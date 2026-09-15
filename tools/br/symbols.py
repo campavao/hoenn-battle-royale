@@ -21,7 +21,8 @@ ENGINE_SYMBOLS = [
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"
-LINE = re.compile(r"^\s+(0x[0-9a-fA-F]{8,16})\s+(\S+)\s*$")
+# The agbcc build takes RAM symbols from sym_*.ld, where the map shows them as "name = .".
+LINE = re.compile(r"^\s+(0x[0-9a-fA-F]{8,16})\s+(\S+)(?:\s*=\s*\.)?\s*$")
 
 
 def parse(path):

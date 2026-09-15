@@ -21,6 +21,7 @@ Driver grammar (one action per line, `#` comments):
 | `shot <name>` | write `<name>.png` |
 | `expect u8/u16/u32 <addr> <value>` | assert equal; addr is `0xHEX`, a symbol from `br-symbols.json`, or `sym+0xOFF` |
 | `expectge u8/u16/u32 <addr> <value>` | assert got >= value |
+| `*sym+off` as an addr | dereference the u32 pointer at `sym` first (`*gSaveBlock1Ptr+4` is the location) |
 | `poke u8/u16/u32 <addr> <value>` / `pokebytes <addr> <hex...>` | write RAM |
 | `dump <addr> <len>` | hex dump |
 | `title` / `say <text>` | print the game code / echo |

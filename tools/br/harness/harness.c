@@ -15,6 +15,7 @@
 //   shot <name>                 write <outdir>/<name>.png
 //   expect u8|u16|u32 <addr> <value>     assert; <addr> is 0xHEX or sym or sym+0xOFF
 //   expectge u8|u16|u32 <addr> <value>   assert got >= value
+//   <addr> may also be *sym+off: dereference the u32 at sym, then add off
 //   dump <addr> <len>           hex dump
 //   poke u8|u16|u32 <addr> <value>
 //   pokebytes <addr> <hex hex ...>
@@ -76,6 +77,18 @@ static void loadSymbols(const char* path) {
 }
 
 static int parseAddr(const char* s, uint32_t* out) {
+    // `*sym+off` reads the u32 pointer at sym first (gSaveBlock1Ptr etc. are pointers).
+    if (s[0] == '*') {
+        uint32_t p;
+        const char* plus = strchr(s, '+');
+        char base[64];
+        size_t n = plus ? (size_t)(plus - s - 1) : strlen(s + 1);
+        if (n >= sizeof base) return 0;
+        memcpy(base, s + 1, n); base[n] = 0;
+        if (!parseAddr(base, &p)) return 0;
+        *out = core->busRead32(core, p) + (plus ? (uint32_t)strtoul(plus + 1, NULL, 0) : 0);
+        return 1;
+    }
     if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) { *out = (uint32_t)strtoul(s, NULL, 16); return 1; }
     char name[64];
     uint32_t off = 0;
