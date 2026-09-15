@@ -138,8 +138,8 @@ jobs:
         id: mgba-cache
         uses: actions/cache@v4
         with:
-          path: tools/br/.mgba/build
-          key: libmgba-harness-0.10.5-${{ runner.os }}
+          path: tools/br/.mgba
+          key: libmgba-harness-0.10.5-v2-${{ runner.os }}
 
       - name: Smoke-test the fork ROM
         # Folded into this job instead of a separate `harness` job: a standalone job
