@@ -105,6 +105,11 @@ static void Bleed(void)
     }
 }
 
+u16 BrRing_Outside(void)
+{
+    return gBrRing.active && gBrRing.outside ? 1 : 0;
+}
+
 void BrRing_Init(void)
 {
     CpuFill32(0, &gBrRing, sizeof(gBrRing));

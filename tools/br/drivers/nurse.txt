@@ -1,0 +1,31 @@
+# nurse: one question. Boot into Oldale's Centre (map 2,2) in front of the nurse with a
+# hurt Treecko; YES heals. With the fog on this map she says the Centre is closed.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 02 02 07 00 04 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+poke u16 gPlayerParty+0x56 1
+hold UP 6
+wait 10
+tap A
+wait 60
+shot question
+tap A
+wait 420
+expectge u16 gPlayerParty+0x56 15
+shot healed
+tap A
+wait 60
+# now the fog: ring far away, radius 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrRing+5 1
+poke u16 gPlayerParty+0x56 1
+tap A
+wait 60
+shot closed
+tap A
+wait 60
+expect u16 gPlayerParty+0x56 1
+say nurse ok

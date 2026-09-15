@@ -1,6 +1,24 @@
 Common_EventScript_PkmnCenterNurse::
 	lock
 	faceplayer
+.if BR
+@ One question, no flavour; and once the fog is on this map the Centre is closed (POK-225).
+	specialvar VAR_RESULT, BrRing_Outside
+	goto_if_eq VAR_RESULT, 1, BR_EventScript_CentreClosed
+	msgbox BR_Text_HealParty, MSGBOX_YESNO
+	goto_if_eq VAR_RESULT, NO, BR_EventScript_CentreNo
+	call EventScript_PkmnCenterNurse_TakeAndHealPkmn
+	message BR_Text_Healed
+	return
+
+BR_EventScript_CentreClosed::
+	message BR_Text_CentreClosed
+	return
+
+BR_EventScript_CentreNo::
+	message BR_Text_CentreNo
+	return
+.endif
 	setvar VAR_0x8004, 0
 	specialvar VAR_RESULT, CountPlayerTrainerStars
 	goto_if_eq VAR_RESULT, 4, EventScript_PkmnCenterNurse_GoldCard

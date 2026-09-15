@@ -177,6 +177,7 @@ gSpecials::
 	def_special ChangePokemonNickname, waitstate=1
 	def_special ChoosePartyMon, waitstate=1
 	def_special BrCatch_Apply
+	def_special BrRing_Outside
 	def_special GetFirstFreePokeblockSlot
 	def_special DoBerryBlending, waitstate=1
 	def_special PlayRoulette, waitstate=1

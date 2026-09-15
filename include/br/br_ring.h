@@ -31,5 +31,7 @@ void BrRing_Init(void);
 void BrRing_Tick(void);
 // Geometry, exposed for the page's tests and other systems: is the section inside?
 bool8 BrRing_SectionInside(u8 mapsec);
+// Special for scripts: 1 when this map is outside the ring.
+u16 BrRing_Outside(void);
 
 #endif // GUARD_BR_RING_H
