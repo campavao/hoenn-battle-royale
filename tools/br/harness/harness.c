@@ -121,7 +121,16 @@ static int parseKeys(const char* s, uint32_t* mask) {
 }
 
 // ---- actions --------------------------------------------------------------------
-static void runN(int n) { for (int i = 0; i < n; ++i) core->runFrame(core); }
+// `drain gBrMailbox`: with no page attached the ROM's out ring fills in a few seconds
+// of link-battle traffic and BrNetlink stalls on a full ring; this plays the page's
+// reader, taking every slot as it lands (outTail = outHead each frame).
+static uint32_t drainAddr = 0;
+static void runN(int n) {
+    for (int i = 0; i < n; ++i) {
+        core->runFrame(core);
+        if (drainAddr) core->busWrite16(core, drainAddr + 0xA, core->busRead16(core, drainAddr + 0x8));
+    }
+}
 
 static void shot(const char* name) {
     char path[1024];
@@ -176,6 +185,7 @@ static int runLine(char* line) {
 
     if (strcmp(a, "say") == 0) { printf("%s\n", p + 3 + (p[3] == ' ')); return 0; }
     if (strcmp(a, "wait") == 0 && n >= 2) { runN(atoi(b)); return 0; }
+    if (strcmp(a, "drain") == 0 && n >= 2) { if (!parseAddr(b, &drainAddr)) return 4; printf("draining the out ring at 0x%08X\n", drainAddr); return 0; }
     if (strcmp(a, "shot") == 0 && n >= 2) { shot(b); return 0; }
     if (strcmp(a, "state") == 0 && n >= 2) { return loadState(b) ? 0 : 3; }
     if (strcmp(a, "title") == 0) {
@@ -194,13 +204,14 @@ static int runLine(char* line) {
         runN(1);
         return 0;
     }
-    if ((strcmp(a, "expect") == 0 || strcmp(a, "expectge") == 0) && n >= 4) {
-        int ge = a[6] == 'g';
+    if ((strcmp(a, "expect") == 0 || strcmp(a, "expectge") == 0 || strcmp(a, "expectle") == 0) && n >= 4) {
+        int ge = a[6] == 'g', le = a[6] == 'l';
         int w = widthOf(b); uint32_t addr, want;
         if (!w || !parseAddr(c, &addr)) return 4;
         want = (uint32_t)strtoul(d, NULL, 0);
         uint32_t got = readW(w, addr);
-        if (ge ? got < want : got != want) { printf("line %d: EXPECT FAILED %s at 0x%08X: got 0x%X want %s0x%X\n", lineNo, b, addr, got, ge ? ">= " : "", want); return 1; }
+        int bad = ge ? got < want : le ? got > want : got != want;
+        if (bad) { printf("line %d: EXPECT FAILED %s at 0x%08X: got 0x%X want %s0x%X\n", lineNo, b, addr, got, ge ? ">= " : le ? "<= " : "", want); return 1; }
         printf("expect ok %s 0x%08X = 0x%X\n", b, addr, got);
         return 0;
     }

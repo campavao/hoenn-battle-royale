@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_battle.h"
+#endif
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_arena.h"
@@ -490,6 +493,24 @@ void HandleAction_Run(void)
 
     if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK))
     {
+#if BR
+        // RUN against another trainer is allowed but hard: one in four gets away, and
+        // nobody is eliminated by it; the rest of the time the turn goes on (POK-231).
+        if (!BrBattle_RollRun())
+        {
+            ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
+            gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_CANT_ESCAPE_2;
+            gBattlescriptCurrInstr = BattleScript_PrintFailedToRunString;
+            gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
+            return;
+        }
+        gCurrentTurnActionNumber = gBattlersCount;
+        if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
+            gBattleOutcome = B_OUTCOME_RAN;
+        else
+            gBattleOutcome = B_OUTCOME_MON_FLED;
+        return;
+#endif
         gCurrentTurnActionNumber = gBattlersCount;
 
         for (gActiveBattler = 0; gActiveBattler < gBattlersCount; gActiveBattler++)

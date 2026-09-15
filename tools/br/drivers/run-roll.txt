@@ -1,0 +1,26 @@
+# run-roll: RUN against another trainer is a one-in-four roll, never an elimination.
+# Loopback engage battle; at the action menu we pick RUN (down, right, A). The roll
+# happens either way; whichever way it went, nobody is OUT.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrNetlink+8 1
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 900
+expect u16 gBrBattle+4 0
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+shot run
+tap A
+wait 500
+shot rolled
+expectge u16 gBrBattle+4 1
+expect u8 gBrMatch 0
+dump gBrBattle 8
+dump gBrNetlink 12
+dump gBattleOutcome 1
+say run roll ok

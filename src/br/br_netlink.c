@@ -3,6 +3,7 @@
 #include "main.h"
 #include "link.h"
 #include "battle.h"
+#include "battle_controllers.h"
 #include "battle_setup.h"
 #include "overworld.h"
 #include "palette.h"
@@ -42,6 +43,39 @@ static void Deliver(u8 who, const u8 *data, u16 len)
     for (i = 0; i < len; i++)
         dst[i] = data[i];
     gBrNetlink.recvFlags |= 1 << who;
+}
+
+// Drivers only. The loopback peer is our mirror: once the battle is running, the
+// controller blocks we send come back as the other player's. Commands (buffer A) are
+// the master's alone and are not echoed. While only one battler has a command
+// pending (the intro's one-at-a-time data requests) the peer acknowledges the same
+// battler; while both do (the choice of action and move) the peer is our reflection:
+// its player controls the other battler, so replies and acks swap battler, and a
+// move's target flips to the other side.
+// Block layout (battle_controllers.c's private enum): bufferId @0, battler @1, data @8.
+#define BR_LINK_BUFF_BATTLER 1
+#define BR_LINK_BUFF_DATA 8
+static void DeliverMirrored(u8 who, const u8 *data, u16 len)
+{
+    u8 *dst = (u8 *)gBlockRecvBuffer[who];
+    bool8 paired = (gBattleControllerExecFlags & 0x1111) && (gBattleControllerExecFlags & 0x2222);
+
+    if (!(gBattleTypeFlags & BATTLE_TYPE_LINK_IN_BATTLE))
+    {
+        Deliver(who, data, len);
+        return;
+    }
+    if (data[0] == B_COMM_TO_CONTROLLER)
+        return;
+    Deliver(who, data, len);
+    if (data[0] == B_COMM_CONTROLLER_IS_DONE)
+        dst[BR_LINK_BUFF_DATA] = who;
+    if (!paired)
+        return;
+    dst[BR_LINK_BUFF_BATTLER] ^= 1;
+    if (data[0] != B_COMM_CONTROLLER_IS_DONE
+     && dst[BR_LINK_BUFF_DATA] == CONTROLLER_TWORETURNVALUES && dst[BR_LINK_BUFF_DATA + 1] == B_ACTION_EXEC_SCRIPT)
+        dst[BR_LINK_BUFF_DATA + 3] ^= 1; // the move's target is the other battler
 }
 
 static void HandleBt(const u8 *payload, u8 len, bool8 isCont)
@@ -93,7 +127,7 @@ bool8 BrNetlink_SendBlock(const void *src, u16 size)
     // The cable echoes our own block back to us; do the same.
     Deliver(gBrNetlink.myId, s, size);
     if (gBrNetlink.loopback)
-        Deliver(gBrNetlink.myId ^ 1, s, size);
+        DeliverMirrored(gBrNetlink.myId ^ 1, s, size);
     gBrNetlink.sendSeq++;
     sPending[0] = gBrMySeat;
     BrWire_WriteU16(sPending + 1, gBrNetlink.sendSeq);

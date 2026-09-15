@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_battle.h"
+#endif
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_arena.h"
@@ -233,6 +236,18 @@ static void CompleteOnBankSpritePosX_0(void)
 static void HandleInputChooseAction(void)
 {
     u16 itemId = gBattleBufferA[gActiveBattler][2] | (gBattleBufferA[gActiveBattler][3] << 8);
+
+#if BR
+    // The shot clock: thirty seconds on FIGHT, then the first move is chosen for you.
+    if (BrBattle_ShotTick())
+    {
+        PlaySE(SE_SELECT);
+        gBrBattle.autoMove = TRUE;
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_USE_MOVE, 0);
+        PlayerBufferExecCompleted();
+        return;
+    }
+#endif
 
     DoBounceEffect(gActiveBattler, BOUNCE_HEALTHBOX, 7, 1);
     DoBounceEffect(gActiveBattler, BOUNCE_MON, 7, 1);
@@ -472,6 +487,17 @@ static void HandleInputChooseMove(void)
 {
     bool32 canSelectTarget = FALSE;
     struct ChooseMoveStruct *moveInfo = (struct ChooseMoveStruct *)(&gBattleBufferA[gActiveBattler][4]);
+
+#if BR
+    if (BrBattle_TakeAutoMove() || BrBattle_ShotTick())
+    {
+        // Out of time: the move under the cursor, at the default target.
+        gMultiUsePlayerCursor = GetDefaultMoveTarget(gActiveBattler);
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, gMoveSelectionCursor[gActiveBattler] | (gMultiUsePlayerCursor << 8));
+        PlayerBufferExecCompleted();
+        return;
+    }
+#endif
 
     if (JOY_HELD(DPAD_ANY) && gSaveBlock2Ptr->optionsButtonMode == OPTIONS_BUTTON_MODE_L_EQUALS_A)
         gPlayerDpadHoldFrames++;
@@ -2576,6 +2602,9 @@ static void PlayerHandleChooseAction(void)
 {
     s32 i;
 
+#if BR
+    BrBattle_ShotReset();
+#endif
     gBattlerControllerFuncs[gActiveBattler] = HandleChooseActionAfterDma3;
     BattleTv_ClearExplosionFaintCause();
     BattlePutTextOnWindow(gText_BattleMenu, B_WIN_ACTION_MENU);

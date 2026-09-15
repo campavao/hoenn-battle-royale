@@ -1,0 +1,23 @@
+# shot-clock: thirty seconds on FIGHT and the clock picks for you, move included. A
+# loopback link battle via the engage (the peer mirrors us); once the action menu is
+# up we press nothing. After the pick the turn plays out: both Treecko take a POUND.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrNetlink+8 1
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 900
+shot menu
+expect u16 gBrBattle+2 0
+expect u16 gBattleMons+0x28 19
+wait 1900
+expectge u16 gBrBattle+2 1
+# the move went out with it: no second clock, the turn ran
+expect u8 gBrBattle+8 0
+wait 600
+shot turn
+expectle u16 gBattleMons+0x28 18
+expectle u16 gBattleMons+0x80 18
+say shot clock ok
