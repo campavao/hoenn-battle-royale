@@ -1,0 +1,7 @@
+# boot-littleroot: boot into Littleroot Town (0,9) at 5,8 and look at it.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+shot littleroot
+expect u8 *gSaveBlock1Ptr+5 9
+say ok

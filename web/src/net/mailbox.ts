@@ -25,7 +25,9 @@ export const MAILBOX = {
   OFF_DROPPED: 0x14,
   OFF_OUT: 0x18,
   OFF_IN: 0x1018,
-  SIZE: 0x2018,
+  OFF_BOOT: 0x2018,
+  BOOT_BYTES: 16,
+  SIZE: 0x2028,
 } as const;
 
 /** What the mailbox needs from the emulator: bus-addressed RAM access. */

@@ -5,6 +5,8 @@
 #include "br/br_config.h"
 #include "br/br_main.h"
 #include "br/br_mailbox.h"
+#include "br/br_ghosts.h"
+#include "br/br_boot.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
 // running it: `strings pokeemerald.gba | grep HOENN-BR`.
@@ -13,9 +15,12 @@ const u8 gBrVersionString[] = "HOENN-BR patch " BR_STRINGIFY(BR_PATCH_VERSION) "
 void BrInit(void)
 {
     BrMailbox_Init();
+    BrGhosts_Init();
 }
 
 void BrFrame(void)
 {
     BrNet_Tick();
+    BrBoot_Tick();
+    BrGhosts_Tick();
 }

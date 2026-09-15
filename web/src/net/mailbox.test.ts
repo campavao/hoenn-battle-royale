@@ -58,7 +58,8 @@ describe('Mailbox layout', () => {
   it('matches include/br/br_mailbox.h', () => {
     expect(MAILBOX.OFF_OUT).toBe(0x18);
     expect(MAILBOX.OFF_IN).toBe(MAILBOX.OFF_OUT + MAILBOX.RING_SLOTS * MAILBOX.SLOT_BYTES);
-    expect(MAILBOX.SIZE).toBe(MAILBOX.OFF_IN + MAILBOX.RING_SLOTS * MAILBOX.SLOT_BYTES);
+    expect(MAILBOX.OFF_BOOT).toBe(MAILBOX.OFF_IN + MAILBOX.RING_SLOTS * MAILBOX.SLOT_BYTES);
+    expect(MAILBOX.SIZE).toBe(MAILBOX.OFF_BOOT + MAILBOX.BOOT_BYTES);
     expect(MAILBOX.PAYLOAD_MAX).toBe(MAILBOX.SLOT_BYTES - MAILBOX.SLOT_HDR);
   });
 });

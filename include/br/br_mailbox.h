@@ -2,6 +2,7 @@
 #define GUARD_BR_MAILBOX_H
 
 #include "br/br_config.h"
+#include "br/br_boot.h"
 
 // The mailbox: the one bridge between the ROM and the page (POK-216).
 //
@@ -34,11 +35,13 @@ struct BrMailbox
     /* 0x14 */ u32 dropped;    // out pushes lost to a full ring
     /* 0x18 */ u8 out[BR_RING_SLOTS][BR_SLOT_BYTES];
     /* 0x1018 */ u8 in[BR_RING_SLOTS][BR_SLOT_BYTES];
-    /* 0x2018 */
+    /* 0x2018 */ struct BrBoot boot;   // 16 bytes, see br_boot.h
+    /* 0x2028 */
 };
 
 #define BR_MAILBOX_OFF_OUT 0x18
 #define BR_MAILBOX_OFF_IN 0x1018
+#define BR_MAILBOX_OFF_BOOT 0x2018
 
 extern struct BrMailbox gBrMailbox;
 

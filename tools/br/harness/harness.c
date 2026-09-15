@@ -124,6 +124,10 @@ static void runN(int n) { for (int i = 0; i < n; ++i) core->runFrame(core); }
 
 static void shot(const char* name) {
     char path[1024];
+    // mGBA leaves the alpha byte 0, which viewers render as blank; force opaque.
+    uint8_t* px = (uint8_t*)vbuf;
+    size_t i;
+    for (i = 3; i < (size_t)W * H * 4; i += 4) px[i] = 0xFF;
     snprintf(path, sizeof path, "%s/%s.png", outdir, name);
     stbi_write_png(path, (int)W, (int)H, 4, vbuf, (int)W * 4);
     printf("shot %s\n", path);

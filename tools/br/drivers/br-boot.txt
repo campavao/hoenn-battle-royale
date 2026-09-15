@@ -1,0 +1,24 @@
+# br-boot: the page asks for a fresh game on Route 110 and gets one, no intro.
+# boot block at gBrMailbox+0x2018: mode 1, gender MALE, map group 0 num 25 (ROUTE110),
+# x=10 y=40 (map coords), name "CAM" in the Gen 3 charmap (C=0xBD A=0xBB M=0xC7, EOS=0xFF).
+wait 30
+expect u16 gBrMailbox 0x4252
+pokebytes gBrMailbox+0x2018 01 00 00 19 0A 00 28 00 BD BB C7 FF
+wait 400
+shot route110
+# mode consumed
+expect u8 gBrMailbox+0x2018 0
+# gSaveBlock1Ptr->location (offset 4): mapGroup 0, mapNum 25
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 25
+# our own position watcher agrees: BrOwnPos = group, num, x+7, y+7 (0x11, 0x2F), dir
+expect u8 gBrOwnPos+1 25
+expect u16 gBrOwnPos+2 0x11
+expect u16 gBrOwnPos+4 0x2F
+# walk east 3 tiles: hold RIGHT long enough for 3 steps (16 frames each)
+hold RIGHT 52
+wait 20
+expect u16 gBrOwnPos+2 0x14
+expect u8 gBrOwnPos+6 4
+shot walked
+say boot ok
