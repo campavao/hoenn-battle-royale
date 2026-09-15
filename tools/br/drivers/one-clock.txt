@@ -1,0 +1,23 @@
+# one-clock: a ring phase is a level rung. Treecko starts at 5; a phase 3 ring lifts it
+# to 30 with the wound kept; wild level follows.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+expect u8 gPlayerParty+0x54 5
+expect u8 gBrLevels 5
+# RING phase 3, centre 25,12, r 30 (inside everywhere)
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 6
+expect u8 gBrLevels 30
+expect u8 gBrLevels+1 3
+expect u8 gPlayerParty+0x54 30
+expectge u16 gPlayerParty+0x58 60
+# phase 6 -> 100
+pokebytes gBrMailbox+0x1058 0C 0A 07 00 00 00 06 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 6
+expect u8 gBrLevels 100
+expect u8 gPlayerParty+0x54 100
+say one clock ok

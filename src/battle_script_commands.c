@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_levels.h"
+#endif
 #include "battle.h"
 #include "battle_message.h"
 #include "battle_anim.h"
@@ -3267,7 +3270,11 @@ static void Cmd_getexp(void)
     switch (gBattleScripting.getexpState)
     {
     case 0: // check if should receive exp at all
-        if (GetBattlerSide(gBattlerFainted) != B_SIDE_OPPONENT || (gBattleTypeFlags &
+        if (
+#if BR
+            BrLevels_NoExp() ||
+#endif
+            GetBattlerSide(gBattlerFainted) != B_SIDE_OPPONENT || (gBattleTypeFlags &
              (BATTLE_TYPE_LINK
               | BATTLE_TYPE_RECORDED_LINK
               | BATTLE_TYPE_TRAINER_HILL

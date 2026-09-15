@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_levels.h"
+#endif
 #include "battle_setup.h"
 #include "battle_pike.h"
 #include "battle_pyramid.h"
@@ -267,6 +270,9 @@ static u8 ChooseWildMonIndex_Fishing(u8 rod)
 
 static u8 ChooseWildMonLevel(const struct WildPokemon *wildPokemon)
 {
+#if BR
+    return BrLevels_WildLevel(); // one clock: the ring phase is the level (POK-225)
+#endif
     u8 min;
     u8 max;
     u8 range;
