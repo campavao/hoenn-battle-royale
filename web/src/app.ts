@@ -7,10 +7,27 @@ import { Emulator, type GbaKey } from './emu';
 import { checkEmerald, isPrePatched } from './rom/emerald';
 import { loadRelease, loadSidecars, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
-import { MAILBOX } from './net/mailbox';
+import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient } from './net/relay';
 import { Bridge } from './net/bridge';
+import { crossesToRom, packSlot, type BinarySlot } from './net/slots';
+import { decode, type Msg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
+import { writeHudClockSecs, writeHudLeft, writeMySeat } from './net/hud';
+import { Director, type DirectorState, type DirectorWorld } from './match/director';
+import worldData from './data/world.json';
+import landingData from './data/landing.json';
+import regionmapData from './data/regionmap.json';
+
+// The world data the director deals spawns and picks ring centres from (POK-223/224).
+// Cast rather than re-declared: these three JSON files are the exporter's own output
+// (DESIGN.md §6), and director.ts only reads the handful of fields it documents on
+// `DirectorMapEntry`/`LandingCell`/`RegionSection` -- a wider real shape satisfies it.
+const WORLD: DirectorWorld = {
+  maps: worldData.maps as DirectorWorld['maps'],
+  landing: landingData as DirectorWorld['landing'],
+  sections: regionmapData.sections as DirectorWorld['sections'],
+};
 
 const MUTE_STORAGE_KEY = 'hbr:muted';
 const UNMUTED_VOLUME = 100;
@@ -22,6 +39,9 @@ const DEFAULT_RELAY_URL = 'wss://hoenn-relay-production.up.railway.app';
 // Littleroot, skipping the intro/Birch/naming screen every driver and every match
 // alike would otherwise have to sit through.
 const BR_BOOT_MAP = 1;
+// Solo only (POK-222): warp straight into the Safari opening, skipping Littleroot --
+// there is no lobby to wait in when there's nobody else to wait for.
+const BR_BOOT_SAFARI = 2;
 const MALE = 0;
 const LITTLEROOT = { group: 0, num: 9, x: 5, y: 8 };
 
@@ -128,6 +148,10 @@ interface PatchResult {
    *  there is no BR-aware ROM running to have a mailbox at all. */
   mailboxBase?: number;
   protocol?: number;
+  /** The full symbol table alongside mailboxBase -- gBrHud/gBrMySeat's addresses
+   *  (director.ts's HUD wiring, POK-222/224/228) come from here rather than a
+   *  second hard-coded constant (per CLAUDE.md: never hard-code an EWRAM address). */
+  symbols?: Map<string, number>;
 }
 
 async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
@@ -141,7 +165,13 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
     const side = await loadSidecars();
     if (!side) throw new Error('pre-patched ROM but no /patch/br-symbols.json: run tools/br/dev-patch.sh');
     setVersionLine(`${versionText(side.info)} · local build`);
-    return { bytes: stored, usingPatched: true, mailboxBase: side.symbols.get('gBrMailbox'), protocol: side.info.protocol };
+    return {
+      bytes: stored,
+      usingPatched: true,
+      mailboxBase: side.symbols.get('gBrMailbox'),
+      protocol: side.info.protocol,
+      symbols: side.symbols,
+    };
   }
   const release = await loadRelease();
 
@@ -162,6 +192,7 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
       usingPatched: true,
       mailboxBase: release.symbols.get('gBrMailbox'),
       protocol: release.info.protocol,
+      symbols: release.symbols,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -373,9 +404,9 @@ function careerName(): string {
  *  is already standing in Littleroot -- every driver's own trick (project CLAUDE.md),
  *  used here so a match (or solo play) starts the same way. The ROM clears `mode`
  *  once it has consumed the block. */
-function writeBootBlock(emu: Emulator, mailboxBase: number, name: string): void {
+function writeBootBlock(emu: Emulator, mailboxBase: number, name: string, mode: number = BR_BOOT_MAP): void {
   const boot = mailboxBase + MAILBOX.OFF_BOOT;
-  emu.write(boot + 0, BR_BOOT_MAP, 8);
+  emu.write(boot + 0, mode, 8);
   emu.write(boot + 1, MALE, 8);
   emu.write(boot + 2, LITTLEROOT.group, 8);
   emu.write(boot + 3, LITTLEROOT.num, 8);
@@ -413,7 +444,116 @@ function renderRoom(bridge: Bridge): void {
   }
 }
 
-function wireRoom(emu: Emulator, mailboxBase: number | undefined, protocol: number | undefined): void {
+// ---- the match director's page-side wiring (POK-222/223/224/228) ------------------------
+
+const AUTO_START_MS = 10_000; // "for now": a room starts 10s after hosting, or once 2+ seats
+const DIRECTOR_TICK_MS = 1000; // coarser than the 5s clock/fogSecs cadence director.ts needs
+
+function renderMatchStrip(state: DirectorState): void {
+  const panel = $('#room-panel') as HTMLElement;
+  const strip = $('#match-strip') as HTMLElement;
+  panel.hidden = false;
+  strip.hidden = false;
+  const mm = Math.floor(state.clockLeft / 60);
+  const ss = String(state.clockLeft % 60).padStart(2, '0');
+  const phaseLabel =
+    state.phase === 'safari'
+      ? 'SAFARI'
+      : state.phase === 'ring'
+        ? `RING ${state.ring?.r ?? '?'} (${state.ring?.place ?? '?'})`
+        : state.phase === 'ended'
+          ? state.winner !== undefined
+            ? `P${state.winner} WINS`
+            : 'DRAW'
+          : 'WAITING';
+  strip.textContent = `${phaseLabel} · ${state.alive} left · ${mm}:${ss}`;
+}
+
+/** Packs and pushes every `Msg` that crosses to the ROM (start/clock/ring -- not
+ *  `win`, JSON-only per docs/WIRE.md) into one mailbox's in-ring, one slot budget a
+ *  frame, retrying next frame while it's full -- the same shape as bridge.ts's own
+ *  `flushOutQueue`, reused here because the director's `send` needs exactly that
+ *  behaviour for two different mailboxes (solo's own, and the room host's, which
+ *  reuses `bridge.mailbox` rather than opening a second one on the same base). */
+function createRomPushQueue(emu: Emulator, mailbox: Mailbox): { push: (msg: Msg) => void; dispose: () => void } {
+  const queue: BinarySlot[] = [];
+  const off = emu.onFrame(() => {
+    while (queue.length > 0) {
+      const slot = queue[0];
+      if (!mailbox.push(slot.type, slot.payload)) return; // ring full; retry next frame
+      queue.shift();
+    }
+  });
+  return {
+    push(msg) {
+      if (crossesToRom(msg.t)) queue.push(...packSlot(msg));
+    },
+    dispose: off,
+  };
+}
+
+/** Starts the director's own 1Hz pump: `tick()` (fires the due clock/ring messages),
+ *  then mirrors its `state` into `gBrHud`'s two page-writes fields and the HTML
+ *  strip. Returns a disposer. */
+function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director: Director): () => void {
+  const pump = () => {
+    director.tick();
+    const state = director.state;
+    if (hudBase !== undefined) {
+      writeHudLeft(emu, hudBase, state.alive);
+      writeHudClockSecs(emu, hudBase, state.clockLeft);
+    }
+    renderMatchStrip(state);
+  };
+  pump();
+  const id = setInterval(pump, DIRECTOR_TICK_MS);
+  return () => clearInterval(id);
+}
+
+// ---- solo: no relay at all, this page is the whole match -------------------------------
+
+/** Solo play (no `#host`/`#join`): there is no room, so there is no Bridge either --
+ *  just a direct push into this ROM's own mailbox (`createRomPushQueue`) and a
+ *  Director for the one seat this client owns. `onOut` wires nothing in: a one-seat
+ *  match's own out (a real whiteout) never decides a winner (director.ts's own
+ *  header comment), so nobody needs to hear about it here. */
+function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number> | undefined): void {
+  const mailbox = new Mailbox(emu, mailboxBase);
+  const rom = createRomPushQueue(emu, mailbox);
+  const seatBase = symbols?.get('gBrMySeat');
+  if (seatBase !== undefined) writeMySeat(emu, seatBase, 0);
+
+  const director = new Director({
+    seats: [0],
+    hostSeat: 0,
+    seed: Math.floor(Math.random() * 0x7fff_ffff) + 1,
+    world: WORLD,
+    send: (msg) => rom.push(msg),
+    now: () => performance.now(),
+    onOut: () => () => {},
+  });
+
+  // "the first PLACE message it emits, or simply after the mailbox is awake + ~200
+  // frames" -- this takes the second, simpler option: solo has no Bridge unpacking
+  // PLACE for us to hook, and 200 frames (~3.3s) is well past BR_BOOT_SAFARI's own
+  // warp-in.
+  let frames = 0;
+  const off = emu.onFrame(() => {
+    if (++frames < 200) return;
+    off();
+    director.start();
+    startDirectorLoop(emu, symbols?.get('gBrHud'), director);
+  });
+}
+
+// ---- room: relay + bridge, opted into by the URL hash ------------------------------------
+
+function wireRoom(
+  emu: Emulator,
+  mailboxBase: number | undefined,
+  protocol: number | undefined,
+  symbols: Map<string, number> | undefined,
+): void {
   const hash = parseRoomHash();
   if (!hash || mailboxBase === undefined) return; // solo: no socket at all
 
@@ -424,20 +564,74 @@ function wireRoom(emu: Emulator, mailboxBase: number | undefined, protocol: numb
 
   const relay = new RelayClient();
   let bridge: Bridge | null = null;
+  let director: Director | null = null;
+  let stopDirectorLoop: (() => void) | null = null;
+  let isHost = false;
+
+  const startDirector = () => {
+    if (director || !bridge || !isHost) return;
+    const seats = bridge.roster.all().map((e) => e.seat);
+    if (seats.length === 0) return;
+    const hostSeat = bridge.seat;
+    const rom = createRomPushQueue(emu, bridge.mailbox); // reuses the Bridge's own Mailbox, not a second one on the same base
+    director = new Director({
+      seats,
+      hostSeat,
+      seed: Math.floor(Math.random() * 0x7fff_ffff) + 1,
+      world: WORLD,
+      send: (msg) => {
+        // Guests' ROMs act on this over the relay; the host's own ROM would too,
+        // eventually, but ring/clock/win carry `seat: hostSeat` and bridge.ts's own
+        // echo-guard (msgSeat(msg) === this.seat) drops exactly those coming back
+        // over the wire -- so the host's own mailbox needs this direct push, not a
+        // round trip through the relay it just sent to. `win` is JSON-only
+        // (docs/WIRE.md) and has no slots.ts codec, so it never goes to `rom`.
+        bridge!.relay.all(msg);
+        rom.push(msg); // no-op for `win` -- createRomPushQueue only packs a msg.t crossesToRom() knows
+      },
+      now: () => performance.now(),
+      onOut: (handler) =>
+        bridge!.relay.on('recv', (ev) => {
+          try {
+            const m = decode(JSON.stringify(ev.m));
+            if (m.t === 'out') handler(m.seat);
+          } catch {
+            // not a wire.ts Msg at all, or failed validation -- bridge.ts already
+            // counts this as a drop; nothing for the director to act on either way.
+          }
+        }),
+    });
+    director.start();
+    const stopLoop = startDirectorLoop(emu, symbols?.get('gBrHud'), director);
+    stopDirectorLoop = () => {
+      stopLoop();
+      rom.dispose();
+    };
+  };
 
   const attach = (seat: number, code: string) => {
     if (bridge) bridge.dispose(); // a re-join after a reconnect must not leave two pumps on one ring
     console.info(`[room] attached as seat ${seat} in ${code}`);
     bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol });
+    isHost = hash.mode === 'host'; // known from our own hash, not worth waiting on a roster event
     codeEl.textContent = `Room ${code}`;
     renderRoom(bridge);
+    const seatBase = symbols?.get('gBrMySeat');
+    if (seatBase !== undefined) writeMySeat(emu, seatBase, seat);
+    if (isHost) setTimeout(startDirector, AUTO_START_MS);
   };
 
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code));
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
-  relay.on('roster', () => bridge && renderRoom(bridge));
+  relay.on('roster', (ev) => {
+    if (bridge) renderRoom(bridge);
+    if (ev.members.length >= 2) startDirector();
+  });
   relay.on('room_error', (ev) => (codeEl.textContent = `Couldn't join: ${ev.reason}`));
-  relay.on('closed', (ev) => (codeEl.textContent = `Disconnected: ${ev.reason}`));
+  relay.on('closed', (ev) => {
+    codeEl.textContent = `Disconnected: ${ev.reason}`;
+    stopDirectorLoop?.();
+  });
 
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
   relay.connect(relayUrl);
@@ -463,21 +657,32 @@ async function main(): Promise<void> {
   const emu = await Emulator.create(canvas);
 
   await runImportScreen(emu);
-  const { bytes, usingPatched, mailboxBase, protocol } = await runPatchingScreen(emu);
+  const { bytes, usingPatched, mailboxBase, protocol, symbols } = await runPatchingScreen(emu);
 
   showScreen('playing');
   if (usingPatched) await emu.startBytes(bytes);
   else await emu.start();
 
+  // Dev only, for the e2e harness (POK-220): solo play never builds a Bridge, so this
+  // is the only way in to read the emulator's memory from outside the page.
+  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu };
+
+  // No hash at all is solo (project CLAUDE.md's rule, app.ts's own parseRoomHash) --
+  // decided before the boot block, since solo warps straight into the Safari opening
+  // (BR_BOOT_SAFARI) instead of Littleroot (BR_BOOT_MAP): there is no room to wait for.
+  const roomHash = parseRoomHash();
+  const bootMode = roomHash ? BR_BOOT_MAP : BR_BOOT_SAFARI;
+
   // BrMailbox_Init zeroes the struct on the ROM's first frame, so the boot block has to
   // land after the magic appears, not before.
   if (mailboxBase !== undefined) {
     await waitForMailbox(emu, mailboxBase);
-    writeBootBlock(emu, mailboxBase, careerName());
+    writeBootBlock(emu, mailboxBase, careerName(), bootMode);
   }
 
   wirePlayScreen(emu);
-  wireRoom(emu, mailboxBase, protocol);
+  if (mailboxBase !== undefined && !roomHash) runSolo(emu, mailboxBase, symbols);
+  else wireRoom(emu, mailboxBase, protocol, symbols);
 }
 
 main().catch((err) => {
