@@ -25,8 +25,12 @@ judge, unset only when it needs this session's reasoning.
 ## Toolchain (nothing is on PATH)
 
     MSYS2 UCRT64 shell   MSYSTEM=UCRT64 C:/msys64/usr/bin/bash.exe -lc '<cmd>'
-    arm-none-eabi-gcc    /c/msys64/ucrt64/bin (13.4)       -> `make modern` (dev only)
-    agbcc                not installed yet (POK-210)      -> `make` (release, byte-matching)
+    arm-none-eabi-gcc    /c/msys64/ucrt64/bin (13.4)       -> `make modern` (dev only, ~1 min)
+    agbcc                C:\Users\cam95\Documents\Github\agbcc, installed into tools/agbcc
+                         -> `make` (release, byte-matching, ~1 min incremental, ~9 min clean)
+    tools/br/check-rom.sh  prints OK/MISMATCH for pokeemerald.gba against rom.sha1
+    mGBA wasm core       built in WSL from thenick775/mgba feature/wasm + tools/br/mgba-wasm/hbr-exports.patch
+                         (emsdk 6.0.5 at ~/emsdk, source at ~/mgba-wasm, output copied to web/public/emu/)
     libmgba (static)     C:\Users\cam95\Documents\Github\mgba-src\build\libmgba.a (0.10.5)
     Emerald ROM (U)      sha1 f3ae088181bf583e55daf962a92bb46f4f1d07b7
     WSL2 Ubuntu          available as the fallback build host
@@ -35,7 +39,8 @@ Build (from the repo root, no spaces anywhere in the path or the build breaks):
 
     MSYSTEM=UCRT64 C:/msys64/usr/bin/bash.exe -lc 'cd /c/Users/cam95/Documents/Github/hoenn-battle-royale && make modern -j"$(nproc)"'
 
-Switching terminals (msys2 <-> WSL) needs `make clean-tools` once.
+Switching terminals (msys2 <-> WSL) needs `make clean-tools` once. `make clean` deletes both
+ROMs, so a driver run right after a clean needs a rebuild first.
 
 ## Facts that cost hours
 

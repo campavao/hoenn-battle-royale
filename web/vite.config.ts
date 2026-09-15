@@ -10,7 +10,7 @@ const isolation = {
 };
 
 export default defineConfig({
-  server: { headers: isolation, host: true },
+  server: { headers: isolation, host: true, fs: { allow: ['.', 'C:/Users/cam95/Documents/Github'] } },
   preview: { headers: isolation, host: true },
   build: {
     target: 'es2022',
@@ -22,5 +22,5 @@ export default defineConfig({
     },
   },
   // mgba.js spawns its pthread workers from its own URL; leave it unbundled.
-  optimizeDeps: { exclude: ['/spike/vendor/mgba.js'] },
+  optimizeDeps: { exclude: ['/emu/mgba.js'] },
 });

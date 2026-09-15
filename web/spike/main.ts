@@ -16,7 +16,7 @@ type Emu = EmscriptenModule & {
   buttonUnpress(name: string): void;
   setVolume(percent: number): void;
   setFastForwardMultiplier(multiplier: number): void;
-  addCoreCallbacks(cb: { videoFrameEnded?: () => void; video?: () => void }): void;
+  addCoreCallbacks(cb: { videoFrameEndedCallback?: () => void }): void;
   // Our exports (candidate A fork). Absent on the stock build.
   _brWramPtr?: () => number;
   _brIwramPtr?: () => number;
@@ -43,8 +43,11 @@ let emu: Emu | null = null;
 async function boot(): Promise<Emu> {
   if (emu) return emu;
   // Served, not bundled: the threaded runtime spawns its workers from this URL.
-  const url = '/spike/vendor/mgba.js';
-  const factory = (await import(/* @vite-ignore */ url)).default as (o: { canvas: HTMLCanvasElement }) => Promise<Emu>;
+  // Served raw from web/public/emu, never bundled. The import goes through
+  // `new Function` so Vite's import analysis leaves it alone in dev.
+  const url = '/emu/mgba.js';
+  const importRaw = new Function('u', 'return import(u)') as (u: string) => Promise<{ default: unknown }>;
+  const factory = (await importRaw(url)).default as (o: { canvas: HTMLCanvasElement }) => Promise<Emu>;
   emu = await factory({ canvas: $('#canvas') });
   await emu.FSInit();
   log(`core up. crossOriginIsolated=${crossOriginIsolated} SAB=${typeof SharedArrayBuffer !== 'undefined'}`);
@@ -71,7 +74,7 @@ function hookFps(m: Emu) {
     frames++;
   };
   try {
-    m.addCoreCallbacks({ videoFrameEnded: bump, video: bump });
+    m.addCoreCallbacks({ videoFrameEndedCallback: bump });
   } catch (e) {
     log(`addCoreCallbacks failed: ${String(e)}`);
   }
@@ -104,12 +107,16 @@ function decodeGen3(bytes: Uint8Array): string {
   return s;
 }
 
+// The pointer's own address differs between the retail ROM and a modern build;
+// `#sb2=0x030071f4` overrides it (the modern map file says where).
+const SB2_ADDR = Number(new URLSearchParams(location.hash.slice(1)).get('sb2') ?? '0x03005d90');
+
 function readTrainerName(m: Emu): string {
   if (!m._brWramPtr || !m._brIwramPtr) return 'no memory export in this build';
   const wram = m._brWramPtr();
   const iwram = m._brIwramPtr();
   const heap = m.HEAPU8;
-  const off = 0x03005d90 - 0x03000000;
+  const off = SB2_ADDR - 0x03000000;
   const ptr = heap[iwram + off] | (heap[iwram + off + 1] << 8) | (heap[iwram + off + 2] << 16) | (heap[iwram + off + 3] << 24);
   if ((ptr >>> 24) !== 0x02) return `gSaveBlock2Ptr=0x${(ptr >>> 0).toString(16)} (not EWRAM yet; start a game first)`;
   const name = heap.subarray(wram + (ptr - 0x02000000), wram + (ptr - 0x02000000) + 8);
@@ -158,6 +165,15 @@ async function main() {
   let pending: Uint8Array | null = null;
 
   const m = await boot();
+  // Dev only: `#rom=<absolute path>` pulls a local file through Vite's /@fs/ route so a
+  // headless browser can drive the spike without a file picker. Never in production.
+  const devRom = import.meta.env.DEV ? new URLSearchParams(location.hash.slice(1)).get('rom') : null;
+  if (devRom) {
+    const r = await fetch(`/@fs/${devRom}`);
+    pending = new Uint8Array(await r.arrayBuffer());
+    log(`dev ROM ${devRom}: ${pending.length} bytes sha1 ${await sha1(pending)}`);
+    play.disabled = false;
+  }
   if (storedRomExists(m)) {
     log('stored ROM found; press Play');
     play.disabled = false;
@@ -188,10 +204,10 @@ async function main() {
       await m.FSSync();
       log('ROM stored in IndexedDB');
     }
-    hookFps(m);
     wireInput(m);
     const ok = m.loadGame(ROM_PATH);
     log(`loadGame → ${ok}`);
+    hookFps(m); // after loadGame: addCoreCallbacks is a no-op until a core exists
     setup.classList.add('hidden');
     m.setVolume(100);
   });

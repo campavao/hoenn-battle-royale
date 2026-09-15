@@ -1,0 +1,68 @@
+diff --git a/src/platform/wasm/CMakeLists.txt b/src/platform/wasm/CMakeLists.txt
+index 751e8b1..59daede 100644
+--- a/src/platform/wasm/CMakeLists.txt
++++ b/src/platform/wasm/CMakeLists.txt
+@@ -2,7 +2,7 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \
+ 	-O3 \
+ 	-s USE_SDL=2 \
+ 	-s INITIAL_MEMORY=256mb \
+-	-s EXPORTED_RUNTIME_METHODS=[\"FS\",\"cwrap\",\"addFunction\",\"removeFunction\"] \
++	-s EXPORTED_RUNTIME_METHODS=[\"FS\",\"cwrap\",\"addFunction\",\"removeFunction\",\"HEAPU8\",\"HEAPU16\",\"HEAPU32\"] \
+ 	-s ALLOW_TABLE_GROWTH=1 \
+ 	-s ENVIRONMENT='web,worker' \
+ 	-s PTHREAD_POOL_SIZE=5 \
+diff --git a/src/platform/wasm/main.c b/src/platform/wasm/main.c
+index 14d9a8a..8e3be56 100644
+--- a/src/platform/wasm/main.c
++++ b/src/platform/wasm/main.c
+@@ -12,6 +12,9 @@
+ #include <mgba/core/version.h>
+ #include <mgba/gba/interface.h>
+ #include <mgba/internal/gba/input.h>
++#include <mgba/core/interface.h>
++#include <mgba/internal/gba/gba.h>
++#include <mgba/internal/gba/memory.h>
+ 
+ #include "platform/sdl/sdl-audio.h"
+ #include "platform/sdl/sdl-events.h"
+@@ -146,6 +149,22 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
+ 		return 0.0;
+ }
+ 
++// Hoenn Battle Royale: byte offsets into the wasm heap of the GBA's work RAM, so the
++// page can read/write EWRAM/IWRAM through Module.HEAPU8 with no copy. 0 when no GBA core.
++EMSCRIPTEN_KEEPALIVE uint32_t brWramPtr() {
++	if (!renderer->core || renderer->core->platform(renderer->core) != mPLATFORM_GBA)
++		return 0;
++	struct GBA* gba = (struct GBA*) renderer->core->board;
++	return (uint32_t) (uintptr_t) gba->memory.wram;
++}
++
++EMSCRIPTEN_KEEPALIVE uint32_t brIwramPtr() {
++	if (!renderer->core || renderer->core->platform(renderer->core) != mPLATFORM_GBA)
++		return 0;
++	struct GBA* gba = (struct GBA*) renderer->core->board;
++	return (uint32_t) (uintptr_t) gba->memory.iwram;
++}
++
+ EMSCRIPTEN_KEEPALIVE int getMainLoopTimingMode() {
+ 	int mode = -1;
+ 	int value = -1;
+diff --git a/src/platform/wasm/mgba.d.ts b/src/platform/wasm/mgba.d.ts
+index edad1b1..18be6ab 100644
+--- a/src/platform/wasm/mgba.d.ts
++++ b/src/platform/wasm/mgba.d.ts
+@@ -296,6 +296,13 @@ declare namespace mGBA {
+      * @returns Current volume multiplier.
+      */
+     getVolume(): number;
++    /** Hoenn BR: wasm heap offset of GBA EWRAM (256 KiB), 0 when no GBA core is loaded. */
++    _brWramPtr(): number;
++    /** Hoenn BR: wasm heap offset of GBA IWRAM (32 KiB), 0 when no GBA core is loaded. */
++    _brIwramPtr(): number;
++    HEAPU8: Uint8Array;
++    HEAPU16: Uint16Array;
++    HEAPU32: Uint32Array;
+ 
+     /**
+      * Lists ROM file names under the game directory.
