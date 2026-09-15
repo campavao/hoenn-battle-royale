@@ -13,6 +13,7 @@
 #include "br/br_levels.h"
 #include "br/br_catch.h"
 #include "br/br_netlink.h"
+#include "br/br_engage.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
 // running it: `strings pokeemerald.gba | grep HOENN-BR`.
@@ -28,6 +29,7 @@ void BrInit(void)
     BrLevels_Init();
     BrCatch_Init();
     BrNetlink_Init();
+    BrEngage_Init();
 }
 
 void BrFrame(void)
@@ -41,4 +43,5 @@ void BrFrame(void)
     BrLevels_Tick();
     BrCatch_Tick();
     BrNetlink_Tick();
+    BrEngage_Tick();
 }

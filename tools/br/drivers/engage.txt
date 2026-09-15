@@ -1,0 +1,21 @@
+# engage: a ghost placed three tiles east facing us is in our eyeline: we (seat 0,
+# the lower seat) send CHALLENGE and start the link battle at once. With loopback the
+# start exchange completes into the VS screen.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrNetlink+8 1
+# seat 1 at (15,16) facing WEST (3) on Littleroot; we stand at (12,16) after the settle step
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 20
+expect u8 gBrSeats+16 1
+# the challenge went out and our battle started
+expect u16 gBrEngage+4 1
+expect u8 gBrEngage 1
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+1 0
+expect u8 gWirelessCommType 5
+wait 600
+shot vs
+say engage ok
