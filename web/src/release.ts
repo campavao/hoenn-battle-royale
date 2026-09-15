@@ -22,6 +22,12 @@ const SYMBOLS_URL = '/patch/br-symbols.json';
 
 const UNPUBLISHED_REASON = 'no patch published yet';
 
+// A dev server answers a missing file with index.html; that is "not there" too.
+function isHtml(res: Response): boolean {
+  const type = typeof res.headers?.get === 'function' ? res.headers.get('content-type') : null;
+  return (type ?? '').includes('text/html');
+}
+
 async function fetchJson<T>(url: string): Promise<T | null> {
   let res: Response;
   try {
@@ -30,7 +36,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
     return null; // network error, offline, etc. -- treated the same as "not there"
   }
   if (!res.ok) return null;
-  if ((res.headers.get('content-type') ?? '').includes('text/html')) return null;
+  if (isHtml(res)) return null;
   return (await res.json()) as T;
 }
 
@@ -43,7 +49,7 @@ async function fetchBytes(url: string): Promise<Uint8Array | null> {
   }
   if (!res.ok) return null;
   // A dev server answers a missing file with index.html; that is "not there" too.
-  if ((res.headers.get('content-type') ?? '').includes('text/html')) return null;
+  if (isHtml(res)) return null;
   return new Uint8Array(await res.arrayBuffer());
 }
 
