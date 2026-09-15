@@ -15,6 +15,8 @@
 #include "palette.h"
 #include "constants/characters.h"
 #include "constants/maps.h"
+#include "constants/species.h"
+#include "script_pokemon_util.h"
 #include "br/br_mailbox.h"
 #include "br/br_boot.h"
 
@@ -82,7 +84,11 @@ void BrBoot_Tick(void)
     if (sBooted || b->mode == BR_BOOT_NONE || !PreGame())
         return;
     sBooted = TRUE;
-    if (b->mode == BR_BOOT_MAP)
+    if (BR_BOOT_MODE(b->mode) == BR_BOOT_MAP)
+    {
         StartGameAt(b);
+        if (b->mode & BR_BOOT_FLAG_TESTMON)
+            ScriptGiveMon(SPECIES_TREECKO, 5, 0, 0, 0, 0);
+    }
     b->mode = BR_BOOT_NONE;
 }

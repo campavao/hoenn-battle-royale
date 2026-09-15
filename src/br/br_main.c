@@ -7,6 +7,7 @@
 #include "br/br_mailbox.h"
 #include "br/br_ghosts.h"
 #include "br/br_boot.h"
+#include "br/br_ring.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
 // running it: `strings pokeemerald.gba | grep HOENN-BR`.
@@ -16,6 +17,7 @@ void BrInit(void)
 {
     BrMailbox_Init();
     BrGhosts_Init();
+    BrRing_Init();
 }
 
 void BrFrame(void)
@@ -23,4 +25,5 @@ void BrFrame(void)
     BrNet_Tick();
     BrBoot_Tick();
     BrGhosts_Tick();
+    BrRing_Tick();
 }

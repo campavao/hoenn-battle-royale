@@ -9,6 +9,9 @@
 #define BR_BOOT_NONE 0
 // Fresh game, warp to boot.map at boot.x/y (map coords, no MAP_OFFSET).
 #define BR_BOOT_MAP 1
+// OR into mode: also hand the player a level 5 Treecko, for drivers that need a party.
+#define BR_BOOT_FLAG_TESTMON 0x80
+#define BR_BOOT_MODE(m) ((m) & 0x0F)
 
 struct BrBoot
 {

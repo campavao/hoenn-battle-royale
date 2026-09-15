@@ -1,0 +1,26 @@
+# ring-outside: a ring centred far from Littleroot puts us outside: fog weather and
+# the party bleeds a tenth every 240 frames. Boots with a test Treecko (mode 0x81).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# party count 1
+expect u8 gPlayerPartyCount 1
+# RING: type 12, framed len 10 = hdr(07 00 00) + seat 00, phase 01, sx 25, sy 12, r 1, placeLen 0, hasElapsed 0
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrRing 1
+expect u8 gBrRing+5 1
+expect u8 gBrRing+6 1
+shot fog
+# two bleed ticks later some HP is gone, and we are not out
+wait 480
+expectge u16 gBrRing+10 2
+expect u8 gBrRing+7 0
+# move the ring onto us: centre on Littleroot's own section coordinates? Use r = 30: everything inside.
+pokebytes gBrMailbox+0x1058 0C 0A 07 00 00 00 02 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 30
+expect u8 gBrRing+5 0
+shot clear
+say ring ok
