@@ -56,6 +56,9 @@ static void StartGameAt(const struct BrBoot *b)
 
     // (CB2_LoadMap clears the field callbacks itself; a fresh game has no Safari flag.)
     Sav2_ClearSetDefault();
+    // Always SET, always fast text: an option would be a lie once the match runs.
+    gSaveBlock2Ptr->optionsBattleStyle = OPTIONS_BATTLE_STYLE_SET;
+    gSaveBlock2Ptr->optionsTextSpeed = OPTIONS_TEXT_SPEED_FAST;
     m4aMPlayAllStop();
     StopMapMusic();
     NewGameInitData();

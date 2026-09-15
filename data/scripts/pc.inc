@@ -1,4 +1,14 @@
 EventScript_PC::
+.if BR
+@ Every PC is out of order in a match: boxes would be a second health bar (POK-221).
+	lockall
+	msgbox BR_Text_PCOutOfOrder, MSGBOX_DEFAULT
+	releaseall
+	end
+
+BR_Text_PCOutOfOrder:
+	.string "OUT OF ORDER.$"
+.endif
 	lockall
 	setvar VAR_0x8004, PC_LOCATION_OTHER
 	special DoPCTurnOnEffect

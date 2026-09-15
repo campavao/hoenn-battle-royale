@@ -318,6 +318,18 @@ static void BuildNormalStartMenu(void)
     {
         AddStartMenuAction(MENU_ACTION_POKEDEX);
     }
+#if BR
+    // A match has no flags to earn: the party row is there once there is a party, and
+    // POKENAV / SAVE / OPTION are doors out of a live match (POK-221).
+    if (CalculatePlayerPartyCount() > 0)
+    {
+        AddStartMenuAction(MENU_ACTION_POKEMON);
+    }
+
+    AddStartMenuAction(MENU_ACTION_BAG);
+    AddStartMenuAction(MENU_ACTION_PLAYER);
+    AddStartMenuAction(MENU_ACTION_EXIT);
+#else
     if (FlagGet(FLAG_SYS_POKEMON_GET) == TRUE)
     {
         AddStartMenuAction(MENU_ACTION_POKEMON);
@@ -334,6 +346,7 @@ static void BuildNormalStartMenu(void)
     AddStartMenuAction(MENU_ACTION_SAVE);
     AddStartMenuAction(MENU_ACTION_OPTION);
     AddStartMenuAction(MENU_ACTION_EXIT);
+#endif
 }
 
 static void BuildSafariZoneStartMenu(void)
