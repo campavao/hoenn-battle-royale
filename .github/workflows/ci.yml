@@ -1,0 +1,250 @@
+name: BR CI
+
+# Runs against the mod's own branch, not upstream's `master` (that's build.yml, pret's
+# CI). Kept as a second workflow file instead of extending build.yml so a `git merge`
+# from upstream never has to touch a line we own.
+on:
+  push:
+    branches: [hoenn-battle-royale]
+  pull_request:
+    branches: [hoenn-battle-royale]
+
+concurrency:
+  group: br-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Builds both ROMs (baseline pret, and this fork) with agbcc - the byte-matching
+  # compiler, because the release patch must be a diff of our changes only, never a
+  # modern-GCC recompile of the whole game riding along. Ends with the one artifact
+  # players' browsers actually load (never a .gba) and, since it already has a built
+  # ROM sitting right there, the harness smoke test too (see the comment on that step
+  # for why it isn't job of its own).
+  rom:
+    runs-on: ubuntu-latest
+    outputs:
+      rom-sha1: ${{ steps.fork-rom.outputs.sha1 }}
+      patch-size: ${{ steps.patch.outputs.size }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libpng-dev gcc-arm-none-eabi binutils-arm-none-eabi \
+            cmake zlib1g-dev
+        # cmake + zlib1g-dev are only for the drive.sh smoke step at the end of this
+        # job (libmgba, static, headless) - see that step.
+
+      - name: Read baseline commit
+        id: baseline
+        run: echo "sha=$(cat tools/br/BASELINE_COMMIT)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout agbcc
+        uses: actions/checkout@v4
+        with:
+          repository: pret/agbcc
+          path: agbcc
+
+      - name: agbcc HEAD sha
+        id: agbcc-sha
+        run: echo "sha=$(git -C agbcc rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache agbcc build
+        id: agbcc-cache
+        uses: actions/cache@v4
+        with:
+          path: agbcc
+          key: agbcc-${{ steps.agbcc-sha.outputs.sha }}
+
+      - name: Build agbcc
+        if: steps.agbcc-cache.outputs.cache-hit != 'true'
+        working-directory: agbcc
+        run: ./build.sh
+
+      - name: Checkout baseline pokeemerald
+        uses: actions/checkout@v4
+        with:
+          repository: pret/pokeemerald
+          ref: ${{ steps.baseline.outputs.sha }}
+          path: baseline
+
+      - name: Cache baseline ROM
+        id: baseline-cache
+        uses: actions/cache@v4
+        with:
+          path: baseline/pokeemerald.gba
+          # The baseline never changes without BASELINE_COMMIT changing, so once this
+          # is cached, every push and PR skips a ~9 minute clean pret build entirely.
+          key: baseline-rom-${{ steps.baseline.outputs.sha }}
+
+      - name: Build baseline ROM
+        if: steps.baseline-cache.outputs.cache-hit != 'true'
+        run: |
+          ( cd agbcc && ./install.sh ../baseline )
+          make -C baseline -j"$(nproc)"
+
+      - name: Verify baseline ROM sha1
+        # The whole point of pinning BASELINE_COMMIT is that this ROM is a known
+        # quantity; a mismatch here means the pin or the agbcc build drifted, and every
+        # downstream step (the patch, the symbols) would be diffing against the wrong
+        # thing without this catching it first.
+        run: tools/br/check-rom.sh baseline/pokeemerald.gba
+
+      - name: Install agbcc into fork
+        run: ( cd agbcc && ./install.sh .. )
+
+      - name: Build fork ROM
+        run: make -j"$(nproc)"
+
+      - name: Fork ROM sha1
+        id: fork-rom
+        run: echo "sha1=$(sha1sum pokeemerald.gba | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Build patch, symbols, version
+        id: patch
+        run: |
+          mkdir -p patch
+          tools/br/make-patch.sh baseline/pokeemerald.gba pokeemerald.gba patch/hoenn-br.bps
+          python3 tools/br/symbols.py pokeemerald.map > patch/br-symbols.json
+          tools/br/version-json.sh pokeemerald.gba patch/br-version.json
+          echo "size=$(stat -c%s patch/hoenn-br.bps)" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          {
+            echo "### hoenn-br patch"
+            echo "- patch size: ${{ steps.patch.outputs.size }} bytes"
+            echo "- fork ROM sha1: ${{ steps.fork-rom.outputs.sha1 }}"
+            echo "- baseline commit: ${{ steps.baseline.outputs.sha }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patch
+          # Exactly these three files - never the ROM itself, on principle (see
+          # CLAUDE.md: "the ROM is never anywhere but the player's device").
+          path: |
+            patch/hoenn-br.bps
+            patch/br-symbols.json
+            patch/br-version.json
+          if-no-files-found: error
+
+      - name: Cache libmgba (harness)
+        id: mgba-cache
+        uses: actions/cache@v4
+        with:
+          path: tools/br/.mgba/build
+          key: libmgba-harness-0.10.5-${{ runner.os }}
+
+      - name: Smoke-test the fork ROM
+        # Folded into this job instead of a separate `harness` job: a standalone job
+        # would either re-download the ROM as an artifact (banned - see above) or
+        # rebuild it from scratch, doubling the build time for no reason when the ROM
+        # this job just built is sitting right here on disk.
+        run: tools/br/drive.sh smoke pokeemerald.gba
+
+  # mGBA's own wasm fork, plus our EWRAM/IWRAM export patch. Independent of the rom
+  # job (different toolchain entirely - emscripten, not agbcc), so it runs in parallel.
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.5
+
+      - name: Clone mgba-wasm at the pinned commit
+        run: |
+          git clone --branch feature/wasm https://github.com/thenick775/mgba mgba-wasm-src
+          git -C mgba-wasm-src checkout "$(cat tools/br/mgba-wasm/COMMIT)"
+
+      - name: Apply the EWRAM/IWRAM export patch
+        working-directory: mgba-wasm-src
+        run: git apply "$GITHUB_WORKSPACE/tools/br/mgba-wasm/hbr-exports.patch"
+
+      - name: Cache wasm build
+        id: wasm-cache
+        uses: actions/cache@v4
+        with:
+          path: mgba-wasm-src/build-wasm
+          key: mgba-wasm-${{ hashFiles('tools/br/mgba-wasm/COMMIT', 'tools/br/mgba-wasm/hbr-exports.patch') }}
+
+      - name: Build the wasm core
+        working-directory: mgba-wasm-src
+        run: |
+          mkdir -p build-wasm
+          cd build-wasm
+          emcmake cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
+          make -j"$(nproc)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emu
+          path: |
+            mgba-wasm-src/build-wasm/wasm/mgba.js
+            mgba-wasm-src/build-wasm/wasm/mgba.wasm
+            mgba-wasm-src/build-wasm/wasm/mgba.d.ts
+          if-no-files-found: error
+
+  # The shell needs both the patch and the emulator core in place before it can even
+  # typecheck (public/patch and public/emu are real imports, not just static assets).
+  web:
+    needs: [rom, wasm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with: { name: patch, path: web/public/patch }
+
+      - uses: actions/download-artifact@v4
+        with: { name: emu, path: web/public/emu }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - working-directory: web
+        run: npm ci
+
+      - working-directory: web
+        run: npm run typecheck
+
+      - working-directory: web
+        run: npm test
+
+      - working-directory: web
+        run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: web/dist
+          if-no-files-found: error
+
+  # relay/ has no server.js yet (POK-209's layout ticket, not built out). Runs anyway
+  # so the day server.js lands, this job starts enforcing it with no further edit here.
+  relay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Test
+        run: |
+          if [ -f relay/server.js ]; then
+            cd relay && npm ci --ignore-scripts || true && node --test
+          else
+            echo "relay/server.js does not exist yet - skipping"
+          fi

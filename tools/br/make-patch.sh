@@ -23,9 +23,10 @@ if [[ ! -x "$FLIPS_BIN" ]]; then
   echo "building flips into $FLIPS_DIR"
   rm -rf "$FLIPS_DIR"
   git clone --depth 1 https://github.com/Alcaro/Flips "$FLIPS_DIR"
-  # Flips' own Makefile targets a GUI by default on some platforms; the CLI-only build
-  # is just `make`, which drops a `flips` binary (no `flips-gtk`/`flips.exe`) on Linux.
-  ( cd "$FLIPS_DIR" && make )
+  # Plain `make` targets the GTK GUI and needs pkg-config + libgtk-3-dev, neither of
+  # which CI (or a bare WSL box) has. TARGET=cli builds the headless binary we actually
+  # want, which is also all `--create --bps` needs.
+  ( cd "$FLIPS_DIR" && TARGET=cli make )
   [[ -x "$FLIPS_BIN" ]] || { echo "flips build did not produce $FLIPS_BIN" >&2; exit 2; }
 fi
 
