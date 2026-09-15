@@ -130,6 +130,12 @@ void BrMatch_SafariOver(void)
     DoWarp();
 }
 
+void BrMatch_WhiteOut(void)
+{
+    if (gBrMatch.phase != BR_PHASE_OUT)
+        SendOut();
+}
+
 void BrMatch_Tick(void)
 {
     if (gBrMatch.phase != BR_PHASE_SAFARI || !OverworldRunning())

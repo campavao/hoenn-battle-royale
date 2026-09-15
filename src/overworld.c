@@ -66,6 +66,9 @@
 #include "constants/songs.h"
 #include "constants/trainer_hill.h"
 #include "constants/weather.h"
+#if BR
+#include "br/br_match.h"
+#endif
 
 struct CableClubPlayer
 {
@@ -1556,7 +1559,16 @@ void CB2_WhiteOut(void)
         FieldClearVBlankHBlankCallbacks();
         StopMapMusic();
         ResetSafariZoneFlag_();
+#if BR
+        // Eliminated: OUT goes out, no heal, no Centre; come back where we fell (POK-228).
+        BrMatch_WhiteOut();
+        Overworld_ResetStateAfterWhiteOut();
+        SetWarpDestination(gSaveBlock1Ptr->location.mapGroup, gSaveBlock1Ptr->location.mapNum, WARP_ID_NONE,
+                           gSaveBlock1Ptr->pos.x, gSaveBlock1Ptr->pos.y);
+        WarpIntoMap();
+#else
         DoWhiteOut();
+#endif
         ResetInitialPlayerAvatarState();
         ScriptContext_Init();
         UnlockPlayerFieldControls();

@@ -45,5 +45,8 @@ void BrMatch_BeginSafari(void);
 // The opening is over for us: out of time, steps or balls. Empty party -> OUT,
 // else warp to our dealt spawn. Safe to call from a field step hook.
 void BrMatch_SafariOver(void);
+// Called from CB2_WhiteOut in place of the heal-and-Centre DoWhiteOut: sends OUT and
+// marks the phase; overworld.c then re-enters the same map where they fell.
+void BrMatch_WhiteOut(void);
 
 #endif // GUARD_BR_MATCH_H

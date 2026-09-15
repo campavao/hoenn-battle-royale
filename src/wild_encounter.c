@@ -270,14 +270,14 @@ static u8 ChooseWildMonIndex_Fishing(u8 rod)
 
 static u8 ChooseWildMonLevel(const struct WildPokemon *wildPokemon)
 {
-#if BR
-    return BrLevels_WildLevel(); // one clock: the ring phase is the level (POK-225)
-#endif
     u8 min;
     u8 max;
     u8 range;
     u8 rand;
 
+#if BR
+    return BrLevels_WildLevel(); // one clock: the ring phase is the level (POK-225)
+#endif
     // Make sure minimum level is less than maximum level
     if (wildPokemon->maxLevel >= wildPokemon->minLevel)
     {
