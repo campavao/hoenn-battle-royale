@@ -58,7 +58,6 @@ SECTIONS {
         src/rom_header_gf.o(.text.*);
         src/crt0.o(.text);
         src/main.o(.text);
-        src/br/*.o(.text);
         src/malloc.o(.text);
         src/dma3_manager.o(.text);
         src/gpu_regs.o(.text);
@@ -449,7 +448,6 @@ SECTIONS {
         src/rom_header.o(.rodata);
         src/rom_header_gf.o(.rodata);
         src/main.o(.rodata);
-        src/br/*.o(.rodata);
         src/bg.o(.rodata);
         src/window.o(.rodata);
         src/text.o(.rodata);
@@ -1322,7 +1320,9 @@ SECTIONS {
     ALIGN(4)
     {
         src/*.o(.text);
+        src/br/*.o(.text); /* last, so upstream code keeps its addresses and the patch stays small */
         src/*.o(.rodata);
+        src/br/*.o(.rodata);
         data/*.o(.rodata);
     } > ROM = 0
 
