@@ -1,0 +1,21 @@
+# netlink-loop: a CHALLENGE opens the netlink session and starts a link battle; with
+# loopback on, our own blocks come back as the peer's and the battle-start exchange
+# (header, party in three blocks, seed) completes into the battle screen.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrNetlink+8 1
+# CHALLENGE: type 5, framed len 7 = hdr(04 00 00) + challenger 00, opponent 01, nonce 00 00
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 00 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 6
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+1 0
+expect u8 gBrNetlink+2 1
+expect u8 gWirelessCommType 5
+wait 600
+# five blocks went out: header, party x3, rng seed
+expectge u16 gBrNetlink+12 5
+expectge u16 gBrMailbox+0x08 6
+shot battle
+say netlink loop ok

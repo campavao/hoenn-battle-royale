@@ -29,6 +29,33 @@ bool8 BrWire_Send(u8 type, const u8 *data, u8 len)
     return BrMailbox_Push(type, buf, BR_FRAME_HDR + len);
 }
 
+bool8 BrWire_SendLarge(u8 type, const u8 *data, u16 len)
+{
+    u8 buf[BR_SLOT_PAYLOAD_MAX];
+    u16 sent = 0, slots = 1, i;
+    u8 seq = 1;
+
+    if (len > BR_FRAME_DATA_MAX)
+        slots += (len - BR_FRAME_DATA_MAX + (BR_SLOT_PAYLOAD_MAX - 1) - 1) / (BR_SLOT_PAYLOAD_MAX - 1);
+    if ((u16)(gBrMailbox.outHead - gBrMailbox.outTail) + slots > BR_RING_SLOTS)
+        return FALSE;
+    // First slot.
+    BrWire_WriteU16(buf, len);
+    buf[2] = 0;
+    for (i = 0; i < BR_FRAME_DATA_MAX && sent < len; i++, sent++)
+        buf[BR_FRAME_HDR + i] = data[sent];
+    BrMailbox_Push(type, buf, BR_FRAME_HDR + i);
+    // Continuations: seq, then data.
+    while (sent < len)
+    {
+        buf[0] = seq++;
+        for (i = 0; i < BR_SLOT_PAYLOAD_MAX - 1 && sent < len; i++, sent++)
+            buf[1 + i] = data[sent];
+        BrMailbox_Push(type | BR_MSG_CONT, buf, 1 + i);
+    }
+    return TRUE;
+}
+
 bool8 BrWire_Assemble(struct BrAssembler *as, u8 baseType, bool8 isCont, const u8 *payload, u8 len)
 {
     u16 i, n;

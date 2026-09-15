@@ -12,6 +12,10 @@
 // Sends one message that fits a single slot. Returns FALSE if it did not fit or the
 // ring was full.
 bool8 BrWire_Send(u8 type, const u8 *data, u8 len);
+// Sends a message of any size up to the assembler's reach: the first slot carries
+// the header and 59 bytes, continuation slots (type | BR_MSG_CONT) 61 more each.
+// All or nothing: FALSE (and nothing pushed) when the ring lacks the room.
+bool8 BrWire_SendLarge(u8 type, const u8 *data, u16 len);
 // Unframes a single-slot payload: points *data at the message bytes and returns their
 // length, or 0xFF when the frame is a continuation or claims more than one slot.
 u8 BrWire_Unframe(const u8 *payload, u8 len, const u8 **data);

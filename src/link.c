@@ -1,4 +1,8 @@
 #include "global.h"
+#if BR
+#include "br/br_netlink.h"
+#define BR_NETLINK_ACTIVE (gWirelessCommType == BR_WIRELESS_NETLINK)
+#endif
 #include "m4a.h"
 #include "malloc.h"
 #include "reload_save.h"
@@ -735,7 +739,7 @@ static void LinkCB_SendHeldKeys(void)
 
 void ClearLinkCallback(void)
 {
-    if (gWirelessCommType)
+    if (gWirelessCommType == 1)
         ClearLinkRfuCallback();
     else
         gLinkCallback = NULL;
@@ -743,7 +747,7 @@ void ClearLinkCallback(void)
 
 void ClearLinkCallback_2(void)
 {
-    if (gWirelessCommType)
+    if (gWirelessCommType == 1)
         ClearLinkRfuCallback();
     else
         gLinkCallback = NULL;
@@ -751,6 +755,10 @@ void ClearLinkCallback_2(void)
 
 u8 GetLinkPlayerCount(void)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return 2;
+#endif
     if (gWirelessCommType)
         return Rfu_GetLinkPlayerCount();
 
@@ -1021,6 +1029,10 @@ static void UNUSED SendBerryBlenderNoSpaceForPokeblocks(void)
 
 u8 GetMultiplayerId(void)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return BrNetlink_GetMultiplayerId();
+#endif
     if (gWirelessCommType == TRUE)
         return Rfu_GetMultiplayerId();
 
@@ -1037,6 +1049,10 @@ u8 BitmaskAllOtherLinkPlayers(void)
 
 bool8 SendBlock(u8 unused, const void *src, u16 size)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return BrNetlink_SendBlock(src, size);
+#endif
     if (gWirelessCommType == TRUE)
         return Rfu_InitBlockSend(src, size);
 
@@ -1045,6 +1061,10 @@ bool8 SendBlock(u8 unused, const void *src, u16 size)
 
 bool8 SendBlockRequest(u8 blockReqType)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return TRUE;
+#endif
     if (gWirelessCommType == TRUE)
         return Rfu_SendBlockRequest(blockReqType);
 
@@ -1059,6 +1079,10 @@ bool8 SendBlockRequest(u8 blockReqType)
 
 bool8 IsLinkTaskFinished(void)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return BrNetlink_IsTaskFinished();
+#endif
     if (gWirelessCommType == TRUE)
         return IsLinkRfuTaskFinished();
 
@@ -1067,6 +1091,10 @@ bool8 IsLinkTaskFinished(void)
 
 u8 GetBlockReceivedStatus(void)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return BrNetlink_GetBlockReceivedStatus();
+#endif
     if (gWirelessCommType == TRUE)
         return Rfu_GetBlockReceivedStatus();
 
@@ -1085,6 +1113,14 @@ void ResetBlockReceivedFlags(void)
 {
     int i;
 
+#if BR
+    if (BR_NETLINK_ACTIVE)
+    {
+        BrNetlink_ResetBlockReceivedFlag(0);
+        BrNetlink_ResetBlockReceivedFlag(1);
+        return;
+    }
+#endif
     if (gWirelessCommType == TRUE)
     {
         for (i = 0; i < MAX_RFU_PLAYERS; i++)
@@ -1099,6 +1135,13 @@ void ResetBlockReceivedFlags(void)
 
 void ResetBlockReceivedFlag(u8 who)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+    {
+        BrNetlink_ResetBlockReceivedFlag(who);
+        return;
+    }
+#endif
     if (gWirelessCommType == TRUE)
     {
         Rfu_ResetBlockReceivedFlag(who);
@@ -1370,6 +1413,10 @@ u8 GetLinkPlayerCount_2(void)
 
 bool8 IsLinkMaster(void)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return BrNetlink_GetMultiplayerId() == 0;
+#endif
     if (gWirelessCommType)
         return Rfu_IsMaster();
 
@@ -1383,6 +1430,10 @@ static u8 UNUSED GetDummy2(void)
 
 void SetCloseLinkCallbackAndType(u16 type)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return;
+#endif
     if (gWirelessCommType == TRUE)
     {
         Rfu_SetCloseLinkCallback();
@@ -1400,6 +1451,10 @@ void SetCloseLinkCallbackAndType(u16 type)
 
 void SetCloseLinkCallback(void)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return;
+#endif
     if (gWirelessCommType == TRUE)
     {
         Rfu_SetCloseLinkCallback();
@@ -1517,6 +1572,10 @@ static void LinkCB_WaitCloseLinkWithJP(void)
 
 void SetLinkStandbyCallback(void)
 {
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return; // nothing to synchronise: the mailbox has no standby handshake
+#endif
     if (gWirelessCommType == TRUE)
     {
         Rfu_SetLinkStandbyCallback();
@@ -1786,6 +1845,10 @@ bool8 HandleLinkConnection(void)
 {
     bool32 main1Failed, main2Failed;
 
+#if BR
+    if (BR_NETLINK_ACTIVE)
+        return FALSE; // no cable and no adapter to service; the mailbox tick does it
+#endif
     if (gWirelessCommType == 0)
     {
         gLinkStatus = LinkMain1(&gShouldAdvanceLinkState, gSendCmd, gRecvCmds);
