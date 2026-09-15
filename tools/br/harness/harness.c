@@ -14,6 +14,7 @@
 //   tap <KEYS>                  hold 4 frames, release, 1 frame
 //   shot <name>                 write <outdir>/<name>.png
 //   expect u8|u16|u32 <addr> <value>     assert; <addr> is 0xHEX or sym or sym+0xOFF
+//   expectge u8|u16|u32 <addr> <value>   assert got >= value
 //   dump <addr> <len>           hex dump
 //   poke u8|u16|u32 <addr> <value>
 //   pokebytes <addr> <hex hex ...>
@@ -29,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>  // strcasecmp; glibc only declares it here, not in string.h
 #include <ctype.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -174,12 +176,13 @@ static int runLine(char* line) {
         runN(1);
         return 0;
     }
-    if (strcmp(a, "expect") == 0 && n >= 4) {
+    if ((strcmp(a, "expect") == 0 || strcmp(a, "expectge") == 0) && n >= 4) {
+        int ge = a[6] == 'g';
         int w = widthOf(b); uint32_t addr, want;
         if (!w || !parseAddr(c, &addr)) return 4;
         want = (uint32_t)strtoul(d, NULL, 0);
         uint32_t got = readW(w, addr);
-        if (got != want) { printf("line %d: EXPECT FAILED %s at 0x%08X: got 0x%X want 0x%X\n", lineNo, b, addr, got, want); return 1; }
+        if (ge ? got < want : got != want) { printf("line %d: EXPECT FAILED %s at 0x%08X: got 0x%X want %s0x%X\n", lineNo, b, addr, got, ge ? ">= " : "", want); return 1; }
         printf("expect ok %s 0x%08X = 0x%X\n", b, addr, got);
         return 0;
     }

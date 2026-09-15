@@ -19,7 +19,8 @@ Driver grammar (one action per line, `#` comments):
 | `hold <KEYS> <frames>` | hold `A B SELECT START RIGHT LEFT UP DOWN R L` (join with `+`) |
 | `tap <KEYS>` | hold 4 frames, release |
 | `shot <name>` | write `<name>.png` |
-| `expect u8/u16/u32 <addr> <value>` | assert; addr is `0xHEX`, a symbol from `br-symbols.json`, or `sym+0xOFF` |
+| `expect u8/u16/u32 <addr> <value>` | assert equal; addr is `0xHEX`, a symbol from `br-symbols.json`, or `sym+0xOFF` |
+| `expectge u8/u16/u32 <addr> <value>` | assert got >= value |
 | `poke u8/u16/u32 <addr> <value>` / `pokebytes <addr> <hex...>` | write RAM |
 | `dump <addr> <len>` | hex dump |
 | `title` / `say <text>` | print the game code / echo |
@@ -30,3 +31,6 @@ wash out after a Qt-saved savestate load, auto-contrast the PNGs in post.
 
 `states/` holds savestates (gitignored). Save one from the mGBA GUI standing where the
 driver should start; `state <path>` loads it.
+
+Reads go through the GBA bus, so a `u32` at an address that is not 4-aligned comes back
+rotated (hardware behaviour, mGBA reproduces it). Read `u16` at 2-aligned or `u8` instead.

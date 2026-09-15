@@ -1,0 +1,27 @@
+# mailbox-echo: the bridge works both ways. Writes an ECHO into in[0], bumps inHead,
+# runs frames, expects the same bytes back in out[0] with outHead == 1.
+wait 30
+expect u16 gBrMailbox 0x4252
+# frame counter is ticking (boot eats some frames before the main loop)
+expectge u32 gBrMailbox+0x10 8
+# in[0] at +0x1018: type 1 (ECHO), len 4, payload DE AD BE EF
+pokebytes gBrMailbox+0x1018 01 04 DE AD BE EF
+poke u16 gBrMailbox+0x0C 1
+wait 2
+expect u16 gBrMailbox+0x0E 1
+expect u16 gBrMailbox+0x08 1
+# out[0] at +0x18
+expect u8 gBrMailbox+0x18 1
+expect u8 gBrMailbox+0x19 4
+expect u16 gBrMailbox+0x1A 0xADDE
+expect u16 gBrMailbox+0x1C 0xEFBE
+# nothing dropped
+expect u32 gBrMailbox+0x14 0
+# a second message lands in slot 1
+pokebytes gBrMailbox+0x1058 01 01 42
+poke u16 gBrMailbox+0x0C 2
+wait 2
+expect u16 gBrMailbox+0x08 2
+expect u8 gBrMailbox+0x58 1
+expect u8 gBrMailbox+0x5A 0x42
+say echo ok

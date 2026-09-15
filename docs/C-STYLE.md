@@ -14,8 +14,10 @@ lenient one.
   for match state: the shell cannot find it. IWRAM is scarce; keep it for the engine.
 - **No heap.** `Alloc` exists but every allocation is a leak waiting for a map change.
   Fixed arrays sized by `br_config.h`.
-- **Tasks over callbacks.** A per-frame job is a `Task` (`CreateTask`), re-created where
-  the engine wipes the task list (map load, battle start). Do not hang state on a task's
+- **Per-frame work goes through `BrFrame`.** The main loop calls it after `ReadKeys`,
+  in every state (title, overworld, battle, menus), so nothing needs a `Task` to stay
+  alive across a map load. Register a system's tick from `BrFrame`; use a `Task` only for
+  something that should stop when the engine wipes tasks. Do not hang state on a task's
   `data[]` if the shell needs it; put it in the mailbox.
 - **Upstream touches.** One `#if BR` block per site, calling one function in `src/br/`.
   Never reindent or reflow upstream code around the hook. The build must still match the

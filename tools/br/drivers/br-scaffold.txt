@@ -1,8 +1,10 @@
-# br-scaffold: the patch booted. BrInit ran (magic + patch version in EWRAM) and the
-# ROM header carries our title. Runs from power-on, no savestate.
+# br-scaffold: the patch booted. BrMailbox_Init ran (magic, protocol, patch, size in
+# EWRAM) and the ROM header carries our title. Runs from power-on, no savestate.
 wait 30
-expect u16 gBrMagic 0x4252
-expect u16 gBrPatchVersion 1
+expect u16 gBrMailbox 0x4252
+expect u16 gBrMailbox+2 1
+expect u16 gBrMailbox+4 1
+expect u16 gBrMailbox+6 0x2018
 # "HOENN BR" at the header title, 0x080000A0
 expect u8 0x080000A0 0x48
 expect u8 0x080000A1 0x4F
