@@ -58,3 +58,4 @@ web/public/emu/*.map
 !web/**/*.js
 !relay/**/*.js
 !tools/br/**/*.js
+br-symbols.json

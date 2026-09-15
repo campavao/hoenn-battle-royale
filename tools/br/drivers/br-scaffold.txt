@@ -1,0 +1,13 @@
+# br-scaffold: the patch booted. BrInit ran (magic + patch version in EWRAM) and the
+# ROM header carries our title. Runs from power-on, no savestate.
+wait 30
+expect u16 gBrMagic 0x4252
+expect u16 gBrPatchVersion 1
+# "HOENN BR" at the header title, 0x080000A0
+expect u8 0x080000A0 0x48
+expect u8 0x080000A1 0x4F
+expect u8 0x080000A5 0x20
+expect u8 0x080000A6 0x42
+expect u8 0x080000A7 0x52
+title
+say scaffold ok

@@ -23,6 +23,7 @@ SECTIONS {
     {
         INCLUDE "sym_ewram.ld"
         src/*.o(ewram_data);
+        src/br/*.o(ewram_data);
 
         *libc.a:impure.o(.data);
         *libc.a:locale.o(.data);
@@ -35,6 +36,7 @@ SECTIONS {
         /* .bss starts at 0x3000000 */
         INCLUDE "sym_bss.ld"
         src/*.o(.bss);
+        src/br/*.o(.bss);
         data/*.o(.bss);
 
         /* .bss.code starts at 0x3001AA8 */
@@ -56,6 +58,7 @@ SECTIONS {
         src/rom_header_gf.o(.text.*);
         src/crt0.o(.text);
         src/main.o(.text);
+        src/br/*.o(.text);
         src/malloc.o(.text);
         src/dma3_manager.o(.text);
         src/gpu_regs.o(.text);
@@ -446,6 +449,7 @@ SECTIONS {
         src/rom_header.o(.rodata);
         src/rom_header_gf.o(.rodata);
         src/main.o(.rodata);
+        src/br/*.o(.rodata);
         src/bg.o(.rodata);
         src/window.o(.rodata);
         src/text.o(.rodata);

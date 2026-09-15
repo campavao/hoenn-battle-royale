@@ -24,6 +24,9 @@
 #include "main.h"
 #include "trainer_hill.h"
 #include "constants/rgb.h"
+#if BR
+#include "br/br_main.h"
+#endif
 
 static void VBlankIntr(void);
 static void HBlankIntr(void);
@@ -104,6 +107,9 @@ void AgbMain(void)
     RtcInit();
     CheckForFlashMemory();
     InitMainCallbacks();
+#if BR
+    BrInit();
+#endif
     InitMapMusic();
 #ifdef BUGFIX
     SeedRngWithRtc(); // see comment at SeedRngWithRtc definition below
