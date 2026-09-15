@@ -53,3 +53,8 @@ tools/br/harness/*.exe
 .vercel/
 tools/br/states/
 web/public/emu/*.map
+
+# pret ignores *.js for its tooling; ours lives here
+!web/**/*.js
+!relay/**/*.js
+!tools/br/**/*.js
