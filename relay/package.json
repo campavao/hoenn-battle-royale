@@ -1,7 +1,14 @@
 {
   "name": "hoenn-battle-royale-relay",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "N-player room relay for the Hoenn Battle Royale mod (WebSocket, one JSON object per text frame, one dependency)",
   "type": "module",
-  "scripts": { "start": "node server.js", "test": "node --test" }
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node --test" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "license": "MIT"
 }
