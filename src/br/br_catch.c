@@ -6,6 +6,8 @@
 #include "script.h"
 #include "event_data.h"
 #include "constants/party_menu.h"
+#include "move_relearner.h"
+#include "br/br_hud.h"
 #include "br/br_catch.h"
 
 EWRAM_DATA struct BrCatch gBrCatch = {0};
@@ -13,10 +15,18 @@ EWRAM_DATA struct Pokemon gBrPendingCatch = {0};
 
 extern const u8 BR_EventScript_ReleaseOne[];
 
+static const u8 sText_NoMoves[] = _("NO NEW MOVES AT THIS LEVEL");
+
 void BrCatch_Init(void)
 {
     gBrCatch.pending = FALSE;
     gBrCatch.asked = FALSE;
+    gBrCatch.movesSlot = 0xFF;
+}
+
+void BrCatch_RequestMoves(u8 slot)
+{
+    gBrCatch.movesSlot = slot;
 }
 
 bool8 BrCatch_TryPark(struct Pokemon *mon)
@@ -41,11 +51,27 @@ void BrCatch_Apply(void)
 
 void BrCatch_Tick(void)
 {
-    if (!gBrCatch.pending || gBrCatch.asked)
-        return;
     if (gMain.callback2 != CB2_Overworld || gMain.inBattle)
         return;
     if (ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked())
+        return;
+    if (gBrCatch.movesSlot != 0xFF)
+    {
+        u8 slot = gBrCatch.movesSlot;
+
+        gBrCatch.movesSlot = 0xFF;
+        if (slot < PARTY_SIZE && GetNumberOfRelearnableMoves(&gPlayerParty[slot]) > 0)
+        {
+            gSpecialVar_0x8004 = slot;
+            TeachMoveRelearnerMove();
+        }
+        else
+        {
+            BrHud_Say(sText_NoMoves);
+        }
+        return;
+    }
+    if (!gBrCatch.pending || gBrCatch.asked)
         return;
     gBrCatch.asked = TRUE;
     ScriptContext_SetupScript(BR_EventScript_ReleaseOne);

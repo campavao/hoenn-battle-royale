@@ -10,7 +10,8 @@ struct BrCatch
 {
     /* 0 */ u8 pending;   // gBrPendingCatch holds a mon waiting for a slot
     /* 1 */ u8 asked;     // the release script has been started for it
-    /* 2 */ u8 pad[2];
+    /* 2 */ u8 movesSlot; // party slot waiting for the move relearner, 0xFF none
+    /* 3 */ u8 pad;
 };
 
 extern struct BrCatch gBrCatch;
@@ -22,5 +23,7 @@ void BrCatch_Tick(void);
 bool8 BrCatch_TryPark(struct Pokemon *mon);
 // Special: after ChoosePartyMon, VAR_0x8004 says which slot gives way (or nothing).
 void BrCatch_Apply(void);
+// From the party menu's MOVES row: open the relearner for the slot once back in the field.
+void BrCatch_RequestMoves(u8 slot);
 
 #endif // GUARD_BR_CATCH_H

@@ -1,0 +1,23 @@
+# moves-row: the party menu has a MOVES row that opens the free relearner at the rung.
+# Treecko at L30 (ring phase 3) has level-up moves to pick from.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gPlayerParty+0x54 30
+tap START
+wait 40
+tap A
+wait 80
+tap A
+wait 40
+shot menu
+tap DOWN
+wait 10
+tap A
+wait 240
+shot relearner
+expect u8 gBrCatch+2 0xFF
+say moves row ok

@@ -72,6 +72,11 @@
 #include "constants/party_menu.h"
 #include "constants/rgb.h"
 #include "constants/songs.h"
+#if BR
+#include "br/br_catch.h"
+static void CursorCb_BrMoves(u8);
+static const u8 sText_BrMoves[] = _("MOVES");
+#endif
 
 enum {
     MENU_SUMMARY,
@@ -93,6 +98,9 @@ enum {
     MENU_TRADE1,
     MENU_TRADE2,
     MENU_TOSS,
+#if BR
+    MENU_MOVES, // the free move relearner at the rung (POK-225)
+#endif
     MENU_FIELD_MOVES
 };
 
@@ -2610,6 +2618,9 @@ static void SetPartyMonFieldSelectionActions(struct Pokemon *mons, u8 slotId)
 
     sPartyMenuInternal->numActions = 0;
     AppendToList(sPartyMenuInternal->actions, &sPartyMenuInternal->numActions, MENU_SUMMARY);
+#if BR
+    AppendToList(sPartyMenuInternal->actions, &sPartyMenuInternal->numActions, MENU_MOVES);
+#endif
 
     // Add field moves to action list
     for (i = 0; i < MAX_MON_MOVES; i++)
@@ -2766,6 +2777,18 @@ static void Task_HandleSelectionMenuInput(u8 taskId)
         }
     }
 }
+
+#if BR
+// Close the party menu and let BrCatch_Tick open the move relearner for this slot once
+// the field is back; the relearner is free and lists every level-up move at the rung.
+static void CursorCb_BrMoves(u8 taskId)
+{
+    PlaySE(SE_SELECT);
+    BrCatch_RequestMoves(gPartyMenu.slotId);
+    sPartyMenuInternal->exitCallback = CB2_ReturnToField;
+    Task_ClosePartyMenu(taskId);
+}
+#endif
 
 static void CursorCb_Summary(u8 taskId)
 {
