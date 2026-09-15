@@ -1,0 +1,7 @@
+{
+  "name": "hoenn-battle-royale-relay",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": { "start": "node server.js", "test": "node --test" }
+}

@@ -44,3 +44,10 @@ prefabs.json
 *.js
 /pokeemerald-*.png
 /pokeemerald_modern-*.png
+*.bps
+*.ss?
+node_modules/
+web/dist/
+tools/br/harness/frames/
+tools/br/harness/*.exe
+.vercel/
