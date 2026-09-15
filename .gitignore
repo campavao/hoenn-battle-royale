@@ -62,3 +62,8 @@ br-symbols.json
 !web/.env.example
 web/public/patch/*
 !web/public/patch/.gitkeep
+
+# Playwright (POK-220)
+web/e2e/out/
+web/test-results/
+web/playwright-report/

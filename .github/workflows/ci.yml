@@ -24,6 +24,10 @@ jobs:
   # ROM sitting right there, the harness smoke test too (see the comment on that step
   # for why it isn't job of its own).
   rom:
+    # needs wasm too now: the e2e steps at the end of this job boot the mGBA wasm core
+    # in a real browser against the ROM this job just built, so both artifacts must be
+    # on disk together before Playwright ever opens a page.
+    needs: [wasm]
     runs-on: ubuntu-latest
     outputs:
       rom-sha1: ${{ steps.fork-rom.outputs.sha1 }}
@@ -148,8 +152,44 @@ jobs:
         # this job just built is sitting right here on disk.
         run: tools/br/drive.sh smoke pokeemerald.gba
 
-  # mGBA's own wasm fork, plus our EWRAM/IWRAM export patch. Independent of the rom
-  # job (different toolchain entirely - emscripten, not agbcc), so it runs in parallel.
+      - uses: actions/download-artifact@v4
+        with: { name: emu, path: web/public/emu }
+
+      - name: Sidecars for the web shell's local-build path (POK-220)
+        # web/e2e drives the shell the same way `npm run dev` does: a pre-patched ROM
+        # plus these two sidecars, no BPS (see tools/br/dev-patch.sh and app.ts's
+        # isPrePatched() branch). Same pokeemerald.gba/.map this job just built.
+        run: tools/br/dev-patch.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - working-directory: web
+        run: npm ci
+
+      - working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - working-directory: web
+        env:
+          HBR_ROM: ${{ github.workspace }}/pokeemerald.gba
+        run: npm run e2e
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-shots
+          # Screenshots only, never the ROM (see the artifact-upload comment above).
+          path: web/e2e/out
+          if-no-files-found: warn
+
+  # mGBA's own wasm fork, plus our EWRAM/IWRAM export patch. Different toolchain
+  # entirely (emscripten, not agbcc) and no dependency on the ROM, so it starts in
+  # parallel with `rom` -- `rom` waits on this one only for its own e2e steps at the
+  # end, not for the ROM build itself.
   wasm:
     runs-on: ubuntu-latest
     steps:
