@@ -1,0 +1,41 @@
+# ghost-walk: a placed seat becomes an object event that walks on step messages,
+# and our own movement comes out of the mailbox as place/step.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# our own PLACE went out first: out[0] type 2, frame hdr 0b 00 00, hasMap 1, x 12 (0x0c), y 15
+expect u8 gBrMailbox+0x18 2
+expect u8 gBrMailbox+0x1E 1
+expect u8 gBrMailbox+0x21 0x0C
+expect u8 gBrMailbox+0x23 0x0F
+# seat 1 placed two tiles east of us, facing west, skin 1 (May)
+# in slot: type 2, len 14 = hdr(0b 00 00) + seat 01, hasMap 01, group 00, num 09, x 0e 00, y 0f 00, facing 03, status 01, sprite 01
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 4
+# gBrSeats[1] (16 bytes each): present, skin, group, num, x, y, dir, objId
+expect u8 gBrSeats+16 1
+expect u8 gBrSeats+17 1
+expect u16 gBrSeats+20 14
+expect u16 gBrSeats+22 15
+expect u8 gBrSeats+24 3
+shot placed
+# step east: type 3, len 11 = hdr(08 00 00) + seat 01, d 04 (EAST), x 0f 00, y 0f 00, group 00, num 09
+pokebytes gBrMailbox+0x1058 03 0B 08 00 00 01 04 0F 00 0F 00 00 09
+poke u16 gBrMailbox+0x0C 2
+wait 40
+expect u16 gBrSeats+20 15
+expect u8 gBrSeats+24 4
+shot stepped
+# now we walk one tile east ourselves. The engine settles the player one tile south
+# right after the warp (out[1] is that STEP), then our walk is a FACE east (out[2])
+# and a STEP east (out[3]: type 3, d 4, x 13).
+hold RIGHT 20
+wait 10
+expect u8 gBrMailbox+0x98 4
+expect u8 gBrMailbox+0x9E 4
+expect u8 gBrMailbox+0xD8 3
+expect u8 gBrMailbox+0xDE 4
+expect u8 gBrMailbox+0xDF 0x0D
+expect u16 gBrMailbox+0x08 4
+say ghosts ok

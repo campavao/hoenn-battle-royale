@@ -11,10 +11,15 @@
 #include "constants/event_objects.h"
 #include "constants/event_object_movement.h"
 #include "br/br_ghosts.h"
+#include "br/br_mailbox.h"
+#include "br/br_wire.h"
+#include "br/br_wire_c.h"
 
 EWRAM_DATA struct BrSeat gBrSeats[BR_MAX_SEATS] = {0};
 EWRAM_DATA struct BrOwnPos gBrOwnPos = {0};
 EWRAM_DATA u8 gBrOwnEvents = 0;
+EWRAM_DATA u8 gBrMySeat = 0;
+EWRAM_DATA u8 gBrMySkin = 0;
 static EWRAM_DATA u8 sOwnValid = 0;
 
 // Skin -> object event graphics. Index 0 is the default; the shell's career picks.
@@ -92,9 +97,106 @@ static void Spawn(u8 seat)
     ObjectEventTurn(&gObjectEvents[id], s->dir);
 }
 
+// ---- wire glue: br_wire.h layouts for PLACE (11), STEP (8), FACE (4) -----------
+
+static void HandlePlace(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 11)
+        return;
+    if (d[1] == 0)
+        BrGhosts_Remove(d[0]);
+    else
+        BrGhosts_Place(d[0], d[10], d[2], d[3], (s16)BrWire_ReadU16(d + 4), (s16)BrWire_ReadU16(d + 6), d[8]);
+}
+
+static void HandleStep(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+    struct BrSeat *s;
+    s16 x, y;
+
+    if (n < 8 || d[0] >= BR_MAX_SEATS)
+        return;
+    s = &gBrSeats[d[0]];
+    x = (s16)BrWire_ReadU16(d + 2);
+    y = (s16)BrWire_ReadU16(d + 4);
+    if (!s->present || s->mapGroup != d[6] || s->mapNum != d[7])
+    {
+        // A step we cannot follow: treat it as a place so the ghost still appears.
+        BrGhosts_Place(d[0], s->present ? s->skin : 0, d[6], d[7], x, y, d[1]);
+        return;
+    }
+    BrGhosts_Step(d[0], d[1]);
+    if (s->x != x || s->y != y)
+    {
+        // Lost a step somewhere; the sender's coordinates win, snap on the next tick.
+        s->x = x;
+        s->y = y;
+        s->queued = BR_STEP_QUEUE + 1;
+    }
+}
+
+static void HandleFace(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 4)
+        return;
+    BrGhosts_Face(d[0], d[1]);
+}
+
+// Own place/step/face for the page to forward. The seat byte is what the page
+// overwrites with the real seat, so it only has to be plausible here.
+static void EmitOwn(void)
+{
+    u8 buf[11];
+
+    if (gBrOwnEvents & BR_OWN_PLACED)
+    {
+        buf[0] = gBrMySeat;
+        buf[1] = 1;
+        buf[2] = gBrOwnPos.mapGroup;
+        buf[3] = gBrOwnPos.mapNum;
+        BrWire_WriteU16(buf + 4, (u16)gBrOwnPos.x);
+        BrWire_WriteU16(buf + 6, (u16)gBrOwnPos.y);
+        buf[8] = gBrOwnPos.dir;
+        buf[9] = 1;
+        buf[10] = gBrMySkin;
+        BrWire_Send(BR_MSG_PLACE, buf, 11);
+    }
+    else if (gBrOwnEvents & BR_OWN_STEPPED)
+    {
+        buf[0] = gBrMySeat;
+        buf[1] = gBrOwnPos.dir;
+        BrWire_WriteU16(buf + 2, (u16)gBrOwnPos.x);
+        BrWire_WriteU16(buf + 4, (u16)gBrOwnPos.y);
+        buf[6] = gBrOwnPos.mapGroup;
+        buf[7] = gBrOwnPos.mapNum;
+        BrWire_Send(BR_MSG_STEP, buf, 8);
+    }
+    else if (gBrOwnEvents & BR_OWN_FACED)
+    {
+        buf[0] = gBrMySeat;
+        buf[1] = gBrOwnPos.dir;
+        buf[2] = gBrOwnPos.mapGroup;
+        buf[3] = gBrOwnPos.mapNum;
+        BrWire_Send(BR_MSG_FACE, buf, 4);
+    }
+    gBrOwnEvents = 0;
+}
+
 void BrGhosts_Init(void)
 {
     u8 i;
+
+    BrNet_On(BR_MSG_PLACE, HandlePlace);
+    BrNet_On(BR_MSG_STEP, HandleStep);
+    BrNet_On(BR_MSG_FACE, HandleFace);
 
     for (i = 0; i < BR_MAX_SEATS; i++)
     {
@@ -279,4 +381,5 @@ void BrGhosts_Tick(void)
         }
     }
     WatchOwn();
+    EmitOwn();
 }

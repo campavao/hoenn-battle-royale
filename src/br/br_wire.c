@@ -1,0 +1,43 @@
+// Slot framing helpers (POK-217). See include/br/br_wire_c.h.
+#include "global.h"
+#include "br/br_mailbox.h"
+#include "br/br_wire.h"
+#include "br/br_wire_c.h"
+
+u16 BrWire_ReadU16(const u8 *p)
+{
+    return (u16)(p[0] | (p[1] << 8));
+}
+
+void BrWire_WriteU16(u8 *p, u16 v)
+{
+    p[0] = v & 0xFF;
+    p[1] = v >> 8;
+}
+
+bool8 BrWire_Send(u8 type, const u8 *data, u8 len)
+{
+    u8 buf[BR_SLOT_PAYLOAD_MAX];
+    u8 i;
+
+    if (len > BR_FRAME_DATA_MAX)
+        return FALSE;
+    BrWire_WriteU16(buf, len);
+    buf[2] = 0;
+    for (i = 0; i < len; i++)
+        buf[BR_FRAME_HDR + i] = data[i];
+    return BrMailbox_Push(type, buf, BR_FRAME_HDR + len);
+}
+
+u8 BrWire_Unframe(const u8 *payload, u8 len, const u8 **data)
+{
+    u16 total;
+
+    if (len < BR_FRAME_HDR)
+        return 0xFF;
+    total = BrWire_ReadU16(payload);
+    if (payload[2] != 0 || total > BR_FRAME_DATA_MAX || total > len - BR_FRAME_HDR)
+        return 0xFF;
+    *data = payload + BR_FRAME_HDR;
+    return (u8)total;
+}

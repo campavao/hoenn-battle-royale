@@ -62,5 +62,8 @@ extern struct BrOwnPos gBrOwnPos;
 #define BR_OWN_STEPPED 2  // moved one tile: send step with gBrOwnPos.dir
 #define BR_OWN_FACED 4    // turned in place: send face
 extern u8 gBrOwnEvents;
+// This ROM's seat and skin; the page sets them from the roster (0 until then).
+extern u8 gBrMySeat;
+extern u8 gBrMySkin;
 
 #endif // GUARD_BR_GHOSTS_H
