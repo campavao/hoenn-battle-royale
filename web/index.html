@@ -42,6 +42,16 @@
       .banner { background: #33424c; border-radius: 8px; padding: 8px 12px; color: #ffe08a; }
 
       #screen-playing { padding: 0; align-items: center; position: relative; }
+      .room-panel {
+        width: 100%;
+        max-width: 480px;
+        padding: 6px calc(16px + env(safe-area-inset-right)) 6px calc(16px + env(safe-area-inset-left));
+        background: #1a2128;
+        font-size: 12px;
+      }
+      .room-code { font-weight: 600; color: #9fb3c0; margin-bottom: 4px; }
+      .room-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+      .room-roster li { color: #cfe3ef; }
       #screen-wrap {
         position: relative;
         flex: 0 0 auto;
@@ -129,6 +139,10 @@
       </section>
 
       <section id="screen-playing" class="screen" hidden>
+        <div id="room-panel" class="room-panel" hidden>
+          <div id="room-code" class="room-code"></div>
+          <ul id="room-roster" class="room-roster"></ul>
+        </div>
         <div id="screen-wrap">
           <canvas id="canvas" width="240" height="160"></canvas>
           <div id="fps" class="fps" hidden></div>

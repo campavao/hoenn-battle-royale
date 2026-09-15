@@ -59,3 +59,4 @@ web/public/emu/*.map
 !relay/**/*.js
 !tools/br/**/*.js
 br-symbols.json
+!web/.env.example

@@ -7,9 +7,23 @@ import { Emulator, type GbaKey } from './emu';
 import { checkEmerald } from './rom/emerald';
 import { loadRelease, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
+import { MAILBOX } from './net/mailbox';
+import { RelayClient } from './net/relay';
+import { Bridge } from './net/bridge';
+import { encodeGen3 } from './text/gen3';
 
 const MUTE_STORAGE_KEY = 'hbr:muted';
 const UNMUTED_VOLUME = 100;
+const NAME_STORAGE_KEY = 'hbr:name';
+const DEFAULT_NAME = 'CAM';
+const DEFAULT_RELAY_URL = 'wss://hoenn-relay-production.up.railway.app';
+
+// The boot block (include/br/br_boot.h): a fresh game, dropped straight into
+// Littleroot, skipping the intro/Birch/naming screen every driver and every match
+// alike would otherwise have to sit through.
+const BR_BOOT_MAP = 1;
+const MALE = 0;
+const LITTLEROOT = { group: 0, num: 9, x: 5, y: 8 };
 
 const $ = <T extends Element>(sel: string) => document.querySelector(sel) as T;
 
@@ -96,6 +110,10 @@ async function runImportScreen(emu: Emulator): Promise<void> {
 interface PatchResult {
   bytes: Uint8Array;
   usingPatched: boolean;
+  /** gBrMailbox's bus address, from br-symbols.json -- absent when unpatched, since
+   *  there is no BR-aware ROM running to have a mailbox at all. */
+  mailboxBase?: number;
+  protocol?: number;
 }
 
 async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
@@ -118,7 +136,12 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   statusEl.textContent = 'Applying the patch…';
   try {
     const patched = await applyPatchInWorker(emu.readRom(), release.patch);
-    return { bytes: patched, usingPatched: true };
+    return {
+      bytes: patched,
+      usingPatched: true,
+      mailboxBase: release.symbols.get('gBrMailbox'),
+      protocol: release.info.protocol,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     statusEl.textContent = `Patch failed: ${message}`;
@@ -304,6 +327,86 @@ function wireFps(emu: Emulator): void {
   }, 1000);
 }
 
+// ---- boot: start in Littleroot under the career name (br_boot.h) ------------------------
+
+function careerName(): string {
+  return localStorage.getItem(NAME_STORAGE_KEY) || DEFAULT_NAME;
+}
+
+/** Writes gBrMailbox.boot so a fresh game skips the intro/Birch/naming screens and
+ *  is already standing in Littleroot -- every driver's own trick (project CLAUDE.md),
+ *  used here so a match (or solo play) starts the same way. The ROM clears `mode`
+ *  once it has consumed the block. */
+function writeBootBlock(emu: Emulator, mailboxBase: number, name: string): void {
+  const boot = mailboxBase + MAILBOX.OFF_BOOT;
+  emu.write(boot + 0, BR_BOOT_MAP, 8);
+  emu.write(boot + 1, MALE, 8);
+  emu.write(boot + 2, LITTLEROOT.group, 8);
+  emu.write(boot + 3, LITTLEROOT.num, 8);
+  emu.write(boot + 4, LITTLEROOT.x, 16);
+  emu.write(boot + 6, LITTLEROOT.y, 16);
+  const nameField = emu.bytes(boot + 8, 8);
+  nameField.fill(0xff); // EOS (include/constants/characters.h) pads whatever the name doesn't fill
+  nameField.set(encodeGen3(name, 7));
+}
+
+// ---- room: relay + bridge, opted into by the URL hash ------------------------------------
+
+interface RoomHash {
+  mode: 'host' | 'join';
+  code?: string;
+}
+
+/** `#host` hosts a room; `#join=CODE` joins one; no hash at all is solo play with no
+ *  socket opened (Kanto's rule, project CLAUDE.md). */
+function parseRoomHash(): RoomHash | null {
+  const hash = location.hash.slice(1);
+  if (hash === 'host') return { mode: 'host' };
+  const joined = /^join=([A-Za-z0-9]+)$/.exec(hash);
+  return joined ? { mode: 'join', code: joined[1].toUpperCase() } : null;
+}
+
+function renderRoom(bridge: Bridge): void {
+  const list = $('#room-roster') as HTMLElement;
+  list.innerHTML = '';
+  for (const entry of bridge.roster.all()) {
+    const li = document.createElement('li');
+    const label = entry.name || `P${entry.seat}`;
+    li.textContent = `${label}${entry.isMe ? ' (you)' : ''}${entry.alive ? '' : ' -- OUT'}`;
+    list.appendChild(li);
+  }
+}
+
+function wireRoom(emu: Emulator, mailboxBase: number | undefined, protocol: number | undefined): void {
+  const hash = parseRoomHash();
+  if (!hash || mailboxBase === undefined) return; // solo: no socket at all
+
+  const panel = $('#room-panel') as HTMLElement;
+  const codeEl = $('#room-code') as HTMLElement;
+  panel.hidden = false;
+  codeEl.textContent = hash.mode === 'host' ? 'Hosting…' : `Joining ${hash.code}…`;
+
+  const relay = new RelayClient();
+  let bridge: Bridge | null = null;
+
+  const attach = (seat: number, code: string) => {
+    bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol });
+    codeEl.textContent = `Room ${code}`;
+    renderRoom(bridge);
+  };
+
+  relay.on('room_hosted', (ev) => attach(ev.id, ev.code));
+  relay.on('room_joined', (ev) => attach(ev.id, ev.code));
+  relay.on('roster', () => bridge && renderRoom(bridge));
+  relay.on('room_error', (ev) => (codeEl.textContent = `Couldn't join: ${ev.reason}`));
+  relay.on('closed', (ev) => (codeEl.textContent = `Disconnected: ${ev.reason}`));
+
+  const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
+  relay.connect(relayUrl);
+  if (hash.mode === 'host') relay.host({ name: careerName(), open: false });
+  else relay.join(hash.code!, { name: careerName() });
+}
+
 // ---- wiring -------------------------------------------------------------------------------
 
 function wirePlayScreen(emu: Emulator): void {
@@ -322,13 +425,16 @@ async function main(): Promise<void> {
   const emu = await Emulator.create(canvas);
 
   await runImportScreen(emu);
-  const { bytes, usingPatched } = await runPatchingScreen(emu);
+  const { bytes, usingPatched, mailboxBase, protocol } = await runPatchingScreen(emu);
 
   showScreen('playing');
   if (usingPatched) await emu.startBytes(bytes);
   else await emu.start();
 
+  if (mailboxBase !== undefined) writeBootBlock(emu, mailboxBase, careerName());
+
   wirePlayScreen(emu);
+  wireRoom(emu, mailboxBase, protocol);
 }
 
 main().catch((err) => {
