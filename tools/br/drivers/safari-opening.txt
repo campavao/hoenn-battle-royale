@@ -1,0 +1,29 @@
+# safari-opening: boot mode 2 = Safari Zone South with 30 balls; START deals seat 0 a
+# spawn on Route 110; CLOCK 0 ends the opening: no party -> OUT goes out.
+wait 30
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gNumSafariBalls 30
+expect u8 gBrMatch 1
+expect u8 *gSaveBlock1Ptr+4 26
+expect u8 *gSaveBlock1Ptr+5 3
+shot safari
+# START: type 14, framed len 21 = hdr(12 00 00) + seed 78 56 34 12, count 01, safari 78 00, fog 78 00, pace 00,
+# row: seat 00, group 00, num 19, x 0A 00, y 28 00, out 00
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 4
+expect u8 gBrMatch+1 1
+expect u16 gBrMatch+2 120
+expect u8 gBrMatch+48 0
+expect u8 gBrMatch+49 25
+expect u16 gBrMatch+50 10
+expect u16 gBrMatch+12 120
+# CLOCK: type 13, framed len 6 = hdr(03 00 00) + seat 00, left 00 00
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 4
+# no party: OUT (type 9) went out as the first message after our PLACE
+expect u8 gBrMatch 3
+expect u8 gBrMailbox+0x58 9
+say safari-opening ok

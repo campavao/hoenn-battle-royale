@@ -29,6 +29,51 @@ bool8 BrWire_Send(u8 type, const u8 *data, u8 len)
     return BrMailbox_Push(type, buf, BR_FRAME_HDR + len);
 }
 
+bool8 BrWire_Assemble(struct BrAssembler *as, u8 baseType, bool8 isCont, const u8 *payload, u8 len)
+{
+    u16 i, n;
+    const u8 *src;
+
+    if (!isCont && len >= BR_FRAME_HDR && payload[2] == 0)
+    {
+        // First slot: totalLen, seq 0, data.
+        as->total = BrWire_ReadU16(payload);
+        if (as->total > as->cap)
+        {
+            as->type = 0;
+            return FALSE;
+        }
+        as->type = baseType;
+        as->got = 0;
+        as->nextSeq = 1;
+        src = payload + BR_FRAME_HDR;
+        n = len - BR_FRAME_HDR;
+    }
+    else if (isCont && as->type == baseType && len >= 1 && payload[0] == as->nextSeq)
+    {
+        // Continuation: seq, data.
+        as->nextSeq++;
+        src = payload + 1;
+        n = len - 1;
+    }
+    else
+    {
+        as->type = 0; // gap, stray continuation, or a different message: start over
+        return FALSE;
+    }
+    if (n > as->total - as->got)
+        n = as->total - as->got;
+    for (i = 0; i < n; i++)
+        as->buf[as->got + i] = src[i];
+    as->got += n;
+    if (as->got >= as->total)
+    {
+        as->type = 0;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 u8 BrWire_Unframe(const u8 *payload, u8 len, const u8 **data)
 {
     u16 total;

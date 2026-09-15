@@ -1,0 +1,154 @@
+// Match phases, START and CLOCK, the Safari opening's end and the drop (POK-222).
+#include "global.h"
+#include "main.h"
+#include "overworld.h"
+#include "field_screen_effect.h"
+#include "safari_zone.h"
+#include "pokemon.h"
+#include "constants/maps.h"
+#include "br/br_mailbox.h"
+#include "br/br_wire.h"
+#include "br/br_wire_c.h"
+#include "br/br_ghosts.h"
+#include "br/br_match.h"
+
+EWRAM_DATA struct BrMatch gBrMatch = {0};
+// START can span slots once there are more than six spawn rows.
+static EWRAM_DATA u8 sStartBuf[10 + 8 * BR_MAX_SEATS];
+static EWRAM_DATA struct BrAssembler sStartAsm = {0};
+
+static bool8 OverworldRunning(void)
+{
+    return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
+}
+
+static void ParseStart(const u8 *d, u16 n)
+{
+    u8 i, count;
+
+    if (n < 10)
+        return;
+    gBrMatch.seed = d[0] | (d[1] << 8) | (d[2] << 16) | ((u32)d[3] << 24);
+    count = d[4];
+    gBrMatch.safariSecs = BrWire_ReadU16(d + 5);
+    gBrMatch.fogSecs = BrWire_ReadU16(d + 7);
+    gBrMatch.pace = d[9];
+    if (count > BR_MAX_SEATS)
+        count = BR_MAX_SEATS;
+    if (n < 10 + 8 * count)
+        return;
+    for (i = 0; i < count; i++)
+    {
+        const u8 *row = d + 10 + 8 * i;
+        u8 seat = row[0];
+
+        if (seat >= BR_MAX_SEATS)
+            continue;
+        gBrMatch.spawns[seat].mapGroup = row[1];
+        gBrMatch.spawns[seat].mapNum = row[2];
+        gBrMatch.spawns[seat].x = (s16)BrWire_ReadU16(row + 3);
+        gBrMatch.spawns[seat].y = (s16)BrWire_ReadU16(row + 5);
+        gBrMatch.haveSpawn[seat] = TRUE;
+    }
+    gBrMatch.spawnCount = count;
+    gBrMatch.started = TRUE;
+    if (gBrMatch.safariSecs > 0 && gBrMatch.phase == BR_PHASE_SAFARI)
+    {
+        gBrMatch.clockLeft = gBrMatch.safariSecs;
+        gBrMatch.clockFrames = 60;
+    }
+}
+
+static void HandleStart(const u8 *payload, u8 len)
+{
+    if (BrWire_Assemble(&sStartAsm, BR_MSG_START, FALSE, payload, len))
+        ParseStart(sStartAsm.buf, sStartAsm.total);
+}
+
+static void HandleStartCont(const u8 *payload, u8 len)
+{
+    if (BrWire_Assemble(&sStartAsm, BR_MSG_START, TRUE, payload, len))
+        ParseStart(sStartAsm.buf, sStartAsm.total);
+}
+
+static void HandleClock(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 3)
+        return;
+    gBrMatch.clockLeft = BrWire_ReadU16(d + 1);
+    gBrMatch.clockFrames = 60;
+}
+
+void BrMatch_Init(void)
+{
+    CpuFill32(0, &gBrMatch, sizeof(gBrMatch));
+    sStartAsm.buf = sStartBuf;
+    sStartAsm.cap = sizeof(sStartBuf);
+    sStartAsm.type = 0;
+    BrNet_On(BR_MSG_START, HandleStart);
+    BrNet_On(BR_MSG_START | BR_MSG_CONT, HandleStartCont);
+    BrNet_On(BR_MSG_CLOCK, HandleClock);
+}
+
+void BrMatch_BeginSafari(void)
+{
+    EnterSafariMode();
+    gBrMatch.phase = BR_PHASE_SAFARI;
+    gBrMatch.clockLeft = gBrMatch.safariSecs;
+    gBrMatch.clockFrames = 60;
+}
+
+static void SendOut(void)
+{
+    u8 seat = gBrMySeat;
+
+    gBrMatch.phase = BR_PHASE_OUT;
+    BrWire_Send(BR_MSG_OUT, &seat, 1);
+}
+
+void BrMatch_SafariOver(void)
+{
+    struct BrSpawn *sp;
+
+    if (gBrMatch.phase != BR_PHASE_SAFARI)
+        return;
+    ExitSafariMode();
+    if (CalculatePlayerPartyCount() == 0)
+    {
+        // Caught nothing: eliminated at the buzzer (Kanto rule). The page takes over.
+        SendOut();
+        return;
+    }
+    gBrMatch.phase = BR_PHASE_PLAY;
+    if (!gBrMatch.haveSpawn[gBrMySeat])
+        return; // no deal yet; the page will place us with a later START
+    sp = &gBrMatch.spawns[gBrMySeat];
+    SetWarpDestination(sp->mapGroup, sp->mapNum, WARP_ID_NONE, sp->x, sp->y);
+    DoWarp();
+}
+
+void BrMatch_Tick(void)
+{
+    if (gBrMatch.phase != BR_PHASE_SAFARI || !OverworldRunning())
+        return;
+    // Balls gone mid-opening: the scripts that would warp out are stubbed under BR,
+    // so this is where the opening ends for the ball-less.
+    if (gNumSafariBalls == 0 && gBrMatch.started)
+    {
+        BrMatch_SafariOver();
+        return;
+    }
+    if (!gBrMatch.started)
+        return;
+    if (gBrMatch.clockFrames > 0 && --gBrMatch.clockFrames == 0)
+    {
+        gBrMatch.clockFrames = 60;
+        if (gBrMatch.clockLeft > 0)
+            gBrMatch.clockLeft--;
+    }
+    if (gBrMatch.clockLeft == 0)
+        BrMatch_SafariOver();
+}

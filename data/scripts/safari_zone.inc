@@ -1,10 +1,18 @@
 SafariZone_EventScript_OutOfBallsMidBattle::
+.if BR
+@ The opening ends where the match's own code says (BrMatch_Tick sees the balls gone).
+	end
+.endif
 	setvar VAR_SAFARI_ZONE_STATE, 1
 	special ExitSafariMode
 	setwarp MAP_ROUTE121_SAFARI_ZONE_ENTRANCE, 2, 5
 	end
 
 SafariZone_EventScript_Exit::
+.if BR
+	releaseall
+	end
+.endif
 	setvar VAR_SAFARI_ZONE_STATE, 1
 	special ExitSafariMode
 	warp MAP_ROUTE121_SAFARI_ZONE_ENTRANCE, 2, 5

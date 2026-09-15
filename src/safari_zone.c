@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_match.h"
+#endif
 #include "battle.h"
 #include "event_data.h"
 #include "field_player_avatar.h"
@@ -83,7 +86,11 @@ bool8 SafariZoneTakeStep(void)
     sSafariZoneStepCounter--;
     if (sSafariZoneStepCounter == 0)
     {
+#if BR
+        BrMatch_SafariOver();
+#else
         ScriptContext_SetupScript(SafariZone_EventScript_TimesUp);
+#endif
         return TRUE;
     }
     return FALSE;

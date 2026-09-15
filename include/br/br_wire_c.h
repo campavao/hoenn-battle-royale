@@ -16,6 +16,21 @@ bool8 BrWire_Send(u8 type, const u8 *data, u8 len);
 // length, or 0xFF when the frame is a continuation or claims more than one slot.
 u8 BrWire_Unframe(const u8 *payload, u8 len, const u8 **data);
 
+// Multi-slot reassembly: feed every slot of a type (and its type | BR_MSG_CONT)
+// through BrWire_Assemble; it returns TRUE on the slot that completes a message, with
+// the bytes in buf[0..total). A seq gap or an oversize message resets the assembler.
+struct BrAssembler
+{
+    u8 *buf;
+    u16 cap;
+    u16 total;
+    u16 got;
+    u8 type;    // the base type being assembled, 0 when idle
+    u8 nextSeq;
+};
+// isCont: the slot arrived on type | BR_MSG_CONT (register a handler for that type too).
+bool8 BrWire_Assemble(struct BrAssembler *as, u8 baseType, bool8 isCont, const u8 *payload, u8 len);
+
 // Little-endian helpers on byte buffers (agbcc has no packed structs to lean on).
 u16 BrWire_ReadU16(const u8 *p);
 void BrWire_WriteU16(u8 *p, u16 v);

@@ -19,6 +19,7 @@
 #include "script_pokemon_util.h"
 #include "br/br_mailbox.h"
 #include "br/br_boot.h"
+#include "br/br_match.h"
 
 static EWRAM_DATA u8 sBooted = 0;
 
@@ -87,11 +88,21 @@ void BrBoot_Tick(void)
     if (sBooted || b->mode == BR_BOOT_NONE || !PreGame())
         return;
     sBooted = TRUE;
-    if (BR_BOOT_MODE(b->mode) == BR_BOOT_MAP)
+    if (BR_BOOT_MODE(b->mode) == BR_BOOT_MAP || BR_BOOT_MODE(b->mode) == BR_BOOT_SAFARI)
     {
+        if (BR_BOOT_MODE(b->mode) == BR_BOOT_SAFARI)
+        {
+            // Safari Zone South, a few tiles north of the exit gate.
+            b->mapGroup = MAP_GROUP(MAP_SAFARI_ZONE_SOUTH);
+            b->mapNum = MAP_NUM(MAP_SAFARI_ZONE_SOUTH);
+            b->x = 32;
+            b->y = 30;
+        }
         StartGameAt(b);
         if (b->mode & BR_BOOT_FLAG_TESTMON)
             ScriptGiveMon(SPECIES_TREECKO, 5, 0, 0, 0, 0);
+        if (BR_BOOT_MODE(b->mode) == BR_BOOT_SAFARI)
+            BrMatch_BeginSafari();
     }
     b->mode = BR_BOOT_NONE;
 }

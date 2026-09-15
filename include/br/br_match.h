@@ -1,0 +1,49 @@
+#ifndef GUARD_BR_MATCH_H
+#define GUARD_BR_MATCH_H
+
+#include "br/br_config.h"
+
+// The match as the ROM sees it (POK-222/POK-223): the phase, what START dealt, and
+// the shared clock. The page's director owns the rules; this is the ROM's copy plus
+// the transitions it has to perform itself (the Safari opening ending, the drop).
+
+#define BR_PHASE_NONE 0
+#define BR_PHASE_SAFARI 1   // in the Safari Zone, no fighting, catching only
+#define BR_PHASE_PLAY 2     // dropped, the match proper
+#define BR_PHASE_OUT 3      // eliminated
+
+struct BrSpawn
+{
+    /* 0 */ u8 mapGroup;
+    /* 1 */ u8 mapNum;
+    /* 2 */ s16 x;      // map coords, no MAP_OFFSET (what SetWarpDestination takes)
+    /* 4 */ s16 y;
+};                      // 6 bytes
+
+struct BrMatch
+{
+    /* 0 */ u8 phase;
+    /* 1 */ u8 started;      // START received
+    /* 2 */ u16 safariSecs;  // from START
+    /* 4 */ u16 fogSecs;
+    /* 6 */ u8 pace;         // START paceFlags
+    /* 7 */ u8 spawnCount;
+    /* 8 */ u32 seed;
+    /* 12 */ u16 clockLeft;  // seconds, last CLOCK then counted down locally
+    /* 14 */ u16 clockFrames; // frames until the next local second
+    /* 16 */ u8 haveSpawn[BR_MAX_SEATS];          // a row arrived for the seat
+    /* 48 */ struct BrSpawn spawns[BR_MAX_SEATS]; // 192 bytes
+    /* 240 */
+};
+
+extern struct BrMatch gBrMatch;
+
+void BrMatch_Init(void);
+void BrMatch_Tick(void);
+// Enter the Safari opening on the current map (the boot warped us there).
+void BrMatch_BeginSafari(void);
+// The opening is over for us: out of time, steps or balls. Empty party -> OUT,
+// else warp to our dealt spawn. Safe to call from a field step hook.
+void BrMatch_SafariOver(void);
+
+#endif // GUARD_BR_MATCH_H
