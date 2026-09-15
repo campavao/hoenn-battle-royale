@@ -14,12 +14,18 @@ struct BrEngage
     /* 1 */ u8 cooldown;     // frames before another challenge may go out
     /* 2 */ u16 nonce;
     /* 4 */ u16 challenges;  // sent so far, for drivers
-    /* 6 */ u16 pad;
+    /* 6 */ u8 fledFrom;     // a seat we fled from: no re-challenge while fledLockout > 0, 0xFF none
+    /* 7 */ u8 pad;
+    /* 8 */ u16 fledLockout; // frames left on the fled-from lockout
 };
 
 extern struct BrEngage gBrEngage;
 
 void BrEngage_Init(void);
 void BrEngage_Tick(void);
+// Called when a link battle returns to the field: a grace on both sides, and a longer
+// lockout on the seat we fled from (fleeing is not a way to pick when the fight
+// restarts -- the pursuer keeps coming, but we do not turn and re-engage them).
+void BrEngage_OnBattleEnd(u8 peerSeat, u8 outcome);
 
 #endif // GUARD_BR_ENGAGE_H

@@ -28,6 +28,7 @@
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
+#include "br/br_engage.h"
 #include "br/br_netlink.h"
 
 EWRAM_DATA struct BrNetlink gBrNetlink = {0};
@@ -275,6 +276,7 @@ static void CB2_BrReturnFromBattle(void)
     gBattleTypeFlags &= ~BATTLE_TYPE_LINK_IN_BATTLE;
     Overworld_ResetMapMusic();
     gBrNetlink.lastOutcome = gBattleOutcome;
+    BrEngage_OnBattleEnd(gBrNetlink.peerSeat, gBattleOutcome);
     buf[0] = gBrMySeat;
     switch (gBattleOutcome)
     {

@@ -4,6 +4,7 @@
 #include "overworld.h"
 #include "fieldmap.h"
 #include "script.h"
+#include "constants/battle.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -18,6 +19,11 @@ static EWRAM_DATA u8 sBusyKind = 0;    // the kind we are settling on
 static EWRAM_DATA u8 sBusyStable = 0;  // frames it has held
 
 #define BR_BUSY_SETTLE 20
+
+// After a fight ends, neither of the pair re-engages for a grace so the escape a flee
+// promises is real; the fleer stays off the seat it fled from far longer (POK-231).
+#define BR_ENGAGE_GRACE 120     // 2 s, both sides, any re-challenge
+#define BR_ENGAGE_LOCKOUT 600   // 10 s, the fleer will not initiate on that pursuer
 
 // Tell the room what we are doing, once it has held long enough to be a state and
 // not a transition (a warp's map load is a menu for a few frames). Nothing is said
@@ -121,9 +127,23 @@ void BrEngage_Init(void)
     gBrEngage.cooldown = 0;
     gBrEngage.nonce = 0;
     gBrEngage.challenges = 0;
+    gBrEngage.fledFrom = 0xFF;
+    gBrEngage.fledLockout = 0;
     sOwnBusy = 0xFF;
     sBusyKind = 0;
     sBusyStable = 0;
+}
+
+void BrEngage_OnBattleEnd(u8 peerSeat, u8 outcome)
+{
+    gBrEngage.cooldown = BR_ENGAGE_GRACE;
+    // B_OUTCOME_RAN is our own trainer running; MON_FLED is the peer running from us.
+    // Only the fleer is held off the pursuer; the pursuer is free after the grace.
+    if (outcome == B_OUTCOME_RAN)
+    {
+        gBrEngage.fledFrom = peerSeat;
+        gBrEngage.fledLockout = BR_ENGAGE_LOCKOUT;
+    }
 }
 
 void BrEngage_Tick(void)
@@ -132,6 +152,8 @@ void BrEngage_Tick(void)
 
     if (gBrEngage.cooldown)
         gBrEngage.cooldown--;
+    if (gBrEngage.fledLockout && --gBrEngage.fledLockout == 0)
+        gBrEngage.fledFrom = 0xFF;
     ReportBusy();
     if (!CanEngage())
         return;
@@ -147,6 +169,8 @@ void BrEngage_Tick(void)
             continue; // not spawned here (too many ghosts): not in sight either
         if (gBrSeatBusy[seat] == BR_BUSY_BATTLE)
             continue; // already fighting someone; a menu is not a hiding place though
+        if (seat == gBrEngage.fledFrom)
+            continue; // we fled this one: no turning around to re-engage yet
         if (Sees(gBrOwnPos.x, gBrOwnPos.y, gBrOwnPos.dir, s->x, s->y)
          || Sees(s->x, s->y, s->dir, gBrOwnPos.x, gBrOwnPos.y))
         {

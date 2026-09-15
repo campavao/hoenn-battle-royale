@@ -1,0 +1,26 @@
+# pursuit-lockout: after we flee a seat, we do not turn and re-engage it (POK-231).
+# A ghost is placed in our eyeline while seat 1 is our fledFrom: no challenge goes out.
+# Once the lockout runs down, the same eyeline challenge fires -- the pursuer is fair
+# game again (and until then it is free to keep chasing us).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrNetlink+8 1
+# we fled seat 1: hold it off
+poke u8 gBrEngage+6 1
+poke u16 gBrEngage+8 200
+# seat 1 at (15,16) facing WEST, in our eyeline (as in the engage driver)
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 60
+shot locked
+expect u16 gBrEngage+4 0
+expect u8 gBrNetlink 0
+# run the lockout down to zero; fledFrom clears and the eyeline challenge fires
+poke u16 gBrEngage+8 3
+wait 40
+expect u8 gBrEngage+6 0xFF
+expectge u16 gBrEngage+4 1
+expect u8 gBrNetlink 1
+shot chased
+say pursuit lockout ok
