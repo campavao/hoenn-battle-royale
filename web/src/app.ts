@@ -4,8 +4,8 @@
 // directly, per the project CLAUDE.md.
 
 import { Emulator, type GbaKey } from './emu';
-import { checkEmerald } from './rom/emerald';
-import { loadRelease, type ReleaseInfo } from './release';
+import { checkEmerald, isPrePatched } from './rom/emerald';
+import { loadRelease, loadSidecars, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
 import { MAILBOX } from './net/mailbox';
 import { RelayClient } from './net/relay';
@@ -66,7 +66,9 @@ function applyPatchInWorker(source: Uint8Array, patch: Uint8Array): Promise<Uint
 // ---- importing ----------------------------------------------------------------------
 
 async function runImportScreen(emu: Emulator): Promise<void> {
-  if (emu.hasRom()) return; // already imported on this device; nothing to do
+  // Dev only: a `#rom=` in the hash always wins over whatever is stored.
+  const devRomHash = import.meta.env.DEV ? new URLSearchParams(location.hash.slice(1)).get('rom') : null;
+  if (emu.hasRom() && !devRomHash) return; // already imported on this device; nothing to do
 
   showScreen('importing');
   const input = $('#rom-input') as HTMLInputElement;
@@ -82,6 +84,10 @@ async function runImportScreen(emu: Emulator): Promise<void> {
     const handle = async (file: File) => {
       errorEl.hidden = true;
       const fileBytes = new Uint8Array(await file.arrayBuffer());
+      if (import.meta.env.DEV && isPrePatched(fileBytes)) {
+        resolve(fileBytes); // a local build: dev runs it without a patch
+        return;
+      }
       const result = await checkEmerald(fileBytes);
       if (!result.ok) {
         showError(result.reason ?? 'not a Pokémon Emerald (U) ROM, 16 MiB');
@@ -94,6 +100,14 @@ async function runImportScreen(emu: Emulator): Promise<void> {
       const file = input.files?.[0];
       if (file) void handle(file);
     });
+    // Dev only: `#rom=<absolute path>` pulls a local file through Vite's /@fs/ route so a
+    // headless browser can drive the shell without a file picker. Never in production.
+    const devRom = import.meta.env.DEV ? new URLSearchParams(location.hash.slice(1)).get('rom') : null;
+    if (devRom) {
+      void fetch(`/@fs/${devRom}`)
+        .then(async (r) => handle(new File([await r.arrayBuffer()], 'dev.gba')))
+        .catch((e) => showError(`dev ROM: ${String(e)}`));
+    }
     dropzone.addEventListener('dragover', (e) => e.preventDefault());
     dropzone.addEventListener('drop', (e) => {
       e.preventDefault();
@@ -122,6 +136,13 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   const bannerEl = $('#patch-banner') as HTMLElement;
 
   statusEl.textContent = 'Checking for a release…';
+  const stored = emu.readRom();
+  if (import.meta.env.DEV && isPrePatched(stored)) {
+    const side = await loadSidecars();
+    if (!side) throw new Error('pre-patched ROM but no /patch/br-symbols.json: run tools/br/dev-patch.sh');
+    setVersionLine(`${versionText(side.info)} · local build`);
+    return { bytes: stored, usingPatched: true, mailboxBase: side.symbols.get('gBrMailbox'), protocol: side.info.protocol };
+  }
   const release = await loadRelease();
 
   if (release.status === 'unpublished') {
@@ -329,6 +350,21 @@ function wireFps(emu: Emulator): void {
 
 // ---- boot: start in Littleroot under the career name (br_boot.h) ------------------------
 
+function waitForMailbox(emu: Emulator, mailboxBase: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let frames = 0;
+    const off = emu.onFrame(() => {
+      if (emu.read(mailboxBase + MAILBOX.OFF_MAGIC, 16) === MAILBOX.MAGIC) {
+        off();
+        resolve();
+      } else if (++frames > 600) {
+        off();
+        reject(new Error('the ROM never woke its mailbox: is this a Hoenn BR build?'));
+      }
+    });
+  });
+}
+
 function careerName(): string {
   return localStorage.getItem(NAME_STORAGE_KEY) || DEFAULT_NAME;
 }
@@ -360,10 +396,10 @@ interface RoomHash {
 /** `#host` hosts a room; `#join=CODE` joins one; no hash at all is solo play with no
  *  socket opened (Kanto's rule, project CLAUDE.md). */
 function parseRoomHash(): RoomHash | null {
-  const hash = location.hash.slice(1);
-  if (hash === 'host') return { mode: 'host' };
-  const joined = /^join=([A-Za-z0-9]+)$/.exec(hash);
-  return joined ? { mode: 'join', code: joined[1].toUpperCase() } : null;
+  const params = new URLSearchParams(location.hash.slice(1));
+  if (params.has('host')) return { mode: 'host' };
+  const code = params.get('join');
+  return code && /^[A-Za-z0-9]+$/.test(code) ? { mode: 'join', code: code.toUpperCase() } : null;
 }
 
 function renderRoom(bridge: Bridge): void {
@@ -390,6 +426,8 @@ function wireRoom(emu: Emulator, mailboxBase: number | undefined, protocol: numb
   let bridge: Bridge | null = null;
 
   const attach = (seat: number, code: string) => {
+    if (bridge) bridge.dispose(); // a re-join after a reconnect must not leave two pumps on one ring
+    console.info(`[room] attached as seat ${seat} in ${code}`);
     bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol });
     codeEl.textContent = `Room ${code}`;
     renderRoom(bridge);
@@ -431,7 +469,12 @@ async function main(): Promise<void> {
   if (usingPatched) await emu.startBytes(bytes);
   else await emu.start();
 
-  if (mailboxBase !== undefined) writeBootBlock(emu, mailboxBase, careerName());
+  // BrMailbox_Init zeroes the struct on the ROM's first frame, so the boot block has to
+  // land after the magic appears, not before.
+  if (mailboxBase !== undefined) {
+    await waitForMailbox(emu, mailboxBase);
+    writeBootBlock(emu, mailboxBase, careerName());
+  }
 
   wirePlayScreen(emu);
   wireRoom(emu, mailboxBase, protocol);

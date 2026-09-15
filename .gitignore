@@ -60,3 +60,5 @@ web/public/emu/*.map
 !tools/br/**/*.js
 br-symbols.json
 !web/.env.example
+web/public/patch/*
+!web/public/patch/.gitkeep

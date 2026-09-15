@@ -30,6 +30,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
     return null; // network error, offline, etc. -- treated the same as "not there"
   }
   if (!res.ok) return null;
+  if ((res.headers.get('content-type') ?? '').includes('text/html')) return null;
   return (await res.json()) as T;
 }
 
@@ -41,6 +42,8 @@ async function fetchBytes(url: string): Promise<Uint8Array | null> {
     return null;
   }
   if (!res.ok) return null;
+  // A dev server answers a missing file with index.html; that is "not there" too.
+  if ((res.headers.get('content-type') ?? '').includes('text/html')) return null;
   return new Uint8Array(await res.arrayBuffer());
 }
 
@@ -48,6 +51,14 @@ function parseSymbols(raw: Record<string, string>): Map<string, number> {
   const symbols = new Map<string, number>();
   for (const [name, hex] of Object.entries(raw)) symbols.set(name, Number.parseInt(hex, 16));
   return symbols;
+}
+
+/** Dev only: the sidecars without a patch, for a ROM that is already patched (a local
+ * build). tools/br/dev-patch.sh writes them into web/public/patch/. */
+export async function loadSidecars(): Promise<{ info: ReleaseInfo; symbols: Map<string, number> } | null> {
+  const [info, rawSymbols] = await Promise.all([fetchJson<ReleaseInfo>(VERSION_URL), fetchJson<Record<string, string>>(SYMBOLS_URL)]);
+  if (!info || !rawSymbols) return null;
+  return { info, symbols: parseSymbols(rawSymbols) };
 }
 
 /** Loads the release triple, or a clear "nothing published yet" state -- never throws

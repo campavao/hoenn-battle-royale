@@ -31,6 +31,13 @@ function readGameCode(bytes: Uint8Array): string {
 /** Checks a file the player picked against the Pokemon Emerald (U) baseline the
  * shipped patch was diffed from. `sha1` is always populated when it was computed,
  * even on a mismatch, so a caller can log or display it. */
+/** True for a ROM our own build produced: the header title reads HOENN BR. Only a dev
+ * build of the shell accepts one (it skips the BPS and runs it as-is). */
+export function isPrePatched(bytes: Uint8Array): boolean {
+  const title = String.fromCharCode(...bytes.subarray(0xa0, 0xa8));
+  return bytes.length === EMERALD_SIZE && title === 'HOENN BR';
+}
+
 export async function checkEmerald(bytes: Uint8Array): Promise<EmeraldCheck> {
   if (bytes.length !== EMERALD_SIZE) {
     return {

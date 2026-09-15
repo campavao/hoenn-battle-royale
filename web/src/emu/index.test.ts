@@ -27,6 +27,7 @@ function fakeCore() {
         if (!files.has(p)) throw new Error('ENOENT');
         return {};
       },
+      readdir: (dir) => ['.', '..', ...[...files.keys()].filter((k) => k.startsWith(dir + '/')).map((k) => k.slice(dir.length + 1))],
     },
     loadGame: (p) => {
       calls.push(`load ${p}`);
@@ -73,6 +74,13 @@ describe('Emulator', () => {
     expect(calls).toEqual(['sync', 'load /data/games/emerald.gba']);
     await emu.forgetRom();
     expect(emu.hasRom()).toBe(false);
+  });
+
+  it('drops the core auto-save state before booting', async () => {
+    const { emu, files } = await make();
+    files.set('/autosave/patched.ss', new Uint8Array([1]));
+    await emu.start(new Uint8Array([1]));
+    expect(files.has('/autosave/patched.ss')).toBe(false);
   });
 
   it('reads back the stored ROM bytes', async () => {

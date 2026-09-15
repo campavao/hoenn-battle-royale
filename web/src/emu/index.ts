@@ -31,6 +31,7 @@ export interface CoreModule {
     readFile(path: string): Uint8Array;
     unlink(path: string): void;
     stat(path: string): unknown;
+    readdir(path: string): string[];
   };
   loadGame(romPath: string, savePathOverride?: string): boolean;
   quitGame(): void;
@@ -60,6 +61,7 @@ const ROM_PATH = '/data/games/emerald.gba';
 // player's original, stored ROM with the patched bytes (POK-213).
 const PATCHED_ROM_PATH = '/data/games/patched.gba';
 const SCREENSHOT_PATH = '/data/screenshots/shot.png';
+const AUTOSAVE_DIR = '/autosave';
 
 /** Loads the core script raw from public/emu, outside Vite's import analysis. */
 export async function loadCoreFactory(url = '/emu/mgba.js'): Promise<CoreFactory> {
@@ -132,6 +134,15 @@ export class Emulator {
   }
 
   private async boot(path: string): Promise<void> {
+    // The core auto-saves a state every 30 s and restores it on the next loadGame of
+    // the same file. A match must always start from power-on, so drop those first.
+    try {
+      for (const f of this.m.FS.readdir(AUTOSAVE_DIR)) {
+        if (f !== '.' && f !== '..') this.m.FS.unlink(`${AUTOSAVE_DIR}/${f}`);
+      }
+    } catch {
+      /* no autosave dir yet */
+    }
     if (!this.m.loadGame(path)) throw new Error('loadGame failed');
     this.running = true;
     // addCoreCallbacks is a no-op until a core exists, so this must follow loadGame.
