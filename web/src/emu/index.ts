@@ -1,0 +1,255 @@
+// The emulator, as the shell sees it (POK-212).
+//
+// Wraps the mGBA wasm core served from /emu/mgba.js (thenick775/mgba feature/wasm plus
+// tools/br/mgba-wasm/hbr-exports.patch). The core runs on its own pthread; the page
+// reads the GBA's work RAM through a Uint8Array view over the shared wasm heap, and
+// gets a callback on the main thread after every emulated frame. That callback is
+// where the mailbox is drained (POK-216).
+//
+// Everything Emerald-specific stays out of here; this file knows GBA memory, keys,
+// files and frames, nothing about save blocks or the match.
+
+export type GbaKey = 'a' | 'b' | 'select' | 'start' | 'right' | 'left' | 'up' | 'down' | 'r' | 'l';
+
+/** Bit positions match mGBA's GBA_KEY_* order, so a mask round-trips to the harness. */
+export const KEY_BIT: Record<GbaKey, number> = {
+  a: 0, b: 1, select: 2, start: 3, right: 4, left: 5, up: 6, down: 7, r: 8, l: 9,
+};
+export const ALL_KEYS = Object.keys(KEY_BIT) as GbaKey[];
+
+export const EWRAM_BASE = 0x02000000;
+export const EWRAM_SIZE = 0x40000;
+export const IWRAM_BASE = 0x03000000;
+export const IWRAM_SIZE = 0x8000;
+
+/** The subset of the core's Module contract this wrapper uses. */
+export interface CoreModule {
+  FSInit(): Promise<void>;
+  FSSync(): Promise<void>;
+  FS: {
+    writeFile(path: string, data: Uint8Array): void;
+    readFile(path: string): Uint8Array;
+    unlink(path: string): void;
+    stat(path: string): unknown;
+  };
+  loadGame(romPath: string, savePathOverride?: string): boolean;
+  quitGame(): void;
+  pauseGame(): void;
+  resumeGame(): void;
+  buttonPress(name: string): void;
+  buttonUnpress(name: string): void;
+  setVolume(percent: number): void;
+  getVolume(): number;
+  setFastForwardMultiplier(multiplier: number): void;
+  saveState(slot: number): boolean;
+  loadState(slot: number): boolean;
+  screenshot(fileName?: string): boolean;
+  addCoreCallbacks(cb: {
+    videoFrameEndedCallback?: (() => void) | null;
+    coreCrashedCallback?: (() => void) | null;
+  }): void;
+  _brWramPtr(): number;
+  _brIwramPtr(): number;
+  HEAPU8: Uint8Array;
+}
+
+export type CoreFactory = (opts: { canvas: HTMLCanvasElement }) => Promise<CoreModule>;
+
+const ROM_PATH = '/data/games/emerald.gba';
+const SCREENSHOT_PATH = '/data/screenshots/shot.png';
+
+/** Loads the core script raw from public/emu, outside Vite's import analysis. */
+export async function loadCoreFactory(url = '/emu/mgba.js'): Promise<CoreFactory> {
+  const importRaw = new Function('u', 'return import(u)') as (u: string) => Promise<{ default: CoreFactory }>;
+  return (await importRaw(url)).default;
+}
+
+export class Emulator {
+  private held = 0;
+  private frameListeners = new Set<() => void>();
+  private crashListeners = new Set<() => void>();
+  private running = false;
+
+  private constructor(private readonly m: CoreModule) {}
+
+  /** Instantiates the core against a canvas and mounts its IndexedDB-backed filesystem. */
+  static async create(canvas: HTMLCanvasElement, factory?: CoreFactory): Promise<Emulator> {
+    const f = factory ?? (await loadCoreFactory());
+    const m = await f({ canvas });
+    await m.FSInit();
+    return new Emulator(m);
+  }
+
+  // ---- ROM storage: the player's own ROM, imported once, kept in the core's IDBFS ----
+
+  hasRom(): boolean {
+    try {
+      this.m.FS.stat(ROM_PATH);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async importRom(bytes: Uint8Array): Promise<void> {
+    this.m.FS.writeFile(ROM_PATH, bytes);
+    await this.m.FSSync();
+  }
+
+  async forgetRom(): Promise<void> {
+    try {
+      this.m.FS.unlink(ROM_PATH);
+    } catch {
+      /* nothing stored */
+    }
+    await this.m.FSSync();
+  }
+
+  // ---- running --------------------------------------------------------------------
+
+  /** Boots the stored ROM (or the bytes given, which are also stored). */
+  async start(bytes?: Uint8Array): Promise<void> {
+    if (bytes) await this.importRom(bytes);
+    if (!this.hasRom()) throw new Error('no ROM stored');
+    if (!this.m.loadGame(ROM_PATH)) throw new Error('loadGame failed');
+    this.running = true;
+    // addCoreCallbacks is a no-op until a core exists, so this must follow loadGame.
+    this.m.addCoreCallbacks({
+      videoFrameEndedCallback: () => {
+        for (const l of this.frameListeners) l();
+      },
+      coreCrashedCallback: () => {
+        this.running = false;
+        for (const l of this.crashListeners) l();
+      },
+    });
+  }
+
+  stop(): void {
+    if (!this.running) return;
+    this.m.quitGame();
+    this.running = false;
+  }
+
+  pause(): void {
+    this.m.pauseGame();
+  }
+
+  resume(): void {
+    this.m.resumeGame();
+  }
+
+  isRunning(): boolean {
+    return this.running;
+  }
+
+  /** Fires on the main thread after every emulated frame. Returns an unsubscribe. */
+  onFrame(listener: () => void): () => void {
+    this.frameListeners.add(listener);
+    return () => this.frameListeners.delete(listener);
+  }
+
+  onCrash(listener: () => void): () => void {
+    this.crashListeners.add(listener);
+    return () => this.crashListeners.delete(listener);
+  }
+
+  // ---- input ------------------------------------------------------------------------
+
+  press(key: GbaKey): void {
+    const bit = 1 << KEY_BIT[key];
+    if (this.held & bit) return;
+    this.held |= bit;
+    this.m.buttonPress(key);
+  }
+
+  release(key: GbaKey): void {
+    const bit = 1 << KEY_BIT[key];
+    if (!(this.held & bit)) return;
+    this.held &= ~bit;
+    this.m.buttonUnpress(key);
+  }
+
+  /** Sets the whole key state from a bitmask (KEY_BIT order); only changed keys are sent. */
+  setKeys(mask: number): void {
+    for (const key of ALL_KEYS) {
+      if (mask & (1 << KEY_BIT[key])) this.press(key);
+      else this.release(key);
+    }
+  }
+
+  keys(): number {
+    return this.held;
+  }
+
+  // ---- memory -----------------------------------------------------------------------
+  // Views over the shared heap. Take them fresh each time: the heap buffer can only
+  // change if the core is torn down, but it costs nothing and keeps callers honest.
+
+  /** EWRAM, 256 KiB, mapped at 0x02000000. */
+  wram(): Uint8Array {
+    const p = this.m._brWramPtr();
+    if (!p) throw new Error('no GBA core loaded');
+    return this.m.HEAPU8.subarray(p, p + EWRAM_SIZE);
+  }
+
+  /** IWRAM, 32 KiB, mapped at 0x03000000. */
+  iwram(): Uint8Array {
+    const p = this.m._brIwramPtr();
+    if (!p) throw new Error('no GBA core loaded');
+    return this.m.HEAPU8.subarray(p, p + IWRAM_SIZE);
+  }
+
+  /** Reads a little-endian value at a GBA bus address in EWRAM or IWRAM. */
+  read(addr: number, width: 8 | 16 | 32 = 32): number {
+    const [view, off] = this.locate(addr);
+    let v = 0;
+    for (let i = width / 8 - 1; i >= 0; i--) v = (v << 8) | view[off + i];
+    return v >>> 0;
+  }
+
+  write(addr: number, value: number, width: 8 | 16 | 32 = 32): void {
+    const [view, off] = this.locate(addr);
+    for (let i = 0; i < width / 8; i++) view[off + i] = (value >>> (8 * i)) & 0xff;
+  }
+
+  /** Bytes at a GBA bus address, as a view (writes go straight to the core). */
+  bytes(addr: number, len: number): Uint8Array {
+    const [view, off] = this.locate(addr);
+    return view.subarray(off, off + len);
+  }
+
+  private locate(addr: number): [Uint8Array, number] {
+    if (addr >= EWRAM_BASE && addr < EWRAM_BASE + EWRAM_SIZE) return [this.wram(), addr - EWRAM_BASE];
+    if (addr >= IWRAM_BASE && addr < IWRAM_BASE + IWRAM_SIZE) return [this.iwram(), addr - IWRAM_BASE];
+    throw new Error(`address 0x${addr.toString(16)} is not in EWRAM or IWRAM`);
+  }
+
+  // ---- misc -------------------------------------------------------------------------
+
+  setSpeed(multiplier: number): void {
+    this.m.setFastForwardMultiplier(multiplier);
+  }
+
+  setVolume(percent: number): void {
+    this.m.setVolume(percent);
+  }
+
+  saveState(slot = 1): boolean {
+    return this.m.saveState(slot);
+  }
+
+  loadState(slot = 1): boolean {
+    return this.m.loadState(slot);
+  }
+
+  /** PNG bytes of the current frame. */
+  screenshot(): Uint8Array | null {
+    if (!this.m.screenshot(SCREENSHOT_PATH)) return null;
+    try {
+      return this.m.FS.readFile(SCREENSHOT_PATH);
+    } catch {
+      return null;
+    }
+  }
+}

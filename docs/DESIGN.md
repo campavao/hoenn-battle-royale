@@ -200,6 +200,7 @@ Decided by Cam:
 3. **Lobby in HTML**, not in-game.
 4. **Relay: a new service in the existing Railway project**; the Kanto relay is untouched.
 
-Still open:
-- **Emulator base.** thenick775's wasm fork with our exports vs our own minimal shim on
-  upstream 0.10.5. The spike (POK-212) decides on measured iPhone Safari frame rate.
+5. **Emulator base: thenick775's wasm fork plus our exports** (`tools/br/mgba-wasm/hbr-exports.patch`).
+   Measured on Cam's iPhone in Safari, 2026-09-15: 59.8 to 60 fps, p5 59.7, sound fine,
+   phone stays cool. Desktop Chrome 60. The single-threaded shim is not needed.
+   The wrapper is `web/src/emu/index.ts`.
