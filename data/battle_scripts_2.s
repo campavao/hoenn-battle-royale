@@ -72,6 +72,9 @@ BattleScript_PrintCaughtMonInfo::
 	setbyte gBattleCommunication, 0
 	displaydexinfo
 BattleScript_TryNicknameCaughtMon::
+.if BR
+	goto BattleScript_GiveCaughtMonEnd @ no nickname prompt: the team is disposable (POK-227)
+.endif
 	printstring STRINGID_GIVENICKNAMECAPTURED
 	waitstate
 	setbyte gBattleCommunication, 0

@@ -11,6 +11,7 @@
 #include "br/br_hud.h"
 #include "br/br_match.h"
 #include "br/br_levels.h"
+#include "br/br_catch.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
 // running it: `strings pokeemerald.gba | grep HOENN-BR`.
@@ -24,6 +25,7 @@ void BrInit(void)
     BrHud_Init();
     BrMatch_Init();
     BrLevels_Init();
+    BrCatch_Init();
 }
 
 void BrFrame(void)
@@ -35,4 +37,5 @@ void BrFrame(void)
     BrHud_Tick();
     BrMatch_Tick();
     BrLevels_Tick();
+    BrCatch_Tick();
 }

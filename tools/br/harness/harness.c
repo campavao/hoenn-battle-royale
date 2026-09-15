@@ -17,6 +17,7 @@
 //   expectge u8|u16|u32 <addr> <value>   assert got >= value
 //   <addr> may also be *sym+off: dereference the u32 at sym, then add off
 //   dump <addr> <len>           hex dump
+//   copy <dst> <src> <len>      copy bytes within RAM
 //   poke u8|u16|u32 <addr> <value>
 //   pokebytes <addr> <hex hex ...>
 //   say <text>                  echo
@@ -216,6 +217,13 @@ static int runLine(char* line) {
         for (char* tok = strtok(rest, " \t"); tok; tok = strtok(NULL, " \t"), ++i)
             core->busWrite8(core, addr + i, (uint8_t)strtoul(tok, NULL, 16));
         printf("poked %d bytes at 0x%08X\n", i, addr);
+        return 0;
+    }
+    if (strcmp(a, "copy") == 0 && n >= 4) {
+        uint32_t dst, src; int len = atoi(d), i;
+        if (!parseAddr(b, &dst) || !parseAddr(c, &src)) return 4;
+        for (i = 0; i < len; ++i) core->busWrite8(core, dst + i, (uint8_t)core->busRead8(core, src + i));
+        printf("copied %d bytes 0x%08X -> 0x%08X\n", len, src, dst);
         return 0;
     }
     if (strcmp(a, "dump") == 0 && n >= 3) {

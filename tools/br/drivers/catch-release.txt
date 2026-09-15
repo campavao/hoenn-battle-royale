@@ -1,0 +1,25 @@
+# catch-release: a parked catch with a full party brings up the party picker in the
+# overworld; choosing a slot puts the catch there. Mechanism only: the park comes from
+# a copy of the test Treecko, the "full party" check is bypassed by setting pending.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+# park a copy of party[0] and mark it pending
+copy gBrPendingCatch gPlayerParty 100
+poke u8 gBrCatch 1
+wait 90
+shot prompt
+expect u8 gBrCatch+1 1
+# through the message, into the party menu, pick slot 0
+tap A
+wait 60
+shot picker
+tap A
+wait 60
+tap A
+wait 90
+expect u8 gBrCatch 0
+expect u8 gBrCatch+1 0
+shot done
+say catch release ok

@@ -1,6 +1,7 @@
 #include "global.h"
 #if BR
 #include "br/br_levels.h"
+#include "br/br_catch.h"
 #endif
 #include "battle.h"
 #include "battle_message.h"
@@ -10061,6 +10062,13 @@ static void Cmd_handleballthrow(void)
 
 static void Cmd_givecaughtmon(void)
 {
+#if BR
+    if (BrCatch_TryPark(&gEnemyParty[gBattlerPartyIndexes[BATTLE_OPPOSITE(gBattlerAttacker)]]))
+    {
+        // Parked for the release picker back in the overworld; no PC, no message.
+    }
+    else
+#endif
     if (GiveMonToPlayer(&gEnemyParty[gBattlerPartyIndexes[BATTLE_OPPOSITE(gBattlerAttacker)]]) != MON_GIVEN_TO_PARTY)
     {
         if (!ShouldShowBoxWasFullMessage())
