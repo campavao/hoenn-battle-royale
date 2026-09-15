@@ -1,0 +1,30 @@
+# run-doll: RUN spends a POKe DOLL for a guaranteed getaway, no roll (POK-231).
+# Loopback engage battle; a doll is poked into the bag, then we pick RUN. The escape
+# is certain -- the one-in-four roll never runs (runRolls stays 0) and the outcome is
+# RAN. (Loopback leaves the link up; a real peer tears the battle down.)
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrNetlink+8 1
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 900
+expect u16 gBrBattle+4 0
+# a POKe DOLL in the bag: zero the save encryption key, then POKe DOLL (item 0x50) x1 in slot 0
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x560 0x50
+poke u16 *gSaveBlock1Ptr+0x562 1
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+shot run
+tap A
+wait 120
+shot fled
+# guaranteed: no roll happened, the runner ran (RAN=4), the doll is spent
+expect u16 gBrBattle+4 0
+expect u8 gBattleOutcome 4
+expect u16 *gSaveBlock1Ptr+0x560 0
+say run doll ok

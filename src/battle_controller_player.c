@@ -273,6 +273,18 @@ static void HandleInputChooseAction(void)
             BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_SWITCH, 0);
             break;
         case 3: // Bottom right
+#if BR
+            // RUN spends a POKe DOLL for a guaranteed getaway if you hold one (POK-231,
+            // Kanto's flee.lua). The decision rides the action's return value so both
+            // ROMs of a link battle agree on the escape; the doll is spent on the
+            // runner's own bag alone. Without one it is the one-in-four roll.
+            if (CheckBagHasItem(ITEM_POKE_DOLL, 1))
+            {
+                RemoveBagItem(ITEM_POKE_DOLL, 1);
+                BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, 1);
+                break;
+            }
+#endif
             BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, 0);
             break;
         }

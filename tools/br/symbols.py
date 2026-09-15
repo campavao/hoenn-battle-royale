@@ -18,7 +18,8 @@ ENGINE_SYMBOLS = [
     "gBattleTypeFlags", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
     "gLinkPlayers", "gBlockRecvBuffer", "gBlockSendBuffer", "gWirelessCommType",
     "gRngValue", "gSaveBlock1", "gSaveBlock2", "gNumSafariBalls",
-    "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleMons",
+    "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleBufferB", "gBattleMons",
+    "gBattlerByTurnOrder", "gCurrentTurnActionNumber", "gBagPockets",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

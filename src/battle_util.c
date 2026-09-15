@@ -496,7 +496,10 @@ void HandleAction_Run(void)
 #if BR
         // RUN against another trainer is allowed but hard: one in four gets away, and
         // nobody is eliminated by it; the rest of the time the turn goes on (POK-231).
-        if (!BrBattle_RollRun())
+        // A POKe DOLL, spent at RUN selection and flagged in the action's return value
+        // (so both ROMs agree without re-reading a bag they cannot see), is a sure
+        // getaway and skips the roll entirely.
+        if (gBattleBufferB[gBattlerAttacker][2] == 0 && !BrBattle_RollRun())
         {
             ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
             gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_CANT_ESCAPE_2;
