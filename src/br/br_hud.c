@@ -1,0 +1,502 @@
+// The overworld HUD (POK-226): corner counter and clock, wound bar, ticker.
+// See include/br/br_hud.h for the model, the tile map and the lifecycle rules.
+#include "global.h"
+#include "main.h"
+#include "overworld.h"
+#include "window.h"
+#include "text.h"
+#include "menu.h"
+#include "script.h"
+#include "string_util.h"
+#include "field_message_box.h"
+#include "constants/characters.h"
+#include "br/br_hud.h"
+#include "br/br_mailbox.h"
+#include "br/br_wire.h"
+#include "br/br_wire_c.h"
+
+EWRAM_DATA struct BrHud gBrHud = {0};
+
+// bg, left, top, width, height, palette, baseBlock. Palette 15 is the message-box
+// palette the field loads on every map: 1 white, 2 dark gray, 3 light gray, 5 light red.
+static const struct WindowTemplate sCornerTemplate = { 0, 24, 0, 6, 3, 15, 0x23A };
+static const struct WindowTemplate sWoundTemplate = { 0, 24, 3, 6, 2, 15, 0x24C };
+static const struct WindowTemplate sTickerTemplate = { 0, 1, 18, 28, 2, 15, 0x258 };
+
+#define BR_HUD_BOX PIXEL_FILL(TEXT_COLOR_DARK_GRAY)
+
+// bg, fg, shadow
+static const u8 sColorsText[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY };
+static const u8 sColorsFog[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_RED, TEXT_COLOR_DARK_GRAY };
+static const u8 sColorsKill[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_RED, TEXT_COLOR_DARK_GRAY };
+static const u8 sColorsSay[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_BLUE, TEXT_COLOR_DARK_GRAY };
+static const u8 sColorsWound[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GREEN, TEXT_COLOR_DARK_GRAY };
+
+static const u8 sText_Left[] = _(" LEFT");
+static const u8 sText_Fog[] = _("FOG!");
+// Wound glyphs, all from the small font's extra-symbol page: no new graphics.
+static const u8 sText_WoundFull[] = _("{EMOJI_CIRCLE}");
+static const u8 sText_WoundHurt[] = _("{CIRCLE_DOT}");
+static const u8 sText_WoundDown[] = _("×");
+
+#define WOUND_NONE 0
+#define WOUND_DOWN 1
+#define WOUND_HURT 2
+#define WOUND_FULL 3
+
+// ---- windows ------------------------------------------------------------------
+
+static bool8 OverworldRunning(void)
+{
+    return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
+}
+
+// The slot still holds our window: a map load frees the buffer (tileData NULL) and
+// the next InitWindows may hand the slot to someone else (baseBlock differs).
+static bool8 Live(u8 id, const struct WindowTemplate *t)
+{
+    if (id == WINDOW_NONE)
+        return FALSE;
+    return gWindows[id].tileData != NULL
+        && gWindows[id].window.bg == t->bg
+        && gWindows[id].window.baseBlock == t->baseBlock;
+}
+
+static u8 Ensure(u8 id, const struct WindowTemplate *t)
+{
+    if (Live(id, t))
+        return id;
+    // Our template with no buffer: the engine freed it without an InitWindows since.
+    if (id != WINDOW_NONE && gWindows[id].window.bg == t->bg && gWindows[id].window.baseBlock == t->baseBlock)
+        RemoveWindow(id);
+    return (u8)AddWindow(t);
+}
+
+static void Drop(u8 *id, const struct WindowTemplate *t)
+{
+    if (Live(*id, t))
+        RemoveWindow(*id);
+    *id = WINDOW_NONE;
+}
+
+// Puts or clears a window's tilemap cells, but only across a change, and only when
+// nothing else owns the cells (the caller checks that). `pixels` says the buffer was
+// redrawn this frame and needs a tile copy too.
+static void Present(u8 id, u8 bit, bool8 want, bool8 pixels)
+{
+    struct BrHud *h = &gBrHud;
+    bool8 have = (h->shown & bit) != 0;
+
+    if (want && !have)
+    {
+        PutWindowTilemap(id);
+        CopyWindowToVram(id, COPYWIN_FULL);
+        h->shown |= bit;
+    }
+    else if (!want && have)
+    {
+        ClearWindowTilemap(id);
+        CopyWindowToVram(id, COPYWIN_MAP);
+        h->shown &= ~bit;
+    }
+    else if (want && pixels)
+    {
+        CopyWindowToVram(id, COPYWIN_GFX);
+    }
+}
+
+// ---- corner -------------------------------------------------------------------
+
+static u8 FogPhase(void)
+{
+    if (gBrHud.fogFrames == 0)
+        return 0;
+    return ((gBrHud.fogFrames >> 3) & 1) ? 1 : 2;
+}
+
+static void PrintRight(u8 id, const u8 *str, u8 y, const u8 *colors)
+{
+    s32 w = GetStringWidth(FONT_SMALL, str, 0);
+    s32 x = 47 - w;
+
+    if (x < 0)
+        x = 0;
+    AddTextPrinterParameterized3(id, FONT_SMALL, (u8)x, y, colors, (s8)TEXT_SKIP_DRAW, str);
+}
+
+static void DrawCorner(void)
+{
+    struct BrHud *h = &gBrHud;
+    u8 buf[16];
+    u8 *p;
+    u8 fog = FogPhase();
+
+    FillWindowPixelBuffer(h->winCorner, BR_HUD_BOX);
+    p = ConvertIntToDecimalStringN(buf, h->left, STR_CONV_MODE_LEFT_ALIGN, 2);
+    StringCopy(p, sText_Left);
+    PrintRight(h->winCorner, buf, 0, sColorsText);
+    if (fog == 2)
+    {
+        PrintRight(h->winCorner, sText_Fog, 12, sColorsFog);
+    }
+    else if (fog == 0)
+    {
+        p = ConvertIntToDecimalStringN(buf, h->clockSecs / 60, STR_CONV_MODE_LEFT_ALIGN, 2);
+        *p++ = CHAR_COLON;
+        ConvertIntToDecimalStringN(p, h->clockSecs % 60, STR_CONV_MODE_LEADING_ZEROS, 2);
+        PrintRight(h->winCorner, buf, 12, sColorsText);
+    }
+    h->drawnClock = h->clockSecs;
+    h->drawnLeft = h->left;
+    h->drawnFog = fog;
+}
+
+static void TickCorner(bool8 blocked)
+{
+    struct BrHud *h = &gBrHud;
+    bool8 pixels = FALSE;
+
+    if (blocked)
+    {
+        h->shown &= ~BR_HUD_SHOWN_CORNER;
+        return;
+    }
+    if ((h->dirty & BR_HUD_DIRTY_CORNER) || h->drawnClock != h->clockSecs || h->drawnLeft != h->left
+        || h->drawnFog != FogPhase())
+    {
+        DrawCorner();
+        h->dirty &= ~BR_HUD_DIRTY_CORNER;
+        pixels = TRUE;
+    }
+    Present(h->winCorner, BR_HUD_SHOWN_CORNER, TRUE, pixels);
+}
+
+// ---- wound bar ----------------------------------------------------------------
+
+static u8 WoundOf(u8 slot)
+{
+    struct Pokemon *mon;
+    u16 hp, max;
+
+    if (slot >= gPlayerPartyCount || slot >= PARTY_SIZE)
+        return WOUND_NONE;
+    mon = &gPlayerParty[slot];
+    hp = GetMonData(mon, MON_DATA_HP);
+    max = GetMonData(mon, MON_DATA_MAX_HP);
+    if (max == 0)
+        return WOUND_NONE;
+    if (hp == 0)
+        return WOUND_DOWN;
+    if (hp * 2 <= max)
+        return WOUND_HURT;
+    return WOUND_FULL;
+}
+
+static void DrawWound(const u8 *codes)
+{
+    struct BrHud *h = &gBrHud;
+    u8 buf[2 * PARTY_SIZE + 1];
+    u8 *p = buf;
+    u8 i;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        h->drawnWound[i] = codes[i];
+        switch (codes[i])
+        {
+        case WOUND_FULL: p = StringCopy(p, sText_WoundFull); break;
+        case WOUND_HURT: p = StringCopy(p, sText_WoundHurt); break;
+        case WOUND_DOWN: p = StringCopy(p, sText_WoundDown); break;
+        }
+    }
+    *p = EOS;
+    FillWindowPixelBuffer(h->winWound, BR_HUD_BOX);
+    PrintRight(h->winWound, buf, 0, sColorsWound);
+}
+
+static void TickWound(bool8 blocked)
+{
+    struct BrHud *h = &gBrHud;
+    u8 codes[PARTY_SIZE];
+    bool8 pixels = FALSE;
+    bool8 any = FALSE;
+    u8 i;
+
+    if (blocked)
+    {
+        h->shown &= ~BR_HUD_SHOWN_WOUND;
+        return;
+    }
+    // GetMonData on HP is a plain read, but six of them a frame is still needless.
+    if ((h->dirty & BR_HUD_DIRTY_WOUND) == 0 && (gMain.vblankCounter1 & 7) != 0)
+    {
+        for (i = 0; i < PARTY_SIZE; i++)
+            if (h->drawnWound[i] != WOUND_NONE)
+                any = TRUE;
+        Present(h->winWound, BR_HUD_SHOWN_WOUND, any, FALSE);
+        return;
+    }
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        codes[i] = WoundOf(i);
+        if (codes[i] != WOUND_NONE)
+            any = TRUE;
+        if (codes[i] != h->drawnWound[i])
+            pixels = TRUE;
+    }
+    if (pixels || (h->dirty & BR_HUD_DIRTY_WOUND))
+    {
+        DrawWound(codes);
+        h->dirty &= ~BR_HUD_DIRTY_WOUND;
+        pixels = TRUE;
+    }
+    Present(h->winWound, BR_HUD_SHOWN_WOUND, any, pixels);
+}
+
+// ---- ticker -------------------------------------------------------------------
+
+static void SetLine(struct BrHudLine *line, u8 kind, const u8 *text, u8 len)
+{
+    u8 i;
+
+    if (len > BR_HUD_LINE_MAX)
+        len = BR_HUD_LINE_MAX;
+    line->kind = kind;
+    line->len = len;
+    for (i = 0; i < len; i++)
+        line->text[i] = text[i];
+    line->text[len] = EOS;
+}
+
+static void Push(u8 kind, const u8 *text, u8 len)
+{
+    struct BrHud *h = &gBrHud;
+    u8 i;
+
+    if (h->queueLen >= BR_HUD_QUEUE)
+    {
+        // Full: the oldest line goes, and if it was on screen the next one starts fresh.
+        for (i = 1; i < BR_HUD_QUEUE; i++)
+            h->queue[i - 1] = h->queue[i];
+        h->queueLen = BR_HUD_QUEUE - 1;
+        h->lineFrames = 0;
+        h->dirty |= BR_HUD_DIRTY_TICKER;
+    }
+    SetLine(&h->queue[h->queueLen], kind, text, len);
+    if (h->queueLen == 0)
+        h->dirty |= BR_HUD_DIRTY_TICKER;
+    h->queueLen++;
+}
+
+static void PopLine(void)
+{
+    struct BrHud *h = &gBrHud;
+    u8 i;
+
+    if (h->queueLen == 0)
+        return;
+    for (i = 1; i < h->queueLen; i++)
+        h->queue[i - 1] = h->queue[i];
+    h->queueLen--;
+    h->lineFrames = 0;
+    h->dirty |= BR_HUD_DIRTY_TICKER;
+}
+
+// The 180-frame timer: runs while the overworld does, held or not shown alike, so
+// stale news does not pile up behind a message box.
+static void AdvanceTicker(void)
+{
+    struct BrHud *h = &gBrHud;
+
+    if (h->held || h->queueLen == 0)
+        return;
+    h->lineFrames++;
+    if (h->lineFrames >= BR_HUD_LINE_FRAMES)
+        PopLine();
+}
+
+static const struct BrHudLine *CurrentLine(void)
+{
+    struct BrHud *h = &gBrHud;
+
+    if (h->held)
+        return &h->heldLine;
+    if (h->queueLen > 0)
+        return &h->queue[0];
+    return NULL;
+}
+
+static void DrawTicker(const struct BrHudLine *line)
+{
+    const u8 *colors = sColorsText;
+
+    if (line->kind == BR_HUD_KIND_KILL)
+        colors = sColorsKill;
+    else if (line->kind == BR_HUD_KIND_SAY)
+        colors = sColorsSay;
+    FillWindowPixelBuffer(gBrHud.winTicker, BR_HUD_BOX);
+    AddTextPrinterParameterized3(gBrHud.winTicker, FONT_SMALL, 2, 1, colors, (s8)TEXT_SKIP_DRAW, line->text);
+}
+
+static void TickTicker(bool8 blocked)
+{
+    struct BrHud *h = &gBrHud;
+    const struct BrHudLine *line = CurrentLine();
+    bool8 pixels = FALSE;
+
+    if (blocked)
+    {
+        h->shown &= ~BR_HUD_SHOWN_TICKER;
+        return;
+    }
+    if (line != NULL && (h->dirty & BR_HUD_DIRTY_TICKER))
+    {
+        DrawTicker(line);
+        h->dirty &= ~BR_HUD_DIRTY_TICKER;
+        pixels = TRUE;
+    }
+    Present(h->winTicker, BR_HUD_SHOWN_TICKER, line != NULL, pixels);
+}
+
+// BR_MSG_TICKER: seat, kind, textLen, text. One slot only; a line the page split
+// across slots is longer than the ticker shows anyway.
+static void HandleTicker(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+    u8 textLen;
+
+    if (n == 0xFF || n < 3)
+        return;
+    textLen = d[2];
+    if (textLen > n - 3)
+        textLen = n - 3;
+    Push(d[1], d + 3, textLen);
+}
+
+// ---- entry points -------------------------------------------------------------
+
+void BrHud_Init(void)
+{
+    struct BrHud *h = &gBrHud;
+    u8 i;
+
+    BrNet_On(BR_MSG_TICKER, HandleTicker);
+    h->left = 0;
+    h->flashFog = 0;
+    h->clockSecs = 0;
+    h->clockFrames = 0;
+    h->fogFrames = 0;
+    h->winCorner = WINDOW_NONE;
+    h->winWound = WINDOW_NONE;
+    h->winTicker = WINDOW_NONE;
+    h->live = 0;
+    h->shown = 0;
+    h->queueLen = 0;
+    h->lineFrames = 0;
+    h->held = 0;
+    h->dirty = 0;
+    h->scriptWas = 0;
+    h->drawnClock = 0xFFFF;
+    h->drawnLeft = 0xFF;
+    h->drawnFog = 0xFF;
+    for (i = 0; i < PARTY_SIZE; i++)
+        h->drawnWound[i] = WOUND_NONE;
+    h->heldLine.text[0] = EOS;
+}
+
+void BrHud_Say(const u8 *text)
+{
+    u16 len = StringLength(text);
+
+    Push(BR_HUD_KIND_SYSTEM, text, len > BR_HUD_LINE_MAX ? BR_HUD_LINE_MAX : (u8)len);
+}
+
+void BrHud_Hold(const u8 *text)
+{
+    u16 len = StringLength(text);
+
+    SetLine(&gBrHud.heldLine, BR_HUD_KIND_SYSTEM, text, len > BR_HUD_LINE_MAX ? BR_HUD_LINE_MAX : (u8)len);
+    gBrHud.held = 1;
+    gBrHud.dirty |= BR_HUD_DIRTY_TICKER;
+}
+
+void BrHud_Release(void)
+{
+    if (!gBrHud.held)
+        return;
+    gBrHud.held = 0;
+    gBrHud.dirty |= BR_HUD_DIRTY_TICKER;
+}
+
+void BrHud_Tick(void)
+{
+    struct BrHud *h = &gBrHud;
+    bool8 scriptOn, menuUp;
+    u8 live;
+
+    if (h->flashFog)
+    {
+        h->flashFog = 0;
+        h->fogFrames = BR_HUD_FOG_FRAMES;
+    }
+    if (!OverworldRunning())
+    {
+        // Battle, menu or a map load: the windows must not outlive the overworld's BG0.
+        Drop(&h->winCorner, &sCornerTemplate);
+        Drop(&h->winWound, &sWoundTemplate);
+        Drop(&h->winTicker, &sTickerTemplate);
+        h->live = 0;
+        h->shown = 0;
+        h->scriptWas = 0;
+        return;
+    }
+    // The page's clock is a wall clock; the ROM only keeps it moving between writes.
+    if (++h->clockFrames >= 60)
+    {
+        h->clockFrames = 0;
+        if (h->clockSecs > 0)
+            h->clockSecs--;
+    }
+    if (h->fogFrames > 0)
+        h->fogFrames--;
+    AdvanceTicker();
+
+    // The field's own message box (window 0) is the sign that InitWindows has run for
+    // this map; before that there is no BG0 tilemap buffer to draw into.
+    if (gWindows[0].tileData == NULL)
+        return;
+
+    live = 0;
+    h->winCorner = Ensure(h->winCorner, &sCornerTemplate);
+    h->winWound = Ensure(h->winWound, &sWoundTemplate);
+    h->winTicker = Ensure(h->winTicker, &sTickerTemplate);
+    if (h->winCorner != WINDOW_NONE)
+        live++;
+    if (h->winWound != WINDOW_NONE)
+        live++;
+    if (h->winTicker != WINDOW_NONE)
+        live++;
+    if (live != h->live)
+    {
+        // Fresh buffers hold garbage and no tilemap: draw and put everything again.
+        h->dirty = BR_HUD_DIRTY_CORNER | BR_HUD_DIRTY_WOUND | BR_HUD_DIRTY_TICKER;
+        h->shown = 0;
+        h->live = live;
+    }
+
+    scriptOn = ScriptContext_IsEnabled();
+    menuUp = GetStartMenuWindowId() != WINDOW_NONE;
+    // A script's own windows (multichoice, braille, the like) may have cleared our
+    // cells on their way out; put every tilemap again once it is over.
+    if (h->scriptWas && !scriptOn)
+        h->shown = 0;
+    h->scriptWas = scriptOn;
+
+    if (h->winCorner != WINDOW_NONE)
+        TickCorner(menuUp);
+    if (h->winWound != WINDOW_NONE)
+        TickWound(menuUp);
+    if (h->winTicker != WINDOW_NONE)
+        TickTicker(menuUp || scriptOn || !IsFieldMessageBoxHidden());
+}

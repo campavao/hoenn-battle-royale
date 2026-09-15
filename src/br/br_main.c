@@ -8,6 +8,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_boot.h"
 #include "br/br_ring.h"
+#include "br/br_hud.h"
 #include "br/br_match.h"
 #include "br/br_levels.h"
 
@@ -20,6 +21,7 @@ void BrInit(void)
     BrMailbox_Init();
     BrGhosts_Init();
     BrRing_Init();
+    BrHud_Init();
     BrMatch_Init();
     BrLevels_Init();
 }
@@ -30,6 +32,7 @@ void BrFrame(void)
     BrBoot_Tick();
     BrGhosts_Tick();
     BrRing_Tick();
+    BrHud_Tick();
     BrMatch_Tick();
     BrLevels_Tick();
 }

@@ -1,0 +1,40 @@
+# hud: the overworld HUD (POK-226) -- corner counter and clock, wound bar, ticker --
+# as BG0 windows in Littleroot, booted with a test Treecko so the wound bar has a mon.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# all three windows exist (gBrHud.live) and every tilemap is ours (shown = 7)
+expect u8 gBrHud+0x09 3
+expect u8 gBrHud+0x0A 3
+# the page writes 7 left and 2:05 on the clock
+poke u8 gBrHud+0x00 7
+poke u16 gBrHud+0x02 125
+# a kill line from seat 1: slot type 0F, len 0x15 = frame (12 00 00) + seat 01 kind 01
+# textLen 0F + "MAY GOT BRENDAN"
+pokebytes gBrMailbox+0x1018 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+poke u16 gBrMailbox+0x0C 1
+wait 4
+expect u8 gBrHud+0x0B 1
+expect u8 gBrHud+0x0A 7
+# the page flags the fog: FOG! replaces the clock for 60 frames
+poke u8 gBrHud+0x01 1
+wait 12
+shot hud
+expect u8 gBrHud+0x01 0
+expectge u8 gBrHud+0x05 40
+# START draws the menu over the corner: our tilemaps yield, and come back on B
+tap START
+wait 20
+shot hud-startmenu
+expect u8 gBrHud+0x0A 0
+tap B
+wait 20
+shot hud-back
+expect u8 gBrHud+0x0A 7
+# the line falls off after 180 frames and the clock kept counting (>= 3 seconds gone)
+wait 180
+expect u8 gBrHud+0x0B 0
+expect u8 gBrHud+0x0A 3
+expectge u16 gBrHud+0x02 120
+shot hud-quiet
+say hud ok
