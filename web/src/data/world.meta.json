@@ -1,0 +1,11 @@
+{
+  "totalMapsInGame": 518,
+  "mapsExported": 518,
+  "outdoorMaps": 68,
+  "sections": 95,
+  "outdoorSectionsWithLanding": 58,
+  "landingCells": 2722,
+  "worldJsonBytes": 390389,
+  "worldJsonGzipBytes": 56099,
+  "warnings": []
+}
