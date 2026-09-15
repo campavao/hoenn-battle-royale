@@ -168,13 +168,7 @@ jobs:
         working-directory: mgba-wasm-src
         run: git apply "$GITHUB_WORKSPACE/tools/br/mgba-wasm/hbr-exports.patch"
 
-      - name: Cache wasm build
-        id: wasm-cache
-        uses: actions/cache@v4
-        with:
-          path: mgba-wasm-src/build-wasm
-          key: mgba-wasm-${{ hashFiles('tools/br/mgba-wasm/COMMIT', 'tools/br/mgba-wasm/hbr-exports.patch') }}
-
+      # No build cache here: CMakeCache pins the emsdk path, which is a per-run temp dir.
       - name: Build the wasm core
         working-directory: mgba-wasm-src
         run: |
