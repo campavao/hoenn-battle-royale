@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_levels.h"
+#endif
 #include "bg.h"
 #include "data.h"
 #include "decompress.h"
@@ -1249,6 +1252,9 @@ static void RecordItemPurchase(u8 taskId)
 void CreatePokemartMenu(const u16 *itemsForSale)
 {
     CreateShopMenu(MART_TYPE_NORMAL);
+#if BR
+    itemsForSale = BrLevels_MartItems(); // one shelf per rung, whatever the map's script says
+#endif
     SetShopItemsForSale(itemsForSale);
     ClearItemPurchases();
     SetShopMenuCallback(ScriptContext_Enable);

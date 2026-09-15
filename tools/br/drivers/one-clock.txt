@@ -6,6 +6,8 @@ wait 400
 expect u8 gPlayerPartyCount 1
 expect u8 gPlayerParty+0x54 5
 expect u8 gBrLevels 5
+# starting bag: OLD ROD (item 262)
+expect u16 gBrLevels+4 262
 # RING phase 3, centre 25,12, r 30 (inside everywhere)
 pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
 poke u16 gBrMailbox+0x0C 1
@@ -14,10 +16,17 @@ expect u8 gBrLevels 30
 expect u8 gBrLevels+1 3
 expect u8 gPlayerParty+0x54 30
 expectge u16 gPlayerParty+0x58 60
+# tier 2: GOOD ROD (263), a ticker line queued
+expect u8 gBrLevels+2 2
+expect u16 gBrLevels+4 263
+expectge u8 gBrHud+0x0B 1
+wait 40
+shot phase
 # phase 6 -> 100
 pokebytes gBrMailbox+0x1058 0C 0A 07 00 00 00 06 19 0C 1E 00 00
 poke u16 gBrMailbox+0x0C 2
 wait 6
 expect u8 gBrLevels 100
 expect u8 gPlayerParty+0x54 100
+expect u16 gBrLevels+4 264
 say one clock ok

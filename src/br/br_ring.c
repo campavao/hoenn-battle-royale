@@ -12,6 +12,7 @@
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
 #include "br/br_ring.h"
+#include "br/br_hud.h"
 
 EWRAM_DATA struct BrRing gBrRing = {0};
 
@@ -124,6 +125,8 @@ void BrRing_Tick(void)
     if (!gBrRing.active || !OverworldRunning())
         return;
     outside = !BrRing_SectionInside(gMapHeader.regionMapSectionId);
+    if (outside && !gBrRing.outside)
+        gBrHud.flashFog = 1; // just went outside: the corner flashes FOG!
     gBrRing.outside = outside;
     // A map load resets the weather to the map's own; re-apply when the map changed.
     if (!gBrRing.applied

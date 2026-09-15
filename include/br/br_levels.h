@@ -9,7 +9,10 @@ struct BrLevels
 {
     /* 0 */ u8 rung;        // current level for wild mons and the party
     /* 1 */ u8 phaseSeen;   // last ring phase applied
-    /* 2 */ u8 pad[2];
+    /* 2 */ u8 tier;        // ladder index 0..5: the Mart shelf and the rod
+    /* 3 */ u8 pad;
+    /* 4 */ u16 rod;        // the rod item in the bag right now
+    /* 6 */ u16 pad2;
 };
 
 extern struct BrLevels gBrLevels;
@@ -17,6 +20,10 @@ extern struct BrLevels gBrLevels;
 void BrLevels_Init(void);
 void BrLevels_Tick(void);
 u8 BrLevels_WildLevel(void);
+// The Mart's shelf for the current tier (ITEM_NONE-terminated), for CreatePokemartMenu.
+const u16 *BrLevels_MartItems(void);
+// The starting bag: an OLD ROD and a few balls. Called once by the boot.
+void BrLevels_GiveStartingBag(void);
 bool8 BrLevels_NoExp(void);
 
 #endif // GUARD_BR_LEVELS_H

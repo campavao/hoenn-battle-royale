@@ -20,6 +20,7 @@
 #include "br/br_mailbox.h"
 #include "br/br_boot.h"
 #include "br/br_match.h"
+#include "br/br_levels.h"
 
 static EWRAM_DATA u8 sBooted = 0;
 
@@ -99,6 +100,7 @@ void BrBoot_Tick(void)
             b->y = 30;
         }
         StartGameAt(b);
+        BrLevels_GiveStartingBag();
         if (b->mode & BR_BOOT_FLAG_TESTMON)
             ScriptGiveMon(SPECIES_TREECKO, 5, 0, 0, 0, 0);
         if (BR_BOOT_MODE(b->mode) == BR_BOOT_SAFARI)
