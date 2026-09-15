@@ -2,15 +2,154 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <title>Hoenn Battle Royale</title>
     <style>
-      body { margin: 0; padding: 24px 16px; font-family: system-ui, sans-serif; background: #101418; color: #e8eef2; }
-      a { color: #7fd1ff; }
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #101418; color: #e8eef2; font: 14px/1.4 system-ui, sans-serif; }
+      body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
+        padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+      }
+      #app { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+      header {
+        padding: 8px calc(16px + env(safe-area-inset-right)) 8px calc(16px + env(safe-area-inset-left));
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+      header h1 { font-size: 15px; margin: 0; }
+      .version { font-variant-numeric: tabular-nums; color: #9fb3c0; font-size: 12px; white-space: nowrap; }
+
+      .screen {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        padding: 0 calc(16px + env(safe-area-inset-right)) 16px calc(16px + env(safe-area-inset-left));
+      }
+      .screen[hidden] { display: none; }
+      .screen p { margin: 8px 0; }
+
+      .dropzone { border: 2px dashed #33424c; border-radius: 12px; padding: 28px 16px; text-align: center; color: #9fb3c0; }
+      .dropzone input { display: block; margin: 0 auto 8px; }
+      .error { color: #ff8a80; }
+      .banner { background: #33424c; border-radius: 8px; padding: 8px 12px; color: #ffe08a; }
+
+      #screen-playing { padding: 0; align-items: center; position: relative; }
+      #screen-wrap {
+        position: relative;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        background: #000;
+        touch-action: none;
+        width: 100%;
+      }
+      canvas { image-rendering: pixelated; width: min(100vw, 480px); aspect-ratio: 240 / 160; height: auto; display: block; }
+      .fps {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        font: 11px ui-monospace, monospace;
+        color: #9fb3c0;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+
+      #pad {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-items: center;
+        gap: 8px;
+        padding: 16px calc(16px + env(safe-area-inset-right)) 8px calc(16px + env(safe-area-inset-left));
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        width: 100%;
+      }
+      .dpad-surface { position: relative; width: 132px; height: 132px; justify-self: start; touch-action: none; }
+      .dpad-surface::before,
+      .dpad-surface::after {
+        content: '';
+        position: absolute;
+        background: #26313a;
+        border-radius: 10px;
+        transition: background 60ms;
+      }
+      .dpad-surface::before { left: 36px; top: 0; width: 60px; height: 132px; }
+      .dpad-surface::after { left: 0; top: 36px; width: 132px; height: 60px; }
+      .dpad-surface.active::before,
+      .dpad-surface.active::after { background: #4c7a99; }
+
+      .ab { display: grid; grid-template-columns: 72px 72px; gap: 12px; justify-content: end; align-content: end; justify-self: end; }
+      .btn { display: grid; place-items: center; background: #26313a; border-radius: 10px; color: #cfe3ef; font-weight: 600; touch-action: none; }
+      .btn:active, .btn.down { background: #4c7a99; }
+      .ab .btn.round { height: 72px; border-radius: 50%; }
+      .sys { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: center; }
+      .sys .btn { width: 96px; height: 36px; font-size: 12px; }
+
+      .settings {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        padding: 8px calc(16px + env(safe-area-inset-right)) 16px calc(16px + env(safe-area-inset-left));
+        flex-wrap: wrap;
+      }
+      button, input { font: inherit; }
+      .settings button { padding: 8px 14px; border-radius: 8px; border: 0; background: #26313a; color: #cfe3ef; }
     </style>
   </head>
   <body>
-    <h1>Hoenn Battle Royale</h1>
-    <p>Nothing to play yet. The emulator spike is at <a href="/spike/">/spike/</a>.</p>
+    <div id="app">
+      <header>
+        <h1>Hoenn Battle Royale</h1>
+        <div id="version" class="version">—</div>
+      </header>
+
+      <section id="screen-importing" class="screen">
+        <p>Pick your own <b>Pokémon Emerald (U)</b> ROM, 16 MiB. It stays on this device (IndexedDB); nothing is uploaded.</p>
+        <div id="dropzone" class="dropzone">
+          <input id="rom-input" type="file" accept=".gba" />
+          <p>or drop the file here</p>
+        </div>
+        <p id="import-error" class="error" hidden></p>
+      </section>
+
+      <section id="screen-patching" class="screen" hidden>
+        <p id="patch-status">Loading release…</p>
+        <p id="patch-banner" class="banner" hidden></p>
+      </section>
+
+      <section id="screen-playing" class="screen" hidden>
+        <div id="screen-wrap">
+          <canvas id="canvas" width="240" height="160"></canvas>
+          <div id="fps" class="fps" hidden></div>
+        </div>
+        <div id="pad">
+          <div id="dpad-surface" class="dpad-surface" aria-label="D-pad"></div>
+          <div class="ab">
+            <div class="btn round" data-key="b">B</div>
+            <div class="btn round" data-key="a">A</div>
+          </div>
+          <div class="sys">
+            <div class="btn" data-key="select">SELECT</div>
+            <div class="btn" data-key="start">START</div>
+          </div>
+        </div>
+        <div class="settings">
+          <button id="mute" type="button">Mute</button>
+          <button id="forget-rom" type="button">Forget stored ROM</button>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="/src/app.ts"></script>
   </body>
 </html>

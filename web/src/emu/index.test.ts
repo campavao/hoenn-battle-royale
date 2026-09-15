@@ -75,6 +75,28 @@ describe('Emulator', () => {
     expect(emu.hasRom()).toBe(false);
   });
 
+  it('reads back the stored ROM bytes', async () => {
+    const { emu } = await make();
+    const bytes = new Uint8Array([5, 6, 7]);
+    await emu.start(bytes);
+    expect(emu.readRom()).toEqual(bytes);
+  });
+
+  it('boots patched bytes from a separate path, leaving the stored ROM untouched', async () => {
+    const { emu, calls, files } = await make();
+    const original = new Uint8Array([1, 2, 3]);
+    await emu.start(original);
+    calls.length = 0; // drop the initial-boot log; only care about startBytes from here
+
+    const patched = new Uint8Array([9, 9, 9, 9]);
+    await emu.startBytes(patched);
+
+    expect(calls).toEqual(['sync', 'load /data/games/patched.gba']);
+    expect(files.get('/data/games/patched.gba')).toEqual(patched);
+    expect(emu.readRom()).toEqual(original);
+    expect(emu.isRunning()).toBe(true);
+  });
+
   it('sends only key transitions', async () => {
     const { emu, calls } = await make();
     emu.press('a');

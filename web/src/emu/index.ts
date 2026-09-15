@@ -56,6 +56,9 @@ export interface CoreModule {
 export type CoreFactory = (opts: { canvas: HTMLCanvasElement }) => Promise<CoreModule>;
 
 const ROM_PATH = '/data/games/emerald.gba';
+// A patched image boots from a separate path so start() never overwrites the
+// player's original, stored ROM with the patched bytes (POK-213).
+const PATCHED_ROM_PATH = '/data/games/patched.gba';
 const SCREENSHOT_PATH = '/data/screenshots/shot.png';
 
 /** Loads the core script raw from public/emu, outside Vite's import analysis. */
@@ -105,13 +108,31 @@ export class Emulator {
     await this.m.FSSync();
   }
 
+  /** Reads back the stored original ROM's bytes (e.g. to feed the BPS patcher). */
+  readRom(): Uint8Array {
+    return this.m.FS.readFile(ROM_PATH);
+  }
+
   // ---- running --------------------------------------------------------------------
 
-  /** Boots the stored ROM (or the bytes given, which are also stored). */
+  /** Boots the stored ROM (or the bytes given, which are also stored as the ROM). */
   async start(bytes?: Uint8Array): Promise<void> {
     if (bytes) await this.importRom(bytes);
     if (!this.hasRom()) throw new Error('no ROM stored');
-    if (!this.m.loadGame(ROM_PATH)) throw new Error('loadGame failed');
+    await this.boot(ROM_PATH);
+  }
+
+  /** Boots arbitrary bytes -- typically a BPS-patched image -- from a separate path,
+   * leaving the stored original ROM at rest untouched. Use this instead of start()
+   * whenever `bytes` is a patched copy rather than the player's own ROM file. */
+  async startBytes(bytes: Uint8Array): Promise<void> {
+    this.m.FS.writeFile(PATCHED_ROM_PATH, bytes);
+    await this.m.FSSync();
+    await this.boot(PATCHED_ROM_PATH);
+  }
+
+  private async boot(path: string): Promise<void> {
+    if (!this.m.loadGame(path)) throw new Error('loadGame failed');
     this.running = true;
     // addCoreCallbacks is a no-op until a core exists, so this must follow loadGame.
     this.m.addCoreCallbacks({
