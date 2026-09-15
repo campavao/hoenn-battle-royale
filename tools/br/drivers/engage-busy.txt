@@ -1,0 +1,25 @@
+# engage-busy: a seat in a battle is left alone. Seat 1 reports BUSY battle, then is
+# placed in our eyeline: no challenge. BUSY map lifts it: the challenge goes out.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrNetlink+8 1
+# BUSY: type 17, framed len 5 = hdr(02 00 00) + seat 01, kind 02 (battle)
+pokebytes gBrMailbox+0x1018 11 05 02 00 00 01 02
+# PLACE seat 1 at (15,16) facing WEST on Littleroot, three tiles east of us
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 2
+wait 20
+expect u8 gBrSeatBusy+1 2
+expect u8 gBrSeats+16 1
+expect u16 gBrEngage+4 0
+expect u8 gBrNetlink 0
+# BUSY map: they are back on the map
+pokebytes gBrMailbox+0x1098 11 05 02 00 00 01 00
+poke u16 gBrMailbox+0x0C 3
+wait 20
+expect u8 gBrSeatBusy+1 0
+expect u16 gBrEngage+4 1
+expect u8 gBrNetlink 1
+say engage busy ok

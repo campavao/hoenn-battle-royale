@@ -28,6 +28,12 @@ struct BrSeat
 };                        // 16 bytes
 
 #define BR_NO_OBJ 0xFF
+
+// BR_MSG_BUSY kinds, per seat (POK-230). The engage leaves a seat in a battle alone.
+#define BR_BUSY_MAP 0
+#define BR_BUSY_MENU 1
+#define BR_BUSY_BATTLE 2
+extern u8 gBrSeatBusy[BR_MAX_SEATS];
 #define BR_STEP_QUEUE 5
 // OBJECT_EVENTS_COUNT is 16; the player, loot and map NPCs need the rest.
 #define BR_MAX_GHOSTS 12

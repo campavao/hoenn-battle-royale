@@ -16,6 +16,7 @@
 #include "br/br_wire_c.h"
 
 EWRAM_DATA struct BrSeat gBrSeats[BR_MAX_SEATS] = {0};
+EWRAM_DATA u8 gBrSeatBusy[BR_MAX_SEATS] = {0};
 EWRAM_DATA struct BrOwnPos gBrOwnPos = {0};
 EWRAM_DATA u8 gBrOwnEvents = 0;
 EWRAM_DATA u8 gBrMySeat = 0;
@@ -98,6 +99,16 @@ static void Spawn(u8 seat)
 }
 
 // ---- wire glue: br_wire.h layouts for PLACE (11), STEP (8), FACE (4) -----------
+
+static void HandleBusy(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 2 || d[0] >= BR_MAX_SEATS)
+        return;
+    gBrSeatBusy[d[0]] = d[1];
+}
 
 static void HandlePlace(const u8 *payload, u8 len)
 {
@@ -195,6 +206,7 @@ void BrGhosts_Init(void)
     u8 i;
 
     BrNet_On(BR_MSG_PLACE, HandlePlace);
+    BrNet_On(BR_MSG_BUSY, HandleBusy);
     BrNet_On(BR_MSG_STEP, HandleStep);
     BrNet_On(BR_MSG_FACE, HandleFace);
 
@@ -203,6 +215,7 @@ void BrGhosts_Init(void)
         gBrSeats[i].present = FALSE;
         gBrSeats[i].objId = BR_NO_OBJ;
         gBrSeats[i].queued = 0;
+        gBrSeatBusy[i] = BR_BUSY_MAP;
     }
     gBrOwnEvents = 0;
     sOwnValid = FALSE;
@@ -263,6 +276,7 @@ void BrGhosts_Face(u8 seat, u8 dir)
 
 void BrGhosts_Remove(u8 seat)
 {
+    gBrSeatBusy[seat] = BR_BUSY_MAP;
     if (seat >= BR_MAX_SEATS)
         return;
     Despawn(seat);

@@ -33,6 +33,9 @@ describe('slots round trip (single slot)', () => {
     { t: 'challenge', seat: 2, opponent: 5, nonce: 7 },
     { t: 'faint', seat: 2, index: 3 },
     { t: 'out', seat: 2 },
+    { t: 'busy', seat: 2, kind: 'battle' },
+    { t: 'busy', seat: 3, kind: 'menu' },
+    { t: 'busy', seat: 4 },
     { t: 'pickup', seat: 2, key: 55 },
     { t: 'pickup', seat: 2, key: 55, item: 12, n: 3, cash: true },
     { t: 'ring', seat: 0, phase: 1, sx: -12, sy: 12, r: 10, place: 'Littleroot', elapsed: 0 },
@@ -146,6 +149,7 @@ const FIXED_LAYOUT_SIZES: Record<string, number> = {
   challenge: 4, // seat, opponent, nonce:u16
   faint: 2, // seat, index
   out: 1, // seat
+  busy: 2, // seat, kind
   clock: 3, // seat, left:u16
   result: 2, // seat, outcome
 };
@@ -160,6 +164,7 @@ describe('fixed-layout byte counts', () => {
         challenge: { t: 'challenge', seat: 0, opponent: 1, nonce: 0 },
         faint: { t: 'faint', seat: 0, index: 0 },
         out: { t: 'out', seat: 0 },
+        busy: { t: 'busy', seat: 0, kind: 'battle' },
         clock: { t: 'clock', seat: 0, left: 0 },
         result: { t: 'result', seat: 0, outcome: 'win' },
       };

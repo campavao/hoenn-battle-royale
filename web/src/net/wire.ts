@@ -314,9 +314,9 @@ export interface AgainMsg {
 }
 
 /** What this trainer is doing that is not walking (Kanto POK-113). Edge-triggered:
- *  sent when the answer changes, and re-sent on a position resync. JSON only -- not
- *  in the ROM-crossing subset; each client's own ROM already knows its own menu/
- *  battle state, this is only the "draw a mark over their head" hint for peers. */
+ *  the ROM sends it when its own answer settles (POK-230), and every peer's ROM keeps
+ *  it per seat so the engage leaves a trainer mid-battle alone. `BR_MSG_BUSY` 17:
+ *  seat, kind (0 map, 1 menu, 2 battle). */
 export interface BusyMsg {
   t: 'busy';
   seat: number;

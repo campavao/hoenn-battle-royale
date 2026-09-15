@@ -16,6 +16,8 @@ expect u8 gBrEngage 1
 expect u8 gBrNetlink 1
 expect u8 gBrNetlink+1 0
 expect u8 gWirelessCommType 5
+# the ! over our own head, before the fade
+shot bubble
 wait 600
 shot vs
 say engage ok

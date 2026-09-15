@@ -14,6 +14,12 @@
 #include "string_util.h"
 #include "script.h"
 #include "task.h"
+#include "start_menu.h"
+#include "event_object_lock.h"
+#include "field_effect.h"
+#include "field_player_avatar.h"
+#include "event_object_movement.h"
+#include "constants/field_effects.h"
 #include "constants/battle.h"
 #include "constants/songs.h"
 #include "constants/trainers.h"
@@ -94,6 +100,17 @@ static void HandleBtCont(const u8 *payload, u8 len) { HandleBt(payload, len, TRU
 
 // CHALLENGE {challenger, opponent, nonce}: the page sends it to both sides once the
 // engage is settled. The challenger is link id 0.
+// The overworld with nothing open: a battle can start from here right now.
+static bool8 FieldFree(void)
+{
+    return gMain.callback2 == CB2_Overworld && !gMain.inBattle
+        && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked();
+}
+
+// A menu is not a hiding place (POK-230): a CHALLENGE that lands with something open
+// waits in pendingPeer; BrNetlink_Tick closes the START menu, lets a sub-screen (bag,
+// party, fly map) settle and starts the fight from inside it, and waits out a battle
+// or a running script.
 static void HandleChallenge(const u8 *payload, u8 len)
 {
     const u8 *d;
@@ -104,7 +121,60 @@ static void HandleChallenge(const u8 *payload, u8 len)
     if (d[0] == gBrMySeat)
         BrNetlink_StartBattle(0, d[1]);
     else if (d[1] == gBrMySeat)
-        BrNetlink_StartBattle(1, d[0]);
+    {
+        if (FieldFree())
+            BrNetlink_StartBattle(1, d[0]);
+        else
+            gBrNetlink.pendingPeer = d[0];
+    }
+}
+
+#define BR_MENU_SETTLE 30
+
+static void TickPendingChallenge(void)
+{
+    static EWRAM_DATA MainCallback sLastCb2 = NULL;
+
+    if (gBrNetlink.pendingPeer == 0xFF || gBrNetlink.active)
+        return;
+    if (gMain.inBattle)
+    {
+        gBrNetlink.stableFrames = 0;
+        return; // theirs to finish first
+    }
+    if (gMain.callback2 == CB2_Overworld)
+    {
+        gBrNetlink.stableFrames = 0;
+        if (FuncIsActiveTask(Task_ShowStartMenu))
+        {
+            DestroyTask(FindTaskIdByFunc(Task_ShowStartMenu));
+            HideStartMenu();
+            ScriptUnfreezeObjectEvents();
+            UnlockPlayerFieldControls();
+        }
+        if (!FieldFree())
+            return; // a script (a sign, the nurse) runs to its end
+    }
+    else
+    {
+        // A sub-screen: once it has sat on one callback for a while it is a menu
+        // idling, not a transition, and the start task runs inside it. The battle's
+        // own init resets tasks, sprites and windows; what the menu allocated leaks
+        // until the next page load, which is what PLAY AGAIN is.
+        if (gMain.callback2 != sLastCb2 || gPaletteFade.active)
+        {
+            sLastCb2 = gMain.callback2;
+            gBrNetlink.stableFrames = 0;
+            return;
+        }
+        if (gBrNetlink.stableFrames < BR_MENU_SETTLE)
+        {
+            gBrNetlink.stableFrames++;
+            return;
+        }
+    }
+    BrNetlink_StartBattle(1, gBrNetlink.pendingPeer);
+    gBrNetlink.pendingPeer = 0xFF;
 }
 
 static bool8 FlushPending(void)
@@ -224,7 +294,19 @@ static void CB2_BrReturnFromBattle(void)
 #define tState data[0]
 #define tTimer data[1]
 
-// The cable club's Task_StartWiredCableClubBattle, minus the cable.
+// The ! bubble over the challenger: our own trainer when we challenged, their ghost
+// when they did (or ourselves if their ghost is not on this map).
+static void StartExclamation(void)
+{
+    struct ObjectEvent *obj = &gObjectEvents[gPlayerAvatar.objectEventId];
+
+    if (gBrNetlink.myId == 1 && gBrSeats[gBrNetlink.peerSeat].objId != BR_NO_OBJ)
+        obj = &gObjectEvents[gBrSeats[gBrNetlink.peerSeat].objId];
+    ObjectEventGetLocalIdAndMap(obj, &gFieldEffectArguments[0], &gFieldEffectArguments[1], &gFieldEffectArguments[2]);
+    FieldEffectStart(FLDEFF_EXCLAMATION_MARK_ICON);
+}
+
+// The cable club's Task_StartWiredCableClubBattle, minus the cable, plus the bubble.
 static void Task_BrStartLinkBattle(u8 taskId)
 {
     struct Task *task = &gTasks[taskId];
@@ -232,19 +314,32 @@ static void Task_BrStartLinkBattle(u8 taskId)
     switch (task->tState)
     {
     case 0:
-        FadeScreen(FADE_TO_BLACK, 0);
         gLinkType = LINKTYPE_BATTLE;
+        if (gMain.callback2 == CB2_Overworld)
+            StartExclamation();
+        task->tTimer = 0;
         task->tState++;
         break;
     case 1:
+        if (gMain.callback2 != CB2_Overworld || !FieldEffectActiveListContains(FLDEFF_EXCLAMATION_MARK_ICON) || ++task->tTimer > 90)
+        {
+            task->tTimer = 0;
+            task->tState++;
+        }
+        break;
+    case 2:
+        FadeScreen(FADE_TO_BLACK, 0);
+        task->tState++;
+        break;
+    case 3:
         if (!gPaletteFade.active)
             task->tState++;
         break;
-    case 2:
+    case 4:
         if (++task->tTimer > 20)
             task->tState++;
         break;
-    case 3:
+    case 5:
         PlayMapChosenOrBattleBGM(MUS_VS_TRAINER);
         gBattleTypeFlags = BATTLE_TYPE_LINK | BATTLE_TYPE_TRAINER;
         CleanupOverworldWindowsAndTilemaps();
@@ -287,10 +382,12 @@ void BrNetlink_Init(void)
     BrNet_On(BR_MSG_BT, HandleBtFirst);
     BrNet_On(BR_MSG_BT | BR_MSG_CONT, HandleBtCont);
     BrNet_On(BR_MSG_CHALLENGE, HandleChallenge);
+    gBrNetlink.pendingPeer = 0xFF;
 }
 
 void BrNetlink_Tick(void)
 {
     if (gBrNetlink.active && gBrNetlink.pendingLen)
         FlushPending();
+    TickPendingChallenge();
 }

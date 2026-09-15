@@ -23,6 +23,9 @@ struct BrNetlink
     /* 11 */ u8 lastOutcome;
     /* 12 */ u16 blocksSent;
     /* 14 */ u16 blocksRecv;
+    /* 16 */ u8 pendingPeer;  // a CHALLENGE that landed in a menu waits here, 0xFF none
+    /* 17 */ u8 stableFrames; // frames the current non-field callback2 has held
+    /* 18 */ u16 pad;
 };
 
 extern struct BrNetlink gBrNetlink;

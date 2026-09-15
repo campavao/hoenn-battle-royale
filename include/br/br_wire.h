@@ -187,4 +187,9 @@
 // Payload (2 bytes): seat u8, outcome u8 (0=win 1=lose 2=draw 3=forfeit)
 #define BR_MSG_RESULT 16
 
+// ROM <-> page: what a seat is doing that is not walking, edge-triggered (POK-230).
+// The engage skips a seat in a battle; a menu is not a hiding place and is not skipped.
+// Payload (2 bytes): seat u8, kind u8 (0 on the map, 1 in a menu, 2 in a battle)
+#define BR_MSG_BUSY 17
+
 #endif // GUARD_BR_WIRE_H

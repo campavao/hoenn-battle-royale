@@ -65,7 +65,7 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `late` | -- | host-&gt;one watcher (unicast) | no | host, to a peer who joined mid-match |
 | `win` | -- | host-&gt;page | no | host, when the match is decided |
 | `again` | -- | host-&gt;page | no | host, returning the room to the lobby |
-| `busy` | -- | page&lt;-&gt;page | no | a seat, when its menu/battle state changes |
+| `busy` | `BR_MSG_BUSY` 17 | ROM-&gt;page&lt;-&gt;page-&gt;ROM | yes | a seat's ROM, once its menu/battle state has settled; every peer's ROM keeps it so the engage skips a trainer mid-battle |
 | `peek` | -- | page-&gt;page | no | a spectator, asking for a party |
 | `botout` | -- | page&lt;-&gt;page | no | whoever beat a bot |
 | `botrec` | -- | page&lt;-&gt;page | no | whoever changed a bot's persistent record |
@@ -130,7 +130,7 @@ runtime.
   engine specifics (`src/link/Handshake.lua`, `Fingerprint`'s `modKey`) that have no
   Hoenn analogue; this wire's version gate lives entirely in the relay's room check
   above, not in per-message fields.
-- **`npcout`, `busy`, `botout`, `botrec`, `fame`, `late`, `win`, `again`, `peek`
+- **`npcout`, `botout`, `botrec`, `fame`, `late`, `win`, `again`, `peek`
   stayed JSON-only** even though some of them (npcout especially) arguably touch
   what a remote ROM renders: POK-217's scope named an explicit ROM-crossing subset
   ("place/step/face/map, challenge and the battle blocks, party, faint/out,

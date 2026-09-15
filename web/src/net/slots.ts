@@ -34,6 +34,7 @@ import type {
   MapRef,
   Msg,
   OutMsg,
+  BusyMsg,
   Outcome,
   PackedMon,
   PickupMsg,
@@ -61,6 +62,7 @@ export const BR_MSG = {
   PARTY: 7,
   FAINT: 8,
   OUT: 9,
+  BUSY: 17,
   PICKUP: 10,
   SPILL: 11,
   RING: 12,
@@ -333,6 +335,18 @@ function decodeOut(bytes: Uint8Array): OutMsg {
   return { t: 'out', seat: new Reader(bytes).u8() };
 }
 
+const BUSY_KINDS = [undefined, 'menu', 'battle'] as const;
+function encodeBusy(m: BusyMsg): Uint8Array {
+  const kind = m.kind === 'battle' ? 2 : m.kind === 'menu' ? 1 : 0;
+  return new Writer().u8(m.seat).u8(kind).toBytes();
+}
+function decodeBusy(bytes: Uint8Array): BusyMsg {
+  const r = new Reader(bytes);
+  const seat = r.u8();
+  const kind = BUSY_KINDS[r.u8()];
+  return kind ? { t: 'busy', seat, kind } : { t: 'busy', seat };
+}
+
 function encodePickup(m: PickupMsg): Uint8Array {
   const hasItem = m.item !== undefined;
   return new Writer()
@@ -502,6 +516,7 @@ const CODECS: Record<string, Codec> = {
   party: { type: BR_MSG.PARTY, encode: (m) => encodeParty(m as PartyMsg), decode: decodeParty },
   faint: { type: BR_MSG.FAINT, encode: (m) => encodeFaint(m as FaintMsg), decode: decodeFaint },
   out: { type: BR_MSG.OUT, encode: (m) => encodeOut(m as OutMsg), decode: decodeOut },
+  busy: { type: BR_MSG.BUSY, encode: (m) => encodeBusy(m as BusyMsg), decode: decodeBusy },
   pickup: { type: BR_MSG.PICKUP, encode: (m) => encodePickup(m as PickupMsg), decode: decodePickup },
   spill: { type: BR_MSG.SPILL, encode: (m) => encodeSpill(m as SpillMsg), decode: decodeSpill },
   ring: { type: BR_MSG.RING, encode: (m) => encodeRing(m as RingMsg), decode: decodeRing },

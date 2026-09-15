@@ -1,0 +1,24 @@
+# engage-menu: a menu is not a hiding place. With the START menu open a CHALLENGE
+# from seat 1 lands; the menu closes on its own and the link battle starts (loopback
+# so the start exchange completes into the VS screen).
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrNetlink+8 1
+tap START
+wait 40
+shot menu
+# CHALLENGE: type 5, framed len 7 = hdr(04 00 00) + challenger 01, opponent 00, nonce 00 00
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 01 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 6
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+1 1
+expect u8 gBrNetlink+16 0xFF
+wait 20
+shot closed
+wait 700
+expect u8 gWirelessCommType 5
+shot vs
+say engage from a menu ok

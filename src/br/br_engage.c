@@ -13,6 +13,51 @@
 #include "br/br_engage.h"
 
 EWRAM_DATA struct BrEngage gBrEngage = {0};
+static EWRAM_DATA u8 sOwnBusy = 0xFF;  // last BR_MSG_BUSY kind sent, 0xFF nothing yet
+static EWRAM_DATA u8 sBusyKind = 0;    // the kind we are settling on
+static EWRAM_DATA u8 sBusyStable = 0;  // frames it has held
+
+#define BR_BUSY_SETTLE 20
+
+// Tell the room what we are doing, once it has held long enough to be a state and
+// not a transition (a warp's map load is a menu for a few frames). Nothing is said
+// before the first map: the boot is not a menu.
+static void ReportBusy(void)
+{
+    u8 kind, buf[2];
+
+    if (gMain.inBattle)
+        kind = BR_BUSY_BATTLE;
+    else if (gMain.callback2 != CB2_Overworld || ArePlayerFieldControlsLocked())
+        kind = BR_BUSY_MENU;
+    else
+        kind = BR_BUSY_MAP;
+    if (kind != sBusyKind)
+    {
+        sBusyKind = kind;
+        sBusyStable = 0;
+        return;
+    }
+    if (sBusyStable < BR_BUSY_SETTLE)
+    {
+        sBusyStable++;
+        return;
+    }
+    // Say nothing until we have first settled on the map: the boot's transitions are a
+    // menu for a few frames, and peers already assume the map, so it arms silently.
+    if (sOwnBusy == 0xFF)
+    {
+        if (kind == BR_BUSY_MAP)
+            sOwnBusy = BR_BUSY_MAP;
+        return;
+    }
+    if (kind == sOwnBusy)
+        return;
+    buf[0] = gBrMySeat;
+    buf[1] = kind;
+    if (BrWire_Send(BR_MSG_BUSY, buf, 2))
+        sOwnBusy = kind;
+}
 
 // Does a straight look from (x, y) facing dir reach (tx, ty) within range, with no
 // blocking tile in between? Ledges, water and walls all count as collision.
@@ -76,6 +121,9 @@ void BrEngage_Init(void)
     gBrEngage.cooldown = 0;
     gBrEngage.nonce = 0;
     gBrEngage.challenges = 0;
+    sOwnBusy = 0xFF;
+    sBusyKind = 0;
+    sBusyStable = 0;
 }
 
 void BrEngage_Tick(void)
@@ -84,6 +132,7 @@ void BrEngage_Tick(void)
 
     if (gBrEngage.cooldown)
         gBrEngage.cooldown--;
+    ReportBusy();
     if (!CanEngage())
         return;
     for (seat = 0; seat < BR_MAX_SEATS; seat++)
@@ -96,6 +145,8 @@ void BrEngage_Tick(void)
             continue;
         if (s->objId == BR_NO_OBJ)
             continue; // not spawned here (too many ghosts): not in sight either
+        if (gBrSeatBusy[seat] == BR_BUSY_BATTLE)
+            continue; // already fighting someone; a menu is not a hiding place though
         if (Sees(gBrOwnPos.x, gBrOwnPos.y, gBrOwnPos.dir, s->x, s->y)
          || Sees(s->x, s->y, s->dir, gBrOwnPos.x, gBrOwnPos.y))
         {
