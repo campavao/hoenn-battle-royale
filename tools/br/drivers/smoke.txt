@@ -1,0 +1,15 @@
+# smoke: the ROM boots and is Emerald. Runs from power-on, no savestate.
+title
+expect u8 0x080000AC 0x42
+expect u8 0x080000AD 0x50
+expect u8 0x080000AE 0x45
+expect u8 0x080000AF 0x45
+# through the Game Freak / copyright screens to the title
+wait 240
+shot boot
+tap A
+wait 120
+tap A
+wait 300
+shot title
+say smoke done
