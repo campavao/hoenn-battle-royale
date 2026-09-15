@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_match.h"
+#endif
 #include "hall_of_fame.h"
 #include "task.h"
 #include "palette.h"
@@ -778,7 +781,11 @@ static void Task_Hof_HandleExit(u8 taskId)
 
 static void StartCredits(void)
 {
+#if BR
+    BrMatch_HallOfFameDone(); // a match has no credits: back to the map, the page takes over
+#else
     SetMainCallback2(CB2_StartCreditsSequence);
+#endif
 }
 
 #undef tDontSaveData

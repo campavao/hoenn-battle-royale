@@ -1,0 +1,21 @@
+# win-parade: a RESULT with outcome 0 for our seat runs the Hall of Fame for the party
+# (no save, no credits) and comes back to the map.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+# RESULT: type 16, framed len 5 = hdr(02 00 00) + seat 00, outcome 00
+pokebytes gBrMailbox+0x1018 10 05 02 00 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrMatch 4
+wait 900
+shot parade
+tap A
+wait 300
+tap A
+wait 300
+tap A
+wait 300
+shot after
+say win parade ok

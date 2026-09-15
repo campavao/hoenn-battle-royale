@@ -11,6 +11,7 @@
 #define BR_PHASE_SAFARI 1   // in the Safari Zone, no fighting, catching only
 #define BR_PHASE_PLAY 2     // dropped, the match proper
 #define BR_PHASE_OUT 3      // eliminated
+#define BR_PHASE_WIN 4      // last one standing: the Hall of Fame parade, then the page
 
 struct BrSpawn
 {
@@ -48,5 +49,7 @@ void BrMatch_SafariOver(void);
 // Called from CB2_WhiteOut in place of the heal-and-Centre DoWhiteOut: sends OUT and
 // marks the phase; overworld.c then re-enters the same map where they fell.
 void BrMatch_WhiteOut(void);
+// Called by hall_of_fame.c where the credits would start: back to the map instead.
+void BrMatch_HallOfFameDone(void);
 
 #endif // GUARD_BR_MATCH_H

@@ -4,8 +4,10 @@
 #include "overworld.h"
 #include "field_screen_effect.h"
 #include "safari_zone.h"
+#include "script.h"
 #include "pokemon.h"
 #include "constants/maps.h"
+#include "hall_of_fame.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -71,6 +73,20 @@ static void HandleStartCont(const u8 *payload, u8 len)
         ParseStart(sStartAsm.buf, sStartAsm.total);
 }
 
+static EWRAM_DATA u8 sWinPending = 0;
+
+// RESULT {seat, outcome}: outcome 0 for our seat means we are the last one standing.
+static void HandleResult(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 2)
+        return;
+    if (d[0] == gBrMySeat && d[1] == 0 && gBrMatch.phase != BR_PHASE_OUT)
+        sWinPending = TRUE;
+}
+
 static void HandleClock(const u8 *payload, u8 len)
 {
     const u8 *d;
@@ -91,6 +107,8 @@ void BrMatch_Init(void)
     BrNet_On(BR_MSG_START, HandleStart);
     BrNet_On(BR_MSG_START | BR_MSG_CONT, HandleStartCont);
     BrNet_On(BR_MSG_CLOCK, HandleClock);
+    BrNet_On(BR_MSG_RESULT, HandleResult);
+    sWinPending = FALSE;
 }
 
 void BrMatch_BeginSafari(void)
@@ -136,8 +154,25 @@ void BrMatch_WhiteOut(void)
         SendOut();
 }
 
+void BrMatch_HallOfFameDone(void)
+{
+    SetWarpDestination(gSaveBlock1Ptr->location.mapGroup, gSaveBlock1Ptr->location.mapNum, WARP_ID_NONE,
+                       gSaveBlock1Ptr->pos.x, gSaveBlock1Ptr->pos.y);
+    WarpIntoMap();
+    gMain.state = 0;
+    SetMainCallback2(CB2_LoadMap);
+}
+
 void BrMatch_Tick(void)
 {
+    if (sWinPending && OverworldRunning() && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked())
+    {
+        // The winner's parade: Emerald's own Hall of Fame, no save, no credits.
+        sWinPending = FALSE;
+        gBrMatch.phase = BR_PHASE_WIN;
+        SetMainCallback2(CB2_DoHallOfFameScreenDontSaveData);
+        return;
+    }
     if (gBrMatch.phase != BR_PHASE_SAFARI || !OverworldRunning())
         return;
     // Balls gone mid-opening: the scripts that would warp out are stubbed under BR,
