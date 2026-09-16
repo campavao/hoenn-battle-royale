@@ -23,7 +23,7 @@ import { dealBots, MAX_SEATS } from './bots/roster';
 import type { Bot } from './bots/roster';
 import { voiceFor } from './bots/lines';
 import * as Ticker from './match/ticker';
-import { emptyNote, fixedRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
+import { emptyNote, fixedRows, isRoomCode, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
 import {
   canStart,
   doorOf,
@@ -2105,10 +2105,11 @@ function wireRoom(
 
 // ---- the lobby (POK-240) -----------------------------------------------------------
 
-/** How often the list refreshes. Kanto's lobby was a drawn room that redrew on a timer
- *  too; this is the same beat, and it is also what tells the relay somebody is
- *  browsing (its `browsedAt`, which its own stats read). */
-const LOBBY_REFRESH_MS = 3000;
+/** How often the list refreshes. Kanto's `relay.lua` re-asks `list_rooms` every
+ *  `LIST_EVERY` (5.0s) while its browse screen is up; this is the same beat, and it
+ *  is also what tells the relay somebody is browsing (its `browsedAt`, which its own
+ *  stats read). */
+const LOBBY_REFRESH_MS = 5000;
 
 /** Kanto's one screen: every way into a match is a row on it. Resolves with the choice,
  *  having closed the browsing socket first -- SOLO VS BOTS must reach the ROM with no
@@ -2159,7 +2160,10 @@ function runLobby(): Promise<RoomHash> {
           return done({ mode: 'daily' });
         case 'code': {
           const code = (prompt('Room code?') ?? '').trim().toUpperCase();
-          if (!/^[A-Z0-9]{4,8}$/.test(code)) {
+          // The relay never issues 0/O/1/I/L -- they read alike at a glance -- so a
+          // code with one of those in it, or the wrong length, could not be real
+          // (POK-240). Catching that here beats waiting on the relay's `not_found`.
+          if (!isRoomCode(code)) {
             note.textContent = code ? `${code} is not a room code.` : '';
             return;
           }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countdown, emptyNote, fixedRows, roomRows } from './lobby';
+import { countdown, emptyNote, fixedRows, isRoomCode, roomRows } from './lobby';
 import type { RoomListing } from '../net/relay';
 
 const room = (over: Partial<RoomListing> = {}): RoomListing => ({
@@ -36,6 +36,15 @@ describe('the room rows', () => {
     expect(roomRows([room({ host: '' })])[0].label).toBe('ABC123');
   });
 
+  it('names the host\'s sprite, same as the profile row does', () => {
+    expect(roomRows([room({ skin: '1' })])[0].detail).toBe('MAY · 3/8');
+    // No skin on the listing (an older relay, or one that never set it): the count
+    // is still the whole detail, not a blank leading "· ".
+    expect(roomRows([room()])[0].detail).toBe('3/8');
+    // A skin the four sprites don't cover is dropped rather than shown as a digit.
+    expect(roomRows([room({ skin: 'nope' })])[0].detail).toBe('3/8');
+  });
+
   it('turn the daily into its own row with a countdown', () => {
     const [row] = roomRows([room({ daily: true, host: 'DAILY', secs: 754, players: 2 })]);
     expect(row.label).toBe('DAILY GAME');
@@ -49,6 +58,24 @@ describe('the empty list', () => {
   it('says what to do about it either way', () => {
     expect(emptyNote(true)).toContain('QUICK PLAY');
     expect(emptyNote(false)).toContain('SOLO');
+  });
+});
+
+describe('a room code', () => {
+  it('is six characters from the relay\'s own alphabet', () => {
+    expect(isRoomCode('7F3KM9')).toBe(true);
+  });
+
+  it('rejects the wrong length either way', () => {
+    expect(isRoomCode('7F3KM')).toBe(false);
+    expect(isRoomCode('7F3KM99')).toBe(false);
+    expect(isRoomCode('')).toBe(false);
+  });
+
+  it('rejects 0/O/1/I/L -- the relay never issues them, so a code with one in it could not be real', () => {
+    for (const bad of ['0F3KM9', 'OF3KM9', '1F3KM9', 'IF3KM9', 'LF3KM9']) {
+      expect(isRoomCode(bad)).toBe(false);
+    }
   });
 });
 

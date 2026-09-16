@@ -9,6 +9,21 @@
 // appear half an hour out", "does a full room stop being joinable", "does the passcode
 // padlock show" -- not which element got which class.
 import type { RoomListing } from '../net/relay';
+import { SKINS } from './career';
+
+/** The relay's own code alphabet (server.js `CODE_ALPHABET`, ported from Kanto's
+ *  `CodeEntry.CHARSET`): no `0`/`O`, `1`/`I`/`L` -- the characters that look alike
+ *  at a glance, dropped so a code never asks anyone to guess which one they were
+ *  shown. `CODE_LENGTH` matches the relay's own; a code is never shorter or longer. */
+export const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+export const CODE_LENGTH = 6;
+
+/** Whether `code` could be a real room code -- right length, right alphabet. Used to
+ *  reject a mistyped JOIN BY CODE before it ever reaches the relay, rather than
+ *  waiting on a `not_found` for a code that could never have been issued. */
+export function isRoomCode(code: string): boolean {
+  return code.length === CODE_LENGTH && [...code].every((c) => CODE_ALPHABET.includes(c));
+}
 
 export type LobbyAction =
   | { kind: 'solo' }
@@ -69,7 +84,14 @@ export function roomRows(rooms: RoomListing[]): LobbyRow[] {
       };
     }
     const full = room.players >= room.seats;
-    const bits = [`${room.players}/${room.seats}`];
+    const bits: string[] = [];
+    // The host's own sprite (Kanto's `browse.lua` draws its walk frame beside the
+    // name; a plain-TS row says the same thing in words). `skin` is the numeric
+    // index `careerSkin()` sends, so an unrecognised one is dropped rather than
+    // shown as a stray digit -- SOLO's four sprites are the only ones there are.
+    const skinName = room.skin !== undefined ? SKINS[Number(room.skin)] : undefined;
+    if (skinName) bits.push(skinName);
+    bits.push(`${room.players}/${room.seats}`);
     if (room.pass) bits.push('🔒');
     if (full) bits.push('FULL');
     return {
