@@ -165,3 +165,47 @@ test('QUICK PLAY hosts a game when there is nothing to join', async ({ page }) =
   await expect(page.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 });
+
+test('a room that will not let you in offers the way back', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+  try {
+    // One tab hosts and starts, which locks the room -- the state any old link points
+    // at once a match has begun.
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&quick&nobots&testmon&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+    await host.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__br?.director !== undefined,
+      undefined,
+      { timeout: 60_000 },
+    );
+    await host.evaluate(() => {
+      // START's own effect: shut the door.
+      (window as unknown as { __br: { bridge: { relay: { lockRoom(b: boolean): void } } } }).__br.bridge.relay.lockRoom(true);
+    });
+
+    // Somebody follows the old link. The door is shut, and the page says so and offers
+    // a way out rather than leaving them on a dead end.
+    const guest = await guestCtx.newPage();
+    await guest.goto(`/#join=${code}&rom=${rom}`);
+    await expect(guest.locator('#room-code')).toContainText('locked', { timeout: 60_000 });
+    const back = guest.locator('#room-note button', { hasText: 'BACK TO LOBBY' });
+    await expect(back).toBeVisible();
+
+    // And it works: the lobby, with the room gone from the URL.
+    await back.click();
+    await expect(guest.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({
+      timeout: 60_000,
+    });
+    expect(new URL(guest.url()).hash).not.toContain('join=');
+  } finally {
+    await hostCtx.close();
+    await guestCtx.close();
+  }
+});

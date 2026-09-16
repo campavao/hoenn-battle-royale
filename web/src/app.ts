@@ -984,6 +984,16 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
 
 // ---- room: relay + bridge, opted into by the URL hash ------------------------------------
 
+/** Drops the room out of the URL and reloads, which lands on the lobby (parseRoomHash
+ *  returns null with no room in the hash). The way out of anywhere. */
+function backToLobby(): void {
+  const params = new URLSearchParams(location.hash.slice(1));
+  for (const k of ['host', 'join', 'quick', 'solo', 'daily']) params.delete(k);
+  const rest = params.toString().replace(/=(?=&|$)/g, '');
+  location.hash = rest;
+  location.reload();
+}
+
 function wireRoom(
   emu: Emulator,
   mailboxBase: number | undefined,
@@ -1285,7 +1295,11 @@ function wireRoom(
     if (isHost && autoStarts()) setTimeout(startDirector, AUTO_START_MS);
   };
 
-  ($('#play-again') as HTMLElement).addEventListener('click', () => location.reload());
+  // PLAY AGAIN goes back to the lobby, not back into this room. Reloading on the same
+  // hash rejoined the room the match had just been played in -- which START locked, so
+  // a guest got "Couldn't join: locked" and had nowhere to go but the URL bar, and a
+  // host silently opened a new room and abandoned everybody in the old one.
+  ($('#play-again') as HTMLElement).addEventListener('click', () => backToLobby());
 
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code));
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
@@ -1314,7 +1328,20 @@ function wireRoom(
       codeEl.textContent = `That room is on patch ${theirs}; you have ${patch ?? '?'}. Reload to update.`;
       return;
     }
+    // A door that will not open is a dead end unless the page says where else to go.
+    // `locked` is the common one: a room mid-match, which is exactly what you rejoin
+    // if you reload an old link.
+    const FATAL = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server_full'];
     codeEl.textContent = `Couldn't join: ${ev.reason}`;
+    if (FATAL.includes(ev.reason)) {
+      const note = $('#room-note') as HTMLElement;
+      note.textContent = '';
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.textContent = 'BACK TO LOBBY';
+      back.addEventListener('click', () => backToLobby());
+      note.appendChild(back);
+    }
   });
   // QUICK PLAY found nothing to join: host one and let the bots fill it, which is what
   // Kanto does rather than leaving somebody looking at an empty list (POK-240).
