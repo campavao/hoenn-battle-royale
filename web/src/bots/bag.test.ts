@@ -75,14 +75,22 @@ describe("a bot's own bag", () => {
     expect(isMedicine(ITEM.X_ATTACK)).toBe(false);
   });
 
-  it('hands over four units at most, medicine first', () => {
+  it('hands over four units at most, two medicine and then the boosters', () => {
     const bag = [{ id: ITEM.X_ATTACK, n: 3 }, { id: ITEM.POTION, n: 3 }];
     const staked = battleItems(bag);
     expect(staked).toHaveLength(BATTLE_ITEMS);
-    expect(staked.slice(0, 3)).toEqual([ITEM.POTION, ITEM.POTION, ITEM.POTION]);
-    expect(staked[3]).toBe(ITEM.X_ATTACK);
+    // Two potions, then the X ATTACKs get their turn -- a bag of six potions must not
+    // crowd the boosters out of every fight.
+    expect(staked.slice(0, 2)).toEqual([ITEM.POTION, ITEM.POTION]);
+    expect(staked.slice(2)).toEqual([ITEM.X_ATTACK, ITEM.X_ATTACK]);
     // Staking is not spending: a fight that ends on the first turn costs nothing.
     expect(units(bag)).toBe(6);
+  });
+
+  it('fills the rest with medicine when there are no boosters', () => {
+    expect(battleItems([{ id: ITEM.POTION, n: 9 }])).toEqual([
+      ITEM.POTION, ITEM.POTION, ITEM.POTION, ITEM.POTION,
+    ]);
   });
 
   it('spends only what the fight says it used', () => {

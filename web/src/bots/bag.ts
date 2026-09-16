@@ -160,26 +160,34 @@ export function quaff(party: PackedMon[], bag: Stack[]): number | null {
   return best;
 }
 
-/** What the bot hands its opponent's ROM for one fight: up to four units, medicine
- *  first because that is the item the AI will actually reach for, then the boosters.
- *  Units, not stacks -- two POTIONs go over as two entries, which is how Emerald's
+/** What the bot hands its opponent's ROM for one fight: four units at most. Units,
+ *  not stacks -- two POTIONs go over as two entries, which is how Emerald's
  *  trainerItems array is shaped.
+ *
+ *  Two medicine at most, then the boosters, then medicine again to fill. A bot that
+ *  has been restocked at every ring is carrying nothing but potions by the late rungs,
+ *  and taking the first four would mean its X ATTACK never saw another fight -- which
+ *  is the opposite of what a bag full of things is for.
  *
  *  Nothing is taken out of the bag here. The ROM says what it used when the fight is
  *  over (`spent`), and a fight that ended on the first turn leaves the bag full. */
 export function battleItems(bag: Stack[]): number[] {
   const out: number[] = [];
-  const pour = (want: (id: number) => boolean) => {
+  const pour = (want: (id: number) => boolean, cap = BATTLE_ITEMS) => {
     for (const stack of bag) {
       if (!want(stack.id)) continue;
-      for (let i = 0; i < stack.n && out.length < BATTLE_ITEMS; i++) out.push(stack.id);
+      for (let i = 0; i < stack.n && out.length < cap; i++) out.push(stack.id);
     }
   };
 
-  pour((id) => isMedicine(id));
+  pour((id) => isMedicine(id), MEDICINE_FIRST);
   pour((id) => !isMedicine(id));
+  pour((id) => isMedicine(id));
   return out.slice(0, BATTLE_ITEMS);
 }
+
+/** How many of the four go to medicine before the boosters get a look in. */
+const MEDICINE_FIRST = 2;
 
 /** The fight is over and the ROM says these were used. */
 export function spend(bag: Stack[], used: number[]): void {
