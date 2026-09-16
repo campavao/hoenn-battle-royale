@@ -15,6 +15,8 @@ import { World, type WorldMap } from '../../web/src/bots/world';
 import { mulberry32 } from '../../web/src/match/clock';
 import worldData from '../../web/src/data/world.json';
 import { LANDING } from '../../web/src/match/landing';
+import { sectionInside } from '../../web/src/match/ring';
+import regionmapData from '../../web/src/data/regionmap.json';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -46,6 +48,7 @@ const bots = new Bots({
   mapRef: (id) => refById.get(id),
   send: () => {},
   rng: mulberry32(seed ^ 0x51ce),
+  inside: (id: string) => ring === undefined || inFog(id),
   deal: (bot, phase) => dealParty(seed, bot.seat, phase),
   seed,
   centres: () => world.centres(),
@@ -61,6 +64,17 @@ const bots = new Bots({
   },
 });
 
+// The fog, which this tool never modelled: `inside` was left undefined, so every rule
+// that asks about the ring -- aiming into it, bleeding outside it, and now flying out
+// of it -- was dead in here while being alive in a match. The ring closes on the first
+// section of the world, the way a Director's would, and shrinks a rung at a time.
+const RADII = [12, 9, 7, 5, 4, 3, 2, -1];
+const SECTIONS = regionmapData.sections as Record<string, { x: number; y: number; w: number; h: number; name: string; num?: number }>;
+const eye = SECTIONS[Object.keys(SECTIONS)[0]];
+let ring: { sx: number; sy: number; r: number } | undefined;
+const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
+const inFog = (mapId: string) => sectionInside(SECTIONS[sectionOf.get(mapId) ?? ''], ring);
+
 const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
 const dealt = dealBots(seed, count, [], spawns);
 bots.start(dealt, 0);
@@ -72,6 +86,7 @@ for (let t = STEP_MS; t <= end; t += STEP_MS) {
   const next = Math.floor(t / perPhase);
   if (next !== phase) {
     phase = next;
+    ring = { sx: eye.x, sy: eye.y, r: RADII[Math.min(phase, RADII.length - 1)] };
     bots.ringMoved(phase);
   }
   bots.tick(t);

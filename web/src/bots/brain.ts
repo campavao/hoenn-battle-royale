@@ -12,7 +12,7 @@
 import { findPath, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
-import { MOVE_CUT, MOVE_SURF } from './party';
+import { MOVE_CUT, MOVE_FLY, MOVE_SURF } from './party';
 import { duel } from './duel';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon } from '../net/wire';
@@ -23,6 +23,8 @@ export const STEP_MS = 250;
 const WANDER_BUDGET = 1500;
 /** BR_ENGAGE_GRACE in src/br/br_engage.c: 120 frames, and a frame is a sixtieth. */
 const ENGAGE_COOLDOWN_MS = 2000;
+/** Long on purpose: a flight is an event, not a way of moving. */
+const FLY_COOLDOWN_MS = 45_000;
 /** What a grade does with the moment after a fight (POK-265). An ace is looking for the
  *  next one before the last has finished; a rookie needs a minute. The cheapest honest
  *  difference: nothing about the walk changes, only the appetite. */
@@ -84,6 +86,9 @@ interface Walker {
   /** Nothing before this: the same grace the ROM keeps after a fight, so a bot that
    *  just fought does not re-challenge the player still standing in front of it. */
   engageAfter: number;
+  /** No flying again until this. One flight gets you inside; the next one is a
+   *  teleport every few seconds, which is not a trainer. */
+  flyAfter: number;
   /** No more searching before this: the last one found nowhere to go. */
   retryAfter: number;
   /** When the fog next takes its bite, if this bot is still standing in it. */
@@ -108,7 +113,9 @@ export interface Decision {
     | 'fog'
     | 'duel'
     /** Waiting its turn to think: the tick's search budget went to somebody else. */
-    | 'wait';
+    | 'wait'
+    // The flight out of the fog (POK-267).
+    | 'fly';
   spot: Spot;
   detail?: string;
 }
@@ -199,6 +206,14 @@ export function canSurf(party: PackedMon[]): boolean {
  *  the honest answer for a contestant is that everybody can, because the boot hands
  *  over all eight HMs (POK-256) and the relearner is one menu away (POK-225). What the
  *  move actually buys is the fight: a bot that knows CUT can use it in one. */
+/** And over it? A bird dealt FLY at the rung (POK-267). Unlike CUT this one is NOT
+ *  something every contestant has -- the HMs are in everybody's bag, but a flight needs
+ *  a Pokemon that can carry you, and whether this bot has one is the whole point of the
+ *  rule. */
+export function canFly(party: PackedMon[]): boolean {
+  return party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_FLY));
+}
+
 export function canCut(party: PackedMon[]): boolean {
   return party.length === 0 || party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_CUT)) || CONTESTANTS_CARRY_HMS;
 }
@@ -252,6 +267,7 @@ export class Bots {
         nextStepAt: now + STEP_MS,
         facing: 1,
         engageAfter: 0,
+      flyAfter: 0,
         retryAfter: 0,
         bleedAt: now + FOG_TICK_MS,
         party: this.opts.deal?.(bot, 0, bot.mapId) ?? [],
@@ -564,8 +580,36 @@ export class Bots {
     return null;
   }
 
+  /** The flight (POK-267, Kanto v0.46.0/v0.49.0). A bird that knows FLY does not walk
+   *  out of the fog -- it goes, the way a player would, and appears where it landed.
+   *
+   *  It is deliberately only ever used to get INSIDE the ring. Flying to loot or to a
+   *  fight would make a bot that owns a Taillow a different game from one that does
+   *  not; flying out of the fog is the thing the move is for, and the thing a player
+   *  with FLY would do at exactly that moment.
+   */
+  private tryFly(walker: Walker, now: number): boolean {
+    const inside = this.opts.inside;
+
+    if (!inside || inside(walker.at.map)) return false; // not in the fog: nothing to flee
+    if (now < walker.flyAfter || !canFly(walker.party)) return false;
+    const home = this.opts.targets.filter((t) => inside(t.mapId));
+    if (home.length === 0) return false;
+    const to = home[Math.floor(this.opts.rng() * home.length)];
+
+    walker.flyAfter = now + FLY_COOLDOWN_MS;
+    walker.at = { map: to.mapId, x: to.x, y: to.y };
+    walker.path = null;
+    walker.stepIndex = 0;
+    this.place(walker);
+    this.note(walker, 'fly', `${to.mapId} ${to.x},${to.y}`);
+    return true;
+  }
+
   private chooseTarget(walker: Walker, now: number): void {
     const inside = this.opts.inside;
+    // Out of the fog the fast way, if this one can (POK-267).
+    if (this.tryFly(walker, now)) return;
     if (now < walker.retryAfter) {
       this.wanderOneStep(walker);
       return;

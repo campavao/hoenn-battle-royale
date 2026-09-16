@@ -19,7 +19,7 @@ describe('what the trainer you are watching took', () => {
         { key: 0x0301, x: 5, y: 5, species: 286, level: 12 },
         { key: 0x0303, x: 7, y: 5, species: 1, level: 12 },
       ],
-      bag: { key: 0x0302, x: 6, y: 5, money: 500 },
+      bag: { key: 0x0302, x: 6, y: 5, money: 500, items: [] },
     });
     expect(loot.describe(0x0301)).toBe('A POOCHYENA');
     // And one the page has no name for reads as a Pokemon rather than as a number.

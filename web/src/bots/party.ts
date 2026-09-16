@@ -56,6 +56,7 @@ export function rungForPhase(phase: number): number {
  *  a bot dealt from it still looks like it came from around here. */
 export const MOVE_SURF = 57;
 export const MOVE_CUT = 15;
+export const MOVE_FLY = 19;
 /** The rung a water mon has learned SURF by. Hoenn is half ocean and the drop is
  *  happy to put a trainer on Route 125 or Southern Island, which nothing without it
  *  ever leaves -- so this is a way off an island, not a convenience. */
@@ -64,16 +65,19 @@ const SURF_RUNG = 30;
  *  across a route rather than half the map, and a bot stuck behind one looks broken
  *  in a way a bot that cannot cross the sea does not. */
 const CUT_RUNG = 20;
+/** And the rung a bird has picked FLY up by. Later than CUT: a fence is a nuisance, a
+ *  flight across Hoenn is a way out of the fog, and that is worth waiting for. */
+const FLY_RUNG = 25;
 
-const POOL: { species: number; name: string; moves: number[]; water?: true }[] = [
+const POOL: { species: number; name: string; moves: number[]; water?: true; flier?: true }[] = [
   { species: 277, name: 'TREECKO', moves: [1, 43] }, // POUND, LEER
   { species: 280, name: 'TORCHIC', moves: [10, 45] }, // SCRATCH, GROWL
   { species: 283, name: 'MUDKIP', moves: [33, 45], water: true }, // TACKLE, GROWL
   { species: 286, name: 'POOCHYENA', moves: [33, 43] },
   { species: 288, name: 'ZIGZAGOON', moves: [33, 39] }, // TACKLE, TAIL WHIP
   { species: 290, name: 'WURMPLE', moves: [33, 81] },
-  { species: 296, name: 'TAILLOW', moves: [33, 45] },
-  { species: 300, name: 'WINGULL', moves: [55, 39], water: true }, // WATER GUN
+  { species: 296, name: 'TAILLOW', moves: [33, 45], flier: true },
+  { species: 300, name: 'WINGULL', moves: [55, 39], water: true, flier: true }, // WATER GUN
   { species: 304, name: 'RALTS', moves: [93, 45] }, // CONFUSION
   { species: 309, name: 'ARON', moves: [33, 106] },
   { species: 313, name: 'ELECTRIKE', moves: [33, 84] }, // THUNDER SHOCK
@@ -128,6 +132,7 @@ function mon(level: number, rng: () => number, mapId?: string): PackedMon {
   const moves = [...pick.moves];
   if (pick.water && level >= SURF_RUNG && !moves.includes(MOVE_SURF)) moves.push(MOVE_SURF);
   if (!pick.water && level >= CUT_RUNG && !moves.includes(MOVE_CUT)) moves.push(MOVE_CUT);
+  if (pick.flier && level >= FLY_RUNG && !moves.includes(MOVE_FLY)) moves.push(MOVE_FLY);
   return {
     species,
     level,
