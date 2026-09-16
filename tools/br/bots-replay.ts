@@ -43,11 +43,21 @@ const targets = LANDING.filter((c) => outdoor.has(c.map) && refById.has(c.map)).
 
 const lines: string[] = [];
 const tally = new Map<string, number>();
+// When the field thins, and to what (POK-273). A battle royale's shape is its pacing,
+// and until now this tool counted what bots decided without ever counting what it cost
+// them: a match that empties in seven minutes and one that runs the full sixteen look
+// identical in a decision tally.
+const outs: { at: number; seat: number }[] = [];
+let duels = 0;
+let now = 0;
 const bots = new Bots({
   world,
   targets,
   mapRef: (id) => refById.get(id),
-  send: () => {},
+  send: (m) => {
+    if (m.t === 'out') outs.push({ at: now, seat: m.seat });
+  },
+  onDuel: () => void duels++,
   rng: mulberry32(seed ^ 0x51ce),
   inside: (id: string) => ring === undefined || inFog(id),
   deal: (bot, phase) => dealParty(seed, bot.seat, phase),
@@ -87,6 +97,7 @@ const end = minutes * 60_000;
 const perPhase = end / 6;
 let phase = 0;
 for (let t = STEP_MS; t <= end; t += STEP_MS) {
+  now = t;
   const next = Math.floor(t / perPhase);
   if (next !== phase) {
     phase = next;
@@ -99,3 +110,20 @@ for (let t = STEP_MS; t <= end; t += STEP_MS) {
 console.log(lines.join('\n'));
 console.log(`\n${lines.length} decisions over ${minutes} min, seed ${seed}, ${dealt.length} bots`);
 console.log([...tally].map(([r, n]) => `${r} ${n}`).join('  '));
+
+// The survivor curve: how many were still standing at each minute, and what took the
+// rest. `duel` and `fog` are the only two ways a bot goes out in here -- there is no
+// player in a replay -- so the split says which one is running the match.
+const fog = tally.get('fog') ?? 0;
+const curve: string[] = [];
+for (let t = 60_000; t <= end; t += 60_000) {
+  curve.push(`${String(t / 60_000).padStart(2)}m ${String(dealt.length - outs.filter((o) => o.at <= t).length).padStart(3)}`);
+}
+console.log(`
+survivors: ${curve.join('  ')}`);
+const half = outs[Math.floor(dealt.length / 2) - 1];
+console.log(
+  `${outs.length} out of ${dealt.length} over ${minutes} min` +
+    (half ? `, half the field gone by ${Math.round(half.at / 1000)}s` : ', the field held') +
+    ` -- ${duels} duels, ${fog} to the fog`,
+);
