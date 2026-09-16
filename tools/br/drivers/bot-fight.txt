@@ -26,4 +26,16 @@ wait 300
 expect u8 gBrBotFight+2 1
 expect u8 gBrNetlink 0
 shot fighting
+# Into the fight itself: the intro text, then FIGHT and the first move. The bot's
+# side is Emerald's own trainer AI (POK-236's coverage and potion rules are its job
+# now), so this is also the check that the BR branches feeding it do not crash it.
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 90
+tap A
+wait 120
+shot turn
 say bot fight ok

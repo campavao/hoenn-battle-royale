@@ -15,6 +15,9 @@
 #include "constants/battle_move_effects.h"
 #include "constants/items.h"
 #include "constants/moves.h"
+#if BR
+#include "br/br_bot.h"
+#endif
 
 #define AI_ACTION_DONE          (1 << 0)
 #define AI_ACTION_FLEE          (1 << 1)
@@ -296,6 +299,24 @@ void BattleAI_HandleItemUseBeforeAISetup(u8 defaultScoreMoves)
             )
        )
     {
+#if BR
+        // A bot is not in gTrainers -- it is a seat the host's tab walks around -- so
+        // its bag is dealt off the rung its team is at, which is Kanto's potion rule
+        // (POK-236) arriving as the thing Emerald's own AI already knows how to do.
+        if (gBrBotFight.fighting)
+        {
+            u8 level = GetMonData(&gEnemyParty[0], MON_DATA_LEVEL, NULL);
+            u16 potion = level >= 75 ? ITEM_FULL_RESTORE
+                       : level >= 50 ? ITEM_HYPER_POTION
+                       : level >= 30 ? ITEM_SUPER_POTION
+                                     : ITEM_POTION;
+
+            BATTLE_HISTORY->trainerItems[0] = potion;
+            BATTLE_HISTORY->trainerItems[1] = potion;
+            BATTLE_HISTORY->itemsNo = 2;
+        }
+        else
+#endif
         for (i = 0; i < MAX_TRAINER_ITEMS; i++)
         {
             if (gTrainers[gTrainerBattleOpponent_A].items[i] != ITEM_NONE)
@@ -372,6 +393,14 @@ void BattleAI_SetupAIData(u8 defaultScoreMoves)
         AI_THINKING_STRUCT->aiFlags = AI_SCRIPT_CHECK_BAD_MOVE | AI_SCRIPT_CHECK_VIABILITY | AI_SCRIPT_TRY_TO_FAINT;
     else if (gBattleTypeFlags & BATTLE_TYPE_TWO_OPPONENTS)
         AI_THINKING_STRUCT->aiFlags = gTrainers[gTrainerBattleOpponent_A].aiFlags | gTrainers[gTrainerBattleOpponent_B].aiFlags;
+#if BR
+    // TRAINER_NONE's row is blank, so a bot fight would otherwise get an opponent that
+    // picks moves at random. It gets the Frontier's set instead: check the bad move,
+    // check the viable one, go for the knockout (POK-236's coverage rule, fought by
+    // the engine that is already fighting the battle).
+    else if (gBrBotFight.fighting)
+        AI_THINKING_STRUCT->aiFlags = AI_SCRIPT_CHECK_BAD_MOVE | AI_SCRIPT_CHECK_VIABILITY | AI_SCRIPT_TRY_TO_FAINT;
+#endif
     else
        AI_THINKING_STRUCT->aiFlags = gTrainers[gTrainerBattleOpponent_A].aiFlags;
 
