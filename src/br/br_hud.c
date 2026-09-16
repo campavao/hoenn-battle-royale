@@ -34,6 +34,8 @@ static const u8 sColorsWound[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GREEN,
 
 static const u8 sText_Left[] = _(" LEFT");
 static const u8 sText_Fog[] = _("FOG!");
+// How many are watching. Kanto's corner eye, on the small font's own symbol page.
+static const u8 sText_Eye[] = _("{EMOJI_LEFT_EYE}");
 // Wound glyphs, all from the small font's extra-symbol page: no new graphics.
 static const u8 sText_WoundFull[] = _("{EMOJI_CIRCLE}");
 static const u8 sText_WoundHurt[] = _("{CIRCLE_DOT}");
@@ -146,9 +148,21 @@ static void DrawCorner(void)
         ConvertIntToDecimalStringN(p, h->clockSecs % 60, STR_CONV_MODE_LEADING_ZEROS, 2);
         PrintRight(h->winCorner, buf, 12, sColorsText);
     }
+    if (h->eyes != 0)
+    {
+        // Left of the clock, on the same line: the corner is two lines tall and both
+        // are spoken for.
+        // The eye is a two-byte escape (F9 D8), so the count goes where StringCopy
+        // left the terminator, not at buf[1].
+        ConvertIntToDecimalStringN(StringCopy(buf, sText_Eye), h->eyes,
+            STR_CONV_MODE_LEFT_ALIGN, 2);
+        AddTextPrinterParameterized3(h->winCorner, FONT_SMALL, 0, 12, sColorsText,
+            (s8)TEXT_SKIP_DRAW, buf);
+    }
     h->drawnClock = h->clockSecs;
     h->drawnLeft = h->left;
     h->drawnFog = fog;
+    h->drawnEyes = h->eyes;
 }
 
 static void TickCorner(bool8 blocked)
@@ -162,7 +176,7 @@ static void TickCorner(bool8 blocked)
         return;
     }
     if ((h->dirty & BR_HUD_DIRTY_CORNER) || h->drawnClock != h->clockSecs || h->drawnLeft != h->left
-        || h->drawnFog != FogPhase())
+        || h->drawnFog != FogPhase() || h->drawnEyes != h->eyes)
     {
         DrawCorner();
         h->dirty &= ~BR_HUD_DIRTY_CORNER;

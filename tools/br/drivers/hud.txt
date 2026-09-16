@@ -9,6 +9,14 @@ expect u8 gBrHud+0x0A 3
 # the page writes 7 left and 2:05 on the clock
 poke u8 gBrHud+0x00 7
 poke u16 gBrHud+0x02 125
+# three spectators are on us: the eye and the count share the clock line (POK-233)
+poke u8 gBrHud+0x1A 3
+wait 4
+expect u8 gBrHud+0x1B 3
+shot hud-eye
+poke u8 gBrHud+0x1A 0
+wait 4
+expect u8 gBrHud+0x1B 0
 # a kill line from seat 1: slot type 0F, len 0x15 = frame (12 00 00) + seat 01 kind 01
 # textLen 0F + "MAY GOT BRENDAN"
 pokebytes gBrMailbox+0x1018 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8

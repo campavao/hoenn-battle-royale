@@ -6,7 +6,9 @@
 // The overworld HUD (POK-226): three text windows on BG0 that live only while the
 // overworld runs, redrawn from gBrHud every frame something changed.
 //
-//   corner  cols 24..29, rows 0..2   "N LEFT" over the clock "M:SS" (or a FOG! flash)
+//   corner  cols 24..29, rows 0..2   "N LEFT" over the clock "M:SS" (or a FOG! flash),
+//                                    with an eye and a count left of the clock while
+//                                    anyone is spectating this trainer (POK-233)
 //   wound   cols 24..29, rows 3..4   one glyph per party mon: full / hurt / fainted
 //   ticker  cols  1..28, rows 18..19 one line of news, 180 frames each, kill feed etc.
 //
@@ -77,7 +79,8 @@ struct BrHud
     /* 0x12 */ u8 drawnLeft;
     /* 0x13 */ u8 drawnFog;      // 0 clock, 1 flash-off, 2 flash-on
     /* 0x14 */ u8 drawnWound[6]; // glyph per slot as last drawn: 0 none 1 fainted 2 hurt 3 full
-    /* 0x1A */ u8 pad[2];
+    /* 0x1A */ u8 eyes;          // PAGE WRITES: spectators watching this trainer
+    /* 0x1B */ u8 drawnEyes;     // what the corner last drew
     /* 0x1C */ struct BrHudLine heldLine;             // 44 bytes
     /* 0x48 */ struct BrHudLine queue[BR_HUD_QUEUE];  // 352 bytes
     /* 0x1A8 */

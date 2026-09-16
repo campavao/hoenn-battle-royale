@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HUD, writeHudLeft, writeHudClockSecs, writeMySeat } from './hud';
+import { HUD, writeHudLeft, writeHudClockSecs, writeHudEyes, writeMySeat } from './hud';
 import type { RamAccess } from './mailbox';
 
 function fakeRam(): { ram: RamAccess; mem: Map<number, number> } {
@@ -23,6 +23,14 @@ describe('hud.ts (the page-writes fields of gBrHud)', () => {
     const { ram } = fakeRam();
     writeHudLeft(ram, 0x1000, 12);
     expect(ram.read(0x1000 + HUD.OFF_LEFT, 8)).toBe(12);
+  });
+
+  it('writes the eye count at +0x1a as a byte', () => {
+    const { ram } = fakeRam();
+    writeHudEyes(ram, 0x1000, 3);
+    expect(ram.read(0x1000 + HUD.OFF_EYES, 8)).toBe(3);
+    writeHudEyes(ram, 0x1000, 0);
+    expect(ram.read(0x1000 + HUD.OFF_EYES, 8)).toBe(0);
   });
 
   it('clamps left to a byte', () => {
