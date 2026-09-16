@@ -14,7 +14,7 @@ import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
 import { MOVE_CUT, MOVE_FLY, MOVE_SURF } from './party';
 import { battleItems, merge as mergeBag, purse, quaff, restock, spend, type Stack } from './bag';
-import { duel } from './duel';
+import { duel, type DuelResult } from './duel';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg } from '../net/wire';
 
@@ -184,6 +184,14 @@ export interface BotsOptions {
   /** Two bots settled it. The only place both sides of a fight are known at once,
    *  which is what a kill feed needs. */
   onDuel?: (winner: number, loser: number) => void;
+  /** Fights it for real, if the host has a proxy instance up (POK-238). Answers null
+   *  when it could not -- no instance, a crash, a fight that would not end -- and the
+   *  seeded resolver settles it instead, which is what happens today and what happens
+   *  on every client that is not the host. */
+  settle?: (
+    a: { seat: number; party: PackedMon[] },
+    b: { seat: number; party: PackedMon[] },
+  ) => Promise<{ winner: number; loser: number; a: { hp: number; status: number }[]; b: { hp: number; status: number }[] } | null>;
   /** Is anybody allowed to fight yet? FALSE through the Safari opening (POK-257):
    *  everybody is on one map catching things, and a bot that duels in there takes the
    *  field apart before the match has started -- eight went into the Zone and two came
@@ -595,22 +603,94 @@ export class Bots {
       const theirs: Look = { map: other.at.map, x: other.at.x, y: other.at.y, dir: other.facing };
       if (!eitherSees(this.opts.world, mine, theirs)) continue;
       this.nonce = (this.nonce + 1) & 0xffff;
+      // For real, in the hidden instance, when the host has one (POK-238). Both bots
+      // stand where they are while it runs -- the same thing that happens to one
+      // fighting a player -- and the seeded resolver is the answer if it cannot.
+      if (this.opts.settle) {
+        this.startProxyDuel(walker, other, now);
+        return true;
+      }
       const result = duel(
         this.opts.seed,
         { seat: walker.bot.seat, party: walker.party },
         { seat: other.bot.seat, party: other.party },
         this.nonce,
       );
-      const won = result.winner === walker.bot.seat ? walker : other;
-      const lost = won === walker ? other : walker;
-      won.party = result.winnerParty;
-      won.engageAfter = now + cooldownFor(won.bot);
-      this.note(walker, 'duel', `${result.winner} beat ${result.loser}`);
-      this.opts.onDuel?.(result.winner, result.loser);
-      this.eliminate(lost);
-      return lost === walker;
+      return this.applyDuel(walker, other, result, now);
     }
     return false;
+  }
+
+  /** One duel's outcome, whoever worked it out: the winner keeps what it has left, the
+   *  loser goes. TRUE when the bot whose step this was is the one that went. */
+  private applyDuel(walker: Walker, other: Walker, result: DuelResult, now: number): boolean {
+    const won = result.winner === walker.bot.seat ? walker : other;
+    const lost = won === walker ? other : walker;
+
+    won.party = result.winnerParty;
+    won.engageAfter = now + cooldownFor(won.bot);
+    this.note(walker, 'duel', `${result.winner} beat ${result.loser}`);
+    this.opts.onDuel?.(result.winner, result.loser);
+    this.eliminate(lost);
+    return lost === walker;
+  }
+
+  /** Hands the pair to the proxy and waits. Both are held as fighting meanwhile, so
+   *  nothing engages them and the room sees them busy -- a bot strolling off while its
+   *  own battle runs somewhere else is the bug POK-238's bot-vs-player half already
+   *  had to fix. */
+  private startProxyDuel(walker: Walker, other: Walker, now: number): void {
+    const settle = this.opts.settle;
+    const seed = this.opts.seed ?? 0;
+    const nonce = this.nonce;
+    if (!settle) return;
+
+    for (const w of [walker, other]) {
+      this.fighting.add(w.bot.seat);
+      this.opts.send({ t: 'busy', seat: w.bot.seat, kind: 'battle' });
+      w.path = null;
+    }
+    void settle(
+      { seat: walker.bot.seat, party: walker.party },
+      { seat: other.bot.seat, party: other.party },
+    )
+      .catch(() => null)
+      .then((out) => {
+        const then = this.now;
+        for (const w of [walker, other]) {
+          this.fighting.delete(w.bot.seat);
+          this.opts.send({ t: 'busy', seat: w.bot.seat });
+        }
+        // The fog may have taken one of them while the instance was fighting: that
+        // elimination stands, and this duel never happened.
+        if (!this.walkers.includes(walker) || !this.walkers.includes(other)) return;
+        if (out) {
+          const wonIsWalker = out.winner === walker.bot.seat;
+          const left = wonIsWalker ? out.a : out.b;
+          const winner = wonIsWalker ? walker : other;
+
+          this.applyDuel(walker, other, {
+            winner: out.winner,
+            loser: out.loser,
+            // What the fight actually left, mon for mon, in the order it was sent.
+            winnerParty: winner.party.map((mon, i) =>
+              left[i] ? { ...mon, hp: Math.min(mon.maxHp, left[i].hp), status: left[i].status } : mon,
+            ),
+          }, then);
+          return;
+        }
+        this.applyDuel(
+          walker,
+          other,
+          duel(
+            seed,
+            { seat: walker.bot.seat, party: walker.party },
+            { seat: other.bot.seat, party: other.party },
+            nonce,
+          ),
+          then,
+        );
+      });
   }
 
   /** Standing at a nurse's counter with something to heal. The page is the bot's

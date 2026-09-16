@@ -53,6 +53,8 @@ import type {
   PartyMsg,
   TrainerMsg,
   SpentMsg,
+  DuelMsg,
+  DresultMsg,
   PickMsg,
   LandMsg,
   ResultMsg,
@@ -86,6 +88,8 @@ export const BR_MSG = {
   RESULT: 16,
   TRAINER: 23,
   SPENT: 26,
+  DUEL: 27,
+  DRESULT: 28,
   PICK: 24,
   LAND: 25,
 } as const;
@@ -439,6 +443,47 @@ function decodeTrainer(bytes: Uint8Array): TrainerMsg {
   return msg;
 }
 
+// DUEL: two bot parties for the hidden proxy instance to fight (POK-238). A's rows
+// first; br_duel.c builds them straight into gPlayerParty and gEnemyParty.
+function encodeDuel(m: DuelMsg): Uint8Array {
+  const w = new Writer().u8(m.seatA).u8(m.seatB).u8(m.a.length).u8(m.b.length);
+  for (const mon of [...m.a, ...m.b]) w.raw(encodeMon(mon));
+  return w.toBytes();
+}
+function decodeDuel(bytes: Uint8Array): DuelMsg {
+  const r = new Reader(bytes);
+  const seatA = r.u8();
+  const seatB = r.u8();
+  const countA = r.u8();
+  const countB = r.u8();
+  const a: PackedMon[] = [];
+  const b: PackedMon[] = [];
+  for (let i = 0; i < countA; i++) a.push(decodeMon(r.raw(MON_BYTES)));
+  for (let i = 0; i < countB; i++) b.push(decodeMon(r.raw(MON_BYTES)));
+  return { t: 'duel', seatA, seatB, a, b };
+}
+
+// DRESULT: who won and what each side has left, three bytes a mon.
+function encodeDresult(m: DresultMsg): Uint8Array {
+  const w = new Writer().u8(m.seatA).u8(m.seatB).u8(m.winner).u8(m.a.length).u8(m.b.length);
+  for (const mon of [...m.a, ...m.b]) w.u16(mon.hp).u8(mon.status);
+  return w.toBytes();
+}
+function decodeDresult(bytes: Uint8Array): DresultMsg {
+  const r = new Reader(bytes);
+  const seatA = r.u8();
+  const seatB = r.u8();
+  const winner = r.u8();
+  const countA = r.u8();
+  const countB = r.u8();
+  const row = () => ({ hp: r.u16(), status: r.u8() });
+  const a: { hp: number; status: number }[] = [];
+  const b: { hp: number; status: number }[] = [];
+  for (let i = 0; i < countA; i++) a.push(row());
+  for (let i = 0; i < countB; i++) b.push(row());
+  return { t: 'dresult', seatA, seatB, winner, a, b };
+}
+
 // SPENT: seat, then the items that fight actually used (POK-237).
 function encodeSpent(m: SpentMsg): Uint8Array {
   const items = m.items.slice(0, 4);
@@ -655,6 +700,8 @@ const CODECS: Record<string, Codec> = {
   party: { type: BR_MSG.PARTY, encode: (m) => encodeParty(m as PartyMsg), decode: decodeParty },
   trainer: { type: BR_MSG.TRAINER, encode: (m) => encodeTrainer(m as TrainerMsg), decode: decodeTrainer },
   spent: { type: BR_MSG.SPENT, encode: (m) => encodeSpent(m as SpentMsg), decode: decodeSpent },
+  duel: { type: BR_MSG.DUEL, encode: (m) => encodeDuel(m as DuelMsg), decode: decodeDuel },
+  dresult: { type: BR_MSG.DRESULT, encode: (m) => encodeDresult(m as DresultMsg), decode: decodeDresult },
   pick: { type: BR_MSG.PICK, encode: (m) => encodePick(m as PickMsg), decode: decodePick },
   land: { type: BR_MSG.LAND, encode: (m) => encodeLand(m as LandMsg), decode: decodeLand },
   faint: { type: BR_MSG.FAINT, encode: (m) => encodeFaint(m as FaintMsg), decode: decodeFaint },

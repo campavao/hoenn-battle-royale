@@ -15,6 +15,7 @@
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
+#include "br/br_duel.h"
 #include "br/br_match.h"
 #include "br/br_ring.h"
 #include "br/br_zone.h"
@@ -233,6 +234,10 @@ void BrMatch_SafariOver(void)
 
 void BrMatch_WhiteOut(void)
 {
+    // The proxy instance is not in the match it is simulating (POK-238): a duel side
+    // losing is the duel's result, not this ROM going out of anything.
+    if (BrDuel_IsProxy())
+        return;
     if (gBrMatch.phase != BR_PHASE_OUT)
         SendOut();
 }

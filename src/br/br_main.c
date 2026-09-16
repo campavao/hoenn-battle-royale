@@ -16,6 +16,7 @@
 #include "br/br_engage.h"
 #include "br/br_battle.h"
 #include "br/br_bot.h"
+#include "br/br_duel.h"
 #include "br/br_loot.h"
 #include "br/br_spectate.h"
 #include "br/br_pick.h"
@@ -40,6 +41,7 @@ void BrInit(void)
     BrBattle_Init();
     BrLoot_Init();
     BrBot_Init();
+    BrDuel_Init();
     BrSpectate_Init();
     BrPick_Init();
     BrMap_Init();
@@ -53,6 +55,7 @@ void BrFrame(void)
     BrGhosts_Tick();
     BrLoot_Tick();
     BrBot_Tick();
+    BrDuel_Tick();
     BrRing_Tick();
     BrHud_Tick();
     BrMatch_Tick();

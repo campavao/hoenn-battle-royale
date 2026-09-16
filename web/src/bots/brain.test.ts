@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Bots, health, STEP_MS, type PlayerView } from './brain';
+import { Bots, health, STEP_MS, type BotsOptions, type PlayerView } from './brain';
 import { dealBots, MAX_SEATS } from './roster';
 import { World, type Spot, type WorldMap } from './world';
 import { mulberry32 } from '../match/clock';
@@ -540,6 +540,59 @@ describe('two bots meeting', () => {
     for (let t = STEP_MS; t <= 5000; t += STEP_MS) bots.tick(t);
     return { bots, sent, seats: dealt.map((b) => b.seat) };
   }
+
+  /** The same pair, but the host has a proxy instance: the fight is handed over and
+   *  the answer comes back a tick later (POK-238). */
+  function pairWithProxy(settle: NonNullable<BotsOptions['settle']>) {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      seed: 4242,
+      settle,
+    });
+    const dealt = dealBots(1, 2, [0], [
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 1 },
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 2 },
+    ]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 5000; t += STEP_MS) bots.tick(t);
+    return { bots, sent, seats: dealt.map((b) => b.seat) };
+  }
+
+  it('hands the fight to the proxy when there is one, and takes its answer (POK-238)', async () => {
+    let asked: { a: number; b: number } | null = null;
+    const { bots, sent, seats } = pairWithProxy(async (a, b) => {
+      asked = { a: a.seat, b: b.seat };
+      // The seat that was spotted wins, with one mon left on 7 HP.
+      return { winner: b.seat, loser: a.seat, a: [{ hp: 0, status: 0 }], b: [{ hp: 7, status: 0 }] };
+    });
+    // Both are held while it runs, and neither walks off mid-fight.
+    expect(sent.some((m) => m.t === 'busy' && (m as { kind?: string }).kind === 'battle')).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(asked).not.toBeNull();
+    expect(bots.count()).toBe(1);
+    const left = seats.find((s) => bots.spotOf(s) !== undefined) as number;
+    // The winner is carrying exactly what the instance said it had left, not what a
+    // formula guessed.
+    expect(bots.partyOf(left)[0].hp).toBe(7);
+    expect(sent.some((m) => m.t === 'out')).toBe(true);
+  });
+
+  it('falls back to the seeded resolver when the proxy cannot (POK-238)', async () => {
+    const { bots } = pairWithProxy(async () => null);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(bots.count()).toBe(1);
+  });
 
   it('settles it: one of them is out, and drops what it carried', () => {
     const { bots, sent } = pair();

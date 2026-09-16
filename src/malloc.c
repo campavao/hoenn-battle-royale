@@ -3,6 +3,7 @@
 #if BR
 #include "br/br_spectate.h"
 #include "br/br_bot.h"
+#include "br/br_duel.h"
 #endif
 
 static void *sHeapStart;
@@ -199,6 +200,7 @@ void InitHeap(void *heapStart, u32 heapSize)
     // into every single battle.
     BrSpectate_HeapReset();
     BrBot_HeapReset();
+    BrDuel_HeapReset();
 #endif
 }
 

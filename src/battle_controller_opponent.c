@@ -33,6 +33,14 @@
 #include "constants/songs.h"
 #include "constants/trainers.h"
 #include "trainer_hill.h"
+#if BR
+#include "br/br_duel.h"
+// A proxy duel puts BOTH battlers on this controller (POK-238), and the one standing in
+// the player's position owns gPlayerParty -- so every read and write below follows the
+// side rather than a fixed array. Outside a duel this answers gEnemyParty, so nothing
+// about a real battle changes.
+#define gEnemyParty BrDuel_ControllerParty()
+#endif
 
 static void OpponentHandleGetMonData(void);
 static void OpponentHandleGetRawMonData(void);

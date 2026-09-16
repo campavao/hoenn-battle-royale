@@ -61,6 +61,7 @@
 #include "constants/trainers.h"
 #if BR
 #include "br/br_bot.h"
+#include "br/br_duel.h"
 #include "br/br_levels.h"
 #endif
 #include "cable_club.h"
@@ -699,8 +700,9 @@ static void CB2_InitBattleInternal(void)
     if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED))
 #if BR
      // A bot's party is already in gEnemyParty, put there from the wire (POK-238):
-     // asking gTrainers for one would throw it away.
-     && !BrBot_PartyIsStaged()
+     // asking gTrainers for one would throw it away. A duel stages both sides the
+     // same way, and CreateNPCTrainerParty would clobber the enemy half of it.
+     && !BrBot_PartyIsStaged() && !BrDuel_Running()
 #endif
     )
     {

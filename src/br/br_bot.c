@@ -38,8 +38,9 @@ static EWRAM_DATA struct BrAssembler sTrainerAsm = {0};
 
 // The wire's PackedMon (br_wire.h) into a real mon. Only the fields a fight needs:
 // species and level make the stats, the moves make the fight, the HP makes it a mon
-// that has already been somewhere.
-static void BuildMon(const u8 *row, struct Pokemon *mon)
+// that has already been somewhere. Shared with br_duel.c, which reads the same rows
+// for both sides of a bot-vs-bot fight (POK-238).
+void BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
 {
     u16 species = BrWire_ReadU16(row);
     u8 level = row[2];
@@ -91,7 +92,7 @@ static void ParseTrainer(const u8 *d, u16 n)
 
     ZeroEnemyPartyMons();
     for (i = 0; i < count; i++)
-        BuildMon(d + off + i * 100, &gEnemyParty[i]);
+        BrBot_BuildMon(d + off + i * 100, &gEnemyParty[i]);
     for (i = 0; i < nameLen; i++)
         gBrBotFight.name[i] = d[2 + i];
     gBrBotFight.name[nameLen] = EOS;

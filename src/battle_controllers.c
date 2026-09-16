@@ -12,6 +12,9 @@
 #include "task.h"
 #include "util.h"
 #include "constants/abilities.h"
+#if BR
+#include "br/br_duel.h"
+#endif
 
 static EWRAM_DATA u8 sLinkSendTaskId = 0;
 static EWRAM_DATA u8 sLinkReceiveTaskId = 0;
@@ -385,6 +388,20 @@ static void InitSinglePlayerBtlControllers(void)
             }
         }
     }
+#if BR
+    // Two bots fighting (POK-238): nobody is holding this GBA, so the side that is
+    // normally the player is played by the same AI as the other one. Its POSITION is
+    // left alone -- it still stands where the player stands, is still gPlayerParty, and
+    // still wins by making the other side faint. Only the hand on the controller
+    // changes.
+    //
+    // It also has to be this way round rather than a page holding A: the intro's
+    // "would like to battle!" box is printed to the player's battler and waits there
+    // for a press (POK-269's rule), which is precisely where the first attempt at this
+    // ticket stalled for ever. An opponent controller prints it and moves on.
+    if (BrDuel_Running())
+        gBattlerControllerFuncs[B_BATTLER_0] = SetControllerToOpponent;
+#endif
 }
 
 static void InitLinkBtlControllers(void)

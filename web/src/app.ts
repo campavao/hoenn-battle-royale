@@ -43,6 +43,7 @@ import { World, type WorldMap } from './bots/world';
 import { sectionInside } from './match/ring';
 import { dealParty } from './bots/party';
 import { dealBag } from './bots/bag';
+import { ProxyDuels } from './bots/proxy';
 import { mulberry32 } from './match/clock';
 import {
   careerLine,
@@ -688,6 +689,13 @@ function careerName(): string {
   return career.name || cleanName(localStorage.getItem(NAME_STORAGE_KEY) ?? '') || DEFAULT_NAME;
 }
 
+/** The hidden instance that fights bot-vs-bot duels for real (POK-238). Module state
+ *  rather than an argument because it is made at boot, long before there is a room, and
+ *  only the host will ever ask it anything -- it boots its emulator lazily, on the first
+ *  duel, so a page that never runs bots never pays for it. Null on an unpatched ROM,
+ *  which has no BrDuel to talk to. */
+let proxyDuels: ProxyDuels | null = null;
+
 /** Which of the four trainer sprites is your ghost on everybody else's screen. */
 function careerSkin(): number {
   return loadCareer().skin ?? 0;
@@ -1065,6 +1073,11 @@ function startBots(
           }))
           .filter((p) => p.mapId !== ''),
     },
+    // Two bots meeting is fought for real in the hidden instance when there is one
+    // (POK-238); `duel.ts`'s seeded resolver is what answers when there is not.
+    settle: proxyDuels
+      ? (a, b) => (proxyDuels as ProxyDuels).fight(a.seat, b.seat, a.party, b.party)
+      : undefined,
     // Where the bot is standing is where its mons came from (POK-237): the drop put
     // it on a route, and that route's own table is what a trainer there would have.
     deal: (bot, atPhase, mapId) => dealParty(seed, bot.seat, atPhase, mapId, bot.grade),
@@ -2266,6 +2279,10 @@ async function askToKeepStorage(): Promise<void> {
   }
 }
 
+/** The name the proxy instance boots under. It never appears anywhere -- no room, no
+ *  ghost, no HUD -- but the boot block wants one. */
+const PROXY_NAME = 'PROXY';
+
 async function main(): Promise<void> {
   registerServiceWorker();
   void askToKeepStorage();
@@ -2283,6 +2300,27 @@ async function main(): Promise<void> {
   // Dev only, for the e2e harness (POK-220): solo play never builds a Bridge, so this
   // is the only way in to read the emulator's memory from outside the page.
   if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu };
+
+  // The proxy's own instance is not booted here -- only made available. It costs a
+  // second wasm core and a second copy of the ROM, so it is paid for on the first bot
+  // -vs-bot meeting, in the one tab that runs the bots (POK-238).
+  if (usingPatched && mailboxBase !== undefined) {
+    proxyDuels = new ProxyDuels({
+      mailboxBase,
+      boot: async () => {
+        const hidden = document.createElement('canvas');
+        hidden.width = 240;
+        hidden.height = 160;
+        const other = await Emulator.create(hidden);
+        await other.startBytes(bytes);
+        other.setVolume(0); // it is not on screen and it is not to be heard
+        other.setSpeed(8); // ...and it is in a hurry: a duel is a fight nobody watches
+        return other;
+      },
+      writeBoot: (e, base) => writeBootBlock(e as Emulator, base, PROXY_NAME),
+      onNote: (what) => console.info('[proxy]', what),
+    });
+  }
 
   // Input first, and before anything that waits: the wiring used to sit after the
   // mailbox handshake and the lobby, so between the ROM starting and the match being

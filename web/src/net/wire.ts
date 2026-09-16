@@ -225,6 +225,31 @@ export interface SpentMsg {
   items: number[]; // the item ids used, at most 4
 }
 
+/** Two bots, handed to the hidden proxy instance to fight properly (POK-238). Only
+ *  that instance ever receives one: it has no seat and is in no room. Side A's party
+ *  goes into its gPlayerParty and B's into gEnemyParty, and both are played by the AI.
+ *  Crosses into the ROM (duel). */
+export interface DuelMsg {
+  t: 'duel';
+  seatA: number;
+  seatB: number;
+  a: PackedMon[]; // 1..6
+  b: PackedMon[]; // 1..6
+}
+
+/** How it went. Not the mons -- the page sent them and still holds them -- only what
+ *  the fight changed: who won, and what each side has left. Crosses out of the ROM
+ *  (dresult). */
+export interface DresultMsg {
+  t: 'dresult';
+  seatA: number;
+  seatB: number;
+  /** 0 = A, 1 = B, 2 = neither: a draw, or a fight that never resolved. */
+  winner: number;
+  a: { hp: number; status: number }[];
+  b: { hp: number; status: number }[];
+}
+
 /** Where a trainer chose to drop (POK-223). The ROM puts the fly map in front of them
  *  when the opening ends and sends the section they picked; the host deals a cell
  *  inside it that nobody else has. Crosses into the ROM (pick). */
@@ -522,6 +547,8 @@ export type Msg =
   | TurnMsg
   | PartyMsg
   | TrainerMsg
+  | DuelMsg
+  | DresultMsg
   | SpentMsg
   | PickMsg
   | LandMsg
@@ -885,6 +912,41 @@ const decoders: Record<string, Decoder> = {
   },
 
   spent: (m) => ({ t: 'spent', seat: reqSeat(m), items: itemIds(m.items, 'spent items') }),
+
+  duel: (m) => {
+    const side = (raw: unknown, what: string): PackedMon[] => {
+      if (!Array.isArray(raw) || raw.length === 0 || raw.length > 6) fail(`bad duel ${what}`);
+      return (raw as unknown[]).map(validateMon);
+    };
+    return {
+      t: 'duel',
+      seatA: reqSeat(m, 'seatA'),
+      seatB: reqSeat(m, 'seatB'),
+      a: side(m.a, 'side a'),
+      b: side(m.b, 'side b'),
+    };
+  },
+
+  dresult: (m) => {
+    const left = (raw: unknown, what: string): { hp: number; status: number }[] => {
+      if (!Array.isArray(raw) || raw.length > 6) fail(`bad dresult ${what}`);
+      return (raw as unknown[]).map((row) => {
+        if (!isPlainObject(row)) fail(`bad dresult ${what}`);
+        return {
+          hp: reqInt(row, 'hp', 0, 0xffff),
+          status: reqInt(row, 'status', 0, 0xff),
+        };
+      });
+    };
+    return {
+      t: 'dresult',
+      seatA: reqSeat(m, 'seatA'),
+      seatB: reqSeat(m, 'seatB'),
+      winner: reqInt(m, 'winner', 0, 2),
+      a: left(m.a, 'side a'),
+      b: left(m.b, 'side b'),
+    };
+  },
 
   faint: (m) => ({ t: 'faint', seat: reqSeat(m), index: reqInt(m, 'index', 0, 5) }),
 

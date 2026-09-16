@@ -19,6 +19,7 @@
 #include "battle.h"
 #include "br/br_netlink.h"
 #include "br/br_bot.h"
+#include "br/br_duel.h"
 
 EWRAM_DATA struct BrRing gBrRing = {0};
 
@@ -36,7 +37,7 @@ static bool8 FogReachesThisBattle(void)
 {
     if (!gMain.inBattle)
         return FALSE;
-    if (gBrNetlink.active || gBrBotFight.fighting)
+    if (gBrNetlink.active || gBrBotFight.fighting || gBrDuel.running)
         return FALSE; // a fight between contestants is theirs to lose
     return TRUE;
 }

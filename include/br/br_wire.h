@@ -256,4 +256,24 @@
 //   2..:  ids      count * u16
 #define BR_MSG_SPENT 26
 
+// duel: two bot parties for the hidden proxy instance to fight properly (POK-238).
+// Only that instance ever receives one -- it has no seat and is in no room.
+// Payload (variable):
+//   0:    seatA    u8   whose party goes into gPlayerParty
+//   1:    seatB    u8   whose goes into gEnemyParty
+//   2:    countA   u8   1..6
+//   3:    countB   u8   1..6
+//   4..:  parties  (countA + countB) * PackedMon, A's first
+#define BR_MSG_DUEL 27
+
+// dresult: how it went. Not the mons -- the page sent them and still holds them --
+// only what the fight changed.
+//   0:    seatA    u8
+//   1:    seatB    u8
+//   2:    winner   u8   0 = A, 1 = B, 2 = neither (a draw, or it never resolved)
+//   3:    countA   u8
+//   4:    countB   u8
+//   5..:  left     (countA + countB) * (hp u16, status u8), A's first
+#define BR_MSG_DRESULT 28
+
 #endif // GUARD_BR_WIRE_H
