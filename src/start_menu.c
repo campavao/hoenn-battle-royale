@@ -46,6 +46,10 @@
 #include "constants/battle_frontier.h"
 #include "constants/rgb.h"
 #include "constants/songs.h"
+#if BR
+#include "br/br_map.h"
+#include "br/br_match.h"
+#endif
 
 // Menu actions
 enum
@@ -62,7 +66,10 @@ enum
     MENU_ACTION_PLAYER_LINK,
     MENU_ACTION_REST_FRONTIER,
     MENU_ACTION_RETIRE_FRONTIER,
-    MENU_ACTION_PYRAMID_BAG
+    MENU_ACTION_PYRAMID_BAG,
+#if BR
+    MENU_ACTION_BR_MAP, // the ring, mid-match (POK-263)
+#endif
 };
 
 // Save status
@@ -94,6 +101,9 @@ EWRAM_DATA static u8 sSaveInfoWindowId = 0;
 static bool8 StartMenuPokedexCallback(void);
 static bool8 StartMenuPokemonCallback(void);
 static bool8 StartMenuBagCallback(void);
+#if BR
+static bool8 StartMenuBrMapCallback(void);
+#endif
 static bool8 StartMenuPokeNavCallback(void);
 static bool8 StartMenuPlayerNameCallback(void);
 static bool8 StartMenuSaveCallback(void);
@@ -184,6 +194,9 @@ static const struct MenuAction sStartMenuItems[] =
     [MENU_ACTION_POKEDEX]         = {gText_MenuPokedex, {.u8_void = StartMenuPokedexCallback}},
     [MENU_ACTION_POKEMON]         = {gText_MenuPokemon, {.u8_void = StartMenuPokemonCallback}},
     [MENU_ACTION_BAG]             = {gText_MenuBag,     {.u8_void = StartMenuBagCallback}},
+#if BR
+    [MENU_ACTION_BR_MAP]          = {gBrText_MenuMap,   {.u8_void = StartMenuBrMapCallback}},
+#endif
     [MENU_ACTION_POKENAV]         = {gText_MenuPokenav, {.u8_void = StartMenuPokeNavCallback}},
     [MENU_ACTION_PLAYER]          = {gText_MenuPlayer,  {.u8_void = StartMenuPlayerNameCallback}},
     [MENU_ACTION_SAVE]            = {gText_MenuSave,    {.u8_void = StartMenuSaveCallback}},
@@ -327,6 +340,9 @@ static void BuildNormalStartMenu(void)
     }
 
     AddStartMenuAction(MENU_ACTION_BAG);
+    // Where the fog is, for as long as there is a fog to be somewhere (POK-263).
+    if (gBrMatch.phase == BR_PHASE_PLAY)
+        AddStartMenuAction(MENU_ACTION_BR_MAP);
     AddStartMenuAction(MENU_ACTION_PLAYER);
     AddStartMenuAction(MENU_ACTION_EXIT);
 #else
@@ -679,6 +695,19 @@ static bool8 StartMenuPokemonCallback(void)
 
     return FALSE;
 }
+
+#if BR
+// The map is not a screen the menu hands over to -- it is a task on the field, the
+// same one the drop uses -- so this closes the menu and lets it take the screen.
+static bool8 StartMenuBrMapCallback(void)
+{
+    RemoveExtraStartMenuWindows();
+    HideStartMenu();
+    BrMap_Open();
+
+    return TRUE;
+}
+#endif
 
 static bool8 StartMenuBagCallback(void)
 {

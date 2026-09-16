@@ -1,0 +1,32 @@
+# ring-map: the fog, on the map, from the START menu mid-match (POK-263). Until this
+# the ring was only ever a FOG! flash once you were already in it.
+#
+# The menu in a match is POKEMON / BAG / MAP / <name> / EXIT (start-menu.txt pins the
+# first two), so MAP is two below the top with a party in the bag.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# a match, dropped, with a ring around Rustboro-ish: centre (4,5), radius 4
+poke u8 gBrMatch 2
+poke u8 gBrRing 1
+poke u8 gBrRing+1 1
+poke u8 gBrRing+2 4
+poke u8 gBrRing+3 5
+poke u8 gBrRing+4 4
+tap START
+wait 40
+tap DOWN
+wait 20
+tap DOWN
+wait 20
+tap A
+wait 240
+shot ring
+# the map is up and it is a look, not a pick: the drop is not running
+expect u8 gBrMap 1
+expect u8 gBrPick 0
+# and B puts us back on the field
+tap B
+wait 200
+expect u8 gBrMap 0
+say ring map ok

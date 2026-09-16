@@ -115,6 +115,9 @@ static void SpriteCB_FlyDestIcon(struct Sprite *sprite);
 static void CB_FadeInFlyMap(void);
 static void CB_HandleFlyMapInput(void);
 static void CB_ExitFlyMap(void);
+#if BR
+static void BrCreateRingIcons(void);
+#endif
 
 static const u16 sRegionMapCursorPal[] = INCGFX_U16("graphics/pokenav/region_map/cursor.pal", ".gbapal");
 static const u32 sRegionMapCursorSmallGfxLZ[] = INCGFX_U32("graphics/pokenav/region_map/cursor_small.png", ".4bpp.lz");
@@ -131,6 +134,8 @@ static const u8 sRegionMapPlayerIcon_MayGfx[] = INCGFX_U8("graphics/pokenav/regi
 #include "data/region_map/region_map_entries.h"
 #if BR
 #include "br/br_pick.h"
+#include "br/br_map.h"
+#include "br/br_ring.h"
 #endif
 
 static const mapsec_u16_t sRegionMap_SpecialPlaceLocations[][2] =
@@ -1722,6 +1727,7 @@ void CB2_OpenFlyMap(void)
         FillWindowPixelBuffer(WIN_FLY_TO_WHERE, PIXEL_FILL(0));
         AddTextPrinterParameterized(WIN_FLY_TO_WHERE, FONT_NORMAL,
 #if BR
+                                    BrMap_Looking() ? gBrText_TheFog :
                                     BrPick_Picking() ? gBrText_DropWhere :
 #endif
                                     gText_FlyToWhere, 0, 1, 0, NULL);
@@ -1730,6 +1736,11 @@ void CB2_OpenFlyMap(void)
         break;
     case 8:
         LoadFlyDestIcons();
+#if BR
+        // After the town icons, so the ring is drawn over them rather than under.
+        if (BrMap_Looking())
+            BrCreateRingIcons();
+#endif
         gMain.state++;
         break;
     case 9:
@@ -1849,6 +1860,54 @@ static void LoadFlyDestIcons(void)
 // Sprite data for SpriteCB_FlyDestIcon
 #define sIconMapSec   data[0]
 #define sFlickerTimer data[1]
+
+#if BR
+// Is this cell of the region-map grid inside the ring? The ring is a disc in exactly
+// these coordinates (br_ring.c's BrRing_SectionInside measures the same way against a
+// section's own rectangle), so this is that test with the rectangle shrunk to a point.
+static bool8 BrCellInside(s16 x, s16 y)
+{
+    s16 dx = x - gBrRing.cx;
+    s16 dy = y - gBrRing.cy;
+
+    if (gBrRing.r < 0)
+        return FALSE;
+    return dx * dx + dy * dy <= (s16)gBrRing.r * gBrRing.r;
+}
+
+// The fog's edge (POK-263). Only the boundary cells get a sprite -- the inside of the
+// ring can be forty cells and OAM has 128 -- which draws as a ring and costs a perimeter
+// rather than an area. The eye is marked too: it is the one cell everybody is walking
+// towards.
+static void BrCreateRingIcons(void)
+{
+    s16 x, y;
+    u8 spriteId, made = 0;
+
+    if (!gBrRing.active)
+        return;
+    for (y = 0; y < MAP_HEIGHT; y++)
+    {
+        for (x = 0; x < MAP_WIDTH; x++)
+        {
+            if (!BrCellInside(x, y))
+                continue;
+            // An interior cell has ring on all four sides; a boundary one does not.
+            if (BrCellInside(x - 1, y) && BrCellInside(x + 1, y)
+             && BrCellInside(x, y - 1) && BrCellInside(x, y + 1)
+             && !(x == gBrRing.cx && y == gBrRing.cy))
+                continue;
+            spriteId = CreateSprite(&sFlyDestIconSpriteTemplate,
+                                    (x + MAPCURSOR_X_MIN) * 8 + 4, (y + MAPCURSOR_Y_MIN) * 8 + 4, 10);
+            if (spriteId == MAX_SPRITES)
+                return;
+            StartSpriteAnim(&gSprites[spriteId], FLYDESTICON_RED_OUTLINE);
+            if (++made >= 60)
+                return;
+        }
+    }
+}
+#endif
 
 static void CreateFlyDestIcons(void)
 {
@@ -1987,6 +2046,16 @@ static void CB_HandleFlyMapInput(void)
             DrawFlyDestTextWindow();
             break;
         case MAP_INPUT_A_BUTTON:
+#if BR
+            // Nothing is chosen on a look: A closes it, the same as B (POK-263).
+            if (BrMap_Looking())
+            {
+                m4aSongNumStart(SE_SELECT);
+                sFlyMap->choseFlyLocation = FALSE;
+                SetFlyMapCallback(CB_ExitFlyMap);
+                break;
+            }
+#endif
             if (sFlyMap->regionMap.mapSecType == MAPSECTYPE_CITY_CANFLY || sFlyMap->regionMap.mapSecType == MAPSECTYPE_BATTLE_FRONTIER)
             {
                 m4aSongNumStart(SE_SELECT);
@@ -2031,6 +2100,17 @@ static void CB_ExitFlyMap(void)
                 // warp to yet: hold the black screen the fade left and let br_pick.c
                 // do the drop when `land` arrives.
                 BrPick_Wait();
+                TRY_FREE_AND_SET_NULL(sFlyMap);
+                FreeAllWindowBuffers();
+                break;
+            }
+#endif
+#if BR
+            // A look ends where it started: back on the field, nothing flown to.
+            if (BrMap_Looking())
+            {
+                BrMap_Close();
+                SetMainCallback2(CB2_ReturnToField);
                 TRY_FREE_AND_SET_NULL(sFlyMap);
                 FreeAllWindowBuffers();
                 break;
