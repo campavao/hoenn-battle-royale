@@ -390,6 +390,8 @@ function wireGamepad(emu: Emulator): () => void {
   // that is a direction held down forever, which is a player who cannot move and
   // cannot see why. Directions are a move AWAY from rest, not a position.
   const rest = new Map<number, readonly number[]>();
+  /** Which axes are away from rest this poll, for the readout. */
+  const moved: string[] = [];
   const poll = () => {
     const now = new Set<GbaKey>();
     for (const pad of navigator.getGamepads()) {
@@ -410,12 +412,22 @@ function wireGamepad(emu: Emulator): () => void {
         const key = gamepadMap[i];
         if (key && button.pressed) now.add(key);
       });
-      const x = (pad.axes[0] ?? 0) - (base[0] ?? 0);
-      const y = (pad.axes[1] ?? 0) - (base[1] ?? 0);
-      if (x <= -STICK) now.add('left');
-      else if (x >= STICK) now.add('right');
-      if (y <= -STICK) now.add('up');
-      else if (y >= STICK) now.add('down');
+      // EVERY axis, not just the first pair (Cam's play-test: "analog stick on my
+      // controller doesn't work" on a pad whose D-pad did). A standard pad puts the
+      // left stick on axes 0 and 1; a non-standard one puts its sticks wherever its
+      // driver felt like, and reading only the first two means a pad whose stick is on
+      // 2 and 3 has no stick at all. Even axes are horizontal, odd are vertical --
+      // the one convention every layout keeps -- and axis 9 is skipped because that is
+      // the DirectInput hat, decoded below.
+      moved.length = 0;
+      for (let i = 0; i < pad.axes.length; i++) {
+        if (i === 9 && pad.axes.length >= 10) continue;
+        const away = (pad.axes[i] ?? 0) - (base[i] ?? 0);
+        if (Math.abs(away) < STICK) continue;
+        moved.push(`${i}${away < 0 ? '-' : '+'}`);
+        if (i % 2 === 0) now.add(away < 0 ? 'left' : 'right');
+        else now.add(away < 0 ? 'up' : 'down');
+      }
       // The tenth axis is where a DirectInput pad puts its D-pad. Only there, and
       // only on a pad that has one: a resting stick reads 0, which decodes to "down".
       if (pad.axes.length >= 10) for (const key of hatKeys(pad.axes[9])) now.add(key);
@@ -428,7 +440,11 @@ function wireGamepad(emu: Emulator): () => void {
     // difference, and it is the line that would have found the stuck axis in seconds.
     if (padLine !== null) {
       const keys = [...held].join(' ');
-      padLine.textContent = `${padName}${keys ? ` -- ${keys}` : ''}`;
+      // The axes that have moved, by number, so a pad that does nothing can be told
+      // apart from a pad whose stick is somewhere this code is not looking -- which is
+      // the difference this line existed to show and could not.
+      const axes = moved.length > 0 ? ` [axes ${moved.join(' ')}]` : '';
+      padLine.textContent = `${padName}${keys ? ` -- ${keys}` : ''}${axes}`;
     }
   };
   let padLine: HTMLElement | null = null;
