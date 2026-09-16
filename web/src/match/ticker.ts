@@ -51,6 +51,17 @@ export function said(seat: number, name: string, text: string): TickerMsg | null
   return line(seat, `${short(name)}: ${text}`, 'say');
 }
 
+/** What the trainer you are watching just picked up (POK-268). Kanto tells a spectator
+ *  when the bot they are following catches something (v0.48.0); Hoenn's bots are dealt
+ *  their teams rather than catching, so the moment worth reporting is the one where
+ *  they take something off the ground.
+ *
+ *  Drawn by the watcher's own page, not sent: a `pickup` reaches everybody, and only
+ *  the page following that seat has any business saying so. */
+export function took(seat: number, name: string, what: string): TickerMsg | null {
+  return line(seat, `${short(name)} TOOK ${what}`, 'say');
+}
+
 /** Somebody is out, however it happened, and how many are left after it. */
 export function out(seat: number, name: string, left: number): TickerMsg | null {
   if (left <= 0) return line(seat, `${short(name)} IS OUT!`, 'kill');

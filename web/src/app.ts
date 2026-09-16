@@ -1740,6 +1740,16 @@ function wireRoom(
     bridge.relay.on('recv', (ev) => {
       try {
         const m = decode(JSON.stringify(ev.m));
+        // What the trainer we are watching just took (POK-268). Drawn here rather than
+        // sent: a `pickup` reaches the whole room, and only the page following that
+        // seat has any business saying so. The describe() has to happen before the
+        // loot table forgets the piece, which loot.note() does on this same message.
+        if (m.t === 'pickup' && bridge && spectate.watchingSeat() === m.seat) {
+          const what = loot.describe(m.key);
+          const row = bridge.roster.all().find((e) => e.seat === m.seat);
+          const line = what ? Ticker.took(m.seat, row?.name || `P${m.seat}`, what) : null;
+          if (line) bridge.pushToRom(line);
+        }
         loot.note(m);
         noteResult(m);
         noteBusy(m);

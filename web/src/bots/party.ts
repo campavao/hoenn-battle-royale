@@ -89,7 +89,7 @@ function hp(level: number): number {
 /** The names the wire carries are the page's; the ROM builds the real mon from the
  *  species id and nicknames it itself. A species we have no name for is shown by its
  *  number, which is honest rather than wrong. */
-function nameOf(species: number): string {
+export function speciesName(species: number): string {
   return POOL.find((p) => p.species === species)?.name ?? String(species);
 }
 
@@ -118,7 +118,7 @@ function mon(level: number, rng: () => number, mapId?: string): PackedMon {
       otId: 0,
       personality: Math.floor(rng() * 0xffff_ffff) >>> 0,
       exp: 0,
-      nickname: nameOf(species),
+      nickname: speciesName(species),
       ot: 'BR',
     };
   }
@@ -139,7 +139,7 @@ function mon(level: number, rng: () => number, mapId?: string): PackedMon {
     otId: 0,
     personality: Math.floor(rng() * 0xffff_ffff) >>> 0,
     exp: 0,
-    nickname: species === pick.species ? pick.name : nameOf(species),
+    nickname: species === pick.species ? pick.name : speciesName(species),
     ot: 'BR',
   };
 }

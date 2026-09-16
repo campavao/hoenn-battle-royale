@@ -10,6 +10,7 @@
 // matters: every time our own trainer arrives on a map, the loot standing on that map
 // goes into the in-ring as a fresh `spill`. The ROM cannot tell the difference between
 // that and the original, which is the point.
+import { speciesName } from '../bots/party';
 import type { MapRef, Msg, SpillBag, SpillMon, SpillMsg } from '../net/wire';
 
 interface Piece {
@@ -76,6 +77,24 @@ export class Loot {
   }
 
   /** Every piece still on the ground, for anyone who needs to walk to one. */
+  /** What is under this key, in the words a ticker line would use -- or null when this
+   *  page never saw it land (POK-268). A watcher uses it to say what the trainer it is
+   *  following just picked up. */
+  describe(key: number): string | null {
+    const piece = this.pieces.get(key);
+
+    if (!piece) return null;
+    if (piece.mon) {
+      // speciesName only knows the species the bots deal from (party.ts's POOL) and
+      // answers with the number for anything else. A number in a ticker line is noise
+      // to a player, so an unknown one is just a Pokemon.
+      const name = speciesName(piece.mon.species);
+      return /^\d+$/.test(name) ? 'A POKéMON' : `A ${name}`;
+    }
+    if (piece.bag) return 'A BAG';
+    return 'SOMETHING';
+  }
+
   all(): { key: number; map: MapRef; x: number; y: number }[] {
     const out: { key: number; map: MapRef; x: number; y: number }[] = [];
     for (const [key, piece] of this.pieces) {
