@@ -1,0 +1,19 @@
+# safari-menu: the START menu inside the Zone. start-menu.txt covers the one out in
+# Hoenn (POK-221); this is the opening's own, and it was still Emerald's -- RETIRE,
+# POKEDEX, POKEMON, BAG, <name>, OPTION, EXIT -- which the play-test's video caught.
+#
+# RETIRE is a door out of the match's opening (POK-222 says the buzzer is how it ends,
+# or running out of balls). POKEDEX and OPTION are the doors POK-221 already shut
+# everywhere else. What is left is the same four rows the rest of the match has.
+#
+# The boot's mode byte 2 is BR_BOOT_SAFARI: straight into the Zone.
+wait 30
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+tap START
+wait 40
+shot menu
+tap B
+wait 20
+say safari menu ok

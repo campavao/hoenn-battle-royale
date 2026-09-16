@@ -367,6 +367,18 @@ static void BuildNormalStartMenu(void)
 
 static void BuildSafariZoneStartMenu(void)
 {
+#if BR
+    // The Zone is the match's opening, not a trip you can cut short (POK-222), so
+    // there is no RETIRE -- the buzzer, or running out of balls, is how it ends. The
+    // rest is BuildNormalStartMenu's own list for the same reason it is: POKEDEX and
+    // OPTION are doors out of a live match (POK-221), and the play-test found all
+    // three still standing in here.
+    if (CalculatePlayerPartyCount() > 0)
+        AddStartMenuAction(MENU_ACTION_POKEMON);
+    AddStartMenuAction(MENU_ACTION_BAG);
+    AddStartMenuAction(MENU_ACTION_PLAYER);
+    AddStartMenuAction(MENU_ACTION_EXIT);
+#else
     AddStartMenuAction(MENU_ACTION_RETIRE_SAFARI);
     AddStartMenuAction(MENU_ACTION_POKEDEX);
     AddStartMenuAction(MENU_ACTION_POKEMON);
@@ -374,6 +386,7 @@ static void BuildSafariZoneStartMenu(void)
     AddStartMenuAction(MENU_ACTION_PLAYER);
     AddStartMenuAction(MENU_ACTION_OPTION);
     AddStartMenuAction(MENU_ACTION_EXIT);
+#endif
 }
 
 static void BuildLinkModeStartMenu(void)
