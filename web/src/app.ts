@@ -188,6 +188,9 @@ interface PatchResult {
    *  there is no BR-aware ROM running to have a mailbox at all. */
   mailboxBase?: number;
   protocol?: number;
+  /** The patch number this ROM was built from, for the relay's version gate
+   *  (POK-244): both sides of a link battle must be on the same one. */
+  patch?: number;
   /** The full symbol table alongside mailboxBase -- gBrHud/gBrMySeat's addresses
    *  (director.ts's HUD wiring, POK-222/224/228) come from here rather than a
    *  second hard-coded constant (per CLAUDE.md: never hard-code an EWRAM address). */
@@ -210,6 +213,7 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
       usingPatched: true,
       mailboxBase: side.symbols.get('gBrMailbox'),
       protocol: side.info.protocol,
+      patch: side.info.patch,
       symbols: side.symbols,
     };
   }
@@ -232,6 +236,7 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
       usingPatched: true,
       mailboxBase: release.symbols.get('gBrMailbox'),
       protocol: release.info.protocol,
+      patch: release.info.patch,
       symbols: release.symbols,
     };
   } catch (err) {
@@ -967,6 +972,7 @@ function wireRoom(
   protocol: number | undefined,
   symbols: Map<string, number> | undefined,
   hash: RoomHash,
+  patch?: number,
 ): void {
   if (mailboxBase === undefined || hash.mode === 'solo') return; // solo: no socket at all
 
@@ -1282,7 +1288,16 @@ function wireRoom(
       }, director !== null);
     }
   });
-  relay.on('room_error', (ev) => (codeEl.textContent = `Couldn't join: ${ev.reason}`));
+  relay.on('room_error', (ev) => {
+    // Kanto's door: a room on another patch is not one you can play in, and the fix is
+    // always the same -- get the build they have, which here means a reload.
+    if (ev.reason === 'version') {
+      const theirs = ev.host?.patch ?? '?';
+      codeEl.textContent = `That room is on patch ${theirs}; you have ${patch ?? '?'}. Reload to update.`;
+      return;
+    }
+    codeEl.textContent = `Couldn't join: ${ev.reason}`;
+  });
   // QUICK PLAY found nothing to join: host one and let the bots fill it, which is what
   // Kanto does rather than leaving somebody looking at an empty list (POK-240).
   relay.on('no_open_rooms', () => {
@@ -1308,10 +1323,15 @@ function wireRoom(
   // Open, because a room nobody can find is not a lobby (POK-240). JOIN BY CODE still
   // works for one that is not listed; that is what a passcode is for.
   const skin = String(careerSkin());
-  if (hash.mode === 'host') relay.host({ name: careerName(), open: true, max: BOT_FILL, skin });
-  else if (hash.mode === 'quick') relay.quickJoin({ name: careerName(), skin });
-  else if (hash.mode === 'daily') relay.dailyJoin({ name: careerName(), skin });
-  else relay.join(hash.code!, { name: careerName(), skin, spectate: hash.mode === 'watch' });
+  // What we are running, so the relay's version gate can do its job (POK-244). Both
+  // sides of a link battle must be on the same patch or the block exchange desyncs
+  // silently -- and saying nothing means never being refused, which is the wrong end of
+  // that trade once there is more than one patch in the world.
+  const me = { name: careerName(), skin, patch, protocol };
+  if (hash.mode === 'host') relay.host({ ...me, open: true, max: BOT_FILL });
+  else if (hash.mode === 'quick') relay.quickJoin(me);
+  else if (hash.mode === 'daily') relay.dailyJoin(me);
+  else relay.join(hash.code!, { ...me, spectate: hash.mode === 'watch' });
 }
 
 // ---- the lobby (POK-240) -----------------------------------------------------------
@@ -1463,7 +1483,7 @@ async function main(): Promise<void> {
   const emu = await Emulator.create(canvas);
 
   await runImportScreen(emu);
-  const { bytes, usingPatched, mailboxBase, protocol, symbols } = await runPatchingScreen(emu);
+  const { bytes, usingPatched, mailboxBase, protocol, symbols, patch } = await runPatchingScreen(emu);
 
   showScreen('playing');
   if (usingPatched) await emu.startBytes(bytes);
@@ -1492,7 +1512,7 @@ async function main(): Promise<void> {
   wirePlayScreen(emu);
   showScreen('playing');
   if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols);
-  else wireRoom(emu, mailboxBase, protocol, symbols, roomHash);
+  else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch);
 }
 
 main().catch((err) => {
