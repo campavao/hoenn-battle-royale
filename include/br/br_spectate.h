@@ -13,7 +13,13 @@ struct BrSpectate
     /* 4 */ u8 started;  // BR_MSG_BSTART sent for the current battle
     /* 5 */ u8 watching; // a replay of someone else's battle is on screen
     /* 6 */ u16 watchId; // the battle being watched, as BR_MSG_BSTART's battle id
+    /* 8 */ u8 follow;   // seat whose walk we are watching, BR_NO_SEAT for nobody
+    /* 9 */ u8 followed; // the camera is actually on them (0 while warping to their map)
+    /* 10 */ u8 pad[2];
 };
+
+// gBrSpectate.follow when nobody is being followed. Matches the wire's stop byte.
+#define BR_NO_SEAT 0xFF
 
 extern struct BrSpectate gBrSpectate;
 
@@ -29,5 +35,8 @@ void BrSpectate_Tick(void);
 // we are watching, the stream is closed: the replay plays out what it has and ends
 // rather than waiting for a turn that is never coming.
 void BrSpectate_OnResult(u8 seat);
+// Watch a seat walk (BR_NO_SEAT to stop). The camera rides their ghost, our own
+// trainer goes invisible where it stood, and field controls are locked.
+void BrSpectate_Follow(u8 seat);
 
 #endif // GUARD_BR_SPECTATE_H

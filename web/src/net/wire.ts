@@ -239,6 +239,14 @@ export interface OutMsg {
   seat: number;
 }
 
+/** Watch this seat walk around. Page -> the spectator's own ROM only: the seat being
+ *  followed never sees it, and it never leaves the page that sent it. `seat` null
+ *  stops following, and the ROM gets 0xFF for it (follow). */
+export interface FollowMsg {
+  t: 'follow';
+  seat: number | null;
+}
+
 /** That ground item is mine, or part of a bag is (Kanto's `took`, renamed to match
  *  what it does). A bare `key` is the whole piece; with `item`/`n`, that many of that
  *  item left the bag and the rest is still there; `cash` says the money went too.
@@ -469,6 +477,7 @@ export type Msg =
   | WinMsg
   | AgainMsg
   | BusyMsg
+  | FollowMsg
   | PeekMsg
   | BotOutMsg
   | BotRecMsg

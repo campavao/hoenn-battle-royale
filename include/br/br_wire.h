@@ -211,4 +211,10 @@
 //   2..:   one or more [battler u8, count u8, count action bytes] runs
 #define BR_MSG_TURN 19
 
+// page -> ROM: watch this seat walk around (POK-233). The spectator's camera rides
+// their ghost; the seat's own ROM never sees this. 0xFF stops following and gives the
+// camera, the sprite and the controls back.
+// Payload (1 byte): seat u8 (0xFF = stop)
+#define BR_MSG_FOLLOW 20
+
 #endif // GUARD_BR_WIRE_H

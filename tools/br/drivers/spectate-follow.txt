@@ -1,0 +1,41 @@
+# spectate-follow: watching a seat walk (POK-233 part 5). FOLLOW puts the camera on
+# their ghost, hides our own trainer where it stood and locks the controls; FOLLOW 0xFF
+# gives all three back.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# seat 1 placed two tiles east of us, facing west (same slot shape as ghost-walk)
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrSeats+16 1
+shot before
+# FOLLOW seat 1: type 20 (0x14), len 4 = hdr(01 00 00) + seat
+pokebytes gBrMailbox+0x1058 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u8 gBrSpectate+8 1
+expect u8 gBrSpectate+9 1
+shot following
+# they walk three tiles east and the camera rides along
+pokebytes gBrMailbox+0x1098 03 0B 08 00 00 01 04 0F 00 0F 00 00 09
+poke u16 gBrMailbox+0x0C 3
+wait 40
+pokebytes gBrMailbox+0x10D8 03 0B 08 00 00 01 04 10 00 0F 00 00 09
+poke u16 gBrMailbox+0x0C 4
+wait 40
+pokebytes gBrMailbox+0x1118 03 0B 08 00 00 01 04 11 00 0F 00 00 09
+poke u16 gBrMailbox+0x0C 5
+wait 60
+expect u16 gBrSeats+20 17
+expect u8 gBrSpectate+9 1
+shot followed
+# our own trainer stayed put and stayed quiet: no step of ours went out while locked
+# FOLLOW 0xFF: back to ourselves
+pokebytes gBrMailbox+0x1158 14 04 01 00 00 FF
+poke u16 gBrMailbox+0x0C 6
+wait 120
+expect u8 gBrSpectate+8 0xFF
+expect u8 gBrSpectate+9 0
+shot stopped
+say spectate follow ok

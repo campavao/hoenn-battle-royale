@@ -7,6 +7,12 @@
 #include "overworld.h"
 #include "palette.h"
 #include "task.h"
+#include "script.h"
+#include "fieldmap.h"
+#include "field_screen_effect.h"
+#include "sprite.h"
+#include "event_object_movement.h"
+#include "field_player_avatar.h"
 #include "field_weather.h"
 #include "constants/field_weather.h"
 #include "pokemon.h"
@@ -299,6 +305,106 @@ static void HandleTurnCont(const u8 *payload, u8 len)
         ParseTurn(sTurnAsm.buf, sTurnAsm.total);
 }
 
+// ---- follow: watching a seat walk ---------------------------------------------
+
+static bool8 FieldRunning(void)
+{
+    return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
+}
+
+static void ShowOwnTrainer(bool8 shown)
+{
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+
+    self->invisible = !shown;
+    gSprites[self->spriteId].invisible = !shown;
+}
+
+// Hand the camera, the trainer and the controls back. Recentring reloads the map on
+// our own tile: the camera object tracks a sprite's movement instead of jumping to it,
+// so on its own it would stay wherever the ghost left it, with our trainer off screen.
+// Switching to another seat skips that -- the follow warp is about to move us anyway.
+static void StopFollowing(bool8 recentre)
+{
+    struct ObjectEvent *self;
+
+    if (FieldRunning())
+    {
+        self = &gObjectEvents[gPlayerAvatar.objectEventId];
+        ShowOwnTrainer(TRUE);
+        CameraObjectSetFollowedSpriteId(self->spriteId);
+        UnlockPlayerFieldControls();
+        if (recentre && gBrSpectate.followed)
+        {
+            SetWarpDestination(gSaveBlock1Ptr->location.mapGroup,
+                gSaveBlock1Ptr->location.mapNum, WARP_ID_NONE,
+                self->currentCoords.x - MAP_OFFSET, self->currentCoords.y - MAP_OFFSET);
+            DoWarp();
+        }
+    }
+    gBrSpectate.followed = FALSE;
+}
+
+void BrSpectate_Follow(u8 seat)
+{
+    if (seat != BR_NO_SEAT && (seat >= BR_MAX_SEATS || seat == gBrMySeat))
+        return;
+    if (gBrSpectate.follow != BR_NO_SEAT && seat != gBrSpectate.follow)
+        StopFollowing(seat == BR_NO_SEAT);
+    gBrSpectate.follow = seat;
+}
+
+static void HandleFollow(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 1)
+        return;
+    BrSpectate_Follow(d[0]);
+}
+
+// Each frame while following: get onto their map, then ride their ghost. The camera
+// object tracks a sprite's movement rather than jumping to it, so the warp is what
+// puts us beside them and the camera is what keeps us there as they walk.
+static void FollowTick(void)
+{
+    struct BrSeat *them;
+
+    if (gBrSpectate.follow == BR_NO_SEAT)
+        return;
+    them = &gBrSeats[gBrSpectate.follow];
+    if (!them->present)
+    {
+        BrSpectate_Follow(BR_NO_SEAT);
+        return;
+    }
+    if (!FieldRunning() || ScriptContext_IsEnabled())
+        return;
+    if (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
+     || gSaveBlock1Ptr->location.mapNum != them->mapNum)
+    {
+        // They are somewhere else: go there. Warp coords carry no MAP_OFFSET; the
+        // roster's do, the way an object event holds them.
+        gBrSpectate.followed = FALSE;
+        SetWarpDestination(them->mapGroup, them->mapNum, WARP_ID_NONE,
+            them->x - MAP_OFFSET, them->y - MAP_OFFSET);
+        DoWarp();
+        return;
+    }
+    if (them->objId == BR_NO_OBJ)
+        return; // their ghost has not spawned on this map yet
+    // Reasserted every frame: a map load rebuilds our object event, and it comes back
+    // visible and in charge.
+    ShowOwnTrainer(FALSE);
+    LockPlayerFieldControls();
+    if (!gBrSpectate.followed)
+    {
+        CameraObjectSetFollowedSpriteId(gObjectEvents[them->objId].spriteId);
+        gBrSpectate.followed = TRUE;
+    }
+}
+
 void BrSpectate_Init(void)
 {
     sTurnAsm.buf = sTurnBuf;
@@ -311,6 +417,8 @@ void BrSpectate_Init(void)
     BrNet_On(BR_MSG_BSTART | BR_MSG_CONT, HandleBstartCont);
     BrNet_On(BR_MSG_TURN, HandleTurn);
     BrNet_On(BR_MSG_TURN | BR_MSG_CONT, HandleTurnCont);
+    BrNet_On(BR_MSG_FOLLOW, HandleFollow);
+    gBrSpectate.follow = BR_NO_SEAT;
 }
 
 void BrSpectate_OnResult(u8 seat)
@@ -328,6 +436,7 @@ void BrSpectate_Tick(void)
     u16 id;
     u8 n;
 
+    FollowTick();
     // Spectating: the replay owns the screen until it ends, and nothing is published.
     if (gBrSpectate.watching)
     {
