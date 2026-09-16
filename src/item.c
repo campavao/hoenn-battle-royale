@@ -14,6 +14,12 @@
 #include "battle_pyramid_bag.h"
 #include "constants/items.h"
 #include "constants/hold_effects.h"
+#if BR
+#include "data.h"
+#include "party_menu.h"
+#include "constants/moves.h"
+#include "br/br_match.h"
+#endif
 
 static bool8 CheckPyramidBagHasItem(u16 itemId, u16 count);
 static bool8 CheckPyramidBagHasSpace(u16 itemId, u16 count);
@@ -872,6 +878,22 @@ static u16 SanitizeItemId(u16 itemId)
 
 const u8 *GetItemName(u16 itemId)
 {
+#if BR
+    // A TM is called what it teaches (POK-264). Six things are lying in a spill, a ring
+    // is closing, and "TM32" is a number you would have to go and look up -- so for the
+    // length of a match every TM and HM wears its move's name instead. Kanto's rule
+    // (v0.30.0), and the reason its loot piles can be read at a glance.
+    //
+    // gMoveNames is a table of static strings, so this returns the same kind of pointer
+    // the item table would have: safe to hold, safe to StringCopy.
+    if (gBrMatch.phase != BR_PHASE_NONE && itemId >= ITEM_TM01 && itemId <= ITEM_HM08)
+    {
+        u16 move = ItemIdToBattleMoveId(itemId);
+
+        if (move != MOVE_NONE && move < MOVES_COUNT)
+            return gMoveNames[move];
+    }
+#endif
     return gItems[SanitizeItemId(itemId)].name;
 }
 

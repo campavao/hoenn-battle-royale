@@ -1,0 +1,27 @@
+# tm-names: in a match a TM is called what it teaches (POK-264). The boot hands over
+# every HM (POK-256), so the TMs&HMs pocket is full of them before anybody picks
+# anything up -- HM01 first, which is CUT.
+#
+# The pocket's contents are the memory assert; the name itself is the screenshot, since
+# a rendered item row lives in a window buffer and nowhere a driver can read. TMs&HMs
+# lives at SaveBlock1+0x690, which is 0x130 past the ITEMS pocket at +0x560 -- and the
+# harness derefs one pointer, so that offset is taken off gBagPockets[0].itemSlots.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the match is under way -- outside one, a TM is a TM again
+poke u8 gBrMatch 2
+# HM01 (339 = 0x153) is sitting in the first TMs&HMs slot
+expect u16 *gBagPockets+0x130 0x153
+tap START
+wait 40
+tap DOWN
+wait 30
+tap A
+wait 120
+tap RIGHT
+wait 50
+tap RIGHT
+wait 80
+shot tmpocket
+say tm names ok
