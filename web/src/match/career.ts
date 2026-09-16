@@ -6,6 +6,8 @@
 // localStorage, not the relay: this is one device's own record, it is never authority
 // for anything, and a wiped browser costing somebody their streak is a smaller problem
 // than a server that has to be trusted with it.
+import { VOICE_COUNT } from '../bots/lines';
+
 const KEY = 'hbr:career';
 
 export interface Career {
@@ -18,10 +20,33 @@ export interface Career {
    *  own name field and the ROM is where the name ends up. */
   name?: string;
   skin?: number;
+  /** Which of `bots/lines.ts`'s voices this seat speaks with when its own duels get
+   *  announced (POK-243). Undefined means "whatever the match seed deals" -- the same
+   *  thing a bot gets, since nobody has picked one yet. */
+  voice?: number;
 }
 
 /** How many sprites there are to pick from: `sSkinGraphics` in src/br/br_ghosts.c. */
 export const SKINS = ['BRENDAN', 'MAY', 'RIVAL BRENDAN', 'RIVAL MAY'];
+
+/** Wins needed to unlock each entry in SKINS, index for index -- Kanto's wardrobe
+ *  ladder (lib/skins.lua unlocks nine trainer classes on a curve from 1 win), sized to
+ *  Hoenn's four: your own two starting trainers are free, the rival's recolors are
+ *  what winning earns. */
+export const SKIN_UNLOCK_WINS = [0, 0, 1, 3];
+
+export function skinUnlocked(skin: number, wins: number): boolean {
+  return wins >= (SKIN_UNLOCK_WINS[skin] ?? 0);
+}
+
+/** The next skin still locked, and how many more wins it takes -- null once the
+ *  wardrobe is full. What the lobby's sprite row hints at. */
+export function nextLockedSkin(wins: number): { skin: number; wins: number } | null {
+  for (let i = 0; i < SKINS.length; i++) {
+    if (!skinUnlocked(i, wins)) return { skin: i, wins: SKIN_UNLOCK_WINS[i] };
+  }
+  return null;
+}
 
 /** Emerald's own PLAYER_NAME_LENGTH. A longer one is not truncated somewhere clever;
  *  it is refused, so what you typed is what a room calls you. */
@@ -36,8 +61,15 @@ export function cleanName(raw: string): string {
     .slice(0, NAME_MAX);
 }
 
-export function nextSkin(skin: number): number {
-  return (skin + 1) % SKINS.length;
+/** The next skin after this one, skipping anything `wins` has not unlocked yet.
+ *  `wins` defaults to unlimited so callers that do not care about the wardrobe (most
+ *  of the existing tests, `voiceFor`-style pure use) still get a plain cycle. */
+export function nextSkin(skin: number, wins = Number.POSITIVE_INFINITY): number {
+  for (let i = 1; i <= SKINS.length; i++) {
+    const candidate = (skin + i) % SKINS.length;
+    if (skinUnlocked(candidate, wins)) return candidate;
+  }
+  return skin; // nothing else is unlocked -- stay put rather than loop forever
 }
 
 const EMPTY: Career = { matches: 0, wins: 0 };
@@ -53,6 +85,8 @@ function sane(value: unknown): Career {
   if (name) career.name = name;
   const skin = num(raw.skin);
   if (skin > 0 && skin < SKINS.length) career.skin = skin;
+  const voice = num(raw.voice);
+  if (voice > 0 && voice < VOICE_COUNT) career.voice = voice;
   return career;
 }
 
@@ -91,7 +125,7 @@ export function recordMatch(
 /** Sets who you are. Kept beside the record rather than in a key of its own, so one
  *  read is your whole profile. */
 export function saveProfile(
-  patch: { name?: string; skin?: number },
+  patch: { name?: string; skin?: number; voice?: number },
   store: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
 ): Career {
   const career = loadCareer(store);
@@ -100,7 +134,13 @@ export function saveProfile(
     if (name) career.name = name;
     else delete career.name;
   }
-  if (patch.skin !== undefined) career.skin = ((patch.skin % SKINS.length) + SKINS.length) % SKINS.length;
+  if (patch.skin !== undefined) {
+    const wanted = ((patch.skin % SKINS.length) + SKINS.length) % SKINS.length;
+    // A locked skin is refused rather than worn -- the lobby's own cycle never offers
+    // one, but this is the backstop against a store poked by hand.
+    if (skinUnlocked(wanted, career.wins)) career.skin = wanted;
+  }
+  if (patch.voice !== undefined) career.voice = ((patch.voice % VOICE_COUNT) + VOICE_COUNT) % VOICE_COUNT;
   try {
     store.setItem(KEY, JSON.stringify(career));
   } catch {

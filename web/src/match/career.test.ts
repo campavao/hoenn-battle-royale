@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { careerLine, cleanName, loadCareer, NAME_MAX, nextSkin, recordMatch, saveProfile, SKINS } from './career';
+import { VOICE_COUNT } from '../bots/lines';
+import {
+  careerLine,
+  cleanName,
+  loadCareer,
+  NAME_MAX,
+  nextLockedSkin,
+  nextSkin,
+  recordMatch,
+  saveProfile,
+  SKIN_UNLOCK_WINS,
+  SKINS,
+  skinUnlocked,
+} from './career';
 
 /** A localStorage that lives for one test. */
 function store() {
@@ -49,6 +62,59 @@ describe('the profile', () => {
     expect(career.name).toBeUndefined();
     expect(career.skin).toBeUndefined();
     expect(career.wins).toBe(0);
+  });
+});
+
+describe('the wardrobe', () => {
+  it('starts with the two base trainers unlocked and the rivals locked', () => {
+    expect(skinUnlocked(0, 0)).toBe(true);
+    expect(skinUnlocked(1, 0)).toBe(true);
+    expect(skinUnlocked(2, 0)).toBe(false);
+    expect(skinUnlocked(3, 0)).toBe(false);
+  });
+
+  it('unlocks each rival at its own win threshold, not before', () => {
+    const rivalBrendan = SKIN_UNLOCK_WINS[2];
+    expect(skinUnlocked(2, rivalBrendan - 1)).toBe(false);
+    expect(skinUnlocked(2, rivalBrendan)).toBe(true);
+  });
+
+  it('names the next locked skin and how many wins it takes, or nothing once full', () => {
+    expect(nextLockedSkin(0)?.skin).toBe(2);
+    expect(nextLockedSkin(SKIN_UNLOCK_WINS[SKINS.length - 1])).toBeNull();
+  });
+
+  it('cycles past a locked skin rather than landing on it', () => {
+    // At 0 wins only BRENDAN(0)/MAY(1) are unlocked.
+    expect(nextSkin(0, 0)).toBe(1);
+    expect(nextSkin(1, 0)).toBe(0); // wraps past both locked rivals
+  });
+
+  it('refuses to save a skin the win count has not earned', () => {
+    const s = store();
+    saveProfile({ skin: 3 }, s); // 0 wins: RIVAL MAY is locked
+    expect(loadCareer(s).skin).toBeUndefined();
+    recordMatch(1, s);
+    recordMatch(1, s);
+    recordMatch(1, s); // 3 wins: RIVAL MAY unlocks
+    saveProfile({ skin: 3 }, s);
+    expect(loadCareer(s).skin).toBe(3);
+  });
+});
+
+describe('the chosen voice', () => {
+  it('is kept beside the record, and wraps like a skin', () => {
+    const s = store();
+    saveProfile({ voice: 1 }, s);
+    expect(loadCareer(s).voice).toBe(1);
+    saveProfile({ voice: VOICE_COUNT }, s); // wraps back to 0, which reads as unset
+    expect(loadCareer(s).voice).toBeUndefined();
+  });
+
+  it('drops an out-of-range voice from a store holding nonsense', () => {
+    const s = store();
+    s.setItem('hbr:career', JSON.stringify({ voice: VOICE_COUNT + 5 }));
+    expect(loadCareer(s).voice).toBeUndefined();
   });
 });
 

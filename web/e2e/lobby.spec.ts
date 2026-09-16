@@ -206,6 +206,32 @@ test('the lobby is where you say who you are', async ({ page }) => {
   await expect(page.locator('#lobby-rows button').nth(0)).toContainText('WALLYFR', { timeout: 60_000 });
 });
 
+test('the lobby offers a voice and a stats toggle, and the wardrobe starts locked (POK-243)', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto(`/#rom=${romHashParam()}`);
+  const rows = page.locator('#lobby-rows button');
+  await expect(rows.first()).toBeVisible({ timeout: 60_000 });
+
+  // A fresh profile has 0 wins, so the sprite row hints at what winning would unlock
+  // rather than the flat 'your sprite' a fuller career gets.
+  const skin = rows.nth(1);
+  await expect(skin).toContainText('wins');
+
+  // MY VOICE previews a line from the pool, and cycling changes which one.
+  const voice = rows.nth(2);
+  const before = await voice.textContent();
+  await voice.click();
+  await expect(voice).not.toHaveText(before ?? '');
+
+  // PLAY STATS starts shared, and pressing it toggles the opt-out and back.
+  const stats = rows.nth(3);
+  await expect(stats).not.toContainText('not shared');
+  await stats.click();
+  await expect(stats).toContainText('not shared');
+  await stats.click();
+  await expect(stats).not.toContainText('not shared');
+});
+
 test('QUICK PLAY hosts a game when there is nothing to join', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto(`/#rom=${romHashParam()}`);

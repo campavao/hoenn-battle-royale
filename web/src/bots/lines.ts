@@ -11,8 +11,10 @@
 import { mulberry32, pickIndex } from '../match/clock';
 
 /** Every line fits the ticker with a name and a colon in front of it: BR_HUD_LINE_MAX
- *  is 40, a name is at most 7, so these stay under 30. */
-const INTRO = [
+ *  is 40, a name is at most 7, so these stay under 30. Exported (POK-243) so a real
+ *  player's profile can cycle through the same pool a bot is dealt from, rather than
+ *  keeping a second copy of it. */
+export const INTRO = [
   'YOU LOOK LOST.',
   'NICE TEAM. SHAME.',
   'I WAS HERE FIRST.',
@@ -27,7 +29,7 @@ const INTRO = [
   'FOUND YOU.',
 ];
 
-const WIN = [
+export const WIN = [
   'TOLD YOU.',
   'THAT IS ONE MORE.',
   'BAD LUCK.',
@@ -38,7 +40,7 @@ const WIN = [
   'THE RING IS MINE.',
 ];
 
-const LOSE = [
+export const LOSE = [
   'NOT LIKE THIS...',
   'TAKE THEM THEN.',
   'I WAS CLOSE.',
@@ -65,4 +67,21 @@ export function voiceFor(seed: number, seat: number): BotVoice {
     win: WIN[pickIndex(rng, WIN.length)],
     lose: LOSE[pickIndex(rng, LOSE.length)],
   };
+}
+
+/** How many voices a real player can cycle through in their profile (POK-243). A bot
+ *  gets its three lines dealt independently from the match seed; a player is picking
+ *  one ahead of any match, with nothing to seed off, so this is one index into all
+ *  three pools at once rather than three separate rerolls. Sized to the longest pool
+ *  so cycling reaches every line in it at least once. */
+export const VOICE_COUNT = Math.max(INTRO.length, WIN.length, LOSE.length);
+
+/** The voice at this index -- wraps, same as `nextSkin`. */
+export function voiceOf(index: number): BotVoice {
+  const i = ((index % VOICE_COUNT) + VOICE_COUNT) % VOICE_COUNT;
+  return { intro: INTRO[i % INTRO.length], win: WIN[i % WIN.length], lose: LOSE[i % LOSE.length] };
+}
+
+export function nextVoice(index: number): number {
+  return (index + 1) % VOICE_COUNT;
 }
