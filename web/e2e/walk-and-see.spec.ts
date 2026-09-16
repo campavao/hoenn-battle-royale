@@ -11,20 +11,29 @@ import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
 const BR_NO_OBJ = 0xff;
+/** BR_PHASE_SAFARI in include/br/br_match.h: the opening, everybody in one place. */
+const BR_PHASE_SAFARI = 1;
+type RamWindow = { __br: { mailbox: { ram: { read(addr: number, width: 8 | 16 | 32): number } } } };
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
 });
 
-// fixme (POK-220): the guest does not walk at all here -- its own roster x never
-// moves, so nothing reaches the host. NOT the engage any more: the eyeline is gated on
-// a started match now, and the lobby is quiet. The remaining suspect is the host's own
-// director, which auto-starts the match the moment a second seat joins and warps both
-// of them mid-test. Lift once the E2E can hold a room open without the match starting
-// under it (or the test starts the match deliberately and walks after the drop).
-test.fixme("a guest walking right moves on the host's screen", async ({ browser }) => {
-  test.setTimeout(60_000);
+// The host's Director starts the match the moment a second seat joins, and that used
+// to break this test two ways: the guest was told to walk while the opening was warping
+// it into the Safari Zone, and the drop afterwards puts the two of them on different
+// maps -- where neither can be the other's ghost, which is the whole assertion.
+//
+// So the walk happens during the Safari opening, once both ROMs are in it. That is the
+// only stretch of a match where everybody is in the same place, which makes it the only
+// stretch where "your ghost moved on my screen" is a thing that can be true.
+//
+// `#nobots` keeps the room to the two of them -- eight bots walking into the guest is
+// eight chances for the thing under test to be something else -- and `#quick` runs the
+// Safari opening in ten seconds rather than two minutes.
+test("a guest walking right moves on the host's screen", async ({ browser }) => {
+  test.setTimeout(120_000);
   const rom = romHashParam();
 
   const hostCtx = await browser.newContext();
@@ -32,7 +41,7 @@ test.fixme("a guest walking right moves on the host's screen", async ({ browser 
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&rom=${rom}`);
+    await host.goto(`/#host&nobots&quick&testmon&rom=${rom}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     const codeEl = host.locator('#room-code');
@@ -42,7 +51,7 @@ test.fixme("a guest walking right moves on the host's screen", async ({ browser 
     if (!code) throw new Error(`could not parse a room code out of "${codeText}"`);
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&rom=${rom}`);
+    await guest.goto(`/#join=${code}&nobots&quick&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     // Both seats seated in the host's own roster mirror.
@@ -54,8 +63,20 @@ test.fixme("a guest walking right moves on the host's screen", async ({ browser 
 
     const guestSeat: number = await guest.evaluate(() => (window as unknown as { __br: { bridge: { seat: number } } }).__br.bridge.seat);
 
-    // The guest's own x before it moves -- placed asynchronously by its ROM's first
-    // tick, so wait for the field to exist rather than assuming frame 1 already has it.
+    // Into the opening first: walking while the warp into it is happening is walking
+    // while something else is moving you.
+    const symbols = loadSymbols();
+    const phaseAddr = symbols.gBrMatch;
+    for (const page of [host, guest]) {
+      await page.waitForFunction(
+        // The page has no access to this file's scope: both values go over as args.
+        ([addr, phase]) => (window as unknown as RamWindow).__br.mailbox.ram.read(addr, 8) === phase,
+        [phaseAddr, BR_PHASE_SAFARI],
+        { timeout: 60_000 },
+      );
+    }
+
+    // And its own position, placed by its ROM's first tick inside the Zone.
     await guest.waitForFunction(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       () => (window as any).__br.roster.all().some((e: { isMe: boolean; x?: number }) => e.isMe && e.x !== undefined),
@@ -105,7 +126,6 @@ test.fixme("a guest walking right moves on the host's screen", async ({ browser 
     // a second, independent hop (relay message -> host's in-ring -> host ROM's own next
     // tick spawns/steps the ghost), so it can lag the JS-side roster update above by a
     // frame or two: poll gBrSeats directly rather than reading it once.
-    const symbols = loadSymbols();
     const seatBase = symbols.gBrSeats + guestSeat * 16;
     await host.waitForFunction(
       ([base, x, noObj]) => {

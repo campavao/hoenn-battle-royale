@@ -20,6 +20,9 @@ EWRAM_DATA struct BrMatch gBrMatch = {0};
 // START can span slots once there are more than six spawn rows.
 static EWRAM_DATA u8 sStartBuf[10 + 8 * BR_MAX_SEATS] = {0};
 static EWRAM_DATA struct BrAssembler sStartAsm = {0};
+// START arrived while we were still standing on a map. The warp it asks for cannot be
+// done from inside the mailbox pump, so the tick does it on the next quiet frame.
+static EWRAM_DATA u8 sStartPending = 0;
 
 static bool8 OverworldRunning(void)
 {
@@ -60,6 +63,15 @@ static void ParseStart(const u8 *d, u16 n)
     {
         gBrMatch.clockLeft = gBrMatch.safariSecs;
         gBrMatch.clockFrames = 60;
+    }
+    // Still on a map: this START is the match beginning under us. Booting straight
+    // into the Safari Zone only ever happens to a driver (BR_BOOT_SAFARI) -- a real
+    // room boots to Littleroot and waits in the lobby, so without this the opening
+    // never begins, the clock runs out against a phase that is not SAFARI, and the
+    // drop never fires. Which is to say: the match never actually started.
+    else if (gBrMatch.phase == BR_PHASE_NONE)
+    {
+        sStartPending = TRUE;
     }
 }
 
@@ -107,6 +119,7 @@ void BrMatch_Init(void)
     sStartAsm.buf = sStartBuf;
     sStartAsm.cap = sizeof(sStartBuf);
     sStartAsm.type = 0;
+    sStartPending = FALSE;
     BrNet_On(BR_MSG_START, HandleStart);
     BrNet_On(BR_MSG_START | BR_MSG_CONT, HandleStartCont);
     BrNet_On(BR_MSG_CLOCK, HandleClock);
@@ -184,6 +197,29 @@ void BrMatch_Tick(void)
         sWinPending = FALSE;
         gBrMatch.phase = BR_PHASE_WIN;
         SetMainCallback2(CB2_DoHallOfFameScreenDontSaveData);
+        return;
+    }
+    if (sStartPending && OverworldRunning() && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked())
+    {
+        sStartPending = FALSE;
+        if (gBrMatch.safariSecs > 0)
+        {
+            // Safari Zone South, a few tiles north of the exit gate -- the same cell
+            // BR_BOOT_SAFARI uses, so both ways in land in the same place.
+            SetWarpDestination(MAP_GROUP(MAP_SAFARI_ZONE_SOUTH), MAP_NUM(MAP_SAFARI_ZONE_SOUTH),
+                               WARP_ID_NONE, 32, 30);
+            DoWarp();
+            BrMatch_BeginSafari();
+        }
+        else if (gBrMatch.haveSpawn[gBrMySeat])
+        {
+            // No opening: straight to the drop.
+            struct BrSpawn *sp = &gBrMatch.spawns[gBrMySeat];
+
+            gBrMatch.phase = BR_PHASE_PLAY;
+            SetWarpDestination(sp->mapGroup, sp->mapNum, WARP_ID_NONE, sp->x, sp->y);
+            DoWarp();
+        }
         return;
     }
     if (gBrMatch.phase != BR_PHASE_SAFARI || !OverworldRunning())

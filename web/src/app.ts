@@ -464,6 +464,21 @@ function renderRoom(bridge: Bridge): void {
 /** How many the host fills a room to. A fixed number until the lobby gets its own FILL
  *  control (M5, POK-240); Kanto's rooms are never empty, which is the whole point. */
 const BOT_FILL = 8;
+/** `#nobots` fills the room with nobody. A dev-only affordance like `#testmon`: an e2e
+ *  that is about two people needs the room to hold still, and eight bots walking into
+ *  them is eight chances for the thing under test to be something else. */
+/** `#quick` runs the match at a pace a test can sit through: a 45-second Safari
+ *  opening instead of two minutes, and a fog that closes in one. Dev only, like
+ *  `#testmon` and `#nobots`. Long enough that an e2e can still do something during the
+ *  opening, which is the only part of a match where everybody is in the same place. */
+function paceOptions(): { safariSecs?: number; fogSecs?: number } | undefined {
+  if (!import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('quick')) return undefined;
+  return { safariSecs: 45, fogSecs: 60 };
+}
+
+function botFill(): number {
+  return import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('nobots') ? 0 : BOT_FILL;
+}
 /** The bots' own pump. Faster than one step, so the pace comes out of `Bots.tick`
  *  rather than out of whatever interval the browser felt like giving us. */
 const BOT_TICK_MS = 100;
@@ -553,7 +568,7 @@ function startBots(
     alive: () => players().filter((e) => e.alive).length,
   });
   const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
-  const dealt = dealBots(seed, BOT_FILL, takenSeats, spawns);
+  const dealt = dealBots(seed, botFill(), takenSeats, spawns);
   const seatsDealt = new Set(dealt.map((b) => b.seat));
   let phase = 0;
   bots.start(dealt, performance.now());
@@ -841,6 +856,7 @@ function wireRoom(
       // Bots are contestants, not scenery: leaving them out of the seat list makes
       // "N LEFT" a lie and hands the match to whoever outlasts the humans alone.
       seats: [...seats, ...bots.seats],
+      options: paceOptions(),
       hostSeat,
       seed,
       world: WORLD,
