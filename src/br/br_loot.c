@@ -27,6 +27,7 @@
 #include "constants/species.h"
 #include "constants/characters.h"
 #include "br/br_ghosts.h"
+#include "item.h"
 #include "br/br_loot.h"
 
 EWRAM_DATA struct BrLoot gBrLoot = {0};
@@ -140,6 +141,11 @@ static void Add(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u8 l
     it->kind = kind;
     it->money = money;
     it->objId = BR_NO_OBJ;
+}
+
+void BrLoot_AddItem(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 item)
+{
+    Add(key, mapGroup, mapNum, x, y, item, 0, BR_LOOT_ITEM, 0);
 }
 
 // SPILL: seat, map, count, then count 9-byte rows (key, x, y, species, level), then a
@@ -413,6 +419,18 @@ static void Take(struct BrLootItem *it)
         PlaySE(SE_PIN);
         BrHud_Box(line);
         SendPickup(it);
+        return;
+    }
+    if (it->kind == BR_LOOT_ITEM)
+    {
+        // A dealt item ball (POK-261). One press, like everything else on the ground.
+        p = StringCopy(line, sText_Found);
+        p = StringCopy(p, GetItemName(it->species));
+        StringCopy(p, sText_Bang);
+        PlaySE(SE_PIN);
+        BrHud_Box(line);
+        SendPickup(it);
+        AddBagItem(it->species, 1);
         return;
     }
     // A ball: the mon inside goes to the party, evolving on the way if it just changed

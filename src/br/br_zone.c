@@ -2,6 +2,10 @@
 #include "global.h"
 #include "random.h"
 #include "constants/species.h"
+#include "constants/items.h"
+#include "constants/maps.h"
+#include "fieldmap.h"
+#include "br/br_loot.h"
 #include "br/br_match.h"
 #include "br/br_zone.h"
 
@@ -71,6 +75,33 @@ static bool8 Taken(u8 upto, u16 species)
     return FALSE;
 }
 
+// What a ball in the Zone can hold. Nothing here is a match-winner on its own -- the
+// Master Ball below is the one that is, and it is dealt separately.
+static const u16 sBallItems[] =
+{
+    ITEM_ULTRA_BALL, ITEM_GREAT_BALL, ITEM_HYPER_POTION, ITEM_FULL_RESTORE, ITEM_REVIVE,
+    ITEM_MAX_POTION, ITEM_FULL_HEAL, ITEM_X_ATTACK, ITEM_X_SPEED, ITEM_RARE_CANDY,
+    ITEM_FIRE_STONE, ITEM_WATER_STONE, ITEM_THUNDER_STONE, ITEM_LEAF_STONE, ITEM_SUN_STONE,
+    ITEM_MOON_STONE, ITEM_NUGGET, ITEM_PP_UP,
+};
+
+// Where the balls lie: one per area, each as far from that area's four spawn cells as
+// the grid allows, three tiles clear of the edges and two of every warp. A ball on a
+// spawn cell is a ball somebody takes without looking for it.
+static const u8 sSafariItemCells[][3] =   // mapNum, x, y -- map group 26
+{
+    {  0,  8, 36 },  // NORTHWEST
+    {  1, 19,  8 },  // NORTH
+    { 12,  5, 20 },  // NORTHEAST
+    {  2, 31, 21 },  // SOUTHWEST
+    {  3,  4, 20 },  // SOUTH
+    { 13, 30, 20 },  // SOUTHEAST
+};
+
+// Kanto's one-in-eight (v0.49.0). Drawn from the same stream as everything else, so a
+// match either has one in it or does not, and every ROM in the room agrees which.
+#define BR_ZONE_MASTER_ODDS 8
+
 void BrZone_Init(void)
 {
     CpuFill32(0, &gBrZone, sizeof(gBrZone));
@@ -93,7 +124,32 @@ void BrZone_Ensure(void)
             species = PickFrom(table, count);
         gBrZone.species[i] = species;
     }
+    // And the balls (POK-261): one per area, and a one-in-eight chance the first is the
+    // Master Ball rather than what it would otherwise have been.
+    for (i = 0; i < BR_ZONE_ITEMS; i++)
+        gBrZone.items[i] = sBallItems[NextU32() % ARRAY_COUNT(sBallItems)];
+    if (NextU32() % BR_ZONE_MASTER_ODDS == 0)
+        gBrZone.items[NextU32() % BR_ZONE_ITEMS] = ITEM_MASTER_BALL;
+    gBrZone.placed = FALSE;
     gBrZone.dealtFor = gBrMatch.seed;
+}
+
+void BrZone_PlaceItems(void)
+{
+    u8 i;
+
+    if (gBrZone.placed || gBrZone.dealtFor == 0)
+        return;
+    gBrZone.placed = TRUE;
+    for (i = 0; i < BR_ZONE_ITEMS && i < ARRAY_COUNT(sSafariItemCells); i++)
+    {
+        const u8 *cell = sSafariItemCells[i];
+
+        // The key's top bit says it belongs to nobody, the way a beaten trainer's does;
+        // the rest is the ball's index, which every ROM works out the same way.
+        BrLoot_AddItem((u16)(0x8000 | 0x0F00 | i), MAP_GROUP(MAP_SAFARI_ZONE_SOUTH),
+                       cell[0], cell[1] + MAP_OFFSET, cell[2] + MAP_OFFSET, gBrZone.items[i]);
+    }
 }
 
 u16 BrZone_Pick(void)

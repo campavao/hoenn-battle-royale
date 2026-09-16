@@ -23,6 +23,9 @@
 #define BR_LOOT_NONE 0
 #define BR_LOOT_MON 1
 #define BR_LOOT_BAG 2
+// An item ball the Zone dealt (POK-261). `species` holds the item id: a ball is a ball
+// on the ground either way, and the field that says which is which is `kind`.
+#define BR_LOOT_ITEM 3
 
 struct BrLootItem
 {
@@ -75,5 +78,9 @@ void BrLoot_SpillOwn(void);
 // One of Hoenn's own trainers just lost to us: they leave the map for the rest of the
 // match, and one of their team is on the ground where they stood (Kanto BR-9b).
 void BrLoot_TrainerBeaten(u16 trainerId, u8 localId);
+// Puts one dealt item ball on the ground (POK-261). Every ROM deals the same ones from
+// the match seed, so nothing is sent: they simply agree. The key's top bit is set, the
+// way a beaten trainer's is -- it belongs to nobody, so nothing trade-evolves from it.
+void BrLoot_AddItem(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 item);
 
 #endif // GUARD_BR_LOOT_H

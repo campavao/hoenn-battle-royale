@@ -1,0 +1,21 @@
+# zone-items: the Zone's item balls are dealt from the match seed (POK-261, Kanto
+# v0.49.0), one per area, with a one-in-eight chance one of them is a Master Ball. The
+# opening's second decision is whether to spend two minutes catching or to go and look,
+# and it only exists if there is something to find.
+#
+# Seed 0x0C00 drops this ROM in SOUTHWEST (safari-opening.txt's own cell), and the ball
+# for that area is at (31,21) -- so the loot table has to hold six and this map has to
+# have spawned exactly one of them.
+wait 30
+poke u32 gBrMatch+8 0x00000C00
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+expect u8 *gSaveBlock1Ptr+5 2
+# six balls on the ground, one of them here
+expect u8 gBrLoot+0xA0 6
+expect u8 gBrLoot+0xA1 1
+# and the first row is an item ball (kind 3), not a mon or a bag
+expect u8 gBrLoot+11 3
+shot zone
+say zone items ok

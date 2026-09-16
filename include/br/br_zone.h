@@ -19,11 +19,18 @@
 // Of those twelve, the first four come from the rare table.
 #define BR_ZONE_RARES 4
 
+// One item ball per area of the Zone (POK-261), dealt from the same seed. Kanto's rule
+// (v0.49.0): the opening's second decision is whether to spend two minutes catching or
+// to go and look, and a one-in-eight Master Ball is what makes looking worth it.
+#define BR_ZONE_ITEMS 6
+
 struct BrZone
 {
     /*  0 */ u32 dealtFor;                 // the seed these were dealt from; 0 = none yet
     /*  4 */ u16 species[BR_ZONE_SLOTS];
-};                                          // 28 bytes
+    /* 28 */ u16 items[BR_ZONE_ITEMS];     // what is in each area's ball
+    /* 40 */ u8 placed;                    // the balls have been put on the ground
+};                                          // 44 bytes
 
 extern struct BrZone gBrZone;
 
@@ -34,5 +41,7 @@ void BrZone_Ensure(void);
 // The species a wild encounter in the opening should use, or SPECIES_NONE outside one
 // (the caller then keeps whatever the map's own table gave it).
 u16 BrZone_Pick(void);
+// Puts this match's item balls on the ground, once. Safe to call every tick.
+void BrZone_PlaceItems(void);
 
 #endif // GUARD_BR_ZONE_H

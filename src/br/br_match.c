@@ -301,6 +301,8 @@ void BrMatch_Tick(void)
     // carries the seed arrives -- and a pool dealt from a seed of zero is no pool.
     // Ensure is a no-op once the seed it was dealt for still matches.
     BrZone_Ensure();
+    // And the balls it dealt go on the ground, once (POK-261).
+    BrZone_PlaceItems();
     if (!OverworldRunning())
         return;
     // The fog is up: the opening is over whatever our own clock says. It has to be
