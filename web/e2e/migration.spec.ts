@@ -34,9 +34,10 @@ test('the host drops mid-match and the guest picks up the clock', async ({ brows
     await guest.goto(`/#join=${code}&quick&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
 
-    // A guest runs no director and the page's own match strip is drawn by the
-    // director's loop, so the only thing on a guest that knows the fog is up is its
-    // ROM: gBrRing.phase is the host's own ring number, off the wire.
+    // A guest draws its own strip now (POK-268), from the same messages a promoted
+    // host would resume from -- so this is both the wait and an assertion.
+    await expect(guest.locator('#match-strip')).toContainText(/RING \d/, { timeout: 120_000 });
+    // And the ROM has it too: gBrRing.phase is the host's own ring number, off the wire.
     const ring = loadSymbols().gBrRing;
     await guest.waitForFunction(
       (addr) => (window as unknown as RamWindow).__br.mailbox.ram.read(addr + 1, 8) >= 1,

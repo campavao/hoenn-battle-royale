@@ -905,6 +905,13 @@ u16 GetItemId(u16 itemId)
 
 u16 GetItemPrice(u16 itemId)
 {
+#if BR
+    // The Master Ball has a price during a match (POK-268, Kanto v0.48.0). Emerald
+    // gives it none because it is never for sale; here it is the top shelf's one real
+    // decision, and five thousand is most of a match's money.
+    if (itemId == ITEM_MASTER_BALL && gBrMatch.phase != BR_PHASE_NONE)
+        return 5000;
+#endif
     return gItems[SanitizeItemId(itemId)].price;
 }
 

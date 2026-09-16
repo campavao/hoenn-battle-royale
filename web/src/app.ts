@@ -1168,6 +1168,36 @@ function autoStarts(): boolean {
 }
 const DIRECTOR_TICK_MS = 1000; // coarser than the 5s clock/fogSecs cadence director.ts needs
 
+/** The same strip, for a client that is not running the match (POK-268). The host's is
+ *  drawn by the director's own loop, so until now RING / N LEFT / the clock appeared on
+ *  exactly one page in the room and everybody else had to read their ROM's corner.
+ *
+ *  Everything here arrived in messages every client hears -- which is the same reason a
+ *  promoted host can pick a match up mid-flight (POK-252). */
+function renderGuestStrip(
+  bridge: Bridge,
+  match: { ringPhase: number; ringR: number; centre?: { place?: string }; clockLeft: number; clockAt: number; seed: number },
+  now: number,
+): void {
+  const strip = $('#match-strip') as HTMLElement;
+  if (match.seed === 0) {
+    strip.hidden = true;
+    return;
+  }
+  ($('#room-panel') as HTMLElement).hidden = false;
+  strip.hidden = false;
+  // The CLOCK lands every five seconds; the seconds in between are counted off here,
+  // the same way the ROM counts them off against its own frame timer.
+  const gone = Math.floor(Math.max(0, now - match.clockAt) / 1000);
+  const left = Math.max(0, match.clockLeft - gone);
+  const mm = Math.floor(left / 60);
+  const ss = String(left % 60).padStart(2, '0');
+  const alive = bridge.roster.all().filter((e) => e.alive).length;
+  const phaseLabel =
+    match.ringPhase <= 0 ? 'SAFARI' : `RING ${match.ringR} (${match.centre?.place ?? '?'})`;
+  strip.textContent = `${phaseLabel} · ${alive} left · ${mm}:${ss}`;
+}
+
 function renderMatchStrip(state: DirectorState): void {
   const panel = $('#room-panel') as HTMLElement;
   const strip = $('#match-strip') as HTMLElement;
@@ -1567,7 +1597,12 @@ function wireRoom(
     seats: [] as number[],
     ringPhase: 0,
     centre: undefined as { sx: number; sy: number; place?: string } | undefined,
+    /** The ring's radius, for the strip a guest draws for itself (POK-268). */
+    ringR: 0,
     clockLeft: 0,
+    /** When that clockLeft arrived, so the seconds between the five-second CLOCKs can
+     *  be counted off locally rather than standing still. */
+    clockAt: 0,
     out: new Set<number>(),
   };
   let fieldSize = 0;
@@ -1583,9 +1618,12 @@ function wireRoom(
     } else if (msg.t === 'ring') {
       match.ringPhase = msg.phase;
       match.centre = { sx: msg.sx, sy: msg.sy, place: msg.place };
+      match.ringR = msg.r;
       match.clockLeft = 0;
+      match.clockAt = performance.now();
     } else if (msg.t === 'clock') {
       match.clockLeft = msg.left;
+      match.clockAt = performance.now();
     } else if (msg.t === 'out') {
       match.out.add(msg.seat);
     }
@@ -1613,6 +1651,7 @@ function wireRoom(
     }
   };
   let stopSpectateLoop: (() => void) | null = null;
+  let stopGuestStrip: (() => void) | null = null;
   let bots: ReturnType<typeof startBots> | null = null;
 
   const attach = (seat: number, code: string) => {
@@ -1715,6 +1754,13 @@ function wireRoom(
     }
     stopSpectateLoop?.();
     stopSpectateLoop = startSpectateLoop(emu, symbols?.get('gBrHud'), bridge, spectate);
+    // A second's cadence, like the director's own loop. It stands down the moment this
+    // client becomes the one running the match, which draws the real one.
+    stopGuestStrip?.();
+    const guestStrip = setInterval(() => {
+      if (!director && bridge) renderGuestStrip(bridge, match, performance.now());
+    }, 1000);
+    stopGuestStrip = () => clearInterval(guestStrip);
     renderSpectate(bridge, spectate);
     if (isHost && autoStarts()) setTimeout(startDirector, AUTO_START_MS);
   };
