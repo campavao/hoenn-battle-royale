@@ -135,7 +135,7 @@ static EWRAM_DATA u8 sPendGenders[2] = {0};
 // Turns that arrive while the field is still fading out. The fighters do not wait for
 // a spectator to be ready, so the opening turn of a fight can land before the replay
 // exists; held here, they are flushed into the record the moment it does.
-static EWRAM_DATA u8 sEarlyTurns[96] = {0};
+static EWRAM_DATA u8 sEarlyTurns[64] = {0};
 static EWRAM_DATA u8 sEarlyLen = 0;
 
 static void CB2_BrReturnFromSpectate(void)

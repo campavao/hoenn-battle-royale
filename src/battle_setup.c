@@ -45,6 +45,9 @@
 #include "constants/songs.h"
 #include "constants/map_types.h"
 #include "constants/trainers.h"
+#if BR
+#include "br/br_loot.h"
+#endif
 #include "constants/trainer_hill.h"
 #include "constants/weather.h"
 
@@ -1344,6 +1347,12 @@ static void CB2_EndTrainerBattle(void)
         {
             RegisterTrainerInMatchCall();
             SetBattledTrainersFlags();
+#if BR
+            // Hoenn's own trainers pay out too (POK-232): the beaten one leaves the
+            // map for the rest of the match and one of their team is on the ground
+            // where they stood.
+            BrLoot_TrainerBeaten(gTrainerBattleOpponent_A, (u8)sTrainerObjectEventLocalId);
+#endif
         }
     }
 }

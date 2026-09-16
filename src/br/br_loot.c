@@ -12,6 +12,7 @@
 #include "pokemon.h"
 #include "money.h"
 #include "data.h"
+#include "event_object_lock.h"
 #include "script.h"
 #include "string_util.h"
 #include "sound.h"
@@ -26,6 +27,7 @@
 #include "br/br_loot.h"
 
 EWRAM_DATA struct BrLoot gBrLoot = {0};
+EWRAM_DATA struct BrDespawned gBrDespawned[BR_MAX_DESPAWN] = {0};
 // A full spill is six rows, a bag and its contents -- past one slot's 59 bytes.
 static EWRAM_DATA u8 sSpillBuf[128] = {0};
 static EWRAM_DATA struct BrAssembler sSpillAsm = {0};
@@ -423,9 +425,107 @@ static void TryTake(void)
         Take(it);
 }
 
+// ---- Hoenn's own trainers -------------------------------------------------------
+
+// Take the sprite off the map now, and keep taking it off every time the map comes
+// back. Emerald only remembers that a beaten trainer will not fight again; Kanto's
+// rule is that they are gone.
+static void Despawn_Trainer(u8 mapGroup, u8 mapNum, u8 localId)
+{
+    u8 id = GetObjectEventIdByLocalIdAndMap(localId, mapNum, mapGroup);
+
+    if (id < OBJECT_EVENTS_COUNT)
+    {
+        RemoveObjectEventByLocalIdAndMap(localId, mapNum, mapGroup);
+        gBrLoot.gone++;
+    }
+}
+
+static void RememberDespawned(u8 mapGroup, u8 mapNum, u8 localId)
+{
+    u8 i;
+
+    for (i = 0; i < BR_MAX_DESPAWN; i++)
+    {
+        if (gBrDespawned[i].localId == localId && gBrDespawned[i].mapNum == mapNum
+         && gBrDespawned[i].mapGroup == mapGroup)
+            return;
+    }
+    for (i = 0; i < BR_MAX_DESPAWN; i++)
+    {
+        if (gBrDespawned[i].localId == 0)
+        {
+            gBrDespawned[i].mapGroup = mapGroup;
+            gBrDespawned[i].mapNum = mapNum;
+            gBrDespawned[i].localId = localId;
+            return;
+        }
+    }
+    // Full: the oldest one comes back. Sixteen beaten trainers on one match's worth of
+    // maps is already more than Kanto sees, and the alternative is EWRAM we do not have.
+}
+
+// Swept every frame, not once per map load: a map spawns its objects over several
+// frames and a sweep timed to the load would run before the sprite it wants is there.
+// The cost is two byte compares an entry, and the list is almost always empty.
+static void DespawnForThisMap(void)
+{
+    u8 group = gSaveBlock1Ptr->location.mapGroup;
+    u8 num = gSaveBlock1Ptr->location.mapNum;
+    u8 i;
+
+    for (i = 0; i < BR_MAX_DESPAWN; i++)
+    {
+        if (gBrDespawned[i].localId != 0 && gBrDespawned[i].mapGroup == group
+         && gBrDespawned[i].mapNum == num)
+            Despawn_Trainer(group, num, gBrDespawned[i].localId);
+    }
+}
+
+void BrLoot_TrainerBeaten(u16 trainerId, u8 localId)
+{
+    u8 buf[16];
+    u8 group = gSaveBlock1Ptr->location.mapGroup;
+    u8 num = gSaveBlock1Ptr->location.mapNum;
+    u8 id = GetObjectEventIdByLocalIdAndMap(localId, num, group);
+    const struct TrainerMonNoItemDefaultMoves *mon;
+    u16 len = 0, key;
+    s16 x, y;
+
+    if (localId == 0 || id >= OBJECT_EVENTS_COUNT)
+        return;
+    if (gTrainers[trainerId].partySize == 0)
+        return;
+    x = gObjectEvents[id].currentCoords.x;
+    y = gObjectEvents[id].currentCoords.y;
+    // Every party shape starts with the same three fields, so the plainest one reads
+    // the first mon of any of them.
+    mon = gTrainers[trainerId].party.NoItemDefaultMoves;
+    // A trainer id is unique for the game, so it is the key: they are beaten once.
+    key = (u16)(0x8000 | trainerId);
+
+    buf[len++] = gBrMySeat; // the beater speaks for it; an NPC has no seat of its own
+    buf[len++] = group;
+    buf[len++] = num;
+    buf[len++] = 1;
+    BrWire_WriteU16(buf + len, key);
+    BrWire_WriteU16(buf + len + 2, (u16)x);
+    BrWire_WriteU16(buf + len + 4, (u16)y);
+    BrWire_WriteU16(buf + len + 6, mon->species);
+    buf[len + 8] = mon->lvl;
+    len += 9;
+    buf[len++] = 0; // no bag: a route trainer's pockets are the game's, not ours
+    BrWire_SendLarge(BR_MSG_SPILL, buf, len);
+    ParseSpill(buf, len);
+
+    RememberDespawned(group, num, localId);
+    Despawn_Trainer(group, num, localId);
+}
+
 void BrLoot_Init(void)
 {
     CpuFill32(0, &gBrLoot, sizeof(gBrLoot));
+    CpuFill32(0, gBrDespawned, sizeof(gBrDespawned));
     sSpillAsm.buf = sSpillBuf;
     sSpillAsm.cap = sizeof(sSpillBuf);
     sSpillAsm.type = 0;
@@ -464,5 +564,6 @@ void BrLoot_Tick(void)
     }
     gBrLoot.count = count;
     gBrLoot.spawned = spawned;
+    DespawnForThisMap();
     TryTake();
 }

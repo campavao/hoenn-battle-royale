@@ -45,9 +45,23 @@ struct BrLoot
     /* 0xA0 */ u8 count;    // rows in use, for drivers
     /* 0xA1 */ u8 spawned;  // objects on this map right now, for drivers
     /* 0xA2 */ u8 taken;    // pieces this player has picked up, for drivers
+    /* 0xA3 */ u8 gone;     // beaten trainers this sweep has taken off a map, for drivers
+};
+
+// Trainers we have beaten: Emerald leaves a beaten trainer standing on the map, and
+// Kanto's rule is that a farmed route shows it. Small on purpose -- EWRAM is full, and
+// a match does not walk past that many.
+#define BR_MAX_DESPAWN 16
+
+struct BrDespawned
+{
+    u8 mapGroup;
+    u8 mapNum;
+    u8 localId; // 0 = empty
 };
 
 extern struct BrLoot gBrLoot;
+extern struct BrDespawned gBrDespawned[BR_MAX_DESPAWN];
 
 void BrLoot_Init(void);
 // Each frame: makes the object events on this map agree with the table.
@@ -58,5 +72,8 @@ struct BrLootItem *BrLoot_At(s16 x, s16 y);
 // other ROM spawns what this message describes; ours spawns it from the same message
 // coming back is not how it works -- we never hear our own, so we add ours here too.
 void BrLoot_SpillOwn(void);
+// One of Hoenn's own trainers just lost to us: they leave the map for the rest of the
+// match, and one of their team is on the ground where they stood (Kanto BR-9b).
+void BrLoot_TrainerBeaten(u16 trainerId, u8 localId);
 
 #endif // GUARD_BR_LOOT_H

@@ -36,7 +36,9 @@
 // The page writes `left`, `clockSecs` and `flashFog` straight into EWRAM (offsets
 // below, mirrored in web/src/net/hud.ts); everything else is the ROM's.
 
-#define BR_HUD_QUEUE 8
+// Six, not eight: eighteen seconds of backlog at 180 frames a line is already more
+// than anyone reads, and EWRAM is at 99.9%.
+#define BR_HUD_QUEUE 6
 #define BR_HUD_LINE_MAX 40
 #define BR_HUD_LINE_FRAMES 180
 #define BR_HUD_BOX_FRAMES 90
@@ -89,12 +91,12 @@ struct BrHud
     /* 0x1A */ u8 eyes;          // PAGE WRITES: spectators watching this trainer
     /* 0x1B */ u8 drawnEyes;     // what the corner last drew
     /* 0x1C */ struct BrHudLine heldLine;             // 44 bytes
-    /* 0x48 */ struct BrHudLine queue[BR_HUD_QUEUE];  // 352 bytes
-    /* 0x1A8 */ struct BrHudLine box;                 // 44 bytes, the bottom box
-    /* 0x1D4 */ u8 boxFrames;   // frames the box has left, 0 = none
-    /* 0x1D5 */ u8 winBox;      // window id, WINDOW_NONE while absent
-    /* 0x1D6 */ u8 boxPad[2];
-    /* 0x1D8 */
+    /* 0x48 */ struct BrHudLine queue[BR_HUD_QUEUE];  // 264 bytes
+    /* 0x150 */ struct BrHudLine box;                 // 44 bytes, the bottom box
+    /* 0x17C */ u8 boxFrames;   // frames the box has left, 0 = none
+    /* 0x17D */ u8 winBox;      // window id, WINDOW_NONE while absent
+    /* 0x17E */ u8 boxPad[2];
+    /* 0x180 */
 };
 
 #define BR_HUD_OFF_HELD 0x1C

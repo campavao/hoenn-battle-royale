@@ -1,0 +1,13 @@
+# trainer-despawn: a trainer we have beaten stays gone (POK-232). The despawn list is
+# swept once per map load, so a sprite the match has retired does not walk back in when
+# the player does. Littleroot's own NPC 1 stands in for a beaten route trainer here --
+# the sweep does not care how a local id got onto the list.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+# gBrDespawned[0] = { mapGroup 0, mapNum 9, localId 1 }
+pokebytes gBrDespawned 00 09 01
+wait 400
+# the sweep took one sprite off this map
+expectge u8 gBrLoot+0xA3 1
+shot gone
+say trainer despawn ok
