@@ -115,6 +115,10 @@ jobs:
           mkdir -p patch
           tools/br/make-patch.sh baseline/pokeemerald.gba pokeemerald.gba patch/hoenn-br.bps
           python3 tools/br/symbols.py pokeemerald.map > patch/br-symbols.json
+          # And at the root, where tools/br/drive.sh looks for it. It is gitignored --
+          # it is a build output, one per build -- so without this the drivers below
+          # have no symbol table at all.
+          cp patch/br-symbols.json br-symbols.json
           tools/br/version-json.sh pokeemerald.gba patch/br-version.json
           echo "size=$(stat -c%s patch/hoenn-br.bps)" >> "$GITHUB_OUTPUT"
 
@@ -145,12 +149,28 @@ jobs:
           path: tools/br/.mgba
           key: libmgba-harness-0.10.5-v2-${{ runner.os }}
 
-      - name: Smoke-test the fork ROM
+      - name: Drive the fork ROM
+        # Every driver, not just `smoke`. The drivers ARE the ROM's test suite -- each
+        # one boots the real thing, pokes the mailbox and asserts on RAM -- and running
+        # one of them was running 3% of it.
+        #
         # Folded into this job instead of a separate `harness` job: a standalone job
         # would either re-download the ROM as an artifact (banned - see above) or
         # rebuild it from scratch, doubling the build time for no reason when the ROM
         # this job just built is sitting right here on disk.
-        run: tools/br/drive.sh smoke pokeemerald.gba
+        run: |
+          fail=0
+          for d in tools/br/drivers/*.txt; do
+            n=$(basename "$d" .txt)
+            if tools/br/drive.sh "$n" pokeemerald.gba > "/tmp/$n.log" 2>&1; then
+              echo "ok   $n"
+            else
+              echo "FAIL $n"
+              tail -20 "/tmp/$n.log"
+              fail=1
+            fi
+          done
+          exit $fail
 
       - uses: actions/download-artifact@v4
         with: { name: emu, path: web/public/emu }
@@ -264,8 +284,8 @@ jobs:
           path: web/dist
           if-no-files-found: error
 
-  # relay/ has no server.js yet (POK-209's layout ticket, not built out). Runs anyway
-  # so the day server.js lands, this job starts enforcing it with no further edit here.
+  # The relay's own suite: room protocol, the version gate, the flood disconnect, the
+  # idle sweep, /health.
   relay:
     runs-on: ubuntu-latest
     steps:
@@ -276,9 +296,7 @@ jobs:
           node-version: 22
 
       - name: Test
+        working-directory: relay
         run: |
-          if [ -f relay/server.js ]; then
-            cd relay && npm ci --ignore-scripts || true && node --test
-          else
-            echo "relay/server.js does not exist yet - skipping"
-          fi
+          npm ci --ignore-scripts
+          node --test
