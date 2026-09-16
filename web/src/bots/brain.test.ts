@@ -276,9 +276,9 @@ describe('a bot meeting a player', () => {
     const bag: Stack[] = [{ id: 13, n: 2 }, { id: 75, n: 1 }];
     const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }, [MON], bag);
     const card = sent.find((m) => m.t === 'trainer') as { items?: number[] };
-    // Two POTIONs and an X ATTACK: medicine first, and all three fit in the four the
-    // AI can read.
-    expect(card.items).toEqual([13, 13, 75]);
+    // Two POTIONs, then the X ATTACK, then medicine again to fill the fourth slot:
+    // bag.ts's own order, so a bag of potions never crowds the booster out.
+    expect(card.items).toEqual([13, 13, 75, 13]);
     // Still in the bag until the ROM says otherwise.
     expect(bots.bagOf(dealt[0].seat)).toEqual([{ id: 13, n: 2 }, { id: 75, n: 1 }]);
     bots.noteSpent(dealt[0].seat, [13, 75]);
