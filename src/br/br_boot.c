@@ -17,6 +17,11 @@
 #include "constants/maps.h"
 #include "constants/species.h"
 #include "script_pokemon_util.h"
+#include "event_data.h"
+#include "pokedex.h"
+#include "item.h"
+#include "constants/items.h"
+#include "constants/flags.h"
 #include "br/br_mailbox.h"
 #include "br/br_boot.h"
 #include "br/br_match.h"
@@ -36,6 +41,37 @@ static bool8 PreGame(void)
     if (gMain.callback2 == CB2_InitCopyrightScreenAfterBootup)
         return FALSE;
     return gMain.callback2 != CB2_Overworld && !gMain.inBattle;
+}
+
+// A contestant is not a ten-year-old leaving home (Kanto's rule, POK-256). Nobody in
+// a match is going to earn a badge in sixteen minutes, and everything a badge, an HM or
+// a Pokedex entry gates is something the match needs working from the first second:
+// the fly map wants every town visited or it draws them all grey, the field moves want
+// their badges, and a Pokedex that has never seen a Wurmple stops to say so every time
+// one is caught -- mid-match, in a box the player has to press through.
+static void GiveTheRunOfHoenn(void)
+{
+    u16 species;
+    u16 flag;
+
+    for (flag = FLAG_BADGE01_GET; flag <= FLAG_BADGE08_GET; flag++)
+        FlagSet(flag);
+    // Every town and city: this is what CreateFlyDestIcons reads, and an unset flag is
+    // a grey dot on the drop's own map.
+    for (flag = FLAG_VISITED_LITTLEROOT_TOWN; flag <= FLAG_VISITED_EVER_GRANDE_CITY; flag++)
+        FlagSet(flag);
+    EnableNationalPokedex();
+    for (species = 1; species < NUM_SPECIES; species++)
+    {
+        u16 dexNum = SpeciesToNationalPokedexNum(species);
+
+        if (dexNum == 0)
+            continue;
+        GetSetPokedexFlag(dexNum, FLAG_SET_SEEN);
+        GetSetPokedexFlag(dexNum, FLAG_SET_CAUGHT);
+    }
+    for (flag = ITEM_HM01; flag <= ITEM_HM08; flag++)
+        AddBagItem(flag, 1);
 }
 
 static void StartGameAt(const struct BrBoot *b)
@@ -69,6 +105,8 @@ static void StartGameAt(const struct BrBoot *b)
     ScriptContext_Init();
     UnlockPlayerFieldControls();
 
+    GiveTheRunOfHoenn();
+
     gSaveBlock2Ptr->playerGender = b->gender == FEMALE ? FEMALE : MALE;
     for (i = 0; i < PLAYER_NAME_LENGTH && b->name[i] != EOS; i++)
         gSaveBlock2Ptr->playerName[i] = b->name[i];
@@ -93,11 +131,14 @@ void BrBoot_Tick(void)
     {
         if (BR_BOOT_MODE(b->mode) == BR_BOOT_SAFARI)
         {
-            // Safari Zone South, a few tiles north of the exit gate.
+            // Somewhere in the Zone, dealt (POK-256).
+            u8 sx, sy;
+
+            BrMatch_SafariCell(&sx, &sy);
             b->mapGroup = MAP_GROUP(MAP_SAFARI_ZONE_SOUTH);
             b->mapNum = MAP_NUM(MAP_SAFARI_ZONE_SOUTH);
-            b->x = 32;
-            b->y = 30;
+            b->x = sx;
+            b->y = sy;
         }
         StartGameAt(b);
         BrLevels_GiveStartingBag();

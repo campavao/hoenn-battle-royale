@@ -13,7 +13,10 @@ poke u16 gBrMailbox+0x0C 1
 wait 900
 shot menu
 expect u16 gBrBattle+2 0
-expect u16 gBattleMons+0x28 19
+# Full HP, not exactly 19: the test mon's IVs come off the RNG at boot, so anything
+# that shifts a frame on the way in (POK-256 gave the boot a Pokedex to fill) rolls a
+# different Treecko. What this line is for is "undamaged before the turn".
+expectge u16 gBattleMons+0x28 19
 wait 1900
 expectge u16 gBrBattle+2 1
 # the move went out with it: no second clock, the turn ran

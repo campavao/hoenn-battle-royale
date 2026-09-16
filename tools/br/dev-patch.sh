@@ -15,12 +15,18 @@ MAP="${1:-$ROOT/pokeemerald.map}"
 [[ -f "$MAP" ]] || { echo "no $MAP; run make first"; exit 2; }
 mkdir -p "$ROOT/web/public/patch"
 python3 "$HERE/symbols.py" "$MAP" > "$ROOT/web/public/patch/br-symbols.json"
+# The drivers read the copy at the repo root (tools/br/drive.sh), the shell reads the
+# one in public/. They are the same file and they must be the same build: a stale root
+# copy points every driver at addresses the new ROM does not use, and all 38 fail at
+# once on the first expect, which looks exactly like a broken ROM.
+cp "$ROOT/web/public/patch/br-symbols.json" "$ROOT/br-symbols.json"
 bash "$HERE/version-json.sh" "${MAP%.map}.gba" "$ROOT/web/public/patch/br-version.json"
 echo "sidecars written for $MAP"
 
 BASELINE="${2:-${BR_BASELINE_ROM:-}}"
 if [[ -n "$BASELINE" && -f "$BASELINE" ]]; then
-  ( cd "$ROOT/web" && npx vite-node "$HERE/make-bps.ts" -- "$BASELINE" "${MAP%.map}.gba" "$ROOT/web/public/patch/hoenn-br.bps" )
+  # npx is not on the MSYS2 login shell's PATH; node_modules/.bin always is.
+  ( cd "$ROOT/web" && ./node_modules/.bin/vite-node "$HERE/make-bps.ts" -- "$BASELINE" "${MAP%.map}.gba" "$ROOT/web/public/patch/hoenn-br.bps" )
 else
   rm -f "$ROOT/web/public/patch/hoenn-br.bps"
   echo "no baseline rom (arg 2 or \$BR_BASELINE_ROM): skipping the BPS -- dev will only run a pre-patched ROM"

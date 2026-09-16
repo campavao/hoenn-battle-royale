@@ -212,6 +212,10 @@
 
       /* Nothing on screen said which keys these were, so the answer was "it has no
          keyboard support". It has had one all along. */
+      /* The remap wizard's prompt. Always visible when it has something to say --
+         a pad is as likely on a phone in a dock as on a desk. */
+      .keys-note { text-align: center; color: #ffe08a; font-size: 12px; padding: 0 12px 4px; min-height: 1.2em; }
+
       .keys {
         display: none;
         text-align: center;
@@ -338,7 +342,10 @@
         <div class="settings">
           <button id="mute" type="button">Mute</button>
           <button id="forget-rom" type="button">Forget stored ROM</button>
+          <button id="remap" type="button">Remap pad</button>
+          <button id="remap-reset" type="button">Reset pad</button>
         </div>
+        <div id="remap-line" class="keys-note"></div>
         <div class="keys">
           Arrows move &middot; Z = A &middot; X = B &middot; A = L &middot; S = R &middot;
           Enter = START &middot; Shift = SELECT &middot; a gamepad works too

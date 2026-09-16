@@ -7,6 +7,7 @@
 #include "script.h"
 #include "pokemon.h"
 #include "constants/maps.h"
+#include "random.h"
 #include "hall_of_fame.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
@@ -139,6 +140,32 @@ void BrMatch_Init(void)
     sWinPending = FALSE;
 }
 
+// Where the opening starts you (POK-256). One cell for everybody put the whole room
+// behind the gate building, in the one spot on the map with a wall on three sides --
+// so the first thing a match asked of a player was to work out which way was out.
+// These are picked off the exported collision grid (tools/br/export-world.py's own
+// classes): open ground or tall grass with open ground on all four sides, spread over
+// the map by farthest-point sampling so no two are neighbours.
+static const u8 sSafariCells[][2] =
+{
+    { 29,  2 }, { 15,  5 }, {  2,  7 }, { 23,  7 },
+    { 36,  9 }, { 10, 13 }, { 26, 15 }, { 35, 16 },
+    { 18, 19 }, {  4, 20 }, { 26, 26 }, {  9, 29 },
+    { 17, 33 }, { 31, 35 }, {  3, 36 }, { 23, 38 },
+};
+
+// The match seed and the seat, so every ROM in the room lands somewhere different and
+// the same match starts the same way twice. Before a START there is no seed -- that is
+// a driver booting straight into the Zone -- and then anywhere will do.
+void BrMatch_SafariCell(u8 *x, u8 *y)
+{
+    u32 pick = gBrMatch.seed != 0 ? gBrMatch.seed + gBrMySeat * 2654435761u : Random32();
+    const u8 *cell = sSafariCells[(pick >> 8) % ARRAY_COUNT(sSafariCells)];
+
+    *x = cell[0];
+    *y = cell[1];
+}
+
 void BrMatch_BeginSafari(void)
 {
     EnterSafariMode();
@@ -221,10 +248,13 @@ void BrMatch_Tick(void)
         sStartPending = FALSE;
         if (gBrMatch.safariSecs > 0)
         {
-            // Safari Zone South, a few tiles north of the exit gate -- the same cell
-            // BR_BOOT_SAFARI uses, so both ways in land in the same place.
+            // Somewhere in the Zone, dealt from the seed -- the same way BR_BOOT_SAFARI
+            // does it, so both ways in are the same opening.
+            u8 sx, sy;
+
+            BrMatch_SafariCell(&sx, &sy);
             SetWarpDestination(MAP_GROUP(MAP_SAFARI_ZONE_SOUTH), MAP_NUM(MAP_SAFARI_ZONE_SOUTH),
-                               WARP_ID_NONE, 32, 30);
+                               WARP_ID_NONE, sx, sy);
             DoWarp();
             BrMatch_BeginSafari();
         }

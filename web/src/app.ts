@@ -3,14 +3,14 @@
 // goes through emu/index.ts's Emulator wrapper -- this file never touches the core
 // directly, per the project CLAUDE.md.
 
-import { Emulator, type GbaKey } from './emu';
+import { KEY_BIT, Emulator, type GbaKey } from './emu';
 import { checkEmerald, isPrePatched } from './rom/emerald';
 import { loadRelease, loadSidecars, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
 import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
-import { crossesToRom, packSlot, type BinarySlot } from './net/slots';
+import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './net/slots';
 import { decode, type Msg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
@@ -295,7 +295,7 @@ function wireKeyboard(emu: Emulator): () => void {
 /** Standard-mapping indices (w3c.github.io/gamepad/#remapping), laid out the way mGBA
  *  itself defaults: the bottom face button is A, the right one is B. Face left and
  *  face top mirror them, so a pad held any way round still plays. */
-const GAMEPAD_MAP: Record<number, GbaKey> = {
+const GAMEPAD_DEFAULT: Record<number, GbaKey> = {
   0: 'a',
   1: 'b',
   2: 'b',
@@ -311,6 +311,38 @@ const GAMEPAD_MAP: Record<number, GbaKey> = {
   14: 'left',
   15: 'right',
 };
+const REMAP_KEY = 'hbr.padmap';
+/** The order the wizard asks for them in. Directions are not here: they come off the
+ *  D-pad, the hat and the stick, and all three are standard enough to leave alone. */
+const REMAP_ORDER: GbaKey[] = ['a', 'b', 'start', 'select', 'l', 'r'];
+
+/** Every pad lays its face buttons out differently and the standard mapping is a
+ *  promise, not a fact -- so whatever we guess, somebody's B is our A. This is that
+ *  somebody's way out, and it is remembered per device. */
+function loadPadMap(): Record<number, GbaKey> {
+  try {
+    const raw = localStorage.getItem(REMAP_KEY);
+    if (!raw) return { ...GAMEPAD_DEFAULT };
+    const saved = JSON.parse(raw) as Record<string, GbaKey>;
+    const out: Record<number, GbaKey> = {};
+    for (const [index, key] of Object.entries(saved)) {
+      if (KEY_BIT[key] !== undefined) out[Number(index)] = key;
+    }
+    return Object.keys(out).length > 0 ? out : { ...GAMEPAD_DEFAULT };
+  } catch {
+    return { ...GAMEPAD_DEFAULT }; // private window, cleared storage: the default still plays
+  }
+}
+
+let gamepadMap = loadPadMap();
+/** Set while the remap wizard is waiting for a button; the poll feeds it instead of
+ *  the emulator, so binding START does not also open the start menu. */
+let padCapture: ((index: number) => void) | null = null;
+
+/** The line under the buttons, when no pad has taken it over. */
+const KEY_LEGEND =
+  'Arrows move · Z = A · X = B · A = L · S = R · Enter = START · Shift = SELECT · a gamepad works too';
+
 /** Half throw. A stick is not a D-pad and a resting one is never quite zero. */
 const STICK = 0.5;
 /** Eight hat positions, evenly spaced over -1..1, starting at up and going clockwise. */
@@ -343,15 +375,34 @@ function hatKeys(axis: number): GbaKey[] {
 function wireGamepad(emu: Emulator): () => void {
   if (typeof navigator.getGamepads !== 'function') return () => {};
   let held = new Set<GbaKey>();
+  const wasPressed = new Set<number>();
+  // What each pad's axes read when nobody is touching it. A stick rests at 0, but an
+  // axis a pad is not using rests wherever it likes -- 1, or -1 -- and read as a stick
+  // that is a direction held down forever, which is a player who cannot move and
+  // cannot see why. Directions are a move AWAY from rest, not a position.
+  const rest = new Map<number, readonly number[]>();
   const poll = () => {
     const now = new Set<GbaKey>();
     for (const pad of navigator.getGamepads()) {
       if (!pad) continue;
+      if (!rest.has(pad.index)) rest.set(pad.index, [...pad.axes]);
+      const base = rest.get(pad.index) ?? [];
+      if (padCapture) {
+        const pressed = pad.buttons.findIndex((button) => button.pressed);
+        if (pressed >= 0 && !wasPressed.has(pressed)) {
+          const take = padCapture;
+          wasPressed.add(pressed);
+          take(pressed);
+        }
+        if (pressed < 0) wasPressed.clear(); // let go before the next one counts
+        continue;
+      }
       pad.buttons.forEach((button, i) => {
-        const key = GAMEPAD_MAP[i];
+        const key = gamepadMap[i];
         if (key && button.pressed) now.add(key);
       });
-      const [x = 0, y = 0] = pad.axes;
+      const x = (pad.axes[0] ?? 0) - (base[0] ?? 0);
+      const y = (pad.axes[1] ?? 0) - (base[1] ?? 0);
       if (x <= -STICK) now.add('left');
       else if (x >= STICK) now.add('right');
       if (y <= -STICK) now.add('up');
@@ -363,19 +414,91 @@ function wireGamepad(emu: Emulator): () => void {
     for (const key of now) if (!held.has(key)) emu.press(key);
     for (const key of held) if (!now.has(key)) emu.release(key);
     held = now;
+    // What the pad is doing, on screen. A pad the page cannot see, a pad it has mapped
+    // wrong and a pad with a stuck axis all look identical from the sofa; this is the
+    // difference, and it is the line that would have found the stuck axis in seconds.
+    if (padLine !== null) {
+      const keys = [...held].join(' ');
+      padLine.textContent = `${padName}${keys ? ` -- ${keys}` : ''}`;
+    }
+  };
+  let padLine: HTMLElement | null = null;
+  let padName = '';
+  const note = (e: GamepadEvent) => {
+    padName = `Gamepad: ${e.gamepad.id} (${e.gamepad.mapping || 'non-standard'})`;
+    padLine = document.querySelector('.keys');
+    rest.delete(e.gamepad.index); // a pad that just arrived gets its rest read again
+  };
+  const gone = (e: GamepadEvent) => {
+    rest.delete(e.gamepad.index);
+    if (padLine) padLine.textContent = KEY_LEGEND;
+    padLine = null;
   };
   const id = setInterval(poll, 16);
-  // Say so on screen when one turns up. A pad the page cannot see and a pad it has
-  // mapped wrong look identical from the sofa, and this is the difference.
-  const note = (e: GamepadEvent) => {
-    const keys = document.querySelector('.keys');
-    if (keys) keys.textContent = `Gamepad: ${e.gamepad.id} (${e.gamepad.mapping || 'non-standard'})`;
-  };
   addEventListener('gamepadconnected', note);
+  addEventListener('gamepaddisconnected', gone);
   return () => {
     clearInterval(id);
     removeEventListener('gamepadconnected', note);
+    removeEventListener('gamepaddisconnected', gone);
   };
+}
+
+/** The remap wizard: one prompt per key, bind by pressing the button you want. Six
+ *  presses and a pad whose face buttons are the wrong way round is the right way
+ *  round, for good -- it is stored per device. */
+function wireRemap(): void {
+  const button = $('#remap') as HTMLButtonElement;
+  const line = $('#remap-line') as HTMLElement;
+  let cancel: (() => void) | null = null;
+
+  const stop = (note: string) => {
+    padCapture = null;
+    cancel = null;
+    line.textContent = note;
+    button.textContent = 'Remap pad';
+  };
+
+  const run = () => {
+    const taken: Record<number, GbaKey> = {};
+    let i = 0;
+    const ask = () => {
+      if (i >= REMAP_ORDER.length) {
+        gamepadMap = taken;
+        try {
+          localStorage.setItem(REMAP_KEY, JSON.stringify(taken));
+        } catch {
+          // Private window or storage off: the mapping still holds for this session.
+        }
+        stop('Pad remapped.');
+        return;
+      }
+      line.textContent = `Press the button for ${REMAP_ORDER[i].toUpperCase()} (Esc to cancel)`;
+      padCapture = (index) => {
+        taken[index] = REMAP_ORDER[i];
+        i++;
+        ask();
+      };
+    };
+    button.textContent = 'Cancel';
+    cancel = () => stop('Remap cancelled.');
+    ask();
+  };
+
+  button.addEventListener('click', () => (cancel ? cancel() : run()));
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && cancel) cancel();
+  });
+  const reset = $('#remap-reset') as HTMLButtonElement;
+  reset.addEventListener('click', () => {
+    gamepadMap = { ...GAMEPAD_DEFAULT };
+    try {
+      localStorage.removeItem(REMAP_KEY);
+    } catch {
+      // nothing stored, nothing to clear
+    }
+    stop('Pad mapping reset.');
+  });
 }
 
 // ---- input: touch pad -------------------------------------------------------------------
@@ -1083,15 +1206,33 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const seatBase = symbols?.get('gBrMySeat');
   if (seatBase !== undefined) writeMySeat(emu, seatBase, 0);
 
+  let out: ((seat: number) => void) | null = null;
   const director = new Director({
     seats: [0],
+    // `#quick` is a dev pace, and solo is where a change gets looked at first -- it had
+    // no way to ask for it, so every solo look cost the full two-minute opening.
+    options: paceOptions(),
     hostSeat: 0,
     seed: Math.floor(Math.random() * 0x7fff_ffff) + 1,
     world: WORLD,
     send: (msg) => rom.push(msg),
     now: () => performance.now(),
-    onOut: () => () => {},
+    onOut: (handler) => {
+      out = handler;
+      return () => {
+        out = null;
+      };
+    },
   });
+
+  // Solo talks in one direction only -- which is how the drop picker came to send its
+  // `pick` into a room with nobody in it and the ROM sat on a black screen waiting for
+  // a `land` that could never arrive (POK-255). A room has the Bridge for this; solo
+  // has no Bridge, so it needs the one answer the ROM cannot go on without.
+  const fromRom = (msg: Msg) => {
+    if (msg.t === 'pick') rom.push({ t: 'land', ...director.landFor(msg.seat, msg.section) });
+    else if (msg.t === 'out') out?.(msg.seat);
+  };
 
   // "the first PLACE message it emits, or simply after the mailbox is awake + ~200
   // frames" -- this takes the second, simpler option: solo has no Bridge unpacking
@@ -1104,6 +1245,30 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     director.start();
     startDirectorLoop(emu, symbols?.get('gBrHud'), director);
   });
+  emu.onFrame(() => {
+    if (mailbox.isAwake()) drainRom(mailbox, fromRom);
+  });
+}
+
+/** Everything the ROM has pushed since the last frame, as wire.ts messages: the same
+ *  poll -> regroup -> reassemble -> unpack that bridge.ts does on its way to the relay,
+ *  for the callers that have no relay to send it to. */
+function drainRom(mailbox: Mailbox, handle: (msg: Msg) => void): void {
+  const raw = mailbox.poll();
+  let i = 0;
+  while (i < raw.length) {
+    // A message is a base slot followed by its BR_CONT_FLAG continuations.
+    const group: BinarySlot[] = [raw[i++]];
+    while (i < raw.length && (raw[i].type & BR_CONT_FLAG) !== 0) group.push(raw[i++]);
+    try {
+      const done = reassembleSlots(group);
+      if (done.type === BR_MSG.NONE || done.type === BR_MSG.ECHO) continue;
+      handle(unpackSlot(done.type, done.payload));
+    } catch {
+      // A gap or a slot that is not a message we know: the ROM does not resend, and
+      // there is nothing here to act on either way.
+    }
+  }
 }
 
 // ---- room: relay + bridge, opted into by the URL hash ------------------------------------
@@ -1760,6 +1925,7 @@ function runLobby(): Promise<RoomHash> {
 function wirePlayScreen(emu: Emulator): void {
   wireKeyboard(emu);
   wireGamepad(emu);
+  wireRemap();
   for (const el of document.querySelectorAll<HTMLElement>('#pad .btn[data-key]')) {
     wireButton(el, el.dataset.key as GbaKey, emu);
   }

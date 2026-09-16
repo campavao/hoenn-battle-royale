@@ -41,6 +41,9 @@ extern struct BrMatch gBrMatch;
 
 void BrMatch_Init(void);
 void BrMatch_Tick(void);
+// Where in the Safari Zone this ROM starts the opening, dealt from the match seed and
+// our seat so a room spreads out instead of piling up on one tile.
+void BrMatch_SafariCell(u8 *x, u8 *y);
 // Enter the Safari opening on the current map (the boot warped us there).
 void BrMatch_BeginSafari(void);
 // The opening is over for us: out of time, steps or balls. Empty party -> OUT,
