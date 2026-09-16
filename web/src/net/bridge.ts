@@ -81,6 +81,10 @@ export class Bridge {
    *  relay (the echo guard below drops them), and it is the one that has to hand a
    *  late watcher the fight so far. */
   private outObserver: ((msg: Msg) => void) | null = null;
+  /** Says whether this ROM's own messages reach the room at all. A watcher's do not
+   *  (POK-260): it is in the room to look, and a ghost of it walking around Littleroot
+   *  is not part of anybody's match. */
+  private outFilter: ((msg: Msg) => boolean) | null = null;
   /** Slots waiting for room in the ROM's in-ring, in send order. */
   private outQueue: BinarySlot[] = [];
   private framesCount = 0;
@@ -180,6 +184,9 @@ export class Bridge {
     this.roster.applyMsg(stamped);
 
     this.outObserver?.(stamped);
+    // Observed either way -- this page's own spectator, loot and results all read the
+    // ROM's messages -- but a watcher's never leave the page.
+    if (this.outFilter && !this.outFilter(stamped)) return;
 
     const target = this.targetSeat(stamped);
     if (target !== undefined) this.relay.to(target, stamped);
@@ -213,6 +220,11 @@ export class Bridge {
 
   setRomFilter(fn: ((msg: Msg) => boolean) | null): void {
     this.romFilter = fn;
+  }
+
+  /** TRUE from `fn` lets this ROM's message out to the room; FALSE keeps it here. */
+  setOutFilter(fn: ((msg: Msg) => boolean) | null): void {
+    this.outFilter = fn;
   }
 
   setOutObserver(fn: ((msg: Msg) => void) | null): void {

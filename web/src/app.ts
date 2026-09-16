@@ -730,6 +730,11 @@ function parseRoomHash(): RoomHash | null {
   if (params.has('host')) return { mode: 'host' };
   if (params.has('quick')) return { mode: 'quick' };
   if (params.has('daily')) return { mode: 'daily' };
+  // `watch=CODE` is a seat-less door into a room (POK-260): the mode has always been
+  // in the type and in the join, and nothing ever produced it, so the one deep link a
+  // spectator could use fell through to the lobby.
+  const watch = params.get('watch');
+  if (watch && /^[A-Za-z0-9]+$/.test(watch)) return { mode: 'watch', code: watch.toUpperCase() };
   const code = params.get('join');
   return code && /^[A-Za-z0-9]+$/.test(code) ? { mode: 'join', code: code.toUpperCase() } : null;
 }
@@ -1180,7 +1185,10 @@ function renderGuestStrip(
   now: number,
 ): void {
   const strip = $('#match-strip') as HTMLElement;
-  if (match.seed === 0) {
+  // A watcher arrives mid-match and never hears the START, so the seed is not the test
+  // for "is there a match": what it has is the late burst the host sent it, a ring and
+  // a clock (POK-260).
+  if (match.seed === 0 && match.ringPhase === 0 && match.clockLeft === 0) {
     strip.hidden = true;
     return;
   }
@@ -1195,7 +1203,10 @@ function renderGuestStrip(
   const alive = bridge.roster.all().filter((e) => e.alive).length;
   const phaseLabel =
     match.ringPhase <= 0 ? 'SAFARI' : `RING ${match.ringR} (${match.centre?.place ?? '?'})`;
-  strip.textContent = `${phaseLabel} · ${alive} left · ${mm}:${ss}`;
+  // A watcher's roster fills up as people move, so "0 left" is only ever "nobody has
+  // moved yet" -- say nothing rather than something wrong.
+  const standing = alive > 0 ? ` · ${alive} left` : '';
+  strip.textContent = `${phaseLabel}${standing} · ${mm}:${ss}`;
 }
 
 function renderMatchStrip(state: DirectorState): void {
@@ -1388,9 +1399,18 @@ function wireRoom(
   const startDirector = (members?: number[], takeOver = false) => {
     if (director || !bridge || !isHost) return;
     const known = bridge.roster.all().map((e) => e.seat);
-    const seats = [...new Set([...(members ?? []), ...known])];
+    // Watchers are in the room but not in the match (POK-260). Seating one deals it a
+    // drop it will never take and counts it among the living, so the match cannot
+    // reach a winner -- a spectator never counts, which is Kanto's rule too.
+    const watching = new Set((controls.roster?.members ?? []).filter((m) => m.spectate).map((m) => m.id));
+    const seats = [...new Set([...(members ?? []), ...known])].filter((seat) => !watching.has(seat));
     if (seats.length === 0) return;
     const hostSeat = bridge.seat;
+    // The door shuts when the match starts, wherever the start came from (POK-260).
+    // It used to be the START button's job alone, so a match dealt by the ten-second
+    // buzzer left the room open -- latecomers walked into a running match as players,
+    // and quick play offered it as somewhere to join rather than somewhere to watch.
+    relay.lockRoom(true);
     // A takeover keeps the match's own seed: the bots are dealt from it, and dealing
     // them again from a new one would rename everybody mid-match.
     const seed = takeOver && match.seed !== 0
@@ -1652,6 +1672,11 @@ function wireRoom(
   };
   let stopSpectateLoop: (() => void) | null = null;
   let stopGuestStrip: (() => void) | null = null;
+  /** In the room to look, not to play (POK-260). Set when this client asks to watch,
+   *  and reasserted from the relay's own roster, which is the authority on it. */
+  let amWatching = false;
+  /** Seats this client has already caught up on the running match. */
+  const greeted = new Set<number>();
   let bots: ReturnType<typeof startBots> | null = null;
 
   const attach = (seat: number, code: string) => {
@@ -1674,6 +1699,9 @@ function wireRoom(
     relay.canHost(true);
     // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast.
     bridge.setRomFilter((msg) => spectate.wantsFromRelay(msg));
+    // A watcher is furniture: its ROM is walking around Littleroot and nobody in the
+    // match should see a ghost of it, or hear it claim a seat (POK-260).
+    bridge.setOutFilter(() => !amWatching);
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);
       loot.note(msg);
@@ -1746,6 +1774,9 @@ function wireRoom(
         // What a promotion would resume from (POK-252), so the migration e2e can see
         // whether this client was listening to the match it is in.
         dev.match = match;
+        // The relay's last roster, so a test can ask who the room thinks is watching
+        // (POK-260) rather than inferring it from the screen.
+        dev.controls = controls;
         dev.watch = (target: number | null) => {
           for (const m of spectate.follow(target)) bridge!.pushToRom(m);
           renderSpectate(bridge!, spectate);
@@ -1800,8 +1831,7 @@ function wireRoom(
           // The host gets its START back: a new match is dealt from the room, the same
           // way the first one was.
           renderRoomPanel(controls, bridge.seat, relay, () => {
-            relay.lockRoom(true);
-            startDirector(controls.roster?.members.map((m) => m.id));
+            startDirector(controls.roster?.members.map((m) => m.id)); // locks the room itself
             renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
           }, false);
         }
@@ -1815,12 +1845,35 @@ function wireRoom(
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
   relay.on('roster', (ev) => {
     controls.roster = ev;
+    // The relay says who is watching; believe it over what we asked for.
+    if (bridge) amWatching = ev.members.some((m) => m.id === bridge!.seat && m.spectate === true);
     // Promoted. The relay moves `host` on the roster and says nothing else about it
     // (POK-252), so this is where a guest finds out it is now running the match.
     if (bridge && ev.host === bridge.seat && !isHost) {
       isHost = true;
       console.info('[room] promoted to host');
       startDirector(ev.members.map((m) => m.id), match.seed !== 0);
+    }
+    // Somebody arrived while the match is running: tell them where the fog is, now
+    // (POK-260). Kanto calls this the late start -- a watcher who has to wait for the
+    // next ring to learn the state spends up to two minutes looking at nothing.
+    if (director && bridge) {
+      const state = director.state;
+      for (const m of ev.members) {
+        if (m.id === bridge.seat || greeted.has(m.id)) continue;
+        greeted.add(m.id);
+        if (!state.ring) continue;
+        relay.to(m.id, {
+          t: 'ring',
+          seat: bridge.seat,
+          phase: state.ring.phase,
+          sx: state.ring.sx,
+          sy: state.ring.sy,
+          r: state.ring.r,
+          place: state.ring.place,
+        });
+        relay.to(m.id, { t: 'clock', seat: bridge.seat, left: state.clockLeft });
+      }
     }
     // The buzzer, before the panel is drawn: a director created after the draw would
     // leave the host's controls on screen for the rest of the match.
@@ -1831,8 +1884,7 @@ function wireRoom(
       renderRoomPanel(controls, bridge.seat, relay, () => {
         // START: the host shuts the door and deals the match. This is what the
         // ten-second timer was standing in for.
-        relay.lockRoom(true);
-        startDirector(ev.members.map((m) => m.id));
+        startDirector(ev.members.map((m) => m.id)); // locks the room itself
         renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
       }, director !== null);
     }
@@ -1872,6 +1924,7 @@ function wireRoom(
     if (!ev.code) return;
     codeEl.textContent = `Watching ${ev.code}…`;
     setRoomHash('join', ev.code);
+    amWatching = true;
     relay.join(ev.code, { name: careerName(), skin, spectate: true });
   });
   relay.on('closed', (ev) => {
