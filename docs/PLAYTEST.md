@@ -194,22 +194,26 @@ The relay half is deployed (`railway up`, 2026-09-16 23:31Z).
 
 ## 2026-09-16, Cam, earlier session (Linear was full)
 
-### A beaten route trainer drops nothing
+### A beaten route trainer drops nothing -- **fixed** (`41812fe38`)
 
-"An NPC trainer didn't drop their Pokémon after defeat. What's funny is I did after I lost
-to Roxanne, so maybe it's just hooked up to players/bots and not NPCs yet."
+"An NPC trainer didn't drop their Pokémon after defeat. What's funny is I did after I
+lost to Roxanne, so maybe it's just hooked up to players/bots and not NPCs yet."
 
-It is hooked up: `BrLoot_TrainerBeaten` is called from `battle_setup.c`'s end-of-trainer-
-battle path (POK-232). Ruled out so far: `sTrainerObjectEventLocalId` is loaded from the
-script's own parameters and `InitTrainerBattleVariables` only clears it when a battle is
-*configured*, so it still holds at the end callback.
+It was hooked up, and called with a local id of zero every time.
+`BrLoot_TrainerBeaten` read `sTrainerObjectEventLocalId` -- the script's own parameter
+for the trainer's object -- and `trainerbattle_single` passes a literal `0` there for
+every ordinary trainer in Hoenn. The engine never depended on it either: where it reads
+that field it falls back to `gSpecialVar_LastTalked`, which the approach has held since
+the eye met ours. Our call hit the guard and returned.
 
-Left to check: that the object is still in `gObjectEvents` at that moment (the guard
-returns early if the lookup fails), and whether the ball is spawned but invisible because
-the map's object slots are full. **No driver has ever exercised the real path** —
-`trainer-despawn.txt` pokes the despawn list and tests the sweep, not the beating. A
-driver that boots next to a route trainer, wins, and asserts a ball on their tile is the
-missing test.
+`trainer-drop.txt` is the driver that was missing: boot into the gym, beat a trainer
+for real, read the tile they were standing on.
+
+### The Zone's START menu was still Emerald's -- **fixed** (`0d27d1c60`)
+
+From the video's frames: RETIRE, POKéDEX, POKéMON, BAG, CAM. POK-221 pruned the START
+menu and POK-222 made the Zone the opening, but `BuildSafariZoneStartMenu` is a
+different function and nothing had touched it. Driver `safari-menu.txt`.
 
 ### A Pokémon started the match on -1 HP
 
