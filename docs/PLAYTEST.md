@@ -123,6 +123,61 @@ moments when the overworld's palettes are mid-fade.
 ~11:00 in the video, unexplained. Needs another look at the recording or a repeat: which
 line said it, and what had just happened.
 
+## 2026-09-16, Cam, second sitting (the room strip and the freeze)
+
+### Walking into a bot froze the game on a black screen -- **fixed** (`4cc935d1c`)
+
+When the player is the one who spots the bot, the ROM's challenge fell through to a
+link battle against a seat with no ROM behind it, and `BrNetlink_StartBattle` has no
+timeout. The challenge parks for 90 frames now and the page answers it with the bot's
+card. Driver `bot-spotted.txt`.
+
+### A link battle that nobody answers has no way out
+
+The fix above closes the way in that we know about. The shape underneath is still
+there: once `gBrNetlink.active` is set, nothing in the ROM ever clears it on its own.
+A peer that crashes, closes the tab or loses the relay mid-handshake leaves the other
+side on a black screen with the controls locked until the page is reloaded.
+
+Wanted: a watchdog in `BrNetlink_Tick` -- if the link has been active for N seconds
+and the peer has sent nothing at all, unwind it and put the trainer back on the field
+(Kanto has the same shape in its bag-stall watchdog). Nothing recovers a match, but a
+player who can walk away is not a player who has to reload.
+
+### `Disconnected: closed` stays on the room strip for the rest of the match
+
+Seen throughout the second video. `RelayClient` reconnects with backoff, but
+`app.ts:2208` writes the line and nothing ever un-writes it: there is no `open` event
+to hang the recovery on (the lobby's own list works around this by polling
+`relay.isOpen()` on its refresh tick). Worse, a reconnect does NOT re-host or re-join
+-- `handleClose` nulls `id`/`code` and the module's own comment hands that decision to
+`app.ts`, which does not make it. So the socket comes back and the room does not.
+
+What the relay logged tonight says most of these were the page's own reloads
+(`drop CAM#1 room ... (closed) after 17s`), plus one `(idle) after 66s` which was the
+black-screen freeze above. Two things to do: clear the line when the socket is up
+again, and rejoin the room we were in.
+
+### The host tabbing out must not pause the match -- Cam's call: swap hosts
+
+POK-247 put a warning in the title bar and a note on the room panel: "This tab was
+hidden for 3s -- you are the host, so the match was waiting on it." Cam: *"we cannot
+pause the game if the host tabs out. If that happens it should swap hosts. No alert is
+needed."*
+
+The freeze is real and not fixable in place: a hidden tab's `requestAnimationFrame`
+stops, so the host's own emulator stops, and `setInterval` (the director's clock, the
+bots' walking) is throttled to about once a second. Kanto never solved this either --
+its relay comment says a host dropped for flooding "ended the match" because there is
+no host migration.
+
+The pieces are already here: `relay.canHost()` and `heirOf` pick a successor when a
+host leaves (POK-252), and the director is rebuilt from the seed. Migration is that
+path fired on a `visibilitychange` instead of on a disconnect: hand the clock to the
+heir, become an ordinary member, take it back only if they go too. The alert comes out
+with the same change -- taking it out first would leave the match freezing silently.
+
+---
 ---
 
 ## 2026-09-16, Cam, earlier session (Linear was full)
