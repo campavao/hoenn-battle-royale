@@ -16,7 +16,7 @@
 
 EWRAM_DATA struct BrMatch gBrMatch = {0};
 // START can span slots once there are more than six spawn rows.
-static EWRAM_DATA u8 sStartBuf[10 + 8 * BR_MAX_SEATS];
+static EWRAM_DATA u8 sStartBuf[10 + 8 * BR_MAX_SEATS] = {0};
 static EWRAM_DATA struct BrAssembler sStartAsm = {0};
 
 static bool8 OverworldRunning(void)
