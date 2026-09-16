@@ -14,6 +14,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
 #include "br/br_ring.h"
+#include "br/br_pick.h"
 #include "br/br_loot.h"
 #include "br/br_spectate.h"
 
@@ -168,6 +169,11 @@ void BrMatch_SafariOver(void)
         return;
     }
     gBrMatch.phase = BR_PHASE_PLAY;
+    // Where you land is yours to choose (POK-223): the fly map goes up, the section
+    // goes out as `pick`, and the host deals a cell inside it. The START's own spawn is
+    // the fallback -- for a driver, and for anyone the page never answers.
+    if (BrPick_Start())
+        return;
     if (!gBrMatch.haveSpawn[gBrMySeat])
         return; // no deal yet; the page will place us with a later START
     sp = &gBrMatch.spawns[gBrMySeat];

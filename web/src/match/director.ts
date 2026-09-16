@@ -63,6 +63,9 @@ export interface RegionSection {
   w: number;
   h: number;
   name?: string;
+  /** The MAPSEC_* value, which is what the ROM puts on the wire when a trainer picks
+   *  where to drop (POK-223). regionmap.json carries it for every section. */
+  num?: number;
 }
 
 export interface DirectorWorld {
@@ -156,6 +159,9 @@ export interface DirectorState {
 export class Director {
   private readonly rng: () => number;
   private readonly sections: SectionCells[];
+  /** Every cell handed out this match, so no two trainers land on the same tile --
+   *  the START's own deal and every `pick` answered afterwards share it. */
+  private readonly dealtCells = new Set<string>();
   private readonly safariSecs: number;
   private readonly fogSecs: number;
   private readonly hostSeat: number;
@@ -223,8 +229,26 @@ export class Director {
 
   // ---- dealing (POK-223) -----------------------------------------------------------
 
+  /** Answers a `pick`: a cell in the section that trainer chose, that nobody has been
+   *  given yet. A section with nothing standable in it (POK-251 marks those) falls back
+   *  to anywhere, because a trainer who picked one is owed a drop regardless. */
+  landFor(seat: number, section: number): { seat: number; map: MapRef; x: number; y: number } {
+    const wanted = this.sections.find((s) => s.section.num === section);
+    const pool = wanted && wanted.cells.length > 0 ? [wanted] : this.sections;
+    for (let attempt = 0; attempt < DEAL_RETRY_LIMIT; attempt++) {
+      const from = pool[pickIndex(this.rng, pool.length)];
+      const cell = from.cells[pickIndex(this.rng, from.cells.length)];
+      const key = `${cell.map.group}:${cell.map.num}:${cell.x}:${cell.y}`;
+      if (this.dealtCells.has(key) && attempt < DEAL_RETRY_LIMIT - 1) continue;
+      this.dealtCells.add(key);
+      return { seat, map: cell.map, x: cell.x, y: cell.y };
+    }
+    const fallback = this.sections[0].cells[0];
+    return { seat, map: fallback.map, x: fallback.x, y: fallback.y };
+  }
+
   private dealSpawns() {
-    const used = new Set<string>();
+    const used = this.dealtCells;
     return this.opts.seats.map((seat) => {
       let map: MapRef = { group: 0, num: 0 };
       let x = 0;

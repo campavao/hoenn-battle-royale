@@ -71,6 +71,38 @@ test('a match runs from the opening to a winner', async ({ browser }) => {
         { timeout: 90_000 },
       );
     }
+    // 2b. The picker. The opening ends by putting the Hoenn map in front of you
+    //     (POK-223) -- every section selectable, twenty seconds to choose. Press A, so
+    //     the path a player actually takes is the one under test rather than the
+    //     timeout that carries an idle tab.
+    const pickBase = symbols.gBrPick;
+    for (const page of [host, guest]) {
+      await page.waitForFunction(
+        (addr) => (window as unknown as RamWindow).__br.mailbox.ram.read(addr, 8) === 1,
+        pickBase,
+        { timeout: 30_000 },
+      );
+    }
+    await host.screenshot({ path: path.join(OUT_DIR, 'match-pick.png') });
+    // Tap until it takes: the map fades in over about a second, and a press that lands
+    // during the fade is a press the input loop never sees.
+    const tapA = async (page: typeof host) =>
+      page.evaluate(() => {
+        const ram = (window as unknown as { __br: { mailbox: { ram: { press(k: string): void; release(k: string): void } } } }).__br.mailbox.ram;
+        ram.press('a');
+        setTimeout(() => ram.release('a'), 100);
+      });
+    const picked = async (page: typeof host) =>
+      page.evaluate((addr) => (window as unknown as RamWindow).__br.mailbox.ram.read(addr, 8) === 0, pickBase);
+    for (let i = 0; i < 30; i++) {
+      const done = await Promise.all([host, guest].map(picked));
+      if (done.every(Boolean)) break;
+      for (const page of [host, guest]) if (!(await picked(page))) await tapA(page);
+      await host.waitForTimeout(500);
+    }
+    for (const page of [host, guest]) {
+      expect(await picked(page), 'the drop was taken from the map').toBe(true);
+    }
     await host.screenshot({ path: path.join(OUT_DIR, 'match-drop.png') });
 
     // 3. The ring. gBrRing.active is the ROM having been told where the fog is.

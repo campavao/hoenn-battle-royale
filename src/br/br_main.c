@@ -18,6 +18,7 @@
 #include "br/br_bot.h"
 #include "br/br_loot.h"
 #include "br/br_spectate.h"
+#include "br/br_pick.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
 // running it: `strings pokeemerald.gba | grep HOENN-BR`.
@@ -38,6 +39,7 @@ void BrInit(void)
     BrLoot_Init();
     BrBot_Init();
     BrSpectate_Init();
+    BrPick_Init();
 }
 
 void BrFrame(void)
@@ -55,4 +57,5 @@ void BrFrame(void)
     BrNetlink_Tick();
     BrEngage_Tick();
     BrSpectate_Tick();
+    BrPick_Tick();
 }

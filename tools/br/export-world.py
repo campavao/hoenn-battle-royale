@@ -207,7 +207,10 @@ def load_layouts():
 
 def load_region_map_sections():
     rm = load_json("src", "data", "region_map", "region_map_sections.json")
-    return {s["id"]: s for s in rm["map_sections"]}
+    # include/constants/region_map_sections.h is generated from this file in order, so a
+    # section's index here IS its MAPSEC_* value -- which is what the ROM puts on the
+    # wire when a trainer picks where to drop (POK-223).
+    return {s["id"]: dict(s, num=i) for i, s in enumerate(rm["map_sections"])}
 
 
 def base_building_name(folder):
@@ -477,7 +480,15 @@ def main():
     # are never placed on the region map, so drop them here.
     regionmap = {
         "sections": {
-            sid: {"id": sid, "x": s["x"], "y": s["y"], "w": s["width"], "h": s["height"], "name": s["name"]}
+            sid: {
+                "id": sid,
+                "num": s["num"],
+                "x": s["x"],
+                "y": s["y"],
+                "w": s["width"],
+                "h": s["height"],
+                "name": s["name"],
+            }
             for sid, s in sections.items()
             if "x" in s
         }

@@ -1023,6 +1023,10 @@ function wireRoom(
       loot.note(msg);
       noteResult(msg);
       noteBusy(msg);
+      // Our own ROM's pick never comes back over the relay either.
+      if (msg.t === 'pick' && director) {
+        bridge!.pushToRom({ t: 'land', ...director.landFor(msg.seat, msg.section) });
+      }
       // Our own ROM saying we are out. Nobody hears their own messages come back over
       // the relay, so without this the director never counts this client's own
       // elimination and the match it is running cannot reach a winner.
@@ -1045,6 +1049,14 @@ function wireRoom(
         loot.note(m);
         noteResult(m);
         noteBusy(m);
+        // The drop (POK-223): a trainer chose a section, the host deals them a cell
+        // inside it that nobody else has. Only the host answers -- everyone hears the
+        // `pick`, and two answers would put two trainers on two different tiles.
+        if (m.t === 'pick' && director) {
+          const land = director.landFor(m.seat, m.section);
+          if (m.seat === bridge!.seat) bridge!.pushToRom({ t: 'land', ...land });
+          else bridge!.relay.to(m.seat, { t: 'land', ...land });
+        }
         if (m.t === 'peek' && m.target === seat) {
           spectate.notePeek(m.seat, performance.now());
           // Their ROM answers the party; the fight so far is ours to hand over, since

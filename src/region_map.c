@@ -129,6 +129,9 @@ static const u8 sRegionMapPlayerIcon_MayGfx[] = INCGFX_U8("graphics/pokenav/regi
 
 #include "data/region_map/region_map_layout.h"
 #include "data/region_map/region_map_entries.h"
+#if BR
+#include "br/br_pick.h"
+#endif
 
 static const mapsec_u16_t sRegionMap_SpecialPlaceLocations[][2] =
 {
@@ -1174,6 +1177,13 @@ static void RegionMap_InitializeStateBasedOnSSTidalLocation(void)
 
 static u8 GetMapsecType(mapsec_u16_t mapSecId)
 {
+#if BR
+    // The drop (POK-223). A battle royale is not a playthrough, so "have you been
+    // here" is the wrong question: every section on the map is a place you may choose
+    // to start. The page refuses the ones with nowhere to stand (POK-251).
+    if (BrPick_Picking())
+        return mapSecId == MAPSEC_NONE ? MAPSECTYPE_NONE : MAPSECTYPE_CITY_CANFLY;
+#endif
     switch (mapSecId)
     {
     case MAPSEC_NONE:
@@ -1710,7 +1720,11 @@ void CB2_OpenFlyMap(void)
         LoadPalette(sRegionMapFramePal, BG_PLTT_ID(1), sizeof(sRegionMapFramePal));
         PutWindowTilemap(WIN_FLY_TO_WHERE);
         FillWindowPixelBuffer(WIN_FLY_TO_WHERE, PIXEL_FILL(0));
-        AddTextPrinterParameterized(WIN_FLY_TO_WHERE, FONT_NORMAL, gText_FlyToWhere, 0, 1, 0, NULL);
+        AddTextPrinterParameterized(WIN_FLY_TO_WHERE, FONT_NORMAL,
+#if BR
+                                    BrPick_Picking() ? gBrText_DropWhere :
+#endif
+                                    gText_FlyToWhere, 0, 1, 0, NULL);
         ScheduleBgCopyTilemapToVram(0);
         gMain.state++;
         break;
@@ -1952,6 +1966,17 @@ static void CB_HandleFlyMapInput(void)
 {
     if (sFlyMap->state == 0)
     {
+#if BR
+        // The drop's clock ran out: the section under the cursor is the choice, the
+        // same as if they had pressed A on it (POK-223).
+        if (BrPick_TimedOut())
+        {
+            sFlyMap->choseFlyLocation = TRUE;
+            BrPick_Chose(sFlyMap->regionMap.mapSecId);
+            SetFlyMapCallback(CB_ExitFlyMap);
+            return;
+        }
+#endif
         switch (DoRegionMapInputCallback())
         {
         case MAP_INPUT_NONE:
@@ -1966,10 +1991,19 @@ static void CB_HandleFlyMapInput(void)
             {
                 m4aSongNumStart(SE_SELECT);
                 sFlyMap->choseFlyLocation = TRUE;
+#if BR
+                if (BrPick_Picking())
+                    BrPick_Chose(sFlyMap->regionMap.mapSecId);
+#endif
                 SetFlyMapCallback(CB_ExitFlyMap);
             }
             break;
         case MAP_INPUT_B_BUTTON:
+#if BR
+            // There is no backing out of the drop: you are landing somewhere.
+            if (BrPick_Picking())
+                break;
+#endif
             m4aSongNumStart(SE_SELECT);
             sFlyMap->choseFlyLocation = FALSE;
             SetFlyMapCallback(CB_ExitFlyMap);
@@ -1990,6 +2024,18 @@ static void CB_ExitFlyMap(void)
         if (!UpdatePaletteFade())
         {
             FreeRegionMapIconResources();
+#if BR
+            if (BrPick_Picking())
+            {
+                // The cell is the host's to deal (POK-223), so there is nothing to
+                // warp to yet: hold the black screen the fade left and let br_pick.c
+                // do the drop when `land` arrives.
+                BrPick_Wait();
+                TRY_FREE_AND_SET_NULL(sFlyMap);
+                FreeAllWindowBuffers();
+                break;
+            }
+#endif
             if (sFlyMap->choseFlyLocation)
             {
                 switch (sFlyMap->regionMap.mapSecId)

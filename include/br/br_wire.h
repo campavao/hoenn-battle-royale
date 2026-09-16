@@ -242,5 +242,7 @@
 //   ..:   count    u8   1..6
 //   ..:   party    count * PackedMon (100 bytes each, as BR_MSG_PARTY)
 #define BR_MSG_TRAINER 23
+#define BR_MSG_PICK 24      // ROM -> page: the section this trainer chose to drop into
+#define BR_MSG_LAND 25      // page -> ROM: the cell the host dealt them inside it
 
 #endif // GUARD_BR_WIRE_H

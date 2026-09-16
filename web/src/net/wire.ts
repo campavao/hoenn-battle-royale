@@ -210,6 +210,24 @@ export interface TrainerMsg {
   mons: PackedMon[]; // 1..6
 }
 
+/** Where a trainer chose to drop (POK-223). The ROM puts the fly map in front of them
+ *  when the opening ends and sends the section they picked; the host deals a cell
+ *  inside it that nobody else has. Crosses into the ROM (pick). */
+export interface PickMsg {
+  t: 'pick';
+  seat: number;
+  section: number; // a MAPSEC_* value -- regionmap.json carries `num` for each
+}
+
+/** The cell that pick was answered with. Crosses into the ROM (land). */
+export interface LandMsg {
+  t: 'land';
+  seat: number;
+  map: MapRef;
+  x: number;
+  y: number;
+}
+
 export interface PackedMove {
   id: number; // move id
   pp: number; // current PP
@@ -489,6 +507,8 @@ export type Msg =
   | TurnMsg
   | PartyMsg
   | TrainerMsg
+  | PickMsg
+  | LandMsg
   | FaintMsg
   | OutMsg
   | PickupMsg
@@ -815,6 +835,16 @@ const decoders: Record<string, Decoder> = {
     if (!Array.isArray(mons) || mons.length === 0 || mons.length > 6) fail('bad party');
     return { t: 'party', seat: reqSeat(m), mons: mons.map(validateMon) };
   },
+
+  pick: (m) => ({ t: 'pick', seat: reqSeat(m), section: reqInt(m, 'section', 0, 0xffff) }),
+
+  land: (m) => ({
+    t: 'land',
+    seat: reqSeat(m),
+    map: reqMapRef(m),
+    x: reqCell(m, 'x'),
+    y: reqCell(m, 'y'),
+  }),
 
   trainer: (m) => {
     const mons = m.mons;

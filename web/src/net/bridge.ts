@@ -56,6 +56,13 @@ function msgSeat(msg: Msg): number | undefined {
   return 'seat' in msg ? (msg as { seat?: number }).seat : undefined;
 }
 
+/** Messages whose `seat` is who they are FOR, not who they are from. The echo guard
+ *  below drops anything carrying our own seat as something we said coming back -- true
+ *  of every message a ROM emits, and exactly wrong for these: `land` is the host
+ *  answering our own `pick` with the cell it dealt us (POK-223), and dropping it left
+ *  the trainer standing on a black screen for the rest of the match. */
+const ADDRESSED_TO_SEAT = new Set<string>(['land']);
+
 export class Bridge {
   readonly mailbox: Mailbox;
   readonly roster = new Roster();
@@ -187,7 +194,7 @@ export class Bridge {
       this.dropCount++;
       return;
     }
-    if (msgSeat(msg) === this.seat) return; // our own message, echoed back
+    if (msgSeat(msg) === this.seat && !ADDRESSED_TO_SEAT.has(msg.t)) return; // our own message, echoed back
 
     this.noteChallenge(msg);
     this.roster.applyMsg(msg);

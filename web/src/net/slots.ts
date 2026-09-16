@@ -52,6 +52,8 @@ import type {
   TickerMsg,
   PartyMsg,
   TrainerMsg,
+  PickMsg,
+  LandMsg,
   ResultMsg,
 } from './wire';
 
@@ -82,6 +84,8 @@ export const BR_MSG = {
   TICKER: 15,
   RESULT: 16,
   TRAINER: 23,
+  PICK: 24,
+  LAND: 25,
 } as const;
 
 /** Set on a continuation slot's `type` byte; `type & ~BR_CONT_FLAG` names the message. */
@@ -383,6 +387,25 @@ function decodeParty(bytes: Uint8Array): PartyMsg {
   return { t: 'party', seat, mons };
 }
 
+// PICK: seat, the MAPSEC the trainer chose. LAND: seat, the map and cell the host
+// dealt them inside it (POK-223).
+function encodePick(m: PickMsg): Uint8Array {
+  return new Writer().u8(m.seat).u16(m.section).toBytes();
+}
+function decodePick(bytes: Uint8Array): PickMsg {
+  const r = new Reader(bytes);
+  return { t: 'pick', seat: r.u8(), section: r.u16() };
+}
+function encodeLand(m: LandMsg): Uint8Array {
+  return new Writer().u8(m.seat).u8(m.map.group).u8(m.map.num).u16(m.x).u16(m.y).toBytes();
+}
+function decodeLand(bytes: Uint8Array): LandMsg {
+  const r = new Reader(bytes);
+  const seat = r.u8();
+  const map = { group: r.u8(), num: r.u8() };
+  return { t: 'land', seat, map, x: r.u16(), y: r.u16() };
+}
+
 // TRAINER: seat, the bot's name, then its party -- the 3 + name + count header that
 // br_bot.c's ParseTrainer reads before the same 100-byte rows a party carries.
 function encodeTrainer(m: TrainerMsg): Uint8Array {
@@ -602,6 +625,8 @@ const CODECS: Record<string, Codec> = {
   shot: { type: BR_MSG.SHOT, encode: (m) => encodeShot(m as ShotMsg), decode: decodeShot },
   party: { type: BR_MSG.PARTY, encode: (m) => encodeParty(m as PartyMsg), decode: decodeParty },
   trainer: { type: BR_MSG.TRAINER, encode: (m) => encodeTrainer(m as TrainerMsg), decode: decodeTrainer },
+  pick: { type: BR_MSG.PICK, encode: (m) => encodePick(m as PickMsg), decode: decodePick },
+  land: { type: BR_MSG.LAND, encode: (m) => encodeLand(m as LandMsg), decode: decodeLand },
   faint: { type: BR_MSG.FAINT, encode: (m) => encodeFaint(m as FaintMsg), decode: decodeFaint },
   out: { type: BR_MSG.OUT, encode: (m) => encodeOut(m as OutMsg), decode: decodeOut },
   busy: { type: BR_MSG.BUSY, encode: (m) => encodeBusy(m as BusyMsg), decode: decodeBusy },

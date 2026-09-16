@@ -1,5 +1,6 @@
-# safari-drop: same opening with a caught mon (mode 0x82): CLOCK 0 warps us to the
-# dealt spawn on Route 110 and the phase is PLAY.
+# safari-drop: the opening ends and the drop begins -- which since POK-223 means the
+# fly map, not a warp. Every section is selectable (a battle royale is not a
+# playthrough), A sends `pick`, and the host answers with the cell it dealt you.
 wait 30
 pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
 wait 400
@@ -10,9 +11,21 @@ wait 4
 pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
 poke u16 gBrMailbox+0x0C 2
 wait 200
+# the opening is over and the map is up, waiting for a choice
 expect u8 gBrMatch 2
+expect u8 gNumSafariBalls 0
+expect u8 gBrPick 1
+shot pickmap
+# A takes the section under the cursor; `pick` goes out and the map closes
+tap A
+wait 150
+shot picked
+# LAND {seat 0, map 0:25, x 10, y 40}: type 25, framed len 10 = hdr(07 00 00) + 7 bytes
+pokebytes gBrMailbox+0x1098 19 0A 07 00 00 00 00 19 0A 00 28 00
+poke u16 gBrMailbox+0x0C 3
+wait 200
 expect u8 *gSaveBlock1Ptr+4 0
 expect u8 *gSaveBlock1Ptr+5 25
-expect u8 gNumSafariBalls 0
+expect u8 gBrPick 0
 shot dropped
 say safari-drop ok

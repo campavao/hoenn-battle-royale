@@ -1,0 +1,26 @@
+# drop-timeout: the other half of POK-223. A trainer who never touches the map still
+# lands: twenty seconds in, the section under the cursor is the choice and `pick` goes
+# out on its own. Nobody is kept waiting by a tab nobody is looking at.
+wait 30
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 4
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 200
+expect u8 gBrPick 1
+# the clock is running and nobody is pressing anything
+expectle u16 gBrPick+8 1200
+wait 1260
+# it chose on its own: the map is gone and we are waiting on the host's cell
+shot timedout
+expect u8 gBrPick 1
+# ...which arrives, and the drop happens like any other
+pokebytes gBrMailbox+0x1098 19 0A 07 00 00 00 00 19 0A 00 28 00
+poke u16 gBrMailbox+0x0C 3
+wait 200
+expect u8 *gSaveBlock1Ptr+5 25
+expect u8 gBrPick 0
+say drop timeout ok
