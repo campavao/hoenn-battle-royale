@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Bots, health, STEP_MS, type PlayerView } from './brain';
 import { dealBots, MAX_SEATS } from './roster';
-import { World, type WorldMap } from './world';
+import { World, type Spot, type WorldMap } from './world';
 import { mulberry32 } from '../match/clock';
 import type { MapRef, Msg, PackedMon } from '../net/wire';
 
@@ -366,5 +366,43 @@ describe('a bot that is hurt', () => {
     bots.ringMoved(3);
     const mon = bots.partyOf(seat)[0];
     expect(mon.hp / mon.maxHp).toBeCloseTo(10 / 19, 1);
+  });
+});
+
+describe('the hunt', () => {
+  // A player parked in the far corner of PATH, facing away so the eyeline never
+  // fires: the only thing that can bring a bot there is the hunt rule.
+  const FAR: PlayerView = { seat: 0, mapId: 'PATH', x: 3, y: 5, dir: 2 };
+
+  function field(alive: number) {
+    const world = new World([FIELD, PATH]);
+    const bots = new Bots({
+      world,
+      targets: [{ mapId: 'FIELD', x: 0, y: 0 }],
+      mapRef: (id) => REFS[id],
+      send: () => {},
+      rng: mulberry32(7),
+      alive: () => alive,
+      engage: { players: () => [FAR] },
+      deal: () => [],
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 5 }]);
+    bots.start(dealt, 0);
+    // Every cell it stood on, not just the last: it walks on once it gets there.
+    const visited: Spot[] = [];
+    for (let t = STEP_MS; t <= 30000; t += STEP_MS) {
+      bots.tick(t);
+      const at = bots.spotOf(dealt[0].seat);
+      if (at) visited.push(at);
+    }
+    return visited;
+  }
+
+  it('walks to whoever is left once the field is down to three', () => {
+    expect(field(3)).toContainEqual({ map: 'PATH', x: FAR.x, y: FAR.y });
+  });
+
+  it('does not hunt while the room is full', () => {
+    expect(field(12)).not.toContainEqual({ map: 'PATH', x: FAR.x, y: FAR.y });
   });
 });

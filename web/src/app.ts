@@ -548,6 +548,9 @@ function startBots(
     },
     deal: (bot, atPhase) => dealParty(seed, bot.seat, atPhase),
     centres: () => world.centres(),
+    // Bots are on this roster too -- the host applies its own bots' `place` to it --
+    // so this is the whole field, which is what the hunt rule wants.
+    alive: () => players().filter((e) => e.alive).length,
   });
   const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
   const dealt = dealBots(seed, BOT_FILL, takenSeats, spawns);

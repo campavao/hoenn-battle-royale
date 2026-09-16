@@ -12,6 +12,7 @@
 import { findPath, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import type { Bot } from './roster';
+import { MOVE_SURF } from './party';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon } from '../net/wire';
 
@@ -26,6 +27,10 @@ const HURT = 0.5;
 /** How far a bot will walk to be healed. A Centre across Hoenn is not worth the match
  *  it would spend getting there, and A* pays for the search either way. */
 const CENTRE_BUDGET = 3000;
+/** Kanto's rule: with three left the match stops being a walk and starts being a
+ *  hunt. Under this many still standing, a bot aims at somebody rather than at a
+ *  cell -- otherwise the last three wander a shrinking ring waiting for each other. */
+const HUNT_AT = 3;
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
   south: 1,
@@ -52,6 +57,15 @@ interface Walker {
 
 /** A player as the roster knows them -- where they are and which way they are looking.
  *  Exactly what the eyeline needs, and nothing a bot could not see. */
+/** One rule firing, with where the bot was when it did. */
+export interface Decision {
+  at: number;
+  seat: number;
+  rule: 'heal' | 'engage' | 'pickup' | 'centre' | 'hunt' | 'loot' | 'wander' | 'stuck';
+  spot: Spot;
+  detail?: string;
+}
+
 export interface PlayerView {
   seat: number;
   mapId: string;
@@ -87,6 +101,12 @@ export interface BotsOptions {
   };
   /** A bot's starting team, and the mons it picks up as the rung climbs. */
   deal?: (bot: Bot, phase: number) => PackedMon[];
+  /** How many trainers are still in, bots included. The hunt starts at HUNT_AT. */
+  alive?: () => number;
+  /** Every rule that fired, as it fires. Kanto's `Bots.decisions`: the only way to
+   *  answer "why did it go there" about something that walks for sixteen minutes.
+   *  Off in the browser; `tools/br/bots-replay.ts` turns it on. */
+  onDecision?: (d: Decision) => void;
   /** Every nurse's counter in the world, for the Centre rule. A bot under half health
    *  walks to the nearest one it can reach and is healed there, exactly the way a
    *  player would be -- and it is seen doing it, which is the point. */
@@ -103,6 +123,12 @@ export interface BotsOptions {
 /** The team at the new rung. A mon that is already there keeps its place and the
  *  share of its health it had -- a bot does not get healed by the fog closing -- and
  *  the rest of the roster is whatever the deal added at this phase. */
+/** Can this team cross water? One mon that knows SURF is the whole rule, the same as
+ *  in the game -- and it is what gets a bot off an island the drop put it on. */
+export function canSurf(party: PackedMon[]): boolean {
+  return party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_SURF));
+}
+
 /** The share of the team's health still standing: 1 is untouched, 0 is wiped. */
 export function health(party: PackedMon[]): number {
   let hp = 0;
@@ -130,6 +156,7 @@ export class Bots {
    *  a ghost walking around while a spectator watches it lose. */
   private readonly fighting = new Set<number>();
   private nonce = 0;
+  private now = 0;
 
   constructor(private readonly opts: BotsOptions) {}
 
@@ -214,6 +241,7 @@ export class Bots {
   }
 
   private stepOne(walker: Walker, now: number): void {
+    this.now = now;
     if (this.fighting.has(walker.bot.seat)) return;
     // At the counter: the nurse is the turn spent, and the bot walks back out whole.
     if (this.healHere(walker)) return;
@@ -226,6 +254,7 @@ export class Bots {
     const here = this.opts.loot?.at(walker.at.map, walker.at.x, walker.at.y);
     if (here !== undefined) {
       this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: here });
+      this.note(walker, 'pickup', `key ${here}`);
       walker.path = null;
       return;
     }
@@ -282,6 +311,7 @@ export class Bots {
         opponent: player.seat,
         nonce: this.nonce,
       });
+      this.note(walker, 'engage', `seat ${player.seat}`);
       this.fighting.add(walker.bot.seat);
       this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
       walker.engageAfter = now + ENGAGE_COOLDOWN_MS;
@@ -300,6 +330,7 @@ export class Bots {
       return false;
     walker.party = walker.party.map((mon) => ({ ...mon, hp: mon.maxHp, status: 0 }));
     walker.path = null;
+    this.note(walker, 'heal');
     return true;
   }
 
@@ -317,7 +348,7 @@ export class Bots {
       (c) => c.mapId !== walker.at.map && this.opts.world.map(c.mapId)?.section === section,
     );
     for (const c of [...here, ...town]) {
-      const path = findPath(this.opts.world, walker.at, { map: c.mapId, x: c.x, y: c.y }, CENTRE_BUDGET);
+      const path = findPath(this.opts.world, walker.at, { map: c.mapId, x: c.x, y: c.y }, CENTRE_BUDGET, canSurf(walker.party));
       if (path.found) return path;
     }
     return null;
@@ -331,6 +362,7 @@ export class Bots {
     if (centre) {
       walker.path = centre;
       walker.stepIndex = 0;
+      this.note(walker, 'centre', `${Math.round(health(walker.party) * 100)}% hp`);
       return;
     }
     // Fog first. Aiming only at cells inside the ring is the whole rule: a bot already
@@ -347,29 +379,77 @@ export class Bots {
           (Math.abs(b.x - walker.at.x) + Math.abs(b.y - walker.at.y)),
       );
     for (const piece of loot.slice(0, 2)) {
-      const path = findPath(this.opts.world, walker.at, { map: piece.mapId, x: piece.x, y: piece.y }, WANDER_BUDGET);
+      const path = findPath(this.opts.world, walker.at, { map: piece.mapId, x: piece.x, y: piece.y }, WANDER_BUDGET, canSurf(walker.party));
       if (path.found && path.steps.length > 0) {
         walker.path = path;
         walker.stepIndex = 0;
+        this.note(walker, 'loot', `key ${piece.key}`);
         return;
+      }
+    }
+    // Hunt when the field is down to a few. A player's own cell is the target, so
+    // the route ends in somebody's eyeline whether or not they are looking.
+    if ((this.opts.alive?.() ?? 99) <= HUNT_AT) {
+      for (const player of this.opts.engage?.players() ?? []) {
+        if (player.busy) continue;
+        const path = findPath(
+          this.opts.world,
+          walker.at,
+          { map: player.mapId, x: player.x, y: player.y },
+          WANDER_BUDGET,
+          canSurf(walker.party),
+        );
+        if (path.found && path.steps.length > 0) {
+          walker.path = path;
+          walker.stepIndex = 0;
+          this.note(walker, 'hunt', `seat ${player.seat}`);
+          return;
+        }
       }
     }
     const targets = inside ? this.opts.targets.filter((t) => inside(t.mapId)) : this.opts.targets;
     if (targets.length === 0) return;
-    // Somewhere else, on foot. Three tries so an unreachable pick (an island, a cave
-    // mouth behind a puzzle) costs a fraction of a second rather than the match.
-    for (let i = 0; i < 3; i++) {
-      const pick = targets[Math.floor(this.opts.rng() * targets.length)];
+    // Somewhere else, on foot -- and somewhere else NEAR, first. Hoenn is 500 maps
+    // wide and the landing pool spans all of it, so a target drawn uniformly is
+    // almost always past the A* budget: the replay tool had bots failing to route
+    // 94% of the time, standing still while they did it. Own map, then own section,
+    // then anywhere, so the cheap pick is also the one a trainer would make.
+    const section = this.opts.world.map(walker.at.map)?.section;
+    const pools = [
+      targets.filter((t) => t.mapId === walker.at.map),
+      targets.filter((t) => t.mapId !== walker.at.map && this.opts.world.map(t.mapId)?.section === section),
+      targets,
+    ].filter((pool) => pool.length > 0);
+    for (let i = 0; i < 4; i++) {
+      const pool = pools[Math.min(i, pools.length - 1)];
+      const pick = pool[Math.floor(this.opts.rng() * pool.length)];
       const to: Spot = { map: pick.mapId, x: pick.x, y: pick.y };
       if (sameSpot(to, walker.at)) continue;
-      const path = findPath(this.opts.world, walker.at, to, WANDER_BUDGET);
+      const path = findPath(this.opts.world, walker.at, to, WANDER_BUDGET, canSurf(walker.party));
       if (path.found && path.steps.length > 0) {
         walker.path = path;
         walker.stepIndex = 0;
+        this.note(walker, 'wander', `${pick.mapId} ${pick.x},${pick.y}`);
         return;
       }
     }
+    // Nowhere it can route to. A bot that stands perfectly still for the rest of the
+    // match reads as broken, so it takes one step somewhere legal and tries again --
+    // which is also usually enough to get off whatever cell was the problem.
+    const open = this.opts.world.neighbours(walker.at, canSurf(walker.party));
+    if (open.length > 0) {
+      const step = open[Math.floor(this.opts.rng() * open.length)];
+      walker.path = { steps: [step], found: true, visited: 0 };
+      walker.stepIndex = 0;
+      this.note(walker, 'stuck', step.dir);
+      return;
+    }
+    this.note(walker, 'stuck');
     walker.path = null;
+  }
+
+  private note(walker: Walker, rule: Decision['rule'], detail?: string): void {
+    this.opts.onDecision?.({ at: this.now, seat: walker.bot.seat, rule, spot: walker.at, detail });
   }
 
   private place(walker: Walker): void {

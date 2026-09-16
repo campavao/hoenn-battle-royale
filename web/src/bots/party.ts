@@ -22,15 +22,21 @@ export function rungForPhase(phase: number): number {
 /** A curated Hoenn pool, standing in for the exported encounter tables. Chosen to be
  *  the sort of thing a trainer walking Hoenn's routes would actually have -- the real
  *  per-map tables are the rest of POK-237. */
-const POOL: { species: number; name: string; moves: number[] }[] = [
+export const MOVE_SURF = 57;
+/** The rung a water mon has learned SURF by. Hoenn is half ocean and the drop is
+ *  happy to put a trainer on Route 125 or Southern Island, which nothing without it
+ *  ever leaves -- so this is a way off an island, not a convenience. */
+const SURF_RUNG = 30;
+
+const POOL: { species: number; name: string; moves: number[]; water?: true }[] = [
   { species: 277, name: 'TREECKO', moves: [1, 43] }, // POUND, LEER
   { species: 280, name: 'TORCHIC', moves: [10, 45] }, // SCRATCH, GROWL
-  { species: 283, name: 'MUDKIP', moves: [33, 45] }, // TACKLE, GROWL
+  { species: 283, name: 'MUDKIP', moves: [33, 45], water: true }, // TACKLE, GROWL
   { species: 286, name: 'POOCHYENA', moves: [33, 43] },
   { species: 288, name: 'ZIGZAGOON', moves: [33, 39] }, // TACKLE, TAIL WHIP
   { species: 290, name: 'WURMPLE', moves: [33, 81] },
   { species: 296, name: 'TAILLOW', moves: [33, 45] },
-  { species: 300, name: 'WINGULL', moves: [55, 39] }, // WATER GUN
+  { species: 300, name: 'WINGULL', moves: [55, 39], water: true }, // WATER GUN
   { species: 304, name: 'RALTS', moves: [93, 45] }, // CONFUSION
   { species: 309, name: 'ARON', moves: [33, 106] },
   { species: 313, name: 'ELECTRIKE', moves: [33, 84] }, // THUNDER SHOCK
@@ -46,13 +52,15 @@ function hp(level: number): number {
 function mon(level: number, rng: () => number): PackedMon {
   const pick = POOL[pickIndex(rng, POOL.length)];
   const max = hp(level);
+  const moves = [...pick.moves];
+  if (pick.water && level >= SURF_RUNG && !moves.includes(MOVE_SURF)) moves.push(MOVE_SURF);
   return {
     species: pick.species,
     level,
     hp: max,
     maxHp: max,
     status: 0,
-    moves: pick.moves.map((id) => ({ id, pp: 25, ppUps: 0 })),
+    moves: moves.map((id) => ({ id, pp: 25, ppUps: 0 })),
     heldItem: 0,
     otId: 0,
     personality: Math.floor(rng() * 0xffff_ffff) >>> 0,

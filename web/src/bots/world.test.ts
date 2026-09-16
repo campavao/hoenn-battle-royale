@@ -176,3 +176,41 @@ describe('against the real Hoenn', () => {
     expect(landed).toBeGreaterThan(0);
   });
 });
+
+describe('water and doors', () => {
+  // A 5x1 strip with water in the middle: the only way across is SURF.
+  const LAKE: WorldMap = {
+    id: 'LAKE', group: 0, num: 9, w: 5, h: 1, section: 'S', outdoor: true,
+    grid: grid(['00220']),
+    seams: [],
+    warps: [{ x: 4, y: 0, to: 'HUT', toX: 0, toY: 0, kind: 'door' }],
+  };
+  const HUT: WorldMap = {
+    id: 'HUT', group: 0, num: 10, w: 2, h: 1, section: 'S', outdoor: false,
+    grid: grid(['00']),
+    seams: [],
+    warps: [{ x: 0, y: 0, to: 'LAKE', toX: 3, toY: 0, kind: 'door' }],
+  };
+  const world = new World([LAKE, HUT]);
+
+  it('will not step into water on foot, and will while surfing', () => {
+    expect(world.step({ map: 'LAKE', x: 1, y: 0 }, 'east')).toBeNull();
+    expect(world.step({ map: 'LAKE', x: 1, y: 0 }, 'east', true)).toEqual({ map: 'LAKE', x: 2, y: 0 });
+  });
+
+  it('routes across the water only with SURF', () => {
+    // (3,0) is the far bank, not the door tile at (4,0) -- you cannot route TO a door,
+    // only through it, because stepping onto one lands you on the other side.
+    const from = { map: 'LAKE', x: 0, y: 0 };
+    const to = { map: 'LAKE', x: 3, y: 0 };
+    expect(findPath(world, from, to).found).toBe(false);
+    expect(findPath(world, from, to, 500, true).found).toBe(true);
+  });
+
+  it('a door is a step that lands on the other side', () => {
+    // (4,0) is the door tile; stepping onto it from (3,0) comes out inside the hut.
+    expect(world.step({ map: 'LAKE', x: 3, y: 0 }, 'east')).toEqual({ map: 'HUT', x: 0, y: 0 });
+    // And back out again, because Emerald's warps come in pairs.
+    expect(world.step({ map: 'HUT', x: 1, y: 0 }, 'west')).toEqual({ map: 'LAKE', x: 3, y: 0 });
+  });
+});

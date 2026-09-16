@@ -35,7 +35,7 @@ function heuristic(a: Spot, b: Spot): number {
 
 export const DEFAULT_BUDGET = 4000;
 
-export function findPath(world: World, from: Spot, to: Spot, maxVisited = DEFAULT_BUDGET): Path {
+export function findPath(world: World, from: Spot, to: Spot, maxVisited = DEFAULT_BUDGET, surf = false): Path {
   if (sameSpot(from, to)) return { steps: [], found: true, visited: 0 };
 
   const open: Node[] = [{ spot: from, cost: 0, estimate: heuristic(from, to) }];
@@ -67,7 +67,7 @@ export function findPath(world: World, from: Spot, to: Spot, maxVisited = DEFAUL
       return { steps, found: true, visited };
     }
 
-    for (const { dir, to: next } of world.neighbours(node.spot)) {
+    for (const { dir, to: next } of world.neighbours(node.spot, surf)) {
       const nextKey = spotKey(next);
       if (closed.has(nextKey)) continue;
       const cost = node.cost + 1;
