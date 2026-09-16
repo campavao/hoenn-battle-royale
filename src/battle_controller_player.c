@@ -243,10 +243,12 @@ static void HandleInputChooseAction(void)
     {
         PlaySE(SE_SELECT);
         gBrBattle.autoMove = TRUE;
+        BrBattle_HideClock();
         BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_USE_MOVE, 0);
         PlayerBufferExecCompleted();
         return;
     }
+    BrBattle_DrawClock();
 #endif
 
     DoBounceEffect(gActiveBattler, BOUNCE_HEALTHBOX, 7, 1);
@@ -288,6 +290,9 @@ static void HandleInputChooseAction(void)
             BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, 0);
             break;
         }
+#if BR
+        BrBattle_HideClock(); // a choice is made; a FIGHT reopens it on the move menu
+#endif
         PlayerBufferExecCompleted();
     }
     else if (JOY_NEW(DPAD_LEFT))
@@ -505,10 +510,12 @@ static void HandleInputChooseMove(void)
     {
         // Out of time: the move under the cursor, at the default target.
         gMultiUsePlayerCursor = GetDefaultMoveTarget(gActiveBattler);
+        BrBattle_HideClock();
         BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, gMoveSelectionCursor[gActiveBattler] | (gMultiUsePlayerCursor << 8));
         PlayerBufferExecCompleted();
         return;
     }
+    BrBattle_DrawClock();
 #endif
 
     if (JOY_HELD(DPAD_ANY) && gSaveBlock2Ptr->optionsButtonMode == OPTIONS_BUTTON_MODE_L_EQUALS_A)

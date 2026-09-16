@@ -1,0 +1,17 @@
+# shot-clock-draw: the drawn shot clock is top-right in both menus (POK-231). A loopback
+# engage battle; screenshots of the action menu (bg0 scrolled 20) and the move menu
+# (scrolled 40) both show the seconds top-right. No pixel assert -- the harness reads
+# memory, not the screen -- so this is a capture driver for a human/agent eyeball.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrNetlink+8 1
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 860
+shot action
+tap A
+wait 40
+shot move
+say shot clock draw ok

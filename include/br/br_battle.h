@@ -26,5 +26,10 @@ bool8 BrBattle_ShotTick(void);
 bool8 BrBattle_TakeAutoMove(void);
 // HandleAction_Run, link battles: TRUE when the runner gets away (one in four).
 bool8 BrBattle_RollRun(void);
+// The drawn shot clock: the seconds left, top-right of the battle screen. Draw each
+// frame a choice menu is open (it follows bg0's scroll so it stays top-right in both
+// the action and move menus); hide it when selection ends.
+void BrBattle_DrawClock(void);
+void BrBattle_HideClock(void);
 
 #endif // GUARD_BR_BATTLE_H
