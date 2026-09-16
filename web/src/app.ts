@@ -48,6 +48,8 @@ import { ProxyDuels } from './bots/proxy';
 import { mulberry32 } from './match/clock';
 import {
   careerLine,
+  exportCareer,
+  importCareer,
   cleanName,
   loadCareer,
   nextLockedSkin,
@@ -1509,6 +1511,43 @@ function drainRom(mailbox: Mailbox, handle: (msg: Msg) => void): void {
 
 // ---- room: relay + bridge, opted into by the URL hash ------------------------------------
 
+/** The career, out to a file the player keeps (POK-243). A download is the browser's
+ *  answer to Kanto's keyfile: something you own, that survives this browser, and that
+ *  moves to a phone by being a file. */
+function saveCareerFile(): void {
+  const blob = new Blob([exportCareer()], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+
+  a.href = url;
+  a.download = 'hoenn-battle-royale-career.json';
+  document.body.append(a);
+  a.click();
+  a.remove();
+  // Let the click start before the URL stops meaning anything.
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+/** ...and back in. A file that is not one of ours changes nothing and says so. */
+function loadCareerFile(then: () => void): void {
+  const input = document.createElement('input');
+
+  input.type = 'file';
+  input.accept = 'application/json,.json';
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    void file
+      .text()
+      .then((text) => {
+        if (importCareer(text)) then();
+        else alert('That is not a Hoenn Battle Royale career file.');
+      })
+      .catch(() => alert('That file could not be read.'));
+  });
+  input.click();
+}
+
 /** Drops the room out of the URL and reloads, which lands on the lobby (parseRoomHash
  *  returns null with no room in the hash). The way out of anywhere. */
 function backToLobby(): void {
@@ -2297,6 +2336,13 @@ function runLobby(): Promise<RoomHash> {
         case 'stats':
           setStatsOff(!loadStats().off);
           render();
+          return;
+        case 'career':
+          // Kanto's career is a file somebody can carry between machines; ours lives
+          // in a localStorage nobody can copy, so this is the door (POK-243). Save
+          // writes it out; load takes one back and re-reads the profile from it.
+          if (confirm('Save your career to a file?\n\nCancel to load one instead.')) saveCareerFile();
+          else loadCareerFile(render);
           return;
         case 'solo':
           setRoomHash('solo');
