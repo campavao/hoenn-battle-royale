@@ -42,6 +42,7 @@ import type { TickerMsg, MapRef } from './net/wire';
 import { World, type WorldMap } from './bots/world';
 import { sectionInside } from './match/ring';
 import { dealParty, speciesName } from './bots/party';
+import { MatchLog, saveMatch } from './match/log';
 import { dealBag } from './bots/bag';
 import { ProxyDuels } from './bots/proxy';
 import { mulberry32 } from './match/clock';
@@ -1168,7 +1169,7 @@ function startBots(
  *  it is the record it produced. PLAY AGAIN reloads the page on the same hash, which
  *  re-imports the ROM from IndexedDB and rejoins the same room -- the blunt way, and
  *  the one that cannot leave half a match's state behind. */
-function renderResults(bridge: Bridge, results: Results, seats: number): void {
+function renderResults(bridge: Bridge, results: Results, seats: number, seed?: number): void {
   const panel = $('#results-panel') as HTMLElement;
   const mine = results.forSeat(bridge.seat, performance.now());
   if (!mine.ended) {
@@ -1189,6 +1190,9 @@ function renderResults(bridge: Bridge, results: Results, seats: number): void {
   } else {
     parts.push('a draw');
   }
+  // The seed last, because it is the question anybody asks about a round afterwards
+  // and the round is written down under it (POK-248, match/log.ts).
+  if (seed !== undefined) parts.push(`seed ${seed}`);
   ($('#results-line') as HTMLElement).textContent = parts.join(' · ');
   renderFame(bridge, mine.winner);
 }
@@ -1428,6 +1432,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   if (seatBase !== undefined) writeMySeat(emu, seatBase, 0);
 
   let out: ((seat: number) => void) | null = null;
+  const log = new MatchLog();
   const director = new Director({
     seats: [0],
     // `#quick` is a dev pace, and solo is where a change gets looked at first -- it had
@@ -1436,7 +1441,16 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     hostSeat: 0,
     seed: Math.floor(Math.random() * 0x7fff_ffff) + 1,
     world: WORLD,
-    send: (msg) => rom.push(msg),
+    send: (msg) => {
+      rom.push(msg);
+      // Solo rounds are written down too (POK-248): a match nobody else saw is the
+      // one whose seed is hardest to come by afterwards.
+      log.note(msg, performance.now());
+      if (msg.t === 'win') {
+        const round = log.current(performance.now());
+        if (round) saveMatch(round);
+      }
+    },
     now: () => performance.now(),
     onOut: (handler) => {
       out = handler;
@@ -1451,6 +1465,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // a `land` that could never arrive (POK-255). A room has the Bridge for this; solo
   // has no Bridge, so it needs the one answer the ROM cannot go on without.
   const fromRom = (msg: Msg) => {
+    log.note(msg, performance.now());
     if (msg.t === 'pick') rom.push({ t: 'land', ...director.landFor(msg.seat, msg.section) });
     else if (msg.t === 'out') out?.(msg.seat);
   };
@@ -1784,6 +1799,7 @@ function wireRoom(
   };
   let fieldSize = 0;
   let recorded = false;
+  const log = new MatchLog();
   // Everything that decides a placement crosses this page one way or the other: our
   // own ROM's `out` on the way up, everybody else's on the way in, and the host's own
   // `start`/`win` as it sends them.
@@ -1815,7 +1831,7 @@ function wireRoom(
       // The champion's own party arrives after the `win` that put the results on
       // screen -- their ROM sends it as the parade starts (POK-243) -- so the panel
       // is drawn again rather than waiting for a team that came too late.
-      if (recorded && bridge) renderResults(bridge, results, fieldSize);
+      if (recorded && bridge) renderResults(bridge, results, fieldSize, match.seed);
     }
     // And what it spent out of its bag in there (POK-237), for the same reason: the
     // host walks the bot, but only the ROM that fought it saw the items go.
@@ -1826,15 +1842,20 @@ function wireRoom(
       recorded = false;
     }
     results.note(msg, performance.now());
+    // ...and the round is written down as it happens (POK-248). The same messages
+    // placement is derived from, kept in a shape the round can be read back from.
+    log.note(msg, performance.now(), (seat) => bridge?.roster.get(seat)?.name || `P${seat}`);
     // The match is over: the door opens again (POK-258). START locked the room to keep
     // latecomers out of a running match, and leaving it locked is what turned the end
     // of a match into everybody scattering -- a reload could not get back in.
     if (msg.t === 'win' && director) relay.lockRoom(false);
     if (msg.t === 'win' && bridge && !recorded) {
       recorded = true;
+      const round = log.current(performance.now());
+      if (round) saveMatch(round);
       const mine = results.forSeat(bridge.seat, performance.now());
       ($('#results-career') as HTMLElement).textContent = careerLine(recordMatch(mine.placement));
-      renderResults(bridge, results, fieldSize);
+      renderResults(bridge, results, fieldSize, match.seed);
     }
   };
   let stopSpectateLoop: (() => void) | null = null;
