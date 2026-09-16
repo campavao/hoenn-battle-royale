@@ -24,6 +24,13 @@ export const STEP_MS = 250;
 const WANDER_BUDGET = 1500;
 /** BR_ENGAGE_GRACE in src/br/br_engage.c: 120 frames, and a frame is a sixtieth. */
 const ENGAGE_COOLDOWN_MS = 2000;
+/** And a longer breather after one bot has beaten another (POK-273). Kanto's own
+ *  `Bots.FIGHT_COOLDOWN` is twelve seconds, for the reason its comment gives: bots
+ *  used to park beside a fight and take the winner the frame it ended, "a queue of
+ *  fights with no way out of it". Ours had only the two-second engage cooldown, and a
+ *  full room spent itself in the first minute -- half of thirty bots gone by 97s,
+ *  while the fog, which is supposed to decide the match, took four all game. */
+const DUEL_COOLDOWN_MS = 12_000;
 /** Long on purpose: a flight is an event, not a way of moving. */
 const FLY_COOLDOWN_MS = 45_000;
 /** One drink every ten seconds (POK-237). Without it a hurt bot empties its bag in
@@ -288,6 +295,10 @@ export class Bots {
   private now = 0;
   /** Route searches left in this tick (SEARCHES_PER_TICK). */
   private budget = 0;
+  /** Nothing starts another bot-vs-bot fight before this (POK-273). Room-wide, not
+   *  per bot: what needed slowing down was the rate the field eliminated itself at,
+   *  and that is a property of the room. */
+  private duelAfter = 0;
   /** The ring phase, as the last `ringMoved` left it. The rung a bot falls at is what
    *  its purse is worth (POK-237). */
   private phase = 0;
@@ -605,12 +616,18 @@ export class Bots {
    *  the winner walks on hurt, which is what makes the next fight interesting. */
   private tryDuel(walker: Walker, now: number, mine: Look): boolean {
     if (this.opts.seed === undefined || walker.party.length === 0) return false;
+    // One meeting at a time, room-wide, which is Kanto's rule (`BR:tickBotDuels`
+    // starts one approach and returns). Ours ran the whole pair list every tick, so
+    // the elimination rate went up with the SQUARE of the field: every pair that could
+    // see each other fought, and a full room was decided before the first ring moved.
+    if (now < this.duelAfter) return false;
     for (const other of this.walkers) {
       if (other === walker || now < other.engageAfter) continue;
       if (this.fighting.has(other.bot.seat) || other.party.length === 0) continue;
       const theirs: Look = { map: other.at.map, x: other.at.x, y: other.at.y, dir: other.facing };
       if (!eitherSees(this.opts.world, mine, theirs)) continue;
       this.nonce = (this.nonce + 1) & 0xffff;
+      this.duelAfter = now + DUEL_COOLDOWN_MS;
       // For real, in the hidden instance, when the host has one (POK-238). Both bots
       // stand where they are while it runs -- the same thing that happens to one
       // fighting a player -- and the seeded resolver is the answer if it cannot.
@@ -636,7 +653,9 @@ export class Bots {
     const lost = won === walker ? other : walker;
 
     won.party = result.winnerParty;
-    won.engageAfter = now + cooldownFor(won.bot);
+    // A winner that turns straight round is how a queue of fights starts: Kanto gives
+    // it twelve seconds, whatever its grade says about appetite (POK-273).
+    won.engageAfter = now + Math.max(cooldownFor(won.bot), DUEL_COOLDOWN_MS);
     this.note(walker, 'duel', `${result.winner} beat ${result.loser}`);
     this.opts.onDuel?.(result.winner, result.loser);
     this.eliminate(lost);
