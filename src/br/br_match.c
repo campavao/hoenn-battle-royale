@@ -42,6 +42,16 @@ static void ParseStart(const u8 *d, u16 n)
     gBrMatch.safariSecs = BrWire_ReadU16(d + 5);
     gBrMatch.fogSecs = BrWire_ReadU16(d + 7);
     gBrMatch.pace = d[9];
+    // The host's pace, applied (POK-241, Kanto's POK-186). Bit 0 says the host sent
+    // any at all -- an older page sends a zero byte, and the options this save already
+    // has are then the right answer. Bit 1 is battle animations, bits 2..3 the text
+    // speed. Everybody in a room reads text at the same speed or the shot clock means
+    // different things to different people.
+    if (d[9] & 1)
+    {
+        gSaveBlock2Ptr->optionsBattleSceneOff = (d[9] & 2) ? 0 : 1;
+        gSaveBlock2Ptr->optionsTextSpeed = (d[9] >> 2) & 3;
+    }
     if (count > BR_MAX_SEATS)
         count = BR_MAX_SEATS;
     if (n < 10 + 8 * count)

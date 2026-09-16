@@ -81,3 +81,31 @@ export function startNote(view: RoomView): string {
   const bots = view.fill > 0 ? ` and ${view.fill} bot${view.fill === 1 ? '' : 's'}` : '';
   return `START: ${view.players} trainer${view.players === 1 ? '' : 's'}${bots}.`;
 }
+
+// ---- match options (POK-241) --------------------------------------------------------
+
+/** Text speed as the ROM numbers it (OPTIONS_TEXT_SPEED_* in constants/global.h), in
+ *  the order a host cycles them. The wire carries the same three (wire.ts's `Pace`). */
+export const TEXT_SPEEDS: { label: string; value: 1 | 3 | 5 }[] = [
+  { label: 'SLOW', value: 1 },
+  { label: 'MID', value: 3 },
+  { label: 'FAST', value: 5 },
+];
+
+export function nextTextSpeed(value: 1 | 3 | 5): 1 | 3 | 5 {
+  const i = TEXT_SPEEDS.findIndex((s) => s.value === value);
+  return TEXT_SPEEDS[(i + 1) % TEXT_SPEEDS.length].value;
+}
+
+export function textSpeedLabel(value: 1 | 3 | 5): string {
+  return TEXT_SPEEDS.find((s) => s.value === value)?.label ?? 'MID';
+}
+
+/** How long a ring phase lasts. Six of these is most of a match's length, so this is
+ *  the dial that says "quick game" or "a proper one". */
+export const FOG_STEPS = [30, 60, 90, 120, 180];
+
+export function nextFog(secs: number): number {
+  const i = FOG_STEPS.indexOf(secs);
+  return i < 0 ? FOG_STEPS[0] : FOG_STEPS[(i + 1) % FOG_STEPS.length];
+}

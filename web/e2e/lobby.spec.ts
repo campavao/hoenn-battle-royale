@@ -94,6 +94,13 @@ test('the host gets the room controls and START, and the guest does not', async 
     await expect(guest.locator('#room-controls')).toBeHidden();
     await expect(guest.locator('#room-note')).toContainText('Waiting for the host');
 
+    // The match options are the host's too, and cycle.
+    await expect(host.locator('#room-text')).toContainText('TEXT MID');
+    await host.locator('#room-text').click();
+    await expect(host.locator('#room-text')).toContainText('TEXT FAST');
+    await host.locator('#room-fog').click();
+    await expect(host.locator('#room-fog')).toContainText(/FOG \d+s/);
+
     // MAX cycles, and both sides hear about it (the relay owns it, not the page).
     await host.locator('#room-max').click();
     await expect(host.locator('#room-max')).toContainText('MAX 12', { timeout: 15_000 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canStart, doorOf, MAX_STEPS, nextDoor, nextMax, roomView, startNote } from './room';
+import { canStart, doorOf, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, roomView, startNote, textSpeedLabel } from './room';
 import type { RosterEvent } from '../net/relay';
 
 const roster = (over: Partial<RosterEvent> = {}): RosterEvent => ({
@@ -67,5 +67,19 @@ describe('START', () => {
     expect(startNote(roomView(roster({ max: 8 }), 1, true))).toBe('START: 2 trainers and 6 bots.');
     expect(startNote(roomView(roster({ max: 2 }), 1, true))).toBe('START: 2 trainers.');
     expect(startNote(roomView(roster(), 2, true))).toContain('Waiting for the host');
+  });
+});
+
+describe('the match options', () => {
+  it('cycle the three text speeds the ROM knows, and name them', () => {
+    expect(nextTextSpeed(1)).toBe(3);
+    expect(nextTextSpeed(5)).toBe(1);
+    expect(textSpeedLabel(5)).toBe('FAST');
+  });
+
+  it('cycle the fog length and wrap', () => {
+    expect(nextFog(FOG_STEPS[0])).toBe(FOG_STEPS[1]);
+    expect(nextFog(FOG_STEPS[FOG_STEPS.length - 1])).toBe(FOG_STEPS[0]);
+    expect(nextFog(7)).toBe(FOG_STEPS[0]);
   });
 });

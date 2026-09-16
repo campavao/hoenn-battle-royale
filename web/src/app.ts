@@ -22,7 +22,17 @@ import { Bots } from './bots/brain';
 import { dealBots } from './bots/roster';
 import * as Ticker from './match/ticker';
 import { emptyNote, fixedRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
-import { canStart, doorOf, nextDoor, nextMax, roomView, startNote } from './match/room';
+import {
+  canStart,
+  doorOf,
+  nextDoor,
+  nextFog,
+  nextMax,
+  nextTextSpeed,
+  roomView,
+  startNote,
+  textSpeedLabel,
+} from './match/room';
 import type { RosterEntry } from './match/roster';
 import type { TickerMsg } from './net/wire';
 import { World, type WorldMap } from './bots/world';
@@ -482,6 +492,11 @@ function renderRoom(bridge: Bridge): void {
 interface RoomControls {
   fill: boolean;
   roster: RosterEvent | null;
+  /** MATCH OPTIONS. The pace rides START and every ROM in the room applies it; the fog
+   *  length is the director's, and six phases of it is most of a match. */
+  textSpeed: 1 | 3 | 5;
+  animations: boolean;
+  fogSecs: number;
 }
 
 /** Draws the room panel: the roster everybody sees, and the four controls only the
@@ -510,10 +525,16 @@ function renderRoomPanel(
   const fill = $('#room-fill') as HTMLButtonElement;
   const door = $('#room-door') as HTMLButtonElement;
   const start = $('#room-start') as HTMLButtonElement;
+  const text = $('#room-text') as HTMLButtonElement;
+  const anim = $('#room-anim') as HTMLButtonElement;
+  const fog = $('#room-fog') as HTMLButtonElement;
   max.textContent = `MAX ${view.max}`;
   fill.textContent = view.fill > 0 ? `FILL ${view.fill}` : 'FILL OFF';
   door.textContent = { open: 'LISTED', private: 'UNLISTED', pass: 'PASSCODE' }[doorOf(view)];
   start.disabled = !canStart(view);
+  text.textContent = `TEXT ${textSpeedLabel(controls.textSpeed)}`;
+  anim.textContent = controls.animations ? 'ANIM ON' : 'ANIM OFF';
+  fog.textContent = `FOG ${controls.fogSecs}s`;
 
   max.onclick = () => relay.setMax(nextMax(view.max));
   fill.onclick = () => {
@@ -531,6 +552,19 @@ function renderRoomPanel(
       relay.setPass(null);
       relay.setOpen(next === 'open');
     }
+  };
+  const redraw = () => renderRoomPanel(controls, mySeat, relay, onStart, started);
+  text.onclick = () => {
+    controls.textSpeed = nextTextSpeed(controls.textSpeed);
+    redraw();
+  };
+  anim.onclick = () => {
+    controls.animations = !controls.animations;
+    redraw();
+  };
+  fog.onclick = () => {
+    controls.fogSecs = nextFog(controls.fogSecs);
+    redraw();
   };
   start.onclick = onStart;
 }
@@ -920,7 +954,7 @@ function wireRoom(
   let stopDirectorLoop: (() => void) | null = null;
   let isHost = false;
   /** The host's room settings between roster events (POK-241). */
-  const controls: RoomControls = { fill: true, roster: null };
+  const controls: RoomControls = { fill: true, roster: null, textSpeed: 3, animations: true, fogSecs: 120 };
 
   /** `members` comes straight off the relay's roster event when there is one: the
    *  Bridge's own subscription may not have folded it into `bridge.roster` yet -- both
@@ -980,7 +1014,10 @@ function wireRoom(
       // Bots are contestants, not scenery: leaving them out of the seat list makes
       // "N LEFT" a lie and hands the match to whoever outlasts the humans alone.
       seats: [...seats, ...bots.seats],
-      options: paceOptions(),
+      options: paceOptions() ?? {
+        fogSecs: controls.fogSecs,
+        pace: { textSpeed: controls.textSpeed, animations: controls.animations },
+      },
       hostSeat,
       seed,
       world: WORLD,

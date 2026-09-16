@@ -25,7 +25,7 @@
 //    locally between wire ticks (br_match.h's `clockLeft`/`clockFrames`), and the
 //    page's HUD mirror should look just as live.
 import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
-import type { MapRef, Msg } from '../net/wire';
+import type { MapRef, Msg, Pace } from '../net/wire';
 
 const DEFAULT_SAFARI_SECS = 120;
 const DEFAULT_FOG_SECS = 120;
@@ -117,7 +117,7 @@ export interface DirectorOptions {
   hostSeat?: number;
   /** The match seed -- also sent in `start` so every client deals/rings identically. */
   seed: number;
-  options?: { safariSecs?: number; fogSecs?: number };
+  options?: { safariSecs?: number; fogSecs?: number; pace?: Pace };
   world: DirectorWorld;
   /** Ships one wire.ts `Msg` -- the bridge's `relay.all` in a room, a local
    *  mailbox-only push in solo (app.ts). */
@@ -198,6 +198,10 @@ export class Director {
       spawns,
       safari: this.safariSecs,
       fog: this.fogSecs,
+      // The host's pace goes out with the deal, and every ROM in the room applies it
+      // (POK-241): one room reads at one speed, or the shot clock means different
+      // things to different people.
+      pace: this.opts.options?.pace,
     });
     this.unsubOut = this.opts.onOut((seat) => this.handleOut(seat));
   }

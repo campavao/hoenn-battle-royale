@@ -1,0 +1,21 @@
+# pace: the host's match options reach every ROM in the room (POK-241). START's pace
+# byte is bit 0 "the host said something", bit 1 battle animations, bits 2..3 the text
+# speed -- and a zero byte leaves this save's own options alone, which is what an older
+# page sends.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the save's defaults before anybody says otherwise
+expect u8 gBrMatch+6 0
+# START with pace = 1 | 0<<1 | 2<<2 = 0x09: animations OFF, text speed FAST
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 09 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+expect u8 gBrMatch+6 0x09
+expect u8 *gSaveBlock2Ptr+0x14 0x02
+# ...and with the animations bit set, they come back on
+pokebytes gBrMailbox+0x1058 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 03 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 20
+expect u8 gBrMatch+6 0x03
+say pace ok
