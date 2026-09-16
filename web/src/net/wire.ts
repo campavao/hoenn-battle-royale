@@ -199,6 +199,17 @@ export interface PartyMsg {
   mons: PackedMon[]; // at most 6
 }
 
+/** A bot's trainer card: who it is and what it is carrying. A bot has no ROM, so the
+ *  fight against it is an ordinary trainer battle in the player's own -- this is the
+ *  party that battle is built from, staged before the challenge that starts it.
+ *  Crosses into the ROM (trainer). */
+export interface TrainerMsg {
+  t: 'trainer';
+  seat: number; // the bot's seat
+  name: string; // Gen 3 charmap text, at most 7 chars
+  mons: PackedMon[]; // 1..6
+}
+
 export interface PackedMove {
   id: number; // move id
   pp: number; // current PP
@@ -477,6 +488,7 @@ export type Msg =
   | BstartMsg
   | TurnMsg
   | PartyMsg
+  | TrainerMsg
   | FaintMsg
   | OutMsg
   | PickupMsg
@@ -802,6 +814,17 @@ const decoders: Record<string, Decoder> = {
     const mons = m.mons;
     if (!Array.isArray(mons) || mons.length === 0 || mons.length > 6) fail('bad party');
     return { t: 'party', seat: reqSeat(m), mons: mons.map(validateMon) };
+  },
+
+  trainer: (m) => {
+    const mons = m.mons;
+    if (!Array.isArray(mons) || mons.length === 0 || mons.length > 6) fail('bad trainer party');
+    return {
+      t: 'trainer',
+      seat: reqSeat(m),
+      name: optShortString(m, 'name', 7) ?? '',
+      mons: mons.map(validateMon),
+    };
   },
 
   faint: (m) => ({ t: 'faint', seat: reqSeat(m), index: reqInt(m, 'index', 0, 5) }),

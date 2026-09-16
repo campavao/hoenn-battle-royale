@@ -1,0 +1,32 @@
+# bot-eyeline: the other direction of POK-238. The player is the one who spots the
+# bot, so the challenge comes out of BrEngage_Tick -- and it has to become a trainer
+# battle too, not a link exchange with a seat that has no ROM behind it.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# The page stages seat 1's team the moment the pair can see each other: TRAINER,
+# name "BOT", one TREKO at level 5 with POUND.
+pokebytes gDecompressionBuffer 01 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+expect u8 gBrBotFight 1
+expect u8 gBrBotFight+1 1
+# the name came over with the card -- it is what the battle text says
+expect u8 gBrBotFight+4 0xBC
+expect u8 gBrBotFight+7 0xFF
+# PLACE seat 1 at (15,16) facing WEST on Littleroot, three tiles east of us -- the
+# same spot engage.txt uses, so this is the ordinary eyeline and nothing special.
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 30
+# the challenge went out, exactly as it would against a person
+expect u16 gBrEngage+4 1
+wait 300
+# ...but the fight is a trainer battle, and no netlink was ever opened
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+shot fighting
+say bot eyeline ok

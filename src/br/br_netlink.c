@@ -29,6 +29,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
 #include "br/br_engage.h"
+#include "br/br_bot.h"
 #include "br/br_netlink.h"
 
 EWRAM_DATA struct BrNetlink gBrNetlink = {0};
@@ -118,6 +119,10 @@ static void HandleChallenge(const u8 *payload, u8 len)
     u8 n = BrWire_Unframe(payload, len, &d);
 
     if (n < 4 || gBrNetlink.active)
+        return;
+    // A bot has no ROM to link with: if its party is already staged, this is a trainer
+    // battle, not an exchange (POK-238).
+    if (d[1] == gBrMySeat && BrBot_IsStaged(d[0]) && BrBot_StartFight(d[0]))
         return;
     if (d[0] == gBrMySeat)
         BrNetlink_StartBattle(0, d[1]);

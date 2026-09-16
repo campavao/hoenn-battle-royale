@@ -2,6 +2,7 @@
 #include "malloc.h"
 #if BR
 #include "br/br_spectate.h"
+#include "br/br_bot.h"
 #endif
 
 static void *sHeapStart;
@@ -197,6 +198,7 @@ void InitHeap(void *heapStart, u32 heapSize)
     // somebody else's allocation -- and CB2_InitBattle comes through here on the way
     // into every single battle.
     BrSpectate_HeapReset();
+    BrBot_HeapReset();
 #endif
 }
 

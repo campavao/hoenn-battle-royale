@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Bots, STEP_MS } from './brain';
+import { Bots, STEP_MS, type PlayerView } from './brain';
 import { dealBots, MAX_SEATS } from './roster';
 import { World, type WorldMap } from './world';
 import { mulberry32 } from '../match/clock';
-import type { MapRef, Msg } from '../net/wire';
+import type { MapRef, Msg, PackedMon } from '../net/wire';
 
 function grid(rows: string[]): string {
   const cells = rows.join('').split('').map(Number);
@@ -225,5 +225,85 @@ describe('bots walking', () => {
     bots.remove(dealt[0].seat);
     expect(bots.count()).toBe(2);
     expect(bots.spotOf(dealt[0].seat)).toBeUndefined();
+  });
+});
+
+describe('a bot meeting a player', () => {
+  // One bot, parked where the player is standing right in front of it. The room is
+  // told its team and then challenged -- in that order, because the ROM has to have
+  // the party in hand before the challenge that starts the battle arrives.
+  function meeting(player: PlayerView, party: PackedMon[] = [MON]) {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      engage: { players: () => [player], party: () => party },
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 4000; t += STEP_MS) bots.tick(t);
+    return { sent, dealt };
+  }
+
+  const MON: PackedMon = {
+    species: 277, level: 5, hp: 19, maxHp: 19, status: 0,
+    moves: [{ id: 1, pp: 35, ppUps: 0 }],
+    heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: 'TREECKO', ot: 'BR',
+  };
+
+  it('stages its party and challenges, in that order', () => {
+    // A bot dealt at (1, 1) facing south sees anyone in the column below it.
+    const { sent, dealt } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 });
+    const trainer = sent.findIndex((m) => m.t === 'trainer');
+    const challenge = sent.findIndex((m) => m.t === 'challenge');
+    expect(trainer).toBeGreaterThanOrEqual(0);
+    expect(challenge).toBeGreaterThan(trainer);
+    const card = sent[trainer] as { seat: number; name: string; mons: PackedMon[] };
+    expect(card.seat).toBe(dealt[0].seat);
+    expect(card.name.length).toBeLessThanOrEqual(7);
+    expect(card.mons).toHaveLength(1);
+    expect((sent[challenge] as { opponent: number }).opponent).toBe(0);
+  });
+
+  it('stands still while the fight runs, and walks again on the result', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      engage: { players: () => [{ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }], party: () => [MON] },
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 3000; t += STEP_MS) bots.tick(t);
+    expect(sent.some((m) => m.t === 'busy' && m.kind === 'battle')).toBe(true);
+    const stepsWhileFighting = sent.filter((m) => m.t === 'step').length;
+    for (let t = 3250; t <= 6000; t += STEP_MS) bots.tick(t);
+    expect(sent.filter((m) => m.t === 'step').length).toBe(stepsWhileFighting);
+    bots.noteResult(dealt[0].seat);
+    expect(sent.some((m) => m.t === 'busy' && m.kind === undefined)).toBe(true);
+  });
+
+  it('leaves alone a player already in a battle', () => {
+    const { sent } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2, busy: true });
+    expect(sent.some((m) => m.t === 'challenge')).toBe(false);
+  });
+
+  it('does not challenge across a map', () => {
+    const { sent } = meeting({ seat: 0, mapId: 'PATH', x: 1, y: 1, dir: 2 });
+    expect(sent.some((m) => m.t === 'challenge')).toBe(false);
+  });
+
+  it('challenges once and then keeps the ROM grace', () => {
+    const { sent } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 });
+    // 4 s of ticks against a 2 s cooldown: twice, never once a step.
+    expect(sent.filter((m) => m.t === 'challenge').length).toBeLessThanOrEqual(2);
   });
 });

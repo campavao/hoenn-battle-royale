@@ -28,6 +28,9 @@
 #include "constants/trainers.h"
 #include "constants/trainer_hill.h"
 #include "constants/weather.h"
+#if BR
+#include "br/br_bot.h"
+#endif
 
 struct BattleWindowText
 {
@@ -2539,6 +2542,16 @@ u32 BattleStringExpandPlaceholders(const u8 *src, u8 *dst)
                     toCpy = gTrainerClassNames[gTrainers[gTrainerBattleOpponent_A].trainerClass];
                 break;
             case B_TXT_TRAINER1_NAME: // trainer1 name
+#if BR
+                // A bot fight is an ordinary trainer battle (POK-238), so the name
+                // would otherwise come out of gTrainers -- which is the ROM's own
+                // table and knows nothing about the seat we are actually fighting.
+                if (gBrBotFight.fighting)
+                {
+                    toCpy = gBrBotFight.name;
+                }
+                else
+#endif
                 if (gBattleTypeFlags & BATTLE_TYPE_SECRET_BASE)
                 {
                     for (i = 0; i < (s32) ARRAY_COUNT(gBattleResources->secretBase->trainerName); i++)

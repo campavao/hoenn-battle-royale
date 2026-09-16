@@ -1,0 +1,29 @@
+# bot-fight: a bot has no ROM to link with, so fighting one is an ordinary trainer
+# battle against a party the page staged (POK-238). TRAINER puts the team in
+# gEnemyParty; the CHALLENGE that follows starts the fight.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# TRAINER: seat 31 (0x1F), name "BOT" (BC C9 CE), one mon -- TREKO, level 5, 19 HP,
+# POUND (move 1) with 35 PP. The PackedMon's own offsets: species 0, level 2, hp 3,
+# maxHp 5, status 7, moves 8, nickname length 36 and the name at 37.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+# staged, and it knows whose it is
+expect u8 gBrBotFight 1
+expect u8 gBrBotFight+1 0x1F
+expect u8 gBrBotFight+3 1
+# the name came over with the card -- it is what the battle text says
+expect u8 gBrBotFight+4 0xBC
+expect u8 gBrBotFight+7 0xFF
+# CHALLENGE from seat 31 to us: type 5, framed len 7 = hdr(04 00 00) + 1F 00 00 00
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 1F 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 300
+# the fight is on, and it is a trainer battle rather than a link exchange
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+shot fighting
+say bot fight ok

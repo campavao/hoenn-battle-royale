@@ -10,14 +10,17 @@
 // decision list -- fog, loot, the Centre, hunting -- goes on top of it, replacing only
 // `chooseTarget`.
 import { findPath, type Path } from './path';
+import { eitherSees, type Facing, type Look } from './sight';
 import type { Bot } from './roster';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
-import { PROTOCOL, type MapRef, type Msg } from '../net/wire';
+import { PROTOCOL, type MapRef, type Msg, type PackedMon } from '../net/wire';
 
 /** Kanto's pace: four tiles a second, whatever the host's tab is doing. */
 export const STEP_MS = 250;
 /** How far a bot will look for its next wander target before settling for less. */
 const WANDER_BUDGET = 1500;
+/** BR_ENGAGE_GRACE in src/br/br_engage.c: 120 frames, and a frame is a sixtieth. */
+const ENGAGE_COOLDOWN_MS = 2000;
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
   south: 1,
@@ -32,7 +35,22 @@ interface Walker {
   path: Path | null;
   stepIndex: number;
   nextStepAt: number;
-  facing: 1 | 2 | 3 | 4;
+  facing: Facing;
+  /** Nothing before this: the same grace the ROM keeps after a fight, so a bot that
+   *  just fought does not re-challenge the player still standing in front of it. */
+  engageAfter: number;
+}
+
+/** A player as the roster knows them -- where they are and which way they are looking.
+ *  Exactly what the eyeline needs, and nothing a bot could not see. */
+export interface PlayerView {
+  seat: number;
+  mapId: string;
+  x: number;
+  y: number;
+  dir: Facing;
+  /** In a battle already, or in a menu: not engageable (BR_BUSY_BATTLE in the ROM). */
+  busy?: boolean;
 }
 
 export interface BotsOptions {
@@ -52,13 +70,29 @@ export interface BotsOptions {
   };
   /** world.json id -> the wire's group/num. */
   mapRef: (mapId: string) => MapRef | undefined;
+  /** The eyeline (POK-238). A bot has no ROM, so the fight against it is a trainer
+   *  battle in the player's: `party` is what that battle is built from, staged over
+   *  the wire the moment the pair see each other and immediately challenged. */
+  engage?: {
+    players: () => PlayerView[];
+    party: (bot: Bot) => PackedMon[];
+  };
   send: (msg: Msg) => void;
+  /** To one seat only. A trainer card staged in every ROM in the room would sit in
+   *  six `gEnemyParty`s waiting for a challenge five of them will never get, and the
+   *  next real trainer any of them walks into would be wearing it. */
+  sendTo?: (seat: number, msg: Msg) => void;
   /** 0..1, the same shape as `Math.random`; seeded by the caller so a match replays. */
   rng: () => number;
 }
 
 export class Bots {
   private readonly walkers: Walker[] = [];
+  /** Seats whose fight is running in somebody else's ROM. They stand where they were
+   *  challenged until the `result` comes back: a bot that strolled off mid-battle is
+   *  a ghost walking around while a spectator watches it lose. */
+  private readonly fighting = new Set<number>();
+  private nonce = 0;
 
   constructor(private readonly opts: BotsOptions) {}
 
@@ -72,6 +106,7 @@ export class Bots {
         stepIndex: 0,
         nextStepAt: now + STEP_MS,
         facing: 1,
+        engageAfter: 0,
       };
       this.walkers.push(walker);
       this.place(walker);
@@ -95,8 +130,16 @@ export class Bots {
 
   /** A bot is out: it stops walking and stops being spoken for. */
   remove(seat: number): void {
+    this.fighting.delete(seat);
     const i = this.walkers.findIndex((w) => w.bot.seat === seat);
     if (i >= 0) this.walkers.splice(i, 1);
+  }
+
+  /** A fight this bot was in has ended -- it is back on the map and walking again.
+   *  The `result` that says so comes from the ROM that fought it. */
+  noteResult(seat: number): void {
+    if (!this.fighting.delete(seat)) return;
+    this.opts.send({ t: 'busy', seat });
   }
 
   /** Runs every bot up to `now`. Called as often as the host likes -- the pace is in
@@ -115,6 +158,11 @@ export class Bots {
   }
 
   private stepOne(walker: Walker, now: number): void {
+    if (this.fighting.has(walker.bot.seat)) return;
+    // The eyeline outranks everything: a bot that can see a player fights them, the
+    // same way walking into one in the ROM does. It is checked before the step, on
+    // where the bot is standing, because that is the position the room was told.
+    if (this.tryEngage(walker, now)) return;
     // Loot at your feet, before anything else: a bot standing on a ball takes it, and
     // that is the turn spent.
     const here = this.opts.loot?.at(walker.at.map, walker.at.x, walker.at.y);
@@ -147,6 +195,42 @@ export class Bots {
       x: walker.at.x,
       y: walker.at.y,
     });
+  }
+
+  /** Is anybody in this bot's eyeline? If so, stage its party and challenge them --
+   *  `trainer` then `challenge`, because the ROM has to have the team in hand before
+   *  the challenge that starts the battle arrives. TRUE when it spent the step. */
+  private tryEngage(walker: Walker, now: number): boolean {
+    const engage = this.opts.engage;
+    if (!engage || now < walker.engageAfter) return false;
+    const map = this.opts.mapRef(walker.at.map);
+    if (!map) return false;
+    const mine: Look = { map: walker.at.map, x: walker.at.x, y: walker.at.y, dir: walker.facing };
+    for (const player of engage.players()) {
+      if (player.busy || player.mapId !== walker.at.map) continue;
+      const theirs: Look = { map: player.mapId, x: player.x, y: player.y, dir: player.dir };
+      if (!eitherSees(this.opts.world, mine, theirs)) continue;
+      const mons = engage.party(walker.bot);
+      if (mons.length === 0) return false;
+      // PLAYER_NAME_LENGTH is 7: a HUD name may be longer, a trainer card may not.
+      const name = walker.bot.name.slice(0, 7);
+      const card: Msg = { t: 'trainer', seat: walker.bot.seat, name, mons };
+      if (this.opts.sendTo) this.opts.sendTo(player.seat, card);
+      else this.opts.send(card);
+      this.nonce = (this.nonce + 1) & 0xffff;
+      this.opts.send({
+        t: 'challenge',
+        seat: walker.bot.seat,
+        opponent: player.seat,
+        nonce: this.nonce,
+      });
+      this.fighting.add(walker.bot.seat);
+      this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
+      walker.engageAfter = now + ENGAGE_COOLDOWN_MS;
+      walker.path = null;
+      return true;
+    }
+    return false;
   }
 
   private chooseTarget(walker: Walker, _now: number): void {

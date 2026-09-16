@@ -188,6 +188,17 @@ describe('fixed-layout byte counts', () => {
     });
   }
 
+  it('a trainer card is the 3 + name header br_bot.c reads, then the same rows', () => {
+    const msg: Msg = { t: 'trainer', seat: 31, name: 'WALLY', mons: [mon(), mon({ species: 4 })] };
+    const { payload } = reassembleSlots(packSlot(msg));
+    // seat(1) + nameLen(1) + name(5) + count(1) + 2 mons * 100
+    expect(payload.length).toBe(1 + 1 + 5 + 1 + 200);
+    expect(payload[0]).toBe(31);
+    expect(payload[1]).toBe(5);
+    expect(payload[7]).toBe(2);
+    expect(roundTrip(msg)).toEqual(msg);
+  });
+
   it('a party mon packs to exactly 100 bytes', () => {
     const slots = packSlot({ t: 'party', seat: 0, mons: [mon()] });
     const { payload } = reassembleSlots(slots);

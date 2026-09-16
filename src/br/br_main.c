@@ -15,6 +15,7 @@
 #include "br/br_netlink.h"
 #include "br/br_engage.h"
 #include "br/br_battle.h"
+#include "br/br_bot.h"
 #include "br/br_loot.h"
 #include "br/br_spectate.h"
 
@@ -35,6 +36,7 @@ void BrInit(void)
     BrEngage_Init();
     BrBattle_Init();
     BrLoot_Init();
+    BrBot_Init();
     BrSpectate_Init();
 }
 
@@ -44,6 +46,7 @@ void BrFrame(void)
     BrBoot_Tick();
     BrGhosts_Tick();
     BrLoot_Tick();
+    BrBot_Tick();
     BrRing_Tick();
     BrHud_Tick();
     BrMatch_Tick();

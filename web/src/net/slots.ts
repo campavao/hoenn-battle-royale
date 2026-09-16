@@ -51,6 +51,7 @@ import type {
   TickerKind,
   TickerMsg,
   PartyMsg,
+  TrainerMsg,
   ResultMsg,
 } from './wire';
 
@@ -80,6 +81,7 @@ export const BR_MSG = {
   START: 14,
   TICKER: 15,
   RESULT: 16,
+  TRAINER: 23,
 } as const;
 
 /** Set on a continuation slot's `type` byte; `type & ~BR_CONT_FLAG` names the message. */
@@ -380,6 +382,25 @@ function decodeParty(bytes: Uint8Array): PartyMsg {
   for (let i = 0; i < count; i++) mons.push(decodeMon(r.raw(MON_BYTES)));
   return { t: 'party', seat, mons };
 }
+
+// TRAINER: seat, the bot's name, then its party -- the 3 + name + count header that
+// br_bot.c's ParseTrainer reads before the same 100-byte rows a party carries.
+function encodeTrainer(m: TrainerMsg): Uint8Array {
+  const w = new Writer().u8(m.seat);
+  writeGen3(w, m.name, 7);
+  w.u8(m.mons.length);
+  for (const mon of m.mons) w.raw(encodeMon(mon));
+  return w.toBytes();
+}
+function decodeTrainer(bytes: Uint8Array): TrainerMsg {
+  const r = new Reader(bytes);
+  const seat = r.u8();
+  const name = r.gen3String();
+  const count = r.u8();
+  const mons: PackedMon[] = [];
+  for (let i = 0; i < count; i++) mons.push(decodeMon(r.raw(MON_BYTES)));
+  return { t: 'trainer', seat, name, mons };
+}
 
 function encodeFaint(m: FaintMsg): Uint8Array {
   return new Writer().u8(m.seat).u8(m.index).toBytes();
@@ -580,6 +601,7 @@ const CODECS: Record<string, Codec> = {
   peek: { type: BR_MSG.PEEK, encode: (m) => encodePeek(m as PeekMsg), decode: decodePeek },
   shot: { type: BR_MSG.SHOT, encode: (m) => encodeShot(m as ShotMsg), decode: decodeShot },
   party: { type: BR_MSG.PARTY, encode: (m) => encodeParty(m as PartyMsg), decode: decodeParty },
+  trainer: { type: BR_MSG.TRAINER, encode: (m) => encodeTrainer(m as TrainerMsg), decode: decodeTrainer },
   faint: { type: BR_MSG.FAINT, encode: (m) => encodeFaint(m as FaintMsg), decode: decodeFaint },
   out: { type: BR_MSG.OUT, encode: (m) => encodeOut(m as OutMsg), decode: decodeOut },
   busy: { type: BR_MSG.BUSY, encode: (m) => encodeBusy(m as BusyMsg), decode: decodeBusy },

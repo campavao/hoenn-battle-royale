@@ -231,4 +231,16 @@
 // Payload (2 bytes): seat u8, secs u8 (0..30)
 #define BR_MSG_SHOT 22
 
+// page -> ROM: the party of a bot about to challenge us (POK-238). A bot has no ROM on
+// the other end of a link, so the fight is an ordinary trainer battle and this is the
+// trainer: the ROM builds these straight into gEnemyParty and leaves gTrainers alone.
+// The CHALLENGE that follows starts it.
+// Payload (variable):
+//   0:    seat     u8   the bot's roster seat
+//   1:    nameLen  u8   (<= PLAYER_NAME_LENGTH)
+//   2..:  name     Gen 3 charmap bytes
+//   ..:   count    u8   1..6
+//   ..:   party    count * PackedMon (100 bytes each, as BR_MSG_PARTY)
+#define BR_MSG_TRAINER 23
+
 #endif // GUARD_BR_WIRE_H

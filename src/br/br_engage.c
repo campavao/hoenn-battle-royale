@@ -11,6 +11,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
 #include "br/br_netlink.h"
+#include "br/br_bot.h"
 #include "br/br_engage.h"
 
 EWRAM_DATA struct BrEngage gBrEngage = {0};
@@ -118,6 +119,11 @@ static void Challenge(u8 target)
     gBrEngage.lastTarget = target;
     gBrEngage.cooldown = 120;
     gBrEngage.challenges++;
+    // A bot has no ROM on the other end of a link. If the page has staged its party
+    // (POK-238), this is a trainer battle instead -- the same engage, a different
+    // kind of fight. The CHALLENGE still goes out so the room sees the pair engage.
+    if (BrBot_StartFight(target))
+        return;
     // The page relays it to the target; our own side starts now.
     BrNetlink_StartBattle(0, target);
 }

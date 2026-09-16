@@ -20,6 +20,7 @@ import { Loot } from './match/loot';
 import { Results } from './match/results';
 import { Bots } from './bots/brain';
 import { dealBots } from './bots/roster';
+import type { RosterEntry } from './match/roster';
 import { World, type WorldMap } from './bots/world';
 import { sectionInside } from './match/ring';
 import { dealParty } from './bots/party';
@@ -470,11 +471,26 @@ const BOT_TICK_MS = 100;
 /** Fills the room with bots the host walks around. They reach every other client as
  *  ordinary `place`/`step` -- a ghost, which is all a bot ever is on the wire -- so
  *  nothing downstream of here has to know they are not people. */
+/** Who is in a battle or a menu right now, off the ROMs' own `busy` (POK-230). The
+ *  eyeline needs it: a bot does not challenge somebody already fighting. */
+const busySeats = new Set<number>();
+
+function noteBusy(msg: Msg): void {
+  if (msg.t === 'busy') {
+    if (msg.kind === 'battle') busySeats.add(msg.seat);
+    else busySeats.delete(msg.seat);
+  } else if (msg.t === 'out') {
+    busySeats.delete(msg.seat);
+  }
+}
+
 function startBots(
   send: (msg: Msg) => void,
   takenSeats: number[],
   seed: number,
   loot: Loot,
+  players: () => RosterEntry[],
+  sendTo: (seat: number, msg: Msg) => void,
 ): {
   bots: Bots;
   seats: number[];
@@ -500,6 +516,7 @@ function startBots(
     mapRef: (id) => refById.get(id),
     send,
     rng: mulberry32(seed ^ 0x51ce),
+    sendTo,
     inside: (id) => sectionInside(WORLD.sections[sectionOf.get(id) ?? ''], ring),
     loot: {
       all: () =>
@@ -511,6 +528,24 @@ function startBots(
         const ref = refById.get(mapId);
         return ref ? loot.at(ref, x, y) : undefined;
       },
+    },
+    // The eyeline (POK-238). A bot fights a player the same way a player fights one:
+    // whoever sees the other starts it. The team goes over as a `trainer` card first,
+    // because the ROM has to build a party before the challenge lands.
+    engage: {
+      players: () =>
+        players()
+          .filter((e) => e.alive && !seatsDealt.has(e.seat) && e.map && e.x !== undefined && e.y !== undefined)
+          .map((e) => ({
+            seat: e.seat,
+            mapId: idByRef.get(`${e.map!.group}:${e.map!.num}`) ?? '',
+            x: e.x!,
+            y: e.y!,
+            dir: e.dir as 1 | 2 | 3 | 4,
+            busy: busySeats.has(e.seat),
+          }))
+          .filter((p) => p.mapId !== ''),
+      party: (bot) => dealParty(seed, bot.seat, phase),
     },
   });
   const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
@@ -787,6 +822,13 @@ function wireRoom(
       seats,
       seed,
       loot,
+      () => bridge!.roster.all(),
+      // A trainer card is for the one player it is a challenge to. The host's own ROM
+      // never hears itself over the relay, so its copy is a direct push.
+      (toSeat, msg) => {
+        if (toSeat === bridge!.seat) rom.push(msg);
+        else bridge!.relay.to(toSeat, msg);
+      },
     );
     director = new Director({
       // Bots are contestants, not scenery: leaving them out of the seat list makes
@@ -842,6 +884,9 @@ function wireRoom(
   // own ROM's `out` on the way up, everybody else's on the way in, and the host's own
   // `start`/`win` as it sends them.
   const noteResult = (msg: Msg) => {
+    // A bot's fight runs in whoever challenged it: the result is how the host
+    // learns it is over and the bot can walk again.
+    if (msg.t === 'result') bots?.bots.noteResult(msg.seat);
     if (msg.t === 'start') {
       fieldSize = msg.spawns.length;
       results.start(fieldSize, performance.now());
@@ -873,6 +918,7 @@ function wireRoom(
       spectate.noteOutgoing(msg);
       loot.note(msg);
       noteResult(msg);
+      noteBusy(msg);
       // Our own `place` is how the page learns we changed maps -- there is no separate
       // "I have arrived" message, and this one is already on the wire four times a
       // second.
@@ -890,6 +936,7 @@ function wireRoom(
         const m = decode(JSON.stringify(ev.m));
         loot.note(m);
         noteResult(m);
+        noteBusy(m);
         if (m.t === 'peek' && m.target === seat) {
           spectate.notePeek(m.seat, performance.now());
           // Their ROM answers the party; the fight so far is ours to hand over, since

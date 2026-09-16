@@ -59,6 +59,9 @@
 #include "constants/rgb.h"
 #include "constants/songs.h"
 #include "constants/trainers.h"
+#if BR
+#include "br/br_bot.h"
+#endif
 #include "cable_club.h"
 
 extern const struct BgTemplate gBattleBgTemplates[];
@@ -692,7 +695,13 @@ static void CB2_InitBattleInternal(void)
     else
         SetMainCallback2(CB2_HandleStartBattle);
 
-    if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED)))
+    if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED))
+#if BR
+     // A bot's party is already in gEnemyParty, put there from the wire (POK-238):
+     // asking gTrainers for one would throw it away.
+     && !BrBot_PartyIsStaged()
+#endif
+    )
     {
         CreateNPCTrainerParty(&gEnemyParty[0], gTrainerBattleOpponent_A, TRUE);
         if (gBattleTypeFlags & BATTLE_TYPE_TWO_OPPONENTS)
