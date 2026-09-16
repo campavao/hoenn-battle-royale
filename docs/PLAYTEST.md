@@ -53,14 +53,15 @@ and P21..P31 beside it, so eleven bots were in that match and in the Zone. Six a
 a two-minute opening is simply thin. The question is whether the opening should deal
 everybody into fewer areas, which is a pacing decision rather than a bug.
 
-### Eliminated in the Safari does not put you into spectating
+### Eliminated in the Safari does not put you into spectating -- **fixed** (`1f57d8571`)
 
 "When I got out in the Safari, it should have brought me to spectating the other players."
 
-`BrMatch_SafariOver` sends OUT with an empty party (POK-222) and the page has the whole
-spectator path (POK-233/POK-260). Nothing joins the two: going out should hand you to a
-seat worth watching. Check what the results/spectate flow does on an `out` for our own
-seat during `BR_PHASE_SAFARI`, as opposed to during PLAY.
+It was not the Safari: our own `out` never comes back over the relay, and the WATCH
+strip was only ever drawn from a relay message or a roster event -- so on a host
+walking a room of bots, where no relay traffic arrives at all, it was never drawn at
+any point in a match. `autoWatch` draws it on our own elimination and puts us on the
+first trainer still standing, then moves us on when that one goes out too.
 
 ### The fog closes too fast, and the match is over in about two minutes -- **fixed**
 
@@ -162,7 +163,7 @@ What the relay logged tonight says most of these were the page's own reloads
 black-screen freeze above. Two things to do: clear the line when the socket is up
 again, and rejoin the room we were in.
 
-### The host tabbing out must not pause the match -- Cam's call: swap hosts
+### The host tabbing out must not pause the match -- **fixed** (`1f1c81a63`)
 
 POK-247 put a warning in the title bar and a note on the room panel: "This tab was
 hidden for 3s -- you are the host, so the match was waiting on it." Cam: *"we cannot
@@ -175,11 +176,12 @@ bots' walking) is throttled to about once a second. Kanto never solved this eith
 its relay comment says a host dropped for flooding "ended the match" because there is
 no host migration.
 
-The pieces are already here: `relay.canHost()` and `heirOf` pick a successor when a
-host leaves (POK-252), and the director is rebuilt from the seed. Migration is that
-path fired on a `visibilitychange` instead of on a disconnect: hand the clock to the
-heir, become an ordinary member, take it back only if they go too. The alert comes out
-with the same change -- taking it out first would leave the match freezing silently.
+Done as described: `can_host false` on `visibilitychange`, the relay re-elects, the
+old host keeps its seat and plays on. The alert went with it.
+
+**The relay half is not deployed.** `relay/server.js` needs to reach Railway
+(`hoenn-relay`) before a handover works against the live relay; until then the page
+stands down and nothing catches the room.
 
 ---
 ---
