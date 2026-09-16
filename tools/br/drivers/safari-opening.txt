@@ -26,4 +26,6 @@ wait 4
 # no party: OUT (type 9) went out as the first message after our PLACE
 expect u8 gBrMatch 3
 expect u8 gBrMailbox+0x58 9
+# and the spill right behind it: nothing caught, so it is the bag alone (POK-232)
+expect u8 gBrMailbox+0x98 11
 say safari-opening ok

@@ -13,6 +13,7 @@
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
+#include "br/br_loot.h"
 #include "br/br_spectate.h"
 
 EWRAM_DATA struct BrMatch gBrMatch = {0};
@@ -121,12 +122,22 @@ void BrMatch_BeginSafari(void)
     gBrMatch.clockFrames = 60;
 }
 
-static void SendOut(void)
+void BrMatch_Out(void)
 {
     u8 seat = gBrMySeat;
 
+    if (gBrMatch.phase == BR_PHASE_OUT)
+        return;
     gBrMatch.phase = BR_PHASE_OUT;
     BrWire_Send(BR_MSG_OUT, &seat, 1);
+    // Then what we were carrying: the room hears the elimination first, and the spill
+    // that goes with it right behind (POK-232).
+    BrLoot_SpillOwn();
+}
+
+static void SendOut(void)
+{
+    BrMatch_Out();
 }
 
 void BrMatch_SafariOver(void)

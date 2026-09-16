@@ -9,6 +9,11 @@
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
+#include "pokemon.h"
+#include "money.h"
+#include "field_player_avatar.h"
+#include "constants/species.h"
+#include "constants/characters.h"
 #include "br/br_ghosts.h"
 #include "br/br_loot.h"
 
@@ -196,6 +201,124 @@ struct BrLootItem *BrLoot_At(s16 x, s16 y)
             return it;
     }
     return NULL;
+}
+
+// Where a dropped thing lands: our own cell first, then the ring of cells around it,
+// skipping anything impassable or already holding loot. Kanto scatters within two
+// tiles; this walks out in the same order every time, which is what keeps a spill
+// deterministic for everyone reading the message.
+static const s8 sSpillDx[] = { 0, 1, -1, 0,  0, 1, -1,  1, -1, 2, -2,  0,  0 };
+static const s8 sSpillDy[] = { 0, 0,  0, 1, -1, 1,  1, -1, -1, 0,  0,  2, -2 };
+#define BR_SPILL_CELLS (sizeof(sSpillDx) / sizeof(sSpillDx[0]))
+
+static bool8 CellFree(s16 x, s16 y, const s16 *usedX, const s16 *usedY, u8 used)
+{
+    u8 i;
+
+    if (MapGridGetCollisionAt(x, y) != 0)
+        return FALSE;
+    for (i = 0; i < used; i++)
+    {
+        if (usedX[i] == x && usedY[i] == y)
+            return FALSE;
+    }
+    return TRUE;
+}
+
+// The next cell out that nothing is standing on, or FALSE when the ring runs out.
+static bool8 NextCell(s16 ox, s16 oy, u8 *cell, const s16 *usedX, const s16 *usedY, u8 used,
+                      s16 *outX, s16 *outY)
+{
+    while (*cell < BR_SPILL_CELLS)
+    {
+        s16 x = ox + sSpillDx[*cell];
+        s16 y = oy + sSpillDy[*cell];
+
+        (*cell)++;
+        if (CellFree(x, y, usedX, usedY, used))
+        {
+            *outX = x;
+            *outY = y;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+// [seat, map, count, count*(key, x, y, species, level), hasBag, bagKey, bagX, bagY,
+// itemCount, money, nameLen, name] -- br_wire.h's BR_MSG_SPILL. The bag goes out with
+// the money and the name on it; its item list is the pickup ticket's business.
+void BrLoot_SpillOwn(void)
+{
+    u8 buf[96];
+    s16 usedX[BR_SPILL_CELLS], usedY[BR_SPILL_CELLS];
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    s16 ox = self->currentCoords.x, oy = self->currentCoords.y;
+    u16 len = 0, key;
+    u8 count = 0, used = 0, cell = 0, i;
+    u32 money;
+
+    buf[len++] = gBrMySeat;
+    buf[len++] = gSaveBlock1Ptr->location.mapGroup;
+    buf[len++] = gSaveBlock1Ptr->location.mapNum;
+    len++; // count, filled in below
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        s16 x, y;
+
+        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
+            break;
+        if (!NextCell(ox, oy, &cell, usedX, usedY, used, &x, &y))
+            break; // nowhere left within reach: the rest of the team stays in its balls
+        usedX[used] = x;
+        usedY[used] = y;
+        used++;
+        // The key is ours alone for the match: our seat in the high byte.
+        key = (u16)((gBrMySeat << 8) | count);
+        BrWire_WriteU16(buf + len, key);
+        BrWire_WriteU16(buf + len + 2, (u16)x);
+        BrWire_WriteU16(buf + len + 4, (u16)y);
+        BrWire_WriteU16(buf + len + 6, GetMonData(&gPlayerParty[i], MON_DATA_SPECIES, NULL));
+        buf[len + 8] = GetMonData(&gPlayerParty[i], MON_DATA_LEVEL, NULL);
+        len += 9;
+        count++;
+    }
+    buf[3] = count;
+    // The bag, on the next free cell.
+    {
+        s16 bx, by;
+
+        if (NextCell(ox, oy, &cell, usedX, usedY, used, &bx, &by))
+        {
+        buf[len++] = 1;
+        BrWire_WriteU16(buf + len, (u16)((gBrMySeat << 8) | 0xFF));
+        BrWire_WriteU16(buf + len + 2, (u16)bx);
+        BrWire_WriteU16(buf + len + 4, (u16)by);
+        len += 6;
+        buf[len++] = 0; // itemCount: the bag's contents ride with the pickup
+        money = GetMoney(&gSaveBlock1Ptr->money);
+        buf[len++] = money & 0xFF;
+        buf[len++] = (money >> 8) & 0xFF;
+        buf[len++] = (money >> 16) & 0xFF;
+        buf[len++] = (money >> 24) & 0xFF;
+        for (i = 0; i < PLAYER_NAME_LENGTH && gSaveBlock2Ptr->playerName[i] != EOS; i++)
+            ;
+        buf[len++] = i;
+        {
+            u8 j;
+
+            for (j = 0; j < i; j++)
+                buf[len++] = gSaveBlock2Ptr->playerName[j];
+        }
+        }
+        else
+        {
+            buf[len++] = 0;
+        }
+    }
+    BrWire_SendLarge(BR_MSG_SPILL, buf, len);
+    // Nobody hears their own message come back off the relay, so put ours down here.
+    ParseSpill(buf, len);
 }
 
 void BrLoot_Init(void)

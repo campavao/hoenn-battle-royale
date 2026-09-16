@@ -53,5 +53,9 @@ void BrLoot_Init(void);
 void BrLoot_Tick(void);
 // The loot item standing on this cell of the current map, or NULL.
 struct BrLootItem *BrLoot_At(s16 x, s16 y);
+// We are out: drop our own team and bag where we stand, and tell the room. Every
+// other ROM spawns what this message describes; ours spawns it from the same message
+// coming back is not how it works -- we never hear our own, so we add ours here too.
+void BrLoot_SpillOwn(void);
 
 #endif // GUARD_BR_LOOT_H

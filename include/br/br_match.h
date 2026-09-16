@@ -49,6 +49,9 @@ void BrMatch_SafariOver(void);
 // Called from CB2_WhiteOut in place of the heal-and-Centre DoWhiteOut: sends OUT and
 // marks the phase; overworld.c then re-enters the same map where they fell.
 void BrMatch_WhiteOut(void);
+// Out of the match, whatever did it -- a whiteout, the buzzer with nothing caught, or
+// the fog. One door, so the team always hits the ground on the way through it.
+void BrMatch_Out(void);
 // Called by hall_of_fame.c where the credits would start: back to the map instead.
 void BrMatch_HallOfFameDone(void);
 

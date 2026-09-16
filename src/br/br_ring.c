@@ -14,6 +14,7 @@
 #include "string_util.h"
 #include "constants/characters.h"
 #include "br/br_hud.h"
+#include "br/br_match.h"
 #include "br/br_ring.h"
 #include "br/br_hud.h"
 
@@ -126,10 +127,10 @@ static void Bleed(void)
     }
     if (count > 0 && alive == 0 && !gBrRing.out)
     {
-        u8 seat = gBrMySeat;
-
+        // Through br_match's one door, so the fog drops a team on the ground like any
+        // other way out (POK-232) instead of quietly sending its own OUT.
         gBrRing.out = TRUE;
-        BrWire_Send(BR_MSG_OUT, &seat, 1);
+        BrMatch_Out();
     }
 }
 

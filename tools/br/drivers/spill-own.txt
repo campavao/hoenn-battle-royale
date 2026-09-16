@@ -1,0 +1,23 @@
+# spill-own: going out drops our own team and bag where we stand (POK-232). The fog
+# does the killing -- a ring centred far from Littleroot, left to bleed the party out.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+# the eyeline only fires in a started match, and so does going out of one
+poke u8 gBrMatch 2
+# RING phase 1 centred on Fortree with r 1: Littleroot is outside, so the fog bleeds
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrRing+5 1
+# a level 5 Treecko bleeds out in about twenty ticks of 240 frames
+wait 5200
+# the fog took us: OUT went out, and so did the spill
+expect u8 gBrRing+7 1
+expect u8 gBrMatch 3
+# one ball for the one mon, plus the bag, both standing on this map
+expect u8 gBrLoot+0x80 2
+expect u8 gBrLoot+0x81 2
+shot spilled-own
+say spill own ok
