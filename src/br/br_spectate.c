@@ -366,7 +366,11 @@ static void PackOwnMon(struct Pokemon *mon, u8 *row)
 
 // The answer to a peek: everyone hears it, and the asker's page is the one that keeps
 // it (match/spectate.ts drops a party from a seat it is not watching).
-void BrSpectate_SendParty(void)
+//
+// Any party, under any seat: a bot's team lives on the host's page, but the fight it
+// just had ran here (POK-238), so this ROM is the only thing that knows what came out
+// of it alive. Reporting gEnemyParty under the bot's seat is how the page finds out.
+void BrSpectate_SendPartyOf(struct Pokemon *party, u8 seat)
 {
     u8 *buf = Alloc(2 + PARTY_SIZE * BR_PEEK_ROW);
     u8 count = 0, i;
@@ -375,15 +379,21 @@ void BrSpectate_SendParty(void)
         return;
     for (i = 0; i < PARTY_SIZE; i++)
     {
-        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
+        if (GetMonData(&party[i], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
             break;
-        PackOwnMon(&gPlayerParty[i], buf + 2 + count * BR_PEEK_ROW);
+        PackOwnMon(&party[i], buf + 2 + count * BR_PEEK_ROW);
         count++;
     }
-    buf[0] = gBrMySeat;
+    buf[0] = seat;
     buf[1] = count;
-    BrWire_SendLarge(BR_MSG_PARTY, buf, (u16)(2 + count * BR_PEEK_ROW));
+    if (count > 0)
+        BrWire_SendLarge(BR_MSG_PARTY, buf, (u16)(2 + count * BR_PEEK_ROW));
     Free(buf);
+}
+
+void BrSpectate_SendParty(void)
+{
+    BrSpectate_SendPartyOf(gPlayerParty, gBrMySeat);
 }
 
 // The seconds left on the watched fighter's choice. Their ROM publishes it as it

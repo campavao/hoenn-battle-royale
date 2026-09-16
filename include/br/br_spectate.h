@@ -47,5 +47,8 @@ void BrSpectate_HeapReset(void);
 // Our party, on the wire (BR_MSG_PARTY). Sent when somebody peeks, and again whenever
 // the team changes -- a spectator's peek box and the director both want it current.
 void BrSpectate_SendParty(void);
+// The same message for somebody else's party under somebody else's seat -- how a bot's
+// team gets back to the page that walks it after a fight it lost mons in (POK-238).
+void BrSpectate_SendPartyOf(struct Pokemon *party, u8 seat);
 
 #endif // GUARD_BR_SPECTATE_H

@@ -24,6 +24,7 @@
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
+#include "br/br_spectate.h"
 #include "br/br_engage.h"
 #include "br/br_bot.h"
 
@@ -163,6 +164,9 @@ static void CB2_BrReturnFromBotFight(void)
     Overworld_ResetMapMusic();
     gBrBotFight.fighting = FALSE;
     gBrBotFight.staged = FALSE;
+    // The fight ran here, so this is the only ROM that knows what the bot has left.
+    // Its own page deals it a team but never watches it fight; this is the report.
+    BrSpectate_SendPartyOf(gEnemyParty, gBrBotFight.seat);
     BrEngage_OnBattleEnd(gBrBotFight.seat, gBattleOutcome);
     buf[0] = gBrMySeat;
     switch (gBattleOutcome)

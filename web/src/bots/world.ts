@@ -20,6 +20,21 @@ export interface WorldMap {
   outdoor: boolean;
   grid: string;
   seams: { dir: SeamDir; to: string; offset: number }[];
+  /** Doors, stairs and mats: stepping onto one lands you somewhere else entirely.
+   *  The exporter writes each map's own, and Emerald's warps come in pairs, so the
+   *  way back is on the other map's list. */
+  warps?: Warp[];
+  /** Where the nurse's counter is, on the sixteen maps that have one. */
+  centre?: { counterX: number; counterY: number };
+}
+
+export interface Warp {
+  x: number;
+  y: number;
+  to: string;
+  toX: number;
+  toY: number;
+  kind: string;
 }
 
 export type SeamDir = 'north' | 'south' | 'east' | 'west';
@@ -69,12 +84,30 @@ export function decodeGrid(grid: string, cells: number): Uint8Array {
 export class World {
   private readonly maps = new Map<string, WorldMap>();
   private readonly grids = new Map<string, Uint8Array>();
+  private readonly warps = new Map<string, Warp>();
 
   constructor(maps: WorldMap[]) {
     for (const m of maps) {
       this.maps.set(m.id, m);
       this.grids.set(m.id, decodeGrid(m.grid, m.w * m.h));
+      for (const w of m.warps ?? []) this.warps.set(`${m.id}:${w.x},${w.y}`, w);
     }
+  }
+
+  /** The warp on this cell, if there is one. A door is a tile you walk onto, not a
+   *  tile you walk through: this fires on arriving, which is why walking back out of
+   *  a building works without any special case. */
+  warpAt(id: string, x: number, y: number): Warp | undefined {
+    return this.warps.get(`${id}:${x},${y}`);
+  }
+
+  /** Every Pokemon Centre in the world, with the tile you talk to the nurse from. */
+  centres(): { mapId: string; x: number; y: number }[] {
+    const out: { mapId: string; x: number; y: number }[] = [];
+    for (const m of this.maps.values()) {
+      if (m.centre) out.push({ mapId: m.id, x: m.centre.counterX, y: m.centre.counterY });
+    }
+    return out;
   }
 
   map(id: string): WorldMap | undefined {
@@ -113,7 +146,14 @@ export class World {
         const jy = ny + move.dy;
         return this.standable(spot.map, jx, jy) ? { map: spot.map, x: jx, y: jy } : null;
       }
-      return this.standable(spot.map, nx, ny) ? { map: spot.map, x: nx, y: ny } : null;
+      if (!this.standable(spot.map, nx, ny)) return null;
+      const warp = this.warpAt(spot.map, nx, ny);
+      if (warp) {
+        // Through the door. The landing is the other side's own cell, so this is a
+        // `place` on the wire rather than a step -- the same as crossing a seam.
+        return this.maps.has(warp.to) ? { map: warp.to, x: warp.toX, y: warp.toY } : null;
+      }
+      return { map: spot.map, x: nx, y: ny };
     }
     return this.acrossSeam(m, spot, dir);
   }

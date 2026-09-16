@@ -21,6 +21,11 @@ export const STEP_MS = 250;
 const WANDER_BUDGET = 1500;
 /** BR_ENGAGE_GRACE in src/br/br_engage.c: 120 frames, and a frame is a sixtieth. */
 const ENGAGE_COOLDOWN_MS = 2000;
+/** Kanto's rule: under half health is hurt enough to walk to a Centre for. */
+const HURT = 0.5;
+/** How far a bot will walk to be healed. A Centre across Hoenn is not worth the match
+ *  it would spend getting there, and A* pays for the search either way. */
+const CENTRE_BUDGET = 3000;
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
   south: 1,
@@ -36,6 +41,10 @@ interface Walker {
   stepIndex: number;
   nextStepAt: number;
   facing: Facing;
+  /** What it is carrying, right now. Dealt once and then kept: a bot that came out of
+   *  a fight with two mons down is a bot that should be looking for a Centre, and a
+   *  team re-dealt from the seed every time anybody asks has never been hurt. */
+  party: PackedMon[];
   /** Nothing before this: the same grace the ROM keeps after a fight, so a bot that
    *  just fought does not re-challenge the player still standing in front of it. */
   engageAfter: number;
@@ -75,8 +84,13 @@ export interface BotsOptions {
    *  the wire the moment the pair see each other and immediately challenged. */
   engage?: {
     players: () => PlayerView[];
-    party: (bot: Bot) => PackedMon[];
   };
+  /** A bot's starting team, and the mons it picks up as the rung climbs. */
+  deal?: (bot: Bot, phase: number) => PackedMon[];
+  /** Every nurse's counter in the world, for the Centre rule. A bot under half health
+   *  walks to the nearest one it can reach and is healed there, exactly the way a
+   *  player would be -- and it is seen doing it, which is the point. */
+  centres?: () => { mapId: string; x: number; y: number }[];
   send: (msg: Msg) => void;
   /** To one seat only. A trainer card staged in every ROM in the room would sit in
    *  six `gEnemyParty`s waiting for a challenge five of them will never get, and the
@@ -84,6 +98,29 @@ export interface BotsOptions {
   sendTo?: (seat: number, msg: Msg) => void;
   /** 0..1, the same shape as `Math.random`; seeded by the caller so a match replays. */
   rng: () => number;
+}
+
+/** The team at the new rung. A mon that is already there keeps its place and the
+ *  share of its health it had -- a bot does not get healed by the fog closing -- and
+ *  the rest of the roster is whatever the deal added at this phase. */
+/** The share of the team's health still standing: 1 is untouched, 0 is wiped. */
+export function health(party: PackedMon[]): number {
+  let hp = 0;
+  let max = 0;
+  for (const mon of party) {
+    hp += mon.hp;
+    max += mon.maxHp;
+  }
+  return max > 0 ? hp / max : 1;
+}
+
+function climb(held: PackedMon[], fresh: PackedMon[]): PackedMon[] {
+  return fresh.map((next, i) => {
+    const mine = held[i];
+    if (!mine || mine.species !== next.species) return next;
+    const share = mine.maxHp > 0 ? mine.hp / mine.maxHp : 1;
+    return { ...next, hp: Math.max(1, Math.round(next.maxHp * share)), status: mine.status };
+  });
 }
 
 export class Bots {
@@ -107,6 +144,7 @@ export class Bots {
         nextStepAt: now + STEP_MS,
         facing: 1,
         engageAfter: 0,
+        party: this.opts.deal?.(bot, 0) ?? [],
       };
       this.walkers.push(walker);
       this.place(walker);
@@ -122,10 +160,28 @@ export class Bots {
     return this.walkers.find((w) => w.bot.seat === seat)?.at;
   }
 
+  /** What a bot is carrying -- for answering a peek, and for the rules that care how
+   *  hurt it is. Empty for a seat we do not walk. */
+  partyOf(seat: number): PackedMon[] {
+    return this.walkers.find((w) => w.bot.seat === seat)?.party ?? [];
+  }
+
+  /** The party a fight left behind. The ROM that fought the bot reports it under the
+   *  bot's own seat, because it is the only thing that watched the fight happen. */
+  setParty(seat: number, mons: PackedMon[]): void {
+    const walker = this.walkers.find((w) => w.bot.seat === seat);
+    if (walker && mons.length > 0) walker.party = mons;
+  }
+
   /** The ring moved. Every route was chosen against the old one, so they are all
-   *  suspect: dropping them makes each bot re-aim on its next step. */
-  ringMoved(): void {
-    for (const walker of this.walkers) walker.path = null;
+   *  suspect: dropping them makes each bot re-aim on its next step. The rung moved
+   *  with it (POK-225: the ring phase IS the level), so the teams climb too. */
+  ringMoved(phase = 0): void {
+    for (const walker of this.walkers) {
+      walker.path = null;
+      const fresh = this.opts.deal?.(walker.bot, phase);
+      if (fresh) walker.party = climb(walker.party, fresh);
+    }
   }
 
   /** A bot is out: it stops walking and stops being spoken for. */
@@ -159,6 +215,8 @@ export class Bots {
 
   private stepOne(walker: Walker, now: number): void {
     if (this.fighting.has(walker.bot.seat)) return;
+    // At the counter: the nurse is the turn spent, and the bot walks back out whole.
+    if (this.healHere(walker)) return;
     // The eyeline outranks everything: a bot that can see a player fights them, the
     // same way walking into one in the ROM does. It is checked before the step, on
     // where the bot is standing, because that is the position the room was told.
@@ -210,7 +268,7 @@ export class Bots {
       if (player.busy || player.mapId !== walker.at.map) continue;
       const theirs: Look = { map: player.mapId, x: player.x, y: player.y, dir: player.dir };
       if (!eitherSees(this.opts.world, mine, theirs)) continue;
-      const mons = engage.party(walker.bot);
+      const mons = walker.party;
       if (mons.length === 0) return false;
       // PLAYER_NAME_LENGTH is 7: a HUD name may be longer, a trainer card may not.
       const name = walker.bot.name.slice(0, 7);
@@ -233,8 +291,48 @@ export class Bots {
     return false;
   }
 
+  /** Standing at a nurse's counter with something to heal. The page is the bot's
+   *  whole world, so this is the heal -- there is no ROM to run the script in. */
+  private healHere(walker: Walker): boolean {
+    const centres = this.opts.centres?.();
+    if (!centres || health(walker.party) >= 1) return false;
+    if (!centres.some((c) => c.mapId === walker.at.map && c.x === walker.at.x && c.y === walker.at.y))
+      return false;
+    walker.party = walker.party.map((mon) => ({ ...mon, hp: mon.maxHp, status: 0 }));
+    walker.path = null;
+    return true;
+  }
+
+  /** Under half health, with a Centre in reach. Returns a route to the counter, or
+   *  null to leave the bot to the rest of the list. */
+  private centreRoute(walker: Walker): Path | null {
+    const centres = this.opts.centres?.();
+    if (!centres || centres.length === 0 || health(walker.party) >= HURT) return null;
+    // The one you are standing in first -- that is the door you just walked through --
+    // then the one belonging to this town. A Centre three sections away is not worth
+    // the match it would take to reach, and A* would pay for the search to find out.
+    const section = this.opts.world.map(walker.at.map)?.section;
+    const here = centres.filter((c) => c.mapId === walker.at.map);
+    const town = centres.filter(
+      (c) => c.mapId !== walker.at.map && this.opts.world.map(c.mapId)?.section === section,
+    );
+    for (const c of [...here, ...town]) {
+      const path = findPath(this.opts.world, walker.at, { map: c.mapId, x: c.x, y: c.y }, CENTRE_BUDGET);
+      if (path.found) return path;
+    }
+    return null;
+  }
+
   private chooseTarget(walker: Walker, _now: number): void {
     const inside = this.opts.inside;
+    // Centre when hurt, third on Kanto's list -- after the fog and the ball at your
+    // feet, before going anywhere else. A bot walks in, gets healed, walks out.
+    const centre = this.centreRoute(walker);
+    if (centre) {
+      walker.path = centre;
+      walker.stepIndex = 0;
+      return;
+    }
     // Fog first. Aiming only at cells inside the ring is the whole rule: a bot already
     // inside wanders inside, and a bot caught outside walks in, because the route to
     // anywhere it may aim at crosses the edge on the way.

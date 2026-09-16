@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Bots, STEP_MS, type PlayerView } from './brain';
+import { Bots, health, STEP_MS, type PlayerView } from './brain';
 import { dealBots, MAX_SEATS } from './roster';
 import { World, type WorldMap } from './world';
 import { mulberry32 } from '../match/clock';
@@ -241,7 +241,8 @@ describe('a bot meeting a player', () => {
       mapRef: (id) => REFS[id],
       send: (m) => void sent.push(m),
       rng: mulberry32(7),
-      engage: { players: () => [player], party: () => party },
+      engage: { players: () => [player] },
+      deal: () => party,
     });
     const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
     bots.start(dealt, 0);
@@ -278,7 +279,8 @@ describe('a bot meeting a player', () => {
       mapRef: (id) => REFS[id],
       send: (m) => void sent.push(m),
       rng: mulberry32(7),
-      engage: { players: () => [{ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }], party: () => [MON] },
+      engage: { players: () => [{ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }] },
+      deal: () => [MON],
     });
     const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
     bots.start(dealt, 0);
@@ -305,5 +307,64 @@ describe('a bot meeting a player', () => {
     const { sent } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 });
     // 4 s of ticks against a 2 s cooldown: twice, never once a step.
     expect(sent.filter((m) => m.t === 'challenge').length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('a bot that is hurt', () => {
+  // FIELD with a door at (5, 5) into a one-room Centre whose counter is at (2, 1).
+  const DOOR: WorldMap = {
+    ...FIELD,
+    warps: [{ x: 5, y: 5, to: 'CENTRE', toX: 2, toY: 3, kind: 'centre' }],
+  };
+  const CENTRE: WorldMap = {
+    id: 'CENTRE', group: 0, num: 3, w: 4, h: 4, section: 'S', outdoor: false,
+    grid: grid(['0000', '0000', '0000', '0000']),
+    seams: [],
+    warps: [{ x: 2, y: 3, to: 'FIELD', toX: 5, toY: 4, kind: 'door' }],
+    centre: { counterX: 2, counterY: 1 },
+  };
+
+  const HURT_MON: PackedMon = {
+    species: 277, level: 5, hp: 3, maxHp: 19, status: 0,
+    moves: [{ id: 1, pp: 35, ppUps: 0 }],
+    heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: 'TREECKO', ot: 'BR',
+  };
+
+  function hurtBot(mon: PackedMon) {
+    const world = new World([DOOR, CENTRE]);
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => ({ ...REFS, CENTRE: { group: 0, num: 3 } })[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...mon }],
+      centres: () => world.centres(),
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 20000; t += STEP_MS) bots.tick(t);
+    return { bots, sent, seat: dealt[0].seat };
+  }
+
+  it('walks through the door to the counter and comes out whole', () => {
+    const { bots, seat } = hurtBot(HURT_MON);
+    expect(health(bots.partyOf(seat))).toBe(1);
+  });
+
+  it('does not go to a Centre it does not need', () => {
+    const { bots, seat } = hurtBot({ ...HURT_MON, hp: 19 });
+    // Untouched: it wanders, and never ends up standing at a counter.
+    expect(health(bots.partyOf(seat))).toBe(1);
+    expect(bots.spotOf(seat)?.map).toBe('FIELD');
+  });
+
+  it('keeps the share of its health when the rung climbs', () => {
+    const { bots, seat } = hurtBot({ ...HURT_MON, hp: 10 });
+    bots.setParty(seat, [{ ...HURT_MON, hp: 10 }]);
+    bots.ringMoved(3);
+    const mon = bots.partyOf(seat)[0];
+    expect(mon.hp / mon.maxHp).toBeCloseTo(10 / 19, 1);
   });
 });

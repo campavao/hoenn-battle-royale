@@ -545,8 +545,9 @@ function startBots(
             busy: busySeats.has(e.seat),
           }))
           .filter((p) => p.mapId !== ''),
-      party: (bot) => dealParty(seed, bot.seat, phase),
     },
+    deal: (bot, atPhase) => dealParty(seed, bot.seat, atPhase),
+    centres: () => world.centres(),
   });
   const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
   const dealt = dealBots(seed, BOT_FILL, takenSeats, spawns);
@@ -562,12 +563,15 @@ function startBots(
     setRing: (next: { sx: number; sy: number; r: number }, nextPhase: number) => {
       ring = next;
       phase = nextPhase;
-      bots.ringMoved();
+      bots.ringMoved(nextPhase);
     },
-    // Pull, not push: a bot's team is dealt from the seed and only ever put on the wire
-    // when somebody asks to see it, the same way a player's is (POK-227's peek).
-    partyFor: (seat: number) =>
-      seatsDealt.has(seat) ? { t: 'party', seat, mons: dealParty(seed, seat, phase) } : null,
+    // Pull, not push: a bot's team only goes on the wire when somebody asks to see
+    // it, the same way a player's does (POK-227's peek) -- and what it answers with
+    // is the team the bot is actually carrying, fights it has had and all.
+    partyFor: (seat: number) => {
+      const mons = bots.partyOf(seat);
+      return seatsDealt.has(seat) && mons.length > 0 ? { t: 'party', seat, mons } : null;
+    },
     dispose: () => clearInterval(id),
   };
 }
@@ -887,6 +891,9 @@ function wireRoom(
     // A bot's fight runs in whoever challenged it: the result is how the host
     // learns it is over and the bot can walk again.
     if (msg.t === 'result') bots?.bots.noteResult(msg.seat);
+    // Whoever fought a bot reports what it has left under the bot's own seat: the
+    // host walks it, but only that ROM saw the fight.
+    if (msg.t === 'party') bots?.bots.setParty(msg.seat, msg.mons);
     if (msg.t === 'start') {
       fieldSize = msg.spawns.length;
       results.start(fieldSize, performance.now());
