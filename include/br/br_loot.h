@@ -36,14 +36,15 @@ struct BrLootItem
     /* 11 */ u8 kind;     // BR_LOOT_*
     /* 12 */ u8 objId;    // object event id while spawned here, else BR_NO_OBJ
     /* 13 */ u8 pad[3];
-};                        // 16 bytes
+    /* 16 */ u32 money;   // a bag's cash; 0 on a ball
+};                        // 20 bytes
 
 struct BrLoot
 {
-    /* 0x00 */ struct BrLootItem items[BR_MAX_LOOT]; // 128 bytes
-    /* 0x80 */ u8 count;    // rows in use, for drivers
-    /* 0x81 */ u8 spawned;  // objects on this map right now, for drivers
-    /* 0x82 */ u8 pad[2];
+    /* 0x00 */ struct BrLootItem items[BR_MAX_LOOT]; // 160 bytes
+    /* 0xA0 */ u8 count;    // rows in use, for drivers
+    /* 0xA1 */ u8 spawned;  // objects on this map right now, for drivers
+    /* 0xA2 */ u8 taken;    // pieces this player has picked up, for drivers
 };
 
 extern struct BrLoot gBrLoot;

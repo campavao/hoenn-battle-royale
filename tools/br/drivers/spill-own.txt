@@ -17,7 +17,7 @@ wait 5200
 expect u8 gBrRing+7 1
 expect u8 gBrMatch 3
 # one ball for the one mon, plus the bag, both standing on this map
-expect u8 gBrLoot+0x80 2
-expect u8 gBrLoot+0x81 2
+expect u8 gBrLoot+0xA0 2
+expect u8 gBrLoot+0xA1 2
 shot spilled-own
 say spill own ok

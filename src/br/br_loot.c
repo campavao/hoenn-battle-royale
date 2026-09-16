@@ -11,6 +11,14 @@
 #include "br/br_wire_c.h"
 #include "pokemon.h"
 #include "money.h"
+#include "data.h"
+#include "script.h"
+#include "string_util.h"
+#include "sound.h"
+#include "script_pokemon_util.h"
+#include "constants/songs.h"
+#include "constants/items.h"
+#include "br/br_hud.h"
 #include "field_player_avatar.h"
 #include "constants/species.h"
 #include "constants/characters.h"
@@ -107,7 +115,8 @@ static void Drop(struct BrLootItem *it)
     it->key = 0;
 }
 
-static void Add(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u8 level, u8 kind)
+static void Add(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u8 level, u8 kind,
+                u32 money)
 {
     struct BrLootItem *it = Find(key);
 
@@ -124,6 +133,7 @@ static void Add(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u8 l
     it->species = species;
     it->level = level;
     it->kind = kind;
+    it->money = money;
     it->objId = BR_NO_OBJ;
 }
 
@@ -149,13 +159,25 @@ static void ParseSpill(const u8 *d, u16 n)
         const u8 *row = d + 4 + 9 * i;
 
         Add(BrWire_ReadU16(row), mapGroup, mapNum, (s16)BrWire_ReadU16(row + 2),
-            (s16)BrWire_ReadU16(row + 4), BrWire_ReadU16(row + 6), row[8], BR_LOOT_MON);
+            (s16)BrWire_ReadU16(row + 4), BrWire_ReadU16(row + 6), row[8], BR_LOOT_MON, 0);
     }
     off = 4 + 9 * count;
     if (off < n && d[off] != 0 && (u16)(off + 7) <= n)
     {
+        u32 money = 0;
+        u16 cash = off + 8; // past the bag's key and cell, over its item count
+
+        // itemCount rows of (id u16, n u8) then the money; the rows are the pickup's
+        // business, the money is what the bag is worth to whoever gets there first.
+        if (cash < n)
+        {
+            u16 at = cash + 1 + 3 * d[cash];
+
+            if ((u16)(at + 4) <= n)
+                money = d[at] | (d[at + 1] << 8) | (d[at + 2] << 16) | ((u32)d[at + 3] << 24);
+        }
         Add(BrWire_ReadU16(d + off + 1), mapGroup, mapNum, (s16)BrWire_ReadU16(d + off + 3),
-            (s16)BrWire_ReadU16(d + off + 5), 0, 0, BR_LOOT_BAG);
+            (s16)BrWire_ReadU16(d + off + 5), 0, 0, BR_LOOT_BAG, money);
     }
 }
 
@@ -321,6 +343,86 @@ void BrLoot_SpillOwn(void)
     ParseSpill(buf, len);
 }
 
+// ---- taking it ----------------------------------------------------------------
+
+static const u8 sText_Took[] = _("TOOK ");
+static const u8 sText_Found[] = _("FOUND ");
+static const u8 sText_NoRoom[] = _("NO ROOM FOR IT");
+static const u8 sText_Bang[] = _("!");
+
+// Tell the room it is gone, and take it off our own ground: nobody hears their own
+// message come back.
+static void SendPickup(struct BrLootItem *it)
+{
+    u8 buf[8];
+
+    buf[0] = gBrMySeat;
+    BrWire_WriteU16(buf + 1, it->key);
+    buf[3] = 0; // no item named: the whole piece is leaving the ground
+    buf[4] = 0;
+    buf[5] = 0;
+    buf[6] = 0;
+    buf[7] = it->kind == BR_LOOT_BAG ? 1 : 0;
+    BrWire_Send(BR_MSG_PICKUP, buf, 8);
+    gBrLoot.taken++;
+    Drop(it);
+}
+
+static void Take(struct BrLootItem *it)
+{
+    u8 line[BR_HUD_LINE_MAX + 2];
+    u8 *p;
+
+    if (it->kind == BR_LOOT_BAG)
+    {
+        if (it->money != 0)
+            AddMoney(&gSaveBlock1Ptr->money, it->money);
+        p = StringCopy(line, sText_Found);
+        p = ConvertIntToDecimalStringN(p, it->money, STR_CONV_MODE_LEFT_ALIGN, 7);
+        StringCopy(p, sText_Bang);
+        PlaySE(SE_PIN);
+        BrHud_Box(line);
+        SendPickup(it);
+        return;
+    }
+    // A ball: the mon inside goes to the party. A full party keeps it on the ground --
+    // the release picker a full party really wants is the catch ticket's (POK-227).
+    if (CalculatePlayerPartyCount() >= PARTY_SIZE)
+    {
+        BrHud_Box(sText_NoRoom);
+        return;
+    }
+    ScriptGiveMon(it->species, it->level, ITEM_NONE, 0, 0, 0);
+    p = StringCopy(line, sText_Took);
+    p = StringCopy(p, gSpeciesNames[it->species]);
+    StringCopy(p, sText_Bang);
+    PlaySE(SE_PIN);
+    BrHud_Box(line);
+    SendPickup(it);
+}
+
+// A on the cell we stand on or the one we face. The loot has no script of its own --
+// it is spawned, not placed by a map -- so the A-press is read here rather than
+// through the field's own interaction path.
+static void TryTake(void)
+{
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    struct BrLootItem *it;
+    s16 x, y;
+
+    if (!JOY_NEW(A_BUTTON) || ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked())
+        return;
+    it = BrLoot_At(self->currentCoords.x, self->currentCoords.y);
+    if (it == NULL)
+    {
+        x = self->currentCoords.x + (s16)gDirectionToVectors[self->facingDirection].x;
+        y = self->currentCoords.y + (s16)gDirectionToVectors[self->facingDirection].y;
+        it = BrLoot_At(x, y);
+    }
+    if (it != NULL)
+        Take(it);
+}
+
 void BrLoot_Init(void)
 {
     CpuFill32(0, &gBrLoot, sizeof(gBrLoot));
@@ -362,4 +464,5 @@ void BrLoot_Tick(void)
     }
     gBrLoot.count = count;
     gBrLoot.spawned = spawned;
+    TryTake();
 }
