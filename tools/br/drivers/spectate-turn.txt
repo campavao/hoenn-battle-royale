@@ -1,5 +1,6 @@
-# spectate-turn: the challenger streams a link battle's actions to spectators as
-# BR_MSG_TURN (POK-233). Loopback battle (myId 0 = challenger); pick FIGHT + a move to
+# spectate-turn: the challenger publishes a link battle (BR_MSG_BSTART: seed + both
+# parties) and streams its actions (BR_MSG_TURN) to spectators (POK-233). Loopback
+# battle (myId 0 = challenger); once it is up, `started` is set; pick FIGHT + a move to
 # run a turn, and the spectate counter climbs -- action bytes went out on the wire.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
@@ -10,6 +11,8 @@ pokebytes gBrMailbox+0x1018 05 07 04 00 00 00 01 00 00
 poke u16 gBrMailbox+0x0C 1
 wait 900
 expect u16 gBrSpectate 0
+# the battle is set up: the challenger has published BR_MSG_BSTART (seed + parties)
+expect u8 gBrSpectate+4 1
 # at the action menu: FIGHT, then the first move, to run one turn
 tap A
 wait 40

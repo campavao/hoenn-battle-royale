@@ -8,13 +8,16 @@
 
 struct BrSpectate
 {
-    /* 0 */ u16 turns;  // BR_MSG_TURN messages emitted, for drivers
-    /* 2 */ u16 bytes;  // action bytes streamed
+    /* 0 */ u16 turns;   // BR_MSG_TURN messages emitted, for drivers
+    /* 2 */ u16 bytes;   // action bytes streamed
+    /* 4 */ u8 started;  // BR_MSG_BSTART sent for the current battle
+    /* 5 */ u8 pad[3];
 };
 
 extern struct BrSpectate gBrSpectate;
 
-// Each frame: stream any new action bytes as BR_MSG_TURN (challenger, in a battle).
+// Each frame: emit BR_MSG_BSTART once the battle is set up, then stream new action
+// bytes as BR_MSG_TURN (challenger only, in a battle).
 void BrSpectate_Tick(void);
 
 #endif // GUARD_BR_SPECTATE_H

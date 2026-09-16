@@ -2,7 +2,11 @@
 #include "global.h"
 #include "main.h"
 #include "battle.h"
+#include "malloc.h"
+#include "link.h"
+#include "pokemon.h"
 #include "recorded_battle.h"
+#include "constants/species.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -25,18 +29,92 @@ static u16 BattleId(void)
     return lo | (hi << 8);
 }
 
-// Only the challenger (link id 0) streams: it records its own actions and receives the
-// peer's over the netlink, so it alone holds both sides of the fight.
+// The seed and both parties are up: the recorded replay can be built. The seed is set
+// in RecordedBattle_SetTrainerInfo after the parties are exchanged, and the peer's
+// party lands in gEnemyParty over the netlink -- so all three ready together.
+static bool8 BattleReady(void)
+{
+    return gRecordedBattleRngSeed != 0
+        && GetMonData(&gPlayerParty[0], MON_DATA_SPECIES, NULL) != SPECIES_NONE
+        && GetMonData(&gEnemyParty[0], MON_DATA_SPECIES, NULL) != SPECIES_NONE;
+}
+
+// [count u8][count * struct Pokemon (100 B each, real bytes -- portable across ROMs,
+// keyed by each mon's own personality^otId)]. Returns bytes written.
+static u16 PackParty(struct Pokemon *party, u8 *dst)
+{
+    const u8 *src;
+    u16 idx = 1;
+    u8 count = 0, i, j;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (GetMonData(&party[i], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
+            break;
+        count++;
+        src = (const u8 *)&party[i];
+        for (j = 0; j < sizeof(struct Pokemon); j++)
+            dst[idx++] = src[j];
+    }
+    dst[0] = count;
+    return idx;
+}
+
+// Publish the battle so a spectator can build the BATTLE_TYPE_RECORDED: the seed, both
+// trainers' names and genders, and both real parties. Assembled on the heap -- ~1.2 KB
+// once per battle is no place for a permanent EWRAM buffer.
+static void SendBstart(void)
+{
+    u8 *buf = Alloc(24 + 2 * (1 + PARTY_SIZE * sizeof(struct Pokemon)));
+    u16 len = 0, id;
+    u32 seed;
+    u8 i;
+
+    if (buf == NULL)
+        return;
+    id = BattleId();
+    buf[len++] = id & 0xFF;
+    buf[len++] = id >> 8;
+    seed = gRecordedBattleRngSeed;
+    buf[len++] = seed & 0xFF;
+    buf[len++] = (seed >> 8) & 0xFF;
+    buf[len++] = (seed >> 16) & 0xFF;
+    buf[len++] = (seed >> 24) & 0xFF;
+    for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)
+        buf[len++] = gLinkPlayers[0].name[i];
+    for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)
+        buf[len++] = gLinkPlayers[1].name[i];
+    buf[len++] = gLinkPlayers[0].gender;
+    buf[len++] = gLinkPlayers[1].gender;
+    len += PackParty(gPlayerParty, buf + len);
+    len += PackParty(gEnemyParty, buf + len);
+    BrWire_SendLarge(BR_MSG_BSTART, buf, len);
+    Free(buf);
+}
+
+// Only the challenger (link id 0) publishes: it records its own actions and receives
+// the peer's over the netlink, so it alone holds both sides of the fight.
 void BrSpectate_Tick(void)
 {
-    // sTurnBuf (EWRAM) holds the [battle][delta] payload; 128 leaves ample room for a
-    // whole turn arriving from the peer in one frame without ever splitting a run.
     u16 id;
     u8 n;
 
-    if (!gBrNetlink.active || gBrNetlink.myId != 0 || !gMain.inBattle)
+    if (!gBrNetlink.active || gBrNetlink.myId != 0)
         return;
+    if (!gMain.inBattle)
+    {
+        gBrSpectate.started = FALSE; // ready for the next battle
+        return;
+    }
 
+    if (!gBrSpectate.started && BattleReady())
+    {
+        SendBstart();
+        gBrSpectate.started = TRUE;
+    }
+
+    // The action bytes recorded since last frame -- a handful; sTurnBuf holds a whole
+    // turn arriving in one frame without splitting a run.
     id = BattleId();
     sTurnBuf[0] = id & 0xFF;
     sTurnBuf[1] = id >> 8;
