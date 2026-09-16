@@ -2218,6 +2218,24 @@ function wireRoom(
     stopDirectorLoop?.();
     stopSpectateLoop?.();
   });
+  // ...and it comes back. The socket retries on its own, but nothing ever un-said
+  // `Disconnected`, so a page that had recovered still read as dead for the rest of
+  // the match (play-test: the line was on the strip in every frame of the video).
+  //
+  // A room does not come back with it. The relay forgets a member the moment its
+  // socket goes, and the id it hands out on a rejoin is a NEW one -- which is this
+  // page's seat, so rejoining mid-match would change who we are. The host is the
+  // exception: everybody else has been dropped from its room anyway, the match it is
+  // running lives in this tab, and hosting again is how anyone finds it.
+  relay.on('open', (ev) => {
+    if (!ev.reconnected) return;
+    if (isHost) {
+      codeEl.textContent = 'Reconnected. Hosting again…';
+      relay.host({ ...me, open: true, max: BOT_FILL });
+      return;
+    }
+    codeEl.textContent = 'Reconnected, but the room carried on without you. LEAVE to start again.';
+  });
 
   // A hidden tab gets its timers throttled, and on the host those timers ARE the
   // match: the director's clock and the bots' walking both ride setInterval. Nothing
@@ -2248,6 +2266,12 @@ function wireRoom(
   });
 
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
+  const skin = String(careerSkin());
+  // What we are running, so the relay's version gate can do its job (POK-244). Both
+  // sides of a link battle must be on the same patch or the block exchange desyncs
+  // silently -- and saying nothing means never being refused, which is the wrong end
+  // of that trade once there is more than one patch in the world.
+  const me = { name: careerName(), skin, patch, protocol };
   relay.connect(relayUrl);
   // Whatever solo play never got to tell the relay about itself (POK-243): `wireRoom`
   // only ever runs for host/quick/daily/join -- solo returned above, before there was
@@ -2261,12 +2285,6 @@ function wireRoom(
   }
   // Open, because a room nobody can find is not a lobby (POK-240). JOIN BY CODE still
   // works for one that is not listed; that is what a passcode is for.
-  const skin = String(careerSkin());
-  // What we are running, so the relay's version gate can do its job (POK-244). Both
-  // sides of a link battle must be on the same patch or the block exchange desyncs
-  // silently -- and saying nothing means never being refused, which is the wrong end of
-  // that trade once there is more than one patch in the world.
-  const me = { name: careerName(), skin, patch, protocol };
   if (hash.mode === 'host') relay.host({ ...me, open: true, max: BOT_FILL });
   else if (hash.mode === 'quick') relay.quickJoin(me);
   else if (hash.mode === 'daily') relay.dailyJoin(me);

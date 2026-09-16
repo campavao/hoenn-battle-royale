@@ -101,7 +101,15 @@ export interface ClosedEvent {
   reason: string;
 }
 
+/** The socket came up. `reconnected` is FALSE for the first one after connect() and
+ *  TRUE for every one the backoff won back -- which is the only difference that
+ *  matters to a caller, since the relay has forgotten the room by then. */
+export interface OpenEvent {
+  reconnected: boolean;
+}
+
 export interface RelayEvents {
+  open: OpenEvent;
   roster: RosterEvent;
   recv: RecvEvent;
   room_hosted: RoomHostedEvent;
@@ -172,6 +180,9 @@ export class RelayClient {
   private ws: WebSocketLike | null = null;
   private url: string | null = null;
   private closedByUser = true;
+  /** Whether a socket has ever come up on this client, so the next one can say
+   *  whether it is a first connection or a recovery. */
+  private everOpened = false;
   private backoff = BACKOFF_START_MS;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -243,6 +254,9 @@ export class RelayClient {
       this.pending = [];
       for (const json of queued) ws.send(json);
       this.startPing();
+      const again = this.everOpened;
+      this.everOpened = true;
+      this.emit('open', { reconnected: again });
     };
     ws.onmessage = (ev) => this.handleMessage(ev.data);
     ws.onerror = () => {

@@ -208,6 +208,24 @@ describe('RelayClient', () => {
     expect(sockets).toHaveLength(3); // second step doubled to 1000ms
   });
 
+  it('says whether an open is the first one or a recovery', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    const opens: boolean[] = [];
+
+    relay.on('open', (ev) => void opens.push(ev.reconnected));
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    expect(opens).toEqual([false]);
+
+    // Dropped, and won back: the page has a room to put back together, which is a
+    // different job from the one it did on the first open.
+    sockets[0].onclose?.({});
+    vi.advanceTimersByTime(500);
+    sockets[1].open();
+    expect(opens).toEqual([false, true]);
+  });
+
   it('does not reconnect after an intentional close()', () => {
     const { factory, sockets } = makeFactory();
     const relay = new RelayClient(factory);
