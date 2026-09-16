@@ -1,0 +1,30 @@
+# spill-pickup: a beaten trainer's team lies on the ground (POK-232). SPILL puts three
+# balls and a bag on this map; every ROM spawns the same objects in the same cells from
+# it, and a PICKUP takes one away everywhere.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# SPILL: type 11 (0x0B), framed len 41 = hdr(26 00 00) + seat 01, group 00, num 09,
+# count 03, three 9-byte rows (key, x, y, species 0x0115, level 5), then hasBag 01 and
+# the bag's own key and cell.
+pokebytes gBrMailbox+0x1018 0B 29 26 00 00 01 00 09 03 01 00 0D 00 0F 00 15 01 05 02 00 0E 00 0F 00 15 01 05 03 00 0D 00 10 00 15 01 05 01 04 00 0C 00 10 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+# four rows held, all four standing on this map
+expect u8 gBrLoot+0x80 4
+expect u8 gBrLoot+0x81 4
+shot spilled
+# PICKUP the middle ball: type 10 (0x0A), framed len 11 = hdr(08 00 00) + seat 01,
+# key 02 00, hasItem 00, item 00 00, n 00, cash 00
+pokebytes gBrMailbox+0x1058 0A 0B 08 00 00 01 02 00 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 20
+expect u8 gBrLoot+0x80 3
+expect u8 gBrLoot+0x81 3
+shot taken
+# a PICKUP that names an item is somebody taking part of a bag: the bag stays put
+pokebytes gBrMailbox+0x1098 0A 0B 08 00 00 01 04 00 01 0D 00 01 00
+poke u16 gBrMailbox+0x0C 3
+wait 20
+expect u8 gBrLoot+0x80 3
+say spill pickup ok

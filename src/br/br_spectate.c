@@ -614,6 +614,27 @@ static void FollowTick(void)
     }
 }
 
+// A heap reset does not free anything -- it forgets everything, and hands the same
+// memory out again. A pointer we kept across one is a pointer into somebody else's
+// allocation, so the only safe thing is to let go of all of them. The assemblers start
+// over on their next first slot; a watch that was still parsing is abandoned, which is
+// correct: the battle that reset the heap is the one that would have replaced it.
+void BrSpectate_HeapReset(void)
+{
+    sBstartAsm.buf = NULL;
+    sBstartAsm.cap = 0;
+    sBstartAsm.type = 0;
+    sPartyAsm.buf = NULL;
+    sPartyAsm.cap = 0;
+    sPartyAsm.type = 0;
+    gBrSpectate.peekMons = 0;
+    if (sPendParties != NULL)
+    {
+        sPendParties = NULL;
+        gBrSpectate.watching = FALSE;
+    }
+}
+
 void BrSpectate_Init(void)
 {
     sTurnAsm.buf = sTurnBuf;

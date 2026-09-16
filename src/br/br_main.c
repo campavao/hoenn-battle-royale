@@ -15,6 +15,7 @@
 #include "br/br_netlink.h"
 #include "br/br_engage.h"
 #include "br/br_battle.h"
+#include "br/br_loot.h"
 #include "br/br_spectate.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
@@ -33,6 +34,7 @@ void BrInit(void)
     BrNetlink_Init();
     BrEngage_Init();
     BrBattle_Init();
+    BrLoot_Init();
     BrSpectate_Init();
 }
 
@@ -41,6 +43,7 @@ void BrFrame(void)
     BrNet_Tick();
     BrBoot_Tick();
     BrGhosts_Tick();
+    BrLoot_Tick();
     BrRing_Tick();
     BrHud_Tick();
     BrMatch_Tick();

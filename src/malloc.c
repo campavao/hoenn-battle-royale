@@ -1,5 +1,8 @@
 #include "global.h"
 #include "malloc.h"
+#if BR
+#include "br/br_spectate.h"
+#endif
 
 static void *sHeapStart;
 static u32 sHeapSize;
@@ -188,6 +191,13 @@ void InitHeap(void *heapStart, u32 heapSize)
     sHeapStart = heapStart;
     sHeapSize = heapSize;
     PutFirstMemBlockHeader(heapStart, heapSize);
+#if BR
+    // Everything allocated a moment ago is now unowned memory that will be handed out
+    // again. Anything BR kept a pointer to has to let go here or it writes into
+    // somebody else's allocation -- and CB2_InitBattle comes through here on the way
+    // into every single battle.
+    BrSpectate_HeapReset();
+#endif
 }
 
 void *Alloc(u32 size)

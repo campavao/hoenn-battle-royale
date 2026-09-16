@@ -1,0 +1,57 @@
+#ifndef GUARD_BR_LOOT_H
+#define GUARD_BR_LOOT_H
+
+#include "br/br_config.h"
+
+// Loot on the ground (POK-232): when a trainer goes out, their team lies where they
+// fell as Poké Balls and their bag as a bag. Kanto's rule -- the world is a record of
+// the match, and the first person to walk over a ball gets what is in it.
+//
+// The ROM does not decide where anything lands. A spill arrives as BR_MSG_SPILL, one
+// row a mon plus an optional bag, and every ROM in the room spawns the same objects in
+// the same cells from it; BR_MSG_PICKUP takes one away everywhere. Coordinates are map
+// grid coords the way ObjectEvent.currentCoords holds them (MAP_OFFSET included), the
+// same convention as a ghost's.
+//
+// The table only has to hold what could be on one map at once: the object event table
+// is 16 slots and the ghosts already want 12, so the ground gets the handful left.
+
+#define BR_MAX_LOOT 8
+// Object-event local ids for loot, below the ghosts' 0xE0 and far above any map's own.
+#define BR_LOOT_LOCAL_ID_BASE 0xC0
+
+#define BR_LOOT_NONE 0
+#define BR_LOOT_MON 1
+#define BR_LOOT_BAG 2
+
+struct BrLootItem
+{
+    /* 0 */ u16 key;      // the wire's instance id, unique for the match
+    /* 2 */ s16 x;
+    /* 4 */ s16 y;
+    /* 6 */ u16 species;  // 0 for a bag
+    /* 8 */ u8 mapGroup;
+    /* 9 */ u8 mapNum;
+    /* 10 */ u8 level;
+    /* 11 */ u8 kind;     // BR_LOOT_*
+    /* 12 */ u8 objId;    // object event id while spawned here, else BR_NO_OBJ
+    /* 13 */ u8 pad[3];
+};                        // 16 bytes
+
+struct BrLoot
+{
+    /* 0x00 */ struct BrLootItem items[BR_MAX_LOOT]; // 128 bytes
+    /* 0x80 */ u8 count;    // rows in use, for drivers
+    /* 0x81 */ u8 spawned;  // objects on this map right now, for drivers
+    /* 0x82 */ u8 pad[2];
+};
+
+extern struct BrLoot gBrLoot;
+
+void BrLoot_Init(void);
+// Each frame: makes the object events on this map agree with the table.
+void BrLoot_Tick(void);
+// The loot item standing on this cell of the current map, or NULL.
+struct BrLootItem *BrLoot_At(s16 x, s16 y);
+
+#endif // GUARD_BR_LOOT_H

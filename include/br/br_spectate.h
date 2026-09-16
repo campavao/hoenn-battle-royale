@@ -41,5 +41,8 @@ void BrSpectate_OnResult(u8 seat);
 // Watch a seat walk (BR_NO_SEAT to stop). The camera rides their ghost, our own
 // trainer goes invisible where it stood, and field controls are locked.
 void BrSpectate_Follow(u8 seat);
+// The heap was just re-initialised (malloc.c's InitHeap, which CB2_InitBattle calls on
+// the way into every battle). Everything this module is holding there is gone with it.
+void BrSpectate_HeapReset(void);
 
 #endif // GUARD_BR_SPECTATE_H
