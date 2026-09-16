@@ -23,6 +23,8 @@ poke u16 gBrEngage+8 3
 wait 40
 expect u8 gBrEngage+6 0xFF
 expectge u16 gBrEngage+4 1
+# ...and the challenge waits out BR_ENGAGE_WAIT before it links (bot-spotted.txt).
+wait 120
 expect u8 gBrNetlink 1
 shot chased
 say pursuit lockout ok

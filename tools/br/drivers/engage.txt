@@ -12,9 +12,17 @@ pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
 poke u16 gBrMailbox+0x0C 1
 wait 20
 expect u8 gBrSeats+16 1
-# the challenge went out and our battle started
+# the challenge went out, and it waits to learn what kind of fight this is: a bot's
+# card would make it a trainer battle (bot-spotted.txt), and nothing at all makes it
+# the link battle below. A person never answers -- their ROM just starts its own
+# side -- so the wait running out IS the answer here.
 expect u16 gBrEngage+4 1
 expect u8 gBrEngage 1
+expect u8 gBrEngage+7 1
+expect u8 gBrNetlink 0
+# BR_ENGAGE_WAIT is 90 frames.
+wait 120
+expect u8 gBrEngage+7 0xFF
 expect u8 gBrNetlink 1
 expect u8 gBrNetlink+1 0
 expect u8 gWirelessCommType 5

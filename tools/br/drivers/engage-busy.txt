@@ -23,5 +23,8 @@ poke u16 gBrMailbox+0x0C 3
 wait 20
 expect u8 gBrSeatBusy+1 0
 expect u16 gBrEngage+4 1
+# The challenge parks for BR_ENGAGE_WAIT frames first, in case the seat is a bot whose
+# card is still on its way (bot-spotted.txt); nothing answers for a person.
+wait 120
 expect u8 gBrNetlink 1
 say engage busy ok

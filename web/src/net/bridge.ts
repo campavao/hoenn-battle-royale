@@ -254,11 +254,20 @@ export class Bridge {
    *  seat) knows where to route. */
   private noteChallenge(msg: Msg): void {
     if (msg.t !== 'challenge') return;
+    // Challenges are broadcast now (see targetSeat), so most of them are about
+    // two other people: noting one of those would point our own battle traffic at
+    // a seat we are not fighting.
+    if (msg.seat !== this.seat && msg.opponent !== this.seat) return;
     this.opponentSeat = msg.seat === this.seat ? msg.opponent : msg.seat;
   }
 
   private targetSeat(msg: Msg): number | undefined {
-    if (msg.t === 'challenge') return msg.opponent;
+    // A challenge is broadcast, not addressed. It used to go only to the seat it
+    // named, which is fine for a person and wrong for a bot: a bot is not a member
+    // of the room, so `to` a bot's seat reached nobody and the host that walks it
+    // never heard that one of its bots had been challenged (POK-238). The room
+    // seeing a pair engage is worth having anyway -- br_netlink.c's HandleChallenge
+    // ignores one that names neither side.
     if (msg.t === 'bt') return this.opponentSeat ?? undefined;
     return undefined;
   }

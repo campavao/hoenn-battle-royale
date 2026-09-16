@@ -203,7 +203,7 @@ describe('Bridge', () => {
     expect(decoded).toEqual(outMsg);
   });
 
-  it('routes challenge to its opponent, then remembers that seat for bt', () => {
+  it('broadcasts a challenge, then remembers that seat for bt', () => {
     const { emu, frame, romInit, romEmit } = fakeEmulator(BASE);
     romInit();
     const { relay, socket } = fakeRelay();
@@ -211,7 +211,9 @@ describe('Bridge', () => {
 
     romEmit({ t: 'challenge', seat: 0, opponent: 7, nonce: 42 });
     frame();
-    expect(socket.sent[0]).toEqual({ type: 'to', id: 7, m: { t: 'challenge', seat: 2, opponent: 7, nonce: 42 } });
+    // Broadcast, not addressed: a bot is not a member of the room, so `to` its seat
+    // reached nobody and the host walking it never heard the challenge (POK-238).
+    expect(socket.sent[0]).toEqual({ type: 'all', m: { t: 'challenge', seat: 2, opponent: 7, nonce: 42 } });
 
     romEmit({ t: 'bt', seat: 0, seq: 1, data: [9, 9] });
     frame();

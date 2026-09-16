@@ -272,6 +272,28 @@ describe('a bot meeting a player', () => {
     expect((sent[challenge] as { opponent: number }).opponent).toBe(0);
   });
 
+  it('answers a challenge from a player who spotted it first', () => {
+    // Nobody in the eyeline: the player is on another map, so nothing here has staged
+    // anything. Their ROM saw the bot's ghost and challenged it anyway, which is the
+    // half of the engage that used to leave them linking with a seat that has no ROM
+    // behind it (POK-238).
+    const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'PATH', x: 1, y: 1, dir: 2 });
+    expect(sent.some((m) => m.t === 'trainer')).toBe(false);
+
+    expect(bots.challenged(dealt[0].seat, 0)).toBe(true);
+    const card = sent.find((m) => m.t === 'trainer') as { seat: number; mons: PackedMon[] };
+    expect(card.seat).toBe(dealt[0].seat);
+    expect(card.mons).toHaveLength(1);
+    // Their challenge is already waiting in their ROM: sending one back would start
+    // the same fight twice.
+    expect(sent.some((m) => m.t === 'challenge')).toBe(false);
+    expect(sent.some((m) => m.t === 'busy' && (m as { kind?: string }).kind === 'battle')).toBe(true);
+    // And it only answers once: a second challenge lands while it is already fighting.
+    expect(bots.challenged(dealt[0].seat, 0)).toBe(false);
+    // A seat nobody here walks is not ours to answer for.
+    expect(bots.challenged(99, 0)).toBe(false);
+  });
+
   it('stakes its bag on the card, and spends only what the fight used (POK-237)', () => {
     const bag: Stack[] = [{ id: 13, n: 2 }, { id: 75, n: 1 }];
     const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }, [MON], bag);

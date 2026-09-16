@@ -15,8 +15,10 @@ struct BrEngage
     /* 2 */ u16 nonce;
     /* 4 */ u16 challenges;  // sent so far, for drivers
     /* 6 */ u8 fledFrom;     // a seat we fled from: no re-challenge while fledLockout > 0, 0xFF none
-    /* 7 */ u8 pad;
+    /* 7 */ u8 waitSeat;     // challenged, still waiting to learn what kind of fight it is, 0xFF none
     /* 8 */ u16 fledLockout; // frames left on the fled-from lockout
+    /* 10 */ u8 waitFrames;  // frames left on that wait
+    /* 11 */ u8 pad;
 };
 
 extern struct BrEngage gBrEngage;

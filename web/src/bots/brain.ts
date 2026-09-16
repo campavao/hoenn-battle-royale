@@ -401,6 +401,34 @@ export class Bots {
     if (i >= 0) this.walkers.splice(i, 1);
   }
 
+  /** A player's ROM challenged this bot (POK-238, the play-test black screen). The
+   *  eyeline works both ways, and when the PLAYER is the one who spots the bot the
+   *  challenge comes out of their ROM before anything here has staged a team. Their
+   *  ROM cannot tell a bot from a person, so without an answer it waits to link with
+   *  a seat that has no ROM behind it -- a black screen for the rest of the match.
+   *  The card is the answer: it arrives, their parked challenge sees a bot, and it is
+   *  an ordinary trainer battle. No `challenge` goes back, because theirs is already
+   *  waiting. FALSE when this bot cannot take it (gone, empty, already fighting), in
+   *  which case the `busy` already on the wire is what their ROM gives up on. */
+  challenged(botSeat: number, playerSeat: number, now = this.now): boolean {
+    const walker = this.walkers.find((w) => w.bot.seat === botSeat);
+
+    if (!walker || this.fighting.has(botSeat) || walker.party.length === 0) return false;
+    if (this.opts.fights && !this.opts.fights()) return false;
+    const card: Msg = { t: 'trainer', seat: botSeat, name: walker.bot.name.slice(0, 7), mons: walker.party };
+    const items = battleItems(walker.bag);
+    if (items.length > 0) (card as { items?: number[] }).items = items;
+    if (this.opts.sendTo) this.opts.sendTo(playerSeat, card);
+    else this.opts.send(card);
+    this.note(walker, 'engage', `seat ${playerSeat} (theirs)`);
+    this.opts.onEngage?.(botSeat, playerSeat);
+    this.fighting.add(botSeat);
+    this.opts.send({ t: 'busy', seat: botSeat, kind: 'battle' });
+    walker.engageAfter = now + cooldownFor(walker.bot);
+    walker.path = null;
+    return true;
+  }
+
   /** A fight this bot was in has ended -- it is back on the map and walking again.
    *  The `result` that says so comes from the ROM that fought it. */
   noteResult(seat: number): void {

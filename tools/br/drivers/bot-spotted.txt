@@ -1,0 +1,36 @@
+# bot-spotted: the player is the one who sees the bot, and nothing has staged its team
+# yet. bot-eyeline.txt stages the card first, which is the easy half -- in a real match
+# the page has not even heard the challenge at the moment the ROM sends it, and
+# committing to a link battle there is a screen that never comes back (the play-test's
+# black screen: BrNetlink_StartBattle has no timeout and a bot has no ROM to answer).
+#
+# So the challenge parks. This is the wait, and the card that ends it.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# PLACE seat 1 at (15,16) facing WEST on Littleroot, three tiles east of us -- and no
+# TRAINER card anywhere: as far as this ROM knows, that could be a person.
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 30
+# The challenge went out, exactly as it would against a person...
+expect u16 gBrEngage+4 1
+# ...and it is parked on seat 1 rather than having started anything.
+expect u8 gBrEngage+7 1
+expect u8 gBrNetlink 0
+expect u8 gBrBotFight+2 0
+shot waiting
+# The page heard the challenge and answered with the bot's team: TRAINER, seat 1,
+# name "BOT", one TREKO at level 5 with POUND.
+pokebytes gDecompressionBuffer 01 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 300
+# A trainer battle, and no netlink was ever opened.
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+expect u8 gBrEngage+7 0xFF
+shot fighting
+say bot spotted ok

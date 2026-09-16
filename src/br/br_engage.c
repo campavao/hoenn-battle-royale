@@ -27,6 +27,18 @@ static EWRAM_DATA u8 sBusyStable = 0;  // frames it has held
 #define BR_ENGAGE_GRACE 120     // 2 s, both sides, any re-challenge
 #define BR_ENGAGE_LOCKOUT 600   // 10 s, the fleer will not initiate on that pursuer
 
+// How long a challenge we sent waits to learn what kind of fight it is (POK-238, and
+// the play-test black screen). A bot's card is staged by the page, and when the BOT
+// spots US it lands before the challenge does, so Challenge() can decide on the spot.
+// When WE spot IT, nothing has staged anything yet -- the page has not even heard the
+// challenge. Starting a link battle there is a screen that never comes back:
+// BrNetlink_StartBattle has no timeout, so a link with no ROM behind it waits for
+// blocks that never arrive, for the rest of the match.
+//
+// Nothing answers a challenge to a person -- the peer just starts its own side -- so
+// the wait is short and its end is the link battle exactly as before.
+#define BR_ENGAGE_WAIT 90       // 1.5 s for a card, or for the seat to say it cannot
+
 // Tell the room what we are doing, once it has held long enough to be a state and
 // not a transition (a warp's map load is a menu for a few frames). Nothing is said
 // before the first map: the boot is not a menu.
@@ -138,6 +150,8 @@ static bool8 CanEngage(void)
         return FALSE;
     if (gBrNetlink.active || gBrEngage.cooldown)
         return FALSE;
+    if (gBrEngage.waitSeat != 0xFF)
+        return FALSE; // one is already out and waiting for its answer
     if (gBrMatch.phase != BR_PHASE_PLAY)
         return FALSE; // the eyeline is a match rule: not in the lobby, not in the
                       // Safari opening, and not once you are out
@@ -164,8 +178,41 @@ static void Challenge(u8 target)
     // kind of fight. The CHALLENGE still goes out so the room sees the pair engage.
     if (BrBot_StartFight(target))
         return;
-    // The page relays it to the target; our own side starts now.
-    BrNetlink_StartBattle(0, target);
+    // Nothing staged: this is a person, or it is a bot whose card is still on its
+    // way. TickWait decides which, and only then does anything start.
+    gBrEngage.waitSeat = target;
+    gBrEngage.waitFrames = BR_ENGAGE_WAIT;
+}
+
+// The parked challenge, one frame at a time.
+static void TickWait(void)
+{
+    u8 seat = gBrEngage.waitSeat;
+
+    if (seat == 0xFF)
+        return;
+    if (gBrNetlink.active || gMain.inBattle)
+    {
+        gBrEngage.waitSeat = 0xFF; // a fight already started; it was not this one's to start
+        return;
+    }
+    // The card landed: a bot, and an ordinary trainer battle (POK-238).
+    if (BrBot_IsStaged(seat) && BrBot_StartFight(seat))
+    {
+        gBrEngage.waitSeat = 0xFF;
+        return;
+    }
+    // ...or the seat answered that it cannot: it left the match, or it is already in
+    // somebody else's fight. Either way there is nothing here to link with.
+    if (!gBrSeats[seat].present || gBrSeatBusy[seat] == BR_BUSY_BATTLE)
+    {
+        gBrEngage.waitSeat = 0xFF;
+        return;
+    }
+    if (gBrEngage.waitFrames > 0 && --gBrEngage.waitFrames > 0)
+        return;
+    gBrEngage.waitSeat = 0xFF;
+    BrNetlink_StartBattle(0, seat);
 }
 
 void BrEngage_Init(void)
@@ -176,6 +223,8 @@ void BrEngage_Init(void)
     gBrEngage.challenges = 0;
     gBrEngage.fledFrom = 0xFF;
     gBrEngage.fledLockout = 0;
+    gBrEngage.waitSeat = 0xFF;
+    gBrEngage.waitFrames = 0;
     sOwnBusy = 0xFF;
     sBusyKind = 0;
     sBusyStable = 0;
@@ -209,6 +258,7 @@ void BrEngage_Tick(void)
     if (gBrEngage.fledLockout && --gBrEngage.fledLockout == 0)
         gBrEngage.fledFrom = 0xFF;
     ReportBusy();
+    TickWait();
     if (sSafariSaid != 0)
         sSafariSaid--;
     // In the Zone the eyeline does nothing, so this is the only thing that tells you
