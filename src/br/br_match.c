@@ -6,6 +6,8 @@
 #include "safari_zone.h"
 #include "script.h"
 #include "pokemon.h"
+#include "battle.h"
+#include "constants/battle.h"
 #include "constants/maps.h"
 #include "random.h"
 #include "hall_of_fame.h"
@@ -233,6 +235,19 @@ void BrMatch_HallOfFameDone(void)
     SetMainCallback2(CB2_LoadMap);
 }
 
+// Is the opening's buzzer going off while we are still in a battle (POK-261)? The
+// battle controllers ask, because an outcome poked in from outside is inert until the
+// engine next looks at one -- and it only looks at a turn boundary, which a battle
+// sitting on its action menu never reaches. The buzzer presses RUN instead: the same
+// door the player would use, and the engine finishes the turn it is in on the way out,
+// which is the grace a ball already in the air needs.
+bool8 BrMatch_BuzzerClosing(void)
+{
+    if (gBrMatch.phase != BR_PHASE_SAFARI || !gMain.inBattle)
+        return FALSE;
+    return gBrRing.active || (gBrMatch.started && gBrMatch.clockLeft == 0);
+}
+
 void BrMatch_Tick(void)
 {
     if (sWinPending && OverworldRunning() && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked())
@@ -269,7 +284,9 @@ void BrMatch_Tick(void)
         }
         return;
     }
-    if (gBrMatch.phase != BR_PHASE_SAFARI || !OverworldRunning())
+    if (gBrMatch.phase != BR_PHASE_SAFARI)
+        return;
+    if (!OverworldRunning())
         return;
     // The fog is up: the opening is over whatever our own clock says. It has to be
     // this way round, because the CLOCK the page sends during the ring phases is the

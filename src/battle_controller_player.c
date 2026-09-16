@@ -1,5 +1,6 @@
 #include "global.h"
 #if BR
+#include "br/br_match.h"
 #include "br/br_battle.h"
 #endif
 #include "battle.h"
@@ -238,6 +239,15 @@ static void HandleInputChooseAction(void)
     u16 itemId = gBattleBufferA[gActiveBattler][2] | (gBattleBufferA[gActiveBattler][3] << 8);
 
 #if BR
+    // The Safari opening is over and we are still in here (POK-261): leave, now. The
+    // ring is already closing outside and there is a drop to take.
+    if (BrMatch_BuzzerClosing())
+    {
+        BrBattle_HideClock();
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, 0);
+        PlayerBufferExecCompleted();
+        return;
+    }
     // The shot clock: thirty seconds on FIGHT, then the first move is chosen for you.
     if (BrBattle_ShotTick())
     {

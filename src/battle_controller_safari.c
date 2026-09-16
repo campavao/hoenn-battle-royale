@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_match.h"
+#endif
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_controllers.h"
@@ -169,6 +172,17 @@ static void SafariBufferRunCommand(void)
 
 static void HandleInputChooseAction(void)
 {
+#if BR
+    // The buzzer, mid-catch (POK-261). RUN is what the Zone's own clock does to you
+    // when it runs out, so it is what the match's does too -- and in here that is
+    // B_ACTION_SAFARI_RUN, which is a different number from the field's B_ACTION_RUN.
+    if (BrMatch_BuzzerClosing())
+    {
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_SAFARI_RUN, 0);
+        SafariBufferExecCompleted();
+        return;
+    }
+#endif
     if (JOY_NEW(A_BUTTON))
     {
         PlaySE(SE_SELECT);
