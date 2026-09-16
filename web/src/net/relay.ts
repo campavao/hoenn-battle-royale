@@ -409,6 +409,14 @@ export class RelayClient {
     this.send({ type: 'lock_room', locked });
   }
 
+  /** Whether this client is willing to run the match if the host's tab goes away
+   *  (POK-252). The relay promotes the longest-standing willing member; a client that
+   *  has been eliminated withdraws by sending false. Nobody had ever sent this, so
+   *  `heirOf` never found one and every host leaving closed the room. */
+  canHost(ok: boolean): void {
+    this.send({ type: 'can_host', ok });
+  }
+
   /** Asks for the open rooms. The answer arrives as a `rooms` event; the lobby asks
    *  again every few seconds, which is also what marks this connection as browsing. */
   listRooms(): void {

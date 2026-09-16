@@ -19,7 +19,8 @@ import { Spectate } from './match/spectate';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
 import { Bots } from './bots/brain';
-import { dealBots } from './bots/roster';
+import { dealBots, MAX_SEATS } from './bots/roster';
+import type { Bot } from './bots/roster';
 import { voiceFor } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { emptyNote, fixedRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
@@ -35,7 +36,7 @@ import {
   textSpeedLabel,
 } from './match/room';
 import type { RosterEntry } from './match/roster';
-import type { TickerMsg } from './net/wire';
+import type { TickerMsg, MapRef } from './net/wire';
 import { World, type WorldMap } from './bots/world';
 import { sectionInside } from './match/ring';
 import { dealParty } from './bots/party';
@@ -222,7 +223,14 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   if (release.status === 'unpublished') {
     setVersionLine('unpatched');
     statusEl.textContent = 'No patch published yet -- starting the unpatched ROM.';
-    bannerEl.textContent = `Running the unpatched ROM (${release.reason}). Battle royale features are not active.`;
+    // A stock ROM on the dev server boots into vanilla Emerald -- NEW GAME, the real
+    // intro, no battle royale -- and the only clue was one word in the corner. Say
+    // what to do about it instead.
+    bannerEl.textContent = import.meta.env.DEV
+      ? 'This is a stock ROM and the dev server has no BPS to apply, so nothing here is'
+        + ' battle royale. Forget stored ROM, then import the build this repo just made:'
+        + ' pokeemerald.gba in the repo root.'
+      : `Running the unpatched ROM (${release.reason}). Battle royale features are not active.`;
     bannerEl.hidden = false;
     return { bytes: emu.readRom(), usingPatched: false };
   }
@@ -279,6 +287,94 @@ function wireKeyboard(emu: Emulator): () => void {
   return () => {
     removeEventListener('keydown', down);
     removeEventListener('keyup', up);
+  };
+}
+
+// ---- input: gamepad -------------------------------------------------------------------
+
+/** Standard-mapping indices (w3c.github.io/gamepad/#remapping), laid out the way mGBA
+ *  itself defaults: the bottom face button is A, the right one is B. Face left and
+ *  face top mirror them, so a pad held any way round still plays. */
+const GAMEPAD_MAP: Record<number, GbaKey> = {
+  0: 'a',
+  1: 'b',
+  2: 'b',
+  3: 'a',
+  4: 'l',
+  5: 'r',
+  6: 'l',
+  7: 'r',
+  8: 'select',
+  9: 'start',
+  12: 'up',
+  13: 'down',
+  14: 'left',
+  15: 'right',
+};
+/** Half throw. A stick is not a D-pad and a resting one is never quite zero. */
+const STICK = 0.5;
+/** Eight hat positions, evenly spaced over -1..1, starting at up and going clockwise. */
+const HAT: GbaKey[][] = [
+  ['up'],
+  ['up', 'right'],
+  ['right'],
+  ['down', 'right'],
+  ['down'],
+  ['down', 'left'],
+  ['left'],
+  ['up', 'left'],
+];
+
+/** A D-pad that arrives as one "hat" axis instead of four buttons -- which is what a
+ *  pad in DirectInput mode does, and the reason a controller could press A but not
+ *  walk. Idle sits outside the range (1.29 on the usual layout), which is the only
+ *  thing separating it from up. */
+function hatKeys(axis: number): GbaKey[] {
+  if (axis < -1.1 || axis > 1.1) return [];
+  return HAT[Math.round((axis + 1) * 3.5) % 8];
+}
+
+/** A controller, polled. The Gamepad API has no events for buttons -- a pad is only
+ *  ever a snapshot you ask for -- so this reads one every 16ms and sends the
+ *  difference, which is what turns a held button into one press and one release.
+ *  A timer and not requestAnimationFrame: rAF stops whenever the page is not being
+ *  painted, and a pad that only works while the compositor feels like it is worse
+ *  than no pad at all. */
+function wireGamepad(emu: Emulator): () => void {
+  if (typeof navigator.getGamepads !== 'function') return () => {};
+  let held = new Set<GbaKey>();
+  const poll = () => {
+    const now = new Set<GbaKey>();
+    for (const pad of navigator.getGamepads()) {
+      if (!pad) continue;
+      pad.buttons.forEach((button, i) => {
+        const key = GAMEPAD_MAP[i];
+        if (key && button.pressed) now.add(key);
+      });
+      const [x = 0, y = 0] = pad.axes;
+      if (x <= -STICK) now.add('left');
+      else if (x >= STICK) now.add('right');
+      if (y <= -STICK) now.add('up');
+      else if (y >= STICK) now.add('down');
+      // The tenth axis is where a DirectInput pad puts its D-pad. Only there, and
+      // only on a pad that has one: a resting stick reads 0, which decodes to "down".
+      if (pad.axes.length >= 10) for (const key of hatKeys(pad.axes[9])) now.add(key);
+    }
+    for (const key of now) if (!held.has(key)) emu.press(key);
+    for (const key of held) if (!now.has(key)) emu.release(key);
+    held = now;
+  };
+  const id = setInterval(poll, 16);
+  // Say so on screen when one turns up. A pad the page cannot see and a pad it has
+  // mapped wrong look identical from the sofa, and this is the difference.
+  const note = (e: GamepadEvent) => {
+    const keys = document.querySelector('.keys');
+    if (keys) keys.textContent = `Gamepad: ${e.gamepad.id} (${e.gamepad.mapping || 'non-standard'})`;
+  };
+  addEventListener('gamepadconnected', note);
+  return () => {
+    clearInterval(id);
+    removeEventListener('gamepadconnected', note);
   };
 }
 
@@ -660,6 +756,23 @@ function noteBusy(msg: Msg): void {
   }
 }
 
+/** Picking up somebody else's bots (POK-252). The deal is a pure function of the
+ *  match seed and the seats that were taken, so the promoted host can re-run it and
+ *  get the same bots -- same seats, same names, same skins -- without anybody having
+ *  sent it a thing. What the seed cannot say is where they have walked to since, so
+ *  the roster supplies that: every bot's `place` has been passing this client all
+ *  match. */
+interface BotResume {
+  /** Every bot seat the match was dealt, the dead ones included -- the deal has to be
+   *  re-run whole or the survivors come back under the wrong names. */
+  botSeats: number[];
+  /** The seats taken when it was dealt, so the allocator lands on the same seats. */
+  humanSeats: number[];
+  /** Seats that are not coming back: eliminated, or gone from the room. */
+  out: Set<number>;
+  where: (seat: number) => { map: MapRef; x: number; y: number } | undefined;
+}
+
 function startBots(
   send: (msg: Msg) => void,
   takenSeats: number[],
@@ -670,6 +783,7 @@ function startBots(
   onDuel: (winner: number, loser: number) => void,
   onEngage: (seat: number, target: number) => void,
   fill: number,
+  resume?: BotResume,
 ): {
   bots: Bots;
   seats: number[];
@@ -737,7 +851,17 @@ function startBots(
     alive: () => players().filter((e) => e.alive).length,
   });
   const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
-  const dealt = dealBots(seed, fill, takenSeats, spawns);
+  // Re-deal the whole field so the names line up, drop whoever is out of the match,
+  // and stand the rest where the room last saw them rather than back on their drop.
+  const resumed = (r: BotResume): Bot[] =>
+    dealBots(seed, r.botSeats.length, r.humanSeats, spawns)
+      .filter((b) => !r.out.has(b.seat))
+      .map((b) => {
+        const at = r.where(b.seat);
+        const mapId = at ? idByRef.get(`${at.map.group}:${at.map.num}`) : undefined;
+        return at && mapId ? { ...b, map: at.map, mapId, x: at.x, y: at.y } : b;
+      });
+  const dealt = resume ? resumed(resume) : dealBots(seed, fill, takenSeats, spawns);
   const seatsDealt = new Set(dealt.map((b) => b.seat));
   let phase = 0;
   bots.start(dealt, performance.now());
@@ -1030,13 +1154,41 @@ function wireRoom(
    *  Bridge's own subscription may not have folded it into `bridge.roster` yet -- both
    *  listen to the same event, and this one was registered first -- and starting a
    *  match a seat short makes "N LEFT" wrong and hands the win to the wrong person. */
-  const startDirector = (members?: number[]) => {
+  const startDirector = (members?: number[], takeOver = false) => {
     if (director || !bridge || !isHost) return;
     const known = bridge.roster.all().map((e) => e.seat);
     const seats = [...new Set([...(members ?? []), ...known])];
     if (seats.length === 0) return;
     const hostSeat = bridge.seat;
-    const seed = fixedSeed() ?? Math.floor(Math.random() * 0x7fff_ffff) + 1;
+    // A takeover keeps the match's own seed: the bots are dealt from it, and dealing
+    // them again from a new one would rename everybody mid-match.
+    const seed = takeOver && match.seed !== 0
+      ? match.seed
+      : fixedSeed() ?? Math.floor(Math.random() * 0x7fff_ffff) + 1;
+    // Bots count down from the top seat and people count up from zero (bots/roster.ts),
+    // so the bots are the run at the top of the field the match was dealt with.
+    const dealtField = new Set(match.seats);
+    const botSeats: number[] = [];
+    for (let seat = MAX_SEATS - 1; dealtField.has(seat); seat--) botSeats.push(seat);
+    const humanSeats = match.seats.filter((seat) => !dealtField.has(seat) || seat < MAX_SEATS - botSeats.length);
+    // Whoever was in the match and is no longer in the room is not coming back --
+    // the old host above all. Left alive they would hold the match open forever.
+    const gone = takeOver
+      ? humanSeats.filter((seat) => !seats.includes(seat) && seat !== hostSeat)
+      : [];
+    const resume: BotResume | undefined = takeOver && match.seed !== 0
+      ? {
+          botSeats,
+          humanSeats,
+          out: new Set([...match.out, ...gone]),
+          where: (seat: number) => {
+            const row = bridge!.roster.all().find((e) => e.seat === seat);
+            return row?.map && row.x !== undefined && row.y !== undefined
+              ? { map: row.map, x: row.x, y: row.y }
+              : undefined;
+          },
+        }
+      : undefined;
     const rom = createRomPushQueue(emu, bridge.mailbox); // reuses the Bridge's own Mailbox, not a second one on the same base
     // The ticker. The ROM has drawn the window since POK-226 and nothing had ever sent
     // it a line, so a match was silent: people vanished, the fog closed, somebody won,
@@ -1087,11 +1239,15 @@ function wireRoom(
       // How many bots the host is filling to (POK-241's FILL), held to what the room
       // has room for.
       botFill() === 0 ? 0 : Math.max(0, (controls.roster?.max ?? BOT_FILL) - seats.length),
+      resume,
     );
     director = new Director({
       // Bots are contestants, not scenery: leaving them out of the seat list makes
       // "N LEFT" a lie and hands the match to whoever outlasts the humans alone.
-      seats: [...seats, ...bots.seats],
+      // A takeover inherits the field the match was dealt with, not the room as it
+      // stands now: people who have already been eliminated are still in it, and
+      // resume() is what takes them back out.
+      seats: takeOver && match.seats.length > 0 ? match.seats : [...seats, ...bots.seats],
       options: paceOptions() ?? {
         fogSecs: controls.fogSecs,
         pace: { textSpeed: controls.textSpeed, animations: controls.animations },
@@ -1159,7 +1315,27 @@ function wireRoom(
         dev.botCount = () => bots?.bots.count() ?? 0;
       }
     }
-    director.start();
+    if (takeOver) {
+      // The old host's tab went away and the relay handed us the room (POK-252).
+      // Everybody already has a `start`, a drop and a ring, so dealing again would
+      // restart the match under them: pick up what the wire already said instead.
+      director.resume({
+        ringPhase: match.ringPhase,
+        centre: match.centre,
+        secsLeftInPhase: match.clockLeft,
+        out: [...match.out, ...gone],
+      });
+      // And the room is told about the ones who walked out, so every roster agrees
+      // with the count this page is now keeping.
+      for (const seat of gone) {
+        bridge!.relay.all({ t: 'out', seat });
+        rom.push({ t: 'out', seat });
+        bridge!.roster.applyMsg({ t: 'out', seat });
+      }
+      say(Ticker.said(hostSeat, nameOf(hostSeat), 'I HAVE THE CLOCK.'));
+    } else {
+      director.start();
+    }
     const stopLoop = startDirectorLoop(emu, symbols?.get('gBrHud'), director);
     stopDirectorLoop = () => {
       stopLoop();
@@ -1176,12 +1352,36 @@ function wireRoom(
   const loot = new Loot();
   let lootMap: string | null = null;
   const results = new Results();
+  /** Everything a promoted client needs to pick the match up (POK-252). All of it
+   *  arrives in messages every client hears, so a guest is always ready to take over
+   *  without anybody having sent it anything special. */
+  const match = {
+    seed: 0,
+    seats: [] as number[],
+    ringPhase: 0,
+    centre: undefined as { sx: number; sy: number; place?: string } | undefined,
+    clockLeft: 0,
+    out: new Set<number>(),
+  };
   let fieldSize = 0;
   let recorded = false;
   // Everything that decides a placement crosses this page one way or the other: our
   // own ROM's `out` on the way up, everybody else's on the way in, and the host's own
   // `start`/`win` as it sends them.
   const noteResult = (msg: Msg) => {
+    // The match, as anybody in the room can see it.
+    if (msg.t === 'start') {
+      match.seed = msg.seed;
+      match.seats = msg.spawns.map((s) => s.seat);
+    } else if (msg.t === 'ring') {
+      match.ringPhase = msg.phase;
+      match.centre = { sx: msg.sx, sy: msg.sy, place: msg.place };
+      match.clockLeft = 0;
+    } else if (msg.t === 'clock') {
+      match.clockLeft = msg.left;
+    } else if (msg.t === 'out') {
+      match.out.add(msg.seat);
+    }
     // A bot's fight runs in whoever challenged it: the result is how the host
     // learns it is over and the bot can walk again.
     if (msg.t === 'result') bots?.bots.noteResult(msg.seat);
@@ -1217,6 +1417,11 @@ function wireRoom(
     // `place` it sends (POK-243).
     const skinBase = symbols?.get('gBrMySkin');
     if (skinBase !== undefined) writeMySkin(emu, skinBase, careerSkin());
+    // Willing to run the match if the host's tab goes away (POK-252). Every client
+    // says this the moment it has a ROM and a seat; the relay promotes the
+    // longest-standing one that has. Nobody ever said it before, so `heirOf` never
+    // found anybody and a host leaving closed the room on everybody in it.
+    relay.canHost(true);
     // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast.
     bridge.setRomFilter((msg) => spectate.wantsFromRelay(msg));
     bridge.setOutObserver((msg) => {
@@ -1231,7 +1436,12 @@ function wireRoom(
       // Our own ROM saying we are out. Nobody hears their own messages come back over
       // the relay, so without this the director never counts this client's own
       // elimination and the match it is running cannot reach a winner.
-      if (msg.t === 'out') localOut?.(msg.seat);
+      if (msg.t === 'out') {
+        localOut?.(msg.seat);
+        // And we withdraw from the succession: a trainer who is out should not be the
+        // one still running the match everybody else is in (POK-252).
+        if (msg.seat === bridge?.seat && !director) relay.canHost(false);
+      }
       // Our own `place` is how the page learns we changed maps -- there is no separate
       // "I have arrived" message, and this one is already on the wire four times a
       // second.
@@ -1305,6 +1515,13 @@ function wireRoom(
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
   relay.on('roster', (ev) => {
     controls.roster = ev;
+    // Promoted. The relay moves `host` on the roster and says nothing else about it
+    // (POK-252), so this is where a guest finds out it is now running the match.
+    if (bridge && ev.host === bridge.seat && !isHost) {
+      isHost = true;
+      console.info('[room] promoted to host');
+      startDirector(ev.members.map((m) => m.id), match.seed !== 0);
+    }
     // The buzzer, before the panel is drawn: a director created after the draw would
     // leave the host's controls on screen for the rest of the match.
     if (ev.members.length >= 2 && autoStarts()) startDirector(ev.members.map((m) => m.id));
@@ -1542,6 +1759,7 @@ function runLobby(): Promise<RoomHash> {
 
 function wirePlayScreen(emu: Emulator): void {
   wireKeyboard(emu);
+  wireGamepad(emu);
   for (const el of document.querySelectorAll<HTMLElement>('#pad .btn[data-key]')) {
     wireButton(el, el.dataset.key as GbaKey, emu);
   }
@@ -1599,6 +1817,11 @@ async function main(): Promise<void> {
   // is the only way in to read the emulator's memory from outside the page.
   if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu };
 
+  // Input first, and before anything that waits: the wiring used to sit after the
+  // mailbox handshake and the lobby, so between the ROM starting and the match being
+  // chosen there was a running game that answered to nothing at all.
+  wirePlayScreen(emu);
+
   // Which way in decides the boot block -- solo warps straight into the Safari opening
   // (BR_BOOT_SAFARI) while a room waits in Littleroot (BR_BOOT_MAP) -- so the choice has
   // to be made before the ROM is told anything. A hash is that choice already made (a
@@ -1615,7 +1838,6 @@ async function main(): Promise<void> {
     writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
   }
 
-  wirePlayScreen(emu);
   showScreen('playing');
   if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols);
   else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch);

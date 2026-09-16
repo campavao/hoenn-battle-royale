@@ -210,6 +210,55 @@
         .settings { padding-top: 2px; padding-bottom: 4px; }
       }
 
+      /* Nothing on screen said which keys these were, so the answer was "it has no
+         keyboard support". It has had one all along. */
+      .keys {
+        display: none;
+        text-align: center;
+        color: #7d8f9c;
+        font-size: 11px;
+        padding: 0 12px 8px;
+      }
+
+      /* A computer is not a phone (POK-253). With a keyboard and a mouse the touch
+         pad is dead weight and a 480px screen in the middle of a 1440px window is
+         worse than useless: the game takes the window, and the only chrome left is
+         the two buttons that are not a game control. `pointer: fine` is the test --
+         a tablet with a stylus keeps the pad, a laptop does not. */
+      @media (hover: hover) and (pointer: fine) {
+        #pad { display: none; }
+        #screen-playing { padding: 0; }
+        /* The room panel is not a game control: it is how a host runs the match, so
+           it stays. It sits over the screen rather than pushing it down. */
+        #room-panel { width: 100%; }
+        /* basis 0, not auto: on `auto` the canvas sizes the box and the box then
+           overflows the window instead of the picture shrinking to fit it. */
+        #screen-wrap {
+          flex: 1 1 0;
+          min-height: 0;
+          width: 100%;
+          overflow: hidden;
+          /* `place-items: center` leaves the canvas sized by its own 3:2 and a
+             percentage height with nothing to resolve against, so it grew taller
+             than the box it was in. Stretched, the box is the area and `object-fit`
+             does the centring. */
+          place-items: stretch;
+        }
+        /* `object-fit` works on a canvas -- it is a replaced element with an intrinsic
+           240x160 -- so the box can be the whole window and the picture is letterboxed
+           inside it at whatever integer-ish scale fits. */
+        #screen-wrap canvas {
+          width: 100%;
+          height: 100%;
+          min-width: 0;
+          min-height: 0;
+          max-width: 100%;
+          aspect-ratio: auto;
+          object-fit: contain;
+        }
+        .settings { padding: 6px 12px 10px; }
+        .keys { display: block; }
+      }
       .settings {
         display: flex;
         gap: 8px;
@@ -289,6 +338,10 @@
         <div class="settings">
           <button id="mute" type="button">Mute</button>
           <button id="forget-rom" type="button">Forget stored ROM</button>
+        </div>
+        <div class="keys">
+          Arrows move &middot; Z = A &middot; X = B &middot; A = L &middot; S = R &middot;
+          Enter = START &middot; Shift = SELECT &middot; a gamepad works too
         </div>
       </section>
     </div>

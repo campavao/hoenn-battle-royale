@@ -159,3 +159,50 @@ describe('Director in solo (one seat)', () => {
     expect(h.sent.some((m) => m.t === 'win')).toBe(false);
   });
 });
+
+describe('picking up a match in progress (POK-252)', () => {
+  it('does not deal anything again -- everybody already has a start', () => {
+    const { director, sent } = harness([0, 1, 2], 42, { safariSecs: 60, fogSecs: 30 });
+    director.resume({ ringPhase: 2, centre: { sx: 4, sy: 11 }, secsLeftInPhase: 12 });
+    expect(sent.some((m) => m.t === 'start'), 'no second start').toBe(false);
+    expect(director.state.phase).toBe('ring');
+  });
+
+  it('carries on from the phase it was handed, not from the first one', () => {
+    const { director, sent, advance } = harness([0, 1, 2], 42, { safariSecs: 60, fogSecs: 30 });
+    director.resume({ ringPhase: 3, centre: { sx: 4, sy: 11, place: 'ROUTE 110' }, secsLeftInPhase: 5 });
+    // Five seconds left of phase 3, so nothing yet...
+    advance(4_000);
+    expect(sent.filter((m) => m.t === 'ring')).toHaveLength(0);
+    // ...and then phase 4, rather than starting the ring over at 1.
+    advance(2_000);
+    const rings = sent.filter((m) => m.t === 'ring') as RingMsg[];
+    expect(rings).toHaveLength(1);
+    expect(rings[0].phase).toBe(4);
+    // Same centre the old host chose: the fog does not move house mid-match.
+    expect(rings[0].sx).toBe(4);
+    expect(rings[0].sy).toBe(11);
+  });
+
+  it('keeps the dead dead, so N LEFT does not jump back up', () => {
+    const { director } = harness([0, 1, 2, 3], 42, { safariSecs: 60, fogSecs: 30 });
+    director.resume({ ringPhase: 1, centre: { sx: 4, sy: 11 }, secsLeftInPhase: 30, out: [2, 3] });
+    expect(director.state.alive).toBe(2);
+  });
+
+  it('can be handed the opening instead, and finishes it', () => {
+    const { director, sent, advance } = harness([0, 1], 42, { safariSecs: 60, fogSecs: 30 });
+    director.resume({ ringPhase: 0, secsLeftInPhase: 3 });
+    expect(director.state.phase).toBe('safari');
+    advance(4_000);
+    expect(sent.some((m) => m.t === 'ring'), 'the fog starts on time').toBe(true);
+  });
+
+  it('still ends the match it inherited', () => {
+    const { director, sent, fireOut } = harness([0, 1], 42, { safariSecs: 60, fogSecs: 30 });
+    director.resume({ ringPhase: 1, centre: { sx: 4, sy: 11 }, secsLeftInPhase: 20 });
+    fireOut(1);
+    const win = sent.find((m) => m.t === 'win') as WinMsg | undefined;
+    expect(win?.seat).toBe(0);
+  });
+});

@@ -206,6 +206,46 @@ export class Director {
     this.unsubOut = this.opts.onOut((seat) => this.handleOut(seat));
   }
 
+  /** Picks up a match already in progress (POK-252). The host's tab went away and this
+   *  client was promoted; everybody already has a `start`, a drop and a ring, so this
+   *  must not deal any of that again -- it adopts what the wire already said and
+   *  carries on from there.
+   *
+   *  Everything it needs is something every client hears: the seed came with `start`,
+   *  the seats are the roster, the ring phase and its centre came with `ring`, and how
+   *  far through that phase we are came with `clock`. */
+  resume(state: {
+    /** The wire's ring phase: 1-based, 0 while the Safari opening is still running. */
+    ringPhase: number;
+    centre?: { sx: number; sy: number; place?: string };
+    /** Seconds left in the phase named above. */
+    secsLeftInPhase: number;
+    /** Seats already eliminated, so "N LEFT" does not jump back up. */
+    out?: number[];
+  }): void {
+    for (const seat of state.out ?? []) this.aliveSeats.delete(seat);
+    this.unsubOut = this.opts.onOut((seat) => this.handleOut(seat));
+
+    if (state.ringPhase <= 0 || !state.centre) {
+      // Still the opening. Its clock is wall-clock from `startedAt`, so back-date that
+      // by however much of it has gone.
+      this.phase = 'safari';
+      this.startedAt = this.opts.now() - (this.safariSecs - state.secsLeftInPhase) * 1000;
+      return;
+    }
+
+    this.phase = 'ring';
+    this.ringIndex = Math.max(0, state.ringPhase - 1);
+    this.ringCentre = { sx: state.centre.sx, sy: state.centre.sy, place: state.centre.place };
+    // tickRing measures from the start of the WHOLE ring, not of this phase, so the
+    // back-date is every phase before this one plus the part of this one that has gone.
+    const goneThisPhase = Math.max(0, this.fogSecs - state.secsLeftInPhase);
+    this.ringStartedAt =
+      this.opts.now() - (this.ringIndex * this.fogSecs + goneThisPhase) * 1000;
+    // Only used for the elapsed line on `ring`; near enough that nobody can tell.
+    this.startedAt = this.ringStartedAt - this.safariSecs * 1000;
+  }
+
   /** Stops listening for eliminations. Idempotent. */
   stop(): void {
     this.unsubOut?.();
