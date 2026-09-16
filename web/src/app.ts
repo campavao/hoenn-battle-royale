@@ -21,7 +21,7 @@ import { Results } from './match/results';
 import { Bots } from './bots/brain';
 import { dealBots, MAX_SEATS } from './bots/roster';
 import type { Bot } from './bots/roster';
-import { voiceFor } from './bots/lines';
+import { nextVoice, voiceFor, voiceOf } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { emptyNote, fixedRows, isRoomCode, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
 import {
@@ -49,12 +49,14 @@ import {
   careerLine,
   cleanName,
   loadCareer,
+  nextLockedSkin,
   nextSkin,
   ordinal,
   recordMatch,
   saveProfile,
   SKINS,
 } from './match/career';
+import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import worldData from './data/world.json';
 import { LANDING } from './match/landing';
 import { SAFARI_CELLS } from './match/safari';
@@ -699,6 +701,12 @@ let proxyDuels: ProxyDuels | null = null;
 /** Which of the four trainer sprites is your ghost on everybody else's screen. */
 function careerSkin(): number {
   return loadCareer().skin ?? 0;
+}
+
+/** Which voice (bots/lines.ts) this seat speaks with when its own duels get
+ *  announced (POK-243). */
+function careerVoice(): number {
+  return loadCareer().voice ?? 0;
 }
 
 /** Writes gBrMailbox.boot so a fresh game skips the intro/Birch/naming screens and
@@ -1378,6 +1386,10 @@ function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director:
  *  match's own out (a real whiteout) never decides a winner (director.ts's own
  *  header comment), so nobody needs to hear about it here. */
 function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number> | undefined): void {
+  // The relay cannot see this: no socket opens for solo play, ever (that is the whole
+  // point of the mode). The count rides along on whatever real connection comes next
+  // (POK-243, match/stats.ts) -- a local bump now, nothing that touches the network.
+  recordSolo();
   const mailbox = new Mailbox(emu, mailboxBase);
   const rom = createRomPushQueue(emu, mailbox);
   const seatBase = symbols?.get('gBrMySeat');
@@ -1557,6 +1569,10 @@ function wireRoom(
       bridge!.relay.all(msg);
       rom.push(msg);
     };
+    // The seed's voice for anyone, except this client's own seat, which speaks with
+    // whatever its profile picked (POK-243) -- see the onDuel/onEngage callbacks below.
+    const myVoice = (seat: number, matchSeed: number) =>
+      seat === bridge!.seat ? voiceOf(careerVoice()) : voiceFor(matchSeed, seat);
     const seen = new Set<number>(); // seats already announced out, so a repeat is quiet
     // The host speaks for the bots as well as for the clock: same relay, same in-ring,
     // and its own roster too -- nobody hears their own messages come back, so the host
@@ -1584,12 +1600,17 @@ function wireRoom(
       (winner, loser) => {
         say(Ticker.beat(winner, nameOf(winner), nameOf(loser)));
         // And they say something about it (POK-239). Dealt from the seed, so the same
-        // bot has the same voice all match on every client that works it out.
-        say(Ticker.said(winner, nameOf(winner), voiceFor(seed, winner).win));
-        say(Ticker.said(loser, nameOf(loser), voiceFor(seed, loser).lose));
+        // bot has the same voice all match on every client that works it out -- unless
+        // the seat that just fought is this client's own, in which case it is whatever
+        // voice its profile picked (POK-243): the same pipe a bot gets, handed to the
+        // one player who actually gets to choose it. Any *other* real player still
+        // falls back to the seed, the same as a bot -- their own pick lives only in
+        // their own localStorage, and nothing on the wire carries it here yet.
+        say(Ticker.said(winner, nameOf(winner), myVoice(winner, seed).win));
+        say(Ticker.said(loser, nameOf(loser), myVoice(loser, seed).lose));
       },
       // Walking up to somebody is the other time a bot has something to say.
-      (seat) => say(Ticker.said(seat, nameOf(seat), voiceFor(seed, seat).intro)),
+      (seat) => say(Ticker.said(seat, nameOf(seat), myVoice(seat, seed).intro)),
       // How many bots the host is filling to (POK-241's FILL), held to what the room
       // has room for.
       botFill() === 0 ? 0 : Math.max(0, (controls.roster?.max ?? BOT_FILL) - seats.length),
@@ -2089,6 +2110,16 @@ function wireRoom(
 
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
   relay.connect(relayUrl);
+  // Whatever solo play never got to tell the relay about itself (POK-243): `wireRoom`
+  // only ever runs for host/quick/daily/join -- solo returned above, before there was
+  // a `relay` to send on -- so reaching this line at all is the "next real connection"
+  // match/stats.ts's own comment is waiting for. `send` queues until the socket is
+  // actually open, the same trust `relay.host`/`relay.join` below already put in it.
+  const stat = statMessage(String(protocol ?? '?'));
+  if (stat) {
+    relay.send(stat);
+    statFlushed();
+  }
   // Open, because a room nobody can find is not a lobby (POK-240). JOIN BY CODE still
   // works for one that is not listed; that is what a passcode is for.
   const skin = String(careerSkin());
@@ -2140,8 +2171,18 @@ function runLobby(): Promise<RoomHash> {
           render();
           return;
         }
-        case 'skin':
-          saveProfile({ skin: nextSkin(careerSkin()) });
+        case 'skin': {
+          const career = loadCareer();
+          saveProfile({ skin: nextSkin(career.skin ?? 0, career.wins) });
+          render();
+          return;
+        }
+        case 'voice':
+          saveProfile({ voice: nextVoice(careerVoice()) });
+          render();
+          return;
+        case 'stats':
+          setStatsOff(!loadStats().off);
           render();
           return;
         case 'solo':
@@ -2198,10 +2239,14 @@ function runLobby(): Promise<RoomHash> {
 
     const render = () => {
       const career = loadCareer();
+      const locked = nextLockedSkin(career.wins);
       fixed.replaceChildren(
         ...fixedRows(online, {
           name: careerName(),
           skin: SKINS[careerSkin()],
+          skinNote: locked ? `${SKINS[locked.skin]} at ${locked.wins} wins` : 'your sprite',
+          voice: voiceOf(careerVoice()).win,
+          statsOn: !loadStats().off,
           record: career.matches > 0 ? careerLine(career) : 'your name',
         }).map(rowButton),
       );

@@ -97,6 +97,29 @@ describe('the profile rows', () => {
     expect(rows[0].label).toBe('WALLY');
     expect(rows[0].detail).toBe('3 played');
     expect(rows[1].label).toBe('MAY');
-    expect(rows[2].label).toBe('SOLO VS BOTS');
+    expect(rows[4].label).toBe('SOLO VS BOTS');
+  });
+
+  it('shows the sprite note when there is one, otherwise the plain default', () => {
+    const plain = fixedRows(true, { name: 'WALLY', skin: 'MAY' });
+    expect(plain[1].detail).toBe('your sprite');
+    const noted = fixedRows(true, { name: 'WALLY', skin: 'MAY', skinNote: 'RIVAL MAY at 3 wins' });
+    expect(noted[1].detail).toBe('RIVAL MAY at 3 wins');
+  });
+
+  it('previews the chosen voice, or says there is nothing chosen yet', () => {
+    const plain = fixedRows(true, { name: 'WALLY', skin: 'MAY' });
+    expect(plain[2].label).toBe('MY VOICE');
+    expect(plain[2].detail).toBe('what you say');
+    const chosen = fixedRows(true, { name: 'WALLY', skin: 'MAY', voice: 'STILL STANDING.' });
+    expect(chosen[2].detail).toBe('STILL STANDING.');
+  });
+
+  it('reads as shared unless stats were explicitly turned off', () => {
+    const shared = fixedRows(true, { name: 'WALLY', skin: 'MAY' });
+    expect(shared[3].label).toBe('PLAY STATS');
+    expect(shared[3].detail).toBe('shared');
+    const off = fixedRows(true, { name: 'WALLY', skin: 'MAY', statsOn: false });
+    expect(off[3].detail).toBe('not shared');
   });
 });
