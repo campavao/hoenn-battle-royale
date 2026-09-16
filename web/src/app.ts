@@ -1700,6 +1700,9 @@ function wireRoom(
       const dev = (window as unknown as { __br?: Record<string, unknown> }).__br;
       if (dev) {
         dev.spectate = spectate;
+        // What a promotion would resume from (POK-252), so the migration e2e can see
+        // whether this client was listening to the match it is in.
+        dev.match = match;
         dev.watch = (target: number | null) => {
           for (const m of spectate.follow(target)) bridge!.pushToRom(m);
           renderSpectate(bridge!, spectate);
