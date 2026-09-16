@@ -13,6 +13,11 @@
 #include "sprite.h"
 #include "event_object_movement.h"
 #include "field_player_avatar.h"
+#include "window.h"
+#include "text.h"
+#include "menu.h"
+#include "string_util.h"
+#include "constants/characters.h"
 #include "field_weather.h"
 #include "constants/field_weather.h"
 #include "pokemon.h"
@@ -305,6 +310,125 @@ static void HandleTurnCont(const u8 *payload, u8 len)
         ParseTurn(sTurnAsm.buf, sTurnAsm.total);
 }
 
+// ---- peek: what the trainer we watch is carrying -------------------------------
+
+// A party row on the wire, BR_MSG_PARTY's PackedMon: 100 fixed bytes, unencrypted.
+#define BR_PEEK_ROW 100
+#define BR_PEEK_OFF_SPECIES 0
+#define BR_PEEK_OFF_LEVEL 2
+#define BR_PEEK_OFF_HP 3
+#define BR_PEEK_OFF_MAXHP 5
+#define BR_PEEK_OFF_NICKLEN 36
+#define BR_PEEK_OFF_NICK 37
+
+// The rows live in the assembler's own heap buffer -- a whole party is 602 bytes, and
+// this is a box a spectator opens now and then, not something to keep in EWRAM.
+static EWRAM_DATA struct BrAssembler sPartyAsm = {0};
+static EWRAM_DATA u8 sPeekSeat = 0xFF;
+static EWRAM_DATA u8 sPeekWin = WINDOW_NONE;
+
+// bg, left, top, width, height, palette, baseBlock. Palette 15 and baseBlock 0x294
+// (above the HUD's ticker, below the tilemap at 0x3C0) -- see br_hud.h's tile map.
+static const struct WindowTemplate sPeekTemplate = { 0, 2, 2, 18, 10, 15, 0x294 };
+static const u8 sPeekColors[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY };
+static const u8 sText_PeekLv[] = _(" Lv");
+static const u8 sText_PeekNone[] = _("no party seen yet");
+
+static void ParseParty(const u8 *d, u16 n)
+{
+    u8 count;
+
+    if (n < 2)
+        return;
+    count = d[1];
+    if (count > PARTY_SIZE || (u16)(2 + count * BR_PEEK_ROW) > n)
+        return;
+    sPeekSeat = d[0];
+    gBrSpectate.peekMons = count;
+}
+
+static void HandleParty(const u8 *payload, u8 len)
+{
+    if (sPartyAsm.buf == NULL)
+    {
+        sPartyAsm.buf = Alloc(2 + PARTY_SIZE * BR_PEEK_ROW);
+        if (sPartyAsm.buf == NULL)
+            return;
+        sPartyAsm.cap = 2 + PARTY_SIZE * BR_PEEK_ROW;
+    }
+    if (BrWire_Assemble(&sPartyAsm, BR_MSG_PARTY, FALSE, payload, len))
+        ParseParty(sPartyAsm.buf, sPartyAsm.total);
+}
+
+static void HandlePartyCont(const u8 *payload, u8 len)
+{
+    if (sPartyAsm.buf != NULL
+     && BrWire_Assemble(&sPartyAsm, BR_MSG_PARTY, TRUE, payload, len))
+        ParseParty(sPartyAsm.buf, sPartyAsm.total);
+}
+
+// "NICKNAME Lv12 34/56", one line per mon -- what Kanto's peek shows without handing
+// over anything that would let a spectator rebuild the record.
+static void DrawPeek(void)
+{
+    const u8 *row;
+    u8 line[40];
+    u8 *p;
+    u8 i, j, len;
+
+    FillWindowPixelBuffer(sPeekWin, PIXEL_FILL(TEXT_COLOR_DARK_GRAY));
+    if (gBrSpectate.peekMons == 0 || sPartyAsm.buf == NULL || sPeekSeat != gBrSpectate.follow)
+    {
+        AddTextPrinterParameterized3(sPeekWin, FONT_SMALL, 2, 2, sPeekColors,
+            (s8)TEXT_SKIP_DRAW, sText_PeekNone);
+        return;
+    }
+    for (i = 0; i < gBrSpectate.peekMons; i++)
+    {
+        row = sPartyAsm.buf + 2 + i * BR_PEEK_ROW;
+        len = row[BR_PEEK_OFF_NICKLEN];
+        if (len > 10)
+            len = 10;
+        p = line;
+        for (j = 0; j < len; j++)
+            *p++ = row[BR_PEEK_OFF_NICK + j];
+        *p = EOS;
+        p = StringCopy(p, sText_PeekLv);
+        p = ConvertIntToDecimalStringN(p, row[BR_PEEK_OFF_LEVEL], STR_CONV_MODE_LEFT_ALIGN, 3);
+        *p++ = CHAR_SPACE;
+        p = ConvertIntToDecimalStringN(p, BrWire_ReadU16(row + BR_PEEK_OFF_HP),
+            STR_CONV_MODE_LEFT_ALIGN, 3);
+        *p++ = CHAR_SLASH;
+        ConvertIntToDecimalStringN(p, BrWire_ReadU16(row + BR_PEEK_OFF_MAXHP),
+            STR_CONV_MODE_LEFT_ALIGN, 3);
+        AddTextPrinterParameterized3(sPeekWin, FONT_SMALL, 2, (u8)(2 + i * 12), sPeekColors,
+            (s8)TEXT_SKIP_DRAW, line);
+    }
+}
+
+static void ClosePeek(void)
+{
+    if (sPeekWin != WINDOW_NONE)
+    {
+        ClearWindowTilemap(sPeekWin);
+        CopyWindowToVram(sPeekWin, COPYWIN_MAP);
+        RemoveWindow(sPeekWin);
+        sPeekWin = WINDOW_NONE;
+    }
+    gBrSpectate.peeking = FALSE;
+}
+
+static void OpenPeek(void)
+{
+    sPeekWin = (u8)AddWindow(&sPeekTemplate);
+    if (sPeekWin == WINDOW_NONE)
+        return;
+    DrawPeek();
+    PutWindowTilemap(sPeekWin);
+    CopyWindowToVram(sPeekWin, COPYWIN_FULL);
+    gBrSpectate.peeking = TRUE;
+}
+
 // ---- follow: watching a seat walk ---------------------------------------------
 
 static bool8 FieldRunning(void)
@@ -334,6 +458,7 @@ static void StopFollowing(bool8 recentre)
         ShowOwnTrainer(TRUE);
         CameraObjectSetFollowedSpriteId(self->spriteId);
         UnlockPlayerFieldControls();
+        ClosePeek();
         if (recentre && gBrSpectate.followed)
         {
             SetWarpDestination(gSaveBlock1Ptr->location.mapGroup,
@@ -392,6 +517,15 @@ static void FollowTick(void)
         DoWarp();
         return;
     }
+    // START opens what they are carrying, and closes it again. Field controls are
+    // locked while following, so the start menu never sees the press.
+    if (JOY_NEW(START_BUTTON) || (gBrSpectate.peeking && JOY_NEW(B_BUTTON)))
+    {
+        if (gBrSpectate.peeking)
+            ClosePeek();
+        else
+            OpenPeek();
+    }
     if (them->objId == BR_NO_OBJ)
         return; // their ghost has not spawned on this map yet
     // Reasserted every frame: a map load rebuilds our object event, and it comes back
@@ -418,6 +552,13 @@ void BrSpectate_Init(void)
     BrNet_On(BR_MSG_TURN, HandleTurn);
     BrNet_On(BR_MSG_TURN | BR_MSG_CONT, HandleTurnCont);
     BrNet_On(BR_MSG_FOLLOW, HandleFollow);
+    BrNet_On(BR_MSG_PARTY, HandleParty);
+    BrNet_On(BR_MSG_PARTY | BR_MSG_CONT, HandlePartyCont);
+    sPartyAsm.buf = NULL;
+    sPartyAsm.cap = 0;
+    sPartyAsm.type = 0;
+    sPeekWin = WINDOW_NONE;
+    sPeekSeat = BR_NO_SEAT;
     gBrSpectate.follow = BR_NO_SEAT;
 }
 

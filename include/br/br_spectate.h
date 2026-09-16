@@ -15,7 +15,8 @@ struct BrSpectate
     /* 6 */ u16 watchId; // the battle being watched, as BR_MSG_BSTART's battle id
     /* 8 */ u8 follow;   // seat whose walk we are watching, BR_NO_SEAT for nobody
     /* 9 */ u8 followed; // the camera is actually on them (0 while warping to their map)
-    /* 10 */ u8 pad[2];
+    /* 10 */ u8 peeking; // the peek box is up
+    /* 11 */ u8 peekMons; // party rows held for the followed seat, 0..PARTY_SIZE
 };
 
 // gBrSpectate.follow when nobody is being followed. Matches the wire's stop byte.
