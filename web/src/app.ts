@@ -22,6 +22,7 @@ import { Bots } from './bots/brain';
 import { dealBots } from './bots/roster';
 import { World, type WorldMap } from './bots/world';
 import { sectionInside } from './match/ring';
+import { dealParty } from './bots/party';
 import { mulberry32 } from './match/clock';
 import { careerLine, ordinal, recordMatch } from './match/career';
 import worldData from './data/world.json';
@@ -477,7 +478,9 @@ function startBots(
 ): {
   bots: Bots;
   seats: number[];
-  setRing: (ring: { sx: number; sy: number; r: number }) => void;
+  setRing: (ring: { sx: number; sy: number; r: number }, phase: number) => void;
+  /** A bot's team, for answering a peek about it. Null for a seat we do not own. */
+  partyFor: (seat: number) => Msg | null;
   dispose: () => void;
 } {
   const maps = (worldData as { maps: WorldMap[] }).maps;
@@ -512,6 +515,8 @@ function startBots(
   });
   const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
   const dealt = dealBots(seed, BOT_FILL, takenSeats, spawns);
+  const seatsDealt = new Set(dealt.map((b) => b.seat));
+  let phase = 0;
   bots.start(dealt, performance.now());
   const id = setInterval(() => bots.tick(performance.now()), BOT_TICK_MS);
   return {
@@ -519,10 +524,15 @@ function startBots(
     seats: dealt.map((b) => b.seat),
     // The host hands its own `ring` straight over: the bots read the fog off the same
     // message every ROM in the room does.
-    setRing: (next: { sx: number; sy: number; r: number }) => {
+    setRing: (next: { sx: number; sy: number; r: number }, nextPhase: number) => {
       ring = next;
+      phase = nextPhase;
       bots.ringMoved();
     },
+    // Pull, not push: a bot's team is dealt from the seed and only ever put on the wire
+    // when somebody asks to see it, the same way a player's is (POK-227's peek).
+    partyFor: (seat: number) =>
+      seatsDealt.has(seat) ? { t: 'party', seat, mons: dealParty(seed, seat, phase) } : null,
     dispose: () => clearInterval(id),
   };
 }
@@ -795,7 +805,7 @@ function wireRoom(
         bridge!.relay.all(msg);
         rom.push(msg); // no-op for `win` -- createRomPushQueue only packs a msg.t crossesToRom() knows
         noteResult(msg); // the host's own `start`/`win` never come back to it over the relay
-        if (msg.t === 'ring') bots?.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r });
+        if (msg.t === 'ring') bots?.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r }, msg.phase);
       },
       now: () => performance.now(),
       onOut: (handler) =>
@@ -885,6 +895,11 @@ function wireRoom(
           // Their ROM answers the party; the fight so far is ours to hand over, since
           // the relay never delivered our bstart to somebody who was not in the room.
           for (const part of spectate.streamFor(seat)) bridge!.relay.to(m.seat, part);
+        }
+        else if (m.t === 'peek') {
+          // A bot has no ROM to answer for it, so the host that walks it does.
+          const party = bots?.partyFor(m.target);
+          if (party) bridge!.relay.to(m.seat, party);
         }
         else if (m.t === 'result') spectate.noteResult(m.seat);
         else if (m.t === 'out') {
