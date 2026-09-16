@@ -27,7 +27,7 @@ import { dealParty } from './bots/party';
 import { mulberry32 } from './match/clock';
 import { careerLine, ordinal, recordMatch } from './match/career';
 import worldData from './data/world.json';
-import landingData from './data/landing.json';
+import { LANDING } from './match/landing';
 import regionmapData from './data/regionmap.json';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
@@ -36,7 +36,7 @@ import regionmapData from './data/regionmap.json';
 // `DirectorMapEntry`/`LandingCell`/`RegionSection` -- a wider real shape satisfies it.
 const WORLD: DirectorWorld = {
   maps: worldData.maps as DirectorWorld['maps'],
-  landing: landingData as DirectorWorld['landing'],
+  landing: LANDING,
   sections: regionmapData.sections as DirectorWorld['sections'],
 };
 
@@ -504,7 +504,7 @@ function startBots(
   const refById = new Map(maps.map((m) => [m.id, { group: m.group, num: m.num }]));
   const outdoor = new Set(maps.filter((m) => m.outdoor).map((m) => m.id));
   // The same pool the drop deals from: known-walkable, outdoor, already in the bundle.
-  const targets = (landingData as { map: string; x: number; y: number }[])
+  const targets = LANDING
     .filter((c) => outdoor.has(c.map) && refById.has(c.map))
     .map((c) => ({ mapId: c.map, x: c.x, y: c.y }));
   const sectionOf = new Map(maps.map((m) => [m.id, m.section]));

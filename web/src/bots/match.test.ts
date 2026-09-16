@@ -10,7 +10,7 @@ import { World, sameSpot, type Spot, type WorldMap } from './world';
 import { mulberry32 } from '../match/clock';
 import { sectionInside } from '../match/ring';
 import worldData from '../data/world.json';
-import landingData from '../data/landing.json';
+import { LANDING } from '../match/landing';
 import regionData from '../data/regionmap.json';
 
 const MAPS = (worldData as { maps: WorldMap[] }).maps;
@@ -46,9 +46,11 @@ function match(): Run {
   const refById = new Map(maps.map((m) => [m.id, { group: m.group, num: m.num }]));
   const outdoor = new Set(maps.filter((m) => m.outdoor).map((m) => m.id));
   const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
-  const targets = (landingData as { map: string; x: number; y: number }[])
-    .filter((c) => outdoor.has(c.map) && refById.has(c.map))
-    .map((c) => ({ mapId: c.map, x: c.x, y: c.y }));
+  const targets = LANDING.filter((c) => outdoor.has(c.map) && refById.has(c.map)).map((c) => ({
+    mapId: c.map,
+    x: c.x,
+    y: c.y,
+  }));
 
   // The fog closes on Littleroot's own section, the way the Director's does: a centre
   // and a radius that shrinks a rung at a time.

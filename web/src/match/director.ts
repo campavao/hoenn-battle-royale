@@ -50,6 +50,10 @@ export interface LandingCell {
   map: string;
   x: number;
   y: number;
+  /** Set by `tools/br/landing-reach.ts` on a cell with no route to the rest of Hoenn
+   *  -- a map's border filler, or a genuinely gated corner. app.ts filters these out
+   *  before the Director ever sees them (POK-251). */
+  off?: 1;
 }
 
 /** One regionmap.json section: a rectangle on the 28x15 Hoenn region map. */

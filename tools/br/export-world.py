@@ -27,6 +27,11 @@ Writes (relative to repo root):
   web/src/data/world.meta.json
   web/src/data/regionmap.json
   web/src/data/landing.json
+
+Run `npx vite-node tools/br/landing-reach.ts` (from web/) afterwards. It walks the
+world this wrote and marks every landing cell with no route out of it, which is the
+only thing standing between the drop and a trainer stranded for a whole match
+(POK-251). It rewrites landing.json in place.
 """
 import glob
 import gzip
@@ -377,6 +382,12 @@ def export():
     return result_maps, sections, warn, len(maps_meta)
 
 
+# How many cells a single map offers the section's pool. A section is usually a
+# town plus its routes, and 48 is the whole section's budget, so this only has to
+# be wide enough that the round-robin below has somewhere to spread.
+SPREAD = 48
+
+
 def build_landing(result_maps):
     by_section = {}
     for m in result_maps:
@@ -418,6 +429,13 @@ def build_landing(result_maps):
                     if near_warp:
                         continue
                     cands.append((x, y))
+            # Spread the picks over the map instead of taking the first ones found.
+            # Row-major order means "first 48" is the map's top strip -- which on a
+            # map with no north seam is the border filler, walkable in the grid and
+            # unreachable in the game (POK-251: Lilycove's 48 cells were all y=0).
+            if len(cands) > SPREAD:
+                stride = len(cands) / float(SPREAD)
+                cands = [cands[int(i * stride)] for i in range(SPREAD)]
             candidate_iters.append(iter(cands))
 
         picked = []

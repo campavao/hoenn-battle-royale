@@ -14,7 +14,7 @@ import { dealParty } from '../../web/src/bots/party';
 import { World, type WorldMap } from '../../web/src/bots/world';
 import { mulberry32 } from '../../web/src/match/clock';
 import worldData from '../../web/src/data/world.json';
-import landingData from '../../web/src/data/landing.json';
+import { LANDING } from '../../web/src/match/landing';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -32,9 +32,11 @@ const maps = (worldData as { maps: WorldMap[] }).maps;
 const world = new World(maps);
 const refById = new Map(maps.map((m) => [m.id, { group: m.group, num: m.num }]));
 const outdoor = new Set(maps.filter((m) => m.outdoor).map((m) => m.id));
-const targets = (landingData as { map: string; x: number; y: number }[])
-  .filter((c) => outdoor.has(c.map) && refById.has(c.map))
-  .map((c) => ({ mapId: c.map, x: c.x, y: c.y }));
+const targets = LANDING.filter((c) => outdoor.has(c.map) && refById.has(c.map)).map((c) => ({
+  mapId: c.map,
+  x: c.x,
+  y: c.y,
+}));
 
 const lines: string[] = [];
 const tally = new Map<string, number>();
