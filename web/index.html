@@ -59,6 +59,13 @@
         border: 0; border-radius: 6px; padding: 3px 9px; cursor: pointer;
       }
       .spectate-strip button[aria-pressed='true'] { background: #4f6b7d; color: #fff; }
+      .results { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .results-line { font-weight: 600; color: #ffe08a; }
+      .results-career { color: #9fb3c0; }
+      .results button {
+        font: inherit; background: #4f6b7d; color: #fff;
+        border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer;
+      }
       #screen-wrap {
         position: relative;
         flex: 0 0 auto;
@@ -154,6 +161,11 @@
           <div id="match-strip" class="room-code" hidden></div>
           <ul id="room-roster" class="room-roster"></ul>
           <div id="spectate-strip" class="spectate-strip" hidden></div>
+          <div id="results-panel" class="results" hidden>
+            <div id="results-line" class="results-line"></div>
+            <div id="results-career" class="results-career"></div>
+            <button id="play-again" type="button">PLAY AGAIN</button>
+          </div>
         </div>
         <div id="screen-wrap">
           <canvas id="canvas" width="240" height="160"></canvas>

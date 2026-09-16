@@ -17,6 +17,8 @@ import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat } from './ne
 import { Director, type DirectorState, type DirectorWorld } from './match/director';
 import { Spectate } from './match/spectate';
 import { Loot } from './match/loot';
+import { Results } from './match/results';
+import { careerLine, ordinal, recordMatch } from './match/career';
 import worldData from './data/world.json';
 import landingData from './data/landing.json';
 import regionmapData from './data/regionmap.json';
@@ -450,6 +452,37 @@ function renderRoom(bridge: Bridge): void {
   }
 }
 
+// ---- results (POK-228) --------------------------------------------------------------
+
+/** Where we came, how long we lasted, and what that does to the career record. Shown
+ *  once, when the match ends: `recordMatch` folds the placement in and the line under
+ *  it is the record it produced. PLAY AGAIN reloads the page on the same hash, which
+ *  re-imports the ROM from IndexedDB and rejoins the same room -- the blunt way, and
+ *  the one that cannot leave half a match's state behind. */
+function renderResults(bridge: Bridge, results: Results, seats: number): void {
+  const panel = $('#results-panel') as HTMLElement;
+  const mine = results.forSeat(bridge.seat, performance.now());
+  if (!mine.ended) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  const parts: string[] = [];
+  if (mine.placement !== undefined) parts.push(`${ordinal(mine.placement)} of ${seats}`);
+  if (mine.survived !== undefined) {
+    const mm = Math.floor(mine.survived / 60);
+    const ss = String(mine.survived % 60).padStart(2, '0');
+    parts.push(`survived ${mm}:${ss}`);
+  }
+  if (mine.winner !== undefined) {
+    const who = bridge.roster.get(mine.winner);
+    parts.push(mine.winner === bridge.seat ? 'you won' : `${who?.name || `P${mine.winner}`} won`);
+  } else {
+    parts.push('a draw');
+  }
+  ($('#results-line') as HTMLElement).textContent = parts.join(' · ');
+}
+
 // ---- spectating (POK-233) -----------------------------------------------------------
 
 const SPECTATE_TICK_MS = 500; // the peek timer is 3s; this only has to not miss it by much
@@ -661,6 +694,7 @@ function wireRoom(
         // (docs/WIRE.md) and has no slots.ts codec, so it never goes to `rom`.
         bridge!.relay.all(msg);
         rom.push(msg); // no-op for `win` -- createRomPushQueue only packs a msg.t crossesToRom() knows
+        noteResult(msg); // the host's own `start`/`win` never come back to it over the relay
       },
       now: () => performance.now(),
       onOut: (handler) =>
@@ -688,6 +722,26 @@ function wireRoom(
   // matters every time our own trainer arrives somewhere (POK-232).
   const loot = new Loot();
   let lootMap: string | null = null;
+  const results = new Results();
+  let fieldSize = 0;
+  let recorded = false;
+  // Everything that decides a placement crosses this page one way or the other: our
+  // own ROM's `out` on the way up, everybody else's on the way in, and the host's own
+  // `start`/`win` as it sends them.
+  const noteResult = (msg: Msg) => {
+    if (msg.t === 'start') {
+      fieldSize = msg.spawns.length;
+      results.start(fieldSize, performance.now());
+      recorded = false;
+    }
+    results.note(msg, performance.now());
+    if (msg.t === 'win' && bridge && !recorded) {
+      recorded = true;
+      const mine = results.forSeat(bridge.seat, performance.now());
+      ($('#results-career') as HTMLElement).textContent = careerLine(recordMatch(mine.placement));
+      renderResults(bridge, results, fieldSize);
+    }
+  };
   let stopSpectateLoop: (() => void) | null = null;
 
   const attach = (seat: number, code: string) => {
@@ -704,6 +758,7 @@ function wireRoom(
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);
       loot.note(msg);
+      noteResult(msg);
       // Our own `place` is how the page learns we changed maps -- there is no separate
       // "I have arrived" message, and this one is already on the wire four times a
       // second.
@@ -720,6 +775,7 @@ function wireRoom(
       try {
         const m = decode(JSON.stringify(ev.m));
         loot.note(m);
+        noteResult(m);
         if (m.t === 'peek' && m.target === seat) {
           spectate.notePeek(m.seat, performance.now());
           // Their ROM answers the party; the fight so far is ours to hand over, since
@@ -748,6 +804,8 @@ function wireRoom(
     renderSpectate(bridge, spectate);
     if (isHost) setTimeout(startDirector, AUTO_START_MS);
   };
+
+  ($('#play-again') as HTMLElement).addEventListener('click', () => location.reload());
 
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code));
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
