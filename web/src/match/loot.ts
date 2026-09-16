@@ -75,6 +75,26 @@ export class Loot {
     return msg;
   }
 
+  /** Every piece still on the ground, for anyone who needs to walk to one. */
+  all(): { key: number; map: MapRef; x: number; y: number }[] {
+    const out: { key: number; map: MapRef; x: number; y: number }[] = [];
+    for (const [key, piece] of this.pieces) {
+      const cell = piece.mon ?? piece.bag;
+      if (cell) out.push({ key, map: piece.map, x: cell.x, y: cell.y });
+    }
+    return out;
+  }
+
+  /** The piece standing on this cell, if any. */
+  at(map: MapRef, x: number, y: number): number | undefined {
+    for (const [key, piece] of this.pieces) {
+      if (!sameMap(piece.map, map)) continue;
+      const cell = piece.mon ?? piece.bag;
+      if (cell && cell.x === x && cell.y === y) return key;
+    }
+    return undefined;
+  }
+
   /** Feeds the table from anything that crosses this page, either way. */
   note(msg: Msg): void {
     if (msg.t === 'spill') this.noteSpill(msg);

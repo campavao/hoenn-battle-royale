@@ -43,6 +43,13 @@ export interface BotsOptions {
    *  rule of Kanto's decision list, and the one that decides whether a match ends with
    *  a fight or with everybody quietly bleeding out in the corners. */
   inside?: (mapId: string) => boolean;
+  /** What is lying on the ground, and how to take it: the second rule. A bot walks to
+   *  a piece it can reach and picks it up like anybody else, which is also how the
+   *  room hears about it -- `pickup` is the same message a player's ROM sends. */
+  loot?: {
+    all: () => { key: number; mapId: string; x: number; y: number }[];
+    at: (mapId: string, x: number, y: number) => number | undefined;
+  };
   /** world.json id -> the wire's group/num. */
   mapRef: (mapId: string) => MapRef | undefined;
   send: (msg: Msg) => void;
@@ -108,6 +115,14 @@ export class Bots {
   }
 
   private stepOne(walker: Walker, now: number): void {
+    // Loot at your feet, before anything else: a bot standing on a ball takes it, and
+    // that is the turn spent.
+    const here = this.opts.loot?.at(walker.at.map, walker.at.x, walker.at.y);
+    if (here !== undefined) {
+      this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: here });
+      walker.path = null;
+      return;
+    }
     if (!walker.path || walker.stepIndex >= walker.path.steps.length) {
       this.chooseTarget(walker, now);
       if (!walker.path || walker.path.steps.length === 0) return;
@@ -139,6 +154,24 @@ export class Bots {
     // Fog first. Aiming only at cells inside the ring is the whole rule: a bot already
     // inside wanders inside, and a bot caught outside walks in, because the route to
     // anywhere it may aim at crosses the edge on the way.
+    // Loot in the ring beats wandering: a bot goes and gets it. Nearest first only
+    // among the pieces on its own map -- distances across a seam are not comparable,
+    // and a bot that crosses one will see that map's loot when it gets there.
+    const loot = (this.opts.loot?.all() ?? [])
+      .filter((l) => (!inside || inside(l.mapId)) && l.mapId === walker.at.map)
+      .sort(
+        (a, b) =>
+          Math.abs(a.x - walker.at.x) + Math.abs(a.y - walker.at.y) -
+          (Math.abs(b.x - walker.at.x) + Math.abs(b.y - walker.at.y)),
+      );
+    for (const piece of loot.slice(0, 2)) {
+      const path = findPath(this.opts.world, walker.at, { map: piece.mapId, x: piece.x, y: piece.y }, WANDER_BUDGET);
+      if (path.found && path.steps.length > 0) {
+        walker.path = path;
+        walker.stepIndex = 0;
+        return;
+      }
+    }
     const targets = inside ? this.opts.targets.filter((t) => inside(t.mapId)) : this.opts.targets;
     if (targets.length === 0) return;
     // Somewhere else, on foot. Three tries so an unreachable pick (an island, a cave

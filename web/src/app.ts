@@ -473,6 +473,7 @@ function startBots(
   send: (msg: Msg) => void,
   takenSeats: number[],
   seed: number,
+  loot: Loot,
 ): {
   bots: Bots;
   seats: number[];
@@ -488,6 +489,7 @@ function startBots(
     .filter((c) => outdoor.has(c.map) && refById.has(c.map))
     .map((c) => ({ mapId: c.map, x: c.x, y: c.y }));
   const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
+  const idByRef = new Map(maps.map((m) => [`${m.group}:${m.num}`, m.id]));
   let ring: { sx: number; sy: number; r: number } | undefined;
   const bots = new Bots({
     world,
@@ -496,6 +498,17 @@ function startBots(
     send,
     rng: mulberry32(seed ^ 0x51ce),
     inside: (id) => sectionInside(WORLD.sections[sectionOf.get(id) ?? ''], ring),
+    loot: {
+      all: () =>
+        loot
+          .all()
+          .map((l) => ({ ...l, mapId: idByRef.get(`${l.map.group}:${l.map.num}`) ?? '' }))
+          .filter((l) => l.mapId !== ''),
+      at: (mapId, x, y) => {
+        const ref = refById.get(mapId);
+        return ref ? loot.at(ref, x, y) : undefined;
+      },
+    },
   });
   const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
   const dealt = dealBots(seed, BOT_FILL, takenSeats, spawns);
@@ -759,9 +772,11 @@ function wireRoom(
         bridge!.relay.all(msg);
         rom.push(msg);
         bridge!.roster.applyMsg(msg);
+        loot.note(msg); // a bot taking a ball takes it off this page's table too
       },
       seats,
       seed,
+      loot,
     );
     director = new Director({
       // Bots are contestants, not scenery: leaving them out of the seat list makes

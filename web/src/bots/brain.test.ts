@@ -157,7 +157,7 @@ describe('bots walking', () => {
   it('re-aims when the ring moves', () => {
     const world = new World([FIELD, PATH]);
     const sent: Msg[] = [];
-    let inside = (mapId: string) => mapId === 'FIELD';
+    let inside: (mapId: string) => boolean = (mapId) => mapId === 'FIELD';
     const bots = new Bots({
       world,
       targets: targets(),
@@ -184,6 +184,40 @@ describe('bots walking', () => {
     }
     expect(ends.size).toBeGreaterThan(0);
     expect([...ends.values()].every((m) => m === 'PATH')).toBe(true);
+  });
+
+  it('walks to loot and picks it up', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    // One ball, on the far side of the field from where the bot starts.
+    const ground = new Map<number, { mapId: string; x: number; y: number }>([
+      [0x0100, { mapId: 'FIELD', x: 5, y: 5 }],
+    ]);
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(3),
+      inside: (id) => id === 'FIELD',
+      loot: {
+        all: () => [...ground].map(([key, at]) => ({ key, ...at })),
+        at: (mapId, x, y) => {
+          for (const [key, cell] of ground) {
+            if (cell.mapId === mapId && cell.x === x && cell.y === y) return key;
+          }
+          return undefined;
+        },
+      },
+    });
+    bots.start(dealBots(8, 1, [], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]), 0);
+    for (let t = STEP_MS; t <= 30_000; t += STEP_MS) {
+      bots.tick(t);
+      // The page takes it off the ground when the pickup goes out, the way the real
+      // Loot table does.
+      for (const msg of sent) if (msg.t === 'pickup') ground.delete(msg.key);
+    }
+    expect(sent.some((m) => m.t === 'pickup' && m.key === 0x0100)).toBe(true);
   });
 
   it('forgets a bot that goes out', () => {
