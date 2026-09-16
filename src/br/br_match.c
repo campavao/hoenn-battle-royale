@@ -143,30 +143,37 @@ void BrMatch_Init(void)
     sWinPending = FALSE;
 }
 
-// Where the opening starts you (POK-256). One cell for everybody put the whole room
-// behind the gate building, in the one spot on the map with a wall on three sides --
-// so the first thing a match asked of a player was to work out which way was out.
-// These are picked off the exported collision grid (tools/br/export-world.py's own
-// classes): open ground or tall grass with open ground on all four sides, spread over
-// the map by farthest-point sampling so no two are neighbours.
-static const u8 sSafariCells[][2] =
+// Where the opening starts you (POK-256), and which of the Zone's six areas you start
+// in (POK-261). One cell for everybody put the whole room behind the gate building, in
+// the one spot on the map with a wall on three sides -- and one AREA for everybody left
+// five sixths of the Safari Zone unused for the whole match.
+//
+// Four cells per area, picked off the exported collision grid: open ground or tall
+// grass with open ground on all eight sides, three tiles clear of every edge (a seam
+// is a map away and a spawn on top of one is a warp nobody asked for), two clear of
+// every warp, and spread within the area by farthest-point sampling. The areas are all
+// connected by seams, so a trainer can walk the whole Zone from any of them.
+static const u8 sSafariCells[][3] =   // mapNum, x, y -- all six are map group 26
 {
-    { 29,  2 }, { 15,  5 }, {  2,  7 }, { 23,  7 },
-    { 36,  9 }, { 10, 13 }, { 26, 15 }, { 35, 16 },
-    { 18, 19 }, {  4, 20 }, { 26, 26 }, {  9, 29 },
-    { 17, 33 }, { 31, 35 }, {  3, 36 }, { 23, 38 },
+    {  0,  6,  7 }, {  0, 36, 15 }, {  0, 13, 22 }, {  0, 29, 32 },  // NORTHWEST
+    {  1,  5, 11 }, {  1, 29, 19 }, {  1, 19, 32 }, {  1,  3, 36 },  // NORTH
+    { 12,  3,  3 }, { 12, 27,  9 }, { 12, 21, 26 }, { 12,  7, 36 },  // NORTHEAST
+    {  2,  8,  5 }, {  2, 36,  7 }, {  2, 16, 25 }, {  2, 34, 36 },  // SOUTHWEST
+    {  3, 29,  3 }, {  3,  5,  5 }, {  3, 24, 26 }, {  3,  4, 36 },  // SOUTH
+    { 13, 31,  3 }, { 13, 15, 14 }, { 13, 14, 32 }, { 13, 31, 36 },  // SOUTHEAST
 };
 
 // The match seed and the seat, so every ROM in the room lands somewhere different and
 // the same match starts the same way twice. Before a START there is no seed -- that is
-// a driver booting straight into the Zone -- and then anywhere will do.
-void BrMatch_SafariCell(u8 *x, u8 *y)
+// a driver or a solo boot going straight into the Zone -- and then anywhere will do.
+void BrMatch_SafariCell(u8 *mapNum, u8 *x, u8 *y)
 {
     u32 pick = gBrMatch.seed != 0 ? gBrMatch.seed + gBrMySeat * 2654435761u : Random32();
     const u8 *cell = sSafariCells[(pick >> 8) % ARRAY_COUNT(sSafariCells)];
 
-    *x = cell[0];
-    *y = cell[1];
+    *mapNum = cell[0];
+    *x = cell[1];
+    *y = cell[2];
 }
 
 void BrMatch_BeginSafari(void)
@@ -269,11 +276,10 @@ void BrMatch_Tick(void)
         {
             // Somewhere in the Zone, dealt from the seed -- the same way BR_BOOT_SAFARI
             // does it, so both ways in are the same opening.
-            u8 sx, sy;
+            u8 area, sx, sy;
 
-            BrMatch_SafariCell(&sx, &sy);
-            SetWarpDestination(MAP_GROUP(MAP_SAFARI_ZONE_SOUTH), MAP_NUM(MAP_SAFARI_ZONE_SOUTH),
-                               WARP_ID_NONE, sx, sy);
+            BrMatch_SafariCell(&area, &sx, &sy);
+            SetWarpDestination(MAP_GROUP(MAP_SAFARI_ZONE_SOUTH), area, WARP_ID_NONE, sx, sy);
             DoWarp();
             BrMatch_BeginSafari();
         }

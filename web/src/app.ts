@@ -53,7 +53,7 @@ import {
 } from './match/career';
 import worldData from './data/world.json';
 import { LANDING } from './match/landing';
-import { SAFARI_CELLS, SAFARI_MAP_ID } from './match/safari';
+import { SAFARI_CELLS } from './match/safari';
 import regionmapData from './data/regionmap.json';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
@@ -938,10 +938,15 @@ function startBots(
   // so a room of one human and fifteen bots was a single-player Safari trip with a
   // countdown. They start in the Zone now, on the cells the ROM deals its own players
   // from, and the drop is what sends everybody out (POK-257).
-  const safariRef = refById.get(SAFARI_MAP_ID);
-  const opening = safariSecs > 0 && safariRef !== undefined && resume === undefined;
-  const safariTargets = SAFARI_CELLS.map((c) => ({ mapId: SAFARI_MAP_ID, x: c.x, y: c.y }));
-  const safariSpawns = safariTargets.map((t) => ({ ...t, map: safariRef! }));
+  // All six areas of the Zone, not just the south one (POK-261): they are joined by
+  // seams, so bots walk between them the same way a trainer does.
+  const safariTargets = SAFARI_CELLS.filter((c) => refById.has(c.map)).map((c) => ({
+    mapId: c.map,
+    x: c.x,
+    y: c.y,
+  }));
+  const opening = safariSecs > 0 && safariTargets.length > 0 && resume === undefined;
+  const safariSpawns = safariTargets.map((t) => ({ ...t, map: refById.get(t.mapId)! }));
   let inOpening = opening;
   const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
   const idByRef = new Map(maps.map((m) => [`${m.group}:${m.num}`, m.id]));

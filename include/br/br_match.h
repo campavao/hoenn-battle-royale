@@ -41,9 +41,10 @@ extern struct BrMatch gBrMatch;
 
 void BrMatch_Init(void);
 void BrMatch_Tick(void);
-// Where in the Safari Zone this ROM starts the opening, dealt from the match seed and
-// our seat so a room spreads out instead of piling up on one tile.
-void BrMatch_SafariCell(u8 *x, u8 *y);
+// Where in the Safari Zone this ROM starts the opening: which of the six areas (a map
+// number in group 26) and which cell of it, dealt from the match seed and our seat so a
+// room spreads over the whole Zone instead of piling up on one tile.
+void BrMatch_SafariCell(u8 *mapNum, u8 *x, u8 *y);
 // The opening's buzzer is going off and we are in a battle: the controllers press RUN.
 bool8 BrMatch_BuzzerClosing(void);
 // Enter the Safari opening on the current map (the boot warped us there).

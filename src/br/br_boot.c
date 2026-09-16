@@ -131,12 +131,12 @@ void BrBoot_Tick(void)
     {
         if (BR_BOOT_MODE(b->mode) == BR_BOOT_SAFARI)
         {
-            // Somewhere in the Zone, dealt (POK-256).
-            u8 sx, sy;
+            // Somewhere in the Zone, dealt -- any of its six areas (POK-256, POK-261).
+            u8 area, sx, sy;
 
-            BrMatch_SafariCell(&sx, &sy);
+            BrMatch_SafariCell(&area, &sx, &sy);
             b->mapGroup = MAP_GROUP(MAP_SAFARI_ZONE_SOUTH);
-            b->mapNum = MAP_NUM(MAP_SAFARI_ZONE_SOUTH);
+            b->mapNum = area;
             b->x = sx;
             b->y = sy;
         }
