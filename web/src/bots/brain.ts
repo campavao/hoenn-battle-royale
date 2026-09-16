@@ -31,6 +31,11 @@ const CENTRE_BUDGET = 3000;
  *  hunt. Under this many still standing, a bot aims at somebody rather than at a
  *  cell -- otherwise the last three wander a shrinking ring waiting for each other. */
 const HUNT_AT = 3;
+/** After a search that found nowhere to go, how long before trying another. A bot
+ *  stranded outside a tight ring would otherwise run four full A* sweeps every step
+ *  for the rest of the match -- on the host's tab, beside an emulator. It walks
+ *  instead, and asks again in a couple of seconds. */
+const RETRY_MS = 2000;
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
   south: 1,
@@ -53,6 +58,8 @@ interface Walker {
   /** Nothing before this: the same grace the ROM keeps after a fight, so a bot that
    *  just fought does not re-challenge the player still standing in front of it. */
   engageAfter: number;
+  /** No more searching before this: the last one found nowhere to go. */
+  retryAfter: number;
 }
 
 /** A player as the roster knows them -- where they are and which way they are looking.
@@ -171,6 +178,7 @@ export class Bots {
         nextStepAt: now + STEP_MS,
         facing: 1,
         engageAfter: 0,
+        retryAfter: 0,
         party: this.opts.deal?.(bot, 0) ?? [],
       };
       this.walkers.push(walker);
@@ -262,7 +270,15 @@ export class Bots {
       this.chooseTarget(walker, now);
       if (!walker.path || walker.path.steps.length === 0) return;
     }
-    const step = walker.path.steps[walker.stepIndex++];
+    const step = walker.path.steps[walker.stepIndex];
+    // Somebody is already standing there. Two trainers never share a tile, and a pair
+    // that swap through each other read as walking through a wall to anyone watching.
+    // Drop the route and re-aim next step rather than shove.
+    if (this.taken(step.to, walker) || this.swapping(walker, step.to)) {
+      walker.path = null;
+      return;
+    }
+    walker.stepIndex++;
     const wasMap = walker.at.map;
     walker.at = step.to;
     walker.facing = DIR_WIRE[step.dir];
@@ -354,8 +370,12 @@ export class Bots {
     return null;
   }
 
-  private chooseTarget(walker: Walker, _now: number): void {
+  private chooseTarget(walker: Walker, now: number): void {
     const inside = this.opts.inside;
+    if (now < walker.retryAfter) {
+      this.wanderOneStep(walker);
+      return;
+    }
     // Centre when hurt, third on Kanto's list -- after the fog and the ball at your
     // feet, before going anywhere else. A bot walks in, gets healed, walks out.
     const centre = this.centreRoute(walker);
@@ -429,23 +449,47 @@ export class Bots {
       if (path.found && path.steps.length > 0) {
         walker.path = path;
         walker.stepIndex = 0;
+        walker.retryAfter = 0;
         this.note(walker, 'wander', `${pick.mapId} ${pick.x},${pick.y}`);
         return;
       }
     }
     // Nowhere it can route to. A bot that stands perfectly still for the rest of the
-    // match reads as broken, so it takes one step somewhere legal and tries again --
-    // which is also usually enough to get off whatever cell was the problem.
+    // match reads as broken, so it takes one step somewhere legal -- which is usually
+    // enough to get off whatever cell was the problem -- and holds off searching again
+    // until the backoff is up.
+    walker.retryAfter = now + RETRY_MS;
+    this.wanderOneStep(walker);
+  }
+
+  /** One legal step, any direction. The fallback when there is nothing to route to. */
+  private wanderOneStep(walker: Walker): void {
     const open = this.opts.world.neighbours(walker.at, canSurf(walker.party));
-    if (open.length > 0) {
-      const step = open[Math.floor(this.opts.rng() * open.length)];
-      walker.path = { steps: [step], found: true, visited: 0 };
-      walker.stepIndex = 0;
-      this.note(walker, 'stuck', step.dir);
+    if (open.length === 0) {
+      this.note(walker, 'stuck');
+      walker.path = null;
       return;
     }
-    this.note(walker, 'stuck');
-    walker.path = null;
+    const step = open[Math.floor(this.opts.rng() * open.length)];
+    walker.path = { steps: [step], found: true, visited: 0 };
+    walker.stepIndex = 0;
+    this.note(walker, 'stuck', step.dir);
+  }
+
+  /** Is another bot standing here? */
+  private taken(spot: Spot, self: Walker): boolean {
+    return this.walkers.some((w) => w !== self && sameSpot(w.at, spot));
+  }
+
+  /** Would this step trade places with a bot walking the other way? Neither of them
+   *  has moved yet this tick, so the cell it wants is still the other one's. */
+  private swapping(self: Walker, to: Spot): boolean {
+    for (const other of this.walkers) {
+      if (other === self || !sameSpot(other.at, to)) continue;
+      const next = other.path?.steps[other.stepIndex]?.to;
+      if (next && sameSpot(next, self.at)) return true;
+    }
+    return false;
   }
 
   private note(walker: Walker, rule: Decision['rule'], detail?: string): void {
