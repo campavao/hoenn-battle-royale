@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_match.h"
+#endif
 #include "malloc.h"
 #include "battle.h"
 #include "battle_anim.h"
@@ -2322,6 +2325,13 @@ static void DisplayPartyPokemonLevelCheck(struct Pokemon *mon, struct PartyMenuB
 
 static void DisplayPartyPokemonLevel(u8 level, struct PartyMenuBox *menuBox)
 {
+#if BR
+    // No level numbers during a round (POK-266, Kanto v0.37.0). The rung is shared, so
+    // a number that is the same for everybody is noise on every screen it is on -- and
+    // reading an opponent by their team rather than by a number is the point.
+    if (gBrMatch.phase != BR_PHASE_NONE)
+        return;
+#endif
     ConvertIntToDecimalStringN(gStringVar2, level, STR_CONV_MODE_LEFT_ALIGN, 3);
     StringCopy(gStringVar1, gText_LevelSymbol);
     StringAppend(gStringVar1, gStringVar2);

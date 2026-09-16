@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_match.h"
+#endif
 #include "battle.h"
 #include "pokemon.h"
 #include "battle_controllers.h"
@@ -1109,6 +1112,14 @@ static void UpdateLvlInHealthbox(u8 healthboxSpriteId, u8 lvl)
     u8 text[16];
     u32 xPos;
     u8 *objVram;
+
+#if BR
+    // Not during a round (POK-266). The box keeps its space; there is simply no number
+    // in it, which is what a shared rung is worth saying. (agbcc is C89: the guard has
+    // to come after the declarations, not before them.)
+    if (gBrMatch.phase != BR_PHASE_NONE)
+        return;
+#endif
 
     text[0] = CHAR_EXTRA_SYMBOL;
     text[1] = CHAR_LV_2;

@@ -8,6 +8,9 @@
 #include "field_player_avatar.h"
 #include "main.h"
 #include "overworld.h"
+#include "field_effect.h"
+#include "field_effect_helpers.h"
+#include "constants/field_effects.h"
 #include "constants/event_objects.h"
 #include "constants/event_object_movement.h"
 #include "br/br_ghosts.h"
@@ -107,6 +110,14 @@ static void HandleBusy(const u8 *payload, u8 len)
 
     if (n < 2 || d[0] >= BR_MAX_SEATS)
         return;
+    if (gBrSeatBusy[d[0]] != d[1])
+    {
+        gBrSeatBusy[d[0]] = d[1];
+        // Say so now, not up to three seconds from now: the moment somebody steps into
+        // a fight is exactly the moment the trainer walking towards them needs it.
+        BrGhosts_Emote(d[0]);
+        return;
+    }
     gBrSeatBusy[d[0]] = d[1];
 }
 
@@ -368,6 +379,53 @@ static void WatchOwn(void)
     sOwnValid = TRUE;
 }
 
+// How often a busy trainer says so (POK-266). A bubble that fires once would be missed
+// by whoever was looking the other way; one that never stops would be wallpaper.
+#define BR_EMOTE_FRAMES (3 * 60)
+static EWRAM_DATA u16 sEmoteTimer = 0;
+
+// What everybody else is doing, over their head (POK-266, Kanto v0.29.0). The engage
+// already refuses a trainer who is in a menu or a battle -- that is POK-230's rule --
+// and nothing showed it, so a trainer standing still in a fight looked exactly like one
+// standing still waiting to take yours. Emerald's own trainer-sight icons do the job:
+// "!" for a battle, "?" for a menu.
+// The bubble for one seat, if it has a ghost here and is busy. TRUE when it fired.
+bool8 BrGhosts_Emote(u8 seat)
+{
+    struct ObjectEvent *obj;
+    u8 busy;
+
+    if (seat >= BR_MAX_SEATS || !OverworldRunning())
+        return FALSE;
+    obj = GhostObject(seat);
+    busy = gBrSeatBusy[seat];
+    if (obj == NULL || busy == BR_BUSY_MAP)
+        return FALSE;
+    if (FieldEffectActiveListContains(FLDEFF_EXCLAMATION_MARK_ICON)
+     || FieldEffectActiveListContains(FLDEFF_QUESTION_MARK_ICON))
+        return FALSE;
+    ObjectEventGetLocalIdAndMap(obj, &gFieldEffectArguments[0], &gFieldEffectArguments[1],
+                                &gFieldEffectArguments[2]);
+    FieldEffectStart(busy == BR_BUSY_BATTLE ? FLDEFF_EXCLAMATION_MARK_ICON : FLDEFF_QUESTION_MARK_ICON);
+    return TRUE;
+}
+
+static void EmoteBusyGhosts(void)
+{
+    u8 seat;
+
+    if (++sEmoteTimer < BR_EMOTE_FRAMES)
+        return;
+    sEmoteTimer = 0;
+    // One at a time: the field-effect list is short, and two bubbles in the same frame is
+    // a fight over it rather than two bubbles.
+    for (seat = 0; seat < BR_MAX_SEATS; seat++)
+    {
+        if (BrGhosts_Emote(seat))
+            return;
+    }
+}
+
 void BrGhosts_Tick(void)
 {
     u8 seat;
@@ -394,6 +452,7 @@ void BrGhosts_Tick(void)
             Despawn(seat);
         }
     }
+    EmoteBusyGhosts();
     WatchOwn();
     EmitOwn();
 }

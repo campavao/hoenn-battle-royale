@@ -1,0 +1,18 @@
+# no-levels: no level number on any screen during a round (POK-266, Kanto v0.37.0). The
+# rung is shared, so a number that is the same for everybody is noise -- and reading an
+# opponent by their team rather than by a number is the point.
+#
+# The party screen is the one a player opens most, so that is the one this looks at:
+# START, POKEMON, and a shot with a match running. `levels-shown.txt` is the control,
+# the same screen with no match, where the Lv is where it always was.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+poke u8 gBrMatch 2
+tap START
+wait 40
+tap A
+wait 150
+shot party
+say no levels ok

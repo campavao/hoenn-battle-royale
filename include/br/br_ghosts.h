@@ -45,6 +45,9 @@ void BrGhosts_Place(u8 seat, u8 skin, u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 d
 void BrGhosts_Step(u8 seat, u8 dir);
 void BrGhosts_Face(u8 seat, u8 dir);
 void BrGhosts_Remove(u8 seat);
+// The busy bubble over one seat's ghost (POK-266): "!" in a fight, "?" in a menu.
+// TRUE when one fired.
+bool8 BrGhosts_Emote(u8 seat);
 // Called every frame from BrFrame; only acts while the overworld is running.
 void BrGhosts_Tick(void);
 // The seat whose ghost is the given object event, or BR_NO_OBJ.

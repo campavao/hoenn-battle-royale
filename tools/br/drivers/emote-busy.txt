@@ -1,0 +1,32 @@
+# emote-busy: what everybody else is doing, over their head (POK-266, Kanto v0.29.0).
+# The engage already refuses a trainer who is in a menu or a battle (POK-230) and
+# nothing showed it, so a trainer standing still in a fight looked exactly like one
+# standing still waiting to take yours.
+#
+# A ghost two tiles east, then BUSY says it is fighting. The bubble fires on a three
+# second timer, so the shot is taken after one.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# seat 1 placed two tiles east of us, facing west
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrSeats+16 1
+# BUSY: type 17 (0x11), framed len 5 = hdr(02 00 00) + seat 01, kind 02 (BR_BUSY_BATTLE)
+pokebytes gBrMailbox+0x1058 11 05 02 00 00 01 02
+poke u16 gBrMailbox+0x0C 2
+wait 20
+expect u8 gBrSeatBusy+1 2
+# The bubble fires on the message, not on the three-second repeat, so this frame has
+# it: the moment somebody steps into a fight is the moment it is worth showing.
+wait 20
+shot bang
+# it goes quiet again when they do
+pokebytes gBrMailbox+0x1098 11 05 02 00 00 01 00
+poke u16 gBrMailbox+0x0C 3
+wait 20
+expect u8 gBrSeatBusy+1 0
+wait 220
+shot quiet
+say emote busy ok

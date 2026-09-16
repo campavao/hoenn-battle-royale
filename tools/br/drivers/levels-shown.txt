@@ -1,0 +1,15 @@
+# levels-shown: the control for no-levels.txt (POK-266). The same party screen with no
+# match running, where the Lv is where Emerald always put it. Read the two frames
+# together -- on its own, a screenshot of a screen with no number on it proves nothing.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+# no match: gBrMatch stays zeroed
+expect u8 gBrMatch 0
+tap START
+wait 40
+tap A
+wait 150
+shot party
+say levels shown ok
