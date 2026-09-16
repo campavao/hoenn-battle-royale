@@ -9,6 +9,10 @@ const __dirname = import.meta.dirname;
 // relay (7790) the developer already has open.
 const RELAY_PORT = 7791;
 const VITE_PORT = 5174;
+// The built site, served the way it ships. The service worker registers only in a
+// production build (POK-246), so offline behaviour cannot be tested against the dev
+// server at all -- it needs this one.
+const PREVIEW_PORT = 5175;
 
 export default defineConfig({
   testDir: './e2e',
@@ -43,6 +47,16 @@ export default defineConfig({
       port: RELAY_PORT,
       reuseExistingServer: !process.env.CI,
       timeout: 15_000,
+    },
+    {
+      // `vite preview` serves dist/ with the same COOP/COEP headers production sends,
+      // and builds first so what it serves is this checkout rather than whatever was
+      // last built. The build is about half a second.
+      command: `npx vite build && npx vite preview --port ${PREVIEW_PORT} --strictPort`,
+      cwd: __dirname,
+      port: PREVIEW_PORT,
+      reuseExistingServer: true,
+      timeout: 60_000,
     },
     {
       command: `npx vite --port ${VITE_PORT} --strictPort`,

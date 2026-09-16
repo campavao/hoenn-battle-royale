@@ -1523,7 +1523,24 @@ function wirePlayScreen(emu: Emulator): void {
   wireFps(emu);
 }
 
+/** Registers the service worker (POK-246), so a second visit works with no network and
+ *  the site can be added to a home screen. Production only: in dev it would cache the
+ *  dev server's own modules and fight HMR for the rest of the afternoon. */
+function registerServiceWorker(): void {
+  if (import.meta.env.DEV || !('serviceWorker' in navigator)) return;
+  // After load, so it never competes with the shell and the wasm core for the network
+  // on a first visit -- which is the visit that decides whether anybody comes back.
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      // A blocked worker (private mode, an http:// origin, a policy) costs offline and
+      // nothing else, so it is worth a line in the console and not a word on screen.
+      console.info('[pwa] no service worker:', err);
+    });
+  });
+}
+
 async function main(): Promise<void> {
+  registerServiceWorker();
   setVersionLine('—');
   const canvas = $('#canvas') as HTMLCanvasElement;
   const emu = await Emulator.create(canvas);

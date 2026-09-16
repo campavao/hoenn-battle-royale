@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Hoenn Battle Royale">
+  <rect width="192" height="192" rx="34" fill="#0f151a"/>
+  <!-- The ring, closing. -->
+  <circle cx="96" cy="96" r="66" fill="none" stroke="#2b3742" stroke-width="10"/>
+  <circle cx="96" cy="96" r="42" fill="none" stroke="#4c7a99" stroke-width="10"/>
+  <circle cx="96" cy="96" r="18" fill="#e4572e"/>
+  <rect x="78" y="92" width="36" height="8" fill="#0f151a"/>
+</svg>

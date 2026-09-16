@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Hoenn Battle Royale">
+  <!-- Maskable: everything that matters stays inside the middle 80%, because the
+       launcher may crop this to a circle, a squircle or a rounded square. -->
+  <rect width="192" height="192" fill="#0f151a"/>
+  <circle cx="96" cy="96" r="52" fill="none" stroke="#2b3742" stroke-width="9"/>
+  <circle cx="96" cy="96" r="33" fill="none" stroke="#4c7a99" stroke-width="9"/>
+  <circle cx="96" cy="96" r="14" fill="#e4572e"/>
+  <rect x="82" y="92" width="28" height="7" fill="#0f151a"/>
+</svg>
