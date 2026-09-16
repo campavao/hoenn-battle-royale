@@ -19,6 +19,9 @@
 #include "script_pokemon_util.h"
 #include "constants/songs.h"
 #include "constants/items.h"
+#include "constants/pokemon.h"
+#include "br/br_catch.h"
+#include "br/br_spectate.h"
 #include "br/br_hud.h"
 #include "field_player_avatar.h"
 #include "constants/species.h"
@@ -370,9 +373,34 @@ static void SendPickup(struct BrLootItem *it)
     Drop(it);
 }
 
+// A ball that changed hands finishes the trade the game would have wanted. Kanto's
+// rule (BR-24): the four classic trade evolutions go off when somebody else's mon
+// reaches you, and your own ball picked back up does not. The item-held ones
+// (CLAMPERL, SEADRA) need a held item the ground does not carry, so they stay put.
+static u16 TradedInto(u16 species)
+{
+    switch (species)
+    {
+    case SPECIES_KADABRA:  return SPECIES_ALAKAZAM;
+    case SPECIES_MACHOKE:  return SPECIES_MACHAMP;
+    case SPECIES_GRAVELER: return SPECIES_GOLEM;
+    case SPECIES_HAUNTER:  return SPECIES_GENGAR;
+    default:               return species;
+    }
+}
+
+// Whose ball it was. A player's key carries their seat in the high byte; a beaten
+// Hoenn trainer's has the top bit set and belongs to nobody.
+static bool8 WasOurs(u16 key)
+{
+    return (key & 0x8000) == 0 && (u8)(key >> 8) == gBrMySeat;
+}
+
 static void Take(struct BrLootItem *it)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
+    struct Pokemon mon;
+    u16 species;
     u8 *p;
 
     if (it->kind == BR_LOOT_BAG)
@@ -387,20 +415,22 @@ static void Take(struct BrLootItem *it)
         SendPickup(it);
         return;
     }
-    // A ball: the mon inside goes to the party. A full party keeps it on the ground --
-    // the release picker a full party really wants is the catch ticket's (POK-227).
-    if (CalculatePlayerPartyCount() >= PARTY_SIZE)
-    {
-        BrHud_Box(sText_NoRoom);
-        return;
-    }
-    ScriptGiveMon(it->species, it->level, ITEM_NONE, 0, 0, 0);
+    // A ball: the mon inside goes to the party, evolving on the way if it just changed
+    // hands. A full party goes through the catch ticket's own release flow -- the same
+    // question, asked once, in one place (POK-227).
+    species = WasOurs(it->key) ? it->species : TradedInto(it->species);
+    CreateMon(&mon, species, it->level, USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
     p = StringCopy(line, sText_Took);
-    p = StringCopy(p, gSpeciesNames[it->species]);
+    p = StringCopy(p, gSpeciesNames[species]);
     StringCopy(p, sText_Bang);
     PlaySE(SE_PIN);
     BrHud_Box(line);
     SendPickup(it);
+    // Off the ground either way: parked, the release script asks who gives way next
+    // frame, and cancelling there loses it -- which is the rule a catch already plays by.
+    if (!BrCatch_TryPark(&mon))
+        GiveMonToPlayer(&mon);
+    BrSpectate_SendParty();
 }
 
 // A on the cell we stand on or the one we face. The loot has no script of its own --

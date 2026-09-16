@@ -8,6 +8,7 @@
 #include "constants/party_menu.h"
 #include "move_relearner.h"
 #include "br/br_hud.h"
+#include "br/br_spectate.h"
 #include "br/br_catch.h"
 
 EWRAM_DATA struct BrCatch gBrCatch = {0};
@@ -47,6 +48,7 @@ void BrCatch_Apply(void)
         gPlayerParty[slot] = gBrPendingCatch; // the old one is released, the catch takes its slot
     gBrCatch.pending = FALSE;
     gBrCatch.asked = FALSE;
+    BrSpectate_SendParty(); // the team changed: spectators and the director want it
 }
 
 void BrCatch_Tick(void)

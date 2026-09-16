@@ -1,0 +1,25 @@
+# loot-trade-evo: a ball that changed hands finishes the trade (POK-227, Kanto BR-24).
+# Boots with no party (mode 1) so the picked-up mon is party slot 0 and its species
+# reads straight out of the PARTY message the pickup sends.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 0
+# SPILL from seat 2 -- not us: one KADABRA (species 64) at level 30, on the cell we face
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 02 00 09 01 00 02 0C 00 10 00 40 00 1E 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+expect u8 gBrLoot+0xA0 1
+tap A
+wait 30
+expect u8 gPlayerPartyCount 1
+# out[2] is the PICKUP, out[3] the PARTY that follows every team change
+expect u8 gBrMailbox+0x98 10
+expect u8 gBrMailbox+0xD8 7
+expect u8 gBrMailbox+0xDD 0
+expect u8 gBrMailbox+0xDE 1
+# ALAKAZAM (65), not the KADABRA (64) that was lying there
+expect u8 gBrMailbox+0xDF 0x41
+expect u8 gBrMailbox+0xE0 0x00
+shot traded
+say loot trade evo ok

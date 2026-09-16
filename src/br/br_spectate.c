@@ -366,7 +366,7 @@ static void PackOwnMon(struct Pokemon *mon, u8 *row)
 
 // The answer to a peek: everyone hears it, and the asker's page is the one that keeps
 // it (match/spectate.ts drops a party from a seat it is not watching).
-static void SendOwnParty(void)
+void BrSpectate_SendParty(void)
 {
     u8 *buf = Alloc(2 + PARTY_SIZE * BR_PEEK_ROW);
     u8 count = 0, i;
@@ -405,7 +405,7 @@ static void HandlePeek(const u8 *payload, u8 len)
 
     if (n < 2 || d[1] != gBrMySeat)
         return; // a broadcast; only the trainer being asked about answers
-    SendOwnParty();
+    BrSpectate_SendParty();
 }
 
 static void ParseParty(const u8 *d, u16 n)

@@ -44,5 +44,8 @@ void BrSpectate_Follow(u8 seat);
 // The heap was just re-initialised (malloc.c's InitHeap, which CB2_InitBattle calls on
 // the way into every battle). Everything this module is holding there is gone with it.
 void BrSpectate_HeapReset(void);
+// Our party, on the wire (BR_MSG_PARTY). Sent when somebody peeks, and again whenever
+// the team changes -- a spectator's peek box and the director both want it current.
+void BrSpectate_SendParty(void);
 
 #endif // GUARD_BR_SPECTATE_H
