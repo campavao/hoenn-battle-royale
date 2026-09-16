@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beat, dropped, fewLeft, fog, LINE_MAX, opening, out, short, won } from './ticker';
+import { beat, dropped, fewLeft, fog, LINE_MAX, opening, out, said, short, won } from './ticker';
 import type { TickerMsg } from '../net/wire';
 
 const all = (): (TickerMsg | null)[] => [
@@ -12,6 +12,7 @@ const all = (): (TickerMsg | null)[] => [
   out(0, 'FLANNERY', 0),
   fewLeft(0, 3),
   won(0, 'WALLACE'),
+  said(0, 'COURTNEY', 'THE FOG IS COMING.'),
 ];
 
 describe('ticker lines', () => {
@@ -43,5 +44,14 @@ describe('ticker lines', () => {
   it('do not truncate a long name into nonsense in a two-name line', () => {
     // Both names are cut before the line is built, so the line is never cut mid-word.
     expect(beat(0, 'ABCDEFGHIJ', 'KLMNOPQRST')!.text).toBe('ABCDEFG BEAT KLMNOPQ!');
+  });
+});
+
+describe('a trainer speaking', () => {
+  it('is their name and their words, marked as chat', () => {
+    const msg = said(9, 'COURTNEY', 'FOUND YOU.')!;
+    expect(msg.text).toBe('COURTNE: FOUND YOU.');
+    expect(msg.kind).toBe('say');
+    expect(msg.seat).toBe(9);
   });
 });

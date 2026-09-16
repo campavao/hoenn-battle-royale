@@ -45,6 +45,12 @@ export function beat(seat: number, winner: string, loser: string): TickerMsg | n
   return line(seat, `${short(winner)} BEAT ${short(loser)}!`, 'kill');
 }
 
+/** A trainer's own words -- a bot's dealt line (POK-239), or a player's chat. The
+ *  ticker's `say` kind, which is the one text channel that reaches the ROM's screen. */
+export function said(seat: number, name: string, text: string): TickerMsg | null {
+  return line(seat, `${short(name)}: ${text}`, 'say');
+}
+
 /** Somebody is out, however it happened, and how many are left after it. */
 export function out(seat: number, name: string, left: number): TickerMsg | null {
   if (left <= 0) return line(seat, `${short(name)} IS OUT!`, 'kill');

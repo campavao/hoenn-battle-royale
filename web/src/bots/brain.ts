@@ -127,6 +127,8 @@ export interface BotsOptions {
   /** Two bots settled it. The only place both sides of a fight are known at once,
    *  which is what a kill feed needs. */
   onDuel?: (winner: number, loser: number) => void;
+  /** A bot walked up to somebody. Its chance to say something (POK-239). */
+  onEngage?: (seat: number, target: number) => void;
   /** Every rule that fired, as it fires. Kanto's `Bots.decisions`: the only way to
    *  answer "why did it go there" about something that walks for sixteen minutes.
    *  Off in the browser; `tools/br/bots-replay.ts` turns it on. */
@@ -402,6 +404,7 @@ export class Bots {
         nonce: this.nonce,
       });
       this.note(walker, 'engage', `seat ${player.seat}`);
+      this.opts.onEngage?.(walker.bot.seat, player.seat);
       this.fighting.add(walker.bot.seat);
       this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
       walker.engageAfter = now + ENGAGE_COOLDOWN_MS;

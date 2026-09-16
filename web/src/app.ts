@@ -20,6 +20,7 @@ import { Loot } from './match/loot';
 import { Results } from './match/results';
 import { Bots } from './bots/brain';
 import { dealBots } from './bots/roster';
+import { voiceFor } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { emptyNote, fixedRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
 import {
@@ -619,6 +620,7 @@ function startBots(
   players: () => RosterEntry[],
   sendTo: (seat: number, msg: Msg) => void,
   onDuel: (winner: number, loser: number) => void,
+  onEngage: (seat: number, target: number) => void,
   fill: number,
 ): {
   bots: Bots;
@@ -678,6 +680,7 @@ function startBots(
     deal: (bot, atPhase) => dealParty(seed, bot.seat, atPhase),
     seed,
     onDuel,
+    onEngage,
     centres: () => world.centres(),
     // Bots are on this roster too -- the host applies its own bots' `place` to it --
     // so this is the whole field, which is what the hunt rule wants.
@@ -1005,7 +1008,15 @@ function wireRoom(
       },
       // The kill feed. A duel is the only moment both sides of a fight are known at
       // once -- an `out` on its own cannot say who did it.
-      (winner, loser) => say(Ticker.beat(winner, nameOf(winner), nameOf(loser))),
+      (winner, loser) => {
+        say(Ticker.beat(winner, nameOf(winner), nameOf(loser)));
+        // And they say something about it (POK-239). Dealt from the seed, so the same
+        // bot has the same voice all match on every client that works it out.
+        say(Ticker.said(winner, nameOf(winner), voiceFor(seed, winner).win));
+        say(Ticker.said(loser, nameOf(loser), voiceFor(seed, loser).lose));
+      },
+      // Walking up to somebody is the other time a bot has something to say.
+      (seat) => say(Ticker.said(seat, nameOf(seat), voiceFor(seed, seat).intro)),
       // How many bots the host is filling to (POK-241's FILL), held to what the room
       // has room for.
       botFill() === 0 ? 0 : Math.max(0, (controls.roster?.max ?? BOT_FILL) - seats.length),
@@ -1219,6 +1230,9 @@ function wireRoom(
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
   relay.on('roster', (ev) => {
     controls.roster = ev;
+    // The buzzer, before the panel is drawn: a director created after the draw would
+    // leave the host's controls on screen for the rest of the match.
+    if (ev.members.length >= 2 && autoStarts()) startDirector(ev.members.map((m) => m.id));
     if (bridge) renderRoom(bridge);
     if (bridge) renderSpectate(bridge, spectate);
     if (bridge) {
@@ -1230,7 +1244,6 @@ function wireRoom(
         renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
       }, director !== null);
     }
-    if (ev.members.length >= 2 && autoStarts()) startDirector(ev.members.map((m) => m.id));
   });
   relay.on('room_error', (ev) => (codeEl.textContent = `Couldn't join: ${ev.reason}`));
   relay.on('closed', (ev) => {
