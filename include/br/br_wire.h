@@ -217,4 +217,11 @@
 // Payload (1 byte): seat u8 (0xFF = stop)
 #define BR_MSG_FOLLOW 20
 
+// A spectator asks what the trainer they watch is carrying (POK-233). Broadcast, so
+// every ROM sees it and only `target` answers -- with a BR_MSG_PARTY of its own party,
+// which is how the asker's peek box gets its rows and how the answerer counts the eyes
+// on it.
+// Payload (2 bytes): asker u8, target u8
+#define BR_MSG_PEEK 21
+
 #endif // GUARD_BR_WIRE_H

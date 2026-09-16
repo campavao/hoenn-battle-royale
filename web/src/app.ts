@@ -13,8 +13,9 @@ import { Bridge } from './net/bridge';
 import { crossesToRom, packSlot, type BinarySlot } from './net/slots';
 import { decode, type Msg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
-import { writeHudClockSecs, writeHudLeft, writeMySeat } from './net/hud';
+import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat } from './net/hud';
 import { Director, type DirectorState, type DirectorWorld } from './match/director';
+import { Spectate } from './match/spectate';
 import worldData from './data/world.json';
 import landingData from './data/landing.json';
 import regionmapData from './data/regionmap.json';
@@ -444,6 +445,73 @@ function renderRoom(bridge: Bridge): void {
   }
 }
 
+// ---- spectating (POK-233) -----------------------------------------------------------
+
+const SPECTATE_TICK_MS = 500; // the peek timer is 3s; this only has to not miss it by much
+
+/** The strip of who an eliminated player can watch. Alive only, ourselves never, and
+ *  nothing at all while we are still in the match -- watching is what being out is
+ *  for. Clicking a seat hands our own ROM a `follow`; clicking the one we are on, or
+ *  STOP, gives the camera back. */
+function renderSpectate(bridge: Bridge, spectate: Spectate): void {
+  const strip = $('#spectate-strip') as HTMLElement;
+  const me = bridge.roster.get(bridge.seat);
+  const out = me !== undefined && !me.alive;
+  strip.hidden = !out;
+  if (!out) {
+    if (spectate.watchingSeat() !== null) bridge.pushToRom(spectate.follow(null));
+    strip.innerHTML = '';
+    return;
+  }
+  strip.innerHTML = '';
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = 'WATCH';
+  strip.appendChild(label);
+  const watching = spectate.watchingSeat();
+  for (const entry of bridge.roster.all()) {
+    if (!entry.alive || entry.seat === bridge.seat) continue;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = entry.name || `P${entry.seat}`;
+    button.setAttribute('aria-pressed', String(watching === entry.seat));
+    button.addEventListener('click', () => {
+      const next = spectate.watchingSeat() === entry.seat ? null : entry.seat;
+      bridge.pushToRom(spectate.follow(next));
+      renderSpectate(bridge, spectate);
+    });
+    strip.appendChild(button);
+  }
+  if (watching !== null) {
+    const stop = document.createElement('button');
+    stop.type = 'button';
+    stop.textContent = 'STOP';
+    stop.addEventListener('click', () => {
+      bridge.pushToRom(spectate.follow(null));
+      renderSpectate(bridge, spectate);
+    });
+    strip.appendChild(stop);
+  }
+}
+
+/** The spectator's own pump: re-ask the trainer we watch what they carry (the ask is
+ *  also what tells them they are being watched), and mirror how many are watching US
+ *  into the corner eye. Returns a disposer. */
+function startSpectateLoop(
+  emu: Emulator,
+  hudBase: number | undefined,
+  bridge: Bridge,
+  spectate: Spectate,
+): () => void {
+  const id = setInterval(() => {
+    const now = performance.now();
+    const ask = spectate.duePeek(bridge.seat, now);
+    if (ask) bridge.relay.all(ask);
+    if (hudBase !== undefined) writeHudEyes(emu, hudBase, spectate.eyes(now));
+  }, SPECTATE_TICK_MS);
+  return () => clearInterval(id);
+}
+
 // ---- the match director's page-side wiring (POK-222/223/224/228) ------------------------
 
 const AUTO_START_MS = 10_000; // "for now": a room starts 10s after hosting, or once 2+ seats
@@ -609,6 +677,9 @@ function wireRoom(
     };
   };
 
+  const spectate = new Spectate();
+  let stopSpectateLoop: (() => void) | null = null;
+
   const attach = (seat: number, code: string) => {
     if (bridge) bridge.dispose(); // a re-join after a reconnect must not leave two pumps on one ring
     console.info(`[room] attached as seat ${seat} in ${code}`);
@@ -618,6 +689,21 @@ function wireRoom(
     renderRoom(bridge);
     const seatBase = symbols?.get('gBrMySeat');
     if (seatBase !== undefined) writeMySeat(emu, seatBase, seat);
+    // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast.
+    bridge.setRomFilter((msg) => spectate.wantsFromRelay(msg));
+    bridge.relay.on('recv', (ev) => {
+      try {
+        const m = decode(JSON.stringify(ev.m));
+        if (m.t === 'peek' && m.target === seat) spectate.notePeek(m.seat, performance.now());
+        else if (m.t === 'result') spectate.noteResult(m.seat);
+        else if (m.t === 'out') renderSpectate(bridge!, spectate);
+      } catch {
+        // bridge.ts already counted the drop; nothing to spectate about it either way.
+      }
+    });
+    stopSpectateLoop?.();
+    stopSpectateLoop = startSpectateLoop(emu, symbols?.get('gBrHud'), bridge, spectate);
+    renderSpectate(bridge, spectate);
     if (isHost) setTimeout(startDirector, AUTO_START_MS);
   };
 
@@ -625,12 +711,14 @@ function wireRoom(
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
   relay.on('roster', (ev) => {
     if (bridge) renderRoom(bridge);
+    if (bridge) renderSpectate(bridge, spectate);
     if (ev.members.length >= 2) startDirector();
   });
   relay.on('room_error', (ev) => (codeEl.textContent = `Couldn't join: ${ev.reason}`));
   relay.on('closed', (ev) => {
     codeEl.textContent = `Disconnected: ${ev.reason}`;
     stopDirectorLoop?.();
+    stopSpectateLoop?.();
   });
 
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;

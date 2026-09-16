@@ -29,6 +29,7 @@ import type {
   BstartMsg,
   TurnMsg,
   FollowMsg,
+  PeekMsg,
   ChallengeMsg,
   ClockMsg,
   Dir,
@@ -69,6 +70,7 @@ export const BR_MSG = {
   BSTART: 18,
   TURN: 19,
   FOLLOW: 20,
+  PEEK: 21,
   PICKUP: 10,
   SPILL: 11,
   RING: 12,
@@ -275,6 +277,13 @@ function decodeBstart(bytes: Uint8Array): BstartMsg {
   const r = new Reader(bytes);
   const battle = r.u16();
   return { t: 'bstart', battle, data: Array.from(r.raw(bytes.length - 2)) };
+}
+function encodePeek(m: PeekMsg): Uint8Array {
+  return new Writer().u8(m.seat).u8(m.target).toBytes();
+}
+function decodePeek(bytes: Uint8Array): PeekMsg {
+  const r = new Reader(bytes);
+  return { t: 'peek', seat: r.u8(), target: r.u8() };
 }
 // seat 0xFF is "stop following" -- the ROM's BR_NO_SEAT.
 function encodeFollow(m: FollowMsg): Uint8Array {
@@ -548,6 +557,7 @@ const CODECS: Record<string, Codec> = {
   bstart: { type: BR_MSG.BSTART, encode: (m) => encodeBstart(m as BstartMsg), decode: decodeBstart },
   turn: { type: BR_MSG.TURN, encode: (m) => encodeTurn(m as TurnMsg), decode: decodeTurn },
   follow: { type: BR_MSG.FOLLOW, encode: (m) => encodeFollow(m as FollowMsg), decode: decodeFollow },
+  peek: { type: BR_MSG.PEEK, encode: (m) => encodePeek(m as PeekMsg), decode: decodePeek },
   party: { type: BR_MSG.PARTY, encode: (m) => encodeParty(m as PartyMsg), decode: decodeParty },
   faint: { type: BR_MSG.FAINT, encode: (m) => encodeFaint(m as FaintMsg), decode: decodeFaint },
   out: { type: BR_MSG.OUT, encode: (m) => encodeOut(m as OutMsg), decode: decodeOut },

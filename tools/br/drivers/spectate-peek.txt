@@ -1,0 +1,29 @@
+# spectate-peek: a spectator asks what we are carrying (POK-233). PEEK is a broadcast
+# and only the seat it names answers -- with a PARTY of its own party, in the wire's
+# unencrypted PackedMon shape.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the boot has emitted our own PLACE (out[0]) and the warp's settling STEP (out[1])
+expect u16 gBrMailbox+0x08 2
+# PEEK from seat 1 about seat 0 -- us: type 21 (0x15), len 5 = hdr(02 00 00) + 01 00
+pokebytes gBrMailbox+0x1018 15 05 02 00 00 01 00
+poke u16 gBrMailbox+0x0C 1
+wait 10
+# the answer is out[2]: PARTY (type 7), 102 bytes over two slots, seat 0, one mon,
+# species 0x0115 (Treecko), level 5
+expect u8 gBrMailbox+0x98 7
+expect u16 gBrMailbox+0x9A 102
+expect u8 gBrMailbox+0x9D 0
+expect u8 gBrMailbox+0x9E 1
+# species little-endian, byte by byte: the payload is at an odd address and a u16 read
+# there rotates (br-symbols/harness note)
+expect u8 gBrMailbox+0x9F 0x15
+expect u8 gBrMailbox+0xA0 0x01
+expect u8 gBrMailbox+0xA1 5
+# a PEEK about somebody else says nothing: the ring does not grow
+pokebytes gBrMailbox+0x1058 15 05 02 00 00 01 03
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u16 gBrMailbox+0x08 4
+say spectate peek ok

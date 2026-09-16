@@ -69,7 +69,7 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `bstart` | `BR_MSG_BSTART` 18 | ROM-&gt;page-&gt;page-&gt;ROM | yes | the challenger's ROM, when a link battle begins; carries seed + both parties + names so a spectator replays it as a BATTLE_TYPE_RECORDED |
 | `turn` | `BR_MSG_TURN` 19 | ROM-&gt;page-&gt;page-&gt;ROM | yes | the challenger's ROM, streaming the battle's new action bytes each turn so the spectator's replay stays a turn behind |
 | `follow` | `BR_MSG_FOLLOW` 20 | page-&gt;ROM | yes | the spectator's own page, to put its camera on a seat's ghost; `seat` null (0xFF on the wire) stops. Never leaves the page that sent it -- the seat being watched is not told |
-| `peek` | -- | page-&gt;page | no | a spectator, asking for a party |
+| `peek` | `BR_MSG_PEEK` 21 | page-&gt;ROM-&gt;page | yes | a spectator asking what the trainer they watch carries. Broadcast; only `target`'s ROM answers, with a `party` of its own. The re-ask is also the watcher tally the corner eye counts |
 | `botout` | -- | page&lt;-&gt;page | no | whoever beat a bot |
 | `botrec` | -- | page&lt;-&gt;page | no | whoever changed a bot's persistent record |
 | `fame` | -- | page&lt;-&gt;page | no | the champion, at the end of a match |
@@ -133,7 +133,7 @@ runtime.
   engine specifics (`src/link/Handshake.lua`, `Fingerprint`'s `modKey`) that have no
   Hoenn analogue; this wire's version gate lives entirely in the relay's room check
   above, not in per-message fields.
-- **`npcout`, `botout`, `botrec`, `fame`, `late`, `win`, `again`, `peek`
+- **`npcout`, `botout`, `botrec`, `fame`, `late`, `win`, `again`
   stayed JSON-only** even though some of them (npcout especially) arguably touch
   what a remote ROM renders: POK-217's scope named an explicit ROM-crossing subset
   ("place/step/face/map, challenge and the battle blocks, party, faint/out,

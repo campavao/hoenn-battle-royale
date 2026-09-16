@@ -334,6 +334,67 @@ static const u8 sPeekColors[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_C
 static const u8 sText_PeekLv[] = _(" Lv");
 static const u8 sText_PeekNone[] = _("no party seen yet");
 
+// Our own party in BR_MSG_PARTY's PackedMon shape (br_wire.h): a fixed, unencrypted
+// 100 bytes a page or another ROM can read without knowing this ROM's keys. Only the
+// fields a spectator is allowed to see get filled; the rest stays zero.
+static void PackOwnMon(struct Pokemon *mon, u8 *row)
+{
+    u8 name[POKEMON_NAME_LENGTH + 1];
+    u16 v;
+    u8 i, len;
+
+    for (i = 0; i < BR_PEEK_ROW; i++)
+        row[i] = 0;
+    v = GetMonData(mon, MON_DATA_SPECIES, NULL);
+    BrWire_WriteU16(row + BR_PEEK_OFF_SPECIES, v);
+    row[BR_PEEK_OFF_LEVEL] = GetMonData(mon, MON_DATA_LEVEL, NULL);
+    BrWire_WriteU16(row + BR_PEEK_OFF_HP, GetMonData(mon, MON_DATA_HP, NULL));
+    BrWire_WriteU16(row + BR_PEEK_OFF_MAXHP, GetMonData(mon, MON_DATA_MAX_HP, NULL));
+    row[7] = GetMonData(mon, MON_DATA_STATUS, NULL) != 0;
+    for (i = 0; i < MAX_MON_MOVES; i++)
+    {
+        BrWire_WriteU16(row + 8 + i * 4, GetMonData(mon, MON_DATA_MOVE1 + i, NULL));
+        row[10 + i * 4] = GetMonData(mon, MON_DATA_PP1 + i, NULL);
+    }
+    BrWire_WriteU16(row + 24, GetMonData(mon, MON_DATA_HELD_ITEM, NULL));
+    GetMonData(mon, MON_DATA_NICKNAME, name);
+    for (len = 0; len < POKEMON_NAME_LENGTH && name[len] != EOS; len++)
+        row[BR_PEEK_OFF_NICK + len] = name[len];
+    row[BR_PEEK_OFF_NICKLEN] = len;
+}
+
+// The answer to a peek: everyone hears it, and the asker's page is the one that keeps
+// it (match/spectate.ts drops a party from a seat it is not watching).
+static void SendOwnParty(void)
+{
+    u8 *buf = Alloc(2 + PARTY_SIZE * BR_PEEK_ROW);
+    u8 count = 0, i;
+
+    if (buf == NULL)
+        return;
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
+            break;
+        PackOwnMon(&gPlayerParty[i], buf + 2 + count * BR_PEEK_ROW);
+        count++;
+    }
+    buf[0] = gBrMySeat;
+    buf[1] = count;
+    BrWire_SendLarge(BR_MSG_PARTY, buf, (u16)(2 + count * BR_PEEK_ROW));
+    Free(buf);
+}
+
+static void HandlePeek(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 2 || d[1] != gBrMySeat)
+        return; // a broadcast; only the trainer being asked about answers
+    SendOwnParty();
+}
+
 static void ParseParty(const u8 *d, u16 n)
 {
     u8 count;
@@ -552,6 +613,7 @@ void BrSpectate_Init(void)
     BrNet_On(BR_MSG_TURN, HandleTurn);
     BrNet_On(BR_MSG_TURN | BR_MSG_CONT, HandleTurnCont);
     BrNet_On(BR_MSG_FOLLOW, HandleFollow);
+    BrNet_On(BR_MSG_PEEK, HandlePeek);
     BrNet_On(BR_MSG_PARTY, HandleParty);
     BrNet_On(BR_MSG_PARTY | BR_MSG_CONT, HandlePartyCont);
     sPartyAsm.buf = NULL;

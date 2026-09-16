@@ -64,6 +64,11 @@ export class Bridge {
 
   private readonly protocol: number;
   private opponentSeat: number | null = null;
+  /** An extra gate on relay -> ROM, set by the page (match/spectate.ts). A ROM handed
+   *  a `bstart` starts replaying a fight, and `bstart`/`turn` are broadcasts, so a
+   *  client that did not ask to watch must not be handed one. Unset, everything that
+   *  crosses passes. */
+  private romFilter: ((msg: Msg) => boolean) | null = null;
   /** Slots waiting for room in the ROM's in-ring, in send order. */
   private outQueue: BinarySlot[] = [];
   private framesCount = 0;
@@ -180,6 +185,7 @@ export class Bridge {
     this.noteChallenge(msg);
     this.roster.applyMsg(msg);
     if (!crossesToRom(msg.t)) return; // JSON-only (accept/decline/win/ready/...): nothing to push
+    if (this.romFilter && !this.romFilter(msg)) return;
 
     let slots: BinarySlot[];
     try {
@@ -189,6 +195,21 @@ export class Bridge {
       return;
     }
     this.outQueue.push(...slots);
+  }
+
+  setRomFilter(fn: ((msg: Msg) => boolean) | null): void {
+    this.romFilter = fn;
+  }
+
+  /** Hands a message straight to this ROM without it ever touching the relay: the
+   *  spectator's own `follow`, which is a page's word to its own ROM (docs/WIRE.md). */
+  pushToRom(msg: Msg): void {
+    if (!crossesToRom(msg.t)) return;
+    try {
+      this.outQueue.push(...packSlot(msg));
+    } catch {
+      this.dropCount++;
+    }
   }
 
   /** Remembers who we are fighting, so a later `bt` (which does not itself name a

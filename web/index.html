@@ -52,6 +52,13 @@
       .room-code { font-weight: 600; color: #9fb3c0; margin-bottom: 4px; }
       .room-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
       .room-roster li { color: #cfe3ef; }
+      .spectate-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
+      .spectate-strip .label { color: #9fb3c0; }
+      .spectate-strip button {
+        font: inherit; background: #33424c; color: #cfe3ef;
+        border: 0; border-radius: 6px; padding: 3px 9px; cursor: pointer;
+      }
+      .spectate-strip button[aria-pressed='true'] { background: #4f6b7d; color: #fff; }
       #screen-wrap {
         position: relative;
         flex: 0 0 auto;
@@ -143,6 +150,7 @@
           <div id="room-code" class="room-code"></div>
           <div id="match-strip" class="room-code" hidden></div>
           <ul id="room-roster" class="room-roster"></ul>
+          <div id="spectate-strip" class="spectate-strip" hidden></div>
         </div>
         <div id="screen-wrap">
           <canvas id="canvas" width="240" height="160"></canvas>
