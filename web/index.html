@@ -113,6 +113,16 @@
         background: #1a2128; color: #cfe3ef; font-size: 12px; max-width: 320px;
       }
       .trainer-card[hidden] { display: none; }
+      .card-kick {
+        margin-top: 6px; font: inherit; font-size: 11px; cursor: pointer;
+        background: #5a2d2d; color: #ffd9d9; border: 0; border-radius: 6px; padding: 3px 10px;
+      }
+      /* The way out of a room, for everybody who is not running it (POK-241). */
+      .room-leave {
+        margin-top: 6px; font: inherit; font-size: 11px; cursor: pointer;
+        background: #33424c; color: #cfe3ef; border: 0; border-radius: 6px; padding: 3px 12px;
+      }
+      .room-leave[hidden] { display: none; }
       .card-line { line-height: 1.5; }
       .spectate-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
       .spectate-strip .label { color: #9fb3c0; }
@@ -327,8 +337,10 @@
             <button id="room-text" type="button">TEXT MID</button>
             <button id="room-anim" type="button">ANIM ON</button>
             <button id="room-fog" type="button">FOG 120s</button>
+            <button id="room-safari" type="button">SAFARI 120s</button>
             <button id="room-start" type="button">START</button>
           </div>
+          <button id="room-leave" type="button" class="room-leave">LEAVE</button>
           <div id="trainer-card" class="trainer-card" hidden></div>
           <div id="room-note" class="room-note"></div>
           <div id="spectate-strip" class="spectate-strip" hidden></div>

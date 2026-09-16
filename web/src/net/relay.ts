@@ -459,6 +459,12 @@ export class RelayClient {
     });
   }
 
+  /** Shows one member the door (POK-241). Host only -- the relay checks -- and the
+   *  seat is refused if it comes back. */
+  kick(id: number): void {
+    this.send({ type: 'kick', id });
+  }
+
   /** Unicasts `msg` (a JSON-able wire.ts Msg) to one seat -- the relay's own member id. */
   to(seat: number, msg: unknown): void {
     this.send({ type: 'to', id: seat, m: msg });

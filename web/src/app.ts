@@ -34,6 +34,8 @@ import {
   roomView,
   startNote,
   textSpeedLabel,
+  nextSafari,
+  safariLabel,
 } from './match/room';
 import type { RosterEntry } from './match/roster';
 import type { TickerMsg, MapRef } from './net/wire';
@@ -749,7 +751,17 @@ function setRoomHash(key: string, value?: string): void {
   history.replaceState(null, '', `#${params.toString().replace(/=(?=&|$)/g, '')}`);
 }
 
+/** Set while this client is the one who may show somebody the door (POK-241).
+ *
+ *  Module state rather than an argument, because the roster is redrawn from two places
+ *  -- the room screen, which knows, and the spectate loop, which does not -- and the
+ *  loop's redraw every tick would otherwise quietly take the host's KICK away again. */
+let roomKick: RelayClient | null = null;
+
+/** The room, as everybody in it sees it. */
 function renderRoom(bridge: Bridge): void {
+  const canKick = roomKick !== null;
+  const relay = roomKick;
   const list = $('#room-roster') as HTMLElement;
   const card = $('#trainer-card') as HTMLElement;
   list.innerHTML = '';
@@ -775,6 +787,20 @@ function renderRoom(bridge: Bridge): void {
         row.className = 'card-line';
         row.textContent = line.label ? `${line.label}: ${line.value}` : line.value;
         card.appendChild(row);
+      }
+      // The host's one power over another seat, and it lives on the card rather than
+      // as a row of buttons beside every name (POK-241).
+      if (canKick && relay && !entry.isMe) {
+        const kick = document.createElement('button');
+        kick.type = 'button';
+        kick.className = 'card-kick';
+        kick.textContent = 'KICK';
+        kick.addEventListener('click', () => {
+          relay.kick(entry.seat);
+          card.hidden = true;
+          card.dataset.seat = '';
+        });
+        card.appendChild(kick);
       }
       card.dataset.seat = String(entry.seat);
       card.hidden = false;
@@ -808,6 +834,8 @@ interface RoomControls {
   textSpeed: 1 | 3 | 5;
   animations: boolean;
   fogSecs: number;
+  /** How long the opening runs. Zero means there is none: a dealt drop, straight away. */
+  safariSecs: number;
 }
 
 /** Draws the room panel: the roster everybody sees, and the four controls only the
@@ -839,6 +867,7 @@ function renderRoomPanel(
   const text = $('#room-text') as HTMLButtonElement;
   const anim = $('#room-anim') as HTMLButtonElement;
   const fog = $('#room-fog') as HTMLButtonElement;
+  const safari = $('#room-safari') as HTMLButtonElement;
   max.textContent = `MAX ${view.max}`;
   fill.textContent = view.fill > 0 ? `FILL ${view.fill}` : 'FILL OFF';
   door.textContent = { open: 'LISTED', private: 'UNLISTED', pass: 'PASSCODE' }[doorOf(view)];
@@ -846,6 +875,7 @@ function renderRoomPanel(
   text.textContent = `TEXT ${textSpeedLabel(controls.textSpeed)}`;
   anim.textContent = controls.animations ? 'ANIM ON' : 'ANIM OFF';
   fog.textContent = `FOG ${controls.fogSecs}s`;
+  safari.textContent = safariLabel(controls.safariSecs);
 
   max.onclick = () => relay.setMax(nextMax(view.max));
   fill.onclick = () => {
@@ -875,6 +905,12 @@ function renderRoomPanel(
   };
   fog.onclick = () => {
     controls.fogSecs = nextFog(controls.fogSecs);
+    redraw();
+  };
+  // How long the opening lasts, including not at all (POK-241). Zero is Kanto's own
+  // escape hatch: no Safari, straight to a dealt drop.
+  safari.onclick = () => {
+    controls.safariSecs = nextSafari(controls.safariSecs);
     redraw();
   };
   start.onclick = onStart;
@@ -1188,6 +1224,10 @@ function startSpectateLoop(
     if (ask) bridge.relay.all(ask);
     // Bots join by walking, not by joining: their seats appear in the roster from a
     // `place`, and there is no relay event to redraw the list on.
+    // This loop has no `isHost` of its own, and the roster it would ask lives in the
+    // room screen's closure -- so it draws the list without the host's KICK on it. The
+    // roster handler redraws with it the moment anything about the room changes, which
+    // is what a host is looking at when they go to use it.
     renderRoom(bridge);
     if (hudBase !== undefined) writeHudEyes(emu, hudBase, spectate.eyes(now));
   }, SPECTATE_TICK_MS);
@@ -1432,7 +1472,10 @@ function wireRoom(
   let stopDirectorLoop: (() => void) | null = null;
   let isHost = false;
   /** The host's room settings between roster events (POK-241). */
-  const controls: RoomControls = { fill: true, roster: null, textSpeed: 3, animations: true, fogSecs: 120 };
+  const controls: RoomControls = {
+    fill: true, roster: null, textSpeed: 3, animations: true, fogSecs: 120,
+    safariSecs: DEFAULT_SAFARI_SECS,
+  };
 
   /** `members` comes straight off the relay's roster event when there is one: the
    *  Bridge's own subscription may not have folded it into `bridge.roster` yet -- both
@@ -1533,7 +1576,7 @@ function wireRoom(
       // has room for.
       botFill() === 0 ? 0 : Math.max(0, (controls.roster?.max ?? BOT_FILL) - seats.length),
       resume,
-      paceOptions()?.safariSecs ?? DEFAULT_SAFARI_SECS,
+      paceOptions()?.safariSecs ?? controls.safariSecs,
     );
     director = new Director({
       // Bots are contestants, not scenery: leaving them out of the seat list makes
@@ -1543,6 +1586,7 @@ function wireRoom(
       // resume() is what takes them back out.
       seats: takeOver && match.seats.length > 0 ? match.seats : [...seats, ...bots.seats],
       options: paceOptions() ?? {
+        safariSecs: controls.safariSecs,
         fogSecs: controls.fogSecs,
         pace: { textSpeed: controls.textSpeed, animations: controls.animations },
       },
@@ -1860,6 +1904,12 @@ function wireRoom(
   // So it reloads nothing. The socket, the bridge and the roster stay up and only the
   // ROM starts over -- which is also the only way the next match is fair, since a ROM
   // that has just finished one is carrying that match's team and an empty ball pocket.
+  // The way out of a room (POK-241). A host leaving closes the room for everybody --
+  // that is what migration is for -- so this is offered to guests only.
+  const leave = $('#room-leave') as HTMLButtonElement;
+  leave.hidden = true;
+  leave.addEventListener('click', () => backToLobby());
+
   const playAgainButton = $('#play-again') as HTMLButtonElement;
   playAgainButton.addEventListener('click', () => {
     void (async () => {
@@ -1897,6 +1947,8 @@ function wireRoom(
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
   relay.on('roster', (ev) => {
     controls.roster = ev;
+    // Who may kick, for every redraw between now and the next roster event.
+    roomKick = ev.host === bridge?.seat ? relay : null;
     // The relay says who is watching; believe it over what we asked for.
     if (bridge) amWatching = ev.members.some((m) => m.id === bridge!.seat && m.spectate === true);
     // Promoted. The relay moves `host` on the roster and says nothing else about it
@@ -1931,6 +1983,7 @@ function wireRoom(
     // leave the host's controls on screen for the rest of the match.
     if (ev.members.length >= 2 && autoStarts()) startDirector(ev.members.map((m) => m.id));
     if (bridge) renderRoom(bridge);
+    leave.hidden = isHost;
     if (bridge) renderSpectate(bridge, spectate);
     if (bridge) {
       renderRoomPanel(controls, bridge.seat, relay, () => {

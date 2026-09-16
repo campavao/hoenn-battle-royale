@@ -105,6 +105,20 @@ export function textSpeedLabel(value: 1 | 3 | 5): string {
  *  the dial that says "quick game" or "a proper one". */
 export const FOG_STEPS = [30, 60, 90, 120, 180];
 
+/** How long the opening lasts (POK-241). Zero is Kanto's own escape hatch: no Safari
+ *  at all, straight to a dealt drop, which is the setting for people who have played
+ *  six in a row and want the match rather than the catching. */
+export const SAFARI_STEPS = [0, 60, 120, 180];
+
+export function nextSafari(secs: number): number {
+  const i = SAFARI_STEPS.indexOf(secs);
+  return i < 0 ? SAFARI_STEPS[0] : SAFARI_STEPS[(i + 1) % SAFARI_STEPS.length];
+}
+
+export function safariLabel(secs: number): string {
+  return secs === 0 ? 'NO SAFARI' : `SAFARI ${secs}s`;
+}
+
 export function nextFog(secs: number): number {
   const i = FOG_STEPS.indexOf(secs);
   return i < 0 ? FOG_STEPS[0] : FOG_STEPS[(i + 1) % FOG_STEPS.length];

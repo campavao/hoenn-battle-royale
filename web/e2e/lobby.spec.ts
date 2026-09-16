@@ -144,6 +144,42 @@ test("a name in the room opens that trainer's card (POK-268)", async ({ page }) 
   await expect(card).toBeHidden();
 });
 
+test('the host can set the opening length, and show somebody the door (POK-241)', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&noauto&nobots&rom=${romHashParam()}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+
+    // The opening length is a control now, and it cycles down to none at all.
+    const safari = host.locator('#room-safari');
+    await expect(safari).toHaveText('SAFARI 120s');
+    await safari.click();
+    await expect(safari).toHaveText('SAFARI 180s');
+    await safari.click();
+    await expect(safari).toHaveText('NO SAFARI');
+
+    // A guest arrives, and the host shows them the door from their card.
+    const guest = await guestCtx.newPage();
+    await guest.goto(`/#join=${code}&noauto&rom=${romHashParam()}`);
+    await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 60_000 });
+    // The guest has a way out of their own, which the host does not.
+    await expect(guest.locator('#room-leave')).toBeVisible({ timeout: 30_000 });
+    await expect(host.locator('#room-leave')).toBeHidden();
+
+    await host.locator('#room-roster .roster-name').nth(1).click();
+    await host.locator('#trainer-card .card-kick').click();
+    await expect(host.locator('#room-roster li')).toHaveCount(1, { timeout: 30_000 });
+  } finally {
+    await guestCtx.close().catch(() => {});
+    await hostCtx.close().catch(() => {});
+  }
+});
+
 test('the lobby is where you say who you are', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(`/#rom=${romHashParam()}`);

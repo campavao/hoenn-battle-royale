@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canStart, doorOf, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, roomView, startNote, textSpeedLabel } from './room';
+import { canStart, doorOf, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, roomView, startNote, textSpeedLabel, nextSafari, safariLabel } from './room';
 import type { RosterEvent } from '../net/relay';
 
 const roster = (over: Partial<RosterEvent> = {}): RosterEvent => ({
@@ -81,5 +81,20 @@ describe('the match options', () => {
     expect(nextFog(FOG_STEPS[0])).toBe(FOG_STEPS[1]);
     expect(nextFog(FOG_STEPS[FOG_STEPS.length - 1])).toBe(FOG_STEPS[0]);
     expect(nextFog(7)).toBe(FOG_STEPS[0]);
+  });
+});
+
+describe('the opening length (POK-241)', () => {
+  it('cycles through the steps and comes back round', () => {
+    expect(nextSafari(0)).toBe(60);
+    expect(nextSafari(60)).toBe(120);
+    expect(nextSafari(180)).toBe(0);
+    // Anything not on the ladder lands on its first rung rather than nowhere.
+    expect(nextSafari(45)).toBe(0);
+  });
+
+  it('says what no Safari means rather than showing a zero', () => {
+    expect(safariLabel(0)).toBe('NO SAFARI');
+    expect(safariLabel(120)).toBe('SAFARI 120s');
   });
 });
