@@ -16,6 +16,7 @@ import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat } from './net/hud';
 import { Director, type DirectorState, type DirectorWorld } from './match/director';
 import { Spectate } from './match/spectate';
+import { Loot } from './match/loot';
 import worldData from './data/world.json';
 import landingData from './data/landing.json';
 import regionmapData from './data/regionmap.json';
@@ -682,6 +683,11 @@ function wireRoom(
   };
 
   const spectate = new Spectate();
+  // The ROM only holds the loot for the map it is standing on, and forgets it on the
+  // way out; the page holds the match's whole table and hands back the piece that
+  // matters every time our own trainer arrives somewhere (POK-232).
+  const loot = new Loot();
+  let lootMap: string | null = null;
   let stopSpectateLoop: (() => void) | null = null;
 
   const attach = (seat: number, code: string) => {
@@ -695,10 +701,25 @@ function wireRoom(
     if (seatBase !== undefined) writeMySeat(emu, seatBase, seat);
     // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast.
     bridge.setRomFilter((msg) => spectate.wantsFromRelay(msg));
-    bridge.setOutObserver((msg) => spectate.noteOutgoing(msg));
+    bridge.setOutObserver((msg) => {
+      spectate.noteOutgoing(msg);
+      loot.note(msg);
+      // Our own `place` is how the page learns we changed maps -- there is no separate
+      // "I have arrived" message, and this one is already on the wire four times a
+      // second.
+      if (msg.t === 'place' && msg.map) {
+        const key = `${msg.map.group}:${msg.map.num}`;
+        if (key !== lootMap) {
+          lootMap = key;
+          const standing = loot.forMap(msg.map);
+          if (standing) bridge!.pushToRom(standing);
+        }
+      }
+    });
     bridge.relay.on('recv', (ev) => {
       try {
         const m = decode(JSON.stringify(ev.m));
+        loot.note(m);
         if (m.t === 'peek' && m.target === seat) {
           spectate.notePeek(m.seat, performance.now());
           // Their ROM answers the party; the fight so far is ours to hand over, since
