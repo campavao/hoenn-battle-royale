@@ -80,15 +80,14 @@ pace say `#fast`; the one that clicks the QUICK PLAY row is unchanged.
 This is separate from POK-273 (the bots eliminating each other too fast), which is real
 and still parked on `pok-273-pacing`.
 
-### HUD: the second window (the party/ball blobs) is not wanted
+### HUD: the second window (the party/ball blobs) is not wanted -- **fixed** (`1ef860e77`)
 
 "Under the seven left and time display there's an empty looking box... I think it shows
 the amount of pokeballs you have or Pokemon you have. I don't think we need that, let's
 get rid of it."
 
-That is the wound bar (POK-226): one blob per party mon, green while it is standing. Cam's
-call is to remove it. It is `BrHud`'s `winWound` and its draw; taking it out frees BG0
-tiles and a window slot, both of which are scarce.
+That was the wound bar (POK-226): one blob per party mon, green while it is standing. It
+is out, along with its window slot and its tiles -- both scarce on BG0.
 
 ### HUD: the window borders should match the game's own dialogue frame
 
@@ -144,7 +143,7 @@ and the peer has sent nothing at all, unwind it and put the trainer back on the 
 (Kanto has the same shape in its bag-stall watchdog). Nothing recovers a match, but a
 player who can walk away is not a player who has to reload.
 
-### `Disconnected: closed` stays on the room strip for the rest of the match
+### `Disconnected: closed` stays on the room strip for the rest of the match -- **half fixed** (`1004a6cd2`)
 
 Seen throughout the second video. `RelayClient` reconnects with backoff, but
 `app.ts:2208` writes the line and nothing ever un-writes it: there is no `open` event
@@ -152,6 +151,11 @@ to hang the recovery on (the lobby's own list works around this by polling
 `relay.isOpen()` on its refresh tick). Worse, a reconnect does NOT re-host or re-join
 -- `handleClose` nulls `id`/`code` and the module's own comment hands that decision to
 `app.ts`, which does not make it. So the socket comes back and the room does not.
+
+There is an `open` event now and the line is replaced when the socket comes back: the
+host hosts again, a guest is told the room carried on without them. Rejoining a room
+mid-match is still not possible -- the relay hands out a new id, which is this page's
+seat -- and that is what is left of this one.
 
 What the relay logged tonight says most of these were the page's own reloads
 (`drop CAM#1 room ... (closed) after 17s`), plus one `(idle) after 66s` which was the
