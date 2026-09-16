@@ -104,7 +104,7 @@ export class MatchLog {
   }
 
   private push(now: number, event: Omit<LogEvent, 'at'>): void {
-    if (this.startedAt === undefined || this.ended && event.t !== 'win') return;
+    if (this.startedAt === undefined || (this.ended && event.t !== 'win')) return;
     this.events.push({ at: Math.max(0, Math.round((now - this.startedAt) / 1000)), ...event });
   }
 
