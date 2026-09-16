@@ -13,9 +13,34 @@ import type { PackedMon } from '../net/wire';
 import encounterData from '../data/encounters.json';
 
 /** `tools/br/export-encounters.py`: every map's land table, species ids, the commonest
- *  first. A bot on Route 119 should be carrying Route 119's mons, and the ROM has had
- *  these tables all along -- the page just could not see them. */
-const ENCOUNTERS = encounterData as Record<string, number[]>;
+ *  first, plus the level-up evolutions. A bot on Route 119 should be carrying Route
+ *  119's mons and they should grow up with the rung -- the ROM has had both tables all
+ *  along, the page just could not see them. */
+const EXPORTED = encounterData as unknown as {
+  maps: Record<string, number[]>;
+  evolve: Record<string, [number, number]>;
+};
+const ENCOUNTERS = EXPORTED.maps;
+
+/** What this species turns into, and at what level. Undefined for something that does
+ *  not grow up on levels alone. */
+export function evolutionOf(species: number): { level: number; into: number } | undefined {
+  const row = EXPORTED.evolve[String(species)];
+  return row ? { level: row[0], into: row[1] } : undefined;
+}
+
+/** The species this one is at `level`, following the chain as far as it goes -- a
+ *  Wurmple dealt at rung 30 is a Beautifly, not a Wurmple that has been alive a long
+ *  time. */
+export function grownUp(species: number, level: number): number {
+  let at = species;
+  for (let step = 0; step < 4; step++) {
+    const evo = evolutionOf(at);
+    if (!evo || level < evo.level) return at;
+    at = evo.into;
+  }
+  return at;
+}
 
 /** `sLadder` in src/br/br_levels.c, indexed by ring phase. The one clock. */
 export const LADDER = [5, 15, 30, 50, 75, 100];
@@ -71,7 +96,7 @@ export function speciesAt(mapId: string): number[] {
 function mon(level: number, rng: () => number, mapId?: string): PackedMon {
   const local = mapId ? speciesAt(mapId) : [];
   if (local.length > 0) {
-    const species = local[pickIndex(rng, local.length)];
+    const species = grownUp(local[pickIndex(rng, local.length)], level);
     const max = hp(level);
     return {
       species,
@@ -92,11 +117,12 @@ function mon(level: number, rng: () => number, mapId?: string): PackedMon {
     };
   }
   const pick = POOL[pickIndex(rng, POOL.length)];
+  const species = grownUp(pick.species, level);
   const max = hp(level);
   const moves = [...pick.moves];
   if (pick.water && level >= SURF_RUNG && !moves.includes(MOVE_SURF)) moves.push(MOVE_SURF);
   return {
-    species: pick.species,
+    species,
     level,
     hp: max,
     maxHp: max,
@@ -106,7 +132,7 @@ function mon(level: number, rng: () => number, mapId?: string): PackedMon {
     otId: 0,
     personality: Math.floor(rng() * 0xffff_ffff) >>> 0,
     exp: 0,
-    nickname: pick.name,
+    nickname: species === pick.species ? pick.name : nameOf(species),
     ot: 'BR',
   };
 }

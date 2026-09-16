@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-map wild tables, so a bot's team comes from where it actually is (POK-237).
+"""Per-map wild tables and the level-up evolutions, for the bot dealer (POK-237).
 
 A bot that dropped on Route 119 should be carrying Route 119's mons. The ROM already
 has the tables -- `src/data/wild_encounters.json` is what `CreateWildMon` reads -- and
@@ -9,8 +9,13 @@ dealer can index by map.
 Only the land tables. A bot walks; the water, fishing and rock-smash tables belong to
 things it cannot do yet, and folding them in would put Tentacool in a forest.
 
+Also the level-up evolutions out of `src/data/pokemon/evolution.h`, so a bot's team
+grows with the rung the way a player's does. Only EVO_LEVEL: a stone or a trade is
+something a trainer chose to do, and a bot has neither the stone nor the friend.
+
 Writes web/src/data/encounters.json:
-  { "MAP_ROUTE101": [277, 288, 290], ... }   species ids, most common first
+  { "maps": { "MAP_ROUTE101": [277, 288, 290], ... },   species ids, commonest first
+    "evolve": { "277": [16, 278], ... } }               species -> [level, into]
 
 Species names come from include/constants/species.h, so a rename upstream is a build
 error here rather than a silently empty table.
@@ -36,6 +41,28 @@ def load_species_ids():
                 ids[m.group(1)] = int(m.group(2))
     return ids
 
+
+def load_level_evolutions(ids):
+    """species id -> [level, into]. Every EVO_LEVEL* form, which includes the
+    personality-branched ones (Wurmple's two, Nincada's) -- those are still things that
+    happen to a mon for walking around long enough. A stone or a trade is not: that is
+    something a trainer chose to do, and a bot has neither the stone nor the friend.
+    The first row wins, so a branch is a coin flip we call once."""
+    out = {}
+    name_re = re.compile(r"\[(SPECIES_[A-Z0-9_]+)\]")
+    evo_re = re.compile(r"EVO_LEVEL[A-Z_]*\s*,\s*(\d+)\s*,\s*(SPECIES_[A-Z0-9_]+)")
+    path = rp("src", "data", "pokemon", "evolution.h")
+    # One species a line in this table, which is what makes a line-at-a-time read
+    # honest here rather than lazy.
+    for line in open(path, encoding="utf-8"):
+        name = name_re.search(line)
+        evo = evo_re.search(line)
+        if not name or not evo:
+            continue
+        if name.group(1) not in ids or evo.group(2) not in ids:
+            continue
+        out.setdefault(ids[name.group(1)], [int(evo.group(1)), ids[evo.group(2)]])
+    return out
 
 def main():
     ids = load_species_ids()
@@ -73,13 +100,17 @@ def main():
         for map_id, counts in sorted(out.items())
     }
 
+    evolve = load_level_evolutions(ids)
+
     path = rp("web", "src", "data", "encounters.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(flat, f, separators=(",", ":"))
+        json.dump({"maps": flat, "evolve": {str(k): v for k, v in sorted(evolve.items())}},
+                  f, separators=(",", ":"))
 
     print(json.dumps({
         "maps": len(flat),
         "species": len({s for row in flat.values() for s in row}),
+        "evolutions": len(evolve),
         "bytes": os.path.getsize(path),
         "unknownSpecies": sorted(unknown),
     }, indent=2))

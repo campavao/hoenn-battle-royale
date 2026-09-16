@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dealParty, LADDER, rungForPhase, speciesAt } from './party';
+import { dealParty, evolutionOf, grownUp, LADDER, rungForPhase, speciesAt } from './party';
 import { packSlot, unpackSlot, reassembleSlots } from '../net/slots';
 import type { PartyMsg } from '../net/wire';
 
@@ -56,10 +56,17 @@ describe("a bot's mons come from where it is", () => {
     expect(speciesAt('MAP_NOWHERE_AT_ALL')).toEqual([]);
   });
 
-  it('deals a team out of the local table when there is one', () => {
-    const local = new Set(speciesAt('MAP_ROUTE101'));
+  it('deals a team out of the local table, grown up to the rung', () => {
+    // At a high rung the mon is what the table's species turns into, so check the
+    // chain rather than the raw table.
+    const local = speciesAt('MAP_ROUTE101');
+    const reachable = new Set(local.flatMap((s) => [s, grownUp(s, 100)]));
     for (const mon of dealParty(5, 31, 4, 'MAP_ROUTE101')) {
-      expect(local.has(mon.species)).toBe(true);
+      expect(reachable.has(mon.species)).toBe(true);
+    }
+    // And at the drop rung they are still the little ones.
+    for (const mon of dealParty(5, 31, 0, 'MAP_ROUTE101')) {
+      expect(local).toContain(mon.species);
     }
   });
 
@@ -72,5 +79,26 @@ describe("a bot's mons come from where it is", () => {
   it('still deals the same team from the same seed, map and all', () => {
     expect(dealParty(9, 30, 3, 'MAP_ROUTE110')).toEqual(dealParty(9, 30, 3, 'MAP_ROUTE110'));
     expect(dealParty(9, 30, 3, 'MAP_ROUTE110')).not.toEqual(dealParty(9, 30, 3, 'MAP_ROUTE119'));
+  });
+});
+
+describe('growing up', () => {
+  it('knows what the game says a species turns into', () => {
+    // WURMPLE -> SILCOON at 7 (the ROM's first branch; personality picks in-game).
+    expect(evolutionOf(290)).toEqual({ level: 7, into: 291 });
+    // TREECKO -> GROVYLE at 16.
+    expect(evolutionOf(277)).toEqual({ level: 16, into: 278 });
+  });
+
+  it('follows the chain as far as the level takes it', () => {
+    expect(grownUp(277, 5)).toBe(277); // TREECKO
+    expect(grownUp(277, 16)).toBe(278); // GROVYLE
+    expect(grownUp(277, 36)).toBe(279); // SCEPTILE
+    expect(grownUp(277, 100)).toBe(279); // and no further
+  });
+
+  it('leaves alone something that does not grow up on levels', () => {
+    expect(evolutionOf(317)).toBeUndefined(); // KECLEON
+    expect(grownUp(317, 100)).toBe(317);
   });
 });
