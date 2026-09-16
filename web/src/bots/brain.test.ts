@@ -41,7 +41,7 @@ function targets() {
   return out;
 }
 
-function run(botCount: number, seconds: number) {
+function run(botCount: number, seconds: number, inside?: (mapId: string) => boolean) {
   const world = new World([FIELD, PATH]);
   const sent: Msg[] = [];
   const bots = new Bots({
@@ -50,6 +50,7 @@ function run(botCount: number, seconds: number) {
     mapRef: (id) => REFS[id],
     send: (m) => void sent.push(m),
     rng: mulberry32(7),
+    inside,
   });
   const dealt = dealBots(99, botCount, [0, 1], targets().slice(0, 8).map((t) => ({
     mapId: t.mapId, map: REFS[t.mapId], x: t.x, y: t.y,
@@ -138,6 +139,51 @@ describe('bots walking', () => {
     const { sent } = run(4, 40);
     const crossings = sent.filter((m) => m.t === 'place').length;
     expect(crossings).toBeGreaterThan(4); // the four openers, plus seam crossings
+  });
+
+  it('only ever aims at somewhere inside the fog', () => {
+    // FIELD is out of the ring, PATH is in it. Wherever a bot starts, it ends up on
+    // PATH and stays there -- which is the fog rule doing its whole job.
+    const { sent } = run(4, 60, (mapId) => mapId === 'PATH');
+    const last = new Map<number, string>();
+    for (const msg of sent) {
+      if (msg.t === 'place' || msg.t === 'step') {
+        last.set(msg.seat, msg.map!.num === 1 ? 'FIELD' : 'PATH');
+      }
+    }
+    expect([...last.values()].every((m) => m === 'PATH')).toBe(true);
+  });
+
+  it('re-aims when the ring moves', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    let inside = (mapId: string) => mapId === 'FIELD';
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(11),
+      inside: (id) => inside(id),
+    });
+    bots.start(
+      dealBots(5, 2, [], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]),
+      0,
+    );
+    for (let t = STEP_MS; t <= 20_000; t += STEP_MS) bots.tick(t);
+    inside = (mapId: string) => mapId === 'PATH';
+    bots.ringMoved();
+    const before = sent.length;
+    for (let t = 20_000 + STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    const after = sent.slice(before);
+    const ends = new Map<number, string>();
+    for (const msg of after) {
+      if (msg.t === 'place' || msg.t === 'step') {
+        ends.set(msg.seat, msg.map!.num === 1 ? 'FIELD' : 'PATH');
+      }
+    }
+    expect(ends.size).toBeGreaterThan(0);
+    expect([...ends.values()].every((m) => m === 'PATH')).toBe(true);
   });
 
   it('forgets a bot that goes out', () => {

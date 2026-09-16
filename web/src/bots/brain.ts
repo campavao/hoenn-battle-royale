@@ -39,6 +39,10 @@ export interface BotsOptions {
   world: World;
   /** Every cell a bot may wander to -- the same landing pool the drop deals from. */
   targets: { mapId: string; x: number; y: number }[];
+  /** Is this map inside the fog? Bots only ever aim at somewhere that is -- the first
+   *  rule of Kanto's decision list, and the one that decides whether a match ends with
+   *  a fight or with everybody quietly bleeding out in the corners. */
+  inside?: (mapId: string) => boolean;
   /** world.json id -> the wire's group/num. */
   mapRef: (mapId: string) => MapRef | undefined;
   send: (msg: Msg) => void;
@@ -74,6 +78,12 @@ export class Bots {
   /** Where a bot is standing right now -- for the engage, and for tests. */
   spotOf(seat: number): Spot | undefined {
     return this.walkers.find((w) => w.bot.seat === seat)?.at;
+  }
+
+  /** The ring moved. Every route was chosen against the old one, so they are all
+   *  suspect: dropping them makes each bot re-aim on its next step. */
+  ringMoved(): void {
+    for (const walker of this.walkers) walker.path = null;
   }
 
   /** A bot is out: it stops walking and stops being spoken for. */
@@ -125,7 +135,11 @@ export class Bots {
   }
 
   private chooseTarget(walker: Walker, _now: number): void {
-    const targets = this.opts.targets;
+    const inside = this.opts.inside;
+    // Fog first. Aiming only at cells inside the ring is the whole rule: a bot already
+    // inside wanders inside, and a bot caught outside walks in, because the route to
+    // anywhere it may aim at crosses the edge on the way.
+    const targets = inside ? this.opts.targets.filter((t) => inside(t.mapId)) : this.opts.targets;
     if (targets.length === 0) return;
     // Somewhere else, on foot. Three tries so an unreachable pick (an island, a cave
     // mouth behind a puzzle) costs a fraction of a second rather than the match.

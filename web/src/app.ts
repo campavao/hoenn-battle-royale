@@ -21,6 +21,7 @@ import { Results } from './match/results';
 import { Bots } from './bots/brain';
 import { dealBots } from './bots/roster';
 import { World, type WorldMap } from './bots/world';
+import { sectionInside } from './match/ring';
 import { mulberry32 } from './match/clock';
 import { careerLine, ordinal, recordMatch } from './match/career';
 import worldData from './data/world.json';
@@ -472,7 +473,12 @@ function startBots(
   send: (msg: Msg) => void,
   takenSeats: number[],
   seed: number,
-): { bots: Bots; seats: number[]; dispose: () => void } {
+): {
+  bots: Bots;
+  seats: number[];
+  setRing: (ring: { sx: number; sy: number; r: number }) => void;
+  dispose: () => void;
+} {
   const maps = (worldData as { maps: WorldMap[] }).maps;
   const world = new World(maps);
   const refById = new Map(maps.map((m) => [m.id, { group: m.group, num: m.num }]));
@@ -481,18 +487,31 @@ function startBots(
   const targets = (landingData as { map: string; x: number; y: number }[])
     .filter((c) => outdoor.has(c.map) && refById.has(c.map))
     .map((c) => ({ mapId: c.map, x: c.x, y: c.y }));
+  const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
+  let ring: { sx: number; sy: number; r: number } | undefined;
   const bots = new Bots({
     world,
     targets,
     mapRef: (id) => refById.get(id),
     send,
     rng: mulberry32(seed ^ 0x51ce),
+    inside: (id) => sectionInside(WORLD.sections[sectionOf.get(id) ?? ''], ring),
   });
   const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
   const dealt = dealBots(seed, BOT_FILL, takenSeats, spawns);
   bots.start(dealt, performance.now());
   const id = setInterval(() => bots.tick(performance.now()), BOT_TICK_MS);
-  return { bots, seats: dealt.map((b) => b.seat), dispose: () => clearInterval(id) };
+  return {
+    bots,
+    seats: dealt.map((b) => b.seat),
+    // The host hands its own `ring` straight over: the bots read the fog off the same
+    // message every ROM in the room does.
+    setRing: (next: { sx: number; sy: number; r: number }) => {
+      ring = next;
+      bots.ringMoved();
+    },
+    dispose: () => clearInterval(id),
+  };
 }
 
 // ---- results (POK-228) --------------------------------------------------------------
@@ -761,6 +780,7 @@ function wireRoom(
         bridge!.relay.all(msg);
         rom.push(msg); // no-op for `win` -- createRomPushQueue only packs a msg.t crossesToRom() knows
         noteResult(msg); // the host's own `start`/`win` never come back to it over the relay
+        if (msg.t === 'ring') bots?.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r });
       },
       now: () => performance.now(),
       onOut: (handler) =>
@@ -811,7 +831,7 @@ function wireRoom(
     }
   };
   let stopSpectateLoop: (() => void) | null = null;
-  let bots: { bots: Bots; seats: number[]; dispose: () => void } | null = null;
+  let bots: ReturnType<typeof startBots> | null = null;
 
   const attach = (seat: number, code: string) => {
     if (bridge) bridge.dispose(); // a re-join after a reconnect must not leave two pumps on one ring
