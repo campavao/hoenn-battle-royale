@@ -219,6 +219,24 @@ describe('the proxy duel instance', () => {
     void waiting;
   });
 
+  it('lets go of a fight in flight when the instance is disposed', async () => {
+    // A stopped emulator sends no more frames, so a duel waiting on one would wait for
+    // ever -- and `busy` would hold every later meeting behind it for the rest of the
+    // match. Disposing has to answer the caller, not just drop the instance.
+    const inst = fakeInstance({ answers: false });
+    const proxy = proxyOver(inst, [], 60_000);
+    const running = proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] });
+
+    // Far enough in to be waiting on frames rather than still booting. (`settle`
+    // stops as soon as its promise does, which an already-resolved one has.)
+    for (let i = 0; i < 40; i++) {
+      inst.frame();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    proxy.dispose();
+    expect(await running, 'the caller is told to settle it itself').toBeNull();
+  });
+
   it('fights one at a time, queueing the rest', async () => {
     const inst = fakeInstance({ afterFrames: 2 });
     const proxy = proxyOver(inst);

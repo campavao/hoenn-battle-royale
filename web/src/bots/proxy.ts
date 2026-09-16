@@ -84,6 +84,9 @@ export class ProxyDuels {
   private emu: ProxyEmulator | null = null;
   private mailbox: Mailbox | null = null;
   private booting: Promise<void> | null = null;
+  /** Cancels the duel in flight: unhooks its frame handler and answers its caller
+   *  with null, so a dispose while a fight is running does not leave `run` waiting
+   *  on frames from an emulator that has been stopped. */
   private unframe: (() => void) | null = null;
   /** The duel in flight, and everyone waiting behind it. */
   private busy = false;
@@ -190,6 +193,21 @@ export class ProxyDuels {
       const started = Date.now();
       // Slots of a message that spans several, held until the last one lands.
       let parts: BinarySlot[] = [];
+      const finish = (value: DresultMsg | null) => {
+        stop();
+        this.unframe = null;
+        try {
+          emu.release('a');
+        } catch {
+          /* the instance has already gone */
+        }
+        resolve(value);
+      };
+      // A dispose while this is in flight -- the page tearing the room down, or the
+      // timeout below on an earlier duel -- stops the emulator, and a stopped emulator
+      // sends no more frames: without this the promise would never settle and `busy`
+      // would hold the queue shut for the rest of the match.
+      this.unframe = () => finish(null);
       const stop = emu.onFrame(() => {
         this.tap(emu);
         for (const raw of mailbox.poll()) {
@@ -203,16 +221,10 @@ export class ProxyDuels {
             continue; // more slots to come
           }
           parts = [];
-          stop();
-          emu.release('a');
-          resolve(msg);
+          finish(msg);
           return;
         }
-        if (Date.now() - started > deadlineMs) {
-          stop();
-          emu.release('a');
-          resolve(null);
-        }
+        if (Date.now() - started > deadlineMs) finish(null);
       });
     });
   }

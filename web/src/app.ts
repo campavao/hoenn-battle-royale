@@ -2132,6 +2132,11 @@ function wireRoom(
           writeBootBlock(emu, mailboxBase, careerName(), BR_BOOT_MAP, careerSkin());
         }
         recorded = false;
+        // Last match's champion is not this match's, and the parade reads by seat
+        // (POK-243): a seat that wins twice would otherwise be shown the team it had
+        // the first time, and one that never sends a `party` would be shown somebody
+        // else's. PLAY AGAIN used to reload the page, which cleared this for free.
+        lastParty.clear();
         // Whoever we were watching is not in a match any more.
         for (const m of spectate.follow(null)) bridge?.pushToRom(m);
         ($('#results-panel') as HTMLElement).hidden = true;
