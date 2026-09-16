@@ -167,6 +167,44 @@
       .sys { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: center; }
       .sys .btn { width: 96px; height: 36px; font-size: 12px; }
 
+      /* Landscape on a phone (POK-245): the screen is the scarce thing, so it takes
+         the middle and the controls go either side of it rather than under it. The
+         @media hook is orientation plus a short viewport -- a landscape laptop is not
+         a phone and should keep the ordinary layout. */
+      @media (orientation: landscape) and (max-height: 520px) {
+        /* The grid is on the playing screen, which is what actually holds these three
+           -- #app holds the <section>, not its children. */
+        #screen-playing {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          grid-template-rows: auto 1fr auto auto;
+          align-items: center;
+          /* `display: contents` on #pad drops its own padding with its box, so the
+             gutters have to be said here or a thumb is pressing the bezel. */
+          gap: 0 10px;
+          padding: 0 calc(10px + env(safe-area-inset-right)) 4px calc(10px + env(safe-area-inset-left));
+        }
+        /* The settings are the last row, not the first cell the grid happens to have
+           spare -- they live inside this section, so auto-placement grabs them. */
+        #screen-playing .settings { grid-column: 1 / -1; grid-row: 4; }
+        #room-panel { grid-column: 1 / -1; grid-row: 1; }
+        /* `width: 100%` would make the middle column take everything and push the
+           pad off the left edge, so here the screen is exactly as wide as it is. */
+        #screen-wrap { grid-column: 2; grid-row: 2; width: auto; }
+        /* `display: contents` lifts the pad's own children into the grid, so the
+           D-pad and the buttons can sit either side of the screen without moving
+           them in the markup. */
+        #pad { display: contents; }
+        #pad .dpad-surface { grid-column: 1; grid-row: 2; justify-self: center; }
+        #pad .ab { grid-column: 3; grid-row: 2; justify-self: center; align-content: center; }
+        #pad .sys { grid-column: 1 / -1; grid-row: 3; }
+        /* Sideways, height is what runs out first, so the screen is sized by it --
+           `min(100vw, 480px)` would be 480 wide and 320 tall on a 390-tall phone. */
+        canvas { width: auto; height: min(calc(100vh - 150px), 320px); }
+        header h1 { font-size: 15px; }
+        .settings { padding-top: 2px; padding-bottom: 4px; }
+      }
+
       .settings {
         display: flex;
         gap: 8px;

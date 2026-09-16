@@ -289,6 +289,7 @@ function wireButton(el: Element, key: GbaKey, emu: Emulator): void {
     e.preventDefault();
     el.classList.add('down');
     emu.press(key);
+    buzz();
   };
   const up = (e: Event) => {
     e.preventDefault();
@@ -304,6 +305,17 @@ function wireButton(el: Element, key: GbaKey, emu: Emulator): void {
 /** An 8-way D-pad on a single square surface: the touch position's angle from
  * center picks 1 or 2 (diagonal) keys, with a dead zone near the center so a light
  * touch doesn't register a direction. */
+/** A short tap of haptic feedback on a button going down (POK-245). Phones without it,
+ *  and every desktop, get nothing and no error -- and a page the user has not touched
+ *  yet is not allowed to buzz at all, which the try/catch covers. */
+function buzz(ms = 8): void {
+  try {
+    navigator.vibrate?.(ms);
+  } catch {
+    // A browser that refuses (no gesture yet, or the API disabled): not worth a word.
+  }
+}
+
 function wireDpad(el: HTMLElement, emu: Emulator): void {
   const DEAD_ZONE = 0.35; // fraction of the half-width/height
   let active = new Set<GbaKey>();
@@ -352,7 +364,11 @@ function wireDpad(el: HTMLElement, emu: Emulator): void {
     const dy = (clientY - (rect.top + rect.height / 2)) / (rect.height / 2);
     const next = directionsFor(dx, dy);
     for (const key of active) if (!next.has(key)) emu.release(key);
-    for (const key of next) if (!active.has(key)) emu.press(key);
+    for (const key of next) {
+      if (active.has(key)) continue;
+      emu.press(key);
+      buzz(6); // a step is a lighter tap than a button press
+    }
     active = next;
     el.classList.toggle('active', next.size > 0);
   };
