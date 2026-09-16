@@ -30,7 +30,7 @@ test.beforeAll(() => {
 // stretch where "your ghost moved on my screen" is a thing that can be true.
 //
 // `#nobots` keeps the room to the two of them -- eight bots walking into the guest is
-// eight chances for the thing under test to be something else -- and `#quick` runs the
+// eight chances for the thing under test to be something else -- and `#fast` runs the
 // Safari opening in 25 seconds rather than two minutes.
 test("a guest walking right moves on the host's screen", async ({ browser }) => {
   test.setTimeout(120_000);
@@ -41,7 +41,7 @@ test("a guest walking right moves on the host's screen", async ({ browser }) => 
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&nobots&quick&testmon&rom=${rom}`);
+    await host.goto(`/#host&nobots&fast&testmon&rom=${rom}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     const codeEl = host.locator('#room-code');
@@ -51,7 +51,7 @@ test("a guest walking right moves on the host's screen", async ({ browser }) => 
     if (!code) throw new Error(`could not parse a room code out of "${codeText}"`);
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&nobots&quick&testmon&rom=${rom}`);
+    await guest.goto(`/#join=${code}&nobots&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     // Both seats seated in the host's own roster mirror.

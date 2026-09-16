@@ -103,6 +103,14 @@ static void Present(u8 id, u8 bit, bool8 want, bool8 pixels)
 
     if (want && !have)
     {
+        // The frame's tiles and palettes, again. Loading them when the window was made
+        // is not enough: a map load, a weather fade or a battle coming back puts its
+        // own palettes in that slot, and the frame is then drawn in whatever colours
+        // were left there -- Cam's play-test saw the counter framed in RED with garbage
+        // tiles in its corner, and the FOG message arriving painted orange bars across
+        // the top of the screen. Both went away on the next step, because a step is
+        // what redrew them. Idempotent, and this runs on a show, not every frame.
+        LoadMessageBoxAndBorderGfx();
         // The frame goes on with the window. DrawStdWindowFrame fills the buffer as it
         // goes, so this has to happen before the content is printed -- which is why the
         // drawing functions call it in place of their own FillWindowPixelBuffer, and

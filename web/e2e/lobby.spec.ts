@@ -80,13 +80,13 @@ test('the host gets the room controls and START, and the guest does not', async 
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&noauto&quick&testmon&rom=${rom}`);
+    await host.goto(`/#host&noauto&fast&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&noauto&quick&testmon&rom=${rom}`);
+    await guest.goto(`/#join=${code}&noauto&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
 
     // The host's four controls, and the line under them saying what START would make.
@@ -273,7 +273,7 @@ test('a room that will not let you in offers the way back', async ({ browser }) 
     // One tab hosts and starts, which locks the room -- the state any old link points
     // at once a match has begun.
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&quick&nobots&testmon&rom=${rom}`);
+    await host.goto(`/#host&fast&nobots&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');

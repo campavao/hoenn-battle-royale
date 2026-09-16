@@ -55,7 +55,7 @@ test('a whole match, with the host carrying it', async ({ browser }) => {
       const text = msg.text();
       if (text.includes('[proxy]') || text.toLowerCase().includes('error')) notes.push(text);
     });
-    // The real thing: default pace, a full field of bots, no `#quick`. The host is the
+    // The real thing: default pace, a full field of bots, no `#fast`. The host is the
     // worst case by construction -- the director, the bots' A*, the loot table, the
     // ticker and (once two bots meet) a second emulator, all on top of its own game.
     await host.goto(`/#host&seed=20260916&testmon&rom=${rom}`);

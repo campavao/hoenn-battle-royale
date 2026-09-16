@@ -25,7 +25,7 @@ test('a watcher walks in on a running match, and the match is not theirs', async
   try {
     // A match, running and locked.
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&quick&seed=20260916&testmon&rom=${rom}`);
+    await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     await host.waitForFunction(
       () => ((window as unknown as BrWindow).__br?.director?.state?.ring?.phase ?? 0) >= 1,

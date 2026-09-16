@@ -36,7 +36,7 @@ a quick-play join where the block is written after the ROM has already begun the
 a second boot (PLAY AGAIN reboots the emulator: POK-258) where nothing writes the block
 the second time.
 
-### No other trainers in the Safari, in a room with bots
+### No other trainers in the Safari, in a room with bots -- partly explained
 
 Video, and the earlier solo report. "I still did not see any other players in the Safari.
 I think I saw an NPC that was just a normal NPC, but I would expect to see other players
@@ -48,6 +48,11 @@ started its bots, or they are in the Zone's other areas: `BrMatch_SafariCell` sp
 field across all six maps (POK-261), and six areas over a two-minute opening is thin.
 Worth measuring how often two contestants share an area before changing anything.
 
+**The video answers half of it:** the room strip reads `SAFARI · 12 left` with `CAM (you)`
+and P21..P31 beside it, so eleven bots were in that match and in the Zone. Six areas over
+a two-minute opening is simply thin. The question is whether the opening should deal
+everybody into fewer areas, which is a pacing decision rather than a bug.
+
 ### Eliminated in the Safari does not put you into spectating
 
 "When I got out in the Safari, it should have brought me to spectating the other players."
@@ -57,16 +62,23 @@ spectator path (POK-233/POK-260). Nothing joins the two: going out should hand y
 seat worth watching. Check what the results/spectate flow does on an `out` for our own
 seat during `BR_PHASE_SAFARI`, as opposed to during PLAY.
 
-### The fog closes too fast, and the match is over in about two minutes
+### The fog closes too fast, and the match is over in about two minutes -- **fixed**
 
 "Once the fog was coming in, it was like every minute or 45 seconds, which feels like not
-enough." Related to **POK-273** (a sixteen-minute match ending in seven) but this is the
-ring's own clock rather than the bots' duels: `DEFAULT_FOG_SECS` is 120 with eight radii,
-so a default match should be sixteen minutes of fog. If phases are arriving every 45-60
-seconds, either quick play's `#quick` pace (15s phases) is leaking into a normal room, or
-`tickRing` is advancing on the wrong clock.
+enough."
 
-First thing to check: whether the room Cam played had `#quick` in its hash.
+**`#quick` meant two different things.** It was the dev pace flag (25-second opening,
+15-second fog phases, so a whole match fits in three minutes) *and* what QUICK PLAY puts
+in the hash. So every quick-play game in dev ran at the dev pace: the video's own frame
+shows the room's controls reading `FOG 120s` while the strip says `RING -1 (MAUVILLE
+CITY)` -- the last of eight phases -- two and a half minutes in. There was no time to
+catch anything because there was no Safari to speak of, either.
+
+The dev pace is `#fast` now and `#quick` means quick play. The e2e specs that wanted the
+pace say `#fast`; the one that clicks the QUICK PLAY row is unchanged.
+
+This is separate from POK-273 (the bots eliminating each other too fast), which is real
+and still parked on `pok-273-pacing`.
 
 ### HUD: the second window (the party/ball blobs) is not wanted
 
@@ -90,7 +102,7 @@ player's chosen text frame (`gSaveBlock2Ptr->optionsWindowFrameType`, the one th
 cyan box uses) is the one to follow — `LoadMessageBoxAndBorderGfx` is already what the
 message box uses, so the HUD should load the same pair rather than its own.
 
-### Graphical: borders wrong until you move
+### Graphical: borders wrong until you move -- **fixed**
 
 Three sightings, all the same shape — the window is drawn before the palette or tilemap it
 wants has settled, and a step fixes it:

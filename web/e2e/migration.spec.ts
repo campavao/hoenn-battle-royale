@@ -25,13 +25,13 @@ test('the host drops mid-match and the guest picks up the clock', async ({ brows
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&quick&seed=20260916&testmon&rom=${rom}`);
+    await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&quick&testmon&rom=${rom}`);
+    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
 
     // A guest draws its own strip now (POK-268), from the same messages a promoted

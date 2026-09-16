@@ -1,6 +1,6 @@
 // What a match costs (POK-247, the measuring half).
 //
-// The ticket says measure first, so this does: it runs a real match at `#quick` pace
+// The ticket says measure first, so this does: it runs a real match at `#fast` pace
 // with the host walking eight bots, and samples what actually matters on a phone --
 // the emulator's frame rate, and how long the longest main-thread task was while the
 // bots were thinking. The host is the worst case by construction: it runs the
@@ -49,7 +49,7 @@ test('the host carries a match without the emulator falling over', async ({ brow
     try {
       // One tab hosting, bots filling it: the director auto-starts after its buzzer, so
       // this measures the same match anybody would get.
-      await host.goto(`/#host&quick&seed=20260916&testmon&rom=${rom}`);
+      await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
       await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
 
       // Count emulator frames ourselves, and watch for long main-thread tasks -- a
@@ -119,7 +119,7 @@ test('a hidden host tab says so, because the match is waiting on it', async ({ b
   const ctx = await browser.newContext();
   try {
     const host = await ctx.newPage();
-    await host.goto(`/#host&quick&nobots&seed=7&testmon&rom=${romHashParam()}`);
+    await host.goto(`/#host&fast&nobots&seed=7&testmon&rom=${romHashParam()}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
     // The director starts on its own buzzer; until then there is nothing to pause.
     await host.waitForFunction(

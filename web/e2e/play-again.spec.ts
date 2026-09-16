@@ -4,7 +4,7 @@
 // into a running match, and nothing unlocked it afterwards, so the only way out was the
 // lobby -- eight people who had just played together, each alone on a menu.
 //
-// This runs a whole match at `#quick` with one human and bots, waits for the result,
+// This runs a whole match at `#fast` with one human and bots, waits for the result,
 // presses PLAY AGAIN, and asserts the client is still in the same room with its code,
 // its roster and a socket -- and that the room's door is open again.
 import { test, expect } from '@playwright/test';
@@ -20,7 +20,7 @@ test.beforeAll(() => {
 test('PLAY AGAIN keeps the room, the code and the roster', async ({ page }) => {
   test.setTimeout(300_000);
 
-  await page.goto(`/#host&quick&seed=20260916&testmon&rom=${romHashParam()}`);
+  await page.goto(`/#host&fast&seed=20260916&testmon&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
   const codeEl = page.locator('#room-code');
   await expect(codeEl).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });

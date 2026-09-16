@@ -970,8 +970,14 @@ const BOT_FILL = 8;
  *  six of those is where a match's length actually lives. Dev only, like `#testmon`
  *  and `#nobots`. Still long enough to do something during the opening, which is the
  *  only part of a match where everybody is in the same place. */
+/** `#fast` is the dev pace: a 25-second opening and 15-second fog phases, so a whole
+ *  match can be looked at in three minutes. It used to be `#quick` -- which is ALSO
+ *  what QUICK PLAY puts in the hash, so every quick-play game in dev ran at the dev
+ *  pace: Cam's play-test had eight fog phases inside two minutes while the room's own
+ *  control said FOG 120s, and there was no time to catch anything. Two meanings, one
+ *  word, and the one that lost was the game. */
 function paceOptions(): { safariSecs?: number; fogSecs?: number } | undefined {
-  if (!import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('quick')) return undefined;
+  if (!import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('fast')) return undefined;
   return { safariSecs: 25, fogSecs: 15 };
 }
 
