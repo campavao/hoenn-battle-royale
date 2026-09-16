@@ -254,6 +254,17 @@ static void CompleteOnBattlerSpriteCallbackDummy(void)
 
 static void CompleteOnInactiveTextPrinter(void)
 {
+#if BR
+    // Nobody chose this exit: the buzzer did (POK-261), and the box it prints on the
+    // way out still waits to be pressed through. On the play-test that read as a
+    // freeze -- a Safari battle sitting on one line, the fog closing outside, and no
+    // sign that a button was what it wanted. A forced exit does not ask.
+    if (BrMatch_BuzzerClosing())
+    {
+        SafariBufferExecCompleted();
+        return;
+    }
+#endif
     if (!IsTextPrinterActive(B_WIN_MSG))
         SafariBufferExecCompleted();
 }
