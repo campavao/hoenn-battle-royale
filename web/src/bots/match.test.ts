@@ -34,7 +34,7 @@ const SEED = 4242;
 interface Run {
   world: World;
   bots: Bots;
-  spots: Spot[][];
+  spots: Map<number, Spot>[];
   seats: number[];
   sectionOf: Map<string, string>;
   ring: { sx: number; sy: number; r: number };
@@ -72,7 +72,7 @@ function match(): Run {
 
   const end = MINUTES * 60_000;
   const perPhase = end / 6;
-  const spots: Spot[][] = [];
+  const spots: Map<number, Spot>[] = [];
   let phase = 0;
   for (let t = STEP_MS; t <= end; t += STEP_MS) {
     const next = Math.floor(t / perPhase);
@@ -82,7 +82,14 @@ function match(): Run {
       bots.ringMoved(phase);
     }
     bots.tick(t);
-    spots.push(dealt.map((b) => bots.spotOf(b.seat)).filter((s): s is Spot => s !== undefined));
+    // Keyed by seat, not by position: the fog takes bots out mid-match, so an array
+    // index means a different bot from one tick to the next.
+    const tick = new Map<number, Spot>();
+    for (const b of dealt) {
+      const at = bots.spotOf(b.seat);
+      if (at) tick.set(b.seat, at);
+    }
+    spots.push(tick);
   }
   return { world, bots, spots, seats: dealt.map((b) => b.seat), sectionOf, ring };
 }
@@ -93,7 +100,7 @@ describe('thirty bots, sixteen minutes', () => {
   it('never puts one on a cell nothing can stand on', () => {
     const bad: string[] = [];
     for (const tick of run.spots) {
-      for (const at of tick) {
+      for (const at of tick.values()) {
         // Surfing is allowed, so a water cell is only wrong if nothing may stand there
         // at all -- which is the wall class, and the void off the edge of a map.
         if (!run.world.standable(at.map, at.x, at.y, true)) bad.push(`${at.map} ${at.x},${at.y}`);
@@ -106,7 +113,7 @@ describe('thirty bots, sixteen minutes', () => {
     const clashes: string[] = [];
     for (const tick of run.spots) {
       const seen = new Set<string>();
-      for (const at of tick) {
+      for (const at of tick.values()) {
         const key = `${at.map}:${at.x},${at.y}`;
         if (seen.has(key)) clashes.push(key);
         seen.add(key);
@@ -120,10 +127,15 @@ describe('thirty bots, sixteen minutes', () => {
     for (let i = 1; i < run.spots.length; i++) {
       const before = run.spots[i - 1];
       const after = run.spots[i];
-      for (let a = 0; a < before.length; a++) {
-        for (let b = a + 1; b < before.length; b++) {
-          if (sameSpot(before[a], after[b]) && sameSpot(before[b], after[a])) {
-            swaps.push(`${before[a].map} ${before[a].x},${before[a].y}`);
+      const seats = [...before.keys()];
+      for (let a = 0; a < seats.length; a++) {
+        for (let b = a + 1; b < seats.length; b++) {
+          const fromA = before.get(seats[a])!;
+          const fromB = before.get(seats[b])!;
+          const toA = after.get(seats[a]);
+          const toB = after.get(seats[b]);
+          if (toA && toB && sameSpot(fromA, toB) && sameSpot(fromB, toA)) {
+            swaps.push(`${fromA.map} ${fromA.x},${fromA.y}`);
           }
         }
       }
@@ -137,7 +149,11 @@ describe('thirty bots, sixteen minutes', () => {
     // insist on is that a bot is still going somewhere at the end.
     const last = run.spots[run.spots.length - 1];
     const earlier = run.spots[run.spots.length - 60]; // fifteen seconds back
-    const moving = last.filter((at, i) => earlier[i] && !sameSpot(at, earlier[i])).length;
-    expect(moving).toBeGreaterThan(last.length / 2);
+    let moving = 0;
+    for (const [seat, at] of last) {
+      const was = earlier.get(seat);
+      if (was && !sameSpot(at, was)) moving++;
+    }
+    expect(moving).toBeGreaterThan(last.size / 2);
   });
 });

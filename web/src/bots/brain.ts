@@ -36,6 +36,13 @@ const HUNT_AT = 3;
  *  for the rest of the match -- on the host's tab, beside an emulator. It walks
  *  instead, and asks again in a couple of seconds. */
 const RETRY_MS = 2000;
+/** BR_FOG_TICK_FRAMES in include/br/br_ring.h: 240 frames, four seconds. The ROM takes
+ *  a tenth of each mon's max HP off the player on this beat while they are outside the
+ *  ring; a bot standing in the same fog has to lose the same thing on the same beat, or
+ *  the fog is a rule that only applies to people and a match with bots in it can never
+ *  end. */
+const FOG_TICK_MS = 4000;
+const FOG_BITE = 10; // a tenth, as `Bleed` in src/br/br_ring.c
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
   south: 1,
@@ -60,6 +67,8 @@ interface Walker {
   engageAfter: number;
   /** No more searching before this: the last one found nowhere to go. */
   retryAfter: number;
+  /** When the fog next takes its bite, if this bot is still standing in it. */
+  bleedAt: number;
 }
 
 /** A player as the roster knows them -- where they are and which way they are looking.
@@ -68,7 +77,7 @@ interface Walker {
 export interface Decision {
   at: number;
   seat: number;
-  rule: 'heal' | 'engage' | 'pickup' | 'centre' | 'hunt' | 'loot' | 'wander' | 'stuck';
+  rule: 'heal' | 'engage' | 'pickup' | 'centre' | 'hunt' | 'loot' | 'wander' | 'stuck' | 'fog';
   spot: Spot;
   detail?: string;
 }
@@ -179,6 +188,7 @@ export class Bots {
         facing: 1,
         engageAfter: 0,
         retryAfter: 0,
+        bleedAt: now + FOG_TICK_MS,
         party: this.opts.deal?.(bot, 0) ?? [],
       };
       this.walkers.push(walker);
@@ -236,6 +246,10 @@ export class Bots {
   /** Runs every bot up to `now`. Called as often as the host likes -- the pace is in
    *  here, not in the caller, so a slow frame makes bots catch up rather than crawl. */
   tick(now: number): void {
+    this.now = now;
+    for (const walker of this.walkers.slice()) {
+      this.bleed(walker, now);
+    }
     for (const walker of this.walkers) {
       // At most a few steps a tick: a tab that was backgrounded for a minute should
       // not teleport its bots across Hoenn when it comes back.
@@ -246,6 +260,31 @@ export class Bots {
       }
       if (walker.nextStepAt < now) walker.nextStepAt = now + STEP_MS;
     }
+  }
+
+  /** The fog, on a bot. Outside the ring it loses a tenth of each mon every four
+   *  seconds, and when the whole team is down it is out -- through `out`, the same
+   *  message a player's ROM sends, so the Director counts it the same way. */
+  private bleed(walker: Walker, now: number): void {
+    const inside = this.opts.inside;
+    if (!inside || walker.party.length === 0) return;
+    if (inside(walker.at.map)) {
+      walker.bleedAt = now + FOG_TICK_MS;
+      return;
+    }
+    if (now < walker.bleedAt) return;
+    walker.bleedAt = now + FOG_TICK_MS;
+    let standing = 0;
+    walker.party = walker.party.map((mon) => {
+      if (mon.hp === 0) return mon;
+      const hp = Math.max(0, mon.hp - Math.max(1, Math.floor(mon.maxHp / FOG_BITE)));
+      if (hp > 0) standing++;
+      return { ...mon, hp };
+    });
+    if (standing > 0) return;
+    this.note(walker, 'fog');
+    this.opts.send({ t: 'out', seat: walker.bot.seat });
+    this.remove(walker.bot.seat);
   }
 
   private stepOne(walker: Walker, now: number): void {
@@ -342,6 +381,10 @@ export class Bots {
   private healHere(walker: Walker): boolean {
     const centres = this.opts.centres?.();
     if (!centres || health(walker.party) >= 1) return false;
+    // A Centre in the fog is shut -- that is the ROM's own rule (the nurse says so;
+    // see tools/br/drivers/nurse.txt), and without it here a bot in the late ring
+    // heals faster than the fog bleeds and the match can never end.
+    if (this.opts.inside && !this.opts.inside(walker.at.map)) return false;
     if (!centres.some((c) => c.mapId === walker.at.map && c.x === walker.at.x && c.y === walker.at.y))
       return false;
     walker.party = walker.party.map((mon) => ({ ...mon, hp: mon.maxHp, status: 0 }));
@@ -353,8 +396,10 @@ export class Bots {
   /** Under half health, with a Centre in reach. Returns a route to the counter, or
    *  null to leave the bot to the rest of the list. */
   private centreRoute(walker: Walker): Path | null {
-    const centres = this.opts.centres?.();
-    if (!centres || centres.length === 0 || health(walker.party) >= HURT) return null;
+    const centres = (this.opts.centres?.() ?? []).filter(
+      (c) => !this.opts.inside || this.opts.inside(c.mapId),
+    );
+    if (centres.length === 0 || health(walker.party) >= HURT) return null;
     // The one you are standing in first -- that is the door you just walked through --
     // then the one belonging to this town. A Centre three sections away is not worth
     // the match it would take to reach, and A* would pay for the search to find out.

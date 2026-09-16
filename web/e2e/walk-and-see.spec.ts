@@ -31,7 +31,7 @@ test.beforeAll(() => {
 //
 // `#nobots` keeps the room to the two of them -- eight bots walking into the guest is
 // eight chances for the thing under test to be something else -- and `#quick` runs the
-// Safari opening in ten seconds rather than two minutes.
+// Safari opening in 25 seconds rather than two minutes.
 test("a guest walking right moves on the host's screen", async ({ browser }) => {
   test.setTimeout(120_000);
   const rom = romHashParam();

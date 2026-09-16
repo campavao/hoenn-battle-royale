@@ -13,6 +13,7 @@
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
+#include "br/br_ring.h"
 #include "br/br_loot.h"
 #include "br/br_spectate.h"
 
@@ -224,6 +225,16 @@ void BrMatch_Tick(void)
     }
     if (gBrMatch.phase != BR_PHASE_SAFARI || !OverworldRunning())
         return;
+    // The fog is up: the opening is over whatever our own clock says. It has to be
+    // this way round, because the CLOCK the page sends during the ring phases is the
+    // ring's countdown and HandleClock cannot tell the two apart -- so a ring clock
+    // arriving before our own hit zero used to reset it to 55 and the drop never
+    // happened at all. The opening ending is an event, not an arithmetic result.
+    if (gBrRing.active)
+    {
+        BrMatch_SafariOver();
+        return;
+    }
     // Balls gone mid-opening: the scripts that would warp out are stubbed under BR,
     // so this is where the opening ends for the ball-less.
     if (gNumSafariBalls == 0 && gBrMatch.started)

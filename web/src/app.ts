@@ -467,13 +467,14 @@ const BOT_FILL = 8;
 /** `#nobots` fills the room with nobody. A dev-only affordance like `#testmon`: an e2e
  *  that is about two people needs the room to hold still, and eight bots walking into
  *  them is eight chances for the thing under test to be something else. */
-/** `#quick` runs the match at a pace a test can sit through: a 45-second Safari
- *  opening instead of two minutes, and a fog that closes in one. Dev only, like
- *  `#testmon` and `#nobots`. Long enough that an e2e can still do something during the
- *  opening, which is the only part of a match where everybody is in the same place. */
+/** `#quick` runs the match at a pace a test can sit through: a 25-second opening
+ *  instead of two minutes, and ring phases of 15 seconds instead of a minute each --
+ *  six of those is where a match's length actually lives. Dev only, like `#testmon`
+ *  and `#nobots`. Still long enough to do something during the opening, which is the
+ *  only part of a match where everybody is in the same place. */
 function paceOptions(): { safariSecs?: number; fogSecs?: number } | undefined {
   if (!import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('quick')) return undefined;
-  return { safariSecs: 45, fogSecs: 60 };
+  return { safariSecs: 25, fogSecs: 15 };
 }
 
 function botFill(): number {
@@ -816,6 +817,8 @@ function wireRoom(
   const relay = new RelayClient();
   let bridge: Bridge | null = null;
   let director: Director | null = null;
+  /** The director's own elimination handler, for `out`s this page makes itself. */
+  let localOut: ((seat: number) => void) | null = null;
   let stopDirectorLoop: (() => void) | null = null;
   let isHost = false;
 
@@ -840,6 +843,7 @@ function wireRoom(
         rom.push(msg);
         bridge!.roster.applyMsg(msg);
         loot.note(msg); // a bot taking a ball takes it off this page's table too
+        if (msg.t === 'out') localOut?.(msg.seat);
       },
       seats,
       seed,
@@ -873,8 +877,12 @@ function wireRoom(
         if (msg.t === 'ring') bots?.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r }, msg.phase);
       },
       now: () => performance.now(),
-      onOut: (handler) =>
-        bridge!.relay.on('recv', (ev) => {
+      onOut: (handler) => {
+        // A bot the fog took is eliminated by this very page, so its `out` never comes
+        // back over the relay -- nobody hears their own messages. Without this the
+        // host's own bots are immortal and the match cannot end.
+        localOut = handler;
+        const off = bridge!.relay.on('recv', (ev) => {
           try {
             const m = decode(JSON.stringify(ev.m));
             if (m.t === 'out') handler(m.seat);
@@ -882,8 +890,22 @@ function wireRoom(
             // not a wire.ts Msg at all, or failed validation -- bridge.ts already
             // counts this as a drop; nothing for the director to act on either way.
           }
-        }),
+        });
+        return () => {
+          localOut = null;
+          off?.();
+        };
+      },
     });
+    if (import.meta.env.DEV) {
+      // The whole-match e2e needs to see the director's own verdict: a winner is a
+      // page-side rule, and there is nothing in RAM that says the match ended.
+      const dev = (window as unknown as { __br?: Record<string, unknown> }).__br;
+      if (dev) {
+        dev.director = director;
+        dev.botCount = () => bots?.bots.count() ?? 0;
+      }
+    }
     director.start();
     const stopLoop = startDirectorLoop(emu, symbols?.get('gBrHud'), director);
     stopDirectorLoop = () => {
@@ -945,6 +967,10 @@ function wireRoom(
       loot.note(msg);
       noteResult(msg);
       noteBusy(msg);
+      // Our own ROM saying we are out. Nobody hears their own messages come back over
+      // the relay, so without this the director never counts this client's own
+      // elimination and the match it is running cannot reach a winner.
+      if (msg.t === 'out') localOut?.(msg.seat);
       // Our own `place` is how the page learns we changed maps -- there is no separate
       // "I have arrived" message, and this one is already on the wire four times a
       // second.

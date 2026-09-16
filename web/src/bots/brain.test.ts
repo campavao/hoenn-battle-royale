@@ -406,3 +406,46 @@ describe('the hunt', () => {
     expect(field(12)).not.toContainEqual({ map: 'PATH', x: FAR.x, y: FAR.y });
   });
 });
+
+describe('a bot caught in the fog', () => {
+  const MON: PackedMon = {
+    species: 277, level: 5, hp: 20, maxHp: 20, status: 0,
+    moves: [{ id: 1, pp: 35, ppUps: 0 }],
+    heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: 'TREECKO', ot: 'BR',
+  };
+
+  function fog(inside: boolean, seconds: number) {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      inside: () => inside,
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= seconds * 1000; t += STEP_MS) bots.tick(t);
+    return { bots, sent, seat: dealt[0].seat };
+  }
+
+  it('loses a tenth of its team every four seconds, like the ROM does to a player', () => {
+    // 12 s outside = three bites of 2 HP off a 20 HP mon.
+    const { bots, seat } = fog(false, 12);
+    expect(bots.partyOf(seat)[0].hp).toBe(14);
+  });
+
+  it('loses nothing inside the ring', () => {
+    const { bots, seat } = fog(true, 12);
+    expect(bots.partyOf(seat)[0].hp).toBe(20);
+  });
+
+  it('goes out when the fog takes the last of it, and says so', () => {
+    const { bots, sent, seat } = fog(false, 60);
+    expect(sent.some((m) => m.t === 'out' && m.seat === seat)).toBe(true);
+    expect(bots.count()).toBe(0);
+  });
+});
