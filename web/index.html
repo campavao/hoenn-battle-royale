@@ -69,10 +69,13 @@
         width: 100%;
       }
       canvas { image-rendering: pixelated; width: min(100vw, 480px); aspect-ratio: 240 / 160; height: auto; display: block; }
+      /* Top-LEFT, not top-right: the ROM draws its own corner up there (N LEFT, the
+         clock, the spectator eye) and the ticker owns the bottom, so this is the one
+         edge a badge can sit on without hiding something a player needs to read. */
       .fps {
         position: absolute;
         top: 6px;
-        right: 6px;
+        left: 6px;
         font: 11px ui-monospace, monospace;
         color: #9fb3c0;
         background: rgba(0, 0, 0, 0.5);
