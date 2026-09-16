@@ -146,6 +146,11 @@ export interface BotsOptions {
   /** Two bots settled it. The only place both sides of a fight are known at once,
    *  which is what a kill feed needs. */
   onDuel?: (winner: number, loser: number) => void;
+  /** Is anybody allowed to fight yet? FALSE through the Safari opening (POK-257):
+   *  everybody is on one map catching things, and a bot that duels in there takes the
+   *  field apart before the match has started -- eight went into the Zone and two came
+   *  out. The ROM refuses an engage outside BR_PHASE_PLAY for the same reason. */
+  fights?: () => boolean;
   /** A bot walked up to somebody. Its chance to say something (POK-239). */
   onEngage?: (seat: number, target: number) => void;
   /** Every rule that fired, as it fires. Kanto's `Bots.decisions`: the only way to
@@ -229,6 +234,30 @@ export class Bots {
 
   count(): number {
     return this.walkers.length;
+  }
+
+  /** The pool the bots wander to. It changes once a match: the opening happens in the
+   *  Safari Zone (POK-257) and the drop puts everybody out in Hoenn, so every route
+   *  chosen against the old pool is abandoned with it. */
+  setTargets(targets: { mapId: string; x: number; y: number }[]): void {
+    this.opts.targets = targets;
+    for (const walker of this.walkers) {
+      walker.path = null;
+      walker.retryAfter = 0;
+    }
+  }
+
+  /** Puts a bot somewhere without walking it there, and tells the room -- the drop,
+   *  for a bot. A player's ROM warps at the buzzer; this is the same moment. */
+  placeAt(seat: number, spot: Spot): void {
+    const walker = this.walkers.find((w) => w.bot.seat === seat);
+
+    if (!walker) return;
+    walker.at = { ...spot };
+    walker.path = null;
+    walker.stepIndex = 0;
+    walker.retryAfter = 0;
+    this.place(walker);
   }
 
   /** Where a bot is standing right now -- for the engage, and for tests. */
@@ -403,6 +432,7 @@ export class Bots {
    *  the challenge that starts the battle arrives. TRUE when it spent the step. */
   private tryEngage(walker: Walker, now: number): boolean {
     const engage = this.opts.engage;
+    if (this.opts.fights && !this.opts.fights()) return false;
     if (now < walker.engageAfter) return false;
     const map = this.opts.mapRef(walker.at.map);
     if (!map) return false;

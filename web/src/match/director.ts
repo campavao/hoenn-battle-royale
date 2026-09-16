@@ -27,7 +27,7 @@
 import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
 import type { MapRef, Msg, Pace } from '../net/wire';
 
-const DEFAULT_SAFARI_SECS = 120;
+export const DEFAULT_SAFARI_SECS = 120;
 const DEFAULT_FOG_SECS = 120;
 const CLOCK_STEP_MS = 5000;
 const DEAL_RETRY_LIMIT = 200; // generous: real world.json has thousands of landing cells for <=32 seats

@@ -14,7 +14,7 @@ import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSl
 import { decode, type Msg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
-import { Director, type DirectorState, type DirectorWorld } from './match/director';
+import { DEFAULT_SAFARI_SECS, Director, type DirectorState, type DirectorWorld } from './match/director';
 import { Spectate } from './match/spectate';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
@@ -53,6 +53,7 @@ import {
 } from './match/career';
 import worldData from './data/world.json';
 import { LANDING } from './match/landing';
+import { SAFARI_CELLS, SAFARI_MAP_ID } from './match/safari';
 import regionmapData from './data/regionmap.json';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
@@ -907,9 +908,14 @@ function startBots(
   onEngage: (seat: number, target: number) => void,
   fill: number,
   resume?: BotResume,
+  /** Seconds of Safari opening. Above zero the bots start in the Zone with everybody
+   *  else (POK-257) and only go out into Hoenn when the fog does. */
+  safariSecs = 0,
 ): {
   bots: Bots;
   seats: number[];
+  /** The buzzer: the bots leave the Zone for the cells the seed dealt them. */
+  drop: () => void;
   setRing: (ring: { sx: number; sy: number; r: number }, phase: number) => void;
   /** A bot's team, for answering a peek about it. Null for a seat we do not own. */
   partyFor: (seat: number) => Msg | null;
@@ -923,17 +929,29 @@ function startBots(
   const targets = LANDING
     .filter((c) => outdoor.has(c.map) && refById.has(c.map))
     .map((c) => ({ mapId: c.map, x: c.x, y: c.y }));
+  // The opening is two minutes long and the bots used to spend all of it out in Hoenn,
+  // so a room of one human and fifteen bots was a single-player Safari trip with a
+  // countdown. They start in the Zone now, on the cells the ROM deals its own players
+  // from, and the drop is what sends everybody out (POK-257).
+  const safariRef = refById.get(SAFARI_MAP_ID);
+  const opening = safariSecs > 0 && safariRef !== undefined && resume === undefined;
+  const safariTargets = SAFARI_CELLS.map((c) => ({ mapId: SAFARI_MAP_ID, x: c.x, y: c.y }));
+  const safariSpawns = safariTargets.map((t) => ({ ...t, map: safariRef! }));
+  let inOpening = opening;
   const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
   const idByRef = new Map(maps.map((m) => [`${m.group}:${m.num}`, m.id]));
   let ring: { sx: number; sy: number; r: number } | undefined;
   const bots = new Bots({
     world,
-    targets,
+    targets: opening ? safariTargets : targets,
     mapRef: (id) => refById.get(id),
     send,
     rng: mulberry32(seed ^ 0x51ce),
     sendTo,
-    inside: (id) => sectionInside(WORLD.sections[sectionOf.get(id) ?? ''], ring),
+    // No ring yet means no fog anywhere, not fog everywhere. Before this, a bot was
+    // counted as outside a ring that did not exist and bled through the whole opening:
+    // eight bots went into the Zone and two came out of it (POK-257).
+    inside: (id) => ring === undefined || sectionInside(WORLD.sections[sectionOf.get(id) ?? ''], ring),
     loot: {
       all: () =>
         loot
@@ -967,6 +985,8 @@ function startBots(
     deal: (bot, atPhase, mapId) => dealParty(seed, bot.seat, atPhase, mapId),
     seed,
     onDuel,
+    // Nobody fights in the Zone -- not a player, not another bot.
+    fights: () => !inOpening,
     onEngage,
     centres: () => world.centres(),
     // Bots are on this roster too -- the host applies its own bots' `place` to it --
@@ -984,7 +1004,13 @@ function startBots(
         const mapId = at ? idByRef.get(`${at.map.group}:${at.map.num}`) : undefined;
         return at && mapId ? { ...b, map: at.map, mapId, x: at.x, y: at.y } : b;
       });
-  const dealt = resume ? resumed(resume) : dealBots(seed, fill, takenSeats, spawns);
+  const dealt = resume
+    ? resumed(resume)
+    : dealBots(seed, fill, takenSeats, opening ? safariSpawns : spawns);
+  // Where they will be when the fog comes. The deal draws the same seats, names and
+  // skins whichever pool it is handed -- only the cell differs -- so this is the same
+  // sixteen bots, standing where the drop would have put them.
+  const landing = new Map(dealBots(seed, fill, takenSeats, spawns).map((b) => [b.seat, b]));
   const seatsDealt = new Set(dealt.map((b) => b.seat));
   let phase = 0;
   bots.start(dealt, performance.now());
@@ -992,6 +1018,16 @@ function startBots(
   return {
     bots,
     seats: dealt.map((b) => b.seat),
+    drop: () => {
+      if (!inOpening) return;
+      inOpening = false;
+      bots.setTargets(targets);
+      for (const bot of dealt) {
+        const to = landing.get(bot.seat);
+
+        if (to) bots.placeAt(bot.seat, { map: to.mapId, x: to.x, y: to.y });
+      }
+    },
     // The host hands its own `ring` straight over: the bots read the fog off the same
     // message every ROM in the room does.
     setRing: (next: { sx: number; sy: number; r: number }, nextPhase: number) => {
@@ -1405,6 +1441,7 @@ function wireRoom(
       // has room for.
       botFill() === 0 ? 0 : Math.max(0, (controls.roster?.max ?? BOT_FILL) - seats.length),
       resume,
+      paceOptions()?.safariSecs ?? DEFAULT_SAFARI_SECS,
     );
     director = new Director({
       // Bots are contestants, not scenery: leaving them out of the seat list makes
@@ -1430,7 +1467,12 @@ function wireRoom(
         bridge!.relay.all(msg);
         rom.push(msg); // no-op for `win` -- createRomPushQueue only packs a msg.t crossesToRom() knows
         noteResult(msg); // the host's own `start`/`win` never come back to it over the relay
-        if (msg.t === 'ring') bots?.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r }, msg.phase);
+        if (msg.t === 'ring') {
+          // The first ring IS the buzzer: it is what ends the opening in the ROM
+          // (br_match.c reads gBrRing.active), so it is when the bots leave too.
+          bots?.drop();
+          bots?.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r }, msg.phase);
+        }
         // The match, narrated. These are the director's own messages on their way out,
         // which is the one place every one of them passes through.
         if (msg.t === 'start') {
