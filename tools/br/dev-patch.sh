@@ -25,8 +25,12 @@ echo "sidecars written for $MAP"
 
 BASELINE="${2:-${BR_BASELINE_ROM:-}}"
 if [[ -n "$BASELINE" && -f "$BASELINE" ]]; then
-  # npx is not on the MSYS2 login shell's PATH; node_modules/.bin always is.
-  ( cd "$ROOT/web" && ./node_modules/.bin/vite-node "$HERE/make-bps.ts" -- "$BASELINE" "${MAP%.map}.gba" "$ROOT/web/public/patch/hoenn-br.bps" )
+  # npx is not on the MSYS2 login shell's PATH; node_modules/.bin always is. Both ROM
+  # paths are resolved before the cd -- a relative "pokeemerald.gba" means the repo
+  # root to the caller and web/ to the subshell, which is a file that does not exist.
+  ROM="$(cd "$(dirname "${MAP%.map}.gba")" && pwd)/$(basename "${MAP%.map}.gba")"
+  BASE="$(cd "$(dirname "$BASELINE")" && pwd)/$(basename "$BASELINE")"
+  ( cd "$ROOT/web" && ./node_modules/.bin/vite-node "$HERE/make-bps.ts" -- "$BASE" "$ROM" "$ROOT/web/public/patch/hoenn-br.bps" )
 else
   rm -f "$ROOT/web/public/patch/hoenn-br.bps"
   echo "no baseline rom (arg 2 or \$BR_BASELINE_ROM): skipping the BPS -- dev will only run a pre-patched ROM"
