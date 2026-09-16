@@ -186,6 +186,17 @@ const TEXT_SPEED_ORDER = [1, 3, 5] as const;
 // for that message BEFORE slot-splitting; each `decode*` is the inverse. Byte
 // offsets and widths here are the ones documented in include/br/br_wire.h.
 
+/** The ROM wants an index into its own skin table (br_ghosts.c's sSkinGraphics). A
+ *  numeric sprite key IS that index -- a bot deals one straight out of the table --
+ *  and anything else is a name we have no table for yet, whose length stands in the
+ *  way it always has. */
+function skinIndex(sprite?: string): number {
+  if (!sprite) return 0;
+  const n = Number(sprite);
+  if (Number.isInteger(n) && n >= 0 && n <= 255) return n;
+  return Math.min(255, sprite.length);
+}
+
 function encodePlace(m: PlaceMsg): Uint8Array {
   const w = new Writer();
   w.u8(m.seat);
@@ -196,7 +207,7 @@ function encodePlace(m: PlaceMsg): Uint8Array {
   w.s16(m.y ?? 0);
   w.u8(m.f);
   w.u8(STATUS_ORDER.indexOf(m.st));
-  w.u8(m.sprite ? Math.min(255, m.sprite.length) : 0); // sprite id: string key length stands in for a real skin table index until one exists
+  w.u8(skinIndex(m.sprite));
   return w.toBytes();
 }
 function decodePlace(bytes: Uint8Array): PlaceMsg {

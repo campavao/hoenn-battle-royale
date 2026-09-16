@@ -18,6 +18,10 @@ import { Director, type DirectorState, type DirectorWorld } from './match/direct
 import { Spectate } from './match/spectate';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
+import { Bots } from './bots/brain';
+import { dealBots } from './bots/roster';
+import { World, type WorldMap } from './bots/world';
+import { mulberry32 } from './match/clock';
 import { careerLine, ordinal, recordMatch } from './match/career';
 import worldData from './data/world.json';
 import landingData from './data/landing.json';
@@ -452,6 +456,45 @@ function renderRoom(bridge: Bridge): void {
   }
 }
 
+// ---- bots (POK-236) -----------------------------------------------------------------
+
+/** How many the host fills a room to. A fixed number until the lobby gets its own FILL
+ *  control (M5, POK-240); Kanto's rooms are never empty, which is the whole point. */
+const BOT_FILL = 8;
+/** The bots' own pump. Faster than one step, so the pace comes out of `Bots.tick`
+ *  rather than out of whatever interval the browser felt like giving us. */
+const BOT_TICK_MS = 100;
+
+/** Fills the room with bots the host walks around. They reach every other client as
+ *  ordinary `place`/`step` -- a ghost, which is all a bot ever is on the wire -- so
+ *  nothing downstream of here has to know they are not people. */
+function startBots(
+  send: (msg: Msg) => void,
+  takenSeats: number[],
+  seed: number,
+): { bots: Bots; seats: number[]; dispose: () => void } {
+  const maps = (worldData as { maps: WorldMap[] }).maps;
+  const world = new World(maps);
+  const refById = new Map(maps.map((m) => [m.id, { group: m.group, num: m.num }]));
+  const outdoor = new Set(maps.filter((m) => m.outdoor).map((m) => m.id));
+  // The same pool the drop deals from: known-walkable, outdoor, already in the bundle.
+  const targets = (landingData as { map: string; x: number; y: number }[])
+    .filter((c) => outdoor.has(c.map) && refById.has(c.map))
+    .map((c) => ({ mapId: c.map, x: c.x, y: c.y }));
+  const bots = new Bots({
+    world,
+    targets,
+    mapRef: (id) => refById.get(id),
+    send,
+    rng: mulberry32(seed ^ 0x51ce),
+  });
+  const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
+  const dealt = dealBots(seed, BOT_FILL, takenSeats, spawns);
+  bots.start(dealt, performance.now());
+  const id = setInterval(() => bots.tick(performance.now()), BOT_TICK_MS);
+  return { bots, seats: dealt.map((b) => b.seat), dispose: () => clearInterval(id) };
+}
+
 // ---- results (POK-228) --------------------------------------------------------------
 
 /** Where we came, how long we lasted, and what that does to the career record. Shown
@@ -545,6 +588,9 @@ function startSpectateLoop(
     const now = performance.now();
     const ask = spectate.duePeek(bridge.seat, now);
     if (ask) bridge.relay.all(ask);
+    // Bots join by walking, not by joining: their seats appear in the roster from a
+    // `place`, and there is no relay event to redraw the list on.
+    renderRoom(bridge);
     if (hudBase !== undefined) writeHudEyes(emu, hudBase, spectate.eyes(now));
   }, SPECTATE_TICK_MS);
   return () => clearInterval(id);
@@ -674,16 +720,36 @@ function wireRoom(
   let stopDirectorLoop: (() => void) | null = null;
   let isHost = false;
 
-  const startDirector = () => {
+  /** `members` comes straight off the relay's roster event when there is one: the
+   *  Bridge's own subscription may not have folded it into `bridge.roster` yet -- both
+   *  listen to the same event, and this one was registered first -- and starting a
+   *  match a seat short makes "N LEFT" wrong and hands the win to the wrong person. */
+  const startDirector = (members?: number[]) => {
     if (director || !bridge || !isHost) return;
-    const seats = bridge.roster.all().map((e) => e.seat);
+    const known = bridge.roster.all().map((e) => e.seat);
+    const seats = [...new Set([...(members ?? []), ...known])];
     if (seats.length === 0) return;
     const hostSeat = bridge.seat;
+    const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
     const rom = createRomPushQueue(emu, bridge.mailbox); // reuses the Bridge's own Mailbox, not a second one on the same base
-    director = new Director({
+    // The host speaks for the bots as well as for the clock: same relay, same in-ring,
+    // and its own roster too -- nobody hears their own messages come back, so the host
+    // would otherwise be the one client that cannot see the bots it is walking.
+    bots = startBots(
+      (msg) => {
+        bridge!.relay.all(msg);
+        rom.push(msg);
+        bridge!.roster.applyMsg(msg);
+      },
       seats,
+      seed,
+    );
+    director = new Director({
+      // Bots are contestants, not scenery: leaving them out of the seat list makes
+      // "N LEFT" a lie and hands the match to whoever outlasts the humans alone.
+      seats: [...seats, ...bots.seats],
       hostSeat,
-      seed: Math.floor(Math.random() * 0x7fff_ffff) + 1,
+      seed,
       world: WORLD,
       send: (msg) => {
         // Guests' ROMs act on this over the relay; the host's own ROM would too,
@@ -713,6 +779,8 @@ function wireRoom(
     stopDirectorLoop = () => {
       stopLoop();
       rom.dispose();
+      bots?.dispose();
+      bots = null;
     };
   };
 
@@ -743,6 +811,7 @@ function wireRoom(
     }
   };
   let stopSpectateLoop: (() => void) | null = null;
+  let bots: { bots: Bots; seats: number[]; dispose: () => void } | null = null;
 
   const attach = (seat: number, code: string) => {
     if (bridge) bridge.dispose(); // a re-join after a reconnect must not leave two pumps on one ring
@@ -783,7 +852,10 @@ function wireRoom(
           for (const part of spectate.streamFor(seat)) bridge!.relay.to(m.seat, part);
         }
         else if (m.t === 'result') spectate.noteResult(m.seat);
-        else if (m.t === 'out') renderSpectate(bridge!, spectate);
+        else if (m.t === 'out') {
+          bots?.bots.remove(m.seat); // a bot that is out stops being walked around
+          renderSpectate(bridge!, spectate);
+        }
       } catch {
         // bridge.ts already counted the drop; nothing to spectate about it either way.
       }
@@ -812,7 +884,7 @@ function wireRoom(
   relay.on('roster', (ev) => {
     if (bridge) renderRoom(bridge);
     if (bridge) renderSpectate(bridge, spectate);
-    if (ev.members.length >= 2) startDirector();
+    if (ev.members.length >= 2) startDirector(ev.members.map((m) => m.id));
   });
   relay.on('room_error', (ev) => (codeEl.textContent = `Couldn't join: ${ev.reason}`));
   relay.on('closed', (ev) => {
