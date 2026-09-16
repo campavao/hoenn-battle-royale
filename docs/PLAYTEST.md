@@ -9,7 +9,7 @@ named; when one is created later, put its id at the top of the entry and leave t
 
 ## 2026-09-16, Cam, solo and quick play
 
-### Freeze: throwing a Safari Ball at a Makuhita ends with both sprites gone and no input
+### Freeze: throwing a Safari Ball at a Makuhita ends with both sprites gone and no input -- **a way out** (`ba5d153d1`)
 
 **Critical.** Video at ~2:50. First mon of the match, a Makuhita, Safari Ball thrown;
 "we both just disappeared, and then I was frozen here, I couldn't do anything."
@@ -23,6 +23,19 @@ throw, the battle may be being closed underneath the catch.
 
 Reproduce first: `catch-pages.txt` drives a real catch and passes, so this is either a
 specific species/ball combination or the buzzer overlapping the throw.
+
+**What has changed:** the place a frozen game most likely WAS is no longer a place
+you can be stuck in. A catch at 2:50 is a catch as the ring comes up, and a ring
+ends the opening: `BrMatch_SafariOver` -> `BrPick_Start` -> the drop map -> the black
+screen `BrPick_Wait` holds until the host's `land` arrives. Nothing drew and nothing
+answered a button there, for as long as the answer took, which was for ever if it
+never came. It now asks again at five seconds and drops itself at fifteen
+(`land-lost.txt`).
+
+That is a floor, not the cause. The cause is still open: the sprites vanishing
+before the freeze is not what a drop map looks like, so something ends the battle
+in a way the catch did not expect. A driver that throws a ball with `gBrRing`
+already active is the next thing to write.
 
 ### The new-game intro plays: the truck, not the Safari
 
@@ -179,9 +192,7 @@ no host migration.
 Done as described: `can_host false` on `visibilitychange`, the relay re-elects, the
 old host keeps its seat and plays on. The alert went with it.
 
-**The relay half is not deployed.** `relay/server.js` needs to reach Railway
-(`hoenn-relay`) before a handover works against the live relay; until then the page
-stands down and nothing catches the room.
+The relay half is deployed (`railway up`, 2026-09-16 23:31Z).
 
 ---
 ---
