@@ -19,7 +19,7 @@ expectge u16 gPlayerParty+0x58 60
 # tier 2: GOOD ROD (263), a ticker line queued
 expect u8 gBrLevels+2 2
 expect u16 gBrLevels+4 263
-expectge u8 gBrHud+0x0B 1
+expectge u8 gBrHud+0x0A 1
 wait 40
 shot phase
 # phase 6 -> 100

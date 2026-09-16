@@ -1,4 +1,4 @@
-// The overworld HUD (POK-226): corner counter and clock, wound bar, ticker.
+// The overworld HUD (POK-226): corner counter and clock, ticker, bottom box.
 // See include/br/br_hud.h for the model, the tile map and the lifecycle rules.
 #include "global.h"
 #include "main.h"
@@ -25,7 +25,6 @@ EWRAM_DATA struct BrHud gBrHud = {0};
 // palette 14, from the border set in OPTIONS (POK-256). A window flush against the top
 // of the screen has nowhere to put its lid.
 static const struct WindowTemplate sCornerTemplate = { 0, 23, 1, 6, 3, 15, 0x23A };
-static const struct WindowTemplate sWoundTemplate = { 0, 23, 6, 6, 2, 15, 0x24C };
 static const struct WindowTemplate sTickerTemplate = { 0, 1, 17, 28, 2, 15, 0x258 };
 static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, 0x294 };
 
@@ -38,22 +37,11 @@ static const u8 sColorsText[] = { 1, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY
 static const u8 sColorsFog[] = { 1, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
 static const u8 sColorsKill[] = { 1, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
 static const u8 sColorsSay[] = { 1, TEXT_COLOR_BLUE, TEXT_COLOR_LIGHT_BLUE };
-static const u8 sColorsWound[] = { 1, TEXT_COLOR_GREEN, TEXT_COLOR_LIGHT_GREEN };
 
 static const u8 sText_Left[] = _(" LEFT");
 static const u8 sText_Fog[] = _("FOG!");
 // How many are watching. Kanto's corner eye, on the small font's own symbol page.
 static const u8 sText_Eye[] = _("{EMOJI_LEFT_EYE}");
-// Wound glyphs, all from the small font's extra-symbol page: no new graphics.
-static const u8 sText_WoundFull[] = _("{EMOJI_CIRCLE}");
-static const u8 sText_WoundHurt[] = _("{CIRCLE_DOT}");
-static const u8 sText_WoundDown[] = _("×");
-
-#define WOUND_NONE 0
-#define WOUND_DOWN 1
-#define WOUND_HURT 2
-#define WOUND_FULL 3
-
 // ---- windows ------------------------------------------------------------------
 
 static bool8 OverworldRunning(void)
@@ -211,89 +199,6 @@ static void TickCorner(bool8 blocked)
     Present(h->winCorner, BR_HUD_SHOWN_CORNER, TRUE, pixels);
 }
 
-// ---- wound bar ----------------------------------------------------------------
-
-static u8 WoundOf(u8 slot)
-{
-    struct Pokemon *mon;
-    u16 hp, max;
-
-    if (slot >= gPlayerPartyCount || slot >= PARTY_SIZE)
-        return WOUND_NONE;
-    mon = &gPlayerParty[slot];
-    hp = GetMonData(mon, MON_DATA_HP);
-    max = GetMonData(mon, MON_DATA_MAX_HP);
-    if (max == 0)
-        return WOUND_NONE;
-    if (hp == 0)
-        return WOUND_DOWN;
-    if (hp * 2 <= max)
-        return WOUND_HURT;
-    return WOUND_FULL;
-}
-
-static void DrawWound(const u8 *codes)
-{
-    struct BrHud *h = &gBrHud;
-    u8 buf[2 * PARTY_SIZE + 1];
-    u8 *p = buf;
-    u8 i;
-
-    for (i = 0; i < PARTY_SIZE; i++)
-    {
-        h->drawnWound[i] = codes[i];
-        switch (codes[i])
-        {
-        case WOUND_FULL: p = StringCopy(p, sText_WoundFull); break;
-        case WOUND_HURT: p = StringCopy(p, sText_WoundHurt); break;
-        case WOUND_DOWN: p = StringCopy(p, sText_WoundDown); break;
-        }
-    }
-    *p = EOS;
-    DrawStdWindowFrame(h->winWound, FALSE);
-    PrintRight(h->winWound, buf, 0, sColorsWound);
-}
-
-static void TickWound(bool8 blocked)
-{
-    struct BrHud *h = &gBrHud;
-    u8 codes[PARTY_SIZE];
-    bool8 pixels = FALSE;
-    bool8 any = FALSE;
-    u8 i;
-
-    if (blocked)
-    {
-        h->shown &= ~BR_HUD_SHOWN_WOUND;
-        return;
-    }
-    // GetMonData on HP is a plain read, but six of them a frame is still needless.
-    if ((h->dirty & BR_HUD_DIRTY_WOUND) == 0 && (gMain.vblankCounter1 & 7) != 0)
-    {
-        for (i = 0; i < PARTY_SIZE; i++)
-            if (h->drawnWound[i] != WOUND_NONE)
-                any = TRUE;
-        Present(h->winWound, BR_HUD_SHOWN_WOUND, any, FALSE);
-        return;
-    }
-    for (i = 0; i < PARTY_SIZE; i++)
-    {
-        codes[i] = WoundOf(i);
-        if (codes[i] != WOUND_NONE)
-            any = TRUE;
-        if (codes[i] != h->drawnWound[i])
-            pixels = TRUE;
-    }
-    if (pixels || (h->dirty & BR_HUD_DIRTY_WOUND))
-    {
-        DrawWound(codes);
-        h->dirty &= ~BR_HUD_DIRTY_WOUND;
-        pixels = TRUE;
-    }
-    Present(h->winWound, BR_HUD_SHOWN_WOUND, any, pixels);
-}
-
-// ---- ticker -------------------------------------------------------------------
 
 static void SetLine(struct BrHudLine *line, u8 kind, const u8 *text, u8 len)
 {
@@ -428,7 +333,6 @@ void BrHud_Init(void)
     h->clockFrames = 0;
     h->fogFrames = 0;
     h->winCorner = WINDOW_NONE;
-    h->winWound = WINDOW_NONE;
     h->winTicker = WINDOW_NONE;
     h->winBox = WINDOW_NONE;
     h->boxFrames = 0;
@@ -442,8 +346,6 @@ void BrHud_Init(void)
     h->drawnClock = 0xFFFF;
     h->drawnLeft = 0xFF;
     h->drawnFog = 0xFF;
-    for (i = 0; i < PARTY_SIZE; i++)
-        h->drawnWound[i] = WOUND_NONE;
     h->heldLine.text[0] = EOS;
 }
 
@@ -533,7 +435,6 @@ void BrHud_Tick(void)
     {
         // Battle, menu or a map load: the windows must not outlive the overworld's BG0.
         Drop(&h->winCorner, &sCornerTemplate);
-        Drop(&h->winWound, &sWoundTemplate);
         Drop(&h->winTicker, &sTickerTemplate);
         Drop(&h->winBox, &sBoxTemplate);
         h->live = 0;
@@ -561,11 +462,8 @@ void BrHud_Tick(void)
 
     live = 0;
     h->winCorner = Ensure(h->winCorner, &sCornerTemplate);
-    h->winWound = Ensure(h->winWound, &sWoundTemplate);
     h->winTicker = Ensure(h->winTicker, &sTickerTemplate);
     if (h->winCorner != WINDOW_NONE)
-        live++;
-    if (h->winWound != WINDOW_NONE)
         live++;
     if (h->winTicker != WINDOW_NONE)
         live++;
@@ -589,7 +487,7 @@ void BrHud_Tick(void)
     if (live != h->live)
     {
         // Fresh buffers hold garbage and no tilemap: draw and put everything again.
-        h->dirty = BR_HUD_DIRTY_CORNER | BR_HUD_DIRTY_WOUND | BR_HUD_DIRTY_TICKER;
+        h->dirty = BR_HUD_DIRTY_CORNER | BR_HUD_DIRTY_TICKER;
         h->shown = 0;
         h->live = live;
     }
@@ -604,8 +502,6 @@ void BrHud_Tick(void)
 
     if (h->winCorner != WINDOW_NONE)
         TickCorner(menuUp);
-    if (h->winWound != WINDOW_NONE)
-        TickWound(menuUp);
     if (h->winTicker != WINDOW_NONE)
         TickTicker(menuUp || scriptOn || !IsFieldMessageBoxHidden());
     TickBox(menuUp || scriptOn || !IsFieldMessageBoxHidden());

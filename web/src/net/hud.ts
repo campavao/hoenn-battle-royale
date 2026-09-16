@@ -9,7 +9,7 @@ export const HUD = {
   OFF_LEFT: 0x00, // u8: trainers still in the match
   OFF_FLASH_FOG: 0x01, // u8: write 1, the ROM clears it after a 60-frame flash
   OFF_CLOCK_SECS: 0x02, // u16: seconds; the ROM counts it down once per 60 frames
-  OFF_EYES: 0x1a, // u8: how many spectators are watching this trainer
+  OFF_EYES: 0x0f, // u8: how many spectators are watching this trainer
 } as const;
 
 /** `gBrHud.left` -- alive count, clamped to a byte (BR_MAX_SEATS is well under 256). */
