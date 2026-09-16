@@ -1336,6 +1336,34 @@ function wireRoom(
     stopSpectateLoop?.();
   });
 
+  // A hidden tab gets its timers throttled, and on the host those timers ARE the
+  // match: the director's clock and the bots' walking both ride setInterval. Nothing
+  // breaks -- the clock is wall-clock and catches up on return -- but the match
+  // freezes and then lurches for everybody, and only the host can do anything about
+  // it (POK-247).
+  //
+  // The page cannot tell them while it is hidden, so the title does: it is the one
+  // thing a backgrounded tab still shows. On the way back, the room's own line says
+  // how long everybody was waiting.
+  const baseTitle = document.title;
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (!director) return;
+    const note = $('#room-note') as HTMLElement;
+    if (document.hidden) {
+      hiddenAt = performance.now();
+      document.title = `PAUSED - ${baseTitle}`;
+      return;
+    }
+    document.title = baseTitle;
+    const secs = Math.round((performance.now() - hiddenAt) / 1000);
+    note.textContent =
+      hiddenAt > 0 && secs >= 2
+        ? `This tab was hidden for ${secs}s -- you are the host, so the match was waiting on it.`
+        : '';
+    hiddenAt = 0;
+  });
+
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
   relay.connect(relayUrl);
   // Open, because a room nobody can find is not a lobby (POK-240). JOIN BY CODE still
