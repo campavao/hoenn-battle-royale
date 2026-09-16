@@ -116,8 +116,9 @@ export interface BotsOptions {
   engage?: {
     players: () => PlayerView[];
   };
-  /** A bot's starting team, and the mons it picks up as the rung climbs. */
-  deal?: (bot: Bot, phase: number) => PackedMon[];
+  /** A bot's starting team, and the mons it picks up as the rung climbs. `mapId` is
+   *  where it is standing, which is where a trainer's mons come from (POK-237). */
+  deal?: (bot: Bot, phase: number, mapId: string) => PackedMon[];
   /** How many trainers are still in, bots included. The hunt starts at HUNT_AT. */
   alive?: () => number;
   /** The match seed, so two bots meeting settle it the same way on every client that
@@ -199,7 +200,7 @@ export class Bots {
         engageAfter: 0,
         retryAfter: 0,
         bleedAt: now + FOG_TICK_MS,
-        party: this.opts.deal?.(bot, 0) ?? [],
+        party: this.opts.deal?.(bot, 0, bot.mapId) ?? [],
       };
       this.walkers.push(walker);
       this.place(walker);
@@ -234,7 +235,7 @@ export class Bots {
   ringMoved(phase = 0): void {
     for (const walker of this.walkers) {
       walker.path = null;
-      const fresh = this.opts.deal?.(walker.bot, phase);
+      const fresh = this.opts.deal?.(walker.bot, phase, walker.at.map);
       if (fresh) walker.party = climb(walker.party, fresh);
     }
   }

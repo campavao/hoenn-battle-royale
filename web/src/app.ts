@@ -709,7 +709,9 @@ function startBots(
           }))
           .filter((p) => p.mapId !== ''),
     },
-    deal: (bot, atPhase) => dealParty(seed, bot.seat, atPhase),
+    // Where the bot is standing is where its mons came from (POK-237): the drop put
+    // it on a route, and that route's own table is what a trainer there would have.
+    deal: (bot, atPhase, mapId) => dealParty(seed, bot.seat, atPhase, mapId),
     seed,
     onDuel,
     onEngage,

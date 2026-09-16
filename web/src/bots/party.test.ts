@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dealParty, LADDER, rungForPhase } from './party';
+import { dealParty, LADDER, rungForPhase, speciesAt } from './party';
 import { packSlot, unpackSlot, reassembleSlots } from '../net/slots';
 import type { PartyMsg } from '../net/wire';
 
@@ -39,5 +39,38 @@ describe("a bot's team", () => {
     expect(back.mons[0].species).toBe(msg.mons[0].species);
     expect(back.mons[0].level).toBe(msg.mons[0].level);
     expect(back.mons[0].nickname).toBe(msg.mons[0].nickname);
+  });
+});
+
+describe("a bot's mons come from where it is", () => {
+  it('knows what walks on a route the game has a table for', () => {
+    // Route 101 is the first patch of grass in the game: Wurmple, Poochyena, Zigzagoon.
+    const r101 = speciesAt('MAP_ROUTE101');
+    expect(r101.length).toBeGreaterThan(0);
+    expect(r101).toContain(290); // WURMPLE
+    expect(r101).toContain(286); // POOCHYENA
+  });
+
+  it('has nothing for a map with no grass on it, and says so plainly', () => {
+    expect(speciesAt('MAP_LITTLEROOT_TOWN')).toEqual([]);
+    expect(speciesAt('MAP_NOWHERE_AT_ALL')).toEqual([]);
+  });
+
+  it('deals a team out of the local table when there is one', () => {
+    const local = new Set(speciesAt('MAP_ROUTE101'));
+    for (const mon of dealParty(5, 31, 4, 'MAP_ROUTE101')) {
+      expect(local.has(mon.species)).toBe(true);
+    }
+  });
+
+  it('falls back to the pool where there is no table, rather than dealing nothing', () => {
+    const party = dealParty(5, 31, 4, 'MAP_LITTLEROOT_TOWN');
+    expect(party.length).toBeGreaterThan(0);
+    for (const mon of party) expect(mon.species).toBeGreaterThan(0);
+  });
+
+  it('still deals the same team from the same seed, map and all', () => {
+    expect(dealParty(9, 30, 3, 'MAP_ROUTE110')).toEqual(dealParty(9, 30, 3, 'MAP_ROUTE110'));
+    expect(dealParty(9, 30, 3, 'MAP_ROUTE110')).not.toEqual(dealParty(9, 30, 3, 'MAP_ROUTE119'));
   });
 });

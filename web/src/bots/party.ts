@@ -10,6 +10,12 @@
 // a second implementation of something the ROM already owns.
 import { mulberry32, pickIndex } from '../match/clock';
 import type { PackedMon } from '../net/wire';
+import encounterData from '../data/encounters.json';
+
+/** `tools/br/export-encounters.py`: every map's land table, species ids, the commonest
+ *  first. A bot on Route 119 should be carrying Route 119's mons, and the ROM has had
+ *  these tables all along -- the page just could not see them. */
+const ENCOUNTERS = encounterData as Record<string, number[]>;
 
 /** `sLadder` in src/br/br_levels.c, indexed by ring phase. The one clock. */
 export const LADDER = [5, 15, 30, 50, 75, 100];
@@ -19,9 +25,9 @@ export function rungForPhase(phase: number): number {
   return LADDER[Math.min(i, LADDER.length - 1)];
 }
 
-/** A curated Hoenn pool, standing in for the exported encounter tables. Chosen to be
- *  the sort of thing a trainer walking Hoenn's routes would actually have -- the real
- *  per-map tables are the rest of POK-237. */
+/** The fallback pool, for a map with no land table of its own -- a town, a cave mouth,
+ *  the inside of a Centre. Every one of these is somewhere in Hoenn's early routes, so
+ *  a bot dealt from it still looks like it came from around here. */
 export const MOVE_SURF = 57;
 /** The rung a water mon has learned SURF by. Hoenn is half ocean and the drop is
  *  happy to put a trainer on Route 125 or Southern Island, which nothing without it
@@ -49,7 +55,42 @@ function hp(level: number): number {
   return Math.max(10, Math.floor(level * 2.2) + 10);
 }
 
-function mon(level: number, rng: () => number): PackedMon {
+/** The names the wire carries are the page's; the ROM builds the real mon from the
+ *  species id and nicknames it itself. A species we have no name for is shown by its
+ *  number, which is honest rather than wrong. */
+function nameOf(species: number): string {
+  return POOL.find((p) => p.species === species)?.name ?? String(species);
+}
+
+/** What a trainer standing here would have caught. Empty for a map with no land table,
+ *  which is the caller's cue to fall back to the pool. */
+export function speciesAt(mapId: string): number[] {
+  return ENCOUNTERS[mapId] ?? [];
+}
+
+function mon(level: number, rng: () => number, mapId?: string): PackedMon {
+  const local = mapId ? speciesAt(mapId) : [];
+  if (local.length > 0) {
+    const species = local[pickIndex(rng, local.length)];
+    const max = hp(level);
+    return {
+      species,
+      level,
+      hp: max,
+      maxHp: max,
+      status: 0,
+      // TACKLE. A real move set per species is the ROM's own learnset table, and
+      // building one here would be a second implementation of what the ROM already
+      // does when it makes the mon.
+      moves: [{ id: 33, pp: 25, ppUps: 0 }],
+      heldItem: 0,
+      otId: 0,
+      personality: Math.floor(rng() * 0xffff_ffff) >>> 0,
+      exp: 0,
+      nickname: nameOf(species),
+      ot: 'BR',
+    };
+  }
   const pick = POOL[pickIndex(rng, POOL.length)];
   const max = hp(level);
   const moves = [...pick.moves];
@@ -73,11 +114,16 @@ function mon(level: number, rng: () => number): PackedMon {
 /** A bot's team at a given ring phase: one at the drop, another every two rungs, up to
  *  Kanto's six. Dealt from the seed and the seat, so the same match always deals the
  *  same bot the same team -- including on a client that never ran the brain. */
-export function dealParty(seed: number, seat: number, phase: number): PackedMon[] {
+export function dealParty(
+  seed: number,
+  seat: number,
+  phase: number,
+  mapId?: string,
+): PackedMon[] {
   const rng = mulberry32((seed ^ (seat * 0x9e37)) >>> 0);
   const level = rungForPhase(phase);
   const count = Math.min(6, 1 + Math.floor(Math.max(0, phase - 1) / 2));
   const party: PackedMon[] = [];
-  for (let i = 0; i < count; i++) party.push(mon(level, rng));
+  for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId));
   return party;
 }
