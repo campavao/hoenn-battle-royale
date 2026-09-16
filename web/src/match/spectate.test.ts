@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { battleId, battleSeats, EYE_WINDOW_MS, PEEK_INTERVAL_MS, Spectate } from './spectate';
+import { battleId, battleSeats, CACHE_MAX_BYTES, EYE_WINDOW_MS, PEEK_INTERVAL_MS, Spectate } from './spectate';
 import type { Msg } from '../net/wire';
 
 const bstart = (battle: number): Msg => ({ t: 'bstart', battle, data: [1, 2, 3] });
@@ -51,6 +51,33 @@ describe('the relay -> ROM gate', () => {
     s.follow(7);
     expect(s.watchingBattle()).toBeNull();
     expect(s.wantsFromRelay(turn(battleId(1, 2)))).toBe(false);
+  });
+
+  it('hands a late watcher the fight from the top', () => {
+    const s = new Spectate();
+    // Not watching anyone: the stream is dropped, but remembered.
+    expect(s.wantsFromRelay(bstart(battleId(1, 2)))).toBe(false);
+    expect(s.wantsFromRelay(turn(battleId(1, 2)))).toBe(false);
+    expect(s.wantsFromRelay(turn(battleId(1, 2)))).toBe(false);
+    const out = s.follow(2);
+    expect(out.map((m) => m.t)).toEqual(['follow', 'bstart', 'turn', 'turn']);
+    expect(s.watchingBattle()).toBe(battleId(1, 2));
+  });
+
+  it('has nothing to hand over once the fight is done', () => {
+    const s = new Spectate();
+    s.wantsFromRelay(bstart(battleId(1, 2)));
+    s.noteResult(1);
+    expect(s.follow(2).map((m) => m.t)).toEqual(['follow']);
+  });
+
+  it('stops holding a fight that outgrows the cache', () => {
+    const s = new Spectate();
+    const battle = battleId(1, 2);
+    s.wantsFromRelay(bstart(battle));
+    const big: Msg = { t: 'turn', battle, data: new Array(CACHE_MAX_BYTES + 1).fill(0) };
+    s.wantsFromRelay(big);
+    expect(s.follow(2).map((m) => m.t)).toEqual(['follow']);
   });
 
   it('never takes a follow off the wire', () => {

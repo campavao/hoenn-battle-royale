@@ -14,7 +14,24 @@
 //   - the tally. A spectator's `follow` never leaves its own page, so nobody else can
 //     count watchers. The peeks are the count: whoever asked recently is watching,
 //     which is exactly the number the HUD's corner eye wants.
+//
+// It also keeps every live fight's stream, not just the one being watched. A `bstart`
+// is sent once, at the start; somebody who decides to watch two minutes in would
+// otherwise have nothing to replay. Holding the bstart and the turns since means
+// starting a watch is handing the ROM the fight from the top -- it catches up in the
+// seconds it takes to play the turns out, and is a turn behind from there.
 import type { Msg } from '../net/wire';
+
+/** How much of one fight's stream to hold for a late watcher. A turn is a handful of
+ *  bytes, so this is a long fight; past it, that fight is no longer joinable rather
+ *  than growing without bound. */
+export const CACHE_MAX_BYTES = 8192;
+
+interface LiveFight {
+  bstart: Msg;
+  turns: Msg[];
+  bytes: number;
+}
 
 /** How often a spectator re-asks while watching (Kanto's `Peek.SECONDS`). */
 export const PEEK_INTERVAL_MS = 3000;
@@ -44,6 +61,8 @@ export class Spectate {
   private lastPeek = Number.NEGATIVE_INFINITY;
   /** seat -> when they last asked about us. */
   private readonly peekers = new Map<number, number>();
+  /** battle id -> its stream so far, for whoever starts watching mid-fight. */
+  private readonly live = new Map<number, LiveFight>();
 
   watchingSeat(): number | null {
     return this.seat;
@@ -53,15 +72,25 @@ export class Spectate {
     return this.battle;
   }
 
-  /** Start watching a seat, or stop with null. Returns the `follow` the caller should
-   *  hand to its own ROM -- it never goes to the relay. */
-  follow(seat: number | null): Msg {
+  /** Start watching a seat, or stop with null. Returns what the caller should hand to
+   *  its own ROM -- none of it goes to the relay: the `follow`, and, if that seat is
+   *  already fighting, the fight from its `bstart` and every turn since. */
+  follow(seat: number | null): Msg[] {
     if (seat !== this.seat) {
       this.battle = null;
       this.lastPeek = Number.NEGATIVE_INFINITY;
     }
     this.seat = seat;
-    return { t: 'follow', seat };
+    const out: Msg[] = [{ t: 'follow', seat }];
+    if (seat === null) return out;
+    for (const [battle, fight] of this.live) {
+      const [lo, hi] = battleSeats(battle);
+      if (lo !== seat && hi !== seat) continue;
+      this.battle = battle;
+      out.push(fight.bstart, ...fight.turns);
+      break;
+    }
+    return out;
   }
 
   /** The `peek` to send now, or null if it is not due yet. Kanto re-asks on a timer
@@ -71,6 +100,25 @@ export class Spectate {
     if (now - this.lastPeek < PEEK_INTERVAL_MS) return null;
     this.lastPeek = now;
     return { t: 'peek', seat: mySeat, target: this.seat };
+  }
+
+  /** Everything our own ROM sent, so a fighter's page holds its own fight too -- it
+   *  never sees those come back over the relay. */
+  noteOutgoing(msg: Msg): void {
+    this.remember(msg);
+    if (msg.t === 'result') this.noteResult(msg.seat);
+  }
+
+  /** The fight `seat` is in, from its `bstart` and every turn since, for a spectator
+   *  who asked after it started. A relay only delivers to who was in the room at the
+   *  time, so a watcher who joined mid-fight has nothing of its own to replay -- this
+   *  is the answer to their peek. */
+  streamFor(seat: number): Msg[] {
+    for (const [battle, fight] of this.live) {
+      const [lo, hi] = battleSeats(battle);
+      if (lo === seat || hi === seat) return [fight.bstart, ...fight.turns];
+    }
+    return [];
   }
 
   /** Somebody asked what we are carrying: they are watching us from now on. */
@@ -102,6 +150,7 @@ export class Spectate {
         return false;
       case 'bstart':
       case 'turn': {
+        this.remember(msg);
         if (this.seat === null) return false;
         if (this.battle !== null && msg.battle === this.battle) return true;
         const [lo, hi] = battleSeats(msg.battle);
@@ -116,9 +165,29 @@ export class Spectate {
     }
   }
 
+  /** Holds a fight's stream for a late watcher, whether we are watching it or not. */
+  private remember(msg: Msg): void {
+    if (msg.t === 'bstart') {
+      this.live.set(msg.battle, { bstart: msg, turns: [], bytes: msg.data.length });
+      return;
+    }
+    if (msg.t !== 'turn') return;
+    const fight = this.live.get(msg.battle);
+    if (!fight) return;
+    fight.turns.push(msg);
+    fight.bytes += msg.data.length;
+    // Too long to replay from the top: drop it rather than grow. Anyone already
+    // watching keeps getting turns; only joining late is off the table.
+    if (fight.bytes > CACHE_MAX_BYTES) this.live.delete(msg.battle);
+  }
+
   /** A fight ended: the stream for it is over, so a later fight between other seats
-   *  cannot be mistaken for it. */
+   *  cannot be mistaken for it, and there is nothing left to join. */
   noteResult(seat: number): void {
+    for (const battle of [...this.live.keys()]) {
+      const [lo, hi] = battleSeats(battle);
+      if (seat === lo || seat === hi) this.live.delete(battle);
+    }
     if (this.battle === null) return;
     const [lo, hi] = battleSeats(this.battle);
     if (seat === lo || seat === hi) this.battle = null;

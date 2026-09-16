@@ -574,6 +574,16 @@ function optInt(m: Record<string, unknown>, field: string, lo: number, hi: numbe
   return v as number;
 }
 
+/** A field of raw bytes -- the ROM messages that carry a slice of its own memory. */
+function reqBytes(m: Record<string, unknown>, field: string, max: number): number[] {
+  const data = m[field];
+  if (!Array.isArray(data) || data.length > max) fail(`bad ${field}`);
+  for (const b of data) {
+    if (typeof b !== 'number' || !Number.isInteger(b) || b < 0 || b > 255) fail(`bad ${field} byte`);
+  }
+  return data as number[];
+}
+
 function reqInt(m: Record<string, unknown>, field: string, lo: number, hi: number): number {
   const v = optInt(m, field, lo, hi);
   if (v === undefined) fail(`missing integer '${field}'`);
@@ -755,6 +765,27 @@ const decoders: Record<string, Decoder> = {
     for (const b of data) if (typeof b !== 'number' || !Number.isInteger(b) || b < 0 || b > 255) fail('bad block byte');
     return { t: 'bt', seat: reqSeat(m), seq: reqInt(m, 'seq', 0, 0xffff), data: data as number[] };
   },
+
+  // A published battle's setup and its action stream (POK-233). Both carry raw ROM
+  // bytes: the `bstart` is a seed, two names and two real parties (~1.2 KB), the
+  // `turn` a handful of action bytes. Without a decoder here every peer drops them as
+  // an unknown type and nobody can ever watch anything -- which is exactly what the
+  // first three-tab run did.
+  bstart: (m) => ({
+    t: 'bstart',
+    battle: reqInt(m, 'battle', 0, 0xffff),
+    data: reqBytes(m, 'data', 1400),
+  }),
+
+  turn: (m) => ({
+    t: 'turn',
+    battle: reqInt(m, 'battle', 0, 0xffff),
+    data: reqBytes(m, 'data', 256),
+  }),
+
+  // Page -> its own ROM only (docs/WIRE.md); decodable so the type round-trips, but
+  // match/spectate.ts refuses one that arrives from anybody else.
+  follow: (m) => ({ t: 'follow', seat: m.seat === null ? null : reqSeat(m) }),
 
   party: (m) => {
     const mons = m.mons;

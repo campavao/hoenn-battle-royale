@@ -43,6 +43,10 @@ const BR_BOOT_MAP = 1;
 // Solo only (POK-222): warp straight into the Safari opening, skipping Littleroot --
 // there is no lobby to wait in when there's nobody else to wait for.
 const BR_BOOT_SAFARI = 2;
+// br_boot.h: ORed into the mode, hands the ROM a level 5 Treecko. Dev only, and only
+// on an explicit `#testmon` -- the e2e needs two seats able to actually fight before
+// anyone has caught anything.
+const BR_BOOT_FLAG_TESTMON = 0x80;
 const MALE = 0;
 const LITTLEROOT = { group: 0, num: 9, x: 5, y: 8 };
 
@@ -459,7 +463,7 @@ function renderSpectate(bridge: Bridge, spectate: Spectate): void {
   const out = me !== undefined && !me.alive;
   strip.hidden = !out;
   if (!out) {
-    if (spectate.watchingSeat() !== null) bridge.pushToRom(spectate.follow(null));
+    if (spectate.watchingSeat() !== null) for (const m of spectate.follow(null)) bridge.pushToRom(m);
     strip.innerHTML = '';
     return;
   }
@@ -477,7 +481,7 @@ function renderSpectate(bridge: Bridge, spectate: Spectate): void {
     button.setAttribute('aria-pressed', String(watching === entry.seat));
     button.addEventListener('click', () => {
       const next = spectate.watchingSeat() === entry.seat ? null : entry.seat;
-      bridge.pushToRom(spectate.follow(next));
+      for (const m of spectate.follow(next)) bridge.pushToRom(m);
       renderSpectate(bridge, spectate);
     });
     strip.appendChild(button);
@@ -487,7 +491,7 @@ function renderSpectate(bridge: Bridge, spectate: Spectate): void {
     stop.type = 'button';
     stop.textContent = 'STOP';
     stop.addEventListener('click', () => {
-      bridge.pushToRom(spectate.follow(null));
+      for (const m of spectate.follow(null)) bridge.pushToRom(m);
       renderSpectate(bridge, spectate);
     });
     strip.appendChild(stop);
@@ -691,16 +695,33 @@ function wireRoom(
     if (seatBase !== undefined) writeMySeat(emu, seatBase, seat);
     // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast.
     bridge.setRomFilter((msg) => spectate.wantsFromRelay(msg));
+    bridge.setOutObserver((msg) => spectate.noteOutgoing(msg));
     bridge.relay.on('recv', (ev) => {
       try {
         const m = decode(JSON.stringify(ev.m));
-        if (m.t === 'peek' && m.target === seat) spectate.notePeek(m.seat, performance.now());
+        if (m.t === 'peek' && m.target === seat) {
+          spectate.notePeek(m.seat, performance.now());
+          // Their ROM answers the party; the fight so far is ours to hand over, since
+          // the relay never delivered our bstart to somebody who was not in the room.
+          for (const part of spectate.streamFor(seat)) bridge!.relay.to(m.seat, part);
+        }
         else if (m.t === 'result') spectate.noteResult(m.seat);
         else if (m.t === 'out') renderSpectate(bridge!, spectate);
       } catch {
         // bridge.ts already counted the drop; nothing to spectate about it either way.
       }
     });
+    if (import.meta.env.DEV) {
+      // The E2E drives a watch without a click: the strip only exists once you are out.
+      const dev = (window as unknown as { __br?: Record<string, unknown> }).__br;
+      if (dev) {
+        dev.spectate = spectate;
+        dev.watch = (target: number | null) => {
+          for (const m of spectate.follow(target)) bridge!.pushToRom(m);
+          renderSpectate(bridge!, spectate);
+        };
+      }
+    }
     stopSpectateLoop?.();
     stopSpectateLoop = startSpectateLoop(emu, symbols?.get('gBrHud'), bridge, spectate);
     renderSpectate(bridge, spectate);
@@ -759,7 +780,8 @@ async function main(): Promise<void> {
   // decided before the boot block, since solo warps straight into the Safari opening
   // (BR_BOOT_SAFARI) instead of Littleroot (BR_BOOT_MAP): there is no room to wait for.
   const roomHash = parseRoomHash();
-  const bootMode = roomHash ? BR_BOOT_MAP : BR_BOOT_SAFARI;
+  const wantsTestMon = import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('testmon');
+  const bootMode = (roomHash ? BR_BOOT_MAP : BR_BOOT_SAFARI) | (wantsTestMon ? BR_BOOT_FLAG_TESTMON : 0);
 
   // BrMailbox_Init zeroes the struct on the ROM's first frame, so the boot block has to
   // land after the magic appears, not before.

@@ -560,11 +560,11 @@ static void FollowTick(void)
     if (gBrSpectate.follow == BR_NO_SEAT)
         return;
     them = &gBrSeats[gBrSpectate.follow];
+    // No roster row yet: wait. A spectator who starts watching mid-fight has never
+    // heard a place from that seat -- they are in a battle, not walking -- and giving
+    // up here would cancel the watch before it began.
     if (!them->present)
-    {
-        BrSpectate_Follow(BR_NO_SEAT);
         return;
-    }
     if (!FieldRunning() || ScriptContext_IsEnabled())
         return;
     if (gSaveBlock1Ptr->location.mapGroup != them->mapGroup

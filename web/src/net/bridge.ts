@@ -69,6 +69,11 @@ export class Bridge {
    *  client that did not ask to watch must not be handed one. Unset, everything that
    *  crosses passes. */
   private romFilter: ((msg: Msg) => boolean) | null = null;
+  /** Called with everything our own ROM sends, after the seat stamp. The page's own
+   *  spectate cache needs it: a fighter never sees its own messages come back over the
+   *  relay (the echo guard below drops them), and it is the one that has to hand a
+   *  late watcher the fight so far. */
+  private outObserver: ((msg: Msg) => void) | null = null;
   /** Slots waiting for room in the ROM's in-ring, in send order. */
   private outQueue: BinarySlot[] = [];
   private framesCount = 0;
@@ -167,6 +172,8 @@ export class Bridge {
     this.noteChallenge(stamped);
     this.roster.applyMsg(stamped);
 
+    this.outObserver?.(stamped);
+
     const target = this.targetSeat(stamped);
     if (target !== undefined) this.relay.to(target, stamped);
     else this.relay.all(stamped);
@@ -199,6 +206,10 @@ export class Bridge {
 
   setRomFilter(fn: ((msg: Msg) => boolean) | null): void {
     this.romFilter = fn;
+  }
+
+  setOutObserver(fn: ((msg: Msg) => void) | null): void {
+    this.outObserver = fn;
   }
 
   /** Hands a message straight to this ROM without it ever touching the relay: the
