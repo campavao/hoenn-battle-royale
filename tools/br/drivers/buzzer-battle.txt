@@ -1,0 +1,87 @@
+# buzzer-battle: the opening's buzzer closes a catch that is still running (POK-261,
+# Kanto v0.27.0). Without it the opening ends for everybody standing on a map and waits
+# for whoever is in a battle -- with the ring already closing outside and the drop they
+# are owed still to come.
+#
+# Seed 0x0C00 lands this ROM in the Zone's SOUTHWEST area at (8,5); the grass is five
+# steps south and two west. Holding A gets through the encounter's intro -- the message
+# box waits for a press, which is what POK-269 turned out to be.
+wait 30
+poke u32 gBrMatch+8 0x00000C00
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+expect u8 *gSaveBlock1Ptr+5 2
+# the opening is running with two minutes on it, so the buzzer is ours to fire
+poke u8 gBrMatch+1 1
+poke u16 gBrMatch+12 120
+# into the grass
+hold DOWN 140
+hold LEFT 100
+hold RIGHT 60
+hold LEFT 60
+hold RIGHT 60
+# B, not A, and tapped rather than held. A held button is ONE press and every box on
+# the way in waits for its own -- but A on the Safari's action menu throws a ball, so a
+# run of them catches the thing instead of leaving it there for the buzzer. B advances
+# a message box just as well and chooses nothing.
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+shot in-battle
+expectge u8 gBattlersCount 2
+# the fog goes up while we are still in there
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+# The getaway has a box of its own -- "Got away safely!" waits like every other one.
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+wait 200
+shot after
+# The buzzer pressed RUN for us and the opening is over. gBattlersCount is NOT the test
+# -- it keeps its last value after a battle ends -- so the phase is: the ROM was in the
+# Zone with a battle running, and it is out of the opening now. Nothing was caught (B
+# chooses nothing), so that means OUT.
+expectge u8 gBrMatch 2
+# and the fog it left into is really up
+expect u8 gBrRing 1
+say buzzer battle ok
