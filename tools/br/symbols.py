@@ -20,6 +20,8 @@ ENGINE_SYMBOLS = [
     "gRngValue", "gSaveBlock1", "gSaveBlock2", "gNumSafariBalls",
     "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleBufferB", "gBattleMons",
     "gBattlerByTurnOrder", "gCurrentTurnActionNumber", "gBagPockets",
+    # Scratch a driver can build a wire message in before mailsend pushes it.
+    "gDecompressionBuffer",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

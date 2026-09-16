@@ -11,13 +11,23 @@ struct BrSpectate
     /* 0 */ u16 turns;   // BR_MSG_TURN messages emitted, for drivers
     /* 2 */ u16 bytes;   // action bytes streamed
     /* 4 */ u8 started;  // BR_MSG_BSTART sent for the current battle
-    /* 5 */ u8 pad[3];
+    /* 5 */ u8 watching; // a replay of someone else's battle is on screen
+    /* 6 */ u16 watchId; // the battle being watched, as BR_MSG_BSTART's battle id
 };
 
 extern struct BrSpectate gBrSpectate;
 
+// Registers the BSTART/TURN handlers. A spectator only ever receives what the page
+// chooses to deliver: the page is the "watch this fight" gate, the ROM just plays what
+// lands.
+void BrSpectate_Init(void);
 // Each frame: emit BR_MSG_BSTART once the battle is set up, then stream new action
-// bytes as BR_MSG_TURN (challenger only, in a battle).
+// bytes as BR_MSG_TURN (challenger only, in a battle); on a spectator, retire the watch
+// once the replay is over.
 void BrSpectate_Tick(void);
+// A fighter's battle concluded (from br_match's RESULT handler). When it is the battle
+// we are watching, the stream is closed: the replay plays out what it has and ends
+// rather than waiting for a turn that is never coming.
+void BrSpectate_OnResult(u8 seat);
 
 #endif // GUARD_BR_SPECTATE_H

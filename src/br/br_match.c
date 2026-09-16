@@ -13,6 +13,7 @@
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
+#include "br/br_spectate.h"
 
 EWRAM_DATA struct BrMatch gBrMatch = {0};
 // START can span slots once there are more than six spawn rows.
@@ -83,6 +84,7 @@ static void HandleResult(const u8 *payload, u8 len)
 
     if (n < 2)
         return;
+    BrSpectate_OnResult(d[0]);
     if (d[0] == gBrMySeat && d[1] == 0 && gBrMatch.phase != BR_PHASE_OUT)
         sWinPending = TRUE;
 }

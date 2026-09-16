@@ -1,0 +1,42 @@
+# spectate-watch: the receive half of the spectator stream (POK-233 part 4). A BSTART
+# off the wire builds somebody else's link battle as a BATTLE_TYPE_RECORDED, and the
+# TURN stream drives it. The page is the "watch this fight" gate -- this driver plays
+# the page, so the ROM only ever sees what a watcher asked for.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# The header: battle id (seats 0 and 1), seed, the fighters' own flags
+# (LINK|IS_MASTER|TRAINER), both names, both genders, then the challenger's party
+# (count 1) and the peer's. Both are this ROM's own test mon -- a battle can only use
+# real encrypted bytes, and the driver has exactly one real party to hand.
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+# The watch is live well before the battle is: the recorded battle waits out a ~128
+# frame countdown first.
+expect u8 gBrSpectate+5 1
+expect u16 gBrSpectate+6 0x0100
+# One turn, streamed DURING that countdown: both battlers pick FIGHT and the first move
+# at each other. RecordedBattle_Init must leave the stream's write cursor alone here, or
+# the opening turn of every fight would be overwritten before it is ever read.
+pokebytes gDecompressionBuffer 00 01 00 03 00 00 01 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+wait 10
+expectge u16 gBrSpectate 1
+wait 1200
+# The replay is on the real battle screen, from the challenger's side.
+expect u32 gBattleTypeFlags 0x8300000C
+expect u8 gBattleOutcome 0
+shot battle
+# Both mons spent the move the stream told them to: PP 35 -> 34 on move slot 0.
+expect u8 gBattleMons+0x24 34
+expect u8 gBattleMons+0x7C 34
+# Out of stream now, and the fight is not over: the replay waits a turn behind instead
+# of quitting, so it is still sitting in the battle 300 frames later.
+wait 300
+expect u8 gBrSpectate+5 1
+expect u8 gBattleOutcome 0
+say spectate watch ok

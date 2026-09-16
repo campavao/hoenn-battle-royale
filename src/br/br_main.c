@@ -33,6 +33,7 @@ void BrInit(void)
     BrNetlink_Init();
     BrEngage_Init();
     BrBattle_Init();
+    BrSpectate_Init();
 }
 
 void BrFrame(void)

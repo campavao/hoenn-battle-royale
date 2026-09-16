@@ -20,6 +20,9 @@
 //   copy <dst> <src> <len>      copy bytes within RAM
 //   poke u8|u16|u32 <addr> <value>
 //   pokebytes <addr> <hex hex ...>
+//   mailsend <mailbox> <type> <src> <len>   frame <len> bytes at <src> as a BR wire
+//                               message of <type> and push it into the page -> ROM ring
+//                               (splitting across continuation slots), playing the page
 //   say <text>                  echo
 //   title                       print the game code at 0x080000AC
 #include <mgba/core/core.h>
@@ -179,8 +182,8 @@ static int runLine(char* line) {
     if (*p == 0 || *p == '#') return 0;
     char* nl = strpbrk(p, "\r\n"); if (nl) *nl = 0;
 
-    char a[64], b[64], c[64], d[64];
-    int n = sscanf(p, "%63s %63s %63s %63s", a, b, c, d);
+    char a[64], b[64], c[64], d[64], e[64];
+    int n = sscanf(p, "%63s %63s %63s %63s %63s", a, b, c, d, e);
     if (n < 1) return 0;
 
     if (strcmp(a, "say") == 0) { printf("%s\n", p + 3 + (p[3] == ' ')); return 0; }
@@ -230,11 +233,58 @@ static int runLine(char* line) {
         printf("poked %d bytes at 0x%08X\n", i, addr);
         return 0;
     }
+    if (strcmp(a, "mailsend") == 0 && n >= 5) {
+        // The page's side of br_wire.c's framing: first slot [type][len][totalLen u16]
+        // [seq 0][<=59 data], then continuations [type|0x80][len][seq][<=61 data].
+        uint32_t box, src;
+        int type = (int)strtoul(c, NULL, 0), len = atoi(e), sent = 0, i;
+        uint8_t seq = 1;
+        uint16_t head;
+        uint8_t* buf;
+        if (!parseAddr(b, &box) || !parseAddr(d, &src)) return 4;
+        if (len < 0 || len > 0xFFFF) { printf("line %d: mailsend bad len %d\n", lineNo, len); return 4; }
+        buf = malloc((size_t)len + 1);
+        for (i = 0; i < len; ++i) buf[i] = core->busRead8(core, src + i);
+        head = core->busRead16(core, box + 0x0C);
+        {
+            uint32_t slot = box + 0x1018 + (head % 64) * 64;
+            core->busWrite8(core, slot + 0, (uint8_t)type);
+            core->busWrite8(core, slot + 2, (uint8_t)(len & 0xFF));
+            core->busWrite8(core, slot + 3, (uint8_t)(len >> 8));
+            core->busWrite8(core, slot + 4, 0);
+            for (i = 0; i < 59 && sent < len; ++i, ++sent)
+                core->busWrite8(core, slot + 5 + i, buf[sent]);
+            core->busWrite8(core, slot + 1, (uint8_t)(3 + i));
+            head++;
+        }
+        while (sent < len) {
+            uint32_t slot = box + 0x1018 + (head % 64) * 64;
+            core->busWrite8(core, slot + 0, (uint8_t)(type | 0x80));
+            core->busWrite8(core, slot + 2, seq++);
+            for (i = 0; i < 61 && sent < len; ++i, ++sent)
+                core->busWrite8(core, slot + 3 + i, buf[sent]);
+            core->busWrite8(core, slot + 1, (uint8_t)(1 + i));
+            head++;
+        }
+        core->busWrite16(core, box + 0x0C, head);
+        free(buf);
+        printf("mailsend type %d, %d bytes, inHead now %u\n", type, len, head);
+        return 0;
+    }
     if (strcmp(a, "copy") == 0 && n >= 4) {
         uint32_t dst, src; int len = atoi(d), i;
         if (!parseAddr(b, &dst) || !parseAddr(c, &src)) return 4;
         for (i = 0; i < len; ++i) core->busWrite8(core, dst + i, (uint8_t)core->busRead8(core, src + i));
         printf("copied %d bytes 0x%08X -> 0x%08X\n", len, src, dst);
+        return 0;
+    }
+    if (strcmp(a, "pc") == 0) {
+        uint32_t v = 0;
+        static const char* rn[] = { "pc", "sp", "lr", "cpsr" };
+        for (int i = 0; i < 4; ++i) {
+            if (core->readRegister(core, rn[i], &v)) printf("%s=0x%08X ", rn[i], v);
+        }
+        printf("\n");
         return 0;
     }
     if (strcmp(a, "dump") == 0 && n >= 3) {
