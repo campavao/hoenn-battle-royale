@@ -19,14 +19,24 @@
 import { Mailbox } from '../net/mailbox';
 import { packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
 import { BR_MSG, BR_CONT_FLAG } from '../net/slots';
-import type { DresultMsg, PackedMon } from '../net/wire';
+import type { DresultMsg, Msg, PackedMon } from '../net/wire';
 
-/** What the caller gets back: who won, and what each side has left. */
+/** What the caller gets back: who won, what each side has left, and what each spent
+ *  out of its own bag (POK-237). */
 export interface DuelOutcome {
   winner: number; // the seat that took it
   loser: number;
   a: { hp: number; status: number }[];
   b: { hp: number; status: number }[];
+  usedA: number[];
+  usedB: number[];
+}
+
+/** One side of a duel: the team, and the units it may spend in there. */
+export interface DuelSide {
+  seat: number;
+  party: PackedMon[];
+  items?: number[];
 }
 
 /** The emulator surface this needs. A subset of `Emulator` so a test can stand in a
@@ -91,8 +101,8 @@ export class ProxyDuels {
 
   /** Fights one, or answers null when the proxy could not (and the caller should fall
    *  back to the seeded resolver). Duels queue: one instance, one fight at a time. */
-  async fight(seatA: number, seatB: number, a: PackedMon[], b: PackedMon[]): Promise<DuelOutcome | null> {
-    if (this.broken || a.length === 0 || b.length === 0) return null;
+  async fight(a: DuelSide, b: DuelSide): Promise<DuelOutcome | null> {
+    if (this.broken || a.party.length === 0 || b.party.length === 0) return null;
     if (this.busy && this.queue.length >= MAX_QUEUED) {
       this.note('queue full: settling this one the cheap way');
       return null;
@@ -100,7 +110,7 @@ export class ProxyDuels {
     if (this.busy) await new Promise<void>((resolve) => this.queue.push(resolve));
     this.busy = true;
     try {
-      return await this.run(seatA, seatB, a, b);
+      return await this.run(a, b);
     } catch (err) {
       this.note(`duel failed: ${String(err)}`);
       return null;
@@ -129,7 +139,7 @@ export class ProxyDuels {
     this.opts.onNote?.(what);
   }
 
-  private async run(seatA: number, seatB: number, a: PackedMon[], b: PackedMon[]): Promise<DuelOutcome | null> {
+  private async run(a: DuelSide, b: DuelSide): Promise<DuelOutcome | null> {
     await this.ensure();
     const emu = this.emu;
     const mailbox = this.mailbox;
@@ -138,7 +148,10 @@ export class ProxyDuels {
     // Drain whatever the instance said while it was idle -- it walks around Littleroot
     // like any other boot and has been talking to nobody.
     mailbox.poll();
-    for (const slot of packSlot({ t: 'duel', seatA, seatB, a, b })) {
+    const duel: Msg = { t: 'duel', seatA: a.seat, seatB: b.seat, a: a.party, b: b.party };
+    if (a.items?.length) (duel as { itemsA?: number[] }).itemsA = a.items;
+    if (b.items?.length) (duel as { itemsB?: number[] }).itemsB = b.items;
+    for (const slot of packSlot(duel)) {
       if (!mailbox.push(slot.type, slot.payload)) {
         this.note('mailbox full: the instance is not draining');
         return null;
@@ -160,6 +173,8 @@ export class ProxyDuels {
       loser: result.winner === 0 ? result.seatB : result.seatA,
       a: result.a,
       b: result.b,
+      usedA: result.usedA ?? [],
+      usedB: result.usedB ?? [],
     };
   }
 

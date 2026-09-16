@@ -264,6 +264,10 @@
 //   2:    countA   u8   1..6
 //   3:    countB   u8   1..6
 //   4..:  parties  (countA + countB) * PackedMon, A's first
+//   ..:   bagA     u8 count (0..4) then count * u16 item ids (POK-237)
+//   ..:   bagB     the same for the other side
+// The bags are optional: without them the duel is fought bare, which is what it did
+// before there were bags at all.
 #define BR_MSG_DUEL 27
 
 // dresult: how it went. Not the mons -- the page sent them and still holds them --
@@ -274,6 +278,8 @@
 //   3:    countA   u8
 //   4:    countB   u8
 //   5..:  left     (countA + countB) * (hp u16, status u8), A's first
+//   ..:   usedA    u8 count then count * u16: what side A spent out of its bag
+//   ..:   usedB    the same for the other side
 #define BR_MSG_DRESULT 28
 
 // fled: this trainer just ran from that one (POK-266, Kanto v0.49.0). Its own signal

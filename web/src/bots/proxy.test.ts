@@ -153,7 +153,7 @@ describe('the proxy duel instance', () => {
       b: [{ hp: 11, status: 0 }],
     });
     const proxy = proxyOver(inst);
-    const out = await settle(proxy.fight(4, 7, [mon()], [mon({ species: 283 })]), inst);
+    const out = await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon({ species: 283 })] }), inst);
 
     expect(inst.duels).toBe(1);
     expect(out).toEqual({
@@ -161,13 +161,15 @@ describe('the proxy duel instance', () => {
       loser: 4,
       a: [{ hp: 0, status: 0 }],
       b: [{ hp: 11, status: 0 }],
+      usedA: [],
+      usedB: [],
     });
   });
 
   it('taps A rather than holding it, because a held button is one press', async () => {
     const inst = fakeInstance({ afterFrames: 40 });
     const proxy = proxyOver(inst, [], 5_000);
-    await settle(proxy.fight(1, 2, [mon()], [mon()]), inst);
+    await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst);
     // Several separate presses over those frames, not one long hold.
     expect(inst.taps.length).toBeGreaterThan(1);
   });
@@ -176,7 +178,7 @@ describe('the proxy duel instance', () => {
     const inst = fakeInstance({ answers: false });
     const notes: string[] = [];
     const proxy = proxyOver(inst, notes);
-    const out = await settle(proxy.fight(1, 2, [mon()], [mon()]), inst, 400);
+    const out = await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst, 400);
 
     expect(out).toBeNull();
     expect(notes).toContain('duel timed out');
@@ -188,28 +190,28 @@ describe('the proxy duel instance', () => {
     const notes: string[] = [];
     const proxy = proxyOver(inst, notes);
 
-    expect(await settle(proxy.fight(1, 2, [mon()], [mon()]), inst)).toBeNull();
+    expect(await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst)).toBeNull();
     expect(proxy.failed).toBe(true);
     expect(notes.some((n) => n.includes('never woke'))).toBe(true);
     // A second caller is answered immediately, without booting anything.
-    expect(await proxy.fight(3, 4, [mon()], [mon()])).toBeNull();
+    expect(await proxy.fight({ seat: 3, party: [mon()] }, { seat: 4, party: [mon()] })).toBeNull();
   });
 
   it('leaves a draw to the caller', async () => {
     const inst = fakeInstance();
     inst.answerWith({ t: 'dresult', seatA: 1, seatB: 2, winner: 2, a: [], b: [] });
     const proxy = proxyOver(inst);
-    expect(await settle(proxy.fight(1, 2, [mon()], [mon()]), inst)).toBeNull();
+    expect(await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst)).toBeNull();
   });
 
   it('sends the overflow to the cheap resolver rather than queue the whole room', async () => {
     const inst = fakeInstance({ answers: false });
     const notes: string[] = [];
     const proxy = proxyOver(inst, notes, 5_000);
-    const running = proxy.fight(1, 2, [mon()], [mon()]);
+    const running = proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] });
     // Two may wait; the fourth caller is told to settle it itself.
-    const waiting = [proxy.fight(3, 4, [mon()], [mon()]), proxy.fight(5, 6, [mon()], [mon()])];
-    const overflow = await settle(proxy.fight(7, 8, [mon()], [mon()]), inst, 5);
+    const waiting = [proxy.fight({ seat: 3, party: [mon()] }, { seat: 4, party: [mon()] }), proxy.fight({ seat: 5, party: [mon()] }, { seat: 6, party: [mon()] })];
+    const overflow = await settle(proxy.fight({ seat: 7, party: [mon()] }, { seat: 8, party: [mon()] }), inst, 5);
 
     expect(overflow).toBeNull();
     expect(notes).toContain('queue full: settling this one the cheap way');
@@ -220,8 +222,8 @@ describe('the proxy duel instance', () => {
   it('fights one at a time, queueing the rest', async () => {
     const inst = fakeInstance({ afterFrames: 2 });
     const proxy = proxyOver(inst);
-    const first = proxy.fight(1, 2, [mon()], [mon()]);
-    const second = proxy.fight(3, 4, [mon()], [mon()]);
+    const first = proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] });
+    const second = proxy.fight({ seat: 3, party: [mon()] }, { seat: 4, party: [mon()] });
     const [a, b] = await settle(Promise.all([first, second]), inst, 400);
 
     // The fake answers under one pair of seats; what matters is that both callers are

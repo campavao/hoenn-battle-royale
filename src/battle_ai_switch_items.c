@@ -13,6 +13,7 @@
 #include "constants/moves.h"
 #if BR
 #include "br/br_bot.h"
+#include "br/br_duel.h"
 #endif
 
 // this file's functions
@@ -596,9 +597,16 @@ void AI_TrySwitchOrUseItem(void)
             *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = *(gBattleStruct->AI_monToSwitchIntoId + gActiveBattler);
             return;
         }
-        else if (ShouldUseItem())
+        else
         {
-            return;
+#if BR
+            // A duel has two trainers in it and BATTLE_HISTORY has room for one
+            // (POK-238): the side about to decide gets its own bag loaded first. A
+            // no-op in every other battle.
+            BrDuel_LoadItems(gActiveBattler);
+#endif
+            if (ShouldUseItem())
+                return;
         }
     }
 
@@ -943,6 +951,7 @@ static bool8 ShouldUseItem(void)
             // That came out of a real bag on somebody's page (POK-237), and this is
             // the only place that knows it went.
             BrBot_NoteItemUsed(item);
+            BrDuel_NoteItemUsed(item);
 #endif
             return shouldUse;
         }

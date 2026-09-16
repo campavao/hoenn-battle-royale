@@ -1076,7 +1076,7 @@ function startBots(
     // Two bots meeting is fought for real in the hidden instance when there is one
     // (POK-238); `duel.ts`'s seeded resolver is what answers when there is not.
     settle: proxyDuels
-      ? (a, b) => (proxyDuels as ProxyDuels).fight(a.seat, b.seat, a.party, b.party)
+      ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b)
       : undefined,
     // Where the bot is standing is where its mons came from (POK-237): the drop put
     // it on a route, and that route's own table is what a trainer there would have.

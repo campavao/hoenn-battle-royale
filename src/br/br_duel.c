@@ -21,6 +21,8 @@
 #include "br/br_wire_c.h"
 #include "br/br_match.h"
 #include "br/br_bot.h"
+#include "data.h"
+#include "constants/items.h"
 #include "br/br_duel.h"
 
 EWRAM_DATA struct BrDuel gBrDuel = {0};
@@ -34,7 +36,7 @@ static EWRAM_DATA struct BrAssembler sDuelAsm = {0};
 // the result back, since both of them are played by the AI.
 static void ParseDuel(const u8 *d, u16 n)
 {
-    u8 countA, countB, i;
+    u8 countA, countB, i, side;
     u16 off;
 
     if (n < 4)
@@ -60,8 +62,71 @@ static void ParseDuel(const u8 *d, u16 n)
     gBrDuel.seatB = d[1];
     gBrDuel.countA = countA;
     gBrDuel.countB = countB;
+    // The two bags, after the parties (POK-237): a count then that many u16s, A's
+    // first. Absent -- an older page, or two bots with nothing left -- and the duel is
+    // fought bare, which is what it did before there were bags at all.
+    off += (countA + countB) * 100;
+    gBrDuel.itemCount[0] = 0;
+    gBrDuel.itemCount[1] = 0;
+    gBrDuel.spent[0] = 0;
+    gBrDuel.spent[1] = 0;
+    for (side = 0; side < 2; side++)
+    {
+        u8 count;
+
+        if ((u16)(off + 1) > n)
+            break;
+        count = d[off];
+        if (count > BR_BOT_ITEMS || (u16)(off + 1 + count * 2) > n)
+            break;
+        for (i = 0; i < count; i++)
+            gBrDuel.items[side][i] = BrWire_ReadU16(d + off + 1 + i * 2);
+        gBrDuel.itemCount[side] = count;
+        off += 1 + count * 2;
+    }
     gBrDuel.staged = TRUE;
     gBrDuel.proxy = TRUE;
+}
+
+// Which side of the duel a battler is on: 0 is the party in gPlayerParty.
+static u8 SideOf(u8 battler)
+{
+    return GetBattlerSide(battler) == B_SIDE_PLAYER ? 0 : 1;
+}
+
+void BrDuel_LoadItems(u8 battler)
+{
+    u8 side, i, n = 0;
+
+    if (!gBrDuel.running || gBattleResources == NULL)
+        return;
+    side = SideOf(battler);
+    for (i = 0; i < MAX_TRAINER_ITEMS; i++)
+        gBattleResources->battleHistory->trainerItems[i] = ITEM_NONE;
+    for (i = 0; i < gBrDuel.itemCount[side]; i++)
+    {
+        if (gBrDuel.spent[side] & (1 << i))
+            continue;
+        gBattleResources->battleHistory->trainerItems[n++] = gBrDuel.items[side][i];
+    }
+    gBattleResources->battleHistory->itemsNo = n;
+}
+
+void BrDuel_NoteItemUsed(u16 item)
+{
+    u8 side, i;
+
+    if (!gBrDuel.running)
+        return;
+    side = SideOf(gActiveBattler);
+    for (i = 0; i < gBrDuel.itemCount[side]; i++)
+    {
+        if (gBrDuel.items[side][i] == item && !(gBrDuel.spent[side] & (1 << i)))
+        {
+            gBrDuel.spent[side] |= 1 << i;
+            return;
+        }
+    }
 }
 
 static void DoneWithBuffer(void)
@@ -127,7 +192,7 @@ bool8 BrDuel_IsProxy(void)
 // what the fight changed: who won, and what each side has left, three bytes a mon.
 static void SendResult(void)
 {
-    u8 buf[5 + 2 * BR_DUEL_MAX_MONS * 3];
+    u8 buf[5 + 2 * BR_DUEL_MAX_MONS * 3 + 2 * (1 + BR_BOT_ITEMS * 2)];
     u8 len = 5, i;
 
     buf[0] = gBrDuel.seatA;
@@ -155,6 +220,23 @@ static void SendResult(void)
         BrWire_WriteU16(buf + len, hp);
         len += 2;
         buf[len++] = GetMonData(&gEnemyParty[i], MON_DATA_STATUS, NULL) & 0xFF;
+    }
+    // What each side spent out of its own bag (POK-237), so the page can take it off
+    // the right one: a count then the ids, A's first.
+    for (i = 0; i < 2; i++)
+    {
+        u8 at = len++;
+        u8 j;
+
+        buf[at] = 0;
+        for (j = 0; j < gBrDuel.itemCount[i]; j++)
+        {
+            if (!(gBrDuel.spent[i] & (1 << j)))
+                continue;
+            BrWire_WriteU16(buf + len, gBrDuel.items[i][j]);
+            len += 2;
+            buf[at]++;
+        }
     }
     BrWire_SendLarge(BR_MSG_DRESULT, buf, len);
 }

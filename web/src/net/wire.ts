@@ -235,6 +235,11 @@ export interface DuelMsg {
   seatB: number;
   a: PackedMon[]; // 1..6
   b: PackedMon[]; // 1..6
+  /** What each side may spend out of its own bag in there (POK-237), at most four
+   *  units each. Emerald keeps one trainer's worth of items, so the ROM swaps the
+   *  right list in before each side decides. */
+  itemsA?: number[];
+  itemsB?: number[];
 }
 
 /** How it went. Not the mons -- the page sent them and still holds them -- only what
@@ -248,6 +253,9 @@ export interface DresultMsg {
   winner: number;
   a: { hp: number; status: number }[];
   b: { hp: number; status: number }[];
+  /** And what each side actually spent, so the page takes it off the right bag. */
+  usedA?: number[];
+  usedB?: number[];
 }
 
 /** This trainer just ran from that one (POK-266, Kanto v0.49.0): a boot over their
@@ -932,13 +940,18 @@ const decoders: Record<string, Decoder> = {
       if (!Array.isArray(raw) || raw.length === 0 || raw.length > 6) fail(`bad duel ${what}`);
       return (raw as unknown[]).map(validateMon);
     };
-    return {
+    const msg: DuelMsg = {
       t: 'duel',
       seatA: reqSeat(m, 'seatA'),
       seatB: reqSeat(m, 'seatB'),
       a: side(m.a, 'side a'),
       b: side(m.b, 'side b'),
     };
+    const itemsA = itemIds(m.itemsA, 'duel items a');
+    const itemsB = itemIds(m.itemsB, 'duel items b');
+    if (itemsA.length > 0) msg.itemsA = itemsA;
+    if (itemsB.length > 0) msg.itemsB = itemsB;
+    return msg;
   },
 
   dresult: (m) => {
@@ -952,7 +965,7 @@ const decoders: Record<string, Decoder> = {
         };
       });
     };
-    return {
+    const msg: DresultMsg = {
       t: 'dresult',
       seatA: reqSeat(m, 'seatA'),
       seatB: reqSeat(m, 'seatB'),
@@ -960,6 +973,11 @@ const decoders: Record<string, Decoder> = {
       a: left(m.a, 'side a'),
       b: left(m.b, 'side b'),
     };
+    const usedA = itemIds(m.usedA, 'dresult used a');
+    const usedB = itemIds(m.usedB, 'dresult used b');
+    if (usedA.length > 0) msg.usedA = usedA;
+    if (usedB.length > 0) msg.usedB = usedB;
+    return msg;
   },
 
   faint: (m) => ({ t: 'faint', seat: reqSeat(m), index: reqInt(m, 'index', 0, 5) }),

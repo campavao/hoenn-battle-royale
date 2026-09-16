@@ -450,6 +450,13 @@ function decodeTrainer(bytes: Uint8Array): TrainerMsg {
 function encodeDuel(m: DuelMsg): Uint8Array {
   const w = new Writer().u8(m.seatA).u8(m.seatB).u8(m.a.length).u8(m.b.length);
   for (const mon of [...m.a, ...m.b]) w.raw(encodeMon(mon));
+  // Each side's bag, A's first (POK-237). Written even when empty: the ROM reads them
+  // in order, so "nothing" has to be sayable.
+  for (const items of [m.itemsA ?? [], m.itemsB ?? []]) {
+    const four = items.slice(0, 4);
+    w.u8(four.length);
+    for (const id of four) w.u16(id);
+  }
   return w.toBytes();
 }
 function decodeDuel(bytes: Uint8Array): DuelMsg {
@@ -462,13 +469,29 @@ function decodeDuel(bytes: Uint8Array): DuelMsg {
   const b: PackedMon[] = [];
   for (let i = 0; i < countA; i++) a.push(decodeMon(r.raw(MON_BYTES)));
   for (let i = 0; i < countB; i++) b.push(decodeMon(r.raw(MON_BYTES)));
-  return { t: 'duel', seatA, seatB, a, b };
+  const msg: DuelMsg = { t: 'duel', seatA, seatB, a, b };
+  const bag = (): number[] => {
+    const out: number[] = [];
+    if (r.remaining < 1) return out;
+    for (let n = r.u8(); n > 0 && r.remaining >= 2; n--) out.push(r.u16());
+    return out;
+  };
+  const itemsA = bag();
+  const itemsB = bag();
+  if (itemsA.length > 0) msg.itemsA = itemsA;
+  if (itemsB.length > 0) msg.itemsB = itemsB;
+  return msg;
 }
 
 // DRESULT: who won and what each side has left, three bytes a mon.
 function encodeDresult(m: DresultMsg): Uint8Array {
   const w = new Writer().u8(m.seatA).u8(m.seatB).u8(m.winner).u8(m.a.length).u8(m.b.length);
   for (const mon of [...m.a, ...m.b]) w.u16(mon.hp).u8(mon.status);
+  for (const used of [m.usedA ?? [], m.usedB ?? []]) {
+    const four = used.slice(0, 4);
+    w.u8(four.length);
+    for (const id of four) w.u16(id);
+  }
   return w.toBytes();
 }
 function decodeDresult(bytes: Uint8Array): DresultMsg {
@@ -483,7 +506,18 @@ function decodeDresult(bytes: Uint8Array): DresultMsg {
   const b: { hp: number; status: number }[] = [];
   for (let i = 0; i < countA; i++) a.push(row());
   for (let i = 0; i < countB; i++) b.push(row());
-  return { t: 'dresult', seatA, seatB, winner, a, b };
+  const msg: DresultMsg = { t: 'dresult', seatA, seatB, winner, a, b };
+  const used = (): number[] => {
+    const out: number[] = [];
+    if (r.remaining < 1) return out;
+    for (let n = r.u8(); n > 0 && r.remaining >= 2; n--) out.push(r.u16());
+    return out;
+  };
+  const usedA = used();
+  const usedB = used();
+  if (usedA.length > 0) msg.usedA = usedA;
+  if (usedB.length > 0) msg.usedB = usedB;
+  return msg;
 }
 
 // FLED: who ran, and who from (POK-266).

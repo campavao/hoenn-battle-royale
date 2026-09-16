@@ -226,8 +226,9 @@ describe('fixed-layout byte counts', () => {
   it('a duel is both parties, A first (POK-238)', () => {
     const msg: Msg = { t: 'duel', seatA: 3, seatB: 9, a: [mon()], b: [mon({ species: 283 }), mon()] };
     const { payload } = reassembleSlots(packSlot(msg));
-    // seatA(1) + seatB(1) + countA(1) + countB(1) + 3 mons * 100
-    expect(payload.length).toBe(4 + 300);
+    // seatA(1) + seatB(1) + countA(1) + countB(1) + 3 mons * 100 + a count for each
+    // side's bag (POK-237), written even when both are empty
+    expect(payload.length).toBe(4 + 300 + 2);
     expect(Array.from(payload.subarray(0, 4))).toEqual([3, 9, 1, 2]);
     expect(roundTrip(msg)).toEqual(msg);
   });
@@ -239,7 +240,8 @@ describe('fixed-layout byte counts', () => {
       b: [{ hp: 12, status: 8 }, { hp: 30, status: 0 }],
     };
     const { payload } = reassembleSlots(packSlot(msg));
-    expect(Array.from(payload)).toEqual([3, 9, 1, 1, 2, 0, 0, 0, 12, 0, 8, 30, 0, 0]);
+    // ...then a count of what each side spent, zero here
+    expect(Array.from(payload)).toEqual([3, 9, 1, 1, 2, 0, 0, 0, 12, 0, 8, 30, 0, 0, 0, 0]);
     expect(roundTrip(msg)).toEqual(msg);
   });
 

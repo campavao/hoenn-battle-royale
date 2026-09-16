@@ -2,6 +2,9 @@
 #define GUARD_BR_DUEL_H
 
 #include "br/br_config.h"
+// BR_BOT_ITEMS: a duel's bags are the same four units a bot stakes on a fight with a
+// player (POK-237), so the two read the same constant.
+#include "br/br_bot.h"
 
 // Two bots fighting, for real (POK-238, Kanto BR-28).
 //
@@ -33,8 +36,11 @@ struct BrDuel
     /* 5 */ u8 countB;
     /* 6 */ u8 proxy;    // a DUEL has arrived here at least once: this ROM is the
                          // hidden instance, not somebody's game
-    /* 7 */ u8 pad;
-};                       // 8 bytes
+    /* 7 */ u8 itemCount[2];  // [0] side A, [1] side B (POK-237's bags, POK-238's fight)
+    /* 9 */ u8 spent[2];      // bit i: that side's item i was used
+    /* B */ u8 pad;
+    /* C */ u16 items[2][BR_BOT_ITEMS];
+};                       // 28 bytes
 
 extern struct BrDuel gBrDuel;
 
@@ -43,6 +49,13 @@ extern struct BrDuel gBrDuel;
 // -- so battle_controller_opponent.c reads and writes through this instead of a fixed
 // array. Always gEnemyParty outside a duel, which is what it has always been.
 struct Pokemon *BrDuel_ControllerParty(void);
+
+// Emerald keeps ONE trainer's worth of items in BATTLE_HISTORY, and a duel has two
+// trainers in it (POK-237). So the side about to decide gets its own bag loaded in
+// first: called before every AI item decision, a no-op outside a duel.
+void BrDuel_LoadItems(u8 battler);
+// The AI reached for one. Recorded per side, so the page can spend the right bag.
+void BrDuel_NoteItemUsed(u16 item);
 
 void BrDuel_Init(void);
 void BrDuel_HeapReset(void);

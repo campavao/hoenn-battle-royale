@@ -8,15 +8,23 @@ wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 # DUEL: seat 1 vs seat 2, one mon each -- a level 5 TREKO and a level 5 MUDKI, both
-# with POUND, so the fight is short and somebody has to lose it.
-pokebytes gDecompressionBuffer 01 02 01 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 1B 01 05 14 00 14 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 C7 CF BE C5 C3 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-mailsend gBrMailbox 27 gDecompressionBuffer 204
+# with POUND, so the fight is short and somebody has to lose it -- and a bag each
+# (POK-237): an X ATTACK for A, a POTION for B. Emerald keeps one trainer's worth of
+# items, so the ROM swaps the right list in before each side decides.
+pokebytes gDecompressionBuffer 01 02 01 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 1B 01 05 14 00 14 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 C7 CF BE C5 C3 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 4B 00 01 0D 00
+mailsend gBrMailbox 27 gDecompressionBuffer 210
 wait 10
 # both parties are in, and this ROM knows whose they are
 expect u8 gBrDuel 1
 expect u8 gBrDuel+2 1
 expect u8 gBrDuel+3 2
 expect u8 gPlayerPartyCount 1
+# both bags read off the tail, nothing spent yet
+expect u8 gBrDuel+7 1
+expect u8 gBrDuel+8 1
+expect u16 gBrDuel+0xC 0x4B
+expect u16 gBrDuel+0x14 0x0D
+expect u8 gBrDuel+9 0
 # the tick starts it on the next overworld frame
 wait 300
 expect u8 gBrDuel+1 1
@@ -333,4 +341,7 @@ expect u8 gBrDuel+1 0
 expect u8 gBattleOutcome 2
 # and the proxy did NOT treat its own side losing as going out of a match
 expect u8 gBrMatch 2
+# A's X ATTACK went in on the first turn -- an X item is a first-turn item to Emerald's
+# AI -- and that is what rides home in the DRESULT for the page to take off its bag.
+expect u8 gBrDuel+9 1
 say duel ok

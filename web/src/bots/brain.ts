@@ -189,9 +189,17 @@ export interface BotsOptions {
    *  seeded resolver settles it instead, which is what happens today and what happens
    *  on every client that is not the host. */
   settle?: (
-    a: { seat: number; party: PackedMon[] },
-    b: { seat: number; party: PackedMon[] },
-  ) => Promise<{ winner: number; loser: number; a: { hp: number; status: number }[]; b: { hp: number; status: number }[] } | null>;
+    a: { seat: number; party: PackedMon[]; items?: number[] },
+    b: { seat: number; party: PackedMon[]; items?: number[] },
+  ) => Promise<{
+    winner: number;
+    loser: number;
+    a: { hp: number; status: number }[];
+    b: { hp: number; status: number }[];
+    /** What each side spent out of the bag it was handed (POK-237). */
+    usedA?: number[];
+    usedB?: number[];
+  } | null>;
   /** Is anybody allowed to fight yet? FALSE through the Safari opening (POK-257):
    *  everybody is on one map catching things, and a bot that duels in there takes the
    *  field apart before the match has started -- eight went into the Zone and two came
@@ -650,9 +658,11 @@ export class Bots {
       this.opts.send({ t: 'busy', seat: w.bot.seat, kind: 'battle' });
       w.path = null;
     }
+    // Both bags go in with them (POK-237): what a bot spends in here is gone from the
+    // bag it will take into its next fight, the same as a fight against a player.
     void settle(
-      { seat: walker.bot.seat, party: walker.party },
-      { seat: other.bot.seat, party: other.party },
+      { seat: walker.bot.seat, party: walker.party, items: battleItems(walker.bag) },
+      { seat: other.bot.seat, party: other.party, items: battleItems(other.bag) },
     )
       .catch(() => null)
       .then((out) => {
@@ -668,6 +678,9 @@ export class Bots {
           const wonIsWalker = out.winner === walker.bot.seat;
           const left = wonIsWalker ? out.a : out.b;
           const winner = wonIsWalker ? walker : other;
+
+          spend(walker.bag, out.usedA ?? []);
+          spend(other.bag, out.usedB ?? []);
 
           this.applyDuel(walker, other, {
             winner: out.winner,
