@@ -290,6 +290,53 @@ test("the room outlives its host when somebody can take it over", async () => {
   });
 });
 
+test("a host can stand down without leaving the room", async () => {
+  await withRelay(async (port, relay) => {
+    const a = await connect(port);
+    a.send({ type: "can_host", ok: true });
+    a.send({ type: "host_room", name: "A" });
+    const { code } = await a.next();
+    await a.next();
+    const b = await connect(port);
+    b.send({ type: "can_host", ok: true });
+    b.send({ type: "join_room", code, name: "B" });
+    await b.next(); await b.next(); await a.next();
+
+    // The host's tab went to the background: it hands the match over rather than
+    // making everybody wait for a throttled timer, and stays in the room.
+    a.send({ type: "can_host", ok: false });
+    const roster = await a.until("roster");
+    assert.equal(roster.host, 2, "the guest was promoted");
+    assert.deepEqual(roster.members.map((m) => m.id), [1, 2], "the old host is still in it");
+    assert.equal(relay.rooms.size, 1);
+
+    // ...and it is an ordinary member now: what it says still reaches the room.
+    a.send({ type: "all", m: { t: "ring", phase: 3 } });
+    const relayed = await b.until("recv");
+    assert.equal(relayed.from, 1);
+    a.end(); b.end();
+  });
+});
+
+test("a host with nobody to hand to keeps the room", async () => {
+  await withRelay(async (port, relay) => {
+    const a = await connect(port);
+    a.send({ type: "can_host", ok: true });
+    a.send({ type: "host_room", name: "A" });
+    const { code } = await a.next();
+    await a.next();
+    const b = await connect(port);
+    b.send({ type: "join_room", code, name: "B" }); // never says it can host
+    await b.next(); await b.next(); await a.next();
+
+    a.send({ type: "can_host", ok: false });
+    // A pong proves the can_host ahead of it has landed and moved nothing.
+    a.send({ type: "ping" });
+    assert.equal((await a.next()).type, "pong");
+    assert.equal([...relay.rooms.values()][0].host.id, 1, "it is still the host");
+    a.end(); b.end();
+  });
+});
 test("a room of clients that cannot host still closes, as it always did", async () => {
   await withRelay(async (port, relay) => {
     const a = await connect(port);

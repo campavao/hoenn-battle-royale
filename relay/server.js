@@ -848,9 +848,25 @@ export function createRelay(options = {}) {
       // A client says whether it is willing and able to inherit the room.
       // Sent once on arrival by anything that understands migration, and
       // again with ok:false when its player goes out (POK-116).
-      case "can_host":
+      //
+      // A HOST saying it can no longer host is handing the room over without
+      // leaving it.  A browser tab in the background has its timers throttled
+      // and its emulator stopped, and on the host those timers are the match --
+      // so it stands down rather than making everybody wait for it, and takes
+      // an ordinary seat in the room it opened.  Same election as leaveRoom's,
+      // and the same broadcast: the roster carries `host`, and every client
+      // already adopts it.
+      case "can_host": {
         conn.canHost = msg.ok !== false;
+        if (conn.canHost || !conn.room || conn.room.host !== conn) return;
+        const successor = heirOf(conn.room);
+        if (!successor) return; // nobody to take it: it stays where it is
+        conn.room.host = successor;
+        conn.room.broadcast(conn.room.roster());
+        log(`room ${conn.room.code}: host ${conn.name}#${conn.id} stood down,`
+            + ` ${successor.name}#${successor.id} promoted`);
         return;
+      }
 
       // The host shows somebody the door (POK-130).  The room had eleven
       // message types and not one of them could do this, so an open room

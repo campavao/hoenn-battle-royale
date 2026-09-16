@@ -114,39 +114,7 @@ test('the host carries a match without the emulator falling over', async ({ brow
   }
 });
 
-test('a hidden host tab says so, because the match is waiting on it', async ({ browser }) => {
-  test.setTimeout(150_000);
-  const ctx = await browser.newContext();
-  try {
-    const host = await ctx.newPage();
-    await host.goto(`/#host&fast&nobots&seed=7&testmon&rom=${romHashParam()}`);
-    await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
-    // The director starts on its own buzzer; until then there is nothing to pause.
-    await host.waitForFunction(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      () => (window as any).__br.director !== undefined,
-      undefined,
-      { timeout: 60_000 },
-    );
-    const before = await host.title();
-
-    // Hiding the tab throttles the timers the match runs on, and the title is the one
-    // thing a backgrounded tab still shows.
-    await host.evaluate(() => {
-      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
-      document.dispatchEvent(new Event('visibilitychange'));
-    });
-    expect(await host.title()).toContain('PAUSED');
-
-    // Back again, and the room's own line says how long everybody was waiting.
-    await host.waitForTimeout(2_500);
-    await host.evaluate(() => {
-      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
-      document.dispatchEvent(new Event('visibilitychange'));
-    });
-    expect(await host.title()).toBe(before);
-    await expect(host.locator('#room-note')).toContainText(/hidden for \d+s/);
-  } finally {
-    await ctx.close();
-  }
-});
+// A hidden host tab used to say so, because the match was waiting on it. It no longer
+// waits: the host hands the room over the moment its tab goes to the background, and
+// migration.spec.ts is where that lives -- it takes two browsers to see it, which is
+// exactly what this file does not have.

@@ -2166,6 +2166,23 @@ function wireRoom(
       console.info('[room] promoted to host');
       startDirector(ev.members.map((m) => m.id), match.seed !== 0);
     }
+    // Stood down. The relay moved `host` off us while we are still in the room, which
+    // only happens because we asked it to (the tab went to the background). The
+    // director has to stop with it: two clients running one match is worse than one
+    // running it slowly. Everything else -- our own trainer, the ghosts, the ticker --
+    // carries on as any guest's does.
+    else if (bridge && isHost && ev.host !== bridge.seat) {
+      isHost = false;
+      console.info('[room] stood down as host');
+      stopDirectorLoop?.();
+      stopDirectorLoop = null;
+      director = null;
+      localOut = null;
+      if (import.meta.env.DEV) {
+        const dev = (window as unknown as { __br?: Record<string, unknown> }).__br;
+        if (dev) dev.director = undefined;
+      }
+    }
     // Somebody arrived while the match is running: tell them where the fog is, now
     // (POK-260). Kanto calls this the late start -- a watcher who has to wait for the
     // next ring to learn the state spends up to two minutes looking at nothing.
@@ -2264,32 +2281,30 @@ function wireRoom(
     codeEl.textContent = 'Reconnected, but the room carried on without you. LEAVE to start again.';
   });
 
-  // A hidden tab gets its timers throttled, and on the host those timers ARE the
-  // match: the director's clock and the bots' walking both ride setInterval. Nothing
-  // breaks -- the clock is wall-clock and catches up on return -- but the match
-  // freezes and then lurches for everybody, and only the host can do anything about
-  // it (POK-247).
+  // A hidden tab gets its timers throttled and its rAF stopped, and on the host those
+  // are the match: the director's clock, the bots' walking and the emulator itself.
+  // POK-247 put a warning in the title bar and a line on the room panel, which is
+  // the best a page can do about its own freeze -- and not what anybody wants.
+  // Cam's call at the play-test: "we cannot pause the game if the host tabs out. If
+  // that happens it should swap hosts. No alert is needed."
   //
-  // The page cannot tell them while it is hidden, so the title does: it is the one
-  // thing a backgrounded tab still shows. On the way back, the room's own line says
-  // how long everybody was waiting.
-  const baseTitle = document.title;
-  let hiddenAt = 0;
+  // So it hands the room over. `can_host false` is already how an eliminated client
+  // withdraws from the succession (POK-252); the relay now reads it from the host
+  // itself as a stand-down and holds the same election it holds when a host leaves.
+  // The heir was already mirroring the world the director is authoritative over, so
+  // there is nothing to send: the roster carries `host` and the promotion below is
+  // what everybody already does with it.
+  //
+  // On the way back this page is an ordinary member. It says it could host again --
+  // for the next time the room needs an heir -- and does not take the match back.
   document.addEventListener('visibilitychange', () => {
-    if (!director) return;
-    const note = $('#room-note') as HTMLElement;
+    if (amWatching) return;
     if (document.hidden) {
-      hiddenAt = performance.now();
-      document.title = `PAUSED - ${baseTitle}`;
+      if (director) relay.canHost(false);
       return;
     }
-    document.title = baseTitle;
-    const secs = Math.round((performance.now() - hiddenAt) / 1000);
-    note.textContent =
-      hiddenAt > 0 && secs >= 2
-        ? `This tab was hidden for ${secs}s -- you are the host, so the match was waiting on it.`
-        : '';
-    hiddenAt = 0;
+    const me = bridge ? bridge.roster.get(bridge.seat) : undefined;
+    if (me === undefined || me.alive) relay.canHost(true);
   });
 
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;

@@ -88,3 +88,54 @@ test('the host drops mid-match and the guest picks up the clock', async ({ brows
     await hostCtx.close().catch(() => {});
   }
 });
+
+test('the host tabs out and hands the match over without leaving', async ({ browser }) => {
+  // The other half of POK-252, and the play-test's own: "we cannot pause the game if
+  // the host tabs out. If that happens it should swap hosts. No alert is needed." A
+  // backgrounded tab has its timers throttled and its emulator stopped, so a host that
+  // stays a host is a match that stops for everybody in it.
+  test.setTimeout(180_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&fast&seed=20260917&testmon&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+
+    const guest = await guestCtx.newPage();
+    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await expect(guest.locator('#match-strip')).toContainText(/RING \d/, { timeout: 120_000 });
+    expect(await guest.evaluate(() => (window as unknown as BrWindow).__br.director)).toBeUndefined();
+
+    // The tab goes to the background. Nothing closes; the page just stops being one
+    // anybody should be waiting on.
+    await host.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await guest.waitForFunction(() => (window as unknown as BrWindow).__br.director !== undefined, undefined, {
+      timeout: 60_000,
+    });
+    const phase = await guest.evaluate(
+      () => ((window as unknown as BrWindow).__br.director.state.ring?.phase as number) ?? 0,
+    );
+    expect(phase, 'the new host resumed the ring rather than restarting the match').toBeGreaterThan(0);
+
+    // The old host stood down: still in the room, no longer running it, and told
+    // nothing about being paused.
+    await host.waitForFunction(() => (window as unknown as BrWindow).__br.director === undefined, undefined, {
+      timeout: 30_000,
+    });
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/);
+    expect(await host.title(), 'no PAUSED banner: nothing is paused').not.toContain('PAUSED');
+    expect(await host.locator('#room-note').textContent()).not.toMatch(/hidden for/);
+  } finally {
+    await guestCtx.close();
+    await hostCtx.close().catch(() => {});
+  }
+});
