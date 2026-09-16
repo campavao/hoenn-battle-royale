@@ -42,6 +42,7 @@ import type { TickerMsg, MapRef } from './net/wire';
 import { World, type WorldMap } from './bots/world';
 import { sectionInside } from './match/ring';
 import { dealParty } from './bots/party';
+import { dealBag } from './bots/bag';
 import { mulberry32 } from './match/clock';
 import {
   careerLine,
@@ -1045,6 +1046,7 @@ function startBots(
         const ref = refById.get(mapId);
         return ref ? loot.at(ref, x, y) : undefined;
       },
+      bagAt: (key) => loot.bagAt(key),
     },
     // The eyeline (POK-238). A bot fights a player the same way a player fights one:
     // whoever sees the other starts it. The team goes over as a `trainer` card first,
@@ -1066,6 +1068,9 @@ function startBots(
     // Where the bot is standing is where its mons came from (POK-237): the drop put
     // it on a route, and that route's own table is what a trainer there would have.
     deal: (bot, atPhase, mapId) => dealParty(seed, bot.seat, atPhase, mapId, bot.grade),
+    // And the bag it spends from (POK-237): the potions it drinks between fights, the
+    // X ATTACKs its opponent's ROM pops on its behalf, and what a player finds on it.
+    bagFor: (bot, atPhase) => dealBag(seed, bot.seat, atPhase, bot.grade),
     seed,
     onDuel,
     // Nobody fights in the Zone -- not a player, not another bot.
@@ -1739,6 +1744,9 @@ function wireRoom(
     // Whoever fought a bot reports what it has left under the bot's own seat: the
     // host walks it, but only that ROM saw the fight.
     if (msg.t === 'party') bots?.bots.setParty(msg.seat, msg.mons);
+    // And what it spent out of its bag in there (POK-237), for the same reason: the
+    // host walks the bot, but only the ROM that fought it saw the items go.
+    if (msg.t === 'spent') bots?.bots.noteSpent(msg.seat, msg.items);
     if (msg.t === 'start') {
       fieldSize = msg.spawns.length;
       results.start(fieldSize, performance.now());

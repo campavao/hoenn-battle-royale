@@ -11,6 +11,9 @@
 #include "constants/item_effects.h"
 #include "constants/items.h"
 #include "constants/moves.h"
+#if BR
+#include "br/br_bot.h"
+#endif
 
 // this file's functions
 static bool8 HasSuperEffectiveMoveAgainstOpponents(bool8 noRng);
@@ -936,6 +939,11 @@ static bool8 ShouldUseItem(void)
             BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_USE_ITEM, 0);
             *(gBattleStruct->chosenItem + (gActiveBattler / 2) * 2) = item;
             gBattleResources->battleHistory->trainerItems[i] = ITEM_NONE;
+#if BR
+            // That came out of a real bag on somebody's page (POK-237), and this is
+            // the only place that knows it went.
+            BrBot_NoteItemUsed(item);
+#endif
             return shouldUse;
         }
     }

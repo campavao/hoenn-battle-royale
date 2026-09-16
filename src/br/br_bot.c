@@ -97,7 +97,45 @@ static void ParseTrainer(const u8 *d, u16 n)
     gBrBotFight.name[nameLen] = EOS;
     gBrBotFight.seat = d[0];
     gBrBotFight.count = count;
+    // The bag, after the party: itemCount then that many u16s (POK-237). An older page
+    // sends no tail at all, and a bot with an empty bag sends a zero -- both leave the
+    // AI on the rung's own potion, which is what it had before there was a bag.
+    gBrBotFight.itemCount = 0;
+    gBrBotFight.spent = 0;
+    off += count * 100;
+    if ((u16)(off + 1) <= n)
+    {
+        u8 items = d[off];
+
+        if (items > BR_BOT_ITEMS)
+            items = BR_BOT_ITEMS;
+        if ((u16)(off + 1 + items * 2) <= n)
+        {
+            for (i = 0; i < items; i++)
+                gBrBotFight.items[i] = BrWire_ReadU16(d + off + 1 + i * 2);
+            gBrBotFight.itemCount = items;
+        }
+    }
     gBrBotFight.staged = TRUE;
+}
+
+// The AI reached for one of the four (battle_ai_switch_items.c). Remembered as a bit
+// rather than a list: the page knows what it handed over and in what order, so which
+// slots went is the whole report.
+void BrBot_NoteItemUsed(u16 item)
+{
+    u8 i;
+
+    if (!gBrBotFight.fighting)
+        return;
+    for (i = 0; i < gBrBotFight.itemCount; i++)
+    {
+        if (gBrBotFight.items[i] == item && !(gBrBotFight.spent & (1 << i)))
+        {
+            gBrBotFight.spent |= 1 << i;
+            return;
+        }
+    }
 }
 
 static void DoneWithBuffer(void)
@@ -155,6 +193,27 @@ bool8 BrBot_PartyIsStaged(void)
     return gBrBotFight.staged || gBrBotFight.fighting;
 }
 
+// What the AI spent out of the bot's bag (POK-237), under the bot's own seat. Sent
+// even when nothing went: the page staked those units on this fight and a silent
+// report would leave them staked for ever.
+static void SendSpent(void)
+{
+    u8 buf[2 + BR_BOT_ITEMS * 2];
+    u8 len = 2, i;
+
+    buf[0] = gBrBotFight.seat;
+    buf[1] = 0;
+    for (i = 0; i < gBrBotFight.itemCount; i++)
+    {
+        if (!(gBrBotFight.spent & (1 << i)))
+            continue;
+        buf[len++] = gBrBotFight.items[i] & 0xFF;
+        buf[len++] = (gBrBotFight.items[i] >> 8) & 0xFF;
+        buf[1]++;
+    }
+    BrWire_Send(BR_MSG_SPENT, buf, len);
+}
+
 // Where the fight comes back to. The same errand as the netlink's own return: say what
 // happened, and a loss is an elimination like any other.
 static void CB2_BrReturnFromBotFight(void)
@@ -167,6 +226,7 @@ static void CB2_BrReturnFromBotFight(void)
     // The fight ran here, so this is the only ROM that knows what the bot has left.
     // Its own page deals it a team but never watches it fight; this is the report.
     BrSpectate_SendPartyOf(gEnemyParty, gBrBotFight.seat);
+    SendSpent();
     BrEngage_OnBattleEnd(gBrBotFight.seat, gBattleOutcome);
     buf[0] = gBrMySeat;
     switch (gBattleOutcome)

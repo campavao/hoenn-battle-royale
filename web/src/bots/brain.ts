@@ -13,9 +13,10 @@ import { findPath, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
 import { MOVE_CUT, MOVE_FLY, MOVE_SURF } from './party';
+import { battleItems, merge as mergeBag, purse, quaff, restock, spend, type Stack } from './bag';
 import { duel } from './duel';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
-import { PROTOCOL, type MapRef, type Msg, type PackedMon } from '../net/wire';
+import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg } from '../net/wire';
 
 /** Kanto's pace: four tiles a second, whatever the host's tab is doing. */
 export const STEP_MS = 250;
@@ -25,6 +26,9 @@ const WANDER_BUDGET = 1500;
 const ENGAGE_COOLDOWN_MS = 2000;
 /** Long on purpose: a flight is an event, not a way of moving. */
 const FLY_COOLDOWN_MS = 45_000;
+/** One drink every ten seconds (POK-237). Without it a hurt bot empties its bag in
+ *  four steps, which is a bot with no bag by the second ring. */
+const QUAFF_COOLDOWN_MS = 10_000;
 /** What a grade does with the moment after a fight (POK-265). An ace is looking for the
  *  next one before the last has finished; a rookie needs a minute. The cheapest honest
  *  difference: nothing about the walk changes, only the appetite. */
@@ -93,6 +97,12 @@ interface Walker {
   retryAfter: number;
   /** When the fog next takes its bite, if this bot is still standing in it. */
   bleedAt: number;
+  /** Nothing to drink before this: one gulp at a time, not the whole bag in four
+   *  steps. */
+  quaffAfter: number;
+  /** Its own bag (POK-237): what it drinks between fights, what it spends in one, and
+   *  what a player finds on it when it falls. */
+  bag: Stack[];
 }
 
 /** A player as the roster knows them -- where they are and which way they are looking.
@@ -103,6 +113,8 @@ export interface Decision {
   seat: number;
   rule:
     | 'heal'
+    /** Drank from its own bag rather than walking to a Centre (POK-237). */
+    | 'quaff'
     | 'engage'
     | 'pickup'
     | 'centre'
@@ -144,6 +156,10 @@ export interface BotsOptions {
   loot?: {
     all: () => { key: number; mapId: string; x: number; y: number }[];
     at: (mapId: string, x: number, y: number) => number | undefined;
+    /** What the next item out of this piece would be, when the piece is a bag rather
+     *  than a mon (POK-237). A bot takes one the way a player does -- one press, one
+     *  item -- and the rest stays on the ground for whoever is next. */
+    bagAt?: (key: number) => number | undefined;
   };
   /** world.json id -> the wire's group/num. */
   mapRef: (mapId: string) => MapRef | undefined;
@@ -156,6 +172,9 @@ export interface BotsOptions {
   /** A bot's starting team, and the mons it picks up as the rung climbs. `mapId` is
    *  where it is standing, which is where a trainer's mons come from (POK-237). */
   deal?: (bot: Bot, phase: number, mapId: string) => PackedMon[];
+  /** And its bag (POK-237). Dealt the same way, from the seed and the grade, so a
+   *  rookie's two POTIONs and an ace's X ATTACK are the same on every client. */
+  bagFor?: (bot: Bot, phase: number) => Stack[];
   /** How many trainers are still in, bots included. The hunt starts at HUNT_AT. */
   alive?: () => number;
   /** The match seed, so two bots meeting settle it the same way on every client that
@@ -253,6 +272,9 @@ export class Bots {
   private now = 0;
   /** Route searches left in this tick (SEARCHES_PER_TICK). */
   private budget = 0;
+  /** The ring phase, as the last `ringMoved` left it. The rung a bot falls at is what
+   *  its purse is worth (POK-237). */
+  private phase = 0;
 
   constructor(private readonly opts: BotsOptions) {}
 
@@ -271,6 +293,8 @@ export class Bots {
         retryAfter: 0,
         bleedAt: now + FOG_TICK_MS,
         party: this.opts.deal?.(bot, 0, bot.mapId) ?? [],
+        bag: this.opts.bagFor?.(bot, 0) ?? [],
+        quaffAfter: 0,
       };
       this.walkers.push(walker);
       this.place(walker);
@@ -323,14 +347,34 @@ export class Bots {
     if (walker && mons.length > 0) walker.party = mons;
   }
 
+  /** What the ROM that fought this bot spent out of its bag (POK-237). The units were
+   *  handed over on the `trainer` card and are still in the bag until this says
+   *  otherwise -- a fight that ended on the first turn spends nothing. */
+  noteSpent(seat: number, items: number[]): void {
+    const walker = this.walkers.find((w) => w.bot.seat === seat);
+
+    if (!walker) return;
+    spend(walker.bag, items);
+  }
+
+  /** What a bot has left to spend -- for a test, and for anyone who wants to look. */
+  bagOf(seat: number): Stack[] {
+    return this.walkers.find((w) => w.bot.seat === seat)?.bag ?? [];
+  }
+
   /** The ring moved. Every route was chosen against the old one, so they are all
    *  suspect: dropping them makes each bot re-aim on its next step. The rung moved
    *  with it (POK-225: the ring phase IS the level), so the teams climb too. */
   ringMoved(phase = 0): void {
+    this.phase = phase;
     for (const walker of this.walkers) {
       walker.path = null;
       const fresh = this.opts.deal?.(walker.bot, phase, walker.at.map);
       if (fresh) walker.party = climb(walker.party, fresh);
+      // A trainer still standing at the new rung has restocked (POK-237) -- one
+      // potion of the tier it is now on, not a fresh bag, so what it has spent
+      // stays spent.
+      if (this.opts.bagFor) restock(walker.bag, phase);
     }
   }
 
@@ -401,7 +445,7 @@ export class Bots {
   private eliminate(walker: Walker): void {
     const map = this.opts.mapRef(walker.at.map);
     if (map && walker.party.length > 0) {
-      this.opts.send({
+      const spill: SpillMsg = {
         t: 'spill',
         seat: walker.bot.seat,
         map,
@@ -414,7 +458,21 @@ export class Bots {
           species: mon.species,
           level: mon.level,
         })),
-      });
+      };
+      // And its bag, which is the point of it having had one (POK-237): the X ATTACKs
+      // it did not get to pop are lying there for whoever beat it. Key 6 is the slot
+      // after the six mons, which is what the ROM's own whiteout uses.
+      if (walker.bag.length > 0) {
+        spill.bag = {
+          key: ((walker.bot.seat & 0xff) << 8) | 6,
+          x: walker.at.x,
+          y: walker.at.y,
+          items: walker.bag.map((stack) => ({ ...stack })),
+          money: purse(this.phase, walker.bot.grade),
+          name: walker.bot.name.slice(0, 7),
+        };
+      }
+      this.opts.send(spill);
     }
     this.opts.send({ t: 'out', seat: walker.bot.seat });
     this.remove(walker.bot.seat);
@@ -433,8 +491,17 @@ export class Bots {
     // that is the turn spent.
     const here = this.opts.loot?.at(walker.at.map, walker.at.x, walker.at.y);
     if (here !== undefined) {
-      this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: here });
-      this.note(walker, 'pickup', `key ${here}`);
+      // A bag on the ground gives up one item per press -- the ROM's own rule -- so
+      // the pickup names what was taken and the rest stays there (POK-237).
+      const item = this.opts.loot?.bagAt?.(here);
+      if (item !== undefined) {
+        this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: here, item });
+        mergeBag(walker.bag, [{ id: item, n: 1 }]);
+        this.note(walker, 'pickup', `item ${item}`);
+      } else {
+        this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: here });
+        this.note(walker, 'pickup', `key ${here}`);
+      }
       walker.path = null;
       return;
     }
@@ -490,7 +557,12 @@ export class Bots {
       if (mons.length === 0) return false;
       // PLAYER_NAME_LENGTH is 7: a HUD name may be longer, a trainer card may not.
       const name = walker.bot.name.slice(0, 7);
+      // What it may spend in there, out of the bag it is actually carrying (POK-237).
+      // Held rather than deducted: the ROM says which of them it used when the fight
+      // is over, and one that ends on the first turn spends nothing.
+      const items = battleItems(walker.bag);
       const card: Msg = { t: 'trainer', seat: walker.bot.seat, name, mons };
+      if (items.length > 0) (card as { items?: number[] }).items = items;
       if (this.opts.sendTo) this.opts.sendTo(player.seat, card);
       else this.opts.send(card);
       this.nonce = (this.nonce + 1) & 0xffff;
@@ -555,6 +627,26 @@ export class Bots {
     walker.party = walker.party.map((mon) => ({ ...mon, hp: mon.maxHp, status: 0 }));
     walker.path = null;
     this.note(walker, 'heal');
+    return true;
+  }
+
+  /** A drink from its own bag (POK-237, Kanto's Bots.quaff). Silent -- there is no
+   *  animation for a bot doing this and nobody is watching it happen -- but it is
+   *  spent out of the same inventory the fight draws on, so a bot that drank its way
+   *  across Hoenn arrives at the buzzer with nothing to pop. */
+  private tryQuaff(walker: Walker, now: number): boolean {
+    if (walker.bag.length === 0 || walker.party.length === 0) return false;
+    if (now < walker.quaffAfter) return false;
+    // Not in the fog -- the same rule that shuts the nurse out there (healHere). The
+    // fog is not damage a potion is an answer to, it is the thing that ends the match,
+    // and a bot sipping its way through it outlives the ring: the replay had one
+    // wander the burning half of Hoenn for six extra minutes on a bag of POTIONs.
+    if (this.opts.inside && !this.opts.inside(walker.at.map)) return false;
+    const drunk = quaff(walker.party, walker.bag);
+
+    if (drunk === null) return false;
+    walker.quaffAfter = now + QUAFF_COOLDOWN_MS;
+    this.note(walker, 'quaff', `item ${drunk}`);
     return true;
   }
 
@@ -630,6 +722,11 @@ export class Bots {
       this.note(walker, 'centre', `${Math.round(health(walker.party) * 100)}% hp`);
       return;
     }
+    // No nurse in reach, so the bag (POK-237, Kanto's rule at main.lua's goal pick):
+    // one sip when it stops to think, and only where the nurse is not an option --
+    // she is free and heals everything, and the potions keep for the road. It is not
+    // the errand itself: the bot drinks and then goes wherever it was going.
+    this.tryQuaff(walker, now);
     // Fog first. Aiming only at cells inside the ring is the whole rule: a bot already
     // inside wanders inside, and a bot caught outside walks in, because the route to
     // anywhere it may aim at crosses the edge on the way.

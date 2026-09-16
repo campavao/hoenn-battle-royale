@@ -63,6 +63,14 @@ function msgSeat(msg: Msg): number | undefined {
  *  the trainer standing on a black screen for the rest of the match. */
 const ADDRESSED_TO_SEAT = new Set<string>(['land']);
 
+/** Messages whose `seat` names somebody else and must survive the stamp below. A ROM
+ *  that fought a bot is the only thing that watched the fight happen, so it reports
+ *  what the bot has left (`party`, POK-238) and what it spent out of the bot's bag
+ *  (`spent`, POK-237) under the BOT's seat. Stamping our own seat on those threw both
+ *  reports away -- the host looked for a walker with our seat, found none, and the bot
+ *  walked off whole with a full bag. Every other message a ROM sends is about us. */
+const SPEAKS_FOR_ANOTHER = new Set<string>(['party', 'spent']);
+
 export class Bridge {
   readonly mailbox: Mailbox;
   readonly roster = new Roster();
@@ -179,7 +187,7 @@ export class Bridge {
     }
     this.outCount++;
 
-    const stamped = { ...msg, seat: this.seat } as Msg;
+    const stamped = (SPEAKS_FOR_ANOTHER.has(msg.t) ? msg : { ...msg, seat: this.seat }) as Msg;
     this.noteChallenge(stamped);
     this.roster.applyMsg(stamped);
 

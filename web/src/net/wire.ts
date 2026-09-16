@@ -208,6 +208,21 @@ export interface TrainerMsg {
   seat: number; // the bot's seat
   name: string; // Gen 3 charmap text, at most 7 chars
   mons: PackedMon[]; // 1..6
+  /** What it may spend in this fight, out of its own bag (POK-237). Emerald's trainer
+   *  AI reads at most MAX_TRAINER_ITEMS = 4, so this is four units at most -- and they
+   *  are units, not stacks: two POTIONs are two entries. Absent means an empty bag. */
+  items?: number[];
+}
+
+/** The ROM that fought a bot says which of the items it was handed were actually used
+ *  (POK-237). The bot's bag lives on the host's page and the fight does not, so this
+ *  is the only thing that knows -- without it a bot's bag could only ever be guessed
+ *  at, and what is left has to be right, because it is what hits the ground when the
+ *  bot falls. Crosses out of the ROM (spent). */
+export interface SpentMsg {
+  t: 'spent';
+  seat: number; // the bot whose bag it was
+  items: number[]; // the item ids used, at most 4
 }
 
 /** Where a trainer chose to drop (POK-223). The ROM puts the fly map in front of them
@@ -507,6 +522,7 @@ export type Msg =
   | TurnMsg
   | PartyMsg
   | TrainerMsg
+  | SpentMsg
   | PickMsg
   | LandMsg
   | FaintMsg
@@ -625,6 +641,14 @@ function reqBytes(m: Record<string, unknown>, field: string, max: number): numbe
     if (typeof b !== 'number' || !Number.isInteger(b) || b < 0 || b > 255) fail(`bad ${field} byte`);
   }
   return data as number[];
+}
+
+/** A short run of Gen 3 item ids: the four a trainer may spend in one fight, and the
+ *  four a ROM can report back (POK-237). */
+function itemIds(raw: unknown, what: string): number[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.length > 4) fail(`bad ${what}`);
+  return raw.map((id) => reqInt({ id }, 'id', 1, 0xffff));
 }
 
 function reqInt(m: Record<string, unknown>, field: string, lo: number, hi: number): number {
@@ -849,13 +873,18 @@ const decoders: Record<string, Decoder> = {
   trainer: (m) => {
     const mons = m.mons;
     if (!Array.isArray(mons) || mons.length === 0 || mons.length > 6) fail('bad trainer party');
-    return {
+    const msg: TrainerMsg = {
       t: 'trainer',
       seat: reqSeat(m),
       name: optShortString(m, 'name', 7) ?? '',
       mons: mons.map(validateMon),
     };
+    const items = itemIds(m.items, 'trainer items');
+    if (items.length > 0) msg.items = items;
+    return msg;
   },
+
+  spent: (m) => ({ t: 'spent', seat: reqSeat(m), items: itemIds(m.items, 'spent items') }),
 
   faint: (m) => ({ t: 'faint', seat: reqSeat(m), index: reqInt(m, 'index', 0, 5) }),
 

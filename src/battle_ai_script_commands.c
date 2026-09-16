@@ -301,19 +301,31 @@ void BattleAI_HandleItemUseBeforeAISetup(u8 defaultScoreMoves)
     {
 #if BR
         // A bot is not in gTrainers -- it is a seat the host's tab walks around -- so
-        // its bag is dealt off the rung its team is at, which is Kanto's potion rule
-        // (POK-236) arriving as the thing Emerald's own AI already knows how to do.
+        // what it may spend comes over on its trainer card, out of a bag that is
+        // really being carried and really runs down (POK-237). A card with no bag on
+        // it (an older page, or a bot that has spent everything) falls back to the
+        // rung's own potion, which is what this branch did before there was a bag:
+        // Kanto's potion rule (POK-236) as the thing Emerald's AI already knows.
         if (gBrBotFight.fighting)
         {
-            u8 level = GetMonData(&gEnemyParty[0], MON_DATA_LEVEL, NULL);
-            u16 potion = level >= 75 ? ITEM_FULL_RESTORE
-                       : level >= 50 ? ITEM_HYPER_POTION
-                       : level >= 30 ? ITEM_SUPER_POTION
-                                     : ITEM_POTION;
+            if (gBrBotFight.itemCount > 0)
+            {
+                for (i = 0; i < gBrBotFight.itemCount && i < MAX_TRAINER_ITEMS; i++)
+                    BATTLE_HISTORY->trainerItems[i] = gBrBotFight.items[i];
+                BATTLE_HISTORY->itemsNo = i;
+            }
+            else
+            {
+                u8 level = GetMonData(&gEnemyParty[0], MON_DATA_LEVEL, NULL);
+                u16 potion = level >= 75 ? ITEM_FULL_RESTORE
+                           : level >= 50 ? ITEM_HYPER_POTION
+                           : level >= 30 ? ITEM_SUPER_POTION
+                                         : ITEM_POTION;
 
-            BATTLE_HISTORY->trainerItems[0] = potion;
-            BATTLE_HISTORY->trainerItems[1] = potion;
-            BATTLE_HISTORY->itemsNo = 2;
+                BATTLE_HISTORY->trainerItems[0] = potion;
+                BATTLE_HISTORY->trainerItems[1] = potion;
+                BATTLE_HISTORY->itemsNo = 2;
+            }
         }
         else
 #endif

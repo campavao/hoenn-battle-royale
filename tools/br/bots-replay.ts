@@ -10,6 +10,7 @@
 // No emulator, no relay, no page: the brain has never needed any of them.
 import { Bots, STEP_MS, type Decision } from '../../web/src/bots/brain';
 import { dealBots } from '../../web/src/bots/roster';
+import { dealBag } from '../../web/src/bots/bag';
 import { dealParty } from '../../web/src/bots/party';
 import { World, type WorldMap } from '../../web/src/bots/world';
 import { mulberry32 } from '../../web/src/match/clock';
@@ -50,6 +51,9 @@ const bots = new Bots({
   rng: mulberry32(seed ^ 0x51ce),
   inside: (id: string) => ring === undefined || inFog(id),
   deal: (bot, phase) => dealParty(seed, bot.seat, phase),
+  // The bag too (POK-237), so a `quaff` shows up in the decision list next to the
+  // walk to a Centre it was instead of.
+  bagFor: (bot, phase) => dealBag(seed, bot.seat, phase, bot.grade),
   seed,
   centres: () => world.centres(),
   onDecision: (d: Decision) => {

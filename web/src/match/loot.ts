@@ -37,13 +37,26 @@ export class Loot {
   }
 
   /** Somebody took it. An `item` named is part of a bag going, not the bag itself --
-   *  the same rule the ROM plays by. */
+   *  the same rule the ROM plays by -- so the stack goes down by one and the bag stays
+   *  where it is until it is empty (POK-237). Before that the table kept the bag
+   *  whole, which a player never noticed (their own ROM holds the real list) and a bot
+   *  standing on it did: it took the same POTION every step, for ever. */
   notePickup(key: number, item?: number): void {
     if (item !== undefined) {
       const piece = this.pieces.get(key);
-      if (piece?.bag) return;
+      if (piece?.bag) {
+        const i = piece.bag.items.findIndex((s) => s.id === item);
+        if (i >= 0 && --piece.bag.items[i].n <= 0) piece.bag.items.splice(i, 1);
+        if (piece.bag.items.length > 0) return;
+      }
     }
     this.pieces.delete(key);
+  }
+
+  /** What the next item out of this piece would be, when it is a bag. Undefined for a
+   *  mon, for an empty bag, and for a key this page never saw land. */
+  bagAt(key: number): number | undefined {
+    return this.pieces.get(key)?.bag?.items[0]?.id;
   }
 
   /** How many pieces are still on the ground anywhere. */

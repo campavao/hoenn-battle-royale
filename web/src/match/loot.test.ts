@@ -12,7 +12,18 @@ function spill(seat: number, map: MapRef, keys: number[], bagKey?: number): Spil
     map,
     mons: keys.map((key, i) => ({ key, x: 10 + i, y: 12, species: 277, level: 5 })),
   };
-  if (bagKey !== undefined) msg.bag = { key: bagKey, x: 9, y: 12, items: [], money: 1200, name: 'CAM' };
+  if (bagKey !== undefined) {
+    // A real list, because a pickup that names an item now takes it off the stack
+    // (POK-237) -- an empty bag is a bag that is already gone.
+    msg.bag = {
+      key: bagKey,
+      x: 9,
+      y: 12,
+      items: [{ id: 13, n: 2 }, { id: 75, n: 1 }],
+      money: 1200,
+      name: 'CAM',
+    };
+  }
   return msg;
 }
 
@@ -47,6 +58,24 @@ describe('the match-wide loot table', () => {
     loot.note({ t: 'pickup', seat: 2, key: 0x01ff, item: 13, n: 1 });
     expect(loot.size()).toBe(1);
     expect(loot.forMap(LITTLEROOT)?.bag?.key).toBe(0x01ff);
+    // ...one POTION lighter, so the next trainer to stand on it takes what is left
+    // rather than the same one for ever (POK-237).
+    expect(loot.forMap(LITTLEROOT)?.bag?.items).toEqual([{ id: 13, n: 1 }, { id: 75, n: 1 }]);
+    expect(loot.bagAt(0x01ff)).toBe(13);
+  });
+
+  it('drops the bag once the last thing in it is taken', () => {
+    const loot = new Loot();
+    loot.note(spill(1, LITTLEROOT, [], 0x01ff));
+    for (const item of [13, 13, 75]) loot.note({ t: 'pickup', seat: 2, key: 0x01ff, item, n: 1 });
+    expect(loot.size()).toBe(0);
+    expect(loot.bagAt(0x01ff)).toBeUndefined();
+  });
+
+  it('has nothing to offer from a mon, which is picked up whole', () => {
+    const loot = new Loot();
+    loot.note(spill(1, LITTLEROOT, [0x0100]));
+    expect(loot.bagAt(0x0100)).toBeUndefined();
   });
 
   it('re-reading the same spill replaces rather than doubles it', () => {

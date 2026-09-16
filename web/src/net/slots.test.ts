@@ -191,11 +191,35 @@ describe('fixed-layout byte counts', () => {
   it('a trainer card is the 3 + name header br_bot.c reads, then the same rows', () => {
     const msg: Msg = { t: 'trainer', seat: 31, name: 'WALLY', mons: [mon(), mon({ species: 4 })] };
     const { payload } = reassembleSlots(packSlot(msg));
-    // seat(1) + nameLen(1) + name(5) + count(1) + 2 mons * 100
-    expect(payload.length).toBe(1 + 1 + 5 + 1 + 200);
+    // seat(1) + nameLen(1) + name(5) + count(1) + 2 mons * 100 + the bag's count(1),
+    // which is written even when the bag is empty (POK-237)
+    expect(payload.length).toBe(1 + 1 + 5 + 1 + 200 + 1);
     expect(payload[0]).toBe(31);
     expect(payload[1]).toBe(5);
     expect(payload[7]).toBe(2);
+    expect(roundTrip(msg)).toEqual(msg);
+  });
+
+  it("carries the bot's bag on the end of the card (POK-237)", () => {
+    const msg: Msg = {
+      t: 'trainer', seat: 31, name: 'WALLY', mons: [mon()], items: [13, 13, 75],
+    };
+    const { payload } = reassembleSlots(packSlot(msg));
+    // ...three ids after the one mon: count(1) + 3 * u16
+    expect(payload.length).toBe(1 + 1 + 5 + 1 + 100 + 1 + 6);
+    expect(payload[108]).toBe(3);
+    expect(roundTrip(msg)).toEqual(msg);
+  });
+
+  it('reports back what the fight spent (POK-237)', () => {
+    const msg: Msg = { t: 'spent', seat: 31, items: [13, 75] };
+    const { payload } = reassembleSlots(packSlot(msg));
+    expect(Array.from(payload)).toEqual([31, 2, 13, 0, 75, 0]);
+    expect(roundTrip(msg)).toEqual(msg);
+  });
+
+  it('a spent report with nothing in it is still a report', () => {
+    const msg: Msg = { t: 'spent', seat: 4, items: [] };
     expect(roundTrip(msg)).toEqual(msg);
   });
 

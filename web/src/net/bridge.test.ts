@@ -134,6 +134,20 @@ describe('Bridge', () => {
     expect(bridge.stats.out).toBe(1);
   });
 
+  it("leaves a report about somebody else's seat alone (POK-237)", () => {
+    const { emu, frame, romInit, romEmit } = fakeEmulator(BASE);
+    romInit();
+    const { relay, socket } = fakeRelay();
+    new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+
+    // We fought bot 31. What it has left and what it spent are reported under ITS
+    // seat: stamping ours on them threw both away, and the bot walked off whole.
+    romEmit({ t: 'spent', seat: 31, items: [13] });
+    frame();
+
+    expect(socket.sent).toEqual([{ type: 'all', m: { t: 'spent', seat: 31, items: [13] } }]);
+  });
+
   it('lands a step from the relay in the ROM in-ring as the right bytes', () => {
     const { emu, frame, romInit, romDrainIn } = fakeEmulator(BASE);
     romInit();

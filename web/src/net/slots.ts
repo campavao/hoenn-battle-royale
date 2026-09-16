@@ -52,6 +52,7 @@ import type {
   TickerMsg,
   PartyMsg,
   TrainerMsg,
+  SpentMsg,
   PickMsg,
   LandMsg,
   ResultMsg,
@@ -84,6 +85,7 @@ export const BR_MSG = {
   TICKER: 15,
   RESULT: 16,
   TRAINER: 23,
+  SPENT: 26,
   PICK: 24,
   LAND: 25,
 } as const;
@@ -413,6 +415,12 @@ function encodeTrainer(m: TrainerMsg): Uint8Array {
   writeGen3(w, m.name, 7);
   w.u8(m.mons.length);
   for (const mon of m.mons) w.raw(encodeMon(mon));
+  // The bag it may spend from, after the party (POK-237). A count of zero is still
+  // written: the ROM reads the tail when it is there and falls back to the rung's
+  // potion when it is not, so "nothing" has to be sayable.
+  const items = (m.items ?? []).slice(0, 4);
+  w.u8(items.length);
+  for (const id of items) w.u16(id);
   return w.toBytes();
 }
 function decodeTrainer(bytes: Uint8Array): TrainerMsg {
@@ -422,7 +430,28 @@ function decodeTrainer(bytes: Uint8Array): TrainerMsg {
   const count = r.u8();
   const mons: PackedMon[] = [];
   for (let i = 0; i < count; i++) mons.push(decodeMon(r.raw(MON_BYTES)));
-  return { t: 'trainer', seat, name, mons };
+  const msg: TrainerMsg = { t: 'trainer', seat, name, mons };
+  if (r.remaining > 0) {
+    const items: number[] = [];
+    for (let n = r.u8(); n > 0 && r.remaining >= 2; n--) items.push(r.u16());
+    if (items.length > 0) msg.items = items;
+  }
+  return msg;
+}
+
+// SPENT: seat, then the items that fight actually used (POK-237).
+function encodeSpent(m: SpentMsg): Uint8Array {
+  const items = m.items.slice(0, 4);
+  const w = new Writer().u8(m.seat).u8(items.length);
+  for (const id of items) w.u16(id);
+  return w.toBytes();
+}
+function decodeSpent(bytes: Uint8Array): SpentMsg {
+  const r = new Reader(bytes);
+  const seat = r.u8();
+  const items: number[] = [];
+  for (let n = r.u8(); n > 0 && r.remaining >= 2; n--) items.push(r.u16());
+  return { t: 'spent', seat, items };
 }
 
 function encodeFaint(m: FaintMsg): Uint8Array {
@@ -625,6 +654,7 @@ const CODECS: Record<string, Codec> = {
   shot: { type: BR_MSG.SHOT, encode: (m) => encodeShot(m as ShotMsg), decode: decodeShot },
   party: { type: BR_MSG.PARTY, encode: (m) => encodeParty(m as PartyMsg), decode: decodeParty },
   trainer: { type: BR_MSG.TRAINER, encode: (m) => encodeTrainer(m as TrainerMsg), decode: decodeTrainer },
+  spent: { type: BR_MSG.SPENT, encode: (m) => encodeSpent(m as SpentMsg), decode: decodeSpent },
   pick: { type: BR_MSG.PICK, encode: (m) => encodePick(m as PickMsg), decode: decodePick },
   land: { type: BR_MSG.LAND, encode: (m) => encodeLand(m as LandMsg), decode: decodeLand },
   faint: { type: BR_MSG.FAINT, encode: (m) => encodeFaint(m as FaintMsg), decode: decodeFaint },

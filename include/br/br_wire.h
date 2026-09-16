@@ -241,8 +241,19 @@
 //   2..:  name     Gen 3 charmap bytes
 //   ..:   count    u8   1..6
 //   ..:   party    count * PackedMon (100 bytes each, as BR_MSG_PARTY)
+//   ..:   items    u8   how many of its bag it may spend here, 0..4 (POK-237)
+//   ..:   ids      items * u16  Gen 3 item ids, straight into BATTLE_HISTORY
+// The tail is optional: a card without one leaves the AI on the rung's own potion.
 #define BR_MSG_TRAINER 23
 #define BR_MSG_PICK 24      // ROM -> page: the section this trainer chose to drop into
 #define BR_MSG_LAND 25      // page -> ROM: the cell the host dealt them inside it
+
+// spent: which of a bot's staked items this fight actually used (POK-237). The bag
+// lives on the host's page and the fight does not, so this is the only report of it.
+// Payload:
+//   0:    seat     u8   the bot's roster seat, not the sender's
+//   1:    count    u8   0..4
+//   2..:  ids      count * u16
+#define BR_MSG_SPENT 26
 
 #endif // GUARD_BR_WIRE_H

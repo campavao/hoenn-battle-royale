@@ -1,0 +1,42 @@
+# bot-bag: a bot's items are real (POK-237). Its bag lives on the host's page, the
+# few units it may spend here ride over on the trainer card, and Emerald's own AI is
+# handed exactly those -- so an X ATTACK a player watches it pop is one that came out
+# of an inventory and is gone from it. The card also records which slots went, because
+# this ROM is the only thing that watches the fight happen.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# The same card bot-fight.txt sends -- seat 31, "BOT", one level 5 TREKO -- with a bag
+# on the end of it: count 1, then ITEM_X_ATTACK (75 = 0x4B) little-endian.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+pokebytes gDecompressionBuffer+106 01 4B 00
+mailsend gBrMailbox 23 gDecompressionBuffer 109
+wait 10
+# staged, with the bag read off the tail and nothing spent yet
+expect u8 gBrBotFight 1
+expect u8 gBrBotFight+0xC 1
+expect u16 gBrBotFight+0xE 0x4B
+expect u8 gBrBotFight+0xD 0
+# CHALLENGE from seat 31 to us, as bot-fight.txt
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 1F 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 300
+expect u8 gBrBotFight+2 1
+# Through the intro and into the first turn: FIGHT, the first move, and the AI's own
+# action against it. An X item is a first-turn item in Emerald's AI, so this is the
+# turn the bag gets spent.
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 90
+tap A
+wait 150
+tap A
+wait 150
+shot bag-turn
+# slot 0 went, which is what rides home as BR_MSG_SPENT
+expect u8 gBrBotFight+0xD 1
+say bot bag ok

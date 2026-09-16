@@ -4,6 +4,7 @@ import { dealBots, MAX_SEATS } from './roster';
 import { World, type Spot, type WorldMap } from './world';
 import { mulberry32 } from '../match/clock';
 import type { MapRef, Msg, PackedMon } from '../net/wire';
+import type { Stack } from './bag';
 
 function grid(rows: string[]): string {
   const cells = rows.join('').split('').map(Number);
@@ -232,7 +233,7 @@ describe('a bot meeting a player', () => {
   // One bot, parked where the player is standing right in front of it. The room is
   // told its team and then challenged -- in that order, because the ROM has to have
   // the party in hand before the challenge that starts the battle arrives.
-  function meeting(player: PlayerView, party: PackedMon[] = [MON]) {
+  function meeting(player: PlayerView, party: PackedMon[] = [MON], bag?: Stack[]) {
     const world = new World([FIELD, PATH]);
     const sent: Msg[] = [];
     const bots = new Bots({
@@ -243,11 +244,12 @@ describe('a bot meeting a player', () => {
       rng: mulberry32(7),
       engage: { players: () => [player] },
       deal: () => party,
+      ...(bag ? { bagFor: () => bag.map((s) => ({ ...s })) } : {}),
     });
     const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
     bots.start(dealt, 0);
     for (let t = STEP_MS; t <= 4000; t += STEP_MS) bots.tick(t);
-    return { sent, dealt };
+    return { sent, dealt, bots };
   }
 
   const MON: PackedMon = {
@@ -268,6 +270,65 @@ describe('a bot meeting a player', () => {
     expect(card.name.length).toBeLessThanOrEqual(7);
     expect(card.mons).toHaveLength(1);
     expect((sent[challenge] as { opponent: number }).opponent).toBe(0);
+  });
+
+  it('stakes its bag on the card, and spends only what the fight used (POK-237)', () => {
+    const bag: Stack[] = [{ id: 13, n: 2 }, { id: 75, n: 1 }];
+    const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }, [MON], bag);
+    const card = sent.find((m) => m.t === 'trainer') as { items?: number[] };
+    // Two POTIONs and an X ATTACK: medicine first, and all three fit in the four the
+    // AI can read.
+    expect(card.items).toEqual([13, 13, 75]);
+    // Still in the bag until the ROM says otherwise.
+    expect(bots.bagOf(dealt[0].seat)).toEqual([{ id: 13, n: 2 }, { id: 75, n: 1 }]);
+    bots.noteSpent(dealt[0].seat, [13, 75]);
+    expect(bots.bagOf(dealt[0].seat)).toEqual([{ id: 13, n: 1 }]);
+  });
+
+  it('drops what is left of the bag where it falls (POK-237)', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    const hurt: PackedMon = { ...MON, hp: 1, maxHp: 19 };
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [hurt],
+      bagFor: () => [{ id: 75, n: 1 }],
+      // Nowhere is inside the ring, so the fog takes it where it stands.
+      inside: () => false,
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    const spill = sent.find((m) => m.t === 'spill') as { bag?: { items: Stack[]; money: number } };
+    expect(spill?.bag?.items).toEqual([{ id: 75, n: 1 }]);
+    expect(spill?.bag?.money).toBeGreaterThan(0);
+  });
+
+  it('drinks from its own bag rather than walk to a Centre (POK-237)', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    const hurt: PackedMon = { ...MON, hp: 4, maxHp: 40 };
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [hurt],
+      bagFor: () => [{ id: 13, n: 1 }],
+      inside: () => true,
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 4000; t += STEP_MS) bots.tick(t);
+    // One POTION drunk, and only one -- the cooldown is what stops a hurt bot
+    // emptying the bag in four steps.
+    expect(bots.bagOf(dealt[0].seat)).toEqual([]);
+    expect(bots.partyOf(dealt[0].seat)[0].hp).toBe(24);
   });
 
   it('stands still while the fight runs, and walks again on the result', () => {
