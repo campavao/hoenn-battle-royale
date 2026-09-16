@@ -19,19 +19,26 @@ EWRAM_DATA struct BrHud gBrHud = {0};
 
 // bg, left, top, width, height, palette, baseBlock. Palette 15 is the message-box
 // palette the field loads on every map: 1 white, 2 dark gray, 3 light gray, 5 light red.
-static const struct WindowTemplate sCornerTemplate = { 0, 24, 0, 6, 3, 15, 0x23A };
-static const struct WindowTemplate sWoundTemplate = { 0, 24, 3, 6, 2, 15, 0x24C };
-static const struct WindowTemplate sTickerTemplate = { 0, 1, 18, 28, 2, 15, 0x258 };
-static const struct WindowTemplate sBoxTemplate = { 0, 1, 14, 28, 4, 15, 0x294 };
+//
+// Every one of these is inset by a tile from the edge it wants to sit on, because an
+// Emerald frame is drawn OUTSIDE the window it belongs to -- one tile on each side, in
+// palette 14, from the border set in OPTIONS (POK-256). A window flush against the top
+// of the screen has nowhere to put its lid.
+static const struct WindowTemplate sCornerTemplate = { 0, 23, 1, 6, 3, 15, 0x23A };
+static const struct WindowTemplate sWoundTemplate = { 0, 23, 6, 6, 2, 15, 0x24C };
+static const struct WindowTemplate sTickerTemplate = { 0, 1, 17, 28, 2, 15, 0x258 };
+static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, 0x294 };
 
-#define BR_HUD_BOX PIXEL_FILL(TEXT_COLOR_DARK_GRAY)
+// The message box's own background, which is what makes it look like one.
+#define BR_HUD_BOX PIXEL_FILL(1)
 
-// bg, fg, shadow
-static const u8 sColorsText[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY };
-static const u8 sColorsFog[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_RED, TEXT_COLOR_DARK_GRAY };
-static const u8 sColorsKill[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_RED, TEXT_COLOR_DARK_GRAY };
-static const u8 sColorsSay[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_BLUE, TEXT_COLOR_DARK_GRAY };
-static const u8 sColorsWound[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GREEN, TEXT_COLOR_DARK_GRAY };
+// bg, fg, shadow -- the standard trio on a light box, and the line kinds keep their
+// colours so a kill and the fog still read differently at a glance.
+static const u8 sColorsText[] = { 1, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY };
+static const u8 sColorsFog[] = { 1, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
+static const u8 sColorsKill[] = { 1, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
+static const u8 sColorsSay[] = { 1, TEXT_COLOR_BLUE, TEXT_COLOR_LIGHT_BLUE };
+static const u8 sColorsWound[] = { 1, TEXT_COLOR_GREEN, TEXT_COLOR_LIGHT_GREEN };
 
 static const u8 sText_Left[] = _(" LEFT");
 static const u8 sText_Fog[] = _("FOG!");
@@ -69,6 +76,10 @@ static u8 Ensure(u8 id, const struct WindowTemplate *t)
 {
     if (Live(id, t))
         return id;
+    // The frame's tiles and its two palettes, from the border the player chose in
+    // OPTIONS. Idempotent, and cheap enough to say every time a window is made rather
+    // than track whether the field has done it on this map yet.
+    LoadMessageBoxAndBorderGfx();
     // Our template with no buffer: the engine freed it without an InitWindows since.
     if (id != WINDOW_NONE && gWindows[id].window.bg == t->bg && gWindows[id].window.baseBlock == t->baseBlock)
         RemoveWindow(id);
@@ -92,13 +103,19 @@ static void Present(u8 id, u8 bit, bool8 want, bool8 pixels)
 
     if (want && !have)
     {
+        // The frame goes on with the window. DrawStdWindowFrame fills the buffer as it
+        // goes, so this has to happen before the content is printed -- which is why the
+        // drawing functions call it in place of their own FillWindowPixelBuffer, and
+        // this branch only has to put the tilemap up.
         PutWindowTilemap(id);
         CopyWindowToVram(id, COPYWIN_FULL);
         h->shown |= bit;
     }
     else if (!want && have)
     {
-        ClearWindowTilemap(id);
+        // And comes off with it: a cleared window with its border still drawn is a
+        // frame around a hole in the map.
+        ClearStdWindowAndFrame(id, FALSE);
         CopyWindowToVram(id, COPYWIN_MAP);
         h->shown &= ~bit;
     }
@@ -134,7 +151,7 @@ static void DrawCorner(void)
     u8 *p;
     u8 fog = FogPhase();
 
-    FillWindowPixelBuffer(h->winCorner, BR_HUD_BOX);
+    DrawStdWindowFrame(h->winCorner, FALSE);
     p = ConvertIntToDecimalStringN(buf, h->left, STR_CONV_MODE_LEFT_ALIGN, 2);
     StringCopy(p, sText_Left);
     PrintRight(h->winCorner, buf, 0, sColorsText);
@@ -225,7 +242,7 @@ static void DrawWound(const u8 *codes)
         }
     }
     *p = EOS;
-    FillWindowPixelBuffer(h->winWound, BR_HUD_BOX);
+    DrawStdWindowFrame(h->winWound, FALSE);
     PrintRight(h->winWound, buf, 0, sColorsWound);
 }
 
@@ -349,7 +366,7 @@ static void DrawTicker(const struct BrHudLine *line)
         colors = sColorsKill;
     else if (line->kind == BR_HUD_KIND_SAY)
         colors = sColorsSay;
-    FillWindowPixelBuffer(gBrHud.winTicker, BR_HUD_BOX);
+    DrawStdWindowFrame(gBrHud.winTicker, FALSE);
     AddTextPrinterParameterized3(gBrHud.winTicker, FONT_SMALL, 2, 1, colors, (s8)TEXT_SKIP_DRAW, line->text);
 }
 
@@ -428,7 +445,7 @@ static void DrawBox(void)
 {
     struct BrHud *h = &gBrHud;
 
-    FillWindowPixelBuffer(h->winBox, BR_HUD_BOX);
+    DrawStdWindowFrame(h->winBox, FALSE);
     // CHAR_NEWLINE in the text gives the second line; the printer handles the rest.
     AddTextPrinterParameterized3(h->winBox, FONT_SMALL, 2, 2, sColorsText,
         (s8)TEXT_SKIP_DRAW, h->box.text);
