@@ -37,6 +37,12 @@ const HUNT_AT = 3;
  *  for the rest of the match -- on the host's tab, beside an emulator. It walks
  *  instead, and asks again in a couple of seconds. */
 const RETRY_MS = 2000;
+/** How many route searches the whole roster may do in one tick. A* over Hoenn is the
+ *  expensive thing here, and eight bots deciding at once is eight of them in one main
+ *  thread task -- measured at 159 ms on a CPU throttled to phone speed, which is a
+ *  visible hitch in a game running at 60. Whoever misses out keeps walking the route
+ *  they had, or waits a tick: at four tiles a second nobody can see the difference. */
+const SEARCHES_PER_TICK = 2;
 /** BR_FOG_TICK_FRAMES in include/br/br_ring.h: 240 frames, four seconds. The ROM takes
  *  a tenth of each mon's max HP off the player on this beat while they are outside the
  *  ring; a bot standing in the same fog has to lose the same thing on the same beat, or
@@ -78,7 +84,19 @@ interface Walker {
 export interface Decision {
   at: number;
   seat: number;
-  rule: 'heal' | 'engage' | 'pickup' | 'centre' | 'hunt' | 'loot' | 'wander' | 'stuck' | 'fog' | 'duel';
+  rule:
+    | 'heal'
+    | 'engage'
+    | 'pickup'
+    | 'centre'
+    | 'hunt'
+    | 'loot'
+    | 'wander'
+    | 'stuck'
+    | 'fog'
+    | 'duel'
+    /** Waiting its turn to think: the tick's search budget went to somebody else. */
+    | 'wait';
   spot: Spot;
   detail?: string;
 }
@@ -184,6 +202,8 @@ export class Bots {
   private readonly fighting = new Set<number>();
   private nonce = 0;
   private now = 0;
+  /** Route searches left in this tick (SEARCHES_PER_TICK). */
+  private budget = 0;
 
   constructor(private readonly opts: BotsOptions) {}
 
@@ -258,6 +278,7 @@ export class Bots {
    *  here, not in the caller, so a slow frame makes bots catch up rather than crawl. */
   tick(now: number): void {
     this.now = now;
+    this.budget = SEARCHES_PER_TICK;
     // Both loops walk a snapshot: the fog and a lost duel both take a bot out of the
     // list mid-pass, and splicing the array being iterated skips whoever came next.
     for (const walker of this.walkers.slice()) {
@@ -490,6 +511,13 @@ export class Bots {
       this.wanderOneStep(walker);
       return;
     }
+    // Somebody else already did the thinking this tick. Take a step and ask again --
+    // standing still would be visible, and so would eight A* runs in one frame.
+    if (this.budget <= 0) {
+      this.wanderOneStep(walker, 'wait');
+      return;
+    }
+    this.budget--;
     // Centre when hurt, third on Kanto's list -- after the fog and the ball at your
     // feet, before going anywhere else. A bot walks in, gets healed, walks out.
     const centre = this.centreRoute(walker);
@@ -576,18 +604,19 @@ export class Bots {
     this.wanderOneStep(walker);
   }
 
-  /** One legal step, any direction. The fallback when there is nothing to route to. */
-  private wanderOneStep(walker: Walker): void {
+  /** One legal step, any direction. The fallback when there is nothing to route to --
+   *  or, as 'wait', when the tick's thinking budget went to another bot. */
+  private wanderOneStep(walker: Walker, why: 'stuck' | 'wait' = 'stuck'): void {
     const open = this.opts.world.neighbours(walker.at, canSurf(walker.party));
     if (open.length === 0) {
-      this.note(walker, 'stuck');
+      this.note(walker, why);
       walker.path = null;
       return;
     }
     const step = open[Math.floor(this.opts.rng() * open.length)];
     walker.path = { steps: [step], found: true, visited: 0 };
     walker.stepIndex = 0;
-    this.note(walker, 'stuck', step.dir);
+    this.note(walker, why, step.dir);
   }
 
   /** Is another bot standing here? */
