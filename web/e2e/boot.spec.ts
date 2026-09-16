@@ -15,7 +15,7 @@ test('solo boot: local build, no socket, mailbox awake, boot block consumed', as
   test.setTimeout(30_000);
   const rom = romHashParam();
 
-  await page.goto(`/#rom=${rom}`);
+  await page.goto(`/#solo&rom=${rom}`);
 
   await expect(page.locator('#version')).toContainText('local build', { timeout: 30_000 });
 

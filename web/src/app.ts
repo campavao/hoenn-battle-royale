@@ -8,7 +8,7 @@ import { checkEmerald, isPrePatched } from './rom/emerald';
 import { loadRelease, loadSidecars, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
 import { Mailbox, MAILBOX } from './net/mailbox';
-import { RelayClient } from './net/relay';
+import { RelayClient, type RoomListing } from './net/relay';
 import { Bridge } from './net/bridge';
 import { crossesToRom, packSlot, type BinarySlot } from './net/slots';
 import { decode, type Msg } from './net/wire';
@@ -21,6 +21,7 @@ import { Results } from './match/results';
 import { Bots } from './bots/brain';
 import { dealBots } from './bots/roster';
 import * as Ticker from './match/ticker';
+import { emptyNote, fixedRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
 import type { RosterEntry } from './match/roster';
 import type { TickerMsg } from './net/wire';
 import { World, type WorldMap } from './bots/world';
@@ -64,8 +65,8 @@ const LITTLEROOT = { group: 0, num: 9, x: 5, y: 8 };
 
 const $ = <T extends Element>(sel: string) => document.querySelector(sel) as T;
 
-type Screen = 'importing' | 'patching' | 'playing';
-const SCREENS: Screen[] = ['importing', 'patching', 'playing'];
+type Screen = 'importing' | 'patching' | 'lobby' | 'playing';
+const SCREENS: Screen[] = ['importing', 'patching', 'lobby', 'playing'];
 
 function showScreen(screen: Screen): void {
   for (const s of SCREENS) $(`#screen-${s}`).toggleAttribute('hidden', s !== screen);
@@ -437,17 +438,29 @@ function writeBootBlock(emu: Emulator, mailboxBase: number, name: string, mode: 
 // ---- room: relay + bridge, opted into by the URL hash ------------------------------------
 
 interface RoomHash {
-  mode: 'host' | 'join';
+  mode: 'host' | 'join' | 'quick' | 'solo';
   code?: string;
 }
 
-/** `#host` hosts a room; `#join=CODE` joins one; no hash at all is solo play with no
- *  socket opened (Kanto's rule, project CLAUDE.md). */
+/** `#host` hosts a room, `#join=CODE` joins one, `#quick` takes whatever game is going,
+ *  and `#solo` plays alone and opens no socket at all (Kanto's rule, project
+ *  CLAUDE.md). No hash at all is the lobby, which is a choice between those. */
 function parseRoomHash(): RoomHash | null {
   const params = new URLSearchParams(location.hash.slice(1));
+  if (params.has('solo')) return { mode: 'solo' };
   if (params.has('host')) return { mode: 'host' };
+  if (params.has('quick')) return { mode: 'quick' };
   const code = params.get('join');
   return code && /^[A-Za-z0-9]+$/.test(code) ? { mode: 'join', code: code.toUpperCase() } : null;
+}
+
+/** Keeps the URL honest about which room you are in, so a reload rejoins it and the
+ *  link is shareable -- without adding a history entry per press. */
+function setRoomHash(key: string, value?: string): void {
+  const params = new URLSearchParams(location.hash.slice(1));
+  for (const k of ['host', 'join', 'quick', 'solo']) params.delete(k);
+  params.set(key, value ?? '');
+  history.replaceState(null, '', `#${params.toString().replace(/=(?=&|$)/g, '')}`);
 }
 
 function renderRoom(bridge: Bridge): void {
@@ -826,14 +839,15 @@ function wireRoom(
   mailboxBase: number | undefined,
   protocol: number | undefined,
   symbols: Map<string, number> | undefined,
+  hash: RoomHash,
 ): void {
-  const hash = parseRoomHash();
-  if (!hash || mailboxBase === undefined) return; // solo: no socket at all
+  if (mailboxBase === undefined || hash.mode === 'solo') return; // solo: no socket at all
 
   const panel = $('#room-panel') as HTMLElement;
   const codeEl = $('#room-code') as HTMLElement;
   panel.hidden = false;
-  codeEl.textContent = hash.mode === 'host' ? 'Hosting…' : `Joining ${hash.code}…`;
+  codeEl.textContent =
+    hash.mode === 'host' ? 'Hosting…' : hash.mode === 'quick' ? 'Finding a game…' : `Joining ${hash.code}…`;
 
   const relay = new RelayClient();
   let bridge: Bridge | null = null;
@@ -1112,8 +1126,125 @@ function wireRoom(
 
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
   relay.connect(relayUrl);
-  if (hash.mode === 'host') relay.host({ name: careerName(), open: false });
+  // Open, because a room nobody can find is not a lobby (POK-240). JOIN BY CODE still
+  // works for one that is not listed; that is what a passcode is for.
+  if (hash.mode === 'host') relay.host({ name: careerName(), open: true });
+  else if (hash.mode === 'quick') relay.quickJoin({ name: careerName() });
   else relay.join(hash.code!, { name: careerName() });
+}
+
+// ---- the lobby (POK-240) -----------------------------------------------------------
+
+/** How often the list refreshes. Kanto's lobby was a drawn room that redrew on a timer
+ *  too; this is the same beat, and it is also what tells the relay somebody is
+ *  browsing (its `browsedAt`, which its own stats read). */
+const LOBBY_REFRESH_MS = 3000;
+
+/** Kanto's one screen: every way into a match is a row on it. Resolves with the choice,
+ *  having closed the browsing socket first -- SOLO VS BOTS must reach the ROM with no
+ *  connection open, which is the whole point of it. */
+function runLobby(): Promise<RoomHash> {
+  showScreen('lobby');
+  const fixed = $('#lobby-rows') as HTMLElement;
+  const list = $('#lobby-rooms') as HTMLElement;
+  const head = $('#lobby-rooms-head') as HTMLElement;
+  const note = $('#lobby-note') as HTMLElement;
+  const relay = new RelayClient();
+  let online = false;
+  let rooms: RoomListing[] = [];
+
+  return new Promise<RoomHash>((resolve) => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const done = (hash: RoomHash) => {
+      if (timer) clearInterval(timer);
+      relay.close();
+      resolve(hash);
+    };
+
+    const press = (action: LobbyAction) => {
+      switch (action.kind) {
+        case 'solo':
+          setRoomHash('solo');
+          return done({ mode: 'solo' });
+        case 'quick':
+          setRoomHash('quick');
+          return done({ mode: 'quick' });
+        case 'host':
+          setRoomHash('host');
+          return done({ mode: 'host' });
+        case 'daily':
+          // The daily has its own door on the relay, but from here it is a room like
+          // any other until POK-242 gives it the countdown it deserves.
+          note.textContent = 'The daily game is not wired up yet (POK-242).';
+          return;
+        case 'code': {
+          const code = (prompt('Room code?') ?? '').trim().toUpperCase();
+          if (!/^[A-Z0-9]{4,8}$/.test(code)) {
+            note.textContent = code ? `${code} is not a room code.` : '';
+            return;
+          }
+          setRoomHash('join', code);
+          return done({ mode: 'join', code });
+        }
+        case 'join':
+        case 'watch':
+          setRoomHash('join', action.code);
+          return done({ mode: 'join', code: action.code });
+      }
+    };
+
+    const rowButton = (row: LobbyRow): HTMLLIElement => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.disabled = row.disabled === true;
+      const label = document.createElement('span');
+      label.textContent = row.label;
+      btn.appendChild(label);
+      if (row.detail) {
+        const sub = document.createElement('span');
+        sub.className = 'sub';
+        sub.textContent = row.detail;
+        btn.appendChild(sub);
+      }
+      btn.addEventListener('click', () => press(row.action));
+      li.appendChild(btn);
+      return li;
+    };
+
+    const render = () => {
+      fixed.replaceChildren(...fixedRows(online).map(rowButton));
+      const roomList = roomRows(rooms);
+      list.replaceChildren(...roomList.map(rowButton));
+      head.hidden = roomList.length === 0;
+      note.textContent = roomList.length === 0 ? emptyNote(online) : '';
+    };
+
+    relay.on('closed', () => {
+      online = false;
+      rooms = [];
+      render();
+    });
+    relay.on('rooms', (ev) => {
+      rooms = ev.rooms;
+      render();
+    });
+    render();
+    relay.connect((import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL);
+    // There is no 'open' event to hang this on, so the refresh tick is also what
+    // notices the socket came up. A short first beat so the list is not blank for
+    // three seconds on a connection that was ready immediately.
+    const beat = () => {
+      const up = relay.isOpen();
+      if (up !== online) {
+        online = up;
+        render();
+      }
+      if (up) relay.listRooms();
+    };
+    setTimeout(beat, 200);
+    timer = setInterval(beat, LOBBY_REFRESH_MS);
+  });
 }
 
 // ---- wiring -------------------------------------------------------------------------------
@@ -1144,12 +1275,14 @@ async function main(): Promise<void> {
   // is the only way in to read the emulator's memory from outside the page.
   if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu };
 
-  // No hash at all is solo (project CLAUDE.md's rule, app.ts's own parseRoomHash) --
-  // decided before the boot block, since solo warps straight into the Safari opening
-  // (BR_BOOT_SAFARI) instead of Littleroot (BR_BOOT_MAP): there is no room to wait for.
-  const roomHash = parseRoomHash();
+  // Which way in decides the boot block -- solo warps straight into the Safari opening
+  // (BR_BOOT_SAFARI) while a room waits in Littleroot (BR_BOOT_MAP) -- so the choice has
+  // to be made before the ROM is told anything. A hash is that choice already made (a
+  // deep link, a rejoin, a test); with no hash, the lobby is where it gets made.
+  const roomHash = parseRoomHash() ?? (await runLobby());
   const wantsTestMon = import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('testmon');
-  const bootMode = (roomHash ? BR_BOOT_MAP : BR_BOOT_SAFARI) | (wantsTestMon ? BR_BOOT_FLAG_TESTMON : 0);
+  const bootMode =
+    (roomHash.mode === 'solo' ? BR_BOOT_SAFARI : BR_BOOT_MAP) | (wantsTestMon ? BR_BOOT_FLAG_TESTMON : 0);
 
   // BrMailbox_Init zeroes the struct on the ROM's first frame, so the boot block has to
   // land after the magic appears, not before.
@@ -1159,8 +1292,9 @@ async function main(): Promise<void> {
   }
 
   wirePlayScreen(emu);
-  if (mailboxBase !== undefined && !roomHash) runSolo(emu, mailboxBase, symbols);
-  else wireRoom(emu, mailboxBase, protocol, symbols);
+  showScreen('playing');
+  if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols);
+  else wireRoom(emu, mailboxBase, protocol, symbols, roomHash);
 }
 
 main().catch((err) => {

@@ -366,6 +366,35 @@ export class RelayClient {
     });
   }
 
+  /** Asks for the open rooms. The answer arrives as a `rooms` event; the lobby asks
+   *  again every few seconds, which is also what marks this connection as browsing. */
+  listRooms(): void {
+    this.send({ type: 'list_rooms' });
+  }
+
+  /** A game right now: the relay seats you in the fullest open room, or names a
+   *  running one to watch, or tells you to host. */
+  quickJoin(opts: JoinOpts): void {
+    this.send({
+      type: 'quick_join',
+      name: opts.name,
+      skin: opts.skin,
+      patch: opts.patch,
+      protocol: opts.protocol,
+    });
+  }
+
+  /** The daily game's one door: everybody who presses the row lands in the same room. */
+  dailyJoin(opts: JoinOpts): void {
+    this.send({
+      type: 'daily_join',
+      name: opts.name,
+      skin: opts.skin,
+      patch: opts.patch,
+      protocol: opts.protocol,
+    });
+  }
+
   join(code: string, opts: JoinOpts): void {
     this.send({
       type: 'join_room',
