@@ -37,7 +37,7 @@ import {
   nextSafari,
   safariLabel,
 } from './match/room';
-import type { RosterEntry } from './match/roster';
+import { Roster, type RosterEntry } from './match/roster';
 import type { TickerMsg, MapRef } from './net/wire';
 import { World, type WorldMap } from './bots/world';
 import { sectionInside } from './match/ring';
@@ -1433,16 +1433,57 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
 
   let out: ((seat: number) => void) | null = null;
   const log = new MatchLog();
+  // SOLO VS BOTS, with the bots (POK-275). The row has promised them since the lobby
+  // was built and `startBots` was only ever called from the room path, so solo was one
+  // seat in an empty Hoenn -- and a director whose field starts at one can never
+  // declare a winner, which is why the match would not end either.
+  //
+  // Everything the bots need is page-side: no relay, no Bridge, no other ROM. Their
+  // messages go straight into our own ROM's in-ring, which is what the room's host
+  // does for itself anyway (nobody hears their own messages).
+  const roster = new Roster();
+  const loot = new Loot();
+  const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
+  roster.setMySeat(0);
+  const solo = startBots(
+    (msg) => {
+      rom.push(msg);
+      roster.applyMsg(msg);
+      loot.note(msg);
+      log.note(msg, performance.now());
+      if (msg.t === 'out') out?.(msg.seat);
+    },
+    [0],
+    seed,
+    loot,
+    () => roster.all(),
+    // No relay, so a trainer card for our own seat is a direct push and a card for
+    // anybody else has nowhere to go.
+    (toSeat, msg) => {
+      if (toSeat === 0) rom.push(msg);
+    },
+    () => {},
+    () => {},
+    botFill(),
+    undefined,
+    paceOptions()?.safariSecs ?? DEFAULT_SAFARI_SECS,
+  );
   const director = new Director({
-    seats: [0],
+    seats: [0, ...solo.seats],
     // `#quick` is a dev pace, and solo is where a change gets looked at first -- it had
     // no way to ask for it, so every solo look cost the full two-minute opening.
     options: paceOptions(),
     hostSeat: 0,
-    seed: Math.floor(Math.random() * 0x7fff_ffff) + 1,
+    seed,
     world: WORLD,
     send: (msg) => {
       rom.push(msg);
+      // The bots hear the director the same way a room's do: the ring moving is what
+      // sends them out of the Zone and what they aim at afterwards.
+      if (msg.t === 'ring') {
+        solo.drop();
+        solo.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r }, msg.phase);
+      }
       // Solo rounds are written down too (POK-248): a match nobody else saw is the
       // one whose seed is hardest to come by afterwards.
       log.note(msg, performance.now());
@@ -1466,6 +1507,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // has no Bridge, so it needs the one answer the ROM cannot go on without.
   const fromRom = (msg: Msg) => {
     log.note(msg, performance.now());
+    roster.applyMsg(msg); // our own ghost, so the bots' eyeline can see us
     if (msg.t === 'pick') rom.push({ t: 'land', ...director.landFor(msg.seat, msg.section) });
     else if (msg.t === 'out') out?.(msg.seat);
   };
@@ -1484,6 +1526,12 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   emu.onFrame(() => {
     if (mailbox.isAwake()) drainRom(mailbox, fromRom);
   });
+  // LEAVE works in here too (POK-276). The strip is drawn for every mode and the
+  // button was only ever wired in `wireRoom`, so the one way out of a solo match was
+  // editing the URL.
+  const leave = $('#room-leave') as HTMLButtonElement;
+  leave.hidden = false;
+  leave.addEventListener('click', () => backToLobby());
 }
 
 /** Everything the ROM has pushed since the last frame, as wire.ts messages: the same

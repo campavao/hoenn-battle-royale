@@ -284,6 +284,7 @@ static void Task_BrStartDuel(u8 taskId)
         gTrainerBattleOpponent_B = 0;
         CleanupOverworldWindowsAndTilemaps();
         gBrDuel.running = TRUE;
+        gBrDuel.starting = FALSE;
         gMain.savedCallback = CB2_BrReturnFromDuel;
         SetMainCallback2(CB2_InitBattle);
         DestroyTask(taskId);
@@ -306,10 +307,16 @@ void BrDuel_Init(void)
 
 void BrDuel_Tick(void)
 {
-    if (!gBrDuel.staged || gBrDuel.running)
+    if (!gBrDuel.staged || gBrDuel.running || gBrDuel.starting)
         return;
     if (gMain.callback2 != CB2_Overworld || gMain.inBattle)
         return;
+    // Latched, because `running` is not set until the task's last state -- a fade and
+    // twenty frames later -- and this runs every frame. Without it the tick stacked a
+    // fresh Task_BrStartDuel on every one of those frames, each of which went on to
+    // re-enter CB2_InitBattle after the first one had already got there. A bot fight
+    // never had the problem because a CHALLENGE is an event; this is a poll.
+    gBrDuel.starting = TRUE;
     // The proxy is simulating a moment in a match, and the ROM's own battle hooks ask
     // what phase it is (POK-238's first attempt ran with BR_PHASE_NONE and nothing in
     // the ROM has ever fought in that state).

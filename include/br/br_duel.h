@@ -38,7 +38,7 @@ struct BrDuel
                          // hidden instance, not somebody's game
     /* 7 */ u8 itemCount[2];  // [0] side A, [1] side B (POK-237's bags, POK-238's fight)
     /* 9 */ u8 spent[2];      // bit i: that side's item i was used
-    /* B */ u8 pad;
+    /* B */ u8 starting;  // the start task is on its way in: do not stage another
     /* C */ u16 items[2][BR_BOT_ITEMS];
 };                       // 28 bytes
 

@@ -17,6 +17,7 @@
 #include "constants/moves.h"
 #if BR
 #include "br/br_bot.h"
+#include "br/br_duel.h"
 #endif
 
 #define AI_ACTION_DONE          (1 << 0)
@@ -410,7 +411,10 @@ void BattleAI_SetupAIData(u8 defaultScoreMoves)
     // picks moves at random. It gets the Frontier's set instead: check the bad move,
     // check the viable one, go for the knockout (POK-236's coverage rule, fought by
     // the engine that is already fighting the battle).
-    else if (gBrBotFight.fighting)
+    // ...and a proxy duel is the same battle with nobody on either side (POK-238).
+    // Without this it was TWO opponents picking at random, which is the coin flip the
+    // whole ticket was meant to replace -- a fight that looks real and is not.
+    else if (gBrBotFight.fighting || gBrDuel.running)
         AI_THINKING_STRUCT->aiFlags = AI_SCRIPT_CHECK_BAD_MOVE | AI_SCRIPT_CHECK_VIABILITY | AI_SCRIPT_TRY_TO_FAINT;
 #endif
     else
