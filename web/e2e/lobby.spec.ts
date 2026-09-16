@@ -38,12 +38,15 @@ test('the lobby lists a room somebody else is hosting, and joining it seats you'
       timeout: 60_000,
     });
 
-    // The room is on the list, named by its host, with its count.
+    // The room is on the list, named by its host, with its count and the host's own
+    // sprite (Kanto's browse.lua draws the walk frame; the default career has never
+    // set one, so it is BRENDAN, sprite 0 -- POK-240).
     const room = guest.locator('#lobby-rooms button').first();
     await expect(room).toBeVisible({ timeout: 30_000 });
     // One trainer in it, out of the relay's seat count: the row is a live count, not
     // a placeholder.
     await expect(room).toContainText(/1\/\d+/);
+    await expect(room).toContainText('BRENDAN');
     await guest.screenshot({ path: path.join(OUT_DIR, 'lobby.png') });
 
     // Pressing it joins that room -- same code, and the ROM boots into it.
@@ -217,6 +220,22 @@ test('QUICK PLAY hosts a game when there is nothing to join', async ({ page }) =
   // leaving somebody looking at an empty list (POK-240).
   await expect(page.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
+});
+
+test('JOIN BY CODE rejects a code the relay could never have issued (POK-240)', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto(`/#rom=${romHashParam()}`);
+  const join = page.locator('#lobby-rows button', { hasText: 'JOIN BY CODE' });
+  await expect(join).toBeVisible({ timeout: 60_000 });
+  await expect(join).toBeEnabled({ timeout: 30_000 }); // the socket came up
+
+  // Every character the relay's CODE_ALPHABET never hands out (0/O/1/I/L), so this
+  // could not be a real code no matter what the relay says.
+  page.once('dialog', (d) => d.accept('O0IL1X'));
+  await join.click();
+  await expect(page.locator('#lobby-note')).toContainText('is not a room code');
+  // Rejected before it ever reached the relay -- still on the lobby, not a dead join.
+  await expect(page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible();
 });
 
 test('a room that will not let you in offers the way back', async ({ browser }) => {
