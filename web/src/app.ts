@@ -54,6 +54,7 @@ import {
 import worldData from './data/world.json';
 import { LANDING } from './match/landing';
 import { SAFARI_CELLS } from './match/safari';
+import { cardFor } from './match/card';
 import regionmapData from './data/regionmap.json';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
@@ -750,13 +751,49 @@ function setRoomHash(key: string, value?: string): void {
 
 function renderRoom(bridge: Bridge): void {
   const list = $('#room-roster') as HTMLElement;
+  const card = $('#trainer-card') as HTMLElement;
   list.innerHTML = '';
   for (const entry of bridge.roster.all()) {
     const li = document.createElement('li');
     const label = entry.name || `P${entry.seat}`;
-    li.textContent = `${label}${entry.isMe ? ' (you)' : ''}${entry.alive ? '' : ' -- OUT'}`;
+    // A name is a button now (POK-268): Kanto's drawn lobby opens a trainer's card on
+    // A, and this is the same idea in the shape this front end has.
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'roster-name';
+    button.textContent = `${label}${entry.isMe ? ' (you)' : ''}${entry.alive ? '' : ' -- OUT'}`;
+    button.addEventListener('click', () => {
+      if (card.dataset.seat === String(entry.seat) && !card.hidden) {
+        card.hidden = true;
+        card.dataset.seat = '';
+        return;
+      }
+      const mapId = entry.map ? mapIdOf(entry.map) : undefined;
+      card.innerHTML = '';
+      for (const line of cardFor(entry, mapId)) {
+        const row = document.createElement('div');
+        row.className = 'card-line';
+        row.textContent = line.label ? `${line.label}: ${line.value}` : line.value;
+        card.appendChild(row);
+      }
+      card.dataset.seat = String(entry.seat);
+      card.hidden = false;
+    });
+    li.appendChild(button);
     list.appendChild(li);
   }
+  // A card left open on somebody who has gone is a card about nobody.
+  if (card.dataset.seat && !bridge.roster.all().some((e) => String(e.seat) === card.dataset.seat)) {
+    card.hidden = true;
+    card.dataset.seat = '';
+  }
+}
+
+/** world.json's id for a wire MapRef, for the places a card names. */
+function mapIdOf(map: MapRef): string | undefined {
+  return (worldData as { maps: { id: string; group: number; num: number }[] }).maps.find(
+    (m) => m.group === map.group && m.num === map.num,
+  )?.id;
 }
 
 // ---- the room screen (POK-241) ------------------------------------------------------

@@ -127,6 +127,23 @@ test('the host gets the room controls and START, and the guest does not', async 
   }
 });
 
+test("a name in the room opens that trainer's card (POK-268)", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto(`/#host&noauto&nobots&rom=${romHashParam()}`);
+  await expect(page.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+  const me = page.locator('#room-roster .roster-name').first();
+  await expect(me).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#trainer-card')).toBeHidden();
+  await me.click();
+  const card = page.locator('#trainer-card');
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('TRAINER:');
+  await expect(card).toContainText('THIS IS YOU');
+  // And pressing the same name again puts it away.
+  await me.click();
+  await expect(card).toBeHidden();
+});
+
 test('the lobby is where you say who you are', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(`/#rom=${romHashParam()}`);

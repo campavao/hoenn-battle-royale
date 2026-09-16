@@ -101,6 +101,19 @@
       .room-note { color: #9fb3c0; font-size: 11px; margin-top: 6px; min-height: 1.2em; }
       .room-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
       .room-roster li { color: #cfe3ef; }
+      /* A name is a button (POK-268) -- it opens that trainer's card -- but it should
+         read as a name, not as a control, so it borrows nothing from the button. */
+      .roster-name {
+        background: none; border: 0; padding: 0; margin: 0;
+        font: inherit; color: inherit; cursor: pointer; text-align: left;
+      }
+      .roster-name:hover { text-decoration: underline; }
+      .trainer-card {
+        margin-top: 6px; padding: 6px 10px; border-radius: 8px;
+        background: #1a2128; color: #cfe3ef; font-size: 12px; max-width: 320px;
+      }
+      .trainer-card[hidden] { display: none; }
+      .card-line { line-height: 1.5; }
       .spectate-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
       .spectate-strip .label { color: #9fb3c0; }
       .spectate-strip button {
@@ -316,6 +329,7 @@
             <button id="room-fog" type="button">FOG 120s</button>
             <button id="room-start" type="button">START</button>
           </div>
+          <div id="trainer-card" class="trainer-card" hidden></div>
           <div id="room-note" class="room-note"></div>
           <div id="spectate-strip" class="spectate-strip" hidden></div>
           <div id="results-panel" class="results" hidden>
