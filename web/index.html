@@ -73,6 +73,27 @@
         font-size: 12px;
       }
       .room-code { font-weight: 600; color: #9fb3c0; margin-bottom: 4px; }
+      .room-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      /* A class that sets `display` outranks the UA's [hidden] rule, so every element
+         that has both needs this said out loud -- otherwise `hidden` does nothing and a
+         guest sees the host's buttons. */
+      .room-controls[hidden],
+      .spectate-strip[hidden],
+      .results[hidden] { display: none; }
+      .room-controls button {
+        padding: 6px 10px;
+        background: #22303a;
+        color: #e6edf3;
+        border: 1px solid #2b3742;
+        border-radius: 4px;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .room-controls button:disabled { opacity: 0.45; cursor: default; }
+      #room-start { background: #2d4a2f; border-color: #3c6440; }
+      .room-note { color: #9fb3c0; font-size: 11px; margin-top: 6px; min-height: 1.2em; }
       .room-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
       .room-roster li { color: #cfe3ef; }
       .spectate-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
@@ -190,6 +211,13 @@
           <div id="room-code" class="room-code"></div>
           <div id="match-strip" class="room-code" hidden></div>
           <ul id="room-roster" class="room-roster"></ul>
+          <div id="room-controls" class="room-controls" hidden>
+            <button id="room-max" type="button">MAX 8</button>
+            <button id="room-fill" type="button">FILL ON</button>
+            <button id="room-door" type="button">OPEN</button>
+            <button id="room-start" type="button">START</button>
+          </div>
+          <div id="room-note" class="room-note"></div>
           <div id="spectate-strip" class="spectate-strip" hidden></div>
           <div id="results-panel" class="results" hidden>
             <div id="results-line" class="results-line"></div>

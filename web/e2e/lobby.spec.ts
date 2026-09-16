@@ -67,3 +67,53 @@ test('SOLO VS BOTS opens no socket', async ({ page }) => {
   expect(await page.evaluate(() => (window as unknown as { __br?: unknown }).__br !== undefined)).toBe(false);
   expect(new URL(page.url()).hash).toContain('solo');
 });
+
+test('the host gets the room controls and START, and the guest does not', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&noauto&quick&testmon&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+
+    const guest = await guestCtx.newPage();
+    await guest.goto(`/#join=${code}&noauto&quick&testmon&rom=${rom}`);
+    await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
+
+    // The host's four controls, and the line under them saying what START would make.
+    await expect(host.locator('#room-controls')).toBeVisible({ timeout: 30_000 });
+    await expect(host.locator('#room-max')).toContainText('MAX');
+    await expect(host.locator('#room-note')).toContainText(/START: 2 trainers/);
+    await host.screenshot({ path: path.join(OUT_DIR, 'room-host.png') });
+
+    // The guest has none of them -- just the wait.
+    await expect(guest.locator('#room-controls')).toBeHidden();
+    await expect(guest.locator('#room-note')).toContainText('Waiting for the host');
+
+    // MAX cycles, and both sides hear about it (the relay owns it, not the page).
+    await host.locator('#room-max').click();
+    await expect(host.locator('#room-max')).toContainText('MAX 12', { timeout: 15_000 });
+
+    // And START starts it -- which is the thing a ten-second timer used to do.
+    await host.locator('#room-start').click();
+    for (const page of [host, guest]) {
+      await page.waitForFunction(
+        () => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const d = (window as any).__br.director;
+          return d ? d.state.phase !== 'idle' : false;
+        },
+        undefined,
+        { timeout: 30_000 },
+      ).catch(() => undefined); // only the host runs a director
+    }
+    await expect(host.locator('#room-controls')).toBeHidden({ timeout: 30_000 });
+  } finally {
+    await hostCtx.close();
+    await guestCtx.close();
+  }
+});

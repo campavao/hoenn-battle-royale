@@ -8,7 +8,7 @@ import { checkEmerald, isPrePatched } from './rom/emerald';
 import { loadRelease, loadSidecars, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
 import { Mailbox, MAILBOX } from './net/mailbox';
-import { RelayClient, type RoomListing } from './net/relay';
+import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { crossesToRom, packSlot, type BinarySlot } from './net/slots';
 import { decode, type Msg } from './net/wire';
@@ -22,6 +22,7 @@ import { Bots } from './bots/brain';
 import { dealBots } from './bots/roster';
 import * as Ticker from './match/ticker';
 import { emptyNote, fixedRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
+import { canStart, doorOf, nextDoor, nextMax, roomView, startNote } from './match/room';
 import type { RosterEntry } from './match/roster';
 import type { TickerMsg } from './net/wire';
 import { World, type WorldMap } from './bots/world';
@@ -474,10 +475,71 @@ function renderRoom(bridge: Bridge): void {
   }
 }
 
+// ---- the room screen (POK-241) ------------------------------------------------------
+
+/** What the host has set, between roster events. The relay owns MAX, OPEN and the
+ *  passcode; FILL is ours alone, since bots never touch the relay. */
+interface RoomControls {
+  fill: boolean;
+  roster: RosterEvent | null;
+}
+
+/** Draws the room panel: the roster everybody sees, and the four controls only the
+ *  host gets. `onStart` is the host pressing START -- the thing that used to be a
+ *  ten-second timer. */
+function renderRoomPanel(
+  controls: RoomControls,
+  mySeat: number,
+  relay: RelayClient,
+  onStart: () => void,
+  started: boolean,
+): void {
+  const box = $('#room-controls') as HTMLElement;
+  const note = $('#room-note') as HTMLElement;
+  if (!controls.roster) {
+    box.hidden = true;
+    note.textContent = '';
+    return;
+  }
+  const view = roomView(controls.roster, mySeat, controls.fill);
+  box.hidden = !view.isHost || started;
+  note.textContent = started ? '' : startNote(view);
+  if (box.hidden) return;
+
+  const max = $('#room-max') as HTMLButtonElement;
+  const fill = $('#room-fill') as HTMLButtonElement;
+  const door = $('#room-door') as HTMLButtonElement;
+  const start = $('#room-start') as HTMLButtonElement;
+  max.textContent = `MAX ${view.max}`;
+  fill.textContent = view.fill > 0 ? `FILL ${view.fill}` : 'FILL OFF';
+  door.textContent = { open: 'LISTED', private: 'UNLISTED', pass: 'PASSCODE' }[doorOf(view)];
+  start.disabled = !canStart(view);
+
+  max.onclick = () => relay.setMax(nextMax(view.max));
+  fill.onclick = () => {
+    controls.fill = !controls.fill;
+    renderRoomPanel(controls, mySeat, relay, onStart, started);
+  };
+  door.onclick = () => {
+    const next = nextDoor(doorOf(view));
+    if (next === 'pass') {
+      const code = (prompt('Passcode for the door? (4 characters)') ?? '').trim().toUpperCase();
+      if (!code) return;
+      relay.setPass(code);
+      relay.setOpen(true);
+    } else {
+      relay.setPass(null);
+      relay.setOpen(next === 'open');
+    }
+  };
+  start.onclick = onStart;
+}
+
 // ---- bots (POK-236) -----------------------------------------------------------------
 
-/** How many the host fills a room to. A fixed number until the lobby gets its own FILL
- *  control (M5, POK-240); Kanto's rooms are never empty, which is the whole point. */
+/** How many the host fills a room to when nothing says otherwise. The room screen's
+ *  own FILL control (POK-241) overrides it; Kanto's rooms are never empty, which is the
+ *  whole point. */
 const BOT_FILL = 8;
 /** `#nobots` fills the room with nobody. A dev-only affordance like `#testmon`: an e2e
  *  that is about two people needs the room to hold still, and eight bots walking into
@@ -523,6 +585,7 @@ function startBots(
   players: () => RosterEntry[],
   sendTo: (seat: number, msg: Msg) => void,
   onDuel: (winner: number, loser: number) => void,
+  fill: number,
 ): {
   bots: Bots;
   seats: number[];
@@ -587,7 +650,7 @@ function startBots(
     alive: () => players().filter((e) => e.alive).length,
   });
   const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
-  const dealt = dealBots(seed, botFill(), takenSeats, spawns);
+  const dealt = dealBots(seed, fill, takenSeats, spawns);
   const seatsDealt = new Set(dealt.map((b) => b.seat));
   let phase = 0;
   bots.start(dealt, performance.now());
@@ -856,6 +919,8 @@ function wireRoom(
   let localOut: ((seat: number) => void) | null = null;
   let stopDirectorLoop: (() => void) | null = null;
   let isHost = false;
+  /** The host's room settings between roster events (POK-241). */
+  const controls: RoomControls = { fill: true, roster: null };
 
   /** `members` comes straight off the relay's roster event when there is one: the
    *  Bridge's own subscription may not have folded it into `bridge.roster` yet -- both
@@ -907,6 +972,9 @@ function wireRoom(
       // The kill feed. A duel is the only moment both sides of a fight are known at
       // once -- an `out` on its own cannot say who did it.
       (winner, loser) => say(Ticker.beat(winner, nameOf(winner), nameOf(loser))),
+      // How many bots the host is filling to (POK-241's FILL), held to what the room
+      // has room for.
+      botFill() === 0 ? 0 : Math.max(0, (controls.roster?.max ?? BOT_FILL) - seats.length),
     );
     director = new Director({
       // Bots are contestants, not scenery: leaving them out of the seat list makes
@@ -1113,8 +1181,18 @@ function wireRoom(
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code));
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
   relay.on('roster', (ev) => {
+    controls.roster = ev;
     if (bridge) renderRoom(bridge);
     if (bridge) renderSpectate(bridge, spectate);
+    if (bridge) {
+      renderRoomPanel(controls, bridge.seat, relay, () => {
+        // START: the host shuts the door and deals the match. This is what the
+        // ten-second timer was standing in for.
+        relay.lockRoom(true);
+        startDirector(ev.members.map((m) => m.id));
+        renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
+      }, director !== null);
+    }
     if (ev.members.length >= 2 && autoStarts()) startDirector(ev.members.map((m) => m.id));
   });
   relay.on('room_error', (ev) => (codeEl.textContent = `Couldn't join: ${ev.reason}`));
@@ -1128,7 +1206,7 @@ function wireRoom(
   relay.connect(relayUrl);
   // Open, because a room nobody can find is not a lobby (POK-240). JOIN BY CODE still
   // works for one that is not listed; that is what a passcode is for.
-  if (hash.mode === 'host') relay.host({ name: careerName(), open: true });
+  if (hash.mode === 'host') relay.host({ name: careerName(), open: true, max: BOT_FILL });
   else if (hash.mode === 'quick') relay.quickJoin({ name: careerName() });
   else relay.join(hash.code!, { name: careerName() });
 }

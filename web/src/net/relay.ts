@@ -366,6 +366,28 @@ export class RelayClient {
     });
   }
 
+  /** Host only. The room's seat count -- humans are held to the relay's own ceiling
+   *  and the rest are bot seats (POK-241). */
+  setMax(max: number): void {
+    this.send({ type: 'set_max', max });
+  }
+
+  /** Host only. Whether the room appears in LOBBIES at all. */
+  setOpen(open: boolean): void {
+    this.send({ type: 'set_open', open });
+  }
+
+  /** Host only. A passcode on the door, or null to take it off. The roster carries
+   *  only THAT one is set, so a guest can draw the padlock without holding the code. */
+  setPass(pass: string | null): void {
+    this.send({ type: 'set_pass', pass });
+  }
+
+  /** Host only. Shuts the door: the match is starting and nobody else is coming in. */
+  lockRoom(locked: boolean): void {
+    this.send({ type: 'lock_room', locked });
+  }
+
   /** Asks for the open rooms. The answer arrives as a `rooms` event; the lobby asks
    *  again every few seconds, which is also what marks this connection as browsing. */
   listRooms(): void {
