@@ -167,6 +167,11 @@ export class ProxyDuels {
       this.dispose();
       return null;
     }
+    // Said out loud, once per duel: this is the only way anybody -- a soak, a host
+    // watching their own console -- can tell a match where the bots fought for real
+    // from one where every meeting fell back to the resolver. Failures say so below;
+    // without this, silence meant both.
+    this.note(`seat ${a.seat} vs seat ${b.seat}: fought, winner ${result.winner === 0 ? a.seat : b.seat}`);
     if (result.winner > 1) return null; // a draw is the caller's to settle
     return {
       winner: result.winner === 0 ? result.seatA : result.seatB,
