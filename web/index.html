@@ -134,6 +134,9 @@
       .results { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
       .results-line { font-weight: 600; color: #ffe08a; }
       .results-career { color: #9fb3c0; }
+      /* The champion's team, the shell's half of the parade (POK-243). */
+      .results-fame { flex-basis: 100%; color: #cfe3ef; font-size: 13px; }
+      .results-fame b { color: #ffe08a; font-weight: 600; }
       .results button {
         font: inherit; background: #4f6b7d; color: #fff;
         border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer;
@@ -347,6 +350,7 @@
           <div id="results-panel" class="results" hidden>
             <div id="results-line" class="results-line"></div>
             <div id="results-career" class="results-career"></div>
+            <div id="results-fame" class="results-fame" hidden></div>
             <button id="play-again" type="button">PLAY AGAIN</button>
           </div>
         </div>

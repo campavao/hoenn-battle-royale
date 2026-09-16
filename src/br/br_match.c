@@ -271,6 +271,11 @@ void BrMatch_Tick(void)
         // The winner's parade: Emerald's own Hall of Fame, no save, no credits.
         sWinPending = FALSE;
         gBrMatch.phase = BR_PHASE_WIN;
+        // ...and the room gets to see the team that took it (POK-243). Nobody else
+        // knows what the champion is carrying: a party only crosses the wire when a
+        // spectator asks, and by now the asking is over. The page keeps it for the
+        // results screen, which is the shell's half of the same parade.
+        BrSpectate_SendParty();
         SetMainCallback2(CB2_DoHallOfFameScreenDontSaveData);
         return;
     }

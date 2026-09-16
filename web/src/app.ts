@@ -11,7 +11,7 @@ import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './net/slots';
-import { decode, type Msg } from './net/wire';
+import { decode, type Msg, type PackedMon } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
 import { DEFAULT_SAFARI_SECS, Director, type DirectorState, type DirectorWorld } from './match/director';
@@ -41,7 +41,7 @@ import type { RosterEntry } from './match/roster';
 import type { TickerMsg, MapRef } from './net/wire';
 import { World, type WorldMap } from './bots/world';
 import { sectionInside } from './match/ring';
-import { dealParty } from './bots/party';
+import { dealParty, speciesName } from './bots/party';
 import { dealBag } from './bots/bag';
 import { ProxyDuels } from './bots/proxy';
 import { mulberry32 } from './match/clock';
@@ -691,6 +691,12 @@ function careerName(): string {
   return career.name || cleanName(localStorage.getItem(NAME_STORAGE_KEY) ?? '') || DEFAULT_NAME;
 }
 
+/** The last team each seat was seen carrying, from any `party` that crossed this page.
+ *  Kept for one thing (POK-243): the champion's own ROM sends its party as the parade
+ *  starts, and the results screen is the shell's half of that parade. A `party` is
+ *  otherwise an answer to a spectator's peek and belongs to whoever asked. */
+const lastParty = new Map<number, PackedMon[]>();
+
 /** The hidden instance that fights bot-vs-bot duels for real (POK-238). Module state
  *  rather than an argument because it is made at boot, long before there is a room, and
  *  only the host will ever ask it anything -- it boots its emulator lazily, on the first
@@ -1184,6 +1190,32 @@ function renderResults(bridge: Bridge, results: Results, seats: number): void {
     parts.push('a draw');
   }
   ($('#results-line') as HTMLElement).textContent = parts.join(' · ');
+  renderFame(bridge, mine.winner);
+}
+
+/** The champion's team under the result (POK-243, Kanto's Hall of Fame parade). The
+ *  ROM's own parade runs on the winner's screen; everybody else gets this, which is
+ *  the only place the room ever sees what actually took the match. Silent when the
+ *  champion's `party` never arrived -- a bot's never does, since a bot has no ROM to
+ *  send one. */
+function renderFame(bridge: Bridge, winner: number | undefined): void {
+  const el = $('#results-fame') as HTMLElement;
+  const party = winner === undefined ? undefined : lastParty.get(winner);
+
+  if (winner === undefined || !party || party.length === 0) {
+    el.hidden = true;
+    return;
+  }
+  const who = winner === bridge.seat ? 'YOUR TEAM' : `${bridge.roster.get(winner)?.name || `P${winner}`}'S TEAM`;
+  const team = party
+    .filter((mon) => mon.species > 0)
+    .map((mon) => `${mon.nickname || speciesName(mon.species)} L${mon.level}`)
+    .join(' · ');
+  el.innerHTML = '';
+  const label = document.createElement('b');
+  label.textContent = `${who}: `;
+  el.append(label, document.createTextNode(team));
+  el.hidden = false;
 }
 
 // ---- spectating (POK-233) -----------------------------------------------------------
@@ -1777,7 +1809,14 @@ function wireRoom(
     if (msg.t === 'result') bots?.bots.noteResult(msg.seat);
     // Whoever fought a bot reports what it has left under the bot's own seat: the
     // host walks it, but only that ROM saw the fight.
-    if (msg.t === 'party') bots?.bots.setParty(msg.seat, msg.mons);
+    if (msg.t === 'party') {
+      bots?.bots.setParty(msg.seat, msg.mons);
+      lastParty.set(msg.seat, msg.mons);
+      // The champion's own party arrives after the `win` that put the results on
+      // screen -- their ROM sends it as the parade starts (POK-243) -- so the panel
+      // is drawn again rather than waiting for a team that came too late.
+      if (recorded && bridge) renderResults(bridge, results, fieldSize);
+    }
     // And what it spent out of its bag in there (POK-237), for the same reason: the
     // host walks the bot, but only the ROM that fought it saw the items go.
     if (msg.t === 'spent') bots?.bots.noteSpent(msg.seat, msg.items);
