@@ -107,9 +107,37 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
       { timeout: 30_000 },
     );
 
+    // Now make something faint under it (POK-250). Nobody was driving the fighters'
+    // input, so the replay had only the start block to chew on and a faint -- the case
+    // Kanto's spectator froze on -- never happened. Both sides hold A: one Treecko each
+    // with POUND, so a few turns of that is a fainted mon and a party menu.
+    const mash = async (page: typeof host) =>
+      page.evaluate(() => {
+        const ram = (window as unknown as { __br: { mailbox: { ram: { press(k: string): void; release(k: string): void } } } }).__br.mailbox.ram;
+        ram.press('a');
+        setTimeout(() => ram.release('a'), 90);
+      });
+    // gPlayerParty[0]'s current HP -- the same offset every driver reads.
+    const PARTY_HP = 0x56;
+    const hpOf = (page: typeof host) =>
+      page.evaluate(
+        ([addr, off]) => (window as unknown as RamWindow).__br.mailbox.ram.read(addr + off, 16),
+        [symbols.gPlayerParty, PARTY_HP],
+      );
+    let fainted = false;
+    for (let i = 0; i < 90 && !fainted; i++) {
+      await Promise.all([mash(host), mash(guest)]);
+      await host.waitForTimeout(500);
+      const [hostHp, guestHp] = await Promise.all([hpOf(host), hpOf(guest)]);
+      fainted = hostHp === 0 || guestHp === 0;
+    }
+    // The point of this test: something went down while somebody was watching.
+    expect(fainted, 'a mon fainted in the fight being watched').toBe(true);
+    await watcher.screenshot({ path: path.join(OUT_DIR, 'spectator-fainted.png') });
+
     // And it stays: a replay that ran out of stream waits a turn behind rather than
     // quitting, so it is still the same battle seconds later (Kanto's spectator-freeze
-    // bug, POK-2026-09-14, was exactly this going the other way).
+    // bug, 2026-09-14, was exactly this going the other way).
     await watcher.waitForTimeout(5_000);
     const [flags, watching] = await watcher.evaluate(
       ([flagsAddr, specAddr]) => {
