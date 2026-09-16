@@ -66,6 +66,8 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `win` | -- | host-&gt;page | no | host, when the match is decided |
 | `again` | -- | host-&gt;page | no | host, returning the room to the lobby |
 | `busy` | `BR_MSG_BUSY` 17 | ROM-&gt;page&lt;-&gt;page-&gt;ROM | yes | a seat's ROM, once its menu/battle state has settled; every peer's ROM keeps it so the engage skips a trainer mid-battle |
+| `bstart` | `BR_MSG_BSTART` 18 | ROM-&gt;page-&gt;page-&gt;ROM | yes | the challenger's ROM, when a link battle begins; carries seed + both parties + names so a spectator replays it as a BATTLE_TYPE_RECORDED |
+| `turn` | `BR_MSG_TURN` 19 | ROM-&gt;page-&gt;page-&gt;ROM | yes | the challenger's ROM, streaming the battle's new action bytes each turn so the spectator's replay stays a turn behind |
 | `peek` | -- | page-&gt;page | no | a spectator, asking for a party |
 | `botout` | -- | page&lt;-&gt;page | no | whoever beat a bot |
 | `botrec` | -- | page&lt;-&gt;page | no | whoever changed a bot's persistent record |

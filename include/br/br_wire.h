@@ -192,4 +192,22 @@
 // Payload (2 bytes): seat u8, kind u8 (0 on the map, 1 in a menu, 2 in a battle)
 #define BR_MSG_BUSY 17
 
+// ROM -> page -> spectators: a link battle starting, so a spectator can replay it as a
+// BATTLE_TYPE_RECORDED (POK-233). The challenger emits it (it has both sides). Spans
+// slots: two 6-mon parties are ~1.2 KB. Payload (variable):
+//   0..1:  battle    u16 LE   the challenger's seat pair id (loSeat | hiSeat<<8)
+//   2..5:  seed      u32 LE   gRecordedBattleRngSeed, so the replay is deterministic
+//   6:     names     2 * (PLAYER_NAME_LENGTH+1) bytes, player then opponent
+//   ..:    genders   u8 player, u8 opponent
+//   ..:    party     u8 pCount, then pCount struct Pokemon (100 bytes; portable, keyed
+//                    by each mon's own personality^otId), then u8 oCount + oCount mons
+#define BR_MSG_BSTART 18
+
+// ROM -> page -> spectators: the action bytes a battle produced since the last turn
+// message, streamed so the spectator's recorded replay stays a turn behind (POK-233).
+// The challenger emits it. Payload (variable, the RecordedBattle delta):
+//   0..1:  battle  u16 LE
+//   2..:   one or more [battler u8, count u8, count action bytes] runs
+#define BR_MSG_TURN 19
+
 #endif // GUARD_BR_WIRE_H

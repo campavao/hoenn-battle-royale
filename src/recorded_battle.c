@@ -71,6 +71,9 @@ EWRAM_DATA static u8 sBattleRecords[MAX_BATTLERS_COUNT][BATTLER_RECORD_SIZE] = {
 EWRAM_DATA static u16 sBattlerRecordSizes[MAX_BATTLERS_COUNT] = {0};
 EWRAM_DATA static u16 sBattlerPrevRecordSizes[MAX_BATTLERS_COUNT] = {0};
 EWRAM_DATA static u16 sBattlerSavedRecordSizes[MAX_BATTLERS_COUNT] = {0};
+#if BR
+EWRAM_DATA static u16 sSpectatePrevSizes[MAX_BATTLERS_COUNT] = {0}; // POK-233 stream cursor
+#endif
 EWRAM_DATA static u8 sRecordMode = 0;
 EWRAM_DATA static u8 sLvlMode = 0;
 EWRAM_DATA static u8 sFrontierFacility = 0;
@@ -113,6 +116,9 @@ void RecordedBattle_Init(u8 mode)
         sBattlerRecordSizes[i] = 0;
         sBattlerPrevRecordSizes[i] = 0;
         sBattlerSavedRecordSizes[i] = 0;
+#if BR
+        sSpectatePrevSizes[i] = 0;
+#endif
 
         if (mode == B_RECORD_MODE_RECORDING)
         {
@@ -248,6 +254,35 @@ u8 RecordedBattle_BufferNewBattlerData(u8 *dst)
 
     return idx;
 }
+
+#if BR
+// The spectator stream (POK-233): the action bytes recorded on ANY battler since the
+// last call, as [battler, count, bytes...] runs, against a cursor of our own so the
+// link's own delta exchange (BufferNewBattlerData / sBattlerPrevRecordSizes) is
+// untouched. The challenger streams this out as BR_MSG_TURN; a spectator feeds it back
+// through RecordedBattle_RecordAllBattlerData to replay a turn behind.
+u8 RecordedBattle_BufferSpectateDelta(u8 *dst)
+{
+    u8 i, j;
+    u8 idx = 0;
+
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        if (sBattlerRecordSizes[i] != sSpectatePrevSizes[i])
+        {
+            dst[idx++] = i;
+            dst[idx++] = sBattlerRecordSizes[i] - sSpectatePrevSizes[i];
+
+            for (j = 0; j < sBattlerRecordSizes[i] - sSpectatePrevSizes[i]; j++)
+                dst[idx++] = sBattleRecords[i][sSpectatePrevSizes[i] + j];
+
+            sSpectatePrevSizes[i] = sBattlerRecordSizes[i];
+        }
+    }
+
+    return idx;
+}
+#endif
 
 void RecordedBattle_RecordAllBattlerData(u8 *src)
 {

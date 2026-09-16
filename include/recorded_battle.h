@@ -15,6 +15,9 @@ void RecordedBattle_ClearBattlerAction(u8 battler, u8 bytesToClear);
 u8 RecordedBattle_GetBattlerAction(u8 battler);
 u8 RecordedBattle_BufferNewBattlerData(u8 *dst);
 void RecordedBattle_RecordAllBattlerData(u8 *src);
+#if BR
+u8 RecordedBattle_BufferSpectateDelta(u8 *dst); // POK-233: the spectator action stream
+#endif
 bool32 CanCopyRecordedBattleSaveData(void);
 bool32 MoveRecordedBattleToSaveData(void);
 void PlayRecordedBattle(void (*CB2_After)(void));

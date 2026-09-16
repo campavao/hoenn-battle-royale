@@ -26,6 +26,8 @@ import { packGen3String, unpackGen3String } from '../text/gen3';
 import { PROTOCOL } from './wire';
 import type {
   BlockMsg,
+  BstartMsg,
+  TurnMsg,
   ChallengeMsg,
   ClockMsg,
   Dir,
@@ -63,6 +65,8 @@ export const BR_MSG = {
   FAINT: 8,
   OUT: 9,
   BUSY: 17,
+  BSTART: 18,
+  TURN: 19,
   PICKUP: 10,
   SPILL: 11,
   RING: 12,
@@ -259,6 +263,24 @@ function decodeBlock(bytes: Uint8Array): BlockMsg {
   const len = r.u16();
   const data = Array.from(r.raw(len));
   return { t: 'bt', seat, seq, data };
+}
+
+// bstart/turn (POK-233): a battle id then opaque bytes the spectator's ROM decodes.
+function encodeBstart(m: BstartMsg): Uint8Array {
+  return new Writer().u16(m.battle).raw(m.data).toBytes();
+}
+function decodeBstart(bytes: Uint8Array): BstartMsg {
+  const r = new Reader(bytes);
+  const battle = r.u16();
+  return { t: 'bstart', battle, data: Array.from(r.raw(bytes.length - 2)) };
+}
+function encodeTurn(m: TurnMsg): Uint8Array {
+  return new Writer().u16(m.battle).raw(m.data).toBytes();
+}
+function decodeTurn(bytes: Uint8Array): TurnMsg {
+  const r = new Reader(bytes);
+  const battle = r.u16();
+  return { t: 'turn', battle, data: Array.from(r.raw(bytes.length - 2)) };
 }
 
 const MON_BYTES = 100;
@@ -513,6 +535,8 @@ const CODECS: Record<string, Codec> = {
   face: { type: BR_MSG.FACE, encode: (m) => encodeFace(m as FaceMsg), decode: decodeFace },
   challenge: { type: BR_MSG.CHALLENGE, encode: (m) => encodeChallenge(m as ChallengeMsg), decode: decodeChallenge },
   bt: { type: BR_MSG.BT, encode: (m) => encodeBlock(m as BlockMsg), decode: decodeBlock },
+  bstart: { type: BR_MSG.BSTART, encode: (m) => encodeBstart(m as BstartMsg), decode: decodeBstart },
+  turn: { type: BR_MSG.TURN, encode: (m) => encodeTurn(m as TurnMsg), decode: decodeTurn },
   party: { type: BR_MSG.PARTY, encode: (m) => encodeParty(m as PartyMsg), decode: decodeParty },
   faint: { type: BR_MSG.FAINT, encode: (m) => encodeFaint(m as FaintMsg), decode: decodeFaint },
   out: { type: BR_MSG.OUT, encode: (m) => encodeOut(m as OutMsg), decode: decodeOut },

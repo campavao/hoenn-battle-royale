@@ -172,6 +172,24 @@ export interface BlockMsg {
   data: number[]; // the block bytes, at most 256 (Emerald's BLOCK_BUFFER_SIZE)
 }
 
+/** A link battle starting, published by the challenger so a spectator can replay it as
+ *  a BATTLE_TYPE_RECORDED (POK-233). `data` is the seed + both parties + names,
+ *  opaque to the page -- the spectator's ROM decodes it. Crosses into the ROM. */
+export interface BstartMsg {
+  t: 'bstart';
+  battle: number; // u16: the seat pair, low seat | high seat << 8
+  data: number[]; // seed + parties + names
+}
+
+/** The action bytes a published battle produced since the last turn message, streamed
+ *  so a spectator's recorded replay stays a turn behind (POK-233). Crosses into the
+ *  ROM (fed through RecordedBattle_RecordAllBattlerData on the spectator). */
+export interface TurnMsg {
+  t: 'turn';
+  battle: number; // u16
+  data: number[]; // one or more [battler, count, action bytes] runs
+}
+
 /** A trainer's full party -- for a bot roster seat (`CreateNPCTrainerParty` builds a
  *  trainer battle's party from this) or a player's, for the Hall of Fame. Crosses
  *  into the ROM (party). */
@@ -438,6 +456,8 @@ export type Msg =
   | AcceptMsg
   | DeclineMsg
   | BlockMsg
+  | BstartMsg
+  | TurnMsg
   | PartyMsg
   | FaintMsg
   | OutMsg

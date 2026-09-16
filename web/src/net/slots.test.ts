@@ -42,6 +42,7 @@ describe('slots round trip (single slot)', () => {
     { t: 'ring', seat: 0, phase: 64, sx: 0, sy: 0, r: -1 },
     { t: 'clock', seat: 0, left: 120 },
     { t: 'result', seat: 1, outcome: 'forfeit' },
+    { t: 'turn', battle: 0x0301, data: [0, 2, 1, 0, 1, 1, 0] },
     { t: 'ticker', seat: 1, kind: 'kill', text: 'ASH KO MISTY' },
     { t: 'ticker', seat: 1, text: 'the fog is closing in' },
     {
@@ -73,6 +74,14 @@ describe('slots round trip (spans multiple slots)', () => {
   it('a 256-byte battle block', () => {
     const data = Array.from({ length: 256 }, (_, i) => i & 0xff);
     const msg: Msg = { t: 'bt', seat: 9, seq: 500, data };
+    const slots = packSlot(msg);
+    expect(slots.length).toBeGreaterThan(1);
+    expect(roundTrip(msg)).toEqual(msg);
+  });
+
+  it('a bstart with two parties (~1.2 KB)', () => {
+    const data = Array.from({ length: 1208 }, (_, i) => i & 0xff);
+    const msg: Msg = { t: 'bstart', battle: 0x0502, data };
     const slots = packSlot(msg);
     expect(slots.length).toBeGreaterThan(1);
     expect(roundTrip(msg)).toEqual(msg);
