@@ -1,0 +1,154 @@
+# catch-pages: what a catch says, and how many times it stops to say it (POK-266,
+# Kanto v0.45.0 -- the catch confirmation is one page). Two of the three pages Emerald
+# would show are already gone: the Pokedex is filled at boot (POK-256), so "data was
+# added" never fires, and the nickname prompt went with it. This is the driver that says
+# so out loud, and `caught` is the shot a player would read.
+#
+# Driving a battle: tap rather than hold; B advances a box without choosing anything,
+# A on the Safari menu throws a ball (POK-269). A Safari mon flees when it feels like
+# it, so this has four goes at it.
+wait 30
+poke u32 gBrMatch+8 0x00000C00
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+expect u8 gPlayerPartyCount 0
+# every species already seen and caught, which is the page that does not happen
+expect u8 gBrMatch+1 0
+poke u8 gBrMatch+1 1
+poke u16 gBrMatch+12 240
+# into the grass
+hold DOWN 140
+hold LEFT 100
+# find something
+hold RIGHT 70
+hold LEFT 70
+hold RIGHT 70
+hold LEFT 70
+wait 40
+# through its intro, then throw
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+shot try1
+tap A
+wait 30
+# find something
+hold RIGHT 70
+hold LEFT 70
+hold RIGHT 70
+hold LEFT 70
+wait 40
+# through its intro, then throw
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+shot try2
+tap A
+wait 30
+# find something
+hold RIGHT 70
+hold LEFT 70
+hold RIGHT 70
+hold LEFT 70
+wait 40
+# through its intro, then throw
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+shot try3
+tap A
+wait 30
+# find something
+hold RIGHT 70
+hold LEFT 70
+hold RIGHT 70
+hold LEFT 70
+wait 40
+# through its intro, then throw
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+tap A
+wait 30
+shot try4
+tap A
+wait 30
+shot caught
+expectge u8 gPlayerPartyCount 1
+expect u8 gBrMatch 1
+say catch pages ok
