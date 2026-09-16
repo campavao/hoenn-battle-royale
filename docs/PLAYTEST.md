@@ -9,33 +9,28 @@ named; when one is created later, put its id at the top of the entry and leave t
 
 ## 2026-09-16, Cam, solo and quick play
 
-### Freeze: throwing a Safari Ball at a Makuhita ends with both sprites gone and no input -- **a way out** (`ba5d153d1`)
+### Freeze: throwing a Safari Ball at a Makuhita ends with both sprites gone and no input -- **fixed** (`f514e0299`)
 
 **Critical.** Video at ~2:50. First mon of the match, a Makuhita, Safari Ball thrown;
 "we both just disappeared, and then I was frozen here, I couldn't do anything."
 
-Where to look: `src/br/br_catch.c` (the catch flow: SET style, no nickname, the full-party
-release, the trade-evolution on a loot ball) and `battle_controller_safari.c`'s BR hooks.
-POK-269's rule is the shape of it — a Safari battle wants *tapped* presses, and a box
-waiting for one looks exactly like a freeze. A ball thrown at the buzzer is also a known
-edge (POK-261 made the buzzer close a battle in flight); if the opening ended during the
-throw, the battle may be being closed underneath the catch.
+Reproduced in `catch-buzzer.txt`: catch-pages.txt's catch with the ring already up,
+which is what 2:50 of that match was. The throw is pre-empted -- `BrMatch_BuzzerClosing`
+turns the turn into a RUN (POK-261, and the right call) -- so the ball animation cuts
+short, which is the sprites going. The battle then printed "Got away safely!" and sat
+there: fifteen seconds of driver time, moving only when something pressed A. Nobody
+chose that exit and nothing on screen said a button was what it wanted.
 
-Reproduce first: `catch-pages.txt` drives a real catch and passes, so this is either a
-specific species/ball combination or the buzzer overlapping the throw.
+A forced exit does not ask now: while the buzzer is closing, the safari controller's
+text-printer wait completes on its own. The driver presses nothing after the throw and
+reaches the drop map by itself.
 
-**What has changed:** the place a frozen game most likely WAS is no longer a place
-you can be stuck in. A catch at 2:50 is a catch as the ring comes up, and a ring
-ends the opening: `BrMatch_SafariOver` -> `BrPick_Start` -> the drop map -> the black
-screen `BrPick_Wait` holds until the host's `land` arrives. Nothing drew and nothing
-answered a button there, for as long as the answer took, which was for ever if it
-never came. It now asks again at five seconds and drops itself at fifteen
-(`land-lost.txt`).
+Two things found on the way there, both fixed and both their own escape hatch:
 
-That is a floor, not the cause. The cause is still open: the sprites vanishing
-before the freeze is not what a drop map looks like, so something ends the battle
-in a way the catch did not expect. A driver that throws a ball with `gBrRing`
-already active is the next thing to write.
+* The drop's own black screen (`BrPick_Wait`) held for ever if the host's `land` never
+  came. It re-asks at five seconds and drops itself on the START's cell at fifteen
+  (`ba5d153d1`, `land-lost.txt`).
+* The `#quick` pace collision is why the buzzer was at 2:50 at all (`3ef373a8c`).
 
 ### The new-game intro plays: the truck, not the Safari
 
