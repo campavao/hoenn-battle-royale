@@ -169,3 +169,48 @@ export function ordinal(n: number): string {
       return `${n}th`;
   }
 }
+
+/** The career as a file (POK-243). Kanto's career IS a file -- `lib/keyfile.lua` on
+ *  disk, which a player can copy to another machine -- and a browser's localStorage
+ *  cannot be copied at all, so the same ownership needs a door: take your record out,
+ *  put it back on the next device. The shape is the record itself plus a tag, because
+ *  a file somebody opens should say what it is. */
+export const FILE_TAG = 'hoenn-battle-royale/career';
+
+export function exportCareer(store: Pick<Storage, 'getItem' | 'setItem'> = localStorage): string {
+  return JSON.stringify({ tag: FILE_TAG, v: 1, career: loadCareer(store) }, null, 2);
+}
+
+/** Reads one back. Answers the career that is now stored, or null when the text is not
+ *  one of ours -- every field goes through the same `sane` a stored record does, so a
+ *  hand-edited file cannot put a skin, a voice or a negative count into the app that
+ *  the app would not have written itself. A claimed win total is taken at face value:
+ *  this is one device's own record, there is no leaderboard to defend, and Kanto's
+ *  keyfile is a text file anybody can edit too. */
+export function importCareer(
+  text: string,
+  store: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
+): Career | null {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const file = parsed as { tag?: unknown; career?: unknown };
+  if (file.tag !== FILE_TAG || typeof file.career !== 'object' || file.career === null) return null;
+  const career = sane(file.career);
+  // The wardrobe still has to be earned by the wins in the same file: a record that
+  // claims BRENDAN'S RIVAL with no wins behind it wears what it has actually earned.
+  if (career.skin !== undefined && !skinUnlocked(career.skin, career.wins)) delete career.skin;
+  try {
+    store.setItem(KEY, JSON.stringify(career));
+  } catch {
+    // Out of quota or a blocked store: nothing was kept, so say so rather than
+    // pretending the import worked.
+    return null;
+  }
+  return career;
+}

@@ -3,6 +3,9 @@ import { VOICE_COUNT } from '../bots/lines';
 import {
   careerLine,
   cleanName,
+  exportCareer,
+  FILE_TAG,
+  importCareer,
   loadCareer,
   NAME_MAX,
   nextLockedSkin,
@@ -123,5 +126,57 @@ describe('the career line', () => {
     const s = store();
     recordMatch(1, s);
     expect(careerLine(loadCareer(s))).toContain('1 won');
+  });
+});
+
+describe('the career as a file', () => {
+  it('goes out and comes back', () => {
+    const mine = store();
+    saveProfile({ name: 'CAM', voice: 2 }, mine);
+    recordMatch(1, mine);
+    recordMatch(4, mine);
+    const text = exportCareer(mine);
+    expect(JSON.parse(text).tag).toBe(FILE_TAG);
+
+    const theirs = store();
+    const back = importCareer(text, theirs);
+    expect(back).toEqual({ matches: 2, wins: 1, best: 1, name: 'CAM', voice: 2 });
+    expect(loadCareer(theirs)).toEqual(back);
+  });
+
+  it('refuses anything that is not one of ours', () => {
+    const disk = store();
+    expect(importCareer('{not json', disk)).toBeNull();
+    expect(importCareer('null', disk)).toBeNull();
+    expect(importCareer(JSON.stringify({ career: { wins: 9 } }), disk)).toBeNull();
+    expect(importCareer(JSON.stringify({ tag: FILE_TAG }), disk)).toBeNull();
+    // ...and nothing was written by any of that.
+    expect(loadCareer(disk)).toEqual({ matches: 0, wins: 0 });
+  });
+
+  it('puts a hand-edited file through the same door a stored record goes through', () => {
+    const disk = store();
+    const back = importCareer(
+      JSON.stringify({
+        tag: FILE_TAG,
+        career: { matches: -5, wins: 3, name: 'a very long name', voice: VOICE_COUNT + 9 },
+      }),
+      disk,
+    );
+    expect(back?.matches).toBe(0); // a negative count is not a count
+    expect(back?.name).toBe('A VERY L'.slice(0, NAME_MAX));
+    expect(back?.voice).toBeUndefined();
+  });
+
+  it('will not wear a skin the file has not earned', () => {
+    const disk = store();
+    const locked = SKIN_UNLOCK_WINS.findIndex((w) => w > 0);
+    const back = importCareer(
+      JSON.stringify({ tag: FILE_TAG, career: { matches: 1, wins: 0, skin: locked } }),
+      disk,
+    );
+    expect(skinUnlocked(locked, 0)).toBe(false);
+    expect(back?.skin).toBeUndefined();
+    expect(SKINS[locked]).toBeDefined();
   });
 });

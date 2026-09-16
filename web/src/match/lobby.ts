@@ -35,6 +35,7 @@ export type LobbyAction =
   | { kind: 'skin' }
   | { kind: 'voice' }
   | { kind: 'stats' }
+  | { kind: 'career' }
   | { kind: 'join'; code: string; pass: boolean }
   | { kind: 'watch'; code: string };
 
@@ -86,6 +87,9 @@ export function fixedRows(
             detail: profile.statsOn === false ? 'not shared' : 'shared',
             action: { kind: 'stats' as const },
           },
+          // Kanto's career is a file on disk somebody can copy to another machine;
+          // localStorage cannot be copied at all, so it needs a door (POK-243).
+          { label: 'MY CAREER', detail: 'save or load a file', action: { kind: 'career' as const } },
         ]
       : []),
     { label: 'SOLO VS BOTS', detail: 'no socket, ever', action: { kind: 'solo' } },

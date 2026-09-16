@@ -48,6 +48,8 @@ import { ProxyDuels } from './bots/proxy';
 import { mulberry32 } from './match/clock';
 import {
   careerLine,
+  exportCareer,
+  importCareer,
   cleanName,
   loadCareer,
   nextLockedSkin,
@@ -1579,6 +1581,43 @@ function drainRom(mailbox: Mailbox, handle: (msg: Msg) => void): void {
 
 // ---- room: relay + bridge, opted into by the URL hash ------------------------------------
 
+/** The career, out to a file the player keeps (POK-243). A download is the browser's
+ *  answer to Kanto's keyfile: something you own, that survives this browser, and that
+ *  moves to a phone by being a file. */
+function saveCareerFile(): void {
+  const blob = new Blob([exportCareer()], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+
+  a.href = url;
+  a.download = 'hoenn-battle-royale-career.json';
+  document.body.append(a);
+  a.click();
+  a.remove();
+  // Let the click start before the URL stops meaning anything.
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+/** ...and back in. A file that is not one of ours changes nothing and says so. */
+function loadCareerFile(then: () => void): void {
+  const input = document.createElement('input');
+
+  input.type = 'file';
+  input.accept = 'application/json,.json';
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    void file
+      .text()
+      .then((text) => {
+        if (importCareer(text)) then();
+        else alert('That is not a Hoenn Battle Royale career file.');
+      })
+      .catch(() => alert('That file could not be read.'));
+  });
+  input.click();
+}
+
 /** Drops the room out of the URL and reloads, which lands on the lobby (parseRoomHash
  *  returns null with no room in the hash). The way out of anywhere. */
 function backToLobby(): void {
@@ -1616,6 +1655,11 @@ function wireRoom(
   let director: Director | null = null;
   /** The director's own elimination handler, for `out`s this page makes itself. */
   let localOut: ((seat: number) => void) | null = null;
+  /** Announces a seat out of the match to the whole room -- set while this client is
+   *  the one running a director (POK-271). A seat that closed its tab has to be
+   *  eliminated by somebody, and the host is the only client that can: nobody hears
+   *  their own messages, so the one who left cannot say it about themselves. */
+  let announceOut: ((seat: number) => void) | null = null;
   let stopDirectorLoop: (() => void) | null = null;
   let isHost = false;
   /** The host's room settings between roster events (POK-241). */
@@ -1790,6 +1834,16 @@ function wireRoom(
           handler(seat);
         };
         localOut = narrate;
+        // ...and the same door for a seat that simply vanished (POK-271): the relay's
+        // roster is the authority on who is still here, and a match cannot end while
+        // it is waiting on somebody who closed their tab.
+        announceOut = (seat: number) => {
+          if (seen.has(seat)) return;
+          const msg: Msg = { t: 'out', seat };
+          bridge!.relay.all(msg);
+          rom.push(msg); // our own ROM never hears it over the relay
+          narrate(seat);
+        };
         const off = bridge!.relay.on('recv', (ev) => {
           try {
             const m = decode(JSON.stringify(ev.m));
@@ -1801,6 +1855,7 @@ function wireRoom(
         });
         return () => {
           localOut = null;
+          announceOut = null;
           off?.();
         };
       },
@@ -2158,8 +2213,45 @@ function wireRoom(
 
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code));
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
+  /** Seats the roster has stopped listing, with the timer that will finish them off
+   *  (POK-271). A tab that reconnects inside the grace keeps its place: a blip on
+   *  somebody's wifi is not a forfeit, and the relay hands a returning client the seat
+   *  it had. The wait is a timer rather than the next roster event, because a
+   *  departure is usually the LAST roster event -- nothing else is coming to notice
+   *  it on. */
+  const leaving = new Map<number, ReturnType<typeof setTimeout>>();
+  const LEFT_GRACE_MS = 10_000;
+
   relay.on('roster', (ev) => {
     controls.roster = ev;
+    // Who is gone. Only the host acts on it -- it is the one client running a director
+    // -- and only while a match is actually running; before START, leaving a room is
+    // just leaving a room.
+    if (director && bridge && isHost) {
+      const here = new Set(ev.members.map((m) => m.id));
+      for (const seat of match.seats) {
+        if (here.has(seat) || match.out.has(seat)) {
+          const timer = leaving.get(seat);
+          if (timer !== undefined) {
+            clearTimeout(timer);
+            leaving.delete(seat);
+          }
+          continue;
+        }
+        if (leaving.has(seat)) continue;
+        leaving.set(
+          seat,
+          setTimeout(() => {
+            leaving.delete(seat);
+            // Still gone, still in the match, and we are still the one running it.
+            if (!director || !isHost || match.out.has(seat)) return;
+            if ((controls.roster?.members ?? []).some((m) => m.id === seat)) return;
+            console.info(`[room] seat ${seat} left the match`);
+            announceOut?.(seat);
+          }, LEFT_GRACE_MS),
+        );
+      }
+    }
     // Who may kick, for every redraw between now and the next roster event.
     roomKick = ev.host === bridge?.seat ? relay : null;
     // The relay says who is watching; believe it over what we asked for.
@@ -2388,6 +2480,13 @@ function runLobby(): Promise<RoomHash> {
         case 'stats':
           setStatsOff(!loadStats().off);
           render();
+          return;
+        case 'career':
+          // Kanto's career is a file somebody can carry between machines; ours lives
+          // in a localStorage nobody can copy, so this is the door (POK-243). Save
+          // writes it out; load takes one back and re-reads the profile from it.
+          if (confirm('Save your career to a file?\n\nCancel to load one instead.')) saveCareerFile();
+          else loadCareerFile(render);
           return;
         case 'solo':
           setRoomHash('solo');
