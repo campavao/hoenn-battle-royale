@@ -67,6 +67,9 @@ EWRAM_DATA static u8 sWildEncountersDisabled = 0;
 EWRAM_DATA static u32 sFeebasRngValue = 0;
 
 #include "data/wild_encounters.h"
+#if BR
+#include "br/br_match.h"
+#endif
 
 static const struct WildPokemon sWildFeebas = {20, 25, SPECIES_FEEBAS};
 
@@ -523,6 +526,15 @@ static bool8 EncounterOddsCheck(u16 encounterRate)
 static bool8 WildEncounterCheck(u32 encounterRate, bool8 ignoreAbility)
 {
     encounterRate *= 16;
+#if BR
+    // Twice as often in the opening (POK-222). The Safari is two minutes long and it
+    // is the whole of a contestant's team-building: at Emerald's own rate a player who
+    // drew a quiet corner of the Zone walks out of it with nothing, which is not a bad
+    // run, it is a bad rule. Doubled at the source rather than by a step counter, so
+    // everything downstream -- the Repel, the ability mods, the cap -- still applies.
+    if (gBrMatch.phase == BR_PHASE_SAFARI)
+        encounterRate *= 2;
+#endif
     if (TestPlayerAvatarFlags(PLAYER_AVATAR_FLAG_MACH_BIKE | PLAYER_AVATAR_FLAG_ACRO_BIKE))
         encounterRate = encounterRate * 80 / 100;
     ApplyFluteEncounterRateMod(&encounterRate);

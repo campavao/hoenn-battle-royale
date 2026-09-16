@@ -29,13 +29,12 @@ export function writeHudEyes(ram: RamAccess, hudBase: number, watchers: number):
   ram.write(hudBase + HUD.OFF_EYES, Math.max(0, Math.min(255, watchers)), 8);
 }
 
-/** Arms the one-shot FOG! flash (br_hud.h: the ROM clears this itself). Not called
- *  from app.ts today -- the director doesn't yet distinguish "the ring just moved"
- *  from "seconds ticked by" at the call site -- but kept alongside its two siblings
- *  since it is the same PAGE WRITES field and a follow-up ticket will want it. */
-export function flashHudFog(ram: RamAccess, hudBase: number): void {
-  ram.write(hudBase + HUD.OFF_FLASH_FOG, 1, 8);
-}
+// There is deliberately no flashHudFog() here any more (POK-224). The FOG! flash is
+// raised by the ROM itself, in br_ring.c's tick, at the frame the section we are
+// standing in leaves the ring -- the page does not know Hoenn's geography and would
+// have to be told it to work that out. The field is still marked PAGE WRITES in
+// br_hud.h because the ROM clears it the same way either way; an exported page-side
+// writer that nothing called only made a later audit conclude the flash was missing.
 
 /** `gBrMySeat` (include/br/br_ghosts.h) -- a separate global, not part of `BrHud`,
  *  but written by the same page-writes-a-few-globals pattern; this client's seat,

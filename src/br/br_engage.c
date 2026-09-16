@@ -12,6 +12,7 @@
 #include "br/br_match.h"
 #include "br/br_netlink.h"
 #include "br/br_bot.h"
+#include "br/br_hud.h"
 #include "br/br_engage.h"
 
 EWRAM_DATA struct BrEngage gBrEngage = {0};
@@ -92,6 +93,45 @@ static bool8 Sees(s16 x, s16 y, u8 dir, s16 tx, s16 ty)
     return FALSE;
 }
 
+// Walking up to somebody in the Zone (POK-222). The eyeline is a match rule and the
+// opening is not the match, so nothing happened at all -- which looks exactly like a
+// bug from the inside: two contestants stand face to face and neither one's game
+// reacts. Now it says so, once in a while rather than every frame the pair are looking
+// at each other.
+static const u8 sText_NoBattlesHere[] = _("NO BATTLES IN THE\nSAFARI ZONE!");
+#define BR_SAFARI_SAY_FRAMES (8 * 60)
+static EWRAM_DATA u16 sSafariSaid = 0;
+
+// Anybody at all standing in our eyeline on this map. Deliberately not the engage's
+// own scan: that one has the seat ordering, the busy check and the flee lockout in it,
+// and none of those decide whether to say a sentence.
+static bool8 LookingAtSomebody(void)
+{
+    u8 seat;
+
+    for (seat = 0; seat < BR_MAX_SEATS; seat++)
+    {
+        const struct BrSeat *s = &gBrSeats[seat];
+
+        if (!s->present || seat == gBrMySeat)
+            continue;
+        if (s->mapGroup != gBrOwnPos.mapGroup || s->mapNum != gBrOwnPos.mapNum)
+            continue;
+        if (Sees(gBrOwnPos.x, gBrOwnPos.y, gBrOwnPos.dir, s->x, s->y)
+         || Sees(s->x, s->y, s->dir, gBrOwnPos.x, gBrOwnPos.y))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static void SayNoBattlesHere(void)
+{
+    if (sSafariSaid != 0)
+        return;
+    sSafariSaid = BR_SAFARI_SAY_FRAMES;
+    BrHud_Box(sText_NoBattlesHere);
+}
+
 static bool8 CanEngage(void)
 {
     if (gMain.callback2 != CB2_Overworld || gMain.inBattle)
@@ -169,6 +209,13 @@ void BrEngage_Tick(void)
     if (gBrEngage.fledLockout && --gBrEngage.fledLockout == 0)
         gBrEngage.fledFrom = 0xFF;
     ReportBusy();
+    if (sSafariSaid != 0)
+        sSafariSaid--;
+    // In the Zone the eyeline does nothing, so this is the only thing that tells you
+    // why (POK-222).
+    if (gBrMatch.phase == BR_PHASE_SAFARI && gMain.callback2 == CB2_Overworld && !gMain.inBattle
+     && !ScriptContext_IsEnabled() && LookingAtSomebody())
+        SayNoBattlesHere();
     if (!CanEngage())
         return;
     for (seat = 0; seat < BR_MAX_SEATS; seat++)

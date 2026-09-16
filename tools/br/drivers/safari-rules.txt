@@ -1,0 +1,34 @@
+# safari-rules: walking up to somebody in the Zone says why nothing happens (POK-222).
+# The eyeline is a match rule (br_engage.c) and the opening is not the match, so two
+# contestants standing face to face used to get silence, which from the inside looks
+# exactly like a bug rather than a rule.
+#
+# The opening's other rule -- encounters twice as often (wild_encounter.c's BR branch)
+# -- is deliberately not driven here: it is a doubled probability, so any driver that
+# watched for an encounter would be a coin flip pretending to be a test.
+wait 30
+poke u32 gBrMatch+8 0x00000C00
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+expect u8 gNumSafariBalls 30
+# A ghost right in front of us: seat 1, two tiles north of where the seed puts us,
+# facing SOUTH (dir 1) -- looking straight down the column at us, so the eyeline is
+# satisfied from their side whichever way we happen to be facing. The wire carries
+# OBJECT coordinates, which are the save block's plus MAP_OFFSET: the boot lands us on
+# the Zone's (8,5), and that is (15,12) here.
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 1A 02 0F 00 0A 00 01 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 40
+expect u8 gBrSeats+16 1
+# The box says so -- BrHud_Box lights gBrHud's box window and counts it down (POK-226).
+expectge u8 gBrHud+0x17C 1
+shot no-battles
+# ...and it is not repeated every frame the pair are looking at each other: the box is
+# gone well before the eight-second cooldown is up, and nothing has put it back.
+wait 200
+expect u8 gBrHud+0x17C 0
+shot quiet
+# Nobody was challenged by any of that: the engage is still refused in the Zone.
+expect u8 gBrNetlink 0
+say safari rules ok
