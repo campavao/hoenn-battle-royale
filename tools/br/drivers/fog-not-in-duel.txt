@@ -1,0 +1,27 @@
+# fog-not-in-duel: the fog does not reach into a fight between contestants (POK-262).
+# The other half of fog-in-battle.txt, and the half that matters for fairness: a duel
+# decided by whose map the ring happens to be over is not a duel.
+#
+# A loopback netlink battle (the same setup run-roll.txt uses), then the ring closes
+# somewhere else, and nothing bleeds for as long as the fight lasts.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 900
+# in the duel
+expectge u8 gBattlersCount 2
+expect u16 gBrRing+10 0
+# the fog closes on Littleroot: RING phase 1, centre (25,12), r 1
+pokebytes gBrMailbox+0x1058 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 600
+shot duel
+# two and a half bleed ticks' worth of nothing
+expect u16 gBrRing+10 0
+expect u8 gBrRing+7 0
+say fog not in duel ok

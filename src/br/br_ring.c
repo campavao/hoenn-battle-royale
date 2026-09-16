@@ -16,13 +16,29 @@
 #include "br/br_hud.h"
 #include "br/br_match.h"
 #include "br/br_ring.h"
-#include "br/br_hud.h"
+#include "battle.h"
+#include "br/br_netlink.h"
+#include "br/br_bot.h"
 
 EWRAM_DATA struct BrRing gBrRing = {0};
 
 static bool8 OverworldRunning(void)
 {
     return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
+}
+
+// Does the fog reach into this battle (POK-262)? Kanto's rule, v0.3.1: a wild or route
+// fight fought outside the ring drains you, and a fight between contestants does not.
+// Both halves matter. Without the first, a battle is somewhere to hide from the fog --
+// step outside the ring, pick a fight with the grass, and the clock stops mattering.
+// Without the second, a duel is decided by whose map the ring happens to be over.
+static bool8 FogReachesThisBattle(void)
+{
+    if (!gMain.inBattle)
+        return FALSE;
+    if (gBrNetlink.active || gBrBotFight.fighting)
+        return FALSE; // a fight between contestants is theirs to lose
+    return TRUE;
 }
 
 // Distance from the centre to the nearest point of the section's rectangle, squared,
@@ -105,6 +121,11 @@ static void Bleed(void)
 {
     u8 i, count = CalculatePlayerPartyCount();
     u8 alive = 0;
+    // In a battle the fog hurts but never finishes anybody. A team that fainted to the
+    // weather mid-turn would take the elimination -- and the spill, and the OUT -- out
+    // of the battle engine's hands while it was still running a turn, so it waits at
+    // 1 HP and the next tick in the overworld does the rest.
+    bool8 floorAtOne = FogReachesThisBattle();
 
     for (i = 0; i < count; i++)
     {
@@ -119,9 +140,17 @@ static void Bleed(void)
             dmg = 1;
         if (dmg > hp)
             dmg = hp;
+        if (floorAtOne && dmg >= hp)
+            dmg = hp - 1;
+        if (dmg == 0)
+            continue;
         hp -= dmg;
         gBrRing.damageDealt += dmg;
         SetMonData(mon, MON_DATA_HP, &hp);
+        // The battle is looking at its own copy, so the bar only moves if that moves
+        // with it. Singles only, which is every battle this game has.
+        if (floorAtOne && gBattlersCount > 0 && gBattlerPartyIndexes[0] == i)
+            gBattleMons[0].hp = hp;
         if (hp > 0)
             alive++;
     }
@@ -150,8 +179,29 @@ void BrRing_Tick(void)
 {
     bool8 outside;
 
-    if (!gBrRing.active || !OverworldRunning())
+    // The fog does not stop at the battle door (POK-262). Outside the overworld the
+    // only thing it can do is bleed -- the weather and the FOG! flash belong to a map --
+    // so a battle it reaches takes the damage and nothing else.
+    if (!gBrRing.active)
         return;
+    if (!OverworldRunning())
+    {
+        if (!FogReachesThisBattle())
+            return;
+        // Asked of the map, not of gBrRing.outside: that flag is worked out by the
+        // overworld branch below, so in a battle it is whatever it was when the battle
+        // started -- and a ring that closed on you mid-fight would never be noticed.
+        // The map header does not change for a battle, so this is still where we stand.
+        if (BrRing_SectionInside(gMapHeader.regionMapSectionId))
+            return;
+        gBrRing.outside = TRUE;
+        if (--gBrRing.damageTimer == 0)
+        {
+            gBrRing.damageTimer = BR_FOG_TICK_FRAMES;
+            Bleed();
+        }
+        return;
+    }
     outside = !BrRing_SectionInside(gMapHeader.regionMapSectionId);
     if (outside && !gBrRing.outside)
         gBrHud.flashFog = 1; // just went outside: the corner flashes FOG!

@@ -1,0 +1,38 @@
+# fog-in-battle: a wild fight is not somewhere to hide from the fog (POK-262). Kanto's
+# rule, v0.3.1. Without it you step outside the ring, pick a fight with the grass, and
+# the clock stops mattering.
+#
+# The ring is turned on AFTER the encounter starts on purpose: the bleed counter is
+# cumulative, so a ring that was already up while we walked would have spent ticks
+# before the battle and "did it grow" would prove nothing.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9 -- the middle grass patch
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# walk the patch until something jumps out
+hold RIGHT 60
+hold LEFT 60
+hold RIGHT 60
+hold LEFT 60
+hold RIGHT 60
+hold LEFT 60
+hold RIGHT 60
+hold LEFT 60
+wait 200
+shot wild
+# in a battle, and it is a wild one: BATTLE_TYPE_IS_MASTER only, no TRAINER (0x8)
+expectge u8 gBattlersCount 2
+expect u16 gBattleTypeFlags 4
+# nothing has bled yet
+expect u16 gBrRing+10 0
+# now the fog closes somewhere else: RING phase 1, centre (25,12), r 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 400
+# it reached in
+expectge u16 gBrRing+10 1
+# but it did not end anybody mid-turn: still fighting, still in
+expectge u8 gBattlersCount 2
+expect u8 gBrRing+7 0
+say fog in battle ok
