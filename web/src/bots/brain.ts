@@ -13,6 +13,7 @@ import { findPath, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import type { Bot } from './roster';
 import { MOVE_SURF } from './party';
+import { duel } from './duel';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon } from '../net/wire';
 
@@ -77,7 +78,7 @@ interface Walker {
 export interface Decision {
   at: number;
   seat: number;
-  rule: 'heal' | 'engage' | 'pickup' | 'centre' | 'hunt' | 'loot' | 'wander' | 'stuck' | 'fog';
+  rule: 'heal' | 'engage' | 'pickup' | 'centre' | 'hunt' | 'loot' | 'wander' | 'stuck' | 'fog' | 'duel';
   spot: Spot;
   detail?: string;
 }
@@ -119,6 +120,10 @@ export interface BotsOptions {
   deal?: (bot: Bot, phase: number) => PackedMon[];
   /** How many trainers are still in, bots included. The hunt starts at HUNT_AT. */
   alive?: () => number;
+  /** The match seed, so two bots meeting settle it the same way on every client that
+   *  cares to work it out. Without it bots never fight each other and only the fog
+   *  ever eliminates anybody. */
+  seed?: number;
   /** Every rule that fired, as it fires. Kanto's `Bots.decisions`: the only way to
    *  answer "why did it go there" about something that walks for sixteen minutes.
    *  Off in the browser; `tools/br/bots-replay.ts` turns it on. */
@@ -247,10 +252,13 @@ export class Bots {
    *  here, not in the caller, so a slow frame makes bots catch up rather than crawl. */
   tick(now: number): void {
     this.now = now;
+    // Both loops walk a snapshot: the fog and a lost duel both take a bot out of the
+    // list mid-pass, and splicing the array being iterated skips whoever came next.
     for (const walker of this.walkers.slice()) {
       this.bleed(walker, now);
     }
-    for (const walker of this.walkers) {
+    for (const walker of this.walkers.slice()) {
+      if (!this.walkers.includes(walker)) continue;
       // At most a few steps a tick: a tab that was backgrounded for a minute should
       // not teleport its bots across Hoenn when it comes back.
       let budget = 4;
@@ -283,6 +291,30 @@ export class Bots {
     });
     if (standing > 0) return;
     this.note(walker, 'fog');
+    this.eliminate(walker);
+  }
+
+  /** A bot is finished. Everything it was carrying hits the ground where it fell --
+   *  the same `spill` a player's ROM sends on a whiteout (POK-232), so the balls are
+   *  pickable by anybody -- and then it is out and stops being walked around. */
+  private eliminate(walker: Walker): void {
+    const map = this.opts.mapRef(walker.at.map);
+    if (map && walker.party.length > 0) {
+      this.opts.send({
+        t: 'spill',
+        seat: walker.bot.seat,
+        map,
+        // The ROM's key convention: the dropper's seat in the high byte, so keys never
+        // collide between trainers (br_loot.c).
+        mons: walker.party.slice(0, 6).map((mon, i) => ({
+          key: ((walker.bot.seat & 0xff) << 8) | i,
+          x: walker.at.x,
+          y: walker.at.y,
+          species: mon.species,
+          level: mon.level,
+        })),
+      });
+    }
     this.opts.send({ t: 'out', seat: walker.bot.seat });
     this.remove(walker.bot.seat);
   }
@@ -344,11 +376,11 @@ export class Bots {
    *  the challenge that starts the battle arrives. TRUE when it spent the step. */
   private tryEngage(walker: Walker, now: number): boolean {
     const engage = this.opts.engage;
-    if (!engage || now < walker.engageAfter) return false;
+    if (now < walker.engageAfter) return false;
     const map = this.opts.mapRef(walker.at.map);
     if (!map) return false;
     const mine: Look = { map: walker.at.map, x: walker.at.x, y: walker.at.y, dir: walker.facing };
-    for (const player of engage.players()) {
+    for (const player of engage?.players() ?? []) {
       if (player.busy || player.mapId !== walker.at.map) continue;
       const theirs: Look = { map: player.mapId, x: player.x, y: player.y, dir: player.dir };
       if (!eitherSees(this.opts.world, mine, theirs)) continue;
@@ -372,6 +404,35 @@ export class Bots {
       walker.engageAfter = now + ENGAGE_COOLDOWN_MS;
       walker.path = null;
       return true;
+    }
+    // Nobody to fight but each other. A bot that can see another bot settles it
+    // (POK-238's resolver; the proxy emulator replaces this with a real battle).
+    return this.tryDuel(walker, now, mine);
+  }
+
+  /** Two bots in each other's eyeline. The loser is out and drops what it carried;
+   *  the winner walks on hurt, which is what makes the next fight interesting. */
+  private tryDuel(walker: Walker, now: number, mine: Look): boolean {
+    if (this.opts.seed === undefined || walker.party.length === 0) return false;
+    for (const other of this.walkers) {
+      if (other === walker || now < other.engageAfter) continue;
+      if (this.fighting.has(other.bot.seat) || other.party.length === 0) continue;
+      const theirs: Look = { map: other.at.map, x: other.at.x, y: other.at.y, dir: other.facing };
+      if (!eitherSees(this.opts.world, mine, theirs)) continue;
+      this.nonce = (this.nonce + 1) & 0xffff;
+      const result = duel(
+        this.opts.seed,
+        { seat: walker.bot.seat, party: walker.party },
+        { seat: other.bot.seat, party: other.party },
+        this.nonce,
+      );
+      const won = result.winner === walker.bot.seat ? walker : other;
+      const lost = won === walker ? other : walker;
+      won.party = result.winnerParty;
+      won.engageAfter = now + ENGAGE_COOLDOWN_MS;
+      this.note(walker, 'duel', `${result.winner} beat ${result.loser}`);
+      this.eliminate(lost);
+      return lost === walker;
     }
     return false;
   }

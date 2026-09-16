@@ -449,3 +449,50 @@ describe('a bot caught in the fog', () => {
     expect(bots.count()).toBe(0);
   });
 });
+
+describe('two bots meeting', () => {
+  const MON: PackedMon = {
+    species: 277, level: 20, hp: 40, maxHp: 40, status: 0,
+    moves: [{ id: 1, pp: 35, ppUps: 0 }],
+    heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: 'TREECKO', ot: 'BR',
+  };
+
+  function pair() {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      seed: 4242,
+    });
+    // Two of them dealt a tile apart, so one is in the other's eyeline on the first
+    // step whichever way either is facing.
+    const dealt = dealBots(1, 2, [0], [
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 1 },
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 2 },
+    ]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 5000; t += STEP_MS) bots.tick(t);
+    return { bots, sent, seats: dealt.map((b) => b.seat) };
+  }
+
+  it('settles it: one of them is out, and drops what it carried', () => {
+    const { bots, sent } = pair();
+    expect(bots.count()).toBe(1);
+    const out = sent.filter((m) => m.t === 'out');
+    expect(out).toHaveLength(1);
+    const spill = sent.find((m) => m.t === 'spill') as { seat: number; mons: unknown[] } | undefined;
+    expect(spill?.seat).toBe((out[0] as { seat: number }).seat);
+    expect(spill?.mons).toHaveLength(1);
+  });
+
+  it('leaves the winner hurt', () => {
+    const { bots, seats } = pair();
+    const alive = seats.map((s) => bots.partyOf(s)).find((p) => p.length > 0)!;
+    expect(alive[0].hp).toBeLessThan(MON.hp);
+  });
+});

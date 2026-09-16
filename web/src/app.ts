@@ -563,6 +563,7 @@ function startBots(
           .filter((p) => p.mapId !== ''),
     },
     deal: (bot, atPhase) => dealParty(seed, bot.seat, atPhase),
+    seed,
     centres: () => world.centres(),
     // Bots are on this roster too -- the host applies its own bots' `place` to it --
     // so this is the whole field, which is what the hunt rule wants.
@@ -699,6 +700,22 @@ function startSpectateLoop(
 // ---- the match director's page-side wiring (POK-222/223/224/228) ------------------------
 
 const AUTO_START_MS = 10_000; // "for now": a room starts 10s after hosting, or once 2+ seats
+/** `#noauto` holds the room open instead. Dev only, like `#testmon`, `#nobots` and
+ *  `#quick`: an e2e about one piece of a match needs the rest of it to stand still,
+ *  and a director that starts under the test warps everybody out from under it. */
+/** `#seed=N` runs the match off a fixed seed instead of a fresh one. Dev only: it is
+ *  what makes a whole match reproducible -- the drop, the ring's centre, every bot's
+ *  team and every duel come off it, so the same seed is the same match. */
+function fixedSeed(): number | null {
+  if (!import.meta.env.DEV) return null;
+  const raw = new URLSearchParams(location.hash.slice(1)).get('seed');
+  const n = raw === null ? NaN : Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function autoStarts(): boolean {
+  return !import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('noauto');
+}
 const DIRECTOR_TICK_MS = 1000; // coarser than the 5s clock/fogSecs cadence director.ts needs
 
 function renderMatchStrip(state: DirectorState): void {
@@ -832,7 +849,7 @@ function wireRoom(
     const seats = [...new Set([...(members ?? []), ...known])];
     if (seats.length === 0) return;
     const hostSeat = bridge.seat;
-    const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
+    const seed = fixedSeed() ?? Math.floor(Math.random() * 0x7fff_ffff) + 1;
     const rom = createRomPushQueue(emu, bridge.mailbox); // reuses the Bridge's own Mailbox, not a second one on the same base
     // The host speaks for the bots as well as for the clock: same relay, same in-ring,
     // and its own roster too -- nobody hears their own messages come back, so the host
@@ -1023,7 +1040,7 @@ function wireRoom(
     stopSpectateLoop?.();
     stopSpectateLoop = startSpectateLoop(emu, symbols?.get('gBrHud'), bridge, spectate);
     renderSpectate(bridge, spectate);
-    if (isHost) setTimeout(startDirector, AUTO_START_MS);
+    if (isHost && autoStarts()) setTimeout(startDirector, AUTO_START_MS);
   };
 
   ($('#play-again') as HTMLElement).addEventListener('click', () => location.reload());
@@ -1033,7 +1050,7 @@ function wireRoom(
   relay.on('roster', (ev) => {
     if (bridge) renderRoom(bridge);
     if (bridge) renderSpectate(bridge, spectate);
-    if (ev.members.length >= 2) startDirector(ev.members.map((m) => m.id));
+    if (ev.members.length >= 2 && autoStarts()) startDirector(ev.members.map((m) => m.id));
   });
   relay.on('room_error', (ev) => (codeEl.textContent = `Couldn't join: ${ev.reason}`));
   relay.on('closed', (ev) => {

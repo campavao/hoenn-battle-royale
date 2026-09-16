@@ -6,7 +6,9 @@
 // real room sat in Littleroot forever because START never began the opening.
 //
 // One host, one guest, bots filling the rest, at `#quick` pace: a 25-second opening and
-// ring phases of fifteen seconds. The assertions follow a match in order -- the opening
+// ring phases of fifteen seconds, off a `#seed` fixed so the match is the same one every
+// time -- the drop, the ring, every bot's team and every duel come off that seed, and a
+// five-minute test that is a different match each run is a coin flip, not a check. The assertions follow a match in order -- the opening
 // starts, the drop lands, the ring closes, somebody wins -- so a failure says which
 // joint came apart rather than just "no winner".
 import fs from 'node:fs';
@@ -39,7 +41,7 @@ test('a match runs from the opening to a winner', async ({ browser }) => {
   const guestCtx = await browser.newContext();
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&quick&testmon&rom=${rom}`);
+    await host.goto(`/#host&quick&seed=20260916&testmon&rom=${rom}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
     const codeEl = host.locator('#room-code');
     await expect(codeEl).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 30_000 });
@@ -47,7 +49,7 @@ test('a match runs from the opening to a winner', async ({ browser }) => {
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&quick&testmon&rom=${rom}`);
+    await guest.goto(`/#join=${code}&quick&seed=20260916&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     // 1. The opening. A second seat starts the match, and both ROMs walk into the Zone.

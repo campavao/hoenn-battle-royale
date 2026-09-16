@@ -37,7 +37,7 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&testmon&rom=${rom}`);
+    await host.goto(`/#host&noauto&nobots&testmon&rom=${rom}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     const codeEl = host.locator('#room-code');
@@ -46,12 +46,15 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
     if (!code) throw new Error('could not parse a room code');
 
     const guest = await guestCtx.newPage();
-    await guest.goto(`/#join=${code}&testmon&rom=${rom}`);
+    await guest.goto(`/#join=${code}&noauto&nobots&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     // The eyeline is a match rule -- it does not fire in the lobby -- so put both seats
     // in the match rather than waiting out a Safari opening. gBrMatch.phase is what the
     // director's START would set; everything downstream of it is the real thing.
+    //
+    // `#noauto` is what makes that stick: a director starting under the test sends its
+    // own START, which warps both seats into the Safari Zone and puts the phase back.
     const inMatch = async (p: typeof host) =>
       p.evaluate(
         (addr) => (window as unknown as { __br: { mailbox: { ram: { write(a: number, v: number, w: 8 | 16 | 32): void } } } }).__br.mailbox.ram.write(addr, 2, 8),
@@ -71,7 +74,7 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
 
     // Now the watcher, mid-fight.
     const watcher = await watchCtx.newPage();
-    await watcher.goto(`/#join=${code}&testmon&rom=${rom}`);
+    await watcher.goto(`/#join=${code}&noauto&nobots&testmon&rom=${rom}`);
     await watcher.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
     await watcher.waitForFunction(
       (addr) => (window as unknown as RamWindow).__br.mailbox.ram.read(addr, 16) === 0x4252,

@@ -47,6 +47,7 @@ const bots = new Bots({
   send: () => {},
   rng: mulberry32(seed ^ 0x51ce),
   deal: (bot, phase) => dealParty(seed, bot.seat, phase),
+  seed,
   centres: () => world.centres(),
   onDecision: (d: Decision) => {
     if (only >= 0 && d.seat !== only) return;
