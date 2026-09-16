@@ -276,4 +276,14 @@
 //   5..:  left     (countA + countB) * (hp u16, status u8), A's first
 #define BR_MSG_DRESULT 28
 
+// fled: this trainer just ran from that one (POK-266, Kanto v0.49.0). Its own signal
+// rather than a fourth BUSY kind: BUSY means "cannot be challenged", and POK-231's rule
+// is that only the FLEER is held off the PURSUER -- everybody else may still walk up to
+// them. Reporting a flee as busy would take a runner off the board for the whole room
+// for ten seconds, which is a rules change wearing a cosmetic's clothes.
+// Payload:
+//   0:    seat     u8   who ran
+//   1:    from     u8   who they ran from
+#define BR_MSG_FLED 29
+
 #endif // GUARD_BR_WIRE_H

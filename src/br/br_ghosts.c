@@ -121,6 +121,18 @@ static void HandleBusy(const u8 *payload, u8 len)
     gBrSeatBusy[d[0]] = d[1];
 }
 
+// Somebody ran from somebody (POK-266). Nothing about the engage changes here -- the
+// lockout is the fleer's own ROM's business (br_engage.c) -- this is only the picture.
+static void HandleFled(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 1 || d[0] >= BR_MAX_SEATS)
+        return;
+    BrGhosts_Fled(d[0]);
+}
+
 static void HandlePlace(const u8 *payload, u8 len)
 {
     const u8 *d;
@@ -218,6 +230,7 @@ void BrGhosts_Init(void)
 
     BrNet_On(BR_MSG_PLACE, HandlePlace);
     BrNet_On(BR_MSG_BUSY, HandleBusy);
+    BrNet_On(BR_MSG_FLED, HandleFled);
     BrNet_On(BR_MSG_STEP, HandleStep);
     BrNet_On(BR_MSG_FACE, HandleFace);
 
@@ -390,23 +403,47 @@ static EWRAM_DATA u16 sEmoteTimer = 0;
 // standing still waiting to take yours. Emerald's own trainer-sight icons do the job:
 // "!" for a battle, "?" for a menu.
 // The bubble for one seat, if it has a ghost here and is busy. TRUE when it fired.
-bool8 BrGhosts_Emote(u8 seat)
+// One bubble at a time: the field-effect list is short, and two marks over two ghosts
+// in the same frame is a fight over it rather than two marks.
+static bool8 BubbleBusy(void)
+{
+    return FieldEffectActiveListContains(FLDEFF_EXCLAMATION_MARK_ICON)
+        || FieldEffectActiveListContains(FLDEFF_QUESTION_MARK_ICON)
+        || FieldEffectActiveListContains(FLDEFF_BR_BOOT_ICON);
+}
+
+// Points the field-effect arguments at a seat's ghost. FALSE when it has none here.
+static bool8 AimAtGhost(u8 seat)
 {
     struct ObjectEvent *obj;
-    u8 busy;
 
     if (seat >= BR_MAX_SEATS || !OverworldRunning())
         return FALSE;
     obj = GhostObject(seat);
-    busy = gBrSeatBusy[seat];
-    if (obj == NULL || busy == BR_BUSY_MAP)
-        return FALSE;
-    if (FieldEffectActiveListContains(FLDEFF_EXCLAMATION_MARK_ICON)
-     || FieldEffectActiveListContains(FLDEFF_QUESTION_MARK_ICON))
+    if (obj == NULL || BubbleBusy())
         return FALSE;
     ObjectEventGetLocalIdAndMap(obj, &gFieldEffectArguments[0], &gFieldEffectArguments[1],
                                 &gFieldEffectArguments[2]);
+    return TRUE;
+}
+
+bool8 BrGhosts_Emote(u8 seat)
+{
+    u8 busy = seat < BR_MAX_SEATS ? gBrSeatBusy[seat] : BR_BUSY_MAP;
+
+    if (busy == BR_BUSY_MAP || !AimAtGhost(seat))
+        return FALSE;
     FieldEffectStart(busy == BR_BUSY_BATTLE ? FLDEFF_EXCLAMATION_MARK_ICON : FLDEFF_QUESTION_MARK_ICON);
+    return TRUE;
+}
+
+// Somebody ran (POK-266). Unlike the busy marks this is an event, not a state: it fires
+// once, where they were standing when the news arrived, and nothing repeats it.
+bool8 BrGhosts_Fled(u8 seat)
+{
+    if (!AimAtGhost(seat))
+        return FALSE;
+    FieldEffectStart(FLDEFF_BR_BOOT_ICON);
     return TRUE;
 }
 

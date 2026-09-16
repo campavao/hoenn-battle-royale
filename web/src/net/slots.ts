@@ -55,6 +55,7 @@ import type {
   SpentMsg,
   DuelMsg,
   DresultMsg,
+  FledMsg,
   PickMsg,
   LandMsg,
   ResultMsg,
@@ -90,6 +91,7 @@ export const BR_MSG = {
   SPENT: 26,
   DUEL: 27,
   DRESULT: 28,
+  FLED: 29,
   PICK: 24,
   LAND: 25,
 } as const;
@@ -484,6 +486,15 @@ function decodeDresult(bytes: Uint8Array): DresultMsg {
   return { t: 'dresult', seatA, seatB, winner, a, b };
 }
 
+// FLED: who ran, and who from (POK-266).
+function encodeFled(m: FledMsg): Uint8Array {
+  return new Writer().u8(m.seat).u8(m.from).toBytes();
+}
+function decodeFled(bytes: Uint8Array): FledMsg {
+  const r = new Reader(bytes);
+  return { t: 'fled', seat: r.u8(), from: r.u8() };
+}
+
 // SPENT: seat, then the items that fight actually used (POK-237).
 function encodeSpent(m: SpentMsg): Uint8Array {
   const items = m.items.slice(0, 4);
@@ -700,6 +711,7 @@ const CODECS: Record<string, Codec> = {
   party: { type: BR_MSG.PARTY, encode: (m) => encodeParty(m as PartyMsg), decode: decodeParty },
   trainer: { type: BR_MSG.TRAINER, encode: (m) => encodeTrainer(m as TrainerMsg), decode: decodeTrainer },
   spent: { type: BR_MSG.SPENT, encode: (m) => encodeSpent(m as SpentMsg), decode: decodeSpent },
+  fled: { type: BR_MSG.FLED, encode: (m) => encodeFled(m as FledMsg), decode: decodeFled },
   duel: { type: BR_MSG.DUEL, encode: (m) => encodeDuel(m as DuelMsg), decode: decodeDuel },
   dresult: { type: BR_MSG.DRESULT, encode: (m) => encodeDresult(m as DresultMsg), decode: decodeDresult },
   pick: { type: BR_MSG.PICK, encode: (m) => encodePick(m as PickMsg), decode: decodePick },

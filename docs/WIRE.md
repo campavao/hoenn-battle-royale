@@ -75,6 +75,7 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `spent` | `BR_MSG_SPENT` 26 | ROM-&gt;page | yes | the ROM that fought a bot, naming the items out of the bot's own bag (POK-237) that the AI actually used. Carries the BOT's seat, not the sender's -- the bag lives on the host's page and the fight does not, so this is the only report of it, and the bridge deliberately does not stamp the sender's seat over it |
 | `duel` | `BR_MSG_DUEL` 27 | page-&gt;ROM | yes | the host, handing two bot parties to its hidden proxy instance (POK-238). Only that instance ever receives one: it has no seat and is in no room, and both sides of the fight are played by the AI |
 | `dresult` | `BR_MSG_DRESULT` 28 | ROM-&gt;page | yes | the proxy instance, when the duel resolves: who won and what each side has left, three bytes a mon. A timeout or a draw falls back to `bots/duel.ts`'s seeded resolver |
+| `fled` | `BR_MSG_FLED` 29 | ROM-&gt;page&lt;-&gt;page-&gt;ROM | yes | the trainer who just ran, naming who they ran from (POK-266). Every ROM that has their ghost draws a boot over it. Deliberately not a fourth `busy` kind: `busy` means "cannot be challenged", and POK-231 holds only the fleer off the pursuer |
 | `botout` | -- | page&lt;-&gt;page | no | whoever beat a bot |
 | `botrec` | -- | page&lt;-&gt;page | no | whoever changed a bot's persistent record |
 | `fame` | -- | page&lt;-&gt;page | no | the champion, at the end of a match |

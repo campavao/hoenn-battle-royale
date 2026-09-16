@@ -72,6 +72,7 @@ gFieldEffectScriptPointers::
 	.4byte gFieldEffectScript_RayquazaSpotlight         @ FLDEFF_RAYQUAZA_SPOTLIGHT
 	.4byte gFieldEffectScript_DestroyDeoxysRock         @ FLDEFF_DESTROY_DEOXYS_ROCK
 	.4byte gFieldEffectScript_MoveDeoxysRock            @ FLDEFF_MOVE_DEOXYS_ROCK
+	.4byte gFieldEffectScript_BrBootIcon                @ FLDEFF_BR_BOOT_ICON
 
 gFieldEffectScript_ExclamationMarkIcon1::
 	field_eff_callnative FldEff_ExclamationMarkIcon
@@ -342,4 +343,9 @@ gFieldEffectScript_DestroyDeoxysRock::
 
 gFieldEffectScript_MoveDeoxysRock::
 	field_eff_callnative FldEff_MoveDeoxysRock
+	field_eff_end
+
+@ POK-266: the runner's mark, drawn like the exclamation and the question mark.
+gFieldEffectScript_BrBootIcon::
+	field_eff_callnative FldEff_BrBootIcon
 	field_eff_end

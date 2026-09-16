@@ -148,8 +148,15 @@ void BrEngage_OnBattleEnd(u8 peerSeat, u8 outcome)
     // Only the fleer is held off the pursuer; the pursuer is free after the grace.
     if (outcome == B_OUTCOME_RAN)
     {
+        u8 buf[2];
+
         gBrEngage.fledFrom = peerSeat;
         gBrEngage.fledLockout = BR_ENGAGE_LOCKOUT;
+        // And everybody sees it happen (POK-266): a boot over our head on their screen,
+        // which is the only way a room learns that somebody ran rather than won.
+        buf[0] = gBrMySeat;
+        buf[1] = peerSeat;
+        BrWire_Send(BR_MSG_FLED, buf, 2);
     }
 }
 

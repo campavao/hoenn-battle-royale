@@ -48,6 +48,9 @@ void BrGhosts_Remove(u8 seat);
 // The busy bubble over one seat's ghost (POK-266): "!" in a fight, "?" in a menu.
 // TRUE when one fired.
 bool8 BrGhosts_Emote(u8 seat);
+// The runner's mark over a seat's ghost (POK-266). An event rather than a state: it is
+// drawn once, when the news arrives, and nothing repeats it.
+bool8 BrGhosts_Fled(u8 seat);
 // Called every frame from BrFrame; only acts while the overworld is running.
 void BrGhosts_Tick(void);
 // The seat whose ghost is the given object event, or BR_NO_OBJ.

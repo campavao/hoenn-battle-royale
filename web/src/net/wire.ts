@@ -250,6 +250,17 @@ export interface DresultMsg {
   b: { hp: number; status: number }[];
 }
 
+/** This trainer just ran from that one (POK-266, Kanto v0.49.0): a boot over their
+ *  head on everybody's screen. Its own message rather than a fourth `busy` kind --
+ *  `busy` means "cannot be challenged", and POK-231's rule is that only the fleer is
+ *  held off the pursuer, so reporting a flee as busy would take a runner off the board
+ *  for the whole room. Crosses out of and into the ROM (fled). */
+export interface FledMsg {
+  t: 'fled';
+  seat: number; // who ran
+  from: number; // who they ran from
+}
+
 /** Where a trainer chose to drop (POK-223). The ROM puts the fly map in front of them
  *  when the opening ends and sends the section they picked; the host deals a cell
  *  inside it that nobody else has. Crosses into the ROM (pick). */
@@ -549,6 +560,7 @@ export type Msg =
   | TrainerMsg
   | DuelMsg
   | DresultMsg
+  | FledMsg
   | SpentMsg
   | PickMsg
   | LandMsg
@@ -912,6 +924,8 @@ const decoders: Record<string, Decoder> = {
   },
 
   spent: (m) => ({ t: 'spent', seat: reqSeat(m), items: itemIds(m.items, 'spent items') }),
+
+  fled: (m) => ({ t: 'fled', seat: reqSeat(m), from: reqSeat(m, 'from') }),
 
   duel: (m) => {
     const side = (raw: unknown, what: string): PackedMon[] => {

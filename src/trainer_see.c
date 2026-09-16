@@ -65,6 +65,12 @@ EWRAM_DATA u8 gApproachingTrainerId = 0;
 static const u8 sEmotion_ExclamationMarkGfx[] = INCGFX_U8("graphics/field_effects/pics/emotion_exclamation.png", ".4bpp");
 static const u8 sEmotion_QuestionMarkGfx[] = INCGFX_U8("graphics/field_effects/pics/emotion_question.png", ".4bpp");
 static const u8 sEmotion_HeartGfx[] = INCGFX_U8("graphics/field_effects/pics/emotion_heart.png", ".4bpp");
+#if BR
+// The runner's mark (POK-266): Kanto's own shoe, pixel for pixel, sat in Emerald's
+// bubble. It rides the exclamation/question sprite as a third frame rather than a
+// sprite of its own -- same size, same palette, same bobbing callback.
+static const u8 sEmotion_BrBootGfx[] = INCGFX_U8("graphics/field_effects/pics/emotion_boot.png", ".4bpp");
+#endif
 
 static u8 (*const sDirectionalApproachDistanceFuncs[])(struct ObjectEvent *trainerObj, s16 range, s16 x, s16 y) =
 {
@@ -139,7 +145,13 @@ static const struct SpriteFrameImage sSpriteImageTable_ExclamationQuestionMark[]
     {
         .data = sEmotion_QuestionMarkGfx,
         .size = sizeof(sEmotion_QuestionMarkGfx)
-    }
+    },
+#if BR
+    {
+        .data = sEmotion_BrBootGfx,
+        .size = sizeof(sEmotion_BrBootGfx)
+    },
+#endif
 };
 
 static const struct SpriteFrameImage sSpriteImageTable_HeartIcon[] =
@@ -162,10 +174,21 @@ static const union AnimCmd sSpriteAnim_Icons2[] =
     ANIMCMD_END
 };
 
+#if BR
+static const union AnimCmd sSpriteAnim_Icons3[] =
+{
+    ANIMCMD_FRAME(2, 60),
+    ANIMCMD_END
+};
+#endif
+
 static const union AnimCmd *const sSpriteAnimTable_Icons[] =
 {
     sSpriteAnim_Icons1,
-    sSpriteAnim_Icons2
+    sSpriteAnim_Icons2,
+#if BR
+    sSpriteAnim_Icons3,
+#endif
 };
 
 static const struct SpriteTemplate sSpriteTemplate_ExclamationQuestionMark =
@@ -724,6 +747,20 @@ u8 FldEff_QuestionMarkIcon(void)
 
     return 0;
 }
+
+#if BR
+// Whoever just ran, for everybody watching (POK-266). The same sprite as the other two
+// marks, one frame further along.
+u8 FldEff_BrBootIcon(void)
+{
+    u8 spriteId = CreateSpriteAtEnd(&sSpriteTemplate_ExclamationQuestionMark, 0, 0, 0x52);
+
+    if (spriteId != MAX_SPRITES)
+        SetIconSpriteData(&gSprites[spriteId], FLDEFF_BR_BOOT_ICON, 2);
+
+    return 0;
+}
+#endif
 
 u8 FldEff_HeartIcon(void)
 {

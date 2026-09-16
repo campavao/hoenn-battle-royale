@@ -1,0 +1,31 @@
+# flee-boot: a boot over whoever just ran (POK-266, Kanto v0.49.0). Losing is visible
+# -- the loser drops their team where they stood -- and running was not: a trainer who
+# ran from a fight simply walked away, and the room could not tell that from a trainer
+# who had never been in one.
+#
+# It is its own message rather than a fourth BUSY kind. BUSY means "cannot be
+# challenged", and POK-231's rule is that only the FLEER is held off the PURSUER --
+# everybody else may still walk up to them.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# seat 1 placed two tiles east of us, facing west (emote-busy.txt's own ghost)
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrSeats+16 1
+# FLED: type 29 (0x1D), framed len 5 = hdr(02 00 00) + seat 01 ran from seat 00 (us)
+pokebytes gBrMailbox+0x1058 1D 05 02 00 00 01 00
+poke u16 gBrMailbox+0x0C 2
+wait 8
+shot ran-08
+wait 8
+shot ran-16
+wait 9
+shot ran
+# ...and it is an event, not a state: nothing repeats it, and the seat is not marked
+# busy by it -- the room may still challenge somebody who ran from somebody else.
+expect u8 gBrSeatBusy+1 0
+wait 240
+shot after
+say flee boot ok

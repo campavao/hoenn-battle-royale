@@ -243,6 +243,13 @@ describe('fixed-layout byte counts', () => {
     expect(roundTrip(msg)).toEqual(msg);
   });
 
+  it('a flee is two seats and nothing else (POK-266)', () => {
+    const msg: Msg = { t: 'fled', seat: 5, from: 2 };
+    const { payload } = reassembleSlots(packSlot(msg));
+    expect(Array.from(payload)).toEqual([5, 2]);
+    expect(roundTrip(msg)).toEqual(msg);
+  });
+
   it('a party mon packs to exactly 100 bytes', () => {
     const slots = packSlot({ t: 'party', seat: 0, mons: [mon()] });
     const { payload } = reassembleSlots(slots);
