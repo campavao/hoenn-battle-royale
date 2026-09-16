@@ -124,6 +124,9 @@ export interface BotsOptions {
    *  cares to work it out. Without it bots never fight each other and only the fog
    *  ever eliminates anybody. */
   seed?: number;
+  /** Two bots settled it. The only place both sides of a fight are known at once,
+   *  which is what a kill feed needs. */
+  onDuel?: (winner: number, loser: number) => void;
   /** Every rule that fired, as it fires. Kanto's `Bots.decisions`: the only way to
    *  answer "why did it go there" about something that walks for sixteen minutes.
    *  Off in the browser; `tools/br/bots-replay.ts` turns it on. */
@@ -431,6 +434,7 @@ export class Bots {
       won.party = result.winnerParty;
       won.engageAfter = now + ENGAGE_COOLDOWN_MS;
       this.note(walker, 'duel', `${result.winner} beat ${result.loser}`);
+      this.opts.onDuel?.(result.winner, result.loser);
       this.eliminate(lost);
       return lost === walker;
     }

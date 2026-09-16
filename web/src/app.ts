@@ -20,7 +20,9 @@ import { Loot } from './match/loot';
 import { Results } from './match/results';
 import { Bots } from './bots/brain';
 import { dealBots } from './bots/roster';
+import * as Ticker from './match/ticker';
 import type { RosterEntry } from './match/roster';
+import type { TickerMsg } from './net/wire';
 import { World, type WorldMap } from './bots/world';
 import { sectionInside } from './match/ring';
 import { dealParty } from './bots/party';
@@ -507,6 +509,7 @@ function startBots(
   loot: Loot,
   players: () => RosterEntry[],
   sendTo: (seat: number, msg: Msg) => void,
+  onDuel: (winner: number, loser: number) => void,
 ): {
   bots: Bots;
   seats: number[];
@@ -564,6 +567,7 @@ function startBots(
     },
     deal: (bot, atPhase) => dealParty(seed, bot.seat, atPhase),
     seed,
+    onDuel,
     centres: () => world.centres(),
     // Bots are on this roster too -- the host applies its own bots' `place` to it --
     // so this is the whole field, which is what the hunt rule wants.
@@ -851,6 +855,20 @@ function wireRoom(
     const hostSeat = bridge.seat;
     const seed = fixedSeed() ?? Math.floor(Math.random() * 0x7fff_ffff) + 1;
     const rom = createRomPushQueue(emu, bridge.mailbox); // reuses the Bridge's own Mailbox, not a second one on the same base
+    // The ticker. The ROM has drawn the window since POK-226 and nothing had ever sent
+    // it a line, so a match was silent: people vanished, the fog closed, somebody won,
+    // and the only way to know was to be watching the right corner. The host narrates,
+    // because the host is the one client that knows the whole match.
+    const nameOf = (seat: number) => {
+      const row = bridge!.roster.all().find((e) => e.seat === seat);
+      return row?.name || `P${seat}`;
+    };
+    const say = (msg: TickerMsg | null) => {
+      if (!msg) return;
+      bridge!.relay.all(msg);
+      rom.push(msg);
+    };
+    const seen = new Set<number>(); // seats already announced out, so a repeat is quiet
     // The host speaks for the bots as well as for the clock: same relay, same in-ring,
     // and its own roster too -- nobody hears their own messages come back, so the host
     // would otherwise be the one client that cannot see the bots it is walking.
@@ -872,6 +890,9 @@ function wireRoom(
         if (toSeat === bridge!.seat) rom.push(msg);
         else bridge!.relay.to(toSeat, msg);
       },
+      // The kill feed. A duel is the only moment both sides of a fight are known at
+      // once -- an `out` on its own cannot say who did it.
+      (winner, loser) => say(Ticker.beat(winner, nameOf(winner), nameOf(loser))),
     );
     director = new Director({
       // Bots are contestants, not scenery: leaving them out of the seat list makes
@@ -892,17 +913,35 @@ function wireRoom(
         rom.push(msg); // no-op for `win` -- createRomPushQueue only packs a msg.t crossesToRom() knows
         noteResult(msg); // the host's own `start`/`win` never come back to it over the relay
         if (msg.t === 'ring') bots?.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r }, msg.phase);
+        // The match, narrated. These are the director's own messages on their way out,
+        // which is the one place every one of them passes through.
+        if (msg.t === 'start') {
+          say(Ticker.opening(hostSeat, msg.safari ?? 0));
+          say(Ticker.dropped(hostSeat, msg.spawns.length));
+        } else if (msg.t === 'ring') {
+          say(Ticker.fog(hostSeat, msg.phase, msg.r < 0));
+        } else if (msg.t === 'win' && msg.seat !== undefined && msg.seat !== null) {
+          say(Ticker.won(msg.seat, nameOf(msg.seat)));
+        }
       },
       now: () => performance.now(),
       onOut: (handler) => {
         // A bot the fog took is eliminated by this very page, so its `out` never comes
         // back over the relay -- nobody hears their own messages. Without this the
         // host's own bots are immortal and the match cannot end.
-        localOut = handler;
+        const narrate = (seat: number) => {
+          if (seen.has(seat)) return;
+          seen.add(seat);
+          const left = Math.max(0, (director?.state.alive ?? 1) - 1);
+          say(Ticker.out(seat, nameOf(seat), left));
+          if (left === 3) say(Ticker.fewLeft(seat, left));
+          handler(seat);
+        };
+        localOut = narrate;
         const off = bridge!.relay.on('recv', (ev) => {
           try {
             const m = decode(JSON.stringify(ev.m));
-            if (m.t === 'out') handler(m.seat);
+            if (m.t === 'out') narrate(m.seat);
           } catch {
             // not a wire.ts Msg at all, or failed validation -- bridge.ts already
             // counts this as a drop; nothing for the director to act on either way.
