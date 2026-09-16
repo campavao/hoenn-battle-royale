@@ -20,6 +20,7 @@
 #include "br/br_spectate.h"
 #include "br/br_pick.h"
 #include "br/br_map.h"
+#include "br/br_zone.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
 // running it: `strings pokeemerald.gba | grep HOENN-BR`.
@@ -42,6 +43,7 @@ void BrInit(void)
     BrSpectate_Init();
     BrPick_Init();
     BrMap_Init();
+    BrZone_Init();
 }
 
 void BrFrame(void)

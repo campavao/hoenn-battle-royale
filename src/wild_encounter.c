@@ -1,6 +1,7 @@
 #include "global.h"
 #if BR
 #include "br/br_levels.h"
+#include "br/br_zone.h"
 #endif
 #include "battle_setup.h"
 #include "battle_pike.h"
@@ -385,6 +386,20 @@ static u8 PickWildMonNature(void)
 static void CreateWildMon(u16 species, u8 level)
 {
     bool32 checkCuteCharm;
+
+#if BR
+    // The opening's catch pool is dealt from the match seed (POK-255), not read off
+    // the Zone's own table -- otherwise every match offers the same handful of species
+    // in the same proportions, and the one real decision the opening asks is the same
+    // decision every time. Outside the opening this answers SPECIES_NONE and the map
+    // keeps whatever it chose.
+    {
+        u16 dealt = BrZone_Pick();
+
+        if (dealt != SPECIES_NONE)
+            species = dealt;
+    }
+#endif
 
     ZeroEnemyPartyMons();
     checkCuteCharm = TRUE;

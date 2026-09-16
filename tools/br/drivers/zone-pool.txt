@@ -1,0 +1,41 @@
+# zone-pool: the Safari's catch pool is dealt from the match seed (POK-255), not read
+# off Emerald's own Zone table. Twelve species -- four from the rare slice (starters,
+# the pseudo-legendary lines, the ones worth going looking for) and eight from the open
+# slice -- and the same twelve on every ROM in the room, because the deal is a pure
+# function of the seed the START carried rather than anything sent.
+#
+# The encounter itself cannot be driven here (POK-269: the harness cannot run a wild
+# battle past its intro), so this checks the deal, which is the part that is ours. The
+# expected twelve were worked out by running the same generator offline -- mulberry32
+# to the bit, the one clock.ts uses, so the page can mirror this without a second
+# implementation.
+wait 30
+# boot mode 2 = the Safari Zone
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+# nothing is dealt before there is a seed to deal from
+expect u32 gBrZone 0
+# START, seed 0x12345678
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u32 gBrMatch+8 0x12345678
+# BrMatch_BeginSafari deals it, so by now it is there and it is this seed's
+expect u32 gBrZone 0x12345678
+# the rare slice: MUDKIP 283, BELDUM 398, LILEEP 388, TORCHIC 280
+expect u16 gBrZone+4 283
+expect u16 gBrZone+6 398
+expect u16 gBrZone+8 388
+expect u16 gBrZone+10 280
+# and the open slice: TENTACOOL 72, PIKACHU 25, MACHOP 66, BARBOACH 323, GULPIN 367,
+# MEDITITE 356, ARON 382, DUSKULL 361
+expect u16 gBrZone+12 72
+expect u16 gBrZone+14 25
+expect u16 gBrZone+16 66
+expect u16 gBrZone+18 323
+expect u16 gBrZone+20 367
+expect u16 gBrZone+22 356
+expect u16 gBrZone+24 382
+expect u16 gBrZone+26 361
+say zone pool ok

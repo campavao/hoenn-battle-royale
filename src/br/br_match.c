@@ -17,6 +17,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
 #include "br/br_ring.h"
+#include "br/br_zone.h"
 #include "br/br_pick.h"
 #include "br/br_loot.h"
 #include "br/br_spectate.h"
@@ -171,6 +172,9 @@ void BrMatch_SafariCell(u8 *x, u8 *y)
 void BrMatch_BeginSafari(void)
 {
     EnterSafariMode();
+    // The catch pool belongs to the opening, so it is dealt when the opening starts
+    // rather than on the first encounter that asks (POK-255).
+    BrZone_Ensure();
     gBrMatch.phase = BR_PHASE_SAFARI;
     gBrMatch.clockLeft = gBrMatch.safariSecs;
     gBrMatch.clockFrames = 60;
@@ -286,6 +290,11 @@ void BrMatch_Tick(void)
     }
     if (gBrMatch.phase != BR_PHASE_SAFARI)
         return;
+    // The catch pool belongs to the opening (POK-255). Dealt here rather than in
+    // BrMatch_BeginSafari because the boot can enter the Zone before the START that
+    // carries the seed arrives -- and a pool dealt from a seed of zero is no pool.
+    // Ensure is a no-op once the seed it was dealt for still matches.
+    BrZone_Ensure();
     if (!OverworldRunning())
         return;
     // The fog is up: the opening is over whatever our own clock says. It has to be
