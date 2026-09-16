@@ -12,7 +12,7 @@
 import { findPath, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
-import { MOVE_SURF } from './party';
+import { MOVE_CUT, MOVE_SURF } from './party';
 import { duel } from './duel';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon } from '../net/wire';
@@ -190,6 +190,23 @@ export interface BotsOptions {
 export function canSurf(party: PackedMon[]): boolean {
   return party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_SURF));
 }
+
+/** And through a tree? Kanto's bots cut (v0.46.0); ours walked through them, because
+ *  the exporter has always marked a cuttable tree as its own class and nothing ever
+ *  looked (POK-267).
+ *
+ *  It answers TRUE for anybody carrying CUT, and a bot is dealt it at the rung -- but
+ *  the honest answer for a contestant is that everybody can, because the boot hands
+ *  over all eight HMs (POK-256) and the relearner is one menu away (POK-225). What the
+ *  move actually buys is the fight: a bot that knows CUT can use it in one. */
+export function canCut(party: PackedMon[]): boolean {
+  return party.length === 0 || party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_CUT)) || CONTESTANTS_CARRY_HMS;
+}
+
+/** POK-256 gave every contestant the run of Hoenn, HMs included. Named rather than
+ *  inlined as `true` so that if that ever stops being so, this is the one place that
+ *  has to change -- and the graph keeps modelling a tree as a tree either way. */
+const CONTESTANTS_CARRY_HMS = true;
 
 /** The share of the team's health still standing: 1 is untouched, 0 is wiped. */
 export function health(party: PackedMon[]): number {
@@ -541,7 +558,7 @@ export class Bots {
       (c) => c.mapId !== walker.at.map && this.opts.world.map(c.mapId)?.section === section,
     );
     for (const c of [...here, ...town]) {
-      const path = findPath(this.opts.world, walker.at, { map: c.mapId, x: c.x, y: c.y }, CENTRE_BUDGET, canSurf(walker.party));
+      const path = findPath(this.opts.world, walker.at, { map: c.mapId, x: c.x, y: c.y }, CENTRE_BUDGET, canSurf(walker.party), canCut(walker.party));
       if (path.found) return path;
     }
     return null;
@@ -583,7 +600,7 @@ export class Bots {
           (Math.abs(b.x - walker.at.x) + Math.abs(b.y - walker.at.y)),
       );
     for (const piece of loot.slice(0, 2)) {
-      const path = findPath(this.opts.world, walker.at, { map: piece.mapId, x: piece.x, y: piece.y }, WANDER_BUDGET, canSurf(walker.party));
+      const path = findPath(this.opts.world, walker.at, { map: piece.mapId, x: piece.x, y: piece.y }, WANDER_BUDGET, canSurf(walker.party), canCut(walker.party));
       if (path.found && path.steps.length > 0) {
         walker.path = path;
         walker.stepIndex = 0;
@@ -602,6 +619,7 @@ export class Bots {
           { map: player.mapId, x: player.x, y: player.y },
           WANDER_BUDGET,
           canSurf(walker.party),
+          canCut(walker.party),
         );
         if (path.found && path.steps.length > 0) {
           walker.path = path;
@@ -629,7 +647,7 @@ export class Bots {
       const pick = pool[Math.floor(this.opts.rng() * pool.length)];
       const to: Spot = { map: pick.mapId, x: pick.x, y: pick.y };
       if (sameSpot(to, walker.at)) continue;
-      const path = findPath(this.opts.world, walker.at, to, WANDER_BUDGET, canSurf(walker.party));
+      const path = findPath(this.opts.world, walker.at, to, WANDER_BUDGET, canSurf(walker.party), canCut(walker.party));
       if (path.found && path.steps.length > 0) {
         walker.path = path;
         walker.stepIndex = 0;
@@ -649,7 +667,7 @@ export class Bots {
   /** One legal step, any direction. The fallback when there is nothing to route to --
    *  or, as 'wait', when the tick's thinking budget went to another bot. */
   private wanderOneStep(walker: Walker, why: 'stuck' | 'wait' = 'stuck'): void {
-    const open = this.opts.world.neighbours(walker.at, canSurf(walker.party));
+    const open = this.opts.world.neighbours(walker.at, canSurf(walker.party), canCut(walker.party));
     if (open.length === 0) {
       this.note(walker, why);
       walker.path = null;

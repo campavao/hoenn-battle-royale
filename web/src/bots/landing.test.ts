@@ -24,7 +24,9 @@ function component(from: Spot): Set<string> {
   const queue = [from];
   while (queue.length > 0) {
     const at = queue.pop()!;
-    for (const { to } of world.neighbours(at, false)) {
+    // On foot, but able to cut: every contestant boots with the HMs (POK-256), which
+    // is the same assumption tools/br/landing-reach.ts floods the world with.
+    for (const { to } of world.neighbours(at, false, true)) {
       if (seen.has(key(to))) continue;
       seen.add(key(to));
       queue.push(to);

@@ -55,10 +55,15 @@ export function rungForPhase(phase: number): number {
  *  the inside of a Centre. Every one of these is somewhere in Hoenn's early routes, so
  *  a bot dealt from it still looks like it came from around here. */
 export const MOVE_SURF = 57;
+export const MOVE_CUT = 15;
 /** The rung a water mon has learned SURF by. Hoenn is half ocean and the drop is
  *  happy to put a trainer on Route 125 or Southern Island, which nothing without it
  *  ever leaves -- so this is a way off an island, not a convenience. */
 const SURF_RUNG = 30;
+/** And the rung anybody has picked up CUT by. Lower than SURF: a cut tree is a fence
+ *  across a route rather than half the map, and a bot stuck behind one looks broken
+ *  in a way a bot that cannot cross the sea does not. */
+const CUT_RUNG = 20;
 
 const POOL: { species: number; name: string; moves: number[]; water?: true }[] = [
   { species: 277, name: 'TREECKO', moves: [1, 43] }, // POUND, LEER
@@ -122,6 +127,7 @@ function mon(level: number, rng: () => number, mapId?: string): PackedMon {
   const max = hp(level);
   const moves = [...pick.moves];
   if (pick.water && level >= SURF_RUNG && !moves.includes(MOVE_SURF)) moves.push(MOVE_SURF);
+  if (!pick.water && level >= CUT_RUNG && !moves.includes(MOVE_CUT)) moves.push(MOVE_CUT);
   return {
     species,
     level,

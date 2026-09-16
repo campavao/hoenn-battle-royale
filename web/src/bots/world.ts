@@ -51,6 +51,10 @@ export interface Spot {
  *  which can be stood on and only jumped one way. 1 and 2 are wall and water. */
 const CLASS_WALL = 1;
 const CLASS_WATER = 2;
+/** A cuttable tree or a smashable rock: the exporter overlays these at their object
+ *  event's cell, because in Emerald they are objects rather than metatile behaviours.
+ *  Nothing checked for them until POK-267, so bots walked through trees. */
+const CLASS_CUT = 9;
 const LEDGE_MIN = 3;
 const LEDGE_MAX = 6;
 
@@ -126,15 +130,16 @@ export class World {
    *  that is one-way. Water is not, unless they are surfing -- and a bot that can
    *  surf is the only thing that gets off Route 125 or Southern Island, where the
    *  drop is perfectly happy to put one. */
-  standable(id: string, x: number, y: number, surf = false): boolean {
+  standable(id: string, x: number, y: number, surf = false, cut = false): boolean {
     const cls = this.cell(id, x, y);
     if (cls === CLASS_WALL) return false;
+    if (cls === CLASS_CUT) return cut;
     return cls !== CLASS_WATER || surf;
   }
 
   /** Where one step in `dir` from `spot` lands -- the next cell, the map across a
    *  seam, or null when it is a wall, the void, or a ledge facing the wrong way. */
-  step(spot: Spot, dir: SeamDir, surf = false): Spot | null {
+  step(spot: Spot, dir: SeamDir, surf = false, cut = false): Spot | null {
     const m = this.maps.get(spot.map);
     if (!m) return null;
     const move = STEPS.find((s) => s.dir === dir);
@@ -147,9 +152,9 @@ export class World {
         // A ledge taken the way it faces: the jump lands two cells on.
         const jx = nx + move.dx;
         const jy = ny + move.dy;
-        return this.standable(spot.map, jx, jy, surf) ? { map: spot.map, x: jx, y: jy } : null;
+        return this.standable(spot.map, jx, jy, surf, cut) ? { map: spot.map, x: jx, y: jy } : null;
       }
-      if (!this.standable(spot.map, nx, ny, surf)) return null;
+      if (!this.standable(spot.map, nx, ny, surf, cut)) return null;
       const warp = this.warpAt(spot.map, nx, ny);
       if (warp) {
         // Through the door. The landing is the other side's own cell, so this is a
@@ -158,13 +163,13 @@ export class World {
       }
       return { map: spot.map, x: nx, y: ny };
     }
-    return this.acrossSeam(m, spot, dir, surf);
+    return this.acrossSeam(m, spot, dir, surf, cut);
   }
 
   /** Off the edge: the seam that joins this map to the next, at the offset the
    *  exporter recorded. A connection's offset shifts the neighbour's axis, which is
    *  why this is not just "same coordinate on the other map". */
-  private acrossSeam(m: WorldMap, spot: Spot, dir: SeamDir, surf = false): Spot | null {
+  private acrossSeam(m: WorldMap, spot: Spot, dir: SeamDir, surf = false, cut = false): Spot | null {
     const seam = m.seams.find((s) => s.dir === dir);
     if (!seam) return null;
     const to = this.maps.get(seam.to);
@@ -189,14 +194,14 @@ export class World {
         y = spot.y - seam.offset;
         break;
     }
-    return this.standable(seam.to, x, y, surf) ? { map: seam.to, x, y } : null;
+    return this.standable(seam.to, x, y, surf, cut) ? { map: seam.to, x, y } : null;
   }
 
   /** Every step a trainer could take from here, with the direction that took it. */
-  neighbours(spot: Spot, surf = false): { dir: SeamDir; to: Spot }[] {
+  neighbours(spot: Spot, surf = false, cut = false): { dir: SeamDir; to: Spot }[] {
     const out: { dir: SeamDir; to: Spot }[] = [];
     for (const move of STEPS) {
-      const to = this.step(spot, move.dir, surf);
+      const to = this.step(spot, move.dir, surf, cut);
       if (to) out.push({ dir: move.dir, to });
     }
     return out;

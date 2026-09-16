@@ -33,6 +33,11 @@ const world = new World(maps);
 // that strands somebody. Route 108, the Abandoned Ship's island, is the case that
 // made the point: reachable by surf, and two bots sat on it for a whole match.
 const SURF = false;
+// But CUT is free. Every contestant boots with all eight HMs (POK-256) and the free
+// MOVES relearner is one menu away (POK-225), so a tree is a fence anybody in a match
+// can open -- and treating it as a wall is what dropped the usable pool from 945 cells
+// to 134 the moment trees stopped being walked straight through (POK-267).
+const CUT = true;
 
 const seen = new Map<string, number>();
 const components: { id: number; cells: number }[] = [];
@@ -46,7 +51,7 @@ function flood(from: Spot, id: number): number {
   while (queue.length > 0) {
     const at = queue.pop()!;
     n++;
-    for (const { to } of world.neighbours(at, SURF)) {
+    for (const { to } of world.neighbours(at, SURF, CUT)) {
       if (seen.has(key(to))) continue;
       seen.set(key(to), id);
       queue.push(to);

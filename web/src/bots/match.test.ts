@@ -103,7 +103,8 @@ describe('thirty bots, sixteen minutes', () => {
       for (const at of tick.values()) {
         // Surfing is allowed, so a water cell is only wrong if nothing may stand there
         // at all -- which is the wall class, and the void off the edge of a map.
-        if (!run.world.standable(at.map, at.x, at.y, true)) bad.push(`${at.map} ${at.x},${at.y}`);
+        // surf and cut: a bot is a contestant, and a contestant has the HMs (POK-256).
+        if (!run.world.standable(at.map, at.x, at.y, true, true)) bad.push(`${at.map} ${at.x},${at.y}`);
       }
     }
     expect(bad.slice(0, 5)).toEqual([]);
