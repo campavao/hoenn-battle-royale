@@ -20,7 +20,15 @@ u8 RecordedBattle_BufferSpectateDelta(u8 *dst); // POK-233: the spectator action
 struct Pokemon;
 void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
     struct Pokemon *eParty, const u8 *names, const u8 *genders, void (*CB2_After)(void));
-void RecordedBattle_FeedSpectate(const u8 *delta);
+// Appends one streamed delta ([battler, count, bytes...] runs, `n` bytes of them) to
+// the record the replay reads from. Its own write cursor, so it never disturbs the read.
+void RecordedBattle_FeedSpectate(const u8 *delta, u8 n);
+// TRUE when `count` more action bytes have arrived for this battler -- the spectator's
+// controllers hold their turn until they have, so the replay waits a turn behind.
+bool8 RecordedBattle_HasBattlerAction(u8 battler, u8 count);
+// The fight is over on the fighters' side: let the replay finish what it has and quit
+// instead of waiting for a turn that will never come.
+void RecordedBattle_EndSpectate(void);
 bool8 RecordedBattle_IsSpectateLive(void);
 #endif
 bool32 CanCopyRecordedBattleSaveData(void);

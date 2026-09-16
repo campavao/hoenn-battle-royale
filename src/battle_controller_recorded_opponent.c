@@ -1400,8 +1400,51 @@ static void RecordedOpponentHandlePrintSelectionString(void)
     RecordedOpponentBufferExecCompleted();
 }
 
+#if BR
+// A live spectated battle (POK-233) runs a turn behind the fighters, so the next action
+// bytes may not have arrived yet. Hold the controller here and look again next frame
+// instead of handing the engine a B_ACTION_NONE it would act on.
+static void RecordedOpponentWaitForAction(void)
+{
+    if (RecordedBattle_HasBattlerAction(gActiveBattler, 1))
+    {
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, RecordedBattle_GetBattlerAction(gActiveBattler), 0);
+        RecordedOpponentBufferExecCompleted();
+    }
+}
+
+static void RecordedOpponentWaitForMove(void)
+{
+    if (RecordedBattle_HasBattlerAction(gActiveBattler, 2))
+    {
+        u8 moveIndex = RecordedBattle_GetBattlerAction(gActiveBattler);
+        u8 target = RecordedBattle_GetBattlerAction(gActiveBattler);
+
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, moveIndex | (target << 8));
+        RecordedOpponentBufferExecCompleted();
+    }
+}
+
+static void RecordedOpponentWaitForSwitch(void)
+{
+    if (RecordedBattle_HasBattlerAction(gActiveBattler, 1))
+    {
+        *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = RecordedBattle_GetBattlerAction(gActiveBattler);
+        BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, *(gBattleStruct->monToSwitchIntoId + gActiveBattler), NULL);
+        RecordedOpponentBufferExecCompleted();
+    }
+}
+#endif
+
 static void RecordedOpponentHandleChooseAction(void)
 {
+#if BR
+    if (RecordedBattle_IsSpectateLive())
+    {
+        gBattlerControllerFuncs[gActiveBattler] = RecordedOpponentWaitForAction;
+        return;
+    }
+#endif
     BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, RecordedBattle_GetBattlerAction(gActiveBattler), 0);
     RecordedOpponentBufferExecCompleted();
 }
@@ -1413,6 +1456,13 @@ static void RecordedOpponentHandleYesNoBox(void)
 
 static void RecordedOpponentHandleChooseMove(void)
 {
+#if BR
+    if (RecordedBattle_IsSpectateLive())
+    {
+        gBattlerControllerFuncs[gActiveBattler] = RecordedOpponentWaitForMove;
+        return;
+    }
+#endif
     if (gBattleTypeFlags & BATTLE_TYPE_PALACE)
     {
         BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, ChooseMoveAndTargetInBattlePalace());
@@ -1434,6 +1484,13 @@ static void RecordedOpponentHandleChooseItem(void)
 
 static void RecordedOpponentHandleChoosePokemon(void)
 {
+#if BR
+    if (RecordedBattle_IsSpectateLive())
+    {
+        gBattlerControllerFuncs[gActiveBattler] = RecordedOpponentWaitForSwitch;
+        return;
+    }
+#endif
     *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = RecordedBattle_GetBattlerAction(gActiveBattler);
     BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, *(gBattleStruct->monToSwitchIntoId + gActiveBattler), NULL);
     RecordedOpponentBufferExecCompleted();

@@ -1410,6 +1410,42 @@ static void RecordedPlayerHandlePrintSelectionString(void)
     RecordedPlayerBufferExecCompleted();
 }
 
+#if BR
+// A live spectated battle (POK-233) runs a turn behind the fighters, so the next action
+// bytes may not have arrived yet. Hold the controller here and look again next frame
+// instead of handing the engine a B_ACTION_NONE it would act on.
+static void RecordedPlayerWaitForAction(void)
+{
+    if (RecordedBattle_HasBattlerAction(gActiveBattler, 1))
+    {
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, RecordedBattle_GetBattlerAction(gActiveBattler), 0);
+        RecordedPlayerBufferExecCompleted();
+    }
+}
+
+static void RecordedPlayerWaitForMove(void)
+{
+    if (RecordedBattle_HasBattlerAction(gActiveBattler, 2))
+    {
+        u8 moveIndex = RecordedBattle_GetBattlerAction(gActiveBattler);
+        u8 target = RecordedBattle_GetBattlerAction(gActiveBattler);
+
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, moveIndex | (target << 8));
+        RecordedPlayerBufferExecCompleted();
+    }
+}
+
+static void RecordedPlayerWaitForSwitch(void)
+{
+    if (RecordedBattle_HasBattlerAction(gActiveBattler, 1))
+    {
+        *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = RecordedBattle_GetBattlerAction(gActiveBattler);
+        BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, *(gBattleStruct->monToSwitchIntoId + gActiveBattler), NULL);
+        RecordedPlayerBufferExecCompleted();
+    }
+}
+#endif
+
 static void ChooseActionInBattlePalace(void)
 {
     if (gBattleCommunication[4] >= gBattlersCount / 2)
@@ -1421,6 +1457,13 @@ static void ChooseActionInBattlePalace(void)
 
 static void RecordedPlayerHandleChooseAction(void)
 {
+#if BR
+    if (RecordedBattle_IsSpectateLive())
+    {
+        gBattlerControllerFuncs[gActiveBattler] = RecordedPlayerWaitForAction;
+        return;
+    }
+#endif
     if (gBattleTypeFlags & BATTLE_TYPE_PALACE)
     {
         gBattlerControllerFuncs[gActiveBattler] = ChooseActionInBattlePalace;
@@ -1439,6 +1482,13 @@ static void RecordedPlayerHandleYesNoBox(void)
 
 static void RecordedPlayerHandleChooseMove(void)
 {
+#if BR
+    if (RecordedBattle_IsSpectateLive())
+    {
+        gBattlerControllerFuncs[gActiveBattler] = RecordedPlayerWaitForMove;
+        return;
+    }
+#endif
     if (gBattleTypeFlags & BATTLE_TYPE_PALACE)
     {
         BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, ChooseMoveAndTargetInBattlePalace());
@@ -1460,6 +1510,13 @@ static void RecordedPlayerHandleChooseItem(void)
 
 static void RecordedPlayerHandleChoosePokemon(void)
 {
+#if BR
+    if (RecordedBattle_IsSpectateLive())
+    {
+        gBattlerControllerFuncs[gActiveBattler] = RecordedPlayerWaitForSwitch;
+        return;
+    }
+#endif
     *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = RecordedBattle_GetBattlerAction(gActiveBattler);
     BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, *(gBattleStruct->monToSwitchIntoId + gActiveBattler), NULL);
     RecordedPlayerBufferExecCompleted();

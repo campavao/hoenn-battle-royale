@@ -74,6 +74,7 @@ EWRAM_DATA static u16 sBattlerSavedRecordSizes[MAX_BATTLERS_COUNT] = {0};
 #if BR
 EWRAM_DATA static u16 sSpectatePrevSizes[MAX_BATTLERS_COUNT] = {0}; // POK-233 stream cursor
 EWRAM_DATA static bool8 sSpectateLive = FALSE; // POK-233 live spectate: block, don't quit
+EWRAM_DATA static bool8 sSpectateEnded = FALSE; // the stream is closed: stop waiting
 #endif
 EWRAM_DATA static u8 sRecordMode = 0;
 EWRAM_DATA static u8 sLvlMode = 0;
@@ -116,9 +117,15 @@ void RecordedBattle_Init(u8 mode)
     {
         sBattlerRecordSizes[i] = 0;
         sBattlerPrevRecordSizes[i] = 0;
-        sBattlerSavedRecordSizes[i] = 0;
 #if BR
+        // A live spectate (POK-233) is already streaming turns in by the time the battle
+        // initialises -- this runs ~128 frames after RecordedBattle_StartSpectate. Its
+        // write cursor must survive, or those first turns are overwritten and lost.
+        if (!sSpectateLive)
+            sBattlerSavedRecordSizes[i] = 0;
         sSpectatePrevSizes[i] = 0;
+#else
+        sBattlerSavedRecordSizes[i] = 0;
 #endif
 
         if (mode == B_RECORD_MODE_RECORDING)
@@ -221,7 +228,7 @@ u8 RecordedBattle_GetBattlerAction(u8 battler)
         // A live spectated battle runs a turn behind the fighters (POK-233): when the
         // stream has not delivered this battler's next action yet, wait rather than end
         // the battle -- the turn arrives over the next frames and the read succeeds then.
-        if (sSpectateLive)
+        if (sSpectateLive && !sSpectateEnded)
             return B_ACTION_NONE;
 #endif
         gSpecialVar_Result = gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED; // hah
@@ -543,6 +550,7 @@ static void CB2_RecordedBattleEnd(void)
 {
 #if BR
     sSpectateLive = FALSE;
+    sSpectateEnded = FALSE;
 #endif
     gSaveBlock2Ptr->frontier.lvlMode = sLvlMode;
     gBattleOutcome = 0;
@@ -658,7 +666,8 @@ void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
     struct Pokemon *eParty, const u8 *names, const u8 *genders, void (*CB2_After)(void))
 {
     struct RecordedBattleSave *save = AllocZeroed(sizeof(struct RecordedBattleSave));
-    u8 taskId, i, j;
+    u8 i;
+    s32 j;
 
     if (save == NULL)
         return;
@@ -673,26 +682,92 @@ void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
             save->playersName[i][j] = names[i * (PLAYER_NAME_LENGTH + 1) + j];
         save->playersGender[i] = genders[i];
         save->playersBattlers[i] = i;
+        save->playersLanguage[i] = gGameLanguage;
     }
+    // Empty, not zeroed: 0 is B_ACTION_USE_MOVE, so a zeroed record reads as a battle
+    // full of moves. 0xFF is the record's own "nothing here", which is what the
+    // controllers wait on until the stream delivers the turn.
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+        for (j = 0; j < BATTLER_RECORD_SIZE; j++)
+            save->battleRecord[i][j] = 0xFF;
     save->rngSeed = seed;
-    save->battleFlags = flags;
+    // The fighters' own flags, turned into a replay's the same way Emerald turns them
+    // when it saves a link battle: the link is gone (there is no cable on this side),
+    // RECORDED_LINK puts both trainers on the screen, and RECORDED_IS_MASTER keeps the
+    // publisher -- the challenger, whose party we were sent as the player's -- with its
+    // back to the camera. SetVariablesForRecordedBattle ORs in BATTLE_TYPE_RECORDED.
+    save->battleFlags = (flags & ~(BATTLE_TYPE_LINK | BATTLE_TYPE_LINK_IN_BATTLE))
+                      | BATTLE_TYPE_RECORDED_LINK | BATTLE_TYPE_RECORDED_IS_MASTER;
     save->multiplayerId = 0;
+    save->opponentA = TRAINER_LINK_OPPONENT;
+    save->battleScene = TRUE;
 
     RecordedBattle_SaveParties();
     SetVariablesForRecordedBattle(save);
+    // The stream writes at sBattlerSavedRecordSizes from the first turn, which can land
+    // before the battle initialises; RecordedBattle_Init then leaves it alone.
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        sBattlerSavedRecordSizes[i] = 0;
+        sBattlerRecordSizes[i] = 0;
+    }
+    sSpectateEnded = FALSE;
     sSpectateLive = TRUE;
 
-    taskId = CreateTask(Task_StartAfterCountdown, 1);
-    gTasks[taskId].tFramesToWait = 128;
+    // Straight into the battle, not PlayRecordedBattle's 128-frame countdown under
+    // CB2_RecordedBattle. A spectator comes from the overworld, and its caller has
+    // already torn the field down (Task_BrStartSpectate, mirroring the link battle's
+    // own start) -- leaving CB1_Overworld running over the wreckage for two seconds
+    // crashes the game.
     sCallback2_AfterRecordedBattle = CB2_After;
     PlayMapChosenOrBattleBGM(FALSE);
-    SetMainCallback2(CB2_RecordedBattle);
+    gMain.savedCallback = CB2_RecordedBattleEnd;
+    SetMainCallback2(CB2_InitBattle);
     Free(save);
 }
 
-void RecordedBattle_FeedSpectate(const u8 *delta)
+// The same shape RecordedBattle_RecordAllBattlerData consumes, minus its link gates
+// (a spectator has no link: no BATTLE_TYPE_LINK, no gLinkPlayers versions to check).
+void RecordedBattle_FeedSpectate(const u8 *delta, u8 n)
 {
-    RecordedBattle_RecordAllBattlerData((u8 *)delta);
+    u8 idx = 0;
+
+    if (!sSpectateLive)
+        return;
+    while (idx + 1 < n)
+    {
+        u8 battler = delta[idx++];
+        u8 count = delta[idx++];
+
+        while (count != 0 && idx < n)
+        {
+            if (battler < MAX_BATTLERS_COUNT && sBattlerSavedRecordSizes[battler] < BATTLER_RECORD_SIZE)
+                sBattleRecords[battler][sBattlerSavedRecordSizes[battler]++] = delta[idx];
+            idx++;
+            count--;
+        }
+    }
+}
+
+bool8 RecordedBattle_HasBattlerAction(u8 battler, u8 count)
+{
+    u8 i;
+
+    if (battler >= MAX_BATTLERS_COUNT)
+        return TRUE;
+    for (i = 0; i < count; i++)
+    {
+        if (sBattlerRecordSizes[battler] + i >= BATTLER_RECORD_SIZE)
+            return TRUE; // out of room: let GetBattlerAction end the battle
+        if (sBattleRecords[battler][sBattlerRecordSizes[battler] + i] == 0xFF)
+            return FALSE;
+    }
+    return TRUE;
+}
+
+void RecordedBattle_EndSpectate(void)
+{
+    sSpectateEnded = TRUE;
 }
 
 bool8 RecordedBattle_IsSpectateLive(void)
