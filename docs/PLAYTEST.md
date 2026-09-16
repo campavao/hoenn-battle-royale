@@ -227,3 +227,26 @@ short" the moment the ring goes active; a literal `-1` is a different bug entire
 The poll read axes 0 and 1 only, which is where a *standard* pad puts its left stick.
 Every axis counts now (even = horizontal, odd = vertical, axis 9 is the DirectInput hat),
 and the pad readout names the axes that moved, so the next pad that misbehaves says so.
+
+---
+
+## What is left, 2026-09-17 (after the night's pass)
+
+Everything above that is not marked **fixed**, plus:
+
+* **A `-1` HP mon.** Needs one detail before it can be chased: was it one HP short of
+  full, or did the screen literally read `-1`, and where -- party screen, health box or
+  summary? The fog's bleed takes `maxHp/10` with a minimum of 1, which looks like "one
+  short" the moment the ring goes active; a literal `-1` is a different bug.
+* **"Found 0"** at ~11:00 of the first video, unexplained. Which line said it, and what
+  had just happened.
+* **A link battle nobody answers still has no way out.** The one way in that we knew
+  about is closed (`4cc935d1c`), but `gBrNetlink.active` is never cleared by anything in
+  the ROM: a peer that crashes or loses the relay mid-handshake leaves the other side on
+  a black screen with the controls locked. Wanted: a watchdog in `BrNetlink_Tick`, the
+  shape `BrPick_Wait`'s now has.
+* **Rejoining a room after a dropped socket.** The relay hands out a new id on a rejoin
+  and that id is the page's seat, so a mid-match rejoin would change who you are. Needs
+  a relay-side resume before the page can do anything better than say so.
+* **Six Zone areas is thin for a two-minute opening** (see above). A pacing decision,
+  not a bug: worth measuring how often two contestants share an area first.
