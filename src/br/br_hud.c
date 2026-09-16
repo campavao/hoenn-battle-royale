@@ -22,6 +22,7 @@ EWRAM_DATA struct BrHud gBrHud = {0};
 static const struct WindowTemplate sCornerTemplate = { 0, 24, 0, 6, 3, 15, 0x23A };
 static const struct WindowTemplate sWoundTemplate = { 0, 24, 3, 6, 2, 15, 0x24C };
 static const struct WindowTemplate sTickerTemplate = { 0, 1, 18, 28, 2, 15, 0x258 };
+static const struct WindowTemplate sBoxTemplate = { 0, 1, 14, 28, 4, 15, 0x294 };
 
 #define BR_HUD_BOX PIXEL_FILL(TEXT_COLOR_DARK_GRAY)
 
@@ -404,6 +405,8 @@ void BrHud_Init(void)
     h->winCorner = WINDOW_NONE;
     h->winWound = WINDOW_NONE;
     h->winTicker = WINDOW_NONE;
+    h->winBox = WINDOW_NONE;
+    h->boxFrames = 0;
     h->live = 0;
     h->shown = 0;
     h->queueLen = 0;
@@ -417,6 +420,53 @@ void BrHud_Init(void)
     for (i = 0; i < PARTY_SIZE; i++)
         h->drawnWound[i] = WOUND_NONE;
     h->heldLine.text[0] = EOS;
+}
+
+// ---- bottom box ---------------------------------------------------------------
+
+static void DrawBox(void)
+{
+    struct BrHud *h = &gBrHud;
+
+    FillWindowPixelBuffer(h->winBox, BR_HUD_BOX);
+    // CHAR_NEWLINE in the text gives the second line; the printer handles the rest.
+    AddTextPrinterParameterized3(h->winBox, FONT_SMALL, 2, 2, sColorsText,
+        (s8)TEXT_SKIP_DRAW, h->box.text);
+}
+
+static void TickBox(bool8 blocked)
+{
+    struct BrHud *h = &gBrHud;
+    bool8 pixels = FALSE;
+
+    if (h->winBox == WINDOW_NONE)
+        return;
+    if (blocked || h->boxFrames == 0)
+    {
+        Present(h->winBox, BR_HUD_SHOWN_BOX, FALSE, FALSE);
+        return;
+    }
+    if (h->dirty & BR_HUD_DIRTY_BOX)
+    {
+        DrawBox();
+        h->dirty &= ~BR_HUD_DIRTY_BOX;
+        pixels = TRUE;
+    }
+    Present(h->winBox, BR_HUD_SHOWN_BOX, TRUE, pixels);
+}
+
+void BrHud_Box(const u8 *text)
+{
+    struct BrHud *h = &gBrHud;
+    u8 i;
+
+    for (i = 0; i < BR_HUD_LINE_MAX && text[i] != EOS; i++)
+        h->box.text[i] = text[i];
+    h->box.text[i] = EOS;
+    h->box.len = i;
+    h->box.kind = BR_HUD_KIND_SYSTEM;
+    h->boxFrames = BR_HUD_BOX_FRAMES;
+    h->dirty |= BR_HUD_DIRTY_BOX;
 }
 
 void BrHud_Say(const u8 *text)
@@ -460,6 +510,7 @@ void BrHud_Tick(void)
         Drop(&h->winCorner, &sCornerTemplate);
         Drop(&h->winWound, &sWoundTemplate);
         Drop(&h->winTicker, &sTickerTemplate);
+        Drop(&h->winBox, &sBoxTemplate);
         h->live = 0;
         h->shown = 0;
         h->scriptWas = 0;
@@ -474,6 +525,8 @@ void BrHud_Tick(void)
     }
     if (h->fogFrames > 0)
         h->fogFrames--;
+    if (h->boxFrames > 0)
+        h->boxFrames--;
     AdvanceTicker();
 
     // The field's own message box (window 0) is the sign that InitWindows has run for
@@ -491,6 +544,23 @@ void BrHud_Tick(void)
         live++;
     if (h->winTicker != WINDOW_NONE)
         live++;
+    // The box is transient: it holds tiles only while it has something to say, which
+    // is also what keeps it clear of the spectator's peek box at the same baseBlock.
+    if (h->boxFrames > 0)
+    {
+        u8 was = h->winBox;
+
+        h->winBox = Ensure(h->winBox, &sBoxTemplate);
+        if (h->winBox != was)
+            h->dirty |= BR_HUD_DIRTY_BOX;
+    }
+    else if (h->winBox != WINDOW_NONE)
+    {
+        TickBox(TRUE); // clear our cells before the window goes
+        Drop(&h->winBox, &sBoxTemplate);
+        h->shown &= ~BR_HUD_SHOWN_BOX;
+    }
+
     if (live != h->live)
     {
         // Fresh buffers hold garbage and no tilemap: draw and put everything again.
@@ -513,4 +583,5 @@ void BrHud_Tick(void)
         TickWound(menuUp);
     if (h->winTicker != WINDOW_NONE)
         TickTicker(menuUp || scriptOn || !IsFieldMessageBoxHidden());
+    TickBox(menuUp || scriptOn || !IsFieldMessageBoxHidden());
 }

@@ -23,4 +23,15 @@ poke u16 gBrMailbox+0x0C 2
 wait 30
 expect u8 gBrRing+5 0
 shot clear
+# a phase that names its place gets the bottom box (POK-226): two lines over the field
+# for 90 frames, above the ticker. LITTLEROOT = C6 C3 CE CE C6 BF CC C9 C9 CE
+pokebytes gBrMailbox+0x1098 0C 14 11 00 00 00 03 19 0C 1E 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00
+poke u16 gBrMailbox+0x0C 3
+wait 20
+expectge u8 gBrHud+0x1D4 1
+shot box
+# and it goes on its own
+wait 120
+expect u8 gBrHud+0x1D4 0
+shot box-gone
 say ring ok

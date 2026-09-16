@@ -11,9 +11,13 @@
 //                                    anyone is spectating this trainer (POK-233)
 //   wound   cols 24..29, rows 3..4   one glyph per party mon: full / hurt / fainted
 //   ticker  cols  1..28, rows 18..19 one line of news, 180 frames each, kill feed etc.
+//   box     cols  1..28, rows 14..17  the bottom box: a transient two-line message
+//                                     (the fog closing in), 90 frames, above the ticker
 //
 // Tiles: the corner is at baseBlock 0x23A, the wound bar at 0x24C, the ticker at
-// 0x258..0x293. The overworld's BG0 already uses 0x008 (Safari balls), 0x107 (map
+// 0x258..0x293, the bottom box at 0x294..0x303 (shared with the spectator's peek box,
+// which only a player who is out ever opens -- and they get no bottom box while they
+// are watching somebody else's screen). The overworld's BG0 already uses 0x008 (Safari balls), 0x107 (map
 // name), 0x125 (yes/no), 0x139 (start menu), 0x194 (message box), 0x200/0x214 (the
 // two frames) and 0x21D..0x23A (the map-name frame edges); 0x23A on is free up to the
 // tilemap at 0x3C0. Nothing here loads graphics: the boxes are a PIXEL_FILL of the
@@ -35,16 +39,19 @@
 #define BR_HUD_QUEUE 8
 #define BR_HUD_LINE_MAX 40
 #define BR_HUD_LINE_FRAMES 180
+#define BR_HUD_BOX_FRAMES 90
 #define BR_HUD_FOG_FRAMES 60
 
 // gBrHud.shown: whose tilemap cells are ours on screen right now.
 #define BR_HUD_SHOWN_CORNER 1
 #define BR_HUD_SHOWN_WOUND 2
 #define BR_HUD_SHOWN_TICKER 4
+#define BR_HUD_SHOWN_BOX 8
 // gBrHud.dirty: a window's pixels must be redrawn.
 #define BR_HUD_DIRTY_CORNER 1
 #define BR_HUD_DIRTY_WOUND 2
 #define BR_HUD_DIRTY_TICKER 4
+#define BR_HUD_DIRTY_BOX 8
 
 // Ticker line kinds, as BR_MSG_TICKER carries them.
 #define BR_HUD_KIND_SYSTEM 0
@@ -83,7 +90,11 @@ struct BrHud
     /* 0x1B */ u8 drawnEyes;     // what the corner last drew
     /* 0x1C */ struct BrHudLine heldLine;             // 44 bytes
     /* 0x48 */ struct BrHudLine queue[BR_HUD_QUEUE];  // 352 bytes
-    /* 0x1A8 */
+    /* 0x1A8 */ struct BrHudLine box;                 // 44 bytes, the bottom box
+    /* 0x1D4 */ u8 boxFrames;   // frames the box has left, 0 = none
+    /* 0x1D5 */ u8 winBox;      // window id, WINDOW_NONE while absent
+    /* 0x1D6 */ u8 boxPad[2];
+    /* 0x1D8 */
 };
 
 #define BR_HUD_OFF_HELD 0x1C
@@ -102,5 +113,8 @@ void BrHud_Say(const u8 *text);
 // it (the Kanto rule: a held line outranks the feed).
 void BrHud_Hold(const u8 *text);
 void BrHud_Release(void);
+// The bottom box: a two-line message over the field for 90 frames, above the ticker
+// and out of the way of both it and the corner. CHAR_NEWLINE splits the two lines.
+void BrHud_Box(const u8 *text);
 
 #endif // GUARD_BR_HUD_H

@@ -11,6 +11,9 @@
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
+#include "string_util.h"
+#include "constants/characters.h"
+#include "br/br_hud.h"
 #include "br/br_ring.h"
 #include "br/br_hud.h"
 
@@ -46,6 +49,26 @@ bool8 BrRing_SectionInside(u8 mapsec)
     return dx * dx + dy * dy <= (s16)gBrRing.r * gBrRing.r;
 }
 
+// The bottom box on a ring move: the place the fog is closing on, which the host
+// already sends and nothing was reading. Two lines, 90 frames, above the ticker.
+static const u8 sText_FogCloses[] = _("THE FOG CLOSES IN ON");
+
+static void SayFog(const u8 *place, u8 len)
+{
+    u8 line[BR_HUD_LINE_MAX + 2];
+    u8 *p = StringCopy(line, sText_FogCloses);
+    u8 i;
+
+    *p++ = CHAR_NEWLINE;
+    if (len > 16)
+        len = 16;
+    for (i = 0; i < len; i++)
+        *p++ = place[i];
+    *p++ = CHAR_EXCL_MARK;
+    *p = EOS;
+    BrHud_Box(line);
+}
+
 static void HandleRing(const u8 *payload, u8 len)
 {
     const u8 *d;
@@ -53,6 +76,10 @@ static void HandleRing(const u8 *payload, u8 len)
 
     if (n < 5)
         return;
+    // A new phase, with a place named: say where. The corner's FOG! flash is the
+    // page's own (gBrHud.flashFog); this is the sentence that goes with it.
+    if (d[1] != gBrRing.phase && n >= 6 && d[5] > 0 && (u16)(6 + d[5]) <= n)
+        SayFog(d + 6, d[5]);
     gBrRing.active = TRUE;
     gBrRing.phase = d[1];
     gBrRing.cx = (s8)d[2];
