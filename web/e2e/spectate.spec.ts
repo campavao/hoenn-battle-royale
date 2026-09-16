@@ -49,8 +49,19 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
     await guest.goto(`/#join=${code}&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
-    // The eyeline forces a duel: both seats boot on the same Littleroot tile, so the
-    // host's netlink opens within a second or two of the guest arriving.
+    // The eyeline is a match rule -- it does not fire in the lobby -- so put both seats
+    // in the match rather than waiting out a Safari opening. gBrMatch.phase is what the
+    // director's START would set; everything downstream of it is the real thing.
+    const inMatch = async (p: typeof host) =>
+      p.evaluate(
+        (addr) => (window as unknown as { __br: { mailbox: { ram: { write(a: number, v: number, w: 8 | 16 | 32): void } } } }).__br.mailbox.ram.write(addr, 2, 8),
+        symbols.gBrMatch,
+      );
+    await inMatch(host);
+    await inMatch(guest);
+
+    // Both seats boot on the same Littleroot tile, so the host's netlink opens within a
+    // second or two of that.
     await host.waitForFunction(
       (addr) => (window as unknown as RamWindow).__br.mailbox.ram.read(addr, 8) === 1,
       symbols.gBrNetlink,

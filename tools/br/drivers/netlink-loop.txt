@@ -4,6 +4,8 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
+# the eyeline only fires in a started match (gBrMatch.phase = BR_PHASE_PLAY)
+poke u8 gBrMatch 2
 poke u8 gBrNetlink+8 1
 # CHALLENGE: type 5, framed len 7 = hdr(04 00 00) + challenger 00, opponent 01, nonce 00 00
 pokebytes gBrMailbox+0x1018 05 07 04 00 00 00 01 00 00

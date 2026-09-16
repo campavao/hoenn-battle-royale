@@ -97,8 +97,9 @@ static bool8 CanEngage(void)
         return FALSE;
     if (gBrNetlink.active || gBrEngage.cooldown)
         return FALSE;
-    if (gBrMatch.phase != BR_PHASE_PLAY && gBrMatch.phase != BR_PHASE_NONE)
-        return FALSE; // no fighting in the Safari opening, none once out
+    if (gBrMatch.phase != BR_PHASE_PLAY)
+        return FALSE; // the eyeline is a match rule: not in the lobby, not in the
+                      // Safari opening, and not once you are out
     if (ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked())
         return FALSE;
     return TRUE;

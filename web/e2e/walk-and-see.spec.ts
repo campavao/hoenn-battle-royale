@@ -17,10 +17,13 @@ test.beforeAll(() => {
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
 });
 
-// fixme (POK-220/230): host and guest both boot on the same Littleroot tile, so the
-// eyeline engage forces a VS screen ~1.2 s after the guest joins, before either can
-// walk. Lift once each seat boots on its own tile (or the engage waits for START).
-test.fixme("a guest walking right moves 3 tiles on the host's screen", async ({ browser }) => {
+// fixme (POK-220): the guest does not walk at all here -- its own roster x never
+// moves, so nothing reaches the host. NOT the engage any more: the eyeline is gated on
+// a started match now, and the lobby is quiet. The remaining suspect is the host's own
+// director, which auto-starts the match the moment a second seat joins and warps both
+// of them mid-test. Lift once the E2E can hold a room open without the match starting
+// under it (or the test starts the match deliberately and walks after the drop).
+test.fixme("a guest walking right moves on the host's screen", async ({ browser }) => {
   test.setTimeout(60_000);
   const rom = romHashParam();
 
@@ -66,16 +69,28 @@ test.fixme("a guest walking right moves 3 tiles on the host's screen", async ({ 
     // The mgba core's frame pacing is uneven for about the first second and a half
     // after boot (it is still catching the emulated clock up to wall-clock time), so
     // a `press` issued right at spawn does not translate into a clean number of tile
-    // steps per millisecond held -- confirmed empirically: at this point, 700 ms held
-    // moves anywhere from 1 to 3 tiles depending on exactly when the hold lands. Once
-    // pacing settles, it is reliably 3. Settle first, then walk.
+    // steps per millisecond held. Settle first, then walk -- and then ask the guest
+    // how far it actually got rather than predicting it: what this test is about is
+    // that whatever the guest did arrives on the host as a ghost standing there, not
+    // how many tiles a held button is worth on a busy CI box.
     await guest.waitForTimeout(2_000);
 
     await guest.evaluate(() => (window as unknown as { __br: { mailbox: { ram: { press(k: string): void } } } }).__br.mailbox.ram.press('right'));
     await guest.waitForTimeout(700);
     await guest.evaluate(() => (window as unknown as { __br: { mailbox: { ram: { release(k: string): void } } } }).__br.mailbox.ram.release('right'));
 
-    const expectedX = guestStartX + 3;
+    // Where the guest actually ended up, from its own roster row.
+    await guest.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (startX) => (window as any).__br.roster.all().some((e: { isMe: boolean; x?: number }) => e.isMe && e.x !== undefined && e.x > startX),
+      guestStartX,
+      { timeout: 10_000 },
+    );
+    const expectedX: number = await guest.evaluate(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__br.roster.all().find((e: { isMe: boolean }) => e.isMe).x as number,
+    );
+    expect(expectedX, 'the guest walked east').toBeGreaterThan(guestStartX);
 
     await host.waitForFunction(
       ([seat, x]) =>

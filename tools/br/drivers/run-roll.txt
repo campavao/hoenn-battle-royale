@@ -5,6 +5,8 @@ drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
+# the eyeline only fires in a started match (gBrMatch.phase = BR_PHASE_PLAY)
+poke u8 gBrMatch 2
 poke u8 gBrNetlink+8 1
 pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
 poke u16 gBrMailbox+0x0C 1
@@ -19,7 +21,8 @@ tap A
 wait 500
 shot rolled
 expectge u16 gBrBattle+4 1
-expect u8 gBrMatch 0
+# still BR_PHASE_PLAY, not BR_PHASE_OUT: a failed or successful RUN eliminates nobody
+expect u8 gBrMatch 2
 dump gBrBattle 8
 dump gBrNetlink 12
 dump gBattleOutcome 1

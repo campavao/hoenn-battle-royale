@@ -6,6 +6,8 @@ drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
+# the eyeline only fires in a started match (gBrMatch.phase = BR_PHASE_PLAY)
+poke u8 gBrMatch 2
 poke u8 gBrNetlink+8 1
 pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
 poke u16 gBrMailbox+0x0C 1
