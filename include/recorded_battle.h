@@ -17,6 +17,11 @@ u8 RecordedBattle_BufferNewBattlerData(u8 *dst);
 void RecordedBattle_RecordAllBattlerData(u8 *src);
 #if BR
 u8 RecordedBattle_BufferSpectateDelta(u8 *dst); // POK-233: the spectator action stream
+struct Pokemon;
+void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
+    struct Pokemon *eParty, const u8 *names, const u8 *genders, void (*CB2_After)(void));
+void RecordedBattle_FeedSpectate(const u8 *delta);
+bool8 RecordedBattle_IsSpectateLive(void);
 #endif
 bool32 CanCopyRecordedBattleSaveData(void);
 bool32 MoveRecordedBattleToSaveData(void);

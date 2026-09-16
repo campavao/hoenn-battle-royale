@@ -65,7 +65,7 @@ static u16 PackParty(struct Pokemon *party, u8 *dst)
 // once per battle is no place for a permanent EWRAM buffer.
 static void SendBstart(void)
 {
-    u8 *buf = Alloc(24 + 2 * (1 + PARTY_SIZE * sizeof(struct Pokemon)));
+    u8 *buf = Alloc(28 + 2 * (1 + PARTY_SIZE * sizeof(struct Pokemon)));
     u16 len = 0, id;
     u32 seed;
     u8 i;
@@ -80,6 +80,10 @@ static void SendBstart(void)
     buf[len++] = (seed >> 8) & 0xFF;
     buf[len++] = (seed >> 16) & 0xFF;
     buf[len++] = (seed >> 24) & 0xFF;
+    buf[len++] = gBattleTypeFlags & 0xFF;
+    buf[len++] = (gBattleTypeFlags >> 8) & 0xFF;
+    buf[len++] = (gBattleTypeFlags >> 16) & 0xFF;
+    buf[len++] = (gBattleTypeFlags >> 24) & 0xFF;
     for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)
         buf[len++] = gLinkPlayers[0].name[i];
     for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)

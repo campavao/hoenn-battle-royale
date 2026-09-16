@@ -197,7 +197,8 @@
 // slots: two 6-mon parties are ~1.2 KB. Payload (variable):
 //   0..1:  battle    u16 LE   the challenger's seat pair id (loSeat | hiSeat<<8)
 //   2..5:  seed      u32 LE   gRecordedBattleRngSeed, so the replay is deterministic
-//   6:     names     2 * (PLAYER_NAME_LENGTH+1) bytes, player then opponent
+//   6..9:  flags     u32 LE   the fighters' gBattleTypeFlags (the replay ORs RECORDED)
+//   10:    names     2 * (PLAYER_NAME_LENGTH+1) bytes, player then opponent
 //   ..:    genders   u8 player, u8 opponent
 //   ..:    party     u8 pCount, then pCount struct Pokemon (100 bytes; portable, keyed
 //                    by each mon's own personality^otId), then u8 oCount + oCount mons

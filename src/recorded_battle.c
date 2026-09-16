@@ -73,6 +73,7 @@ EWRAM_DATA static u16 sBattlerPrevRecordSizes[MAX_BATTLERS_COUNT] = {0};
 EWRAM_DATA static u16 sBattlerSavedRecordSizes[MAX_BATTLERS_COUNT] = {0};
 #if BR
 EWRAM_DATA static u16 sSpectatePrevSizes[MAX_BATTLERS_COUNT] = {0}; // POK-233 stream cursor
+EWRAM_DATA static bool8 sSpectateLive = FALSE; // POK-233 live spectate: block, don't quit
 #endif
 EWRAM_DATA static u8 sRecordMode = 0;
 EWRAM_DATA static u8 sLvlMode = 0;
@@ -216,6 +217,13 @@ u8 RecordedBattle_GetBattlerAction(u8 battler)
     // Trying to read past array or invalid action byte, battle is over.
     if (sBattlerRecordSizes[battler] >= BATTLER_RECORD_SIZE || sBattleRecords[battler][sBattlerRecordSizes[battler]] == 0xFF)
     {
+#if BR
+        // A live spectated battle runs a turn behind the fighters (POK-233): when the
+        // stream has not delivered this battler's next action yet, wait rather than end
+        // the battle -- the turn arrives over the next frames and the read succeeds then.
+        if (sSpectateLive)
+            return B_ACTION_NONE;
+#endif
         gSpecialVar_Result = gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED; // hah
         ResetPaletteFadeControl();
         BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
@@ -533,6 +541,9 @@ static bool32 CopyRecordedBattleFromSave(struct RecordedBattleSave *dst)
 
 static void CB2_RecordedBattleEnd(void)
 {
+#if BR
+    sSpectateLive = FALSE;
+#endif
     gSaveBlock2Ptr->frontier.lvlMode = sLvlMode;
     gBattleOutcome = 0;
     gBattleTypeFlags = 0;
@@ -637,6 +648,58 @@ void PlayRecordedBattle(void (*CB2_After)(void))
     }
     Free(battleSave);
 }
+
+#if BR
+// A live spectated battle (POK-233): build the recorded battle from the streamed setup
+// and run it. The record starts empty; the turn stream fills it, and
+// RecordedBattle_GetBattlerAction blocks a turn behind instead of quitting. `battler`
+// values ride in playersBattlers; multiplayerId 0 watches from the challenger's side.
+void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
+    struct Pokemon *eParty, const u8 *names, const u8 *genders, void (*CB2_After)(void))
+{
+    struct RecordedBattleSave *save = AllocZeroed(sizeof(struct RecordedBattleSave));
+    u8 taskId, i, j;
+
+    if (save == NULL)
+        return;
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        save->playerParty[i] = pParty[i];
+        save->opponentParty[i] = eParty[i];
+    }
+    for (i = 0; i < 2; i++)
+    {
+        for (j = 0; j < PLAYER_NAME_LENGTH + 1; j++)
+            save->playersName[i][j] = names[i * (PLAYER_NAME_LENGTH + 1) + j];
+        save->playersGender[i] = genders[i];
+        save->playersBattlers[i] = i;
+    }
+    save->rngSeed = seed;
+    save->battleFlags = flags;
+    save->multiplayerId = 0;
+
+    RecordedBattle_SaveParties();
+    SetVariablesForRecordedBattle(save);
+    sSpectateLive = TRUE;
+
+    taskId = CreateTask(Task_StartAfterCountdown, 1);
+    gTasks[taskId].tFramesToWait = 128;
+    sCallback2_AfterRecordedBattle = CB2_After;
+    PlayMapChosenOrBattleBGM(FALSE);
+    SetMainCallback2(CB2_RecordedBattle);
+    Free(save);
+}
+
+void RecordedBattle_FeedSpectate(const u8 *delta)
+{
+    RecordedBattle_RecordAllBattlerData((u8 *)delta);
+}
+
+bool8 RecordedBattle_IsSpectateLive(void)
+{
+    return sSpectateLive;
+}
+#endif
 
 #undef tFramesToWait
 
