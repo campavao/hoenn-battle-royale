@@ -11,7 +11,7 @@
 // `chooseTarget`.
 import { findPath, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
-import type { Bot } from './roster';
+import { Grade, type Bot } from './roster';
 import { MOVE_SURF } from './party';
 import { duel } from './duel';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
@@ -23,6 +23,18 @@ export const STEP_MS = 250;
 const WANDER_BUDGET = 1500;
 /** BR_ENGAGE_GRACE in src/br/br_engage.c: 120 frames, and a frame is a sixtieth. */
 const ENGAGE_COOLDOWN_MS = 2000;
+/** What a grade does with the moment after a fight (POK-265). An ace is looking for the
+ *  next one before the last has finished; a rookie needs a minute. The cheapest honest
+ *  difference: nothing about the walk changes, only the appetite. */
+const COOLDOWN_BY_GRADE: Record<number, number> = {
+  [Grade.Rookie]: 3,
+  [Grade.Regular]: 1,
+  [Grade.Ace]: 0.5,
+};
+
+function cooldownFor(bot: Bot): number {
+  return ENGAGE_COOLDOWN_MS * (COOLDOWN_BY_GRADE[bot.grade] ?? 1);
+}
 /** Kanto's rule: under half health is hurt enough to walk to a Centre for. */
 const HURT = 0.5;
 /** How far a bot will walk to be healed. A Centre across Hoenn is not worth the match
@@ -459,7 +471,7 @@ export class Bots {
       this.opts.onEngage?.(walker.bot.seat, player.seat);
       this.fighting.add(walker.bot.seat);
       this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
-      walker.engageAfter = now + ENGAGE_COOLDOWN_MS;
+      walker.engageAfter = now + cooldownFor(walker.bot);
       walker.path = null;
       return true;
     }
@@ -487,7 +499,7 @@ export class Bots {
       const won = result.winner === walker.bot.seat ? walker : other;
       const lost = won === walker ? other : walker;
       won.party = result.winnerParty;
-      won.engageAfter = now + ENGAGE_COOLDOWN_MS;
+      won.engageAfter = now + cooldownFor(won.bot);
       this.note(walker, 'duel', `${result.winner} beat ${result.loser}`);
       this.opts.onDuel?.(result.winner, result.loser);
       this.eliminate(lost);

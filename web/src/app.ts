@@ -982,7 +982,7 @@ function startBots(
     },
     // Where the bot is standing is where its mons came from (POK-237): the drop put
     // it on a route, and that route's own table is what a trainer there would have.
-    deal: (bot, atPhase, mapId) => dealParty(seed, bot.seat, atPhase, mapId),
+    deal: (bot, atPhase, mapId) => dealParty(seed, bot.seat, atPhase, mapId, bot.grade),
     seed,
     onDuel,
     // Nobody fights in the Zone -- not a player, not another bot.

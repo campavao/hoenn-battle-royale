@@ -14,9 +14,33 @@ import type { MapRef } from '../net/wire';
 /** include/br/br_config.h's BR_MAX_SEATS. */
 export const MAX_SEATS = 32;
 
+/** How good a bot is (POK-265). Kanto deals three grades and the field is worth
+ *  reading because of it: a rookie is a speed bump, an ace has a real team and fights
+ *  like it, and you do not know which is which until you are in front of one. */
+export const enum Grade {
+  Rookie = 0,
+  Regular = 1,
+  Ace = 2,
+}
+
+/** Two rookies and two regulars for every ace: an ace you can see coming is not a
+ *  threat, and a field of them is not a match. */
+const GRADES: Grade[] = [
+  Grade.Rookie, Grade.Rookie, Grade.Regular, Grade.Regular, Grade.Ace,
+];
+
+/** Dealt from the seed and the seat, like the name and the skin -- so every client
+ *  works out the same field without anybody sending it. */
+export function gradeOf(seed: number, seat: number): Grade {
+  const rng = mulberry32((seed ^ (seat * 0x2545_f491)) >>> 0);
+
+  return GRADES[pickIndex(rng, GRADES.length)];
+}
+
 export interface Bot {
   seat: number;
   name: string;
+  grade: Grade;
   /** Index into the ROM's skin table (br_ghosts.c's sSkinGraphics). */
   skin: number;
   map: MapRef;
@@ -59,6 +83,7 @@ export function dealBots(seed: number, count: number, takenSeats: number[], spaw
     const spawn = spawns[pickIndex(rng, spawns.length)];
     bots.push({
       seat,
+      grade: gradeOf(seed, seat),
       name,
       skin: pickIndex(rng, 4),
       map: spawn.map,

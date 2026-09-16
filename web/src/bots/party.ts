@@ -9,6 +9,7 @@
 // does that when it needs one, and a page that knew how to encrypt a Gen 3 mon would be
 // a second implementation of something the ROM already owns.
 import { mulberry32, pickIndex } from '../match/clock';
+import { Grade } from './roster';
 import type { PackedMon } from '../net/wire';
 import encounterData from '../data/encounters.json';
 
@@ -145,10 +146,15 @@ export function dealParty(
   seat: number,
   phase: number,
   mapId?: string,
+  grade: Grade = Grade.Regular,
 ): PackedMon[] {
   const rng = mulberry32((seed ^ (seat * 0x9e37)) >>> 0);
   const level = rungForPhase(phase);
-  const count = Math.min(6, 1 + Math.floor(Math.max(0, phase - 1) / 2));
+  // A grade is worth a Pokemon either way (POK-265). The rung is shared, so what
+  // separates a rookie from an ace is how much of a team is standing behind the one in
+  // front -- which is also what a player finds out by fighting it.
+  const bring = grade === Grade.Ace ? 1 : grade === Grade.Rookie ? -1 : 0;
+  const count = Math.max(1, Math.min(6, 1 + Math.floor(Math.max(0, phase - 1) / 2) + bring));
   const party: PackedMon[] = [];
   for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId));
   return party;
