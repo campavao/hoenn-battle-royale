@@ -1351,7 +1351,19 @@ static void CB2_EndTrainerBattle(void)
             // Hoenn's own trainers pay out too (POK-232): the beaten one leaves the
             // map for the rest of the match and one of their team is on the ground
             // where they stood.
-            BrLoot_TrainerBeaten(gTrainerBattleOpponent_A, (u8)sTrainerObjectEventLocalId);
+            //
+            // Which object that is: the script's own parameter when it gave one, and
+            // it almost never does -- `trainerbattle_single` passes a literal 0 in that
+            // slot and the engine falls back to `gSpecialVar_LastTalked`, which the
+            // approach has held since the eye met ours (see the same fallback at
+            // CB2_ReturnToFieldContinueScript's setup above). Reading only the
+            // parameter meant every route trainer came back with a local id of zero,
+            // BrLoot_TrainerBeaten's first guard sent it straight home, and nothing was
+            // ever dropped: the play-test's "an NPC trainer didn't drop their Pokemon
+            // after defeat".
+            BrLoot_TrainerBeaten(gTrainerBattleOpponent_A,
+                                 (u8)(sTrainerObjectEventLocalId != 0 ? sTrainerObjectEventLocalId
+                                                                     : gSpecialVar_LastTalked));
 #endif
         }
     }

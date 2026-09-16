@@ -1,0 +1,95 @@
+# trainer-drop: a beaten route trainer leaves one of their team on the ground where
+# they stood (POK-232), and leaves the map for the rest of the match. The play-test
+# says it does not happen -- "an NPC trainer didn't drop their Pokemon after defeat" --
+# and trainer-despawn.txt only ever poked the despawn list, so the real path (win a
+# trainer battle, look at the tile) has never been driven. This is that path.
+#
+# gym-rung.txt's own opening: Rustboro Gym, one of Roxanne's students up the hall.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 0B 03 05 00 0F 00 BD BB C7 FF
+wait 400
+# A started match at rung 30, so both sides of the fight stand at 30 (POK-225/234).
+poke u8 gBrMatch 2
+poke u8 gBrMatch+1 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 3C 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrLevels 30
+expect u8 gBrLoot+0xA0 0
+hold UP 120
+wait 30
+tap A
+wait 120
+tap A
+wait 240
+shot trainer
+# Through the intro, and then the fight is called: B_OUTCOME_WON, which the engine
+# reads at the next turn boundary (br_match.c's own note about a poked outcome). What
+# is on trial here is what a won trainer battle leaves behind, not whether a Treecko
+# can win one -- and a press that lands on a box is a box advanced, which is what the
+# rest of these are for.
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+shot won
+# Out through the defeat speech and back onto the field -- on B, because A on the tile
+# in front of us is how loot is picked up (POK-232) and the ball is the whole point.
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+shot back
+# One of their team is on the ground where they stood...
+expectge u8 gBrLoot+0xA0 1
+expectge u8 gBrLoot+0xA1 1
+# ...and they are gone from the map for the rest of the match.
+expectge u8 gBrLoot+0xA3 1
+shot ball
+# And it is a real piece of loot: one press, facing it, and it is ours.
+tap A
+wait 90
+expectge u8 gBrLoot+0xA2 1
+say trainer drop ok
