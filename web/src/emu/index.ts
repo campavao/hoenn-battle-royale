@@ -72,6 +72,8 @@ export async function loadCoreFactory(url = '/emu/mgba.js'): Promise<CoreFactory
 export class Emulator {
   private held = 0;
   private frameListeners = new Set<() => void>();
+  /** What boot() last loaded, so reboot() can load it again. */
+  private bootedPath: string | null = null;
   private crashListeners = new Set<() => void>();
   private running = false;
 
@@ -133,7 +135,16 @@ export class Emulator {
     await this.boot(PATCHED_ROM_PATH);
   }
 
+  /** Power-cycles whatever is loaded, from the same file. PLAY AGAIN keeps the room
+   *  (POK-258), so the match after it cannot be a page reload: the socket, the bridge
+   *  and every frame listener have to survive, and only the ROM starts over. */
+  async reboot(): Promise<void> {
+    if (!this.bootedPath) throw new Error('nothing booted yet');
+    await this.boot(this.bootedPath);
+  }
+
   private async boot(path: string): Promise<void> {
+    this.bootedPath = path;
     // The core auto-saves a state every 30 s and restores it on the next loadGame of
     // the same file. A match must always start from power-on, so drop those first.
     try {

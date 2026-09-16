@@ -1601,6 +1601,10 @@ function wireRoom(
       recorded = false;
     }
     results.note(msg, performance.now());
+    // The match is over: the door opens again (POK-258). START locked the room to keep
+    // latecomers out of a running match, and leaving it locked is what turned the end
+    // of a match into everybody scattering -- a reload could not get back in.
+    if (msg.t === 'win' && director) relay.lockRoom(false);
     if (msg.t === 'win' && bridge && !recorded) {
       recorded = true;
       const mine = results.forSeat(bridge.seat, performance.now());
@@ -1719,7 +1723,47 @@ function wireRoom(
   // hash rejoined the room the match had just been played in -- which START locked, so
   // a guest got "Couldn't join: locked" and had nowhere to go but the URL bar, and a
   // host silently opened a new room and abandoned everybody in the old one.
-  ($('#play-again') as HTMLElement).addEventListener('click', () => backToLobby());
+  // PLAY AGAIN keeps the room, the code and the roster, and rolls a fresh match
+  // (POK-258, Kanto v0.6.0). It used to reload onto the lobby, which scattered the
+  // eight people you had just played with; before that it reloaded onto the same hash,
+  // which is worse, because START had locked the room and the rejoin was refused.
+  //
+  // So it reloads nothing. The socket, the bridge and the roster stay up and only the
+  // ROM starts over -- which is also the only way the next match is fair, since a ROM
+  // that has just finished one is carrying that match's team and an empty ball pocket.
+  const playAgainButton = $('#play-again') as HTMLButtonElement;
+  playAgainButton.addEventListener('click', () => {
+    void (async () => {
+      playAgainButton.disabled = true;
+      try {
+        stopDirectorLoop?.();
+        stopDirectorLoop = null;
+        director = null;
+        await emu.reboot();
+        if (mailboxBase !== undefined) {
+          await waitForMailbox(emu, mailboxBase);
+          writeBootBlock(emu, mailboxBase, careerName(), BR_BOOT_MAP, careerSkin());
+        }
+        recorded = false;
+        // Whoever we were watching is not in a match any more.
+        for (const m of spectate.follow(null)) bridge?.pushToRom(m);
+        ($('#results-panel') as HTMLElement).hidden = true;
+        if (bridge) {
+          renderRoom(bridge);
+          renderSpectate(bridge, spectate);
+          // The host gets its START back: a new match is dealt from the room, the same
+          // way the first one was.
+          renderRoomPanel(controls, bridge.seat, relay, () => {
+            relay.lockRoom(true);
+            startDirector(controls.roster?.members.map((m) => m.id));
+            renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
+          }, false);
+        }
+      } finally {
+        playAgainButton.disabled = false;
+      }
+    })();
+  });
 
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code));
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
