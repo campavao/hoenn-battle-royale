@@ -6,6 +6,11 @@
 #include "string_util.h"
 #include "battle.h"
 #include "constants/characters.h"
+#include "br/br_mailbox.h"
+#include "br/br_wire.h"
+#include "br/br_wire_c.h"
+#include "br/br_ghosts.h"
+#include "br/br_netlink.h"
 #include "br/br_battle.h"
 
 EWRAM_DATA struct BrBattle gBrBattle = {0};
@@ -30,6 +35,14 @@ static bool8 ClockLive(void)
 
 void BrBattle_HideClock(void)
 {
+    if (ClockLive() && gBrNetlink.active)
+    {
+        u8 msg[2];
+
+        msg[0] = gBrMySeat;
+        msg[1] = 0; // the choice is made: the spectator's clock goes too
+        BrWire_Send(BR_MSG_SHOT, msg, 2);
+    }
     if (ClockLive())
     {
         ClearWindowTilemap(sClockWin);
@@ -44,7 +57,12 @@ void BrBattle_HideClock(void)
 void BrBattle_DrawClock(void)
 {
     u16 remain = BR_SHOT_CLOCK_FRAMES - gBrBattle.shotFrames;
-    u8 secs = (remain + 59) / 60;              // ceil to seconds
+
+    BrBattle_DrawClockSecs((u8)((remain + 59) / 60)); // ceil to seconds
+}
+
+void BrBattle_DrawClockSecs(u8 secs)
+{
     u8 top = gBattle_BG0_Y / 8;                // screen row 0 in bg0-tile space
     struct TextPrinterTemplate tp;
     u8 buf[4];
@@ -67,6 +85,16 @@ void BrBattle_DrawClock(void)
     }
     if (sClockWin == WINDOW_NONE || secs == sClockSecs)
         return;
+    // A spectator watches this number, not our menu: publish each second as it turns
+    // over (and the 0 on the way out, from HideClock).
+    if (gBrNetlink.active)
+    {
+        u8 msg[2];
+
+        msg[0] = gBrMySeat;
+        msg[1] = secs;
+        BrWire_Send(BR_MSG_SHOT, msg, 2);
+    }
 
     FillWindowPixelBuffer(sClockWin, PIXEL_FILL(TEXT_COLOR_TRANSPARENT));
     ConvertIntToDecimalStringN(buf, secs, STR_CONV_MODE_RIGHT_ALIGN, 2);

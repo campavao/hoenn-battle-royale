@@ -45,6 +45,7 @@ describe('slots round trip (single slot)', () => {
     { t: 'turn', battle: 0x0301, data: [0, 2, 1, 0, 1, 1, 0] },
     { t: 'follow', seat: 7 },
     { t: 'peek', seat: 2, target: 5 },
+    { t: 'shot', seat: 2, secs: 17 },
     { t: 'follow', seat: null },
     { t: 'ticker', seat: 1, kind: 'kill', text: 'ASH KO MISTY' },
     { t: 'ticker', seat: 1, text: 'the fog is closing in' },

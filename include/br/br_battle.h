@@ -30,6 +30,9 @@ bool8 BrBattle_RollRun(void);
 // frame a choice menu is open (it follows bg0's scroll so it stays top-right in both
 // the action and move menus); hide it when selection ends.
 void BrBattle_DrawClock(void);
+// The same clock with the seconds handed in: what a spectator draws, since a replay
+// has no choice menu of its own to count down (POK-231's `clock` for spectators).
+void BrBattle_DrawClockSecs(u8 secs);
 void BrBattle_HideClock(void);
 
 #endif // GUARD_BR_BATTLE_H

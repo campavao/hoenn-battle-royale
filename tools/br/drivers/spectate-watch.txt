@@ -39,4 +39,19 @@ expect u8 gBattleMons+0x7C 34
 wait 300
 expect u8 gBrSpectate+5 1
 expect u8 gBattleOutcome 0
+# The fighter's shot clock rides along (POK-231): follow the seat whose clock it is,
+# then their seconds land and the replay draws them top-right.
+pokebytes gBrMailbox+0x1158 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 6
+wait 5
+pokebytes gBrMailbox+0x1198 16 05 02 00 00 01 19
+poke u16 gBrMailbox+0x0C 7
+wait 20
+expect u8 gBrSpectate+12 0x19
+shot clock
+# 0 means they chose: the clock goes
+pokebytes gBrMailbox+0x11D8 16 05 02 00 00 01 00
+poke u16 gBrMailbox+0x0C 8
+wait 20
+expect u8 gBrSpectate+12 0
 say spectate watch ok

@@ -28,6 +28,7 @@
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
 #include "br/br_netlink.h"
+#include "br/br_battle.h"
 #include "br/br_spectate.h"
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
@@ -385,6 +386,18 @@ static void SendOwnParty(void)
     Free(buf);
 }
 
+// The seconds left on the watched fighter's choice. Their ROM publishes it as it
+// turns over, and 0 once they have chosen.
+static void HandleShot(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 2 || d[0] != gBrSpectate.follow)
+        return;
+    gBrSpectate.shotSecs = d[1];
+}
+
 static void HandlePeek(const u8 *payload, u8 len)
 {
     const u8 *d;
@@ -538,6 +551,7 @@ void BrSpectate_Follow(u8 seat)
     if (gBrSpectate.follow != BR_NO_SEAT && seat != gBrSpectate.follow)
         StopFollowing(seat == BR_NO_SEAT);
     gBrSpectate.follow = seat;
+    gBrSpectate.shotSecs = 0;
 }
 
 static void HandleFollow(const u8 *payload, u8 len)
@@ -613,6 +627,7 @@ void BrSpectate_Init(void)
     BrNet_On(BR_MSG_TURN, HandleTurn);
     BrNet_On(BR_MSG_TURN | BR_MSG_CONT, HandleTurnCont);
     BrNet_On(BR_MSG_FOLLOW, HandleFollow);
+    BrNet_On(BR_MSG_SHOT, HandleShot);
     BrNet_On(BR_MSG_PEEK, HandlePeek);
     BrNet_On(BR_MSG_PARTY, HandleParty);
     BrNet_On(BR_MSG_PARTY | BR_MSG_CONT, HandlePartyCont);
@@ -643,6 +658,16 @@ void BrSpectate_Tick(void)
     // Spectating: the replay owns the screen until it ends, and nothing is published.
     if (gBrSpectate.watching)
     {
+        // The fighter's own shot clock, drawn on the replay. The replay is a turn
+        // behind, so this is the pressure they are under now, not then -- which is the
+        // point of showing it at all.
+        if (gMain.inBattle)
+        {
+            if (gBrSpectate.shotSecs != 0)
+                BrBattle_DrawClockSecs(gBrSpectate.shotSecs);
+            else
+                BrBattle_HideClock();
+        }
         // sPendParties outlives the parse until the fade task hands it to the battle:
         // the replay is not live yet, and the watch must not retire underneath it.
         if (sPendParties == NULL && !RecordedBattle_IsSpectateLive())

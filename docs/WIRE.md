@@ -70,6 +70,7 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `turn` | `BR_MSG_TURN` 19 | ROM-&gt;page-&gt;page-&gt;ROM | yes | the challenger's ROM, streaming the battle's new action bytes each turn so the spectator's replay stays a turn behind |
 | `follow` | `BR_MSG_FOLLOW` 20 | page-&gt;ROM | yes | the spectator's own page, to put its camera on a seat's ghost; `seat` null (0xFF on the wire) stops. Never leaves the page that sent it -- the seat being watched is not told |
 | `peek` | `BR_MSG_PEEK` 21 | page-&gt;ROM-&gt;page | yes | a spectator asking what the trainer they watch carries. Broadcast; only `target`'s ROM answers, with a `party` of its own. The re-ask is also the watcher tally the corner eye counts |
+| `shot` | `BR_MSG_SHOT` 22 | ROM-&gt;page-&gt;page-&gt;ROM | yes | a fighter's own shot clock as each second turns over (0 once they have chosen), drawn on the replay of whoever is watching that seat |
 | `botout` | -- | page&lt;-&gt;page | no | whoever beat a bot |
 | `botrec` | -- | page&lt;-&gt;page | no | whoever changed a bot's persistent record |
 | `fame` | -- | page&lt;-&gt;page | no | the champion, at the end of a match |

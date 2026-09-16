@@ -349,8 +349,18 @@ export interface BusyMsg {
   kind?: BusyKind; // absent = back on the map
 }
 
-/** A spectator asks the trainer they watch what they carry (Kanto POK-18). JSON
- *  only; the answer is a `party` message for the same seat. */
+/** The seconds left on a fighter's shot clock (POK-231), so somebody watching sees the
+ *  pressure they are under. Each fighter publishes its own; a spectator draws the one
+ *  belonging to the seat it follows. 0 means they have chosen. Crosses into the ROM
+ *  (shot). */
+export interface ShotMsg {
+  t: 'shot';
+  seat: number;
+  secs: number; // 0..30
+}
+
+/** A spectator asks the trainer they watch what they carry (Kanto POK-18). The answer
+ *  is a `party` message for the same seat. Crosses into the ROM (peek). */
 export interface PeekMsg {
   t: 'peek';
   seat: number; // the asker
@@ -479,6 +489,7 @@ export type Msg =
   | BusyMsg
   | FollowMsg
   | PeekMsg
+  | ShotMsg
   | BotOutMsg
   | BotRecMsg
   | FameMsg
@@ -865,6 +876,8 @@ const decoders: Record<string, Decoder> = {
   },
 
   peek: (m) => ({ t: 'peek', seat: reqSeat(m), target: reqSeat(m, 'target') }),
+
+  shot: (m) => ({ t: 'shot', seat: reqSeat(m), secs: reqInt(m, 'secs', 0, 60) }),
 
   botout: (m) => ({ t: 'botout', seat: reqSeat(m), target: reqSeat(m, 'target') }),
 

@@ -30,6 +30,7 @@ import type {
   TurnMsg,
   FollowMsg,
   PeekMsg,
+  ShotMsg,
   ChallengeMsg,
   ClockMsg,
   Dir,
@@ -71,6 +72,7 @@ export const BR_MSG = {
   TURN: 19,
   FOLLOW: 20,
   PEEK: 21,
+  SHOT: 22,
   PICKUP: 10,
   SPILL: 11,
   RING: 12,
@@ -277,6 +279,13 @@ function decodeBstart(bytes: Uint8Array): BstartMsg {
   const r = new Reader(bytes);
   const battle = r.u16();
   return { t: 'bstart', battle, data: Array.from(r.raw(bytes.length - 2)) };
+}
+function encodeShot(m: ShotMsg): Uint8Array {
+  return new Writer().u8(m.seat).u8(m.secs).toBytes();
+}
+function decodeShot(bytes: Uint8Array): ShotMsg {
+  const r = new Reader(bytes);
+  return { t: 'shot', seat: r.u8(), secs: r.u8() };
 }
 function encodePeek(m: PeekMsg): Uint8Array {
   return new Writer().u8(m.seat).u8(m.target).toBytes();
@@ -558,6 +567,7 @@ const CODECS: Record<string, Codec> = {
   turn: { type: BR_MSG.TURN, encode: (m) => encodeTurn(m as TurnMsg), decode: decodeTurn },
   follow: { type: BR_MSG.FOLLOW, encode: (m) => encodeFollow(m as FollowMsg), decode: decodeFollow },
   peek: { type: BR_MSG.PEEK, encode: (m) => encodePeek(m as PeekMsg), decode: decodePeek },
+  shot: { type: BR_MSG.SHOT, encode: (m) => encodeShot(m as ShotMsg), decode: decodeShot },
   party: { type: BR_MSG.PARTY, encode: (m) => encodeParty(m as PartyMsg), decode: decodeParty },
   faint: { type: BR_MSG.FAINT, encode: (m) => encodeFaint(m as FaintMsg), decode: decodeFaint },
   out: { type: BR_MSG.OUT, encode: (m) => encodeOut(m as OutMsg), decode: decodeOut },

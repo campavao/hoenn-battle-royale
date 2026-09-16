@@ -224,4 +224,11 @@
 // Payload (2 bytes): asker u8, target u8
 #define BR_MSG_PEEK 21
 
+// ROM -> page -> spectators: the seconds left on a fighter's shot clock (POK-231), so
+// somebody watching sees the pressure the fighter is under. Each fighter publishes its
+// own; a spectator draws the one belonging to the seat it follows. 0 means the choice
+// is made and the clock is gone.
+// Payload (2 bytes): seat u8, secs u8 (0..30)
+#define BR_MSG_SHOT 22
+
 #endif // GUARD_BR_WIRE_H
