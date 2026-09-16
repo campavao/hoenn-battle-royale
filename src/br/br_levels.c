@@ -105,6 +105,34 @@ static void LiftParty(u8 level)
     }
 }
 
+// Hoenn's own trainers are on the one clock too (POK-225, POK-234). A gym leader's
+// canned levels make them free loot at rung 75 and a wall at rung 5; their team is
+// what it always was, standing at the rung the match is at. Exactly the lift the
+// player's party gets, so nobody is fighting somebody from another match.
+void BrLevels_LiftTrainer(struct Pokemon *party, u8 count)
+{
+    u8 i, level = gBrLevels.rung;
+
+    for (i = 0; i < count && i < PARTY_SIZE; i++)
+    {
+        struct Pokemon *mon = &party[i];
+        u16 species = GetMonData(mon, MON_DATA_SPECIES);
+        u32 exp;
+
+        if (species == SPECIES_NONE || GetMonData(mon, MON_DATA_LEVEL) == level)
+            continue;
+        exp = gExperienceTables[gSpeciesInfo[species].growthRate][level];
+        SetMonData(mon, MON_DATA_EXP, &exp);
+        CalculateMonStats(mon);
+        // A trainer's mon walks in whole, unlike the player's, which keeps its wound.
+        {
+            u16 max = GetMonData(mon, MON_DATA_MAX_HP);
+
+            SetMonData(mon, MON_DATA_HP, &max);
+        }
+    }
+}
+
 void BrLevels_Init(void)
 {
     gBrLevels.rung = sLadder[0];

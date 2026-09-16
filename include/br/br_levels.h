@@ -25,5 +25,8 @@ const u16 *BrLevels_MartItems(void);
 // The starting bag: an OLD ROD and a few balls. Called once by the boot.
 void BrLevels_GiveStartingBag(void);
 bool8 BrLevels_NoExp(void);
+// One clock for Hoenn's own trainers too: their team at the rung the match is at,
+// rather than the levels the game shipped them with (POK-234).
+void BrLevels_LiftTrainer(struct Pokemon *party, u8 count);
 
 #endif // GUARD_BR_LEVELS_H

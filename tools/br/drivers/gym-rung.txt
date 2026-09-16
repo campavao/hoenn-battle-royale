@@ -1,0 +1,24 @@
+# gym-rung: Hoenn's own trainers are on the one clock (POK-234). Rustboro Gym's own
+# ship at level 10-ish; at rung 30 they stand at 30, so a gym is neither free loot
+# late nor a wall early. Walking up the hall meets one of Roxanne's students first,
+# which is the same rule and a shorter walk.
+wait 30
+# Rustboro Gym is map 11:3. Boot in at (5, 15), a few tiles south of Roxanne.
+pokebytes gBrMailbox+0x2018 81 00 0B 03 05 00 0F 00 BD BB C7 FF
+wait 400
+# the rung: phase 3 on the ladder {5,15,30,50,75,100}
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 3C 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrLevels 30
+# walk up the hall: the first eyeline in it is a battle
+hold UP 120
+wait 30
+tap A
+wait 120
+tap A
+wait 240
+shot trainer
+# whatever they lead with, it is at the rung rather than the level it shipped at
+expect u8 gEnemyParty+0x54 30
+say gym rung ok

@@ -61,6 +61,7 @@
 #include "constants/trainers.h"
 #if BR
 #include "br/br_bot.h"
+#include "br/br_levels.h"
 #endif
 #include "cable_club.h"
 
@@ -2079,6 +2080,13 @@ static u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum, bool8 fir
         }
 
         gBattleTypeFlags |= gTrainers[trainerNum].doubleBattle;
+#if BR
+        // One clock (POK-225/POK-234): Hoenn's own trainers stand at the rung the match
+        // is at, gym leaders included. Their canned levels make a leader free loot late
+        // and a wall early, and a match where the world is on a different clock from
+        // the people in it is two matches.
+        BrLevels_LiftTrainer(party, gTrainers[trainerNum].partySize);
+#endif
     }
 
     return gTrainers[trainerNum].partySize;
