@@ -152,8 +152,11 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
     await watcher.screenshot({ path: path.join(OUT_DIR, 'spectator.png') });
     await host.screenshot({ path: path.join(OUT_DIR, 'fighter.png') });
   } finally {
-    await hostCtx.close();
-    await guestCtx.close();
-    await watchCtx.close();
+    // A throw here (two mgba cores crashing a renderer, see playwright.config.ts) would
+    // otherwise skip every close after it, leaking a context -- and its live relay
+    // connection and its live wasm core -- for the rest of the worker's browser instance.
+    await hostCtx.close().catch(() => {});
+    await guestCtx.close().catch(() => {});
+    await watchCtx.close().catch(() => {});
   }
 });

@@ -128,7 +128,10 @@ test('a match runs from the opening to a winner', async ({ browser }) => {
     await host.screenshot({ path: path.join(OUT_DIR, 'match-end.png') });
     expect(result, 'the match ended').toBeTruthy();
   } finally {
-    await hostCtx.close();
-    await guestCtx.close();
+    // A throw here (two mgba cores crashing a renderer, see playwright.config.ts) would
+    // otherwise skip every close after it, leaking a context -- and its live relay
+    // connection and its live wasm core -- for the rest of the worker's browser instance.
+    await hostCtx.close().catch(() => {});
+    await guestCtx.close().catch(() => {});
   }
 });
