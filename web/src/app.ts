@@ -2510,7 +2510,21 @@ async function main(): Promise<void> {
   // (BR_BOOT_SAFARI) while a room waits in Littleroot (BR_BOOT_MAP) -- so the choice has
   // to be made before the ROM is told anything. A hash is that choice already made (a
   // deep link, a rejoin, a test); with no hash, the lobby is where it gets made.
-  const roomHash = parseRoomHash() ?? (await runLobby());
+  // Held still while the lobby is up (play-test: "it looks like I'm doing the weird
+  // intro screen with the cars... I should never see this screen"). The ROM starts
+  // before the lobby and the boot block is not written until a way in has been chosen,
+  // so every second spent choosing was a second of a ROM nobody was steering -- long
+  // enough to reach the title screen and start Emerald's own attract loop, which is
+  // what Cam watched. A hash in the URL skips the lobby and lands the block in about
+  // 150 frames, which is why no driver and no e2e has ever seen it.
+  const fromHash = parseRoomHash();
+  let roomHash = fromHash;
+  if (!roomHash) {
+    if (mailboxBase !== undefined) await waitForMailbox(emu, mailboxBase);
+    emu.pause();
+    roomHash = await runLobby();
+    emu.resume();
+  }
   const wantsTestMon = import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('testmon');
   const bootMode =
     (roomHash.mode === 'solo' ? BR_BOOT_SAFARI : BR_BOOT_MAP) | (wantsTestMon ? BR_BOOT_FLAG_TESTMON : 0);
