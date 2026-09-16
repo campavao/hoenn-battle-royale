@@ -1,0 +1,32 @@
+# land-lost: the drop's black screen is not a place to live. Between the map closing
+# and the host's `land` arriving there is nothing drawn and nothing that answers a
+# button (CB2_BrPickWait), and the play-test froze there -- "I was frozen here, I
+# couldn't do anything". A host that never answers, or an answer lost on the way, used
+# to mean the rest of the match was that screen.
+#
+# drop-timeout.txt is the same opening with the `land` delivered. This is the one where
+# it never comes.
+wait 30
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+# START (seat 0, one spawn: Route 101 at 25,10 -- the cell everybody already has)
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 4
+# RING: the opening is over, the map goes up
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 200
+expect u8 gBrPick 1
+# It chooses for itself after twenty seconds and then waits on the host.
+wait 1260
+expect u8 gBrPick 1
+expectge u16 gBrPick+10 1
+shot waiting
+# Nothing answers. Five seconds in it asks again, and at fifteen it drops itself on the
+# cell the START dealt -- Route 101 (map 0:25), which is where drop-timeout lands too.
+wait 1000
+expect u8 gBrPick 0
+expect u8 *gSaveBlock1Ptr+5 25
+shot dropped
+say land lost ok

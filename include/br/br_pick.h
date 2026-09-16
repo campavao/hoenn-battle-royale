@@ -25,7 +25,9 @@ struct BrPick
     /* 4 */ s16 x;
     /* 6 */ s16 y;
     /* 8 */ u16 timer;    // frames left to choose; 0 means the map chose for you
-};                        // 10 bytes
+    /* 10 */ u16 waited;  // frames held on the black screen waiting for `land`
+    /* 12 */ u16 asked;   // the section we sent, to ask again with
+};                        // 14 bytes
 
 extern struct BrPick gBrPick;
 extern const u8 gBrText_DropWhere[];

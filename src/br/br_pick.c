@@ -50,6 +50,14 @@ void BrPick_Init(void)
 // nobody is kept waiting by somebody who walked away.
 #define BR_PICK_FRAMES (20 * 60)
 
+// ...and how long the black screen after it will wait for the host's cell. Between
+// the map closing and `land` arriving there is nothing on screen and nothing that
+// answers a button (CB2_BrPickWait below), which is indistinguishable from a frozen
+// game -- and the play-test froze there. So it asks again, and then it stops
+// waiting: a drop we dealt ourselves is a match, and a black screen is not.
+#define BR_PICK_ASK_AGAIN (5 * 60)
+#define BR_PICK_GIVE_UP (15 * 60)
+
 bool8 BrPick_Picking(void)
 {
     return gBrPick.active;
@@ -68,6 +76,8 @@ void BrPick_Chose(u16 mapSec)
 {
     u8 buf[3];
 
+    gBrPick.asked = mapSec;
+    gBrPick.waited = 0;
     buf[0] = gBrMySeat;
     BrWire_WriteU16(buf + 1, mapSec);
     BrWire_Send(BR_MSG_PICK, buf, 3);
@@ -136,10 +146,48 @@ bool8 BrPick_Start(void)
     return TRUE;
 }
 
+// Nothing is coming. The cell the START dealt us is the one every client already
+// has, so it is the drop we make for ourselves; with not even that, reloading the
+// map we are standing on at least hands the controls back.
+static void DropWithoutTheHost(void)
+{
+    gBrPick.active = FALSE;
+    gBrPick.landed = FALSE;
+    gBrPick.waited = 0;
+    if (gBrMatch.haveSpawn[gBrMySeat])
+    {
+        struct BrSpawn *sp = &gBrMatch.spawns[gBrMySeat];
+
+        SetWarpDestination(sp->mapGroup, sp->mapNum, WARP_ID_NONE, sp->x, sp->y);
+        WarpIntoMap();
+    }
+    gFieldCallback = NULL;
+    gMain.state = 0;
+    SetMainCallback2(CB2_LoadMap);
+}
+
 void BrPick_Tick(void)
 {
     if (!gBrPick.landed)
+    {
+        if (!gBrPick.active || gMain.callback2 != CB2_BrPickWait)
+            return;
+        gBrPick.waited++;
+        if (gBrPick.waited == BR_PICK_ASK_AGAIN)
+        {
+            u8 buf[3];
+
+            // One more ask, in case the slot went in the ring rather than the room.
+            buf[0] = gBrMySeat;
+            BrWire_WriteU16(buf + 1, gBrPick.asked);
+            BrWire_Send(BR_MSG_PICK, buf, 3);
+        }
+        else if (gBrPick.waited >= BR_PICK_GIVE_UP)
+        {
+            DropWithoutTheHost();
+        }
         return;
+    }
     if (gMain.callback2 == CB2_BrPickWait)
     {
         // Straight off the black screen the map left behind: no fly-in, no bounce
