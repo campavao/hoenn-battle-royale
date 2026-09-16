@@ -1,0 +1,25 @@
+# no-ambush: Emerald's own route trainers do not start a fight on sight during a match
+# (POK-259). Route 102's BUG CATCHER RICK stands at (25,15) with MOVEMENT_TYPE_FACE_UP
+# and sight 2, so the cells at (25,13) and (25,14) are inside his eyeline. We boot two
+# tiles above and walk down through it.
+#
+# No A is pressed here on purpose. The rule is "only their own A-press starts their
+# fight", so a driver that walks past and then taps A is testing the opposite rule --
+# which is exactly what the first draft of this did, and it failed for the right reason.
+#
+# Its control is ambush-control.txt: the same walk with no match running, where he does
+# see us and the battle starts. One without the other proves nothing.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (group 0, num 17), x=25, y=11
+pokebytes gBrMailbox+0x2018 81 00 00 11 19 00 0B 00 BD BB C7 FF
+wait 400
+# the match is under way
+poke u8 gBrMatch 2
+poke u8 gBrMatch+1 1
+expect u8 gBrMatch 2
+hold DOWN 40
+wait 400
+shot walked
+# nothing grabbed us on the way past
+expect u16 gBattleTypeFlags 0
+say no ambush ok

@@ -1,0 +1,18 @@
+# ambush-control: the control for no-ambush.txt (POK-259). The same walk into BUG
+# CATCHER RICK's eyeline on Route 102, with no match running -- here he DOES see us and
+# the battle starts, which is what makes his silence during a match meaningful.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (group 0, num 17), x=25, y=11
+pokebytes gBrMailbox+0x2018 81 00 00 11 19 00 0B 00 BD BB C7 FF
+wait 400
+hold DOWN 40
+wait 200
+# his line comes first: press through it, or the assert lands mid-dialogue
+tap A
+wait 120
+tap A
+wait 300
+shot seen
+# a trainer battle, started by the eyeline and nothing else
+expectge u16 gBattleTypeFlags 1
+say ambush control ok

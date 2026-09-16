@@ -18,6 +18,9 @@
 #include "constants/event_object_movement.h"
 #include "constants/field_effects.h"
 #include "constants/trainer_types.h"
+#if BR
+#include "br/br_match.h"
+#endif
 
 // this file's functions
 static u8 CheckTrainer(u8 objectEventId);
@@ -192,6 +195,15 @@ bool8 CheckForTrainersWantingBattle(void)
 {
     u8 i;
 
+#if BR
+    // Not during a match (POK-259). A battle royale's fights are between contestants;
+    // a scripted trainer who grabs you for walking through their line of sight is a
+    // thirty-second sentence handed out by the scenery, with a shot clock running and
+    // a ring closing. Only their own A-press starts their fight now -- the script path
+    // is untouched, so a trainer you choose to talk to still fights.
+    if (gBrMatch.phase != BR_PHASE_NONE)
+        return FALSE;
+#endif
     gNoOfApproachingTrainers = 0;
     gApproachingTrainerId = 0;
 
