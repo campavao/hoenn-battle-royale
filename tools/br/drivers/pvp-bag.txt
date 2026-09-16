@@ -1,0 +1,41 @@
+# pvp-bag: the bag works against a person (Kanto POK-207). Emerald bans items in every
+# link battle -- Nintendo's own link rules, not a limit of the cable -- and our PvP is
+# a link battle, so a contestant who could drink a potion against a bot could not
+# against a player. Two kinds of fight, two sets of rules, one match.
+#
+# netlink-loop.txt's own session: CHALLENGE with loopback on, so our blocks come back
+# as the peer's and a real link battle starts. Then FIGHT is passed over for BAG.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# CHALLENGE: type 5, framed len 7 = hdr(04 00 00) + challenger 00, opponent 01, nonce 0
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 00 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 600
+expect u8 gBrNetlink 1
+expect u8 gWirelessCommType 5
+# Through the intro to the action menu (POK-269's rule: tap, never hold -- a held
+# button is one press).
+tap A
+wait 90
+tap A
+wait 200
+# gBattleCommunication[0] is 2 (STATE_WAIT_ACTION_CHOSEN) once the engine is actually
+# waiting on this battler's choice -- press before that and the taps go nowhere.
+expect u8 gBattleCommunication 2
+shot menu
+# FIGHT is on the left, BAG on the right.
+tap RIGHT
+wait 30
+tap A
+wait 120
+# 3 is STATE_WAIT_ACTION_CASE_CHOSEN: the choice was taken and the bag is opening.
+# 6 (STATE_SELECTION_SCRIPT) is where the engine parks a battler it has just told
+# "Items can't be used now.", which is what this used to be.
+expect u8 gBattleCommunication 3
+# The frame shows the ITEMS pocket over the battle. It is empty, because the driver's
+# boot block hands out no bag -- what is on trial here is the door, not the stock.
+shot bag
+say pvp bag ok

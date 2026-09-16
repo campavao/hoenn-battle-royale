@@ -61,6 +61,7 @@
 #include "constants/trainers.h"
 #if BR
 #include "br/br_bot.h"
+#include "br/br_netlink.h"
 #include "br/br_duel.h"
 #include "br/br_levels.h"
 #endif
@@ -4238,7 +4239,18 @@ static void HandleTurnActionSelectionState(void)
                     }
                     break;
                 case B_ACTION_USE_ITEM:
-                    if (gBattleTypeFlags & (BATTLE_TYPE_LINK
+                    if (
+#if BR
+                        // The bag works against a person (POK-207 in Kanto). Emerald
+                        // bans items in every link battle -- Nintendo's own link rules,
+                        // not a limit of the cable -- and a battle royale where the bag
+                        // works against a bot and not against a player is two games.
+                        // Our link is the mailbox (br_netlink.c) and the item action
+                        // crosses it like any other, so the ban is lifted for ours and
+                        // left alone for everybody else's.
+                        !gBrNetlink.active &&
+#endif
+                        gBattleTypeFlags & (BATTLE_TYPE_LINK
                                             | BATTLE_TYPE_FRONTIER_NO_PYRAMID
                                             | BATTLE_TYPE_EREADER_TRAINER
                                             | BATTLE_TYPE_RECORDED_LINK))
