@@ -1539,8 +1539,24 @@ function registerServiceWorker(): void {
   });
 }
 
+/** Asks the browser to keep what we store (POK-246). The whole premise is "import your
+ *  ROM once", and without this Safari evicts an origin's storage after about a week of
+ *  not being opened -- which would mean finding the .gba again. The prompt, where there
+ *  is one, is only shown to somebody who has already installed or engaged with the
+ *  site, so asking is not a thing a first-time visitor sees. */
+async function askToKeepStorage(): Promise<void> {
+  try {
+    if (!navigator.storage?.persist) return;
+    if (await navigator.storage.persisted()) return;
+    await navigator.storage.persist();
+  } catch {
+    // Refused or unsupported: the ROM is still in IndexedDB, just evictable.
+  }
+}
+
 async function main(): Promise<void> {
   registerServiceWorker();
+  void askToKeepStorage();
   setVersionLine('—');
   const canvas = $('#canvas') as HTMLCanvasElement;
   const emu = await Emulator.create(canvas);
