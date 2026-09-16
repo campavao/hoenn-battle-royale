@@ -1933,6 +1933,25 @@ function wireRoom(
   /** In the room to look, not to play (POK-260). Set when this client asks to watch,
    *  and reasserted from the relay's own roster, which is the authority on it. */
   let amWatching = false;
+  /** Hands a trainer who is out somebody to watch, and keeps the strip honest as the
+   *  field thins. Kanto's rule: being out IS spectating -- the strip is how you change
+   *  who, not how you start. A watcher (POK-260) is left alone: it chose its own seat
+   *  and was never in the match to be eliminated from it. */
+  const autoWatch = (): void => {
+    if (!bridge || amWatching) return;
+    const me = bridge.roster.get(bridge.seat);
+    if (me === undefined || me.alive) return;
+    const on = spectate.watchingSeat();
+    const still = on !== null && bridge.roster.all().some((e) => e.seat === on && e.alive);
+    if (!still) {
+      const next = bridge.roster.all().find((e) => e.alive && e.seat !== bridge!.seat);
+      // Nobody left to watch is the end of the match, and the results panel is what
+      // answers that; the strip just stops offering.
+      if (next) for (const m of spectate.follow(next.seat)) bridge.pushToRom(m);
+      else if (on !== null) for (const m of spectate.follow(null)) bridge.pushToRom(m);
+    }
+    renderSpectate(bridge, spectate);
+  };
   /** Seats this client has already caught up on the running match. */
   const greeted = new Set<number>();
   let bots: ReturnType<typeof startBots> | null = null;
@@ -1983,6 +2002,12 @@ function wireRoom(
         // And we withdraw from the succession: a trainer who is out should not be the
         // one still running the match everybody else is in (POK-252).
         if (msg.seat === bridge?.seat && !director) relay.canHost(false);
+        // Going out is the moment to start watching (play-test: "when I got out in the
+        // Safari, it should have brought me to spectating the other players"). Our own
+        // `out` never comes back over the relay, so nothing else here ever saw it --
+        // on a host walking a room of bots, no relay message arrives at all and the
+        // WATCH strip was never even drawn.
+        if (msg.seat === bridge?.seat) autoWatch();
       }
       // Our own `place` is how the page learns we changed maps -- there is no separate
       // "I have arrived" message, and this one is already on the wire four times a
@@ -2067,6 +2092,8 @@ function wireRoom(
     stopGuestStrip?.();
     const guestStrip = setInterval(() => {
       if (!director && bridge) renderGuestStrip(bridge, match, performance.now());
+      // ...and the seat we are watching may itself have gone out since.
+      autoWatch();
     }, 1000);
     stopGuestStrip = () => clearInterval(guestStrip);
     renderSpectate(bridge, spectate);
