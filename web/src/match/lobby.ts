@@ -16,6 +16,8 @@ export type LobbyAction =
   | { kind: 'host' }
   | { kind: 'code' }
   | { kind: 'daily' }
+  | { kind: 'name' }
+  | { kind: 'skin' }
   | { kind: 'join'; code: string; pass: boolean }
   | { kind: 'watch'; code: string };
 
@@ -37,8 +39,16 @@ export function countdown(secs: number): string {
 
 /** The fixed rows, always in this order. `online` is false before the socket is up --
  *  SOLO VS BOTS still works, because solo never opens one (the Kanto rule). */
-export function fixedRows(online: boolean): LobbyRow[] {
+export function fixedRows(online: boolean, profile?: { name: string; skin: string; record?: string }): LobbyRow[] {
   return [
+    // Who you are, first: a room full of people called CAM is nobody's idea of a
+    // lobby, and the name is what the ROM is told too (POK-243).
+    ...(profile
+      ? [
+          { label: profile.name, detail: profile.record ?? 'your name', action: { kind: 'name' as const } },
+          { label: profile.skin, detail: 'your sprite', action: { kind: 'skin' as const } },
+        ]
+      : []),
     { label: 'SOLO VS BOTS', detail: 'no socket, ever', action: { kind: 'solo' } },
     { label: 'QUICK PLAY', detail: online ? 'a game right now' : 'offline', action: { kind: 'quick' }, disabled: !online },
     { label: 'HOST A ROOM', action: { kind: 'host' }, disabled: !online },

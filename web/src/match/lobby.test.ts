@@ -59,3 +59,17 @@ describe('the countdown', () => {
     expect(countdown(-4)).toBe('0:00');
   });
 });
+
+describe('the profile rows', () => {
+  it('are absent until there is a profile to show', () => {
+    expect(fixedRows(true).some((r) => r.action.kind === 'name')).toBe(false);
+  });
+
+  it('put who you are at the top, above the ways in', () => {
+    const rows = fixedRows(true, { name: 'WALLY', skin: 'MAY', record: '3 played' });
+    expect(rows[0].label).toBe('WALLY');
+    expect(rows[0].detail).toBe('3 played');
+    expect(rows[1].label).toBe('MAY');
+    expect(rows[2].label).toBe('SOLO VS BOTS');
+  });
+});

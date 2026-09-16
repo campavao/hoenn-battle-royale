@@ -43,3 +43,9 @@ export function flashHudFog(ram: RamAccess, hudBase: number): void {
 export function writeMySeat(ram: RamAccess, seatBase: number, seat: number): void {
   ram.write(seatBase, Math.max(0, Math.min(255, seat)), 8);
 }
+
+/** `gBrMySkin`: which of `sSkinGraphics` this trainer's ghost is drawn as on everybody
+ *  else's screen (POK-243). The ROM puts it on every `place` it sends. */
+export function writeMySkin(ram: RamAccess, skinBase: number, skin: number): void {
+  ram.write(skinBase, Math.max(0, Math.min(255, skin)), 8);
+}

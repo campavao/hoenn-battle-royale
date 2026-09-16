@@ -13,6 +13,31 @@ export interface Career {
   wins: number;
   /** 1 = a win. Undefined until a match has been finished. */
   best?: number;
+  /** Who you are in a room, and which of the four trainer sprites is your ghost on
+   *  everybody else's screen (POK-243). Seven characters, because that is Emerald's
+   *  own name field and the ROM is where the name ends up. */
+  name?: string;
+  skin?: number;
+}
+
+/** How many sprites there are to pick from: `sSkinGraphics` in src/br/br_ghosts.c. */
+export const SKINS = ['BRENDAN', 'MAY', 'RIVAL BRENDAN', 'RIVAL MAY'];
+
+/** Emerald's own PLAYER_NAME_LENGTH. A longer one is not truncated somewhere clever;
+ *  it is refused, so what you typed is what a room calls you. */
+export const NAME_MAX = 7;
+
+/** Uppercase, letters and digits, at most seven. Empty when it is not a name. */
+export function cleanName(raw: string): string {
+  return raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, '')
+    .trim()
+    .slice(0, NAME_MAX);
+}
+
+export function nextSkin(skin: number): number {
+  return (skin + 1) % SKINS.length;
 }
 
 const EMPTY: Career = { matches: 0, wins: 0 };
@@ -24,6 +49,10 @@ function sane(value: unknown): Career {
   const career: Career = { matches: num(raw.matches), wins: num(raw.wins) };
   const best = num(raw.best);
   if (best > 0) career.best = best;
+  const name = typeof raw.name === 'string' ? cleanName(raw.name) : '';
+  if (name) career.name = name;
+  const skin = num(raw.skin);
+  if (skin > 0 && skin < SKINS.length) career.skin = skin;
   return career;
 }
 
@@ -59,6 +88,27 @@ export function recordMatch(
 }
 
 /** "12 played · 3 won · best 2nd" -- the line the results panel shows. */
+/** Sets who you are. Kept beside the record rather than in a key of its own, so one
+ *  read is your whole profile. */
+export function saveProfile(
+  patch: { name?: string; skin?: number },
+  store: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
+): Career {
+  const career = loadCareer(store);
+  if (patch.name !== undefined) {
+    const name = cleanName(patch.name);
+    if (name) career.name = name;
+    else delete career.name;
+  }
+  if (patch.skin !== undefined) career.skin = ((patch.skin % SKINS.length) + SKINS.length) % SKINS.length;
+  try {
+    store.setItem(KEY, JSON.stringify(career));
+  } catch {
+    // A blocked store: you are still that name for this tab's life.
+  }
+  return career;
+}
+
 export function careerLine(career: Career): string {
   const parts = [`${career.matches} played`, `${career.wins} won`];
   if (career.best !== undefined) parts.push(`best ${ordinal(career.best)}`);

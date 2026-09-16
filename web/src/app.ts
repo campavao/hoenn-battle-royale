@@ -13,7 +13,7 @@ import { Bridge } from './net/bridge';
 import { crossesToRom, packSlot, type BinarySlot } from './net/slots';
 import { decode, type Msg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
-import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat } from './net/hud';
+import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
 import { Director, type DirectorState, type DirectorWorld } from './match/director';
 import { Spectate } from './match/spectate';
 import { Loot } from './match/loot';
@@ -40,7 +40,16 @@ import { World, type WorldMap } from './bots/world';
 import { sectionInside } from './match/ring';
 import { dealParty } from './bots/party';
 import { mulberry32 } from './match/clock';
-import { careerLine, ordinal, recordMatch } from './match/career';
+import {
+  careerLine,
+  cleanName,
+  loadCareer,
+  nextSkin,
+  ordinal,
+  recordMatch,
+  saveProfile,
+  SKINS,
+} from './match/career';
 import worldData from './data/world.json';
 import { LANDING } from './match/landing';
 import regionmapData from './data/regionmap.json';
@@ -73,6 +82,7 @@ const BR_BOOT_SAFARI = 2;
 // anyone has caught anything.
 const BR_BOOT_FLAG_TESTMON = 0x80;
 const MALE = 0;
+const FEMALE = 1;
 const LITTLEROOT = { group: 0, num: 9, x: 5, y: 8 };
 
 const $ = <T extends Element>(sel: string) => document.querySelector(sel) as T;
@@ -427,17 +437,33 @@ function waitForMailbox(emu: Emulator, mailboxBase: number): Promise<void> {
 }
 
 function careerName(): string {
-  return localStorage.getItem(NAME_STORAGE_KEY) || DEFAULT_NAME;
+  // The old key, from before the profile lived beside the record (POK-243). Read as a
+  // fallback so nobody loses the name they already had.
+  const career = loadCareer();
+  return career.name || cleanName(localStorage.getItem(NAME_STORAGE_KEY) ?? '') || DEFAULT_NAME;
+}
+
+/** Which of the four trainer sprites is your ghost on everybody else's screen. */
+function careerSkin(): number {
+  return loadCareer().skin ?? 0;
 }
 
 /** Writes gBrMailbox.boot so a fresh game skips the intro/Birch/naming screens and
  *  is already standing in Littleroot -- every driver's own trick (project CLAUDE.md),
  *  used here so a match (or solo play) starts the same way. The ROM clears `mode`
  *  once it has consumed the block. */
-function writeBootBlock(emu: Emulator, mailboxBase: number, name: string, mode: number = BR_BOOT_MAP): void {
+function writeBootBlock(
+  emu: Emulator,
+  mailboxBase: number,
+  name: string,
+  mode: number = BR_BOOT_MAP,
+  skin = 0,
+): void {
   const boot = mailboxBase + MAILBOX.OFF_BOOT;
   emu.write(boot + 0, mode, 8);
-  emu.write(boot + 1, MALE, 8);
+  // The four sprites are BRENDAN, MAY, RIVAL BRENDAN, RIVAL MAY -- the odd ones are
+  // the girls, and the player's own avatar should be what they picked for their ghost.
+  emu.write(boot + 1, skin % 2 === 1 ? FEMALE : MALE, 8);
   emu.write(boot + 2, LITTLEROOT.group, 8);
   emu.write(boot + 3, LITTLEROOT.num, 8);
   emu.write(boot + 4, LITTLEROOT.x, 16);
@@ -1146,6 +1172,10 @@ function wireRoom(
     renderRoom(bridge);
     const seatBase = symbols?.get('gBrMySeat');
     if (seatBase !== undefined) writeMySeat(emu, seatBase, seat);
+    // And what our ghost looks like to everybody else, which the ROM stamps on every
+    // `place` it sends (POK-243).
+    const skinBase = symbols?.get('gBrMySkin');
+    if (skinBase !== undefined) writeMySkin(emu, skinBase, careerSkin());
     // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast.
     bridge.setRomFilter((msg) => spectate.wantsFromRelay(msg));
     bridge.setOutObserver((msg) => {
@@ -1256,9 +1286,10 @@ function wireRoom(
   relay.connect(relayUrl);
   // Open, because a room nobody can find is not a lobby (POK-240). JOIN BY CODE still
   // works for one that is not listed; that is what a passcode is for.
-  if (hash.mode === 'host') relay.host({ name: careerName(), open: true, max: BOT_FILL });
-  else if (hash.mode === 'quick') relay.quickJoin({ name: careerName() });
-  else relay.join(hash.code!, { name: careerName() });
+  const skin = String(careerSkin());
+  if (hash.mode === 'host') relay.host({ name: careerName(), open: true, max: BOT_FILL, skin });
+  else if (hash.mode === 'quick') relay.quickJoin({ name: careerName(), skin });
+  else relay.join(hash.code!, { name: careerName(), skin });
 }
 
 // ---- the lobby (POK-240) -----------------------------------------------------------
@@ -1291,6 +1322,16 @@ function runLobby(): Promise<RoomHash> {
 
     const press = (action: LobbyAction) => {
       switch (action.kind) {
+        case 'name': {
+          const typed = cleanName(prompt('Your name? (7 characters)') ?? '');
+          if (typed) saveProfile({ name: typed });
+          render();
+          return;
+        }
+        case 'skin':
+          saveProfile({ skin: nextSkin(careerSkin()) });
+          render();
+          return;
         case 'solo':
           setRoomHash('solo');
           return done({ mode: 'solo' });
@@ -1341,7 +1382,14 @@ function runLobby(): Promise<RoomHash> {
     };
 
     const render = () => {
-      fixed.replaceChildren(...fixedRows(online).map(rowButton));
+      const career = loadCareer();
+      fixed.replaceChildren(
+        ...fixedRows(online, {
+          name: careerName(),
+          skin: SKINS[careerSkin()],
+          record: career.matches > 0 ? careerLine(career) : 'your name',
+        }).map(rowButton),
+      );
       const roomList = roomRows(rooms);
       list.replaceChildren(...roomList.map(rowButton));
       head.hidden = roomList.length === 0;
@@ -1416,7 +1464,7 @@ async function main(): Promise<void> {
   // land after the magic appears, not before.
   if (mailboxBase !== undefined) {
     await waitForMailbox(emu, mailboxBase);
-    writeBootBlock(emu, mailboxBase, careerName(), bootMode);
+    writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
   }
 
   wirePlayScreen(emu);

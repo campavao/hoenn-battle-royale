@@ -33,8 +33,10 @@ test('the lobby lists a room somebody else is hosting, and joining it seats you'
     // And somebody else opens the page with no hash at all.
     const guest = await guestCtx.newPage();
     await guest.goto(`/#rom=${rom}`);
-    const rows = guest.locator('#lobby-rows button');
-    await expect(rows.first()).toContainText('SOLO VS BOTS', { timeout: 60_000 });
+    // The profile rows come first now (POK-243), so ask for the row by its name.
+    await expect(guest.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({
+      timeout: 60_000,
+    });
 
     // The room is on the list, named by its host, with its count.
     const room = guest.locator('#lobby-rooms button').first();
@@ -123,4 +125,30 @@ test('the host gets the room controls and START, and the guest does not', async 
     await hostCtx.close();
     await guestCtx.close();
   }
+});
+
+test('the lobby is where you say who you are', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto(`/#rom=${romHashParam()}`);
+  const rows = page.locator('#lobby-rows button');
+  await expect(rows.first()).toBeVisible({ timeout: 60_000 });
+
+  // Your name is the first row, and your sprite the second.
+  const name = rows.nth(0);
+  const skin = rows.nth(1);
+  await expect(name).toContainText('your name');
+  await expect(skin).toContainText('BRENDAN');
+
+  // The sprite cycles through the four the ROM draws.
+  await skin.click();
+  await expect(skin).toContainText('MAY');
+
+  // And the name is yours to set -- seven characters, Emerald's own limit.
+  page.once('dialog', (d) => d.accept('wallyfromthegym'));
+  await name.click();
+  await expect(name).toContainText('WALLYFR');
+
+  // It survives a reload, because it lives beside the record rather than in the tab.
+  await page.reload();
+  await expect(page.locator('#lobby-rows button').nth(0)).toContainText('WALLYFR', { timeout: 60_000 });
 });
