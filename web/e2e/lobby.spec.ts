@@ -152,3 +152,16 @@ test('the lobby is where you say who you are', async ({ page }) => {
   await page.reload();
   await expect(page.locator('#lobby-rows button').nth(0)).toContainText('WALLYFR', { timeout: 60_000 });
 });
+
+test('QUICK PLAY hosts a game when there is nothing to join', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto(`/#rom=${romHashParam()}`);
+  const quick = page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' });
+  await expect(quick).toBeVisible({ timeout: 60_000 });
+  await expect(quick).toBeEnabled({ timeout: 30_000 }); // the socket came up
+  await quick.click();
+  // The relay has nothing open, answers `no_open_rooms`, and the page hosts instead of
+  // leaving somebody looking at an empty list (POK-240).
+  await expect(page.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+  await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
+});

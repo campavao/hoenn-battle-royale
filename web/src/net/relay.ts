@@ -73,6 +73,18 @@ export interface RoomListing {
   secs?: number;
 }
 
+/** The relay had nothing to seat you in: QUICK PLAY hosts instead. */
+export interface NoRoomsEvent {
+  reason: 'none';
+}
+
+/** Everything open is mid-match. Kanto's WATCH PLAY NEXT: join it as a spectator and
+ *  be seated in the next one. */
+export interface MatchRunningEvent {
+  code: string;
+  members: number;
+}
+
 export interface RoomsEvent {
   rooms: RoomListing[];
 }
@@ -96,6 +108,8 @@ export interface RelayEvents {
   room_joined: RoomJoinedEvent;
   room_error: RoomErrorEvent;
   rooms: RoomsEvent;
+  no_open_rooms: NoRoomsEvent;
+  match_in_progress: MatchRunningEvent;
   info: InfoEvent;
   closed: ClosedEvent;
 }
@@ -296,10 +310,17 @@ export class RelayClient {
       case 'room_closed':
         this.handleClose(typeof msg.reason === 'string' ? msg.reason : 'closed');
         return;
-      case 'pong':
       case 'no_open_rooms':
+        this.emit('no_open_rooms', { reason: 'none' });
+        return;
       case 'match_in_progress':
-        return; // not part of this bridge's scope; app.ts can add handlers later
+        this.emit('match_in_progress', {
+          code: typeof msg.code === 'string' ? msg.code : '',
+          members: typeof msg.members === 'number' ? msg.members : 0,
+        });
+        return;
+      case 'pong':
+        return;
       default:
         return; // an older/newer relay's unknown chatter is not fatal
     }

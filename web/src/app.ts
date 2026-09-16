@@ -476,7 +476,7 @@ function writeBootBlock(
 // ---- room: relay + bridge, opted into by the URL hash ------------------------------------
 
 interface RoomHash {
-  mode: 'host' | 'join' | 'quick' | 'solo';
+  mode: 'host' | 'join' | 'quick' | 'solo' | 'daily' | 'watch';
   code?: string;
 }
 
@@ -488,6 +488,7 @@ function parseRoomHash(): RoomHash | null {
   if (params.has('solo')) return { mode: 'solo' };
   if (params.has('host')) return { mode: 'host' };
   if (params.has('quick')) return { mode: 'quick' };
+  if (params.has('daily')) return { mode: 'daily' };
   const code = params.get('join');
   return code && /^[A-Za-z0-9]+$/.test(code) ? { mode: 'join', code: code.toUpperCase() } : null;
 }
@@ -496,7 +497,7 @@ function parseRoomHash(): RoomHash | null {
  *  link is shareable -- without adding a history entry per press. */
 function setRoomHash(key: string, value?: string): void {
   const params = new URLSearchParams(location.hash.slice(1));
-  for (const k of ['host', 'join', 'quick', 'solo']) params.delete(k);
+  for (const k of ['host', 'join', 'quick', 'solo', 'daily']) params.delete(k);
   params.set(key, value ?? '');
   history.replaceState(null, '', `#${params.toString().replace(/=(?=&|$)/g, '')}`);
 }
@@ -973,7 +974,13 @@ function wireRoom(
   const codeEl = $('#room-code') as HTMLElement;
   panel.hidden = false;
   codeEl.textContent =
-    hash.mode === 'host' ? 'Hosting…' : hash.mode === 'quick' ? 'Finding a game…' : `Joining ${hash.code}…`;
+    hash.mode === 'host'
+      ? 'Hosting…'
+      : hash.mode === 'quick'
+        ? 'Finding a game…'
+        : hash.mode === 'daily'
+          ? 'Joining the daily…'
+          : `Joining ${hash.code}…`;
 
   const relay = new RelayClient();
   let bridge: Bridge | null = null;
@@ -1276,6 +1283,20 @@ function wireRoom(
     }
   });
   relay.on('room_error', (ev) => (codeEl.textContent = `Couldn't join: ${ev.reason}`));
+  // QUICK PLAY found nothing to join: host one and let the bots fill it, which is what
+  // Kanto does rather than leaving somebody looking at an empty list (POK-240).
+  relay.on('no_open_rooms', () => {
+    codeEl.textContent = 'No game going. Hosting one…';
+    relay.host({ name: careerName(), open: true, max: BOT_FILL, skin });
+  });
+  // Everything open is mid-match: WATCH PLAY NEXT. Joining as a spectator gets you the
+  // match now and a seat in the next one.
+  relay.on('match_in_progress', (ev) => {
+    if (!ev.code) return;
+    codeEl.textContent = `Watching ${ev.code}…`;
+    setRoomHash('join', ev.code);
+    relay.join(ev.code, { name: careerName(), skin, spectate: true });
+  });
   relay.on('closed', (ev) => {
     codeEl.textContent = `Disconnected: ${ev.reason}`;
     stopDirectorLoop?.();
@@ -1289,7 +1310,8 @@ function wireRoom(
   const skin = String(careerSkin());
   if (hash.mode === 'host') relay.host({ name: careerName(), open: true, max: BOT_FILL, skin });
   else if (hash.mode === 'quick') relay.quickJoin({ name: careerName(), skin });
-  else relay.join(hash.code!, { name: careerName(), skin });
+  else if (hash.mode === 'daily') relay.dailyJoin({ name: careerName(), skin });
+  else relay.join(hash.code!, { name: careerName(), skin, spectate: hash.mode === 'watch' });
 }
 
 // ---- the lobby (POK-240) -----------------------------------------------------------
@@ -1342,10 +1364,10 @@ function runLobby(): Promise<RoomHash> {
           setRoomHash('host');
           return done({ mode: 'host' });
         case 'daily':
-          // The daily has its own door on the relay, but from here it is a room like
-          // any other until POK-242 gives it the countdown it deserves.
-          note.textContent = 'The daily game is not wired up yet (POK-242).';
-          return;
+          // The daily has its own door on the relay: everybody who presses this row
+          // lands in the same room, whoever gets there first hosting it (POK-242).
+          setRoomHash('daily');
+          return done({ mode: 'daily' });
         case 'code': {
           const code = (prompt('Room code?') ?? '').trim().toUpperCase();
           if (!/^[A-Z0-9]{4,8}$/.test(code)) {
