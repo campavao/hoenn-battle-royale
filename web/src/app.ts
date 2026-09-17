@@ -2781,23 +2781,30 @@ async function main(): Promise<void> {
   // enough to reach the title screen and start Emerald's own attract loop, which is
   // what Cam watched. A hash in the URL skips the lobby and lands the block in about
   // 150 frames, which is why no driver and no e2e has ever seen it.
+  // The ROM is held still from the moment its mailbox answers until the boot block is
+  // in. It has a copyright screen, a title screen and an attract loop, and if nobody is
+  // steering it it will play all three -- which is the truck the play-test kept seeing
+  // (POK-221). The first version of this only held it while the LOBBY was up, and every
+  // other way in still had a running game behind it: a deep link, a rejoin, PLAY AGAIN
+  // rebooting the emulator, a quick-play join waiting on the relay. So the hold is
+  // around all of them now, hash or no hash.
+  //
+  // BrMailbox_Init zeroes the struct on the ROM's first frame, so the wait has to come
+  // before the block and the block cannot be written before the magic appears.
+  if (mailboxBase !== undefined) {
+    await waitForMailbox(emu, mailboxBase);
+    emu.pause();
+  }
   const fromHash = parseRoomHash();
   let roomHash = fromHash;
-  if (!roomHash) {
-    if (mailboxBase !== undefined) await waitForMailbox(emu, mailboxBase);
-    emu.pause();
-    roomHash = await runLobby();
-    emu.resume();
-  }
+  if (!roomHash) roomHash = await runLobby();
   const wantsTestMon = import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('testmon');
   const bootMode =
     (roomHash.mode === 'solo' ? BR_BOOT_SAFARI : BR_BOOT_MAP) | (wantsTestMon ? BR_BOOT_FLAG_TESTMON : 0);
 
-  // BrMailbox_Init zeroes the struct on the ROM's first frame, so the boot block has to
-  // land after the magic appears, not before.
   if (mailboxBase !== undefined) {
-    await waitForMailbox(emu, mailboxBase);
     writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
+    emu.resume();
   }
 
   showScreen('playing');
