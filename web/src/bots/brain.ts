@@ -17,6 +17,7 @@ import { battleItems, merge as mergeBag, purse, quaff, restock, spend, type Stac
 import { duel, type DuelResult } from './duel';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg } from '../net/wire';
+import { spillCells } from '../match/loot';
 
 /** One tile per walk animation, whatever the host's tab is doing.
  *
@@ -525,16 +526,23 @@ export class Bots {
   private eliminate(walker: Walker): void {
     const map = this.opts.mapRef(walker.at.map);
     if (map && walker.party.length > 0) {
+      // Scattered, not stacked. Every piece used to be written to the dropper's own
+      // cell -- which is ONE visible ball (BrLoot_At returns the first row it matches)
+      // with the rest of the team underneath it and the bag under those, so a beaten bot
+      // looked like it dropped a single Pokemon and no bag at all. The ROM has always
+      // scattered its own spill; this is the same ring, in the same order.
+      const party = walker.party.slice(0, 6);
+      const cells = spillCells(this.opts.world, walker.at.map, walker.at.x, walker.at.y, party.length + 1);
       const spill: SpillMsg = {
         t: 'spill',
         seat: walker.bot.seat,
         map,
         // The ROM's key convention: the dropper's seat in the high byte, so keys never
         // collide between trainers (br_loot.c).
-        mons: walker.party.slice(0, 6).map((mon, i) => ({
+        mons: party.slice(0, cells.length).map((mon, i) => ({
           key: ((walker.bot.seat & 0xff) << 8) | i,
-          x: walker.at.x,
-          y: walker.at.y,
+          x: cells[i].x,
+          y: cells[i].y,
           species: mon.species,
           level: mon.level,
         })),
@@ -542,11 +550,14 @@ export class Bots {
       // And its bag, which is the point of it having had one (POK-237): the X ATTACKs
       // it did not get to pop are lying there for whoever beat it. Key 6 is the slot
       // after the six mons, which is what the ROM's own whiteout uses.
-      if (walker.bag.length > 0) {
+      // The bag takes the cell after the team's. Nowhere left to put it means no bag
+      // rather than a bag nobody can reach: a piece sharing a cell with another is a
+      // piece that does not exist.
+      if (walker.bag.length > 0 && cells.length > party.length) {
         spill.bag = {
           key: ((walker.bot.seat & 0xff) << 8) | 6,
-          x: walker.at.x,
-          y: walker.at.y,
+          x: cells[party.length].x,
+          y: cells[party.length].y,
           items: walker.bag.map((stack) => ({ ...stack })),
           money: purse(this.phase, walker.bot.grade),
           name: walker.bot.name.slice(0, 7),

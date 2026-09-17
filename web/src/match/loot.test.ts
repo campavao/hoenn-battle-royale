@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Loot } from './loot';
+import { Loot, spillCells } from './loot';
+import { World } from '../bots/world';
 import type { MapRef, SpillMsg } from '../net/wire';
 
 const LITTLEROOT: MapRef = { group: 0, num: 9 };
@@ -126,5 +127,42 @@ describe('the match-wide loot table', () => {
     loot.note({ t: 'pickup', seat: 3, key: 0x01ff, item: 13, n: 1, cash: false });
     loot.note({ t: 'pickup', seat: 3, key: 0x01ff, item: 13, n: 1, cash: false });
     expect(loot.bagItems(0x01ff)).toEqual([{ id: 75, n: 1 }]);
+  });
+});
+
+// A 5x5 room: all floor except a wall down the middle column, so a spill next to it has
+// to skip cells rather than stack on them.
+function room(): World {
+  // The grid is run-length encoded, `countxclass;...` (world.ts's decodeGrid), class 0
+  // floor and 1 wall -- not a bitstring, which is the mistake this comment is here to
+  // stop somebody making twice.
+  const grid = Array.from({ length: 5 }, () => '4x0;1x1').join(';');
+  return new World([{ id: 'ROOM', group: 9, num: 9, w: 5, h: 5, section: 0, outdoor: true, grid, seams: [], warps: [] } as never]);
+}
+
+describe('where the pieces of a spill land', () => {
+  // The bug this exists for: a bot's spill wrote every ball to the dropper's own cell,
+  // so one ball was visible and the rest of the team -- and the bag under them -- could
+  // never be reached. BrLoot_At returns the first row it matches.
+  it('gives every piece its own cell', () => {
+    const cells = spillCells(room(), 'ROOM', 2, 2, 4);
+    expect(cells).toHaveLength(4);
+    expect(new Set(cells.map((c) => `${c.x},${c.y}`)).size).toBe(4);
+  });
+
+  it('starts on the cell they fell on', () => {
+    expect(spillCells(room(), 'ROOM', 2, 2, 1)).toEqual([{ x: 2, y: 2 }]);
+  });
+
+  it('skips what nobody could stand on', () => {
+    // (4, y) is the wall column, and (3,2)'s right-hand neighbour is it.
+    const cells = spillCells(room(), 'ROOM', 3, 2, 13);
+    expect(cells.some((c) => c.x === 4)).toBe(false);
+  });
+
+  it('runs out rather than doubling up', () => {
+    // A one-cell world: one piece lands and the rest stay in their balls.
+    const tiny = new World([{ id: 'CELL', group: 9, num: 9, w: 1, h: 1, section: 0, outdoor: true, grid: '1x0', seams: [], warps: [] } as never]);
+    expect(spillCells(tiny, 'CELL', 0, 0, 6)).toHaveLength(1);
   });
 });

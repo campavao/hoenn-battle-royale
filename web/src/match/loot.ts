@@ -11,7 +11,37 @@
 // goes into the in-ring as a fresh `spill`. The ROM cannot tell the difference between
 // that and the original, which is the point.
 import { speciesName } from '../bots/party';
+import type { World } from '../bots/world';
 import type { MapRef, Msg, SpillBag, SpillMon, SpillMsg } from '../net/wire';
+
+/** Where the pieces of one spill land, walked in this order: the cell they fell on, then
+ *  the ring around it, then two out. Kanto scatters within two tiles; this is the same
+ *  list the ROM uses for a player's own spill (`sSpillDx`/`sSpillDy` in br_loot.c) and it
+ *  has to stay that list, because both sides describe the same event and a spill that
+ *  landed differently depending on who dropped it is two different worlds. */
+const SPILL_DX = [0, 1, -1, 0, 0, 1, -1, 1, -1, 2, -2, 0, 0];
+const SPILL_DY = [0, 0, 0, 1, -1, 1, 1, -1, -1, 0, 0, 2, -2];
+
+/** Cells for `n` pieces dropped at (x, y), skipping anything nobody could stand on and
+ *  never using one twice. Fewer than `n` when the ring runs out -- a trainer who falls in
+ *  a doorway leaves what fits.
+ *
+ *  A bot's spill used to put every ball on the dropper's own cell. That is one visible
+ *  ball (BrLoot_At returns the first row it matches) with the rest of the team stacked
+ *  underneath it, and the BAG under those -- which is why a beaten bot looked like it
+ *  dropped one Pokemon and no bag at all. The ROM has always scattered its own. */
+export function spillCells(world: World, mapId: string, x: number, y: number, n: number): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+
+  for (let i = 0; i < SPILL_DX.length && out.length < n; i++) {
+    const cx = x + SPILL_DX[i];
+    const cy = y + SPILL_DY[i];
+    if (!world.standable(mapId, cx, cy)) continue;
+    if (out.some((c) => c.x === cx && c.y === cy)) continue;
+    out.push({ x: cx, y: cy });
+  }
+  return out;
+}
 
 interface Piece {
   seat: number;
