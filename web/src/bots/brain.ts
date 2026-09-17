@@ -423,6 +423,13 @@ export class Bots {
     return this.walkers.find((w) => w.bot.seat === seat)?.bag ?? [];
   }
 
+  /** What a bot's bag is worth in cash right now -- the purse it would drop (POK-237),
+   *  which is also what a spectator reading its bag is shown (POK-297). */
+  moneyOf(seat: number): number {
+    const walker = this.walkers.find((w) => w.bot.seat === seat);
+    return walker ? purse(this.phase, walker.bot.grade) : 0;
+  }
+
   /** The ring moved. Every route was chosen against the old one, so they are all
    *  suspect: dropping them makes each bot re-aim on its next step. The rung moved
    *  with it (POK-225: the ring phase IS the level), so the teams climb too. */

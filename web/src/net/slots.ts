@@ -23,7 +23,7 @@
 // bare.
 import { MAILBOX } from './mailbox';
 import { packGen3String, unpackGen3String } from '../text/gen3';
-import { PROTOCOL } from './wire';
+import { PARTY_BAG_MAX, PROTOCOL } from './wire';
 import type {
   BlockMsg,
   BstartMsg,
@@ -388,6 +388,13 @@ function decodeMon(bytes: Uint8Array): PackedMon {
 function encodeParty(m: PartyMsg): Uint8Array {
   const w = new Writer().u8(m.seat).u8(m.mons.length);
   for (const mon of m.mons) w.raw(encodeMon(mon));
+  // The bag is a tail, like a trainer card's items: money u32, stacks u8, then id u16 and
+  // n u8 a stack (POK-297). A party without one ends at its last row, as it always did.
+  if (m.bag) {
+    const stacks = m.bag.items.slice(0, PARTY_BAG_MAX);
+    w.u32(m.bag.money).u8(stacks.length);
+    for (const it of stacks) w.u16(it.id).u8(it.n);
+  }
   return w.toBytes();
 }
 function decodeParty(bytes: Uint8Array): PartyMsg {
@@ -396,9 +403,16 @@ function decodeParty(bytes: Uint8Array): PartyMsg {
   const count = r.u8();
   const mons: PackedMon[] = [];
   for (let i = 0; i < count; i++) mons.push(decodeMon(r.raw(MON_BYTES)));
-  return { t: 'party', seat, mons };
+  const msg: PartyMsg = { t: 'party', seat, mons };
+  if (r.remaining >= 5) {
+    const money = r.u32();
+    const items: { id: number; n: number }[] = [];
+    for (let n = r.u8(); n > 0 && r.remaining >= 3; n--) items.push({ id: r.u16(), n: r.u8() });
+    msg.bag = { money, items };
+  }
+  return msg;
 }
-
+
 // PICK: seat, the MAPSEC the trainer chose. LAND: seat, the map and cell the host
 // dealt them inside it (POK-223).
 function encodePick(m: PickMsg): Uint8Array {

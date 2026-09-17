@@ -53,7 +53,7 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `accept` | -- | page&lt;-&gt;page | no | the challenged seat, accepting |
 | `decline` | -- | page&lt;-&gt;page | no | the challenged seat, declining |
 | `bt` | `BR_MSG_BT` 6 | ROM&lt;-&gt;page&lt;-&gt;page&lt;-&gt;ROM | yes | one raw link-block exchange, per turn, during a PvP battle |
-| `party` | `BR_MSG_PARTY` 7 | page-&gt;ROM | yes | host (bot roster seat, before a trainer battle) or a player (Hall of Fame) |
+| `party` | `BR_MSG_PARTY` 7 | page-&gt;ROM | yes | host (bot roster seat, before a trainer battle) or a player (Hall of Fame). As the answer to a `peek` it carries an optional tail behind the rows (POK-297): money u32, stacks u8, then id u16 + n u8 a stack, at most 20 -- what that trainer is carrying, for the spectator's peek box. A player's ROM packs its own; the host's page packs a bot's. `status` in a row sent by a ROM is a code (0 none, 1 SLP, 2 PSN, 3 BRN, 4 FRZ, 5 PAR, 6 TOX), not a flag |
 | `faint` | `BR_MSG_FAINT` 8 | ROM-&gt;page | yes | ROM, when a party slot faints in battle |
 | `out` | `BR_MSG_OUT` 9 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | the eliminated seat |
 | `pickup` | `BR_MSG_PICKUP` 10 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | whoever picked something up off the ground |

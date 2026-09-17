@@ -23,6 +23,11 @@
 #include "pokemon.h"
 #include "recorded_battle.h"
 #include "constants/species.h"
+#include "constants/items.h"
+#include "constants/moves.h"
+#include "data.h"
+#include "item.h"
+#include "money.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -319,6 +324,12 @@ static void HandleTurnCont(const u8 *payload, u8 len)
 #define BR_PEEK_OFF_LEVEL 2
 #define BR_PEEK_OFF_HP 3
 #define BR_PEEK_OFF_MAXHP 5
+#define BR_PEEK_OFF_STATUS 7
+#define BR_PEEK_OFF_MOVES 8
+// The bag behind the rows (POK-297): money u32, stacks u8, then id u16 + n u8 a stack.
+// web/src/net/wire.ts's PARTY_BAG_MAX.
+#define BR_PEEK_BAG_MAX 20
+#define BR_PEEK_CAP (2 + PARTY_SIZE * BR_PEEK_ROW + 5 + 3 * BR_PEEK_BAG_MAX)
 #define BR_PEEK_OFF_NICKLEN 36
 #define BR_PEEK_OFF_NICK 37
 
@@ -339,6 +350,57 @@ static const u8 sPeekColors[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_C
 static const u8 sText_PeekLv[] = _(" Lv");
 static const u8 sText_PeekNone[] = _("no party seen yet");
 
+// Which one, not just whether (POK-297): a spectator judging the next fight wants to know
+// SLP from PAR. 0 none, then the order sText_PeekStatus is written in.
+static u8 StatusCode(u32 status)
+{
+    if (status & STATUS1_SLEEP)
+        return 1;
+    if (status & STATUS1_TOXIC_POISON)
+        return 6;
+    if (status & STATUS1_POISON)
+        return 2;
+    if (status & STATUS1_BURN)
+        return 3;
+    if (status & STATUS1_FREEZE)
+        return 4;
+    if (status & STATUS1_PARALYSIS)
+        return 5;
+    return 0;
+}
+
+// What we are carrying, behind our own party's rows: the pockets a fight or a MOVES
+// screen can spend. Not the key items, and not the eight HMs -- everybody has those.
+static u16 PackOwnBag(u8 *out)
+{
+    static const u8 sPockets[] = { ITEMS_POCKET, BALLS_POCKET, BERRIES_POCKET, TMHM_POCKET };
+    u32 money = GetMoney(&gSaveBlock1Ptr->money);
+    u8 count = 0, p, i;
+
+    out[0] = money;
+    out[1] = money >> 8;
+    out[2] = money >> 16;
+    out[3] = money >> 24;
+    for (p = 0; p < ARRAY_COUNT(sPockets); p++)
+    {
+        struct BagPocket *pocket = &gBagPockets[sPockets[p]];
+
+        for (i = 0; i < pocket->capacity && count < BR_PEEK_BAG_MAX; i++)
+        {
+            u16 item = pocket->itemSlots[i].itemId;
+            u16 n = pocket->itemSlots[i].quantity ^ (u16)gSaveBlock2Ptr->encryptionKey;
+
+            if (item == ITEM_NONE || n == 0 || item >= ITEM_HM01)
+                continue;
+            BrWire_WriteU16(out + 5 + 3 * count, item);
+            out[5 + 3 * count + 2] = n > 99 ? 99 : n;
+            count++;
+        }
+    }
+    out[4] = count;
+    return 5 + 3 * count;
+}
+
 // Our own party in BR_MSG_PARTY's PackedMon shape (br_wire.h): a fixed, unencrypted
 // 100 bytes a page or another ROM can read without knowing this ROM's keys. Only the
 // fields a spectator is allowed to see get filled; the rest stays zero.
@@ -355,7 +417,7 @@ static void PackOwnMon(struct Pokemon *mon, u8 *row)
     row[BR_PEEK_OFF_LEVEL] = GetMonData(mon, MON_DATA_LEVEL, NULL);
     BrWire_WriteU16(row + BR_PEEK_OFF_HP, GetMonData(mon, MON_DATA_HP, NULL));
     BrWire_WriteU16(row + BR_PEEK_OFF_MAXHP, GetMonData(mon, MON_DATA_MAX_HP, NULL));
-    row[7] = GetMonData(mon, MON_DATA_STATUS, NULL) != 0;
+    row[BR_PEEK_OFF_STATUS] = StatusCode(GetMonData(mon, MON_DATA_STATUS, NULL));
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
         BrWire_WriteU16(row + 8 + i * 4, GetMonData(mon, MON_DATA_MOVE1 + i, NULL));
@@ -376,7 +438,8 @@ static void PackOwnMon(struct Pokemon *mon, u8 *row)
 // of it alive. Reporting gEnemyParty under the bot's seat is how the page finds out.
 void BrSpectate_SendPartyOf(struct Pokemon *party, u8 seat)
 {
-    u8 *buf = Alloc(2 + PARTY_SIZE * BR_PEEK_ROW);
+    u8 *buf = Alloc(BR_PEEK_CAP);
+    u16 len;
     u8 count = 0, i;
 
     if (buf == NULL)
@@ -390,8 +453,13 @@ void BrSpectate_SendPartyOf(struct Pokemon *party, u8 seat)
     }
     buf[0] = seat;
     buf[1] = count;
+    len = 2 + count * BR_PEEK_ROW;
+    // Our own bag goes with our own team. A bot's lives on the host's page, which is what
+    // answers a peek about it; its party only comes through here after a fight.
+    if (party == gPlayerParty)
+        len += PackOwnBag(buf + len);
     if (count > 0)
-        BrWire_SendLarge(BR_MSG_PARTY, buf, (u16)(2 + count * BR_PEEK_ROW));
+        BrWire_SendLarge(BR_MSG_PARTY, buf, len);
     Free(buf);
 }
 
@@ -422,6 +490,8 @@ static void HandlePeek(const u8 *payload, u8 len)
     BrSpectate_SendParty();
 }
 
+static void RefreshPeek(void);
+
 static void ParseParty(const u8 *d, u16 n)
 {
     u8 count;
@@ -433,16 +503,19 @@ static void ParseParty(const u8 *d, u16 n)
         return;
     sPeekSeat = d[0];
     gBrSpectate.peekMons = count;
+    // The asking is on a timer (match/spectate.ts), so an open box is a live one: HP
+    // moves, a potion leaves the bag. It used to show whatever was true when it opened.
+    RefreshPeek();
 }
 
 static void HandleParty(const u8 *payload, u8 len)
 {
     if (sPartyAsm.buf == NULL)
     {
-        sPartyAsm.buf = Alloc(2 + PARTY_SIZE * BR_PEEK_ROW);
+        sPartyAsm.buf = Alloc(BR_PEEK_CAP);
         if (sPartyAsm.buf == NULL)
             return;
-        sPartyAsm.cap = 2 + PARTY_SIZE * BR_PEEK_ROW;
+        sPartyAsm.cap = BR_PEEK_CAP;
     }
     if (BrWire_Assemble(&sPartyAsm, BR_MSG_PARTY, FALSE, payload, len))
         ParseParty(sPartyAsm.buf, sPartyAsm.total);
@@ -455,43 +528,196 @@ static void HandlePartyCont(const u8 *payload, u8 len)
         ParseParty(sPartyAsm.buf, sPartyAsm.total);
 }
 
-// "NICKNAME Lv12 34/56", one line per mon -- what Kanto's peek shows without handing
-// over anything that would let a spectator rebuild the record.
-static void DrawPeek(void)
+// "NICKNAME Lv12 34/56 PSN", one line per mon -- and, a page on, what each of them can
+// do and what their trainer is carrying (POK-297). Kanto's spectator reads "team with
+// levels, HP and moves, their bag": enough to judge whether the trainer they are watching
+// can win the next fight, which is mostly a question about moves and FULL RESTOREs.
+//
+// Pages, A or RIGHT for the next and LEFT for the last: the team, then one page a mon
+// (its four moves and their PP), then the bag five stacks at a time under the money.
+#define BR_PEEK_BAG_PER_PAGE 5
+
+static const u8 sText_PeekPP[] = _(" PP ");
+static const u8 sText_PeekTimes[] = _(" x");
+static const u8 sText_PeekMoney[] = _("MONEY ");
+static const u8 sText_PeekNoBag[] = _("bag not seen yet");
+static const u8 sText_PeekEmpty[] = _("nothing in the bag");
+static const u8 sText_PeekStatus[][5] =
 {
-    const u8 *row;
+    _(""), _(" SLP"), _(" PSN"), _(" BRN"), _(" FRZ"), _(" PAR"), _(" TOX"),
+};
+
+// The bag rides behind the last party row: money u32, stacks u8, then id u16 and n u8 a
+// stack. NULL when the party came without one (an older page, a champion's parade).
+static const u8 *PeekBag(void)
+{
+    u16 off = 2 + gBrSpectate.peekMons * BR_PEEK_ROW;
+
+    if (sPartyAsm.buf == NULL || (u16)(off + 5) > sPartyAsm.total)
+        return NULL;
+    return sPartyAsm.buf + off;
+}
+
+static u8 PeekBagStacks(void)
+{
+    const u8 *bag = PeekBag();
+    u16 room;
+    u8 n;
+
+    if (bag == NULL)
+        return 0;
+    n = bag[4];
+    room = (sPartyAsm.total - (2 + gBrSpectate.peekMons * BR_PEEK_ROW) - 5) / 3;
+    if (n > room)
+        n = room;
+    return n > BR_PEEK_BAG_MAX ? BR_PEEK_BAG_MAX : n;
+}
+
+static u8 PeekPages(void)
+{
+    u8 stacks = PeekBagStacks();
+    u8 bagPages = stacks == 0 ? 1 : (stacks + BR_PEEK_BAG_PER_PAGE - 1) / BR_PEEK_BAG_PER_PAGE;
+
+    return 1 + gBrSpectate.peekMons + bagPages;
+}
+
+static void PeekLine(u8 row, const u8 *text)
+{
+    AddTextPrinterParameterized3(sPeekWin, FONT_SMALL, 2, (u8)(2 + row * 12), sPeekColors,
+        (s8)TEXT_SKIP_DRAW, text);
+}
+
+// "NICKNAME Lv12" into `p`; returns the new end.
+static u8 *PeekWho(u8 *p, const u8 *row)
+{
+    u8 j, len = row[BR_PEEK_OFF_NICKLEN];
+
+    if (len > 10)
+        len = 10;
+    for (j = 0; j < len; j++)
+        *p++ = row[BR_PEEK_OFF_NICK + j];
+    *p = EOS;
+    p = StringCopy(p, sText_PeekLv);
+    return ConvertIntToDecimalStringN(p, row[BR_PEEK_OFF_LEVEL], STR_CONV_MODE_LEFT_ALIGN, 3);
+}
+
+static void DrawPeekTeam(void)
+{
     u8 line[40];
     u8 *p;
-    u8 i, j, len;
+    u8 i;
 
-    FillWindowPixelBuffer(sPeekWin, PIXEL_FILL(TEXT_COLOR_DARK_GRAY));
-    if (gBrSpectate.peekMons == 0 || sPartyAsm.buf == NULL || sPeekSeat != gBrSpectate.follow)
-    {
-        AddTextPrinterParameterized3(sPeekWin, FONT_SMALL, 2, 2, sPeekColors,
-            (s8)TEXT_SKIP_DRAW, sText_PeekNone);
-        return;
-    }
     for (i = 0; i < gBrSpectate.peekMons; i++)
     {
-        row = sPartyAsm.buf + 2 + i * BR_PEEK_ROW;
-        len = row[BR_PEEK_OFF_NICKLEN];
-        if (len > 10)
-            len = 10;
-        p = line;
-        for (j = 0; j < len; j++)
-            *p++ = row[BR_PEEK_OFF_NICK + j];
-        *p = EOS;
-        p = StringCopy(p, sText_PeekLv);
-        p = ConvertIntToDecimalStringN(p, row[BR_PEEK_OFF_LEVEL], STR_CONV_MODE_LEFT_ALIGN, 3);
+        const u8 *row = sPartyAsm.buf + 2 + i * BR_PEEK_ROW;
+
+        p = PeekWho(line, row);
         *p++ = CHAR_SPACE;
         p = ConvertIntToDecimalStringN(p, BrWire_ReadU16(row + BR_PEEK_OFF_HP),
             STR_CONV_MODE_LEFT_ALIGN, 3);
         *p++ = CHAR_SLASH;
-        ConvertIntToDecimalStringN(p, BrWire_ReadU16(row + BR_PEEK_OFF_MAXHP),
+        p = ConvertIntToDecimalStringN(p, BrWire_ReadU16(row + BR_PEEK_OFF_MAXHP),
             STR_CONV_MODE_LEFT_ALIGN, 3);
-        AddTextPrinterParameterized3(sPeekWin, FONT_SMALL, 2, (u8)(2 + i * 12), sPeekColors,
-            (s8)TEXT_SKIP_DRAW, line);
+        if (row[BR_PEEK_OFF_STATUS] < ARRAY_COUNT(sText_PeekStatus))
+            StringCopy(p, sText_PeekStatus[row[BR_PEEK_OFF_STATUS]]);
+        PeekLine(i, line);
     }
+}
+
+static void DrawPeekMoves(u8 index)
+{
+    const u8 *row = sPartyAsm.buf + 2 + index * BR_PEEK_ROW;
+    u8 line[40];
+    u8 *p;
+    u8 i, shown = 1;
+
+    PeekWho(line, row);
+    PeekLine(0, line);
+    for (i = 0; i < MAX_MON_MOVES; i++)
+    {
+        u16 move = BrWire_ReadU16(row + BR_PEEK_OFF_MOVES + i * 4);
+
+        if (move == MOVE_NONE || move >= MOVES_COUNT)
+            continue;
+        p = StringCopy(line, gMoveNames[move]);
+        p = StringCopy(p, sText_PeekPP);
+        ConvertIntToDecimalStringN(p, row[BR_PEEK_OFF_MOVES + i * 4 + 2], STR_CONV_MODE_LEFT_ALIGN, 2);
+        PeekLine(shown++, line);
+    }
+}
+
+static void DrawPeekBag(u8 page)
+{
+    const u8 *bag = PeekBag();
+    u8 line[40];
+    u8 *p;
+    u8 i, stacks = PeekBagStacks();
+    u32 money;
+
+    if (bag == NULL)
+    {
+        PeekLine(0, sText_PeekNoBag);
+        return;
+    }
+    money = bag[0] | (bag[1] << 8) | (bag[2] << 16) | ((u32)bag[3] << 24);
+    p = StringCopy(line, sText_PeekMoney);
+    ConvertIntToDecimalStringN(p, money, STR_CONV_MODE_LEFT_ALIGN, 6);
+    PeekLine(0, line);
+    if (stacks == 0)
+    {
+        PeekLine(1, sText_PeekEmpty);
+        return;
+    }
+    for (i = 0; i < BR_PEEK_BAG_PER_PAGE && page * BR_PEEK_BAG_PER_PAGE + i < stacks; i++)
+    {
+        const u8 *it = bag + 5 + 3 * (page * BR_PEEK_BAG_PER_PAGE + i);
+        u16 item = BrWire_ReadU16(it);
+
+        if (item == ITEM_NONE || item >= ITEMS_COUNT)
+            continue;
+        p = StringCopy(line, GetItemName(item));
+        p = StringCopy(p, sText_PeekTimes);
+        ConvertIntToDecimalStringN(p, it[2], STR_CONV_MODE_LEFT_ALIGN, 2);
+        PeekLine(1 + i, line);
+    }
+}
+
+static void DrawPeek(void)
+{
+    FillWindowPixelBuffer(sPeekWin, PIXEL_FILL(TEXT_COLOR_DARK_GRAY));
+    if (gBrSpectate.peekMons == 0 || sPartyAsm.buf == NULL || sPeekSeat != gBrSpectate.follow)
+    {
+        PeekLine(0, sText_PeekNone);
+        return;
+    }
+    // A party that shrank under us (a faint, a release) can leave the page past the end.
+    if (gBrSpectate.peekPage >= PeekPages())
+        gBrSpectate.peekPage = 0;
+    if (gBrSpectate.peekPage == 0)
+        DrawPeekTeam();
+    else if (gBrSpectate.peekPage <= gBrSpectate.peekMons)
+        DrawPeekMoves(gBrSpectate.peekPage - 1);
+    else
+        DrawPeekBag(gBrSpectate.peekPage - 1 - gBrSpectate.peekMons);
+}
+
+// A or RIGHT for the next page, LEFT for the one before. Round and round: there is no
+// cursor and nothing to choose, only more to read.
+static void TurnPeekPage(s8 by)
+{
+    u8 pages = PeekPages();
+
+    gBrSpectate.peekPage = (u8)((gBrSpectate.peekPage + pages + by) % pages);
+    DrawPeek();
+    CopyWindowToVram(sPeekWin, COPYWIN_GFX);
+}
+
+static void RefreshPeek(void)
+{
+    if (!gBrSpectate.peeking || sPeekWin == WINDOW_NONE)
+        return;
+    DrawPeek();
+    CopyWindowToVram(sPeekWin, COPYWIN_GFX);
 }
 
 static void ClosePeek(void)
@@ -511,6 +737,7 @@ static void OpenPeek(void)
     sPeekWin = (u8)AddWindow(&sPeekTemplate);
     if (sPeekWin == WINDOW_NONE)
         return;
+    gBrSpectate.peekPage = 0;
     DrawPeek();
     PutWindowTilemap(sPeekWin);
     CopyWindowToVram(sPeekWin, COPYWIN_FULL);
@@ -614,6 +841,14 @@ static void FollowTick(void)
             ClosePeek();
         else
             OpenPeek();
+    }
+    else if (gBrSpectate.peeking && (JOY_NEW(A_BUTTON) || JOY_NEW(DPAD_RIGHT)))
+    {
+        TurnPeekPage(1);
+    }
+    else if (gBrSpectate.peeking && JOY_NEW(DPAD_LEFT))
+    {
+        TurnPeekPage(-1);
     }
     if (them->objId == BR_NO_OBJ)
         return; // their ghost has not spawned on this map yet

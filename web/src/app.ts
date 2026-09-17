@@ -11,7 +11,7 @@ import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './net/slots';
-import { decode, type Msg, type PackedMon } from './net/wire';
+import { decode, PARTY_BAG_MAX, type Msg, type PackedMon } from './net/wire';
 import { MAP_OFFSET, toRomCells } from './net/cells';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
@@ -1324,7 +1324,10 @@ function startBots(
     // is the team the bot is actually carrying, fights it has had and all.
     partyFor: (seat: number) => {
       const mons = bots.partyOf(seat);
-      return seatsDealt.has(seat) && mons.length > 0 ? { t: 'party', seat, mons } : null;
+      if (!seatsDealt.has(seat) || mons.length === 0) return null;
+      // ...and what it is carrying (POK-297): a bot's bag lives here and nowhere else.
+      const items = bots.bagOf(seat).slice(0, PARTY_BAG_MAX).map((s) => ({ id: s.id, n: Math.min(99, s.n) }));
+      return { t: 'party', seat, mons, bag: { money: bots.moneyOf(seat), items: items.filter((s) => s.n > 0) } };
     },
     dispose: () => clearInterval(id),
   };

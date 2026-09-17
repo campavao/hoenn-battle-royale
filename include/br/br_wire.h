@@ -83,6 +83,9 @@
 //   0: seat  u8
 //   1: count u8   1..6
 //   2..: count PackedMon rows, 100 bytes each (see below)
+//   ..:  OPTIONAL bag tail, on the answer to a PEEK (POK-297): money u32 LE, stacks u8
+//        (<= 20), then stacks * (item id u16 LE, n u8). A party without one ends at its
+//        last row, as it always did.
 //
 // PackedMon (100 bytes) -- NOT the ROM's real encrypted struct Pokemon; a fixed,
 // unencrypted shape sized to match it (100 bytes) so the continuation-slot math for
@@ -91,7 +94,7 @@
 //   2:      level       u8
 //   3..4:   hp          u16 LE
 //   5..6:   maxHp       u16 LE
-//   7:      status      u8
+//   7:      status      u8   0 none, 1 SLP, 2 PSN, 3 BRN, 4 FRZ, 5 PAR, 6 TOX (from a ROM)
 //   8..23:  moves[4]    4 bytes each: id u16 LE, pp u8, ppUps u8 (id 0 = empty slot)
 //   24..25: heldItem    u16 LE
 //   26..27: otId        u16 LE

@@ -33,13 +33,17 @@ shot followed
 # peek: the page answers with seat 1's party -- six of the same mon, TREKO Lv12 34/56.
 # payload = seat 01, count 01, then a 100-byte PackedMon (species 0x0115, level 0x0C,
 # hp 0x0022, maxHp 0x0038, nickname length at +36 and the name at +37)
-pokebytes gDecompressionBuffer 01 06 15 01 0C 22 00 38 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+pokebytes gDecompressionBuffer 01 06 15 01 0C 22 00 38 00 02 01 00 23 00 47 00 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
 copy gDecompressionBuffer+102 gDecompressionBuffer+2 100
 copy gDecompressionBuffer+202 gDecompressionBuffer+2 100
 copy gDecompressionBuffer+302 gDecompressionBuffer+2 100
 copy gDecompressionBuffer+402 gDecompressionBuffer+2 100
 copy gDecompressionBuffer+502 gDecompressionBuffer+2 100
-mailsend gBrMailbox 7 gDecompressionBuffer 602
+# ...and behind the six rows, what seat 1 is carrying (POK-297): 1234 in cash, three
+# POTIONs (13) and a FULL RESTORE (19). Each row now says PSN (status 2) and knows POUND
+# (1, 35 PP) and ABSORB (71, 20 PP).
+pokebytes gDecompressionBuffer+602 D2 04 00 00 02 0D 00 03 13 00 01
+mailsend gBrMailbox 7 gDecompressionBuffer 613
 wait 10
 expect u8 gBrSpectate+11 6
 # START opens the box, B closes it -- field controls are locked, so the start menu
@@ -48,6 +52,19 @@ tap START
 wait 20
 expect u8 gBrSpectate+10 1
 shot peek
+expect u8 gBrSpectate+13 0
+# A turns the page: the first mon's moves...
+tap A
+wait 20
+expect u8 gBrSpectate+13 1
+shot peek-moves
+# ...LEFT goes back round the other way, past the team, to the last page: the bag.
+tap LEFT
+wait 20
+tap LEFT
+wait 20
+expect u8 gBrSpectate+13 7
+shot peek-bag
 tap B
 wait 20
 expect u8 gBrSpectate+10 0

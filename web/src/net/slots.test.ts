@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAILBOX } from './mailbox';
 import { BR_CONT_FLAG, BR_MSG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
 import type { Msg, PackedMon } from './wire';
-import { PROTOCOL } from './wire';
+import { decode, PROTOCOL } from './wire';
 
 // Pack -> (simulate the ring) -> reassemble -> unpack, the same round trip a real
 // mailbox poll does across however many slots a message took.
@@ -260,5 +260,27 @@ describe('fixed-layout byte counts', () => {
     const { payload } = reassembleSlots(slots);
     // seat(1) + count(1) + 1 mon * 100
     expect(payload.length).toBe(2 + 100);
+  });
+});
+
+describe("a party's bag (POK-297)", () => {
+  const bag = { money: 12_345, items: [{ id: 13, n: 3 }, { id: 19, n: 1 }, { id: 327, n: 1 }] };
+
+  it('crosses the ROM boundary with the team it belongs to', () => {
+    expect(roundTrip({ t: 'party', seat: 4, mons: [mon(), mon()], bag })).toEqual({
+      t: 'party', seat: 4, mons: [mon(), mon()], bag,
+    });
+  });
+
+  it('is a tail: a party without one is the bytes it always was', () => {
+    const bare = roundTrip({ t: 'party', seat: 4, mons: [mon()] });
+    expect(bare).toEqual({ t: 'party', seat: 4, mons: [mon()] });
+    expect('bag' in bare).toBe(false);
+  });
+
+  it('survives the relay too, and an empty bag is still a bag', () => {
+    const empty = { t: 'party', seat: 2, mons: [mon()], bag: { money: 0, items: [] } } as const;
+    expect(decode(JSON.stringify(empty))).toEqual(empty);
+    expect(roundTrip(decode(JSON.stringify(empty)))).toEqual(empty);
   });
 });

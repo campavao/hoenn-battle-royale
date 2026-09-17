@@ -197,6 +197,19 @@ export interface PartyMsg {
   t: 'party';
   seat: number;
   mons: PackedMon[]; // at most 6
+  /** What they are carrying (POK-297). Kanto's spectator reads the watched trainer's
+   *  "team with levels, HP and moves, their bag" -- enough to judge whether they can win
+   *  the next fight, which is mostly a question about FULL RESTOREs. Optional: a party
+   *  sent for any other reason (the champion's parade) has no business carrying one. */
+  bag?: PartyBag;
+}
+
+/** BR_PEEK_BAG_MAX in src/br/br_spectate.c. */
+export const PARTY_BAG_MAX = 20;
+
+export interface PartyBag {
+  money: number;
+  items: { id: number; n: number }[]; // at most PARTY_BAG_MAX stacks
 }
 
 /** A bot's trainer card: who it is and what it is carrying. A bot has no ROM, so the
@@ -901,7 +914,19 @@ const decoders: Record<string, Decoder> = {
   party: (m) => {
     const mons = m.mons;
     if (!Array.isArray(mons) || mons.length === 0 || mons.length > 6) fail('bad party');
-    return { t: 'party', seat: reqSeat(m), mons: mons.map(validateMon) };
+    const out: PartyMsg = { t: 'party', seat: reqSeat(m), mons: mons.map(validateMon) };
+    if (isPlainObject(m.bag)) {
+      const items = Array.isArray(m.bag.items) ? m.bag.items : [];
+      if (items.length > PARTY_BAG_MAX) fail('bad party bag');
+      out.bag = {
+        money: reqInt(m.bag, 'money', 0, 999_999),
+        items: items.map((it) => {
+          if (!isPlainObject(it)) fail('bad party bag item');
+          return { id: reqInt(it, 'id', 1, 0xffff), n: reqInt(it, 'n', 1, 99) };
+        }),
+      };
+    }
+    return out;
   },
 
   pick: (m) => ({ t: 'pick', seat: reqSeat(m), section: reqInt(m, 'section', 0, 0xffff) }),

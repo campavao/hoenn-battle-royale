@@ -10,10 +10,12 @@ expect u16 gBrMailbox+0x08 2
 pokebytes gBrMailbox+0x1018 15 05 02 00 00 01 00
 poke u16 gBrMailbox+0x0C 1
 wait 10
-# the answer is out[2]: PARTY (type 7), 102 bytes over two slots, seat 0, one mon,
-# species 0x0115 (Treecko), level 5
+# the answer is out[2]: PARTY (type 7), seat 0, one mon, species 0x0115 (Treecko),
+# level 5 -- 102 bytes of team, and behind it what we are carrying (POK-297): money u32,
+# stacks u8, and one stack of three bytes, the starting bag's five POKe BALLS. The rod is
+# a key item and the eight HMs are everybody's, so neither is listed. 110 in all.
 expect u8 gBrMailbox+0x98 7
-expect u16 gBrMailbox+0x9A 102
+expect u16 gBrMailbox+0x9A 110
 expect u8 gBrMailbox+0x9D 0
 expect u8 gBrMailbox+0x9E 1
 # species little-endian, byte by byte: the payload is at an odd address and a u16 read
