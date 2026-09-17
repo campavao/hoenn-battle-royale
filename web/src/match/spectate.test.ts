@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { battleId, battleSeats, CACHE_MAX_BYTES, EYE_WINDOW_MS, PEEK_INTERVAL_MS, Spectate } from './spectate';
+import { encodeGen3 } from '../text/gen3';
+import { battleId, battleSeats, CACHE_MAX_BYTES, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, Spectate } from './spectate';
 import type { Msg } from '../net/wire';
 
 const bstart = (battle: number): Msg => ({ t: 'bstart', battle, data: [1, 2, 3] });
@@ -133,5 +134,17 @@ describe('the eye', () => {
     s.notePeek(1, 1000);
     expect(s.eyes(1000 + EYE_WINDOW_MS)).toBe(1);
     expect(s.eyes(1001 + EYE_WINDOW_MS)).toBe(0);
+  });
+});
+
+describe("a proxy duel's bstart (POK-300)", () => {
+  it('is named after the two bots, low seat first, seven characters and an EOS', () => {
+    const data = new Array(40).fill(0);
+    const msg = nameBstart({ t: 'bstart', battle: 3 | (9 << 8), data }, (s) => (s === 3 ? 'courtney' : 'Max'));
+    expect(msg.data.slice(0, 8)).toEqual(data.slice(0, 8)); // the seed and flags are untouched
+    expect(msg.data.slice(8, 16)).toEqual([...encodeGen3('COURTNE'), 0xff]);
+    expect(msg.data.slice(16, 24)).toEqual([...encodeGen3('MAX'), 0xff, 0xff, 0xff, 0xff, 0xff]);
+    expect(msg.data.slice(24)).toEqual(data.slice(24));
+    expect(data[8]).toBe(0); // and the original was not written on
   });
 });

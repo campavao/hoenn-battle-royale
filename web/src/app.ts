@@ -11,12 +11,12 @@ import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './net/slots';
-import { decode, PARTY_BAG_MAX, type Msg, type PackedMon } from './net/wire';
+import { decode, PARTY_BAG_MAX, type BstartMsg, type Msg, type PackedMon, type TurnMsg } from './net/wire';
 import { MAP_OFFSET, toRomCells } from './net/cells';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
 import { DEFAULT_SAFARI_SECS, Director, type DirectorState, type DirectorWorld } from './match/director';
-import { Spectate } from './match/spectate';
+import { nameBstart, Spectate } from './match/spectate';
 import { bossAt } from './match/bosses';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
@@ -846,6 +846,9 @@ const record = new MatchRecord();
  *  duel, so a page that never runs bots never pays for it. Null on an unpatched ROM,
  *  which has no BrDuel to talk to. */
 let proxyDuels: ProxyDuels | null = null;
+/** Where the proxy's fight goes as it happens (POK-300). The instance is made before
+ *  there is a room to tell; the room path sets this when it has one. */
+let proxyStream: ((msg: BstartMsg | TurnMsg) => void) | null = null;
 
 /** Which of the four trainer sprites is your ghost on everybody else's screen. */
 function careerSkin(): number {
@@ -2405,6 +2408,18 @@ function wireRoom(
     relay.canHost(true);
     // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast.
     bridge.setRomFilter((msg) => spectate.wantsFromRelay(msg));
+    // Two bots fighting can be watched (POK-300): the proxy instance publishes its duel
+    // the way a player's ROM publishes a link battle, and this page is its relay -- to
+    // the room, and through the same gate to our own ROM if we are following either bot.
+    // The bots' names go in on the way past; the instance has no roster to read them from.
+    proxyStream = (raw) => {
+      const msg = raw.t === 'bstart'
+        ? nameBstart(raw, (s) => bridge!.roster.all().find((e) => e.seat === s)?.name || `P${s}`)
+        : raw;
+
+      bridge!.relay.all(msg);
+      if (spectate.wantsFromRelay(msg)) bridge!.pushToRom(msg);
+    };
     // A watcher is furniture: its ROM is walking around Littleroot and nobody in the
     // match should see a ghost of it, or hear it claim a seat (POK-260).
     // Everybody hears what we picked (POK-274): our three lines ride out on every
@@ -3138,6 +3153,7 @@ async function main(): Promise<void> {
       },
       writeBoot: (e, base) => writeBootBlock(e as Emulator, base, PROXY_NAME),
       onNote: (what) => console.info('[proxy]', what),
+      onStream: (msg) => proxyStream?.(msg),
     });
   }
 

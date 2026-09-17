@@ -35,6 +35,7 @@
 #include "br/br_netlink.h"
 #include "br/br_battle.h"
 #include "br/br_spectate.h"
+#include "br/br_duel.h"
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
 // The per-frame turn scratch, kept in EWRAM on purpose: a plain function-local static
@@ -48,12 +49,28 @@ static EWRAM_DATA struct BrAssembler sTurnAsm = {0};
 
 // The battle's id on the wire: the seat pair, low seat then high. The challenger is
 // the lower seat (the engage's lower seat initiates), so our seat is the low one.
+//
+// A proxy duel (POK-238) is two bots' seats, neither of them ours: the hidden instance
+// has no seat at all. Its fight is published under the pair the same way (POK-300), so
+// a spectator following either bot is handed it like any other.
 static u16 BattleId(void)
 {
-    u8 lo = gBrMySeat < gBrNetlink.peerSeat ? gBrMySeat : gBrNetlink.peerSeat;
-    u8 hi = gBrMySeat < gBrNetlink.peerSeat ? gBrNetlink.peerSeat : gBrMySeat;
+    u8 mine = gBrDuel.running ? gBrDuel.seatA : gBrMySeat;
+    u8 theirs = gBrDuel.running ? gBrDuel.seatB : gBrNetlink.peerSeat;
+    u8 lo = mine < theirs ? mine : theirs;
+    u8 hi = mine < theirs ? theirs : mine;
 
     return lo | (hi << 8);
+}
+
+// Who publishes: the master of a link battle, and the proxy instance for the duel it is
+// fighting (POK-300). Nobody else -- a spectator never emits, and the bot fight in a
+// player's own ROM is that player's, not a thing the room watches.
+static bool8 Publishing(void)
+{
+    if (gBrDuel.running)
+        return TRUE;
+    return gBrNetlink.active && gBrNetlink.myId == 0;
 }
 
 // The seed and both parties are up: the recorded replay can be built. The seed is set
@@ -94,7 +111,7 @@ static void SendBstart(void)
 {
     u8 *buf = Alloc(28 + 2 * (1 + PARTY_SIZE * sizeof(struct Pokemon)));
     u16 len = 0, id;
-    u32 seed;
+    u32 seed, flags;
     u8 i;
 
     if (buf == NULL)
@@ -107,10 +124,16 @@ static void SendBstart(void)
     buf[len++] = (seed >> 8) & 0xFF;
     buf[len++] = (seed >> 16) & 0xFF;
     buf[len++] = (seed >> 24) & 0xFF;
-    buf[len++] = gBattleTypeFlags & 0xFF;
-    buf[len++] = (gBattleTypeFlags >> 8) & 0xFF;
-    buf[len++] = (gBattleTypeFlags >> 16) & 0xFF;
-    buf[len++] = (gBattleTypeFlags >> 24) & 0xFF;
+    // A duel is BATTLE_TYPE_TRAINER with both sides on the AI. The replay is built for a
+    // link fight's flags (RecordedBattle_StartSpectate masks LINK off and puts RECORDED_LINK
+    // on), so a duel goes out looking like one: the same shape the replay already plays.
+    flags = gBattleTypeFlags;
+    if (gBrDuel.running)
+        flags |= BATTLE_TYPE_LINK | BATTLE_TYPE_IS_MASTER;
+    buf[len++] = flags & 0xFF;
+    buf[len++] = (flags >> 8) & 0xFF;
+    buf[len++] = (flags >> 16) & 0xFF;
+    buf[len++] = (flags >> 24) & 0xFF;
     for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)
         buf[len++] = gLinkPlayers[0].name[i];
     for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)
@@ -944,7 +967,7 @@ void BrSpectate_Tick(void)
             gBrSpectate.watching = FALSE;
         return;
     }
-    if (!gBrNetlink.active || gBrNetlink.myId != 0)
+    if (!Publishing())
         return;
     if (!gMain.inBattle)
     {

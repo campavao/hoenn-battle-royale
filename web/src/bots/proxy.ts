@@ -19,7 +19,7 @@
 import { Mailbox } from '../net/mailbox';
 import { packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
 import { BR_MSG, BR_CONT_FLAG } from '../net/slots';
-import type { DresultMsg, Msg, PackedMon } from '../net/wire';
+import type { BstartMsg, DresultMsg, Msg, PackedMon, TurnMsg } from '../net/wire';
 
 /** What the caller gets back: who won, what each side has left, and what each spent
  *  out of its own bag (POK-237). */
@@ -64,6 +64,10 @@ export interface ProxyOptions {
   wakeFrames?: number;
   /** Told about anything worth knowing: a timeout, a crash, a fallback. */
   onNote?: (what: string) => void;
+  /** The fight as it happens (POK-300): the instance publishes its duel the way a
+   *  player's ROM publishes a link battle -- a `bstart`, then `turn`s -- under the two
+   *  bots' seats. Handed over as they land so the room can watch either bot into it. */
+  onStream?: (msg: BstartMsg | TurnMsg) => void;
 }
 
 /** A battle has message boxes that wait for a press (POK-269's rule) -- the intro's
@@ -191,8 +195,10 @@ export class ProxyDuels {
   private awaitResult(emu: ProxyEmulator, mailbox: Mailbox, deadlineMs: number): Promise<DresultMsg | null> {
     return new Promise((resolve) => {
       const started = Date.now();
-      // Slots of a message that spans several, held until the last one lands.
+      // Slots of a message that spans several, held until the last one lands -- one
+      // run per type, since a bstart spans a dozen slots and a turn can land between.
       let parts: BinarySlot[] = [];
+      const streamParts = new Map<number, BinarySlot[]>();
       const finish = (value: DresultMsg | null) => {
         stop();
         this.unframe = null;
@@ -211,7 +217,21 @@ export class ProxyDuels {
       const stop = emu.onFrame(() => {
         this.tap(emu);
         for (const raw of mailbox.poll()) {
-          if ((raw.type & ~BR_CONT_FLAG) !== BR_MSG.DRESULT) continue;
+          const base = raw.type & ~BR_CONT_FLAG;
+          if (base === BR_MSG.BSTART || base === BR_MSG.TURN) {
+            const run = streamParts.get(base) ?? [];
+            run.push({ type: raw.type, payload: raw.payload });
+            streamParts.set(base, run);
+            try {
+              const { type, payload } = reassembleSlots(run);
+              streamParts.delete(base);
+              this.opts.onStream?.(unpackSlot(type, payload) as BstartMsg | TurnMsg);
+            } catch {
+              /* more slots to come */
+            }
+            continue;
+          }
+          if (base !== BR_MSG.DRESULT) continue;
           parts.push({ type: raw.type, payload: raw.payload });
           let msg;
           try {
