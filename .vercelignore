@@ -1,0 +1,62 @@
+# The Vercel project's Root Directory is "web", so a deploy is made from HERE -- the repo
+# root -- and Vercel then builds web/. But this root is a pokeemerald fork: two 16 MB
+# ROMs, a build tree, the whole of Hoenn's graphics and audio. None of that is the site,
+# and one of those ROMs is somebody else's copyright.
+#
+# EVERY PATH HERE IS ANCHORED WITH A LEADING SLASH, and that is load-bearing. A bare
+# `src` is a gitignore pattern that matches at any depth, so it takes web/src with it and
+# the build dies on "Failed to resolve /src/app.ts". Same for data, tools, docs, build,
+# include and constants -- web/ has its own of several of those.
+#
+# The earlier `/*` + `!/web/` form does not work either: it left web/ out of the upload
+# altogether and Vercel answered "the specified Root Directory web does not exist", which
+# is a confusing way to be told the site was never sent.
+/.git
+/.github
+/.claude
+/asm
+/build
+/constants
+/data
+/docs
+/graphics
+/include
+/libagbsyscall
+/sound
+/src
+/tools
+/relay
+/*.elf
+/*.map
+/*.mk
+/*.ld
+/*.md
+/Makefile
+/charmap.txt
+/rom.sha1
+/sym_*.txt
+/asmdiff.*
+/build_tools.sh
+
+# ...and the parts of web/ that are not the site. NOT spike/, which is a build input
+# (vite.config.ts's rollupOptions), and NOT public/patch, which is the whole point:
+# web/public/patch/* is gitignored because the patch is a build artifact, and Vercel
+# falls back to .gitignore when there is no .vercelignore. That is why the first deploy
+# went up with no BPS at all and the shell told everybody "no patch published yet".
+/web/node_modules
+/web/dist
+/web/.vercel
+/web/test-results
+/web/playwright-report
+/web/e2e
+/web/.env*
+
+# The dev ROM, and anything ROM-shaped anywhere -- these stay unanchored on purpose.
+# tools/br/dev-patch.sh leaves a full, patched Emerald in web/public/patch/ so the dev
+# shell can skip the file picker; app.ts fetches it only under import.meta.env.DEV and
+# its own comment says "nothing ships this file". The build drops it too
+# (vite.config.ts's br-drop-roms) and web/scripts/no-rom.mjs asserts the result. Three
+# locks on one door: the ROM belongs on the player's device and nowhere else.
+*.gba
+*.sav
+*.ss?

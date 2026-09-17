@@ -587,3 +587,74 @@ Professor Birch's lab (closed, `lab-closed.txt`), the end-of-match exit, the las
 the truck, MOVES as a real menu with machines in the world to fill it, and the champion's
 Hall of Fame (POK-281), and a bag that hands over its items as well as its cash
 (POK-280).
+
+---
+---
+
+## 2026-09-17: the site is live
+
+`https://hoenn-battle-royale.vercel.app` serves the shell, the patch and the symbol table,
+and **404s the ROM**. The relay it points at answers
+(`{"type":"info","rooms":0,"conns":3,"minProtocol":1}`) and its `minProtocol` matches the
+published `br-version.json`, so the version gate lets people in.
+
+### Why the first attempt produced a site with no game in it
+
+Three separate things, each of which looks like the deploy worked:
+
+1. **`.vercelignore` did not exist**, so the Vercel CLI fell back to `.gitignore` -- which
+   ignores `web/public/patch/*`, because the patch is a 10 MB build artifact and is never
+   committed. The BPS therefore never left this machine. The shell fetched
+   `/patch/br-version.json`, got a 404, and told every visitor "no patch published yet --
+   starting the unpatched ROM", which is vanilla Emerald with a battle royale's version
+   line over it.
+2. **The project's Root Directory is `web`**, so the deploy has to be made from the repo
+   root. From `web/` Vercel goes looking for `web/web` and says the root directory does
+   not exist.
+3. **A `.vercelignore` entry without a leading slash matches at any depth.** A bare `src`
+   to skip the ROM's C source took `web/src` with it, and the build died on "Failed to
+   resolve /src/app.ts". Same trap waiting in `data`, `tools`, `docs`, `build`, `include`
+   and `constants` -- `web/` has its own of several of those. Every root-level path in
+   `.vercelignore` is anchored now, and the comment says why.
+
+The `/*` + `!/web/` form does not work either: it left `web/` out of the upload entirely.
+
+### The ROM is kept off the internet by three locks, not one
+
+`app.ts` has always said `nothing ships this file` about `patch/pokeemerald.gba`, and
+nothing enforced it. `public/` is copied into `dist/` verbatim, so one `vite build` from a
+checkout that had run `dev-patch.sh` was all it would have taken to publish a full,
+patched, copyrighted Emerald.
+
+* `.vercelignore` keeps it out of the upload.
+* `vite.config.ts`'s `br-drop-roms` plugin removes anything `.gba`/`.sav`/`.ss?` from
+  `dist/` after the public copy -- dropped rather than refused, because building for
+  `vite preview` is an ordinary thing to do and the e2e's own ROM comes from the repo
+  root through `/@fs/`, not from `public/`.
+* `web/scripts/no-rom.mjs` runs as `postbuild` and fails the build if any survived.
+
+`tools/br/release-web.sh` then checks the deployed URL and refuses to call it live unless
+`/patch/pokeemerald.gba` really is a 404.
+
+### The release path is the CLI, and it has to be
+
+A git-driven deploy can never carry the patch: the BPS is gitignored, and building it
+needs the retail Emerald, which is not in the repo and must not be. So a release is made
+from a machine that has the ROM:
+
+```
+make -j"$(nproc)"                             # agbcc; the release is never `make modern`
+bash tools/br/dev-patch.sh pokeemerald.map    # sidecars -- and this DELETES the BPS
+cd web && npx vite-node ../tools/br/make-bps.ts -- \
+    "<retail Emerald (U).gba>" ../pokeemerald.gba public/patch/hoenn-br.bps
+bash tools/br/release-web.sh --prod           # from Git Bash: npx is not on MSYS2's PATH
+```
+
+The order matters: `dev-patch.sh` deletes the BPS, so it goes first. `release-web.sh`
+refuses to publish if `br-version.json`'s `romSha1` does not match the ROM on disk, which
+is the same class of mistake as the stale-ROM play-test -- a patch whose symbol table
+points at addresses that build never had.
+
+Preview URLs sit behind Vercel's Deployment Protection, so the script's own checks go
+through `vercel curl`; a plain `curl` gets a 302 to the SSO page and every check "fails"
+on a deploy that is fine.

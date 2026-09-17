@@ -1,0 +1,23 @@
+# Vercel falls back to .gitignore when this file is absent -- and the repo ignores
+# web/public/patch/* (the patch is a build artifact, never committed). That is why the
+# first deploy went up with no BPS at all: the shell fetched /patch/br-version.json,
+# got a 404, and told everybody "no patch published yet -- starting the unpatched ROM".
+#
+# So this file exists to say the opposite of .gitignore for that one directory, and to
+# keep saying it for the one file in there that must NEVER be published.
+node_modules
+dist
+test-results
+playwright-report
+e2e
+.env*
+.vercel
+
+# The dev ROM. tools/br/dev-patch.sh leaves a full, patched, copyrighted Emerald in
+# public/patch/ so the dev shell can skip the file picker; app.ts only ever fetches it
+# under import.meta.env.DEV and says so in its own comment: "nothing ships this file".
+# Nothing enforced that until now. The ROM lives on the player's device and nowhere else.
+public/patch/pokeemerald.gba
+*.gba
+*.sav
+*.ss?

@@ -70,3 +70,5 @@ web/playwright-report/
 
 # Agent worktrees live here (Claude Code); they are checkouts, not repo content.
 .claude/
+
+.vercel

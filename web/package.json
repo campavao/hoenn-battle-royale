@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "postbuild": "node ./scripts/no-rom.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.1",
