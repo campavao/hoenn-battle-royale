@@ -1500,18 +1500,20 @@ const DIRECTOR_TICK_MS = 1000; // coarser than the 5s clock/fogSecs cadence dire
  *
  *  Everything here arrived in messages every client hears -- which is the same reason a
  *  promoted host can pick a match up mid-flight (POK-252). */
+/** Returns what it drew, or null when there is no match to draw -- the caller puts the
+ *  same two numbers into the ROM's own HUD corner. */
 function renderGuestStrip(
   bridge: Bridge,
   match: { ringPhase: number; ringR: number; centre?: { place?: string }; clockLeft: number; clockAt: number; seed: number },
   now: number,
-): void {
+): { alive: number; clockLeft: number } | null {
   const strip = $('#match-strip') as HTMLElement;
   // A watcher arrives mid-match and never hears the START, so the seed is not the test
   // for "is there a match": what it has is the late burst the host sent it, a ring and
   // a clock (POK-260).
   if (match.seed === 0 && match.ringPhase === 0 && match.clockLeft === 0) {
     strip.hidden = true;
-    return;
+    return null;
   }
   ($('#room-panel') as HTMLElement).hidden = false;
   strip.hidden = false;
@@ -1528,6 +1530,7 @@ function renderGuestStrip(
   // moved yet" -- say nothing rather than something wrong.
   const standing = alive > 0 ? ` · ${alive} left` : '';
   strip.textContent = `${phaseLabel}${standing} · ${mm}:${ss}`;
+  return { alive, clockLeft: left };
 }
 
 function renderMatchStrip(state: DirectorState): void {
@@ -2427,8 +2430,21 @@ function wireRoom(
     // A second's cadence, like the director's own loop. It stands down the moment this
     // client becomes the one running the match, which draws the real one.
     stopGuestStrip?.();
+    const hudBase = symbols?.get('gBrHud');
     const guestStrip = setInterval(() => {
-      if (!director && bridge) renderGuestStrip(bridge, match, performance.now());
+      if (!director && bridge) {
+        const shown = renderGuestStrip(bridge, match, performance.now());
+        // The same two numbers into the ROM's own corner (net/hud.ts). `gBrHud.left` and
+        // `gBrHud.clockSecs` are PAGE WRITES -- the ROM never works them out for itself --
+        // and the only thing writing them was startDirectorLoop, which exists only on the
+        // host. So every guest in every match played with a dead corner: no count, and a
+        // clock frozen at 0:00, for the whole sixteen minutes. The HTML strip above it was
+        // right the whole time, which is what made it look like a drawing bug.
+        if (shown && hudBase !== undefined) {
+          writeHudLeft(emu, hudBase, shown.alive);
+          writeHudClockSecs(emu, hudBase, shown.clockLeft);
+        }
+      }
       // ...and the seat we are watching may itself have gone out since.
       autoWatch();
     }, 1000);

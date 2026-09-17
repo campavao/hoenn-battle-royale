@@ -690,3 +690,37 @@ exists; over the network it is wide open.
 picked is taken. The spec sets the file at the first possible moment on purpose, which is
 what pins it.
 
+### Two browsers in one room on the live relay -- and every guest had a dead HUD corner
+
+`web/e2e/live-room.spec.ts` is the other half of `live.spec.ts`: two production bundles,
+one room, on the deployed site and the deployed relay. The guest joins by code, both
+rosters agree, **the match deals itself** (`autoStarts()` is
+`!import.meta.env.DEV || !hash.has('noauto')`, so in production a room with two in it
+starts on its own -- START is only ever a dev convenience), and both canvases are checked
+to be *moving*, because a ROM that never booted is perfectly still.
+
+`match.spec.ts` already ran two clients beautifully -- through `#rom=`, `__br`, `testmon`
+and `#fast`, every one of which is DEV-only. A room between two production bundles had
+never been run at all, and it found this:
+
+**`gBrHud.left` and `gBrHud.clockSecs` are PAGE WRITES** -- the ROM never works them out
+for itself (`web/src/net/hud.ts`, and `include/br/br_hud.h` says so) -- and the only thing
+writing them was `startDirectorLoop`, **which exists only on the host**. So every guest in
+every match played with a dead corner: a garbage count and a clock frozen at `0:00`, for
+the whole sixteen minutes.
+
+What hid it: the HTML strip above the game was right the whole time. `renderGuestStrip`
+works out the alive count and the seconds every second and draws them -- it just never
+handed them to the ROM. So a guest saw the correct numbers in the page chrome and nonsense
+in the game's own corner, which reads as a drawing bug rather than a missing feed, and
+that is the same shape as the transient palette bug already in this file.
+
+`renderGuestStrip` returns what it drew now, and the guest's own loop writes it. Live
+before: garbage and `0:00` at five, fifteen, thirty and sixty seconds. After: `8 LEFT` and
+a clock counting down.
+
+**The lesson for the rest of the backlog:** the dev server cannot see anything that is
+host-only versus guest-only, because every local two-client spec makes both sides the same
+kind of client with the same dev conveniences. Any "the page writes this into the ROM"
+field is worth checking twice -- once as a host, once as a guest.
+
