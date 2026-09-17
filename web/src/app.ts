@@ -1990,8 +1990,20 @@ function wireRoom(
     };
     // The seed's voice for anyone, except this client's own seat, which speaks with
     // whatever its profile picked (POK-243) -- see the onDuel/onEngage callbacks below.
-    const myVoice = (seat: number, matchSeed: number) =>
-      seat === bridge!.seat ? careerVoiceLines() : voiceFor(matchSeed, seat);
+    const myVoice = (seat: number, matchSeed: number): BotVoice => {
+      if (seat === bridge!.seat) return careerVoiceLines();
+      // What they actually picked, if their challenge told us (POK-274). A bot never
+      // sends one, so a bot keeps the lines the seed deals it -- which is what makes a
+      // room of bots sound like a room of people in the first place.
+      const heard = bridge!.linesFor(seat);
+      if (!heard) return voiceFor(matchSeed, seat);
+      const dealt = voiceFor(matchSeed, seat);
+      return {
+        intro: heard.intro ?? dealt.intro,
+        win: heard.win ?? dealt.win,
+        lose: heard.lose ?? dealt.lose,
+      };
+    };
     const seen = new Set<number>(); // seats already announced out, so a repeat is quiet
     // The host speaks for the bots as well as for the clock: same relay, same in-ring,
     // and its own roster too -- nobody hears their own messages come back, so the host
@@ -2357,6 +2369,9 @@ function wireRoom(
     bridge.setRomFilter((msg) => spectate.wantsFromRelay(msg));
     // A watcher is furniture: its ROM is walking around Littleroot and nobody in the
     // match should see a ghost of it, or hear it claim a seat (POK-260).
+    // Everybody hears what we picked (POK-274): our three lines ride out on every
+    // challenge, which is the one message that reaches the other side before a fight.
+    bridge.myLines = careerVoiceLines();
     bridge.setOutFilter(() => !amWatching);
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);

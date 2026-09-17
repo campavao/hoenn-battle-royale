@@ -18,7 +18,7 @@
 // counterpart to forward.
 import { Mailbox, type RamAccess, type RawMessage } from './mailbox';
 import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
-import { decode, PROTOCOL, type Msg } from './wire';
+import { decode, type Lines, PROTOCOL, type Msg } from './wire';
 import { Roster } from '../match/roster';
 import { RelayClient, type RecvEvent } from './relay';
 
@@ -89,6 +89,13 @@ export class Bridge {
    *  relay (the echo guard below drops them), and it is the one that has to hand a
    *  late watcher the fight so far. */
   private outObserver: ((msg: Msg) => void) | null = null;
+  /** Our own battle text, put on every challenge we send (POK-274). Kanto sends it with
+   *  the challenge itself so "each side holds the other's before the locks"; ours picked
+   *  three lines that only the picker could see. Set once, by the page that knows the
+   *  career. */
+  myLines: Lines | null = null;
+  /** ...and what everybody else's challenges have said. */
+  private readonly heardLines = new Map<number, Lines>();
   /** Says whether this ROM's own messages reach the room at all. A watcher's do not
    *  (POK-260): it is in the room to look, and a ghost of it walking around Littleroot
    *  is not part of anybody's match. */
@@ -187,7 +194,10 @@ export class Bridge {
     }
     this.outCount++;
 
-    const stamped = (SPEAKS_FOR_ANOTHER.has(msg.t) ? msg : { ...msg, seat: this.seat }) as Msg;
+    let stamped = (SPEAKS_FOR_ANOTHER.has(msg.t) ? msg : { ...msg, seat: this.seat }) as Msg;
+    // Our own lines ride out with the challenge (POK-274), which is the only message
+    // that reaches the other side before a fight starts.
+    if (stamped.t === 'challenge' && this.myLines) stamped = { ...stamped, lines: this.myLines };
     this.noteChallenge(stamped);
     this.roster.applyMsg(stamped);
 
@@ -251,14 +261,24 @@ export class Bridge {
   }
 
   /** Remembers who we are fighting, so a later `bt` (which does not itself name a
-   *  seat) knows where to route. */
+   *  seat) knows where to route -- and what they say, if they told us (POK-274). */
   private noteChallenge(msg: Msg): void {
+    if (msg.t !== 'challenge' && msg.t !== 'accept') return;
+    // A challenge is broadcast, so the lines on one are worth keeping whoever it is
+    // about: the room hears every duel announced, not just its own.
+    if (msg.lines && msg.seat !== this.seat) this.heardLines.set(msg.seat, msg.lines);
     if (msg.t !== 'challenge') return;
     // Challenges are broadcast now (see targetSeat), so most of them are about
     // two other people: noting one of those would point our own battle traffic at
     // a seat we are not fighting.
     if (msg.seat !== this.seat && msg.opponent !== this.seat) return;
     this.opponentSeat = msg.seat === this.seat ? msg.opponent : msg.seat;
+  }
+
+  /** What a seat said when it challenged somebody (POK-274), or undefined if this page
+   *  has never heard from them -- a bot never does, so its lines stay the seed's. */
+  linesFor(seat: number): Lines | undefined {
+    return this.heardLines.get(seat);
   }
 
   private targetSeat(msg: Msg): number | undefined {

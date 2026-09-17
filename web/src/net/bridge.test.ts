@@ -238,3 +238,66 @@ describe('Bridge', () => {
     expect(bridge.roster.get(7)).toMatchObject({ x: 1, y: 1, dir: 4 });
   });
 });
+
+
+// POK-274. Kanto sends a player's own battle text with the challenge itself, so "each
+// side holds the other's before the locks". Ours picked three lines nobody else could
+// see: the `lines` field was in the wire schema, had a decoder, and was put on a
+// challenge by nobody.
+describe("the battle lines you picked (POK-274)", () => {
+  it('rides out on our own challenge', () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, romEmit, frame, romInit } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    bridge.myLines = { intro: 'FOUND YOU.', win: 'TOLD YOU.', lose: 'GOOD FIGHT.' };
+
+    romEmit({ t: 'challenge', seat: 0, opponent: 5, nonce: 7 });
+    frame();
+
+    const sent = socket.sent.at(-1)!.m as Record<string, unknown>;
+    expect(sent.t).toBe('challenge');
+    expect(sent.lines).toEqual({ intro: 'FOUND YOU.', win: 'TOLD YOU.', lose: 'GOOD FIGHT.' });
+  });
+
+  it('is not stapled to everything else we send', () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, romEmit, frame, romInit } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    bridge.myLines = { intro: 'FOUND YOU.' };
+
+    romEmit({ t: 'place', v: PROTOCOL, seat: 0, f: 1, st: 'alive', sprite: 'brendan' });
+    frame();
+
+    expect((socket.sent.at(-1)!.m as Record<string, unknown>).lines).toBeUndefined();
+  });
+
+  it('remembers what somebody else said, and never mistakes it for our own', () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, romInit } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+
+    socket.receive({
+      type: 'recv',
+      from: 5,
+      m: { t: 'challenge', v: PROTOCOL, seat: 5, opponent: 9, nonce: 1, lines: { win: 'NEXT!' } },
+    });
+
+    expect(bridge.linesFor(5)).toEqual({ win: 'NEXT!' });
+    // A challenge that is about two other people still counts: the whole room hears
+    // every duel announced, not only its own.
+    expect(bridge.linesFor(9)).toBeUndefined();
+    expect(bridge.linesFor(2)).toBeUndefined();
+  });
+
+  it('says nothing about a seat that has never challenged anybody', () => {
+    const { relay } = fakeRelay();
+    const { emu, romInit } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    // A bot never sends one, which is why its lines stay the seed's.
+    expect(bridge.linesFor(30)).toBeUndefined();
+  });
+});
