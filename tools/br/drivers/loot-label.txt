@@ -1,0 +1,35 @@
+# loot-label: the ticker names the piece in front of you before you take it (POK-289).
+#
+# Kanto's rule, from its README: "face a piece (or stand on it) and the ticker in the
+# top-left corner names it -- the Pokemon with its party icon, or whose bag it is -- and
+# A takes it." BrHud_Hold and BrHud_Release have existed since the HUD went in and were
+# called by nothing, so the only thing a pile ever said was the 90-frame box AFTER the
+# press: you could not tell a NUGGET from a MASTER BALL from somebody's SWAMPERT until
+# you had already taken one, which with a full party is a decision you cannot undo.
+#
+# The boot's warp lands a tile south of the cell it names (the way a door exit does), so
+# the player stands on Littleroot (5,9) facing south -- (12,16) outer, facing (12,17).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# nothing in reach, nothing held
+expect u8 gBrHud+0x0C 0
+# a MUDKIP ball on the cell we face. SPECIES_MUDKIP is 283 (0x011B) -- not 258, which is
+# an empty slot whose name is "?", and which is exactly what the ticker said when this
+# driver had the wrong number in it. Key 1, (12,17), map 0:9, level 5, kind 1
+# (BR_LOOT_MON), objId BR_NO_OBJ.
+pokebytes gBrLoot 01 00 0C 00 11 00 1B 01 00 09 05 01 FF 00 00 00 00 00 00 00
+wait 30
+shot named
+# the held line is up, and it is the species name: six letters starting with M (0xC7 in
+# the Gen 3 charmap, where A is 0xBB)
+expect u8 gBrHud+0x0C 1
+expect u8 gBrHud+0x19 6
+expect u8 gBrHud+0x1A 0xC7
+# take it, and the label comes off with the piece
+tap A
+wait 20
+shot took
+expect u8 gBrHud+0x0C 0
+expect u8 gBrLoot+0xA2 1
+say loot label ok

@@ -768,3 +768,61 @@ sprite out of range is not there to remove and the despawn counts nothing. Littl
 driver pass for the wrong reason; it uses the moving van at (2,10), three tiles away, and
 shoots before and after so the removal is something a person can see.
 
+### The ticker names what is under your feet -- **fixed** (POK-289)
+
+`BrHud_Hold` and `BrHud_Release` have existed in full since the HUD went in -- a held line
+that outranks the news queue, exactly Kanto's `lib/ticker.lua:102` -- and **nothing has
+ever called either of them.** So the only thing a loot pile said was the 90-frame box
+AFTER the press: you walked into a dead trainer's spill and could not tell a NUGGET from a
+MASTER BALL from somebody's SWAMPERT until you had already taken one, which with a full
+party is a decision you cannot undo.
+
+`PieceInReach()` is the shared answer now -- the cell you FACE first, then the one you
+stand on, which is Kanto's order (`main.lua:6547-6549`) and the right one: standing on a
+pile while facing another is a choice. `TryTake` uses it too, so the label and the press
+can never disagree about which piece they mean.
+
+It only speaks when the piece changes: `BrHud_Hold` re-dirties the ticker on every call,
+and saying the same thing sixty times a second would redraw it sixty times a second. It
+lets go on taking it, on walking away, and on the overworld going away (a battle is not
+the place to still be naming a ball).
+
+A bag says "A BAG" rather than whose. The name is on the wire and the page keeps it, but
+the ROM's loot row does not -- and eight names is sixty-four bytes of an EWRAM budget with
+about seventy left in it.
+
+### A beaten trainer drops their team -- **fixed** (POK-291)
+
+`BrLoot_TrainerBeaten` sent party[0] with a hard-coded count of 1, so clearing a route was
+worth about a third of what Kanto's is and "a route can be picked over" did not read on the
+ground.
+
+The trap was the party's four shapes. Every one starts with the same three fields -- which
+is why party[0] could be read through the plainest pointer, as it was -- but they have
+different **strides**, so party[i] cannot. `TrainerMonAt` switches on `partyFlags`. (In
+if/else form: agbcc calls the switch "unreachable code at beginning of switch statement",
+which turned out to be its way of reporting that `constants/trainers.h` was not included.)
+
+Keys had to change with it: `0x8000 | (partyIndex << 11) | trainerId`. A trainer id fits
+in eleven bits (TRAINERS_COUNT is 855), so the index rides above it and every ball of one
+team keeps its own key -- which matters, because a key is what a pickup names and what
+`Add()` overwrites.
+
+**What the driver cost, and it is all reusable:**
+
+* **`NextCell` has to have somewhere to put each ball.** Inside Rustboro Gym -- a maze of
+  walls -- a two-mon team still only had room for one, and the driver read that as the
+  loop not working. Outdoors has room.
+* **The boot lands ON the cell it names, out on a route.** The one-tile step south
+  Littleroot's boot makes is a DOOR-EXIT animation, not something every warp does.
+* **A trainer with sight 0 cannot be started from a driver.** Ivan on Route 104 carries
+  three, which is why he was the first pick; A on him from a driver starts nothing, so it
+  has to be a trainer who spots YOU.
+* **Pick one with no neighbours.** On Route 102 several trainers reach the same tile, so
+  which one ambushed varied run to run -- and a two-mon trainer and a one-mon trainer make
+  the same driver pass and fail at random. It is Haley on Route 104 now (sight 7, nearest
+  neighbour eight tiles away), and the driver **asserts the keys** so a wrong trainer
+  wandering into range fails loudly instead of quietly passing.
+* `spawned` is not `count`: Emerald keeps object events near the camera, so a ball two
+  tiles the wrong side of the screen edge is on the ground and not spawned.
+

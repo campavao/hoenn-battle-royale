@@ -1,0 +1,139 @@
+# trainer-team: a beaten trainer drops THEIR WHOLE TEAM, not just their lead (POK-291).
+#
+# Kanto's rule, from its README: "Kanto's trainers drop their teams too (at the rung they
+# fought at), which gives PvE a point beyond levels -- and means a route can be picked
+# over." Ours dropped party[0] with a hard-coded count of 1, so clearing a route was worth
+# about a third of what it is worth there.
+#
+# trainer-drop.txt walks into Josh in Rustboro Gym, who carries exactly one Pokemon -- so
+# it could never have caught this, and did not. HALEY on Route 104 (31,24) carries two.
+#
+# OUTDOORS on purpose. A spill needs somewhere to put each ball: NextCell walks thirteen
+# offsets around the trainer and skips anything the metatile grid calls solid, so inside
+# Rustboro Gym -- a maze of walls -- a three-mon team still only had room for one ball,
+# and the driver read that as the loop not working. A route has room.
+#
+# He spots US -- POK-259's ambush -- rather than being talked to. Ivan on Route 104 was
+# the first pick and carries three, but his sight range is 0, so the only way in is a
+# conversation, and A on a trainer did not start one from a driver.
+#
+# HALEY faces LEFT with a sight range of 7, so the boot lands two tiles to her LEFT --
+# into her line, not behind her, which is the mistake Devan cost.
+#
+# Route 102 was the first pick and is no good for this: several trainers there reach the
+# same tile, so WHICH one ambushed varied run to run, and a two-mon trainer and a one-mon
+# trainer make this pass and fail at random. Haley's nearest neighbour, Winston at
+# (21,25), has a sight of 3 and is eight tiles away.
+#
+# The boot lands ON the cell it names out here: the one-tile step south Littleroot's boot
+# makes is a DOOR-EXIT animation, not something every warp does.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 13 1D 00 18 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrMatch+1 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 3C 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrLevels 30
+expect u8 gBrLoot+0xA0 0
+shot standing
+# Nothing is pressed: he comes to us.
+wait 240
+shot spotted
+# Through the intro and into the battle proper before the outcome is poked: an outcome
+# written while the intro text is still up is read by nobody.
+tap A
+wait 240
+shot fighting
+# B_OUTCOME_WON, read at the next turn boundary -- br_match.c's own note: an outcome
+# poked in from outside is inert until the engine next looks at one, and it only looks at
+# a turn boundary, which a battle sitting on its action menu never reaches. So these taps
+# are what drives the turns; there are enough of them to get through a two-mon team.
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+shot won
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+shot back
+# Both of their Pokemon are on the ground, each on its own cell, and they are gone.
+#
+# `count` is the table and is the assertion that matters. `spawned` is only the balls
+# whose object events exist right now, and Emerald keeps object events near the camera --
+# a ball two tiles the wrong side of the screen edge is on the ground and not spawned, so
+# that one is >= 1 rather than == 2 (the same thing npcout-peer.txt had to learn).
+expect u8 gBrLoot+0xA0 2
+expectge u8 gBrLoot+0xA1 1
+expectge u8 gBrLoot+0xA3 1
+# ...and they are HALEY's. A key is `0x8000 | (partyIndex << 11) | trainerId`, so trainer
+# 604 gives 0x825C for the lead and 0x8A5C for the second. Without this the driver passes
+# on any two-mon trainer who wanders into range, which is how it read as flaky before.
+expect u16 gBrLoot+0 0x825C
+expect u16 gBrLoot+20 0x8A5C
+say trainer team ok

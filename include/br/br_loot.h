@@ -20,6 +20,11 @@
 // Object-event local ids for loot, below the ghosts' 0xE0 and far above any map's own.
 #define BR_LOOT_LOCAL_ID_BASE 0xC0
 
+// "nothing held" for the ticker's held line (POK-289). A key is `(seat << 8) | n` and
+// seats are well under 32, so 0xFFFF is never one -- 0 IS one (seat 0's first ball),
+// which is why that is not the sentinel.
+#define BR_HELD_NONE 0xFFFF
+
 #define BR_LOOT_NONE 0
 #define BR_LOOT_MON 1
 #define BR_LOOT_BAG 2

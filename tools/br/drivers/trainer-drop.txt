@@ -1,5 +1,5 @@
-# trainer-drop: a beaten route trainer leaves one of their team on the ground where
-# they stood (POK-232), and leaves the map for the rest of the match. The play-test
+# trainer-drop: a beaten route trainer leaves THEIR TEAM on the ground where they stood
+# (POK-232, POK-291), and leaves the map for the rest of the match. The play-test
 # says it does not happen -- "an NPC trainer didn't drop their Pokemon after defeat" --
 # and trainer-despawn.txt only ever poked the despawn list, so the real path (win a
 # trainer battle, look at the tile) has never been driven. This is that path.
@@ -82,7 +82,9 @@ wait 70
 tap B
 wait 70
 shot back
-# One of their team is on the ground where they stood...
+# Their team is on the ground where they stood. Josh, who this walk meets first, carries
+# exactly one Pokemon -- so one ball is the whole team and this stays at 1.
+# trainer-team.txt is the driver for a trainer who has more than one (POK-291).
 expectge u8 gBrLoot+0xA0 1
 expectge u8 gBrLoot+0xA1 1
 # ...and they are gone from the map for the rest of the match.

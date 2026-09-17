@@ -19,6 +19,7 @@
 #include "script_pokemon_util.h"
 #include "constants/songs.h"
 #include "constants/items.h"
+#include "constants/trainers.h"
 #include "constants/pokemon.h"
 #include "br/br_catch.h"
 #include "br/br_spectate.h"
@@ -430,6 +431,10 @@ static bool8 WasOurs(u16 key)
     return (key & 0x8000) == 0 && (u8)(key >> 8) == gBrMySeat;
 }
 
+// Defined below, with the rest of the held line; Take() is above it because it is the
+// pickup's own business and this is only the label coming off.
+static void DropHeldLine(void);
+
 static void Take(struct BrLootItem *it)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
@@ -437,6 +442,7 @@ static void Take(struct BrLootItem *it)
     u16 species;
     u8 *p;
 
+    DropHeldLine(); // it is about to say what was taken; the held name has done its job
     if (it->kind == BR_LOOT_BAG)
     {
         if (it->money != 0)
@@ -479,24 +485,80 @@ static void Take(struct BrLootItem *it)
     BrSpectate_SendParty();
 }
 
+// The piece A would take: the cell we FACE first, then the one we stand on. Kanto asks in
+// that order (main.lua:6547-6549) and it is the right one -- standing on a pile while
+// facing another is a choice, and the one you are looking at is the one you mean.
+static struct BrLootItem *PieceInReach(void)
+{
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    s16 x = self->currentCoords.x + (s16)gDirectionToVectors[self->facingDirection].x;
+    s16 y = self->currentCoords.y + (s16)gDirectionToVectors[self->facingDirection].y;
+    struct BrLootItem *it = BrLoot_At(x, y);
+
+    return it != NULL ? it : BrLoot_At(self->currentCoords.x, self->currentCoords.y);
+}
+
+static EWRAM_DATA u16 sHeldKey = BR_HELD_NONE;
+
+static const u8 sText_ABag[] = _("A BAG");
+
+// Stop naming a piece: nothing in reach, the piece was taken, or the overworld is gone.
+static void DropHeldLine(void)
+{
+    if (sHeldKey == BR_HELD_NONE)
+        return;
+    sHeldKey = BR_HELD_NONE;
+    BrHud_Release();
+}
+
+// What the ticker says about the piece in front of you (POK-289). Kanto's rule, from its
+// README: "face a piece (or stand on it) and the ticker in the top-left corner names it --
+// the Pokemon with its party icon, or whose bag it is -- and A takes it."
+//
+// BrHud_Hold and BrHud_Release have been built and called by nothing since the HUD went
+// in, so the only thing a pile ever said was the 90-frame box AFTER you pressed A. You
+// walked into a dead trainer's spill and could not tell a NUGGET from a MASTER BALL from
+// somebody's SWAMPERT until you had already taken one -- and with a full party, taking
+// one is a decision you cannot undo.
+//
+// Only when the piece in reach CHANGES: BrHud_Hold re-dirties the ticker on every call,
+// and saying the same thing sixty times a second would redraw it sixty times a second.
+//
+// A bag says "A BAG" rather than whose it is. The name is on the wire and the page keeps
+// it (match/loot.ts); the ROM's loot row does not, and eight names is sixty-four bytes of
+// an EWRAM budget with about seventy left in it.
+static void HoldLineForReach(void)
+{
+    struct BrLootItem *it = PieceInReach();
+    u8 line[BR_HUD_LINE_MAX + 2];
+
+    if (it == NULL)
+    {
+        DropHeldLine();
+        return;
+    }
+    if (it->key == sHeldKey)
+        return;
+    sHeldKey = it->key;
+    if (it->kind == BR_LOOT_BAG)
+        StringCopy(line, sText_ABag);
+    else if (it->kind == BR_LOOT_ITEM)
+        StringCopy(line, GetItemName(it->species));
+    else
+        StringCopy(line, gSpeciesNames[it->species]);
+    BrHud_Hold(line);
+}
+
 // A on the cell we stand on or the one we face. The loot has no script of its own --
 // it is spawned, not placed by a map -- so the A-press is read here rather than
 // through the field's own interaction path.
 static void TryTake(void)
 {
-    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
     struct BrLootItem *it;
-    s16 x, y;
 
     if (!JOY_NEW(A_BUTTON) || ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked())
         return;
-    it = BrLoot_At(self->currentCoords.x, self->currentCoords.y);
-    if (it == NULL)
-    {
-        x = self->currentCoords.x + (s16)gDirectionToVectors[self->facingDirection].x;
-        y = self->currentCoords.y + (s16)gDirectionToVectors[self->facingDirection].y;
-        it = BrLoot_At(x, y);
-    }
+    it = PieceInReach();
     if (it != NULL)
         Take(it);
 }
@@ -586,38 +648,95 @@ static void DespawnForThisMap(void)
     }
 }
 
+// The species and level of party[i], whichever of the four shapes this trainer's party
+// is stored in. Every shape starts with the same three fields -- which is why party[0]
+// can be read through the plainest pointer, as this used to -- but they have different
+// STRIDES, so party[i] cannot.
+static void TrainerMonAt(u16 trainerId, u8 i, u16 *species, u8 *lvl)
+{
+    const struct Trainer *t = &gTrainers[trainerId];
+    u8 flags = t->partyFlags;
+
+    // if/else rather than a switch: agbcc (GCC 2.95) calls the switch "unreachable code
+    // at beginning of switch statement" and warnings are errors here.
+    if (flags == (F_TRAINER_PARTY_CUSTOM_MOVESET | F_TRAINER_PARTY_HELD_ITEM))
+    {
+        *species = t->party.ItemCustomMoves[i].species;
+        *lvl = t->party.ItemCustomMoves[i].lvl;
+    }
+    else if (flags == F_TRAINER_PARTY_CUSTOM_MOVESET)
+    {
+        *species = t->party.NoItemCustomMoves[i].species;
+        *lvl = t->party.NoItemCustomMoves[i].lvl;
+    }
+    else if (flags == F_TRAINER_PARTY_HELD_ITEM)
+    {
+        *species = t->party.ItemDefaultMoves[i].species;
+        *lvl = t->party.ItemDefaultMoves[i].lvl;
+    }
+    else
+    {
+        *species = t->party.NoItemDefaultMoves[i].species;
+        *lvl = t->party.NoItemDefaultMoves[i].lvl;
+    }
+}
+
 void BrLoot_TrainerBeaten(u16 trainerId, u8 localId)
 {
-    u8 buf[16];
+    // Six rows of nine bytes, plus the header and the bag flag. It was sixteen, which is
+    // one row: a beaten trainer dropped their lead and kept the rest (POK-291).
+    u8 buf[4 + 9 * PARTY_SIZE + 1];
+    s16 usedX[BR_SPILL_CELLS], usedY[BR_SPILL_CELLS];
+    u8 count = 0, used = 0, cell = 0;
     u8 group = gSaveBlock1Ptr->location.mapGroup;
     u8 num = gSaveBlock1Ptr->location.mapNum;
     u8 id = GetObjectEventIdByLocalIdAndMap(localId, num, group);
-    const struct TrainerMonNoItemDefaultMoves *mon;
-    u16 len = 0, key;
-    s16 x, y;
+    u16 len = 0;
+    u8 size = gTrainers[trainerId].partySize;
+    s16 ox, oy;
+    u8 i;
 
     if (localId == 0 || id >= OBJECT_EVENTS_COUNT)
         return;
-    if (gTrainers[trainerId].partySize == 0)
+    if (size == 0)
         return;
-    x = gObjectEvents[id].currentCoords.x;
-    y = gObjectEvents[id].currentCoords.y;
-    // Every party shape starts with the same three fields, so the plainest one reads
-    // the first mon of any of them.
-    mon = gTrainers[trainerId].party.NoItemDefaultMoves;
-    // A trainer id is unique for the game, so it is the key: they are beaten once.
-    key = (u16)(0x8000 | trainerId);
+    ox = gObjectEvents[id].currentCoords.x;
+    oy = gObjectEvents[id].currentCoords.y;
 
     buf[len++] = gBrMySeat; // the beater speaks for it; an NPC has no seat of its own
     buf[len++] = group;
     buf[len++] = num;
-    buf[len++] = 1;
-    BrWire_WriteU16(buf + len, key);
-    BrWire_WriteU16(buf + len + 2, (u16)x);
-    BrWire_WriteU16(buf + len + 4, (u16)y);
-    BrWire_WriteU16(buf + len + 6, mon->species);
-    buf[len + 8] = mon->lvl;
-    len += 9;
+    len++; // count, filled in below
+
+    // Their whole team, not just their lead (POK-291). Kanto's rule, from its README:
+    // "Kanto's trainers drop their teams too ... which gives PvE a point beyond levels --
+    // and means a route can be picked over." This dropped party[0] and a hard-coded count
+    // of 1, so clearing a route was worth about a third of what it is worth there.
+    for (i = 0; i < size && i < PARTY_SIZE; i++)
+    {
+        u16 species;
+        u8 lvl;
+        s16 x, y;
+
+        if (!NextCell(ox, oy, &cell, usedX, usedY, used, &x, &y))
+            break; // nowhere left within reach: the rest of the team stays in its balls
+        TrainerMonAt(trainerId, i, &species, &lvl);
+        usedX[used] = x;
+        usedY[used] = y;
+        used++;
+        // The top bit says this belongs to nobody. A trainer id is unique for the game
+        // and fits in eleven bits (TRAINERS_COUNT is 855), so the party index rides
+        // above it and every ball of one team is still its own key -- which matters,
+        // because a key is what a pickup names and what Add() overwrites.
+        BrWire_WriteU16(buf + len, (u16)(0x8000 | (i << 11) | trainerId));
+        BrWire_WriteU16(buf + len + 2, (u16)x);
+        BrWire_WriteU16(buf + len + 4, (u16)y);
+        BrWire_WriteU16(buf + len + 6, species);
+        buf[len + 8] = lvl;
+        len += 9;
+        count++;
+    }
+    buf[3] = count;
     buf[len++] = 0; // no bag: a route trainer's pockets are the game's, not ours
     BrWire_SendLarge(BR_MSG_SPILL, buf, len);
     ParseSpill(buf, len);
@@ -662,6 +781,7 @@ void BrLoot_Tick(void)
         for (i = 0; i < BR_MAX_LOOT; i++)
             gBrLoot.items[i].objId = BR_NO_OBJ; // the object table is gone with the map
         gBrLoot.spawned = 0;
+        DropHeldLine(); // a battle is not the place to still be naming a ball
         return;
     }
     for (i = 0; i < BR_MAX_LOOT; i++)
@@ -684,5 +804,6 @@ void BrLoot_Tick(void)
     gBrLoot.count = count;
     gBrLoot.spawned = spawned;
     DespawnForThisMap();
+    HoldLineForReach();
     TryTake();
 }
