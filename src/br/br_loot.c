@@ -33,6 +33,7 @@
 #include "br/br_levels.h"
 #include "item.h"
 #include "br/br_loot.h"
+#include "br/br_gym.h"
 
 EWRAM_DATA struct BrLoot gBrLoot = {0};
 EWRAM_DATA struct BrDespawned gBrDespawned[BR_MAX_DESPAWN] = {0};
@@ -735,6 +736,9 @@ void BrLoot_TrainerBeaten(u16 trainerId, u8 localId)
     s16 ox, oy;
     u8 i;
 
+    // A gym leader pays out before anything else is asked (POK-295): the purse does not
+    // depend on there being a sprite to take off the map.
+    BrGym_Beaten(trainerId);
     if (localId == 0 || id >= OBJECT_EVENTS_COUNT)
         return;
     if (size == 0)

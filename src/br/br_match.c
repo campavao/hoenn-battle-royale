@@ -163,6 +163,10 @@ static const u8 sText_TrickHouseClosed[] = _("THE TRICK HOUSE\nIS CLOSED.");
 // a step counter in a Zone whose catch pool is the opening's, with the fog outside unable
 // to follow. Nobody has done it in a play-test; it was a hole on paper (2026-09-17).
 static const u8 sText_SafariClosed[] = _("THE SAFARI ZONE\nIS CLOSED.");
+// The boot hands out all eight badges, so Victory Road and the LEAGUE stand open -- and
+// SIDNEY's room takes your controls, walks you in and seals the door behind you, with the
+// fog closing outside (POK-295). The lobby stays: it has a nurse and a mart in it.
+static const u8 sText_LeagueClosed[] = _("THE ELITE FOUR\nARE NOT IN.");
 
 static const struct BrClosedDoor sClosedDoors[] =
 {
@@ -172,6 +176,7 @@ static const struct BrClosedDoor sClosedDoors[] =
     { MAP_GROUP(MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY),     MAP_NUM(MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY),     sText_TentClosed },
     { MAP_GROUP(MAP_ROUTE110_TRICK_HOUSE_ENTRANCE),        MAP_NUM(MAP_ROUTE110_TRICK_HOUSE_ENTRANCE),        sText_TrickHouseClosed },
     { MAP_GROUP(MAP_ROUTE121_SAFARI_ZONE_ENTRANCE),        MAP_NUM(MAP_ROUTE121_SAFARI_ZONE_ENTRANCE),        sText_SafariClosed },
+    { MAP_GROUP(MAP_EVER_GRANDE_CITY_HALL5),               MAP_NUM(MAP_EVER_GRANDE_CITY_HALL5),               sText_LeagueClosed },
 };
 
 bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)

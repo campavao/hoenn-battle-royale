@@ -17,6 +17,7 @@ import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
 import { DEFAULT_SAFARI_SECS, Director, type DirectorState, type DirectorWorld } from './match/director';
 import { Spectate } from './match/spectate';
+import { bossAt } from './match/bosses';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
 import { Bots } from './bots/brain';
@@ -2373,9 +2374,20 @@ function wireRoom(
     // challenge, which is the one message that reaches the other side before a fight.
     bridge.myLines = careerVoiceLines();
     bridge.setOutFilter(() => !amWatching);
+    // A gym leader fell (POK-295): every page in the room says so, off the `npcout` that
+    // already takes the sprite off every map. Nothing new crosses the wire.
+    const bossFell = (m: Msg) => {
+      if (m.t !== 'npcout' || !bridge) return;
+      const boss = bossAt(m.map, m.localId);
+      if (!boss) return;
+      const row = bridge.roster.all().find((e) => e.seat === m.seat);
+      const line = Ticker.felled(m.seat, row?.name || `P${m.seat}`, boss);
+      if (line) bridge.pushToRom(line);
+    };
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);
       giveBag(loot, msg, (m) => bridge?.pushToRom(m));
+      bossFell(msg); // our own win never comes back over the relay
       loot.note(msg);
       noteResult(msg);
       noteBusy(msg);
@@ -2441,6 +2453,7 @@ function wireRoom(
           const line = Ticker.chest(m.seat, row?.name || `P${m.seat}`);
           if (line) bridge.pushToRom(line);
         }
+        bossFell(m);
         loot.note(m);
         noteResult(m);
         noteBusy(m);

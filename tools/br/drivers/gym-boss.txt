@@ -1,0 +1,104 @@
+# gym-boss: a gym leader is a one-shot boss, not a ceremony (POK-295).
+#
+# Kanto's rule: "Bosses talk for one page. A gym leader in a match says the first page of
+# their speech and the fight opens; a win prints the purse line -- the prize TM and the
+# money -- and nothing else: no badge pages, no TM explanation, no vanilla TM." Ours ran
+# the whole gym script: three pages in, then the badge, its fanfare, its page, the TM and
+# the TM's page on the way out, with the ring closing.
+#
+# ROXANNE stands at (5,2) in Rustboro Gym (11:3) facing down. The boot names (5,4); one
+# step up and we are in front of her.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 0B 03 05 00 04 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 11
+expect u8 *gSaveBlock1Ptr+5 3
+poke u8 gBrMatch 2
+# eight HMs from the boot fill the TM pocket's first eight slots; the ninth is empty
+expect u16 *gSaveBlock1Ptr+0x6B0 0
+hold UP 20
+wait 30
+tap A
+wait 30
+tap A
+wait 200
+shot one-page
+# ONE press past "Hello, I am ROXANNE, the RUSTBORO POKeMON GYM LEADER." and the fight
+# opens. Her speech is three pages; two more presses used to be owed here.
+tap A
+wait 500
+shot fight
+expect u32 gBattleTypeFlags 0xC
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+shot won
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 40
+# the purse line is up, drawn, on the first frames back on the map
+expectge u8 gBrHud+0x178 1
+shot line
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+shot purse
+# The purse: TM39 ROCK TOMB (item 327) is in the TM pocket, behind the HMs...
+expect u16 *gSaveBlock1Ptr+0x6B0 327
+# ...she is gone, like any beaten trainer (and for everybody: NPCOUT, POK-287)...
+expectge u8 gBrLoot+0xA3 1
+# ...and the gym's own script never ran: FLAG_DEFEATED_RUSTBORO_GYM (0x4F0) is the first
+# thing RoxanneDefeated sets after the badge pages, and it is still clear.
+expect u8 *gSaveBlock1Ptr+0x130E 0
+say gym boss ok

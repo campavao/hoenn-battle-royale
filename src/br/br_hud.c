@@ -6,6 +6,7 @@
 #include "window.h"
 #include "text.h"
 #include "menu.h"
+#include "palette.h"
 #include "script.h"
 #include "string_util.h"
 #include "field_message_box.h"
@@ -379,7 +380,12 @@ static void TickBox(bool8 blocked)
         return;
     if (blocked || h->boxFrames == 0)
     {
+        // Taking it down wipes its pixels as well as its cells (ClearStdWindowAndFrame),
+        // so a box that outlives whatever blocked it has to be drawn again, not just put
+        // again. It was not: the purse line after a gym (POK-295) came back from the
+        // win's own script as a white slab with no frame and nothing written on it.
         Present(h->winBox, BR_HUD_SHOWN_BOX, FALSE, FALSE);
+        h->dirty |= BR_HUD_DIRTY_BOX;
         return;
     }
     if (h->dirty & BR_HUD_DIRTY_BOX)
@@ -460,7 +466,9 @@ void BrHud_Tick(void)
     }
     if (h->fogFrames > 0)
         h->fogFrames--;
-    if (h->boxFrames > 0)
+    // A box said on the way out of a battle (the gym's purse, POK-295) spent most of its
+    // ninety frames behind the fade back to the map. The fade does not count against it.
+    if (h->boxFrames > 0 && !gPaletteFade.active)
         h->boxFrames--;
     AdvanceTicker();
 
@@ -495,7 +503,9 @@ void BrHud_Tick(void)
     if (live != h->live)
     {
         // Fresh buffers hold garbage and no tilemap: draw and put everything again.
-        h->dirty = BR_HUD_DIRTY_CORNER | BR_HUD_DIRTY_TICKER;
+        // OR, not assign: the box's own bit was set a few lines up when its window came
+        // back, and assigning dropped it.
+        h->dirty |= BR_HUD_DIRTY_CORNER | BR_HUD_DIRTY_TICKER | BR_HUD_DIRTY_BOX;
         h->shown = 0;
         h->live = live;
     }

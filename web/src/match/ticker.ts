@@ -75,6 +75,14 @@ export function chest(seat: number, name: string): TickerMsg | null {
   return line(seat, `${short(name)} EMPTIED THE DAY CARE!`);
 }
 
+/** A gym leader fell (POK-295). A gym is a contested landmark and the first to beat it
+ *  closes it for everybody, so everybody hears: the beater's own page and every peer's
+ *  draw this off the same `npcout` (match/bosses.ts). The boss's name is not cut -- it is
+ *  ours, and TATE&LIZA is nine. */
+export function felled(seat: number, name: string, boss: string): TickerMsg | null {
+  return line(seat, `${short(name)} BEAT ${boss}!`, 'kill');
+}
+
 /** Somebody is out, however it happened, and how many are left after it. */
 export function out(seat: number, name: string, left: number): TickerMsg | null {
   if (left <= 0) return line(seat, `${short(name)} IS OUT!`, 'kill');

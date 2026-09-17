@@ -47,6 +47,7 @@
 #include "constants/trainers.h"
 #if BR
 #include "br/br_loot.h"
+#include "br/br_gym.h"
 #endif
 #include "constants/trainer_hill.h"
 #include "constants/weather.h"
@@ -1418,7 +1419,11 @@ void ShowTrainerIntroSpeech(void)
     }
     else
     {
+#if BR
+        ShowFieldMessage(BrGym_Intro(gTrainerBattleOpponent_A, GetIntroSpeechOfApproachingTrainer()));
+#else
         ShowFieldMessage(GetIntroSpeechOfApproachingTrainer());
+#endif
     }
 }
 
@@ -1446,7 +1451,11 @@ const u8 *BattleSetup_GetTrainerPostBattleScript(void)
         if (sTrainerABattleScriptRetAddr != NULL)
         {
             gWhichTrainerToFaceAfterBattle = 0;
+#if BR
+            return BrGym_AfterScript(gTrainerBattleOpponent_A, sTrainerABattleScriptRetAddr);
+#else
             return sTrainerABattleScriptRetAddr;
+#endif
         }
     }
 

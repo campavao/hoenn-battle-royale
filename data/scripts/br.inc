@@ -10,6 +10,13 @@ BR_EventScript_ReleaseOne::
 	releaseall
 	end
 
+@ A gym leader fell (src/br/br_gym.c). The gym's own script here is the badge, its
+@ fanfare, the badge's page, the TM and the TM's page -- with the fog closing. The purse
+@ has already been paid in C; this lets go of the player and stops.
+BR_EventScript_BossBeaten::
+	releaseall
+	end
+
 BR_Text_PartyFull:
 	.string "Your party is full.\n"
 	.string "Release one for the new catch?$"
