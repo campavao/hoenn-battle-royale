@@ -1,0 +1,53 @@
+# map-flies: MAP is a way out, not just a look (POK-278). ring-map.txt opens the same
+# screen and closes it; the play-test opened it with a bird in the party, pressed A on a
+# town, and nothing happened -- "I used MAP from the main menu with a pokemon that could
+# fly, but clicking on the location did not fly me there".
+#
+# Boot flags 0x40 is BR_BOOT_FLAG_TESTFLY: a SWELLOW that knows FLY, drivers only.
+wait 30
+pokebytes gBrMailbox+0x2018 C1 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 2
+# A dropped match with a ring, the same as ring-map's.
+poke u8 gBrMatch 2
+poke u8 gBrRing 1
+poke u8 gBrRing+1 1
+poke u8 gBrRing+2 4
+poke u8 gBrRing+3 5
+poke u8 gBrRing+4 4
+# We are in Littleroot (map 0:9).
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+tap START
+wait 40
+tap DOWN
+wait 20
+tap DOWN
+wait 20
+tap A
+wait 240
+shot map
+expect u8 gBrMap 1
+# The cursor opens on where we are standing (LITTLEROOT TOWN). Two steps north is
+# OLDALE TOWN -- somewhere else, so landing there is the assertion.
+tap UP
+wait 30
+tap UP
+wait 30
+shot cursor
+# A on a town you can fly to is a flight now, not a way of closing the map.
+tap A
+wait 400
+shot flying
+wait 400
+shot landed
+expect u8 gBrMap 0
+expect u8 gBrPick 0
+# Oldale Town is map 0:10: somewhere we were not.
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 10
+# ...and we are somewhere, on a map, with the controls back: START opens.
+tap START
+wait 60
+shot menu
+say map flies ok

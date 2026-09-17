@@ -17,6 +17,8 @@
 #include "constants/maps.h"
 #include "constants/species.h"
 #include "script_pokemon_util.h"
+#include "pokemon.h"
+#include "constants/moves.h"
 #include "event_data.h"
 #include "pokedex.h"
 #include "item.h"
@@ -144,6 +146,17 @@ void BrBoot_Tick(void)
         BrLevels_GiveStartingBag();
         if (b->mode & BR_BOOT_FLAG_TESTMON)
             ScriptGiveMon(SPECIES_TREECKO, 5, 0, 0, 0, 0);
+        if (b->mode & BR_BOOT_FLAG_TESTFLY)
+        {
+            // A bird that knows FLY, for the drivers that have to leave the ground.
+            // SWELLOW learns it from no level-up table, so the move goes on by hand.
+            u16 move = MOVE_FLY;
+            u8 slot = CalculatePlayerPartyCount();
+
+            ScriptGiveMon(SPECIES_SWELLOW, 30, 0, 0, 0, 0);
+            if (slot < PARTY_SIZE)
+                SetMonData(&gPlayerParty[slot], MON_DATA_MOVE4, &move);
+        }
         if (BR_BOOT_MODE(b->mode) == BR_BOOT_SAFARI)
             BrMatch_BeginSafari();
     }

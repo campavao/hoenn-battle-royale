@@ -2047,8 +2047,14 @@ static void CB_HandleFlyMapInput(void)
             break;
         case MAP_INPUT_A_BUTTON:
 #if BR
-            // Nothing is chosen on a look: A closes it, the same as B (POK-263).
-            if (BrMap_Looking())
+            // A look closes on A, the same as on B (POK-263) -- unless there is
+            // somebody in the party who can fly and something under the cursor worth
+            // flying to, in which case this is a flight and the branch below is the
+            // same one Emerald's own FLY takes (POK-278).
+            if (BrMap_Looking()
+             && !(BrMap_CanFly()
+               && (sFlyMap->regionMap.mapSecType == MAPSECTYPE_CITY_CANFLY
+                || sFlyMap->regionMap.mapSecType == MAPSECTYPE_BATTLE_FRONTIER)))
             {
                 m4aSongNumStart(SE_SELECT);
                 sFlyMap->choseFlyLocation = FALSE;
@@ -2106,8 +2112,10 @@ static void CB_ExitFlyMap(void)
             }
 #endif
 #if BR
-            // A look ends where it started: back on the field, nothing flown to.
-            if (BrMap_Looking())
+            // A look ends where it started: back on the field, nothing flown to. A
+            // flight does not -- it falls through to the warp below, which is Emerald's
+            // own (POK-278).
+            if (BrMap_Looking() && !sFlyMap->choseFlyLocation)
             {
                 BrMap_Close();
                 SetMainCallback2(CB2_ReturnToField);
@@ -2115,6 +2123,8 @@ static void CB_ExitFlyMap(void)
                 FreeAllWindowBuffers();
                 break;
             }
+            if (BrMap_Looking())
+                BrMap_TakeFlight();
 #endif
             if (sFlyMap->choseFlyLocation)
             {

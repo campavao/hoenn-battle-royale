@@ -13,6 +13,9 @@
 #define BR_BOOT_SAFARI 2
 // OR into mode: also hand the player a level 5 Treecko, for drivers that need a party.
 #define BR_BOOT_FLAG_TESTMON 0x80
+// ...and one that can carry you: a SWELLOW that knows FLY, for the drivers and e2e
+// that have to be in the air (POK-278). Nothing a player can reach writes it.
+#define BR_BOOT_FLAG_TESTFLY 0x40
 #define BR_BOOT_MODE(m) ((m) & 0x0F)
 
 struct BrBoot
