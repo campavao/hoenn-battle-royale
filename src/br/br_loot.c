@@ -477,11 +477,15 @@ static void Take(struct BrLootItem *it)
     StringCopy(p, sText_Bang);
     PlaySE(SE_PIN);
     BrHud_Box(line);
-    SendPickup(it);
-    // Off the ground either way: parked, the release script asks who gives way next
-    // frame, and cancelling there loses it -- which is the rule a catch already plays by.
-    if (!BrCatch_TryPark(&mon))
+    // The ball stays on the ground until the mon inside is really kept. Parking it and
+    // taking it in the same breath meant cancelling the release screen destroyed both --
+    // and nothing ever leaves the match (POK-294). BrCatch_Apply claims the key when a
+    // slot is chosen; a cancel leaves the piece exactly where it was.
+    if (!BrCatch_TryParkFrom(&mon, it->key))
+    {
         GiveMonToPlayer(&mon);
+        SendPickup(it);
+    }
     BrSpectate_SendParty();
 }
 
@@ -765,6 +769,22 @@ void BrLoot_TrainerBeaten(u16 trainerId, u8 localId)
 // BR_LOOT_KEY_FREED keeps the key clear of both other spaces, and the counter only has to
 // be unique for one seat for one match -- a party of six, released one at a time, cannot
 // come near wrapping a byte.
+void BrLoot_ClaimKey(u16 key)
+{
+    u8 i;
+
+    if (key == BR_HELD_NONE)
+        return;
+    for (i = 0; i < BR_MAX_LOOT; i++)
+    {
+        if (gBrLoot.items[i].kind != BR_LOOT_NONE && gBrLoot.items[i].key == key)
+        {
+            SendPickup(&gBrLoot.items[i]);
+            return;
+        }
+    }
+}
+
 void BrLoot_Released(struct Pokemon *mon)
 {
     u8 buf[4 + 9 + 1];

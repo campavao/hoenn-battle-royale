@@ -35,6 +35,7 @@ void BrCatch_Init(void)
     gBrCatch.pending = FALSE;
     gBrCatch.asked = FALSE;
     gBrCatch.movesSlot = 0xFF;
+    gBrCatch.fromKey = BR_HELD_NONE;
 }
 
 void BrCatch_RequestMoves(u8 slot)
@@ -44,11 +45,17 @@ void BrCatch_RequestMoves(u8 slot)
 
 bool8 BrCatch_TryPark(struct Pokemon *mon)
 {
+    return BrCatch_TryParkFrom(mon, BR_HELD_NONE);
+}
+
+bool8 BrCatch_TryParkFrom(struct Pokemon *mon, u16 key)
+{
     if (CalculatePlayerPartyCount() < PARTY_SIZE)
         return FALSE;
     gBrPendingCatch = *mon;
     gBrCatch.pending = TRUE;
     gBrCatch.asked = FALSE;
+    gBrCatch.fromKey = key;
     return TRUE;
 }
 
@@ -66,7 +73,12 @@ void BrCatch_Apply(void)
         // A different mon in the slot, so whatever the player had chosen for the last one
         // is not a choice about this one (POK-290).
         BrMoves_ForgetKept(slot);
+        // ...and only NOW does the ball it came out of leave the ground. Taking it first
+        // meant cancelling this screen destroyed it -- the same thing POK-294 is about,
+        // on the other side of the same decision.
+        BrLoot_ClaimKey(gBrCatch.fromKey);
     }
+    gBrCatch.fromKey = BR_HELD_NONE;
     gBrCatch.pending = FALSE;
     gBrCatch.asked = FALSE;
     BrSpectate_SendParty(); // the team changed: spectators and the director want it

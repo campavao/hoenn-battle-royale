@@ -1,0 +1,48 @@
+# catch-cancel: cancelling the release leaves the ball where it was (POK-294).
+#
+# Kanto's rule is that nothing ever leaves the match, and this is the other side of it
+# from catch-release.txt: picking a ball up with a full party asks who gives way, and
+# saying "nobody" used to destroy BOTH -- the mon in the ball and the ball itself, taken
+# off the ground before the question was even asked.
+#
+# The party is filled by copying the test Treecko into all six slots (100 bytes a mon),
+# so the pickup really does go down the full-party path rather than a poked flag.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+copy gPlayerParty+100 gPlayerParty 100
+copy gPlayerParty+200 gPlayerParty 100
+copy gPlayerParty+300 gPlayerParty 100
+copy gPlayerParty+400 gPlayerParty 100
+copy gPlayerParty+500 gPlayerParty 100
+wait 20
+# A ball on the cell we are standing on: key 0x0501, TREECKO (277) at level 5, kind 1
+# (BR_LOOT_MON), not spawned yet (objId 0xFF). Loot coords are the outer space, and the
+# boot leaves us on (12,16) there.
+pokebytes gBrLoot 01 05 0C 00 10 00 15 01 00 09 05 01 FF 00 00 00 00 00 00 00
+poke u8 gBrLoot+0xA0 1
+wait 60
+expect u8 gBrLoot+0xA2 0
+tap A
+wait 120
+shot asked
+# parked, and the release question is up
+expect u8 gBrCatch 1
+tap A
+wait 90
+shot picker
+# ...and we say nobody. B out of the party menu.
+tap B
+wait 120
+tap B
+wait 120
+shot cancelled
+expect u8 gBrCatch 0
+# The ball is still there: nothing was taken, and the row still holds the TREECKO.
+expect u8 gBrLoot+0xA2 0
+expect u8 gBrLoot+0xA0 1
+expect u16 gBrLoot 0x0501
+expect u8 gBrLoot+11 1
+expect u16 gBrLoot+6 277
+say catch cancel ok
