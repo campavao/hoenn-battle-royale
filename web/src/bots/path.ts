@@ -80,3 +80,65 @@ export function findPath(world: World, from: Spot, to: Spot, maxVisited = DEFAUL
   }
   return { steps: [], found: false, visited };
 }
+
+/** The nearest of several goals, in one search (POK-302).
+ *
+ *  This is what a cross-map route is actually made of: the goals are every cell on this
+ *  map that steps onto the next one, and any of them will do. Running `findPath` once
+ *  per candidate would settle the same nodes over and over -- an edge can be forty cells
+ *  wide -- and stop at the budget forty times.
+ *
+ *  Kanto's `Bots.pathToAny` (lib/bots.lua:826) is the same idea for the same reason. The
+ *  estimate is zero throughout: with several goals on one map there is no admissible
+ *  Manhattan target, so this is Dijkstra, which is correct and -- bounded to one map --
+ *  cheap. That bound is the point: the searches this replaces were unbounded across
+ *  Hoenn and cost about 8,800 nodes against a budget of 1,500.
+ */
+export function findPathToAny(world: World, from: Spot, goals: Spot[], maxVisited = DEFAULT_BUDGET, surf = false, cut = false): Path {
+  const wanted = new Set(goals.map(spotKey));
+  if (wanted.size === 0) return { steps: [], found: false, visited: 0 };
+  if (wanted.has(spotKey(from))) return { steps: [], found: true, visited: 0 };
+
+  const open: Node[] = [{ spot: from, cost: 0, estimate: 0 }];
+  const seen = new Map<string, Node>([[spotKey(from), open[0]]]);
+  const closed = new Set<string>();
+  let visited = 0;
+
+  while (open.length > 0 && visited < maxVisited) {
+    let best = 0;
+    for (let i = 1; i < open.length; i++) {
+      if (open[i].cost < open[best].cost) best = i;
+    }
+    const node = open.splice(best, 1)[0];
+    const key = spotKey(node.spot);
+    if (closed.has(key)) continue;
+    closed.add(key);
+    visited++;
+
+    if (wanted.has(key)) {
+      const steps: { dir: SeamDir; to: Spot }[] = [];
+      let at: Node | undefined = node;
+      while (at && at.from) {
+        steps.push({ dir: at.from.dir, to: at.spot });
+        at = seen.get(at.from.key);
+      }
+      steps.reverse();
+      return { steps, found: true, visited };
+    }
+
+    for (const { dir, to: next } of world.neighbours(node.spot, surf, cut)) {
+      // Stay on this map. The goals are its own edge cells, and wandering onto the
+      // neighbour mid-search is how a "route to the edge" becomes a route across Hoenn.
+      if (next.map !== from.map && !wanted.has(spotKey(next))) continue;
+      const nextKey = spotKey(next);
+      if (closed.has(nextKey)) continue;
+      const cost = node.cost + 1;
+      const known = seen.get(nextKey);
+      if (known && known.cost <= cost) continue;
+      const entry: Node = { spot: next, cost, estimate: 0, from: { key, dir } };
+      seen.set(nextKey, entry);
+      open.push(entry);
+    }
+  }
+  return { steps: [], found: false, visited };
+}

@@ -9,7 +9,7 @@
 // This slice walks. Where it walks is one rule ("somewhere else on foot") and the
 // decision list -- fog, loot, the Centre, hunting -- goes on top of it, replacing only
 // `chooseTarget`.
-import { findPath, type Path } from './path';
+import { findPath, findPathToAny, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
 import { MOVE_CUT, MOVE_FLY, MOVE_SURF } from './party';
@@ -32,6 +32,13 @@ import { spillCells } from '../match/loot';
 export const STEP_MS = 267;
 /** How far a bot will look for its next wander target before settling for less. */
 const WANDER_BUDGET = 1500;
+/** Routes to the edge of THIS map, which is all a cross-map hop ever needs (POK-302).
+ *  Hoenn's biggest outdoor map is comfortably under this; Kanto's own per-map cap is
+ *  3000 for the same reason (lib/bots.lua's Bots.PATH_NODES). */
+const HOP_BUDGET = 3000;
+/** How many candidate goal maps to try before giving up and drifting. Kanto's ladder is
+ *  best exit, next best, then any -- "any seam beats standing still". */
+const GOAL_TRIES = 3;
 /** BR_ENGAGE_GRACE in src/br/br_engage.c: 120 frames, and a frame is a sixtieth. */
 const ENGAGE_COOLDOWN_MS = 2000;
 /** And a longer breather after one bot has beaten another (POK-273). Kanto's own
@@ -340,6 +347,12 @@ export class Bots {
 
   count(): number {
     return this.walkers.length;
+  }
+
+  /** Where every bot still walking is. For the replay tool, which needs to ask the
+   *  question POK-302 is about: at the end of a match, are they inside the last ring? */
+  positions(): { seat: number; map: string; x: number; y: number }[] {
+    return this.walkers.map((w) => ({ seat: w.bot.seat, map: w.at.map, x: w.at.x, y: w.at.y }));
   }
 
   /** The pool the bots wander to. It changes once a match: the opening happens in the
@@ -948,6 +961,18 @@ export class Bots {
     }
     const targets = inside ? this.opts.targets.filter((t) => inside(t.mapId)) : this.opts.targets;
     if (targets.length === 0) return;
+    // Somewhere else on the map is a cell search. Somewhere else in HOENN is not
+    // (POK-302): a single A* to a cell on Verdanturf from Littleroot settles about
+    // 8,800 nodes against a budget of 1,500, so it fails -- every time, for 90% of the
+    // drop cells -- and the bot falls through to a random step it then repeats for the
+    // rest of the match. Four bots alive and none of them able to compute a step toward
+    // the last ring is what a live play-test looked like.
+    //
+    // So the route is two questions, which is how Kanto has always done it (lib/bots.lua
+    // exits/homeward for the maps, then a BFS bounded to the current one). Pick the map
+    // to head for, then walk to the edge that leads there: a search that never leaves
+    // this map and never costs more than a few hundred nodes.
+    if (this.aimAcrossMaps(walker, targets, now)) return;
     // Somewhere else, on foot -- and somewhere else NEAR, first. Hoenn is 500 maps
     // wide and the landing pool spans all of it, so a target drawn uniformly is
     // almost always past the A* budget: the replay tool had bots failing to route
@@ -981,8 +1006,52 @@ export class Bots {
     this.wanderOneStep(walker);
   }
 
-  /** One legal step, any direction. The fallback when there is nothing to route to --
-   *  or, as 'wait', when the tick's thinking budget went to another bot. */
+  /** Head for a target on ANOTHER map by walking to the edge that leads towards it.
+   *  True when it set a path. The goal map is the one the most targets are on, which for
+   *  a closing ring is the ring's own section -- so the whole roster converges without
+   *  anybody searching across Hoenn. */
+  private aimAcrossMaps(walker: Walker, targets: { mapId: string; x: number; y: number }[], now: number): boolean {
+    const world = this.opts.world;
+    const surf = canSurf(walker.party);
+    const cut = canCut(walker.party);
+    // The most-wanted map that is not this one, and that we can actually get to.
+    const wanted = new Map<string, number>();
+    for (const t of targets) {
+      if (t.mapId === walker.at.map) continue;
+      wanted.set(t.mapId, (wanted.get(t.mapId) ?? 0) + 1);
+    }
+    const goals = [...wanted.entries()]
+      .map(([mapId, n]) => ({ mapId, n, hops: world.hops(walker.at.map, mapId) }))
+      .filter((g) => g.hops !== undefined && g.hops > 0)
+      .sort((a, b) => a.hops! - b.hops! || b.n - a.n);
+    if (goals.length === 0) return false;
+
+    // Kanto's ladder (main.lua:3380): the best next map, then the next best, then any --
+    // "any seam beats standing still". Only when every one of them is unreachable from
+    // where we stand does this give up and let the caller take its one random step.
+    for (const goal of goals.slice(0, GOAL_TRIES)) {
+      for (const hop of world.nextHops(walker.at.map, goal.mapId)) {
+        const doors = world.exitCells(walker.at.map, hop, surf, cut);
+        if (doors.length === 0) continue;
+        const path = findPathToAny(world, walker.at, doors, HOP_BUDGET, surf, cut);
+        if (!path.found || path.steps.length === 0) continue;
+        walker.path = path;
+        walker.stepIndex = 0;
+        walker.retryAfter = 0;
+        this.note(walker, 'wander', `-> ${hop} (for ${goal.mapId})`);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** One legal step. The fallback when there is nothing to route to -- or, as 'wait',
+   *  when the tick's thinking budget went to another bot.
+   *
+   *  Greedy rather than uniform: among the legal steps, prefer one that does not take us
+   *  further from where the targets are. A uniformly random step repeated every two
+   *  seconds is a random walk, and a random walk does not cross Hoenn -- it is what the
+   *  bots were doing for the whole back half of a match (POK-302). */
   private wanderOneStep(walker: Walker, why: 'stuck' | 'wait' = 'stuck'): void {
     const open = this.opts.world.neighbours(walker.at, canSurf(walker.party), canCut(walker.party));
     if (open.length === 0) {
@@ -990,10 +1059,33 @@ export class Bots {
       walker.path = null;
       return;
     }
-    const step = open[Math.floor(this.opts.rng() * open.length)];
+    const goal = this.driftGoal(walker);
+    const closer = goal === undefined ? [] : open.filter((o) => {
+      const here = this.opts.world.hops(walker.at.map, goal);
+      const there = this.opts.world.hops(o.to.map, goal);
+      return there !== undefined && (here === undefined || there <= here);
+    });
+    const pick = closer.length > 0 ? closer : open;
+    const step = pick[Math.floor(this.opts.rng() * pick.length)];
     walker.path = { steps: [step], found: true, visited: 0 };
     walker.stepIndex = 0;
     this.note(walker, why, step.dir);
+  }
+
+  /** The map a stuck bot should drift towards: whichever of the current targets is
+   *  fewest map crossings away. Undefined when there are none, or none reachable. */
+  private driftGoal(walker: Walker): string | undefined {
+    let best: string | undefined;
+    let bestHops = Infinity;
+    for (const t of this.opts.targets) {
+      if (t.mapId === walker.at.map) return undefined; // already where the targets are
+      const h = this.opts.world.hops(walker.at.map, t.mapId);
+      if (h !== undefined && h < bestHops) {
+        bestHops = h;
+        best = t.mapId;
+      }
+    }
+    return best;
   }
 
   /** Is another bot standing here? */

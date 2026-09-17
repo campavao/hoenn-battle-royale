@@ -171,8 +171,26 @@ export class World {
    *  exporter recorded. A connection's offset shifts the neighbour's axis, which is
    *  why this is not just "same coordinate on the other map". */
   private acrossSeam(m: WorldMap, spot: Spot, dir: SeamDir, surf = false, cut = false): Spot | null {
-    const seam = m.seams.find((s) => s.dir === dir);
-    if (!seam) return null;
+    // EVERY seam on that side, not the first. Two maps have two connections on one
+    // edge -- ROUTE111 west runs to ROUTE113 at offset 0 and ROUTE112 at offset 20, and
+    // ROUTE124 east to ROUTE125 and MOSSDEEP_CITY -- so a `.find()` resolved Route 111's
+    // whole west edge to Route 113 and dropped Route 112, Lavaridge, Jagged Pass and Mt
+    // Chimney out of the walkable world entirely.
+    for (const seam of m.seams) {
+      if (seam.dir !== dir) continue;
+      const landed = this.landAcross(seam, spot, dir, surf, cut);
+      if (landed) return landed;
+    }
+    return null;
+  }
+
+  private landAcross(
+    seam: { dir: SeamDir; to: string; offset: number },
+    spot: Spot,
+    dir: SeamDir,
+    surf: boolean,
+    cut: boolean,
+  ): Spot | null {
     const to = this.maps.get(seam.to);
     if (!to) return null;
     let x: number;
@@ -195,7 +213,131 @@ export class World {
         y = spot.y - seam.offset;
         break;
     }
+    // Off the neighbour's own axis: this offset's seam is not the one this cell uses.
+    if (x < 0 || y < 0 || x >= to.w || y >= to.h) return null;
     return this.standable(seam.to, x, y, surf, cut) ? { map: seam.to, x, y } : null;
+  }
+
+  // ---- the map-level plan (POK-302) ----------------------------------------------
+  //
+  // A route across Hoenn is two questions, not one: WHICH MAPS, then which cells on this
+  // one. Asking a single A* for a cell on Verdanturf from Littleroot is ~8,800 settled
+  // nodes against a budget of 1,500, so it fails, every time, for 90% of the drop cells
+  // -- which is why Cam watched four bots fail to reach the last ring. Kanto never runs a
+  // cross-world search either (lib/bots.lua's exits/homeward, then a per-map BFS).
+  //
+  // This is the coarse half: a graph whose nodes are maps and whose edges are the seams
+  // and warps between them. 518 nodes, about 1,450 edges, built once.
+
+  private mapGraph?: Map<string, Set<string>>;
+  /** goal map -> hops from every map that can reach it. One table per goal, shared by
+   *  the whole roster: the ring moves a handful of times a match, the bots re-aim
+   *  constantly. */
+  private readonly hopCache = new Map<string, Map<string, number>>();
+
+  private graph(): Map<string, Set<string>> {
+    if (this.mapGraph) return this.mapGraph;
+    const g = new Map<string, Set<string>>();
+    const link = (a: string, b: string) => {
+      if (!this.maps.has(a) || !this.maps.has(b) || a === b) return;
+      if (!g.has(a)) g.set(a, new Set());
+      g.get(a)!.add(b);
+    };
+    for (const m of this.maps.values()) {
+      for (const seam of m.seams) link(m.id, seam.to);
+      for (const w of m.warps ?? []) link(m.id, w.to);
+    }
+    this.mapGraph = g;
+    return g;
+  }
+
+  /** How many map crossings from each map to `goal`, by breadth-first search from the
+   *  goal outwards. Undefined entries are maps that cannot reach it at all. */
+  private hopsTo(goal: string): Map<string, number> {
+    const cached = this.hopCache.get(goal);
+    if (cached) return cached;
+    const g = this.graph();
+    // The graph is built from each map's own seams and warps, and Emerald's are written
+    // on both sides -- but not always, so this walks it backwards over the reverse
+    // edges rather than trusting symmetry.
+    const back = new Map<string, Set<string>>();
+    for (const [from, tos] of g) {
+      for (const to of tos) {
+        if (!back.has(to)) back.set(to, new Set());
+        back.get(to)!.add(from);
+      }
+    }
+    const dist = new Map<string, number>([[goal, 0]]);
+    let edge = [goal];
+    for (let d = 1; edge.length > 0; d++) {
+      const next: string[] = [];
+      for (const at of edge) {
+        for (const from of back.get(at) ?? []) {
+          if (dist.has(from)) continue;
+          dist.set(from, d);
+          next.push(from);
+        }
+      }
+      edge = next;
+    }
+    this.hopCache.set(goal, dist);
+    return dist;
+  }
+
+  /** Map crossings from `from` to `goal`, or undefined when there is no way at all. */
+  hops(from: string, goal: string): number | undefined {
+    return this.hopsTo(goal).get(from);
+  }
+
+  /** The neighbouring maps that take a step closer to `goal`, nearest first. Empty when
+   *  we are already there, or when nothing from here reaches it. */
+  nextHops(from: string, goal: string): string[] {
+    const dist = this.hopsTo(goal);
+    const here = dist.get(from);
+    if (here === undefined || here === 0) return [];
+    const out: string[] = [];
+    for (const to of this.graph().get(from) ?? []) {
+      const d = dist.get(to);
+      if (d !== undefined && d < here) out.push(to);
+    }
+    return out;
+  }
+
+  /** The cells on `from` that a step lands on `to` -- the seam edge, and any door.
+   *  These are what a bot actually walks to; the crossing itself is just the next step,
+   *  so a route to one of these never leaves the current map. */
+  exitCells(from: string, to: string, surf = false, cut = false): Spot[] {
+    const m = this.maps.get(from);
+    if (!m) return [];
+    const out: Spot[] = [];
+    const seen = new Set<string>();
+    const add = (x: number, y: number) => {
+      const k = `${x},${y}`;
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push({ map: from, x, y });
+    };
+    for (const w of m.warps ?? []) {
+      if (w.to === to && this.standable(from, w.x, w.y, surf, cut)) add(w.x, w.y);
+    }
+    for (const seam of m.seams) {
+      if (seam.to !== to) continue;
+      // Walk the edge this seam is on and keep the cells that really cross. Cheap: an
+      // edge is w or h cells, and the alternative -- trusting the offset arithmetic --
+      // is how the two-seams-per-side bug stayed hidden.
+      const along = seam.dir === 'north' || seam.dir === 'south' ? m.w : m.h;
+      for (let i = 0; i < along; i++) {
+        const cell: Spot =
+          seam.dir === 'north' ? { map: from, x: i, y: 0 }
+          : seam.dir === 'south' ? { map: from, x: i, y: m.h - 1 }
+          : seam.dir === 'west' ? { map: from, x: 0, y: i }
+          : { map: from, x: m.w - 1, y: i };
+        if (!this.standable(from, cell.x, cell.y, surf, cut)) continue;
+        const landed = this.step(cell, seam.dir, surf, cut);
+        if (landed && landed.map === to) add(cell.x, cell.y);
+      }
+    }
+    return out;
   }
 
   /** Every step a trainer could take from here, with the direction that took it. */

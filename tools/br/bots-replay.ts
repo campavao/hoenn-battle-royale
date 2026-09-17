@@ -121,6 +121,20 @@ for (let t = 60_000; t <= end; t += 60_000) {
 }
 console.log(`
 survivors: ${curve.join('  ')}`);
+// The question this tool exists to answer since POK-302: can a bot GET to the last
+// ring? A survivor standing outside it at the end is one the fog is about to take for
+// no reason but navigation, and for a long time that was almost all of them.
+const standing = dealt.filter((b) => !outs.some((o) => o.seat === b.seat));
+const where = bots.positions();
+const insideNow = where.filter((w) => inFog(w.map));
+console.log(
+  `final ring: ${insideNow.length}/${where.length} of the bots still walking are inside it` +
+    (where.length > insideNow.length
+      ? ` -- outside: ${where.filter((w) => !inFog(w.map)).map((w) => w.map).join(', ')}`
+      : ''),
+);
+void standing;
+
 const half = outs[Math.floor(dealt.length / 2) - 1];
 console.log(
   `${outs.length} out of ${dealt.length} over ${minutes} min` +

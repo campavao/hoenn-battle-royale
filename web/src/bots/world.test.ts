@@ -214,3 +214,63 @@ describe('water and doors', () => {
     expect(world.step({ map: 'HUT', x: 1, y: 0 }, 'west')).toEqual({ map: 'LAKE', x: 3, y: 0 });
   });
 });
+
+// POK-302: a route across Hoenn is two questions -- which maps, then which cells on
+// this one. These are the coarse half.
+describe('the map-level plan', () => {
+  const w = new World((worldData as { maps: WorldMap[] }).maps);
+  const all = (worldData as { maps: WorldMap[] }).maps;
+  it('counts map crossings, and says when there are none', () => {
+    const first = all[0].id;
+    expect(w.hops(first, first)).toBe(0);
+    expect(w.hops(first, 'MAP_NOWHERE_AT_ALL')).toBeUndefined();
+  });
+
+  it('reaches Verdanturf from Littleroot in a handful of hops, not a search', () => {
+    // The case Cam watched fail: four bots alive, the last ring on Verdanturf, and a
+    // cell-level A* needing ~8,800 settled nodes against a budget of 1,500.
+    const hops = w.hops('MAP_LITTLEROOT_TOWN', 'MAP_VERDANTURF_TOWN');
+    expect(hops).toBeDefined();
+    expect(hops).toBeLessThan(30);
+  });
+
+  it('every next hop is strictly closer', () => {
+    const goal = 'MAP_VERDANTURF_TOWN';
+    const from = 'MAP_LITTLEROOT_TOWN';
+    const here = w.hops(from, goal)!;
+    const next = w.nextHops(from, goal);
+    expect(next.length).toBeGreaterThan(0);
+    for (const n of next) expect(w.hops(n, goal)).toBeLessThan(here);
+  });
+
+  it('has nowhere to go once it is there', () => {
+    expect(w.nextHops('MAP_VERDANTURF_TOWN', 'MAP_VERDANTURF_TOWN')).toEqual([]);
+  });
+
+  it('exit cells really cross onto the map they name', () => {
+    const goal = 'MAP_VERDANTURF_TOWN';
+    const from = 'MAP_LITTLEROOT_TOWN';
+    const hop = w.nextHops(from, goal)[0];
+    const cells = w.exitCells(from, hop, false, true);
+    expect(cells.length).toBeGreaterThan(0);
+    // Each one is a cell on `from` whose step lands on `hop`.
+    for (const c of cells.slice(0, 8)) {
+      expect(c.map).toBe(from);
+      const landed = (['north', 'south', 'east', 'west'] as const)
+        .map((d) => w.step(c, d, false, true))
+        .filter((s) => s && s.map === hop);
+      expect(landed.length).toBeGreaterThan(0);
+    }
+  });
+
+  // Two maps carry two connections on one edge, and `seams.find()` took the first --
+  // which resolved Route 111's whole west edge to Route 113 and dropped Route 112 and
+  // everything behind it (Lavaridge, Jagged Pass, Mt Chimney) out of the world.
+  it('sees both maps on an edge that has two', () => {
+    const r111 = all.find((m) => m.id === 'MAP_ROUTE111');
+    if (!r111) return; // not in this export
+    const west = r111.seams.filter((s) => s.dir === 'west').map((s) => s.to);
+    if (west.length < 2) return; // nothing to prove on this export
+    for (const to of west) expect(w.exitCells('MAP_ROUTE111', to, false, true).length).toBeGreaterThan(0);
+  });
+});
