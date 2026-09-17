@@ -1,0 +1,22 @@
+# npcout-fog: the fog's sweep takes the sprite and remembers nothing (POK-299).
+#
+# The host's fog clock sends an NPCOUT for every trainer on a map the ring has held
+# outside for forty seconds, under BR_NO_SEAT (0xFF) rather than a beater's seat. The
+# sprite goes off the map we are standing on, like npcout-peer.txt's -- but gBrDespawned
+# stays empty. It is a table of sixteen, and a single sweep is a hundred trainers: kept
+# there, they would push out every trainer anybody had actually beaten.
+#
+# Littleroot's twin stands at local id 1 on 0:9; the boot puts us on screen with her.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 10 00 0C 00 BD BB C7 FF
+wait 400
+expect u8 gBrLoot+0xA3 0
+expect u8 gBrDespawned+2 0
+# NPCOUT: type 31, framed len 7 = hdr(04 00 00) + seat FF, group 00, num 09, localId 01
+pokebytes gBrMailbox+0x1018 1F 07 04 00 00 FF 00 09 01
+poke u16 gBrMailbox+0x0C 1
+wait 60
+shot gone
+expectge u8 gBrLoot+0xA3 1
+expect u8 gBrDespawned+2 0
+say npcout fog ok

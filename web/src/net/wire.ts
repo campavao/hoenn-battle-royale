@@ -405,8 +405,9 @@ export interface NpcOutMsg {
   seat: number; // the beater -- or, with `fog`, whoever is running the fog clock
   map: MapRef;
   localId: number; // the object event's local id on that map
-  /** The fog took them, nobody beat them (POK-299). Page-side only: the ROM does the
-   *  same thing either way, and neither the record card nor the boss line counts it. */
+  /** The fog took them, nobody beat them (POK-299). Neither the record card nor the
+   *  boss line counts it, and it crosses to the ROM as seat 0xFF: despawn if standing
+   *  there, but do not remember it -- the table of remembered despawns is sixteen. */
   fog?: true;
 }
 

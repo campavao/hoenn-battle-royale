@@ -284,3 +284,12 @@ describe("a party's bag (POK-297)", () => {
     expect(roundTrip(decode(JSON.stringify(empty)))).toEqual(empty);
   });
 });
+
+describe("the fog's npcout (POK-299)", () => {
+  it('reaches the ROM under BR_NO_SEAT, so it is despawned and not remembered', () => {
+    const slots = packSlot({ t: 'npcout', seat: 3, map: { group: 0, num: 9 }, localId: 1, fog: true });
+    expect(slots[0].payload[3]).toBe(0xff); // framed: total u16, seq, then the seat
+    const beaten = packSlot({ t: 'npcout', seat: 3, map: { group: 0, num: 9 }, localId: 1 });
+    expect(beaten[0].payload[3]).toBe(3);
+  });
+});

@@ -756,7 +756,11 @@ function decodeGive(bytes: Uint8Array): GiveMsg {
 
 // NPCOUT: a Hoenn route trainer somebody beat, so every ROM hides the sprite (POK-287).
 function encodeNpcOut(m: NpcOutMsg): Uint8Array {
-  return new Writer().u8(m.seat).u8(m.map.group).u8(m.map.num).u8(m.localId).toBytes();
+  // The fog's sweep goes to the ROM under BR_NO_SEAT (POK-299): the ROM takes the
+  // sprite off the map it is standing on and does NOT remember it in gBrDespawned, a
+  // table of sixteen that a sweep of a hundred trainers would otherwise empty of every
+  // trainer somebody actually beat.
+  return new Writer().u8(m.fog ? 0xff : m.seat).u8(m.map.group).u8(m.map.num).u8(m.localId).toBytes();
 }
 function decodeNpcOut(bytes: Uint8Array): NpcOutMsg {
   const r = new Reader(bytes);

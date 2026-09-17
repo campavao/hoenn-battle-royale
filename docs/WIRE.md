@@ -58,7 +58,7 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `out` | `BR_MSG_OUT` 9 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | the eliminated seat |
 | `pickup` | `BR_MSG_PICKUP` 10 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | whoever picked something up off the ground |
 | `spill` | `BR_MSG_SPILL` 11 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | the defeated trainer's client, on elimination |
-| `npcout` | 31 | page&lt;-&gt;page, page-&gt;ROM | yes | whoever beat one of Hoenn's own route trainers -- or the host's fog clock, with `fog: true` (POK-299): every trainer on a map the ring has held outside for forty seconds leaves every ROM the same way, and the record card and the boss line both skip a fog one. `fog` is JSON-only; the ROM does the same thing either way |
+| `npcout` | 31 | page&lt;-&gt;page, page-&gt;ROM | yes | whoever beat one of Hoenn's own route trainers -- or the host's fog clock, with `fog: true` (POK-299): every trainer on a map the ring has held outside for forty seconds leaves every ROM the same way, and the record card and the boss line both skip a fog one. to the ROM a fog one crosses under seat `0xFF` (`BR_NO_SEAT`): despawn if standing there, but do not remember it -- `gBrDespawned` is sixteen slots and a sweep is a hundred trainers |
 | `ring` | `BR_MSG_RING` 12 | host-&gt;page&lt;-&gt;ROM | yes | host, on every fog shrink |
 | `clock` | `BR_MSG_CLOCK` 13 | host-&gt;page&lt;-&gt;ROM | yes | host, ticking down a shared countdown (the Safari opening today) |
 | `start` | `BR_MSG_START` 14 | host-&gt;page&lt;-&gt;ROM | yes | host, when the match begins |

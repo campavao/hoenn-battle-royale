@@ -650,6 +650,15 @@ static void HandleNpcOut(const u8 *payload, u8 len)
 
     if (n < 4 || d[3] == 0)
         return;
+    // BR_NO_SEAT: the fog took them, nobody did (POK-299). The map is outside the ring,
+    // so whoever is standing on it is bleeding and leaving -- the sprite goes now, and
+    // that is all. Remembering it would cost a slot in a table of sixteen, per trainer,
+    // per swept map: a single sweep would push out every trainer anybody had beaten.
+    if (d[0] == BR_NO_SEAT)
+    {
+        Despawn_Trainer(d[1], d[2], d[3]);
+        return;
+    }
     // Remembered first: the sweep is what hides it when we walk onto that map later, and
     // Despawn_Trainer only does anything if we are standing on it right now.
     RememberDespawned(d[1], d[2], d[3]);
