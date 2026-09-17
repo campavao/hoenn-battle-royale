@@ -114,6 +114,20 @@ function versionText(info: ReleaseInfo): string {
   return `patch ${info.patch} · shell ${info.shell.slice(0, 7)}`;
 }
 
+/** Which ROM is actually running, in seven characters. `patch` is a hand-bumped
+ *  constant and `shell` is package.json's, so neither moves when a build does -- and
+ *  the play-test spent a night reporting bugs from a ROM three hours older than the
+ *  fixes for them, with nothing on screen able to say so. This is that, said out loud:
+ *  the sha1 of the ROM in the tab, and the one the sidecar expects beside it when they
+ *  differ. */
+async function buildLine(info: ReleaseInfo, running: Uint8Array): Promise<string> {
+  const mine = (await sha1Hex(running)).slice(0, 7);
+  const want = (info.romSha1 ?? '').slice(0, 7);
+
+  if (!want || mine === want) return `rom ${mine}`;
+  return `rom ${mine} — STALE, build is ${want}`;
+}
+
 // ---- BPS patching, off the main thread ---------------------------------------------
 
 function applyPatchInWorker(source: Uint8Array, patch: Uint8Array): Promise<Uint8Array> {
@@ -255,7 +269,7 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
         bannerEl.hidden = false;
       }
     }
-    setVersionLine(`${versionText(side.info)} · local build`);
+    setVersionLine(`${versionText(side.info)} · local build · ${await buildLine(side.info, bytes)}`);
     return {
       bytes,
       usingPatched: true,
@@ -2675,7 +2689,38 @@ async function askToKeepStorage(): Promise<void> {
  *  ghost, no HUD -- but the boot block wants one. */
 const PROXY_NAME = 'PROXY';
 
+/** `#fresh`: the reload that cannot be argued with. A shift-reload asks the browser
+ *  nicely and a service worker (or a browser with its own ideas about caching) can
+ *  still answer with what it had -- the play-test pressed it repeatedly and kept
+ *  getting the same page. This unregisters every worker for this origin, drops every
+ *  cache, and comes back on a clean hash so it happens once. */
+async function runFreshIfAsked(): Promise<boolean> {
+  const hash = new URLSearchParams(location.hash.slice(1));
+
+  if (!hash.has('fresh')) return false;
+  setVersionLine('clearing…');
+  try {
+    if ('serviceWorker' in navigator) {
+      const workers = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(workers.map((w) => w.unregister()));
+    }
+  } catch {
+    /* no workers, or a browser that will not say: the caches below still go */
+  }
+  try {
+    if ('caches' in window) {
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+    }
+  } catch {
+    /* nothing cached */
+  }
+  location.replace(`${location.pathname}${location.search}`);
+  return true;
+}
+
 async function main(): Promise<void> {
+  if (await runFreshIfAsked()) return;
   registerServiceWorker();
   void askToKeepStorage();
   setVersionLine('—');
