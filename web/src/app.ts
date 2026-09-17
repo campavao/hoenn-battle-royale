@@ -2434,6 +2434,13 @@ function wireRoom(
           const line = what ? Ticker.took(m.seat, row?.name || `P${m.seat}`, what) : null;
           if (line) bridge.pushToRom(line);
         }
+        // The DAY CARE chest (POK-306) is the other pickup worth a line, and this one is
+        // for the whole room: everybody who was on their way there should stop.
+        if (m.t === 'pickup' && bridge && m.key === Ticker.CHEST_KEY && m.item === undefined) {
+          const row = bridge.roster.all().find((e) => e.seat === m.seat);
+          const line = Ticker.chest(m.seat, row?.name || `P${m.seat}`);
+          if (line) bridge.pushToRom(line);
+        }
         loot.note(m);
         noteResult(m);
         noteBusy(m);

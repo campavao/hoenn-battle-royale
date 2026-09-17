@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { beat, dropped, fewLeft, fog, LINE_MAX, opening, out, said, short, won } from './ticker';
+import zoneSource from '../../../src/br/br_zone.c?raw';
+import { beat, chest, CHEST_KEY, dropped, fewLeft, fog, LINE_MAX, opening, out, said, short, won } from './ticker';
 import type { TickerMsg } from '../net/wire';
 
 const all = (): (TickerMsg | null)[] => [
@@ -13,6 +14,7 @@ const all = (): (TickerMsg | null)[] => [
   fewLeft(0, 3),
   won(0, 'WALLACE'),
   said(0, 'COURTNEY', 'THE FOG IS COMING.'),
+  chest(0, 'WWWWWWWWWW'),
 ];
 
 describe('ticker lines', () => {
@@ -53,5 +55,18 @@ describe('a trainer speaking', () => {
     expect(msg.text).toBe('COURTNE: FOUND YOU.');
     expect(msg.kind).toBe('say');
     expect(msg.seat).toBe(9);
+  });
+});
+
+describe('the DAY CARE chest', () => {
+  it('says who got there first', () => {
+    expect(chest(3, 'may')!.text).toBe('MAY EMPTIED THE DAY CARE!');
+  });
+
+  it('is keyed the way the ROM keys it', () => {
+    // The page never sees the chest land, so the key is the only thing the two share.
+    const m = /#define BR_CHEST_KEY (0x[0-9A-Fa-f]+)/.exec(zoneSource);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBe(CHEST_KEY);
   });
 });

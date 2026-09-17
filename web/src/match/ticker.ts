@@ -62,6 +62,19 @@ export function took(seat: number, name: string, what: string): TickerMsg | null
   return line(seat, `${short(name)} TOOK ${what}`, 'say');
 }
 
+/** BR_CHEST_KEY in src/br/br_zone.c: the one piece of loot a match starts with. */
+export const CHEST_KEY = 0x8e00;
+
+/** Somebody got to the DAY CARE first (POK-306). Everybody else finds an empty room, and
+ *  this is how they learn whose fault that is before they cross the map for it.
+ *
+ *  Drawn by each page off the `pickup` that already reaches the room, like took(). It
+ *  does not name what was in there: the chest is dealt inside the ROM off the match seed
+ *  and the page's loot table never sees it land. */
+export function chest(seat: number, name: string): TickerMsg | null {
+  return line(seat, `${short(name)} EMPTIED THE DAY CARE!`);
+}
+
 /** Somebody is out, however it happened, and how many are left after it. */
 export function out(seat: number, name: string, left: number): TickerMsg | null {
   if (left <= 0) return line(seat, `${short(name)} IS OUT!`, 'kill');
