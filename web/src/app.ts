@@ -1357,6 +1357,16 @@ function renderFame(roster: Roster, winner: number | undefined, seat: number): v
  *  only time the player has to read it. */
 const SOLO_END_GRACE_MS = 8_000;
 
+/** `gBrMatch.phase` once the winner's Hall of Fame has finished and the ROM is back on
+ *  the map (include/br/br_match.h). The one byte the page reads out of the match struct:
+ *  everything else it needs comes through the mailbox. */
+const BR_PHASE_DONE = 5;
+
+/** The champion's own exit waits for their parade instead of a timer, and this is how
+ *  long it waits before going anyway. Kanto's END_DEADLINE_SECONDS, the same idea. */
+const SOLO_WIN_GRACE_MAX_MS = 60_000;
+const SOLO_PARADE_POLL_MS = 500;
+
 const SPECTATE_TICK_MS = 500; // the peek timer is 3s; this only has to not miss it by much
 
 /** The strip of who an eliminated player can watch. Alive only, ourselves never, and
@@ -1584,6 +1594,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // needs -- a seat, a roster and the same messages -- so it gets the same panel, the
   // same career line, and the same grace before the exit.
   const results = new Results();
+  const matchBase = symbols?.get('gBrMatch');
   let fieldSize = 0;
   let recorded = false;
   let endGraceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1599,9 +1610,28 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     ($('#results-career') as HTMLElement).textContent =
       careerLine(recordMatch(results.forSeat(0, performance.now()).placement));
     renderResults(0, roster, results, fieldSize, seed);
+    // The parade, the same as a room's (POK-281). Solo is seat 0, so a `win` naming it
+    // is ours; naming a bot, it is the seat whose fight a spectating player was watching.
+    // A `win` with no seat at all is a draw and there is nobody to crown.
+    if (msg.seat !== undefined) rom.push({ t: 'result', seat: msg.seat, outcome: 'win' });
     // Solo has no room to go back to, so the exit is the lobby -- which is what
     // backToLobby does, and there is no socket here for it to scatter.
     if (endGraceTimer !== null) clearTimeout(endGraceTimer);
+    if (msg.seat === 0 && matchBase !== undefined) {
+      // Won: wait for the Hall of Fame rather than a timer, with a deadline so a ROM that
+      // never finishes cannot strand anybody in a match that is over.
+      const deadline = setTimeout(() => {
+        clearInterval(poll);
+        backToLobby();
+      }, SOLO_WIN_GRACE_MAX_MS);
+      const poll = setInterval(() => {
+        if (emu.read(matchBase, 8) !== BR_PHASE_DONE) return;
+        clearInterval(poll);
+        clearTimeout(deadline);
+        backToLobby();
+      }, SOLO_PARADE_POLL_MS);
+      return;
+    }
     endGraceTimer = setTimeout(() => backToLobby(), SOLO_END_GRACE_MS);
   };
   const solo = startBots(
@@ -2135,13 +2165,21 @@ function wireRoom(
       const mine = results.forSeat(bridge.seat, performance.now());
       ($('#results-career') as HTMLElement).textContent = careerLine(recordMatch(mine.placement));
       renderResults(bridge.seat, bridge.roster, results, fieldSize, match.seed);
+      // And the ROM is told who won (POK-243's parade, POK-281). `win` is a page-side
+      // verdict with no codec, so it has never crossed to any ROM: the Hall of Fame has
+      // been reachable only by a driver poking the RESULT slot by hand, which is exactly
+      // why nobody ever saw it. One push serves the whole room -- the winner's own ROM
+      // matches the seat and runs the parade, and everybody else's ends a replay of a
+      // fight whose fighter has just taken the match (BrSpectate_OnResult).
+      // A `win` with no seat is a draw -- nobody to crown, and nothing to end a replay on.
+      if (msg.seat !== undefined) bridge.pushToRom({ t: 'result', seat: msg.seat, outcome: 'win' });
       // "If the game is over I should be kicked back to the main menu." Nothing took
       // anybody out of a finished match: the page drew the results panel over a ROM that
       // went on walking Hoenn, and the host did not even have a LEAVE button. Kanto's
       // shape (main.lua, END_GRACE_SECONDS): everybody reads the result for a moment,
       // then one funnel takes them all back -- keeping the room, so the next match is a
       // press of START rather than eight people finding each other again.
-      armEndGrace(() => void returnToRoom());
+      armEndGrace(() => void returnToRoom(), msg.seat === bridge.seat);
     }
   };
   let stopSpectateLoop: (() => void) | null = null;
@@ -2150,16 +2188,38 @@ function wireRoom(
    *  END_GRACE_SECONDS, and the same reasoning: long enough to read where you came, short
    *  enough that nobody is left sitting in a game that is over. */
   const END_GRACE_MS = 4_000;
+  /** The champion waits for their own parade instead. Kanto's END_DEADLINE_SECONDS is the
+   *  same idea -- take the exit once the screen is quiet, and take it regardless after
+   *  this long, because a ROM that never finishes must not strand somebody in a match
+   *  that is over. */
+  const WIN_GRACE_MAX_MS = 60_000;
+  const PARADE_POLL_MS = 500;
   let endGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  let paradePoll: ReturnType<typeof setInterval> | null = null;
   /** Cancel a grace that is in flight -- because the exit has already been taken, by a
    *  press of PLAY AGAIN or by the host's `again` arriving first. */
   const endGrace = (): void => {
     if (endGraceTimer !== null) clearTimeout(endGraceTimer);
+    if (paradePoll !== null) clearInterval(paradePoll);
     endGraceTimer = null;
+    paradePoll = null;
   };
-  const armEndGrace = (go: () => void): void => {
+  const armEndGrace = (go: () => void, won = false): void => {
     endGrace();
-    endGraceTimer = setTimeout(go, END_GRACE_MS);
+    const matchBase = symbols?.get('gBrMatch');
+    if (!won || matchBase === undefined) {
+      endGraceTimer = setTimeout(go, END_GRACE_MS);
+      return;
+    }
+    // BR_PHASE_DONE: BrMatch_HallOfFameDone sets it on the way back to the map. Polling
+    // one byte beats guessing at a duration -- the parade is as long as the champion's
+    // team is, and a four-second timer would reboot the ROM in the middle of it.
+    endGraceTimer = setTimeout(go, WIN_GRACE_MAX_MS);
+    paradePoll = setInterval(() => {
+      if (emu.read(matchBase, 8) !== BR_PHASE_DONE) return;
+      endGrace();
+      go();
+    }, PARADE_POLL_MS);
   };
   /** In the room to look, not to play (POK-260). Set when this client asks to watch,
    *  and reasserted from the relay's own roster, which is the authority on it. */

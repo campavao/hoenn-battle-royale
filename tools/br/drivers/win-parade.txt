@@ -18,4 +18,8 @@ wait 300
 tap A
 wait 300
 shot after
+# BR_PHASE_DONE (5): BrMatch_HallOfFameDone sets it on the way back to the map, and the
+# page polls this byte to know the parade has finished rather than guessing at a duration
+# (POK-281). Without it the four-second ending grace reboots the ROM mid-parade.
+expect u8 gBrMatch 5
 say win parade ok

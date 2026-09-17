@@ -12,6 +12,12 @@
 #define BR_PHASE_PLAY 2     // dropped, the match proper
 #define BR_PHASE_OUT 3      // eliminated
 #define BR_PHASE_WIN 4      // last one standing: the Hall of Fame parade, then the page
+// The parade is over and we are back on the map. The page waits for this before it takes
+// the winner out of the match -- its ending grace is four seconds and a Hall of Fame is
+// not, so without a signal the reboot lands in the middle of it. Every other reader of
+// this field asks `!= BR_PHASE_NONE` or names a phase, so a fifth value changes nothing
+// but the one thing it is for.
+#define BR_PHASE_DONE 5
 
 struct BrSpawn
 {

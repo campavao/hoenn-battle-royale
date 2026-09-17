@@ -426,16 +426,28 @@ it the e2e harness's party on every replay; `bootModeFor()` is hoisted out of `m
 take it out, and then asserts the second boot block was **consumed** rather than wiped and
 that the map is Littleroot (0,9) and not `MAP_INSIDE_OF_TRUCK` (25,40).
 
-### Found on the way: the champion's parade is unreachable in real play
+### Found on the way: the champion's parade was unreachable in real play -- **fixed** (POK-281)
 
-Not fixed, not reported by Cam, and worth its own pass. `sWinPending` wants an inbound
-`result` naming our own seat before the ROM will run the Hall of Fame, and nothing
-page-side ever sends one -- `win-parade.txt` passes because it pokes the RESULT slot by
-hand, which is itself the evidence. The fix is one push at the `win` handler when
-`msg.seat === bridge.seat`; `result` already has an encoder, so there is no codec work.
-The reason it is not in this change: the four-second grace would reboot the ROM out from
-under the parade, so the two have to be designed together -- Kanto's own tick defers the
-ending while the parade is on screen.
+`sWinPending` wants an inbound `result` naming our own seat before the ROM will run the
+Hall of Fame, and nothing page-side ever sent one. `win-parade.txt` passed the whole time
+because it pokes the RESULT slot by hand -- which is itself the evidence that real play
+did not. So POK-243 built a parade that nobody has ever seen outside a driver.
+
+**One push serves the whole room.** At the `win` handler, `result` naming the *winner's*
+seat goes to every ROM: the champion's own matches `gBrMySeat` and runs the parade, and
+everybody else's ends a replay of a fight whose fighter has just taken the match
+(`BrSpectate_OnResult`). A `win` with no seat is a draw and nobody is crowned.
+
+**The grace had to learn to wait.** Four seconds would have rebooted the ROM mid-parade,
+and a Hall of Fame is as long as the champion's team is -- so guessing a duration is not
+good enough. `BrMatch_HallOfFameDone` now sets `gBrMatch.phase = BR_PHASE_DONE` (5) on its
+way back to the map and the page polls that one byte, with a sixty-second deadline so a
+ROM that never finishes cannot strand somebody in a match that is over. Kanto does the
+same thing by a different road (`END_GRACE_SECONDS` / `END_DEADLINE_SECONDS`, taking the
+exit "once the screen is quiet").
+
+Every other reader of `gBrMatch.phase` asks `!= BR_PHASE_NONE` or names a phase, so a
+fifth value changes nothing else. `win-parade.txt` asserts it.
 
 ---
 
@@ -521,9 +533,6 @@ exporter's grid.
 
 Everything above that is not marked **fixed** or **closed**, which is now:
 
-* **The champion's parade is unreachable in real play.** Above -- one push at the `win`
-  handler, designed together with the ending's grace so the reboot does not cut the parade
-  off.
 * **A bag gives its money and drops its items.** Above. The one item EWRAM genuinely gates.
 * **The wardrobe** -- more skins and a preview of the locked ones. Not EWRAM-gated after
   all. Two index-parity traps the entry above does not name: `br_netlink.c:258` takes the
@@ -550,4 +559,5 @@ Everything above that is not marked **fixed** or **closed**, which is now:
 Answered and closed this pass: the `-1` HP mon (the fog's bleed, working as designed),
 "found 0" (the bag-money off-by-one), the HUD frame (Cam keeps OPTIONS > FRAME),
 Professor Birch's lab (closed, `lab-closed.txt`), the end-of-match exit, the last path to
-the truck, and MOVES as a real menu with machines in the world to fill it.
+the truck, MOVES as a real menu with machines in the world to fill it, and the champion's
+Hall of Fame (POK-281).
