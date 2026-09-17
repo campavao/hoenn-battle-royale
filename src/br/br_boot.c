@@ -52,11 +52,32 @@ static bool8 PreGame(void)
 // the fly map wants every town visited or it draws them all grey, the field moves want
 // their badges, and a Pokedex that has never seen a Wurmple stops to say so every time
 // one is caught -- mid-match, in a box the player has to press through.
+// The FLAG_HIDE_* sweep below is blanket on purpose -- see GiveTheRunOfHoenn -- but a
+// handful of the people it would take away are people a match wants.
+static const u16 sKeepVisible[] =
+{
+    // Mt Chimney's five ordinary trainers: Shelby, Melissa, Sheila, Shirley and Sawyer,
+    // who are hidden only while Magma holds the summit. The only flag in the whole block
+    // that gates an ordinary trainer on any of the 518 maps a match can use.
+    FLAG_HIDE_MT_CHIMNEY_TRAINERS,
+    // And the ferry. Cam: "you can keep the harbors open, or at least the one that will
+    // take you to Dewford and Mauville" -- Slateport and Lilycove are a boat ride apart
+    // and that is worth having. Opening the doors is not enough on its own: the attendant
+    // you talk to and the boat you can see are both hide-gated, so the sweep left two
+    // harbours you could walk into and do nothing in.
+    FLAG_HIDE_LILYCOVE_HARBOR_FERRY_ATTENDANT,
+    FLAG_HIDE_LILYCOVE_HARBOR_SSTIDAL,
+    FLAG_HIDE_SLATEPORT_CITY_HARBOR_PATRONS,
+    FLAG_HIDE_SLATEPORT_CITY_HARBOR_SS_TIDAL,
+};
+
 static void GiveTheRunOfHoenn(void)
 {
     u16 species;
     u16 flag;
     u16 var;
+    u8 k;
+    bool8 keep;
 
     for (flag = FLAG_BADGE01_GET; flag <= FLAG_BADGE08_GET; flag++)
         FlagSet(flag);
@@ -138,12 +159,16 @@ static void GiveTheRunOfHoenn(void)
     // Petalburg, Mauville and Verdanturf, Wanda and her boyfriend and the two smashable
     // rocks in Rusturf Tunnel, and every Aqua and Magma grunt in a hideout.
     //
-    // Across the 518 maps a match can use, the only ordinary trainers any flag in the
-    // block gates are Mt Chimney's five -- Shelby, Melissa, Sheila, Shirley and Sawyer,
-    // who are hidden only while Magma holds the summit. That one stays clear.
+    // sKeepVisible above is the short list of exceptions and why each one is on it.
     for (flag = FLAG_HIDE_ROUTE_101_BIRCH_STARTERS_BAG; flag <= FLAG_HIDE_SS_TIDAL_ROOMS_SNATCH_GIVER; flag++)
     {
-        if (flag != FLAG_HIDE_MT_CHIMNEY_TRAINERS)
+        keep = FALSE;
+        for (k = 0; k < ARRAY_COUNT(sKeepVisible); k++)
+        {
+            if (sKeepVisible[k] == flag)
+                keep = TRUE;
+        }
+        if (!keep)
             FlagSet(flag);
     }
     FlagSet(FLAG_HIDE_CONTEST_POKE_BALL);
@@ -155,6 +180,15 @@ static void GiveTheRunOfHoenn(void)
     // OnTransition calls SetTwinPos while it is clear, and the twin spends the match
     // standing at (10,1) waiting to turn somebody back from Route 101.
     FlagSet(FLAG_RESCUED_BIRCH);
+    // The ferry runs -- Slateport and Lilycove are a boat ride apart and that is worth
+    // having -- but the Battle Frontier is not on its menu, and this one var is the
+    // whole gate. Every place the Frontier is offered (script_menu.c's two, and
+    // SlateportCity_Harbor/scripts.inc:165) asks FLAG_MET_SCOTT_ON_SS_TIDAL, and the
+    // only thing that sets it is the scene on the boat -- whose ON_FRAME trigger fires
+    // at VAR_SS_TIDAL_SCOTT_STATE 0, which is what it is at boot. Past it: Scott is
+    // hidden with the rest of the story, so that scene would have spent a lockall
+    // walking an object that is not there.
+    VarSet(VAR_SS_TIDAL_SCOTT_STATE, 1);
 }
 
 static void StartGameAt(const struct BrBoot *b)

@@ -1,0 +1,35 @@
+# ferry-runs: the ferry still runs, and the Battle Frontier is not on its menu (POK-304).
+#
+# Cam: "you can keep the harbors open, or at least the one that will take you to Dewford
+# and Mauville. Agreed they shouldn't be able to go to the battle frontier tho."
+#
+# So the harbour door opens like any other, and the Frontier is shut one step earlier.
+# Every place it is offered -- script_menu.c's CreateLilycoveSSTidalMultichoice and
+# CreateSlateportSSTidalMultichoice, and SlateportCity_Harbor/scripts.inc:165 -- asks
+# FLAG_MET_SCOTT_ON_SS_TIDAL, and the only thing that sets it is the scene on the boat,
+# whose ON_FRAME trigger fires at VAR_SS_TIDAL_SCOTT_STATE 0. The boot puts it at 1.
+#
+# Lilycove's harbour is a walk-on warp at (12,32) on map 0:5, not a door you press north
+# into -- which is the difference that made the first version of this driver photograph a
+# black screen. Walk onto it and arrive: Lilycove Harbor is map 13:10.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 05 0C 00 21 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 5
+# VAR_SS_TIDAL_SCOTT_STATE is SaveBlock1 + 0x139C + 2*(0x40D4 - 0x4000) = +0x1544.
+expect u16 *gSaveBlock1Ptr+0x1544 1
+hold UP 40
+wait 120
+shot inside
+expect u8 *gSaveBlock1Ptr+4 13
+expect u8 *gSaveBlock1Ptr+5 10
+# And the ferry attendant is still standing in it. The sweep hides her by default --
+# FLAG_HIDE_LILYCOVE_HARBOR_FERRY_ATTENDANT is in the block, as is the SS TIDAL itself --
+# so without sKeepVisible the door opened onto an empty room. She is object 1 on this map
+# and gBrLoot's despawn sweep is not involved: walk three west and look at the screenshot.
+hold LEFT 48
+wait 20
+hold UP 36
+wait 20
+shot the-counter
+say ferry runs ok
