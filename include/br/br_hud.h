@@ -16,16 +16,16 @@
 // There was a wound bar under the corner too -- a glyph per party mon, full / hurt /
 // fainted -- from POK-226 until the 2026-09-16 play-test: "under the seven left and
 // time display there's an empty looking box... I don't think we need that, let's get
-// rid of it." Its tiles (0x24C) and its window slot are free now, both of which are
-// scarce on BG0.
+// rid of it." Its window slot is free now and its tiles (0x24C) are the ticker's.
 //
-// Tiles: the corner is at baseBlock 0x23A, the ticker at
-// 0x258..0x293, the bottom box at 0x294..0x303 (shared with the spectator's peek box,
-// which only a player who is out ever opens -- and they get no bottom box while they
-// are watching somebody else's screen). The overworld's BG0 already uses 0x008 (Safari balls), 0x107 (map
-// name), 0x125 (yes/no), 0x139 (start menu), 0x194 (message box), 0x200/0x214 (the
-// two frames) and 0x21D..0x23A (the map-name frame edges); 0x23A on is free up to the
-// tilemap at 0x3C0. Nothing here loads graphics: the boxes are a PIXEL_FILL of the
+// Tiles: the corner is at baseBlock 0x23A..0x24B, the ticker at 0x24C..0x283, the bottom
+// box at 0x284..0x2F3. The overworld's BG0 already uses 0x008 (Safari balls, money,
+// script menus -- and the spectator's peek box, br_spectate.c), 0x107 (map name), 0x125
+// (yes/no), 0x139 (start menu), 0x194 (message box), 0x200/0x214 (the two frames) and
+// 0x21D..0x23A (the map-name frame edges). **0x23A on is free up to 0x300 and not a tile
+// further**: BG0's tiles are char block 2 at 0x06008000 and BG2's TILEMAP is at
+// 0x0600E000, long before BG0's own at 0x0600F800. This said 0x3C0 until 2026-09-17 and
+// the box ran four tiles over. Nothing here loads graphics: the boxes are a PIXEL_FILL of the
 // message-box palette (15) and the text is FONT_SMALL, so every map load that
 // re-inits the field's text box (InitTextBoxGfxAndPrinters) also re-arms the HUD.
 //

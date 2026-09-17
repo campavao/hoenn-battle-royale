@@ -25,8 +25,17 @@ EWRAM_DATA struct BrHud gBrHud = {0};
 // palette 14, from the border set in OPTIONS (POK-256). A window flush against the top
 // of the screen has nowhere to put its lid.
 static const struct WindowTemplate sCornerTemplate = { 0, 23, 1, 6, 3, 15, 0x23A };
-static const struct WindowTemplate sTickerTemplate = { 0, 1, 17, 28, 2, 15, 0x258 };
-static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, 0x294 };
+static const struct WindowTemplate sTickerTemplate = { 0, 1, 17, 28, 2, 15, 0x24C };
+static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, 0x284 };
+
+// BG0's tiles are char block 2 (0x06008000) and the first thing after them is not BG0's
+// own tilemap, it is BG2's, at 0x0600E000: tile 0x300. The box sat at 0x294..0x303 for a
+// month and every line it printed wrote 0x80 bytes of PIXEL_FILL(1) over the first two
+// rows of the map's middle layer -- a magenta band wherever those rows were on screen
+// and nothing had scrolled to redraw them, which is the DAY CARE's whole floor
+// (2026-09-17), and very likely the "orange bars across the top" of an earlier play-test.
+#define BR_HUD_TILE_CEILING 0x300
+STATIC_ASSERT(0x284 + 28 * 4 <= BR_HUD_TILE_CEILING, BrHudBoxFitsBelowBg2Tilemap)
 
 // The message box's own background, which is what makes it look like one.
 #define BR_HUD_BOX PIXEL_FILL(1)
@@ -467,8 +476,7 @@ void BrHud_Tick(void)
         live++;
     if (h->winTicker != WINDOW_NONE)
         live++;
-    // The box is transient: it holds tiles only while it has something to say, which
-    // is also what keeps it clear of the spectator's peek box at the same baseBlock.
+    // The box is transient: it holds a window slot only while it has something to say.
     if (h->boxFrames > 0)
     {
         u8 was = h->winBox;

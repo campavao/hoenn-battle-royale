@@ -51,4 +51,12 @@ expect u8 gPlayerPartyCount 1
 # No ring here, so the rung is the floor of the ladder.
 expect u8 gPlayerParty+0x54 5
 shot took
+# The box that just said so must not have written on the map. BG0's tiles end at 0x300
+# because BG2's tilemap starts there (0x0600E000), and the box's tiles ran to 0x303: every
+# line it printed put 0x80 bytes of PIXEL_FILL(1) -- 0x1111 as a tilemap entry -- across
+# the first two rows of the map's middle layer. In this room, which is smaller than the
+# screen and never scrolls far enough to redraw them, that was a magenta band under the
+# ceiling for the rest of the visit.
+expectne u16 0x0600E000 0x1111
+expectne u16 0x0600E07E 0x1111
 say day care chest ok

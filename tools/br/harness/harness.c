@@ -251,14 +251,14 @@ static int runLine(char* line) {
         runN(1);
         return 0;
     }
-    if ((strcmp(a, "expect") == 0 || strcmp(a, "expectge") == 0 || strcmp(a, "expectle") == 0) && n >= 4) {
-        int ge = a[6] == 'g', le = a[6] == 'l';
+    if ((strcmp(a, "expect") == 0 || strcmp(a, "expectge") == 0 || strcmp(a, "expectle") == 0 || strcmp(a, "expectne") == 0) && n >= 4) {
+        int ge = a[6] == 'g', le = a[6] == 'l', ne = a[6] == 'n';
         int w = widthOf(b); uint32_t addr, want;
         if (!w || !parseAddr(c, &addr)) return 4;
         want = (uint32_t)strtoul(d, NULL, 0);
         uint32_t got = readW(w, addr);
-        int bad = ge ? got < want : le ? got > want : got != want;
-        if (bad) { printf("line %d: EXPECT FAILED %s at 0x%08X: got 0x%X want %s0x%X\n", lineNo, b, addr, got, ge ? ">= " : le ? "<= " : "", want); return 1; }
+        int bad = ge ? got < want : le ? got > want : ne ? got == want : got != want;
+        if (bad) { printf("line %d: EXPECT FAILED %s at 0x%08X: got 0x%X want %s0x%X\n", lineNo, b, addr, got, ge ? ">= " : le ? "<= " : ne ? "!= " : "", want); return 1; }
         printf("expect ok %s 0x%08X = 0x%X\n", b, addr, got);
         return 0;
     }

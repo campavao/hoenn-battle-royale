@@ -840,8 +840,8 @@ two rows to land in, and `Add()` drops the rest silently ("the ground is full").
 
 **Fixed in passing** (`BrZone_ItemsGone`, called from `BrMatch_SafariOver`): this ROM is out
 of the Zone for the rest of the match, so what is still lying in it comes off its table.
-There is no driver on it yet -- the one worth writing spills six mons on a route after the
-opening and counts the rows.
+`zone-balls-gone.txt` drives it (`b362d9c20`): six rows held during the opening, one after
+the buzzer (the chest), and a full team of six spilled on the landing route all lands.
 
 ### The SAFARI ZONE entrance has no BR guard, so a match can re-enter it
 
@@ -851,6 +851,9 @@ with no `#if BR` anywhere near it, and the attendant is an ordinary NPC with no
 can pay 500 and be handed thirty Safari balls and a step counter in a zone whose catch pool
 is the opening's. Nobody has tried it in a play-test; it is a hole on paper.
 
+**Fixed** (`b362d9c20`): one row in `sClosedDoors` (`src/br/br_match.c`), the way the lab, the
+tents and the TRICK HOUSE are shut. `safari-closed.txt`.
+
 ### The top row goes magenta in the DAY CARE after a HUD box
 
 Cosmetic, and only in there so far: after `TOOK SWAMPERT!` fades, the top row of the screen
@@ -859,3 +862,20 @@ drawn is clean, and the same box outdoors and in a POKe CENTRE is clean. The Day
 interior is 12x9 -- smaller than the screen -- so what is up there is border block, and the
 suspicion is the HUD's window leaving tiles behind it that the border then draws with the
 wrong palette. Worth one look before anybody plays the room.
+
+**Fixed, and it was not cosmetic and not the Day Care's.** The bottom box's tiles were at
+baseBlock `0x294..0x303` on the strength of a header comment that said BG0's tiles were free
+"up to the tilemap at 0x3C0". That is BG0's *own* tilemap (`0x0600F800`). BG2's is at
+`0x0600E000` -- tile `0x300` -- so every line the box ever printed wrote `0x80` bytes of
+`PIXEL_FILL(1)` over the first two rows of the map's middle layer, on every map, for a
+month. It only showed where those two tilemap rows were on screen and nothing had scrolled
+to redraw them: the Day Care's whole floor, and very likely the "orange bars across the
+top" when a FOG message arrived in an earlier play-test (the fix then was a palette reload,
+which is why it "went away on the next step"). The spectator's peek box shared that
+baseBlock and is 180 tiles, so it ran to `0x347` -- clean through BG2's tilemap.
+
+Ticker `0x24C`, box `0x284..0x2F3` (the wound bar's old tiles made the room), peek box at
+`0x008` where the field keeps its own transient boxes, none of which can open while
+following. A `STATIC_ASSERT` holds each ceiling, and `daycare-chest.txt` reads BG2's
+tilemap after the box (`expectne`, new in the harness). Dumped with the harness's `dump
+0x04000000 16` for the BGCNTs -- worth remembering as the way to ask "which layer is that".

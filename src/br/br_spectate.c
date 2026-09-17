@@ -328,9 +328,13 @@ static EWRAM_DATA struct BrAssembler sPartyAsm = {0};
 static EWRAM_DATA u8 sPeekSeat = 0xFF;
 static EWRAM_DATA u8 sPeekWin = WINDOW_NONE;
 
-// bg, left, top, width, height, palette, baseBlock. Palette 15 and baseBlock 0x294
-// (above the HUD's ticker, below the tilemap at 0x3C0) -- see br_hud.h's tile map.
-static const struct WindowTemplate sPeekTemplate = { 0, 2, 2, 18, 10, 15, 0x294 };
+// bg, left, top, width, height, palette, baseBlock. Palette 15, and the 180 tiles from
+// 0x008: where the field puts its own transient boxes (Safari balls, money, a script's
+// multichoice), none of which can open while we are following somebody -- field controls
+// are locked. It used to share the HUD box's 0x294, which ran to 0x347: past the end of
+// BG0's tiles at 0x300 and clean through BG2's tilemap. See br_hud.h's tile map.
+static const struct WindowTemplate sPeekTemplate = { 0, 2, 2, 18, 10, 15, 0x008 };
+STATIC_ASSERT(0x008 + 18 * 10 <= 0x107, BrPeekFitsBelowTheMapNamePopup)
 static const u8 sPeekColors[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY };
 static const u8 sText_PeekLv[] = _(" Lv");
 static const u8 sText_PeekNone[] = _("no party seen yet");
