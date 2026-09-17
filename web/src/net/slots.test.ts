@@ -42,6 +42,8 @@ describe('slots round trip (single slot)', () => {
     { t: 'ring', seat: 0, phase: 64, sx: 0, sy: 0, r: -1 },
     { t: 'clock', seat: 0, left: 120 },
     { t: 'result', seat: 1, outcome: 'forfeit' },
+    { t: 'give', items: [{ id: 13, n: 2 }, { id: 294, n: 1 }] },
+    { t: 'give', items: [] },
     { t: 'turn', battle: 0x0301, data: [0, 2, 1, 0, 1, 1, 0] },
     { t: 'follow', seat: 7 },
     { t: 'peek', seat: 2, target: 5 },

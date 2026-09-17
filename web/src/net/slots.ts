@@ -56,6 +56,7 @@ import type {
   DuelMsg,
   DresultMsg,
   FledMsg,
+  GiveMsg,
   PickMsg,
   LandMsg,
   ResultMsg,
@@ -92,6 +93,7 @@ export const BR_MSG = {
   DUEL: 27,
   DRESULT: 28,
   FLED: 29,
+  GIVE: 30,
   PICK: 24,
   LAND: 25,
 } as const;
@@ -721,6 +723,21 @@ function decodeTicker(bytes: Uint8Array): TickerMsg {
   return { t: 'ticker', seat, kind: kind === 'system' ? undefined : kind, text };
 }
 
+// GIVE: what was in a bag we just took (POK-280). Page -> ROM only: the contents live
+// on this side for the whole match (match/loot.ts) and the ROM has no room for them.
+function encodeGive(m: GiveMsg): Uint8Array {
+  const items = m.items.slice(0, 8);
+  const w = new Writer().u8(items.length);
+  for (const s of items) w.u16(s.id).u8(Math.min(s.n, 255));
+  return w.toBytes();
+}
+function decodeGive(bytes: Uint8Array): GiveMsg {
+  const r = new Reader(bytes);
+  const items: { id: number; n: number }[] = [];
+  for (let n = r.u8(); n > 0 && r.remaining >= 3; n--) items.push({ id: r.u16(), n: r.u8() });
+  return { t: 'give', items };
+}
+
 function encodeResult(m: ResultMsg): Uint8Array {
   return new Writer().u8(m.seat).u8(OUTCOME_ORDER.indexOf(m.outcome)).toBytes();
 }
@@ -760,6 +777,7 @@ const CODECS: Record<string, Codec> = {
   start: { type: BR_MSG.START, encode: (m) => encodeStart(m as StartMsg), decode: decodeStart },
   ticker: { type: BR_MSG.TICKER, encode: (m) => encodeTicker(m as TickerMsg), decode: decodeTicker },
   result: { type: BR_MSG.RESULT, encode: (m) => encodeResult(m as ResultMsg), decode: decodeResult },
+  give: { type: BR_MSG.GIVE, encode: (m) => encodeGive(m as GiveMsg), decode: decodeGive },
 };
 
 const CODEC_BY_TYPE = new Map<number, Codec & { t: string }>(

@@ -320,19 +320,43 @@ multiple of 256, and then it read the wrong bytes anyway.
 One character: `cash = off + 7`. The `cash < n` guard below it is then exactly the bounds
 check the read needs, so nothing else moves.
 
-### A bag gives its money and drops its items on the floor
+### A bag gave its money and dropped its items on the floor -- **fixed** (POK-280)
 
-Found on the way there, and not fixed. Kanto's rule (README, "Knock someone out and their
-BAG hits the ground"): *items and money, the whole bag in one press.* Ours is money only.
+Found on the way there. Kanto's rule (README, "Knock someone out and their BAG hits the
+ground"): *items and money, the whole bag in one press.* Ours was money only.
 
 `ParseSpill` skips the item rows on purpose -- "the bag's contents are the picker's
-business and are not kept here" -- and `Take()`'s `BR_LOOT_BAG` branch does `AddMoney` and
-nothing else. A bot that died holding three X ATTACKs leaves them in a bag that hands over
-cash. Bots do not lose out: `bag.ts:117` folds a bag found on the ground into their own.
+business and are not kept here" -- and `Take()`'s `BR_LOOT_BAG` branch did `AddMoney` and
+nothing else. A bot that died holding three X ATTACKs left them in a bag that handed over
+cash. Bots never lost out: `bag.ts:117` folds a bag found on the ground into their own, so
+a player was the only one getting a worse deal than Kanto's.
 
-**The fix is blocked on EWRAM, which is the real finding below.** `struct BrLootItem` has
-six free bytes on a bag (`pad[3]`, plus `species` and `level`, which are 0 for one) -- two
-stacks of (id u16, n u8), at zero cost. Anything more grows `gBrLoot` and will not link.
+**EWRAM decided the shape.** Eighty free bytes on modern: `struct BrLootItem` has six
+spare on a bag (`pad[3]`, plus `species` and `level`, both 0 for one), which is two stacks
+— and a late-match ace that has been restocked at every ring carries up to seven.
+
+So the ROM does not hold them at all. The page has held the whole match's loot since
+POK-232 (`match/loot.ts`), so it gives them over: the ROM's `pickup` says the whole piece
+is leaving the ground, and `BR_MSG_GIVE` answers with what was in it. Zero EWRAM, all
+eight stacks, and the ROM goes on not deciding what is in a bag any more than it decides
+where one lands.
+
+Two things to know if this is ever touched again:
+
+* **The read has to happen before `loot.note`**, which is what deletes the piece.
+  `giveBag` is called just above it in both the room's out-observer and solo's `fromRom`.
+* **A `pickup` that names an item is a bot taking one stack** out of a bag that stays
+  where it is (POK-237), not the bag itself — and `bagItems` is undefined for a ball, so
+  a mon never reaches this.
+
+Found while wiring it: **solo never took the player's own pickups off the page's loot
+table.** Only the bots' were noted, so a ball the player had already taken sat on the solo
+table for ever and a bot could walk over and "take" it again. The room path has always
+done this; solo never did. `loot.note(msg)` in `fromRom` now.
+
+`bag-items.txt` puts a bag under the player's feet, takes it -- the shot reads
+`FOUND 1200!`, which is the money fix from `017142fc9` on screen -- and then reads both
+pockets out of `SaveBlock1` to prove a POTION and a TM06 arrived.
 
 ### EWRAM is full: 80 bytes on modern, 140 on agbcc
 
@@ -533,7 +557,6 @@ exporter's grid.
 
 Everything above that is not marked **fixed** or **closed**, which is now:
 
-* **A bag gives its money and drops its items.** Above. The one item EWRAM genuinely gates.
 * **The wardrobe** -- more skins and a preview of the locked ones. Not EWRAM-gated after
   all. Two index-parity traps the entry above does not name: `br_netlink.c:258` takes the
   peer's gender as `skin & 1` and `app.ts:813` takes your own avatar's as `skin % 2`, so
@@ -560,4 +583,5 @@ Answered and closed this pass: the `-1` HP mon (the fog's bleed, working as desi
 "found 0" (the bag-money off-by-one), the HUD frame (Cam keeps OPTIONS > FRAME),
 Professor Birch's lab (closed, `lab-closed.txt`), the end-of-match exit, the last path to
 the truck, MOVES as a real menu with machines in the world to fill it, and the champion's
-Hall of Fame (POK-281).
+Hall of Fame (POK-281), and a bag that hands over its items as well as its cash
+(POK-280).

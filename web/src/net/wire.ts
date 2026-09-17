@@ -530,6 +530,18 @@ export interface ReadyMsg {
  *  `win` (the room's overall winner) and from `out` (elimination) -- a lost PvP fight
  *  does not by itself eliminate anyone. Crosses into the ROM (result), since the ROM
  *  is what emits it. */
+/** Put these items in the bag (POK-280). Kanto's rule is that a fallen trainer's BAG is
+ *  items AND money, taken whole in one press. Ours handed over the cash and left the
+ *  items on the floor: the ROM's loot table has room for eight pieces on a map and none
+ *  at all for what is inside one, and EWRAM has eighty bytes left to argue with. So the
+ *  page keeps the contents -- as it already does for the whole match, match/loot.ts --
+ *  and gives them over when it sees our own seat take the bag.
+ *  Crosses into the ROM only. */
+export interface GiveMsg {
+  t: 'give';
+  items: { id: number; n: number }[];
+}
+
 export interface ResultMsg {
   t: 'result';
   seat: number;
@@ -591,6 +603,7 @@ export type Msg =
   | TickerMsg
   | ReadyMsg
   | ResultMsg
+  | GiveMsg
   | PingMsg
   | PongMsg;
 
@@ -1126,6 +1139,8 @@ const decoders: Record<string, Decoder> = {
     if (outcome !== 'win' && outcome !== 'lose' && outcome !== 'draw' && outcome !== 'forfeit') fail('bad outcome');
     return { t: 'result', seat: reqSeat(m), outcome };
   },
+
+  give: (m) => ({ t: 'give', items: reqItems(m.items ?? [], 8) }),
 
   ping: (m) => ({ t: 'ping', seat: reqSeat(m), at: reqInt(m, 'at', 0, Number.MAX_SAFE_INTEGER) }),
   pong: (m) => ({ t: 'pong', seat: reqSeat(m), at: reqInt(m, 'at', 0, Number.MAX_SAFE_INTEGER) }),

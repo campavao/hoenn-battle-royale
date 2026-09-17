@@ -99,4 +99,32 @@ describe('the match-wide loot table', () => {
     loot.note(spill(1, LITTLEROOT, [1, 2, 3, 4, 5, 6, 7, 8]));
     expect(loot.forMap(LITTLEROOT)?.mons).toHaveLength(6);
   });
+
+  // POK-280: Kanto's rule is items AND money, the whole bag in one press. The ROM never
+  // keeps a bag's contents, so this table is the only place they exist.
+  it('hands over a whole bag, as a copy', () => {
+    const loot = new Loot();
+    loot.note(spill(1, LITTLEROOT, [0x0100], 0x01ff));
+    const items = loot.bagItems(0x01ff);
+    expect(items).toEqual([{ id: 13, n: 2 }, { id: 75, n: 1 }]);
+    items![0].n = 99; // a copy: the caller is about to watch the piece be deleted
+    expect(loot.bagItems(0x01ff)).toEqual([{ id: 13, n: 2 }, { id: 75, n: 1 }]);
+  });
+
+  it('has nothing to hand over for a ball or a key it never saw', () => {
+    const loot = new Loot();
+    loot.note(spill(1, LITTLEROOT, [0x0100], 0x01ff));
+    expect(loot.bagItems(0x0100)).toBeUndefined(); // a mon, not a bag
+    expect(loot.bagItems(0x0999)).toBeUndefined(); // never landed here
+  });
+
+  // A bot takes one stack at a time and the bag stays where it is, so what is left is
+  // what the next taker gets.
+  it('hands over only what the bots have not already picked off', () => {
+    const loot = new Loot();
+    loot.note(spill(1, LITTLEROOT, [], 0x01ff));
+    loot.note({ t: 'pickup', seat: 3, key: 0x01ff, item: 13, n: 1, cash: false });
+    loot.note({ t: 'pickup', seat: 3, key: 0x01ff, item: 13, n: 1, cash: false });
+    expect(loot.bagItems(0x01ff)).toEqual([{ id: 75, n: 1 }]);
+  });
 });

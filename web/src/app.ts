@@ -1357,6 +1357,28 @@ function renderFame(roster: Roster, winner: number | undefined, seat: number): v
  *  only time the player has to read it. */
 const SOLO_END_GRACE_MS = 8_000;
 
+/** A bag we just took hands its contents over (POK-280).
+ *
+ *  Kanto's rule is that a fallen trainer's BAG is items AND money, taken whole in one
+ *  press. Ours gave the cash and left the items lying there, because the ROM never kept
+ *  them: `ParseSpill` skips the item rows on purpose, the loot table has room for eight
+ *  pieces on a map and none for what is inside one, and EWRAM has eighty bytes left to
+ *  argue with. Bots did not lose out -- `bag.ts` folds a bag on the ground into their own
+ *  -- so a player was the only one getting a worse deal than Kanto's.
+ *
+ *  The page has held the contents for the whole match anyway (match/loot.ts), so it gives
+ *  them over: the ROM says the whole piece is leaving the ground, this answers with what
+ *  was in it. **Call before loot.note**, which is what deletes the piece.
+ *
+ *  A `pickup` that names an item is a bot taking one stack out of a bag that stays where
+ *  it is (POK-237), not the bag itself; and `bagItems` is undefined for a ball, so a mon
+ *  never reaches this. */
+function giveBag(loot: Loot, msg: Msg, push: (m: Msg) => void): void {
+  if (msg.t !== 'pickup' || msg.item !== undefined) return;
+  const items = loot.bagItems(msg.key);
+  if (items && items.length > 0) push({ t: 'give', items });
+}
+
 /** `gBrMatch.phase` once the winner's Hall of Fame has finished and the ROM is back on
  *  the map (include/br/br_match.h). The one byte the page reads out of the match struct:
  *  everything else it needs comes through the mailbox. */
@@ -1703,6 +1725,12 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const fromRom = (msg: Msg) => {
     log.note(msg, performance.now());
     noteResult(msg);
+    giveBag(loot, msg, (m) => rom.push(m));
+    // Our own pickups come off this page's table too. Only the bots' did, so a ball the
+    // player had already taken stayed on the solo table for ever and a bot could walk
+    // over to "take" it again -- the room path has always done this (app.ts's out
+    // observer) and solo never did.
+    loot.note(msg);
     roster.applyMsg(msg); // our own ghost, so the bots' eyeline can see us
     if (msg.t === 'pick') rom.push({ t: 'land', ...director.landFor(msg.seat, msg.section) });
     else if (msg.t === 'out') out?.(msg.seat);
@@ -2272,6 +2300,7 @@ function wireRoom(
     bridge.setOutFilter(() => !amWatching);
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);
+      giveBag(loot, msg, (m) => bridge?.pushToRom(m));
       loot.note(msg);
       noteResult(msg);
       noteBusy(msg);

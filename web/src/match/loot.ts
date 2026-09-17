@@ -59,6 +59,16 @@ export class Loot {
     return this.pieces.get(key)?.bag?.items[0]?.id;
   }
 
+  /** Everything in this bag, for handing to a ROM that has just taken the whole piece
+   *  (POK-280). A copy, because the caller is about to see the piece deleted. Undefined
+   *  for a mon and for a key this page never saw land; an empty array for a bag whose
+   *  stacks have all been picked off one at a time by bots. */
+  bagItems(key: number): { id: number; n: number }[] | undefined {
+    const bag = this.pieces.get(key)?.bag;
+
+    return bag ? bag.items.map((s) => ({ ...s })) : undefined;
+  }
+
   /** How many pieces are still on the ground anywhere. */
   size(): number {
     return this.pieces.size;

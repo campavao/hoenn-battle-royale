@@ -196,6 +196,30 @@ static void ParseSpill(const u8 *d, u16 n)
     }
 }
 
+// GIVE: the page handing over what was in a bag we just took. The line and the money
+// are already said by Take(); this is the rest of it arriving a frame later, which is
+// what "one press" means when the contents live on the other side of the mailbox.
+static void HandleGive(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+    u8 count, i;
+
+    if (n < 1)
+        return;
+    count = d[0];
+    if (count > 8 || (u16)(1 + 3 * count) > n)
+        return;
+    for (i = 0; i < count; i++)
+    {
+        const u8 *row = d + 1 + 3 * i;
+        u16 item = BrWire_ReadU16(row);
+
+        if (item != ITEM_NONE && row[2] != 0)
+            AddBagItem(item, row[2]);
+    }
+}
+
 static void HandleSpill(const u8 *payload, u8 len)
 {
     if (BrWire_Assemble(&sSpillAsm, BR_MSG_SPILL, FALSE, payload, len))
@@ -584,6 +608,7 @@ void BrLoot_Init(void)
     BrNet_On(BR_MSG_SPILL, HandleSpill);
     BrNet_On(BR_MSG_SPILL | BR_MSG_CONT, HandleSpillCont);
     BrNet_On(BR_MSG_PICKUP, HandlePickup);
+    BrNet_On(BR_MSG_GIVE, HandleGive);
 }
 
 void BrLoot_Tick(void)

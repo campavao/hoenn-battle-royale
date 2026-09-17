@@ -292,4 +292,18 @@
 //   1:    from     u8   who they ran from
 #define BR_MSG_FLED 29
 
+// give: put these items in the bag (POK-280). Kanto's rule is that a fallen trainer's
+// BAG is items AND money, taken whole in one press; ours handed over the cash and left
+// the items on the floor, because `ParseSpill` never kept them -- the ROM's loot table
+// has room for eight pieces on a map and no room at all for what is inside one, and
+// EWRAM has eighty bytes left to argue with.
+//
+// So the page keeps the contents, as it already does for the whole match (match/loot.ts),
+// and gives them over when it sees our own seat take the bag. The ROM does not decide
+// what is in a bag any more than it decides where one lands.
+// Payload:
+//   0:    count    u8   1..8 stacks
+//   1..:  stacks   count * (id u16, n u8)
+#define BR_MSG_GIVE 30
+
 #endif // GUARD_BR_WIRE_H

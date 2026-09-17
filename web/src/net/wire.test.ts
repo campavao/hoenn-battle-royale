@@ -59,6 +59,7 @@ const SAMPLES: Msg[] = [
   { t: 'ticker', seat: 1, kind: 'kill', text: 'ASH knocked out MISTY!' },
   { t: 'ready', seat: 1, ready: true },
   { t: 'result', seat: 1, outcome: 'win' },
+  { t: 'give', items: [{ id: 13, n: 2 }] },
   { t: 'ping', seat: 1, at: 1000 },
   { t: 'pong', seat: 1, at: 1000 },
 ];
