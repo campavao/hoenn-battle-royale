@@ -56,7 +56,12 @@ void BrCatch_Apply(void)
     u16 slot = gSpecialVar_0x8004;
 
     if (gBrCatch.pending && slot < PARTY_SIZE)
+    {
         gPlayerParty[slot] = gBrPendingCatch; // the old one is released, the catch takes its slot
+        // A different mon in the slot, so whatever the player had chosen for the last one
+        // is not a choice about this one (POK-290).
+        BrMoves_ForgetKept(slot);
+    }
     gBrCatch.pending = FALSE;
     gBrCatch.asked = FALSE;
     BrSpectate_SendParty(); // the team changed: spectators and the director want it

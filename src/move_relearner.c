@@ -538,6 +538,10 @@ static void DoMoveRelearnerMain(void)
                     // the bag, so a machine taken out before the move is written would
                     // shift every row under the cursor.
                     BrMoves_Spend(GetCurrentSelectedMove());
+                    // The player chose this one, so the rung's automatic learning will
+                    // not take the slot back off them (POK-290). Whichever slot
+                    // GiveMoveToMon used -- it does not say, so it is found by the move.
+                    BrMoves_Keep(sMoveRelearnerStruct->partyMon, GetCurrentSelectedMove());
                     gSpecialVar_0x8004 = TRUE;
                     PlaySE(SE_USE_ITEM);
                     sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
@@ -727,6 +731,7 @@ static void DoMoveRelearnerMain(void)
                 // GetCurrentSelectedMove reads a row out of a list built against the
                 // ordering it had before.
                 BrMoves_Spend(GetCurrentSelectedMove());
+                BrMoves_Keep(sMoveRelearnerStruct->partyMon, GetCurrentSelectedMove());
                 gSpecialVar_0x8004 = TRUE;
                 PlaySE(SE_USE_ITEM);
                 sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;

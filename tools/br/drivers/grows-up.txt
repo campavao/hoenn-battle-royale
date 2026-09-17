@@ -1,0 +1,62 @@
+# grows-up: the party grows up with the rung (POK-290).
+#
+# Cam, live 2026-09-17: "Pokemon are not automatically evolving as time goes on... as well
+# as just automatically teaching them moves that is for that level." A Zigzagoon caught in
+# the Zone was still a Zigzagoon at Lv75 in the last ring, with the four moves it was
+# caught with -- while a bot's team walked its evolution chain as it was dealt. At rung 75
+# you fought their SWAMPERT with your MUDKIP.
+#
+# Neither can hang off a level-up, because nothing in a match levels up: no battle awards
+# EXP and the rung writes the level straight on. So both happen in the lift.
+#
+# grows-up-keeps.txt is the other half: the same lift with a move the player chose in it.
+#
+# Ring phase 5 is the top of sLadder: rung 75, seventy levels in one step, which is two
+# evolutions for a TREECKO (16 GROVYLE, 36 SCEPTILE).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# The nickname is the one thing on a party mon that is NOT encrypted -- BoxPokemon keeps
+# it in the clear at +8 -- so it is how a driver reads a species without a battle open.
+# TREECKO, in the Gen 3 charmap, and level 5.
+expect u8 gPlayerParty+8 0xCE
+expect u8 gPlayerParty+9 0xCC
+expect u8 gPlayerParty+0x54 5
+poke u8 gBrRing+1 5
+poke u8 gBrRing 1
+wait 120
+shot grown
+expect u8 gPlayerParty+0x54 75
+# SCEPTILE: S C E P T I L E. A mon nobody renamed is called after its species, so the
+# name had to travel with the evolution or a SCEPTILE would answer to TREECKO.
+expect u8 gPlayerParty+8 0xCD
+expect u8 gPlayerParty+9 0xBD
+expect u8 gPlayerParty+10 0xBF
+expect u8 gPlayerParty+11 0xCA
+expect u8 gPlayerParty+12 0xCE
+# and the rung itself moved
+expect u8 gBrLevels 75
+# Into a fight, where gBattleMons is decrypted: species at +0, the four moves at +0x0C.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 1F 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 400
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 200
+shot fight
+expect u16 gBattleMons 279
+# POUND (1) and LEER (43) are gone. AGILITY (97), SLAM (21), DETECT (197) and FALSE SWIPE
+# (206) are what a SCEPTILE knows on the way to 75, and nothing here was the player's, so
+# the rung took all four.
+expect u16 gBattleMons+0x0C 97
+expect u16 gBattleMons+0x0E 21
+expect u16 gBattleMons+0x10 197
+expect u16 gBattleMons+0x12 206
+say grows up ok

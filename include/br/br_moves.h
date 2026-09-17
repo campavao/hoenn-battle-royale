@@ -35,4 +35,18 @@ bool8 BrMoves_HasAny(struct Pokemon *mon);
 // A move has just been taught: take the TM that taught it out of the bag. An HM stays.
 void BrMoves_Spend(u16 move);
 
+// A move the player chose stays chosen (POK-290).
+//
+// The rung teaches moves on its own now, and Kanto's rule is that it may take a slot the
+// player left alone and never one they filled on purpose. Emerald has nowhere to write
+// "this one was a decision", so BR keeps the note: four bits a party slot, cleared when
+// the slot changes hands, and gone with the match.
+void BrMoves_ClearKept(void);
+void BrMoves_ForgetKept(u8 partyIndex);
+// Mark whichever of this mon's four slots holds `move`. Called where a move is taught
+// deliberately -- the relearner's two paths -- rather than passed a slot, because the
+// empty-slot path does not know which slot GiveMoveToMon used.
+void BrMoves_Keep(u8 partyIndex, u16 move);
+bool8 BrMoves_IsKept(u8 partyIndex, u8 slot);
+
 #endif // GUARD_BR_MOVES_H
