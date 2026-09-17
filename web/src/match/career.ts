@@ -26,14 +26,39 @@ export interface Career {
   voice?: number;
 }
 
-/** How many sprites there are to pick from: `sSkinGraphics` in src/br/br_ghosts.c. */
-export const SKINS = ['BRENDAN', 'MAY', 'RIVAL BRENDAN', 'RIVAL MAY'];
+/** The wardrobe, index for index with `sSkinGraphics` in src/br/br_ghosts.c -- which is
+ *  where the sprite actually comes from, so the ROM half has to ship first or a new entry
+ *  draws as BRENDAN.
+ *
+ *  EVEN IS MALE AND ODD IS FEMALE. A skin index is the only thing on the wire that says
+ *  which you are: `br_netlink.c` reads the peer's gender as `skin & 1` and `app.ts` reads
+ *  your own avatar's as `skin % 2`. Append in pairs. */
+export const SKINS = [
+  'BRENDAN',
+  'MAY',
+  'RIVAL BRENDAN',
+  'RIVAL MAY',
+  'HIKER',
+  'BEAUTY',
+  'CAMPER',
+  'PICNICKER',
+  'SWIMMER',
+  'SWIMMER GIRL',
+  'EXPERT',
+  'EXPERT LADY',
+  'POKEFAN',
+  'POKEFAN LADY',
+  'YOUNGSTER',
+  'LASS',
+];
 
-/** Wins needed to unlock each entry in SKINS, index for index -- Kanto's wardrobe
- *  ladder (lib/skins.lua unlocks nine trainer classes on a curve from 1 win), sized to
- *  Hoenn's four: your own two starting trainers are free, the rival's recolors are
- *  what winning earns. */
-export const SKIN_UNLOCK_WINS = [0, 0, 1, 3];
+/** Wins needed to unlock each entry in SKINS, index for index -- Kanto's wardrobe ladder
+ *  (lib/skins.lua unlocks nine trainer classes on a curve from 1 win).
+ *
+ *  A PAIR AT A TIME, so every rung offers both genders: unlocking one of a pair and not
+ *  the other would hand somebody a wardrobe that cannot dress them. Your own two starting
+ *  trainers are free; everything after is won. */
+export const SKIN_UNLOCK_WINS = [0, 0, 1, 1, 5, 5, 8, 8, 12, 12, 16, 16, 20, 20, 25, 25];
 
 export function skinUnlocked(skin: number, wins: number): boolean {
   return wins >= (SKIN_UNLOCK_WINS[skin] ?? 0);
@@ -70,6 +95,22 @@ export function nextSkin(skin: number, wins = Number.POSITIVE_INFINITY): number 
     if (skinUnlocked(candidate, wins)) return candidate;
   }
   return skin; // nothing else is unlocked -- stay put rather than loop forever
+}
+
+/** The next skin after this one whether it is unlocked or not (POK-282).
+ *
+ *  Cam: "in Kanto you're able to preview all the different skins even if you don't have
+ *  all the wins yet." A wardrobe you cannot look at is not a ladder -- there is nothing to
+ *  climb towards. `nextSkin` above is what SAVES; this is what BROWSES. */
+export function peekSkin(skin: number): number {
+  return (skin + 1) % SKINS.length;
+}
+
+/** What to say under a skin while it is being browsed: its price, or that it is yours. */
+export function skinNote(skin: number, wins: number): string {
+  if (skinUnlocked(skin, wins)) return 'your sprite';
+  const need = SKIN_UNLOCK_WINS[skin] ?? 0;
+  return `LOCKED -- ${need} ${need === 1 ? 'win' : 'wins'}`;
 }
 
 const EMPTY: Career = { matches: 0, wins: 0 };

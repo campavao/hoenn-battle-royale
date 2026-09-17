@@ -1,3 +1,4 @@
+import ghostsSource from '../../../src/br/br_ghosts.c?raw';
 import { describe, expect, it } from 'vitest';
 import { VOICE_COUNT } from '../bots/lines';
 import {
@@ -10,10 +11,12 @@ import {
   NAME_MAX,
   nextLockedSkin,
   nextSkin,
+  peekSkin,
   recordMatch,
   saveProfile,
   SKIN_UNLOCK_WINS,
   SKINS,
+  skinNote,
   skinUnlocked,
 } from './career';
 
@@ -178,5 +181,85 @@ describe('the career as a file', () => {
     expect(skinUnlocked(locked, 0)).toBe(false);
     expect(back?.skin).toBeUndefined();
     expect(SKINS[locked]).toBeDefined();
+  });
+});
+
+
+// POK-282. Cam: "I should be able to pick kind of like any sprites -- the way Kanto
+// Battle Royale has it, the amount of wins you get means you get more sprites. But in
+// Kanto you're able to preview all the different skins even if you don't have all the
+// wins yet."
+describe('the wardrobe (POK-282)', () => {
+  /** sSkinGraphics in src/br/br_ghosts.c, which is where the sprite really comes from.
+   *  Read rather than mirrored: the two lists drifting apart is the whole failure mode,
+   *  and it shows up as everybody wearing BRENDAN rather than as an error. */
+  const romSkins = (): string[] => {
+    const block = /static const u8 sSkinGraphics\[\] =\s*\{([^}]*)\}/.exec(ghostsSource);
+    if (!block) throw new Error('sSkinGraphics not found in br_ghosts.c');
+    return [...block[1].matchAll(/OBJ_EVENT_GFX_[A-Z0-9_]+/g)].map((m) => m[0]);
+  };
+
+  it('has exactly as many sprites as the ROM does', () => {
+    expect(SKINS.length).toBe(romSkins().length);
+  });
+
+  it('prices every one of them', () => {
+    expect(SKIN_UNLOCK_WINS.length).toBe(SKINS.length);
+  });
+
+  it('unlocks a male and a female together', () => {
+    // A skin index IS the gender on the wire -- br_netlink.c reads the peer's as
+    // `skin & 1` -- so an odd number of sprites, or a rung that opens one of a pair,
+    // hands somebody a wardrobe that cannot dress them.
+    expect(SKINS.length % 2).toBe(0);
+    for (let i = 0; i < SKINS.length; i += 2) {
+      expect(SKIN_UNLOCK_WINS[i]).toBe(SKIN_UNLOCK_WINS[i + 1]);
+    }
+  });
+
+  it('never gets cheaper further down the list', () => {
+    for (let i = 1; i < SKIN_UNLOCK_WINS.length; i++) {
+      expect(SKIN_UNLOCK_WINS[i]).toBeGreaterThanOrEqual(SKIN_UNLOCK_WINS[i - 1]);
+    }
+  });
+
+  it('keeps the first four where they were, because a career file stores the index', () => {
+    // The NAMES and their positions are what a saved career depends on. The price is not:
+    // RIVAL MAY came down from 3 wins to 1 so the pair opens together, and a price that
+    // only ever falls cannot take a sprite off somebody already wearing it.
+    expect(SKINS.slice(0, 4)).toEqual(['BRENDAN', 'MAY', 'RIVAL BRENDAN', 'RIVAL MAY']);
+    expect(SKIN_UNLOCK_WINS.slice(0, 2)).toEqual([0, 0]);
+  });
+
+  it('gives a new trainer two to choose from and the rest to look at', () => {
+    expect(skinUnlocked(0, 0)).toBe(true);
+    expect(skinUnlocked(1, 0)).toBe(true);
+    expect(skinUnlocked(2, 0)).toBe(false);
+    expect(skinUnlocked(SKINS.length - 1, 0)).toBe(false);
+  });
+
+  it('browses every sprite, locked or not, and comes back round', () => {
+    const seen = new Set<number>();
+    let at = 0;
+    for (let i = 0; i < SKINS.length; i++) {
+      at = peekSkin(at);
+      seen.add(at);
+    }
+    expect(seen.size).toBe(SKINS.length);
+    expect(at).toBe(0);
+  });
+
+  it('says what a locked one costs, and says nothing about one you own', () => {
+    expect(skinNote(0, 0)).toBe('your sprite');
+    expect(skinNote(2, 0)).toBe('LOCKED -- 1 win');
+    expect(skinNote(4, 0)).toBe('LOCKED -- 5 wins');
+    expect(skinNote(3, 1)).toBe('your sprite');
+  });
+
+  it('still refuses to WEAR one that has not been earned', () => {
+    // Browsing is not wearing: saveProfile is the backstop and stays shut.
+    const s = store();
+    saveProfile({ skin: SKINS.length - 1 }, s);
+    expect(loadCareer(s).skin).toBeUndefined();
   });
 });

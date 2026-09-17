@@ -53,8 +53,10 @@ import {
   importCareer,
   cleanName,
   loadCareer,
-  nextLockedSkin,
   nextSkin,
+  peekSkin,
+  skinNote,
+  skinUnlocked,
   ordinal,
   recordMatch,
   saveProfile,
@@ -845,6 +847,13 @@ let proxyDuels: ProxyDuels | null = null;
 function careerSkin(): number {
   return loadCareer().skin ?? 0;
 }
+
+/** The sprite the lobby's row is SHOWING, which is not always the one you are wearing
+ *  (POK-282). Cam: "in Kanto you're able to preview all the different skins even if you
+ *  don't have all the wins yet" -- a wardrobe you cannot look at is not a ladder, because
+ *  there is nothing to climb towards. Browsing walks every entry; only an unlocked one is
+ *  saved, so wandering into the locked half and leaving still leaves you dressed. */
+let browsedSkin: number | null = null;
 
 /** Which voice (bots/lines.ts) this seat speaks with when its own duels get
  *  announced (POK-243). */
@@ -2806,7 +2815,11 @@ function runLobby(): Promise<RoomHash> {
         }
         case 'skin': {
           const career = loadCareer();
-          saveProfile({ skin: nextSkin(career.skin ?? 0, career.wins) });
+          browsedSkin = peekSkin(browsedSkin ?? career.skin ?? 0);
+          // Only what you have earned is worn. saveProfile refuses a locked skin anyway
+          // -- that is the backstop against a poked store -- but asking it to is what
+          // would make the row lie about which sprite is yours.
+          if (skinUnlocked(browsedSkin, career.wins)) saveProfile({ skin: browsedSkin });
           render();
           return;
         }
@@ -2879,12 +2892,12 @@ function runLobby(): Promise<RoomHash> {
 
     const render = () => {
       const career = loadCareer();
-      const locked = nextLockedSkin(career.wins);
+      const showing = browsedSkin ?? careerSkin();
       fixed.replaceChildren(
         ...fixedRows(online, {
           name: careerName(),
-          skin: SKINS[careerSkin()],
-          skinNote: locked ? `${SKINS[locked.skin]} at ${locked.wins} wins` : 'your sprite',
+          skin: SKINS[showing],
+          skinNote: skinNote(showing, career.wins),
           voice: voiceOf(careerVoice()).win,
           statsOn: !loadStats().off,
           record: career.matches > 0 ? careerLine(career) : 'your name',

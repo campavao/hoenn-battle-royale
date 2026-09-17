@@ -28,12 +28,40 @@ EWRAM_DATA u8 gBrMySkin = 0;
 static EWRAM_DATA u8 sOwnValid = 0;
 
 // Skin -> object event graphics. Index 0 is the default; the shell's career picks.
+// The wardrobe (POK-282). Cam: "I should be able to pick kind of like any sprites -- the
+// way Kanto Battle Royale has it, the amount of wins you get means you get more sprites."
+//
+// EVEN IS MALE AND ODD IS FEMALE, and that is load-bearing rather than tidy: a skin index
+// is the only thing on the wire that says which you are, and both ends read it as a
+// parity -- br_netlink.c takes the peer's gender as `skin & 1` and app.ts takes your own
+// avatar's as `skin % 2`. Append in pairs or people turn up as the wrong sprite in a link
+// battle.
+//
+// All twelve of the new ones use sAnimTable_Standard, which is the ordinary four-way
+// walking NPC table; a single-pose graphic would stand still and slide. This is
+// `static const`, so it is ROM and costs no EWRAM at all.
+//
+// APPEND ONLY. A career file stores the index, so reordering renames everybody's sprite.
+// And the C half has to be in a shipped ROM before the page offers the new ones, or they
+// all draw as BRENDAN through the clamp in Spawn().
 static const u8 sSkinGraphics[] =
 {
     OBJ_EVENT_GFX_BRENDAN_NORMAL,
     OBJ_EVENT_GFX_MAY_NORMAL,
     OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL,
     OBJ_EVENT_GFX_RIVAL_MAY_NORMAL,
+    OBJ_EVENT_GFX_HIKER,
+    OBJ_EVENT_GFX_BEAUTY,
+    OBJ_EVENT_GFX_CAMPER,
+    OBJ_EVENT_GFX_PICNICKER,
+    OBJ_EVENT_GFX_SWIMMER_M,
+    OBJ_EVENT_GFX_SWIMMER_F,
+    OBJ_EVENT_GFX_EXPERT_M,
+    OBJ_EVENT_GFX_EXPERT_F,
+    OBJ_EVENT_GFX_POKEFAN_M,
+    OBJ_EVENT_GFX_POKEFAN_F,
+    OBJ_EVENT_GFX_YOUNGSTER,
+    OBJ_EVENT_GFX_LASS,
 };
 #define BR_SKIN_COUNT (sizeof(sSkinGraphics) / sizeof(sSkinGraphics[0]))
 

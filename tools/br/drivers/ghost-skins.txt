@@ -1,0 +1,39 @@
+# ghost-skins: the wardrobe past the fourth sprite really draws (POK-282).
+#
+# Cam: "I should be able to pick kind of like any sprites -- the way Kanto Battle Royale
+# has it, the amount of wins you get means you get more sprites."
+#
+# sSkinGraphics went from four to sixteen, and a skin index above the old end used to be
+# clamped to BRENDAN by Spawn(). Two ghosts are placed either side of us wearing indices
+# the old table did not have: 5 is BEAUTY and 14 is YOUNGSTER. The frame is the proof --
+# three different sprites, none of them the player's.
+#
+# Even is male and odd is female, because a skin index IS the gender on the wire
+# (br_netlink.c reads the peer's as `skin & 1`), which is why the page unlocks them in
+# pairs. PLACE carries outer coords, the way gBrOwnPos reads them.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 10 07 00 0F 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 16
+expect u16 gBrOwnPos+2 0x0E
+expect u16 gBrOwnPos+4 0x16
+# seat 1, skin 5 (BEAUTY), one tile west of us
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 10 0D 00 16 00 04 01 05
+poke u16 gBrMailbox+0x0C 1
+wait 40
+# seat 2, skin 14 (YOUNGSTER), one tile east
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 02 01 00 10 0F 00 16 00 03 01 0E
+poke u16 gBrMailbox+0x0C 2
+wait 90
+expect u8 gBrSeats+16 1
+expect u8 gBrSeats+32 1
+shot three-sprites
+# Both really spawned. A BrSeat is 16 bytes with objId at +9, so seat 1's is at +25 and
+# seat 2's at +41; BR_NO_OBJ (0xFF) there would mean the object table refused them and
+# the frame above would be showing one sprite, not three.
+expectle u8 gBrSeats+25 15
+expectle u8 gBrSeats+41 15
+# ...wearing the skins they were sent, not clamped back to BRENDAN like the old table did
+expect u8 gBrSeats+17 5
+expect u8 gBrSeats+33 14
+say ghost skins ok
