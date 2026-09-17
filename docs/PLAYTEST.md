@@ -439,20 +439,88 @@ ending while the parade is on screen.
 
 ---
 
+## 2026-09-17: MOVES is one screen, and there are machines to put on it
+
+### MOVES as a real menu -- **fixed**
+
+Cam's decision on POK-279's second option: the relearner list *plus* every TM and HM in
+the bag this species can learn, taught from there. What shipped was the hint --
+"TEACH FLY FROM THE BAG" -- which is a sign pointing at a screen the player then had to go
+and find.
+
+**Hooked into Emerald's own relearner rather than rolled fresh.** That screen already has
+the move's description, its PP, power and accuracy, the contest hearts and scroll arrows
+that size themselves off the list; a hand-rolled menu throws all of it away for the same
+result. Kanto only built its own because the Gen 1 engine had no relearner at all.
+
+So it is four one-line hooks and a new file:
+
+* `move_relearner.c:904` -- `BrMoves_AppendMachines` after `GetMoveRelearnerMoves`. Rows
+  downstream read a plain move id, so an appended machine needs no id space of its own.
+* `move_relearner.c:160` -- `MAX_RELEARNER_MOVES` becomes 20 level-up + 58 machines +
+  CANCEL. `sMoveRelearnerStruct` is `AllocZeroed`, so that is heap and not one byte of
+  EWRAM (confirmed: the link map did not move). 25 rows would have been overflowed by the
+  eight HMs alone, and `movesToLearn` and `menuItems` are adjacent in that struct, so it
+  would have corrupted `partyMon` silently.
+* `move_relearner.c:524` and `:713` -- `BrMoves_Spend` in both apply paths, into a free
+  slot and over a chosen move.
+* `br_catch.c` -- the gate is `BrMoves_HasAny` now, so "NO NEW MOVES AT THIS LEVEL" is
+  only ever the truth. `MachineFor` and the hint strings are gone.
+
+**The TM rule is the cartridge's**, copied from `party_menu.c`'s `Task_LearnedMove`:
+`if (item < ITEM_HM01) RemoveBagItem(item, 1)`. A TM is spent by teaching, an HM is not --
+which is also Kanto's (`lib/moves.lua`). The spend happens *after* the move is written,
+not at the selection: the summary screen's round trip rebuilds the list from the bag, and
+a machine taken out early would shift every row under the cursor.
+
+### And something to teach: the Zone's balls carry machines
+
+Cam's second decision, and the reason the menu would otherwise have been a wardrobe with
+no clothes in it: a match grants only the eight HMs (`br_boot.c:76`), no mart sells a TM
+and the Zone dealt balls and medicine only. A MOVES list of CUT and FLASH is not a list.
+
+Kanto's own weighting, from the README: *a strong TM most often*, then the rest. Eighteen
+TMs, one of every type that matters and nothing that needs a partner to be worth the
+detour, at one ball in two -- so about three machines are on the ground in a match, and a
+contestant walks past one or two areas in a two-minute opening. They are named after their
+moves already (POK-264), so the pickup line reads FOUND ICE BEAM!.
+
+The marts are deliberately left alone: Kanto leaves Celadon's TM counter out of the match
+shelf, and a TM you can simply buy is not loot.
+
+**Drivers.** `moves-machines.txt` (was `moves-bag.txt`) opens MOVES on the same L5 mon that
+used to be turned away and gets CUT / STRENGTH / FLASH / ROCK SMASH -- the HMs a Treecko
+can take. `moves-row.txt` shows the merge on a L30 one: its five level-up moves, then the
+machines. `moves-spend.txt` puts a TM06 TOXIC under the player's feet, takes it, teaches
+it, and reads the bag straight out of `SaveBlock1 + 0x690` -- the TM pocket, four bytes a
+slot, ids in the clear -- to prove slot 8 went from 294 to 0 while HM01 stayed put.
+`zone-items.txt` pins the three machines seed 0x0C00 deals.
+
+### Found while sweeping: `catch-pages` was red on the modern build, and had been
+
+Not caused by any of this -- it fails the same way at `7d86862f2`, the commit this session
+started from, so the handoff's "64 drivers green on both builds" was already stale. Worth
+writing down because it looked exactly like a regression for twenty minutes.
+
+The driver pressed A every thirty frames through a Safari throw and then asserted the mon
+was in the party. The modern build runs the same catch several seconds slower than agbcc,
+so the assert landed while the ball was still in the air -- indistinguishable from a catch
+that failed. Waiting fifteen seconds without pressing anything showed "Gotcha! ARON was
+caught!" on screen, which is what settled it. The ending now allows three hundred frames a
+press and passes on both.
+
+**Two driver facts this cost, both worth keeping:** the boot block's warp lands the player
+one tile SOUTH of the cell it names, the way stepping out of a door does, and `gBrOwnPos`
+is where to read back where they actually are; loot coordinates are the outer space
+(`+ MAP_OFFSET`), so a row poked into `gBrLoot` has to be placed there and not in the
+exporter's grid.
+
+---
+
 ## What is left, 2026-09-17 (re-cut after the morning pass)
 
 Everything above that is not marked **fixed** or **closed**, which is now:
 
-* **MOVES as a real menu.** Cam decided POK-279's second option: the relearner list *plus*
-  every TM/HM in the bag this species can learn, taught from there. What shipped
-  (`44355109c`) is only the hint. `br_catch.c:96` still opens the relearner only when
-  `GetNumberOfRelearnableMoves() > 0`, and `move_relearner.c:903` still builds its list
-  from `GetMoveRelearnerMoves` alone. Watch `move_relearner.c:160`: the list is sized
-  `max(MAX_LEVEL_UP_MOVES, 25)` and MAX_LEVEL_UP_MOVES is 20, so eight HMs alone overflow
-  it -- the struct is `AllocZeroed`, so growing it is gHeap, not EWRAM.
-  **Cam also decided the content question:** a match grants only the eight HMs today, no
-  mart sells a TM and the Zone deals none, so TMs go into the world in the same batch
-  rather than shipping a menu with half of it empty.
 * **The champion's parade is unreachable in real play.** Above -- one push at the `win`
   handler, designed together with the ending's grace so the reboot does not cut the parade
   off.
@@ -481,5 +549,5 @@ Everything above that is not marked **fixed** or **closed**, which is now:
 
 Answered and closed this pass: the `-1` HP mon (the fog's bleed, working as designed),
 "found 0" (the bag-money off-by-one), the HUD frame (Cam keeps OPTIONS > FRAME),
-Professor Birch's lab (closed, `lab-closed.txt`), the end-of-match exit, and the last
-path to the truck.
+Professor Birch's lab (closed, `lab-closed.txt`), the end-of-match exit, the last path to
+the truck, and MOVES as a real menu with machines in the world to fill it.

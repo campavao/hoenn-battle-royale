@@ -24,6 +24,8 @@
 #include "task.h"
 #include "constants/rgb.h"
 #include "constants/songs.h"
+#include "constants/items.h"
+#include "br/br_moves.h"
 
 /*
  * Move relearner state machine
@@ -157,7 +159,11 @@ enum {
 #define GFXTAG_UI       5525
 #define PALTAG_UI       5526
 
-#define MAX_RELEARNER_MOVES max(MAX_LEVEL_UP_MOVES, 25)
+// Battle Royale's MOVES row offers the machines in the bag alongside the level-up moves
+// (POK-279), so the list is 20 level-up rows + 58 machines + CANCEL rather than 25. The
+// struct is AllocZeroed, so this is heap and not a byte of EWRAM -- and the count fields
+// below are u8, which 84 still fits.
+#define MAX_RELEARNER_MOVES (max(MAX_LEVEL_UP_MOVES, 25) + NUM_TECHNICAL_MACHINES + NUM_HIDDEN_MACHINES + 1)
 
 static EWRAM_DATA struct
 {
@@ -522,6 +528,11 @@ static void DoMoveRelearnerMain(void)
             {
                 if (GiveMoveToMon(&gPlayerParty[sMoveRelearnerStruct->partyMon], GetCurrentSelectedMove()) != MON_HAS_MAX_MOVES)
                 {
+                    // A TM that taught it is spent, an HM is not. Here rather than at the
+                    // selection: the summary screen's round trip rebuilds this list from
+                    // the bag, so a machine taken out before the move is written would
+                    // shift every row under the cursor.
+                    BrMoves_Spend(GetCurrentSelectedMove());
                     PrintMessageWithPlaceholders(gText_MoveRelearnerPkmnLearnedMove);
                     gSpecialVar_0x8004 = TRUE;
                     sMoveRelearnerStruct->state = MENU_STATE_PRINT_TEXT_THEN_FANFARE;
@@ -711,6 +722,10 @@ static void DoMoveRelearnerMain(void)
                 RemoveMonPPBonus(&gPlayerParty[sMoveRelearnerStruct->partyMon], sMoveRelearnerStruct->moveSlot);
                 SetMonMoveSlot(&gPlayerParty[sMoveRelearnerStruct->partyMon], GetCurrentSelectedMove(), sMoveRelearnerStruct->moveSlot);
                 StringCopy(gStringVar2, gMoveNames[GetCurrentSelectedMove()]);
+                // After the name is copied: RemoveBagItem compacts the pocket, and
+                // GetCurrentSelectedMove reads a row out of a list built against the
+                // ordering it had before.
+                BrMoves_Spend(GetCurrentSelectedMove());
                 PrintMessageWithPlaceholders(gText_MoveRelearnerAndPoof);
                 sMoveRelearnerStruct->state = MENU_STATE_DOUBLE_FANFARE_FORGOT_MOVE;
                 gSpecialVar_0x8004 = TRUE;
@@ -901,6 +916,11 @@ static void CreateLearnableMovesList(void)
     u8 nickname[POKEMON_NAME_LENGTH + 1];
 
     sMoveRelearnerStruct->numMenuChoices = GetMoveRelearnerMoves(&gPlayerParty[sMoveRelearnerStruct->partyMon], sMoveRelearnerStruct->movesToLearn);
+    // Every TM and HM in the bag this species can take, after the level-up moves. The
+    // rows below read a move id and nothing else, so an appended machine needs no id
+    // space of its own; -1 keeps the CANCEL slot written just after this loop.
+    sMoveRelearnerStruct->numMenuChoices = BrMoves_AppendMachines(&gPlayerParty[sMoveRelearnerStruct->partyMon],
+        sMoveRelearnerStruct->movesToLearn, sMoveRelearnerStruct->numMenuChoices, MAX_RELEARNER_MOVES - 1);
 
     for (i = 0; i < sMoveRelearnerStruct->numMenuChoices; i++)
     {

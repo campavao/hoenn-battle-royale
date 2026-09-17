@@ -85,6 +85,41 @@ static const u16 sBallItems[] =
     ITEM_MOON_STONE, ITEM_NUGGET, ITEM_PP_UP,
 };
 
+// And the machines. Kanto's rule for what a Zone ball is worth (README, "the zone's item
+// balls are dealt too"): *a strong TM most often*, then the rest. That weighting is what
+// makes the MOVES row a real choice -- the eight HMs are the only machines a match grants
+// otherwise, and a menu of CUT and FLASH is not a menu.
+//
+// One of each type that matters, so almost any party finds something it can take, and
+// nothing that needs a second item or a specific partner to be worth the detour. They are
+// named after their moves on the ground (POK-264), so the line reads FOUND ICE BEAM!.
+static const u16 sBallTMs[] =
+{
+    ITEM_TM02, // DRAGON CLAW
+    ITEM_TM06, // TOXIC
+    ITEM_TM13, // ICE BEAM
+    ITEM_TM14, // BLIZZARD
+    ITEM_TM15, // HYPER BEAM
+    ITEM_TM19, // GIGA DRAIN
+    ITEM_TM22, // SOLARBEAM
+    ITEM_TM24, // THUNDERBOLT
+    ITEM_TM25, // THUNDER
+    ITEM_TM26, // EARTHQUAKE
+    ITEM_TM29, // PSYCHIC
+    ITEM_TM30, // SHADOW BALL
+    ITEM_TM31, // BRICK BREAK
+    ITEM_TM35, // FLAMETHROWER
+    ITEM_TM36, // SLUDGE BOMB
+    ITEM_TM38, // FIRE BLAST
+    ITEM_TM40, // AERIAL ACE
+    ITEM_TM50, // OVERHEAT
+};
+
+// How often a ball holds one. Six areas, so about three machines are on the ground in a
+// match -- and a contestant walks past one or two areas in a two-minute opening, which is
+// what "most often" has to mean to be felt at all.
+#define BR_ZONE_TM_IN 2
+
 // Where the balls lie: one per area, each as far from that area's four spawn cells as
 // the grid allows, three tiles clear of the edges and two of every warp. A ball on a
 // spawn cell is a ball somebody takes without looking for it.
@@ -127,7 +162,12 @@ void BrZone_Ensure(void)
     // And the balls (POK-261): one per area, and a one-in-eight chance the first is the
     // Master Ball rather than what it would otherwise have been.
     for (i = 0; i < BR_ZONE_ITEMS; i++)
-        gBrZone.items[i] = sBallItems[NextU32() % ARRAY_COUNT(sBallItems)];
+    {
+        if (NextU32() % BR_ZONE_TM_IN == 0)
+            gBrZone.items[i] = PickFrom(sBallTMs, ARRAY_COUNT(sBallTMs));
+        else
+            gBrZone.items[i] = PickFrom(sBallItems, ARRAY_COUNT(sBallItems));
+    }
     if (NextU32() % BR_ZONE_MASTER_ODDS == 0)
         gBrZone.items[NextU32() % BR_ZONE_ITEMS] = ITEM_MASTER_BALL;
     gBrZone.placed = FALSE;

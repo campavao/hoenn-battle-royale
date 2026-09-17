@@ -147,7 +147,15 @@ tap A
 wait 30
 shot try4
 tap A
-wait 30
+# The shakes, the Gotcha! and the mon reaching the party. Thirty frames a press is enough
+# on agbcc and nowhere near it on the modern build, where the same catch runs several
+# seconds slower -- the driver was asserting while the ball was still in the air, which
+# reads exactly like a catch that failed.
+wait 300
+tap A
+wait 300
+tap A
+wait 180
 shot caught
 expectge u8 gPlayerPartyCount 1
 expect u8 gBrMatch 1

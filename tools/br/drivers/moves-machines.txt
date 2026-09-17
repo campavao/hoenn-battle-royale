@@ -1,0 +1,33 @@
+# moves-machines: MOVES is one screen, and the machines in the bag are on it (POK-279).
+#
+# Play-test: "I had a Wingull and when I clicked on MOVES from the Party screen, it
+# kicked me out and said there were no moves. If I went to my bag manually though and
+# used FLY, it was available to teach." Both true -- the relearner only ever offers
+# level-up moves, and a machine used to be taught from the bag -- and the first answer
+# to that was a line pointing at the bag. Cam's call was that MOVES should BE the screen.
+#
+# So this is the same L5 mon that had nothing before: the relearner has no level-up move
+# to offer it at that level, and the list is therefore machines or nothing. It opens.
+#
+# moves-row.txt is the other half: a mon that HAS level-up moves still gets them, with
+# the machines appended after.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerParty+0x54 5
+tap START
+wait 40
+tap A
+wait 80
+tap A
+wait 40
+shot menu
+tap DOWN
+wait 10
+tap A
+wait 240
+# The relearner is up on a mon the old gate would have turned away, and every row on it
+# is a machine from the bag: GiveTheRunOfHoenn deals the eight HMs and nothing else.
+shot machines
+expect u8 gBrCatch+2 0xFF
+say moves machines ok
