@@ -5,6 +5,8 @@
 #include "text.h"
 #include "string_util.h"
 #include "battle.h"
+#include "battle_main.h"
+#include "main.h"
 #include "constants/characters.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
@@ -136,8 +138,59 @@ bool8 BrBattle_TakeAutoMove(void)
     return TRUE;
 }
 
+// THE BAG IS NOT A HIDING PLACE (POK-292).
+//
+// Kanto's README: "The clock does not stop for an open bag: leave it open past the same
+// thirty seconds and the bag closes itself." Ours stopped. BrBattle_ShotTick is called
+// from the action menu and the move menu and from nowhere else, so a duellist who opened
+// the BAG -- or the party screen the POKeMON row opens -- froze the clock for as long as
+// they liked and held the other player there. A better stall than the one the clock was
+// written to close.
+//
+// Counted here rather than inside those screens, because BrFrame runs every frame
+// whatever is on top and neither screen is ours to edit. `callback2 != BattleMainCB2`
+// while gMain.inBattle is exactly "a screen the battle put up is on top": the bag, the
+// party menu, a summary over the party menu.
+//
+// Past the clock it puts B in the frame's keys, never A, so it can only ever back OUT
+// and can never choose an item. BrFrame runs straight after ReadKeys and before the
+// callback, which is what makes a synthetic press land.
+//
+// Link battles only: a bot fight, a wild one and the Safari are nobody else's time.
+void BrBattle_TickStall(void)
+{
+    if (!gMain.inBattle
+     || !(gBattleTypeFlags & BATTLE_TYPE_LINK)
+     || gMain.callback2 == BattleMainCB2)
+    {
+        gBrBattle.stallFrames = 0;
+        return;
+    }
+    if (gBrBattle.stallFrames < BR_SHOT_CLOCK_FRAMES)
+    {
+        gBrBattle.stallFrames++;
+        return;
+    }
+    // Not back to zero: the next press is due in BR_BAG_BACKOUT_FRAMES, not in another
+    // thirty seconds. And the menu this backs out to does not get a fresh clock either.
+    gBrBattle.stallFrames = BR_SHOT_CLOCK_FRAMES - BR_BAG_BACKOUT_FRAMES;
+    gBrBattle.stalled = TRUE;
+    gMain.newKeys |= B_BUTTON;
+    gMain.newAndRepeatedKeys |= B_BUTTON;
+}
+
 bool8 BrBattle_ShotTick(void)
 {
+    // A screen the battle put up already ran this turn's clock out (BrBattle_TickStall),
+    // so coming back to the menu does not buy another thirty seconds -- otherwise the bag
+    // is a hiding place you re-enter, and the clock never catches anybody.
+    if (gBrBattle.stalled)
+    {
+        gBrBattle.stalled = FALSE;
+        gBrBattle.shotFrames = 0;
+        gBrBattle.timedOut++;
+        return TRUE;
+    }
     if (gBrBattle.shotFrames < BR_SHOT_CLOCK_FRAMES)
     {
         gBrBattle.shotFrames++;

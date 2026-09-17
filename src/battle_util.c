@@ -499,20 +499,26 @@ void HandleAction_Run(void)
         // A POKe DOLL, spent at RUN selection and flagged in the action's return value
         // (so both ROMs agree without re-reading a bag they cannot see), is a sure
         // getaway and skips the roll entirely.
-        if (gBattleBufferB[gBattlerAttacker][2] == 0 && !BrBattle_RollRun())
+        // A forfeit is not a flee (POK-292). The shot clock ran out, and that has a
+        // definite loser and a definite winner -- which is vanilla's own link branch
+        // just below, so this one steps aside and lets it run.
+        if (gBattleBufferB[gBattlerAttacker][2] != BR_RUN_FORFEIT)
         {
-            ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
-            gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_CANT_ESCAPE_2;
-            gBattlescriptCurrInstr = BattleScript_PrintFailedToRunString;
-            gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
+            if (gBattleBufferB[gBattlerAttacker][2] == BR_RUN_ROLL && !BrBattle_RollRun())
+            {
+                ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
+                gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_CANT_ESCAPE_2;
+                gBattlescriptCurrInstr = BattleScript_PrintFailedToRunString;
+                gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
+                return;
+            }
+            gCurrentTurnActionNumber = gBattlersCount;
+            if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
+                gBattleOutcome = B_OUTCOME_RAN;
+            else
+                gBattleOutcome = B_OUTCOME_MON_FLED;
             return;
         }
-        gCurrentTurnActionNumber = gBattlersCount;
-        if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
-            gBattleOutcome = B_OUTCOME_RAN;
-        else
-            gBattleOutcome = B_OUTCOME_MON_FLED;
-        return;
 #endif
         gCurrentTurnActionNumber = gBattlersCount;
 

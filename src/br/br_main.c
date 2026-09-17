@@ -62,6 +62,7 @@ void BrFrame(void)
     BrLevels_Tick();
     BrCatch_Tick();
     BrNetlink_Tick();
+    BrBattle_TickStall();
     BrEngage_Tick();
     BrSpectate_Tick();
     BrPick_Tick();

@@ -1,6 +1,14 @@
-# shot-clock: thirty seconds on FIGHT and the clock picks for you, move included. A
-# loopback link battle via the engage (the peer mirrors us); once the action menu is
-# up we press nothing. After the pick the turn plays out: both Treecko take a POUND.
+# shot-clock: thirty seconds to choose in a duel, and then the clock forfeits it
+# (POK-231, POK-292). Kanto's rule: "the PvP clock forfeits; [the bot one] only spends
+# the turn" -- nobody drags an opponent into the fog by sitting on a menu, and an
+# opponent who has walked away from the game cannot hold you there for ever by
+# auto-choosing at the far end.
+#
+# shot-clock-pass.txt is the other half: the same clock in a fight nobody else is
+# waiting on, where it only costs the turn.
+#
+# A loopback link battle via the engage (the peer mirrors us); once the action menu is
+# up we press nothing.
 drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
@@ -19,10 +27,16 @@ expect u16 gBrBattle+2 0
 expectge u16 gBattleMons+0x28 19
 wait 1900
 expectge u16 gBrBattle+2 1
-# the move went out with it: no second clock, the turn ran
-expect u8 gBrBattle+8 0
+# nothing was hiding the clock: the action menu ran it out in the open
+expect u8 gBrBattle+9 0
 wait 600
-shot turn
-expectle u16 gBattleMons+0x28 18
-expectle u16 gBattleMons+0x80 18
-say shot clock ok
+shot after
+# B_OUTCOME_WON (1) | B_OUTCOME_LOST (2). Both bits, because a loopback peer mirrors us
+# -- our own RUN comes back as theirs, so the engine scores a forfeit on both sides at
+# once. Against a real peer it is 2 here and 1 there. What this line holds is that the
+# fight was DECIDED rather than run from: B_OUTCOME_RAN (4) is the flee POK-231 allows,
+# and a forfeit must never be scored as one.
+expect u8 gBattleOutcome 3
+# and the fight is over: the session is closed and the field is back
+expect u8 gBrNetlink 0
+say shot clock forfeits ok

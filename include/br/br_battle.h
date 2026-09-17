@@ -6,14 +6,26 @@
 
 #define BR_SHOT_CLOCK_FRAMES (30 * 60)
 
+// What a RUN action's return value carries, so both ROMs of a link battle agree on what
+// kind of RUN it was without re-reading a bag or a clock neither can see (POK-231/292).
+#define BR_RUN_ROLL 0    // the one-in-four roll
+#define BR_RUN_DOLL 1    // a POKe DOLL: a sure getaway, and nobody is eliminated
+#define BR_RUN_FORFEIT 2 // the shot clock ran out: a definite loser and a definite winner
+
+// How often B is pressed once a screen the battle put up has held the clock past it.
+// Kanto's BAG_BACKOUT_SECONDS: often enough to unwind a picker over a bag over a battle
+// in about a second, slow enough to read as a press.
+#define BR_BAG_BACKOUT_FRAMES 21
+
 struct BrBattle
 {
     /* 0 */ u16 shotFrames;  // frames spent on the current choice
     /* 2 */ u16 timedOut;    // choices the clock made for the player
     /* 4 */ u16 runRolls;    // RUN attempts against a trainer
     /* 6 */ u16 runEscapes;
-    /* 8 */ u8 autoMove;     // the clock chose FIGHT: pick the move at once too
-    /* 9 */ u8 pad[3];
+    /* 8 */ u8 autoMove;      // the clock chose FIGHT: pick the move at once too
+    /* 9 */ u8 stalled;       // a sub-screen already ran this turn's clock out
+    /* 10 */ u16 stallFrames; // frames a screen the battle put up has held the clock
 };
 
 extern struct BrBattle gBrBattle;
@@ -24,6 +36,9 @@ void BrBattle_ShotReset(void);
 bool8 BrBattle_ShotTick(void);
 // The move menu after a timed-out FIGHT: TRUE once, so the move is picked at once.
 bool8 BrBattle_TakeAutoMove(void);
+// Every frame from BrFrame, whatever is on top: the same clock over the BAG and the
+// party screen, which the two above cannot see (POK-292).
+void BrBattle_TickStall(void);
 // HandleAction_Run, link battles: TRUE when the runner gets away (one in four).
 bool8 BrBattle_RollRun(void);
 // The drawn shot clock: the seconds left, top-right of the battle screen. Draw each

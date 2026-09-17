@@ -248,13 +248,31 @@ static void HandleInputChooseAction(void)
         PlayerBufferExecCompleted();
         return;
     }
-    // The shot clock: thirty seconds on FIGHT, then the first move is chosen for you.
+    // The shot clock: thirty seconds to choose, and then it chooses (POK-231/292).
     if (BrBattle_ShotTick())
     {
         PlaySE(SE_SELECT);
-        gBrBattle.autoMove = TRUE;
         BrBattle_HideClock();
-        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_USE_MOVE, 0);
+        if (gBattleTypeFlags & BATTLE_TYPE_LINK)
+        {
+            // Kanto's rule: the PvP clock FORFEITS, with a definite winner -- nobody
+            // drags an opponent into the fog by sitting on a menu, and an opponent who
+            // has walked away from the game cannot hold you there for ever by
+            // auto-choosing at the far end. BR_RUN_FORFEIT rides the action's return
+            // value, the way the POKe DOLL does, so the peer's ROM reads the same byte
+            // and both agree without seeing each other's clock.
+            BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, BR_RUN_FORFEIT);
+        }
+        else
+        {
+            // Against a bot or a wild one, FIGHT and then the first move -- nobody else is
+            // waiting, so there is nothing to forfeit. Kanto only SPENDS the turn here
+            // ("their mon does nothing while the bot's moves"); ours still swings. See
+            // POK-313: the engine has an action for doing nothing and it is not safely
+            // reachable from the player's controller.
+            gBrBattle.autoMove = TRUE;
+            BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_USE_MOVE, 0);
+        }
         PlayerBufferExecCompleted();
         return;
     }
@@ -293,7 +311,7 @@ static void HandleInputChooseAction(void)
             if (CheckBagHasItem(ITEM_POKE_DOLL, 1))
             {
                 RemoveBagItem(ITEM_POKE_DOLL, 1);
-                BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, 1);
+                BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, BR_RUN_DOLL);
                 break;
             }
 #endif
@@ -518,7 +536,8 @@ static void HandleInputChooseMove(void)
 #if BR
     if (BrBattle_TakeAutoMove() || BrBattle_ShotTick())
     {
-        // Out of time: the move under the cursor, at the default target.
+        // Out of time: the move under the cursor, at the default target. No forfeit here
+        // -- FIGHT was chosen, so the turn is already committed to a move.
         gMultiUsePlayerCursor = GetDefaultMoveTarget(gActiveBattler);
         BrBattle_HideClock();
         BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, gMoveSelectionCursor[gActiveBattler] | (gMultiUsePlayerCursor << 8));

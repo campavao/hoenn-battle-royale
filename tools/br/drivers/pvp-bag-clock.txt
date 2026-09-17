@@ -1,0 +1,64 @@
+# pvp-bag-clock: THE BAG IS NOT A HIDING PLACE (POK-292).
+#
+# Kanto's README: "The clock does not stop for an open bag: leave it open past the same
+# thirty seconds and the bag closes itself." Ours stopped dead. BrBattle_ShotTick is
+# called from the action menu and the move menu and from nowhere else, so a duellist who
+# opened the BAG -- or the party screen the POKeMON row opens -- froze the clock for as
+# long as they liked and held the other player there. A better stall than the one the
+# shot clock was written to close, and it arrived with POK-207 opening the bag in a duel.
+#
+# pvp-bag.txt is the door itself: that the bag opens at all. This is the clock over it.
+# shot-clock.txt is the clock in the open, where it forfeits.
+#
+# What this pins is the watchdog: the shot clock's own counter FROZEN while the bag is
+# up, BrBattle_TickStall's counter running in its place, and the bag off the top of the
+# stack afterwards without a button being touched. It stops there rather than following
+# the forfeit through, because a loopback peer cannot service a link transfer that starts
+# while this ROM is inside the bag menu and the fight wedges -- see POK-312, which is
+# about that wedge and not about this clock.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 00 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 600
+expect u8 gBrNetlink 1
+tap A
+wait 90
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+# The action menu has been counting: shotFrames is up but nowhere near the thirty
+# seconds, and nothing has timed out.
+expectge u16 gBrBattle 1
+expectle u16 gBrBattle 1799
+expect u16 gBrBattle+2 0
+# FIGHT is on the left, BAG on the right.
+tap RIGHT
+wait 30
+tap A
+wait 150
+# 3 is STATE_WAIT_ACTION_CASE_CHOSEN: the bag is open over the battle. Nothing is
+# pressed from here -- every press after this line is the watchdog's own.
+expect u8 gBattleCommunication 3
+shot bag
+# ...and the shot clock has stopped, which is the bug it is named after. Twenty-eight
+# more seconds pass and its counter is still where the action menu left it -- a couple of
+# hundred frames, nowhere near the 1800 it needs. BrBattle_ShotTick is not called from
+# inside a bag and never was.
+wait 1700
+expectle u16 gBrBattle 400
+# The clock that IS running is the watchdog's, and it is nearly out.
+expectge u16 gBrBattle+10 1700
+shot still-in-the-bag
+wait 400
+# Out of time. B was pressed for us: the bag is off the top of the stack (the watchdog
+# only counts while a screen the battle put up is up, so a zero here IS the bag closing),
+# and the flag that says this turn's clock has already gone is set, so the menu it backs
+# out to does not get a fresh thirty seconds.
+expect u8 gBrBattle+9 1
+expect u16 gBrBattle+10 0
+shot backed-out
+say pvp bag clock ok
