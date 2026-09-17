@@ -12,6 +12,9 @@
 #include "br/br_ring.h"
 #include "data.h"
 #include "constants/pokemon.h"
+#include "battle.h"
+#include "constants/battle_move_effects.h"
+#include "constants/moves.h"
 #include "br/br_moves.h"
 #include "br/br_levels.h"
 
@@ -137,72 +140,286 @@ static void GrowUp(struct Pokemon *mon)
     }
 }
 
-// Where in this species' own learnset a move sits, or 0 for one that is not in it at all
-// -- a TM, or something inherited. 0 makes it the first thing an automatic learn takes,
-// which is right for a move nobody chose and harmless for one somebody did: that one is
-// kept and never reaches this.
-static u8 LearnLevelOf(const u16 *learnset, u16 move)
-{
-    u16 i;
+// ---- a move worth having (POK-311) -----------------------------------------------
+//
+// Cam, 2026-09-17: "handcrafting each move set at the levels, so that good moves -- more
+// battle viable moves -- are chosen automatically. I noticed in Kanto Battle Royale
+// there's an instance where Electrode gets Self-Destruct and Explosion, which is just kind
+// of ridiculous." A level-up learnset is written for a story where you pick your own four;
+// walked in order it ends on whatever comes last, and a SCEPTILE lifted to 75 knew AGILITY,
+// SLAM, DETECT and FALSE SWIPE and had never heard of LEAF BLADE.
+//
+// A rule rather than a table: 386 species, no data to keep, and ROM only. A move is worth
+// roughly the damage it does in a turn from THIS mon -- its power, how often it lands, its
+// own type, and which of its two attacking stats the move's type reads in Gen 3 -- and a
+// set is worth its moves, less for saying the same thing twice.
 
-    for (i = 0; learnset[i] != LEVEL_UP_END; i++)
+#define BR_WORTH_STATUS_GOOD 50
+#define BR_WORTH_STATUS 20
+
+static u16 StatusWorth(u8 effect)
+{
+    switch (effect)
     {
-        if ((learnset[i] & LEVEL_UP_MOVE_ID) == move)
-            return (learnset[i] & LEVEL_UP_MOVE_LV) >> 9;
+    case EFFECT_SPLASH:
+    case EFFECT_TELEPORT:
+        return 0;
+    case EFFECT_SLEEP:
+    case EFFECT_TOXIC:
+    case EFFECT_PARALYZE:
+    case EFFECT_WILL_O_WISP:
+    case EFFECT_CONFUSE:
+    case EFFECT_LEECH_SEED:
+    case EFFECT_RESTORE_HP:
+    case EFFECT_SOFTBOILED:
+    case EFFECT_MORNING_SUN:
+    case EFFECT_SYNTHESIS:
+    case EFFECT_MOONLIGHT:
+    case EFFECT_ATTACK_UP_2:
+    case EFFECT_SPECIAL_ATTACK_UP_2:
+    case EFFECT_SPEED_UP_2:
+    case EFFECT_DRAGON_DANCE:
+    case EFFECT_CALM_MIND:
+    case EFFECT_BULK_UP:
+        return BR_WORTH_STATUS_GOOD;
     }
-    return 0;
+    return BR_WORTH_STATUS;
 }
 
-// An empty slot if there is one, otherwise the most outdated slot the player did not
-// choose. With all four chosen, nothing is learned -- which is the right answer and the
-// reason this can never be a prompt: a prompt is a freeze with the fog closing.
-static void Teach(struct Pokemon *mon, u8 slot, u16 move)
+// Power 1 is the cartridge's way of saying "worked out at the time".
+static u16 OddWorth(u8 effect)
 {
-    const u16 *learnset = gLevelUpLearnsets[GetMonData(mon, MON_DATA_SPECIES, NULL)];
-    u8 i, worst = MAX_MON_MOVES, worstLevel = 0xFF;
+    switch (effect)
+    {
+    case EFFECT_LEVEL_DAMAGE:
+        return 60; // SEISMIC TOSS, NIGHT SHADE: the rung, every time
+    case EFFECT_FRUSTRATION:
+        return 60; // nobody in a match has had time to be liked
+    case EFFECT_SUPER_FANG:
+        return 50;
+    case EFFECT_OHKO:
+        return 35;
+    case EFFECT_RETURN:
+        return 30;
+    case EFFECT_DRAGON_RAGE:
+        return 25;
+    case EFFECT_SONICBOOM:
+        return 15;
+    }
+    return 40;
+}
+
+// What a move's worth depends on, read off the mon ONCE a lift. Every GetMonData on the
+// species decrypts and checksums the whole box mon, and the first cut of this asked from
+// inside MoveWorth: a thousand times a mon, a third of a second each, a two-second freeze
+// for a full party every time the fog moved. one-clock.txt caught it.
+struct BrLearner
+{
+    u16 atk;
+    u16 spAtk;
+    u8 types[2];
+};
+
+static u16 MoveWorth(const struct BrLearner *who, u16 move)
+{
+    const struct BattleMove *m = &gBattleMoves[move];
+    u16 mine, best;
+    u32 worth;
+
+    if (move == MOVE_NONE)
+        return 0;
+    if (m->power == 0)
+        return StatusWorth(m->effect) * (m->accuracy == 0 ? 100 : m->accuracy) / 100;
+    if (m->power == 1)
+        return OddWorth(m->effect);
+    // The move that ends the mon using it. Worth having when there is nothing else, and
+    // never worth having twice: the same-effect rule below is what stops the second.
+    if (m->effect == EFFECT_EXPLOSION)
+        return 15;
+
+    worth = m->power;
+    switch (m->effect)
+    {
+    case EFFECT_MULTI_HIT:
+        worth *= 3;
+        break;
+    case EFFECT_DOUBLE_HIT:
+    case EFFECT_TWINEEDLE:
+        worth *= 2;
+        break;
+    case EFFECT_TRIPLE_KICK:
+        worth *= 4;
+        break;
+    case EFFECT_RECHARGE:
+    case EFFECT_RAZOR_WIND:
+    case EFFECT_SKY_ATTACK:
+    case EFFECT_SKULL_BASH:
+    case EFFECT_SOLAR_BEAM:
+    case EFFECT_SEMI_INVULNERABLE:
+    case EFFECT_FOCUS_PUNCH:
+    case EFFECT_FAKE_OUT:
+        worth /= 2; // two turns for one hit, or one hit that mostly does not happen
+        break;
+    case EFFECT_FALSE_SWIPE:
+        worth /= 3; // cannot finish anything, in a game about finishing things
+        break;
+    case EFFECT_DREAM_EATER:
+    case EFFECT_SNORE:
+    case EFFECT_SPIT_UP:
+        worth /= 5; // needs a second move to have worked first
+        break;
+    case EFFECT_OVERHEAT:
+    case EFFECT_SUPERPOWER:
+        worth = worth * 4 / 5;
+        break;
+    }
+    worth = worth * (m->accuracy == 0 ? 100 : m->accuracy) / 100;
+    if (m->type == who->types[0] || m->type == who->types[1])
+        worth = worth * 3 / 2;
+    mine = IS_TYPE_PHYSICAL(m->type) ? who->atk : who->spAtk;
+    best = who->atk > who->spAtk ? who->atk : who->spAtk;
+    if (best != 0)
+        worth = worth * mine / best;
+    return (u16)worth;
+}
+
+// Is move `j` the one that makes move `i` redundant? Only ever the better of the two, or
+// the earlier on a tie, so exactly one of a pair pays for it.
+static bool8 Outranks(const u16 *worth, u8 j, u8 i)
+{
+    return worth[j] > worth[i] || (worth[j] == worth[i] && j < i);
+}
+
+// Two of one thing: SELFDESTRUCT and EXPLOSION, two ways to lower ATTACK, or a second
+// attack of a type the set already hits harder with.
+static bool8 Echoes(const struct BattleMove *a, const struct BattleMove *b)
+{
+    if (a->power == 0 || a->effect == EFFECT_EXPLOSION)
+        return a->effect == b->effect;
+    return b->power > 1 && b->effect != EFFECT_EXPLOSION && a->type == b->type;
+}
+
+static u16 SetWorth(const struct BrLearner *who, const u16 *moves)
+{
+    u16 worth[MAX_MON_MOVES];
+    u16 total = 0;
+    u8 i, j, hitters = 0;
+
+    for (i = 0; i < MAX_MON_MOVES; i++)
+        worth[i] = MoveWorth(who, moves[i]);
+    for (i = 0; i < MAX_MON_MOVES; i++)
+    {
+        const struct BattleMove *a = &gBattleMoves[moves[i]];
+        u16 w = worth[i];
+        u8 statusAbove = 0, echoes = 0;
+
+        if (moves[i] == MOVE_NONE)
+            continue;
+        if (a->power != 0 && a->effect != EFFECT_EXPLOSION)
+            hitters++;
+        for (j = 0; j < MAX_MON_MOVES; j++)
+        {
+            const struct BattleMove *b = &gBattleMoves[moves[j]];
+
+            if (j == i || moves[j] == MOVE_NONE || !Outranks(worth, j, i))
+                continue;
+            if (a->power == 0 && b->power == 0)
+                statusAbove++;
+            if (Echoes(a, b))
+                echoes++;
+        }
+        // Said twice is worth less than half; said three times, a DOUBLE-EDGE, a TAKE DOWN
+        // and a HEADBUTT, is a slot IRON DEFENSE would have used better.
+        if (echoes == 1)
+            w = w * 2 / 5;
+        else if (echoes >= 2)
+            w = w / 5;
+        if (statusAbove >= 2)
+            w = w * 3 / 10; // a third status move is a turn nobody will ever spend
+        total += w;
+    }
+    // Nothing to attack with is not a moveset, whatever else is in it.
+    return hitters == 0 ? total / 4 : total;
+}
+
+// An empty slot if there is one; otherwise whichever swap leaves the best four, over the
+// slots the player did not choose -- and no swap at all when the four it has are better
+// than any of them with the new move in. With all four chosen nothing is learned either,
+// and this can never be a prompt: a prompt is a freeze with the fog closing.
+static void Teach(const struct BrLearner *who, u16 *moves, u8 slot, u16 move)
+{
+    u16 trial[MAX_MON_MOVES];
+    u16 bestWorth, w;
+    u8 i, j, best = MAX_MON_MOVES;
 
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
-        u16 have = GetMonData(mon, MON_DATA_MOVE1 + i, NULL);
-        u8 level;
-
-        if (have == move)
+        if (moves[i] == move)
             return;
-        if (have == MOVE_NONE)
+        if (moves[i] == MOVE_NONE)
         {
-            SetMonMoveSlot(mon, move, i);
+            moves[i] = move;
             return;
-        }
-        if (BrMoves_IsKept(slot, i))
-            continue;
-        level = LearnLevelOf(learnset, have);
-        if (level < worstLevel)
-        {
-            worstLevel = level;
-            worst = i;
         }
     }
-    if (worst == MAX_MON_MOVES)
-        return;
-    RemoveMonPPBonus(mon, worst);
-    SetMonMoveSlot(mon, move, worst);
+    bestWorth = SetWorth(who, moves);
+    for (i = 0; i < MAX_MON_MOVES; i++)
+    {
+        if (BrMoves_IsKept(slot, i))
+            continue;
+        for (j = 0; j < MAX_MON_MOVES; j++)
+            trial[j] = j == i ? move : moves[j];
+        w = SetWorth(who, trial);
+        if (w > bestWorth)
+        {
+            bestWorth = w;
+            best = i;
+        }
+    }
+    if (best != MAX_MON_MOVES)
+        moves[best] = move;
 }
 
 // Every move the levels it skipped would have taught it. Walking the learnset rather than
 // calling MonTryLearningNewMove, which only ever answers for the level the mon is standing
 // on: a lift from 5 to 75 would learn whatever is written at exactly 75 -- usually nothing
 // -- and none of the seventy levels in between.
-static void LearnThrough(struct Pokemon *mon, u8 slot, u8 from, u8 to)
+//
+// From the bottom of the learnset, not from the level it was lifted from (POK-311): a mon
+// caught at 30 knows the last four things written before 30, which is the same accident
+// one level at a time. Teach only ever swaps for a better four, so offering it a move it
+// already passed over costs nothing and is how a wild GROVYLE finds LEAF BLADE.
+static void LearnThrough(struct Pokemon *mon, u8 slot, u8 to)
 {
-    const u16 *learnset = gLevelUpLearnsets[GetMonData(mon, MON_DATA_SPECIES, NULL)];
+    u16 species = GetMonData(mon, MON_DATA_SPECIES, NULL);
+    const u16 *learnset = gLevelUpLearnsets[species];
+    struct BrLearner who;
+    u16 had[MAX_MON_MOVES];
+    u16 moves[MAX_MON_MOVES];
     u16 i;
 
+    who.atk = GetMonData(mon, MON_DATA_ATK, NULL);
+    who.spAtk = GetMonData(mon, MON_DATA_SPATK, NULL);
+    who.types[0] = gSpeciesInfo[species].types[0];
+    who.types[1] = gSpeciesInfo[species].types[1];
+    for (i = 0; i < MAX_MON_MOVES; i++)
+        had[i] = moves[i] = GetMonData(mon, MON_DATA_MOVE1 + i, NULL);
     for (i = 0; learnset[i] != LEVEL_UP_END; i++)
     {
         u8 level = (learnset[i] & LEVEL_UP_MOVE_LV) >> 9;
 
-        if (level > from && level <= to)
-            Teach(mon, slot, learnset[i] & LEVEL_UP_MOVE_ID);
+        if (level <= to)
+            Teach(&who, moves, slot, learnset[i] & LEVEL_UP_MOVE_ID);
+    }
+    // Only the slots that ended up different are written, so a move that survived the
+    // whole walk keeps the PP it had and the PP UPs somebody spent on it.
+    for (i = 0; i < MAX_MON_MOVES; i++)
+    {
+        if (moves[i] == had[i])
+            continue;
+        if (had[i] != MOVE_NONE)
+            RemoveMonPPBonus(mon, i);
+        SetMonMoveSlot(mon, moves[i], i);
     }
 }
 
@@ -216,20 +433,18 @@ static void LiftParty(u8 level)
         u16 species = GetMonData(mon, MON_DATA_SPECIES);
         u32 exp;
         u16 hp, maxBefore, maxAfter;
-        u8 was;
 
         if (species == SPECIES_NONE || GetMonData(mon, MON_DATA_LEVEL) >= level)
             continue;
         exp = gExperienceTables[gSpeciesInfo[species].growthRate][level];
         hp = GetMonData(mon, MON_DATA_HP);
         maxBefore = GetMonData(mon, MON_DATA_MAX_HP);
-        was = GetMonData(mon, MON_DATA_LEVEL);
         SetMonData(mon, MON_DATA_EXP, &exp);
         CalculateMonStats(mon);
         // Evolve before the moves are worked out, so the learnset walked is the one it
         // will be standing in when the fighting starts.
         GrowUp(mon);
-        LearnThrough(mon, i, was, level);
+        LearnThrough(mon, i, level);
         // Keep the wound: the new max grows, the missing HP stays missing.
         maxAfter = GetMonData(mon, MON_DATA_MAX_HP);
         if (hp > 0)
@@ -268,7 +483,7 @@ void BrLevels_LiftTrainer(struct Pokemon *party, u8 count)
         if (level > was)
         {
             GrowUp(mon);
-            LearnThrough(mon, PARTY_SIZE, was, level);
+            LearnThrough(mon, PARTY_SIZE, level);
         }
         // A trainer's mon walks in whole, unlike the player's, which keeps its wound.
         {

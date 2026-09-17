@@ -52,11 +52,12 @@ tap A
 wait 200
 shot fight
 expect u16 gBattleMons 279
-# POUND (1) and LEER (43) are gone. AGILITY (97), SLAM (21), DETECT (197) and FALSE SWIPE
-# (206) are what a SCEPTILE knows on the way to 75, and nothing here was the player's, so
-# the rung took all four.
-expect u16 gBattleMons+0x0C 97
-expect u16 gBattleMons+0x0E 21
-expect u16 gBattleMons+0x10 197
-expect u16 gBattleMons+0x12 206
+# POUND (1) and LEER (43) are gone, and what replaced them is a set rather than the last
+# four lines of the learnset (POK-311): PURSUIT (228), AGILITY (97), LEAF BLADE (348) and
+# SLAM (21). By the book it was AGILITY, SLAM, DETECT and FALSE SWIPE -- a SCEPTILE that
+# had never heard of LEAF BLADE. Nothing here was the player's, so the rung had all four.
+expect u16 gBattleMons+0x0C 228
+expect u16 gBattleMons+0x0E 97
+expect u16 gBattleMons+0x10 348
+expect u16 gBattleMons+0x12 21
 say grows up ok

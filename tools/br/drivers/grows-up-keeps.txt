@@ -83,12 +83,13 @@ shot fight
 # SCEPTILE, two evolutions up from the TREECKO that was taught the move...
 expect u16 gBattleMons 279
 # ...and TOXIC (92) is still in slot 2, the slot GiveMoveToMon put it in at level 5 when
-# POUND and LEER held the first two. The three around it are SCEPTILE's own -- DETECT
-# (197), FALSE SWIPE (206), SLAM (21) -- so the rung filled everything it was allowed to
-# and stopped at the one it was not. Without the mark, TOXIC scores 0 in LearnLevelOf (a
-# TM is in no learnset) and would have been the FIRST slot taken.
+# POUND and LEER held the first two. The three around it are the best SCEPTILE's own
+# learnset has to go with it (POK-311) -- AGILITY (97), SLAM (21), LEAF BLADE (348) -- so
+# the rung filled everything it was allowed to and stopped at the one it was not. A TOXIC
+# nobody chose is only worth 42 to the rule and PURSUIT would have had its slot: that is
+# grows-up.txt's set, and the difference between the two is the mark.
 expect u16 gBattleMons+0x10 92
-expect u16 gBattleMons+0x0C 197
-expect u16 gBattleMons+0x0E 206
-expect u16 gBattleMons+0x12 21
+expect u16 gBattleMons+0x0C 97
+expect u16 gBattleMons+0x0E 21
+expect u16 gBattleMons+0x12 348
 say grows up keeps ok

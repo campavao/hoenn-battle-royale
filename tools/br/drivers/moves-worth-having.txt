@@ -1,0 +1,49 @@
+# moves-worth-having: an automatic learn picks a set, not the last four (POK-311).
+#
+# Cam, 2026-09-17: "I noticed in Kanto Battle Royale there's an instance where Electrode
+# gets Self-Destruct and Explosion, which is just kind of ridiculous." Walked in order, an
+# ELECTRODE's learnset ends on SWIFT, EXPLOSION, MIRROR COAT and whatever was fourth; the
+# rung now keeps whichever four are worth the most together. grows-up.txt is the same rule
+# on a SCEPTILE, which used to arrive at 75 without LEAF BLADE.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# SPILL one Lv5 VOLTORB (species 100) onto the cell we face: see spill-pickup.txt.
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 01 00 09 01 01 00 0C 00 10 00 64 00 05 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+expect u8 gBrLoot+0xA0 1
+tap A
+wait 60
+expect u8 gPlayerPartyCount 2
+# the rung: 75, so VOLTORB is an ELECTRODE (30) with its whole learnset behind it
+poke u8 gBrRing+1 5
+poke u8 gBrRing 1
+wait 120
+expect u8 gPlayerParty+0xB8 75
+# The lead faints on paper (HP is in the clear at +0x56), so the fight opens on the
+# ELECTRODE and gBattleMons shows its moves decrypted.
+poke u16 gPlayerParty+0x56 0
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gBrMailbox+0x10D8 05 07 04 00 00 1F 00 00 00
+poke u16 gBrMailbox+0x0C 4
+wait 400
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 200
+shot fight
+expect u16 gBattleMons 101
+# MIRROR COAT (243), SWIFT (129), LIGHT SCREEN (113), SPARK (209): its one STAB attack, a
+# second type to hit with, and no SELFDESTRUCT (120) or EXPLOSION (153) in any slot. By
+# the book this was SWIFT, EXPLOSION, MIRROR COAT and LIGHT SCREEN.
+expect u16 gBattleMons+0x0C 243
+expect u16 gBattleMons+0x0E 129
+expect u16 gBattleMons+0x10 113
+expect u16 gBattleMons+0x12 209
+say moves worth having ok
