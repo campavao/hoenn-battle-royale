@@ -306,3 +306,50 @@ Everything above that is not marked **fixed**, plus:
   a relay-side resume before the page can do anything better than say so.
 * **Six Zone areas is thin for a two-minute opening** (see above). A pacing decision,
   not a bug: worth measuring how often two contestants share an area first.
+
+---
+
+## 2026-09-17, the late session: what was wrong with the session itself
+
+### The shell had been playing a ROM three hours older than the fixes -- **fixed**
+
+Every report in the first half of this session was made against a build from before the
+fixes it was reporting on, and nothing on screen could say so. `runPatchingScreen`'s dev
+branch said "the stored ROM is pre-patched, so it is a local build, run it" and never
+asked *which* local build; the version line was `patch 1 · shell 0.0.0`, two hand-bumped
+constants that do not move when a build does.
+
+* The version line now carries the running ROM's sha1: `rom 9e91ed3`, or
+  `rom abc1234 — STALE, build is 9e91ed3` (`2347f6add`, `54838bfc2`).
+* `tools/br/dev-patch.sh` leaves the built ROM at `web/public/patch/pokeemerald.gba` and
+  the shell fetches it when the stored one does not match (`aa5e4734b`).
+* `#fresh` unregisters service workers and drops caches; the sidecars are `no-store`.
+* "Forget stored ROM" was stopping the core before the unlink was flushed, so it was
+  not forgetting anything.
+
+**Ask for the version line before trusting a report.** A play-test against the wrong
+build is worse than none: every finding is noise and the real bugs stay hidden.
+
+### Bots were seven tiles from where their brain walked them -- **fixed** (`54eb24f4b`)
+
+"They are not respecting collision in general, whether that be trees or hopping over
+cliffs." They were respecting it exactly, seven tiles away. Emerald keeps two coordinate
+spaces for the same tile -- map data counts from the map's corner, everything running
+counts from seven tiles further out -- and `world.ts` has claimed "the wire adds
+MAP_OFFSET on its way to the ROM" since POK-236 with nothing doing it.
+`web/src/net/cells.ts` is the door. Warps are left alone, which is why the drop was
+always right and only the walking was wrong.
+
+The eyeline was measured across the two spaces too, so **any report about fights being
+hard to trigger that predates this is suspect** and wants re-testing before it is chased.
+
+### Still open from this session
+
+* **MOVES should be a real menu** -- Cam has decided the second option in POK-279: the
+  relearner list *plus* every TM/HM in the bag this species can learn, taught from there.
+  What shipped is only the hint that points at the bag.
+* **The match ends and the player is still in it.** "If the game is over I should be
+  kicked back to the main menu."
+* **Professor Birch's lab should be closed.**
+* The wardrobe and MY VOICE, above.
+
