@@ -300,6 +300,12 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   statusEl.textContent = 'Applying the patch…';
   try {
     const patched = await applyPatchInWorker(emu.readRom(), release.patch);
+
+    // The same line the local-build path gets: which ROM is in the tab, in seven
+    // characters. This is the path a stock ROM takes, and it is just as able to be
+    // running something other than the build everyone is talking about -- a cached
+    // BPS is a stale ROM with a fresh-looking patch number over it.
+    setVersionLine(`${versionText(release.info)} · ${await buildLine(release.info, patched)}`);
     return {
       bytes: patched,
       usingPatched: true,

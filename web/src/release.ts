@@ -28,10 +28,18 @@ function isHtml(res: Response): boolean {
   return (type ?? '').includes('text/html');
 }
 
+// Never from the browser's own cache. The patch and the sidecars change every time
+// the ROM is rebuilt and none of their names do, so a cached copy is a stale game
+// with a fresh-looking version number over it -- which cost the 2026-09-17 play-test
+// a whole session of reporting bugs that had already been fixed. The service worker
+// caches these deliberately for offline play and answers before this does; this is
+// about the HTTP cache underneath it.
+const FRESH: RequestInit = { cache: 'no-store' };
+
 async function fetchJson<T>(url: string): Promise<T | null> {
   let res: Response;
   try {
-    res = await fetch(url);
+    res = await fetch(url, FRESH);
   } catch {
     return null; // network error, offline, etc. -- treated the same as "not there"
   }
@@ -43,7 +51,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 async function fetchBytes(url: string): Promise<Uint8Array | null> {
   let res: Response;
   try {
-    res = await fetch(url);
+    res = await fetch(url, FRESH);
   } catch {
     return null;
   }
