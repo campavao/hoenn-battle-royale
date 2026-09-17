@@ -7,7 +7,8 @@
 // as the match runs. So this decodes the grids once and answers those two questions.
 //
 // Coordinates are map coords with no MAP_OFFSET, the way `landing.json` and the
-// exporter write them; the wire adds MAP_OFFSET on its way to the ROM.
+// exporter write them. net/cells.ts is where they become the ROM's -- it really does
+// add MAP_OFFSET now, which for a long time nothing did (POK-236).
 
 /** One map's row in world.json, with only what walking needs. */
 export interface WorldMap {

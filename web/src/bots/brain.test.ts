@@ -511,7 +511,10 @@ describe('a bot caught in the fog', () => {
     });
     const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
     bots.start(dealt, 0);
-    for (let t = STEP_MS; t <= seconds * 1000; t += STEP_MS) bots.tick(t);
+    // The bleed is on a four-second wall clock, not on the step cadence -- so the
+    // last tick lands exactly on the second asked for, whatever STEP_MS happens to be.
+    for (let t = STEP_MS; t < seconds * 1000; t += STEP_MS) bots.tick(t);
+    bots.tick(seconds * 1000);
     return { bots, sent, seat: dealt[0].seat };
   }
 

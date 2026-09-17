@@ -12,6 +12,7 @@ import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './net/slots';
 import { decode, type Msg, type PackedMon } from './net/wire';
+import { MAP_OFFSET, toRomCells } from './net/cells';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
 import { DEFAULT_SAFARI_SECS, Director, type DirectorState, type DirectorWorld } from './match/director';
@@ -1149,9 +1150,11 @@ function startBots(
           .all()
           .map((l) => ({ ...l, mapId: idByRef.get(`${l.map.group}:${l.map.num}`) ?? '' }))
           .filter((l) => l.mapId !== ''),
+      // The table holds what the wire said, which is the ROM's space; the brain asks
+      // about the grid it walks.
       at: (mapId, x, y) => {
         const ref = refById.get(mapId);
-        return ref ? loot.at(ref, x, y) : undefined;
+        return ref ? loot.at(ref, x + MAP_OFFSET, y + MAP_OFFSET) : undefined;
       },
       bagAt: (key) => loot.bagAt(key),
     },
@@ -1159,14 +1162,17 @@ function startBots(
     // whoever sees the other starts it. The team goes over as a `trainer` card first,
     // because the ROM has to build a party before the challenge lands.
     engage: {
+      // ...and back out of it on the way in. A player's cell on the roster came from
+      // their own ROM, so it is seven tiles out from the grid the brain walks -- and an
+      // eyeline measured between the two spaces is an eyeline measured wrong.
       players: () =>
         players()
           .filter((e) => e.alive && !seatsDealt.has(e.seat) && e.map && e.x !== undefined && e.y !== undefined)
           .map((e) => ({
             seat: e.seat,
             mapId: idByRef.get(`${e.map!.group}:${e.map!.num}`) ?? '',
-            x: e.x!,
-            y: e.y!,
+            x: e.x! - MAP_OFFSET,
+            y: e.y! - MAP_OFFSET,
             dir: e.dir as 1 | 2 | 3 | 4,
             busy: busySeats.has(e.seat),
           }))
@@ -1531,11 +1537,15 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   roster.setMySeat(0);
   const solo = startBots(
     (msg) => {
-      rom.push(msg);
-      roster.applyMsg(msg);
-      loot.note(msg);
-      log.note(msg, performance.now());
-      if (msg.t === 'out') out?.(msg.seat);
+      // Into the ROM's coordinate space on the way out (net/cells.ts): the brain walks
+      // the exporter's grid, the ROM draws in the one seven tiles further out.
+      const wire = toRomCells(msg);
+
+      rom.push(wire);
+      roster.applyMsg(wire);
+      loot.note(wire);
+      log.note(wire, performance.now());
+      if (wire.t === 'out') out?.(wire.seat);
     },
     [0],
     seed,
@@ -1800,11 +1810,15 @@ function wireRoom(
     // would otherwise be the one client that cannot see the bots it is walking.
     bots = startBots(
       (msg) => {
-        bridge!.relay.all(msg);
-        rom.push(msg);
-        bridge!.roster.applyMsg(msg);
-        loot.note(msg); // a bot taking a ball takes it off this page's table too
-        if (msg.t === 'out') localOut?.(msg.seat);
+        // The wire is the ROM's coordinate space (net/cells.ts): every client's ghosts
+        // are drawn from it, and a player's own `place` already arrives that way.
+        const wire = toRomCells(msg);
+
+        bridge!.relay.all(wire);
+        rom.push(wire);
+        bridge!.roster.applyMsg(wire);
+        loot.note(wire); // a bot taking a ball takes it off this page's table too
+        if (wire.t === 'out') localOut?.(wire.seat);
       },
       seats,
       seed,

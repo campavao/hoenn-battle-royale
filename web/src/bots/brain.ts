@@ -18,8 +18,17 @@ import { duel, type DuelResult } from './duel';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg } from '../net/wire';
 
-/** Kanto's pace: four tiles a second, whatever the host's tab is doing. */
-export const STEP_MS = 250;
+/** One tile per walk animation, whatever the host's tab is doing.
+ *
+ *  Emerald's WALK_NORMAL takes sixteen frames -- a sixtieth each, so 266.67ms -- and
+ *  a ghost walks with `GetWalkNormalMovementAction` like anything else on the map
+ *  (br_ghosts.c). Kanto's four-a-second was right for Kanto's engine and is 17ms too
+ *  fast for this one, which does not sound like much until you notice it never stops:
+ *  a step arrives before the last one has finished, every time, so BR_STEP_QUEUE fills
+ *  and the ghost snaps forward to catch up. The play-test read that as bots moving
+ *  faster than the player, and they were -- by one tile every fifteen.
+ */
+export const STEP_MS = 267;
 /** How far a bot will look for its next wander target before settling for less. */
 const WANDER_BUDGET = 1500;
 /** BR_ENGAGE_GRACE in src/br/br_engage.c: 120 frames, and a frame is a sixtieth. */
@@ -481,7 +490,12 @@ export class Bots {
       return;
     }
     if (now < walker.bleedAt) return;
-    walker.bleedAt = now + FOG_TICK_MS;
+    // The next bite is due a fixed four seconds after the last one was DUE, not after
+    // it happened: a tick never lands exactly on the beat, and `now + FOG_TICK_MS`
+    // pushed the whole schedule later every time -- so a bot outside the ring bled
+    // slightly slower than the ROM bleeds a player, and by more the slower the tick.
+    walker.bleedAt += FOG_TICK_MS;
+    if (walker.bleedAt <= now) walker.bleedAt = now + FOG_TICK_MS; // a long stall: start over
     let standing = 0;
     walker.party = walker.party.map((mon) => {
       if (mon.hp === 0) return mon;
