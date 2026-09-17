@@ -225,6 +225,70 @@ The poll read axes 0 and 1 only, which is where a *standard* pad puts its left s
 Every axis counts now (even = horizontal, odd = vertical, axis 9 is the DirectInput hat),
 and the pad readout names the axes that moved, so the next pad that misbehaves says so.
 
+## 2026-09-17, Cam, the profile screen (recorded, to do in a later batch)
+
+### The wardrobe is four sprites, and you cannot see the ones you have not earned
+
+"For the sprite, I can only ever pick May / Brendan / Rival May / Rival Brendan. I
+should be able to pick kind of like any sprites -- the way Kanto Battle Royale has it,
+the amount of wins you get means you get more sprites. Maybe that is how this works; I
+see RIVAL BRENDAN is at one win. But in Kanto you're able to preview all the different
+skins even if you don't have all the wins yet."
+
+Two separate things, and the second is the smaller one.
+
+**The ladder exists.** `SKIN_UNLOCK_WINS = [0, 0, 1, 3]` in `web/src/match/career.ts`,
+and `updateCareer` refuses a locked skin rather than wearing it. So the mechanic is
+there; what is missing is everything for it to be a mechanic *about*.
+
+**Four is the whole wardrobe**, because `sSkinGraphics` in `src/br/br_ghosts.c` has four
+entries -- BRENDAN, MAY, RIVAL_BRENDAN, RIVAL_MAY -- and a skin on the wire is an index
+into it. Kanto unlocks nine trainer *classes* (`lib/skins.lua`). Emerald has the same
+kind of thing sitting there unused: `OBJ_EVENT_GFX_HIKER`, `_BEAUTY`, `_YOUNGSTER`,
+`_FISHERMAN`, `_BLACK_BELT`, `_CAMPER`, `_PICNICKER` and the rest, all already in the
+ROM's object-event graphics table. Adding them is appending to `sSkinGraphics` and
+extending `SKINS`/`SKIN_UNLOCK_WINS` to match, index for index -- the wire, the ghosts
+and the lobby all read the same index and need no other change.
+
+Worth checking before picking the list: a skin has to work as a walking overworld
+sprite in all four directions, and some object-event graphics are single-pose.
+
+**The preview.** `nextSkin(skin, wins)` skips locked entries, so the lobby's cycle never
+shows one. Kanto's does, greyed or captioned with what it costs. That is a change to the
+cycle and one line of caption -- `nextLockedSkin` already works out which is next and
+how many wins it takes, and nothing reads it yet.
+
+### MY VOICE should be three lists, and the lists should be the game's own words
+
+"For the my voice section it should have three voices: your intro text, your win text
+-- what you say when you win -- and your lose text, what you say when you lose. And
+these should be a big list of essentially any NPC text in the game, so that you can use
+them however you want. But it's not like free text or anything."
+
+**Today it is one choice for all three.** `career.voice` is a single index and
+`voiceOf(i)` returns `{ intro: INTRO[i % 12], win: WIN[i % 8], lose: LOSE[i % n] }` --
+so picking a different intro changes your win and lose lines with it, and the profile
+screen only has one row to cycle. Cam wants three independent picks.
+
+That is three fields in the career file (`intro`, `win`, `lose` instead of `voice`),
+three rows on the profile, and the same three in `myVoice` -- the wire already carries
+nothing here, because a line is said as a ticker `say` by whoever announces the fight.
+Keep a migration for an old file's single `voice`.
+
+**The pool.** `web/src/bots/lines.ts` is twelve intros, eight wins and a handful of
+loses, written by hand for Hoenn. Cam wants the game's own NPC text instead -- a big
+list, picked from, never typed. The text is all in the repo: `data/maps/*/scripts.inc`
+and `data/text/*.inc` hold every line every NPC says, and `tools/` already has exporters
+that read the repo and emit JSON for the page (`export-encounters.py`, `export-world.py`).
+A third one that pulls single-box NPC lines short enough for the ticker
+(`BR_HUD_LINE_MAX` is 40, minus a name and a colon, so under about 30 characters) would
+give a pool of hundreds without anybody writing them.
+
+Decide when it is picked up: whether bots draw from the same pool (they do today, which
+is what makes a room feel like people), and whether an intro/win/lose split makes sense
+for text that was written as neither.
+
+---
 ---
 
 ## What is left, 2026-09-17 (after the night's pass)
