@@ -375,8 +375,10 @@ The dev build is the tighter one, and it is the build every driver runs. BR's ow
 first, because the obvious candidates are free: `sSkinGraphics` is `static const`
 (`br_ghosts.c:30`), so eight more skins cost eight ROM bytes and no EWRAM, and
 `sMoveRelearnerStruct` is `AllocZeroed` (`move_relearner.c:397`), so a longer list spends
-gHeap, which is already reserved. The bag's items above are the one open item the ceiling
-genuinely blocks.
+gHeap, which is already reserved. The bag's items above *were* the one open item it
+genuinely blocked -- and the answer turned out to be not to store them in the ROM at all.
+That is the pattern worth keeping: when the ceiling blocks something, ask first whether
+the ROM needs to hold it, because the page already holds most of the match.
 
 When something does need EWRAM, the only large thing to sell is the mailbox: dropping
 `BR_RING_SLOTS` to 48 frees 2048 bytes and risks dropping messages in a twelve-player
