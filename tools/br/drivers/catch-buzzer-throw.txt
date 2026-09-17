@@ -1,0 +1,70 @@
+# catch-buzzer-throw: the buzzer waits for a ball already in the air (POK-308).
+#
+# Cam threw a SAFARI BALL as the clock hit 0:01 and the wild mon's health box came
+# apart: the bar's own sprite left alive beside the ball with its frame gone. The forced
+# exit skips the text waits (POK-261, so a Safari battle does not sit on one line with
+# the fog closing) -- and skipping them WHILE THE THROW IS STILL PLAYING runs the
+# battle's ending through the middle of the animation that tears the box down.
+#
+# Cam's own call on the scope: "it's fine for the Safari one to end when the timer is
+# done, but the UI piece is really kind of the weird part." So it still ends; it just
+# does not end mid-throw.
+#
+# catch-buzzer.txt is the buzzer arriving between throws, which is the case POK-261 was
+# about. This one drops the clock to zero WHILE a ball is in the air.
+# freeze -- "we both just disappeared. And then I was frozen here"). Cam's catch was at
+# 2:50 of a match whose opening was over by then, so the ring was already up: the
+# battle ends into BrMatch_SafariOver, which ends the opening and puts the drop map in
+# front of you. What this asks is whether any of that happens at all, or whether the
+# battle's own ending leaves the game somewhere with nothing to press.
+#
+# catch-pages.txt is the same catch without the ring. Everything down to the fourth
+# throw is its script, so the two only differ in what is true outside the battle.
+#
+wait 30
+poke u32 gBrMatch+8 0x00000C00
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+expect u8 gPlayerPartyCount 0
+expect u8 gBrMatch+1 0
+poke u8 gBrMatch+1 1
+poke u16 gBrMatch+12 240
+hold DOWN 140
+hold LEFT 100
+hold RIGHT 70
+hold LEFT 70
+hold RIGHT 70
+hold LEFT 70
+wait 40
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+# The ball goes up...
+tap A
+wait 20
+shot in-the-air
+# ...and the clock runs out under it. clockLeft is gBrMatch+12.
+poke u16 gBrMatch+12 0
+wait 60
+shot mid-throw
+wait 120
+shot after-throw
+wait 240
+# Both boxes are gone rather than half-drawn -- the wild mon's and the SAFARI BALLS
+# counter. This is the frame Cam's bug was in.
+shot boxes-gone
+wait 600
+# ...and the buzzer still closed it, with nothing pressed: phase 2 is BR_PHASE_DROP.
+# It takes longer than an idle buzzer does, because the throw plays out first.
+expectge u8 gBrMatch 2
+say catch buzzer throw ok

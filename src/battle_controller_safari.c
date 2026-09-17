@@ -259,8 +259,25 @@ static void CompleteOnInactiveTextPrinter(void)
     // way out still waits to be pressed through. On the play-test that read as a
     // freeze -- a Safari battle sitting on one line, the fog closing outside, and no
     // sign that a button was what it wanted. A forced exit does not ask.
+    //
     if (BrMatch_BuzzerClosing())
     {
+        // ...and it takes the health boxes with it (POK-308). Cam threw a ball as the
+        // clock hit 0:01 and the wild mon's box came apart: the bar's own sprite left
+        // alive beside the ball with its frame gone. Skipping the text waits runs the
+        // ending through the middle of the throw animation that slides the box away, so
+        // whatever it had got to is what stays on screen. Hiding them outright is the
+        // cheap half of that: the battle is leaving either way, and an invisible box
+        // cannot be a half-drawn one.
+        //
+        // NOT by waiting for the animation. That was tried and it deadlocks -- a throw's
+        // own text waits come through this very function, so blocking them stops the
+        // animation this would have been waiting for, and the ball hangs in the air for
+        // ever.
+        u8 i;
+
+        for (i = 0; i < gBattlersCount; i++)
+            SetHealthboxSpriteInvisible(gHealthboxSpriteIds[i]);
         SafariBufferExecCompleted();
         return;
     }
