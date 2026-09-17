@@ -29,6 +29,7 @@
 #include "constants/mauville_old_man.h"
 #include "constants/trainer_types.h"
 #include "constants/union_room.h"
+#include "br/br_ghosts.h"
 
 #define SPECIAL_LOCALIDS_START (min(LOCALID_CAMERA, \
                                 min(LOCALID_PLAYER, \
@@ -4729,6 +4730,13 @@ static bool8 DoesObjectCollideWithObjectAt(struct ObjectEvent *objectEvent, s16 
     for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
     {
         curObject = &gObjectEvents[i];
+#if BR
+        // Nothing the match puts on a map is solid (POK-310): a ghost is a drawing of
+        // where somebody is, not an obstacle, and a ball is something you stand on to
+        // take. Otherwise one trainer parked in a doorway closes it for everybody.
+        if (curObject->active && BrGhosts_Insubstantial(curObject->localId))
+            continue;
+#endif
         if (curObject->active && curObject != objectEvent)
         {
             if ((curObject->currentCoords.x == x && curObject->currentCoords.y == y) || (curObject->previousCoords.x == x && curObject->previousCoords.y == y))

@@ -1,0 +1,39 @@
+# ghost-walkthrough: another trainer is a drawing, not a wall (POK-310).
+#
+# Cam: "other bots, they should have their collision off. I just want to avoid a
+# scenario where a player can block an entrance somewhere." Kanto's rule, and Kanto
+# learned it the hard way -- a trainer parked on a Centre's mat or a cave mouth denies
+# it to everybody else for as long as they feel like standing there, and there is
+# nothing the blocked player can do about it: you cannot push, and challenging them
+# takes the fight but not the tile.
+#
+# story-quiet-control.txt is the control for the whole idea, on this same route: the
+# Youngster, one of Hoenn's own, still stops you dead. This is the same walk into a
+# ghost, three tiles of open Route 101 so there is nothing else to stop us.
+#
+# PLACE carries OUTER coords (map coords + MAP_OFFSET), the way gBrOwnPos reads them.
+# We boot on Route 101 map (7,15) = outer (14,22); the ghost goes on outer (14,21),
+# directly in the way, facing south at us.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 10 07 00 0F 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 16
+expect u16 gBrOwnPos+2 0x0E
+expect u16 gBrOwnPos+4 0x16
+# PLACE: type 2, framed len 11 = hdr(0B 00 00) + seat 01, on 01, map 00:10, x 0x000E,
+# y 0x0015, dir 1 (SOUTH), skin 1
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 10 0E 00 15 00 01 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 60
+# the ghost is really there: the roster took the seat
+expect u8 gBrSeats+16 1
+shot facing-them
+hold UP 26
+wait 20
+shot walked-through
+# Three tiles north, straight through the tile they are standing on. A solid object
+# would have stopped us on the first one, which is exactly what the Youngster does in
+# story-quiet-control.txt.
+expect u16 gBrOwnPos+2 0x0E
+expect u16 gBrOwnPos+4 0x13
+say ghost walkthrough ok

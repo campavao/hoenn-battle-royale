@@ -14,6 +14,7 @@
 #include "constants/event_objects.h"
 #include "constants/event_object_movement.h"
 #include "br/br_ghosts.h"
+#include "br/br_loot.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -461,6 +462,17 @@ static void EmoteBusyGhosts(void)
         if (BrGhosts_Emote(seat))
             return;
     }
+}
+
+// Nothing the match puts on a map is solid (POK-310). See the header for why.
+//
+// The two ranges are BR's own: loot at 0xC0 and ghosts at 0xE0. LOCALID_PLAYER is 255
+// and above both, so the player is never mistaken for one -- which matters, because
+// this is asked about every object on the map, the player included, whenever anything
+// else tries to move.
+bool8 BrGhosts_Insubstantial(u8 localId)
+{
+    return localId >= BR_LOOT_LOCAL_ID_BASE && localId < LOCALID_PLAYER;
 }
 
 void BrGhosts_Tick(void)

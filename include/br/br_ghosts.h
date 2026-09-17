@@ -78,4 +78,24 @@ extern u8 gBrOwnEvents;
 extern u8 gBrMySeat;
 extern u8 gBrMySkin;
 
+// Is this object event one the MATCH put on the map, rather than one of Hoenn's own?
+//
+// Kanto's rule, and Kanto learned it the hard way: a ghost is a drawing of where
+// somebody is, not an obstacle (POK-310). A trainer standing on a Centre's mat or a
+// cave mouth would otherwise deny it to everybody else for as long as they felt like
+// standing there, and there is nothing the blocked player can do about it -- you cannot
+// push, and challenging them takes the fight but not the tile.
+//
+// It also removes a class of disagreement: a ghost's cell comes off the wire a step
+// behind where its owner actually is, so a solid ghost blocks a tile they have already
+// left, and two clients differ on whether a step was legal.
+//
+// Loot is in the same range and gets the same answer for a different reason: a ball is
+// something you stand on to take (BrLoot's own reach check is faces-first, then your own
+// cell), and a ball spilled into a doorway would otherwise close it.
+//
+// Called from DoesObjectCollideWithObjectAt, which is the one place both
+// GetCollisionAtCoords and GetCollisionFlagsAtCoords ask the question.
+bool8 BrGhosts_Insubstantial(u8 localId);
+
 #endif // GUARD_BR_GHOSTS_H
