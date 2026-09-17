@@ -62,7 +62,7 @@ import {
 } from './match/career';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import worldData from './data/world.json';
-import { LANDING } from './match/landing';
+import { DOORSTEPS, LANDING } from './match/landing';
 import { SAFARI_CELLS } from './match/safari';
 import { cardFor } from './match/card';
 import { MatchRecord, recordLines } from './match/record';
@@ -75,6 +75,7 @@ import regionmapData from './data/regionmap.json';
 const WORLD: DirectorWorld = {
   maps: worldData.maps as DirectorWorld['maps'],
   landing: LANDING,
+  doorsteps: DOORSTEPS,
   sections: regionmapData.sections as DirectorWorld['sections'],
 };
 

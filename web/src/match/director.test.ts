@@ -11,6 +11,11 @@ const world: DirectorWorld = {
     { id: 'MAP_ALPHA', group: 0, num: 1, section: 'SEC_ALPHA', outdoor: true },
     { id: 'MAP_BETA', group: 0, num: 2, section: 'SEC_BETA', outdoor: true },
     { id: 'MAP_INDOOR', group: 0, num: 3, section: 'SEC_ALPHA', outdoor: false },
+    // POK-307: a section the reachability flood left with nothing, which is what seven
+    // of Hoenn's real towns look like -- every ordinary cell across water and marked off.
+    { id: 'MAP_GAMMA', group: 0, num: 4, section: 'SEC_GAMMA', outdoor: true },
+    // ...and one with no buildings either, which only a cave or an underwater route is.
+    { id: 'MAP_DELTA', group: 0, num: 5, section: 'SEC_DELTA', outdoor: true },
   ],
   landing: [
     ...Array.from({ length: 40 }, (_, i) => ({ map: 'MAP_ALPHA', x: i, y: 0 })),
@@ -18,9 +23,17 @@ const world: DirectorWorld = {
     // an indoor map's cells must never be dealt or used as a ring centre
     { map: 'MAP_INDOOR', x: 5, y: 5 },
   ],
+  // Ranked as landing-reach.ts ranks them: 0 centre, 1 mart, 2 gym, 3 any other door.
+  doorsteps: [
+    { map: 'MAP_GAMMA', x: 7, y: 7, door: 0 },
+    { map: 'MAP_GAMMA', x: 8, y: 8, door: 1 },
+    { map: 'MAP_GAMMA', x: 9, y: 9, door: 3 },
+  ],
   sections: {
-    SEC_ALPHA: { x: 0, y: 0, w: 2, h: 2, name: 'ALPHA' },
-    SEC_BETA: { x: 10, y: 10, w: 4, h: 4, name: 'BETA' },
+    SEC_ALPHA: { x: 0, y: 0, w: 2, h: 2, name: 'ALPHA', num: 1 },
+    SEC_BETA: { x: 10, y: 10, w: 4, h: 4, name: 'BETA', num: 2 },
+    SEC_GAMMA: { x: 11, y: 10, w: 1, h: 1, name: 'GAMMA', num: 3 },
+    SEC_DELTA: { x: 12, y: 10, w: 1, h: 1, name: 'DELTA', num: 4 },
   },
 };
 
@@ -204,5 +217,63 @@ describe('picking up a match in progress (POK-252)', () => {
     fireOut(1);
     const win = sent.find((m) => m.t === 'win') as WinMsg | undefined;
     expect(win?.seat).toBe(0);
+  });
+});
+
+
+// POK-307. Cam picked Fortree City from the drop and landed on Route 117, forty maps
+// away, behind the Day Care's fence. The fallback for a section with nothing standable
+// in it was ANYWHERE IN HOENN -- and seven of the towns the picker offers are in that
+// state, because the reachability flood walks and most of eastern Hoenn is across water.
+describe('where a pick actually lands you (POK-307)', () => {
+  const seats = [0, 1, 2, 3];
+
+  it('lands in the section that was picked', () => {
+    const { director } = harness(seats, 99);
+    const land = director.landFor(0, 2);
+    expect(land.map).toEqual({ group: 0, num: 2 }); // MAP_BETA, SEC_BETA
+  });
+
+  it('falls back to a doorstep IN THAT SECTION, not to another one', () => {
+    const { director } = harness(seats, 99);
+    const land = director.landFor(0, 3);
+    expect(land.map).toEqual({ group: 0, num: 4 }); // MAP_GAMMA, and nowhere else
+  });
+
+  it('takes the nicest doorstep first, and a different one for the next trainer', () => {
+    const { director } = harness(seats, 99);
+    // A ranked list is walked in order rather than sampled: the CENTRE, then the MART.
+    expect(director.landFor(0, 3)).toMatchObject({ x: 7, y: 7 });
+    expect(director.landFor(1, 3)).toMatchObject({ x: 8, y: 8 });
+    expect(director.landFor(2, 3)).toMatchObject({ x: 9, y: 9 });
+  });
+
+  it('gives the same seat the same section however many picked it', () => {
+    const { director } = harness(seats, 7);
+    for (const seat of seats) expect(director.landFor(seat, 3).map).toEqual({ group: 0, num: 4 });
+  });
+
+  it('never deals two trainers the same cell', () => {
+    const { director } = harness(seats, 4242);
+    const seen = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      const l = director.landFor(i, 2);
+      const key = `${l.map.num}:${l.x}:${l.y}`;
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
+  });
+
+  it('a section with no cells and no buildings goes to the NEAREST section, not a random one', () => {
+    const { director } = harness(seats, 99);
+    // SEC_DELTA is at (12,10); SEC_BETA's centre is nearer than SEC_ALPHA's (0,0).
+    const land = director.landFor(0, 4);
+    expect(land.map).toEqual({ group: 0, num: 2 });
+  });
+
+  it('a section nobody has heard of still lands somewhere real', () => {
+    const { director } = harness(seats, 99);
+    const land = director.landFor(0, 255);
+    expect([1, 2]).toContain(land.map.num);
   });
 });

@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { World, type Spot, type WorldMap } from './world';
 import worldData from '../data/world.json';
-import { LANDING, LANDING_ALL } from '../match/landing';
+import { DOORSTEPS, LANDING, LANDING_ALL } from '../match/landing';
 
 const maps = (worldData as { maps: WorldMap[] }).maps;
 const world = new World(maps);
@@ -54,5 +54,50 @@ describe('the drop pool', () => {
     // the pool is being trimmed for no reason.
     const wrongly = cells.filter((c) => c.off && reach.has(`${c.map}:${c.x},${c.y}`));
     expect(wrongly.slice(0, 5)).toEqual([]);
+  });
+});
+
+
+// POK-307. Cam picked Fortree City from the drop and landed on Route 117, behind the Day
+// Care's fence, because Fortree had no droppable cell and the fallback was anywhere in
+// Hoenn. Seven of Hoenn's towns are in that state -- the flood above walks, and most of
+// eastern Hoenn is across water -- so this is the invariant that says a town the picker
+// offers always has somewhere to put you.
+describe('every town you can pick has somewhere to land (POK-307)', () => {
+  /** A section is a town you can pick if one of its maps has a POKeMON CENTER on it.
+   *  That is what MAPSECTYPE_CITY_CANFLY means in practice, and unlike the ROM's own
+   *  type table it is in world.json where this test can read it. */
+  const townSections = new Set(
+    maps.filter((m) => m.outdoor && (m.warps ?? []).some((w) => w.kind === 'centre')).map((m) => m.section),
+  );
+  const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
+  const withCells = new Set([...live, ...DOORSTEPS].map((c) => sectionOf.get(c.map)));
+
+  it('finds the towns at all', () => {
+    // Hoenn has sixteen of them; a number far off that means world.json changed shape.
+    expect(townSections.size).toBeGreaterThanOrEqual(12);
+  });
+
+  it('leaves none of them with nothing', () => {
+    // The Battle Frontier is the one deliberate exception: the match does not go there
+    // (POK-304 shut the ferry, and it is an island you cannot walk off), so it has no
+    // cells and no doorsteps on purpose and a pick there lands in Hoenn instead.
+    const empty = [...townSections].filter((s) => !withCells.has(s) && s !== 'MAPSEC_BATTLE_FRONTIER');
+    expect(empty).toEqual([]);
+  });
+
+  it('has doorsteps ranked, nicest first', () => {
+    const ranks = DOORSTEPS.map((c) => c.door ?? 9);
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    // A CENTRE is rank 0 and there is one in every town, so the list starts with them.
+    expect(ranks[0]).toBe(0);
+  });
+
+  it('keeps doorsteps out of the ordinary pool', () => {
+    expect(live.some((c) => c.door !== undefined)).toBe(false);
+  });
+
+  it('puts every doorstep somewhere standable', () => {
+    for (const c of DOORSTEPS) expect(world.standable(c.map, c.x, c.y)).toBe(true);
   });
 });

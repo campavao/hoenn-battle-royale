@@ -130,7 +130,11 @@ describe('landing.json', () => {
 
   it('never puts more than 48 landing cells in one section', () => {
     const perSection = new Map<string, number>();
-    for (const entry of landing as { map: string }[]) {
+    // Doorsteps do not count against the exporter's sampling cap: they are a separate
+    // tier appended by landing-reach.ts, one per building rather than a sample of a
+    // grid, and the drop only reaches them when a section has nothing else (POK-307).
+    for (const entry of landing as { map: string; door?: number }[]) {
+      if (entry.door !== undefined) continue;
       const section = byId.get(entry.map)!.section;
       perSection.set(section, (perSection.get(section) ?? 0) + 1);
     }

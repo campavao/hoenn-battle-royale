@@ -31,6 +31,10 @@ export const DEFAULT_SAFARI_SECS = 120;
 const DEFAULT_FOG_SECS = 120;
 const CLOCK_STEP_MS = 5000;
 const DEAL_RETRY_LIMIT = 200; // generous: real world.json has thousands of landing cells for <=32 seats
+/** A pool no bigger than this is walked in order rather than sampled, because it is a
+ *  ranked doorstep list and the first free entry is the best one (POK-307). No town has
+ *  anywhere near this many buildings; no route section has this few ordinary cells. */
+const DOORSTEP_ORDERED = 32;
 
 // ---- world data (regionmap.json + landing.json + world.json's `maps`) -----------
 
@@ -54,6 +58,9 @@ export interface LandingCell {
    *  -- a map's border filler, or a genuinely gated corner. app.ts filters these out
    *  before the Director ever sees them (POK-251). */
   off?: 1;
+  /** A building's doorstep rather than an ordinary cell, ranked 0 centre, 1 mart,
+   *  2 gym, 3 any other door (POK-307). These arrive separately, as `doorsteps`. */
+  door?: number;
 }
 
 /** One regionmap.json section: a rectangle on the 28x15 Hoenn region map. */
@@ -72,6 +79,10 @@ export interface DirectorWorld {
   maps: DirectorMapEntry[]; // world.json's `.maps`
   landing: LandingCell[]; // landing.json
   sections: Record<string, RegionSection>; // regionmap.json's `.sections`
+  /** landing.json's doorstep rows, for a section the flood left with nothing (POK-307).
+   *  The drop falls back to these; the ring never does, because a fog centred on a town
+   *  nobody can walk to strands everybody who cannot surf. */
+  doorsteps?: LandingCell[];
 }
 
 interface SectionCells {
@@ -79,6 +90,8 @@ interface SectionCells {
   section: RegionSection;
   cells: { map: MapRef; x: number; y: number }[];
 }
+
+type Cell = { map: MapRef; x: number; y: number };
 
 /** Joins the three world files into "every outdoor section that has at least one
  *  landing cell", the pool both the drop (POK-223) and the ring (POK-224) draw from
@@ -100,6 +113,23 @@ function buildOutdoorSections(world: DirectorWorld): SectionCells[] {
     entry.cells.push({ map: { group: m.group, num: m.num }, x: cell.x, y: cell.y });
   }
   return Array.from(bySection.values());
+}
+
+/** MAPSEC number -> that section's doorsteps, in rank order (POK-307). Keyed by number
+ *  rather than by name because a pick arrives off the wire as the ROM's MAPSEC id. */
+function buildDoorsteps(world: DirectorWorld): Map<number, Cell[]> {
+  const byId = new Map(world.maps.map((m) => [m.id, m]));
+  const out = new Map<number, Cell[]>();
+  for (const cell of world.doorsteps ?? []) {
+    const m = byId.get(cell.map);
+    if (!m || !m.outdoor) continue;
+    const section = world.sections[m.section];
+    if (!section || section.num === undefined) continue;
+    const list = out.get(section.num) ?? [];
+    list.push({ map: { group: m.group, num: m.num }, x: cell.x, y: cell.y });
+    out.set(section.num, list);
+  }
+  return out;
 }
 
 function sectionCentre(section: RegionSection): { sx: number; sy: number } {
@@ -159,6 +189,12 @@ export interface DirectorState {
 export class Director {
   private readonly rng: () => number;
   private readonly sections: SectionCells[];
+  /** POK-307: a doorstep for a section the flood left with nothing. */
+  private readonly doorsteps: Map<number, Cell[]>;
+  /** Every section on the region map, cells or not -- `sections` above holds only the
+   *  ones with somewhere to stand, and a section with nowhere still has a place on the
+   *  map to measure from. */
+  private readonly rects: Map<number, RegionSection>;
   /** Every cell handed out this match, so no two trainers land on the same tile --
    *  the START's own deal and every `pick` answered afterwards share it. */
   private readonly dealtCells = new Set<string>();
@@ -180,6 +216,12 @@ export class Director {
   constructor(private readonly opts: DirectorOptions) {
     this.rng = mulberry32(opts.seed);
     this.sections = buildOutdoorSections(opts.world);
+    this.doorsteps = buildDoorsteps(opts.world);
+    this.rects = new Map(
+      Object.values(opts.world.sections)
+        .filter((s) => s.num !== undefined)
+        .map((s) => [s.num as number, s]),
+    );
     if (this.sections.length === 0) throw new Error('director: no outdoor landing sections in world data');
     this.safariSecs = opts.options?.safariSecs ?? DEFAULT_SAFARI_SECS;
     this.fogSecs = opts.options?.fogSecs ?? DEFAULT_FOG_SECS;
@@ -274,21 +316,60 @@ export class Director {
   // ---- dealing (POK-223) -----------------------------------------------------------
 
   /** Answers a `pick`: a cell in the section that trainer chose, that nobody has been
-   *  given yet. A section with nothing standable in it (POK-251 marks those) falls back
-   *  to anywhere, because a trainer who picked one is owed a drop regardless. */
+   *  given yet.
+   *
+   *  It used to fall back to ANYWHERE IN HOENN when the chosen section had nothing
+   *  standable, which is how Cam picked Fortree City and landed on Route 117 -- a
+   *  different map, forty maps away, behind the Day Care's fence (POK-307). And it was
+   *  not a rare corner: the reachability flood runs on foot, most of eastern Hoenn is
+   *  across water, and that left seven of the towns the picker offers with every cell
+   *  marked off.
+   *
+   *  So the fallback stays inside the section the trainer actually chose: a doorstep,
+   *  Cam's own rule -- "if a location cannot be found, drop them in front of a Poke
+   *  Center, a Poke Mart, or a Building". Only if the section has neither does this
+   *  leave it, and then for the NEAREST section with cells rather than a random one. */
   landFor(seat: number, section: number): { seat: number; map: MapRef; x: number; y: number } {
     const wanted = this.sections.find((s) => s.section.num === section);
-    const pool = wanted && wanted.cells.length > 0 ? [wanted] : this.sections;
+    const pool: Cell[] =
+      wanted && wanted.cells.length > 0
+        ? wanted.cells
+        : (this.doorsteps.get(section) ?? this.nearestCells(section));
     for (let attempt = 0; attempt < DEAL_RETRY_LIMIT; attempt++) {
-      const from = pool[pickIndex(this.rng, pool.length)];
-      const cell = from.cells[pickIndex(this.rng, from.cells.length)];
+      // A doorstep list is short and ranked -- centre, mart, gym, door -- so it is walked
+      // in order rather than sampled: the first free one is the nicest one.
+      const cell = pool.length <= DOORSTEP_ORDERED ? pool[attempt % pool.length] : pool[pickIndex(this.rng, pool.length)];
       const key = `${cell.map.group}:${cell.map.num}:${cell.x}:${cell.y}`;
       if (this.dealtCells.has(key) && attempt < DEAL_RETRY_LIMIT - 1) continue;
       this.dealtCells.add(key);
       return { seat, map: cell.map, x: cell.x, y: cell.y };
     }
-    const fallback = this.sections[0].cells[0];
+    const fallback = pool[0] ?? this.sections[0].cells[0];
     return { seat, map: fallback.map, x: fallback.x, y: fallback.y };
+  }
+
+  /** The cells of the section closest on the region map to the one asked for. Only ever
+   *  reached by a section with no cells AND no buildings -- a cave, an underwater route
+   *  -- which the drop picker does not offer anyway. Nearest rather than random, so even
+   *  that lands somebody roughly where they asked. */
+  private nearestCells(section: number): Cell[] {
+    // From every section on the map, not just the ones with cells: the section being
+    // asked about is by definition one without any.
+    const want = this.rects.get(section);
+    if (!want) return this.sections[0].cells;
+    const here = sectionCentre(want);
+    let best = this.sections[0];
+    let bestD = Number.POSITIVE_INFINITY;
+    for (const s of this.sections) {
+      if (s.cells.length === 0) continue;
+      const there = sectionCentre(s.section);
+      const d = Math.abs(there.sx - here.sx) + Math.abs(there.sy - here.sy);
+      if (d < bestD) {
+        bestD = d;
+        best = s;
+      }
+    }
+    return best.cells;
   }
 
   private dealSpawns() {

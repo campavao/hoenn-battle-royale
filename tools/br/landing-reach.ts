@@ -20,12 +20,11 @@ import { World, type Spot, type WorldMap } from '../../web/src/bots/world';
 
 const DATA = path.resolve(import.meta.dirname, '../../web/src/data');
 const maps = (JSON.parse(fs.readFileSync(path.join(DATA, 'world.json'), 'utf8')) as { maps: WorldMap[] }).maps;
-const landing = JSON.parse(fs.readFileSync(path.join(DATA, 'landing.json'), 'utf8')) as {
-  map: string;
-  x: number;
-  y: number;
-  off?: 1;
-}[];
+type Row = { map: string; x: number; y: number; off?: 1; door?: number };
+const landing = (JSON.parse(fs.readFileSync(path.join(DATA, 'landing.json'), 'utf8')) as Row[])
+  // The doorsteps below are rebuilt from scratch every run, so a previous run's are not
+  // flooded as if they were ordinary cells.
+  .filter((c) => c.door === undefined);
 const world = new World(maps);
 
 // On foot. Surfing needs a water mon that knows SURF, which a trainer may never be
@@ -81,7 +80,46 @@ for (const cell of landing) {
   }
 }
 
+// ---- doorsteps (POK-307) ----------------------------------------------------------
+//
+// Cam, after a drop that put him on the wrong map entirely: "if a location cannot be
+// found, drop them in front of a Poke Center, a Poke Mart, or a Building."
+//
+// He is owed one either way, and half the towns the picker offers have nothing to give
+// him: the flood above runs on foot, and on foot most of eastern Hoenn is across water,
+// so Fortree, Lilycove, Mossdeep, Dewford, Pacifidlog, Sootopolis and Ever Grande come
+// out of it with every cell marked off. Picking one used to deal a cell from ANYWHERE.
+//
+// A door's warp cell is the tile you step ONTO to go in; the tile you are put back on
+// coming out is the one below it, which is where FieldCB_DefaultWarpExit lands you, so
+// it is standable by construction -- and it is unmistakably in the town you picked.
+// Ranked so the nicest answer comes first, which is Cam's own order.
+const KIND_RANK: Record<string, number> = { centre: 0, mart: 1, gym: 2, door: 3 };
+// ...except the Battle Frontier, which the match does not go to (POK-304 shut the ferry
+// and the Frontier is an island you cannot walk off). The drop picker still offers it,
+// because MAPSECTYPE_BATTLE_FRONTIER is one of the two types Emerald's own map lets you
+// choose; with no cells and no doorsteps a pick there lands in the nearest real section
+// of Hoenn instead, which is the right answer and needs no change to the ROM.
+const NOT_IN_THE_MATCH = new Set(['MAPSEC_BATTLE_FRONTIER']);
+
+const steps: Row[] = [];
+for (const m of maps) {
+  if (!m.outdoor || NOT_IN_THE_MATCH.has(m.section)) continue;
+  for (const warp of m.warps ?? []) {
+    const rank = KIND_RANK[warp.kind];
+    if (rank === undefined) continue;
+    const y = warp.y + 1;
+    // world.standable rather than a second reading of the grid: one implementation of
+    // what a cell is, the same one the flood and the bots use.
+    if (!world.standable(m.id, warp.x, y)) continue;
+    steps.push({ map: m.id, x: warp.x, y, door: rank });
+  }
+}
+steps.sort((a, b) => (a.door ?? 9) - (b.door ?? 9));
+landing.push(...steps);
+
 fs.writeFileSync(path.join(DATA, 'landing.json'), JSON.stringify(landing));
+console.log(`${steps.length} doorsteps, for the sections the flood left with nothing`);
 console.log(`${components.length} components; the biggest holds ${biggest.cells} cells`);
 console.log(`${off} of ${landing.length} landing cells marked off (${Math.round((off / landing.length) * 100)}%)`);
 console.log(
