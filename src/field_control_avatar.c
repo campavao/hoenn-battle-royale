@@ -706,6 +706,12 @@ static bool8 TryStartWarpEventScript(struct MapPosition *position, u16 metatileB
 
     if (warpEventId != WARP_ID_NONE && IsWarpMetatileBehavior(metatileBehavior) == TRUE)
     {
+        // The other half of the closed-door check in TryDoorWarp below. Not every shut
+        // entrance is an animated door you press north into: Lilycove's harbour, and any
+        // cave mouth or stairwell, is a tile you walk onto and this is the path it takes.
+        if (BrMatch_DoorClosed(gMapHeader.events->warps[warpEventId].mapGroup,
+                               gMapHeader.events->warps[warpEventId].mapNum))
+            return TRUE;
         StoreInitialPlayerAvatarState();
         SetupWarp(&gMapHeader, warpEventId, position);
         if (MetatileBehavior_IsEscalator(metatileBehavior) == TRUE)

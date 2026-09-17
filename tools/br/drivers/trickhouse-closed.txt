@@ -1,0 +1,22 @@
+# trickhouse-closed: the TRICK HOUSE is shut for the match (POK-304).
+#
+# Eight corridors of puzzle, and a mechadoll that stops you on the way in --
+# VAR_TRICK_HOUSE_ENTRANCE_STATE is 0 at boot, which is the value its ON_FRAME trigger
+# fires on, so walking in is a cutscene before it is a maze.
+#
+# The door is (11,66) on Route 110, map 0:25. See lab-closed.txt for the shape; one boot
+# block is consumed per run, which is why this is not folded into ferry-closed.txt.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 19 0B 00 43 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 25
+hold UP 30
+wait 4
+shot refused
+expectge u8 gBrHud+0x178 1
+hold UP 120
+wait 20
+shot still-out
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 25
+say trick house closed ok

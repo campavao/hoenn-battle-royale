@@ -155,6 +155,15 @@ static const u8 sText_LabClosed[] = _("PROF. BIRCH'S LAB\nIS CLOSED.");
 // listed: refuse that door and the corridor behind it is unreachable.
 static const u8 sText_TentClosed[] = _("THE BATTLE TENT\nIS CLOSED.");
 static const u8 sText_DayCareClosed[] = _("THE DAY CARE\nIS CLOSED.");
+// The ferry is open in a match, because the gate on it is FLAG_SYS_GAME_CLEAR and that
+// is the flag the boot sets to end the story (LilycoveCity_Harbor/scripts.inc:12). A
+// sailor and one page of talk puts you on the Battle Frontier, an island the ring has
+// never heard of, with a boat ride each way. Both harbours are shut.
+static const u8 sText_HarborClosed[] = _("THE FERRY IS\nNOT RUNNING.");
+// And the TRICK HOUSE is eight corridors of puzzle with a mechadoll that stops you on
+// the way in -- VAR_TRICK_HOUSE_ENTRANCE_STATE is 0 at boot, which is the value its
+// ON_FRAME trigger fires on.
+static const u8 sText_TrickHouseClosed[] = _("THE TRICK HOUSE\nIS CLOSED.");
 
 static const struct BrClosedDoor sClosedDoors[] =
 {
@@ -163,6 +172,9 @@ static const struct BrClosedDoor sClosedDoors[] =
     { MAP_GROUP(MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY),    MAP_NUM(MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY),    sText_TentClosed },
     { MAP_GROUP(MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY),     MAP_NUM(MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY),     sText_TentClosed },
     { MAP_GROUP(MAP_ROUTE117_POKEMON_DAY_CARE),            MAP_NUM(MAP_ROUTE117_POKEMON_DAY_CARE),            sText_DayCareClosed },
+    { MAP_GROUP(MAP_LILYCOVE_CITY_HARBOR),                 MAP_NUM(MAP_LILYCOVE_CITY_HARBOR),                 sText_HarborClosed },
+    { MAP_GROUP(MAP_SLATEPORT_CITY_HARBOR),                MAP_NUM(MAP_SLATEPORT_CITY_HARBOR),                sText_HarborClosed },
+    { MAP_GROUP(MAP_ROUTE110_TRICK_HOUSE_ENTRANCE),        MAP_NUM(MAP_ROUTE110_TRICK_HOUSE_ENTRANCE),        sText_TrickHouseClosed },
 };
 
 bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)
