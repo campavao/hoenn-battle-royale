@@ -20,6 +20,13 @@ python3 "$HERE/symbols.py" "$MAP" > "$ROOT/web/public/patch/br-symbols.json"
 # copy points every driver at addresses the new ROM does not use, and all 38 fail at
 # once on the first expect, which looks exactly like a broken ROM.
 cp "$ROOT/web/public/patch/br-symbols.json" "$ROOT/br-symbols.json"
+# ...and the build itself, where the dev shell can fetch it (POK-254 again). A ROM
+# already in IndexedDB is a ROM the shell keeps using: `isPrePatched` says "a local
+# build, run it" and nothing ever asked WHICH local build. A whole night of fixes can
+# land, every driver go green, and the tab still be playing this morning's ROM --
+# which is exactly what happened on 2026-09-17. With this file served, the shell can
+# notice its stored ROM is not the current one and take the current one instead.
+cp "${MAP%.map}.gba" "$ROOT/web/public/patch/pokeemerald.gba"
 bash "$HERE/version-json.sh" "${MAP%.map}.gba" "$ROOT/web/public/patch/br-version.json"
 echo "sidecars written for $MAP"
 

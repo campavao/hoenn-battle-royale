@@ -4,7 +4,7 @@
 // directly, per the project CLAUDE.md.
 
 import { KEY_BIT, Emulator, type GbaKey } from './emu';
-import { checkEmerald, isPrePatched } from './rom/emerald';
+import { checkEmerald, isPrePatched, sha1Hex } from './rom/emerald';
 import { loadRelease, loadSidecars, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
 import { Mailbox, MAILBOX } from './net/mailbox';
@@ -209,6 +209,21 @@ interface PatchResult {
   symbols?: Map<string, number>;
 }
 
+/** The build this repo just made, as `tools/br/dev-patch.sh` leaves it in public/.
+ *  Null when it is not there -- a checkout that has never built a ROM, or a shell
+ *  served from anywhere but the dev server. Dev only; nothing ships this file. */
+async function fetchLocalBuild(): Promise<Uint8Array | null> {
+  try {
+    const res = await fetch('/patch/pokeemerald.gba', { cache: 'no-store' });
+
+    if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    return isPrePatched(bytes) ? bytes : null;
+  } catch {
+    return null;
+  }
+}
+
 async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   showScreen('patching');
   const statusEl = $('#patch-status') as HTMLElement;
@@ -219,9 +234,30 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   if (import.meta.env.DEV && isPrePatched(stored)) {
     const side = await loadSidecars();
     if (!side) throw new Error('pre-patched ROM but no /patch/br-symbols.json: run tools/br/dev-patch.sh');
+    // ...but WHICH local build? A ROM in IndexedDB is a ROM the shell keeps using, and
+    // this branch never asked. A whole night of fixes landed, every driver went green,
+    // and the tab was still playing the morning's ROM -- every report from it about
+    // things that were already fixed (2026-09-17). The sidecar knows the sha1 of the
+    // build it was written for, so ask.
+    let bytes = stored;
+    if (side.info.romSha1 && (await sha1Hex(stored)) !== side.info.romSha1) {
+      statusEl.textContent = 'Your stored ROM is an older build -- fetching this one…';
+      const fresh = await fetchLocalBuild();
+      if (fresh) {
+        bytes = fresh;
+        await emu.importRom(fresh); // so the next reload starts here rather than fetching again
+      } else {
+        bannerEl.textContent =
+          'The ROM stored in this browser is NOT the build in this repo, and'
+          + ' patch/pokeemerald.gba is not being served -- run tools/br/dev-patch.sh.'
+          + ' Nothing built since that ROM is in this tab. Forget stored ROM and import'
+          + ' pokeemerald.gba from the repo root.';
+        bannerEl.hidden = false;
+      }
+    }
     setVersionLine(`${versionText(side.info)} · local build`);
     return {
-      bytes: stored,
+      bytes,
       usingPatched: true,
       mailboxBase: side.symbols.get('gBrMailbox'),
       protocol: side.info.protocol,
@@ -662,8 +698,12 @@ function wireSettings(emu: Emulator): void {
   });
 
   forgetBtn.addEventListener('click', async () => {
-    emu.stop();
+    // Unlinked and flushed BEFORE the core is stopped: forgetRom's own FSSync is the
+    // thing that writes the deletion through to IndexedDB, and a stopped core is a
+    // poor time to ask it to. The play-test pressed this and came back into the same
+    // match, which is what a deletion that never reached disk looks like.
     await emu.forgetRom();
+    emu.stop();
     location.reload();
   });
 }
