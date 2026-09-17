@@ -141,12 +141,29 @@ static void HandleClock(const u8 *payload, u8 len)
 //
 // Unconditional, not gated on the phase: the lobby is Littleroot too, and the lab door
 // is nine tiles from the boot cell. This ROM is only ever a Battle Royale ROM.
-static const u8 sClosedDoors[][2] =
+struct BrClosedDoor
 {
-    { MAP_GROUP(MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB), MAP_NUM(MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB) },
+    u8 group;
+    u8 num;
+    const u8 *line;
 };
 
 static const u8 sText_LabClosed[] = _("PROF. BIRCH'S LAB\nIS CLOSED.");
+// Cam, live: "block off the battle tent and the daycare center." Both take the party out
+// of the match -- a Tent challenge swaps it for a rental three and runs its own battles,
+// and the DAY CARE will happily keep a Pokemon you are about to need. Only the lobby is
+// listed: refuse that door and the corridor behind it is unreachable.
+static const u8 sText_TentClosed[] = _("THE BATTLE TENT\nIS CLOSED.");
+static const u8 sText_DayCareClosed[] = _("THE DAY CARE\nIS CLOSED.");
+
+static const struct BrClosedDoor sClosedDoors[] =
+{
+    { MAP_GROUP(MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB), MAP_NUM(MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB), sText_LabClosed },
+    { MAP_GROUP(MAP_FALLARBOR_TOWN_BATTLE_TENT_LOBBY),     MAP_NUM(MAP_FALLARBOR_TOWN_BATTLE_TENT_LOBBY),     sText_TentClosed },
+    { MAP_GROUP(MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY),    MAP_NUM(MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY),    sText_TentClosed },
+    { MAP_GROUP(MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY),     MAP_NUM(MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY),     sText_TentClosed },
+    { MAP_GROUP(MAP_ROUTE117_POKEMON_DAY_CARE),            MAP_NUM(MAP_ROUTE117_POKEMON_DAY_CARE),            sText_DayCareClosed },
+};
 
 bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)
 {
@@ -154,13 +171,13 @@ bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)
 
     for (i = 0; i < ARRAY_COUNT(sClosedDoors); i++)
     {
-        if (sClosedDoors[i][0] == mapGroup && sClosedDoors[i][1] == mapNum)
+        if (sClosedDoors[i].group == mapGroup && sClosedDoors[i].num == mapNum)
         {
             // Leaning on the door holds the direction, so this is asked every frame.
             // The box's own life is the throttle -- it re-says itself the moment the
             // last one has faded, and never re-dirties the window mid-display.
             if (gBrHud.boxFrames == 0)
-                BrHud_Box(sText_LabClosed);
+                BrHud_Box(sClosedDoors[i].line);
             return TRUE;
         }
     }

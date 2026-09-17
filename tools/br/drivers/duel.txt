@@ -28,6 +28,13 @@ expect u8 gBrDuel+9 0
 # the tick starts it on the next overworld frame
 wait 300
 expect u8 gBrDuel+1 1
+# Pin the dice. Two level-5 mon with POUND is a coin flip, and until POK-298 the coin was
+# being tossed by the overworld: an NPC with a random movement type calls Random() every
+# few frames, so how many people were standing on Littleroot decided who won this fight.
+# Hiding the story's NPCs changed the count and flipped it. Seeded here rather than at the
+# mailsend because a battle has no wandering NPCs in it, so from this frame on the run is
+# a pure function of the seed. 3 is the smallest one where B takes it.
+poke u32 gRngValue 3
 shot duel-intro
 # The AI chooses both sides' moves, but a battle still has message boxes that wait for
 # a press (POK-269's rule) -- the intro's "would like to battle!" among them. The proxy
@@ -337,7 +344,8 @@ shot duel-done
 # it resolved, and the ROM is back on the overworld with the result sent
 expect u8 gBrDuel+1 0
 # ...with an outcome, which is what rides home as BR_MSG_DRESULT: 2 is B_OUTCOME_LOST,
-# meaning the party in gEnemyParty -- side B, the MUDKI -- took it.
+# meaning the party in gEnemyParty -- side B, the MUDKI -- took it. Deterministic off the
+# seed above; without it this line is a coin flip dressed as an assertion.
 expect u8 gBattleOutcome 2
 # and the proxy did NOT treat its own side losing as going out of a match
 expect u8 gBrMatch 2

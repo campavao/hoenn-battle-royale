@@ -1,0 +1,24 @@
+# tent-closed: the BATTLE TENT is shut for the match (POK-304).
+#
+# Cam, live: "block off the battle tent and the daycare center." Both take the party out
+# of the match -- a Tent challenge swaps it for a rental three and runs its own battles,
+# and the DAY CARE will keep a Pokemon you are about to need.
+#
+# daycare-closed.txt is the other one. Same shape as lab-closed: lean into the door and be
+# refused with a line on the bottom box instead of warped. Verdanturf's tent door is (3,7)
+# on map 0:14; boot one tile south of it and hold UP. Only one boot block is consumed per
+# run, which is why these are two files rather than one.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 0E 03 00 08 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 14
+hold UP 30
+wait 4
+shot tent-refused
+expectge u8 gBrHud+0x178 1
+hold UP 120
+wait 20
+shot tent-still-out
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 14
+say battle tent closed ok

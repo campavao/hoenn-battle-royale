@@ -1,0 +1,22 @@
+# daycare-closed: the DAY CARE is shut for the match (POK-304).
+#
+# Cam, live: "block off the battle tent and the daycare center." The DAY CARE will keep a
+# Pokemon you are about to need, and hand it back at a level the ring has no time for.
+#
+# tent-closed.txt is the other one; see it for the shape. The Route 117 door is (51,5) on
+# map 0:32, and a route boot lands on the cell it names -- the one-tile-south step only
+# happens coming out of a door.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 20 33 00 06 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 32
+hold UP 30
+wait 4
+shot refused
+expectge u8 gBrHud+0x178 1
+hold UP 120
+wait 20
+shot still-out
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 32
+say day care closed ok
