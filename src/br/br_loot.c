@@ -176,7 +176,11 @@ static void ParseSpill(const u8 *d, u16 n)
     if (off < n && d[off] != 0 && (u16)(off + 7) <= n)
     {
         u32 money = 0;
-        u16 cash = off + 8; // past the bag's key and cell, over its item count
+        // off is the bag flag; its key and cell are the six bytes after it, so the
+        // item count is at off+7. It was read at off+8 -- the low byte of the money
+        // itself -- so `at` ran hundreds of bytes past the end, the guard below caught
+        // it, and every bag on the ground was worth the fallback: FOUND 0.
+        u16 cash = off + 7;
 
         // itemCount rows of (id u16, n u8) then the money; the rows are the pickup's
         // business, the money is what the bag is worth to whoever gets there first.

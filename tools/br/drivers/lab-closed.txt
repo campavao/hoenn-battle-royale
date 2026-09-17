@@ -1,0 +1,24 @@
+# lab-closed: Professor Birch's lab is shut for the match. Boot onto the tile below the
+# lab door (Littleroot 7,16), lean north into it, and be refused with a line on the
+# bottom box instead of warped into a room with Birch, the rival and the aide in it.
+#
+# lab-control.txt is the other half: the same walk into Brendan's house, which is not on
+# the closed list, still opens. Without it this driver passes on a player who never moved.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 07 00 11 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 9
+# the step onto the door tile is eight frames at a run; the refusal is the next press.
+hold UP 30
+wait 4
+shot refused
+# the box was drawn, so the door said something rather than the walk quietly failing.
+# BrHud_Box gives it 90 frames, hence the check here and not after the long hold below.
+expectge u8 gBrHud+0x178 1
+# and leaning on it for another two seconds still does not get in
+hold UP 120
+wait 20
+shot still-out
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+say lab closed ok

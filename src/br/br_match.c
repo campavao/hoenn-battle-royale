@@ -22,6 +22,7 @@
 #include "br/br_pick.h"
 #include "br/br_loot.h"
 #include "br/br_spectate.h"
+#include "br/br_hud.h"
 
 EWRAM_DATA struct BrMatch gBrMatch = {0};
 // START can span slots once there are more than six spawn rows.
@@ -128,6 +129,42 @@ static void HandleClock(const u8 *payload, u8 len)
         return;
     gBrMatch.clockLeft = BrWire_ReadU16(d + 1);
     gBrMatch.clockFrames = 60;
+}
+
+// ---- closed doors ---------------------------------------------------------------
+
+// Cam walked into Professor Birch's lab mid-match and found Birch, the rival and the
+// aide standing in it, talking. They are there because we set FLAG_SYS_GAME_CLEAR to
+// end the story (10eed13f9) -- prof_birch.inc:14 reads that flag and moves him home.
+// Kanto's answer to the same thing is CLOSED_DOORS: the door is refused with a line,
+// rather than the map being cut, so pret's data stays pret's.
+//
+// Unconditional, not gated on the phase: the lobby is Littleroot too, and the lab door
+// is nine tiles from the boot cell. This ROM is only ever a Battle Royale ROM.
+static const u8 sClosedDoors[][2] =
+{
+    { MAP_GROUP(MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB), MAP_NUM(MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB) },
+};
+
+static const u8 sText_LabClosed[] = _("PROF. BIRCH'S LAB\nIS CLOSED.");
+
+bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)
+{
+    u8 i;
+
+    for (i = 0; i < ARRAY_COUNT(sClosedDoors); i++)
+    {
+        if (sClosedDoors[i][0] == mapGroup && sClosedDoors[i][1] == mapNum)
+        {
+            // Leaning on the door holds the direction, so this is asked every frame.
+            // The box's own life is the throttle -- it re-says itself the moment the
+            // last one has faded, and never re-dirties the window mid-display.
+            if (gBrHud.boxFrames == 0)
+                BrHud_Box(sText_LabClosed);
+            return TRUE;
+        }
+    }
+    return FALSE;
 }
 
 void BrMatch_Init(void)

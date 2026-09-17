@@ -86,8 +86,9 @@ catch anything because there was no Safari to speak of, either.
 The dev pace is `#fast` now and `#quick` means quick play. The e2e specs that wanted the
 pace say `#fast`; the one that clicks the QUICK PLAY row is unchanged.
 
-This is separate from POK-273 (the bots eliminating each other too fast), which is real
-and still parked on `pok-273-pacing`.
+This is separate from POK-273 (the bots eliminating each other too fast), which shipped in
+`ed24169f1` on 2026-09-16 -- the twelve-second bot-duel cooldown at `bots/brain.ts:36`.
+There is no `pok-273-pacing` branch any more; this line used to say there was.
 
 ### HUD: the second window (the party/ball blobs) is not wanted -- **fixed** (`1ef860e77`)
 
@@ -105,10 +106,20 @@ cyan. We should be matching that style, or whatever that style is derived from, 
 user setting. We should be applying that same style to the dialogue boxes and the UI
 pieces that we make."
 
-POK-256 gave the HUD Emerald windows with a frame, and it took the **bag's** frame. The
-player's chosen text frame (`gSaveBlock2Ptr->optionsWindowFrameType`, the one the green and
-cyan box uses) is the one to follow — `LoadMessageBoxAndBorderGfx` is already what the
-message box uses, so the HUD should load the same pair rather than its own.
+**Closed 2026-09-17 by Cam's decision, and the diagnosis above was wrong.** The HUD does
+not wear "the bag's frame": `LoadMessageBoxAndBorderGfx` at `br_hud.c:70`/`:101` routes
+through `LoadUserWindowBorderGfx`, which reads `gSaveBlock2Ptr->optionsWindowFrameType`
+(`text_window.c:110`) -- so the HUD has been wearing the player's own FRAME setting all
+along, the same one the bag and the START menu wear.
+
+The green and cyan box is a different asset: `gMessageBox_Gfx` at tile 0x200 with
+`gMessageBox_Pal` in palette 15 (`text_window.c:93`, `:187`), fixed, not selectable. The
+two are mutually exclusive -- matching the dialogue box means the FRAME option stops moving
+the HUD. Asked, and **Cam chose to keep FRAME.** A drawer that takes the dialogue frame
+instead was written and reverted; if it is ever wanted, the shape is a BR-local window func
+with the real height and one-column side fills (upstream's hardcodes height 5 and fills
+tile +9 across `width + 1`, straight over the window's interior, which only survives
+because `DrawDialogueFrame` re-puts the tilemap immediately after -- the HUD does not).
 
 ### Graphical: borders wrong until you move -- **fixed**
 
@@ -291,65 +302,122 @@ for text that was written as neither.
 ---
 ---
 
-## What is left, 2026-09-17 (after the night's pass)
+## 2026-09-17, the two answers Cam gave, and what they turned up
 
-Everything above that is not marked **fixed**, plus:
+### "Found 0" -- **fixed**, and it was every bag in the game
 
-* **A `-1` HP mon.** Needs one detail before it can be chased: was it one HP short of
-  full, or did the screen literally read `-1`, and where -- party screen, health box or
-  summary? The fog's bleed takes `maxHp/10` with a minimum of 1, which looks like "one
-  short" the moment the ring goes active; a literal `-1` is a different bug.
-* **"Found 0"** at ~11:00 of the first video, unexplained. Which line said it, and what
-  had just happened.
-* **Rejoining a room after a dropped socket.** The relay hands out a new id on a rejoin
-  and that id is the page's seat, so a mid-match rejoin would change who you are. Needs
-  a relay-side resume before the page can do anything better than say so.
-* **Six Zone areas is thin for a two-minute opening** (see above). A pacing decision,
-  not a bug: worth measuring how often two contestants share an area first.
+`br_loot.c`'s `Take()` prints `FOUND ` + the bag's money, so `FOUND 0!` is a bag that
+arrived worth nothing. It was every bag: `ParseSpill` read the bag's item count one byte
+late.
+
+`BrLoot_SpillOwn` and the page's `encodeSpill` (`web/src/net/slots.ts:597`) agree on the
+layout -- flag, key, x, y, **itemCount at off+7**, money, name -- and `ParseSpill` read
+the count at `off+8`, which is the low byte of the money. For ¥3000 that byte is 0xB8, so
+`at` landed 561 bytes past a 96-byte buffer, the bounds guard caught it, and `money` kept
+its `0` fallback. The only way it could ever have read right was a purse that was an exact
+multiple of 256, and then it read the wrong bytes anyway.
+
+One character: `cash = off + 7`. The `cash < n` guard below it is then exactly the bounds
+check the read needs, so nothing else moves.
+
+### A bag gives its money and drops its items on the floor
+
+Found on the way there, and not fixed. Kanto's rule (README, "Knock someone out and their
+BAG hits the ground"): *items and money, the whole bag in one press.* Ours is money only.
+
+`ParseSpill` skips the item rows on purpose -- "the bag's contents are the picker's
+business and are not kept here" -- and `Take()`'s `BR_LOOT_BAG` branch does `AddMoney` and
+nothing else. A bot that died holding three X ATTACKs leaves them in a bag that hands over
+cash. Bots do not lose out: `bag.ts:117` folds a bag found on the ground into their own.
+
+**The fix is blocked on EWRAM, which is the real finding below.** `struct BrLootItem` has
+six free bytes on a bag (`pad[3]`, plus `species` and `level`, which are 0 for one) -- two
+stacks of (id u16, n u8), at zero cost. Anything more grows `gBrLoot` and will not link.
+
+### EWRAM is full: 80 bytes on modern, 140 on agbcc
+
+Measured from the link maps, not estimated:
+
+```
+modern  highest EWRAM symbol 0x0203ffb0   262064 / 262144   80 bytes free
+agbcc   highest EWRAM symbol 0x0203ff74   262004 / 262144  140 bytes free
+```
+
+The dev build is the tighter one, and it is the build every driver runs. BR's own state is
+12424 bytes of that, and `gBrMailbox` is 9256 of the 12424 -- two 64x64 rings
+(`BR_RING_SLOTS`, `BR_SLOT_BYTES` in `include/br/br_config.h`) plus the boot block.
+
+**Cost every new piece of state before designing it** -- but check where it actually lands
+first, because the obvious candidates are free: `sSkinGraphics` is `static const`
+(`br_ghosts.c:30`), so eight more skins cost eight ROM bytes and no EWRAM, and
+`sMoveRelearnerStruct` is `AllocZeroed` (`move_relearner.c:397`), so a longer list spends
+gHeap, which is already reserved. The bag's items above are the one open item the ceiling
+genuinely blocks.
+
+When something does need EWRAM, the only large thing to sell is the mailbox: dropping
+`BR_RING_SLOTS` to 48 frees 2048 bytes and risks dropping messages in a twelve-player
+room. That is a measurement somebody has to make before it is a decision.
+
+### The `-1` HP mon -- **answered, not a bug**
+
+Cam: one short of full, on the battle health box. That is the fog's bleed
+(`br_ring.c:136`, `maxHp / 10` with a minimum of 1) doing exactly what POK-224 says. It
+read as "started the match" because `#quick` was the dev pace at the time, so the ring went
+active about 25 seconds in; `3ef373a8c` split the pace flag off and that is already gone.
 
 ---
 
-## 2026-09-17, the late session: what was wrong with the session itself
+## What is left, 2026-09-17 (re-cut after the morning pass)
 
-### The shell had been playing a ROM three hours older than the fixes -- **fixed**
+Everything above that is not marked **fixed** or **closed**, which is now:
 
-Every report in the first half of this session was made against a build from before the
-fixes it was reporting on, and nothing on screen could say so. `runPatchingScreen`'s dev
-branch said "the stored ROM is pre-patched, so it is a local build, run it" and never
-asked *which* local build; the version line was `patch 1 · shell 0.0.0`, two hand-bumped
-constants that do not move when a build does.
+* **MOVES as a real menu.** Cam decided POK-279's second option: the relearner list *plus*
+  every TM/HM in the bag this species can learn, taught from there. What shipped
+  (`44355109c`) is only the hint. `br_catch.c:96` still opens the relearner only when
+  `GetNumberOfRelearnableMoves() > 0`, and `move_relearner.c:903` still builds its list
+  from `GetMoveRelearnerMoves` alone. Watch `move_relearner.c:160`: the list is sized
+  `max(MAX_LEVEL_UP_MOVES, 25)` and MAX_LEVEL_UP_MOVES is 20, so eight HMs alone overflow
+  it -- the struct is `AllocZeroed`, so growing it is gHeap, not EWRAM.
+  **Cam also decided the content question:** a match grants only the eight HMs today, no
+  mart sells a TM and the Zone deals none, so TMs go into the world in the same batch
+  rather than shipping a menu with half of it empty.
+* **The match ends and the player is still in it.** Traced: `director.ts:400` sends
+  `{t:'win'}` and `results.ts:50` flips `ended`, so every client knows -- and nothing
+  takes anybody out. In a room the page draws `#results-panel` over a ROM that keeps
+  walking Hoenn; in SOLO VS BOTS not even that (`app.ts:1583` saves the round log and
+  stops). The host never gets LEAVE (`app.ts:2382`, `leave.hidden = isHost`, re-run on
+  every roster tick). The champion's parade is unreachable in real play: `sWinPending`
+  wants an inbound `result` naming our own seat and nothing page-side sends one. Kanto's
+  shape is `onWinner` on every client, a 4s grace, then one funnel back to the lobby with
+  the room kept -- `backToLobby()` is the wrong exit for a room, it reloads and scatters
+  the roster (POK-258).
+* **The truck, on one path only.** `784567b31` holds the ROM on every way in through
+  `main()`; the PLAY AGAIN handler it names is not one of them (`app.ts:2258`, reboot with
+  no pause) and `waitForMailbox` resolves on MAGIC alone, which can be the pre-reboot value
+  still in EWRAM.
+* **A bag gives its money and drops its items.** Above. The one item EWRAM genuinely gates.
+* **The wardrobe** -- more skins and a preview of the locked ones. Not EWRAM-gated after
+  all. Two index-parity traps the entry above does not name: `br_netlink.c:258` takes the
+  peer's gender as `skin & 1` and `app.ts:813` takes your own avatar's as `skin % 2`, so
+  the appended list has to keep male/female alternating. The C half must be in a ROM
+  before the page half merges, or every new skin draws as BRENDAN through the clamp at
+  `br_ghosts.c:90`.
+* **MY VOICE** -- three independent picks from the game's own NPC text. Two constraints
+  the entry above does not name: the ticker's encoder throws on anything outside a
+  96-entry charmap subset (`web/src/text/gen3.ts:15`, no apostrophe), and Emerald's own
+  intro/defeat split is 6 usable intro lines against 75 defeat lines at 30 characters --
+  so a source-tagged three-way split does not exist in the ROM and the pool has to be
+  assigned rather than derived.
+* **Rejoining a room after a dropped socket.** Half fixed (`1004a6cd2`). The rest needs a
+  relay-side resume token: the relay hands out a new id on a rejoin and that id is the
+  page's seat, so a mid-match rejoin would change who you are. The only leftover that
+  lives in the relay rather than here.
+* **Six Zone areas is thin for a two-minute opening.** Still unmeasured, and the cheapest
+  thing on this list: `tools/br/bots-replay.ts` already runs the real brain headless over
+  `world.json` for a seeded sixteen minutes, so an area-occupancy histogram over
+  `BrMatch_SafariCell`'s six maps is a page-lane change with no ROM build at all. Measure
+  before changing anything -- it is a pacing decision, not a bug.
 
-* The version line now carries the running ROM's sha1: `rom 9e91ed3`, or
-  `rom abc1234 — STALE, build is 9e91ed3` (`2347f6add`, `54838bfc2`).
-* `tools/br/dev-patch.sh` leaves the built ROM at `web/public/patch/pokeemerald.gba` and
-  the shell fetches it when the stored one does not match (`aa5e4734b`).
-* `#fresh` unregisters service workers and drops caches; the sidecars are `no-store`.
-* "Forget stored ROM" was stopping the core before the unlink was flushed, so it was
-  not forgetting anything.
-
-**Ask for the version line before trusting a report.** A play-test against the wrong
-build is worse than none: every finding is noise and the real bugs stay hidden.
-
-### Bots were seven tiles from where their brain walked them -- **fixed** (`54eb24f4b`)
-
-"They are not respecting collision in general, whether that be trees or hopping over
-cliffs." They were respecting it exactly, seven tiles away. Emerald keeps two coordinate
-spaces for the same tile -- map data counts from the map's corner, everything running
-counts from seven tiles further out -- and `world.ts` has claimed "the wire adds
-MAP_OFFSET on its way to the ROM" since POK-236 with nothing doing it.
-`web/src/net/cells.ts` is the door. Warps are left alone, which is why the drop was
-always right and only the walking was wrong.
-
-The eyeline was measured across the two spaces too, so **any report about fights being
-hard to trigger that predates this is suspect** and wants re-testing before it is chased.
-
-### Still open from this session
-
-* **MOVES should be a real menu** -- Cam has decided the second option in POK-279: the
-  relearner list *plus* every TM/HM in the bag this species can learn, taught from there.
-  What shipped is only the hint that points at the bag.
-* **The match ends and the player is still in it.** "If the game is over I should be
-  kicked back to the main menu."
-* **Professor Birch's lab should be closed.**
-* The wardrobe and MY VOICE, above.
-
+Answered and closed this pass: the `-1` HP mon (the fog's bleed, working as designed),
+"found 0" (the bag-money off-by-one), the HUD frame (Cam keeps OPTIONS > FRAME), and
+Professor Birch's lab (closed, `lab-closed.txt`).

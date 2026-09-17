@@ -34,6 +34,7 @@
 #include "constants/map_types.h"
 #include "constants/songs.h"
 #include "constants/trainer_hill.h"
+#include "br/br_match.h"
 
 static EWRAM_DATA u8 sWildEncounterImmunitySteps = 0;
 static EWRAM_DATA u16 sPrevMetatileBehavior = 0;
@@ -847,6 +848,14 @@ static bool8 TryDoorWarp(struct MapPosition *position, u16 metatileBehavior, u8 
             warpEventId = GetWarpEventAtMapPosition(&gMapHeader, position);
             if (warpEventId != WARP_ID_NONE && IsWarpMetatileBehavior(metatileBehavior) == TRUE)
             {
+                // A door the match keeps shut says so and eats the press: no door
+                // animation, no warp, and the player is never locked out of their
+                // own controls. The lab's own two warps both point out, so refusing
+                // the one door here is the whole entrance.
+                const struct WarpEvent *closed = &gMapHeader.events->warps[warpEventId];
+
+                if (BrMatch_DoorClosed(closed->mapGroup, closed->mapNum))
+                    return TRUE;
                 StoreInitialPlayerAvatarState();
                 SetupWarp(&gMapHeader, warpEventId, position);
                 DoDoorWarp();

@@ -60,5 +60,9 @@ void BrMatch_WhiteOut(void);
 void BrMatch_Out(void);
 // Called by hall_of_fame.c where the credits would start: back to the map instead.
 void BrMatch_HallOfFameDone(void);
+// A door this ROM never opens. Kanto shuts OAK's LAB for the whole match (POK-51) and
+// this is the same rule: the story's rooms are not part of the game we are playing.
+// Answered for the door's destination, so the map itself is left exactly as pret has it.
+bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum);
 
 #endif // GUARD_BR_MATCH_H
