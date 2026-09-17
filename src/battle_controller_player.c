@@ -304,10 +304,12 @@ static void HandleInputChooseAction(void)
             break;
         case 3: // Bottom right
 #if BR
-            // RUN spends a POKe DOLL for a guaranteed getaway if you hold one (POK-231,
-            // Kanto's flee.lua). The decision rides the action's return value so both
-            // ROMs of a link battle agree on the escape; the doll is spent on the
-            // runner's own bag alone. Without one it is the one-in-four roll.
+            // RUN spends a POKe DOLL, and a POKe DOLL is the whole of it (POK-231,
+            // POK-293). Cam's rule: "should use poke doll, no random chance" -- so
+            // without one there is no escape at all, and BR_RUN_ROLL below now means
+            // "asked to leave, had nothing to leave with". The decision rides the
+            // action's return value so both ROMs of a link battle agree; the doll is
+            // spent on the runner's own bag alone. Every Mart sells them.
             if (CheckBagHasItem(ITEM_POKE_DOLL, 1))
             {
                 RemoveBagItem(ITEM_POKE_DOLL, 1);

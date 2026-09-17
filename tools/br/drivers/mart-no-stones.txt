@@ -27,6 +27,25 @@ wait 90
 shot list-top
 hold DOWN 150
 wait 40
-# The whole shelf, and the bottom of it is CANCEL rather than six stones.
+# The whole shelf, and the bottom of it is the POKe DOLL and CANCEL rather than six
+# stones. The doll is on EVERY shelf including the first (POK-293): it is the only way
+# out of a fight you do not want, and an escape you can only buy in one town is an
+# escape most matches never have.
 shot list-bottom
-say mart no stones ok
+# One up from CANCEL is the doll. Buy it and find it in the bag: 80 is ITEM_POKE_DOLL,
+# and SaveBlock1 +0x560 is the first ITEMS slot with the id in the clear.
+tap UP
+wait 20
+shot on-doll
+tap A
+wait 90
+tap A
+wait 120
+tap A
+wait 150
+tap A
+wait 60
+tap B
+wait 60
+expect u16 *gSaveBlock1Ptr+0x560 80
+say mart shelf ok

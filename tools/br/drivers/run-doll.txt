@@ -25,8 +25,11 @@ shot run
 tap A
 wait 120
 shot fled
-# guaranteed: no roll happened, the runner ran (RAN=4), the doll is spent
-expect u16 gBrBattle+4 0
+# The doll is the whole mechanism now (POK-293), so this is the ONE attempt that ever
+# gets away: attempted once, escaped once, outcome RAN (4) rather than a loss, and the
+# doll gone from the bag.
+expect u16 gBrBattle+4 1
+expect u16 gBrBattle+6 1
 expect u8 gBattleOutcome 4
 expect u16 *gSaveBlock1Ptr+0x560 0
 say run doll ok

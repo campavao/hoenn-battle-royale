@@ -201,14 +201,21 @@ bool8 BrBattle_ShotTick(void)
     return TRUE;
 }
 
-bool8 BrBattle_RollRun(void)
+// A POKe DOLL or nothing (POK-293).
+//
+// Cam: "should use poke doll, no random chance." The one-in-four roll this replaces made
+// running a lottery you could keep entering, which is the worst of both -- it neither
+// let you leave nor made you pay to. A doll is a decision: you bought it, you are
+// spending it, and you are out of the fight. Without one the answer is simply no.
+//
+// Nothing is rolled here at all, so the two ROMs of a link battle cannot disagree: the
+// doll was spent on the runner's own machine at selection and the fact of it rides in
+// the action's return value, which both sides read.
+bool8 BrBattle_TakeRun(bool8 doll)
 {
     gBrBattle.runRolls++;
-    // The battle RNG is in step on both sides of a link battle, so both agree.
-    if (Random() % 4 == 0)
-    {
-        gBrBattle.runEscapes++;
-        return TRUE;
-    }
-    return FALSE;
+    if (!doll)
+        return FALSE;
+    gBrBattle.runEscapes++;
+    return TRUE;
 }

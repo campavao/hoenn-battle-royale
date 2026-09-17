@@ -34,8 +34,11 @@ shot list-top
 hold DOWN 150
 wait 40
 shot list-bottom
-# The shelf's tail is FIRE, WATER, THUNDER, LEAF, SUN, MOON STONE, all at 2100 -- the
-# frame above is where the price is read. Two more down to the MOON STONE and buy one.
+# The shelf's tail is the POKe DOLL (POK-293) and then FIRE, WATER, THUNDER, LEAF, SUN,
+# MOON STONE, all at 2100 -- the frame above is where the price is read. Down to the
+# MOON STONE and buy one.
+tap DOWN
+wait 15
 tap DOWN
 wait 15
 tap DOWN

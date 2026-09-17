@@ -22,7 +22,7 @@ struct BrBattle
     /* 0 */ u16 shotFrames;  // frames spent on the current choice
     /* 2 */ u16 timedOut;    // choices the clock made for the player
     /* 4 */ u16 runRolls;    // RUN attempts against a trainer
-    /* 6 */ u16 runEscapes;
+    /* 6 */ u16 runEscapes;  // ...of which got away, which is one per POKe DOLL spent
     /* 8 */ u8 autoMove;      // the clock chose FIGHT: pick the move at once too
     /* 9 */ u8 stalled;       // a sub-screen already ran this turn's clock out
     /* 10 */ u16 stallFrames; // frames a screen the battle put up has held the clock
@@ -39,8 +39,11 @@ bool8 BrBattle_TakeAutoMove(void);
 // Every frame from BrFrame, whatever is on top: the same clock over the BAG and the
 // party screen, which the two above cannot see (POK-292).
 void BrBattle_TickStall(void);
-// HandleAction_Run, link battles: TRUE when the runner gets away (one in four).
-bool8 BrBattle_RollRun(void);
+// HandleAction_Run, link battles: TRUE when the runner gets away. Not a roll -- Cam's
+// rule (POK-293) is that a POKe DOLL is the only way out of a fight with another
+// trainer, and without one there is no way out. `doll` is what the RUN action carried,
+// decided and spent on the runner's own machine and read back here on both.
+bool8 BrBattle_TakeRun(bool8 doll);
 // The drawn shot clock: the seconds left, top-right of the battle screen. Draw each
 // frame a choice menu is open (it follows bg0's scroll so it stays top-right in both
 // the action and move menus); hide it when selection ends.

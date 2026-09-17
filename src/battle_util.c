@@ -504,7 +504,10 @@ void HandleAction_Run(void)
         // just below, so this one steps aside and lets it run.
         if (gBattleBufferB[gBattlerAttacker][2] != BR_RUN_FORFEIT)
         {
-            if (gBattleBufferB[gBattlerAttacker][2] == BR_RUN_ROLL && !BrBattle_RollRun())
+            // ...and a flee is a POKe DOLL or nothing (POK-293). No roll: the doll was
+            // spent at selection on the runner's own machine and the byte says so here
+            // on both, so the two ROMs cannot come to different answers.
+            if (!BrBattle_TakeRun(gBattleBufferB[gBattlerAttacker][2] == BR_RUN_DOLL))
             {
                 ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
                 gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_CANT_ESCAPE_2;

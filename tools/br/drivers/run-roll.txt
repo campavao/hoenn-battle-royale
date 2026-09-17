@@ -1,6 +1,12 @@
-# run-roll: RUN against another trainer is a one-in-four roll, never an elimination.
-# Loopback engage battle; at the action menu we pick RUN (down, right, A). The roll
-# happens either way; whichever way it went, nobody is OUT.
+# run-roll: RUN against another trainer with nothing to run WITH gets you nowhere
+# (POK-293). Cam's rule: "should use poke doll, no random chance." The one-in-four roll
+# this replaces made running a lottery you could keep entering, which neither let you
+# leave nor made you pay to.
+#
+# run-doll.txt is the other half: the same RUN with a POKe DOLL in the bag, which works.
+#
+# Loopback engage battle; at the action menu we pick RUN (down, right, A). The driver's
+# boot hands out no doll, so this is the refusal -- and nobody is eliminated by it.
 drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
@@ -20,10 +26,15 @@ shot run
 tap A
 wait 500
 shot rolled
-expectge u16 gBrBattle+4 1
-# still BR_PHASE_PLAY, not BR_PHASE_OUT: a failed or successful RUN eliminates nobody
+# Two attempts and no escape: a loopback peer mirrors us, so our own RUN comes back as
+# theirs and the engine asks the question once for each side. Against a real peer it is
+# one. What matters is that runEscapes stayed at zero -- nobody left without a doll.
+expect u16 gBrBattle+4 2
+expect u16 gBrBattle+6 0
+expect u8 gBattleOutcome 0
+# still BR_PHASE_PLAY, not BR_PHASE_OUT: a refused RUN eliminates nobody
 expect u8 gBrMatch 2
 dump gBrBattle 8
 dump gBrNetlink 12
 dump gBattleOutcome 1
-say run roll ok
+say run refused ok
