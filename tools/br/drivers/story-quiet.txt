@@ -1,0 +1,34 @@
+# story-quiet: the story is not standing in the world (POK-298). Cam's play-test walked
+# into Professor Birch and the Zigzagoon on Route 101 with nothing chasing anybody, and
+# the starters bag two tiles away runs ChooseStarter and warps you to the lab -- mid-match.
+#
+# story-quiet-control.txt is the other half: the Youngster on the same route has no hide
+# flag, is still there, and still stops you. Without it this driver passes on a route where
+# every tile is walkable.
+#
+# Route 101 is group 0 num 16. Birch's bag is the object at map (7,14); boot one tile south
+# of it and walk north. A spawned object is solid, so this only lands on the tile if the
+# bag is not there. gBrOwnPos carries map coords + 7.
+wait 30
+expect u16 gBrMailbox 0x4252
+pokebytes gBrMailbox+0x2018 01 00 00 10 07 00 0F 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 16
+expect u16 gBrOwnPos+2 0x0E
+expect u16 gBrOwnPos+4 0x16
+hold UP 26
+wait 20
+shot onto-the-bag
+# walked clean through the bag's tile (y 15 -> 12 -- a run is three tiles in 26 frames)
+# and nothing opened a box on the way
+expect u16 gBrOwnPos+4 0x13
+expect u8 gBrHud+0x178 0
+
+# And Norman's gym is past the Wally tutorial rather than short of it. VAR_PETALBURG_GYM_STATE
+# is SaveBlock1 + 0x139C + 2*(0x4085 - 0x4000) = +0x14A6, and its `switch` has cases 2..8 with
+# the tutorial as the body a no-match falls into. 7 is "defeated Norman".
+expect u16 *gSaveBlock1Ptr+0x14A6 7
+# VAR_ROUTE101_STATE (+0x145C) is pushed past every value the route compares against.
+expect u16 *gSaveBlock1Ptr+0x145C 255
+say story quiet ok

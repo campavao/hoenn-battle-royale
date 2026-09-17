@@ -56,6 +56,7 @@ static void GiveTheRunOfHoenn(void)
 {
     u16 species;
     u16 flag;
+    u16 var;
 
     for (flag = FLAG_BADGE01_GET; flag <= FLAG_BADGE08_GET; flag++)
         FlagSet(flag);
@@ -101,6 +102,59 @@ static void GiveTheRunOfHoenn(void)
     VarSet(VAR_BIRCH_LAB_STATE, 255);
     VarSet(VAR_BIRCH_STATE, 255);
     VarSet(VAR_ROUTE101_STATE, 255);
+    // ...and the rest of the region, because the play-test only got as far as Route 101.
+    // 0x4050..0x4081 is every town and route progress state in one block, and they are
+    // read with goto_if_eq / map_script_2, which want an exact match: 255 matches none of
+    // them, so nothing fires rather than something else firing.
+    for (var = VAR_LITTLEROOT_TOWN_STATE; var <= VAR_ROUTE134_STATE; var++)
+        VarSet(var, 255);
+    VarSet(VAR_LITTLEROOT_INTRO_STATE, 255);
+    VarSet(VAR_LITTLEROOT_RIVAL_STATE, 255);
+    VarSet(VAR_BOARD_BRINEY_BOAT_STATE, 255);
+    VarSet(VAR_BRINEY_HOUSE_STATE, 255);
+    VarSet(VAR_BRINEY_LOCATION, 255);
+    VarSet(VAR_DEVON_CORP_3F_STATE, 255);
+    VarSet(VAR_PETALBURG_WOODS_STATE, 255);
+    VarSet(VAR_RUSTURF_TUNNEL_STATE, 255);
+    VarSet(VAR_SLATEPORT_HARBOR_STATE, 255);
+    VarSet(VAR_SLATEPORT_MUSEUM_1F_STATE, 255);
+    VarSet(VAR_LILYCOVE_MUSEUM_2F_STATE, 255);
+    VarSet(VAR_LILYCOVE_FAN_CLUB_STATE, 255);
+    VarSet(VAR_MOSSDEEP_SPACE_CENTER_STATE, 255);
+    VarSet(VAR_MOSSDEEP_SPACE_CENTER_STAIR_GUARD_STATE, 255);
+    VarSet(VAR_SEAFLOOR_CAVERN_STATE, 255);
+    VarSet(VAR_ELITE_4_STATE, 255);
+    // 255 is the wrong answer exactly once. PetalburgCity_Gym_EventScript_Norman is a
+    // `switch` over cases 2..8 with the Wally tutorial as its body, and a switch that
+    // matches nothing falls through to the body: talking to Norman in a match added Wally
+    // to the map and warped you out of the ring. 7 is `defeated Norman`, which is also
+    // what OnLoad's `call_if_ge 7` wants to unlock the gym's doors.
+    VarSet(VAR_PETALBURG_GYM_STATE, 7);
+
+    // Nobody from the story is standing in the world either. FLAG_HIDE_* is what a map
+    // reads before it spawns an object, and 0x2BC..0x3B7 is the whole event block with
+    // nothing else in it. That is Birch and the Zigzagoon on Route 101 and the starters
+    // bag beside them (an A press ran ChooseStarter and warped you to the lab), Wally in
+    // Petalburg, Mauville and Verdanturf, Wanda and her boyfriend and the two smashable
+    // rocks in Rusturf Tunnel, and every Aqua and Magma grunt in a hideout.
+    //
+    // Across the 518 maps a match can use, the only ordinary trainers any flag in the
+    // block gates are Mt Chimney's five -- Shelby, Melissa, Sheila, Shirley and Sawyer,
+    // who are hidden only while Magma holds the summit. That one stays clear.
+    for (flag = FLAG_HIDE_ROUTE_101_BIRCH_STARTERS_BAG; flag <= FLAG_HIDE_SS_TIDAL_ROOMS_SNATCH_GIVER; flag++)
+    {
+        if (flag != FLAG_HIDE_MT_CHIMNEY_TRAINERS)
+            FlagSet(flag);
+    }
+    FlagSet(FLAG_HIDE_CONTEST_POKE_BALL);
+    // And the tunnel is already open, so Rock Smash in Rusturf is Rock Smash and not a
+    // cutscene: TryUpdateRusturfTunnelState (src/field_specials.c) is guarded on nothing
+    // but this flag, and it is what reunites the couple.
+    FlagSet(FLAG_RUSTURF_TUNNEL_OPENED);
+    // And Birch was rescued, which is not a hide flag but reads like one: Littleroot's
+    // OnTransition calls SetTwinPos while it is clear, and the twin spends the match
+    // standing at (10,1) waiting to turn somebody back from Route 101.
+    FlagSet(FLAG_RESCUED_BIRCH);
 }
 
 static void StartGameAt(const struct BrBoot *b)

@@ -1,0 +1,16 @@
+# story-quiet-control: the other half of story-quiet. Route 101's Youngster at map (16,8)
+# has no hide flag on him, so POK-298's sweep of the FLAG_HIDE_* block leaves him standing
+# -- and a standing object is solid. Boot one tile south and run at him for the same 26
+# frames that carried the player three tiles through where Birch's bag used to be.
+wait 30
+expect u16 gBrMailbox 0x4252
+pokebytes gBrMailbox+0x2018 01 00 00 10 10 00 09 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 16
+expect u16 gBrOwnPos+2 0x17
+expect u16 gBrOwnPos+4 0x10
+hold UP 26
+wait 20
+shot blocked
+expect u16 gBrOwnPos+4 0x10
+say youngster still blocks ok
