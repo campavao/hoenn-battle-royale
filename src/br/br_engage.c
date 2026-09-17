@@ -117,9 +117,43 @@ static EWRAM_DATA u16 sSafariSaid = 0;
 // Anybody at all standing in our eyeline on this map. Deliberately not the engage's
 // own scan: that one has the seat ordering, the busy check and the flee lockout in it,
 // and none of those decide whether to say a sentence.
+// Where a peer's ghost IS, not where the wire says they got to.
+//
+// Kanto's rule, from its README: "a trainer is engaged on the cell your screen has DRAWN
+// them on rather than the cell the wire says they reached, so a fight never opens against
+// a sprite that was never there." It is there because Kanto hit it (POK-98).
+//
+// gBrSeats[].x/y is the roster cell and it runs ahead: BrGhosts_Step advances it the
+// moment a step arrives -- "the roster moves now; the object catches up in the tick, one
+// tile per walk" -- and queues up to BR_STEP_QUEUE more behind it. So a trainer sprinting
+// past could be challenged from five tiles away, by a sprite visibly somewhere else.
+//
+// The object's own currentCoords is at worst one tile ahead (the destination of the step
+// it is playing), which is the cell the screen is drawing them onto. Its facingDirection
+// is the drawn facing for the same reason, and the eyeline wants both or neither.
+//
+// Callers must have checked objId != BR_NO_OBJ; an unspawned ghost has no drawn cell.
+static void DrawnAt(const struct BrSeat *s, s16 *x, s16 *y, u8 *dir)
+{
+    if (s->objId != BR_NO_OBJ)
+    {
+        const struct ObjectEvent *o = &gObjectEvents[s->objId];
+
+        *x = o->currentCoords.x;
+        *y = o->currentCoords.y;
+        *dir = o->facingDirection;
+        return;
+    }
+    *x = s->x;
+    *y = s->y;
+    *dir = s->dir;
+}
+
 static bool8 LookingAtSomebody(void)
 {
     u8 seat;
+    s16 sx, sy;
+    u8 sdir;
 
     for (seat = 0; seat < BR_MAX_SEATS; seat++)
     {
@@ -129,8 +163,9 @@ static bool8 LookingAtSomebody(void)
             continue;
         if (s->mapGroup != gBrOwnPos.mapGroup || s->mapNum != gBrOwnPos.mapNum)
             continue;
-        if (Sees(gBrOwnPos.x, gBrOwnPos.y, gBrOwnPos.dir, s->x, s->y)
-         || Sees(s->x, s->y, s->dir, gBrOwnPos.x, gBrOwnPos.y))
+        DrawnAt(s, &sx, &sy, &sdir);
+        if (Sees(gBrOwnPos.x, gBrOwnPos.y, gBrOwnPos.dir, sx, sy)
+         || Sees(sx, sy, sdir, gBrOwnPos.x, gBrOwnPos.y))
             return TRUE;
     }
     return FALSE;
@@ -263,6 +298,8 @@ void BrEngage_NoAnswer(u8 peerSeat)
 void BrEngage_Tick(void)
 {
     u8 seat;
+    s16 sx, sy;
+    u8 sdir;
 
     if (gBrEngage.cooldown)
         gBrEngage.cooldown--;
@@ -293,8 +330,10 @@ void BrEngage_Tick(void)
             continue; // already fighting someone; a menu is not a hiding place though
         if (seat == gBrEngage.fledFrom)
             continue; // we fled this one: no turning around to re-engage yet
-        if (Sees(gBrOwnPos.x, gBrOwnPos.y, gBrOwnPos.dir, s->x, s->y)
-         || Sees(s->x, s->y, s->dir, gBrOwnPos.x, gBrOwnPos.y))
+        // The cell their sprite is on, not the one the wire says they reached (POK-288).
+        DrawnAt(s, &sx, &sy, &sdir);
+        if (Sees(gBrOwnPos.x, gBrOwnPos.y, gBrOwnPos.dir, sx, sy)
+         || Sees(sx, sy, sdir, gBrOwnPos.x, gBrOwnPos.y))
         {
             Challenge(seat);
             return;

@@ -1,0 +1,60 @@
+# engage-drawn: a fight opens on the cell their SPRITE is on, not the one the wire says
+# they reached (POK-288).
+#
+# Kanto's rule, from its README: "a trainer is engaged on the cell your screen has DRAWN
+# them on rather than the cell the wire says they reached, so a fight never opens against
+# a sprite that was never there." It is there because Kanto hit it (POK-98).
+#
+# gBrSeats[].x/y is the roster cell and it runs AHEAD of the sprite: BrGhosts_Step moves it
+# the moment a step arrives and queues up to BR_STEP_QUEUE (5) more behind it, one played
+# per walk. So a trainer sprinting past could be challenged from five tiles away by a
+# sprite visibly somewhere else.
+#
+# engage.txt places a STATIC ghost already in the eyeline, so no driver has ever had one
+# mid-walk -- which is why the gap in the code outlived the tests.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# Seat 1 placed at (19,16) on Littleroot facing WEST: seven tiles east of us at (12,16),
+# outside BR_SIGHT_RANGE (5), and close enough that the ghost really spawns -- which it
+# HAS to, because Spawn() puts the object on the roster cell and resets the queue, so a
+# ghost that first appears after the steps have landed appears already caught up and
+# there is no lag to test.
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 13 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrSeats+16 1
+expect u16 gBrSeats+20 19
+# spawned: objId is not BR_NO_OBJ
+expectle u8 gBrSeats+25 15
+# gBrEngage+4 is the count of challenges sent (lastTarget at +0 is 0xFF for "none").
+expect u16 gBrEngage+4 0
+shot far
+# Three steps WEST in one go -- under BR_STEP_QUEUE (5), so the tick walks them rather
+# than snapping to the roster. The roster lands on (16,16), four tiles away and well
+# inside the eyeline, while the sprite is still back at (19,16) with three walks to play.
+# Slot N is the one inHead N+1 hands over, so these go in slots 1, 2 and 3 -- writing the
+# first back into slot 0 puts it where the PLACE has already been consumed from, and the
+# ROM reads three slots that were never written.
+pokebytes gBrMailbox+0x1058 03 0B 08 00 00 01 03 12 00 10 00 00 09
+poke u16 gBrMailbox+0x0C 2
+pokebytes gBrMailbox+0x1098 03 0B 08 00 00 01 03 11 00 10 00 00 09
+poke u16 gBrMailbox+0x0C 3
+pokebytes gBrMailbox+0x10D8 03 0B 08 00 00 01 03 10 00 10 00 00 09
+poke u16 gBrMailbox+0x0C 4
+wait 4
+# The roster is already there, and the sprite is still walking...
+expect u16 gBrSeats+20 16
+expectge u8 gBrSeats+26 1
+# ...and the sprite is not, so nothing has been challenged.
+expect u16 gBrEngage+4 0
+shot walking
+# Let the ghost actually walk it. Once the sprite is inside the eyeline the challenge
+# goes out -- the rule is "not until it is drawn there", not "never".
+wait 240
+shot arrived
+expect u16 gBrEngage+4 1
+expect u8 gBrEngage 1
+say engage drawn ok
