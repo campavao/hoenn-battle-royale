@@ -1,6 +1,11 @@
 # catch-release: a parked catch with a full party brings up the party picker in the
-# overworld; choosing a slot puts the catch there. Mechanism only: the park comes from
-# a copy of the test Treecko, the "full party" check is bypassed by setting pending.
+# overworld; choosing a slot puts the catch there -- and the one that gave up its slot
+# lands on the ground as a ball anybody can take (POK-294). Kanto's rule, from its
+# README: "The released Pokemon lands as a ball at your feet, claimable by anyone --
+# trading up leaves a trace." Nothing ever leaves a match.
+#
+# Mechanism only: the park comes from a copy of the test Treecko, the "full party" check
+# is bypassed by setting pending.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -22,4 +27,20 @@ wait 90
 expect u8 gBrCatch 0
 expect u8 gBrCatch+1 0
 shot done
+# ...and the old one is on the ground rather than gone. One piece of loot on this map,
+# one release counted.
+expect u8 gBrLoot+0xA0 1
+expect u8 gBrLoot+0xA4 1
+# Its key is in the released space -- BR_LOOT_KEY_FREED (0x4000) | seat 0 | first drop --
+# so it can never collide with an elimination's (seat << 8) or a trainer's (0x8000).
+expect u16 gBrLoot 0x4000
+# ...and it is BESIDE us rather than under us: the boot leaves us on (12,16) in the outer
+# coords loot uses, and the first spill offset out from there is (13,16).
+expect u16 gBrLoot+2 13
+expect u16 gBrLoot+4 16
+# nothing was picked back up by the presses that chose the slot
+expect u8 gBrLoot+0xA2 0
+# kind 1 is BR_LOOT_MON, and it is the TREECKO that gave up the slot (species 277).
+expect u8 gBrLoot+11 1
+expect u16 gBrLoot+6 277
 say catch release ok

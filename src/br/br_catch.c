@@ -16,6 +16,7 @@
 #include "br/br_hud.h"
 #include "br/br_spectate.h"
 #include "br/br_catch.h"
+#include "br/br_loot.h"
 #include "br/br_moves.h"
 
 EWRAM_DATA struct BrCatch gBrCatch = {0};
@@ -57,7 +58,11 @@ void BrCatch_Apply(void)
 
     if (gBrCatch.pending && slot < PARTY_SIZE)
     {
-        gPlayerParty[slot] = gBrPendingCatch; // the old one is released, the catch takes its slot
+        // Nothing ever leaves the match (POK-294). The one giving up its slot is put on
+        // the ground first, as a ball anybody can take -- trading up leaves a trace --
+        // and only then is it overwritten.
+        BrLoot_Released(&gPlayerParty[slot]);
+        gPlayerParty[slot] = gBrPendingCatch; // the old one takes its place on the ground
         // A different mon in the slot, so whatever the player had chosen for the last one
         // is not a choice about this one (POK-290).
         BrMoves_ForgetKept(slot);

@@ -32,6 +32,15 @@
 // on the ground either way, and the field that says which is which is `kind`.
 #define BR_LOOT_ITEM 3
 
+// Key spaces, so two things on the ground can never claim the same key:
+//
+//   0x0000..0x1FFF  a fallen trainer's team and bag -- `(seat << 8) | n`, minted by the
+//                   page, which is what decides where an elimination scatters.
+//   0x4000..0x5FFF  a Pokemon the player RELEASED to make room (POK-294). Minted in the
+//                   ROM, because nobody else is watching the moment it happens.
+//   0x8000..0xFFFF  one of Hoenn's own trainers -- `0x8000 | (party index << 11) | id`.
+#define BR_LOOT_KEY_FREED 0x4000
+
 struct BrLootItem
 {
     /* 0 */ u16 key;      // the wire's instance id, unique for the match
@@ -54,6 +63,9 @@ struct BrLoot
     /* 0xA1 */ u8 spawned;  // objects on this map right now, for drivers
     /* 0xA2 */ u8 taken;    // pieces this player has picked up, for drivers
     /* 0xA3 */ u8 gone;     // beaten trainers this sweep has taken off a map, for drivers
+    /* 0xA4 */ u8 freed;    // Pokemon this player has released (POK-294), and the low
+                            // half of their keys. Free padding: the struct was already
+                            // rounded up to here.
 };
 
 // Trainers we have beaten: Emerald leaves a beaten trainer standing on the map, and
@@ -88,6 +100,12 @@ void BrLoot_SpillOwn(void);
 // One of Hoenn's own trainers just lost to us: they leave the map for the rest of the
 // match, and one of their team is on the ground where they stood (Kanto BR-9b).
 void BrLoot_TrainerBeaten(u16 trainerId, u8 localId);
+
+// A Pokemon the player let go of to make room for a catch lands at their feet as a ball
+// anybody can pick up (POK-294). Kanto's rule, from its README: "The released Pokemon
+// lands as a ball at your feet, claimable by anyone -- trading up leaves a trace."
+// Nothing ever leaves a match.
+void BrLoot_Released(struct Pokemon *mon);
 // Puts one dealt item ball on the ground (POK-261). Every ROM deals the same ones from
 // the match seed, so nothing is sent: they simply agree. The key's top bit is set, the
 // way a beaten trainer's is -- it belongs to nobody, so nothing trade-evolves from it.

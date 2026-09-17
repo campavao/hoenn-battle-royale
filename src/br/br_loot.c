@@ -758,6 +758,53 @@ void BrLoot_TrainerBeaten(u16 trainerId, u8 localId)
     Despawn_Trainer(group, num, localId);
 }
 
+// A Pokemon let go of to make room lands at your feet (POK-294). See the header.
+//
+// Minted here rather than by the page, unlike an elimination: a release happens inside a
+// script the page never sees, and the mon is gone from the party on the next line.
+// BR_LOOT_KEY_FREED keeps the key clear of both other spaces, and the counter only has to
+// be unique for one seat for one match -- a party of six, released one at a time, cannot
+// come near wrapping a byte.
+void BrLoot_Released(struct Pokemon *mon)
+{
+    u8 buf[4 + 9 + 1];
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    s16 usedX[BR_SPILL_CELLS], usedY[BR_SPILL_CELLS];
+    u16 species = GetMonData(mon, MON_DATA_SPECIES, NULL);
+    u16 len = 0;
+    u8 cell = 0;
+    s16 x, y;
+
+    if (species == SPECIES_NONE)
+        return;
+    // Beside you, not under you. NextCell's first offset is the cell you are standing on
+    // -- which is where Kanto's "at your feet" would put it -- and a ball there is taken
+    // by the same A press that is already being held down, straight back into a party
+    // that is still full, which asks you to release again. Starting one cell out keeps
+    // the trace without the loop. If nothing within reach is free the mon stays in its
+    // ball rather than falling into a wall.
+    cell = 1;
+    if (!NextCell(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
+        return;
+
+    buf[len++] = gBrMySeat;
+    buf[len++] = gSaveBlock1Ptr->location.mapGroup;
+    buf[len++] = gSaveBlock1Ptr->location.mapNum;
+    buf[len++] = 1; // one mon, no bag
+    BrWire_WriteU16(buf + len, (u16)(BR_LOOT_KEY_FREED | (gBrMySeat << 8) | gBrLoot.freed));
+    BrWire_WriteU16(buf + len + 2, (u16)x);
+    BrWire_WriteU16(buf + len + 4, (u16)y);
+    BrWire_WriteU16(buf + len + 6, species);
+    buf[len + 8] = GetMonData(mon, MON_DATA_LEVEL, NULL);
+    len += 9;
+    buf[len++] = 0;
+    gBrLoot.freed++;
+    // Out to the room first, then applied here, exactly as a beaten trainer's team is:
+    // every ROM spawns the same ball on the same cell from the same message.
+    BrWire_SendLarge(BR_MSG_SPILL, buf, len);
+    ParseSpill(buf, len);
+}
+
 void BrLoot_Init(void)
 {
     CpuFill32(0, &gBrLoot, sizeof(gBrLoot));
