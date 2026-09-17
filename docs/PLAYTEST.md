@@ -658,3 +658,35 @@ points at addresses that build never had.
 Preview URLs sit behind Vercel's Deployment Protection, so the script's own checks go
 through `vercel curl`; a plain `curl` gets a 302 to the SSO page and every check "fails"
 on a deploy that is fine.
+
+### And the live site really does patch a stock ROM -- checked, and it found a bug
+
+Cam asked whether the deployed site patches on the fly the way the dev shell does. It
+does: `web/e2e/live.spec.ts` drives `https://hoenn-battle-royale.vercel.app`, hands it a
+retail Emerald (U), and gets `patch 1 · shell 0.0.0 · rom b7d1d79` and the game screen in
+about seventeen seconds, with nothing failing to load.
+
+That is worth having as a test, because **the dev server proves none of it**. Under
+`import.meta.env.DEV` the shell runs a pre-patched local build instead of patching, and
+registers no service worker -- so the path a real player takes had only ever been run by
+`patch.spec.ts` against the dev server, and that spec skips itself unless `HBR_BASE_ROM`
+is set, which it evidently never was.
+
+**The first run of it failed, and the failure was real.** The shell sat on the import
+screen for ever. It was not the patcher, the service worker, `crypto.subtle`, IndexedDB or
+the wasm core -- all of those were fine, and the same bundle worked when served from
+`vite preview`:
+
+`#screen-importing` is the page's DEFAULT screen -- it carries no `hidden` in
+`index.html` -- so the dropzone and the file picker are live from the first paint. The
+change listener is not attached until `runImportScreen`, which runs after
+`await Emulator.create()`: five pthread workers and a 1.8 MB wasm core. Over a slow line
+that gap is seconds. **A file picked inside it fires a change event at nothing, is
+silently never read, and the shell waits for ever** -- which is indistinguishable from a
+shell that cannot patch at all. Locally the boot is fast enough that the window barely
+exists; over the network it is wide open.
+
+`runImportScreen` reads `input.files` when it attaches now, so a ROM that was already
+picked is taken. The spec sets the file at the first possible moment on purpose, which is
+what pins it.
+

@@ -187,6 +187,18 @@ async function runImportScreen(emu: Emulator): Promise<void> {
       const file = input.files?.[0];
       if (file) void handle(file);
     });
+    // A ROM picked BEFORE this listener existed is still sitting on the input, and
+    // nothing would ever read it.
+    //
+    // `#screen-importing` is the page's default screen -- it carries no `hidden` in
+    // index.html -- so the dropzone and the file picker are live from the first paint,
+    // while this listener is not attached until runImportScreen runs, which is after
+    // `await Emulator.create()`: five pthread workers and a 1.8 MB wasm core. Over a slow
+    // connection that is seconds, and a change event fired in the gap lands on nothing.
+    // The file is silently never read and the shell waits for ever, which looks exactly
+    // like a shell that cannot patch -- it is what the first live test of the deployed
+    // site hit, and a quick player on a slow line can hit it too.
+    if (input.files?.[0]) void handle(input.files[0]);
     // Dev only: `#rom=<absolute path>` pulls a local file through Vite's /@fs/ route so a
     // headless browser can drive the shell without a file picker. Never in production.
     const devRom = import.meta.env.DEV ? new URLSearchParams(location.hash.slice(1)).get('rom') : null;
