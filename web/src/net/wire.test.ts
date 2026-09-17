@@ -41,7 +41,7 @@ const SAMPLES: Msg[] = [
     mons: [{ key: 1, x: 5, y: 5, species: 1, level: 10 }],
     bag: { key: 2, x: 5, y: 6, items: [{ id: 1, n: 2 }], money: 500, name: 'ASH' },
   },
-  { t: 'npcout', seat: 2, map: { group: 0, num: 1 }, obj: 'trainer_1' },
+  { t: 'npcout', seat: 2, map: { group: 0, num: 1 }, localId: 7 },
   { t: 'ring', seat: 0, phase: 1, sx: 0, sy: 0, r: 10, place: 'Littleroot', elapsed: 0 },
   { t: 'clock', seat: 0, left: 120 },
   { t: 'win', seat: 4 },

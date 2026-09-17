@@ -57,6 +57,7 @@ import type {
   DresultMsg,
   FledMsg,
   GiveMsg,
+  NpcOutMsg,
   PickMsg,
   LandMsg,
   ResultMsg,
@@ -94,6 +95,7 @@ export const BR_MSG = {
   DRESULT: 28,
   FLED: 29,
   GIVE: 30,
+  NPCOUT: 31,
   PICK: 24,
   LAND: 25,
 } as const;
@@ -738,6 +740,15 @@ function decodeGive(bytes: Uint8Array): GiveMsg {
   return { t: 'give', items };
 }
 
+// NPCOUT: a Hoenn route trainer somebody beat, so every ROM hides the sprite (POK-287).
+function encodeNpcOut(m: NpcOutMsg): Uint8Array {
+  return new Writer().u8(m.seat).u8(m.map.group).u8(m.map.num).u8(m.localId).toBytes();
+}
+function decodeNpcOut(bytes: Uint8Array): NpcOutMsg {
+  const r = new Reader(bytes);
+  return { t: 'npcout', seat: r.u8(), map: { group: r.u8(), num: r.u8() }, localId: r.u8() };
+}
+
 function encodeResult(m: ResultMsg): Uint8Array {
   return new Writer().u8(m.seat).u8(OUTCOME_ORDER.indexOf(m.outcome)).toBytes();
 }
@@ -778,6 +789,7 @@ const CODECS: Record<string, Codec> = {
   ticker: { type: BR_MSG.TICKER, encode: (m) => encodeTicker(m as TickerMsg), decode: decodeTicker },
   result: { type: BR_MSG.RESULT, encode: (m) => encodeResult(m as ResultMsg), decode: decodeResult },
   give: { type: BR_MSG.GIVE, encode: (m) => encodeGive(m as GiveMsg), decode: decodeGive },
+  npcout: { type: BR_MSG.NPCOUT, encode: (m) => encodeNpcOut(m as NpcOutMsg), decode: decodeNpcOut },
 };
 
 const CODEC_BY_TYPE = new Map<number, Codec & { t: string }>(

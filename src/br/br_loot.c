@@ -517,6 +517,9 @@ static void Despawn_Trainer(u8 mapGroup, u8 mapNum, u8 localId)
     }
 }
 
+// Where the ring writes next once every slot is taken.
+static EWRAM_DATA u8 sDespawnNext = 0;
+
 static void RememberDespawned(u8 mapGroup, u8 mapNum, u8 localId)
 {
     u8 i;
@@ -537,8 +540,33 @@ static void RememberDespawned(u8 mapGroup, u8 mapNum, u8 localId)
             return;
         }
     }
-    // Full: the oldest one comes back. Sixteen beaten trainers on one match's worth of
-    // maps is already more than Kanto sees, and the alternative is EWRAM we do not have.
+    // Full. Since POK-287 this table holds the whole ROOM's beaten trainers rather than
+    // only ours, and a twelve-player match beats far more than sixteen of them -- so
+    // running out is now the normal case rather than the strange one, and which entry
+    // goes matters. Overwrite the oldest: the newest sixteen are the ones on routes
+    // somebody has just cleared, which is where anybody is about to be standing. It used
+    // to silently drop the NEW one, which is the same size of table with the worse half
+    // of it kept.
+    gBrDespawned[sDespawnNext].mapGroup = mapGroup;
+    gBrDespawned[sDespawnNext].mapNum = mapNum;
+    gBrDespawned[sDespawnNext].localId = localId;
+    sDespawnNext = (u8)((sDespawnNext + 1) % BR_MAX_DESPAWN);
+}
+
+// NPCOUT: somebody else beat one of Hoenn's own trainers, so the sprite goes away here
+// too (POK-287). Nobody hears their own message come back, so this only ever runs on a
+// peer -- the beater despawned it inline in BrLoot_TrainerBeaten.
+static void HandleNpcOut(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 4 || d[3] == 0)
+        return;
+    // Remembered first: the sweep is what hides it when we walk onto that map later, and
+    // Despawn_Trainer only does anything if we are standing on it right now.
+    RememberDespawned(d[1], d[2], d[3]);
+    Despawn_Trainer(d[1], d[2], d[3]);
 }
 
 // Swept every frame, not once per map load: a map spawns its objects over several
@@ -594,6 +622,19 @@ void BrLoot_TrainerBeaten(u16 trainerId, u8 localId)
     BrWire_SendLarge(BR_MSG_SPILL, buf, len);
     ParseSpill(buf, len);
 
+    // And the sprite goes away for everybody, not just here (POK-287). The spill has
+    // always been broadcast and the despawn never was, so every other client saw the
+    // Poke Balls lying on the ground with the trainer still standing next to them -- and
+    // could walk up and fight the same one again. Kanto's rule is that beaten means gone.
+    {
+        u8 out[4];
+
+        out[0] = gBrMySeat;
+        out[1] = group;
+        out[2] = num;
+        out[3] = localId;
+        BrWire_Send(BR_MSG_NPCOUT, out, 4);
+    }
     RememberDespawned(group, num, localId);
     Despawn_Trainer(group, num, localId);
 }
@@ -609,6 +650,7 @@ void BrLoot_Init(void)
     BrNet_On(BR_MSG_SPILL | BR_MSG_CONT, HandleSpillCont);
     BrNet_On(BR_MSG_PICKUP, HandlePickup);
     BrNet_On(BR_MSG_GIVE, HandleGive);
+    BrNet_On(BR_MSG_NPCOUT, HandleNpcOut);
 }
 
 void BrLoot_Tick(void)

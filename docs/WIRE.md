@@ -58,7 +58,7 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `out` | `BR_MSG_OUT` 9 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | the eliminated seat |
 | `pickup` | `BR_MSG_PICKUP` 10 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | whoever picked something up off the ground |
 | `spill` | `BR_MSG_SPILL` 11 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | the defeated trainer's client, on elimination |
-| `npcout` | -- | page&lt;-&gt;page | no | whoever beat one of Hoenn's own route trainers |
+| `npcout` | 31 | page&lt;-&gt;page, page-&gt;ROM | yes | whoever beat one of Hoenn's own route trainers |
 | `ring` | `BR_MSG_RING` 12 | host-&gt;page&lt;-&gt;ROM | yes | host, on every fog shrink |
 | `clock` | `BR_MSG_CLOCK` 13 | host-&gt;page&lt;-&gt;ROM | yes | host, ticking down a shared countdown (the Safari opening today) |
 | `start` | `BR_MSG_START` 14 | host-&gt;page&lt;-&gt;ROM | yes | host, when the match begins |
@@ -134,16 +134,22 @@ runtime.
 - **String keys for ground items and object events.** `took`'s Lua string `key`
   becomes `pickup`'s numeric `key` (a u16): EWRAM has no room for arbitrary
   strings, and the ROM has to recognize a ground item by id, not by name. `npcout`
-  keeps a string `obj` since it stays JSON-only (see below).
+  went the same way when it joined the crossing set (POK-287): its `obj` string is a
+  numeric `localId`.
 - **Anything gen1recomp-engine-internal.** Kanto's `Wire.PROTOCOL` history mentions
   engine specifics (`src/link/Handshake.lua`, `Fingerprint`'s `modKey`) that have no
   Hoenn analogue; this wire's version gate lives entirely in the relay's room check
   above, not in per-message fields.
-- **`npcout`, `botout`, `botrec`, `fame`, `late`, `win`, `again`
-  stayed JSON-only** even though some of them (npcout especially) arguably touch
-  what a remote ROM renders: POK-217's scope named an explicit ROM-crossing subset
-  ("place/step/face/map, challenge and the battle blocks, party, faint/out,
-  pickup/spill, ring, clock, seed/start, ticker/say, result") and these are not in
-  it. If a remote player's own map trainer needs to auto-hide on `npcout` in
-  practice, that is a follow-up ticket to add it to the crossing set, not a gap in
-  this port.
+- **`botout`, `botrec`, `fame`, `late`, `win`, `again` stayed JSON-only**:
+  POK-217's scope named an explicit ROM-crossing subset ("place/step/face/map,
+  challenge and the battle blocks, party, faint/out, pickup/spill, ring, clock,
+  seed/start, ticker/say, result") and these are not in it.
+
+  **`npcout` was on that list and is not any more (POK-287).** The reasoning for
+  leaving it off was that each client's ROM keeps its own beaten-trainer flags -- true,
+  for the trainers it beat. The spill was broadcast and the despawn was not, so
+  everybody else saw the Poke Balls on the ground with the trainer still standing next
+  to them, and could fight and loot the same one again. Kanto's rule is that beaten
+  means gone: the world is a record of the match. The note above ("if a remote player's
+  own map trainer needs to auto-hide on `npcout` in practice, that is a follow-up
+  ticket") was right that it was a follow-up and wrong that it was hypothetical.

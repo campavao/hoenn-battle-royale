@@ -374,15 +374,24 @@ export interface SpillMsg {
   bag?: SpillBag;
 }
 
-/** One of Hoenn's own route/field trainers has been beaten: hide the sprite
- *  everywhere. JSON only -- not in the ROM-crossing subset (POK-217 scope); each
- *  client's own ROM instance already persists its beaten-trainer flags locally, this
- *  message is only for a page-side "who's still standing" view. */
+/** One of Hoenn's own route/field trainers has been beaten: hide the sprite everywhere
+ *  (POK-287). Kanto's rule, from its README -- beaten means gone, because the world is a
+ *  record of the match and reading a route as "somebody got here first" is the point.
+ *
+ *  This was JSON-only under POK-217's ROM-crossing scope, on the reasoning that each
+ *  client's ROM keeps its own beaten-trainer flags. It does -- for the trainers IT beat.
+ *  Everybody else saw the spilled Poke Balls on the ground with the trainer still
+ *  standing next to them, and could fight and loot the same one again. docs/WIRE.md named
+ *  this as the follow-up if it ever mattered in practice; it does.
+ *
+ *  Crosses into the ROM. `obj` was a string for a page-side view that was never built;
+ *  it is the object event's local id now, because EWRAM has no room for names and the
+ *  object is found by id anyway. */
 export interface NpcOutMsg {
   t: 'npcout';
   seat: number; // the beater
   map: MapRef;
-  obj: string; // the object event's key
+  localId: number; // the object event's local id on that map
 }
 
 /** The host's word on where the fog is now; `place` is the section's name so every
@@ -1044,7 +1053,7 @@ const decoders: Record<string, Decoder> = {
     t: 'npcout',
     seat: reqSeat(m),
     map: reqMapRef(m),
-    obj: optShortString(m, 'obj') ?? fail('bad object'),
+    localId: reqInt(m, 'localId', 1, 255),
   }),
 
   ring: (m) => validateRing(m),

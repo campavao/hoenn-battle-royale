@@ -724,3 +724,47 @@ host-only versus guest-only, because every local two-client spec makes both side
 kind of client with the same dev conveniences. Any "the page writes this into the ROM"
 field is worth checking twice -- once as a host, once as a guest.
 
+## 2026-09-17, the backlog audit's best find
+
+### A beaten route trainer only vanished for whoever beat them -- **fixed** (POK-287)
+
+Kanto's rule, from its README: **beaten means gone.** The sprite disappears for every
+client and only the Poke Balls stay, because the world is a record of the match and
+reading a route as "somebody got here first" is the point of it.
+
+Ours despawned on one screen. `BrLoot_TrainerBeaten` broadcasts the spill and then calls
+`RememberDespawned`/`Despawn_Trainer`, **both of which only touch `gBrDespawned`, an EWRAM
+table on the ROM that won the fight.** `ParseSpill` adds loot rows and despawns nothing.
+So every other client saw the balls lying on the ground with the trainer still standing
+next to them -- and could walk up, fight the same one again, and spill them a second time.
+The trainer's key is `0x8000 | trainerId` and `Add()` just overwrites the slot, so nothing
+downstream objected either.
+
+**`docs/WIRE.md` had already called this out as the follow-up it is.** `npcout` was left
+out of POK-217's ROM-crossing subset on the reasoning that each client's ROM keeps its own
+beaten-trainer flags -- true, for the trainers *it* beat -- with the note: "if a remote
+player's own map trainer needs to auto-hide on `npcout` in practice, that is a follow-up
+ticket to add it to the crossing set, not a gap in this port." Right that it was a
+follow-up, wrong that it was hypothetical.
+
+It crosses now, as `BR_MSG_NPCOUT` 31 (`seat, group, num, localId`). Its `obj` was a string
+for a page-side view that was never built and is a numeric local id instead: EWRAM has no
+room for names and the object is found by id anyway. Worth saying out loud that the page
+half of `npcout` had **no sender and no handler at all** -- declared in `wire.ts`,
+validated, and referenced by nothing but its own round-trip test. That is the third
+dead-wire message this week, after `again` and `result`.
+
+**The despawn table is a ring now.** It used to hold only the trainers *this* player beat,
+and sixteen was generous. It holds the room's now, and a twelve-player match beats far
+more than sixteen between them, so running out went from strange to normal. It silently
+dropped the NEW entry when full -- the same size of table with the worse half kept. The
+newest sixteen win instead: those are the routes somebody has just cleared, which is where
+anybody is about to be standing.
+
+`npcout-peer.txt` is the driver. One thing it cost, worth keeping: **the stand-in has to be
+on screen.** Emerald only keeps object events near the camera in `gObjectEvents`, so a
+sprite out of range is not there to remove and the despawn counts nothing. Littleroot's NPC
+1 is eleven tiles east of where the boot lands, which is exactly far enough to make the
+driver pass for the wrong reason; it uses the moving van at (2,10), three tiles away, and
+shoots before and after so the removal is something a person can see.
+

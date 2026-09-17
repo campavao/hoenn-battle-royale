@@ -306,4 +306,24 @@
 //   1..:  stacks   count * (id u16, n u8)
 #define BR_MSG_GIVE 30
 
+// npcout: one of Hoenn's own route trainers has been beaten, so its sprite goes away
+// for EVERYBODY (POK-287). Kanto's rule, README: "beaten means gone" -- the world is a
+// record of the match, and reading a route as "somebody got here first" is the point.
+//
+// The spill was already broadcast and the despawn was not, so every other client saw the
+// Poke Balls on the ground with the trainer still standing next to them -- and could
+// fight and loot the same trainer again.
+//
+// docs/WIRE.md called this out as the follow-up it is: npcout was left JSON-only under
+// POK-217's ROM-crossing scope, with the note that if a remote player's map trainer ever
+// needs to auto-hide, it joins the crossing set. It does, so it has. Its `obj` was a
+// string for the page's benefit and is a local id here: EWRAM has no room for names, and
+// the object is found by id anyway.
+// Payload:
+//   0:    seat     u8   who beat them
+//   1:    group    u8   the map they were standing on
+//   2:    num      u8
+//   3:    localId  u8   the object event's local id on that map
+#define BR_MSG_NPCOUT 31
+
 #endif // GUARD_BR_WIRE_H

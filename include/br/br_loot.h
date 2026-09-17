@@ -52,8 +52,13 @@ struct BrLoot
 };
 
 // Trainers we have beaten: Emerald leaves a beaten trainer standing on the map, and
-// Kanto's rule is that a farmed route shows it. Small on purpose -- EWRAM is full, and
-// a match does not walk past that many.
+// Kanto's rule is that a farmed route shows it. Small on purpose -- EWRAM is full.
+//
+// It used to hold only the trainers THIS player had beaten, and sixteen was generous for
+// that. Since POK-287 it holds the room's: every client hears every npcout, and a
+// twelve-player match beats far more than sixteen route trainers between them. So it is a
+// ring -- the newest sixteen win. A despawn that falls off is a trainer who stands back
+// up on a route somebody cleared a long time ago, which is the least bad way to run out.
 #define BR_MAX_DESPAWN 16
 
 struct BrDespawned

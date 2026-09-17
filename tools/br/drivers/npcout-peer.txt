@@ -1,0 +1,35 @@
+# npcout-peer: a trainer SOMEBODY ELSE beat is gone here too (POK-287).
+#
+# Kanto's rule, from its README: beaten means gone. The world is a record of the match,
+# and reading a route as "somebody got here first" is the point of it. The spill has
+# always been broadcast and the despawn never was, so every client but the beater saw the
+# Poke Balls lying on the ground with the trainer still standing next to them -- and could
+# walk up, fight the same one again, and spill them a second time.
+#
+# trainer-despawn.txt is the other half: a trainer WE beat, poked straight into the table.
+# This one arrives the way a peer's does, through the in-ring, and has to reach the same
+# place. The sweep does not care how a local id got onto the list, so Littleroot's own
+# local id 5 stands in for a route trainer -- the moving van outside Brendan's house at
+# (2,10), three tiles from where the boot lands. It has to be something ON SCREEN: Emerald
+# only keeps object events near the camera in gObjectEvents, so a sprite out of range is
+# not there to remove and the despawn counts nothing. Littleroot's NPC 1 is eleven tiles
+# east, which is exactly far enough to make this driver pass for the wrong reason.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+shot before
+# nothing has been taken off this map yet, and the table is empty
+expect u8 gBrLoot+0xA3 0
+expect u8 gBrDespawned+2 0
+# NPCOUT: type 31 (0x1F), framed len 7 = hdr(04 00 00) + seat 03, group 00, num 09, localId 05
+pokebytes gBrMailbox+0x1018 1F 07 04 00 00 03 00 09 05
+poke u16 gBrMailbox+0x0C 1
+wait 60
+shot gone
+# it reached the table...
+expect u8 gBrDespawned+0 0
+expect u8 gBrDespawned+1 9
+expect u8 gBrDespawned+2 5
+# ...and the sprite is off this map
+expectge u8 gBrLoot+0xA3 1
+say npcout peer ok
