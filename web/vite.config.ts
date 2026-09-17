@@ -10,17 +10,22 @@ const isolation = {
 };
 
 export default defineConfig({
-  server: { headers: isolation, host: true, fs: { allow: ['.', 'C:/Users/cam95/Documents/Github'] } },
+  server: {
+    headers: isolation,
+    host: true,
+    fs: { allow: [".", "C:/Users/cam95/Documents/Github"] },
+  },
   preview: { headers: isolation, host: true },
   build: {
-    target: 'es2022',
+    target: "es2022",
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'index.html'),
-        spike: resolve(__dirname, 'spike/index.html'),
+        main: resolve(__dirname, "index.html"),
+        spike: resolve(__dirname, "spike/index.html"),
       },
     },
+    outDir: "dist", // Forces Vite to output to the "dist" folder
   },
   // mgba.js spawns its pthread workers from its own URL; leave it unbundled.
-  optimizeDeps: { exclude: ['/emu/mgba.js'] },
+  optimizeDeps: { exclude: ["/emu/mgba.js"] },
 });
