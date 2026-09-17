@@ -78,7 +78,6 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `fled` | `BR_MSG_FLED` 29 | ROM-&gt;page&lt;-&gt;page-&gt;ROM | yes | the trainer who just ran, naming who they ran from (POK-266). Every ROM that has their ghost draws a boot over it. Deliberately not a fourth `busy` kind: `busy` means "cannot be challenged", and POK-231 holds only the fleer off the pursuer |
 | `botout` | -- | page&lt;-&gt;page | no | whoever beat a bot |
 | `botrec` | -- | page&lt;-&gt;page | no | whoever changed a bot's persistent record |
-| `fame` | -- | page&lt;-&gt;page | no | the champion, at the end of a match |
 | `ticker` | `BR_MSG_TICKER` 15 | page/host-&gt;page&lt;-&gt;ROM | yes | kill feed, system lines, and chat (`say`), all one pipe |
 | `ready` | -- | page-&gt;page | no | a seat in the HTML lobby, toggling ready |
 | `result` | `BR_MSG_RESULT` 16 | ROM-&gt;page | yes | ROM, when a link/trainer battle this seat was in concludes |
@@ -140,10 +139,17 @@ runtime.
   engine specifics (`src/link/Handshake.lua`, `Fingerprint`'s `modKey`) that have no
   Hoenn analogue; this wire's version gate lives entirely in the relay's room check
   above, not in per-message fields.
-- **`botout`, `botrec`, `fame`, `late`, `win`, `again` stayed JSON-only**:
+- **`botout`, `botrec`, `late`, `win`, `again` stayed JSON-only**:
   POK-217's scope named an explicit ROM-crossing subset ("place/step/face/map,
   challenge and the battle blocks, party, faint/out, pickup/spill, ring, clock,
   seed/start, ticker/say, result") and these are not in it.
+
+  **`fame` is gone entirely (POK-303).** It carried the champion's party and a six-field
+  `stat` block, had a decoder and a round-trip test, and was sent by nobody: the parade
+  has always been drawn from `party`, which the winner's ROM already sends. The stats it
+  was going to carry are counted page-side now (`match/record.ts`) off messages that
+  already cross -- `npcout`, `dresult`, `pickup`, `ring` -- so nothing has to be sent and
+  no ROM has to count. A decoder for a message nobody sends is a trap, not an asset.
 
   **`npcout` was on that list and is not any more (POK-287).** The reasoning for
   leaving it off was that each client's ROM keeps its own beaten-trainer flags -- true,

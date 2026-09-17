@@ -52,10 +52,6 @@ const SAMPLES: Msg[] = [
   { t: 'peek', seat: 1, target: 2 },
   { t: 'botout', seat: 1, target: 30 },
   { t: 'botrec', seat: 30, mons: [{ species: 1, hpFrac: 0.5 }], bag: { items: [], money: 0 } },
-  {
-    t: 'fame', seat: 1, party: [{ species: 1, nickname: 'BULBY', level: 100 }],
-    stat: { catches: 1, beats: 2, steps: 3, rings: 4, seconds: 5, money: 6 },
-  },
   { t: 'ticker', seat: 1, kind: 'kill', text: 'ASH knocked out MISTY!' },
   { t: 'ready', seat: 1, ready: true },
   { t: 'result', seat: 1, outcome: 'win' },

@@ -65,6 +65,7 @@ import worldData from './data/world.json';
 import { LANDING } from './match/landing';
 import { SAFARI_CELLS } from './match/safari';
 import { cardFor } from './match/card';
+import { MatchRecord, recordLines } from './match/record';
 import regionmapData from './data/regionmap.json';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
@@ -827,6 +828,11 @@ function careerName(): string {
  *  otherwise an answer to a spectator's peek and belongs to whoever asked. */
 const lastParty = new Map<number, PackedMon[]>();
 
+/** What each seat did in the match, for the card under the parade (POK-303). One for
+ *  the page rather than one per path: solo and a room never run at the same time, and
+ *  `start` clears it either way. */
+const record = new MatchRecord();
+
 /** The hidden instance that fights bot-vs-bot duels for real (POK-238). Module state
  *  rather than an argument because it is made at boot, long before there is a room, and
  *  only the host will ever ask it anything -- it boots its emulator lazily, on the first
@@ -1335,6 +1341,7 @@ function renderResults(seat: number, roster: Roster, results: Results, seats: nu
   if (seed !== undefined) parts.push(`seed ${seed}`);
   ($('#results-line') as HTMLElement).textContent = parts.join(' · ');
   renderFame(roster, mine.winner, seat);
+  renderRecord(seat);
 }
 
 /** The champion's team under the result (POK-243, Kanto's Hall of Fame parade). The
@@ -1359,6 +1366,23 @@ function renderFame(roster: Roster, winner: number | undefined, seat: number): v
   const label = document.createElement('b');
   label.textContent = `${who}: `;
   el.append(label, document.createTextNode(team));
+  el.hidden = false;
+}
+
+/** What you did in there, under the parade (POK-303). Cam asked for "how many rings you
+ *  survived, how many trainers you beat"; `record.ts` counts those off the wire and this
+ *  is where they land. Always drawn -- RINGS is an answer even at zero, and a match you
+ *  were eliminated from thirty seconds into is exactly when you want to see the number. */
+function renderRecord(seat: number): void {
+  const el = $('#results-record') as HTMLElement;
+  el.innerHTML = '';
+  for (const line of recordLines(record.forSeat(seat))) {
+    const row = document.createElement('span');
+    const label = document.createElement('b');
+    label.textContent = line.label;
+    row.append(label, document.createTextNode(` ${line.value}`));
+    el.append(row);
+  }
   el.hidden = false;
 }
 
@@ -1639,9 +1663,11 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     if (msg.t === 'start') {
       fieldSize = msg.spawns.length;
       results.start(fieldSize, performance.now());
+      record.start();
       recorded = false;
     }
     results.note(msg, performance.now());
+    record.note(msg);
     if (msg.t !== 'win' || recorded) return;
     recorded = true;
     ($('#results-career') as HTMLElement).textContent =
@@ -2183,9 +2209,11 @@ function wireRoom(
     if (msg.t === 'start') {
       fieldSize = msg.spawns.length;
       results.start(fieldSize, performance.now());
+      record.start();
       recorded = false;
     }
     results.note(msg, performance.now());
+    record.note(msg);
     // ...and the round is written down as it happens (POK-248). The same messages
     // placement is derived from, kept in a shape the round can be read back from.
     log.note(msg, performance.now(), (seat) => bridge?.roster.get(seat)?.name || `P${seat}`);

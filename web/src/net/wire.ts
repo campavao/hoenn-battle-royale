@@ -488,30 +488,6 @@ export interface BotRecMsg {
   bag?: { items: { id: number; n: number }[]; money: number };
 }
 
-export interface FameRow {
-  species: number;
-  nickname: string;
-  level: number;
-}
-
-export interface FameStat {
-  catches: number;
-  beats: number;
-  steps: number;
-  rings: number; // which ring phase the match ended on, >= 1
-  seconds: number;
-  money: number;
-}
-
-/** The champion's parade, for the whole room to watch (Kanto POK-107). JSON only --
- *  drawn by the page, not the ROM's own Hall of Fame scene. */
-export interface FameMsg {
-  t: 'fame';
-  seat: number; // the champion
-  party: FameRow[]; // at most 6
-  stat: FameStat;
-}
-
 export type TickerKind = 'kill' | 'system' | 'say';
 
 /** A line for the overworld ticker/HUD (new for Hoenn: DESIGN.md §6 draws the
@@ -608,7 +584,6 @@ export type Msg =
   | ShotMsg
   | BotOutMsg
   | BotRecMsg
-  | FameMsg
   | TickerMsg
   | ReadyMsg
   | ResultMsg
@@ -1099,33 +1074,6 @@ const decoders: Record<string, Decoder> = {
       bag = { items: reqItems(bagRaw.items ?? []), money: reqInt(bagRaw, 'money', 0, 999_999) };
     }
     return { t: 'botrec', seat: reqSeat(m), mons: rows, bag };
-  },
-
-  fame: (m) => {
-    const party = m.party;
-    if (!Array.isArray(party) || party.length === 0 || party.length > 6) fail('bad fame party');
-    const rows: FameRow[] = party.map((raw) => {
-      if (!isPlainObject(raw)) fail('bad fame row');
-      return {
-        species: reqInt(raw, 'species', 1, 0xffff),
-        nickname: optShortString(raw, 'nickname', MAX_ID) ?? String(reqInt(raw, 'species', 1, 0xffff)),
-        level: reqInt(raw, 'level', 1, 100),
-      };
-    });
-    const st = isPlainObject(m.stat) ? m.stat : {};
-    return {
-      t: 'fame',
-      seat: reqSeat(m),
-      party: rows,
-      stat: {
-        catches: optInt(st, 'catches', 0, 99_999) ?? 0,
-        beats: optInt(st, 'beats', 0, 99_999) ?? 0,
-        steps: optInt(st, 'steps', 0, 9_999_999) ?? 0,
-        rings: optInt(st, 'rings', 1, 64) ?? 1,
-        seconds: optInt(st, 'seconds', 0, 999_999) ?? 0,
-        money: optInt(st, 'money', 0, 999_999) ?? 0,
-      },
-    };
   },
 
   ticker: (m) => {

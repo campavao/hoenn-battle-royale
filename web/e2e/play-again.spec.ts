@@ -39,6 +39,12 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
   // A whole match at the dev pace: 25s opening, 15s ring phases, bots filling the room.
   await expect(page.locator('#results-panel')).toBeVisible({ timeout: 240_000 });
 
+  // ...and the card under it says what the match was (POK-303). RINGS is always there,
+  // counted off the `ring` messages this page has been watching go past all match.
+  const card = page.locator('#results-record');
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('RINGS');
+
   // Nothing is pressed from here. The grace is what has to move us.
   await expect(page.locator('#results-panel')).toBeHidden({ timeout: 60_000 });
 
