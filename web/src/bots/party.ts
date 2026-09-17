@@ -103,8 +103,10 @@ export function speciesAt(mapId: string): number[] {
   return ENCOUNTERS[mapId] ?? [];
 }
 
-function mon(level: number, rng: () => number, mapId?: string): PackedMon {
-  const local = mapId ? speciesAt(mapId) : [];
+function mon(level: number, rng: () => number, mapId?: string, from: number[] = []): PackedMon {
+  // `from` is the Zone's pool (POK-296) and outranks the map: a bot's first Pokemon is the
+  // one it caught in the opening, wherever it has walked to since.
+  const local = from.length > 0 ? from : mapId ? speciesAt(mapId) : [];
   if (local.length > 0) {
     const species = grownUp(local[pickIndex(rng, local.length)], level);
     const max = hp(level);
@@ -158,6 +160,10 @@ export function dealParty(
   phase: number,
   mapId?: string,
   grade: Grade = Grade.Regular,
+  /** This match's Zone pool (match/zone.ts). Kanto: "bots draft their first Pokemon from
+   *  the same zone pool", which is what carries a match's theme past the opening. Every
+   *  ROM in the room deals the same twelve, so every client still deals the same bot. */
+  pool: number[] = [],
 ): PackedMon[] {
   const rng = mulberry32((seed ^ (seat * 0x9e37)) >>> 0);
   const level = rungForPhase(phase);
@@ -167,6 +173,6 @@ export function dealParty(
   const bring = grade === Grade.Ace ? 1 : grade === Grade.Rookie ? -1 : 0;
   const count = Math.max(1, Math.min(6, 1 + Math.floor(Math.max(0, phase - 1) / 2) + bring));
   const party: PackedMon[] = [];
-  for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId));
+  for (let i = 0; i < count; i++) party.push(mon(level, rng, mapId, i === 0 ? pool : []));
   return party;
 }

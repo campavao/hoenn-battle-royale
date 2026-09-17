@@ -1,7 +1,8 @@
 # zone-pool: the Safari's catch pool is dealt from the match seed (POK-255), not read
-# off Emerald's own Zone table. Twelve species -- four from the rare slice (starters,
-# the pseudo-legendary lines, the ones worth going looking for) and eight from the open
-# slice -- and the same twelve on every ROM in the room, because the deal is a pure
+# off Emerald's own Zone table. Twelve species -- three from the rare slice (starters,
+# the pseudo-legendary lines, the ones worth going looking for), five of the type the
+# match is about (POK-296) and four from the open slice -- and the same twelve on every
+# ROM in the room, because the deal is a pure
 # function of the seed the START carried rather than anything sent.
 #
 # The encounter itself cannot be driven here (POK-269: the harness cannot run a wild
@@ -24,18 +25,26 @@ expect u32 gBrMatch+8 0x12345678
 # BrMatch_BeginSafari deals it, so by now it is there and it is this seed's
 expect u32 gBrZone 0x12345678
 # the rare slice: MUDKIP 283, BELDUM 398, LILEEP 388, TORCHIC 280
+# Three slices, Kanto's shape (POK-296): three rare, five of the match's theme, four open.
+# This seed deals a GRASS match. MUDKIP, BELDUM, LILEEP...
 expect u16 gBrZone+4 283
 expect u16 gBrZone+6 398
 expect u16 gBrZone+8 388
-expect u16 gBrZone+10 280
-# and the open slice: TENTACOOL 72, PIKACHU 25, MACHOP 66, BARBOACH 323, GULPIN 367,
-# MEDITITE 356, ARON 382, DUSKULL 361
-expect u16 gBrZone+12 72
-expect u16 gBrZone+14 25
-expect u16 gBrZone+16 66
-expect u16 gBrZone+18 323
+# ...SEEDOT, ODDISH, SHROOMISH, TREECKO, CACNEA -- every one of them GRASS, none twice, and
+# LILEEP above is not drawn again for being GRASS as well...
+expect u16 gBrZone+10 298
+expect u16 gBrZone+12 43
+expect u16 gBrZone+14 306
+expect u16 gBrZone+16 277
+expect u16 gBrZone+18 344
+# ...and GULPIN, MEDITITE, ARON, DUSKULL: the open rest, exactly as it was dealt before there
+# was a theme. The theme comes off a stream of its own, so it re-deals nothing else.
 expect u16 gBrZone+20 367
 expect u16 gBrZone+22 356
 expect u16 gBrZone+24 382
 expect u16 gBrZone+26 361
+# "The log names the theme": ours is the ticker, in the opening, where it is news.
+expectge u8 gBrHud+0x0A 1
+wait 60
+shot theme
 say zone pool ok

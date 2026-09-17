@@ -25,6 +25,7 @@ import { dealBots, MAX_SEATS } from './bots/roster';
 import type { Bot } from './bots/roster';
 import { type BotVoice, lineAt, nextLine, voiceFor } from './bots/lines';
 import * as Ticker from './match/ticker';
+import { readZonePool } from './match/zone';
 import { emptyNote, fixedRows, isRoomCode, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
 import {
   canStart,
@@ -1172,6 +1173,9 @@ function startBots(
   /** Seconds of Safari opening. Above zero the bots start in the Zone with everybody
    *  else (POK-257) and only go out into Hoenn when the fog does. */
   safariSecs = 0,
+  /** This match's Zone pool, read out of the ROM (match/zone.ts). Asked for at every deal
+   *  rather than once: the first deal can come before the ROM has dealt the pool. */
+  zonePool: () => number[] = () => [],
 ): {
   bots: Bots;
   seats: number[];
@@ -1259,7 +1263,7 @@ function startBots(
       : undefined,
     // Where the bot is standing is where its mons came from (POK-237): the drop put
     // it on a route, and that route's own table is what a trainer there would have.
-    deal: (bot, atPhase, mapId) => dealParty(seed, bot.seat, atPhase, mapId, bot.grade),
+    deal: (bot, atPhase, mapId) => dealParty(seed, bot.seat, atPhase, mapId, bot.grade, zonePool()),
     // And the bag it spends from (POK-237): the potions it drinks between fights, the
     // X ATTACKs its opponent's ROM pops on its behalf, and what a player finds on it.
     bagFor: (bot, atPhase) => dealBag(seed, bot.seat, atPhase, bot.grade),
@@ -1742,6 +1746,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     botFill(),
     undefined,
     paceOptions()?.safariSecs ?? DEFAULT_SAFARI_SECS,
+    () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
   );
   const director = new Director({
     seats: [0, ...solo.seats],
@@ -2052,6 +2057,7 @@ function wireRoom(
       botFill() === 0 ? 0 : Math.max(0, (controls.roster?.max ?? BOT_FILL) - seats.length),
       resume,
       paceOptions()?.safariSecs ?? controls.safariSecs,
+      () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
     );
     director = new Director({
       // Bots are contestants, not scenery: leaving them out of the seat list makes
