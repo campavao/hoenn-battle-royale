@@ -80,7 +80,7 @@ export class MatchRecord {
         if (!this.outAt.has(msg.seat)) this.outAt.set(msg.seat, this.phase);
         return;
       case 'npcout':
-        this.row(msg.seat).trainers++;
+        if (!msg.fog) this.row(msg.seat).trainers++; // the fog's sweep is nobody's win
         return;
       case 'pickup':
         // An `item` named is one stack coming out of a bag that stays on the ground

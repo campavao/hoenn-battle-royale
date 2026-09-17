@@ -1,0 +1,680 @@
+{
+ "MAP_ABANDONED_SHIP_CORRIDORS_1F": [
+  2
+ ],
+ "MAP_ABANDONED_SHIP_CORRIDORS_B1F": [
+  2
+ ],
+ "MAP_ABANDONED_SHIP_ROOMS2_1F": [
+  1,
+  2,
+  4,
+  5
+ ],
+ "MAP_ABANDONED_SHIP_ROOMS_1F": [
+  3,
+  4
+ ],
+ "MAP_AQUA_HIDEOUT_1F": [
+  3
+ ],
+ "MAP_AQUA_HIDEOUT_B1F": [
+  1,
+  2,
+  4,
+  9
+ ],
+ "MAP_AQUA_HIDEOUT_B2F": [
+  1,
+  2,
+  5,
+  6
+ ],
+ "MAP_DEWFORD_TOWN_GYM": [
+  1,
+  2,
+  3,
+  4,
+  6,
+  7,
+  8
+ ],
+ "MAP_EVER_GRANDE_CITY_DRAKES_ROOM": [
+  1
+ ],
+ "MAP_EVER_GRANDE_CITY_GLACIAS_ROOM": [
+  1
+ ],
+ "MAP_EVER_GRANDE_CITY_PHOEBES_ROOM": [
+  1
+ ],
+ "MAP_EVER_GRANDE_CITY_SIDNEYS_ROOM": [
+  1
+ ],
+ "MAP_FORTREE_CITY_GYM": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  7,
+  8
+ ],
+ "MAP_JAGGED_PASS": [
+  1,
+  2,
+  4,
+  5,
+  6,
+  7
+ ],
+ "MAP_LAVARIDGE_TOWN_GYM_1F": [
+  1,
+  2,
+  3,
+  4,
+  5
+ ],
+ "MAP_MAGMA_HIDEOUT_1F": [
+  1,
+  3
+ ],
+ "MAP_MAGMA_HIDEOUT_2F_1R": [
+  1,
+  2,
+  3,
+  4
+ ],
+ "MAP_MAGMA_HIDEOUT_2F_2R": [
+  1,
+  2,
+  4,
+  5
+ ],
+ "MAP_MAGMA_HIDEOUT_3F_1R": [
+  1,
+  2
+ ],
+ "MAP_MAGMA_HIDEOUT_3F_2R": [
+  1
+ ],
+ "MAP_MAGMA_HIDEOUT_4F": [
+  2,
+  3,
+  4,
+  5,
+  6
+ ],
+ "MAP_MAUVILLE_CITY_GYM": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  7
+ ],
+ "MAP_METEOR_FALLS_1F_2R": [
+  1,
+  2,
+  3
+ ],
+ "MAP_METEOR_FALLS_STEVENS_CAVE": [
+  1
+ ],
+ "MAP_MOSSDEEP_CITY_GYM": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  9,
+  17,
+  18,
+  25,
+  27,
+  28,
+  32
+ ],
+ "MAP_MOSSDEEP_CITY_SPACE_CENTER_1F": [
+  6,
+  7,
+  8,
+  9
+ ],
+ "MAP_MT_CHIMNEY": [
+  2,
+  3,
+  22,
+  25,
+  26,
+  27,
+  28,
+  29,
+  30
+ ],
+ "MAP_MT_PYRE_2F": [
+  1,
+  5,
+  6,
+  7,
+  8
+ ],
+ "MAP_MT_PYRE_3F": [
+  1,
+  2,
+  4
+ ],
+ "MAP_MT_PYRE_6F": [
+  1,
+  3
+ ],
+ "MAP_MT_PYRE_SUMMIT": [
+  4,
+  5,
+  6,
+  7
+ ],
+ "MAP_PETALBURG_CITY_GYM": [
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8
+ ],
+ "MAP_PETALBURG_WOODS": [
+  9,
+  10
+ ],
+ "MAP_ROUTE102": [
+  2,
+  3,
+  4,
+  9
+ ],
+ "MAP_ROUTE103": [
+  3,
+  4,
+  5,
+  6,
+  12,
+  16,
+  17,
+  18,
+  19
+ ],
+ "MAP_ROUTE104": [
+  3,
+  9,
+  23,
+  24,
+  25,
+  26,
+  28,
+  33
+ ],
+ "MAP_ROUTE105": [
+  1,
+  2,
+  3,
+  4,
+  6,
+  7,
+  8
+ ],
+ "MAP_ROUTE106": [
+  1,
+  2,
+  3,
+  4
+ ],
+ "MAP_ROUTE107": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7
+ ],
+ "MAP_ROUTE108": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6
+ ],
+ "MAP_ROUTE109": [
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  11,
+  12,
+  13,
+  17,
+  18,
+  21,
+  22,
+  24
+ ],
+ "MAP_ROUTE109_SEASHORE_HOUSE": [
+  2,
+  3,
+  4
+ ],
+ "MAP_ROUTE110": [
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  27,
+  30,
+  31,
+  32,
+  33,
+  34
+ ],
+ "MAP_ROUTE110_TRICK_HOUSE_PUZZLE1": [
+  1,
+  2,
+  3
+ ],
+ "MAP_ROUTE110_TRICK_HOUSE_PUZZLE2": [
+  1,
+  2,
+  3
+ ],
+ "MAP_ROUTE110_TRICK_HOUSE_PUZZLE3": [
+  1,
+  2,
+  3
+ ],
+ "MAP_ROUTE110_TRICK_HOUSE_PUZZLE4": [
+  1,
+  2,
+  3
+ ],
+ "MAP_ROUTE110_TRICK_HOUSE_PUZZLE6": [
+  1,
+  2,
+  3
+ ],
+ "MAP_ROUTE110_TRICK_HOUSE_PUZZLE7": [
+  1,
+  2,
+  3,
+  5,
+  6,
+  7
+ ],
+ "MAP_ROUTE110_TRICK_HOUSE_PUZZLE8": [
+  1,
+  2,
+  3
+ ],
+ "MAP_ROUTE111": [
+  5,
+  9,
+  10,
+  11,
+  12,
+  28,
+  29,
+  30,
+  31,
+  32,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41
+ ],
+ "MAP_ROUTE112": [
+  2,
+  3,
+  4,
+  5,
+  13,
+  14
+ ],
+ "MAP_ROUTE113": [
+  3,
+  4,
+  5,
+  8,
+  9,
+  10,
+  11,
+  13,
+  14,
+  15,
+  16
+ ],
+ "MAP_ROUTE114": [
+  3,
+  4,
+  5,
+  6,
+  7,
+  15,
+  16,
+  17,
+  22,
+  23,
+  24,
+  25,
+  27
+ ],
+ "MAP_ROUTE115": [
+  2,
+  3,
+  7,
+  8,
+  9,
+  17,
+  18,
+  19,
+  20,
+  21
+ ],
+ "MAP_ROUTE116": [
+  3,
+  6,
+  13,
+  16,
+  17,
+  18,
+  23,
+  24,
+  27,
+  28
+ ],
+ "MAP_ROUTE117": [
+  8,
+  9,
+  10,
+  17,
+  18,
+  19,
+  20,
+  22,
+  23,
+  24
+ ],
+ "MAP_ROUTE118": [
+  4,
+  14,
+  15,
+  16,
+  17,
+  18,
+  21
+ ],
+ "MAP_ROUTE119": [
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  34,
+  37,
+  38,
+  39,
+  40
+ ],
+ "MAP_ROUTE119_WEATHER_INSTITUTE_1F": [
+  1,
+  2
+ ],
+ "MAP_ROUTE119_WEATHER_INSTITUTE_2F": [
+  1,
+  2,
+  3,
+  8
+ ],
+ "MAP_ROUTE120": [
+  11,
+  12,
+  13,
+  14,
+  15,
+  24,
+  25,
+  26,
+  27,
+  34,
+  35,
+  42,
+  43
+ ],
+ "MAP_ROUTE121": [
+  10,
+  11,
+  17,
+  18,
+  19,
+  20,
+  23,
+  24,
+  25,
+  26,
+  27
+ ],
+ "MAP_ROUTE123": [
+  8,
+  9,
+  26,
+  27,
+  28,
+  29,
+  30,
+  31,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  41,
+  42
+ ],
+ "MAP_ROUTE124": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  9,
+  10,
+  11,
+  12
+ ],
+ "MAP_ROUTE125": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9
+ ],
+ "MAP_ROUTE126": [
+  1,
+  2,
+  3,
+  4,
+  6,
+  7,
+  8,
+  9
+ ],
+ "MAP_ROUTE127": [
+  1,
+  2,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10
+ ],
+ "MAP_ROUTE128": [
+  1,
+  2,
+  6,
+  7,
+  8,
+  9,
+  10
+ ],
+ "MAP_ROUTE129": [
+  1,
+  2,
+  3,
+  4,
+  5
+ ],
+ "MAP_ROUTE130": [
+  1,
+  2,
+  4
+ ],
+ "MAP_ROUTE131": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8
+ ],
+ "MAP_ROUTE132": [
+  1,
+  2,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9
+ ],
+ "MAP_ROUTE133": [
+  1,
+  2,
+  3,
+  6,
+  7,
+  8,
+  9
+ ],
+ "MAP_ROUTE134": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9
+ ],
+ "MAP_RUSTBORO_CITY_GYM": [
+  1,
+  2,
+  3,
+  5
+ ],
+ "MAP_RUSTURF_TUNNEL": [
+  6,
+  9
+ ],
+ "MAP_SEAFLOOR_CAVERN_ROOM1": [
+  4,
+  5
+ ],
+ "MAP_SEAFLOOR_CAVERN_ROOM3": [
+  8,
+  9
+ ],
+ "MAP_SEAFLOOR_CAVERN_ROOM4": [
+  1,
+  2
+ ],
+ "MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F": [
+  1
+ ],
+ "MAP_SOOTOPOLIS_CITY_GYM_1F": [
+  1
+ ],
+ "MAP_SOOTOPOLIS_CITY_GYM_B1F": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10
+ ],
+ "MAP_SS_TIDAL_LOWER_DECK": [
+  1,
+  2
+ ],
+ "MAP_SS_TIDAL_ROOMS": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7
+ ],
+ "MAP_VICTORY_ROAD_1F": [
+  1,
+  2,
+  3,
+  7,
+  8,
+  9
+ ],
+ "MAP_VICTORY_ROAD_B1F": [
+  14,
+  15,
+  16,
+  20,
+  21
+ ],
+ "MAP_VICTORY_ROAD_B2F": [
+  1,
+  2,
+  3,
+  4,
+  6,
+  7
+ ]
+}

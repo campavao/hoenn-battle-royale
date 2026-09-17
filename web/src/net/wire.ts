@@ -402,9 +402,12 @@ export interface SpillMsg {
  *  object is found by id anyway. */
 export interface NpcOutMsg {
   t: 'npcout';
-  seat: number; // the beater
+  seat: number; // the beater -- or, with `fog`, whoever is running the fog clock
   map: MapRef;
   localId: number; // the object event's local id on that map
+  /** The fog took them, nobody beat them (POK-299). Page-side only: the ROM does the
+   *  same thing either way, and neither the record card nor the boss line counts it. */
+  fog?: true;
 }
 
 /** The host's word on where the fog is now; `place` is the section's name so every
@@ -1049,12 +1052,11 @@ const decoders: Record<string, Decoder> = {
     return { t: 'spill', seat: reqSeat(m), map: reqMapRef(m), mons: rows, bag };
   },
 
-  npcout: (m) => ({
-    t: 'npcout',
-    seat: reqSeat(m),
-    map: reqMapRef(m),
-    localId: reqInt(m, 'localId', 1, 255),
-  }),
+  npcout: (m) => {
+    const out: NpcOutMsg = { t: 'npcout', seat: reqSeat(m), map: reqMapRef(m), localId: reqInt(m, 'localId', 1, 255) };
+    if (m.fog === true) out.fog = true;
+    return out;
+  },
 
   ring: (m) => validateRing(m),
 

@@ -55,6 +55,13 @@ describe('the record card', () => {
     expect(rec.forSeat(2).trainers).toBe(1);
   });
 
+  it("does not count the fog's sweep as anybody's win (POK-299)", () => {
+    const rec = new MatchRecord();
+    rec.start();
+    feed(rec, [{ ...npcout(1, 4), fog: true } as Msg, npcout(1, 7)]);
+    expect(rec.forSeat(1).trainers).toBe(1);
+  });
+
   it('counts a duel for both sides and the win for one of them', () => {
     const rec = new MatchRecord();
     rec.start();

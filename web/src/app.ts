@@ -26,6 +26,7 @@ import type { Bot } from './bots/roster';
 import { type BotVoice, lineAt, nextLine, voiceFor } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
+import { NpcFog } from './match/npcfog';
 import { emptyNote, fixedRows, isRoomCode, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
 import {
   canStart,
@@ -66,6 +67,7 @@ import {
 } from './match/career';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import worldData from './data/world.json';
+import TRAINERS from './data/trainers.json';
 import { DOORSTEPS, LANDING } from './match/landing';
 import { SAFARI_CELLS } from './match/safari';
 import { cardFor } from './match/card';
@@ -1298,7 +1300,33 @@ function startBots(
   const seatsDealt = new Set(dealt.map((b) => b.seat));
   let phase = 0;
   bots.start(dealt, performance.now());
-  const id = setInterval(() => bots.tick(performance.now()), BOT_TICK_MS);
+  // The fog clears Hoenn's own trainers off a map it has taken (POK-299): the host runs
+  // the per-map clock, and each trainer leaves every ROM as `npcout`, the way a beaten
+  // one does. The seat on it is only a seat; `fog` says nobody beat them.
+  const npcFog = new NpcFog(TRAINERS as Record<string, number[]>, (id) => WORLD.sections[sectionOf.get(id) ?? '']);
+  const fogSeat = takenSeats[0] ?? 0;
+  const id = setInterval(() => {
+    const now = performance.now();
+
+    bots.tick(now);
+    if (inOpening) return;
+    const died = npcFog.tick(now, ring);
+    let cleared = 0;
+    for (const mapId of died) {
+      const map = refById.get(mapId);
+
+      if (!map) continue;
+      for (const localId of TRAINERS[mapId as keyof typeof TRAINERS] ?? []) {
+        send({ t: 'npcout', seat: fogSeat, map, localId, fog: true });
+        cleared++;
+      }
+    }
+    if (cleared > 0) {
+      const line = Ticker.cleared(fogSeat, cleared, died.length);
+
+      if (line) send(line);
+    }
+  }, BOT_TICK_MS);
   return {
     bots,
     seats: dealt.map((b) => b.seat),
@@ -2386,7 +2414,7 @@ function wireRoom(
     // A gym leader fell (POK-295): every page in the room says so, off the `npcout` that
     // already takes the sprite off every map. Nothing new crosses the wire.
     const bossFell = (m: Msg) => {
-      if (m.t !== 'npcout' || !bridge) return;
+      if (m.t !== 'npcout' || m.fog || !bridge) return; // the fog taking a gym is not a win
       const boss = bossAt(m.map, m.localId);
       if (!boss) return;
       const row = bridge.roster.all().find((e) => e.seat === m.seat);

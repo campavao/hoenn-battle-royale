@@ -83,6 +83,14 @@ export function felled(seat: number, name: string, boss: string): TickerMsg | nu
   return line(seat, `${short(name)} BEAT ${boss}!`, 'kill');
 }
 
+/** The fog took a map with Hoenn's own trainers on it (POK-299). Kanto: "the ring
+ *  cleared N static trainers across M map(s)" -- one line for the whole sweep, never
+ *  one per map, because a sweep that read like eliminations once looked like half the
+ *  lobby dying at once. */
+export function cleared(seat: number, trainers: number, maps: number): TickerMsg | null {
+  return line(seat, `THE FOG CLEARED ${trainers} TRAINERS ON ${maps} MAP${maps === 1 ? '' : 'S'}`);
+}
+
 /** Somebody is out, however it happened, and how many are left after it. */
 export function out(seat: number, name: string, left: number): TickerMsg | null {
   if (left <= 0) return line(seat, `${short(name)} IS OUT!`, 'kill');
