@@ -114,5 +114,13 @@ void BrLoot_Released(struct Pokemon *mon);
 // the match seed, so nothing is sent: they simply agree. The key's top bit is set, the
 // way a beaten trainer's is -- it belongs to nobody, so nothing trade-evolves from it.
 void BrLoot_AddItem(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 item);
+// One Pokemon the match itself put on the ground rather than anybody dropping it: the
+// DAY CARE's chest (POK-306). A `level` of 0 means "the rung the match is at when it is
+// picked up", which is what a prize that has been lying there since the drop wants.
+void BrLoot_AddMon(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u8 level);
+// Take a piece off the ground here and say nothing: no PICKUP, so no other ROM's ground
+// changes. For loot that has gone out of reach rather than been taken -- the Zone's own
+// balls once the opening is over (BrZone_ItemsGone).
+void BrLoot_DropKey(u16 key);
 
 #endif // GUARD_BR_LOOT_H

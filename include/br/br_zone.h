@@ -30,7 +30,9 @@ struct BrZone
     /*  4 */ u16 species[BR_ZONE_SLOTS];
     /* 28 */ u16 items[BR_ZONE_ITEMS];     // what is in each area's ball
     /* 40 */ u8 placed;                    // the balls have been put on the ground
-};                                          // 44 bytes
+    /* 41 */ u8 chestPlaced;               // ...and the DAY CARE's one Pokemon (POK-306)
+    /* 42 */ u16 chest;                    // the species waiting on its floor
+};                                          // 44 bytes -- the last three were padding
 
 extern struct BrZone gBrZone;
 
@@ -43,5 +45,16 @@ void BrZone_Ensure(void);
 u16 BrZone_Pick(void);
 // Puts this match's item balls on the ground, once. Safe to call every tick.
 void BrZone_PlaceItems(void);
+// The opening is over: the balls nobody picked up come off the ground. Six of the eight
+// rows the whole match has to share were holding item balls on Safari maps that nobody
+// can walk back to, from the buzzer to the last ring -- so a trainer eliminated on a
+// route dropped two pieces of a team and the rest fell through the floor.
+void BrZone_ItemsGone(void);
+// The DAY CARE as a chest (POK-306), Cam's own alternative to closing the door: one
+// strong Pokemon on the floor of the room and the first trainer through the door takes
+// it. Dealt from the match seed like everything else here, so nothing is sent and every
+// ROM in the room agrees what is in there; put on the floor once the match proper is on.
+// Safe to call every tick.
+void BrZone_PlaceChest(void);
 
 #endif // GUARD_BR_ZONE_H

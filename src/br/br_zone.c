@@ -120,6 +120,34 @@ static const u16 sBallTMs[] =
 // what "most often" has to mean to be felt at all.
 #define BR_ZONE_TM_IN 2
 
+// ---- the DAY CARE, which is a chest (POK-306) -------------------------------------
+//
+// Cam, live: "block off the battle tent and the daycare center, though daycare could be a
+// chest where the first one there takes the Pokemon." Every other piece of loot in a match
+// is a consequence -- somebody lost it. This is the one thing on the ground that is a
+// reason to run somewhere on purpose, and a reason to expect company when you arrive.
+//
+// What is in it is fully evolved and worth the trip, because the trip is most of a ring
+// phase for most drops. Nothing here is a trade evolution (the ground finishes those on
+// its own, TradedInto) and nothing here is legendary: a match is sixteen minutes and the
+// prize has to be beatable by whoever did not get it.
+static const u16 sChest[] =
+{
+    SPECIES_SALAMENCE, SPECIES_METAGROSS, SPECIES_FLYGON, SPECIES_ALTARIA, SPECIES_MILOTIC,
+    SPECIES_GARDEVOIR, SPECIES_SLAKING, SPECIES_AGGRON, SPECIES_ABSOL, SPECIES_SHARPEDO,
+    SPECIES_WALREIN, SPECIES_ARMALDO, SPECIES_CRADILY, SPECIES_BRELOOM, SPECIES_MANECTRIC,
+    SPECIES_SWAMPERT, SPECIES_SCEPTILE, SPECIES_BLAZIKEN,
+};
+
+// The room is twelve by nine with the door at the bottom left; this is the middle of its
+// floor, three tiles in from the mat and the first thing in the frame walking in.
+#define BR_CHEST_X 5
+#define BR_CHEST_Y 5
+// Its key, in the "belongs to nobody" space the Zone's own balls use: no trade evolution
+// runs off it, and no seat can mint a key that collides. 0x8E00 would be trainer 1536 in
+// party slot 1, and Emerald's last trainer id is 854.
+#define BR_CHEST_KEY 0x8E00
+
 // Where the balls lie: one per area, each as far from that area's four spawn cells as
 // the grid allows, three tiles clear of the edges and two of every warp. A ball on a
 // spawn cell is a ball somebody takes without looking for it.
@@ -170,7 +198,10 @@ void BrZone_Ensure(void)
     }
     if (NextU32() % BR_ZONE_MASTER_ODDS == 0)
         gBrZone.items[NextU32() % BR_ZONE_ITEMS] = ITEM_MASTER_BALL;
+    // And the one in the DAY CARE, off the end of the same stream (POK-306).
+    gBrZone.chest = PickFrom(sChest, ARRAY_COUNT(sChest));
     gBrZone.placed = FALSE;
+    gBrZone.chestPlaced = FALSE;
     gBrZone.dealtFor = gBrMatch.seed;
 }
 
@@ -190,6 +221,33 @@ void BrZone_PlaceItems(void)
         BrLoot_AddItem((u16)(0x8000 | 0x0F00 | i), MAP_GROUP(MAP_SAFARI_ZONE_SOUTH),
                        cell[0], cell[1] + MAP_OFFSET, cell[2] + MAP_OFFSET, gBrZone.items[i]);
     }
+}
+
+void BrZone_ItemsGone(void)
+{
+    u8 i;
+
+    for (i = 0; i < BR_ZONE_ITEMS; i++)
+        BrLoot_DropKey((u16)(0x8000 | 0x0F00 | i));
+}
+
+void BrZone_PlaceChest(void)
+{
+    if (gBrZone.chestPlaced)
+        return;
+    // A match with the opening turned off (POK-186) never goes through the Zone, so the
+    // deal that names what is in the chest has to be asked for here rather than assumed.
+    // Ensure is a no-op once the seed it was dealt for still matches.
+    BrZone_Ensure();
+    if (gBrZone.dealtFor == 0)
+        return; // no START yet: no seed, so no agreed contents
+    gBrZone.chestPlaced = TRUE;
+    // Level 0: whatever rung the match is at when somebody finally walks in. It has been
+    // lying there since the drop, and a level-5 SALAMENCE handed over in the fourth ring
+    // is a prize nobody would cross the map for.
+    BrLoot_AddMon(BR_CHEST_KEY, MAP_GROUP(MAP_ROUTE117_POKEMON_DAY_CARE),
+                  MAP_NUM(MAP_ROUTE117_POKEMON_DAY_CARE),
+                  BR_CHEST_X + MAP_OFFSET, BR_CHEST_Y + MAP_OFFSET, gBrZone.chest, 0);
 }
 
 u16 BrZone_Pick(void)

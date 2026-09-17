@@ -26,8 +26,11 @@
 #include "br/br_hud.h"
 #include "field_player_avatar.h"
 #include "constants/species.h"
+#include "constants/maps.h"
+#include "constants/map_event_ids.h"
 #include "constants/characters.h"
 #include "br/br_ghosts.h"
+#include "br/br_levels.h"
 #include "item.h"
 #include "br/br_loot.h"
 
@@ -147,6 +150,19 @@ static void Add(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u8 l
 void BrLoot_AddItem(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 item)
 {
     Add(key, mapGroup, mapNum, x, y, item, 0, BR_LOOT_ITEM, 0);
+}
+
+void BrLoot_AddMon(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u8 level)
+{
+    Add(key, mapGroup, mapNum, x, y, species, level, BR_LOOT_MON, 0);
+}
+
+void BrLoot_DropKey(u16 key)
+{
+    struct BrLootItem *it = Find(key);
+
+    if (it != NULL)
+        Drop(it);
 }
 
 // SPILL: seat, map, count, then count 9-byte rows (key, x, y, species, level), then a
@@ -471,7 +487,11 @@ static void Take(struct BrLootItem *it)
     // hands. A full party goes through the catch ticket's own release flow -- the same
     // question, asked once, in one place (POK-227).
     species = WasOurs(it->key) ? it->species : TradedInto(it->species);
-    CreateMon(&mon, species, it->level, USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    // A ball dropped by somebody carries the level they were at, which is the record of
+    // the match the ground is for. A ball the match itself put down carries 0 and means
+    // the rung: the DAY CARE's chest (POK-306) has been on that floor since the drop.
+    CreateMon(&mon, species, it->level != 0 ? it->level : BrLevels_WildLevel(),
+              USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
     p = StringCopy(line, sText_Took);
     p = StringCopy(p, gSpeciesNames[species]);
     StringCopy(p, sText_Bang);
@@ -635,6 +655,16 @@ static void HandleNpcOut(const u8 *payload, u8 len)
     Despawn_Trainer(d[1], d[2], d[3]);
 }
 
+// ...and the ones a match never has at all. br_boot.c's story sweep clears the event
+// block by setting every FLAG_HIDE_ in it (POK-298), which only reaches NPCs that have
+// such a flag. The DAY CARE lady does not have one -- she is furniture to Emerald, always
+// there -- and with her door open (POK-306) she is an offer to take a Pokemon off you
+// mid-match and hand it back after the last ring. ROM, not EWRAM.
+static const struct BrDespawned sNotInAMatch[] =
+{
+    { MAP_GROUP(MAP_ROUTE117_POKEMON_DAY_CARE), MAP_NUM(MAP_ROUTE117_POKEMON_DAY_CARE), LOCALID_DAYCARE_LADY },
+};
+
 // Swept every frame, not once per map load: a map spawns its objects over several
 // frames and a sweep timed to the load would run before the sprite it wants is there.
 // The cost is two byte compares an entry, and the list is almost always empty.
@@ -649,6 +679,11 @@ static void DespawnForThisMap(void)
         if (gBrDespawned[i].localId != 0 && gBrDespawned[i].mapGroup == group
          && gBrDespawned[i].mapNum == num)
             Despawn_Trainer(group, num, gBrDespawned[i].localId);
+    }
+    for (i = 0; i < ARRAY_COUNT(sNotInAMatch); i++)
+    {
+        if (sNotInAMatch[i].mapGroup == group && sNotInAMatch[i].mapNum == num)
+            Despawn_Trainer(group, num, sNotInAMatch[i].localId);
     }
 }
 

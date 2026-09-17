@@ -1,0 +1,54 @@
+# daycare-chest: the DAY CARE is a chest, and the first one there takes it (POK-306).
+#
+# Cam, live: "block off the battle tent and the daycare center, though daycare could be a
+# chest where the first one there takes the Pokemon." POK-304 shut the door (this driver
+# replaces daycare-closed.txt); this is his alternative built instead. Every other piece
+# of loot in a match is a consequence -- somebody lost it. This is the one thing on the
+# ground that is a reason to run somewhere on purpose.
+#
+# Route 117 is group 0 num 32 and the door is at (51,5); a route boot lands on the cell it
+# names, so this starts one tile south of it.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 20 33 00 06 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 32
+# A match in PLAY with a seed. What is in the chest comes off the same seeded stream as
+# the Zone's catch pool and its item balls, so no ROM has to be told: seed 12345 deals
+# SWAMPERT (285), here and on the other side of the room's link.
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 12345
+wait 30
+expect u8 gBrZone+41 1
+expect u16 gBrZone+42 285
+expect u8 gBrLoot+0xA0 1
+# The door opens now. It is the only one POK-304 closed that does.
+hold UP 40
+wait 120
+expect u8 *gSaveBlock1Ptr+4 22
+expect u8 *gSaveBlock1Ptr+5 0
+shot room
+# One ball on the floor -- and no DAY CARE lady. She has no FLAG_HIDE_ of her own for the
+# story sweep to set (POK-298), so the despawn sweep takes her instead: with the door open
+# she is an offer to take a Pokemon off you mid-match and hand it back after the last ring.
+expect u8 gBrLoot+0xA1 1
+expectge u8 gBrLoot+0xA3 1
+# Three tiles north and two east of the mat, facing the ball. gBrOwnPos is map coords + 7.
+hold UP 34
+wait 10
+hold RIGHT 34
+wait 10
+expect u16 gBrOwnPos+2 0x0B
+expect u16 gBrOwnPos+4 0x0C
+# One press, like everything else on the ground.
+tap A
+wait 60
+expect u8 gBrLoot+0xA2 1
+expect u8 gBrLoot+0xA0 0
+expect u8 gPlayerPartyCount 1
+# ...and it arrives at the rung, not at the level it was dealt at. The row carries level 0
+# and means "whatever the match is at when somebody finally walks in": it has been lying
+# on that floor since the drop, and a level-5 SWAMPERT in the fourth ring is not a prize.
+# No ring here, so the rung is the floor of the ladder.
+expect u8 gPlayerParty+0x54 5
+shot took
+say day care chest ok

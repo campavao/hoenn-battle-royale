@@ -154,7 +154,6 @@ static const u8 sText_LabClosed[] = _("PROF. BIRCH'S LAB\nIS CLOSED.");
 // and the DAY CARE will happily keep a Pokemon you are about to need. Only the lobby is
 // listed: refuse that door and the corridor behind it is unreachable.
 static const u8 sText_TentClosed[] = _("THE BATTLE TENT\nIS CLOSED.");
-static const u8 sText_DayCareClosed[] = _("THE DAY CARE\nIS CLOSED.");
 // And the TRICK HOUSE is eight corridors of puzzle with a mechadoll that stops you on
 // the way in -- VAR_TRICK_HOUSE_ENTRANCE_STATE is 0 at boot, which is the value its
 // ON_FRAME trigger fires on.
@@ -166,7 +165,6 @@ static const struct BrClosedDoor sClosedDoors[] =
     { MAP_GROUP(MAP_FALLARBOR_TOWN_BATTLE_TENT_LOBBY),     MAP_NUM(MAP_FALLARBOR_TOWN_BATTLE_TENT_LOBBY),     sText_TentClosed },
     { MAP_GROUP(MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY),    MAP_NUM(MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY),    sText_TentClosed },
     { MAP_GROUP(MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY),     MAP_NUM(MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY),     sText_TentClosed },
-    { MAP_GROUP(MAP_ROUTE117_POKEMON_DAY_CARE),            MAP_NUM(MAP_ROUTE117_POKEMON_DAY_CARE),            sText_DayCareClosed },
     { MAP_GROUP(MAP_ROUTE110_TRICK_HOUSE_ENTRANCE),        MAP_NUM(MAP_ROUTE110_TRICK_HOUSE_ENTRANCE),        sText_TrickHouseClosed },
 };
 
@@ -279,6 +277,10 @@ void BrMatch_SafariOver(void)
         return;
     }
     gBrMatch.phase = BR_PHASE_PLAY;
+    // The Zone is behind us, and so is everything still lying in it: six of the ground's
+    // eight rows were held by item balls on maps nobody can walk back to, for the rest of
+    // the match (POK-306's neighbour).
+    BrZone_ItemsGone();
     // Where you land is yours to choose (POK-223): the fly map goes up, the section
     // goes out as `pick`, and the host deals a cell inside it. The START's own spawn is
     // the fallback -- for a driver, and for anyone the page never answers.
@@ -366,6 +368,12 @@ void BrMatch_Tick(void)
         }
         return;
     }
+    // The DAY CARE's chest goes on its floor once the match proper is on (POK-306).
+    // Here rather than in BrMatch_SafariOver because a match with the opening turned off
+    // (POK-186) never goes through it, and both ways in end up at BR_PHASE_PLAY. It does
+    // nothing after the first time.
+    if (gBrMatch.phase == BR_PHASE_PLAY)
+        BrZone_PlaceChest();
     if (gBrMatch.phase != BR_PHASE_SAFARI)
         return;
     // The catch pool belongs to the opening (POK-255). Dealt here rather than in

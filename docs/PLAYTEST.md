@@ -826,3 +826,36 @@ team keeps its own key -- which matters, because a key is what a pickup names an
 * `spawned` is not `count`: Emerald keeps object events near the camera, so a ball two
   tiles the wrong side of the screen edge is on the ground and not spawned.
 
+## 2026-09-17 evening: three things the DAY CARE turned up, none of them play-tested
+
+Found while building POK-306 (the chest). Written down rather than fixed: each is its own
+change and none of them is what that ticket is.
+
+### The Zone's item balls hold six of the ground's eight rows for the whole match
+
+`BrZone_PlaceItems` puts six item balls on six Safari maps at the start of the opening
+(POK-261) and nothing ever takes them off. `BR_MAX_LOOT` is 8. So from the buzzer to the
+last ring, a spill -- a fallen trainer's whole team plus their bag, up to seven rows -- had
+two rows to land in, and `Add()` drops the rest silently ("the ground is full").
+
+**Fixed in passing** (`BrZone_ItemsGone`, called from `BrMatch_SafariOver`): this ROM is out
+of the Zone for the rest of the match, so what is still lying in it comes off its table.
+There is no driver on it yet -- the one worth writing spills six mons on a route after the
+opening and counts the rows.
+
+### The SAFARI ZONE entrance has no BR guard, so a match can re-enter it
+
+`data/maps/Route121_SafariZoneEntrance/scripts.inc` still runs `special EnterSafariMode`
+with no `#if BR` anywhere near it, and the attendant is an ordinary NPC with no
+`FLAG_HIDE_` for the story sweep to reach. Mid-match, a contestant who walks to Route 121
+can pay 500 and be handed thirty Safari balls and a step counter in a zone whose catch pool
+is the opening's. Nobody has tried it in a play-test; it is a hole on paper.
+
+### The top row goes magenta in the DAY CARE after a HUD box
+
+Cosmetic, and only in there so far: after `TOOK SWAMPERT!` fades, the top row of the screen
+is magenta (`tools/br/harness/frames/daycare-chest/took.png`). The same walk with no box
+drawn is clean, and the same box outdoors and in a POKe CENTRE is clean. The Day Care
+interior is 12x9 -- smaller than the screen -- so what is up there is border block, and the
+suspicion is the HUD's window leaving tiles behind it that the border then draws with the
+wrong palette. Worth one look before anybody plays the room.
