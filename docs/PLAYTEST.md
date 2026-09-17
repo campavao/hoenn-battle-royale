@@ -367,6 +367,78 @@ active about 25 seconds in; `3ef373a8c` split the pace flag off and that is alre
 
 ---
 
+## 2026-09-17, the morning: the exit, and the last way to the truck
+
+### The match ends and the player is still in it -- **fixed**
+
+"If the game is over I should be kicked back to the main menu."
+
+Every client already knew: `director.ts:400` sends `{t:'win'}` and `results.ts` flips
+`ended` on all of them. Nothing acted on it. The room drew `#results-panel` over a ROM
+that went on walking Hoenn, SOLO VS BOTS did not even do that (`app.ts` saved the round
+log and stopped), and the host was the one person in the room with no LEAVE button at all
+(`leave.hidden = isHost`, re-run on every roster tick).
+
+Kanto's shape, and this follows it: everybody reads the result for a moment, then **one
+funnel** takes them out. `returnToRoom()` is that funnel -- the old PLAY AGAIN body,
+extracted -- and PLAY AGAIN is now a press of it rather than the only thing that ends a
+match. A four-second grace arms on `win` on every client and calls the same function.
+
+* **The room is kept**, which is the whole point of POK-258: `backToLobby()` reloads, and
+  a reload scatters the eight people you just played with. The exit from a room is never
+  a reload; only solo, which has no socket to lose, goes to the lobby (after eight
+  seconds -- there is no PLAY AGAIN there, so it is the only time to read the result).
+* **Solo gets a results screen.** `renderResults`/`renderFame` took a `Bridge`, which solo
+  has never had; they take a seat and a roster now, which solo does have.
+* **The host's LEAVE appears when the match is over** and not before: a host leaving
+  mid-match closes the room on everybody, which is what migration is for.
+* **`again` is finally sent.** It has been in the wire since POK-258 and sent by nobody.
+  The host broadcasts it beside the unlock, as the recovery path for a client whose socket
+  blinked over the last fight and never saw the `win`. It is not the mechanism -- each
+  client's own grace is -- so a room of older clients still ends properly.
+
+`returnToRoom` is idempotent (a `returning` latch, and it cancels the grace), so a press
+and the timer cannot both reboot.
+
+### The truck, on the one path 784567b31 missed -- **fixed**
+
+`784567b31` put the hold around every way in "hash or no hash", and its own commit message
+named PLAY AGAIN as one of them. Its diff is sixteen lines, all inside `main()`.
+
+PLAY AGAIN rebooted the emulator with no pause anywhere, and the `waitForMailbox` after it
+resolved on the magic alone -- which on a reboot can be **the previous run's magic still
+sitting in EWRAM**, because nothing in the repo asserts that mGBA's `loadGame` clears WRAM.
+When it is, the boot block goes in before `BrInit` has run, `BrMailbox_Init`'s `CpuFill32`
+wipes it, nothing boots, and the ROM sits on the title screen with live input -- where the
+first A press is NEW GAME, `CB2_NewGame`, and the moving van. And once the player has
+reached the overworld by hand, `br_boot.c:156`'s `PreGame()` is false for the rest of the
+page session, so no later block is ever consumed: that is why Cam stayed in the story game.
+
+`rebootIntoBr()` is the same shape `main()` uses: zero the magic (inert if WRAM is cleared,
+decisive if it is not), reboot, wait for a mailbox whose **frame counter has gone
+backwards**, then pause, write, resume. The pause has to come after the wait -- that wait
+counts emulated frames both to resolve and to time out, so pausing first deadlocks it.
+
+It also stopped hardcoding `BR_BOOT_MAP`, which silently dropped the testmon flag and with
+it the e2e harness's party on every replay; `bootModeFor()` is hoisted out of `main()`.
+
+`play-again.spec.ts` is rewritten around both: it presses nothing, waits for the grace to
+take it out, and then asserts the second boot block was **consumed** rather than wiped and
+that the map is Littleroot (0,9) and not `MAP_INSIDE_OF_TRUCK` (25,40).
+
+### Found on the way: the champion's parade is unreachable in real play
+
+Not fixed, not reported by Cam, and worth its own pass. `sWinPending` wants an inbound
+`result` naming our own seat before the ROM will run the Hall of Fame, and nothing
+page-side ever sends one -- `win-parade.txt` passes because it pokes the RESULT slot by
+hand, which is itself the evidence. The fix is one push at the `win` handler when
+`msg.seat === bridge.seat`; `result` already has an encoder, so there is no codec work.
+The reason it is not in this change: the four-second grace would reboot the ROM out from
+under the parade, so the two have to be designed together -- Kanto's own tick defers the
+ending while the parade is on screen.
+
+---
+
 ## What is left, 2026-09-17 (re-cut after the morning pass)
 
 Everything above that is not marked **fixed** or **closed**, which is now:
@@ -381,20 +453,9 @@ Everything above that is not marked **fixed** or **closed**, which is now:
   **Cam also decided the content question:** a match grants only the eight HMs today, no
   mart sells a TM and the Zone deals none, so TMs go into the world in the same batch
   rather than shipping a menu with half of it empty.
-* **The match ends and the player is still in it.** Traced: `director.ts:400` sends
-  `{t:'win'}` and `results.ts:50` flips `ended`, so every client knows -- and nothing
-  takes anybody out. In a room the page draws `#results-panel` over a ROM that keeps
-  walking Hoenn; in SOLO VS BOTS not even that (`app.ts:1583` saves the round log and
-  stops). The host never gets LEAVE (`app.ts:2382`, `leave.hidden = isHost`, re-run on
-  every roster tick). The champion's parade is unreachable in real play: `sWinPending`
-  wants an inbound `result` naming our own seat and nothing page-side sends one. Kanto's
-  shape is `onWinner` on every client, a 4s grace, then one funnel back to the lobby with
-  the room kept -- `backToLobby()` is the wrong exit for a room, it reloads and scatters
-  the roster (POK-258).
-* **The truck, on one path only.** `784567b31` holds the ROM on every way in through
-  `main()`; the PLAY AGAIN handler it names is not one of them (`app.ts:2258`, reboot with
-  no pause) and `waitForMailbox` resolves on MAGIC alone, which can be the pre-reboot value
-  still in EWRAM.
+* **The champion's parade is unreachable in real play.** Above -- one push at the `win`
+  handler, designed together with the ending's grace so the reboot does not cut the parade
+  off.
 * **A bag gives its money and drops its items.** Above. The one item EWRAM genuinely gates.
 * **The wardrobe** -- more skins and a preview of the locked ones. Not EWRAM-gated after
   all. Two index-parity traps the entry above does not name: `br_netlink.c:258` takes the
@@ -419,5 +480,6 @@ Everything above that is not marked **fixed** or **closed**, which is now:
   before changing anything -- it is a pacing decision, not a bug.
 
 Answered and closed this pass: the `-1` HP mon (the fog's bleed, working as designed),
-"found 0" (the bag-money off-by-one), the HUD frame (Cam keeps OPTIONS > FRAME), and
-Professor Birch's lab (closed, `lab-closed.txt`).
+"found 0" (the bag-money off-by-one), the HUD frame (Cam keeps OPTIONS > FRAME),
+Professor Birch's lab (closed, `lab-closed.txt`), the end-of-match exit, and the last
+path to the truck.

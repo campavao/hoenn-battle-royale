@@ -74,6 +74,12 @@ export class Results {
     return result;
   }
 
+  /** Is the match over? Asked by the room, which has to answer it without a seat (the
+   *  host's LEAVE button appears at the end of a match and only then). */
+  isOver(): boolean {
+    return this.ended;
+  }
+
   eliminationOrder(): number[] {
     return [...this.order];
   }

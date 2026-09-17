@@ -749,11 +749,26 @@ function wireFps(emu: Emulator): void {
 
 // ---- boot: start in Littleroot under the career name (br_boot.h) ------------------------
 
-function waitForMailbox(emu: Emulator, mailboxBase: number): Promise<void> {
+/** Wait for the ROM to wake its mailbox.
+ *
+ *  `staleAfter` is for a reboot, and it is the whole reason this takes an argument. The
+ *  magic is the last thing BrMailbox_Init writes, so on a cold boot its presence really
+ *  does mean the ROM is up -- but a reboot does not necessarily clear EWRAM, and the
+ *  magic the previous run left there is still at the same address the instant the core
+ *  restarts. Resolving on that puts the boot block in before BrInit has run, and
+ *  BrMailbox_Init's CpuFill32 then wipes it: nothing boots, the ROM sits on the title
+ *  screen with live input, and the first A press walks the player into NEW GAME and the
+ *  moving van. Pass the frame counter read just before the reboot; a count that has not
+ *  gone backwards is not a fresh ROM.
+ *
+ *  Both the resolve and the timeout count emulated frames, so never call this paused. */
+function waitForMailbox(emu: Emulator, mailboxBase: number, staleAfter?: number): Promise<void> {
   return new Promise((resolve, reject) => {
     let frames = 0;
     const off = emu.onFrame(() => {
-      if (emu.read(mailboxBase + MAILBOX.OFF_MAGIC, 16) === MAILBOX.MAGIC) {
+      const awake = emu.read(mailboxBase + MAILBOX.OFF_MAGIC, 16) === MAILBOX.MAGIC;
+      const fresh = staleAfter === undefined || emu.read(mailboxBase + MAILBOX.OFF_FRAME, 32) < staleAfter;
+      if (awake && fresh) {
         off();
         resolve();
       } else if (++frames > 600) {
@@ -762,6 +777,29 @@ function waitForMailbox(emu: Emulator, mailboxBase: number): Promise<void> {
       }
     });
   });
+}
+
+/** Take the ROM back to the start of a match, the way main() comes in -- which is the
+ *  one way in PLAY AGAIN never had. Zeroing the magic before the reset is inert if
+ *  mGBA's loadGame clears WRAM and decisive if it does not, so it costs nothing either
+ *  way; the pause has to come AFTER the wait, because waitForMailbox counts emulated
+ *  frames both to resolve and to time out. */
+async function rebootIntoBr(emu: Emulator, mailboxBase: number, bootMode: number): Promise<void> {
+  const before = emu.read(mailboxBase + MAILBOX.OFF_FRAME, 32);
+  emu.write(mailboxBase + MAILBOX.OFF_MAGIC, 0, 16);
+  await emu.reboot();
+  await waitForMailbox(emu, mailboxBase, before);
+  emu.pause();
+  writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
+  emu.resume();
+}
+
+/** The boot mode for a way in. Hoisted out of main() because PLAY AGAIN needs the same
+ *  answer and hardcoded BR_BOOT_MAP instead, which quietly dropped the testmon flag --
+ *  and with it the e2e harness's party -- on every replay. */
+function bootModeFor(mode: string): number {
+  const wantsTestMon = import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('testmon');
+  return (mode === 'solo' ? BR_BOOT_SAFARI : BR_BOOT_MAP) | (wantsTestMon ? BR_BOOT_FLAG_TESTMON : 0);
 }
 
 function careerName(): string {
@@ -1259,9 +1297,9 @@ function startBots(
  *  it is the record it produced. PLAY AGAIN reloads the page on the same hash, which
  *  re-imports the ROM from IndexedDB and rejoins the same room -- the blunt way, and
  *  the one that cannot leave half a match's state behind. */
-function renderResults(bridge: Bridge, results: Results, seats: number, seed?: number): void {
+function renderResults(seat: number, roster: Roster, results: Results, seats: number, seed?: number): void {
   const panel = $('#results-panel') as HTMLElement;
-  const mine = results.forSeat(bridge.seat, performance.now());
+  const mine = results.forSeat(seat, performance.now());
   if (!mine.ended) {
     panel.hidden = true;
     return;
@@ -1275,8 +1313,8 @@ function renderResults(bridge: Bridge, results: Results, seats: number, seed?: n
     parts.push(`survived ${mm}:${ss}`);
   }
   if (mine.winner !== undefined) {
-    const who = bridge.roster.get(mine.winner);
-    parts.push(mine.winner === bridge.seat ? 'you won' : `${who?.name || `P${mine.winner}`} won`);
+    const who = roster.get(mine.winner);
+    parts.push(mine.winner === seat ? 'you won' : `${who?.name || `P${mine.winner}`} won`);
   } else {
     parts.push('a draw');
   }
@@ -1284,7 +1322,7 @@ function renderResults(bridge: Bridge, results: Results, seats: number, seed?: n
   // and the round is written down under it (POK-248, match/log.ts).
   if (seed !== undefined) parts.push(`seed ${seed}`);
   ($('#results-line') as HTMLElement).textContent = parts.join(' · ');
-  renderFame(bridge, mine.winner);
+  renderFame(roster, mine.winner, seat);
 }
 
 /** The champion's team under the result (POK-243, Kanto's Hall of Fame parade). The
@@ -1292,7 +1330,7 @@ function renderResults(bridge: Bridge, results: Results, seats: number, seed?: n
  *  the only place the room ever sees what actually took the match. Silent when the
  *  champion's `party` never arrived -- a bot's never does, since a bot has no ROM to
  *  send one. */
-function renderFame(bridge: Bridge, winner: number | undefined): void {
+function renderFame(roster: Roster, winner: number | undefined, seat: number): void {
   const el = $('#results-fame') as HTMLElement;
   const party = winner === undefined ? undefined : lastParty.get(winner);
 
@@ -1300,7 +1338,7 @@ function renderFame(bridge: Bridge, winner: number | undefined): void {
     el.hidden = true;
     return;
   }
-  const who = winner === bridge.seat ? 'YOUR TEAM' : `${bridge.roster.get(winner)?.name || `P${winner}`}'S TEAM`;
+  const who = winner === seat ? 'YOUR TEAM' : `${roster.get(winner)?.name || `P${winner}`}'S TEAM`;
   const team = party
     .filter((mon) => mon.species > 0)
     .map((mon) => `${mon.nickname || speciesName(mon.species)} L${mon.level}`)
@@ -1313,6 +1351,11 @@ function renderFame(bridge: Bridge, winner: number | undefined): void {
 }
 
 // ---- spectating (POK-233) -----------------------------------------------------------
+
+/** How long a finished solo match stays on screen before the lobby comes back. Longer
+ *  than the room's four seconds: there is no PLAY AGAIN to press here, so this is the
+ *  only time the player has to read it. */
+const SOLO_END_GRACE_MS = 8_000;
 
 const SPECTATE_TICK_MS = 500; // the peek timer is 3s; this only has to not miss it by much
 
@@ -1535,6 +1578,32 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const loot = new Loot();
   const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
   roster.setMySeat(0);
+  // A solo match ended in complete silence: the director declared a winner, the round
+  // was written down, and the player was left standing in Hoenn with nothing on screen
+  // to say so. `Results` was only ever built in the room path. Solo has everything it
+  // needs -- a seat, a roster and the same messages -- so it gets the same panel, the
+  // same career line, and the same grace before the exit.
+  const results = new Results();
+  let fieldSize = 0;
+  let recorded = false;
+  let endGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  const noteResult = (msg: Msg): void => {
+    if (msg.t === 'start') {
+      fieldSize = msg.spawns.length;
+      results.start(fieldSize, performance.now());
+      recorded = false;
+    }
+    results.note(msg, performance.now());
+    if (msg.t !== 'win' || recorded) return;
+    recorded = true;
+    ($('#results-career') as HTMLElement).textContent =
+      careerLine(recordMatch(results.forSeat(0, performance.now()).placement));
+    renderResults(0, roster, results, fieldSize, seed);
+    // Solo has no room to go back to, so the exit is the lobby -- which is what
+    // backToLobby does, and there is no socket here for it to scatter.
+    if (endGraceTimer !== null) clearTimeout(endGraceTimer);
+    endGraceTimer = setTimeout(() => backToLobby(), SOLO_END_GRACE_MS);
+  };
   const solo = startBots(
     (msg) => {
       // Into the ROM's coordinate space on the way out (net/cells.ts): the brain walks
@@ -1545,6 +1614,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       roster.applyMsg(wire);
       loot.note(wire);
       log.note(wire, performance.now());
+      noteResult(wire);
       if (wire.t === 'out') out?.(wire.seat);
     },
     [0],
@@ -1585,6 +1655,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
         const round = log.current(performance.now());
         if (round) saveMatch(round);
       }
+      noteResult(msg);
     },
     now: () => performance.now(),
     onOut: (handler) => {
@@ -1601,6 +1672,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // has no Bridge, so it needs the one answer the ROM cannot go on without.
   const fromRom = (msg: Msg) => {
     log.note(msg, performance.now());
+    noteResult(msg);
     roster.applyMsg(msg); // our own ghost, so the bots' eyeline can see us
     if (msg.t === 'pick') rom.push({ t: 'land', ...director.landFor(msg.seat, msg.section) });
     else if (msg.t === 'out') out?.(msg.seat);
@@ -2030,7 +2102,7 @@ function wireRoom(
       // The champion's own party arrives after the `win` that put the results on
       // screen -- their ROM sends it as the parade starts (POK-243) -- so the panel
       // is drawn again rather than waiting for a team that came too late.
-      if (recorded && bridge) renderResults(bridge, results, fieldSize, match.seed);
+      if (recorded && bridge) renderResults(bridge.seat, bridge.roster, results, fieldSize, match.seed);
     }
     // And what it spent out of its bag in there (POK-237), for the same reason: the
     // host walks the bot, but only the ROM that fought it saw the items go.
@@ -2047,18 +2119,48 @@ function wireRoom(
     // The match is over: the door opens again (POK-258). START locked the room to keep
     // latecomers out of a running match, and leaving it locked is what turned the end
     // of a match into everybody scattering -- a reload could not get back in.
-    if (msg.t === 'win' && director) relay.lockRoom(false);
+    if (msg.t === 'win' && director) {
+      relay.lockRoom(false);
+      // And says so: a client that never saw the `win` -- a socket that blinked over the
+      // last fight -- still gets taken out of the match. `again` has been defined in the
+      // wire since POK-258 and sent by nobody until now. It is the recovery path and not
+      // the mechanism: each client's own grace below is what actually moves it, so a
+      // room of older clients still ends properly.
+      relay.all({ t: 'again', seat: bridge?.seat ?? 0 });
+    }
     if (msg.t === 'win' && bridge && !recorded) {
       recorded = true;
       const round = log.current(performance.now());
       if (round) saveMatch(round);
       const mine = results.forSeat(bridge.seat, performance.now());
       ($('#results-career') as HTMLElement).textContent = careerLine(recordMatch(mine.placement));
-      renderResults(bridge, results, fieldSize, match.seed);
+      renderResults(bridge.seat, bridge.roster, results, fieldSize, match.seed);
+      // "If the game is over I should be kicked back to the main menu." Nothing took
+      // anybody out of a finished match: the page drew the results panel over a ROM that
+      // went on walking Hoenn, and the host did not even have a LEAVE button. Kanto's
+      // shape (main.lua, END_GRACE_SECONDS): everybody reads the result for a moment,
+      // then one funnel takes them all back -- keeping the room, so the next match is a
+      // press of START rather than eight people finding each other again.
+      armEndGrace(() => void returnToRoom());
     }
   };
   let stopSpectateLoop: (() => void) | null = null;
   let stopGuestStrip: (() => void) | null = null;
+  /** How long the result stays on screen before the match lets go of you. Kanto's
+   *  END_GRACE_SECONDS, and the same reasoning: long enough to read where you came, short
+   *  enough that nobody is left sitting in a game that is over. */
+  const END_GRACE_MS = 4_000;
+  let endGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Cancel a grace that is in flight -- because the exit has already been taken, by a
+   *  press of PLAY AGAIN or by the host's `again` arriving first. */
+  const endGrace = (): void => {
+    if (endGraceTimer !== null) clearTimeout(endGraceTimer);
+    endGraceTimer = null;
+  };
+  const armEndGrace = (go: () => void): void => {
+    endGrace();
+    endGraceTimer = setTimeout(go, END_GRACE_MS);
+  };
   /** In the room to look, not to play (POK-260). Set when this client asks to watch,
    *  and reasserted from the relay's own roster, which is the authority on it. */
   let amWatching = false;
@@ -2157,6 +2259,11 @@ function wireRoom(
         // sent: a `pickup` reaches the whole room, and only the page following that
         // seat has any business saying so. The describe() has to happen before the
         // loot table forgets the piece, which loot.note() does on this same message.
+        // The host says the match is over (POK-258's `again`, sent for the first time
+        // here). Belt and braces for the local grace: a socket that blinked over the
+        // last fight never saw the `win` and would otherwise sit in a finished match
+        // for ever. Whoever gets there first wins -- returnToRoom is idempotent.
+        if (m.t === 'again' && !director) void returnToRoom();
         if (m.t === 'pickup' && bridge && spectate.watchingSeat() === m.seat) {
           const what = loot.describe(m.key);
           const row = bridge.roster.all().find((e) => e.seat === m.seat);
@@ -2248,42 +2355,49 @@ function wireRoom(
   leave.addEventListener('click', () => backToLobby());
 
   const playAgainButton = $('#play-again') as HTMLButtonElement;
-  playAgainButton.addEventListener('click', () => {
-    void (async () => {
-      playAgainButton.disabled = true;
-      try {
-        stopDirectorLoop?.();
-        stopDirectorLoop = null;
-        director = null;
-        await emu.reboot();
-        if (mailboxBase !== undefined) {
-          await waitForMailbox(emu, mailboxBase);
-          writeBootBlock(emu, mailboxBase, careerName(), BR_BOOT_MAP, careerSkin());
-        }
-        recorded = false;
-        // Last match's champion is not this match's, and the parade reads by seat
-        // (POK-243): a seat that wins twice would otherwise be shown the team it had
-        // the first time, and one that never sends a `party` would be shown somebody
-        // else's. PLAY AGAIN used to reload the page, which cleared this for free.
-        lastParty.clear();
-        // Whoever we were watching is not in a match any more.
-        for (const m of spectate.follow(null)) bridge?.pushToRom(m);
-        ($('#results-panel') as HTMLElement).hidden = true;
-        if (bridge) {
-          renderRoom(bridge);
-          renderSpectate(bridge, spectate);
-          // The host gets its START back: a new match is dealt from the room, the same
-          // way the first one was.
-          renderRoomPanel(controls, bridge.seat, relay, () => {
-            startDirector(controls.roster?.members.map((m) => m.id)); // locks the room itself
-            renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
-          }, false);
-        }
-      } finally {
-        playAgainButton.disabled = false;
+
+  /** Out of the match and back into the room: the ROM starts over, the results panel
+   *  comes down, and the room -- socket, roster, code -- is exactly as it was. This is
+   *  the one funnel, the way Kanto has one `endMatch`. PLAY AGAIN is a press of it and
+   *  so is the grace timer below; nothing else may take the exit, because a reload
+   *  (backToLobby) scatters the eight people you have just played with (POK-258). */
+  let returning = false;
+  async function returnToRoom(): Promise<void> {
+    if (returning) return;
+    returning = true;
+    playAgainButton.disabled = true;
+    try {
+      endGrace();
+      stopDirectorLoop?.();
+      stopDirectorLoop = null;
+      director = null;
+      if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
+      else await emu.reboot();
+      recorded = false;
+      // Last match's champion is not this match's, and the parade reads by seat
+      // (POK-243): a seat that wins twice would otherwise be shown the team it had
+      // the first time, and one that never sends a `party` would be shown somebody
+      // else's. PLAY AGAIN used to reload the page, which cleared this for free.
+      lastParty.clear();
+      // Whoever we were watching is not in a match any more.
+      for (const m of spectate.follow(null)) bridge?.pushToRom(m);
+      ($('#results-panel') as HTMLElement).hidden = true;
+      if (bridge) {
+        renderRoom(bridge);
+        renderSpectate(bridge, spectate);
+        // The host gets its START back: a new match is dealt from the room, the same
+        // way the first one was.
+        renderRoomPanel(controls, bridge.seat, relay, () => {
+          startDirector(controls.roster?.members.map((m) => m.id)); // locks the room itself
+          renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
+        }, false);
       }
-    })();
-  });
+    } finally {
+      returning = false;
+      playAgainButton.disabled = false;
+    }
+  }
+  playAgainButton.addEventListener('click', () => void returnToRoom());
 
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code));
   relay.on('room_joined', (ev) => attach(ev.id, ev.code));
@@ -2379,7 +2493,10 @@ function wireRoom(
     // leave the host's controls on screen for the rest of the match.
     if (ev.members.length >= 2 && autoStarts()) startDirector(ev.members.map((m) => m.id));
     if (bridge) renderRoom(bridge);
-    leave.hidden = isHost;
+    // A host leaving closes the room for everybody -- that is what migration is for --
+    // so LEAVE is a guest's button while a match is on. It is not once the match is
+    // over: the host was the only one in the room with no way out at all.
+    leave.hidden = isHost && !results.isOver();
     if (bridge) renderSpectate(bridge, spectate);
     if (bridge) {
       renderRoomPanel(controls, bridge.seat, relay, () => {
@@ -2812,9 +2929,7 @@ async function main(): Promise<void> {
   const fromHash = parseRoomHash();
   let roomHash = fromHash;
   if (!roomHash) roomHash = await runLobby();
-  const wantsTestMon = import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('testmon');
-  const bootMode =
-    (roomHash.mode === 'solo' ? BR_BOOT_SAFARI : BR_BOOT_MAP) | (wantsTestMon ? BR_BOOT_FLAG_TESTMON : 0);
+  const bootMode = bootModeFor(roomHash.mode);
 
   if (mailboxBase !== undefined) {
     writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
