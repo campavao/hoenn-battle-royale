@@ -1,0 +1,32 @@
+# mart-no-stones: an ordinary Poke Mart sells no evolution stones, at any rung
+# (POK-309). The control for mart-stones.txt -- read the two frames together, because a
+# screenshot of a shelf without stones on it proves nothing on its own.
+#
+# Oldale Town's Mart is map 2:4 and its clerk stands at (1,3), so boot on (1,4). The
+# ring is pushed to phase 5 first, which is the top of the ladder and the shelf that
+# used to carry all six stones.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 02 04 01 00 04 00 BD BB C7 FF
+wait 700
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 2
+expect u8 *gSaveBlock1Ptr+5 4
+poke u8 gBrRing+1 5
+poke u8 gBrRing 1
+wait 120
+# the top rung, so this is sMart4 -- the shelf with the MASTER BALL on it
+expect u8 gBrLevels+2 4
+hold UP 10
+wait 20
+tap A
+wait 120
+tap A
+wait 150
+tap A
+wait 90
+shot list-top
+hold DOWN 150
+wait 40
+# The whole shelf, and the bottom of it is CANCEL rather than six stones.
+shot list-bottom
+say mart no stones ok

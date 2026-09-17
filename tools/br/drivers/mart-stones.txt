@@ -1,0 +1,58 @@
+# mart-stones: the evolution stones are sold in Lilycove, and the MOON STONE costs
+# money (POK-309).
+#
+# Cam: "it looks like all of the stones are available in Pokemarts. I think this is
+# incorrect... there is a town that has essentially a big department store. That
+# location should be what sells the stones, not just all Pokemarts. And the Moon Stone
+# for sure should not be sold for zero dollars."
+#
+# mart-no-stones.txt is the other half: an ordinary mart at the top rung, with none.
+#
+# DEPARTMENT STORE 2F is map 13:17; the left clerk stands at (7,6), so boot on (7,7)
+# and face her. Indoors the boot lands on the cell it names -- the one-tile step is the
+# door-exit animation and there is no door here.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 0D 11 07 00 07 00 BD BB C7 FF
+wait 700
+shot arrived
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 13
+expect u8 *gSaveBlock1Ptr+5 17
+# the item pocket is empty before we buy anything (SaveBlock1 +0x560, four bytes a slot,
+# item id in the clear)
+expect u16 *gSaveBlock1Ptr+0x560 0
+hold UP 10
+wait 20
+tap A
+wait 120
+tap A
+wait 150
+shot shelf
+tap A
+wait 90
+shot list-top
+hold DOWN 150
+wait 40
+shot list-bottom
+# The shelf's tail is FIRE, WATER, THUNDER, LEAF, SUN, MOON STONE, all at 2100 -- the
+# frame above is where the price is read. Two more down to the MOON STONE and buy one.
+tap DOWN
+wait 15
+tap DOWN
+wait 20
+shot on-moon-stone
+tap A
+wait 90
+tap A
+wait 120
+tap A
+wait 150
+shot bought
+tap A
+wait 60
+tap B
+wait 60
+# It is in the bag: SaveBlock1 +0x560 is the first ITEMS slot, four bytes, and the item
+# id is in the clear (only the quantity is scrambled). 94 is ITEM_MOON_STONE.
+expect u16 *gSaveBlock1Ptr+0x560 94
+say mart stones ok

@@ -911,6 +911,12 @@ u16 GetItemPrice(u16 itemId)
     // decision, and five thousand is most of a match's money.
     if (itemId == ITEM_MASTER_BALL && gBrMatch.phase != BR_PHASE_NONE)
         return 5000;
+    // ...and so does the MOON STONE (POK-309). Emerald prices it at nothing because it
+    // is never for sale -- you find it -- so putting it on a shelf handed it out free,
+    // which Cam caught. The other five stones are 2100 in the item table; this is the
+    // sixth of a matched set, not a number of its own.
+    if (itemId == ITEM_MOON_STONE && gBrMatch.phase != BR_PHASE_NONE)
+        return 2100;
 #endif
     return gItems[SanitizeItemId(itemId)].price;
 }

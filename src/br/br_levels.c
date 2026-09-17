@@ -6,6 +6,7 @@
 #include "item.h"
 #include "string_util.h"
 #include "constants/items.h"
+#include "constants/maps.h"
 #include "constants/characters.h"
 #include "br/br_hud.h"
 #include "br/br_ring.h"
@@ -31,16 +32,29 @@ static const u16 sMart0[] = { ITEM_POKE_BALL, ITEM_POTION, ITEM_ANTIDOTE, ITEM_P
 static const u16 sMart1[] = { ITEM_POKE_BALL, ITEM_GREAT_BALL, ITEM_POTION, ITEM_SUPER_POTION, ITEM_ANTIDOTE, ITEM_PARALYZE_HEAL,
                               ITEM_AWAKENING, ITEM_BURN_HEAL, ITEM_ICE_HEAL, ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_NONE };
 static const u16 sMart2[] = { ITEM_GREAT_BALL, ITEM_ULTRA_BALL, ITEM_SUPER_POTION, ITEM_HYPER_POTION, ITEM_REVIVE, ITEM_FULL_HEAL,
-                              ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_FIRE_STONE, ITEM_WATER_STONE,
-                              ITEM_THUNDER_STONE, ITEM_LEAF_STONE, ITEM_SUN_STONE, ITEM_MOON_STONE, ITEM_NONE };
+                              ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_NONE };
 static const u16 sMart3[] = { ITEM_ULTRA_BALL, ITEM_HYPER_POTION, ITEM_MAX_POTION, ITEM_REVIVE, ITEM_FULL_HEAL, ITEM_X_ATTACK,
-                              ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_X_ACCURACY, ITEM_GUARD_SPEC, ITEM_DIRE_HIT,
-                              ITEM_FIRE_STONE, ITEM_WATER_STONE, ITEM_THUNDER_STONE, ITEM_LEAF_STONE, ITEM_SUN_STONE, ITEM_MOON_STONE, ITEM_NONE };
+                              ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_X_ACCURACY, ITEM_GUARD_SPEC, ITEM_DIRE_HIT, ITEM_NONE };
 // The top shelf carries the Master Ball, priced for the match in item.c (POK-268).
 static const u16 sMart4[] = { ITEM_MASTER_BALL, ITEM_ULTRA_BALL, ITEM_MAX_POTION, ITEM_FULL_RESTORE, ITEM_REVIVE, ITEM_MAX_REVIVE, ITEM_FULL_HEAL,
-                              ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_X_ACCURACY, ITEM_GUARD_SPEC, ITEM_DIRE_HIT,
-                              ITEM_FIRE_STONE, ITEM_WATER_STONE, ITEM_THUNDER_STONE, ITEM_LEAF_STONE, ITEM_SUN_STONE, ITEM_MOON_STONE, ITEM_NONE };
+                              ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_X_ACCURACY, ITEM_GUARD_SPEC, ITEM_DIRE_HIT, ITEM_NONE };
 static const u16 *const sMarts[] = { sMart0, sMart1, sMart2, sMart3, sMart4, sMart4 };
+
+// LILYCOVE DEPARTMENT STORE (POK-309).
+//
+// Cam: "it looks like all of the stones are available in Pokemarts. I think this is
+// incorrect... there is a town that has essentially a big department store. That
+// location should be what sells the stones, not just all Pokemarts."
+//
+// So a stone evolution is a place you go rather than a thing you buy on the way past,
+// which is also what makes POK-290's rule work: the rung evolves what levels up, and
+// everything else is a trip to Lilycove. It is a long way from most drops, which is the
+// point -- and the shelf is the top one plus the stones whatever rung the match is at,
+// so arriving is worth it rather than a second-best mart.
+static const u16 sDeptStore[] = { ITEM_MASTER_BALL, ITEM_ULTRA_BALL, ITEM_MAX_POTION, ITEM_FULL_RESTORE, ITEM_REVIVE, ITEM_MAX_REVIVE,
+                                  ITEM_FULL_HEAL, ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_X_ACCURACY,
+                                  ITEM_GUARD_SPEC, ITEM_DIRE_HIT, ITEM_FIRE_STONE, ITEM_WATER_STONE, ITEM_THUNDER_STONE,
+                                  ITEM_LEAF_STONE, ITEM_SUN_STONE, ITEM_MOON_STONE, ITEM_NONE };
 
 static const u8 sText_Lv[] = _("LV ");
 static const u8 sText_Sep[] = _(" - ");
@@ -277,8 +291,20 @@ void BrLevels_GiveStartingBag(void)
     AddBagItem(ITEM_POKE_BALL, 5);
 }
 
+// Which floor of the Department Store you are standing on does not matter: the fog is
+// closing and a hunt for the right lift button is not a puzzle worth having. 1F..5F all
+// carry the same shelf; the rooftop and the lift have no counter to stand at.
+static bool8 InTheDeptStore(void)
+{
+    return gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F)
+        && gSaveBlock1Ptr->location.mapNum >= MAP_NUM(MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F)
+        && gSaveBlock1Ptr->location.mapNum <= MAP_NUM(MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F);
+}
+
 const u16 *BrLevels_MartItems(void)
 {
+    if (InTheDeptStore())
+        return sDeptStore;
     return sMarts[gBrLevels.tier];
 }
 
