@@ -1,0 +1,51 @@
+# run-bot: a POKe DOLL spent against a BOT buys the same escape it buys against a person
+# (POK-293).
+#
+# A bot's fight is an ordinary trainer battle rather than a link one, so RUN came down
+# the vanilla path and was decided by a speed roll -- while the doll had already been
+# taken out of the bag at selection. You paid and got a coin toss.
+#
+# bot-fight.txt's staging: a TRAINER card puts a level 5 TREKO in gEnemyParty, then a
+# CHALLENGE starts the fight. A doll is poked into the first ITEMS slot (SaveBlock1
+# +0x560) the way run-doll.txt does it -- the shelf it would really come off is
+# mart-no-stones.txt's business.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 1F 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 300
+# a POKe DOLL in the bag, run-doll.txt's recipe: zero the save encryption key first,
+# because a bag quantity is XOR'd with it, then POKe DOLL (0x50) x1 in the first slot
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x560 0x50
+poke u16 *gSaveBlock1Ptr+0x562 1
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+expect u16 gBrBattle+4 0
+shot menu
+# RUN is bottom right of the action menu
+tap DOWN
+wait 15
+tap RIGHT
+wait 15
+shot on-run
+tap A
+wait 300
+shot ran
+# Attempted once, escaped once, and the fight is over as a run rather than a loss.
+expect u16 gBrBattle+4 1
+expect u16 gBrBattle+6 1
+expect u8 gBattleOutcome 4
+say run bot ok

@@ -546,6 +546,27 @@ void HandleAction_Run(void)
     {
         if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
         {
+#if BR
+            // A bot's fight is a TRAINER battle rather than a link one, so it came down
+            // here and was decided by the vanilla speed roll -- while the POKe DOLL had
+            // already been spent at selection. You paid and got a coin toss (POK-293).
+            // The same rule as above: a doll or nothing, and against a wild Pokemon this
+            // is left alone, because the Zone is not somebody else's time.
+            if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
+            {
+                if (!BrBattle_TakeRun(gBattleBufferB[gBattlerAttacker][2] == BR_RUN_DOLL))
+                {
+                    ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
+                    gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_CANT_ESCAPE_2;
+                    gBattlescriptCurrInstr = BattleScript_PrintFailedToRunString;
+                    gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
+                    return;
+                }
+                gCurrentTurnActionNumber = gBattlersCount;
+                gBattleOutcome = B_OUTCOME_RAN;
+                return;
+            }
+#endif
             if (!TryRunFromBattle(gBattlerAttacker)) // failed to run away
             {
                 ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
