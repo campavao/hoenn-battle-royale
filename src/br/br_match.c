@@ -158,6 +158,11 @@ static const u8 sText_TentClosed[] = _("THE BATTLE TENT\nIS CLOSED.");
 // the way in -- VAR_TRICK_HOUSE_ENTRANCE_STATE is 0 at boot, which is the value its
 // ON_FRAME trigger fires on.
 static const u8 sText_TrickHouseClosed[] = _("THE TRICK HOUSE\nIS CLOSED.");
+// The SAFARI ZONE sells its own way back in. The attendant wants a POKeBLOCK CASE, which
+// Lilycove still hands out, and 500 -- and for that a contestant is given thirty balls and
+// a step counter in a Zone whose catch pool is the opening's, with the fog outside unable
+// to follow. Nobody has done it in a play-test; it was a hole on paper (2026-09-17).
+static const u8 sText_SafariClosed[] = _("THE SAFARI ZONE\nIS CLOSED.");
 
 static const struct BrClosedDoor sClosedDoors[] =
 {
@@ -166,6 +171,7 @@ static const struct BrClosedDoor sClosedDoors[] =
     { MAP_GROUP(MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY),    MAP_NUM(MAP_VERDANTURF_TOWN_BATTLE_TENT_LOBBY),    sText_TentClosed },
     { MAP_GROUP(MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY),     MAP_NUM(MAP_SLATEPORT_CITY_BATTLE_TENT_LOBBY),     sText_TentClosed },
     { MAP_GROUP(MAP_ROUTE110_TRICK_HOUSE_ENTRANCE),        MAP_NUM(MAP_ROUTE110_TRICK_HOUSE_ENTRANCE),        sText_TrickHouseClosed },
+    { MAP_GROUP(MAP_ROUTE121_SAFARI_ZONE_ENTRANCE),        MAP_NUM(MAP_ROUTE121_SAFARI_ZONE_ENTRANCE),        sText_SafariClosed },
 };
 
 bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)

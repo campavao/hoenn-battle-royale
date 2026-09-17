@@ -1,0 +1,45 @@
+# zone-balls-gone: the Zone's item balls come off the ground when the opening ends.
+#
+# BrZone_PlaceItems puts six balls on six Safari maps (POK-261) and the ground has eight
+# rows (BR_MAX_LOOT). Nothing took them off again, so from the buzzer to the last ring a
+# fallen trainer's team had two rows to land in and Add() dropped the rest in silence.
+# BrMatch_SafariOver calls BrZone_ItemsGone now (found building POK-306). This is
+# safari-drop's walk to the landing, counting the rows on the way.
+wait 30
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+# the opening is on and its six balls are down: six of the eight rows
+expect u8 gBrMatch 1
+expect u8 gBrLoot+0xA0 6
+# the buzzer
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 200
+expect u8 gBrMatch 2
+expect u8 gBrPick 1
+tap A
+wait 150
+pokebytes gBrMailbox+0x1098 19 0A 07 00 00 00 00 19 0A 00 28 00
+poke u16 gBrMailbox+0x0C 3
+wait 200
+expect u8 *gSaveBlock1Ptr+5 25
+# The six are gone. What is left is the one thing the match proper puts down: the DAY
+# CARE's chest (POK-306), a map away from here.
+expect u8 gBrLoot+0xA0 1
+expect u8 gBrLoot+0xA1 0
+# SPILL: a full team of six on this map, in a row one tile south of where we landed
+# ((10,40), so (17,47) in the +7 coords a row carries). Type 11, framed len 62 -- the
+# most one slot holds -- = hdr(3B 00 00) + seat 01, group 00, num 19, count 06, six
+# 9-byte rows, hasBag 00.
+pokebytes gBrMailbox+0x10D8 0B 3E 3B 00 00 01 00 19 06 01 01 0E 00 30 00 15 01 05 02 01 0F 00 30 00 15 01 05 03 01 10 00 30 00 15 01 05 04 01 11 00 30 00 15 01 05 05 01 12 00 30 00 15 01 05 06 01 13 00 30 00 15 01 05 00
+poke u16 gBrMailbox+0x0C 4
+wait 30
+# all six landed. It was two.
+expect u8 gBrLoot+0xA0 7
+expect u8 gBrLoot+0xA1 6
+shot spilled
+say zone balls gone ok
