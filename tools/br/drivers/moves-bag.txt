@@ -1,0 +1,31 @@
+# moves-bag: MOVES on a mon with nothing to remember says where the moves ARE (POK-279).
+#
+# Play-test: "I had a Wingull and when I clicked on MOVES from the Party screen, it
+# kicked me out and said there were no moves. If I went to my bag manually though and
+# used FLY, it was available to teach." Both true -- the relearner only ever offers
+# level-up moves, and a machine is taught from the bag -- and nothing on screen joined
+# them up.
+#
+# moves-row.txt is the same row on a mon that HAS something to remember: a Treecko at
+# the L30 rung. This one leaves it at L5, where the relearner has nothing, and the bag
+# has the HMs every match is dealt (GiveTheRunOfHoenn).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerParty+0x54 5
+tap START
+wait 40
+tap A
+wait 80
+tap A
+wait 40
+shot menu
+tap DOWN
+wait 10
+tap A
+wait 120
+# The relearner never opened -- there was nothing to open it for -- and the ticker is
+# holding the line that says so.
+shot said
+expect u8 gBrCatch+2 0xFF
+say moves bag ok
