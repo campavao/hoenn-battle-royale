@@ -327,10 +327,12 @@ static void AddStartMenuAction(u8 action)
 
 static void BuildNormalStartMenu(void)
 {
+#if !BR
     if (FlagGet(FLAG_SYS_POKEDEX_GET) == TRUE)
     {
         AddStartMenuAction(MENU_ACTION_POKEDEX);
     }
+#endif
 #if BR
     // A match has no flags to earn: the party row is there once there is a party, and
     // POKENAV / SAVE / OPTION are doors out of a live match (POK-221).

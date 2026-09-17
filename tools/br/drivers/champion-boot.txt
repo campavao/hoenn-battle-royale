@@ -1,0 +1,32 @@
+# champion-boot: a match starts after the story, not in it (play-test). Cam walked into
+# May and Professor Birch on Route 101 -- "the game should treat each player as if
+# they're already the champion and had beaten the game. No other story action should be
+# available."
+#
+# br_boot.c's GiveTheRunOfHoenn already handed out the badges, the towns and the dex
+# (POK-256); this is the rest of it: the game-clear flag, the state VARs the early maps
+# branch on, the shoes and both bikes.
+# Booted straight onto ROUTE 101 (map 0:16) at (8, 15), which is where the story's
+# first scripted meeting lives: in an unfinished game, walking north from here is Birch
+# shouting for help and a forced battle. Here it is a route.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 10 08 00 0F 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 16
+shot route101
+# North, through the grass the story would have interrupted us in.
+hold UP 160
+wait 60
+shot north
+hold UP 160
+wait 60
+shot further
+# Nothing took the controls: the START menu opens, which a cutscene would not allow,
+# and a script would have left ArePlayerFieldControlsLocked set.
+tap START
+wait 60
+shot menu
+tap B
+wait 30
+say champion boot ok

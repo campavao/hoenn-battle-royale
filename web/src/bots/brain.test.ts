@@ -294,13 +294,31 @@ describe('a bot meeting a player', () => {
     expect(bots.challenged(99, 0)).toBe(false);
   });
 
+  it('goes out and drops everything when the fight comes back with a wiped team', () => {
+    const bag: Stack[] = [{ id: 13, n: 2 }];
+    const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }, [MON], bag);
+    const seat = dealt[0].seat;
+
+    expect(sent.some((m) => m.t === 'spill')).toBe(false);
+    // What the ROM that fought it says when it has finished it: the same team, face down.
+    bots.setParty(seat, [{ ...MON, hp: 0 }]);
+
+    const spill = sent.find((m) => m.t === 'spill') as { seat: number; mons: unknown[]; bag?: { items: unknown[] } };
+    expect(spill, 'its team is on the ground where it fell').toBeDefined();
+    expect(spill.seat).toBe(seat);
+    expect(spill.mons).toHaveLength(1);
+    expect(spill.bag?.items, 'and the bag it never got to spend').toHaveLength(1);
+    expect(sent.some((m) => m.t === 'out' && m.seat === seat)).toBe(true);
+    expect(bots.count(), 'and it stops being walked around').toBe(0);
+  });
+
   it('stakes its bag on the card, and spends only what the fight used (POK-237)', () => {
     const bag: Stack[] = [{ id: 13, n: 2 }, { id: 75, n: 1 }];
     const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }, [MON], bag);
     const card = sent.find((m) => m.t === 'trainer') as { items?: number[] };
-    // Two POTIONs, then the X ATTACK, then medicine again to fill the fourth slot:
-    // bag.ts's own order, so a bag of potions never crowds the booster out.
-    expect(card.items).toEqual([13, 13, 75, 13]);
+    // One POTION, then the X ATTACK: bag.ts's own order, so a bag of potions never
+    // crowds the booster out and nobody drinks four of them in one fight.
+    expect(card.items).toEqual([13, 75]);
     // Still in the bag until the ROM says otherwise.
     expect(bots.bagOf(dealt[0].seat)).toEqual([{ id: 13, n: 2 }, { id: 75, n: 1 }]);
     bots.noteSpent(dealt[0].seat, [13, 75]);

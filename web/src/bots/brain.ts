@@ -380,7 +380,18 @@ export class Bots {
    *  bot's own seat, because it is the only thing that watched the fight happen. */
   setParty(seat: number, mons: PackedMon[]): void {
     const walker = this.walkers.find((w) => w.bot.seat === seat);
-    if (walker && mons.length > 0) walker.party = mons;
+
+    if (!walker || mons.length === 0) return;
+    walker.party = mons;
+    // ...and if nothing in it is standing, that fight was the end of this bot. Only
+    // the ROM that fought it knows -- it sends the team back under the bot's own seat
+    // (POK-238), all of it fainted -- and this took the team and left the bot walking
+    // around carrying it: no `out`, no spill, and the play-test's "beating a bot does
+    // not drop its items or Pokemon". A bot the fog takes goes out through `bleed`;
+    // this is the same ending by the other road.
+    if (mons.some((mon) => mon.hp > 0)) return;
+    this.fighting.delete(seat);
+    this.eliminate(walker);
   }
 
   /** What the ROM that fought this bot spent out of its bag (POK-237). The units were

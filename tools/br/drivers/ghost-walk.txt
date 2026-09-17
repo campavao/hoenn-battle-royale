@@ -30,7 +30,8 @@ shot stepped
 # now we walk one tile east ourselves. The engine settles the player one tile south
 # right after the warp (out[1] is that STEP), then our walk is a FACE east (out[2])
 # and a STEP east (out[3]: type 3, d 4, x 13).
-hold RIGHT 20
+# One tile, at the running pace: a step is eight frames now, not sixteen.
+hold RIGHT 14
 wait 10
 expect u8 gBrMailbox+0x98 4
 expect u8 gBrMailbox+0x9E 4

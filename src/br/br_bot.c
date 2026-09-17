@@ -61,11 +61,14 @@ void BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
         SetMonData(mon, MON_DATA_MOVE1 + i, &move);
         SetMonData(mon, MON_DATA_PP1 + i, &pp);
     }
-    for (len = 0; len < POKEMON_NAME_LENGTH && row[37 + len] != 0 && len < row[36]; len++)
-        nickname[len] = row[37 + len];
-    nickname[len] = EOS;
-    if (len > 0)
-        SetMonData(mon, MON_DATA_NICKNAME, nickname);
+    // The card's nickname is NOT applied (POK-237, and the play-test: "the bot's
+    // Pokemon names were all weird, most were numbers like 289, but then one was a
+    // Lovedisc named Makuhita"). CreateMon has already given this species its real
+    // name from the ROM's own table; the page's is a display string from a pool that
+    // does not cover Hoenn, so it is a number for anything the pool never heard of and
+    // the wrong name for anything that evolved on the way. A bot's mon is not a
+    // nicknamed mon -- it is a Luvdisc, and the ROM knows what a Luvdisc is called.
+    (void)nickname;
     if (hp > 0)
         SetMonData(mon, MON_DATA_HP, &hp);
 }

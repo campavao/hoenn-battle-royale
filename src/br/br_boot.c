@@ -24,6 +24,7 @@
 #include "item.h"
 #include "constants/items.h"
 #include "constants/flags.h"
+#include "constants/vars.h"
 #include "br/br_mailbox.h"
 #include "br/br_boot.h"
 #include "br/br_match.h"
@@ -74,6 +75,32 @@ static void GiveTheRunOfHoenn(void)
     }
     for (flag = ITEM_HM01; flag <= ITEM_HM08; flag++)
         AddBagItem(flag, 1);
+    // Both bikes, and the shoes -- and in a match the shoes are the default rather than
+    // a button you hold (field_player_avatar.c). Sixteen minutes of Hoenn on foot is a
+    // lot of Hoenn, and the fog does not wait.
+    AddBagItem(ITEM_MACH_BIKE, 1);
+    AddBagItem(ITEM_ACRO_BIKE, 1);
+    FlagSet(FLAG_RECEIVED_RUNNING_SHOES);
+    FlagSet(FLAG_SYS_B_DASH);
+
+    // ...and the story is over before it starts (the play-test walked into May and
+    // Professor Birch on Route 101). Everybody in a match is the champion who has been
+    // everywhere: FLAG_SYS_GAME_CLEAR is the one the game itself asks, and the state
+    // VARs below are what the early maps' scripts branch on -- pushed past every value
+    // they compare against, so nothing fires rather than something else firing.
+    FlagSet(FLAG_SYS_GAME_CLEAR);
+    FlagSet(FLAG_ADVENTURE_STARTED);
+    FlagSet(FLAG_SYS_POKEMON_GET);
+    FlagSet(FLAG_SYS_USE_FLASH);
+    // Not the Pokedex or the PokeNav: the dex entries are set directly above, and the
+    // flags only add rows to a menu POK-221 cut down on purpose (and a PokeNav is a
+    // trainer's phone ringing mid-match).
+    VarSet(VAR_LITTLEROOT_TOWN_STATE, 255);
+    VarSet(VAR_LITTLEROOT_HOUSES_STATE_BRENDAN, 255);
+    VarSet(VAR_LITTLEROOT_HOUSES_STATE_MAY, 255);
+    VarSet(VAR_BIRCH_LAB_STATE, 255);
+    VarSet(VAR_BIRCH_STATE, 255);
+    VarSet(VAR_ROUTE101_STATE, 255);
 }
 
 static void StartGameAt(const struct BrBoot *b)

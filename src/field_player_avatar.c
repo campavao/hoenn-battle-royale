@@ -655,8 +655,19 @@ static void PlayerNotOnBikeMoving(u8 direction, u16 heldKeys)
         return;
     }
 
+#if BR
+    // Running is the default in a match, and B is how you slow down (the play-test:
+    // "the player should be able to run by default"). Sixteen minutes of Hoenn on foot
+    // is a lot of Hoenn, the fog does not wait, and nobody chose to walk here -- they
+    // were dropped. Everything else about the rule stands: not underwater, not where
+    // the map forbids it, and the shoes still have to have been given (br_boot.c does
+    // that with the badges).
+    if (!(gPlayerAvatar.flags & PLAYER_AVATAR_FLAG_UNDERWATER) && !(heldKeys & B_BUTTON) && FlagGet(FLAG_SYS_B_DASH)
+     && IsRunningDisallowed(gObjectEvents[gPlayerAvatar.objectEventId].currentMetatileBehavior) == 0)
+#else
     if (!(gPlayerAvatar.flags & PLAYER_AVATAR_FLAG_UNDERWATER) && (heldKeys & B_BUTTON) && FlagGet(FLAG_SYS_B_DASH)
      && IsRunningDisallowed(gObjectEvents[gPlayerAvatar.objectEventId].currentMetatileBehavior) == 0)
+#endif
     {
         PlayerRun(direction);
         gPlayerAvatar.flags |= PLAYER_AVATAR_FLAG_DASH;

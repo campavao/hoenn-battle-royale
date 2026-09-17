@@ -55,7 +55,7 @@ const HEAL: Record<number, number> = {
 const BOOSTS = [ITEM.X_ATTACK, ITEM.X_SPEED, ITEM.X_DEFEND, ITEM.DIRE_HIT, ITEM.GUARD_SPEC];
 
 /** Emerald's MAX_TRAINER_ITEMS: the AI reads four and no more. */
-export const BATTLE_ITEMS = 4;
+export const BATTLE_ITEMS = 2;
 
 /** Is this something a quaff could drink? */
 export function isMedicine(id: number): boolean {
@@ -160,14 +160,16 @@ export function quaff(party: PackedMon[], bag: Stack[]): number | null {
   return best;
 }
 
-/** What the bot hands its opponent's ROM for one fight: four units at most. Units,
- *  not stacks -- two POTIONs go over as two entries, which is how Emerald's
- *  trainerItems array is shaped.
+/** What the bot hands its opponent's ROM for one fight: two units at most. Units, not
+ *  stacks -- two POTIONs go over as two entries, which is how Emerald's trainerItems
+ *  array is shaped.
  *
- *  Two medicine at most, then the boosters, then medicine again to fill. A bot that
- *  has been restocked at every ring is carrying nothing but potions by the late rungs,
- *  and taking the first four would mean its X ATTACK never saw another fight -- which
- *  is the opposite of what a bag full of things is for.
+ *  One medicine at most, then a booster. It was four and two, and Emerald's AI spends
+ *  what it is given the moment it is behind: the play-test met bots drinking "three to
+ *  five potions per battle, usually all at once", which is not a fight, it is a wall.
+ *  A bot that has been restocked at every ring is carrying nothing but potions by the
+ *  late rungs, so medicine goes first but only once -- the second slot is where its
+ *  X ATTACK gets to exist.
  *
  *  Nothing is taken out of the bag here. The ROM says what it used when the fight is
  *  over (`spent`), and a fight that ended on the first turn leaves the bag full. */
@@ -186,8 +188,8 @@ export function battleItems(bag: Stack[]): number[] {
   return out.slice(0, BATTLE_ITEMS);
 }
 
-/** How many of the four go to medicine before the boosters get a look in. */
-const MEDICINE_FIRST = 2;
+/** How many of the two go to medicine before the boosters get a look in. */
+const MEDICINE_FIRST = 1;
 
 /** The fight is over and the ROM says these were used. */
 export function spend(bag: Stack[], used: number[]): void {
