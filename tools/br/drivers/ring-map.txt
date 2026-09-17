@@ -1,6 +1,11 @@
 # ring-map: the fog, on the map, from the START menu mid-match (POK-263). Until this
 # the ring was only ever a FOG! flash once you were already in it.
 #
+# The fog is drawn as a purple overlay over everything outside the ring (POK-277) --
+# blended on BG1 rather than outlined in sprites, which is what the play-test asked for
+# and what `shot ring` below is the record of. There is nothing in RAM that says what
+# colour the map is, so the frame is the assertion: read it, do not trust it.
+#
 # The menu in a match is POKEMON / BAG / MAP / <name> / EXIT (start-menu.txt pins the
 # first two), so MAP is two below the top with a party in the bag.
 wait 30
