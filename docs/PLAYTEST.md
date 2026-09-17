@@ -140,17 +140,14 @@ link battle against a seat with no ROM behind it, and `BrNetlink_StartBattle` ha
 timeout. The challenge parks for 90 frames now and the page answers it with the bot's
 card. Driver `bot-spotted.txt`.
 
-### A link battle that nobody answers has no way out
+### A link battle that nobody answers has no way out -- **fixed** (`9fdd7ffb9`)
 
-The fix above closes the way in that we know about. The shape underneath is still
-there: once `gBrNetlink.active` is set, nothing in the ROM ever clears it on its own.
-A peer that crashes, closes the tab or loses the relay mid-handshake leaves the other
-side on a black screen with the controls locked until the page is reloaded.
-
-Wanted: a watchdog in `BrNetlink_Tick` -- if the link has been active for N seconds
-and the peer has sent nothing at all, unwind it and put the trainer back on the field
-(Kanto has the same shape in its bag-stall watchdog). Nothing recovers a match, but a
-player who can walk away is not a player who has to reload.
+Ten seconds with nothing heard at all and the session ends: B_OUTCOME_FORFEITED (no
+white-out, no boot over anybody's head), the seat on the fleer's lockout so the engage
+does not immediately try again, and the battle torn down by `BrBattle_Unwind`. Only a
+session that has heard nothing *at all* is touched -- a real peer's first block lands
+in the start exchange -- so a long turn is nobody's business but the players'.
+Driver `netlink-silent.txt`.
 
 ### `Disconnected: closed` stays on the room strip for the rest of the match -- **half fixed** (`1004a6cd2`)
 
@@ -240,11 +237,6 @@ Everything above that is not marked **fixed**, plus:
   short" the moment the ring goes active; a literal `-1` is a different bug.
 * **"Found 0"** at ~11:00 of the first video, unexplained. Which line said it, and what
   had just happened.
-* **A link battle nobody answers still has no way out.** The one way in that we knew
-  about is closed (`4cc935d1c`), but `gBrNetlink.active` is never cleared by anything in
-  the ROM: a peer that crashes or loses the relay mid-handshake leaves the other side on
-  a black screen with the controls locked. Wanted: a watchdog in `BrNetlink_Tick`, the
-  shape `BrPick_Wait`'s now has.
 * **Rejoining a room after a dropped socket.** The relay hands out a new id on a rejoin
   and that id is the page's seat, so a mid-match rejoin would change who you are. Needs
   a relay-side resume before the page can do anything better than say so.
