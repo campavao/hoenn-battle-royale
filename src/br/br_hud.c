@@ -25,9 +25,15 @@ EWRAM_DATA struct BrHud gBrHud = {0};
 // Emerald frame is drawn OUTSIDE the window it belongs to -- one tile on each side, in
 // palette 14, from the border set in OPTIONS (POK-256). A window flush against the top
 // of the screen has nowhere to put its lid.
-static const struct WindowTemplate sCornerTemplate = { 0, 23, 1, 6, 3, 15, 0x23A };
-static const struct WindowTemplate sTickerTemplate = { 0, 1, 17, 28, 2, 15, 0x24C };
-static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, 0x284 };
+//
+// The floor is 0x23D, not 0x23A. The map-name popup loads its outline at 0x21D and the
+// load is 0x400 bytes -- thirty-two tiles, 0x21D..0x23C -- so on every outdoor map it
+// wrote its last three over the corner's first three. That, and the popup putting its
+// own palette in slot 14 (see BrHud_Tick), is the play-test's "counter framed in RED with
+// garbage tiles in its corner"; it was blamed on a weather fade for two days.
+static const struct WindowTemplate sCornerTemplate = { 0, 23, 1, 6, 3, 15, 0x23D };
+static const struct WindowTemplate sTickerTemplate = { 0, 1, 17, 28, 2, 15, 0x24F };
+static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, 0x287 };
 
 // BG0's tiles are char block 2 (0x06008000) and the first thing after them is not BG0's
 // own tilemap, it is BG2's, at 0x0600E000: tile 0x300. The box sat at 0x294..0x303 for a
@@ -36,7 +42,8 @@ static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, 0x284 }
 // and nothing had scrolled to redraw them, which is the DAY CARE's whole floor
 // (2026-09-17), and very likely the "orange bars across the top" of an earlier play-test.
 #define BR_HUD_TILE_CEILING 0x300
-STATIC_ASSERT(0x284 + 28 * 4 <= BR_HUD_TILE_CEILING, BrHudBoxFitsBelowBg2Tilemap)
+STATIC_ASSERT(0x287 + 28 * 4 <= BR_HUD_TILE_CEILING, BrHudBoxFitsBelowBg2Tilemap)
+STATIC_ASSERT(0x21D + 0x400 / 32 <= 0x23D, BrHudCornerClearOfTheMapNamePopup)
 
 // The message box's own background, which is what makes it look like one.
 #define BR_HUD_BOX PIXEL_FILL(1)
@@ -104,10 +111,10 @@ static void Present(u8 id, u8 bit, bool8 want, bool8 pixels)
         // The frame's tiles and palettes, again. Loading them when the window was made
         // is not enough: a map load, a weather fade or a battle coming back puts its
         // own palettes in that slot, and the frame is then drawn in whatever colours
-        // were left there -- Cam's play-test saw the counter framed in RED with garbage
-        // tiles in its corner, and the FOG message arriving painted orange bars across
-        // the top of the screen. Both went away on the next step, because a step is
-        // what redrew them. Idempotent, and this runs on a show, not every frame.
+        // were left there. (The play-test's red counter with garbage in its corner and
+        // its orange bars were put down to this for two days; they were the map-name
+        // popup and the box's tiles, see the templates above.) Idempotent, and this runs
+        // on a show, not every frame.
         LoadMessageBoxAndBorderGfx();
         // The frame goes on with the window. DrawStdWindowFrame fills the buffer as it
         // goes, so this has to happen before the content is printed -- which is why the
@@ -353,6 +360,7 @@ void BrHud_Init(void)
     h->held = 0;
     h->dirty = 0;
     h->scriptWas = 0;
+    h->popupWas = 0;
     h->drawnClock = 0xFFFF;
     h->drawnLeft = 0xFF;
     h->drawnFog = 0xFF;
@@ -438,7 +446,7 @@ void BrHud_Release(void)
 void BrHud_Tick(void)
 {
     struct BrHud *h = &gBrHud;
-    bool8 scriptOn, menuUp;
+    bool8 scriptOn, menuUp, popupUp;
     u8 live;
 
     if (h->flashFog)
@@ -509,6 +517,18 @@ void BrHud_Tick(void)
         h->shown = 0;
         h->live = live;
     }
+
+    // The map-name popup paints every frame on screen in ITS colours while it is up --
+    // it loads its theme's palette into slot 14, which is the standard frame's -- and
+    // nothing put ours back when it left, so outdoors the HUD stayed framed in brick red
+    // or wood brown until something else happened to reload it. When it goes, reload.
+    popupUp = GetMapNamePopUpWindowId() != WINDOW_NONE;
+    if (h->popupWas && !popupUp)
+    {
+        LoadMessageBoxAndBorderGfx();
+        h->shown = 0;
+    }
+    h->popupWas = popupUp;
 
     scriptOn = ScriptContext_IsEnabled();
     menuUp = GetStartMenuWindowId() != WINDOW_NONE;

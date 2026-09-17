@@ -18,11 +18,12 @@
 // time display there's an empty looking box... I don't think we need that, let's get
 // rid of it." Its window slot is free now and its tiles (0x24C) are the ticker's.
 //
-// Tiles: the corner is at baseBlock 0x23A..0x24B, the ticker at 0x24C..0x283, the bottom
-// box at 0x284..0x2F3. The overworld's BG0 already uses 0x008 (Safari balls, money,
+// Tiles: the corner is at baseBlock 0x23D..0x24E, the ticker at 0x24F..0x286, the bottom
+// box at 0x287..0x2F6. The overworld's BG0 already uses 0x008 (Safari balls, money,
 // script menus -- and the spectator's peek box, br_spectate.c), 0x107 (map name), 0x125
 // (yes/no), 0x139 (start menu), 0x194 (message box), 0x200/0x214 (the two frames) and
-// 0x21D..0x23A (the map-name frame edges). **0x23A on is free up to 0x300 and not a tile
+// 0x21D..0x23C (the map-name frame edges: a 0x400-byte load, thirty-two tiles, not the
+// twenty-nine its own constants name). **0x23D on is free up to 0x300 and not a tile
 // further**: BG0's tiles are char block 2 at 0x06008000 and BG2's TILEMAP is at
 // 0x0600E000, long before BG0's own at 0x0600F800. This said 0x3C0 until 2026-09-17 and
 // the box ran four tiles over. Nothing here loads graphics: the boxes are a PIXEL_FILL of the
@@ -91,7 +92,8 @@ struct BrHud
     /* 0x12 */ u8 drawnLeft;
     /* 0x13 */ u8 drawnFog;      // 0 clock, 1 flash-off, 2 flash-on
     /* 0x14 */ u8 drawnEyes;     // what the corner last drew
-    /* 0x15 */ u8 pad[3];
+    /* 0x15 */ u8 popupWas;      // the map-name popup was up on the last tick
+    /* 0x16 */ u8 pad[2];
     /* 0x18 */ struct BrHudLine heldLine;             // 44 bytes
     /* 0x44 */ struct BrHudLine queue[BR_HUD_QUEUE];  // 264 bytes
     /* 0x14C */ struct BrHudLine box;                 // 44 bytes, the bottom box
