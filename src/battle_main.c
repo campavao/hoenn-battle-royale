@@ -1916,6 +1916,27 @@ void CB2_QuitRecordedBattle(void)
     }
 }
 
+#if BR
+// A link battle with nobody on the other end (br_netlink.c's watchdog). The engine
+// cannot reach its own ending -- it is waiting for blocks that are not coming -- so
+// this is the ending: CB2_QuitRecordedBattle's own teardown, which is the one exit in
+// here that does not need the battle to have finished. `gMain.savedCallback` is
+// CB2_BrReturnFromBattle, which sends the RESULT and puts the trainer back on the
+// field, so the caller only has to set gBattleOutcome first.
+void BrBattle_Unwind(void)
+{
+    m4aMPlayStop(&gMPlayInfo_SE1);
+    m4aMPlayStop(&gMPlayInfo_SE2);
+    FreeRestoreBattleData();
+    // Note for the caller: a battle stuck in its own start never reached the step that
+    // saves the overworld's callback1 (case 18 above), so what FreeRestoreBattleData
+    // just restored may be a null -- and a field with no callback1 draws and answers
+    // nothing. br_netlink.c puts CB1_Overworld back; overworld.h is not included here.
+    FreeAllWindowBuffers();
+    SetMainCallback2(gMain.savedCallback);
+}
+#endif
+
 #define sState data[0]
 #define sDelay data[4]
 

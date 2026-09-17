@@ -34,5 +34,8 @@ void BrBattle_DrawClock(void);
 // has no choice menu of its own to count down (POK-231's `clock` for spectators).
 void BrBattle_DrawClockSecs(u8 secs);
 void BrBattle_HideClock(void);
+// battle_main.c: tear a battle down that the engine cannot end on its own, and hand
+// the trainer back to gMain.savedCallback. Only br_netlink.c's watchdog calls it.
+void BrBattle_Unwind(void);
 
 #endif // GUARD_BR_BATTLE_H

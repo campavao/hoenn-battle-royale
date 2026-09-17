@@ -249,6 +249,17 @@ void BrEngage_OnBattleEnd(u8 peerSeat, u8 outcome)
     }
 }
 
+// A challenge nobody ever answered (br_netlink.c's watchdog). The seat goes on the
+// same lockout a fleer gets, for the same reason: the ghost is still standing in our
+// eyeline, and re-challenging a peer that did not answer the first time turns the rest
+// of the match into that loop. Nothing is said to the room -- nobody ran.
+void BrEngage_NoAnswer(u8 peerSeat)
+{
+    gBrEngage.cooldown = BR_ENGAGE_GRACE;
+    gBrEngage.fledFrom = peerSeat;
+    gBrEngage.fledLockout = BR_ENGAGE_LOCKOUT;
+}
+
 void BrEngage_Tick(void)
 {
     u8 seat;

@@ -29,6 +29,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
 #include "br/br_engage.h"
+#include "br/br_battle.h"
 #include "br/br_bot.h"
 #include "br/br_netlink.h"
 
@@ -392,9 +393,67 @@ void BrNetlink_Init(void)
     gBrNetlink.pendingPeer = 0xFF;
 }
 
+// How long a link battle may go without a single word from the other side before it
+// is not a link battle. A real peer's first block lands within a second of the fight
+// starting -- it is the start exchange, and nothing happens until both sides have
+// sent one -- so this only ever fires on a link with nothing behind it: a peer that
+// closed its tab in the handshake, or a challenge that reached a seat with no ROM.
+//
+// It matters because there is no other way out. A battle waiting for blocks that are
+// not coming waits for ever, on a black screen, with the controls locked, and the
+// only thing a player can do about it is reload -- which the play-test did.
+#define BR_NETLINK_HELLO (10 * 60)
+
+static void TickWatchdog(void)
+{
+    if (!gBrNetlink.active)
+    {
+        gBrNetlink.silent = 0;
+        return;
+    }
+    if (gBrNetlink.blocksRecv != 0 || gBrNetlink.loopback)
+    {
+        // They are there -- and a loopback peer (drivers only) is there by
+        // construction: its blocks are delivered here rather than counted, because
+        // they never went anywhere. A slow fight is not this function's business.
+        gBrNetlink.silent = 0;
+        return;
+    }
+    if (++gBrNetlink.silent < BR_NETLINK_HELLO)
+        return;
+    gBrNetlink.silent = 0;
+    // Not a loss and not a flee: nobody fought. B_OUTCOME_FORFEITED is the one the
+    // room reads as "something else happened" (CB2_BrReturnFromBattle's default),
+    // which keeps it off BrMatch_WhiteOut and off the fled lockout.
+    gBattleOutcome = B_OUTCOME_FORFEITED;
+    // Their ghost is still standing in our eyeline, and the engage would challenge it
+    // again the moment the grace was up.
+    BrEngage_NoAnswer(gBrNetlink.peerSeat);
+    if (gMain.inBattle)
+    {
+        // The start locked the field (BrNetlink_StartBattle) and the battle's own
+        // ending is what would have unlocked it.
+        UnlockPlayerFieldControls();
+        BrBattle_Unwind(); // -> gMain.savedCallback, which is CB2_BrReturnFromBattle
+        // ...and the overworld's own callback1, which the battle never got far enough
+        // to save: without it the map comes back and answers nothing, which is the
+        // freeze again wearing the field's clothes.
+        if (gMain.callback1 == NULL)
+            gMain.callback1 = CB1_Overworld;
+        return;
+    }
+    // Still in the start task: no battle to tear down, just the session to close.
+    if (gBrNetlink.startState != 0 && FuncIsActiveTask(Task_BrStartLinkBattle))
+        DestroyTask(FindTaskIdByFunc(Task_BrStartLinkBattle));
+    gBrNetlink.startState = 0;
+    Close();
+    UnlockPlayerFieldControls();
+}
+
 void BrNetlink_Tick(void)
 {
     if (gBrNetlink.active && gBrNetlink.pendingLen)
         FlushPending();
     TickPendingChallenge();
+    TickWatchdog();
 }

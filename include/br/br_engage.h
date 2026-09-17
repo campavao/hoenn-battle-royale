@@ -29,5 +29,8 @@ void BrEngage_Tick(void);
 // lockout on the seat we fled from (fleeing is not a way to pick when the fight
 // restarts -- the pursuer keeps coming, but we do not turn and re-engage them).
 void BrEngage_OnBattleEnd(u8 peerSeat, u8 outcome);
+// A challenge that was never answered: the same lockout a fleer gets, and no word to
+// the room. Only br_netlink.c's watchdog calls it.
+void BrEngage_NoAnswer(u8 peerSeat);
 
 #endif // GUARD_BR_ENGAGE_H

@@ -1,0 +1,47 @@
+# netlink-silent: a link battle with nobody on the other end. engage.txt is this driver
+# with loopback on, so our own blocks come back as the peer's and a real fight starts;
+# with it off, nothing ever answers -- which is what a peer closing its tab in the
+# handshake looks like, and what a challenge to a seat with no ROM behind it used to
+# look like (bot-spotted.txt).
+#
+# There was no way out of that. The battle waits for blocks that are not coming, on a
+# black screen, with the controls locked, for the rest of the match: the play-test's own
+# freeze, and the only thing a player could do about it was reload.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# No `poke u8 gBrNetlink+8 1` here: no loopback, no peer.
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u16 gBrEngage+4 1
+# BR_ENGAGE_WAIT, and then the link battle starts on faith, the way it does against a
+# person (engage.txt).
+wait 120
+expect u8 gBrNetlink 1
+expect u8 gWirelessCommType 5
+# Nothing has been heard from them at all.
+expect u16 gBrNetlink+14 0
+shot waiting
+# BR_NETLINK_HELLO is ten seconds. Nothing is pressed: a battle nobody can finish is
+# not something to press through.
+wait 700
+# The session is closed and we are back in the overworld, on our own feet.
+expect u8 gBrNetlink 0
+expect u8 gWirelessCommType 0
+shot back
+# ...and their seat is on the fleer's lockout, because their ghost is still standing
+# in our eyeline and the engage would challenge it again the moment the grace was up.
+expect u8 gBrEngage+6 1
+# The field is our own again: a step is taken and the START menu opens, which between
+# them are the overworld's callback1, its input and its windows.
+expect u16 gBrOwnPos+4 16
+hold DOWN 60
+wait 20
+expectge u16 gBrOwnPos+4 17
+tap START
+wait 60
+shot menu
+say netlink silent ok
