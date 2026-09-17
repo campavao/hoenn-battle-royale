@@ -144,6 +144,10 @@
 #define MENU_STATE_PRINT_TEXT_THEN_FANFARE 31
 #define MENU_STATE_WAIT_FOR_FANFARE 32
 #define MENU_STATE_WAIT_FOR_A_BUTTON 33
+// BR: MOVES is a screen you stand in, not a ceremony you sit through. A teach hands the
+// list straight back, so a bag of four TMs is four presses rather than four trips through
+// "1, 2, and... Poof!" with the fog closing. 34 is the next free number.
+#define MENU_STATE_BR_BACK_TO_LIST 34
 
 // The different versions of hearts are selected using animation
 // commands.
@@ -354,6 +358,7 @@ static const struct BgTemplate sMoveRelearnerMenuBackgroundTemplates[] =
 
 static void DoMoveRelearnerMain(void);
 static void CreateLearnableMovesList(void);
+static void BrBackToList(void);
 static void CreateUISprites(void);
 static void CB2_MoveRelearnerMain(void);
 static void Task_WaitForFadeOut(u8 taskId);
@@ -533,9 +538,9 @@ static void DoMoveRelearnerMain(void)
                     // the bag, so a machine taken out before the move is written would
                     // shift every row under the cursor.
                     BrMoves_Spend(GetCurrentSelectedMove());
-                    PrintMessageWithPlaceholders(gText_MoveRelearnerPkmnLearnedMove);
                     gSpecialVar_0x8004 = TRUE;
-                    sMoveRelearnerStruct->state = MENU_STATE_PRINT_TEXT_THEN_FANFARE;
+                    PlaySE(SE_USE_ITEM);
+                    sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
                 }
                 else
                 {
@@ -716,19 +721,15 @@ static void DoMoveRelearnerMain(void)
             }
             else
             {
-                u16 move = GetMonData(&gPlayerParty[sMoveRelearnerStruct->partyMon], MON_DATA_MOVE1 + sMoveRelearnerStruct->moveSlot);
-
-                StringCopy(gStringVar3, gMoveNames[move]);
                 RemoveMonPPBonus(&gPlayerParty[sMoveRelearnerStruct->partyMon], sMoveRelearnerStruct->moveSlot);
                 SetMonMoveSlot(&gPlayerParty[sMoveRelearnerStruct->partyMon], GetCurrentSelectedMove(), sMoveRelearnerStruct->moveSlot);
-                StringCopy(gStringVar2, gMoveNames[GetCurrentSelectedMove()]);
-                // After the name is copied: RemoveBagItem compacts the pocket, and
+                // After the slot is written: RemoveBagItem compacts the pocket, and
                 // GetCurrentSelectedMove reads a row out of a list built against the
                 // ordering it had before.
                 BrMoves_Spend(GetCurrentSelectedMove());
-                PrintMessageWithPlaceholders(gText_MoveRelearnerAndPoof);
-                sMoveRelearnerStruct->state = MENU_STATE_DOUBLE_FANFARE_FORGOT_MOVE;
                 gSpecialVar_0x8004 = TRUE;
+                PlaySE(SE_USE_ITEM);
+                sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
             }
         }
         break;
@@ -759,6 +760,13 @@ static void DoMoveRelearnerMain(void)
             PlaySE(SE_SELECT);
             sMoveRelearnerStruct->state = MENU_STATE_FADE_AND_RETURN;
         }
+        break;
+    case MENU_STATE_BR_BACK_TO_LIST:
+        BrBackToList();
+        if (sMoveRelearnerMenuState.showContestInfo == FALSE)
+            sMoveRelearnerStruct->state = MENU_STATE_SETUP_BATTLE_MODE;
+        else
+            sMoveRelearnerStruct->state = MENU_STATE_SETUP_CONTEST_MODE;
         break;
     }
 }
@@ -908,6 +916,34 @@ static void RemoveScrollArrows(void)
         RemoveScrollIndicatorArrowPair(sMoveRelearnerStruct->moveListScrollArrowTask);
         sMoveRelearnerStruct->moveListScrollArrowTask = TASK_NONE;
     }
+}
+
+// BR: the same list again, with the machine that just taught a move gone from it. The
+// row the cursor was on is the row the NEXT machine has slid up into, so the absolute
+// selection is what survives the rebuild -- teaching four TMs is four presses of A on one
+// unmoving cursor. Then put the window back around it: the list is a row shorter, so an
+// offset that was against the old end is now past the new one.
+static void BrBackToList(void)
+{
+    u16 sel;
+
+    RemoveScrollArrows();
+    DestroyListMenuTask(sMoveRelearnerStruct->moveListMenuTask, &sMoveRelearnerMenuState.listOffset, &sMoveRelearnerMenuState.listRow);
+    sel = sMoveRelearnerMenuState.listOffset + sMoveRelearnerMenuState.listRow;
+    CreateLearnableMovesList();
+    // CANCEL is always the last row, so there is always one to land on.
+    if (sel >= sMoveRelearnerStruct->numMenuChoices)
+        sel = sMoveRelearnerStruct->numMenuChoices - 1;
+    if (sMoveRelearnerStruct->numMenuChoices <= sMoveRelearnerStruct->numToShowAtOnce)
+        sMoveRelearnerMenuState.listOffset = 0;
+    else if (sMoveRelearnerMenuState.listOffset > sMoveRelearnerStruct->numMenuChoices - sMoveRelearnerStruct->numToShowAtOnce)
+        sMoveRelearnerMenuState.listOffset = sMoveRelearnerStruct->numMenuChoices - sMoveRelearnerStruct->numToShowAtOnce;
+    if (sMoveRelearnerMenuState.listOffset > sel)
+        sMoveRelearnerMenuState.listOffset = sel;
+    else if (sel - sMoveRelearnerMenuState.listOffset >= sMoveRelearnerStruct->numToShowAtOnce)
+        sMoveRelearnerMenuState.listOffset = sel + 1 - sMoveRelearnerStruct->numToShowAtOnce;
+    sMoveRelearnerMenuState.listRow = sel - sMoveRelearnerMenuState.listOffset;
+    sMoveRelearnerStruct->moveListMenuTask = ListMenuInit(&gMultiuseListMenuTemplate, sMoveRelearnerMenuState.listOffset, sMoveRelearnerMenuState.listRow);
 }
 
 static void CreateLearnableMovesList(void)
