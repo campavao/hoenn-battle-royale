@@ -10,12 +10,17 @@
 # pvp-bag.txt is the door itself: that the bag opens at all. This is the clock over it.
 # shot-clock.txt is the clock in the open, where it forfeits.
 #
-# What this pins is the watchdog: the shot clock's own counter FROZEN while the bag is
-# up, BrBattle_TickStall's counter running in its place, and the bag off the top of the
-# stack afterwards without a button being touched. It stops there rather than following
-# the forfeit through, because a loopback peer cannot service a link transfer that starts
-# while this ROM is inside the bag menu and the fight wedges -- see POK-312, which is
-# about that wedge and not about this clock.
+# What this pins is the watchdog end to end: the shot clock's own counter FROZEN while
+# the bag is up, BrBattle_TickStall's counter running in its place, the bag off the top
+# of the stack afterwards without a button being touched, and the turn the clock had
+# already spent forfeiting the fight the moment the action menu is back.
+#
+# It used to stop at the backout, on the belief that a loopback peer could not service a
+# link transfer started from inside the bag (POK-312). It could; what it could not do was
+# hand a block to a mailbox nobody was reading. This driver never drained the out ring,
+# so the ring filled, BrNetlink stalled on a full ring and the fight froze -- the harness
+# fails that now instead of running on (tools/br/harness/harness.c).
+drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -56,9 +61,20 @@ shot still-in-the-bag
 wait 400
 # Out of time. B was pressed for us: the bag is off the top of the stack (the watchdog
 # only counts while a screen the battle put up is up, so a zero here IS the bag closing),
-# and the flag that says this turn's clock has already gone is set, so the menu it backs
-# out to does not get a fresh thirty seconds.
-expect u8 gBrBattle+9 1
+# and the clock has taken this turn -- timedOut, the counter the action menu's own
+# timeout raises, is up without a button ever being pressed.
 expect u16 gBrBattle+10 0
+expect u16 gBrBattle+2 1
 shot backed-out
+# ...and the action menu it lands on does NOT get a fresh thirty seconds: the turn was
+# already spent, so the duel's timeout forfeits it at once. B_OUTCOME_WON (1) |
+# B_OUTCOME_LOST (2), both bits because a loopback peer mirrors us and the forfeit scores
+# on both sides; against a real peer it is 2 here and 1 there. Thirty seconds after the
+# backout this would still be 0 if the clock had restarted.
+wait 200
+expect u8 gBattleOutcome 3
+# and the fight is over: the session is closed and the field is back.
+wait 400
+expect u8 gBrNetlink 0
+shot forfeited
 say pvp bag clock ok

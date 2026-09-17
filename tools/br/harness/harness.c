@@ -128,10 +128,54 @@ static int parseKeys(const char* s, uint32_t* mask) {
 // of link-battle traffic and BrNetlink stalls on a full ring; this plays the page's
 // reader, taking every slot as it lands (outTail = outHead each frame).
 static uint32_t drainAddr = 0;
+
+// ---- the netlink stall guard ----------------------------------------------------
+// A page reads the mailbox every frame. A driver that stages a link battle without
+// `drain gBrMailbox` fills the ROM's out ring in a few seconds of block traffic, and
+// from there BrNetlink_SendBlock can never hand another block over: gBrNetlink.pendingLen
+// sticks, IsLinkTaskFinished() is false for ever, the battle controller's exec flags keep
+// a transfer nobody will ever acknowledge, and the fight freezes mid-turn.
+//
+// On screen that is indistinguishable from a game bug, and it cost POK-312 a High ticket
+// and most of a session. So the harness says which it is rather than running on in a ROM
+// that is already dead.
+#define STALL_LIMIT 300
+static uint32_t netlinkAddr = 0;
+static int netlinkLookedUp = 0;
+static int stallFrames = 0;
+static int stalled = 0;
+
+static int findSym(const char* name, uint32_t* out) {
+    for (int i = 0; i < nsyms; ++i)
+        if (strcmp(syms[i].name, name) == 0) { *out = syms[i].addr; return 1; }
+    return 0;
+}
+
+static void checkNetlinkStall(void) {
+    if (!netlinkLookedUp) { netlinkLookedUp = 1; if (!findSym("gBrNetlink", &netlinkAddr)) netlinkAddr = 0; }
+    if (!netlinkAddr || stalled) return;
+    // struct BrNetlink: active at +0, pendingLen at +9 (include/br/br_netlink.h).
+    if (core->busRead8(core, netlinkAddr) && core->busRead8(core, netlinkAddr + 9)) {
+        if (++stallFrames < STALL_LIMIT) return;
+        stalled = 1;
+        printf("line %d: NETLINK STALLED -- gBrNetlink.pendingLen has held for %d frames.\n", lineNo, stallFrames);
+        if (drainAddr)
+            printf("  The out ring IS being drained, so this is not the usual cause: a block is stuck\n"
+                   "  in BrWire_SendLarge. Read br_wire.c before believing the game froze.\n");
+        else
+            printf("  Nothing is reading the out ring, so it filled and the link battle is wedged.\n"
+                   "  A page drains the mailbox every frame; a driver has to say so:\n"
+                   "  put `drain gBrMailbox` at the top of this driver.\n");
+    } else {
+        stallFrames = 0;
+    }
+}
+
 static void runN(int n) {
     for (int i = 0; i < n; ++i) {
         core->runFrame(core);
         if (drainAddr) core->busWrite16(core, drainAddr + 0xA, core->busRead16(core, drainAddr + 0x8));
+        checkNetlinkStall();
     }
 }
 
@@ -332,6 +376,7 @@ int main(int argc, char** argv) {
     while (fgets(line, sizeof line, f)) {
         lineNo++;
         rc = runLine(line);
+        if (!rc && stalled) rc = 5;
         fflush(stdout);
         if (rc) break;
     }

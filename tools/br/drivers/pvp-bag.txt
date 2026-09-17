@@ -5,6 +5,7 @@
 #
 # netlink-loop.txt's own session: CHALLENGE with loopback on, so our blocks come back
 # as the peer's and a real link battle starts. Then FIGHT is passed over for BAG.
+drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400

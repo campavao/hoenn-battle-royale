@@ -2,6 +2,7 @@
 # A ghost is placed in our eyeline while seat 1 is our fledFrom: no challenge goes out.
 # Once the lockout runs down, the same eyeline challenge fires -- the pursuer is fair
 # game again (and until then it is free to keep chasing us).
+drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400

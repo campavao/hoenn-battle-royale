@@ -12,6 +12,7 @@
 #
 # engage.txt places a STATIC ghost already in the eyeline, so no driver has ever had one
 # mid-walk -- which is why the gap in the code outlived the tests.
+drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400

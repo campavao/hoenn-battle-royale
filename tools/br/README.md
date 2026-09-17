@@ -22,7 +22,7 @@ Driver grammar (one action per line, `#` comments):
 | `expect u8/u16/u32 <addr> <value>` | assert equal; addr is `0xHEX`, a symbol from `br-symbols.json`, or `sym+0xOFF` |
 | `expectge u8/u16/u32 <addr> <value>` | assert got >= value |
 | `expectle u8/u16/u32 <addr> <value>` | assert got <= value |
-| `drain gBrMailbox` | from now on take every out-ring slot each frame, as the page would; without it a link battle fills the ring in seconds and BrNetlink stalls |
+| `drain gBrMailbox` | from now on take every out-ring slot each frame, as the page would. **Every driver that opens a netlink session needs this.** Without it a link battle fills the ring in seconds, `gBrNetlink.pendingLen` sticks, and the fight freezes mid-turn looking exactly like a game bug -- it cost POK-312 a High ticket. The harness fails a run whose `pendingLen` holds for 300 frames rather than driving on in a dead ROM |
 | `*sym+off` as an addr | dereference the u32 pointer at `sym` first (`*gSaveBlock1Ptr+4` is the location) |
 | `poke u8/u16/u32 <addr> <value>` / `pokebytes <addr> <hex...>` | write RAM |
 | `dump <addr> <len>` | hex dump |

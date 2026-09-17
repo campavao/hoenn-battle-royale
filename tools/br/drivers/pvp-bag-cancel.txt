@@ -1,0 +1,70 @@
+# pvp-bag-cancel: back out of the bag in a duel and the fight goes on (POK-312).
+#
+# The ticket read: "open the BAG from the action menu, press B without picking anything.
+# The battle never comes back" -- gBattleCommunication[0] stuck at 3 for ever, the action
+# menu never redrawn, and gBattleControllerExecFlags holding 0x20000011: a link buffer
+# transfer queued for the peer that nothing would ever acknowledge. It reproduced every
+# time, and it was the driver.
+#
+# A page reads the mailbox out ring every frame. pvp-bag.txt did not, so a couple of
+# thousand frames of block traffic filled the ring, BrNetlink_SendBlock could not hand
+# another block over, gBrNetlink.pendingLen stuck, IsLinkTaskFinished() was false for ever
+# and the link battle froze mid-turn. Nothing to do with the bag, the peer, or the
+# loopback standing in for it. The harness fails a run that stalls that way now, rather
+# than passing while the ROM is dead (tools/br/harness/harness.c).
+#
+# So this is the cancel with the ring read the way a page reads it: the action menu is
+# back, nothing is left queued over the link, and the turn after it is played to damage.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# CHALLENGE: type 5, framed len 7 = hdr(04 00 00) + challenger 00, opponent 01, nonce 0
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 00 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 600
+expect u8 gBrNetlink 1
+tap A
+wait 90
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+# Undamaged going in. Not exactly 20: the test mon's IVs come off the RNG at boot, so
+# anything that shifts a frame on the way in rolls a different TREECKO (shot-clock.txt
+# carries the same line).
+expectge u16 gBattleMons+0x28 19
+# FIGHT is on the left, BAG on the right. 3 is STATE_WAIT_ACTION_CASE_CHOSEN: the choice
+# was taken and the bag is opening over the battle.
+tap RIGHT
+wait 30
+tap A
+wait 150
+expect u8 gBattleCommunication 3
+shot bag
+# One B, nothing picked.
+tap B
+wait 180
+# 2 is STATE_WAIT_ACTION_CHOSEN: the action menu is up again and waiting on this battler.
+expect u8 gBattleCommunication 2
+shot back
+# ...and nothing is stuck over the link. The top nibble of the exec flags is the
+# "dispatched to a controller, not yet acknowledged" set; the whole 0x20000011 wedge lives
+# up there, so anything at or below 0xFFFF is a battle whose bookkeeping is square.
+expectle u32 gBattleControllerExecFlags 0xFFFF
+# ...with nothing waiting on a ring slot either.
+expect u8 gBrNetlink+9 0
+# The turn still plays: FIGHT, the first move, and it lands. Both sides swing (a loopback
+# peer mirrors us), so our own mon comes out of the turn with less than it went in with,
+# and the next choice opens.
+tap LEFT
+wait 20
+tap A
+wait 60
+tap A
+wait 400
+expectle u16 gBattleMons+0x28 18
+expect u8 gBattleCommunication 2
+shot next-turn
+say pvp bag cancel ok

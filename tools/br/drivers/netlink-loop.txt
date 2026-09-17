@@ -1,6 +1,7 @@
 # netlink-loop: a CHALLENGE opens the netlink session and starts a link battle; with
 # loopback on, our own blocks come back as the peer's and the battle-start exchange
 # (header, party in three blocks, seed) completes into the battle screen.
+drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400

@@ -2,6 +2,7 @@
 # parties) and streams its actions (BR_MSG_TURN) to spectators (POK-233). Loopback
 # battle (myId 0 = challenger); once it is up, `started` is set; pick FIGHT + a move to
 # run a turn, and the spectate counter climbs -- action bytes went out on the wire.
+drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400

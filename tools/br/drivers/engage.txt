@@ -1,6 +1,7 @@
 # engage: a ghost placed three tiles east facing us is in our eyeline: we (seat 0,
 # the lower seat) send CHALLENGE and start the link battle at once. With loopback the
 # start exchange completes into the VS screen.
+drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
