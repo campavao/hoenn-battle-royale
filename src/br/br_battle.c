@@ -127,15 +127,6 @@ void BrBattle_Init(void)
 void BrBattle_ShotReset(void)
 {
     gBrBattle.shotFrames = 0;
-    gBrBattle.autoMove = FALSE;
-}
-
-bool8 BrBattle_TakeAutoMove(void)
-{
-    if (!gBrBattle.autoMove)
-        return FALSE;
-    gBrBattle.autoMove = FALSE;
-    return TRUE;
 }
 
 // THE BAG IS NOT A HIDING PLACE (POK-292).

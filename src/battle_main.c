@@ -4489,6 +4489,14 @@ static void HandleTurnActionSelectionState(void)
                 case B_ACTION_SAFARI_WATCH_CAREFULLY:
                     gBattleCommunication[gActiveBattler]++;
                     break;
+#if BR
+                case B_ACTION_NOTHING_FAINTED:
+                    // The shot clock spending the turn (POK-313): the engine's own "do
+                    // nothing" action, which it sets for a battler off the field and
+                    // nothing had ever CHOSEN -- so this switch had no branch for it.
+                    gBattleCommunication[gActiveBattler]++;
+                    break;
+#endif
                 case B_ACTION_SAFARI_BALL:
                     gBattleCommunication[gActiveBattler]++;
                     break;

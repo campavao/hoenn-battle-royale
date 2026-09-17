@@ -1,0 +1,45 @@
+# shot-clock-pass: in a fight nobody else is waiting on, the clock spends the turn
+# (POK-313). Kanto, lib/bots.lua: "the player who does not pick in time is not penalised
+# beyond the turn -- their mon does nothing while the bot's moves, and the menu comes back
+# with a fresh clock. The PvP clock forfeits; this one only spends the turn."
+#
+# shot-clock.txt is the PvP half. This is run-bot.txt's staged bot fight, and then nothing
+# is pressed for thirty seconds.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 1F 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 300
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+expect u16 gBrBattle+2 0
+shot menu
+# gBattleMons[0] is ours, gBattleMons[1] (+0x58) theirs: DEF stage at +0x1A (6 = level),
+# POUND's PP at +0x24, HP at +0x28. Their trainer AI picks LEER here, which is what
+# makes this readable: a stat drop is a turn THEY took and we did not answer.
+expect u8 gBattleMons+0x1A 6
+expect u8 gBattleMons+0x24 35
+wait 1900
+# the clock fired once...
+expect u16 gBrBattle+2 1
+wait 400
+shot after
+# ...their move landed on us and ours never swung: DEF down a stage, POUND's PP untouched,
+# and their DEF where it was
+expect u8 gBattleMons+0x1A 5
+expect u8 gBattleMons+0x24 35
+expect u8 gBattleMons+0x72 6
+# and the menu is back, with a fresh clock, for the second turn
+expect u8 gBattleCommunication 2
+expectle u16 gBrBattle 500
+say shot clock pass ok

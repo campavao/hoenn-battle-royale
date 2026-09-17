@@ -265,13 +265,12 @@ static void HandleInputChooseAction(void)
         }
         else
         {
-            // Against a bot or a wild one, FIGHT and then the first move -- nobody else is
-            // waiting, so there is nothing to forfeit. Kanto only SPENDS the turn here
-            // ("their mon does nothing while the bot's moves"); ours still swings. See
-            // POK-313: the engine has an action for doing nothing and it is not safely
-            // reachable from the player's controller.
-            gBrBattle.autoMove = TRUE;
-            BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_USE_MOVE, 0);
+            // Against a bot or a wild one the turn is spent, not the fight (POK-313).
+            // Kanto: "their mon does nothing while the bot's moves, and the menu comes
+            // back with a fresh clock." B_ACTION_NOTHING_FAINTED is the engine's own
+            // action for a battler that does nothing this turn; battle_main.c's
+            // action-chosen switch has a branch for it now.
+            BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_NOTHING_FAINTED, 0);
         }
         PlayerBufferExecCompleted();
         return;
@@ -536,7 +535,7 @@ static void HandleInputChooseMove(void)
     struct ChooseMoveStruct *moveInfo = (struct ChooseMoveStruct *)(&gBattleBufferA[gActiveBattler][4]);
 
 #if BR
-    if (BrBattle_TakeAutoMove() || BrBattle_ShotTick())
+    if (BrBattle_ShotTick())
     {
         // Out of time: the move under the cursor, at the default target. No forfeit here
         // -- FIGHT was chosen, so the turn is already committed to a move.

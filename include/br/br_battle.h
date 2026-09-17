@@ -23,7 +23,7 @@ struct BrBattle
     /* 2 */ u16 timedOut;    // choices the clock made for the player
     /* 4 */ u16 runRolls;    // RUN attempts against a trainer
     /* 6 */ u16 runEscapes;  // ...of which got away, which is one per POKe DOLL spent
-    /* 8 */ u8 autoMove;      // the clock chose FIGHT: pick the move at once too
+    /* 8 */ u8 pad;           // was autoMove, until POK-313: the clock no longer chooses FIGHT
     /* 9 */ u8 stalled;       // a sub-screen already ran this turn's clock out
     /* 10 */ u16 stallFrames; // frames a screen the battle put up has held the clock
 };
@@ -34,8 +34,6 @@ void BrBattle_Init(void);
 // The player controller: reset when a choice opens, tick each frame it is open.
 void BrBattle_ShotReset(void);
 bool8 BrBattle_ShotTick(void);
-// The move menu after a timed-out FIGHT: TRUE once, so the move is picked at once.
-bool8 BrBattle_TakeAutoMove(void);
 // Every frame from BrFrame, whatever is on top: the same clock over the BAG and the
 // party screen, which the two above cannot see (POK-292).
 void BrBattle_TickStall(void);
