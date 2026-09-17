@@ -33,7 +33,11 @@ export type LobbyAction =
   | { kind: 'daily' }
   | { kind: 'name' }
   | { kind: 'skin' }
-  | { kind: 'voice' }
+  // MY VOICE is three rows now (POK-283): one line each for walking up, winning and
+  // losing, picked independently out of the same pool.
+  | { kind: 'intro' }
+  | { kind: 'win' }
+  | { kind: 'lose' }
   | { kind: 'stats' }
   | { kind: 'career' }
   | { kind: 'join'; code: string; pass: boolean }
@@ -65,9 +69,9 @@ export function fixedRows(
     /** What the sprite row says under it -- 'your sprite', or how many wins the next
      *  one takes once the wardrobe is not already full (POK-243). */
     skinNote?: string;
-    /** A preview of the chosen voice (POK-243) -- what the win line says, so cycling
-     *  is picking something rather than picking a number. */
-    voice?: string;
+    /** MY VOICE: the three lines themselves (POK-283), each on its own row, so cycling
+     *  one is picking that line rather than picking a number that moves all three. */
+    lines?: { intro: string; win: string; lose: string };
     /** Whether play is being shared with the relay's own count -- undefined reads as
      *  "shared", the same default `stats.ts`'s `off` field defaults to. */
     statsOn?: boolean;
@@ -81,7 +85,9 @@ export function fixedRows(
       ? [
           { label: profile.name, detail: profile.record ?? 'your name', action: { kind: 'name' as const } },
           { label: profile.skin, detail: profile.skinNote ?? 'your sprite', action: { kind: 'skin' as const } },
-          { label: 'MY VOICE', detail: profile.voice ?? 'what you say', action: { kind: 'voice' as const } },
+          { label: profile.lines?.intro ?? 'MY VOICE', detail: 'walking up', action: { kind: 'intro' as const } },
+          { label: profile.lines?.win ?? 'MY VOICE', detail: 'when you win', action: { kind: 'win' as const } },
+          { label: profile.lines?.lose ?? 'MY VOICE', detail: 'when you lose', action: { kind: 'lose' as const } },
           {
             label: 'PLAY STATS',
             detail: profile.statsOn === false ? 'not shared' : 'shared',

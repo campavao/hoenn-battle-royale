@@ -6,7 +6,7 @@
 // localStorage, not the relay: this is one device's own record, it is never authority
 // for anything, and a wiped browser costing somebody their streak is a smaller problem
 // than a server that has to be trusted with it.
-import { VOICE_COUNT } from '../bots/lines';
+import { LINE_COUNT, lineIndexOf, VOICE_COUNT, voiceOf } from '../bots/lines';
 
 const KEY = 'hbr:career';
 
@@ -22,8 +22,17 @@ export interface Career {
   skin?: number;
   /** Which of `bots/lines.ts`'s voices this seat speaks with when its own duels get
    *  announced (POK-243). Undefined means "whatever the match seed deals" -- the same
-   *  thing a bot gets, since nobody has picked one yet. */
+   *  thing a bot gets, since nobody has picked one yet.
+   *
+   *  Kept only to migrate an old career file: POK-283 split it into three separate picks
+   *  below, because "one index into all three pools at once" meant choosing a win line
+   *  you did not want to get the intro you did. Nothing writes it any more. */
   voice?: number;
+  /** MY VOICE, three independent indices into `LINES` (POK-283). Undefined is dealt from
+   *  the match seed, the same as a bot's. */
+  intro?: number;
+  win?: number;
+  lose?: number;
 }
 
 /** The wardrobe, index for index with `sSkinGraphics` in src/br/br_ghosts.c -- which is
@@ -128,6 +137,26 @@ function sane(value: unknown): Career {
   if (skin > 0 && skin < SKINS.length) career.skin = skin;
   const voice = num(raw.voice);
   if (voice > 0 && voice < VOICE_COUNT) career.voice = voice;
+  const line = (key: 'intro' | 'win' | 'lose') => {
+    const v = num(raw[key]);
+    if (v > 0 && v < LINE_COUNT) career[key] = v;
+  };
+  line('intro');
+  line('win');
+  line('lose');
+  // An old career picked one number for all three (POK-243). Keep what it was saying
+  // rather than resetting somebody to the top of the list: the three lines it resolved
+  // to are all in the new pool, because the pool starts with the pools it came from.
+  if (career.intro === undefined && career.win === undefined && career.lose === undefined && career.voice !== undefined) {
+    const was = voiceOf(career.voice);
+    const at = (text: string) => {
+      const i = lineIndexOf(text);
+      return i > 0 ? i : undefined;
+    };
+    career.intro = at(was.intro);
+    career.win = at(was.win);
+    career.lose = at(was.lose);
+  }
   return career;
 }
 
@@ -166,7 +195,7 @@ export function recordMatch(
 /** Sets who you are. Kept beside the record rather than in a key of its own, so one
  *  read is your whole profile. */
 export function saveProfile(
-  patch: { name?: string; skin?: number; voice?: number },
+  patch: { name?: string; skin?: number; voice?: number; intro?: number; win?: number; lose?: number },
   store: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
 ): Career {
   const career = loadCareer(store);
@@ -182,6 +211,10 @@ export function saveProfile(
     if (skinUnlocked(wanted, career.wins)) career.skin = wanted;
   }
   if (patch.voice !== undefined) career.voice = ((patch.voice % VOICE_COUNT) + VOICE_COUNT) % VOICE_COUNT;
+  for (const key of ['intro', 'win', 'lose'] as const) {
+    const v = patch[key];
+    if (v !== undefined) career[key] = ((v % LINE_COUNT) + LINE_COUNT) % LINE_COUNT;
+  }
   try {
     store.setItem(KEY, JSON.stringify(career));
   } catch {

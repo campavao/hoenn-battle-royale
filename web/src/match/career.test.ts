@@ -1,6 +1,6 @@
 import ghostsSource from '../../../src/br/br_ghosts.c?raw';
 import { describe, expect, it } from 'vitest';
-import { VOICE_COUNT } from '../bots/lines';
+import { lineAt, LINE_COUNT, LINES, nextLine, VOICE_COUNT, voiceOf } from '../bots/lines';
 import {
   careerLine,
   cleanName,
@@ -143,7 +143,12 @@ describe('the career as a file', () => {
 
     const theirs = store();
     const back = importCareer(text, theirs);
-    expect(back).toEqual({ matches: 2, wins: 1, best: 1, name: 'CAM', voice: 2 });
+    // An old file's single `voice` is read back as the three lines it used to resolve
+    // to (POK-283), so somebody who moves machines keeps saying what they said.
+    expect(back).toMatchObject({ matches: 2, wins: 1, best: 1, name: 'CAM', voice: 2 });
+    expect(lineAt(back!.intro!)).toBe(voiceOf(2).intro);
+    expect(lineAt(back!.win!)).toBe(voiceOf(2).win);
+    expect(lineAt(back!.lose!)).toBe(voiceOf(2).lose);
     expect(loadCareer(theirs)).toEqual(back);
   });
 
@@ -261,5 +266,49 @@ describe('the wardrobe (POK-282)', () => {
     const s = store();
     saveProfile({ skin: SKINS.length - 1 }, s);
     expect(loadCareer(s).skin).toBeUndefined();
+  });
+});
+
+
+// POK-283. Cam: "it should have three voices: your intro text, your win text -- what you
+// say when you win -- and your lose text. And these should be a big list of essentially
+// any NPC text in the game, so that you can use them however you want."
+describe('MY VOICE (POK-283)', () => {
+  it("is a big list, and it is the game's own words", () => {
+    expect(LINE_COUNT).toBeGreaterThan(100);
+    // Everything the ticker draws has to fit beside a name and a colon on a 40-wide line.
+    for (const line of LINES) expect(line.length).toBeLessThanOrEqual(30);
+  });
+
+  it('has no line twice, which would read as a bug while cycling', () => {
+    expect(new Set(LINES).size).toBe(LINES.length);
+  });
+
+  it('cycles one row without moving the other two', () => {
+    const s = store();
+    saveProfile({ intro: 4, win: 9, lose: 2 }, s);
+    saveProfile({ win: nextLine(9) }, s);
+    const after = loadCareer(s);
+    expect(after.intro).toBe(4);
+    expect(after.win).toBe(10);
+    expect(after.lose).toBe(2);
+  });
+
+  it('wraps rather than running off the end', () => {
+    const s = store();
+    saveProfile({ intro: LINE_COUNT - 1 }, s);
+    saveProfile({ intro: nextLine(LINE_COUNT - 1) }, s);
+    // Stored as absent rather than as 0 -- `sane` keeps only a positive index, the same
+    // convention `skin` and `voice` use -- and absent IS the first line.
+    expect(loadCareer(s).intro ?? 0).toBe(0);
+  });
+
+  it('turns an old single-voice career into the three lines it was saying', () => {
+    const s = store();
+    s.setItem('hbr:career', JSON.stringify({ matches: 1, wins: 0, voice: 3 }));
+    const career = loadCareer(s);
+    expect(lineAt(career.intro ?? 0)).toBe(voiceOf(3).intro);
+    expect(lineAt(career.win ?? 0)).toBe(voiceOf(3).win);
+    expect(lineAt(career.lose ?? 0)).toBe(voiceOf(3).lose);
   });
 });

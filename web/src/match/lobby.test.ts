@@ -97,9 +97,9 @@ describe('the profile rows', () => {
     expect(rows[0].label).toBe('WALLY');
     expect(rows[0].detail).toBe('3 played');
     expect(rows[1].label).toBe('MAY');
-    // name, sprite, voice, stats, career -- then the ways in (POK-243).
-    expect(rows[4].label).toBe('MY CAREER');
-    expect(rows[5].label).toBe('SOLO VS BOTS');
+    // name, sprite, three voice rows (POK-283), stats, career -- then the ways in.
+    expect(rows[6].label).toBe('MY CAREER');
+    expect(rows[7].label).toBe('SOLO VS BOTS');
   });
 
   it('shows the sprite note when there is one, otherwise the plain default', () => {
@@ -109,19 +109,25 @@ describe('the profile rows', () => {
     expect(noted[1].detail).toBe('RIVAL MAY at 3 wins');
   });
 
-  it('previews the chosen voice, or says there is nothing chosen yet', () => {
+  it('gives MY VOICE a row each and shows the line itself (POK-283)', () => {
     const plain = fixedRows(true, { name: 'WALLY', skin: 'MAY' });
-    expect(plain[2].label).toBe('MY VOICE');
-    expect(plain[2].detail).toBe('what you say');
-    const chosen = fixedRows(true, { name: 'WALLY', skin: 'MAY', voice: 'STILL STANDING.' });
-    expect(chosen[2].detail).toBe('STILL STANDING.');
+    expect(plain.slice(2, 5).map((r) => r.label)).toEqual(['MY VOICE', 'MY VOICE', 'MY VOICE']);
+    expect(plain.slice(2, 5).map((r) => r.detail)).toEqual(['walking up', 'when you win', 'when you lose']);
+    expect(plain.slice(2, 5).map((r) => r.action?.kind)).toEqual(['intro', 'win', 'lose']);
+    const chosen = fixedRows(true, {
+      name: 'WALLY',
+      skin: 'MAY',
+      lines: { intro: 'FOUND YOU.', win: 'STILL STANDING.', lose: 'GOOD FIGHT.' },
+    });
+    // The row says the line, not a number: cycling is picking something.
+    expect(chosen.slice(2, 5).map((r) => r.label)).toEqual(['FOUND YOU.', 'STILL STANDING.', 'GOOD FIGHT.']);
   });
 
   it('reads as shared unless stats were explicitly turned off', () => {
     const shared = fixedRows(true, { name: 'WALLY', skin: 'MAY' });
-    expect(shared[3].label).toBe('PLAY STATS');
-    expect(shared[3].detail).toBe('shared');
+    expect(shared[5].label).toBe('PLAY STATS');
+    expect(shared[5].detail).toBe('shared');
     const off = fixedRows(true, { name: 'WALLY', skin: 'MAY', statsOn: false });
-    expect(off[3].detail).toBe('not shared');
+    expect(off[5].detail).toBe('not shared');
   });
 });

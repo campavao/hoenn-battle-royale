@@ -22,7 +22,7 @@ import { Results } from './match/results';
 import { Bots } from './bots/brain';
 import { dealBots, MAX_SEATS } from './bots/roster';
 import type { Bot } from './bots/roster';
-import { nextVoice, voiceFor, voiceOf } from './bots/lines';
+import { type BotVoice, lineAt, nextLine, voiceFor } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { emptyNote, fixedRows, isRoomCode, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
 import {
@@ -855,10 +855,17 @@ function careerSkin(): number {
  *  saved, so wandering into the locked half and leaving still leaves you dressed. */
 let browsedSkin: number | null = null;
 
-/** Which voice (bots/lines.ts) this seat speaks with when its own duels get
- *  announced (POK-243). */
-function careerVoice(): number {
-  return loadCareer().voice ?? 0;
+/** MY VOICE: the three lines this seat speaks with when its own duels get announced
+ *  (POK-243, split into three by POK-283). Each is an index into `LINES`; an unpicked
+ *  one falls back to the head of the pool rather than to a deal, because a profile is
+ *  chosen ahead of any match and has no seed to deal from. */
+function careerVoiceLines(): BotVoice {
+  const career = loadCareer();
+  return {
+    intro: lineAt(career.intro ?? 0),
+    win: lineAt(career.win ?? 0),
+    lose: lineAt(career.lose ?? 0),
+  };
 }
 
 /** Writes gBrMailbox.boot so a fresh game skips the intro/Birch/naming screens and
@@ -1984,7 +1991,7 @@ function wireRoom(
     // The seed's voice for anyone, except this client's own seat, which speaks with
     // whatever its profile picked (POK-243) -- see the onDuel/onEngage callbacks below.
     const myVoice = (seat: number, matchSeed: number) =>
-      seat === bridge!.seat ? voiceOf(careerVoice()) : voiceFor(matchSeed, seat);
+      seat === bridge!.seat ? careerVoiceLines() : voiceFor(matchSeed, seat);
     const seen = new Set<number>(); // seats already announced out, so a repeat is quiet
     // The host speaks for the bots as well as for the clock: same relay, same in-ring,
     // and its own roster too -- nobody hears their own messages come back, so the host
@@ -2823,10 +2830,17 @@ function runLobby(): Promise<RoomHash> {
           render();
           return;
         }
-        case 'voice':
-          saveProfile({ voice: nextVoice(careerVoice()) });
+        case 'intro':
+        case 'win':
+        case 'lose': {
+          // Three rows, three independent picks (POK-283). One index for all three meant
+          // choosing a win line you did not want to get the intro you did.
+          const which = action.kind;
+          const career = loadCareer();
+          saveProfile({ [which]: nextLine(career[which] ?? 0) });
           render();
           return;
+        }
         case 'stats':
           setStatsOff(!loadStats().off);
           render();
@@ -2898,7 +2912,7 @@ function runLobby(): Promise<RoomHash> {
           name: careerName(),
           skin: SKINS[showing],
           skinNote: skinNote(showing, career.wins),
-          voice: voiceOf(careerVoice()).win,
+          lines: careerVoiceLines(),
           statsOn: !loadStats().off,
           record: career.matches > 0 ? careerLine(career) : 'your name',
         }).map(rowButton),

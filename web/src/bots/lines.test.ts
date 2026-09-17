@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextVoice, voiceFor, voiceOf, VOICE_COUNT } from './lines';
+import { voiceFor, voiceOf, VOICE_COUNT } from './lines';
 import { LINE_MAX, short } from '../match/ticker';
 
 describe("a bot's three lines", () => {
@@ -22,12 +22,9 @@ describe("a bot's three lines", () => {
   });
 });
 
-describe("a player's chosen voice (POK-243)", () => {
-  it('cycles and wraps, same as nextSkin', () => {
-    expect(nextVoice(0)).toBe(1);
-    expect(nextVoice(VOICE_COUNT - 1)).toBe(0);
-  });
-
+// POK-283 split a player's voice into three independent picks, so this describes what
+// is left of POK-243's single index: the shape an old career file is read back through.
+describe("a POK-243 career's single voice", () => {
   it('is stable for a given index, unlike the seed-dealt one', () => {
     expect(voiceOf(2)).toEqual(voiceOf(2));
   });
