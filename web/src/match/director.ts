@@ -83,6 +83,11 @@ export interface DirectorWorld {
    *  The drop falls back to these; the ring never does, because a fog centred on a town
    *  nobody can walk to strands everybody who cannot surf. */
   doorsteps?: LandingCell[];
+  /** Cam's own picks (POK-314), landing-hand.json. A section with any of these deals
+   *  from them and nothing else: hand-painted beats ordinary beats doorsteps, and a
+   *  hand-painted cell is exempt from the flood by definition -- if Cam says you can
+   *  drop in Fortree, you can drop in Fortree. */
+  hand?: LandingCell[];
 }
 
 interface SectionCells {
@@ -118,9 +123,13 @@ function buildOutdoorSections(world: DirectorWorld): SectionCells[] {
 /** MAPSEC number -> that section's doorsteps, in rank order (POK-307). Keyed by number
  *  rather than by name because a pick arrives off the wire as the ROM's MAPSEC id. */
 function buildDoorsteps(world: DirectorWorld): Map<number, Cell[]> {
+  return bySection(world, world.doorsteps ?? []);
+}
+
+function bySection(world: DirectorWorld, cells: LandingCell[]): Map<number, Cell[]> {
   const byId = new Map(world.maps.map((m) => [m.id, m]));
   const out = new Map<number, Cell[]>();
-  for (const cell of world.doorsteps ?? []) {
+  for (const cell of cells) {
     const m = byId.get(cell.map);
     if (!m || !m.outdoor) continue;
     const section = world.sections[m.section];
@@ -191,6 +200,8 @@ export class Director {
   private readonly sections: SectionCells[];
   /** POK-307: a doorstep for a section the flood left with nothing. */
   private readonly doorsteps: Map<number, Cell[]>;
+  /** POK-314: the cells Cam painted, which outrank everything else in their section. */
+  private readonly hand: Map<number, Cell[]>;
   /** Every section on the region map, cells or not -- `sections` above holds only the
    *  ones with somewhere to stand, and a section with nowhere still has a place on the
    *  map to measure from. */
@@ -217,6 +228,7 @@ export class Director {
     this.rng = mulberry32(opts.seed);
     this.sections = buildOutdoorSections(opts.world);
     this.doorsteps = buildDoorsteps(opts.world);
+    this.hand = bySection(opts.world, opts.world.hand ?? []);
     this.rects = new Map(
       Object.values(opts.world.sections)
         .filter((s) => s.num !== undefined)
@@ -331,14 +343,20 @@ export class Director {
    *  leave it, and then for the NEAREST section with cells rather than a random one. */
   landFor(seat: number, section: number): { seat: number; map: MapRef; x: number; y: number } {
     const wanted = this.sections.find((s) => s.section.num === section);
+    const hand = this.hand.get(section);
     const pool: Cell[] =
-      wanted && wanted.cells.length > 0
-        ? wanted.cells
-        : (this.doorsteps.get(section) ?? this.nearestCells(section));
+      hand && hand.length > 0
+        ? hand
+        : wanted && wanted.cells.length > 0
+          ? wanted.cells
+          : (this.doorsteps.get(section) ?? this.nearestCells(section));
     for (let attempt = 0; attempt < DEAL_RETRY_LIMIT; attempt++) {
       // A doorstep list is short and ranked -- centre, mart, gym, door -- so it is walked
-      // in order rather than sampled: the first free one is the nicest one.
-      const cell = pool.length <= DOORSTEP_ORDERED ? pool[attempt % pool.length] : pool[pickIndex(this.rng, pool.length)];
+      // in order rather than sampled: the first free one is the nicest one. A painted
+      // list is short too and not ranked at all: sampled, so a town's drops spread over
+      // the spots Cam chose rather than filling them in the order he clicked.
+      const ordered = pool !== hand && pool.length <= DOORSTEP_ORDERED;
+      const cell = ordered ? pool[attempt % pool.length] : pool[pickIndex(this.rng, pool.length)];
       const key = `${cell.map.group}:${cell.map.num}:${cell.x}:${cell.y}`;
       if (this.dealtCells.has(key) && attempt < DEAL_RETRY_LIMIT - 1) continue;
       this.dealtCells.add(key);

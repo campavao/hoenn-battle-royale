@@ -68,7 +68,7 @@ import {
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import worldData from './data/world.json';
 import TRAINERS from './data/trainers.json';
-import { DOORSTEPS, LANDING } from './match/landing';
+import { DOORSTEPS, HAND, LANDING } from './match/landing';
 import { SAFARI_CELLS } from './match/safari';
 import { cardFor } from './match/card';
 import { MatchRecord, recordLines } from './match/record';
@@ -82,6 +82,7 @@ const WORLD: DirectorWorld = {
   maps: worldData.maps as DirectorWorld['maps'],
   landing: LANDING,
   doorsteps: DOORSTEPS,
+  hand: HAND,
   sections: regionmapData.sections as DirectorWorld['sections'],
 };
 

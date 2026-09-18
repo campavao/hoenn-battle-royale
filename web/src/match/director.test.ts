@@ -277,3 +277,39 @@ describe('where a pick actually lands you (POK-307)', () => {
     expect([1, 2]).toContain(land.map.num);
   });
 });
+
+describe('hand-painted drop cells (POK-314)', () => {
+  const painted: DirectorWorld = {
+    ...world,
+    hand: [
+      { map: 'MAP_GAMMA', x: 1, y: 1 }, // a town the flood left with only doorsteps
+      { map: 'MAP_GAMMA', x: 2, y: 2 },
+      { map: 'MAP_ALPHA', x: 30, y: 30 }, // and one with plenty of ordinary cells
+    ],
+  };
+  const make = (seed: number) =>
+    new Director({ seats: [0, 1, 2], seed, world: painted, send: () => {}, now: () => 0, onOut: () => () => {} });
+
+  it('beat doorsteps: a painted town drops on the painted cells, not the doors', () => {
+    const d = make(99);
+    const cells = [0, 1, 2].map((s) => d.landFor(s, 3));
+    for (const c of cells) expect(c.map).toEqual({ group: 0, num: 4 });
+    for (const c of cells) expect([1, 2]).toContain(c.x);
+  });
+
+  it('beat ordinary cells: a section with any painted cell deals only from them', () => {
+    const d = make(7);
+    for (let i = 0; i < 10; i++) expect(d.landFor(i, 1)).toMatchObject({ x: 30, y: 30 });
+  });
+
+  it('are sampled, not walked in click order', () => {
+    // Over many seeds the first drop in GAMMA lands on both painted cells.
+    const firsts = new Set(Array.from({ length: 20 }, (_, i) => make(i * 31 + 1).landFor(0, 3).x));
+    expect(firsts).toEqual(new Set([1, 2]));
+  });
+
+  it('leave an unpainted section exactly as it was', () => {
+    const d = make(99);
+    expect(d.landFor(0, 2).map).toEqual({ group: 0, num: 2 }); // BETA's ordinary cells
+  });
+});

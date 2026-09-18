@@ -10,6 +10,7 @@
 // anything else that wants landing cells (the bots, the replay tool, the tests) gets
 // the same answer instead of quietly reading the raw file.
 import landingData from '../data/landing.json';
+import handData from '../data/landing-hand.json';
 import type { LandingCell } from './director';
 
 export const LANDING: LandingCell[] = (landingData as LandingCell[]).filter((c) => !c.off && c.door === undefined);
@@ -27,6 +28,14 @@ export const LANDING: LandingCell[] = (landingData as LandingCell[]).filter((c) 
  *  gym, then any other door. A fallback only -- never mixed into the ordinary pool, or
  *  every drop would cluster on doorsteps. */
 export const DOORSTEPS: LandingCell[] = (landingData as LandingCell[]).filter((c) => c.door !== undefined);
+
+/** Cam's own picks (POK-314): "maybe we should have a follow up where I paint droppable
+ *  lines for you and you can save those coordinates?" Painted in web/painter.html, saved
+ *  to landing-hand.json by hand and committed; landing-reach.ts never writes that file,
+ *  so hand work survives every re-export. A section with any of these deals from them
+ *  alone. landing.test.ts holds every one to a standable cell in the current world.json,
+ *  so a re-export that moves a map fails a test rather than dropping somebody in a wall. */
+export const HAND: LandingCell[] = handData as LandingCell[];
 
 /** Every cell the exporter found, marks and all -- for the tools that check the marks. */
 export const LANDING_ALL = landingData as LandingCell[];

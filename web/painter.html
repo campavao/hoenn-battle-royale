@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Drop painter</title>
+    <style>
+      body { margin: 0; padding: 12px; font: 14px system-ui, sans-serif; background: #14181c; color: #dfe6ea; }
+      header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+      select, button, textarea { font: inherit; }
+      canvas { image-rendering: pixelated; border: 1px solid #333; cursor: crosshair; display: block; }
+      textarea { width: 100%; height: 160px; margin-top: 8px; background: #0e1114; color: #dfe6ea; border: 1px solid #333; }
+      .legend span { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin: 0 4px 0 10px; }
+      #status { color: #9fb3c0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <label>Map <select id="map"></select></label>
+      <button id="clear">Clear this map</button>
+      <button id="copy">Copy JSON</button>
+      <span id="status"></span>
+      <span class="legend">
+        <span style="background:#2b7a3b"></span>ordinary cell
+        <span style="background:#2f6fd1"></span>doorstep
+        <span style="background:#f28c28"></span>painted
+        <span style="background:#7a2b2b"></span>off (flood)
+      </span>
+    </header>
+    <canvas id="grid"></canvas>
+    <p>Click a cell to paint it, click again to clear. Paste the JSON into <code>web/src/data/landing-hand.json</code> and commit; <code>landing.test.ts</code> holds every cell to the current map data.</p>
+    <textarea id="json" readonly></textarea>
+    <script type="module" src="/src/painter.ts"></script>
+  </body>
+</html>
