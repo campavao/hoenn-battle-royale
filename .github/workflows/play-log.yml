@@ -38,7 +38,9 @@ jobs:
       - name: check out the play-log branch
         run: |
           if git ls-remote --exit-code --heads origin play-log >/dev/null; then
-            git worktree add play-log origin/play-log
+            # actions/checkout fetched one ref; the data branch has to be asked for
+            git fetch --depth=1 origin play-log:refs/remotes/origin/play-log
+            git worktree add --detach play-log origin/play-log
             git -C play-log checkout -B play-log origin/play-log
           else
             git worktree add --detach play-log
