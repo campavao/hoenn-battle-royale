@@ -156,6 +156,16 @@ Career (name, skin, wins), stats opt-out and pace live in IndexedDB. Touch contr
 the shell's, with the emulator's `buttonPress` API. PWA manifest + service worker so a
 home-screen install works offline after the first patch.
 
+**The picture is 240×160 and the game is not** (POK-317). The GBA draws its window and
+nothing past it, so the shell draws the rest: a still of every outdoor map
+(`tools/br/render-maps.py` → `web/public/field-maps/`) scrolled in lockstep with the ROM's
+camera (`gSaveBlock1Ptr->pos`, `gFieldCamera.x/y`, one frame behind the struct, offsets
+measured by `tools/br/drivers/field-scroll*.txt`) on a canvas under the picture, at the
+picture's own scale, with the palette fade mirrored from `gPaletteFade`. In a battle or a
+menu the picture shows that and the field stays around it. Nothing is zoomed or
+stretched; the border shows no people, no ghosts, no weather. A tap out there walks
+there like a tap on the picture. `web/src/field.ts`.
+
 ## 8. Relay
 
 `relay/server.js` ports with its message shapes intact (`host_room`, `join_room`,

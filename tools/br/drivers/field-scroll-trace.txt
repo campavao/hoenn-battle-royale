@@ -1,0 +1,119 @@
+# field-scroll-trace: the camera, frame by frame, through a run to the right (POK-317).
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+hold RIGHT 1
+say f1
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f2
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f3
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f4
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f5
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f6
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f7
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f8
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f9
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f10
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+shot f10
+hold RIGHT 1
+say f11
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f12
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f13
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f14
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+shot f14
+hold RIGHT 1
+say f15
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f16
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f17
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f18
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f19
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f20
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f21
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f22
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f23
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f24
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f25
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f26
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f27
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+hold RIGHT 1
+say f28
+dump *gSaveBlock1Ptr 4
+dump 0x03005dd0 24
+say ok

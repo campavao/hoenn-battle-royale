@@ -1,33 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { MENU_ACTION, MENU_MOVE, MENU_SAFARI, menuSlot, toGbaPixel } from './touch';
+import { MENU_ACTION, MENU_MOVE, MENU_SAFARI, menuSlot, onPicture, toGbaPixel } from './touch';
 
 describe('a tap becomes a GBA pixel', () => {
-  it('maps a 3:2 box one to one at scale', () => {
+  it('maps the picture one to one at scale', () => {
     const rect = { left: 0, top: 100, width: 480, height: 320 };
-    expect(toGbaPixel(rect, 0, 100, false)).toEqual({ x: 0, y: 0 });
-    expect(toGbaPixel(rect, 240, 260, false)).toEqual({ x: 120, y: 80 });
-    expect(toGbaPixel(rect, 479, 419, false)).toEqual({ x: 239.5, y: 159.5 });
+    expect(toGbaPixel(rect, 0, 100)).toEqual({ x: 0, y: 0 });
+    expect(toGbaPixel(rect, 240, 260)).toEqual({ x: 120, y: 80 });
+    expect(toGbaPixel(rect, 479, 419)).toEqual({ x: 239.5, y: 159.5 });
   });
 
-  it('letterboxes a wide box and refuses the bars', () => {
-    // A 1000x400 window: the picture is 600x400, centred, 200px of bar each side.
-    const rect = { left: 0, top: 0, width: 1000, height: 400 };
-    expect(toGbaPixel(rect, 100, 200, false)).toBeNull();
-    expect(toGbaPixel(rect, 200, 0, false)).toEqual({ x: 0, y: 0 });
-    expect(toGbaPixel(rect, 500, 200, false)).toEqual({ x: 120, y: 80 });
-    expect(toGbaPixel(rect, 800, 200, false)).toBeNull();
-  });
-
-  it('stretched, the whole box is the picture', () => {
-    const rect = { left: 0, top: 0, width: 390, height: 560 };
-    const p = toGbaPixel(rect, 195, 280, true)!;
-    expect(p.x).toBeCloseTo(120);
-    expect(p.y).toBeCloseTo(80);
-    expect(toGbaPixel(rect, 390, 0, true)).toBeNull();
+  it('past the picture the numbers keep going: that is the field around it', () => {
+    const rect = { left: 0, top: 200, width: 390, height: 260 };
+    const above = toGbaPixel(rect, 195, 100)!;
+    expect(above.x).toBeCloseTo(120);
+    expect(above.y).toBeCloseTo((-100 / 260) * 160);
+    expect(onPicture(above.x, above.y)).toBe(false);
+    expect(onPicture(120, 80)).toBe(true);
+    expect(onPicture(240, 80)).toBe(false);
   });
 
   it('a box with no size is no tap', () => {
-    expect(toGbaPixel({ left: 0, top: 0, width: 0, height: 0 }, 0, 0, false)).toBeNull();
+    expect(toGbaPixel({ left: 0, top: 0, width: 0, height: 0 }, 0, 0)).toBeNull();
   });
 });
 
@@ -106,7 +99,7 @@ function layer(emu: FakeEmu) {
   // No DOM here: the layer only listens on it, and these tests call `tap` directly.
   const canvas = { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 240, height: 160 }) } as unknown as HTMLCanvasElement;
   const symbols = new Map([['gMain', 0], ['gBrBattle', 1000], ['gActionSelectionCursor', 2000], ['gMoveSelectionCursor', 3000], ['gBattleBufferA', 4000]]);
-  const t = new TouchLayer({ emu: emu as never, canvas, symbols, stretched: () => false });
+  const t = new TouchLayer({ emu: emu as never, canvas, symbols });
   t.attach();
   return { t, tap: (x: number, y: number) => (t as unknown as { tap(x: number, y: number): void }).tap(x, y) };
 }

@@ -24,6 +24,9 @@ ENGINE_SYMBOLS = [
     "gAnimScriptActive", "gAnimVisualTaskCount", "gAnimSoundTaskCount", "gAnimScriptCallback", "gBattleSpritesDataPtr", "gBattleAnimAttacker", "gBattleAnimTarget", "gBattleScripting", "gBattlescriptCurrInstr", "gCurrentMove",
     # Scratch a driver can build a wire message in before mailsend pushes it.
     "gDecompressionBuffer", "gBrZone",
+    # The field camera and the palette fade: the page draws the map past the picture
+    # in lockstep with the ROM's own scroll (POK-317, web/src/field.ts).
+    "gFieldCamera", "gPaletteFade",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

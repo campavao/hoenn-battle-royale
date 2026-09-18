@@ -137,7 +137,7 @@ function show(m: WorldMap): void {
     picture = null;
     status.textContent = `no render for ${m.id}: run python tools/br/render-maps.py`;
   };
-  picture.src = `/painter-maps/${m.id}.png`;
+  picture.src = `/field-maps/${m.id}.png`;
   draw();
 }
 

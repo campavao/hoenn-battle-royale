@@ -143,16 +143,31 @@
         font: inherit; background: #4f6b7d; color: #fff;
         border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer;
       }
+      /* The picture and the field around it (POK-317, web/src/field.ts). #screen-wrap is
+         the whole area the game may take; field.ts places the 240x160 picture inside it at
+         one scale and draws the map past its edges on #field at the same scale. Out of a
+         match the box is the picture's own 3:2; in one it takes what is left. */
       #screen-wrap {
         position: relative;
         flex: 0 0 auto;
-        display: grid;
-        place-items: center;
+        overflow: hidden;
         background: #000;
         touch-action: none;
         width: 100%;
+        max-width: 480px;
+        aspect-ratio: 240 / 160;
       }
-      canvas { image-rendering: pixelated; width: min(100vw, 480px); aspect-ratio: 240 / 160; height: auto; display: block; }
+      body.in-match #screen-wrap { flex: 1 1 0; min-height: 0; max-width: none; aspect-ratio: auto; }
+      canvas { image-rendering: pixelated; display: block; }
+      #field { position: absolute; left: 0; top: 0; }
+      #canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; }
+      /* In a match the pad floats over the bottom of the field rather than under the
+         picture (the reference: thumbs over the map). Only its controls take a touch;
+         the map between them is tappable. */
+      body.in-match #pad { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; pointer-events: none; }
+      body.in-match #pad .dpad-surface, body.in-match #pad .btn, body.in-match #pad .menu-btn { pointer-events: auto; }
+      body.in-match .dpad-surface:not(.active)::before, body.in-match .dpad-surface:not(.active)::after,
+      body.in-match .btn:not(.down):not(:active), body.in-match .menu-btn { background: rgba(38, 49, 58, 0.62); }
       /* Top-LEFT, not top-right: the ROM draws its own corner up there (N LEFT, the
          clock, the spectator eye) and the ticker owns the bottom, so this is the one
          edge a badge can sit on without hiding something a player needs to read. */
@@ -222,7 +237,7 @@
         #screen-playing .drawer { grid-column: 1 / -1; grid-row: 1; }
         /* `width: 100%` would make the middle column take everything and push the
            pad off the left edge, so here the screen is exactly as wide as it is. */
-        #screen-wrap { grid-column: 2; grid-row: 2; width: auto; }
+        #screen-wrap { grid-column: 2; grid-row: 2; width: auto; max-width: none; align-self: stretch; justify-self: stretch; aspect-ratio: auto; min-height: 0; }
         /* `display: contents` lifts the pad's own children into the grid, so the
            D-pad and the buttons can sit either side of the screen without moving
            them in the markup. */
@@ -230,9 +245,8 @@
         #pad .dpad-surface { grid-column: 1; grid-row: 2; justify-self: center; }
         #pad .ab { grid-column: 3; grid-row: 2; justify-self: center; align-content: center; }
         #pad .sys { grid-column: 1 / -1; grid-row: 3; }
-        /* Sideways, height is what runs out first, so the screen is sized by it --
-           `min(100vw, 480px)` would be 480 wide and 320 tall on a 390-tall phone. */
-        canvas { width: auto; height: min(calc(100vh - 150px), 320px); }
+        /* Sideways the pad is in the grid's side columns, not over the field. */
+        body.in-match #pad { position: static; }
         header h1 { font-size: 15px; }
         .settings { padding-top: 2px; padding-bottom: 4px; }
       }
@@ -263,31 +277,10 @@
            it stays. It sits over the screen rather than pushing it down. */
         #room-panel { width: 100%; }
         .drawer { width: 100%; }
-        /* basis 0, not auto: on `auto` the canvas sizes the box and the box then
-           overflows the window instead of the picture shrinking to fit it. */
-        #screen-wrap {
-          flex: 1 1 0;
-          min-height: 0;
-          width: 100%;
-          overflow: hidden;
-          /* `place-items: center` leaves the canvas sized by its own 3:2 and a
-             percentage height with nothing to resolve against, so it grew taller
-             than the box it was in. Stretched, the box is the area and `object-fit`
-             does the centring. */
-          place-items: stretch;
-        }
-        /* `object-fit` works on a canvas -- it is a replaced element with an intrinsic
-           240x160 -- so the box can be the whole window and the picture is letterboxed
-           inside it at whatever integer-ish scale fits. */
-        #screen-wrap canvas {
-          width: 100%;
-          height: 100%;
-          min-width: 0;
-          min-height: 0;
-          max-width: 100%;
-          aspect-ratio: auto;
-          object-fit: contain;
-        }
+        /* basis 0, not auto: on `auto` the picture sizes the box and the box then
+           overflows the window instead of the picture shrinking to fit it. The game
+           takes the window, match or not; field.ts fits the picture and fills the rest. */
+        #screen-wrap { flex: 1 1 0; min-height: 0; width: 100%; max-width: none; aspect-ratio: auto; }
         .settings { padding: 6px 12px 10px; }
         .keys { display: block; }
       }
@@ -328,15 +321,6 @@
         body.in-match.drawer-open .drawer { position: static; padding: 0; background: none; max-width: none; }
         body.in-match.drawer-open .drawer-head { display: none; }
         .drawer { max-width: none; }
-      }
-      /* Stretch (Cam's question): the 240x160 picture pulled to whatever height is left
-         between the top and the pad. Off by default -- Emerald's sprites are 3:2 and this
-         is them squashed -- but on the phone it is his call to make, so it is a button. */
-      body.stretch #screen-wrap { flex: 1 1 0; min-height: 0; place-items: stretch; }
-      body.stretch #pad { flex: 0 0 auto; }
-      body.stretch canvas { width: 100%; height: 100%; aspect-ratio: auto; object-fit: fill; }
-      @media (hover: hover) and (pointer: fine) {
-        body.stretch #screen-wrap canvas { object-fit: fill; }
       }
       .settings {
         display: flex;
@@ -415,7 +399,6 @@
         </div>
         <div class="settings">
           <button id="mute" type="button">Mute</button>
-          <button id="stretch" type="button" aria-pressed="false">Stretch</button>
           <button id="forget-rom" type="button">Forget stored ROM</button>
           <button id="remap" type="button">Remap pad</button>
           <button id="remap-reset" type="button">Reset pad</button>
@@ -425,9 +408,11 @@
           Arrows move &middot; Z = A &middot; X = B &middot; A = L &middot; S = R &middot;
           Enter = START &middot; Shift = SELECT &middot; a gamepad works too
         </div>
-        <p class="drawer-note">Tap the picture to walk there, or tap a move to use it.</p>
+        <p class="drawer-note">Tap the map to walk there, or tap a move to use it.</p>
         </div>
         <div id="screen-wrap">
+          <!-- The field past the picture, drawn by field.ts; the picture sits over it. -->
+          <canvas id="field" width="240" height="160" aria-hidden="true"></canvas>
           <canvas id="canvas" width="240" height="160"></canvas>
           <div id="fps" class="fps" hidden></div>
         </div>

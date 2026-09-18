@@ -45,6 +45,7 @@ import { Roster, type RosterEntry } from './match/roster';
 import type { TickerMsg, MapRef } from './net/wire';
 import { World, type WorldMap } from './bots/world';
 import { TouchLayer } from './touch';
+import { FieldView } from './field';
 import { sectionInside } from './match/ring';
 import { dealParty, speciesName } from './bots/party';
 import { MatchLog, saveMatch } from './match/log';
@@ -88,7 +89,6 @@ const WORLD: DirectorWorld = {
 };
 
 const MUTE_STORAGE_KEY = 'hbr:muted';
-const STRETCH_STORAGE_KEY = 'hbr:stretch';
 const UNMUTED_VOLUME = 100;
 const NAME_STORAGE_KEY = 'hbr:name';
 const DEFAULT_NAME = 'CAM';
@@ -3083,14 +3083,24 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined)
   wireSettings(emu);
   wireDrawer();
   wireFps(emu);
-  // Tapping the picture itself (touch.ts). Needs the symbol table: without it there is
-  // no reading where we stand or which menu is up, and a tap does nothing.
+  // The picture in its box and the field drawn past it (field.ts, POK-317). Without the
+  // symbol table the picture is still placed; the field around it stays dark.
+  new FieldView({
+    emu,
+    symbols: symbols ?? null,
+    box: $('#screen-wrap') as HTMLElement,
+    lcd: $('#canvas') as HTMLCanvasElement,
+    field: $('#field') as HTMLCanvasElement,
+    pad: $('#pad') as HTMLElement,
+  }).attach();
+  // Tapping the map (touch.ts). Needs the symbol table: without it there is no reading
+  // where we stand or which menu is up, and a tap does nothing.
   if (symbols) {
     new TouchLayer({
       emu,
       canvas: $('#canvas') as HTMLCanvasElement,
+      surface: $('#screen-wrap') as HTMLElement,
       symbols,
-      stretched: () => document.body.classList.contains('stretch'),
     }).attach();
   }
 }
@@ -3099,19 +3109,6 @@ function wireDrawer(): void {
   const btn = $('#menu-btn') as HTMLButtonElement;
   btn.addEventListener('click', () => openDrawer(!document.body.classList.contains('drawer-open')));
   ($('#drawer-close') as HTMLButtonElement).addEventListener('click', () => openDrawer(false));
-  // Stretch: the picture pulled to the height left over. A choice, remembered.
-  const stretchBtn = $('#stretch') as HTMLButtonElement;
-  const applyStretch = (on: boolean) => {
-    document.body.classList.toggle('stretch', on);
-    stretchBtn.setAttribute('aria-pressed', String(on));
-    stretchBtn.textContent = on ? 'Stretch: on' : 'Stretch';
-  };
-  applyStretch(localStorage.getItem(STRETCH_STORAGE_KEY) === '1');
-  stretchBtn.addEventListener('click', () => {
-    const on = stretchBtn.getAttribute('aria-pressed') !== 'true';
-    localStorage.setItem(STRETCH_STORAGE_KEY, on ? '1' : '0');
-    applyStretch(on);
-  });
 }
 
 /** Registers the service worker (POK-246), so a second visit works with no network and

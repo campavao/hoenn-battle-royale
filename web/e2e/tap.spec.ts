@@ -103,31 +103,7 @@ test('a tap on a tile walks the trainer to it', async ({ browser }) => {
     await expect(page.locator('#menu-btn')).toBeVisible();
     await page.locator('#menu-btn').tap();
     await expect(page.locator('#drawer')).toBeVisible();
-    await expect(page.locator('#stretch')).toBeVisible();
     await page.screenshot({ path: path.join(OUT_DIR, 'tap-drawer.png') });
-
-    // Stretch (Cam's question): the picture takes the height the pad leaves, and a tap
-    // still lands on the right tile through the other geometry. Walk back the way we came.
-    await page.locator('#stretch').tap();
-    await expect(page.locator('#stretch')).toHaveAttribute('aria-pressed', 'true');
-    await page.locator('#drawer-close').tap();
-    await expect(page.locator('#drawer')).toBeHidden();
-    await page.waitForTimeout(300);
-    const tall = (await page.locator('#canvas').boundingBox())!;
-    expect(tall.height, 'taller than 3:2 allows').toBeGreaterThan(tall.width / 1.5 + 100);
-    const bx = tall.x + ((PLAYER_COL - goal!.dx) * 16 + 8) * (tall.width / 240);
-    const by = tall.y + ((PLAYER_ROW - goal!.dy) * 16 + 8) * (tall.height / 160);
-    await page.touchscreen.tap(bx, by);
-    await page.waitForFunction(
-      ([base, x, y]) => {
-        const emu = (window as unknown as EmuWindow).__hbr.emu;
-        const s16 = (v: number) => (v << 16) >> 16;
-        return s16(emu.read(base + 2, 16)) === x && s16(emu.read(base + 4, 16)) === y;
-      },
-      [symbols.gBrOwnPos, before.x, before.y],
-      { timeout: 15_000 },
-    );
-    await page.screenshot({ path: path.join(OUT_DIR, 'tap-stretched.png') });
   } finally {
     await ctx.close();
   }

@@ -73,10 +73,12 @@ const TURN_FRAMES = 12;
 
 export interface TouchDeps {
   emu: Emulator;
+  /** The emulator's 240x160 canvas: where a tap is measured from. */
   canvas: HTMLCanvasElement;
+  /** Where taps are listened for. The whole box, when the field is drawn past the
+   *  picture (field.ts): a tap on the map out there walks there too. */
+  surface?: HTMLElement;
   symbols: Map<string, number>;
-  /** True while the picture is stretched to the box rather than letterboxed in it. */
-  stretched: () => boolean;
 }
 
 interface Own {
@@ -93,30 +95,21 @@ interface Press {
   gapAfter: number;
 }
 
-/** A GBA pixel from a tap, or null when the tap fell on the letterbox. Exported for
- *  the tests; the geometry is the whole of what can go wrong on a phone. */
+/** A GBA pixel from a tap, measured from the picture's box -- which IS the picture,
+ *  240x160 at one scale, since field.ts places it. Past its edges the numbers run
+ *  negative or over 240/160: that is the field drawn around it, and in the field a tap
+ *  out there is as good as one on the picture. Null only when the box has no size. */
 export function toGbaPixel(
   rect: { left: number; top: number; width: number; height: number },
   clientX: number,
   clientY: number,
-  stretched: boolean,
 ): { x: number; y: number } | null {
   if (!rect.width || !rect.height) return null;
-  let x: number;
-  let y: number;
-  if (stretched) {
-    x = ((clientX - rect.left) / rect.width) * GBA_W;
-    y = ((clientY - rect.top) / rect.height) * GBA_H;
-  } else {
-    // object-fit: contain -- the picture keeps 3:2 and sits centred in the box.
-    const scale = Math.min(rect.width / GBA_W, rect.height / GBA_H);
-    const left = rect.left + (rect.width - GBA_W * scale) / 2;
-    const top = rect.top + (rect.height - GBA_H * scale) / 2;
-    x = (clientX - left) / scale;
-    y = (clientY - top) / scale;
-  }
-  if (x < 0 || y < 0 || x >= GBA_W || y >= GBA_H) return null;
-  return { x, y };
+  return { x: ((clientX - rect.left) / rect.width) * GBA_W, y: ((clientY - rect.top) / rect.height) * GBA_H };
+}
+
+export function onPicture(px: number, py: number): boolean {
+  return px >= 0 && py >= 0 && px < GBA_W && py < GBA_H;
 }
 
 /** Which quadrant of which battle menu a GBA pixel is on, or -1 for none. */
@@ -158,21 +151,22 @@ export class TouchLayer {
 
   attach(): void {
     const { canvas, emu } = this.deps;
+    const surface = this.deps.surface ?? canvas;
     let down: { x: number; y: number; at: number; id: number } | null = null;
-    canvas.addEventListener('pointerdown', (ev) => {
+    surface.addEventListener('pointerdown', (ev) => {
       down = { x: ev.clientX, y: ev.clientY, at: performance.now(), id: ev.pointerId };
     });
-    canvas.addEventListener('pointerup', (ev) => {
+    surface.addEventListener('pointerup', (ev) => {
       if (!down || down.id !== ev.pointerId) return;
       const moved = Math.hypot(ev.clientX - down.x, ev.clientY - down.y);
       const held = performance.now() - down.at;
       down = null;
       // A drag or a long press is not a tap.
       if (moved > 12 || held > 400) return;
-      const px = toGbaPixel(canvas.getBoundingClientRect(), ev.clientX, ev.clientY, this.deps.stretched());
+      const px = toGbaPixel(canvas.getBoundingClientRect(), ev.clientX, ev.clientY);
       if (px) this.tap(px.x, px.y);
     });
-    canvas.addEventListener('pointercancel', () => { down = null; });
+    surface.addEventListener('pointercancel', () => { down = null; });
     this.off = emu.onFrame(() => this.frame());
   }
 
@@ -241,8 +235,10 @@ export class TouchLayer {
   // ---- a tap ----------------------------------------------------------------------------
 
   private tap(px: number, py: number): void {
-    if (this.inBattle()) this.tapBattle(px, py);
-    else this.tapField(Math.floor(px / TILE), Math.floor(py / TILE));
+    if (this.inBattle()) {
+      // The menus are on the picture; the field around it is scenery here.
+      if (onPicture(px, py)) this.tapBattle(px, py);
+    } else this.tapField(Math.floor(px / TILE), Math.floor(py / TILE));
   }
 
   private tapField(col: number, row: number): void {

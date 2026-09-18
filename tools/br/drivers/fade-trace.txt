@@ -1,0 +1,1447 @@
+# fade-trace: gPaletteFade, frame by frame, through the boot warp (POK-317).
+# The page mirrors the ROM's palette fade over the field it draws past the picture, and
+# agbcc packs the struct's bitfields its own way: this is where the y/blendColor/active
+# bytes were read off, not guessed. tools/br/drive.sh fade-trace | python - dedupes.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 1
+say f1
+dump 0x02037fd4 12
+wait 1
+say f2
+dump 0x02037fd4 12
+wait 1
+say f3
+dump 0x02037fd4 12
+wait 1
+say f4
+dump 0x02037fd4 12
+wait 1
+say f5
+dump 0x02037fd4 12
+wait 1
+say f6
+dump 0x02037fd4 12
+wait 1
+say f7
+dump 0x02037fd4 12
+wait 1
+say f8
+dump 0x02037fd4 12
+wait 1
+say f9
+dump 0x02037fd4 12
+wait 1
+say f10
+dump 0x02037fd4 12
+wait 1
+say f11
+dump 0x02037fd4 12
+wait 1
+say f12
+dump 0x02037fd4 12
+wait 1
+say f13
+dump 0x02037fd4 12
+wait 1
+say f14
+dump 0x02037fd4 12
+wait 1
+say f15
+dump 0x02037fd4 12
+wait 1
+say f16
+dump 0x02037fd4 12
+wait 1
+say f17
+dump 0x02037fd4 12
+wait 1
+say f18
+dump 0x02037fd4 12
+wait 1
+say f19
+dump 0x02037fd4 12
+wait 1
+say f20
+dump 0x02037fd4 12
+wait 1
+say f21
+dump 0x02037fd4 12
+wait 1
+say f22
+dump 0x02037fd4 12
+wait 1
+say f23
+dump 0x02037fd4 12
+wait 1
+say f24
+dump 0x02037fd4 12
+wait 1
+say f25
+dump 0x02037fd4 12
+wait 1
+say f26
+dump 0x02037fd4 12
+wait 1
+say f27
+dump 0x02037fd4 12
+wait 1
+say f28
+dump 0x02037fd4 12
+wait 1
+say f29
+dump 0x02037fd4 12
+wait 1
+say f30
+dump 0x02037fd4 12
+wait 1
+say f31
+dump 0x02037fd4 12
+wait 1
+say f32
+dump 0x02037fd4 12
+wait 1
+say f33
+dump 0x02037fd4 12
+wait 1
+say f34
+dump 0x02037fd4 12
+wait 1
+say f35
+dump 0x02037fd4 12
+wait 1
+say f36
+dump 0x02037fd4 12
+wait 1
+say f37
+dump 0x02037fd4 12
+wait 1
+say f38
+dump 0x02037fd4 12
+wait 1
+say f39
+dump 0x02037fd4 12
+wait 1
+say f40
+dump 0x02037fd4 12
+wait 1
+say f41
+dump 0x02037fd4 12
+wait 1
+say f42
+dump 0x02037fd4 12
+wait 1
+say f43
+dump 0x02037fd4 12
+wait 1
+say f44
+dump 0x02037fd4 12
+wait 1
+say f45
+dump 0x02037fd4 12
+wait 1
+say f46
+dump 0x02037fd4 12
+wait 1
+say f47
+dump 0x02037fd4 12
+wait 1
+say f48
+dump 0x02037fd4 12
+wait 1
+say f49
+dump 0x02037fd4 12
+wait 1
+say f50
+dump 0x02037fd4 12
+wait 1
+say f51
+dump 0x02037fd4 12
+wait 1
+say f52
+dump 0x02037fd4 12
+wait 1
+say f53
+dump 0x02037fd4 12
+wait 1
+say f54
+dump 0x02037fd4 12
+wait 1
+say f55
+dump 0x02037fd4 12
+wait 1
+say f56
+dump 0x02037fd4 12
+wait 1
+say f57
+dump 0x02037fd4 12
+wait 1
+say f58
+dump 0x02037fd4 12
+wait 1
+say f59
+dump 0x02037fd4 12
+wait 1
+say f60
+dump 0x02037fd4 12
+wait 1
+say f61
+dump 0x02037fd4 12
+wait 1
+say f62
+dump 0x02037fd4 12
+wait 1
+say f63
+dump 0x02037fd4 12
+wait 1
+say f64
+dump 0x02037fd4 12
+wait 1
+say f65
+dump 0x02037fd4 12
+wait 1
+say f66
+dump 0x02037fd4 12
+wait 1
+say f67
+dump 0x02037fd4 12
+wait 1
+say f68
+dump 0x02037fd4 12
+wait 1
+say f69
+dump 0x02037fd4 12
+wait 1
+say f70
+dump 0x02037fd4 12
+wait 1
+say f71
+dump 0x02037fd4 12
+wait 1
+say f72
+dump 0x02037fd4 12
+wait 1
+say f73
+dump 0x02037fd4 12
+wait 1
+say f74
+dump 0x02037fd4 12
+wait 1
+say f75
+dump 0x02037fd4 12
+wait 1
+say f76
+dump 0x02037fd4 12
+wait 1
+say f77
+dump 0x02037fd4 12
+wait 1
+say f78
+dump 0x02037fd4 12
+wait 1
+say f79
+dump 0x02037fd4 12
+wait 1
+say f80
+dump 0x02037fd4 12
+wait 1
+say f81
+dump 0x02037fd4 12
+wait 1
+say f82
+dump 0x02037fd4 12
+wait 1
+say f83
+dump 0x02037fd4 12
+wait 1
+say f84
+dump 0x02037fd4 12
+wait 1
+say f85
+dump 0x02037fd4 12
+wait 1
+say f86
+dump 0x02037fd4 12
+wait 1
+say f87
+dump 0x02037fd4 12
+wait 1
+say f88
+dump 0x02037fd4 12
+wait 1
+say f89
+dump 0x02037fd4 12
+wait 1
+say f90
+dump 0x02037fd4 12
+wait 1
+say f91
+dump 0x02037fd4 12
+wait 1
+say f92
+dump 0x02037fd4 12
+wait 1
+say f93
+dump 0x02037fd4 12
+wait 1
+say f94
+dump 0x02037fd4 12
+wait 1
+say f95
+dump 0x02037fd4 12
+wait 1
+say f96
+dump 0x02037fd4 12
+wait 1
+say f97
+dump 0x02037fd4 12
+wait 1
+say f98
+dump 0x02037fd4 12
+wait 1
+say f99
+dump 0x02037fd4 12
+wait 1
+say f100
+dump 0x02037fd4 12
+wait 1
+say f101
+dump 0x02037fd4 12
+wait 1
+say f102
+dump 0x02037fd4 12
+wait 1
+say f103
+dump 0x02037fd4 12
+wait 1
+say f104
+dump 0x02037fd4 12
+wait 1
+say f105
+dump 0x02037fd4 12
+wait 1
+say f106
+dump 0x02037fd4 12
+wait 1
+say f107
+dump 0x02037fd4 12
+wait 1
+say f108
+dump 0x02037fd4 12
+wait 1
+say f109
+dump 0x02037fd4 12
+wait 1
+say f110
+dump 0x02037fd4 12
+wait 1
+say f111
+dump 0x02037fd4 12
+wait 1
+say f112
+dump 0x02037fd4 12
+wait 1
+say f113
+dump 0x02037fd4 12
+wait 1
+say f114
+dump 0x02037fd4 12
+wait 1
+say f115
+dump 0x02037fd4 12
+wait 1
+say f116
+dump 0x02037fd4 12
+wait 1
+say f117
+dump 0x02037fd4 12
+wait 1
+say f118
+dump 0x02037fd4 12
+wait 1
+say f119
+dump 0x02037fd4 12
+wait 1
+say f120
+dump 0x02037fd4 12
+wait 1
+say f121
+dump 0x02037fd4 12
+wait 1
+say f122
+dump 0x02037fd4 12
+wait 1
+say f123
+dump 0x02037fd4 12
+wait 1
+say f124
+dump 0x02037fd4 12
+wait 1
+say f125
+dump 0x02037fd4 12
+wait 1
+say f126
+dump 0x02037fd4 12
+wait 1
+say f127
+dump 0x02037fd4 12
+wait 1
+say f128
+dump 0x02037fd4 12
+wait 1
+say f129
+dump 0x02037fd4 12
+wait 1
+say f130
+dump 0x02037fd4 12
+wait 1
+say f131
+dump 0x02037fd4 12
+wait 1
+say f132
+dump 0x02037fd4 12
+wait 1
+say f133
+dump 0x02037fd4 12
+wait 1
+say f134
+dump 0x02037fd4 12
+wait 1
+say f135
+dump 0x02037fd4 12
+wait 1
+say f136
+dump 0x02037fd4 12
+wait 1
+say f137
+dump 0x02037fd4 12
+wait 1
+say f138
+dump 0x02037fd4 12
+wait 1
+say f139
+dump 0x02037fd4 12
+wait 1
+say f140
+dump 0x02037fd4 12
+wait 1
+say f141
+dump 0x02037fd4 12
+wait 1
+say f142
+dump 0x02037fd4 12
+wait 1
+say f143
+dump 0x02037fd4 12
+wait 1
+say f144
+dump 0x02037fd4 12
+wait 1
+say f145
+dump 0x02037fd4 12
+wait 1
+say f146
+dump 0x02037fd4 12
+wait 1
+say f147
+dump 0x02037fd4 12
+wait 1
+say f148
+dump 0x02037fd4 12
+wait 1
+say f149
+dump 0x02037fd4 12
+wait 1
+say f150
+dump 0x02037fd4 12
+wait 1
+say f151
+dump 0x02037fd4 12
+wait 1
+say f152
+dump 0x02037fd4 12
+wait 1
+say f153
+dump 0x02037fd4 12
+wait 1
+say f154
+dump 0x02037fd4 12
+wait 1
+say f155
+dump 0x02037fd4 12
+wait 1
+say f156
+dump 0x02037fd4 12
+wait 1
+say f157
+dump 0x02037fd4 12
+wait 1
+say f158
+dump 0x02037fd4 12
+wait 1
+say f159
+dump 0x02037fd4 12
+wait 1
+say f160
+dump 0x02037fd4 12
+wait 1
+say f161
+dump 0x02037fd4 12
+wait 1
+say f162
+dump 0x02037fd4 12
+wait 1
+say f163
+dump 0x02037fd4 12
+wait 1
+say f164
+dump 0x02037fd4 12
+wait 1
+say f165
+dump 0x02037fd4 12
+wait 1
+say f166
+dump 0x02037fd4 12
+wait 1
+say f167
+dump 0x02037fd4 12
+wait 1
+say f168
+dump 0x02037fd4 12
+wait 1
+say f169
+dump 0x02037fd4 12
+wait 1
+say f170
+dump 0x02037fd4 12
+wait 1
+say f171
+dump 0x02037fd4 12
+wait 1
+say f172
+dump 0x02037fd4 12
+wait 1
+say f173
+dump 0x02037fd4 12
+wait 1
+say f174
+dump 0x02037fd4 12
+wait 1
+say f175
+dump 0x02037fd4 12
+wait 1
+say f176
+dump 0x02037fd4 12
+wait 1
+say f177
+dump 0x02037fd4 12
+wait 1
+say f178
+dump 0x02037fd4 12
+wait 1
+say f179
+dump 0x02037fd4 12
+wait 1
+say f180
+dump 0x02037fd4 12
+wait 1
+say f181
+dump 0x02037fd4 12
+wait 1
+say f182
+dump 0x02037fd4 12
+wait 1
+say f183
+dump 0x02037fd4 12
+wait 1
+say f184
+dump 0x02037fd4 12
+wait 1
+say f185
+dump 0x02037fd4 12
+wait 1
+say f186
+dump 0x02037fd4 12
+wait 1
+say f187
+dump 0x02037fd4 12
+wait 1
+say f188
+dump 0x02037fd4 12
+wait 1
+say f189
+dump 0x02037fd4 12
+wait 1
+say f190
+dump 0x02037fd4 12
+wait 1
+say f191
+dump 0x02037fd4 12
+wait 1
+say f192
+dump 0x02037fd4 12
+wait 1
+say f193
+dump 0x02037fd4 12
+wait 1
+say f194
+dump 0x02037fd4 12
+wait 1
+say f195
+dump 0x02037fd4 12
+wait 1
+say f196
+dump 0x02037fd4 12
+wait 1
+say f197
+dump 0x02037fd4 12
+wait 1
+say f198
+dump 0x02037fd4 12
+wait 1
+say f199
+dump 0x02037fd4 12
+wait 1
+say f200
+dump 0x02037fd4 12
+wait 1
+say f201
+dump 0x02037fd4 12
+wait 1
+say f202
+dump 0x02037fd4 12
+wait 1
+say f203
+dump 0x02037fd4 12
+wait 1
+say f204
+dump 0x02037fd4 12
+wait 1
+say f205
+dump 0x02037fd4 12
+wait 1
+say f206
+dump 0x02037fd4 12
+wait 1
+say f207
+dump 0x02037fd4 12
+wait 1
+say f208
+dump 0x02037fd4 12
+wait 1
+say f209
+dump 0x02037fd4 12
+wait 1
+say f210
+dump 0x02037fd4 12
+wait 1
+say f211
+dump 0x02037fd4 12
+wait 1
+say f212
+dump 0x02037fd4 12
+wait 1
+say f213
+dump 0x02037fd4 12
+wait 1
+say f214
+dump 0x02037fd4 12
+wait 1
+say f215
+dump 0x02037fd4 12
+wait 1
+say f216
+dump 0x02037fd4 12
+wait 1
+say f217
+dump 0x02037fd4 12
+wait 1
+say f218
+dump 0x02037fd4 12
+wait 1
+say f219
+dump 0x02037fd4 12
+wait 1
+say f220
+dump 0x02037fd4 12
+wait 1
+say f221
+dump 0x02037fd4 12
+wait 1
+say f222
+dump 0x02037fd4 12
+wait 1
+say f223
+dump 0x02037fd4 12
+wait 1
+say f224
+dump 0x02037fd4 12
+wait 1
+say f225
+dump 0x02037fd4 12
+wait 1
+say f226
+dump 0x02037fd4 12
+wait 1
+say f227
+dump 0x02037fd4 12
+wait 1
+say f228
+dump 0x02037fd4 12
+wait 1
+say f229
+dump 0x02037fd4 12
+wait 1
+say f230
+dump 0x02037fd4 12
+wait 1
+say f231
+dump 0x02037fd4 12
+wait 1
+say f232
+dump 0x02037fd4 12
+wait 1
+say f233
+dump 0x02037fd4 12
+wait 1
+say f234
+dump 0x02037fd4 12
+wait 1
+say f235
+dump 0x02037fd4 12
+wait 1
+say f236
+dump 0x02037fd4 12
+wait 1
+say f237
+dump 0x02037fd4 12
+wait 1
+say f238
+dump 0x02037fd4 12
+wait 1
+say f239
+dump 0x02037fd4 12
+wait 1
+say f240
+dump 0x02037fd4 12
+wait 1
+say f241
+dump 0x02037fd4 12
+wait 1
+say f242
+dump 0x02037fd4 12
+wait 1
+say f243
+dump 0x02037fd4 12
+wait 1
+say f244
+dump 0x02037fd4 12
+wait 1
+say f245
+dump 0x02037fd4 12
+wait 1
+say f246
+dump 0x02037fd4 12
+wait 1
+say f247
+dump 0x02037fd4 12
+wait 1
+say f248
+dump 0x02037fd4 12
+wait 1
+say f249
+dump 0x02037fd4 12
+wait 1
+say f250
+dump 0x02037fd4 12
+wait 1
+say f251
+dump 0x02037fd4 12
+wait 1
+say f252
+dump 0x02037fd4 12
+wait 1
+say f253
+dump 0x02037fd4 12
+wait 1
+say f254
+dump 0x02037fd4 12
+wait 1
+say f255
+dump 0x02037fd4 12
+wait 1
+say f256
+dump 0x02037fd4 12
+wait 1
+say f257
+dump 0x02037fd4 12
+wait 1
+say f258
+dump 0x02037fd4 12
+wait 1
+say f259
+dump 0x02037fd4 12
+wait 1
+say f260
+dump 0x02037fd4 12
+wait 1
+say f261
+dump 0x02037fd4 12
+wait 1
+say f262
+dump 0x02037fd4 12
+wait 1
+say f263
+dump 0x02037fd4 12
+wait 1
+say f264
+dump 0x02037fd4 12
+wait 1
+say f265
+dump 0x02037fd4 12
+wait 1
+say f266
+dump 0x02037fd4 12
+wait 1
+say f267
+dump 0x02037fd4 12
+wait 1
+say f268
+dump 0x02037fd4 12
+wait 1
+say f269
+dump 0x02037fd4 12
+wait 1
+say f270
+dump 0x02037fd4 12
+wait 1
+say f271
+dump 0x02037fd4 12
+wait 1
+say f272
+dump 0x02037fd4 12
+wait 1
+say f273
+dump 0x02037fd4 12
+wait 1
+say f274
+dump 0x02037fd4 12
+wait 1
+say f275
+dump 0x02037fd4 12
+wait 1
+say f276
+dump 0x02037fd4 12
+wait 1
+say f277
+dump 0x02037fd4 12
+wait 1
+say f278
+dump 0x02037fd4 12
+wait 1
+say f279
+dump 0x02037fd4 12
+wait 1
+say f280
+dump 0x02037fd4 12
+wait 1
+say f281
+dump 0x02037fd4 12
+wait 1
+say f282
+dump 0x02037fd4 12
+wait 1
+say f283
+dump 0x02037fd4 12
+wait 1
+say f284
+dump 0x02037fd4 12
+wait 1
+say f285
+dump 0x02037fd4 12
+wait 1
+say f286
+dump 0x02037fd4 12
+wait 1
+say f287
+dump 0x02037fd4 12
+wait 1
+say f288
+dump 0x02037fd4 12
+wait 1
+say f289
+dump 0x02037fd4 12
+wait 1
+say f290
+dump 0x02037fd4 12
+wait 1
+say f291
+dump 0x02037fd4 12
+wait 1
+say f292
+dump 0x02037fd4 12
+wait 1
+say f293
+dump 0x02037fd4 12
+wait 1
+say f294
+dump 0x02037fd4 12
+wait 1
+say f295
+dump 0x02037fd4 12
+wait 1
+say f296
+dump 0x02037fd4 12
+wait 1
+say f297
+dump 0x02037fd4 12
+wait 1
+say f298
+dump 0x02037fd4 12
+wait 1
+say f299
+dump 0x02037fd4 12
+wait 1
+say f300
+dump 0x02037fd4 12
+wait 1
+say f301
+dump 0x02037fd4 12
+wait 1
+say f302
+dump 0x02037fd4 12
+wait 1
+say f303
+dump 0x02037fd4 12
+wait 1
+say f304
+dump 0x02037fd4 12
+wait 1
+say f305
+dump 0x02037fd4 12
+wait 1
+say f306
+dump 0x02037fd4 12
+wait 1
+say f307
+dump 0x02037fd4 12
+wait 1
+say f308
+dump 0x02037fd4 12
+wait 1
+say f309
+dump 0x02037fd4 12
+wait 1
+say f310
+dump 0x02037fd4 12
+wait 1
+say f311
+dump 0x02037fd4 12
+wait 1
+say f312
+dump 0x02037fd4 12
+wait 1
+say f313
+dump 0x02037fd4 12
+wait 1
+say f314
+dump 0x02037fd4 12
+wait 1
+say f315
+dump 0x02037fd4 12
+wait 1
+say f316
+dump 0x02037fd4 12
+wait 1
+say f317
+dump 0x02037fd4 12
+wait 1
+say f318
+dump 0x02037fd4 12
+wait 1
+say f319
+dump 0x02037fd4 12
+wait 1
+say f320
+dump 0x02037fd4 12
+wait 1
+say f321
+dump 0x02037fd4 12
+wait 1
+say f322
+dump 0x02037fd4 12
+wait 1
+say f323
+dump 0x02037fd4 12
+wait 1
+say f324
+dump 0x02037fd4 12
+wait 1
+say f325
+dump 0x02037fd4 12
+wait 1
+say f326
+dump 0x02037fd4 12
+wait 1
+say f327
+dump 0x02037fd4 12
+wait 1
+say f328
+dump 0x02037fd4 12
+wait 1
+say f329
+dump 0x02037fd4 12
+wait 1
+say f330
+dump 0x02037fd4 12
+wait 1
+say f331
+dump 0x02037fd4 12
+wait 1
+say f332
+dump 0x02037fd4 12
+wait 1
+say f333
+dump 0x02037fd4 12
+wait 1
+say f334
+dump 0x02037fd4 12
+wait 1
+say f335
+dump 0x02037fd4 12
+wait 1
+say f336
+dump 0x02037fd4 12
+wait 1
+say f337
+dump 0x02037fd4 12
+wait 1
+say f338
+dump 0x02037fd4 12
+wait 1
+say f339
+dump 0x02037fd4 12
+wait 1
+say f340
+dump 0x02037fd4 12
+wait 1
+say f341
+dump 0x02037fd4 12
+wait 1
+say f342
+dump 0x02037fd4 12
+wait 1
+say f343
+dump 0x02037fd4 12
+wait 1
+say f344
+dump 0x02037fd4 12
+wait 1
+say f345
+dump 0x02037fd4 12
+wait 1
+say f346
+dump 0x02037fd4 12
+wait 1
+say f347
+dump 0x02037fd4 12
+wait 1
+say f348
+dump 0x02037fd4 12
+wait 1
+say f349
+dump 0x02037fd4 12
+wait 1
+say f350
+dump 0x02037fd4 12
+wait 1
+say f351
+dump 0x02037fd4 12
+wait 1
+say f352
+dump 0x02037fd4 12
+wait 1
+say f353
+dump 0x02037fd4 12
+wait 1
+say f354
+dump 0x02037fd4 12
+wait 1
+say f355
+dump 0x02037fd4 12
+wait 1
+say f356
+dump 0x02037fd4 12
+wait 1
+say f357
+dump 0x02037fd4 12
+wait 1
+say f358
+dump 0x02037fd4 12
+wait 1
+say f359
+dump 0x02037fd4 12
+wait 1
+say f360
+dump 0x02037fd4 12
+wait 1
+say f361
+dump 0x02037fd4 12
+wait 1
+say f362
+dump 0x02037fd4 12
+wait 1
+say f363
+dump 0x02037fd4 12
+wait 1
+say f364
+dump 0x02037fd4 12
+wait 1
+say f365
+dump 0x02037fd4 12
+wait 1
+say f366
+dump 0x02037fd4 12
+wait 1
+say f367
+dump 0x02037fd4 12
+wait 1
+say f368
+dump 0x02037fd4 12
+wait 1
+say f369
+dump 0x02037fd4 12
+wait 1
+say f370
+dump 0x02037fd4 12
+wait 1
+say f371
+dump 0x02037fd4 12
+wait 1
+say f372
+dump 0x02037fd4 12
+wait 1
+say f373
+dump 0x02037fd4 12
+wait 1
+say f374
+dump 0x02037fd4 12
+wait 1
+say f375
+dump 0x02037fd4 12
+wait 1
+say f376
+dump 0x02037fd4 12
+wait 1
+say f377
+dump 0x02037fd4 12
+wait 1
+say f378
+dump 0x02037fd4 12
+wait 1
+say f379
+dump 0x02037fd4 12
+wait 1
+say f380
+dump 0x02037fd4 12
+wait 1
+say f381
+dump 0x02037fd4 12
+wait 1
+say f382
+dump 0x02037fd4 12
+wait 1
+say f383
+dump 0x02037fd4 12
+wait 1
+say f384
+dump 0x02037fd4 12
+wait 1
+say f385
+dump 0x02037fd4 12
+wait 1
+say f386
+dump 0x02037fd4 12
+wait 1
+say f387
+dump 0x02037fd4 12
+wait 1
+say f388
+dump 0x02037fd4 12
+wait 1
+say f389
+dump 0x02037fd4 12
+wait 1
+say f390
+dump 0x02037fd4 12
+wait 1
+say f391
+dump 0x02037fd4 12
+wait 1
+say f392
+dump 0x02037fd4 12
+wait 1
+say f393
+dump 0x02037fd4 12
+wait 1
+say f394
+dump 0x02037fd4 12
+wait 1
+say f395
+dump 0x02037fd4 12
+wait 1
+say f396
+dump 0x02037fd4 12
+wait 1
+say f397
+dump 0x02037fd4 12
+wait 1
+say f398
+dump 0x02037fd4 12
+wait 1
+say f399
+dump 0x02037fd4 12
+wait 1
+say f400
+dump 0x02037fd4 12
+wait 1
+say f401
+dump 0x02037fd4 12
+wait 1
+say f402
+dump 0x02037fd4 12
+wait 1
+say f403
+dump 0x02037fd4 12
+wait 1
+say f404
+dump 0x02037fd4 12
+wait 1
+say f405
+dump 0x02037fd4 12
+wait 1
+say f406
+dump 0x02037fd4 12
+wait 1
+say f407
+dump 0x02037fd4 12
+wait 1
+say f408
+dump 0x02037fd4 12
+wait 1
+say f409
+dump 0x02037fd4 12
+wait 1
+say f410
+dump 0x02037fd4 12
+wait 1
+say f411
+dump 0x02037fd4 12
+wait 1
+say f412
+dump 0x02037fd4 12
+wait 1
+say f413
+dump 0x02037fd4 12
+wait 1
+say f414
+dump 0x02037fd4 12
+wait 1
+say f415
+dump 0x02037fd4 12
+wait 1
+say f416
+dump 0x02037fd4 12
+wait 1
+say f417
+dump 0x02037fd4 12
+wait 1
+say f418
+dump 0x02037fd4 12
+wait 1
+say f419
+dump 0x02037fd4 12
+wait 1
+say f420
+dump 0x02037fd4 12
+wait 1
+say f421
+dump 0x02037fd4 12
+wait 1
+say f422
+dump 0x02037fd4 12
+wait 1
+say f423
+dump 0x02037fd4 12
+wait 1
+say f424
+dump 0x02037fd4 12
+wait 1
+say f425
+dump 0x02037fd4 12
+wait 1
+say f426
+dump 0x02037fd4 12
+wait 1
+say f427
+dump 0x02037fd4 12
+wait 1
+say f428
+dump 0x02037fd4 12
+wait 1
+say f429
+dump 0x02037fd4 12
+wait 1
+say f430
+dump 0x02037fd4 12
+wait 1
+say f431
+dump 0x02037fd4 12
+wait 1
+say f432
+dump 0x02037fd4 12
+wait 1
+say f433
+dump 0x02037fd4 12
+wait 1
+say f434
+dump 0x02037fd4 12
+wait 1
+say f435
+dump 0x02037fd4 12
+wait 1
+say f436
+dump 0x02037fd4 12
+wait 1
+say f437
+dump 0x02037fd4 12
+wait 1
+say f438
+dump 0x02037fd4 12
+wait 1
+say f439
+dump 0x02037fd4 12
+wait 1
+say f440
+dump 0x02037fd4 12
+wait 1
+say f441
+dump 0x02037fd4 12
+wait 1
+say f442
+dump 0x02037fd4 12
+wait 1
+say f443
+dump 0x02037fd4 12
+wait 1
+say f444
+dump 0x02037fd4 12
+wait 1
+say f445
+dump 0x02037fd4 12
+wait 1
+say f446
+dump 0x02037fd4 12
+wait 1
+say f447
+dump 0x02037fd4 12
+wait 1
+say f448
+dump 0x02037fd4 12
+wait 1
+say f449
+dump 0x02037fd4 12
+wait 1
+say f450
+dump 0x02037fd4 12
+wait 1
+say f451
+dump 0x02037fd4 12
+wait 1
+say f452
+dump 0x02037fd4 12
+wait 1
+say f453
+dump 0x02037fd4 12
+wait 1
+say f454
+dump 0x02037fd4 12
+wait 1
+say f455
+dump 0x02037fd4 12
+wait 1
+say f456
+dump 0x02037fd4 12
+wait 1
+say f457
+dump 0x02037fd4 12
+wait 1
+say f458
+dump 0x02037fd4 12
+wait 1
+say f459
+dump 0x02037fd4 12
+wait 1
+say f460
+dump 0x02037fd4 12
+wait 1
+say f461
+dump 0x02037fd4 12
+wait 1
+say f462
+dump 0x02037fd4 12
+wait 1
+say f463
+dump 0x02037fd4 12
+wait 1
+say f464
+dump 0x02037fd4 12
+wait 1
+say f465
+dump 0x02037fd4 12
+wait 1
+say f466
+dump 0x02037fd4 12
+wait 1
+say f467
+dump 0x02037fd4 12
+wait 1
+say f468
+dump 0x02037fd4 12
+wait 1
+say f469
+dump 0x02037fd4 12
+wait 1
+say f470
+dump 0x02037fd4 12
+wait 1
+say f471
+dump 0x02037fd4 12
+wait 1
+say f472
+dump 0x02037fd4 12
+wait 1
+say f473
+dump 0x02037fd4 12
+wait 1
+say f474
+dump 0x02037fd4 12
+wait 1
+say f475
+dump 0x02037fd4 12
+wait 1
+say f476
+dump 0x02037fd4 12
+wait 1
+say f477
+dump 0x02037fd4 12
+wait 1
+say f478
+dump 0x02037fd4 12
+wait 1
+say f479
+dump 0x02037fd4 12
+wait 1
+say f480
+dump 0x02037fd4 12
+say ok
