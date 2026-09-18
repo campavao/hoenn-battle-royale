@@ -1,9 +1,10 @@
 # start-menu: in a match the START menu is POKEMON / BAG / <name> / EXIT, and the
-# options are pinned to SET + FAST text (optionsWord at SaveBlock2+0x14 = 0x0202).
+# options are pinned to SET + FAST text + no battle animations (optionsWord at
+# SaveBlock2+0x14 = 0x0602: textSpeed 2, battleStyle SET, battleSceneOff).
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
-expect u16 *gSaveBlock2Ptr+0x14 0x0202
+expect u16 *gSaveBlock2Ptr+0x14 0x0602
 tap START
 wait 40
 shot menu

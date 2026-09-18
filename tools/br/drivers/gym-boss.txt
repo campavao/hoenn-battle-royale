@@ -74,13 +74,15 @@ wait 70
 shot won
 tap B
 wait 70
+# the purse line is up, drawn, on the first frames back on the map -- one press past
+# the money text now that battle animations are off (it lasts 90 frames; three presses
+# used to be owed here and the third now lands after it has gone)
+expectge u8 gBrHud+0x178 1
+shot line
 tap B
 wait 70
 tap B
-wait 40
-# the purse line is up, drawn, on the first frames back on the map
-expectge u8 gBrHud+0x178 1
-shot line
+wait 70
 tap B
 wait 70
 tap B

@@ -161,7 +161,11 @@
       canvas { image-rendering: pixelated; display: block; }
       #field { position: absolute; left: 0; top: 0; }
       #overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
-      #canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; }
+      /* No object-fit: field.ts sizes the canvas to its buffer's own aspect, and Firefox
+         composes object-fit with the clip-path that hides the band into a picture
+         squashed to two thirds with black bars (Cam's 2026-09-18 video, "everything got
+         squished"). */
+      #canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
       /* In a match the pad floats over the bottom of the field rather than under the
          picture (the reference: thumbs over the map). Only its controls take a touch;
          the map between them is tappable. */

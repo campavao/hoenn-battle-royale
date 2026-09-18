@@ -72,3 +72,8 @@ web/playwright-report/
 .claude/
 
 .vercel
+
+# Play-test video transcripts keep their text; the frame grabs are regenerated from the video.
+docs/playtests/*/frames/
+docs/playtests/*/*.jpg
+docs/playtests/*/audio.wav

@@ -211,9 +211,12 @@ static void StartGameAt(const struct BrBoot *b)
 
     // (CB2_LoadMap clears the field callbacks itself; a fresh game has no Safari flag.)
     Sav2_ClearSetDefault();
-    // Always SET, always fast text: an option would be a lie once the match runs.
+    // Always SET, always fast text, and no battle animations: an option would be a lie
+    // once the match runs, and the clock is the point (Cam, 2026-09-18 play-test: "maybe
+    // animations off by default ... some of these transitions really take a minute").
     gSaveBlock2Ptr->optionsBattleStyle = OPTIONS_BATTLE_STYLE_SET;
     gSaveBlock2Ptr->optionsTextSpeed = OPTIONS_TEXT_SPEED_FAST;
+    gSaveBlock2Ptr->optionsBattleSceneOff = TRUE;
     m4aMPlayAllStop();
     StopMapMusic();
     NewGameInitData();

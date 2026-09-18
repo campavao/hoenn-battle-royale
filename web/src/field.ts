@@ -64,6 +64,21 @@ const SB1_MAP_NUM = 5;
  *  the u16 at +6 is blendColor:15, active:1. y runs 0..16, 16 = all blendColor. */
 const FADE_Y_WORD = 4;
 const FADE_COLOR_WORD = 6;
+/** `multipurpose1` at +0: during a fade, the bitmask of palettes it touches (bits 0..15
+ *  the BG palettes, 16..31 the OBJ palettes). A catch's white flash fades only OBJ
+ *  palettes, and the field's ground is BG: the composite follows a fade only when it
+ *  reaches the BG palettes (Cam's 2026-09-18 play-test: the map going white around a
+ *  battle picture that had not). */
+const FADE_SELECTED = 0;
+const FADE_BG_PALETTES = 0xffff;
+/** A map load leaves y at 0 for ~13 frames before its fade-in; a hold that lasts longer
+ *  than a second is not that, it is a fade the ROM never started (after a battle, say),
+ *  and the field is visible under it. */
+const HELD_FADE_MAX = 60;
+/** `struct BrPick` (include/br/br_pick.h): active at 0 -- the drop map is up. It runs
+ *  under the overworld's callback with the region map's BG state, so the band would be
+ *  its tilemap's garbage rows. */
+const PICK_ACTIVE = 0;
 
 // The people (POK-318). The ROM draws an object only inside its window and marks its
 // sprite invisible the moment it is off screen (UpdateObjectEventOffscreen), so the page
@@ -73,6 +88,11 @@ const OBJ_COUNT = 16;
 const OBJ_SIZE = 0x24;
 const OBJ_ACTIVE_BYTE = 0; // bit 0
 const OBJ_INVISIBLE_BYTE = 1; // bit 5
+/** `offScreen`, byte 1 bit 6: UpdateObjectEventOffscreen's own verdict, which is the
+ *  only reason the overlay draws a sprite. A sprite hidden any other way -- a beaten
+ *  trainer blinking out, a script's `hide` -- stays hidden (Cam's 2026-09-18 play-test:
+ *  "the trainer that I just beat is still on the map... flashing above"). */
+const OBJ_OFFSCREEN_BIT = 0x40;
 const OBJ_PLAYER_BYTE = 2; // bit 0
 const OBJ_SPRITE_ID = 4;
 const OBJ_GFX = 5;
@@ -143,7 +163,8 @@ export interface FieldSprite {
   /** The sprite's top-left, in the picture's pixels (may be outside it). */
   x: number;
   y: number;
-  /** The ROM marked the sprite invisible: it is past the picture the core draws. */
+  /** The ROM hid the object for being past the picture the core draws (its offScreen
+   *  bit), and for no other reason: the overlay's cue. */
   hidden: boolean;
 }
 
@@ -242,10 +263,27 @@ export function layoutField(boxW: number, boxH: number, bottomInset = 0): FieldL
 }
 
 /** Where the core's whole picture -- the LCD plus its band -- sits on the field canvas,
- *  in GBA pixels, given where the LCD was placed. */
-export function pictureBox(lay: FieldLayout, band: Band | null): { left: number; top: number; width: number; height: number } {
+ *  in GBA pixels, given where the LCD was placed. `canvas` is the core's own buffer
+ *  size, which is the truth of what is being drawn: the element is always sized to it,
+ *  so a band the page believes in and a buffer that lacks it (or the reverse) can never
+ *  squash or stretch the picture (Cam's 2026-09-18 video, "everything got squished":
+ *  a 256-row buffer in an element sized for 160). The band only says where the LCD
+ *  sits inside the buffer. */
+export function pictureBox(
+  lay: FieldLayout,
+  band: Band | null,
+  canvas: { width: number; height: number } = { width: GBA_W + (band?.left ?? 0) + (band?.right ?? 0), height: GBA_H + (band?.top ?? 0) + (band?.bottom ?? 0) },
+): { left: number; top: number; width: number; height: number } {
   const b = band ?? { left: 0, top: 0, right: 0, bottom: 0 };
-  return { left: lay.lcdCol - b.left, top: lay.lcdRow - b.top, width: GBA_W + b.left + b.right, height: GBA_H + b.top + b.bottom };
+  return { left: lay.lcdCol - b.left, top: lay.lcdRow - b.top, width: canvas.width, height: canvas.height };
+}
+
+/** The band to lay out with: what the core was asked for, or, when the page has no
+ *  answer but the buffer is plainly bigger than the LCD, the one band this shell ever
+ *  asks for. */
+export function bandOf(asked: Band | null, canvas: { width: number; height: number }): Band | null {
+  if (asked) return asked;
+  return canvas.width > GBA_W || canvas.height > GBA_H ? BAND : null;
 }
 
 /** The LCD's own box inside the picture canvas's box on screen (CSS pixels). */
@@ -314,6 +352,9 @@ export class FieldView {
   private images = new Map<string, HTMLImageElement>();
   private lay: FieldLayout = { scale: 0, cols: 0, rows: 0, lcdCol: 0, lcdRow: 0 };
   private band: Band | null = null;
+  /** The core's buffer size the layout was made for; a change re-lays out. */
+  private canvasW = 0;
+  private canvasH = 0;
   /** The band is clipped off the picture while the ROM is not on the field. */
   private clipped: boolean | null = null;
   /** The state the picture on screen was drawn from: one frame behind the struct. */
@@ -359,16 +400,20 @@ export class FieldView {
     if (pad && getComputedStyle(pad).position === 'absolute') inset = pad.getBoundingClientRect().height;
     const lay = layoutField(w, h, inset);
     if (!lay.scale) return;
-    const band = this.deps.emu.viewport;
+    const band = bandOf(this.deps.emu.viewport, lcd);
     const sameBand = (band === null) === (this.band === null)
       && (!band || !this.band || (band.left === this.band.left && band.top === this.band.top && band.right === this.band.right && band.bottom === this.band.bottom));
-    const same = sameBand && lay.scale === this.lay.scale && lay.cols === this.lay.cols && lay.rows === this.lay.rows
+    const same = sameBand && lcd.width === this.canvasW && lcd.height === this.canvasH
+      && lay.scale === this.lay.scale && lay.cols === this.lay.cols && lay.rows === this.lay.rows
       && lay.lcdCol === this.lay.lcdCol && lay.lcdRow === this.lay.lcdRow;
     if (same) return;
     this.lay = lay;
     this.band = band ? { ...band } : null;
-    // The core's canvas is the LCD plus its band; the LCD lands where the layout put it.
-    const pic = pictureBox(lay, this.band);
+    this.canvasW = lcd.width;
+    this.canvasH = lcd.height;
+    // The core's canvas is the LCD plus its band; the LCD lands where the layout put it,
+    // and the element is the buffer's own size at the layout's scale, nothing else.
+    const pic = pictureBox(lay, this.band, lcd);
     lcd.style.left = `${pic.left * lay.scale}px`;
     lcd.style.top = `${pic.top * lay.scale}px`;
     lcd.style.width = `${pic.width * lay.scale}px`;
@@ -413,14 +458,20 @@ export class FieldView {
   // ---- every frame ----------------------------------------------------------------------
 
   private held = false;
+  private heldFor = 0;
   private shake = 0;
 
   private frame(): void {
+    // The core sizes its buffer when it loads a game; a reboot can change it under us.
+    const { lcd } = this.deps;
+    if (lcd.width !== this.canvasW || lcd.height !== this.canvasH) this.layout();
     const cur = this.read();
     if (this.prev) this.draw(this.prev);
     this.clip(cur?.onField ?? false);
     if (cur) {
       this.held = heldFade(this.prev, cur, this.held);
+      this.heldFor = this.held ? this.heldFor + 1 : 0;
+      if (this.heldFor > HELD_FADE_MAX) this.held = false;
       if (this.held) cur.fade = 16;
       // The ring's bleed: the timer reloads the frame it bites. The whole box shakes,
       // picture and field together; the pad is not in the box and stays put.
@@ -454,6 +505,12 @@ export class FieldView {
     const fade = fadeBase === undefined
       ? { y: 0, color: 0, active: false }
       : fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16));
+    // A fade that leaves the BG palettes alone leaves the map alone.
+    if (fadeBase !== undefined && fade.active && (emu.read(fadeBase + FADE_SELECTED, 32) & FADE_BG_PALETTES) === 0) {
+      fade.y = 0;
+      fade.active = false;
+    }
+    const pick = this.sym('gBrPick');
     return {
       group: emu.read(p + SB1_MAP_GROUP, 8),
       num: emu.read(p + SB1_MAP_NUM, 8),
@@ -468,7 +525,8 @@ export class FieldView {
       fog: this.readFog(),
       outside: ring !== undefined && emu.read(ring + RING_OUTSIDE, 8) !== 0,
       ringTimer: ring === undefined ? 0 : emu.read(ring + RING_TIMER, 16),
-      onField: main !== undefined && cb2 !== undefined && (emu.read(main + MAIN_CALLBACK2, 32) & ~1) === cb2,
+      onField: main !== undefined && cb2 !== undefined && (emu.read(main + MAIN_CALLBACK2, 32) & ~1) === cb2
+        && !(pick !== undefined && emu.read(pick + PICK_ACTIVE, 8) !== 0),
     };
   }
 
@@ -501,7 +559,8 @@ export class FieldView {
     for (let i = 0; i < OBJ_COUNT; i++) {
       const o = objs + i * OBJ_SIZE;
       if (!(emu.read(o + OBJ_ACTIVE_BYTE, 8) & 1)) continue;
-      if (emu.read(o + OBJ_INVISIBLE_BYTE, 8) & 0x20) continue;
+      const bits = emu.read(o + OBJ_INVISIBLE_BYTE, 8);
+      if (bits & 0x20) continue;
       if (emu.read(o + OBJ_PLAYER_BYTE, 8) & 1) continue;
       let gfx = emu.read(o + OBJ_GFX, 8);
       if (gfx >= GFX_VARS) gfx = emu.read(sb1 + SB1_VARS + 2 * (VAR_OBJ_GFX_ID_0 + gfx - GFX_VARS - 0x4000), 16) & 0xff;
@@ -509,11 +568,15 @@ export class FieldView {
       const s = sprs + emu.read(o + OBJ_SPRITE_ID, 8) * SPR_SIZE;
       const flags = emu.read(s + SPR_FLAGS, 16);
       if (!(flags & 1)) continue;
+      // A sprite the ROM hid for a reason other than the picture's edge is nobody's to
+      // draw: not under the picture (the band would show it anyway) and not over it.
+      const offScreen = (bits & OBJ_OFFSCREEN_BIT) !== 0;
+      if ((flags & 4) && !offScreen) continue;
       const onCamera = (flags & 2) !== 0;
       const x = s16(emu.read(s + SPR_X, 16)) + s16(emu.read(s + SPR_X2, 16)) + s8(emu.read(s + SPR_CTC_X, 8)) + (onCamera ? coX : 0);
       const y = s16(emu.read(s + SPR_Y, 16)) + s16(emu.read(s + SPR_Y2, 16)) + s8(emu.read(s + SPR_CTC_Y, 8)) + (onCamera ? coY : 0);
       const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
-      out.push({ gfx, frame, hFlip: (flags & 0x100) !== 0, x, y, hidden: (flags & 4) !== 0 });
+      out.push({ gfx, frame, hFlip: (flags & 0x100) !== 0, x, y, hidden: offScreen });
     }
     return out;
   }

@@ -66,6 +66,10 @@ test('a phone gets the screen and both thumbs, either way up', async ({ browser 
       expect(canvas.height, 'the core draws the band above and below').toBeCloseTo(((160 + band.top + band.bottom) * picture.width) / 240, 0);
       expect(canvas.y, 'the band above starts higher than the picture').toBeLessThan(picture.y);
     }
+    // The element's aspect is the buffer's aspect, whatever the band: a 256-row buffer in
+    // an element sized for 160 was "everything got squished" (Cam, 2026-09-18).
+    const buffer = await page.evaluate(() => { const c = document.querySelector('#canvas') as HTMLCanvasElement; return { w: c.width, h: c.height }; });
+    expect(canvas.width / canvas.height, 'the picture is never squashed or stretched').toBeCloseTo(buffer.w / buffer.h, 2);
     expect(field.width).toBeGreaterThanOrEqual(screen.width - 2);
     expect(field.height).toBeGreaterThanOrEqual(screen.height - 2);
     await page.screenshot({ path: path.join(OUT_DIR, 'phone-portrait.png') });
