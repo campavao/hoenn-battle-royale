@@ -14,7 +14,7 @@ named; when one is created later, put its id at the top of the entry and leave t
 
 ---
 
-## 2026-09-18, Cam, the first video play-test (desktop Firefox, rom ea0d106)
+## 2026-09-18, Cam, the first video play-test (desktop Firefox, rom ea0d106; fixes live as rom 304b564)
 
 **How this one was read.** Cam recorded the browser while playing and talking, and
 `tools/br/transcribe.py "<video>"` turned it into `docs/playtests/<video>/transcript.md`
