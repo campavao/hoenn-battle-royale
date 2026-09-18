@@ -78,6 +78,47 @@ const SPR_ANIM_CMD = 0x2b;
 const SPR_FLAGS = 0x3e; // u16: inUse 1, coordOffsetEnabled 2, invisible 4, hFlip 0x100
 const ROM_BASE = 0x08000000;
 
+// The fog (WEATHER_FOG_HORIZONTAL, what the ring's outside looks like): twenty 64x64
+// sprites tiling the screen, scrolled with the camera and drifting left a pixel every
+// four frames (FogHorizontal_Main), alpha-blended fog*EVA/16 + ground*EVB/16 with the
+// coefficients easing to 12/8. `struct Weather` (include/field_weather.h), offsets
+// probed with the compiler:
+const WEATHER_CURR = 0x6d0;
+const WEATHER_FOG_X = 0x6ee;
+const WEATHER_EVA = 0x730;
+const WEATHER_EVB = 0x732;
+const WEATHER_FOG_HORIZONTAL = 6;
+const FOG_TILE = 64;
+/** `struct BrRing` (include/br/br_ring.h): outside, and the frames to the next bleed. */
+const RING_OUTSIDE = 5;
+const RING_TIMER = 8;
+/** The shake on a fog bleed (Cam: "like as if a Pokémon were poisoned"), in frames. */
+export const SHAKE_FRAMES = 16;
+
+export interface Fog {
+  /** The fog tile's origin on the picture, in its pixels, modulo the tile. */
+  x: number;
+  y: number;
+  eva: number;
+  evb: number;
+}
+
+/** Where the fog tiles sit: the sprite columns start at the scroll position and the rows
+ *  follow the camera's vertical offset, both modulo the 64-pixel tile. */
+export function fogOrigin(scrollPosX: number, coordOffsetY: number): { x: number; y: number } {
+  const mod = (v: number) => ((v % FOG_TILE) + FOG_TILE) % FOG_TILE;
+  return { x: mod(scrollPosX), y: mod(coordOffsetY & 0xff) };
+}
+
+/** The box's offset on frame `n` of a shake, counting down from SHAKE_FRAMES: side to
+ *  side every two frames, dying out. */
+export function shakeOffset(n: number): { dx: number; dy: number } {
+  if (n <= 0) return { dx: 0, dy: 0 };
+  const amp = Math.ceil((3 * n) / SHAKE_FRAMES);
+  const sign = (n >> 1) & 1 ? -1 : 1;
+  return { dx: sign * amp, dy: (n & 1 ? 1 : 0) * Math.min(1, amp) };
+}
+
 export interface FieldSprite {
   gfx: number;
   frame: number;
@@ -117,6 +158,10 @@ export interface Camera {
   fadeColor: number;
   fadeActive: boolean;
   sprites: FieldSprite[];
+  fog: Fog | null;
+  /** Outside the ring, and the ring's frames to the next bleed. */
+  outside: boolean;
+  ringTimer: number;
 }
 
 /** The sub-tile part of the picture's offset from gFieldCamera.x or .y. */
@@ -294,6 +339,7 @@ export class FieldView {
   // ---- every frame ----------------------------------------------------------------------
 
   private held = false;
+  private shake = 0;
 
   private frame(): void {
     const cur = this.read();
@@ -301,8 +347,16 @@ export class FieldView {
     if (cur) {
       this.held = heldFade(this.prev, cur, this.held);
       if (this.held) cur.fade = 16;
+      // The ring's bleed: the timer reloads the frame it bites. The whole box shakes,
+      // picture and field together; the pad is not in the box and stays put.
+      if (cur.outside && this.prev && cur.ringTimer > this.prev.ringTimer) this.shake = SHAKE_FRAMES;
     }
     this.prev = cur;
+    if (this.shake > 0) {
+      const { dx, dy } = shakeOffset(this.shake);
+      this.deps.box.style.transform = `translate(${dx * this.lay.scale}px, ${dy * this.lay.scale}px)`;
+      if (--this.shake === 0) this.deps.box.style.transform = '';
+    }
   }
 
   private sym(name: string): number | undefined {
@@ -318,6 +372,7 @@ export class FieldView {
     if (!p) return null;
     const s16 = (v: number) => (v << 16) >> 16;
     const s32 = (v: number) => v | 0;
+    const ring = this.sym('gBrRing');
     const fadeBase = this.sym('gPaletteFade');
     const fade = fadeBase === undefined
       ? { y: 0, color: 0, active: false }
@@ -333,7 +388,23 @@ export class FieldView {
       fadeColor: fade.color,
       fadeActive: fade.active,
       sprites: this.readSprites(p),
+      fog: this.readFog(),
+      outside: ring !== undefined && emu.read(ring + RING_OUTSIDE, 8) !== 0,
+      ringTimer: ring === undefined ? 0 : emu.read(ring + RING_TIMER, 16),
     };
+  }
+
+  private readFog(): Fog | null {
+    const weather = this.sym('gWeather');
+    const offY = this.sym('gSpriteCoordOffsetY');
+    if (weather === undefined || offY === undefined) return null;
+    const { emu } = this.deps;
+    if (emu.read(weather + WEATHER_CURR, 8) !== WEATHER_FOG_HORIZONTAL) return null;
+    const eva = emu.read(weather + WEATHER_EVA, 16);
+    const evb = emu.read(weather + WEATHER_EVB, 16);
+    if (!eva) return null;
+    const { x, y } = fogOrigin(emu.read(weather + WEATHER_FOG_X, 16), ((emu.read(offY, 16) << 16) >> 16));
+    return { x, y, eva, evb };
   }
 
   /** Every object the ROM has on the map except the player, where its sprite is. */
@@ -382,6 +453,29 @@ export class FieldView {
     return img.complete && img.naturalWidth > 0 ? img : null;
   }
 
+  /** The fog over the ground, under the people (its sprites are last in OAM, so every
+   *  other sprite wins where they overlap). The GBA's blend is fog*EVA/16 + ground*EVB/16,
+   *  clamped: the ground darkened to EVB/16, then the fog added at EVA/16. */
+  private drawFog(ctx: CanvasRenderingContext2D, fog: Fog): boolean {
+    const tile = this.image('fog', 'field-sprites');
+    if (!tile) return false;
+    const lay = this.lay;
+    ctx.globalAlpha = Math.max(0, 1 - fog.evb / 16);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, lay.cols, lay.rows);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = Math.min(1, fog.eva / 16);
+    const mod = (v: number) => ((v % FOG_TILE) + FOG_TILE) % FOG_TILE;
+    const x0 = mod(lay.lcdCol + fog.x) - FOG_TILE;
+    const y0 = mod(lay.lcdRow + fog.y) - FOG_TILE;
+    for (let y = y0; y < lay.rows; y += FOG_TILE) {
+      for (let x = x0; x < lay.cols; x += FOG_TILE) ctx.drawImage(tile, x, y);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    return true;
+  }
+
   /** The people, bottom-most last so a sprite further down the map is in front. */
   private drawSprites(ctx: CanvasRenderingContext2D, c: Camera): boolean {
     let complete = true;
@@ -413,7 +507,8 @@ export class FieldView {
     if (!lay.scale) return;
     const map = this.byRef.get(`${c.group}:${c.num}`);
     const people = c.sprites.map((s) => `${s.gfx}/${s.frame}/${s.hFlip ? 1 : 0}/${s.x}/${s.y}`).join(',');
-    const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}`;
+    const fog = c.fog ? `${c.fog.x}/${c.fog.y}/${c.fog.eva}/${c.fog.evb}` : '';
+    const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}`;
     if (key === this.drawn) return;
     const ctx = field.getContext('2d');
     if (!ctx) return;
@@ -451,6 +546,7 @@ export class FieldView {
         if (img) ctx.drawImage(img, n.x - ox, n.y - oy);
         else complete = false;
       }
+      if (c.fog && !this.drawFog(ctx, c.fog)) complete = false;
       if (!this.drawSprites(ctx, c)) complete = false;
     }
 

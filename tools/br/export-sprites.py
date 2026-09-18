@@ -131,6 +131,20 @@ def main():
         sheet.save(os.path.join(OUT, f'{gfx_id}.png'), optimize=True)
         out[str(gfx_id)] = {'name': name[len('gObjectEventGraphicsInfo_'):], 'w': w, 'h': h, 'frames': len(table)}
 
+    # The fog (WEATHER_FOG_HORIZONTAL): one 64x64 tile the ROM repeats over the screen,
+    # with graphics/weather/fog.pal -- purple, Cam's ask -- so the page's fog past the
+    # picture is the ROM's fog, colour for colour.
+    fog = Image.open(os.path.join(ROOT, 'graphics', 'weather', 'fog_horizontal.png')).convert('P')
+    fog_pal = load_palette(os.path.join(ROOT, 'graphics', 'weather', 'fog.pal'))
+    fog_out = Image.new('RGBA', fog.size, (0, 0, 0, 0))
+    fpx = fog.load()
+    for y in range(fog.size[1]):
+        for x in range(fog.size[0]):
+            c = fpx[x, y]
+            if c:
+                fog_out.putpixel((x, y), fog_pal[c] + (255,))
+    fog_out.save(os.path.join(OUT, 'fog.png'), optimize=True)
+
     json.dump(out, open(DATA, 'w', encoding='utf-8'), indent=1)
     print(f'{len(out)} sheets into {OUT}; {DATA}')
     for m in missing:

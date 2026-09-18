@@ -29,6 +29,8 @@ ENGINE_SYMBOLS = [
     "gFieldCamera", "gPaletteFade",
     # ...and the people on it: where a sprite is on screen (POK-318).
     "gSpriteCoordOffsetX", "gSpriteCoordOffsetY",
+    # ...and the fog over it, drawn past the picture at the ROM's own scroll (POK-318).
+    "gWeather",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

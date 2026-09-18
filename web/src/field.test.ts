@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type Camera, fadeOf, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, neighbours, subTile } from './field';
+import { type Camera, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, neighbours, shakeOffset, subTile } from './field';
 import type { WorldMap } from './bots/world';
 
 describe('where the picture sits on the map', () => {
@@ -34,7 +34,7 @@ describe('the fade', () => {
 
   it('holds black across a map load until the fade-in starts', () => {
     const cam = (fade: number, fadeActive: boolean): Camera =>
-      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [] });
+      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [], fog: null, outside: false, ringTimer: 0 });
     expect(heldFade(cam(16, false), cam(0, false), false), 'the reset').toBe(true);
     expect(heldFade(cam(0, false), cam(0, false), true), 'still loading').toBe(true);
     expect(heldFade(cam(0, false), cam(16, true), true), 'the fade-in begins').toBe(false);
@@ -114,6 +114,23 @@ describe('which frame a sprite is on', () => {
     expect(frameOf(rom, 0x08000010, 1, 2)).toBeNull();
     expect(frameOf(rom, 0x08000010, 5, 0)).toBeNull();
     expect(frameOf(rom, 0x02000000, 0, 0)).toBeNull();
+  });
+});
+
+describe('the fog and the shake', () => {
+  it('the fog tiles start at the scroll position, rows on the camera, modulo 64', () => {
+    expect(fogOrigin(0, 0)).toEqual({ x: 0, y: 0 });
+    expect(fogOrigin(200, -40)).toEqual({ x: 8, y: (256 - 40) % 64 });
+    expect(fogOrigin(64, 64)).toEqual({ x: 0, y: 0 });
+  });
+
+  it('a shake goes side to side and dies out to nothing', () => {
+    expect(shakeOffset(0)).toEqual({ dx: 0, dy: 0 });
+    const first = shakeOffset(SHAKE_FRAMES);
+    const late = shakeOffset(2);
+    expect(Math.abs(first.dx)).toBeGreaterThan(Math.abs(late.dx));
+    expect(Math.sign(shakeOffset(SHAKE_FRAMES).dx)).not.toBe(Math.sign(shakeOffset(SHAKE_FRAMES - 2).dx));
+    for (let n = 1; n <= SHAKE_FRAMES; n++) expect(Math.abs(shakeOffset(n).dx)).toBeLessThanOrEqual(3);
   });
 });
 
