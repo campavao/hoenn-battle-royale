@@ -1,0 +1,31 @@
+# ring-far-column: the ring's sixteenth column after a step right (POK-319). Emerald's
+# slice redraw draws columns pos.x..pos.x+14 and leaves the sixteenth stale; the band
+# past the LCD shows it, so BrField_DrawFarColumn draws metatile pos.x+15 into it.
+#
+# From Littleroot (5,9) one step right puts pos at (6,9) with the ring's x tile offset at
+# 2, so the sixteenth slot is tile columns (2 + 30) % 32 = 0..1 of every row of BG2's
+# tilemap (0x0600E000, the middle layer): u32 at 0x0600E000 + row * 64. The values are
+# metatile (21, 9 + row/2)'s, read off a whole-map draw booted straight at (6,9), where
+# that metatile sits in tile columns 30..31 (u32 at 0x0600E03C + row * 64): rows 12..15
+# are the edge of a building, not the plain grass the stale column 20 would show.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 09 00 BD BB C7 FF
+wait 400
+say pos-at-rest
+dump *gSaveBlock1Ptr 4
+expect u16 *gSaveBlock1Ptr 5
+hold RIGHT 12
+wait 30
+say pos-after-a-step-right
+dump *gSaveBlock1Ptr 4
+expect u16 *gSaveBlock1Ptr 6
+say far-column-rows-12-15
+dump 0x0600E300 4
+dump 0x0600E340 4
+dump 0x0600E380 4
+dump 0x0600E3C0 4
+expect u32 0x0600E300 0x628C628B
+expect u32 0x0600E340 0x629C629B
+expect u32 0x0600E380 0x52515250
+expect u32 0x0600E3C0 0x52615260
+say ok

@@ -296,6 +296,16 @@ declare namespace mGBA {
      * @returns Current volume multiplier.
      */
     getVolume(): number;
+    /** Hoenn BR (POK-319): render a band of pixels past the LCD on each side, from the
+     *  same registers. Call before loadGame; multiples of 8, at most 128 a side. The
+     *  canvas becomes (240 + left + right) x (160 + top + bottom) with the LCD at
+     *  (left, top). */
+    _brSetViewport(left: number, top: number, right: number, bottom: number): void;
+    /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
+     *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
+    _brPicturePtr(): number;
+    /** Hoenn BR (POK-319): pixels per row of that picture. */
+    _brPictureStride(): number;
     /** Hoenn BR: wasm heap offset of GBA EWRAM (256 KiB), 0 when no GBA core is loaded. */
     _brWramPtr(): number;
     /** Hoenn BR: wasm heap offset of GBA IWRAM (32 KiB), 0 when no GBA core is loaded. */

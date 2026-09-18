@@ -23,7 +23,8 @@
 // player presses one themselves: `Emulator.keys()` shows bits this file did not set,
 // and that is the thumb taking over. In a battle the walker stops; a menu open in the
 // field (START, a dialog) shows up as a walk that goes nowhere, and a stall is a stop.
-import { KEY_BIT, type Emulator, type GbaKey } from './emu';
+import { KEY_BIT, type Band, type Emulator, type GbaKey } from './emu';
+import { lcdRect } from './field';
 import { findPath } from './bots/path';
 import { World, type SeamDir, type Spot, type WorldMap } from './bots/world';
 import worldData from './data/world.json';
@@ -73,7 +74,7 @@ const TURN_FRAMES = 12;
 
 export interface TouchDeps {
   emu: Emulator;
-  /** The emulator's 240x160 canvas: where a tap is measured from. */
+  /** The emulator's canvas: where a tap is measured from (the LCD inside it). */
   canvas: HTMLCanvasElement;
   /** Where taps are listened for. The whole box, when the field is drawn past the
    *  picture (field.ts): a tap on the map out there walks there too. */
@@ -95,17 +96,20 @@ interface Press {
   gapAfter: number;
 }
 
-/** A GBA pixel from a tap, measured from the picture's box -- which IS the picture,
- *  240x160 at one scale, since field.ts places it. Past its edges the numbers run
- *  negative or over 240/160: that is the field drawn around it, and in the field a tap
- *  out there is as good as one on the picture. Null only when the box has no size. */
+/** A GBA pixel from a tap, measured from the LCD's box -- 240x160 at one scale, since
+ *  field.ts places it. Past its edges the numbers run negative or over 240/160: that
+ *  is the field drawn around it, and in the field a tap out there is as good as one on
+ *  the picture. The core's canvas may be bigger than the LCD (POK-319: a band past it
+ *  on each side); `band` says by how much. Null only when the box has no size. */
 export function toGbaPixel(
   rect: { left: number; top: number; width: number; height: number },
   clientX: number,
   clientY: number,
+  band: Band | null = null,
 ): { x: number; y: number } | null {
   if (!rect.width || !rect.height) return null;
-  return { x: ((clientX - rect.left) / rect.width) * GBA_W, y: ((clientY - rect.top) / rect.height) * GBA_H };
+  const lcd = lcdRect(rect, band);
+  return { x: ((clientX - lcd.left) / lcd.width) * GBA_W, y: ((clientY - lcd.top) / lcd.height) * GBA_H };
 }
 
 export function onPicture(px: number, py: number): boolean {
@@ -163,7 +167,7 @@ export class TouchLayer {
       down = null;
       // A drag or a long press is not a tap.
       if (moved > 12 || held > 400) return;
-      const px = toGbaPixel(canvas.getBoundingClientRect(), ev.clientX, ev.clientY);
+      const px = toGbaPixel(canvas.getBoundingClientRect(), ev.clientX, ev.clientY, emu.viewport);
       if (px) this.tap(px.x, px.y);
     });
     surface.addEventListener('pointercancel', () => { down = null; });

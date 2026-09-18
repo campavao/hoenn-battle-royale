@@ -9,6 +9,15 @@
 // What the border is not: object events (people, ghosts, loot balls), tile animation,
 // weather. The ROM never rendered those out there and the page does not know them.
 //
+// Then POK-319: the emulator draws a picture bigger than the LCD -- the same BG and OBJ
+// state, a band of pixels on each side (BAND below, matching include/br/br_field.h) --
+// so the map, its animation, the people and the fog nearest the window are the ROM's
+// own. The composite keeps filling everything past that band, and an overlay above the
+// picture draws the one thing the band cannot: a person the ROM hid because their
+// sprite's top is past the band (the OAM's 8-bit y would put them at the wrong end).
+// Off the field -- a battle, a menu -- the band is clipped away and the composite shows
+// through, so the fight sits in the middle of the field it was on.
+//
 // Where the window sits on the map was MEASURED, not derived (tools/br/drivers/
 // field-scroll.txt and field-scroll-trace.txt, matched against the render): with the ROM
 // at rest at gSaveBlock1Ptr->pos = (x, y) the picture's top-left is map pixel
@@ -21,10 +30,18 @@
 import type { WorldMap } from './bots/world';
 import worldData from './data/world.json';
 import spritesData from './data/sprites.json';
-import type { Emulator } from './emu';
+import type { Band, Emulator } from './emu';
 
 export const GBA_W = 240;
 export const GBA_H = 160;
+/** What the core draws past the LCD (POK-319): the ROM's ring is 256x256 and the LCD
+ *  sits at its rows 40..199, so this is the ring, exactly once. The numbers are
+ *  include/br/br_field.h's; field.test.ts pins them. */
+export const BAND: Band = { left: 0, top: 40, right: 16, bottom: 56 };
+/** `struct Main` (include/main.h): callback1 at 0, callback2 at 4. The picture past the
+ *  LCD shows only while callback2 is CB2_Overworld; a function pointer carries the
+ *  Thumb bit. */
+const MAIN_CALLBACK2 = 4;
 const TILE = 16;
 /** The picture's top-left, relative to the pos tile's top-left, at rest. Measured. */
 export const LCD_LEFT = 112;
@@ -126,6 +143,8 @@ export interface FieldSprite {
   /** The sprite's top-left, in the picture's pixels (may be outside it). */
   x: number;
   y: number;
+  /** The ROM marked the sprite invisible: it is past the picture the core draws. */
+  hidden: boolean;
 }
 
 /** The image index the sprite is showing: `anims[animNum][animCmdIndex].frame.imageValue`,
@@ -162,6 +181,8 @@ export interface Camera {
   /** Outside the ring, and the ring's frames to the next bleed. */
   outside: boolean;
   ringTimer: number;
+  /** The overworld is what the ROM is running (gMain.callback2 == CB2_Overworld). */
+  onField: boolean;
 }
 
 /** The sub-tile part of the picture's offset from gFieldCamera.x or .y. */
@@ -220,6 +241,23 @@ export function layoutField(boxW: number, boxH: number, bottomInset = 0): FieldL
   return { scale, cols, rows, lcdCol, lcdRow };
 }
 
+/** Where the core's whole picture -- the LCD plus its band -- sits on the field canvas,
+ *  in GBA pixels, given where the LCD was placed. */
+export function pictureBox(lay: FieldLayout, band: Band | null): { left: number; top: number; width: number; height: number } {
+  const b = band ?? { left: 0, top: 0, right: 0, bottom: 0 };
+  return { left: lay.lcdCol - b.left, top: lay.lcdRow - b.top, width: GBA_W + b.left + b.right, height: GBA_H + b.top + b.bottom };
+}
+
+/** The LCD's own box inside the picture canvas's box on screen (CSS pixels). */
+export function lcdRect(
+  picture: { left: number; top: number; width: number; height: number },
+  band: Band | null,
+): { left: number; top: number; width: number; height: number } {
+  if (!band) return picture;
+  const scale = picture.width / (GBA_W + band.left + band.right);
+  return { left: picture.left + band.left * scale, top: picture.top + band.top * scale, width: GBA_W * scale, height: GBA_H * scale };
+}
+
 export interface Placed {
   map: WorldMap;
   /** This map's origin, in map pixels of the map it neighbours. */
@@ -252,6 +290,9 @@ export interface FieldDeps {
   lcd: HTMLCanvasElement;
   /** The canvas the field is drawn on, under the picture. */
   field: HTMLCanvasElement;
+  /** A canvas over the picture for the people the ROM hides past its band (POK-319).
+   *  Without one, or without a band, the people are drawn under the picture instead. */
+  overlay?: HTMLCanvasElement | null;
   /** The pad, when it floats over the bottom of the box (position: absolute). */
   pad?: HTMLElement | null;
   /** The ROM the emulator is running, for the sprites' animation tables. */
@@ -272,6 +313,9 @@ export class FieldView {
   private byId = new Map<string, WorldMap>();
   private images = new Map<string, HTMLImageElement>();
   private lay: FieldLayout = { scale: 0, cols: 0, rows: 0, lcdCol: 0, lcdRow: 0 };
+  private band: Band | null = null;
+  /** The band is clipped off the picture while the ROM is not on the field. */
+  private clipped: boolean | null = null;
   /** The state the picture on screen was drawn from: one frame behind the struct. */
   private prev: Camera | null = null;
   private drawn: string | null = null;
@@ -315,20 +359,50 @@ export class FieldView {
     if (pad && getComputedStyle(pad).position === 'absolute') inset = pad.getBoundingClientRect().height;
     const lay = layoutField(w, h, inset);
     if (!lay.scale) return;
-    const same = lay.scale === this.lay.scale && lay.cols === this.lay.cols && lay.rows === this.lay.rows
+    const band = this.deps.emu.viewport;
+    const sameBand = (band === null) === (this.band === null)
+      && (!band || !this.band || (band.left === this.band.left && band.top === this.band.top && band.right === this.band.right && band.bottom === this.band.bottom));
+    const same = sameBand && lay.scale === this.lay.scale && lay.cols === this.lay.cols && lay.rows === this.lay.rows
       && lay.lcdCol === this.lay.lcdCol && lay.lcdRow === this.lay.lcdRow;
     if (same) return;
     this.lay = lay;
-    lcd.style.left = `${lay.lcdCol * lay.scale}px`;
-    lcd.style.top = `${lay.lcdRow * lay.scale}px`;
-    lcd.style.width = `${GBA_W * lay.scale}px`;
-    lcd.style.height = `${GBA_H * lay.scale}px`;
+    this.band = band ? { ...band } : null;
+    // The core's canvas is the LCD plus its band; the LCD lands where the layout put it.
+    const pic = pictureBox(lay, this.band);
+    lcd.style.left = `${pic.left * lay.scale}px`;
+    lcd.style.top = `${pic.top * lay.scale}px`;
+    lcd.style.width = `${pic.width * lay.scale}px`;
+    lcd.style.height = `${pic.height * lay.scale}px`;
+    this.clipped = null;
     if (field.width !== lay.cols) field.width = lay.cols;
     if (field.height !== lay.rows) field.height = lay.rows;
     field.style.width = `${lay.cols * lay.scale}px`;
     field.style.height = `${lay.rows * lay.scale}px`;
+    const overlay = this.deps.overlay;
+    if (overlay) {
+      if (overlay.width !== lay.cols) overlay.width = lay.cols;
+      if (overlay.height !== lay.rows) overlay.height = lay.rows;
+      overlay.style.width = field.style.width;
+      overlay.style.height = field.style.height;
+    }
     this.drawn = null;
     if (this.prev) this.draw(this.prev);
+  }
+
+  /** Show the band only on the field; anywhere else the picture is the LCD alone and the
+   *  composite shows through around it. */
+  private clip(onField: boolean): void {
+    const b = this.band;
+    const want = !!b && !onField;
+    if (want === this.clipped) return;
+    this.clipped = want;
+    const { lcd } = this.deps;
+    if (!want || !b) {
+      lcd.style.clipPath = '';
+      return;
+    }
+    const s = this.lay.scale;
+    lcd.style.clipPath = `inset(${b.top * s}px ${b.right * s}px ${b.bottom * s}px ${b.left * s}px)`;
   }
 
   /** Where the picture is, for anyone turning a screen point into a GBA pixel. */
@@ -344,6 +418,7 @@ export class FieldView {
   private frame(): void {
     const cur = this.read();
     if (this.prev) this.draw(this.prev);
+    this.clip(cur?.onField ?? false);
     if (cur) {
       this.held = heldFade(this.prev, cur, this.held);
       if (this.held) cur.fade = 16;
@@ -374,6 +449,8 @@ export class FieldView {
     const s32 = (v: number) => v | 0;
     const ring = this.sym('gBrRing');
     const fadeBase = this.sym('gPaletteFade');
+    const main = this.sym('gMain');
+    const cb2 = this.sym('CB2_Overworld');
     const fade = fadeBase === undefined
       ? { y: 0, color: 0, active: false }
       : fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16));
@@ -391,6 +468,7 @@ export class FieldView {
       fog: this.readFog(),
       outside: ring !== undefined && emu.read(ring + RING_OUTSIDE, 8) !== 0,
       ringTimer: ring === undefined ? 0 : emu.read(ring + RING_TIMER, 16),
+      onField: main !== undefined && cb2 !== undefined && (emu.read(main + MAIN_CALLBACK2, 32) & ~1) === cb2,
     };
   }
 
@@ -435,7 +513,7 @@ export class FieldView {
       const x = s16(emu.read(s + SPR_X, 16)) + s16(emu.read(s + SPR_X2, 16)) + s8(emu.read(s + SPR_CTC_X, 8)) + (onCamera ? coX : 0);
       const y = s16(emu.read(s + SPR_Y, 16)) + s16(emu.read(s + SPR_Y2, 16)) + s8(emu.read(s + SPR_CTC_Y, 8)) + (onCamera ? coY : 0);
       const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
-      out.push({ gfx, frame, hFlip: (flags & 0x100) !== 0, x, y });
+      out.push({ gfx, frame, hFlip: (flags & 0x100) !== 0, x, y, hidden: (flags & 4) !== 0 });
     }
     return out;
   }
@@ -477,10 +555,10 @@ export class FieldView {
   }
 
   /** The people, bottom-most last so a sprite further down the map is in front. */
-  private drawSprites(ctx: CanvasRenderingContext2D, c: Camera): boolean {
+  private drawSprites(ctx: CanvasRenderingContext2D, sprites: FieldSprite[]): boolean {
     let complete = true;
     const lay = this.lay;
-    const order = c.sprites.slice().sort((a, b) => (a.y + (SHEETS[String(a.gfx)]?.h ?? 0)) - (b.y + (SHEETS[String(b.gfx)]?.h ?? 0)));
+    const order = sprites.slice().sort((a, b) => (a.y + (SHEETS[String(a.gfx)]?.h ?? 0)) - (b.y + (SHEETS[String(b.gfx)]?.h ?? 0)));
     for (const s of order) {
       const info = SHEETS[String(s.gfx)];
       const sheet = this.image(String(s.gfx), 'field-sprites');
@@ -506,12 +584,16 @@ export class FieldView {
     const lay = this.lay;
     if (!lay.scale) return;
     const map = this.byRef.get(`${c.group}:${c.num}`);
-    const people = c.sprites.map((s) => `${s.gfx}/${s.frame}/${s.hFlip ? 1 : 0}/${s.x}/${s.y}`).join(',');
+    const people = c.sprites.map((s) => `${s.gfx}/${s.frame}/${s.hFlip ? 1 : 0}/${s.x}/${s.y}/${s.hidden ? 1 : 0}`).join(',');
     const fog = c.fog ? `${c.fog.x}/${c.fog.y}/${c.fog.eva}/${c.fog.evb}` : '';
-    const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}`;
+    const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}:${c.onField ? 1 : 0}`;
     if (key === this.drawn) return;
     const ctx = field.getContext('2d');
     if (!ctx) return;
+    // With a band the ROM draws the people nearest the window itself, and the ones it
+    // hid go on the overlay, above the picture; without one they all go under it.
+    const overlay = this.band ? this.deps.overlay ?? null : null;
+    const under = overlay ? [] : c.sprites;
     ctx.imageSmoothingEnabled = false;
     ctx.globalAlpha = 1;
     ctx.fillStyle = '#000';
@@ -547,7 +629,7 @@ export class FieldView {
         else complete = false;
       }
       if (c.fog && !this.drawFog(ctx, c.fog)) complete = false;
-      if (!this.drawSprites(ctx, c)) complete = false;
+      if (!this.drawSprites(ctx, under)) complete = false;
     }
 
     if (c.fade > 0) {
@@ -556,7 +638,32 @@ export class FieldView {
       ctx.fillRect(0, 0, lay.cols, lay.rows);
       ctx.globalAlpha = 1;
     }
+    if (overlay && !this.drawOverlay(overlay, c, !!map && map.outdoor)) complete = false;
     // A picture missing its still is drawn again when the still arrives.
     this.drawn = complete ? key : null;
+  }
+
+  /** The people the ROM hid for being past its band, drawn over the picture -- only on
+   *  the field, where the object table means what it says -- and faded the way the
+   *  ROM's palette is, over their own pixels alone. */
+  private drawOverlay(overlay: HTMLCanvasElement, c: Camera, outdoors: boolean): boolean {
+    const ctx = overlay.getContext('2d');
+    if (!ctx) return true;
+    const lay = this.lay;
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, lay.cols, lay.rows);
+    if (!c.onField || !outdoors) return true;
+    ctx.imageSmoothingEnabled = false;
+    const complete = this.drawSprites(ctx, c.sprites.filter((s) => s.hidden));
+    if (c.fade > 0) {
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.globalAlpha = Math.min(1, c.fade / 16);
+      ctx.fillStyle = gbaColor(c.fadeColor);
+      ctx.fillRect(0, 0, lay.cols, lay.rows);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
+    return complete;
   }
 }

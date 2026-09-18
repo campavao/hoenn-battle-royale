@@ -52,6 +52,12 @@ volume, fast-forward. It exports **no memory access**, so we fork it and add:
   a `Uint8Array` view with zero copies.
 - `brRunFrame()` / a frame hook, so the shell can drain the mailbox once per emulated
   frame instead of on a timer.
+- `brSetViewport(left, top, right, bottom)` (POK-319) — the software renderer draws a
+  band of pixels past the LCD on each side from the same BG/OBJ registers, at VBlank,
+  into a texture the LCD sits inside; the page asks for it before `loadGame`. Sprite rows
+  are taken modulo 256 like the hardware's 8-bit OAM y, and a window edge on the LCD's
+  border reaches across the band (Emerald's overworld is a full-screen WIN0). All of it
+  is `tools/br/mgba-wasm/hbr-exports.patch`, applied to the pinned commit by CI.
 
 It uses pthreads, which means `SharedArrayBuffer`, which means `Cross-Origin-Opener-Policy`
 / `Cross-Origin-Embedder-Policy` headers on the host. Vercel sets those from
@@ -163,8 +169,20 @@ camera (`gSaveBlock1Ptr->pos`, `gFieldCamera.x/y`, one frame behind the struct, 
 measured by `tools/br/drivers/field-scroll*.txt`) on a canvas under the picture, at the
 picture's own scale, with the palette fade mirrored from `gPaletteFade`. In a battle or a
 menu the picture shows that and the field stays around it. Nothing is zoomed or
-stretched; the border shows no people, no ghosts, no weather. A tap out there walks
-there like a tap on the picture. `web/src/field.ts`.
+stretched. A tap out there walks there like a tap on the picture. `web/src/field.ts`.
+
+**The nearest band of that is the ROM's own** (POK-319). The core renders a 256×256
+picture with the LCD at (0, 40) inside it: the ring of tiles Emerald already keeps
+around the camera (32×32 tiles, the LCD at rows 40..199 with the standing vertical pan),
+so the 40 rows above, 56 below and 16 columns right of the window are real BG and OBJ
+state -- tile animation, people, the fog's own blend. The ROM's part is small
+(`src/br/br_field.c`): draw the ring's sixteenth row and column after a step (the slice
+redraws leave them stale), and hide an object by its sprite's TOP, not its bottom, so
+every visible sprite's OAM y is unambiguous. The composite fills everything past the
+band; an overlay above the picture draws the people the ROM hid for being past it. Off
+the field the band is clipped away and the composite shows through. The numbers are
+`include/br/br_field.h`'s, pinned by `web/src/field.test.ts`; the harness's libmgba is
+unpatched and photographs 240×160 only.
 
 ## 8. Relay
 

@@ -51,7 +51,18 @@ export interface CoreModule {
   }): void;
   _brWramPtr(): number;
   _brIwramPtr(): number;
+  /** The picture past the LCD (POK-319): a band of pixels on each side, drawn by the
+   *  core from the same registers. Older cores lack it. */
+  _brSetViewport?(left: number, top: number, right: number, bottom: number): void;
   HEAPU8: Uint8Array;
+}
+
+/** Pixels the core draws past the LCD on each side (POK-319). */
+export interface Band {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
 }
 
 export type CoreFactory = (opts: { canvas: HTMLCanvasElement }) => Promise<CoreModule>;
@@ -76,6 +87,7 @@ export class Emulator {
   private bootedPath: string | null = null;
   private crashListeners = new Set<() => void>();
   private running = false;
+  private band: Band | null = null;
 
   private constructor(private readonly m: CoreModule) {}
 
@@ -117,6 +129,27 @@ export class Emulator {
     return this.m.FS.readFile(ROM_PATH);
   }
 
+  // ---- the picture past the LCD (POK-319) --------------------------------------------
+
+  /** Ask the core to draw a band past the LCD on every boot from now on. Takes effect
+   *  at the next boot (the core sizes its texture when it loads a game). Returns what
+   *  the core will draw, or null when this core cannot. */
+  setViewport(band: Band | null): Band | null {
+    if (!band || !this.m._brSetViewport) {
+      this.band = null;
+      return null;
+    }
+    this.band = { ...band };
+    return this.band;
+  }
+
+  /** The band the core draws past the LCD: null on a core without the export or when
+   *  none was asked for. The canvas is (240 + left + right) x (160 + top + bottom) with
+   *  the LCD at (left, top). */
+  get viewport(): Band | null {
+    return this.band;
+  }
+
   // ---- running --------------------------------------------------------------------
 
   /** Boots the stored ROM (or the bytes given, which are also stored as the ROM). */
@@ -153,6 +186,11 @@ export class Emulator {
       }
     } catch {
       /* no autosave dir yet */
+    }
+    // The band is a load-time size: the core builds its texture in loadGame.
+    if (this.m._brSetViewport) {
+      const b = this.band ?? { left: 0, top: 0, right: 0, bottom: 0 };
+      this.m._brSetViewport(b.left, b.top, b.right, b.bottom);
     }
     if (!this.m.loadGame(path)) throw new Error('loadGame failed');
     this.running = true;

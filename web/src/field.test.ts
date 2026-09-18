@@ -1,6 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { type Camera, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, neighbours, shakeOffset, subTile } from './field';
+import { BAND, type Camera, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
 import type { WorldMap } from './bots/world';
+import fieldHeader from '../../include/br/br_field.h?raw';
+
+describe('the picture past the LCD (POK-319)', () => {
+  it('the band is the ROM\'s: include/br/br_field.h says the same four numbers', () => {
+    const define = (name: string): number => {
+      const m = fieldHeader.match(new RegExp(`#define\\s+${name}\\s+(\\d+)`));
+      if (!m) throw new Error(`${name} not in br_field.h`);
+      return Number(m[1]);
+    };
+    expect(BAND).toEqual({ left: define('BR_VIEW_LEFT'), top: define('BR_VIEW_TOP'), right: define('BR_VIEW_RIGHT'), bottom: define('BR_VIEW_BOTTOM') });
+  });
+
+  it('the band is one ring: 256 rows of the 8-bit sprite y, 256 columns of the tilemap', () => {
+    expect(160 + BAND.top + BAND.bottom).toBe(256);
+    expect(240 + BAND.left + BAND.right).toBe(256);
+    for (const v of Object.values(BAND)) expect(v % 8, 'the core wants multiples of 8').toBe(0);
+  });
+
+  it('the core\'s canvas is placed so the LCD lands where the layout put it', () => {
+    const lay = layoutField(390, 844, 0);
+    const pic = pictureBox(lay, BAND);
+    expect(pic).toEqual({ left: lay.lcdCol - BAND.left, top: lay.lcdRow - BAND.top, width: 256, height: 256 });
+    expect(pictureBox(lay, null), 'no band: the canvas is the LCD').toEqual({ left: lay.lcdCol, top: lay.lcdRow, width: 240, height: 160 });
+  });
+
+  it('a tap or a spec finds the LCD inside the bigger canvas on screen', () => {
+    const picture = { left: 10, top: 20, width: 512, height: 512 };
+    expect(lcdRect(picture, BAND)).toEqual({ left: 10, top: 20 + 80, width: 480, height: 320 });
+    expect(lcdRect(picture, null)).toBe(picture);
+  });
+});
 
 describe('where the picture sits on the map', () => {
   // The numbers are tools/br/drivers/field-scroll.txt's, matched against the Littleroot
@@ -34,7 +65,7 @@ describe('the fade', () => {
 
   it('holds black across a map load until the fade-in starts', () => {
     const cam = (fade: number, fadeActive: boolean): Camera =>
-      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [], fog: null, outside: false, ringTimer: 0 });
+      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [], fog: null, outside: false, ringTimer: 0, onField: true });
     expect(heldFade(cam(16, false), cam(0, false), false), 'the reset').toBe(true);
     expect(heldFade(cam(0, false), cam(0, false), true), 'still loading').toBe(true);
     expect(heldFade(cam(0, false), cam(16, true), true), 'the fade-in begins').toBe(false);

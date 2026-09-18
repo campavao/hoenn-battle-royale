@@ -11,6 +11,9 @@
 #include "rotating_gate.h"
 #include "sprite.h"
 #include "text.h"
+#ifdef BR
+#include "br/br_field.h"
+#endif
 
 EWRAM_DATA bool8 gUnusedBikeCameraAheadPanback = FALSE;
 
@@ -152,6 +155,9 @@ static void RedrawMapSliceNorth(struct FieldCameraOffset *cameraOffset, const st
             temp -= 32;
         DrawMetatileAt(mapLayout, r7 + temp, gSaveBlock1Ptr->pos.x + i / 2, gSaveBlock1Ptr->pos.y + 14);
     }
+#ifdef BR
+    BrField_DrawFarRow();
+#endif
 }
 
 static void RedrawMapSliceSouth(struct FieldCameraOffset *cameraOffset, const struct MapLayout *mapLayout)
@@ -199,6 +205,9 @@ static void RedrawMapSliceWest(struct FieldCameraOffset *cameraOffset, const str
             temp -= 32;
         DrawMetatileAt(mapLayout, temp * 32 + r5, gSaveBlock1Ptr->pos.x + 14, gSaveBlock1Ptr->pos.y + i / 2);
     }
+#ifdef BR
+    BrField_DrawFarColumn();
+#endif
 }
 
 void CurrentMapDrawMetatileAt(int x, int y)

@@ -1,0 +1,20 @@
+# objects-band: which object sprites the ROM shows past the LCD (POK-319). The band the
+# core draws is 40 rows above, 56 below and 16 columns right of the LCD, and a sprite is
+# visible there iff BrField_OffScreen says so -- keyed on its TOP row, because the OAM's
+# 8-bit y would put a top below -40 at the band's bottom. tools/br/objects-band.py reads
+# these dumps and checks every active object's sprite.invisible against that rule.
+# Littleroot (8,9): the town's one outdoor NPC then stands at screen (240, 184) -- 24
+# rows below the LCD and on the band's right edge, past the LCD both ways.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 08 00 09 00 BD BB C7 FF
+wait 400
+say pos
+dump *gSaveBlock1Ptr 4
+say coord-offset
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+say objects
+dump gObjectEvents 576
+say sprites
+dump gSprites 4352
+say ok

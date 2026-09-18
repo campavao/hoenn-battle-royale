@@ -45,7 +45,7 @@ import { Roster, type RosterEntry } from './match/roster';
 import type { TickerMsg, MapRef } from './net/wire';
 import { World, type WorldMap } from './bots/world';
 import { TouchLayer } from './touch';
-import { FieldView } from './field';
+import { BAND, FieldView } from './field';
 import { sectionInside } from './match/ring';
 import { dealParty, speciesName } from './bots/party';
 import { MatchLog, saveMatch } from './match/log';
@@ -3091,6 +3091,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     box: $('#screen-wrap') as HTMLElement,
     lcd: $('#canvas') as HTMLCanvasElement,
     field: $('#field') as HTMLCanvasElement,
+    overlay: $('#overlay') as HTMLCanvasElement,
     pad: $('#pad') as HTMLElement,
     rom,
   }).attach();
@@ -3184,6 +3185,9 @@ async function main(): Promise<void> {
   setVersionLine('—');
   const canvas = $('#canvas') as HTMLCanvasElement;
   const emu = await Emulator.create(canvas);
+  // The picture past the LCD (POK-319, field.ts): the core draws a band around the
+  // 240x160 from the same registers. A core without the export draws the LCD alone.
+  emu.setViewport(BAND);
 
   await runImportScreen(emu);
   const { bytes, usingPatched, mailboxBase, protocol, symbols, patch } = await runPatchingScreen(emu);

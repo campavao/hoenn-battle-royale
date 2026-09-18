@@ -74,11 +74,13 @@ test('a tap on a tile walks the trainer to it', async ({ browser }) => {
     }
     expect(goal, 'a reachable tile on screen').not.toBeNull();
 
-    // The tap: the tile's centre, in the picture's pixels, through the canvas's box.
+    // The tap: the tile's centre, in the picture's pixels, through the canvas's box --
+    // the LCD inside it, since the core's canvas carries a band past the LCD (POK-319).
     const box = (await page.locator('#canvas').boundingBox())!;
-    const scale = box.width / 240;
-    const px = box.x + ((PLAYER_COL + goal!.dx) * 16 + 8) * scale;
-    const py = box.y + ((PLAYER_ROW + goal!.dy) * 16 + 8) * scale;
+    const band = await page.evaluate(() => (window as unknown as { __hbr: { emu: { viewport: { left: number; top: number; right: number; bottom: number } | null } } }).__hbr.emu.viewport);
+    const scale = box.width / (240 + (band?.left ?? 0) + (band?.right ?? 0));
+    const px = box.x + ((band?.left ?? 0) + (PLAYER_COL + goal!.dx) * 16 + 8) * scale;
+    const py = box.y + ((band?.top ?? 0) + (PLAYER_ROW + goal!.dy) * 16 + 8) * scale;
     await page.screenshot({ path: path.join(OUT_DIR, 'tap-before.png') });
     await page.touchscreen.tap(px, py);
 

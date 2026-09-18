@@ -30,6 +30,7 @@
 #include "constants/trainer_types.h"
 #include "constants/union_room.h"
 #include "br/br_ghosts.h"
+#include "br/br_field.h"
 
 #define SPECIAL_LOCALIDS_START (min(LOCALID_CAMERA, \
                                 min(LOCALID_PLAYER, \
@@ -7380,11 +7381,16 @@ static void UpdateObjectEventOffscreen(struct ObjectEvent *objectEvent, struct S
     y2 = y;
     y2 += graphicsInfo->height;
 
+#ifdef BR
+    if (BrField_OffScreen(x, x2, y))
+        objectEvent->offScreen = TRUE;
+#else
     if ((s16)x >= DISPLAY_WIDTH + 16 || (s16)x2 < -16)
         objectEvent->offScreen = TRUE;
 
     if ((s16)y >= DISPLAY_HEIGHT + 16 || (s16)y2 < -16)
         objectEvent->offScreen = TRUE;
+#endif
 }
 
 static void UpdateObjectEventSpriteVisibility(struct ObjectEvent *objectEvent, struct Sprite *sprite)
@@ -8586,10 +8592,15 @@ void UpdateObjectEventSpriteInvisibility(struct Sprite *sprite, bool8 invisible)
     x2 = x - (sprite->centerToCornerVecX >> 1);
     y2 = y - (sprite->centerToCornerVecY >> 1);
 
+#ifdef BR
+    if (BrField_OffScreen(x, x2, y))
+        sprite->invisible = TRUE;
+#else
     if ((s16)x >= DISPLAY_WIDTH + 16 || x2 < -16)
         sprite->invisible = TRUE;
     if ((s16)y >= DISPLAY_HEIGHT + 16 || y2 < -16)
         sprite->invisible = TRUE;
+#endif
 }
 
 #define sInvisible     data[2]

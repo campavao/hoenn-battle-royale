@@ -9,6 +9,15 @@ describe('a tap becomes a GBA pixel', () => {
     expect(toGbaPixel(rect, 479, 419)).toEqual({ x: 239.5, y: 159.5 });
   });
 
+  it('with a band past the LCD (POK-319) the tap is measured from the LCD inside the canvas', () => {
+    // A 256x256 canvas at 2x with the LCD at (0, 40): its top-left is 80 CSS px down.
+    const rect = { left: 0, top: 100, width: 512, height: 512 };
+    const band = { left: 0, top: 40, right: 16, bottom: 56 };
+    expect(toGbaPixel(rect, 0, 180, band)).toEqual({ x: 0, y: 0 });
+    expect(toGbaPixel(rect, 240, 340, band)).toEqual({ x: 120, y: 80 });
+    expect(toGbaPixel(rect, 0, 100, band), 'the band above is the field').toEqual({ x: 0, y: -40 });
+  });
+
   it('past the picture the numbers keep going: that is the field around it', () => {
     const rect = { left: 0, top: 200, width: 390, height: 260 };
     const above = toGbaPixel(rect, 195, 100)!;

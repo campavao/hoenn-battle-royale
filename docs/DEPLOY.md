@@ -57,6 +57,22 @@ If the Vercel CLI asks you to log in: `npx vercel login`. The project is
 after a deploy: open the site with `#fresh` on the URL once (drops the service worker and
 its caches).
 
+## The emulator core
+
+`web/public/emu/` (mgba.js, mgba.wasm, mgba.d.ts) is tracked and goes out with the shell.
+It is thenick775's `feature/wasm` at `tools/br/mgba-wasm/COMMIT` plus
+`tools/br/mgba-wasm/hbr-exports.patch` (the EWRAM pointers and, since POK-319, the
+picture past the LCD). When the patch changes, rebuild in WSL and copy the output in
+before deploying; a tagged release's CI builds the same thing from the patch:
+
+```bash
+wsl.exe -e bash -lc 'source ~/emsdk/emsdk_env.sh; cd ~/mgba-wasm/build-wasm && make -j8 && cp wasm/mgba.js wasm/mgba.wasm wasm/mgba.d.ts wasm/mgba.wasm.map /mnt/c/Users/cam95/Documents/Github/hoenn-battle-royale/web/public/emu/'
+```
+
+The WSL tree at `~/mgba-wasm` keeps the patch as uncommitted changes; `git diff` there
+is the patch file, and `git stash && git apply --check <patch> && git stash pop` proves
+it still applies to the pinned commit.
+
 ## The relay (Railway)
 
 Only when `relay/` changed. A relay deploy restarts it and **drops every room**, so do it

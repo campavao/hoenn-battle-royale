@@ -31,6 +31,9 @@ ENGINE_SYMBOLS = [
     "gSpriteCoordOffsetX", "gSpriteCoordOffsetY",
     # ...and the fog over it, drawn past the picture at the ROM's own scroll (POK-318).
     "gWeather",
+    # The overworld's main callback: the page shows the picture past the LCD only while
+    # gMain.callback2 is this (POK-319, web/src/field.ts).
+    "CB2_Overworld",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"
