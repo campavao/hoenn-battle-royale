@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // web/package.json sets "type": "module", so this config loads as ESM -- no
@@ -38,7 +39,21 @@ export default defineConfig({
     // Cross-origin isolation (SharedArrayBuffer) comes from the dev server's own
     // COOP/COEP headers (vite.config.ts), not a Chromium flag.
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // One project per spec file, so every file gets a worker -- and a Chromium -- of its
+  // own (POK-272). A worker is reused across files that share a project, and with one
+  // worker the whole suite shared one browser for twenty-odd wasm-heavy tests, each
+  // leaking a little (a renderer that crashed mid-close keeps its core). Projects run in
+  // order, one at a time, so nothing fights over the ROM file or the fixed ports; a
+  // fresh browser costs about a second a file.
+  //
+  // For the record: walk-and-see's "3/3 in a full run, first try alone" was NOT this.
+  // It was the opening dealing the host and the guest into different Safari areas five
+  // times in six (see the seed pinned in that spec), and a fresh browser per file did
+  // not change that by itself.
+  projects: readdirSync(resolve(__dirname, 'e2e'))
+    .filter((f) => f.endsWith('.spec.ts'))
+    .sort()
+    .map((f) => ({ name: f.replace(/\.spec\.ts$/, ''), testMatch: f, use: { ...devices['Desktop Chrome'] } })),
   webServer: [
     {
       command: `node ../relay/server.js`,

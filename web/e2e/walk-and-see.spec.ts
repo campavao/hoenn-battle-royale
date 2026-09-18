@@ -32,6 +32,15 @@ test.beforeAll(() => {
 // `#nobots` keeps the room to the two of them -- eight bots walking into the guest is
 // eight chances for the thing under test to be something else -- and `#fast` runs the
 // Safari opening in 25 seconds rather than two minutes.
+// `#seed` pins the match (POK-272). The opening deals every seat its own Safari cell off
+// the seed and the seat (BrMatch_SafariCell), across all six areas since POK-261 -- and a
+// ghost is only spawned on the map its ROM is standing on. With a fresh seed the host and
+// the guest were in different areas five times in six, the host's gBrSeats row for the
+// guest had no object, and this failed "3/3 in a full run, first try alone" for a month
+// while being blamed on a starved browser. This seed puts seats 1 and 2 in the NORTHWEST
+// area together: cells 0 and 2 of the ROM's table. Change the table and re-derive it.
+const SAME_AREA_SEED = 1640531713;
+
 test("a guest walking right moves on the host's screen", async ({ browser }) => {
   test.setTimeout(120_000);
   const rom = romHashParam();
@@ -41,7 +50,7 @@ test("a guest walking right moves on the host's screen", async ({ browser }) => 
 
   try {
     const host = await hostCtx.newPage();
-    await host.goto(`/#host&nobots&fast&testmon&rom=${rom}`);
+    await host.goto(`/#host&nobots&fast&testmon&seed=${SAME_AREA_SEED}&rom=${rom}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 
     const codeEl = host.locator('#room-code');

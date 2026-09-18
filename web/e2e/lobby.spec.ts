@@ -215,19 +215,20 @@ test('the lobby offers a voice and a stats toggle, and the wardrobe starts locke
   const rows = page.locator('#lobby-rows button');
   await expect(rows.first()).toBeVisible({ timeout: 60_000 });
 
-  // A fresh profile has 0 wins, so the sprite row hints at what winning would unlock
-  // rather than the flat 'your sprite' a fuller career gets.
+  // A fresh profile is on the first sprite, which is everybody's: the row says so. The
+  // wardrobe's prices show while BROWSING (POK-282), not on the row at rest.
   const skin = rows.nth(1);
-  await expect(skin).toContainText('wins');
+  await expect(skin).toContainText('your sprite');
 
-  // MY VOICE previews a line from the pool, and cycling changes which one.
+  // MY VOICE is three rows since POK-283 -- walking up, when you win, when you lose --
+  // each showing its line, and cycling one changes that line.
   const voice = rows.nth(2);
   const before = await voice.textContent();
   await voice.click();
   await expect(voice).not.toHaveText(before ?? '');
 
   // PLAY STATS starts shared, and pressing it toggles the opt-out and back.
-  const stats = rows.nth(3);
+  const stats = rows.nth(5);
   await expect(stats).not.toContainText('not shared');
   await stats.click();
   await expect(stats).toContainText('not shared');
