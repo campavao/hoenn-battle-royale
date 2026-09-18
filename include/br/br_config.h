@@ -18,7 +18,10 @@
 #define BR_MAX_SEATS 32
 
 // Ghost object events use local ids from this base (POK-219). Object event templates on
-// maps use small ids, so a high range never collides.
-#define BR_GHOST_LOCAL_ID_BASE 0xE0
+// maps use small ids, so a high range never collides -- but not TOO high: 0xE0 + seat 31
+// was 255, LOCALID_PLAYER, and to a good part of the engine that ghost was the player
+// (POK-315). 0xC8..0xE7 sits above the loot balls (0xC0..0xC7) and below the berry
+// blender's 236..240, which is the next thing up.
+#define BR_GHOST_LOCAL_ID_BASE 0xC8
 
 #endif // GUARD_BR_CONFIG_H

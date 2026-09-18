@@ -494,7 +494,7 @@ static void EmoteBusyGhosts(void)
 
 // Nothing the match puts on a map is solid (POK-310). See the header for why.
 //
-// The two ranges are BR's own: loot at 0xC0 and ghosts at 0xE0. LOCALID_PLAYER is 255
+// The two ranges are BR's own: loot at 0xC0 and ghosts at 0xC8. LOCALID_PLAYER is 255
 // and above both, so the player is never mistaken for one -- which matters, because
 // this is asked about every object on the map, the player included, whenever anything
 // else tries to move.

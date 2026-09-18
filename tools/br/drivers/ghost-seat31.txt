@@ -1,0 +1,30 @@
+# ghost-seat31: the last seat's ghost is not the player (POK-315).
+#
+# Ghost local ids were BR_GHOST_LOCAL_ID_BASE (0xE0) + seat, and 0xE0 + 31 is 255:
+# LOCALID_PLAYER, the id the engine uses to mean YOU. Seat 31 is dealt in an ordinary
+# match (Cam's roster read CAM, P25..P31), and its ghost was, to a good part of the
+# engine, the player -- and solid, since BrGhosts_Insubstantial stops short of 255 on
+# purpose. The base is 0xC8 now: 0xC8..0xE7, clear of the loot balls and the player.
+#
+# ghost-walkthrough.txt's shape, with seat 31 in the tile north of us instead of seat 1:
+# walking through it is what a ghost lets you do and the player's own id never would.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 10 07 00 0F 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 16
+expect u16 gBrOwnPos+2 0x0E
+expect u16 gBrOwnPos+4 0x16
+# PLACE seat 31 (0x1F) at (0x0E,0x15), facing down
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 1F 01 00 10 0E 00 15 00 01 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 60
+# seat 31's row is present and its ghost is on the map (objId at +9 is not BR_NO_OBJ)
+expect u8 gBrSeats+0x1F0 1
+expectne u8 gBrSeats+0x1F9 0xFF
+shot facing-them
+hold UP 26
+wait 20
+shot walked-through
+expect u16 gBrOwnPos+2 0x0E
+expect u16 gBrOwnPos+4 0x13
+say ghost seat31 ok
