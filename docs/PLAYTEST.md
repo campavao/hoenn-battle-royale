@@ -892,3 +892,40 @@ Ticker `0x24C`, box `0x284..0x2F3` (the wound bar's old tiles made the room), pe
 following. A `STATIC_ASSERT` holds each ceiling, and `daycare-chest.txt` reads BG2's
 tilemap after the box (`expectne`, new in the harness). Dumped with the harness's `dump
 0x04000000 16` for the BGCNTs -- worth remembering as the way to ask "which layer is that".
+
+## 2026-09-17 night: the parity block, and four things nobody play-tested
+
+Every ticket in Cam's queue after POK-306 went in tonight -- POK-311, 295, 296, 297, 299,
+300, 313, 284, 285, 315, and POK-314's tooling -- plus what turned up on the way. The
+findings that were NOT tickets, so they are recorded here:
+
+### The map-name popup was the "red counter with garbage in its corner" -- **fixed** (`36fe0e836`)
+
+Every outdoor map. The popup's `LoadBgTiles` is 0x400 bytes at 0x21D -- thirty-two tiles,
+0x21D..0x23C -- and the corner sat at 0x23A; and the popup puts its theme palette into
+slot 14, the standard frame's, and nothing put ours back when it left. Blamed on a weather
+fade for two days. Visible in every outdoor driver shot before tonight.
+
+### A blocked HUD box came back blank -- **fixed** (`64a8585fe`)
+
+A bottom box said while a script or menu was up was taken down with its pixels wiped
+(`ClearStdWindowAndFrame`) and put back without a redraw: a white slab, no frame, no
+text. Found by the gym purse line, which is said during the win's own script.
+
+### The "agbcc hang" in POK-313 was LEER
+
+The trainer AI picks LEER on agbcc and POUND on modern (RNG drift). LEER does no damage,
+and a trace watching HP saw nothing for 2600 frames. `gCurrentMove` first, HP second.
+
+### walk-and-see was never starved (POK-272)
+
+Since POK-261 the opening deals every seat its own Safari area, and a ghost is only
+spawned on the map its ROM stands on: the host and the guest were in different areas
+five times in six, so the host's `gBrSeats` row had no object. The spec pins a seed that
+puts seats 1 and 2 in one area. The lobby spec was also two rows out of date since
+POK-283 (MY VOICE is three rows).
+
+### Bots started stacked (POK-285)
+
+`dealBots` drew spawns with replacement: three pairs of twelve on one tile, eighteen of
+thirty. Without replacement now, for the Zone and the drop.
