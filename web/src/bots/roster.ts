@@ -72,6 +72,11 @@ export function dealBots(seed: number, count: number, takenSeats: number[], spaw
   const rng = mulberry32(seed ^ 0x8b07);
   const taken = new Set(takenSeats);
   const names = [...NAMES];
+  // Spawns are dealt without replacement (POK-285): drawn with it, twelve bots over
+  // the Zone's twenty-four cells began with three pairs standing on one tile, and a
+  // room of thirty with eighteen. The deck is reshuffled once it runs out, so a field
+  // bigger than the cell list still gets everybody a cell.
+  let deck: BotSpawn[] = [];
   const bots: Bot[] = [];
   let seat = MAX_SEATS - 1;
 
@@ -80,7 +85,8 @@ export function dealBots(seed: number, count: number, takenSeats: number[], spaw
     if (seat < 0) break; // the room is full of people, which is a good problem
     taken.add(seat);
     const name = names.length > 0 ? names.splice(pickIndex(rng, names.length), 1)[0] : `BOT${seat}`;
-    const spawn = spawns[pickIndex(rng, spawns.length)];
+    if (deck.length === 0) deck = [...spawns];
+    const spawn = deck.splice(pickIndex(rng, deck.length), 1)[0];
     bots.push({
       seat,
       grade: gradeOf(seed, seat),

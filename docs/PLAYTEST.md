@@ -61,6 +61,19 @@ and P21..P31 beside it, so eleven bots were in that match and in the Zone. Six a
 a two-minute opening is simply thin. The question is whether the opening should deal
 everybody into fewer areas, which is a pacing decision rather than a bug.
 
+**Measured (POK-285), and it is not thin.** `tools/br/zone-occupancy.ts` runs the real bot
+brain over the real twenty-four cells for a two-minute opening across forty seeds. Twelve
+contestants: the first two come within an eyeline (four cells) of each other at **7 s** on
+average, **90% of the field sees somebody** before the buzzer, some area holds two or more
+for 100% of the opening, and no area goes unvisited. Thirty contestants: 94%. The bots'
+targets ARE the twenty-four cells the ROM deals a player, so they walk to where players
+are. Leave the six areas alone; the video was `#quick` doubling as the dev pace flag
+(`3ef373a8c`), not the Zone.
+
+What the measurement did find: `dealBots` drew spawns WITH replacement, so twelve bots
+over twenty-four cells began with three pairs standing on one tile (eighteen pairs of
+thirty). Dealt without replacement now -- and the drop's landing cells with it.
+
 ### Eliminated in the Safari does not put you into spectating -- **fixed** (`1f57d8571`)
 
 "When I got out in the Safari, it should have brought me to spectating the other players."
