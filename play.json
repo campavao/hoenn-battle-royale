@@ -1,7 +1,140 @@
 {
- "readAt": "2026-09-18T13:27:53.929Z",
+ "readAt": "2026-09-18T13:50:10.329Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "DCVWG4",
+   "at": "2026-09-18T13:44:38.289Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-09-18T13:44:48.352Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "BEW72Y",
+   "at": "2026-09-18T13:37:21.840Z",
+   "end": "2026-09-18T13:44:36.885Z",
+   "secs": 435,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-09-18T13:37:29.716Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "4S54VE",
+   "at": "2026-09-18T13:37:09.758Z",
+   "end": "2026-09-18T13:37:14.275Z",
+   "secs": 5,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-09-18T13:37:09.821Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "WE86ZJ",
+   "at": "2026-09-18T13:29:41.582Z",
+   "end": "2026-09-18T13:30:42.678Z",
+   "secs": 61,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-09-18T13:29:51.651Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "GW8KPK",
+   "at": "2026-09-18T13:29:18.665Z",
+   "end": "2026-09-18T13:29:25.851Z",
+   "secs": 7,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "4YTRHX",
+   "at": "2026-09-18T13:29:14.967Z",
+   "end": "2026-09-18T13:29:17.501Z",
+   "secs": 3,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "UX5WTD",
    "at": "2026-09-18T12:33:47.743Z",
