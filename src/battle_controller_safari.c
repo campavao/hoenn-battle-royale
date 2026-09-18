@@ -1,6 +1,7 @@
 #include "global.h"
 #if BR
 #include "br/br_match.h"
+#include "br/br_battle.h"
 #endif
 #include "battle.h"
 #include "battle_anim.h"
@@ -182,6 +183,7 @@ static void HandleInputChooseAction(void)
         SafariBufferExecCompleted();
         return;
     }
+    gBrBattle.menu = BR_MENU_SAFARI; // the page's tap-to-choose
 #endif
     if (JOY_NEW(A_BUTTON))
     {
@@ -335,6 +337,9 @@ static void CompleteOnFinishedBattleAnimation(void)
 
 static void SafariBufferExecCompleted(void)
 {
+#if BR
+    gBrBattle.menu = BR_MENU_NONE;
+#endif
     gBattlerControllerFuncs[gActiveBattler] = SafariBufferRunCommand;
     if (gBattleTypeFlags & BATTLE_TYPE_LINK)
     {

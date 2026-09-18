@@ -203,6 +203,9 @@ void SetControllerToPlayer(void)
 
 static void PlayerBufferExecCompleted(void)
 {
+#if BR
+    gBrBattle.menu = BR_MENU_NONE; // every choice leaves through here
+#endif
     gBattlerControllerFuncs[gActiveBattler] = PlayerBufferRunCommand;
     if (gBattleTypeFlags & BATTLE_TYPE_LINK)
     {
@@ -275,6 +278,7 @@ static void HandleInputChooseAction(void)
         PlayerBufferExecCompleted();
         return;
     }
+    gBrBattle.menu = BR_MENU_ACTION;
     BrBattle_DrawClock();
 #endif
 
@@ -545,6 +549,7 @@ static void HandleInputChooseMove(void)
         PlayerBufferExecCompleted();
         return;
     }
+    gBrBattle.menu = BR_MENU_MOVE;
     BrBattle_DrawClock();
 #endif
 

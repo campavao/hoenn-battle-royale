@@ -1,0 +1,63 @@
+# menu-byte: gBrBattle.menu says which choice menu is up (the page's tap-to-choose,
+# Cam's phone UI of 2026-09-18). 0 out of a menu, 1 on FIGHT/BAG/POKeMON/RUN, 2 on the
+# four moves, back to 1 after B, 0 the moment a choice is made. The Safari's own menu
+# is 3 (safari-menu-byte.txt).
+#
+# The page walks the cursor with D-pad taps and confirms with A through the same
+# handlers a thumb drives, so what it needs from the ROM is only this byte and the two
+# cursors -- both exported to br-symbols.json now.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9 -- the middle grass patch
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gBrBattle+8 0
+hold RIGHT 60
+hold LEFT 60
+hold RIGHT 60
+hold LEFT 60
+hold RIGHT 60
+hold LEFT 60
+hold RIGHT 60
+hold LEFT 60
+wait 240
+expectge u8 gBattlersCount 2
+# through "Wild X appeared!" and "Go! Y!" to the menu
+tap A
+wait 90
+tap A
+wait 90
+# the action menu is open: 1
+shot action
+expect u8 gBrBattle+8 1
+expect u8 gActionSelectionCursor 0
+# the cursor moves the way the page will move it: RIGHT is bit 0, DOWN is bit 1
+tap RIGHT
+wait 6
+expect u8 gActionSelectionCursor 1
+tap DOWN
+wait 6
+expect u8 gActionSelectionCursor 3
+tap UP
+wait 6
+tap LEFT
+wait 6
+expect u8 gActionSelectionCursor 0
+# FIGHT: the move menu is 2
+tap A
+wait 30
+shot moves
+expect u8 gBrBattle+8 2
+# ...and B is the action menu again
+tap B
+wait 30
+expect u8 gBrBattle+8 1
+# choose a move: the byte drops to 0 the frame the choice leaves the controller
+tap A
+wait 30
+expect u8 gBrBattle+8 2
+tap A
+wait 10
+shot chosen
+expect u8 gBrBattle+8 0
+say menu byte ok

@@ -23,12 +23,20 @@ struct BrBattle
     /* 2 */ u16 timedOut;    // choices the clock made for the player
     /* 4 */ u16 runRolls;    // RUN attempts against a trainer
     /* 6 */ u16 runEscapes;  // ...of which got away, which is one per POKe DOLL spent
-    /* 8 */ u8 pad;           // was autoMove, until POK-313: the clock no longer chooses FIGHT
+    /* 8 */ u8 menu;          // BR_MENU_*: the choice menu the player's controller is on
+                              // this frame. The page's tap-to-choose reads it; it is set
+                              // by the three input handlers and cleared when a choice is
+                              // made (was autoMove until POK-313).
     /* 9 */ u8 stalled;       // a sub-screen already ran this turn's clock out
     /* 10 */ u16 stallFrames; // frames a screen the battle put up has held the clock
 };
 
 extern struct BrBattle gBrBattle;
+
+#define BR_MENU_NONE   0
+#define BR_MENU_ACTION 1 // FIGHT / BAG / POKeMON / RUN, bottom right, 2x2
+#define BR_MENU_MOVE   2 // the four moves, bottom left, 2x2
+#define BR_MENU_SAFARI 3 // BALL / POKeBLOCK / GO NEAR / RUN, bottom right, 2x2
 
 void BrBattle_Init(void);
 // The player controller: reset when a choice opens, tick each frame it is open.

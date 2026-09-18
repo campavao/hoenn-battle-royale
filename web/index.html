@@ -219,8 +219,7 @@
         }
         /* The settings are the last row, not the first cell the grid happens to have
            spare -- they live inside this section, so auto-placement grabs them. */
-        #screen-playing .settings { grid-column: 1 / -1; grid-row: 4; }
-        #room-panel { grid-column: 1 / -1; grid-row: 1; }
+        #screen-playing .drawer { grid-column: 1 / -1; grid-row: 1; }
         /* `width: 100%` would make the middle column take everything and push the
            pad off the left edge, so here the screen is exactly as wide as it is. */
         #screen-wrap { grid-column: 2; grid-row: 2; width: auto; }
@@ -263,6 +262,7 @@
         /* The room panel is not a game control: it is how a host runs the match, so
            it stays. It sits over the screen rather than pushing it down. */
         #room-panel { width: 100%; }
+        .drawer { width: 100%; }
         /* basis 0, not auto: on `auto` the canvas sizes the box and the box then
            overflows the window instead of the picture shrinking to fit it. */
         #screen-wrap {
@@ -290,6 +290,53 @@
         }
         .settings { padding: 6px 12px 10px; }
         .keys { display: block; }
+      }
+      /* ---- the drawer (phone chrome) ----
+         Out of a match the drawer is simply in the flow: the room screen IS the drawer's
+         contents. In a match (body.in-match) it goes behind the menu button and comes
+         back as a sheet over the game; the results open it on their own. */
+      .drawer { width: 100%; max-width: 480px; }
+      .drawer-head { display: none; justify-content: space-between; align-items: center; gap: 12px;
+                     flex-wrap: wrap; padding: 6px 0 8px; font-weight: 600; }
+      .drawer-close { margin-left: auto; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+                      background: #4c7a99; color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; }
+      .drawer-note { display: none; color: #7d8f9c; font-size: 11px; text-align: center; margin: 0; padding: 0 12px 6px; }
+      body.in-match.drawer-open .drawer-note { display: block; }
+      .menu-btn {
+        display: none;
+        width: 44px; height: 36px; border: 0; border-radius: 10px;
+        background: #26313a; color: #cfe3ef; font-size: 18px; line-height: 1;
+        place-items: center; touch-action: manipulation;
+      }
+      body.in-match .menu-btn { display: grid; }
+      body.in-match .drawer { display: none; }
+      body.in-match.drawer-open .drawer {
+        display: block;
+        position: fixed; inset: 0; z-index: 5;
+        max-width: none; overflow: auto;
+        background: rgba(16, 20, 24, 0.96);
+        padding: calc(12px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+      }
+      body.in-match.drawer-open .drawer-head { display: flex; }
+      /* The header is the drawer's job on the playing screen. Every screen before it keeps it. */
+      body.playing header { display: none; }
+      /* The wide-window layout keeps its header and never hides the panel. */
+      @media (hover: hover) and (pointer: fine) {
+        body.playing header { display: flex; }
+        body.in-match .menu-btn { display: none; }
+        body.in-match .drawer { display: block; }
+        body.in-match.drawer-open .drawer { position: static; padding: 0; background: none; max-width: none; }
+        body.in-match.drawer-open .drawer-head { display: none; }
+        .drawer { max-width: none; }
+      }
+      /* Stretch (Cam's question): the 240x160 picture pulled to whatever height is left
+         between the top and the pad. Off by default -- Emerald's sprites are 3:2 and this
+         is them squashed -- but on the phone it is his call to make, so it is a button. */
+      body.stretch #screen-wrap { flex: 1 1 0; min-height: 0; place-items: stretch; }
+      body.stretch #pad { flex: 0 0 auto; }
+      body.stretch canvas { width: 100%; height: 100%; aspect-ratio: auto; object-fit: fill; }
+      @media (hover: hover) and (pointer: fine) {
+        body.stretch #screen-wrap canvas { object-fit: fill; }
       }
       .settings {
         display: flex;
@@ -331,6 +378,15 @@
       </section>
 
       <section id="screen-playing" class="screen" hidden>
+        <!-- The phone's chrome (Cam, 2026-09-18): during a match only game controls are
+             on the glass. Everything else -- the room, the host's buttons, the results,
+             the settings -- is behind this button, in the drawer below it. -->
+        <div id="drawer" class="drawer">
+        <div class="drawer-head">
+          <span>Hoenn Battle Royale</span>
+          <span id="drawer-version" class="version"></span>
+          <button id="drawer-close" class="drawer-close" type="button">BACK TO GAME</button>
+        </div>
         <div id="room-panel" class="room-panel" hidden>
           <div id="room-code" class="room-code"></div>
           <div id="match-strip" class="room-code" hidden></div>
@@ -357,6 +413,20 @@
             <button id="play-again" type="button">PLAY AGAIN</button>
           </div>
         </div>
+        <div class="settings">
+          <button id="mute" type="button">Mute</button>
+          <button id="stretch" type="button" aria-pressed="false">Stretch</button>
+          <button id="forget-rom" type="button">Forget stored ROM</button>
+          <button id="remap" type="button">Remap pad</button>
+          <button id="remap-reset" type="button">Reset pad</button>
+        </div>
+        <div id="remap-line" class="keys-note"></div>
+        <div class="keys">
+          Arrows move &middot; Z = A &middot; X = B &middot; A = L &middot; S = R &middot;
+          Enter = START &middot; Shift = SELECT &middot; a gamepad works too
+        </div>
+        <p class="drawer-note">Tap the picture to walk there, or tap a move to use it.</p>
+        </div>
         <div id="screen-wrap">
           <canvas id="canvas" width="240" height="160"></canvas>
           <div id="fps" class="fps" hidden></div>
@@ -369,19 +439,12 @@
           </div>
           <div class="sys">
             <div class="btn" data-key="select">SELECT</div>
+            <!-- Not over the picture: the ROM draws its own corner top-right and the
+                 ticker along the bottom, so the one place a button covers nothing is
+                 in the pad. -->
+            <button id="menu-btn" class="menu-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="drawer">&#9776;</button>
             <div class="btn" data-key="start">START</div>
           </div>
-        </div>
-        <div class="settings">
-          <button id="mute" type="button">Mute</button>
-          <button id="forget-rom" type="button">Forget stored ROM</button>
-          <button id="remap" type="button">Remap pad</button>
-          <button id="remap-reset" type="button">Reset pad</button>
-        </div>
-        <div id="remap-line" class="keys-note"></div>
-        <div class="keys">
-          Arrows move &middot; Z = A &middot; X = B &middot; A = L &middot; S = R &middot;
-          Enter = START &middot; Shift = SELECT &middot; a gamepad works too
         </div>
       </section>
     </div>

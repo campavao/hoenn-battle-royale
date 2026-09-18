@@ -44,6 +44,7 @@ import {
 import { Roster, type RosterEntry } from './match/roster';
 import type { TickerMsg, MapRef } from './net/wire';
 import { World, type WorldMap } from './bots/world';
+import { TouchLayer } from './touch';
 import { sectionInside } from './match/ring';
 import { dealParty, speciesName } from './bots/party';
 import { MatchLog, saveMatch } from './match/log';
@@ -87,6 +88,7 @@ const WORLD: DirectorWorld = {
 };
 
 const MUTE_STORAGE_KEY = 'hbr:muted';
+const STRETCH_STORAGE_KEY = 'hbr:stretch';
 const UNMUTED_VOLUME = 100;
 const NAME_STORAGE_KEY = 'hbr:name';
 const DEFAULT_NAME = 'CAM';
@@ -114,10 +116,27 @@ const SCREENS: Screen[] = ['importing', 'patching', 'lobby', 'playing'];
 
 function showScreen(screen: Screen): void {
   for (const s of SCREENS) $(`#screen-${s}`).toggleAttribute('hidden', s !== screen);
+  // On the playing screen the header's job moves into the drawer (index.html).
+  document.body.classList.toggle('playing', screen === 'playing');
 }
 
 function setVersionLine(text: string): void {
   $('#version').textContent = text;
+  $('#drawer-version').textContent = text;
+}
+
+/** The phone's chrome (Cam, 2026-09-18): in a match, only game controls are on the
+ *  glass and everything else waits behind the menu button. The results open the
+ *  drawer themselves, because "you are out" is not something to go looking for. */
+function setInMatch(on: boolean): void {
+  document.body.classList.toggle('in-match', on);
+  if (!on) document.body.classList.remove('drawer-open');
+  ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', String(document.body.classList.contains('drawer-open')));
+}
+
+function openDrawer(open: boolean): void {
+  document.body.classList.toggle('drawer-open', open);
+  ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', String(open));
 }
 
 function versionText(info: ReleaseInfo): string {
@@ -1374,6 +1393,7 @@ function startBots(
  *  the one that cannot leave half a match's state behind. */
 function renderResults(seat: number, roster: Roster, results: Results, seats: number, seed?: number): void {
   const panel = $('#results-panel') as HTMLElement;
+  openDrawer(true);
   const mine = results.forSeat(seat, performance.now());
   if (!mine.ended) {
     panel.hidden = true;
@@ -1598,6 +1618,7 @@ function renderGuestStrip(
   }
   ($('#room-panel') as HTMLElement).hidden = false;
   strip.hidden = false;
+  setInMatch(true);
   // The CLOCK lands every five seconds; the seconds in between are counted off here,
   // the same way the ROM counts them off against its own frame timer.
   const gone = Math.floor(Math.max(0, now - match.clockAt) / 1000);
@@ -1619,6 +1640,7 @@ function renderMatchStrip(state: DirectorState): void {
   const strip = $('#match-strip') as HTMLElement;
   panel.hidden = false;
   strip.hidden = false;
+  setInMatch(true);
   const mm = Math.floor(state.clockLeft / 60);
   const ss = String(state.clockLeft % 60).padStart(2, '0');
   const phaseLabel =
@@ -2632,6 +2654,7 @@ function wireRoom(
       // Whoever we were watching is not in a match any more.
       for (const m of spectate.follow(null)) bridge?.pushToRom(m);
       ($('#results-panel') as HTMLElement).hidden = true;
+      setInMatch(false);
       if (bridge) {
         renderRoom(bridge);
         renderSpectate(bridge, spectate);
@@ -3049,7 +3072,7 @@ function runLobby(): Promise<RoomHash> {
 
 // ---- wiring -------------------------------------------------------------------------------
 
-function wirePlayScreen(emu: Emulator): void {
+function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined): void {
   wireKeyboard(emu);
   wireGamepad(emu);
   wireRemap();
@@ -3058,7 +3081,37 @@ function wirePlayScreen(emu: Emulator): void {
   }
   wireDpad($('#dpad-surface') as HTMLElement, emu);
   wireSettings(emu);
+  wireDrawer();
   wireFps(emu);
+  // Tapping the picture itself (touch.ts). Needs the symbol table: without it there is
+  // no reading where we stand or which menu is up, and a tap does nothing.
+  if (symbols) {
+    new TouchLayer({
+      emu,
+      canvas: $('#canvas') as HTMLCanvasElement,
+      symbols,
+      stretched: () => document.body.classList.contains('stretch'),
+    }).attach();
+  }
+}
+
+function wireDrawer(): void {
+  const btn = $('#menu-btn') as HTMLButtonElement;
+  btn.addEventListener('click', () => openDrawer(!document.body.classList.contains('drawer-open')));
+  ($('#drawer-close') as HTMLButtonElement).addEventListener('click', () => openDrawer(false));
+  // Stretch: the picture pulled to the height left over. A choice, remembered.
+  const stretchBtn = $('#stretch') as HTMLButtonElement;
+  const applyStretch = (on: boolean) => {
+    document.body.classList.toggle('stretch', on);
+    stretchBtn.setAttribute('aria-pressed', String(on));
+    stretchBtn.textContent = on ? 'Stretch: on' : 'Stretch';
+  };
+  applyStretch(localStorage.getItem(STRETCH_STORAGE_KEY) === '1');
+  stretchBtn.addEventListener('click', () => {
+    const on = stretchBtn.getAttribute('aria-pressed') !== 'true';
+    localStorage.setItem(STRETCH_STORAGE_KEY, on ? '1' : '0');
+    applyStretch(on);
+  });
 }
 
 /** Registers the service worker (POK-246), so a second visit works with no network and
@@ -3170,7 +3223,7 @@ async function main(): Promise<void> {
   // Input first, and before anything that waits: the wiring used to sit after the
   // mailbox handshake and the lobby, so between the ROM starting and the match being
   // chosen there was a running game that answered to nothing at all.
-  wirePlayScreen(emu);
+  wirePlayScreen(emu, symbols);
 
   // Which way in decides the boot block -- solo warps straight into the Safari opening
   // (BR_BOOT_SAFARI) while a room waits in Littleroot (BR_BOOT_MAP) -- so the choice has

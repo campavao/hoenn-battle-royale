@@ -1,0 +1,46 @@
+# safari-menu-byte: the Safari's controller says 3 on BALL/POKeBLOCK/GO NEAR/RUN and 0
+# once a choice is made (menu-byte.txt is the ordinary battle). The opening is where a
+# phone spends its first two minutes, so the tap-to-choose has to work here too.
+#
+# The walk into the grass is catch-pages.txt's.
+wait 30
+poke u32 gBrMatch+8 0x00000C00
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+poke u8 gBrMatch+1 1
+poke u16 gBrMatch+12 240
+expect u8 gBrBattle+8 0
+hold DOWN 140
+hold LEFT 100
+hold RIGHT 70
+hold LEFT 70
+hold RIGHT 70
+hold LEFT 70
+wait 40
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+tap B
+wait 30
+expectge u8 gBattlersCount 2
+shot safari-menu
+expect u8 gBrBattle+8 3
+expect u8 gActionSelectionCursor 0
+tap DOWN
+wait 6
+expect u8 gActionSelectionCursor 2
+tap UP
+wait 6
+# BALL: the choice leaves through SafariBufferExecCompleted, which clears it
+tap A
+wait 10
+expect u8 gBrBattle+8 0
+say safari menu byte ok
