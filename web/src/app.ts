@@ -2810,6 +2810,15 @@ function wireRoom(
   // running lives in this tab, and hosting again is how anyone finds it.
   relay.on('open', (ev) => {
     if (!ev.reconnected) return;
+    // Back to the seat we had (POK-284): the relay holds it for a minute after a
+    // socket drops, and the id it hands back is the one every ROM in the room already
+    // knows us by. A host that dropped finds an heir running the match and comes back
+    // as a member of it (POK-116); the room only closed if nobody could take it, and
+    // then the rejoin is refused and we host again as before.
+    if (relay.rejoin()) {
+      codeEl.textContent = 'Reconnected. Rejoining…';
+      return;
+    }
     if (isHost) {
       codeEl.textContent = 'Reconnected. Hosting again…';
       relay.host({ ...me, open: true, max: BOT_FILL });

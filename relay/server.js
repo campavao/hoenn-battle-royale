@@ -110,7 +110,7 @@
 // has to be checked twice.
 
 import http from "node:http";
-import { randomInt } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import { WebSocketServer } from "ws";
 
 export const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -161,6 +161,11 @@ export const DEFAULT_LIMITS = Object.freeze({
   idleMs: 60_000,       // clients ping every few seconds
   unboundMs: 30_000,    // connected but never hosted/joined
   sweepMs: 5_000,
+  // How long a seat is held for a member whose socket dropped (POK-284).
+  // The page's own grace for a missing seat is ten seconds; this is
+  // longer because the page's clock starts on the roster that says they
+  // are gone, and a phone coming back from a tunnel takes what it takes.
+  rejoinMs: 60_000,
 });
 
 const NAME_MAX = 10;
@@ -333,13 +338,53 @@ class Room {
     // client sent neither (an older client, or one that opts out of the
     // gate entirely).
     this.version = null;
+    // Seats held for members whose socket dropped (POK-284), by resume
+    // token: the id and what the member was when they went, kept for
+    // limits.rejoinMs.  A returning client presents the token and gets
+    // the same id back -- and the id is the page's seat, so its ghost, its
+    // loot keys, its spectator target and everything in flight still fit.
+    this.held = new Map();
   }
 
-  add(conn) {
-    conn.id = this.nextId++;
+  // A member's seat, and a fresh token that can claim it back.  With a
+  // `token` that names a held seat, the SAME id as before; otherwise the
+  // next one.  The token is new either way: the old one has done its job.
+  add(conn, token) {
+    const held = token ? this.held.get(token) : undefined;
+    if (held) {
+      this.held.delete(token);
+      conn.id = held.id;
+      conn.canHost = held.canHost;
+      conn.spectator = held.spectator;
+    } else {
+      conn.id = this.nextId++;
+    }
+    conn.token = randomBytes(12).toString("hex");
     conn.room = this;
     this.members.set(conn.id, conn);
     return conn.id;
+  }
+
+  // Keep a dropped member's seat for a while.  Not for one who LEFT, and
+  // not for one shown the door: a removal is meant to stick.
+  hold(conn, now) {
+    if (!conn.token) return;
+    this.held.set(conn.token, { id: conn.id, name: conn.name, canHost: conn.canHost,
+                                spectator: conn.spectator, at: now });
+  }
+
+  // Is this token a seat this room is still holding?
+  holding(token, now, rejoinMs) {
+    const held = typeof token === "string" ? this.held.get(token) : undefined;
+    if (!held) return false;
+    if (now - held.at > rejoinMs) { this.held.delete(token); return false; }
+    return true;
+  }
+
+  expireHeld(now, rejoinMs) {
+    for (const [token, held] of this.held) {
+      if (now - held.at > rejoinMs) this.held.delete(token);
+    }
   }
 
   remove(conn) {
@@ -499,6 +544,9 @@ export function createRelay(options = {}) {
     const room = conn.room;
     if (!room) return;
     room.remove(conn);
+    // A dropped socket keeps its seat for a while (POK-284); a member who
+    // said "leave_room" does not, and neither does one the host removed.
+    if (reason !== "left" && reason !== "removed") room.hold(conn, Date.now());
     if (room.host === conn) {
       // Host migration (POK-116).  The host's client is the match authority,
       // but every guest already mirrors the world it is authoritative over --
@@ -622,7 +670,7 @@ export function createRelay(options = {}) {
         if (open) {
           conn.name = cleanName(msg.name);
           open.add(conn);
-          conn.send({ type: "room_joined", code: open.code, id: conn.id, host: open.host.id });
+          conn.send({ type: "room_joined", code: open.code, id: conn.id, host: open.host.id, token: conn.token });
           open.broadcast(open.roster());
           log(`room ${open.code}: ${conn.name}#${conn.id} joined the daily`);
           return;
@@ -646,7 +694,7 @@ export function createRelay(options = {}) {
         room.add(conn);
         traffic.roomsOpened += 1;
         if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
-        conn.send({ type: "room_hosted", code: room.code, id: conn.id });
+        conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
         conn.send(room.roster());
         log(`room ${room.code} hosted by ${conn.name}#${conn.id} (daily)`);
         return;
@@ -672,7 +720,7 @@ export function createRelay(options = {}) {
         room.add(conn);
         traffic.roomsOpened += 1;
         if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
-        conn.send({ type: "room_hosted", code: room.code, id: conn.id });
+        conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
         conn.send(room.roster());
         log(`room ${room.code} hosted by ${conn.name}#${conn.id}` +
             (room.open ? " (open)" : "") + (room.pass ? " (passcode)" : ""));
@@ -697,21 +745,27 @@ export function createRelay(options = {}) {
           conn.send({ type: "room_error", reason: "version", host: room.version });
           return;
         }
+        // Coming back to a seat the room is still holding (POK-284): the
+        // door's state is not asked, because they were already inside.
+        // A stale or unknown token is an ordinary join.
+        const resuming = room.holding(msg.token, Date.now(), limits.rejoinMs);
         // A spectator's door opens where a player's is barred (POK-133):
         // lock_room exists to stop competitors joining a running match,
         // and somebody who asks to WATCH is not one.  The flag rides the
         // roster so every client knows who is a guest of the next match
         // rather than a trainer in this one.
         const spectate = msg.spectate === true;
-        if (room.locked && !spectate) { conn.send({ type: "room_error", reason: "locked" }); return; }
-        if (room.members.size >= room.max) { conn.send({ type: "room_error", reason: "full" }); return; }
+        if (!resuming) {
+          if (room.locked && !spectate) { conn.send({ type: "room_error", reason: "locked" }); return; }
+          if (room.members.size >= room.max) { conn.send({ type: "room_error", reason: "full" }); return; }
+        }
         conn.name = cleanName(msg.name);
         conn.skin = cleanSkin(msg.skin);
         conn.spectator = spectate || undefined;
-        room.add(conn);
-        conn.send({ type: "room_joined", code: room.code, id: conn.id, host: room.host.id });
+        room.add(conn, resuming ? msg.token : undefined);
+        conn.send({ type: "room_joined", code: room.code, id: conn.id, host: room.host.id, token: conn.token });
         room.broadcast(room.roster());
-        log(`room ${room.code}: ${conn.name}#${conn.id} ${spectate ? "spectates" : "joined"}`);
+        log(`room ${room.code}: ${conn.name}#${conn.id} ${resuming ? "rejoined" : spectate ? "spectates" : "joined"}`);
         return;
       }
 
@@ -759,7 +813,7 @@ export function createRelay(options = {}) {
         conn.name = cleanName(msg.name);
         conn.skin = cleanSkin(msg.skin);
         best.add(conn);
-        conn.send({ type: "room_joined", code: best.code, id: conn.id, host: best.host.id });
+        conn.send({ type: "room_joined", code: best.code, id: conn.id, host: best.host.id, token: conn.token });
         best.broadcast(best.roster());
         log(`room ${best.code}: ${conn.name}#${conn.id} quick-joined`);
         return;
@@ -883,6 +937,7 @@ export function createRelay(options = {}) {
         if (!target || target === conn) return;
         room.banned.add(target.ip);
         room.remove(target);
+        target.token = null; // no seat is held for the removed (POK-284)
         target.send({ type: "room_closed", reason: "removed" });
         room.broadcast(room.roster());
         log(`room ${room.code}: ${target.name}#${target.id} removed by host`);
@@ -1076,6 +1131,7 @@ export function createRelay(options = {}) {
         conn.destroy("unbound");
       }
     }
+    for (const room of rooms.values()) room.expireHeld(now, limits.rejoinMs);
   }, limits.sweepMs);
   sweeper.unref();
 

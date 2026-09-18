@@ -176,6 +176,14 @@ export class RelayClient {
   id: number | null = null;
   code: string | null = null;
   hostId: number | null = null;
+  /** The relay's resume token for our seat (POK-284): presented on a rejoin so a
+   *  dropped socket gets the id it had, which is the page's seat. Spent by the rejoin;
+   *  the relay hands out a new one with every room_hosted/room_joined. */
+  token: string | null = null;
+  /** What we last joined or hosted as, and where, so a rejoin can ask the same way.
+   *  `code` above is cleared with the socket; this survives it, which is the point. */
+  private lastOpts: JoinOpts | null = null;
+  private lastCode: string | null = null;
 
   private ws: WebSocketLike | null = null;
   private url: string | null = null;
@@ -233,6 +241,8 @@ export class RelayClient {
     }
     this.stopPing();
     this.pending = [];
+    this.token = null; // closed on purpose: there is no seat to go back to
+    this.lastCode = null;
     this.ws?.close();
     this.ws = null;
   }
@@ -282,12 +292,16 @@ export class RelayClient {
         this.id = msg.id as number;
         this.code = msg.code as string;
         this.hostId = msg.id as number;
+        this.token = typeof msg.token === 'string' ? msg.token : null;
+        this.lastCode = this.code;
         this.emit('room_hosted', { code: this.code, id: this.id });
         return;
       case 'room_joined':
         this.id = msg.id as number;
         this.code = msg.code as string;
         this.hostId = msg.host as number;
+        this.token = typeof msg.token === 'string' ? msg.token : null;
+        this.lastCode = this.code;
         this.emit('room_joined', { code: this.code, id: this.id, host: this.hostId });
         return;
       case 'roster':
@@ -389,6 +403,7 @@ export class RelayClient {
   }
 
   host(opts: HostOpts): void {
+    this.lastOpts = { name: opts.name, pass: opts.pass, skin: opts.skin, patch: opts.patch, protocol: opts.protocol };
     this.send({
       type: 'host_room',
       name: opts.name,
@@ -461,6 +476,7 @@ export class RelayClient {
   }
 
   join(code: string, opts: JoinOpts): void {
+    this.lastOpts = opts;
     this.send({
       type: 'join_room',
       code,
@@ -471,6 +487,26 @@ export class RelayClient {
       patch: opts.patch,
       protocol: opts.protocol,
     });
+  }
+
+  /** Back into the room we were in, as the seat we had (POK-284). The relay answers
+   *  room_joined with the same id while it is still holding the seat, whatever the
+   *  door says -- or room_error once it is not. False when there is nothing to go back
+   *  to: no room, or a relay that never gave us a token. */
+  rejoin(): boolean {
+    if (this.lastCode === null || this.token === null || this.lastOpts === null) return false;
+    this.send({
+      type: 'join_room',
+      code: this.lastCode,
+      name: this.lastOpts.name,
+      pass: this.lastOpts.pass,
+      skin: this.lastOpts.skin,
+      spectate: this.lastOpts.spectate === true ? true : undefined,
+      patch: this.lastOpts.patch,
+      protocol: this.lastOpts.protocol,
+      token: this.token,
+    });
+    return true;
   }
 
   /** Shows one member the door (POK-241). Host only -- the relay checks -- and the

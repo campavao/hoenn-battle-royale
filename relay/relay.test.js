@@ -1313,3 +1313,79 @@ test("GET /health answers 200 with room and connection counts", async () => {
     a.end();
   });
 });
+
+// A dropped socket gets its seat back (POK-284): the id IS the page's seat, so a
+// returning client that was handed a new one would be somebody else to every ROM in
+// the room.
+test("rejoin: a dropped guest presents its token and gets the same id, past a locked door", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.next();
+    assert.equal(typeof hosted.token, "string");
+    await a.next(); // roster
+
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "BLUE" });
+    const joined = await b.next();
+    assert.equal(joined.id, 2);
+    assert.equal(typeof joined.token, "string");
+    await b.next(); await a.next(); // rosters
+
+    // The match starts, then BLUE's socket dies.
+    a.send({ type: "lock_room" });
+    await a.settled();
+    b.end(); // the socket goes without a leave_room: a drop, as the relay sees it
+    const gone = await a.until("roster");
+    assert.deepEqual(gone.members.map((m) => m.id), [1]);
+
+    // A stranger cannot get in: the door is locked.
+    const c = await connect(port);
+    c.send({ type: "join_room", code: hosted.code, name: "GREEN" });
+    assert.equal((await c.next()).reason, "locked");
+
+    // BLUE comes back with its token and is seat 2 again, locked door or not.
+    const b2 = await connect(port);
+    b2.send({ type: "join_room", code: hosted.code, name: "BLUE", token: joined.token });
+    const back = await b2.next();
+    assert.equal(back.type, "room_joined");
+    assert.equal(back.id, 2);
+    assert.notEqual(back.token, joined.token); // a token is spent by the rejoin
+    const roster = await a.until("roster");
+    assert.deepEqual(roster.members.map((m) => m.id), [1, 2]);
+
+    // The spent token is worth nothing a second time.
+    const b3 = await connect(port);
+    b3.send({ type: "join_room", code: hosted.code, name: "BLUE", token: joined.token });
+    assert.equal((await b3.next()).reason, "locked");
+    a.end(); b2.end(); c.end(); b3.end();
+  });
+});
+
+test("rejoin: leaving on purpose holds nothing, and a hold expires", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.next();
+    await a.next();
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "BLUE" });
+    const joined = await b.next();
+    await b.next(); await a.next();
+
+    b.send({ type: "leave_room" });
+    await a.until("roster");
+    const b2 = await connect(port);
+    b2.send({ type: "join_room", code: hosted.code, name: "BLUE", token: joined.token });
+    assert.equal((await b2.next()).id, 3); // a new seat: nothing was held for a leaver
+    await b2.next(); await a.until("roster");
+
+    b2.end();
+    await a.until("roster");
+    await new Promise((r) => setTimeout(r, 120)); // past rejoinMs + a sweep
+    const b3 = await connect(port);
+    b3.send({ type: "join_room", code: hosted.code, name: "BLUE", token: joined.token });
+    assert.equal((await b3.next()).id, 4); // expired: the next seat, not the old one
+    a.end(); b3.end();
+  }, { rejoinMs: 50, sweepMs: 20 });
+});

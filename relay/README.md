@@ -27,12 +27,12 @@ Client -> server:
 
 | type | fields | does |
 | --- | --- | --- |
-| `host_room` | `name, open?, max?, skin?, pass?, patch?, protocol?` | opens a room; `room_hosted {code, id}` then a roster |
+| `host_room` | `name, open?, max?, skin?, pass?, patch?, protocol?` | opens a room; `room_hosted {code, id, token}` then a roster |
 | `set_max` | `max` | host only: room size, live |
 | `set_pass` | `pass` | host only: passcode, live; empty/absent clears it |
 | `set_skin` | `skin` | what this member looks like, live |
 | `list_rooms` | | `rooms {rooms:[...]}`: every joinable lobby |
-| `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?` | `room_joined {code, id, host}` or `room_error {reason}` |
+| `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?, token?` | `room_joined {code, id, host, token}` or `room_error {reason}`. With a `token` naming a seat the room is still holding (a socket that dropped within `rejoinMs`, 60 s), the same `id` comes back whatever the door says -- locked or full -- and the token is spent (POK-284). A member who sent `leave_room` or was removed is not held |
 | `stat` | `id, v, solo, since` | play counter; logged, counted, never answered |
 | `lock_room` | `locked` | host only: refuse new joiners (match in progress) |
 | `kick` | `id` | host only: remove a member, ban their IP from the room |
@@ -54,8 +54,8 @@ Server -> client:
 | `rooms` | `rooms:[...]` | reply to `list_rooms` |
 | `recv` | `from, m` | a `to`/`all` delivery |
 | `room_closed` | `reason` | the host left with no heir, or you were kicked (`reason:"removed"`) |
-| `room_hosted` | `code, id` | your `host_room`/`daily_join` succeeded |
-| `room_joined` | `code, id, host` | your `join_room`/`quick_join` succeeded |
+| `room_hosted` | `code, id, token` | your `host_room`/`daily_join` succeeded; `token` claims this seat back after a drop |
+| `room_joined` | `code, id, host, token` | your `join_room`/`quick_join` succeeded; `token` claims this seat back after a drop |
 | `room_error` | `reason` (`not_found`, `full`, `locked`, `passcode`, `removed`, `already_in_room`, `server_full`, `version`) | a request was refused |
 | `no_open_rooms` | | `quick_join` found nothing open or running |
 | `match_in_progress` | `code, members` | nothing joinable, but a match is running |

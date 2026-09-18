@@ -247,3 +247,47 @@ describe('RelayClient', () => {
     expect(closed).toHaveBeenCalledWith({ reason: 'removed' });
   });
 });
+
+describe('rejoin (POK-284)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('goes back to the same room with the token the relay gave, as it joined before', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    expect(relay.rejoin()).toBe(false); // nothing to go back to yet
+    relay.join('ABC123', { name: 'BLUE', pass: 'X1', patch: 7, protocol: 3 });
+    sockets[0].receive({ type: 'room_joined', code: 'ABC123', id: 5, host: 2, token: 'tok-1' });
+    expect(relay.token).toBe('tok-1');
+
+    // The socket drops and comes back: the client asks for its seat.
+    sockets[0].onclose?.({});
+    vi.advanceTimersByTime(60_000);
+    const again = sockets[sockets.length - 1];
+    expect(again).not.toBe(sockets[0]);
+    again.open();
+    expect(relay.rejoin()).toBe(true);
+    expect(again.sent.filter((m) => m.type === 'join_room')).toEqual([
+      { type: 'join_room', code: 'ABC123', name: 'BLUE', pass: 'X1', skin: undefined, spectate: undefined, patch: 7, protocol: 3, token: 'tok-1' },
+    ]);
+    // ...and the relay's answer carries a new token: the old one is spent.
+    again.receive({ type: 'room_joined', code: 'ABC123', id: 5, host: 2, token: 'tok-2' });
+    expect(relay.id).toBe(5);
+    expect(relay.token).toBe('tok-2');
+  });
+
+  it('a host has a token too, and a relay that gives none leaves rejoin with nothing', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    relay.host({ name: 'RED', open: true, max: 8 });
+    sockets[0].receive({ type: 'room_hosted', code: 'ABC123', id: 1 });
+    expect(relay.rejoin()).toBe(false);
+    sockets[0].receive({ type: 'room_hosted', code: 'ABC123', id: 1, token: 'h-1' });
+    expect(relay.rejoin()).toBe(true);
+    expect(sockets[0].sent.at(-1)).toMatchObject({ type: 'join_room', code: 'ABC123', name: 'RED', token: 'h-1' });
+  });
+});
