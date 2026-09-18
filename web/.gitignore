@@ -1,2 +1,5 @@
 .vercel
 .env*
+
+# The drop painter's map renders (tools/br/render-maps.py); generated, ~5 MB
+painter-maps/

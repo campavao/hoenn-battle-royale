@@ -9,13 +9,18 @@
 // builds only index.html, so this never ships. Pick a map, see its grid with what the drop
 // already knows drawn over it, click cells, copy the JSON into landing-hand.json. The file
 // is hand-edited and committed; landing-reach.ts never writes it.
+//
+// The map itself is drawn under the grid, from web/painter-maps/<MAP_ID>.png -- rendered
+// by tools/br/render-maps.py from pret's tilesets, one block to sixteen pixels. Cam: "I
+// have to see the actual map sprites to know what I'm painting." Gitignored; run the
+// script once. Without the PNG the grid still draws, over black.
 import { decodeGrid, type WorldMap } from './bots/world';
 import worldData from './data/world.json';
 import regionmapData from './data/regionmap.json';
 import { DOORSTEPS, HAND, LANDING, LANDING_ALL } from './match/landing';
 import type { LandingCell } from './match/director';
 
-const CELL = 10;
+const CELL = 16; // one map block, so the render lines up under the grid
 const maps = (worldData as { maps: WorldMap[] }).maps.filter((m) => m.outdoor);
 const sections = regionmapData.sections as Record<string, { name: string }>;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -51,23 +56,34 @@ for (const m of maps.slice().sort((a, b) => a.id.localeCompare(b.id))) {
 }
 
 let current = maps[0];
+let picture: HTMLImageElement | null = null;
 
 function draw(): void {
   const m = current;
   const grid = decodeGrid(m.grid, m.w * m.h);
   canvas.width = m.w * CELL;
   canvas.height = m.h * CELL;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (picture && picture.complete && picture.naturalWidth > 0) ctx.drawImage(picture, 0, 0);
   for (let y = 0; y < m.h; y++) {
     for (let x = 0; x < m.w; x++) {
-      ctx.fillStyle = CLASS_COLOUR[grid[y * m.w + x]] ?? '#f0f';
-      ctx.fillRect(x * CELL, y * CELL, CELL - 1, CELL - 1);
+      const cls = grid[y * m.w + x];
+      // The class as a tint over the tiles: walls and water darkened so what can be
+      // stood on reads at a glance, everything else left as the map draws it.
+      if (!picture || cls === 1 || cls === 2 || cls === 9) {
+        ctx.fillStyle = picture ? 'rgba(0,0,0,0.55)' : (CLASS_COLOUR[cls] ?? '#f0f');
+        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.strokeRect(x * CELL + 0.5, y * CELL + 0.5, CELL - 1, CELL - 1);
       const k = `${m.id}:${x},${y}`;
       if (painted.has(k)) ctx.fillStyle = '#f28c28';
       else if (doorstep.has(k)) ctx.fillStyle = '#2f6fd1';
       else if (ordinary.has(k)) ctx.fillStyle = '#2b7a3b';
       else if (off.has(k)) ctx.fillStyle = '#7a2b2b';
       else continue;
-      ctx.fillRect(x * CELL + 3, y * CELL + 3, CELL - 7, CELL - 7);
+      ctx.fillRect(x * CELL + 5, y * CELL + 5, CELL - 10, CELL - 10);
     }
   }
   const mine = [...painted.values()].filter((c) => c.map === m.id).length;
@@ -75,10 +91,19 @@ function draw(): void {
   json.value = JSON.stringify([...painted.values()].sort((a, b) => a.map.localeCompare(b.map) || a.y - b.y || a.x - b.x), null, 1);
 }
 
-select.addEventListener('change', () => {
-  current = maps.find((m) => m.id === select.value) ?? maps[0];
+function show(m: WorldMap): void {
+  current = m;
+  picture = new Image();
+  picture.onload = draw;
+  picture.onerror = () => {
+    picture = null;
+    status.textContent = `no render for ${m.id}: run python tools/br/render-maps.py`;
+  };
+  picture.src = `/painter-maps/${m.id}.png`;
   draw();
-});
+}
+
+select.addEventListener('change', () => show(maps.find((m) => m.id === select.value) ?? maps[0]));
 
 canvas.addEventListener('click', (ev) => {
   const rect = canvas.getBoundingClientRect();
@@ -107,4 +132,4 @@ $<HTMLButtonElement>('copy').addEventListener('click', () => {
   });
 });
 
-draw();
+show(current);
