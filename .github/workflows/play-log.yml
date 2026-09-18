@@ -53,7 +53,12 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
           PLAY_LOG_DIR: play-log
-        run: node tools/br/play-log.mjs
+        run: |
+          if [ -z "$RAILWAY_TOKEN$RAILWAY_PROJECT_TOKEN" ]; then
+            echo "::notice::no RAILWAY_PROJECT_TOKEN in this repo's secrets yet; nothing read"
+            exit 0
+          fi
+          node tools/br/play-log.mjs
 
       - name: commit if it moved
         run: |
