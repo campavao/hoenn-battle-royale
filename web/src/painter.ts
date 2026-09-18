@@ -57,6 +57,42 @@ for (const m of maps.slice().sort((a, b) => a.id.localeCompare(b.id))) {
 
 let current = maps[0];
 let picture: HTMLImageElement | null = null;
+/** Cells on the current map you can actually walk to from somewhere the drop already
+ *  knows about. Emerald's collision bits call the top of a tree "passable" -- it is only
+ *  ever drawn over -- so the class grid has pockets of standable cells inside solid tree
+ *  clusters, and Dewford's top-right corner lit up as if you could drop into a canopy.
+ *  A four-way flood over standable classes from every landing row on the map (off or
+ *  not, doorsteps included) tells the pockets from the ground. */
+let reachable = new Set<number>();
+
+function floodReachable(m: WorldMap): Set<number> {
+  const grid = decodeGrid(m.grid, m.w * m.h);
+  const standable = (i: number) => grid[i] !== 1 && grid[i] !== 2 && grid[i] !== 9;
+  const seen = new Set<number>();
+  const queue: number[] = [];
+  for (const c of LANDING_ALL) {
+    if (c.map !== m.id) continue;
+    const i = c.y * m.w + c.x;
+    if (!standable(i) || seen.has(i)) continue;
+    seen.add(i);
+    queue.push(i);
+  }
+  while (queue.length > 0) {
+    const i = queue.pop()!;
+    const x = i % m.w;
+    const y = (i - x) / m.w;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= m.w || ny >= m.h) continue;
+      const j = ny * m.w + nx;
+      if (seen.has(j) || !standable(j)) continue;
+      seen.add(j);
+      queue.push(j);
+    }
+  }
+  return seen;
+}
 
 function draw(): void {
   const m = current;
@@ -69,9 +105,10 @@ function draw(): void {
   for (let y = 0; y < m.h; y++) {
     for (let x = 0; x < m.w; x++) {
       const cls = grid[y * m.w + x];
-      // The class as a tint over the tiles: walls and water darkened so what can be
-      // stood on reads at a glance, everything else left as the map draws it.
-      if (!picture || cls === 1 || cls === 2 || cls === 9) {
+      // The class as a tint over the tiles: walls, water and the pockets nobody can
+      // walk to darkened so what can be stood on reads at a glance, everything else
+      // left as the map draws it.
+      if (!picture || cls === 1 || cls === 2 || cls === 9 || !reachable.has(y * m.w + x)) {
         ctx.fillStyle = picture ? 'rgba(0,0,0,0.55)' : (CLASS_COLOUR[cls] ?? '#f0f');
         ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
       }
@@ -93,6 +130,7 @@ function draw(): void {
 
 function show(m: WorldMap): void {
   current = m;
+  reachable = floodReachable(m);
   picture = new Image();
   picture.onload = draw;
   picture.onerror = () => {
@@ -113,6 +151,10 @@ canvas.addEventListener('click', (ev) => {
   const cls = decodeGrid(current.grid, current.w * current.h)[y * current.w + x];
   if (cls === 1 || cls === 2 || cls === 9) {
     status.textContent = `${x},${y} is not standable (class ${cls})`;
+    return;
+  }
+  if (!reachable.has(y * current.w + x)) {
+    status.textContent = `${x},${y} cannot be walked to from anywhere on this map (a tree top, or a sealed pocket)`;
     return;
   }
   const k = `${current.id}:${x},${y}`;
