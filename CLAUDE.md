@@ -18,7 +18,9 @@ judge, unset only when it needs this session's reasoning.
   under `#ifdef BR`. Write C89-ish: agbcc is GCC 2.95 (declarations before statements, no
   designated initialisers, no `//` in odd places).
 - `web/` — Vite + TypeScript shell. `relay/` — Node WebSocket relay. `tools/br/` — harness,
-  exporters, patch builder. `docs/` — design and handoffs.
+  exporters, patch builder. `docs/` — design and handoffs. **Deploying (site, relay, tag):
+  `docs/DEPLOY.md`** — when Cam asks to ship, that is the recipe, and read the live
+  `rom` back afterwards.
 - Never commit a `.gba`, `.sav`, `.ss?` or `.bps`. The patch is a CI artifact and a release
   asset; the ROM is never anywhere but the player's device.
 

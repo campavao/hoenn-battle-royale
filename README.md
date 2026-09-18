@@ -38,6 +38,9 @@ Upstream pokeemerald's own README is [README.pokeemerald.md](README.pokeemerald.
 
 ## Releases
 
+**How to deploy, step by step: [docs/DEPLOY.md](docs/DEPLOY.md)** (the site, the relay,
+the tag flow, and what to check afterwards).
+
 A tag is a release. `git tag -a v0.1.0 -m "what changed"` and push it: CI builds the ROM
 with agbcc (byte-matching, so the patch is our changes and nothing else), diffs it
 against the baseline pret build into `hoenn-br.bps`, attaches the patch and its two
