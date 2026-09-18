@@ -1,12 +1,53 @@
 {
- "readAt": "2026-09-18T04:59:46.150Z",
+ "readAt": "2026-09-18T13:27:53.929Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
+   "code": "UX5WTD",
+   "at": "2026-09-18T12:33:47.743Z",
+   "end": "2026-09-18T12:34:03.576Z",
+   "secs": 16,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-09-18T12:33:57.822Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "Z2AHW2",
+   "at": "2026-09-18T12:33:38.775Z",
+   "end": "2026-09-18T12:33:46.328Z",
+   "secs": 8,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
    "code": "G58F7T",
    "at": "2026-09-18T04:55:24.881Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-09-18T05:11:05.392Z",
+   "secs": 941,
    "door": "open",
    "mode": "host",
    "humans": 1,
@@ -22,10 +63,9 @@
      "mode": "host",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 888
     }
    ],
-   "live": true,
    "exact": true
   },
   {

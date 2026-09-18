@@ -1,5 +1,5 @@
-{"readAt":"2026-09-18T04:59:46.150Z",
- "swept":{"47f192a6-84bb-40f6-a53d-46b0bf8e3aa3":{"at":"2026-09-18T04:59:46.150Z","status":"SUCCESS"},"7372a377-5b16-4bdb-8b06-0ca0b142d379":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"},"6069d3c7-954d-4746-bb5d-dfa3dc8468c4":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"},"635232b1-61c6-4406-8989-7b83c8f67aff":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"}},
+{"readAt":"2026-09-18T13:27:53.929Z",
+ "swept":{"47f192a6-84bb-40f6-a53d-46b0bf8e3aa3":{"at":"2026-09-18T13:27:53.929Z","status":"SUCCESS"},"7372a377-5b16-4bdb-8b06-0ca0b142d379":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"},"6069d3c7-954d-4746-bb5d-dfa3dc8468c4":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"},"635232b1-61c6-4406-8989-7b83c8f67aff":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"}},
  "events":[
   {"t":"2026-09-16T22:07:57.080Z","kind":"drop","who":"4ab5#-","code":null,"why":"closed","secs":31,"sent":{"list_rooms":6,"ping":1},"deploy":"635232b1"},
   {"t":"2026-09-16T22:25:53.926Z","kind":"drop","who":"4ab5#-","code":null,"why":"closed","secs":292,"sent":{"list_rooms":58,"ping":14},"deploy":"635232b1"},
@@ -383,5 +383,23 @@
   {"t":"2026-09-18T04:55:24.881Z","kind":"host","code":"G58F7T","who":"a202#1","door":"open","deploy":"47f192a6"},
   {"t":"2026-09-18T04:55:27.252Z","kind":"seats","code":"G58F7T","max":12,"deploy":"47f192a6"},
   {"t":"2026-09-18T04:55:27.802Z","kind":"seats","code":"G58F7T","max":16,"deploy":"47f192a6"},
-  {"t":"2026-09-18T04:55:30.200Z","kind":"match","code":"G58F7T","mode":"host","trainers":1,"watching":0,"max":16,"deploy":"47f192a6"}
+  {"t":"2026-09-18T04:55:30.200Z","kind":"match","code":"G58F7T","mode":"host","trainers":1,"watching":0,"max":16,"deploy":"47f192a6"},
+  {"t":"2026-09-18T05:10:18.534Z","kind":"matchend","code":"G58F7T","secs":888,"deploy":"47f192a6"},
+  {"t":"2026-09-18T05:11:05.392Z","kind":"drop","who":"a202#1","code":"G58F7T","why":"closed","secs":941,"sent":{"all":29618,"ping":47,"to":3,"set_max":2,"lock_room":2,"host_room":1,"can_host":1},"deploy":"47f192a6"},
+  {"t":"2026-09-18T05:11:05.392Z","kind":"close","code":"G58F7T","why":"host_gone","deploy":"47f192a6"},
+  {"t":"2026-09-18T05:59:14.941Z","kind":"drop","who":"4ab5#-","code":null,"why":"closed","secs":15570,"sent":{"list_rooms":3041,"ping":760},"deploy":"47f192a6"},
+  {"t":"2026-09-18T12:33:38.775Z","kind":"host","code":"Z2AHW2","who":"a202#1","door":"open","deploy":"47f192a6"},
+  {"t":"2026-09-18T12:33:46.328Z","kind":"drop","who":"a202#1","code":"Z2AHW2","why":"closed","secs":8,"sent":{"all":2,"host_room":1,"can_host":1},"deploy":"47f192a6"},
+  {"t":"2026-09-18T12:33:46.328Z","kind":"close","code":"Z2AHW2","why":"host_gone","deploy":"47f192a6"},
+  {"t":"2026-09-18T12:33:47.743Z","kind":"host","code":"UX5WTD","who":"a202#1","door":"open","deploy":"47f192a6"},
+  {"t":"2026-09-18T12:33:57.822Z","kind":"match","code":"UX5WTD","mode":"host","trainers":1,"watching":0,"max":8,"deploy":"47f192a6"},
+  {"t":"2026-09-18T12:34:03.575Z","kind":"drop","who":"a202#1","code":"UX5WTD","why":"closed","secs":16,"sent":{"all":163,"host_room":1,"can_host":1,"lock_room":1},"deploy":"47f192a6"},
+  {"t":"2026-09-18T12:34:03.576Z","kind":"close","code":"UX5WTD","why":"host_gone","deploy":"47f192a6"},
+  {"t":"2026-09-18T13:27:18.255Z","kind":"host","code":"DZ44U4","who":"1e58#1","door":"open","test":true,"deploy":"47f192a6"},
+  {"t":"2026-09-18T13:27:20.612Z","kind":"join","code":"DZ44U4","who":"1e58#2","how":"code","test":true,"deploy":"47f192a6"},
+  {"t":"2026-09-18T13:27:20.675Z","kind":"match","code":"DZ44U4","mode":"host","trainers":2,"watching":0,"max":8,"deploy":"47f192a6"},
+  {"t":"2026-09-18T13:27:28.531Z","kind":"drop","who":"1e58#2","code":"DZ44U4","why":"closed","secs":8,"sent":{"all":3,"join_room":1,"can_host":1},"test":true,"deploy":"47f192a6"},
+  {"t":"2026-09-18T13:27:28.531Z","kind":"left","code":"DZ44U4","who":"1e58#2","how":"left","test":true,"deploy":"47f192a6"},
+  {"t":"2026-09-18T13:27:28.554Z","kind":"drop","who":"1e58#1","code":"DZ44U4","why":"closed","secs":10,"sent":{"all":187,"host_room":1,"can_host":1,"lock_room":1},"test":true,"deploy":"47f192a6"},
+  {"t":"2026-09-18T13:27:28.554Z","kind":"close","code":"DZ44U4","why":"host_gone","deploy":"47f192a6"}
  ]}
