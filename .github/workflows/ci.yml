@@ -6,6 +6,10 @@ name: BR CI
 on:
   push:
     branches: [hoenn-battle-royale]
+    # A tag is a release (POK-248): the same build, then the `release` job at the end
+    # publishes it. `git tag -a v0.1.0 -m "..."` and push the tag; the message is the
+    # release note.
+    tags: ['v*']
   pull_request:
     branches: [hoenn-battle-royale]
 
@@ -119,6 +123,9 @@ jobs:
           # it is a build output, one per build -- so without this the drivers below
           # have no symbol table at all.
           cp patch/br-symbols.json br-symbols.json
+          # On a tag the shell is named after it (v0.1.0 -> "0.1.0"); otherwise
+          # package.json's, as on every push.
+          if [ "${{ github.ref_type }}" = "tag" ]; then export HBR_SHELL_VERSION="${GITHUB_REF_NAME#v}"; fi
           tools/br/version-json.sh pokeemerald.gba patch/br-version.json
           echo "size=$(stat -c%s patch/hoenn-br.bps)" >> "$GITHUB_OUTPUT"
 
@@ -305,3 +312,104 @@ jobs:
       # next to the thing that writes them. No dependencies: node alone.
       - name: Test the play log's parser
         run: node --test tools/br/play-log.test.mjs
+
+  # A tag is a release (POK-248). Three things go out, in this order, each only after
+  # the one before it held:
+  #
+  #   1. a GitHub release carrying the patch and its two sidecars -- never a ROM. The
+  #      BPS needs no retail Emerald: the rom job diffs this fork against the baseline
+  #      pret build, which agbcc reproduces byte for byte.
+  #   2. the site, to Vercel production, from the repo root (the project's Root
+  #      Directory is web/) with the patch already in web/public/patch. Skipped with a
+  #      warning until VERCEL_TOKEN is in this repo's secrets; tools/br/release-web.sh
+  #      is the same deploy by hand.
+  #   3. the relay, to Railway -- ONLY when relay/ changed since the previous tag,
+  #      because a relay deploy restarts it and every room in it is lost.
+  #
+  # Nothing here runs on a branch push; a broken tag can be deleted and re-pushed.
+  release:
+    if: github.ref_type == 'tag'
+    needs: [rom, web, relay]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      SITE: https://hoenn-battle-royale.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the previous tag, for the relay's "did it change" check
+
+      - uses: actions/download-artifact@v4
+        with: { name: patch, path: web/public/patch }
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # An annotated tag's message is the release note, in the author's own words;
+          # a bare tag gets GitHub's list of commits since the last one.
+          notes="$(git tag -l --format='%(contents)' "$TAG")"
+          if [ -n "$notes" ]; then
+            printf '%s\n' "$notes" > notes.md
+            gh release create "$TAG" --title "$TAG" --notes-file notes.md \
+              web/public/patch/hoenn-br.bps web/public/patch/br-symbols.json web/public/patch/br-version.json
+          else
+            gh release create "$TAG" --title "$TAG" --generate-notes \
+              web/public/patch/hoenn-br.bps web/public/patch/br-symbols.json web/public/patch/br-version.json
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Site to Vercel production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # Identifiers, not secrets: the same two in .vercel/project.json on a linked
+          # checkout. With them set the CLI needs no `vercel link`.
+          VERCEL_ORG_ID: team_gaLIYr6KzQS9rVhAXaQH5gnQ
+          VERCEL_PROJECT_ID: prj_aEr5EE6Or7i7sflksOzk0MI6XOeT
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::warning::no VERCEL_TOKEN in this repo's secrets; the site was not deployed. Run tools/br/release-web.sh --prod by hand, or add the token (Vercel -> Account Settings -> Tokens)."
+            exit 0
+          fi
+          npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+          # The same four checks as release-web.sh. Production is public, so plain curl.
+          fail=0
+          check() {
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$SITE$1")"
+            if [ "$code" = "$2" ]; then echo "  ok   $1 -> $code"; else echo "  FAIL $1 -> $code (wanted $2)"; fail=1; fi
+          }
+          check /patch/br-version.json 200
+          check /patch/br-symbols.json 200
+          check /patch/hoenn-br.bps 200
+          # A 200 here means a copyrighted ROM is on the internet.
+          check /patch/pokeemerald.gba 404
+          [ "$fail" -eq 0 ]
+          live="$(curl -s "$SITE/patch/br-version.json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["romSha1"][:7])')"
+          want="$(python3 -c 'import json;print(json.load(open("web/public/patch/br-version.json"))["romSha1"][:7])')"
+          echo "live rom $live, this build $want"
+          [ "$live" = "$want" ]
+
+      - name: Relay to Railway, if relay/ changed since the previous tag
+        env:
+          # The account token (the same secret the play log reads with). The CLI calls
+          # it RAILWAY_API_TOKEN; RAILWAY_TOKEN to the CLI would mean a project token.
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          prev="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"
+          if [ -n "$prev" ] && git diff --quiet "$prev" "$TAG" -- relay/; then
+            echo "relay/ unchanged since $prev; the relay stays up"
+            exit 0
+          fi
+          if [ -z "$RAILWAY_API_TOKEN" ]; then
+            echo "::warning::relay/ changed but there is no RAILWAY_TOKEN in this repo's secrets; deploy it by hand: cd relay && railway up --detach"
+            exit 0
+          fi
+          npm i -g @railway/cli
+          cd relay
+          railway link --project 34e1da0b-5125-40be-9954-d90fafa3e156 --environment production --service hoenn-relay
+          railway up --service hoenn-relay --detach --ci

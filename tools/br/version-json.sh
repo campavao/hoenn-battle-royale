@@ -33,7 +33,12 @@ PATCH_VERSION="$(grep_define BR_PATCH_VERSION)"
 PROTOCOL="$(grep_define BR_PROTOCOL)"
 
 SHELL_VERSION="unknown"
-if [[ -f "$ROOT/web/package.json" ]]; then
+if [[ -n "${HBR_SHELL_VERSION:-}" ]]; then
+  # A tagged release (ci.yml's release job) names the shell after the tag, so the
+  # version line on the phone says the release a player is running, not package.json's
+  # never-bumped 0.0.0.
+  SHELL_VERSION="$HBR_SHELL_VERSION"
+elif [[ -f "$ROOT/web/package.json" ]]; then
   # No jq dependency: package.json's "version" field, first hit, quotes stripped.
   SHELL_VERSION="$(grep -m1 '"version"' "$ROOT/web/package.json" | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')"
 fi
