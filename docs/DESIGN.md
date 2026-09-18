@@ -164,6 +164,15 @@ swapping newline-JSON-over-TCP for WebSocket frames because browsers cannot open
 Flood buckets, idle sweep, code alphabet, room caps and the daily row are unchanged.
 Separate Railway service from the Kanto relay.
 
+**Observability is outside-in, as Kanto's.** The relay has no HTTP surface, and adding
+one would mean a deploy, which kills every match in progress. It writes one log line per
+thing that happens and a heartbeat every five minutes; `tools/br/play-log.mjs` reads them
+off Railway's log API every fifteen minutes (`.github/workflows/play-log.yml`), keeps every
+parsed line for good, and commits `play.json` / `stats.json` to the orphan `play-log`
+branch. `/play.html` on the site reads that branch raw, so the numbers move without a
+release. Names are hashed to four characters before they are written anywhere; the e2e
+suite connects as `E2E` and is left out.
+
 ## 9. Testing
 
 | Layer | How |

@@ -300,3 +300,8 @@ jobs:
         run: |
           npm ci --ignore-scripts
           node --test
+
+      # The play log reads this relay's lines (POK-248), so its parser is pinned here,
+      # next to the thing that writes them. No dependencies: node alone.
+      - name: Test the play log's parser
+        run: node --test tools/br/play-log.test.mjs

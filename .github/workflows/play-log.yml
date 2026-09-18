@@ -1,0 +1,76 @@
+name: play log
+
+# Scrapes the relay's log lines into a play history the site can draw (POK-248):
+# rooms, matches, who played with whom, solo reports, and the five-minute heartbeat.
+# Deliberately outside-in: the relay has no HTTP surface, and adding one would mean
+# deploying it, which kills every match in progress.
+#
+# The data lives on the orphan `play-log` branch, never on this one: a commit every
+# quarter hour would bury the code's history, and the site reads the branch raw
+# (web/public/play.html), so nothing here needs a release to reach the page. Commits
+# only when the numbers actually move, so an idle relay produces no history at all.
+#
+# Needs one secret: RAILWAY_PROJECT_TOKEN (least privilege, one environment) or
+# RAILWAY_TOKEN. Kanto's relay_stats.yml is the parent of this file.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: play-log
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The branch the data lives on, checked out beside the code. The first run finds
+      # no such branch and starts one with nothing on it.
+      - name: check out the play-log branch
+        run: |
+          if git ls-remote --exit-code --heads origin play-log >/dev/null; then
+            git worktree add play-log origin/play-log
+            git -C play-log checkout -B play-log origin/play-log
+          else
+            git worktree add --detach play-log
+            git -C play-log checkout --orphan play-log
+            git -C play-log rm -rfq . || true
+            echo "# play-log" > play-log/README.md
+            echo "Written by .github/workflows/play-log.yml from the relay's logs; read by /play.html." >> play-log/README.md
+          fi
+
+      - name: read the relay's log
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
+          PLAY_LOG_DIR: play-log
+        run: node tools/br/play-log.mjs
+
+      - name: commit if it moved
+        run: |
+          cd play-log
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          summary=$(node -e "
+            let s = {}, p = {};
+            try { s = require('./stats.json'); } catch (e) {}
+            try { p = require('./play.json'); } catch (e) {}
+            process.stdout.write((s.conns ?? 0) + ' connected, ' + (s.rooms ?? 0) + ' rooms, ' +
+              (p.sessions ? p.sessions.length + ' rooms logged' : 'no play log'));
+          ")
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "relay: $summary"
+          git push origin play-log

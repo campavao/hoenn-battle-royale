@@ -30,6 +30,13 @@ test.beforeAll(() => {
 /** A production bundle with a patched ROM in it, sitting wherever `hash` puts it. */
 async function open(browser: Browser, hash: string): Promise<Page> {
   const page = await (await browser.newContext()).newPage();
+  // Named E2E on the relay, not CAM: this room lands in the relay's log next to real
+  // ones, and tools/br/play-log.mjs leaves out anything an E2E opened or sat in, so the
+  // play page does not count the suite as players. A fresh context would otherwise
+  // connect under the shell's default name, which is also what a new player gets.
+  await page.addInitScript(() => {
+    try { localStorage.setItem('hbr:career', JSON.stringify({ matches: 0, wins: 0, name: 'E2E' })); } catch {}
+  });
   await page.goto(`${site}/${hash}`, { waitUntil: 'domcontentloaded' });
   // The picker is live before the shell can take a file (see live.spec.ts); the shell
   // reads `input.files` when it attaches, so setting it early is safe and is the point.
