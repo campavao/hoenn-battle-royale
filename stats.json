@@ -1,0 +1,15 @@
+{
+  "at": "2026-09-18T04:59:06.361Z",
+  "rooms": 1,
+  "roomCap": 40,
+  "conns": 2,
+  "connCap": 200,
+  "peakRooms": 1,
+  "peakConns": 4,
+  "matches": 5,
+  "sent": "180.8KB",
+  "lines": 5982,
+  "deployedAt": "2026-09-18T01:23:26.265Z",
+  "deploymentId": "47f192a6-84bb-40f6-a53d-46b0bf8e3aa3",
+  "readAt": "2026-09-18T04:59:46.150Z"
+}
