@@ -446,7 +446,7 @@ index 751e8b1..59daede 100644
  	-s ENVIRONMENT='web,worker' \
  	-s PTHREAD_POOL_SIZE=5 \
 diff --git a/src/platform/wasm/main.c b/src/platform/wasm/main.c
-index 14d9a8a..fa32132 100644
+index 14d9a8a..7fafaf8 100644
 --- a/src/platform/wasm/main.c
 +++ b/src/platform/wasm/main.c
 @@ -12,6 +12,10 @@
@@ -460,7 +460,7 @@ index 14d9a8a..fa32132 100644
  
  #include "platform/sdl/sdl-audio.h"
  #include "platform/sdl/sdl-events.h"
-@@ -146,6 +150,107 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
+@@ -146,6 +150,126 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
  		return 0.0;
  }
  
@@ -473,6 +473,12 @@ index 14d9a8a..fa32132 100644
 +static int brBandTop = 0;
 +static int brBandRight = 0;
 +static int brBandBottom = 0;
++// Module.brHeadless at start-up: this instance draws to nothing (a page's second core).
++// SDL's emscripten video names its canvas "#canvas" by selector, whichever element
++// Module.canvas is, so a second instance with a window would resize the first's canvas.
++static bool brHeadless = false;
++static mColor* brHeadlessBuffer = NULL;
++static size_t brHeadlessBufferSize = 0;
 +
 +static int _brClampBand(int v) {
 +	if (v < 0) {
@@ -492,7 +498,7 @@ index 14d9a8a..fa32132 100644
 +	// Size the window now, before a game is loaded: the first loadGame after the window
 +	// was made at the LCD's size otherwise resizes it under a fresh renderer, and the
 +	// canvas came up blank that way.
-+	if (renderer && renderer->window && !renderer->core) {
++	if (renderer && renderer->window && !renderer->core && !brHeadless) {
 +		int w = GBA_VIDEO_HORIZONTAL_PIXELS + brBandLeft + brBandRight;
 +		int h = GBA_VIDEO_VERTICAL_PIXELS + brBandTop + brBandBottom;
 +		SDL_SetWindowSize(renderer->window, w, h);
@@ -524,11 +530,24 @@ index 14d9a8a..fa32132 100644
 +	*h += brBandTop + brBandBottom;
 +}
 +
-+// Lock the texture and hand the core the LCD's top-left inside it.
++// Lock the texture (or size the headless buffer) and hand the core the LCD's top-left
++// inside it.
 +static void _brBindVideoBuffer(void) {
 +	int stride;
-+	SDL_LockTexture(renderer->sdlTex, 0, (void**) &renderer->outputBuffer, &stride);
-+	stride /= BYTES_PER_PIXEL;
++	if (brHeadless) {
++		unsigned w, h;
++		_brPictureSize(&w, &h);
++		if (brHeadlessBufferSize < (size_t) w * h) {
++			free(brHeadlessBuffer);
++			brHeadlessBufferSize = (size_t) w * h;
++			brHeadlessBuffer = calloc(brHeadlessBufferSize, BYTES_PER_PIXEL);
++		}
++		renderer->outputBuffer = brHeadlessBuffer;
++		stride = w;
++	} else {
++		SDL_LockTexture(renderer->sdlTex, 0, (void**) &renderer->outputBuffer, &stride);
++		stride /= BYTES_PER_PIXEL;
++	}
 +	renderer->core->setVideoBuffer(renderer->core, renderer->outputBuffer + brBandTop * stride + brBandLeft, stride);
 +}
 +
@@ -568,17 +587,23 @@ index 14d9a8a..fa32132 100644
  EMSCRIPTEN_KEEPALIVE int getMainLoopTimingMode() {
  	int mode = -1;
  	int value = -1;
-@@ -427,21 +532,19 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
+@@ -427,28 +551,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
  	mSDLInitBindingsGBA(&renderer->core->inputMap);
  
  	unsigned w, h;
 -	renderer->core->baseVideoSize(renderer->core, &w, &h);
+-	if (renderer->sdlTex) {
+-		SDL_DestroyTexture(renderer->sdlTex);
 +	_brPictureSize(&w, &h);
- 	if (renderer->sdlTex) {
- 		SDL_DestroyTexture(renderer->sdlTex);
++	if (!brHeadless) {
++		if (renderer->sdlTex) {
++			SDL_DestroyTexture(renderer->sdlTex);
++		}
++		renderer->sdlTex =
++		    SDL_CreateTexture(renderer->sdlRenderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, w, h);
  	}
- 	renderer->sdlTex =
- 	    SDL_CreateTexture(renderer->sdlRenderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+-	renderer->sdlTex =
+-	    SDL_CreateTexture(renderer->sdlRenderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, w, h);
  
 -	int stride;
 -	SDL_LockTexture(renderer->sdlTex, 0, (void**) &renderer->outputBuffer, &stride);
@@ -590,34 +615,84 @@ index 14d9a8a..fa32132 100644
 +	_brApplyViewport();
  
 -	renderer->core->currentVideoSize(renderer->core, &w, &h);
- 	SDL_SetWindowSize(renderer->window, w, h);
- 	EM_ASM(
- 	    {
-@@ -745,7 +848,7 @@ void runLoop() {
+-	SDL_SetWindowSize(renderer->window, w, h);
+-	EM_ASM(
+-	    {
+-		    Module.canvas.width = $0;
+-		    Module.canvas.height = $1;
+-	    },
+-	    w, h);
++	if (!brHeadless) {
++		SDL_SetWindowSize(renderer->window, w, h);
++		EM_ASM(
++		    {
++			    Module.canvas.width = $0;
++			    Module.canvas.height = $1;
++		    },
++		    w, h);
++	}
+ 
+ 	emscripten_resume_main_loop();
+ 	return true;
+@@ -744,19 +870,19 @@ void runLoop() {
+ 				};
  			}
  			if (mCoreSyncWaitFrameStart(&renderer->thread->impl->sync)) {
- 				unsigned w, h;
+-				unsigned w, h;
 -				renderer->core->currentVideoSize(renderer->core, &w, &h);
-+				_brPictureSize(&w, &h);
- 
- 				SDL_Rect rect = { .x = 0, .y = 0, .w = w, .h = h };
- 
-@@ -754,9 +857,7 @@ void runLoop() {
- 				if (renderer->showFpsCounter)
- 					drawFPS(w - 35, h - LINE_HEIGHT);
- 				SDL_RenderPresent(renderer->sdlRenderer);
+-
+-				SDL_Rect rect = { .x = 0, .y = 0, .w = w, .h = h };
+-
+-				SDL_UnlockTexture(renderer->sdlTex);
+-				SDL_RenderCopy(renderer->sdlRenderer, renderer->sdlTex, &rect, &rect);
+-				if (renderer->showFpsCounter)
+-					drawFPS(w - 35, h - LINE_HEIGHT);
+-				SDL_RenderPresent(renderer->sdlRenderer);
 -				int stride;
 -				SDL_LockTexture(renderer->sdlTex, 0, (void**) &renderer->outputBuffer, &stride);
 -				renderer->core->setVideoBuffer(renderer->core, renderer->outputBuffer, stride / BYTES_PER_PIXEL);
++				if (!brHeadless) {
++					unsigned w, h;
++					_brPictureSize(&w, &h);
++
++					SDL_Rect rect = { .x = 0, .y = 0, .w = w, .h = h };
++
++					SDL_UnlockTexture(renderer->sdlTex);
++					SDL_RenderCopy(renderer->sdlRenderer, renderer->sdlTex, &rect, &rect);
++					if (renderer->showFpsCounter)
++						drawFPS(w - 35, h - LINE_HEIGHT);
++					SDL_RenderPresent(renderer->sdlRenderer);
++				}
 +				_brBindVideoBuffer();
  			}
  			mCoreSyncWaitFrameEnd(&renderer->thread->impl->sync);
  		}
+@@ -860,11 +986,16 @@ int main() {
+ 
+ 	mLogSetDefaultLogger(&logCtx);
+ 
++	// Hoenn BR: a page's second instance draws to nothing (see brHeadless above).
++	brHeadless = EM_ASM_INT({ return Module.brHeadless ? 1 : 0; }) != 0;
++	// (Video init only registers display modes; the canvas is touched by a window.)
+ 	SDL_Init(SDL_INIT_VIDEO);
+-	renderer->window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+-	                                    GBA_VIDEO_HORIZONTAL_PIXELS, GBA_VIDEO_VERTICAL_PIXELS, SDL_WINDOW_OPENGL);
+-	renderer->sdlRenderer =
+-	    SDL_CreateRenderer(renderer->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
++	if (!brHeadless) {
++		renderer->window = SDL_CreateWindow(NULL, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
++		                                    GBA_VIDEO_HORIZONTAL_PIXELS, GBA_VIDEO_VERTICAL_PIXELS, SDL_WINDOW_OPENGL);
++		renderer->sdlRenderer =
++		    SDL_CreateRenderer(renderer->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
++	}
+ 
+ 	// exclude specific key events
+ 	SDL_SetEventFilter(excludeKeys, NULL);
 diff --git a/src/platform/wasm/mgba.d.ts b/src/platform/wasm/mgba.d.ts
-index edad1b1..e501804 100644
+index edad1b1..cb0eb16 100644
 --- a/src/platform/wasm/mgba.d.ts
 +++ b/src/platform/wasm/mgba.d.ts
-@@ -296,6 +296,23 @@ declare namespace mGBA {
+@@ -296,6 +296,28 @@ declare namespace mGBA {
       * @returns Current volume multiplier.
       */
      getVolume(): number;
@@ -626,6 +701,11 @@ index edad1b1..e501804 100644
 +     *  canvas becomes (240 + left + right) x (160 + top + bottom) with the LCD at
 +     *  (left, top). */
 +    _brSetViewport(left: number, top: number, right: number, bottom: number): void;
++    /** Hoenn BR: pass `brHeadless: true` in the module options to make an instance that
++     *  draws to nothing -- no SDL window, no canvas. A page's second core must, because
++     *  SDL's emscripten video names its canvas "#canvas" by selector, whichever element
++     *  Module.canvas is, and a second window would resize the first's canvas. */
++    brHeadless?: boolean;
 +    /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
 +     *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
 +    _brPicturePtr(): number;

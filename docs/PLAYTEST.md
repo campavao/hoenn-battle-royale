@@ -44,16 +44,25 @@ moment that needs more, cut a contact sheet: `ffmpeg -ss <t> -t 10 -i <video> -v
 POK-323 the world moving during a battle, POK-324 ticker noise, POK-325 the ring's target
 in the game, POK-326 fog at spawn in Mossdeep, POK-327 a test that plays a match.
 
-* "Everything got squished" after the battle at 02:41, and for the rest of the video:
-  the picture's 256-row buffer drawn in an element sized for 160 rows (frame 056: the
-  HUD corner to the ticker is 117 px in a 262-px-wide column, where 3:2 is 175). Two
-  fixes, either of which alone closes it: `#canvas` no longer carries `object-fit:
-  contain` (Firefox composes it with the band's `clip-path` into a letterboxed picture
-  in a battle), and `field.ts` now sizes the element from the canvas's own buffer, so
-  the element's aspect can never disagree with what the core draws, whatever the page
-  believes the band is; the phone e2e pins that. `web/scripts/firefox-probe.mjs` boots
-  solo in Playwright's Firefox and photographs a battle: the picture is 3:2 with the map
-  around it.
+* "Everything got squished" after the battle at 02:41, and for the rest of the video --
+  and again on the phone after the first fix shipped. **The bots' second emulator
+  core.** It boots on the first bot fight (the console's first `[proxy] ... fought` is
+  the moment the video squashes), and emscripten's SDL names its canvas by the CSS
+  selector `#canvas`, whichever element the module was handed, so the second instance's
+  `SDL_SetWindowSize(240, 160)` resized the first instance's canvas: a 256×256 buffer
+  drawn into 240×160, on both axes (the phone's HUD box: 225×80 where the route's was
+  244×131 -- 240/256 and 160/256 exactly). Proven in the pane: boot a second module
+  against a detached canvas and `#canvas` drops to 240×160; boot it `brHeadless: true`
+  and it stays. The fix is that flag: the core patch grows a headless mode (no SDL
+  window, no renderer, a malloc'd video buffer) and the page boots the bots' core with
+  it. Two earlier changes stay because they are right anyway: `#canvas` lost
+  `object-fit: contain` (Firefox composes it with the band's `clip-path` into a
+  letterboxed battle) and `field.ts` sizes the element from the canvas's own buffer.
+  `web/scripts/firefox-probe.mjs [firefox|webkit|chromium]` boots solo and photographs
+  a battle.
+* The NPC at the band's top edge "cut off as I moved up/down" (phone, second report):
+  not yet looked at; it may be the same cached-shell question. The overlay is meant to
+  draw whole any person the ROM hid past the band.
 
 ## 2026-09-16, Cam, solo and quick play
 

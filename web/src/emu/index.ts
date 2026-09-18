@@ -65,7 +65,12 @@ export interface Band {
   bottom: number;
 }
 
-export type CoreFactory = (opts: { canvas: HTMLCanvasElement }) => Promise<CoreModule>;
+/** `brHeadless`: an instance that draws to nothing. A page's SECOND core must be one:
+ *  emscripten's SDL names its canvas by the selector "#canvas", whichever element the
+ *  module was given, so a second instance with a window resizes the first's canvas to
+ *  its own size the moment it loads a game (the picture past the LCD squashed into the
+ *  LCD's box after the first bot fight, on every browser, 2026-09-18). */
+export type CoreFactory = (opts: { canvas: HTMLCanvasElement; brHeadless?: boolean }) => Promise<CoreModule>;
 
 const ROM_PATH = '/data/games/emerald.gba';
 // A patched image boots from a separate path so start() never overwrites the
@@ -91,10 +96,11 @@ export class Emulator {
 
   private constructor(private readonly m: CoreModule) {}
 
-  /** Instantiates the core against a canvas and mounts its IndexedDB-backed filesystem. */
-  static async create(canvas: HTMLCanvasElement, factory?: CoreFactory): Promise<Emulator> {
+  /** Instantiates the core against a canvas and mounts its IndexedDB-backed filesystem.
+   *  `headless` for any core but the page's first: it draws to nothing (see CoreFactory). */
+  static async create(canvas: HTMLCanvasElement, factory?: CoreFactory, headless = false): Promise<Emulator> {
     const f = factory ?? (await loadCoreFactory());
-    const m = await f({ canvas });
+    const m = await f({ canvas, brHeadless: headless });
     await m.FSInit();
     return new Emulator(m);
   }

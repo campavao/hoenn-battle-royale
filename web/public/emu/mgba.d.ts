@@ -301,6 +301,11 @@ declare namespace mGBA {
      *  canvas becomes (240 + left + right) x (160 + top + bottom) with the LCD at
      *  (left, top). */
     _brSetViewport(left: number, top: number, right: number, bottom: number): void;
+    /** Hoenn BR: pass `brHeadless: true` in the module options to make an instance that
+     *  draws to nothing -- no SDL window, no canvas. A page's second core must, because
+     *  SDL's emscripten video names its canvas "#canvas" by selector, whichever element
+     *  Module.canvas is, and a second window would resize the first's canvas. */
+    brHeadless?: boolean;
     /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
      *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
     _brPicturePtr(): number;

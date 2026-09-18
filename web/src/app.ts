@@ -3207,10 +3207,12 @@ async function main(): Promise<void> {
     proxyDuels = new ProxyDuels({
       mailboxBase,
       boot: async () => {
+        // Headless: a second core with a window would resize the first's canvas -- SDL
+        // finds its canvas by the selector "#canvas", not by Module.canvas.
         const hidden = document.createElement('canvas');
         hidden.width = 240;
         hidden.height = 160;
-        const other = await Emulator.create(hidden);
+        const other = await Emulator.create(hidden, undefined, true);
         await other.startBytes(bytes);
         other.setVolume(0); // it is not on screen and it is not to be heard
         other.setSpeed(8); // ...and it is in a hurry: a duel is a fight nobody watches
