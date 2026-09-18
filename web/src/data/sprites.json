@@ -1,0 +1,1418 @@
+{
+ "0": {
+  "name": "BrendanNormal",
+  "w": 16,
+  "h": 32,
+  "frames": 18
+ },
+ "1": {
+  "name": "BrendanMachBike",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "2": {
+  "name": "BrendanSurfing",
+  "w": 32,
+  "h": 32,
+  "frames": 12
+ },
+ "3": {
+  "name": "BrendanFieldMove",
+  "w": 32,
+  "h": 32,
+  "frames": 5
+ },
+ "4": {
+  "name": "QuintyPlump",
+  "w": 32,
+  "h": 32,
+  "frames": 7
+ },
+ "5": {
+  "name": "NinjaBoy",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "6": {
+  "name": "Twin",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "7": {
+  "name": "Boy1",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "8": {
+  "name": "Girl1",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "9": {
+  "name": "Boy2",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "10": {
+  "name": "Girl2",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "11": {
+  "name": "LittleBoy",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "12": {
+  "name": "LittleGirl",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "13": {
+  "name": "Boy3",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "14": {
+  "name": "Girl3",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "15": {
+  "name": "RichBoy",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "16": {
+  "name": "Woman1",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "17": {
+  "name": "FatMan",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "18": {
+  "name": "PokefanF",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "19": {
+  "name": "Man1",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "20": {
+  "name": "Woman2",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "21": {
+  "name": "ExpertM",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "22": {
+  "name": "ExpertF",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "23": {
+  "name": "Man2",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "24": {
+  "name": "Woman3",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "25": {
+  "name": "PokefanM",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "26": {
+  "name": "Woman4",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "27": {
+  "name": "Cook",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "28": {
+  "name": "LinkReceptionist",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "29": {
+  "name": "OldMan",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "30": {
+  "name": "OldWoman",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "31": {
+  "name": "Camper",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "32": {
+  "name": "Picnicker",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "33": {
+  "name": "Man3",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "34": {
+  "name": "Woman5",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "35": {
+  "name": "Youngster",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "36": {
+  "name": "BugCatcher",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "37": {
+  "name": "PsychicM",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "38": {
+  "name": "SchoolKidM",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "39": {
+  "name": "Maniac",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "40": {
+  "name": "HexManiac",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "41": {
+  "name": "RayquazaStill",
+  "w": 64,
+  "h": 64,
+  "frames": 9
+ },
+ "42": {
+  "name": "SwimmerM",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "43": {
+  "name": "SwimmerF",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "44": {
+  "name": "BlackBelt",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "45": {
+  "name": "Beauty",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "46": {
+  "name": "Scientist1",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "47": {
+  "name": "Lass",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "48": {
+  "name": "Gentleman",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "49": {
+  "name": "Sailor",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "50": {
+  "name": "Fisherman",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "51": {
+  "name": "RunningTriathleteM",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "52": {
+  "name": "RunningTriathleteF",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "53": {
+  "name": "TuberF",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "54": {
+  "name": "TuberM",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "55": {
+  "name": "Hiker",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "56": {
+  "name": "CyclingTriathleteM",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "57": {
+  "name": "CyclingTriathleteF",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "58": {
+  "name": "Nurse",
+  "w": 16,
+  "h": 32,
+  "frames": 10
+ },
+ "59": {
+  "name": "ItemBall",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "63": {
+  "name": "BrendanAcroBike",
+  "w": 32,
+  "h": 32,
+  "frames": 27
+ },
+ "64": {
+  "name": "ProfBirch",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "65": {
+  "name": "Man4",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "66": {
+  "name": "Man5",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "67": {
+  "name": "ReporterM",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "68": {
+  "name": "ReporterF",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "69": {
+  "name": "Bard",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "70": {
+  "name": "Anabel",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "71": {
+  "name": "Tucker",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "72": {
+  "name": "Greta",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "73": {
+  "name": "Spenser",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "74": {
+  "name": "Noland",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "75": {
+  "name": "Lucy",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "76": {
+  "name": "UnusedNatuDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "77": {
+  "name": "UnusedMagnemiteDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "78": {
+  "name": "UnusedSquirtleDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "79": {
+  "name": "UnusedWooperDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "80": {
+  "name": "UnusedPikachuDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "81": {
+  "name": "UnusedPorygon2Doll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "82": {
+  "name": "CuttableTree",
+  "w": 16,
+  "h": 16,
+  "frames": 4
+ },
+ "83": {
+  "name": "MartEmployee",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "84": {
+  "name": "RooftopSaleWoman",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "85": {
+  "name": "Teala",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "86": {
+  "name": "BreakableRock",
+  "w": 16,
+  "h": 16,
+  "frames": 4
+ },
+ "87": {
+  "name": "PushableBoulder",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "88": {
+  "name": "MrBrineysBoat",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "89": {
+  "name": "MayNormal",
+  "w": 16,
+  "h": 32,
+  "frames": 18
+ },
+ "90": {
+  "name": "MayMachBike",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "91": {
+  "name": "MayAcroBike",
+  "w": 32,
+  "h": 32,
+  "frames": 27
+ },
+ "92": {
+  "name": "MaySurfing",
+  "w": 32,
+  "h": 32,
+  "frames": 12
+ },
+ "93": {
+  "name": "MayFieldMove",
+  "w": 32,
+  "h": 32,
+  "frames": 5
+ },
+ "94": {
+  "name": "Truck",
+  "w": 48,
+  "h": 48,
+  "frames": 1
+ },
+ "95": {
+  "name": "VigorothCarryingBox",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "96": {
+  "name": "VigorothFacingAway",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "97": {
+  "name": "BirchsBag",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "98": {
+  "name": "EnemyZigzagoon",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "99": {
+  "name": "Artist",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "100": {
+  "name": "RivalBrendanNormal",
+  "w": 16,
+  "h": 32,
+  "frames": 18
+ },
+ "101": {
+  "name": "RivalBrendanMachBike",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "102": {
+  "name": "RivalBrendanAcroBike",
+  "w": 32,
+  "h": 32,
+  "frames": 27
+ },
+ "103": {
+  "name": "RivalBrendanSurfing",
+  "w": 32,
+  "h": 32,
+  "frames": 12
+ },
+ "104": {
+  "name": "RivalBrendanFieldMove",
+  "w": 32,
+  "h": 32,
+  "frames": 5
+ },
+ "105": {
+  "name": "RivalMayNormal",
+  "w": 16,
+  "h": 32,
+  "frames": 18
+ },
+ "106": {
+  "name": "RivalMayMachBike",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "107": {
+  "name": "RivalMayAcroBike",
+  "w": 32,
+  "h": 32,
+  "frames": 27
+ },
+ "108": {
+  "name": "RivalMaySurfing",
+  "w": 32,
+  "h": 32,
+  "frames": 12
+ },
+ "109": {
+  "name": "RivalMayFieldMove",
+  "w": 32,
+  "h": 32,
+  "frames": 5
+ },
+ "110": {
+  "name": "Cameraman",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "111": {
+  "name": "BrendanUnderwater",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "112": {
+  "name": "MayUnderwater",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "113": {
+  "name": "MovingBox",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "114": {
+  "name": "CableCar",
+  "w": 64,
+  "h": 64,
+  "frames": 1
+ },
+ "115": {
+  "name": "Scientist2",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "116": {
+  "name": "DevonEmployee",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "117": {
+  "name": "AquaMemberM",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "118": {
+  "name": "AquaMemberF",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "119": {
+  "name": "MagmaMemberM",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "120": {
+  "name": "MagmaMemberF",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "121": {
+  "name": "Sidney",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "122": {
+  "name": "Phoebe",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "123": {
+  "name": "Glacia",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "124": {
+  "name": "Drake",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "125": {
+  "name": "Roxanne",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "126": {
+  "name": "Brawly",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "127": {
+  "name": "Wattson",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "128": {
+  "name": "Flannery",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "129": {
+  "name": "Norman",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "130": {
+  "name": "Winona",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "131": {
+  "name": "Liza",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "132": {
+  "name": "Tate",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "133": {
+  "name": "Wallace",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "134": {
+  "name": "Steven",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "135": {
+  "name": "Wally",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "136": {
+  "name": "RubySapphireLittleBoy",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "137": {
+  "name": "BrendanFishing",
+  "w": 32,
+  "h": 32,
+  "frames": 12
+ },
+ "138": {
+  "name": "MayFishing",
+  "w": 32,
+  "h": 32,
+  "frames": 12
+ },
+ "139": {
+  "name": "HotSpringsOldWoman",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "140": {
+  "name": "SSTidal",
+  "w": 96,
+  "h": 40,
+  "frames": 9
+ },
+ "141": {
+  "name": "SubmarineShadow",
+  "w": 88,
+  "h": 32,
+  "frames": 9
+ },
+ "142": {
+  "name": "PichuDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "143": {
+  "name": "PikachuDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "144": {
+  "name": "MarillDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "145": {
+  "name": "TogepiDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "146": {
+  "name": "CyndaquilDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "147": {
+  "name": "ChikoritaDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "148": {
+  "name": "TotodileDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "149": {
+  "name": "JigglypuffDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "150": {
+  "name": "MeowthDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "151": {
+  "name": "ClefairyDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "152": {
+  "name": "DittoDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "153": {
+  "name": "SmoochumDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "154": {
+  "name": "TreeckoDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "155": {
+  "name": "TorchicDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "156": {
+  "name": "MudkipDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "157": {
+  "name": "DuskullDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "158": {
+  "name": "WynautDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "159": {
+  "name": "BaltoyDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "160": {
+  "name": "KecleonDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "161": {
+  "name": "AzurillDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "162": {
+  "name": "SkittyDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "163": {
+  "name": "SwabluDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "164": {
+  "name": "GulpinDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "165": {
+  "name": "LotadDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "166": {
+  "name": "SeedotDoll",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "167": {
+  "name": "PikaCushion",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "168": {
+  "name": "RoundCushion",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "169": {
+  "name": "KissCushion",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "170": {
+  "name": "ZigzagCushion",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "171": {
+  "name": "SpinCushion",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "172": {
+  "name": "DiamondCushion",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "173": {
+  "name": "BallCushion",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "174": {
+  "name": "GrassCushion",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "175": {
+  "name": "FireCushion",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "176": {
+  "name": "WaterCushion",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "177": {
+  "name": "BigSnorlaxDoll",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "178": {
+  "name": "BigRhydonDoll",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "179": {
+  "name": "BigLaprasDoll",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "180": {
+  "name": "BigVenusaurDoll",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "181": {
+  "name": "BigCharizardDoll",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "182": {
+  "name": "BigBlastoiseDoll",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "183": {
+  "name": "BigWailmerDoll",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "184": {
+  "name": "BigRegirockDoll",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "185": {
+  "name": "BigRegiceDoll",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "186": {
+  "name": "BigRegisteelDoll",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "187": {
+  "name": "Latias",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "188": {
+  "name": "Latios",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "189": {
+  "name": "GameboyKid",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "190": {
+  "name": "ContestJudge",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "191": {
+  "name": "BrendanWatering",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "192": {
+  "name": "MayWatering",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "193": {
+  "name": "BrendanDecorating",
+  "w": 16,
+  "h": 32,
+  "frames": 1
+ },
+ "194": {
+  "name": "MayDecorating",
+  "w": 16,
+  "h": 32,
+  "frames": 1
+ },
+ "195": {
+  "name": "Archie",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "196": {
+  "name": "Maxie",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "197": {
+  "name": "KyogreFront",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "198": {
+  "name": "GroudonFront",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "199": {
+  "name": "Fossil",
+  "w": 16,
+  "h": 16,
+  "frames": 1
+ },
+ "200": {
+  "name": "Regirock",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "201": {
+  "name": "Regice",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "202": {
+  "name": "Registeel",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "203": {
+  "name": "Skitty",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "204": {
+  "name": "Kecleon",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "205": {
+  "name": "KyogreAsleep",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "206": {
+  "name": "GroudonAsleep",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "207": {
+  "name": "Rayquaza",
+  "w": 64,
+  "h": 64,
+  "frames": 5
+ },
+ "208": {
+  "name": "Zigzagoon",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "209": {
+  "name": "Pikachu",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "210": {
+  "name": "Azumarill",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "211": {
+  "name": "Wingull",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "212": {
+  "name": "KecleonBridgeShadow",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "213": {
+  "name": "TuberMSwimming",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "214": {
+  "name": "Azurill",
+  "w": 16,
+  "h": 16,
+  "frames": 9
+ },
+ "215": {
+  "name": "Mom",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "216": {
+  "name": "LinkBrendan",
+  "w": 16,
+  "h": 32,
+  "frames": 18
+ },
+ "217": {
+  "name": "LinkMay",
+  "w": 16,
+  "h": 32,
+  "frames": 18
+ },
+ "218": {
+  "name": "Juan",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "219": {
+  "name": "Scott",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "220": {
+  "name": "Poochyena",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "221": {
+  "name": "KyogreSide",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "222": {
+  "name": "GroudonSide",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "223": {
+  "name": "MysteryEventDeliveryman",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "224": {
+  "name": "Statue",
+  "w": 16,
+  "h": 32,
+  "frames": 1
+ },
+ "225": {
+  "name": "Kirlia",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "226": {
+  "name": "Dusclops",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "227": {
+  "name": "UnionRoomAttendant",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "228": {
+  "name": "Sudowoodo",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "229": {
+  "name": "Mew",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "230": {
+  "name": "Red",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "231": {
+  "name": "Leaf",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "232": {
+  "name": "Deoxys",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "233": {
+  "name": "BirthIslandStone",
+  "w": 32,
+  "h": 32,
+  "frames": 1
+ },
+ "234": {
+  "name": "Brandon",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "235": {
+  "name": "RubySapphireBrendan",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "236": {
+  "name": "RubySapphireMay",
+  "w": 16,
+  "h": 32,
+  "frames": 9
+ },
+ "237": {
+  "name": "Lugia",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ },
+ "238": {
+  "name": "HoOh",
+  "w": 32,
+  "h": 32,
+  "frames": 9
+ }
+}

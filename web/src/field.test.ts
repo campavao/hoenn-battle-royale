@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type Camera, fadeOf, gbaColor, heldFade, layoutField, lcdOrigin, neighbours, subTile } from './field';
+import { type Camera, fadeOf, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, neighbours, subTile } from './field';
 import type { WorldMap } from './bots/world';
 
 describe('where the picture sits on the map', () => {
@@ -34,7 +34,7 @@ describe('the fade', () => {
 
   it('holds black across a map load until the fade-in starts', () => {
     const cam = (fade: number, fadeActive: boolean): Camera =>
-      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive });
+      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [] });
     expect(heldFade(cam(16, false), cam(0, false), false), 'the reset').toBe(true);
     expect(heldFade(cam(0, false), cam(0, false), true), 'still loading').toBe(true);
     expect(heldFade(cam(0, false), cam(16, true), true), 'the fade-in begins').toBe(false);
@@ -89,6 +89,31 @@ describe('the picture in the box', () => {
 
   it('no box, no layout', () => {
     expect(layoutField(0, 0).scale).toBe(0);
+  });
+});
+
+describe('which frame a sprite is on', () => {
+  // A ROM of 64 bytes at 0x08000000: anims table at +0x10 (two anims), the second
+  // anim's commands at +0x20: FRAME(3, 8), FRAME(0, 8), JUMP(0).
+  const rom = new Uint8Array(64);
+  const w32 = (o: number, v: number) => { rom[o] = v & 255; rom[o + 1] = (v >>> 8) & 255; rom[o + 2] = (v >>> 16) & 255; rom[o + 3] = (v >>> 24) & 255; };
+  w32(0x10, 0x08000030);
+  w32(0x14, 0x08000020);
+  w32(0x20, (8 << 16) | 3);
+  w32(0x24, (8 << 16) | 0);
+  w32(0x28, 0xfffe);
+  w32(0x30, (16 << 16) | 1);
+
+  it('reads anims[animNum][cmd].imageValue off the ROM', () => {
+    expect(frameOf(rom, 0x08000010, 1, 0)).toBe(3);
+    expect(frameOf(rom, 0x08000010, 1, 1)).toBe(0);
+    expect(frameOf(rom, 0x08000010, 0, 0)).toBe(1);
+  });
+
+  it('a jump is not a frame, and nothing past the ROM is', () => {
+    expect(frameOf(rom, 0x08000010, 1, 2)).toBeNull();
+    expect(frameOf(rom, 0x08000010, 5, 0)).toBeNull();
+    expect(frameOf(rom, 0x02000000, 0, 0)).toBeNull();
   });
 });
 

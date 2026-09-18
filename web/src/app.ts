@@ -3072,7 +3072,7 @@ function runLobby(): Promise<RoomHash> {
 
 // ---- wiring -------------------------------------------------------------------------------
 
-function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined): void {
+function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined, rom: Uint8Array | null = null): void {
   wireKeyboard(emu);
   wireGamepad(emu);
   wireRemap();
@@ -3092,6 +3092,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined)
     lcd: $('#canvas') as HTMLCanvasElement,
     field: $('#field') as HTMLCanvasElement,
     pad: $('#pad') as HTMLElement,
+    rom,
   }).attach();
   // Tapping the map (touch.ts). Needs the symbol table: without it there is no reading
   // where we stand or which menu is up, and a tap does nothing.
@@ -3220,7 +3221,7 @@ async function main(): Promise<void> {
   // Input first, and before anything that waits: the wiring used to sit after the
   // mailbox handshake and the lobby, so between the ROM starting and the match being
   // chosen there was a running game that answered to nothing at all.
-  wirePlayScreen(emu, symbols);
+  wirePlayScreen(emu, symbols, bytes);
 
   // Which way in decides the boot block -- solo warps straight into the Safari opening
   // (BR_BOOT_SAFARI) while a room waits in Littleroot (BR_BOOT_MAP) -- so the choice has

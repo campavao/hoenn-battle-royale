@@ -20,6 +20,7 @@
 // is the state read the frame BEFORE.
 import type { WorldMap } from './bots/world';
 import worldData from './data/world.json';
+import spritesData from './data/sprites.json';
 import type { Emulator } from './emu';
 
 export const GBA_W = 240;
@@ -47,6 +48,62 @@ const SB1_MAP_NUM = 5;
 const FADE_Y_WORD = 4;
 const FADE_COLOR_WORD = 6;
 
+// The people (POK-318). The ROM draws an object only inside its window and marks its
+// sprite invisible the moment it is off screen (UpdateObjectEventOffscreen), so the page
+// reads the object's OWN invisible bit and the sprite's position, and draws it whole
+// wherever it is. `struct ObjectEvent` (include/global.fieldmap.h) is 0x24 bytes:
+const OBJ_COUNT = 16;
+const OBJ_SIZE = 0x24;
+const OBJ_ACTIVE_BYTE = 0; // bit 0
+const OBJ_INVISIBLE_BYTE = 1; // bit 5
+const OBJ_PLAYER_BYTE = 2; // bit 0
+const OBJ_SPRITE_ID = 4;
+const OBJ_GFX = 5;
+/** Graphics ids from OBJ_EVENT_GFX_VARS up name a VAR_OBJ_GFX_ID_n (include/constants). */
+const GFX_VARS = 240;
+const VAR_OBJ_GFX_ID_0 = 0x4010;
+const SB1_VARS = 0x139c;
+/** `struct Sprite` (include/sprite.h), 0x44 bytes. x/y are the centre; centerToCorner
+ *  takes them to the OAM's top-left; the coord offset is the camera's, when enabled. */
+const SPR_SIZE = 0x44;
+const SPR_ANIMS = 0x08;
+const SPR_X = 0x20;
+const SPR_Y = 0x22;
+const SPR_X2 = 0x24;
+const SPR_Y2 = 0x26;
+const SPR_CTC_X = 0x28;
+const SPR_CTC_Y = 0x29;
+const SPR_ANIM_NUM = 0x2a;
+const SPR_ANIM_CMD = 0x2b;
+const SPR_FLAGS = 0x3e; // u16: inUse 1, coordOffsetEnabled 2, invisible 4, hFlip 0x100
+const ROM_BASE = 0x08000000;
+
+export interface FieldSprite {
+  gfx: number;
+  frame: number;
+  hFlip: boolean;
+  /** The sprite's top-left, in the picture's pixels (may be outside it). */
+  x: number;
+  y: number;
+}
+
+/** The image index the sprite is showing: `anims[animNum][animCmdIndex].frame.imageValue`,
+ *  read off the ROM through the sprite's own table pointer. Null off the end of the
+ *  ROM or on a command that is not a frame (END -1, JUMP -2, LOOP -3). */
+export function frameOf(rom: Uint8Array, animsPtr: number, animNum: number, cmdIndex: number): number | null {
+  const u32 = (addr: number): number | null => {
+    const o = addr - ROM_BASE;
+    if (o < 0 || o + 4 > rom.length) return null;
+    return (rom[o] | (rom[o + 1] << 8) | (rom[o + 2] << 16) | (rom[o + 3] << 24)) >>> 0;
+  };
+  const table = u32(animsPtr + animNum * 4);
+  if (table === null) return null;
+  const cmd = u32(table + cmdIndex * 4);
+  if (cmd === null) return null;
+  const image = cmd & 0xffff;
+  return image >= 0xfffd ? null : image;
+}
+
 export interface Camera {
   group: number;
   num: number;
@@ -59,6 +116,7 @@ export interface Camera {
   /** 15-bit GBA colour */
   fadeColor: number;
   fadeActive: boolean;
+  sprites: FieldSprite[];
 }
 
 /** The sub-tile part of the picture's offset from gFieldCamera.x or .y. */
@@ -151,7 +209,18 @@ export interface FieldDeps {
   field: HTMLCanvasElement;
   /** The pad, when it floats over the bottom of the box (position: absolute). */
   pad?: HTMLElement | null;
+  /** The ROM the emulator is running, for the sprites' animation tables. */
+  rom?: Uint8Array | null;
 }
+
+interface SheetInfo {
+  name: string;
+  w: number;
+  h: number;
+  frames: number;
+}
+
+const SHEETS = spritesData as Record<string, SheetInfo>;
 
 export class FieldView {
   private byRef = new Map<string, WorldMap>();
@@ -263,19 +332,79 @@ export class FieldView {
       fade: fade.y,
       fadeColor: fade.color,
       fadeActive: fade.active,
+      sprites: this.readSprites(p),
     };
   }
 
-  private image(id: string): HTMLImageElement | null {
-    let img = this.images.get(id);
+  /** Every object the ROM has on the map except the player, where its sprite is. */
+  private readSprites(sb1: number): FieldSprite[] {
+    const objs = this.sym('gObjectEvents');
+    const sprs = this.sym('gSprites');
+    const offX = this.sym('gSpriteCoordOffsetX');
+    const offY = this.sym('gSpriteCoordOffsetY');
+    const { emu, rom } = this.deps;
+    if (objs === undefined || sprs === undefined || offX === undefined || offY === undefined || !rom) return [];
+    const s16 = (v: number) => (v << 16) >> 16;
+    const s8 = (v: number) => (v << 24) >> 24;
+    const coX = s16(emu.read(offX, 16));
+    const coY = s16(emu.read(offY, 16));
+    const out: FieldSprite[] = [];
+    for (let i = 0; i < OBJ_COUNT; i++) {
+      const o = objs + i * OBJ_SIZE;
+      if (!(emu.read(o + OBJ_ACTIVE_BYTE, 8) & 1)) continue;
+      if (emu.read(o + OBJ_INVISIBLE_BYTE, 8) & 0x20) continue;
+      if (emu.read(o + OBJ_PLAYER_BYTE, 8) & 1) continue;
+      let gfx = emu.read(o + OBJ_GFX, 8);
+      if (gfx >= GFX_VARS) gfx = emu.read(sb1 + SB1_VARS + 2 * (VAR_OBJ_GFX_ID_0 + gfx - GFX_VARS - 0x4000), 16) & 0xff;
+      if (!SHEETS[String(gfx)]) continue;
+      const s = sprs + emu.read(o + OBJ_SPRITE_ID, 8) * SPR_SIZE;
+      const flags = emu.read(s + SPR_FLAGS, 16);
+      if (!(flags & 1)) continue;
+      const onCamera = (flags & 2) !== 0;
+      const x = s16(emu.read(s + SPR_X, 16)) + s16(emu.read(s + SPR_X2, 16)) + s8(emu.read(s + SPR_CTC_X, 8)) + (onCamera ? coX : 0);
+      const y = s16(emu.read(s + SPR_Y, 16)) + s16(emu.read(s + SPR_Y2, 16)) + s8(emu.read(s + SPR_CTC_Y, 8)) + (onCamera ? coY : 0);
+      const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
+      out.push({ gfx, frame, hFlip: (flags & 0x100) !== 0, x, y });
+    }
+    return out;
+  }
+
+  private image(id: string, dir = 'field-maps'): HTMLImageElement | null {
+    const key = `${dir}/${id}`;
+    let img = this.images.get(key);
     if (!img) {
       img = new Image();
       img.decoding = 'async';
       img.addEventListener('load', () => { this.drawn = null; });
-      img.src = `/field-maps/${id}.png`;
-      this.images.set(id, img);
+      img.src = `/${dir}/${id}.png`;
+      this.images.set(key, img);
     }
     return img.complete && img.naturalWidth > 0 ? img : null;
+  }
+
+  /** The people, bottom-most last so a sprite further down the map is in front. */
+  private drawSprites(ctx: CanvasRenderingContext2D, c: Camera): boolean {
+    let complete = true;
+    const lay = this.lay;
+    const order = c.sprites.slice().sort((a, b) => (a.y + (SHEETS[String(a.gfx)]?.h ?? 0)) - (b.y + (SHEETS[String(b.gfx)]?.h ?? 0)));
+    for (const s of order) {
+      const info = SHEETS[String(s.gfx)];
+      const sheet = this.image(String(s.gfx), 'field-sprites');
+      if (!sheet) { complete = false; continue; }
+      const frame = Math.min(s.frame, info.frames - 1);
+      const cx = lay.lcdCol + s.x;
+      const cy = lay.lcdRow + s.y;
+      if (s.hFlip) {
+        ctx.save();
+        ctx.translate(cx + info.w, cy);
+        ctx.scale(-1, 1);
+        ctx.drawImage(sheet, frame * info.w, 0, info.w, info.h, 0, 0, info.w, info.h);
+        ctx.restore();
+      } else {
+        ctx.drawImage(sheet, frame * info.w, 0, info.w, info.h, cx, cy, info.w, info.h);
+      }
+    }
+    return complete;
   }
 
   private draw(c: Camera): void {
@@ -283,7 +412,8 @@ export class FieldView {
     const lay = this.lay;
     if (!lay.scale) return;
     const map = this.byRef.get(`${c.group}:${c.num}`);
-    const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}`;
+    const people = c.sprites.map((s) => `${s.gfx}/${s.frame}/${s.hFlip ? 1 : 0}/${s.x}/${s.y}`).join(',');
+    const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}`;
     if (key === this.drawn) return;
     const ctx = field.getContext('2d');
     if (!ctx) return;
@@ -321,6 +451,7 @@ export class FieldView {
         if (img) ctx.drawImage(img, n.x - ox, n.y - oy);
         else complete = false;
       }
+      if (!this.drawSprites(ctx, c)) complete = false;
     }
 
     if (c.fade > 0) {

@@ -27,6 +27,8 @@ ENGINE_SYMBOLS = [
     # The field camera and the palette fade: the page draws the map past the picture
     # in lockstep with the ROM's own scroll (POK-317, web/src/field.ts).
     "gFieldCamera", "gPaletteFade",
+    # ...and the people on it: where a sprite is on screen (POK-318).
+    "gSpriteCoordOffsetX", "gSpriteCoordOffsetY",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"
