@@ -12,14 +12,13 @@
 #
 # catch-buzzer.txt is the buzzer arriving between throws, which is the case POK-261 was
 # about. This one drops the clock to zero WHILE a ball is in the air.
-# freeze -- "we both just disappeared. And then I was frozen here"). Cam's catch was at
-# 2:50 of a match whose opening was over by then, so the ring was already up: the
-# battle ends into BrMatch_SafariOver, which ends the opening and puts the drop map in
-# front of you. What this asks is whether any of that happens at all, or whether the
-# battle's own ending leaves the game somewhere with nothing to press.
 #
-# catch-pages.txt is the same catch without the ring. Everything down to the fourth
-# throw is its script, so the two only differ in what is true outside the battle.
+# The throw is seeded so that it CATCHES (gRngValue 2, poked the frame before A; a
+# wild battle advances Random() every vblank, so the seed and the frame together are
+# the roll). That is the half of the ticket that mattered: Kanto's own version of this
+# bug was a mon caught on the "was caught!" page and never stored when the buzzer
+# closed the battle over it. Here the close skips the text waits, givecaughtmon still
+# runs, and the party has one mon in it on the drop map. 15 other seeds miss.
 #
 wait 30
 poke u32 gBrMatch+8 0x00000C00
@@ -49,7 +48,8 @@ tap B
 wait 30
 tap B
 wait 30
-# The ball goes up...
+# The ball goes up, and this one comes down with a ZIGZAGOON in it.
+poke u32 gRngValue 2
 tap A
 wait 20
 shot in-the-air
@@ -67,4 +67,6 @@ wait 600
 # ...and the buzzer still closed it, with nothing pressed: phase 2 is BR_PHASE_DROP.
 # It takes longer than an idle buzzer does, because the throw plays out first.
 expectge u8 gBrMatch 2
+# ...and the catch was stored, not lost under the close.
+expect u8 gPlayerPartyCount 1
 say catch buzzer throw ok
