@@ -7,7 +7,7 @@
 // is provable on its own, and no driver can see any of it: this is two browsers and a
 // relay, which is what makes it an e2e.
 import { test, expect } from '@playwright/test';
-import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BrWindow = { __br: any };
@@ -33,6 +33,7 @@ test('the host drops mid-match and the guest picks up the clock', async ({ brows
     const guest = await guestCtx.newPage();
     await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
+    await startWith(host, 2);
 
     // A guest draws its own strip now (POK-268), from the same messages a promoted
     // host would resume from -- so this is both the wait and an assertion.
@@ -108,6 +109,7 @@ test('the host tabs out and hands the match over without leaving', async ({ brow
 
     const guest = await guestCtx.newPage();
     await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await startWith(host, 2);
     await expect(guest.locator('#match-strip')).toContainText(/RING \d/, { timeout: 120_000 });
     expect(await guest.evaluate(() => (window as unknown as BrWindow).__br.director)).toBeUndefined();
 

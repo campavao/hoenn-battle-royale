@@ -99,7 +99,8 @@ describe('the profile rows', () => {
     expect(rows[1].label).toBe('MAY');
     // name, sprite, three voice rows (POK-283), stats, career -- then the ways in.
     expect(rows[6].label).toBe('MY CAREER');
-    expect(rows[7].label).toBe('SOLO VS BOTS');
+    expect(rows[7].label).toBe('QUICK PLAY');
+    expect(rows[rows.length - 1].label).toBe('SOLO VS BOTS');
   });
 
   it('shows the sprite note when there is one, otherwise the plain default', () => {

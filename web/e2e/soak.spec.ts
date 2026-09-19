@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
@@ -60,6 +60,7 @@ test('a whole match, with the host carrying it', async ({ browser }) => {
     // ticker and (once two bots meet) a second emulator, all on top of its own game.
     await host.goto(`/#host&seed=20260916&testmon&rom=${rom}`);
     await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
+    await startWith(host, 1);
 
     await host.evaluate(() => {
       const w = window as unknown as { __perf: { frames: number; long: number; longest: number } };

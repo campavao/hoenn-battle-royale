@@ -27,7 +27,9 @@ import { type BotVoice, lineAt, nextLine, voiceFor } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { NpcFog } from './match/npcfog';
-import { emptyNote, fixedRows, isRoomCode, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
+import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
+import { Stage } from './ui/stage';
+import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
 import {
   canStart,
   doorOf,
@@ -37,6 +39,7 @@ import {
   nextTextSpeed,
   roomView,
   startNote,
+  type RoomView,
   textSpeedLabel,
   nextSafari,
   safariLabel,
@@ -121,6 +124,17 @@ function showScreen(screen: Screen): void {
   document.body.classList.toggle('playing', screen === 'playing');
 }
 
+/** The stage every screen outside the game is drawn on (POK-320): the lobby before a
+ *  match and the room before START. One canvas, made when first needed. */
+let stage: Stage | null = null;
+function theStage(): Stage {
+  if (!stage) stage = new Stage($('#stage') as HTMLElement, $('#ui') as HTMLCanvasElement, $('#ui-hits') as HTMLElement);
+  return stage;
+}
+/** What a match starting does to the room screen: set by wireRoom, called by anything
+ *  that learns a match is on. */
+let hideRoomHook: (() => void) | null = null;
+
 function setVersionLine(text: string): void {
   $('#version').textContent = text;
   $('#drawer-version').textContent = text;
@@ -131,6 +145,7 @@ function setVersionLine(text: string): void {
  *  drawer themselves, because "you are out" is not something to go looking for. */
 function setInMatch(on: boolean): void {
   document.body.classList.toggle('in-match', on);
+  if (on) hideRoomHook?.();
   if (!on) document.body.classList.remove('drawer-open');
   ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', String(document.body.classList.contains('drawer-open')));
 }
@@ -383,12 +398,18 @@ function wireKeyboard(emu: Emulator): () => void {
     const key = KEYBOARD_MAP[e.key];
     if (!key) return;
     e.preventDefault();
+    // A drawn screen (POK-320) has the keys; the game under it hears nothing.
+    if (stage?.active) {
+      if (!e.repeat) stage.key(key);
+      return;
+    }
     emu.press(key);
   };
   const up = (e: KeyboardEvent) => {
     const key = KEYBOARD_MAP[e.key];
     if (!key) return;
     e.preventDefault();
+    if (stage?.active) return;
     emu.release(key);
   };
   addEventListener('keydown', down);
@@ -549,7 +570,12 @@ function wireGamepad(emu: Emulator): () => void {
       // only on a pad that has one: a resting stick reads 0, which decodes to "down".
       if (pad.axes.length >= 10) for (const key of hatKeys(pad.axes[9])) now.add(key);
     }
-    for (const key of now) if (!held.has(key)) emu.press(key);
+    const ui = stage?.active === true;
+    for (const key of now) {
+      if (held.has(key)) continue;
+      if (ui) stage!.key(key);
+      else emu.press(key);
+    }
     for (const key of held) if (!now.has(key)) emu.release(key);
     held = now;
     // What the pad is doing, on screen. A pad the page cannot see, a pad it has mapped
@@ -1008,8 +1034,8 @@ let roomKick: RelayClient | null = null;
 function renderRoom(bridge: Bridge): void {
   const canKick = roomKick !== null;
   const relay = roomKick;
-  const list = $('#room-roster') as HTMLElement;
-  const card = $('#trainer-card') as HTMLElement;
+  const list = $('#match-roster') as HTMLElement;
+  const card = $('#match-card') as HTMLElement;
   list.innerHTML = '';
   for (const entry of bridge.roster.all()) {
     const li = document.createElement('li');
@@ -1059,6 +1085,8 @@ function renderRoom(bridge: Bridge): void {
     card.hidden = true;
     card.dataset.seat = '';
   }
+  // The drawn room shows the same people (POK-320).
+  stage?.redraw();
 }
 
 /** world.json's id for a wire MapRef, for the places a card names. */
@@ -1084,82 +1112,21 @@ interface RoomControls {
   safariSecs: number;
 }
 
-/** Draws the room panel: the roster everybody sees, and the four controls only the
- *  host gets. `onStart` is the host pressing START -- the thing that used to be a
- *  ten-second timer. */
+/** The room screen's START and its started flag (POK-320). The drawn room reads the
+ *  controls itself; this is how the rest of the page tells it what START does and
+ *  that the match is on. Set by wireRoom. */
+let roomPanelHook: ((onStart: () => void, started: boolean) => void) | null = null;
+
+/** Redraws the room: `onStart` is the host pressing START -- the thing that used to be
+ *  a ten-second timer -- and `started` takes the controls away once it has. */
 function renderRoomPanel(
-  controls: RoomControls,
-  mySeat: number,
-  relay: RelayClient,
+  _controls: RoomControls,
+  _mySeat: number,
+  _relay: RelayClient,
   onStart: () => void,
   started: boolean,
 ): void {
-  const box = $('#room-controls') as HTMLElement;
-  const note = $('#room-note') as HTMLElement;
-  if (!controls.roster) {
-    box.hidden = true;
-    note.textContent = '';
-    return;
-  }
-  const view = roomView(controls.roster, mySeat, controls.fill);
-  box.hidden = !view.isHost || started;
-  note.textContent = started ? '' : startNote(view);
-  if (box.hidden) return;
-
-  const max = $('#room-max') as HTMLButtonElement;
-  const fill = $('#room-fill') as HTMLButtonElement;
-  const door = $('#room-door') as HTMLButtonElement;
-  const start = $('#room-start') as HTMLButtonElement;
-  const text = $('#room-text') as HTMLButtonElement;
-  const anim = $('#room-anim') as HTMLButtonElement;
-  const fog = $('#room-fog') as HTMLButtonElement;
-  const safari = $('#room-safari') as HTMLButtonElement;
-  max.textContent = `MAX ${view.max}`;
-  fill.textContent = view.fill > 0 ? `FILL ${view.fill}` : 'FILL OFF';
-  door.textContent = { open: 'LISTED', private: 'UNLISTED', pass: 'PASSCODE' }[doorOf(view)];
-  start.disabled = !canStart(view);
-  text.textContent = `TEXT ${textSpeedLabel(controls.textSpeed)}`;
-  anim.textContent = controls.animations ? 'ANIM ON' : 'ANIM OFF';
-  fog.textContent = `FOG ${controls.fogSecs}s`;
-  safari.textContent = safariLabel(controls.safariSecs);
-
-  max.onclick = () => relay.setMax(nextMax(view.max));
-  fill.onclick = () => {
-    controls.fill = !controls.fill;
-    renderRoomPanel(controls, mySeat, relay, onStart, started);
-  };
-  door.onclick = () => {
-    const next = nextDoor(doorOf(view));
-    if (next === 'pass') {
-      const code = (prompt('Passcode for the door? (4 characters)') ?? '').trim().toUpperCase();
-      if (!code) return;
-      relay.setPass(code);
-      relay.setOpen(true);
-    } else {
-      relay.setPass(null);
-      relay.setOpen(next === 'open');
-    }
-  };
-  const redraw = () => renderRoomPanel(controls, mySeat, relay, onStart, started);
-  text.onclick = () => {
-    controls.textSpeed = nextTextSpeed(controls.textSpeed);
-    redraw();
-  };
-  anim.onclick = () => {
-    controls.animations = !controls.animations;
-    redraw();
-  };
-  fog.onclick = () => {
-    controls.fogSecs = nextFog(controls.fogSecs);
-    redraw();
-  };
-  // How long the opening lasts, including not at all (POK-241). Zero is Kanto's own
-  // escape hatch: no Safari, straight to a dealt drop.
-  safari.onclick = () => {
-    controls.safariSecs = nextSafari(controls.safariSecs);
-    redraw();
-  };
-  start.onclick = onStart;
+  roomPanelHook?.(onStart, started);
 }
 
 // ---- bots (POK-236) -----------------------------------------------------------------
@@ -1636,6 +1603,12 @@ function fixedSeed(): number | null {
 function autoStarts(): boolean {
   return !import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('noauto');
 }
+/** Which rooms start on their own (POK-320, Cam: "if I click an option that isn't quick
+ *  play, the game should not start automatically"). Quick play and the daily are
+ *  games that are going; a hosted room waits for its host's START. */
+function startsItself(mode: string): boolean {
+  return mode === 'quick' || mode === 'daily';
+}
 const DIRECTOR_TICK_MS = 1000; // coarser than the 5s clock/fogSecs cadence director.ts needs
 
 /** The same strip, for a client that is not running the match (POK-268). The host's is
@@ -2003,16 +1976,38 @@ function wireRoom(
   if (mailboxBase === undefined || hash.mode === 'solo') return; // solo: no socket at all
 
   const panel = $('#room-panel') as HTMLElement;
-  const codeEl = $('#room-code') as HTMLElement;
   panel.hidden = false;
-  codeEl.textContent =
-    hash.mode === 'host'
-      ? 'Hosting…'
-      : hash.mode === 'quick'
-        ? 'Finding a game…'
-        : hash.mode === 'daily'
-          ? 'Joining the daily…'
-          : `Joining ${hash.code}…`;
+  /** The drawn room's own state (POK-320): what no roster event carries. */
+  const room = {
+    status:
+      hash.mode === 'host'
+        ? 'Hosting…'
+        : hash.mode === 'quick'
+          ? 'Finding a game…'
+          : hash.mode === 'daily'
+            ? 'Joining the daily…'
+            : `Joining ${hash.code}…`,
+    /** The room refused us; BACK TO LOBBY is all there is. */
+    fatal: false,
+    /** Whose card is open over the seats. */
+    card: null as { seat: number } | null,
+    /** The match is on: the room screen is down and its controls gone. */
+    started: false,
+    /** When a room that starts itself will (quick play, the daily). */
+    startAt: null as number | null,
+    onStart: () => {},
+  };
+  const stage = theStage();
+  // The same status and note in the drawer, where they stay through the match (the room
+  // screen comes down when it starts): what the strip sits under, and what a test reads.
+  const codeEl = $('#room-code') as HTMLElement;
+  const noteEl = $('#room-note') as HTMLElement;
+  const setStatus = (text: string) => {
+    room.status = text;
+    codeEl.textContent = text;
+    stage.redraw();
+  };
+  setStatus(room.status);
 
   const relay = new RelayClient();
   let bridge: Bridge | null = null;
@@ -2031,6 +2026,152 @@ function wireRoom(
     fill: true, roster: null, textSpeed: 3, animations: true, fogSecs: 120,
     safariSecs: DEFAULT_SAFARI_SECS,
   };
+
+  // ---- the room, drawn (POK-320) ----
+  // Kanto's lobby: the code, a 2x4 of seats with everybody's sprite, what START would
+  // make, the host's options, START or LEAVE. It covers the game until the match is
+  // on: nobody walks Littleroot while the host is still choosing the fog.
+  const hostOptions = (view: RoomView) => {
+    const redraw = () => stage.redraw();
+    return [
+      { id: 'room-max', label: `MAX ${view.max}`, onPress: () => relay.setMax(nextMax(view.max)) },
+      {
+        id: 'room-fill',
+        label: view.fill > 0 ? `FILL ${view.fill}` : 'FILL OFF',
+        onPress: () => {
+          controls.fill = !controls.fill;
+          redraw();
+        },
+      },
+      {
+        id: 'room-door',
+        label: { open: 'LISTED', private: 'UNLISTED', pass: 'PASSCODE' }[doorOf(view)],
+        onPress: () => {
+          const next = nextDoor(doorOf(view));
+          if (next === 'pass') {
+            const code = (prompt('Passcode for the door? (4 characters)') ?? '').trim().toUpperCase();
+            if (!code) return;
+            relay.setPass(code);
+            relay.setOpen(true);
+          } else {
+            relay.setPass(null);
+            relay.setOpen(next === 'open');
+          }
+        },
+      },
+      {
+        id: 'room-text',
+        label: `TEXT ${textSpeedLabel(controls.textSpeed)}`,
+        onPress: () => {
+          controls.textSpeed = nextTextSpeed(controls.textSpeed);
+          redraw();
+        },
+      },
+      {
+        id: 'room-anim',
+        label: controls.animations ? 'ANIM ON' : 'ANIM OFF',
+        onPress: () => {
+          controls.animations = !controls.animations;
+          redraw();
+        },
+      },
+      {
+        id: 'room-fog',
+        label: `FOG ${controls.fogSecs}s`,
+        onPress: () => {
+          controls.fogSecs = nextFog(controls.fogSecs);
+          redraw();
+        },
+      },
+      // How long the opening lasts, including not at all (POK-241). Zero is Kanto's own
+      // escape hatch: no Safari, straight to a dealt drop.
+      {
+        id: 'room-safari',
+        label: safariLabel(controls.safariSecs),
+        onPress: () => {
+          controls.safariSecs = nextSafari(controls.safariSecs);
+          redraw();
+        },
+      },
+    ];
+  };
+  const roomModel = (): RoomModel => {
+    const view = controls.roster && bridge ? roomView(controls.roster, bridge.seat, controls.fill) : null;
+    const seats: RoomSeat[] = (controls.roster?.members ?? []).map((m) => {
+      const entry = bridge?.roster.get(m.id);
+      return {
+        seat: m.id,
+        name: m.name || entry?.name || 'TRAINER',
+        skin: Number(entry?.skin ?? 0) || 0,
+        isMe: m.id === bridge?.seat,
+        spectating: m.spectate === true,
+        alive: entry?.alive ?? true,
+      };
+    });
+    const cardEntry = room.card ? bridge?.roster.get(room.card.seat) : undefined;
+    const countdown = room.startAt !== null && !room.started ? Math.max(0, Math.ceil((room.startAt - performance.now()) / 1000)) : null;
+    const note = view && !room.started ? startNote(view) : '';
+    if (!room.fatal) noteEl.textContent = note;
+    return {
+      status: room.status,
+      note,
+      seats,
+      max: view?.max ?? BOT_FILL,
+      fill: view?.fill ?? 0,
+      isHost: view?.isHost ?? false,
+      started: room.started,
+      canStart: view ? canStart(view) : false,
+      countdown,
+      options: view?.isHost ? hostOptions(view) : null,
+      card: cardEntry
+        ? {
+            seat: cardEntry.seat,
+            lines: cardFor(cardEntry, cardEntry.map ? mapIdOf(cardEntry.map) : undefined),
+            canKick: (view?.isHost ?? false) && !cardEntry.isMe,
+          }
+        : null,
+      fatal: room.fatal,
+      onStart: () => room.onStart(),
+      onLeave: () => backToLobby(),
+      onBack: () => backToLobby(),
+      onSeat: (seat) => {
+        room.card = room.card?.seat === seat ? null : { seat };
+        stage.redraw();
+      },
+      onKick: (seat) => {
+        relay.kick(seat);
+        room.card = null;
+        stage.redraw();
+      },
+      onCloseCard: () => {
+        room.card = null;
+        stage.redraw();
+      },
+    };
+  };
+  const roomScreenView = roomScreen(roomModel);
+  const showRoomScreen = () => {
+    room.started = false;
+    room.card = null;
+    stage.show(roomScreenView);
+  };
+  const hideRoomScreen = () => {
+    if (room.started) return;
+    room.started = true;
+    room.startAt = null;
+    if (stage.current === roomScreenView) stage.hide();
+  };
+  hideRoomHook = hideRoomScreen;
+  roomPanelHook = (onStart, started) => {
+    room.onStart = onStart;
+    if (started) hideRoomScreen();
+    stage.redraw();
+  };
+  // A room that starts itself counts down on screen.
+  setInterval(() => {
+    if (room.startAt !== null && !room.started) stage.redraw();
+  }, 1000);
+  showRoomScreen();
 
   /** `members` comes straight off the relay's roster event when there is one: the
    *  Bridge's own subscription may not have folded it into `bridge.roster` yet -- both
@@ -2314,6 +2455,7 @@ function wireRoom(
     if (msg.t === 'start') {
       match.seed = msg.seed;
       match.seats = msg.spawns.map((s) => s.seat);
+      hideRoomScreen();
     } else if (msg.t === 'ring') {
       match.ringPhase = msg.phase;
       match.centre = { sx: msg.sx, sy: msg.sy, place: msg.place };
@@ -2459,7 +2601,7 @@ function wireRoom(
     console.info(`[room] attached as seat ${seat} in ${code}`);
     bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol });
     isHost = hash.mode === 'host'; // known from our own hash, not worth waiting on a roster event
-    codeEl.textContent = `Room ${code}`;
+    setStatus(`Room ${code}`);
     renderRoom(bridge);
     const seatBase = symbols?.get('gBrMySeat');
     if (seatBase !== undefined) writeMySeat(emu, seatBase, seat);
@@ -2648,7 +2790,11 @@ function wireRoom(
     }, 1000);
     stopGuestStrip = () => clearInterval(guestStrip);
     renderSpectate(bridge, spectate);
-    if (isHost && autoStarts()) setTimeout(startDirector, AUTO_START_MS);
+    if (isHost && autoStarts() && startsItself(hash.mode)) {
+      room.startAt = performance.now() + AUTO_START_MS;
+      stage.redraw();
+      setTimeout(() => startDirector(), AUTO_START_MS);
+    }
   };
 
   // PLAY AGAIN goes back to the lobby, not back into this room. Reloading on the same
@@ -2665,10 +2811,6 @@ function wireRoom(
   // that has just finished one is carrying that match's team and an empty ball pocket.
   // The way out of a room (POK-241). A host leaving closes the room for everybody --
   // that is what migration is for -- so this is offered to guests only.
-  const leave = $('#room-leave') as HTMLButtonElement;
-  leave.hidden = true;
-  leave.addEventListener('click', () => backToLobby());
-
   const playAgainButton = $('#play-again') as HTMLButtonElement;
 
   /** Out of the match and back into the room: the ROM starts over, the results panel
@@ -2698,6 +2840,7 @@ function wireRoom(
       for (const m of spectate.follow(null)) bridge?.pushToRom(m);
       ($('#results-panel') as HTMLElement).hidden = true;
       setInMatch(false);
+      showRoomScreen();
       if (bridge) {
         renderRoom(bridge);
         renderSpectate(bridge, spectate);
@@ -2765,7 +2908,14 @@ function wireRoom(
     if (bridge && ev.host === bridge.seat && !isHost) {
       isHost = true;
       console.info('[room] promoted to host');
-      startDirector(ev.members.map((m) => m.id), match.seed !== 0);
+      // Quick play's own host is "promoted" the moment the relay seats it, with no match
+      // to take over: that room starts itself, after the STARTS IN count (POK-320).
+      if (match.seed === 0 && !room.started && startsItself(hash.mode)) {
+        if (autoStarts() && room.startAt === null) {
+          room.startAt = performance.now() + AUTO_START_MS;
+          setTimeout(() => startDirector(), AUTO_START_MS);
+        }
+      } else startDirector(ev.members.map((m) => m.id), match.seed !== 0);
     }
     // Stood down. The relay moved `host` off us while we are still in the room, which
     // only happens because we asked it to (the tab went to the background). The
@@ -2807,12 +2957,8 @@ function wireRoom(
     }
     // The buzzer, before the panel is drawn: a director created after the draw would
     // leave the host's controls on screen for the rest of the match.
-    if (ev.members.length >= 2 && autoStarts()) startDirector(ev.members.map((m) => m.id));
+    if (ev.members.length >= 2 && autoStarts() && startsItself(hash.mode)) startDirector(ev.members.map((m) => m.id));
     if (bridge) renderRoom(bridge);
-    // A host leaving closes the room for everybody -- that is what migration is for --
-    // so LEAVE is a guest's button while a match is on. It is not once the match is
-    // over: the host was the only one in the room with no way out at all.
-    leave.hidden = isHost && !results.isOver();
     if (bridge) renderSpectate(bridge, spectate);
     if (bridge) {
       renderRoomPanel(controls, bridge.seat, relay, () => {
@@ -2828,41 +2974,43 @@ function wireRoom(
     // always the same -- get the build they have, which here means a reload.
     if (ev.reason === 'version') {
       const theirs = ev.host?.patch ?? '?';
-      codeEl.textContent = `That room is on patch ${theirs}; you have ${patch ?? '?'}. Reload to update.`;
+      setStatus(`That room is on patch ${theirs}; you have ${patch ?? '?'}. Reload to update.`);
       return;
     }
     // A door that will not open is a dead end unless the page says where else to go.
     // `locked` is the common one: a room mid-match, which is exactly what you rejoin
     // if you reload an old link.
     const FATAL = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server_full'];
-    codeEl.textContent = `Couldn't join: ${ev.reason}`;
+    setStatus(`Couldn't join: ${ev.reason}`);
     if (FATAL.includes(ev.reason)) {
-      const note = $('#room-note') as HTMLElement;
-      note.textContent = '';
+      room.fatal = true;
+      noteEl.textContent = '';
       const back = document.createElement('button');
       back.type = 'button';
       back.textContent = 'BACK TO LOBBY';
       back.addEventListener('click', () => backToLobby());
-      note.appendChild(back);
+      noteEl.appendChild(back);
+      // The drawer says so, under no screen: a dead end is not worth drawing.
+      stage.hide();
     }
   });
   // QUICK PLAY found nothing to join: host one and let the bots fill it, which is what
   // Kanto does rather than leaving somebody looking at an empty list (POK-240).
   relay.on('no_open_rooms', () => {
-    codeEl.textContent = 'No game going. Hosting one…';
+    setStatus('No game going. Hosting one…');
     relay.host({ name: careerName(), open: true, max: BOT_FILL, skin });
   });
   // Everything open is mid-match: WATCH PLAY NEXT. Joining as a spectator gets you the
   // match now and a seat in the next one.
   relay.on('match_in_progress', (ev) => {
     if (!ev.code) return;
-    codeEl.textContent = `Watching ${ev.code}…`;
+    setStatus(`Watching ${ev.code}…`);
     setRoomHash('join', ev.code);
     amWatching = true;
     relay.join(ev.code, { name: careerName(), skin, spectate: true });
   });
   relay.on('closed', (ev) => {
-    codeEl.textContent = `Disconnected: ${ev.reason}`;
+    setStatus(`Disconnected: ${ev.reason}`);
     stopDirectorLoop?.();
     stopSpectateLoop?.();
   });
@@ -2883,15 +3031,15 @@ function wireRoom(
     // as a member of it (POK-116); the room only closed if nobody could take it, and
     // then the rejoin is refused and we host again as before.
     if (relay.rejoin()) {
-      codeEl.textContent = 'Reconnected. Rejoining…';
+      setStatus('Reconnected. Rejoining…');
       return;
     }
     if (isHost) {
-      codeEl.textContent = 'Reconnected. Hosting again…';
+      setStatus('Reconnected. Hosting again…');
       relay.host({ ...me, open: true, max: BOT_FILL });
       return;
     }
-    codeEl.textContent = 'Reconnected, but the room carried on without you. LEAVE to start again.';
+    setStatus('Reconnected, but the room carried on without you. LEAVE to start again.');
   });
 
   // A hidden tab gets its timers throttled and its rAF stopped, and on the host those
@@ -2959,40 +3107,36 @@ const LOBBY_REFRESH_MS = 5000;
  *  connection open, which is the whole point of it. */
 function runLobby(): Promise<RoomHash> {
   showScreen('lobby');
-  const fixed = $('#lobby-rows') as HTMLElement;
-  const list = $('#lobby-rooms') as HTMLElement;
-  const head = $('#lobby-rooms-head') as HTMLElement;
-  const note = $('#lobby-note') as HTMLElement;
+  const stage = theStage();
   const relay = new RelayClient();
   let online = false;
   let rooms: RoomListing[] = [];
+  /** The line under the main menu: a rejected code, or nothing. */
+  let note = '';
 
   return new Promise<RoomHash>((resolve) => {
     let timer: ReturnType<typeof setInterval> | null = null;
     const done = (hash: RoomHash) => {
       if (timer) clearInterval(timer);
       relay.close();
+      stage.hide();
       resolve(hash);
     };
+    const redraw = () => stage.redraw();
 
     const press = (action: LobbyAction) => {
       switch (action.kind) {
         case 'name': {
           const typed = cleanName(prompt('Your name? (7 characters)') ?? '');
           if (typed) saveProfile({ name: typed });
-          render();
+          redraw();
           return;
         }
-        case 'skin': {
-          const career = loadCareer();
-          browsedSkin = peekSkin(browsedSkin ?? career.skin ?? 0);
-          // Only what you have earned is worn. saveProfile refuses a locked skin anyway
-          // -- that is the backstop against a poked store -- but asking it to is what
-          // would make the row lie about which sprite is yours.
-          if (skinUnlocked(browsedSkin, career.wins)) saveProfile({ skin: browsedSkin });
-          render();
+        case 'skin':
+          // The wardrobe (POK-320): every sprite on the ladder, Kanto's Picker.
+          browsedSkin = careerSkin();
+          stage.push(wardrobe);
           return;
-        }
         case 'intro':
         case 'win':
         case 'lose': {
@@ -3001,19 +3145,22 @@ function runLobby(): Promise<RoomHash> {
           const which = action.kind;
           const career = loadCareer();
           saveProfile({ [which]: nextLine(career[which] ?? 0) });
-          render();
+          redraw();
           return;
         }
         case 'stats':
           setStatsOff(!loadStats().off);
-          render();
+          redraw();
           return;
         case 'career':
           // Kanto's career is a file somebody can carry between machines; ours lives
           // in a localStorage nobody can copy, so this is the door (POK-243). Save
           // writes it out; load takes one back and re-reads the profile from it.
           if (confirm('Save your career to a file?\n\nCancel to load one instead.')) saveCareerFile();
-          else loadCareerFile(render);
+          else loadCareerFile(redraw);
+          return;
+        case 'lobbies':
+          stage.push(lobbies);
           return;
         case 'solo':
           setRoomHash('solo');
@@ -3035,7 +3182,8 @@ function runLobby(): Promise<RoomHash> {
           // code with one of those in it, or the wrong length, could not be real
           // (POK-240). Catching that here beats waiting on the relay's `not_found`.
           if (!isRoomCode(code)) {
-            note.textContent = code ? `${code} is not a room code.` : '';
+            note = code ? `${code} is not a room code.` : '';
+            redraw();
             return;
           }
           setRoomHash('join', code);
@@ -3047,55 +3195,81 @@ function runLobby(): Promise<RoomHash> {
           return done({ mode: 'join', code: action.code });
       }
     };
-
-    const rowButton = (row: LobbyRow): HTMLLIElement => {
-      const li = document.createElement('li');
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.disabled = row.disabled === true;
-      const label = document.createElement('span');
-      label.textContent = row.label;
-      btn.appendChild(label);
-      if (row.detail) {
-        const sub = document.createElement('span');
-        sub.className = 'sub';
-        sub.textContent = row.detail;
-        btn.appendChild(sub);
-      }
-      btn.addEventListener('click', () => press(row.action));
-      li.appendChild(btn);
-      return li;
-    };
-
-    const render = () => {
+    const row = (r: LobbyRow): RowSpec => ({
+      label: r.label,
+      // The padlock is not in Emerald's font.
+      detail: r.detail?.replace('🔒', 'PASS'),
+      disabled: r.disabled,
+      onPress: () => press(r.action),
+    });
+    const record = () => {
       const career = loadCareer();
-      const showing = browsedSkin ?? careerSkin();
-      fixed.replaceChildren(
-        ...fixedRows(online, {
-          name: careerName(),
-          skin: SKINS[showing],
-          skinNote: skinNote(showing, career.wins),
-          lines: careerVoiceLines(),
-          statsOn: !loadStats().off,
-          record: career.matches > 0 ? careerLine(career) : 'your name',
-        }).map(rowButton),
-      );
-      const roomList = roomRows(rooms);
-      list.replaceChildren(...roomList.map(rowButton));
-      head.hidden = roomList.length === 0;
-      note.textContent = roomList.length === 0 ? emptyNote(online) : '';
+      return career.matches > 0 ? careerLine(career) : 'your name';
     };
+
+    const main = menuScreen(() => ({
+      title: 'HOENN BATTLE ROYALE',
+      rows: playRows(online, rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)).map(row),
+      rowsId: 'lobby-rows',
+      note: note || (online ? '' : 'Not connected. SOLO VS BOTS works without a socket.'),
+      noteId: 'lobby-note',
+      trainer: { name: careerName(), skin: careerSkin(), record: record(), onPress: () => stage.push(trainer) },
+    }));
+    const trainer = menuScreen(() => ({
+      title: 'TRAINER',
+      rows: profileRows({
+        name: careerName(),
+        skin: SKINS[careerSkin()],
+        lines: careerVoiceLines(),
+        statsOn: !loadStats().off,
+        record: record(),
+      }).map(row),
+      rowsId: 'trainer-rows',
+      note: '',
+      buttons: [{ label: 'BACK', id: 'trainer-back', onPress: () => stage.pop() }],
+      onBack: () => stage.pop(),
+    }));
+    const lobbies = menuScreen(() => ({
+      title: 'LOBBIES',
+      rows: roomRows(rooms).map(row),
+      rowsId: 'lobby-rooms',
+      note: rooms.length === 0 ? emptyNote(online) : '',
+      noteId: 'lobby-rooms-note',
+      buttons: [{ label: 'BACK', id: 'lobbies-back', onPress: () => stage.pop() }],
+      onBack: () => stage.pop(),
+    }));
+    const wardrobe = wardrobeScreen(() => ({
+      wins: loadCareer().wins,
+      worn: careerSkin(),
+      browsing: browsedSkin ?? careerSkin(),
+      onBrowse: (skin) => {
+        // Only what you have earned is worn. saveProfile refuses a locked skin anyway
+        // -- that is the backstop against a poked store -- but asking it to is what
+        // would make the screen lie about which sprite is yours.
+        if (browsedSkin === skin && skinUnlocked(skin, loadCareer().wins)) saveProfile({ skin });
+        browsedSkin = skin;
+        redraw();
+      },
+      onWear: (skin) => {
+        if (skinUnlocked(skin, loadCareer().wins)) saveProfile({ skin });
+        redraw();
+      },
+      onBack: () => {
+        browsedSkin = null;
+        stage.pop();
+      },
+    }));
+    stage.show(main);
 
     relay.on('closed', () => {
       online = false;
       rooms = [];
-      render();
+      redraw();
     });
     relay.on('rooms', (ev) => {
       rooms = ev.rooms;
-      render();
+      redraw();
     });
-    render();
     relay.connect((import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL);
     // There is no 'open' event to hang this on, so the refresh tick is also what
     // notices the socket came up. A short first beat so the list is not blank for
@@ -3104,7 +3278,7 @@ function runLobby(): Promise<RoomHash> {
       const up = relay.isOpen();
       if (up !== online) {
         online = up;
-        render();
+        redraw();
       }
       if (up) relay.listRooms();
     };

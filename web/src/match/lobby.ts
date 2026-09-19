@@ -31,6 +31,8 @@ export type LobbyAction =
   | { kind: 'host' }
   | { kind: 'code' }
   | { kind: 'daily' }
+  // The list of open rooms is its own screen now (POK-320).
+  | { kind: 'lobbies' }
   | { kind: 'name' }
   | { kind: 'skin' }
   // MY VOICE is three rows now (POK-283): one line each for walking up, winning and
@@ -63,7 +65,12 @@ export function countdown(secs: number): string {
  *  SOLO VS BOTS still works, because solo never opens one (the Kanto rule). */
 export function fixedRows(
   online: boolean,
-  profile?: {
+  profile?: Profile,
+): LobbyRow[] {
+  return [...(profile ? profileRows(profile) : []), ...playRows(online)];
+}
+
+export interface Profile {
     name: string;
     skin: string;
     /** What the sprite row says under it -- 'your sprite', or how many wins the next
@@ -76,32 +83,44 @@ export function fixedRows(
      *  "shared", the same default `stats.ts`'s `off` field defaults to. */
     statsOn?: boolean;
     record?: string;
-  },
-): LobbyRow[] {
+}
+
+/** Who you are (POK-243): the trainer's own rows, on their own screen since POK-320. */
+export function profileRows(profile: Profile): LobbyRow[] {
   return [
-    // Who you are, first: a room full of people called CAM is nobody's idea of a
-    // lobby, and the name is what the ROM is told too (POK-243).
-    ...(profile
-      ? [
-          { label: profile.name, detail: profile.record ?? 'your name', action: { kind: 'name' as const } },
-          { label: profile.skin, detail: profile.skinNote ?? 'your sprite', action: { kind: 'skin' as const } },
-          { label: profile.lines?.intro ?? 'MY VOICE', detail: 'walking up', action: { kind: 'intro' as const } },
-          { label: profile.lines?.win ?? 'MY VOICE', detail: 'when you win', action: { kind: 'win' as const } },
-          { label: profile.lines?.lose ?? 'MY VOICE', detail: 'when you lose', action: { kind: 'lose' as const } },
-          {
-            label: 'PLAY STATS',
-            detail: profile.statsOn === false ? 'not shared' : 'shared',
-            action: { kind: 'stats' as const },
-          },
-          // Kanto's career is a file on disk somebody can copy to another machine;
-          // localStorage cannot be copied at all, so it needs a door (POK-243).
-          { label: 'MY CAREER', detail: 'save or load a file', action: { kind: 'career' as const } },
-        ]
-      : []),
-    { label: 'SOLO VS BOTS', detail: 'no socket, ever', action: { kind: 'solo' } },
+    { label: profile.name, detail: profile.record ?? 'your name', action: { kind: 'name' as const } },
+    { label: profile.skin, detail: profile.skinNote ?? 'your sprite', action: { kind: 'skin' as const } },
+    { label: profile.lines?.intro ?? 'MY VOICE', detail: 'walking up', action: { kind: 'intro' as const } },
+    { label: profile.lines?.win ?? 'MY VOICE', detail: 'when you win', action: { kind: 'win' as const } },
+    { label: profile.lines?.lose ?? 'MY VOICE', detail: 'when you lose', action: { kind: 'lose' as const } },
+    {
+      label: 'PLAY STATS',
+      detail: profile.statsOn === false ? 'not shared' : 'shared',
+      action: { kind: 'stats' as const },
+    },
+    // Kanto's career is a file on disk somebody can copy to another machine;
+    // localStorage cannot be copied at all, so it needs a door (POK-243).
+    { label: 'MY CAREER', detail: 'save or load a file', action: { kind: 'career' as const } },
+  ];
+}
+
+/** The ways into a match. `openRooms` is how many the relay lists, for the LOBBIES
+ *  row's detail; the daily gets a row of its own when the relay is offering one. */
+export function playRows(online: boolean, openRooms = 0, daily?: RoomListing): LobbyRow[] {
+  return [
     { label: 'QUICK PLAY', detail: online ? 'a game right now' : 'offline', action: { kind: 'quick' }, disabled: !online },
     { label: 'HOST A ROOM', action: { kind: 'host' }, disabled: !online },
+    {
+      label: 'LOBBIES',
+      detail: online ? `${openRooms} open` : undefined,
+      action: { kind: 'lobbies' },
+      disabled: !online,
+    },
     { label: 'JOIN BY CODE', action: { kind: 'code' }, disabled: !online },
+    ...(daily
+      ? [{ label: 'DAILY GAME', detail: `in ${countdown(daily.secs ?? 0)}`, action: { kind: 'daily' as const } }]
+      : []),
+    { label: 'SOLO VS BOTS', detail: 'no socket, ever', action: { kind: 'solo' } },
   ];
 }
 

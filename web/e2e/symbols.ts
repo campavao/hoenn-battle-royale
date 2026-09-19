@@ -4,6 +4,7 @@
 // tsconfig, and has no business importing app code.
 import fs from 'node:fs';
 import path from 'node:path';
+import { expect, type Page } from '@playwright/test';
 
 // web/package.json sets "type": "module" -- import.meta.dirname (Node 20.11+/24)
 // stands in for __dirname, which does not exist in ESM scope.
@@ -34,6 +35,17 @@ export function romPath(): string {
 
 export function romExists(): boolean {
   return fs.existsSync(romPath());
+}
+
+/** The host presses START once `members` are seated (POK-320: a hosted room waits for
+ *  its host, the way Cam asked; only quick play and the daily start themselves). The
+ *  seats are counted first because a room that fills with bots has START lit before
+ *  anybody else arrives, and pressing it then locks the door on the guest. */
+export async function startWith(host: Page, members: number): Promise<void> {
+  await expect(host.locator('#room-roster li')).toHaveCount(members, { timeout: 60_000 });
+  const start = host.locator('#room-start');
+  await expect(start).toBeEnabled({ timeout: 60_000 });
+  await start.click();
 }
 
 export function romHashParam(): string {

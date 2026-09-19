@@ -70,6 +70,31 @@
       .lobby-rows .sub { font-weight: 400; color: #9fb3c0; }
       .lobby-head { width: 100%; max-width: 480px; color: #9fb3c0; font-size: 12px; margin-bottom: 6px; }
       .lobby-note { color: #9fb3c0; font-size: 12px; min-height: 1.2em; }
+      #stage {
+        position: fixed; inset: 0; z-index: 9;
+        background: #101418;
+        display: flex; justify-content: center; align-items: flex-start;
+        overflow: hidden;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      #stage[hidden] { display: none; }
+      #stage-box { position: relative; }
+      #ui { display: block; image-rendering: pixelated; }
+      #ui-hits { position: absolute; inset: 0; }
+      #ui-hits ul, #ui-hits li { list-style: none; margin: 0; padding: 0; }
+      /* The mirror: real, invisible, exactly where the drawing is. A container has no
+         place of its own -- it fills the stage and lets touches through to its children. */
+      #ui-hits div, #ui-hits ul, #ui-hits button {
+        position: absolute; margin: 0; padding: 0; border: 0; background: transparent;
+        color: transparent; font-size: 8px; line-height: 1; overflow: hidden; white-space: nowrap;
+        opacity: 0; user-select: none; -webkit-user-select: none;
+      }
+      #ui-hits > div, #ui-hits > ul { inset: 0; pointer-events: none; }
+      #ui-hits li { position: static; pointer-events: none; }
+      #ui-hits button, #ui-hits li > *, #ui-hits > div > * { pointer-events: auto; }
+      #ui-hits button { cursor: pointer; touch-action: manipulation; }
+      #ui-hits button:disabled { cursor: default; }
+      #ui-hits [hidden] { display: none; }
       .room-panel {
         width: 100%;
         max-width: 480px;
@@ -359,12 +384,9 @@
         <p id="patch-banner" class="banner" hidden></p>
       </section>
 
-      <section id="screen-lobby" class="screen" hidden>
-        <ul id="lobby-rows" class="lobby-rows"></ul>
-        <div id="lobby-rooms-head" class="lobby-head">LOBBIES</div>
-        <ul id="lobby-rooms" class="lobby-rows"></ul>
-        <p id="lobby-note" class="lobby-note"></p>
-      </section>
+      <!-- The lobby is drawn on #stage (web/src/ui, POK-320); this section only keeps
+           the page's own layout while it is up. -->
+      <section id="screen-lobby" class="screen" hidden></section>
 
       <section id="screen-playing" class="screen" hidden>
         <!-- The phone's chrome (Cam, 2026-09-18): during a match only game controls are
@@ -376,23 +398,14 @@
           <span id="drawer-version" class="version"></span>
           <button id="drawer-close" class="drawer-close" type="button">BACK TO GAME</button>
         </div>
+        <!-- The room before a match is drawn on #stage (POK-320). What is left here is
+             the match: the strip, who is still in, who you are watching, the results. -->
         <div id="room-panel" class="room-panel" hidden>
           <div id="room-code" class="room-code"></div>
           <div id="match-strip" class="room-code" hidden></div>
-          <ul id="room-roster" class="room-roster"></ul>
-          <div id="room-controls" class="room-controls" hidden>
-            <button id="room-max" type="button">MAX 8</button>
-            <button id="room-fill" type="button">FILL ON</button>
-            <button id="room-door" type="button">OPEN</button>
-            <button id="room-text" type="button">TEXT MID</button>
-            <button id="room-anim" type="button">ANIM ON</button>
-            <button id="room-fog" type="button">FOG 120s</button>
-            <button id="room-safari" type="button">SAFARI 120s</button>
-            <button id="room-start" type="button">START</button>
-          </div>
-          <button id="room-leave" type="button" class="room-leave">LEAVE</button>
-          <div id="trainer-card" class="trainer-card" hidden></div>
           <div id="room-note" class="room-note"></div>
+          <ul id="match-roster" class="room-roster"></ul>
+          <div id="match-card" class="trainer-card" hidden></div>
           <div id="spectate-strip" class="spectate-strip" hidden></div>
           <div id="results-panel" class="results" hidden>
             <div id="results-line" class="results-line"></div>
@@ -439,6 +452,16 @@
           </div>
         </div>
       </section>
+    </div>
+    <!-- The stage (web/src/ui/stage.ts, POK-320): every screen outside the game, in
+         Emerald's own font and frames, on one canvas. #ui-hits mirrors what is drawn in
+         invisible DOM -- a button over every pressable thing -- so a tap, a screen reader
+         and a test find the same things the eye does. -->
+    <div id="stage" hidden>
+      <div id="stage-box">
+        <canvas id="ui" width="240" height="320"></canvas>
+        <div id="ui-hits"></div>
+      </div>
     </div>
     <script type="module" src="/src/app.ts"></script>
   </body>

@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 // web/package.json sets "type": "module" -- no __dirname in ESM scope.
 const __dirname = import.meta.dirname;
@@ -62,6 +62,7 @@ test("a guest walking right moves on the host's screen", async ({ browser }) => 
     const guest = await guestCtx.newPage();
     await guest.goto(`/#join=${code}&nobots&fast&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
+    await startWith(host, 2);
 
     // Both seats seated in the host's own roster mirror.
     await host.waitForFunction(

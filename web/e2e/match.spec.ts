@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
@@ -51,6 +51,7 @@ test('a match runs from the opening to a winner', async ({ browser }) => {
     const guest = await guestCtx.newPage();
     await guest.goto(`/#join=${code}&fast&seed=20260916&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
+    await startWith(host, 2);
 
     // 1. The opening. A second seat starts the match, and both ROMs walk into the Zone.
     for (const page of [host, guest]) {

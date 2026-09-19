@@ -15,7 +15,7 @@
 // itself, into the same room, with its code, its roster and its socket, on a ROM that
 // really did power-cycle and land in Littleroot rather than on Emerald's moving van.
 import { test, expect } from '@playwright/test';
-import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BrWindow = { __br: any };
@@ -35,6 +35,7 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
   const codeEl = page.locator('#room-code');
   await expect(codeEl).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
   const code = await codeEl.textContent();
+  await startWith(page, 1);
 
   // A whole match at the dev pace: 25s opening, 15s ring phases, bots filling the room.
   await expect(page.locator('#results-panel')).toBeVisible({ timeout: 240_000 });

@@ -154,9 +154,31 @@ Vite + TypeScript, no framework needed; a small state machine:
 → room (roster, options, pace, passcode) → match (emulator + HUD overlay + touch pad)
 → results (Hall of Fame, record card, PLAY AGAIN)`.
 
-The lobby moves out of the game and into HTML. Kanto drew its lobby as a room because it
-had no other surface; a phone browser has a better one, and it stops the ROM from needing
-any menu we would otherwise have to build in Gen 3 windows.
+The lobby moves out of the game and onto the page. Kanto drew its lobby as a room because
+it had no other surface; the page is a better one, and it stops the ROM from needing any
+menu we would otherwise have to build in Gen 3 windows.
+
+**It is drawn in Emerald's own look** (POK-320, Cam: "the UI should look almost native to
+Pokémon Emerald"). `tools/br/export-ui.py` writes the ROM's `latin_normal` font (a 16-cell
+mask indexed by charmap byte, with `gFontNormalLatinGlyphWidths`), its standard window
+frame, its message box, the text palettes and the skin ladder's gfx ids to
+`web/public/ui/` + `web/src/data/ui.json`; `web/src/ui/emerald.ts` draws them on a canvas
+at the picture's scale (whole pixels on a desktop, the phone's own fit below that). Every
+screen outside the game -- the main menu, LOBBIES, the trainer's rows, the wardrobe with
+every sprite on the ladder, and the room with Kanto's 2×4 of seats -- is a `DrawnScreen`
+on one `Stage` (`web/src/ui/stage.ts`, `screens.ts`). Under the canvas the stage keeps a
+mirror in real DOM: an invisible `<button>` over every pressable thing and a `<div>` over
+every line, with the ids the page always had (`#room-code`, `#room-roster li`,
+`#room-start`...), so a tap, a screen reader and a Playwright locator all find what the
+eye does. The D-pad moves Emerald's cursor, A presses, B backs out; the game hears no
+key while a screen is up.
+
+**A hosted room waits for its host.** The room screen covers the game until the match
+starts (the ROM idles in Littleroot under it); only quick play and the daily start
+themselves, with a STARTS IN count on the screen. Everything the host used to have to set
+"ahead of time" -- MAX, FILL, the door, TEXT, ANIM, FOG, SAFARI -- is on the room screen
+beside START. PLAY AGAIN brings the room screen back. The drawer keeps only what belongs
+to a running match: the strip, who is still in, WATCH, the results.
 
 Career (name, skin, wins), stats opt-out and pace live in IndexedDB. Touch controls are
 the shell's, with the emulator's `buttonPress` API. PWA manifest + service worker so a
@@ -223,8 +245,9 @@ Beaten sprites vanish, balls remain. Gyms are one-shot bosses, first-to-beat clo
 Bots use their own bag. Two bots fighting is a real battle. Quick play has no host. Solo
 play opens no socket. Backfill is wrong for a battle royale.
 
-Changed: the lobby is HTML, not a drawn room. Fast-forward stays available to the
-**proxy duel instance only**.
+Changed: the lobby is the page's, not the ROM's -- but drawn in Emerald's font and frames
+since POK-320, with Kanto's room of seats. Fast-forward stays available to the **proxy
+duel instance only**.
 
 ## 11. Decisions (2026-09-15) and what is still open
 

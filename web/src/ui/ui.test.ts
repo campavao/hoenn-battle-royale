@@ -59,3 +59,61 @@ describe('a tap', () => {
     expect(inRect(r, 9, 12)).toBe(false);
   });
 });
+
+describe('the drawn screens (POK-320)', () => {
+  it('lays a list out one row per line inside its frame', async () => {
+    const { layoutRows, ROW_H } = await import('./screens');
+    const lay = layoutRows(24, 5);
+    expect(lay.frame).toEqual({ x: 0, y: 24, w: 240, h: 5 * ROW_H + 16 });
+    expect(lay.rows[0]).toEqual({ x: 8, y: 32, w: 224, h: ROW_H });
+    expect(lay.rows[4].y).toBe(32 + 4 * ROW_H);
+  });
+
+  it("seats Kanto's 2x4, and a bigger MAX in more rows", async () => {
+    const { layoutSeats, SEAT_W, SEAT_H } = await import('./screens');
+    const eight = layoutSeats(24, 8);
+    expect(eight.cells).toHaveLength(8);
+    expect(eight.cells[0]).toEqual({ x: 8, y: 32, w: SEAT_W, h: SEAT_H });
+    expect(eight.cells[3].x).toBe(8 + 3 * SEAT_W);
+    expect(eight.cells[4]).toEqual({ x: 8, y: 32 + SEAT_H, w: SEAT_W, h: SEAT_H });
+    expect(eight.frame.h).toBe(2 * SEAT_H + 16);
+    expect(layoutSeats(24, 12).frame.h).toBe(3 * SEAT_H + 16);
+    // Four across fill the 240 exactly with a tile each side.
+    expect(4 * SEAT_W + 16).toBe(240);
+  });
+
+  it('centres a row of buttons a tile apart, each a whole number of tiles wide', async () => {
+    const { layoutButtons, buttonWidth } = await import('./screens');
+    expect(buttonWidth('START') % 8).toBe(0);
+    const [wear, back] = layoutButtons(100, ['WEAR', 'BACK']);
+    expect(wear.y).toBe(100);
+    expect(back.x).toBe(wear.x + wear.w + 8);
+    expect(wear.x).toBe(240 - (back.x + back.w));
+  });
+
+  it("says what the wardrobe's line says: yours, wearable, or the price", async () => {
+    const { wardrobeNote } = await import('./screens');
+    expect(wardrobeNote(0, 0, 0)).toBe('your sprite');
+    expect(wardrobeNote(1, 0, 0)).toBe('press WEAR');
+    expect(wardrobeNote(2, 0, 0)).toBe('LOCKED -- 1 win');
+    expect(wardrobeNote(4, 3, 0)).toBe('LOCKED -- 5 wins');
+    expect(wardrobeNote(4, 5, 0)).toBe('press WEAR');
+  });
+
+  it('shows the stage at whole pixels once it can afford two, and at the phone’s own fit below', async () => {
+    const { stageScale } = await import('./stage');
+    expect(stageScale(1200, 800)).toBe(2);
+    expect(stageScale(1200, 1000)).toBe(3);
+    expect(stageScale(375, 812)).toBeCloseTo(375 / 240);
+    expect(stageScale(200, 300)).toBe(1);
+  });
+
+  it('cuts a long line to fit, with an ellipsis the font has', async () => {
+    const { fitText, measure } = await import('./emerald');
+    const long = 'A LINE THAT IS FAR TOO LONG FOR THE ROW IT IS ON';
+    const cut = fitText(long, 100);
+    expect(cut.endsWith('…')).toBe(true);
+    expect(measure(cut)).toBeLessThanOrEqual(100);
+    expect(fitText('SHORT', 100)).toBe('SHORT');
+  });
+});

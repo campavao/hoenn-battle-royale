@@ -7,7 +7,7 @@
 // never take, and a seat that keeps the match from ever ending) and their ROM walked
 // around Littleroot broadcasting a ghost into somebody else's match.
 import { test, expect } from '@playwright/test';
-import { romExists, romHashParam, romPath } from './symbols';
+import { romExists, romHashParam, romPath, startWith } from './symbols';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BrWindow = { __br: any };
@@ -27,6 +27,7 @@ test('a watcher walks in on a running match, and the match is not theirs', async
     const host = await hostCtx.newPage();
     await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    await startWith(host, 1);
     await host.waitForFunction(
       () => ((window as unknown as BrWindow).__br?.director?.state?.ring?.phase ?? 0) >= 1,
       undefined,

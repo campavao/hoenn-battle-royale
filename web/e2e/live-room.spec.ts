@@ -16,6 +16,7 @@
 //   npx playwright test e2e/live-room.spec.ts
 import fs from 'node:fs';
 import { test, expect, type Page, type Browser } from '@playwright/test';
+import { startWith } from './symbols';
 
 const site = process.env.HBR_LIVE_URL ?? '';
 const baseRom = process.env.HBR_BASE_ROM ?? '';
@@ -77,12 +78,11 @@ test('two browsers meet in a room on the live relay', async ({ browser }) => {
   // eslint-disable-next-line no-console
   console.log(`roster: host had ${before} alone, now ${await rosterSize(host)}; guest sees ${await rosterSize(guest)}`);
 
-  // And the match deals ITSELF. Nothing is pressed here: `autoStarts()` is
-  // `!import.meta.env.DEV || !hash.has('noauto')`, so in production a room with two in it
-  // starts on its own and START is only ever a dev convenience. The button going away is
-  // the host's director coming up.
-  await expect(host.locator('#room-start'), 'the match dealt itself once there were two')
-    .toBeHidden({ timeout: 120_000 });
+  // And the host deals the match (POK-320: a hosted room waits for START; only quick
+  // play and the daily start themselves). The button going away is the host's director
+  // coming up.
+  await startWith(host, await rosterSize(host));
+  await expect(host.locator('#room-start'), 'START dealt the match').toBeHidden({ timeout: 120_000 });
 
   // Both ROMs are really running it. There is no `__hbr` in a production build, so the
   // check is the screen: two shots of the canvas a few seconds apart have to differ.

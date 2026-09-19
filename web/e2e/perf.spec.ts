@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
@@ -47,10 +47,10 @@ test('the host carries a match without the emulator falling over', async ({ brow
     const cdp = await ctx.newCDPSession(host);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
     try {
-      // One tab hosting, bots filling it: the director auto-starts after its buzzer, so
-      // this measures the same match anybody would get.
+      // One tab hosting, bots filling it: START deals the same match anybody would get.
       await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
       await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
+      await startWith(host, 1);
 
       // Count emulator frames ourselves, and watch for long main-thread tasks -- a
       // dropped frame on a phone is almost always one of those rather than slow wasm.

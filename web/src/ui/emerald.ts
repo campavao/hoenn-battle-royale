@@ -31,8 +31,16 @@ const rgb = (c: number[]) => `rgb(${c[0]},${c[1]},${c[2]})`;
 export const TEXT_DARK: TextColor = { fg: rgb(PALETTES.pal1[2]), shadow: rgb(PALETTES.pal1[3]) };
 /** White on a dark box, the message box's style. */
 export const TEXT_WHITE: TextColor = { fg: rgb(PALETTES.pal1[1]), shadow: rgb(PALETTES.pal1[2]) };
+/** A lighter line under a dark one: the detail on a row, the note under a list. */
+export const TEXT_GRAY: TextColor = { fg: rgb(PALETTES.pal1[3]), shadow: rgb(PALETTES.pal1[1]) };
+/** Emerald's three coloured texts (TEXT_COLOR_RED/GREEN/BLUE with their own shadows). */
+export const TEXT_RED: TextColor = { fg: rgb(PALETTES.pal1[4]), shadow: rgb(PALETTES.pal1[5]) };
+export const TEXT_GREEN: TextColor = { fg: rgb(PALETTES.pal1[6]), shadow: rgb(PALETTES.pal1[7]) };
+export const TEXT_BLUE: TextColor = { fg: rgb(PALETTES.pal1[8]), shadow: rgb(PALETTES.pal1[9]) };
 /** The frame's inside, Emerald's window white. */
 export const WINDOW_FILL = '#ffffff';
+/** The page behind every drawn screen: the dark the site already wears. */
+export const STAGE_FILL = '#101418';
 
 /** A charmap byte for each character; an unknown character is a space. */
 export function glyphIds(text: string): number[] {
@@ -50,6 +58,15 @@ export function glyphIds(text: string): number[] {
 /** The width of a string in the font's pixels, as the ROM would print it. */
 export function measure(text: string): number {
   return glyphIds(text).reduce((w, id) => w + (FONT.widths[id] ?? 6), 0);
+}
+
+/** `text` cut to `maxW` pixels of the font, with an ellipsis when it was. */
+export function fitText(text: string, maxW: number): string {
+  if (measure(text) <= maxW) return text;
+  const tail = measure('…');
+  let out = text;
+  while (out.length > 0 && measure(out) + tail > maxW) out = out.slice(0, -1);
+  return `${out.trimEnd()}…`;
 }
 
 export interface Rect {
@@ -136,10 +153,14 @@ export class EmeraldCanvas {
   private mask: HTMLImageElement | null = null;
   private frame: HTMLImageElement | null = null;
   private box: HTMLImageElement | null = null;
+  /** Called when a sheet or the font lands, so whoever drew without it can draw again. */
+  onLoad: (() => void) | null = null;
   /** The logical size, in GBA pixels. */
   width = 240;
   height = 160;
   scale = 1;
+  /** Added to every x drawn: where a 240-wide screen sits on a wider canvas. */
+  origin = 0;
 
   constructor(public readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -148,6 +169,7 @@ export class EmeraldCanvas {
         this.mask = mask;
         this.frame = frame;
         this.box = box;
+        this.onLoad?.();
       },
     );
   }
@@ -156,16 +178,15 @@ export class EmeraldCanvas {
     return this.ready;
   }
 
-  /** Size the canvas to a CSS box: the largest integer scale at which `width` fits,
-   *  and as many rows as the box has at that scale. */
-  fit(cssW: number, cssH: number, width = 240): void {
-    this.scale = Math.max(1, Math.floor(cssW / width));
-    this.width = Math.floor(cssW / this.scale);
-    this.height = Math.floor(cssH / this.scale);
-    this.canvas.width = this.width;
-    this.canvas.height = this.height;
-    this.canvas.style.width = `${this.width * this.scale}px`;
-    this.canvas.style.height = `${this.height * this.scale}px`;
+  /** `w` x `h` GBA pixels shown at `scale` CSS pixels each. */
+  resize(w: number, h: number, scale: number): void {
+    this.scale = scale;
+    this.width = w;
+    this.height = h;
+    this.canvas.width = w;
+    this.canvas.height = h;
+    this.canvas.style.width = `${w * scale}px`;
+    this.canvas.style.height = `${h * scale}px`;
     this.ctx.imageSmoothingEnabled = false;
   }
 
@@ -175,20 +196,28 @@ export class EmeraldCanvas {
     return { x: Math.floor((clientX - r.left) / this.scale), y: Math.floor((clientY - r.top) / this.scale) };
   }
 
-  clear(color = '#000'): void {
+  clear(color = STAGE_FILL): void {
     this.ctx.fillStyle = color;
     this.ctx.fillRect(0, 0, this.width, this.height);
+  }
+
+  fillRect(r: Rect, color: string, alpha = 1): void {
+    this.ctx.globalAlpha = alpha;
+    this.ctx.fillStyle = color;
+    this.ctx.fillRect(r.x + this.origin, r.y, r.w, r.h);
+    this.ctx.globalAlpha = 1;
   }
 
   /** Emerald's window: the frame around a white inside. */
   drawFrame(r: Rect): void {
     const { ctx, frame } = this;
+    const x0 = r.x + this.origin;
     ctx.fillStyle = WINDOW_FILL;
-    ctx.fillRect(r.x + TILE, r.y + TILE, r.w - 2 * TILE, r.h - 2 * TILE);
+    ctx.fillRect(x0 + TILE, r.y + TILE, r.w - 2 * TILE, r.h - 2 * TILE);
     if (!frame) return;
     for (const t of frameTiles(r.w, r.h)) {
       if (t.tx === 1 && t.ty === 1) continue;
-      ctx.drawImage(frame, t.tx * TILE, t.ty * TILE, TILE, TILE, r.x + t.dx, r.y + t.dy, TILE, TILE);
+      ctx.drawImage(frame, t.tx * TILE, t.ty * TILE, TILE, TILE, x0 + t.dx, r.y + t.dy, TILE, TILE);
     }
   }
 
@@ -200,14 +229,14 @@ export class EmeraldCanvas {
       font = tintFont(this.mask, color);
       this.fonts.set(color, font);
     }
-    let cx = x;
+    let cx = x + this.origin;
     for (const id of glyphIds(text)) {
       const sx = (id % FONT.cols) * CELL;
       const sy = Math.floor(id / FONT.cols) * CELL;
       this.ctx.drawImage(font, sx, sy, CELL, CELL, cx, y, CELL, CELL);
       cx += FONT.widths[id] ?? 6;
     }
-    return cx - x;
+    return cx - x - this.origin;
   }
 
   drawTextCentred(text: string, cx: number, y: number, color?: TextColor): void {
@@ -223,13 +252,14 @@ export class EmeraldCanvas {
     if (!img) {
       const el = new Image();
       el.decoding = 'async';
+      el.onload = () => this.onLoad?.();
       el.src = `/field-sprites/${gfx}.png`;
       this.sheets.set(gfx, el);
       img = el;
     }
     if (!img.complete || img.naturalWidth === 0) return false;
     this.ctx.globalAlpha = alpha;
-    this.ctx.drawImage(img, Math.min(frame, info.frames - 1) * info.w, 0, info.w, info.h, x, y, info.w, info.h);
+    this.ctx.drawImage(img, Math.min(frame, info.frames - 1) * info.w, 0, info.w, info.h, x + this.origin, y, info.w, info.h);
     this.ctx.globalAlpha = 1;
     return true;
   }
@@ -237,6 +267,6 @@ export class EmeraldCanvas {
   /** The cursor Emerald's menus use: a small right-pointing triangle. */
   drawCursor(x: number, y: number, color = TEXT_DARK): void {
     this.ctx.fillStyle = color.fg;
-    for (let i = 0; i < 4; i++) this.ctx.fillRect(x + i, y + 2 + i, 1, 7 - 2 * i);
+    for (let i = 0; i < 4; i++) this.ctx.fillRect(x + this.origin + i, y + 2 + i, 1, 7 - 2 * i);
   }
 }

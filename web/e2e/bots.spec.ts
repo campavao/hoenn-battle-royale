@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
@@ -38,8 +38,9 @@ test('the host fills the room with bots and the guest sees them walking', async 
     const guest = await guestCtx.newPage();
     await guest.goto(`/#join=${code}&testmon&rom=${rom}`);
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
+    await startWith(host, 2);
 
-    // Two members is what starts the host's director, and the bots come with it.
+    // START runs the host's director, and the bots come with it.
     // The guest's own roster is the thing under test: it learns about a bot from the
     // same `place` a person sends, so the count is people plus bots.
     await guest.waitForFunction(

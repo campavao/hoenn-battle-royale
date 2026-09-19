@@ -37,6 +37,7 @@ const GEN3_CHARMAP: ReadonlyMap<string, number> = new Map<string, number>([
   ['?', 0xac],
   ['.', 0xad],
   ['-', 0xae],
+  ['…', 0xb0],
   [',', 0xb8],
   ['/', 0xba],
   ['A', 0xbb],

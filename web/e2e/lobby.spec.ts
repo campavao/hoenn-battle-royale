@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { romExists, romHashParam, romPath } from './symbols';
+import { romExists, romHashParam, romPath, startWith } from './symbols';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
@@ -38,9 +38,10 @@ test('the lobby lists a room somebody else is hosting, and joining it seats you'
       timeout: 60_000,
     });
 
-    // The room is on the list, named by its host, with its count and the host's own
-    // sprite (Kanto's browse.lua draws the walk frame; the default career has never
-    // set one, so it is BRENDAN, sprite 0 -- POK-240).
+    // The room is on the LOBBIES screen (POK-320), named by its host, with its count
+    // and the host's own sprite (Kanto's browse.lua draws the walk frame; the default
+    // career has never set one, so it is BRENDAN, sprite 0 -- POK-240).
+    await guest.locator('#lobby-rows button', { hasText: 'LOBBIES' }).click();
     const room = guest.locator('#lobby-rooms button').first();
     await expect(room).toBeVisible({ timeout: 30_000 });
     // One trainer in it, out of the relay's seat count: the row is a live count, not
@@ -186,8 +187,12 @@ test('the host can set the opening length, and show somebody the door (POK-241)'
 test('the lobby is where you say who you are', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(`/#rom=${romHashParam()}`);
-  const rows = page.locator('#lobby-rows button');
-  await expect(rows.first()).toBeVisible({ timeout: 60_000 });
+  // Who you are is the strip under the ways in (POK-320); pressing it opens your rows.
+  const strip = page.locator('#lobby-trainer');
+  await expect(strip).toBeVisible({ timeout: 60_000 });
+  await expect(strip).toContainText('your name');
+  await strip.click();
+  const rows = page.locator('#trainer-rows button');
 
   // Your name is the first row, and your sprite the second.
   const name = rows.nth(0);
@@ -195,8 +200,15 @@ test('the lobby is where you say who you are', async ({ page }) => {
   await expect(name).toContainText('your name');
   await expect(skin).toContainText('BRENDAN');
 
-  // The sprite cycles through the four the ROM draws.
+  // The sprite row opens the wardrobe: every sprite on the ladder, and the two you
+  // start with are wearable. MAY is the second.
   await skin.click();
+  const may = page.locator('#wardrobe button', { hasText: 'MAY' }).first();
+  await may.click();
+  await expect(page.locator('#wardrobe-name')).toHaveText('MAY');
+  await page.locator('#wardrobe-wear').click();
+  await expect(may).toContainText('worn');
+  await page.locator('#wardrobe-back').click();
   await expect(skin).toContainText('MAY');
 
   // And the name is yours to set -- seven characters, Emerald's own limit.
@@ -206,19 +218,27 @@ test('the lobby is where you say who you are', async ({ page }) => {
 
   // It survives a reload, because it lives beside the record rather than in the tab.
   await page.reload();
-  await expect(page.locator('#lobby-rows button').nth(0)).toContainText('WALLYFR', { timeout: 60_000 });
+  await expect(page.locator('#lobby-trainer')).toContainText('WALLYFR', { timeout: 60_000 });
 });
 
 test('the lobby offers a voice and a stats toggle, and the wardrobe starts locked (POK-243)', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(`/#rom=${romHashParam()}`);
-  const rows = page.locator('#lobby-rows button');
-  await expect(rows.first()).toBeVisible({ timeout: 60_000 });
+  const strip = page.locator('#lobby-trainer');
+  await expect(strip).toBeVisible({ timeout: 60_000 });
+  await strip.click();
+  const rows = page.locator('#trainer-rows button');
 
   // A fresh profile is on the first sprite, which is everybody's: the row says so. The
-  // wardrobe's prices show while BROWSING (POK-282), not on the row at rest.
+  // wardrobe's prices show in the wardrobe (POK-282, POK-320), not on the row at rest.
   const skin = rows.nth(1);
   await expect(skin).toContainText('your sprite');
+  await skin.click();
+  await expect(page.locator('#wardrobe button', { hasText: 'HIKER' })).toContainText('LOCKED');
+  await page.locator('#wardrobe button', { hasText: 'HIKER' }).click();
+  await expect(page.locator('#wardrobe-note')).toContainText('LOCKED -- 5 wins');
+  await expect(page.locator('#wardrobe-wear')).toBeDisabled();
+  await page.locator('#wardrobe-back').click();
 
   // MY VOICE is three rows since POK-283 -- walking up, when you win, when you lose --
   // each showing its line, and cycling one changes that line.
@@ -278,6 +298,7 @@ test('a room that will not let you in offers the way back', async ({ browser }) 
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
+    await startWith(host, 1);
     await host.waitForFunction(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       () => (window as any).__br?.director !== undefined,
