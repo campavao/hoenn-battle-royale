@@ -45,6 +45,7 @@ import { Roster, type RosterEntry } from './match/roster';
 import type { TickerMsg, MapRef } from './net/wire';
 import { World, type WorldMap } from './bots/world';
 import { TouchLayer } from './touch';
+import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, stickKeys, type AxisSense, type StickMap } from './pad';
 import { BAND, FieldView } from './field';
 import { sectionInside } from './match/ring';
 import { dealParty, speciesName } from './bots/party';
@@ -446,13 +447,16 @@ let gamepadMap = loadPadMap();
 /** Set while the remap wizard is waiting for a button; the poll feeds it instead of
  *  the emulator, so binding START does not also open the start menu. */
 let padCapture: ((index: number) => void) | null = null;
+/** Set while the wizard is waiting for the stick to be pushed a given way (POK-321);
+ *  any button press skips the step, for a pad with no stick. */
+let axisCapture: ((sense: AxisSense | null) => void) | null = null;
+/** The stick, once the wizard has been shown it; null means the parity guess. */
+let stickMap: StickMap | null = loadStickMap();
 
 /** The line under the buttons, when no pad has taken it over. */
 const KEY_LEGEND =
   'Arrows move · Z = A · X = B · A = L · S = R · Enter = START · Shift = SELECT · a gamepad works too';
 
-/** Half throw. A stick is not a D-pad and a resting one is never quite zero. */
-const STICK = 0.5;
 /** Eight hat positions, evenly spaced over -1..1, starting at up and going clockwise. */
 const HAT: GbaKey[][] = [
   ['up'],
@@ -507,6 +511,19 @@ function wireGamepad(emu: Emulator): () => void {
         if (pressed < 0) wasPressed.clear(); // let go before the next one counts
         continue;
       }
+      if (axisCapture) {
+        const take = axisCapture;
+        const pressed = pad.buttons.findIndex((button) => button.pressed);
+        if (pressed >= 0 && !wasPressed.has(pressed)) {
+          wasPressed.add(pressed);
+          take(null); // no stick to teach: skip
+        } else {
+          if (pressed < 0) wasPressed.clear();
+          const sense = learnAxis(pad.axes, base);
+          if (sense) take(sense);
+        }
+        continue;
+      }
       pad.buttons.forEach((button, i) => {
         const key = gamepadMap[i];
         if (key && button.pressed) now.add(key);
@@ -518,14 +535,15 @@ function wireGamepad(emu: Emulator): () => void {
       // 2 and 3 has no stick at all. Even axes are horizontal, odd are vertical --
       // the one convention every layout keeps -- and axis 9 is skipped because that is
       // the DirectInput hat, decoded below.
+      // ...unless the wizard has been shown the stick (POK-321, Cam's pad, whose
+      // vertical is an even axis): then only its two learned axes count.
       moved.length = 0;
-      for (let i = 0; i < pad.axes.length; i++) {
-        if (i === 9 && pad.axes.length >= 10) continue;
-        const away = (pad.axes[i] ?? 0) - (base[i] ?? 0);
-        if (Math.abs(away) < STICK) continue;
-        moved.push(`${i}${away < 0 ? '-' : '+'}`);
-        if (i % 2 === 0) now.add(away < 0 ? 'left' : 'right');
-        else now.add(away < 0 ? 'up' : 'down');
+      if (stickMap) {
+        for (const key of stickKeys(pad.axes, base, stickMap)) now.add(key);
+      } else {
+        const guess = guessedStickKeys(pad.axes, base);
+        for (const key of guess.keys) now.add(key);
+        moved.push(...guess.moved);
       }
       // The tenth axis is where a DirectInput pad puts its D-pad. Only there, and
       // only on a pad that has one: a resting stick reads 0, which decodes to "down".
@@ -578,6 +596,7 @@ function wireRemap(): void {
 
   const stop = (note: string) => {
     padCapture = null;
+    axisCapture = null;
     cancel = null;
     line.textContent = note;
     button.textContent = 'Remap pad';
@@ -586,15 +605,37 @@ function wireRemap(): void {
   const run = () => {
     const taken: Record<number, GbaKey> = {};
     let i = 0;
+    // After the buttons, the stick: pushed UP, then RIGHT, each learned from whichever
+    // axis moves (any button skips, for a pad without one).
+    let up: AxisSense | null = null;
+    const askStick = (which: 'up' | 'right') => {
+      line.textContent = `Push the stick ${which.toUpperCase()} (any button to skip, Esc to cancel)`;
+      axisCapture = (sense) => {
+        axisCapture = null;
+        if (which === 'up') {
+          up = sense;
+          if (!sense) { finish(null); return; }
+          askStick('right');
+          return;
+        }
+        finish(sense && up && sense.axis !== up.axis ? { up, right: sense } : null);
+      };
+    };
+    const finish = (stick: StickMap | null) => {
+      gamepadMap = taken;
+      stickMap = stick;
+      try {
+        localStorage.setItem(REMAP_KEY, JSON.stringify(taken));
+        if (stick) localStorage.setItem(STICK_KEY, JSON.stringify(stick));
+        else localStorage.removeItem(STICK_KEY);
+      } catch {
+        // Private window or storage off: the mapping still holds for this session.
+      }
+      stop(stick ? 'Pad remapped, stick learned.' : 'Pad remapped.');
+    };
     const ask = () => {
       if (i >= REMAP_ORDER.length) {
-        gamepadMap = taken;
-        try {
-          localStorage.setItem(REMAP_KEY, JSON.stringify(taken));
-        } catch {
-          // Private window or storage off: the mapping still holds for this session.
-        }
-        stop('Pad remapped.');
+        askStick('up');
         return;
       }
       line.textContent = `Press the button for ${REMAP_ORDER[i].toUpperCase()} (Esc to cancel)`;
@@ -616,8 +657,10 @@ function wireRemap(): void {
   const reset = $('#remap-reset') as HTMLButtonElement;
   reset.addEventListener('click', () => {
     gamepadMap = { ...GAMEPAD_DEFAULT };
+    stickMap = null;
     try {
       localStorage.removeItem(REMAP_KEY);
+      localStorage.removeItem(STICK_KEY);
     } catch {
       // nothing stored, nothing to clear
     }
