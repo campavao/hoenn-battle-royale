@@ -72,6 +72,10 @@ test('SOLO VS BOTS opens no socket', async ({ page }) => {
   // never opened: `__br` is the Bridge, and solo never builds one.
   expect(await page.evaluate(() => (window as unknown as { __br?: unknown }).__br !== undefined)).toBe(false);
   expect(new URL(page.url()).hash).toContain('solo');
+  // `__hbr` is set before runSolo, so it proves nothing about runSolo itself: the
+  // 2026-09-19 phone report was runSolo throwing on a button POK-320 had removed.
+  await expect(page.locator('#import-error')).toBeHidden();
+  expect(await page.evaluate(() => (document.querySelector('#match-leave') as HTMLElement | null)?.hidden)).toBe(false);
 });
 
 test('the host gets the room controls and START, and the guest does not', async ({ browser }) => {

@@ -1890,7 +1890,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // LEAVE works in here too (POK-276). The strip is drawn for every mode and the
   // button was only ever wired in `wireRoom`, so the one way out of a solo match was
   // editing the URL.
-  const leave = $('#room-leave') as HTMLButtonElement;
+  const leave = $('#match-leave') as HTMLButtonElement;
   leave.hidden = false;
   leave.addEventListener('click', () => backToLobby());
 }
@@ -2811,6 +2811,8 @@ function wireRoom(
   // that has just finished one is carrying that match's team and an empty ball pocket.
   // The way out of a room (POK-241). A host leaving closes the room for everybody --
   // that is what migration is for -- so this is offered to guests only.
+  const matchLeave = $('#match-leave') as HTMLButtonElement;
+  matchLeave.addEventListener('click', () => backToLobby());
   const playAgainButton = $('#play-again') as HTMLButtonElement;
 
   /** Out of the match and back into the room: the ROM starts over, the results panel
@@ -2959,6 +2961,9 @@ function wireRoom(
     // leave the host's controls on screen for the rest of the match.
     if (ev.members.length >= 2 && autoStarts() && startsItself(hash.mode)) startDirector(ev.members.map((m) => m.id));
     if (bridge) renderRoom(bridge);
+    // A host leaving closes the room for everybody -- that is what migration is for --
+    // so the in-match LEAVE is a guest's button (POK-241).
+    matchLeave.hidden = isHost;
     if (bridge) renderSpectate(bridge, spectate);
     if (bridge) {
       renderRoomPanel(controls, bridge.seat, relay, () => {
@@ -3487,7 +3492,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  // Safari's `stack` is frames only, no message: say both.
+  const message = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
   console.error('shell startup failed', err);
   showScreen('importing');
   const el = $('#import-error') as HTMLElement;

@@ -407,6 +407,9 @@
           <ul id="match-roster" class="room-roster"></ul>
           <div id="match-card" class="trainer-card" hidden></div>
           <div id="spectate-strip" class="spectate-strip" hidden></div>
+          <!-- The way out during a match: solo always, a room's guests always. Not
+               #room-leave -- that id is the drawn room's button now (POK-320). -->
+          <button id="match-leave" type="button" class="room-leave" hidden>LEAVE</button>
           <div id="results-panel" class="results" hidden>
             <div id="results-line" class="results-line"></div>
             <div id="results-career" class="results-career"></div>
