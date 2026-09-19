@@ -7,15 +7,27 @@
 # tilemap (0x0600E000, the middle layer): u32 at 0x0600E000 + row * 64. The values are
 # metatile (21, 9 + row/2)'s, read off a whole-map draw booted straight at (6,9), where
 # that metatile sits in tile columns 30..31 (u32 at 0x0600E03C + row * 64): rows 12..15
-# are the edge of a building, not the plain grass the stale column 20 would show.
+# are the edge of a building, not the plain grass the stale column 20 would show. The
+# same address tells the whole story: metatile 5 at rest, still metatile 5 mid-step,
+# metatile 21 once the step is done (BrField_Tick draws it on the completing frame).
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 09 00 BD BB C7 FF
 wait 400
 say pos-at-rest
 dump *gSaveBlock1Ptr 4
 expect u16 *gSaveBlock1Ptr 5
-hold RIGHT 12
-wait 30
+say rest-slot-0-row-12-is-metatile-5
+expect u32 0x0600E300 0x20092180
+# Ten frames in (hold N is N+1 frames; the first eight face and start the step) the tile
+# offset has advanced, so slot 0 is now also "slot 30", and it must STILL hold metatile 5:
+# the scroll lags the tile by 12 pixels and those are on screen. Drawing the far column
+# here was the "jitter on the top left" of Cam's 2026-09-18 phone play-test.
+hold RIGHT 9
+say mid-step-camera
+dump gFieldCamera+16 4
+expectne u32 gFieldCamera+16 0
+expect u32 0x0600E300 0x20092180
+wait 40
 say pos-after-a-step-right
 dump *gSaveBlock1Ptr 4
 expect u16 *gSaveBlock1Ptr 6

@@ -12,9 +12,10 @@
 //     below and 16 columns to the right. That is the whole 256-row period of the
 //     hardware's 8-bit sprite y, so the band is exactly one ring.
 //   * The ring's sixteenth row and column are stale: the slice redraws on a step draw
-//     rows pos.y..pos.y+14 and columns pos.x..pos.x+14 only. BrField_DrawFarRow and
-//     BrField_DrawFarColumn draw the sixteenth after a step down or right (a step up or
-//     left rotates a fresh one in on its own).
+//     rows pos.y..pos.y+14 and columns pos.x..pos.x+14 only. BrField_MarkFarRow and
+//     BrField_MarkFarColumn note the sixteenth after a step down or right and BrField_Tick
+//     draws it when the step completes (a step up or left rotates a fresh one in on its
+//     own; drawing it earlier would paint over the slot still on screen).
 //   * Emerald hides an object's sprite once it is 16 pixels past the LCD. The band's
 //     sprites need their OAM y to be unambiguous -- 8 bits, so a top in [-40, 0) is
 //     216..255 and a top in [160, 216) is 160..215 -- which is why BrField_OffScreen
@@ -29,8 +30,11 @@
 #define BR_VIEW_RIGHT  16
 #define BR_VIEW_BOTTOM 56
 
-void BrField_DrawFarRow(void);
-void BrField_DrawFarColumn(void);
+// A step down or right leaves the ring's sixteenth row or column stale: mark it, and
+// BrField_Tick (every frame from CameraUpdate) draws it once the step has completed.
+void BrField_MarkFarRow(void);
+void BrField_MarkFarColumn(void);
+void BrField_Tick(void);
 // TRUE when a sprite whose top-left is (x, y) and right edge x2 is past the picture.
 bool8 BrField_OffScreen(s16 x, s16 x2, s16 y);
 

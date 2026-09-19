@@ -54,6 +54,10 @@ export interface CoreModule {
   /** The picture past the LCD (POK-319): a band of pixels on each side, drawn by the
    *  core from the same registers. Older cores lack it. */
   _brSetViewport?(left: number, top: number, right: number, bottom: number): void;
+  /** Present the frame to the canvas from the frame-ended callback, where the core
+   *  thread is paused: what the page drew in that callback and the picture are then
+   *  the same frame. Older cores lack it and present on their own tick. */
+  _brPresent?(): void;
   HEAPU8: Uint8Array;
 }
 
@@ -204,6 +208,8 @@ export class Emulator {
     this.m.addCoreCallbacks({
       videoFrameEndedCallback: () => {
         for (const l of this.frameListeners) l();
+        // The listeners drew around the picture for this frame; now the picture.
+        this.m._brPresent?.();
       },
       coreCrashedCallback: () => {
         this.running = false;

@@ -446,7 +446,7 @@ index 751e8b1..59daede 100644
  	-s ENVIRONMENT='web,worker' \
  	-s PTHREAD_POOL_SIZE=5 \
 diff --git a/src/platform/wasm/main.c b/src/platform/wasm/main.c
-index 14d9a8a..7fafaf8 100644
+index 14d9a8a..9b78c21 100644
 --- a/src/platform/wasm/main.c
 +++ b/src/platform/wasm/main.c
 @@ -12,6 +12,10 @@
@@ -460,7 +460,7 @@ index 14d9a8a..7fafaf8 100644
  
  #include "platform/sdl/sdl-audio.h"
  #include "platform/sdl/sdl-events.h"
-@@ -146,6 +150,126 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
+@@ -146,6 +150,161 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
  		return 0.0;
  }
  
@@ -479,6 +479,13 @@ index 14d9a8a..7fafaf8 100644
 +static bool brHeadless = false;
 +static mColor* brHeadlessBuffer = NULL;
 +static size_t brHeadlessBufferSize = 0;
++// Once the page has called brPresent() from the frame-ended callback, the run loop
++// stops presenting on its own: the page presents each frame while the core thread is
++// paused in that callback, so what it draws around the picture is the same frame as
++// the picture. Left to the run loop, the upload lands on the browser's animation tick
++// while the core runs on, and the picture can be a frame ahead of the page's drawing
++// (a 4 px step between the map copy and the band while walking, 2026-09-18).
++static bool brPagePresents = false;
 +
 +static int _brClampBand(int v) {
 +	if (v < 0) {
@@ -551,6 +558,34 @@ index 14d9a8a..7fafaf8 100644
 +	renderer->core->setVideoBuffer(renderer->core, renderer->outputBuffer + brBandTop * stride + brBandLeft, stride);
 +}
 +
++void drawFPS(unsigned x, unsigned y);
++
++// The texture to the canvas, then the buffer handed back to the core.
++static void _brPresentFrame(void) {
++	unsigned w, h;
++	_brPictureSize(&w, &h);
++
++	SDL_Rect rect = { .x = 0, .y = 0, .w = w, .h = h };
++
++	SDL_UnlockTexture(renderer->sdlTex);
++	SDL_RenderCopy(renderer->sdlRenderer, renderer->sdlTex, &rect, &rect);
++	if (renderer->showFpsCounter)
++		drawFPS(w - 35, h - LINE_HEIGHT);
++	SDL_RenderPresent(renderer->sdlRenderer);
++	_brBindVideoBuffer();
++}
++
++// Hoenn BR: present the frame from the page's frame-ended callback (main thread, the
++// core thread paused inside that callback), so the page's own drawing and the picture
++// are the same frame. Takes the presenting over from the run loop for good.
++EMSCRIPTEN_KEEPALIVE void brPresent(void) {
++	if (!renderer->core || !renderer->thread || brHeadless || !renderer->sdlTex) {
++		return;
++	}
++	brPagePresents = true;
++	_brPresentFrame();
++}
++
 +// Tell the software renderer about the band, once the core has installed it.
 +static void _brApplyViewport(void) {
 +	if (!renderer->core || renderer->core->platform(renderer->core) != mPLATFORM_GBA) {
@@ -587,7 +622,7 @@ index 14d9a8a..7fafaf8 100644
  EMSCRIPTEN_KEEPALIVE int getMainLoopTimingMode() {
  	int mode = -1;
  	int value = -1;
-@@ -427,28 +551,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
+@@ -427,28 +586,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
  	mSDLInitBindingsGBA(&renderer->core->inputMap);
  
  	unsigned w, h;
@@ -612,8 +647,7 @@ index 14d9a8a..7fafaf8 100644
  	renderer->core->setAudioBufferSize(renderer->core, renderer->audio.samples);
  
  	renderer->core->reset(renderer->core);
-+	_brApplyViewport();
- 
+-
 -	renderer->core->currentVideoSize(renderer->core, &w, &h);
 -	SDL_SetWindowSize(renderer->window, w, h);
 -	EM_ASM(
@@ -622,6 +656,8 @@ index 14d9a8a..7fafaf8 100644
 -		    Module.canvas.height = $1;
 -	    },
 -	    w, h);
++	_brApplyViewport();
++
 +	if (!brHeadless) {
 +		SDL_SetWindowSize(renderer->window, w, h);
 +		EM_ASM(
@@ -634,7 +670,7 @@ index 14d9a8a..7fafaf8 100644
  
  	emscripten_resume_main_loop();
  	return true;
-@@ -744,19 +870,19 @@ void runLoop() {
+@@ -744,19 +905,11 @@ void runLoop() {
  				};
  			}
  			if (mCoreSyncWaitFrameStart(&renderer->thread->impl->sync)) {
@@ -651,23 +687,15 @@ index 14d9a8a..7fafaf8 100644
 -				int stride;
 -				SDL_LockTexture(renderer->sdlTex, 0, (void**) &renderer->outputBuffer, &stride);
 -				renderer->core->setVideoBuffer(renderer->core, renderer->outputBuffer, stride / BYTES_PER_PIXEL);
-+				if (!brHeadless) {
-+					unsigned w, h;
-+					_brPictureSize(&w, &h);
-+
-+					SDL_Rect rect = { .x = 0, .y = 0, .w = w, .h = h };
-+
-+					SDL_UnlockTexture(renderer->sdlTex);
-+					SDL_RenderCopy(renderer->sdlRenderer, renderer->sdlTex, &rect, &rect);
-+					if (renderer->showFpsCounter)
-+						drawFPS(w - 35, h - LINE_HEIGHT);
-+					SDL_RenderPresent(renderer->sdlRenderer);
++				if (brHeadless) {
++					_brBindVideoBuffer();
++				} else if (!brPagePresents) {
++					_brPresentFrame();
 +				}
-+				_brBindVideoBuffer();
  			}
  			mCoreSyncWaitFrameEnd(&renderer->thread->impl->sync);
  		}
-@@ -860,11 +986,16 @@ int main() {
+@@ -860,11 +1013,16 @@ int main() {
  
  	mLogSetDefaultLogger(&logCtx);
  
@@ -689,10 +717,10 @@ index 14d9a8a..7fafaf8 100644
  	// exclude specific key events
  	SDL_SetEventFilter(excludeKeys, NULL);
 diff --git a/src/platform/wasm/mgba.d.ts b/src/platform/wasm/mgba.d.ts
-index edad1b1..cb0eb16 100644
+index edad1b1..d279d1b 100644
 --- a/src/platform/wasm/mgba.d.ts
 +++ b/src/platform/wasm/mgba.d.ts
-@@ -296,6 +296,28 @@ declare namespace mGBA {
+@@ -296,6 +296,32 @@ declare namespace mGBA {
       * @returns Current volume multiplier.
       */
      getVolume(): number;
@@ -706,6 +734,10 @@ index edad1b1..cb0eb16 100644
 +     *  SDL's emscripten video names its canvas "#canvas" by selector, whichever element
 +     *  Module.canvas is, and a second window would resize the first's canvas. */
 +    brHeadless?: boolean;
++    /** Hoenn BR: present the frame to the canvas now. Call it from the video-frame-ended
++     *  callback, where the core thread is paused, after drawing whatever must match the
++     *  picture; from then on the run loop leaves presenting to the page. */
++    _brPresent(): void;
 +    /** Hoenn BR (POK-319): wasm heap offset of the picture's ABGR8888 pixels (the texture's
 +     *  top-left; the LCD is at (left, top) inside it), 0 with no game loaded. */
 +    _brPicturePtr(): number;

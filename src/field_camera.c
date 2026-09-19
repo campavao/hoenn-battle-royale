@@ -156,7 +156,7 @@ static void RedrawMapSliceNorth(struct FieldCameraOffset *cameraOffset, const st
         DrawMetatileAt(mapLayout, r7 + temp, gSaveBlock1Ptr->pos.x + i / 2, gSaveBlock1Ptr->pos.y + 14);
     }
 #ifdef BR
-    BrField_DrawFarRow();
+    BrField_MarkFarRow();
 #endif
 }
 
@@ -206,7 +206,7 @@ static void RedrawMapSliceWest(struct FieldCameraOffset *cameraOffset, const str
         DrawMetatileAt(mapLayout, temp * 32 + r5, gSaveBlock1Ptr->pos.x + 14, gSaveBlock1Ptr->pos.y + i / 2);
     }
 #ifdef BR
-    BrField_DrawFarColumn();
+    BrField_MarkFarColumn();
 #endif
 }
 
@@ -432,6 +432,9 @@ void CameraUpdate(void)
     AddCameraPixelOffset(&sFieldCameraOffset, movementSpeedX, movementSpeedY);
     gTotalCameraPixelOffsetX -= movementSpeedX;
     gTotalCameraPixelOffsetY -= movementSpeedY;
+#ifdef BR
+    BrField_Tick();
+#endif
 }
 
 void MoveCameraAndRedrawMap(int deltaX, int deltaY) //unused
