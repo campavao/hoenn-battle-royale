@@ -123,8 +123,8 @@ describe('Director ring (POK-224)', () => {
     for (let i = 0; i < 8; i++) h.advance(10000);
 
     const rings = h.sent.filter((m) => m.t === 'ring') as RingMsg[];
-    expect(rings.map((r) => r.r)).toEqual([15, 9, 7, 5, 3, 2, 0, -1]);
-    expect(rings.map((r) => r.phase)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(rings.map((r) => r.r), 'the first ring reaches all of Hoenn; the first fog is the first shrink').toEqual([28, 15, 9, 7, 5, 3, 2, 0, -1]);
+    expect(rings.map((r) => r.phase)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
     const centres = new Set(rings.map((r) => `${r.sx},${r.sy}`));
     expect(centres.size).toBe(1); // shrinks in place, never recentres

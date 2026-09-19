@@ -29,7 +29,12 @@ export function pickIndex(rng: () => number, length: number): number {
  *  The ticket's own list writes phase 6 as "1.5 -> use 2" (a fog radius has to be a
  *  whole number of sections); this array already carries that rounding. `phase` in
  *  a RingMsg is this array's index + 1 (1-based, matching wire.ts's `phase: 1..64`). */
-export const RING_RADII: readonly number[] = [15, 9, 7, 5, 3, 2, 0, -1];
+/** The first ring is an announcement, not a fog: Hoenn's region map is 28 sections
+ *  wide, so 28 reaches every section from any centre and nobody drops into the fog
+ *  (Cam, 2026-09-18, Mossdeep "already covered in the Weezing fog": with 15 first, a
+ *  western centre put the whole east outside from the first second). The first fog
+ *  comes with the first shrink. */
+export const RING_RADII: readonly number[] = [28, 15, 9, 7, 5, 3, 2, 0, -1];
 
 /** True once the ring has reached `-1` ("everywhere") and has nowhere further to
  *  shrink -- the phase that stops director.ts's ring timer. */
