@@ -60,9 +60,19 @@ in the game, POK-326 fog at spawn in Mossdeep, POK-327 a test that plays a match
   letterboxed battle) and `field.ts` sizes the element from the canvas's own buffer.
   `web/scripts/firefox-probe.mjs [firefox|webkit|chromium]` boots solo and photographs
   a battle.
-* The NPC at the band's top edge "cut off as I moved up/down" (phone, second report):
-  not yet looked at; it may be the same cached-shell question. The overlay is meant to
-  draw whole any person the ROM hid past the band.
+* The NPC at the band's top edge "cut off as I moved up/down" and "the screen jittering
+  on the top left, up, down, based on which way you're going" (phone, second report):
+  two causes, both found by `web/scripts/seam-probe.mjs` (walks up and down at phone
+  size and photographs the band's top edge every 40 ms). One: the ring is a torus and
+  the band shows all of it, so drawing the sixteenth row at the tile advance painted the
+  far row over the slot the band's top 12 rows were still showing for the three frames
+  the scroll lags the tile (and the far column over the picture's left 12 columns on a
+  step right). The far slice is now marked at the advance and drawn by `BrField_Tick`
+  on the frame the step completes; `ring-far-column.txt` pins one address through rest,
+  mid-step and completion. Two: the run loop presented the picture on the browser's own
+  tick while the core ran on, so the picture could be a frame ahead of the map copy
+  drawn in the frame callback; the page now presents from that callback, with the core
+  paused, after its own drawing (`brPresent`). 48 samples at the seam are clean.
 
 ## 2026-09-16, Cam, solo and quick play
 
