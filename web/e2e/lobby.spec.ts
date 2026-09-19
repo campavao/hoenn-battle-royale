@@ -135,6 +135,39 @@ test('the host gets the room controls and START, and the guest does not', async 
   }
 });
 
+// No `noauto` here on purpose: that flag is what kept every other room test off the
+// path a real player takes. A host that drops before START (iOS closes the socket when
+// you switch apps) hands the room to a guest, and the guest used to start the match.
+test('a host who leaves before START hands over the room, not a match', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+    const guest = await guestCtx.newPage();
+    const promoted = guest.waitForEvent('console', { predicate: (m) => m.text().includes('[room] promoted to host'), timeout: 60_000 });
+    await guest.goto(`/#join=${code}&rom=${rom}`);
+    await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
+    await expect(guest.locator('#room-start')).toBeHidden();
+    await hostCtx.close();
+    await promoted;
+    // The heir is the host of a room that is still waiting: START is theirs to press.
+    await expect(guest.locator('#room-start')).toBeAttached({ timeout: 15_000 });
+    await guest.waitForTimeout(8000);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(await guest.evaluate(() => (window as any).__br?.director?.state.phase ?? null)).toBeNull();
+    await expect(guest.locator('#stage')).toBeVisible();
+  } finally {
+    await hostCtx.close().catch(() => undefined);
+    await guestCtx.close();
+  }
+});
+
 test("a name in the room opens that trainer's card (POK-268)", async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto(`/#host&noauto&nobots&rom=${romHashParam()}`);

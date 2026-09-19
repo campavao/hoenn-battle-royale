@@ -2912,8 +2912,11 @@ function wireRoom(
       console.info('[room] promoted to host');
       // Quick play's own host is "promoted" the moment the relay seats it, with no match
       // to take over: that room starts itself, after the STARTS IN count (POK-320).
-      if (match.seed === 0 && !room.started && startsItself(hash.mode)) {
-        if (autoStarts() && room.startAt === null) {
+      // Before any match, an heir inherits the room and nothing else: a hosted room still
+      // waits for START, now this page's (play-test 2026-09-19: the host switched apps,
+      // iOS dropped its socket, and the guest it handed to started the match unasked).
+      if (match.seed === 0 && !room.started) {
+        if (startsItself(hash.mode) && autoStarts() && room.startAt === null) {
           room.startAt = performance.now() + AUTO_START_MS;
           setTimeout(() => startDirector(), AUTO_START_MS);
         }
