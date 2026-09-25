@@ -89,7 +89,8 @@ it still applies to the pinned commit.
 ## The relay (Railway)
 
 Only when `relay/` changed. A relay deploy restarts it and **drops every room**, so do it
-when nobody is playing (`/play.html` shows who is on).
+when nobody is playing (`/play.html` shows who is on) and wait until
+`https://hoenn-relay-production.up.railway.app/health` says `"locked":0`, no match running.
 
 ```bash
 cd relay && railway up --detach

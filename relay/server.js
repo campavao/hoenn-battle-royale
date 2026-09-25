@@ -106,7 +106,14 @@
 //   {type:"recv", from, m}
 //   {type:"room_closed", reason}       the host left and nobody could take
 //                                      the room over -- or, reason
-//                                      "removed", the host showed YOU out
+//                                      "removed", the host showed YOU out.
+//                                      A host that DROPS with no heir is
+//                                      waited for through the seat hold
+//                                      (POK-330 #47): the roster keeps
+//                                      naming it, the door takes nobody new,
+//                                      its token makes it host again, and a
+//                                      member sending can_host takes over;
+//                                      when the hold runs out, "host_gone"
 //   {type:"match_in_progress", code, members}  quick_join's third answer
 //                                      (POK-133): nothing joinable, but a
 //                                      match is running -- watch it and
@@ -454,6 +461,13 @@ class Room {
     // the same id back -- and the id is the page's seat, so its ghost, its
     // loot keys, its spectator target and everything in flight still fit.
     this.held = new Map();
+    // The token of the HOST's held seat while the room waits for it to come
+    // back (POK-330 #47), else null.  A host that drops with nobody to take
+    // over -- alone with its bots, or late in a match when everybody else is
+    // out -- used to close the room two lines after holding its seat.  Now
+    // the room outlives the drop by the hold: `host` still names the one it
+    // is waiting for, and the door takes nobody new meanwhile.
+    this.hostToken = null;
   }
 
   // The id the next newcomer gets: the lowest in 1..MAX_SEAT that nobody is
@@ -509,6 +523,11 @@ class Room {
       conn.joined = held.joined;
       conn.canHost = held.canHost;
       conn.spectator = held.spectator;
+      // the host the room was waiting for: it is theirs again
+      if (token === this.hostToken) {
+        this.host = conn;
+        this.hostToken = null;
+      }
     } else {
       conn.id = this.freeId();
       conn.joined = ++this.joined;
@@ -667,7 +686,9 @@ class Conn {
     }
   }
 
-  destroy(reason) {
+  // `code`, when there is one to say: a close frame the page can read (1012,
+  // the relay restarting) rather than a cut it cannot tell from its own network
+  destroy(reason, code) {
     if (this.closed) return;
     this.closed = true;
     // Why a connection went away is the first thing you need when a match
@@ -679,7 +700,9 @@ class Conn {
       + ` | in ${this.census()}`
       + ` | headroom ${Math.round(this.minTokens)}/${this.relay.limits.burstLines}`);
     this.relay.onClose(this, reason);
-    try { this.ws.terminate(); } catch { /* already gone */ }
+    try {
+      if (code) this.ws.close(code, reason); else this.ws.terminate();
+    } catch { /* already gone */ }
   }
 }
 
@@ -756,18 +779,43 @@ export function createRelay(options = {}) {
             + ` ${heir.name}#${heir.id} promoted`);
         return;
       }
-      // Nobody could take it: the old ending, for a room of old clients or
-      // one whose last eligible member has been eliminated.
-      room.broadcast({ type: "room_closed", reason: reason || "host_left" });
-      for (const m of [...room.members.values()]) {
-        room.remove(m);
+      // Nobody could take it, but the host only dropped: the room waits the
+      // seat hold out for it (POK-330 #47).  A lone host playing bots is the
+      // common case, and a phone's blip ended their match on the spot.  The
+      // roster still names them as host; the door takes nobody new.
+      if (conn.token && room.held.has(conn.token)) {
+        room.hostToken = conn.token;
+        room.broadcast(room.roster());
+        log(`room ${room.code}: host ${conn.name}#${conn.id} dropped, held`
+            + ` ${Math.round(limits.rejoinMs / 1000)}s`);
+        return;
       }
-      rooms.delete(room.code);
-      log(`room ${room.code} closed (${reason || "host_left"}, no heir)`);
+      // Left on purpose: the old ending, for a room of old clients or one
+      // whose last eligible member has been eliminated.
+      closeRoom(room, reason || "host_left");
     } else {
       room.broadcast(room.roster());
       log(`room ${room.code}: ${conn.name}#${conn.id} left`);
     }
+  }
+
+  // The room is over: everybody still in it is told, and its code is gone.
+  function closeRoom(room, reason) {
+    room.broadcast({ type: "room_closed", reason });
+    for (const m of [...room.members.values()]) {
+      room.remove(m);
+    }
+    rooms.delete(room.code);
+    log(`room ${room.code} closed (${reason}, no heir)`);
+  }
+
+  // Lets go of seats held past rejoinMs, and closes a room whose host's was
+  // one of them.  False when the room is gone.
+  function reap(room, now) {
+    room.expireHeld(now, limits.rejoinMs);
+    if (room.hostToken === null || room.held.has(room.hostToken)) return true;
+    closeRoom(room, "host_gone");
+    return false;
   }
 
   function infoFor() {
@@ -804,6 +852,9 @@ export function createRelay(options = {}) {
     if (room.pass !== null && cleanPass(pass) !== room.pass) return "passcode";
     if (versionMismatch(room, version)) return "version";
     if (resuming) return null;
+    // waiting on its dropped host (POK-330 #47): nobody would run the lobby
+    // or the match for a newcomer, so the door is shut to watchers too
+    if (room.hostToken !== null) return "locked";
     if (room.locked && !spectate) return "locked";
     if (room.full()) return "full";
     return null;
@@ -960,7 +1011,9 @@ export function createRelay(options = {}) {
         if (conn.room) { conn.send({ type: "room_error", reason: "already_in_room" }); return; }
         const code = typeof msg.code === "string" ? msg.code.toUpperCase() : "";
         const room = rooms.get(code);
-        if (!room) { conn.send({ type: "room_error", reason: "not_found" }); return; }
+        // a room whose host's hold ran out is closed here, not at the next sweep:
+        // that host is told not_found, which is what re-hosts its match
+        if (!room || !reap(room, Date.now())) { conn.send({ type: "room_error", reason: "not_found" }); return; }
         // Coming back to a seat the room is still holding (POK-284): the
         // door's state is not asked, because they were already inside.
         // A stale or unknown token is an ordinary join.
@@ -1125,6 +1178,19 @@ export function createRelay(options = {}) {
       // already adopts it.
       case "can_host": {
         conn.canHost = msg.ok !== false;
+        // A room waiting on its dropped host takes the first member able to
+        // run it (POK-330 #47): a guest coming back from the same blip, say.
+        // The old host's seat is still held, as an ordinary one.
+        const waiting = conn.room && conn.room.hostToken !== null ? conn.room : null;
+        if (conn.canHost && waiting) {
+          const gone = waiting.host;
+          waiting.host = conn;
+          waiting.hostToken = null;
+          waiting.broadcast(waiting.roster());
+          log(`room ${waiting.code}: host ${gone.name}#${gone.id} left,`
+              + ` ${conn.name}#${conn.id} promoted`);
+          return;
+        }
         if (conn.canHost || !conn.room || conn.room.host !== conn) return;
         const successor = heirOf(conn.room);
         if (!successor) return; // nobody to take it: it stays where it is
@@ -1281,7 +1347,10 @@ export function createRelay(options = {}) {
   // else's). Everything else on this port is the WebSocket upgrade below.
   const httpServer = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
-      const body = JSON.stringify({ status: "ok", rooms: rooms.size, conns: conns.size });
+      // `locked`: matches running, which a relay deploy would end (docs/DEPLOY.md)
+      let locked = 0;
+      for (const room of rooms.values()) if (room.locked) locked += 1;
+      const body = JSON.stringify({ status: "ok", rooms: rooms.size, conns: conns.size, locked });
       res.writeHead(200, { "Content-Type": "application/json",
                             "Content-Length": Buffer.byteLength(body) });
       res.end(body);
@@ -1332,16 +1401,16 @@ export function createRelay(options = {}) {
   });
 
   // One line every few minutes: enough to see whether the box is busy or
-  // idle and what it has moved, without shipping a metrics stack.
-  const reporter = setInterval(() => {
-    log(`rooms ${rooms.size}/${limits.rooms} conns ${conns.size}/${limits.conns}`
-        + ` | sent ${human(traffic.bytesOut)} in ${traffic.linesOut} lines`
-        + ` | peak ${traffic.peakRooms} rooms ${traffic.peakConns} conns`
-        + (traffic.matches ? ` | matches ${traffic.matches}` : "")
-        + (traffic.statSeen
-           ? ` | stats ${traffic.statSeen} (solo ${traffic.statSolo})` : "")
-        + (traffic.rejected ? ` | refused ${traffic.rejected}` : ""));
-  }, 5 * 60_000);
+  // idle and what it has moved, without shipping a metrics stack.  Once more
+  // on the way out, or a deploy loses everything since the last one.
+  const report = () => `rooms ${rooms.size}/${limits.rooms} conns ${conns.size}/${limits.conns}`
+      + ` | sent ${human(traffic.bytesOut)} in ${traffic.linesOut} lines`
+      + ` | peak ${traffic.peakRooms} rooms ${traffic.peakConns} conns`
+      + (traffic.matches ? ` | matches ${traffic.matches}` : "")
+      + (traffic.statSeen
+         ? ` | stats ${traffic.statSeen} (solo ${traffic.statSolo})` : "")
+      + (traffic.rejected ? ` | refused ${traffic.rejected}` : "");
+  const reporter = setInterval(() => log(report()), 5 * 60_000);
   reporter.unref();
 
   const sweeper = setInterval(() => {
@@ -1354,11 +1423,19 @@ export function createRelay(options = {}) {
         conn.destroy("unbound");
       }
     }
-    for (const room of rooms.values()) room.expireHeld(now, limits.rejoinMs);
+    for (const room of [...rooms.values()]) reap(room, now);
   }, limits.sweepMs);
   sweeper.unref();
 
   httpServer.on("error", (err) => log(`server error: ${err && err.message}`));
+
+  // Every socket goes, cut or -- with a `code` -- closed with one.
+  function close(code) {
+    clearInterval(sweeper);
+    clearInterval(reporter);
+    for (const conn of [...conns]) conn.destroy("shutdown", code);
+    return new Promise((resolve) => httpServer.close(() => resolve()));
+  }
 
   return {
     server: httpServer,
@@ -1375,13 +1452,29 @@ export function createRelay(options = {}) {
         });
       });
     },
-    close() {
-      clearInterval(sweeper);
-      clearInterval(reporter);
-      for (const conn of [...conns]) conn.destroy("shutdown");
-      return new Promise((resolve) => httpServer.close(() => resolve()));
+    close,
+    // A deploy stops the old process with SIGTERM (POK-330 #47).  Every room
+    // dies with it -- they live in memory -- so what a clean stop buys is the
+    // counters since the last report, which a deploy used to lose, and a close
+    // code (1012, service restart) a page can tell from its own network going.
+    shutdown(signal) {
+      log(`${signal}: shutting down | ${report()}`);
+      return close(1012);
     },
   };
+}
+
+// The process's end of a deploy: SIGTERM shuts the relay down and exits once
+// every socket has closed, or after graceMs for a peer that never answers its
+// close frame.
+export function exitOnSignal(relay, proc = process, graceMs = 3000) {
+  proc.once("SIGTERM", () => {
+    const force = setTimeout(() => proc.exit(0), graceMs);
+    relay.shutdown("SIGTERM").finally(() => {
+      clearTimeout(force);
+      proc.exit(0);
+    });
+  });
 }
 
 const isMain = process.argv[1] && import.meta.url === new URL(`file://${process.argv[1].replace(/\\/g, "/")}`).href
@@ -1394,6 +1487,7 @@ if (isMain) {
   const relay = createRelay({ limits: limitsFromEnv(process.env, log), log });
   process.on("uncaughtException", (err) => console.error("uncaught:", err));
   process.on("unhandledRejection", (err) => console.error("unhandled:", err));
+  exitOnSignal(relay);
   relay.listen(port, host).then((addr) => {
     console.log(`hoenn battle royale relay listening on ${addr.address}:${addr.port}`);
   });

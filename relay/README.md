@@ -53,7 +53,7 @@ Server -> client:
 | `roster` | `code, host, open, max, seats, pass, members:[{id,name,spectate?}]` | on every room change. `max`: the humans the room seats (the host's MAX, clamped to 16); `seats`: the MAX the host asked for (up to 30), which bots fill |
 | `rooms` | `rooms:[{code, host, skin?, players, seats, pass, full}]` | reply to `list_rooms`. `full`: the door would refuse a join (it counts watchers and free ids, which `players`/`seats` cannot) |
 | `recv` | `from, m` | a `to`/`all` delivery |
-| `room_closed` | `reason` | the host left with no heir, or you were kicked (`reason:"removed"`) |
+| `room_closed` | `reason` | the host left with no heir, or dropped and did not come back inside the seat hold (`host_gone`), or you were kicked (`removed`). The room is over: the page closes its socket rather than reconnecting to it |
 | `room_hosted` | `code, id, token` | your `host_room`/`daily_join` succeeded; `token` claims this seat back after a drop |
 | `room_joined` | `code, id, host, token` | your `join_room`/`quick_join` succeeded; `token` claims this seat back after a drop |
 | `room_error` | `reason` (`not_found`, `full`, `locked`, `passcode`, `removed`, `already_in_room`, `server_full`, `version`) | a request was refused |
@@ -67,7 +67,11 @@ BOTS'), the lowest one that is not a member's, not held for one who dropped,
 and not used since the match locked the door -- nor a bot's. When none is left
 the door says `full`, whatever MAX says. The heir is the earliest arrival that
 can host, by the room's own count, since the lowest id is no longer the
-oldest. The host is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
+oldest. A host that drops with no heir (alone with its bots, or the last one
+standing) is waited for through the same seat hold: the roster keeps naming
+it, the door takes nobody new, and its token makes it host again. A member
+that sends `can_host` meanwhile takes the room over instead; if nobody does
+and the hold runs out, the room closes with `host_gone`. The host is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
 (no `0 O 1 I L`), so a code read aloud never has to be checked twice.
 
 ### The version gate
@@ -156,6 +160,12 @@ flood disconnect, the idle/unbound sweep, and `/health`.
 ```sh
 railway up
 ```
+
+Rooms live in memory, so a deploy ends every one. On SIGTERM the relay logs
+its counters once more (`SIGTERM: shutting down | rooms ...`) and closes each
+socket with 1012 (service restart), which the page tells apart from its own
+network dropping. `/health` answers `{status, rooms, conns, locked}`, where
+`locked` is the matches running: deploy at `locked: 0`.
 
 Run from inside `relay/` -- the service is **`hoenn-relay`**, separate from
 the Kanto mod's relay (`kanto-br-relay`) and its own Railway project.

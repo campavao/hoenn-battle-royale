@@ -12,7 +12,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { readFileSync } from "node:fs";
-import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, limitsFromEnv, stats } from "./server.js";
+import { EventEmitter } from "node:events";
+import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, exitOnSignal, limitsFromEnv, stats } from "./server.js";
 
 class Client {
   // headers: what a proxy in front of the relay would add (POK-330 #19)
@@ -564,9 +565,10 @@ test("the room ceiling holds, refuses cleanly, and frees up again", async () => 
     quick.send({ type: "quick_join", name: "QUICK" });
     assert.equal((await quick.next()).type, "no_open_rooms");
 
-    // ...and a room closing gives the slot back
-    a.end();
-    await new Promise((r) => setTimeout(r, 50));
+    // ...and a room closing gives the slot back (a host that LEAVES closes it; one
+    // that drops is waited for, POK-330 #47)
+    a.send({ type: "leave_room" });
+    await a.settled();
     const fourth = await connect(port);
     fourth.send({ type: "host_room", name: "FOUR" });
     assert.equal((await fourth.until("room_hosted")).code.length, CODE_LENGTH);
@@ -1397,6 +1399,8 @@ test("GET /health answers 200 with room and connection counts", async () => {
     const a = await connect(port);
     a.send({ type: "host_room", name: "A" });
     await a.until("room_hosted");
+    a.send({ type: "lock_room", locked: true });
+    await a.settled();
 
     const body = await new Promise((resolve, reject) => {
       http.get(`http://127.0.0.1:${port}/health`, (res) => {
@@ -1410,6 +1414,7 @@ test("GET /health answers 200 with room and connection counts", async () => {
     assert.equal(parsed.status, "ok");
     assert.equal(parsed.rooms, 1);
     assert.equal(parsed.conns, 1);
+    assert.equal(parsed.locked, 1, "a match running, which a deploy would end");
 
     a.end();
   });
@@ -1914,4 +1919,107 @@ test("a listed room is full when its door would say so, not by trainers over sea
     assert.equal((await late.next()).reason, "full");
     for (const c of [host, seeker, watcher, late]) c.end();
   }, { members: 2 });
+});
+
+// ------- POK-330 #47: a host's drop, and a relay's restart
+
+// A host alone with its bots, or the last one standing, has nobody to hand the room to.
+// Its drop used to close the room two lines after holding its seat.
+test("a host that drops with nobody to take over gets its room back, as host, inside the hold", async () => {
+  await withRelay(async (port, relay) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "OUT" }); // never says it can host
+    await b.until("room_joined"); await b.until("roster");
+    a.send({ type: "lock_room", locked: true });
+    await a.settled();
+
+    a.end(); // a drop, not a leave
+    const waiting = await b.until("roster");
+    assert.equal(waiting.host, 1, "the room still names the host it is waiting for");
+    assert.deepEqual(waiting.members.map((m) => m.id), [2]);
+    assert.equal(relay.rooms.size, 1);
+
+    // nobody new comes in meanwhile, not even to watch
+    const c = await connect(port);
+    c.send({ type: "join_room", code: hosted.code, name: "NEW", spectate: true });
+    assert.equal((await c.next()).reason, "locked");
+
+    const a2 = await connect(port);
+    a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
+    const back = await a2.next();
+    assert.equal(back.type, "room_joined");
+    assert.equal(back.id, 1);
+    assert.equal(back.host, 1, "it is the host again");
+    assert.deepEqual((await b.until("roster")).members.map((m) => m.id).sort(), [1, 2]);
+    // ...with the host's say over the room
+    a2.send({ type: "set_max", max: 4 });
+    assert.equal((await b.until("roster")).max, 4);
+    for (const x of [a2, b, c]) x.end();
+  });
+});
+
+test("a room whose dropped host never comes back closes when the hold runs out", async () => {
+  await withRelay(async (port, relay) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "OUT" });
+    await b.until("room_joined"); await b.until("roster");
+    a.end();
+    assert.equal((await b.until("roster")).host, 1, "waited for, at first");
+    assert.deepEqual(await b.until("room_closed"), { type: "room_closed", reason: "host_gone" });
+    assert.equal(relay.rooms.size, 0);
+    // the host that turns up late finds nothing, which is what re-hosts its match
+    const a2 = await connect(port);
+    a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
+    assert.equal((await a2.next()).reason, "not_found");
+    b.end(); a2.end();
+  }, { rejoinMs: 50, sweepMs: 20 });
+});
+
+test("a member able to run the room takes it while its host is away", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "BLUE" });
+    await b.until("room_joined"); await b.until("roster");
+    a.end();
+    assert.equal((await b.until("roster")).host, 1, "nobody could take it when it went");
+    // BLUE was backgrounded, say, and is back: it can run the match now
+    b.send({ type: "can_host", ok: true });
+    const roster = await b.until("roster");
+    assert.equal(roster.host, 2);
+    // and the old host comes back to its seat, as a member of the room
+    const a2 = await connect(port);
+    a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
+    const back = await a2.next();
+    assert.equal(back.id, 1);
+    assert.equal(back.host, 2);
+    a2.end(); b.end();
+  });
+});
+
+test("SIGTERM logs the counters once more and closes every socket as a restart", async () => {
+  const lines = [];
+  const relay = createRelay({ log: (l) => lines.push(l) });
+  const addr = await relay.listen(0, "127.0.0.1");
+  const a = await connect(addr.port);
+  a.send({ type: "host_room", name: "RED" });
+  await a.until("roster");
+  const code = new Promise((resolve) => a.ws.addEventListener("close", (ev) => resolve(ev.code)));
+
+  const proc = new EventEmitter();
+  const exited = new Promise((resolve) => { proc.exit = resolve; });
+  exitOnSignal(relay, proc);
+  proc.emit("SIGTERM");
+  assert.equal(await exited, 0);
+  assert.equal(await code, 1012, "service restart, not an abnormal 1006");
+  assert.ok(lines.some((l) => /^SIGTERM: shutting down \| rooms 1\/40 conns 1\/200 \| sent /.test(l)),
+    lines.join("\n"));
 });
