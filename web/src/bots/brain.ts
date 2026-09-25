@@ -92,6 +92,34 @@ const SEARCHES_PER_TICK = 2;
  *  end. */
 const FOG_TICK_MS = 4000;
 const FOG_BITE = 10; // a tenth, as `Bleed` in src/br/br_ring.c
+/** How long a fight against a player may run before the page stops waiting for it. A
+ *  backstop, not a rule: a fight ends with the `party` the ROM that ran it sends back,
+ *  and one whose opponent has left ends with them. What is left is a ROM that stalled
+ *  or a report lost on the way -- and without this the bot stands frozen, and `busy`
+ *  on every client, until the fog takes it. Long, because the shot clock gives every
+ *  turn thirty seconds and six-a-side takes a while. */
+const FIGHT_TIMEOUT_MS = 5 * 60_000;
+/** A fight whose opponent has not been in a battle by now never started: their ROM
+ *  was already in something else when the card landed, or never took it at all. */
+const FIGHT_START_MS = 20_000;
+/** And a duel in the hidden instance: thirty seconds a fight (proxy.ts), up to two
+ *  queued ahead of it, and a boot. Past this the instance is not going to answer. */
+const PROXY_TIMEOUT_MS = 2 * 60_000;
+
+/** A bot standing still because its fight is running somewhere else. */
+interface Fight {
+  /** The other side: the player whose ROM runs the battle, or the other bot in a proxy
+   *  duel. Only this seat's ROM may say how it went. */
+  opponent: number;
+  /** When it began, for the backstop. */
+  since: number;
+  /** Has the opponent been seen in a battle? That is what tells a fight that never
+   *  started from a long one. */
+  started: boolean;
+  /** Set on a duel in the hidden instance, which no ROM reports on: what the backstop
+   *  does when the instance never answers -- the seeded resolver. */
+  proxy?: () => void;
+}
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
   south: 1,
@@ -127,6 +155,10 @@ interface Walker {
   /** Its own bag (POK-237): what it drinks between fights, what it spends in one, and
    *  what a player finds on it when it falls. */
   bag: Stack[];
+  /** Who it last fought, kept after the fight lets go of it: the ROM that ran it sends
+   *  `party`, then `spent`, then `result`, and the first of those is what ends it. The
+   *  reports that follow are still that ROM's to make, and nobody else's. */
+  foe?: number;
 }
 
 /** A player as the roster knows them -- where they are and which way they are looking.
@@ -305,9 +337,12 @@ function climb(held: PackedMon[], fresh: PackedMon[]): PackedMon[] {
 export class Bots {
   private readonly walkers: Walker[] = [];
   /** Seats whose fight is running in somebody else's ROM. They stand where they were
-   *  challenged until the `result` comes back: a bot that strolled off mid-battle is
-   *  a ghost walking around while a spectator watches it lose. */
-  private readonly fighting = new Set<number>();
+   *  challenged until the fight comes back: a bot that strolled off mid-battle is a
+   *  ghost walking around while a spectator watches it lose. Keyed by the bot, with
+   *  who it is fighting -- a bare set of seats could only be released by a `result`
+   *  under the bot's own seat, and the Bridge stamps every result with the player's,
+   *  so a bot that won stood frozen for the rest of the match. */
+  private readonly fighting = new Map<number, Fight>();
   private nonce = 0;
   private now = 0;
   /** Route searches left in this tick (SEARCHES_PER_TICK). */
@@ -391,11 +426,13 @@ export class Bots {
   }
 
   /** The party a fight left behind. The ROM that fought the bot reports it under the
-   *  bot's own seat, because it is the only thing that watched the fight happen. */
-  setParty(seat: number, mons: PackedMon[]): void {
+   *  bot's own seat, because it is the only thing that watched the fight happen.
+   *  `from` is the seat whose ROM sent it (bots/adapt.ts): a report from anybody but
+   *  the bot's own opponent is not about this fight, and is dropped. */
+  setParty(seat: number, mons: PackedMon[], from?: number): void {
     const walker = this.walkers.find((w) => w.bot.seat === seat);
 
-    if (!walker || mons.length === 0) return;
+    if (!walker || mons.length === 0 || !this.heardFrom(walker, from)) return;
     walker.party = mons;
     // ...and if nothing in it is standing, that fight was the end of this bot. Only
     // the ROM that fought it knows -- it sends the team back under the bot's own seat
@@ -403,19 +440,31 @@ export class Bots {
     // around carrying it: no `out`, no spill, and the play-test's "beating a bot does
     // not drop its items or Pokemon". A bot the fog takes goes out through `bleed`;
     // this is the same ending by the other road.
-    if (mons.some((mon) => mon.hp > 0)) return;
-    this.fighting.delete(seat);
+    if (mons.some((mon) => mon.hp > 0)) {
+      // Standing: the fight is over and the bot won it. The party is the one report a
+      // ROM always sends when a bot fight ends (br_bot.c, before `spent` and `result`),
+      // so it is what lets the bot walk again.
+      this.release(seat);
+      return;
+    }
     this.eliminate(walker);
   }
 
   /** What the ROM that fought this bot spent out of its bag (POK-237). The units were
    *  handed over on the `trainer` card and are still in the bag until this says
    *  otherwise -- a fight that ended on the first turn spends nothing. */
-  noteSpent(seat: number, items: number[]): void {
+  noteSpent(seat: number, items: number[], from?: number): void {
     const walker = this.walkers.find((w) => w.bot.seat === seat);
 
-    if (!walker) return;
+    if (!walker || !this.heardFrom(walker, from)) return;
     spend(walker.bag, items);
+  }
+
+  /** Is `from` the ROM that fought this bot last? Undefined is the page speaking for
+   *  itself, and a bot this page never saw fight (it was dealt to an old host that
+   *  has since gone, POK-252) takes the word of whoever fought it. */
+  private heardFrom(walker: Walker, from: number | undefined): boolean {
+    return from === undefined || walker.foe === undefined || walker.foe === from;
   }
 
   /** What a bot has left to spend -- for a test, and for anyone who wants to look. */
@@ -474,18 +523,65 @@ export class Bots {
     else this.opts.send(card);
     this.note(walker, 'engage', `seat ${playerSeat} (theirs)`);
     this.opts.onEngage?.(botSeat, playerSeat);
-    this.fighting.add(botSeat);
-    this.opts.send({ t: 'busy', seat: botSeat, kind: 'battle' });
+    this.hold(walker, playerSeat, now);
     walker.engageAfter = now + cooldownFor(walker.bot);
-    walker.path = null;
     return true;
   }
 
-  /** A fight this bot was in has ended -- it is back on the map and walking again.
-   *  The `result` that says so comes from the ROM that fought it. */
-  noteResult(seat: number): void {
+  /** A fight has ended -- the `result` the ROM that ran it sends. The Bridge stamps a
+   *  ROM's messages with its own seat, so the result the ROM wrote under the bot's
+   *  seat arrives under the player's: either one names the fight. `from` is the seat
+   *  whose ROM said so, and only the bot's opponent can end its fight this way. */
+  noteResult(seat: number, from?: number): void {
+    for (const [bot, fight] of [...this.fighting]) {
+      if (fight.proxy) continue; // no ROM runs a proxy duel, so no ROM reports on one
+      if (bot !== seat && fight.opponent !== seat) continue;
+      if (from !== undefined && from !== fight.opponent) continue;
+      this.release(bot);
+    }
+  }
+
+  /** Stands a bot still for a fight that is running somewhere else, and tells the room
+   *  it is busy so nothing else engages it meanwhile. */
+  private hold(walker: Walker, opponent: number, now: number, proxy?: () => void): Fight {
+    const fight: Fight = { opponent, since: now, started: proxy !== undefined, proxy };
+
+    this.fighting.set(walker.bot.seat, fight);
+    walker.foe = opponent;
+    walker.path = null;
+    this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
+    return fight;
+  }
+
+  /** Lets a fight go, however it ended: the bot is back on the map, after the grace
+   *  the ROM keeps after a fight (BR_ENGAGE_GRACE) so it does not turn straight round
+   *  on whoever is still standing in front of it. */
+  private release(seat: number): void {
     if (!this.fighting.delete(seat)) return;
     this.opts.send({ t: 'busy', seat });
+    const walker = this.walkers.find((w) => w.bot.seat === seat);
+    if (walker) walker.engageAfter = Math.max(walker.engageAfter, this.now + cooldownFor(walker.bot));
+  }
+
+  /** The fights nobody is going to report on: an opponent who has gone (out, or out of
+   *  the room), a fight that never started, and -- the backstop -- one that has simply
+   *  run too long. A proxy duel past its time is settled by the seeded resolver. */
+  private expireFights(now: number): void {
+    if (this.fighting.size === 0) return;
+    const players = this.opts.engage?.players();
+    const field = players ? new Map(players.map((p) => [p.seat, p])) : undefined;
+    for (const [seat, fight] of [...this.fighting]) {
+      if (this.fighting.get(seat) !== fight) continue; // a proxy pair goes both at once
+      if (fight.proxy) {
+        if (now - fight.since > PROXY_TIMEOUT_MS) fight.proxy();
+        continue;
+      }
+      const them = field?.get(fight.opponent);
+      if (them?.busy) fight.started = true;
+      if (field && !them) this.release(seat);
+      else if (!fight.started && now - fight.since > FIGHT_START_MS) this.release(seat);
+      else if (now - fight.since > FIGHT_TIMEOUT_MS) this.release(seat);
+    }
   }
 
   /** Runs every bot up to `now`. Called as often as the host likes -- the pace is in
@@ -493,6 +589,7 @@ export class Bots {
   tick(now: number): void {
     this.now = now;
     this.budget = SEARCHES_PER_TICK;
+    this.expireFights(now);
     // Both loops walk a snapshot: the fog and a lost duel both take a bot out of the
     // list mid-pass, and splicing the array being iterated skips whoever came next.
     for (const walker of this.walkers.slice()) {
@@ -685,10 +782,8 @@ export class Bots {
       });
       this.note(walker, 'engage', `seat ${player.seat}`);
       this.opts.onEngage?.(walker.bot.seat, player.seat);
-      this.fighting.add(walker.bot.seat);
-      this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
+      this.hold(walker, player.seat, now);
       walker.engageAfter = now + cooldownFor(walker.bot);
-      walker.path = null;
       return true;
     }
     // Nobody to fight but each other. A bot that can see another bot settles it
@@ -756,11 +851,24 @@ export class Bots {
     const nonce = this.nonce;
     if (!settle) return;
 
-    for (const w of [walker, other]) {
-      this.fighting.add(w.bot.seat);
-      this.opts.send({ t: 'busy', seat: w.bot.seat, kind: 'battle' });
-      w.path = null;
-    }
+    const resolve = () =>
+      duel(seed, { seat: walker.bot.seat, party: walker.party }, { seat: other.bot.seat, party: other.party }, nonce);
+    // Lets the pair go, and says whether this duel is still theirs to settle. Not when
+    // the backstop has already settled it, and not when one of them has left the match
+    // some other way meanwhile -- the one still standing just walks on.
+    const finish = (): boolean => {
+      const live = held.filter(([w, fight]) => this.fighting.get(w.bot.seat) === fight);
+      for (const [w] of live) this.release(w.bot.seat);
+      return live.length === 2 && this.walkers.includes(walker) && this.walkers.includes(other);
+    };
+    // An instance that never answers -- crashed, stalled, a tab that stopped drawing --
+    // costs the room a real fight, not two bots frozen for the rest of the match.
+    const expire = () => {
+      if (finish()) this.applyDuel(walker, other, resolve(), this.now);
+    };
+    const held = [walker, other].map(
+      (w) => [w, this.hold(w, (w === walker ? other : walker).bot.seat, now, expire)] as const,
+    );
     // Both bags go in with them (POK-237): what a bot spends in here is gone from the
     // bag it will take into its next fight, the same as a fight against a player.
     void settle(
@@ -770,13 +878,7 @@ export class Bots {
       .catch(() => null)
       .then((out) => {
         const then = this.now;
-        for (const w of [walker, other]) {
-          this.fighting.delete(w.bot.seat);
-          this.opts.send({ t: 'busy', seat: w.bot.seat });
-        }
-        // The fog may have taken one of them while the instance was fighting: that
-        // elimination stands, and this duel never happened.
-        if (!this.walkers.includes(walker) || !this.walkers.includes(other)) return;
+        if (!finish()) return;
         if (out) {
           const wonIsWalker = out.winner === walker.bot.seat;
           const left = wonIsWalker ? out.a : out.b;
@@ -795,17 +897,7 @@ export class Bots {
           }, then);
           return;
         }
-        this.applyDuel(
-          walker,
-          other,
-          duel(
-            seed,
-            { seat: walker.bot.seat, party: walker.party },
-            { seat: other.bot.seat, party: other.party },
-            nonce,
-          ),
-          then,
-        );
+        this.applyDuel(walker, other, resolve(), then);
       });
   }
 

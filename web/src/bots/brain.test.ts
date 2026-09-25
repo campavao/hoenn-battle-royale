@@ -394,6 +394,63 @@ describe('a bot meeting a player', () => {
     expect(sent.some((m) => m.t === 'busy' && m.kind === undefined)).toBe(true);
   });
 
+  // The fights nobody reports on (POK-330 #8). Each of these used to hold the bot as
+  // `fighting`, and `busy` on every client, until the fog took it.
+  describe('a fight nobody reports on', () => {
+    function engaged() {
+      const world = new World([FIELD, PATH]);
+      const sent: Msg[] = [];
+      const them: PlayerView = { seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 };
+      let field: PlayerView[] = [them];
+      const bots = new Bots({
+        world,
+        targets: targets(),
+        mapRef: (id) => REFS[id],
+        send: (m) => void sent.push(m),
+        rng: mulberry32(7),
+        engage: { players: () => field },
+        deal: () => [MON],
+      });
+      const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+      bots.start(dealt, 0);
+      let now = 0;
+      const run = (ms: number) => {
+        for (const end = now + ms; now < end; ) bots.tick((now += STEP_MS));
+      };
+      run(1000);
+      expect(sent.some((m) => m.t === 'challenge')).toBe(true);
+      const free = () => sent.some((m) => m.t === 'busy' && m.kind === undefined);
+      return { run, free, them, leave: () => void (field = []) };
+    }
+
+    it('lets go of a fight that never started', () => {
+      const { run, free } = engaged();
+      run(10_000);
+      expect(free()).toBe(false); // their ROM may still be finishing a sign or a menu
+      run(15_000);
+      expect(free()).toBe(true);
+    });
+
+    it('lets go when the other side leaves the match', () => {
+      const { run, free, them, leave } = engaged();
+      them.busy = true;
+      run(2000);
+      expect(free()).toBe(false);
+      leave();
+      run(STEP_MS);
+      expect(free()).toBe(true);
+    });
+
+    it('waits out a long fight, and gives up on one that never ends', () => {
+      const { run, free, them } = engaged();
+      them.busy = true;
+      run(4 * 60_000);
+      expect(free(), 'six-a-side on the shot clock takes a while').toBe(false);
+      run(2 * 60_000);
+      expect(free()).toBe(true);
+    });
+  });
+
   it('leaves alone a player already in a battle', () => {
     const { sent } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2, busy: true });
     expect(sent.some((m) => m.t === 'challenge')).toBe(false);
@@ -635,6 +692,22 @@ describe('two bots meeting', () => {
     await Promise.resolve();
 
     expect(bots.count()).toBe(1);
+  });
+
+  it('settles it anyway when the instance never answers (POK-330 #8)', async () => {
+    // A core that crashed or stopped drawing: the promise simply never settles.
+    let late: ((v: null) => void) | undefined;
+    const { bots, sent } = pairWithProxy(() => new Promise((resolve) => (late = resolve)));
+    for (let t = 5000 + STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    expect(bots.count(), 'still waiting on it a minute in').toBe(2);
+    for (let t = 60_000 + STEP_MS; t <= 3 * 60_000; t += STEP_MS) bots.tick(t);
+    expect(bots.count()).toBe(1);
+    expect(sent.filter((m) => m.t === 'out')).toHaveLength(1);
+    // ...and an answer that turns up after all is too late to fight it twice.
+    late?.(null);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sent.filter((m) => m.t === 'out')).toHaveLength(1);
   });
 
   it('settles it: one of them is out, and drops what it carried', () => {

@@ -21,6 +21,7 @@ import { bossAt } from './match/bosses';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
 import { Bots } from './bots/brain';
+import { routeToBots } from './bots/adapt';
 import { dealBots, MAX_SEATS } from './bots/roster';
 import type { Bot } from './bots/roster';
 import { type BotVoice, lineAt, nextLine, voiceFor } from './bots/lines';
@@ -2468,22 +2469,16 @@ function wireRoom(
     } else if (msg.t === 'out') {
       match.out.add(msg.seat);
     }
-    // A bot's fight runs in whoever challenged it: the result is how the host
-    // learns it is over and the bot can walk again.
-    if (msg.t === 'result') bots?.bots.noteResult(msg.seat);
-    // Whoever fought a bot reports what it has left under the bot's own seat: the
-    // host walks it, but only that ROM saw the fight.
+    // A bot's fight runs in whoever fought it, and what that ROM reports goes to the
+    // brain through routeToBots (bots/adapt.ts) -- below, where the seat that sent it
+    // is known.
     if (msg.t === 'party') {
-      bots?.bots.setParty(msg.seat, msg.mons);
       lastParty.set(msg.seat, msg.mons);
       // The champion's own party arrives after the `win` that put the results on
       // screen -- their ROM sends it as the parade starts (POK-243) -- so the panel
       // is drawn again rather than waiting for a team that came too late.
       if (recorded && bridge) renderResults(bridge.seat, bridge.roster, results, fieldSize, match.seed);
     }
-    // And what it spent out of its bag in there (POK-237), for the same reason: the
-    // host walks the bot, but only the ROM that fought it saw the items go.
-    if (msg.t === 'spent') bots?.bots.noteSpent(msg.seat, msg.items);
     if (msg.t === 'start') {
       fieldSize = msg.spawns.length;
       results.start(fieldSize, performance.now());
@@ -2651,12 +2646,9 @@ function wireRoom(
       loot.note(msg);
       noteResult(msg);
       noteBusy(msg);
-      // Our own ROM challenged somebody (POK-238). If that somebody is one of our
-      // bots, this is the only thing that can answer: a ROM cannot tell a bot from a
-      // person, so it has parked the challenge waiting to find out, and a bot that
-      // never sends its card leaves it waiting to link with nobody -- the play-test's
-      // black screen. `challenged` stages the team; their ROM does the rest.
-      if (msg.t === 'challenge' && msg.seat === bridge?.seat) bots?.bots.challenged(msg.opponent, msg.seat);
+      // Our own ROM challenged one of our bots, or fought one and is saying how it went
+      // (POK-238): the host walks the bot, and nobody hears their own messages come back.
+      if (bots && bridge) routeToBots(bots.bots, msg, bridge.seat);
       // Our own ROM's pick never comes back over the relay either.
       if (msg.t === 'pick' && director) {
         bridge!.pushToRom({ t: 'land', ...director.landFor(msg.seat, msg.section) });
@@ -2725,9 +2717,10 @@ function wireRoom(
           if (m.seat === bridge!.seat) bridge!.pushToRom({ t: 'land', ...land });
           else bridge!.relay.to(m.seat, { t: 'land', ...land });
         }
-        // Somebody else's ROM challenged one of our bots. Same answer as our own
-        // ROM's above -- the host is the only page that has the bot's team.
-        if (m.t === 'challenge' && m.seat !== seat) bots?.bots.challenged(m.opponent, m.seat);
+        // Somebody else's ROM challenged one of our bots, or fought one. Same as our own
+        // ROM's above -- the host is the only page that has the bot's team -- and the
+        // relay's `from` is what says whose ROM it was.
+        if (bots) routeToBots(bots.bots, m, ev.from);
         if (m.t === 'peek' && m.target === seat) {
           spectate.notePeek(m.seat, performance.now());
           // Their ROM answers the party; the fight so far is ours to hand over, since
