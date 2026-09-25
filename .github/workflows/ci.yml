@@ -253,19 +253,16 @@ jobs:
             mgba-wasm-src/build-wasm/wasm/mgba.d.ts
           if-no-files-found: error
 
-  # The shell needs both the patch and the emulator core in place before it can even
-  # typecheck (public/patch and public/emu are real imports, not just static assets).
+  # The shell's own checks: typecheck, the unit suite, and a production build with the
+  # no-ROM check after it. None of it reads public/patch (the unit tests stub the
+  # sidecars) and the core it types against is the tracked web/public/emu, so it needs
+  # no other job. It used to wait on rom + wasm, and a red ROM build -- nine days of
+  # them in September -- meant the 576 unit tests never ran at all.
   web:
-    needs: [rom, wasm]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with: { name: patch, path: web/public/patch }
-
-      - uses: actions/download-artifact@v4
-        with: { name: emu, path: web/public/emu }
 
       - uses: actions/setup-node@v4
         with:
@@ -282,14 +279,11 @@ jobs:
       - working-directory: web
         run: npm test
 
+      # The site a tag deploys is built by Vercel from the repo, not from this job, so
+      # the build here is a check (it compiles, and scripts/no-rom.mjs finds no ROM in
+      # it) rather than an artifact anybody downloads.
       - working-directory: web
         run: npm run build
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: site
-          path: web/dist
-          if-no-files-found: error
 
   # The relay's own suite: room protocol, the version gate, the flood disconnect, the
   # idle sweep, /health.
