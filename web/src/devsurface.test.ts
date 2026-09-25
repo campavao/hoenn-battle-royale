@@ -13,8 +13,8 @@ const specs = import.meta.glob<string>('../e2e/*.spec.ts', { query: '?raw', impo
 
 /** What has come out of app.ts, which has to stay off the page: vitest drives it with no
  *  DOM, and solo and the room both run it. Each step of the split adds its module. */
-const PAGE_FREE = ['./bots/host.ts', './match/grace.ts', './match/session.ts'];
-const pageFree = import.meta.glob<string>(['./bots/host.ts', './match/grace.ts', './match/session.ts'], {
+const PAGE_FREE = ['./bots/host.ts', './match/grace.ts', './match/host.ts', './match/session.ts'];
+const pageFree = import.meta.glob<string>(['./bots/host.ts', './match/grace.ts', './match/host.ts', './match/session.ts'], {
   query: '?raw',
   import: 'default',
   eager: true,
