@@ -113,10 +113,24 @@ jobs:
         id: fork-rom
         run: echo "sha1=$(sha1sum pokeemerald.gba | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
+      # Before the patch: make-patch.sh checks what flips wrote with the page's own BPS
+      # decoder (tools/br/make-bps.ts, under vite-node), and the e2e steps at the end of
+      # this job need the same install.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - working-directory: web
+        run: npm ci
+
       - name: Build patch, symbols, version
         id: patch
         run: |
           mkdir -p patch
+          # flips at a pinned commit, then the round trip (retail + patch = this ROM, byte
+          # for byte) and the size ceiling; a patch that fails either is never written.
           tools/br/make-patch.sh baseline/pokeemerald.gba pokeemerald.gba patch/hoenn-br.bps
           python3 tools/br/symbols.py pokeemerald.map > patch/br-symbols.json
           # And at the root, where tools/br/drive.sh looks for it. It is gitignored --
@@ -187,15 +201,6 @@ jobs:
         # plus these two sidecars, no BPS (see tools/br/dev-patch.sh and app.ts's
         # isPrePatched() branch). Same pokeemerald.gba/.map this job just built.
         run: tools/br/dev-patch.sh
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - working-directory: web
-        run: npm ci
 
       - working-directory: web
         run: npx playwright install --with-deps chromium

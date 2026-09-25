@@ -33,6 +33,13 @@ behind.
    bash tools/br/dev-patch.sh pokeemerald.map "C:/Users/cam95/Downloads/Pokemon - Emerald Version (U).gba"
    ```
 
+   The patch comes from `tools/br/make-patch.sh`, the same script CI runs for a tag:
+   flips at a pinned commit (`tools/br/flips.sh`; the first run clones and builds it in
+   the MSYS2 shell, about 15 s), then `tools/br/make-bps.ts` applies it with the page's
+   own decoder and refuses it unless retail + patch is this ROM byte for byte and the
+   file is under 2 MB. Expect about 0.7 MB. A patch near 10 MB is shifted retail ROM,
+   which is what the old same-offset encoder shipped until 2026-09-24.
+
    Run it again after committing, so `br-version.json` names the right commit.
 
 3. **Deploy**:
@@ -41,7 +48,8 @@ behind.
    bash tools/br/release-web.sh --prod
    ```
 
-   It refuses to publish unless the sidecars match the ROM on disk, deploys from the repo
+   It refuses to publish unless the sidecars and the patch match the ROM on disk and the
+   patch is under the ceiling, deploys from the repo
    root (the Vercel project's Root Directory is `web`), and then checks the live site
    serves the three patch files and **404s the ROM**. `live: https://hoenn-battle-royale.vercel.app`
    at the end means it worked.

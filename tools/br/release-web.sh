@@ -3,12 +3,12 @@
 #
 # What a player's browser needs from the site is three files in /patch/ -- br-version.json,
 # br-symbols.json and hoenn-br.bps -- and NOT a ROM. The BPS is built here from the retail
-# Emerald the player is expected to own; it is never committed (10 MB, and a build
-# artifact), so a git-driven Vercel deploy can never carry it. That is why this exists and
-# why the release path is the CLI from a machine that has the ROM.
+# Emerald the player is expected to own; it is never committed (a build artifact), so a
+# git-driven Vercel deploy can never carry it. That is why this exists and why the release
+# path is the CLI from a machine that has the ROM.
 #
-#   1. refuse unless the built ROM matches the sidecars, so the site never publishes a
-#      patch for a build nobody has
+#   1. refuse unless the built ROM matches the sidecars and the patch, so the site never
+#      publishes a patch for a build nobody has, and refuse a patch over the size ceiling
 #   2. deploy from the REPO ROOT, because the Vercel project's Root Directory is "web"
 #   3. verify the live URL serves the patch and 404s the ROM
 #
@@ -39,13 +39,10 @@ for f in br-version.json br-symbols.json hoenn-br.bps; do
   [[ -f "$PATCH_DIR/$f" ]] || {
     echo "missing $PATCH_DIR/$f"
     echo
-    echo "Build the ROM, then both sidecars and the patch, in this order -- dev-patch.sh"
-    echo "DELETES the BPS, so it has to come first:"
+    echo "Build the ROM, then the sidecars and the patch (docs/DEPLOY.md):"
     echo "  make -j\"\$(nproc)\"                       # the agbcc build; the release is never 'make modern'"
-    echo "  bash tools/br/dev-patch.sh pokeemerald.map"
-    echo "  cd web && npx vite-node ../tools/br/make-bps.ts -- \\"
-    echo "      \"<retail Emerald (U).gba>\" ../pokeemerald.gba public/patch/hoenn-br.bps"
-    echo "(make-bps wants node, which is not on the MSYS2 PATH -- run it from PowerShell.)"
+    echo "  bash tools/br/dev-patch.sh pokeemerald.map \"<retail Emerald (U).gba>\""
+    echo "(from Git Bash: the patch is checked with node, which is not on the MSYS2 PATH.)"
     exit 1
   }
 done
@@ -57,9 +54,17 @@ want="$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['romSha1']
 have="$(sha1sum "$ROOT/pokeemerald.gba" | cut -d' ' -f1)"
 if [[ "$want" != "$have" ]]; then
   echo "the sidecars are for rom $want but pokeemerald.gba is $have"
-  echo "rebuild, then re-run dev-patch.sh and make-bps in that order."
+  echo "rebuild, then re-run dev-patch.sh with the retail ROM."
   exit 1
 fi
+# ...and the patch has to be for it too, and small: its footer CRCs say retail in and this
+# build out, and a patch over the ceiling is shifted retail ROM, not our changes (the
+# 10.2 MB same-offset patch of 2026-09 was exactly that). make-bps.ts is the same gate
+# make-patch.sh ran when it wrote the file.
+( cd "$ROOT/web" && ./node_modules/.bin/vite-node "$HERE/make-bps.ts" -- --shipped "$ROOT/pokeemerald.gba" "$PATCH_DIR/hoenn-br.bps" ) || {
+  echo "re-run dev-patch.sh with the retail ROM; it builds the patch with flips."
+  exit 1
+}
 echo "publishing rom $have, commit $(git rev-parse --short HEAD)"
 
 if [[ "$PROD" -eq 1 ]]; then
