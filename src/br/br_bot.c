@@ -38,6 +38,55 @@ EWRAM_DATA struct BrBotFight gBrBotFight = {0};
 STATIC_ASSERT(BR_CAP_TRAINER >= 3 + PLAYER_NAME_LENGTH + PARTY_SIZE * 100 + 1 + BR_BOT_ITEMS * 2, BrTrainerCapHoldsAFullCard)
 static EWRAM_DATA struct BrAssembler sTrainerAsm = {0};
 
+// A card's HP is a share of the mon, not a count of hit points (POK-330 #30). The page
+// keeps HP on a scale of its own -- a formula, or the max of the last report it had --
+// and only the ROM knows the real one, so what crosses is how much of the mon is left:
+// none stays fainted, a sliver is at least 1, and a full card is a full mon. Rounded to
+// the nearest, so a card that goes out and comes back unhurt is the card it was.
+u16 BrBot_HpFromCard(u16 cardHp, u16 cardMax, u16 realMax)
+{
+    u32 hp;
+
+    if (cardHp == 0)
+        return 0;
+    if (cardMax == 0 || cardHp >= cardMax)
+        return realMax;
+    hp = ((u32)realMax * cardHp + cardMax / 2) / cardMax;
+    if (hp < 1)
+        hp = 1;
+    if (hp > realMax)
+        hp = realMax;
+    return hp;
+}
+
+u16 BrBot_HpToCard(u16 hp, u16 realMax, u16 cardMax)
+{
+    u32 share;
+
+    if (hp == 0 || realMax == 0 || cardMax == 0)
+        return hp;
+    if (hp >= realMax)
+        return cardMax;
+    share = ((u32)cardMax * hp + realMax / 2) / realMax;
+    if (share < 1)
+        share = 1;
+    if (share > cardMax)
+        share = cardMax;
+    return share;
+}
+
+bool8 BrBot_AnyStanding(struct Pokemon *party, u8 count)
+{
+    u8 i;
+
+    for (i = 0; i < count; i++)
+    {
+        if (GetMonData(&party[i], MON_DATA_HP, NULL) != 0)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 // The wire's PackedMon (br_wire.h) into a real mon. Only the fields a fight needs:
 // species and level make the stats, the moves make the fight, the HP makes it a mon
 // that has already been somewhere. Shared with br_duel.c, which reads the same rows
@@ -50,7 +99,7 @@ bool8 BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
 {
     u16 species = BrWire_Species(BrWire_ReadU16(row));
     u8 level = BrWire_Level(row[2]);
-    u16 hp = BrWire_ReadU16(row + 3);
+    u16 hp;
     u8 nickname[POKEMON_NAME_LENGTH + 1];
     u8 i, len;
 
@@ -77,8 +126,12 @@ bool8 BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
     // the wrong name for anything that evolved on the way. A bot's mon is not a
     // nicknamed mon -- it is a Luvdisc, and the ROM knows what a Luvdisc is called.
     (void)nickname;
-    if (hp > 0)
-        SetMonData(mon, MON_DATA_HP, &hp);
+    // It was written straight on as hit points, so a ZIGZAGOON the page gave 21 walked
+    // in at 21/19 and a SWAMPERT at 70% of itself -- and a 0, a mon the fog had put
+    // down, walked in whole (POK-330 #30).
+    hp = BrBot_HpFromCard(BrWire_ReadU16(row + 3), BrWire_ReadU16(row + 5),
+                          GetMonData(mon, MON_DATA_MAX_HP, NULL));
+    SetMonData(mon, MON_DATA_HP, &hp);
     return TRUE;
 }
 
@@ -118,7 +171,9 @@ static void ParseTrainer(const u8 *d, u16 n)
         if (BrBot_BuildMon(d + off + i * 100, &gEnemyParty[built]))
             built++;
     }
-    if (built == 0)
+    // A fainted mon is on the card now as one (POK-330 #30); a team with nobody standing
+    // is not a fight, whatever sent it.
+    if (built == 0 || !BrBot_AnyStanding(gEnemyParty, built))
     {
         gBrBotFight.staged = FALSE; // whatever was staged is gone with gEnemyParty
         return;

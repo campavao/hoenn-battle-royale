@@ -92,8 +92,8 @@
 // a full party lines up with a real party's size:
 //   0..1:   species     u16 LE
 //   2:      level       u8
-//   3..4:   hp          u16 LE
-//   5..6:   maxHp       u16 LE
+//   3..4:   hp          u16 LE   on a TRAINER/DUEL card, hp/maxHp is a share of the
+//   5..6:   maxHp       u16 LE   real mon, 0 fainted (POK-330 #30); a PARTY is real HP
 //   7:      status      u8   0 none, 1 SLP, 2 PSN, 3 BRN, 4 FRZ, 5 PAR, 6 TOX (from a ROM)
 //   8..23:  moves[4]    4 bytes each: id u16 LE, pp u8, ppUps u8 (id 0 = empty slot)
 //   24..25: heldItem    u16 LE
@@ -281,7 +281,8 @@
 //   2:    winner   u8   0 = A, 1 = B, 2 = neither (a draw, or it never resolved)
 //   3:    countA   u8
 //   4:    countB   u8
-//   5..:  left     (countA + countB) * (hp u16, status u8), A's first
+//   5..:  left     (countA + countB) * (hp u16, status u8), A's first; hp is on the
+//                  mon's own card's scale, as the DUEL sent its maxHp (POK-330 #30)
 //   ..:   usedA    u8 count then count * u16: what side A spent out of its bag
 //   ..:   usedB    the same for the other side
 #define BR_MSG_DRESULT 28

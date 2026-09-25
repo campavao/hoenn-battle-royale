@@ -56,6 +56,12 @@ void BrBot_Init(void);
 // it, so a duel's mons are made exactly the way a staged bot's are. FALSE, and nothing
 // built, when the row's species is not a real one (BrWire_Species).
 bool8 BrBot_BuildMon(const u8 *row, struct Pokemon *mon);
+// A card's hp/maxHp is a share of the real mon (POK-330 #30): its HP on the ROM's
+// scale, and back onto the card's for a report that carries HP alone (the DRESULT).
+u16 BrBot_HpFromCard(u16 cardHp, u16 cardMax, u16 realMax);
+u16 BrBot_HpToCard(u16 hp, u16 realMax, u16 cardMax);
+// Somebody in the first `count` of the party can still fight.
+bool8 BrBot_AnyStanding(struct Pokemon *party, u8 count);
 // The heap was re-initialised: anything this module was holding there is gone.
 void BrBot_HeapReset(void);
 void BrBot_Tick(void);

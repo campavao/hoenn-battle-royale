@@ -31,6 +31,9 @@ EWRAM_DATA struct BrDuel gBrDuel = {0};
 // no bags -- until POK-330 #11, which dropped every 6v6 duel.
 STATIC_ASSERT(BR_CAP_DUEL >= 4 + 2 * BR_DUEL_MAX_MONS * 100 + 2 * (1 + BR_BOT_ITEMS * 2), BrDuelCapHoldsTwoFullSides)
 static EWRAM_DATA struct BrAssembler sDuelAsm = {0};
+// Each built mon's card maxHp, [side][slot]: the DRESULT reports HP on the card's scale,
+// so the page's share comes back as a share (POK-330 #30).
+static EWRAM_DATA u16 sCardMax[2][BR_DUEL_MAX_MONS] = {0};
 
 // DUEL: seatA, seatB, countA, countB, then countA + countB PackedMon rows. A goes into
 // gPlayerParty and B into gEnemyParty -- which side is which matters only for reading
@@ -58,18 +61,23 @@ static void ParseDuel(const u8 *d, u16 n)
     builtB = 0;
     for (i = 0; i < countA; i++)
     {
-        if (BrBot_BuildMon(d + off + i * 100, &gPlayerParty[builtA]))
-            builtA++;
+        const u8 *row = d + off + i * 100;
+
+        if (BrBot_BuildMon(row, &gPlayerParty[builtA]))
+            sCardMax[0][builtA++] = BrWire_ReadU16(row + 5);
     }
     for (i = 0; i < countB; i++)
     {
-        if (BrBot_BuildMon(d + off + (countA + i) * 100, &gEnemyParty[builtB]))
-            builtB++;
+        const u8 *row = d + off + (countA + i) * 100;
+
+        if (BrBot_BuildMon(row, &gEnemyParty[builtB]))
+            sCardMax[1][builtB++] = BrWire_ReadU16(row + 5);
     }
     // Filling the array is not enough: the battle reads the count, and a stale one
     // sends the wrong number of mons into the fight.
     CalculatePlayerPartyCount();
-    if (builtA == 0 || builtB == 0)
+    if (builtA == 0 || builtB == 0
+     || !BrBot_AnyStanding(gPlayerParty, builtA) || !BrBot_AnyStanding(gEnemyParty, builtB))
         return;
     gBrDuel.seatA = d[0];
     gBrDuel.seatB = d[1];
@@ -202,7 +210,9 @@ bool8 BrDuel_IsProxy(void)
 }
 
 // What came out of it. Not the mons -- the page sent them and still holds them -- only
-// what the fight changed: who won, and what each side has left, three bytes a mon.
+// what the fight changed: who won, and what each side has left, three bytes a mon. The
+// HP is on each card's own scale: the page merges it against the maxHp it sent, and a
+// real count there mixed two units (POK-330 #30).
 static void SendResult(void)
 {
     u8 buf[5 + 2 * BR_DUEL_MAX_MONS * 3 + 2 * (1 + BR_BOT_ITEMS * 2)];
@@ -220,7 +230,8 @@ static void SendResult(void)
     buf[4] = gBrDuel.countB;
     for (i = 0; i < gBrDuel.countA; i++)
     {
-        u16 hp = GetMonData(&gPlayerParty[i], MON_DATA_HP, NULL);
+        u16 hp = BrBot_HpToCard(GetMonData(&gPlayerParty[i], MON_DATA_HP, NULL),
+                                GetMonData(&gPlayerParty[i], MON_DATA_MAX_HP, NULL), sCardMax[0][i]);
 
         BrWire_WriteU16(buf + len, hp);
         len += 2;
@@ -228,7 +239,8 @@ static void SendResult(void)
     }
     for (i = 0; i < gBrDuel.countB; i++)
     {
-        u16 hp = GetMonData(&gEnemyParty[i], MON_DATA_HP, NULL);
+        u16 hp = BrBot_HpToCard(GetMonData(&gEnemyParty[i], MON_DATA_HP, NULL),
+                                GetMonData(&gEnemyParty[i], MON_DATA_MAX_HP, NULL), sCardMax[1][i]);
 
         BrWire_WriteU16(buf + len, hp);
         len += 2;

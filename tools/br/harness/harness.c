@@ -262,6 +262,30 @@ static int runLine(char* line) {
         printf("expect ok %s 0x%08X = 0x%X\n", b, addr, got);
         return 0;
     }
+    if (strcmp(a, "expectmsg") == 0 && n >= 5) {
+        // What the ROM last said of a type, read the way the page would take it:
+        // `expectmsg <type> <u8|u16> <dataOff> <value>` finds the newest first slot of
+        // that type still in the out ring (a continuation's type has 0x80 set, so it
+        // never matches) and reads the framed data at dataOff -- a slot is [type][len]
+        // [totalLen u16][seq 0][data...], so only the first slot's 59 bytes reach.
+        // Draining does not matter: the page taking a slot leaves its bytes where they
+        // are until the ring comes round again.
+        uint32_t box, slot = 0, got, want = (uint32_t)strtoul(e, NULL, 0);
+        int type = (int)strtoul(b, NULL, 0), w = widthOf(c), off = atoi(d), k, found = 0;
+        uint16_t head;
+        if ((w != 8 && w != 16) || off < 0 || off + w / 8 > 59 || !findSym("gBrMailbox", &box)) return 4;
+        head = core->busRead16(core, box + 0x08);
+        for (k = 1; k <= 64 && !found; ++k) {
+            slot = box + 0x18 + (uint32_t)((uint16_t)(head - k) % 64) * 64;
+            found = core->busRead8(core, slot) == (uint8_t)type;
+        }
+        if (!found) { printf("line %d: EXPECT FAILED no type %d message in the out ring\n", lineNo, type); return 1; }
+        got = core->busRead8(core, slot + 5 + off);
+        if (w == 16) got |= (uint32_t)core->busRead8(core, slot + 6 + off) << 8;
+        if (got != want) { printf("line %d: EXPECT FAILED msg %d %s at data+%d: got 0x%X want 0x%X\n", lineNo, type, c, off, got, want); return 1; }
+        printf("expect ok msg %d %s data+%d = 0x%X\n", type, c, off, got);
+        return 0;
+    }
     if (strcmp(a, "poke") == 0 && n >= 4) {
         int w = widthOf(b); uint32_t addr;
         if (!w || !parseAddr(c, &addr)) return 4;

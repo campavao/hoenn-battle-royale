@@ -1,0 +1,159 @@
+# duel-hp-share: the proxy duel reports HP on each card's own scale (POK-330 #30). The
+# page merges a DRESULT's hp against the maxHp it sent, so a real count there mixed two
+# units. Side A: a MUDKIP to win it, a SHEDINJA carded 1 of 2 on the bench -- its real
+# max is 1 whatever its IVs, so a full one is a full card, 2 -- and a fainted TREECKO.
+# Side B: one TREECKO with a sliver left, which the first hit ends.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 01 02 03 01 1B 01 05 28 00 28 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+100 00 00 00 00 2F 01 05 01 00 02 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+200 00 00 00 00 15 01 05 00 00 64 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+300 00 00 00 00 15 01 05 01 00 64 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+400 00 00 00 00 00 00
+mailsend gBrMailbox 27 gDecompressionBuffer 406
+wait 10
+expect u8 gBrDuel 1
+expect u8 gBrDuel+4 3
+expect u8 gBrDuel+5 1
+# The SHEDINJA is whole and the TREECKO behind it is down, not whole.
+expect u16 gPlayerParty+186 1
+expect u16 gPlayerParty+286 0
+wait 300
+expect u8 gBrDuel+1 1
+poke u32 gRngValue 3
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+# Over, back on the field, A took it.
+expect u8 gBrDuel+1 0
+expect u8 gBattleOutcome 1
+# The DRESULT: [seatA seatB winner countA countB] then hp u16 + status per mon, A's first.
+expectmsg 28 u8 2 0
+expectmsg 28 u8 3 3
+expectmsg 28 u8 4 1
+# The benched SHEDINJA: 1 of its real 1 is 2 of the card's 2. The ROM said 1.
+expectmsg 28 u16 8 2
+# The fainted TREECKO comes back fainted; it used to come back whole.
+expectmsg 28 u16 11 0
+# B's TREECKO lost.
+expectmsg 28 u16 14 0
+say duel hp share ok

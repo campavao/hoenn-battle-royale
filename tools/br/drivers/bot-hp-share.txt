@@ -1,0 +1,39 @@
+# bot-hp-share: a bot card's hp/maxHp is a share of the mon, not a count of hit points
+# (POK-330 #30). The page keeps HP on a scale of its own -- hp(level) was 2.2L+10, so a
+# ZIGZAGOON at 5 walked in at 21/19 -- and only the ROM knows the real one. Four level-5
+# TREECKO (a real max of 19 or 20, by IVs), carded against a max of 100: full, half,
+# fainted and a sliver.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# TRAINER: seat 31, "BOT", four rows (hp 100, 50, 0, 1 of 100), an empty bag tail.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 04 15 01 05 64 00 64 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+100 00 00 00 00 00 00 15 01 05 32 00 64 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+200 00 00 00 00 00 00 15 01 05 00 00 64 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+300 00 00 00 00 00 00 15 01 05 01 00 64 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+400 00 00 00 00 00 00 00
+mailsend gBrMailbox 23 gDecompressionBuffer 407
+wait 10
+expect u8 gBrBotFight 1
+expect u8 gBrBotFight+3 4
+# struct Pokemon keeps hp at +86 and maxHP at +88, outside the encrypted box.
+expectge u16 gEnemyParty+88 19
+expectle u16 gEnemyParty+88 20
+# 100 of 100 is the whole mon, not 100 hit points.
+expectge u16 gEnemyParty+86 19
+expectle u16 gEnemyParty+86 20
+# 50 of 100 is half of it: 19 or 20 rounds to 10 either way.
+expect u16 gEnemyParty+186 10
+# 0 is a mon the fog put down, and it stays down; it used to walk in whole.
+expect u16 gEnemyParty+286 0
+# A sliver is still standing.
+expect u16 gEnemyParty+386 1
+# A card with nobody standing on it is not a fight: seat 30, one fainted TREECKO. It
+# replaces the one above, so nothing is staged afterwards.
+pokebytes gDecompressionBuffer 1E 03 BC C9 CE 01 15 01 05 00 00 64 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+100 00 00 00 00 00 00 00
+mailsend gBrMailbox 23 gDecompressionBuffer 107
+wait 10
+expect u8 gBrBotFight 0
+say bot hp share ok

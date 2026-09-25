@@ -118,6 +118,12 @@ implements it field for field. A `PackedMon` (the `party` message's per-mon row)
 the wire needs. Strings (`nickname`, `ot`, `place`, ticker `text`, spill bag `name`)
 are length-prefixed Gen 3 charmap text (`web/src/text/gen3.ts`): `[len: u8][bytes]`.
 
+On a `trainer` or `duel` card a row's `hp`/`maxHp` are a share of the mon, not hit
+points (POK-330 #30): the page keeps HP on its own scale and the ROM builds the real
+mon with that much of itself -- 0 is fainted, a sliver is at least 1, full is full.
+`dresult` reports each mon's HP back on its own card's scale, so the page merges it
+against the `maxHp` it sent. A `party` report is real HP and real max.
+
 `tests/slots.test.ts` keeps its own `FIXED_LAYOUT_SIZES` table (packed size before
 framing, per message) asserted against real `packSlot()` output, so a layout drift
 between this doc, the header, and the code fails a test rather than surfacing at
