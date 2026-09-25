@@ -11,7 +11,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { createRelay, CODE_ALPHABET, CODE_LENGTH, stats } from "./server.js";
+import { createRelay, CODE_ALPHABET, CODE_LENGTH, limitsFromEnv, stats } from "./server.js";
 
 class Client {
   constructor(port) {
@@ -1388,4 +1388,127 @@ test("rejoin: leaving on purpose holds nothing, and a hold expires", async () =>
     assert.equal((await b3.next()).id, 4); // expired: the next seat, not the old one
     a.end(); b3.end();
   }, { rejoinMs: 50, sweepMs: 20 });
+});
+
+// ------- POK-330 #18: one hostile socket must not take the relay down
+
+// Whether a socket gets as far as open, or is refused on the way.
+function opens(port) {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+    ws.addEventListener("open", () => { resolve(true); ws.close(); }, { once: true });
+    ws.addEventListener("error", () => resolve(false), { once: true });
+    ws.addEventListener("close", () => resolve(false), { once: true });
+  });
+}
+
+test("junk message types are counted as one, not one entry each", async () => {
+  await withRelay(async (port, relay) => {
+    const a = await connect(port);
+    for (let i = 0; i < 300; i++) a.send({ type: `junk${i}` });
+    await a.settled();
+    const [conn] = [...relay.conns];
+    assert.equal(conn.seen.get("other"), 300, "every junk frame is counted");
+    assert.deepEqual([...conn.seen.keys()].sort(), ["other", "ping"],
+      "but under one key: the census is bounded by what the relay knows");
+    a.end();
+  });
+});
+
+test("a socket that stops reading is dropped before its backlog grows", async () => {
+  const lines = [];
+  const relay = createRelay({ log: (l) => lines.push(l) });
+  const addr = await relay.listen(0, "127.0.0.1");
+  try {
+    const a = await connect(addr.port);
+    const [conn] = [...relay.conns];
+    // what ws reports for a peer that has not read for a long while
+    Object.defineProperty(conn.ws, "bufferedAmount", { get: () => 2 * 1024 * 1024 });
+    a.send({ type: "ping" });   // the pong would be one more line in the queue
+    await a.until("__closed");
+    assert.ok(lines.some((l) => l.includes("(slow_consumer)")), lines.join("\n"));
+  } finally {
+    await relay.close();
+  }
+});
+
+test("a byte flood disconnects, even inside the line budget", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    const pad = "x".repeat(2000);
+    // three ~2 KB frames against a 4 KB byte bucket and a 1200-line one
+    for (let i = 0; i < 3; i++) a.send({ type: "all", m: { pad } });
+    const closed = await a.until("__closed");
+    assert.equal(closed.type, "__closed");
+  }, { burstBytes: 4096, bytesPerSec: 1 });
+});
+
+test("the byte bucket leaves ordinary play alone", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "HOST" });
+    await a.until("roster");
+    // a second of a busy host: forty places
+    for (let i = 0; i < 40; i++) {
+      a.send({ type: "all", m: { t: "place", seat: 31, x: i, y: 4, map: { group: 0, num: 9 }, d: 1 } });
+    }
+    await a.settled();
+    assert.equal(a.closed, false);
+    a.end();
+  });
+});
+
+test("limits must be positive numbers, from the env or from code", async () => {
+  const said = [];
+  assert.deepEqual(limitsFromEnv({
+    BR_MAX_ROOMS: "forty", BR_MAX_CONNS: "0", BR_LINES_PER_SEC: "-1", BR_BURST_LINES: "50",
+  }, (l) => said.push(l)), { burstLines: 50 });
+  assert.equal(said.length, 3, "each bad one is logged");
+  assert.deepEqual(limitsFromEnv({}), {});
+
+  // NaN used to switch the cap off (every comparison with it is false)
+  const relay = createRelay({ limits: { rooms: NaN, conns: 0, members: 4 } });
+  assert.equal(relay.limits.rooms, 40);
+  assert.equal(relay.limits.conns, 200);
+  assert.equal(relay.limits.members, 4, "a good one is kept");
+  await relay.close();
+});
+
+test("the per-IP and total connection ceilings refuse the next socket", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    const b = await connect(port);
+    assert.equal(await opens(port), false, "a third from one address");
+    a.end(); b.end();
+  }, { connsPerIp: 2 });
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    const b = await connect(port);
+    assert.equal(await opens(port), false, "a third on the relay");
+    a.end(); b.end();
+  }, { conns: 2 });
+});
+
+test("a silent socket is swept as idle; a pinging one is kept", async () => {
+  await withRelay(async (port) => {
+    const quiet = await connect(port);
+    const chatty = await connect(port);
+    const pinger = setInterval(() => chatty.send({ type: "ping" }), 40);
+    try {
+      await quiet.until("__closed", 2000);
+      assert.equal(chatty.closed, false);
+    } finally {
+      clearInterval(pinger);
+    }
+    chatty.end();
+  }, { idleMs: 200, sweepMs: 20 });
+});
+
+test("a frame past the line limit closes the socket", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "all", m: { pad: "x".repeat(2048) } });
+    const closed = await a.until("__closed");
+    assert.equal(closed.type, "__closed");
+  }, { line: 1024 });
 });

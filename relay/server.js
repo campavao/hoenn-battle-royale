@@ -139,6 +139,17 @@ export const DEFAULT_LIMITS = Object.freeze({
   // magnitude above this; the multiplier only lifts the ceiling off the
   // one connection whose legitimate rate scales with the room.
   hostLines: 4,
+  // Bytes as well as lines (POK-330 #18): a line may be `line` bytes, so the
+  // line bucket alone let one guest push 120 x 16 KB a second into a room
+  // that hands each of them to fifteen others.  Play is a few KB a second; a
+  // fog sweep or a spectator's catch-up is tens of KB at once.  The host's
+  // bucket scales by hostLines, like its line bucket.
+  bytesPerSec: 64 * 1024,
+  burstBytes: 1024 * 1024,
+  // A socket whose unsent output passes this is not reading.  A busy room
+  // sends ~10 KB/s, so a megabyte is over a minute behind, and every byte of
+  // it sits in this process's heap until it is dropped.
+  sendBuffer: 1024 * 1024,
   badLines: 20,         // unparsable frames before we give up on a socket
   members: 16,
   // The widest room the lobby list may claim: the host's MAX as the mod
@@ -167,6 +178,37 @@ export const DEFAULT_LIMITS = Object.freeze({
   // are gone, and a phone coming back from a tunnel takes what it takes.
   rejoinMs: 60_000,
 });
+
+// Env vars for the ceilings above.  A limit that is not a positive number is
+// dropped with a log line, not used: NaN compares false with everything, so
+// BR_MAX_ROOMS=forty used to switch the room cap off rather than set it.
+const ENV_LIMITS = {
+  BR_MAX_ROOMS: "rooms",
+  BR_MAX_CONNS: "conns",
+  BR_LINES_PER_SEC: "linesPerSec",
+  BR_BURST_LINES: "burstLines",
+};
+
+export function limitsFromEnv(env, log = () => {}) {
+  const limits = {};
+  for (const [name, key] of Object.entries(ENV_LIMITS)) {
+    if (env[name] === undefined || env[name] === "") continue;
+    const n = Number(env[name]);
+    if (Number.isFinite(n) && n > 0) limits[key] = n;
+    else log(`ignoring ${name}=${JSON.stringify(env[name])}: not a positive number`);
+  }
+  return limits;
+}
+
+// The message types handle() answers.  The per-connection census counts
+// these by name and everything else as "other": keyed by whatever string a
+// client sent, it was a Map that grew by one entry per junk type for the
+// life of the socket (16 MB from one probe, POK-330 #18).
+const HANDLED = new Set([
+  "ping", "info", "list_rooms", "daily_join", "host_room", "join_room",
+  "quick_join", "set_open", "set_max", "set_pass", "set_skin", "lock_room",
+  "can_host", "kick", "leave_room", "to", "all", "stat",
+]);
 
 const NAME_MAX = 10;
 // A passcode: the code-entry alphabet, one to eight of them, uppercased so
@@ -441,6 +483,7 @@ class Conn {
     // unbound by definition, and the sweep must not take it mid-look
     this.browsedAt = 0;
     this.tokens = relay.limits.burstLines;
+    this.byteTokens = relay.limits.burstBytes;
     this.tokenAt = this.lastSeen;
     this.minTokens = this.tokens;   // how close real play came to the wall
     this.badLines = 0;
@@ -462,7 +505,8 @@ class Conn {
   }
 
   note(type, bytes) {
-    this.seen.set(type, (this.seen.get(type) || 0) + 1);
+    const key = HANDLED.has(type) ? type : "other";
+    this.seen.set(key, (this.seen.get(key) || 0) + 1);
     this.bytesIn += bytes;
   }
 
@@ -476,6 +520,14 @@ class Conn {
 
   send(msg) {
     if (this.closed) return;
+    // ws queues whatever a socket cannot take yet, without limit.  A client
+    // that stops reading -- a frozen tab, or one doing it on purpose -- would
+    // grow that queue until the process ran out of heap and dropped every
+    // room, so it goes first.
+    if (this.ws.bufferedAmount > this.relay.limits.sendBuffer) {
+      this.destroy("slow_consumer");
+      return;
+    }
     try {
       const line = JSON.stringify(msg);
       traffic.bytesOut += Buffer.byteLength(line);
@@ -503,7 +555,14 @@ class Conn {
 }
 
 export function createRelay(options = {}) {
-  const limits = { ...DEFAULT_LIMITS, ...(options.limits || {}) };
+  const log = options.log || (() => {});
+  // Every ceiling is a positive number or it is the default: a NaN or a zero
+  // here would not fail loudly, it would quietly switch the cap off.
+  const limits = { ...DEFAULT_LIMITS };
+  for (const [key, value] of Object.entries(options.limits || {})) {
+    if (Number.isFinite(value) && value > 0) limits[key] = value;
+    else log(`limit ${key}=${value} is not a positive number: keeping ${DEFAULT_LIMITS[key]}`);
+  }
   // a host's MAX: a whole number from two up to the member ceiling; anything
   // else (an older client sends nothing) is the ceiling
   const cleanMax = (n) => Number.isInteger(n)
@@ -513,7 +572,6 @@ export function createRelay(options = {}) {
   // human ceiling it is actually held to
   const cleanSeats = (n) => Number.isInteger(n)
     ? Math.max(2, Math.min(limits.seats, n)) : limits.members;
-  const log = options.log || (() => {});
   const motd = cleanMotd(options.motd ?? process.env.BR_MOTD);
   const daily = parseDaily(options.daily ?? process.env.BR_DAILY);
   const minProtocol = Number.isInteger(options.minProtocol)
@@ -997,6 +1055,9 @@ export function createRelay(options = {}) {
   function onMessage(conn, data, isBinary) {
     const now = Date.now();
     conn.lastSeen = now;
+    // ws hands a text frame over as a Buffer: its length is the byte count,
+    // with no second decode to measure it
+    const bytes = typeof data === "string" ? Buffer.byteLength(data) : data.length;
 
     const mul = (conn.room && conn.room.host === conn) ? limits.hostLines : 1;
     if (mul > 1 && !conn.hostDepth) {
@@ -1004,12 +1065,18 @@ export function createRelay(options = {}) {
       // whatever a guest's was down to
       conn.hostDepth = true;
       conn.tokens += limits.burstLines * (mul - 1);
+      conn.byteTokens += limits.burstBytes * (mul - 1);
     }
+    const elapsed = (now - conn.tokenAt) / 1000;
     conn.tokens = Math.min(limits.burstLines * mul,
-      conn.tokens + ((now - conn.tokenAt) / 1000) * limits.linesPerSec * mul);
+      conn.tokens + elapsed * limits.linesPerSec * mul);
+    conn.byteTokens = Math.min(limits.burstBytes * mul,
+      conn.byteTokens + elapsed * limits.bytesPerSec * mul);
     conn.tokenAt = now;
     if (conn.tokens < 1) { conn.destroy("flood"); return; }
+    if (conn.byteTokens < bytes) { conn.destroy("flood_bytes"); return; }
     conn.tokens -= 1;
+    conn.byteTokens -= bytes;
     if (conn.tokens < conn.minTokens) conn.minTokens = conn.tokens;
 
     // One JSON object per text frame -- a binary frame or one that does not
@@ -1028,8 +1095,7 @@ export function createRelay(options = {}) {
       if (++conn.badLines > limits.badLines) conn.destroy("bad_input");
       return;
     }
-    const byteLength = isBinary ? data.length : Buffer.byteLength(String(data));
-    conn.note(msg.type, byteLength);
+    conn.note(msg.type, bytes);
     try {
       handle(conn, msg);
     } catch (err) {
@@ -1142,6 +1208,7 @@ export function createRelay(options = {}) {
     wss,
     rooms,
     conns,
+    limits,
     listen(port, host) {
       return new Promise((resolve, reject) => {
         httpServer.once("error", reject);
@@ -1166,13 +1233,8 @@ const isMain = process.argv[1] && import.meta.url === new URL(`file://${process.
 if (isMain) {
   const port = Number(process.env.PORT || process.env.BR_RELAY_PORT || 7790);
   const host = process.env.HOST || "0.0.0.0";
-  const limits = {};
-  if (process.env.BR_MAX_ROOMS) limits.rooms = Number(process.env.BR_MAX_ROOMS);
-  if (process.env.BR_MAX_CONNS) limits.conns = Number(process.env.BR_MAX_CONNS);
-  if (process.env.BR_LINES_PER_SEC) limits.linesPerSec = Number(process.env.BR_LINES_PER_SEC);
-  if (process.env.BR_BURST_LINES) limits.burstLines = Number(process.env.BR_BURST_LINES);
-  const relay = createRelay({ limits,
-    log: (line) => console.log(new Date().toISOString(), line) });
+  const log = (line) => console.log(new Date().toISOString(), line);
+  const relay = createRelay({ limits: limitsFromEnv(process.env, log), log });
   process.on("uncaughtException", (err) => console.error("uncaught:", err));
   process.on("unhandledRejection", (err) => console.error("unhandled:", err));
   relay.listen(port, host).then((addr) => {

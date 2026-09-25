@@ -103,6 +103,14 @@ and not on the list is refused before the upgrade completes.
 | `BR_MIN_PROTOCOL` | `1` | advertised in `info` as `minProtocol` |
 | `BR_ORIGINS` | unset (allow all) | comma-separated `Origin` allow-list |
 
+A ceiling that is not a positive number (`BR_MAX_ROOMS=forty`, `0`) is
+ignored with a log line and the default stands; it used to switch the cap off.
+
+Besides the line bucket, each connection has a byte bucket (64 KB/s, 1 MB
+deep, both times four for a host) and a send backlog ceiling (1 MB of output
+the peer has not read). Past either, the socket is dropped (`flood_bytes`,
+`slow_consumer` on its drop line).
+
 ## Tests
 
 ```sh
