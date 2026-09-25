@@ -14,9 +14,14 @@ const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
 const PORTRAIT = { width: 390, height: 844 };
 const BR_PHASE_SAFARI = 1;
-/** touch.ts's constants: the tile under the player, and the object-event offset. */
-const PLAYER_COL = 7;
-const PLAYER_ROW = 5;
+/** Where the player's tile sits in the picture: src/field.ts's measured LCD_LEFT/LCD_TOP,
+ *  the numbers touch.ts aims by (POK-330 #34). Copied, not imported: field.ts imports
+ *  world.json with no import attribute, which Playwright's Node loader refuses. The old
+ *  PLAYER_ROW 5 grid was 8 px low, so a tap aimed by it landed on the tile under the one
+ *  it meant. */
+const LCD_LEFT = 112;
+const LCD_TOP = 72;
+/** The object-event offset. */
 const MAP_OFFSET = 7;
 
 type EmuWindow = { __hbr: { emu: { read(addr: number, width: 8 | 16 | 32): number } } };
@@ -79,8 +84,8 @@ test('a tap on a tile walks the trainer to it', async ({ browser }) => {
     const box = (await page.locator('#canvas').boundingBox())!;
     const band = await page.evaluate(() => (window as unknown as { __hbr: { emu: { viewport: { left: number; top: number; right: number; bottom: number } | null } } }).__hbr.emu.viewport);
     const scale = box.width / (240 + (band?.left ?? 0) + (band?.right ?? 0));
-    const px = box.x + ((band?.left ?? 0) + (PLAYER_COL + goal!.dx) * 16 + 8) * scale;
-    const py = box.y + ((band?.top ?? 0) + (PLAYER_ROW + goal!.dy) * 16 + 8) * scale;
+    const px = box.x + ((band?.left ?? 0) + LCD_LEFT + goal!.dx * 16 + 8) * scale;
+    const py = box.y + ((band?.top ?? 0) + LCD_TOP + goal!.dy * 16 + 8) * scale;
     await page.screenshot({ path: path.join(OUT_DIR, 'tap-before.png') });
     await page.touchscreen.tap(px, py);
 
