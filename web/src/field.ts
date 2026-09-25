@@ -185,13 +185,37 @@ export function frameOf(rom: Uint8Array, animsPtr: number, animNum: number, cmdI
   return image >= 0xfffd ? null : image;
 }
 
-export interface Camera {
+/** Where the camera is: the pos tile and its map (`gSaveBlock1Ptr`, the map's own
+ *  coordinates, no MAP_OFFSET) and `gFieldCamera`'s sub-tile offsets. */
+export interface CameraPos {
   group: number;
   num: number;
   x: number;
   y: number;
   subX: number;
   subY: number;
+}
+
+/** The camera, read off the ROM. Null without the symbols or before a save block exists.
+ *  The picture on screen was drawn from the read one frame before this one. */
+export function readCameraPos(emu: Pick<Emulator, 'read'>, sym: (name: string) => number | undefined): CameraPos | null {
+  const sb = sym('gSaveBlock1Ptr');
+  const cam = sym('gFieldCamera');
+  if (sb === undefined || cam === undefined) return null;
+  const p = emu.read(sb, 32);
+  if (!p) return null;
+  const s16 = (v: number) => (v << 16) >> 16;
+  return {
+    group: emu.read(p + SB1_MAP_GROUP, 8),
+    num: emu.read(p + SB1_MAP_NUM, 8),
+    x: s16(emu.read(p + SB1_POS_X, 16)),
+    y: s16(emu.read(p + SB1_POS_Y, 16)),
+    subX: emu.read(cam + CAMERA_X, 32) | 0,
+    subY: emu.read(cam + CAMERA_Y, 32) | 0,
+  };
+}
+
+export interface Camera extends CameraPos {
   /** 0..16 */
   fade: number;
   /** 15-bit GBA colour */
@@ -214,6 +238,13 @@ export function subTile(v: number): number {
 /** The map pixel at the picture's top-left. */
 export function lcdOrigin(c: { x: number; y: number; subX: number; subY: number }): { left: number; top: number } {
   return { left: c.x * TILE - LCD_LEFT + subTile(c.subX), top: c.y * TILE - LCD_TOP + subTile(c.subY) };
+}
+
+/** The map tile under a pixel of the picture -- past the LCD too, where the field goes
+ *  on -- for the camera the picture was drawn from. The pos tile's own coordinates. */
+export function tileAt(c: { x: number; y: number; subX: number; subY: number }, px: number, py: number): { x: number; y: number } {
+  const o = lcdOrigin(c);
+  return { x: Math.floor((o.left + px) / TILE), y: Math.floor((o.top + py) / TILE) };
 }
 
 export function fadeOf(word4: number, word6: number): { y: number; color: number; active: boolean } {
@@ -554,14 +585,11 @@ export class FieldView {
   }
 
   private read(): Camera | null {
-    const sb = this.sym('gSaveBlock1Ptr');
-    const cam = this.sym('gFieldCamera');
-    if (sb === undefined || cam === undefined) return null;
     const { emu } = this.deps;
+    const sb = this.sym('gSaveBlock1Ptr');
+    const pos = readCameraPos(emu, (name) => this.sym(name));
+    if (sb === undefined || !pos) return null;
     const p = emu.read(sb, 32);
-    if (!p) return null;
-    const s16 = (v: number) => (v << 16) >> 16;
-    const s32 = (v: number) => v | 0;
     const ring = this.sym('gBrRing');
     const fadeBase = this.sym('gPaletteFade');
     const main = this.sym('gMain');
@@ -576,12 +604,7 @@ export class FieldView {
     }
     const pick = this.sym('gBrPick');
     return {
-      group: emu.read(p + SB1_MAP_GROUP, 8),
-      num: emu.read(p + SB1_MAP_NUM, 8),
-      x: s16(emu.read(p + SB1_POS_X, 16)),
-      y: s16(emu.read(p + SB1_POS_Y, 16)),
-      subX: s32(emu.read(cam + CAMERA_X, 32)),
-      subY: s32(emu.read(cam + CAMERA_Y, 32)),
+      ...pos,
       fade: fade.y,
       fadeColor: fade.color,
       fadeActive: fade.active,

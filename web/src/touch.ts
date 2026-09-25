@@ -4,9 +4,11 @@
 // Two things a tap on the picture can mean, and the page can tell which because it
 // can read the ROM:
 //
-//  - **In the overworld, a tap is a place to go.** Emerald keeps the camera on the
-//    player, so the tile under the player is always the same screen tile (7, 5) and a
-//    tapped tile is an offset from where `gBrOwnPos` says we stand. The route is the
+//  - **In the overworld, a tap is a place to go.** The tile is the one the picture
+//    shows under the finger, found the way field.ts places the picture on the map:
+//    measured, and up to a tile short of the pos mid-step. (A grid of this file's own,
+//    the player always on screen tile (7, 5), was 8 px off.) The walk starts from
+//    where `gBrOwnPos` says we stand. The route is the
 //    bots' own A* over `world.json` (bots/path.ts), and it is walked by holding the
 //    D-pad the way a thumb would, one step at a time, checking `gBrOwnPos` after each.
 //    A tap next to us on something that cannot be stood on -- a sign, a nurse, a
@@ -24,32 +26,25 @@
 // and that is the thumb taking over. In a battle the walker stops; a menu open in the
 // field (START, a dialog) shows up as a walk that goes nowhere, and a stall is a stop.
 import { KEY_BIT, type Band, type Emulator, type GbaKey } from './emu';
-import { lcdRect } from './field';
+import { GBA_H, GBA_W, lcdRect, readCameraPos, tileAt, type CameraPos } from './field';
 import { findPath } from './bots/path';
 import { World, type SeamDir, type Spot, type WorldMap } from './bots/world';
 import worldData from './data/world.json';
+import { MAP_OFFSET } from './net/cells';
 
-/** The GBA picture. */
-const GBA_W = 240;
-const GBA_H = 160;
-const TILE = 16;
-/** The screen tile the player stands on: Emerald centres the camera, so this never moves. */
-const PLAYER_COL = 7;
-const PLAYER_ROW = 5;
-/** Object-event coordinates carry MAP_OFFSET; world.json's do not. */
-const MAP_OFFSET = 7;
-
-/** `struct BrOwnPos` (include/br/br_ghosts.h). */
-const OWN_GROUP = 0;
-const OWN_NUM = 1;
-const OWN_X = 2;
-const OWN_Y = 4;
-const OWN_DIR = 6;
+// Offsets into the ROM's structs. parity.test.ts reads the headers and holds these to them.
+/** `struct BrOwnPos` (include/br/br_ghosts.h). Object-event coordinates, so they carry
+ *  MAP_OFFSET; world.json's do not. */
+export const OWN_GROUP = 0;
+export const OWN_NUM = 1;
+export const OWN_X = 2;
+export const OWN_Y = 4;
+export const OWN_DIR = 6;
 /** `gMain.inBattle`, a bitfield at 0x439 (include/main.h). */
-const MAIN_IN_BATTLE_BYTE = 0x439;
-const MAIN_IN_BATTLE_BIT = 0x02;
+export const MAIN_IN_BATTLE_BYTE = 0x439;
+export const MAIN_IN_BATTLE_BIT = 0x02;
 /** `struct BrBattle.menu` (include/br/br_battle.h). */
-const BATTLE_MENU = 8;
+export const BATTLE_MENU = 8;
 export const MENU_ACTION = 1;
 export const MENU_MOVE = 2;
 export const MENU_SAFARI = 3;
@@ -149,6 +144,10 @@ export class TouchLayer {
   private menu: { which: number; target: number; frames: number } | null = null;
   /** After a walk stalls, the tile it was pushing toward: a second tap there is "A". */
   private stalledToward: Spot | null = null;
+  /** The camera the picture on screen was drawn from -- the ROM's one frame back
+   *  (field.ts) -- and the latest read, which is next frame's picture. */
+  private shownCamera: CameraPos | null = null;
+  private lastCamera: CameraPos | null = null;
   private off: (() => void) | null = null;
 
   constructor(private readonly deps: TouchDeps) {}
@@ -242,15 +241,23 @@ export class TouchLayer {
     if (this.inBattle()) {
       // The menus are on the picture; the field around it is scenery here.
       if (onPicture(px, py)) this.tapBattle(px, py);
-    } else this.tapField(Math.floor(px / TILE), Math.floor(py / TILE));
-  }
-
-  private tapField(col: number, row: number): void {
-    const world = this.ensureWorld();
+      return;
+    }
     const own = this.own();
     if (!own || !own.map) return;
-    const dx = col - PLAYER_COL;
-    const dy = row - PLAYER_ROW;
+    // What is on screen is last frame's camera. Across a seam that one counts from the
+    // map we just left, and the latest is the one on ours.
+    const ours = (c: CameraPos | null): c is CameraPos => c !== null && this.byRef.get(`${c.group}:${c.num}`) === own.map;
+    const cam = ours(this.shownCamera) ? this.shownCamera : readCameraPos(this.deps.emu, (name) => this.sym(name));
+    if (!ours(cam)) return;
+    this.tapField({ ...own, map: own.map }, tileAt(cam, px, py));
+  }
+
+  /** A tap on map tile `at` (world.json's coordinates), from where we stand. */
+  private tapField(own: Own & { map: string }, at: { x: number; y: number }): void {
+    const world = this.ensureWorld();
+    const dx = at.x - own.x;
+    const dy = at.y - own.y;
     if (dx === 0 && dy === 0) return;
     const goal: Spot = { map: own.map, x: own.x + dx, y: own.y + dy };
     const adjacent = Math.abs(dx) + Math.abs(dy) === 1;
@@ -306,6 +313,8 @@ export class TouchLayer {
 
   private frame(): void {
     const { emu } = this.deps;
+    this.shownCamera = this.lastCamera;
+    this.lastCamera = readCameraPos(emu, (name) => this.sym(name));
     // Whatever is down that this file did not press is the player, and the player wins.
     const mine = this.held ? 1 << KEY_BIT[this.held] : 0;
     if (emu.keys() & ~mine) {
