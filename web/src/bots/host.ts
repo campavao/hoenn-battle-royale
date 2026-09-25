@@ -49,8 +49,8 @@ export interface BotResume {
 type Cell = { mapId: string; x: number; y: number };
 
 /** What the bots walk on, off world.json: the graph, both names for a map, and the
- *  cells a bot is dealt onto and walks to. One function, so the offline tools
- *  (tools/br/bots-replay.ts, zone-occupancy.ts) walk the ground the host's bots do.
+ *  cells a bot is dealt onto and walks to. One function, so the offline match
+ *  (bots/offline.ts, which the tools run) walks the ground the host's bots do.
  *  The graph is the index's own (POK-331 #20): every match walks the one World the tab
  *  built, rather than decoding Hoenn again each time bots are dealt. */
 export interface BotGround {
@@ -120,6 +120,9 @@ export interface HostBotsOptions {
   /** This match's Zone pool, read out of the ROM (match/zone.ts). Asked for at every deal
    *  rather than once: the first deal can come before the ROM has dealt the pool. */
   zonePool?: () => number[];
+  /** What they walk on: botGround()'s. bots/offline.ts hands in one whose spawns are a
+   *  single map's, to deal the whole field onto it. */
+  ground?: BotGround;
   /** The clock and the pump, for a test to drive: performance.now and setInterval. */
   now?: () => number;
   every?: (fn: () => void, ms: number) => () => void;
@@ -150,7 +153,7 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
       const id = setInterval(fn, ms);
       return () => clearInterval(id);
     });
-  const { world, refById, idOf, sectionOf, targets, safariTargets, spawns } = botGround();
+  const { world, refById, idOf, sectionOf, targets, safariTargets, spawns } = opts.ground ?? botGround();
   const opening = safariSecs > 0 && safariTargets.length > 0 && resume === undefined;
   const safariSpawns = safariTargets.map((t) => ({ ...t, map: refById.get(t.mapId)! }));
   let inOpening = opening;

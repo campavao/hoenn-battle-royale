@@ -82,6 +82,16 @@ describe('the host deals its bots (POK-330 #42)', () => {
     expect(sent).toEqual([]);
   });
 
+  it('deals onto the ground it is handed: the drop lands on its spawns (POK-331 #25)', () => {
+    // bots-replay's --map: one map's spawns, every other part of the ground as it was.
+    const spawns = GROUND.spawns.filter((s) => s.mapId === 'MAP_ROUTE114');
+    const { hb, sent } = host({ ground: { ...GROUND, spawns }, safariSecs: 120 });
+    sent.length = 0;
+    hb.drop();
+    expect(places(sent).map(where)).toEqual(dealBots(SEED, 7, [0], spawns).map(where));
+    for (const p of places(sent)) expect(GROUND.idOf(p.map!)).toBe('MAP_ROUTE114');
+  });
+
   it('picks up a match it did not deal: the same field, less whoever is out, stood where the room saw them', () => {
     const dealt = dealBots(SEED, 7, [0], GROUND.spawns);
     const botSeats = dealt.map((b) => b.seat);
