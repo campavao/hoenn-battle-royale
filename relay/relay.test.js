@@ -2127,3 +2127,43 @@ test("a passcoded room takes its members back on their token alone", async () =>
     for (const x of [a2, b2, c]) x.end();
   });
 });
+
+// The daily is nobody's room in particular: passed over while it waited on its host,
+// the next press opened a second one, which started alone at the hour.
+test("a daily waiting on its dropped host is still the daily: its lobby takes the next press, its match is running", async () => {
+  await withRelay(async (port, relay) => {
+    const a = await connect(port);
+    a.send({ type: "daily_join", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    const out = await connect(port);
+    out.send({ type: "daily_join", name: "OUT" }); // never says it can host
+    await out.until("room_joined");
+
+    a.end(); // the lone daily host's phone blips
+    await rosterWhere(out, (r) => r.members.length === 1 && r.host === 1);
+    const b = await connect(port);
+    b.send({ type: "daily_join", name: "BLUE" });
+    const joined = await b.until("room_joined");
+    assert.equal(joined.code, hosted.code, "the daily, not a second one");
+    assert.equal(relay.rooms.size, 1);
+    b.send({ type: "can_host", ok: true });
+    assert.equal((await rosterWhere(b, (r) => r.host !== 1)).host, joined.id, "and it runs it now");
+    // the old host comes back to its seat, as a member of the room
+    const a2 = await connect(port);
+    a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
+    assert.equal((await a2.next()).host, joined.id);
+
+    // The hour: BLUE starts it and drops, with nobody able to take over.
+    b.send({ type: "lock_room", locked: true });
+    await b.settled();
+    b.end();
+    await rosterWhere(out, (r) => !r.members.some((m) => m.id === joined.id));
+    const c = await connect(port);
+    c.send({ type: "daily_join", name: "LATE" });
+    const answer = await c.next();
+    assert.equal(answer.type, "match_in_progress", "a match is running, host or no host");
+    assert.equal(answer.code, hosted.code);
+    assert.equal(relay.rooms.size, 1);
+    for (const x of [a2, out, c]) x.end();
+  });
+});

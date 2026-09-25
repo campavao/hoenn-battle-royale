@@ -872,8 +872,10 @@ export function createRelay(options = {}) {
     if (versionMismatch(room, version)) return "version";
     if (resuming) return null;
     // waiting on its dropped host (POK-330 #47): nobody would run the lobby
-    // or the match for a newcomer, so the door is shut to watchers too
-    if (room.hostToken !== null) return "locked";
+    // or the match for a newcomer, so the door is shut to watchers too.  Not
+    // the daily's lobby, which is nobody's in particular: a newcomer's can_host
+    // makes it the host there, where passing the room over opened a second daily
+    if (room.hostToken !== null && !(room.daily && !room.locked)) return "locked";
     if (room.locked && !spectate) return "locked";
     if (room.full()) return "full";
     return null;
@@ -997,7 +999,11 @@ export function createRelay(options = {}) {
         for (const room of rooms.values()) {
           if (!room.daily) continue;
           // a daily match already running is watched, like quick play's
-          if (canEnter(room, conn, { version: cleanVersion(msg), spectate: room.locked }) !== null) continue;
+          const why = canEnter(room, conn, { version: cleanVersion(msg), spectate: room.locked });
+          // ...and one running while its host is away is still running (POK-330
+          // #47 review), not a reason to open a second daily beside it
+          if (why === "locked") { running = running || room; continue; }
+          if (why !== null) continue;
           if (room.locked) running = running || room;
           else open = open || room;
         }

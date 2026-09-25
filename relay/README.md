@@ -42,7 +42,7 @@ Client -> server:
 | `all` | `m` | `m` to every other member |
 | `ping` | | -> `pong` |
 | `info` | | -> `info {motd, rooms, conns, minProtocol, daily?}` |
-| `daily_join` | `name, skin?, patch?, protocol?` | the one shared DAILY GAME room: joins it, hosts it, or `match_in_progress` while it runs. A daily of another build is skipped (the version gate), so each build gets its own |
+| `daily_join` | `name, skin?, patch?, protocol?` | the one shared DAILY GAME room: joins it, hosts it, or `match_in_progress` while it runs. A daily of another build is skipped (the version gate), so each build gets its own. A daily waiting on its dropped host is still the daily: its lobby takes you (and your `can_host` makes you its host), its match is answered `match_in_progress` |
 | `quick_join` | `name, skin?, patch?, protocol?` | joins the fullest open room of the same build, or `no_open_rooms` (the page then hosts one) |
 | `set_open` | `open` | host only: open/close the room to `quick_join` |
 
@@ -69,7 +69,8 @@ the door says `full`, whatever MAX says. The heir is the earliest arrival that
 can host, by the room's own count, since the lowest id is no longer the
 oldest. A host that drops with no heir (alone with its bots, or the last one
 standing) is waited for through the same seat hold: the roster keeps naming
-it, the door takes nobody new, and its token makes it host again. A member
+it, the door takes nobody new (except the daily's lobby, which is
+nobody's in particular), and its token makes it host again. A member
 that sends `can_host` meanwhile takes the room over instead; if nobody does
 and the hold runs out, the room closes with `host_gone`. The host is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
 (no `0 O 1 I L`), so a code read aloud never has to be checked twice.
