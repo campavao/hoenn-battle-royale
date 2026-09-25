@@ -160,6 +160,21 @@ describe('where the pieces of a spill land', () => {
     expect(cells.some((c) => c.x === 4)).toBe(false);
   });
 
+  // BrLoot's CellFree skips collision and nothing else, so a player beaten while
+  // surfing drops their team on the water. A bot beaten there used to drop nothing at
+  // all: the page skipped every cell nobody could stand on (POK-330 #67).
+  it('lands on water, the way the spill of a player beaten while surfing does', () => {
+    const sea = new World([{ id: 'SEA', group: 9, num: 9, w: 5, h: 5, section: 0, outdoor: true, grid: '25x2', seams: [], warps: [] } as never]);
+    const cells = spillCells(sea, 'SEA', 2, 2, 7);
+    expect(cells).toHaveLength(7);
+    expect(cells[0]).toEqual({ x: 2, y: 2 });
+  });
+
+  it('keeps the first piece on the dropper when nothing around is clear', () => {
+    const rock = new World([{ id: 'ROCK', group: 9, num: 9, w: 3, h: 3, section: 0, outdoor: true, grid: '9x1', seams: [], warps: [] } as never]);
+    expect(spillCells(rock, 'ROCK', 1, 1, 3)).toEqual([{ x: 1, y: 1 }]);
+  });
+
   it('runs out rather than doubling up', () => {
     // A one-cell world: one piece lands and the rest stay in their balls.
     const tiny = new World([{ id: 'CELL', group: 9, num: 9, w: 1, h: 1, section: 0, outdoor: true, grid: '1x0', seams: [], warps: [] } as never]);

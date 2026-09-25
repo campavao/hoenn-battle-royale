@@ -64,6 +64,15 @@ describe('the grid', () => {
   it('counts tall grass as ground', () => {
     expect(world.standable('FIELD', 2, 0)).toBe(true);
   });
+
+  // The ROM's collision test, which is not the same question as "can I stand here":
+  // water is somewhere you cannot walk and nothing is in the way (POK-330 #67).
+  it('reads only walls and the void as in the way', () => {
+    expect(world.clear('FIELD', 0, 1)).toBe(true); // water
+    expect(world.clear('FIELD', 2, 0)).toBe(true); // grass
+    expect(world.clear('ROOM', 3, 0)).toBe(false); // wall
+    expect(world.clear('ROOM', 99, 0)).toBe(false); // off the map
+  });
 });
 
 describe('one step', () => {

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Bots, health, STEP_MS, type BotsOptions, type PlayerView } from './brain';
-import { dealBots, MAX_SEATS } from './roster';
+import { dealBots, Grade, MAX_SEATS } from './roster';
+import { dealParty, grownUp, rungForPhase } from './party';
 import { World, type Spot, type WorldMap } from './world';
+import { pageCell } from './space';
 import { mulberry32 } from '../match/clock';
 import type { MapRef, Msg, PackedMon } from '../net/wire';
 import type { Stack } from './bag';
@@ -202,8 +204,8 @@ describe('bots walking', () => {
       rng: mulberry32(3),
       inside: (id) => id === 'FIELD',
       loot: {
-        all: () => [...ground].map(([key, at]) => ({ key, ...at })),
-        at: (mapId, x, y) => {
+        all: () => [...ground].map(([key, at]) => ({ key, mapId: at.mapId, ...pageCell(at.x, at.y) })),
+        at: (mapId, { x, y }) => {
           for (const [key, cell] of ground) {
             if (cell.mapId === mapId && cell.x === x && cell.y === y) return key;
           }
@@ -226,6 +228,45 @@ describe('bots walking', () => {
     bots.remove(dealt[0].seat);
     expect(bots.count()).toBe(2);
     expect(bots.spotOf(dealt[0].seat)).toBeUndefined();
+  });
+});
+
+// POK-302's drift, for a bot that can route nowhere: a greedy step towards the targets
+// rather than a random walk. Towards the targets INSIDE the ring (POK-330 #41).
+describe('a bot with nowhere it can route to', () => {
+  // Three maps in a row. The bot is walled into the west column of MID -- the only way
+  // anywhere is back west into FOG, which is a landing map the fog has taken. IN, east
+  // of the wall, is the ring.
+  const FOG: WorldMap = { id: 'FOG', group: 0, num: 4, w: 3, h: 3, section: 'S', outdoor: true, grid: '9x0', seams: [{ dir: 'east', to: 'MID', offset: 0 }] };
+  const MID: WorldMap = {
+    id: 'MID', group: 0, num: 5, w: 3, h: 3, section: 'S', outdoor: true,
+    grid: grid(['010', '010', '010']),
+    seams: [{ dir: 'west', to: 'FOG', offset: 0 }, { dir: 'east', to: 'IN', offset: 0 }],
+  };
+  const IN: WorldMap = { id: 'IN', group: 0, num: 6, w: 3, h: 3, section: 'S', outdoor: true, grid: '9x0', seams: [{ dir: 'west', to: 'MID', offset: 0 }] };
+  const cells = (id: string) => [0, 1, 2].flatMap((y) => [0, 1, 2].map((x) => ({ mapId: id, x, y })));
+
+  it('drifts towards the ring, not towards the nearest landing map in the fog', () => {
+    const world = new World([FOG, MID, IN]);
+    const bots = new Bots({
+      world,
+      // The fogged map first: the nearest landing map, and the one the drift used to pick.
+      targets: [...cells('FOG'), ...cells('IN')],
+      mapRef: (id) => ({ group: 0, num: id === 'FOG' ? 4 : id === 'MID' ? 5 : 6 }),
+      send: () => {},
+      rng: mulberry32(7),
+      inside: (id) => id === 'IN',
+    });
+    const [bot] = dealBots(1, 1, [], [{ mapId: 'MID', map: { group: 0, num: 5 }, x: 0, y: 1 }]);
+    bots.start([bot], 0);
+    const maps = new Set<string>();
+    for (let t = STEP_MS; t <= 30_000; t += STEP_MS) {
+      bots.tick(t);
+      maps.add(bots.spotOf(bot.seat)!.map);
+    }
+    // Stuck, but never a step further from the ring than it started.
+    expect([...maps]).toEqual(['MID']);
+    expect(world.hops(bots.spotOf(bot.seat)!.map, 'IN')).toBe(1);
   });
 });
 
@@ -394,6 +435,63 @@ describe('a bot meeting a player', () => {
     expect(sent.some((m) => m.t === 'busy' && m.kind === undefined)).toBe(true);
   });
 
+  // The fights nobody reports on (POK-330 #8). Each of these used to hold the bot as
+  // `fighting`, and `busy` on every client, until the fog took it.
+  describe('a fight nobody reports on', () => {
+    function engaged() {
+      const world = new World([FIELD, PATH]);
+      const sent: Msg[] = [];
+      const them: PlayerView = { seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 };
+      let field: PlayerView[] = [them];
+      const bots = new Bots({
+        world,
+        targets: targets(),
+        mapRef: (id) => REFS[id],
+        send: (m) => void sent.push(m),
+        rng: mulberry32(7),
+        engage: { players: () => field },
+        deal: () => [MON],
+      });
+      const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+      bots.start(dealt, 0);
+      let now = 0;
+      const run = (ms: number) => {
+        for (const end = now + ms; now < end; ) bots.tick((now += STEP_MS));
+      };
+      run(1000);
+      expect(sent.some((m) => m.t === 'challenge')).toBe(true);
+      const free = () => sent.some((m) => m.t === 'busy' && m.kind === undefined);
+      return { run, free, them, leave: () => void (field = []) };
+    }
+
+    it('lets go of a fight that never started', () => {
+      const { run, free } = engaged();
+      run(10_000);
+      expect(free()).toBe(false); // their ROM may still be finishing a sign or a menu
+      run(15_000);
+      expect(free()).toBe(true);
+    });
+
+    it('lets go when the other side leaves the match', () => {
+      const { run, free, them, leave } = engaged();
+      them.busy = true;
+      run(2000);
+      expect(free()).toBe(false);
+      leave();
+      run(STEP_MS);
+      expect(free()).toBe(true);
+    });
+
+    it('waits out a long fight, and gives up on one that never ends', () => {
+      const { run, free, them } = engaged();
+      them.busy = true;
+      run(4 * 60_000);
+      expect(free(), 'six-a-side on the shot clock takes a while').toBe(false);
+      run(2 * 60_000);
+      expect(free()).toBe(true);
+    });
+  });
+
   it('leaves alone a player already in a battle', () => {
     const { sent } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2, busy: true });
     expect(sent.some((m) => m.t === 'challenge')).toBe(false);
@@ -467,6 +565,71 @@ describe('a bot that is hurt', () => {
     bots.ringMoved(3);
     const mon = bots.partyOf(seat)[0];
     expect(mon.hp / mon.maxHp).toBeCloseTo(10 / 19, 1);
+  });
+});
+
+// The rung climbing, on the real deal (POK-330 #30). The stub deals above hand back the
+// same species every time, which is why nothing saw what the real one does to a team:
+// evolve it, and draw its extra slots from whatever table the bot is standing on.
+describe('the rung climbing, with the real deal', () => {
+  const R101: WorldMap = { ...FIELD, id: 'MAP_ROUTE101', seams: [{ dir: 'east', to: 'MAP_ROUTE110', offset: 0 }] };
+  const R110: WorldMap = { ...PATH, id: 'MAP_ROUTE110', seams: [{ dir: 'west', to: 'MAP_ROUTE101', offset: 0 }] };
+  const REF: Record<string, MapRef> = { MAP_ROUTE101: REFS.FIELD, MAP_ROUTE110: REFS.PATH };
+  const SEED = 4242;
+  const deal = (seat: number, phase: number, mapId: string) => dealParty(SEED, seat, phase, mapId, Grade.Ace);
+  /** The first seat whose team passes `ok` -- the deal is seeded, so a test picks the
+   *  bot it needs rather than hoping for it. */
+  const seatWhere = (ok: (seat: number) => boolean) => {
+    for (let seat = MAX_SEATS - 1; seat >= 0; seat--) if (ok(seat)) return seat;
+    throw new Error('no seat deals that');
+  };
+
+  function ace(seat: number, targets: { mapId: string; x: number; y: number }[] = [{ mapId: 'MAP_ROUTE101', x: 0, y: 0 }]) {
+    const bots = new Bots({
+      world: new World([R101, R110]),
+      targets,
+      mapRef: (id) => REF[id],
+      send: () => {},
+      rng: mulberry32(7),
+      // app.ts's own deal, minus the Zone pool.
+      deal: (bot, phase, mapId) => dealParty(SEED, bot.seat, phase, mapId, bot.grade),
+    });
+    bots.start([{ seat, name: 'MAY', grade: Grade.Ace, skin: 0, map: REF.MAP_ROUTE101, mapId: 'MAP_ROUTE101', x: 1, y: 1 }], 0);
+    return bots;
+  }
+
+  it('carries a hurt mon through its evolution, still hurt', () => {
+    // A WURMPLE up front at the drop, which by rung 15 has grown all the way up.
+    const seat = seatWhere((s) => deal(s, 0, 'MAP_ROUTE101')[0].species === 290);
+    const bots = ace(seat);
+    const [lead, ...rest] = bots.partyOf(seat);
+    bots.setParty(seat, [{ ...lead, hp: Math.floor(lead.maxHp / 2) }, ...rest]);
+    bots.ringMoved(2);
+    const after = bots.partyOf(seat)[0];
+    expect(after.species).not.toBe(290);
+    expect(after.species).toBe(grownUp(290, rungForPhase(2)));
+    expect(after.hp / after.maxHp).toBeCloseTo(0.5, 1);
+  });
+
+  it('leaves a fainted mon fainted', () => {
+    const seat = seatWhere(() => true);
+    const bots = ace(seat);
+    const [lead, ...rest] = bots.partyOf(seat);
+    expect(rest.length, 'an ace has a second mon to still be standing').toBeGreaterThan(0);
+    bots.setParty(seat, [{ ...lead, hp: 0 }, ...rest]);
+    bots.ringMoved(3);
+    expect(bots.partyOf(seat)[0].hp).toBe(0);
+  });
+
+  it('deals the new slots from where the drop put it, not from where it has walked', () => {
+    const species = (mapId: string, s: number) => deal(s, 3, mapId).map((m) => m.species);
+    const seat = seatWhere((s) => species('MAP_ROUTE101', s).join() !== species('MAP_ROUTE110', s).join());
+    // Somewhere to go on the next map over, so it walks there before the ring moves.
+    const bots = ace(seat, [{ mapId: 'MAP_ROUTE110', x: 3, y: 3 }]);
+    for (let t = STEP_MS; t <= 15_000 && bots.spotOf(seat)?.map !== 'MAP_ROUTE110'; t += STEP_MS) bots.tick(t);
+    expect(bots.spotOf(seat)?.map).toBe('MAP_ROUTE110');
+    bots.ringMoved(3);
+    expect(bots.partyOf(seat).map((m) => m.species)).toEqual(species('MAP_ROUTE101', seat));
   });
 });
 
@@ -552,6 +715,92 @@ describe('a bot caught in the fog', () => {
     expect(sent.some((m) => m.t === 'out' && m.seat === seat)).toBe(true);
     expect(bots.count()).toBe(0);
   });
+
+  // A bot the fog takes at sea drops its team on the water, the way a player beaten
+  // while surfing does -- it used to drop nothing (POK-330 #67). And its bag goes down
+  // under the ROM's own key for a bag, 0xFF, not the page's old 6.
+  it('drops everything where it falls, even out at sea', () => {
+    const SEA: WorldMap = { id: 'SEA', group: 0, num: 7, w: 5, h: 5, section: 'S', outdoor: true, grid: '25x2', seams: [] };
+    const sent: Msg[] = [];
+    const surfer: PackedMon = { ...MON, moves: [{ id: 57, pp: 15, ppUps: 0 }] }; // SURF
+    const bots = new Bots({
+      world: new World([SEA]),
+      targets: [{ mapId: 'SEA', x: 0, y: 0 }],
+      mapRef: () => ({ group: 0, num: 7 }),
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...surfer }, { ...surfer }],
+      bagFor: () => [{ id: 13, n: 1 }],
+      inside: () => false,
+    });
+    const [bot] = dealBots(1, 1, [], [{ mapId: 'SEA', map: { group: 0, num: 7 }, x: 2, y: 2 }]);
+    bots.start([bot], 0);
+    for (let t = STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    const spill = sent.find((m) => m.t === 'spill') as { mons: unknown[]; bag?: { key: number } } | undefined;
+    expect(spill?.mons).toHaveLength(2);
+    expect(spill?.bag?.key).toBe((bot.seat << 8) | 0xff);
+  });
+
+  // FogReachesThisBattle in br_ring.c: a fight between contestants is theirs to lose,
+  // and a bot is a contestant (POK-262, POK-330 #15).
+  it('leaves a bot alone while a player is fighting it', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    const them: PlayerView = { seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 };
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      inside: () => false,
+      engage: { players: () => [them] },
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+    bots.start(dealt, 0);
+    bots.tick(STEP_MS);
+    expect(sent.some((m) => m.t === 'challenge'), 'it saw them before the first bite').toBe(true);
+    them.busy = true;
+    // A minute outside is fifteen bites, which is this mon three times over.
+    for (let t = 2 * STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    expect(bots.partyOf(dealt[0].seat)[0].hp).toBe(20);
+    expect(sent.some((m) => m.t === 'out')).toBe(false);
+  });
+
+  it('lets two bots in the fog finish a duel in the instance', async () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    let answer: ((v: { winner: number; loser: number; a: { hp: number; status: number }[]; b: { hp: number; status: number }[] }) => void) | undefined;
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      seed: 4242,
+      inside: () => false,
+      settle: () => new Promise((resolve) => (answer = resolve)),
+    });
+    const dealt = dealBots(1, 2, [0], [
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 1 },
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 2 },
+    ]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    expect(answer, 'they met and the instance has the fight').toBeDefined();
+    expect(bots.count()).toBe(2);
+
+    const [a, b] = dealt.map((d) => d.seat);
+    answer!({ winner: b, loser: a, a: [{ hp: 0, status: 0 }], b: [{ hp: 7, status: 0 }] });
+    await Promise.resolve();
+    await Promise.resolve();
+    // The duel stands, not the fog: the loser is out and the winner has what it had left.
+    expect(bots.count()).toBe(1);
+    expect(sent.filter((m) => m.t === 'out').map((m) => (m as { seat: number }).seat)).toEqual([a]);
+    expect(bots.partyOf(b)[0].hp).toBe(7);
+  });
 });
 
 describe('two bots meeting', () => {
@@ -635,6 +884,22 @@ describe('two bots meeting', () => {
     await Promise.resolve();
 
     expect(bots.count()).toBe(1);
+  });
+
+  it('settles it anyway when the instance never answers (POK-330 #8)', async () => {
+    // A core that crashed or stopped drawing: the promise simply never settles.
+    let late: ((v: null) => void) | undefined;
+    const { bots, sent } = pairWithProxy(() => new Promise((resolve) => (late = resolve)));
+    for (let t = 5000 + STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    expect(bots.count(), 'still waiting on it a minute in').toBe(2);
+    for (let t = 60_000 + STEP_MS; t <= 3 * 60_000; t += STEP_MS) bots.tick(t);
+    expect(bots.count()).toBe(1);
+    expect(sent.filter((m) => m.t === 'out')).toHaveLength(1);
+    // ...and an answer that turns up after all is too late to fight it twice.
+    late?.(null);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sent.filter((m) => m.t === 'out')).toHaveLength(1);
   });
 
   it('settles it: one of them is out, and drops what it carried', () => {

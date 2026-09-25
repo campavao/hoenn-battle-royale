@@ -16,6 +16,7 @@ import { MOVE_CUT, MOVE_FLY, MOVE_SURF } from './party';
 import { battleItems, merge as mergeBag, purse, quaff, restock, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
+import { pageCell, type PageCell } from './space';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg } from '../net/wire';
 import { spillCells } from '../match/loot';
 
@@ -92,6 +93,34 @@ const SEARCHES_PER_TICK = 2;
  *  end. */
 const FOG_TICK_MS = 4000;
 const FOG_BITE = 10; // a tenth, as `Bleed` in src/br/br_ring.c
+/** How long a fight against a player may run before the page stops waiting for it. A
+ *  backstop, not a rule: a fight ends with the `party` the ROM that ran it sends back,
+ *  and one whose opponent has left ends with them. What is left is a ROM that stalled
+ *  or a report lost on the way -- and without this the bot stands frozen, and `busy`
+ *  on every client, until the fog takes it. Long, because the shot clock gives every
+ *  turn thirty seconds and six-a-side takes a while. */
+const FIGHT_TIMEOUT_MS = 5 * 60_000;
+/** A fight whose opponent has not been in a battle by now never started: their ROM
+ *  was already in something else when the card landed, or never took it at all. */
+const FIGHT_START_MS = 20_000;
+/** And a duel in the hidden instance: thirty seconds a fight (proxy.ts), up to two
+ *  queued ahead of it, and a boot. Past this the instance is not going to answer. */
+const PROXY_TIMEOUT_MS = 2 * 60_000;
+
+/** A bot standing still because its fight is running somewhere else. */
+interface Fight {
+  /** The other side: the player whose ROM runs the battle, or the other bot in a proxy
+   *  duel. Only this seat's ROM may say how it went. */
+  opponent: number;
+  /** When it began, for the backstop. */
+  since: number;
+  /** Has the opponent been seen in a battle? That is what tells a fight that never
+   *  started from a long one. */
+  started: boolean;
+  /** Set on a duel in the hidden instance, which no ROM reports on: what the backstop
+   *  does when the instance never answers -- the seeded resolver. */
+  proxy?: () => void;
+}
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
   south: 1,
@@ -127,6 +156,14 @@ interface Walker {
   /** Its own bag (POK-237): what it drinks between fights, what it spends in one, and
    *  what a player finds on it when it falls. */
   bag: Stack[];
+  /** The map its team is dealt from at every rung: where the drop put it (POK-237 -- a
+   *  trainer on Route 119 carries Route 119's mons). Not wherever it is standing when
+   *  the ring moves, or its team would turn into a different one each time it did. */
+  home: string;
+  /** Who it last fought, kept after the fight lets go of it: the ROM that ran it sends
+   *  `party`, then `spent`, then `result`, and the first of those is what ends it. The
+   *  reports that follow are still that ROM's to make, and nobody else's. */
+  foe?: number;
 }
 
 /** A player as the roster knows them -- where they are and which way they are looking.
@@ -178,8 +215,10 @@ export interface BotsOptions {
    *  a piece it can reach and picks it up like anybody else, which is also how the
    *  room hears about it -- `pickup` is the same message a player's ROM sends. */
   loot?: {
-    all: () => { key: number; mapId: string; x: number; y: number }[];
-    at: (mapId: string, x: number, y: number) => number | undefined;
+    /** In the page's space, which is the one the brain walks: the table itself holds
+     *  the wire's, and bots/adapt.ts's lootView is the door between them. */
+    all: () => ({ key: number; mapId: string } & PageCell)[];
+    at: (mapId: string, cell: PageCell) => number | undefined;
     /** What the next item out of this piece would be, when the piece is a bag rather
      *  than a mon (POK-237). A bot takes one the way a player does -- one press, one
      *  item -- and the rest stays on the ground for whoever is next. */
@@ -194,7 +233,7 @@ export interface BotsOptions {
     players: () => PlayerView[];
   };
   /** A bot's starting team, and the mons it picks up as the rung climbs. `mapId` is
-   *  where it is standing, which is where a trainer's mons come from (POK-237). */
+   *  where the drop put it, which is where a trainer's mons come from (POK-237). */
   deal?: (bot: Bot, phase: number, mapId: string) => PackedMon[];
   /** And its bag (POK-237). Dealt the same way, from the seed and the grade, so a
    *  rookie's two POTIONs and an ace's X ATTACK are the same on every client. */
@@ -248,9 +287,6 @@ export interface BotsOptions {
   rng: () => number;
 }
 
-/** The team at the new rung. A mon that is already there keeps its place and the
- *  share of its health it had -- a bot does not get healed by the fog closing -- and
- *  the rest of the roster is whatever the deal added at this phase. */
 /** Can this team cross water? One mon that knows SURF is the whole rule, the same as
  *  in the game -- and it is what gets a bot off an island the drop put it on. */
 export function canSurf(party: PackedMon[]): boolean {
@@ -293,21 +329,32 @@ export function health(party: PackedMon[]): number {
   return max > 0 ? hp / max : 1;
 }
 
+/** The team at the new rung. A mon that is already there keeps its place and the
+ *  share of its health it had -- a bot does not get healed by the fog closing, and one
+ *  that has fainted stays fainted -- and the rest of the roster is whatever the deal
+ *  added at this phase. Matched by slot, not by species: the rung is what evolves a
+ *  mon (party.ts's grownUp), so a WURMPLE that was hurt is a hurt SILCOON, not a fresh
+ *  one. It used to be a fresh one, and every fainted mon came back on 1 HP, so bots
+ *  outlived the fog and the fights meant to thin them out. */
 function climb(held: PackedMon[], fresh: PackedMon[]): PackedMon[] {
   return fresh.map((next, i) => {
     const mine = held[i];
-    if (!mine || mine.species !== next.species) return next;
+    if (!mine) return next;
     const share = mine.maxHp > 0 ? mine.hp / mine.maxHp : 1;
-    return { ...next, hp: Math.max(1, Math.round(next.maxHp * share)), status: mine.status };
+    const hp = mine.hp <= 0 ? 0 : Math.max(1, Math.round(next.maxHp * share));
+    return { ...next, hp, status: mine.status };
   });
 }
 
 export class Bots {
   private readonly walkers: Walker[] = [];
   /** Seats whose fight is running in somebody else's ROM. They stand where they were
-   *  challenged until the `result` comes back: a bot that strolled off mid-battle is
-   *  a ghost walking around while a spectator watches it lose. */
-  private readonly fighting = new Set<number>();
+   *  challenged until the fight comes back: a bot that strolled off mid-battle is a
+   *  ghost walking around while a spectator watches it lose. Keyed by the bot, with
+   *  who it is fighting -- a bare set of seats could only be released by a `result`
+   *  under the bot's own seat, and the Bridge stamps every result with the player's,
+   *  so a bot that won stood frozen for the rest of the match. */
+  private readonly fighting = new Map<number, Fight>();
   private nonce = 0;
   private now = 0;
   /** Route searches left in this tick (SEARCHES_PER_TICK). */
@@ -336,6 +383,7 @@ export class Bots {
       flyAfter: 0,
         retryAfter: 0,
         bleedAt: now + FOG_TICK_MS,
+        home: bot.mapId,
         party: this.opts.deal?.(bot, 0, bot.mapId) ?? [],
         bag: this.opts.bagFor?.(bot, 0) ?? [],
         quaffAfter: 0,
@@ -373,6 +421,9 @@ export class Bots {
 
     if (!walker) return;
     walker.at = { ...spot };
+    // The drop is where its mons come from from now on: the opening's deal was the
+    // Zone's, and the route it lands on is the one it would have caught them on.
+    walker.home = spot.map;
     walker.path = null;
     walker.stepIndex = 0;
     walker.retryAfter = 0;
@@ -391,11 +442,13 @@ export class Bots {
   }
 
   /** The party a fight left behind. The ROM that fought the bot reports it under the
-   *  bot's own seat, because it is the only thing that watched the fight happen. */
-  setParty(seat: number, mons: PackedMon[]): void {
+   *  bot's own seat, because it is the only thing that watched the fight happen.
+   *  `from` is the seat whose ROM sent it (bots/adapt.ts): a report from anybody but
+   *  the bot's own opponent is not about this fight, and is dropped. */
+  setParty(seat: number, mons: PackedMon[], from?: number): void {
     const walker = this.walkers.find((w) => w.bot.seat === seat);
 
-    if (!walker || mons.length === 0) return;
+    if (!walker || mons.length === 0 || !this.heardFrom(walker, from)) return;
     walker.party = mons;
     // ...and if nothing in it is standing, that fight was the end of this bot. Only
     // the ROM that fought it knows -- it sends the team back under the bot's own seat
@@ -403,19 +456,31 @@ export class Bots {
     // around carrying it: no `out`, no spill, and the play-test's "beating a bot does
     // not drop its items or Pokemon". A bot the fog takes goes out through `bleed`;
     // this is the same ending by the other road.
-    if (mons.some((mon) => mon.hp > 0)) return;
-    this.fighting.delete(seat);
+    if (mons.some((mon) => mon.hp > 0)) {
+      // Standing: the fight is over and the bot won it. The party is the one report a
+      // ROM always sends when a bot fight ends (br_bot.c, before `spent` and `result`),
+      // so it is what lets the bot walk again.
+      this.release(seat);
+      return;
+    }
     this.eliminate(walker);
   }
 
   /** What the ROM that fought this bot spent out of its bag (POK-237). The units were
    *  handed over on the `trainer` card and are still in the bag until this says
    *  otherwise -- a fight that ended on the first turn spends nothing. */
-  noteSpent(seat: number, items: number[]): void {
+  noteSpent(seat: number, items: number[], from?: number): void {
     const walker = this.walkers.find((w) => w.bot.seat === seat);
 
-    if (!walker) return;
+    if (!walker || !this.heardFrom(walker, from)) return;
     spend(walker.bag, items);
+  }
+
+  /** Is `from` the ROM that fought this bot last? Undefined is the page speaking for
+   *  itself, and a bot this page never saw fight (it was dealt to an old host that
+   *  has since gone, POK-252) takes the word of whoever fought it. */
+  private heardFrom(walker: Walker, from: number | undefined): boolean {
+    return from === undefined || walker.foe === undefined || walker.foe === from;
   }
 
   /** What a bot has left to spend -- for a test, and for anyone who wants to look. */
@@ -437,7 +502,7 @@ export class Bots {
     this.phase = phase;
     for (const walker of this.walkers) {
       walker.path = null;
-      const fresh = this.opts.deal?.(walker.bot, phase, walker.at.map);
+      const fresh = this.opts.deal?.(walker.bot, phase, walker.home);
       if (fresh) walker.party = climb(walker.party, fresh);
       // A trainer still standing at the new rung has restocked (POK-237) -- one
       // potion of the tier it is now on, not a fresh bag, so what it has spent
@@ -474,18 +539,65 @@ export class Bots {
     else this.opts.send(card);
     this.note(walker, 'engage', `seat ${playerSeat} (theirs)`);
     this.opts.onEngage?.(botSeat, playerSeat);
-    this.fighting.add(botSeat);
-    this.opts.send({ t: 'busy', seat: botSeat, kind: 'battle' });
+    this.hold(walker, playerSeat, now);
     walker.engageAfter = now + cooldownFor(walker.bot);
-    walker.path = null;
     return true;
   }
 
-  /** A fight this bot was in has ended -- it is back on the map and walking again.
-   *  The `result` that says so comes from the ROM that fought it. */
-  noteResult(seat: number): void {
+  /** A fight has ended -- the `result` the ROM that ran it sends. The Bridge stamps a
+   *  ROM's messages with its own seat, so the result the ROM wrote under the bot's
+   *  seat arrives under the player's: either one names the fight. `from` is the seat
+   *  whose ROM said so, and only the bot's opponent can end its fight this way. */
+  noteResult(seat: number, from?: number): void {
+    for (const [bot, fight] of [...this.fighting]) {
+      if (fight.proxy) continue; // no ROM runs a proxy duel, so no ROM reports on one
+      if (bot !== seat && fight.opponent !== seat) continue;
+      if (from !== undefined && from !== fight.opponent) continue;
+      this.release(bot);
+    }
+  }
+
+  /** Stands a bot still for a fight that is running somewhere else, and tells the room
+   *  it is busy so nothing else engages it meanwhile. */
+  private hold(walker: Walker, opponent: number, now: number, proxy?: () => void): Fight {
+    const fight: Fight = { opponent, since: now, started: proxy !== undefined, proxy };
+
+    this.fighting.set(walker.bot.seat, fight);
+    walker.foe = opponent;
+    walker.path = null;
+    this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
+    return fight;
+  }
+
+  /** Lets a fight go, however it ended: the bot is back on the map, after the grace
+   *  the ROM keeps after a fight (BR_ENGAGE_GRACE) so it does not turn straight round
+   *  on whoever is still standing in front of it. */
+  private release(seat: number): void {
     if (!this.fighting.delete(seat)) return;
     this.opts.send({ t: 'busy', seat });
+    const walker = this.walkers.find((w) => w.bot.seat === seat);
+    if (walker) walker.engageAfter = Math.max(walker.engageAfter, this.now + cooldownFor(walker.bot));
+  }
+
+  /** The fights nobody is going to report on: an opponent who has gone (out, or out of
+   *  the room), a fight that never started, and -- the backstop -- one that has simply
+   *  run too long. A proxy duel past its time is settled by the seeded resolver. */
+  private expireFights(now: number): void {
+    if (this.fighting.size === 0) return;
+    const players = this.opts.engage?.players();
+    const field = players ? new Map(players.map((p) => [p.seat, p])) : undefined;
+    for (const [seat, fight] of [...this.fighting]) {
+      if (this.fighting.get(seat) !== fight) continue; // a proxy pair goes both at once
+      if (fight.proxy) {
+        if (now - fight.since > PROXY_TIMEOUT_MS) fight.proxy();
+        continue;
+      }
+      const them = field?.get(fight.opponent);
+      if (them?.busy) fight.started = true;
+      if (field && !them) this.release(seat);
+      else if (!fight.started && now - fight.since > FIGHT_START_MS) this.release(seat);
+      else if (now - fight.since > FIGHT_TIMEOUT_MS) this.release(seat);
+    }
   }
 
   /** Runs every bot up to `now`. Called as often as the host likes -- the pace is in
@@ -493,6 +605,7 @@ export class Bots {
   tick(now: number): void {
     this.now = now;
     this.budget = SEARCHES_PER_TICK;
+    this.expireFights(now);
     // Both loops walk a snapshot: the fog and a lost duel both take a bot out of the
     // list mid-pass, and splicing the array being iterated skips whoever came next.
     for (const walker of this.walkers.slice()) {
@@ -517,7 +630,12 @@ export class Bots {
   private bleed(walker: Walker, now: number): void {
     const inside = this.opts.inside;
     if (!inside || walker.party.length === 0) return;
-    if (inside(walker.at.map)) {
+    // Nor while it is fighting (POK-262). The ROM's own fog never reaches a fight
+    // between contestants (FogReachesThisBattle in br_ring.c: "theirs to lose"), and a
+    // bot is one: in the last ring, where everywhere is fog, the page used to wipe a
+    // bot mid-battle, its `out` could hand the room a `win` while the player was still
+    // fighting it -- and a player who then lost that battle still got the Hall of Fame.
+    if (inside(walker.at.map) || this.fighting.has(walker.bot.seat)) {
       walker.bleedAt = now + FOG_TICK_MS;
       return;
     }
@@ -568,14 +686,14 @@ export class Bots {
         })),
       };
       // And its bag, which is the point of it having had one (POK-237): the X ATTACKs
-      // it did not get to pop are lying there for whoever beat it. Key 6 is the slot
-      // after the six mons, which is what the ROM's own whiteout uses.
+      // it did not get to pop are lying there for whoever beat it. Key 0xFF is the
+      // ROM's own for a whiteout's bag (br_loot.c), clear of the mons' 0..5.
       // The bag takes the cell after the team's. Nowhere left to put it means no bag
       // rather than a bag nobody can reach: a piece sharing a cell with another is a
       // piece that does not exist.
       if (walker.bag.length > 0 && cells.length > party.length) {
         spill.bag = {
-          key: ((walker.bot.seat & 0xff) << 8) | 6,
+          key: ((walker.bot.seat & 0xff) << 8) | 0xff,
           x: cells[party.length].x,
           y: cells[party.length].y,
           items: walker.bag.map((stack) => ({ ...stack })),
@@ -600,7 +718,7 @@ export class Bots {
     if (this.tryEngage(walker, now)) return;
     // Loot at your feet, before anything else: a bot standing on a ball takes it, and
     // that is the turn spent.
-    const here = this.opts.loot?.at(walker.at.map, walker.at.x, walker.at.y);
+    const here = this.opts.loot?.at(walker.at.map, pageCell(walker.at.x, walker.at.y));
     if (here !== undefined) {
       // A bag on the ground gives up one item per press -- the ROM's own rule -- so
       // the pickup names what was taken and the rest stays there (POK-237).
@@ -685,10 +803,8 @@ export class Bots {
       });
       this.note(walker, 'engage', `seat ${player.seat}`);
       this.opts.onEngage?.(walker.bot.seat, player.seat);
-      this.fighting.add(walker.bot.seat);
-      this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
+      this.hold(walker, player.seat, now);
       walker.engageAfter = now + cooldownFor(walker.bot);
-      walker.path = null;
       return true;
     }
     // Nobody to fight but each other. A bot that can see another bot settles it
@@ -756,11 +872,26 @@ export class Bots {
     const nonce = this.nonce;
     if (!settle) return;
 
-    for (const w of [walker, other]) {
-      this.fighting.add(w.bot.seat);
-      this.opts.send({ t: 'busy', seat: w.bot.seat, kind: 'battle' });
-      w.path = null;
-    }
+    const resolve = () =>
+      duel(seed, { seat: walker.bot.seat, party: walker.party }, { seat: other.bot.seat, party: other.party }, nonce);
+    // Lets the pair go, and says whether this duel is still theirs to settle. Not when
+    // the backstop has already settled it, and not when the room has been told one of
+    // them is out meanwhile -- the one still standing just walks on. The fog is not
+    // one of those: it leaves a fight alone (bleed), so a duel it used to cancel by
+    // taking a bot out of the instance's hands now runs to its end.
+    const finish = (): boolean => {
+      const live = held.filter(([w, fight]) => this.fighting.get(w.bot.seat) === fight);
+      for (const [w] of live) this.release(w.bot.seat);
+      return live.length === 2 && this.walkers.includes(walker) && this.walkers.includes(other);
+    };
+    // An instance that never answers -- crashed, stalled, a tab that stopped drawing --
+    // costs the room a real fight, not two bots frozen for the rest of the match.
+    const expire = () => {
+      if (finish()) this.applyDuel(walker, other, resolve(), this.now);
+    };
+    const held = [walker, other].map(
+      (w) => [w, this.hold(w, (w === walker ? other : walker).bot.seat, now, expire)] as const,
+    );
     // Both bags go in with them (POK-237): what a bot spends in here is gone from the
     // bag it will take into its next fight, the same as a fight against a player.
     void settle(
@@ -770,13 +901,7 @@ export class Bots {
       .catch(() => null)
       .then((out) => {
         const then = this.now;
-        for (const w of [walker, other]) {
-          this.fighting.delete(w.bot.seat);
-          this.opts.send({ t: 'busy', seat: w.bot.seat });
-        }
-        // The fog may have taken one of them while the instance was fighting: that
-        // elimination stands, and this duel never happened.
-        if (!this.walkers.includes(walker) || !this.walkers.includes(other)) return;
+        if (!finish()) return;
         if (out) {
           const wonIsWalker = out.winner === walker.bot.seat;
           const left = wonIsWalker ? out.a : out.b;
@@ -795,17 +920,7 @@ export class Bots {
           }, then);
           return;
         }
-        this.applyDuel(
-          walker,
-          other,
-          duel(
-            seed,
-            { seat: walker.bot.seat, party: walker.party },
-            { seat: other.bot.seat, party: other.party },
-            nonce,
-          ),
-          then,
-        );
+        this.applyDuel(walker, other, resolve(), then);
       });
   }
 
@@ -1079,12 +1194,25 @@ export class Bots {
     this.note(walker, why, step.dir);
   }
 
-  /** The map a stuck bot should drift towards: whichever of the current targets is
-   *  fewest map crossings away. Undefined when there are none, or none reachable. */
+  /** The map a stuck bot should drift towards: whichever target INSIDE the ring is
+   *  fewest map crossings away -- the same targets chooseTarget aims at. Undefined when
+   *  there are none, none reachable, or one is on this very map.
+   *
+   *  It used to read the whole landing pool, ring or no ring (POK-330 #41): a stuck
+   *  bot on any map with a landing cell took uniform random steps even in the fog,
+   *  and anywhere else drifted towards the nearest landing map whichever side of the
+   *  ring it was on. */
   private driftGoal(walker: Walker): string | undefined {
+    const inside = this.opts.inside;
+    const seen = new Set<string>();
     let best: string | undefined;
     let bestHops = Infinity;
     for (const t of this.opts.targets) {
+      // One question a map, not one a cell: the pool is hundreds of cells on a couple
+      // of dozen maps, and this runs for every bot waiting its turn to think.
+      if (seen.has(t.mapId)) continue;
+      seen.add(t.mapId);
+      if (inside && !inside(t.mapId)) continue;
       if (t.mapId === walker.at.map) return undefined; // already where the targets are
       const h = this.opts.world.hops(walker.at.map, t.mapId);
       if (h !== undefined && h < bestHops) {
