@@ -31,6 +31,7 @@ import { readZonePool } from './match/zone';
 import { NpcFog } from './match/npcfog';
 import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
 import { Stage } from './ui/stage';
+import { drawerKey, drawerLabel, stageKey } from './ui/roomkeys';
 import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
 import {
   canStart,
@@ -1038,7 +1039,10 @@ let roomKick: RelayClient | null = null;
 
 /** What the room views last showed, so the spectate loop's call every 500 ms redraws
  *  only on a change: a list rebuilt under a finger mid-tap loses the tap (POK-330 #33). */
-let roomDrawn: { bridge: Bridge; key: string } | null = null;
+let roomDrawn: { bridge: Bridge; list: string; stage: string } | null = null;
+
+/** Whose card the drawn room has open, for its key (ui/roomkeys.ts). Set by wireRoom. */
+let roomCardSeat: () => number | null = () => null;
 
 /** The room, as everybody in it sees it. */
 function renderRoom(bridge: Bridge): void {
@@ -1050,21 +1054,25 @@ function renderRoom(bridge: Bridge): void {
     card.hidden = true;
     card.dataset.seat = '';
   }
-  // All either view shows of a person: the drawer's names, the drawn room's seats and
-  // its card. Where on a map they stand is not in it.
-  const key = JSON.stringify(entries.map((e) => [e.seat, bridge.roster.nameOf(e.seat), e.skin, e.alive, e.isMe, e.map?.group, e.map?.num]));
-  if (roomDrawn?.bridge === bridge && roomDrawn.key === key) return;
-  roomDrawn = { bridge, key };
+  // Each view keyed on what it shows. Walking is in neither: in a match every seat walks,
+  // and a list keyed on the map is rebuilt on most ticks.
+  const nameOf = (seat: number) => bridge.roster.nameOf(seat);
+  const listKey = drawerKey(entries, nameOf);
+  const stageAt = stageKey(entries, nameOf, roomCardSeat());
+  const last = roomDrawn?.bridge === bridge ? roomDrawn : null;
+  roomDrawn = { bridge, list: listKey, stage: stageAt };
+  // The drawn room shows the same people (POK-320).
+  if (last?.stage !== stageAt) stage?.redraw();
+  if (last?.list === listKey) return;
   list.innerHTML = '';
   for (const entry of entries) {
     const li = document.createElement('li');
-    const label = bridge.roster.nameOf(entry.seat);
     // A name is a button now (POK-268): Kanto's drawn lobby opens a trainer's card on
     // A, and this is the same idea in the shape this front end has.
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'roster-name';
-    button.textContent = `${label}${entry.isMe ? ' (you)' : ''}${entry.alive ? '' : ' -- OUT'}`;
+    button.textContent = drawerLabel(entry, nameOf(entry.seat));
     button.addEventListener('click', () => {
       if (card.dataset.seat === String(entry.seat) && !card.hidden) {
         card.hidden = true;
@@ -1102,8 +1110,6 @@ function renderRoom(bridge: Bridge): void {
     li.appendChild(button);
     list.appendChild(li);
   }
-  // The drawn room shows the same people (POK-320).
-  stage?.redraw();
 }
 
 /** world.json's id for a wire MapRef, for the places a card names. */
@@ -2008,6 +2014,7 @@ function wireRoom(
     startAt: null as number | null,
     onStart: () => {},
   };
+  roomCardSeat = () => room.card?.seat ?? null;
   const stage = theStage();
   // The same status and note in the drawer, where they stay through the match (the room
   // screen comes down when it starts): what the strip sits under, and what a test reads.
