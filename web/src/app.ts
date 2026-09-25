@@ -2385,6 +2385,15 @@ function wireRoom(
         centre: match.centre,
         secsLeftInPhase: match.clockLeft,
         out: [...match.out, ...gone],
+        // The old host's list of dealt cells left with it. What `start` dealt, and where
+        // everybody stands now (a `land` is unicast, so a trainer who dropped and has not
+        // moved is only known by their `place`), back out of the ROM's space.
+        dealt: [
+          ...match.spawns,
+          ...bridge.roster.all().flatMap((e) =>
+            e.map && e.x !== undefined && e.y !== undefined ? [{ map: e.map, x: e.x - MAP_OFFSET, y: e.y - MAP_OFFSET }] : [],
+          ),
+        ],
       });
       // And the room is told about the ones who walked out, so every roster agrees
       // with the count this page is now keeping.
@@ -2419,6 +2428,8 @@ function wireRoom(
   const match = {
     seed: 0,
     seats: [] as number[],
+    /** Where `start` dealt everybody, so a takeover does not deal those cells again. */
+    spawns: [] as { map: MapRef; x: number; y: number }[],
     ringPhase: 0,
     centre: undefined as { sx: number; sy: number; place?: string } | undefined,
     /** The ring's radius, for the strip a guest draws for itself (POK-268). */
@@ -2440,6 +2451,7 @@ function wireRoom(
     if (msg.t === 'start') {
       match.seed = msg.seed;
       match.seats = msg.spawns.map((s) => s.seat);
+      match.spawns = msg.spawns.map((s) => ({ map: s.map, x: s.x, y: s.y }));
       hideRoomScreen();
     } else if (msg.t === 'ring') {
       match.ringPhase = msg.phase;
