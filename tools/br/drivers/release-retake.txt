@@ -1,0 +1,62 @@
+# release-retake: your own released ball picked back up is still yours (POK-330 #28).
+#
+# Kanto's BR-24: a ball that changed hands finishes the trade -- KADABRA, MACHOKE,
+# GRAVELER and HAUNTER evolve on the way into somebody ELSE's party -- and your own ball
+# picked back up does not. A released mon's key is BR_LOOT_KEY_FREED | seat << 8 | n, and
+# WasOurs compared the whole high byte (0x40 | seat) with our seat, so it never matched:
+# release a KADABRA to make room, walk back, take it, and it came back an ALAKAZAM. A free
+# trade evolution on demand.
+#
+# The KADABRA comes from our own spill key first (seat 0's, so no evolution), then the
+# catch ticket's release flow lets it go, then we take it back.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+# SPILL: seat 0 (us), map 0:9, one KADABRA (64) at level 30 on our own cell (12,16),
+# keyed 0x0003 -- seat 0's own space, so it is ours and does not evolve
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 00 00 09 01 03 00 0C 00 10 00 40 00 1E 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+tap A
+wait 30
+expect u8 gPlayerPartyCount 2
+# "TOOK KADABRA!": the box line, 'K' (0xC5) after "TOOK "
+expect u8 gBrHud+0x153 0xC5
+wait 120
+# A catch with nowhere to go: a copy of the TREECKO, pending, and the party picker
+copy gBrPendingCatch gPlayerParty 100
+poke u8 gBrCatch 1
+wait 90
+tap A
+wait 60
+shot picker
+# down to slot 1, the KADABRA, and let it go
+tap DOWN
+wait 10
+tap A
+wait 60
+tap A
+wait 90
+expect u8 gBrCatch 0
+shot released
+# it is on the ground beside us, keyed in the released space: FREED | seat 0 | first
+expect u8 gBrLoot+0xA0 1
+expect u16 gBrLoot 0x4000
+expect u16 gBrLoot+6 64
+expect u16 gBrLoot+2 13
+expect u16 gBrLoot+4 16
+wait 120
+# face it and take it back
+tap RIGHT
+wait 20
+tap A
+wait 30
+expect u8 gBrLoot+0xA0 0
+expect u8 gPlayerPartyCount 3
+# "TOOK KADABRA!" again -- it was "TOOK ALAKAZAM!", 'A' (0xBB)
+expect u8 gBrHud+0x153 0xC5
+expect u8 gBrHud+0x154 0xBB
+expect u8 gBrHud+0x155 0xBE
+shot retaken
+say release retake ok

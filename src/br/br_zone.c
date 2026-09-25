@@ -159,8 +159,10 @@ static const u16 sChest[] =
 #define BR_CHEST_Y 5
 // Its key, in the "belongs to nobody" space the Zone's own balls use: no trade evolution
 // runs off it, and no seat can mint a key that collides. 0x8E00 would be trainer 1536 in
-// party slot 1, and Emerald's last trainer id is 854.
+// party slot 1, and Emerald's last trainer id is 854. A literal because the page reads it
+// out of this file (web/src/match/ticker.ts's CHEST_KEY); br_loot.h owns the key space.
 #define BR_CHEST_KEY 0x8E00
+STATIC_ASSERT(BR_CHEST_KEY == BR_LOOT_KEY_CHEST, BrChestKeyIsInTheNobodySpace)
 
 // Where the balls lie: one per area, each as far from that area's four spawn cells as
 // the grid allows, three tiles clear of the edges and two of every warp. A ball on a
@@ -386,7 +388,7 @@ void BrZone_PlaceItems(void)
 
         // The key's top bit says it belongs to nobody, the way a beaten trainer's does;
         // the rest is the ball's index, which every ROM works out the same way.
-        BrLoot_AddItem((u16)(0x8000 | 0x0F00 | i), MAP_GROUP(MAP_SAFARI_ZONE_SOUTH),
+        BrLoot_AddItem(BR_LOOT_KEY_ZONE_ITEM(i), MAP_GROUP(MAP_SAFARI_ZONE_SOUTH),
                        cell[0], cell[1] + MAP_OFFSET, cell[2] + MAP_OFFSET, gBrZone.items[i]);
     }
 }
@@ -396,7 +398,7 @@ void BrZone_ItemsGone(void)
     u8 i;
 
     for (i = 0; i < BR_ZONE_ITEMS; i++)
-        BrLoot_DropKey((u16)(0x8000 | 0x0F00 | i));
+        BrLoot_DropKey(BR_LOOT_KEY_ZONE_ITEM(i));
 }
 
 void BrZone_PlaceChest(void)

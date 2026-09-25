@@ -34,12 +34,29 @@
 
 // Key spaces, so two things on the ground can never claim the same key:
 //
-//   0x0000..0x1FFF  a fallen trainer's team and bag -- `(seat << 8) | n`, minted by the
-//                   page, which is what decides where an elimination scatters.
+//   0x0000..0x1FFF  a fallen trainer's team and bag -- `(seat << 8) | n`, the bag's n
+//                   0xFF. The page mints a bot's; our own ROM mints ours.
 //   0x4000..0x5FFF  a Pokemon the player RELEASED to make room (POK-294). Minted in the
 //                   ROM, because nobody else is watching the moment it happens.
-//   0x8000..0xFFFF  one of Hoenn's own trainers -- `0x8000 | (party index << 11) | id`.
+//   0x8000..0xFFFF  nobody's: one of Hoenn's own trainers, `0x8000 | (party index << 11)
+//                   | id`, the Zone's dealt balls, 0x8F00 | i, and the DAY CARE chest,
+//                   0x8E00 -- clear of the trainers' keys while every trainer id is under
+//                   0x600 (br_loot.c asserts it; Emerald's last is 854).
+//
+// The seat is the low five bits of the high byte in both seat spaces, which is only a
+// seat while seats are 0..31: the relay deals no other, and the ROM treats any other
+// gBrMySeat as nobody (POK-330 #6). They were literals spread over two files, and one
+// reader forgot the FREED bit: a released KADABRA picked back up by its own trainer read
+// as somebody else's and came back an ALAKAZAM (POK-330 #28).
 #define BR_LOOT_KEY_FREED 0x4000
+#define BR_LOOT_KEY_NOBODY 0x8000
+#define BR_LOOT_KEY_SEAT(key) (((key) >> 8) & 0x1F)
+#define BR_LOOT_KEY_OWN(seat, n) ((u16)(((seat) << 8) | (n)))
+#define BR_LOOT_KEY_BAG(seat) BR_LOOT_KEY_OWN(seat, 0xFF)
+#define BR_LOOT_KEY_RELEASED(seat, n) ((u16)(BR_LOOT_KEY_FREED | ((seat) << 8) | (n)))
+#define BR_LOOT_KEY_TRAINER(slot, trainerId) ((u16)(BR_LOOT_KEY_NOBODY | ((slot) << 11) | (trainerId)))
+#define BR_LOOT_KEY_ZONE_ITEM(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x0F00 | (i)))
+#define BR_LOOT_KEY_CHEST ((u16)(BR_LOOT_KEY_NOBODY | 0x0E00))
 
 struct BrLootItem
 {

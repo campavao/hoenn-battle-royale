@@ -41,6 +41,10 @@ EWRAM_DATA struct BrDespawned gBrDespawned[BR_MAX_DESPAWN] = {0};
 STATIC_ASSERT(BR_CAP_SPILL >= 4 + PARTY_SIZE * 9 + 1 + 6 + 1 + 8 * 3 + 4 + 1 + PLAYER_NAME_LENGTH, BrSpillCapHoldsAFullSpill)
 static EWRAM_DATA u8 sSpillBuf[BR_CAP_SPILL] = {0};
 static EWRAM_DATA struct BrAssembler sSpillAsm = {0};
+// A trainer's key keeps its party index above an 11-bit id, and the Zone's balls and the
+// chest sit at 0x8F00 and 0x8E00 in the same space: party index 1, ids 0x700 and 0x600.
+STATIC_ASSERT(TRAINERS_COUNT <= 0x600, BrTrainerLootKeysClearOfTheZoneAndChest)
+STATIC_ASSERT((PARTY_SIZE - 1) << 11 < BR_LOOT_KEY_NOBODY, BrTrainerLootKeysFitSixteenBits)
 
 static bool8 OverworldRunning(void)
 {
@@ -354,7 +358,7 @@ void BrLoot_SpillOwn(void)
         usedY[used] = y;
         used++;
         // The key is ours alone for the match: our seat in the high byte.
-        key = (u16)((gBrMySeat << 8) | count);
+        key = BR_LOOT_KEY_OWN(gBrMySeat, count);
         BrWire_WriteU16(buf + len, key);
         BrWire_WriteU16(buf + len + 2, (u16)x);
         BrWire_WriteU16(buf + len + 4, (u16)y);
@@ -371,7 +375,7 @@ void BrLoot_SpillOwn(void)
         if (NextCell(ox, oy, &cell, usedX, usedY, used, &bx, &by))
         {
         buf[len++] = 1;
-        BrWire_WriteU16(buf + len, (u16)((gBrMySeat << 8) | 0xFF));
+        BrWire_WriteU16(buf + len, BR_LOOT_KEY_BAG(gBrMySeat));
         BrWire_WriteU16(buf + len + 2, (u16)bx);
         BrWire_WriteU16(buf + len + 4, (u16)by);
         len += 6;
@@ -442,11 +446,13 @@ static u16 TradedInto(u16 species)
     }
 }
 
-// Whose ball it was. A player's key carries their seat in the high byte; a beaten
-// Hoenn trainer's has the top bit set and belongs to nobody.
+// Whose ball it was. A player's key carries their seat in the high byte -- under the
+// FREED bit, for one they released -- and a beaten Hoenn trainer's has the top bit set
+// and belongs to nobody. Comparing the whole high byte missed the FREED bit, so taking
+// back your own released KADABRA evolved it (POK-330 #28).
 static bool8 WasOurs(u16 key)
 {
-    return (key & 0x8000) == 0 && (u8)(key >> 8) == gBrMySeat;
+    return (key & BR_LOOT_KEY_NOBODY) == 0 && BR_LOOT_KEY_SEAT(key) == gBrMySeat;
 }
 
 // Defined below, with the rest of the held line; Take() is above it because it is the
@@ -781,7 +787,7 @@ void BrLoot_TrainerBeaten(u16 trainerId, u8 localId)
         // and fits in eleven bits (TRAINERS_COUNT is 855), so the party index rides
         // above it and every ball of one team is still its own key -- which matters,
         // because a key is what a pickup names and what Add() overwrites.
-        BrWire_WriteU16(buf + len, (u16)(0x8000 | (i << 11) | trainerId));
+        BrWire_WriteU16(buf + len, BR_LOOT_KEY_TRAINER(i, trainerId));
         BrWire_WriteU16(buf + len + 2, (u16)x);
         BrWire_WriteU16(buf + len + 4, (u16)y);
         BrWire_WriteU16(buf + len + 6, species);
@@ -860,7 +866,7 @@ void BrLoot_Released(struct Pokemon *mon)
     buf[len++] = gSaveBlock1Ptr->location.mapGroup;
     buf[len++] = gSaveBlock1Ptr->location.mapNum;
     buf[len++] = 1; // one mon, no bag
-    BrWire_WriteU16(buf + len, (u16)(BR_LOOT_KEY_FREED | (gBrMySeat << 8) | gBrLoot.freed));
+    BrWire_WriteU16(buf + len, BR_LOOT_KEY_RELEASED(gBrMySeat, gBrLoot.freed));
     BrWire_WriteU16(buf + len + 2, (u16)x);
     BrWire_WriteU16(buf + len + 4, (u16)y);
     BrWire_WriteU16(buf + len + 6, species);
