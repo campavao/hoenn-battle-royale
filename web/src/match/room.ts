@@ -222,7 +222,10 @@ export interface StartState {
   /** A countdown is running already. */
   countingDown: boolean;
   /** A match has been played in this room and we are back from it: the next one is the
-   *  host's to call (Kanto's READY UP, POK-167). */
+   *  host's to call (Kanto's READY UP, POK-167). This page's, not the room's: one that
+   *  came in after the match, or reloaded, has not played. Everybody who has is back on
+   *  the heir list ahead of it (they came first), so it inherits only a room none of
+   *  them can run, and counts that down as its first lobby. */
   played: boolean;
   match: Pick<MatchSnapshot, 'active' | 'ended' | 'seed'>;
 }

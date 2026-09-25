@@ -2206,7 +2206,7 @@ function wireRoom(
       session.note(m, { from });
       // A `ring` or `clock` with no `start` before it: we walked in on a match, or missed
       // its deal, and could not run it (POK-331 #13 review). Off the heir list from here,
-      // as Kanto's late start is.
+      // as Kanto's late start is; PLAY AGAIN puts us back.
       if (!unheard && unheardMatch(match) && !isHost) relay.canHost(false);
       // ...and to the match we run, when we run it: the director's ear, the drop, the loot
       // a latecomer is owed, a peek at one of our bots, and a bot that is out.
@@ -2324,6 +2324,13 @@ function wireRoom(
       // The room's next match is its host's to call (READY UP, Kanto's POK-167) -- from
       // now, not after the reboot: a roster arriving during it would buzz the room off.
       room.played = true;
+      // ...and back on the heir list, whoever went out or walked in on the match (Kanto's
+      // next `start` does this): everybody here could run the next one. Nothing said so,
+      // so they stayed off it for the life of the room, and a host leaving between
+      // matches handed the room to somebody who came in after -- who never played here,
+      // and counted a quick room down where the room was waiting on READY UP (POK-331 #13
+      // review). A host's yes is a no-op.
+      relay.canHost(true);
       if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
       else await emu.reboot();
       // Last match's champion is not this match's (POK-243). PLAY AGAIN used to reload
