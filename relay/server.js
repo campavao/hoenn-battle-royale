@@ -62,7 +62,8 @@
 //                                      unlock -- the relay's only record of
 //                                      a match as a thing that happened
 //   {type:"kick", id}                  host only: remove a member and refuse
-//                                      their IP for the room's life (POK-130)
+//                                      their address and their resume
+//                                      token for the room's life (POK-130)
 //   {type:"leave_room"}
 //   {type:"can_host", ok}             may this client be promoted to host
 //                                     if the current one drops (POK-116)
@@ -342,6 +343,29 @@ export function originAllowed(allowlist, origin) {
   return allowlist.includes(origin);
 }
 
+// Who a connection is, for the per-IP cap and a kick's ban (POK-330 #19).
+// Behind a proxy -- Railway's edge -- every socket's own address is the
+// proxy's, so strangers shared one cap and a kick banned everybody who came
+// through the same edge.  With trustProxy (BR_TRUST_PROXY=1) the address is
+// the proxy's X-Real-IP, or failing that the entry it APPENDED to
+// X-Forwarded-For (the last one: the ones before it are whatever the client
+// sent).  Off by default, because without a proxy in front both headers are
+// the client's to invent.
+const IP_RE = /^[0-9A-Fa-f:.]{2,45}$/;
+
+export function clientAddress(req, trustProxy) {
+  const direct = (req.socket && req.socket.remoteAddress) || "?";
+  if (!trustProxy) return direct;
+  const real = req.headers["x-real-ip"];
+  if (typeof real === "string" && IP_RE.test(real.trim())) return real.trim();
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") {
+    const appended = forwarded.split(",").pop().trim();
+    if (IP_RE.test(appended)) return appended;
+  }
+  return direct;
+}
+
 class Room {
   constructor(code, host, max) {
     this.code = code;
@@ -370,12 +394,17 @@ class Room {
     this.mode = "host";
     // when the current match locked the door, or null between matches
     this.lockedAt = null;
-    // IPs the host has removed (POK-130).  Per-room and in-memory, like
-    // everything else here: a removal lasts as long as the room does.  IP
-    // is the only identity a connection has -- coarse (a shared NAT goes
-    // together), but the alternative is a removed guest quick-joining
-    // straight back in, which makes the REMOVE row a revolving door.
+    // Addresses the host has removed (POK-130).  Per-room and in-memory,
+    // like everything else here: a removal lasts as long as the room does.
+    // Coarse (a shared NAT goes together), but the alternative is a removed
+    // guest quick-joining straight back in, which makes the REMOVE row a
+    // revolving door.
     this.banned = new Set();
+    // ...and the resume tokens they held (POK-330 #19).  An address is
+    // coarse both ways: behind one proxy it is everybody's, and a phone
+    // changes it walking out of wifi.  The token is the removed client's
+    // own, and its page presents it on every automatic rejoin.
+    this.bannedTokens = new Set();
     // The host's {patch, protocol}, from host_room -- null when the host's
     // client sent neither (an older client, or one that opts out of the
     // gate entirely).
@@ -590,6 +619,9 @@ export function createRelay(options = {}) {
   const originAllowlist = "origins" in options
     ? options.origins
     : parseOrigins(process.env.BR_ORIGINS);
+  const trustProxy = "trustProxy" in options
+    ? options.trustProxy === true
+    : process.env.BR_TRUST_PROXY === "1";
   const rooms = new Map();
   const conns = new Set();
   const perIp = new Map();
@@ -800,7 +832,11 @@ export function createRelay(options = {}) {
         const code = typeof msg.code === "string" ? msg.code.toUpperCase() : "";
         const room = rooms.get(code);
         if (!room) { conn.send({ type: "room_error", reason: "not_found" }); return; }
-        if (room.banned.has(conn.ip)) { conn.send({ type: "room_error", reason: "removed" }); return; }
+        if (room.banned.has(conn.ip)
+            || (typeof msg.token === "string" && room.bannedTokens.has(msg.token))) {
+          conn.send({ type: "room_error", reason: "removed" });
+          return;
+        }
         // The passcode is checked before the door's state is told: a
         // stranger without it learns nothing about the room past "not
         // yours".  Watchers need it too -- a passcoded room is a room
@@ -996,14 +1032,16 @@ export function createRelay(options = {}) {
       // starts the match -- neither is a way out once somebody is in.
       // The removed client is told the room closed, which its POK-115 exit
       // already handles cleanly; its connection stays up (it may want to
-      // host or quick-play elsewhere), but this room will not take its IP
-      // back for the life of the room.
+      // host or quick-play elsewhere), but this room will not take its
+      // address, or the token its page rejoins with, back for the life of
+      // the room.
       case "kick": {
         const room = conn.room;
         if (!room || room.host !== conn) return;
         const target = room.members.get(Number(msg.id));
         if (!target || target === conn) return;
         room.banned.add(target.ip);
+        if (target.token) room.bannedTokens.add(target.token);
         room.remove(target);
         target.token = null; // no seat is held for the removed (POK-284)
         target.send({ type: "room_closed", reason: "removed" });
@@ -1153,7 +1191,7 @@ export function createRelay(options = {}) {
       socket.destroy();
       return;
     }
-    const ip = socket.remoteAddress || "?";
+    const ip = clientAddress(req, trustProxy);
     const ipCount = (perIp.get(ip) || 0) + 1;
     if (conns.size >= limits.conns || ipCount > limits.connsPerIp) {
       // silently dropping these made a full relay look like a network

@@ -11,11 +11,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { createRelay, CODE_ALPHABET, CODE_LENGTH, limitsFromEnv, stats } from "./server.js";
+import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, limitsFromEnv, stats } from "./server.js";
 
 class Client {
-  constructor(port) {
-    this.ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  // headers: what a proxy in front of the relay would add (POK-330 #19)
+  constructor(port, headers) {
+    this.ws = new WebSocket(`ws://127.0.0.1:${port}`, headers ? { headers } : undefined);
     this.inbox = [];
     this.waiters = [];
     this.closed = false;
@@ -94,8 +95,8 @@ async function withRelay(fn, limits) {
 // client learns `minProtocol` before it sends anything). The tests below
 // port straight from the TCP relay's, where no such push existed, so
 // connect() swallows it here rather than every test having to know about it.
-async function connect(port) {
-  const c = new Client(port);
+async function connect(port, headers) {
+  const c = new Client(port, headers);
   await c.ready();
   const info = await c.until("info");
   c.bootInfo = info;
@@ -1544,4 +1545,80 @@ test("a broadcast is serialized once for the whole room", async () => {
     assert.equal(recvs, 1, "three recipients, one stringify");
     host.end(); for (const g of guests) g.end();
   });
+});
+
+// ------- POK-330 #19: behind a proxy, a client is its forwarded address
+
+test("clientAddress trusts the proxy's headers only when told to", () => {
+  const req = (headers) => ({ socket: { remoteAddress: "100.64.0.7" }, headers });
+  // off: the socket's own address, whatever the client wrote
+  assert.equal(clientAddress(req({ "x-real-ip": "203.0.113.9" }), false), "100.64.0.7");
+  // on: X-Real-IP first...
+  assert.equal(clientAddress(req({ "x-real-ip": "203.0.113.9",
+    "x-forwarded-for": "198.51.100.1" }), true), "203.0.113.9");
+  // ...then the entry the proxy APPENDED, never the ones the client sent
+  assert.equal(clientAddress(req({ "x-forwarded-for": "6.6.6.6, 203.0.113.10" }), true),
+    "203.0.113.10");
+  assert.equal(clientAddress(req({ "x-forwarded-for": "2001:db8::1" }), true), "2001:db8::1");
+  // junk, or nothing, falls back to the socket
+  assert.equal(clientAddress(req({ "x-real-ip": "<script>" }), true), "100.64.0.7");
+  assert.equal(clientAddress(req({}), true), "100.64.0.7");
+});
+
+test("behind BR_TRUST_PROXY, two clients through one proxy are two addresses", async () => {
+  const relay = createRelay({ trustProxy: true, limits: { connsPerIp: 1 } });
+  const addr = await relay.listen(0, "127.0.0.1");
+  try {
+    // both sockets come from 127.0.0.1, the "proxy"
+    const a = await connect(addr.port, { "X-Forwarded-For": "203.0.113.1" });
+    const b = await connect(addr.port, { "X-Forwarded-For": "203.0.113.2" });
+    assert.equal(b.closed, false, "a stranger is not capped with the first");
+    a.end(); b.end();
+  } finally {
+    await relay.close();
+  }
+  // ...and without the flag the header is ignored: one address, one cap
+  await withRelay(async (port) => {
+    const a = await connect(port, { "X-Forwarded-For": "203.0.113.1" });
+    assert.equal(await new Promise((resolve) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`, { headers: { "X-Forwarded-For": "203.0.113.2" } });
+      ws.addEventListener("open", () => { resolve(true); ws.close(); }, { once: true });
+      ws.addEventListener("close", () => resolve(false), { once: true });
+    }), false);
+    a.end();
+  }, { connsPerIp: 1 });
+});
+
+test("a kick bans the member's address and token, not the proxy everyone shares", async () => {
+  const relay = createRelay({ trustProxy: true });
+  const addr = await relay.listen(0, "127.0.0.1");
+  try {
+    const host = await connect(addr.port, { "X-Real-IP": "203.0.113.1" });
+    host.send({ type: "host_room", name: "HOST", open: true });
+    const code = (await host.until("room_hosted")).code;
+    const guest = await connect(addr.port, { "X-Real-IP": "203.0.113.2" });
+    guest.send({ type: "join_room", code, name: "GUEST" });
+    const joined = await guest.until("room_joined");
+    await host.until("roster");
+
+    host.send({ type: "kick", id: joined.id });
+    await guest.until("room_closed");
+
+    // a bystander through the same proxy walks in
+    const bystander = await connect(addr.port, { "X-Real-IP": "203.0.113.3" });
+    bystander.send({ type: "join_room", code, name: "NEW" });
+    assert.equal((await bystander.next()).type, "room_joined");
+
+    // the removed page's automatic rejoin, from a new address, is still refused
+    const back = await connect(addr.port, { "X-Real-IP": "198.51.100.4" });
+    back.send({ type: "join_room", code, name: "GUEST", token: joined.token });
+    assert.equal((await back.next()).reason, "removed");
+    // and so is its old address
+    const same = await connect(addr.port, { "X-Real-IP": "203.0.113.2" });
+    same.send({ type: "join_room", code, name: "GUEST" });
+    assert.equal((await same.next()).reason, "removed");
+    for (const c of [host, guest, bystander, back, same]) c.end();
+  } finally {
+    await relay.close();
+  }
 });
