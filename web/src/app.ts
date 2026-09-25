@@ -78,7 +78,7 @@ import { DOORSTEPS, HAND, LANDING } from './match/landing';
 import { SAFARI_CELLS } from './match/safari';
 import { cardFor } from './match/card';
 import { MatchRecord, recordLines } from './match/record';
-import { departedSeats } from './match/lifecycle';
+import { botRows, botSeatsOf, departedSeats } from './match/lifecycle';
 import regionmapData from './data/regionmap.json';
 import { parseRoomHash as parseHash, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
 
@@ -1028,7 +1028,7 @@ function renderRoom(bridge: Bridge): void {
   list.innerHTML = '';
   for (const entry of bridge.roster.all()) {
     const li = document.createElement('li');
-    const label = entry.name || `P${entry.seat}`;
+    const label = bridge.roster.nameOf(entry.seat);
     // A name is a button now (POK-268): Kanto's drawn lobby opens a trainer's card on
     // A, and this is the same idea in the shape this front end has.
     const button = document.createElement('button');
@@ -1407,8 +1407,7 @@ function renderResults(seat: number, roster: Roster, results: Results, seats: nu
     parts.push(`survived ${mm}:${ss}`);
   }
   if (mine.winner !== undefined) {
-    const who = roster.get(mine.winner);
-    parts.push(mine.winner === seat ? 'you won' : `${who?.name || `P${mine.winner}`} won`);
+    parts.push(mine.winner === seat ? 'you won' : `${roster.nameOf(mine.winner)} won`);
   } else {
     parts.push('a draw');
   }
@@ -1433,7 +1432,7 @@ function renderFame(roster: Roster, winner: number | undefined, seat: number): v
     el.hidden = true;
     return;
   }
-  const who = winner === seat ? 'YOUR TEAM' : `${roster.get(winner)?.name || `P${winner}`}'S TEAM`;
+  const who = winner === seat ? 'YOUR TEAM' : `${roster.nameOf(winner)}'S TEAM`;
   const team = party
     .filter((mon) => mon.species > 0)
     .map((mon) => `${mon.nickname || speciesName(mon.species)} L${mon.level}`)
@@ -1527,7 +1526,7 @@ function renderSpectate(bridge: Bridge, spectate: Spectate): void {
     if (!entry.alive || entry.seat === bridge.seat) continue;
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = entry.name || `P${entry.seat}`;
+    button.textContent = bridge.roster.nameOf(entry.seat);
     button.setAttribute('aria-pressed', String(watching === entry.seat));
     button.addEventListener('click', () => {
       const next = spectate.watchingSeat() === entry.seat ? null : entry.seat;
@@ -2212,10 +2211,7 @@ function wireRoom(
     // it a line, so a match was silent: people vanished, the fog closed, somebody won,
     // and the only way to know was to be watching the right corner. The host narrates,
     // because the host is the one client that knows the whole match.
-    const nameOf = (seat: number) => {
-      const row = bridge!.roster.all().find((e) => e.seat === seat);
-      return row?.name || `P${seat}`;
-    };
+    const nameOf = (seat: number) => bridge!.roster.nameOf(seat);
     const say = (msg: TickerMsg | null) => {
       if (!msg) return;
       bridge!.relay.all(msg);
@@ -2462,6 +2458,11 @@ function wireRoom(
       match.seed = msg.seed;
       match.seats = msg.spawns.map((s) => s.seat);
       match.spawns = msg.spawns.map((s) => ({ map: s.map, x: s.x, y: s.y }));
+      // The host set its own bot seats when it dealt them; a guest reads them off the
+      // room. Either way they go on the roster by the names the seed gave them, which
+      // every page can work out (POK-330 #51) -- before the log below takes its names.
+      if (!director) match.botSeats = new Set(botSeatsOf(match.seats, controls.roster));
+      bridge?.roster.seatBots(botRows(msg.seed, match.botSeats));
       hideRoomScreen();
     } else if (msg.t === 'ring') {
       match.ringPhase = msg.phase;
@@ -2501,7 +2502,7 @@ function wireRoom(
     record.note(msg);
     // ...and the round is written down as it happens (POK-248). The same messages
     // placement is derived from, kept in a shape the round can be read back from.
-    log.note(msg, performance.now(), (seat) => bridge?.roster.get(seat)?.name || `P${seat}`);
+    log.note(msg, performance.now(), (seat) => bridge?.roster.nameOf(seat) ?? `P${seat}`);
     // The match is over: the door opens again (POK-258). START locked the room to keep
     // latecomers out of a running match, and leaving it locked is what turned the end
     // of a match into everybody scattering -- a reload could not get back in.
@@ -2618,6 +2619,9 @@ function wireRoom(
     // we joined. The hash said `host` on a rejoin too, after the relay had already handed
     // the room to an heir when our socket went (POK-330 #13).
     isHost = host === seat;
+    // A rejoin mid-match gets a fresh Bridge and with it a fresh roster: the bots go
+    // back on it by name, the same as they went on at the `start` (POK-330 #51).
+    if (match.seed !== 0) bridge.roster.seatBots(botRows(match.seed, match.botSeats));
     setStatus(`Room ${code}`);
     renderRoom(bridge);
     const seatBase = symbols?.get('gBrMySeat');
@@ -2639,7 +2643,7 @@ function wireRoom(
     // The bots' names go in on the way past; the instance has no roster to read them from.
     proxyStream = (raw) => {
       const msg = raw.t === 'bstart'
-        ? nameBstart(raw, (s) => bridge!.roster.all().find((e) => e.seat === s)?.name || `P${s}`)
+        ? nameBstart(raw, (s) => bridge!.roster.nameOf(s))
         : raw;
 
       bridge!.relay.all(msg);
@@ -2657,8 +2661,7 @@ function wireRoom(
       if (m.t !== 'npcout' || m.fog || !bridge) return; // the fog taking a gym is not a win
       const boss = bossAt(m.map, m.localId);
       if (!boss) return;
-      const row = bridge.roster.all().find((e) => e.seat === m.seat);
-      const line = Ticker.felled(m.seat, row?.name || `P${m.seat}`, boss);
+      const line = Ticker.felled(m.seat, bridge.roster.nameOf(m.seat), boss);
       if (line) bridge.pushToRom(line);
     };
     bridge.setOutObserver((msg) => {
@@ -2719,15 +2722,13 @@ function wireRoom(
         if (m.t === 'again' && !director) void returnToRoom();
         if (m.t === 'pickup' && bridge && spectate.watchingSeat() === m.seat) {
           const what = loot.describe(m.key);
-          const row = bridge.roster.all().find((e) => e.seat === m.seat);
-          const line = what ? Ticker.took(m.seat, row?.name || `P${m.seat}`, what) : null;
+          const line = what ? Ticker.took(m.seat, bridge.roster.nameOf(m.seat), what) : null;
           if (line) bridge.pushToRom(line);
         }
         // The DAY CARE chest (POK-306) is the other pickup worth a line, and this one is
         // for the whole room: everybody who was on their way there should stop.
         if (m.t === 'pickup' && bridge && m.key === Ticker.CHEST_KEY && m.item === undefined) {
-          const row = bridge.roster.all().find((e) => e.seat === m.seat);
-          const line = Ticker.chest(m.seat, row?.name || `P${m.seat}`);
+          const line = Ticker.chest(m.seat, bridge.roster.nameOf(m.seat));
           if (line) bridge.pushToRom(line);
         }
         bossFell(m);

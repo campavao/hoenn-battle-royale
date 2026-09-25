@@ -10,6 +10,9 @@
 //    from our own ROM (bridge.ts, stamped with our seat) or another seat over the
 //    relay: where that seat is, which way it's facing, and whether it's still alive.
 //
+// ...and a third, the match's own deal: its bots (`seatBots`), which walk like anybody
+// else but are never relay members, so only the seed can name them.
+//
 // Nothing here talks to the network or the emulator -- bridge.ts owns both and
 // calls into this class.
 
@@ -37,6 +40,9 @@ function sameMap(a: MapRef | undefined, b: MapRef): boolean {
 export class Roster {
   private entries = new Map<number, RosterEntry>();
   private mySeat: number | null = null;
+  /** Seats the match dealt to bots (POK-330 #51): the third source. No relay roster will
+   *  ever list one, so these are the rows a relay roster event must leave alone. */
+  private readonly bots = new Set<number>();
 
   /** Which seat is "us" -- flips `isMe` on the matching row, if it already exists. */
   setMySeat(seat: number): void {
@@ -58,9 +64,10 @@ export class Roster {
   }
 
   /** Applies the relay's `roster` event: creates/updates a row per member (seat =
-   *  the relay's own connection id) and drops rows for anyone no longer listed.
-   *  Position/facing/alive state is left alone -- the relay roster doesn't carry
-   *  it -- until a place/step/face/out message fills it in. */
+   *  the relay's own connection id) and drops rows for anyone no longer listed --
+   *  except the match's bots, which the relay never lists (seatBots). Position/facing/
+   *  alive state is left alone -- the relay roster doesn't carry it -- until a
+   *  place/step/face/out message fills it in. */
   applyRoster(msg: RosterEvent): void {
     const seen = new Set<number>();
     for (const m of msg.members) {
@@ -69,8 +76,34 @@ export class Roster {
       e.name = m.name;
     }
     for (const seat of Array.from(this.entries.keys())) {
-      if (!seen.has(seat)) this.entries.delete(seat);
+      if (!seen.has(seat) && !this.bots.has(seat)) this.entries.delete(seat);
     }
+  }
+
+  /** The match's bots, dealt from its seed (match/lifecycle.ts's botRows): every client
+   *  can work them out, and none of them is ever a relay member. Their rows used to have
+   *  no name -- the ticker, the results and the saved round all said P21..P31 -- and were
+   *  wiped by every roster event, skin, `alive` and all. */
+  seatBots(bots: readonly { seat: number; name: string; skin: number }[]): void {
+    for (const bot of bots) {
+      this.bots.add(bot.seat);
+      const e = this.entry(bot.seat);
+      e.name = bot.name;
+      e.skin ??= String(bot.skin);
+    }
+  }
+
+  /** The match is over (PLAY AGAIN): its bots leave the roster, and everybody still in
+   *  the room is standing again for the next one. */
+  endMatch(): void {
+    for (const seat of this.bots) this.entries.delete(seat);
+    this.bots.clear();
+    for (const e of this.entries.values()) e.alive = true;
+  }
+
+  /** What to call a seat: its name, or `P<seat>` for one nobody has named. */
+  nameOf(seat: number): string {
+    return this.entries.get(seat)?.name || `P${seat}`;
   }
 
   /** Applies one wire Msg that names a seat and moves/marks it. Anything else
