@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ALL_KEYS, EWRAM_BASE, Emulator, IWRAM_BASE, KEY_BIT, type CoreModule } from './index';
+import { ALL_KEYS, EWRAM_BASE, Emulator, IWRAM_BASE, KEY_BIT, type CoreModule, type GbaKey } from './index';
 
 // A fake core: a 1 MiB heap with EWRAM at 0x1000 and IWRAM at 0x50000, a file map,
 // and a log of every call, so the wrapper's bookkeeping can be checked without wasm.
@@ -161,6 +161,62 @@ describe('Emulator', () => {
     view[0] = 0xff;
     expect(heap[0x1010]).toBe(0xff);
     expect(() => emu.read(0x08000000)).toThrow('not in EWRAM');
+  });
+
+  describe('the keyboard (POK-330 #56)', () => {
+    const MAP = { ArrowUp: 'up', z: 'a' } as const;
+    const key = (type: string, k: string, repeat = false) => Object.assign(new Event(type, { cancelable: true }), { key: k, repeat });
+    async function bound(divert?: (key: GbaKey, repeat: boolean) => boolean) {
+      const got = await make();
+      const win = new EventTarget();
+      const doc = Object.assign(new EventTarget(), { hidden: false });
+      const unbind = got.emu.bindKeyboard(MAP, divert, { win, doc });
+      got.calls.length = 0;
+      return { ...got, win, doc, unbind };
+    }
+
+    it('a release reaches the core even while a drawn screen has the presses', async () => {
+      let drawn = false;
+      const taken: GbaKey[] = [];
+      const { win, calls } = await bound((k, repeat) => {
+        if (!drawn) return false;
+        if (!repeat) taken.push(k);
+        return true;
+      });
+      win.dispatchEvent(key('keydown', 'ArrowUp')); // walking...
+      drawn = true; // ...when the room screen comes up
+      win.dispatchEvent(key('keydown', 'z'));
+      win.dispatchEvent(key('keyup', 'ArrowUp'));
+      expect(taken).toEqual(['a']);
+      expect(calls).toEqual(['press up', 'release up']);
+    });
+
+    it('lets go of everything when the window blurs or the tab hides', async () => {
+      const { emu, win, doc, calls } = await bound();
+      win.dispatchEvent(key('keydown', 'ArrowUp'));
+      emu.press('b'); // a pad or the touch layer, holding its own
+      win.dispatchEvent(new Event('blur'));
+      expect(emu.keys()).toBe(0);
+      expect(calls).toEqual(['press up', 'press b', 'release b', 'release up']);
+
+      win.dispatchEvent(key('keydown', 'z'));
+      doc.dispatchEvent(new Event('visibilitychange')); // shown: nothing to do
+      expect(emu.keys()).toBe(1 << KEY_BIT.a);
+      doc.hidden = true;
+      doc.dispatchEvent(new Event('visibilitychange'));
+      expect(emu.keys()).toBe(0);
+    });
+
+    it('ignores keys it does not map, and unbinds', async () => {
+      const { emu, win, calls, unbind } = await bound();
+      const other = key('keydown', 'q');
+      win.dispatchEvent(other);
+      expect(other.defaultPrevented).toBe(false);
+      unbind();
+      win.dispatchEvent(key('keydown', 'z'));
+      expect(emu.keys()).toBe(0);
+      expect(calls).toEqual([]);
+    });
   });
 
   it('keeps its RAM views between reads, and remakes them for a new core or a new heap (POK-330 #65)', async () => {

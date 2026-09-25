@@ -342,6 +342,51 @@ export class Emulator {
     return this.held;
   }
 
+  /** Lets go of every key the core holds, whoever pressed it. */
+  releaseAll(): void {
+    this.setKeys(0);
+  }
+
+  /** A keyboard, as GBA keys (POK-330 #56). A press can be taken by something drawn
+   *  over the game (`divert` returns true); a release always reaches the core, since
+   *  letting go of a key that is not down is nothing -- a key held as a drawn screen
+   *  came up used to stay down into the next match. And every key is let go when the
+   *  page loses the player (the window blurs, the tab hides): the keyup for a key held
+   *  across that lands somewhere this page never hears. Returns an unbind. */
+  bindKeyboard(
+    map: Readonly<Record<string, GbaKey>>,
+    divert: (key: GbaKey, repeat: boolean) => boolean = () => false,
+    on: { win: EventTarget; doc: EventTarget & { readonly hidden: boolean } } = { win: window, doc: document },
+  ): () => void {
+    const keyOf = (e: Event): GbaKey | undefined => {
+      const key = map[(e as KeyboardEvent).key] as GbaKey | undefined;
+      if (key) e.preventDefault();
+      return key;
+    };
+    const down = (e: Event) => {
+      const key = keyOf(e);
+      if (key && !divert(key, (e as KeyboardEvent).repeat)) this.press(key);
+    };
+    const up = (e: Event) => {
+      const key = keyOf(e);
+      if (key) this.release(key);
+    };
+    const away = () => this.releaseAll();
+    const hidden = () => {
+      if (on.doc.hidden) this.releaseAll();
+    };
+    on.win.addEventListener('keydown', down);
+    on.win.addEventListener('keyup', up);
+    on.win.addEventListener('blur', away);
+    on.doc.addEventListener('visibilitychange', hidden);
+    return () => {
+      on.win.removeEventListener('keydown', down);
+      on.win.removeEventListener('keyup', up);
+      on.win.removeEventListener('blur', away);
+      on.doc.removeEventListener('visibilitychange', hidden);
+    };
+  }
+
   // ---- memory -----------------------------------------------------------------------
   // Views over the shared heap, made once per boot and kept (POK-330 #65): the frame
   // listeners make ~290 reads a frame while the core thread waits on them, and a wasm

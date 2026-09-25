@@ -394,30 +394,13 @@ const KEYBOARD_MAP: Record<string, GbaKey> = {
 };
 
 function wireKeyboard(emu: Emulator): () => void {
-  const down = (e: KeyboardEvent) => {
-    const key = KEYBOARD_MAP[e.key];
-    if (!key) return;
-    e.preventDefault();
-    // A drawn screen (POK-320) has the keys; the game under it hears nothing.
-    if (stage?.active) {
-      if (!e.repeat) stage.key(key);
-      return;
-    }
-    emu.press(key);
-  };
-  const up = (e: KeyboardEvent) => {
-    const key = KEYBOARD_MAP[e.key];
-    if (!key) return;
-    e.preventDefault();
-    if (stage?.active) return;
-    emu.release(key);
-  };
-  addEventListener('keydown', down);
-  addEventListener('keyup', up);
-  return () => {
-    removeEventListener('keydown', down);
-    removeEventListener('keyup', up);
-  };
+  // A drawn screen (POK-320) has the presses; the game under it hears nothing -- except
+  // the releases, which always go through (POK-330 #56, Emulator.bindKeyboard).
+  return emu.bindKeyboard(KEYBOARD_MAP, (key, repeat) => {
+    if (!stage?.active) return false;
+    if (!repeat) stage.key(key);
+    return true;
+  });
 }
 
 // ---- input: gamepad -------------------------------------------------------------------
