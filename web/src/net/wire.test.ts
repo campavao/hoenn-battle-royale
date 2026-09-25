@@ -27,6 +27,7 @@ const SAMPLES: Msg[] = [
   { t: 'accept', seat: 5, opponent: 2, nonce: 7 },
   { t: 'decline', seat: 5, opponent: 2, nonce: 7, why: 'busy' },
   { t: 'bt', seat: 2, seq: 9, data: [1, 2, 3, 255] },
+  { t: 'bt', seat: 2, seq: 9, data: [1], fight: 7 * 0x10000 + 3 },
   {
     t: 'party', seat: 2, mons: [{
       species: 1, level: 50, hp: 80, maxHp: 100, status: 0,

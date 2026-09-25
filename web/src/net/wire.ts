@@ -172,6 +172,7 @@ export interface BlockMsg {
   seat: number; // whose block this is
   seq: number; // 0..65535, the link exchange's own counter
   data: number[]; // the block bytes, at most 256 (Emerald's BLOCK_BUFFER_SIZE)
+  fight?: number; // the challenge that started the fight (bridge.ts's fightOf); JSON only
 }
 
 /** A link battle starting, published by the challenger so a spectator can replay it as
@@ -919,7 +920,10 @@ const decoders: Record<string, Decoder> = {
     const data = m.data;
     if (!Array.isArray(data) || data.length > 256) fail('bad block data');
     for (const b of data) if (typeof b !== 'number' || !Number.isInteger(b) || b < 0 || b > 255) fail('bad block byte');
-    return { t: 'bt', seat: reqSeat(m), seq: reqInt(m, 'seq', 0, 0xffff), data: data as number[] };
+    const out: BlockMsg = { t: 'bt', seat: reqSeat(m), seq: reqInt(m, 'seq', 0, 0xffff), data: data as number[] };
+    const fight = optInt(m, 'fight', 0, (MAX_SEAT + 1) * 0x10000 - 1);
+    if (fight !== undefined) out.fight = fight;
+    return out;
   },
 
   // A published battle's setup and its action stream (POK-233). Both carry raw ROM

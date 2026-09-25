@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BLOCKS_KEPT, Bridge } from './bridge';
+import { BLOCKS_KEPT, Bridge, fightOf } from './bridge';
 import { MAILBOX, Mailbox } from './mailbox';
 import { POSITIONAL_CAP, RomPort } from './romport';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
@@ -110,13 +110,14 @@ describe('Bridge', () => {
 
     romEmit({ t: 'challenge', seat: 0, opponent: 7, nonce: 42 });
     frame();
+    const challenge = { t: 'challenge', seat: 2, opponent: 7, nonce: 42 } as const;
     // Broadcast, not addressed: a bot is not a member of the room, so `to` its seat
     // reached nobody and the host walking it never heard the challenge (POK-238).
     expect(socket.sent[0]).toEqual({ type: 'all', m: { t: 'challenge', seat: 2, opponent: 7, nonce: 42 } });
 
     romEmit({ t: 'bt', seat: 0, seq: 1, data: [9, 9] });
     frame();
-    expect(socket.sent[1]).toEqual({ type: 'to', id: 7, m: { t: 'bt', seat: 2, seq: 1, data: [9, 9] } });
+    expect(socket.sent[1]).toEqual({ type: 'to', id: 7, m: { t: 'bt', seat: 2, seq: 1, data: [9, 9], fight: fightOf(challenge) } });
   });
 
   it('updates the roster from both directions and from the relay roster event', () => {
@@ -363,8 +364,11 @@ function roster(socket: { receive(msg: Record<string, unknown>): void }, ids: nu
   });
 }
 
+const block = (seat: number, seq: number, fight?: number) => ({ t: 'bt', seat, seq, data: [seq], ...(fight === undefined ? {} : { fight }) });
+/** The fight a challenge starts (POK-331 #3): every block sent in it says so. */
+const F = (challenger: number, nonce: number) => fightOf({ t: 'challenge', seat: challenger, opponent: 0, nonce });
+
 describe('a link battle, across a blip (POK-330 #20, #7)', () => {
-  const block = (seat: number, seq: number) => ({ t: 'bt', seat, seq, data: [seq] });
 
   it('drops a block when it knows no opponent, rather than telling the whole room', () => {
     const { romEmit, frame, socket, bridge } = joined();
@@ -388,14 +392,14 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     again.resendBlocks();
     // The last few, to the opponent alone: never the room.
     expect(socket.sent).toEqual(
-      Array.from({ length: BLOCKS_KEPT }, (_, i) => ({ type: 'to', id: 7, m: block(2, i + 2) })),
+      Array.from({ length: BLOCKS_KEPT }, (_, i) => ({ type: 'to', id: 7, m: block(2, i + 2, F(7, 1)) })),
     );
     expect(again.linesFor(7)).toEqual({ win: 'HA' });
 
     socket.sent.length = 0;
     romEmit({ t: 'bt', seat: 0, seq: 9, data: [9] });
     frame();
-    expect(socket.sent).toEqual([{ type: 'to', id: 7, m: block(2, 9) }]);
+    expect(socket.sent).toEqual([{ type: 'to', id: 7, m: block(2, 9, F(7, 1)) }]);
   });
 
   it('takes a block only from the seat it is fighting, and each one once', () => {
@@ -424,6 +428,21 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1), block(7, 2), block(7, 1)]);
   });
 
+  // POK-331 #3. A seat whose socket went across the end of one fight and a new challenge
+  // between the same two seats said the last fight's blocks again on its way back, and the
+  // new fight took the first of them as its own next.
+  it('takes no block of the last fight between the same two seats into the next one', () => {
+    const { socket, frame, romDrainIn, romEmit } = joined();
+    socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 1 } });
+    socket.receive({ type: 'recv', from: 7, m: block(7, 1, F(7, 1)) });
+    romEmit({ t: 'result', seat: 0, outcome: 'lose' });
+    frame();
+    socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 2 } });
+    socket.receive({ type: 'recv', from: 7, m: block(7, 3, F(7, 1)) }); // 7, back, saying fight 1's again
+    socket.receive({ type: 'recv', from: 7, m: block(7, 1, F(7, 2)) });
+    expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1), block(7, 1)]);
+  });
+
   it('says its last blocks again when the opponent is back in the room', () => {
     const { romEmit, frame, socket } = joined();
     const roster = (ids: number[]) =>
@@ -437,7 +456,7 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     roster([1, 2, 9]); // 7's socket went: what we send now goes nowhere
     socket.sent.length = 0;
     roster([1, 2, 7, 9]);
-    expect(socket.sent).toEqual([{ type: 'to', id: 7, m: block(2, 1) }]);
+    expect(socket.sent).toEqual([{ type: 'to', id: 7, m: block(2, 1, F(2, 1)) }]);
   });
 
   // The ROM says RESULT seconds after the last exchange. Forgetting our blocks then left an
@@ -454,8 +473,8 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     socket.sent.length = 0;
     roster(socket, [1, 2, 7, 9]);
     expect(socket.sent).toEqual([
-      { type: 'to', id: 7, m: block(2, 1) },
-      { type: 'to', id: 7, m: block(2, 2) },
+      { type: 'to', id: 7, m: block(2, 1, F(2, 1)) },
+      { type: 'to', id: 7, m: block(2, 2, F(2, 1)) },
     ]);
   });
 
@@ -483,7 +502,7 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     socket.sent.length = 0;
     romEmit({ t: 'bt', seat: 0, seq: 1, data: [1] });
     expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1), block(7, 2)]);
-    expect(socket.sent).toEqual([{ type: 'to', id: 7, m: block(2, 1) }]);
+    expect(socket.sent).toEqual([{ type: 'to', id: 7, m: block(2, 1, F(7, 1)) }]);
 
     // Our RESULT is the end of it: the next challenge is a new fight.
     romEmit({ t: 'result', seat: 0, outcome: 'win' });
@@ -492,7 +511,7 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     socket.sent.length = 0;
     romEmit({ t: 'bt', seat: 0, seq: 1, data: [1] });
     frame();
-    expect(socket.sent).toEqual([{ type: 'to', id: 9, m: block(2, 1) }]);
+    expect(socket.sent).toEqual([{ type: 'to', id: 9, m: block(2, 1, F(9, 2)) }]);
   });
 
   it('takes the latest challenge until a block has moved, as a ROM that has not started does', () => {
@@ -503,7 +522,7 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     socket.sent.length = 0;
     romEmit({ t: 'bt', seat: 0, seq: 1, data: [1] });
     frame();
-    expect(socket.sent).toEqual([{ type: 'to', id: 9, m: block(2, 1) }]);
+    expect(socket.sent).toEqual([{ type: 'to', id: 9, m: block(2, 1, F(9, 1)) }]);
   });
 
   it('stands the fight down when the ROM is back on the map with no RESULT (the watchdog)', () => {
@@ -516,7 +535,7 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     socket.sent.length = 0;
     romEmit({ t: 'bt', seat: 0, seq: 1, data: [1] });
     frame();
-    expect(socket.sent).toEqual([{ type: 'to', id: 9, m: block(2, 1) }]);
+    expect(socket.sent).toEqual([{ type: 'to', id: 9, m: block(2, 1, F(9, 1)) }]);
   });
 
   it('carries a fight in progress into the Bridge a rejoin builds', () => {

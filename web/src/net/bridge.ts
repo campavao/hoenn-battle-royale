@@ -20,7 +20,7 @@
 import { Mailbox, type RamAccess } from './mailbox';
 import { RomPort } from './romport';
 import { crossesToRom } from './slots';
-import { decode, type BlockMsg, type Lines, PROTOCOL, type Msg } from './wire';
+import { decode, type BlockMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg } from './wire';
 import { Roster } from '../match/roster';
 import { RelayClient, type RecvEvent, type RosterEvent } from './relay';
 import { admits } from './trust';
@@ -76,11 +76,18 @@ export interface LinkCarry {
   sent: BlockMsg[];
   lastRecvSeq: number;
   fighting: boolean;
+  fight: number | null;
 }
 
 /** How many of our own last blocks are kept to say again. The link is lockstep -- one
  *  block each way, then the next -- so what a blip can lose is the last one or two. */
 export const BLOCKS_KEPT = 4;
+
+/** A fight is the challenge that started it: the challenger's seat and its ROM's nonce
+ *  (POK-331 #3). Both pages heard that one challenge, so both name the fight alike. */
+export function fightOf(c: ChallengeMsg): number {
+  return c.seat * 0x10000 + (c.nonce & 0xffff);
+}
 
 function msgSeat(msg: Msg): number | undefined {
   return 'seat' in msg ? (msg as { seat?: number }).seat : undefined;
@@ -105,6 +112,10 @@ export class Bridge {
 
   private readonly protocol: number;
   private opponentSeat: number | null = null;
+  /** The fight our blocks are part of (fightOf its challenge), stamped on each one we send
+   *  and checked on each one we take: a rejoin says its last few again, and after a new
+   *  challenge between the same two seats they are the last fight's (POK-331 #3). */
+  private fightId: number | null = null;
   /** Our last few blocks of the current fight, for saying again after a gap (#7). */
   private sentBlocks: BlockMsg[] = [];
   /** The last block of the current fight the ROM was handed. The other side says its
@@ -164,6 +175,7 @@ export class Bridge {
       this.sentBlocks = [...opts.carry.sent];
       this.lastRecvSeq = opts.carry.lastRecvSeq;
       this.fighting = opts.carry.fighting;
+      this.fightId = opts.carry.fight;
     }
 
     this.unsubs.push(opts.emu.onFrame(() => this.onFrame()));
@@ -200,6 +212,7 @@ export class Bridge {
       sent: [...this.sentBlocks],
       lastRecvSeq: this.lastRecvSeq,
       fighting: this.fighting,
+      fight: this.fightId,
     };
   }
 
@@ -272,9 +285,10 @@ export class Bridge {
         return;
       }
       this.fighting = true;
-      this.sentBlocks.push(stamped);
+      const block: BlockMsg = this.fightId === null ? stamped : { ...stamped, fight: this.fightId };
+      this.sentBlocks.push(block);
       if (this.sentBlocks.length > BLOCKS_KEPT) this.sentBlocks.shift();
-      this.relay.to(this.opponentSeat, stamped);
+      this.relay.to(this.opponentSeat, block);
       return;
     }
     // A challenge is broadcast too, not addressed: a bot is not a member of the room, so
@@ -336,6 +350,12 @@ export class Bridge {
       this.refusedCount++;
       return false;
     }
+    // ...and from this fight: the last one's, said again by a rejoin, would be read as this
+    // one's next (POK-331 #3). A block with no fight on it is from a page before that.
+    if (msg.fight !== undefined && this.fightId !== null && msg.fight !== this.fightId) {
+      this.refusedCount++;
+      return false;
+    }
     if (msg.seq <= this.lastRecvSeq) return false;
     this.lastRecvSeq = msg.seq;
     this.fighting = true;
@@ -387,8 +407,13 @@ export class Bridge {
     // Somebody else's challenge to us while we fight is one our ROM ignores (#20). Our
     // own is never mid-fight: br_engage.c only challenges from the field.
     if (msg.seat !== this.seat && this.fighting) return;
-    this.opponentSeat = msg.seat === this.seat ? msg.opponent : msg.seat;
-    // A new fight, and a new count: the ROM numbers every fight's blocks from one.
+    this.pointAt(msg.seat === this.seat ? msg.opponent : msg.seat, fightOf(msg));
+  }
+
+  /** A new fight, and a new count: the ROM numbers every fight's blocks from one. */
+  private pointAt(seat: number, fight: number | null): void {
+    this.opponentSeat = seat;
+    this.fightId = fight;
     this.sentBlocks = [];
     this.lastRecvSeq = 0;
     this.opponentAway = false;
