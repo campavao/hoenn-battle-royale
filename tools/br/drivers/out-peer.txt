@@ -1,0 +1,64 @@
+# out-peer: the seat we are fighting goes out, and the fight is ours (POK-330 #5).
+#
+# The hello watchdog (netlink-silent.txt) only covers a peer that never said a word. One
+# that answered the start exchange and then closed its tab left the survivor at the
+# action menu waiting for blocks that were not coming -- and everybody watching the
+# fight waiting with them, because only a fighter's RESULT lets a replay go. The host
+# says `out` for a seat the relay has stopped seeing; now the ROM listens.
+#
+# netlink-loop.txt's session: we challenge seat 1 with loopback on, so the fight is real
+# up to the first choice. Then seat 1 goes out.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# CHALLENGE: challenger 00 (us), opponent 01, nonce 0
+pokebytes gDecompressionBuffer 00 01 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 600
+expect u8 gBrNetlink 1
+expect u8 gWirelessCommType 5
+tap A
+wait 90
+tap A
+wait 200
+# STATE_WAIT_ACTION_CHOSEN: mid-fight, nothing decided.
+expect u8 gBattleCommunication 2
+expect u8 gBattleOutcome 0
+shot menu
+# OUT: seat 1.
+pokebytes gDecompressionBuffer 01
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 120
+# The session is closed, the fight went down as won (lastOutcome = B_OUTCOME_WON, the
+# outcome CB2_BrReturnFromBattle sent as our RESULT), and we are still in the match.
+expect u8 gBrNetlink 0
+expect u8 gWirelessCommType 0
+expect u8 gBrNetlink+11 1
+expect u8 gBrNetlink+20 0
+expect u8 gBrMatch 2
+shot back
+# On our own feet: a step is taken, which is the overworld's callback1 and its input.
+expect u16 gBrOwnPos+4 16
+hold DOWN 60
+wait 20
+expectge u16 gBrOwnPos+4 17
+# A challenge still waiting for us to leave a menu goes with its challenger. Seat 2 is
+# placed out of our eyeline; with the START menu open, its CHALLENGE and its OUT land in
+# the same frame, and the menu is not closed for a fight that is not coming.
+tap START
+wait 40
+pokebytes gDecompressionBuffer 02 01 00 09 14 00 08 00 01 01 02
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 02 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+pokebytes gDecompressionBuffer 02
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 30
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+16 0xFF
+expect u8 gBrSeats+32 0
+shot menu-stays
+say out peer ok

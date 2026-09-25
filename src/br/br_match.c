@@ -24,6 +24,7 @@
 #include "br/br_loot.h"
 #include "br/br_spectate.h"
 #include "br/br_hud.h"
+#include "br/br_netlink.h"
 
 EWRAM_DATA struct BrMatch gBrMatch = {0};
 // START can span slots once there are more than six spawn rows. The buffer is on the
@@ -169,6 +170,22 @@ static void HandleResult(const u8 *payload, u8 len)
         sWinPending = TRUE;
 }
 
+// OUT {seat}: somebody is out of the match -- beaten, fogged, or gone from the room (the
+// host says so for a seat the relay has stopped seeing, POK-271). The page has always
+// pushed these into every ROM, and nothing here listened: an eliminated trainer's ghost
+// kept standing where it fell, still there to be challenged, and a link battle whose
+// peer closed the tab waited for blocks for the rest of the match (POK-330 #5).
+static void HandleOut(const u8 *payload, u8 len)
+{
+    const u8 *d;
+    u8 n = BrWire_Unframe(payload, len, &d);
+
+    if (n < 1 || d[0] >= BR_MAX_SEATS)
+        return;
+    BrGhosts_Out(d[0]);
+    BrNetlink_PeerOut(d[0]);
+}
+
 static void HandleClock(const u8 *payload, u8 len)
 {
     const u8 *d;
@@ -258,6 +275,7 @@ void BrMatch_Init(void)
     BrNet_On(BR_MSG_START | BR_MSG_CONT, HandleStartCont);
     BrNet_On(BR_MSG_CLOCK, HandleClock);
     BrNet_On(BR_MSG_RESULT, HandleResult);
+    BrNet_On(BR_MSG_OUT, HandleOut);
     sWinPending = FALSE;
 }
 

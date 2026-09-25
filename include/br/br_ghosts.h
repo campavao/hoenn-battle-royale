@@ -56,6 +56,10 @@ void BrGhosts_Place(u8 seat, u8 skin, u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 d
 void BrGhosts_Step(u8 seat, u8 dir);
 void BrGhosts_Face(u8 seat, u8 dir);
 void BrGhosts_Remove(u8 seat);
+// The seat is out of the match (BR_MSG_OUT): its ghost goes, and stays gone. An
+// eliminated trainer's page keeps sending where it is -- it is spectating now -- so a
+// PLACE or STEP after the OUT is not them coming back (POK-330 #5).
+void BrGhosts_Out(u8 seat);
 // The busy bubble over one seat's ghost (POK-266): "!" in a fight, "?" in a menu.
 // TRUE when one fired.
 bool8 BrGhosts_Emote(u8 seat);

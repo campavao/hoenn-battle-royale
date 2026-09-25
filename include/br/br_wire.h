@@ -112,7 +112,8 @@
 // Payload (2 bytes): seat u8, index u8 (0..5)
 #define BR_MSG_FAINT 8
 
-// ROM <-> page: this seat has been eliminated from the match.
+// ROM <-> page: this seat has been eliminated from the match. A ROM hearing it takes the
+// seat's ghost off for good and wins an undecided link battle against it (br_match.c).
 // Payload (1 byte): seat u8
 #define BR_MSG_OUT 9
 

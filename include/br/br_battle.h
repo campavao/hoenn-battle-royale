@@ -70,7 +70,8 @@ void BrBattle_DrawClock(void);
 void BrBattle_DrawClockSecs(u8 secs);
 void BrBattle_HideClock(void);
 // battle_main.c: tear a battle down that the engine cannot end on its own, and hand
-// the trainer back to gMain.savedCallback. Only br_netlink.c's watchdog calls it.
+// the trainer back to gMain.savedCallback. Only br_netlink.c calls it: a peer that
+// never answered, or one that went out mid-fight.
 void BrBattle_Unwind(void);
 
 #endif // GUARD_BR_BATTLE_H

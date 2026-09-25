@@ -26,6 +26,10 @@ EWRAM_DATA u8 gBrOwnEvents = 0;
 EWRAM_DATA u8 gBrMySeat = 0;
 EWRAM_DATA u8 gBrMySkin = 0;
 static EWRAM_DATA u8 sOwnValid = 0;
+// Seats the match has put out, a bit each (BrGhosts_Out). A reboot is a new match.
+STATIC_ASSERT(BR_MAX_SEATS <= 32, BrOutSeatsFitAWord)
+static EWRAM_DATA u32 sOutSeats = 0;
+#define SEAT_IS_OUT(seat) (sOutSeats & ((u32)1 << (seat)))
 
 // Skin -> object event graphics. Index 0 is the default; the shell's career picks.
 // The wardrobe (POK-282). Cam: "I should be able to pick kind of like any sprites -- the
@@ -272,6 +276,7 @@ void BrGhosts_Init(void)
     }
     gBrOwnEvents = 0;
     sOwnValid = FALSE;
+    sOutSeats = 0;
 }
 
 void BrGhosts_Place(u8 seat, u8 skin, u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 dir)
@@ -281,6 +286,9 @@ void BrGhosts_Place(u8 seat, u8 skin, u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 d
     // A map gMapGroups does not have is nowhere: following that seat would warp there
     // (br_spectate.c's FollowTick), so it is not placed at all (POK-330 #43).
     if (seat >= BR_MAX_SEATS || !BrWire_MapOk(mapGroup, mapNum))
+        return;
+    // Out is out: an eliminated seat still walks, as a spectator, and nobody sees it.
+    if (SEAT_IS_OUT(seat))
         return;
     s = &gBrSeats[seat];
     // A place is authoritative: drop whatever the object was doing and put it there.
@@ -338,6 +346,14 @@ void BrGhosts_Remove(u8 seat)
     gBrSeatBusy[seat] = BR_BUSY_MAP;
     Despawn(seat);
     gBrSeats[seat].present = FALSE;
+}
+
+void BrGhosts_Out(u8 seat)
+{
+    if (seat >= BR_MAX_SEATS)
+        return;
+    sOutSeats |= (u32)1 << seat;
+    BrGhosts_Remove(seat);
 }
 
 // Feed one queued walk to the object, or snap it when it fell too far behind.

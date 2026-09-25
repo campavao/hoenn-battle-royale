@@ -377,7 +377,12 @@ void BrNetlink_StartBattle(u8 myId, u8 peerSeat)
     gBrNetlink.recvSeq = 0;
     gBrNetlink.pendingLen = 0;
     gBrNetlink.startState = 1;
+    gBrNetlink.peerOut = FALSE;
     sRecvAsm.type = 0;
+    // No outcome yet. The engine clears it only in BeginBattleIntro, after the start
+    // exchange, and until then it still says how the last fight went -- which would read
+    // as this one already decided (TickPeerOut).
+    gBattleOutcome = 0;
     gWirelessCommType = BR_WIRELESS_NETLINK;
     gReceivedRemoteLinkPlayers = TRUE;
     gLinkCallback = NULL;
@@ -409,11 +414,68 @@ void BrNetlink_Init(void)
 // only thing a player can do about it is reload -- which the play-test did.
 #define BR_NETLINK_HELLO (10 * 60)
 
+// The session ends without the engine ending it: tear down whatever it got to and hand
+// the trainer back to the field. The caller has set gBattleOutcome.
+static void Abandon(void)
+{
+    if (gMain.inBattle)
+    {
+        // The start locked the field (BrNetlink_StartBattle) and the battle's own
+        // ending is what would have unlocked it.
+        UnlockPlayerFieldControls();
+        BrBattle_Unwind(); // -> gMain.savedCallback, which is CB2_BrReturnFromBattle
+        // ...and the overworld's own callback1, which the battle never got far enough
+        // to save: without it the map comes back and answers nothing, which is the
+        // freeze again wearing the field's clothes.
+        if (gMain.callback1 == NULL)
+            gMain.callback1 = CB1_Overworld;
+        return;
+    }
+    // Still in the start task: no battle to tear down, just the session to close.
+    if (gBrNetlink.startState != 0 && FuncIsActiveTask(Task_BrStartLinkBattle))
+        DestroyTask(FindTaskIdByFunc(Task_BrStartLinkBattle));
+    gBrNetlink.startState = 0;
+    Close();
+    UnlockPlayerFieldControls();
+}
+
+// The peer is out of the match (BrNetlink_PeerOut): beaten somewhere else, fogged, or
+// gone from the room. Nothing more is coming from them, so the fight is ours, and the
+// RESULT CB2_BrReturnFromBattle sends is what lets anyone watching it go.
+//
+// Once there is a battle to end: the start task runs into one by itself within a couple
+// of seconds, and closing the session under its fade would leave the screen black. A
+// fight the engine has already decided is left alone -- that is how a peer who just lost
+// to us goes out, and a draw is still a draw.
+static void TickPeerOut(void)
+{
+    if (!gMain.inBattle)
+        return;
+    gBrNetlink.peerOut = FALSE;
+    if (gBattleOutcome != 0)
+        return;
+    gBattleOutcome = B_OUTCOME_WON;
+    Abandon();
+}
+
+void BrNetlink_PeerOut(u8 seat)
+{
+    if (gBrNetlink.pendingPeer == seat)
+        gBrNetlink.pendingPeer = 0xFF;
+    if (gBrNetlink.active && seat == gBrNetlink.peerSeat)
+        gBrNetlink.peerOut = TRUE;
+}
+
 static void TickWatchdog(void)
 {
     if (!gBrNetlink.active)
     {
         gBrNetlink.silent = 0;
+        return;
+    }
+    if (gBrNetlink.peerOut)
+    {
+        TickPeerOut();
         return;
     }
     if (gBrNetlink.blocksRecv != 0 || gBrNetlink.loopback)
@@ -434,25 +496,7 @@ static void TickWatchdog(void)
     // Their ghost is still standing in our eyeline, and the engage would challenge it
     // again the moment the grace was up.
     BrEngage_NoAnswer(gBrNetlink.peerSeat);
-    if (gMain.inBattle)
-    {
-        // The start locked the field (BrNetlink_StartBattle) and the battle's own
-        // ending is what would have unlocked it.
-        UnlockPlayerFieldControls();
-        BrBattle_Unwind(); // -> gMain.savedCallback, which is CB2_BrReturnFromBattle
-        // ...and the overworld's own callback1, which the battle never got far enough
-        // to save: without it the map comes back and answers nothing, which is the
-        // freeze again wearing the field's clothes.
-        if (gMain.callback1 == NULL)
-            gMain.callback1 = CB1_Overworld;
-        return;
-    }
-    // Still in the start task: no battle to tear down, just the session to close.
-    if (gBrNetlink.startState != 0 && FuncIsActiveTask(Task_BrStartLinkBattle))
-        DestroyTask(FindTaskIdByFunc(Task_BrStartLinkBattle));
-    gBrNetlink.startState = 0;
-    Close();
-    UnlockPlayerFieldControls();
+    Abandon();
 }
 
 void BrNetlink_Tick(void)

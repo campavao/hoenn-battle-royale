@@ -1,0 +1,50 @@
+# out-ghost: an eliminated seat's ghost leaves the map, and stays gone (POK-330 #5).
+#
+# The page has always pushed every `out` into every ROM, and no handler listened: the
+# fallen kept standing where they fell, in everybody's eyeline, and could still be
+# challenged. Nor is one removal enough on its own -- an eliminated trainer spectates,
+# its ROM follows whoever it watches, and its page keeps forwarding where it walks, so
+# the next PLACE or STEP from that seat would put the ghost straight back.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# Seat 1 on Littleroot at (15,16) facing WEST: three tiles east of us, engage.txt's
+# cell, in our eyeline. Still the lobby (phase NONE), so nobody challenges anybody.
+# PLACE: seat, hasMap, group, num, x u16, y u16, dir, 1, skin
+pokebytes gDecompressionBuffer 01 01 00 09 0F 00 10 00 03 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 20
+expect u8 gBrSeats+16 1
+expectne u8 gBrSeats+25 0xFF
+shot standing
+# OUT: seat 1.
+pokebytes gDecompressionBuffer 01
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 20
+expect u8 gBrSeats+16 0
+expect u8 gBrSeats+25 0xFF
+shot gone
+# Their page goes on forwarding where their ROM is: a PLACE on the same cell, and a STEP
+# (seat, dir, x u16, y u16, group, num) one tile north of it. Neither brings them back.
+pokebytes gDecompressionBuffer 01 01 00 09 0F 00 10 00 03 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 01 02 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 20
+expect u8 gBrSeats+16 0
+expect u8 gBrSeats+25 0xFF
+# The match proper, with that cell still in our eyeline: nothing there to challenge.
+poke u8 gBrMatch 2
+wait 150
+expect u16 gBrEngage+4 0
+expect u8 gBrNetlink 0
+# Somebody still in it is untouched: seat 2 on the same cell is seen and challenged.
+pokebytes gDecompressionBuffer 02 01 00 09 0F 00 10 00 03 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 20
+expect u8 gBrSeats+32 1
+expect u16 gBrEngage+4 1
+expect u8 gBrEngage+7 2
+shot still-in-it
+say out ghost ok

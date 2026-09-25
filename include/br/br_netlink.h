@@ -26,6 +26,7 @@ struct BrNetlink
     /* 16 */ u8 pendingPeer;  // a CHALLENGE that landed in a menu waits here, 0xFF none
     /* 17 */ u8 stableFrames; // frames the current non-field callback2 has held
     /* 18 */ u16 silent;      // frames this session has been open with nothing heard
+    /* 20 */ u8 peerOut;      // the peer went out mid-session: the fight is ours
 };
 
 extern struct BrNetlink gBrNetlink;
@@ -35,6 +36,9 @@ void BrNetlink_Tick(void);
 // Opens a session with the peer seat, as link id myId, and starts the link battle
 // (fade, CB2_InitBattle) from the overworld.
 void BrNetlink_StartBattle(u8 myId, u8 peerSeat);
+// BR_MSG_OUT for a seat (br_match.c): a challenge from them that is still waiting is
+// dropped, and a fight with them that has no outcome yet is won (POK-330 #5).
+void BrNetlink_PeerOut(u8 seat);
 
 // link.c asks these while gWirelessCommType == BR_WIRELESS_NETLINK.
 bool8 BrNetlink_SendBlock(const void *src, u16 size);
