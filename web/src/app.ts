@@ -1498,6 +1498,13 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     paradeDone: matchBase !== undefined ? () => emu.read(matchBase, 8) === BR_PHASE_DONE : undefined,
   });
   let host: HostRole | null = null;
+  /** The way out of solo: the lobby, having let go of the match -- its director's loop,
+   *  its bots' pump -- the way the room's teardownHost does, rather than leaving it all to
+   *  the reload (POK-331 #13: solo kept its loop's disposer and never called it). */
+  const leaveSolo = (): void => {
+    host?.dispose();
+    backToLobby();
+  };
   // A solo match ended in complete silence: the director declared a winner, the round
   // was written down, and the player was left standing in Hoenn with nothing on screen
   // to say so. `Results` was only ever built in the room path. Solo has everything it
@@ -1521,7 +1528,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       // Solo has no room to go back to, so the exit is the lobby -- which is what
       // backToLobby does, and there is no socket here for it to scatter. Won, it waits
       // for the Hall of Fame rather than a timer, the same as the room's champion.
-      exit: backToLobby,
+      exit: leaveSolo,
       // Solo has never kept anybody's party, so the champion's team is not drawn here.
       keepParties: false,
     },
@@ -1611,7 +1618,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // editing the URL.
   const leave = $('#match-leave') as HTMLButtonElement;
   leave.hidden = false;
-  leave.addEventListener('click', () => backToLobby());
+  leave.addEventListener('click', leaveSolo);
 }
 
 // ---- room: relay + bridge, opted into by the URL hash ------------------------------------
