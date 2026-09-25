@@ -32,7 +32,9 @@ import engageC from '../../src/br/br_engage.c?raw';
 import lootC from '../../src/br/br_loot.c?raw';
 import ringC from '../../src/br/br_ring.c?raw';
 import spectateC from '../../src/br/br_spectate.c?raw';
+import ghostsC from '../../src/br/br_ghosts.c?raw';
 import mapGroupsH from '../../include/constants/map_groups.h?raw';
+import eventObjectsH from '../../include/constants/event_objects.h?raw';
 import itemsH from '../../include/constants/items.h?raw';
 import varsH from '../../include/constants/vars.h?raw';
 import weatherH from '../../include/constants/weather.h?raw';
@@ -46,6 +48,7 @@ import serverJs from '../../relay/server.js?raw';
 import appTs from './app.ts?raw';
 import brainTs from './bots/brain.ts?raw';
 import lootTs from './match/loot.ts?raw';
+import uiData from './data/ui.json';
 import { BR_CONT_FLAG, BR_MSG } from './net/slots';
 import { MAILBOX } from './net/mailbox';
 import { MAX_SEAT, PARTY_BAG_MAX, PROTOCOL } from './net/wire';
@@ -77,6 +80,13 @@ function table(src: string, name: string): number[] {
   const m = new RegExp(`\\b${name}(?:\\[[^\\]]*\\])+\\s*=\\s*\\{([\\s\\S]*?)\\};`).exec(code);
   if (!m) throw new Error(`no table ${name}`);
   return [...m[1].matchAll(new RegExp(NUMBER, 'g'))].map((x) => Number(x[1]));
+}
+
+/** The names in `name[] = { A, B, ... };`, in order. */
+function names(src: string, name: string, prefix: string): string[] {
+  const m = new RegExp(`\\b${name}\\[\\]\\s*=\\s*\\{([^}]*)\\}`).exec(src);
+  if (!m) throw new Error(`no table ${name}`);
+  return m[1].match(new RegExp(`\\b${prefix}\\w+`, 'g')) ?? [];
 }
 
 /** Where `struct name { ... }`'s braces are, nested ones and all. */
@@ -449,5 +459,17 @@ describe('the rules a bot plays by the ROM\'s way', () => {
   it('a room code is the relay\'s alphabet and length', () => {
     expect(serverJs).toContain(`export const CODE_ALPHABET = "${CODE_ALPHABET}";`);
     expect(serverJs).toContain(`export const CODE_LENGTH = ${CODE_LENGTH};`);
+  });
+});
+
+// ---- generated data (POK-330 #59) ------------------------------------------------------------
+
+describe('ui.json, as tools/br/export-ui.py generated it', () => {
+  it('the skins are sSkinGraphics in br_ghosts.c, through event_objects.h', () => {
+    const gfx = new Map<string, number>();
+    for (const m of eventObjectsH.matchAll(/#define\s+(OBJ_EVENT_GFX_\w+)\s+(\d+)\b/g)) gfx.set(m[1], Number(m[2]));
+    const rom = names(ghostsC, 'sSkinGraphics', 'OBJ_EVENT_GFX_').map((n) => gfx.get(n));
+    expect(rom.length).toBeGreaterThan(0);
+    expect(uiData.skins, 're-run tools/br/export-ui.py').toEqual(rom);
   });
 });
