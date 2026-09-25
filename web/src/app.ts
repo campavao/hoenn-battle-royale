@@ -33,6 +33,7 @@ import {
   dealable,
   decideStart,
   onRefused,
+  StartCountdown,
   type StartDecision,
   type StartState,
 } from './match/room';
@@ -1685,8 +1686,6 @@ function wireRoom(
     card: null as { seat: number } | null,
     /** The match is on: the room screen is down and its controls gone. */
     started: false,
-    /** When a room that starts itself will (quick play, the daily). */
-    startAt: null as number | null,
     onStart: () => {},
   };
   roomCardSeat = () => room.card?.seat ?? null;
@@ -1701,6 +1700,13 @@ function wireRoom(
     stage.redraw();
   };
   setStatus(room.status);
+  /** A room that starts itself counts down on screen (quick play, the daily). */
+  const countdown = new StartCountdown({
+    ms: AUTO_START_MS,
+    redraw: () => {
+      if (!room.started) stage.redraw();
+    },
+  });
 
   const relay = new RelayClient();
   /** The one writer into our ROM's in-ring (POK-330 #44), shared by every Bridge this
@@ -1805,7 +1811,7 @@ function wireRoom(
       };
     });
     const cardEntry = room.card ? bridge?.roster.get(room.card.seat) : undefined;
-    const countdown = room.startAt !== null && !room.started ? Math.max(0, Math.ceil((room.startAt - performance.now()) / 1000)) : null;
+    const startsIn = room.started ? null : countdown.secondsLeft();
     const note = view && !room.started ? startNote(view) : '';
     if (!room.fatal) noteEl.textContent = note;
     return {
@@ -1817,7 +1823,7 @@ function wireRoom(
       isHost: view?.isHost ?? false,
       started: room.started,
       canStart: view ? canStart(view) : false,
-      countdown,
+      countdown: startsIn,
       options: view?.isHost ? hostOptions(view) : null,
       card: cardEntry
         ? {
@@ -1852,9 +1858,11 @@ function wireRoom(
     stage.show(roomScreenView);
   };
   const hideRoomScreen = () => {
+    // Any start consumes the count (Kanto's POK-167): left armed, it dealt the room's
+    // next match the moment it ran out, whatever was happening by then.
+    countdown.cancel();
     if (room.started) return;
     room.started = true;
-    room.startAt = null;
     if (stage.current === roomScreenView) stage.hide();
   };
   hideRoomHook = hideRoomScreen;
@@ -1863,10 +1871,6 @@ function wireRoom(
     if (started) hideRoomScreen();
     stage.redraw();
   };
-  // A room that starts itself counts down on screen.
-  setInterval(() => {
-    if (room.startAt !== null && !room.started) stage.redraw();
-  }, 1000);
   showRoomScreen();
 
   /** The room, as the page's host sees it: whichever Bridge the page has now, never one
@@ -1940,15 +1944,13 @@ function wireRoom(
     autoStarts: autoStarts(),
     isHost,
     roomStarted: room.started,
-    countingDown: room.startAt !== null,
+    countingDown: countdown.running,
     match,
   });
   /** Carries out what decideStart said. A countdown asks again when it runs out. */
   const act = (decision: StartDecision): void => {
-    if (decision.do === 'count-down') {
-      room.startAt = performance.now() + AUTO_START_MS;
-      setTimeout(() => act(decideStart({ t: 'countdown' }, startState())), AUTO_START_MS);
-    } else if (decision.do === 'deal') startDirector(decision.members);
+    if (decision.do === 'count-down') countdown.arm(() => act(decideStart({ t: 'countdown' }, startState())));
+    else if (decision.do === 'deal') startDirector(decision.members);
     else if (decision.do === 'take-over') startDirector(decision.members, true);
   };
 
@@ -2274,7 +2276,7 @@ function wireRoom(
    *  the old bots as people, and an heir resumed the match that had just been won. */
   const resetMatch = (): void => {
     session.endMatch();
-    room.startAt = null;
+    countdown.cancel();
     if (bridge) {
       bridge.roster.endMatch();
       if (controls.roster) bridge.roster.applyRoster(controls.roster);
@@ -2364,6 +2366,7 @@ function wireRoom(
       isHost = false;
       console.info('[room] stood down as host');
       teardownHost();
+      countdown.cancel(); // the room's start is the new host's now
     }
     // Back as the host after our own drop (POK-330 #47): the drop stopped the director,
     // and it picks the match up the way a promoted heir does, from where it stands.
@@ -2402,6 +2405,7 @@ function wireRoom(
   });
   /** A dead end is not one unless the page says where else to go: BACK TO LOBBY. */
   const deadEnd = (): void => {
+    countdown.cancel();
     if (room.fatal) return;
     room.fatal = true;
     noteEl.textContent = '';
@@ -2459,6 +2463,9 @@ function wireRoom(
       match.clockAt = performance.now();
     }
     teardownHost();
+    // ...and a count to a start this page may no longer be the host for: a rejoin as the
+    // host counts again from attach, and one as a guest leaves it to the heir.
+    countdown.cancel();
     stopSpectateLoop?.();
     // The room itself is over -- the host left, its hold ran out, or it showed us out --
     // and no new socket is coming (POK-330 #47): the same dead end a refused door is.

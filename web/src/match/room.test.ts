@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, type StartState } from './room';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, type StartState } from './room';
 import { freshMatch, noteMatch, ringClockLeft } from './lifecycle';
 import { Director, type DirectorWorld } from './director';
 import type { RosterEvent } from '../net/relay';
@@ -160,6 +160,72 @@ describe('when a match starts (POK-330 #42)', () => {
     expect(decideStart({ t: 'roster', members: [1] }, back)).toEqual({ do: 'nothing' });
     // ...and a room of two or more deals on its next roster at once, with no count
     expect(decideStart({ t: 'roster', members: [1, 2] }, back)).toEqual({ do: 'deal', members: [1, 2] });
+  });
+});
+
+// It was a bare setTimeout per count and a one-second redraw for the page's life, and
+// neither was ever cleared (POK-331 #13).
+describe("a room's countdown to its own start", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  const counting = () => {
+    const clock = { t: 0 };
+    const redraw = vi.fn();
+    const go = vi.fn();
+    const count = new StartCountdown({ ms: 10_000, redraw, now: () => clock.t });
+    const pass = (ms: number) => {
+      clock.t += ms;
+      vi.advanceTimersByTime(ms);
+    };
+    return { count, redraw, go, pass };
+  };
+
+  it('counts whole seconds down to the start, redrawing each one, and is over before it deals', () => {
+    const { count, redraw, go, pass } = counting();
+    expect(count.running).toBe(false);
+    expect(count.secondsLeft()).toBeNull();
+    let seenRunning: boolean | null = null;
+    go.mockImplementation(() => (seenRunning = count.running));
+    count.arm(go);
+    expect(count.secondsLeft()).toBe(10);
+    pass(2_500);
+    expect(count.secondsLeft()).toBe(8);
+    expect(redraw).toHaveBeenCalledTimes(2);
+    pass(7_500);
+    expect(go).toHaveBeenCalledTimes(1);
+    expect(seenRunning).toBe(false); // what `go` asks sees no count running
+    expect(vi.getTimerCount()).toBe(0); // and nothing left ticking
+    pass(10_000);
+    expect(redraw).toHaveBeenCalledTimes(9);
+    expect(go).toHaveBeenCalledTimes(1);
+  });
+
+  it('a start some other way lets go of the count and its redraw, and the count never deals', () => {
+    const { count, redraw, go, pass } = counting();
+    count.arm(go);
+    pass(3_000);
+    count.cancel(); // START pressed inside the count, or the page stood down
+    expect(count.running).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    pass(60_000);
+    expect(go).not.toHaveBeenCalled();
+    expect(redraw).toHaveBeenCalledTimes(3);
+  });
+
+  it('counts one count at a time: arming again starts over', () => {
+    const { count, go, pass } = counting();
+    count.arm(go);
+    pass(6_000);
+    count.arm(go);
+    expect(vi.getTimerCount()).toBe(2); // one timer, one redraw
+    pass(6_000);
+    expect(go).not.toHaveBeenCalled();
+    pass(4_000);
+    expect(go).toHaveBeenCalledTimes(1);
   });
 });
 

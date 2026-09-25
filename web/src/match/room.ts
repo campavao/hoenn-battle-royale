@@ -117,6 +117,63 @@ export const BOT_FILL = 8;
 
 export const AUTO_START_MS = 10_000; // "for now": a room starts 10s after hosting, or once 2+ seats
 
+/** A room's count to its own start (quick play, the daily), and the once-a-second redraw
+ *  that shows STARTS IN ticking: one count at a time, and the two let go of together
+ *  (POK-331 #13). They were a bare setTimeout per count and a redraw interval for the
+ *  page's life, and nothing cleared either: a START inside the count left it armed, to
+ *  deal again whenever it ran out -- Kanto's POK-167, "the room just went again" -- and a
+ *  page that had lost its socket or stood down counted on to a deal no longer its own. */
+export class StartCountdown {
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private tick: ReturnType<typeof setInterval> | null = null;
+  private due: number | null = null;
+
+  constructor(
+    private readonly opts: {
+      ms: number;
+      /** Draws the room again, for the seconds left. */
+      redraw(): void;
+      now?(): number;
+    },
+  ) {}
+
+  private now(): number {
+    return this.opts.now ? this.opts.now() : performance.now();
+  }
+
+  /** A count is running. */
+  get running(): boolean {
+    return this.due !== null;
+  }
+
+  /** Whole seconds to the start, for STARTS IN; null with no count running. */
+  secondsLeft(): number | null {
+    return this.due === null ? null : Math.max(0, Math.ceil((this.due - this.now()) / 1000));
+  }
+
+  /** Count down to `go`, dropping any count already running. The count is over before
+   *  `go` runs, so what `go` asks sees none. */
+  arm(go: () => void): void {
+    this.cancel();
+    this.due = this.now() + this.opts.ms;
+    this.timer = setTimeout(() => {
+      this.cancel();
+      go();
+    }, this.opts.ms);
+    this.tick = setInterval(() => this.opts.redraw(), 1000);
+  }
+
+  /** Stop counting: a match started some other way, or this page is no longer the one
+   *  to start it. */
+  cancel(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    if (this.tick !== null) clearInterval(this.tick);
+    this.timer = null;
+    this.tick = null;
+    this.due = null;
+  }
+}
+
 /** Which rooms start on their own (POK-320, Cam: "if I click an option that isn't quick
  *  play, the game should not start automatically"). Quick play and the daily are
  *  games that are going; a hosted room waits for its host's START. */
