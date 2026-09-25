@@ -4,8 +4,9 @@ import { MAILBOX, Mailbox, type RamAccess } from './mailbox';
 import { NETLINK } from './netlink';
 import { POSITIONAL_CAP, RomPort } from './romport';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
-import { PROTOCOL, type Msg, type SpillMsg, type StepMsg } from './wire';
-import { fakeEmulator, fakeRelay } from './fakes.testutil';
+import { PROTOCOL, type Msg, type NpcOutMsg, type SpillMsg, type StepMsg } from './wire';
+import { FakeSocket, fakeEmulator, fakeRelay } from './fakes.testutil';
+import { RelayClient } from './relay';
 
 const BASE = 0x0203d178; // gBrMailbox, per br-symbols.json
 
@@ -801,6 +802,93 @@ describe('the drop we asked for, across a gap (POK-331 #4)', () => {
     socket.sent.length = 0;
     bridge.resendPick();
     expect(socket.sent).toEqual([]);
+  });
+});
+
+// POK-331 #4 (review). A rejoin said every npcout of ours the session had kept, from before
+// the gap too. Pages book one once, but a ROM whose gBrDespawned has rolled past an old one
+// takes it back in over its oldest entry, and a trainer beaten after it stands again.
+describe('the trainers we beat, across a gap (POK-331 #4)', () => {
+  const MAP = { group: 0, num: 17 };
+  const beat = (localId: number): Msg => ({ t: 'npcout', seat: 0, map: MAP, localId });
+  const said = (localId: number): NpcOutMsg => ({ t: 'npcout', seat: 2, map: MAP, localId });
+  const npcouts = (sent: Record<string, unknown>[]) => sent.filter((f) => (f.m as Msg | undefined)?.t === 'npcout');
+
+  beforeEach(() => void vi.useFakeTimers({ now: 1_000 }));
+  afterEach(() => void vi.useRealTimers());
+
+  /** Seat 2 in a room, over a relay whose sockets the test drops and brings back. */
+  function inRoom() {
+    const sockets: FakeSocket[] = [];
+    const relay = new RelayClient(() => {
+      const s = new FakeSocket();
+      sockets.push(s);
+      return s;
+    });
+    relay.connect('ws://relay.test');
+    const gba = fakeEmulator(BASE);
+    gba.romInit();
+    const joinedAs = () => sockets.at(-1)!.receive({ type: 'room_joined', code: 'ABC123', id: 2, host: 1, token: 't' });
+    joinedAs();
+    const bridge = new Bridge({ emu: gba.emu, mailboxBase: BASE, relay, seat: 2 });
+    return { ...gba, relay, sockets, bridge, joinedAs };
+  }
+
+  it('says again only those the room may not have heard, once it is back in', () => {
+    const { romEmit, frame, relay, sockets, bridge, emu, joinedAs } = inRoom();
+    romEmit(beat(3));
+    frame();
+    vi.setSystemTime(3_000);
+    romEmit(beat(4)); // into a socket about to be found dead
+    frame();
+    sockets[0].receive({ type: 'pong', t: 2_000 }); // the relay had everything before 2 s
+    sockets[0].onclose?.({});
+    romEmit(beat(5)); // no socket at all
+    frame();
+    vi.advanceTimersByTime(500); // the backoff's new socket, not back in the room yet
+    romEmit(beat(6));
+    frame();
+    joinedAs();
+
+    const carry = bridge.carry();
+    bridge.dispose();
+    const again = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2, carry, rom: bridge.rom });
+    sockets[1].sent.length = 0;
+    again.resendNpcOuts();
+    expect(npcouts(sockets[1].sent)).toEqual([4, 5, 6].map((id) => ({ type: 'all', m: said(id) })));
+    sockets[1].sent.length = 0;
+    again.resendNpcOuts();
+    expect(sockets[1].sent).toEqual([]);
+  });
+
+  it('keeps one said again until a pong vouches for it, in case the socket goes again', () => {
+    const { romEmit, frame, relay, sockets, bridge, joinedAs } = inRoom();
+    sockets[0].onclose?.({});
+    romEmit(beat(5));
+    frame();
+    vi.advanceTimersByTime(500);
+    joinedAs();
+    vi.setSystemTime(5_000);
+    bridge.resendNpcOuts();
+    sockets[1].onclose?.({}); // gone again before any pong
+    expect(bridge.carry().npcouts).toEqual([said(5)]);
+    expect(relay.heardUntil).toBe(0);
+  });
+
+  it('forgets them at the end of the match, and at the start of the next', () => {
+    const { romEmit, frame, sockets, bridge, joinedAs } = inRoom();
+    sockets[0].onclose?.({});
+    romEmit(beat(5));
+    frame();
+    bridge.endMatch();
+    expect(bridge.carry().npcouts).toEqual([]);
+
+    romEmit(beat(6));
+    frame();
+    vi.advanceTimersByTime(500);
+    joinedAs();
+    sockets[1].receive({ type: 'recv', from: 1, m: { t: 'start', seed: 9, spawns: [{ seat: 2, map: MAP, x: 1, y: 2 }] } });
+    expect(bridge.carry().npcouts).toEqual([]);
   });
 });
 

@@ -2090,8 +2090,9 @@ function wireRoom(
       // (POK-330 #25). A second one is harmless everywhere.
       if (match.out.has(seat) && !match.ended) relay.all({ t: 'out', seat });
       // ...and the trainers we beat while nobody could hear it, still standing on every
-      // other screen (POK-331 #4). Every page books one once, and every ROM keeps it once.
-      if (!match.ended) for (const b of session.beaten) if (b.seat === seat) relay.all(b);
+      // other screen (POK-331 #4): only those, which the Bridge kept. Every page books one
+      // once, and every ROM keeps it once.
+      if (!match.ended) bridge.resendNpcOuts();
     }
     setStatus(`Room ${code}`);
     renderRoom(bridge);
@@ -2311,7 +2312,7 @@ function wireRoom(
     session.endMatch();
     room.startAt = null;
     if (bridge) {
-      bridge.roster.endMatch();
+      bridge.endMatch(); // its roster, and what it owed the room of this match
       if (controls.roster) bridge.roster.applyRoster(controls.roster);
     }
   };

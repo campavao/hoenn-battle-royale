@@ -21,7 +21,7 @@ import { Mailbox, type RamAccess } from './mailbox';
 import { closeAsSilent, readNetlink, type LinkState } from './netlink';
 import { RomPort } from './romport';
 import { crossesToRom } from './slots';
-import { decode, type BlockMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg, type PickMsg } from './wire';
+import { decode, type BlockMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg, type NpcOutMsg, type PickMsg } from './wire';
 import { Roster } from '../match/roster';
 import { RelayClient, type RecvEvent, type RosterEvent } from './relay';
 import { admits } from './trust';
@@ -87,11 +87,17 @@ export interface LinkCarry {
   fight: number | null;
   /** ...and the drop's `pick`, while no `land` has answered it (POK-331 #4). */
   pick?: PickMsg | null;
+  /** ...and our ROM's npcouts the room may not have heard (POK-331 #4). */
+  npcouts?: NpcOutMsg[];
 }
 
 /** How many of our own last blocks are kept to say again. The link is lockstep -- one
  *  block each way, then the next -- so what a blip can lose is the last one or two. */
 export const BLOCKS_KEPT = 4;
+
+/** How many of our own unheard npcouts are kept to say again: gBrDespawned's size
+ *  (br_loot.h's BR_MAX_DESPAWN, session.ts's BEATEN_KEPT). A ROM keeps no more. */
+const NPCOUTS_KEPT = 16;
 
 /** A fight is the challenge that started it: the challenger's seat and its ROM's nonce
  *  (POK-331 #3). Both pages heard that one challenge, so both name the fight alike. */
@@ -171,6 +177,15 @@ export class Bridge {
   /** The host that pick was last put to, and whether the room has lost them since. */
   private pickHost: number | null = null;
   private pickHostAway = false;
+  /** Our ROM's `npcout`s the room may not have heard (POK-331 #4): sent while we were out
+   *  of it, or after the last ping the relay answered on a socket that then went. Every
+   *  other ROM has that trainer standing until it hears, and the host's catch-up covers
+   *  only what the host heard. These and no others are said again on the rejoin: one the
+   *  room had goes back into any gBrDespawned that has rolled past it since, over the
+   *  oldest there, which is a trainer beaten after it (br_loot.c's RememberDespawned). */
+  private unheard: NpcOutMsg[] = [];
+  /** ...and the ones since, with when they went, until a pong says they got there. */
+  private unconfirmed: { msg: NpcOutMsg; at: number }[] = [];
   private readonly listeners = new Set<(msg: Msg, from: number) => void>();
   /** An extra gate on relay -> ROM, set by the page (match/spectate.ts). A ROM handed
    *  a `bstart` starts replaying a fight, and `bstart`/`turn` are broadcasts, so a
@@ -219,11 +234,13 @@ export class Bridge {
       this.fighting = opts.carry.fighting;
       this.fightId = opts.carry.fight;
       this.pick = opts.carry.pick ?? null;
+      this.unheard = [...(opts.carry.npcouts ?? [])];
     }
 
     this.unsubs.push(opts.emu.onFrame(() => this.onFrame()));
     this.unsubs.push(this.relay.on('recv', (ev) => this.onRelayRecv(ev)));
     this.unsubs.push(this.relay.on('roster', (ev) => this.onRoster(ev)));
+    this.unsubs.push(this.relay.on('closed', () => this.onClosed()));
 
     if (typeof window !== 'undefined' && import.meta.env.DEV) {
       (window as unknown as { __br?: unknown }).__br = { bridge: this, roster: this.roster, mailbox: this.mailbox };
@@ -257,6 +274,7 @@ export class Bridge {
       fighting: this.fighting,
       fight: this.fightId,
       pick: this.pick,
+      npcouts: [...this.unheard],
     };
   }
 
@@ -279,6 +297,20 @@ export class Bridge {
     this.pickHost = this.relay.hostId;
     this.pickHostAway = false;
     this.relay.all(this.pick);
+  }
+
+  /** Says our ROM's npcouts the room may not have heard, once we are back in it (POK-331
+   *  #4), and forgets them. */
+  resendNpcOuts(): void {
+    for (const msg of this.unheard.splice(0)) this.sayNpcOut(msg);
+  }
+
+  /** The match is over for this page: what it owed the room of that one is nothing to say
+   *  to the next. */
+  endMatch(): void {
+    this.roster.endMatch();
+    this.unheard = [];
+    this.unconfirmed = [];
   }
 
   /** Throws unless the ROM's mailbox is awake and speaking this protocol. Call once
@@ -362,7 +394,29 @@ export class Bridge {
     // `to` a bot's seat reached nobody and the host that walks it never heard one of its
     // bots had been challenged (POK-238). br_netlink.c's HandleChallenge ignores one that
     // names neither side.
-    this.relay.all(stamped);
+    if (stamped.t === 'npcout') this.sayNpcOut(stamped);
+    else this.relay.all(stamped);
+  }
+
+  /** An npcout of ours to the room, kept until we know the room heard it (POK-331 #4). */
+  private sayNpcOut(msg: NpcOutMsg): void {
+    if (!this.relay.isOpen() || this.relay.code === null) {
+      // No socket, or one not back in the room yet: the relay drops it.
+      this.unheard.push(msg);
+      if (this.unheard.length > NPCOUTS_KEPT) this.unheard.shift();
+    } else {
+      this.unconfirmed = this.unconfirmed.filter((u) => u.at >= this.relay.heardUntil);
+      this.unconfirmed.push({ msg, at: Date.now() });
+      if (this.unconfirmed.length > NPCOUTS_KEPT) this.unconfirmed.shift();
+    }
+    this.relay.all(msg);
+  }
+
+  /** Our socket went: whatever of ours no pong has vouched for may have gone with it. */
+  private onClosed(): void {
+    for (const u of this.unconfirmed) if (u.at >= this.relay.heardUntil) this.unheard.push(u.msg);
+    this.unconfirmed = [];
+    if (this.unheard.length > NPCOUTS_KEPT) this.unheard.splice(0, this.unheard.length - NPCOUTS_KEPT);
   }
 
   /** Whether a message our ROM sent keeps the seat it wrote, rather than ours. A report
@@ -404,6 +458,10 @@ export class Bridge {
     // Our drop answered -- or a match begun or ended, and a pick of the last one is
     // nothing to ask the next one's host.
     if ((msg.t === 'land' && msg.seat === this.seat) || msg.t === 'start' || msg.t === 'win') this.pick = null;
+    if (msg.t === 'start' || msg.t === 'win') {
+      this.unheard = [];
+      this.unconfirmed = [];
+    }
 
     this.noteChallenge(msg);
     this.roster.applyMsg(msg);
