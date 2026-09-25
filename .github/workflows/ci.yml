@@ -33,6 +33,10 @@ jobs:
     # on disk together before Playwright ever opens a page.
     needs: [wasm]
     runs-on: ubuntu-latest
+    # Two clean agbcc builds (~9 min each uncached), 110 drivers, then 17 Playwright
+    # files with retries. Without a ceiling a hung ROM or browser holds a runner for the
+    # platform's six hours.
+    timeout-minutes: 90
     outputs:
       rom-sha1: ${{ steps.fork-rom.outputs.sha1 }}
       patch-size: ${{ steps.patch.outputs.size }}
@@ -198,16 +202,24 @@ jobs:
 
       - name: Sidecars for the web shell's local-build path (POK-220)
         # web/e2e drives the shell the same way `npm run dev` does: a pre-patched ROM
-        # plus these two sidecars, no BPS (see tools/br/dev-patch.sh and app.ts's
-        # isPrePatched() branch). Same pokeemerald.gba/.map this job just built.
-        run: tools/br/dev-patch.sh
+        # plus the two sidecars (see tools/br/dev-patch.sh and app.ts's isPrePatched()
+        # branch). Same pokeemerald.gba/.map this job just built. With the baseline it
+        # also writes the BPS, so patch.spec.ts can patch a stock ROM in the tab the way
+        # a player does, instead of skipping.
+        run: tools/br/dev-patch.sh pokeemerald.map baseline/pokeemerald.gba
 
       - working-directory: web
         run: npx playwright install --with-deps chromium
 
+      # Playwright's first webServer is `node ../relay/server.js`, which imports `ws`.
+      - working-directory: relay
+        run: npm ci --ignore-scripts
+
       - working-directory: web
         env:
           HBR_ROM: ${{ github.workspace }}/pokeemerald.gba
+          # The pret baseline, which check-rom.sh proved is retail byte for byte.
+          HBR_BASE_ROM: ${{ github.workspace }}/baseline/pokeemerald.gba
         run: npm run e2e
 
       - uses: actions/upload-artifact@v4
@@ -224,6 +236,7 @@ jobs:
   # end, not for the ROM build itself.
   wasm:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -294,6 +307,7 @@ jobs:
   # idle sweep, /health.
   relay:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -330,6 +344,7 @@ jobs:
     if: github.ref_type == 'tag'
     needs: [rom, web, relay]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
     env:
