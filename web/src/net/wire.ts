@@ -699,6 +699,15 @@ function optShortString(m: Record<string, unknown>, field: string, max = MAX_ID)
   return v as string;
 }
 
+/** optShortString for a field that may be blank: one a ROM writes empty rather than
+ *  leaves out. */
+function optText(m: Record<string, unknown>, field: string, max: number): string | undefined {
+  const v = m[field];
+  if (v === undefined) return undefined;
+  if (typeof v !== 'string' || v.length > max) fail(`bad string '${field}': ${JSON.stringify(v)}`);
+  return v;
+}
+
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
@@ -1180,8 +1189,12 @@ function validateMon(raw: unknown): PackedMon {
     otId: optInt(raw, 'otId', 0, 0xffff) ?? 0,
     personality: optInt(raw, 'personality', 0, 0xffffffff) ?? 0,
     exp: optInt(raw, 'exp', 0, 0xffffffff) ?? 0,
-    nickname: optShortString(raw, 'nickname', 10) ?? '',
-    ot: optShortString(raw, 'ot', 7) ?? '',
+    // Either may be blank, and from a ROM the OT always is: br_spectate.c's PackOwnMon
+    // fills only what a spectator may see, and the trainer's name is not that. Refusing an
+    // empty one refused every `party` a ROM ever sent -- the peek box, a guest's report
+    // on a bot it fought, the parade's team (POK-331 #1).
+    nickname: optText(raw, 'nickname', 10) ?? '',
+    ot: optText(raw, 'ot', 7) ?? '',
     traded: raw.traded === true ? true : undefined,
   };
 }
