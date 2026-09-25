@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatchSession, type SessionDeps, type SessionView } from './session';
 import { EndGrace } from './grace';
-import type { DirectorWorld } from './director';
+import { Director, type DirectorWorld } from './director';
 import { botRows } from './lifecycle';
 import { loadCareer } from './career';
 import { loadLog } from './log';
@@ -293,15 +293,29 @@ describe('solo, on the same books', () => {
     vi.useRealTimers();
   });
 
-  /** The session the way runSolo builds it: seat 0, nobody's party kept, and the
-   *  lobby for an exit. */
+  /** The session the way runSolo builds it: seat 0, nobody's party kept, no fog of its
+   *  own, and the lobby for an exit. */
   function solo(over: Partial<SessionDeps> = {}, paradeDone?: () => boolean) {
     return books({
       keepParties: false,
+      defaultFog: undefined,
       grace: new EndGrace({ graceMs: 8_000, winMaxMs: 60_000, pollMs: 500, paradeDone }),
       ...over,
     });
   }
+
+  it("starts from the director's own fog, not a copy of it", () => {
+    const { session } = solo();
+    const sent: Msg[] = [];
+    const world: DirectorWorld = {
+      maps: [{ id: 'MAP_ALPHA', group: 0, num: 1, section: 'SEC_ALPHA', outdoor: true }],
+      landing: Array.from({ length: 4 }, (_, x) => ({ map: 'MAP_ALPHA', x, y: 0 })),
+      sections: { SEC_ALPHA: { x: 0, y: 0, w: 2, h: 2, name: 'ALPHA', num: 1 } },
+    };
+    // A director handed no fog, as solo's is when there is no `#quick`.
+    new Director({ seats: [0], seed: 1, world, send: (m) => void sent.push(m), now: () => 0, onOut: () => () => {} }).start();
+    expect(sent[0]).toMatchObject({ t: 'start', fog: session.fog });
+  });
 
   it("hands our own ROM's challenge to the bot it names, and the bot's card comes to seat 0 (#17)", () => {
     const cards: { seat: number; msg: Msg }[] = [];

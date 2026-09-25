@@ -14,6 +14,7 @@ import type { Bots } from '../bots/brain';
 import type { RosterEvent } from '../net/relay';
 import type { Msg, PackedMon, SpillMsg } from '../net/wire';
 import { careerLine, recordMatch } from './career';
+import { DEFAULT_FOG_SECS } from './director';
 import type { EndGrace } from './grace';
 import { botRows, freshMatch, noteMatch, type MatchSnapshot } from './lifecycle';
 import { MatchLog, saveMatch } from './log';
@@ -44,8 +45,9 @@ export interface SessionDeps {
   bots(): Bots | null;
   /** Into our own ROM, and nowhere else. */
   toRom(msg: Msg): void;
-  /** The fog for a `start` that names none. */
-  defaultFog(): number;
+  /** The fog for a `start` that names none. Left out, the director's own: solo's, so
+   *  its books and its director cannot start from two different fogs. */
+  defaultFog?(): number;
   /** Where the career and the saved rounds go: localStorage on the page. */
   store: Pick<Storage, 'getItem' | 'setItem'>;
   grace: EndGrace;
@@ -141,8 +143,12 @@ export class MatchSession {
     private readonly view: SessionView,
   ) {
     this.grace = deps.grace;
-    this.fogSecs = deps.defaultFog();
+    this.fogSecs = this.defaultFog();
     this.now = () => (deps.now ? deps.now() : performance.now());
+  }
+
+  private defaultFog(): number {
+    return this.deps.defaultFog?.() ?? DEFAULT_FOG_SECS;
   }
 
   get loot(): Loot {
@@ -185,7 +191,7 @@ export class MatchSession {
     this.fogSecs = noteMatch(this.match, this.fogSecs, msg, now, {
       dealing: this.deps.dealing(),
       roster: this.deps.relayRoster(),
-      defaultFog: this.deps.defaultFog(),
+      defaultFog: this.defaultFog(),
     });
     if (msg.t === 'start') {
       // The bots go on the roster by the names the seed gave them, which every page can

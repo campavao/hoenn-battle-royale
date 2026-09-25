@@ -14,7 +14,7 @@ import { RomPort } from './net/romport';
 import type { BstartMsg, Msg, PackedMon, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
-import { DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
+import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { nameBstart, romReplaying, Spectate } from './match/spectate';
 import { bossAt } from './match/bosses';
 import type { Results } from './match/results';
@@ -1511,8 +1511,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       dealing: () => true,
       bots: () => host?.bots.bots ?? null,
       toRom: (m) => rom.push(m),
-      // The director's own; a solo `start` always names its fog anyway.
-      defaultFog: () => 120,
+      // No defaultFog: the director's own, which a solo `start` names anyway.
       store: localStorage,
       grace: soloGrace,
       // Solo has no room to go back to, so the exit is the lobby -- which is what
@@ -1718,7 +1717,7 @@ function wireRoom(
   let resumeHost = false;
   /** The host's room settings between roster events (POK-241). */
   const controls: RoomControls = {
-    fill: true, roster: null, textSpeed: 3, animations: true, fogSecs: 120,
+    fill: true, roster: null, textSpeed: 3, animations: true, fogSecs: DEFAULT_FOG_SECS,
     safariSecs: DEFAULT_SAFARI_SECS,
   };
 
