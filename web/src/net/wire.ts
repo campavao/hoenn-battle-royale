@@ -326,6 +326,7 @@ export interface PackedMon {
   nickname: string; // Gen 3 charmap text, at most 10 chars
   ot: string; // original trainer name, at most 7 chars
   traded?: boolean; // this row changed hands (Kanto POK-181's trade line)
+  romMoves?: boolean; // the moves are a ROM's own, from a `party` report (POK-330 #50)
 }
 
 /** A Pokemon in battle fainted -- ROM-emitted, for spectator/HUD state (which party
@@ -1196,6 +1197,7 @@ function validateMon(raw: unknown): PackedMon {
     nickname: optText(raw, 'nickname', 10) ?? '',
     ot: optText(raw, 'ot', 7) ?? '',
     traded: raw.traded === true ? true : undefined,
+    romMoves: raw.romMoves === true ? true : undefined,
   };
 }
 
