@@ -50,6 +50,8 @@ bool8 BrField_OverworldRunning(void);
 bool8 BrField_Leave(u8 frames, void (*enter)(void));
 // A leave has started and not yet entered.
 bool8 BrField_Leaving(void);
+// ...and it is the one into enter().
+bool8 BrField_LeavingFor(void (*enter)(void));
 // The leave into enter() stops where it is, if that is the one on its way out.
 void BrField_CancelLeave(void (*enter)(void));
 

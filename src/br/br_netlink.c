@@ -110,11 +110,14 @@ static void HandleBtCont(const u8 *payload, u8 len) { HandleBt(payload, len, TRU
 
 // CHALLENGE {challenger, opponent, nonce}: the page sends it to both sides once the
 // engage is settled. The challenger is link id 0.
-// The overworld with nothing open: a battle can start from here right now.
+// The overworld with nothing open: a battle can start from here right now. Not while
+// the field is already on its way out (BrField_Leave) -- a bot fight's fade locks
+// nothing, and a link opened under it lost its start task to the battle's own init.
 static bool8 FieldFree(void)
 {
     return gMain.callback2 == CB2_Overworld && !gMain.inBattle
-        && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked();
+        && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked()
+        && !BrField_Leaving();
 }
 
 // Where the challenger's ghost is: on the map we are standing on, or it did not see us.
@@ -129,8 +132,8 @@ static bool8 OnOurMap(u8 seat)
 
 // A menu is not a hiding place (POK-230): a CHALLENGE that lands with something open
 // waits in pendingPeer; BrNetlink_Tick closes the START menu, lets a sub-screen (bag,
-// party, fly map) settle and starts the fight from inside it, and waits out a battle
-// or a running script.
+// party, fly map) settle and starts the fight from inside it, and waits out a running
+// script. Not a battle, though: see TickPendingChallenge.
 static void HandleChallenge(const u8 *payload, u8 len)
 {
     const u8 *d;
@@ -152,9 +155,14 @@ static void HandleChallenge(const u8 *payload, u8 len)
     if (d[0] != gBrMySeat && !OnOurMap(d[0]))
         return;
     // A bot has no ROM to link with: if its party is already staged, this is a trainer
-    // battle, not an exchange (POK-238).
-    if (d[1] == gBrMySeat && BrBot_IsStaged(d[0]) && BrBot_StartFight(d[0]))
+    // battle, not an exchange (POK-238) -- now, or from the menu it found us in once
+    // that has settled, but never a link, which would wait for blocks nobody sends.
+    if (d[1] == gBrMySeat && BrBot_IsStaged(d[0]))
+    {
+        if (!BrBot_StartFight(d[0]))
+            gBrNetlink.pendingPeer = d[0];
         return;
+    }
     if (d[0] == gBrMySeat)
         BrNetlink_StartBattle(0, d[1]);
     else if (d[1] == gBrMySeat)
@@ -174,16 +182,22 @@ static void TickPendingChallenge(void)
 
     if (gBrNetlink.pendingPeer == 0xFF || gBrNetlink.active)
         return;
-    // The fight it was waiting out may have been the one that put us out of the match.
+    // Out of the match since it landed (the fog): there is no fight to have.
     if (gBrMatch.phase != BR_PHASE_PLAY)
     {
         gBrNetlink.pendingPeer = 0xFF;
         return;
     }
+    // A battle is where a parked challenge ends. It used to be waited out and then
+    // taken, but by then there is nobody to take it from: a challenger's ROM gives up on
+    // a seat that says it is fighting (TickWait) or, once linked, after ten silent
+    // seconds, and a bot's card goes with the battle (BrBot_Tick). Taken anyway it was a
+    // link with nobody on the other end -- a second bot that engaged us on the same step
+    // as the first got one, ten seconds of black after that fight (POK-330 #45).
     if (gMain.inBattle)
     {
-        gBrNetlink.stableFrames = 0;
-        return; // theirs to finish first
+        gBrNetlink.pendingPeer = 0xFF;
+        return;
     }
     if (gMain.callback2 == CB2_Overworld)
     {
@@ -196,7 +210,7 @@ static void TickPendingChallenge(void)
             UnlockPlayerFieldControls();
         }
         if (!FieldFree())
-            return; // a script (a sign, the nurse) runs to its end
+            return; // a script (a sign, the nurse) runs to its end, a fade to its screen
     }
     else
     {
@@ -216,7 +230,16 @@ static void TickPendingChallenge(void)
             return;
         }
     }
-    BrNetlink_StartBattle(1, gBrNetlink.pendingPeer);
+    // A staged bot is a trainer battle from here, as HandleChallenge's would have been.
+    if (BrBot_IsStaged(gBrNetlink.pendingPeer))
+    {
+        if (!BrBot_StartFightHere(gBrNetlink.pendingPeer))
+            return;
+    }
+    else
+    {
+        BrNetlink_StartBattle(1, gBrNetlink.pendingPeer);
+    }
     gBrNetlink.pendingPeer = 0xFF;
 }
 

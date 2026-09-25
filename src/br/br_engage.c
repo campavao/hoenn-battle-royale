@@ -13,6 +13,7 @@
 #include "br/br_netlink.h"
 #include "br/br_bot.h"
 #include "br/br_hud.h"
+#include "br/br_field.h"
 #include "br/br_engage.h"
 
 EWRAM_DATA struct BrEngage gBrEngage = {0};
@@ -195,6 +196,10 @@ static bool8 CanEngage(void)
                       // Safari opening, and not once you are out
     if (ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked())
         return FALSE;
+    // Already on our way off the field (a bot's challenge, the fly map): its fade locks
+    // nothing, and a challenge sent under it is a fight we cannot start.
+    if (BrField_Leaving())
+        return FALSE;
     return TRUE;
 }
 
@@ -247,6 +252,11 @@ static void TickWait(void)
         gBrEngage.waitSeat = 0xFF;
         return;
     }
+    // Off the field meanwhile (a bot's challenge, the fly map): see where to first. A
+    // battle ends the wait (above); a link opened under the fade lost its start task to
+    // that battle's own init, and the hello watchdog forfeited the battle for it.
+    if (BrField_Leaving())
+        return;
     if (gBrEngage.waitFrames > 0 && --gBrEngage.waitFrames > 0)
         return;
     gBrEngage.waitSeat = 0xFF;

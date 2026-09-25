@@ -112,8 +112,9 @@ transport, `br_netlink.c`, that satisfies the same block interface (`SendBlock`,
 runs `BATTLE_TYPE_LINK` exactly as a cable battle would; internet latency is fine because
 link battles wait for the other side's block per turn. The fight starts from the eyeline
 (`br_engage.c`): the page relays a `challenge` to both ROMs, and a ROM accepts one only in
-the match proper and from a ghost on its own map. A watchdog closes a link that never
-hears from the other side, and an `out` for the peer wins an undecided fight.
+the match proper and from a ghost on its own map; one that lands in a menu waits for it
+to settle, and a battle drops it. A watchdog closes a link that never hears from the other
+side, and an `out` for the peer wins an undecided fight.
 
 **Spectating is a recorded battle, streamed live.** The challenger's ROM sees both
 sides, so it publishes the fight: `bstart` (seed, both parties, names), then `turn` (the
@@ -135,7 +136,8 @@ went straight into the duel stalled on the intro (`br_duel.h`) -- and answers wi
 
 Every way off the field -- a fight, a replay, the drop's picker, the MAP row -- goes
 through `BrField_Leave` (`br_field.h`): fade, wait, hand the overworld's windows back,
-then the next screen. One at a time.
+then the next screen. One at a time, and nothing else starts under one: no challenge goes
+out, and one that comes in waits as it would in a menu.
 
 ## 6. Overworld
 

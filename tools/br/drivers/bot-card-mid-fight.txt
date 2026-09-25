@@ -1,5 +1,5 @@
-# bot-card-mid-fight: a bot's card that lands while a battle is running is not staged
-# (POK-330 #17).
+# bot-card-mid-fight: a bot's card that lands while a battle is running, or while a
+# bot fight is fading in, is not staged (POK-330 #17).
 #
 # A card goes straight into gEnemyParty, and ParseTrainer zeroed and rebuilt it whenever
 # one arrived. In a fight against another bot that is the enemy's team replaced under
@@ -45,7 +45,17 @@ pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
 mailsend gBrMailbox 2 gDecompressionBuffer 11
 pokebytes gDecompressionBuffer 1F 00 00 00
 mailsend gBrMailbox 5 gDecompressionBuffer 4
-wait 300
+# The MUDKIP card two frames behind it, while the fight is still fading in -- a second
+# bot that spotted us on the same step (bot-two-challenges.txt). The staged party is
+# already the fight's: nothing changes.
+wait 2
+pokebytes gDecompressionBuffer 1E 03 CC C3 D0 01 1B 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 C7 CF BE C5 C3
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 3
+expect u8 gBrBotFight+2 0
+expect u8 gBrBotFight+1 0x1F
+expect u8 gBrBotFight+4 0xBC
+wait 295
 expect u8 gBrBotFight+2 1
 expect u8 gBrBotFight+1 0x1F
 expect u8 gEnemyParty+8 0xCE

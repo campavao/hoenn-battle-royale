@@ -1,0 +1,45 @@
+# engage-wait-fade: our own challenge, still waiting to learn what kind of fight it is,
+# does not open a link under a bot fight's fade (POK-330 #45, the review).
+#
+# We spot seat 1 and challenge it; the challenge parks for BR_ENGAGE_WAIT (90 frames) in
+# case seat 1 is a bot whose card is on its way (bot-spotted.txt). Sixty frames in, bot
+# 31's challenge lands and its fight starts fading in. The wait ran out under the fade
+# and opened a link with seat 1 there and then: the bot fight's own init killed the link's
+# start task, and the hello watchdog forfeited the bot fight for it ten seconds later.
+# Now the wait holds while the field is on its way out, and the battle ends it.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# Bot 31's TREECKO card (bot-fight.txt's), staged, and its ghost on our map out of our
+# eyeline.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 10
+# Seat 1 at engage-busy.txt's cell, three tiles east facing WEST: we challenge it, and
+# the challenge waits.
+pokebytes gDecompressionBuffer 01 01 00 09 0F 00 10 00 03 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 5
+expect u16 gBrEngage+4 1
+expect u8 gBrEngage+7 1
+wait 60
+# Bot 31's CHALLENGE, with the wait about thirty frames from running out.
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 30
+expect u8 gBrNetlink 0
+wait 270
+# The bot fight, and the wait ended by it rather than turned into a link.
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+expect u8 gBrEngage+7 0xFF
+shot fighting
+wait 700
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+shot still-fighting
+say engage wait fade ok

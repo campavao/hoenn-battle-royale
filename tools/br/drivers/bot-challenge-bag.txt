@@ -1,0 +1,49 @@
+# bot-challenge-bag: a bot that challenges us with the BAG open fights us from the bag,
+# as a person's link battle would -- not a link with a bot (POK-330 #45, the review).
+#
+# A menu is not a hiding place (POK-230): a CHALLENGE that lands in a sub-screen parks
+# in pendingPeer and starts once the screen has settled. A bot's card was staged, but
+# its fight only ever started from the field, so the parked challenge went on to open a
+# link with a seat that has no ROM: the "!" and a black screen until the hello
+# watchdog forfeited it ten seconds later.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# Bot 31's TREECKO card (bot-fight.txt's), staged on the field.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+expect u8 gBrBotFight 1
+# START, down to BAG (the match's menu is POKEMON / BAG / <name> / EXIT), and in.
+tap START
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 120
+shot bag
+# Its ghost on our map, then its CHALLENGE: parked, nothing started yet.
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 6
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+16 0x1F
+expect u8 gBrBotFight+2 0
+# The bag settles (BR_MENU_SETTLE) and the fight starts from inside it: a trainer
+# battle against the staged team, and no link was ever opened.
+wait 300
+expect u8 gBrBotFight+2 1
+expect u8 gBrBotFight+1 0x1F
+expect u8 gEnemyParty+8 0xCE
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+16 0xFF
+shot fighting
+wait 700
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+shot still-fighting
+say bot challenge bag ok

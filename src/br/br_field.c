@@ -126,11 +126,26 @@ bool8 BrField_Leaving(void)
     return FuncIsActiveTask(Task_BrLeaveField);
 }
 
-void BrField_CancelLeave(void (*enter)(void))
+// The leave into enter(), if that is the one on its way out; TASK_NONE if not.
+static u8 LeaveFor(void (*enter)(void))
 {
     u8 taskId = FindTaskIdByFunc(Task_BrLeaveField);
 
-    if (taskId != TASK_NONE && GetWordTaskArg(taskId, ENTER_ARG) == (u32)enter)
+    if (taskId != TASK_NONE && GetWordTaskArg(taskId, ENTER_ARG) != (u32)enter)
+        taskId = TASK_NONE;
+    return taskId;
+}
+
+bool8 BrField_LeavingFor(void (*enter)(void))
+{
+    return LeaveFor(enter) != TASK_NONE;
+}
+
+void BrField_CancelLeave(void (*enter)(void))
+{
+    u8 taskId = LeaveFor(enter);
+
+    if (taskId != TASK_NONE)
         DestroyTask(taskId);
 }
 

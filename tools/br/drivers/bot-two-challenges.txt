@@ -1,0 +1,64 @@
+# bot-two-challenges: two bots that engage us on the same step make one fight, against
+# the first of them, and nothing else (POK-330 #45 and #17, the review).
+#
+# The host's brain can have two bots spot us in one tick, and then their cards and
+# challenges land a frame or two apart: card A, CHALLENGE A, card B, CHALLENGE B. A's
+# challenge starts the bot fight's fade (BrField_Leave), which locks nothing. B's card
+# was built over A's party under the fade, so the fight was B's team under B's seat
+# and A never got a RESULT; and B's challenge found the field "free" and opened a link
+# with a bot -- the battle's own init killed its start task, and ten seconds in the
+# hello watchdog forfeited the real fight for it.
+#
+# Now B's card is refused while A's fight is on its way in, B's challenge parks like
+# one that lands in a menu, and the battle drops it (TickPendingChallenge). A seat that
+# walks into our eyeline during the fade is not challenged either.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# Bot 31: bot-fight.txt's TREECKO card, its ghost on our map (out of our eyeline), and
+# its CHALLENGE.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 2
+# Bot 30, two frames behind: the MUDKIP card (bot-card-mid-fight.txt's), its ghost, and
+# its CHALLENGE.
+pokebytes gDecompressionBuffer 1E 03 CC C3 D0 01 1B 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 C7 CF BE C5 C3
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+pokebytes gDecompressionBuffer 1E 01 00 09 16 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1E 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 3
+# A's card is still the staged one, B's challenge is parked, and no link is open.
+expect u8 gBrBotFight+1 0x1F
+expect u8 gBrBotFight+4 0xBC
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+16 0x1E
+# Seat 1 steps into our eyeline under the fade (engage-busy.txt's cell, three tiles
+# east facing WEST): no challenge goes out.
+pokebytes gDecompressionBuffer 01 01 00 09 0F 00 10 00 03 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 30
+expect u16 gBrEngage+4 0
+wait 270
+# A's fight, A's team, and the parked challenge gone with the battle's start.
+expect u8 gBrBotFight+2 1
+expect u8 gBrBotFight+1 0x1F
+expect u8 gEnemyParty+8 0xCE
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+16 0xFF
+expect u16 gBrEngage+4 0
+shot fighting
+# Past the hello watchdog's ten seconds: still A's fight, and still no link.
+wait 700
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+expectne u8 gWirelessCommType 5
+shot still-fighting
+say bot two challenges ok

@@ -72,6 +72,9 @@ bool8 BrBot_IsStaged(u8 seat);
 void BrBot_NoteItemUsed(u16 item);
 // Starts the trainer battle against the staged party. TRUE when it took the fight.
 bool8 BrBot_StartFight(u8 seat);
+// The same from wherever we are, not only the field: the parked challenge's way in
+// (br_netlink.c), which has seen the menu it is in settle, as a link battle's does.
+bool8 BrBot_StartFightHere(u8 seat);
 // CB2_InitBattleInternal: TRUE while a staged bot party is in gEnemyParty, so the
 // engine must not overwrite it from gTrainers.
 bool8 BrBot_PartyIsStaged(void);

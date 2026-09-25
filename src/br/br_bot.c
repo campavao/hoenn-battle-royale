@@ -40,6 +40,8 @@ EWRAM_DATA struct BrBotFight gBrBotFight = {0};
 STATIC_ASSERT(BR_CAP_TRAINER >= 3 + PLAYER_NAME_LENGTH + PARTY_SIZE * 100 + 1 + BR_BOT_ITEMS * 2, BrTrainerCapHoldsAFullCard)
 static EWRAM_DATA struct BrAssembler sTrainerAsm = {0};
 
+static void EnterBotFight(void);
+
 // A card's HP is a share of the mon, not a count of hit points (POK-330 #30). The page
 // keeps HP on a scale of its own -- a formula, or the max of the last report it had --
 // and only the ROM knows the real one, so what crosses is how much of the mon is left:
@@ -164,7 +166,10 @@ static void ParseTrainer(const u8 *d, u16 n)
     // and took over gBrBotFight, so the report went out under the newcomer's seat. It
     // cannot be this fight's card either -- a bot fight starts from the field -- so it
     // is dropped, as the unstage in BrBot_Tick would have dropped it (POK-330 #17).
-    if (gBrBotFight.fighting || gMain.inBattle)
+    // The staged party is that fight's from its challenge on, fade and all: two bots
+    // that spot us on one step land their cards a frame apart, and the second one's
+    // used to be the team the first one's fight was fought with.
+    if (gBrBotFight.fighting || gMain.inBattle || BrField_LeavingFor(EnterBotFight))
         return;
     nameLen = d[1];
     if (nameLen > PLAYER_NAME_LENGTH || (u16)(2 + nameLen + 1) > n)
@@ -350,13 +355,18 @@ static void EnterBotFight(void)
     SetMainCallback2(CB2_InitBattle);
 }
 
-bool8 BrBot_StartFight(u8 seat)
+bool8 BrBot_StartFightHere(u8 seat)
 {
-    if (!BrBot_IsStaged(seat) || gBrBotFight.fighting)
-        return FALSE;
-    if (gMain.callback2 != CB2_Overworld || gMain.inBattle)
+    if (!BrBot_IsStaged(seat) || gBrBotFight.fighting || gMain.inBattle)
         return FALSE;
     return BrField_Leave(20, EnterBotFight);
+}
+
+bool8 BrBot_StartFight(u8 seat)
+{
+    if (gMain.callback2 != CB2_Overworld)
+        return FALSE;
+    return BrBot_StartFightHere(seat);
 }
 
 void BrBot_Init(void)
