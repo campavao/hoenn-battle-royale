@@ -609,6 +609,67 @@ describe('a bot caught in the fog', () => {
     expect(sent.some((m) => m.t === 'out' && m.seat === seat)).toBe(true);
     expect(bots.count()).toBe(0);
   });
+
+  // FogReachesThisBattle in br_ring.c: a fight between contestants is theirs to lose,
+  // and a bot is a contestant (POK-262, POK-330 #15).
+  it('leaves a bot alone while a player is fighting it', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    const them: PlayerView = { seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 };
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      inside: () => false,
+      engage: { players: () => [them] },
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+    bots.start(dealt, 0);
+    bots.tick(STEP_MS);
+    expect(sent.some((m) => m.t === 'challenge'), 'it saw them before the first bite').toBe(true);
+    them.busy = true;
+    // A minute outside is fifteen bites, which is this mon three times over.
+    for (let t = 2 * STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    expect(bots.partyOf(dealt[0].seat)[0].hp).toBe(20);
+    expect(sent.some((m) => m.t === 'out')).toBe(false);
+  });
+
+  it('lets two bots in the fog finish a duel in the instance', async () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    let answer: ((v: { winner: number; loser: number; a: { hp: number; status: number }[]; b: { hp: number; status: number }[] }) => void) | undefined;
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      seed: 4242,
+      inside: () => false,
+      settle: () => new Promise((resolve) => (answer = resolve)),
+    });
+    const dealt = dealBots(1, 2, [0], [
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 1 },
+      { mapId: 'FIELD', map: REFS.FIELD, x: 2, y: 2 },
+    ]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    expect(answer, 'they met and the instance has the fight').toBeDefined();
+    expect(bots.count()).toBe(2);
+
+    const [a, b] = dealt.map((d) => d.seat);
+    answer!({ winner: b, loser: a, a: [{ hp: 0, status: 0 }], b: [{ hp: 7, status: 0 }] });
+    await Promise.resolve();
+    await Promise.resolve();
+    // The duel stands, not the fog: the loser is out and the winner has what it had left.
+    expect(bots.count()).toBe(1);
+    expect(sent.filter((m) => m.t === 'out').map((m) => (m as { seat: number }).seat)).toEqual([a]);
+    expect(bots.partyOf(b)[0].hp).toBe(7);
+  });
 });
 
 describe('two bots meeting', () => {

@@ -614,7 +614,12 @@ export class Bots {
   private bleed(walker: Walker, now: number): void {
     const inside = this.opts.inside;
     if (!inside || walker.party.length === 0) return;
-    if (inside(walker.at.map)) {
+    // Nor while it is fighting (POK-262). The ROM's own fog never reaches a fight
+    // between contestants (FogReachesThisBattle in br_ring.c: "theirs to lose"), and a
+    // bot is one: in the last ring, where everywhere is fog, the page used to wipe a
+    // bot mid-battle, its `out` could hand the room a `win` while the player was still
+    // fighting it -- and a player who then lost that battle still got the Hall of Fame.
+    if (inside(walker.at.map) || this.fighting.has(walker.bot.seat)) {
       walker.bleedAt = now + FOG_TICK_MS;
       return;
     }
@@ -854,8 +859,10 @@ export class Bots {
     const resolve = () =>
       duel(seed, { seat: walker.bot.seat, party: walker.party }, { seat: other.bot.seat, party: other.party }, nonce);
     // Lets the pair go, and says whether this duel is still theirs to settle. Not when
-    // the backstop has already settled it, and not when one of them has left the match
-    // some other way meanwhile -- the one still standing just walks on.
+    // the backstop has already settled it, and not when the room has been told one of
+    // them is out meanwhile -- the one still standing just walks on. The fog is not
+    // one of those: it leaves a fight alone (bleed), so a duel it used to cancel by
+    // taking a bot out of the instance's hands now runs to its end.
     const finish = (): boolean => {
       const live = held.filter(([w, fight]) => this.fighting.get(w.bot.seat) === fight);
       for (const [w] of live) this.release(w.bot.seat);
