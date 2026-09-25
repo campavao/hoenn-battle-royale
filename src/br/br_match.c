@@ -30,7 +30,7 @@ EWRAM_DATA struct BrMatch gBrMatch = {0};
 // heap for the frame or two between its first slot and its last, the way a bot's card
 // is (br_bot.c): 266 bytes of EWRAM for a message that arrives once a match was more
 // than EWRAM could spare (POK-330 #21). InitHeap takes it back (BrMatch_HeapReset).
-#define BR_START_MAX (10 + 8 * BR_MAX_SEATS)
+STATIC_ASSERT(BR_CAP_START >= 10 + 8 * BR_MAX_SEATS, BrStartCapHoldsEverySeat)
 static EWRAM_DATA struct BrAssembler sStartAsm = {0};
 // START arrived while we were still standing on a map. The warp it asks for cannot be
 // done from inside the mailbox pump, so the tick does it on the next quiet frame.
@@ -120,10 +120,10 @@ static void HandleStart(const u8 *payload, u8 len)
 {
     if (sStartAsm.buf == NULL)
     {
-        sStartAsm.buf = Alloc(BR_START_MAX);
+        sStartAsm.buf = Alloc(BR_CAP_START);
         if (sStartAsm.buf == NULL)
             return;
-        sStartAsm.cap = BR_START_MAX;
+        sStartAsm.cap = BR_CAP_START;
         sStartAsm.type = 0;
     }
     if (BrWire_Assemble(&sStartAsm, BR_MSG_START, FALSE, payload, len))

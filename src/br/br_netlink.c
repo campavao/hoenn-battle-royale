@@ -37,7 +37,8 @@ EWRAM_DATA struct BrNetlink gBrNetlink = {0};
 // BT payload: seat, seq u16, len u16, then up to BLOCK_BUFFER_SIZE bytes.
 #define BR_BT_HDR 5
 static EWRAM_DATA u8 sPending[BR_BT_HDR + BLOCK_BUFFER_SIZE] = {0};
-static EWRAM_DATA u8 sRecvBuf[BR_BT_HDR + BLOCK_BUFFER_SIZE] = {0};
+STATIC_ASSERT(BR_CAP_BT == BR_BT_HDR + BLOCK_BUFFER_SIZE, BrBtCapIsOneBlock)
+static EWRAM_DATA u8 sRecvBuf[BR_CAP_BT] = {0};
 static EWRAM_DATA struct BrAssembler sRecvAsm = {0};
 
 static const u8 sText_Rival[] = _("RIVAL");

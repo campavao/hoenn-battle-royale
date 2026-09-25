@@ -336,4 +336,24 @@
 #define BR_MSG_LAST BR_MSG_NPCOUT
 #define BR_MSG_COUNT 48
 
+// ---- reassembly caps ------------------------------------------------------------
+//
+// The most bytes each message that spans slots can pack to, and so what the ROM's
+// assembler for it has to hold. BrWire_Assemble drops a longer one without a word, so a
+// cap under the page's largest encoding is a message that silently never arrives: the
+// TRAINER and DUEL caps predated the item tails (POK-237), and a six-mon bot with a
+// seven-letter name, or any 6v6 duel, was dropped (POK-330 #11).
+//
+// Plain numbers, on purpose: web/src/net/caps.test.ts reads them out of this file and
+// packs the page's largest instance of each message against them, and every C file that
+// sizes a buffer by one STATIC_ASSERTs it against its own layout.
+#define BR_CAP_BT 261       // seat, seq u16, len u16, a 256-byte block
+#define BR_CAP_PARTY 667    // seat, count, 6 * 100, then money u32, stacks, 20 * (id, n)
+#define BR_CAP_SPILL 128    // 4 + 6 * 9, bag flag, key/x/y, 8 * 3 items, money, 1 + 7 name
+#define BR_CAP_START 266    // 10 + 32 spawn rows * 8
+#define BR_CAP_TRAINER 619  // seat, 1 + 7 name, count, 6 * 100, items, 4 * u16
+#define BR_CAP_DUEL 1222    // 4 + 12 * 100, then two bags of (count, 4 * u16)
+#define BR_CAP_BSTART 1230  // 28 + 2 * (count + 6 * 100): what a fighter's ROM sends
+#define BR_CAP_TURN 128     // what a fighter's ROM sends in one frame
+
 #endif // GUARD_BR_WIRE_H

@@ -38,7 +38,8 @@
 EWRAM_DATA struct BrLoot gBrLoot = {0};
 EWRAM_DATA struct BrDespawned gBrDespawned[BR_MAX_DESPAWN] = {0};
 // A full spill is six rows, a bag and its contents -- past one slot's 59 bytes.
-static EWRAM_DATA u8 sSpillBuf[128] = {0};
+STATIC_ASSERT(BR_CAP_SPILL >= 4 + PARTY_SIZE * 9 + 1 + 6 + 1 + 8 * 3 + 4 + 1 + PLAYER_NAME_LENGTH, BrSpillCapHoldsAFullSpill)
+static EWRAM_DATA u8 sSpillBuf[BR_CAP_SPILL] = {0};
 static EWRAM_DATA struct BrAssembler sSpillAsm = {0};
 
 static bool8 OverworldRunning(void)

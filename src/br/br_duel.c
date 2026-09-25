@@ -26,9 +26,10 @@
 #include "br/br_duel.h"
 
 EWRAM_DATA struct BrDuel gBrDuel = {0};
-// Two parties is 1200 bytes: the heap, for the few frames between the message landing
-// and the mons being built, exactly as br_bot.c does it.
-#define BR_DUEL_MAX (4 + 2 * BR_DUEL_MAX_MONS * 100)
+// Two parties and two bags is 1222 bytes: the heap, for the few frames between the
+// message landing and the mons being built, exactly as br_bot.c does it. It held 1204 --
+// no bags -- until POK-330 #11, which dropped every 6v6 duel.
+STATIC_ASSERT(BR_CAP_DUEL >= 4 + 2 * BR_DUEL_MAX_MONS * 100 + 2 * (1 + BR_BOT_ITEMS * 2), BrDuelCapHoldsTwoFullSides)
 static EWRAM_DATA struct BrAssembler sDuelAsm = {0};
 
 // DUEL: seatA, seatB, countA, countB, then countA + countB PackedMon rows. A goes into
@@ -142,10 +143,10 @@ static void HandleDuel(const u8 *payload, u8 len)
 {
     if (sDuelAsm.buf == NULL)
     {
-        sDuelAsm.buf = Alloc(BR_DUEL_MAX);
+        sDuelAsm.buf = Alloc(BR_CAP_DUEL);
         if (sDuelAsm.buf == NULL)
             return;
-        sDuelAsm.cap = BR_DUEL_MAX;
+        sDuelAsm.cap = BR_CAP_DUEL;
         sDuelAsm.type = 0;
     }
     if (BrWire_Assemble(&sDuelAsm, BR_MSG_DUEL, FALSE, payload, len))

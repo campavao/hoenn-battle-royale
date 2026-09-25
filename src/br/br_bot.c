@@ -29,11 +29,13 @@
 #include "br/br_bot.h"
 
 EWRAM_DATA struct BrBotFight gBrBotFight = {0};
-// A staged party is six rows plus a header -- 610 bytes, which EWRAM at 99.9% does not
-// have. It goes on the heap for the few frames between the first slot and the mons
-// being built, and never outlives that: the battle it is for resets the heap on its way
-// in (BrBot_HeapReset), and by then this is long since freed.
-#define BR_TRAINER_MAX (3 + PLAYER_NAME_LENGTH + PARTY_SIZE * 100)
+// A staged party is six rows, a header and the bag's tail -- 619 bytes, which EWRAM at
+// 99.9% does not have. It goes on the heap for the few frames between the first slot and
+// the mons being built, and never outlives that: the battle it is for resets the heap on
+// its way in (BrBot_HeapReset), and by then this is long since freed. The cap was 610
+// until POK-330 #11 -- no room for the tail -- so a full card with a seven-letter name
+// never arrived at all.
+STATIC_ASSERT(BR_CAP_TRAINER >= 3 + PLAYER_NAME_LENGTH + PARTY_SIZE * 100 + 1 + BR_BOT_ITEMS * 2, BrTrainerCapHoldsAFullCard)
 static EWRAM_DATA struct BrAssembler sTrainerAsm = {0};
 
 // The wire's PackedMon (br_wire.h) into a real mon. Only the fields a fight needs:
@@ -155,10 +157,10 @@ static void HandleTrainer(const u8 *payload, u8 len)
 {
     if (sTrainerAsm.buf == NULL)
     {
-        sTrainerAsm.buf = Alloc(BR_TRAINER_MAX);
+        sTrainerAsm.buf = Alloc(BR_CAP_TRAINER);
         if (sTrainerAsm.buf == NULL)
             return;
-        sTrainerAsm.cap = BR_TRAINER_MAX;
+        sTrainerAsm.cap = BR_CAP_TRAINER;
         sTrainerAsm.type = 0;
     }
     if (BrWire_Assemble(&sTrainerAsm, BR_MSG_TRAINER, FALSE, payload, len))

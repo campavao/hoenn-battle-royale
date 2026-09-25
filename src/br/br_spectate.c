@@ -43,7 +43,7 @@ EWRAM_DATA struct BrSpectate gBrSpectate = {0};
 // the receive side's reassembly buffer -- the two never overlap, because a ROM that is
 // fighting never spectates (ParseBstart refuses while the netlink is up) and a ROM that
 // is spectating never emits (BrSpectate_Tick's first guard).
-static EWRAM_DATA u8 sTurnBuf[128] = {0};
+static EWRAM_DATA u8 sTurnBuf[BR_CAP_TURN] = {0};
 static EWRAM_DATA struct BrAssembler sBstartAsm = {0};
 static EWRAM_DATA struct BrAssembler sTurnAsm = {0};
 
@@ -150,7 +150,7 @@ static void SendBstart(void)
 
 // Two 6-mon parties and the header. Allocated on the first bstart slot and kept for the
 // match: EWRAM is full, the heap is not.
-#define BR_BSTART_MAX (28 + 2 * (1 + PARTY_SIZE * (u16)sizeof(struct Pokemon)))
+STATIC_ASSERT(BR_CAP_BSTART >= 28 + 2 * (1 + PARTY_SIZE * sizeof(struct Pokemon)), BrBstartCapHoldsTwoParties)
 // Where the packed parties start: battle u16, seed u32, flags u32, 2 names, 2 genders.
 #define BR_BSTART_PARTIES 28
 
@@ -311,10 +311,10 @@ static void HandleBstart(const u8 *payload, u8 len)
 {
     if (sBstartAsm.buf == NULL)
     {
-        sBstartAsm.buf = Alloc(BR_BSTART_MAX);
+        sBstartAsm.buf = Alloc(BR_CAP_BSTART);
         if (sBstartAsm.buf == NULL)
             return;
-        sBstartAsm.cap = BR_BSTART_MAX;
+        sBstartAsm.cap = BR_CAP_BSTART;
     }
     if (BrWire_Assemble(&sBstartAsm, BR_MSG_BSTART, FALSE, payload, len))
         ParseBstart(sBstartAsm.buf, sBstartAsm.total);
@@ -352,7 +352,7 @@ static void HandleTurnCont(const u8 *payload, u8 len)
 // The bag behind the rows (POK-297): money u32, stacks u8, then id u16 + n u8 a stack.
 // web/src/net/wire.ts's PARTY_BAG_MAX.
 #define BR_PEEK_BAG_MAX 20
-#define BR_PEEK_CAP (2 + PARTY_SIZE * BR_PEEK_ROW + 5 + 3 * BR_PEEK_BAG_MAX)
+STATIC_ASSERT(BR_CAP_PARTY >= 2 + PARTY_SIZE * BR_PEEK_ROW + 5 + 3 * BR_PEEK_BAG_MAX, BrPartyCapHoldsARowsAndBag)
 #define BR_PEEK_OFF_NICKLEN 36
 #define BR_PEEK_OFF_NICK 37
 
@@ -461,7 +461,7 @@ static void PackOwnMon(struct Pokemon *mon, u8 *row)
 // of it alive. Reporting gEnemyParty under the bot's seat is how the page finds out.
 void BrSpectate_SendPartyOf(struct Pokemon *party, u8 seat)
 {
-    u8 *buf = Alloc(BR_PEEK_CAP);
+    u8 *buf = Alloc(BR_CAP_PARTY);
     u16 len;
     u8 count = 0, i;
 
@@ -535,10 +535,10 @@ static void HandleParty(const u8 *payload, u8 len)
 {
     if (sPartyAsm.buf == NULL)
     {
-        sPartyAsm.buf = Alloc(BR_PEEK_CAP);
+        sPartyAsm.buf = Alloc(BR_CAP_PARTY);
         if (sPartyAsm.buf == NULL)
             return;
-        sPartyAsm.cap = BR_PEEK_CAP;
+        sPartyAsm.cap = BR_CAP_PARTY;
     }
     if (BrWire_Assemble(&sPartyAsm, BR_MSG_PARTY, FALSE, payload, len))
         ParseParty(sPartyAsm.buf, sPartyAsm.total);
