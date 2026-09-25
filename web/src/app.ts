@@ -880,8 +880,8 @@ function wireFps(emu: Emulator): void {
   if (!import.meta.env.DEV) return;
   const el = $('#fps') as HTMLElement;
   el.hidden = false;
-  // ...and a frame listener that threw, which the emulator skips from then on: the page
-  // carries on looking fine without it (POK-331 #29).
+  // ...and how many frame listeners have thrown: the emulator reports each one's first
+  // throw only and goes on calling it, so the page carries on looking fine (POK-331 #29).
   const meter = new FrameMeter(emu);
   setInterval(() => {
     el.textContent = meter.read();

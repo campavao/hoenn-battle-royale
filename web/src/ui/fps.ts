@@ -1,9 +1,10 @@
 // The dev readout in the corner: frames a second, and how many frame listeners have
 // thrown (POK-331 #29).
 //
-// The emulator catches a listener that throws and skips it from then on (emu/index.ts),
-// so the frame carries on and the page looks fine while a piece of it -- the mailbox
-// pump, the field painter, a bot loop -- has quietly stopped. The console had it; the
+// The emulator catches a listener that throws, so the frame carries on, and reports only
+// its first throw (emu/index.ts): the listener is still called every frame, and may fail
+// every frame, while the page looks fine and a piece of it -- the mailbox pump, the field
+// painter, a bot loop -- quietly does nothing. The console had the first throw; the
 // readout says so where somebody trying the page is already looking.
 
 /** What the meter needs of the emulator. */
@@ -32,8 +33,9 @@ export class FrameMeter {
     });
   }
 
-  /** The line: frames a second since the last read, and every listener that has thrown
-   *  so far -- they stay stopped, so the count stays up. */
+  /** The line: frames a second since the last read, and how many listeners have thrown
+   *  so far -- each counted once, at its first throw, since that is all the emulator
+   *  reports. Listeners that have thrown, not ones that stopped: they are still called. */
   read(): string {
     const now = this.now();
     const fps = (this.frames * 1000) / Math.max(1, now - this.since);
