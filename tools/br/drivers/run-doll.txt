@@ -32,4 +32,16 @@ expect u16 gBrBattle+4 1
 expect u16 gBrBattle+6 1
 expect u8 gBattleOutcome 4
 expect u16 *gSaveBlock1Ptr+0x560 0
+# ...and the turn a spectator is sent says so (POK-330 #12): RUN (3) with its kind after
+# it, BR_RUN_DOLL (1), for us and for the loopback's mirror. Without the kind the replay
+# ran it as nothing to run with, printed "Can't escape!", and waited on a turn that was
+# never coming.
+expectmsg 19 u16 0 0x0100
+expectmsg 19 u8 2 0
+expectmsg 19 u8 3 2
+expectmsg 19 u8 4 3
+expectmsg 19 u8 5 1
+expectmsg 19 u8 6 1
+expectmsg 19 u8 8 3
+expectmsg 19 u8 9 1
 say run doll ok

@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_battle.h"
+#endif
 #include "malloc.h"
 #include "apprentice.h"
 #include "battle.h"
@@ -4722,6 +4725,9 @@ void CopyPlayerPartyMonToBattleData(u8 battler, u8 partyIndex)
 
 bool8 ExecuteTableBasedItemEffect(struct Pokemon *mon, u16 item, u8 partyIndex, u8 moveIndex)
 {
+#if BR
+    BrBattle_NoteItemTarget(partyIndex, moveIndex); // whom a bag item went to (POK-330 #12)
+#endif
     return PokemonUseItemEffects(mon, item, partyIndex, moveIndex, FALSE);
 }
 

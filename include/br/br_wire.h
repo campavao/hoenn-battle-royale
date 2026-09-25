@@ -214,7 +214,11 @@
 
 // ROM -> page -> spectators: the action bytes a battle produced since the last turn
 // message, streamed so the spectator's recorded replay stays a turn behind (POK-233).
-// The challenger emits it. Payload (variable, the RecordedBattle delta):
+// The challenger emits it, once every battler has chosen -- a choice can still be taken
+// back until then -- and again when a turn asks for more (a switch after a faint).
+// Beyond Emerald's own record, a RUN is followed by its BR_RUN_* kind and a bag item by
+// four bytes (br_battle.h's BR_ITEM_RECORD_BYTES), none of them 0xFF (POK-330 #12).
+// Payload (variable, the RecordedBattle delta):
 //   0..1:  battle  u16 LE
 //   2..:   one or more [battler u8, count u8, count action bytes] runs
 #define BR_MSG_TURN 19

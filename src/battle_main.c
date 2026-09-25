@@ -64,6 +64,7 @@
 #include "br/br_netlink.h"
 #include "br/br_duel.h"
 #include "br/br_levels.h"
+#include "br/br_battle.h"
 #endif
 #include "cable_club.h"
 
@@ -1934,6 +1935,14 @@ void BrBattle_Unwind(void)
     // nothing. br_netlink.c puts CB1_Overworld back; overworld.h is not included here.
     FreeAllWindowBuffers();
     SetMainCallback2(gMain.savedCallback);
+}
+
+// The spectator stream holds a turn back until every battler has chosen (POK-330 #12):
+// until then the engine can still take a byte back off the record -- a FIGHT backed out
+// of -- and one already on the wire cannot be.
+bool8 BrBattle_Choosing(void)
+{
+    return gBattleMainFunc == HandleTurnActionSelectionState;
 }
 #endif
 
@@ -4217,6 +4226,9 @@ static void HandleTurnActionSelectionState(void)
             if (!IS_BATTLE_CONTROLLER_ACTIVE_OR_PENDING_SYNC_ANYWHERE(gActiveBattler))
             {
                 RecordedBattle_SetBattlerAction(gActiveBattler, gBattleBufferB[gActiveBattler][1]);
+#if BR
+                BrBattle_RecordChoice(gActiveBattler); // a RUN's kind goes on after it (POK-330 #12)
+#endif
                 gChosenActionByBattler[gActiveBattler] = gBattleBufferB[gActiveBattler][1];
 
                 switch (gBattleBufferB[gActiveBattler][1])
@@ -4267,9 +4279,10 @@ static void HandleTurnActionSelectionState(void)
                         // not a limit of the cable -- and a battle royale where the bag
                         // works against a bot and not against a player is two games.
                         // Our link is the mailbox (br_netlink.c) and the item action
-                        // crosses it like any other, so the ban is lifted for ours and
-                        // left alone for everybody else's.
-                        !gBrNetlink.active &&
+                        // crosses it like any other, so the ban is lifted for ours --
+                        // and for a spectator's replay of one (POK-330 #12) -- and left
+                        // alone for everybody else's.
+                        !BrBattle_ItemsAllowed() &&
 #endif
                         gBattleTypeFlags & (BATTLE_TYPE_LINK
                                             | BATTLE_TYPE_FRONTIER_NO_PYRAMID
@@ -4460,6 +4473,9 @@ static void HandleTurnActionSelectionState(void)
                     }
                     break;
                 case B_ACTION_USE_ITEM:
+#if BR
+                    BrBattle_RecordItem(gActiveBattler); // which item, and on whom (POK-330 #12)
+#endif
                     if ((gBattleBufferB[gActiveBattler][1] | (gBattleBufferB[gActiveBattler][2] << 8)) == 0)
                     {
                         gBattleCommunication[gActiveBattler] = STATE_BEFORE_ACTION_CHOSEN;

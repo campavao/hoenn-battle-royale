@@ -1032,6 +1032,12 @@ void BrSpectate_Tick(void)
         gBrSpectate.started = TRUE;
     }
 
+    // Not while the battlers are still choosing (POK-330 #12): a FIGHT backed out of is
+    // taken back off the record, and a byte that is already on the wire cannot be -- the
+    // replay read it as the next choice and every byte after it one out of step. So a
+    // turn goes out whole, once everybody has chosen.
+    if (BrBattle_Choosing())
+        return;
     // The action bytes recorded since last frame -- a handful; sTurnBuf holds a whole
     // turn arriving in one frame without splitting a run.
     id = BattleId();

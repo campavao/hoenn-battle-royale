@@ -1403,36 +1403,30 @@ static void RecordedOpponentHandlePrintSelectionString(void)
 #if BR
 // A live spectated battle (POK-233) runs a turn behind the fighters, so the next action
 // bytes may not have arrived yet. Hold the controller here and look again next frame
-// instead of handing the engine a B_ACTION_NONE it would act on.
+// instead of handing the engine a B_ACTION_NONE it would act on. What each one reads is
+// in recorded_battle.c, once for both sides (POK-330 #12).
 static void RecordedOpponentWaitForAction(void)
 {
-    if (RecordedBattle_HasBattlerAction(gActiveBattler, 1))
-    {
-        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, RecordedBattle_GetBattlerAction(gActiveBattler), 0);
+    if (RecordedBattle_BrEmitAction(gActiveBattler))
         RecordedOpponentBufferExecCompleted();
-    }
 }
 
 static void RecordedOpponentWaitForMove(void)
 {
-    if (RecordedBattle_HasBattlerAction(gActiveBattler, 2))
-    {
-        u8 moveIndex = RecordedBattle_GetBattlerAction(gActiveBattler);
-        u8 target = RecordedBattle_GetBattlerAction(gActiveBattler);
-
-        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, moveIndex | (target << 8));
+    if (RecordedBattle_BrEmitMove(gActiveBattler))
         RecordedOpponentBufferExecCompleted();
-    }
 }
 
 static void RecordedOpponentWaitForSwitch(void)
 {
-    if (RecordedBattle_HasBattlerAction(gActiveBattler, 1))
-    {
-        *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = RecordedBattle_GetBattlerAction(gActiveBattler);
-        BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, *(gBattleStruct->monToSwitchIntoId + gActiveBattler), NULL);
+    if (RecordedBattle_BrEmitSwitch(gActiveBattler))
         RecordedOpponentBufferExecCompleted();
-    }
+}
+
+static void RecordedOpponentWaitForItem(void)
+{
+    if (RecordedBattle_BrEmitItem(gActiveBattler))
+        RecordedOpponentBufferExecCompleted();
 }
 #endif
 
@@ -1479,6 +1473,13 @@ static void RecordedOpponentHandleChooseMove(void)
 
 static void RecordedOpponentHandleChooseItem(void)
 {
+#if BR
+    if (RecordedBattle_IsSpectateLive())
+    {
+        gBattlerControllerFuncs[gActiveBattler] = RecordedOpponentWaitForItem;
+        return;
+    }
+#endif
     RecordedOpponentBufferExecCompleted();
 }
 

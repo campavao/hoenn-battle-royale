@@ -74,4 +74,25 @@ void BrBattle_HideClock(void);
 // never answered, or one that went out mid-fight.
 void BrBattle_Unwind(void);
 
+// The spectator's replay (POK-330 #12) reads a fight off its record, so what the record
+// did not carry, the replay could not do. A bag item goes on it as four bytes after its
+// action, none of them 0xFF, which is the record's "not here yet":
+//   [item & 0x7F][item >> 7][a][b]
+// For a battler on the player's side, a is the party slot the bag's item went to
+// (PARTY_SIZE for none: a ball, a doll, the AI's) and b the move slot a PP item chose;
+// on the opponent's side they are the AI's item type and flags, which its script reads.
+#define BR_ITEM_RECORD_BYTES 4
+// battle_main.c: the bag works in our link battles, and so in a replay of one.
+bool8 BrBattle_ItemsAllowed(void);
+// battle_main.c, as the choices go on the record: RUN's kind after it, a bag item's bytes.
+void BrBattle_RecordChoice(u8 battler);
+void BrBattle_RecordItem(u8 battler);
+// pokemon.c's ExecuteTableBasedItemEffect: which party slot, and move, a bag item went to.
+void BrBattle_NoteItemTarget(u8 partyIndex, u8 moveIndex);
+// recorded_battle.c: a recorded item played onto the replay. Returns its id.
+u16 BrBattle_ReplayItem(u8 battler, const u8 *rec);
+// battle_main.c: TRUE while the battlers are still choosing, when the engine may yet take
+// a recorded byte back off the record.
+bool8 BrBattle_Choosing(void);
+
 #endif // GUARD_BR_BATTLE_H

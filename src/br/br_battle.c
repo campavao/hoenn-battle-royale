@@ -6,8 +6,13 @@
 #include "string_util.h"
 #include "battle.h"
 #include "battle_main.h"
+#include "battle_anim.h"
+#include "battle_interface.h"
 #include "main.h"
+#include "pokemon.h"
+#include "recorded_battle.h"
 #include "constants/characters.h"
+#include "constants/items.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -16,6 +21,9 @@
 #include "br/br_battle.h"
 
 EWRAM_DATA struct BrBattle gBrBattle = {0};
+// The party slot, and move, the last bag item in this battle went to (PARTY_SIZE: none).
+static EWRAM_DATA u8 sItemSlot = 0;
+static EWRAM_DATA u8 sItemMove = 0;
 
 // The drawn clock: a small window that rides bg0's scroll so it sits at the top-right
 // of the screen in both the action menu (bg0 scrolled 20 tiles) and the move menu (40).
@@ -122,6 +130,8 @@ void BrBattle_DrawClockSecs(u8 secs)
 void BrBattle_Init(void)
 {
     CpuFill32(0, &gBrBattle, sizeof(gBrBattle));
+    sItemSlot = PARTY_SIZE;
+    sItemMove = 0;
 }
 
 void BrBattle_ShotReset(void)
@@ -209,4 +219,81 @@ bool8 BrBattle_TakeRun(bool8 doll)
         return FALSE;
     gBrBattle.runEscapes++;
     return TRUE;
+}
+
+// ---- the record a spectator replays (POK-330 #12) ------------------------------------
+
+// A replay of our link battle is a RECORDED_LINK one, and Emerald bans the bag in those
+// too: the ban wrote 0xFF over the replay's own read cursor, and the replay waited on it
+// for good the first time a fighter drank a potion.
+bool8 BrBattle_ItemsAllowed(void)
+{
+    return gBrNetlink.active || RecordedBattle_IsSpectateLive();
+}
+
+// RUN's kind rides in its return value (BR_RUN_*), and the replay's RUN is decided by the
+// same byte: a DOLL gets away, a forfeit loses, nothing is "Can't escape!".
+void BrBattle_RecordChoice(u8 battler)
+{
+    if (gBattleBufferB[battler][1] == B_ACTION_RUN)
+        RecordedBattle_SetBattlerAction(battler, gBattleBufferB[battler][2]);
+}
+
+void BrBattle_NoteItemTarget(u8 partyIndex, u8 moveIndex)
+{
+    if (!gMain.inBattle)
+        return;
+    sItemSlot = partyIndex;
+    sItemMove = moveIndex;
+}
+
+// Recorded on every item action, a bag closed empty included (item 0): the replay reads
+// the same four bytes and closes its own bag the same way.
+void BrBattle_RecordItem(u8 battler)
+{
+    u16 item = gBattleBufferB[battler][1] | (gBattleBufferB[battler][2] << 8);
+    u8 a, b;
+
+    if (GetBattlerSide(battler) == B_SIDE_PLAYER)
+    {
+        a = sItemSlot < PARTY_SIZE ? sItemSlot : PARTY_SIZE;
+        b = sItemMove < MAX_MON_MOVES ? sItemMove : 0;
+    }
+    else
+    {
+        a = *(gBattleStruct->AI_itemType + battler / 2);
+        b = *(gBattleStruct->AI_itemFlags + battler / 2);
+    }
+    sItemSlot = PARTY_SIZE;
+    sItemMove = 0;
+    RecordedBattle_SetBattlerAction(battler, item & 0x7F);
+    RecordedBattle_SetBattlerAction(battler, (item >> 7) & 0x7F);
+    RecordedBattle_SetBattlerAction(battler, a);
+    RecordedBattle_SetBattlerAction(battler, b);
+}
+
+u16 BrBattle_ReplayItem(u8 battler, const u8 *rec)
+{
+    u16 item = rec[0] | (rec[1] << 7);
+
+    // A stream that ended in the middle reads 0xFF for what never came: nothing to play.
+    if (rec[0] > 0x7F || rec[1] > 0x7F || item >= ITEMS_COUNT)
+        return ITEM_NONE;
+    if (GetBattlerSide(battler) != B_SIDE_PLAYER)
+    {
+        // The engine's opponent branch runs the AI's own script for it, off these two.
+        *(gBattleStruct->AI_itemType + battler / 2) = rec[2];
+        *(gBattleStruct->AI_itemFlags + battler / 2) = rec[3];
+    }
+    else if (item != ITEM_NONE && rec[2] < PARTY_SIZE)
+    {
+        // The fighter's bag put it straight on the mon before the turn -- the party menu,
+        // or the active mon for an X item -- and the engine's player branch does nothing
+        // more, so this is the whole of it: the same call, on the same mon.
+        gBattlerInMenuId = battler;
+        ExecuteTableBasedItemEffect(&gPlayerParty[rec[2]], item, rec[2], rec[3]);
+        if (gBattlerPartyIndexes[battler] == rec[2])
+            UpdateHealthboxAttribute(gHealthboxSpriteIds[battler], &gPlayerParty[rec[2]], HEALTHBOX_ALL);
+    }
+    return item;
 }

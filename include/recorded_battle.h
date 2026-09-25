@@ -31,6 +31,12 @@ bool8 RecordedBattle_HasBattlerAction(u8 battler, u8 count);
 // instead of waiting for a turn that will never come.
 void RecordedBattle_EndSpectate(void);
 bool8 RecordedBattle_IsSpectateLive(void);
+// A live replay's controllers, waiting on the stream (POK-330 #12): TRUE once the choice
+// has arrived and gone to the engine, and the controller may complete.
+bool8 RecordedBattle_BrEmitAction(u8 battler);
+bool8 RecordedBattle_BrEmitMove(u8 battler);
+bool8 RecordedBattle_BrEmitSwitch(u8 battler);
+bool8 RecordedBattle_BrEmitItem(u8 battler);
 #endif
 bool32 CanCopyRecordedBattleSaveData(void);
 bool32 MoveRecordedBattleToSaveData(void);

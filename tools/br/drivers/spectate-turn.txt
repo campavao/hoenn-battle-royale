@@ -16,11 +16,28 @@ wait 900
 expect u16 gBrSpectate 0
 # the battle is set up: the challenger has published BR_MSG_BSTART (seed + parties)
 expect u8 gBrSpectate+4 1
-# at the action menu: FIGHT, then the first move, to run one turn
+# At the action menu: FIGHT, back out of it, FIGHT again and the first move -- one turn.
+# The back-out takes USE_MOVE back off the record (POK-330 #12); a byte already streamed
+# could not be taken back, and the replay read every byte after it one out of step. So
+# the turn goes out whole once both battlers have chosen, and nothing else does.
+tap A
+wait 40
+tap B
+wait 40
 tap A
 wait 40
 tap A
 wait 200
-expectge u16 gBrSpectate 1
-expectge u16 gBrSpectate+2 1
+expect u16 gBrSpectate 1
+expect u16 gBrSpectate+2 10
+# The one TURN: battle 0 | 1 << 8, then battler 0 [USE_MOVE, slot 0, target 1] and the
+# loopback's battler 1 [USE_MOVE, slot 0, target 0] -- with no stray USE_MOVE ahead of it.
+expectmsg 19 u16 0 0x0100
+expectmsg 19 u8 2 0
+expectmsg 19 u8 3 3
+expectmsg 19 u8 4 0
+expectmsg 19 u8 5 0
+expectmsg 19 u8 6 1
+expectmsg 19 u8 7 1
+expectmsg 19 u8 8 3
 say spectate turn ok

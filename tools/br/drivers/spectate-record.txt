@@ -1,0 +1,56 @@
+# spectate-record: a bag item goes on the record a spectator replays (POK-330 #12). It
+# never did: Emerald bans items in every recorded link battle, so the record had nothing
+# to say about one, and the replay of a fighter's potion wrote over its own read cursor
+# and waited for good. Now an item's action carries four bytes after it --
+# [item & 0x7F][item >> 7][a][b], none of them 0xFF, the record's "not here yet" -- where
+# a and b are the party slot and move a player's bag used it on (PARTY_SIZE, 6, for
+# none), or the AI's item type and flags on the opponent's side, which its script reads.
+#
+# duel.txt's proxy fight with an X ATTACK in both bags: an X item is a first-turn item to
+# Emerald's AI, so both sides spend it at once, and the first TURN carries both.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 01 02 01 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 1B 01 05 14 00 14 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 C7 CF BE C5 C3 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 4B 00 01 4B 00
+mailsend gBrMailbox 27 gDecompressionBuffer 210
+wait 300
+expect u8 gBrDuel+1 1
+poke u32 gRngValue 3
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+expect u16 gBrSpectate 1
+expectmsg 19 u16 0 0x0201
+# Battler 0 (side A, the AI in the player's place): USE_ITEM, X ATTACK (0x4B), and 6 --
+# no bag of a player's put it on anybody; the engine's player branch does nothing with it.
+expectmsg 19 u8 2 0
+expectmsg 19 u8 3 5
+expectmsg 19 u8 4 1
+expectmsg 19 u8 5 0x4B
+expectmsg 19 u8 6 0
+expectmsg 19 u8 7 6
+expectmsg 19 u8 8 0
+# Battler 1: the same item, and what its AI made of it: type 4 (AI_ITEM_X_STAT) and
+# flags 1 (X ATTACK), which the replay's own opponent branch reads to raise the stat.
+expectmsg 19 u8 9 1
+expectmsg 19 u8 10 5
+expectmsg 19 u8 11 1
+expectmsg 19 u8 12 0x4B
+expectmsg 19 u8 13 0
+expectmsg 19 u8 14 4
+expectmsg 19 u8 15 1
+say spectate record ok

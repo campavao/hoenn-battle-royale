@@ -19,6 +19,9 @@
 #include "frontier_util.h"
 #include "constants/trainers.h"
 #include "constants/rgb.h"
+#if BR
+#include "br/br_battle.h"
+#endif
 
 #define BATTLER_RECORD_SIZE 664
 
@@ -781,6 +784,68 @@ void RecordedBattle_EndSpectate(void)
 bool8 RecordedBattle_IsSpectateLive(void)
 {
     return sSpectateLive;
+}
+
+// What a live replay's controllers hand the engine, written once for both sides
+// (POK-330 #12; the player's and the opponent's copies had drifted into two). Each is
+// TRUE once the battler's bytes have arrived and gone to the engine, and the caller
+// then completes its controller; FALSE, and it looks again next frame.
+bool8 RecordedBattle_BrEmitAction(u8 battler)
+{
+    u8 action;
+
+    if (!RecordedBattle_HasBattlerAction(battler, 1))
+        return FALSE;
+    // RUN carries its kind in the byte after it (br_battle.h's BR_RUN_*): a POKe DOLL, a
+    // forfeit, or nothing to run with. Without it every RUN replayed as the last, and
+    // printed "Can't escape!" over a fighter who had got away.
+    if (sBattlerRecordSizes[battler] < BATTLER_RECORD_SIZE
+     && sBattleRecords[battler][sBattlerRecordSizes[battler]] == B_ACTION_RUN)
+    {
+        if (!RecordedBattle_HasBattlerAction(battler, 2))
+            return FALSE;
+        action = RecordedBattle_GetBattlerAction(battler);
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, action, RecordedBattle_GetBattlerAction(battler));
+        return TRUE;
+    }
+    BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, RecordedBattle_GetBattlerAction(battler), 0);
+    return TRUE;
+}
+
+bool8 RecordedBattle_BrEmitMove(u8 battler)
+{
+    u8 moveIndex, target;
+
+    if (!RecordedBattle_HasBattlerAction(battler, 2))
+        return FALSE;
+    moveIndex = RecordedBattle_GetBattlerAction(battler);
+    target = RecordedBattle_GetBattlerAction(battler);
+    BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, moveIndex | (target << 8));
+    return TRUE;
+}
+
+bool8 RecordedBattle_BrEmitSwitch(u8 battler)
+{
+    if (!RecordedBattle_HasBattlerAction(battler, 1))
+        return FALSE;
+    *(gBattleStruct->monToSwitchIntoId + battler) = RecordedBattle_GetBattlerAction(battler);
+    BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, *(gBattleStruct->monToSwitchIntoId + battler), NULL);
+    return TRUE;
+}
+
+// A bag item: the bytes BrBattle_RecordItem wrote, and what it did played again here
+// before the engine is told which item it was.
+bool8 RecordedBattle_BrEmitItem(u8 battler)
+{
+    u8 rec[BR_ITEM_RECORD_BYTES];
+    u8 i;
+
+    if (!RecordedBattle_HasBattlerAction(battler, BR_ITEM_RECORD_BYTES))
+        return FALSE;
+    for (i = 0; i < BR_ITEM_RECORD_BYTES; i++)
+        rec[i] = RecordedBattle_GetBattlerAction(battler);
+    BtlController_EmitOneReturnValue(B_COMM_TO_ENGINE, BrBattle_ReplayItem(battler, rec));
+    return TRUE;
 }
 #endif
 

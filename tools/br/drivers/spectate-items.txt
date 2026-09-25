@@ -1,0 +1,44 @@
+# spectate-items: a spectator's replay plays a fighter's bag and a POKe DOLL (POK-330
+# #12). Emerald bans items in a recorded link battle, and the ban wrote 0xFF over the
+# replay's read cursor: the replay of a fighter's potion froze on that turn for good. A
+# DOLL rode in RUN's return value, which the record never carried, so the replay said
+# "Can't escape!" and then waited on a turn that was never coming.
+#
+# spectate-watch.txt's setup, with a second mon for the challenger at 5 HP on the bench.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 02
+copy gDecompressionBuffer+29 gPlayerParty 100
+copy gDecompressionBuffer+129 gPlayerParty 100
+pokebytes gDecompressionBuffer+215 05 00
+pokebytes gDecompressionBuffer+229 01
+copy gDecompressionBuffer+230 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 330
+wait 10
+expect u8 gBrSpectate+5 1
+# Turn one. The challenger (battler 0) drinks a POTION into its benched mon: USE_ITEM, then
+# 0x0D, 0 (the id, seven bits a byte), slot 1, move 0. The peer (battler 1) is on the
+# opponent's side, so its item is an X ATTACK with its AI's reading of it: type 4
+# (AI_ITEM_X_STAT), flags 1 (X ATTACK).
+pokebytes gDecompressionBuffer+400 00 01 00 05 01 0D 00 01 00 01 05 01 4B 00 04 01
+mailsend gBrMailbox 19 gDecompressionBuffer+400 16
+wait 1500
+shot items
+# The benched mon took the potion: 5 HP and 20 more is all of it (19 or 20, by IVs).
+expectge u16 gPlayerParty+186 19
+# The peer's X ATTACK went up a stage on the replay too: ATK is statStages[1] at +0x19.
+expect u8 gBattleMons+0x71 7
+expect u8 gBrSpectate+5 1
+# Turn two: the challenger RUNs with a POKe DOLL (RUN, BR_RUN_DOLL); the peer FIGHTs.
+pokebytes gDecompressionBuffer+400 00 01 00 02 03 01 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer+400 11
+wait 600
+# The replay honoured the doll: one run, one getaway (this ROM's own counters, which the
+# replay's HandleAction_Run reaches like a fighter's).
+expect u16 gBrBattle+4 1
+expect u16 gBrBattle+6 1
+wait 600
+# ...and it ended, as the fight did, with the viewer back on the field.
+expect u8 gBrSpectate+5 0
+say spectate items ok
