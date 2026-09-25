@@ -30,13 +30,14 @@
 //                                         the matching `pass`
 //   {type:"set_skin", skin}               what this member looks like, live
 //   {type:"list_rooms"}                -> rooms {rooms:[{code, host, skin,
-//                                         players, seats, pass}]}: every
+//                                         players, seats, pass, full}]}: every
 //                                         lobby a stranger may walk into --
 //                                         open, not mid-match, not the daily.
 //                                         `players` counts trainers, never
 //                                         watchers; `seats` is the host's MAX
 //                                         as they set it; `pass` says a
-//                                         passcode is needed.  A browser that
+//                                         passcode is needed; `full` says the
+//                                         door would refuse a join.  A browser that
 //                                         keeps asking is kept alive past the
 //                                         unbound sweep.  Inside the half hour
 //                                         before the DAILY GAME its row leads
@@ -90,9 +91,13 @@
 //   {type:"quick_join", name,          same as join_room, but the relay picks
 //         patch?, protocol?}           the fullest open room rather than a code
 // Server -> client
-//   {type:"roster", code, host, open, max, pass, members:[{id,name,spectate?}]}
-//                                      on every change (pass: whether a
-//                                      passcode is set, never the code)
+//   {type:"roster", code, host, open, max, seats, pass,
+//         members:[{id,name,spectate?}]}
+//                                      on every change (max: the humans the
+//                                      room seats; seats: the host's MAX as
+//                                      asked, bots filling the rest; pass:
+//                                      whether a passcode is set, never the
+//                                      code)
 //   {type:"rooms", rooms:[...]}        the lobby list, see list_rooms
 //   {type:"recv", from, m}
 //   {type:"room_closed", reason}       the host left and nobody could take
@@ -532,9 +537,12 @@ class Room {
       members.push({ id: m.id, name: m.name,
                      spectate: m.spectator || undefined });
     }
+    // `seats` is the host's MAX as asked (up to limits.seats), `max` the
+    // humans it is clamped to: the page labels MAX and deals its bots from
+    // the first, and read the second as both, so MAX stuck at 16 (POK-330 #29)
     return { type: "roster", code: this.code, host: this.host.id,
-             open: this.open, max: this.max, pass: this.pass !== null,
-             members };
+             open: this.open, max: this.max, seats: this.seats,
+             pass: this.pass !== null, members };
   }
 
   // trainers seated, never watchers: a list that said 3/30 for a lobby
@@ -547,10 +555,13 @@ class Room {
 
   // The row the lobby list shows for this room.  The host's name and
   // skin, never their id or IP; the passcode's existence, never the code.
+  // `full` is the door's own answer: `players` counts trainers against the
+  // seats asked for, while the door counts watchers too, against the human
+  // ceiling and the ids left, so the list could not work it out (POK-330 #29)
   listing() {
     return { code: this.code, host: this.host.name, skin: this.host.skin,
              players: this.trainerCount(), seats: this.seats,
-             pass: this.pass !== null };
+             pass: this.pass !== null, full: this.full() };
   }
 
   // Serialized once for the whole room, not once per member: a host's place

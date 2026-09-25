@@ -2295,7 +2295,8 @@ function wireRoom(
       (seat) => say(Ticker.said(seat, nameOf(seat), myVoice(seat, seed).intro)),
       // How many bots the host is filling to (POK-241's FILL), held to what the room
       // has room for.
-      botFill() === 0 ? 0 : Math.max(0, (controls.roster?.max ?? BOT_FILL) - seats.length),
+      // `seats` is MAX as the host set it; `max` is only the humans (POK-330 #29).
+      botFill() === 0 ? 0 : Math.max(0, (controls.roster?.seats ?? controls.roster?.max ?? BOT_FILL) - seats.length),
       resume,
       paceOptions()?.safariSecs ?? controls.safariSecs,
       () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),

@@ -37,6 +37,24 @@ describe('the room as everyone sees it', () => {
   });
 });
 
+describe('MAX past the relay\'s sixteen humans (POK-330 #29)', () => {
+  it('shows and fills to the seats asked for, not the humans the relay seats', () => {
+    const view = roomView(roster({ max: 16, seats: 30 }), 1, true);
+    expect(view.max).toBe(30);
+    expect(view.fill).toBe(28);
+    expect(startNote(view)).toBe('START: 2 trainers and 28 bots.');
+    // ...and the ladder moves on from 30, instead of sticking at 16
+    expect(nextMax(view.max)).toBe(MAX_STEPS[0]);
+    expect(nextMax(roomView(roster({ max: 16, seats: 16 }), 1, true).max)).toBe(20);
+  });
+
+  it('reads an older relay\'s max as both', () => {
+    const view = roomView(roster({ max: 8 }), 1, true);
+    expect(view.max).toBe(8);
+    expect(view.fill).toBe(6);
+  });
+});
+
 describe('the host controls', () => {
   it('cycle MAX up the ladder and round', () => {
     expect(nextMax(2)).toBe(4);

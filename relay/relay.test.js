@@ -988,9 +988,9 @@ test("list_rooms shows every joinable lobby: host, skin, trainers over seats, th
     seeker.send({ type: "list_rooms" });
     const answer = await seeker.until("rooms");
     assert.deepEqual(answer.rooms, [
-      { code: annaCode, host: "ANNA", skin: "SPRITE_HIKER", players: 2, seats: 30, pass: false },
+      { code: annaCode, host: "ANNA", skin: "SPRITE_HIKER", players: 2, seats: 30, pass: false, full: false },
       // (no skin sent, no skin key: JSON has no undefined)
-      { code: benCode, host: "BEN", players: 1, seats: 4, pass: true },
+      { code: benCode, host: "BEN", players: 1, seats: 4, pass: true, full: false },
     ]);
     // the seat count is the host's MAX as asked, not the human ceiling
     assert.equal(answer.rooms[0].seats, 30);
@@ -1774,4 +1774,44 @@ test("the heir is the earliest arrival, not the lowest id", async () => {
     assert.equal(roster.host, 3, "C has been here longer than D");
     for (const x of [host, b, c, d]) x.end();
   });
+});
+
+// ------- POK-330 #29: MAX goes to 30, and the list says full the way the door does
+
+test("the roster carries the seats asked for beside the humans seated", async () => {
+  await withRelay(async (port) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST", max: 30 });
+    let roster = await host.until("roster");
+    assert.equal(roster.max, 16, "humans: the relay's ceiling");
+    assert.equal(roster.seats, 30, "seats: what the host asked for, bots filling the rest");
+    host.send({ type: "set_max", max: 20 });
+    roster = await host.until("roster");
+    assert.equal(roster.seats, 20);
+    host.end();
+  });
+});
+
+test("a listed room is full when its door would say so, not by trainers over seats", async () => {
+  await withRelay(async (port) => {
+    // thirty seats, two humans allowed: a trainer and a watcher fill it
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST", open: true, max: 30 });
+    const { code } = await host.until("room_hosted");
+    const seeker = await connect(port);
+    seeker.send({ type: "list_rooms" });
+    assert.equal((await seeker.until("rooms")).rooms[0].full, false);
+    const watcher = await connect(port);
+    watcher.send({ type: "join_room", code, name: "W", spectate: true });
+    await watcher.until("room_joined");
+    seeker.send({ type: "list_rooms" });
+    const [row] = (await seeker.until("rooms")).rooms;
+    assert.equal(row.players, 1, "the watcher is not a trainer");
+    assert.equal(row.seats, 30);
+    assert.equal(row.full, true, "but the door is shut all the same");
+    const late = await connect(port);
+    late.send({ type: "join_room", code, name: "L" });
+    assert.equal((await late.next()).reason, "full");
+    for (const c of [host, seeker, watcher, late]) c.end();
+  }, { members: 2 });
 });

@@ -50,8 +50,8 @@ Server -> client:
 
 | type | fields | when |
 | --- | --- | --- |
-| `roster` | `code, host, open, max, pass, members:[{id,name,spectate?}]` | on every room change |
-| `rooms` | `rooms:[...]` | reply to `list_rooms` |
+| `roster` | `code, host, open, max, seats, pass, members:[{id,name,spectate?}]` | on every room change. `max`: the humans the room seats (the host's MAX, clamped to 16); `seats`: the MAX the host asked for (up to 30), which bots fill |
+| `rooms` | `rooms:[{code, host, skin?, players, seats, pass, full}]` | reply to `list_rooms`. `full`: the door would refuse a join (it counts watchers and free ids, which `players`/`seats` cannot) |
 | `recv` | `from, m` | a `to`/`all` delivery |
 | `room_closed` | `reason` | the host left with no heir, or you were kicked (`reason:"removed"`) |
 | `room_hosted` | `code, id, token` | your `host_room`/`daily_join` succeeded; `token` claims this seat back after a drop |

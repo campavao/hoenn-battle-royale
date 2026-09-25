@@ -38,7 +38,11 @@ export interface RosterEvent {
   code: string;
   host: number;
   open: boolean;
+  /** The humans the room seats: the host's MAX clamped to the relay's ceiling (16). */
   max: number;
+  /** The host's MAX as asked, up to 30, bots filling what humans do not. Absent from
+   *  an older relay, which only ever said `max` (POK-330 #29). */
+  seats?: number;
   pass: boolean;
   members: RosterMember[];
 }
@@ -71,6 +75,9 @@ export interface RoomListing {
   players: number;
   seats: number;
   pass: boolean;
+  /** Whether the door would refuse a join, from the relay that runs the door: it
+   *  counts watchers and ids, which `players`/`seats` cannot (POK-330 #29). */
+  full?: boolean;
   daily?: boolean;
   secs?: number;
 }
@@ -328,6 +335,7 @@ export class RelayClient {
           host: msg.host as number,
           open: msg.open as boolean,
           max: msg.max as number,
+          seats: typeof msg.seats === 'number' ? msg.seats : undefined,
           pass: msg.pass as boolean,
           members: (msg.members as RosterMember[]) ?? [],
         });

@@ -277,6 +277,17 @@ describe('RelayClient', () => {
     ]);
   });
 
+  it('passes the roster\'s seats through beside max (POK-330 #29)', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    const roster = vi.fn();
+    relay.on('roster', roster);
+    sockets[0].receive({ type: 'roster', code: 'ABC123', host: 1, open: true, max: 16, seats: 30, pass: false, members: [] });
+    expect(roster).toHaveBeenCalledWith(expect.objectContaining({ max: 16, seats: 30 }));
+  });
+
   it('agrees with the relay on the highest seat', () => {
     expect(serverSource).toMatch(new RegExp(`export const MAX_SEAT = ${MAX_SEAT};`));
   });
