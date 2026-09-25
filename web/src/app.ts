@@ -5,7 +5,7 @@
 
 import { KEY_BIT, Emulator, type GbaKey } from './emu';
 import { checkEmerald, isPrePatched, sha1Hex } from './rom/emerald';
-import { loadRelease, loadSidecars, type ReleaseInfo } from './release';
+import { loadCheckedRelease, loadSidecars, type CheckedRelease, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
 import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
@@ -173,6 +173,27 @@ async function buildLine(info: ReleaseInfo, running: Uint8Array): Promise<string
   return `rom ${mine} — STALE, build is ${want}`;
 }
 
+/** Why this tab could not get the ROM br-version.json names, even fetched past every
+ *  cache (POK-330 #23) -- or null. Solo still plays; a room would be a link battle
+ *  between two builds, and that desyncs. */
+let roomsRefused: string | null = null;
+
+/** Said instead of joining a room, with the one way out: a reload. */
+function refuseRoom(why: string): void {
+  showScreen('patching');
+  ($('#patch-status') as HTMLElement).textContent = 'Online play is off in this tab.';
+  const banner = $('#patch-banner') as HTMLElement;
+  banner.textContent =
+    `It could not get the current release (${why}), and everybody in a room has to run`
+    + ' the same build. Reload to try again -- SOLO VS BOTS still works.';
+  banner.hidden = false;
+  const reload = document.createElement('button');
+  reload.type = 'button';
+  reload.textContent = 'RELOAD';
+  reload.addEventListener('click', () => backToLobby());
+  banner.after(reload);
+}
+
 // ---- BPS patching, off the main thread ---------------------------------------------
 
 function applyPatchInWorker(source: Uint8Array, patch: Uint8Array): Promise<Uint8Array> {
@@ -336,7 +357,19 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
       symbols: side.symbols,
     };
   }
-  const release = await loadRelease();
+  // Fetched by the sha1 br-version.json names, applied, and checked against it: a copy
+  // that builds anything else is fetched once more past every cache (POK-330 #23).
+  let release: CheckedRelease;
+  try {
+    release = await loadCheckedRelease((patch) => {
+      statusEl.textContent = 'Applying the patch…';
+      return applyPatchInWorker(emu.readRom(), patch);
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    statusEl.textContent = `Patch failed: ${message}`;
+    throw err;
+  }
 
   if (release.status === 'unpublished') {
     setVersionLine('unpatched');
@@ -353,29 +386,19 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
     return { bytes: emu.readRom(), usingPatched: false };
   }
 
-  setVersionLine(versionText(release.info));
-  statusEl.textContent = 'Applying the patch…';
-  try {
-    const patched = await applyPatchInWorker(emu.readRom(), release.patch);
-
-    // The same line the local-build path gets: which ROM is in the tab, in seven
-    // characters. This is the path a stock ROM takes, and it is just as able to be
-    // running something other than the build everyone is talking about -- a cached
-    // BPS is a stale ROM with a fresh-looking patch number over it.
-    setVersionLine(`${versionText(release.info)} · ${await buildLine(release.info, patched)}`);
-    return {
-      bytes: patched,
-      usingPatched: true,
-      mailboxBase: release.symbols.get('gBrMailbox'),
-      protocol: release.info.protocol,
-      patch: release.info.patch,
-      symbols: release.symbols,
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    statusEl.textContent = `Patch failed: ${message}`;
-    throw err;
-  }
+  // The same line the local-build path gets: which ROM is in the tab, in seven
+  // characters. This is the path a stock ROM takes, and it is just as able to be
+  // running something other than the build everyone is talking about.
+  setVersionLine(`${versionText(release.info)} · ${await buildLine(release.info, release.rom)}`);
+  roomsRefused = release.stale;
+  return {
+    bytes: release.rom,
+    usingPatched: true,
+    mailboxBase: release.symbols.get('gBrMailbox'),
+    protocol: release.info.protocol,
+    patch: release.info.patch,
+    symbols: release.symbols,
+  };
 }
 
 // ---- input: keyboard ------------------------------------------------------------------
@@ -3465,6 +3488,7 @@ async function main(): Promise<void> {
   const fromHash = parseRoomHash();
   let roomHash = fromHash;
   if (!roomHash) roomHash = await runLobby();
+  if (roomsRefused && roomHash.mode !== 'solo') return refuseRoom(roomsRefused);
   const bootMode = bootModeFor(roomHash.mode);
 
   if (mailboxBase !== undefined) {
