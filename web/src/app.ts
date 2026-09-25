@@ -30,7 +30,7 @@ import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { NpcFog } from './match/npcfog';
 import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
-import { onRefused } from './match/room';
+import { clockLeftAt, onRefused, ringClockLeft } from './match/room';
 import { Stage } from './ui/stage';
 import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
 import {
@@ -1637,8 +1637,7 @@ function renderGuestStrip(
   setInMatch(true);
   // The CLOCK lands every five seconds; the seconds in between are counted off here,
   // the same way the ROM counts them off against its own frame timer.
-  const gone = Math.floor(Math.max(0, now - match.clockAt) / 1000);
-  const left = Math.max(0, match.clockLeft - gone);
+  const left = clockLeftAt(match, now);
   const mm = Math.floor(left / 60);
   const ss = String(left % 60).padStart(2, '0');
   const alive = bridge.roster.all().filter((e) => e.alive).length;
@@ -2418,7 +2417,9 @@ function wireRoom(
       director.resume({
         ringPhase: match.ringPhase,
         centre: match.centre,
-        secsLeftInPhase: match.clockLeft,
+        // counted off since it was heard or kept: a host back from a drop is that much
+        // further on, as every guest's ROM is
+        secsLeftInPhase: clockLeftAt(match, performance.now()),
         out: [...match.out, ...gone],
         // The old host's list of dealt cells left with it. What `start` dealt, and where
         // everybody stands now (a `land` is unicast, so a trainer who dropped and has not
@@ -2458,6 +2459,9 @@ function wireRoom(
   /** Everything a promoted client needs to pick the match up (POK-252), and reset by
    *  returnToRoom for the next one (match/lifecycle.ts). */
   const match: MatchSnapshot = freshMatch();
+  /** The match's fog phase, from its `start`: what a `ring` puts on the clock. A watcher
+   *  who walked in late never heard one, and has the default the director would use. */
+  let matchFog = controls.fogSecs;
   let fieldSize = 0;
   let recorded = false;
   const log = new MatchLog();
@@ -2478,13 +2482,14 @@ function wireRoom(
         botSeats: director ? match.botSeats : new Set(botSeatsOf(msg.spawns.map((s) => s.seat), controls.roster)),
         active: true,
       });
+      matchFog = msg.fog ?? controls.fogSecs;
       bridge?.roster.seatBots(botRows(msg.seed, match.botSeats));
       hideRoomScreen();
     } else if (msg.t === 'ring') {
       match.ringPhase = msg.phase;
       match.centre = { sx: msg.sx, sy: msg.sy, place: msg.place };
       match.ringR = msg.r;
-      match.clockLeft = 0;
+      match.clockLeft = ringClockLeft(msg.phase, matchFog); // nothing sends a `clock` in the ring
       match.clockAt = performance.now();
       match.active = true; // a watcher's late start: it never heard the `start`
     } else if (msg.t === 'clock') {
@@ -3110,7 +3115,12 @@ function wireRoom(
     // A host's socket going is the room going to an heir, or waiting for us: either way
     // this page is not running the match any more, and a director left standing here
     // would answer picks next to the heir's once the rejoin lands. A host the relay
-    // waited for starts its director again from attach (POK-330 #47).
+    // waited for starts its director again from attach (POK-330 #47), from the clock
+    // this one stopped at.
+    if (director && director.state.phase !== 'ended') {
+      match.clockLeft = director.state.clockLeft;
+      match.clockAt = performance.now();
+    }
     teardownHost();
     stopSpectateLoop?.();
     // The room itself is over -- the host left, its hold ran out, or it showed us out --

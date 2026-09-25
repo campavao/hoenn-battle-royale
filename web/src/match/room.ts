@@ -9,6 +9,7 @@
 // "does FILL say how many bots", "is START refused with nobody in the room", "does a
 // guest see the host's settings and not the host's buttons".
 import type { RosterEvent } from '../net/relay';
+import { isFinalRingPhase } from './clock';
 
 /** What MAX cycles through. Kanto's ladder, and the same one the relay clamps to: the
  *  humans are capped by the relay (16, the roster's `max`) and everything above that
@@ -109,6 +110,25 @@ export function onRefused(
 ): 'rehost' | 'dead-end' | 'status' {
   if (reason === 'not_found' && page.rejoining && page.wasHost && page.seat === OPENER_SEAT) return 'rehost';
   return DEAD_ENDS.includes(reason) ? 'dead-end' : 'status';
+}
+
+// ---- the clock a match is picked up from ---------------------------------------------
+
+/** Seconds to the next ring move once a `ring` lands: the whole phase, or none once the
+ *  fog is everywhere -- what the director counts on the host. It was kept as 0, and
+ *  nothing sends a `clock` during the ring, so a page picking the match up (an heir, or
+ *  a host back from its own drop) read the phase as spent and moved the fog on the
+ *  moment it resumed (POK-330 #47 review). */
+export function ringClockLeft(phase: number, fogSecs: number): number {
+  return isFinalRingPhase(phase - 1) ? 0 : fogSecs;
+}
+
+/** The seconds left in the running phase at `now`: the last clock this page heard or
+ *  kept, counted off since it arrived. What a guest's strip draws, and what a director
+ *  resumes from -- a host back after a 40-second drop is 40 seconds further on. */
+export function clockLeftAt(clock: { clockLeft: number; clockAt: number }, now: number): number {
+  const gone = Math.floor(Math.max(0, now - clock.clockAt) / 1000);
+  return Math.max(0, clock.clockLeft - gone);
 }
 
 // ---- match options (POK-241) --------------------------------------------------------
