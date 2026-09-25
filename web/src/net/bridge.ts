@@ -75,6 +75,7 @@ export interface LinkCarry {
   heardLines: Map<number, Lines>;
   sent: BlockMsg[];
   lastRecvSeq: number;
+  fighting: boolean;
 }
 
 /** How many of our own last blocks are kept to say again. The link is lockstep -- one
@@ -110,6 +111,12 @@ export class Bridge {
    *  last few again after a gap, and the ROM keeps no count of its own: a repeat handed
    *  to it would be read as the next block. */
   private lastRecvSeq = 0;
+  /** Our ROM is in a link fight: it has sent or been handed a block since the challenge,
+   *  and has not said how it ended. br_netlink.c's HandleChallenge ignores a challenge
+   *  while gBrNetlink.active, so this page must too, or one naming us from a third seat
+   *  mid-fight points our blocks at them and refuses our real opponent's. Before the
+   *  first block it stays down: until then the ROM takes the latest challenge. */
+  private fighting = false;
   /** Who the relay lists in the room, from its last roster (net/trust.ts). */
   private members = new Set<number>();
   /** Our opponent dropped off the relay's roster mid-fight: the blocks we sent while it
@@ -156,6 +163,7 @@ export class Bridge {
       for (const [seat, lines] of opts.carry.heardLines) this.heardLines.set(seat, lines);
       this.sentBlocks = [...opts.carry.sent];
       this.lastRecvSeq = opts.carry.lastRecvSeq;
+      this.fighting = opts.carry.fighting;
     }
 
     this.unsubs.push(opts.emu.onFrame(() => this.onFrame()));
@@ -191,6 +199,7 @@ export class Bridge {
       heardLines: new Map(this.heardLines),
       sent: [...this.sentBlocks],
       lastRecvSeq: this.lastRecvSeq,
+      fighting: this.fighting,
     };
   }
 
@@ -239,8 +248,14 @@ export class Bridge {
     if (stamped.t === 'challenge' && this.myLines) stamped = { ...stamped, lines: this.myLines };
     this.noteChallenge(stamped);
     this.roster.applyMsg(stamped);
-    // Our fight is over: nothing of it is worth saying again.
-    if (stamped.t === 'result') this.sentBlocks = [];
+    // Our ROM is out of the fight: its RESULT, or -- when the link never got going and
+    // the watchdog closed it with no RESULT -- back on the map, which it never is while
+    // gBrNetlink.active. Our last blocks are kept all the same: the ROM says RESULT
+    // seconds after the final exchange, and the opponent may still be waiting on ours
+    // (#7). Their own `result` lets them go, or the next challenge.
+    if ((stamped.t === 'result' && stamped.seat === this.seat) || (stamped.t === 'busy' && !stamped.kind)) {
+      this.fighting = false;
+    }
 
     this.outObserver?.(stamped);
     // Observed either way -- this page's own spectator, loot and results all read the
@@ -256,6 +271,7 @@ export class Bridge {
         this.dropCount++;
         return;
       }
+      this.fighting = true;
       this.sentBlocks.push(stamped);
       if (this.sentBlocks.length > BLOCKS_KEPT) this.sentBlocks.shift();
       this.relay.to(this.opponentSeat, stamped);
@@ -298,6 +314,9 @@ export class Bridge {
     // with no results and no Hall of Fame.
     if (msgSeat(msg) === this.seat && ev.from !== host) return;
     if (msg.t === 'bt' && !this.takesBlock(msg, ev.from)) return;
+    // The opponent's ROM has played the fight out, so it has every block of ours it will
+    // ever need.
+    if (msg.t === 'result' && msg.seat === this.opponentSeat && ev.from === msg.seat) this.sentBlocks = [];
 
     this.noteChallenge(msg);
     this.roster.applyMsg(msg);
@@ -319,6 +338,7 @@ export class Bridge {
     }
     if (msg.seq <= this.lastRecvSeq) return false;
     this.lastRecvSeq = msg.seq;
+    this.fighting = true;
     return true;
   }
 
@@ -364,11 +384,15 @@ export class Bridge {
     // Challenges are broadcast, so most of them are about two other people: noting one
     // of those would point our own battle traffic at a seat we are not fighting.
     if (msg.seat !== this.seat && msg.opponent !== this.seat) return;
+    // Somebody else's challenge to us while we fight is one our ROM ignores (#20). Our
+    // own is never mid-fight: br_engage.c only challenges from the field.
+    if (msg.seat !== this.seat && this.fighting) return;
     this.opponentSeat = msg.seat === this.seat ? msg.opponent : msg.seat;
     // A new fight, and a new count: the ROM numbers every fight's blocks from one.
     this.sentBlocks = [];
     this.lastRecvSeq = 0;
     this.opponentAway = false;
+    this.fighting = false;
   }
 
   /** What a seat said when it challenged somebody (POK-274), or undefined if this page
