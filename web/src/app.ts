@@ -12,17 +12,15 @@ import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
 import type { BstartMsg, Msg, PackedMon, TurnMsg } from './net/wire';
-import { toRomCells } from './net/cells';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
-import { DEFAULT_SAFARI_SECS, Director, type DirectorState, type DirectorWorld } from './match/director';
+import { DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { nameBstart, romReplaying, Spectate } from './match/spectate';
 import { bossAt } from './match/bosses';
 import type { Results } from './match/results';
 import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
-import { HostRole, type HostLink } from './match/host';
-import { createHostBots, type HostBots } from './bots/host';
+import { HostRole, soloLink, type HostLink } from './match/host';
 import { type BotVoice, lineAt, nextLine } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
@@ -1466,10 +1464,8 @@ function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director:
 // ---- solo: no relay at all, this page is the whole match -------------------------------
 
 /** Solo play (no `#host`/`#join`): there is no room, so there is no Bridge either --
- *  just a RomPort into this ROM's own mailbox (net/romport.ts) and a
- *  Director for the one seat this client owns. `onOut` wires nothing in: a one-seat
- *  match's own out (a real whiteout) never decides a winner (director.ts's own
- *  header comment), so nobody needs to hear about it here. */
+ *  just a RomPort into this ROM's own mailbox (net/romport.ts), and the room's own books
+ *  and host (POK-330 #42) on a link with no room at the other end of it. */
 function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number> | undefined): void {
   // The relay cannot see this: no socket opens for solo play, ever (that is the whole
   // point of the mode). The count rides along on whatever real connection comes next
@@ -1479,7 +1475,6 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const seatBase = symbols?.get('gBrMySeat');
   if (seatBase !== undefined) writeMySeat(emu, seatBase, 0);
 
-  let out: ((seat: number) => void) | null = null;
   // SOLO VS BOTS, with the bots (POK-275). The row has promised them since the lobby
   // was built and the bots were only ever started from the room path, so solo was one
   // seat in an empty Hoenn -- and a director whose field starts at one can never
@@ -1498,7 +1493,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     pollMs: SOLO_PARADE_POLL_MS,
     paradeDone: matchBase !== undefined ? () => emu.read(matchBase, 8) === BR_PHASE_DONE : undefined,
   });
-  let solo: HostBots | null = null;
+  let host: HostRole | null = null;
   // A solo match ended in complete silence: the director declared a winner, the round
   // was written down, and the player was left standing in Hoenn with nothing on screen
   // to say so. `Results` was only ever built in the room path. Solo has everything it
@@ -1514,7 +1509,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       relayRoster: () => null,
       // This page deals every solo match, and has set its bot seats before the `start`.
       dealing: () => true,
-      bots: () => solo?.bots ?? null,
+      bots: () => host?.bots.bots ?? null,
       toRom: (m) => rom.push(m),
       // The director's own; a solo `start` always names its fog anyway.
       defaultFog: () => 120,
@@ -1540,66 +1535,30 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       },
     },
   );
-  solo = createHostBots({
-    send: (msg) => {
-      // Into the ROM's coordinate space on the way out (net/cells.ts): the brain walks
-      // the exporter's grid, the ROM draws in the one seven tiles further out.
-      const wire = toRomCells(msg);
-
-      rom.push(wire);
-      roster.applyMsg(wire);
-      session.note(wire, 'page');
-      if (wire.t === 'out') out?.(wire.seat);
-    },
-    takenSeats: [0],
-    seed,
-    loot: session.loot,
-    players: () => roster.all(),
-    // No relay, so a trainer card for our own seat is a direct push and a card for
-    // anybody else has nowhere to go.
-    sendTo: (toSeat, msg) => {
-      if (toSeat === 0) rom.push(msg);
-    },
+  // The seed is solo's own, dealt as it always was: `#seed` is the room's (fixedSeed).
+  const plan = dealPlan(session.match, [0], 0, false, () => seed);
+  // The room's own host (POK-330 #42), on a link with nobody at the other end. Dealt now,
+  // so the bots walk from the start; the match itself waits for the frame gate below.
+  host = new HostRole({
+    session,
+    link: soloLink(roster, (msg) => rom.push(msg)),
+    world: WORLD,
+    seats: [0],
+    present: [],
+    plan,
     fill: botFill(),
-    safariSecs: paceOptions()?.safariSecs ?? DEFAULT_SAFARI_SECS,
-    zonePool: () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
-    busy: (s) => session.busy.has(s),
-    sections: WORLD.sections,
-    settle: proxyDuels ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b) : undefined,
-  });
-  // The session's `start` seats the bots this page dealt, the way the room's host does.
-  session.match.botSeats = new Set(solo.seats);
-  // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):
-  // nothing else names them, so solo's results and saved round said P31 won.
-  roster.seatBots(botRows(seed, solo.seats));
-  const director = new Director({
-    seats: [0, ...solo.seats],
+    botSafariSecs: paceOptions()?.safariSecs ?? DEFAULT_SAFARI_SECS,
     // `#quick` is a dev pace, and solo is where a change gets looked at first -- it had
     // no way to ask for it, so every solo look cost the full two-minute opening.
     options: paceOptions(),
-    hostSeat: 0,
-    seed,
-    world: WORLD,
-    send: (msg) => {
-      rom.push(msg);
-      // The bots hear the director the same way a room's do: the ring moving is what
-      // sends them out of the Zone and what they aim at afterwards.
-      if (msg.t === 'ring') {
-        solo.drop();
-        solo.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r }, msg.phase);
-      }
-      // Solo rounds are written down too (POK-248): a match nobody else saw is the
-      // one whose seed is hardest to come by afterwards. The session saves it on the win.
-      session.note(msg, 'page');
-    },
-    now: () => performance.now(),
-    onOut: (handler) => {
-      out = handler;
-      return () => {
-        out = null;
-      };
-    },
+    zonePool: () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), plan.seed),
+    settle: proxyDuels ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b) : undefined,
+    // No narration: solo has never had a ticker.
+    startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director),
   });
+  // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):
+  // nothing else names them, so solo's results and saved round said P31 won.
+  roster.seatBots(botRows(seed, host.bots.seats));
 
   // Solo talks in one direction only -- which is how the drop picker came to send its
   // `pick` into a room with nobody in it and the ROM sat on a black screen waiting for
@@ -1615,8 +1574,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     // eliminated, a bot we spotted first never sent its card, and with nothing feeding
     // `busy` a second bot could stage its team into the battle we were already in.
     session.note(msg, 'rom');
-    if (msg.t === 'pick') rom.push({ t: 'land', ...director.landFor(msg.seat, msg.section) });
-    else if (msg.t === 'out') out?.(msg.seat);
+    // The `land` for our pick, and our own `out` to the director, as the room's host.
+    host.hear(msg, 'rom');
   };
 
   // "the first PLACE message it emits, or simply after the mailbox is awake + ~200
@@ -1635,9 +1594,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const off = emu.onFrame(() => {
     if (++frames < 200) return;
     off();
-    if (decideStart({ t: 'solo' }, soloState).do !== 'deal') return;
-    director.start();
-    startDirectorLoop(emu, symbols?.get('gBrHud'), director);
+    if (decideStart({ t: 'solo' }, soloState).do === 'deal') host.begin();
   });
   // One pump for both directions: the port is the only thing that writes the ring.
   emu.onFrame(() => {

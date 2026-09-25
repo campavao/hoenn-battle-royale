@@ -42,6 +42,12 @@ export interface HostLink {
   linesFor?(seat: number): Lines | undefined;
 }
 
+/** Solo's link: nobody at the other end, so the room hears nothing and there is no door
+ *  to shut, and everything for our own seat -- a card, a `land` -- goes into our own ROM. */
+export function soloLink(roster: Roster, toRom: (msg: Msg) => void): HostLink {
+  return { seat: 0, roster, toRoom: () => {}, toSeat: () => {}, toRom, pushToRom: toRom };
+}
+
 export interface HostOptions {
   session: MatchSession;
   link: HostLink;

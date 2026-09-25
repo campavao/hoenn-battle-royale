@@ -3,18 +3,20 @@
 // and a link that reads whichever Bridge the page has now. What the room hears is the
 // socket's frames; what our own ROM is handed is what went through the link.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HostRole, type HostLink, type HostOptions } from './host';
+import { HostRole, soloLink, type HostLink, type HostOptions } from './host';
 import type { DirectorWorld } from './director';
 import { EndGrace } from './grace';
 import { DOORSTEPS, HAND, LANDING } from './landing';
 import { dealPlan } from './lifecycle';
+import { Roster } from './roster';
 import { MatchSession, type SessionView } from './session';
 import { Bridge } from '../net/bridge';
 import { fakeEmulator, fakeRelay, memoryStore, type FakeSocket } from '../net/fakes.testutil';
 import { Mailbox } from '../net/mailbox';
 import type { RosterEvent } from '../net/relay';
 import { RomPort } from '../net/romport';
-import { PROTOCOL, type MapRef, type Msg, type SpillMsg, type StartMsg } from '../net/wire';
+import { BR_CONT_FLAG, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
+import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg, type StartMsg } from '../net/wire';
 import worldData from '../data/world.json';
 import regionmapData from '../data/regionmap.json';
 
@@ -392,5 +394,200 @@ describe('the page that runs the match (POK-330 #42)', () => {
     expect(before.sent).toEqual([]);
     expect(tickers(after.sent as Frame[])).toEqual(['P1 IS OUT - 2 LEFT']);
     host.dispose();
+  });
+});
+
+// Solo runs the same host (POK-330 #42), on a link with nobody at the other end: no relay
+// and no Bridge, just a RomPort over our own mailbox and runSolo's own ear on it. What our
+// ROM is handed is what went through the link, and what it reads is the in-ring.
+describe('solo link', () => {
+  const fainted: PackedMon = {
+    species: 1, level: 5, hp: 0, maxHp: 20, status: 0, moves: [], heldItem: 0, otId: 0, personality: 0, exp: 0,
+    nickname: 'ZIG', ot: 'MAY',
+  };
+
+  /** Every message the ROM would read off its in-ring now. */
+  function drained(romDrainIn: () => BinarySlot[]): Msg[] {
+    const slots = romDrainIn();
+    const out: Msg[] = [];
+    for (let i = 0; i < slots.length; ) {
+      const group = [slots[i++]];
+      while (i < slots.length && (slots[i].type & BR_CONT_FLAG) !== 0) group.push(slots[i++]);
+      const whole = reassembleSlots(group);
+      out.push(unpackSlot(whole.type, whole.payload));
+    }
+    return out;
+  }
+
+  /** runSolo, in small: the books, then the host dealt at once, then the one pump. */
+  function alone(fill: number) {
+    const gba = fakeEmulator(BASE);
+    gba.romInit();
+    const rom = new RomPort(new Mailbox(gba.emu, BASE));
+    const roster = new Roster();
+    roster.setMySeat(0);
+    let host: HostRole | null = null;
+    const exit = vi.fn();
+    const view = { started: vi.fn(), decided: vi.fn(), partyLate: vi.fn() } satisfies SessionView;
+    const session = new MatchSession(
+      {
+        mySeat: () => 0,
+        nameOf: (seat) => roster.nameOf(seat),
+        rows: () => roster,
+        relayRoster: () => null,
+        dealing: () => true,
+        bots: () => host?.bots.bots ?? null,
+        toRom: (m) => rom.push(m),
+        defaultFog: () => 120,
+        store: memoryStore(),
+        grace: new EndGrace({ graceMs: 8_000, winMaxMs: 60_000, pollMs: 500 }),
+        exit,
+        keepParties: false,
+        now: () => Date.now(),
+      },
+      view,
+    );
+    const toRom: Msg[] = [];
+    const link = soloLink(roster, (m) => {
+      toRom.push(m);
+      rom.push(m);
+    });
+    // The room's two ends are no-ops on this link; the spies say what the host offered them.
+    const toRoom = vi.spyOn(link, 'toRoom');
+    const toSeat = vi.spyOn(link, 'toSeat');
+    host = new HostRole({
+      session,
+      link,
+      world: WORLD,
+      seats: [0],
+      present: [],
+      plan: dealPlan(session.match, [0], 0, false, () => SEED),
+      fill,
+      botSafariSecs: 0,
+      options: { safariSecs: 0, fogSecs: 60 },
+      zonePool: () => [],
+      startLoop: (director) => {
+        const id = setInterval(() => director.tick(), 1_000);
+        return () => clearInterval(id);
+      },
+      now: () => Date.now(),
+    });
+    const dealt = host;
+    gba.emu.onFrame(() => {
+      if (!rom.mailbox.isAwake()) return;
+      rom.flush();
+      rom.drain((msg) => {
+        roster.applyMsg(msg);
+        session.note(msg, 'rom');
+        dealt.hear(msg, 'rom');
+      });
+    });
+    /** Our ROM beats a bot: the challenge, then the team it left, all of it fainted. */
+    const beat = (bot: number) => {
+      gba.romEmit({ t: 'challenge', seat: 0, opponent: bot, nonce: 1 });
+      gba.frame();
+      gba.romEmit({ t: 'party', seat: bot, mons: [fainted] });
+      gba.frame();
+    };
+    return { ...gba, host: dealt, session, view, exit, link, toRom, toRoom, toSeat, beat, drained: () => drained(gba.romDrainIn) };
+  }
+
+  it('places the bots in our ROM before any start, and begin() starts the match there with everybody dealt', () => {
+    const solo = alone(2);
+    const bots = solo.host.bots.seats;
+    expect(bots).toHaveLength(2);
+    expect(solo.toRom.map((m) => m.t)).toEqual(['place', 'place']);
+    expect(solo.toRom.map((m) => (m as { seat: number }).seat)).toEqual(bots);
+    expect([...solo.session.match.botSeats]).toEqual(bots);
+    solo.frame();
+    expect(solo.drained().map((m) => m.t)).toEqual(['place', 'place']);
+
+    solo.host.begin();
+    const start = solo.toRom.find((m) => m.t === 'start') as StartMsg;
+    expect(start.seed).toBe(SEED);
+    expect(start.spawns.map((s) => s.seat)).toEqual([0, ...bots]);
+    expect(solo.session.match.active).toBe(true);
+    solo.frame();
+    expect(solo.drained().map((m) => m.t)).toEqual(['start']);
+    solo.host.dispose();
+  });
+
+  it('has nobody else to tell: no door, nothing for another seat, and no ticker', () => {
+    const solo = alone(1);
+    expect(solo.link.lock).toBeUndefined();
+    expect(solo.link.linesFor).toBeUndefined();
+    solo.host.begin();
+    solo.beat(solo.host.bots.seats[0]); // ...which is the match won
+    expect(solo.toSeat).not.toHaveBeenCalled();
+    expect(solo.toRom.filter((m) => m.t === 'ticker')).toEqual([]);
+    solo.frame();
+    expect(solo.drained().filter((m) => m.t === 'ticker')).toEqual([]);
+    // What the room's host would have told the room went nowhere, `again` with it.
+    expect(solo.toRoom.mock.calls.map(([m]) => m.t)).toEqual(['place', 'start', 'busy', 'spill', 'out', 'win', 'again']);
+    solo.host.dispose();
+  });
+
+  it("answers our own ROM's pick with a land, in our own ROM", () => {
+    const solo = alone(0);
+    solo.host.begin();
+    solo.frame();
+    solo.drained();
+    solo.romEmit({ t: 'pick', seat: 0, section: SECTION });
+    solo.frame(); // read, and answered
+    expect(solo.toRom.filter((m) => m.t === 'land')).toEqual([expect.objectContaining({ t: 'land', seat: 0 })]);
+    solo.frame(); // ...and written
+    expect(solo.drained()).toEqual([expect.objectContaining({ t: 'land', seat: 0 })]);
+    solo.host.dispose();
+  });
+
+  it("hands the director a bot's out and our own, once each", () => {
+    const solo = alone(3);
+    solo.host.begin();
+    const [bot] = solo.host.bots.seats;
+    expect(solo.host.director.state.alive).toBe(4);
+    solo.beat(bot);
+    expect(solo.toRom.filter((m) => m.t === 'out')).toEqual([{ t: 'out', seat: bot }]);
+    expect(solo.host.director.state.alive).toBe(3);
+    solo.host.hear({ t: 'out', seat: bot }, 'rom');
+    expect(solo.host.director.state.alive).toBe(3);
+
+    solo.romEmit({ t: 'out', seat: 0 });
+    solo.frame();
+    solo.romEmit({ t: 'out', seat: 0 });
+    solo.frame();
+    expect(solo.host.director.state.alive).toBe(2);
+    expect(solo.session.match.out).toEqual(new Set([bot, 0]));
+    solo.host.dispose();
+  });
+
+  it('gives the last seat standing the win, and the books decide it once', () => {
+    const solo = alone(1);
+    solo.host.begin();
+    solo.beat(solo.host.bots.seats[0]);
+    expect(solo.toRom.filter((m) => m.t === 'win')).toEqual([{ t: 'win', seat: 0 }]);
+    expect(solo.session.recorded).toBe(true);
+    expect(solo.view.decided).toHaveBeenCalledTimes(1);
+    solo.frame();
+    expect(solo.drained().filter((m) => m.t === 'result')).toEqual([{ t: 'result', seat: 0, outcome: 'win' }]);
+    // The director stopped listening on the win, and the books decide once.
+    solo.romEmit({ t: 'out', seat: 0 });
+    solo.frame();
+    expect(solo.view.decided).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(8_000);
+    expect(solo.exit).toHaveBeenCalledTimes(1);
+    solo.host.dispose();
+  });
+
+  it("stages a bot's card to seat 0 when our ROM challenges it (#17)", () => {
+    const solo = alone(2);
+    solo.host.begin();
+    const bot = solo.host.bots.seats[1];
+    solo.romEmit({ t: 'challenge', seat: 0, opponent: bot, nonce: 1 });
+    solo.frame();
+    expect(solo.toRom.filter((m) => m.t === 'trainer')).toEqual([expect.objectContaining({ t: 'trainer', seat: bot })]);
+    expect(solo.toSeat).not.toHaveBeenCalled();
+    solo.frame();
+    expect(solo.drained().filter((m) => m.t === 'trainer')).toEqual([expect.objectContaining({ t: 'trainer', seat: bot })]);
+    solo.host.dispose();
   });
 });
