@@ -66,6 +66,19 @@ export function battleSeats(battle: number): [number, number] {
   return [battle & 0xff, (battle >> 8) & 0xff];
 }
 
+/** What our ROM says it is replaying (gBrSpectate), for duePeek's `romHas` -- or undefined
+ *  while RAM cannot be believed: until the ROM has read everything the page queued for it
+ *  (POK-330 #10). A tab in the background runs no frames while its peeks keep firing, so
+ *  the `bstart` it was handed waits in the port and RAM still says "nothing". Taken at its
+ *  word, every other peek brought the whole fight again, and the copies queued up behind
+ *  the first for the ROM to append when the tab came back. */
+export function romReplaying(
+  port: { readonly queued: number; readonly mailbox: { pending(): number } },
+  read: () => number | null | undefined,
+): number | null | undefined {
+  return port.queued > 0 || port.mailbox.pending() > 0 ? undefined : read();
+}
+
 export class Spectate {
   /** The seat this client is watching, or null. */
   private seat: number | null = null;
@@ -122,8 +135,9 @@ export class Spectate {
    *  bring the whole stream again, and the ROM appends every turn it is handed, so the
    *  replay read a1 a2 a3 a1 a2 a3 a4: a fight that never happened. `romHas` is what
    *  the ROM itself says it is watching (gBrSpectate), undefined where the page cannot
-   *  read it -- and a ROM that refused a `bstart` (it arrived in a menu) says nothing,
-   *  so the next peek asks for the fight again, which is the one retry there is. */
+   *  read it or cannot believe it yet (romReplaying) -- and a ROM that refused a `bstart`
+   *  (it arrived in a menu) says nothing, so the next peek asks for the fight again,
+   *  which is the one retry there is. */
   duePeek(mySeat: number, now: number, romHas?: number | null): Msg | null {
     if (this.seat === null) return null;
     if (now - this.lastPeek < PEEK_INTERVAL_MS) return null;

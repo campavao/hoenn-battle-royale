@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { encodeGen3 } from '../text/gen3';
-import { battleId, battleSeats, CACHE_MAX_BYTES, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, Spectate } from './spectate';
+import { battleId, battleSeats, CACHE_MAX_BYTES, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, romReplaying, Spectate } from './spectate';
 import type { Msg } from '../net/wire';
 
 const bstart = (battle: number): Msg => ({ t: 'bstart', battle, data: [1, 2, 3] });
@@ -240,6 +240,42 @@ describe('the fight so far, handed over once (POK-330 #10)', () => {
     say(turnOf(3));
     peek();
     expect(rom.turns).toEqual([1, 2, 3]);
+  });
+
+  // A background tab runs no frames and its peeks keep firing: RAM said "watching nothing"
+  // on every other one, the fight came again each time, and the ROM appended every copy.
+  it('is handed the fight once however many peeks a background tab makes', () => {
+    const fighter = new Spectate();
+    const watcher = new Spectate();
+    const rom = new Rom();
+    const queue: Msg[] = []; // the RomPort, which only a frame empties
+    const port = { get queued() { return queue.length; }, mailbox: { pending: () => 0 } };
+    const frame = () => queue.splice(0).forEach((m) => rom.take(m));
+    let now = 0;
+    const peek = () => {
+      const ask = watcher.duePeek(WATCHER, now, romReplaying(port, () => rom.watching));
+      if (ask?.t === 'peek') {
+        for (const part of fighter.streamFor(ask.target, ask.have)) if (watcher.wantsFromRelay(part)) queue.push(part);
+      }
+      now += PEEK_INTERVAL_MS;
+    };
+    fighter.noteOutgoing({ t: 'bstart', battle, data: [1, 2, 3] });
+    fighter.noteOutgoing(turnOf(1));
+    fighter.noteOutgoing(turnOf(2));
+    watcher.follow(FIGHTER).forEach((m) => queue.push(m));
+    for (let i = 0; i < 6; i++) peek(); // in the background: no frames
+    frame(); // back
+    peek();
+    frame();
+    expect(rom.turns).toEqual([1, 2]);
+  });
+
+  it('believes RAM once the ROM has read everything it was handed', () => {
+    const idle = { queued: 0, mailbox: { pending: () => 0 } };
+    expect(romReplaying(idle, () => battle)).toBe(battle);
+    expect(romReplaying(idle, () => null)).toBeNull();
+    expect(romReplaying({ ...idle, queued: 1 }, () => null)).toBeUndefined();
+    expect(romReplaying({ queued: 0, mailbox: { pending: () => 3 } }, () => null)).toBeUndefined();
   });
 
   it('says what it holds only when it holds something', () => {

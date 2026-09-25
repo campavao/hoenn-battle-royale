@@ -16,7 +16,7 @@ import { MAP_OFFSET, toRomCells } from './net/cells';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
 import { DEFAULT_SAFARI_SECS, Director, type DirectorState, type DirectorWorld } from './match/director';
-import { nameBstart, Spectate } from './match/spectate';
+import { nameBstart, romReplaying, Spectate } from './match/spectate';
 import { bossAt } from './match/bosses';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
@@ -1573,7 +1573,7 @@ function startSpectateLoop(
 ): () => void {
   const id = setInterval(() => {
     const now = performance.now();
-    const ask = spectate.duePeek(bridge.seat, now, romWatching(emu, spectateBase));
+    const ask = spectate.duePeek(bridge.seat, now, romReplaying(bridge.rom, () => romWatching(emu, spectateBase)));
     if (ask) bridge.relay.all(ask);
     // Bots join by walking, not by joining: their seats appear in the roster from a
     // `place`, and there is no relay event to redraw the list on.
