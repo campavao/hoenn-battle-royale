@@ -18,10 +18,9 @@ import { Bots, STEP_MS } from '../../web/src/bots/brain';
 import { dealBots } from '../../web/src/bots/roster';
 import { dealBag } from '../../web/src/bots/bag';
 import { dealParty } from '../../web/src/bots/party';
-import { World, type WorldMap } from '../../web/src/bots/world';
+import { botGround } from '../../web/src/bots/host';
 import { mulberry32 } from '../../web/src/match/clock';
-import { SAFARI_CELLS, SAFARI_MAPS } from '../../web/src/match/safari';
-import worldData from '../../web/src/data/world.json';
+import { SAFARI_MAPS } from '../../web/src/match/safari';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -36,10 +35,8 @@ const secs = arg('secs', 120);
 /** How near is "you would have seen them": the eyeline is four cells (POK-259). */
 const EYELINE = 4;
 
-const maps = (worldData as { maps: WorldMap[] }).maps;
-const world = new World(maps);
-const refById = new Map(maps.map((m) => [m.id, { group: m.group, num: m.num }]));
-const targets = SAFARI_CELLS.filter((c) => refById.has(c.map)).map((c) => ({ mapId: c.map, x: c.x, y: c.y }));
+// The Zone as the host's bots walk it (bots/host.ts): the opening's own cells.
+const { world, refById, safariTargets: targets } = botGround();
 const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
 
 interface Run {

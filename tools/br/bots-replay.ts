@@ -12,10 +12,8 @@ import { Bots, STEP_MS, type Decision } from '../../web/src/bots/brain';
 import { dealBots } from '../../web/src/bots/roster';
 import { dealBag } from '../../web/src/bots/bag';
 import { dealParty } from '../../web/src/bots/party';
-import { World, type WorldMap } from '../../web/src/bots/world';
+import { botGround } from '../../web/src/bots/host';
 import { mulberry32 } from '../../web/src/match/clock';
-import worldData from '../../web/src/data/world.json';
-import { LANDING } from '../../web/src/match/landing';
 import { sectionInside } from '../../web/src/match/ring';
 import regionmapData from '../../web/src/data/regionmap.json';
 
@@ -31,15 +29,9 @@ const minutes = arg('minutes', 16);
 const only = arg('seat', -1);
 const count = arg('bots', 8);
 
-const maps = (worldData as { maps: WorldMap[] }).maps;
-const world = new World(maps);
-const refById = new Map(maps.map((m) => [m.id, { group: m.group, num: m.num }]));
-const outdoor = new Set(maps.filter((m) => m.outdoor).map((m) => m.id));
-const targets = LANDING.filter((c) => outdoor.has(c.map) && refById.has(c.map)).map((c) => ({
-  mapId: c.map,
-  x: c.x,
-  y: c.y,
-}));
+// The ground the host's bots walk (bots/host.ts): Hoenn's landing cells to wander to and
+// the spawns the deal draws from.
+const { world, refById, sectionOf, targets, spawns } = botGround();
 
 const lines: string[] = [];
 const tally = new Map<string, number>();
@@ -86,10 +78,8 @@ const RADII = [12, 9, 7, 5, 4, 3, 2, -1];
 const SECTIONS = regionmapData.sections as Record<string, { x: number; y: number; w: number; h: number; name: string; num?: number }>;
 const eye = SECTIONS[Object.keys(SECTIONS)[0]];
 let ring: { sx: number; sy: number; r: number } | undefined;
-const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
 const inFog = (mapId: string) => sectionInside(SECTIONS[sectionOf.get(mapId) ?? ''], ring);
 
-const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
 const dealt = dealBots(seed, count, [], spawns);
 bots.start(dealt, 0);
 // The ring phase climbs the way the Director moves it: six rungs over the match.
