@@ -2300,6 +2300,9 @@ function wireRoom(
       paceOptions()?.safariSecs ?? controls.safariSecs,
       () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
     );
+    // The bots' seats are spoken for until the match ends: the relay hands a latecomer
+    // the lowest id nobody is using, and a bot's seat looks unused to it (POK-330 #6).
+    relay.lockRoom(true, bots.seats);
     director = new Director({
       // Bots are contestants, not scenery: leaving them out of the seat list makes
       // "N LEFT" a lie and hands the match to whoever outlasts the humans alone.

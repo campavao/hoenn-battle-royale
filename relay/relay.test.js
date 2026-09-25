@@ -1376,18 +1376,33 @@ test("rejoin: leaving on purpose holds nothing, and a hold expires", async () =>
 
     b.send({ type: "leave_room" });
     await a.until("roster");
+    // nothing was held for a leaver: the next stranger gets its seat...
+    const c = await connect(port);
+    c.send({ type: "join_room", code: hosted.code, name: "GREEN" });
+    assert.equal((await c.next()).id, 2);
+    await a.until("roster");
+    // ...and its token is an ordinary join, to the next free seat
     const b2 = await connect(port);
     b2.send({ type: "join_room", code: hosted.code, name: "BLUE", token: joined.token });
-    assert.equal((await b2.next()).id, 3); // a new seat: nothing was held for a leaver
+    const rejoined = await b2.next();
+    assert.equal(rejoined.id, 3);
     await b2.next(); await a.until("roster");
 
     b2.end();
     await a.until("roster");
+    // while seat 3 is held, nobody else is handed it
+    const d = await connect(port);
+    d.send({ type: "join_room", code: hosted.code, name: "D" });
+    assert.equal((await d.next()).id, 4);
     await new Promise((r) => setTimeout(r, 120)); // past rejoinMs + a sweep
+    // expired: a stranger gets it, and the token is worth nothing
+    const e = await connect(port);
+    e.send({ type: "join_room", code: hosted.code, name: "E" });
+    assert.equal((await e.next()).id, 3);
     const b3 = await connect(port);
-    b3.send({ type: "join_room", code: hosted.code, name: "BLUE", token: joined.token });
-    assert.equal((await b3.next()).id, 4); // expired: the next seat, not the old one
-    a.end(); b3.end();
+    b3.send({ type: "join_room", code: hosted.code, name: "BLUE", token: rejoined.token });
+    assert.equal((await b3.next()).id, 5);
+    for (const x of [a, c, d, e, b3]) x.end();
   }, { rejoinMs: 50, sweepMs: 20 });
 });
 
@@ -1621,4 +1636,142 @@ test("a kick bans the member's address and token, not the proxy everyone shares"
   } finally {
     await relay.close();
   }
+});
+
+// ------- POK-330 #6: ids are seats, and there are 31 of them
+
+test("ids are the lowest free one, and 40 reloads later still fit a seat", async () => {
+  await withRelay(async (port) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST" });
+    const { code } = await host.until("room_hosted");
+    for (let i = 0; i < 40; i++) {
+      const g = await connect(port);
+      g.send({ type: "join_room", code, name: "G" });
+      assert.equal((await g.until("room_joined")).id, 2, `cycle ${i}`);
+      g.send({ type: "leave_room" });
+      await g.settled();
+      g.end();
+    }
+    host.end();
+  });
+});
+
+test("past seat 31 the answer is full, whatever MAX says", async () => {
+  await withRelay(async (port) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST", open: true, max: 40 });
+    const { code } = await host.until("room_hosted");
+    const guests = [];
+    for (let id = 2; id <= 31; id++) {
+      const g = await connect(port);
+      g.send({ type: "join_room", code, name: "G" });
+      assert.equal((await g.until("room_joined")).id, id);
+      guests.push(g);
+    }
+    const late = await connect(port);
+    late.send({ type: "join_room", code, name: "LATE" });
+    assert.equal((await late.next()).reason, "full");
+    const quick = await connect(port);
+    quick.send({ type: "quick_join", name: "QUICK" });
+    assert.equal((await quick.next()).type, "no_open_rooms");
+    for (const c of [host, late, quick, ...guests]) c.end();
+  }, { members: 40, conns: 64, connsPerIp: 64 });
+});
+
+test("mid-match, a latecomer never gets a seat the match has used", async () => {
+  await withRelay(async (port) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST" });
+    const { code } = await host.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code, name: "B" });
+    assert.equal((await b.until("room_joined")).id, 2);
+    host.send({ type: "lock_room", locked: true });
+    await host.settled();
+
+    // B walks out mid-match; seat 2 is still B's ghost on every page
+    b.send({ type: "leave_room" });
+    await b.settled();
+    const watcher = await connect(port);
+    watcher.send({ type: "join_room", code, name: "W", spectate: true });
+    assert.equal((await watcher.until("room_joined")).id, 3);
+
+    // the match ends: its seats are free again
+    host.send({ type: "lock_room", locked: false });
+    await host.settled();
+    const next = await connect(port);
+    next.send({ type: "join_room", code, name: "N" });
+    assert.equal((await next.until("room_joined")).id, 2);
+    for (const c of [host, b, watcher, next]) c.end();
+  });
+});
+
+test("the seats the host dealt its bots are never a latecomer's", async () => {
+  await withRelay(async (port) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST" });
+    const { code } = await host.until("room_hosted");
+    host.send({ type: "lock_room", locked: true });
+    // twenty-nine bots, counted down from the top the way bots/roster.ts deals them
+    const bots = [];
+    for (let seat = 31; seat >= 3; seat--) bots.push(seat);
+    host.send({ type: "lock_room", locked: true, bots: [...bots, 0, 32, "x"] });
+    await host.settled();
+
+    const w1 = await connect(port);
+    w1.send({ type: "join_room", code, name: "W1", spectate: true });
+    assert.equal((await w1.until("room_joined")).id, 2, "the one seat left");
+    const w2 = await connect(port);
+    w2.send({ type: "join_room", code, name: "W2", spectate: true });
+    assert.equal((await w2.next()).reason, "full", "not seat 3, which is a bot");
+    for (const c of [host, w1, w2]) c.end();
+  });
+});
+
+test("a seat held for a dropped member goes to the bot the host dealt onto it", async () => {
+  await withRelay(async (port) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST" });
+    const { code } = await host.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code, name: "B" });
+    const joined = await b.until("room_joined");
+    await rosterWhere(host, (r) => r.members.some((m) => m.id === 2));
+    b.end();   // a drop: seat 2 is held
+    await rosterWhere(host, (r) => !r.members.some((m) => m.id === 2));
+    host.send({ type: "lock_room", locked: true });
+    host.send({ type: "lock_room", locked: true, bots: [2] });
+    await host.settled();
+    const back = await connect(port);
+    back.send({ type: "join_room", code, name: "B", token: joined.token, spectate: true });
+    assert.equal((await back.until("room_joined")).id, 3, "a new seat, not the bot at 2");
+    host.end(); back.end();
+  });
+});
+
+test("the heir is the earliest arrival, not the lowest id", async () => {
+  await withRelay(async (port) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST" });
+    const { code } = await host.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code, name: "B" });
+    await b.until("room_joined");
+    const c = await connect(port);
+    c.send({ type: "can_host", ok: true });
+    c.send({ type: "join_room", code, name: "C" });
+    assert.equal((await c.until("room_joined")).id, 3);
+    b.send({ type: "leave_room" });
+    await b.settled();
+    // D arrives after C but takes the seat B left
+    const d = await connect(port);
+    d.send({ type: "can_host", ok: true });
+    d.send({ type: "join_room", code, name: "D" });
+    assert.equal((await d.until("room_joined")).id, 2);
+    host.send({ type: "leave_room" });
+    const roster = await rosterWhere(c, (r) => r.host !== 1);
+    assert.equal(roster.host, 3, "C has been here longer than D");
+    for (const x of [host, b, c, d]) x.end();
+  });
 });

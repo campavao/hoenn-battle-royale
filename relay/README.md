@@ -34,7 +34,7 @@ Client -> server:
 | `list_rooms` | | `rooms {rooms:[...]}`: every joinable lobby |
 | `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?, token?` | `room_joined {code, id, host, token}` or `room_error {reason}`. With a `token` naming a seat the room is still holding (a socket that dropped within `rejoinMs`, 60 s), the same `id` comes back whatever the door says -- locked or full -- and the token is spent (POK-284). A member who sent `leave_room` or was removed is not held |
 | `stat` | `id, v, solo, since` | play counter; logged, counted, never answered |
-| `lock_room` | `locked` | host only: refuse new joiners (match in progress) |
+| `lock_room` | `locked, bots?` | host only: refuse new joiners (match in progress). `bots`: the seats the host dealt its bots, never handed to a member until the unlock |
 | `kick` | `id` | host only: remove a member, ban their address and their resume token from the room |
 | `leave_room` | | |
 | `can_host` | `ok` | opt in/out of host migration |
@@ -62,8 +62,12 @@ Server -> client:
 | `pong` | `t?` | reply to `ping` |
 | `info` | `motd, rooms, conns, minProtocol, daily?` | reply to `info`, and pushed once, unasked, right after connect |
 
-Ids are small integers handed out per room, never reused within it; the host
-is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
+Ids are seats: `1..31` (the page's wire and the ROM have 32; 0 is SOLO VS
+BOTS'), the lowest one that is not a member's, not held for one who dropped,
+and not used since the match locked the door -- nor a bot's. When none is left
+the door says `full`, whatever MAX says. The heir is the earliest arrival that
+can host, by the room's own count, since the lowest id is no longer the
+oldest. The host is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
 (no `0 O 1 I L`), so a code read aloud never has to be checked twice.
 
 ### The version gate

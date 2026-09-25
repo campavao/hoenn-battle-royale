@@ -56,11 +56,14 @@
 //                                      Never a trainer name. Logged, counted, not
 //                                      answered -- the client sends it on a
 //                                      connection it already had (POK-124).
-//   {type:"lock_room", locked}         host only: refuse new joiners (a match
+//   {type:"lock_room", locked, bots?}  host only: refuse new joiners (a match
 //                                      in progress).  Logged as one `match`
 //                                      line at the lock and one at the
 //                                      unlock -- the relay's only record of
-//                                      a match as a thing that happened
+//                                      a match as a thing that happened.
+//                                      bots: the seats the host dealt its
+//                                      bots, never handed to a member until
+//                                      the unlock
 //   {type:"kick", id}                  host only: remove a member and refuse
 //                                      their address and their resume
 //                                      token for the room's life (POK-130)
@@ -105,8 +108,10 @@
 //                                       "not_found"/"full"/"locked"/etc, this
 //                                       adds one more
 //
-// Ids are small integers handed out per room, never reused within it; the
-// host is whoever created the room.  Codes use the same 0/O/1/I/L-free
+// Ids are 1..MAX_SEAT, the lowest one free: not a member's, not held for one
+// who dropped, and not used since the match locked the door (nor a bot's).
+// None left is `full`.  The host is whoever created the room.  Codes use the
+// same 0/O/1/I/L-free
 // alphabet as the game's room-code entry widget, so a code read aloud never
 // has to be checked twice.
 
@@ -116,6 +121,11 @@ import { WebSocketServer } from "ws";
 
 export const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 export const CODE_LENGTH = 6;
+
+// The highest member id.  An id is the page's seat and the ROM's gBrMySeat,
+// and both have 32 of them (web/src/net/wire.ts MAX_SEAT, br_config.h
+// BR_MAX_SEATS); seat 0 is SOLO VS BOTS', so a room hands out 1..31.
+export const MAX_SEAT = 31;
 
 export const DEFAULT_LIMITS = Object.freeze({
   line: 16 * 1024,      // bytes per message; the game caps at the same order
@@ -371,7 +381,15 @@ class Room {
     this.code = code;
     this.host = host;
     this.members = new Map();
-    this.nextId = 1;
+    // How many have come in, for seniority: ids are reused now, so the
+    // lowest one is no longer the longest-standing (heirOf).
+    this.joined = 0;
+    // Ids spoken for since the match locked the door (POK-330 #6): everyone
+    // in the room or held at the lock, everyone seated since, and the seats
+    // the host dealt its bots.  An id in here is somebody's ghost, loot keys
+    // and roster row on every page and ROM until the match ends, so no
+    // latecomer is handed it.  Emptied at the unlock.
+    this.spent = new Set();
     this.locked = false;
     // an open room is one quick_join is allowed to hand strangers; a room
     // is private until its host says otherwise
@@ -417,19 +435,64 @@ class Room {
     this.held = new Map();
   }
 
+  // The id the next newcomer gets: the lowest in 1..MAX_SEAT that nobody is
+  // in, nobody is coming back to, and the running match has not already
+  // used (POK-330 #6).  It used to be a counter that only went up, so each
+  // reload spent an id, and a room that had seen 32 arrivals handed out ids
+  // no page, wire message or ROM table has a slot for.  Null when none is
+  // left, which the doors answer as `full`.
+  freeId() {
+    const taken = new Set(this.members.keys());
+    for (const held of this.held.values()) taken.add(held.id);
+    for (let id = 1; id <= MAX_SEAT; id++) {
+      if (!taken.has(id) && !this.spent.has(id)) return id;
+    }
+    return null;
+  }
+
+  // Would a newcomer be turned away?  Past the host's MAX, or out of ids.
+  full() {
+    return this.members.size >= this.max || this.freeId() === null;
+  }
+
+  // The door shuts on a match (or opens after one).  Shutting spends every id
+  // in the room or held; `bots` are the seats the host dealt its bots, sent
+  // in a second lock once it has dealt them.  A seat held for a dropped
+  // member that a bot now has is not theirs to come back to: they get a
+  // new one rather than a bot's.
+  setLocked(locked, bots) {
+    const was = this.locked;
+    this.locked = locked;
+    if (!locked) { this.spent.clear(); return; }
+    if (!was) {
+      for (const id of this.members.keys()) this.spent.add(id);
+      for (const held of this.held.values()) this.spent.add(held.id);
+    }
+    for (const id of bots) {
+      this.spent.add(id);
+      for (const [token, held] of this.held) {
+        if (held.id === id) this.held.delete(token);
+      }
+    }
+  }
+
   // A member's seat, and a fresh token that can claim it back.  With a
   // `token` that names a held seat, the SAME id as before; otherwise the
-  // next one.  The token is new either way: the old one has done its job.
+  // lowest free one (the caller has checked full() first).  The token is new
+  // either way: the old one has done its job.
   add(conn, token) {
     const held = token ? this.held.get(token) : undefined;
     if (held) {
       this.held.delete(token);
       conn.id = held.id;
+      conn.joined = held.joined;
       conn.canHost = held.canHost;
       conn.spectator = held.spectator;
     } else {
-      conn.id = this.nextId++;
+      conn.id = this.freeId();
+      conn.joined = ++this.joined;
     }
+    if (this.locked) this.spent.add(conn.id);
     conn.token = randomBytes(12).toString("hex");
     conn.room = this;
     this.members.set(conn.id, conn);
@@ -441,7 +504,7 @@ class Room {
   hold(conn, now) {
     if (!conn.token) return;
     this.held.set(conn.token, { id: conn.id, name: conn.name, canHost: conn.canHost,
-                                spectator: conn.spectator, at: now });
+                                spectator: conn.spectator, joined: conn.joined, at: now });
   }
 
   // Is this token a seat this room is still holding?
@@ -627,15 +690,15 @@ export function createRelay(options = {}) {
   const perIp = new Map();
 
   // Who inherits a room whose host just went.  The longest-standing member
-  // that said it could take it: ids are handed out in join order and never
-  // reused, so the lowest is the one that has been here longest and has seen
-  // the most of the match.  The relay knows nothing about who is still alive
-  // -- that is the client's business, and a client that has been eliminated
-  // withdraws by sending can_host false.
+  // that said it could take it -- the earliest arrival, by the room's own
+  // count rather than by id, since ids are reused -- is the one that has
+  // seen the most of the match.  The relay knows nothing about who is still
+  // alive -- that is the client's business, and a client that has been
+  // eliminated withdraws by sending can_host false.
   function heirOf(room) {
     let heir = null;
     for (const m of room.members.values()) {
-      if (m.canHost && (!heir || m.id < heir.id)) heir = m;
+      if (m.canHost && (!heir || m.joined < heir.joined)) heir = m;
     }
     return heir;
   }
@@ -763,7 +826,7 @@ export function createRelay(options = {}) {
         let open = null, running = null;
         for (const room of rooms.values()) {
           if (!room.daily || room.banned.has(conn.ip)) continue;
-          if (room.members.size >= limits.members) continue;
+          if (room.full()) continue;
           if (room.locked) { running = running || room; continue; }
           open = open || room;
         }
@@ -861,7 +924,7 @@ export function createRelay(options = {}) {
         const spectate = msg.spectate === true;
         if (!resuming) {
           if (room.locked && !spectate) { conn.send({ type: "room_error", reason: "locked" }); return; }
-          if (room.members.size >= room.max) { conn.send({ type: "room_error", reason: "full" }); return; }
+          if (room.full()) { conn.send({ type: "room_error", reason: "full" }); return; }
         }
         conn.name = cleanName(msg.name);
         conn.skin = cleanSkin(msg.skin);
@@ -885,7 +948,7 @@ export function createRelay(options = {}) {
           // and a passcoded room wants somebody who knows the host
           if (!room.open || room.locked || room.daily || room.pass !== null
               || room.banned.has(conn.ip)) continue;
-          if (room.members.size >= room.max) continue;
+          if (room.full()) continue;
           if (!best || room.members.size > best.members.size) best = room;
         }
         if (!best) {
@@ -899,7 +962,7 @@ export function createRelay(options = {}) {
           for (const room of rooms.values()) {
             if (!room.open || !room.locked || room.pass !== null
                 || room.banned.has(conn.ip)) continue;
-            if (room.members.size >= limits.members) continue;
+            if (room.full()) continue;
             if (!running || room.members.size > running.members.size) running = room;
           }
           if (running) {
@@ -968,7 +1031,13 @@ export function createRelay(options = {}) {
         const room = conn.room;
         if (!room || room.host !== conn) return;
         const was = room.locked;
-        room.locked = msg.locked !== false;
+        // The host's second lock carries the seats it dealt its bots, which
+        // the relay must not hand a latecomer (POK-330 #6)
+        const bots = Array.isArray(msg.bots)
+          ? msg.bots.slice(0, MAX_SEAT + 1)
+              .filter((id) => Number.isInteger(id) && id >= 1 && id <= MAX_SEAT)
+          : [];
+        room.setLocked(msg.locked !== false, bots);
         // The lock IS the match starting and the unlock IS it ending, and
         // until this line the only trace either left was a lock_room count
         // on the host's drop line -- from which "how many matches, with

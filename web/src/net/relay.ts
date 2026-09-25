@@ -5,8 +5,8 @@
 // of Lua's on()/callbacks, since the page has no 60 Hz fixed-step pump to drive an
 // update() from.
 //
-// Seats: this room's `id` (a small integer, never reused within the room, handed out
-// by host_room/join_room) doubles as the wire's `seat` -- both are "a fixed roster
+// Seats: this room's `id` (1..MAX_SEAT, the lowest one free, handed out by
+// host_room/join_room) doubles as the wire's `seat` -- both are "a fixed roster
 // slot", just assigned by different code (docs/WIRE.md). bridge.ts uses `id` as its
 // local seat and `to()`'s `seat` argument as the relay's own `id`.
 //
@@ -15,6 +15,8 @@
 // the relay has already forgotten the old room by the time a new socket completes
 // its handshake, and deciding what to do about that (rejoin, show a "lost the room"
 // screen) is app.ts's call, not this module's. Listen for `closed` and decide there.
+
+import { MAX_SEAT } from './wire';
 
 export type RoomError =
   | 'not_found'
@@ -167,6 +169,10 @@ export interface JoinOpts {
   protocol?: number;
 }
 
+function isSeat(id: unknown): id is number {
+  return typeof id === 'number' && Number.isInteger(id) && id >= 0 && id <= MAX_SEAT;
+}
+
 function defaultFactory(url: string): WebSocketLike {
   return new WebSocket(url) as unknown as WebSocketLike;
 }
@@ -286,6 +292,17 @@ export class RelayClient {
     }
     const type = msg.type;
     if (typeof type !== 'string') return;
+
+    // An id is this page's seat, the ROM's gBrMySeat and every message's `seat`, and
+    // all three have 32 (POK-330 #6). A relay that hands out one past that -- the old
+    // one counted up forever -- would have us write gBrMySeat out of the ROM's tables
+    // and send a `start` no guest can decode. Refused as the room being full, which is
+    // what it is, and given back so the relay does not hold it for us.
+    if ((type === 'room_hosted' || type === 'room_joined') && !isSeat(msg.id)) {
+      this.send({ type: 'leave_room' });
+      this.emit('room_error', { reason: 'full' });
+      return;
+    }
 
     switch (type) {
       case 'room_hosted':
@@ -433,9 +450,11 @@ export class RelayClient {
     this.send({ type: 'set_pass', pass });
   }
 
-  /** Host only. Shuts the door: the match is starting and nobody else is coming in. */
-  lockRoom(locked: boolean): void {
-    this.send({ type: 'lock_room', locked });
+  /** Host only. Shuts the door: the match is starting and nobody else is coming in.
+   *  `bots` are the seats the match dealt its bots: the relay hands a latecomer the
+   *  lowest id nobody is using, and a bot's seat looks unused to it (POK-330 #6). */
+  lockRoom(locked: boolean, bots?: number[]): void {
+    this.send(bots ? { type: 'lock_room', locked, bots } : { type: 'lock_room', locked });
   }
 
   /** Whether this client is willing to run the match if the host's tab goes away
