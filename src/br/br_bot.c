@@ -26,6 +26,7 @@
 #include "br/br_match.h"
 #include "br/br_spectate.h"
 #include "br/br_engage.h"
+#include "br/br_levels.h"
 #include "br/br_bot.h"
 
 EWRAM_DATA struct BrBotFight gBrBotFight = {0};
@@ -108,16 +109,28 @@ bool8 BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
     if (level == 0)
         level = 5;
     CreateMon(mon, species, level, USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
-    for (i = 0; i < MAX_MON_MOVES; i++)
+    // The moves are the ROM's to choose (POK-330 #50). A card dealt off a map table
+    // carries a TACKLE (and a fallback's SURF, CUT and FLY, which are the page's for
+    // walking), and writing those over CreateMon's gave bots a set nobody else fights
+    // with. Only a set that came from a ROM's own party report -- the moves this bot
+    // fought its last fight with, PP spent and all -- is kept.
+    if (row[BR_MON_OFF_FLAGS] & BR_MON_ROM_MOVES)
     {
-        u16 move = BrWire_Move(BrWire_ReadU16(row + 8 + i * 4));
-        u8 pp = row[10 + i * 4];
+        for (i = 0; i < MAX_MON_MOVES; i++)
+        {
+            u16 move = BrWire_Move(BrWire_ReadU16(row + 8 + i * 4));
+            u8 pp = row[10 + i * 4];
 
-        if (move == MOVE_NONE)
-            continue;
-        SetMonData(mon, MON_DATA_MOVE1 + i, &move);
-        SetMonData(mon, MON_DATA_PP1 + i, &pp);
+            if (move == MOVE_NONE)
+                continue;
+            SetMonData(mon, MON_DATA_MOVE1 + i, &move);
+            SetMonData(mon, MON_DATA_PP1 + i, &pp);
+        }
     }
+    // Then the learnset walk the party and the gym leaders get (POK-311). Teach only
+    // swaps for a better four, so a reported set at its own rung stays what it was, and
+    // a rung later it learns what a player's lift would have taught it.
+    BrLevels_TeachUpTo(mon, level);
     // The card's nickname is NOT applied (POK-237, and the play-test: "the bot's
     // Pokemon names were all weird, most were numbers like 289, but then one was a
     // Lovedisc named Makuhita"). CreateMon has already given this species its real

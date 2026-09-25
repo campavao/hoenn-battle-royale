@@ -9,10 +9,11 @@ wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
-# The card is run-bot.txt's with LEER (0x2B, 30 PP) in the slot POUND had. TREECKO's own
-# second move is LEER as well, so the bot has nothing else to pick and the turn below
-# does not ride on where the RNG happens to be when the fight starts.
-pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 2B 00 1E 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+# The bot is a SURSKIT at 5: its learnset has nothing but BUBBLE until 7, and the ROM
+# gives a bot's mon its learnset's moves, not the card's (POK-330 #50), so the bot has
+# nothing else to pick and the turn below does not ride on where the RNG happens to be
+# when the fight starts.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 37 01 05 13 00 13 00 00 91 00 1E 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
 mailsend gBrMailbox 23 gDecompressionBuffer 106
 wait 10
 # Seat 31's ghost on our map (out of our eyeline), then its CHALLENGE: a challenge
@@ -31,21 +32,23 @@ wait 200
 expect u8 gBattleCommunication 2
 expect u16 gBrBattle+2 0
 shot menu
-# gBattleMons[0] is ours, gBattleMons[1] (+0x58) theirs: DEF stage at +0x1A (6 = level),
-# POUND's PP at +0x24, HP at +0x28. Their trainer AI can only pick LEER, which is what
-# makes this readable: a stat drop is a turn THEY took and we did not answer.
-expect u8 gBattleMons+0x1A 6
+# gBattleMons[0] is ours, gBattleMons[1] (+0x58) theirs: POUND's PP at +0x24, HP at
+# +0x28. Their trainer AI can only pick BUBBLE, which is what makes this readable: HP
+# off us is a turn THEY took, and HP still on them is one we did not answer. Both set to
+# 15 here, so the reading does not ride on either mon's IVs.
 expect u8 gBattleMons+0x24 35
+poke u16 gBattleMons+0x28 15
+poke u16 gBattleMons+0x80 15
 wait 1900
 # the clock fired once...
 expect u16 gBrBattle+2 1
 wait 400
 shot after
-# ...their move landed on us and ours never swung: DEF down a stage, POUND's PP untouched,
-# and their DEF where it was
-expect u8 gBattleMons+0x1A 5
+# ...their move landed on us and ours never swung: our HP down, POUND's PP untouched,
+# and their HP where it was
+expectle u16 gBattleMons+0x28 14
 expect u8 gBattleMons+0x24 35
-expect u8 gBattleMons+0x72 6
+expect u16 gBattleMons+0x80 15
 # and the menu is back, with a fresh clock, for the second turn
 expect u8 gBattleCommunication 2
 expectle u16 gBrBattle 500

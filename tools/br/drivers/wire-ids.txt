@@ -70,10 +70,11 @@ expect u8 gBrPick+3 0
 expect u8 *gSaveBlock1Ptr+4 0
 expect u8 *gSaveBlock1Ptr+5 9
 # DUEL, seat 29's two against seat 28's one: A is 0xFFFF, then a TREECKO at level 250
-# with move 512 and TACKLE; B is a TORCHIC. A's side goes into our own party, and a PEEK
-# about us answers with it, unencrypted.
+# with move 512 and TACKLE, flagged as a ROM report's so its moves are read at all
+# (POK-330 #50); B is a TORCHIC. A's side goes into our own party, and a PEEK about us
+# answers with it, unencrypted.
 pokebytes gDecompressionBuffer 1D 1C 02 01 FF FF 1E 00 00 00 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-pokebytes gDecompressionBuffer+100 00 00 00 00 15 01 FA 01 00 01 00 00 00 02 23 00 21 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+100 00 00 00 00 15 01 FA 01 00 01 00 00 00 02 23 00 21 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 pokebytes gDecompressionBuffer+200 00 00 00 00 18 01 05 01 00 01 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 pokebytes gDecompressionBuffer+300 00 00 00 00
 mailsend gBrMailbox 27 gDecompressionBuffer 304
@@ -85,8 +86,9 @@ expect u16 gBrMailbox+0x08 2
 pokebytes gDecompressionBuffer 01 00
 mailsend gBrMailbox 21 gDecompressionBuffer 2
 wait 4
-# out[2] is our PARTY: seat 0, one mon, TREECKO (0x0115) at level 100; its first move is
-# CreateMon's own, not 512 (0x0200), and its second is TACKLE (0x21)
+# out[2] is our PARTY: seat 0, one mon, TREECKO (0x0115) at level 100. 512 (0x0200) was
+# never written; TACKLE was, and the learnset walk to 100 ran over all four after it
+# (POK-330 #50), so every slot is a real move and none is 512.
 expect u8 gBrMailbox+0x98 7
 expect u8 gBrMailbox+0x9D 0
 expect u8 gBrMailbox+0x9E 1
@@ -95,8 +97,9 @@ expect u8 gBrMailbox+0xA0 0x01
 expect u8 gBrMailbox+0xA1 100
 expectne u8 gBrMailbox+0xA7 0
 expectle u8 gBrMailbox+0xA8 1
-expect u8 gBrMailbox+0xAB 0x21
-expect u8 gBrMailbox+0xAC 0
+expectle u8 gBrMailbox+0xAC 1
+expectle u8 gBrMailbox+0xB0 1
+expectle u8 gBrMailbox+0xB4 1
 # START with three rows: seat 1 on 255:0, seat 2 on 0:57, seat 3 on 0:9. Only seat 3 is
 # dealt a spawn.
 pokebytes gDecompressionBuffer 78 56 34 12 03 00 00 00 00 00 01 FF 00 0A 00 08 00 00 02 00 39 0A 00 08 00 00 03 00 09 0A 00 08 00 00

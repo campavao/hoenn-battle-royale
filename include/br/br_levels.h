@@ -28,5 +28,8 @@ bool8 BrLevels_NoExp(void);
 // One clock for Hoenn's own trainers too: their team at the rung the match is at,
 // rather than the levels the game shipped them with (POK-234).
 void BrLevels_LiftTrainer(struct Pokemon *party, u8 count);
+// Every move its learnset would have taught it by `level`, the walk the party and the
+// trainers get on a rung (POK-311): how a bot's mon, built from a card, gets its moves.
+void BrLevels_TeachUpTo(struct Pokemon *mon, u8 level);
 
 #endif // GUARD_BR_LEVELS_H

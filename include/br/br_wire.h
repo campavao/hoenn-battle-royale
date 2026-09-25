@@ -104,9 +104,13 @@
 //   37..46: nickname    Gen 3 charmap bytes (web/src/text/gen3.ts), unused tail zero
 //   47:     otLen       u8   (<= 7)
 //   48..54: ot          Gen 3 charmap bytes, unused tail zero
-//   55:     flags       u8   bit0 = traded
+//   55:     flags       u8   bit0 = traded; bit1 = the moves are a ROM's own, from a
+//                             PARTY report: a card with it fights with them (POK-330 #50)
 //   56..99: reserved    zero
 #define BR_MSG_PARTY 7
+#define BR_MON_OFF_FLAGS 55
+#define BR_MON_TRADED 0x01
+#define BR_MON_ROM_MOVES 0x02
 
 // ROM -> page: a party slot fainted (spectator/HUD state, not elimination).
 // Payload (2 bytes): seat u8, index u8 (0..5)

@@ -124,6 +124,12 @@ mon with that much of itself -- 0 is fainted, a sliver is at least 1, full is fu
 `dresult` reports each mon's HP back on its own card's scale, so the page merges it
 against the `maxHp` it sent. A `party` report is real HP and real max.
 
+A card's moves are the ROM's to choose (POK-330 #50). A row whose `flags` has bit1 set
+came from a ROM's own `party` report -- every one a ROM sends sets it -- and fights with
+the moves and PP it carries; any other row's moves are ignored. Either way the ROM then
+walks the species' learnset to the row's level, the same walk the party and the gym
+leaders get (POK-311). HM moves a page keeps for pathing never reach a fight.
+
 `tests/slots.test.ts` keeps its own `FIXED_LAYOUT_SIZES` table (packed size before
 framing, per message) asserted against real `packSlot()` output, so a layout drift
 between this doc, the header, and the code fails a test rather than surfacing at

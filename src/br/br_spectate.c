@@ -447,6 +447,9 @@ static void PackOwnMon(struct Pokemon *mon, u8 *row)
         row[10 + i * 4] = GetMonData(mon, MON_DATA_PP1 + i, NULL);
     }
     BrWire_WriteU16(row + 24, GetMonData(mon, MON_DATA_HELD_ITEM, NULL));
+    // These moves are this ROM's own: a bot card built back from this row keeps them
+    // (POK-330 #50). The page's own cards never say so.
+    row[BR_MON_OFF_FLAGS] = BR_MON_ROM_MOVES;
     GetMonData(mon, MON_DATA_NICKNAME, name);
     for (len = 0; len < POKEMON_NAME_LENGTH && name[len] != EOS; len++)
         row[BR_PEEK_OFF_NICK + len] = name[len];

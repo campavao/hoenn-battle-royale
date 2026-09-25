@@ -1,0 +1,45 @@
+# bot-learnset: a bot's mon knows what anybody's would at its level (POK-330 #50). The
+# page deals a card's mon with a TACKLE -- and a fallback's SURF, CUT and FLY, which are
+# its own for walking -- and the ROM used to write those over CreateMon's four. Now a
+# card's moves are kept only when they came from a ROM's party report (PackedMon flags
+# bit1, which every PARTY this ROM sends carries), and the learnset walk the party and the
+# gym leaders get (POK-311) runs either way.
+#
+# A proxy DUEL puts side A in our own party, and a PEEK answers with it unencrypted.
+# A1: a page card, TREECKO at 21 carrying TACKLE and SURF. A2: a report's, TREECKO at 5
+# with POUND at 7 PP and SURF at 3.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMySeat 0
+pokebytes gDecompressionBuffer 1D 1C 02 01 15 01 15 01 00 01 00 00 21 00 23 00 39 00 0F 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+100 00 00 00 00 15 01 05 01 00 01 00 00 01 00 07 00 39 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+200 00 00 00 00 1B 01 05 01 00 01 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+300 00 00 00 00 00 00
+mailsend gBrMailbox 27 gDecompressionBuffer 306
+wait 20
+expect u8 gBrDuel+4 2
+pokebytes gDecompressionBuffer 01 00
+mailsend gBrMailbox 21 gDecompressionBuffer 2
+wait 4
+# PARTY: [seat 0][count 2], then 100-byte rows; a row's moves are at +8, +12, +16, +20
+# (id u16, pp, ppUps) and its flags at +55.
+expectmsg 7 u8 1 2
+# A1 is the walk's four at 21, not TACKLE and SURF -- and not CreateMon's last four
+# either, which end in SCREECH: ABSORB, QUICK ATTACK, PURSUIT, LEER.
+expectmsg 7 u16 10 0x47
+expectmsg 7 u16 14 0x62
+expectmsg 7 u16 18 0xE4
+expectmsg 7 u16 22 0x2B
+# ...and this report says they are the ROM's own, so they come back as they went.
+expectmsg 7 u8 57 2
+# A2 kept its report's moves and the PP it had spent, and the walk filled the empty slot
+# with LEER.
+expectmsg 7 u16 110 1
+expectmsg 7 u8 112 7
+expectmsg 7 u16 114 0x39
+expectmsg 7 u8 116 3
+expectmsg 7 u16 118 0x2B
+expectmsg 7 u8 157 2
+say bot learnset ok

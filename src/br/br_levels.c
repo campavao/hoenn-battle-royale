@@ -425,6 +425,15 @@ static void LearnThrough(struct Pokemon *mon, u8 slot, u8 to)
     }
 }
 
+// A bot's mon, built from a card, knows what a player's or a gym leader's would at this
+// level (POK-330 #50): the page has no learnsets, so it sends none worth keeping, and
+// CreateMon's last-four-written is the accident POK-311 took off everybody else.
+// PARTY_SIZE as the slot, as LiftTrainer: nothing in a bot's team is a player's decision.
+void BrLevels_TeachUpTo(struct Pokemon *mon, u8 level)
+{
+    LearnThrough(mon, PARTY_SIZE, level);
+}
+
 static void LiftParty(u8 level)
 {
     u8 i, count = CalculatePlayerPartyCount();
