@@ -46,6 +46,22 @@ test('a watcher walks in on a running match, and the match is not theirs', async
     // The late start: the fog's position arrives at once rather than at the next ring.
     await expect(watcher.locator('#match-strip')).toContainText(/RING \d/, { timeout: 60_000 });
 
+    // POK-330 #4: walking in is a roster event, and no roster lists a bot -- so the host
+    // counted every bot still standing as departed and, when the ten-second grace ran
+    // out, eliminated the lot and handed itself the match. Eleven seconds on, the field
+    // is still a field.
+    const field = () =>
+      host.evaluate(() => {
+        const state = (window as unknown as BrWindow).__br.director.state;
+        return { alive: state.alive as number, phase: state.phase as string };
+      });
+    const before = await field();
+    expect(before.alive, 'bots in the match to lose').toBeGreaterThan(2);
+    await host.waitForTimeout(11_000);
+    const after = await field();
+    expect(after.phase, 'nobody won by default').not.toBe('ended');
+    expect(after.alive, 'the bots are still standing').toBeGreaterThan(1);
+
     // And the match does not think it is in it: the host's seat list never took it.
     const seatedWatcher = await host.evaluate(() => {
       const br = (window as unknown as BrWindow).__br;

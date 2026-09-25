@@ -78,6 +78,7 @@ import { DOORSTEPS, HAND, LANDING } from './match/landing';
 import { SAFARI_CELLS } from './match/safari';
 import { cardFor } from './match/card';
 import { MatchRecord, recordLines } from './match/record';
+import { departedSeats } from './match/lifecycle';
 import regionmapData from './data/regionmap.json';
 import { parseRoomHash as parseHash, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
 
@@ -2285,6 +2286,9 @@ function wireRoom(
       paceOptions()?.safariSecs ?? controls.safariSecs,
       () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
     );
+    // Which seats are bots, said once rather than guessed at by everything downstream:
+    // the ones walked here, or on a takeover every one the match was dealt, dead or not.
+    match.botSeats = new Set(resume ? resume.botSeats : bots.seats);
     director = new Director({
       // Bots are contestants, not scenery: leaving them out of the seat list makes
       // "N LEFT" a lie and hands the match to whoever outlasts the humans alone.
@@ -2430,6 +2434,8 @@ function wireRoom(
     seats: [] as number[],
     /** Where `start` dealt everybody, so a takeover does not deal those cells again. */
     spawns: [] as { map: MapRef; x: number; y: number }[],
+    /** The seats in `seats` that are bots, which no relay roster will ever list. */
+    botSeats: new Set<number>(),
     ringPhase: 0,
     centre: undefined as { sx: number; sy: number; place?: string } | undefined,
     /** The ring's radius, for the strip a guest draws for itself (POK-268). */
@@ -2902,16 +2908,16 @@ function wireRoom(
     // -- and only while a match is actually running; before START, leaving a room is
     // just leaving a room.
     if (director && bridge && isHost) {
-      const here = new Set(ev.members.map((m) => m.id));
-      for (const seat of match.seats) {
-        if (here.has(seat) || match.out.has(seat)) {
-          const timer = leaving.get(seat);
-          if (timer !== undefined) {
-            clearTimeout(timer);
-            leaving.delete(seat);
-          }
-          continue;
-        }
+      // Never the bots (POK-330 #4): no roster lists them, so every roster event used to
+      // count every bot still standing as gone, and ten seconds later they all were.
+      const gone = new Set(departedSeats(match.seats, match.botSeats, ev.members.map((m) => m.id), match.out));
+      // Back, or out anyway: whatever was counting them down stops.
+      for (const [seat, timer] of leaving) {
+        if (gone.has(seat)) continue;
+        clearTimeout(timer);
+        leaving.delete(seat);
+      }
+      for (const seat of gone) {
         if (leaving.has(seat)) continue;
         leaving.set(
           seat,
