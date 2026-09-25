@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BLOCKS_KEPT, Bridge, type EmulatorLike } from './bridge';
-import { MAILBOX, type RamAccess } from './mailbox';
+import { MAILBOX, Mailbox, type RamAccess } from './mailbox';
+import { POSITIONAL_CAP, RomPort } from './romport';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
-import { PROTOCOL, type Msg } from './wire';
+import { PROTOCOL, type Msg, type SpillMsg, type StepMsg } from './wire';
 import { RelayClient, type WebSocketLike } from './relay';
 
 const BASE = 0x0203d178; // gBrMailbox, per br-symbols.json
@@ -87,7 +88,7 @@ function fakeEmulator(base: number) {
   };
 
   // As if the ROM had drained up to `budget` slots off the in-ring.
-  const romDrainIn = (budget = MAILBOX.RING_SLOTS): BinarySlot[] => {
+  const romDrainIn = (budget: number = MAILBOX.RING_SLOTS): BinarySlot[] => {
     const out: BinarySlot[] = [];
     let tail = ram.read(base + MAILBOX.OFF_IN_TAIL, 16);
     const head = ram.read(base + MAILBOX.OFF_IN_HEAD, 16);
@@ -514,5 +515,97 @@ describe("a bot's RESULT (POK-330 #20)", () => {
       { type: 'all', m: { t: 'result', seat: 2, outcome: 'win' } },
       { type: 'all', m: { t: 'result', seat: 31, outcome: 'lose' } },
     ]);
+  });
+});
+
+// POK-330 #44. The room's messages queued for the ROM with no cap, and a tab in the
+// background (no frames, the socket still delivering) came back to seconds of stale steps
+// with every `out` behind them. The host's director had a second queue into the same ring.
+describe('the feed into the ROM (POK-330 #44)', () => {
+  /** Frames run and the ROM drains 16 slots after each, as BrNet_Tick does. */
+  const run = (frame: () => void, romDrainIn: (n: number) => BinarySlot[], frames: number) => {
+    const slots: BinarySlot[] = [];
+    for (let i = 0; i < frames; i++) {
+      frame();
+      slots.push(...romDrainIn(16));
+    }
+    return slots;
+  };
+  /** Regroups raw in-ring slots into whole messages: a slot of one message between two of
+   *  another's does not reassemble. */
+  const messages = (slots: BinarySlot[]): Msg[] => {
+    const out: Msg[] = [];
+    for (let i = 0; i < slots.length; ) {
+      const group = [slots[i++]];
+      while (i < slots.length && (slots[i].type & BR_CONT_FLAG) !== 0) group.push(slots[i++]);
+      out.push(decodeReassembled(group));
+    }
+    return out;
+  };
+
+  it("a tab back from the background hands the ROM the room's `out` within frames, not behind every step it missed", () => {
+    const { emu, frame, romInit, romDrainIn } = fakeEmulator(BASE);
+    romInit();
+    const { relay, socket } = fakeRelay();
+    new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+
+    // A minute hidden: no frames, and three seats walking the whole time.
+    for (let i = 0; i < 600; i++) {
+      const seat = 5 + (i % 3);
+      socket.receive({ type: 'recv', from: seat, m: { t: 'step', seat, d: 4, x: i, y: 1, map: { group: 0, num: 9 } } });
+    }
+    socket.receive({ type: 'recv', from: 9, m: { t: 'out', seat: 9 } });
+
+    let frames = 0;
+    const heard: Msg[] = [];
+    while (!heard.some((m) => m.t === 'out') && frames < 60) {
+      heard.push(...messages(run(frame, romDrainIn, 1)));
+      frames++;
+    }
+    expect(frames).toBeLessThanOrEqual(Math.ceil((POSITIONAL_CAP + 1) / 16) + 1);
+    // ...and where each of them ended up is still in what it got.
+    const lastX = (seat: number) => heard.filter((m): m is StepMsg => m.t === 'step' && m.seat === seat).at(-1)?.x;
+    expect([5, 6, 7].map(lastX)).toEqual([597, 598, 599]);
+  });
+
+  it("the host's director and the room share one port, so neither splits the other's spill", () => {
+    const { emu, frame, romInit, romDrainIn, ram } = fakeEmulator(BASE);
+    romInit();
+    const { relay, socket } = fakeRelay();
+    const rom = new RomPort(new Mailbox(emu, BASE));
+    new Bridge({ emu, mailboxBase: BASE, relay, seat: 2, rom });
+    const spill = (seat: number): SpillMsg => ({
+      t: 'spill',
+      seat,
+      map: { group: 0, num: 9 },
+      mons: [1, 2, 3, 4, 5, 6].map((k) => ({ key: seat * 16 + k, x: k, y: 1, species: 252, level: 5 })),
+      bag: { key: seat * 16, x: 1, y: 1, items: [{ id: 13, n: 1 }], money: 100 },
+    });
+    expect(packSlot(spill(9)).length).toBeGreaterThan(1);
+    // One slot free: the bot's spill cannot go in whole yet.
+    ram.write(BASE + MAILBOX.OFF_IN_HEAD, MAILBOX.RING_SLOTS - 1, 16);
+
+    rom.push(spill(30)); // a bot, from the host's own director
+    socket.receive({ type: 'recv', from: 9, m: spill(9) }); // a player, from the room
+    frame();
+    expect(romDrainIn(MAILBOX.RING_SLOTS)).toHaveLength(MAILBOX.RING_SLOTS - 1); // what filled it
+    const got = messages(run(frame, romDrainIn, 4));
+    expect(got.map((m) => (m as SpillMsg).seat)).toEqual([30, 9]);
+  });
+
+  it("a rejoin's Bridge hands the ROM what the last one had not got to", () => {
+    const { emu, frame, romInit, romDrainIn, ram } = fakeEmulator(BASE);
+    romInit();
+    const { relay, socket } = fakeRelay();
+    const rom = new RomPort(new Mailbox(emu, BASE));
+    const first = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2, rom });
+    ram.write(BASE + MAILBOX.OFF_IN_HEAD, MAILBOX.RING_SLOTS, 16); // the ROM is behind
+    socket.receive({ type: 'recv', from: 9, m: { t: 'out', seat: 9 } });
+    frame();
+
+    first.dispose();
+    new Bridge({ emu, mailboxBase: BASE, relay, seat: 2, rom });
+    ram.write(BASE + MAILBOX.OFF_IN_TAIL, MAILBOX.RING_SLOTS, 16);
+    expect(messages(run(frame, romDrainIn, 1))).toEqual([{ t: 'out', seat: 9 }]);
   });
 });

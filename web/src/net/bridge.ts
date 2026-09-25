@@ -4,9 +4,9 @@
 //   ROM out-ring --poll--> reassemble --> unpackSlot --> stamp our seat -->
 //     roster.applyMsg --> relay.to(opponent, msg) or relay.all(msg)
 //
-//   relay 'recv' --> decode --> trust (net/trust.ts) --> roster.applyMsg --> packSlot -->
-//     queue --> mailbox.push (one slot/frame budget; retried next frame while the ring
-//     is full) --> onMessage(msg, from), the page's one stream of what the room said
+//   relay 'recv' --> decode --> trust (net/trust.ts) --> roster.applyMsg --> RomPort
+//     (net/romport.ts: whole messages into the in-ring as it has room, stale movement let
+//     go) --> onMessage(msg, from), the page's one stream of what the room said
 //
 // `all` vs `to`: everything the ROM emits is a broadcast (place/step/face/out/
 // pickup/spill/faint/result/challenge, ...) EXCEPT `bt`, a raw link-block exchange
@@ -17,8 +17,9 @@
 // `echo`/`BR_MSG_NONE` never reach the relay: they exist for the mailbox's own
 // wire-up test (slots.ts's comment on BR_MSG.ECHO) and have no `wire.ts` Msg
 // counterpart to forward.
-import { Mailbox, type RamAccess, type RawMessage } from './mailbox';
-import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
+import { Mailbox, type RamAccess } from './mailbox';
+import { RomPort } from './romport';
+import { crossesToRom } from './slots';
 import { decode, type BlockMsg, type Lines, PROTOCOL, type Msg } from './wire';
 import { Roster } from '../match/roster';
 import { RelayClient, type RecvEvent, type RosterEvent } from './relay';
@@ -33,12 +34,14 @@ export interface EmulatorLike extends RamAccess {
 
 export interface BridgeStats {
   frames: number;
-  /** Messages pushed into the ROM's in-ring (relay -> ROM). */
+  /** Messages this Bridge pushed into the ROM's in-ring: whatever went through the
+   *  port while it was the one pumping it, the host's director's included. */
   in: number;
   /** Messages read off the ROM's out-ring (ROM -> relay). */
   out: number;
   /** Messages discarded: bad JSON/binary, an unknown type, or a validation failure.
-   *  Does not count a full ring's queue-and-retry -- that is delayed, not lost. */
+   *  Does not count a full ring's queue-and-retry -- that is delayed, not lost -- nor
+   *  stale movement the port let go (rom.stats). */
   drops: number;
   /** Messages that decoded but came from somebody with no right to send them
    *  (net/trust.ts), and link blocks from anybody but the seat we are fighting. */
@@ -57,6 +60,10 @@ export interface BridgeOptions {
   protocol?: number;
   /** The fight the last Bridge was in, when this one replaces it mid-match (carry()). */
   carry?: LinkCarry;
+  /** The page's one writer into this ROM's in-ring (POK-330 #44), when it outlives the
+   *  Bridge: a rejoin builds a new Bridge over the same ROM, and the host's director
+   *  pushes through the same port. Unset, the Bridge makes its own. */
+  rom?: RomPort;
 }
 
 /** What a link battle needs to outlive the Bridge it started under (POK-330 #20, #7). A
@@ -95,6 +102,9 @@ const SPEAKS_FOR_ANOTHER = new Set<string>(['party', 'spent']);
 
 export class Bridge {
   readonly mailbox: Mailbox;
+  /** Everything into and out of the ROM goes through here, and nothing else writes the
+   *  in-ring. */
+  readonly rom: RomPort;
   readonly roster = new Roster();
   readonly relay: RelayClient;
   readonly seat: number;
@@ -134,8 +144,6 @@ export class Bridge {
    *  (POK-260): it is in the room to look, and a ghost of it walking around Littleroot
    *  is not part of anybody's match. */
   private outFilter: ((msg: Msg) => boolean) | null = null;
-  /** Slots waiting for room in the ROM's in-ring, in send order. */
-  private outQueue: BinarySlot[] = [];
   private framesCount = 0;
   private inCount = 0;
   private outCount = 0;
@@ -144,7 +152,8 @@ export class Bridge {
   private readonly unsubs: (() => void)[] = [];
 
   constructor(opts: BridgeOptions) {
-    this.mailbox = new Mailbox(opts.emu, opts.mailboxBase);
+    this.rom = opts.rom ?? new RomPort(new Mailbox(opts.emu, opts.mailboxBase));
+    this.mailbox = this.rom.mailbox;
     this.relay = opts.relay;
     this.seat = opts.seat;
     this.protocol = opts.protocol ?? PROTOCOL;
@@ -221,56 +230,14 @@ export class Bridge {
   private onFrame(): void {
     this.framesCount++;
     if (!this.mailbox.isAwake()) return; // BrMailbox_Init has not run yet
-    this.flushOutQueue();
-    const raw = this.mailbox.poll();
-    if (raw.length) this.handleFromRom(raw);
+    this.inCount += this.rom.flush();
+    // Not `dropCount += drain(...)`: that reads the count before the handler adds to it.
+    const unreadable = this.rom.drain((msg) => this.handleFromRom(msg));
+    this.dropCount += unreadable;
   }
 
-  /** Pushes as many queued slots as the ROM's in-ring has room for, in order --
-   *  stops (rather than skipping ahead) the moment one is refused, so a message's
-   *  own slots are never pushed out of order. */
-  private flushOutQueue(): void {
-    while (this.outQueue.length > 0) {
-      const slot = this.outQueue[0];
-      if (!this.mailbox.push(slot.type, slot.payload)) return; // ring full; retry next frame
-      this.outQueue.shift();
-      this.inCount++;
-    }
-  }
-
-  /** Splits one poll() batch back into per-message slot groups (a base-type slot
-   *  followed by zero or more BR_CONT_FLAG continuations) and handles each. */
-  private handleFromRom(raw: RawMessage[]): void {
-    let i = 0;
-    while (i < raw.length) {
-      const group: BinarySlot[] = [raw[i]];
-      i++;
-      while (i < raw.length && (raw[i].type & BR_CONT_FLAG) !== 0) {
-        group.push(raw[i]);
-        i++;
-      }
-      this.handleGroupFromRom(group);
-    }
-  }
-
-  private handleGroupFromRom(group: BinarySlot[]): void {
-    let reassembled: BinarySlot;
-    try {
-      reassembled = reassembleSlots(group);
-    } catch {
-      this.dropCount++;
-      return;
-    }
-    // BR_MSG_NONE/ECHO have no wire.ts Msg and must never reach the relay.
-    if (reassembled.type === BR_MSG.NONE || reassembled.type === BR_MSG.ECHO) return;
-
-    let msg: Msg;
-    try {
-      msg = unpackSlot(reassembled.type, reassembled.payload);
-    } catch {
-      this.dropCount++;
-      return;
-    }
+  /** One message our ROM sent, on its way to the room. */
+  private handleFromRom(msg: Msg): void {
     this.outCount++;
 
     let stamped = (this.keepsItsSeat(msg) ? msg : { ...msg, seat: this.seat }) as Msg;
@@ -343,11 +310,7 @@ export class Bridge {
     // JSON-only messages (accept/decline/win/ready/...) have nothing to push, and reach
     // the page all the same.
     if (crossesToRom(msg.t) && (!this.romFilter || this.romFilter(msg))) {
-      try {
-        this.outQueue.push(...packSlot(msg));
-      } catch {
-        this.dropCount++; // the ROM cannot take it; the page still hears it
-      }
+      if (!this.rom.push(msg)) this.dropCount++; // the ROM cannot take it; the page still hears it
     }
     for (const fn of [...this.listeners]) fn(msg, ev.from);
   }
@@ -393,11 +356,7 @@ export class Bridge {
    *  spectator's own `follow`, which is a page's word to its own ROM (docs/WIRE.md). */
   pushToRom(msg: Msg): void {
     if (!crossesToRom(msg.t)) return;
-    try {
-      this.outQueue.push(...packSlot(msg));
-    } catch {
-      this.dropCount++;
-    }
+    if (!this.rom.push(msg)) this.dropCount++;
   }
 
   /** Remembers who we are fighting, so a later `bt` (which does not itself name a

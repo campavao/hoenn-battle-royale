@@ -10,7 +10,7 @@ import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker
 import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
-import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './net/slots';
+import { RomPort } from './net/romport';
 import { PARTY_BAG_MAX, type BstartMsg, type Msg, type PackedMon, type TurnMsg } from './net/wire';
 import { MAP_OFFSET, toRomCells } from './net/cells';
 import { encodeGen3 } from './text/gen3';
@@ -1676,29 +1676,6 @@ function renderMatchStrip(state: DirectorState): void {
   strip.textContent = `${phaseLabel} · ${state.alive} left · ${mm}:${ss}`;
 }
 
-/** Packs and pushes every `Msg` that crosses to the ROM (start/clock/ring -- not
- *  `win`, JSON-only per docs/WIRE.md) into one mailbox's in-ring, one slot budget a
- *  frame, retrying next frame while it's full -- the same shape as bridge.ts's own
- *  `flushOutQueue`, reused here because the director's `send` needs exactly that
- *  behaviour for two different mailboxes (solo's own, and the room host's, which
- *  reuses `bridge.mailbox` rather than opening a second one on the same base). */
-function createRomPushQueue(emu: Emulator, mailbox: Mailbox): { push: (msg: Msg) => void; dispose: () => void } {
-  const queue: BinarySlot[] = [];
-  const off = emu.onFrame(() => {
-    while (queue.length > 0) {
-      const slot = queue[0];
-      if (!mailbox.push(slot.type, slot.payload)) return; // ring full; retry next frame
-      queue.shift();
-    }
-  });
-  return {
-    push(msg) {
-      if (crossesToRom(msg.t)) queue.push(...packSlot(msg));
-    },
-    dispose: off,
-  };
-}
-
 /** Starts the director's own 1Hz pump: `tick()` (fires the due clock/ring messages),
  *  then mirrors its `state` into `gBrHud`'s two page-writes fields and the HTML
  *  strip. Returns a disposer. */
@@ -1720,7 +1697,7 @@ function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director:
 // ---- solo: no relay at all, this page is the whole match -------------------------------
 
 /** Solo play (no `#host`/`#join`): there is no room, so there is no Bridge either --
- *  just a direct push into this ROM's own mailbox (`createRomPushQueue`) and a
+ *  just a RomPort into this ROM's own mailbox (net/romport.ts) and a
  *  Director for the one seat this client owns. `onOut` wires nothing in: a one-seat
  *  match's own out (a real whiteout) never decides a winner (director.ts's own
  *  header comment), so nobody needs to hear about it here. */
@@ -1729,8 +1706,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // point of the mode). The count rides along on whatever real connection comes next
   // (POK-243, match/stats.ts) -- a local bump now, nothing that touches the network.
   recordSolo();
-  const mailbox = new Mailbox(emu, mailboxBase);
-  const rom = createRomPushQueue(emu, mailbox);
+  const rom = new RomPort(new Mailbox(emu, mailboxBase));
   const seatBase = symbols?.get('gBrMySeat');
   if (seatBase !== undefined) writeMySeat(emu, seatBase, 0);
 
@@ -1897,8 +1873,11 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     director.start();
     startDirectorLoop(emu, symbols?.get('gBrHud'), director);
   });
+  // One pump for both directions: the port is the only thing that writes the ring.
   emu.onFrame(() => {
-    if (mailbox.isAwake()) drainRom(mailbox, fromRom);
+    if (!rom.mailbox.isAwake()) return;
+    rom.flush();
+    rom.drain(fromRom);
   });
   // LEAVE works in here too (POK-276). The strip is drawn for every mode and the
   // button was only ever wired in `wireRoom`, so the one way out of a solo match was
@@ -1906,27 +1885,6 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const leave = $('#match-leave') as HTMLButtonElement;
   leave.hidden = false;
   leave.addEventListener('click', () => backToLobby());
-}
-
-/** Everything the ROM has pushed since the last frame, as wire.ts messages: the same
- *  poll -> regroup -> reassemble -> unpack that bridge.ts does on its way to the relay,
- *  for the callers that have no relay to send it to. */
-function drainRom(mailbox: Mailbox, handle: (msg: Msg) => void): void {
-  const raw = mailbox.poll();
-  let i = 0;
-  while (i < raw.length) {
-    // A message is a base slot followed by its BR_CONT_FLAG continuations.
-    const group: BinarySlot[] = [raw[i++]];
-    while (i < raw.length && (raw[i].type & BR_CONT_FLAG) !== 0) group.push(raw[i++]);
-    try {
-      const done = reassembleSlots(group);
-      if (done.type === BR_MSG.NONE || done.type === BR_MSG.ECHO) continue;
-      handle(unpackSlot(done.type, done.payload));
-    } catch {
-      // A gap or a slot that is not a message we know: the ROM does not resend, and
-      // there is nothing here to act on either way.
-    }
-  }
 }
 
 // ---- room: relay + bridge, opted into by the URL hash ------------------------------------
@@ -2020,6 +1978,10 @@ function wireRoom(
   setStatus(room.status);
 
   const relay = new RelayClient();
+  /** The one writer into our ROM's in-ring (POK-330 #44), shared by every Bridge this
+   *  page builds and by the host's director. The host used to have a second queue beside
+   *  the Bridge's, and two writers could put one `spill`'s slots between another's. */
+  const rom = new RomPort(new Mailbox(emu, mailboxBase));
   let bridge: Bridge | null = null;
   let director: Director | null = null;
   /** The director's own elimination handler, for `out`s this page makes itself. */
@@ -2234,7 +2196,6 @@ function wireRoom(
           },
         }
       : undefined;
-    const rom = createRomPushQueue(emu, bridge.mailbox); // reuses the Bridge's own Mailbox, not a second one on the same base
     // The ticker. The ROM has drawn the window since POK-226 and nothing had ever sent
     // it a line, so a match was silent: people vanished, the fog closed, somebody won,
     // and the only way to know was to be watching the right corner. The host narrates,
@@ -2350,7 +2311,7 @@ function wireRoom(
         // round trip through the relay it just sent to. `win` is JSON-only
         // (docs/WIRE.md) and has no slots.ts codec, so it never goes to `rom`.
         bridge!.relay.all(msg);
-        rom.push(msg); // no-op for `win` -- createRomPushQueue only packs a msg.t crossesToRom() knows
+        rom.push(msg); // no-op for `win` -- the port only packs a msg.t crossesToRom() knows
         noteResult(msg); // the host's own `start`/`win` never come back to it over the relay
         if (msg.t === 'ring') {
           // The first ring IS the buzzer: it is what ends the opening in the ROM
@@ -2441,7 +2402,6 @@ function wireRoom(
     const stopLoop = startDirectorLoop(emu, symbols?.get('gBrHud'), director);
     stopDirectorLoop = () => {
       stopLoop();
-      rom.dispose();
       bots?.dispose();
       bots = null;
     };
@@ -2638,7 +2598,7 @@ function wireRoom(
     if (bridge) bridge.dispose();
     attachedTo = { seat, code };
     console.info(`[room] attached as seat ${seat} in ${code}`);
-    bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol, carry });
+    bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol, carry, rom });
     // Whose room it is, as the relay says: ours when we opened it, whoever it names when
     // we joined. The hash said `host` on a rejoin too, after the relay had already handed
     // the room to an heir when our socket went (POK-330 #13).
