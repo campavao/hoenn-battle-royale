@@ -68,7 +68,6 @@ function books(over: Partial<SessionDeps> = {}) {
     store,
     grace: new EndGrace({ graceMs: 4_000, winMaxMs: 60_000, pollMs: 500 }),
     exit,
-    keepParties: true,
     now: () => now,
     ...over,
   };
@@ -168,13 +167,6 @@ describe("one match's books (POK-330 #42)", () => {
     session.note({ t: 'party', seat: 7, mons: [mon, mon] }, { from: 7 });
     expect(view.partyLate).toHaveBeenCalledTimes(1);
     expect(session.parties.get(7)).toHaveLength(2);
-
-    const solo = books({ keepParties: false });
-    solo.session.note(start([0, 7]), 'page');
-    solo.session.note({ t: 'win', seat: 7 }, 'page');
-    solo.session.note({ t: 'party', seat: 7, mons: [mon] }, 'rom');
-    expect(solo.session.parties.size).toBe(0);
-    expect(solo.view.partyLate).not.toHaveBeenCalled();
   });
 
   it('what the page made itself is nobody busy and nothing for the bots', () => {
@@ -282,9 +274,9 @@ describe("one match's books (POK-330 #42)", () => {
 });
 
 // Solo keeps its books in the same session as the room (POK-330 #42), and the two had
-// drifted before: solo never routed its fights to the bots (#17). What stays different
-// is on purpose -- no champion's team under the results (D1) and no restock on arrival
-// (D2) -- and the grace is solo's own: 8 s out to the lobby, not 4 s back to a room.
+// drifted before: solo never routed its fights to the bots (#17), and kept no champion's
+// team (POK-331 #26). Kanto's solo is the room with nobody else in it (lib/localroom.lua),
+// so what stays different is only the grace: 8 s out to the lobby, not 4 s back to a room.
 describe('solo, on the same books', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -293,11 +285,10 @@ describe('solo, on the same books', () => {
     vi.useRealTimers();
   });
 
-  /** The session the way runSolo builds it: seat 0, nobody's party kept, no fog of its
-   *  own, and the lobby for an exit. */
+  /** The session the way runSolo builds it: seat 0, no fog of its own, and the lobby for
+   *  an exit. */
   function solo(over: Partial<SessionDeps> = {}, paradeDone?: () => boolean) {
     return books({
-      keepParties: false,
       defaultFog: undefined,
       grace: new EndGrace({ graceMs: 8_000, winMaxMs: 60_000, pollMs: 500, paradeDone }),
       ...over,
@@ -389,15 +380,17 @@ describe('solo, on the same books', () => {
     stuck.session.grace.cancel();
   });
 
-  it('keeps no party, mid-match or after the win (D1)', () => {
+  // POK-331 #26 (D1): solo kept no party, so a solo champion's parade had nothing under
+  // the results -- where the room's champion sees YOUR TEAM.
+  it("keeps our own ROM's team as the parade starts, and draws the results again for it", () => {
     const { session, view } = solo();
     session.note(start([0, 31]), 'page');
-    session.note({ t: 'party', seat: 0, mons: [mon] }, 'rom');
-    expect(session.parties.size).toBe(0);
+    session.note({ t: 'out', seat: 31 }, 'page');
     session.note({ t: 'win', seat: 0 }, 'page');
-    session.note({ t: 'party', seat: 0, mons: [mon] }, 'rom');
-    expect(session.parties.size).toBe(0);
     expect(view.partyLate).not.toHaveBeenCalled();
+    session.note({ t: 'party', seat: 0, mons: [mon] }, 'rom');
+    expect(session.parties.get(0)).toEqual([mon]);
+    expect(view.partyLate).toHaveBeenCalledTimes(1);
   });
 
   it("pushes nothing when our own ROM arrives on a map with loot on it: solo never restocks (D2)", () => {
@@ -451,7 +444,6 @@ describe('the books behind a Bridge, wired the way the room wires them', () => {
         store: memoryStore(),
         grace: new EndGrace({ graceMs: 4_000, winMaxMs: 60_000, pollMs: 500 }),
         exit: () => {},
-        keepParties: true,
       },
       view,
     );

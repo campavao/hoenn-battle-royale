@@ -1526,22 +1526,25 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       // backToLobby does, and there is no socket here for it to scatter. Won, it waits
       // for the Hall of Fame rather than a timer, the same as the room's champion.
       exit: leaveSolo,
-      // Solo has never kept anybody's party, so the champion's team is not drawn here.
-      keepParties: false,
     },
     {
       decided: (line) => {
         ($('#results-career') as HTMLElement).textContent = line;
-        renderResults(0, roster, {
-          results: session.results,
-          record: session.record,
-          parties: session.parties,
-          fieldSize: session.fieldSize,
-          seed,
-        });
+        drawResults();
       },
+      // The champion's team under the results, as the room draws it (POK-331 #26): our
+      // own ROM sends it as the parade starts, after the `win` drew the panel.
+      partyLate: () => drawResults(),
     },
   );
+  const drawResults = (): void =>
+    renderResults(0, roster, {
+      results: session.results,
+      record: session.record,
+      parties: session.parties,
+      fieldSize: session.fieldSize,
+      seed,
+    });
   // The seed is solo's own, dealt as it always was: `#seed` is the room's (fixedSeed).
   const plan = dealPlan(session.match, [0], 0, false, () => seed);
   // The room's own host (POK-330 #42), on a link with nobody at the other end. Dealt now,
@@ -2030,7 +2033,6 @@ function wireRoom(
       // keeping the room makes the next match a press of START rather than eight people
       // finding each other again.
       exit: () => void returnToRoom(),
-      keepParties: true,
     },
     {
       started: hideRoomScreen,

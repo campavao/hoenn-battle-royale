@@ -53,9 +53,6 @@ export interface SessionDeps {
   grace: EndGrace;
   /** Out of a decided match, once its grace is up. */
   exit(): void;
-  /** Keep every seat's last `party`, for the champion's team under the results
-   *  (POK-243). The room's; solo has never shown one. */
-  keepParties: boolean;
   now?(): number;
 }
 
@@ -65,8 +62,9 @@ export interface SessionView {
   started?(): void;
   /** Our match was decided: draw the results, with the career line under them. */
   decided(careerLine: string): void;
-  /** A team arrived after the results were drawn: the champion's parade (POK-243). */
-  partyLate?(): void;
+  /** A team arrived after the results were drawn: the champion's parade (POK-243).
+   *  Not optional: solo went without it, and its champion's team was never drawn. */
+  partyLate(): void;
 }
 
 /** A bag we just took hands its contents over (POK-280).
@@ -110,10 +108,12 @@ export class MatchSession {
   /** What each seat did in the match, for the card under the parade (POK-303). */
   readonly record = new MatchRecord();
   readonly log = new MatchLog();
-  /** The last team each seat was seen carrying, from any `party` that crossed the page
-   *  (keepParties). Kept for one thing (POK-243): the champion's own ROM sends its party
-   *  as the parade starts, and the results screen is the shell's half of that parade. A
-   *  `party` is otherwise an answer to a spectator's peek and belongs to whoever asked. */
+  /** The last team each seat was seen carrying, from any `party` that crossed the page.
+   *  Kept for one thing (POK-243): the champion's own ROM sends its party as the parade
+   *  starts, and the results screen is the shell's half of that parade. A `party` is
+   *  otherwise an answer to a spectator's peek and belongs to whoever asked. Solo keeps
+   *  them too (POK-331 #26): Kanto's solo is the room with nobody else in it, and a solo
+   *  champion's parade has the same team under it as a room's. */
   readonly parties = new Map<number, PackedMon[]>();
   /** Who is in a battle or a menu (noteBusy). */
   readonly busy = new Set<number>();
@@ -199,12 +199,12 @@ export class MatchSession {
       this.deps.rows()?.seatBots(botRows(msg.seed, this.match.botSeats));
       this.view.started?.();
     }
-    if (msg.t === 'party' && this.deps.keepParties) {
+    if (msg.t === 'party') {
       this.parties.set(msg.seat, msg.mons);
       // The champion's own party arrives after the `win` that put the results on
       // screen -- their ROM sends it as the parade starts (POK-243) -- so the panel
       // is drawn again rather than waiting for a team that came too late.
-      if (this.booked) this.view.partyLate?.();
+      if (this.booked) this.view.partyLate();
     }
     if (msg.t === 'start') {
       this.field = msg.spawns.length;
