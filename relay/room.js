@@ -141,6 +141,12 @@ export class Room {
       conn.id = seat ?? this.freeId();
       conn.joined = ++this.joined;
     }
+    // Nobody watches a lobby (POK-331 #9 review): a watcher is a player of the
+    // next match, and the unlock seats every one in the room.  One who asks to
+    // watch between matches -- a #watch reload once the match is over, a
+    // match_in_progress that lost the race with the unlock -- or whose seat
+    // was held across the unlock is seated like them, and can be heir.
+    if (!this.locked) conn.spectator = undefined;
     if (this.locked) this.spent.add(conn.id);
     conn.token = randomBytes(12).toString("hex");
     conn.room = this;
@@ -217,8 +223,8 @@ export class Room {
   // The row the lobby list shows for this room.  The host's name and
   // skin, never their id or IP; the passcode's existence, never the code.
   // `full` is the door's own answer: `players` counts trainers against the
-  // seats asked for, while the door counts watchers too, against the human
-  // ceiling and the ids left, so the list could not work it out (POK-330 #29)
+  // seats asked for, while the door counts against the human ceiling and
+  // the ids left, so the list could not work it out (POK-330 #29)
   listing() {
     return { code: this.code, host: this.host.name, skin: this.host.skin,
              players: this.trainerCount(), seats: this.seats,

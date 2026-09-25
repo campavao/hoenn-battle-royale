@@ -291,7 +291,7 @@ export function createRelay(options = {}) {
   // seat, watching or not, and a watcher is not in the match: made its host, it
   // would run one it never heard the start of.  Kanto's watcher withdraws
   // itself; here the relay knows who is watching.  The unlock seats it, and
-  // from then on it is anybody's heir.
+  // from then on it is anybody's heir; nobody watches a lobby (Room.add).
   function heirOf(room) {
     let heir = null;
     for (const m of room.members.values()) {
@@ -620,7 +620,7 @@ export function createRelay(options = {}) {
           stale.destroy("replaced");
         }
         admit(conn, room, msg, stale ? "rejoined over its old socket"
-              : resuming ? "rejoined" : spectate ? "spectates" : "joined",
+              : resuming ? "rejoined" : spectate && room.locked ? "spectates" : "joined",
               { spectate, token: resuming ? msg.token : undefined });
         return;
       }

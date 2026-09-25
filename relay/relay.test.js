@@ -1905,25 +1905,26 @@ test("the roster carries the seats asked for beside the humans seated", async ()
 
 test("a listed room is full when its door would say so, not by trainers over seats", async () => {
   await withRelay(async (port) => {
-    // thirty seats, two humans allowed: a trainer and a watcher fill it
+    // thirty seats, two humans allowed: two trainers fill it (a watcher cannot be in a
+    // listed room: nobody watches a lobby, POK-331 #9 review)
     const host = await connect(port);
     host.send({ type: "host_room", name: "HOST", open: true, max: 30 });
     const { code } = await host.until("room_hosted");
     const seeker = await connect(port);
     seeker.send({ type: "list_rooms" });
     assert.equal((await seeker.until("rooms")).rooms[0].full, false);
-    const watcher = await connect(port);
-    watcher.send({ type: "join_room", code, name: "W", spectate: true });
-    await watcher.until("room_joined");
+    const guest = await connect(port);
+    guest.send({ type: "join_room", code, name: "G" });
+    await guest.until("room_joined");
     seeker.send({ type: "list_rooms" });
     const [row] = (await seeker.until("rooms")).rooms;
-    assert.equal(row.players, 1, "the watcher is not a trainer");
+    assert.equal(row.players, 2, "two trainers of thirty seats");
     assert.equal(row.seats, 30);
     assert.equal(row.full, true, "but the door is shut all the same");
     const late = await connect(port);
     late.send({ type: "join_room", code, name: "L" });
     assert.equal((await late.next()).reason, "full");
-    for (const c of [host, seeker, watcher, late]) c.end();
+    for (const c of [host, seeker, guest, late]) c.end();
   }, { members: 2 });
 });
 
@@ -2273,6 +2274,66 @@ test("a watcher is never the heir: the room waits for its host rather than hand 
     p.send({ type: "leave_room" });
     assert.equal((await rosterWhere(w, (r) => r.members.length === 1)).host, 3);
     p.end(); w.end();
+  });
+});
+
+// ...and nobody watches a lobby. A watch asked of a room between matches, or a watcher's
+// seat held across the unlock, came in flagged; never heir, it let the room close under it.
+async function leftAlone(c) {
+  for (;;) {
+    const msg = await c.next();
+    assert.notEqual(msg.type, "room_closed", "the room closed rather than pass to it");
+    if (msg.type === "roster" && msg.members.length === 1) return msg;
+  }
+}
+
+test("a watch asked of a lobby is a seat in it, and the room's heir (POK-331 #9 review)", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const { code } = await a.until("room_hosted");
+    // a #watch reload once the match is over, or a match_in_progress that lost the race
+    // with the unlock
+    const w = await connect(port);
+    w.send({ type: "can_host", ok: true });
+    w.send({ type: "join_room", code, spectate: true, name: "WATCH" });
+    assert.equal((await w.until("room_joined")).id, 2);
+    const roster = await rosterWhere(a, (r) => r.members.length === 2);
+    assert.equal(roster.members.find((m) => m.id === 2).spectate, undefined,
+      "no match to watch: a player of the next one");
+    a.send({ type: "leave_room" });
+    assert.equal((await leftAlone(w)).host, 2);
+    a.end(); w.end();
+  });
+});
+
+test("a watcher whose seat was held across the unlock comes back seated (POK-331 #9 review)", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const { code } = await a.until("room_hosted");
+    a.send({ type: "lock_room", locked: true });
+    const w = await connect(port);
+    w.send({ type: "join_room", code, spectate: true, name: "WATCH" });
+    const joined = await w.until("room_joined");
+    await rosterWhere(a, (r) => r.members.length === 2);
+    w.end(); // its socket blips across the match's end
+    await rosterWhere(a, (r) => r.members.length === 1);
+    a.send({ type: "lock_room", locked: false });
+    await a.settled();
+
+    // the page asks again as it first asked: to watch
+    const w2 = await connect(port);
+    w2.send({ type: "join_room", code, spectate: true, name: "WATCH", token: joined.token });
+    assert.equal((await w2.until("room_joined")).id, joined.id, "its own seat back");
+    w2.send({ type: "can_host", ok: true });
+    const roster = await rosterWhere(w2, (r) => r.members.length === 2);
+    assert.equal(roster.members.find((m) => m.id === joined.id).spectate, undefined,
+      "seated, as the unlock seated everybody else watching");
+    await w2.settled();
+    a.send({ type: "leave_room" });
+    assert.equal((await leftAlone(w2)).host, joined.id);
+    a.end(); w2.end();
   });
 });
 

@@ -63,7 +63,7 @@ Server -> client:
 | type | fields | when |
 | --- | --- | --- |
 | `roster` | `code, host, open, max, seats, pass, members:[{id,name,spectate?}]` | on every room change. `max`: the humans the room seats (the host's MAX, clamped to 16); `seats`: the MAX the host asked for (up to 30), which bots fill |
-| `rooms` | `rooms:[{code, host, skin?, players, seats, pass, full}]` | reply to `list_rooms`. `full`: the door would refuse a join (it counts watchers and free ids, which `players`/`seats` cannot) |
+| `rooms` | `rooms:[{code, host, skin?, players, seats, pass, full}]` | reply to `list_rooms`. `full`: the door would refuse a join (it counts the humans' ceiling and free ids, which `players`/`seats` cannot) |
 | `recv` | `from, m` | a `to`/`all` delivery |
 | `room_closed` | `reason` | the host left with no heir, or dropped and did not come back inside the seat hold (`host_gone`), or you were kicked (`removed`). The room is over: the page closes its socket rather than reconnecting to it |
 | `room_hosted` | `code, id, token` | your `host_room`/`daily_join` succeeded; `token` claims this seat back after a drop |
@@ -81,7 +81,8 @@ the door says `full`, whatever MAX says. The heir is the earliest arrival that
 can host, by the room's own count, since the lowest id is no longer the
 oldest, and never a watcher: it is not in the match (every page says
 `can_host` on arrival, watchers too), and the unlock that seats it makes it
-eligible. A host that drops with no heir (alone with its bots, or the last one
+eligible. Nobody watches a lobby: `spectate` asked of an unlocked room, or a
+watcher's seat held across the unlock, comes back seated. A host that drops with no heir (alone with its bots, or the last one
 standing) is waited for through the same seat hold: the roster keeps naming
 it, the door takes nobody new (except the daily's lobby, which is
 nobody's in particular, and a watcher of its match: watching needs nobody to
