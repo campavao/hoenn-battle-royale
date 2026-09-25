@@ -2223,3 +2223,40 @@ test("every door says how long a dropped seat is held", async () => {
     for (const x of [a, b, c, d, e]) x.end();
   }, { rejoinMs: 7_000 });
 });
+
+// ------- POK-331: the doors' leftovers
+
+// Every page says can_host the moment it has a seat, watchers included. The relay made
+// one the heir of the match it was watching, and handed it a room waiting on its host.
+test("a watcher is never the heir: the room waits for its host rather than hand it over (POK-331 #9)", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const { code } = await a.until("room_hosted");
+    const p = await connect(port);
+    p.send({ type: "join_room", code, name: "OUT" }); // a trainer, not (yet) able to host
+    assert.equal((await p.until("room_joined")).id, 2);
+    a.send({ type: "lock_room", locked: true });
+    const w = await connect(port);
+    w.send({ type: "can_host", ok: true });
+    w.send({ type: "join_room", code, spectate: true, name: "WATCH" });
+    assert.equal((await w.until("room_joined")).id, 3);
+    await rosterWhere(p, (r) => r.members.length === 3);
+
+    a.end(); // the host drops mid-match
+    assert.equal((await rosterWhere(p, (r) => r.members.length === 2)).host, 1,
+      "waited for: the watcher is not its heir");
+    w.send({ type: "can_host", ok: true });
+    await w.settled();
+    p.send({ type: "can_host", ok: true });
+    assert.equal((await rosterWhere(w, (r) => r.host !== 1)).host, 2,
+      "the trainer takes it, not the watcher that asked first");
+
+    // the match ends and the unlock seats the watcher: now it may run the room
+    p.send({ type: "lock_room", locked: false });
+    await rosterWhere(w, (r) => r.members.every((m) => !m.spectate));
+    p.send({ type: "leave_room" });
+    assert.equal((await rosterWhere(w, (r) => r.members.length === 1)).host, 3);
+    p.end(); w.end();
+  });
+});

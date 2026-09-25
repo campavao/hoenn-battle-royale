@@ -70,7 +70,8 @@
 //                                      token for the room's life (POK-130)
 //   {type:"leave_room"}
 //   {type:"can_host", ok}             may this client be promoted to host
-//                                     if the current one drops (POK-116)
+//                                     if the current one drops (POK-116);
+//                                     never while it is watching (POK-331 #9)
 //   {type:"to", id, m}                 unicast m to one member
 //   {type:"all", m}                    m to every other member
 //   {type:"ping"}                      -> pong
@@ -762,10 +763,16 @@ export function createRelay(options = {}) {
   // seen the most of the match.  The relay knows nothing about who is still
   // alive -- that is the client's business, and a client that has been
   // eliminated withdraws by sending can_host false.
+  //
+  // Never a watcher (POK-331 #9).  Every page says can_host the moment it has a
+  // seat, watching or not, and a watcher is not in the match: made its host, it
+  // would run one it never heard the start of.  Kanto's watcher withdraws
+  // itself; here the relay knows who is watching.  The unlock seats it, and
+  // from then on it is anybody's heir.
   function heirOf(room) {
     let heir = null;
     for (const m of room.members.values()) {
-      if (m.canHost && (!heir || m.joined < heir.joined)) heir = m;
+      if (m.canHost && !m.spectator && (!heir || m.joined < heir.joined)) heir = m;
     }
     return heir;
   }
@@ -1220,9 +1227,10 @@ export function createRelay(options = {}) {
         conn.canHost = msg.ok !== false;
         // A room waiting on its dropped host takes the first member able to
         // run it (POK-330 #47): a guest coming back from the same blip, say.
-        // The old host's seat is still held, as an ordinary one.
+        // The old host's seat is still held, as an ordinary one.  Not a
+        // watcher, for heirOf's reason (POK-331 #9).
         const waiting = conn.room && conn.room.hostToken !== null ? conn.room : null;
-        if (conn.canHost && waiting) {
+        if (conn.canHost && waiting && !conn.spectator) {
           const gone = waiting.host;
           waiting.host = conn;
           waiting.hostToken = null;

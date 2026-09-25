@@ -67,11 +67,13 @@ BOTS'), the lowest one that is not a member's, not held for one who dropped,
 and not used since the match locked the door -- nor a bot's. When none is left
 the door says `full`, whatever MAX says. The heir is the earliest arrival that
 can host, by the room's own count, since the lowest id is no longer the
-oldest. A host that drops with no heir (alone with its bots, or the last one
+oldest, and never a watcher: it is not in the match (every page says
+`can_host` on arrival, watchers too), and the unlock that seats it makes it
+eligible. A host that drops with no heir (alone with its bots, or the last one
 standing) is waited for through the same seat hold: the roster keeps naming
 it, the door takes nobody new (except the daily's lobby, which is
 nobody's in particular), and its token makes it host again. A member
-that sends `can_host` meanwhile takes the room over instead; if nobody does
+(not a watcher) that sends `can_host` meanwhile takes the room over instead; if nobody does
 and the hold runs out, the room closes with `host_gone`. The host is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
 (no `0 O 1 I L`), so a code read aloud never has to be checked twice.
 
