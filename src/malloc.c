@@ -1,10 +1,7 @@
 #include "global.h"
 #include "malloc.h"
 #if BR
-#include "br/br_spectate.h"
-#include "br/br_bot.h"
-#include "br/br_duel.h"
-#include "br/br_match.h"
+#include "br/br_main.h"
 #endif
 
 static void *sHeapStart;
@@ -195,14 +192,7 @@ void InitHeap(void *heapStart, u32 heapSize)
     sHeapSize = heapSize;
     PutFirstMemBlockHeader(heapStart, heapSize);
 #if BR
-    // Everything allocated a moment ago is now unowned memory that will be handed out
-    // again. Anything BR kept a pointer to has to let go here or it writes into
-    // somebody else's allocation -- and CB2_InitBattle comes through here on the way
-    // into every single battle.
-    BrSpectate_HeapReset();
-    BrBot_HeapReset();
-    BrDuel_HeapReset();
-    BrMatch_HeapReset();
+    BrHeapReset();
 #endif
 }
 

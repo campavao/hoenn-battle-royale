@@ -274,7 +274,7 @@ static void HandleTrainerCont(const u8 *payload, u8 len)
     }
 }
 
-// The heap went away under us (src/malloc.c's InitHeap): let go, and the next first
+// The heap went away under us (BrHeapReset): let go, and the next first
 // slot starts over.
 void BrBot_HeapReset(void)
 {

@@ -48,6 +48,17 @@ void BrInit(void)
     BrZone_Init();
 }
 
+// Everything allocated a moment ago is now unowned memory that will be handed out
+// again, and a pointer kept into it writes into somebody else's allocation. A module
+// that keeps an Alloc past the frame it was made in adds its reset here (C-STYLE.md).
+void BrHeapReset(void)
+{
+    BrSpectate_HeapReset();
+    BrBot_HeapReset();
+    BrDuel_HeapReset();
+    BrMatch_HeapReset();
+}
+
 void BrFrame(void)
 {
     BrNet_Tick();
