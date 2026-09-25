@@ -1,0 +1,66 @@
+# stall-reset: a turn the bag's clock spent in one link fight is not spent again in the
+# next one (POK-331 #11).
+#
+# pvp-bag-clock.txt is the clock over the bag: past thirty seconds BrBattle_TickStall
+# presses B and sets `stalled`, and the action menu it backs out to times out at once.
+# A fight torn down by Abandon (the peer out, the hello watchdog) while the bag was still
+# closing never got back to that menu, so `stalled` outlived it -- and the next link
+# fight's very first choice was taken by the clock: a forfeit, and the match with it.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# out-peer.txt's fight: we challenge seat 1, loopback on, up to the first choice.
+pokebytes gDecompressionBuffer 00 01 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 600
+expect u8 gBrNetlink 1
+tap A
+wait 90
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+# BAG, and pvp-bag-clock.txt's thirty seconds in it skipped to their last frame.
+tap RIGHT
+wait 30
+tap A
+wait 150
+expect u8 gBattleCommunication 3
+poke u16 gBrBattle+10 1799
+wait 3
+# The clock ran out in the bag: B is pressed, the turn is spent, and the menu that
+# would spend it is not back yet.
+expect u8 gBrBattle+9 1
+expect u16 gBrBattle+2 0
+# ...and seat 1 goes out while the bag is closing. The fight is ours.
+pokebytes gDecompressionBuffer 01
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 150
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+11 1
+expect u8 gBrMatch 2
+expect u8 gBrBattle+9 0
+expect u16 gBrBattle+10 0
+shot back
+# The next link fight, with seat 3: its first action menu is a choice, not a forfeit.
+pokebytes gDecompressionBuffer 00 03 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 600
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+2 3
+tap A
+wait 90
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+expect u8 gBattleOutcome 0
+expect u16 gBrBattle+2 0
+shot next-fight
+# Seat 3 goes out too, so nothing is left running.
+pokebytes gDecompressionBuffer 03
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 150
+expect u8 gBrNetlink 0
+say stall reset ok

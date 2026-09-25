@@ -339,6 +339,11 @@ static void CB2_BrReturnFromBattle(void)
     gBattleTypeFlags &= ~BATTLE_TYPE_LINK_IN_BATTLE;
     Overworld_ResetMapMusic();
     gBrNetlink.lastOutcome = gBattleOutcome;
+    // A turn the bag's clock already spent is this fight's (BrBattle_TickStall). Torn
+    // down by Abandon before the menu came back to spend it, it stayed set and forfeited
+    // the next link fight's first choice (POK-331 #11).
+    gBrBattle.stalled = FALSE;
+    gBrBattle.stallFrames = 0;
     BrEngage_OnBattleEnd(gBrNetlink.peerSeat, gBattleOutcome);
     BrMatch_SendResult(gBrMySeat, gBattleOutcome);
     Close();
