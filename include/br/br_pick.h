@@ -27,7 +27,17 @@ struct BrPick
     /* 8 */ u16 timer;    // frames left to choose; 0 means the map chose for you
     /* 10 */ u16 waited;  // frames held on the black screen waiting for `land`
     /* 12 */ u16 asked;   // the section we sent, to ask again with
-};                        // 14 bytes
+};                        // 14 bytes, 16 under agbcc
+// web/src/field.ts reads `active` (PICK_ACTIVE).
+BR_OFFSET(BrPick, active, 0)
+BR_OFFSET(BrPick, landed, 1)
+BR_OFFSET(BrPick, mapGroup, 2)
+BR_OFFSET(BrPick, mapNum, 3)
+BR_OFFSET(BrPick, x, 4)
+BR_OFFSET(BrPick, y, 6)
+BR_OFFSET(BrPick, timer, 8)
+BR_OFFSET(BrPick, waited, 10)
+BR_OFFSET(BrPick, asked, 12)
 
 extern struct BrPick gBrPick;
 extern const u8 gBrText_DropWhere[];

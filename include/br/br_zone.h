@@ -33,6 +33,14 @@ struct BrZone
     /* 41 */ u8 chestPlaced;               // ...and the DAY CARE's one Pokemon (POK-306)
     /* 42 */ u16 chest;                    // the species waiting on its floor
 };                                          // 44 bytes -- the last three were padding
+// web/src/match/zone.ts reads dealtFor and species (BR_ZONE).
+BR_OFFSET(BrZone, dealtFor, 0)
+BR_OFFSET(BrZone, species, 4)
+BR_OFFSET(BrZone, items, 28)
+BR_OFFSET(BrZone, placed, 40)
+BR_OFFSET(BrZone, chestPlaced, 41)
+BR_OFFSET(BrZone, chest, 42)
+BR_SIZE(BrZone, 44)
 
 extern struct BrZone gBrZone;
 

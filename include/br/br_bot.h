@@ -39,6 +39,15 @@ struct BrBotFight
                           // words: without the pad the last two bytes of items[] are
                           // never zeroed and a stale bag survives into the next match.
 };                        // 24 bytes
+BR_OFFSET(BrBotFight, staged, 0)
+BR_OFFSET(BrBotFight, seat, 1)
+BR_OFFSET(BrBotFight, fighting, 2)
+BR_OFFSET(BrBotFight, count, 3)
+BR_OFFSET(BrBotFight, name, 4)
+BR_OFFSET(BrBotFight, itemCount, 0xC)
+BR_OFFSET(BrBotFight, spent, 0xD)
+BR_OFFSET(BrBotFight, items, 0xE)
+BR_SIZE(BrBotFight, 24)
 
 extern struct BrBotFight gBrBotFight;
 

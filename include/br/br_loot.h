@@ -72,6 +72,17 @@ struct BrLootItem
     /* 13 */ u8 pad[3];
     /* 16 */ u32 money;   // a bag's cash; 0 on a ball
 };                        // 20 bytes
+BR_OFFSET(BrLootItem, key, 0)
+BR_OFFSET(BrLootItem, x, 2)
+BR_OFFSET(BrLootItem, y, 4)
+BR_OFFSET(BrLootItem, species, 6)
+BR_OFFSET(BrLootItem, mapGroup, 8)
+BR_OFFSET(BrLootItem, mapNum, 9)
+BR_OFFSET(BrLootItem, level, 10)
+BR_OFFSET(BrLootItem, kind, 11)
+BR_OFFSET(BrLootItem, objId, 12)
+BR_OFFSET(BrLootItem, money, 16)
+BR_SIZE(BrLootItem, 20)
 
 struct BrLoot
 {
@@ -83,7 +94,14 @@ struct BrLoot
     /* 0xA4 */ u8 freed;    // Pokemon this player has released (POK-294), and the low
                             // half of their keys. Free padding: the struct was already
                             // rounded up to here.
-};
+};                          // 168 bytes
+BR_OFFSET(BrLoot, items, 0x00)
+BR_OFFSET(BrLoot, count, 0xA0)
+BR_OFFSET(BrLoot, spawned, 0xA1)
+BR_OFFSET(BrLoot, taken, 0xA2)
+BR_OFFSET(BrLoot, gone, 0xA3)
+BR_OFFSET(BrLoot, freed, 0xA4)
+BR_SIZE(BrLoot, 0xA8)
 
 // Trainers we have beaten: Emerald leaves a beaten trainer standing on the map, and
 // Kanto's rule is that a farmed route shows it. Small on purpose -- EWRAM is full.
@@ -97,10 +115,13 @@ struct BrLoot
 
 struct BrDespawned
 {
-    u8 mapGroup;
-    u8 mapNum;
-    u8 localId; // 0 = empty
-};
+    /* 0 */ u8 mapGroup;
+    /* 1 */ u8 mapNum;
+    /* 2 */ u8 localId; // 0 = empty
+};                      // 3 bytes; 4 under agbcc, so drivers read only the first row
+BR_OFFSET(BrDespawned, mapGroup, 0)
+BR_OFFSET(BrDespawned, mapNum, 1)
+BR_OFFSET(BrDespawned, localId, 2)
 
 extern struct BrLoot gBrLoot;
 extern struct BrDespawned gBrDespawned[BR_MAX_DESPAWN];

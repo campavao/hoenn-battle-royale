@@ -1,6 +1,8 @@
 #ifndef GUARD_BR_RING_H
 #define GUARD_BR_RING_H
 
+#include "br/br_config.h"
+
 // The ring (POK-224): a circle on the Hoenn region map, in section units, that the
 // host shrinks on the clock. A map is inside when its region-map rectangle touches
 // the circle. Outside, the weather is fog and the party bleeds; the fog never clamps,
@@ -22,6 +24,20 @@ struct BrRing
     /* 13 */ u8 appliedMapNum;
     /* 14 */ u8 pad[2];
 };                          // 16 bytes
+// web/src/field.ts reads `outside` and `damageTimer` (RING_OUTSIDE, RING_TIMER).
+BR_OFFSET(BrRing, active, 0)
+BR_OFFSET(BrRing, phase, 1)
+BR_OFFSET(BrRing, cx, 2)
+BR_OFFSET(BrRing, cy, 3)
+BR_OFFSET(BrRing, r, 4)
+BR_OFFSET(BrRing, outside, 5)
+BR_OFFSET(BrRing, applied, 6)
+BR_OFFSET(BrRing, out, 7)
+BR_OFFSET(BrRing, damageTimer, 8)
+BR_OFFSET(BrRing, damageDealt, 10)
+BR_OFFSET(BrRing, appliedMapGroup, 12)
+BR_OFFSET(BrRing, appliedMapNum, 13)
+BR_SIZE(BrRing, 16)
 
 #define BR_FOG_TICK_FRAMES 240
 

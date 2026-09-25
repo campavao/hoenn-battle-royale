@@ -25,7 +25,11 @@ struct BrSpawn
     /* 1 */ u8 mapNum;
     /* 2 */ s16 x;      // map coords, no MAP_OFFSET (what SetWarpDestination takes)
     /* 4 */ s16 y;
-};                      // 6 bytes
+};                      // 6 bytes; 8 under agbcc, which rounds a struct up to a word
+BR_OFFSET(BrSpawn, mapGroup, 0)
+BR_OFFSET(BrSpawn, mapNum, 1)
+BR_OFFSET(BrSpawn, x, 2)
+BR_OFFSET(BrSpawn, y, 4)
 
 struct BrMatch
 {
@@ -39,9 +43,22 @@ struct BrMatch
     /* 12 */ u16 clockLeft;  // seconds, last CLOCK then counted down locally
     /* 14 */ u16 clockFrames; // frames until the next local second
     /* 16 */ u8 haveSpawn[BR_MAX_SEATS];          // a row arrived for the seat
-    /* 48 */ struct BrSpawn spawns[BR_MAX_SEATS]; // 192 bytes
-    /* 240 */
+    /* 48 */ struct BrSpawn spawns[BR_MAX_SEATS]; // 192 bytes, 256 under agbcc
+    /* 240 */                                     // 304 under agbcc
 };
+// The page reads `phase` (app.ts's BR_PHASE_DONE). Nothing outside the ROM strides
+// spawns[], whose rows are a different size in the two builds.
+BR_OFFSET(BrMatch, phase, 0)
+BR_OFFSET(BrMatch, started, 1)
+BR_OFFSET(BrMatch, safariSecs, 2)
+BR_OFFSET(BrMatch, fogSecs, 4)
+BR_OFFSET(BrMatch, pace, 6)
+BR_OFFSET(BrMatch, spawnCount, 7)
+BR_OFFSET(BrMatch, seed, 8)
+BR_OFFSET(BrMatch, clockLeft, 12)
+BR_OFFSET(BrMatch, clockFrames, 14)
+BR_OFFSET(BrMatch, haveSpawn, 16)
+BR_OFFSET(BrMatch, spawns, 48)
 
 extern struct BrMatch gBrMatch;
 

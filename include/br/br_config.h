@@ -24,4 +24,11 @@
 // blender's 236..240, which is the next thing up.
 #define BR_GHOST_LOCAL_ID_BASE 0xC8
 
+// A field the page or a driver reads by its offset, pinned where its struct is declared
+// (POK-330 #32): moving it fails the build instead of a play-test. Offsets agree between
+// agbcc and modern GCC; sizes need not -- agbcc rounds every struct up to a whole word,
+// so a 6-byte struct is 8 there -- and BR_SIZE is only for sizes already a multiple of 4.
+#define BR_OFFSET(type, field, off) STATIC_ASSERT(offsetof(struct type, field) == (off), BrOffset_##type##_##field)
+#define BR_SIZE(type, size) STATIC_ASSERT(sizeof(struct type) == (size), BrSize_##type)
+
 #endif // GUARD_BR_CONFIG_H

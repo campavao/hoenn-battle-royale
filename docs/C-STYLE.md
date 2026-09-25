@@ -10,6 +10,13 @@ lenient one.
   the mailbox: the shell reads the layout byte for byte, so every field has an explicit
   width and the struct is laid out by hand with alignment in mind (a `u32` on a 4-byte
   boundary, `u16` on 2). No floats anywhere.
+- **Pin what the shell reads.** Every field the page or a driver reads by offset gets a
+  `BR_OFFSET(Struct, field, off)` right under the struct (br_config.h), so moving it
+  fails both builds. Offsets agree between the compilers; sizes do not always: agbcc
+  rounds every struct up to a whole word, so a 6-byte struct is 8 in the release ROM and
+  an array of them strides differently in the two builds. `BR_SIZE` only for sizes that
+  are already a multiple of 4, and never stride an array of an odd-sized struct from
+  outside the ROM.
 - **RAM.** `EWRAM_DATA` for anything the shell reads. Never `static` inside a function
   for match state: the shell cannot find it. IWRAM is scarce; keep it for the engine.
   EWRAM is nearly full: `tools/br/ram-headroom.py <map>` prints what is left, and CI

@@ -26,6 +26,17 @@ struct BrSeat
     /* 10 */ u8 queued;   // steps received while one was still playing (0..BR_STEP_QUEUE)
     /* 11 */ u8 queue[5]; // the queued directions, FIFO
 };                        // 16 bytes
+BR_OFFSET(BrSeat, present, 0)
+BR_OFFSET(BrSeat, skin, 1)
+BR_OFFSET(BrSeat, mapGroup, 2)
+BR_OFFSET(BrSeat, mapNum, 3)
+BR_OFFSET(BrSeat, x, 4)
+BR_OFFSET(BrSeat, y, 6)
+BR_OFFSET(BrSeat, dir, 8)
+BR_OFFSET(BrSeat, objId, 9)
+BR_OFFSET(BrSeat, queued, 10)
+BR_OFFSET(BrSeat, queue, 11)
+BR_SIZE(BrSeat, 16)
 
 #define BR_NO_OBJ 0xFF
 
@@ -58,12 +69,18 @@ void BrGhosts_Tick(void);
 // Each callback fires at most once per frame.
 struct BrOwnPos
 {
-    u8 mapGroup;
-    u8 mapNum;
-    s16 x;
-    s16 y;
-    u8 dir;
+    /* 0 */ u8 mapGroup;
+    /* 1 */ u8 mapNum;
+    /* 2 */ s16 x;
+    /* 4 */ s16 y;
+    /* 6 */ u8 dir;
 };
+// web/src/touch.ts reads all five (OWN_*).
+BR_OFFSET(BrOwnPos, mapGroup, 0)
+BR_OFFSET(BrOwnPos, mapNum, 1)
+BR_OFFSET(BrOwnPos, x, 2)
+BR_OFFSET(BrOwnPos, y, 4)
+BR_OFFSET(BrOwnPos, dir, 6)
 // What the local player's object looked like at the end of the last tick; the wire
 // layer compares and emits place/step/face.
 extern struct BrOwnPos gBrOwnPos;

@@ -42,6 +42,20 @@ struct BrMailbox
 #define BR_MAILBOX_OFF_OUT 0x18
 #define BR_MAILBOX_OFF_IN 0x1018
 #define BR_MAILBOX_OFF_BOOT 0x2018
+BR_OFFSET(BrMailbox, magic, 0x00)
+BR_OFFSET(BrMailbox, protocol, 0x02)
+BR_OFFSET(BrMailbox, patch, 0x04)
+BR_OFFSET(BrMailbox, size, 0x06)
+BR_OFFSET(BrMailbox, outHead, 0x08)
+BR_OFFSET(BrMailbox, outTail, 0x0A)
+BR_OFFSET(BrMailbox, inHead, 0x0C)
+BR_OFFSET(BrMailbox, inTail, 0x0E)
+BR_OFFSET(BrMailbox, frame, 0x10)
+BR_OFFSET(BrMailbox, dropped, 0x14)
+BR_OFFSET(BrMailbox, out, BR_MAILBOX_OFF_OUT)
+BR_OFFSET(BrMailbox, in, BR_MAILBOX_OFF_IN)
+BR_OFFSET(BrMailbox, boot, BR_MAILBOX_OFF_BOOT)
+BR_SIZE(BrMailbox, 0x2028)
 
 extern struct BrMailbox gBrMailbox;
 

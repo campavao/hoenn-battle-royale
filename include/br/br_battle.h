@@ -1,6 +1,8 @@
 #ifndef GUARD_BR_BATTLE_H
 #define GUARD_BR_BATTLE_H
 
+#include "br/br_config.h"
+
 // In-battle rules (POK-231): the 30-second shot clock on every choice, and RUN that
 // is allowed but hard against another trainer.
 
@@ -30,6 +32,15 @@ struct BrBattle
     /* 9 */ u8 stalled;       // a sub-screen already ran this turn's clock out
     /* 10 */ u16 stallFrames; // frames a screen the battle put up has held the clock
 };
+// web/src/touch.ts reads `menu` (BATTLE_MENU).
+BR_OFFSET(BrBattle, shotFrames, 0)
+BR_OFFSET(BrBattle, timedOut, 2)
+BR_OFFSET(BrBattle, runRolls, 4)
+BR_OFFSET(BrBattle, runEscapes, 6)
+BR_OFFSET(BrBattle, menu, 8)
+BR_OFFSET(BrBattle, stalled, 9)
+BR_OFFSET(BrBattle, stallFrames, 10)
+BR_SIZE(BrBattle, 12)
 
 extern struct BrBattle gBrBattle;
 

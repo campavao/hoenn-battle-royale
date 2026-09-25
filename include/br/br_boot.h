@@ -1,6 +1,8 @@
 #ifndef GUARD_BR_BOOT_H
 #define GUARD_BR_BOOT_H
 
+#include "br/br_config.h"
+
 // Booting straight into the world (POK-221). The page writes gBrMailbox.boot before
 // the title screen; the next frame, the ROM skips the intro, the main menu and Birch,
 // starts a fresh game with the given name and gender, and warps to the map. Drivers
@@ -28,6 +30,14 @@ struct BrBoot
     /* 6 */ s16 y;
     /* 8 */ u8 name[8];   // Gen 3 charmap, EOS-terminated, PLAYER_NAME_LENGTH + 1
 };                        // 16 bytes
+BR_OFFSET(BrBoot, mode, 0)
+BR_OFFSET(BrBoot, gender, 1)
+BR_OFFSET(BrBoot, mapGroup, 2)
+BR_OFFSET(BrBoot, mapNum, 3)
+BR_OFFSET(BrBoot, x, 4)
+BR_OFFSET(BrBoot, y, 6)
+BR_OFFSET(BrBoot, name, 8)
+BR_SIZE(BrBoot, 16)
 
 void BrBoot_Tick(void);
 

@@ -70,6 +70,10 @@ struct BrHudLine
     /* 1 */ u8 len;           // text bytes, <= BR_HUD_LINE_MAX
     /* 2 */ u8 text[42];      // Gen 3 charmap, EOS-terminated
 };                            // 44 bytes
+BR_OFFSET(BrHudLine, kind, 0)
+BR_OFFSET(BrHudLine, len, 1)
+BR_OFFSET(BrHudLine, text, 2)
+BR_SIZE(BrHudLine, 44)
 
 struct BrHud
 {
@@ -103,8 +107,24 @@ struct BrHud
     /* 0x17C */
 };
 
-#define BR_HUD_OFF_HELD 0x1C
-#define BR_HUD_OFF_QUEUE 0x48
+// The page writes the four PAGE WRITES fields (web/src/net/hud.ts); drivers read the rest.
+// BR_HUD_OFF_HELD and _QUEUE said 0x1C and 0x48 here, four bytes past both, and nothing
+// read them (POK-330 #32): the pins are the offsets now.
+BR_OFFSET(BrHud, left, 0x00)
+BR_OFFSET(BrHud, flashFog, 0x01)
+BR_OFFSET(BrHud, clockSecs, 0x02)
+BR_OFFSET(BrHud, fogFrames, 0x05)
+BR_OFFSET(BrHud, live, 0x08)
+BR_OFFSET(BrHud, shown, 0x09)
+BR_OFFSET(BrHud, queueLen, 0x0A)
+BR_OFFSET(BrHud, held, 0x0C)
+BR_OFFSET(BrHud, eyes, 0x0F)
+BR_OFFSET(BrHud, drawnEyes, 0x14)
+BR_OFFSET(BrHud, heldLine, 0x18)
+BR_OFFSET(BrHud, queue, 0x44)
+BR_OFFSET(BrHud, box, 0x14C)
+BR_OFFSET(BrHud, boxFrames, 0x178)
+BR_SIZE(BrHud, 0x17C)
 
 extern struct BrHud gBrHud;
 

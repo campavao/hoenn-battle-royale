@@ -41,6 +41,18 @@ struct BrDuel
     /* B */ u8 starting;  // the start task is on its way in: do not stage another
     /* C */ u16 items[2][BR_BOT_ITEMS];
 };                       // 28 bytes
+BR_OFFSET(BrDuel, staged, 0)
+BR_OFFSET(BrDuel, running, 1)
+BR_OFFSET(BrDuel, seatA, 2)
+BR_OFFSET(BrDuel, seatB, 3)
+BR_OFFSET(BrDuel, countA, 4)
+BR_OFFSET(BrDuel, countB, 5)
+BR_OFFSET(BrDuel, proxy, 6)
+BR_OFFSET(BrDuel, itemCount, 7)
+BR_OFFSET(BrDuel, spent, 9)
+BR_OFFSET(BrDuel, starting, 0xB)
+BR_OFFSET(BrDuel, items, 0xC)
+BR_SIZE(BrDuel, 28)
 
 extern struct BrDuel gBrDuel;
 
