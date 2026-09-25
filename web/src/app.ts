@@ -114,7 +114,15 @@ const MALE = 0;
 const FEMALE = 1;
 const LITTLEROOT = { group: 0, num: 9, x: 5, y: 8 };
 
-const $ = <T extends Element>(sel: string) => document.querySelector(sel) as T;
+/** One of the page's own elements. Throws with the selector rather than handing back a
+ *  null dressed as an element: POK-320 removed a button and solo fell over on it with a
+ *  bare TypeError, far from the lookup, in the one mode that reached it (7a4713615).
+ *  lookups.test.ts checks every id this file looks up against index.html. */
+const $ = <T extends Element>(sel: string): T => {
+  const el = document.querySelector(sel);
+  if (!el) throw new Error(`no ${sel} on the page (index.html)`);
+  return el as T;
+};
 
 type Screen = 'importing' | 'patching' | 'lobby' | 'playing';
 const SCREENS: Screen[] = ['importing', 'patching', 'lobby', 'playing'];
