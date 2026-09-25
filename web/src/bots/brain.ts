@@ -1194,12 +1194,25 @@ export class Bots {
     this.note(walker, why, step.dir);
   }
 
-  /** The map a stuck bot should drift towards: whichever of the current targets is
-   *  fewest map crossings away. Undefined when there are none, or none reachable. */
+  /** The map a stuck bot should drift towards: whichever target INSIDE the ring is
+   *  fewest map crossings away -- the same targets chooseTarget aims at. Undefined when
+   *  there are none, none reachable, or one is on this very map.
+   *
+   *  It used to read the whole landing pool, ring or no ring (POK-330 #41): a stuck
+   *  bot on any map with a landing cell took uniform random steps even in the fog,
+   *  and anywhere else drifted towards the nearest landing map whichever side of the
+   *  ring it was on. */
   private driftGoal(walker: Walker): string | undefined {
+    const inside = this.opts.inside;
+    const seen = new Set<string>();
     let best: string | undefined;
     let bestHops = Infinity;
     for (const t of this.opts.targets) {
+      // One question a map, not one a cell: the pool is hundreds of cells on a couple
+      // of dozen maps, and this runs for every bot waiting its turn to think.
+      if (seen.has(t.mapId)) continue;
+      seen.add(t.mapId);
+      if (inside && !inside(t.mapId)) continue;
       if (t.mapId === walker.at.map) return undefined; // already where the targets are
       const h = this.opts.world.hops(walker.at.map, t.mapId);
       if (h !== undefined && h < bestHops) {

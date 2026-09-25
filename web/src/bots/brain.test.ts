@@ -231,6 +231,45 @@ describe('bots walking', () => {
   });
 });
 
+// POK-302's drift, for a bot that can route nowhere: a greedy step towards the targets
+// rather than a random walk. Towards the targets INSIDE the ring (POK-330 #41).
+describe('a bot with nowhere it can route to', () => {
+  // Three maps in a row. The bot is walled into the west column of MID -- the only way
+  // anywhere is back west into FOG, which is a landing map the fog has taken. IN, east
+  // of the wall, is the ring.
+  const FOG: WorldMap = { id: 'FOG', group: 0, num: 4, w: 3, h: 3, section: 'S', outdoor: true, grid: '9x0', seams: [{ dir: 'east', to: 'MID', offset: 0 }] };
+  const MID: WorldMap = {
+    id: 'MID', group: 0, num: 5, w: 3, h: 3, section: 'S', outdoor: true,
+    grid: grid(['010', '010', '010']),
+    seams: [{ dir: 'west', to: 'FOG', offset: 0 }, { dir: 'east', to: 'IN', offset: 0 }],
+  };
+  const IN: WorldMap = { id: 'IN', group: 0, num: 6, w: 3, h: 3, section: 'S', outdoor: true, grid: '9x0', seams: [{ dir: 'west', to: 'MID', offset: 0 }] };
+  const cells = (id: string) => [0, 1, 2].flatMap((y) => [0, 1, 2].map((x) => ({ mapId: id, x, y })));
+
+  it('drifts towards the ring, not towards the nearest landing map in the fog', () => {
+    const world = new World([FOG, MID, IN]);
+    const bots = new Bots({
+      world,
+      // The fogged map first: the nearest landing map, and the one the drift used to pick.
+      targets: [...cells('FOG'), ...cells('IN')],
+      mapRef: (id) => ({ group: 0, num: id === 'FOG' ? 4 : id === 'MID' ? 5 : 6 }),
+      send: () => {},
+      rng: mulberry32(7),
+      inside: (id) => id === 'IN',
+    });
+    const [bot] = dealBots(1, 1, [], [{ mapId: 'MID', map: { group: 0, num: 5 }, x: 0, y: 1 }]);
+    bots.start([bot], 0);
+    const maps = new Set<string>();
+    for (let t = STEP_MS; t <= 30_000; t += STEP_MS) {
+      bots.tick(t);
+      maps.add(bots.spotOf(bot.seat)!.map);
+    }
+    // Stuck, but never a step further from the ring than it started.
+    expect([...maps]).toEqual(['MID']);
+    expect(world.hops(bots.spotOf(bot.seat)!.map, 'IN')).toBe(1);
+  });
+});
+
 describe('a bot meeting a player', () => {
   // One bot, parked where the player is standing right in front of it. The room is
   // told its team and then challenged -- in that order, because the ROM has to have
