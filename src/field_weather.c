@@ -149,7 +149,14 @@ static const u8 ALIGNED(2) sBasePaletteColorMapTypes[32] =
     COLOR_MAP_DARK_CONTRAST,
 };
 
+#if BR
+// The ring's fog is purple (POK-318, Cam's ask), and so is the page's fog past the
+// picture, which tools/br/export-sprites.py draws from this same file. Haze and Mist
+// borrow the palette in battle, so theirs is purple too.
+const u16 ALIGNED(4) gFogPalette[] = INCGFX_U16("graphics/weather/br_fog.pal", ".gbapal");
+#else
 const u16 ALIGNED(4) gFogPalette[] = INCGFX_U16("graphics/weather/fog.pal", ".gbapal");
+#endif
 
 void StartWeather(void)
 {

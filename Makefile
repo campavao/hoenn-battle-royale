@@ -12,6 +12,13 @@ BR          ?= 1
 # `File name`.gba ('_modern' will be appended to the modern builds)
 FILE_NAME := pokeemerald
 BUILD_DIR := build
+# `make BR=0` is pret's own ROM, byte for byte (tools/br/check-rom.sh pokeemerald_pret.gba):
+# src/br is left out and every hook compiles away. Its objects go to build/pret, so they
+# never mix with the fork's -- make does not rebuild on a changed flag.
+ifeq ($(BR),0)
+  TITLE     := POKEMON EMER
+  FILE_NAME := pokeemerald_pret
+endif
 
 # Builds the ROM using a modern compiler
 MODERN      ?= 0
@@ -75,6 +82,11 @@ OBJ_DIR_NAME := $(BUILD_DIR)/emerald
 MODERN_ROM_NAME := $(FILE_NAME)_modern.gba
 MODERN_OBJ_DIR_NAME := $(BUILD_DIR)/modern
 ASSETS_DIR_NAME := $(BUILD_DIR)/assets
+ifeq ($(BR),0)
+  # Two levels down, as the link rule's ../../ expects.
+  OBJ_DIR_NAME := $(BUILD_DIR)/pret
+  MODERN_OBJ_DIR_NAME := $(BUILD_DIR)/pret_modern
+endif
 
 ELF_NAME := $(ROM_NAME:.gba=.elf)
 MAP_NAME := $(ROM_NAME:.gba=.map)
@@ -199,6 +211,9 @@ endif
 # Collect sources
 C_SRCS_IN := $(wildcard $(C_SUBDIR)/*.c $(C_SUBDIR)/*/*.c $(C_SUBDIR)/*/*/*.c)
 C_SRCS := $(foreach src,$(C_SRCS_IN),$(if $(findstring .inc.c,$(src)),,$(src)))
+ifeq ($(BR),0)
+  C_SRCS := $(filter-out $(C_SUBDIR)/br/%,$(C_SRCS))
+endif
 C_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(C_BUILDDIR)/%.o,$(C_SRCS))
 
 C_ASM_SRCS := $(wildcard $(C_SUBDIR)/*.s $(C_SUBDIR)/*/*.s $(C_SUBDIR)/*/*/*.s)

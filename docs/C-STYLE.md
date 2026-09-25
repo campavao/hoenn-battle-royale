@@ -40,7 +40,11 @@ lenient one.
   (`BR ?= 1`), so that is on even in `make BR=0`. Never reindent or reflow upstream code
   around the hook. `tools/br/check-guards.py` (CI's `guards` job) fails on any
   `Br*`/`gBr*`/`BR_*` name or `br/` include outside a guard, comments included. BR's own
-  specials go at the end of `data/specials.inc`, so pret's keep their numbers.
+  specials go at the end of `data/specials.inc`, so pret's keep their numbers, and a
+  changed graphic is a new file picked under `#if BR`, never an edit to pret's.
+- **`make BR=0` is retail.** It leaves `src/br` out, builds into `build/pret`, and
+  `tools/br/check-rom.sh pokeemerald_pret.gba` must print OK (it did on 2026-09-25). The
+  lint only sees names; this sees bytes, so run it after touching a pret file.
 - **Strings.** Game text is in the Gen 3 charmap (`_("...")` in C, `.string` in scripts).
   Plain C strings are only for `gBrVersionString`-style ROM markers.
 - **Names.** `Br<System>_<Verb>` for functions (`BrMailbox_Push`), `gBr*` for globals
