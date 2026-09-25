@@ -233,14 +233,20 @@ export type StartDecision =
  *  the condition its call site wrote out for itself, quirks and all:
  *  - nothing counts down after PLAY AGAIN, so a quick room of one never starts again and
  *    one of two or more deals on its next roster at once;
- *  - `attached` counts down on every attach, a rejoin mid-match included;
  *  - a takeover of a match whose seed was never heard (a watcher's) deals a fresh one.
+ *  Nothing counts down, or deals, over a match that is on (POK-331 #13): an attach was a
+ *  count on every rejoin, mid-match included, and the buzzer and a count that ran out
+ *  leaned on startDirector finding a director already there.
  *  What the page cannot do anyway -- a director already running, no seat, not the host,
  *  nobody to deal to -- is startDirector's to refuse. */
 export function decideStart(trigger: StartTrigger, s: StartState): StartDecision {
   switch (trigger.t) {
     case 'attached':
-      return s.isHost && s.autoStarts && startsItself(s.mode) ? { do: 'count-down' } : { do: 'nothing' };
+      // The room's first host, in a room waiting for its first match: a rejoin into a
+      // match, into one that has been won, or into a count already running is none.
+      return s.isHost && s.autoStarts && startsItself(s.mode) && !s.roomStarted && !s.match.active && !s.countingDown
+        ? { do: 'count-down' }
+        : { do: 'nothing' };
     case 'promoted': {
       // An heir to a room that starts itself (quick play, the daily) before any match
       // counts it down, after the STARTS IN count (POK-320); the room's own first host
@@ -266,13 +272,15 @@ export function decideStart(trigger: StartTrigger, s: StartState): StartDecision
     case 'host-again':
       return { do: 'take-over', members: trigger.members };
     case 'roster':
-      // The buzzer: a room that starts itself goes once two are in it.
-      return trigger.members.length >= 2 && s.autoStarts && startsItself(s.mode)
+      // The buzzer: a room that starts itself goes once two are in it -- a room waiting,
+      // not a match running.
+      return trigger.members.length >= 2 && s.autoStarts && startsItself(s.mode) && !s.match.active
         ? { do: 'deal', members: trigger.members }
         : { do: 'nothing' };
     case 'start':
       return { do: 'deal', members: trigger.members };
     case 'countdown':
+      return s.match.active ? { do: 'nothing' } : { do: 'deal' };
     case 'solo':
       return { do: 'deal' };
   }

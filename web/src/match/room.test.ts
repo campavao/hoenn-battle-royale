@@ -109,8 +109,22 @@ describe('when a match starts (POK-330 #42)', () => {
     expect(decideStart({ t: 'attached' }, page({ isHost: false }))).toEqual({ do: 'nothing' });
     expect(decideStart({ t: 'attached' }, page({ mode: 'quick' }))).toEqual({ do: 'count-down' });
     expect(decideStart({ t: 'attached' }, page({ mode: 'daily' }))).toEqual({ do: 'count-down' });
-    // quirk kept: an attach looks at no count already running, nor at a match already on
-    expect(decideStart({ t: 'attached' }, page({ countingDown: true, roomStarted: true, match: inFlight }))).toEqual({ do: 'count-down' });
+  });
+
+  // An attach looked at no count already running, nor at a match already on: every rejoin
+  // counted down again, mid-match included (POK-331 #13).
+  it('an attach into a match, one that has been won, or a count already running counts nothing', () => {
+    expect(decideStart({ t: 'attached' }, page({ roomStarted: true, match: inFlight }))).toEqual({ do: 'nothing' });
+    // a host back from a blip mid-match: the room screen was never down on its page
+    expect(decideStart({ t: 'attached' }, page({ match: inFlight }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'attached' }, page({ roomStarted: true, match: { ...inFlight, ended: true } }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'attached' }, page({ countingDown: true }))).toEqual({ do: 'nothing' });
+  });
+
+  it('neither the buzzer nor a count that ran out deals over a match that is on', () => {
+    expect(decideStart({ t: 'roster', members: [1, 2, 3] }, page({ match: inFlight }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'countdown' }, page({ match: inFlight }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'countdown' }, page({ match: { ...inFlight, ended: true } }))).toEqual({ do: 'nothing' });
   });
 
   it('a hosted, joined or watched room never counts down or buzzes, nor any under #noauto', () => {
