@@ -17,7 +17,7 @@ import type { Lines, Msg, TickerMsg } from '../net/wire';
 import { Director, type DirectorOptions, type DirectorWorld } from './director';
 import { catchUp, departedSeats, lootOwed, type DealPlan } from './lifecycle';
 import { clockLeftAt } from './room';
-import type { Roster } from './roster';
+import { Roster } from './roster';
 import type { MatchSession } from './session';
 import * as Ticker from './ticker';
 
@@ -48,6 +48,16 @@ export function soloLink(roster: Roster, toRom: (msg: Msg) => void): HostLink {
   return { seat: 0, roster, toRoom: () => {}, toSeat: () => {}, toRom, pushToRom: toRom };
 }
 
+/** Solo's roster: a room of one, us at seat 0 by our own name, which is the roster Kanto's
+ *  LocalRoom answers `host_room` with. Solo's had no name in it, so once it had a ticker
+ *  every line about the player would have said P0, as its saved rounds did (POK-331 #26). */
+export function soloRoster(name: string): Roster {
+  const roster = new Roster();
+  roster.setMySeat(0);
+  roster.applyRoster({ code: 'SOLO', host: 0, open: false, max: 1, pass: false, members: [{ id: 0, name }] });
+  return roster;
+}
+
 export interface HostOptions {
   session: MatchSession;
   link: HostLink;
@@ -64,8 +74,9 @@ export interface HostOptions {
   options?: DirectorOptions['options'];
   zonePool(): number[];
   settle?: BotsOptions['settle'];
-  /** The ticker, and our own seat's lines on it. Without it nothing is narrated. */
-  narration?: { mine(): BotVoice };
+  /** The ticker, and our own seat's lines on it: the voice the profile picked (POK-243).
+   *  Not optional: solo went without it, and its matches were silent (POK-331 #26). */
+  narration: { mine(): BotVoice };
   /** The director's HUD pump; hands back its disposer. */
   startLoop(director: Director): () => void;
   now?(): number;
@@ -82,7 +93,7 @@ export class HostRole {
   private readonly link: HostLink;
   private readonly plan: DealPlan;
   private readonly hostSeat: number;
-  private readonly narration?: { mine(): BotVoice };
+  private readonly narration: { mine(): BotVoice };
   private readonly startLoop: (director: Director) => () => void;
   private readonly now: () => number;
   private readonly seen = new Set<number>(); // seats already announced out, so a repeat is quiet
@@ -141,7 +152,6 @@ export class HostRole {
           },
         }
       : undefined;
-    const narrated = opts.narration !== undefined;
     // The host speaks for the bots as well as for the clock: same relay, same in-ring,
     // and its own roster too -- nobody hears their own messages come back, so the host
     // would otherwise be the one client that cannot see the bots it is walking.
@@ -166,24 +176,20 @@ export class HostRole {
       },
       // The kill feed. A duel is the only moment both sides of a fight are known at
       // once -- an `out` on its own cannot say who did it.
-      onDuel: narrated
-        ? (winner, loser) => {
-            this.say(Ticker.beat(winner, this.nameOf(winner), this.nameOf(loser)));
-            // And they say something about it (POK-239). Dealt from the seed, so the same
-            // bot has the same voice all match on every client that works it out -- unless
-            // the seat that just fought is this client's own, in which case it is whatever
-            // voice its profile picked (POK-243): the same pipe a bot gets, handed to the
-            // one player who actually gets to choose it. Any *other* real player still
-            // falls back to the seed, the same as a bot -- their own pick lives only in
-            // their own localStorage, and nothing on the wire carries it here yet.
-            this.say(Ticker.said(winner, this.nameOf(winner), this.myVoice(winner, seed).win));
-            this.say(Ticker.said(loser, this.nameOf(loser), this.myVoice(loser, seed).lose));
-          }
-        : undefined,
+      onDuel: (winner, loser) => {
+        this.say(Ticker.beat(winner, this.nameOf(winner), this.nameOf(loser)));
+        // And they say something about it (POK-239). Dealt from the seed, so the same
+        // bot has the same voice all match on every client that works it out -- unless
+        // the seat that just fought is this client's own, in which case it is whatever
+        // voice its profile picked (POK-243): the same pipe a bot gets, handed to the
+        // one player who actually gets to choose it. Any *other* real player still
+        // falls back to the seed, the same as a bot -- their own pick lives only in
+        // their own localStorage, and nothing on the wire carries it here yet.
+        this.say(Ticker.said(winner, this.nameOf(winner), this.myVoice(winner, seed).win));
+        this.say(Ticker.said(loser, this.nameOf(loser), this.myVoice(loser, seed).lose));
+      },
       // Walking up to somebody is the other time a bot has something to say.
-      onEngage: narrated
-        ? (seat) => this.say(Ticker.said(seat, this.nameOf(seat), this.myVoice(seat, seed).intro))
-        : undefined,
+      onEngage: (seat) => this.say(Ticker.said(seat, this.nameOf(seat), this.myVoice(seat, seed).intro)),
       fill: opts.fill,
       resume,
       safariSecs: opts.botSafariSecs,
@@ -360,14 +366,14 @@ export class HostRole {
   // The ROM has drawn the window since POK-226 and nothing had ever sent it a line, so a
   // match was silent: people vanished, the fog closed, somebody won, and the only way to
   // know was to be watching the right corner. The host narrates, because the host is the
-  // one client that knows the whole match.
+  // one client that knows the whole match -- solo's too, into the one ROM there is.
 
   private nameOf(seat: number): string {
     return this.link.roster.nameOf(seat);
   }
 
   private say(msg: TickerMsg | null): void {
-    if (!msg || !this.narration) return;
+    if (!msg) return;
     this.link.toRoom(msg);
     this.link.toRom(msg);
   }
@@ -375,7 +381,7 @@ export class HostRole {
   /** The seed's voice for anyone, except this client's own seat, which speaks with
    *  whatever its profile picked (POK-243) -- see the onDuel/onEngage callbacks. */
   private myVoice(seat: number, matchSeed: number): BotVoice {
-    if (seat === this.link.seat && this.narration) return this.narration.mine();
+    if (seat === this.link.seat) return this.narration.mine();
     // What they actually picked, if their challenge told us (POK-274). A bot never
     // sends one, so a bot keeps the lines the seed deals it -- which is what makes a
     // room of bots sound like a room of people in the first place.

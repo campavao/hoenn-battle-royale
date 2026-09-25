@@ -20,7 +20,7 @@ import { bossAt } from './match/bosses';
 import type { Results } from './match/results';
 import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
-import { HostRole, soloLink, type HostLink } from './match/host';
+import { HostRole, soloLink, soloRoster, type HostLink } from './match/host';
 import { type BotVoice, lineAt, nextLine } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
@@ -1483,10 +1483,10 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   //
   // Everything the bots need is page-side: no relay, no Bridge, no other ROM. Their
   // messages go straight into our own ROM's in-ring, which is what the room's host
-  // does for itself anyway (nobody hears their own messages).
-  const roster = new Roster();
+  // does for itself anyway (nobody hears their own messages). A room of one: us, by the
+  // name a room would know us by.
+  const roster = soloRoster(careerName());
   const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
-  roster.setMySeat(0);
   const matchBase = symbols?.get('gBrMatch');
   const soloGrace = new EndGrace({
     graceMs: SOLO_END_GRACE_MS,
@@ -1563,7 +1563,9 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     options: paceOptions(),
     zonePool: () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), plan.seed),
     settle: proxyDuels ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b) : undefined,
-    // No narration: solo has never had a ticker.
+    // The match narrated, as a room's host narrates it (POK-331 #26): Kanto's solo is the
+    // room with nobody in it, and its ticker says everything a room's does.
+    narration: { mine: careerVoiceLines },
     startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director),
   });
   // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):

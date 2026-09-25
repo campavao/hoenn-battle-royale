@@ -3,20 +3,21 @@
 // and a link that reads whichever Bridge the page has now. What the room hears is the
 // socket's frames; what our own ROM is handed is what went through the link.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HostRole, soloLink, type HostLink, type HostOptions } from './host';
+import { HostRole, soloLink, soloRoster, type HostLink, type HostOptions } from './host';
 import type { DirectorWorld } from './director';
 import { EndGrace } from './grace';
 import { DOORSTEPS, HAND, LANDING } from './landing';
 import { dealPlan } from './lifecycle';
-import { Roster } from './roster';
 import { MatchSession, type SessionView } from './session';
+import * as Ticker from './ticker';
+import { voiceFor } from '../bots/lines';
 import { Bridge } from '../net/bridge';
 import { fakeEmulator, fakeRelay, memoryStore, type FakeSocket } from '../net/fakes.testutil';
 import { Mailbox } from '../net/mailbox';
 import type { RosterEvent } from '../net/relay';
 import { RomPort } from '../net/romport';
 import { BR_CONT_FLAG, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
-import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg, type StartMsg } from '../net/wire';
+import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg, type StartMsg, type TickerMsg } from '../net/wire';
 import worldData from '../data/world.json';
 import regionmapData from '../data/regionmap.json';
 
@@ -423,8 +424,7 @@ describe('solo link', () => {
     const gba = fakeEmulator(BASE);
     gba.romInit();
     const rom = new RomPort(new Mailbox(gba.emu, BASE));
-    const roster = new Roster();
-    roster.setMySeat(0);
+    const roster = soloRoster('MAY');
     let host: HostRole | null = null;
     const exit = vi.fn();
     const view = { started: vi.fn(), decided: vi.fn(), partyLate: vi.fn() } satisfies SessionView;
@@ -464,6 +464,7 @@ describe('solo link', () => {
       botSafariSecs: 0,
       options: { safariSecs: 0, fogSecs: 60 },
       zonePool: () => [],
+      narration: { mine: () => ({ intro: 'HI', win: 'YES', lose: 'NO' }) },
       startLoop: (director) => {
         const id = setInterval(() => director.tick(), 1_000);
         return () => clearInterval(id);
@@ -506,22 +507,44 @@ describe('solo link', () => {
     expect(start.spawns.map((s) => s.seat)).toEqual([0, ...bots]);
     expect(solo.session.match.active).toBe(true);
     solo.frame();
-    expect(solo.drained().map((m) => m.t)).toEqual(['start']);
+    expect(solo.drained().map((m) => m.t)).toEqual(['start', 'ticker', 'ticker']);
     solo.host.dispose();
   });
 
-  it('has nobody else to tell: no door, nothing for another seat, and no ticker', () => {
+  it('has nobody else to tell: no door, and nothing for another seat', () => {
     const solo = alone(1);
     expect(solo.link.lock).toBeUndefined();
     expect(solo.link.linesFor).toBeUndefined();
     solo.host.begin();
     solo.beat(solo.host.bots.seats[0]); // ...which is the match won
     expect(solo.toSeat).not.toHaveBeenCalled();
-    expect(solo.toRom.filter((m) => m.t === 'ticker')).toEqual([]);
-    solo.frame();
-    expect(solo.drained().filter((m) => m.t === 'ticker')).toEqual([]);
     // What the room's host would have told the room went nowhere, `again` with it.
-    expect(solo.toRoom.mock.calls.map(([m]) => m.t)).toEqual(['place', 'start', 'busy', 'spill', 'out', 'win', 'again']);
+    expect(solo.toRoom.mock.calls.map(([m]) => m.t).filter((t) => t !== 'ticker')).toEqual([
+      'place', 'start', 'busy', 'spill', 'out', 'win', 'again',
+    ]);
+    solo.host.dispose();
+  });
+
+  // POK-331 #26 (D4): solo had no ticker at all. Kanto's solo is the room with nobody in
+  // it, and says everything a room's does; so does ours now, into the one ROM there is,
+  // with the player called by name rather than P0.
+  it("narrates the match into our own ROM as a room's host does, the player by name", () => {
+    const solo = alone(1);
+    const [bot] = solo.host.bots.seats;
+    expect(solo.link.roster.nameOf(0)).toBe('MAY');
+    solo.host.begin();
+    const botName = solo.link.roster.nameOf(bot); // seated by the start
+    solo.beat(bot);
+    const lines = [
+      'CATCH WHAT YOU CAN! 0s',
+      '2 TRAINERS ARE LOOSE IN HOENN!',
+      Ticker.said(bot, botName, voiceFor(SEED, bot).intro)!.text, // it walked up to us
+      Ticker.out(bot, botName, 1)!.text,
+      'MAY WINS!',
+    ];
+    expect(solo.toRom.filter((m) => m.t === 'ticker').map((m) => (m as TickerMsg).text)).toEqual(lines);
+    solo.frame();
+    expect(solo.drained().filter((m) => m.t === 'ticker').map((m) => (m as TickerMsg).text)).toEqual(lines);
     solo.host.dispose();
   });
 
