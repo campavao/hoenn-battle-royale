@@ -57,6 +57,41 @@ export interface Spot {
   z?: number;
 }
 
+/** What a trainer can walk to without leaving the map they stand on (World.reachOnMap). */
+export interface Reach {
+  /** A cell of this map: true if they can walk onto it, at either level of a bridge. */
+  cell(x: number, y: number): boolean;
+  /** A spot on another map: true if a step off this one lands there. */
+  across(spot: Spot): boolean;
+}
+
+const NO_REACH: Reach = { cell: () => false, across: () => false };
+
+/** A region (POK-331 #27): nodes of one map joined by steps that go both ways, so all of
+ *  them reach the same places. Found as bots stand in them, for one kit. */
+interface Region {
+  map: number;
+  /** A node in it, to flood its reach from. */
+  rep: number;
+  reach?: Reach;
+  /** The nodes on other maps a step off its reach lands on. */
+  out?: number[];
+  /** Those landings by the region they are in. */
+  next?: Map<number, number[]>;
+}
+
+/** One map's regions for one kit: each node's region's number + 1, so 0 is "not yet". */
+interface Regions {
+  cell: Int32Array;
+  /** A bridge's level nodes, by node number. */
+  level: Map<number, number>;
+}
+
+/** How many regions a crossing's search may settle before it gives up. Two hundred is
+ *  most of the way across Hoenn: the search follows the map-level plan and only strays
+ *  from it where the plan's crossing is on the far side of something. */
+const REGION_LIMIT = 200;
+
 /** The exporter's cell classes. 0 is plain ground, 7 tall grass, 8 a door or warp
  *  tile -- all real tiles a trainer stands on. 3..6 are the four ledge directions,
  *  which can be stood on and only jumped one way. 1 and 2 are wall and water. */
@@ -768,6 +803,185 @@ export class World {
       }
     }
     return out;
+  }
+
+  // ---- regions (POK-331 #27) -------------------------------------------------------
+  //
+  // A lake, a river or a wood can cut a map in two. Route 104's north half and its south
+  // are joined only through Petalburg Woods, a map of their own, so on the north half a
+  // bot drawing a cell of its own map to wander to drew one it could not walk to about
+  // half the time, and a search spent a whole budget finding that out. Worse, the
+  // map-level plan says Petalburg is one hop from all of Route 104 -- so a bot on the
+  // north half with the ring closing on Petalburg was aimed at a crossing on the far
+  // side of the wood, and stood in the fog until it went out. Kanto's per-map BFS only
+  // ever sees what it can reach (lib/bots.lua); this is the same knowledge, kept.
+  //
+  // A map splits into regions: nodes joined by steps that go both ways, so all of them
+  // reach the same places. A region is found the first time somebody stands in it or a
+  // search lands in it, and its reach -- the cells of its map, and the landings off it --
+  // is flooded once. Only a ledge or a door makes a step one way. On foot Hoenn has about
+  // 3,950 regions, 490 of them bigger than fifty cells.
+
+  /** Per map number and kit (n * 4 + surf * 2 + cut): its nodes' regions so far. */
+  private readonly regionMaps = new Map<number, Regions>();
+  /** Every region found, any map, any kit: a region's number is its place here. */
+  private readonly regionList: Region[] = [];
+
+  /** The region a node is in, found now if nobody has asked before. */
+  private regionOf(key: number, surf: boolean, cut: boolean): number {
+    const n = this.mapOf(key);
+    const base = this.bases[n];
+    const slot = n * 4 + (surf ? 2 : 0) + (cut ? 1 : 0);
+    let found = this.regionMaps.get(slot);
+    if (!found) {
+      found = { cell: new Int32Array(this.widths[n] * this.heights[n]), level: new Map() };
+      this.regionMaps.set(slot, found);
+    }
+    const r = found;
+    const get = (k: number) => (k < this.cells ? r.cell[k - base] : r.level.get(k) ?? 0) - 1;
+    const set = (k: number, id: number) => {
+      if (k < this.cells) r.cell[k - base] = id + 1;
+      else r.level.set(k, id + 1);
+    };
+    const known = get(key);
+    if (known >= 0) return known;
+    const id = this.regionList.length;
+    this.regionList.push({ map: n, rep: key });
+    set(key, id);
+    const queue = [key];
+    for (let i = 0; i < queue.length; i++) {
+      const at = queue[i];
+      for (let d = 0; d < 4; d++) {
+        const to = this.stepKey(at, d, surf, cut);
+        if (to < 0 || this.mapOf(to) !== n || get(to) >= 0) continue;
+        // Both ways: d ^ 1 is the opposite direction in DIRS.
+        if (this.stepKey(to, d ^ 1, surf, cut) !== at) continue;
+        set(to, id);
+        queue.push(to);
+      }
+    }
+    return id;
+  }
+
+  /** A region with its reach flooded: from any node of it, since they all have one. */
+  private flooded(id: number, surf: boolean, cut: boolean): Region {
+    const region = this.regionList[id];
+    if (region.reach) return region;
+    const n = region.map;
+    const base = this.bases[n];
+    const w = this.widths[n];
+    const h = this.heights[n];
+    const cells = new Uint32Array((w * h + 31) >> 5);
+    const across = new Set<number>();
+    const out: number[] = [];
+    const seen = new Set<number>([region.rep]);
+    const queue = [region.rep];
+    for (let i = 0; i < queue.length; i++) {
+      const at = queue[i];
+      const c = this.cellOf(at) - base;
+      cells[c >> 5] |= 1 << (c & 31);
+      for (let d = 0; d < 4; d++) {
+        const to = this.stepKey(at, d, surf, cut);
+        if (to < 0 || seen.has(to)) continue;
+        seen.add(to);
+        if (this.mapOf(to) === n) {
+          queue.push(to);
+        } else {
+          across.add(this.cellOf(to));
+          out.push(to);
+        }
+      }
+    }
+    region.out = out;
+    region.reach = {
+      cell: (x, y) => {
+        const c = y * w + x;
+        return x >= 0 && y >= 0 && x < w && y < h && (cells[c >> 5] & (1 << (c & 31))) !== 0;
+      },
+      across: (spot) => {
+        const k = this.key(spot);
+        return k >= 0 && across.has(this.cellOf(k));
+      },
+    };
+    return region;
+  }
+
+  /** The regions a step off this one's reach lands in, with the landings in each. */
+  private nextOf(id: number, surf: boolean, cut: boolean): Map<number, number[]> {
+    const region = this.flooded(id, surf, cut);
+    if (region.next) return region.next;
+    const next = new Map<number, number[]>();
+    for (const landing of region.out!) {
+      const to = this.regionOf(landing, surf, cut);
+      const list = next.get(to);
+      if (list) list.push(landing);
+      else next.set(to, [landing]);
+    }
+    region.next = next;
+    return next;
+  }
+
+  /** What a trainer standing at `from` can walk to without stepping off its map: the
+   *  cells of that map, and where the steps off it land. */
+  reachOnMap(from: Spot, surf = false, cut = false): Reach {
+    const start = this.key(from);
+    if (start < 0) return NO_REACH;
+    return this.flooded(this.regionOf(start, surf, cut), surf, cut).reach!;
+  }
+
+  /** The crossing to take first on the way from `from` to map `goal`: the cells of the
+   *  next map a step off this one lands on, all in the one region of it that is on the
+   *  way. Undefined when there is no way, or none within `limit` regions, or `from` is
+   *  on `goal` already. With `arrive`, only a region of `goal` whose reach it accepts is
+   *  somewhere to arrive: a pocket off the edge of the map the targets are on is on that
+   *  map, and a bot that aimed at it came back out and aimed at it again, all match.
+   *
+   *  The map-level plan, region by region: an A* whose steps are crossings and whose
+   *  estimate is the plan's hop count -- never more than the crossings really needed, so
+   *  the way found is a shortest one. Where the plan's crossing is on this side of the
+   *  water it is the plan; where it is not, this goes round. */
+  firstCrossing(
+    from: Spot,
+    goal: string,
+    surf = false,
+    cut = false,
+    arrive?: (reach: Reach) => boolean,
+    limit = REGION_LIMIT,
+  ): Spot[] | undefined {
+    const start = this.key(from);
+    const goalMap = this.numbers.get(goal);
+    if (start < 0 || goalMap === undefined) return undefined;
+    const origin = this.regionOf(start, surf, cut);
+    const left = (id: number) => this.hops(this.ids[this.regionList[id].map], goal, surf, cut);
+    const h0 = left(origin);
+    if (h0 === undefined || h0 === 0) return undefined;
+    const cost = new Map<number, number>([[origin, 0]]);
+    // Each region reached, by the region the way to it began with.
+    const via = new Map<number, number>();
+    const open: { id: number; f: number }[] = [{ id: origin, f: h0 }];
+    const closed = new Set<number>();
+    while (open.length > 0 && closed.size < limit) {
+      // The lowest estimate, the first one pushed on a tie.
+      let best = 0;
+      for (let i = 1; i < open.length; i++) if (open[i].f < open[best].f) best = i;
+      const { id } = open.splice(best, 1)[0];
+      if (closed.has(id)) continue;
+      closed.add(id);
+      if (this.regionList[id].map === goalMap && (!arrive || arrive(this.flooded(id, surf, cut).reach!))) {
+        const landings = this.nextOf(origin, surf, cut).get(via.get(id)!)!;
+        return landings.map((k) => this.spotAt(k));
+      }
+      const g = cost.get(id)! + 1;
+      for (const to of this.nextOf(id, surf, cut).keys()) {
+        if (closed.has(to) || (cost.get(to) ?? Infinity) <= g) continue;
+        const rest = left(to);
+        if (rest === undefined) continue;
+        cost.set(to, g);
+        via.set(to, id === origin ? to : via.get(id)!);
+        open.push({ id: to, f: g + rest });
+      }
+    }
+    return undefined;
   }
 
   /** Every step a trainer could take from here, with the direction that took it. */

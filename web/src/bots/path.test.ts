@@ -278,20 +278,22 @@ describe('the search on cell numbers', () => {
       asked.on = false;
     }
     const calls = asked.calls.splice(0);
-    // About thirteen hundred on this seed: dozens of them over to the next map, and
-    // hundreds that found nothing -- the searches that spend their whole budget. (Before
-    // the ladder crossed doors, and ran only once a map's own pick had, it was near two
-    // thousand, most of them to a map's edge.)
-    expect(calls.length).toBeGreaterThan(1000);
+    // About 750 on this seed, 87 of them over to the next map. Only fifteen find nothing:
+    // since the brain asks only for what it can reach (POK-331 #27) it hardly ever runs a
+    // search that spends its whole budget, where it used to run hundreds -- the first test
+    // above is the one that holds failing searches to the old answer. (Before the ladder
+    // crossed doors, and ran only once a map's own pick had, it was near two thousand,
+    // most of them to a map's edge.)
+    expect(calls.length).toBeGreaterThan(600);
     expect(calls.filter((c) => c.any).length).toBeGreaterThan(50);
-    expect(calls.filter((c) => !c.got.found).length).toBeGreaterThan(300);
+    expect(calls.filter((c) => !c.got.found).length).toBeGreaterThan(5);
     for (const { any, args, got } of calls) {
       const want = any
         ? oldFindPathToAny(...(args as Parameters<typeof oldFindPathToAny>))
         : oldFindPath(...(args as Parameters<typeof oldFindPath>));
       expect(got).toEqual(want);
     }
-    // Slow on purpose: ~2,200 searches through the old one, which is the cost this
+    // Slow on purpose: ~750 searches through the old one, which is the cost this
     // ticket took out. Seconds here, and more on a shared runner.
   }, 60_000);
 });
