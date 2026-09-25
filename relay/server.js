@@ -1469,10 +1469,17 @@ export function createRelay(options = {}) {
 
   httpServer.on("error", (err) => log(`server error: ${err && err.message}`));
 
-  // Every socket goes, cut or -- with a `code` -- closed with one.
+  // Every socket goes, cut or -- with a `code` -- closed with one.  The rooms go
+  // first, and quietly (POK-330 #47 review): socket by socket, the host's close
+  // elected an heir and told it so before the heir's own close landed, and its
+  // page started a takeover a moment before the restart cut it off too.
   function close(code) {
     clearInterval(sweeper);
     clearInterval(reporter);
+    for (const room of rooms.values()) {
+      for (const m of room.members.values()) m.room = null;
+    }
+    rooms.clear();
     for (const conn of [...conns]) conn.destroy("shutdown", code);
     return new Promise((resolve) => httpServer.close(() => resolve()));
   }

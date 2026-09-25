@@ -163,9 +163,9 @@ railway up
 ```
 
 Rooms live in memory, so a deploy ends every one. On SIGTERM the relay logs
-its counters once more (`SIGTERM: shutting down | rooms ...`) and closes each
-socket with 1012 (service restart), which the page tells apart from its own
-network dropping. `/health` answers `{status, rooms, conns, locked}`, where
+its counters once more (`SIGTERM: shutting down | rooms ...`), lets go of
+every room without a roster or an heir, and closes each socket with 1012
+(service restart), which the page tells apart from its own network dropping. `/health` answers `{status, rooms, conns, locked}`, where
 `locked` is the matches running: deploy at `locked: 0`.
 
 Run from inside `relay/` -- the service is **`hoenn-relay`**, separate from

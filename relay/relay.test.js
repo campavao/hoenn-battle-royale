@@ -2128,6 +2128,28 @@ test("a passcoded room takes its members back on their token alone", async () =>
   });
 });
 
+test("a restart tells nobody they are the host on its way out", async () => {
+  const lines = [];
+  const relay = createRelay({ log: (l) => lines.push(l) });
+  const addr = await relay.listen(0, "127.0.0.1");
+  const a = await connect(addr.port);
+  a.send({ type: "host_room", name: "RED" });
+  const hosted = await a.until("room_hosted");
+  const b = await connect(addr.port);
+  b.send({ type: "join_room", code: hosted.code, name: "BLUE" });
+  await b.until("room_joined");
+  b.send({ type: "can_host", ok: true });
+  await b.settled();
+
+  await relay.shutdown("SIGTERM");
+  // the host's socket closes first: BLUE used to be promoted, and told, before its own
+  // close landed, and its page started a takeover the restart then cut off
+  const heard = [];
+  for (let m = await b.next(); m.type !== "__closed"; m = await b.next()) heard.push(m.type);
+  assert.deepEqual(heard, []);
+  assert.ok(!lines.some((l) => /promoted|dropped, held|closed \(/.test(l)), lines.join("\n"));
+});
+
 // The daily is nobody's room in particular: passed over while it waited on its host,
 // the next press opened a second one, which started alone at the hour.
 test("a daily waiting on its dropped host is still the daily: its lobby takes the next press, its match is running", async () => {
