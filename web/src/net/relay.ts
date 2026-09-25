@@ -11,10 +11,11 @@
 // local seat and `to()`'s `seat` argument as the relay's own `id`.
 //
 // Reconnect: a dropped socket is retried with exponential backoff until connect()
-// is called again or close() is called. Reconnecting does NOT re-host or re-join --
-// the relay has already forgotten the old room by the time a new socket completes
-// its handshake, and deciding what to do about that (rejoin, show a "lost the room"
-// screen) is app.ts's call, not this module's. Listen for `closed` and decide there.
+// is called again or close() is called. Reconnecting does not re-join by itself: the
+// relay holds the seat for a minute (POK-284) and rejoin() asks for it back, but
+// whether to -- and what to do when the room has gone -- is app.ts's call, on `open`.
+// A room that ENDED (room_closed) is not reconnected to at all: `closed` says so with
+// `reconnecting: false`, and the socket is closed (POK-330 #47).
 
 import { MAX_SEAT } from './wire';
 
@@ -108,7 +109,12 @@ export interface InfoEvent {
 }
 
 export interface ClosedEvent {
+  /** `closed`, `stale` (a half-open socket), `restart` (the relay is being redeployed,
+   *  close code 1012), or a room_closed reason: `removed`, `host_left`, `host_gone`... */
   reason: string;
+  /** Whether a new socket is on its way. False once the room itself is over, or after
+   *  close(): there is nothing to go back to. */
+  reconnecting: boolean;
 }
 
 /** The socket came up. `reconnected` is FALSE for the first one after connect() and
@@ -300,7 +306,9 @@ export class RelayClient {
     ws.onerror = () => {
       /* onclose follows every onerror on a real WebSocket; nothing to do here */
     };
-    ws.onclose = () => this.handleClose('closed');
+    // 1012 is the relay restarting for a deploy (its SIGTERM, POK-330 #47): worth
+    // telling apart from this page's own network going
+    ws.onclose = (ev) => this.handleClose((ev as { code?: number } | null)?.code === 1012 ? 'restart' : 'closed');
   }
 
   private handleMessage(data: string): void {
@@ -376,9 +384,19 @@ export class RelayClient {
           daily: msg.daily as InfoEvent['daily'],
         });
         return;
-      case 'room_closed':
+      case 'room_closed': {
+        // The room is over, which is not the socket dropping (POK-330 #47). It used to
+        // be handled as one: the socket was let go without being closed, a new one was
+        // opened, and the rejoin was refused -- an orphan left open until the relay's
+        // idle sweep, and a round trip to learn what this message had already said.
+        this.token = null;
+        this.lastCode = null;
+        this.closedByUser = true;
+        const ws = this.ws;
         this.handleClose(typeof msg.reason === 'string' ? msg.reason : 'closed');
+        ws?.close(); // let go of first, so its onclose cannot say it a second time
         return;
+      }
       case 'no_open_rooms':
         this.emit('no_open_rooms', { reason: 'none' });
         return;
@@ -408,7 +426,7 @@ export class RelayClient {
     this.id = null;
     this.code = null;
     this.hostId = null;
-    this.emit('closed', { reason });
+    this.emit('closed', { reason, reconnecting: !this.closedByUser });
     if (!this.closedByUser) this.scheduleReconnect();
   }
 
@@ -519,6 +537,7 @@ export class RelayClient {
   /** A game right now: the relay seats you in the fullest open room, or names a
    *  running one to watch, or tells you to host. */
   quickJoin(opts: JoinOpts): void {
+    this.lastOpts = opts; // so a rejoin asks as we did: a seat found this way is held too
     this.send({
       type: 'quick_join',
       name: opts.name,
@@ -530,6 +549,7 @@ export class RelayClient {
 
   /** The daily game's one door: everybody who presses the row lands in the same room. */
   dailyJoin(opts: JoinOpts): void {
+    this.lastOpts = opts; // ...and the daily's host above all, which is no other room
     this.send({
       type: 'daily_join',
       name: opts.name,

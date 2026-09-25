@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canStart, doorOf, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, roomView, startNote, textSpeedLabel, nextSafari, safariLabel } from './room';
+import { canStart, doorOf, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel } from './room';
 import type { RosterEvent } from '../net/relay';
 
 const roster = (over: Partial<RosterEvent> = {}): RosterEvent => ({
@@ -114,5 +114,24 @@ describe('the opening length (POK-241)', () => {
   it('says what no Safari means rather than showing a zero', () => {
     expect(safariLabel(0)).toBe('NO SAFARI');
     expect(safariLabel(120)).toBe('SAFARI 120s');
+  });
+});
+
+describe('a door that will not open (POK-330 #47)', () => {
+  const host = { rejoining: true, wasHost: true, seat: 1 };
+
+  it('hosts again when the room it was running is gone', () => {
+    // a relay restart, or the seat hold ran out: the match is still in this tab
+    expect(onRefused('not_found', host)).toBe('rehost');
+  });
+
+  it('is a dead end for anybody else, or for any other refusal', () => {
+    expect(onRefused('not_found', { ...host, wasHost: false })).toBe('dead-end'); // a guest
+    expect(onRefused('not_found', { ...host, rejoining: false })).toBe('dead-end'); // an old link
+    // a new room seats its opener at 1: from any other seat we would come back as somebody else
+    expect(onRefused('not_found', { ...host, seat: 3 })).toBe('dead-end');
+    expect(onRefused('removed', host)).toBe('dead-end');
+    expect(onRefused('version', host)).toBe('dead-end');
+    expect(onRefused('already_in_room', host)).toBe('status');
   });
 });

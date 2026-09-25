@@ -30,6 +30,7 @@ import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { NpcFog } from './match/npcfog';
 import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
+import { onRefused } from './match/room';
 import { Stage } from './ui/stage';
 import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
 import {
@@ -2026,6 +2027,11 @@ function wireRoom(
   let announceOut: ((seat: number) => void) | null = null;
   let stopDirectorLoop: (() => void) | null = null;
   let isHost = false;
+  /** A rejoin is out: a refusal is about the room we were in, not one we asked into. */
+  let rejoining = false;
+  /** The room is ours again after our own drop (POK-330 #47), and the match with it:
+   *  the director the drop stopped starts again on the next roster that says so. */
+  let resumeHost = false;
   /** The host's room settings between roster events (POK-241). */
   const controls: RoomControls = {
     fill: true, roster: null, textSpeed: 3, animations: true, fogSecs: 120,
@@ -2627,7 +2633,12 @@ function wireRoom(
     // Whose room it is, as the relay says: ours when we opened it, whoever it names when
     // we joined. The hash said `host` on a rejoin too, after the relay had already handed
     // the room to an heir when our socket went (POK-330 #13).
+    const wasHost = isHost;
     isHost = host === seat;
+    rejoining = false;
+    // Ours before the drop and ours again: the relay waited for us, or the room had gone
+    // and we opened another (POK-330 #47). The match lives in this tab.
+    resumeHost = wasHost && isHost && director === null && onPromotion(match) === 'take-over';
     // A rejoin mid-match gets a fresh Bridge and with it a fresh roster: the bots go
     // back on it by name, the same as they went on at the `start` (POK-330 #51).
     if (match.seed !== 0) bridge.roster.seatBots(botRows(match.seed, match.botSeats));
@@ -3000,6 +3011,13 @@ function wireRoom(
       console.info('[room] stood down as host');
       teardownHost();
     }
+    // Back as the host after our own drop (POK-330 #47): the drop stopped the director,
+    // and it picks the match up the way a promoted heir does, from where it stands.
+    if (resumeHost && bridge && isHost && ev.host === bridge.seat) {
+      resumeHost = false;
+      console.info('[room] host again after a drop');
+      startDirector(ev.members.map((m) => m.id), true);
+    }
     // Somebody arrived while the match is running: tell them where the fog is, now
     // (POK-260). Kanto calls this the late start -- a watcher who has to wait for the
     // next ring to learn the state spends up to two minutes looking at nothing. Not once
@@ -3040,28 +3058,38 @@ function wireRoom(
       }, director !== null);
     }
   });
+  /** A dead end is not one unless the page says where else to go: BACK TO LOBBY. */
+  const deadEnd = (): void => {
+    if (room.fatal) return;
+    room.fatal = true;
+    noteEl.textContent = '';
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.textContent = 'BACK TO LOBBY';
+    back.addEventListener('click', () => backToLobby());
+    noteEl.appendChild(back);
+    // The drawer says so, under no screen: a dead end is not worth drawing.
+    stage.hide();
+  };
   relay.on('room_error', (ev) => {
-    // A door that will not open is a dead end unless the page says where else to go.
-    // `locked` is the common one: a room mid-match, which is exactly what you rejoin
-    // if you reload an old link.
-    const FATAL = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server_full', 'version'];
+    // `locked` is the common refusal: a room mid-match, which is exactly what you rejoin
+    // if you reload an old link. Which ones are dead ends is match/room.ts's onRefused.
+    const next = onRefused(ev.reason, { rejoining, wasHost: isHost, seat: bridge?.seat ?? null });
+    rejoining = false;
+    // The room we were running is gone -- a relay restart, or the seat hold ran out
+    // (POK-330 #47). The match is still in this tab, so it goes on in a new room.
+    if (next === 'rehost') {
+      setStatus('The room was gone. Hosting it again…');
+      relay.host({ ...me, open: true, max: BOT_FILL });
+      return;
+    }
     // Kanto's door: a room on another build is not one you can play in (POK-330 #3). A
     // reload fixes it when this tab is the stale one; when the room is, the lobby does.
     if (ev.reason === 'version') {
       const rom = (sha?: string) => (sha ? sha.slice(0, 7) : '?');
       setStatus(`That room runs rom ${rom(ev.host?.patch)}, this tab rom ${rom(patch)}: the older one reloads to update.`);
     } else setStatus(`Couldn't join: ${ev.reason}`);
-    if (FATAL.includes(ev.reason)) {
-      room.fatal = true;
-      noteEl.textContent = '';
-      const back = document.createElement('button');
-      back.type = 'button';
-      back.textContent = 'BACK TO LOBBY';
-      back.addEventListener('click', () => backToLobby());
-      noteEl.appendChild(back);
-      // The drawer says so, under no screen: a dead end is not worth drawing.
-      stage.hide();
-    }
+    if (next === 'dead-end') deadEnd();
   });
   // QUICK PLAY found nothing to join: host one and let the bots fill it, which is what
   // Kanto does rather than leaving somebody looking at an empty list (POK-240).
@@ -3079,33 +3107,37 @@ function wireRoom(
     relay.join(ev.code, { ...me, spectate: true }); // a watcher's replay is a link battle: the gate's
   });
   relay.on('closed', (ev) => {
-    setStatus(`Disconnected: ${ev.reason}`);
-    // A host's socket going is the room going to an heir, or closing: either way this
-    // page is not running the match any more, and a director left standing here would
-    // answer picks next to the heir's once the rejoin lands.
+    // A host's socket going is the room going to an heir, or waiting for us: either way
+    // this page is not running the match any more, and a director left standing here
+    // would answer picks next to the heir's once the rejoin lands. A host the relay
+    // waited for starts its director again from attach (POK-330 #47).
     teardownHost();
     stopSpectateLoop?.();
+    // The room itself is over -- the host left, its hold ran out, or it showed us out --
+    // and no new socket is coming (POK-330 #47): the same dead end a refused door is.
+    if (!ev.reconnecting) {
+      setStatus(`The room closed: ${ev.reason}`);
+      deadEnd();
+      return;
+    }
+    setStatus(ev.reason === 'restart' ? 'The server is restarting. Reconnecting…' : `Disconnected: ${ev.reason}`);
   });
   // ...and it comes back. The socket retries on its own, but nothing ever un-said
   // `Disconnected`, so a page that had recovered still read as dead for the rest of
   // the match (play-test: the line was on the strip in every frame of the video).
-  //
-  // A room does not come back with it. The relay forgets a member the moment its
-  // socket goes, and the id it hands out on a rejoin is a NEW one -- which is this
-  // page's seat, so rejoining mid-match would change who we are. The host is the
-  // exception: everybody else has been dropped from its room anyway, the match it is
-  // running lives in this tab, and hosting again is how anyone finds it.
   relay.on('open', (ev) => {
     if (!ev.reconnected) return;
     // Back to the seat we had (POK-284): the relay holds it for a minute after a
     // socket drops, and the id it hands back is the one every ROM in the room already
     // knows us by. A host that dropped finds an heir running the match and comes back
-    // as a member of it (POK-116); the room only closed if nobody could take it, and
-    // then the rejoin is refused and we host again as before.
+    // as a member of it (POK-116), or finds the room waited and is its host again; if
+    // the room is gone (a relay restart), room_error's onRefused hosts a new one.
     if (relay.rejoin()) {
+      rejoining = true;
       setStatus('Reconnected. Rejoining…');
       return;
     }
+    // A relay that gave us no token to come back with.
     if (isHost) {
       setStatus('Reconnected. Hosting again…');
       relay.host({ ...me, open: true, max: BOT_FILL });

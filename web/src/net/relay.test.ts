@@ -23,7 +23,7 @@ class FakeSocket implements WebSocketLike {
   close(): void {
     this.closed = true;
     this.readyState = 3; // CLOSED
-    this.onclose?.({});
+    this.onclose?.({ code: 1005 });
   }
 
   // ---- test helpers ----
@@ -202,7 +202,7 @@ describe('RelayClient', () => {
     vi.advanceTimersByTime(10_000);
     expect(sockets[0].closed).toBe(true);
     expect(closed).toHaveBeenCalledTimes(1);
-    expect(closed).toHaveBeenCalledWith({ reason: 'stale' });
+    expect(closed).toHaveBeenCalledWith({ reason: 'stale', reconnecting: true });
     // ...and the backoff brings a new socket up well inside the relay's 60 s hold
     vi.advanceTimersByTime(500);
     expect(sockets).toHaveLength(2);
@@ -352,15 +352,39 @@ describe('RelayClient', () => {
     expect(error).toHaveBeenCalledWith({ reason: 'version', host: F.version_refused.host });
   });
 
-  it('emits closed with the room_closed reason', () => {
+  // The room is over, which is not the socket dropping (POK-330 #47): it used to reconnect,
+  // rejoin with a token for a room that no longer existed, and leave the old socket open.
+  it('ends on room_closed: says why, closes the socket, and neither reconnects nor rejoins', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    relay.join('ABC123', { name: 'BLUE' });
+    sockets[0].receive({ type: 'room_joined', code: 'ABC123', id: 5, host: 2, token: 'tok-1' });
+    const closed = vi.fn();
+    relay.on('closed', closed);
+
+    sockets[0].receive({ type: 'room_closed', reason: 'removed' });
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(closed).toHaveBeenCalledWith({ reason: 'removed', reconnecting: false });
+    expect(sockets[0].closed).toBe(true);
+    expect(relay.token).toBeNull();
+    expect(relay.rejoin()).toBe(false);
+    vi.advanceTimersByTime(60_000);
+    expect(sockets).toHaveLength(1);
+  });
+
+  it('calls a relay closing with 1012 a restart, and comes back to it', () => {
     const { factory, sockets } = makeFactory();
     const relay = new RelayClient(factory);
     relay.connect('ws://relay.test');
     sockets[0].open();
     const closed = vi.fn();
     relay.on('closed', closed);
-    sockets[0].receive({ type: 'room_closed', reason: 'removed' });
-    expect(closed).toHaveBeenCalledWith({ reason: 'removed' });
+    sockets[0].onclose?.({ code: 1012 });
+    expect(closed).toHaveBeenCalledWith({ reason: 'restart', reconnecting: true });
+    vi.advanceTimersByTime(500);
+    expect(sockets).toHaveLength(2);
   });
 });
 
@@ -392,6 +416,28 @@ describe('rejoin (POK-284)', () => {
     again.receive({ type: 'room_joined', code: 'ABC123', id: 5, host: 2, token: 'tok-2' });
     expect(relay.id).toBe(5);
     expect(relay.token).toBe('tok-2');
+  });
+
+  it('a seat found by quick play or the daily is rejoined as well (POK-330 #47)', () => {
+    for (const door of ['quick', 'daily'] as const) {
+      const { factory, sockets } = makeFactory();
+      const relay = new RelayClient(factory);
+      relay.connect('ws://relay.test');
+      sockets[0].open();
+      if (door === 'quick') relay.quickJoin({ name: 'QUICK', patch: F.quick_join.patch, protocol: 1 });
+      else relay.dailyJoin({ name: 'DAILY', patch: F.daily_join.patch, protocol: 1 });
+      // the daily's first press hosts it: that host above all must get its room back
+      sockets[0].receive(door === 'quick'
+        ? { type: 'room_joined', code: 'QQQQQQ', id: 3, host: 1, token: 't-q' }
+        : { type: 'room_hosted', code: 'DDDDDD', id: 1, token: 't-d' });
+      sockets[0].onclose?.({});
+      vi.advanceTimersByTime(500);
+      sockets[1].open();
+      expect(relay.rejoin()).toBe(true);
+      expect(sockets[1].sent.at(-1)).toMatchObject(door === 'quick'
+        ? { type: 'join_room', code: 'QQQQQQ', name: 'QUICK', token: 't-q', patch: F.quick_join.patch }
+        : { type: 'join_room', code: 'DDDDDD', name: 'DAILY', token: 't-d', patch: F.daily_join.patch });
+    }
   });
 
   it('a host has a token too, and a relay that gives none leaves rejoin with nothing', () => {
