@@ -101,6 +101,11 @@ export class Roster {
     for (const e of this.entries.values()) e.alive = true;
   }
 
+  /** One of the match's bots (seatBots), which no relay roster lists. */
+  isBot(seat: number): boolean {
+    return this.bots.has(seat);
+  }
+
   /** What to call a seat: its name, or `P<seat>` for one nobody has named. */
   nameOf(seat: number): string {
     return this.entries.get(seat)?.name || `P${seat}`;

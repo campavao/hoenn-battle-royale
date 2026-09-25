@@ -2606,13 +2606,22 @@ function wireRoom(
   /** Seats this client has already caught up on the running match. */
   const greeted = new Set<number>();
   let bots: ReturnType<typeof startBots> | null = null;
+  /** The room we are attached to, so a second attach can tell a rejoin of it (the relay
+   *  handed our seat back) from a new room. */
+  let attachedTo: { seat: number; code: string } | null = null;
 
   const attach = (seat: number, code: string, host: number) => {
+    // A rejoin mid-fight keeps the fight: the ROM is still in it, and a fresh Bridge knew
+    // no opponent -- its blocks went to the whole room -- and had no copy of the last ones
+    // it sent, which the blip may have lost (POK-330 #20, #7).
+    const rejoin = attachedTo?.seat === seat && attachedTo.code === code;
+    const carry = rejoin ? bridge?.carry() : undefined;
     // A re-join after a reconnect must not leave two pumps on one ring, nor two copies of
     // the page's handler: dispose() lets go of both.
     if (bridge) bridge.dispose();
+    attachedTo = { seat, code };
     console.info(`[room] attached as seat ${seat} in ${code}`);
-    bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol });
+    bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol, carry });
     // Whose room it is, as the relay says: ours when we opened it, whoever it names when
     // we joined. The hash said `host` on a rejoin too, after the relay had already handed
     // the room to an heir when our socket went (POK-330 #13).
@@ -2620,6 +2629,9 @@ function wireRoom(
     // A rejoin mid-match gets a fresh Bridge and with it a fresh roster: the bots go
     // back on it by name, the same as they went on at the `start` (POK-330 #51).
     if (match.seed !== 0) bridge.roster.seatBots(botRows(match.seed, match.botSeats));
+    // ...and what we last said to the seat we are fighting, which the blip may have
+    // swallowed (#7).
+    if (rejoin) bridge.resendBlocks();
     setStatus(`Room ${code}`);
     renderRoom(bridge);
     const seatBase = symbols?.get('gBrMySeat');

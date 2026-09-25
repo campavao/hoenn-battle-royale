@@ -9,17 +9,17 @@
 //     is full) --> onMessage(msg, from), the page's one stream of what the room said
 //
 // `all` vs `to`: everything the ROM emits is a broadcast (place/step/face/out/
-// pickup/spill/faint/result, ...) EXCEPT the two messages that are inherently a
-// private exchange between two seats -- `challenge` (carries its own `opponent`)
-// and `bt` (a raw link-block exchange, which does not name a target itself, so the
-// bridge remembers the opponent from the `challenge` that started the fight).
+// pickup/spill/faint/result/challenge, ...) EXCEPT `bt`, a raw link-block exchange
+// between two seats, which does not name a target itself: the bridge remembers the
+// opponent from the `challenge` that started the fight, and a block with no opponent
+// known goes nowhere.
 //
 // `echo`/`BR_MSG_NONE` never reach the relay: they exist for the mailbox's own
 // wire-up test (slots.ts's comment on BR_MSG.ECHO) and have no `wire.ts` Msg
 // counterpart to forward.
 import { Mailbox, type RamAccess, type RawMessage } from './mailbox';
 import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
-import { decode, type Lines, PROTOCOL, type Msg } from './wire';
+import { decode, type BlockMsg, type Lines, PROTOCOL, type Msg } from './wire';
 import { Roster } from '../match/roster';
 import { RelayClient, type RecvEvent, type RosterEvent } from './relay';
 import { admits } from './trust';
@@ -41,7 +41,7 @@ export interface BridgeStats {
    *  Does not count a full ring's queue-and-retry -- that is delayed, not lost. */
   drops: number;
   /** Messages that decoded but came from somebody with no right to send them
-   *  (net/trust.ts). */
+   *  (net/trust.ts), and link blocks from anybody but the seat we are fighting. */
   refused: number;
   /** mailbox.pending(): how many queued pushes the ROM still has not drained. */
   pending: number;
@@ -55,7 +55,24 @@ export interface BridgeOptions {
   /** This client's seat -- the relay's own room-member id (net/relay.ts, docs/WIRE.md). */
   seat: number;
   protocol?: number;
+  /** The fight the last Bridge was in, when this one replaces it mid-match (carry()). */
+  carry?: LinkCarry;
 }
+
+/** What a link battle needs to outlive the Bridge it started under (POK-330 #20, #7). A
+ *  rejoin after a socket blip builds a new Bridge while the ROM is still mid-fight, and a
+ *  fresh one knew no opponent: every block after that went to the whole room, feeding
+ *  itself into every other pair's fight. */
+export interface LinkCarry {
+  opponentSeat: number | null;
+  heardLines: Map<number, Lines>;
+  sent: BlockMsg[];
+  lastRecvSeq: number;
+}
+
+/** How many of our own last blocks are kept to say again. The link is lockstep -- one
+ *  block each way, then the next -- so what a blip can lose is the last one or two. */
+export const BLOCKS_KEPT = 4;
 
 function msgSeat(msg: Msg): number | undefined {
   return 'seat' in msg ? (msg as { seat?: number }).seat : undefined;
@@ -84,8 +101,17 @@ export class Bridge {
 
   private readonly protocol: number;
   private opponentSeat: number | null = null;
+  /** Our last few blocks of the current fight, for saying again after a gap (#7). */
+  private sentBlocks: BlockMsg[] = [];
+  /** The last block of the current fight the ROM was handed. The other side says its
+   *  last few again after a gap, and the ROM keeps no count of its own: a repeat handed
+   *  to it would be read as the next block. */
+  private lastRecvSeq = 0;
   /** Who the relay lists in the room, from its last roster (net/trust.ts). */
   private members = new Set<number>();
+  /** Our opponent dropped off the relay's roster mid-fight: the blocks we sent while it
+   *  was gone went nowhere, and are said again when it is back. */
+  private opponentAway = false;
   private readonly listeners = new Set<(msg: Msg, from: number) => void>();
   /** An extra gate on relay -> ROM, set by the page (match/spectate.ts). A ROM handed
    *  a `bstart` starts replaying a fight, and `bstart`/`turn` are broadcasts, so a
@@ -123,6 +149,12 @@ export class Bridge {
     this.seat = opts.seat;
     this.protocol = opts.protocol ?? PROTOCOL;
     this.roster.setMySeat(opts.seat);
+    if (opts.carry) {
+      this.opponentSeat = opts.carry.opponentSeat;
+      for (const [seat, lines] of opts.carry.heardLines) this.heardLines.set(seat, lines);
+      this.sentBlocks = [...opts.carry.sent];
+      this.lastRecvSeq = opts.carry.lastRecvSeq;
+    }
 
     this.unsubs.push(opts.emu.onFrame(() => this.onFrame()));
     this.unsubs.push(this.relay.on('recv', (ev) => this.onRelayRecv(ev)));
@@ -148,6 +180,25 @@ export class Bridge {
   onMessage(fn: (msg: Msg, from: number) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
+  }
+
+  /** The fight in progress, for the Bridge that replaces this one (BridgeOptions.carry). */
+  carry(): LinkCarry {
+    return {
+      opponentSeat: this.opponentSeat,
+      heardLines: new Map(this.heardLines),
+      sent: [...this.sentBlocks],
+      lastRecvSeq: this.lastRecvSeq,
+    };
+  }
+
+  /** Says our last few blocks of the current fight to the opponent again (#7). The relay
+   *  drops what is sent to a seat whose socket is down, and ours go nowhere while ours
+   *  is, so one lost block left both ROMs waiting on each other for ever. The other side
+   *  drops whatever it already had, by `seq`. */
+  resendBlocks(): void {
+    if (this.opponentSeat === null) return;
+    for (const block of this.sentBlocks) this.relay.to(this.opponentSeat, block);
   }
 
   /** Throws unless the ROM's mailbox is awake and speaking this protocol. Call once
@@ -222,21 +273,48 @@ export class Bridge {
     }
     this.outCount++;
 
-    let stamped = (SPEAKS_FOR_ANOTHER.has(msg.t) ? msg : { ...msg, seat: this.seat }) as Msg;
+    let stamped = (this.keepsItsSeat(msg) ? msg : { ...msg, seat: this.seat }) as Msg;
     // Our own lines ride out with the challenge (POK-274), which is the only message
     // that reaches the other side before a fight starts.
     if (stamped.t === 'challenge' && this.myLines) stamped = { ...stamped, lines: this.myLines };
     this.noteChallenge(stamped);
     this.roster.applyMsg(stamped);
+    // Our fight is over: nothing of it is worth saying again.
+    if (stamped.t === 'result') this.sentBlocks = [];
 
     this.outObserver?.(stamped);
     // Observed either way -- this page's own spectator, loot and results all read the
     // ROM's messages -- but a watcher's never leave the page.
     if (this.outFilter && !this.outFilter(stamped)) return;
 
-    const target = this.targetSeat(stamped);
-    if (target !== undefined) this.relay.to(target, stamped);
-    else this.relay.all(stamped);
+    if (stamped.t === 'bt') {
+      // A block is for the one seat we are fighting and nobody else (#20). With no
+      // opponent known it used to go to the whole room -- after every rejoin, since a
+      // new Bridge knew nobody -- and every other pair's ROM took it as their own
+      // opponent's next block.
+      if (this.opponentSeat === null) {
+        this.dropCount++;
+        return;
+      }
+      this.sentBlocks.push(stamped);
+      if (this.sentBlocks.length > BLOCKS_KEPT) this.sentBlocks.shift();
+      this.relay.to(this.opponentSeat, stamped);
+      return;
+    }
+    // A challenge is broadcast too, not addressed: a bot is not a member of the room, so
+    // `to` a bot's seat reached nobody and the host that walks it never heard one of its
+    // bots had been challenged (POK-238). br_netlink.c's HandleChallenge ignores one that
+    // names neither side.
+    this.relay.all(stamped);
+  }
+
+  /** Whether a message our ROM sent keeps the seat it wrote, rather than ours. A report
+   *  on a fight with a bot (SPEAKS_FOR_ANOTHER) always does; so does the RESULT the ROM
+   *  writes under a bot that lost (br_bot.c), which the stamp turned into the player
+   *  losing the fight they had just won. */
+  private keepsItsSeat(msg: Msg): boolean {
+    if (SPEAKS_FOR_ANOTHER.has(msg.t)) return true;
+    return msg.t === 'result' && msg.seat !== this.seat && this.roster.isBot(msg.seat);
   }
 
   private onRelayRecv(ev: RecvEvent): void {
@@ -253,6 +331,7 @@ export class Bridge {
       return;
     }
     if (msgSeat(msg) === this.seat && !ADDRESSED_TO_SEAT.has(msg.t)) return; // our own message, echoed back
+    if (msg.t === 'bt' && !this.takesBlock(msg, ev.from)) return;
 
     this.noteChallenge(msg);
     this.roster.applyMsg(msg);
@@ -268,10 +347,28 @@ export class Bridge {
     for (const fn of [...this.listeners]) fn(msg, ev.from);
   }
 
-  /** The relay's roster: the room's rows, and who is in it for net/trust.ts. */
+  /** A block is taken from the seat we are fighting and nobody else (#20) -- the ROM
+   *  delivers whatever it is handed as the other side's next block -- and only once
+   *  (#7): the other side says its last few again after a gap. */
+  private takesBlock(msg: BlockMsg, from: number): boolean {
+    if (this.opponentSeat === null || from !== this.opponentSeat || msg.seat !== this.opponentSeat) {
+      this.refusedCount++;
+      return false;
+    }
+    if (msg.seq <= this.lastRecvSeq) return false;
+    this.lastRecvSeq = msg.seq;
+    return true;
+  }
+
+  /** The relay's roster: the room's rows, who is in it for net/trust.ts, and our
+   *  opponent coming back from a gap -- when what we said meanwhile is said again. */
   private onRoster(ev: RosterEvent): void {
     this.roster.applyRoster(ev);
     this.members = new Set(ev.members.map((m) => m.id));
+    if (this.opponentSeat === null) return;
+    const here = this.members.has(this.opponentSeat);
+    if (here && this.opponentAway) this.resendBlocks();
+    this.opponentAway = !here;
   }
 
   setRomFilter(fn: ((msg: Msg) => boolean) | null): void {
@@ -306,27 +403,19 @@ export class Bridge {
     // about: the room hears every duel announced, not just its own.
     if (msg.lines && msg.seat !== this.seat) this.heardLines.set(msg.seat, msg.lines);
     if (msg.t !== 'challenge') return;
-    // Challenges are broadcast now (see targetSeat), so most of them are about
-    // two other people: noting one of those would point our own battle traffic at
-    // a seat we are not fighting.
+    // Challenges are broadcast, so most of them are about two other people: noting one
+    // of those would point our own battle traffic at a seat we are not fighting.
     if (msg.seat !== this.seat && msg.opponent !== this.seat) return;
     this.opponentSeat = msg.seat === this.seat ? msg.opponent : msg.seat;
+    // A new fight, and a new count: the ROM numbers every fight's blocks from one.
+    this.sentBlocks = [];
+    this.lastRecvSeq = 0;
+    this.opponentAway = false;
   }
 
   /** What a seat said when it challenged somebody (POK-274), or undefined if this page
    *  has never heard from them -- a bot never does, so its lines stay the seed's. */
   linesFor(seat: number): Lines | undefined {
     return this.heardLines.get(seat);
-  }
-
-  private targetSeat(msg: Msg): number | undefined {
-    // A challenge is broadcast, not addressed. It used to go only to the seat it
-    // named, which is fine for a person and wrong for a bot: a bot is not a member
-    // of the room, so `to` a bot's seat reached nobody and the host that walks it
-    // never heard that one of its bots had been challenged (POK-238). The room
-    // seeing a pair engage is worth having anyway -- br_netlink.c's HandleChallenge
-    // ignores one that names neither side.
-    if (msg.t === 'bt') return this.opponentSeat ?? undefined;
-    return undefined;
   }
 }
