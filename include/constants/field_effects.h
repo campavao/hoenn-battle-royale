@@ -68,10 +68,12 @@
 #define FLDEFF_RAYQUAZA_SPOTLIGHT        64
 #define FLDEFF_DESTROY_DEOXYS_ROCK       65
 #define FLDEFF_MOVE_DEOXYS_ROCK          66
+#if BR
 // A boot in a bubble over whoever just ran (POK-266, Kanto v0.49.0). Emerald ships an
 // exclamation, a question mark and a heart and nothing that says "gone"; this shares
 // the exclamation's sprite and adds a third frame to it.
 #define FLDEFF_BR_BOOT_ICON              67
+#endif
 
 #define FLDEFFOBJ_SHADOW_S              0
 #define FLDEFFOBJ_SHADOW_M              1

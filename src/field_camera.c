@@ -11,7 +11,7 @@
 #include "rotating_gate.h"
 #include "sprite.h"
 #include "text.h"
-#ifdef BR
+#if BR
 #include "br/br_field.h"
 #endif
 
@@ -155,7 +155,7 @@ static void RedrawMapSliceNorth(struct FieldCameraOffset *cameraOffset, const st
             temp -= 32;
         DrawMetatileAt(mapLayout, r7 + temp, gSaveBlock1Ptr->pos.x + i / 2, gSaveBlock1Ptr->pos.y + 14);
     }
-#ifdef BR
+#if BR
     BrField_MarkFarRow();
 #endif
 }
@@ -205,7 +205,7 @@ static void RedrawMapSliceWest(struct FieldCameraOffset *cameraOffset, const str
             temp -= 32;
         DrawMetatileAt(mapLayout, temp * 32 + r5, gSaveBlock1Ptr->pos.x + 14, gSaveBlock1Ptr->pos.y + i / 2);
     }
-#ifdef BR
+#if BR
     BrField_MarkFarColumn();
 #endif
 }
@@ -432,7 +432,7 @@ void CameraUpdate(void)
     AddCameraPixelOffset(&sFieldCameraOffset, movementSpeedX, movementSpeedY);
     gTotalCameraPixelOffsetX -= movementSpeedX;
     gTotalCameraPixelOffsetY -= movementSpeedY;
-#ifdef BR
+#if BR
     BrField_Tick();
 #endif
 }

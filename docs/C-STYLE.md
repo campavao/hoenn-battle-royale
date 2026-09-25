@@ -34,9 +34,13 @@ lenient one.
   alive across a map load. Register a system's tick from `BrFrame`; use a `Task` only for
   something that should stop when the engine wipes tasks. Do not hang state on a task's
   `data[]` if the shell needs it; put it in the mailbox.
-- **Upstream touches.** One `#if BR` block per site, calling one function in `src/br/`.
-  Never reindent or reflow upstream code around the hook. The build must still match the
-  retail sha1 with `BR` defined to 0.
+- **Upstream touches.** One `#if BR` block per site (`.if BR` in assembler), calling one
+  function in `src/br/`. When a hook replaces pret's lines, pret's lines stay under the
+  block's `#else`, word for word. Never `#ifdef BR`: the Makefile always defines BR
+  (`BR ?= 1`), so that is on even in `make BR=0`. Never reindent or reflow upstream code
+  around the hook. `tools/br/check-guards.py` (CI's `guards` job) fails on any
+  `Br*`/`gBr*`/`BR_*` name or `br/` include outside a guard, comments included. BR's own
+  specials go at the end of `data/specials.inc`, so pret's keep their numbers.
 - **Strings.** Game text is in the Gen 3 charmap (`_("...")` in C, `.string` in scripts).
   Plain C strings are only for `gBrVersionString`-style ROM markers.
 - **Names.** `Br<System>_<Verb>` for functions (`BrMailbox_Push`), `gBr*` for globals

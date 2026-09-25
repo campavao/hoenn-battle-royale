@@ -21,6 +21,16 @@ permissions:
   contents: read
 
 jobs:
+  # Every BR touch in a pret file sits under `#if BR` / `.if BR` (docs/C-STYLE.md), so a
+  # pret merge only ever meets our lines in guarded blocks. Seconds, no toolchain.
+  guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upstream edits are guarded
+        run: python3 tools/br/check-guards.py
+
   # Builds both ROMs (baseline pret, and this fork) with agbcc - the byte-matching
   # compiler, because the release patch must be a diff of our changes only, never a
   # modern-GCC recompile of the whole game riding along. Ends with the one artifact

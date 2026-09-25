@@ -34,7 +34,9 @@
 #include "constants/map_types.h"
 #include "constants/songs.h"
 #include "constants/trainer_hill.h"
+#if BR
 #include "br/br_match.h"
+#endif
 
 static EWRAM_DATA u8 sWildEncounterImmunitySteps = 0;
 static EWRAM_DATA u16 sPrevMetatileBehavior = 0;
@@ -706,12 +708,14 @@ static bool8 TryStartWarpEventScript(struct MapPosition *position, u16 metatileB
 
     if (warpEventId != WARP_ID_NONE && IsWarpMetatileBehavior(metatileBehavior) == TRUE)
     {
+#if BR
         // The other half of the closed-door check in TryDoorWarp below. Not every shut
         // entrance is an animated door you press north into: Lilycove's harbour, and any
         // cave mouth or stairwell, is a tile you walk onto and this is the path it takes.
         if (BrMatch_DoorClosed(gMapHeader.events->warps[warpEventId].mapGroup,
                                gMapHeader.events->warps[warpEventId].mapNum))
             return TRUE;
+#endif
         StoreInitialPlayerAvatarState();
         SetupWarp(&gMapHeader, warpEventId, position);
         if (MetatileBehavior_IsEscalator(metatileBehavior) == TRUE)
@@ -854,6 +858,7 @@ static bool8 TryDoorWarp(struct MapPosition *position, u16 metatileBehavior, u8 
             warpEventId = GetWarpEventAtMapPosition(&gMapHeader, position);
             if (warpEventId != WARP_ID_NONE && IsWarpMetatileBehavior(metatileBehavior) == TRUE)
             {
+#if BR
                 // A door the match keeps shut says so and eats the press: no door
                 // animation, no warp, and the player is never locked out of their
                 // own controls. The lab's own two warps both point out, so refusing
@@ -862,6 +867,7 @@ static bool8 TryDoorWarp(struct MapPosition *position, u16 metatileBehavior, u8 
 
                 if (BrMatch_DoorClosed(closed->mapGroup, closed->mapNum))
                     return TRUE;
+#endif
                 StoreInitialPlayerAvatarState();
                 SetupWarp(&gMapHeader, warpEventId, position);
                 DoDoorWarp();

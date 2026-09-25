@@ -24,8 +24,10 @@
 #include "task.h"
 #include "constants/rgb.h"
 #include "constants/songs.h"
+#if BR
 #include "constants/items.h"
 #include "br/br_moves.h"
+#endif
 
 /*
  * Move relearner state machine
@@ -144,10 +146,12 @@
 #define MENU_STATE_PRINT_TEXT_THEN_FANFARE 31
 #define MENU_STATE_WAIT_FOR_FANFARE 32
 #define MENU_STATE_WAIT_FOR_A_BUTTON 33
-// BR: MOVES is a screen you stand in, not a ceremony you sit through. A teach hands the
+#if BR
+// MOVES is a screen you stand in, not a ceremony you sit through. A teach hands the
 // list straight back, so a bag of four TMs is four presses rather than four trips through
 // "1, 2, and... Poof!" with the fog closing. 34 is the next free number.
 #define MENU_STATE_BR_BACK_TO_LIST 34
+#endif
 
 // The different versions of hearts are selected using animation
 // commands.
@@ -163,11 +167,15 @@ enum {
 #define GFXTAG_UI       5525
 #define PALTAG_UI       5526
 
+#if BR
 // Battle Royale's MOVES row offers the machines in the bag alongside the level-up moves
 // (POK-279), so the list is 20 level-up rows + 58 machines + CANCEL rather than 25. The
 // struct is AllocZeroed, so this is heap and not a byte of EWRAM -- and the count fields
 // below are u8, which 84 still fits.
 #define MAX_RELEARNER_MOVES (max(MAX_LEVEL_UP_MOVES, 25) + NUM_TECHNICAL_MACHINES + NUM_HIDDEN_MACHINES + 1)
+#else
+#define MAX_RELEARNER_MOVES max(MAX_LEVEL_UP_MOVES, 25)
+#endif
 
 static EWRAM_DATA struct
 {
@@ -358,7 +366,9 @@ static const struct BgTemplate sMoveRelearnerMenuBackgroundTemplates[] =
 
 static void DoMoveRelearnerMain(void);
 static void CreateLearnableMovesList(void);
+#if BR
 static void BrBackToList(void);
+#endif
 static void CreateUISprites(void);
 static void CB2_MoveRelearnerMain(void);
 static void Task_WaitForFadeOut(u8 taskId);
@@ -533,6 +543,7 @@ static void DoMoveRelearnerMain(void)
             {
                 if (GiveMoveToMon(&gPlayerParty[sMoveRelearnerStruct->partyMon], GetCurrentSelectedMove()) != MON_HAS_MAX_MOVES)
                 {
+#if BR
                     // A TM that taught it is spent, an HM is not. Here rather than at the
                     // selection: the summary screen's round trip rebuilds this list from
                     // the bag, so a machine taken out before the move is written would
@@ -545,6 +556,11 @@ static void DoMoveRelearnerMain(void)
                     gSpecialVar_0x8004 = TRUE;
                     PlaySE(SE_USE_ITEM);
                     sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
+#else
+                    PrintMessageWithPlaceholders(gText_MoveRelearnerPkmnLearnedMove);
+                    gSpecialVar_0x8004 = TRUE;
+                    sMoveRelearnerStruct->state = MENU_STATE_PRINT_TEXT_THEN_FANFARE;
+#endif
                 }
                 else
                 {
@@ -725,6 +741,7 @@ static void DoMoveRelearnerMain(void)
             }
             else
             {
+#if BR
                 RemoveMonPPBonus(&gPlayerParty[sMoveRelearnerStruct->partyMon], sMoveRelearnerStruct->moveSlot);
                 SetMonMoveSlot(&gPlayerParty[sMoveRelearnerStruct->partyMon], GetCurrentSelectedMove(), sMoveRelearnerStruct->moveSlot);
                 // After the slot is written: RemoveBagItem compacts the pocket, and
@@ -735,6 +752,17 @@ static void DoMoveRelearnerMain(void)
                 gSpecialVar_0x8004 = TRUE;
                 PlaySE(SE_USE_ITEM);
                 sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
+#else
+                u16 move = GetMonData(&gPlayerParty[sMoveRelearnerStruct->partyMon], MON_DATA_MOVE1 + sMoveRelearnerStruct->moveSlot);
+
+                StringCopy(gStringVar3, gMoveNames[move]);
+                RemoveMonPPBonus(&gPlayerParty[sMoveRelearnerStruct->partyMon], sMoveRelearnerStruct->moveSlot);
+                SetMonMoveSlot(&gPlayerParty[sMoveRelearnerStruct->partyMon], GetCurrentSelectedMove(), sMoveRelearnerStruct->moveSlot);
+                StringCopy(gStringVar2, gMoveNames[GetCurrentSelectedMove()]);
+                PrintMessageWithPlaceholders(gText_MoveRelearnerAndPoof);
+                sMoveRelearnerStruct->state = MENU_STATE_DOUBLE_FANFARE_FORGOT_MOVE;
+                gSpecialVar_0x8004 = TRUE;
+#endif
             }
         }
         break;
@@ -766,6 +794,7 @@ static void DoMoveRelearnerMain(void)
             sMoveRelearnerStruct->state = MENU_STATE_FADE_AND_RETURN;
         }
         break;
+#if BR
     case MENU_STATE_BR_BACK_TO_LIST:
         BrBackToList();
         if (sMoveRelearnerMenuState.showContestInfo == FALSE)
@@ -773,6 +802,7 @@ static void DoMoveRelearnerMain(void)
         else
             sMoveRelearnerStruct->state = MENU_STATE_SETUP_CONTEST_MODE;
         break;
+#endif
     }
 }
 
@@ -923,7 +953,8 @@ static void RemoveScrollArrows(void)
     }
 }
 
-// BR: the same list again, with the machine that just taught a move gone from it. The
+#if BR
+// The same list again, with the machine that just taught a move gone from it. The
 // row the cursor was on is the row the NEXT machine has slid up into, so the absolute
 // selection is what survives the rebuild -- teaching four TMs is four presses of A on one
 // unmoving cursor. Then put the window back around it: the list is a row shorter, so an
@@ -950,6 +981,7 @@ static void BrBackToList(void)
     sMoveRelearnerMenuState.listRow = sel - sMoveRelearnerMenuState.listOffset;
     sMoveRelearnerStruct->moveListMenuTask = ListMenuInit(&gMultiuseListMenuTemplate, sMoveRelearnerMenuState.listOffset, sMoveRelearnerMenuState.listRow);
 }
+#endif
 
 static void CreateLearnableMovesList(void)
 {
@@ -957,11 +989,13 @@ static void CreateLearnableMovesList(void)
     u8 nickname[POKEMON_NAME_LENGTH + 1];
 
     sMoveRelearnerStruct->numMenuChoices = GetMoveRelearnerMoves(&gPlayerParty[sMoveRelearnerStruct->partyMon], sMoveRelearnerStruct->movesToLearn);
+#if BR
     // Every TM and HM in the bag this species can take, after the level-up moves. The
     // rows below read a move id and nothing else, so an appended machine needs no id
     // space of its own; -1 keeps the CANCEL slot written just after this loop.
     sMoveRelearnerStruct->numMenuChoices = BrMoves_AppendMachines(&gPlayerParty[sMoveRelearnerStruct->partyMon],
         sMoveRelearnerStruct->movesToLearn, sMoveRelearnerStruct->numMenuChoices, MAX_RELEARNER_MOVES - 1);
+#endif
 
     for (i = 0; i < sMoveRelearnerStruct->numMenuChoices; i++)
     {
