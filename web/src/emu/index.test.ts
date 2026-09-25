@@ -163,6 +163,35 @@ describe('Emulator', () => {
     expect(() => emu.read(0x08000000)).toThrow('not in EWRAM');
   });
 
+  it('keeps its RAM views between reads, and remakes them for a new core or a new heap (POK-330 #65)', async () => {
+    const { emu, m } = await make();
+    let wramAt = 0x1000;
+    let asked = 0;
+    m._brWramPtr = () => (asked++, wramAt);
+    await emu.start(new Uint8Array([1]));
+    m.HEAPU8[0x1000 + 4] = 0x2a;
+    for (let i = 0; i < 100; i++) expect(emu.read(EWRAM_BASE + 4, 8)).toBe(0x2a);
+    expect(asked).toBe(1);
+
+    // A reboot builds a new core, whose RAM can be anywhere.
+    wramAt = 0x3000;
+    m.HEAPU8[0x3000 + 4] = 0x33;
+    await emu.reboot();
+    expect(emu.read(EWRAM_BASE + 4, 8)).toBe(0x33);
+    expect(asked).toBe(2);
+
+    // Memory growth replaces the heap under the same pointers.
+    const grown = new Uint8Array(2 << 20);
+    grown[0x3000 + 4] = 0x44;
+    m.HEAPU8 = grown;
+    expect(emu.read(EWRAM_BASE + 4, 8)).toBe(0x44);
+
+    // A stopped core has no RAM to read.
+    emu.stop();
+    wramAt = 0;
+    expect(() => emu.read(EWRAM_BASE + 4, 8)).toThrow('no GBA core loaded');
+  });
+
   it('delivers frame callbacks registered after loadGame', async () => {
     const { emu, frame } = await make();
     let n = 0;

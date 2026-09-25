@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAND, type Camera, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
+import { BAND, type Camera, FieldImages, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
 import type { WorldMap } from './bots/world';
 import fieldHeader from '../../include/br/br_field.h?raw';
 
@@ -182,5 +182,49 @@ describe('the maps next door', () => {
       { map: north, x: -64, y: -320 },
       { map: east, x: 320, y: 48 },
     ]);
+  });
+});
+
+describe('the PNGs past the picture (POK-330 #65)', () => {
+  class FakeImage {
+    src = '';
+    complete = false;
+    naturalWidth = 0;
+    private heard: Record<string, Array<() => void>> = { load: [], error: [] };
+    addEventListener(type: 'load' | 'error', listener: () => void): void {
+      this.heard[type].push(listener);
+    }
+    fire(type: 'load' | 'error'): void {
+      this.complete = true;
+      if (type === 'load') this.naturalWidth = 64;
+      for (const l of this.heard[type]) l();
+    }
+  }
+
+  it('a failed image settles instead of being waited on every frame, and is asked for again on request', () => {
+    const made: FakeImage[] = [];
+    let loads = 0;
+    const images = new FieldImages(() => {
+      const img = new FakeImage();
+      made.push(img);
+      return img;
+    }, () => void loads++);
+
+    expect(images.get('field-maps/A', '/field-maps/A.png')).toBeNull();
+    expect(made[0].src).toBe('/field-maps/A.png');
+    expect(images.settled).toBe(false); // on its way: the picture keeps redrawing for it
+
+    made[0].fire('error');
+    expect(images.settled).toBe(true); // nothing to wait for: the picture can rest
+    expect(images.get('field-maps/A', '/field-maps/A.png')).toBeNull();
+    expect(made).toHaveLength(1); // and it is not asked for again every frame
+
+    images.retry(); // the map changed
+    expect(images.get('field-maps/A', '/field-maps/A.png')).toBeNull();
+    expect(made).toHaveLength(2);
+    made[1].fire('load');
+    expect(loads).toBe(1);
+    expect(images.get('field-maps/A', '/field-maps/A.png')).toBe(made[1]);
+    expect(images.settled).toBe(true);
   });
 });

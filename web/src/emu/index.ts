@@ -106,6 +106,8 @@ export class Emulator {
   private crashListeners = new Set<() => void>();
   private running = false;
   private band: Band | null = null;
+  /** EWRAM and IWRAM over the heap, made once per boot (see wram()). */
+  private views: { heap: Uint8Array; buffer: ArrayBufferLike; ewram: Uint8Array | null; iwram: Uint8Array | null } | null = null;
 
   private constructor(private readonly m: CoreModule) {}
 
@@ -227,6 +229,8 @@ export class Emulator {
       const b = this.band ?? { left: 0, top: 0, right: 0, bottom: 0 };
       this.m._brSetViewport(b.left, b.top, b.right, b.bottom);
     }
+    // loadGame builds a new core, and its RAM with it: the old views point at nothing.
+    this.views = null;
     if (!this.m.loadGame(path)) throw new Error('loadGame failed');
     this.running = true;
     // addCoreCallbacks is a no-op until a core exists, so this must follow loadGame.
@@ -251,6 +255,7 @@ export class Emulator {
       },
       coreCrashedCallback: () => {
         this.running = false;
+        this.views = null;
         for (const l of this.crashListeners) l();
       },
     });
@@ -260,6 +265,7 @@ export class Emulator {
     if (!this.running) return;
     this.m.quitGame();
     this.running = false;
+    this.views = null;
   }
 
   pause(): void {
@@ -337,45 +343,61 @@ export class Emulator {
   }
 
   // ---- memory -----------------------------------------------------------------------
-  // Views over the shared heap. Take them fresh each time: the heap buffer can only
-  // change if the core is torn down, but it costs nothing and keeps callers honest.
+  // Views over the shared heap, made once per boot and kept (POK-330 #65): the frame
+  // listeners make ~290 reads a frame while the core thread waits on them, and a wasm
+  // call plus two allocations for each was all overhead. A view is dropped when the
+  // core is rebuilt, stopped or crashes (its RAM moves with it), and remade when the
+  // heap itself is replaced (memory growth).
+
+  private heapViews(): NonNullable<Emulator['views']> {
+    const heap = this.m.HEAPU8;
+    const v = this.views;
+    if (v && v.heap === heap && v.buffer === heap.buffer) return v;
+    return (this.views = { heap, buffer: heap.buffer, ewram: null, iwram: null });
+  }
 
   /** EWRAM, 256 KiB, mapped at 0x02000000. */
   wram(): Uint8Array {
+    const v = this.heapViews();
+    if (v.ewram) return v.ewram;
     const p = this.m._brWramPtr();
     if (!p) throw new Error('no GBA core loaded');
-    return this.m.HEAPU8.subarray(p, p + EWRAM_SIZE);
+    return (v.ewram = v.heap.subarray(p, p + EWRAM_SIZE));
   }
 
   /** IWRAM, 32 KiB, mapped at 0x03000000. */
   iwram(): Uint8Array {
+    const v = this.heapViews();
+    if (v.iwram) return v.iwram;
     const p = this.m._brIwramPtr();
     if (!p) throw new Error('no GBA core loaded');
-    return this.m.HEAPU8.subarray(p, p + IWRAM_SIZE);
+    return (v.iwram = v.heap.subarray(p, p + IWRAM_SIZE));
   }
 
   /** Reads a little-endian value at a GBA bus address in EWRAM or IWRAM. */
   read(addr: number, width: 8 | 16 | 32 = 32): number {
-    const [view, off] = this.locate(addr);
+    const view = this.viewAt(addr);
+    const off = addr - (addr >= IWRAM_BASE ? IWRAM_BASE : EWRAM_BASE);
     let v = 0;
     for (let i = width / 8 - 1; i >= 0; i--) v = (v << 8) | view[off + i];
     return v >>> 0;
   }
 
   write(addr: number, value: number, width: 8 | 16 | 32 = 32): void {
-    const [view, off] = this.locate(addr);
+    const view = this.viewAt(addr);
+    const off = addr - (addr >= IWRAM_BASE ? IWRAM_BASE : EWRAM_BASE);
     for (let i = 0; i < width / 8; i++) view[off + i] = (value >>> (8 * i)) & 0xff;
   }
 
   /** Bytes at a GBA bus address, as a view (writes go straight to the core). */
   bytes(addr: number, len: number): Uint8Array {
-    const [view, off] = this.locate(addr);
-    return view.subarray(off, off + len);
+    const off = addr - (addr >= IWRAM_BASE ? IWRAM_BASE : EWRAM_BASE);
+    return this.viewAt(addr).subarray(off, off + len);
   }
 
-  private locate(addr: number): [Uint8Array, number] {
-    if (addr >= EWRAM_BASE && addr < EWRAM_BASE + EWRAM_SIZE) return [this.wram(), addr - EWRAM_BASE];
-    if (addr >= IWRAM_BASE && addr < IWRAM_BASE + IWRAM_SIZE) return [this.iwram(), addr - IWRAM_BASE];
+  private viewAt(addr: number): Uint8Array {
+    if (addr >= EWRAM_BASE && addr < EWRAM_BASE + EWRAM_SIZE) return this.wram();
+    if (addr >= IWRAM_BASE && addr < IWRAM_BASE + IWRAM_SIZE) return this.iwram();
     throw new Error(`address 0x${addr.toString(16)} is not in EWRAM or IWRAM`);
   }
 

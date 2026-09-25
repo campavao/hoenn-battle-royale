@@ -346,10 +346,74 @@ interface SheetInfo {
 
 const SHEETS = spritesData as Record<string, SheetInfo>;
 
+/** What the loader needs of an image: an HTMLImageElement, or a test's stand-in. */
+export interface FieldImage {
+  src: string;
+  complete: boolean;
+  naturalWidth: number;
+  addEventListener(type: 'load' | 'error', listener: () => void): void;
+}
+
+/** The PNGs drawn past the picture, each asked for once. A picture missing one is drawn
+ *  again every frame until it arrives -- so one that FAILED (offline, a 404) used to be
+ *  a full redraw every frame for the rest of the session (POK-330 #65). A failure now
+ *  settles, and is asked for again the next time the map changes. */
+export class FieldImages<T extends FieldImage> {
+  private images = new Map<string, T>();
+  private failed = new Set<string>();
+  private pending = new Set<string>();
+
+  constructor(private readonly make: () => T, private readonly onLoad: () => void) {}
+
+  /** The image, or null while it loads or after it failed. */
+  get(key: string, src: string): T | null {
+    if (this.failed.has(key)) return null;
+    let img = this.images.get(key);
+    if (!img) {
+      const made = this.make();
+      made.addEventListener('load', () => {
+        this.pending.delete(key);
+        this.onLoad();
+      });
+      made.addEventListener('error', () => {
+        this.pending.delete(key);
+        this.images.delete(key);
+        this.failed.add(key);
+      });
+      this.pending.add(key);
+      this.images.set(key, made);
+      made.src = src;
+      img = made;
+    }
+    return img.complete && img.naturalWidth > 0 ? img : null;
+  }
+
+  /** Nothing is on its way: a picture drawn without a missing image is as whole as it gets. */
+  get settled(): boolean {
+    return this.pending.size === 0;
+  }
+
+  /** Ask again for everything that failed. */
+  retry(): void {
+    this.failed.clear();
+  }
+}
+
 export class FieldView {
   private byRef = new Map<string, WorldMap>();
   private byId = new Map<string, WorldMap>();
-  private images = new Map<string, HTMLImageElement>();
+  private images = new FieldImages<HTMLImageElement>(
+    () => {
+      const img = new Image();
+      img.decoding = 'async';
+      return img;
+    },
+    () => {
+      this.drawn = null;
+    },
+  );
+  /** The map the picture was last drawn on: a new one retries the images that failed. */
+  private drawnMap: string | null = null;
   private lay: FieldLayout = { scale: 0, cols: 0, rows: 0, lcdCol: 0, lcdRow: 0 };
   private band: Band | null = null;
   /** The core's buffer size the layout was made for; a change re-lays out. */
@@ -582,16 +646,7 @@ export class FieldView {
   }
 
   private image(id: string, dir = 'field-maps'): HTMLImageElement | null {
-    const key = `${dir}/${id}`;
-    let img = this.images.get(key);
-    if (!img) {
-      img = new Image();
-      img.decoding = 'async';
-      img.addEventListener('load', () => { this.drawn = null; });
-      img.src = `/${dir}/${id}.png`;
-      this.images.set(key, img);
-    }
-    return img.complete && img.naturalWidth > 0 ? img : null;
+    return this.images.get(`${dir}/${id}`, `/${dir}/${id}.png`);
   }
 
   /** The fog over the ground, under the people (its sprites are last in OAM, so every
@@ -646,7 +701,12 @@ export class FieldView {
     const { field } = this.deps;
     const lay = this.lay;
     if (!lay.scale) return;
-    const map = this.byRef.get(`${c.group}:${c.num}`);
+    const at = `${c.group}:${c.num}`;
+    if (at !== this.drawnMap) {
+      this.drawnMap = at;
+      this.images.retry();
+    }
+    const map = this.byRef.get(at);
     const people = c.sprites.map((s) => `${s.gfx}/${s.frame}/${s.hFlip ? 1 : 0}/${s.x}/${s.y}/${s.hidden ? 1 : 0}`).join(',');
     const fog = c.fog ? `${c.fog.x}/${c.fog.y}/${c.fog.eva}/${c.fog.evb}` : '';
     const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}:${c.onField ? 1 : 0}`;
@@ -702,8 +762,9 @@ export class FieldView {
       ctx.globalAlpha = 1;
     }
     if (overlay && !this.drawOverlay(overlay, c, !!map && map.outdoor)) complete = false;
-    // A picture missing its still is drawn again when the still arrives.
-    this.drawn = complete ? key : null;
+    // A picture missing its still is drawn again when the still arrives -- and not while
+    // nothing is on its way, which is what a failed one is.
+    this.drawn = complete || this.images.settled ? key : null;
   }
 
   /** The people the ROM hid for being past its band, drawn over the picture -- only on
