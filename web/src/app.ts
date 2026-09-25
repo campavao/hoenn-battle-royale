@@ -85,9 +85,11 @@ import { type MatchRecord, recordLines } from './match/record';
 import {
   botRows,
   dealPlan,
+  offersToHost,
   onAgain,
   onPromotion,
   seatsFor,
+  unheardMatch,
   type MatchSnapshot,
 } from './match/lifecycle';
 import regionmapData from './data/regionmap.json';
@@ -1969,8 +1971,11 @@ function wireRoom(
     else if (decision.do === 'deal') startDirector(decision.members);
     else if (decision.do === 'take-over') startDirector(decision.members, true);
     else if (decision.do === 'step-aside') {
-      // The relay hands the room to the next page that can run it, which heard the deal;
-      // with nobody, it stays here, and nothing deals over the match (decideStart).
+      // The relay hands the room to the next page that can run it, which heard the deal.
+      // With nobody, it stays here, where nothing deals over the match (decideStart) and
+      // nothing runs it either -- which is why such a page takes itself off the heir list
+      // the moment it hears the match (offersToHost), and the relay waits for its host or
+      // closes the room instead. Only a promotion that beat that ends up here.
       console.info('[room] made host of a match never heard dealt: standing aside');
       relay.canHost(false);
     }
@@ -2120,8 +2125,10 @@ function wireRoom(
     // Willing to run the match if the host's tab goes away (POK-252). Every client
     // says this the moment it has a ROM and a seat; the relay promotes the
     // longest-standing one that has. Nobody ever said it before, so `heirOf` never
-    // found anybody and a host leaving closed the room on everybody in it.
-    relay.canHost(true);
+    // found anybody and a host leaving closed the room on everybody in it. Not from a
+    // seat that is out, or in a match it never heard dealt (offersToHost): a rejoin said
+    // yes from both. The host says yes regardless -- a no from it is a stand-down.
+    relay.canHost(isHost || offersToHost(match, seat));
     // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast.
     bridge.setRomFilter((msg) => spectate.wantsFromRelay(msg));
     // Two bots fighting can be watched (POK-300): the proxy instance publishes its duel
@@ -2195,7 +2202,12 @@ function wireRoom(
       // one, goes to the brain from there: the host is the only page that has the bot's
       // team, and the relay's `from` is what says whose ROM it was. A gym leader they beat
       // is a line on our ticker from there too.
+      const unheard = unheardMatch(match);
       session.note(m, { from });
+      // A `ring` or `clock` with no `start` before it: we walked in on a match, or missed
+      // its deal, and could not run it (POK-331 #13 review). Off the heir list from here,
+      // as Kanto's late start is.
+      if (!unheard && unheardMatch(match) && !isHost) relay.canHost(false);
       // ...and to the match we run, when we run it: the director's ear, the drop, the loot
       // a latecomer is owed, a peek at one of our bots, and a bot that is out.
       host?.hear(m, { from });
@@ -2539,7 +2551,7 @@ function wireRoom(
       return;
     }
     const me = bridge ? bridge.roster.get(bridge.seat) : undefined;
-    if (me === undefined || me.alive) relay.canHost(true);
+    if ((me === undefined || me.alive) && (!bridge || offersToHost(match, bridge.seat))) relay.canHost(true);
   });
 
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;

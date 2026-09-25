@@ -255,8 +255,9 @@ export function startLabel(s: Pick<StartState, 'mode' | 'autoStarts' | 'played' 
  *  (relay/server.js's migration note). A page that never heard the `start` -- a watcher
  *  who walked in on the match -- cannot run it, and dealing one afresh put a new `start`
  *  under every ROM in the room mid-match (POK-331 #13). Kanto keeps that page off the
- *  heir list (a late start sends can_host false); one promoted anyway hands the room on,
- *  to somebody who heard the deal. */
+ *  heir list (a late start sends can_host false), and so does this one, from the first
+ *  `ring` or `clock` it hears (lifecycle.ts's offersToHost); one promoted before that
+ *  hands the room on, to somebody who heard the deal. */
 function pickUp(s: StartState, members: number[]): StartDecision {
   return s.match.seed !== 0 ? { do: 'take-over', members } : { do: 'step-aside' };
 }
