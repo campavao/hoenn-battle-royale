@@ -58,7 +58,7 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `place` | `BR_MSG_PLACE` 2 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | every seat, ~4x/s: position + status |
 | `step` | `BR_MSG_STEP` 3 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | a step just committed |
 | `face` | `BR_MSG_FACE` 4 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | a turn in place |
-| `challenge` | `BR_MSG_CHALLENGE` 5 | page&lt;-&gt;page (negotiate), page-&gt;ROM (engage) | yes (once resolved) | challenger; then both sides' pages push the resolved engage to their own ROM |
+| `challenge` | `BR_MSG_CHALLENGE` 5 | page&lt;-&gt;page (negotiate), page-&gt;ROM (engage) | yes (once resolved) | challenger; then both sides' pages push the resolved engage to their own ROM. The challenged ROM starts a fight only in the match proper (`BR_PHASE_PLAY`) and only from a seat whose ghost stands on its map, its own eyeline's rule (POK-330 #24) |
 | `accept` | -- | page&lt;-&gt;page | no | the challenged seat, accepting |
 | `decline` | -- | page&lt;-&gt;page | no | the challenged seat, declining |
 | `bt` | `BR_MSG_BT` 6 | ROM&lt;-&gt;page&lt;-&gt;page&lt;-&gt;ROM | yes | one raw link-block exchange, per turn, during a PvP battle |

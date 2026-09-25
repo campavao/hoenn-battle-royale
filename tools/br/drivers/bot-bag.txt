@@ -18,9 +18,12 @@ expect u8 gBrBotFight 1
 expect u8 gBrBotFight+0xC 1
 expect u16 gBrBotFight+0xE 0x4B
 expect u8 gBrBotFight+0xD 0
-# CHALLENGE from seat 31 to us, as bot-fight.txt
-pokebytes gBrMailbox+0x1018 05 07 04 00 00 1F 00 00 00
-poke u16 gBrMailbox+0x0C 1
+# Seat 31's ghost on our map (out of our eyeline), then its CHALLENGE: a challenge
+# comes from a trainer standing on our map (POK-330 #24).
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
 wait 300
 expect u8 gBrBotFight+2 1
 # Through the intro and into the first turn: FIGHT, the first move, and the AI's own

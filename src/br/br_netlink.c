@@ -116,6 +116,16 @@ static bool8 FieldFree(void)
         && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked();
 }
 
+// Where the challenger's ghost is: on the map we are standing on, or it did not see us.
+static bool8 OnOurMap(u8 seat)
+{
+    const struct BrSeat *s = &gBrSeats[seat];
+
+    return s->present
+        && s->mapGroup == gSaveBlock1Ptr->location.mapGroup
+        && s->mapNum == gSaveBlock1Ptr->location.mapNum;
+}
+
 // A menu is not a hiding place (POK-230): a CHALLENGE that lands with something open
 // waits in pendingPeer; BrNetlink_Tick closes the START menu, lets a sub-screen (bag,
 // party, fly map) settle and starts the fight from inside it, and waits out a battle
@@ -130,6 +140,15 @@ static void HandleChallenge(const u8 *payload, u8 len)
     // Both seats index gBrSeats (the peer's skin, the ghost the ! goes over), so both
     // are on the board or the challenge is nobody's (POK-330 #6).
     if (d[0] >= BR_MAX_SEATS || d[1] >= BR_MAX_SEATS || d[0] == d[1])
+        return;
+    // An engage is two trainers on one map seeing each other in the match proper -- our
+    // own eyeline's rule (CanEngage), checked here against what this ROM can see, since
+    // any member of the room can send a CHALLENGE naming anybody at any time: not in the
+    // lobby, not in the Safari opening, not once we are out, and not from a seat whose
+    // ghost is not standing on our map (POK-330 #24).
+    if (gBrMatch.phase != BR_PHASE_PLAY)
+        return;
+    if (d[0] != gBrMySeat && !OnOurMap(d[0]))
         return;
     // A bot has no ROM to link with: if its party is already staged, this is a trainer
     // battle, not an exchange (POK-238).
@@ -154,6 +173,12 @@ static void TickPendingChallenge(void)
 
     if (gBrNetlink.pendingPeer == 0xFF || gBrNetlink.active)
         return;
+    // The fight it was waiting out may have been the one that put us out of the match.
+    if (gBrMatch.phase != BR_PHASE_PLAY)
+    {
+        gBrNetlink.pendingPeer = 0xFF;
+        return;
+    }
     if (gMain.inBattle)
     {
         gBrNetlink.stableFrames = 0;

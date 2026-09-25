@@ -11,9 +11,12 @@ poke u8 gBrNetlink+8 1
 tap START
 wait 40
 shot menu
-# CHALLENGE: type 5, framed len 7 = hdr(04 00 00) + challenger 01, opponent 00, nonce 00 00
-pokebytes gBrMailbox+0x1018 05 07 04 00 00 01 00 00 00
-poke u16 gBrMailbox+0x0C 1
+# Seat 1's ghost on our map, out of our eyeline -- a challenge comes from a trainer
+# standing on our map (POK-330 #24) -- then its CHALLENGE: challenger 01, opponent 00
+pokebytes gDecompressionBuffer 01 01 00 09 14 00 08 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 01 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
 wait 6
 expect u8 gBrNetlink 1
 expect u8 gBrNetlink+1 1

@@ -9,11 +9,18 @@ wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
-pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+# The card is run-bot.txt's with LEER (0x2B, 30 PP) in the slot POUND had. TREECKO's own
+# second move is LEER as well, so the bot has nothing else to pick and the turn below
+# does not ride on where the RNG happens to be when the fight starts.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 2B 00 1E 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
 mailsend gBrMailbox 23 gDecompressionBuffer 106
 wait 10
-pokebytes gBrMailbox+0x1018 05 07 04 00 00 1F 00 00 00
-poke u16 gBrMailbox+0x0C 1
+# Seat 31's ghost on our map (out of our eyeline), then its CHALLENGE: a challenge
+# comes from a trainer standing on our map (POK-330 #24).
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
 wait 300
 tap A
 wait 60
@@ -25,7 +32,7 @@ expect u8 gBattleCommunication 2
 expect u16 gBrBattle+2 0
 shot menu
 # gBattleMons[0] is ours, gBattleMons[1] (+0x58) theirs: DEF stage at +0x1A (6 = level),
-# POUND's PP at +0x24, HP at +0x28. Their trainer AI picks LEER here, which is what
+# POUND's PP at +0x24, HP at +0x28. Their trainer AI can only pick LEER, which is what
 # makes this readable: a stat drop is a turn THEY took and we did not answer.
 expect u8 gBattleMons+0x1A 6
 expect u8 gBattleMons+0x24 35

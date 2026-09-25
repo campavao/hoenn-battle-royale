@@ -18,9 +18,12 @@ expect u8 gBrBotFight+3 1
 # the name came over with the card -- it is what the battle text says
 expect u8 gBrBotFight+4 0xBC
 expect u8 gBrBotFight+7 0xFF
-# CHALLENGE from seat 31 to us: type 5, framed len 7 = hdr(04 00 00) + 1F 00 00 00
-pokebytes gBrMailbox+0x1018 05 07 04 00 00 1F 00 00 00
-poke u16 gBrMailbox+0x0C 1
+# Seat 31's ghost on our map (out of our eyeline), then its CHALLENGE: a challenge
+# comes from a trainer standing on our map (POK-330 #24).
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
 wait 300
 # the fight is on, and it is a trainer battle rather than a link exchange
 expect u8 gBrBotFight+2 1

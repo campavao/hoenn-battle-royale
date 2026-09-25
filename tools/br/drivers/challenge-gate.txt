@@ -1,0 +1,61 @@
+# challenge-gate: a CHALLENGE starts a fight only in the match proper, and only from a
+# trainer standing on our map (POK-330 #24).
+#
+# The relay passes on whatever a member sends, so anybody in the room can name anybody
+# in a CHALLENGE at any time -- and HandleChallenge took every one: in the lobby, in the
+# Safari opening, after we were out, from a seat on the far side of Hoenn or from one it
+# had never heard of. Our own eyeline refuses all of those (CanEngage, and the same-map
+# test), so the answering side now asks the same things of what it can see.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# Seat 2 on our map, out of our eyeline: (20,8) facing SOUTH. Seat 4 on another map
+# (group 0, number 10). Seat 5 is never placed at all.
+pokebytes gDecompressionBuffer 02 01 00 09 14 00 08 00 01 01 02
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 04 01 00 0A 0A 00 0A 00 01 01 04
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 20
+expect u8 gBrSeats+32 1
+expect u8 gBrSeats+64 1
+# The lobby (phase NONE): CHALLENGE 2 -> 0.
+pokebytes gDecompressionBuffer 02 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 30
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+16 0xFF
+# The Safari opening.
+poke u8 gBrMatch 1
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 30
+expect u8 gBrNetlink 0
+# Out of the match.
+poke u8 gBrMatch 3
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 30
+expect u8 gBrNetlink 0
+# The match proper, from a seat on another map, and from one with no roster row.
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 04 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+pokebytes gDecompressionBuffer 05 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 30
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+16 0xFF
+shot refused
+# And the one that is an engage: in the match, from seat 2 on this map.
+pokebytes gDecompressionBuffer 02 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 10
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+1 1
+expect u8 gBrNetlink+2 2
+shot accepted
+# Seat 2 goes out and the session closes (out-peer.txt), so nothing is left running.
+pokebytes gDecompressionBuffer 02
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 300
+expect u8 gBrNetlink 0
+say challenge gate ok

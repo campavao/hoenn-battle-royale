@@ -28,8 +28,12 @@ poke u16 gPlayerParty+0x56 0
 pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
 mailsend gBrMailbox 23 gDecompressionBuffer 106
 wait 10
-pokebytes gBrMailbox+0x10D8 05 07 04 00 00 1F 00 00 00
-poke u16 gBrMailbox+0x0C 4
+# Seat 31's ghost on our map (out of our eyeline), then its CHALLENGE: a challenge
+# comes from a trainer standing on our map (POK-330 #24).
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
 wait 400
 tap A
 wait 60
