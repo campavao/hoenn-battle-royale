@@ -169,6 +169,11 @@ describe('the fight so far, handed over once (POK-330 #10)', () => {
       if (msg.t === 'bstart' && this.watching === null && !this.inMenu) this.watching = msg.battle;
       if (msg.t === 'turn' && msg.battle === this.watching) this.turns.push(msg.data[2]);
     }
+    /** The replay reached the fight's end -- the last mon on a side fainted -- and let
+     *  go, back to the field. */
+    over(): void {
+      this.watching = null;
+    }
   }
 
   /** The fighter's page, the watcher's page and ROM, and the relay between them. `heard`
@@ -194,7 +199,7 @@ describe('the fight so far, handed over once (POK-330 #10)', () => {
       if (ask?.t === 'peek') for (const part of fighter.streamFor(ask.target, ask.have)) deliver(part);
       now += PEEK_INTERVAL_MS;
     };
-    return { rom, say, peek, join, follow: (seat: number) => watcher.follow(seat).forEach((m) => rom.take(m)) };
+    return { rom, watcher, say, peek, join, follow: (seat: number) => watcher.follow(seat).forEach((m) => rom.take(m)) };
   }
 
   it('a watcher who walks in mid-fight is handed it once, and then only the live turns', () => {
@@ -240,6 +245,43 @@ describe('the fight so far, handed over once (POK-330 #10)', () => {
     say(turnOf(3));
     peek();
     expect(rom.turns).toEqual([1, 2, 3]);
+  });
+
+  // A replay is a turn behind the fight, and a faint that ends it ends the replay seconds
+  // before the fighters' own link winds down and says RESULT. The ROM saying "watching
+  // nothing" then was taken for a ROM that never got the fight: the fighter handed it
+  // over again, and the watcher saw the fight it had just watched start from the top.
+  it('does not hand a fight back to a ROM that played it to the end', () => {
+    const { rom, say, peek, follow } = room(true);
+    say({ t: 'bstart', battle, data: [1, 2, 3] });
+    say(turnOf(1));
+    follow(FIGHTER);
+    peek();
+    say(turnOf(2));
+    peek();
+    rom.over();
+    peek();
+    peek();
+    expect(rom.watching).toBeNull();
+    expect(rom.turns).toEqual([1, 2]);
+  });
+
+  it('watches the same two seats fight again once the first fight has a RESULT', () => {
+    const { rom, watcher, say, peek, follow } = room(true);
+    say({ t: 'bstart', battle, data: [1, 2, 3] });
+    say(turnOf(1));
+    follow(FIGHTER);
+    peek();
+    rom.over();
+    peek();
+    say({ t: 'result', seat: FIGHTER, outcome: 'win' });
+    watcher.noteResult(FIGHTER); // the page's own onMessage, for a RESULT off the relay
+    peek();
+    say({ t: 'bstart', battle, data: [1, 2, 3] }); // a rematch: the same pair, the same id
+    say(turnOf(7));
+    peek();
+    expect(rom.watching).toBe(battle);
+    expect(rom.turns).toEqual([1, 7]);
   });
 
   // A background tab runs no frames and its peeks keep firing: RAM said "watching nothing"

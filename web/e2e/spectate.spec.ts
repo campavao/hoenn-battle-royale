@@ -17,6 +17,10 @@ const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
 
 const BATTLE_TYPE_RECORDED = 0x0100_0000; // include/constants/battle.h
+/** gPlayerParty[0]'s current HP -- the same offset every driver reads. */
+const PARTY_HP = 0x56;
+/** How often a watcher's page asks the fighter again (match/spectate.ts). */
+const PEEK_INTERVAL_MS = 3000;
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -27,7 +31,7 @@ test.beforeAll(() => {
 type RamWindow = { __br: { mailbox: { ram: { read(addr: number, width: 8 | 16 | 32): number } } } };
 
 test('an eliminated player watches a live fight on the real battle screen', async ({ browser }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(240_000);
   const rom = romHashParam();
   const symbols = loadSymbols();
 
@@ -117,15 +121,15 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
         ram.press('a');
         setTimeout(() => ram.release('a'), 90);
       });
-    // gPlayerParty[0]'s current HP -- the same offset every driver reads.
-    const PARTY_HP = 0x56;
     const hpOf = (page: typeof host) =>
       page.evaluate(
         ([addr, off]) => (window as unknown as RamWindow).__br.mailbox.ram.read(addr + off, 16),
         [symbols.gPlayerParty, PARTY_HP],
       );
+    // Five POUNDs a side is a faint, and a link turn is about seven seconds of text and
+    // animation: some 75 rounds of this. Ninety left a slow box ten seconds.
     let fainted = false;
-    for (let i = 0; i < 90 && !fainted; i++) {
+    for (let i = 0; i < 150 && !fainted; i++) {
       await Promise.all([mash(host), mash(guest)]);
       await host.waitForTimeout(500);
       const [hostHp, guestHp] = await Promise.all([hpOf(host), hpOf(guest)]);
@@ -133,21 +137,41 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
     }
     // The point of this test: something went down while somebody was watching.
     expect(fainted, 'a mon fainted in the fight being watched').toBe(true);
+
+    // ...and the watcher saw it go down, on its own ROM: the replay is a turn behind, and
+    // the faint is the case Kanto's spectator froze on. The watched fighter's team is the
+    // replay's player side, the other fighter's its enemy side.
+    await watcher.waitForFunction(
+      ([flagsAddr, player, enemy, hp, flag]) => {
+        const ram = (window as unknown as RamWindow).__br.mailbox.ram;
+        return (ram.read(flagsAddr, 32) & flag) !== 0 && (ram.read(player + hp, 16) === 0 || ram.read(enemy + hp, 16) === 0);
+      },
+      [symbols.gBattleTypeFlags, symbols.gPlayerParty, symbols.gEnemyParty, PARTY_HP, BATTLE_TYPE_RECORDED],
+      { timeout: 30_000, polling: 100 },
+    );
     await watcher.screenshot({ path: path.join(OUT_DIR, 'spectator-fainted.png') });
 
-    // And it stays: a replay that ran out of stream waits a turn behind rather than
-    // quitting, so it is still the same battle seconds later (Kanto's spectator-freeze
-    // bug, 2026-09-14, was exactly this going the other way).
-    await watcher.waitForTimeout(5_000);
-    const [flags, watching] = await watcher.evaluate(
-      ([flagsAddr, specAddr]) => {
-        const ram = (window as unknown as RamWindow).__br.mailbox.ram;
-        return [ram.read(flagsAddr, 32), ram.read(specAddr + 5, 8)];
-      },
-      [symbols.gBattleTypeFlags, symbols.gBrSpectate],
-    );
-    expect(flags & BATTLE_TYPE_RECORDED, 'still a recorded battle').not.toBe(0);
-    expect(watching, 'gBrSpectate.watching').toBe(1);
+    // One mon each, so that faint ends the fight, and the replay plays it out and lets
+    // go -- neither frozen on the faint (Kanto, 2026-09-14) nor waiting for a turn that
+    // will never come (POK-330 #12).
+    const replay = () =>
+      watcher.evaluate(
+        ([flagsAddr, specAddr, flag]) => {
+          const ram = (window as unknown as RamWindow).__br.mailbox.ram;
+          return { recorded: (ram.read(flagsAddr, 32) & flag) !== 0, watching: ram.read(specAddr + 5, 8) };
+        },
+        [symbols.gBattleTypeFlags, symbols.gBrSpectate, BATTLE_TYPE_RECORDED],
+      );
+    await expect.poll(replay, { timeout: 30_000, message: 'the replay lets go once the fight is over' }).toEqual({ recorded: false, watching: 0 });
+
+    // And it stays gone. The fighters' own link takes seconds more to wind down and say
+    // RESULT, and until then the watcher's page peeks the fighter every few seconds: a
+    // peek that did not say this fight had been played was handed the whole fight again,
+    // and the watcher saw the fight it had just watched start over from the top.
+    for (let t = 0; t < 2 * PEEK_INTERVAL_MS + 1_000; t += 250) {
+      expect(await replay(), 'the finished fight is not replayed again').toEqual({ recorded: false, watching: 0 });
+      await watcher.waitForTimeout(250);
+    }
 
     await watcher.screenshot({ path: path.join(OUT_DIR, 'spectator.png') });
     await host.screenshot({ path: path.join(OUT_DIR, 'fighter.png') });

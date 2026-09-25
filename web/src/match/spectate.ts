@@ -91,6 +91,9 @@ export class Spectate {
    *  off the relay -- and has not peeked since. The ROM takes a second or so to read one
    *  off the ring, so until the next peek the page's word is better than RAM's. */
   private handed = false;
+  /** The fight our ROM was last seen replaying, which tells a replay that has since
+   *  ended from a `bstart` the ROM never took. */
+  private played: number | null = null;
   /** seat -> when they last asked about us. */
   private readonly peekers = new Map<number, number>();
   /** battle id -> its stream so far, for whoever starts watching mid-fight. */
@@ -110,6 +113,7 @@ export class Spectate {
   follow(seat: number | null): Msg[] {
     if (seat !== this.seat) {
       this.battle = null;
+      this.played = null;
       this.lastPeek = Number.NEGATIVE_INFINITY;
       this.handed = false;
     }
@@ -137,12 +141,21 @@ export class Spectate {
    *  the ROM itself says it is watching (gBrSpectate), undefined where the page cannot
    *  read it or cannot believe it yet (romReplaying) -- and a ROM that refused a `bstart`
    *  (it arrived in a menu) says nothing, so the next peek asks for the fight again,
-   *  which is the one retry there is. */
+   *  which is the one retry there is.
+   *
+   *  A ROM that replayed the fight and let it go says nothing too: the replay is a turn
+   *  behind, and a faint that ends the fight ends the replay seconds before the fighters'
+   *  link winds down and says RESULT. Asked for again then, the fight came back and the
+   *  watcher saw the one it had just watched start over from the top. So a fight the ROM
+   *  was seen replaying stays `have` until its RESULT. `romHas` is read on every call, not
+   *  only when a peek is due, so a short replay is not missed between two peeks. */
   duePeek(mySeat: number, now: number, romHas?: number | null): Msg | null {
     if (this.seat === null) return null;
+    if (typeof romHas === 'number') this.played = romHas;
     if (now - this.lastPeek < PEEK_INTERVAL_MS) return null;
     this.lastPeek = now;
-    const have = this.handed || romHas === undefined ? this.battle : romHas;
+    const playedOut = romHas === null && this.battle !== null && this.played === this.battle;
+    const have = this.handed || romHas === undefined || playedOut ? this.battle : romHas;
     this.handed = false;
     const ask: PeekMsg = { t: 'peek', seat: mySeat, target: this.seat };
     if (have !== null) ask.have = have;
@@ -241,6 +254,8 @@ export class Spectate {
     }
     if (this.battle === null) return;
     const [lo, hi] = battleSeats(this.battle);
-    if (seat === lo || seat === hi) this.battle = null;
+    if (seat !== lo && seat !== hi) return;
+    this.battle = null;
+    this.played = null;
   }
 }
