@@ -10,13 +10,14 @@
 //   - A message goes into the ring whole or not yet: all its slots, only when
 //     RING_SLOTS - pending() has room for all of them.
 //   - place/step/face are where a seat is. A newer `place` for a seat says all of it, so
-//     that seat's queued place/step/face go. Past POSITIONAL_CAP, the oldest movement
-//     goes, one a later step or place of the same seat has made moot if there is one.
+//     that seat's queued place/step/face go. Past POSITIONAL_CAP, the oldest step or face
+//     a later one of the same seat has made moot goes; a moot `place` takes the step
+//     after it into itself rather than going, since only a place carries the skin.
 //   - Everything else (ring, out, challenge, result, start, bt, ...) is an event: never
 //     dropped, never reordered.
 import { MAILBOX, type Mailbox } from './mailbox';
 import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
-import type { Msg } from './wire';
+import type { Msg, PlaceMsg, StepMsg } from './wire';
 
 /** Messages that only say where a seat stands or faces. The next one for the same seat
  *  says it again, which is what makes them safe to let go. */
@@ -27,6 +28,7 @@ const POSITIONAL = new Set<string>(['place', 'step', 'face']);
 export const POSITIONAL_CAP = MAILBOX.RING_SLOTS;
 
 interface Queued {
+  msg: Msg;
   /** A place/step/face, and whose. */
   move: boolean;
   seat: number;
@@ -53,7 +55,7 @@ export class RomPort {
 
   constructor(
     readonly mailbox: Mailbox,
-    private readonly positionalCap = POSITIONAL_CAP,
+    private readonly positionalCap: number = POSITIONAL_CAP,
   ) {}
 
   get stats(): RomPortStats {
@@ -80,7 +82,7 @@ export class RomPort {
     const move = POSITIONAL.has(msg.t);
     const seat = move ? (msg as { seat: number }).seat : -1;
     if (msg.t === 'place') this.supersede(seat);
-    this.queue.push({ move, seat, slots, fix: msg.t === 'place' || msg.t === 'step' });
+    this.queue.push({ msg, move, seat, slots, fix: msg.t === 'place' || msg.t === 'step' });
     if (move && ++this.positional > this.positionalCap) this.trim();
     return true;
   }
@@ -147,23 +149,47 @@ export class RomPort {
     this.coalescedCount += gone;
   }
 
-  /** One positional message over the cap goes: the oldest that a later step or place of
-   *  the same seat has made moot (both carry where it stands), or else the oldest. */
+  /** One positional message over the cap goes. First the oldest step or face that a later
+   *  message of the same seat has made moot: a step by a later step or place, a face by any
+   *  of those or a later face. A `place` is never just dropped: it alone carries the skin,
+   *  and a ROM that has not drawn the seat yet draws it from a step as skin 0 until its
+   *  next place, which can be a map away. A moot place takes the step after it into
+   *  itself instead. With nothing moot, the oldest step or face goes. */
   private trim(): void {
     const lastFix = new Map<number, number>();
+    const lastMove = new Map<number, number>();
     this.queue.forEach((q, i) => {
+      if (!q.move) return;
+      lastMove.set(q.seat, i);
       if (q.fix) lastFix.set(q.seat, i);
     });
+    const moot = (q: Queued, i: number) => ((q.fix ? lastFix : lastMove).get(q.seat) ?? -1) > i;
     let victim = -1;
+    let place = -1;
+    let oldest = -1;
     for (let i = 0; i < this.queue.length; i++) {
       const q = this.queue[i];
       if (!q.move) continue;
-      if (victim < 0) victim = i;
-      if ((lastFix.get(q.seat) ?? -1) > i) {
+      if (q.msg.t === 'place') {
+        if (place < 0 && moot(q, i)) place = i;
+        continue;
+      }
+      if (oldest < 0) oldest = i;
+      if (moot(q, i)) {
         victim = i;
         break;
       }
     }
+    if (victim < 0 && place >= 0) {
+      // Nothing of that seat sits between its place and the step that made it moot: it
+      // would have been moot itself, and gone first.
+      victim = this.queue.findIndex((q, i) => i > place && q.fix && q.seat === this.queue[place].seat);
+      const was = this.queue[place].msg as PlaceMsg;
+      const to = this.queue[victim].msg as StepMsg;
+      const folded: PlaceMsg = { ...was, map: to.map, x: to.x, y: to.y, f: to.d };
+      this.queue[place] = { ...this.queue[place], msg: folded, slots: packSlot(folded) };
+    }
+    if (victim < 0) victim = oldest >= 0 ? oldest : this.queue.findIndex((q) => q.move);
     this.queue.splice(victim, 1);
     this.positional--;
     this.cappedCount++;

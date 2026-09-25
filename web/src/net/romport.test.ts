@@ -198,6 +198,52 @@ describe('RomPort', () => {
     }
   });
 
+  // A seat's map-entry `place` was always its oldest moot entry, so it went first, and
+  // with it the skin: a ROM that had not drawn that seat drew it from a step as skin 0.
+  it("keeps a seat's place past the cap, moved to the step that made it moot", () => {
+    const rom = fakeRom();
+    const port = new RomPort(rom.mailbox, 3);
+    rom.wedge();
+    const place: Msg = { t: 'place', v: 1, seat: 3, map: MAP, x: 4, y: 4, f: 1, st: 'alive', sprite: '7' };
+    port.push(place);
+    port.push(step(3, 5));
+    port.push(step(5, 1));
+    port.push(step(6, 1)); // over the cap
+    expect(port.stats.capped).toBe(1);
+
+    rom.unwedge();
+    port.flush();
+    rom.tick();
+    expect(rom.heard).toEqual([
+      asRomReads({ ...place, x: 5, y: 5, f: 4 } as Msg),
+      asRomReads(step(5, 1)),
+      asRomReads(step(6, 1)),
+    ]);
+  });
+
+  // A face was never moot, so a seat turning on the spot left nothing to let go, and the
+  // fallback dropped the oldest movement: another seat's only step.
+  it("lets a face go for the face after it, not another seat's only step", () => {
+    const rom = fakeRom();
+    const port = new RomPort(rom.mailbox, 4);
+    rom.wedge();
+    port.push(step(2, 9));
+    port.push(step(1, 1));
+    port.push({ t: 'face', seat: 1, f: 1, map: MAP });
+    port.push({ t: 'face', seat: 1, f: 2, map: MAP });
+    port.push({ t: 'face', seat: 1, f: 3, map: MAP }); // over the cap
+
+    rom.unwedge();
+    port.flush();
+    rom.tick();
+    expect(rom.heard.map((m) => [m.t, 'seat' in m ? m.seat : null, m.t === 'face' ? m.f : null])).toEqual([
+      ['step', 2, null],
+      ['step', 1, null],
+      ['face', 1, 2],
+      ['face', 1, 3],
+    ]);
+  });
+
   it('refuses what the ROM cannot take, and leaves the queue alone', () => {
     const port = new RomPort(fakeRom().mailbox);
     expect(port.push({ t: 'win', seat: 1 } as Msg)).toBe(false); // JSON-only
