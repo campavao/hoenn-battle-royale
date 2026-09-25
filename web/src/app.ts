@@ -2089,6 +2089,9 @@ function wireRoom(
       // So may our own `out`, and a host that never hears it waits on us for ever
       // (POK-330 #25). A second one is harmless everywhere.
       if (match.out.has(seat) && !match.ended) relay.all({ t: 'out', seat });
+      // ...and the trainers we beat while nobody could hear it, still standing on every
+      // other screen (POK-331 #4). Every page books one once, and every ROM keeps it once.
+      if (!match.ended) for (const b of session.beaten) if (b.seat === seat) relay.all(b);
     }
     setStatus(`Room ${code}`);
     renderRoom(bridge);
@@ -2128,6 +2131,7 @@ function wireRoom(
     // already takes the sprite off every map. Nothing new crosses the wire.
     const bossFell = (m: Msg) => {
       if (m.t !== 'npcout' || m.fog || !bridge) return; // the fog taking a gym is not a win
+      if (session.hasBeaten(m)) return; // said the first time; this is a blip's catch-up (POK-331 #4)
       const boss = bossAt(m.map, m.localId);
       if (!boss) return;
       const line = Ticker.felled(m.seat, bridge.roster.nameOf(m.seat), boss);
