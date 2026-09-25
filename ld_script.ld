@@ -1320,7 +1320,12 @@ SECTIONS {
     ALIGN(4)
     {
         src/*.o(.text);
-        src/br/*.o(.text); /* last, so upstream code keeps its addresses and the patch stays small */
+        src/br/*.o(.text); /* Matches nothing, and neither does src/br/*.o(.rodata) below:
+                              ld's `*` crosses `/`, so src/*.o above already took src/br/.
+                              BR code does land here, after gfx_data, but upstream code
+                              does not keep its addresses: every hook grows its own object
+                              and shifts what follows. What keeps the patch small is flips
+                              copying the moved blocks (tools/br/make-patch.sh). */
         src/*.o(.rodata);
         src/br/*.o(.rodata);
         data/*.o(.rodata);

@@ -5,6 +5,7 @@
 # these dumps and checks every active object's sprite.invisible against that rule.
 # Littleroot (8,9): the town's one outdoor NPC then stands at screen (240, 184) -- 24
 # rows below the LCD and on the band's right edge, past the LCD both ways.
+# checked-by: tools/br/objects-band.py
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 09 08 00 09 00 BD BB C7 FF
 wait 400
