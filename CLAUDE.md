@@ -15,7 +15,8 @@ judge, unset only when it needs this session's reasoning.
 ## Layout
 
 - `src/br/`, `include/br/` — our C. Every touch to an upstream file is a one-line call
-  under `#ifdef BR`. Write C89-ish: agbcc is GCC 2.95 (declarations before statements, no
+  under `#if BR` (not `#ifdef`: `make BR=0` defines it as 0; `tools/br/check-guards.py`
+  enforces it). Write C89-ish: agbcc is GCC 2.95 (declarations before statements, no
   designated initialisers, no `//` in odd places).
 - `web/` — Vite + TypeScript shell. `relay/` — Node WebSocket relay. `tools/br/` — harness,
   exporters, patch builder. `docs/` — design and handoffs. **Deploying (site, relay, tag):
@@ -57,6 +58,8 @@ ROMs, so a driver run right after a clean needs a rebuild first.
 - **Headless drivers, not hand play.** `tools/br/drive.sh <driver>` runs the ROM with no
   window from a savestate (see the Emerson harness it grew from). Every C change gets one.
   Hold a direction across frames for a step; hold A about 4 frames to advance text.
+  `tools/br/drive-all.sh <rom>` is CI's sweep; a driver with no `expect` fails unless it
+  says `# capture-only: <why>` or `# checked-by: <script>`.
 - **Kanto's rules are the spec.** `docs/DESIGN.md` §10 lists them; the Kanto repo is at
   `C:\Users\cam95\Documents\Github\gen1recomp-multiplayer\mods\battle_royale` with a
   1131-line README. When a ticket cites `lib/<file>.lua`, read that file before designing.
