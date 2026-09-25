@@ -36,6 +36,7 @@
 #include "br/br_battle.h"
 #include "br/br_spectate.h"
 #include "br/br_duel.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
 // The per-frame turn scratch, kept in EWRAM on purpose: a plain function-local static
@@ -201,48 +202,25 @@ static u16 UnpackParty(const u8 *d, u16 avail, struct Pokemon *party)
     return 1 + n;
 }
 
-#define tState data[0]
-
-// Leaving the field for a battle is the same errand whichever battle it is: fade, let
-// the fade finish, then hand the overworld's windows and tilemaps back before the battle
-// claims the heap. Task_BrStartLinkBattle does it for a fight; this does it for a watch.
-// Skipping the cleanup is what made the spectate crash the sound driver on agbcc.
-static void Task_BrStartSpectate(u8 taskId)
+// Into the replay, straight off the fade (BrField_Leave hands the overworld's windows
+// back first; skipping that is what made the spectate crash the sound driver on agbcc).
+static void EnterSpectate(void)
 {
-    struct Task *task = &gTasks[taskId];
-
-    switch (task->tState)
+    RecordedBattle_StartSpectate(sPendSeed, sPendFlags, sPendParties,
+        sPendParties + PARTY_SIZE, sPendNames, sPendGenders, CB2_BrReturnFromSpectate);
+    Free(sPendParties);
+    sPendParties = NULL;
+    if (sEarlyLen != 0)
     {
-    case 0:
-        FadeScreen(FADE_TO_BLACK, 0);
-        task->tState++;
-        break;
-    case 1:
-        if (!gPaletteFade.active)
-            task->tState++;
-        break;
-    case 2:
-        CleanupOverworldWindowsAndTilemaps();
-        RecordedBattle_StartSpectate(sPendSeed, sPendFlags, sPendParties,
-            sPendParties + PARTY_SIZE, sPendNames, sPendGenders, CB2_BrReturnFromSpectate);
-        Free(sPendParties);
-        sPendParties = NULL;
-        if (sEarlyLen != 0)
-        {
-            RecordedBattle_FeedSpectate(sEarlyTurns, sEarlyLen);
-            sEarlyLen = 0;
-        }
-        if (sEndEarly)
-        {
-            RecordedBattle_EndSpectate();
-            sEndEarly = FALSE;
-        }
-        DestroyTask(taskId);
-        break;
+        RecordedBattle_FeedSpectate(sEarlyTurns, sEarlyLen);
+        sEarlyLen = 0;
+    }
+    if (sEndEarly)
+    {
+        RecordedBattle_EndSpectate();
+        sEndEarly = FALSE;
     }
 }
-
-#undef tState
 
 // A fight worth watching landed: build the recorded battle and run it. The page decides
 // who gets this -- it only forwards a bstart to a ROM whose player chose to watch.
@@ -254,8 +232,9 @@ static void ParseBstart(const u8 *d, u16 n)
 
     if (n < BR_BSTART_PARTIES + 2)
         return;
-    // A fighter must never self-spectate, and a replay must start from the field.
-    if (gMain.inBattle || gBrNetlink.active || gBrSpectate.watching)
+    // A fighter must never self-spectate, and a replay must start from the field -- one
+    // that is not already on its way somewhere else.
+    if (gMain.inBattle || gBrNetlink.active || gBrSpectate.watching || BrField_Leaving())
         return;
     if (gMain.callback2 != CB2_Overworld)
         return;
@@ -294,7 +273,7 @@ static void ParseBstart(const u8 *d, u16 n)
     sTurnLen = 0;
     gBrSpectate.watching = TRUE;
     gBrSpectate.watchId = id;
-    CreateTask(Task_BrStartSpectate, 80);
+    BrField_Leave(0, EnterSpectate);
 }
 
 // The action bytes the fight produced since the last message. Fed straight into the
@@ -787,11 +766,6 @@ static void OpenPeek(void)
 
 // ---- follow: watching a seat walk ---------------------------------------------
 
-static bool8 FieldRunning(void)
-{
-    return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
-}
-
 static void ShowOwnTrainer(bool8 shown)
 {
     struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
@@ -808,7 +782,7 @@ static void StopFollowing(bool8 recentre)
 {
     struct ObjectEvent *self;
 
-    if (FieldRunning())
+    if (BrField_OverworldRunning())
     {
         self = &gObjectEvents[gPlayerAvatar.objectEventId];
         ShowOwnTrainer(TRUE);
@@ -861,7 +835,7 @@ static void FollowTick(void)
     // up here would cancel the watch before it began.
     if (!them->present)
         return;
-    if (!FieldRunning() || ScriptContext_IsEnabled())
+    if (!BrField_OverworldRunning() || ScriptContext_IsEnabled())
         return;
     if (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
      || gSaveBlock1Ptr->location.mapNum != them->mapNum)

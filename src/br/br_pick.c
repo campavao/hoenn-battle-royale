@@ -17,6 +17,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_match.h"
 #include "br/br_pick.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrPick gBrPick = {0};
 
@@ -104,49 +105,22 @@ void BrPick_Wait(void)
     SetMainCallback2(CB2_BrPickWait);
 }
 
-#define tState data[0]
-#define tTimer data[1]
-
-// Task_BrStartLinkBattle's shape again: fade, wait it out, hand the overworld's windows
-// back, and into the map screen.
-static void Task_BrPick(u8 taskId)
+// Into the map screen, which wants the overworld's windows and tilemaps back first.
+static void EnterPicker(void)
 {
-    struct Task *task = &gTasks[taskId];
-
-    switch (task->tState)
-    {
-    case 0:
-        FadeScreen(FADE_TO_BLACK, 0);
-        task->tState++;
-        break;
-    case 1:
-        if (!gPaletteFade.active)
-            task->tState++;
-        break;
-    case 2:
-        if (++task->tTimer > 20)
-            task->tState++;
-        break;
-    case 3:
-        CleanupOverworldWindowsAndTilemaps();
-        gMain.state = 0;
-        SetMainCallback2(CB2_OpenFlyMap);
-        DestroyTask(taskId);
-        break;
-    }
+    gMain.state = 0;
+    SetMainCallback2(CB2_OpenFlyMap);
 }
-
-#undef tState
-#undef tTimer
 
 bool8 BrPick_Start(void)
 {
     if (gBrPick.active || gMain.callback2 != CB2_Overworld || gMain.inBattle)
         return FALSE;
+    if (!BrField_Leave(20, EnterPicker))
+        return FALSE;
     gBrPick.active = TRUE;
     gBrPick.landed = FALSE;
     gBrPick.timer = BR_PICK_FRAMES;
-    CreateTask(Task_BrPick, 80);
     return TRUE;
 }
 

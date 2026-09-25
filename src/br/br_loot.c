@@ -34,6 +34,7 @@
 #include "item.h"
 #include "br/br_loot.h"
 #include "br/br_gym.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrLoot gBrLoot = {0};
 EWRAM_DATA struct BrDespawned gBrDespawned[BR_MAX_DESPAWN] = {0};
@@ -45,11 +46,6 @@ static EWRAM_DATA struct BrAssembler sSpillAsm = {0};
 // chest sit at 0x8F00 and 0x8E00 in the same space: party index 1, ids 0x700 and 0x600.
 STATIC_ASSERT(TRAINERS_COUNT <= 0x600, BrTrainerLootKeysClearOfTheZoneAndChest)
 STATIC_ASSERT((PARTY_SIZE - 1) << 11 < BR_LOOT_KEY_NOBODY, BrTrainerLootKeysFitSixteenBits)
-
-static bool8 OverworldRunning(void)
-{
-    return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
-}
 
 static bool8 OnCurrentMap(const struct BrLootItem *it)
 {
@@ -914,7 +910,7 @@ void BrLoot_Tick(void)
 {
     u8 i, count = 0, spawned = 0;
 
-    if (!OverworldRunning())
+    if (!BrField_OverworldRunning())
     {
         for (i = 0; i < BR_MAX_LOOT; i++)
             gBrLoot.items[i].objId = BR_NO_OBJ; // the object table is gone with the map

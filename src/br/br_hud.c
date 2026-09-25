@@ -15,6 +15,7 @@
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrHud gBrHud = {0};
 
@@ -60,11 +61,6 @@ static const u8 sText_Fog[] = _("FOG!");
 // How many are watching. Kanto's corner eye, on the small font's own symbol page.
 static const u8 sText_Eye[] = _("{EMOJI_LEFT_EYE}");
 // ---- windows ------------------------------------------------------------------
-
-static bool8 OverworldRunning(void)
-{
-    return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
-}
 
 // The slot still holds our window: a map load frees the buffer (tileData NULL) and
 // the next InitWindows may hand the slot to someone else (baseBlock differs).
@@ -462,7 +458,7 @@ void BrHud_Tick(void)
         h->flashFog = 0;
         h->fogFrames = BR_HUD_FOG_FRAMES;
     }
-    if (!OverworldRunning())
+    if (!BrField_OverworldRunning())
     {
         // Battle, menu or a map load: the windows must not outlive the overworld's BG0.
         Drop(&h->winCorner, &sCornerTemplate);

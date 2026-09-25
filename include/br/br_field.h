@@ -38,4 +38,19 @@ void BrField_Tick(void);
 // TRUE when a sprite whose top-left is (x, y) and right edge x2 is past the picture.
 bool8 BrField_OffScreen(s16 x, s16 x2, s16 y);
 
+// ---- leaving the field -----------------------------------------------------------
+
+// The overworld with no battle over it: where every field tick does its work.
+bool8 BrField_OverworldRunning(void);
+// Leave the field for another screen (a battle, a replay, the fly map): fade to black,
+// let the fade finish, wait `frames` more, hand the overworld's windows and tilemaps
+// back before the next screen claims the heap, then enter(), which sets callback2.
+// One at a time: FALSE, and nothing started, while another leave is still on its way
+// out -- the caller has not left and keeps whatever it would have set.
+bool8 BrField_Leave(u8 frames, void (*enter)(void));
+// A leave has started and not yet entered.
+bool8 BrField_Leaving(void);
+// The leave into enter() stops where it is, if that is the one on its way out.
+void BrField_CancelLeave(void (*enter)(void));
+
 #endif // GUARD_BR_FIELD_H

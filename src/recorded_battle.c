@@ -724,8 +724,8 @@ void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
 
     // Straight into the battle, not PlayRecordedBattle's 128-frame countdown under
     // CB2_RecordedBattle. A spectator comes from the overworld, and its caller has
-    // already torn the field down (Task_BrStartSpectate, mirroring the link battle's
-    // own start) -- leaving CB1_Overworld running over the wreckage for two seconds
+    // already torn the field down (BrField_Leave, the way out the link battle takes
+    // too) -- leaving CB1_Overworld running over the wreckage for two seconds
     // crashes the game.
     sCallback2_AfterRecordedBattle = CB2_After;
     PlayMapChosenOrBattleBGM(FALSE);

@@ -18,6 +18,7 @@
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrSeat gBrSeats[BR_MAX_SEATS] = {0};
 EWRAM_DATA u8 gBrSeatBusy[BR_MAX_SEATS] = {0};
@@ -68,11 +69,6 @@ static const u8 sSkinGraphics[] =
     OBJ_EVENT_GFX_LASS,
 };
 #define BR_SKIN_COUNT (sizeof(sSkinGraphics) / sizeof(sSkinGraphics[0]))
-
-static bool8 OverworldRunning(void)
-{
-    return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
-}
 
 static bool8 OnCurrentMap(const struct BrSeat *s)
 {
@@ -456,7 +452,7 @@ static bool8 AimAtGhost(u8 seat)
 {
     struct ObjectEvent *obj;
 
-    if (seat >= BR_MAX_SEATS || !OverworldRunning())
+    if (seat >= BR_MAX_SEATS || !BrField_OverworldRunning())
         return FALSE;
     obj = GhostObject(seat);
     if (obj == NULL || BubbleBusy())
@@ -519,7 +515,7 @@ void BrGhosts_Tick(void)
 {
     u8 seat;
 
-    if (!OverworldRunning())
+    if (!BrField_OverworldRunning())
     {
         sOwnValid = FALSE; // the next overworld frame re-places us (map load, battle end)
         return;

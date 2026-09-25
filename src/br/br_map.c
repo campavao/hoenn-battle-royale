@@ -14,6 +14,7 @@
 #include "br/br_match.h"
 #include "br/br_pick.h"
 #include "br/br_map.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrMap gBrMap = {0};
 
@@ -71,40 +72,13 @@ static u8 FlierSlot(void)
     return PARTY_SIZE;
 }
 
-#define tState data[0]
-#define tTimer data[1]
-
-// Task_BrPick's shape, and for the same reason: the fly map wants the overworld's
+// The drop picker's way in, and for the same reason: the fly map wants the overworld's
 // windows and tilemaps cleaned up before it takes the screen.
-static void Task_BrMap(u8 taskId)
+static void EnterMap(void)
 {
-    struct Task *task = &gTasks[taskId];
-
-    switch (task->tState)
-    {
-    case 0:
-        FadeScreen(FADE_TO_BLACK, 0);
-        task->tState++;
-        break;
-    case 1:
-        if (!gPaletteFade.active)
-            task->tState++;
-        break;
-    case 2:
-        if (++task->tTimer > 20)
-            task->tState++;
-        break;
-    case 3:
-        CleanupOverworldWindowsAndTilemaps();
-        gMain.state = 0;
-        SetMainCallback2(CB2_OpenFlyMap);
-        DestroyTask(taskId);
-        break;
-    }
+    gMain.state = 0;
+    SetMainCallback2(CB2_OpenFlyMap);
 }
-
-#undef tState
-#undef tTimer
 
 bool8 BrMap_Open(void)
 {
@@ -114,10 +88,11 @@ bool8 BrMap_Open(void)
         return FALSE;
     if (gMain.callback2 != CB2_Overworld || gMain.inBattle)
         return FALSE;
+    if (!BrField_Leave(20, EnterMap))
+        return FALSE;
     gBrMap.active = TRUE;
     // Worked out now rather than on the way out: the party cannot change while the
     // map is up, and the answer decides what A does in there.
     gBrMap.flier = FlierSlot();
-    CreateTask(Task_BrMap, 80);
     return TRUE;
 }

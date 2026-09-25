@@ -24,6 +24,7 @@
 #include "data.h"
 #include "constants/items.h"
 #include "br/br_duel.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrDuel gBrDuel = {0};
 // Two parties and two bags is 1222 bytes: the heap, for the few frames between the
@@ -279,46 +280,19 @@ static void CB2_BrReturnFromDuel(void)
     SetMainCallback2(CB2_ReturnToField);
 }
 
-#define tState data[0]
-#define tTimer data[1]
-
-// Task_BrStartBotFight, to the frame. The earlier attempt at this ticket wrote its own
-// entry and stalled on the intro for ever; this one deliberately has no opinions.
-static void Task_BrStartDuel(u8 taskId)
+// The bot fight's way in, to the frame. The earlier attempt at this ticket wrote its
+// own entry and stalled on the intro for ever; this one deliberately has no opinions.
+static void EnterDuel(void)
 {
-    struct Task *task = &gTasks[taskId];
-
-    switch (task->tState)
-    {
-    case 0:
-        FadeScreen(FADE_TO_BLACK, 0);
-        task->tState++;
-        break;
-    case 1:
-        if (!gPaletteFade.active)
-            task->tState++;
-        break;
-    case 2:
-        if (++task->tTimer > 20)
-            task->tState++;
-        break;
-    case 3:
-        PlayMapChosenOrBattleBGM(MUS_VS_TRAINER);
-        gBattleTypeFlags = BATTLE_TYPE_TRAINER;
-        gTrainerBattleOpponent_A = 0;
-        gTrainerBattleOpponent_B = 0;
-        CleanupOverworldWindowsAndTilemaps();
-        gBrDuel.running = TRUE;
-        gBrDuel.starting = FALSE;
-        gMain.savedCallback = CB2_BrReturnFromDuel;
-        SetMainCallback2(CB2_InitBattle);
-        DestroyTask(taskId);
-        break;
-    }
+    PlayMapChosenOrBattleBGM(MUS_VS_TRAINER);
+    gBattleTypeFlags = BATTLE_TYPE_TRAINER;
+    gTrainerBattleOpponent_A = 0;
+    gTrainerBattleOpponent_B = 0;
+    gBrDuel.running = TRUE;
+    gBrDuel.starting = FALSE;
+    gMain.savedCallback = CB2_BrReturnFromDuel;
+    SetMainCallback2(CB2_InitBattle);
 }
-
-#undef tState
-#undef tTimer
 
 void BrDuel_Init(void)
 {
@@ -336,15 +310,16 @@ void BrDuel_Tick(void)
         return;
     if (gMain.callback2 != CB2_Overworld || gMain.inBattle)
         return;
-    // Latched, because `running` is not set until the task's last state -- a fade and
-    // twenty frames later -- and this runs every frame. Without it the tick stacked a
-    // fresh Task_BrStartDuel on every one of those frames, each of which went on to
-    // re-enter CB2_InitBattle after the first one had already got there. A bot fight
-    // never had the problem because a CHALLENGE is an event; this is a poll.
+    // Latched, because `running` is not set until the leave enters -- a fade and twenty
+    // frames later -- and this runs every frame. Without it the tick stacked a fresh
+    // start on every one of those frames, each of which went on to re-enter
+    // CB2_InitBattle after the first one had already got there. A bot fight never had
+    // the problem because a CHALLENGE is an event; this is a poll.
+    if (!BrField_Leave(20, EnterDuel))
+        return;
     gBrDuel.starting = TRUE;
     // The proxy is simulating a moment in a match, and the ROM's own battle hooks ask
     // what phase it is (POK-238's first attempt ran with BR_PHASE_NONE and nothing in
     // the ROM has ever fought in that state).
     gBrMatch.phase = BR_PHASE_PLAY;
-    CreateTask(Task_BrStartDuel, 80);
 }

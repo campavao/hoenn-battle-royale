@@ -28,6 +28,7 @@
 #include "br/br_engage.h"
 #include "br/br_levels.h"
 #include "br/br_bot.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrBotFight gBrBotFight = {0};
 // A staged party is six rows, a header and the bag's tail -- 619 bytes, which EWRAM at
@@ -317,8 +318,6 @@ static void SendSpent(void)
 // happened, and a loss is an elimination like any other.
 static void CB2_BrReturnFromBotFight(void)
 {
-    u8 buf[2];
-
     Overworld_ResetMapMusic();
     gBrBotFight.fighting = FALSE;
     gBrBotFight.staged = FALSE;
@@ -327,69 +326,29 @@ static void CB2_BrReturnFromBotFight(void)
     BrSpectate_SendPartyOf(gEnemyParty, gBrBotFight.seat);
     SendSpent();
     BrEngage_OnBattleEnd(gBrBotFight.seat, gBattleOutcome);
-    buf[0] = gBrMySeat;
-    switch (gBattleOutcome)
-    {
-    case B_OUTCOME_WON: buf[1] = 0; break;
-    case B_OUTCOME_LOST: buf[1] = 1; break;
-    case B_OUTCOME_DREW: buf[1] = 2; break;
-    default: buf[1] = 3; break;
-    }
-    BrWire_Send(BR_MSG_RESULT, buf, 2);
+    BrMatch_SendResult(gBrMySeat, gBattleOutcome);
     // The bot lost: the room is told so its team hits the ground (the host spills it).
     if (gBattleOutcome == B_OUTCOME_WON)
-    {
-        buf[0] = gBrBotFight.seat;
-        buf[1] = 1;
-        BrWire_Send(BR_MSG_RESULT, buf, 2);
-    }
+        BrMatch_SendResult(gBrBotFight.seat, B_OUTCOME_LOST);
     if (gBattleOutcome == B_OUTCOME_LOST || gBattleOutcome == B_OUTCOME_DREW)
         BrMatch_WhiteOut();
     gFieldCallback = NULL;
     SetMainCallback2(CB2_ReturnToField);
 }
 
-#define tState data[0]
-#define tTimer data[1]
-
-// Task_BrStartLinkBattle's shape, minus the link: fade, wait it out, hand the
-// overworld's windows back, and into an ordinary trainer battle.
-static void Task_BrStartBotFight(u8 taskId)
+// The link battle's way in, minus the link: into an ordinary trainer battle.
+static void EnterBotFight(void)
 {
-    struct Task *task = &gTasks[taskId];
-
-    switch (task->tState)
-    {
-    case 0:
-        FadeScreen(FADE_TO_BLACK, 0);
-        task->tState++;
-        break;
-    case 1:
-        if (!gPaletteFade.active)
-            task->tState++;
-        break;
-    case 2:
-        if (++task->tTimer > 20)
-            task->tState++;
-        break;
-    case 3:
-        PlayMapChosenOrBattleBGM(MUS_VS_TRAINER);
-        gBattleTypeFlags = BATTLE_TYPE_TRAINER;
-        // TRAINER_NONE: the party is already staged, so this is only ever read for the
-        // class and the sprite. A bot's own name is a follow-up (POK-238 `trainer`).
-        gTrainerBattleOpponent_A = 0;
-        gTrainerBattleOpponent_B = 0;
-        CleanupOverworldWindowsAndTilemaps();
-        gBrBotFight.fighting = TRUE;
-        gMain.savedCallback = CB2_BrReturnFromBotFight;
-        SetMainCallback2(CB2_InitBattle);
-        DestroyTask(taskId);
-        break;
-    }
+    PlayMapChosenOrBattleBGM(MUS_VS_TRAINER);
+    gBattleTypeFlags = BATTLE_TYPE_TRAINER;
+    // TRAINER_NONE: the party is already staged, so this is only ever read for the
+    // class and the sprite. A bot's own name is a follow-up (POK-238 `trainer`).
+    gTrainerBattleOpponent_A = 0;
+    gTrainerBattleOpponent_B = 0;
+    gBrBotFight.fighting = TRUE;
+    gMain.savedCallback = CB2_BrReturnFromBotFight;
+    SetMainCallback2(CB2_InitBattle);
 }
-
-#undef tState
-#undef tTimer
 
 bool8 BrBot_StartFight(u8 seat)
 {
@@ -397,8 +356,7 @@ bool8 BrBot_StartFight(u8 seat)
         return FALSE;
     if (gMain.callback2 != CB2_Overworld || gMain.inBattle)
         return FALSE;
-    CreateTask(Task_BrStartBotFight, 80);
-    return TRUE;
+    return BrField_Leave(20, EnterBotFight);
 }
 
 void BrBot_Init(void)

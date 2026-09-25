@@ -80,6 +80,9 @@ void BrMatch_BeginSafari(void);
 // The opening is over for us: out of time, steps or balls. Empty party -> OUT,
 // else warp to our dealt spawn. Safe to call from a field step hook.
 void BrMatch_SafariOver(void);
+// RESULT for a battle `seat` was in, from the engine's B_OUTCOME_*: the one mapping
+// onto the wire's 0 win, 1 lose, 2 draw, 3 anything else (a flee, a forfeit).
+void BrMatch_SendResult(u8 seat, u8 outcome);
 // Called from CB2_WhiteOut in place of the heal-and-Centre DoWhiteOut: sends OUT and
 // marks the phase; overworld.c then re-enters the same map where they fell.
 void BrMatch_WhiteOut(void);

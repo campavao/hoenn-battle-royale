@@ -1,6 +1,11 @@
 // The picture past the LCD (POK-319). See include/br/br_field.h.
 #include "global.h"
+#include "main.h"
+#include "overworld.h"
+#include "palette.h"
+#include "task.h"
 #include "field_camera.h"
+#include "field_weather.h"
 #include "br/br_field.h"
 
 // The ring is 16x16 metatiles from gSaveBlock1Ptr->pos; CurrentMapDrawMetatileAt takes a
@@ -53,3 +58,79 @@ bool8 BrField_OffScreen(s16 x, s16 x2, s16 y)
         return TRUE;
     return FALSE;
 }
+
+// ---- leaving the field -----------------------------------------------------------
+
+bool8 BrField_OverworldRunning(void)
+{
+    return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
+}
+
+#define tState  data[0]
+#define tTimer  data[1]
+#define tFrames data[2]
+// enter() is a word in data[3] and data[4].
+#define ENTER_ARG 3
+
+// One errand, whichever screen it is for, and it used to be written six times. Its
+// order is what those copies learned: the cleanup comes after the fade and before the
+// next screen claims the heap (a replay that skipped it crashed the sound driver on
+// agbcc), and nothing may start a second leave while one is fading (the duel's poll
+// once stacked a start task a frame and entered CB2_InitBattle twice).
+static void Task_BrLeaveField(u8 taskId)
+{
+    struct Task *task = &gTasks[taskId];
+
+    switch (task->tState)
+    {
+    case 0:
+        FadeScreen(FADE_TO_BLACK, 0);
+        task->tState++;
+        break;
+    case 1:
+        // With nothing to wait out, the cleanup is the very next frame, as it always
+        // was: the frame a battle starts on moves its RNG.
+        if (!gPaletteFade.active)
+            task->tState = task->tFrames != 0 ? 2 : 3;
+        break;
+    case 2:
+        if (++task->tTimer > task->tFrames)
+            task->tState++;
+        break;
+    case 3:
+        CleanupOverworldWindowsAndTilemaps();
+        ((void (*)(void))GetWordTaskArg(taskId, ENTER_ARG))();
+        DestroyTask(taskId);
+        break;
+    }
+}
+
+bool8 BrField_Leave(u8 frames, void (*enter)(void))
+{
+    u8 taskId;
+
+    if (BrField_Leaving())
+        return FALSE;
+    taskId = CreateTask(Task_BrLeaveField, 80);
+    gTasks[taskId].tFrames = frames;
+    SetWordTaskArg(taskId, ENTER_ARG, (u32)enter);
+    return TRUE;
+}
+
+bool8 BrField_Leaving(void)
+{
+    return FuncIsActiveTask(Task_BrLeaveField);
+}
+
+void BrField_CancelLeave(void (*enter)(void))
+{
+    u8 taskId = FindTaskIdByFunc(Task_BrLeaveField);
+
+    if (taskId != TASK_NONE && GetWordTaskArg(taskId, ENTER_ARG) == (u32)enter)
+        DestroyTask(taskId);
+}
+
+#undef tState
+#undef tTimer
+#undef tFrames
+#undef ENTER_ARG

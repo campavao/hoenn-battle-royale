@@ -20,13 +20,9 @@
 #include "br/br_netlink.h"
 #include "br/br_bot.h"
 #include "br/br_duel.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrRing gBrRing = {0};
-
-static bool8 OverworldRunning(void)
-{
-    return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
-}
 
 // Does the fog reach into this battle (POK-262)? Kanto's rule, v0.3.1: a wild or route
 // fight fought outside the ring drains you, and a fight between contestants does not.
@@ -185,7 +181,7 @@ void BrRing_Tick(void)
     // so a battle it reaches takes the damage and nothing else.
     if (!gBrRing.active)
         return;
-    if (!OverworldRunning())
+    if (!BrField_OverworldRunning())
     {
         if (!FogReachesThisBattle())
             return;

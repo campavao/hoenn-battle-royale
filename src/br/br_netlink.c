@@ -32,6 +32,7 @@
 #include "br/br_battle.h"
 #include "br/br_bot.h"
 #include "br/br_netlink.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrNetlink gBrNetlink = {0};
 // BT payload: seat, seq u16, len u16, then up to BLOCK_BUFFER_SIZE bytes.
@@ -312,21 +313,11 @@ static void Close(void)
 // out, a lost fight is an elimination, then the field.
 static void CB2_BrReturnFromBattle(void)
 {
-    u8 buf[2];
-
     gBattleTypeFlags &= ~BATTLE_TYPE_LINK_IN_BATTLE;
     Overworld_ResetMapMusic();
     gBrNetlink.lastOutcome = gBattleOutcome;
     BrEngage_OnBattleEnd(gBrNetlink.peerSeat, gBattleOutcome);
-    buf[0] = gBrMySeat;
-    switch (gBattleOutcome)
-    {
-    case B_OUTCOME_WON: buf[1] = 0; break;
-    case B_OUTCOME_LOST: buf[1] = 1; break;
-    case B_OUTCOME_DREW: buf[1] = 2; break;
-    default: buf[1] = 3; break;
-    }
-    BrWire_Send(BR_MSG_RESULT, buf, 2);
+    BrMatch_SendResult(gBrMySeat, gBattleOutcome);
     Close();
     if (gBattleOutcome == B_OUTCOME_LOST || gBattleOutcome == B_OUTCOME_DREW)
         BrMatch_WhiteOut();
@@ -349,7 +340,18 @@ static void StartExclamation(void)
     FieldEffectStart(FLDEFF_EXCLAMATION_MARK_ICON);
 }
 
-// The cable club's Task_StartWiredCableClubBattle, minus the cable, plus the bubble.
+static void EnterLinkBattle(void)
+{
+    PlayMapChosenOrBattleBGM(MUS_VS_TRAINER);
+    gBattleTypeFlags = BATTLE_TYPE_LINK | BATTLE_TYPE_TRAINER;
+    gTrainerBattleOpponent_A = TRAINER_LINK_OPPONENT;
+    SetMainCallback2(CB2_InitBattle);
+    gMain.savedCallback = CB2_BrReturnFromBattle;
+    gBrNetlink.startState = 0;
+}
+
+// The cable club's Task_StartWiredCableClubBattle, minus the cable, plus the bubble;
+// then the field's own way out (BrField_Leave), once nothing else is leaving it.
 static void Task_BrStartLinkBattle(u8 taskId)
 {
     struct Task *task = &gTasks[taskId];
@@ -371,26 +373,8 @@ static void Task_BrStartLinkBattle(u8 taskId)
         }
         break;
     case 2:
-        FadeScreen(FADE_TO_BLACK, 0);
-        task->tState++;
-        break;
-    case 3:
-        if (!gPaletteFade.active)
-            task->tState++;
-        break;
-    case 4:
-        if (++task->tTimer > 20)
-            task->tState++;
-        break;
-    case 5:
-        PlayMapChosenOrBattleBGM(MUS_VS_TRAINER);
-        gBattleTypeFlags = BATTLE_TYPE_LINK | BATTLE_TYPE_TRAINER;
-        CleanupOverworldWindowsAndTilemaps();
-        gTrainerBattleOpponent_A = TRAINER_LINK_OPPONENT;
-        SetMainCallback2(CB2_InitBattle);
-        gMain.savedCallback = CB2_BrReturnFromBattle;
-        gBrNetlink.startState = 0;
-        DestroyTask(taskId);
+        if (BrField_Leave(20, EnterLinkBattle))
+            DestroyTask(taskId);
         break;
     }
 }
@@ -467,9 +451,13 @@ static void Abandon(void)
             gMain.callback1 = CB1_Overworld;
         return;
     }
-    // Still in the start task: no battle to tear down, just the session to close.
-    if (gBrNetlink.startState != 0 && FuncIsActiveTask(Task_BrStartLinkBattle))
-        DestroyTask(FindTaskIdByFunc(Task_BrStartLinkBattle));
+    // Still on the way in: no battle to tear down, just the session to close.
+    if (gBrNetlink.startState != 0)
+    {
+        if (FuncIsActiveTask(Task_BrStartLinkBattle))
+            DestroyTask(FindTaskIdByFunc(Task_BrStartLinkBattle));
+        BrField_CancelLeave(EnterLinkBattle);
+    }
     gBrNetlink.startState = 0;
     Close();
     UnlockPlayerFieldControls();

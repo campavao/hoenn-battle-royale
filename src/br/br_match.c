@@ -25,6 +25,7 @@
 #include "br/br_spectate.h"
 #include "br/br_hud.h"
 #include "br/br_netlink.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrMatch gBrMatch = {0};
 // START can span slots once there are more than six spawn rows. The buffer is on the
@@ -36,11 +37,6 @@ static EWRAM_DATA struct BrAssembler sStartAsm = {0};
 // START arrived while we were still standing on a map. The warp it asks for cannot be
 // done from inside the mailbox pump, so the tick does it on the next quiet frame.
 static EWRAM_DATA u8 sStartPending = 0;
-
-static bool8 OverworldRunning(void)
-{
-    return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
-}
 
 static void ParseStart(const u8 *d, u16 n)
 {
@@ -168,6 +164,21 @@ static void HandleResult(const u8 *payload, u8 len)
     BrSpectate_OnResult(d[0]);
     if (d[0] == gBrMySeat && d[1] == 0 && gBrMatch.phase != BR_PHASE_OUT)
         sWinPending = TRUE;
+}
+
+void BrMatch_SendResult(u8 seat, u8 outcome)
+{
+    u8 buf[2];
+
+    buf[0] = seat;
+    switch (outcome)
+    {
+    case B_OUTCOME_WON: buf[1] = 0; break;
+    case B_OUTCOME_LOST: buf[1] = 1; break;
+    case B_OUTCOME_DREW: buf[1] = 2; break;
+    default: buf[1] = 3; break;
+    }
+    BrWire_Send(BR_MSG_RESULT, buf, 2);
 }
 
 // OUT {seat}: somebody is out of the match -- beaten, fogged, or gone from the room (the
@@ -408,7 +419,7 @@ bool8 BrMatch_BuzzerClosing(void)
 
 void BrMatch_Tick(void)
 {
-    if (sWinPending && OverworldRunning() && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked())
+    if (sWinPending && BrField_OverworldRunning() && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked())
     {
         // The winner's parade: Emerald's own Hall of Fame, no save, no credits.
         sWinPending = FALSE;
@@ -421,7 +432,7 @@ void BrMatch_Tick(void)
         SetMainCallback2(CB2_DoHallOfFameScreenDontSaveData);
         return;
     }
-    if (sStartPending && OverworldRunning() && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked())
+    if (sStartPending && BrField_OverworldRunning() && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked())
     {
         sStartPending = FALSE;
         if (gBrMatch.safariSecs > 0)
@@ -461,7 +472,7 @@ void BrMatch_Tick(void)
     BrZone_Ensure();
     // And the balls it dealt go on the ground, once (POK-261).
     BrZone_PlaceItems();
-    if (!OverworldRunning())
+    if (!BrField_OverworldRunning())
         return;
     // The fog is up: the opening is over whatever our own clock says. It has to be
     // this way round, because the CLOCK the page sends during the ring phases is the
