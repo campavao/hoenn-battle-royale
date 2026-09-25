@@ -153,7 +153,12 @@ export type WebSocketFactory = (url: string) => WebSocketLike;
 const WS_CONNECTING = 0;
 const WS_OPEN = 1;
 
-const PING_EVERY_MS = 20_000;
+// A half-open socket -- a phone that changed networks -- stays OPEN while everything
+// sent on it vanishes, and nothing said so until the relay's 60 s seat hold had run
+// out (POK-330 #36). So the pings are listened for: two in a row with nothing back,
+// and the socket is called dead and reconnected, 20-30 s in, inside the hold.
+const PING_EVERY_MS = 10_000;
+const MISSED_PINGS = 2;
 const BACKOFF_START_MS = 500;
 const BACKOFF_MAX_MS = 15_000;
 
@@ -206,6 +211,11 @@ export class RelayClient {
   private everOpened = false;
   private backoff = BACKOFF_START_MS;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  /** When anything last arrived on the socket, when our last ping went out, and how
+   *  many pings in a row have gone out with nothing arriving after them. */
+  private lastRx = 0;
+  private lastPingAt = 0;
+  private unanswered = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   // Keyed by event name, but kept as `unknown` internally: a mapped type indexed by
   // a generic K does not let TS see that on()'s own K ties the map's value back to
@@ -289,6 +299,7 @@ export class RelayClient {
   }
 
   private handleMessage(data: string): void {
+    this.lastRx = Date.now(); // any frame at all says the socket is alive
     let msg: Record<string, unknown>;
     try {
       const parsed = JSON.parse(data);
@@ -407,7 +418,28 @@ export class RelayClient {
 
   private startPing(): void {
     this.stopPing();
-    this.pingTimer = setInterval(() => this.send({ type: 'ping', t: Date.now() }), PING_EVERY_MS);
+    this.lastRx = Date.now();
+    this.lastPingAt = 0;
+    this.unanswered = 0;
+    this.pingTimer = setInterval(() => this.pingTick(), PING_EVERY_MS);
+  }
+
+  private pingTick(): void {
+    // Counted per ping, not by the clock: a background tab whose timers run once a
+    // minute gets its pong a moment after each ping, and is not called dead for the
+    // minute its own timer slept through.
+    if (this.lastPingAt !== 0 && this.lastRx < this.lastPingAt) this.unanswered += 1;
+    else this.unanswered = 0;
+    if (this.unanswered >= MISSED_PINGS) {
+      const ws = this.ws;
+      // handleClose lets go of the socket first, so its own onclose -- which a
+      // half-open socket may not fire for minutes -- cannot close us a second time
+      this.handleClose('stale');
+      ws?.close();
+      return;
+    }
+    this.lastPingAt = Date.now();
+    this.send({ type: 'ping', t: this.lastPingAt });
   }
 
   private stopPing(): void {

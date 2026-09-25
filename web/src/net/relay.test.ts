@@ -175,16 +175,51 @@ describe('RelayClient', () => {
     ]);
   });
 
-  it('pings every 20s while connected', () => {
+  it('pings every 10s while connected', () => {
     const { factory, sockets } = makeFactory();
     const relay = new RelayClient(factory);
     relay.connect('ws://relay.test');
     sockets[0].open();
 
-    vi.advanceTimersByTime(20_000);
+    vi.advanceTimersByTime(10_000);
     expect(sockets[0].sent).toEqual([{ type: 'ping', t: expect.any(Number) }]);
-    vi.advanceTimersByTime(20_000);
+    vi.advanceTimersByTime(10_000);
     expect(sockets[0].sent).toHaveLength(2);
+  });
+
+  it('calls a socket that answers nothing dead, and reconnects inside the seat hold (POK-330 #36)', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    const closed = vi.fn();
+    relay.on('closed', closed);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+
+    // half-open: still OPEN, every ping goes out, nothing ever comes back
+    vi.advanceTimersByTime(20_000);
+    expect(sockets[0].closed).toBe(false); // one unanswered ping is not a verdict
+    vi.advanceTimersByTime(10_000);
+    expect(sockets[0].closed).toBe(true);
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(closed).toHaveBeenCalledWith({ reason: 'stale' });
+    // ...and the backoff brings a new socket up well inside the relay's 60 s hold
+    vi.advanceTimersByTime(500);
+    expect(sockets).toHaveLength(2);
+  });
+
+  it('keeps a socket that answers, whatever the answer is', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+
+    for (let i = 0; i < 12; i++) {
+      vi.advanceTimersByTime(10_000);
+      // a pong, or any other traffic: both say the socket is alive
+      sockets[0].receive(i % 2 === 0 ? { type: 'pong' } : { type: 'roster', code: 'A', host: 1, open: true, max: 8, pass: false, members: [] });
+    }
+    expect(sockets[0].closed).toBe(false);
+    expect(sockets).toHaveLength(1);
   });
 
   it('reconnects with backoff after an unexpected close, and stops pinging meanwhile', () => {
