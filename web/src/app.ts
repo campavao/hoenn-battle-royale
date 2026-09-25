@@ -1551,6 +1551,14 @@ function renderSpectate(bridge: Bridge, spectate: Spectate): void {
   }
 }
 
+/** The battle id our ROM is replaying, from gBrSpectate (include/br/br_spectate.h:
+ *  `watching` at +5, `watchId` at +6), null when it is not replaying anything, and
+ *  undefined without the symbol to read it by. */
+function romWatching(emu: Emulator, base: number | undefined): number | null | undefined {
+  if (base === undefined) return undefined;
+  return emu.read(base + 5, 8) !== 0 ? emu.read(base + 6, 16) : null;
+}
+
 /** The spectator's own pump: re-ask the trainer we watch what they carry (the ask is
  *  also what tells them they are being watched), and mirror how many are watching US
  *  into the corner eye. Returns a disposer. */
@@ -1559,10 +1567,11 @@ function startSpectateLoop(
   hudBase: number | undefined,
   bridge: Bridge,
   spectate: Spectate,
+  spectateBase?: number,
 ): () => void {
   const id = setInterval(() => {
     const now = performance.now();
-    const ask = spectate.duePeek(bridge.seat, now);
+    const ask = spectate.duePeek(bridge.seat, now, romWatching(emu, spectateBase));
     if (ask) bridge.relay.all(ask);
     // Bots join by walking, not by joining: their seats appear in the roster from a
     // `place`, and there is no relay event to redraw the list on.
@@ -2760,9 +2769,10 @@ function wireRoom(
       if (bots) routeToBots(bots.bots, m, from);
       if (m.t === 'peek' && m.target === seat) {
         spectate.notePeek(m.seat, performance.now());
-        // Their ROM answers the party; the fight so far is ours to hand over, since
-        // the relay never delivered our bstart to somebody who was not in the room.
-        for (const part of spectate.streamFor(seat)) bridge!.relay.to(m.seat, part);
+        // Their ROM answers the party; the fight so far is ours to hand over, since the
+        // relay never delivered our bstart to somebody who was not in the room -- unless
+        // their ROM is replaying it already (POK-330 #10).
+        for (const part of spectate.streamFor(seat, m.have)) bridge!.relay.to(m.seat, part);
       }
       else if (m.t === 'peek') {
         // A bot has no ROM to answer for it, so the host that walks it does.
@@ -2793,7 +2803,7 @@ function wireRoom(
       }
     }
     stopSpectateLoop?.();
-    stopSpectateLoop = startSpectateLoop(emu, symbols?.get('gBrHud'), bridge, spectate);
+    stopSpectateLoop = startSpectateLoop(emu, symbols?.get('gBrHud'), bridge, spectate, symbols?.get('gBrSpectate'));
     // A second's cadence, like the director's own loop. It stands down the moment this
     // client becomes the one running the match, which draws the real one.
     stopGuestStrip?.();

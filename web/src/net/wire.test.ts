@@ -50,6 +50,7 @@ const SAMPLES: Msg[] = [
   { t: 'busy', seat: 1, kind: 'menu' },
   { t: 'busy', seat: 1 },
   { t: 'peek', seat: 1, target: 2 },
+  { t: 'peek', seat: 1, target: 2, have: 2 | (5 << 8) },
   { t: 'botout', seat: 1, target: 30 },
   { t: 'botrec', seat: 30, mons: [{ species: 1, hpFrac: 0.5 }], bag: { items: [], money: 0 } },
   { t: 'ticker', seat: 1, kind: 'kill', text: 'ASH knocked out MISTY!' },
