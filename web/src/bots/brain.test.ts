@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Bots, health, STEP_MS, type BotsOptions, type PlayerView } from './brain';
+import { Bots, health, STEP_MS, type BotsOptions, type Decision, type PlayerView } from './brain';
 import { dealBots, Grade, MAX_SEATS } from './roster';
 import { dealParty, grownUp, rungForPhase } from './party';
 import { World, type Spot, type WorldMap } from './world';
@@ -267,6 +267,71 @@ describe('a bot with nowhere it can route to', () => {
     // Stuck, but never a step further from the ring than it started.
     expect([...maps]).toEqual(['MID']);
     expect(world.hops(bots.spotOf(bot.seat)!.map, 'IN')).toBe(1);
+  });
+});
+
+// POK-330 #49 review: the route to the next map ended ON this map, at the cells that
+// step across. A door tile is never one a route can end on -- stepping onto it lands on
+// the other side -- so a hop only a door led to was never found, and a bot already on a
+// seam's edge was "there", with nowhere to walk and no step over.
+describe('a bot heading for another map', () => {
+  // TOWN is a big open field whose only way out is a door in its far corner, into a
+  // CAVE whose east edge is GOAL, the one map anybody lands on. From TOWN's other corner
+  // the door is 78 steps and near 1,600 settled cells away: past a wander pick's budget,
+  // inside a hop's.
+  const TOWN: WorldMap = {
+    id: 'TOWN', group: 0, num: 7, w: 40, h: 40, section: 'S', outdoor: true, grid: '1600x0', seams: [],
+    warps: [{ x: 39, y: 39, to: 'CAVE', toX: 0, toY: 1, kind: 'door' }],
+  };
+  const CAVE: WorldMap = {
+    id: 'CAVE', group: 0, num: 8, w: 3, h: 3, section: 'S', outdoor: false, grid: '9x0',
+    seams: [{ dir: 'east', to: 'GOAL', offset: 0 }],
+    warps: [{ x: 0, y: 1, to: 'TOWN', toX: 39, toY: 39, kind: 'door' }],
+  };
+  const GOAL: WorldMap = {
+    id: 'GOAL', group: 0, num: 9, w: 3, h: 3, section: 'S', outdoor: true, grid: '9x0',
+    seams: [{ dir: 'west', to: 'CAVE', offset: 0 }],
+  };
+  const NUM: Record<string, number> = { TOWN: 7, CAVE: 8, GOAL: 9 };
+
+  function head(from: Spot, seconds: number) {
+    const sent: Msg[] = [];
+    const decisions: Decision[] = [];
+    const bots = new Bots({
+      world: new World([TOWN, CAVE, GOAL]),
+      targets: [0, 1, 2].flatMap((y) => [0, 1, 2].map((x) => ({ mapId: 'GOAL', x, y }))),
+      mapRef: (id) => ({ group: 0, num: NUM[id] }),
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      onDecision: (d) => void decisions.push(d),
+    });
+    const [bot] = dealBots(1, 1, [], [{ mapId: from.map, map: { group: 0, num: NUM[from.map] }, x: from.x, y: from.y }]);
+    bots.start([bot], 0);
+    for (let t = STEP_MS; t <= seconds * 1000; t += STEP_MS) bots.tick(t);
+    return { bots, sent, decisions, seat: bot.seat };
+  }
+
+  it('walks through a door when a door is the only way to the next map', () => {
+    const { bots, decisions, seat } = head({ map: 'TOWN', x: 0, y: 0 }, 40);
+    // It used to be stuck: the route to the door found nothing, and so did every pick.
+    expect(decisions[0]).toMatchObject({ rule: 'wander', detail: '-> CAVE (for GOAL)' });
+    expect(bots.spotOf(seat)?.map).toBe('GOAL');
+  });
+
+  it('takes the step over when it is already standing on the edge', () => {
+    const { sent, decisions } = head({ map: 'CAVE', x: 2, y: 1 }, 1);
+    expect(decisions[0]).toMatchObject({ rule: 'wander', detail: '-> GOAL (for GOAL)' });
+    // The first move after the one that put it down is the crossing.
+    const moves = sent.filter((m) => m.t === 'place' || m.t === 'step');
+    expect(moves[1]).toMatchObject({ t: 'place', map: { num: 9 }, x: 0, y: 1 });
+  });
+
+  it('walks the map it is on when there is somewhere on it to go, not to the next and back', () => {
+    // FIELD and PATH both have targets. A route that crosses, asked before this map's own
+    // pick, took a bot over the seam and straight back again every couple of steps.
+    const { sent } = run(1, 60);
+    const crossings = sent.filter((m) => m.t === 'place').length - 1; // the first put it down
+    expect(crossings).toBeLessThan(4);
   });
 });
 
