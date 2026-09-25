@@ -1,0 +1,103 @@
+# gym-purse-juan: the longest purse line still ends in its "!" (POK-330 #55).
+#
+# BrGym_Beaten builds "TOOK <prize>\nAND 1000 IN PRIZE MONEY!" on the stack in a
+# 42-byte line. JUAN's WATER PULSE made it 41 characters and an EOS -- the line exactly
+# full, one letter from writing past it -- and the box keeps 40, so his "!" was cut. The
+# purse text is shorter now, and the line is built with BrHud_Append, which stops at
+# the buffer's end whatever the table hands it.
+#
+# JUAN stands at (8,2) in Sootopolis Gym (15:0) facing down; the boot names (8,4), and
+# one step up is in front of him. gym-boss.txt's shape, for ROXANNE.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 0F 00 08 00 04 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 15
+expect u8 *gSaveBlock1Ptr+5 0
+poke u8 gBrMatch 2
+hold UP 20
+wait 30
+tap A
+wait 30
+tap A
+wait 200
+shot one-page
+# his first page scrolls once (a \l) before it ends, and the next press opens the fight
+tap A
+wait 60
+tap A
+wait 500
+shot fight
+expect u32 gBattleTypeFlags 0xC
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+shot won
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+shot purse
+# "TOOK WATER PULSE" / "AND 1000 PRIZE MONEY!": 38 characters, the newline at 16 and
+# the "!" last, then the EOS
+expect u8 gBrHud+0x14D 38
+expect u8 gBrHud+0x14E 0xCE
+expect u8 gBrHud+0x153 0xD1
+expect u8 gBrHud+0x15E 0xFE
+expect u8 gBrHud+0x173 0xAB
+expect u8 gBrHud+0x174 0xFF
+say gym purse juan ok

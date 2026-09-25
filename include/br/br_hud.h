@@ -122,5 +122,10 @@ void BrHud_Release(void);
 // The bottom box: a two-line message over the field for 90 frames, above the ticker
 // and out of the way of both it and the corner. CHAR_NEWLINE splits the two lines.
 void BrHud_Box(const u8 *text);
+// StringCopy for a line built on the stack from names out of a table: copies src up to
+// its EOS or to `last`, the buffer's last byte, and ends it there either way. Returns the
+// EOS, as StringCopy does. A name one letter longer than the table has today would
+// otherwise write past the line (POK-330 #55).
+u8 *BrHud_Append(u8 *dst, const u8 *last, const u8 *src);
 
 #endif // GUARD_BR_HUD_H

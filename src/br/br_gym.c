@@ -37,7 +37,9 @@ static const struct BrBoss sBosses[] =
 extern const u8 BR_EventScript_BossBeaten[];
 
 static const u8 sText_Took[] = _("TOOK ");
-static const u8 sText_AndPurse[] = _("\nAND 1000 IN PRIZE MONEY!");
+// 21 after the newline, so the longest prize name (a TM's move, up to 12) still leaves the
+// "!" inside the box's 40. "AND 1000 IN PRIZE MONEY!" lost it to WATER PULSE (POK-330 #55).
+static const u8 sText_AndPurse[] = _("\nAND 1000 PRIZE MONEY!");
 
 static const struct BrBoss *Find(u16 trainerId)
 {
@@ -79,17 +81,18 @@ void BrGym_Beaten(u16 trainerId)
 {
     const struct BrBoss *boss = Find(trainerId);
     u8 line[BR_HUD_LINE_MAX + 2];
+    const u8 *last = line + ARRAY_COUNT(line) - 1;
     u8 *p;
 
     if (boss == NULL)
         return;
     AddBagItem(boss->prize, 1);
     AddMoney(&gSaveBlock1Ptr->money, BR_GYM_PURSE);
-    // "TOOK ROCK TOMB" / "AND 1000 IN PRIZE MONEY!" No yen sign: FONT_SMALL has no glyph
+    // "TOOK ROCK TOMB" / "AND 1000 PRIZE MONEY!" No yen sign: FONT_SMALL has no glyph
     // for it and prints a hash.
-    p = StringCopy(line, sText_Took);
-    p = StringCopy(p, GetItemName(boss->prize));
-    StringCopy(p, sText_AndPurse);
+    p = BrHud_Append(line, last, sText_Took);
+    p = BrHud_Append(p, last, GetItemName(boss->prize));
+    BrHud_Append(p, last, sText_AndPurse);
     PlaySE(SE_PIN);
     BrHud_Box(line);
 }

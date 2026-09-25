@@ -419,6 +419,14 @@ void BrHud_Box(const u8 *text)
     h->dirty |= BR_HUD_DIRTY_BOX;
 }
 
+u8 *BrHud_Append(u8 *dst, const u8 *last, const u8 *src)
+{
+    while (dst < last && *src != EOS)
+        *dst++ = *src++;
+    *dst = EOS;
+    return dst;
+}
+
 void BrHud_Say(const u8 *text)
 {
     u16 len = StringLength(text);

@@ -53,8 +53,6 @@ bool8 BrGhosts_Emote(u8 seat);
 bool8 BrGhosts_Fled(u8 seat);
 // Called every frame from BrFrame; only acts while the overworld is running.
 void BrGhosts_Tick(void);
-// The seat whose ghost is the given object event, or BR_NO_OBJ.
-u8 BrGhosts_SeatOfObject(u8 objId);
 
 // Own movement, reported by the same tick: the page forwards these to the relay.
 // Each callback fires at most once per frame.

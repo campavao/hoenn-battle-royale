@@ -1,0 +1,37 @@
+# loot-full-pocket: an item ball taken into a full pocket stays on the ground (POK-330 #55).
+#
+# Take() sent the pickup -- the ball gone from every ROM's ground -- and then called
+# AddBagItem, whose FALSE for a full pocket nobody read: the ball was thrown away for the
+# whole room, and the NO ROOM FOR IT line written for exactly this was never said. Now the
+# pocket is asked first; a full one leaves the ball where it lies.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the ITEMS pocket, all thirty slots: POTION..BLACK FLUTE (13..42), one of each
+pokebytes *gSaveBlock1Ptr+0x560 0D 00 01 00 0E 00 01 00 0F 00 01 00 10 00 01 00 11 00 01 00 12 00 01 00 13 00 01 00 14 00 01 00 15 00 01 00 16 00 01 00 17 00 01 00 18 00 01 00 19 00 01 00 1A 00 01 00 1B 00 01 00 1C 00 01 00 1D 00 01 00 1E 00 01 00 1F 00 01 00 20 00 01 00 21 00 01 00 22 00 01 00 23 00 01 00 24 00 01 00 25 00 01 00 26 00 01 00 27 00 01 00 28 00 01 00 29 00 01 00 2A 00 01 00
+# a NUGGET (110) ball beside us at (13,16), keyed the way the Zone deals one
+pokebytes gBrLoot 00 8F 0D 00 10 00 6E 00 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 30
+tap RIGHT
+wait 20
+tap A
+wait 30
+shot no-room
+# still on the ground, no pickup went out, and the box says why: "NO ROOM FOR IT"
+expect u8 gBrLoot+11 3
+expect u16 gBrLoot 0x8F00
+expect u8 gBrLoot+0xA2 0
+expect u8 gBrHud+0x14D 14
+expect u8 gBrHud+0x14E 0xC8
+expect u16 *gSaveBlock1Ptr+0x5D4 42
+# room in the last slot, and the same press takes it: "FOUND NUGGET!"
+poke u16 *gSaveBlock1Ptr+0x5D4 0
+wait 100
+tap A
+wait 30
+shot found
+expect u8 gBrLoot+11 0
+expect u8 gBrLoot+0xA2 1
+expect u16 *gSaveBlock1Ptr+0x5D4 110
+expect u8 gBrHud+0x14E 0xC0
+say loot full pocket ok

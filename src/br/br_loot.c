@@ -468,6 +468,7 @@ static void DropHeldLine(void);
 static void Take(struct BrLootItem *it)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
+    const u8 *last = line + ARRAY_COUNT(line) - 1;
     struct Pokemon mon;
     u16 species;
     u8 *p;
@@ -487,14 +488,23 @@ static void Take(struct BrLootItem *it)
     }
     if (it->kind == BR_LOOT_ITEM)
     {
-        // A dealt item ball (POK-261). One press, like everything else on the ground.
-        p = StringCopy(line, sText_Found);
-        p = StringCopy(p, GetItemName(it->species));
-        StringCopy(p, sText_Bang);
+        // A dealt item ball (POK-261). One press, like everything else on the ground --
+        // unless its pocket is full, and then it stays where it lies for somebody with
+        // room. The pickup used to go out first and AddBagItem's FALSE was never read, so
+        // a full pocket threw the ball away for the whole room (POK-330 #55).
+        if (!CheckBagHasSpace(it->species, 1))
+        {
+            PlaySE(SE_FAILURE);
+            BrHud_Box(sText_NoRoom);
+            return;
+        }
+        AddBagItem(it->species, 1);
+        p = BrHud_Append(line, last, sText_Found);
+        p = BrHud_Append(p, last, GetItemName(it->species));
+        BrHud_Append(p, last, sText_Bang);
         PlaySE(SE_PIN);
         BrHud_Box(line);
         SendPickup(it);
-        AddBagItem(it->species, 1);
         return;
     }
     // A ball: the mon inside goes to the party, evolving on the way if it just changed
@@ -506,9 +516,9 @@ static void Take(struct BrLootItem *it)
     // the rung: the DAY CARE's chest (POK-306) has been on that floor since the drop.
     CreateMon(&mon, species, it->level != 0 ? it->level : BrLevels_WildLevel(),
               USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
-    p = StringCopy(line, sText_Took);
-    p = StringCopy(p, gSpeciesNames[species]);
-    StringCopy(p, sText_Bang);
+    p = BrHud_Append(line, last, sText_Took);
+    p = BrHud_Append(p, last, gSpeciesNames[species]);
+    BrHud_Append(p, last, sText_Bang);
     PlaySE(SE_PIN);
     BrHud_Box(line);
     // The ball stays on the ground until the mon inside is really kept. Parking it and

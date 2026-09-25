@@ -340,16 +340,6 @@ void BrGhosts_Remove(u8 seat)
     gBrSeats[seat].present = FALSE;
 }
 
-u8 BrGhosts_SeatOfObject(u8 objId)
-{
-    u8 i;
-
-    for (i = 0; i < BR_MAX_SEATS; i++)
-        if (gBrSeats[i].objId == objId && GhostObject(i) != NULL)
-            return i;
-    return BR_NO_OBJ;
-}
-
 // Feed one queued walk to the object, or snap it when it fell too far behind.
 static void DriveGhost(u8 seat)
 {
