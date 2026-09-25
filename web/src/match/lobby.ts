@@ -136,7 +136,9 @@ export function roomRows(rooms: RoomListing[]): LobbyRow[] {
         action: { kind: 'daily' },
       };
     }
-    const full = room.players >= room.seats;
+    // The relay's answer when it gives one: it runs the door, which counts watchers
+    // and ids as well, so trainers over seats called a shut door open (POK-330 #29).
+    const full = room.full ?? room.players >= room.seats;
     const bits: string[] = [];
     // The host's own sprite (Kanto's `browse.lua` draws its walk frame beside the
     // name; a plain-TS row says the same thing in words). `skin` is the numeric

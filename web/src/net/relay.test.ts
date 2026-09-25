@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import serverSource from '../../../relay/server.js?raw';
 import { RelayClient, type WebSocketLike } from './relay';
+import { MAX_SEAT } from './wire';
 
 /** A fake WebSocket: no network, driven by hand. `sent` records every frame the
  *  client sent, parsed back to objects so assertions read like the wire protocol. */
@@ -173,16 +175,51 @@ describe('RelayClient', () => {
     ]);
   });
 
-  it('pings every 20s while connected', () => {
+  it('pings every 10s while connected', () => {
     const { factory, sockets } = makeFactory();
     const relay = new RelayClient(factory);
     relay.connect('ws://relay.test');
     sockets[0].open();
 
-    vi.advanceTimersByTime(20_000);
+    vi.advanceTimersByTime(10_000);
     expect(sockets[0].sent).toEqual([{ type: 'ping', t: expect.any(Number) }]);
-    vi.advanceTimersByTime(20_000);
+    vi.advanceTimersByTime(10_000);
     expect(sockets[0].sent).toHaveLength(2);
+  });
+
+  it('calls a socket that answers nothing dead, and reconnects inside the seat hold (POK-330 #36)', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    const closed = vi.fn();
+    relay.on('closed', closed);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+
+    // half-open: still OPEN, every ping goes out, nothing ever comes back
+    vi.advanceTimersByTime(20_000);
+    expect(sockets[0].closed).toBe(false); // one unanswered ping is not a verdict
+    vi.advanceTimersByTime(10_000);
+    expect(sockets[0].closed).toBe(true);
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(closed).toHaveBeenCalledWith({ reason: 'stale' });
+    // ...and the backoff brings a new socket up well inside the relay's 60 s hold
+    vi.advanceTimersByTime(500);
+    expect(sockets).toHaveLength(2);
+  });
+
+  it('keeps a socket that answers, whatever the answer is', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+
+    for (let i = 0; i < 12; i++) {
+      vi.advanceTimersByTime(10_000);
+      // a pong, or any other traffic: both say the socket is alive
+      sockets[0].receive(i % 2 === 0 ? { type: 'pong' } : { type: 'roster', code: 'A', host: 1, open: true, max: 8, pass: false, members: [] });
+    }
+    expect(sockets[0].closed).toBe(false);
+    expect(sockets).toHaveLength(1);
   });
 
   it('reconnects with backoff after an unexpected close, and stops pinging meanwhile', () => {
@@ -234,6 +271,60 @@ describe('RelayClient', () => {
     relay.close();
     vi.advanceTimersByTime(60_000);
     expect(sockets).toHaveLength(1);
+  });
+
+  it('refuses a seat past MAX_SEAT: gives it back and says the room is full (POK-330 #6)', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    const joined = vi.fn();
+    const error = vi.fn();
+    relay.on('room_joined', joined);
+    relay.on('room_error', error);
+
+    relay.join('ABC123', { name: 'LATE' });
+    sockets[0].receive({ type: 'room_joined', code: 'ABC123', id: MAX_SEAT + 1, host: 1, token: 't' });
+    expect(joined).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith({ reason: 'full' });
+    expect(relay.id).toBeNull();
+    expect(relay.token).toBeNull();
+    expect(relay.rejoin()).toBe(false); // nothing to come back to
+    expect(sockets[0].sent.at(-1)).toEqual({ type: 'leave_room' });
+
+    // the top seat itself is a seat
+    sockets[0].receive({ type: 'room_joined', code: 'ABC123', id: MAX_SEAT, host: 1 });
+    expect(joined).toHaveBeenCalledWith({ code: 'ABC123', id: MAX_SEAT, host: 1 });
+  });
+
+  it('locks with the bots\' seats so the relay never hands one out (POK-330 #6)', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    relay.lockRoom(true);
+    relay.lockRoom(true, [31, 30]);
+    relay.lockRoom(false);
+    expect(sockets[0].sent).toEqual([
+      { type: 'lock_room', locked: true },
+      { type: 'lock_room', locked: true, bots: [31, 30] },
+      { type: 'lock_room', locked: false },
+    ]);
+  });
+
+  it('passes the roster\'s seats through beside max (POK-330 #29)', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    const roster = vi.fn();
+    relay.on('roster', roster);
+    sockets[0].receive({ type: 'roster', code: 'ABC123', host: 1, open: true, max: 16, seats: 30, pass: false, members: [] });
+    expect(roster).toHaveBeenCalledWith(expect.objectContaining({ max: 16, seats: 30 }));
+  });
+
+  it('agrees with the relay on the highest seat', () => {
+    expect(serverSource).toMatch(new RegExp(`export const MAX_SEAT = ${MAX_SEAT};`));
   });
 
   it('emits closed with the room_closed reason', () => {

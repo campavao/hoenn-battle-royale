@@ -5,8 +5,8 @@
 // of Lua's on()/callbacks, since the page has no 60 Hz fixed-step pump to drive an
 // update() from.
 //
-// Seats: this room's `id` (a small integer, never reused within the room, handed out
-// by host_room/join_room) doubles as the wire's `seat` -- both are "a fixed roster
+// Seats: this room's `id` (1..MAX_SEAT, the lowest one free, handed out by
+// host_room/join_room) doubles as the wire's `seat` -- both are "a fixed roster
 // slot", just assigned by different code (docs/WIRE.md). bridge.ts uses `id` as its
 // local seat and `to()`'s `seat` argument as the relay's own `id`.
 //
@@ -15,6 +15,8 @@
 // the relay has already forgotten the old room by the time a new socket completes
 // its handshake, and deciding what to do about that (rejoin, show a "lost the room"
 // screen) is app.ts's call, not this module's. Listen for `closed` and decide there.
+
+import { MAX_SEAT } from './wire';
 
 export type RoomError =
   | 'not_found'
@@ -36,7 +38,11 @@ export interface RosterEvent {
   code: string;
   host: number;
   open: boolean;
+  /** The humans the room seats: the host's MAX clamped to the relay's ceiling (16). */
   max: number;
+  /** The host's MAX as asked, up to 30, bots filling what humans do not. Absent from
+   *  an older relay, which only ever said `max` (POK-330 #29). */
+  seats?: number;
   pass: boolean;
   members: RosterMember[];
 }
@@ -69,6 +75,9 @@ export interface RoomListing {
   players: number;
   seats: number;
   pass: boolean;
+  /** Whether the door would refuse a join, from the relay that runs the door: it
+   *  counts watchers and ids, which `players`/`seats` cannot (POK-330 #29). */
+  full?: boolean;
   daily?: boolean;
   secs?: number;
 }
@@ -144,7 +153,12 @@ export type WebSocketFactory = (url: string) => WebSocketLike;
 const WS_CONNECTING = 0;
 const WS_OPEN = 1;
 
-const PING_EVERY_MS = 20_000;
+// A half-open socket -- a phone that changed networks -- stays OPEN while everything
+// sent on it vanishes, and nothing said so until the relay's 60 s seat hold had run
+// out (POK-330 #36). So the pings are listened for: two in a row with nothing back,
+// and the socket is called dead and reconnected, 20-30 s in, inside the hold.
+const PING_EVERY_MS = 10_000;
+const MISSED_PINGS = 2;
 const BACKOFF_START_MS = 500;
 const BACKOFF_MAX_MS = 15_000;
 
@@ -165,6 +179,10 @@ export interface JoinOpts {
   spectate?: boolean;
   patch?: number;
   protocol?: number;
+}
+
+function isSeat(id: unknown): id is number {
+  return typeof id === 'number' && Number.isInteger(id) && id >= 0 && id <= MAX_SEAT;
 }
 
 function defaultFactory(url: string): WebSocketLike {
@@ -193,6 +211,11 @@ export class RelayClient {
   private everOpened = false;
   private backoff = BACKOFF_START_MS;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  /** When anything last arrived on the socket, when our last ping went out, and how
+   *  many pings in a row have gone out with nothing arriving after them. */
+  private lastRx = 0;
+  private lastPingAt = 0;
+  private unanswered = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   // Keyed by event name, but kept as `unknown` internally: a mapped type indexed by
   // a generic K does not let TS see that on()'s own K ties the map's value back to
@@ -276,6 +299,7 @@ export class RelayClient {
   }
 
   private handleMessage(data: string): void {
+    this.lastRx = Date.now(); // any frame at all says the socket is alive
     let msg: Record<string, unknown>;
     try {
       const parsed = JSON.parse(data);
@@ -286,6 +310,17 @@ export class RelayClient {
     }
     const type = msg.type;
     if (typeof type !== 'string') return;
+
+    // An id is this page's seat, the ROM's gBrMySeat and every message's `seat`, and
+    // all three have 32 (POK-330 #6). A relay that hands out one past that -- the old
+    // one counted up forever -- would have us write gBrMySeat out of the ROM's tables
+    // and send a `start` no guest can decode. Refused as the room being full, which is
+    // what it is, and given back so the relay does not hold it for us.
+    if ((type === 'room_hosted' || type === 'room_joined') && !isSeat(msg.id)) {
+      this.send({ type: 'leave_room' });
+      this.emit('room_error', { reason: 'full' });
+      return;
+    }
 
     switch (type) {
       case 'room_hosted':
@@ -311,6 +346,7 @@ export class RelayClient {
           host: msg.host as number,
           open: msg.open as boolean,
           max: msg.max as number,
+          seats: typeof msg.seats === 'number' ? msg.seats : undefined,
           pass: msg.pass as boolean,
           members: (msg.members as RosterMember[]) ?? [],
         });
@@ -382,7 +418,28 @@ export class RelayClient {
 
   private startPing(): void {
     this.stopPing();
-    this.pingTimer = setInterval(() => this.send({ type: 'ping', t: Date.now() }), PING_EVERY_MS);
+    this.lastRx = Date.now();
+    this.lastPingAt = 0;
+    this.unanswered = 0;
+    this.pingTimer = setInterval(() => this.pingTick(), PING_EVERY_MS);
+  }
+
+  private pingTick(): void {
+    // Counted per ping, not by the clock: a background tab whose timers run once a
+    // minute gets its pong a moment after each ping, and is not called dead for the
+    // minute its own timer slept through.
+    if (this.lastPingAt !== 0 && this.lastRx < this.lastPingAt) this.unanswered += 1;
+    else this.unanswered = 0;
+    if (this.unanswered >= MISSED_PINGS) {
+      const ws = this.ws;
+      // handleClose lets go of the socket first, so its own onclose -- which a
+      // half-open socket may not fire for minutes -- cannot close us a second time
+      this.handleClose('stale');
+      ws?.close();
+      return;
+    }
+    this.lastPingAt = Date.now();
+    this.send({ type: 'ping', t: this.lastPingAt });
   }
 
   private stopPing(): void {
@@ -433,9 +490,11 @@ export class RelayClient {
     this.send({ type: 'set_pass', pass });
   }
 
-  /** Host only. Shuts the door: the match is starting and nobody else is coming in. */
-  lockRoom(locked: boolean): void {
-    this.send({ type: 'lock_room', locked });
+  /** Host only. Shuts the door: the match is starting and nobody else is coming in.
+   *  `bots` are the seats the match dealt its bots: the relay hands a latecomer the
+   *  lowest id nobody is using, and a bot's seat looks unused to it (POK-330 #6). */
+  lockRoom(locked: boolean, bots?: number[]): void {
+    this.send(bots ? { type: 'lock_room', locked, bots } : { type: 'lock_room', locked });
   }
 
   /** Whether this client is willing to run the match if the host's tab goes away

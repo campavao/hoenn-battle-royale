@@ -31,6 +31,15 @@ describe('the room rows', () => {
     expect(row.detail).toContain('FULL');
   });
 
+  it('take full from the relay, which counts what the door counts (POK-330 #29)', () => {
+    // sixteen humans (or fifteen and a watcher) in a room of thirty: the door is shut
+    const [shut] = roomRows([room({ players: 15, seats: 30, full: true })]);
+    expect(shut.disabled).toBe(true);
+    expect(shut.detail).toContain('FULL');
+    // and the relay's word for open stands too
+    expect(roomRows([room({ players: 8, seats: 8, full: false })])[0].disabled).toBe(false);
+  });
+
   it('name the host, falling back to the code', () => {
     expect(roomRows([room()])[0].label).toBe('BRENDAN');
     expect(roomRows([room({ host: '' })])[0].label).toBe('ABC123');

@@ -34,8 +34,8 @@ Client -> server:
 | `list_rooms` | | `rooms {rooms:[...]}`: every joinable lobby |
 | `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?, token?` | `room_joined {code, id, host, token}` or `room_error {reason}`. With a `token` naming a seat the room is still holding (a socket that dropped within `rejoinMs`, 60 s), the same `id` comes back whatever the door says -- locked or full -- and the token is spent (POK-284). A member who sent `leave_room` or was removed is not held |
 | `stat` | `id, v, solo, since` | play counter; logged, counted, never answered |
-| `lock_room` | `locked` | host only: refuse new joiners (match in progress) |
-| `kick` | `id` | host only: remove a member, ban their IP from the room |
+| `lock_room` | `locked, bots?` | host only: refuse new joiners (match in progress). `bots`: the seats the host dealt its bots, never handed to a member until the unlock |
+| `kick` | `id` | host only: remove a member, ban their address and their resume token from the room |
 | `leave_room` | | |
 | `can_host` | `ok` | opt in/out of host migration |
 | `to` | `id, m` | unicast `m` to one member |
@@ -50,8 +50,8 @@ Server -> client:
 
 | type | fields | when |
 | --- | --- | --- |
-| `roster` | `code, host, open, max, pass, members:[{id,name,spectate?}]` | on every room change |
-| `rooms` | `rooms:[...]` | reply to `list_rooms` |
+| `roster` | `code, host, open, max, seats, pass, members:[{id,name,spectate?}]` | on every room change. `max`: the humans the room seats (the host's MAX, clamped to 16); `seats`: the MAX the host asked for (up to 30), which bots fill |
+| `rooms` | `rooms:[{code, host, skin?, players, seats, pass, full}]` | reply to `list_rooms`. `full`: the door would refuse a join (it counts watchers and free ids, which `players`/`seats` cannot) |
 | `recv` | `from, m` | a `to`/`all` delivery |
 | `room_closed` | `reason` | the host left with no heir, or you were kicked (`reason:"removed"`) |
 | `room_hosted` | `code, id, token` | your `host_room`/`daily_join` succeeded; `token` claims this seat back after a drop |
@@ -62,8 +62,12 @@ Server -> client:
 | `pong` | `t?` | reply to `ping` |
 | `info` | `motd, rooms, conns, minProtocol, daily?` | reply to `info`, and pushed once, unasked, right after connect |
 
-Ids are small integers handed out per room, never reused within it; the host
-is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
+Ids are seats: `1..31` (the page's wire and the ROM have 32; 0 is SOLO VS
+BOTS'), the lowest one that is not a member's, not held for one who dropped,
+and not used since the match locked the door -- nor a bot's. When none is left
+the door says `full`, whatever MAX says. The heir is the earliest arrival that
+can host, by the room's own count, since the lowest id is no longer the
+oldest. The host is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
 (no `0 O 1 I L`), so a code read aloud never has to be checked twice.
 
 ### The version gate
@@ -78,6 +82,18 @@ check entirely -- nobody is refused for silence.
 `info` also carries `minProtocol`, read from `BR_MIN_PROTOCOL` (default `1`)
 so a client can decide for itself whether it is too old to bother connecting,
 before it sends anything.
+
+### Behind a proxy
+
+On Railway every socket arrives from the edge proxy's own address, so without
+help the relay sees one client: the 24-per-address cap is shared by
+strangers, and a `kick` bans everybody who came in through the same edge.
+`BR_TRUST_PROXY=1` makes a client's address the proxy's `X-Real-IP`, or
+failing that the entry the proxy appended to `X-Forwarded-For` (the last one;
+anything before it is whatever the client sent). Set it only behind a proxy
+that writes those headers: with none in front, they are the client's to
+invent. A kick also bans the removed member's resume token, which is what
+their page presents on every automatic rejoin, from any address.
 
 ### Origins
 
@@ -102,6 +118,15 @@ and not on the list is refused before the upgrade completes.
 | `BR_DAILY` | unset | `HH:MM|IANA timezone|label` for the DAILY GAME |
 | `BR_MIN_PROTOCOL` | `1` | advertised in `info` as `minProtocol` |
 | `BR_ORIGINS` | unset (allow all) | comma-separated `Origin` allow-list |
+| `BR_TRUST_PROXY` | unset | `1`: a client's address is the proxy's `X-Real-IP`, else the last `X-Forwarded-For` entry. **Set it on Railway** |
+
+A ceiling that is not a positive number (`BR_MAX_ROOMS=forty`, `0`) is
+ignored with a log line and the default stands; it used to switch the cap off.
+
+Besides the line bucket, each connection has a byte bucket (64 KB/s, 1 MB
+deep, both times four for a host) and a send backlog ceiling (1 MB of output
+the peer has not read). Past either, the socket is dropped (`flood_bytes`,
+`slow_consumer` on its drop line).
 
 ## Tests
 
