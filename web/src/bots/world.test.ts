@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { World, decodeGrid, type WorldMap } from './world';
+import { DIRS, World, decodeGrid, type WorldMap } from './world';
 import { findPath } from './path';
 import worldData from '../data/world.json';
 
@@ -183,6 +183,63 @@ describe('against the real Hoenn', () => {
       }
     }
     expect(landed).toBeGreaterThan(0);
+  });
+});
+
+// POK-330 #49: the search walks cell numbers, not spots. It is only as right as
+// `stepKey` is the same rule as `step`, so that is checked on every cell there is.
+describe('the cell graph', () => {
+  const maps = (worldData as { maps: WorldMap[] }).maps;
+  const hoenn = new World(maps);
+
+  it('numbers every cell of Hoenn once, map after map, and reads each one back', () => {
+    const bad: string[] = [];
+    let n = 0;
+    for (const m of maps) {
+      for (let y = 0; y < m.h; y++) {
+        for (let x = 0; x < m.w; x++) {
+          const k = hoenn.key({ map: m.id, x, y });
+          const back = hoenn.spotAt(k);
+          if (k !== n++ || back.map !== m.id || back.x !== x || back.y !== y) bad.push(`${m.id} ${x},${y}`);
+        }
+      }
+    }
+    expect(bad.slice(0, 5)).toEqual([]);
+    expect(hoenn.cellCount).toBe(n);
+    expect(hoenn.key({ map: maps[0].id, x: -1, y: 0 })).toBe(-1);
+    expect(hoenn.key({ map: 'MAP_NOWHERE_AT_ALL', x: 0, y: 0 })).toBe(-1);
+  });
+
+  it('steps on the numbers exactly as it steps on spots, everywhere, with and without HMs', () => {
+    const bad: string[] = [];
+    const kit: [boolean, boolean][] = [[false, false], [true, false], [false, true], [true, true]];
+    for (const m of maps) {
+      for (let y = 0; y < m.h; y++) {
+        for (let x = 0; x < m.w; x++) {
+          const spot = { map: m.id, x, y };
+          const k = hoenn.key(spot);
+          for (const [surf, cut] of kit) {
+            for (let d = 0; d < 4; d++) {
+              const landed = hoenn.step(spot, DIRS[d], surf, cut);
+              // A step to somewhere with no number would be one the search cannot take.
+              if (landed && hoenn.key(landed) < 0) bad.push(`${m.id} ${x},${y} ${DIRS[d]} lands off the grid`);
+              const want = landed ? hoenn.key(landed) : -1;
+              if (hoenn.stepKey(k, d, surf, cut) !== want) bad.push(`${m.id} ${x},${y} ${DIRS[d]} surf=${surf} cut=${cut}`);
+            }
+          }
+        }
+      }
+    }
+    expect(bad.slice(0, 5)).toEqual([]);
+  });
+
+  it('works out the exits between two maps once, and again only for a different kit', () => {
+    const from = 'MAP_LITTLEROOT_TOWN';
+    const hop = hoenn.nextHops(from, 'MAP_VERDANTURF_TOWN')[0];
+    const cells = hoenn.exitCells(from, hop, false, true);
+    expect(cells.length).toBeGreaterThan(0);
+    expect(hoenn.exitCells(from, hop, false, true)).toBe(cells);
+    expect(hoenn.exitCells(from, hop, true, true)).not.toBe(cells);
   });
 });
 

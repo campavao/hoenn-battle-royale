@@ -74,6 +74,32 @@ const STEPS: { dir: SeamDir; dx: number; dy: number }[] = [
   { dir: 'east', dx: 1, dy: 0 },
 ];
 
+/** The four directions by number, in STEPS order: a direction in the cell graph is an
+ *  index into this, and the order is the order a search tries them in. */
+export const DIRS: readonly SeamDir[] = STEPS.map((s) => s.dir);
+const DX = STEPS.map((s) => s.dx);
+const DY = STEPS.map((s) => s.dy);
+const STEP_OF: Record<SeamDir, { dir: SeamDir; dx: number; dy: number }> = {
+  north: STEPS[0],
+  south: STEPS[1],
+  west: STEPS[2],
+  east: STEPS[3],
+};
+/** LEDGE_DIR as direction numbers, indexed by cell class; -1 for anything not a ledge. */
+const LEDGE_DIRN: number[] = Array.from({ length: 256 }, (_, cls) =>
+  LEDGE_DIR[cls] === undefined ? -1 : DIRS.indexOf(LEDGE_DIR[cls]),
+);
+/** warpTo's two answers that are not a cell: no door here, and a door to a map the
+ *  world does not have. */
+const NO_WARP = -2;
+const DEAD_WARP = -1;
+
+function canStand(cls: number, surf: boolean, cut: boolean): boolean {
+  if (cls === CLASS_WALL) return false;
+  if (cls === CLASS_CUT) return cut;
+  return cls !== CLASS_WATER || surf;
+}
+
 export function decodeGrid(grid: string, cells: number): Uint8Array {
   const out = new Uint8Array(cells);
   let at = 0;
@@ -91,12 +117,175 @@ export class World {
   private readonly grids = new Map<string, Uint8Array>();
   private readonly warps = new Map<string, Warp>();
 
+  // ---- the cell graph (POK-330 #49) ----------------------------------------------
+  //
+  // The same world with every cell numbered once, map after map, so a search can keep
+  // its bookkeeping in flat arrays instead of a Map keyed by "MAP_ROUTE119:12,40"
+  // strings -- building that string for every neighbour, and hashing it three times,
+  // was most of what an A* node cost. `stepKey` is `step` on those numbers: the same
+  // rules, in the same order, with nothing allocated.
+
+  /** Map number -> map id, and back. A map's number is its row in world.json. */
+  private readonly ids: string[] = [];
+  private readonly numbers = new Map<string, number>();
+  /** Per map number: its first cell's number, and its size. */
+  private readonly bases: number[] = [];
+  private readonly widths: number[] = [];
+  private readonly heights: number[] = [];
+  /** Per cell: its class, and which map it is on. */
+  private readonly classes: Uint8Array;
+  private readonly cellMap: Uint16Array;
+  /** Per cell: where a door on it lands, as a cell number -- or NO_WARP / DEAD_WARP. */
+  private readonly warpTo: Int32Array;
+  /** Per map number and direction (m * 4 + d): the seams off that edge, in world.json's
+   *  order, with the far map by number. A seam to a map the world lacks is left out,
+   *  which is what `landAcross` does with it. */
+  private readonly seamsOut: { to: number; offset: number }[][] = [];
+  /** exitCells, once per question: the answer never changes, and aimAcrossMaps asks it
+   *  on every decision a bot makes on its way across Hoenn. */
+  private readonly exitCache = new Map<string, readonly Spot[]>();
+
   constructor(maps: WorldMap[]) {
+    let total = 0;
     for (const m of maps) {
       this.maps.set(m.id, m);
-      this.grids.set(m.id, decodeGrid(m.grid, m.w * m.h));
+      this.numbers.set(m.id, this.ids.length);
+      this.ids.push(m.id);
+      this.bases.push(total);
+      this.widths.push(m.w);
+      this.heights.push(m.h);
+      total += m.w * m.h;
       for (const w of m.warps ?? []) this.warps.set(`${m.id}:${w.x},${w.y}`, w);
     }
+    this.classes = new Uint8Array(total);
+    this.cellMap = new Uint16Array(total);
+    this.warpTo = new Int32Array(total).fill(NO_WARP);
+    maps.forEach((m, n) => {
+      const base = this.bases[n];
+      const cells = m.w * m.h;
+      this.classes.set(decodeGrid(m.grid, cells), base);
+      this.grids.set(m.id, this.classes.subarray(base, base + cells));
+      this.cellMap.fill(n, base, base + cells);
+      for (let d = 0; d < 4; d++) {
+        this.seamsOut.push(
+          m.seams
+            .filter((s) => s.dir === DIRS[d] && this.numbers.has(s.to))
+            .map((s) => ({ to: this.numbers.get(s.to)!, offset: s.offset })),
+        );
+      }
+    });
+    // After every map has its number: a door's landing is a cell on another one. A door
+    // off its own map's edge is one `step` never looks up, so it is not numbered either.
+    maps.forEach((m, n) => {
+      for (const w of m.warps ?? []) {
+        if (w.x < 0 || w.y < 0 || w.x >= m.w || w.y >= m.h) continue;
+        // A landing off the far map's grid cannot be numbered, so it is no step. None
+        // of Emerald's is on a door `step` can reach: all three sit off their own
+        // map's edge as well (world.test.ts checks every step lands on a number).
+        const landing = this.key({ map: w.to, x: w.toX, y: w.toY });
+        this.warpTo[this.bases[n] + w.y * m.w + w.x] = landing < 0 ? DEAD_WARP : landing;
+      }
+    });
+  }
+
+  /** How many cells the whole world has: the size of a search's bookkeeping. */
+  get cellCount(): number {
+    return this.classes.length;
+  }
+
+  /** The cell a spot stands on, or -1 for the void off a map and for a map the world
+   *  does not have. */
+  key(spot: Spot): number {
+    const n = this.numbers.get(spot.map);
+    if (n === undefined) return -1;
+    const w = this.widths[n];
+    if (spot.x < 0 || spot.y < 0 || spot.x >= w || spot.y >= this.heights[n]) return -1;
+    return this.bases[n] + spot.y * w + spot.x;
+  }
+
+  /** A map's number, or -1. */
+  mapNumber(id: string): number {
+    return this.numbers.get(id) ?? -1;
+  }
+
+  /** Which map a cell is on, by number. */
+  mapOf(key: number): number {
+    return this.cellMap[key];
+  }
+
+  /** The spot a cell number stands for. */
+  spotAt(key: number): Spot {
+    const n = this.cellMap[key];
+    const local = key - this.bases[n];
+    const w = this.widths[n];
+    const y = (local / w) | 0;
+    return { map: this.ids[n], x: local - y * w, y };
+  }
+
+  /** A*'s estimate from a cell to (gx, gy) on map `goal`: Manhattan on that map, and
+   *  zero anywhere else, where the coordinates mean nothing. */
+  estimate(key: number, goal: number, gx: number, gy: number): number {
+    const n = this.cellMap[key];
+    if (n !== goal) return 0;
+    const local = key - this.bases[n];
+    const w = this.widths[n];
+    const y = (local / w) | 0;
+    return Math.abs(local - y * w - gx) + Math.abs(y - gy);
+  }
+
+  /** `step` on cell numbers: where one step in direction `d` (an index into DIRS) from
+   *  cell `key` lands, or -1. Rule for rule the same as `step` -- the ledge first, then
+   *  the feet, then a door, then the seams off the edge -- and world.test.ts holds it to
+   *  that on every cell of Hoenn. */
+  stepKey(key: number, d: number, surf: boolean, cut: boolean): number {
+    const n = this.cellMap[key];
+    const base = this.bases[n];
+    const w = this.widths[n];
+    const h = this.heights[n];
+    const local = key - base;
+    const y = (local / w) | 0;
+    const x = local - y * w;
+    const nx = x + DX[d];
+    const ny = y + DY[d];
+    if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
+      const next = base + ny * w + nx;
+      const cls = this.classes[next];
+      if (LEDGE_DIRN[cls] === d) {
+        const jx = nx + DX[d];
+        const jy = ny + DY[d];
+        if (jx < 0 || jy < 0 || jx >= w || jy >= h) return -1;
+        const landing = base + jy * w + jx;
+        return canStand(this.classes[landing], surf, cut) ? landing : -1;
+      }
+      if (!canStand(cls, surf, cut)) return -1;
+      const warp = this.warpTo[next];
+      if (warp === NO_WARP) return next;
+      return warp; // DEAD_WARP is -1: a door to nowhere is no step
+    }
+    for (const seam of this.seamsOut[n * 4 + d]) {
+      const to = seam.to;
+      const tw = this.widths[to];
+      const th = this.heights[to];
+      let lx: number;
+      let ly: number;
+      if (d === 0) {
+        lx = x - seam.offset;
+        ly = th - 1;
+      } else if (d === 1) {
+        lx = x - seam.offset;
+        ly = 0;
+      } else if (d === 2) {
+        lx = tw - 1;
+        ly = y - seam.offset;
+      } else {
+        lx = 0;
+        ly = y - seam.offset;
+      }
+      if (lx < 0 || ly < 0 || lx >= tw || ly >= th) continue;
+      const landing = this.bases[to] + ly * tw + lx;
+      if (canStand(this.classes[landing], surf, cut)) return landing;
+    }
+    return -1;
   }
 
   /** The warp on this cell, if there is one. A door is a tile you walk onto, not a
@@ -159,7 +348,7 @@ export class World {
   step(spot: Spot, dir: SeamDir, surf = false, cut = false): Spot | null {
     const m = this.maps.get(spot.map);
     if (!m) return null;
-    const move = STEPS.find((s) => s.dir === dir);
+    const move = STEP_OF[dir];
     if (!move) return null;
     const nx = spot.x + move.dx;
     const ny = spot.y + move.dy;
@@ -322,7 +511,17 @@ export class World {
   /** The cells on `from` that a step lands on `to` -- the seam edge, and any door.
    *  These are what a bot actually walks to; the crossing itself is just the next step,
    *  so a route to one of these never leaves the current map. */
-  exitCells(from: string, to: string, surf = false, cut = false): Spot[] {
+  exitCells(from: string, to: string, surf = false, cut = false): readonly Spot[] {
+    const asked = `${from}>${to}:${surf ? 1 : 0}${cut ? 1 : 0}`;
+    let cells = this.exitCache.get(asked);
+    if (!cells) {
+      cells = this.findExitCells(from, to, surf, cut);
+      this.exitCache.set(asked, cells);
+    }
+    return cells;
+  }
+
+  private findExitCells(from: string, to: string, surf: boolean, cut: boolean): Spot[] {
     const m = this.maps.get(from);
     if (!m) return [];
     const out: Spot[] = [];
