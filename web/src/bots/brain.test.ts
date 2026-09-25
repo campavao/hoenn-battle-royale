@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Bots, health, STEP_MS, type BotsOptions, type PlayerView } from './brain';
-import { dealBots, MAX_SEATS } from './roster';
+import { dealBots, Grade, MAX_SEATS } from './roster';
+import { dealParty, grownUp, rungForPhase } from './party';
 import { World, type Spot, type WorldMap } from './world';
 import { pageCell } from './space';
 import { mulberry32 } from '../match/clock';
@@ -525,6 +526,71 @@ describe('a bot that is hurt', () => {
     bots.ringMoved(3);
     const mon = bots.partyOf(seat)[0];
     expect(mon.hp / mon.maxHp).toBeCloseTo(10 / 19, 1);
+  });
+});
+
+// The rung climbing, on the real deal (POK-330 #30). The stub deals above hand back the
+// same species every time, which is why nothing saw what the real one does to a team:
+// evolve it, and draw its extra slots from whatever table the bot is standing on.
+describe('the rung climbing, with the real deal', () => {
+  const R101: WorldMap = { ...FIELD, id: 'MAP_ROUTE101', seams: [{ dir: 'east', to: 'MAP_ROUTE110', offset: 0 }] };
+  const R110: WorldMap = { ...PATH, id: 'MAP_ROUTE110', seams: [{ dir: 'west', to: 'MAP_ROUTE101', offset: 0 }] };
+  const REF: Record<string, MapRef> = { MAP_ROUTE101: REFS.FIELD, MAP_ROUTE110: REFS.PATH };
+  const SEED = 4242;
+  const deal = (seat: number, phase: number, mapId: string) => dealParty(SEED, seat, phase, mapId, Grade.Ace);
+  /** The first seat whose team passes `ok` -- the deal is seeded, so a test picks the
+   *  bot it needs rather than hoping for it. */
+  const seatWhere = (ok: (seat: number) => boolean) => {
+    for (let seat = MAX_SEATS - 1; seat >= 0; seat--) if (ok(seat)) return seat;
+    throw new Error('no seat deals that');
+  };
+
+  function ace(seat: number, targets: { mapId: string; x: number; y: number }[] = [{ mapId: 'MAP_ROUTE101', x: 0, y: 0 }]) {
+    const bots = new Bots({
+      world: new World([R101, R110]),
+      targets,
+      mapRef: (id) => REF[id],
+      send: () => {},
+      rng: mulberry32(7),
+      // app.ts's own deal, minus the Zone pool.
+      deal: (bot, phase, mapId) => dealParty(SEED, bot.seat, phase, mapId, bot.grade),
+    });
+    bots.start([{ seat, name: 'MAY', grade: Grade.Ace, skin: 0, map: REF.MAP_ROUTE101, mapId: 'MAP_ROUTE101', x: 1, y: 1 }], 0);
+    return bots;
+  }
+
+  it('carries a hurt mon through its evolution, still hurt', () => {
+    // A WURMPLE up front at the drop, which by rung 15 has grown all the way up.
+    const seat = seatWhere((s) => deal(s, 0, 'MAP_ROUTE101')[0].species === 290);
+    const bots = ace(seat);
+    const [lead, ...rest] = bots.partyOf(seat);
+    bots.setParty(seat, [{ ...lead, hp: Math.floor(lead.maxHp / 2) }, ...rest]);
+    bots.ringMoved(2);
+    const after = bots.partyOf(seat)[0];
+    expect(after.species).not.toBe(290);
+    expect(after.species).toBe(grownUp(290, rungForPhase(2)));
+    expect(after.hp / after.maxHp).toBeCloseTo(0.5, 1);
+  });
+
+  it('leaves a fainted mon fainted', () => {
+    const seat = seatWhere(() => true);
+    const bots = ace(seat);
+    const [lead, ...rest] = bots.partyOf(seat);
+    expect(rest.length, 'an ace has a second mon to still be standing').toBeGreaterThan(0);
+    bots.setParty(seat, [{ ...lead, hp: 0 }, ...rest]);
+    bots.ringMoved(3);
+    expect(bots.partyOf(seat)[0].hp).toBe(0);
+  });
+
+  it('deals the new slots from where the drop put it, not from where it has walked', () => {
+    const species = (mapId: string, s: number) => deal(s, 3, mapId).map((m) => m.species);
+    const seat = seatWhere((s) => species('MAP_ROUTE101', s).join() !== species('MAP_ROUTE110', s).join());
+    // Somewhere to go on the next map over, so it walks there before the ring moves.
+    const bots = ace(seat, [{ mapId: 'MAP_ROUTE110', x: 3, y: 3 }]);
+    for (let t = STEP_MS; t <= 15_000 && bots.spotOf(seat)?.map !== 'MAP_ROUTE110'; t += STEP_MS) bots.tick(t);
+    expect(bots.spotOf(seat)?.map).toBe('MAP_ROUTE110');
+    bots.ringMoved(3);
+    expect(bots.partyOf(seat).map((m) => m.species)).toEqual(species('MAP_ROUTE101', seat));
   });
 });
 

@@ -156,6 +156,10 @@ interface Walker {
   /** Its own bag (POK-237): what it drinks between fights, what it spends in one, and
    *  what a player finds on it when it falls. */
   bag: Stack[];
+  /** The map its team is dealt from at every rung: where the drop put it (POK-237 -- a
+   *  trainer on Route 119 carries Route 119's mons). Not wherever it is standing when
+   *  the ring moves, or its team would turn into a different one each time it did. */
+  home: string;
   /** Who it last fought, kept after the fight lets go of it: the ROM that ran it sends
    *  `party`, then `spent`, then `result`, and the first of those is what ends it. The
    *  reports that follow are still that ROM's to make, and nobody else's. */
@@ -229,7 +233,7 @@ export interface BotsOptions {
     players: () => PlayerView[];
   };
   /** A bot's starting team, and the mons it picks up as the rung climbs. `mapId` is
-   *  where it is standing, which is where a trainer's mons come from (POK-237). */
+   *  where the drop put it, which is where a trainer's mons come from (POK-237). */
   deal?: (bot: Bot, phase: number, mapId: string) => PackedMon[];
   /** And its bag (POK-237). Dealt the same way, from the seed and the grade, so a
    *  rookie's two POTIONs and an ace's X ATTACK are the same on every client. */
@@ -283,9 +287,6 @@ export interface BotsOptions {
   rng: () => number;
 }
 
-/** The team at the new rung. A mon that is already there keeps its place and the
- *  share of its health it had -- a bot does not get healed by the fog closing -- and
- *  the rest of the roster is whatever the deal added at this phase. */
 /** Can this team cross water? One mon that knows SURF is the whole rule, the same as
  *  in the game -- and it is what gets a bot off an island the drop put it on. */
 export function canSurf(party: PackedMon[]): boolean {
@@ -328,12 +329,20 @@ export function health(party: PackedMon[]): number {
   return max > 0 ? hp / max : 1;
 }
 
+/** The team at the new rung. A mon that is already there keeps its place and the
+ *  share of its health it had -- a bot does not get healed by the fog closing, and one
+ *  that has fainted stays fainted -- and the rest of the roster is whatever the deal
+ *  added at this phase. Matched by slot, not by species: the rung is what evolves a
+ *  mon (party.ts's grownUp), so a WURMPLE that was hurt is a hurt SILCOON, not a fresh
+ *  one. It used to be a fresh one, and every fainted mon came back on 1 HP, so bots
+ *  outlived the fog and the fights meant to thin them out. */
 function climb(held: PackedMon[], fresh: PackedMon[]): PackedMon[] {
   return fresh.map((next, i) => {
     const mine = held[i];
-    if (!mine || mine.species !== next.species) return next;
+    if (!mine) return next;
     const share = mine.maxHp > 0 ? mine.hp / mine.maxHp : 1;
-    return { ...next, hp: Math.max(1, Math.round(next.maxHp * share)), status: mine.status };
+    const hp = mine.hp <= 0 ? 0 : Math.max(1, Math.round(next.maxHp * share));
+    return { ...next, hp, status: mine.status };
   });
 }
 
@@ -374,6 +383,7 @@ export class Bots {
       flyAfter: 0,
         retryAfter: 0,
         bleedAt: now + FOG_TICK_MS,
+        home: bot.mapId,
         party: this.opts.deal?.(bot, 0, bot.mapId) ?? [],
         bag: this.opts.bagFor?.(bot, 0) ?? [],
         quaffAfter: 0,
@@ -411,6 +421,9 @@ export class Bots {
 
     if (!walker) return;
     walker.at = { ...spot };
+    // The drop is where its mons come from from now on: the opening's deal was the
+    // Zone's, and the route it lands on is the one it would have caught them on.
+    walker.home = spot.map;
     walker.path = null;
     walker.stepIndex = 0;
     walker.retryAfter = 0;
@@ -489,7 +502,7 @@ export class Bots {
     this.phase = phase;
     for (const walker of this.walkers) {
       walker.path = null;
-      const fresh = this.opts.deal?.(walker.bot, phase, walker.at.map);
+      const fresh = this.opts.deal?.(walker.bot, phase, walker.home);
       if (fresh) walker.party = climb(walker.party, fresh);
       // A trainer still standing at the new rung has restocked (POK-237) -- one
       // potion of the tier it is now on, not a fresh bag, so what it has spent
