@@ -355,7 +355,8 @@ jobs:
         working-directory: relay
         run: |
           npm ci --ignore-scripts
-          node --test
+          # A test that hangs fails in a minute instead of holding the job to its timeout.
+          node --test --test-timeout=60000
 
       # The play log reads this relay's lines (POK-248), so its parser is pinned here,
       # next to the thing that writes them. No dependencies: node alone.

@@ -13,12 +13,17 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { readFileSync } from "node:fs";
 import { EventEmitter } from "node:events";
+import { WebSocket as WsClient } from "ws";
 import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, exitOnSignal, limitsFromEnv, stats } from "./server.js";
 
 class Client {
   // headers: what a proxy in front of the relay would add (POK-330 #19)
   constructor(port, headers) {
-    this.ws = new WebSocket(`ws://127.0.0.1:${port}`, headers ? { headers } : undefined);
+    // ...through ws's client: Node's own WebSocket takes headers on 24 but ignores them
+    // on 22 (CI, and whatever Railway runs), and the proxy tests hung there for good.
+    this.ws = headers
+      ? new WsClient(`ws://127.0.0.1:${port}`, { headers })
+      : new WebSocket(`ws://127.0.0.1:${port}`);
     this.inbox = [];
     this.waiters = [];
     this.closed = false;
@@ -1701,9 +1706,10 @@ test("behind BR_TRUST_PROXY, two clients through one proxy are two addresses", a
   await withRelay(async (port) => {
     const a = await connect(port, { "X-Forwarded-For": "203.0.113.1" });
     assert.equal(await new Promise((resolve) => {
-      const ws = new WebSocket(`ws://127.0.0.1:${port}`, { headers: { "X-Forwarded-For": "203.0.113.2" } });
+      const ws = new WsClient(`ws://127.0.0.1:${port}`, { headers: { "X-Forwarded-For": "203.0.113.2" } });
       ws.addEventListener("open", () => { resolve(true); ws.close(); }, { once: true });
       ws.addEventListener("close", () => resolve(false), { once: true });
+      ws.addEventListener("error", () => resolve(false), { once: true }); // ws's refusal
     }), false);
     a.end();
   }, { connsPerIp: 1 });
