@@ -78,6 +78,23 @@ export function onPromotion(match: Pick<MatchSnapshot, 'active' | 'ended'>): 'ta
   return match.ended ? 'none' : 'take-over';
 }
 
+/** What a page does with the host's `again` (POK-258). The host sends it with the `win`,
+ *  for a page whose socket blinked over that and would otherwise sit in a finished match
+ *  for ever: recovery, not the way out. The way out is each page's own grace, and a page
+ *  that took `again` as the exit rebooted on arrival, cutting its results short and a
+ *  guest champion's Hall of Fame with them (POK-330 #9). So only a page still in a match
+ *  it never heard end starts that grace; everybody else has one running already, or no
+ *  match to leave. */
+export function onAgain(page: {
+  /** This page runs the director: it sent the `again`. */
+  running: boolean;
+  match: Pick<MatchSnapshot, 'active' | 'ended'>;
+  graceArmed: boolean;
+}): 'grace' | 'ignore' {
+  if (page.running || page.graceArmed || !page.match.active || page.match.ended) return 'ignore';
+  return 'grace';
+}
+
 /** The names and skins a match's bots were dealt (POK-330 #51), for any page that knows
  *  the seed and which seats are bots. dealBots walks down from the top seat past the
  *  taken ones, drawing a name, a cell and a skin for each: offered every seat but these

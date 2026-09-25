@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { botRows, botSeatsOf, departedSeats, freshMatch, onPromotion, seatsFor } from './lifecycle';
+import { botRows, botSeatsOf, departedSeats, freshMatch, onAgain, onPromotion, seatsFor } from './lifecycle';
 import { dealBots } from '../bots/roster';
 import type { RosterEvent } from '../net/relay';
 
@@ -71,5 +71,27 @@ describe('the next match, after PLAY AGAIN', () => {
     // where START is the heir's. Taking it over restarted its clock and bots on ROMs
     // that had rebooted into Littleroot.
     expect(onPromotion({ active: true, ended: true })).toBe('none');
+  });
+});
+
+// POK-330 #9: the host's `again` rides right behind its `win`, and every guest took it as
+// the exit -- rebooting before anybody had read a result, and in the middle of a guest
+// champion's Hall of Fame.
+describe("the host's `again`", () => {
+  const inMatch = { active: true, ended: false };
+  const won = { active: true, ended: true };
+
+  it('does not cut short a grace that seeing the win already started', () => {
+    expect(onAgain({ running: false, match: won, graceArmed: true })).toBe('ignore');
+    expect(onAgain({ running: false, match: won, graceArmed: false }), 'a champion waiting on the parade').toBe('ignore');
+  });
+
+  it('starts the grace on a page whose socket blinked over the win', () => {
+    expect(onAgain({ running: false, match: inMatch, graceArmed: false })).toBe('grace');
+  });
+
+  it('means nothing to the host that sent it, or to a page already back in the room', () => {
+    expect(onAgain({ running: true, match: inMatch, graceArmed: false })).toBe('ignore');
+    expect(onAgain({ running: false, match: freshMatch(), graceArmed: false })).toBe('ignore');
   });
 });

@@ -83,6 +83,7 @@ import {
   botSeatsOf,
   departedSeats,
   freshMatch,
+  onAgain,
   onPromotion,
   seatsFor,
   type MatchSnapshot,
@@ -2554,7 +2555,8 @@ function wireRoom(
   let endGraceTimer: ReturnType<typeof setTimeout> | null = null;
   let paradePoll: ReturnType<typeof setInterval> | null = null;
   /** Cancel a grace that is in flight -- because the exit has already been taken, by a
-   *  press of PLAY AGAIN or by the host's `again` arriving first. */
+   *  press of PLAY AGAIN. (Not by the host's `again`, which arrives right behind the
+   *  `win` and used to cut every guest's grace short: onAgain.) */
   const endGrace = (): void => {
     if (endGraceTimer !== null) clearTimeout(endGraceTimer);
     if (paradePoll !== null) clearInterval(paradePoll);
@@ -2715,11 +2717,14 @@ function wireRoom(
         // sent: a `pickup` reaches the whole room, and only the page following that
         // seat has any business saying so. The describe() has to happen before the
         // loot table forgets the piece, which loot.note() does on this same message.
-        // The host says the match is over (POK-258's `again`, sent for the first time
-        // here). Belt and braces for the local grace: a socket that blinked over the
-        // last fight never saw the `win` and would otherwise sit in a finished match
-        // for ever. Whoever gets there first wins -- returnToRoom is idempotent.
-        if (m.t === 'again' && !director) void returnToRoom();
+        // The host says the match is over (POK-258's `again`). Belt and braces for the
+        // local grace: a socket that blinked over the last fight never saw the `win` and
+        // would otherwise sit in a finished match for ever -- so that page, and only that
+        // page, starts the grace now. It arrives on the heels of the `win`, and a page
+        // that took it as the exit rebooted before anybody had read a result (#9).
+        if (m.t === 'again' && onAgain({ running: director !== null, match, graceArmed: endGraceTimer !== null }) === 'grace') {
+          armEndGrace(() => void returnToRoom());
+        }
         if (m.t === 'pickup' && bridge && spectate.watchingSeat() === m.seat) {
           const what = loot.describe(m.key);
           const line = what ? Ticker.took(m.seat, bridge.roster.nameOf(m.seat), what) : null;
