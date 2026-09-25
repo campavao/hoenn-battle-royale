@@ -27,7 +27,10 @@ export type RoomError =
   | 'removed'
   | 'already_in_room'
   | 'server_full'
-  | 'version';
+  | 'version'
+  /** Not the relay's: host() asked for a seat and the relay opened the room as another,
+   *  which an older one does. Given back rather than attached (POK-331 #14). */
+  | 'seat';
 
 export interface RosterMember {
   id: number;
@@ -183,6 +186,10 @@ export interface HostOpts {
    *  relay/protocol.fixtures.json is the shape, and both test suites read it. */
   patch?: string;
   protocol?: number;
+  /** The seat to open the room as: a match hosted again after its room went (a relay
+   *  restart) is played from the seat it had, which is not always the opener's 1
+   *  (POK-331 #14). */
+  seat?: number;
 }
 
 export interface JoinOpts {
@@ -220,6 +227,8 @@ export class RelayClient {
    *  `code` above is cleared with the socket; this survives it, which is the point. */
   private lastOpts: JoinOpts | null = null;
   private lastCode: string | null = null;
+  /** The seat host() asked for, until the relay answers. */
+  private askedSeat: number | null = null;
 
   private ws: WebSocketLike | null = null;
   private url: string | null = null;
@@ -341,6 +350,18 @@ export class RelayClient {
       this.emit('room_error', { reason: 'full' });
       return;
     }
+    // ...and a room opened for a seat it was asked to keep, as another (POK-331 #14): a
+    // relay too old to know `seat` opens it as 1, which is somebody else in the match
+    // being hosted again. Given back as well, and said.
+    if (type === 'room_hosted' || type === 'room_error') {
+      const asked = this.askedSeat;
+      this.askedSeat = null;
+      if (type === 'room_hosted' && asked !== null && msg.id !== asked) {
+        this.send({ type: 'leave_room' });
+        this.emit('room_error', { reason: 'seat' });
+        return;
+      }
+    }
 
     switch (type) {
       case 'room_hosted':
@@ -440,6 +461,7 @@ export class RelayClient {
     this.id = null;
     this.code = null;
     this.hostId = null;
+    this.askedSeat = null; // its host_room went with the socket
     this.emit('closed', { reason, reconnecting: !this.closedByUser });
     if (!this.closedByUser) this.scheduleReconnect();
   }
@@ -498,6 +520,7 @@ export class RelayClient {
 
   host(opts: HostOpts): void {
     this.lastOpts = { name: opts.name, pass: opts.pass, skin: opts.skin, patch: opts.patch, protocol: opts.protocol };
+    this.askedSeat = opts.seat ?? null;
     this.send({
       type: 'host_room',
       name: opts.name,
@@ -507,6 +530,7 @@ export class RelayClient {
       pass: opts.pass,
       patch: opts.patch,
       protocol: opts.protocol,
+      seat: opts.seat,
     });
   }
 

@@ -201,25 +201,23 @@ export function decideStart(trigger: StartTrigger, s: StartState): StartDecision
 
 // ---- a door that will not open -----------------------------------------------------
 
-/** The seat a new room gives the member who opens it: relay/server.js hands out the
- *  lowest free id, and in a new room that is 1. */
-export const OPENER_SEAT = 1;
-
-/** Refusals that leave nothing to do in this room: the page offers the lobby. */
-const DEAD_ENDS = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server_full', 'version'];
+/** Refusals that leave nothing to do in this room: the page offers the lobby. `seat` is
+ *  the relay opening a re-hosted room as a seat other than the one asked for, which an
+ *  older relay does (net/relay.ts). */
+const DEAD_ENDS = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server_full', 'version', 'seat'];
 
 /** What the page does with the relay's `room_error` (POK-330 #47). A rejoin refused
  *  because the room is gone -- a relay restart, or a seat hold that ran out -- is not a
  *  dead end for the page that was running the match: the match lives in its tab, so it
- *  hosts a new room and carries on there. Only from the opener's seat, which is the one
- *  the new room will give it back; from any other it would come back as somebody else,
- *  mid-match. That branch was written once and never ran, because the refusal went
- *  straight to the dead end. */
+ *  hosts a new room and carries on there, asking for the seat it has (HostOpts.seat).
+ *  That used to be the opener's alone, since a new room seated its opener at 1 and from
+ *  any other seat the page would have come back as somebody else, mid-match: an heir
+ *  (POK-331 #14) lost the match to the restart. */
 export function onRefused(
   reason: string,
   page: { rejoining: boolean; wasHost: boolean; seat: number | null },
 ): 'rehost' | 'dead-end' | 'status' {
-  if (reason === 'not_found' && page.rejoining && page.wasHost && page.seat === OPENER_SEAT) return 'rehost';
+  if (reason === 'not_found' && page.rejoining && page.wasHost && page.seat !== null) return 'rehost';
   return DEAD_ENDS.includes(reason) ? 'dead-end' : 'status';
 }
 

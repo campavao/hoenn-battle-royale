@@ -15,13 +15,16 @@
 // Client -> server
 //   {type:"host_room", name, open?, max?, -> room_hosted {code, id}, then a roster
 //         skin?, pass?, patch?,            (max: the room's size; joins past it
-//         protocol?}                       are refused "full"; clamped to the
+//         protocol?, seat?}                are refused "full"; clamped to the
 //                                         member ceiling.  skin: the walk
 //                                         sheet the lobby list draws the host
 //                                         as.  pass: a passcode every join
 //                                         must carry.  patch/protocol: the
 //                                         host's version, recorded for the
-//                                         gate below)
+//                                         gate below.  seat: the id to open
+//                                         it as, 1..MAX_SEAT, for a match
+//                                         re-hosted from the seat it is
+//                                         played from (POK-331 #14))
 //   {type:"set_max", max}              -> host only: the room's size, live
 //   {type:"set_pass", pass}            -> host only: the passcode, live; "" or
 //                                         absent clears it.  A passcoded room
@@ -516,10 +519,11 @@ class Room {
   }
 
   // A member's seat, and a fresh token that can claim it back.  With a
-  // `token` that names a held seat, the SAME id as before; otherwise the
-  // lowest free one (the caller has checked full() first).  The token is new
-  // either way: the old one has done its job.
-  add(conn, token) {
+  // `token` that names a held seat, the SAME id as before; otherwise `seat`
+  // when the caller has one it knows is free, else the lowest free one (the
+  // caller has checked full() first).  The token is new either way: the old
+  // one has done its job.
+  add(conn, token, seat) {
     const held = token ? this.held.get(token) : undefined;
     if (held) {
       this.held.delete(token);
@@ -533,7 +537,7 @@ class Room {
         this.hostToken = null;
       }
     } else {
-      conn.id = this.freeId();
+      conn.id = seat ?? this.freeId();
       conn.joined = ++this.joined;
     }
     if (this.locked) this.spent.add(conn.id);
@@ -924,8 +928,8 @@ export function createRelay(options = {}) {
 
   // A new room with `conn` as its host: the lobby's HOST row, quick play that
   // found nothing, and the daily's first press.  Null, having said why, at the
-  // room ceiling.
-  function openRoom(conn, msg, { mode, open, pass = null, max }) {
+  // room ceiling.  `seat`: the id its opener asked for, else the lowest (1).
+  function openRoom(conn, msg, { mode, open, pass = null, max, seat }) {
     if (rooms.size >= limits.rooms) {
       traffic.rejected += 1;
       conn.send({ type: "room_error", reason: "server_full" });
@@ -943,7 +947,7 @@ export function createRelay(options = {}) {
     room.pass = pass;
     room.version = cleanVersion(msg);
     rooms.set(room.code, room);
-    room.add(conn);
+    room.add(conn, undefined, seat);
     traffic.roomsOpened += 1;
     if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
     conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token, rejoinMs: limits.rejoinMs });
@@ -1052,6 +1056,13 @@ export function createRelay(options = {}) {
           open: msg.open === true,
           pass: cleanPass(msg.pass),
           max: msg.max,
+          // A match that outlived its room -- a relay restart, or a hold that ran
+          // out -- is hosted again from the page running it (POK-331 #14), and an
+          // id is a seat: its ghost, its loot keys, gBrMySeat in its ROM.  Opened
+          // as 1, an heir came back as another trainer of its own match, so only
+          // seat 1 could do it.  Any seat is free in a room nobody else is in.
+          seat: Number.isInteger(msg.seat) && msg.seat >= 1 && msg.seat <= MAX_SEAT
+            ? msg.seat : undefined,
         });
         return;
       }

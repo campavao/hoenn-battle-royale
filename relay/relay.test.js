@@ -14,7 +14,7 @@ import http from "node:http";
 import { readFileSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { WebSocket as WsClient } from "ws";
-import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, exitOnSignal, limitsFromEnv, stats } from "./server.js";
+import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, exitOnSignal, limitsFromEnv, MAX_SEAT, stats } from "./server.js";
 
 class Client {
   // headers: what a proxy in front of the relay would add (POK-330 #19)
@@ -2339,5 +2339,50 @@ test("the DAILY row is the daily this browser's press would land in, by its own 
     for (const c of [old, late]) c.end();
   } finally {
     await relay.close();
+  }
+});
+
+// An heir runs the match from its own seat. A relay restart takes every room with it,
+// and the page running the match hosts it again (match/room.ts onRefused) -- which
+// opened it as seat 1, another trainer's in that match, so only seat 1 could.
+test("a match hosted again after a restart keeps the seat it is played from (POK-331 #14)", async () => {
+  const before = createRelay();
+  const addr = await before.listen(0, "127.0.0.1");
+  const a = await connect(addr.port);
+  a.send({ type: "host_room", name: "RED" });
+  const { code } = await a.until("room_hosted");
+  const b = await connect(addr.port);
+  b.send({ type: "can_host", ok: true });
+  b.send({ type: "join_room", code, name: "BLUE" });
+  const joined = await b.until("room_joined");
+  a.send({ type: "lock_room", locked: true });
+  a.send({ type: "leave_room" });
+  assert.equal((await rosterWhere(b, (r) => r.host !== 1)).host, 2, "BLUE is the heir");
+  await before.shutdown("SIGTERM");
+
+  const after = createRelay();
+  const port = (await after.listen(0, "127.0.0.1")).port;
+  try {
+    const b2 = await connect(port);
+    b2.send({ type: "join_room", code, name: "BLUE", token: joined.token });
+    assert.equal((await b2.next()).reason, "not_found", "the room went with the restart");
+    b2.send({ type: "host_room", name: "BLUE", open: true, seat: joined.id });
+    const hosted = await b2.until("room_hosted");
+    assert.equal(hosted.id, 2, "its own seat, not the opener's");
+    assert.equal((await b2.until("roster")).host, 2);
+    // the next one in gets the lowest seat free
+    const c = await connect(port);
+    c.send({ type: "join_room", code: hosted.code, name: "NEW" });
+    assert.equal((await c.until("room_joined")).id, 1);
+    // and a seat that is no seat is not asked for
+    for (const seat of [0, MAX_SEAT + 1, "2", 2.5]) {
+      const d = await connect(port);
+      d.send({ type: "host_room", name: "D", seat });
+      assert.equal((await d.until("room_hosted")).id, 1, `seat ${JSON.stringify(seat)}`);
+      d.end();
+    }
+    for (const x of [a, b, b2, c]) x.end();
+  } finally {
+    await after.close();
   }
 });

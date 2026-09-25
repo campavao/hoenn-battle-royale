@@ -27,7 +27,7 @@ Client -> server:
 
 | type | fields | does |
 | --- | --- | --- |
-| `host_room` | `name, open?, max?, skin?, pass?, patch?, protocol?` | opens a room; `room_hosted {code, id, token}` then a roster |
+| `host_room` | `name, open?, max?, skin?, pass?, patch?, protocol?, seat?` | opens a room; `room_hosted {code, id, token}` then a roster. `seat` (1..31): the id to open it as instead of 1 -- a match hosted again after its room went (a relay restart) is played from the seat it had, an heir's included |
 | `set_max` | `max` | host only: room size, live |
 | `set_pass` | `pass` | host only: passcode, live; empty/absent clears it |
 | `set_skin` | `skin` | what this member looks like, live |
