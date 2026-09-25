@@ -1,11 +1,56 @@
 // Where the page's match meets the bots' brain (POK-238, POK-330).
 //
-// A bot has no ROM, so its fights run in somebody else's: whoever fought it reports how
-// it went, and the page that walks it has to hear. This is that hearing, written once
-// and called from every road a ROM's words arrive by -- the room's relay, the host's own
-// ROM, and solo's, which has no relay at all and for a long time heard none of it.
-import type { Msg } from '../net/wire';
-import type { Bots } from './brain';
+// The brain walks the page's grid and hears nothing by itself. What it knows of the
+// match comes through here: the loot on the ground and where a bot was last seen, both
+// off the wire in the ROM's space (bots/space.ts), and what a ROM said about a fight
+// with a bot. A bot has no ROM, so its fights run in somebody else's, and the page that
+// walks it only ever hears how they went -- written once, and called from every road a
+// ROM's words arrive by: the room's relay, the host's own ROM, and solo's, which has no
+// relay at all and for a long time heard none of it.
+import type { Loot } from '../match/loot';
+import type { MapRef, Msg } from '../net/wire';
+import type { Bots, BotsOptions } from './brain';
+import type { Bot } from './roster';
+import { toPage, toRom, type RomCell } from './space';
+
+/** The match's loot table as the brain sees it (POK-232, POK-330 #14). The table holds
+ *  what the wire said, which is the ROM's space; the brain walks the page's. `at` was
+ *  converted and `all` was not, so bots walked to the cell seven tiles right and seven
+ *  down of every piece -- a wall as often as not -- and with two pieces on a map
+ *  shuttled between the two wrong cells for the rest of the match. */
+export function lootView(
+  loot: Loot,
+  refOf: (mapId: string) => MapRef | undefined,
+  idOf: (map: MapRef) => string | undefined,
+): NonNullable<BotsOptions['loot']> {
+  return {
+    all: () =>
+      loot.all().flatMap((piece) => {
+        const mapId = idOf(piece.map);
+        return mapId ? [{ key: piece.key, mapId, ...toPage(piece) }] : [];
+      }),
+    at: (mapId, cell) => {
+      const ref = refOf(mapId);
+      return ref ? loot.at(ref, toRom(cell)) : undefined;
+    },
+    bagAt: (key) => loot.bagAt(key),
+  };
+}
+
+/** A bot picked up by a promoted host (POK-252), stood where the room last saw it. That
+ *  is a roster row, which came off the wire -- the ROM's space -- and a bot stands on
+ *  the page's grid, so it used to come back seven tiles off, often inside a wall. No
+ *  row, or a map the world does not know, leaves it where the deal put it. */
+export function resumeAt(
+  bot: Bot,
+  seen: ({ map: MapRef } & RomCell) | undefined,
+  idOf: (map: MapRef) => string | undefined,
+): Bot {
+  const mapId = seen ? idOf(seen.map) : undefined;
+  if (!seen || !mapId) return bot;
+  const cell = toPage(seen);
+  return { ...bot, map: seen.map, mapId, x: cell.x, y: cell.y };
+}
 
 /** Hands the brain whatever a ROM said about a fight with a bot. `from` is the seat
  *  whose ROM said it: the relay's own `from` for a message that crossed the wire, and

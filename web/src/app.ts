@@ -21,7 +21,8 @@ import { bossAt } from './match/bosses';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
 import { Bots } from './bots/brain';
-import { routeToBots } from './bots/adapt';
+import { lootView, resumeAt, routeToBots } from './bots/adapt';
+import { romCell, type RomCell } from './bots/space';
 import { dealBots, MAX_SEATS } from './bots/roster';
 import type { Bot } from './bots/roster';
 import { type BotVoice, lineAt, nextLine, voiceFor } from './bots/lines';
@@ -1192,7 +1193,8 @@ interface BotResume {
   humanSeats: number[];
   /** Seats that are not coming back: eliminated, or gone from the room. */
   out: Set<number>;
-  where: (seat: number) => { map: MapRef; x: number; y: number } | undefined;
+  /** Where the room last saw it -- a roster row, so the wire's space. */
+  where: (seat: number) => ({ map: MapRef } & RomCell) | undefined;
 }
 
 function startBots(
@@ -1246,6 +1248,7 @@ function startBots(
   let inOpening = opening;
   const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
   const idByRef = new Map(maps.map((m) => [`${m.group}:${m.num}`, m.id]));
+  const idOf = (map: MapRef) => idByRef.get(`${map.group}:${map.num}`);
   let ring: { sx: number; sy: number; r: number } | undefined;
   const bots = new Bots({
     world,
@@ -1258,20 +1261,9 @@ function startBots(
     // counted as outside a ring that did not exist and bled through the whole opening:
     // eight bots went into the Zone and two came out of it (POK-257).
     inside: (id) => ring === undefined || sectionInside(WORLD.sections[sectionOf.get(id) ?? ''], ring),
-    loot: {
-      all: () =>
-        loot
-          .all()
-          .map((l) => ({ ...l, mapId: idByRef.get(`${l.map.group}:${l.map.num}`) ?? '' }))
-          .filter((l) => l.mapId !== ''),
-      // The table holds what the wire said, which is the ROM's space; the brain asks
-      // about the grid it walks.
-      at: (mapId, x, y) => {
-        const ref = refById.get(mapId);
-        return ref ? loot.at(ref, x + MAP_OFFSET, y + MAP_OFFSET) : undefined;
-      },
-      bagAt: (key) => loot.bagAt(key),
-    },
+    // The table holds what the wire said, which is the ROM's space; the brain asks
+    // about the grid it walks (bots/space.ts).
+    loot: lootView(loot, (mapId) => refById.get(mapId), idOf),
     // The eyeline (POK-238). A bot fights a player the same way a player fights one:
     // whoever sees the other starts it. The team goes over as a `trainer` card first,
     // because the ROM has to build a party before the challenge lands.
@@ -1319,11 +1311,7 @@ function startBots(
   const resumed = (r: BotResume): Bot[] =>
     dealBots(seed, r.botSeats.length, r.humanSeats, spawns)
       .filter((b) => !r.out.has(b.seat))
-      .map((b) => {
-        const at = r.where(b.seat);
-        const mapId = at ? idByRef.get(`${at.map.group}:${at.map.num}`) : undefined;
-        return at && mapId ? { ...b, map: at.map, mapId, x: at.x, y: at.y } : b;
-      });
+      .map((b) => resumeAt(b, r.where(b.seat), idOf));
   const dealt = resume
     ? resumed(resume)
     : dealBots(seed, fill, takenSeats, opening ? safariSpawns : spawns);
@@ -2223,7 +2211,7 @@ function wireRoom(
           where: (seat: number) => {
             const row = bridge!.roster.all().find((e) => e.seat === seat);
             return row?.map && row.x !== undefined && row.y !== undefined
-              ? { map: row.map, x: row.x, y: row.y }
+              ? { map: row.map, ...romCell(row.x, row.y) }
               : undefined;
           },
         }

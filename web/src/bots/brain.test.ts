@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Bots, health, STEP_MS, type BotsOptions, type PlayerView } from './brain';
 import { dealBots, MAX_SEATS } from './roster';
 import { World, type Spot, type WorldMap } from './world';
+import { pageCell } from './space';
 import { mulberry32 } from '../match/clock';
 import type { MapRef, Msg, PackedMon } from '../net/wire';
 import type { Stack } from './bag';
@@ -202,8 +203,8 @@ describe('bots walking', () => {
       rng: mulberry32(3),
       inside: (id) => id === 'FIELD',
       loot: {
-        all: () => [...ground].map(([key, at]) => ({ key, ...at })),
-        at: (mapId, x, y) => {
+        all: () => [...ground].map(([key, at]) => ({ key, mapId: at.mapId, ...pageCell(at.x, at.y) })),
+        at: (mapId, { x, y }) => {
           for (const [key, cell] of ground) {
             if (cell.mapId === mapId && cell.x === x && cell.y === y) return key;
           }

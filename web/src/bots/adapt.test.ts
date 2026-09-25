@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { Bots, STEP_MS, type PlayerView } from './brain';
-import { routeToBots } from './adapt';
+import { Bots, STEP_MS, type BotsOptions, type PlayerView } from './brain';
+import { lootView, resumeAt, routeToBots } from './adapt';
 import { dealBots } from './roster';
-import { World, type WorldMap } from './world';
+import { pageCell, romCell, toRom } from './space';
+import { World, type Spot, type WorldMap } from './world';
 import { mulberry32 } from '../match/clock';
+import { Loot } from '../match/loot';
+import { toRomCells } from '../net/cells';
 import { Bridge, type EmulatorLike } from '../net/bridge';
 import { MAILBOX } from '../net/mailbox';
 import { packSlot } from '../net/slots';
@@ -117,6 +120,64 @@ function host() {
   run(3000);
   return { bots, bot, sent, gba, run, me };
 }
+
+describe('the loot and the roster, off the wire (POK-330 #14)', () => {
+  // Big enough that a bot wandering at random does not stumble onto the piece: it
+  // has to be walking to it.
+  const BIG: WorldMap = { id: 'BIG', group: 0, num: 2, w: 20, h: 20, section: 'S', outdoor: true, grid: '400x0', seams: [] };
+  const BIG_REF = { group: 0, num: 2 };
+  const idOf = (map: { group: number; num: number }) => (map.num === 2 ? 'BIG' : undefined);
+
+  it('walks a bot onto a piece the wire put down, not seven tiles past it', () => {
+    const loot = new Loot();
+    // A player's whiteout, exactly as their ROM sends it: the ROM's space, seven out.
+    const piece = pageCell(15, 15);
+    loot.note({ t: 'spill', seat: 1, map: BIG_REF, mons: [{ key: 0x0100, ...toRom(piece), species: 277, level: 5 }] });
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world: new World([BIG]),
+      targets: [{ mapId: 'BIG', x: 0, y: 0 }],
+      mapRef: () => BIG_REF,
+      // What the room's send does with a bot's messages: into the wire's space, and
+      // onto the table -- so a pickup takes the piece off it.
+      send: (m) => {
+        sent.push(m);
+        loot.note(toRomCells(m));
+      },
+      rng: mulberry32(7),
+      loot: lootView(loot, (id) => (id === 'BIG' ? BIG_REF : undefined), idOf),
+    });
+    const dealt = dealBots(1, 1, [], [{ mapId: 'BIG', map: BIG_REF, x: 0, y: 0 }]);
+    bots.start(dealt, 0);
+    let took: Spot | undefined;
+    for (let t = STEP_MS; t <= 15_000 && !took; t += STEP_MS) {
+      bots.tick(t);
+      if (sent.some((m) => m.t === 'pickup' && m.key === 0x0100)) took = bots.spotOf(dealt[0].seat);
+    }
+    expect(took).toEqual({ map: 'BIG', x: piece.x, y: piece.y });
+    expect(loot.size()).toBe(0);
+  });
+
+  it('stands a resumed bot where the room last saw it', () => {
+    const bot = dealBots(1, 1, [], [{ mapId: 'BIG', map: BIG_REF, x: 0, y: 0 }])[0];
+    // A roster row: the bot's last `place`, which the host sent in the wire's space.
+    const row = { map: BIG_REF, ...romCell(12, 9) };
+    expect(resumeAt(bot, row, idOf)).toMatchObject({ mapId: 'BIG', x: 5, y: 2 });
+    expect(resumeAt(bot, undefined, idOf)).toBe(bot);
+  });
+
+  it('will not compile a cell from the wrong space', () => {
+    const loot = new Loot();
+    const bot = dealBots(1, 1, [], [{ mapId: 'BIG', map: BIG_REF, x: 0, y: 0 }])[0];
+    type LootAll = NonNullable<BotsOptions['loot']>['all'];
+    // The bug, as it was written: the table's cells handed to the brain unconverted.
+    // @ts-expect-error -- a RomCell is not a PageCell
+    const unconverted: LootAll = () => loot.all().map((l) => ({ ...l, mapId: 'BIG' }));
+    // @ts-expect-error -- and a bare row is not a RomCell: it has to say where it came from
+    const bare = resumeAt(bot, { map: BIG_REF, x: 12, y: 9 }, idOf);
+    expect([unconverted, bare]).toHaveLength(2);
+  });
+});
 
 const released = (sent: Msg[], seat: number) => sent.some((m) => m.t === 'busy' && m.seat === seat && m.kind === undefined);
 

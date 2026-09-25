@@ -11,8 +11,12 @@
 // goes into the in-ring as a fresh `spill`. The ROM cannot tell the difference between
 // that and the original, which is the point.
 import { speciesName } from '../bots/party';
+import { romCell, type RomCell } from '../bots/space';
 import type { World } from '../bots/world';
 import type { MapRef, Msg, SpillBag, SpillMon, SpillMsg } from '../net/wire';
+
+/** One piece on the ground, where the wire put it: the ROM's space (bots/space.ts). */
+export type LootCell = { key: number; map: MapRef } & RomCell;
 
 /** Where the pieces of one spill land, walked in this order: the cell they fell on, then
  *  the ring around it, then two out. Kanto scatters within two tiles; this is the same
@@ -129,7 +133,6 @@ export class Loot {
     return msg;
   }
 
-  /** Every piece still on the ground, for anyone who needs to walk to one. */
   /** What is under this key, in the words a ticker line would use -- or null when this
    *  page never saw it land (POK-268). A watcher uses it to say what the trainer it is
    *  following just picked up. */
@@ -148,21 +151,23 @@ export class Loot {
     return 'SOMETHING';
   }
 
-  all(): { key: number; map: MapRef; x: number; y: number }[] {
-    const out: { key: number; map: MapRef; x: number; y: number }[] = [];
+  /** Every piece still on the ground, for anyone who needs to walk to one -- in the
+   *  wire's space, which is not the one a bot walks in (bots/adapt.ts's lootView). */
+  all(): LootCell[] {
+    const out: LootCell[] = [];
     for (const [key, piece] of this.pieces) {
       const cell = piece.mon ?? piece.bag;
-      if (cell) out.push({ key, map: piece.map, x: cell.x, y: cell.y });
+      if (cell) out.push({ key, map: piece.map, ...romCell(cell.x, cell.y) });
     }
     return out;
   }
 
   /** The piece standing on this cell, if any. */
-  at(map: MapRef, x: number, y: number): number | undefined {
+  at(map: MapRef, at: RomCell): number | undefined {
     for (const [key, piece] of this.pieces) {
       if (!sameMap(piece.map, map)) continue;
       const cell = piece.mon ?? piece.bag;
-      if (cell && cell.x === x && cell.y === y) return key;
+      if (cell && cell.x === at.x && cell.y === at.y) return key;
     }
     return undefined;
   }

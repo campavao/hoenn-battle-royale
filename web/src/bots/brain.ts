@@ -16,6 +16,7 @@ import { MOVE_CUT, MOVE_FLY, MOVE_SURF } from './party';
 import { battleItems, merge as mergeBag, purse, quaff, restock, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
 import { sameSpot, type SeamDir, type Spot, type World } from './world';
+import { pageCell, type PageCell } from './space';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg } from '../net/wire';
 import { spillCells } from '../match/loot';
 
@@ -210,8 +211,10 @@ export interface BotsOptions {
    *  a piece it can reach and picks it up like anybody else, which is also how the
    *  room hears about it -- `pickup` is the same message a player's ROM sends. */
   loot?: {
-    all: () => { key: number; mapId: string; x: number; y: number }[];
-    at: (mapId: string, x: number, y: number) => number | undefined;
+    /** In the page's space, which is the one the brain walks: the table itself holds
+     *  the wire's, and bots/adapt.ts's lootView is the door between them. */
+    all: () => ({ key: number; mapId: string } & PageCell)[];
+    at: (mapId: string, cell: PageCell) => number | undefined;
     /** What the next item out of this piece would be, when the piece is a bag rather
      *  than a mon (POK-237). A bot takes one the way a player does -- one press, one
      *  item -- and the rest stays on the ground for whoever is next. */
@@ -702,7 +705,7 @@ export class Bots {
     if (this.tryEngage(walker, now)) return;
     // Loot at your feet, before anything else: a bot standing on a ball takes it, and
     // that is the turn spent.
-    const here = this.opts.loot?.at(walker.at.map, walker.at.x, walker.at.y);
+    const here = this.opts.loot?.at(walker.at.map, pageCell(walker.at.x, walker.at.y));
     if (here !== undefined) {
       // A bag on the ground gives up one item per press -- the ROM's own rule -- so
       // the pickup names what was taken and the rest stays there (POK-237).
