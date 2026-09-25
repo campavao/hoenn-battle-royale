@@ -378,6 +378,12 @@ void BrNetlink_StartBattle(u8 myId, u8 peerSeat)
     gBrNetlink.pendingLen = 0;
     gBrNetlink.startState = 1;
     gBrNetlink.peerOut = FALSE;
+    // Per fight, not per boot: the hello watchdog reads blocksRecv as "they have answered
+    // THIS challenge", and a count left over from the last fight stood it down in every
+    // fight after the first (POK-330 #7).
+    gBrNetlink.blocksSent = 0;
+    gBrNetlink.blocksRecv = 0;
+    gBrNetlink.silent = 0;
     sRecvAsm.type = 0;
     // No outcome yet. The engine clears it only in BeginBattleIntro, after the start
     // exchange, and until then it still says how the last fight went -- which would read

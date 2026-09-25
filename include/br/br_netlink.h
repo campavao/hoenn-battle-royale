@@ -21,7 +21,7 @@ struct BrNetlink
     /* 9 */ u8 pendingLen;  // a block that did not fit the ring yet, in pending[]
     /* 10 */ u8 startState; // the battle-start task's step, 0 idle
     /* 11 */ u8 lastOutcome;
-    /* 12 */ u16 blocksSent;
+    /* 12 */ u16 blocksSent;  // this session's, like silent: StartBattle zeroes all three
     /* 14 */ u16 blocksRecv;
     /* 16 */ u8 pendingPeer;  // a CHALLENGE that landed in a menu waits here, 0xFF none
     /* 17 */ u8 stableFrames; // frames the current non-field callback2 has held

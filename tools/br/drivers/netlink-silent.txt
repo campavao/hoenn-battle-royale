@@ -44,4 +44,49 @@ expectge u16 gBrOwnPos+4 17
 tap START
 wait 60
 shot menu
+tap B
+wait 30
+#
+# ...and it does so in every fight, not just the first after boot (POK-330 #7). The
+# count that tells the watchdog the peer has answered was never reset, so once any fight
+# had heard a single block, the next peer that went silent in the handshake froze us
+# again, the same black screen, for the rest of the match.
+#
+# One fight that hears from its peer: seat 2 (placed well out of our eyeline) challenges
+# us, and one block comes back from it -- a zero header, which is enough to move the
+# start exchange on to the parties. Then seat 2 goes out, and the fight is ours
+# (out-peer.txt).
+# PLACE seat 2 at (20,8) facing SOUTH; CHALLENGE 2 -> 0
+pokebytes gDecompressionBuffer 02 01 00 09 14 00 08 00 01 01 02
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 02 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+2 2
+# BT from seat 2: seat, seq u16 = 1, len u16 = 4, four zero bytes
+pokebytes gDecompressionBuffer 02 01 00 04 00 00 00 00 00
+mailsend gBrMailbox 6 gDecompressionBuffer 9
+wait 30
+expect u16 gBrNetlink+14 1
+pokebytes gDecompressionBuffer 02
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 200
+expect u8 gBrNetlink 0
+# The next challenge is from somebody who says nothing at all: seat 3, on this map, out
+# of our eyeline. The watchdog must see it for what it is.
+pokebytes gDecompressionBuffer 03 01 00 09 14 00 0A 00 01 01 03
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 03 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 30
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+2 3
+wait 700
+expect u8 gBrNetlink 0
+expect u8 gWirelessCommType 0
+# B_OUTCOME_FORFEITED: nobody fought, and nothing was heard from this one.
+expect u8 gBrNetlink+11 9
+expect u16 gBrNetlink+14 0
+shot back-again
 say netlink silent ok
