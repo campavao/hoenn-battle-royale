@@ -1,0 +1,43 @@
+# wire-misframed: a slot whose framing is wrong is dropped, by every handler (POK-330 #27).
+#
+# BrWire_Unframe answered a bad frame -- a first slot whose seq byte is not 0, a length it
+# does not have -- with 0xFF and never set the data pointer. Only the ticker checked for
+# 0xFF; every other handler checks `n < K`, which 0xFF passes, and then read through a
+# pointer that was whatever the last call left on the stack. Now it answers 0, which no
+# handler accepts, and points the data at a zero byte.
+#
+# The GIVE pair is the one that shows it: the same handler twice in one drain sits on the
+# same stack, so the bad GIVE's stale pointer was the good GIVE's payload, and the POTION
+# arrived twice. The PLACE and CHALLENGE after it must change nothing either.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the bag's quantities are XOR'd with this key; zero reads them in the clear
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u8 gBrMySeat 3
+expect u16 *gSaveBlock1Ptr+0x560 0
+# slot 0: GIVE (type 30), framed len 7 = hdr(04 00 00) + count 01 + POTION (0x000D) x1
+# slot 1: the same bytes with seq 1 on what claims to be a first slot
+pokebytes gBrMailbox+0x1018 1E 07 04 00 00 01 0D 00 01
+pokebytes gBrMailbox+0x1058 1E 07 04 00 01 01 0D 00 01
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u16 gBrMailbox+0x0E 2
+# one POTION, from the good slot alone
+expect u16 *gSaveBlock1Ptr+0x560 13
+expect u16 *gSaveBlock1Ptr+0x562 1
+# PLACE for seat 6 on this map, claiming 11 bytes in a 9-byte slot
+pokebytes gBrMailbox+0x1098 02 0B 0B 00 00 06 01 00 09 07 00
+# CHALLENGE us (3) -> seat 5 with seq 1 on the first slot
+pokebytes gBrMailbox+0x10D8 05 07 04 00 01 03 05 00 00
+# PLACE with a length byte under the frame header
+pokebytes gBrMailbox+0x1118 02 02 0B 00
+poke u16 gBrMailbox+0x0C 5
+wait 30
+expect u16 gBrMailbox+0x0E 5
+expect u8 gBrSeats+0x60 0
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+2 0
+expect u8 gBrMySeat 3
+shot nothing-happened
+say wire misframed ok

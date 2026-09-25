@@ -328,7 +328,7 @@ static void HandleTicker(const u8 *payload, u8 len)
     u8 n = BrWire_Unframe(payload, len, &d);
     u8 textLen;
 
-    if (n == 0xFF || n < 3)
+    if (n < 3)
         return;
     textLen = d[2];
     if (textLen > n - 3)

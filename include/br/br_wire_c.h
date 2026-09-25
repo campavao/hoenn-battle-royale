@@ -17,7 +17,9 @@ bool8 BrWire_Send(u8 type, const u8 *data, u8 len);
 // All or nothing: FALSE (and nothing pushed) when the ring lacks the room.
 bool8 BrWire_SendLarge(u8 type, const u8 *data, u16 len);
 // Unframes a single-slot payload: points *data at the message bytes and returns their
-// length, or 0xFF when the frame is a continuation or claims more than one slot.
+// length. A frame that is a continuation, claims more than one slot or is too short to
+// be a frame at all returns 0 with *data at a zero byte, so a handler's own `n < K`
+// length check is the only check it needs.
 u8 BrWire_Unframe(const u8 *payload, u8 len, const u8 **data);
 
 // Multi-slot reassembly: feed every slot of a type (and its type | BR_MSG_CONT)

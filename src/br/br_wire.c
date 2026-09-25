@@ -101,15 +101,23 @@ bool8 BrWire_Assemble(struct BrAssembler *as, u8 baseType, bool8 isCont, const u
     return FALSE;
 }
 
+// What a bad frame reads as: a zero-length message whose data is one zero byte.
+static const u8 sNoData[1] = {0};
+
 u8 BrWire_Unframe(const u8 *payload, u8 len, const u8 **data)
 {
     u16 total;
 
+    // A bad frame is a message of no bytes, not an error code. It was 0xFF, and every
+    // handler but the ticker's checks `n < K` -- which 0xFF passes -- and then read
+    // through a *data this never set: the stack's leftovers, which in practice was the
+    // last message the same handler took, taken twice (POK-330 #27).
+    *data = sNoData;
     if (len < BR_FRAME_HDR)
-        return 0xFF;
+        return 0;
     total = BrWire_ReadU16(payload);
     if (payload[2] != 0 || total > BR_FRAME_DATA_MAX || total > len - BR_FRAME_HDR)
-        return 0xFF;
+        return 0;
     *data = payload + BR_FRAME_HDR;
     return (u8)total;
 }
