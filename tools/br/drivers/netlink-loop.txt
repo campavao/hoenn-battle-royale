@@ -20,5 +20,12 @@ wait 600
 # five blocks went out: header, party x3, rng seed
 expectge u16 gBrNetlink+12 5
 expectge u16 gBrMailbox+0x08 6
+# gWirelessCommType 5 is "wireless" to every upstream truthy test, so each VBlank of this
+# fight runs RfuVSync and the battle draws the wireless indicator, both of which read
+# gRfuLinkStatus. That is safe only because the boot's InitRFU pointed it at the API
+# buffer with parentChild MODE_NEUTRAL (0xFF), where rfu_syncVBlank does nothing
+# (POK-330 #31, include/br/br_netlink.h).
+expectne u32 gRfuLinkStatus 0
+expect u8 *gRfuLinkStatus+0 0xFF
 shot battle
 say netlink loop ok

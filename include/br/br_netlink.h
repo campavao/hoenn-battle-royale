@@ -9,6 +9,29 @@
 
 #define BR_WIRELESS_NETLINK 5
 
+// Upstream asks `if (gWirelessCommType)` in about sixty places, meaning "wireless", and 5
+// passes every one of them (POK-330 #31). link.c's own are hooked (BR_NETLINK_ACTIVE).
+// These are the others a netlink battle goes through; re-read them after a pret merge,
+// and any new truthy test on the battle path:
+//
+//   Relied on -- with a 0 here the battle would wait for a cable:
+//     battle_controllers.c   Task_HandleSendLinkBuffersData, SENDTASK_STATE_COUNT_PLAYERS:
+//                            skips counting cable players (GetLinkPlayerCount_2 says 0)
+//     battle_controller_player.c  SetBattleEndCallbacks / SetLinkBattleEndCallbacks: the
+//                            end goes through the hooked standby and IsLinkTaskFinished,
+//                            not a wait for gReceivedRemoteLinkPlayers to drop
+//     battle_main.c          EndLinkBattleInSteps (8, 9) and AskRecordBattle's end: no
+//                            close-link callback, straight on to gMain.savedCallback
+//   A no-op for us:
+//     battle_controllers.c   HandleLinkBattleSetup: SetWirelessCommType1 and OpenLink only
+//                            act while gReceivedRemoteLinkPlayers is 0, and it is set
+//   RFU code that runs, and is safe only because AgbMain's InitRFU runs InitRFUAPI at every
+//   boot, leaving gRfuLinkStatus pointing into gRfuAPIBuffer with parentChild ==
+//   MODE_NEUTRAL (netlink-loop.txt asserts both):
+//     main.c                 VBlankIntr: RfuVSync, whose rfu_syncVBlank returns at once
+//     battle_main.c          CB2_HandleStartBattle, and reshow_battle_screen.c: the
+//                            wireless status indicator, which reads gRfuLinkStatus
+
 struct BrNetlink
 {
     /* 0 */ u8 active;      // a session is open (gWirelessCommType is ours)

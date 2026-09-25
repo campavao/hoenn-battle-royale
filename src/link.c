@@ -739,7 +739,14 @@ static void LinkCB_SendHeldKeys(void)
 
 void ClearLinkCallback(void)
 {
-    if (gWirelessCommType == 1)
+#if BR
+    if (BR_NETLINK_ACTIVE)
+    {
+        gLinkCallback = NULL;
+        return;
+    }
+#endif
+    if (gWirelessCommType)
         ClearLinkRfuCallback();
     else
         gLinkCallback = NULL;
@@ -747,7 +754,14 @@ void ClearLinkCallback(void)
 
 void ClearLinkCallback_2(void)
 {
-    if (gWirelessCommType == 1)
+#if BR
+    if (BR_NETLINK_ACTIVE)
+    {
+        gLinkCallback = NULL;
+        return;
+    }
+#endif
+    if (gWirelessCommType)
         ClearLinkRfuCallback();
     else
         gLinkCallback = NULL;

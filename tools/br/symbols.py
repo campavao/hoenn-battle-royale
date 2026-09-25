@@ -34,6 +34,8 @@ ENGINE_SYMBOLS = [
     # The overworld's main callback: the page shows the picture past the LCD only while
     # gMain.callback2 is this (POK-319, web/src/field.ts).
     "CB2_Overworld",
+    # What every netlink VBlank's RfuVSync reads (include/br/br_netlink.h, netlink-loop.txt).
+    "gRfuLinkStatus",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"
