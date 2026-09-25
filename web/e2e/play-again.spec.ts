@@ -28,7 +28,7 @@ test.beforeAll(() => {
 });
 
 test('a finished match lets go, and the room keeps its code, roster and socket', async ({ page }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(360_000);
 
   await page.goto(`/#host&fast&seed=20260916&testmon&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
@@ -45,6 +45,15 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
   const card = page.locator('#results-record');
   await expect(card).toBeVisible();
   await expect(card).toContainText('RINGS');
+
+  // POK-330 #16: the host never hears its own messages back, and its own bots' `out`s
+  // went to the room and the director but not to its results, record or log -- so it
+  // placed itself against a field it never saw thin. The round it wrote down has every
+  // elimination the director counted: all but the winner.
+  const round = await page.evaluate(() => JSON.parse(localStorage.getItem('hbr:log') ?? '[]')[0]);
+  const outs = new Set((round.events as { t: string; seat?: number }[]).filter((e) => e.t === 'out').map((e) => e.seat));
+  expect(round.seats, 'bots filled the room').toBeGreaterThan(1);
+  expect(outs.size, 'every bot that went out is in the host\'s own log').toBeGreaterThanOrEqual(round.seats - 1);
 
   // Nothing is pressed from here. The grace is what has to move us.
   await expect(page.locator('#results-panel')).toBeHidden({ timeout: 60_000 });
@@ -80,4 +89,70 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
     return { group: emu.read(save + 4, 8), num: emu.read(save + 5, 8) };
   }, symbols.gSaveBlock1Ptr);
   expect(where, 'the replay landed in Littleroot, not the truck').toEqual({ group: 0, num: 9 });
+
+  // POK-330 #22: and it stays in the room. The last match was never reset, so the page's
+  // one-second strip still saw a match on and took the room screen -- START with it --
+  // down again about a second after coming back.
+  await page.waitForTimeout(3_000);
+  await expect(page.locator('#room-start'), 'START is still there three seconds on').toBeVisible();
+  expect(await page.evaluate(() => document.body.classList.contains('in-match')), 'not dressed for a match').toBe(false);
+
+  // ...and the next START deals a real match: bots filling the room again, not last
+  // match's bots seated as people (which made FILL zero and a match nobody could win).
+  await page.locator('#room-start').click();
+  await page.waitForFunction(
+    () => (window as unknown as BrWindow).__br?.director?.state?.phase === 'safari',
+    undefined,
+    { timeout: 30_000 },
+  );
+  const second = await page.evaluate(() => {
+    const br = (window as unknown as BrWindow).__br;
+    return { bots: br.botCount() as number, alive: br.director.state.alive as number, seats: br.match.seats.length as number };
+  });
+  expect(second.bots, 'the room filled with bots again').toBeGreaterThan(0);
+  expect(second.alive, 'every seat in the match is somebody who can move: us and the bots').toBe(second.bots + 1);
+  expect(second.seats).toBe(second.alive);
+});
+
+// POK-330 #9. The host sends `again` in the same tick as its `win`, and every guest took it
+// as the way out: its results panel lasted as long as a reboot, and a guest who won had
+// the Hall of Fame power-cycled out from under it. `again` is recovery for a page that
+// never heard the `win`; a page that did keeps its own grace. The single-page test above
+// cannot see this -- nobody hears their own `again` -- so this one needs a guest.
+test("a guest reads its result for the whole grace, whatever the host's `again` says", async ({ browser }) => {
+  test.setTimeout(360_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+
+    const guest = await guestCtx.newPage();
+    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
+    await startWith(host, 2);
+
+    // A whole match at the dev pace, bots filling the room, until the guest is told.
+    const panel = guest.locator('#results-panel');
+    await expect(panel).toBeVisible({ timeout: 240_000 });
+    const shownAt = Date.now();
+
+    // END_GRACE_MS is four seconds (a champion waits longer, for the parade). Two and a
+    // half in, the panel must still be up: the bug took it down in the time a reboot takes.
+    await guest.waitForTimeout(2_500);
+    await expect(panel, 'still reading the result, `again` or no `again`').toBeVisible();
+
+    // And the grace still ends on its own, back in the room.
+    await expect(panel).toBeHidden({ timeout: 90_000 });
+    expect(Date.now() - shownAt, 'the result stayed up for the grace').toBeGreaterThanOrEqual(3_500);
+    await expect(guest.locator('#room-code')).toHaveText(`Room ${code}`, { timeout: 30_000 });
+  } finally {
+    await guestCtx.close();
+    await hostCtx.close().catch(() => {});
+  }
 });

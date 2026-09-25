@@ -136,6 +136,79 @@ test('the host tabs out and hands the match over without leaving', async ({ brow
     await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/);
     expect(await host.title(), 'no PAUSED banner: nothing is paused').not.toContain('PAUSED');
     expect(await host.locator('#room-note').textContent()).not.toMatch(/hidden for/);
+
+    // POK-330 #13: standing down stops the Director, not just its clock. The orphan kept
+    // its `out` subscription and told the room about every later elimination a second
+    // time. So: somebody goes out, and the ex-host must have nothing to say about it.
+    const said = await host.evaluate(() => {
+      const br = (window as unknown as BrWindow).__br;
+      const relay = br.bridge.relay;
+      const sent: { t: string }[] = [];
+      const all = relay.all.bind(relay);
+      relay.all = (m: { t: string }) => {
+        sent.push(m);
+        all(m);
+      };
+      const out = new Set<number>(br.match.out);
+      const seat = [...(br.match.seats as number[])].reverse().find((s) => !out.has(s) && s !== br.bridge.seat);
+      // Delivered as the relay would deliver it, without asking anybody to really go out.
+      relay.emit('recv', { from: br.bridge.seat === 0 ? 1 : 0, m: { t: 'out', seat } });
+      return sent.map((m) => m.t);
+    });
+    expect(said, 'the ex-host narrates nothing: the heir runs the match now').not.toContain('ticker');
+  } finally {
+    await guestCtx.close();
+    await hostCtx.close().catch(() => {});
+  }
+});
+
+test('a socket that blips rejoins with one of everything, not two', async ({ browser }) => {
+  // POK-330 #13: every rejoin re-ran attach(), which threw away the unsubscribe from the
+  // page's own `recv` handler. After N blips N+1 copies handled every message: the record
+  // counted twice, a bot's spent items came out of its bag twice, a peek was answered
+  // twice. Phones drop sockets all the time, so this was the common case.
+  test.setTimeout(150_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&noauto&nobots&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+    const guest = await guestCtx.newPage();
+    await guest.goto(`/#join=${code}&noauto&rom=${rom}`);
+    await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
+
+    const listeners = () =>
+      guest.evaluate(() => {
+        // `listeners` is RelayClient's private map of handlers; `recv` holds the Bridge's
+        // and the page's, one each.
+        const br = (window as unknown as BrWindow).__br;
+        return { recv: br.bridge.relay.listeners.get('recv').size as number, seat: br.bridge.seat as number };
+      });
+    const before = await listeners();
+
+    // The socket drops the way a phone's does: no goodbye, and the client reconnects on
+    // its own and presents its token for the seat it had.
+    await guest.evaluate(() => {
+      const w = window as unknown as BrWindow & { __before?: unknown };
+      w.__before = w.__br;
+      w.__br.bridge.relay.ws.close();
+    });
+    await guest.waitForFunction(
+      () => {
+        const w = window as unknown as BrWindow & { __before?: unknown };
+        return w.__br !== w.__before && w.__br?.bridge !== undefined;
+      },
+      undefined,
+      { timeout: 30_000 },
+    );
+    const after = await listeners();
+    expect(after.seat, 'the relay handed the seat back').toBe(before.seat);
+    expect(after.recv, 'the rejoin replaced the handlers rather than adding to them').toBe(before.recv);
   } finally {
     await guestCtx.close();
     await hostCtx.close().catch(() => {});

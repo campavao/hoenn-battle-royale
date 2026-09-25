@@ -141,6 +141,11 @@ function bySection(world: DirectorWorld, cells: LandingCell[]): Map<number, Cell
   return out;
 }
 
+/** A cell as `dealtCells` keys it. */
+function cellKey(cell: Cell): string {
+  return `${cell.map.group}:${cell.map.num}:${cell.x}:${cell.y}`;
+}
+
 function sectionCentre(section: RegionSection): { sx: number; sy: number } {
   return { sx: section.x + Math.floor(section.w / 2), sy: section.y + Math.floor(section.h / 2) };
 }
@@ -276,15 +281,25 @@ export class Director {
     secsLeftInPhase: number;
     /** Seats already eliminated, so "N LEFT" does not jump back up. */
     out?: number[];
+    /** Cells the old host already handed out, or that somebody is standing on (landing
+     *  space, no MAP_OFFSET), so a `pick` answered from here does not put a second
+     *  trainer on one. The old host's own list went with its tab. */
+    dealt?: { map: MapRef; x: number; y: number }[];
   }): void {
     for (const seat of state.out ?? []) this.aliveSeats.delete(seat);
+    for (const cell of state.dealt ?? []) this.dealtCells.add(cellKey(cell));
     this.unsubOut = this.opts.onOut((seat) => this.handleOut(seat));
 
     if (state.ringPhase <= 0 || !state.centre) {
       // Still the opening. Its clock is wall-clock from `startedAt`, so back-date that
-      // by however much of it has gone.
+      // by however much of it has gone...
       this.phase = 'safari';
-      this.startedAt = this.opts.now() - (this.safariSecs - state.secsLeftInPhase) * 1000;
+      const gone = (this.safariSecs - state.secsLeftInPhase) * 1000;
+      this.startedAt = this.opts.now() - gone;
+      // ...and count the clocks the old host already sent as sent. Left at zero, the
+      // first tick here caught up on every five seconds since the start at once: up to
+      // 23 `clock`s in one burst to every ROM in the room.
+      this.clockTicksSent = Math.max(0, Math.floor(gone / CLOCK_STEP_MS));
       return;
     }
 
@@ -357,7 +372,7 @@ export class Director {
       // the spots Cam chose rather than filling them in the order he clicked.
       const ordered = pool !== hand && pool.length <= DOORSTEP_ORDERED;
       const cell = ordered ? pool[attempt % pool.length] : pool[pickIndex(this.rng, pool.length)];
-      const key = `${cell.map.group}:${cell.map.num}:${cell.x}:${cell.y}`;
+      const key = cellKey(cell);
       if (this.dealtCells.has(key) && attempt < DEAL_RETRY_LIMIT - 1) continue;
       this.dealtCells.add(key);
       return { seat, map: cell.map, x: cell.x, y: cell.y };
@@ -399,7 +414,7 @@ export class Director {
       for (let attempt = 0; attempt < DEAL_RETRY_LIMIT; attempt++) {
         const section = this.sections[pickIndex(this.rng, this.sections.length)];
         const cell = section.cells[pickIndex(this.rng, section.cells.length)];
-        const key = `${cell.map.group}:${cell.map.num}:${cell.x}:${cell.y}`;
+        const key = cellKey(cell);
         if (used.has(key) && attempt < DEAL_RETRY_LIMIT - 1) continue;
         used.add(key);
         map = cell.map;

@@ -218,6 +218,25 @@ describe('picking up a match in progress (POK-252)', () => {
     const win = sent.find((m) => m.t === 'win') as WinMsg | undefined;
     expect(win?.seat).toBe(0);
   });
+
+  // POK-330 #64: a takeover during the opening used to send one `clock` for every five
+  // seconds since the start of the match, all in its first tick.
+  it('does not resend the clocks the old host already sent', () => {
+    const { director, sent, advance } = harness([0, 1], 42, { safariSecs: 60, fogSecs: 30 });
+    director.resume({ ringPhase: 0, secsLeftInPhase: 20 });
+    advance(1_000);
+    expect(sent.filter((m) => m.t === 'clock'), 'no catch-up burst').toHaveLength(0);
+    advance(4_000);
+    expect((sent.filter((m) => m.t === 'clock') as ClockMsg[]).map((c) => c.left)).toEqual([15]);
+  });
+
+  it('does not deal a cell the old host already dealt', () => {
+    const { director } = harness([0, 1, 2], 99, { safariSecs: 60, fogSecs: 30 });
+    // SEC_GAMMA's doorsteps are walked in order, so a fresh director always deals the
+    // CENTRE first -- which the old host has already given somebody.
+    director.resume({ ringPhase: 0, secsLeftInPhase: 30, dealt: [{ map: { group: 0, num: 4 }, x: 7, y: 7 }] });
+    expect(director.landFor(2, 3)).toMatchObject({ x: 8, y: 8 });
+  });
 });
 
 
