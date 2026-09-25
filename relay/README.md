@@ -72,7 +72,8 @@ oldest, and never a watcher: it is not in the match (every page says
 eligible. A host that drops with no heir (alone with its bots, or the last one
 standing) is waited for through the same seat hold: the roster keeps naming
 it, the door takes nobody new (except the daily's lobby, which is
-nobody's in particular), and its token makes it host again. A member
+nobody's in particular, and a watcher of its match: watching needs nobody to
+run anything), and its token makes it host again. A member
 (not a watcher) that sends `can_host` meanwhile takes the room over instead; if nobody does
 and the hold runs out, the room closes with `host_gone`. The host is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
 (no `0 O 1 I L`), so a code read aloud never has to be checked twice.

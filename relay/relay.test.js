@@ -1948,10 +1948,18 @@ test("a host that drops with nobody to take over gets its room back, as host, in
     assert.deepEqual(waiting.members.map((m) => m.id), [2]);
     assert.equal(relay.rooms.size, 1);
 
-    // nobody new comes in meanwhile, not even to watch
+    // nobody new comes in to play meanwhile; a watcher does (POK-331 #14), and is
+    // not made the host for saying it could be
+    const p = await connect(port);
+    p.send({ type: "join_room", code: hosted.code, name: "NEW" });
+    assert.equal((await p.next()).reason, "locked");
     const c = await connect(port);
+    c.send({ type: "can_host", ok: true });
     c.send({ type: "join_room", code: hosted.code, name: "NEW", spectate: true });
-    assert.equal((await c.next()).reason, "locked");
+    const watching = await c.next();
+    assert.equal(watching.type, "room_joined", "the match is there to watch");
+    assert.equal(watching.host, 1, "and still waits for its host");
+    await rosterWhere(b, (r) => r.members.length === 2);
 
     const a2 = await connect(port);
     a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
@@ -1959,11 +1967,11 @@ test("a host that drops with nobody to take over gets its room back, as host, in
     assert.equal(back.type, "room_joined");
     assert.equal(back.id, 1);
     assert.equal(back.host, 1, "it is the host again");
-    assert.deepEqual((await b.until("roster")).members.map((m) => m.id).sort(), [1, 2]);
+    assert.deepEqual((await b.until("roster")).members.map((m) => m.id).sort(), [1, 2, 3]);
     // ...with the host's say over the room
     a2.send({ type: "set_max", max: 4 });
     assert.equal((await b.until("roster")).max, 4);
-    for (const x of [a2, b, c]) x.end();
+    for (const x of [a2, b, c, p]) x.end();
   });
 });
 
@@ -2192,6 +2200,13 @@ test("a daily waiting on its dropped host is still the daily: its lobby takes th
     assert.equal(answer.type, "match_in_progress", "a match is running, host or no host");
     assert.equal(answer.code, hosted.code);
     assert.equal(relay.rooms.size, 1);
+    // ...and the watch it says to go and do is let in (POK-331 #14): it was refused
+    // `locked` while the host was away, a dead end
+    c.send({ type: "join_room", code: answer.code, name: "LATE", spectate: true });
+    const watching = await c.next();
+    assert.equal(watching.type, "room_joined");
+    assert.equal((await rosterWhere(out, (r) => r.members.some((m) => m.name === "LATE")))
+      .members.find((m) => m.name === "LATE").spectate, true);
     for (const x of [a2, out, c]) x.end();
   });
 });

@@ -111,9 +111,10 @@
 //                                      A host that DROPS with no heir is
 //                                      waited for through the seat hold
 //                                      (POK-330 #47): the roster keeps
-//                                      naming it, the door takes nobody new,
-//                                      its token makes it host again, and a
-//                                      member sending can_host takes over;
+//                                      naming it, the door takes nobody new
+//                                      but a watcher (POK-331 #14), its token
+//                                      makes it host again, and a member
+//                                      sending can_host takes over;
 //                                      when the hold runs out, "host_gone"
 //   {type:"match_in_progress", code, members}  quick_join's third answer
 //                                      (POK-133): nothing joinable, but a
@@ -467,7 +468,7 @@ class Room {
     // over -- alone with its bots, or late in a match when everybody else is
     // out -- used to close the room two lines after holding its seat.  Now
     // the room outlives the drop by the hold: `host` still names the one it
-    // is waiting for, and the door takes nobody new meanwhile.
+    // is waiting for, and the door takes nobody new but a watcher meanwhile.
     this.hostToken = null;
   }
 
@@ -806,7 +807,8 @@ export function createRelay(options = {}) {
       // Nobody could take it, but the host only dropped: the room waits the
       // seat hold out for it (POK-330 #47).  A lone host playing bots is the
       // common case, and a phone's blip ended their match on the spot.  The
-      // roster still names them as host; the door takes nobody new.
+      // roster still names them as host; the door takes nobody new but a
+      // watcher.
       if (conn.token && room.held.has(conn.token)) {
         room.hostToken = conn.token;
         room.broadcast(room.roster());
@@ -879,10 +881,14 @@ export function createRelay(options = {}) {
     if (versionMismatch(room, version)) return "version";
     if (resuming) return null;
     // waiting on its dropped host (POK-330 #47): nobody would run the lobby
-    // or the match for a newcomer, so the door is shut to watchers too.  Not
-    // the daily's lobby, which is nobody's in particular: a newcomer's can_host
-    // makes it the host there, where passing the room over opened a second daily
-    if (room.hostToken !== null && !(room.daily && !room.locked)) return "locked";
+    // for a newcomer.  Not the daily's lobby, which is nobody's in particular:
+    // a newcomer's can_host makes it the host there, where passing the room
+    // over opened a second daily.  A running match waiting on its host is
+    // shut to players like any other, and open to watchers (POK-331 #14):
+    // watching needs nobody to run anything, a watcher is never made host
+    // (heirOf), and one turned away here had been told match_in_progress
+    // and had nowhere left to go but the lobby.
+    if (room.hostToken !== null && !room.locked && !room.daily) return "locked";
     if (room.locked && !spectate) return "locked";
     if (room.full()) return "full";
     return null;
@@ -1005,11 +1011,11 @@ export function createRelay(options = {}) {
         let open = null, running = null;
         for (const room of rooms.values()) {
           if (!room.daily) continue;
-          // a daily match already running is watched, like quick play's
+          // a daily match already running is watched, like quick play's, and
+          // one running while its host is away is still running (POK-330 #47
+          // review): canEnter lets its watchers in (POK-331 #14), so it is not
+          // a reason to open a second daily beside it
           const why = canEnter(room, conn, { version: cleanVersion(msg), spectate: room.locked });
-          // ...and one running while its host is away is still running (POK-330
-          // #47 review), not a reason to open a second daily beside it
-          if (why === "locked") { running = running || room; continue; }
           if (why !== null) continue;
           if (room.locked) running = running || room;
           else open = open || room;
