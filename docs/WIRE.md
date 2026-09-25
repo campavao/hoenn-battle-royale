@@ -62,7 +62,7 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `accept` | -- | page&lt;-&gt;page | no | the challenged seat, accepting |
 | `decline` | -- | page&lt;-&gt;page | no | the challenged seat, declining |
 | `bt` | `BR_MSG_BT` 6 | ROM&lt;-&gt;page&lt;-&gt;page&lt;-&gt;ROM | yes | one raw link-block exchange, per turn, during a PvP battle |
-| `party` | `BR_MSG_PARTY` 7 | page-&gt;ROM | yes | host (bot roster seat, before a trainer battle) or a player (Hall of Fame). As the answer to a `peek` it carries an optional tail behind the rows (POK-297): money u32, stacks u8, then id u16 + n u8 a stack, at most 20 -- what that trainer is carrying, for the spectator's peek box. A player's ROM packs its own; the host's page packs a bot's. `status` in a row sent by a ROM is a code (0 none, 1 SLP, 2 PSN, 3 BRN, 4 FRZ, 5 PAR, 6 TOX), not a flag |
+| `party` | `BR_MSG_PARTY` 7 | ROM-&gt;page&lt;-&gt;page-&gt;ROM | yes | a player's ROM, its own team: when a spectator peeks, whenever the team changes, and after a bot fight the bot's team under the bot's seat (POK-238). The host's page answers a peek at a bot with the bot's. Into a ROM it fills the spectator's peek box. As the answer to a `peek` it carries an optional tail behind the rows (POK-297): money u32, stacks u8, then id u16 + n u8 a stack, at most 20 -- what that trainer is carrying, for the spectator's peek box. A player's ROM packs its own; the host's page packs a bot's. `status` in a row sent by a ROM is a code (0 none, 1 SLP, 2 PSN, 3 BRN, 4 FRZ, 5 PAR, 6 TOX), not a flag |
 | `faint` | `BR_MSG_FAINT` 8 | ROM-&gt;page | yes | ROM, when a party slot faints in battle |
 | `out` | `BR_MSG_OUT` 9 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | the eliminated seat. A ROM takes that seat's ghost off every map for good (a later `place` or `step` from it is a spectator walking, and is ignored), drops a parked challenge from it, and wins a link battle against it that has no outcome yet (POK-330 #5) |
 | `pickup` | `BR_MSG_PICKUP` 10 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | whoever picked something up off the ground |
@@ -81,15 +81,18 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `peek` | `BR_MSG_PEEK` 21 | page-&gt;ROM-&gt;page | yes | a spectator asking what the trainer they watch carries. Broadcast; only `target`'s ROM answers, with a `party` of its own. The re-ask is also the watcher tally the corner eye counts |
 | `shot` | `BR_MSG_SHOT` 22 | ROM-&gt;page-&gt;page-&gt;ROM | yes | a fighter's own shot clock as each second turns over (0 once they have chosen), drawn on the replay of whoever is watching that seat |
 | `trainer` | `BR_MSG_TRAINER` 23 | page-&gt;ROM | yes | the host, staging a bot's team in the challenged player's ROM just before the `challenge` that starts the fight. A bot has no ROM to link with, so the battle is an ordinary `BATTLE_TYPE_TRAINER` one built from this party instead of from `gTrainers`. The card also carries the up-to-four items the bot may spend out of its bag in this fight (POK-237), which is what Emerald's trainer AI is given. Sent to that one seat, never broadcast |
+| `pick` | `BR_MSG_PICK` 24 | ROM-&gt;page-&gt;host | yes | a trainer's ROM, when the drop's map closes on a section (POK-223): `{seat, section}`. Asked once more if no `land` comes back |
+| `land` | `BR_MSG_LAND` 25 | host-&gt;page-&gt;ROM | yes | the host, answering a `pick` with a free cell in that section: `{seat, map, x, y}`, to that seat only. A ROM with no answer drops at the spawn its `start` dealt it |
 | `spent` | `BR_MSG_SPENT` 26 | ROM-&gt;page | yes | the ROM that fought a bot, naming the items out of the bot's own bag (POK-237) that the AI actually used. Carries the BOT's seat, not the sender's -- the bag lives on the host's page and the fight does not, so this is the only report of it, and the bridge deliberately does not stamp the sender's seat over it |
 | `duel` | `BR_MSG_DUEL` 27 | page-&gt;ROM | yes | the host, handing two bot parties to its hidden proxy instance (POK-238). Only that instance ever receives one: it has no seat and is in no room, and both sides of the fight are played by the AI |
 | `dresult` | `BR_MSG_DRESULT` 28 | ROM-&gt;page | yes | the proxy instance, when the duel resolves: who won and what each side has left, three bytes a mon. A timeout or a draw falls back to `bots/duel.ts`'s seeded resolver |
 | `fled` | `BR_MSG_FLED` 29 | ROM-&gt;page&lt;-&gt;page-&gt;ROM | yes | the trainer who just ran, naming who they ran from (POK-266). Every ROM that has their ghost draws a boot over it. Deliberately not a fourth `busy` kind: `busy` means "cannot be challenged", and POK-231 holds only the fleer off the pursuer |
+| `give` | `BR_MSG_GIVE` 30 | page-&gt;ROM | yes | a player's own page, when its seat takes a bag off the ground (POK-280): the stacks inside it, which only the page kept. Never on the relay |
 | `botout` | -- | page&lt;-&gt;page | no | whoever beat a bot |
 | `botrec` | -- | page&lt;-&gt;page | no | whoever changed a bot's persistent record |
-| `ticker` | `BR_MSG_TICKER` 15 | page/host-&gt;page&lt;-&gt;ROM | yes | kill feed, system lines, and chat (`say`), all one pipe |
+| `ticker` | `BR_MSG_TICKER` 15 | page/host-&gt;page&lt;-&gt;ROM | yes | kill feed, system lines, and chat (`say`), all one pipe. `text` may be 96 characters on the wire, a ROM reads one slot's worth (56) and the HUD draws `BR_HUD_LINE_MAX` (40), which is what the page's ticker builder cuts every line to |
 | `ready` | -- | page-&gt;page | no | a seat in the HTML lobby, toggling ready |
-| `result` | `BR_MSG_RESULT` 16 | ROM-&gt;page | yes | ROM, when a link/trainer battle this seat was in concludes |
+| `result` | `BR_MSG_RESULT` 16 | ROM-&gt;page&lt;-&gt;page-&gt;ROM | yes | ROM, when a link/trainer battle this seat was in concludes. A page also turns the host's `win` into a `result` `win` for its own ROM: the winner's ROM runs the parade, and a replay of the winner's fight lets go |
 | `ping`/`pong` | -- | page&lt;-&gt;page | no | either side, timing the other (distinct from the relay's own connection heartbeat) |
 
 `BR_MSG_NONE` (0) and `BR_MSG_ECHO` (1) are unchanged from the mailbox bridge test.
@@ -130,10 +133,10 @@ the moves and PP it carries; any other row's moves are ignored. Either way the R
 walks the species' learnset to the row's level, the same walk the party and the gym
 leaders get (POK-311). HM moves a page keeps for pathing never reach a fight.
 
-`tests/slots.test.ts` keeps its own `FIXED_LAYOUT_SIZES` table (packed size before
-framing, per message) asserted against real `packSlot()` output, so a layout drift
-between this doc, the header, and the code fails a test rather than surfacing at
-runtime.
+`web/src/net/slots.test.ts` pins the packed size of the fixed-layout messages
+(`FIXED_LAYOUT_SIZES`) against real `packSlot()` output, and round-trips every codec.
+Nothing reads `br_wire.h` itself: a header change needs its `slots.ts` twin by hand,
+and a driver that sends the new bytes to a real ROM.
 
 ## What did not carry over from Kanto, and why
 

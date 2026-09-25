@@ -72,32 +72,35 @@ Local dev already has the pieces: `mgba-src/` is an 0.10.5 checkout with a stati
 ## 4. The mailbox: how the ROM talks to the world
 
 The GBA has no network. The ROM cannot call out. So the bridge is memory:
+`struct BrMailbox gBrMailbox` in EWRAM (`include/br/br_mailbox.h`, 0x2028 bytes).
 
 ```
-EWRAM_DATA struct BrMailbox {
-    u16 magic;            // 'BR'
-    u16 protocol;         // wire protocol version
-    u16 outHead, outTail; // ROM -> JS ring, ROM writes head
-    u16 inHead,  inTail;  // JS -> ROM ring, JS writes head
-    u8  out[BR_RING_SLOTS][BR_SLOT_BYTES];
-    u8  in [BR_RING_SLOTS][BR_SLOT_BYTES];
-    struct BrRoster roster;   // 32 seats: id, name, skin, map, x, y, alive, ...
-    struct BrMatch  match;    // phase, ring, clock, seed, level rung, options
-} gBrMailbox;
+magic 'BR', protocol, patch, size   the page refuses a mailbox it does not recognise
+outHead/outTail, inHead/inTail      two rings, one per direction; the producer writes
+                                    the slot, then bumps head
+frame, dropped                      BrNet_Tick count, out pushes lost to a full ring
+out[64][64], in[64][64]             slots: [type][len][payload <= 62]
+boot                                16 bytes the page writes before the title screen
 ```
 
-- **ROM side**: one task, `Task_BrNet`, runs every frame from the overworld and battle
-  main loops. It drains `in` (apply ghost steps, challenge, battle blocks, clock, ring)
-  and fills `out` (own step/face/map, engage, battle blocks, catch, faint, pickup).
-- **JS side**: after every frame the shell reads `out` through the heap view, encodes to
-  the JSON wire the relay forwards, and writes relay traffic into `in`.
-- **Addresses** come from the link map. The build emits `br-symbols.json`
-  (`gBrMailbox`, `gSaveBlock1Ptr`, `gPlayerParty`, ...) next to the patch; the shell
-  loads both. Never hard-code an address.
-- Save states include the mailbox. Fine: a state restore re-syncs from the roster.
+That is all of it. Everything else the page reads is a global of its own (`gBrSeats`,
+`gBrMatch`, `gBrRing`, `gBrHud`, `gBrPick`, `gBrZone`, ...), found by name.
 
-This is the pattern Kanto used for ghosts (`place/step/face` per tick), so `lib/wire.lua`
-ports to a shared TypeScript codec on the JS side and a tiny binary codec in C.
+- **ROM side**: no task. `AgbMain` calls `BrInit` once at boot and `BrFrame` every frame
+  after `ReadKeys`, in every state -- title, overworld, battle, menus (`src/br/br_main.c`).
+  `BrNet_Tick` drains `in` into the handler each module registered with `BrNet_On`, then
+  each module ticks. `BrWire_Send`/`BrWire_SendLarge` push to `out`; a message that spans
+  slots goes in whole or not at all.
+- **Page side**: after every frame `web/src/net/bridge.ts` reads `out`, decodes it
+  (`slots.ts`), and forwards it as JSON (`wire.ts`) through the relay; relay traffic for
+  the ROM is packed and pushed into `in`.
+- **Layouts**: `include/br/br_wire.h` has every crossing message's bytes, one comment
+  block per `BR_MSG_*`; `docs/WIRE.md` has the table and the framing. Every struct
+  field the page or a driver reads by offset is pinned with `BR_OFFSET` where it is
+  declared, so moving one fails the build.
+- **Addresses** come from the link map. `tools/br/symbols.py` writes `br-symbols.json`
+  next to the patch and the page loads both. Never hard-code an address: the modern and
+  agbcc builds put things in different places.
 
 ## 5. Battles
 
@@ -105,43 +108,65 @@ ports to a shared TypeScript codec on the JS side and a tiny binary codec in C.
 `gWirelessCommType` between the cable and the RFU wireless adapter. We add a third
 transport, `br_netlink.c`, that satisfies the same block interface (`SendBlock`,
 `GetBlockReceivedStatus`, `IsLinkTaskFinished`, `GetMultiplayerId`,
-`GetLinkPlayerCount`, `gBlockRecvBuffer`) over the mailbox. Battle code is untouched and
+`GetLinkPlayerCount`, `gBlockRecvBuffer`) with `bt` messages. Battle code is untouched and
 runs `BATTLE_TYPE_LINK` exactly as a cable battle would; internet latency is fine because
-link battles wait for the other side's block per turn. This replaces Kanto's
-`lockstep.lua`/`channel.lua`.
+link battles wait for the other side's block per turn. The fight starts from the eyeline
+(`br_engage.c`): the page relays a `challenge` to both ROMs, and a ROM accepts one only in
+the match proper and from a ghost on its own map. A watchdog closes a link that never
+hears from the other side, and an `out` for the peer wins an undecided fight.
 
-**Spectating is a recorded battle, streamed live.** Emerald has `BATTLE_TYPE_RECORDED`
-and `recorded_battle.c`: given the seed and each battler's actions it replays a battle
-deterministically. The two fighters' action stream goes to the relay; a spectator's ROM
-plays it as a recorded battle a turn behind. This is Kanto's `mirror.lua` with the
-engine doing the replay.
+**Spectating is a recorded battle, streamed live.** The challenger's ROM sees both
+sides, so it publishes the fight: `bstart` (seed, both parties, names), then `turn` (the
+action bytes, once every battler has chosen) and `shot` (the clock). A spectator's ROM
+replays it as `BATTLE_TYPE_RECORDED_LINK` a turn behind (`br_spectate.c`, the BR block in
+`recorded_battle.c`). This is Kanto's `mirror.lua` with the engine doing the replay.
 
-**Bot vs player is a trainer battle** (`BATTLE_TYPE_TRAINER`) against a RAM-backed
-trainer: `CreateNPCTrainerParty` gets a BR branch that builds the party from the roster
-seat instead of `gTrainers`.
+**Bot vs player is a trainer battle.** A bot has no ROM, so the host stages its team:
+`trainer` builds the card straight into `gEnemyParty` (`br_bot.c`; HP is a share of the
+real mon, moves come from the learnset unless the row is a ROM's own report), and the
+`challenge` that follows starts an ordinary `BATTLE_TYPE_TRAINER` fight. The ROM that
+fought reports `result`, `spent` and the bot's remaining `party` back.
 
 **Bot vs bot is a proxy game**, as in Kanto. The host's tab runs a second, hidden mGBA
-instance with the same patched ROM booted straight into a duel (`BR_BOOT_DUEL` in the
-mailbox), both sides on the opponent controller, fast-forwarded. It reports the outcome,
-the surviving parties and the action stream, which spectators can watch as a recorded
-battle.
+instance with the same patched ROM, hands it both teams in a `duel`, and both sides are
+played by the AI. It enters the battle the same way a bot fight does -- a boot mode that
+went straight into the duel stalled on the intro (`br_duel.h`) -- and answers with a
+`dresult`; its `bstart`/`turn` let the room watch.
+
+Every way off the field -- a fight, a replay, the drop's picker, the MAP row -- goes
+through `BrField_Leave` (`br_field.h`): fade, wait, hand the overworld's windows back,
+then the next screen. One at a time.
 
 ## 6. Overworld
 
-- **Ghosts** are `ObjectEvent`s spawned with `SpawnSpecialObjectEventParameterized`
-  using player sprites, stepped with held movement actions from `step` messages and
-  snapped on `place`. `OBJECT_EVENTS_COUNT` is 16, so a map shows the nearest ~12
-  ghosts and the rest wait. Skins are the Brendan/May variants and NPC sprites.
-- **The ring** lives in region-map space: `gRegionMapEntries` gives every map section a
-  rectangle on the 28x15 Hoenn map, the analogue of Kanto's town-map grid. Fog phases
-  are radii in that grid; outside the ring the ROM runs `WEATHER_FOG_HORIZONTAL` and a
-  damage task (1/10 max HP every 4 s). The fog never clamps.
-- **Drop** uses the fly-map screen (`CB2_OpenFlyMap`) as the picker and a walkable-cell
-  table (built at compile time from map layouts, `MapGridGetCollisionAt` semantics) to
-  land on a random cell. Safari opening keeps its Kanto shape because Hoenn has a Safari
-  Zone too (Route 121 entrance, 500 steps, Safari Balls).
-- **HUD**: the corner counter, ticker, wound bar and bottom box are overworld windows on
-  BG0 via `AddWindow`/`AddTextPrinterParameterized`.
+- **Ghosts** (`br_ghosts.h`) are every other seat, drawn as `ObjectEvent`s spawned with
+  `SpawnSpecialObjectEventParameterized` under local ids `0xC8 + seat`, snapped by
+  `place`, walked by `step`, turned by `face`. A seat on another map is a roster row with
+  no object. At most `BR_MAX_GHOSTS` (12) are spawned at once, in seat order. They are
+  not solid (POK-310), and an `out` takes a seat off every map for good. Skins are
+  player and NPC sprites.
+- **Loot** (`br_loot.h`): a `spill` puts a fallen trainer's team down as balls and its
+  bag as a bag, on the cells the sender chose, the same on every ROM; `pickup` takes a
+  piece away everywhere. Local ids `0xC0..0xC7`, eight pieces on a map. The page keeps
+  what is inside a bag and `give`s it to whoever takes it. A beaten route trainer leaves
+  every map (`npcout`).
+- **The ring** (`br_ring.h`) lives in region-map space: `gRegionMapEntries` gives every
+  map section a rectangle on the 28x15 Hoenn map, the analogue of Kanto's town-map grid.
+  The host sends the centre and radius in sections (`ring`); a map is inside when its
+  rectangle touches the circle. Outside, the weather is `WEATHER_FOG_HORIZONTAL` and the
+  party bleeds a tenth of max HP every four seconds, in a wild or route fight too. The
+  fog never clamps: the last phase is everywhere.
+- **The drop** (`br_pick.h`): the fly map (`CB2_OpenFlyMap`) is the picker, every
+  section selectable. The ROM does not know where a trainer can stand, so it sends
+  `pick {seat, section}`, and the host deals a free cell back as `land`. With no answer
+  the ROM drops at the spawn the `start` dealt it. The Safari opening keeps its Kanto
+  shape because Hoenn has a Safari Zone too; its catch pool and item balls are dealt
+  from the match seed on every ROM alike (`br_zone.h`).
+- **HUD** (`br_hud.h`): the corner (trainers left over the clock, and an eye while
+  anyone watches), the ticker and the bottom box, as overworld windows on BG0.
+- **Rules**: one clock (`br_levels.h`: the ring phase is the level rung, no EXP), the
+  catch with a full party (`br_catch.h`), the MOVES row (`br_moves.h`), gym leaders as
+  one-shot bosses (`br_gym.h`), the shot clock and RUN (`br_battle.h`).
 - **Bots move in JS**, not the ROM, on walkability grids exported at build time, paced in
   real seconds, exactly as `bots.lua` did on `data/generated/`. The ROM only sees them
   as ghosts. This keeps the patch small and the bot brain testable with vitest.

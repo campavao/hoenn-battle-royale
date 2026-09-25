@@ -125,7 +125,7 @@
 // item/n/cash all zero is the whole piece; with item set, that many left the bag
 // and the rest is still there).
 // Payload (8 bytes):
-//   0..1: seat    (byte 0: seat u8)
+//   0:    seat    u8
 //   1..2: key     u16 LE   ground-item instance id
 //   3:    hasItem u8
 //   4..5: item    u16 LE
@@ -182,10 +182,11 @@
 
 // Host/page -> ROM: a line for the overworld ticker/HUD window (kill feed, system
 // line, or a chat line riding the same pipe -- Hoenn has no separate chat).
-// Payload (2 + textLen bytes):
+// Payload (3 + textLen bytes):
 //   0: seat u8   who said it / who the line is about
 //   1: kind u8   0=system 1=kill 2=say
-//   2: textLen u8 (<=96)
+//   2: textLen u8 (<= 96 on the wire; the ROM reads one slot, 56, and draws
+//                  BR_HUD_LINE_MAX, 40 -- the page cuts every line to 40)
 //   3..: text  Gen 3 charmap bytes
 #define BR_MSG_TICKER 15
 
@@ -257,8 +258,24 @@
 //   ..:   ids      items * u16  Gen 3 item ids, straight into BATTLE_HISTORY
 // The tail is optional: a card without one leaves the AI on the rung's own potion.
 #define BR_MSG_TRAINER 23
-#define BR_MSG_PICK 24      // ROM -> page: the section this trainer chose to drop into
-#define BR_MSG_LAND 25      // page -> ROM: the cell the host dealt them inside it
+
+// pick: ROM -> page -> host: the section this trainer chose to drop into (POK-223).
+// Sent when the drop's map closes, and once more if no LAND has come back.
+// Payload (3 bytes):
+//   0:    seat     u8
+//   1..2: section  u16 LE   MAPSEC_*
+#define BR_MSG_PICK 24
+
+// land: host -> page -> ROM: the cell the host dealt that trainer inside the section.
+// Addressed to one seat; the ROM ignores one for anybody else, and one for a map it
+// does not have. With none at all the drop falls back to the START's spawn.
+// Payload (7 bytes):
+//   0:    seat     u8
+//   1:    mapGroup u8
+//   2:    mapNum   u8
+//   3..4: x        s16 LE   map coords, no MAP_OFFSET (what SetWarpDestination takes)
+//   5..6: y        s16 LE
+#define BR_MSG_LAND 25
 
 // spent: which of a bot's staked items this fight actually used (POK-237). The bag
 // lives on the host's page and the fight does not, so this is the only report of it.

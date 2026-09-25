@@ -17,7 +17,8 @@
 // is 16 slots and the ghosts already want 12, so the ground gets the handful left.
 
 #define BR_MAX_LOOT 8
-// Object-event local ids for loot, below the ghosts' 0xE0 and far above any map's own.
+// Object-event local ids for loot, 0xC0..0xC7: just below the ghosts' 0xC8 (br_config.h)
+// and far above any map's own.
 #define BR_LOOT_LOCAL_ID_BASE 0xC0
 
 // "nothing held" for the ticker's held line (POK-289). A key is `(seat << 8) | n` and

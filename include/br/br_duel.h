@@ -20,9 +20,9 @@
 // The entry path is deliberately the bot fight's (br_bot.c), not a new boot mode: an
 // earlier attempt entered the battle from a fresh boot and stalled forever on "TRAINER
 // would like to battle!" with battler 1's controller flag never clearing, while the
-// same battle type entered from BrBot_StartFight worked. Same task, same fade, same
-// CB2_InitBattle, mid-match phase -- the only thing this adds is that BOTH sides are
-// played by the AI.
+// same battle type entered from BrBot_StartFight worked. Same way off the field
+// (BrField_Leave), same CB2_InitBattle, mid-match phase -- the only thing this adds is
+// that BOTH sides are played by the AI.
 
 #define BR_DUEL_MAX_MONS 6
 
