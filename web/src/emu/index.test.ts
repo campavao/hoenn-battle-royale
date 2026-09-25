@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ALL_KEYS, EWRAM_BASE, Emulator, IWRAM_BASE, KEY_BIT, type CoreModule } from './index';
 
 // A fake core: a 1 MiB heap with EWRAM at 0x1000 and IWRAM at 0x50000, a file map,
@@ -174,6 +174,52 @@ describe('Emulator', () => {
     off();
     frame();
     expect(n).toBe(2);
+  });
+
+  it('a throwing frame listener stops neither the others nor the present, and is logged once (POK-330 #35)', async () => {
+    const { emu, m, frame } = await make();
+    let presents = 0;
+    m._brPresent = () => void presents++;
+    let after = 0;
+    emu.onFrame(() => {
+      throw new Error('bad pointer');
+    });
+    emu.onFrame(() => void after++);
+    await emu.start(new Uint8Array([1]));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      // A throw out of this callback is a core thread blocked for good.
+      expect(() => frame()).not.toThrow();
+      frame();
+      frame();
+      expect(after).toBe(3);
+      expect(presents).toBe(3);
+      expect(logged).toHaveBeenCalledTimes(1);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it('onListenerError hears each listener\'s first throw instead of the console', async () => {
+    const { emu, frame } = await make();
+    const heard: string[] = [];
+    emu.onFrame(() => {
+      throw new Error('one');
+    });
+    emu.onFrame(() => {
+      throw new Error('two');
+    });
+    emu.onListenerError((err) => heard.push((err as Error).message));
+    await emu.start(new Uint8Array([1]));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      frame();
+      frame();
+      expect(heard).toEqual(['one', 'two']);
+      expect(logged).not.toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it('returns screenshot bytes', async () => {

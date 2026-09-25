@@ -98,6 +98,9 @@ export async function loadCoreFactory(url = '/emu/mgba.js'): Promise<CoreFactory
 export class Emulator {
   private held = 0;
   private frameListeners = new Set<() => void>();
+  /** Listeners that have thrown, so each is reported once and not sixty times a second. */
+  private failedListeners = new WeakSet<() => void>();
+  private errorListeners = new Set<(err: unknown) => void>();
   /** What boot() last loaded, so reboot() can load it again. */
   private bootedPath: string | null = null;
   private crashListeners = new Set<() => void>();
@@ -228,10 +231,23 @@ export class Emulator {
     this.running = true;
     // addCoreCallbacks is a no-op until a core exists, so this must follow loadGame.
     this.m.addCoreCallbacks({
+      // This runs inside a synchronous proxy from the core's thread: a throw out of it
+      // never completes the call, and the core waits on it for good -- the game frozen,
+      // the mailbox undrained, nothing on screen (POK-330 #35). So no listener's bug
+      // gets out of here, and the picture is presented whatever happened.
       videoFrameEndedCallback: () => {
-        for (const l of this.frameListeners) l();
-        // The listeners drew around the picture for this frame; now the picture.
-        this.m._brPresent?.();
+        try {
+          for (const l of this.frameListeners) {
+            try {
+              l();
+            } catch (err) {
+              this.listenerFailed(l, err);
+            }
+          }
+        } finally {
+          // The listeners drew around the picture for this frame; now the picture.
+          this.m._brPresent?.();
+        }
       },
       coreCrashedCallback: () => {
         this.running = false;
@@ -267,6 +283,29 @@ export class Emulator {
   onCrash(listener: () => void): () => void {
     this.crashListeners.add(listener);
     return () => this.crashListeners.delete(listener);
+  }
+
+  /** Hears the first throw of each frame listener (the listener stays subscribed). With
+   *  nobody listening, it goes to the console. Returns an unsubscribe. */
+  onListenerError(listener: (err: unknown) => void): () => void {
+    this.errorListeners.add(listener);
+    return () => this.errorListeners.delete(listener);
+  }
+
+  private listenerFailed(l: () => void, err: unknown): void {
+    if (this.failedListeners.has(l)) return;
+    this.failedListeners.add(l);
+    if (!this.errorListeners.size) {
+      console.error('[emu] a frame listener threw; the frame carries on without it', err);
+      return;
+    }
+    for (const report of this.errorListeners) {
+      try {
+        report(err);
+      } catch {
+        /* a reporter's own bug is not the frame's */
+      }
+    }
   }
 
   // ---- input ------------------------------------------------------------------------
