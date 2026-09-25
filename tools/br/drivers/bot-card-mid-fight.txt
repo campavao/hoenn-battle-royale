@@ -1,0 +1,62 @@
+# bot-card-mid-fight: a bot's card that lands while a battle is running is not staged
+# (POK-330 #17).
+#
+# A card goes straight into gEnemyParty, and ParseTrainer zeroed and rebuilt it whenever
+# one arrived. In a fight against another bot that is the enemy's team replaced under
+# the battle, and gBrBotFight's seat, name and bag taken over by the newcomer, so the
+# fight's report (party, spent, RESULT) goes out under the wrong bot. In a link battle it
+# is the peer's team. SOLO never told its bots who was busy, so a second bot could stage
+# one at any time; the page now does, and this is the ROM refusing it anyway.
+#
+# gEnemyParty+8 is the first mon's nickname, which is not encrypted: CreateMon names a
+# card's mon after its species, so its first letter says which card built the party.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+#
+# A link battle (netlink-loop.txt's, loopback on): gEnemyParty is the other side's team.
+poke u8 gBrNetlink+8 1
+pokebytes gDecompressionBuffer 00 01 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 600
+expect u8 gBrNetlink 1
+# Our own TREECKO, mirrored back as the peer's.
+expect u8 gEnemyParty+8 0xCE
+# MUDKIP (283 = 0x11B), from seat 30 (0x1E) calling itself RIV.
+pokebytes gDecompressionBuffer 1E 03 CC C3 D0 01 1B 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 C7 CF BE C5 C3
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+expect u8 gEnemyParty+8 0xCE
+expect u8 gBrBotFight+1 0
+# Seat 1 goes out (out-peer.txt), which ends it.
+pokebytes gDecompressionBuffer 01
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 300
+expect u8 gBrNetlink 0
+#
+# A bot fight: bot-fight.txt's TREECKO card from seat 31, its ghost on our map, and its
+# CHALLENGE.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+expect u8 gBrBotFight+2 1
+expect u8 gBrBotFight+1 0x1F
+expect u8 gEnemyParty+8 0xCE
+shot fighting
+# The MUDKIP card again, mid-fight: nothing changes.
+pokebytes gDecompressionBuffer 1E 03 CC C3 D0 01 1B 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 C7 CF BE C5 C3
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+expect u8 gEnemyParty+8 0xCE
+expect u8 gBrBotFight+1 0x1F
+expect u8 gBrBotFight+4 0xBC
+expect u8 gBrBotFight+2 1
+shot still-treecko
+say bot card mid fight ok

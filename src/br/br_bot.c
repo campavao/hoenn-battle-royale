@@ -92,6 +92,13 @@ static void ParseTrainer(const u8 *d, u16 n)
 
     if (n < 3)
         return;
+    // gEnemyParty belongs to the battle that is running: a bot fight's enemy, a link
+    // peer's team, a wild mon. A card that lands mid-battle rebuilt it under the fight
+    // and took over gBrBotFight, so the report went out under the newcomer's seat. It
+    // cannot be this fight's card either -- a bot fight starts from the field -- so it
+    // is dropped, as the unstage in BrBot_Tick would have dropped it (POK-330 #17).
+    if (gBrBotFight.fighting || gMain.inBattle)
+        return;
     nameLen = d[1];
     if (nameLen > PLAYER_NAME_LENGTH || (u16)(2 + nameLen + 1) > n)
         return;
