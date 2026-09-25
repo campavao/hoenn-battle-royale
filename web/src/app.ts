@@ -39,6 +39,7 @@ import {
   type StartState,
 } from './match/room';
 import { Stage } from './ui/stage';
+import { FrameMeter } from './ui/fps';
 import { drawerKey, drawerLabel, stageKey } from './ui/roomkeys';
 import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
 import {
@@ -878,15 +879,11 @@ function wireFps(emu: Emulator): void {
   if (!import.meta.env.DEV) return;
   const el = $('#fps') as HTMLElement;
   el.hidden = false;
-  let frames = 0;
-  let last = performance.now();
-  emu.onFrame(() => frames++);
+  // ...and a frame listener that threw, which the emulator skips from then on: the page
+  // carries on looking fine without it (POK-331 #29).
+  const meter = new FrameMeter(emu);
   setInterval(() => {
-    const now = performance.now();
-    const fps = (frames * 1000) / (now - last);
-    frames = 0;
-    last = now;
-    el.textContent = `${fps.toFixed(0)} fps`;
+    el.textContent = meter.read();
   }, 1000);
 }
 
