@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Upstream edits are guarded
         run: python3 tools/br/check-guards.py
 
@@ -49,7 +49,7 @@ jobs:
       rom-sha1: ${{ steps.fork-rom.outputs.sha1 }}
       patch-size: ${{ steps.patch.outputs.size }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install build deps
         run: |
@@ -65,7 +65,7 @@ jobs:
         run: echo "sha=$(cat tools/br/BASELINE_COMMIT)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout agbcc
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: pret/agbcc
           path: agbcc
@@ -76,7 +76,7 @@ jobs:
 
       - name: Cache agbcc build
         id: agbcc-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: agbcc
           key: agbcc-${{ steps.agbcc-sha.outputs.sha }}
@@ -87,7 +87,7 @@ jobs:
         run: ./build.sh
 
       - name: Checkout baseline pokeemerald
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: pret/pokeemerald
           ref: ${{ steps.baseline.outputs.sha }}
@@ -95,7 +95,7 @@ jobs:
 
       - name: Cache baseline ROM
         id: baseline-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: baseline/pokeemerald.gba
           # The baseline never changes without BASELINE_COMMIT changing, so once this
@@ -135,7 +135,7 @@ jobs:
       # Before the patch: make-patch.sh checks what flips wrote with the page's own BPS
       # decoder (tools/br/make-bps.ts, under vite-node), and the e2e steps at the end of
       # this job need the same install.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -167,7 +167,7 @@ jobs:
             echo "- baseline commit: ${{ steps.baseline.outputs.sha }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: patch
           # Exactly these three files - never the ROM itself, on principle (see
@@ -180,7 +180,7 @@ jobs:
 
       - name: Cache libmgba (harness)
         id: mgba-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: tools/br/.mgba
           key: libmgba-harness-0.10.5-v2-${{ runner.os }}
@@ -222,7 +222,7 @@ jobs:
           HBR_BASE_ROM: ${{ github.workspace }}/baseline/pokeemerald.gba
         run: npm run e2e
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-shots
@@ -241,11 +241,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: emscripten-core/setup-emsdk@v16
         with:
           version: 6.0.5 # build.sh refuses any other emcc
+          # emsdk itself, which picks the node emcc runs on: the dev box's (24.19.0).
+          # Unset, v15+ fetches emsdk at `version`, whose 6.0.5 tag runs node 22.
+          emsdk-version: 6.0.9
 
       # No build cache here: CMakeCache pins the emsdk path, which is a per-run temp dir.
       - name: Build the wasm core
@@ -271,7 +274,7 @@ jobs:
           fi
           echo "### wasm core: tracked == built" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         # On drift too: the build it disagreed with is the thing to look at.
         if: ${{ !cancelled() }}
         with:
@@ -292,9 +295,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -333,9 +336,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -376,11 +379,11 @@ jobs:
       TAG: ${{ github.ref_name }}
       SITE: https://hoenn-battle-royale.vercel.app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # the previous tag, for the relay's "did it change" check
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: patch, path: web/public/patch }
 
       - name: GitHub release
@@ -399,7 +402,7 @@ jobs:
               web/public/patch/hoenn-br.bps web/public/patch/br-symbols.json web/public/patch/br-version.json
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
