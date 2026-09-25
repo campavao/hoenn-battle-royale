@@ -18,6 +18,7 @@
 // wire-up test (slots.ts's comment on BR_MSG.ECHO) and have no `wire.ts` Msg
 // counterpart to forward.
 import { Mailbox, type RamAccess } from './mailbox';
+import { readNetlink, type LinkState } from './netlink';
 import { RomPort } from './romport';
 import { crossesToRom } from './slots';
 import { decode, type BlockMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg } from './wire';
@@ -64,6 +65,9 @@ export interface BridgeOptions {
    *  Bridge: a rejoin builds a new Bridge over the same ROM, and the host's director
    *  pushes through the same port. Unset, the Bridge makes its own. */
   rom?: RomPort;
+  /** br-symbols.json, for gBrNetlink: the ROM's own word on the fight it is in, which the
+   *  page follows (POK-331 #5). Unset, the page goes by the messages it has seen. */
+  symbols?: ReadonlyMap<string, number>;
 }
 
 /** What a link battle needs to outlive the Bridge it started under (POK-330 #20, #7). A
@@ -111,11 +115,16 @@ export class Bridge {
   readonly seat: number;
 
   private readonly protocol: number;
+  private readonly ram: RamAccess;
+  private readonly netlinkBase: number | undefined;
   private opponentSeat: number | null = null;
   /** The fight our blocks are part of (fightOf its challenge), stamped on each one we send
    *  and checked on each one we take: a rejoin says its last few again, and after a new
    *  challenge between the same two seats they are the last fight's (POK-331 #3). */
   private fightId: number | null = null;
+  /** The latest challenge between us and each seat, for following the ROM to whichever
+   *  one it started (followRom). */
+  private readonly fights = new Map<number, number>();
   /** Our last few blocks of the current fight, for saying again after a gap (#7). */
   private sentBlocks: BlockMsg[] = [];
   /** The last block of the current fight the ROM was handed. The other side says its
@@ -168,6 +177,8 @@ export class Bridge {
     this.relay = opts.relay;
     this.seat = opts.seat;
     this.protocol = opts.protocol ?? PROTOCOL;
+    this.ram = opts.emu;
+    this.netlinkBase = opts.symbols?.get('gBrNetlink');
     this.roster.setMySeat(opts.seat);
     if (opts.carry) {
       this.opponentSeat = opts.carry.opponentSeat;
@@ -245,6 +256,7 @@ export class Bridge {
   private onFrame(): void {
     this.framesCount++;
     if (!this.mailbox.isAwake()) return; // BrMailbox_Init has not run yet
+    this.followRom();
     this.inCount += this.rom.flush();
     // Not `dropCount += drain(...)`: that reads the count before the handler adds to it.
     const unreadable = this.rom.drain((msg) => this.handleFromRom(msg));
@@ -405,9 +417,13 @@ export class Bridge {
     // of those would point our own battle traffic at a seat we are not fighting.
     if (msg.seat !== this.seat && msg.opponent !== this.seat) return;
     // Somebody else's challenge to us while we fight is one our ROM ignores (#20). Our
-    // own is never mid-fight: br_engage.c only challenges from the field.
-    if (msg.seat !== this.seat && this.fighting) return;
-    this.pointAt(msg.seat === this.seat ? msg.opponent : msg.seat, fightOf(msg));
+    // own is never mid-fight: br_engage.c only challenges from the field. The ROM says it
+    // is in one from the frame it starts it (POK-331 #5), before this page can have seen
+    // a block move.
+    if (msg.seat !== this.seat && (this.fighting || this.romLink()?.active)) return;
+    const them = msg.seat === this.seat ? msg.opponent : msg.seat;
+    this.fights.set(them, fightOf(msg));
+    this.pointAt(them, fightOf(msg));
   }
 
   /** A new fight, and a new count: the ROM numbers every fight's blocks from one. */
@@ -418,6 +434,21 @@ export class Bridge {
     this.lastRecvSeq = 0;
     this.opponentAway = false;
     this.fighting = false;
+  }
+
+  /** gBrNetlink, read fresh (POK-331 #5); null with no symbol to read it by. */
+  private romLink(): LinkState | null {
+    if (this.netlinkBase === undefined || !this.mailbox.isAwake()) return null;
+    return readNetlink(this.ram, this.netlinkBase);
+  }
+
+  /** Two challenges that land before the ROM runs a frame are taken the other way round:
+   *  on the field the ROM starts on the first and ignores the second, where this page
+   *  pointed at the latest. Whoever the ROM is linked with is who the blocks are for. */
+  private followRom(): void {
+    const link = this.romLink();
+    if (!link?.active || link.peerSeat === this.opponentSeat) return;
+    this.pointAt(link.peerSeat, this.fights.get(link.peerSeat) ?? null);
   }
 
   /** What a seat said when it challenged somebody (POK-274), or undefined if this page

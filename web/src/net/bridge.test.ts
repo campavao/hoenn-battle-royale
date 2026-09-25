@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BLOCKS_KEPT, Bridge, fightOf } from './bridge';
-import { MAILBOX, Mailbox } from './mailbox';
+import { BLOCKS_KEPT, Bridge, fightOf, type BridgeOptions } from './bridge';
+import { MAILBOX, Mailbox, type RamAccess } from './mailbox';
+import { NETLINK } from './netlink';
 import { POSITIONAL_CAP, RomPort } from './romport';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
 import { PROTOCOL, type Msg, type SpillMsg, type StepMsg } from './wire';
@@ -227,12 +228,12 @@ function readAcrossFrames(frame: () => void, romDrainIn: () => BinarySlot[], fra
 }
 
 /** A room we have joined as seat 2, with seat 1 its host and 7 and 9 in it too. */
-function joined() {
+function joined(opts: Partial<BridgeOptions> = {}) {
   const gba = fakeEmulator(BASE);
   gba.romInit();
   const { relay, socket } = fakeRelay();
   socket.receive({ type: 'room_joined', code: 'ABC123', id: 2, host: 1, token: 't' });
-  const bridge = new Bridge({ emu: gba.emu, mailboxBase: BASE, relay, seat: 2 });
+  const bridge = new Bridge({ emu: gba.emu, mailboxBase: BASE, relay, seat: 2, ...opts });
   socket.receive({
     type: 'roster', code: 'ABC123', host: 1, open: true, max: 8, pass: false,
     members: [{ id: 1, name: 'HOST' }, { id: 2, name: 'ME' }, { id: 7, name: 'MAY' }, { id: 9, name: 'WALLY' }],
@@ -548,6 +549,49 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     socket.receive({ type: 'recv', from: 9, m: { t: 'challenge', seat: 9, opponent: 2, nonce: 1 } });
     socket.receive({ type: 'recv', from: 7, m: block(7, 2) });
     expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1), block(7, 2)]);
+  });
+});
+
+// gBrNetlink where the fake ROM keeps it.
+const NETLINK_AT = 0x02030000;
+const SYMBOLS = new Map([['gBrNetlink', NETLINK_AT]]);
+/** br_netlink.c's BrNetlink_StartBattle with `peer` (or its Close, with null). */
+function link(ram: RamAccess, peer: number | null): void {
+  ram.write(NETLINK_AT + NETLINK.OFF_ACTIVE, peer === null ? 0 : 1, 8);
+  if (peer !== null) ram.write(NETLINK_AT + NETLINK.OFF_PEER_SEAT, peer, 8);
+}
+
+// POK-331 #5. The page learnt its ROM was in a fight from the first block to move, and the
+// ROM starts one a second or more before that: a challenge that landed in between still
+// pointed the page somewhere else. gBrNetlink says so from the frame the fight starts.
+describe("the ROM's own word on the fight it is in (POK-331 #5)", () => {
+  it("ignores a third seat's challenge once the ROM has started a fight, before any block has moved", () => {
+    const { socket, frame, romDrainIn, romEmit, ram } = joined({ symbols: SYMBOLS });
+    socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 1 } });
+    frame();
+    link(ram, 7); // HandleChallenge -> BrNetlink_StartBattle(1, 7)
+    socket.receive({ type: 'recv', from: 9, m: { t: 'challenge', seat: 9, opponent: 2, nonce: 1 } });
+    // 7's start block, before this page has run another frame: it is still 7's fight.
+    socket.receive({ type: 'recv', from: 7, m: block(7, 1, F(7, 1)) });
+    socket.sent.length = 0;
+    romEmit({ t: 'bt', seat: 0, seq: 1, data: [1] });
+    expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1)]);
+    expect(socket.sent).toEqual([{ type: 'to', id: 7, m: block(2, 1, F(7, 1)) }]);
+  });
+
+  it('follows the ROM to the one it started when two challenges land together', () => {
+    const { socket, frame, romDrainIn, romEmit, ram } = joined({ symbols: SYMBOLS });
+    // Both before the ROM runs: on the field it starts on 7's and ignores 9's.
+    socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 1 } });
+    socket.receive({ type: 'recv', from: 9, m: { t: 'challenge', seat: 9, opponent: 2, nonce: 4 } });
+    link(ram, 7);
+    socket.sent.length = 0;
+    romEmit({ t: 'bt', seat: 0, seq: 1, data: [1] });
+    frame();
+    expect(socket.sent).toEqual([{ type: 'to', id: 7, m: block(2, 1, F(7, 1)) }]);
+    socket.receive({ type: 'recv', from: 9, m: block(9, 1, F(9, 4)) });
+    socket.receive({ type: 'recv', from: 7, m: block(7, 1, F(7, 1)) });
+    expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1)]);
   });
 });
 
