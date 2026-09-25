@@ -92,7 +92,8 @@
 //                                      daily of another build is not yours,
 //                                      and you get one of your own
 //   {type:"quick_join", name,          same as join_room, but the relay picks
-//         patch?, protocol?}           the fullest open room rather than a code
+//         patch?, protocol?}           the fullest open room rather than a code,
+//                                      passing over any of another build
 // Server -> client
 //   {type:"roster", code, host, open, max, seats, pass,
 //         members:[{id,name,spectate?}]}
@@ -111,10 +112,13 @@
 //                                      match is running -- watch it and
 //                                      play the next one
 //   {type:"room_error", reason:        the host's client is on a different
-//        "version", host:              patch or protocol than this one; the
+//        "version", host:              build or protocol than this one; the
 //        {patch, protocol}}            reasons list above already has
 //                                       "not_found"/"full"/"locked"/etc, this
-//                                       adds one more
+//                                       adds one more.  `patch` is the sha1 of
+//                                       the ROM running in the tab (POK-330
+//                                       #3), a string; relay/protocol.fixtures
+//                                       .json is what the page sends
 //
 // Ids are 1..MAX_SEAT, the lowest one free: not a member's, not held for one
 // who dropped, and not used since the match locked the door (nor a bot's).
@@ -252,8 +256,15 @@ function cleanSkin(skin) {
 // neither field, and the gate below treats "nothing sent" as "nothing to
 // check" on both ends -- a version gate that refuses a client for saying
 // less than a newer one would is worse than no gate.
+//
+// `patch` is the sha1 of the ROM running in the client's tab (POK-330 #3):
+// forty characters, which the old 32 cut off.  A page older than that sends
+// the hand-bumped patch number, which is compared as a string -- dropped for
+// not being one, it left the gate comparing nothing but a protocol that has
+// never moved.
 function cleanVersion(msg) {
-  const patch = typeof msg.patch === "string" && msg.patch.length <= 32 ? msg.patch : undefined;
+  const raw = Number.isFinite(msg.patch) ? String(msg.patch) : msg.patch;
+  const patch = typeof raw === "string" && raw.length > 0 && raw.length <= 64 ? raw : undefined;
   const protocol = Number.isInteger(msg.protocol) ? msg.protocol : undefined;
   if (patch === undefined && protocol === undefined) return null;
   return { patch, protocol };
@@ -976,12 +987,18 @@ export function createRelay(options = {}) {
       // gather into one match instead of scattering one-per-room.
       case "quick_join": {
         if (conn.room) { conn.send({ type: "room_error", reason: "already_in_room" }); return; }
+        // A room of another build is passed over, not refused (POK-330 #3):
+        // right after a deploy the fullest room may be the old build's, and
+        // telling every up-to-date arrival to reload -- which cannot help
+        // them -- turned quick play off until it emptied.  Walking past it
+        // finds a room of their own build, or hosts one.
+        const version = cleanVersion(msg);
         let best = null;
         for (const room of rooms.values()) {
           // a daily room waits for its hour; quick play wants a game NOW,
           // and a passcoded room (no pass is asked here) wants somebody who
           // knows the host
-          if (!room.open || room.daily || canEnter(room, conn) !== null) continue;
+          if (!room.open || room.daily || canEnter(room, conn, { version }) !== null) continue;
           if (!best || room.members.size > best.members.size) best = room;
         }
         if (!best) {
@@ -994,7 +1011,7 @@ export function createRelay(options = {}) {
           let running = null;
           for (const room of rooms.values()) {
             if (!room.open || !room.locked
-                || canEnter(room, conn, { spectate: true }) !== null) continue;
+                || canEnter(room, conn, { version, spectate: true }) !== null) continue;
             if (!running || room.members.size > running.members.size) running = room;
           }
           if (running) {
@@ -1005,8 +1022,6 @@ export function createRelay(options = {}) {
           conn.send({ type: "no_open_rooms" });
           return;
         }
-        const why = canEnter(best, conn, { version: cleanVersion(msg) });
-        if (why) { refuse(conn, best, why); return; }
         admit(conn, best, msg, "quick-joined");
         return;
       }

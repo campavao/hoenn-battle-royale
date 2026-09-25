@@ -43,7 +43,7 @@ Client -> server:
 | `ping` | | -> `pong` |
 | `info` | | -> `info {motd, rooms, conns, minProtocol, daily?}` |
 | `daily_join` | `name, skin?, patch?, protocol?` | the one shared DAILY GAME room: joins it, hosts it, or `match_in_progress` while it runs. A daily of another build is skipped (the version gate), so each build gets its own |
-| `quick_join` | `name, patch?, protocol?` | joins the fullest open room, or hosts one |
+| `quick_join` | `name, skin?, patch?, protocol?` | joins the fullest open room of the same build, or `no_open_rooms` (the page then hosts one) |
 | `set_open` | `open` | host only: open/close the room to `quick_join` |
 
 Server -> client:
@@ -72,12 +72,23 @@ oldest. The host is whoever created the room. Codes use the alphabet `23456789AB
 
 ### The version gate
 
-`host_room` may carry `{patch, protocol}` -- the host's version -- which the
-room remembers. `join_room` and `quick_join` may carry the same pair for the
-joining client. When both sides said something and it disagrees, the join is
-refused with `room_error {reason: "version", host: {patch, protocol}}`.
-Either side saying nothing (an older client, or one that opts out) skips the
-check entirely -- nobody is refused for silence.
+`host_room` and `daily_join` may carry `{patch, protocol}` -- the host's
+version -- which the room remembers. Every other way in may carry the same
+pair for the joining client. `patch` is the sha1 of the ROM running in the
+page's tab (POK-330 #3), a string; a number from an older page is compared as
+its string. `protocol.fixtures.json` in this directory is exactly what the
+page sends, and both test suites read it.
+
+When both sides said something and it disagrees, a door you named
+(`join_room`, watchers included) refuses with
+`room_error {reason: "version", host: {patch, protocol}}`. A door the relay
+picks for you walks past the room instead: `quick_join` takes the fullest room
+of your own build (or answers `no_open_rooms`, and you host), and `daily_join`
+seats you in the daily of your own build, opening one if there is none. Right
+after a deploy the fullest room is often the old build's, and telling an
+up-to-date player to reload cannot help them. Either side saying nothing (an
+older client, or one that opts out) skips the check entirely -- nobody is
+refused for silence.
 
 `info` also carries `minProtocol`, read from `BR_MIN_PROTOCOL` (default `1`)
 so a client can decide for itself whether it is too old to bother connecting,

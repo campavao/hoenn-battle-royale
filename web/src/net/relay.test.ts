@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import serverSource from '../../../relay/server.js?raw';
+import F from '../../../relay/protocol.fixtures.json';
 import { RelayClient, type WebSocketLike } from './relay';
 import { MAX_SEAT } from './wire';
 
@@ -327,6 +328,30 @@ describe('RelayClient', () => {
     expect(serverSource).toMatch(new RegExp(`export const MAX_SEAT = ${MAX_SEAT};`));
   });
 
+  // The relay's suite sends these same payloads through its gate (POK-330 #3). The two
+  // suites used to pass side by side on a string patch there and a number here, while
+  // the relay dropped every number and the gate compared nothing.
+  it('sends every door the version the relay gates on, as protocol.fixtures.json has it', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    const version = { patch: F.host_room.patch, protocol: F.host_room.protocol };
+    relay.host({ name: 'HOST', open: true, max: 8, skin: 'SPRITE_BRENDAN', ...version });
+    relay.join('CODE', { name: 'GUEST', skin: 'SPRITE_MAY', ...version });
+    relay.join('CODE', { name: 'WATCHER', skin: 'SPRITE_MAY', spectate: true, patch: F.watch_other_build.patch, protocol: 1 });
+    relay.quickJoin({ name: 'QUICK', skin: 'SPRITE_MAY', ...version });
+    relay.dailyJoin({ name: 'DAILY', skin: 'SPRITE_MAY', ...version });
+    relay.join('CODE', { name: 'OLDPAGE' });
+    expect(sockets[0].sent).toEqual([F.host_room, F.join_room, F.watch_other_build, F.quick_join, F.daily_join, F.join_room_unversioned]);
+    expect(F.host_room.patch).toMatch(/^[0-9a-f]{40}$/); // a ROM's sha1, not a patch number
+
+    const error = vi.fn();
+    relay.on('room_error', error);
+    sockets[0].receive(F.version_refused);
+    expect(error).toHaveBeenCalledWith({ reason: 'version', host: F.version_refused.host });
+  });
+
   it('emits closed with the room_closed reason', () => {
     const { factory, sockets } = makeFactory();
     const relay = new RelayClient(factory);
@@ -349,7 +374,7 @@ describe('rejoin (POK-284)', () => {
     relay.connect('ws://relay.test');
     sockets[0].open();
     expect(relay.rejoin()).toBe(false); // nothing to go back to yet
-    relay.join('ABC123', { name: 'BLUE', pass: 'X1', patch: 7, protocol: 3 });
+    relay.join('ABC123', { name: 'BLUE', pass: 'X1', patch: F.join_room.patch, protocol: 3 });
     sockets[0].receive({ type: 'room_joined', code: 'ABC123', id: 5, host: 2, token: 'tok-1' });
     expect(relay.token).toBe('tok-1');
 
@@ -361,7 +386,7 @@ describe('rejoin (POK-284)', () => {
     again.open();
     expect(relay.rejoin()).toBe(true);
     expect(again.sent.filter((m) => m.type === 'join_room')).toEqual([
-      { type: 'join_room', code: 'ABC123', name: 'BLUE', pass: 'X1', skin: undefined, spectate: undefined, patch: 7, protocol: 3, token: 'tok-1' },
+      { type: 'join_room', code: 'ABC123', name: 'BLUE', pass: 'X1', skin: undefined, spectate: undefined, patch: F.join_room.patch, protocol: 3, token: 'tok-1' },
     ]);
     // ...and the relay's answer carries a new token: the old one is spent.
     again.receive({ type: 'room_joined', code: 'ABC123', id: 5, host: 2, token: 'tok-2' });

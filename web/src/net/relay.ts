@@ -65,7 +65,8 @@ export interface RoomJoinedEvent {
 
 export interface RoomErrorEvent {
   reason: RoomError | string;
-  host?: { patch?: number; protocol?: number };
+  /** What the room's host runs, on a `version` refusal: see HostOpts.patch. */
+  host?: { patch?: string; protocol?: number };
 }
 
 export interface RoomListing {
@@ -168,7 +169,10 @@ export interface HostOpts {
   max?: number;
   skin?: string;
   pass?: string;
-  patch?: number;
+  /** The sha1 of the ROM running in this tab, which the relay's gate compares with
+   *  the room's (POK-330 #3): both sides of a link battle must run the same build.
+   *  relay/protocol.fixtures.json is the shape, and both test suites read it. */
+  patch?: string;
   protocol?: number;
 }
 
@@ -177,7 +181,8 @@ export interface JoinOpts {
   pass?: string;
   skin?: string;
   spectate?: boolean;
-  patch?: number;
+  /** As HostOpts.patch. */
+  patch?: string;
   protocol?: number;
 }
 

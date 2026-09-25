@@ -111,8 +111,9 @@ railway logs
 ```
 
 The relay's test suite is `cd relay && node --test`. Both sides of a link battle must run
-the same patch and the relay gates rooms on `br-version.json`'s `protocol`, so a relay that
-raises `minProtocol` needs the site deployed first.
+the same build, and the relay gates rooms on the sha1 of the ROM each tab runs and on
+`br-version.json`'s `protocol` (POK-330 #3), so a relay that raises `minProtocol` needs the
+site deployed first.
 
 ## By tag (CI does all of the above)
 

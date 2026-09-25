@@ -11,6 +11,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { readFileSync } from "node:fs";
 import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, limitsFromEnv, stats } from "./server.js";
 
 class Client {
@@ -1257,24 +1258,88 @@ test("a host that never said its version never gates a join on one", async () =>
   });
 });
 
-test("quick_join gates on the target room's version the same way join_room does", async () => {
+// What the page actually sends (POK-330 #3): the same fixtures web/src/net/relay.test.ts
+// holds RelayClient to, so the two suites cannot pass on two different ideas of `patch`
+// again -- this one sent "1.2.0", the page sent 7, and the relay dropped every number.
+const F = JSON.parse(readFileSync(new URL("./protocol.fixtures.json", import.meta.url), "utf8"));
+const inRoom = (msg, code) => ({ ...msg, code });
+
+test("the gate compares the ROM the page runs: its sha1, as protocol.fixtures.json sends it", async () => {
   await withRelay(async (port) => {
     const host = await connect(port);
-    host.send({ type: "host_room", name: "HOST", open: true, patch: "2.0.0", protocol: 5 });
-    await host.until("room_hosted");
+    host.send(F.host_room);
+    const code = (await host.until("room_hosted")).code;
+    await host.until("roster");
 
-    const mismatched = await connect(port);
-    mismatched.send({ type: "quick_join", name: "SEEK", patch: "1.0.0", protocol: 5 });
-    const refused = await mismatched.next();
-    assert.equal(refused.type, "room_error");
-    assert.equal(refused.reason, "version");
-    assert.deepEqual(refused.host, { patch: "2.0.0", protocol: 5 });
+    const stale = await connect(port);
+    stale.send(inRoom(F.join_room_other_build, code));
+    assert.deepEqual(await stale.next(), F.version_refused);
 
-    const matched = await connect(port);
-    matched.send({ type: "quick_join", name: "SEEK2", patch: "2.0.0", protocol: 5 });
-    assert.equal((await matched.next()).type, "room_joined");
+    const same = await connect(port);
+    same.send(inRoom(F.join_room, code));
+    assert.equal((await same.next()).type, "room_joined");
 
-    host.end(); mismatched.end(); matched.end();
+    // a page from before the gate says nothing, and is refused nothing
+    const old = await connect(port);
+    old.send(inRoom(F.join_room_unversioned, code));
+    assert.equal((await old.next()).type, "room_joined");
+
+    // a watcher is a link to the same match: the gate is at its door too
+    host.send({ type: "lock_room", locked: true });
+    await host.settled();
+    const watcher = await connect(port);
+    watcher.send(inRoom(F.watch_other_build, code));
+    assert.deepEqual(await watcher.next(), F.version_refused);
+
+    for (const c of [host, stale, same, old, watcher]) c.end();
+  });
+});
+
+test("an older page's patch number is compared too, not dropped for being a number", async () => {
+  await withRelay(async (port) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST", patch: 12, protocol: 1 });
+    const code = (await host.until("room_hosted")).code;
+    const older = await connect(port);
+    older.send({ type: "join_room", code, name: "OLDER", patch: 11, protocol: 1 });
+    assert.deepEqual(await older.next(),
+      { type: "room_error", reason: "version", host: { patch: "12", protocol: 1 } });
+    const same = await connect(port);
+    same.send({ type: "join_room", code, name: "SAME", patch: 12, protocol: 1 });
+    assert.equal((await same.next()).type, "room_joined");
+    host.end(); older.end(); same.end();
+  });
+});
+
+test("quick play walks past a room of another build to one of its own, or hosts", async () => {
+  await withRelay(async (port) => {
+    // the fullest room is the other build's
+    const other = await connect(port);
+    other.send({ ...F.host_room, patch: F.join_room_other_build.patch });
+    const otherCode = (await other.until("room_hosted")).code;
+    const otherGuest = await connect(port);
+    otherGuest.send(inRoom(F.join_room_other_build, otherCode));
+    await otherGuest.until("room_joined");
+    const mine = await connect(port);
+    mine.send(F.host_room);
+    const mineCode = (await mine.until("room_hosted")).code;
+
+    const q = await connect(port);
+    q.send(F.quick_join);
+    const joined = await q.next();
+    assert.equal(joined.type, "room_joined");
+    assert.equal(joined.code, mineCode, "not the fuller room of another build");
+
+    // nothing of its own build open, and the other build's match running: it hosts,
+    // rather than being told to watch a match it could not join
+    mine.end();
+    q.end();
+    other.send({ type: "lock_room", locked: true });
+    await other.settled();
+    const q2 = await connect(port);
+    q2.send(F.quick_join);
+    assert.equal((await q2.next()).type, "no_open_rooms");
+    other.end(); otherGuest.end(); q2.end();
   });
 });
 
