@@ -913,7 +913,7 @@ export function createRelay(options = {}) {
     room.add(conn);
     traffic.roomsOpened += 1;
     if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
-    conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
+    conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token, rejoinMs: limits.rejoinMs });
     conn.send(room.roster());
     log(`room ${room.code} hosted by ${conn.name}#${conn.id}`
         + (room.daily ? " (daily)"
@@ -928,7 +928,7 @@ export function createRelay(options = {}) {
     conn.skin = cleanSkin(msg.skin);
     conn.spectator = spectate || undefined;
     room.add(conn, token);
-    conn.send({ type: "room_joined", code: room.code, id: conn.id, host: room.host.id, token: conn.token });
+    conn.send({ type: "room_joined", code: room.code, id: conn.id, host: room.host.id, token: conn.token, rejoinMs: limits.rejoinMs });
     room.broadcast(room.roster());
     log(`room ${room.code}: ${conn.name}#${conn.id} ${how}`);
   }

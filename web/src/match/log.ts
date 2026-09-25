@@ -91,6 +91,9 @@ export class MatchLog {
         this.push(now, { t: 'kill', seat: msg.target, by: msg.seat });
         return;
       case 'out':
+        // Once: a seat goes out once, and a page caught up after a blip hears every
+        // `out` again from the host (POK-330 #25).
+        if (this.events.some((e) => e.t === 'out' && e.seat === msg.seat)) return;
         this.push(now, { t: 'out', seat: msg.seat });
         return;
       case 'win':

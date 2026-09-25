@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import serverSource from '../../../relay/server.js?raw';
 import F from '../../../relay/protocol.fixtures.json';
-import { RelayClient, type WebSocketLike } from './relay';
+import { REJOIN_MS, RelayClient, type WebSocketLike } from './relay';
 import { MAX_SEAT } from './wire';
 
 /** A fake WebSocket: no network, driven by hand. `sent` records every frame the
@@ -438,6 +438,22 @@ describe('rejoin (POK-284)', () => {
         ? { type: 'join_room', code: 'QQQQQQ', name: 'QUICK', token: 't-q', patch: F.quick_join.patch }
         : { type: 'join_room', code: 'DDDDDD', name: 'DAILY', token: 't-d', patch: F.daily_join.patch });
     }
+  });
+
+  // POK-330 #25: the host gives a vanished seat as long as the relay holds it, and no
+  // less, or a seat could come back into a match that had already put it out.
+  it('learns how long the relay holds a seat, and assumes a minute when it is not told', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    expect(relay.rejoinMs).toBe(REJOIN_MS);
+    sockets[0].receive({ type: 'room_hosted', code: 'ABC123', id: 1, token: 'h', rejoinMs: 45_000 });
+    expect(relay.rejoinMs).toBe(45_000);
+    sockets[0].receive({ type: 'room_joined', code: 'ABC123', id: 5, host: 2, token: 't', rejoinMs: 30_000 });
+    expect(relay.rejoinMs).toBe(30_000);
+    sockets[0].receive({ type: 'room_joined', code: 'ABC123', id: 5, host: 2, token: 't' }); // an older relay
+    expect(relay.rejoinMs).toBe(REJOIN_MS);
   });
 
   it('a host has a token too, and a relay that gives none leaves rejoin with nothing', () => {

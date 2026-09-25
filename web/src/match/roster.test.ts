@@ -129,3 +129,42 @@ describe("the match's bots on the roster", () => {
     expect(roster.get(31)).toBeUndefined();
   });
 });
+
+// POK-330 #25: out is for the match. A player's row went when their socket did, and came
+// back standing -- on every page, for the rest of the match -- and so did their next
+// `place`, from a ROM that had never heard it was out.
+describe('the fallen', () => {
+  const place = (seat: number, st: 'alive' | 'out'): Msg => ({ t: 'place', v: PROTOCOL, seat, f: 1, st });
+
+  it('stay out through a blip: the row goes with the socket and comes back fallen', () => {
+    const roster = new Roster();
+    roster.applyRoster(ROOM);
+    roster.applyMsg({ t: 'out', seat: 5 });
+    roster.applyRoster({ ...ROOM, members: [{ id: 2, name: 'ASH' }] });
+    expect(roster.get(5)).toBeUndefined();
+    roster.applyRoster(ROOM);
+    expect(roster.get(5)?.alive).toBe(false);
+  });
+
+  it("stay out whatever their own ROM's next place says", () => {
+    const roster = new Roster();
+    roster.applyRoster(ROOM);
+    roster.applyMsg(place(5, 'out'));
+    roster.applyMsg(place(5, 'alive'));
+    expect(roster.get(5)?.alive).toBe(false);
+    expect(roster.alive().map((e) => e.seat)).toEqual([2]);
+  });
+
+  it('stand up again for the next match, from its start or from PLAY AGAIN', () => {
+    const roster = new Roster();
+    roster.applyRoster(ROOM);
+    roster.applyMsg({ t: 'out', seat: 5 });
+    roster.applyMsg({ t: 'start', seed: 1, spawns: [{ seat: 5, map: { group: 0, num: 1 }, x: 1, y: 1 }] });
+    roster.applyMsg(place(5, 'alive'));
+    expect(roster.get(5)?.alive).toBe(true);
+    roster.applyMsg({ t: 'out', seat: 5 });
+    roster.endMatch();
+    roster.applyMsg(place(5, 'alive'));
+    expect(roster.get(5)?.alive).toBe(true);
+  });
+});

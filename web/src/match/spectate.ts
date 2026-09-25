@@ -20,7 +20,7 @@
 // otherwise have nothing to replay. Holding the bstart and the turns since means
 // starting a watch is handing the ROM the fight from the top -- it catches up in the
 // seconds it takes to play the turns out, and is a turn behind from there.
-import type { BstartMsg, Msg } from '../net/wire';
+import type { BstartMsg, Msg, PeekMsg } from '../net/wire';
 import { encodeGen3 } from '../text/gen3';
 
 /** How much of one fight's stream to hold for a late watcher. A turn is a handful of
@@ -66,6 +66,19 @@ export function battleSeats(battle: number): [number, number] {
   return [battle & 0xff, (battle >> 8) & 0xff];
 }
 
+/** What our ROM says it is replaying (gBrSpectate), for duePeek's `romHas` -- or undefined
+ *  while RAM cannot be believed: until the ROM has read everything the page queued for it
+ *  (POK-330 #10). A tab in the background runs no frames while its peeks keep firing, so
+ *  the `bstart` it was handed waits in the port and RAM still says "nothing". Taken at its
+ *  word, every other peek brought the whole fight again, and the copies queued up behind
+ *  the first for the ROM to append when the tab came back. */
+export function romReplaying(
+  port: { readonly queued: number; readonly mailbox: { pending(): number } },
+  read: () => number | null | undefined,
+): number | null | undefined {
+  return port.queued > 0 || port.mailbox.pending() > 0 ? undefined : read();
+}
+
 export class Spectate {
   /** The seat this client is watching, or null. */
   private seat: number | null = null;
@@ -74,6 +87,10 @@ export class Spectate {
   private battle: number | null = null;
   // Negative infinity, not 0: a new watch asks at once rather than after a gap.
   private lastPeek = Number.NEGATIVE_INFINITY;
+  /** This page has just handed our ROM a `bstart` -- out of the cache on a follow, or
+   *  off the relay -- and has not peeked since. The ROM takes a second or so to read one
+   *  off the ring, so until the next peek the page's word is better than RAM's. */
+  private handed = false;
   /** seat -> when they last asked about us. */
   private readonly peekers = new Map<number, number>();
   /** battle id -> its stream so far, for whoever starts watching mid-fight. */
@@ -94,6 +111,7 @@ export class Spectate {
     if (seat !== this.seat) {
       this.battle = null;
       this.lastPeek = Number.NEGATIVE_INFINITY;
+      this.handed = false;
     }
     this.seat = seat;
     const out: Msg[] = [{ t: 'follow', seat }];
@@ -102,6 +120,7 @@ export class Spectate {
       const [lo, hi] = battleSeats(battle);
       if (lo !== seat && hi !== seat) continue;
       this.battle = battle;
+      this.handed = true;
       out.push(fight.bstart, ...fight.turns);
       break;
     }
@@ -109,12 +128,25 @@ export class Spectate {
   }
 
   /** The `peek` to send now, or null if it is not due yet. Kanto re-asks on a timer
-   *  rather than once, so a party that changes mid-fight stays current. */
-  duePeek(mySeat: number, now: number): Msg | null {
+   *  rather than once, so a party that changes mid-fight stays current.
+   *
+   *  It says which fight our ROM is already replaying (`have`), and the fighter hands
+   *  over the fight so far only when that is not theirs (POK-330 #10). Every peek used to
+   *  bring the whole stream again, and the ROM appends every turn it is handed, so the
+   *  replay read a1 a2 a3 a1 a2 a3 a4: a fight that never happened. `romHas` is what
+   *  the ROM itself says it is watching (gBrSpectate), undefined where the page cannot
+   *  read it or cannot believe it yet (romReplaying) -- and a ROM that refused a `bstart`
+   *  (it arrived in a menu) says nothing, so the next peek asks for the fight again,
+   *  which is the one retry there is. */
+  duePeek(mySeat: number, now: number, romHas?: number | null): Msg | null {
     if (this.seat === null) return null;
     if (now - this.lastPeek < PEEK_INTERVAL_MS) return null;
     this.lastPeek = now;
-    return { t: 'peek', seat: mySeat, target: this.seat };
+    const have = this.handed || romHas === undefined ? this.battle : romHas;
+    this.handed = false;
+    const ask: PeekMsg = { t: 'peek', seat: mySeat, target: this.seat };
+    if (have !== null) ask.have = have;
+    return ask;
   }
 
   /** Everything our own ROM sent, so a fighter's page holds its own fight too -- it
@@ -127,11 +159,13 @@ export class Spectate {
   /** The fight `seat` is in, from its `bstart` and every turn since, for a spectator
    *  who asked after it started. A relay only delivers to who was in the room at the
    *  time, so a watcher who joined mid-fight has nothing of its own to replay -- this
-   *  is the answer to their peek. */
-  streamFor(seat: number): Msg[] {
+   *  is the answer to their peek. Nothing when they say they `have` it already: their
+   *  ROM would append every turn a second time. */
+  streamFor(seat: number, have?: number): Msg[] {
     for (const [battle, fight] of this.live) {
       const [lo, hi] = battleSeats(battle);
-      if (lo === seat || hi === seat) return [fight.bstart, ...fight.turns];
+      if (lo !== seat && hi !== seat) continue;
+      return battle === have ? [] : [fight.bstart, ...fight.turns];
     }
     return [];
   }
@@ -167,10 +201,12 @@ export class Spectate {
       case 'turn': {
         this.remember(msg);
         if (this.seat === null) return false;
-        if (this.battle !== null && msg.battle === this.battle) return true;
         const [lo, hi] = battleSeats(msg.battle);
-        if (lo !== this.seat && hi !== this.seat) return false;
-        if (msg.t === 'bstart') this.battle = msg.battle;
+        if (this.battle !== msg.battle && lo !== this.seat && hi !== this.seat) return false;
+        if (msg.t === 'bstart') {
+          this.battle = msg.battle;
+          this.handed = true;
+        }
         return this.battle === msg.battle;
       }
       case 'party':

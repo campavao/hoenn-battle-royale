@@ -50,6 +50,7 @@ const SAMPLES: Msg[] = [
   { t: 'busy', seat: 1, kind: 'menu' },
   { t: 'busy', seat: 1 },
   { t: 'peek', seat: 1, target: 2 },
+  { t: 'peek', seat: 1, target: 2, have: 2 | (5 << 8) },
   { t: 'botout', seat: 1, target: 30 },
   { t: 'botrec', seat: 30, mons: [{ species: 1, hpFrac: 0.5 }], bag: { items: [], money: 0 } },
   { t: 'ticker', seat: 1, kind: 'kill', text: 'ASH knocked out MISTY!' },
@@ -72,6 +73,14 @@ describe('wire encode/decode round trip', () => {
 describe('wire.decode rejects', () => {
   it('an unknown type', () => {
     expect(() => decode(JSON.stringify({ t: 'nonsense' }))).toThrow(WireError);
+  });
+
+  // POK-330 #24: the type was looked up with `in`, which walks the prototype, so these
+  // found Object's own methods and came back as whatever those return.
+  it("a type that only names something on Object's prototype", () => {
+    for (const t of ['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__']) {
+      expect(() => decode(JSON.stringify({ t })), t).toThrow(WireError);
+    }
   });
 
   it('a missing seat', () => {

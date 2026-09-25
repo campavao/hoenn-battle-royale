@@ -43,6 +43,12 @@ export class Roster {
   /** Seats the match dealt to bots (POK-330 #51): the third source. No relay roster will
    *  ever list one, so these are the rows a relay roster event must leave alone. */
   private readonly bots = new Set<number>();
+  /** Seats that have gone out this match (POK-330 #25), kept apart from the rows: a
+   *  relay roster event drops a player's row the moment their socket goes, and the row
+   *  that comes back with them used to be standing again -- on every page, for the rest
+   *  of the match -- and so did their next `place`, from a ROM that never heard it was
+   *  out. Out is for the match; only endMatch() or the next `start` stands them up. */
+  private readonly fallen = new Set<number>();
 
   /** Which seat is "us" -- flips `isMe` on the matching row, if it already exists. */
   setMySeat(seat: number): void {
@@ -57,7 +63,7 @@ export class Roster {
   private entry(seat: number): RosterEntry {
     let e = this.entries.get(seat);
     if (!e) {
-      e = { seat, name: '', alive: true, dir: DEFAULT_DIR, isMe: seat === this.mySeat };
+      e = { seat, name: '', alive: !this.fallen.has(seat), dir: DEFAULT_DIR, isMe: seat === this.mySeat };
       this.entries.set(seat, e);
     }
     return e;
@@ -98,7 +104,17 @@ export class Roster {
   endMatch(): void {
     for (const seat of this.bots) this.entries.delete(seat);
     this.bots.clear();
+    this.standAll();
+  }
+
+  private standAll(): void {
+    this.fallen.clear();
     for (const e of this.entries.values()) e.alive = true;
+  }
+
+  /** One of the match's bots (seatBots), which no relay roster lists. */
+  isBot(seat: number): boolean {
+    return this.bots.has(seat);
   }
 
   /** What to call a seat: its name, or `P<seat>` for one nobody has named. */
@@ -111,6 +127,10 @@ export class Roster {
    *  mirror, not a general message log. */
   applyMsg(msg: Msg): void {
     switch (msg.t) {
+      case 'start':
+        // A new match: whoever fell in the last one is standing in this one.
+        this.standAll();
+        return;
       case 'place': {
         const e = this.entry(msg.seat);
         if (msg.sprite !== undefined) e.skin = msg.sprite;
@@ -120,7 +140,8 @@ export class Roster {
           e.y = msg.y;
         }
         e.dir = msg.f;
-        e.alive = msg.st !== 'out';
+        if (msg.st === 'out') this.fallen.add(msg.seat);
+        e.alive = !this.fallen.has(msg.seat);
         return;
       }
       case 'step': {
@@ -138,8 +159,8 @@ export class Roster {
         return;
       }
       case 'out': {
-        const e = this.entry(msg.seat);
-        e.alive = false;
+        this.fallen.add(msg.seat);
+        this.entry(msg.seat).alive = false;
         return;
       }
       default:

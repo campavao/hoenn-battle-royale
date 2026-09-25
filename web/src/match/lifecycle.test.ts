@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { botRows, botSeatsOf, departedSeats, freshMatch, onAgain, onPromotion, seatsFor } from './lifecycle';
+import { botRows, botSeatsOf, catchUp, departedSeats, freshMatch, lootOwed, onAgain, onPromotion, seatsFor } from './lifecycle';
+import { Loot } from './loot';
 import { dealBots } from '../bots/roster';
 import type { RosterEvent } from '../net/relay';
+import type { Msg } from '../net/wire';
 
 const room = (members: RosterEvent['members']): RosterEvent => ({ code: 'ABC123', host: 0, open: false, max: 8, pass: false, members });
 
@@ -93,5 +95,64 @@ describe("the host's `again`", () => {
   it('means nothing to the host that sent it, or to a page already back in the room', () => {
     expect(onAgain({ running: true, match: inMatch, graceArmed: false })).toBe('ignore');
     expect(onAgain({ running: false, match: freshMatch(), graceArmed: false })).toBe('ignore');
+  });
+});
+
+// POK-330 #25: a seat back from a blip is a late arrival. The relay held it, but nobody told
+// it what happened while it was gone -- its own elimination above all.
+describe('catching a seat up on the match', () => {
+  const ring = { phase: 2, sx: 3, sy: -1, r: 4, place: 'ROUTE 104' };
+
+  it('says where the fog is, how long it has, and who is out, in the order they went', () => {
+    expect(catchUp(1, { ring, clockLeft: 42, placements: [30, 7, 31] })).toEqual([
+      { t: 'ring', seat: 1, ...ring },
+      { t: 'clock', seat: 1, left: 42 },
+      { t: 'out', seat: 30 },
+      { t: 'out', seat: 7 },
+      { t: 'out', seat: 31 },
+    ]);
+  });
+
+  it('still names the fallen before the fog has moved', () => {
+    expect(catchUp(1, { clockLeft: 90, placements: [7] })).toEqual([{ t: 'out', seat: 7 }]);
+  });
+});
+
+// The ROM sends a `place` only on a map change, a warp, a ledge or the first frame after a
+// menu or a battle. A player back from a blip who kept walking the same route sent only
+// steps, and never got the loot lying on it.
+describe('the loot a seat back from a blip is owed', () => {
+  const ROUTE = { group: 0, num: 16 };
+  const table = () => {
+    const loot = new Loot();
+    loot.note({ t: 'spill', seat: 9, map: ROUTE, mons: [{ key: 9 * 16 + 1, x: 3, y: 4, species: 252, level: 5 }] });
+    return loot;
+  };
+  const step = (seat: number, map = ROUTE): Msg => ({ t: 'step', seat, d: 1, x: 3, y: 5, map });
+
+  it('is paid on its first step, not only on a place', () => {
+    const loot = table();
+    const owed = new Set([7]);
+    expect(lootOwed(owed, step(7), 7, (m) => loot.forMap(m))).toMatchObject({ t: 'spill', seat: 9, map: ROUTE });
+    expect(owed.has(7)).toBe(false);
+    expect(lootOwed(owed, step(7), 7, (m) => loot.forMap(m))).toBeNull(); // once
+  });
+
+  it('is paid on a place that says where it is, and waits out one that does not', () => {
+    const loot = table();
+    const owed = new Set([7]);
+    const lobby: Msg = { t: 'place', v: 1, seat: 7, f: 1, st: 'alive' };
+    expect(lootOwed(owed, lobby, 7, (m) => loot.forMap(m))).toBeNull();
+    expect(owed.has(7)).toBe(true);
+    const there: Msg = { ...lobby, map: ROUTE, x: 3, y: 5 } as Msg;
+    expect(lootOwed(owed, there, 7, (m) => loot.forMap(m))?.map).toEqual(ROUTE);
+  });
+
+  it("is nobody else's to collect, and nothing for a seat that is owed nothing", () => {
+    const loot = table();
+    const owed = new Set([7]);
+    expect(lootOwed(owed, step(30), 1, (m) => loot.forMap(m))).toBeNull(); // the host walking a bot
+    expect(lootOwed(owed, step(8), 8, (m) => loot.forMap(m))).toBeNull();
+    expect(owed.has(7)).toBe(true);
   });
 });

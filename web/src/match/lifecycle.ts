@@ -6,8 +6,9 @@
 // room's worst bugs were those decisions going wrong. They are pure functions here, which
 // is also the first step of pulling the match out of that closure (#42).
 import type { RosterEvent } from '../net/relay';
-import type { MapRef } from '../net/wire';
+import type { MapRef, Msg, SpillMsg } from '../net/wire';
 import { dealBots, MAX_SEATS } from '../bots/roster';
+import type { DirectorState } from './director';
 
 /** The match as any page in the room can see it (POK-252): everything a promoted client
  *  needs to pick it up arrives in messages every client hears, so a guest is always ready
@@ -128,4 +129,38 @@ export function departedSeats(
 ): number[] {
   const here = new Set(members);
   return matchSeats.filter((seat) => !bots.has(seat) && !here.has(seat) && !out.has(seat));
+}
+
+/** What the host hands a seat that walks in on a running match: where the fog is and how
+ *  long it has (POK-260's late start, for a watcher), and one `out` for every seat already
+ *  gone, in the order they went. A player back from a socket blip is a late arrival too
+ *  (POK-330 #25): the relay held its seat, but everything said while it was away went to
+ *  nobody -- its own elimination above all, which its page cannot hear from itself and
+ *  nobody had ever told it, so it walked on as a ghost the room had already buried. */
+export function catchUp(hostSeat: number, state: Pick<DirectorState, 'ring' | 'clockLeft' | 'placements'>): Msg[] {
+  const out: Msg[] = [];
+  if (state.ring) {
+    const { phase, sx, sy, r, place } = state.ring;
+    out.push({ t: 'ring', seat: hostSeat, phase, sx, sy, r, place });
+    out.push({ t: 'clock', seat: hostSeat, left: state.clockLeft });
+  }
+  for (const seat of state.placements) out.push({ t: 'out', seat });
+  return out;
+}
+
+/** The loot a seat caught up by catchUp() is owed, once (POK-330 #25): what is lying on the
+ *  map its own message says it is on. A `step` says so as well as a `place`, and it is all
+ *  a seat walking one route ever sends -- the ROM sends a `place` only on a map change, a
+ *  warp, a ledge or the first frame after a menu or a battle (br_ghosts.c) -- so waiting
+ *  for a `place` left a player back from a blip without the loot on the route it kept
+ *  walking, and then handed it the next map's, which its own page already had. */
+export function lootOwed(
+  owed: Set<number>,
+  m: Msg,
+  from: number,
+  forMap: (map: MapRef) => SpillMsg | null,
+): SpillMsg | null {
+  if (m.t !== 'place' && m.t !== 'step') return null;
+  if (!m.map || m.seat !== from || !owed.delete(from)) return null;
+  return forMap(m.map);
 }

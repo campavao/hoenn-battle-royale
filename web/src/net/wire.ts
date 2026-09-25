@@ -481,6 +481,10 @@ export interface PeekMsg {
   t: 'peek';
   seat: number; // the asker
   target: number; // whose party is being asked for
+  /** The battle id the asker's ROM is already replaying (POK-330 #10), so the fighter
+   *  answers with the fight so far only when it differs. JSON only: the ROM's peek
+   *  carries seat and target and nothing else. */
+  have?: number;
 }
 
 /** A bot beat by `seat` -- `target` is the bot's own roster seat. JSON only: bots are
@@ -1090,7 +1094,12 @@ const decoders: Record<string, Decoder> = {
     };
   },
 
-  peek: (m) => ({ t: 'peek', seat: reqSeat(m), target: reqSeat(m, 'target') }),
+  peek: (m) => {
+    const out: PeekMsg = { t: 'peek', seat: reqSeat(m), target: reqSeat(m, 'target') };
+    const have = optInt(m, 'have', 0, 0xffff);
+    if (have !== undefined) out.have = have;
+    return out;
+  },
 
   shot: (m) => ({ t: 'shot', seat: reqSeat(m), secs: reqInt(m, 'secs', 0, 60) }),
 
@@ -1194,6 +1203,8 @@ export function decode(json: string): Msg {
   }
   if (!isPlainObject(parsed)) throw new WireError('not an object');
   const t = parsed.t;
-  if (typeof t !== 'string' || !(t in decoders)) throw new WireError(`unknown type: ${JSON.stringify(t)}`);
+  // Own keys only: `in` walks the prototype, so a `t` of "constructor" or "toString" found
+  // a decoder -- Object's own -- and came back as something no handler expects.
+  if (typeof t !== 'string' || !Object.hasOwn(decoders, t)) throw new WireError(`unknown type: ${JSON.stringify(t)}`);
   return decoders[t](parsed);
 }
