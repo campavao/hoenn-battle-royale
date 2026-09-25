@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canStart, clockLeftAt, doorOf, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, ringClockLeft, roomView, startNote, textSpeedLabel, nextSafari, safariLabel } from './room';
+import { BOT_FILL, botFillFor, canStart, clockLeftAt, decideStart, doorOf, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, type StartState } from './room';
+import { freshMatch, noteMatch, ringClockLeft } from './lifecycle';
 import { Director, type DirectorWorld } from './director';
 import type { RosterEvent } from '../net/relay';
 import type { Msg } from '../net/wire';
@@ -90,6 +91,94 @@ describe('START', () => {
   });
 });
 
+// Seven places in app.ts decided whether a match starts, each with its own copy of the
+// rule. One rule per trigger now, each the condition its site wrote, quirks included.
+describe('when a match starts (POK-330 #42)', () => {
+  const page = (over: Partial<StartState> = {}): StartState => ({
+    mode: 'quick',
+    autoStarts: true,
+    isHost: true,
+    roomStarted: false,
+    countingDown: false,
+    match: freshMatch(),
+    ...over,
+  });
+  const inFlight = { active: true, ended: false, seed: 7 };
+
+  it('a quick or daily host counts down when it attaches, and a guest does not', () => {
+    expect(decideStart({ t: 'attached' }, page({ isHost: false }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'attached' }, page({ mode: 'quick' }))).toEqual({ do: 'count-down' });
+    expect(decideStart({ t: 'attached' }, page({ mode: 'daily' }))).toEqual({ do: 'count-down' });
+    // quirk kept: an attach looks at no count already running, nor at a match already on
+    expect(decideStart({ t: 'attached' }, page({ countingDown: true, roomStarted: true, match: inFlight }))).toEqual({ do: 'count-down' });
+  });
+
+  it('a hosted, joined or watched room never counts down or buzzes, nor any under #noauto', () => {
+    for (const s of [page({ mode: 'host' }), page({ mode: 'join' }), page({ mode: 'watch' }), page({ autoStarts: false })]) {
+      expect(decideStart({ t: 'attached' }, s), s.mode).toEqual({ do: 'nothing' });
+      expect(decideStart({ t: 'promoted', members: [1, 2] }, s), s.mode).toEqual({ do: 'nothing' });
+      expect(decideStart({ t: 'roster', members: [1, 2, 3] }, s), s.mode).toEqual({ do: 'nothing' });
+    }
+  });
+
+  it('an heir before any match counts a quick room down, unless it is on or counting already', () => {
+    expect(decideStart({ t: 'promoted', members: [2] }, page())).toEqual({ do: 'count-down' });
+    expect(decideStart({ t: 'promoted', members: [2] }, page({ countingDown: true }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'promoted', members: [2] }, page({ roomStarted: true }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'promoted', members: [2] }, page({ mode: 'host' })), 'a hosted room waits for START').toEqual({ do: 'nothing' });
+  });
+
+  it('an heir mid-match takes it over, and leaves one that has been won', () => {
+    for (const mode of ['quick', 'host'] as const) {
+      expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ mode, match: inFlight }))).toEqual({ do: 'take-over', members: [2, 3] });
+    }
+    // quirk kept: a match whose seed was never heard (a watcher's late start) is dealt afresh
+    expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ match: { ...inFlight, seed: 0 } }))).toEqual({ do: 'deal', members: [2, 3] });
+    expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ match: { ...inFlight, ended: true } }))).toEqual({ do: 'nothing' });
+  });
+
+  it('a host back from its own drop takes its match back', () => {
+    expect(decideStart({ t: 'host-again', members: [1, 2] }, page({ mode: 'host', match: inFlight }))).toEqual({ do: 'take-over', members: [1, 2] });
+  });
+
+  it('a quick room deals once two are in it, and a hosted one waits for START (POK-320)', () => {
+    expect(decideStart({ t: 'roster', members: [1] }, page())).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'roster', members: [1, 2] }, page())).toEqual({ do: 'deal', members: [1, 2] });
+    expect(decideStart({ t: 'roster', members: [1, 2] }, page({ mode: 'host' }))).toEqual({ do: 'nothing' });
+  });
+
+  it('START, a countdown running out, and solo deal', () => {
+    expect(decideStart({ t: 'start', members: [1, 4] }, page({ mode: 'host' }))).toEqual({ do: 'deal', members: [1, 4] });
+    expect(decideStart({ t: 'start' }, page({ mode: 'host' }))).toEqual({ do: 'deal' });
+    expect(decideStart({ t: 'countdown' }, page())).toEqual({ do: 'deal' });
+    expect(decideStart({ t: 'solo' }, page({ mode: 'solo' }))).toEqual({ do: 'deal' });
+  });
+
+  it('quirk kept: nothing counts down after PLAY AGAIN, so a quick room of one never starts again', () => {
+    // back in the room: no match, no count, and only a roster event left to deal
+    const back = page({ match: freshMatch(), countingDown: false });
+    expect(decideStart({ t: 'roster', members: [1] }, back)).toEqual({ do: 'nothing' });
+    // ...and a room of two or more deals on its next roster at once, with no count
+    expect(decideStart({ t: 'roster', members: [1, 2] }, back)).toEqual({ do: 'deal', members: [1, 2] });
+  });
+});
+
+describe('how many bots the host fills to', () => {
+  it('fills to the seats asked for, past the relay\'s sixteen humans (POK-330 #29)', () => {
+    expect(botFillFor({ max: 16, seats: 30 }, 2)).toBe(28);
+  });
+
+  it('reads an older relay\'s max, and the default with no roster at all', () => {
+    expect(botFillFor({ max: 8 }, 3)).toBe(5);
+    expect(botFillFor(null, 1)).toBe(BOT_FILL - 1);
+  });
+
+  it('is never negative', () => {
+    expect(botFillFor({ max: 2 }, 3)).toBe(0);
+    expect(botFillFor({ max: 16, seats: 4 }, 6)).toBe(0);
+  });
+});
+
 describe('the match options', () => {
   it('cycle the three text speeds the ROM knows, and name them', () => {
     expect(nextTextSpeed(1)).toBe(3);
@@ -176,25 +265,15 @@ describe('the clock a match is picked up from (POK-330 #47 review)', () => {
   it('a host back from a drop mid-ring carries on with the phase it left, counted on', () => {
     const clock = { t: 0 };
     const sent: Msg[] = [];
-    // the snapshot as the page keeps it (app.ts noteResult)
-    const match = { ringPhase: 0, centre: undefined as { sx: number; sy: number; place?: string } | undefined, clockLeft: 0, clockAt: 0 };
+    // the snapshot as the page keeps it (lifecycle.ts noteMatch)
+    const match = freshMatch();
     const host = directorAt(clock, sent);
     host.start();
     while (clock.t < (10 + FOG + 20) * 1000) {
       clock.t += 1000;
       const before = sent.length;
       host.tick();
-      for (const m of sent.slice(before)) {
-        if (m.t === 'ring') {
-          match.ringPhase = m.phase;
-          match.centre = { sx: m.sx, sy: m.sy, place: m.place };
-          match.clockLeft = ringClockLeft(m.phase, FOG);
-          match.clockAt = clock.t;
-        } else if (m.t === 'clock') {
-          match.clockLeft = m.left;
-          match.clockAt = clock.t;
-        }
-      }
+      for (const m of sent.slice(before)) noteMatch(match, FOG, m, clock.t, { dealing: true, roster: null, defaultFog: FOG });
     }
     expect(match.ringPhase).toBe(2);
     expect(host.state.clockLeft).toBe(FOG - 20);

@@ -9,6 +9,7 @@ import type { RosterEvent } from '../net/relay';
 import type { MapRef, Msg, SpillMsg } from '../net/wire';
 import { dealBots, MAX_SEATS } from '../bots/roster';
 import type { DirectorState } from './director';
+import { isFinalRingPhase } from './clock';
 
 /** The match as any page in the room can see it (POK-252): everything a promoted client
  *  needs to pick it up arrives in messages every client hears, so a guest is always ready
@@ -115,6 +116,109 @@ export function botRows(seed: number, botSeats: Iterable<number>): { seat: numbe
 export function botSeatsOf(startSeats: readonly number[], roster: RosterEvent | null): number[] {
   const players = new Set((roster?.members ?? []).filter((m) => !m.spectate).map((m) => m.id));
   return startSeats.filter((seat) => !players.has(seat));
+}
+
+/** Seconds to the next ring move once a `ring` lands: the whole phase, or none once the
+ *  fog is everywhere -- what the director counts on the host. It was kept as 0, and
+ *  nothing sends a `clock` during the ring, so a page picking the match up (an heir, or
+ *  a host back from its own drop) read the phase as spent and moved the fog on the
+ *  moment it resumed (POK-330 #47 review). */
+export function ringClockLeft(phase: number, fogSecs: number): number {
+  return isFinalRingPhase(phase - 1) ? 0 : fogSecs;
+}
+
+/** The match as this page hears it: what each message any page sees says about the match
+ *  in progress. `match` changes in place and is never replaced, because it is the one
+ *  object the page keeps (and the e2e reads) for its whole life. `fog` is the match's fog
+ *  phase, from its `start`; what comes back is the one to keep. */
+export function noteMatch(
+  match: MatchSnapshot,
+  fog: number,
+  msg: Msg,
+  now: number,
+  page: {
+    /** This page dealt the match, and set its bot seats as it did. */
+    dealing: boolean;
+    /** The relay's last roster, which a guest reads the bots off. */
+    roster: RosterEvent | null;
+    /** The fog for a `start` that names none. */
+    defaultFog: number;
+  },
+): number {
+  if (msg.t === 'start') {
+    // A new match, whatever the last one left here: its eliminations, its ring, its end.
+    Object.assign(match, freshMatch(), {
+      seed: msg.seed,
+      seats: msg.spawns.map((s) => s.seat),
+      spawns: msg.spawns.map((s) => ({ map: s.map, x: s.x, y: s.y })),
+      // The host set its own bot seats when it dealt them; a guest reads them off the
+      // room. Read before the assign, which would otherwise hand back freshMatch's.
+      botSeats: page.dealing ? match.botSeats : new Set(botSeatsOf(msg.spawns.map((s) => s.seat), page.roster)),
+      active: true,
+    });
+    fog = msg.fog ?? page.defaultFog;
+  } else if (msg.t === 'ring') {
+    match.ringPhase = msg.phase;
+    match.centre = { sx: msg.sx, sy: msg.sy, place: msg.place };
+    match.ringR = msg.r;
+    match.clockLeft = ringClockLeft(msg.phase, fog); // nothing sends a `clock` in the ring
+    match.clockAt = now;
+    match.active = true; // a watcher's late start: it never heard the `start`
+  } else if (msg.t === 'clock') {
+    match.clockLeft = msg.left;
+    match.clockAt = now;
+    match.active = true;
+  } else if (msg.t === 'win') {
+    match.ended = true;
+  } else if (msg.t === 'out') {
+    match.out.add(msg.seat);
+  }
+  return fog;
+}
+
+/** A deal, or a takeover, worked out from the match as this page has heard it: the bots
+ *  and who has gone are arithmetic on the `start` every page heard. Where each bot stands
+ *  now needs the roster, which the caller adds to `resume`. */
+export interface DealPlan {
+  takeOver: boolean;
+  seed: number;
+  /** The run of seats at the top of the field the match was dealt with: its bots. */
+  botSeats: number[];
+  /** The seats below that run: the people. */
+  humanSeats: number[];
+  /** On a takeover, the people in the match who are no longer in the room. */
+  gone: number[];
+  /** On a takeover of a match with a seed: what its bots are dealt again from. */
+  resume?: { botSeats: number[]; humanSeats: number[]; out: Set<number> };
+}
+
+/** `seats` is who the match is dealt to now (seatsFor); `freshSeed` is called only when
+ *  the match's own seed is not kept. */
+export function dealPlan(
+  match: Pick<MatchSnapshot, 'seed' | 'seats' | 'out'>,
+  seats: readonly number[],
+  hostSeat: number,
+  takeOver: boolean,
+  freshSeed: () => number,
+): DealPlan {
+  // A takeover keeps the match's own seed: the bots are dealt from it, and dealing
+  // them again from a new one would rename everybody mid-match.
+  const seed = takeOver && match.seed !== 0 ? match.seed : freshSeed();
+  // Bots count down from the top seat and people count up from zero (bots/roster.ts),
+  // so the bots are the run at the top of the field the match was dealt with.
+  const dealtField = new Set(match.seats);
+  const botSeats: number[] = [];
+  for (let seat = MAX_SEATS - 1; dealtField.has(seat); seat--) botSeats.push(seat);
+  const humanSeats = match.seats.filter((seat) => !dealtField.has(seat) || seat < MAX_SEATS - botSeats.length);
+  // Whoever was in the match and is no longer in the room is not coming back --
+  // the old host above all. Left alive they would hold the match open forever.
+  const gone = takeOver
+    ? humanSeats.filter((seat) => !seats.includes(seat) && seat !== hostSeat)
+    : [];
+  const resume = takeOver && match.seed !== 0
+    ? { botSeats, humanSeats, out: new Set([...match.out, ...gone]) }
+    : undefined;
+  return { takeOver, seed, botSeats, humanSeats, gone, resume };
 }
 
 /** Seats in a running match that the relay has stopped listing: the ones a departure timer

@@ -9,7 +9,8 @@
 // "does FILL say how many bots", "is START refused with nobody in the room", "does a
 // guest see the host's settings and not the host's buttons".
 import type { RosterEvent } from '../net/relay';
-import { isFinalRingPhase } from './clock';
+import type { RoomMode } from '../hash';
+import { onPromotion, type MatchSnapshot } from './lifecycle';
 
 /** What MAX cycles through. Kanto's ladder, and the same one the relay clamps to: the
  *  humans are capped by the relay (16, the roster's `max`) and everything above that
@@ -88,6 +89,116 @@ export function startNote(view: RoomView): string {
   return `START: ${view.players} trainer${view.players === 1 ? '' : 's'}${bots}.`;
 }
 
+// ---- when a match starts (POK-330 #42) -----------------------------------------------
+
+/** How many the host fills a room to when nothing says otherwise. The room screen's
+ *  own FILL control (POK-241) overrides it; Kanto's rooms are never empty, which is the
+ *  whole point. */
+export const BOT_FILL = 8;
+
+export const AUTO_START_MS = 10_000; // "for now": a room starts 10s after hosting, or once 2+ seats
+
+/** Which rooms start on their own (POK-320, Cam: "if I click an option that isn't quick
+ *  play, the game should not start automatically"). Quick play and the daily are
+ *  games that are going; a hosted room waits for its host's START. */
+export function startsItself(mode: RoomMode): boolean {
+  return mode === 'quick' || mode === 'daily';
+}
+
+/** How many bots the host fills to (POK-241's FILL), held to what the room has room
+ *  for. `seats` is MAX as the host set it; `max` is only the humans (POK-330 #29), and
+ *  all an older relay sends. */
+export function botFillFor(roster: Pick<RosterEvent, 'seats' | 'max'> | null, humans: number): number {
+  return Math.max(0, (roster?.seats ?? roster?.max ?? BOT_FILL) - humans);
+}
+
+/** Something that might start a match. Each is a place the page used to decide that for
+ *  itself, with its own copy of the rule. */
+export type StartTrigger =
+  /** We have a seat: the room's first host counts a room that starts itself down. */
+  | { t: 'attached' }
+  /** The relay has just made us host (POK-252). */
+  | { t: 'promoted'; members: number[] }
+  /** Host again after our own drop, the match still in this tab (POK-330 #47). */
+  | { t: 'host-again'; members: number[] }
+  /** A roster event. */
+  | { t: 'roster'; members: number[] }
+  /** START. `members` is the roster it was drawn with, when there is one. */
+  | { t: 'start'; members?: number[] }
+  /** A room's countdown ran out. */
+  | { t: 'countdown' }
+  /** Solo, once the ROM is well into its warp-in. */
+  | { t: 'solo' };
+
+export interface StartState {
+  mode: RoomMode;
+  /** False under the dev `#noauto`, which holds a room that starts itself open. */
+  autoStarts: boolean;
+  isHost: boolean;
+  /** The room screen is down: a match has been dealt. */
+  roomStarted: boolean;
+  /** A countdown is running already. */
+  countingDown: boolean;
+  match: Pick<MatchSnapshot, 'active' | 'ended' | 'seed'>;
+}
+
+export type StartDecision =
+  | { do: 'nothing' }
+  | { do: 'count-down' }
+  /** Deal a new match to `members`, or to the relay's last roster when absent. */
+  | { do: 'deal'; members?: number[] }
+  /** Pick up the match in flight from what the wire has said of it. */
+  | { do: 'take-over'; members: number[] };
+
+/** The one start policy: whether a match starts now, later, or not at all. Each rule is
+ *  the condition its call site wrote out for itself, quirks and all:
+ *  - nothing counts down after PLAY AGAIN, so a quick room of one never starts again and
+ *    one of two or more deals on its next roster at once;
+ *  - `attached` counts down on every attach, a rejoin mid-match included;
+ *  - a takeover of a match whose seed was never heard (a watcher's) deals a fresh one.
+ *  What the page cannot do anyway -- a director already running, no seat, not the host,
+ *  nobody to deal to -- is startDirector's to refuse. */
+export function decideStart(trigger: StartTrigger, s: StartState): StartDecision {
+  switch (trigger.t) {
+    case 'attached':
+      return s.isHost && s.autoStarts && startsItself(s.mode) ? { do: 'count-down' } : { do: 'nothing' };
+    case 'promoted': {
+      // An heir to a room that starts itself (quick play, the daily) before any match
+      // counts it down, after the STARTS IN count (POK-320); the room's own first host
+      // does that from attach(), which knows it opened the room.
+      // Before any match, an heir inherits the room and nothing else: a hosted room still
+      // waits for START, now this page's (play-test 2026-09-19: the host switched apps,
+      // iOS dropped its socket, and the guest it handed to started the match unasked).
+      // After one it is the same, once the grace brings everybody back: a match that has
+      // been won is not one to take over (POK-330 #22).
+      const next = onPromotion(s.match);
+      if (next === 'room') {
+        return !s.roomStarted && startsItself(s.mode) && s.autoStarts && !s.countingDown
+          ? { do: 'count-down' }
+          : { do: 'nothing' };
+      }
+      if (next === 'take-over') {
+        return s.match.seed !== 0
+          ? { do: 'take-over', members: trigger.members }
+          : { do: 'deal', members: trigger.members };
+      }
+      return { do: 'nothing' };
+    }
+    case 'host-again':
+      return { do: 'take-over', members: trigger.members };
+    case 'roster':
+      // The buzzer: a room that starts itself goes once two are in it.
+      return trigger.members.length >= 2 && s.autoStarts && startsItself(s.mode)
+        ? { do: 'deal', members: trigger.members }
+        : { do: 'nothing' };
+    case 'start':
+      return { do: 'deal', members: trigger.members };
+    case 'countdown':
+    case 'solo':
+      return { do: 'deal' };
+  }
+}
+
 // ---- a door that will not open -----------------------------------------------------
 
 /** The seat a new room gives the member who opens it: relay/server.js hands out the
@@ -113,15 +224,6 @@ export function onRefused(
 }
 
 // ---- the clock a match is picked up from ---------------------------------------------
-
-/** Seconds to the next ring move once a `ring` lands: the whole phase, or none once the
- *  fog is everywhere -- what the director counts on the host. It was kept as 0, and
- *  nothing sends a `clock` during the ring, so a page picking the match up (an heir, or
- *  a host back from its own drop) read the phase as spent and moved the fog on the
- *  moment it resumed (POK-330 #47 review). */
-export function ringClockLeft(phase: number, fogSecs: number): number {
-  return isFinalRingPhase(phase - 1) ? 0 : fogSecs;
-}
 
 /** The seconds left in the running phase at `now`: the last clock this page heard or
  *  kept, counted off since it arrived. What a guest's strip draws, and what a director

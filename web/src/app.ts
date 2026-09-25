@@ -23,14 +23,23 @@ import { Results } from './match/results';
 import { Bots } from './bots/brain';
 import { lootView, resumeAt, routeToBots } from './bots/adapt';
 import { romCell, type RomCell } from './bots/space';
-import { dealBots, MAX_SEATS } from './bots/roster';
+import { dealBots } from './bots/roster';
 import type { Bot } from './bots/roster';
 import { type BotVoice, lineAt, nextLine, voiceFor } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { NpcFog } from './match/npcfog';
 import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
-import { clockLeftAt, onRefused, ringClockLeft } from './match/room';
+import {
+  AUTO_START_MS,
+  BOT_FILL,
+  botFillFor,
+  clockLeftAt,
+  decideStart,
+  onRefused,
+  type StartDecision,
+  type StartState,
+} from './match/room';
 import { Stage } from './ui/stage';
 import { drawerKey, drawerLabel, stageKey } from './ui/roomkeys';
 import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
@@ -84,11 +93,12 @@ import { cardFor } from './match/card';
 import { MatchRecord, recordLines } from './match/record';
 import {
   botRows,
-  botSeatsOf,
   catchUp,
+  dealPlan,
   departedSeats,
   freshMatch,
   lootOwed,
+  noteMatch,
   onAgain,
   onPromotion,
   seatsFor,
@@ -1164,10 +1174,6 @@ function renderRoomPanel(
 
 // ---- bots (POK-236) -----------------------------------------------------------------
 
-/** How many the host fills a room to when nothing says otherwise. The room screen's
- *  own FILL control (POK-241) overrides it; Kanto's rooms are never empty, which is the
- *  whole point. */
-const BOT_FILL = 8;
 /** `#nobots` fills the room with nobody. A dev-only affordance like `#testmon`: an e2e
  *  that is about two people needs the room to hold still, and eight bots walking into
  *  them is eight chances for the thing under test to be something else. */
@@ -1614,7 +1620,6 @@ function startSpectateLoop(
 
 // ---- the match director's page-side wiring (POK-222/223/224/228) ------------------------
 
-const AUTO_START_MS = 10_000; // "for now": a room starts 10s after hosting, or once 2+ seats
 /** `#noauto` holds the room open instead. Dev only, like `#testmon`, `#nobots` and
  *  `#quick`: an e2e about one piece of a match needs the rest of it to stand still,
  *  and a director that starts under the test warps everybody out from under it. */
@@ -1630,12 +1635,6 @@ function fixedSeed(): number | null {
 
 function autoStarts(): boolean {
   return !import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('noauto');
-}
-/** Which rooms start on their own (POK-320, Cam: "if I click an option that isn't quick
- *  play, the game should not start automatically"). Quick play and the daily are
- *  games that are going; a hosted room waits for its host's START. */
-function startsItself(mode: string): boolean {
-  return mode === 'quick' || mode === 'daily';
 }
 const DIRECTOR_TICK_MS = 1000; // coarser than the 5s clock/fogSecs cadence director.ts needs
 
@@ -1892,9 +1891,18 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // PLACE for us to hook, and 200 frames (~3.3s) is well past BR_BOOT_SAFARI's own
   // warp-in.
   let frames = 0;
+  const soloState: StartState = {
+    mode: 'solo',
+    autoStarts: autoStarts(),
+    isHost: true,
+    roomStarted: false,
+    countingDown: false,
+    match: { active: false, ended: false, seed },
+  };
   const off = emu.onFrame(() => {
     if (++frames < 200) return;
     off();
+    if (decideStart({ t: 'solo' }, soloState).do !== 'deal') return;
     director.start();
     startDirectorLoop(emu, symbols?.get('gBrHud'), director);
   });
@@ -2198,27 +2206,11 @@ function wireRoom(
     // buzzer left the room open -- latecomers walked into a running match as players,
     // and quick play offered it as somewhere to join rather than somewhere to watch.
     relay.lockRoom(true);
-    // A takeover keeps the match's own seed: the bots are dealt from it, and dealing
-    // them again from a new one would rename everybody mid-match.
-    const seed = takeOver && match.seed !== 0
-      ? match.seed
-      : fixedSeed() ?? Math.floor(Math.random() * 0x7fff_ffff) + 1;
-    // Bots count down from the top seat and people count up from zero (bots/roster.ts),
-    // so the bots are the run at the top of the field the match was dealt with.
-    const dealtField = new Set(match.seats);
-    const botSeats: number[] = [];
-    for (let seat = MAX_SEATS - 1; dealtField.has(seat); seat--) botSeats.push(seat);
-    const humanSeats = match.seats.filter((seat) => !dealtField.has(seat) || seat < MAX_SEATS - botSeats.length);
-    // Whoever was in the match and is no longer in the room is not coming back --
-    // the old host above all. Left alive they would hold the match open forever.
-    const gone = takeOver
-      ? humanSeats.filter((seat) => !seats.includes(seat) && seat !== hostSeat)
-      : [];
-    const resume: BotResume | undefined = takeOver && match.seed !== 0
+    const plan = dealPlan(match, seats, hostSeat, takeOver, () => fixedSeed() ?? Math.floor(Math.random() * 0x7fff_ffff) + 1);
+    const { seed, gone } = plan;
+    const resume: BotResume | undefined = plan.resume
       ? {
-          botSeats,
-          humanSeats,
-          out: new Set([...match.out, ...gone]),
+          ...plan.resume,
           where: (seat: number) => {
             const row = bridge!.roster.all().find((e) => e.seat === seat);
             return row?.map && row.x !== undefined && row.y !== undefined
@@ -2307,8 +2299,7 @@ function wireRoom(
       (seat) => say(Ticker.said(seat, nameOf(seat), myVoice(seat, seed).intro)),
       // How many bots the host is filling to (POK-241's FILL), held to what the room
       // has room for.
-      // `seats` is MAX as the host set it; `max` is only the humans (POK-330 #29).
-      botFill() === 0 ? 0 : Math.max(0, (controls.roster?.seats ?? controls.roster?.max ?? BOT_FILL) - seats.length),
+      botFill() === 0 ? 0 : botFillFor(controls.roster, seats.length),
       resume,
       paceOptions()?.safariSecs ?? controls.safariSecs,
       () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
@@ -2439,6 +2430,24 @@ function wireRoom(
       bots = null;
     };
   };
+  /** What match/room.ts's decideStart is asked from: this page, as it stands. The mode is
+   *  the door we came in by, not a re-read of the hash, which match_in_progress rewrites. */
+  const startState = (): StartState => ({
+    mode: hash.mode,
+    autoStarts: autoStarts(),
+    isHost,
+    roomStarted: room.started,
+    countingDown: room.startAt !== null,
+    match,
+  });
+  /** Carries out what decideStart said. A countdown asks again when it runs out. */
+  const act = (decision: StartDecision): void => {
+    if (decision.do === 'count-down') {
+      room.startAt = performance.now() + AUTO_START_MS;
+      setTimeout(() => act(decideStart({ t: 'countdown' }, startState())), AUTO_START_MS);
+    } else if (decision.do === 'deal') startDirector(decision.members);
+    else if (decision.do === 'take-over') startDirector(decision.members, true);
+  };
 
   const spectate = new Spectate();
   // The ROM only holds the loot for the map it is standing on, and forgets it on the
@@ -2463,36 +2472,16 @@ function wireRoom(
   // `start`/`win` as it sends them.
   const noteResult = (msg: Msg) => {
     // The match, as anybody in the room can see it.
+    matchFog = noteMatch(match, matchFog, msg, performance.now(), {
+      dealing: director !== null,
+      roster: controls.roster,
+      defaultFog: controls.fogSecs,
+    });
     if (msg.t === 'start') {
-      // A new match, whatever the last one left here: its eliminations, its ring, its end.
-      Object.assign(match, freshMatch(), {
-        seed: msg.seed,
-        seats: msg.spawns.map((s) => s.seat),
-        spawns: msg.spawns.map((s) => ({ map: s.map, x: s.x, y: s.y })),
-        // The host set its own bot seats when it dealt them; a guest reads them off the
-        // room. Either way they go on the roster by the names the seed gave them, which
-        // every page can work out (POK-330 #51) -- before the log below takes its names.
-        botSeats: director ? match.botSeats : new Set(botSeatsOf(msg.spawns.map((s) => s.seat), controls.roster)),
-        active: true,
-      });
-      matchFog = msg.fog ?? controls.fogSecs;
+      // The bots go on the roster by the names the seed gave them, which every page can
+      // work out (POK-330 #51) -- before the log below takes its names.
       bridge?.roster.seatBots(botRows(msg.seed, match.botSeats));
       hideRoomScreen();
-    } else if (msg.t === 'ring') {
-      match.ringPhase = msg.phase;
-      match.centre = { sx: msg.sx, sy: msg.sy, place: msg.place };
-      match.ringR = msg.r;
-      match.clockLeft = ringClockLeft(msg.phase, matchFog); // nothing sends a `clock` in the ring
-      match.clockAt = performance.now();
-      match.active = true; // a watcher's late start: it never heard the `start`
-    } else if (msg.t === 'clock') {
-      match.clockLeft = msg.left;
-      match.clockAt = performance.now();
-      match.active = true;
-    } else if (msg.t === 'win') {
-      match.ended = true;
-    } else if (msg.t === 'out') {
-      match.out.add(msg.seat);
     }
     // A bot's fight runs in whoever fought it, and what that ROM reports goes to the
     // brain through routeToBots (bots/adapt.ts) -- below, where the seat that sent it
@@ -2856,11 +2845,9 @@ function wireRoom(
     }, 1000);
     stopGuestStrip = () => clearInterval(guestStrip);
     renderSpectate(bridge, spectate);
-    if (isHost && autoStarts() && startsItself(hash.mode)) {
-      room.startAt = performance.now() + AUTO_START_MS;
-      stage.redraw();
-      setTimeout(() => startDirector(), AUTO_START_MS);
-    }
+    const onAttach = decideStart({ t: 'attached' }, startState());
+    act(onAttach);
+    if (onAttach.do === 'count-down') stage.redraw();
   };
 
   // PLAY AGAIN goes back to the lobby, not back into this room. Reloading on the same
@@ -2932,7 +2919,7 @@ function wireRoom(
         // The host gets its START back: a new match is dealt from the room, the same
         // way the first one was.
         renderRoomPanel(controls, bridge.seat, relay, () => {
-          startDirector(controls.roster?.members.map((m) => m.id)); // locks the room itself
+          act(decideStart({ t: 'start', members: controls.roster?.members.map((m) => m.id) }, startState())); // locks the room itself
           renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
         }, false);
       }
@@ -3016,21 +3003,7 @@ function wireRoom(
     if (bridge && ev.host === bridge.seat && !isHost) {
       isHost = true;
       console.info('[room] promoted to host');
-      // An heir to a room that starts itself (quick play, the daily) before any match
-      // counts it down, after the STARTS IN count (POK-320); the room's own first host
-      // does that from attach(), which knows it opened the room.
-      // Before any match, an heir inherits the room and nothing else: a hosted room still
-      // waits for START, now this page's (play-test 2026-09-19: the host switched apps,
-      // iOS dropped its socket, and the guest it handed to started the match unasked).
-      // After one it is the same, once the grace brings everybody back: a match that has
-      // been won is not one to take over (POK-330 #22).
-      const next = onPromotion(match);
-      if (next === 'room') {
-        if (!room.started && startsItself(hash.mode) && autoStarts() && room.startAt === null) {
-          room.startAt = performance.now() + AUTO_START_MS;
-          setTimeout(() => startDirector(), AUTO_START_MS);
-        }
-      } else if (next === 'take-over') startDirector(ev.members.map((m) => m.id), match.seed !== 0);
+      act(decideStart({ t: 'promoted', members: ev.members.map((m) => m.id) }, startState()));
     }
     // Stood down. The relay moved `host` off us while we are still in the room, which
     // only happens because we asked it to (the tab went to the background). The
@@ -3047,7 +3020,7 @@ function wireRoom(
     if (resumeHost && bridge && isHost && ev.host === bridge.seat) {
       resumeHost = false;
       console.info('[room] host again after a drop');
-      startDirector(ev.members.map((m) => m.id), true);
+      act(decideStart({ t: 'host-again', members: ev.members.map((m) => m.id) }, startState()));
     }
     // Somebody arrived while the match is running: tell them where the fog is, now
     // (POK-260). Kanto calls this the late start -- a watcher who has to wait for the
@@ -3076,7 +3049,7 @@ function wireRoom(
     }
     // The buzzer, before the panel is drawn: a director created after the draw would
     // leave the host's controls on screen for the rest of the match.
-    if (ev.members.length >= 2 && autoStarts() && startsItself(hash.mode)) startDirector(ev.members.map((m) => m.id));
+    act(decideStart({ t: 'roster', members: ev.members.map((m) => m.id) }, startState()));
     if (bridge) renderRoom(bridge);
     // A host leaving closes the room for everybody -- that is what migration is for --
     // so the in-match LEAVE is a guest's button (POK-241).
@@ -3086,7 +3059,7 @@ function wireRoom(
       renderRoomPanel(controls, bridge.seat, relay, () => {
         // START: the host shuts the door and deals the match. This is what the
         // ten-second timer was standing in for.
-        startDirector(ev.members.map((m) => m.id)); // locks the room itself
+        act(decideStart({ t: 'start', members: ev.members.map((m) => m.id) }, startState())); // locks the room itself
         renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
       }, director !== null);
     }

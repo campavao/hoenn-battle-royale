@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { botRows, botSeatsOf, catchUp, departedSeats, freshMatch, lootOwed, onAgain, onPromotion, seatsFor } from './lifecycle';
+import { describe, expect, it, vi } from 'vitest';
+import { botRows, botSeatsOf, catchUp, dealPlan, departedSeats, freshMatch, lootOwed, noteMatch, onAgain, onPromotion, ringClockLeft, seatsFor } from './lifecycle';
 import { Loot } from './loot';
 import { dealBots } from '../bots/roster';
 import type { RosterEvent } from '../net/relay';
-import type { Msg } from '../net/wire';
+import type { Msg, StartMsg } from '../net/wire';
 
 const room = (members: RosterEvent['members']): RosterEvent => ({ code: 'ABC123', host: 0, open: false, max: 8, pass: false, members });
 
@@ -154,5 +154,96 @@ describe('the loot a seat back from a blip is owed', () => {
     expect(lootOwed(owed, step(30), 1, (m) => loot.forMap(m))).toBeNull(); // the host walking a bot
     expect(lootOwed(owed, step(8), 8, (m) => loot.forMap(m))).toBeNull();
     expect(owed.has(7)).toBe(true);
+  });
+});
+
+// POK-330 #42: the arithmetic of a deal and of a takeover, out of app.ts's startDirector.
+describe('dealing, and taking over', () => {
+  const seeded = () => Object.assign(freshMatch(), { seed: 7, seats: [1, 2, 31, 30, 29], active: true });
+
+  it('a fresh match has no bots to deal again and nobody gone, and draws a new seed', () => {
+    const fresh = vi.fn(() => 42);
+    expect(dealPlan(freshMatch(), [1, 2], 1, false, fresh)).toEqual({ takeOver: false, seed: 42, botSeats: [], humanSeats: [], gone: [] });
+    expect(fresh).toHaveBeenCalledOnce();
+  });
+
+  it('a takeover keeps the seed and the bots it dealt, and counts out whoever has left', () => {
+    const match = seeded();
+    match.out.add(30);
+    const fresh = vi.fn(() => 42);
+    const plan = dealPlan(match, [2], 2, true, fresh);
+    expect(plan).toMatchObject({ takeOver: true, seed: 7, botSeats: [31, 30, 29], humanSeats: [1, 2], gone: [1] });
+    expect(plan.resume).toEqual({ botSeats: [31, 30, 29], humanSeats: [1, 2], out: new Set([30, 1]) });
+    expect(fresh).not.toHaveBeenCalled();
+  });
+
+  it('quirk kept: a takeover of a match with no seed deals a fresh one, with nothing to resume', () => {
+    const plan = dealPlan({ ...seeded(), seed: 0 }, [2], 2, true, () => 42);
+    expect(plan.seed).toBe(42);
+    expect(plan.resume).toBeUndefined();
+  });
+
+  it('a deal that is not a takeover draws a new seed over a match that had one', () => {
+    expect(dealPlan(seeded(), [1, 2], 1, false, () => 42)).toMatchObject({ seed: 42, gone: [], resume: undefined });
+  });
+});
+
+// POK-330 #42: app.ts's noteResult kept the snapshot by hand; this is that reducer.
+describe('the match as the page hears it', () => {
+  const start = (over: Partial<StartMsg> = {}): StartMsg => ({
+    t: 'start',
+    seed: 99,
+    spawns: [0, 1, 31, 30].map((seat, i) => ({ seat, map: { group: 0, num: 1 }, x: i, y: 0 })),
+    ...over,
+  });
+  const guest = { dealing: false, roster: room([{ id: 0, name: 'CAM' }, { id: 1, name: 'MAY' }]), defaultFog: 120 };
+
+  it('a start fills in the object it is given, whatever the last match left in it', () => {
+    const match = freshMatch();
+    Object.assign(match, { ringPhase: 3, ringR: 5, centre: { sx: 1, sy: 1 }, ended: true, active: true });
+    match.out.add(1);
+    noteMatch(match, 60, start(), 1000, guest);
+    expect(match).toMatchObject({ seed: 99, seats: [0, 1, 31, 30], ringPhase: 0, ringR: 0, centre: undefined, active: true, ended: false });
+    expect(match.spawns[2]).toEqual({ map: { group: 0, num: 1 }, x: 2, y: 0 });
+    expect(match.out.size).toBe(0);
+  });
+
+  it('a guest reads the bots off the room; the page that dealt them keeps its own', () => {
+    const match = freshMatch();
+    noteMatch(match, 60, start(), 0, guest);
+    expect([...match.botSeats]).toEqual([31, 30]);
+    const dealt = new Set([31, 30, 29]);
+    match.botSeats = dealt;
+    noteMatch(match, 60, start(), 0, { ...guest, dealing: true });
+    expect(match.botSeats).toBe(dealt);
+  });
+
+  it("keeps the start's fog, or the room's when it names none", () => {
+    expect(noteMatch(freshMatch(), 60, start({ fog: 30 }), 0, guest)).toBe(30);
+    expect(noteMatch(freshMatch(), 60, start(), 0, guest)).toBe(120);
+    expect(noteMatch(freshMatch(), 60, { t: 'clock', seat: 1, left: 9 }, 0, guest), 'anything else keeps it').toBe(60);
+  });
+
+  it('a ring moves the fog and puts the whole phase on the clock', () => {
+    const match = freshMatch();
+    noteMatch(match, 45, { t: 'ring', seat: 1, phase: 2, sx: 3, sy: -1, r: 9, place: 'ROUTE 104' }, 5000, guest);
+    expect(match).toMatchObject({
+      ringPhase: 2,
+      centre: { sx: 3, sy: -1, place: 'ROUTE 104' },
+      ringR: 9,
+      clockLeft: ringClockLeft(2, 45),
+      clockAt: 5000,
+      active: true,
+    });
+  });
+
+  it('a clock sets the time left, an out adds the seat, and a win ends it', () => {
+    const match = freshMatch();
+    noteMatch(match, 60, { t: 'clock', seat: 1, left: 42 }, 7000, guest);
+    expect(match).toMatchObject({ clockLeft: 42, clockAt: 7000, active: true, ended: false });
+    noteMatch(match, 60, { t: 'out', seat: 30 }, 0, guest);
+    expect([...match.out]).toEqual([30]);
+    noteMatch(match, 60, { t: 'win', seat: 1 }, 0, guest);
+    expect(match.ended).toBe(true);
   });
 });
