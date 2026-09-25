@@ -21,6 +21,7 @@ import { bossAt } from './match/bosses';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
 import { EndGrace } from './match/grace';
+import { giveBag, MatchSession } from './match/session';
 import { createHostBots, type BotResume, type HostBots } from './bots/host';
 import { routeToBots } from './bots/adapt';
 import { romCell } from './bots/space';
@@ -88,9 +89,7 @@ import {
   catchUp,
   dealPlan,
   departedSeats,
-  freshMatch,
   lootOwed,
-  noteMatch,
   onAgain,
   onPromotion,
   seatsFor,
@@ -958,17 +957,6 @@ function careerName(): string {
   return career.name || cleanName(localStorage.getItem(NAME_STORAGE_KEY) ?? '') || DEFAULT_NAME;
 }
 
-/** The last team each seat was seen carrying, from any `party` that crossed this page.
- *  Kept for one thing (POK-243): the champion's own ROM sends its party as the parade
- *  starts, and the results screen is the shell's half of that parade. A `party` is
- *  otherwise an answer to a spectator's peek and belongs to whoever asked. */
-const lastParty = new Map<number, PackedMon[]>();
-
-/** What each seat did in the match, for the card under the parade (POK-303). One for
- *  the page rather than one per path: solo and a room never run at the same time, and
- *  `start` clears it either way. */
-const record = new MatchRecord();
-
 /** The hidden instance that fights bot-vs-bot duels for real (POK-238). Module state
  *  rather than an argument because it is made at boot, long before there is a room, and
  *  only the host will ever ask it anything -- it boots its emulator lazily, on the first
@@ -1209,7 +1197,19 @@ function noteBusy(msg: Msg): void {
  *  it is the record it produced. PLAY AGAIN reloads the page on the same hash, which
  *  re-imports the ROM from IndexedDB and rejoins the same room -- the blunt way, and
  *  the one that cannot leave half a match's state behind. */
-function renderResults(seat: number, roster: Roster, results: Results, seats: number, seed?: number): void {
+function renderResults(
+  seat: number,
+  roster: Roster,
+  books: {
+    results: Results;
+    record: MatchRecord;
+    parties: ReadonlyMap<number, PackedMon[]>;
+    /** How many seats the match started with. */
+    fieldSize: number;
+    seed?: number;
+  },
+): void {
+  const { results, fieldSize: seats, seed } = books;
   const panel = $('#results-panel') as HTMLElement;
   openDrawer(true);
   const mine = results.forSeat(seat, performance.now());
@@ -1234,8 +1234,8 @@ function renderResults(seat: number, roster: Roster, results: Results, seats: nu
   // and the round is written down under it (POK-248, match/log.ts).
   if (seed !== undefined) parts.push(`seed ${seed}`);
   ($('#results-line') as HTMLElement).textContent = parts.join(' · ');
-  renderFame(roster, mine.winner, seat);
-  renderRecord(seat);
+  renderFame(roster, mine.winner, seat, books.parties);
+  renderRecord(seat, books.record);
 }
 
 /** The champion's team under the result (POK-243, Kanto's Hall of Fame parade). The
@@ -1243,9 +1243,14 @@ function renderResults(seat: number, roster: Roster, results: Results, seats: nu
  *  the only place the room ever sees what actually took the match. Silent when the
  *  champion's `party` never arrived -- a bot's never does, since a bot has no ROM to
  *  send one. */
-function renderFame(roster: Roster, winner: number | undefined, seat: number): void {
+function renderFame(
+  roster: Roster,
+  winner: number | undefined,
+  seat: number,
+  parties: ReadonlyMap<number, PackedMon[]>,
+): void {
   const el = $('#results-fame') as HTMLElement;
-  const party = winner === undefined ? undefined : lastParty.get(winner);
+  const party = winner === undefined ? undefined : parties.get(winner);
 
   if (winner === undefined || !party || party.length === 0) {
     el.hidden = true;
@@ -1267,7 +1272,7 @@ function renderFame(roster: Roster, winner: number | undefined, seat: number): v
  *  survived, how many trainers you beat"; `record.ts` counts those off the wire and this
  *  is where they land. Always drawn -- RINGS is an answer even at zero, and a match you
  *  were eliminated from thirty seconds into is exactly when you want to see the number. */
-function renderRecord(seat: number): void {
+function renderRecord(seat: number, record: MatchRecord): void {
   const el = $('#results-record') as HTMLElement;
   el.innerHTML = '';
   for (const line of recordLines(record.forSeat(seat))) {
@@ -1286,28 +1291,6 @@ function renderRecord(seat: number): void {
  *  than the room's four seconds: there is no PLAY AGAIN to press here, so this is the
  *  only time the player has to read it. */
 const SOLO_END_GRACE_MS = 8_000;
-
-/** A bag we just took hands its contents over (POK-280).
- *
- *  Kanto's rule is that a fallen trainer's BAG is items AND money, taken whole in one
- *  press. Ours gave the cash and left the items lying there, because the ROM never kept
- *  them: `ParseSpill` skips the item rows on purpose, the loot table has room for eight
- *  pieces on a map and none for what is inside one, and EWRAM has eighty bytes left to
- *  argue with. Bots did not lose out -- `bag.ts` folds a bag on the ground into their own
- *  -- so a player was the only one getting a worse deal than Kanto's.
- *
- *  The page has held the contents for the whole match anyway (match/loot.ts), so it gives
- *  them over: the ROM says the whole piece is leaving the ground, this answers with what
- *  was in it. **Call before loot.note**, which is what deletes the piece.
- *
- *  A `pickup` that names an item is a bot taking one stack out of a bag that stays where
- *  it is (POK-237), not the bag itself; and `bagItems` is undefined for a ball, so a mon
- *  never reaches this. */
-function giveBag(loot: Loot, msg: Msg, push: (m: Msg) => void): void {
-  if (msg.t !== 'pickup' || msg.item !== undefined) return;
-  const items = loot.bagItems(msg.key);
-  if (items && items.length > 0) push({ t: 'give', items });
-}
 
 /** `gBrMatch.phase` once the winner's Hall of Fame has finished and the ROM is back on
  *  the map (include/br/br_match.h). The one byte the page reads out of the match struct:
@@ -1536,6 +1519,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // needs -- a seat, a roster and the same messages -- so it gets the same panel, the
   // same career line, and the same grace before the exit.
   const results = new Results();
+  const record = new MatchRecord();
   const matchBase = symbols?.get('gBrMatch');
   let fieldSize = 0;
   let recorded = false;
@@ -1558,7 +1542,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     recorded = true;
     ($('#results-career') as HTMLElement).textContent =
       careerLine(recordMatch(results.forSeat(0, performance.now()).placement));
-    renderResults(0, roster, results, fieldSize, seed);
+    // Solo has never kept anybody's party, so the champion's team is not drawn here.
+    renderResults(0, roster, { results, record, parties: new Map(), fieldSize, seed });
     // The parade, the same as a room's (POK-281). Solo is seat 0, so a `win` naming it
     // is ours; naming a bot, it is the seat whose fight a spectating player was watching.
     // A `win` with no seat at all is a draw and there is nobody to crown.
@@ -1790,6 +1775,7 @@ function wireRoom(
   const rom = new RomPort(new Mailbox(emu, mailboxBase));
   let bridge: Bridge | null = null;
   let director: Director | null = null;
+  let bots: HostBots | null = null;
   /** The director's own elimination handler, for `out`s this page makes itself. */
   let localOut: ((seat: number) => void) | null = null;
   /** Announces a seat out of the match to the whole room -- set while this client is
@@ -1972,7 +1958,7 @@ function wireRoom(
     const hostSeat = bridge.seat;
     // Everybody in the room now was dealt in, or on a takeover has been hearing the match
     // all along: only somebody who arrives, or comes back, needs catching up.
-    for (const m of controls.roster?.members ?? []) greeted.add(m.id);
+    for (const m of controls.roster?.members ?? []) session.greeted.add(m.id);
     // The door shuts when the match starts, wherever the start came from (POK-260).
     // It used to be the START button's job alone, so a match dealt by the ten-second
     // buzzer left the room open -- latecomers walked into a running match as players,
@@ -2028,8 +2014,7 @@ function wireRoom(
       bridge!.relay.all(msg);
       rom.push(msg);
       bridge!.roster.applyMsg(msg);
-      loot.note(msg); // a bot taking a ball takes it off this page's table too
-      noteResult(msg); // before the director hears an `out`, so its `win` comes after it
+      session.note(msg, 'page'); // before the director hears an `out`, so its `win` comes after it
     };
     // The host speaks for the bots as well as for the clock: same relay, same in-ring,
     // and its own roster too -- nobody hears their own messages come back, so the host
@@ -2045,7 +2030,7 @@ function wireRoom(
       },
       takenSeats: seats,
       seed,
-      loot,
+      loot: session.loot,
       players: () => bridge!.roster.all(),
       // A trainer card is for the one player it is a challenge to. The host's own ROM
       // never hears itself over the relay, so its copy is a direct push.
@@ -2075,7 +2060,7 @@ function wireRoom(
       resume,
       safariSecs: paceOptions()?.safariSecs ?? controls.safariSecs,
       zonePool: () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
-      busy: (s) => busySeats.has(s),
+      busy: (s) => session.busy.has(s),
       sections: WORLD.sections,
       settle: proxyDuels ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b) : undefined,
     });
@@ -2109,7 +2094,19 @@ function wireRoom(
         // (docs/WIRE.md) and has no slots.ts codec, so it never goes to `rom`.
         bridge!.relay.all(msg);
         rom.push(msg); // no-op for `win` -- the port only packs a msg.t crossesToRom() knows
-        noteResult(msg); // the host's own `start`/`win` never come back to it over the relay
+        session.note(msg, 'page'); // the host's own `start`/`win` never come back to it over the relay
+        // The match is over: the door opens again (POK-258). START locked the room to keep
+        // latecomers out of a running match, and leaving it locked is what turned the end
+        // of a match into everybody scattering -- a reload could not get back in.
+        if (msg.t === 'win') {
+          relay.lockRoom(false);
+          // And says so: a client that never saw the `win` -- a socket that blinked over the
+          // last fight -- still gets taken out of the match. `again` has been defined in the
+          // wire since POK-258 and sent by nobody until now. It is the recovery path and not
+          // the mechanism: each client's own grace is what actually moves it, so a room of
+          // older clients still ends properly.
+          relay.all({ t: 'again', seat: bridge?.seat ?? 0 });
+        }
         if (msg.t === 'ring') {
           // The first ring IS the buzzer: it is what ends the opening in the ROM
           // (br_match.c reads gBrRing.active), so it is when the bots leave too.
@@ -2225,96 +2222,6 @@ function wireRoom(
   };
 
   const spectate = new Spectate();
-  // The ROM only holds the loot for the map it is standing on, and forgets it on the
-  // way out; the page holds the match's whole table and hands back the piece that
-  // matters every time our own trainer arrives somewhere (POK-232).
-  // A `let`, because PLAY AGAIN starts the next match on a clean table: last match's
-  // unclaimed pieces were pushed back into the rebooted ROM, and bots walked to them.
-  let loot = new Loot();
-  let lootMap: string | null = null;
-  const results = new Results();
-  /** Everything a promoted client needs to pick the match up (POK-252), and reset by
-   *  returnToRoom for the next one (match/lifecycle.ts). */
-  const match: MatchSnapshot = freshMatch();
-  /** The match's fog phase, from its `start`: what a `ring` puts on the clock. A watcher
-   *  who walked in late never heard one, and has the default the director would use. */
-  let matchFog = controls.fogSecs;
-  let fieldSize = 0;
-  let recorded = false;
-  const log = new MatchLog();
-  // Everything that decides a placement crosses this page one way or the other: our
-  // own ROM's `out` on the way up, everybody else's on the way in, and the host's own
-  // `start`/`win` as it sends them.
-  const noteResult = (msg: Msg) => {
-    // The match, as anybody in the room can see it.
-    matchFog = noteMatch(match, matchFog, msg, performance.now(), {
-      dealing: director !== null,
-      roster: controls.roster,
-      defaultFog: controls.fogSecs,
-    });
-    if (msg.t === 'start') {
-      // The bots go on the roster by the names the seed gave them, which every page can
-      // work out (POK-330 #51) -- before the log below takes its names.
-      bridge?.roster.seatBots(botRows(msg.seed, match.botSeats));
-      hideRoomScreen();
-    }
-    // A bot's fight runs in whoever fought it, and what that ROM reports goes to the
-    // brain through routeToBots (bots/adapt.ts) -- below, where the seat that sent it
-    // is known.
-    if (msg.t === 'party') {
-      lastParty.set(msg.seat, msg.mons);
-      // The champion's own party arrives after the `win` that put the results on
-      // screen -- their ROM sends it as the parade starts (POK-243) -- so the panel
-      // is drawn again rather than waiting for a team that came too late.
-      if (recorded && bridge) renderResults(bridge.seat, bridge.roster, results, fieldSize, match.seed);
-    }
-    if (msg.t === 'start') {
-      fieldSize = msg.spawns.length;
-      results.start(fieldSize, performance.now());
-      record.start();
-      recorded = false;
-    }
-    results.note(msg, performance.now());
-    record.note(msg);
-    // ...and the round is written down as it happens (POK-248). The same messages
-    // placement is derived from, kept in a shape the round can be read back from.
-    log.note(msg, performance.now(), (seat) => bridge?.roster.nameOf(seat) ?? `P${seat}`);
-    // The match is over: the door opens again (POK-258). START locked the room to keep
-    // latecomers out of a running match, and leaving it locked is what turned the end
-    // of a match into everybody scattering -- a reload could not get back in.
-    if (msg.t === 'win' && director) {
-      relay.lockRoom(false);
-      // And says so: a client that never saw the `win` -- a socket that blinked over the
-      // last fight -- still gets taken out of the match. `again` has been defined in the
-      // wire since POK-258 and sent by nobody until now. It is the recovery path and not
-      // the mechanism: each client's own grace below is what actually moves it, so a
-      // room of older clients still ends properly.
-      relay.all({ t: 'again', seat: bridge?.seat ?? 0 });
-    }
-    if (msg.t === 'win' && bridge && !recorded) {
-      recorded = true;
-      const round = log.current(performance.now());
-      if (round) saveMatch(round);
-      const mine = results.forSeat(bridge.seat, performance.now());
-      ($('#results-career') as HTMLElement).textContent = careerLine(recordMatch(mine.placement));
-      renderResults(bridge.seat, bridge.roster, results, fieldSize, match.seed);
-      // And the ROM is told who won (POK-243's parade, POK-281). `win` is a page-side
-      // verdict with no codec, so it has never crossed to any ROM: the Hall of Fame has
-      // been reachable only by a driver poking the RESULT slot by hand, which is exactly
-      // why nobody ever saw it. One push serves the whole room -- the winner's own ROM
-      // matches the seat and runs the parade, and everybody else's ends a replay of a
-      // fight whose fighter has just taken the match (BrSpectate_OnResult).
-      // A `win` with no seat is a draw -- nobody to crown, and nothing to end a replay on.
-      if (msg.seat !== undefined) bridge.pushToRom({ t: 'result', seat: msg.seat, outcome: 'win' });
-      // "If the game is over I should be kicked back to the main menu." Nothing took
-      // anybody out of a finished match: the page drew the results panel over a ROM that
-      // went on walking Hoenn, and the host did not even have a LEAVE button. Kanto's
-      // shape (main.lua, END_GRACE_SECONDS): everybody reads the result for a moment,
-      // then one funnel takes them all back -- keeping the room, so the next match is a
-      // press of START rather than eight people finding each other again.
-      grace.arm(() => void returnToRoom(), msg.seat === bridge.seat);
-    }
-  };
   let stopSpectateLoop: (() => void) | null = null;
   let stopGuestStrip: (() => void) | null = null;
   /** How long the result stays on screen before the match lets go of you. Kanto's
@@ -2328,12 +2235,57 @@ function wireRoom(
   const WIN_GRACE_MAX_MS = 60_000;
   const PARADE_POLL_MS = 500;
   const gBrMatch = symbols?.get('gBrMatch');
-  const grace = new EndGrace({
-    graceMs: END_GRACE_MS,
-    winMaxMs: WIN_GRACE_MAX_MS,
-    pollMs: PARADE_POLL_MS,
-    paradeDone: gBrMatch !== undefined ? () => emu.read(gBrMatch, 8) === BR_PHASE_DONE : undefined,
-  });
+  /** The results panel, drawn from the match's books over the room's roster. */
+  const drawResults = (): void => {
+    if (!bridge) return;
+    renderResults(bridge.seat, bridge.roster, {
+      results: session.results,
+      record: session.record,
+      parties: session.parties,
+      fieldSize: session.fieldSize,
+      seed: match.seed,
+    });
+  };
+  /** The match's books (match/session.ts). Everything that decides a placement crosses
+   *  this page one way or the other -- our own ROM's messages on the way up, everybody
+   *  else's on the way in, and the host's own as it sends them -- and each goes through
+   *  session.note once, the same way solo's do. */
+  const session = new MatchSession(
+    {
+      mySeat: () => bridge?.seat ?? null,
+      nameOf: (seat) => bridge?.roster.nameOf(seat) ?? `P${seat}`,
+      rows: () => bridge?.roster ?? null,
+      relayRoster: () => controls.roster,
+      dealing: () => director !== null,
+      bots: () => bots?.bots ?? null,
+      toRom: (m) => bridge?.pushToRom(m),
+      defaultFog: () => controls.fogSecs,
+      store: localStorage,
+      grace: new EndGrace({
+        graceMs: END_GRACE_MS,
+        winMaxMs: WIN_GRACE_MAX_MS,
+        pollMs: PARADE_POLL_MS,
+        paradeDone: gBrMatch !== undefined ? () => emu.read(gBrMatch, 8) === BR_PHASE_DONE : undefined,
+      }),
+      // Back to the room, not out of it: the host did not even have a LEAVE button, and
+      // keeping the room makes the next match a press of START rather than eight people
+      // finding each other again.
+      exit: () => void returnToRoom(),
+      keepParties: true,
+    },
+    {
+      started: hideRoomScreen,
+      decided: (line) => {
+        ($('#results-career') as HTMLElement).textContent = line;
+        drawResults();
+      },
+      partyLate: drawResults,
+    },
+  );
+  /** Everything a promoted client needs to pick the match up (POK-252), and reset by
+   *  returnToRoom for the next one (match/lifecycle.ts): the session's, one object for
+   *  the page's life. */
+  const match = session.match;
   /** In the room to look, not to play (POK-260). Set when this client asks to watch,
    *  and reasserted from the relay's own roster, which is the authority on it. */
   let amWatching = false;
@@ -2356,13 +2308,6 @@ function wireRoom(
     }
     renderSpectate(bridge, spectate);
   };
-  /** Seats this client has already caught up on the running match. A seat that leaves is
-   *  taken off it, so coming back is a late arrival like any other (POK-330 #25). */
-  const greeted = new Set<number>();
-  /** Seats caught up on everything but the loot where they stand, which waits for their
-   *  first `place` to say where that is. */
-  const owedLoot = new Set<number>();
-  let bots: HostBots | null = null;
   /** The room we are attached to, so a second attach can tell a rejoin of it (the relay
    *  handed our seat back) from a new room. */
   let attachedTo: { seat: number; code: string } | null = null;
@@ -2445,14 +2390,11 @@ function wireRoom(
     };
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);
-      giveBag(loot, msg, (m) => bridge?.pushToRom(m));
       bossFell(msg); // our own win never comes back over the relay
-      loot.note(msg);
-      noteResult(msg);
-      noteBusy(msg);
-      // Our own ROM challenged one of our bots, or fought one and is saying how it went
-      // (POK-238): the host walks the bot, and nobody hears their own messages come back.
-      if (bots && bridge) routeToBots(bots.bots, msg, bridge.seat);
+      // Into the books, bag and all -- and our own ROM challenging one of our bots, or
+      // fighting one and saying how it went (POK-238), goes to the brain from there: the
+      // host walks the bot, and nobody hears their own messages come back.
+      session.note(msg, 'rom');
       // Our own ROM's pick never comes back over the relay either.
       if (msg.t === 'pick' && director) {
         bridge!.pushToRom({ t: 'land', ...director.landFor(msg.seat, msg.section) });
@@ -2472,17 +2414,9 @@ function wireRoom(
         // WATCH strip was never even drawn.
         if (msg.seat === bridge?.seat) autoWatch();
       }
-      // Our own `place` is how the page learns we changed maps -- there is no separate
-      // "I have arrived" message, and this one is already on the wire four times a
-      // second.
-      if (msg.t === 'place' && msg.map) {
-        const key = `${msg.map.group}:${msg.map.num}`;
-        if (key !== lootMap) {
-          lootMap = key;
-          const standing = loot.forMap(msg.map);
-          if (standing) bridge!.pushToRom(standing);
-        }
-      }
+      // Arriving on a new map: what is lying on it.
+      const standing = session.standingLoot(msg);
+      if (standing) bridge!.pushToRom(standing);
     });
     // The room, as the Bridge hands it over: decoded once, from somebody entitled to say
     // it, with who said it (POK-330 #24). Released by bridge.dispose() on the next attach.
@@ -2490,17 +2424,17 @@ function wireRoom(
       // What the trainer we are watching just took (POK-268). Drawn here rather than
       // sent: a `pickup` reaches the whole room, and only the page following that
       // seat has any business saying so. The describe() has to happen before the
-      // loot table forgets the piece, which loot.note() does on this same message.
+      // loot table forgets the piece, which session.note() does on this same message.
       // The host says the match is over (POK-258's `again`). Belt and braces for the
       // local grace: a socket that blinked over the last fight never saw the `win` and
       // would otherwise sit in a finished match for ever -- so that page, and only that
       // page, starts the grace now. It arrives on the heels of the `win`, and a page
       // that took it as the exit rebooted before anybody had read a result (#9).
-      if (m.t === 'again' && onAgain({ running: director !== null, match, graceArmed: grace.armed }) === 'grace') {
-        grace.arm(() => void returnToRoom());
+      if (m.t === 'again' && onAgain({ running: director !== null, match, graceArmed: session.grace.armed }) === 'grace') {
+        session.grace.arm(() => void returnToRoom());
       }
       if (m.t === 'pickup' && bridge && spectate.watchingSeat() === m.seat) {
-        const what = loot.describe(m.key);
+        const what = session.loot.describe(m.key);
         const line = what ? Ticker.took(m.seat, bridge.roster.nameOf(m.seat), what) : null;
         if (line) bridge.pushToRom(line);
       }
@@ -2511,9 +2445,10 @@ function wireRoom(
         if (line) bridge.pushToRom(line);
       }
       bossFell(m);
-      loot.note(m);
-      noteResult(m);
-      noteBusy(m);
+      // Into the books -- and somebody else's ROM challenging one of our bots, or fighting
+      // one, goes to the brain from there: the host is the only page that has the bot's
+      // team, and the relay's `from` is what says whose ROM it was.
+      session.note(m, { from });
       directorHears?.(m);
       // The drop (POK-223): a trainer chose a section, the host deals them a cell
       // inside it that nobody else has. Only the host answers -- everyone hears the
@@ -2526,13 +2461,9 @@ function wireRoom(
       // A seat the host has just caught up on the match learns what is lying where it
       // stands, once its first `place` or `step` has said where that is (POK-330 #25).
       if (director) {
-        const standing = lootOwed(owedLoot, m, from, (map) => loot.forMap(map));
+        const standing = lootOwed(session.owedLoot, m, from, (map) => session.loot.forMap(map));
         if (standing) bridge!.relay.to(from, standing);
       }
-      // Somebody else's ROM challenged one of our bots, or fought one. Same as our own
-      // ROM's above -- the host is the only page that has the bot's team -- and the
-      // relay's `from` is what says whose ROM it was.
-      if (bots) routeToBots(bots.bots, m, from);
       if (m.t === 'peek' && m.target === seat) {
         spectate.notePeek(m.seat, performance.now());
         // Their ROM answers the party; the fight so far is ours to hand over, since the
@@ -2564,7 +2495,7 @@ function wireRoom(
         dev.spectate = spectate;
         // What a promotion would resume from (POK-252), so the migration e2e can see
         // whether this client was listening to the match it is in.
-        dev.match = match;
+        dev.match = session.match;
         // The relay's last roster, so a test can ask who the room thinks is watching
         // (POK-260) rather than inferring it from the screen.
         dev.controls = controls;
@@ -2634,12 +2565,7 @@ function wireRoom(
    *  the room screen and START went a second after coming back, the next START seated
    *  the old bots as people, and an heir resumed the match that had just been won. */
   const resetMatch = (): void => {
-    Object.assign(match, freshMatch());
-    loot = new Loot();
-    lootMap = null;
-    busySeats.clear();
-    greeted.clear();
-    owedLoot.clear();
+    session.endMatch();
     room.startAt = null;
     if (bridge) {
       bridge.roster.endMatch();
@@ -2651,17 +2577,14 @@ function wireRoom(
     returning = true;
     playAgainButton.disabled = true;
     try {
-      grace.cancel();
+      session.grace.cancel();
       teardownHost();
       resetMatch();
       if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
       else await emu.reboot();
-      recorded = false;
-      // Last match's champion is not this match's, and the parade reads by seat
-      // (POK-243): a seat that wins twice would otherwise be shown the team it had
-      // the first time, and one that never sends a `party` would be shown somebody
-      // else's. PLAY AGAIN used to reload the page, which cleared this for free.
-      lastParty.clear();
+      // Last match's champion is not this match's (POK-243). PLAY AGAIN used to reload
+      // the page, which cleared this for free.
+      session.forgetResult();
       // Whoever we were watching is not in a match any more.
       for (const m of spectate.follow(null)) bridge?.pushToRom(m);
       ($('#results-panel') as HTMLElement).hidden = true;
@@ -2789,15 +2712,15 @@ function wireRoom(
     if (director && bridge && director.state.phase !== 'ended') {
       const state = director.state;
       const here = new Set(ev.members.map((m) => m.id));
-      for (const seat of [...greeted]) {
+      for (const seat of [...session.greeted]) {
         if (here.has(seat)) continue;
-        greeted.delete(seat);
-        owedLoot.delete(seat);
+        session.greeted.delete(seat);
+        session.owedLoot.delete(seat);
       }
       for (const m of ev.members) {
-        if (m.id === bridge.seat || greeted.has(m.id)) continue;
-        greeted.add(m.id);
-        owedLoot.add(m.id);
+        if (m.id === bridge.seat || session.greeted.has(m.id)) continue;
+        session.greeted.add(m.id);
+        session.owedLoot.add(m.id);
         for (const msg of catchUp(bridge.seat, state)) relay.to(m.id, msg);
       }
     }
