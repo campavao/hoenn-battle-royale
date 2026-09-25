@@ -1,0 +1,49 @@
+# start-wide: a START for a full room spans five slots and still lands (POK-330 #21).
+#
+# The START assembler's 266-byte buffer moved out of EWRAM onto the heap -- EWRAM was down
+# to its last eighty bytes -- so it is allocated on the first slot, freed when the last one
+# lands, and let go of by InitHeap. Every other START driver sends one slot; this one sends
+# thirty-two spawn rows, with the last seat's row in the fifth slot, so the heap path is
+# the one carrying the message.
+#
+# Every row is Littleroot (0:9) at (5,8), where the boot leaves us, except seat 31's at
+# (6,8) -- and we are seat 31, so the START's drop is a one-tile warp that only happens
+# if the last slot's row arrived. Read through the warp rather than gBrMatch.spawns: a
+# BrSpawn is 6 bytes to arm-none-eabi-gcc and 8 to agbcc, which rounds every struct up
+# to a word, so the row's offset is not the same in the two builds.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch+1 0
+poke u8 gBrMySeat 31
+pokebytes gDecompressionBuffer 78 56 34 12 20 00 00 00 00 00 00 00 09 05 00 08 00 00 01 00 09 05 00 08 00 00 02 00 09 05 00 08 00 00 03 00 09 05 00 08 00 00 04 00 09 05 00 08 00 00 05 00 09 05 00 08 00 00 06 00 09 05 00 08
+pokebytes gDecompressionBuffer+64 00 00 07 00 09 05 00 08 00 00 08 00 09 05 00 08 00 00 09 00 09 05 00 08 00 00 0A 00 09 05 00 08 00 00 0B 00 09 05 00 08 00 00 0C 00 09 05 00 08 00 00 0D 00 09 05 00 08 00 00 0E 00 09 05 00 08
+pokebytes gDecompressionBuffer+128 00 00 0F 00 09 05 00 08 00 00 10 00 09 05 00 08 00 00 11 00 09 05 00 08 00 00 12 00 09 05 00 08 00 00 13 00 09 05 00 08 00 00 14 00 09 05 00 08 00 00 15 00 09 05 00 08 00 00 16 00 09 05 00 08
+pokebytes gDecompressionBuffer+192 00 00 17 00 09 05 00 08 00 00 18 00 09 05 00 08 00 00 19 00 09 05 00 08 00 00 1A 00 09 05 00 08 00 00 1B 00 09 05 00 08 00 00 1C 00 09 05 00 08 00 00 1D 00 09 05 00 08 00 00 1E 00 09 05 00 08
+pokebytes gDecompressionBuffer+256 00 00 1F 00 09 06 00 08 00 00
+mailsend gBrMailbox 14 gDecompressionBuffer 266
+wait 10
+# started, all thirty-two rows counted, the seed read off the first slot, and seat 31's
+# row -- the fifth slot's -- is the one we were sent to
+expect u8 gBrMatch+1 1
+expect u8 gBrMatch+7 32
+expect u32 gBrMatch+8 0x12345678
+expect u8 gBrMatch+47 1
+wait 200
+expect u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+expect u16 *gSaveBlock1Ptr+0 6
+expect u16 *gSaveBlock1Ptr+2 8
+shot landed
+# ...and again, after the first buffer was freed: the next first slot allocates anew.
+# Back to the lobby phase so the START is a drop once more, this time to (7,8).
+poke u8 gBrMatch 0
+pokebytes gDecompressionBuffer+258 1F 00 09 07 00 08 00 00
+mailsend gBrMailbox 14 gDecompressionBuffer 266
+wait 210
+expect u8 gBrMatch 2
+expect u16 *gSaveBlock1Ptr+0 7
+expect u16 *gSaveBlock1Ptr+2 8
+shot landed-again
+say start wide ok

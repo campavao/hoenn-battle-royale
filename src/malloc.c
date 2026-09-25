@@ -4,6 +4,7 @@
 #include "br/br_spectate.h"
 #include "br/br_bot.h"
 #include "br/br_duel.h"
+#include "br/br_match.h"
 #endif
 
 static void *sHeapStart;
@@ -201,6 +202,7 @@ void InitHeap(void *heapStart, u32 heapSize)
     BrSpectate_HeapReset();
     BrBot_HeapReset();
     BrDuel_HeapReset();
+    BrMatch_HeapReset();
 #endif
 }
 

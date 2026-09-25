@@ -11,6 +11,7 @@
 #include "constants/maps.h"
 #include "random.h"
 #include "hall_of_fame.h"
+#include "malloc.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -25,8 +26,11 @@
 #include "br/br_hud.h"
 
 EWRAM_DATA struct BrMatch gBrMatch = {0};
-// START can span slots once there are more than six spawn rows.
-static EWRAM_DATA u8 sStartBuf[10 + 8 * BR_MAX_SEATS] = {0};
+// START can span slots once there are more than six spawn rows. The buffer is on the
+// heap for the frame or two between its first slot and its last, the way a bot's card
+// is (br_bot.c): 266 bytes of EWRAM for a message that arrives once a match was more
+// than EWRAM could spare (POK-330 #21). InitHeap takes it back (BrMatch_HeapReset).
+#define BR_START_MAX (10 + 8 * BR_MAX_SEATS)
 static EWRAM_DATA struct BrAssembler sStartAsm = {0};
 // START arrived while we were still standing on a map. The warp it asks for cannot be
 // done from inside the mailbox pump, so the tick does it on the next quiet frame.
@@ -93,16 +97,49 @@ static void ParseStart(const u8 *d, u16 n)
     }
 }
 
+static void DoneWithStartBuffer(void)
+{
+    if (sStartAsm.buf != NULL)
+        Free(sStartAsm.buf);
+    sStartAsm.buf = NULL;
+    sStartAsm.cap = 0;
+    sStartAsm.type = 0;
+}
+
 static void HandleStart(const u8 *payload, u8 len)
 {
+    if (sStartAsm.buf == NULL)
+    {
+        sStartAsm.buf = Alloc(BR_START_MAX);
+        if (sStartAsm.buf == NULL)
+            return;
+        sStartAsm.cap = BR_START_MAX;
+        sStartAsm.type = 0;
+    }
     if (BrWire_Assemble(&sStartAsm, BR_MSG_START, FALSE, payload, len))
+    {
         ParseStart(sStartAsm.buf, sStartAsm.total);
+        DoneWithStartBuffer();
+    }
 }
 
 static void HandleStartCont(const u8 *payload, u8 len)
 {
-    if (BrWire_Assemble(&sStartAsm, BR_MSG_START, TRUE, payload, len))
+    if (sStartAsm.buf != NULL
+     && BrWire_Assemble(&sStartAsm, BR_MSG_START, TRUE, payload, len))
+    {
         ParseStart(sStartAsm.buf, sStartAsm.total);
+        DoneWithStartBuffer();
+    }
+}
+
+// The heap went away under us (src/malloc.c's InitHeap): let go, and the next first
+// slot starts over.
+void BrMatch_HeapReset(void)
+{
+    sStartAsm.buf = NULL;
+    sStartAsm.cap = 0;
+    sStartAsm.type = 0;
 }
 
 static EWRAM_DATA u8 sWinPending = 0;
@@ -201,8 +238,8 @@ bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)
 void BrMatch_Init(void)
 {
     CpuFill32(0, &gBrMatch, sizeof(gBrMatch));
-    sStartAsm.buf = sStartBuf;
-    sStartAsm.cap = sizeof(sStartBuf);
+    sStartAsm.buf = NULL;
+    sStartAsm.cap = 0;
     sStartAsm.type = 0;
     sStartPending = FALSE;
     BrNet_On(BR_MSG_START, HandleStart);

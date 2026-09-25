@@ -66,11 +66,13 @@ static const u16 sDeptStore[] = { ITEM_MASTER_BALL, ITEM_ULTRA_BALL, ITEM_MAX_PO
 static const u8 sText_Lv[] = _("LV ");
 static const u8 sText_Sep[] = _(" - ");
 static const u8 sText_Fog[] = _("FOG ");
-static EWRAM_DATA u8 sPhaseLine[40] = {0};
 
+// The line lives on the stack: BrHud_Say copies it into the queue at once, and forty
+// bytes of EWRAM for a string nobody reads twice was forty bytes EWRAM did not have.
 static void SayPhase(void)
 {
-    u8 *p = sPhaseLine;
+    u8 line[40];
+    u8 *p = line;
 
     p = StringCopy(p, sText_Lv);
     p = ConvertIntToDecimalStringN(p, gBrLevels.rung, STR_CONV_MODE_LEFT_ALIGN, 3);
@@ -80,7 +82,7 @@ static void SayPhase(void)
     p = StringCopy(p, sText_Fog);
     p = ConvertIntToDecimalStringN(p, gBrLevels.phaseSeen, STR_CONV_MODE_LEFT_ALIGN, 2);
     *p = EOS;
-    BrHud_Say(sPhaseLine);
+    BrHud_Say(line);
 }
 
 static void SwapRod(u16 rod)

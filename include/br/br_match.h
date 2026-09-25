@@ -47,6 +47,8 @@ extern struct BrMatch gBrMatch;
 
 void BrMatch_Init(void);
 void BrMatch_Tick(void);
+// InitHeap is resetting the heap: drop the half-assembled START buffer that lived there.
+void BrMatch_HeapReset(void);
 // Where in the Safari Zone this ROM starts the opening: which of the six areas (a map
 // number in group 26) and which cell of it, dealt from the match seed and our seat so a
 // room spreads over the whole Zone instead of piling up on one tile.

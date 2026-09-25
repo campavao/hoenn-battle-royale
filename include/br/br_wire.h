@@ -329,4 +329,11 @@
 //   3:    localId  u8   the object event's local id on that map
 #define BR_MSG_NPCOUT 31
 
+// The highest type in use, and how many the ROM's dispatch table has room for
+// (br_mailbox.c; a STATIC_ASSERT there keeps LAST below COUNT). A new message moves
+// LAST; the table grows only when LAST reaches COUNT, and it costs 8 bytes of EWRAM a
+// type when it does. Anything at or past COUNT is dropped on arrival.
+#define BR_MSG_LAST BR_MSG_NPCOUT
+#define BR_MSG_COUNT 48
+
 #endif // GUARD_BR_WIRE_H

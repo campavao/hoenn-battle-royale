@@ -12,8 +12,15 @@ lenient one.
   boundary, `u16` on 2). No floats anywhere.
 - **RAM.** `EWRAM_DATA` for anything the shell reads. Never `static` inside a function
   for match state: the shell cannot find it. IWRAM is scarce; keep it for the engine.
-- **No heap.** `Alloc` exists but every allocation is a leak waiting for a map change.
-  Fixed arrays sized by `br_config.h`.
+  EWRAM is nearly full: `tools/br/ram-headroom.py <map>` prints what is left, and CI
+  fails a build with under 128 bytes of it. A string built and handed straight to
+  `BrHud_Say` belongs on the stack, not in a static.
+- **Heap for staging only.** Fixed arrays sized by `br_config.h` for state. A buffer that
+  only lives between a message's first slot and its last (a bot's card, a duel, a
+  bstart, a START) may go on the heap: `Alloc` on the first slot, `Free` once parsed, and
+  a `Br<System>_HeapReset` called from `InitHeap` (src/malloc.c) that drops the pointer,
+  because `CB2_InitBattle` resets the heap on the way into every battle. Nothing that
+  must outlive that goes there.
 - **Per-frame work goes through `BrFrame`.** The main loop calls it after `ReadKeys`,
   in every state (title, overworld, battle, menus), so nothing needs a `Task` to stay
   alive across a map load. Register a system's tick from `BrFrame`; use a `Task` only for

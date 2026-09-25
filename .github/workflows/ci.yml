@@ -109,6 +109,13 @@ jobs:
       - name: Build fork ROM
         run: make -j"$(nproc)"
 
+      - name: RAM headroom
+        # EWRAM was down to 80 bytes before POK-330 #21 took the handler table back, and
+        # the linker only complains once a build is already over. This prints what is
+        # left on every build and fails under 128 bytes, while there is still a choice.
+        shell: bash
+        run: python3 tools/br/ram-headroom.py pokeemerald.map | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Fork ROM sha1
         id: fork-rom
         run: echo "sha1=$(sha1sum pokeemerald.gba | awk '{print $1}')" >> "$GITHUB_OUTPUT"
