@@ -419,6 +419,27 @@ describe('who may say what (POK-330 #24)', () => {
     expect(bridge.roster.get(2)?.alive).toBe(false);
     expect(drainMsgs(romDrainIn)).toEqual([{ t: 'out', seat: 2 }]);
   });
+
+  // The host's `win` names the winner: a guest that won dropped it as its own echo, and
+  // never drew its results, recorded the match or saw its Hall of Fame.
+  it('hears the host say anything about us: the win, the land, a ticker line', () => {
+    const { socket, frame, romDrainIn, heard } = joined();
+    const land = { t: 'land', seat: 2, map: { group: 0, num: 9 }, x: 4, y: 5 };
+    const line = { t: 'ticker', seat: 2, kind: 'kill', text: 'ME BEAT MAY' };
+    socket.receive({ type: 'recv', from: 1, m: { t: 'win', seat: 2 } });
+    socket.receive({ type: 'recv', from: 1, m: land });
+    socket.receive({ type: 'recv', from: 1, m: line });
+    frame();
+    expect(heard.map(([m, from]) => [m.t, from])).toEqual([['win', 1], ['land', 1], ['ticker', 1]]);
+    expect(drainMsgs(romDrainIn).map((m) => m.t)).toEqual(['land', 'ticker']);
+  });
+
+  it('still drops a message naming us from anybody but the host', () => {
+    const { socket, heard } = joined();
+    // Before the first roster lists us, a report under our seat looks like a bot's.
+    socket.receive({ type: 'recv', from: 7, m: { t: 'result', seat: 2, outcome: 'lose' } });
+    expect(heard).toEqual([]);
+  });
 });
 
 // POK-330 #20 and #7: a link battle's blocks go to the one seat being fought and are

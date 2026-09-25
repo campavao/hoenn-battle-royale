@@ -85,13 +85,6 @@ function msgSeat(msg: Msg): number | undefined {
   return 'seat' in msg ? (msg as { seat?: number }).seat : undefined;
 }
 
-/** Messages whose `seat` is who they are FOR, not who they are from. The echo guard
- *  below drops anything carrying our own seat as something we said coming back -- true
- *  of every message a ROM emits, and exactly wrong for these: `land` is the host
- *  answering our own `pick` with the cell it dealt us (POK-223), and dropping it left
- *  the trainer standing on a black screen for the rest of the match. */
-const ADDRESSED_TO_SEAT = new Set<string>(['land']);
-
 /** Messages whose `seat` names somebody else and must survive the stamp below. A ROM
  *  that fought a bot is the only thing that watched the fight happen, so it reports
  *  what the bot has left (`party`, POK-238) and what it spent out of the bot's bag
@@ -297,12 +290,13 @@ export class Bridge {
       this.refusedCount++;
       return;
     }
-    // Our own message, echoed back -- except the host telling us we are out, which is
-    // how a seat that comes back from a blip learns it was eliminated while it was gone
-    // (POK-330 #25). Nobody else may say that about us, and we cannot hear it from
-    // ourselves.
-    const echo = msgSeat(msg) === this.seat && !ADDRESSED_TO_SEAT.has(msg.t);
-    if (echo && !(msg.t === 'out' && ev.from === host)) return;
+    // Our own message, echoed back. The relay never echoes, and trust holds everybody
+    // else to their own seat, so a message naming us that gets this far is the host
+    // speaking ABOUT us: `land` answering our `pick` (POK-223), the `out` a seat back
+    // from a blip learns it went with (POK-330 #25), the `win` that crowns us, a ticker
+    // line, the loot owed where we stand. Dropping those as echoes left a guest who won
+    // with no results and no Hall of Fame.
+    if (msgSeat(msg) === this.seat && ev.from !== host) return;
     if (msg.t === 'bt' && !this.takesBlock(msg, ev.from)) return;
 
     this.noteChallenge(msg);
