@@ -41,7 +41,7 @@ export const BAND: Band = { left: 0, top: 40, right: 16, bottom: 56 };
 /** `struct Main` (include/main.h): callback1 at 0, callback2 at 4. The picture past the
  *  LCD shows only while callback2 is CB2_Overworld; a function pointer carries the
  *  Thumb bit. */
-const MAIN_CALLBACK2 = 4;
+export const MAIN_CALLBACK2 = 4;
 const TILE = 16;
 /** The picture's top-left, relative to the pos tile's top-left, at rest. Measured. */
 export const LCD_LEFT = 112;
@@ -55,10 +55,10 @@ const BORDER_SIZE = 2 * TILE;
 const CAMERA_X = 16;
 const CAMERA_Y = 20;
 /** `struct SaveBlock1` (include/global.h): pos at 0, then location {group, num, ...}. */
-const SB1_POS_X = 0;
-const SB1_POS_Y = 2;
-const SB1_MAP_GROUP = 4;
-const SB1_MAP_NUM = 5;
+export const SB1_POS_X = 0;
+export const SB1_POS_Y = 2;
+export const SB1_MAP_GROUP = 4;
+export const SB1_MAP_NUM = 5;
 /** `struct PaletteFadeControl` (include/palette.h), packed by agbcc as read off
  *  tools/br/drivers/fade-trace.txt: the u16 at +4 is delayCounter:6, y:5, targetY:5;
  *  the u16 at +6 is blendColor:15, active:1. y runs 0..16, 16 = all blendColor. */
@@ -78,41 +78,44 @@ const HELD_FADE_MAX = 60;
 /** `struct BrPick` (include/br/br_pick.h): active at 0 -- the drop map is up. It runs
  *  under the overworld's callback with the region map's BG state, so the band would be
  *  its tilemap's garbage rows. */
-const PICK_ACTIVE = 0;
+export const PICK_ACTIVE = 0;
 
 // The people (POK-318). The ROM draws an object only inside its window and marks its
 // sprite invisible the moment it is off screen (UpdateObjectEventOffscreen), so the page
 // reads the object's OWN invisible bit and the sprite's position, and draws it whole
-// wherever it is. `struct ObjectEvent` (include/global.fieldmap.h) is 0x24 bytes:
-const OBJ_COUNT = 16;
-const OBJ_SIZE = 0x24;
-const OBJ_ACTIVE_BYTE = 0; // bit 0
-const OBJ_INVISIBLE_BYTE = 1; // bit 5
+// wherever it is. `struct ObjectEvent` (include/global.fieldmap.h) is 0x24 bytes. These
+// offsets, and the others here into the ROM's structs, are held to the headers by
+// parity.test.ts:
+export const OBJ_COUNT = 16;
+export const OBJ_SIZE = 0x24;
+export const OBJ_ACTIVE_BYTE = 0; // bit 0
+export const OBJ_INVISIBLE_BYTE = 1;
+export const OBJ_INVISIBLE_BIT = 0x20;
 /** `offScreen`, byte 1 bit 6: UpdateObjectEventOffscreen's own verdict, which is the
  *  only reason the overlay draws a sprite. A sprite hidden any other way -- a beaten
  *  trainer blinking out, a script's `hide` -- stays hidden (Cam's 2026-09-18 play-test:
  *  "the trainer that I just beat is still on the map... flashing above"). */
-const OBJ_OFFSCREEN_BIT = 0x40;
-const OBJ_PLAYER_BYTE = 2; // bit 0
-const OBJ_SPRITE_ID = 4;
-const OBJ_GFX = 5;
+export const OBJ_OFFSCREEN_BIT = 0x40;
+export const OBJ_PLAYER_BYTE = 2; // bit 0
+export const OBJ_SPRITE_ID = 4;
+export const OBJ_GFX = 5;
 /** Graphics ids from OBJ_EVENT_GFX_VARS up name a VAR_OBJ_GFX_ID_n (include/constants). */
 const GFX_VARS = 240;
-const VAR_OBJ_GFX_ID_0 = 0x4010;
-const SB1_VARS = 0x139c;
+export const VAR_OBJ_GFX_ID_0 = 0x4010;
+export const SB1_VARS = 0x139c;
 /** `struct Sprite` (include/sprite.h), 0x44 bytes. x/y are the centre; centerToCorner
  *  takes them to the OAM's top-left; the coord offset is the camera's, when enabled. */
-const SPR_SIZE = 0x44;
-const SPR_ANIMS = 0x08;
-const SPR_X = 0x20;
-const SPR_Y = 0x22;
-const SPR_X2 = 0x24;
-const SPR_Y2 = 0x26;
-const SPR_CTC_X = 0x28;
-const SPR_CTC_Y = 0x29;
-const SPR_ANIM_NUM = 0x2a;
-const SPR_ANIM_CMD = 0x2b;
-const SPR_FLAGS = 0x3e; // u16: inUse 1, coordOffsetEnabled 2, invisible 4, hFlip 0x100
+export const SPR_SIZE = 0x44;
+export const SPR_ANIMS = 0x08;
+export const SPR_X = 0x20;
+export const SPR_Y = 0x22;
+export const SPR_X2 = 0x24;
+export const SPR_Y2 = 0x26;
+export const SPR_CTC_X = 0x28;
+export const SPR_CTC_Y = 0x29;
+export const SPR_ANIM_NUM = 0x2a;
+export const SPR_ANIM_CMD = 0x2b;
+export const SPR_FLAGS = 0x3e; // u16: inUse 1, coordOffsetEnabled 2, invisible 4, hFlip 0x100
 const ROM_BASE = 0x08000000;
 
 // The fog (WEATHER_FOG_HORIZONTAL, what the ring's outside looks like): twenty 64x64
@@ -124,11 +127,11 @@ const WEATHER_CURR = 0x6d0;
 const WEATHER_FOG_X = 0x6ee;
 const WEATHER_EVA = 0x730;
 const WEATHER_EVB = 0x732;
-const WEATHER_FOG_HORIZONTAL = 6;
+export const WEATHER_FOG_HORIZONTAL = 6;
 const FOG_TILE = 64;
 /** `struct BrRing` (include/br/br_ring.h): outside, and the frames to the next bleed. */
-const RING_OUTSIDE = 5;
-const RING_TIMER = 8;
+export const RING_OUTSIDE = 5;
+export const RING_TIMER = 8;
 /** The shake on a fog bleed (Cam: "like as if a Pokémon were poisoned"), in frames. */
 export const SHAKE_FRAMES = 16;
 
@@ -647,7 +650,7 @@ export class FieldView {
       const o = objs + i * OBJ_SIZE;
       if (!(emu.read(o + OBJ_ACTIVE_BYTE, 8) & 1)) continue;
       const bits = emu.read(o + OBJ_INVISIBLE_BYTE, 8);
-      if (bits & 0x20) continue;
+      if (bits & OBJ_INVISIBLE_BIT) continue;
       if (emu.read(o + OBJ_PLAYER_BYTE, 8) & 1) continue;
       let gfx = emu.read(o + OBJ_GFX, 8);
       if (gfx >= GFX_VARS) gfx = emu.read(sb1 + SB1_VARS + 2 * (VAR_OBJ_GFX_ID_0 + gfx - GFX_VARS - 0x4000), 16) & 0xff;
