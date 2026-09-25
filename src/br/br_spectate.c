@@ -111,16 +111,18 @@ static u16 PackParty(struct Pokemon *party, u8 *dst)
 
 // Publish the battle so a spectator can build the BATTLE_TYPE_RECORDED: the seed, both
 // trainers' names and genders, and both real parties. Assembled on the heap -- ~1.2 KB
-// once per battle is no place for a permanent EWRAM buffer.
-static void SendBstart(void)
+// once per battle is no place for a permanent EWRAM buffer. FALSE when it did not go
+// out: no heap, or no room in the out ring for its twenty-odd slots.
+static bool8 SendBstart(void)
 {
     u8 *buf = Alloc(28 + 2 * (1 + PARTY_SIZE * sizeof(struct Pokemon)));
     u16 len = 0, id;
     u32 seed, flags;
     u8 i;
+    bool8 sent;
 
     if (buf == NULL)
-        return;
+        return FALSE;
     id = BattleId();
     buf[len++] = id & 0xFF;
     buf[len++] = id >> 8;
@@ -147,8 +149,9 @@ static void SendBstart(void)
     buf[len++] = gLinkPlayers[1].gender;
     len += PackParty(gPlayerParty, buf + len);
     len += PackParty(gEnemyParty, buf + len);
-    BrWire_SendLarge(BR_MSG_BSTART, buf, len);
+    sent = BrWire_SendLarge(BR_MSG_BSTART, buf, len);
     Free(buf);
+    return sent;
 }
 
 // ---- receive: the spectator ----------------------------------------------------
@@ -1000,9 +1003,13 @@ void BrSpectate_Tick(void)
         return;
     }
 
+    // A BSTART the ring had no room for is tried again next frame, as a TURN is, and
+    // nothing of the fight goes out ahead of it: `started` was set whether it went or
+    // not, so a full ring lost the whole fight for anybody watching (POK-331 #10).
     if (!gBrSpectate.started && BattleReady())
     {
-        SendBstart();
+        if (!SendBstart())
+            return;
         gBrSpectate.started = TRUE;
     }
 

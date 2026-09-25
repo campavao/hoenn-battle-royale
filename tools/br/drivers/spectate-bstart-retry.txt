@@ -1,0 +1,32 @@
+# spectate-bstart-retry: a BSTART the out ring has no room for goes out when there is
+# room, not never (POK-331 #10).
+#
+# spectate-retry.txt gave a refused TURN its retry; the BSTART in front of it had none.
+# SendBstart ignored BrWire_SendLarge's FALSE and `started` was set anyway, so a fight
+# that began on a full ring was never published at all: no spectator could build the
+# replay, and every TURN after it went out for a battle nobody had heard of. duel.txt's
+# proxy fight is the publisher again, and this time the ring is full before its BSTART.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# The page stops taking slots, and the ring is full: 64 slots between tail and head.
+drain 0x0
+poke u16 gBrMailbox+0x0A 0
+poke u16 gBrMailbox+0x08 64
+pokebytes gDecompressionBuffer 01 02 01 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 1B 01 05 14 00 14 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 C7 CF BE C5 C3 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 4B 00 01 0D 00
+mailsend gBrMailbox 27 gDecompressionBuffer 210
+wait 300
+# The duel is up and ready to publish, and the ring turned its BSTART away: nothing
+# counts as sent, where the old ROM said `started` with nothing in the ring to show.
+expect u8 gBrDuel+1 1
+expect u16 gBrMailbox+0x08 64
+expectge u32 gBrMailbox+0x14 1
+expect u8 gBrSpectate+4 0
+expect u16 gBrSpectate 0
+# The page takes slots again, and the held BSTART goes out: battle 1 | 2 << 8.
+drain gBrMailbox
+wait 3
+expect u8 gBrSpectate+4 1
+expectmsg 18 u16 0 0x0201
+say spectate bstart retry ok
