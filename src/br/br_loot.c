@@ -96,6 +96,48 @@ static void Spawn(struct BrLootItem *it)
     it->objId = id;
 }
 
+// On this map and inside the box the engine keeps objects in (POK-330 #48).
+static bool8 InView(const struct BrLootItem *it)
+{
+    return it->kind != BR_LOOT_NONE && OnCurrentMap(it) && BrField_InObjectView(it->x, it->y);
+}
+
+u8 BrLoot_Wanted(void)
+{
+    u8 i, n = 0;
+
+    for (i = 0; i < BR_MAX_LOOT; i++)
+        if (InView(&gBrLoot.items[i]))
+            n++;
+    return n;
+}
+
+// The pieces in view that get an object, as a bit a row: all of them when there is
+// room, else the `limit` nearest the middle of the view, the lower row first on a tie.
+static u8 Keep(u8 limit)
+{
+    u8 i, j, nearer, keep = 0;
+    u16 d, e;
+
+    for (i = 0; i < BR_MAX_LOOT; i++)
+    {
+        if (!InView(&gBrLoot.items[i]))
+            continue;
+        d = BrField_ViewDistance(gBrLoot.items[i].x, gBrLoot.items[i].y);
+        for (j = 0, nearer = 0; j < BR_MAX_LOOT && nearer < limit; j++)
+        {
+            if (j == i || !InView(&gBrLoot.items[j]))
+                continue;
+            e = BrField_ViewDistance(gBrLoot.items[j].x, gBrLoot.items[j].y);
+            if (e < d || (e == d && j < i))
+                nearer++;
+        }
+        if (nearer < limit)
+            keep |= 1 << i;
+    }
+    return keep;
+}
+
 static struct BrLootItem *Find(u16 key)
 {
     u8 i;
@@ -912,7 +954,7 @@ void BrLoot_Init(void)
 
 void BrLoot_Tick(void)
 {
-    u8 i, count = 0, spawned = 0;
+    u8 i, count = 0, spawned = 0, ghosts, limit, keep;
 
     if (!BrField_OverworldRunning())
     {
@@ -922,6 +964,17 @@ void BrLoot_Tick(void)
         DropHeldLine(); // a battle is not the place to still be naming a ball
         return;
     }
+    BrField_ShareObjects(&ghosts, &limit);
+    keep = BrLoot_Wanted() <= limit ? 0xFF : Keep(limit);
+    // Out of view, off this map or past the share: let go first, so a nearer piece has
+    // the slot this frame (POK-330 #48).
+    for (i = 0; i < BR_MAX_LOOT; i++)
+    {
+        struct BrLootItem *it = &gBrLoot.items[i];
+
+        if (it->kind != BR_LOOT_NONE && !(InView(it) && (keep & (1 << i))))
+            Despawn(it);
+    }
     for (i = 0; i < BR_MAX_LOOT; i++)
     {
         struct BrLootItem *it = &gBrLoot.items[i];
@@ -929,12 +982,7 @@ void BrLoot_Tick(void)
         if (it->kind == BR_LOOT_NONE)
             continue;
         count++;
-        if (!OnCurrentMap(it))
-        {
-            Despawn(it);
-            continue;
-        }
-        if (LootObject(it) == NULL)
+        if (InView(it) && (keep & (1 << i)) && LootObject(it) == NULL)
             Spawn(it);
         if (it->objId != BR_NO_OBJ)
             spawned++;

@@ -1,0 +1,75 @@
+# object-slots: ghosts and loot take object slots only where the engine keeps objects, the
+# nearest first, and never the last few the map's own people need (POK-330 #48).
+#
+# OBJECT_EVENTS_COUNT is 16. Ghosts and balls used to spawn wherever their cell was, in
+# seat order, and again every frame after each camera step culled them, so twelve ghosts
+# and a spill at the far end of a route held every slot as the route's own people scrolled
+# into view -- and those were simply not there. Now: only inside the box
+# RemoveObjectEventIfOutsideView keeps, never the last BR_NPC_HEADROOM (3) free slots,
+# and the nearest to the middle of the view first.
+#
+# Route 103 from (9,8). Map coords below include MAP_OFFSET (7).
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 12 09 00 08 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr 9
+# Twelve ghosts sixty tiles east (seats 1..12 at (67..72, 15..16)), and two spills of four
+# balls beside them (seats 20 and 21 at (67..74, 18)): all out of view.
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 12 43 00 0F 00 03 01 01
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 02 01 00 12 44 00 0F 00 03 01 01
+pokebytes gBrMailbox+0x1098 02 0E 0B 00 00 03 01 00 12 45 00 0F 00 03 01 01
+pokebytes gBrMailbox+0x10D8 02 0E 0B 00 00 04 01 00 12 46 00 0F 00 03 01 01
+pokebytes gBrMailbox+0x1118 02 0E 0B 00 00 05 01 00 12 47 00 0F 00 03 01 01
+pokebytes gBrMailbox+0x1158 02 0E 0B 00 00 06 01 00 12 48 00 0F 00 03 01 01
+pokebytes gBrMailbox+0x1198 02 0E 0B 00 00 07 01 00 12 43 00 10 00 03 01 01
+pokebytes gBrMailbox+0x11D8 02 0E 0B 00 00 08 01 00 12 44 00 10 00 03 01 01
+pokebytes gBrMailbox+0x1218 02 0E 0B 00 00 09 01 00 12 45 00 10 00 03 01 01
+pokebytes gBrMailbox+0x1258 02 0E 0B 00 00 0A 01 00 12 46 00 10 00 03 01 01
+pokebytes gBrMailbox+0x1298 02 0E 0B 00 00 0B 01 00 12 47 00 10 00 03 01 01
+pokebytes gBrMailbox+0x12D8 02 0E 0B 00 00 0C 01 00 12 48 00 10 00 03 01 01
+pokebytes gBrMailbox+0x1318 0B 2C 29 00 00 14 00 12 04 00 14 43 00 12 00 15 01 05 01 14 44 00 12 00 15 01 05 02 14 45 00 12 00 15 01 05 03 14 46 00 12 00 15 01 05 00
+pokebytes gBrMailbox+0x1358 0B 2C 29 00 00 15 00 12 04 00 15 47 00 12 00 15 01 05 01 15 48 00 12 00 15 01 05 02 15 49 00 12 00 15 01 05 03 15 4A 00 12 00 15 01 05 00
+poke u16 gBrMailbox+0x0C 14
+wait 30
+# held, every one of them, and none of them standing on a slot
+expect u8 gBrSeats+16 1
+expect u8 gBrSeats+25 0xFF
+expect u8 gBrSeats+105 0xFF
+expect u8 gBrSeats+201 0xFF
+expect u8 gBrLoot+0xA0 8
+expect u8 gBrLoot+0xA1 0
+# Walking east brings the boy at (27,17) into view (from pos.x 10 on). The old spawning
+# had all sixteen slots full by then (12 ghosts, 3 balls, the player) and he never
+# appeared; he takes the first free slot, the one after the player's.
+hold RIGHT 60
+wait 30
+expectge u16 *gSaveBlock1Ptr 12
+expectle u16 *gSaveBlock1Ptr 16
+expect u8 gObjectEvents+44 0x0A
+expectne u8 gObjectEvents+36 0
+expect u8 gBrSeats+25 0xFF
+expect u8 gBrLoot+0xA1 0
+shot boy
+# Now all twelve in view along row 17, seat k at (33 - k, 17): seat 1 is the farthest,
+# at the view's east edge. Two slots are the player's and the boy's, three are the
+# map's headroom, so eleven are the ghosts', and the one left out is seat 1. Seat order
+# would have spawned seat 1 and dropped seat 12.
+pokebytes gBrMailbox+0x1398 02 0E 0B 00 00 01 01 00 12 20 00 11 00 01 01 01
+pokebytes gBrMailbox+0x13D8 02 0E 0B 00 00 02 01 00 12 1F 00 11 00 01 01 01
+pokebytes gBrMailbox+0x1418 02 0E 0B 00 00 03 01 00 12 1E 00 11 00 01 01 01
+pokebytes gBrMailbox+0x1458 02 0E 0B 00 00 04 01 00 12 1D 00 11 00 01 01 01
+pokebytes gBrMailbox+0x1498 02 0E 0B 00 00 05 01 00 12 1C 00 11 00 01 01 01
+pokebytes gBrMailbox+0x14D8 02 0E 0B 00 00 06 01 00 12 1B 00 11 00 01 01 01
+pokebytes gBrMailbox+0x1518 02 0E 0B 00 00 07 01 00 12 1A 00 11 00 01 01 01
+pokebytes gBrMailbox+0x1558 02 0E 0B 00 00 08 01 00 12 19 00 11 00 01 01 01
+pokebytes gBrMailbox+0x1598 02 0E 0B 00 00 09 01 00 12 18 00 11 00 01 01 01
+pokebytes gBrMailbox+0x15D8 02 0E 0B 00 00 0A 01 00 12 17 00 11 00 01 01 01
+pokebytes gBrMailbox+0x1618 02 0E 0B 00 00 0B 01 00 12 16 00 11 00 01 01 01
+pokebytes gBrMailbox+0x1658 02 0E 0B 00 00 0C 01 00 12 15 00 11 00 01 01 01
+poke u16 gBrMailbox+0x0C 26
+wait 30
+expect u8 gBrSeats+25 0xFF
+expectne u8 gBrSeats+41 0xFF
+expectne u8 gBrSeats+201 0xFF
+shot nearest
+say object slots ok

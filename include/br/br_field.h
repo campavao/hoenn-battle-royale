@@ -53,4 +53,24 @@ bool8 BrField_Leaving(void);
 // The leave into enter() stops where it is, if that is the one on its way out.
 void BrField_CancelLeave(void (*enter)(void));
 
+// ---- object slots (POK-330 #48) ----------------------------------------------------
+
+// OBJECT_EVENTS_COUNT is 16, and the map's own people -- its trainers above all -- need
+// theirs as they scroll into view. BR's ghosts and loot never take the last
+// BR_NPC_HEADROOM free slots (and give theirs back when the map's people eat into them),
+// and loot is owed up to BR_LOOT_SHARE of what is left before the ghosts take the rest.
+#define BR_NPC_HEADROOM 3
+#define BR_LOOT_SHARE 2
+// Inside the box RemoveObjectEventIfOutsideView keeps an object in (object coords,
+// MAP_OFFSET included). The engine removes anything outside it on every camera step,
+// so a ghost or a ball is spawned only in it.
+bool8 BrField_InObjectView(s16 x, s16 y);
+// Tiles from the middle of the view, which is where the player stands (or the ghost a
+// spectator rides): who gets a slot first when there are not enough.
+u16 BrField_ViewDistance(s16 x, s16 y);
+// This frame's share of the object table: how many ghosts and how many pieces of loot
+// may be up, the nearest first. BR's own spawns and despawns do not change it, so the
+// two ticks agree whichever runs first.
+void BrField_ShareObjects(u8 *ghosts, u8 *loot);
+
 #endif // GUARD_BR_FIELD_H

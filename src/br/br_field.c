@@ -4,9 +4,13 @@
 #include "overworld.h"
 #include "palette.h"
 #include "task.h"
+#include "event_object_movement.h"
+#include "fieldmap.h"
 #include "field_camera.h"
 #include "field_weather.h"
 #include "br/br_field.h"
+#include "br/br_ghosts.h"
+#include "br/br_loot.h"
 
 // The ring is 16x16 metatiles from gSaveBlock1Ptr->pos; CurrentMapDrawMetatileAt takes a
 // map position and finds the ring slot itself (MapPosToBgTilemapOffset accepts +15).
@@ -134,3 +138,41 @@ void BrField_CancelLeave(void (*enter)(void))
 #undef tTimer
 #undef tFrames
 #undef ENTER_ARG
+
+// ---- object slots ------------------------------------------------------------------
+
+bool8 BrField_InObjectView(s16 x, s16 y)
+{
+    return x >= gSaveBlock1Ptr->pos.x - 2 && x <= gSaveBlock1Ptr->pos.x + 17
+        && y >= gSaveBlock1Ptr->pos.y && y <= gSaveBlock1Ptr->pos.y + 16;
+}
+
+u16 BrField_ViewDistance(s16 x, s16 y)
+{
+    s16 dx = x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET);
+    s16 dy = y - (gSaveBlock1Ptr->pos.y + MAP_OFFSET);
+
+    return (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+}
+
+// Ghosts and loot used to spawn wherever their cell was, in seat order, and again every
+// frame after the engine culled them: twelve far ghosts held twelve slots at the very
+// moment a route's trainers scrolling into view needed them, and those trainers were
+// simply not there.
+void BrField_ShareObjects(u8 *ghosts, u8 *loot)
+{
+    u8 wantGhosts = BrGhosts_Wanted();
+    u8 wantLoot = BrLoot_Wanted();
+    u8 i, room = 0, owed;
+
+    // What BR could hold: every free slot and every slot it already holds.
+    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+    {
+        if (!gObjectEvents[i].active || BrGhosts_Insubstantial(gObjectEvents[i].localId))
+            room++;
+    }
+    room = room > BR_NPC_HEADROOM ? room - BR_NPC_HEADROOM : 0;
+    owed = min(min(wantLoot, BR_LOOT_SHARE), room);
+    *ghosts = min(min(wantGhosts, BR_MAX_GHOSTS), room - owed);
+    *loot = min(min(wantLoot, BR_MAX_LOOT), room - *ghosts);
+}

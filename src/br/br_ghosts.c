@@ -103,6 +103,50 @@ static u8 SpawnedCount(void)
     return n;
 }
 
+// Where this map is drawn: on it, and inside the box the engine keeps objects in.
+static bool8 InView(const struct BrSeat *s)
+{
+    return s->present && OnCurrentMap(s) && BrField_InObjectView(s->x, s->y);
+}
+
+u8 BrGhosts_Wanted(void)
+{
+    u8 seat, n = 0;
+
+    for (seat = 0; seat < BR_MAX_SEATS; seat++)
+        if (InView(&gBrSeats[seat]))
+            n++;
+    return n;
+}
+
+// Which seats in view get an object, as a bit a seat: all of them when there is room,
+// else the `limit` nearest the middle of the view, the lower seat first on a tie. The
+// ones close enough to engage (BR_SIGHT_RANGE) are the last to go.
+static u32 Keep(u8 limit)
+{
+    u8 seat, other, nearer;
+    u16 d, e;
+    u32 keep = 0;
+
+    for (seat = 0; seat < BR_MAX_SEATS; seat++)
+    {
+        if (!InView(&gBrSeats[seat]))
+            continue;
+        d = BrField_ViewDistance(gBrSeats[seat].x, gBrSeats[seat].y);
+        for (other = 0, nearer = 0; other < BR_MAX_SEATS && nearer < limit; other++)
+        {
+            if (other == seat || !InView(&gBrSeats[other]))
+                continue;
+            e = BrField_ViewDistance(gBrSeats[other].x, gBrSeats[other].y);
+            if (e < d || (e == d && other < seat))
+                nearer++;
+        }
+        if (nearer < limit)
+            keep |= 1u << seat;
+    }
+    return keep;
+}
+
 static void Despawn(u8 seat)
 {
     struct ObjectEvent *obj = GhostObject(seat);
@@ -513,29 +557,30 @@ bool8 BrGhosts_Insubstantial(u8 localId)
 
 void BrGhosts_Tick(void)
 {
-    u8 seat;
+    u8 seat, limit, loot;
+    u32 keep;
 
     if (!BrField_OverworldRunning())
     {
         sOwnValid = FALSE; // the next overworld frame re-places us (map load, battle end)
         return;
     }
+    BrField_ShareObjects(&limit, &loot);
+    keep = BrGhosts_Wanted() <= limit ? 0xFFFFFFFF : Keep(limit);
+    // Out of view, off this map or past the share: let go first, so a nearer seat has
+    // the slot this frame (POK-330 #48).
     for (seat = 0; seat < BR_MAX_SEATS; seat++)
     {
-        struct BrSeat *s = &gBrSeats[seat];
-
-        if (!s->present)
-            continue;
-        if (OnCurrentMap(s))
-        {
-            if (GhostObject(seat) == NULL)
-                Spawn(seat);
-            DriveGhost(seat);
-        }
-        else if (s->objId != BR_NO_OBJ)
-        {
+        if (gBrSeats[seat].objId != BR_NO_OBJ && !(InView(&gBrSeats[seat]) && (keep & (1u << seat))))
             Despawn(seat);
-        }
+    }
+    for (seat = 0; seat < BR_MAX_SEATS; seat++)
+    {
+        if (!InView(&gBrSeats[seat]) || !(keep & (1u << seat)))
+            continue;
+        if (GhostObject(seat) == NULL)
+            Spawn(seat);
+        DriveGhost(seat);
     }
     EmoteBusyGhosts();
     WatchOwn();

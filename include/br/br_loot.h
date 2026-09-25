@@ -13,8 +13,9 @@
 // grid coords the way ObjectEvent.currentCoords holds them (MAP_OFFSET included), the
 // same convention as a ghost's.
 //
-// The table only has to hold what could be on one map at once: the object event table
-// is 16 slots and the ghosts already want 12, so the ground gets the handful left.
+// The table only has to hold what could be on one map at once. The object event table
+// is 16 slots, and BrField_ShareObjects gives the ground its share of them: up to
+// BR_LOOT_SHARE ahead of the ghosts, and whatever they leave after that.
 
 #define BR_MAX_LOOT 8
 // Object-event local ids for loot, 0xC0..0xC7: just below the ghosts' 0xC8 (br_config.h)
@@ -130,6 +131,8 @@ extern struct BrDespawned gBrDespawned[BR_MAX_DESPAWN];
 void BrLoot_Init(void);
 // Each frame: makes the object events on this map agree with the table.
 void BrLoot_Tick(void);
+// Pieces on this map inside the view box: how many want an object.
+u8 BrLoot_Wanted(void);
 // The loot item standing on this cell of the current map, or NULL.
 struct BrLootItem *BrLoot_At(s16 x, s16 y);
 

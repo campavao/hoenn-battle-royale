@@ -46,7 +46,8 @@ BR_SIZE(BrSeat, 16)
 #define BR_BUSY_BATTLE 2
 extern u8 gBrSeatBusy[BR_MAX_SEATS];
 #define BR_STEP_QUEUE 5
-// OBJECT_EVENTS_COUNT is 16; the player, loot and map NPCs need the rest.
+// OBJECT_EVENTS_COUNT is 16; the player, loot and map NPCs need the rest, and
+// BrField_ShareObjects decides how many of these there is room for this frame.
 #define BR_MAX_GHOSTS 12
 
 extern struct BrSeat gBrSeats[BR_MAX_SEATS];
@@ -56,6 +57,8 @@ void BrGhosts_Place(u8 seat, u8 skin, u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 d
 void BrGhosts_Step(u8 seat, u8 dir);
 void BrGhosts_Face(u8 seat, u8 dir);
 void BrGhosts_Remove(u8 seat);
+// Seats standing on this map inside the view box: how many ghosts want an object.
+u8 BrGhosts_Wanted(void);
 // The seat is out of the match (BR_MSG_OUT): its ghost goes, and stays gone. An
 // eliminated trainer's page keeps sending where it is -- it is spectating now -- so a
 // PLACE or STEP after the OUT is not them coming back (POK-330 #5).

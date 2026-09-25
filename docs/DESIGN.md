@@ -141,13 +141,16 @@ then the next screen. One at a time.
 
 - **Ghosts** (`br_ghosts.h`) are every other seat, drawn as `ObjectEvent`s spawned with
   `SpawnSpecialObjectEventParameterized` under local ids `0xC8 + seat`, snapped by
-  `place`, walked by `step`, turned by `face`. A seat on another map is a roster row with
-  no object. At most `BR_MAX_GHOSTS` (12) are spawned at once, in seat order. They are
-  not solid (POK-310), and an `out` takes a seat off every map for good. Skins are
-  player and NPC sprites.
+  `place`, walked by `step`, turned by `face`. A seat on another map, or outside the box
+  the engine keeps objects in, is a roster row with no object. The sixteen object slots
+  are shared out every frame (`BrField_ShareObjects`): the map's own people keep the last
+  three free ones, loot is owed two, and the nearest ghosts get the rest, twelve at most.
+  Ghosts are not solid (POK-310), and an `out` takes a seat off every map for good. Skins
+  are player and NPC sprites.
 - **Loot** (`br_loot.h`): a `spill` puts a fallen trainer's team down as balls and its
   bag as a bag, on the cells the sender chose, the same on every ROM; `pickup` takes a
-  piece away everywhere. Local ids `0xC0..0xC7`, eight pieces on a map. The page keeps
+  piece away everywhere. Local ids `0xC0..0xC7`, eight pieces on a map, spawned only in
+  view and nearest first, like the ghosts. The page keeps
   what is inside a bag and `give`s it to whoever takes it. A beaten route trainer leaves
   every map (`npcout`).
 - **The ring** (`br_ring.h`) lives in region-map space: `gRegionMapEntries` gives every
