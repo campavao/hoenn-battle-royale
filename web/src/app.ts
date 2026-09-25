@@ -20,7 +20,7 @@ import { nameBstart, romReplaying, Spectate } from './match/spectate';
 import { bossAt } from './match/bosses';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
-import { Bots } from './bots/brain';
+import { Bots, type BotsOptions } from './bots/brain';
 import { lootView, resumeAt, routeToBots } from './bots/adapt';
 import { romCell, type RomCell } from './bots/space';
 import { dealBots } from './bots/roster';
@@ -1200,9 +1200,6 @@ function botFill(): number {
  *  rather than out of whatever interval the browser felt like giving us. */
 const BOT_TICK_MS = 100;
 
-/** Fills the room with bots the host walks around. They reach every other client as
- *  ordinary `place`/`step` -- a ghost, which is all a bot ever is on the wire -- so
- *  nothing downstream of here has to know they are not people. */
 /** Who is in a battle or a menu right now, off the ROMs' own `busy` (POK-230). The
  *  eyeline needs it: a bot does not challenge somebody already fighting. */
 const busySeats = new Set<number>();
@@ -1234,34 +1231,25 @@ interface BotResume {
   where: (seat: number) => ({ map: MapRef } & RomCell) | undefined;
 }
 
-function startBots(
-  send: (msg: Msg) => void,
-  takenSeats: number[],
-  seed: number,
-  loot: Loot,
-  players: () => RosterEntry[],
-  sendTo: (seat: number, msg: Msg) => void,
-  onDuel: (winner: number, loser: number) => void,
-  onEngage: (seat: number, target: number) => void,
-  fill: number,
-  resume?: BotResume,
-  /** Seconds of Safari opening. Above zero the bots start in the Zone with everybody
-   *  else (POK-257) and only go out into Hoenn when the fog does. */
-  safariSecs = 0,
-  /** This match's Zone pool, read out of the ROM (match/zone.ts). Asked for at every deal
-   *  rather than once: the first deal can come before the ROM has dealt the pool. */
-  zonePool: () => number[] = () => [],
-): {
-  bots: Bots;
-  seats: number[];
-  /** The buzzer: the bots leave the Zone for the cells the seed dealt them. */
-  drop: () => void;
-  setRing: (ring: { sx: number; sy: number; r: number }, phase: number) => void;
-  /** A bot's team, for answering a peek about it. Null for a seat we do not own. */
-  partyFor: (seat: number) => Msg | null;
-  dispose: () => void;
-} {
-  const maps = (worldData as { maps: WorldMap[] }).maps;
+type Cell = { mapId: string; x: number; y: number };
+
+/** What the bots walk on, off world.json: the graph, both names for a map, and the
+ *  cells a bot is dealt onto and walks to. One function, so the offline tools
+ *  (tools/br/bots-replay.ts, zone-occupancy.ts) walk the ground the host's bots do. */
+interface BotGround {
+  world: World;
+  refById: Map<string, MapRef>;
+  idOf: (map: MapRef) => string | undefined;
+  sectionOf: Map<string, string>;
+  /** Hoenn's landing cells: where the drop deals a bot and where it wanders. */
+  targets: Cell[];
+  /** The Zone's, for the opening. */
+  safariTargets: Cell[];
+  /** `targets` with each cell's wire map, which is what `dealBots` deals from. */
+  spawns: (Cell & { map: MapRef })[];
+}
+
+function botGround(maps: WorldMap[] = (worldData as { maps: WorldMap[] }).maps): BotGround {
   const world = new World(maps);
   const refById = new Map(maps.map((m) => [m.id, { group: m.group, num: m.num }]));
   const outdoor = new Set(maps.filter((m) => m.outdoor).map((m) => m.id));
@@ -1280,12 +1268,76 @@ function startBots(
     x: c.x,
     y: c.y,
   }));
-  const opening = safariSecs > 0 && safariTargets.length > 0 && resume === undefined;
-  const safariSpawns = safariTargets.map((t) => ({ ...t, map: refById.get(t.mapId)! }));
-  let inOpening = opening;
   const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
   const idByRef = new Map(maps.map((m) => [`${m.group}:${m.num}`, m.id]));
   const idOf = (map: MapRef) => idByRef.get(`${map.group}:${map.num}`);
+  const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
+  return { world, refById, idOf, sectionOf, targets, safariTargets, spawns };
+}
+
+interface HostBotsOptions {
+  /** To everybody, on the page's grid: the caller turns it into the wire's (net/cells.ts). */
+  send: (msg: Msg) => void;
+  /** To one seat: a trainer card is for the player it challenges. */
+  sendTo: (seat: number, msg: Msg) => void;
+  /** The seats already taken when the bots are dealt. */
+  takenSeats: number[];
+  seed: number;
+  /** How many bots to deal. */
+  fill: number;
+  loot: Loot;
+  /** The whole field, bots included: the eyeline's players and the hunt's count. */
+  players: () => RosterEntry[];
+  /** In a battle or a menu, so not somebody a bot challenges (POK-230). */
+  busy: (seat: number) => boolean;
+  /** regionmap.json's sections: which maps the ring holds. */
+  sections: DirectorWorld['sections'];
+  /** The hidden instance's real fight, when there is one (POK-238). */
+  settle?: BotsOptions['settle'];
+  onDuel?: (winner: number, loser: number) => void;
+  onEngage?: (seat: number, target: number) => void;
+  onDecision?: BotsOptions['onDecision'];
+  resume?: BotResume;
+  /** Seconds of Safari opening. Above zero the bots start in the Zone with everybody
+   *  else (POK-257) and only go out into Hoenn when the fog does. */
+  safariSecs?: number;
+  /** This match's Zone pool, read out of the ROM (match/zone.ts). Asked for at every deal
+   *  rather than once: the first deal can come before the ROM has dealt the pool. */
+  zonePool?: () => number[];
+  /** The clock and the pump, for a test to drive: performance.now and setInterval. */
+  now?: () => number;
+  every?: (fn: () => void, ms: number) => () => void;
+}
+
+interface HostBots {
+  readonly bots: Bots;
+  readonly seats: number[];
+  /** The buzzer: the bots leave the Zone for the cells the seed dealt them. */
+  drop: () => void;
+  setRing: (ring: { sx: number; sy: number; r: number }, phase: number) => void;
+  /** A bot's team, for answering a peek about it. Null for a seat we do not own. */
+  partyFor: (seat: number) => Msg | null;
+  /** One beat of the pump. */
+  tick: (now: number) => void;
+  dispose: () => void;
+}
+
+/** Fills the room with bots the host walks around. They reach every other client as
+ *  ordinary `place`/`step` -- a ghost, which is all a bot ever is on the wire -- so
+ *  nothing downstream of here has to know they are not people. */
+function createHostBots(opts: HostBotsOptions): HostBots {
+  const { send, sendTo, takenSeats, seed, fill, loot, players, resume, safariSecs = 0, zonePool = () => [] } = opts;
+  const clock = opts.now ?? (() => performance.now());
+  const every =
+    opts.every ??
+    ((fn: () => void, ms: number) => {
+      const id = setInterval(fn, ms);
+      return () => clearInterval(id);
+    });
+  const { world, refById, idOf, sectionOf, targets, safariTargets, spawns } = botGround();
+  const opening = safariSecs > 0 && safariTargets.length > 0 && resume === undefined;
+  const safariSpawns = safariTargets.map((t) => ({ ...t, map: refById.get(t.mapId)! }));
+  let inOpening = opening;
   let ring: { sx: number; sy: number; r: number } | undefined;
   const bots = new Bots({
     world,
@@ -1297,7 +1349,7 @@ function startBots(
     // No ring yet means no fog anywhere, not fog everywhere. Before this, a bot was
     // counted as outside a ring that did not exist and bled through the whole opening:
     // eight bots went into the Zone and two came out of it (POK-257).
-    inside: (id) => ring === undefined || sectionInside(WORLD.sections[sectionOf.get(id) ?? ''], ring),
+    inside: (id) => ring === undefined || sectionInside(opts.sections[sectionOf.get(id) ?? ''], ring),
     // The table holds what the wire said, which is the ROM's space; the brain asks
     // about the grid it walks (bots/space.ts).
     loot: lootView(loot, (mapId) => refById.get(mapId), idOf),
@@ -1313,19 +1365,17 @@ function startBots(
           .filter((e) => e.alive && !seatsDealt.has(e.seat) && e.map && e.x !== undefined && e.y !== undefined)
           .map((e) => ({
             seat: e.seat,
-            mapId: idByRef.get(`${e.map!.group}:${e.map!.num}`) ?? '',
+            mapId: idOf(e.map!) ?? '',
             x: e.x! - MAP_OFFSET,
             y: e.y! - MAP_OFFSET,
             dir: e.dir as 1 | 2 | 3 | 4,
-            busy: busySeats.has(e.seat),
+            busy: opts.busy(e.seat),
           }))
           .filter((p) => p.mapId !== ''),
     },
     // Two bots meeting is fought for real in the hidden instance when there is one
     // (POK-238); `duel.ts`'s seeded resolver is what answers when there is not.
-    settle: proxyDuels
-      ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b)
-      : undefined,
+    settle: opts.settle,
     // Where the bot is standing is where its mons came from (POK-237): the drop put
     // it on a route, and that route's own table is what a trainer there would have.
     deal: (bot, atPhase, mapId) => dealParty(seed, bot.seat, atPhase, mapId, bot.grade, zonePool()),
@@ -1333,16 +1383,16 @@ function startBots(
     // X ATTACKs its opponent's ROM pops on its behalf, and what a player finds on it.
     bagFor: (bot, atPhase) => dealBag(seed, bot.seat, atPhase, bot.grade),
     seed,
-    onDuel,
+    onDuel: opts.onDuel ?? (() => {}),
     // Nobody fights in the Zone -- not a player, not another bot.
     fights: () => !inOpening,
-    onEngage,
+    onEngage: opts.onEngage ?? (() => {}),
+    onDecision: opts.onDecision,
     centres: () => world.centres(),
     // Bots are on this roster too -- the host applies its own bots' `place` to it --
     // so this is the whole field, which is what the hunt rule wants.
     alive: () => players().filter((e) => e.alive).length,
   });
-  const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
   // Re-deal the whole field so the names line up, drop whoever is out of the match,
   // and stand the rest where the room last saw them rather than back on their drop.
   const resumed = (r: BotResume): Bot[] =>
@@ -1358,15 +1408,13 @@ function startBots(
   const landing = new Map(dealBots(seed, fill, takenSeats, spawns).map((b) => [b.seat, b]));
   const seatsDealt = new Set(dealt.map((b) => b.seat));
   let phase = 0;
-  bots.start(dealt, performance.now());
+  bots.start(dealt, clock());
   // The fog clears Hoenn's own trainers off a map it has taken (POK-299): the host runs
   // the per-map clock, and each trainer leaves every ROM as `npcout`, the way a beaten
   // one does. The seat on it is only a seat; `fog` says nobody beat them.
-  const npcFog = new NpcFog(TRAINERS as Record<string, number[]>, (id) => WORLD.sections[sectionOf.get(id) ?? '']);
+  const npcFog = new NpcFog(TRAINERS as Record<string, number[]>, (id) => opts.sections[sectionOf.get(id) ?? '']);
   const fogSeat = takenSeats[0] ?? 0;
-  const id = setInterval(() => {
-    const now = performance.now();
-
+  const tick = (now: number): void => {
     bots.tick(now);
     if (inOpening) return;
     const died = npcFog.tick(now, ring);
@@ -1385,7 +1433,8 @@ function startBots(
 
       if (line) send(line);
     }
-  }, BOT_TICK_MS);
+  };
+  const stop = every(() => tick(clock()), BOT_TICK_MS);
   return {
     bots,
     seats: dealt.map((b) => b.seat),
@@ -1416,7 +1465,8 @@ function startBots(
       const items = bots.bagOf(seat).slice(0, PARTY_BAG_MAX).map((s) => ({ id: s.id, n: Math.min(99, s.n) }));
       return { t: 'party', seat, mons, bag: { money: bots.moneyOf(seat), items: items.filter((s) => s.n > 0) } };
     },
-    dispose: () => clearInterval(id),
+    tick,
+    dispose: stop,
   };
 }
 
@@ -1737,7 +1787,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   let out: ((seat: number) => void) | null = null;
   const log = new MatchLog();
   // SOLO VS BOTS, with the bots (POK-275). The row has promised them since the lobby
-  // was built and `startBots` was only ever called from the room path, so solo was one
+  // was built and the bots were only ever started from the room path, so solo was one
   // seat in an empty Hoenn -- and a director whose field starts at one can never
   // declare a winner, which is why the match would not end either.
   //
@@ -1796,8 +1846,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     }
     endGraceTimer = setTimeout(() => backToLobby(), SOLO_END_GRACE_MS);
   };
-  const solo = startBots(
-    (msg) => {
+  const solo = createHostBots({
+    send: (msg) => {
       // Into the ROM's coordinate space on the way out (net/cells.ts): the brain walks
       // the exporter's grid, the ROM draws in the one seven tiles further out.
       const wire = toRomCells(msg);
@@ -1809,22 +1859,22 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       noteResult(wire);
       if (wire.t === 'out') out?.(wire.seat);
     },
-    [0],
+    takenSeats: [0],
     seed,
     loot,
-    () => roster.all(),
+    players: () => roster.all(),
     // No relay, so a trainer card for our own seat is a direct push and a card for
     // anybody else has nowhere to go.
-    (toSeat, msg) => {
+    sendTo: (toSeat, msg) => {
       if (toSeat === 0) rom.push(msg);
     },
-    () => {},
-    () => {},
-    botFill(),
-    undefined,
-    paceOptions()?.safariSecs ?? DEFAULT_SAFARI_SECS,
-    () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
-  );
+    fill: botFill(),
+    safariSecs: paceOptions()?.safariSecs ?? DEFAULT_SAFARI_SECS,
+    zonePool: () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
+    busy: (s) => busySeats.has(s),
+    sections: WORLD.sections,
+    settle: proxyDuels ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b) : undefined,
+  });
   // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):
   // nothing else names them, so solo's results and saved round said P31 won.
   roster.seatBots(botRows(seed, solo.seats));
@@ -2262,8 +2312,8 @@ function wireRoom(
     // The host speaks for the bots as well as for the clock: same relay, same in-ring,
     // and its own roster too -- nobody hears their own messages come back, so the host
     // would otherwise be the one client that cannot see the bots it is walking.
-    bots = startBots(
-      (msg) => {
+    bots = createHostBots({
+      send: (msg) => {
         // The wire is the ROM's coordinate space (net/cells.ts): every client's ghosts
         // are drawn from it, and a player's own `place` already arrives that way.
         const wire = toRomCells(msg);
@@ -2271,19 +2321,19 @@ function wireRoom(
         hostSays(wire);
         if (wire.t === 'out') localOut?.(wire.seat);
       },
-      seats,
+      takenSeats: seats,
       seed,
       loot,
-      () => bridge!.roster.all(),
+      players: () => bridge!.roster.all(),
       // A trainer card is for the one player it is a challenge to. The host's own ROM
       // never hears itself over the relay, so its copy is a direct push.
-      (toSeat, msg) => {
+      sendTo: (toSeat, msg) => {
         if (toSeat === bridge!.seat) rom.push(msg);
         else bridge!.relay.to(toSeat, msg);
       },
       // The kill feed. A duel is the only moment both sides of a fight are known at
       // once -- an `out` on its own cannot say who did it.
-      (winner, loser) => {
+      onDuel: (winner, loser) => {
         say(Ticker.beat(winner, nameOf(winner), nameOf(loser)));
         // And they say something about it (POK-239). Dealt from the seed, so the same
         // bot has the same voice all match on every client that works it out -- unless
@@ -2296,14 +2346,17 @@ function wireRoom(
         say(Ticker.said(loser, nameOf(loser), myVoice(loser, seed).lose));
       },
       // Walking up to somebody is the other time a bot has something to say.
-      (seat) => say(Ticker.said(seat, nameOf(seat), myVoice(seat, seed).intro)),
+      onEngage: (seat) => say(Ticker.said(seat, nameOf(seat), myVoice(seat, seed).intro)),
       // How many bots the host is filling to (POK-241's FILL), held to what the room
       // has room for.
-      botFill() === 0 ? 0 : botFillFor(controls.roster, seats.length),
+      fill: botFill() === 0 ? 0 : botFillFor(controls.roster, seats.length),
       resume,
-      paceOptions()?.safariSecs ?? controls.safariSecs,
-      () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
-    );
+      safariSecs: paceOptions()?.safariSecs ?? controls.safariSecs,
+      zonePool: () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
+      busy: (s) => busySeats.has(s),
+      sections: WORLD.sections,
+      settle: proxyDuels ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b) : undefined,
+    });
     // Which seats are bots, said once rather than guessed at by everything downstream:
     // the ones walked here, or on a takeover every one the match was dealt, dead or not.
     match.botSeats = new Set(resume ? resume.botSeats : bots.seats);
@@ -2608,7 +2661,7 @@ function wireRoom(
   /** Seats caught up on everything but the loot where they stand, which waits for their
    *  first `place` to say where that is. */
   const owedLoot = new Set<number>();
-  let bots: ReturnType<typeof startBots> | null = null;
+  let bots: HostBots | null = null;
   /** The room we are attached to, so a second attach can tell a rejoin of it (the relay
    *  handed our seat back) from a new room. */
   let attachedTo: { seat: number; code: string } | null = null;
