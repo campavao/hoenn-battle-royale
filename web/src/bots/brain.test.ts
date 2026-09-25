@@ -716,6 +716,31 @@ describe('a bot caught in the fog', () => {
     expect(bots.count()).toBe(0);
   });
 
+  // A bot the fog takes at sea drops its team on the water, the way a player beaten
+  // while surfing does -- it used to drop nothing (POK-330 #67). And its bag goes down
+  // under the ROM's own key for a bag, 0xFF, not the page's old 6.
+  it('drops everything where it falls, even out at sea', () => {
+    const SEA: WorldMap = { id: 'SEA', group: 0, num: 7, w: 5, h: 5, section: 'S', outdoor: true, grid: '25x2', seams: [] };
+    const sent: Msg[] = [];
+    const surfer: PackedMon = { ...MON, moves: [{ id: 57, pp: 15, ppUps: 0 }] }; // SURF
+    const bots = new Bots({
+      world: new World([SEA]),
+      targets: [{ mapId: 'SEA', x: 0, y: 0 }],
+      mapRef: () => ({ group: 0, num: 7 }),
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...surfer }, { ...surfer }],
+      bagFor: () => [{ id: 13, n: 1 }],
+      inside: () => false,
+    });
+    const [bot] = dealBots(1, 1, [], [{ mapId: 'SEA', map: { group: 0, num: 7 }, x: 2, y: 2 }]);
+    bots.start([bot], 0);
+    for (let t = STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    const spill = sent.find((m) => m.t === 'spill') as { mons: unknown[]; bag?: { key: number } } | undefined;
+    expect(spill?.mons).toHaveLength(2);
+    expect(spill?.bag?.key).toBe((bot.seat << 8) | 0xff);
+  });
+
   // FogReachesThisBattle in br_ring.c: a fight between contestants is theirs to lose,
   // and a bot is a contestant (POK-262, POK-330 #15).
   it('leaves a bot alone while a player is fighting it', () => {

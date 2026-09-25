@@ -1,9 +1,9 @@
 // The eyeline, on the page (POK-238).
 //
 // `Sees` in src/br/br_engage.c, ported byte for byte: a straight look from where you
-// stand, at most BR_SIGHT_RANGE cells, stopped by the first thing you cannot walk
-// through. It has to be the same rule on both sides, because a bot and a player can
-// each be the one who spots the other and the room has to agree that they did.
+// stand, at most BR_SIGHT_RANGE cells, stopped by the first cell with collision on it.
+// It has to be the same rule on both sides, because a bot and a player can each be the
+// one who spots the other and the room has to agree that they did.
 import type { World } from './world';
 
 /** BR_SIGHT_RANGE in include/br/br_engage.h. */
@@ -36,9 +36,10 @@ export function sees(world: World, from: Look, tx: number, ty: number): boolean 
     x += d.dx;
     y += d.dy;
     if (x === tx && y === ty) return true;
-    // The ROM stops on any collision; on the page that is anything not standable,
-    // which is the same set for someone on foot.
-    if (!world.standable(from.map, x, y)) return false;
+    // The ROM stops on collision and nothing else (World.clear): a look crosses water,
+    // a ledge and a cuttable tree. It used to stop on anything nobody could walk on,
+    // so a bot never saw across a pond that a player's ROM saw it across (POK-330 #67).
+    if (!world.clear(from.map, x, y)) return false;
   }
   return false;
 }

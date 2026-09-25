@@ -138,6 +138,22 @@ export class World {
     return cls !== CLASS_WATER || surf;
   }
 
+  /** Is anything in the way here, by the ROM's own test? `MapGridGetCollisionAt(x, y)
+   *  != 0` is the whole of it -- the collision bits and nothing else -- and it is what
+   *  both the eyeline (`Sees`, br_engage.c) and a spill's scatter (`CellFree`,
+   *  br_loot.c) stop on. So water, a ledge, tall grass, a door and a cuttable tree (an
+   *  object, not a metatile) are all clear; a wall and the void off the map are not.
+   *  Not `standable`, which is a question about feet: the page asked that one instead
+   *  and a bot could not see across a pond a player's ROM could see it across, and a
+   *  bot beaten at sea dropped nothing (POK-330 #67).
+   *
+   *  The one cell the grid cannot answer exactly is a directional impassable, which the
+   *  exporter folds into the wall class (export-world.py): blocked here, clear to the
+   *  ROM. */
+  clear(id: string, x: number, y: number): boolean {
+    return this.cell(id, x, y) !== CLASS_WALL;
+  }
+
   /** Where one step in `dir` from `spot` lands -- the next cell, the map across a
    *  seam, or null when it is a wall, the void, or a ledge facing the wrong way. */
   step(spot: Spot, dir: SeamDir, surf = false, cut = false): Spot | null {

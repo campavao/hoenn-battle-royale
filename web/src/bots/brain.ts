@@ -686,14 +686,14 @@ export class Bots {
         })),
       };
       // And its bag, which is the point of it having had one (POK-237): the X ATTACKs
-      // it did not get to pop are lying there for whoever beat it. Key 6 is the slot
-      // after the six mons, which is what the ROM's own whiteout uses.
+      // it did not get to pop are lying there for whoever beat it. Key 0xFF is the
+      // ROM's own for a whiteout's bag (br_loot.c), clear of the mons' 0..5.
       // The bag takes the cell after the team's. Nowhere left to put it means no bag
       // rather than a bag nobody can reach: a piece sharing a cell with another is a
       // piece that does not exist.
       if (walker.bag.length > 0 && cells.length > party.length) {
         spill.bag = {
-          key: ((walker.bot.seat & 0xff) << 8) | 6,
+          key: ((walker.bot.seat & 0xff) << 8) | 0xff,
           x: cells[party.length].x,
           y: cells[party.length].y,
           items: walker.bag.map((stack) => ({ ...stack })),

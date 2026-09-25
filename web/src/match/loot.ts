@@ -26,24 +26,30 @@ export type LootCell = { key: number; map: MapRef } & RomCell;
 const SPILL_DX = [0, 1, -1, 0, 0, 1, -1, 1, -1, 2, -2, 0, 0];
 const SPILL_DY = [0, 0, 0, 1, -1, 1, 1, -1, -1, 0, 0, 2, -2];
 
-/** Cells for `n` pieces dropped at (x, y), skipping anything nobody could stand on and
- *  never using one twice. Fewer than `n` when the ring runs out -- a trainer who falls in
- *  a doorway leaves what fits.
+/** Cells for `n` pieces dropped at (x, y), skipping anything the ROM's `CellFree` would
+ *  skip -- collision, and nothing else (World.clear) -- and never using one twice. Fewer
+ *  than `n` when the ring runs out -- a trainer who falls in a doorway leaves what fits.
  *
  *  A bot's spill used to put every ball on the dropper's own cell. That is one visible
  *  ball (BrLoot_At returns the first row it matches) with the rest of the team stacked
  *  underneath it, and the BAG under those -- which is why a beaten bot looked like it
- *  dropped one Pokemon and no bag at all. The ROM has always scattered its own. */
+ *  dropped one Pokemon and no bag at all. The ROM has always scattered its own.
+ *
+ *  And on the same cells the ROM would pick. This used to skip anything nobody could
+ *  stand on, which is water too: a player beaten at sea drops their team on the waves,
+ *  and a bot beaten at sea dropped nothing at all (POK-330 #67). Should nothing in the
+ *  ring be clear, the dropper's own cell takes the first piece: nothing leaves a match. */
 export function spillCells(world: World, mapId: string, x: number, y: number, n: number): { x: number; y: number }[] {
   const out: { x: number; y: number }[] = [];
 
   for (let i = 0; i < SPILL_DX.length && out.length < n; i++) {
     const cx = x + SPILL_DX[i];
     const cy = y + SPILL_DY[i];
-    if (!world.standable(mapId, cx, cy)) continue;
+    if (!world.clear(mapId, cx, cy)) continue;
     if (out.some((c) => c.x === cx && c.y === cy)) continue;
     out.push({ x: cx, y: cy });
   }
+  if (out.length === 0 && n > 0) out.push({ x, y });
   return out;
 }
 
