@@ -94,6 +94,11 @@ static void HandleBt(const u8 *payload, u8 len, bool8 isCont)
         return;
     if (sRecvAsm.total < BR_BT_HDR || !gBrNetlink.active)
         return;
+    // Only the seat we are linked with. A page that lost track of its opponent (a
+    // rejoin mid-fight) broadcast its blocks to the whole room, and every other link
+    // battle in it took them as its own peer's and desynced (POK-330 #20).
+    if (sRecvBuf[0] != gBrNetlink.peerSeat)
+        return;
     gBrNetlink.recvSeq = BrWire_ReadU16(sRecvBuf + 1);
     gBrNetlink.blocksRecv++;
     Deliver(gBrNetlink.myId ^ 1, sRecvBuf + BR_BT_HDR, BrWire_ReadU16(sRecvBuf + 3));

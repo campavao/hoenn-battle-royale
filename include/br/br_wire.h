@@ -70,7 +70,7 @@
 // cable. `seq` is the link exchange's own counter (distinct from the mailbox slot
 // continuation's seq). Spans slots: a full block is BLOCK_BUFFER_SIZE (256) bytes.
 // Payload (4 + len bytes, len up to 256):
-//   0:   seat  u8
+//   0:   seat  u8   the sender; a ROM drops a block from anybody but its own peer
 //   1..2: seq  u16 LE
 //   3..4: len  u16 LE
 //   5..: data  len bytes

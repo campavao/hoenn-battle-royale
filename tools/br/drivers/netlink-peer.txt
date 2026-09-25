@@ -1,0 +1,45 @@
+# netlink-peer: a link battle takes blocks from its own peer and nobody else
+# (POK-330 #20).
+#
+# A BT carries its sender's seat (the bridge stamps it), and HandleBt never looked at
+# it. A page that lost track of its opponent -- a rejoin mid-fight builds a new Bridge
+# with none -- sends its blocks to the whole room, and every other link battle in that
+# room delivered them as its own peer's and desynced.
+#
+# Seat 2 (placed out of our eyeline) challenges us and says nothing yet, so the start
+# exchange sits waiting for its header: gBattleCommunication[MULTIUSE_STATE] is 2.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 02 01 00 09 14 00 08 00 01 01 02
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 02 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+2 2
+expect u8 gBattleCommunication 2
+shot waiting
+# A header from seat 5, which is somebody else's fight: seat, seq u16, len u16, data.
+pokebytes gDecompressionBuffer 05 01 00 04 00 00 00 00 00
+mailsend gBrMailbox 6 gDecompressionBuffer 9
+wait 30
+expect u16 gBrNetlink+14 0
+expect u8 gBattleCommunication 2
+# The same block from seat 2 is the one it was waiting for: the exchange moves on to
+# the parties.
+pokebytes gDecompressionBuffer 02 01 00 04 00 00 00 00 00
+mailsend gBrMailbox 6 gDecompressionBuffer 9
+wait 30
+expect u16 gBrNetlink+14 1
+expectge u8 gBattleCommunication 3
+# Seat 2 goes out, and the fight is ours (out-peer.txt): back to the field.
+pokebytes gDecompressionBuffer 02
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 200
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+11 1
+shot back
+say netlink peer ok
