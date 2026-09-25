@@ -252,8 +252,12 @@ describe("a room's countdown to its own start", () => {
     expect(go).toHaveBeenCalledTimes(1);
     expect(seenRunning).toBe(false); // what `go` asks sees no count running
     expect(vi.getTimerCount()).toBe(0); // and nothing left ticking
+    // nine ticks, and once after the deal: one refused leaves the room up, STARTS IN gone
+    expect(redraw).toHaveBeenCalledTimes(10);
+    expect(redraw.mock.invocationCallOrder[9]).toBeGreaterThan(go.mock.invocationCallOrder[0]);
+    expect(count.secondsLeft()).toBeNull();
     pass(10_000);
-    expect(redraw).toHaveBeenCalledTimes(9);
+    expect(redraw).toHaveBeenCalledTimes(10);
     expect(go).toHaveBeenCalledTimes(1);
   });
 

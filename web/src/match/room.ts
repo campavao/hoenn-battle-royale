@@ -152,13 +152,16 @@ export class StartCountdown {
   }
 
   /** Count down to `go`, dropping any count already running. The count is over before
-   *  `go` runs, so what `go` asks sees none. */
+   *  `go` runs, so what `go` asks sees none; and the room is drawn once more after it,
+   *  since a deal refused (FILL off, nobody else here) leaves the room up with STARTS IN
+   *  still on it. */
   arm(go: () => void): void {
     this.cancel();
     this.due = this.now() + this.opts.ms;
     this.timer = setTimeout(() => {
       this.cancel();
       go();
+      this.opts.redraw();
     }, this.opts.ms);
     this.tick = setInterval(() => this.opts.redraw(), 1000);
   }
