@@ -15,11 +15,9 @@ MAP="${1:-$ROOT/pokeemerald.map}"
 [[ -f "$MAP" ]] || { echo "no $MAP; run make first"; exit 2; }
 mkdir -p "$ROOT/web/public/patch"
 python3 "$HERE/symbols.py" "$MAP" > "$ROOT/web/public/patch/br-symbols.json"
-# The drivers read the copy at the repo root (tools/br/drive.sh), the shell reads the
-# one in public/. They are the same file and they must be the same build: a stale root
-# copy points every driver at addresses the new ROM does not use, and all 38 fail at
-# once on the first expect, which looks exactly like a broken ROM.
-cp "$ROOT/web/public/patch/br-symbols.json" "$ROOT/br-symbols.json"
+# No copy at the repo root any more: tools/br/drive.sh makes its own table from the
+# driven ROM's .map on every run, so a stale root copy can no longer point every driver
+# at another build's addresses (all of them failing at once, like a broken ROM).
 # ...and the build itself, where the dev shell can fetch it (POK-254 again). A ROM
 # already in IndexedDB is a ROM the shell keeps using: `isPrePatched` says "a local
 # build, run it" and nothing ever asked WHICH local build. A whole night of fixes can

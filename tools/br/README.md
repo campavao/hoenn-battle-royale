@@ -8,7 +8,10 @@ Runs `drivers/<driver>.txt` against the built ROM inside libmgba with no window 
 audio, writes frames to `harness/frames/<driver>/`, exits 0 only if every `expect` held.
 Works from Git Bash (it re-execs itself in the MSYS2 UCRT64 shell). Needs the static
 libmgba at `C:\Users\cam95\Documents\Github\mgba-src\build\libmgba.a` (override with
-`MGBA_SRC`). The ROM defaults to `pokeemerald.gba`, then `pokeemerald_modern.gba`.
+`MGBA_SRC`). With no ROM named it drives the newer of `pokeemerald.gba` and
+`pokeemerald_modern.gba`, and says which. The symbol table comes from that ROM's own
+`.map` on every run (into the frames directory); `BR_SYMBOLS=<file>` overrides it for a
+ROM with no map beside it.
 
 `tools/br/drive-all.sh [rom]` runs every driver the way CI does, and fails any driver
 that asserts nothing (the harness alone passes a driver with no `expect`). Each driver

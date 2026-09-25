@@ -5,6 +5,13 @@
 # libmgba, runs the driver script, writes frames to tools/br/harness/frames/<driver>/,
 # exits with the harness's code (0 = every expect held).
 #
+# Which build: the ROM given, or else the NEWER of pokeemerald.gba (agbcc) and
+# pokeemerald_modern.gba -- it used to take pokeemerald.gba whenever it existed, so a
+# `make modern` loop after any release build silently drove the old agbcc ROM. The
+# symbol table is made from that ROM's own .map on every run (symbols.py, well under a
+# second) into the frames directory; the shared root br-symbols.json it used to read
+# was whichever build dev-patch.sh last saw, and the two builds lay RAM out differently.
+#
 # Two hosts:
 #   Windows (Git Bash / a plain shell) - re-execs itself inside the MSYS2 UCRT64 shell,
 #     where libmgba is a prebuilt static lib at MGBA_SRC (default the sibling
@@ -38,14 +45,33 @@ DRIVER="$HERE/drivers/$DRIVER_NAME.txt"
 
 ROM="${2:-}"
 if [[ -z "$ROM" ]]; then
-  for c in "$ROOT/pokeemerald.gba" "$ROOT/pokeemerald_modern.gba"; do [[ -f "$c" ]] && ROM="$c" && break; done
+  AGBCC="$ROOT/pokeemerald.gba"; MODERN="$ROOT/pokeemerald_modern.gba"
+  if [[ -f "$AGBCC" && -f "$MODERN" ]]; then
+    if [[ "$MODERN" -nt "$AGBCC" ]]; then ROM="$MODERN"; else ROM="$AGBCC"; fi
+    echo "drive.sh: both builds exist; driving the newer, $(basename "$ROM") (name a ROM to choose)" >&2
+  elif [[ -f "$AGBCC" ]]; then ROM="$AGBCC"
+  elif [[ -f "$MODERN" ]]; then ROM="$MODERN"
+  fi
 fi
 [[ -f "${ROM:-}" ]] || { echo "no ROM built; run make or make modern first"; exit 2; }
 
 STATE="${3:-}"
-SYMS="$ROOT/br-symbols.json"
 OUT="$HERE/harness/frames/$(basename "${DRIVER%.txt}")"
 mkdir -p "$OUT"; rm -f "$OUT"/*.png
+
+MAP="${ROM%.gba}.map"
+if [[ -n "${BR_SYMBOLS:-}" ]]; then
+  SYMS="$BR_SYMBOLS"   # an explicit table, for a ROM whose map is not beside it
+  [[ -f "$SYMS" ]] || { echo "no BR_SYMBOLS file $SYMS"; exit 2; }
+elif [[ -f "$MAP" ]]; then
+  SYMS="$OUT/br-symbols.json"
+  if ! python3 "$HERE/symbols.py" "$MAP" > "$SYMS" 2> "$OUT/symbols.log"; then
+    cat "$OUT/symbols.log"; echo "symbols.py failed on $MAP"; exit 2
+  fi
+else
+  echo "no $MAP beside $ROM: drive.sh reads each build's own symbols (or set BR_SYMBOLS)"
+  exit 2
+fi
 
 if [[ "$LINUX" -eq 1 && ! -f "$M/build/libmgba.a" ]]; then
   echo "building libmgba into $M (mgba 0.10.5, static, no Qt/SDL/etc)"
@@ -80,7 +106,6 @@ if [[ ! -x "$EXE" || "$HERE/harness/harness.c" -nt "$EXE" ]]; then
     "${LINK_LIBS[@]}"
 fi
 
-args=("$ROM" "$DRIVER" "$OUT")
+args=("$ROM" "$DRIVER" "$OUT" --symbols "$SYMS")
 [[ -n "$STATE" ]] && args+=(--state "$STATE")
-[[ -f "$SYMS" ]] && args+=(--symbols "$SYMS")
 "$EXE" "${args[@]}"

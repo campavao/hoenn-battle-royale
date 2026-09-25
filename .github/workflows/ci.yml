@@ -135,10 +135,6 @@ jobs:
           # for byte) and the size ceiling; a patch that fails either is never written.
           tools/br/make-patch.sh baseline/pokeemerald.gba pokeemerald.gba patch/hoenn-br.bps
           python3 tools/br/symbols.py pokeemerald.map > patch/br-symbols.json
-          # And at the root, where tools/br/drive.sh looks for it. It is gitignored --
-          # it is a build output, one per build -- so without this the drivers below
-          # have no symbol table at all.
-          cp patch/br-symbols.json br-symbols.json
           # On a tag the shell is named after it (v0.1.0 -> "0.1.0"); otherwise
           # package.json's, as on every push.
           if [ "${{ github.ref_type }}" = "tag" ]; then export HBR_SHELL_VERSION="${GITHUB_REF_NAME#v}"; fi
