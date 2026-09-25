@@ -1,114 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { BLOCKS_KEPT, Bridge, type EmulatorLike } from './bridge';
-import { MAILBOX, Mailbox, type RamAccess } from './mailbox';
+import { BLOCKS_KEPT, Bridge } from './bridge';
+import { MAILBOX, Mailbox } from './mailbox';
 import { POSITIONAL_CAP, RomPort } from './romport';
 import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
 import { PROTOCOL, type Msg, type SpillMsg, type StepMsg } from './wire';
-import { RelayClient, type WebSocketLike } from './relay';
+import { fakeEmulator, fakeRelay } from './fakes.testutil';
 
 const BASE = 0x0203d178; // gBrMailbox, per br-symbols.json
-
-// ---- a fake WebSocket, so RelayClient needs no network (mirrors relay.test.ts) ----
-
-class FakeSocket implements WebSocketLike {
-  readyState = 1; // OPEN from the start -- these tests drive the bridge, not reconnect
-  onopen: ((ev: unknown) => void) | null = null;
-  onclose: ((ev: unknown) => void) | null = null;
-  onerror: ((ev: unknown) => void) | null = null;
-  onmessage: ((ev: { data: string }) => void) | null = null;
-  sent: Record<string, unknown>[] = [];
-
-  send(data: string): void {
-    this.sent.push(JSON.parse(data));
-  }
-  close(): void {
-    this.readyState = 3;
-  }
-  receive(msg: Record<string, unknown>): void {
-    this.onmessage?.({ data: JSON.stringify(msg) });
-  }
-}
-
-function fakeRelay(): { relay: RelayClient; socket: FakeSocket } {
-  let socket!: FakeSocket;
-  const relay = new RelayClient((url) => {
-    socket = new FakeSocket();
-    return socket;
-  });
-  relay.connect('ws://relay.test');
-  return { relay, socket };
-}
-
-// ---- a fake emulator: RamAccess over a plain Uint8Array, plus a manual frame() ----
-
-function fakeEmulator(base: number) {
-  const mem = new Uint8Array(0x40000);
-  const at = (addr: number) => addr - 0x02000000;
-  const ram: RamAccess = {
-    read: (addr, width) => {
-      let v = 0;
-      for (let i = width / 8 - 1; i >= 0; i--) v = (v << 8) | mem[at(addr) + i];
-      return v >>> 0;
-    },
-    write: (addr, value, width) => {
-      for (let i = 0; i < width / 8; i++) mem[at(addr) + i] = (value >>> (8 * i)) & 0xff;
-    },
-    bytes: (addr, len) => mem.subarray(at(addr), at(addr) + len),
-  };
-  let listeners: (() => void)[] = [];
-  const emu: EmulatorLike = {
-    ...ram,
-    onFrame(l: () => void) {
-      listeners.push(l);
-      return () => {
-        listeners = listeners.filter((x) => x !== l);
-      };
-    },
-  };
-
-  const romInit = () => {
-    ram.write(base + MAILBOX.OFF_PROTOCOL, PROTOCOL, 16);
-    ram.write(base + MAILBOX.OFF_PATCH, 1, 16);
-    ram.write(base + MAILBOX.OFF_SIZE, MAILBOX.SIZE, 16);
-    ram.write(base + MAILBOX.OFF_MAGIC, MAILBOX.MAGIC, 16);
-  };
-
-  // As if the ROM's own BrNet had produced this message into the out-ring.
-  const romEmit = (msg: Msg): void => {
-    for (const slot of packSlot(msg)) {
-      const head = ram.read(base + MAILBOX.OFF_OUT_HEAD, 16);
-      const tail = ram.read(base + MAILBOX.OFF_OUT_TAIL, 16);
-      if (((head - tail) & 0xffff) >= MAILBOX.RING_SLOTS) throw new Error('out ring full in test setup');
-      const addr = base + MAILBOX.OFF_OUT + (head % MAILBOX.RING_SLOTS) * MAILBOX.SLOT_BYTES;
-      ram.write(addr, slot.type, 8);
-      ram.write(addr + 1, slot.payload.length, 8);
-      ram.bytes(addr + 2, slot.payload.length).set(slot.payload);
-      ram.write(base + MAILBOX.OFF_OUT_HEAD, (head + 1) & 0xffff, 16);
-    }
-  };
-
-  // As if the ROM had drained up to `budget` slots off the in-ring.
-  const romDrainIn = (budget: number = MAILBOX.RING_SLOTS): BinarySlot[] => {
-    const out: BinarySlot[] = [];
-    let tail = ram.read(base + MAILBOX.OFF_IN_TAIL, 16);
-    const head = ram.read(base + MAILBOX.OFF_IN_HEAD, 16);
-    while (tail !== head && budget-- > 0) {
-      const addr = base + MAILBOX.OFF_IN + (tail % MAILBOX.RING_SLOTS) * MAILBOX.SLOT_BYTES;
-      const type = ram.read(addr, 8);
-      const len = ram.read(addr + 1, 8);
-      out.push({ type, payload: ram.bytes(addr + 2, len).slice() });
-      tail = (tail + 1) & 0xffff;
-      ram.write(base + MAILBOX.OFF_IN_TAIL, tail, 16);
-    }
-    return out;
-  };
-
-  const frame = () => {
-    for (const l of listeners.slice()) l();
-  };
-
-  return { emu, frame, romInit, romEmit, romDrainIn, ram };
-}
 
 function decodeReassembled(slots: BinarySlot[]): Msg {
   const r = reassembleSlots(slots);
