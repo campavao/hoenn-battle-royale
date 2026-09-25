@@ -31,7 +31,7 @@ Client -> server:
 | `set_max` | `max` | host only: room size, live |
 | `set_pass` | `pass` | host only: passcode, live; empty/absent clears it |
 | `set_skin` | `skin` | what this member looks like, live |
-| `list_rooms` | | `rooms {rooms:[...]}`: every joinable lobby |
+| `list_rooms` | `patch?, protocol?` | `rooms {rooms:[...]}`: every joinable lobby. Inside the half hour before the DAILY GAME its row leads, and describes the daily this client's `daily_join` would land in: its own build's lobby (code, players), none yet (`code: ""`), or no row while its build's daily match runs |
 | `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?, token?` | `room_joined {code, id, host, token}` or `room_error {reason}`. With a `token` naming a seat the room is still holding (a socket that dropped within `rejoinMs`, 60 s), the same `id` comes back whatever the door says -- locked, full or passcoded -- and the token is spent (POK-284). A token whose socket the relay still has (a page that gave up on a half-open one) takes the seat over, host and all, and the old socket is closed. A member who sent `leave_room` or was removed is not held |
 | `stat` | `id, v, solo, since` | play counter; logged, counted, never answered |
 | `lock_room` | `locked, bots?` | host only: refuse new joiners (match in progress). `bots`: the seats the host dealt its bots, never handed to a member until the unlock |
@@ -92,7 +92,8 @@ When both sides said something and it disagrees, a door you named
 `room_error {reason: "version", host: {patch, protocol}}`. A door the relay
 picks for you walks past the room instead: `quick_join` takes the fullest room
 of your own build (or answers `no_open_rooms`, and you host), and `daily_join`
-seats you in the daily of your own build, opening one if there is none. Right
+seats you in the daily of your own build, opening one if there is none (and
+`list_rooms`, asked with the same pair, gives its DAILY row that daily). Right
 after a deploy the fullest room is often the old build's, and telling an
 up-to-date player to reload cannot help them. Either side saying nothing (an
 older client, or one that opts out) skips the check entirely -- nobody is

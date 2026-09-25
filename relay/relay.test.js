@@ -2275,3 +2275,69 @@ test("a watcher is never the heir: the room waits for its host rather than hand 
     p.end(); w.end();
   });
 });
+
+// The DAILY row took the first unlocked daily of any build for its code and count, and
+// went missing while any build's daily ran: right after a deploy, the old build's.
+test("the DAILY row is the daily this browser's press would land in, by its own build (POK-331 #14)", async () => {
+  const relay = createRelay({ daily: dailyIn(20) });
+  const addr = await relay.listen(0, "127.0.0.1");
+  const ours = { patch: F.list_rooms.patch, protocol: F.list_rooms.protocol };
+  const theirs = { patch: F.join_room_other_build.patch, protocol: 1 };
+  const row = async (c, version) => {
+    c.send({ type: "list_rooms", ...version });
+    return (await c.until("rooms")).rooms.find((r) => r.daily);
+  };
+  // the relay sees a socket go when it sees it: ask until the row says so
+  const rowWhere = async (c, version, pred) => {
+    for (let i = 0; i < 100; i++) {
+      const r = await row(c, version);
+      if (pred(r)) return r;
+    }
+    assert.fail("the row never changed");
+  };
+  try {
+    // the old build's daily is running
+    const old = await connect(addr.port);
+    old.send({ type: "daily_join", name: "OLD", ...theirs });
+    await old.until("room_hosted");
+    old.send({ type: "lock_room", locked: true });
+    await old.settled();
+
+    const seeker = await connect(addr.port);
+    const fresh = await row(seeker, ours);
+    assert.ok(fresh, "not ours: our press opens a daily of our own, so the row is there");
+    assert.equal(fresh.code, "");
+    assert.equal(fresh.players, 0);
+    assert.equal(await row(seeker, theirs), undefined, "theirs is running");
+
+    // ours opens, and the row names it to us, not to them
+    const early = await connect(addr.port);
+    early.send({ type: "daily_join", name: "EARLY", ...ours });
+    const hosted = await early.until("room_hosted");
+    const named = await row(seeker, ours);
+    assert.equal(named.code, hosted.code);
+    assert.equal(named.players, 1);
+    assert.equal(await row(seeker, theirs), undefined);
+
+    // its host drops: its lobby still takes the press (POK-330 #47 review), so the
+    // row still names it
+    early.end();
+    assert.equal((await rowWhere(seeker, ours, (r) => r.players === 0)).code, hosted.code);
+    seeker.send({ type: "daily_join", name: "SEEKER", ...ours });
+    assert.equal((await seeker.until("room_joined")).code, hosted.code);
+    seeker.send({ type: "can_host", ok: true });
+    await rosterWhere(seeker, (r) => r.host !== 1);
+
+    // and once ours runs, host or no host, the press is a watch: no row
+    seeker.send({ type: "lock_room", locked: true });
+    await seeker.settled();
+    seeker.end();
+    const late = await connect(addr.port);
+    await rowWhere(late, ours, (r) => r === undefined);
+    late.send({ type: "daily_join", name: "LATE", ...ours });
+    assert.equal((await late.until("match_in_progress")).code, hosted.code);
+    for (const c of [old, late]) c.end();
+  } finally {
+    await relay.close();
+  }
+});

@@ -29,8 +29,8 @@
 //                                         quick_join, and joined only with
 //                                         the matching `pass`
 //   {type:"set_skin", skin}               what this member looks like, live
-//   {type:"list_rooms"}                -> rooms {rooms:[{code, host, skin,
-//                                         players, seats, pass, full}]}: every
+//   {type:"list_rooms", patch?,        -> rooms {rooms:[{code, host, skin,
+//         protocol?}                      players, seats, pass, full}]}: every
 //                                         lobby a stranger may walk into --
 //                                         open, not mid-match, not the daily.
 //                                         `players` counts trainers, never
@@ -42,7 +42,9 @@
 //                                         unbound sweep.  Inside the half hour
 //                                         before the DAILY GAME its row leads
 //                                         the list: {host:"DAILY", daily:true,
-//                                         secs, code: the room's or ""}
+//                                         secs, code: the room's or ""} -- the
+//                                         daily this browser's press would
+//                                         land in, by its own patch/protocol
 //   {type:"join_room", code, name,     -> room_joined {code, id, host}, or
 //         spectate?, pass?, skin?,        room_error {reason}; spectate:true
 //         patch?, protocol?}              enters a LOCKED room as a watcher
@@ -894,6 +896,24 @@ export function createRelay(options = {}) {
     return null;
   }
 
+  // Where a press of the DAILY GAME puts `conn` (POK-161 v2): `open`, the
+  // first daily lobby of its build that would seat it, else `running`, the
+  // first daily match of its build it could watch -- and neither is the press
+  // opening one.  daily_join acts on it and list_rooms' row describes it, so
+  // the row is always the press (POK-331 #14).  A daily match already running
+  // is watched, like quick play's, and one running while its host is away is
+  // still running (POK-330 #47 review): canEnter lets its watchers in, so it
+  // is not a reason to open a second daily beside it.
+  function dailyDoor(conn, version) {
+    let open = null, running = null;
+    for (const room of rooms.values()) {
+      if (!room.daily || canEnter(room, conn, { version, spectate: room.locked }) !== null) continue;
+      if (room.locked) running = running || room;
+      else open = open || room;
+    }
+    return { open, running };
+  }
+
   // canEnter's answer, said to the client that asked; a version refusal says
   // what the room runs, so the page can tell its player which of them is stale
   function refuse(conn, room, why) {
@@ -983,17 +1003,19 @@ export function createRelay(options = {}) {
         // promise the room.  `secs` is the countdown; picking it is
         // daily_join, which creates the room or seats you in it.  A
         // daily match already running is a locked room: no row.
+        //
+        // The row is the press (POK-331 #14): the daily daily_join would
+        // put THIS browser in, by its own build (`patch`/`protocol`, as
+        // every door is asked).  It took the first unlocked daily of any
+        // build for its code and count, and vanished while any daily of
+        // any build ran.
         if (daily) {
           const secs = dailySecondsUntil(daily);
-          let waiting = null, running = false;
-          for (const room of rooms.values()) {
-            if (!room.daily) continue;
-            if (room.locked) running = true; else waiting = waiting || room;
-          }
-          if (secs <= limits.dailyListSecs && !running) {
-            list.unshift({ code: waiting ? waiting.code : "", host: "DAILY",
+          const { open, running } = dailyDoor(conn, cleanVersion(msg));
+          if (secs <= limits.dailyListSecs && (open || !running)) {
+            list.unshift({ code: open ? open.code : "", host: "DAILY",
                            daily: true, secs,
-                           players: waiting ? waiting.trainerCount() : 0,
+                           players: open ? open.trainerCount() : 0,
                            seats: limits.seats, pass: false });
           }
         }
@@ -1008,18 +1030,7 @@ export function createRelay(options = {}) {
       // a lobby that starts at 7pm is the opposite of "a game right now".
       case "daily_join": {
         if (conn.room) { conn.send({ type: "room_error", reason: "already_in_room" }); return; }
-        let open = null, running = null;
-        for (const room of rooms.values()) {
-          if (!room.daily) continue;
-          // a daily match already running is watched, like quick play's, and
-          // one running while its host is away is still running (POK-330 #47
-          // review): canEnter lets its watchers in (POK-331 #14), so it is not
-          // a reason to open a second daily beside it
-          const why = canEnter(room, conn, { version: cleanVersion(msg), spectate: room.locked });
-          if (why !== null) continue;
-          if (room.locked) running = running || room;
-          else open = open || room;
-        }
+        const { open, running } = dailyDoor(conn, cleanVersion(msg));
         if (open) {
           admit(conn, open, msg, "joined the daily");
           return;

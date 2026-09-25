@@ -543,9 +543,12 @@ export class RelayClient {
   }
 
   /** Asks for the open rooms. The answer arrives as a `rooms` event; the lobby asks
-   *  again every few seconds, which is also what marks this connection as browsing. */
-  listRooms(): void {
-    this.send({ type: 'list_rooms' });
+   *  again every few seconds, which is also what marks this connection as browsing.
+   *  `version` is this tab's, as every door is asked with (HostOpts.patch): the DAILY
+   *  row describes the daily a press would land us in, which is our own build's
+   *  (POK-331 #14). */
+  listRooms(version?: { patch?: string; protocol?: number }): void {
+    this.send({ type: 'list_rooms', patch: version?.patch, protocol: version?.protocol });
   }
 
   /** A game right now: the relay seats you in the fullest open room, or names a

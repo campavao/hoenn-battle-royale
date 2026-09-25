@@ -343,7 +343,11 @@ describe('RelayClient', () => {
     relay.quickJoin({ name: 'QUICK', skin: 'SPRITE_MAY', ...version });
     relay.dailyJoin({ name: 'DAILY', skin: 'SPRITE_MAY', ...version });
     relay.join('CODE', { name: 'OLDPAGE' });
-    expect(sockets[0].sent).toEqual([F.host_room, F.join_room, F.watch_other_build, F.quick_join, F.daily_join, F.join_room_unversioned]);
+    // ...and the list, whose DAILY row is the daily of our own build (POK-331 #14)
+    relay.listRooms(version);
+    expect(sockets[0].sent).toEqual([
+      F.host_room, F.join_room, F.watch_other_build, F.quick_join, F.daily_join, F.join_room_unversioned, F.list_rooms,
+    ]);
     expect(F.host_room.patch).toMatch(/^[0-9a-f]{40}$/); // a ROM's sha1, not a patch number
 
     const error = vi.fn();

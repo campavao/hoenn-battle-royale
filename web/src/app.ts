@@ -2550,8 +2550,9 @@ const LOBBY_REFRESH_MS = 5000;
 
 /** Kanto's one screen: every way into a match is a row on it. Resolves with the choice,
  *  having closed the browsing socket first -- SOLO VS BOTS must reach the ROM with no
- *  connection open, which is the whole point of it. */
-function runLobby(): Promise<RoomHash> {
+ *  connection open, which is the whole point of it. `version` is the tab's, which the
+ *  list is asked with: its DAILY row is our own build's daily (POK-331 #14). */
+function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomHash> {
   showScreen('lobby');
   const stage = theStage();
   const relay = new RelayClient();
@@ -2726,7 +2727,7 @@ function runLobby(): Promise<RoomHash> {
         online = up;
         redraw();
       }
-      if (up) relay.listRooms();
+      if (up) relay.listRooms(version);
     };
     setTimeout(beat, 200);
     timer = setInterval(beat, LOBBY_REFRESH_MS);
@@ -2929,7 +2930,7 @@ async function main(): Promise<void> {
   }
   const fromHash = parseRoomHash();
   let roomHash = fromHash;
-  if (!roomHash) roomHash = await runLobby();
+  if (!roomHash) roomHash = await runLobby({ patch, protocol });
   if (roomsRefused && roomHash.mode !== 'solo') return refuseRoom(roomsRefused);
   const bootMode = bootModeFor(roomHash.mode);
 
