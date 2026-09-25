@@ -298,7 +298,8 @@ jobs:
   # no-ROM check after it. None of it reads public/patch (the unit tests stub the
   # sidecars) and the core it types against is the tracked web/public/emu, so it needs
   # no other job. It used to wait on rom + wasm, and a red ROM build -- nine days of
-  # them in September -- meant the 576 unit tests never ran at all.
+  # them in September -- meant the 576 unit tests never ran at all. The one build
+  # output it does need, map_groups.h, it makes itself (the step before the tests).
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -316,6 +317,18 @@ jobs:
 
       - working-directory: web
         run: npm run typecheck
+
+      # bosses.test.ts reads include/constants/map_groups.h raw. `make` generates it
+      # from data/maps/map_groups.json and git ignores it, so on this bare checkout the
+      # suite failed to load on every push while passing on any machine that had built.
+      # One generator, not the build: mapjson is plain C++ and g++ is on the runner.
+      # web/scripts/ci-inputs.test.ts fails a raw import that is neither tracked nor
+      # named here.
+      - name: Generate map_groups.h
+        run: |
+          make -C tools/mapjson
+          tools/mapjson/mapjson groups emerald data/maps/map_groups.json data/maps include/constants
+          test -s include/constants/map_groups.h
 
       - working-directory: web
         run: npm test

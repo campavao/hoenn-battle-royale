@@ -1,0 +1,51 @@
+# ring-band: what the ROM's 256x256 tile ring holds around the LCD (POK-319). The LCD is
+# at BG VOFS 40 at rest, so ring rows 0..4 (tiles) are the 40 pixels the core draws
+# above the picture and rows 25..31 the 56 below; every one of them should hold a tile.
+# The scroll registers are write-only on hardware; mGBA keeps what was written.
+# Which map is where: BG2CNT names screen block 28 (0x0600E000), the middle layer a
+# normal metatile's bottom half is drawn to; BG1CNT 29 (0xE800), the top layer over the
+# sprites, 0 where no metatile has one; BG3CNT 30 (0xF000). See the bgcnt dump.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 09 00 BD BB C7 FF
+wait 400
+say pos
+dump *gSaveBlock1Ptr 4
+say bgcnt-and-scroll
+dump 0x04000008 24
+say bg2-tilemap-row0
+dump 0x0600E000 64
+say bg2-tilemap-row4
+dump 0x0600E100 64
+say bg2-tilemap-row5-lcd-top
+dump 0x0600E140 64
+say bg2-tilemap-row24
+dump 0x0600E600 64
+say bg2-tilemap-row25
+dump 0x0600E640 64
+say bg2-tilemap-row30
+dump 0x0600E780 64
+say bg2-tilemap-row31
+dump 0x0600E7C0 64
+say bg1-tilemap-row0
+dump 0x0600E800 64
+say bg1-tilemap-row31
+dump 0x0600EFC0 64
+say bg3-tilemap-row0
+dump 0x0600F000 64
+say bg3-tilemap-row31
+dump 0x0600F7C0 64
+# Column 0 of every ring row off the LCD, on the middle layer: this map's left edge is
+# trees, so each is a tile, and a row the field never drew is 0.
+expectne u16 0x0600E000 0
+expectne u16 0x0600E040 0
+expectne u16 0x0600E080 0
+expectne u16 0x0600E0C0 0
+expectne u16 0x0600E100 0
+expectne u16 0x0600E640 0
+expectne u16 0x0600E680 0
+expectne u16 0x0600E6C0 0
+expectne u16 0x0600E700 0
+expectne u16 0x0600E740 0
+expectne u16 0x0600E780 0
+expectne u16 0x0600E7C0 0
+say ok
