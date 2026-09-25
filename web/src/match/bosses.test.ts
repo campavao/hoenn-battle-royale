@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import mapGroups from '../../../include/constants/map_groups.h?raw';
+import mapGroups from '../../../data/maps/map_groups.json';
 import gymSource from '../../../src/br/br_gym.c?raw';
 import { bossAt, BOSSES } from './bosses';
 import { felled, LINE_MAX } from './ticker';
@@ -10,6 +10,10 @@ const MAPS = import.meta.glob('../../../data/maps/*_Gym*/map.json', { eager: tru
   string,
   { id: string; object_events: { script: string }[] }
 >;
+
+/** map_groups.h is made from map_groups.json by the build, and CI's web job runs no make:
+ *  a map's group is its group's place in group_order, and its num its place in the group. */
+const GROUPS = mapGroups as unknown as { group_order: string[] } & Record<string, string[]>;
 
 function mapFor(dir: string) {
   const key = Object.keys(MAPS).find((k) => k.endsWith(`/${dir}/map.json`));
@@ -27,9 +31,9 @@ describe('the gym leaders the page announces', () => {
   it('stand where the table says, on the map it says', () => {
     for (const boss of BOSSES) {
       const map = mapFor(boss.dir);
-      const ids = new RegExp(`${map.id}\\s*=\\s*\\((\\d+) \\| \\((\\d+) << 8\\)\\)`).exec(mapGroups);
-      expect(ids, map.id).not.toBeNull();
-      expect({ group: Number(ids![2]), num: Number(ids![1]) }).toEqual(boss.map);
+      const group = GROUPS.group_order.findIndex((g) => GROUPS[g].includes(boss.dir));
+      expect(group, map.id).toBeGreaterThanOrEqual(0);
+      expect({ group, num: GROUPS[GROUPS.group_order[group]].indexOf(boss.dir) }).toEqual(boss.map);
       // A local id is the object's place in the list, from 1.
       const found = map.object_events
         .map((o, i) => (o.script.endsWith(`EventScript_${boss.leader}`) ? i + 1 : 0))

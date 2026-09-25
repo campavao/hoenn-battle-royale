@@ -32,6 +32,7 @@ import { NpcFog } from './match/npcfog';
 import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
 import { clockLeftAt, onRefused, ringClockLeft } from './match/room';
 import { Stage } from './ui/stage';
+import { drawerKey, drawerLabel, stageKey } from './ui/roomkeys';
 import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
 import {
   canStart,
@@ -126,6 +127,8 @@ const BR_BOOT_FLAG_TESTMON = 0x80;
 const MALE = 0;
 const FEMALE = 1;
 const LITTLEROOT = { group: 0, num: 9, x: 5, y: 8 };
+/** `struct BrBoot` (include/br/br_boot.h): where writeBootBlock puts each field. */
+const BOOT_AT = { mode: 0, gender: 1, mapGroup: 2, mapNum: 3, x: 4, y: 6, name: 8 };
 
 /** One of the page's own elements. Throws with the selector rather than handing back a
  *  null dressed as an element: POK-320 removed a button and solo fell over on it with a
@@ -1009,15 +1012,15 @@ function writeBootBlock(
   skin = 0,
 ): void {
   const boot = mailboxBase + MAILBOX.OFF_BOOT;
-  emu.write(boot + 0, mode, 8);
+  emu.write(boot + BOOT_AT.mode, mode, 8);
   // The four sprites are BRENDAN, MAY, RIVAL BRENDAN, RIVAL MAY -- the odd ones are
   // the girls, and the player's own avatar should be what they picked for their ghost.
-  emu.write(boot + 1, skin % 2 === 1 ? FEMALE : MALE, 8);
-  emu.write(boot + 2, LITTLEROOT.group, 8);
-  emu.write(boot + 3, LITTLEROOT.num, 8);
-  emu.write(boot + 4, LITTLEROOT.x, 16);
-  emu.write(boot + 6, LITTLEROOT.y, 16);
-  const nameField = emu.bytes(boot + 8, 8);
+  emu.write(boot + BOOT_AT.gender, skin % 2 === 1 ? FEMALE : MALE, 8);
+  emu.write(boot + BOOT_AT.mapGroup, LITTLEROOT.group, 8);
+  emu.write(boot + BOOT_AT.mapNum, LITTLEROOT.num, 8);
+  emu.write(boot + BOOT_AT.x, LITTLEROOT.x, 16);
+  emu.write(boot + BOOT_AT.y, LITTLEROOT.y, 16);
+  const nameField = emu.bytes(boot + BOOT_AT.name, MAILBOX.BOOT_BYTES - BOOT_AT.name);
   nameField.fill(0xff); // EOS (include/constants/characters.h) pads whatever the name doesn't fill
   nameField.set(encodeGen3(name, 7));
 }
@@ -1042,31 +1045,54 @@ function setRoomHash(key: RoomMode, value?: string): void {
  *  loop's redraw every tick would otherwise quietly take the host's KICK away again. */
 let roomKick: RelayClient | null = null;
 
+/** What the room views last showed, so the spectate loop's call every 500 ms redraws
+ *  only on a change: a list rebuilt under a finger mid-tap loses the tap (POK-330 #33). */
+let roomDrawn: { bridge: Bridge; list: string; stage: string } | null = null;
+
+/** Whose card the drawn room has open, for its key (ui/roomkeys.ts). Set by wireRoom. */
+let roomCardSeat: () => number | null = () => null;
+
 /** The room, as everybody in it sees it. */
 function renderRoom(bridge: Bridge): void {
-  const canKick = roomKick !== null;
-  const relay = roomKick;
   const list = $('#match-roster') as HTMLElement;
   const card = $('#match-card') as HTMLElement;
+  const entries = bridge.roster.all();
+  // A card left open on somebody who has gone is a card about nobody.
+  if (card.dataset.seat && !entries.some((e) => String(e.seat) === card.dataset.seat)) {
+    card.hidden = true;
+    card.dataset.seat = '';
+  }
+  // Each view keyed on what it shows. Walking is in neither: in a match every seat walks,
+  // and a list keyed on the map is rebuilt on most ticks.
+  const nameOf = (seat: number) => bridge.roster.nameOf(seat);
+  const listKey = drawerKey(entries, nameOf);
+  const stageAt = stageKey(entries, nameOf, roomCardSeat());
+  const last = roomDrawn?.bridge === bridge ? roomDrawn : null;
+  roomDrawn = { bridge, list: listKey, stage: stageAt };
+  // The drawn room shows the same people (POK-320).
+  if (last?.stage !== stageAt) stage?.redraw();
+  if (last?.list === listKey) return;
   list.innerHTML = '';
-  for (const entry of bridge.roster.all()) {
+  for (const entry of entries) {
     const li = document.createElement('li');
-    const label = bridge.roster.nameOf(entry.seat);
     // A name is a button now (POK-268): Kanto's drawn lobby opens a trainer's card on
     // A, and this is the same idea in the shape this front end has.
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'roster-name';
-    button.textContent = `${label}${entry.isMe ? ' (you)' : ''}${entry.alive ? '' : ' -- OUT'}`;
+    button.textContent = drawerLabel(entry, nameOf(entry.seat));
     button.addEventListener('click', () => {
       if (card.dataset.seat === String(entry.seat) && !card.hidden) {
         card.hidden = true;
         card.dataset.seat = '';
         return;
       }
-      const mapId = entry.map ? mapIdOf(entry.map) : undefined;
+      // The list outlives the entries it was drawn from: the card is of them as they are now.
+      const now = bridge.roster.get(entry.seat) ?? entry;
+      const relay = roomKick;
+      const mapId = now.map ? mapIdOf(now.map) : undefined;
       card.innerHTML = '';
-      for (const line of cardFor(entry, mapId)) {
+      for (const line of cardFor(now, mapId)) {
         const row = document.createElement('div');
         row.className = 'card-line';
         row.textContent = line.label ? `${line.label}: ${line.value}` : line.value;
@@ -1074,7 +1100,7 @@ function renderRoom(bridge: Bridge): void {
       }
       // The host's one power over another seat, and it lives on the card rather than
       // as a row of buttons beside every name (POK-241).
-      if (canKick && relay && !entry.isMe) {
+      if (relay && !now.isMe) {
         const kick = document.createElement('button');
         kick.type = 'button';
         kick.className = 'card-kick';
@@ -1092,13 +1118,6 @@ function renderRoom(bridge: Bridge): void {
     li.appendChild(button);
     list.appendChild(li);
   }
-  // A card left open on somebody who has gone is a card about nobody.
-  if (card.dataset.seat && !bridge.roster.all().some((e) => String(e.seat) === card.dataset.seat)) {
-    card.hidden = true;
-    card.dataset.seat = '';
-  }
-  // The drawn room shows the same people (POK-320).
-  stage?.redraw();
 }
 
 /** world.json's id for a wire MapRef, for the places a card names. */
@@ -2002,6 +2021,7 @@ function wireRoom(
     startAt: null as number | null,
     onStart: () => {},
   };
+  roomCardSeat = () => room.card?.seat ?? null;
   const stage = theStage();
   // The same status and note in the drawer, where they stay through the match (the room
   // screen comes down when it starts): what the strip sits under, and what a test reads.

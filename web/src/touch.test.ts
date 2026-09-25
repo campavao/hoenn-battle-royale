@@ -160,3 +160,106 @@ describe('a tap on a battle menu walks the cursor there and presses A', () => {
     expect(emu.held).toBe(0);
   });
 });
+
+// ---- a tap in the field, against a fake ROM ------------------------------------------
+//
+// Littleroot at (10, 10), where every tile round about is open ground. What is under
+// test is which tile a pixel is: field.ts measured the pos tile at picture (112, 72) at
+// rest, and mid-step the picture runs up to a tile behind the pos, which has already
+// moved (field.test.ts has both).
+
+class FieldEmu {
+  held = 0;
+  pressed: GbaKey[] = [];
+  camera = { x: 10, y: 10, subX: 0, subY: 0 };
+  /** gBrOwnPos: object-event coordinates, MAP_OFFSET on. */
+  own = { x: 17, y: 17, dir: 1 };
+  private listeners: (() => void)[] = [];
+  press(k: GbaKey) {
+    this.held |= 1 << KEY_BIT[k];
+    this.pressed.push(k);
+  }
+  release(k: GbaKey) { this.held &= ~(1 << KEY_BIT[k]); }
+  keys() { return this.held; }
+  onFrame(l: () => void) { this.listeners.push(l); return () => {}; }
+  read(addr: number): number {
+    switch (addr) {
+      case 5000: return 6000; // gSaveBlock1Ptr
+      case 6000: return this.camera.x & 0xffff; // ->pos
+      case 6002: return this.camera.y & 0xffff;
+      case 6004: return 0; // ->location: MAP_LITTLEROOT_TOWN is group 0 ...
+      case 6005: return 9; // ... num 9
+      case 7016: return this.camera.subX >>> 0; // gFieldCamera.x
+      case 7020: return this.camera.subY >>> 0;
+      case 8000: return 0; // gBrOwnPos
+      case 8001: return 9;
+      case 8002: return this.own.x;
+      case 8004: return this.own.y;
+      case 8006: return this.own.dir;
+      default: return 0; // gMain.inBattle among them: not in a battle
+    }
+  }
+  frame() {
+    for (const l of this.listeners) l();
+  }
+}
+
+function fieldLayer(emu: FieldEmu) {
+  const canvas = { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 240, height: 160 }) } as unknown as HTMLCanvasElement;
+  const symbols = new Map([['gMain', 0], ['gSaveBlock1Ptr', 5000], ['gFieldCamera', 7000], ['gBrOwnPos', 8000]]);
+  const t = new TouchLayer({ emu: emu as never, canvas, symbols });
+  t.attach();
+  return (x: number, y: number) => (t as unknown as { tap(x: number, y: number): void }).tap(x, y);
+}
+
+describe('a tap in the field is the tile the picture shows there (POK-330 #34)', () => {
+  it('y 74 is our own tile: the pos tile is 72..87 down the picture, not 80..95', () => {
+    const emu = new FieldEmu();
+    const tap = fieldLayer(emu);
+    tap(120, 74);
+    for (let i = 0; i < 10; i++) emu.frame();
+    expect(emu.pressed, 'nothing to walk to').toEqual([]);
+  });
+
+  it('y 90 is the tile south of us, and a walk there starts', () => {
+    const emu = new FieldEmu();
+    const tap = fieldLayer(emu);
+    tap(120, 90);
+    emu.frame();
+    expect(emu.pressed).toEqual(['down']);
+  });
+
+  it('mid-step the pixel is on the tile the picture is still showing', () => {
+    // A step south, four pixels in: the pos (and our own tile) is already 11, and the
+    // picture is 12 px short of it. y 97 was the tile south of the one we stand on at
+    // rest; here it is the one we are stepping onto.
+    const emu = new FieldEmu();
+    emu.camera = { x: 10, y: 11, subX: 0, subY: 4 };
+    emu.own = { x: 17, y: 18, dir: 1 };
+    const tap = fieldLayer(emu);
+    tap(120, 97);
+    for (let i = 0; i < 10; i++) emu.frame();
+    expect(emu.pressed).toEqual([]);
+
+    const atRest = new FieldEmu();
+    fieldLayer(atRest)(120, 97);
+    atRest.frame();
+    expect(atRest.pressed).toEqual(['down']);
+  });
+
+  it("the picture on screen is last frame's camera, and a tap is on what it shows", () => {
+    const emu = new FieldEmu();
+    const tap = fieldLayer(emu);
+    emu.frame();
+    emu.frame(); // at rest, and on screen
+    // The step south starts: the struct moves this frame, the picture next frame.
+    emu.camera = { x: 10, y: 11, subX: 0, subY: 4 };
+    emu.own = { x: 17, y: 18, dir: 1 };
+    emu.frame();
+    // On the picture still up, y 101 is tile 11 -- the one we are stepping onto. The
+    // struct's camera would put it on 12, a tile past us.
+    tap(120, 101);
+    for (let i = 0; i < 10; i++) emu.frame();
+    expect(emu.pressed).toEqual([]);
+  });
+});
