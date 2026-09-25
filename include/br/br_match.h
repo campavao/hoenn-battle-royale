@@ -49,6 +49,9 @@ void BrMatch_Init(void);
 void BrMatch_Tick(void);
 // InitHeap is resetting the heap: drop the half-assembled START buffer that lived there.
 void BrMatch_HeapReset(void);
+// The spawn the START dealt our seat, or NULL: none yet, or gBrMySeat is past the board
+// (a spectator's, and never an index).
+const struct BrSpawn *BrMatch_MySpawn(void);
 // Where in the Safari Zone this ROM starts the opening: which of the six areas (a map
 // number in group 26) and which cell of it, dealt from the match seed and our seat so a
 // room spreads over the whole Zone instead of piling up on one tile.

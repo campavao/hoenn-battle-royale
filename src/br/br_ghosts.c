@@ -329,9 +329,11 @@ void BrGhosts_Face(u8 seat, u8 dir)
 
 void BrGhosts_Remove(u8 seat)
 {
-    gBrSeatBusy[seat] = BR_BUSY_MAP;
+    // The bound comes first. It came after the write, and a PLACE for seat 41 with no
+    // map zeroed gBrMySeat, which sits 41 bytes past gBrSeatBusy (POK-330 #6).
     if (seat >= BR_MAX_SEATS)
         return;
+    gBrSeatBusy[seat] = BR_BUSY_MAP;
     Despawn(seat);
     gBrSeats[seat].present = FALSE;
 }

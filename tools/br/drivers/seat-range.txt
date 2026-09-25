@@ -1,0 +1,46 @@
+# seat-range: a seat past the board is nobody's, in every handler (POK-330 #6).
+#
+# The relay handed out seat ids with no ceiling, and the ROM trusted the page to keep
+# them under 32. Three places did not hold up on their own:
+#
+#   - BrGhosts_Remove wrote gBrSeatBusy[seat] BEFORE its bound, and gBrMySeat sits 41
+#     bytes past gBrSeatBusy: a PLACE for seat 41 with no map zeroed our own seat.
+#   - HandleChallenge used both seats unchecked, as gBrSeats[] indexes -- a CHALLENGE
+#     naming seat 200 opened a link session with it.
+#   - gBrMySeat itself is written by the page, clamped only to a byte, and indexed the
+#     32-row haveSpawn/spawns: seat 32 read seat 0's map group as "have a spawn" and
+#     warped to a row past the end of gBrMatch. Past the board is a spectator: unseated.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMySeat 3
+# PLACE seat 41, no map: type 2, framed len 14 = hdr(0B 00 00) + 11 bytes
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 29 00 00 00 00 00 00 00 01 00 00
+# CHALLENGE us (3) -> seat 200: type 5, framed len 7 = hdr(04 00 00) + 4 bytes
+pokebytes gBrMailbox+0x1058 05 07 04 00 00 03 C8 00 00
+# CHALLENGE seat 200 -> us
+pokebytes gBrMailbox+0x1098 05 07 04 00 00 C8 03 00 00
+# CHALLENGE us -> us
+pokebytes gBrMailbox+0x10D8 05 07 04 00 00 03 03 00 00
+poke u16 gBrMailbox+0x0C 4
+wait 30
+expect u16 gBrMailbox+0x0E 4
+expect u8 gBrMySeat 3
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+16 0xFF
+shot no-battle
+# Unseated: seat 32, and a START whose one row is seat 0's, on map 1:0. Seat 0's map
+# group is the byte haveSpawn[32] used to read, so the old code warped us somewhere past
+# the end of the spawn table. Now nobody is dealt to us and we stay in the lobby.
+poke u8 gBrMySeat 32
+# START: type 14, framed len 21 = hdr(12 00 00) + 18 bytes: seed, count 1, safari 0,
+# fog 0, pace 0, then the row: seat 0, map 1:0, x 10, y 8, out 0
+pokebytes gBrMailbox+0x1118 0E 15 12 00 00 78 56 34 12 01 00 00 00 00 00 00 01 00 0A 00 08 00 00
+poke u16 gBrMailbox+0x0C 5
+wait 200
+expect u8 gBrMatch+1 1
+expect u8 gBrMatch 0
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+shot still-in-the-lobby
+say seat range ok

@@ -154,9 +154,9 @@ static void DropWithoutTheHost(void)
     gBrPick.active = FALSE;
     gBrPick.landed = FALSE;
     gBrPick.waited = 0;
-    if (gBrMatch.haveSpawn[gBrMySeat])
+    if (BrMatch_MySpawn() != NULL)
     {
-        struct BrSpawn *sp = &gBrMatch.spawns[gBrMySeat];
+        const struct BrSpawn *sp = BrMatch_MySpawn();
 
         SetWarpDestination(sp->mapGroup, sp->mapNum, WARP_ID_NONE, sp->x, sp->y);
         WarpIntoMap();

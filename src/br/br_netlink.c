@@ -121,6 +121,10 @@ static void HandleChallenge(const u8 *payload, u8 len)
 
     if (n < 4 || gBrNetlink.active)
         return;
+    // Both seats index gBrSeats (the peer's skin, the ghost the ! goes over), so both
+    // are on the board or the challenge is nobody's (POK-330 #6).
+    if (d[0] >= BR_MAX_SEATS || d[1] >= BR_MAX_SEATS || d[0] == d[1])
+        return;
     // A bot has no ROM to link with: if its party is already staged, this is a trainer
     // battle, not an exchange (POK-238).
     if (d[1] == gBrMySeat && BrBot_IsStaged(d[0]) && BrBot_StartFight(d[0]))

@@ -106,6 +106,16 @@ static void DoneWithStartBuffer(void)
     sStartAsm.type = 0;
 }
 
+// Our own dealt spawn, or NULL: none arrived for our seat, or we have no seat at all.
+// The page writes gBrMySeat straight into EWRAM and clamps it only to a byte, so a seat
+// past the board is a spectator's -- unseated -- and never an index (POK-330 #6).
+const struct BrSpawn *BrMatch_MySpawn(void)
+{
+    if (gBrMySeat >= BR_MAX_SEATS || !gBrMatch.haveSpawn[gBrMySeat])
+        return NULL;
+    return &gBrMatch.spawns[gBrMySeat];
+}
+
 static void HandleStart(const u8 *payload, u8 len)
 {
     if (sStartAsm.buf == NULL)
@@ -313,7 +323,7 @@ static void SendOut(void)
 
 void BrMatch_SafariOver(void)
 {
-    struct BrSpawn *sp;
+    const struct BrSpawn *sp;
 
     if (gBrMatch.phase != BR_PHASE_SAFARI)
         return;
@@ -334,9 +344,9 @@ void BrMatch_SafariOver(void)
     // the fallback -- for a driver, and for anyone the page never answers.
     if (BrPick_Start())
         return;
-    if (!gBrMatch.haveSpawn[gBrMySeat])
+    sp = BrMatch_MySpawn();
+    if (sp == NULL)
         return; // no deal yet; the page will place us with a later START
-    sp = &gBrMatch.spawns[gBrMySeat];
     SetWarpDestination(sp->mapGroup, sp->mapNum, WARP_ID_NONE, sp->x, sp->y);
     DoWarp();
 }
@@ -405,10 +415,10 @@ void BrMatch_Tick(void)
             DoWarp();
             BrMatch_BeginSafari();
         }
-        else if (gBrMatch.haveSpawn[gBrMySeat])
+        else if (BrMatch_MySpawn() != NULL)
         {
             // No opening: straight to the drop.
-            struct BrSpawn *sp = &gBrMatch.spawns[gBrMySeat];
+            const struct BrSpawn *sp = BrMatch_MySpawn();
 
             gBrMatch.phase = BR_PHASE_PLAY;
             SetWarpDestination(sp->mapGroup, sp->mapNum, WARP_ID_NONE, sp->x, sp->y);
