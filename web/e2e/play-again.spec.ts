@@ -46,6 +46,15 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
   await expect(card).toBeVisible();
   await expect(card).toContainText('RINGS');
 
+  // POK-330 #16: the host never hears its own messages back, and its own bots' `out`s
+  // went to the room and the director but not to its results, record or log -- so it
+  // placed itself against a field it never saw thin. The round it wrote down has every
+  // elimination the director counted: all but the winner.
+  const round = await page.evaluate(() => JSON.parse(localStorage.getItem('hbr:log') ?? '[]')[0]);
+  const outs = new Set((round.events as { t: string; seat?: number }[]).filter((e) => e.t === 'out').map((e) => e.seat));
+  expect(round.seats, 'bots filled the room').toBeGreaterThan(1);
+  expect(outs.size, 'every bot that went out is in the host\'s own log').toBeGreaterThanOrEqual(round.seats - 1);
+
   // Nothing is pressed from here. The grace is what has to move us.
   await expect(page.locator('#results-panel')).toBeHidden({ timeout: 60_000 });
 

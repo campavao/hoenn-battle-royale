@@ -2238,6 +2238,19 @@ function wireRoom(
       };
     };
     const seen = new Set<number>(); // seats already announced out, so a repeat is quiet
+    /** A message this page makes for the room: out to everybody else, into our own ROM,
+     *  and through the same bookkeeping every guest runs on it when it arrives. Nobody
+     *  hears their own messages back over the relay, so whatever is not done here never
+     *  happens on the host at all -- the results, the record and the round's log never
+     *  saw its own bots go out, and its placement was counted against a field that, as
+     *  far as they knew, never thinned (POK-330 #16). */
+    const hostSays = (msg: Msg) => {
+      bridge!.relay.all(msg);
+      rom.push(msg);
+      bridge!.roster.applyMsg(msg);
+      loot.note(msg); // a bot taking a ball takes it off this page's table too
+      noteResult(msg); // before the director hears an `out`, so its `win` comes after it
+    };
     // The host speaks for the bots as well as for the clock: same relay, same in-ring,
     // and its own roster too -- nobody hears their own messages come back, so the host
     // would otherwise be the one client that cannot see the bots it is walking.
@@ -2247,10 +2260,7 @@ function wireRoom(
         // are drawn from it, and a player's own `place` already arrives that way.
         const wire = toRomCells(msg);
 
-        bridge!.relay.all(wire);
-        rom.push(wire);
-        bridge!.roster.applyMsg(wire);
-        loot.note(wire); // a bot taking a ball takes it off this page's table too
+        hostSays(wire);
         if (wire.t === 'out') localOut?.(wire.seat);
       },
       seats,
@@ -2350,9 +2360,7 @@ function wireRoom(
         // it is waiting on somebody who closed their tab.
         announceOut = (seat: number) => {
           if (seen.has(seat)) return;
-          const msg: Msg = { t: 'out', seat };
-          bridge!.relay.all(msg);
-          rom.push(msg); // our own ROM never hears it over the relay
+          hostSays({ t: 'out', seat }); // our own ROM and results never hear it over the relay
           narrate(seat);
         };
         const off = bridge!.relay.on('recv', (ev) => {
@@ -2401,11 +2409,7 @@ function wireRoom(
       });
       // And the room is told about the ones who walked out, so every roster agrees
       // with the count this page is now keeping.
-      for (const seat of gone) {
-        bridge!.relay.all({ t: 'out', seat });
-        rom.push({ t: 'out', seat });
-        bridge!.roster.applyMsg({ t: 'out', seat });
-      }
+      for (const seat of gone) hostSays({ t: 'out', seat });
       say(Ticker.said(hostSeat, nameOf(hostSeat), 'I HAVE THE CLOCK.'));
     } else {
       director.start();
