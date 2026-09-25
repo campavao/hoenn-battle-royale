@@ -4,7 +4,7 @@
 // walk the guest, and see the guest's own ghost move on the host's ROM.
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 // web/package.json sets "type": "module" -- no __dirname in ESM scope.
@@ -13,7 +13,15 @@ const OUT_DIR = path.resolve(__dirname, 'out');
 const BR_NO_OBJ = 0xff;
 /** BR_PHASE_SAFARI in include/br/br_match.h: the opening, everybody in one place. */
 const BR_PHASE_SAFARI = 1;
+/** The Zone's six areas are all map group 26 (br_match.c's sSafariCells). */
+const SAFARI_GROUP = 26;
+/** BrField_InObjectView (src/br/br_field.c): the box the engine keeps objects in, and
+ *  the only place a ghost gets one (POK-330 #48) -- from 9 tiles left of the player to
+ *  10 right, 7 above to 9 below. */
+const VIEW = { left: -9, right: 10, up: -7, down: 9 };
 type RamWindow = { __br: { mailbox: { ram: { read(addr: number, width: 8 | 16 | 32): number } } } };
+type Row = { seat: number; isMe: boolean; map?: { group: number; num: number }; x?: number; y?: number };
+type RosterWindow = { __br: { roster: { all(): Row[] } } };
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -37,9 +45,78 @@ test.beforeAll(() => {
 // ghost is only spawned on the map its ROM is standing on. With a fresh seed the host and
 // the guest were in different areas five times in six, the host's gBrSeats row for the
 // guest had no object, and this failed "3/3 in a full run, first try alone" for a month
-// while being blamed on a starved browser. This seed puts seats 1 and 2 in the NORTHWEST
-// area together: cells 0 and 2 of the ROM's table. Change the table and re-derive it.
-const SAME_AREA_SEED = 1640531713;
+// while being blamed on a starved browser.
+//
+// And since POK-330 #48 a ghost gets an object only inside the host's view (VIEW), and
+// one area's four cells are spread too far apart for any two of them to be in it: the
+// old seed's pair were fifteen rows apart, so the guest's row on the host was right and
+// its ghost was, correctly, never drawn. So this seed deals seats 1 and 2 cells 10 and 11
+// of the ROM's table, both in the NORTHEAST area -- the host on (21,26), the guest on
+// (7,36) -- and the guest walks right seven tiles and up three into the host's view. The
+// route was read off the ROM's own map data, not world.json, which knows no elevation
+// (Safari North's cliff tops look like open ground to it): one elevation or a crossing
+// the whole way, a wall ending the climb whichever of the last two columns the guest
+// stops in, and no tall grass, which would roll a wild encounter and end the walk.
+// Change the table and re-derive both.
+const SAME_AREA_SEED = 1640534095;
+const SAFARI_NORTHEAST = 12;
+/** Map coords carry MAP_OFFSET 7 in the ROM and on the wire. */
+const HOST_CELL = { x: 21 + 7, y: 26 + 7 };
+const GUEST_CELL = { x: 7 + 7, y: 36 + 7 };
+
+/** Holds a direction on this page's pad until its own roster row has got to `target`
+ *  along the axis it moves, and lets go on that same emulated frame -- the roster row is
+ *  what the bridge drained off the ROM earlier in the frame. A round trip per poll would
+ *  let go several frames late, and a trainer who runs a tile in eight carries on past. */
+async function walkUntil(page: Page, key: 'right' | 'up', target: number): Promise<void> {
+  await page.evaluate(
+    ([k, t]) =>
+      new Promise<void>((resolve, reject) => {
+        type W = {
+          __hbr: { emu: { onFrame(fn: () => void): () => void; press(k: string): void; release(k: string): void } };
+          __br: { roster: { all(): { isMe: boolean; x?: number; y?: number }[] } };
+        };
+        const w = window as unknown as W;
+        const emu = w.__hbr.emu;
+        const reached = (): boolean => {
+          const me = w.__br.roster.all().find((e) => e.isMe);
+          if (me?.x === undefined || me.y === undefined) return false;
+          return k === 'right' ? me.x >= t : me.y <= t;
+        };
+        const deadline = performance.now() + 10_000;
+        emu.press(k);
+        const off = emu.onFrame(() => {
+          const done = reached();
+          if (!done && performance.now() < deadline) return;
+          emu.release(k);
+          off();
+          if (done) resolve();
+          else {
+            const me = w.__br.roster.all().find((e) => e.isMe);
+            reject(new Error(`holding ${k} stopped at (${me?.x},${me?.y}), short of ${t}`));
+          }
+        });
+      }),
+    [key, target] as const,
+  );
+}
+
+/** Where this page's own trainer stands once it has stopped: the same row twice, 600 ms
+ *  apart, which is a couple of steps even at a walk. */
+async function restingAt(page: Page): Promise<{ x: number; y: number }> {
+  const own = () => page.evaluate(() => {
+    const me = (window as unknown as RosterWindow).__br.roster.all().find((e) => e.isMe);
+    return { x: me?.x ?? -1, y: me?.y ?? -1 };
+  });
+  let before = await own();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(600);
+    const now = await own();
+    if (now.x === before.x && now.y === before.y) return now;
+    before = now;
+  }
+  throw new Error('the guest never stood still');
+}
 
 test("a guest walking right moves on the host's screen", async ({ browser }) => {
   test.setTimeout(120_000);
@@ -86,48 +163,41 @@ test("a guest walking right moves on the host's screen", async ({ browser }) => 
       );
     }
 
-    // And its own position, placed by its ROM's first tick inside the Zone.
-    await guest.waitForFunction(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      () => (window as any).__br.roster.all().some((e: { isMe: boolean; x?: number }) => e.isMe && e.x !== undefined),
-      { timeout: 15_000 },
-    );
-    const guestStartX: number = await guest.evaluate(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      () => (window as any).__br.roster.all().find((e: { isMe: boolean }) => e.isMe).x as number,
-    );
+    // And each one's own position, placed by its ROM's first tick inside the Zone. A row
+    // from before the opening (the room's Littleroot) is not it.
+    const inZone = async (page: Page) => {
+      await page.waitForFunction(
+        (group) => (window as unknown as RosterWindow).__br.roster.all().some((e) => e.isMe && e.map?.group === group && e.x !== undefined),
+        SAFARI_GROUP,
+        { timeout: 15_000 },
+      );
+      return page.evaluate(() => (window as unknown as RosterWindow).__br.roster.all().find((e) => e.isMe)!);
+    };
+    const hostRow = await inZone(host);
+    const guestRow = await inZone(guest);
+    expect({ map: hostRow.map, x: hostRow.x, y: hostRow.y }, 'the seed deals the host its cell').toEqual({ map: { group: SAFARI_GROUP, num: SAFARI_NORTHEAST }, ...HOST_CELL });
+    expect({ map: guestRow.map, x: guestRow.x, y: guestRow.y }, 'the seed deals the guest its cell').toEqual({ map: { group: SAFARI_GROUP, num: SAFARI_NORTHEAST }, ...GUEST_CELL });
 
     // The mgba core's frame pacing is uneven for about the first second and a half
-    // after boot (it is still catching the emulated clock up to wall-clock time), so
-    // a `press` issued right at spawn does not translate into a clean number of tile
-    // steps per millisecond held. Settle first, then walk -- and then ask the guest
-    // how far it actually got rather than predicting it: what this test is about is
-    // that whatever the guest did arrives on the host as a ghost standing there, not
-    // how many tiles a held button is worth on a busy CI box.
+    // after boot (it is still catching the emulated clock up to wall-clock time). Settle
+    // first, then walk -- and then ask the guest where it actually stopped rather than
+    // predicting it: what this test is about is that whatever the guest did arrives on
+    // the host as a ghost standing there, not how many tiles a held button is worth.
     await guest.waitForTimeout(2_000);
 
-    await guest.evaluate(() => (window as unknown as { __br: { mailbox: { ram: { press(k: string): void } } } }).__br.mailbox.ram.press('right'));
-    await guest.waitForTimeout(700);
-    await guest.evaluate(() => (window as unknown as { __br: { mailbox: { ram: { release(k: string): void } } } }).__br.mailbox.ram.release('right'));
-
-    // Where the guest actually ended up, from its own roster row.
-    await guest.waitForFunction(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (startX) => (window as any).__br.roster.all().some((e: { isMe: boolean; x?: number }) => e.isMe && e.x !== undefined && e.x > startX),
-      guestStartX,
-      { timeout: 10_000 },
-    );
-    const expectedX: number = await guest.evaluate(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      () => (window as any).__br.roster.all().find((e: { isMe: boolean }) => e.isMe).x as number,
-    );
-    expect(expectedX, 'the guest walked east').toBeGreaterThan(guestStartX);
+    // Right, to within seven columns of the host, and up to within seven rows of it.
+    await walkUntil(guest, 'right', HOST_CELL.x - 7);
+    await walkUntil(guest, 'up', HOST_CELL.y + 7);
+    const expected = await restingAt(guest);
+    expect(expected.x, 'the guest walked east').toBeGreaterThan(GUEST_CELL.x);
+    expect(expected.y, 'the guest walked north').toBeLessThan(GUEST_CELL.y);
+    const dx = expected.x - HOST_CELL.x;
+    const dy = expected.y - HOST_CELL.y;
+    expect(dx >= VIEW.left && dx <= VIEW.right && dy >= VIEW.up && dy <= VIEW.down, `the guest (${dx},${dy}) from the host is in its view`).toBe(true);
 
     await host.waitForFunction(
-      ([seat, x]) =>
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).__br.roster.all().some((e: { seat: number; x?: number }) => e.seat === seat && e.x === x),
-      [guestSeat, expectedX],
+      ([seat, x, y]) => (window as unknown as RosterWindow).__br.roster.all().some((e) => e.seat === seat && e.x === x && e.y === y),
+      [guestSeat, expected.x, expected.y],
       { timeout: 10_000 },
     );
 
@@ -138,24 +208,25 @@ test("a guest walking right moves on the host's screen", async ({ browser }) => 
     // frame or two: poll gBrSeats directly rather than reading it once.
     const seatBase = symbols.gBrSeats + guestSeat * 16;
     await host.waitForFunction(
-      ([base, x, noObj]) => {
-        const ram = (window as unknown as { __br: { mailbox: { ram: { read(addr: number, width: 8 | 16 | 32): number } } } }).__br.mailbox.ram;
-        return ram.read(base + 0, 8) === 1 && ram.read(base + 4, 16) === x && ram.read(base + 9, 8) !== noObj;
+      ([base, x, y, noObj]) => {
+        const ram = (window as unknown as RamWindow).__br.mailbox.ram;
+        return ram.read(base + 0, 8) === 1 && ram.read(base + 4, 16) === x && ram.read(base + 6, 16) === y && ram.read(base + 9, 8) !== noObj;
       },
-      [seatBase, expectedX, BR_NO_OBJ],
+      [seatBase, expected.x, expected.y, BR_NO_OBJ],
       { timeout: 10_000 },
     );
 
-    const [present, x, objId] = await host.evaluate(
+    const [present, x, y, objId] = await host.evaluate(
       ([base]) => {
-        const ram = (window as unknown as { __br: { mailbox: { ram: { read(addr: number, width: 8 | 16 | 32): number } } } }).__br.mailbox.ram;
-        return [ram.read(base + 0, 8), ram.read(base + 4, 16), ram.read(base + 9, 8)];
+        const ram = (window as unknown as RamWindow).__br.mailbox.ram;
+        return [ram.read(base + 0, 8), ram.read(base + 4, 16), ram.read(base + 6, 16), ram.read(base + 9, 8)];
       },
       [seatBase],
     );
 
     expect(present, 'gBrSeats[guestSeat].present').toBe(1);
-    expect(x, 'gBrSeats[guestSeat].x').toBe(expectedX);
+    expect(x, 'gBrSeats[guestSeat].x').toBe(expected.x);
+    expect(y, 'gBrSeats[guestSeat].y').toBe(expected.y);
     expect(objId, 'gBrSeats[guestSeat].objId (ghost spawned)').not.toBe(BR_NO_OBJ);
 
     await host.screenshot({ path: path.join(OUT_DIR, 'host.png') });
