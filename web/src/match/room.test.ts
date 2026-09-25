@@ -147,9 +147,17 @@ describe('when a match starts (POK-330 #42)', () => {
     for (const mode of ['quick', 'host'] as const) {
       expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ mode, match: inFlight }))).toEqual({ do: 'take-over', members: [2, 3] });
     }
-    // quirk kept: a match whose seed was never heard (a watcher's late start) is dealt afresh
-    expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ match: { ...inFlight, seed: 0 } }))).toEqual({ do: 'deal', members: [2, 3] });
     expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ match: { ...inFlight, ended: true } }))).toEqual({ do: 'nothing' });
+  });
+
+  // The #42 split pinned a deal: a new `start` under every ROM in the room, mid-match,
+  // fresh seed and fresh bots (POK-331 #13). The seed is what a match is picked up from.
+  it('an heir that never heard the match dealt (a watcher) hands the room on rather than dealing one', () => {
+    const unheard = { ...inFlight, seed: 0 };
+    for (const mode of ['quick', 'host'] as const) {
+      expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ mode, match: unheard }))).toEqual({ do: 'step-aside' });
+    }
+    expect(decideStart({ t: 'host-again', members: [1, 2] }, page({ mode: 'host', match: unheard }))).toEqual({ do: 'step-aside' });
   });
 
   it('a host back from its own drop takes its match back', () => {

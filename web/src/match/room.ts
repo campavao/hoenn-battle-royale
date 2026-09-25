@@ -230,7 +230,9 @@ export type StartDecision =
   /** Deal a new match to `members`, or to the relay's last roster when absent. */
   | { do: 'deal'; members?: number[] }
   /** Pick up the match in flight from what the wire has said of it. */
-  | { do: 'take-over'; members: number[] };
+  | { do: 'take-over'; members: number[] }
+  /** Made host of a match this page never heard dealt: hand the room on (can_host false). */
+  | { do: 'step-aside' };
 
 /** READY UP (Kanto's POK-167): back in a room that starts itself after a match, START
  *  arms the first lobby's count instead of dealing, and START inside that count deals at
@@ -246,9 +248,18 @@ export function startLabel(s: Pick<StartState, 'mode' | 'autoStarts' | 'played' 
   return readiesUp(s) ? 'READY UP' : 'START';
 }
 
-/** The one start policy: whether a match starts now, later, or not at all. Each rule is
- *  the condition its call site wrote out for itself, quirks and all:
- *  - a takeover of a match whose seed was never heard (a watcher's) deals a fresh one.
+/** Picking a match up needs its seed: the bots' names, teams and walks are dealt from it
+ *  (relay/server.js's migration note). A page that never heard the `start` -- a watcher
+ *  who walked in on the match -- cannot run it, and dealing one afresh put a new `start`
+ *  under every ROM in the room mid-match (POK-331 #13). Kanto keeps that page off the
+ *  heir list (a late start sends can_host false); one promoted anyway hands the room on,
+ *  to somebody who heard the deal. */
+function pickUp(s: StartState, members: number[]): StartDecision {
+  return s.match.seed !== 0 ? { do: 'take-over', members } : { do: 'step-aside' };
+}
+
+/** The one start policy: whether a match starts now, later, or not at all, one rule per
+ *  place the page used to decide it for itself (POK-330 #42).
  *  A room that starts itself does so once (POK-331 #13, Kanto's POK-167): back from a
  *  match nothing counts it down or buzzes it -- one of two or more used to deal on its
  *  next roster at once, the results still up -- and START readies it up.
@@ -280,15 +291,11 @@ export function decideStart(trigger: StartTrigger, s: StartState): StartDecision
           ? { do: 'count-down' }
           : { do: 'nothing' };
       }
-      if (next === 'take-over') {
-        return s.match.seed !== 0
-          ? { do: 'take-over', members: trigger.members }
-          : { do: 'deal', members: trigger.members };
-      }
+      if (next === 'take-over') return pickUp(s, trigger.members);
       return { do: 'nothing' };
     }
     case 'host-again':
-      return { do: 'take-over', members: trigger.members };
+      return pickUp(s, trigger.members);
     case 'roster':
       // The buzzer: a room that starts itself goes once two are in it -- a room waiting
       // for its first match, not one running or one back from it.

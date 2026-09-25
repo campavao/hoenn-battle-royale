@@ -1959,6 +1959,12 @@ function wireRoom(
     if (decision.do === 'count-down') countdown.arm(() => act(decideStart({ t: 'countdown' }, startState())));
     else if (decision.do === 'deal') startDirector(decision.members);
     else if (decision.do === 'take-over') startDirector(decision.members, true);
+    else if (decision.do === 'step-aside') {
+      // The relay hands the room to the next page that can run it, which heard the deal;
+      // with nobody, it stays here, and nothing deals over the match (decideStart).
+      console.info('[room] made host of a match never heard dealt: standing aside');
+      relay.canHost(false);
+    }
   };
   /** START pressed, drawn with `members`. A deal takes the room screen and START down
    *  with it (the director locks the room itself); READY UP only armed the count, and the
