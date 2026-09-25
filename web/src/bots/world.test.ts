@@ -240,6 +240,41 @@ describe('the cell graph', () => {
     expect(cells.length).toBeGreaterThan(0);
     expect(hoenn.exitCells(from, hop, false, true)).toBe(cells);
     expect(hoenn.exitCells(from, hop, true, true)).not.toBe(cells);
+    const over = hoenn.entryCells(from, hop, false, true);
+    expect(hoenn.entryCells(from, hop, false, true)).toBe(over);
+    expect(hoenn.entryCells(from, hop, true, true)).not.toBe(over);
+  });
+
+  it('finds every cell a step off one map lands on of the next, and nothing else', () => {
+    // POK-330 #49 review: what a route to the next map aims at, checked the long way --
+    // every standable cell of `from`, every direction -- over a seam, a door-only hop
+    // (Route 116's cave mouths), and a Centre's door, with and without SURF.
+    const pairs: [string, string][] = [
+      ['MAP_LITTLEROOT_TOWN', 'MAP_ROUTE101'],
+      ['MAP_ROUTE116', 'MAP_RUSTURF_TUNNEL'],
+      ['MAP_RUSTURF_TUNNEL', 'MAP_ROUTE116'],
+      ['MAP_OLDALE_TOWN_POKEMON_CENTER_1F', 'MAP_OLDALE_TOWN'],
+      ['MAP_ROUTE104', 'MAP_PETALBURG_WOODS'],
+    ];
+    for (const [from, to] of pairs) {
+      const m = maps.find((x) => x.id === from)!;
+      for (const surf of [false, true]) {
+        const want = new Set<number>();
+        for (let y = 0; y < m.h; y++) {
+          for (let x = 0; x < m.w; x++) {
+            if (!hoenn.standable(from, x, y, surf, true)) continue;
+            for (let d = 0; d < 4; d++) {
+              const k = hoenn.stepKey(hoenn.key({ map: from, x, y }), d, surf, true);
+              if (k >= 0 && hoenn.spotAt(k).map === to) want.add(k);
+            }
+          }
+        }
+        const got = hoenn.entryCells(from, to, surf, true).map((s) => hoenn.key(s));
+        expect(want.size, `${from} -> ${to}`).toBeGreaterThan(0);
+        expect(new Set(got), `${from} -> ${to} surf=${surf}`).toEqual(want);
+        expect(got.length).toBe(want.size);
+      }
+    }
   });
 });
 
@@ -278,6 +313,14 @@ describe('water and doors', () => {
     expect(world.step({ map: 'LAKE', x: 3, y: 0 }, 'east')).toEqual({ map: 'HUT', x: 0, y: 0 });
     // And back out again, because Emerald's warps come in pairs.
     expect(world.step({ map: 'HUT', x: 1, y: 0 }, 'west')).toEqual({ map: 'LAKE', x: 3, y: 0 });
+  });
+
+  it('says where a crossing comes out: the far end of the door, not the door', () => {
+    // The door tile is the exit, and no route can end on it (POK-330 #49 review).
+    expect(world.exitCells('LAKE', 'HUT')).toEqual([{ map: 'LAKE', x: 4, y: 0 }]);
+    expect(world.entryCells('LAKE', 'HUT')).toEqual([{ map: 'HUT', x: 0, y: 0 }]);
+    expect(world.entryCells('HUT', 'LAKE')).toEqual([{ map: 'LAKE', x: 3, y: 0 }]);
+    expect(world.entryCells('LAKE', 'NOWHERE')).toEqual([]);
   });
 });
 

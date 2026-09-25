@@ -166,9 +166,9 @@ function search(world: World, start: number, goal: Goal, maxVisited: number, sur
     for (let d = 0; d < 4; d++) {
       const to = world.stepKey(at, d, surf, cut);
       if (to < 0) continue;
-      // findPathToAny stays on its map: the goals are its own edge cells, and wandering
-      // onto the neighbour mid-search is how a "route to the edge" becomes a route
-      // across Hoenn.
+      // findPathToAny stays on its map, stepping off it only onto a goal: the goals are
+      // where this map's exits come out, and wandering onto the neighbour mid-search is
+      // how a "route to the next map" becomes a route across Hoenn.
       if (goal.stayOn >= 0 && world.mapOf(to) !== goal.stayOn && !goal.any?.has(to)) continue;
       const was = state[to];
       if (was === settled) continue;
@@ -206,10 +206,11 @@ export function findPath(world: World, from: Spot, to: Spot, maxVisited = DEFAUL
 
 /** The nearest of several goals, in one search (POK-302).
  *
- *  This is what a cross-map route is actually made of: the goals are every cell on this
- *  map that steps onto the next one, and any of them will do. Running `findPath` once
- *  per candidate would settle the same nodes over and over -- an edge can be forty cells
- *  wide -- and stop at the budget forty times.
+ *  This is what a cross-map route is actually made of: the goals are every cell on the
+ *  next map that a step off this one lands on (`World.entryCells`), and any of them will
+ *  do -- so the route ends with the crossing, through a door as well as over a seam.
+ *  Running `findPath` once per candidate would settle the same nodes over and over -- an
+ *  edge can be forty cells wide -- and stop at the budget forty times.
  *
  *  Kanto's `Bots.pathToAny` (lib/bots.lua:826) is the same idea for the same reason. The
  *  estimate is zero throughout: with several goals on one map there is no admissible

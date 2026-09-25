@@ -173,22 +173,57 @@ describe('the search on cell numbers', () => {
     expect(exhausted).toBeGreaterThan(40);
   }, 30_000);
 
-  it('routes to the nearest exit the way the linear-scan search did', () => {
+  it('routes to the nearest exit, and over it, the way the linear-scan search did', () => {
     const rng = mulberry32(302);
     let asked = 0;
-    for (let i = 0; i < 400 && asked < 120; i++) {
+    for (let i = 0; i < 400 && asked < 240; i++) {
       const from = cells[Math.floor(rng() * cells.length)];
       const goal = cells[Math.floor(rng() * cells.length)].map;
       for (const hop of world.nextHops(from.map, goal)) {
-        const doors = world.exitCells(from.map, hop, i % 2 === 0, true);
+        const surf = i % 2 === 0;
         const budget = [3000, 40][i % 2];
-        expect(findPathToAny(world, from, doors, budget, i % 2 === 0, true), `${spotKey(from)} -> ${hop}`).toEqual(
-          oldFindPathToAny(world, from, doors, budget, i % 2 === 0, true),
-        );
-        asked++;
+        // The exit cells on this map, and the cells on the next that they step onto --
+        // the goals the brain asks for now.
+        for (const goals of [world.exitCells(from.map, hop, surf, true), world.entryCells(from.map, hop, surf, true)]) {
+          expect(findPathToAny(world, from, goals, budget, surf, true), `${spotKey(from)} -> ${hop}`).toEqual(
+            oldFindPathToAny(world, from, goals, budget, surf, true),
+          );
+          asked++;
+        }
       }
     }
-    expect(asked).toBeGreaterThan(60);
+    expect(asked).toBeGreaterThan(120);
+  });
+
+  it('routes through a door when a door is the only way to the next map', () => {
+    // POK-330 #49 review. Aimed at the exit cells, a hop only doors lead to was never
+    // found: a door tile is not somewhere a route can end, since stepping onto one lands
+    // on the other side. Every one of those searches spent its whole budget on nothing.
+    // Aimed at where the doors come out, they end with the step through.
+    let doorOnly = 0;
+    let through = 0;
+    for (const m of MAPS) {
+      if (!outdoor.has(m.id)) continue;
+      const from = cells.find((c) => c.map === m.id);
+      if (!from) continue;
+      for (const hop of new Set((m.warps ?? []).map((w) => w.to))) {
+        if (m.seams.some((s) => s.to === hop) || !world.map(hop)) continue;
+        const exits = world.exitCells(m.id, hop, false, true);
+        if (exits.length === 0) continue;
+        doorOnly++;
+        expect(findPathToAny(world, from, exits, 3000, false, true).found, `${m.id} -> ${hop} by its doors`).toBe(false);
+        const path = findPathToAny(world, from, world.entryCells(m.id, hop, false, true), 3000, false, true);
+        if (!path.found) continue;
+        through++;
+        // Across this map, then one step onto the next.
+        const last = path.steps[path.steps.length - 1];
+        expect(last.to.map).toBe(hop);
+        expect(path.steps.slice(0, -1).every((s) => s.to.map === m.id)).toBe(true);
+      }
+    }
+    // 83 such hops from a landing cell, and 77 of them walk through now; none did.
+    expect(doorOnly).toBeGreaterThan(60);
+    expect(through).toBeGreaterThan(doorOnly * 0.8);
   });
 
   it('agrees on the edges: nowhere to start from, and nothing to find', () => {
@@ -237,10 +272,12 @@ describe('the search on cell numbers', () => {
       asked.on = false;
     }
     const calls = asked.calls.splice(0);
-    // Near two thousand on this seed: most of them to a map's edge, and hundreds that
-    // found nothing -- the searches that spend their whole budget.
+    // About thirteen hundred on this seed: dozens of them over to the next map, and
+    // hundreds that found nothing -- the searches that spend their whole budget. (Before
+    // the ladder crossed doors, and ran only once a map's own pick had, it was near two
+    // thousand, most of them to a map's edge.)
     expect(calls.length).toBeGreaterThan(1000);
-    expect(calls.filter((c) => c.any).length).toBeGreaterThan(500);
+    expect(calls.filter((c) => c.any).length).toBeGreaterThan(50);
     expect(calls.filter((c) => !c.got.found).length).toBeGreaterThan(300);
     for (const { any, args, got } of calls) {
       const want = any

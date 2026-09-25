@@ -141,9 +141,10 @@ export class World {
    *  order, with the far map by number. A seam to a map the world lacks is left out,
    *  which is what `landAcross` does with it. */
   private readonly seamsOut: { to: number; offset: number }[][] = [];
-  /** exitCells, once per question: the answer never changes, and aimAcrossMaps asks it
-   *  on every decision a bot makes on its way across Hoenn. */
+  /** exitCells and entryCells, once per question: the answer never changes, and
+   *  aimAcrossMaps asks on every decision a bot makes on its way across Hoenn. */
   private readonly exitCache = new Map<string, readonly Spot[]>();
+  private readonly entryCache = new Map<string, readonly Spot[]>();
 
   constructor(maps: WorldMap[]) {
     let total = 0;
@@ -509,14 +510,46 @@ export class World {
   }
 
   /** The cells on `from` that a step lands on `to` -- the seam edge, and any door.
-   *  These are what a bot actually walks to; the crossing itself is just the next step,
-   *  so a route to one of these never leaves the current map. */
+   *  Not somewhere to route TO: a door tile is never stood on, since stepping onto it
+   *  lands on the other side, so a route aims at `entryCells` instead. */
   exitCells(from: string, to: string, surf = false, cut = false): readonly Spot[] {
     const asked = `${from}>${to}:${surf ? 1 : 0}${cut ? 1 : 0}`;
     let cells = this.exitCache.get(asked);
     if (!cells) {
       cells = this.findExitCells(from, to, surf, cut);
       this.exitCache.set(asked, cells);
+    }
+    return cells;
+  }
+
+  /** Where those steps come out: the cells on `to` that a step off `from` lands on --
+   *  across each seam cell, and at the far end of each door. This is what a route to the
+   *  next map aims at, so it ends with the crossing itself. Aiming at the exit cells
+   *  could not (POK-330 #49 review): a hop only a door leads to -- Route 116 to Rusturf
+   *  Tunnel, every cave and gatehouse -- was a search that never found its goal and
+   *  spent its whole budget, and a bot already on a seam's edge was "there" and never
+   *  took the step over. */
+  entryCells(from: string, to: string, surf = false, cut = false): readonly Spot[] {
+    const asked = `${from}>${to}:${surf ? 1 : 0}${cut ? 1 : 0}`;
+    let cells = this.entryCache.get(asked);
+    if (!cells) {
+      const out: Spot[] = [];
+      const seen = new Set<number>();
+      // Only a cell a step can land on: a door whose far end is off its map's grid is no
+      // step at all (stepKey's DEAD_WARP).
+      const add = (s: Spot | null) => {
+        const k = s && s.map === to ? this.key(s) : -1;
+        if (k < 0 || seen.has(k)) return;
+        seen.add(k);
+        out.push(s!);
+      };
+      for (const exit of this.exitCells(from, to, surf, cut)) {
+        const door = this.warpAt(from, exit.x, exit.y);
+        if (door) add({ map: door.to, x: door.toX, y: door.toY });
+        for (const dir of DIRS) add(this.step(exit, dir, surf, cut));
+      }
+      cells = out;
+      this.entryCache.set(asked, cells);
     }
     return cells;
   }

@@ -33,9 +33,9 @@ import { spillCells } from '../match/loot';
 export const STEP_MS = 267;
 /** How far a bot will look for its next wander target before settling for less. */
 const WANDER_BUDGET = 1500;
-/** Routes to the edge of THIS map, which is all a cross-map hop ever needs (POK-302).
- *  Hoenn's biggest outdoor map is comfortably under this; Kanto's own per-map cap is
- *  3000 for the same reason (lib/bots.lua's Bots.PATH_NODES). */
+/** Routes across THIS map and one step off it, which is all a cross-map hop ever needs
+ *  (POK-302). Hoenn's biggest outdoor map is comfortably under this; Kanto's own
+ *  per-map cap is 3000 for the same reason (lib/bots.lua's Bots.PATH_NODES). */
 const HOP_BUDGET = 3000;
 /** How many candidate goal maps to try before giving up and drifting. Kanto's ladder is
  *  best exit, next best, then any -- "any seam beats standing still". */
@@ -1099,28 +1099,37 @@ export class Bots {
     //
     // So the route is two questions, which is how Kanto has always done it (lib/bots.lua
     // exits/homeward for the maps, then a BFS bounded to the current one). Pick the map
-    // to head for, then walk to the edge that leads there: a search that never leaves
-    // this map and never costs more than a few hundred nodes.
-    if (this.aimAcrossMaps(walker, targets, now)) return;
+    // to head for, then walk over the edge, or through the door, that leads there: a
+    // search that never leaves this map but for that last step, and never costs more
+    // than a few hundred nodes.
+    //
     // Somewhere else, on foot -- and somewhere else NEAR, first. Hoenn is 500 maps
     // wide and the landing pool spans all of it, so a target drawn uniformly is
     // almost always past the A* budget: the replay tool had bots failing to route
-    // 94% of the time, standing still while they did it. Own map, then own section,
-    // then anywhere, so the cheap pick is also the one a trainer would make.
+    // 94% of the time, standing still while they did it. Own map, then the next map
+    // over, then own section, then anywhere, so the cheap pick is also the one a
+    // trainer would make.
     //
-    // "Anywhere" mostly fails, at its full budget, and aimAcrossMaps has usually asked
-    // the same question better -- but not always: the ones that land are a map or two
-    // over, reached through an exit the goal ladder never tried. Without them the fog
-    // took more bots (POK-330 #49: 46 fog outs against 27 over the same six thirty-bot
-    // matches, and more of the field outside the ring), so they stay, paid for out of
-    // the tick's node budget like everything else.
+    // The next map over comes after this map's own pick, when it has one (POK-330 #49
+    // review). It came first while its route stopped short on the edge, which only ever
+    // walked a bot to the edge and back; a route that crosses, asked first, sends a bot
+    // to the next map and straight back, a seam apart, all match.
+    //
+    // "Anywhere" mostly fails, at its full budget, but not always: the ones that land
+    // are a map or two over, found when this map's pick and the ladder both came up
+    // empty. Without them the fog takes more bots (POK-330 #49: 10 fog outs against 7
+    // over six thirty-bot replays, and 2,784 stuck steps against 1,763), so they stay,
+    // paid for out of the tick's node budget like everything else.
     const section = this.opts.world.map(walker.at.map)?.section;
     const pools = [
       targets.filter((t) => t.mapId === walker.at.map),
       targets.filter((t) => t.mapId !== walker.at.map && this.opts.world.map(t.mapId)?.section === section),
       targets,
     ].filter((pool) => pool.length > 0);
+    // The ladder's turn: after this map's own pick, when there is one to make.
+    const crossAt = pools[0][0].mapId === walker.at.map ? 1 : 0;
     for (let i = 0; i < 4; i++) {
+      if (i === crossAt && this.aimAcrossMaps(walker, targets, now)) return;
       const pool = pools[Math.min(i, pools.length - 1)];
       const pick = pool[Math.floor(this.opts.rng() * pool.length)];
       const to: Spot = { map: pick.mapId, x: pick.x, y: pick.y };
@@ -1149,10 +1158,10 @@ export class Bots {
     return path;
   }
 
-  /** Head for a target on ANOTHER map by walking to the edge that leads towards it.
-   *  True when it set a path. The goal map is the one the most targets are on, which for
-   *  a closing ring is the ring's own section -- so the whole roster converges without
-   *  anybody searching across Hoenn. */
+  /** Head for a target on ANOTHER map by walking over the edge, or through the door,
+   *  that leads towards it. True when it set a path. The goal map is the one the most
+   *  targets are on, which for a closing ring is the ring's own section -- so the whole
+   *  roster converges without anybody searching across Hoenn. */
   private aimAcrossMaps(walker: Walker, targets: { mapId: string; x: number; y: number }[], now: number): boolean {
     const world = this.opts.world;
     const surf = canSurf(walker.party);
@@ -1180,9 +1189,12 @@ export class Bots {
       for (const hop of world.nextHops(walker.at.map, goal.mapId)) {
         if (tried.has(hop)) continue;
         tried.add(hop);
-        const doors = world.exitCells(walker.at.map, hop, surf, cut);
-        if (doors.length === 0) continue;
-        const path = findPathToAny(world, walker.at, doors, HOP_BUDGET, surf, cut);
+        // Where the crossing comes out, not the edge or door it starts from, so the route
+        // takes the step over: a door is never a cell a route can end on, and a bot
+        // already on the edge would be "there" with nowhere to walk (POK-330 #49 review).
+        const over = world.entryCells(walker.at.map, hop, surf, cut);
+        if (over.length === 0) continue;
+        const path = findPathToAny(world, walker.at, over, HOP_BUDGET, surf, cut);
         this.budget -= path.visited;
         if (!path.found || path.steps.length === 0) continue;
         walker.path = path;
