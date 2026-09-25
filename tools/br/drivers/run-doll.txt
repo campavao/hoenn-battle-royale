@@ -1,7 +1,8 @@
-# run-doll: RUN spends a POKe DOLL for a guaranteed getaway, no roll (POK-231).
-# Loopback engage battle; a doll is poked into the bag, then we pick RUN. The escape
-# is certain -- the one-in-four roll never runs (runRolls stays 0) and the outcome is
-# RAN. (Loopback leaves the link up; a real peer tears the battle down.)
+# run-doll: RUN spends a POKe DOLL for a guaranteed getaway (POK-231, POK-293).
+# Loopback engage battle; a doll is poked into the bag, then we pick RUN. Without a doll
+# RUN against a trainer fails outright (run-roll), so this is the one attempt that gets
+# away: runRolls and runEscapes both 1, the outcome RAN. (Loopback leaves the link up; a
+# real peer tears the battle down.)
 drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF

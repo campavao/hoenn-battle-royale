@@ -494,19 +494,16 @@ void HandleAction_Run(void)
     if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK))
     {
 #if BR
-        // RUN against another trainer is allowed but hard: one in four gets away, and
-        // nobody is eliminated by it; the rest of the time the turn goes on (POK-231).
-        // A POKe DOLL, spent at RUN selection and flagged in the action's return value
-        // (so both ROMs agree without re-reading a bag they cannot see), is a sure
-        // getaway and skips the roll entirely.
+        // RUN against another trainer takes a POKe DOLL (POK-293): with one it is a sure
+        // getaway and nobody is eliminated by it; without one it fails and the turn goes
+        // on. No roll: the doll is spent at RUN selection on the runner's own machine and
+        // flagged in the action's return value, so both ROMs read the same byte and
+        // cannot come to different answers.
         // A forfeit is not a flee (POK-292). The shot clock ran out, and that has a
         // definite loser and a definite winner -- which is vanilla's own link branch
         // just below, so this one steps aside and lets it run.
         if (gBattleBufferB[gBattlerAttacker][2] != BR_RUN_FORFEIT)
         {
-            // ...and a flee is a POKe DOLL or nothing (POK-293). No roll: the doll was
-            // spent at selection on the runner's own machine and the byte says so here
-            // on both, so the two ROMs cannot come to different answers.
             if (!BrBattle_TakeRun(gBattleBufferB[gBattlerAttacker][2] == BR_RUN_DOLL))
             {
                 ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);

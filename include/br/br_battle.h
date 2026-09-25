@@ -3,14 +3,14 @@
 
 #include "br/br_config.h"
 
-// In-battle rules (POK-231): the 30-second shot clock on every choice, and RUN that
-// is allowed but hard against another trainer.
+// In-battle rules (POK-231): the 30-second shot clock on every choice, and RUN against
+// another trainer, which takes a POKe DOLL (POK-293).
 
 #define BR_SHOT_CLOCK_FRAMES (30 * 60)
 
 // What a RUN action's return value carries, so both ROMs of a link battle agree on what
 // kind of RUN it was without re-reading a bag or a clock neither can see (POK-231/292).
-#define BR_RUN_ROLL 0    // the one-in-four roll
+#define BR_RUN_ROLL 0    // a plain RUN, which fails against a trainer (POK-293)
 #define BR_RUN_DOLL 1    // a POKe DOLL: a sure getaway, and nobody is eliminated
 #define BR_RUN_FORFEIT 2 // the shot clock ran out: a definite loser and a definite winner
 

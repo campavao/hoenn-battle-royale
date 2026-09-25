@@ -73,7 +73,10 @@ BattleScript_PrintCaughtMonInfo::
 	displaydexinfo
 BattleScript_TryNicknameCaughtMon::
 .if BR
-	goto BattleScript_GiveCaughtMonEnd @ no nickname prompt: the team is disposable (POK-227)
+	@ No nickname prompt: the team is disposable (POK-227), and a yes/no box is a question
+	@ nobody wants with a shot clock running (POK-256). This goto is the whole rule; the
+	@ command below never runs in a match.
+	goto BattleScript_GiveCaughtMonEnd
 .endif
 	printstring STRINGID_GIVENICKNAMECAPTURED
 	waitstate

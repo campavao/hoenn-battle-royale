@@ -10234,12 +10234,6 @@ void BattleDestroyYesNoCursorAt(u8 cursorPosition)
 
 static void Cmd_trygivecaughtmonnick(void)
 {
-#if BR
-    // No nicknames in a match (POK-256). The yes/no box is a question nobody wants
-    // with a shot clock running, and the palette fade on the way past it reads as the
-    // screen glitching. Straight to the state that carries on without one.
-    gBattleCommunication[MULTIUSE_STATE] = 4;
-#endif
     switch (gBattleCommunication[MULTIUSE_STATE])
     {
     case 0:
