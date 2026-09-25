@@ -11,7 +11,7 @@ import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './net/slots';
-import { decode, PARTY_BAG_MAX, type BstartMsg, type Msg, type PackedMon, type TurnMsg } from './net/wire';
+import { PARTY_BAG_MAX, type BstartMsg, type Msg, type PackedMon, type TurnMsg } from './net/wire';
 import { MAP_OFFSET, toRomCells } from './net/cells';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
@@ -2019,6 +2019,9 @@ function wireRoom(
    *  eliminated by somebody, and the host is the only client that can: nobody hears
    *  their own messages, so the one who left cannot say it about themselves. */
   let announceOut: ((seat: number) => void) | null = null;
+  /** The director's ear on the room while one runs, called from the page's one handler
+   *  on the Bridge (attach): what the Bridge let through, and nothing else. */
+  let directorHears: ((m: Msg) => void) | null = null;
   let stopDirectorLoop: (() => void) | null = null;
   let isHost = false;
   /** The host's room settings between roster events (POK-241). */
@@ -2375,19 +2378,15 @@ function wireRoom(
           hostSays({ t: 'out', seat }); // our own ROM and results never hear it over the relay
           narrate(seat);
         };
-        const off = bridge!.relay.on('recv', (ev) => {
-          try {
-            const m = decode(JSON.stringify(ev.m));
-            if (m.t === 'out') narrate(m.seat);
-          } catch {
-            // not a wire.ts Msg at all, or failed validation -- bridge.ts already
-            // counts this as a drop; nothing for the director to act on either way.
-          }
-        });
+        // It used to take `recv` off the relay itself and decode each message again,
+        // trusting whoever sent it (POK-330 #24); it hears what the Bridge let through.
+        directorHears = (m) => {
+          if (m.t === 'out') narrate(m.seat);
+        };
         return () => {
           localOut = null;
           announceOut = null;
-          off?.();
+          directorHears = null;
         };
       },
     });
@@ -2608,15 +2607,10 @@ function wireRoom(
   const greeted = new Set<number>();
   let bots: ReturnType<typeof startBots> | null = null;
 
-  /** Unsubscribes this page's own `recv` handler below. */
-  let offRecv: (() => void) | null = null;
-
   const attach = (seat: number, code: string, host: number) => {
-    if (bridge) bridge.dispose(); // a re-join after a reconnect must not leave two pumps on one ring
-    // ...nor two copies of the page's handler: every rejoin after a blip used to add one,
-    // and each counted the record, took from a bot's bag and answered a peek again.
-    offRecv?.();
-    offRecv = null;
+    // A re-join after a reconnect must not leave two pumps on one ring, nor two copies of
+    // the page's handler: dispose() lets go of both.
+    if (bridge) bridge.dispose();
     console.info(`[room] attached as seat ${seat} in ${code}`);
     bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol });
     // Whose room it is, as the relay says: ours when we opened it, whoever it names when
@@ -2709,66 +2703,64 @@ function wireRoom(
         }
       }
     });
-    offRecv = bridge.relay.on('recv', (ev) => {
-      try {
-        const m = decode(JSON.stringify(ev.m));
-        // What the trainer we are watching just took (POK-268). Drawn here rather than
-        // sent: a `pickup` reaches the whole room, and only the page following that
-        // seat has any business saying so. The describe() has to happen before the
-        // loot table forgets the piece, which loot.note() does on this same message.
-        // The host says the match is over (POK-258's `again`). Belt and braces for the
-        // local grace: a socket that blinked over the last fight never saw the `win` and
-        // would otherwise sit in a finished match for ever -- so that page, and only that
-        // page, starts the grace now. It arrives on the heels of the `win`, and a page
-        // that took it as the exit rebooted before anybody had read a result (#9).
-        if (m.t === 'again' && onAgain({ running: director !== null, match, graceArmed: endGraceTimer !== null }) === 'grace') {
-          armEndGrace(() => void returnToRoom());
-        }
-        if (m.t === 'pickup' && bridge && spectate.watchingSeat() === m.seat) {
-          const what = loot.describe(m.key);
-          const line = what ? Ticker.took(m.seat, bridge.roster.nameOf(m.seat), what) : null;
-          if (line) bridge.pushToRom(line);
-        }
-        // The DAY CARE chest (POK-306) is the other pickup worth a line, and this one is
-        // for the whole room: everybody who was on their way there should stop.
-        if (m.t === 'pickup' && bridge && m.key === Ticker.CHEST_KEY && m.item === undefined) {
-          const line = Ticker.chest(m.seat, bridge.roster.nameOf(m.seat));
-          if (line) bridge.pushToRom(line);
-        }
-        bossFell(m);
-        loot.note(m);
-        noteResult(m);
-        noteBusy(m);
-        // The drop (POK-223): a trainer chose a section, the host deals them a cell
-        // inside it that nobody else has. Only the host answers -- everyone hears the
-        // `pick`, and two answers would put two trainers on two different tiles.
-        if (m.t === 'pick' && director) {
-          const land = director.landFor(m.seat, m.section);
-          if (m.seat === bridge!.seat) bridge!.pushToRom({ t: 'land', ...land });
-          else bridge!.relay.to(m.seat, { t: 'land', ...land });
-        }
-        // Somebody else's ROM challenged one of our bots, or fought one. Same as our own
-        // ROM's above -- the host is the only page that has the bot's team -- and the
-        // relay's `from` is what says whose ROM it was.
-        if (bots) routeToBots(bots.bots, m, ev.from);
-        if (m.t === 'peek' && m.target === seat) {
-          spectate.notePeek(m.seat, performance.now());
-          // Their ROM answers the party; the fight so far is ours to hand over, since
-          // the relay never delivered our bstart to somebody who was not in the room.
-          for (const part of spectate.streamFor(seat)) bridge!.relay.to(m.seat, part);
-        }
-        else if (m.t === 'peek') {
-          // A bot has no ROM to answer for it, so the host that walks it does.
-          const party = bots?.partyFor(m.target);
-          if (party) bridge!.relay.to(m.seat, party);
-        }
-        else if (m.t === 'result') spectate.noteResult(m.seat);
-        else if (m.t === 'out') {
-          bots?.bots.remove(m.seat); // a bot that is out stops being walked around
-          renderSpectate(bridge!, spectate);
-        }
-      } catch {
-        // bridge.ts already counted the drop; nothing to spectate about it either way.
+    // The room, as the Bridge hands it over: decoded once, from somebody entitled to say
+    // it, with who said it (POK-330 #24). Released by bridge.dispose() on the next attach.
+    bridge.onMessage((m, from) => {
+      // What the trainer we are watching just took (POK-268). Drawn here rather than
+      // sent: a `pickup` reaches the whole room, and only the page following that
+      // seat has any business saying so. The describe() has to happen before the
+      // loot table forgets the piece, which loot.note() does on this same message.
+      // The host says the match is over (POK-258's `again`). Belt and braces for the
+      // local grace: a socket that blinked over the last fight never saw the `win` and
+      // would otherwise sit in a finished match for ever -- so that page, and only that
+      // page, starts the grace now. It arrives on the heels of the `win`, and a page
+      // that took it as the exit rebooted before anybody had read a result (#9).
+      if (m.t === 'again' && onAgain({ running: director !== null, match, graceArmed: endGraceTimer !== null }) === 'grace') {
+        armEndGrace(() => void returnToRoom());
+      }
+      if (m.t === 'pickup' && bridge && spectate.watchingSeat() === m.seat) {
+        const what = loot.describe(m.key);
+        const line = what ? Ticker.took(m.seat, bridge.roster.nameOf(m.seat), what) : null;
+        if (line) bridge.pushToRom(line);
+      }
+      // The DAY CARE chest (POK-306) is the other pickup worth a line, and this one is
+      // for the whole room: everybody who was on their way there should stop.
+      if (m.t === 'pickup' && bridge && m.key === Ticker.CHEST_KEY && m.item === undefined) {
+        const line = Ticker.chest(m.seat, bridge.roster.nameOf(m.seat));
+        if (line) bridge.pushToRom(line);
+      }
+      bossFell(m);
+      loot.note(m);
+      noteResult(m);
+      noteBusy(m);
+      directorHears?.(m);
+      // The drop (POK-223): a trainer chose a section, the host deals them a cell
+      // inside it that nobody else has. Only the host answers -- everyone hears the
+      // `pick`, and two answers would put two trainers on two different tiles.
+      if (m.t === 'pick' && director) {
+        const land = director.landFor(m.seat, m.section);
+        if (m.seat === bridge!.seat) bridge!.pushToRom({ t: 'land', ...land });
+        else bridge!.relay.to(m.seat, { t: 'land', ...land });
+      }
+      // Somebody else's ROM challenged one of our bots, or fought one. Same as our own
+      // ROM's above -- the host is the only page that has the bot's team -- and the
+      // relay's `from` is what says whose ROM it was.
+      if (bots) routeToBots(bots.bots, m, from);
+      if (m.t === 'peek' && m.target === seat) {
+        spectate.notePeek(m.seat, performance.now());
+        // Their ROM answers the party; the fight so far is ours to hand over, since
+        // the relay never delivered our bstart to somebody who was not in the room.
+        for (const part of spectate.streamFor(seat)) bridge!.relay.to(m.seat, part);
+      }
+      else if (m.t === 'peek') {
+        // A bot has no ROM to answer for it, so the host that walks it does.
+        const party = bots?.partyFor(m.target);
+        if (party) bridge!.relay.to(m.seat, party);
+      }
+      else if (m.t === 'result') spectate.noteResult(m.seat);
+      else if (m.t === 'out') {
+        bots?.bots.remove(m.seat); // a bot that is out stops being walked around
+        renderSpectate(bridge!, spectate);
       }
     });
     if (import.meta.env.DEV) {

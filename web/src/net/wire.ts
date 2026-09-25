@@ -1180,6 +1180,8 @@ export function decode(json: string): Msg {
   }
   if (!isPlainObject(parsed)) throw new WireError('not an object');
   const t = parsed.t;
-  if (typeof t !== 'string' || !(t in decoders)) throw new WireError(`unknown type: ${JSON.stringify(t)}`);
+  // Own keys only: `in` walks the prototype, so a `t` of "constructor" or "toString" found
+  // a decoder -- Object's own -- and came back as something no handler expects.
+  if (typeof t !== 'string' || !Object.hasOwn(decoders, t)) throw new WireError(`unknown type: ${JSON.stringify(t)}`);
   return decoders[t](parsed);
 }

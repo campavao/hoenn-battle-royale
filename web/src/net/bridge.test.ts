@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Bridge, type EmulatorLike } from './bridge';
 import { MAILBOX, type RamAccess } from './mailbox';
-import { packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
+import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
 import { PROTOCOL, type Msg } from './wire';
 import { RelayClient, type WebSocketLike } from './relay';
 
@@ -299,5 +299,110 @@ describe("the battle lines you picked (POK-274)", () => {
     const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
     // A bot never sends one, which is why its lines stay the seed's.
     expect(bridge.linesFor(30)).toBeUndefined();
+  });
+});
+
+/** Every message the ROM has been handed, one per base slot and its continuations. */
+function drainMsgs(romDrainIn: () => BinarySlot[]): Msg[] {
+  const slots = romDrainIn();
+  const out: Msg[] = [];
+  for (let i = 0; i < slots.length; ) {
+    const group = [slots[i++]];
+    while (i < slots.length && (slots[i].type & BR_CONT_FLAG) !== 0) group.push(slots[i++]);
+    out.push(decodeReassembled(group));
+  }
+  return out;
+}
+
+/** A room we have joined as seat 2, with seat 1 its host and 7 and 9 in it too. */
+function joined() {
+  const gba = fakeEmulator(BASE);
+  gba.romInit();
+  const { relay, socket } = fakeRelay();
+  socket.receive({ type: 'room_joined', code: 'ABC123', id: 2, host: 1, token: 't' });
+  const bridge = new Bridge({ emu: gba.emu, mailboxBase: BASE, relay, seat: 2 });
+  socket.receive({
+    type: 'roster', code: 'ABC123', host: 1, open: true, max: 8, pass: false,
+    members: [{ id: 1, name: 'HOST' }, { id: 2, name: 'ME' }, { id: 7, name: 'MAY' }, { id: 9, name: 'WALLY' }],
+  });
+  const heard: [Msg, number][] = [];
+  bridge.onMessage((m, from) => void heard.push([m, from]));
+  return { ...gba, relay, socket, bridge, heard };
+}
+
+// POK-330 #24. The relay stamps every `recv` with who sent it, and nothing read it: any
+// member of a quick-play room could wipe every team with one `duel`, fill every bag with
+// a `give`, or end the match with an `again`.
+describe('who may say what (POK-330 #24)', () => {
+  it('never hands the ROM a duel, a give or a follow off the relay', () => {
+    const { socket, frame, romDrainIn, bridge, heard } = joined();
+    const mon = { species: 1, level: 5, hp: 20, maxHp: 20, status: 0, moves: [], heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: 'ZIG', ot: 'MAY' };
+    // Not even from the host: these are a page's word to its own ROM.
+    socket.receive({ type: 'recv', from: 1, m: { t: 'duel', seatA: 30, seatB: 31, a: [mon], b: [mon] } });
+    socket.receive({ type: 'recv', from: 7, m: { t: 'give', items: [{ id: 1, n: 99 }] } });
+    socket.receive({ type: 'recv', from: 7, m: { t: 'follow', seat: 7 } });
+    frame();
+    expect(drainMsgs(romDrainIn)).toEqual([]);
+    expect(heard).toEqual([]);
+    expect(bridge.stats.refused).toBe(3);
+  });
+
+  it("takes the room's word only from the room's host", () => {
+    const { socket, frame, romDrainIn, bridge, heard } = joined();
+    socket.receive({ type: 'recv', from: 7, m: { t: 'again', seat: 7 } });
+    socket.receive({ type: 'recv', from: 7, m: { t: 'win', seat: 7 } });
+    socket.receive({ type: 'recv', from: 7, m: { t: 'clock', seat: 1, left: 1 } });
+    frame();
+    expect(heard).toEqual([]);
+    expect(drainMsgs(romDrainIn)).toEqual([]);
+    expect(bridge.stats.refused).toBe(3);
+
+    socket.receive({ type: 'recv', from: 1, m: { t: 'again', seat: 1 } });
+    socket.receive({ type: 'recv', from: 1, m: { t: 'clock', seat: 1, left: 90 } });
+    frame();
+    expect(heard).toEqual([[{ t: 'again', seat: 1 }, 1], [{ t: 'clock', seat: 1, left: 90 }, 1]]);
+    expect(drainMsgs(romDrainIn)).toEqual([{ t: 'clock', seat: 1, left: 90 }]);
+  });
+
+  it('takes the host at its word when the relay moves it', () => {
+    const { socket, heard } = joined();
+    socket.receive({
+      type: 'roster', code: 'ABC123', host: 7, open: true, max: 8, pass: false,
+      members: [{ id: 2, name: 'ME' }, { id: 7, name: 'MAY' }],
+    });
+    socket.receive({ type: 'recv', from: 1, m: { t: 'win', seat: 1 } }); // the old host, too late
+    socket.receive({ type: 'recv', from: 7, m: { t: 'win', seat: 7 } });
+    expect(heard).toEqual([[{ t: 'win', seat: 7 }, 7]]);
+  });
+
+  it('lets a seat speak for itself, and the host for anybody', () => {
+    const { socket, heard, bridge } = joined();
+    const step = (seat: number) => ({ t: 'step', seat, d: 1, x: 1, y: 1, map: { group: 0, num: 1 } });
+    socket.receive({ type: 'recv', from: 9, m: step(7) }); // 9 walking 7 about
+    socket.receive({ type: 'recv', from: 7, m: step(7) });
+    socket.receive({ type: 'recv', from: 1, m: step(30) }); // the host walks its bots
+    expect(heard.map(([m, from]) => [(m as { seat: number }).seat, from])).toEqual([[7, 7], [30, 1]]);
+    expect(bridge.roster.get(7)?.x).toBe(1);
+    expect(bridge.stats.refused).toBe(1);
+  });
+
+  it("takes a report on a bot's fight from whoever fought it, and on a person's from nobody else", () => {
+    const { socket, heard } = joined();
+    socket.receive({ type: 'recv', from: 7, m: { t: 'spent', seat: 30, items: [13] } }); // 30: a bot
+    socket.receive({ type: 'recv', from: 7, m: { t: 'result', seat: 30, outcome: 'lose' } });
+    socket.receive({ type: 'recv', from: 7, m: { t: 'result', seat: 9, outcome: 'lose' } }); // 9: a person
+    expect(heard.map(([m]) => m)).toEqual([
+      { t: 'spent', seat: 30, items: [13] },
+      { t: 'result', seat: 30, outcome: 'lose' },
+    ]);
+  });
+
+  it('decodes once, hands on who sent it, and lets go on dispose', () => {
+    const { socket, bridge, heard } = joined();
+    socket.receive({ type: 'recv', from: 7, m: { t: 'out', seat: 7 } });
+    expect(heard).toEqual([[{ t: 'out', seat: 7 }, 7]]);
+    bridge.dispose();
+    socket.receive({ type: 'recv', from: 9, m: { t: 'out', seat: 9 } });
+    expect(heard).toHaveLength(1);
   });
 });

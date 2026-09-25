@@ -4,8 +4,9 @@
 //   ROM out-ring --poll--> reassemble --> unpackSlot --> stamp our seat -->
 //     roster.applyMsg --> relay.to(opponent, msg) or relay.all(msg)
 //
-//   relay 'recv' --> decode --> roster.applyMsg --> packSlot --> queue -->
-//     mailbox.push (one slot/frame budget; retried next frame while the ring is full)
+//   relay 'recv' --> decode --> trust (net/trust.ts) --> roster.applyMsg --> packSlot -->
+//     queue --> mailbox.push (one slot/frame budget; retried next frame while the ring
+//     is full) --> onMessage(msg, from), the page's one stream of what the room said
 //
 // `all` vs `to`: everything the ROM emits is a broadcast (place/step/face/out/
 // pickup/spill/faint/result, ...) EXCEPT the two messages that are inherently a
@@ -20,7 +21,8 @@ import { Mailbox, type RamAccess, type RawMessage } from './mailbox';
 import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
 import { decode, type Lines, PROTOCOL, type Msg } from './wire';
 import { Roster } from '../match/roster';
-import { RelayClient, type RecvEvent } from './relay';
+import { RelayClient, type RecvEvent, type RosterEvent } from './relay';
+import { admits } from './trust';
 
 /** What Bridge needs from the emulator: bus-addressed RAM access, plus a per-frame
  *  callback. emu/index.ts's Emulator satisfies this directly; tests hand in a fake
@@ -38,6 +40,9 @@ export interface BridgeStats {
   /** Messages discarded: bad JSON/binary, an unknown type, or a validation failure.
    *  Does not count a full ring's queue-and-retry -- that is delayed, not lost. */
   drops: number;
+  /** Messages that decoded but came from somebody with no right to send them
+   *  (net/trust.ts). */
+  refused: number;
   /** mailbox.pending(): how many queued pushes the ROM still has not drained. */
   pending: number;
 }
@@ -79,6 +84,9 @@ export class Bridge {
 
   private readonly protocol: number;
   private opponentSeat: number | null = null;
+  /** Who the relay lists in the room, from its last roster (net/trust.ts). */
+  private members = new Set<number>();
+  private readonly listeners = new Set<(msg: Msg, from: number) => void>();
   /** An extra gate on relay -> ROM, set by the page (match/spectate.ts). A ROM handed
    *  a `bstart` starts replaying a fight, and `bstart`/`turn` are broadcasts, so a
    *  client that did not ask to watch must not be handed one. Unset, everything that
@@ -106,6 +114,7 @@ export class Bridge {
   private inCount = 0;
   private outCount = 0;
   private dropCount = 0;
+  private refusedCount = 0;
   private readonly unsubs: (() => void)[] = [];
 
   constructor(opts: BridgeOptions) {
@@ -117,16 +126,28 @@ export class Bridge {
 
     this.unsubs.push(opts.emu.onFrame(() => this.onFrame()));
     this.unsubs.push(this.relay.on('recv', (ev) => this.onRelayRecv(ev)));
-    this.unsubs.push(this.relay.on('roster', (ev) => this.roster.applyRoster(ev)));
+    this.unsubs.push(this.relay.on('roster', (ev) => this.onRoster(ev)));
 
     if (typeof window !== 'undefined' && import.meta.env.DEV) {
       (window as unknown as { __br?: unknown }).__br = { bridge: this, roster: this.roster, mailbox: this.mailbox };
     }
   }
 
-  /** Stops listening to the emulator and the relay. */
+  /** Stops listening to the emulator and the relay, and lets go of every onMessage. */
   dispose(): void {
     for (const unsub of this.unsubs.splice(0)) unsub();
+    this.listeners.clear();
+  }
+
+  /** Everything the room says to this page, once: decoded, validated, and from somebody
+   *  entitled to say it (net/trust.ts), with the relay's `from` -- the sender, which a
+   *  peer cannot forge. The page and its director used to take `recv` off the relay
+   *  themselves, each decoding `m` again and none of them reading `from` (POK-330 #24).
+   *  Released by dispose(), so a rejoin's new Bridge cannot leave a second copy
+   *  listening. */
+  onMessage(fn: (msg: Msg, from: number) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
   }
 
   /** Throws unless the ROM's mailbox is awake and speaking this protocol. Call once
@@ -136,7 +157,14 @@ export class Bridge {
   }
 
   get stats(): BridgeStats {
-    return { frames: this.framesCount, in: this.inCount, out: this.outCount, drops: this.dropCount, pending: this.mailbox.pending() };
+    return {
+      frames: this.framesCount,
+      in: this.inCount,
+      out: this.outCount,
+      drops: this.dropCount,
+      refused: this.refusedCount,
+      pending: this.mailbox.pending(),
+    };
   }
 
   private onFrame(): void {
@@ -219,21 +247,31 @@ export class Bridge {
       this.dropCount++;
       return;
     }
+    const host = this.relay.hostId;
+    if (!admits(msg, ev.from, { host, members: this.members })) {
+      this.refusedCount++;
+      return;
+    }
     if (msgSeat(msg) === this.seat && !ADDRESSED_TO_SEAT.has(msg.t)) return; // our own message, echoed back
 
     this.noteChallenge(msg);
     this.roster.applyMsg(msg);
-    if (!crossesToRom(msg.t)) return; // JSON-only (accept/decline/win/ready/...): nothing to push
-    if (this.romFilter && !this.romFilter(msg)) return;
-
-    let slots: BinarySlot[];
-    try {
-      slots = packSlot(msg);
-    } catch {
-      this.dropCount++;
-      return;
+    // JSON-only messages (accept/decline/win/ready/...) have nothing to push, and reach
+    // the page all the same.
+    if (crossesToRom(msg.t) && (!this.romFilter || this.romFilter(msg))) {
+      try {
+        this.outQueue.push(...packSlot(msg));
+      } catch {
+        this.dropCount++; // the ROM cannot take it; the page still hears it
+      }
     }
-    this.outQueue.push(...slots);
+    for (const fn of [...this.listeners]) fn(msg, ev.from);
+  }
+
+  /** The relay's roster: the room's rows, and who is in it for net/trust.ts. */
+  private onRoster(ev: RosterEvent): void {
+    this.roster.applyRoster(ev);
+    this.members = new Set(ev.members.map((m) => m.id));
   }
 
   setRomFilter(fn: ((msg: Msg) => boolean) | null): void {

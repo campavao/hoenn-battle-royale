@@ -151,8 +151,10 @@ test('the host tabs out and hands the match over without leaving', async ({ brow
       };
       const out = new Set<number>(br.match.out);
       const seat = [...(br.match.seats as number[])].reverse().find((s) => !out.has(s) && s !== br.bridge.seat);
-      // Delivered as the relay would deliver it, without asking anybody to really go out.
-      relay.emit('recv', { from: br.bridge.seat === 0 ? 1 : 0, m: { t: 'out', seat } });
+      // Delivered as the relay would deliver it, without asking anybody to really go out:
+      // from the heir, which is who announces a bot's `out` now -- and the one sender the
+      // Bridge takes an `out` naming somebody else from (POK-330 #24).
+      relay.emit('recv', { from: relay.hostId, m: { t: 'out', seat } });
       return sent.map((m) => m.t);
     });
     expect(said, 'the ex-host narrates nothing: the heir runs the match now').not.toContain('ticker');
@@ -185,7 +187,7 @@ test('a socket that blips rejoins with one of everything, not two', async ({ bro
     const listeners = () =>
       guest.evaluate(() => {
         // `listeners` is RelayClient's private map of handlers; `recv` holds the Bridge's
-        // and the page's, one each.
+        // alone -- the page and its director hear the room through it (POK-330 #24).
         const br = (window as unknown as BrWindow).__br;
         return { recv: br.bridge.relay.listeners.get('recv').size as number, seat: br.bridge.seat as number };
       });

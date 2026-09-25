@@ -74,6 +74,14 @@ describe('wire.decode rejects', () => {
     expect(() => decode(JSON.stringify({ t: 'nonsense' }))).toThrow(WireError);
   });
 
+  // POK-330 #24: the type was looked up with `in`, which walks the prototype, so these
+  // found Object's own methods and came back as whatever those return.
+  it("a type that only names something on Object's prototype", () => {
+    for (const t of ['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__']) {
+      expect(() => decode(JSON.stringify({ t })), t).toThrow(WireError);
+    }
+  });
+
   it('a missing seat', () => {
     expect(() => decode(JSON.stringify({ t: 'out' }))).toThrow(WireError);
   });
