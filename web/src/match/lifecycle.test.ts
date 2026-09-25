@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { botRows, botSeatsOf, departedSeats } from './lifecycle';
+import { botRows, botSeatsOf, departedSeats, freshMatch, onPromotion, seatsFor } from './lifecycle';
 import { dealBots } from '../bots/roster';
 import type { RosterEvent } from '../net/relay';
 
@@ -44,5 +44,32 @@ describe('who has walked out of a running match (POK-271)', () => {
 
   it('nor is anybody already out', () => {
     expect(departedSeats([0, 1, 2], new Set(), [0], new Set([1]))).toEqual([2]);
+  });
+});
+
+// POK-330 #22: PLAY AGAIN never reset the match.
+describe('the next match, after PLAY AGAIN', () => {
+  it('is dealt to the people the relay lists, never to last match\'s bots on the page\'s roster', () => {
+    const roster = room([{ id: 0, name: 'CAM' }, { id: 2, name: 'EYE', spectate: true }]);
+    expect(seatsFor(roster), 'from the last roster').toEqual([0]);
+    expect(seatsFor(roster, [0, 2, 5]), 'from the event in hand, watchers still out').toEqual([0, 5]);
+    expect(seatsFor(null)).toEqual([]);
+  });
+
+  it('starts from nothing: no match on, none to take over', () => {
+    const match = freshMatch();
+    expect(match).toMatchObject({ seed: 0, seats: [], active: false, ended: false });
+    expect(match.out.size + match.botSeats.size).toBe(0);
+    expect(freshMatch().out, 'and never shares its sets with the last one').not.toBe(match.out);
+  });
+
+  it('an heir takes over a match in flight, and only that', () => {
+    expect(onPromotion({ active: true, ended: false })).toBe('take-over');
+    // Between START presses, or before the first: the room, and its START.
+    expect(onPromotion(freshMatch())).toBe('room');
+    // A match already won is waiting for its grace to bring everybody back to the room,
+    // where START is the heir's. Taking it over restarted its clock and bots on ROMs
+    // that had rebooted into Littleroot.
+    expect(onPromotion({ active: true, ended: true })).toBe('none');
   });
 });

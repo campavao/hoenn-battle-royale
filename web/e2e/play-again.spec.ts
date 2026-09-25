@@ -28,7 +28,7 @@ test.beforeAll(() => {
 });
 
 test('a finished match lets go, and the room keeps its code, roster and socket', async ({ page }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(360_000);
 
   await page.goto(`/#host&fast&seed=20260916&testmon&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
@@ -89,4 +89,27 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
     return { group: emu.read(save + 4, 8), num: emu.read(save + 5, 8) };
   }, symbols.gSaveBlock1Ptr);
   expect(where, 'the replay landed in Littleroot, not the truck').toEqual({ group: 0, num: 9 });
+
+  // POK-330 #22: and it stays in the room. The last match was never reset, so the page's
+  // one-second strip still saw a match on and took the room screen -- START with it --
+  // down again about a second after coming back.
+  await page.waitForTimeout(3_000);
+  await expect(page.locator('#room-start'), 'START is still there three seconds on').toBeVisible();
+  expect(await page.evaluate(() => document.body.classList.contains('in-match')), 'not dressed for a match').toBe(false);
+
+  // ...and the next START deals a real match: bots filling the room again, not last
+  // match's bots seated as people (which made FILL zero and a match nobody could win).
+  await page.locator('#room-start').click();
+  await page.waitForFunction(
+    () => (window as unknown as BrWindow).__br?.director?.state?.phase === 'safari',
+    undefined,
+    { timeout: 30_000 },
+  );
+  const second = await page.evaluate(() => {
+    const br = (window as unknown as BrWindow).__br;
+    return { bots: br.botCount() as number, alive: br.director.state.alive as number, seats: br.match.seats.length as number };
+  });
+  expect(second.bots, 'the room filled with bots again').toBeGreaterThan(0);
+  expect(second.alive, 'every seat in the match is somebody who can move: us and the bots').toBe(second.bots + 1);
+  expect(second.seats).toBe(second.alive);
 });

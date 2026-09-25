@@ -78,7 +78,15 @@ import { DOORSTEPS, HAND, LANDING } from './match/landing';
 import { SAFARI_CELLS } from './match/safari';
 import { cardFor } from './match/card';
 import { MatchRecord, recordLines } from './match/record';
-import { botRows, botSeatsOf, departedSeats } from './match/lifecycle';
+import {
+  botRows,
+  botSeatsOf,
+  departedSeats,
+  freshMatch,
+  onPromotion,
+  seatsFor,
+  type MatchSnapshot,
+} from './match/lifecycle';
 import regionmapData from './data/regionmap.json';
 import { parseRoomHash as parseHash, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
 
@@ -1609,14 +1617,16 @@ const DIRECTOR_TICK_MS = 1000; // coarser than the 5s clock/fogSecs cadence dire
  *  same two numbers into the ROM's own HUD corner. */
 function renderGuestStrip(
   bridge: Bridge,
-  match: { ringPhase: number; ringR: number; centre?: { place?: string }; clockLeft: number; clockAt: number; seed: number },
+  match: Pick<MatchSnapshot, 'ringPhase' | 'ringR' | 'centre' | 'clockLeft' | 'clockAt' | 'active'>,
   now: number,
 ): { alive: number; clockLeft: number } | null {
   const strip = $('#match-strip') as HTMLElement;
   // A watcher arrives mid-match and never hears the START, so the seed is not the test
   // for "is there a match": what it has is the late burst the host sent it, a ring and
-  // a clock (POK-260).
-  if (match.seed === 0 && match.ringPhase === 0 && match.clockLeft === 0) {
+  // a clock (POK-260) -- which `active` counts. And PLAY AGAIN puts it back to false:
+  // reading "a match was once heard" as "a match is on" is what took the room screen
+  // and its START away a second after every return (POK-330 #22).
+  if (!match.active) {
     strip.hidden = true;
     return null;
   }
@@ -2158,18 +2168,15 @@ function wireRoom(
   }, 1000);
   showRoomScreen();
 
-  /** `members` comes straight off the relay's roster event when there is one: the
-   *  Bridge's own subscription may not have folded it into `bridge.roster` yet -- both
-   *  listen to the same event, and this one was registered first -- and starting a
-   *  match a seat short makes "N LEFT" wrong and hands the win to the wrong person. */
+  /** `members` comes straight off the relay's roster event when there is one, and the
+   *  relay's last roster otherwise: who is in the room is the relay's to say. Never
+   *  `bridge.roster`, which also holds whoever this page has merely heard from -- last
+   *  match's bots, which PLAY AGAIN then seated as people (POK-330 #22). Watchers are in
+   *  the room but not in the match (POK-260): seating one deals it a drop it will never
+   *  take and counts it among the living, so the match cannot reach a winner. */
   const startDirector = (members?: number[], takeOver = false) => {
     if (director || !bridge || !isHost) return;
-    const known = bridge.roster.all().map((e) => e.seat);
-    // Watchers are in the room but not in the match (POK-260). Seating one deals it a
-    // drop it will never take and counts it among the living, so the match cannot
-    // reach a winner -- a spectator never counts, which is Kanto's rule too.
-    const watching = new Set((controls.roster?.members ?? []).filter((m) => m.spectate).map((m) => m.id));
-    const seats = [...new Set([...(members ?? []), ...known])].filter((seat) => !watching.has(seat));
+    const seats = seatsFor(controls.roster, members);
     if (seats.length === 0) return;
     const hostSeat = bridge.seat;
     // The door shuts when the match starts, wherever the start came from (POK-260).
@@ -2423,29 +2430,14 @@ function wireRoom(
   // The ROM only holds the loot for the map it is standing on, and forgets it on the
   // way out; the page holds the match's whole table and hands back the piece that
   // matters every time our own trainer arrives somewhere (POK-232).
-  const loot = new Loot();
+  // A `let`, because PLAY AGAIN starts the next match on a clean table: last match's
+  // unclaimed pieces were pushed back into the rebooted ROM, and bots walked to them.
+  let loot = new Loot();
   let lootMap: string | null = null;
   const results = new Results();
-  /** Everything a promoted client needs to pick the match up (POK-252). All of it
-   *  arrives in messages every client hears, so a guest is always ready to take over
-   *  without anybody having sent it anything special. */
-  const match = {
-    seed: 0,
-    seats: [] as number[],
-    /** Where `start` dealt everybody, so a takeover does not deal those cells again. */
-    spawns: [] as { map: MapRef; x: number; y: number }[],
-    /** The seats in `seats` that are bots, which no relay roster will ever list. */
-    botSeats: new Set<number>(),
-    ringPhase: 0,
-    centre: undefined as { sx: number; sy: number; place?: string } | undefined,
-    /** The ring's radius, for the strip a guest draws for itself (POK-268). */
-    ringR: 0,
-    clockLeft: 0,
-    /** When that clockLeft arrived, so the seconds between the five-second CLOCKs can
-     *  be counted off locally rather than standing still. */
-    clockAt: 0,
-    out: new Set<number>(),
-  };
+  /** Everything a promoted client needs to pick the match up (POK-252), and reset by
+   *  returnToRoom for the next one (match/lifecycle.ts). */
+  const match: MatchSnapshot = freshMatch();
   let fieldSize = 0;
   let recorded = false;
   const log = new MatchLog();
@@ -2455,13 +2447,17 @@ function wireRoom(
   const noteResult = (msg: Msg) => {
     // The match, as anybody in the room can see it.
     if (msg.t === 'start') {
-      match.seed = msg.seed;
-      match.seats = msg.spawns.map((s) => s.seat);
-      match.spawns = msg.spawns.map((s) => ({ map: s.map, x: s.x, y: s.y }));
-      // The host set its own bot seats when it dealt them; a guest reads them off the
-      // room. Either way they go on the roster by the names the seed gave them, which
-      // every page can work out (POK-330 #51) -- before the log below takes its names.
-      if (!director) match.botSeats = new Set(botSeatsOf(match.seats, controls.roster));
+      // A new match, whatever the last one left here: its eliminations, its ring, its end.
+      Object.assign(match, freshMatch(), {
+        seed: msg.seed,
+        seats: msg.spawns.map((s) => s.seat),
+        spawns: msg.spawns.map((s) => ({ map: s.map, x: s.x, y: s.y })),
+        // The host set its own bot seats when it dealt them; a guest reads them off the
+        // room. Either way they go on the roster by the names the seed gave them, which
+        // every page can work out (POK-330 #51) -- before the log below takes its names.
+        botSeats: director ? match.botSeats : new Set(botSeatsOf(msg.spawns.map((s) => s.seat), controls.roster)),
+        active: true,
+      });
       bridge?.roster.seatBots(botRows(msg.seed, match.botSeats));
       hideRoomScreen();
     } else if (msg.t === 'ring') {
@@ -2470,9 +2466,13 @@ function wireRoom(
       match.ringR = msg.r;
       match.clockLeft = 0;
       match.clockAt = performance.now();
+      match.active = true; // a watcher's late start: it never heard the `start`
     } else if (msg.t === 'clock') {
       match.clockLeft = msg.left;
       match.clockAt = performance.now();
+      match.active = true;
+    } else if (msg.t === 'win') {
+      match.ended = true;
     } else if (msg.t === 'out') {
       match.out.add(msg.seat);
     }
@@ -2839,6 +2839,23 @@ function wireRoom(
    *  so is the grace timer below; nothing else may take the exit, because a reload
    *  (backToLobby) scatters the eight people you have just played with (POK-258). */
   let returning = false;
+  /** Forgets the last match (POK-330 #22): what the room heard of it, its loot, who was
+   *  busy in it, who had been caught up on it, and its bots on the roster. PLAY AGAIN
+   *  used to keep all of that, and each piece went wrong in the next match its own way:
+   *  the room screen and START went a second after coming back, the next START seated
+   *  the old bots as people, and an heir resumed the match that had just been won. */
+  const resetMatch = (): void => {
+    Object.assign(match, freshMatch());
+    loot = new Loot();
+    lootMap = null;
+    busySeats.clear();
+    greeted.clear();
+    room.startAt = null;
+    if (bridge) {
+      bridge.roster.endMatch();
+      if (controls.roster) bridge.roster.applyRoster(controls.roster);
+    }
+  };
   async function returnToRoom(): Promise<void> {
     if (returning) return;
     returning = true;
@@ -2846,6 +2863,7 @@ function wireRoom(
     try {
       endGrace();
       teardownHost();
+      resetMatch();
       if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
       else await emu.reboot();
       recorded = false;
@@ -2952,12 +2970,15 @@ function wireRoom(
       // Before any match, an heir inherits the room and nothing else: a hosted room still
       // waits for START, now this page's (play-test 2026-09-19: the host switched apps,
       // iOS dropped its socket, and the guest it handed to started the match unasked).
-      if (match.seed === 0 && !room.started) {
-        if (startsItself(hash.mode) && autoStarts() && room.startAt === null) {
+      // After one it is the same, once the grace brings everybody back: a match that has
+      // been won is not one to take over (POK-330 #22).
+      const next = onPromotion(match);
+      if (next === 'room') {
+        if (!room.started && startsItself(hash.mode) && autoStarts() && room.startAt === null) {
           room.startAt = performance.now() + AUTO_START_MS;
           setTimeout(() => startDirector(), AUTO_START_MS);
         }
-      } else startDirector(ev.members.map((m) => m.id), match.seed !== 0);
+      } else if (next === 'take-over') startDirector(ev.members.map((m) => m.id), match.seed !== 0);
     }
     // Stood down. The relay moved `host` off us while we are still in the room, which
     // only happens because we asked it to (the tab went to the background). The
@@ -2971,8 +2992,10 @@ function wireRoom(
     }
     // Somebody arrived while the match is running: tell them where the fog is, now
     // (POK-260). Kanto calls this the late start -- a watcher who has to wait for the
-    // next ring to learn the state spends up to two minutes looking at nothing.
-    if (director && bridge) {
+    // next ring to learn the state spends up to two minutes looking at nothing. Not once
+    // it has been won: the room is open again, and somebody walking in on the wait for
+    // PLAY AGAIN would be handed a match that is over and lose the room screen to it.
+    if (director && bridge && director.state.phase !== 'ended') {
       const state = director.state;
       for (const m of ev.members) {
         if (m.id === bridge.seat || greeted.has(m.id)) continue;

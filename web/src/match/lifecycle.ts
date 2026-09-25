@@ -6,7 +6,77 @@
 // room's worst bugs were those decisions going wrong. They are pure functions here, which
 // is also the first step of pulling the match out of that closure (#42).
 import type { RosterEvent } from '../net/relay';
+import type { MapRef } from '../net/wire';
 import { dealBots, MAX_SEATS } from '../bots/roster';
+
+/** The match as any page in the room can see it (POK-252): everything a promoted client
+ *  needs to pick it up arrives in messages every client hears, so a guest is always ready
+ *  to take over without anybody having sent it anything special. */
+export interface MatchSnapshot {
+  seed: number;
+  seats: number[];
+  /** Where `start` dealt everybody, so a takeover does not deal those cells again. */
+  spawns: { map: MapRef; x: number; y: number }[];
+  /** The seats in `seats` that are bots, which no relay roster will ever list. */
+  botSeats: Set<number>;
+  ringPhase: number;
+  centre?: { sx: number; sy: number; place?: string };
+  /** The ring's radius, for the strip a guest draws for itself (POK-268). */
+  ringR: number;
+  clockLeft: number;
+  /** When that clockLeft arrived, so the seconds between the five-second CLOCKs can be
+   *  counted off locally rather than standing still. */
+  clockAt: number;
+  out: Set<number>;
+  /** A match is on: a `start` was heard, or -- for a watcher who walked in on one and
+   *  never hears its start -- a `ring` or `clock` (POK-260). */
+  active: boolean;
+  /** ...and it has been decided: its `win` has been heard. */
+  ended: boolean;
+}
+
+/** No match at all: what a room is before START, and what PLAY AGAIN puts back. A match
+ *  that outlived its own ending is how the host's room screen lost START a second after
+ *  coming back, and how an heir promoted between matches resumed the finished one
+ *  (POK-330 #22). */
+export function freshMatch(): MatchSnapshot {
+  return {
+    seed: 0,
+    seats: [],
+    spawns: [],
+    botSeats: new Set(),
+    ringPhase: 0,
+    centre: undefined,
+    ringR: 0,
+    clockLeft: 0,
+    clockAt: 0,
+    out: new Set(),
+    active: false,
+    ended: false,
+  };
+}
+
+/** Who a match is dealt to: the relay's members, watchers excepted (POK-260). Never the
+ *  page's own roster, which also holds whoever it has merely heard from -- last match's
+ *  bots above all, which PLAY AGAIN then seated as people: FILL came out at zero and the
+ *  match waited for seven seats that would never move (POK-330 #22). `members` is the
+ *  roster event in hand, when there is one. */
+export function seatsFor(roster: RosterEvent | null, members?: readonly number[]): number[] {
+  const watching = new Set((roster?.members ?? []).filter((m) => m.spectate).map((m) => m.id));
+  const ids = members ?? (roster?.members ?? []).map((m) => m.id);
+  return [...new Set(ids)].filter((seat) => !watching.has(seat));
+}
+
+/** What a client the relay has just made host does about the match (POK-252):
+ *  `take-over` one that is running; `room` when there is none, inheriting the room and
+ *  its START and nothing else (c981dd910); `none` when the last one has been decided and
+ *  is only waiting for its grace to bring everybody back to the room -- which gives the
+ *  heir START there. Resuming a finished match restarted its clock and its bots on ROMs
+ *  that had rebooted into Littleroot (POK-330 #22). */
+export function onPromotion(match: Pick<MatchSnapshot, 'active' | 'ended'>): 'take-over' | 'room' | 'none' {
+  if (!match.active) return 'room';
+  return match.ended ? 'none' : 'take-over';
+}
 
 /** The names and skins a match's bots were dealt (POK-330 #51), for any page that knows
  *  the seed and which seats are bots. dealBots walks down from the top seat past the
