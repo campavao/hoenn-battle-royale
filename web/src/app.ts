@@ -20,6 +20,7 @@ import { nameBstart, romReplaying, Spectate } from './match/spectate';
 import { bossAt } from './match/bosses';
 import { Loot } from './match/loot';
 import { Results } from './match/results';
+import { EndGrace } from './match/grace';
 import { createHostBots, type BotResume, type HostBots } from './bots/host';
 import { routeToBots } from './bots/adapt';
 import { romCell } from './bots/space';
@@ -1538,7 +1539,12 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const matchBase = symbols?.get('gBrMatch');
   let fieldSize = 0;
   let recorded = false;
-  let endGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  const soloGrace = new EndGrace({
+    graceMs: SOLO_END_GRACE_MS,
+    winMaxMs: SOLO_WIN_GRACE_MAX_MS,
+    pollMs: SOLO_PARADE_POLL_MS,
+    paradeDone: matchBase !== undefined ? () => emu.read(matchBase, 8) === BR_PHASE_DONE : undefined,
+  });
   const noteResult = (msg: Msg): void => {
     if (msg.t === 'start') {
       fieldSize = msg.spawns.length;
@@ -1558,24 +1564,9 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     // A `win` with no seat at all is a draw and there is nobody to crown.
     if (msg.seat !== undefined) rom.push({ t: 'result', seat: msg.seat, outcome: 'win' });
     // Solo has no room to go back to, so the exit is the lobby -- which is what
-    // backToLobby does, and there is no socket here for it to scatter.
-    if (endGraceTimer !== null) clearTimeout(endGraceTimer);
-    if (msg.seat === 0 && matchBase !== undefined) {
-      // Won: wait for the Hall of Fame rather than a timer, with a deadline so a ROM that
-      // never finishes cannot strand anybody in a match that is over.
-      const deadline = setTimeout(() => {
-        clearInterval(poll);
-        backToLobby();
-      }, SOLO_WIN_GRACE_MAX_MS);
-      const poll = setInterval(() => {
-        if (emu.read(matchBase, 8) !== BR_PHASE_DONE) return;
-        clearInterval(poll);
-        clearTimeout(deadline);
-        backToLobby();
-      }, SOLO_PARADE_POLL_MS);
-      return;
-    }
-    endGraceTimer = setTimeout(() => backToLobby(), SOLO_END_GRACE_MS);
+    // backToLobby does, and there is no socket here for it to scatter. Won, it waits for
+    // the Hall of Fame rather than a timer, the same as the room's champion.
+    soloGrace.arm(backToLobby, msg.seat === 0);
   };
   const solo = createHostBots({
     send: (msg) => {
@@ -2321,7 +2312,7 @@ function wireRoom(
       // shape (main.lua, END_GRACE_SECONDS): everybody reads the result for a moment,
       // then one funnel takes them all back -- keeping the room, so the next match is a
       // press of START rather than eight people finding each other again.
-      armEndGrace(() => void returnToRoom(), msg.seat === bridge.seat);
+      grace.arm(() => void returnToRoom(), msg.seat === bridge.seat);
     }
   };
   let stopSpectateLoop: (() => void) | null = null;
@@ -2336,34 +2327,13 @@ function wireRoom(
    *  that is over. */
   const WIN_GRACE_MAX_MS = 60_000;
   const PARADE_POLL_MS = 500;
-  let endGraceTimer: ReturnType<typeof setTimeout> | null = null;
-  let paradePoll: ReturnType<typeof setInterval> | null = null;
-  /** Cancel a grace that is in flight -- because the exit has already been taken, by a
-   *  press of PLAY AGAIN. (Not by the host's `again`, which arrives right behind the
-   *  `win` and used to cut every guest's grace short: onAgain.) */
-  const endGrace = (): void => {
-    if (endGraceTimer !== null) clearTimeout(endGraceTimer);
-    if (paradePoll !== null) clearInterval(paradePoll);
-    endGraceTimer = null;
-    paradePoll = null;
-  };
-  const armEndGrace = (go: () => void, won = false): void => {
-    endGrace();
-    const matchBase = symbols?.get('gBrMatch');
-    if (!won || matchBase === undefined) {
-      endGraceTimer = setTimeout(go, END_GRACE_MS);
-      return;
-    }
-    // BR_PHASE_DONE: BrMatch_HallOfFameDone sets it on the way back to the map. Polling
-    // one byte beats guessing at a duration -- the parade is as long as the champion's
-    // team is, and a four-second timer would reboot the ROM in the middle of it.
-    endGraceTimer = setTimeout(go, WIN_GRACE_MAX_MS);
-    paradePoll = setInterval(() => {
-      if (emu.read(matchBase, 8) !== BR_PHASE_DONE) return;
-      endGrace();
-      go();
-    }, PARADE_POLL_MS);
-  };
+  const gBrMatch = symbols?.get('gBrMatch');
+  const grace = new EndGrace({
+    graceMs: END_GRACE_MS,
+    winMaxMs: WIN_GRACE_MAX_MS,
+    pollMs: PARADE_POLL_MS,
+    paradeDone: gBrMatch !== undefined ? () => emu.read(gBrMatch, 8) === BR_PHASE_DONE : undefined,
+  });
   /** In the room to look, not to play (POK-260). Set when this client asks to watch,
    *  and reasserted from the relay's own roster, which is the authority on it. */
   let amWatching = false;
@@ -2526,8 +2496,8 @@ function wireRoom(
       // would otherwise sit in a finished match for ever -- so that page, and only that
       // page, starts the grace now. It arrives on the heels of the `win`, and a page
       // that took it as the exit rebooted before anybody had read a result (#9).
-      if (m.t === 'again' && onAgain({ running: director !== null, match, graceArmed: endGraceTimer !== null }) === 'grace') {
-        armEndGrace(() => void returnToRoom());
+      if (m.t === 'again' && onAgain({ running: director !== null, match, graceArmed: grace.armed }) === 'grace') {
+        grace.arm(() => void returnToRoom());
       }
       if (m.t === 'pickup' && bridge && spectate.watchingSeat() === m.seat) {
         const what = loot.describe(m.key);
@@ -2681,7 +2651,7 @@ function wireRoom(
     returning = true;
     playAgainButton.disabled = true;
     try {
-      endGrace();
+      grace.cancel();
       teardownHost();
       resetMatch();
       if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
