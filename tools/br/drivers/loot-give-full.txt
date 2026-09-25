@@ -1,0 +1,74 @@
+# loot-give-full: what a bag holds that does not fit goes back on the ground (POK-331 #6).
+#
+# A bag's contents arrive as a GIVE after its pickup has gone out (bag-items.txt), and
+# HandleGive ignored AddBagItem's FALSE: a full pocket threw the rest away for the whole
+# room. Kanto's rule (lootTakeAll) is that a stack goes in whole or not at all, and what
+# does not fit stays on the ground for the next trainer with "The rest won't fit." So
+# the ROM spills the bag again, under its own key on its own cell, with only the rest.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the ITEMS pocket, all thirty slots: POTION..BLACK FLUTE (13..42), one of each
+pokebytes *gSaveBlock1Ptr+0x560 0D 00 01 00 0E 00 01 00 0F 00 01 00 10 00 01 00 11 00 01 00 12 00 01 00 13 00 01 00 14 00 01 00 15 00 01 00 16 00 01 00 17 00 01 00 18 00 01 00 19 00 01 00 1A 00 01 00 1B 00 01 00 1C 00 01 00 1D 00 01 00 1E 00 01 00 1F 00 01 00 20 00 01 00 21 00 01 00 22 00 01 00 23 00 01 00 24 00 01 00 25 00 01 00 26 00 01 00 27 00 01 00 28 00 01 00 29 00 01 00 2A 00 01 00
+# seat 3's bag on our own tile: key 0x03FF, (12,16), map 0:9, kind 2 (BR_LOOT_BAG),
+# objId BR_NO_OBJ, money 1200 (0x4B0)
+pokebytes gBrLoot FF 03 0C 00 10 00 00 00 00 09 00 02 FF 00 00 00 B0 04 00 00
+wait 60
+tap A
+wait 20
+# "FOUND 1200!", and the bag's pickup is out: the row is gone from our ground.
+expect u8 gBrLoot+0xA2 1
+expect u8 gBrLoot+11 0
+expect u8 gBrHud+0x14D 11
+# GIVE [count 3] (ORAN BERRY x2) (NUGGET x1) (TM06 x1): the berries and the TM have
+# pockets of their own with room, and the NUGGET needs a slot the ITEMS pocket does not
+# have.
+pokebytes gDecompressionBuffer 03 8B 00 02 6E 00 01 26 01 01
+mailsend gBrMailbox 30 gDecompressionBuffer 10
+wait 10
+shot no-room-rest
+# The berries and the TM are in (TM slot 8, after the eight HMs), the ITEMS pocket is
+# as it was...
+expect u16 *gSaveBlock1Ptr+0x790 139
+expect u16 *gSaveBlock1Ptr+0x6B0 294
+expect u16 *gSaveBlock1Ptr+0x560 13
+expect u16 *gSaveBlock1Ptr+0x5D4 42
+# ...and the NUGGET is back on the ground in the bag it came out of: key 0x03FF on
+# (12,16), a bag with the cash already gone.
+expect u16 gBrLoot 0x03FF
+expect u8 gBrLoot+11 2
+expect u16 gBrLoot+2 12
+expect u16 gBrLoot+4 16
+expect u32 gBrLoot+16 0
+# The room is told the same: a SPILL under our seat, no mons, the bag with one stack.
+expectmsg 11 u8 0 0
+expectmsg 11 u8 3 0
+expectmsg 11 u8 4 1
+expectmsg 11 u16 5 0x03FF
+expectmsg 11 u16 7 12
+expectmsg 11 u16 9 16
+expectmsg 11 u8 11 1
+expectmsg 11 u16 12 110
+expectmsg 11 u8 14 1
+expectmsg 11 u16 15 0
+# The box says both: "FOUND 1200!" then a newline and "NO ROOM FOR THE REST".
+expect u8 gBrHud+0x14D 32
+expect u8 gBrHud+0x159 0xFE
+expect u8 gBrHud+0x15A 0xC8
+# Room in the last slot, and the bag is taken again: "FOUND 0!", and this time its GIVE
+# (the NUGGET, from the page's copy of the bag) goes in and nothing comes back out.
+poke u16 *gSaveBlock1Ptr+0x5D4 0
+wait 100
+tap A
+wait 20
+expect u8 gBrLoot+0xA2 2
+expect u8 gBrLoot+11 0
+pokebytes gDecompressionBuffer 01 6E 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 4
+wait 10
+expect u16 *gSaveBlock1Ptr+0x5D4 110
+expect u8 gBrLoot+11 0
+expect u8 gBrHud+0x14D 8
+shot kept
+say loot give full ok

@@ -330,7 +330,9 @@
 //
 // So the page keeps the contents, as it already does for the whole match (match/loot.ts),
 // and gives them over when it sees our own seat take the bag. The ROM does not decide
-// what is in a bag any more than it decides where one lands.
+// what is in a bag any more than it decides where one lands. A stack that does not fit
+// goes back on the ground: the ROM spills the bag again, same key and cell, under its
+// own seat, with only what is left in it (POK-331 #6).
 // Payload:
 //   0:    count    u8   1..8 stacks
 //   1..:  stacks   count * (id u16, n u8)

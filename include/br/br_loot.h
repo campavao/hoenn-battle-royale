@@ -38,7 +38,8 @@
 // Key spaces, so two things on the ground can never claim the same key:
 //
 //   0x0000..0x1FFF  a fallen trainer's team and bag -- `(seat << 8) | n`, the bag's n
-//                   0xFF. The page mints a bot's; our own ROM mints ours.
+//                   0xFF. The page mints a bot's; our own ROM mints ours. A bag put
+//                   back with what did not fit keeps its key under the taker's spill.
 //   0x4000..0x5FFF  a Pokemon the player RELEASED to make room (POK-294). Minted in the
 //                   ROM, because nobody else is watching the moment it happens.
 //   0x8000..0xFFFF  nobody's: one of Hoenn's own trainers, `0x8000 | (party index << 11)

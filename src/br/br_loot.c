@@ -263,14 +263,32 @@ static void ParseSpill(const u8 *d, u16 n)
     }
 }
 
+// The bag Take() last sent the pickup for, kept until its GIVE arrives: the key and the
+// cell anything that does not fit goes back to. kind BR_LOOT_NONE when there is none.
+static EWRAM_DATA struct BrLootItem sGivenBag = {0};
+static const u8 sText_NoRoom[] = _("NO ROOM FOR IT");
+static const u8 sText_NoRoomRest[] = _("NO ROOM FOR THE REST");
+// Defined with Take(): the FOUND line, and under it the NO ROOM one.
+static void SayBag(u32 money, bool8 full);
+
 // GIVE: the page handing over what was in a bag we just took. The line and the money
 // are already said by Take(); this is the rest of it arriving a frame later, which is
 // what "one press" means when the contents live on the other side of the mailbox.
+//
+// A stack goes in whole or not at all, and what does not fit stays on the ground for the
+// next trainer -- Kanto's rule (lootTakeAll, "The rest won't fit."). The pickup has gone
+// out by now, so staying is the bag spilled again, under its own key on its own cell,
+// with only the rest in it. AddBagItem's FALSE used to go unread, and a full pocket
+// threw the rest away for the whole room (POK-331 #6).
 static void HandleGive(const u8 *payload, u8 len)
 {
     const u8 *d;
     u8 n = BrWire_Unframe(payload, len, &d);
-    u8 count, i;
+    // [seat, map, 0 mons, bag, key, x, y, itemCount, 8 * (id, n), money, nameLen]:
+    // BrLoot_SpillOwn's bag with nobody's name on it and the cash already taken.
+    u8 buf[4 + 1 + 6 + 1 + 8 * 3 + 4 + 1];
+    u8 count, i, left = 0;
+    u16 at = 12;
 
     if (n < 1)
         return;
@@ -282,9 +300,42 @@ static void HandleGive(const u8 *payload, u8 len)
         const u8 *row = d + 1 + 3 * i;
         u16 item = BrWire_ReadU16(row);
 
-        if (item != ITEM_NONE && row[2] != 0)
-            AddBagItem(item, row[2]);
+        if (item == ITEM_NONE || row[2] == 0 || AddBagItem(item, row[2]))
+            continue;
+        buf[at++] = row[0];
+        buf[at++] = row[1];
+        buf[at++] = row[2];
+        left++;
     }
+    if (left == 0)
+    {
+        sGivenBag.kind = BR_LOOT_NONE;
+        return;
+    }
+    PlaySE(SE_FAILURE);
+    if (sGivenBag.kind != BR_LOOT_BAG)
+    {
+        BrHud_Box(sText_NoRoom); // no bag of ours to put it back in: nothing to point at
+        return;
+    }
+    SayBag(sGivenBag.money, TRUE);
+    buf[0] = gBrMySeat;
+    buf[1] = sGivenBag.mapGroup;
+    buf[2] = sGivenBag.mapNum;
+    buf[3] = 0;
+    buf[4] = 1;
+    BrWire_WriteU16(buf + 5, sGivenBag.key);
+    BrWire_WriteU16(buf + 7, (u16)sGivenBag.x);
+    BrWire_WriteU16(buf + 9, (u16)sGivenBag.y);
+    buf[11] = left;
+    buf[at++] = 0; // money: Take() paid it out already
+    buf[at++] = 0;
+    buf[at++] = 0;
+    buf[at++] = 0;
+    buf[at++] = 0; // no name: the ROM never kept whose it was
+    sGivenBag.kind = BR_LOOT_NONE;
+    BrWire_SendLarge(BR_MSG_SPILL, buf, at);
+    ParseSpill(buf, at);
 }
 
 static void HandleSpill(const u8 *payload, u8 len)
@@ -457,7 +508,6 @@ void BrLoot_SpillOwn(void)
 
 static const u8 sText_Took[] = _("TOOK ");
 static const u8 sText_Found[] = _("FOUND ");
-static const u8 sText_NoRoom[] = _("NO ROOM FOR IT");
 static const u8 sText_Bang[] = _("!");
 
 // Tell the room it is gone, and take it off our own ground: nobody hears their own
@@ -507,6 +557,24 @@ static bool8 WasOurs(u16 key)
 // pickup's own business and this is only the label coming off.
 static void DropHeldLine(void);
 
+// "FOUND 1200!" when a bag is taken, and the same again with NO ROOM FOR THE REST under
+// it once its GIVE has found a pocket full (HandleGive).
+static void SayBag(u32 money, bool8 full)
+{
+    u8 line[BR_HUD_LINE_MAX + 2];
+    u8 *p;
+
+    p = StringCopy(line, sText_Found);
+    p = ConvertIntToDecimalStringN(p, money, STR_CONV_MODE_LEFT_ALIGN, 7);
+    p = StringCopy(p, sText_Bang);
+    if (full)
+    {
+        *p++ = CHAR_NEWLINE;
+        StringCopy(p, sText_NoRoomRest);
+    }
+    BrHud_Box(line);
+}
+
 static void Take(struct BrLootItem *it)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
@@ -520,11 +588,9 @@ static void Take(struct BrLootItem *it)
     {
         if (it->money != 0)
             AddMoney(&gSaveBlock1Ptr->money, it->money);
-        p = StringCopy(line, sText_Found);
-        p = ConvertIntToDecimalStringN(p, it->money, STR_CONV_MODE_LEFT_ALIGN, 7);
-        StringCopy(p, sText_Bang);
+        SayBag(it->money, FALSE);
         PlaySE(SE_PIN);
-        BrHud_Box(line);
+        sGivenBag = *it; // where its GIVE puts back what does not fit
         SendPickup(it);
         return;
     }
@@ -942,6 +1008,7 @@ void BrLoot_Init(void)
 {
     CpuFill32(0, &gBrLoot, sizeof(gBrLoot));
     CpuFill32(0, gBrDespawned, sizeof(gBrDespawned));
+    sGivenBag.kind = BR_LOOT_NONE;
     sSpillAsm.buf = sSpillBuf;
     sSpillAsm.cap = sizeof(sSpillBuf);
     sSpillAsm.type = 0;
