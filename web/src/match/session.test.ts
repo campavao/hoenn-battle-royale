@@ -220,23 +220,33 @@ describe("one match's books (POK-330 #42)", () => {
     expect(session.loot.forMap(ROUTE_101)).toBeNull();
   });
 
-  it('hands over the loot where we stand once per map we arrive on', () => {
-    const { session } = books();
+  it('hands our own ROM the loot where it stands, once per map it arrives on', () => {
+    const { session, toRom } = books();
+    const spilled = () => toRom.filter((m): m is SpillMsg => m.t === 'spill').map((m) => m.bag?.key);
     session.note(bag(7), { from: 7 });
-    expect(session.standingLoot(place(0, ROUTE_101))?.bag?.key).toBe(0x07ff);
-    expect(session.standingLoot(place(0, ROUTE_101))).toBeNull();
-    expect(session.standingLoot({ t: 'out', seat: 0 })).toBeNull();
-    expect(session.standingLoot(place(0, ROUTE_102))).toBeNull(); // nothing lying there
-    expect(session.standingLoot(place(0, ROUTE_101))?.bag?.key).toBe(0x07ff);
+    session.note(place(0, ROUTE_101), 'rom');
+    expect(spilled()).toEqual([0x07ff]);
+    session.note(place(0, ROUTE_101), 'rom');
+    session.note({ t: 'out', seat: 0 }, 'rom');
+    expect(spilled()).toEqual([0x07ff]);
+    session.note(place(0, ROUTE_102), 'rom'); // nothing lying there
+    expect(spilled()).toEqual([0x07ff]);
+    session.note(place(0, ROUTE_101), 'rom');
+    expect(spilled()).toEqual([0x07ff, 0x07ff]);
+    // Somebody else arriving is nothing to our ROM, and neither is our own page's word.
+    session.note(place(7, ROUTE_102), { from: 7 });
+    session.note(place(0, ROUTE_102), 'page');
+    session.note(place(7, ROUTE_101), { from: 7 });
+    expect(spilled()).toEqual([0x07ff, 0x07ff]);
   });
 
   // POK-330 #22: PLAY AGAIN kept the last match, and each piece went wrong in the next.
   it('ends a match without letting go of the match object, and starts the next table clean', () => {
-    const { session } = books();
+    const { session, toRom } = books();
     const match = session.match;
     session.note(start([0, 7]), 'page');
     session.note(bag(7), { from: 7 });
-    session.standingLoot(place(0, ROUTE_101));
+    session.note(place(0, ROUTE_101), 'rom');
     session.note({ t: 'busy', seat: 7, kind: 'battle' }, { from: 7 });
     session.greeted.add(7);
     session.owedLoot.add(7);
@@ -254,7 +264,9 @@ describe("one match's books (POK-330 #42)", () => {
     expect(session.log.current(0)?.winner).toBe(0);
     // ...and the map we stand on is news again to the next table.
     session.note(bag(7), { from: 7 });
-    expect(session.standingLoot(place(0, ROUTE_101))?.bag?.key).toBe(0x07ff);
+    toRom.length = 0;
+    session.note(place(0, ROUTE_101), 'rom');
+    expect(toRom).toEqual([expect.objectContaining({ t: 'spill', bag: expect.objectContaining({ key: 0x07ff }) })]);
   });
 
   it("keeps drawing the champion's team through the reboot, and forgets it after", () => {
@@ -393,13 +405,15 @@ describe('solo, on the same books', () => {
     expect(view.partyLate).toHaveBeenCalledTimes(1);
   });
 
-  it("pushes nothing when our own ROM arrives on a map with loot on it: solo never restocks (D2)", () => {
+  // POK-331 #26 (D2): solo never restocked, so a bot's spill that the ROM's eight-piece
+  // ground had no room for when it fell was never on the map when we got there.
+  it("hands our own ROM a bot's spill when we arrive on its map, and again on coming back", () => {
     const { session, toRom } = solo();
     session.note(bag(31), 'page');
     session.note(place(0, ROUTE_101), 'rom');
     session.note(place(0, ROUTE_102), 'rom');
-    expect(toRom).toEqual([]);
-    expect(session.loot.forMap(ROUTE_101)?.bag?.key).toBe(0x1fff); // still on the table
+    session.note(place(0, ROUTE_101), 'rom');
+    expect(toRom.map((m) => m.t === 'spill' && m.bag?.key)).toEqual([0x1fff, 0x1fff]);
   });
 });
 

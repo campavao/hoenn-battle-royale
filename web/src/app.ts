@@ -1582,7 +1582,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     // to "take" a ball the player already had), and our fights with the bots are routed
     // under seat 0 (POK-330 #17). Solo never routed them: a bot we beat was never
     // eliminated, a bot we spotted first never sent its card, and with nothing feeding
-    // `busy` a second bot could stage its team into the battle we were already in.
+    // `busy` a second bot could stage its team into the battle we were already in. And
+    // arriving on a map, what is lying there goes back into our ROM (POK-331 #26).
     session.note(msg, 'rom');
     // The `land` for our pick, and our own `out` to the director, as the room's host.
     host.hear(msg, 'rom');
@@ -2154,7 +2155,8 @@ function wireRoom(
       bossFell(msg); // our own win never comes back over the relay
       // Into the books, bag and all -- and our own ROM challenging one of our bots, or
       // fighting one and saying how it went (POK-238), goes to the brain from there: the
-      // host walks the bot, and nobody hears their own messages come back.
+      // host walks the bot, and nobody hears their own messages come back. Arriving on a
+      // new map, the books hand our ROM what is lying on it.
       session.note(msg, 'rom');
       // Our own pick answered, and our own `out` counted: the match we run hears our
       // ROM straight from here, since nothing comes back to us over the relay.
@@ -2170,9 +2172,6 @@ function wireRoom(
         // WATCH strip was never even drawn.
         if (msg.seat === bridge?.seat) autoWatch();
       }
-      // Arriving on a new map: what is lying on it.
-      const standing = session.standingLoot(msg);
-      if (standing) bridge!.pushToRom(standing);
     });
     // The room, as the Bridge hands it over: decoded once, from somebody entitled to say
     // it, with who said it (POK-330 #24). Released by bridge.dispose() on the next attach.

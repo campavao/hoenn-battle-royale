@@ -182,7 +182,8 @@ export class MatchSession {
    *   7. the first `win` we hear: the round saved, the career counted, the results drawn,
    *      the ROM told who won, and the grace armed;
    *   8. anything the page did not make itself: who is busy;
-   *   9. ...and a fight with one of our bots, to the brain, with whose ROM said it. */
+   *   9. ...and a fight with one of our bots, to the brain, with whose ROM said it;
+   *  10. our own ROM arriving on a map: what is lying there, back into it (POK-232). */
   note(msg: Msg, via: Via): void {
     const now = this.now();
     if (via === 'rom') giveBag(this.lootTable, msg, (m) => this.deps.toRom(m));
@@ -226,6 +227,12 @@ export class MatchSession {
     const bots = this.deps.bots();
     const from = via === 'rom' ? me : via.from;
     if (bots && from !== null) routeToBots(bots, msg, from);
+    // In the books, not the room's out-observer (POK-331 #26): solo had no such ear, so it
+    // never restocked, and a spill the ROM's eight-piece ground had no room for was lost.
+    if (via === 'rom') {
+      const standing = this.standingLoot(msg);
+      if (standing) this.deps.toRom(standing);
+    }
   }
 
   private decide(winner: number | undefined, me: number, now: number): void {
@@ -252,8 +259,10 @@ export class MatchSession {
 
   /** The loot standing where our own trainer has just arrived, once per map (POK-232).
    *  Our own `place` is how the page learns we changed maps -- there is no separate "I
-   *  have arrived" message, and this one is already on the wire four times a second. */
-  standingLoot(msg: Msg): SpillMsg | null {
+   *  have arrived" message, and this one is already on the wire four times a second.
+   *  The ROM holds eight pieces for the whole match, and a spill with no room left is
+   *  dropped until the page sends it again (br_loot.c, Add): this is that again. */
+  private standingLoot(msg: Msg): SpillMsg | null {
     if (msg.t !== 'place' || !msg.map) return null;
     const key = `${msg.map.group}:${msg.map.num}`;
     if (key === this.lootMap) return null;
