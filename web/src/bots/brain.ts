@@ -1177,7 +1177,7 @@ export class Bots {
       wanted.set(t.mapId, (wanted.get(t.mapId) ?? 0) + 1);
     }
     const goals = [...wanted.entries()]
-      .map(([mapId, n]) => ({ mapId, n, hops: world.hops(walker.at.map, mapId) }))
+      .map(([mapId, n]) => ({ mapId, n, hops: world.hops(walker.at.map, mapId, surf, cut) }))
       .filter((g) => g.hops !== undefined && g.hops > 0)
       .sort((a, b) => a.hops! - b.hops! || b.n - a.n);
     if (goals.length === 0) return false;
@@ -1190,7 +1190,7 @@ export class Bots {
     // it is searched once (POK-330 #49): a stuck bot paid for it three times.
     const tried = new Set<string>();
     for (const goal of goals.slice(0, GOAL_TRIES)) {
-      for (const hop of world.nextHops(walker.at.map, goal.mapId)) {
+      for (const hop of world.nextHops(walker.at.map, goal.mapId, surf, cut)) {
         if (tried.has(hop)) continue;
         tried.add(hop);
         // Where the crossing comes out, not the edge or door it starts from, so the route
@@ -1219,16 +1219,18 @@ export class Bots {
    *  seconds is a random walk, and a random walk does not cross Hoenn -- it is what the
    *  bots were doing for the whole back half of a match (POK-302). */
   private wanderOneStep(walker: Walker, why: 'stuck' | 'wait' = 'stuck'): void {
-    const open = this.opts.world.neighbours(walker.at, canSurf(walker.party), canCut(walker.party));
+    const surf = canSurf(walker.party);
+    const cut = canCut(walker.party);
+    const open = this.opts.world.neighbours(walker.at, surf, cut);
     if (open.length === 0) {
       this.note(walker, why);
       walker.path = null;
       return;
     }
-    const goal = this.driftGoal(walker);
+    const goal = this.driftGoal(walker, surf, cut);
     const closer = goal === undefined ? [] : open.filter((o) => {
-      const here = this.opts.world.hops(walker.at.map, goal);
-      const there = this.opts.world.hops(o.to.map, goal);
+      const here = this.opts.world.hops(walker.at.map, goal, surf, cut);
+      const there = this.opts.world.hops(o.to.map, goal, surf, cut);
       return there !== undefined && (here === undefined || there <= here);
     });
     const pick = closer.length > 0 ? closer : open;
@@ -1246,7 +1248,7 @@ export class Bots {
    *  bot on any map with a landing cell took uniform random steps even in the fog,
    *  and anywhere else drifted towards the nearest landing map whichever side of the
    *  ring it was on. */
-  private driftGoal(walker: Walker): string | undefined {
+  private driftGoal(walker: Walker, surf: boolean, cut: boolean): string | undefined {
     const inside = this.opts.inside;
     const seen = new Set<string>();
     let best: string | undefined;
@@ -1258,7 +1260,7 @@ export class Bots {
       seen.add(t.mapId);
       if (inside && !inside(t.mapId)) continue;
       if (t.mapId === walker.at.map) return undefined; // already where the targets are
-      const h = this.opts.world.hops(walker.at.map, t.mapId);
+      const h = this.opts.world.hops(walker.at.map, t.mapId, surf, cut);
       if (h !== undefined && h < bestHops) {
         bestHops = h;
         best = t.mapId;

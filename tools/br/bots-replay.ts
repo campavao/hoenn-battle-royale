@@ -7,6 +7,9 @@
 //
 //   npx vite-node tools/br/bots-replay.ts -- --seed 1234 --minutes 16 --seat 31
 //
+// `--map MAP_ROUTE104` deals every bot onto that map's own cells, to watch a start there:
+// Route 104 and Route 114 are the maps a lake or a river splits in two (POK-331 #27).
+//
 // No emulator, no relay, no page: the brain has never needed any of them.
 import { Bots, STEP_MS, type Decision } from '../../web/src/bots/brain';
 import { dealBots } from '../../web/src/bots/roster';
@@ -28,6 +31,7 @@ const seed = arg('seed', 1234);
 const minutes = arg('minutes', 16);
 const only = arg('seat', -1);
 const count = arg('bots', 8);
+const onMap = process.argv.includes('--map') ? process.argv[process.argv.indexOf('--map') + 1] : undefined;
 
 // The ground the host's bots walk (bots/host.ts): Hoenn's landing cells to wander to and
 // the spawns the deal draws from.
@@ -80,7 +84,8 @@ const eye = SECTIONS[Object.keys(SECTIONS)[0]];
 let ring: { sx: number; sy: number; r: number } | undefined;
 const inFog = (mapId: string) => sectionInside(SECTIONS[sectionOf.get(mapId) ?? ''], ring);
 
-const dealt = dealBots(seed, count, [], spawns);
+const dealt = dealBots(seed, count, [], onMap === undefined ? spawns : spawns.filter((s) => s.mapId === onMap));
+if (dealt.length === 0) throw new Error(`no landing cells on ${onMap}`);
 bots.start(dealt, 0);
 // The ring phase climbs the way the Director moves it: six rungs over the match.
 const end = minutes * 60_000;
@@ -98,7 +103,7 @@ for (let t = STEP_MS; t <= end; t += STEP_MS) {
 }
 
 console.log(lines.join('\n'));
-console.log(`\n${lines.length} decisions over ${minutes} min, seed ${seed}, ${dealt.length} bots`);
+console.log(`\n${lines.length} decisions over ${minutes} min, seed ${seed}, ${dealt.length} bots${onMap ? ` dealt on ${onMap}` : ''}`);
 console.log([...tally].map(([r, n]) => `${r} ${n}`).join('  '));
 
 // The survivor curve: how many were still standing at each minute, and what took the

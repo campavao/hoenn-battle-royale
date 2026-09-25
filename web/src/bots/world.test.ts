@@ -502,6 +502,27 @@ describe('the map-level plan', () => {
     expect(w.nextHops('MAP_VERDANTURF_TOWN', 'MAP_VERDANTURF_TOWN')).toEqual([]);
   });
 
+  // POK-331 #27: an edge is only an edge if a step crosses it, with the kit in hand.
+  it('counts no hop over a seam no step crosses: Route 114 to 115 is through Meteor Falls', () => {
+    expect(w.entryCells('MAP_ROUTE114', 'MAP_ROUTE115', true, true)).toEqual([]);
+    expect(w.hops('MAP_ROUTE114', 'MAP_ROUTE115')).toBe(2);
+    expect(w.nextHops('MAP_ROUTE114', 'MAP_ROUTE115')).toEqual(['MAP_METEOR_FALLS_1F_1R']);
+    expect(w.hops('MAP_ROUTE114', 'MAP_ROUTE115', true, true)).toBe(2);
+  });
+
+  it('counts a hop over the water only for a trainer who can SURF', () => {
+    const SHORE: WorldMap = {
+      id: 'SHORE', group: 0, num: 40, w: 2, h: 1, section: 'S', outdoor: true,
+      grid: grid(['00']), seams: [{ dir: 'east', to: 'SEA', offset: 0 }],
+    };
+    const SEA: WorldMap = { ...SHORE, id: 'SEA', num: 41, grid: grid(['22']), seams: [{ dir: 'west', to: 'SHORE', offset: 0 }] };
+    const sea = new World([SHORE, SEA]);
+    expect(sea.hops('SHORE', 'SEA')).toBeUndefined();
+    expect(sea.nextHops('SHORE', 'SEA')).toEqual([]);
+    expect(sea.hops('SHORE', 'SEA', true)).toBe(1);
+    expect(sea.nextHops('SHORE', 'SEA', true)).toEqual(['SEA']);
+  });
+
   it('exit cells really cross onto the map they name', () => {
     const goal = 'MAP_VERDANTURF_TOWN';
     const from = 'MAP_LITTLEROOT_TOWN';

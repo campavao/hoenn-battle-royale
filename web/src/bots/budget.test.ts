@@ -117,3 +117,23 @@ describe('a stuck bot heading across maps', () => {
     expect(vi.mocked(findPathToAny)).toHaveBeenCalledTimes(1);
   });
 });
+
+// POK-331 #27: Route 114's west edge is joined to Route 115, and no cell of it crosses.
+// The map-level plan counted the seam as a hop, so every bot there was aimed at a
+// crossing that is not there -- and never at Meteor Falls, the real way round.
+describe('a seam nobody can cross', () => {
+  it('goes round by the way that is there', () => {
+    // HOME's east edge is rock and joined to GOAL anyway; the way to GOAL is the door in
+    // HOME's far corner, through TUNNEL. HOME is too big for a plain search to cross.
+    const rows = Array.from({ length: 50 }, () => '0'.repeat(49) + '1');
+    const HOME: WorldMap = {
+      ...field('HOME', 1, rows, [{ dir: 'east', to: 'GOAL', offset: 0 }]),
+      warps: [{ x: 0, y: 49, to: 'TUNNEL', toX: 0, toY: 0, kind: 'door' }],
+    };
+    const TUNNEL = field('TUNNEL', 2, ['00'], [{ dir: 'east', to: 'GOAL', offset: 0 }]);
+    const GOAL = field('GOAL', 3, ['000', '000', '000'], [{ dir: 'west', to: 'TUNNEL', offset: 0 }]);
+    const { bots, decisions } = roster([HOME, TUNNEL, GOAL], [{ mapId: 'GOAL', x: 1, y: 1 }], [bot(31, 'HOME', 48, 0)]);
+    bots.tick(STEP_MS);
+    expect(decisions.map((d) => `${d.rule} ${d.detail}`)).toEqual(['wander -> TUNNEL (for GOAL)']);
+  });
+});

@@ -602,19 +602,31 @@ export class World {
   // cross-world search either (lib/bots.lua's exits/homeward, then a per-map BFS).
   //
   // This is the coarse half: a graph whose nodes are maps and whose edges are the seams
-  // and warps between them. 518 nodes, about 1,450 edges, built once.
+  // and warps between them. 518 nodes, 903 edges, built once for each kit.
+  //
+  // For each kit, because an edge is only an edge if a step really crosses it (POK-331
+  // #27). Route 114's west edge is joined to Route 115, and no cell of it crosses -- it
+  // is rock the whole way down, and the way to Route 115 is through Meteor Falls. A
+  // graph that counted the seam as a hop aimed every bot on Route 114 at a crossing that
+  // is not there, and never at the Falls, a hop further by that count: thirty bots dealt
+  // there logged 5,941 stuck steps and 52 fog outs over five replays. 38 of the 903
+  // edges are not there on foot, and 12 are not there at all.
 
-  private mapGraph?: Map<string, Set<string>>;
-  /** goal map -> hops from every map that can reach it. One table per goal, shared by
-   *  the whole roster: the ring moves a handful of times a match, the bots re-aim
-   *  constantly. */
+  /** Per kit (surf * 2 + cut): map -> the maps a step off it lands on. */
+  private readonly mapGraphs = new Map<number, Map<string, Set<string>>>();
+  /** goal map and kit -> hops from every map that can reach it. One table per goal,
+   *  shared by the whole roster: the ring moves a handful of times a match, the bots
+   *  re-aim constantly. */
   private readonly hopCache = new Map<string, Map<string, number>>();
 
-  private graph(): Map<string, Set<string>> {
-    if (this.mapGraph) return this.mapGraph;
+  private graph(surf: boolean, cut: boolean): Map<string, Set<string>> {
+    const kit = (surf ? 2 : 0) + (cut ? 1 : 0);
+    const built = this.mapGraphs.get(kit);
+    if (built) return built;
     const g = new Map<string, Set<string>>();
     const link = (a: string, b: string) => {
-      if (!this.maps.has(a) || !this.maps.has(b) || a === b) return;
+      if (!this.maps.has(a) || !this.maps.has(b) || a === b || g.get(a)?.has(b)) return;
+      if (this.entryCells(a, b, surf, cut).length === 0) return;
       if (!g.has(a)) g.set(a, new Set());
       g.get(a)!.add(b);
     };
@@ -622,16 +634,17 @@ export class World {
       for (const seam of m.seams) link(m.id, seam.to);
       for (const w of m.warps ?? []) link(m.id, w.to);
     }
-    this.mapGraph = g;
+    this.mapGraphs.set(kit, g);
     return g;
   }
 
   /** How many map crossings from each map to `goal`, by breadth-first search from the
    *  goal outwards. Undefined entries are maps that cannot reach it at all. */
-  private hopsTo(goal: string): Map<string, number> {
-    const cached = this.hopCache.get(goal);
+  private hopsTo(goal: string, surf: boolean, cut: boolean): Map<string, number> {
+    const asked = `${goal}:${surf ? 1 : 0}${cut ? 1 : 0}`;
+    const cached = this.hopCache.get(asked);
     if (cached) return cached;
-    const g = this.graph();
+    const g = this.graph(surf, cut);
     // The graph is built from each map's own seams and warps, and Emerald's are written
     // on both sides -- but not always, so this walks it backwards over the reverse
     // edges rather than trusting symmetry.
@@ -655,23 +668,23 @@ export class World {
       }
       edge = next;
     }
-    this.hopCache.set(goal, dist);
+    this.hopCache.set(asked, dist);
     return dist;
   }
 
   /** Map crossings from `from` to `goal`, or undefined when there is no way at all. */
-  hops(from: string, goal: string): number | undefined {
-    return this.hopsTo(goal).get(from);
+  hops(from: string, goal: string, surf = false, cut = false): number | undefined {
+    return this.hopsTo(goal, surf, cut).get(from);
   }
 
   /** The neighbouring maps that take a step closer to `goal`, nearest first. Empty when
    *  we are already there, or when nothing from here reaches it. */
-  nextHops(from: string, goal: string): string[] {
-    const dist = this.hopsTo(goal);
+  nextHops(from: string, goal: string, surf = false, cut = false): string[] {
+    const dist = this.hopsTo(goal, surf, cut);
     const here = dist.get(from);
     if (here === undefined || here === 0) return [];
     const out: string[] = [];
-    for (const to of this.graph().get(from) ?? []) {
+    for (const to of this.graph(surf, cut).get(from) ?? []) {
       const d = dist.get(to);
       if (d !== undefined && d < here) out.push(to);
     }
