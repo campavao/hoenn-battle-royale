@@ -79,6 +79,7 @@ import { SAFARI_CELLS } from './match/safari';
 import { cardFor } from './match/card';
 import { MatchRecord, recordLines } from './match/record';
 import regionmapData from './data/regionmap.json';
+import { parseRoomHash as parseHash, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
 // Cast rather than re-declared: these three JSON files are the exporter's own output
@@ -991,36 +992,15 @@ function writeBootBlock(
 
 // ---- room: relay + bridge, opted into by the URL hash ------------------------------------
 
-interface RoomHash {
-  mode: 'host' | 'join' | 'quick' | 'solo' | 'daily' | 'watch';
-  code?: string;
-}
-
-/** `#host` hosts a room, `#join=CODE` joins one, `#quick` takes whatever game is going,
- *  and `#solo` plays alone and opens no socket at all (Kanto's rule, project
- *  CLAUDE.md). No hash at all is the lobby, which is a choice between those. */
+/** Which room the URL names (hash.ts), or null for the lobby. */
 function parseRoomHash(): RoomHash | null {
-  const params = new URLSearchParams(location.hash.slice(1));
-  if (params.has('solo')) return { mode: 'solo' };
-  if (params.has('host')) return { mode: 'host' };
-  if (params.has('quick')) return { mode: 'quick' };
-  if (params.has('daily')) return { mode: 'daily' };
-  // `watch=CODE` is a seat-less door into a room (POK-260): the mode has always been
-  // in the type and in the join, and nothing ever produced it, so the one deep link a
-  // spectator could use fell through to the lobby.
-  const watch = params.get('watch');
-  if (watch && /^[A-Za-z0-9]+$/.test(watch)) return { mode: 'watch', code: watch.toUpperCase() };
-  const code = params.get('join');
-  return code && /^[A-Za-z0-9]+$/.test(code) ? { mode: 'join', code: code.toUpperCase() } : null;
+  return parseHash(location.hash);
 }
 
 /** Keeps the URL honest about which room you are in, so a reload rejoins it and the
  *  link is shareable -- without adding a history entry per press. */
-function setRoomHash(key: string, value?: string): void {
-  const params = new URLSearchParams(location.hash.slice(1));
-  for (const k of ['host', 'join', 'quick', 'solo', 'daily']) params.delete(k);
-  params.set(key, value ?? '');
-  history.replaceState(null, '', `#${params.toString().replace(/=(?=&|$)/g, '')}`);
+function setRoomHash(key: RoomMode, value?: string): void {
+  history.replaceState(null, '', `#${withRoom(location.hash, key, value)}`);
 }
 
 /** Set while this client is the one who may show somebody the door (POK-241).
@@ -1958,10 +1938,7 @@ function loadCareerFile(then: () => void): void {
 /** Drops the room out of the URL and reloads, which lands on the lobby (parseRoomHash
  *  returns null with no room in the hash). The way out of anywhere. */
 function backToLobby(): void {
-  const params = new URLSearchParams(location.hash.slice(1));
-  for (const k of ['host', 'join', 'quick', 'solo', 'daily']) params.delete(k);
-  const rest = params.toString().replace(/=(?=&|$)/g, '');
-  location.hash = rest;
+  location.hash = withoutRoom(location.hash);
   location.reload();
 }
 
