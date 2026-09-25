@@ -159,6 +159,38 @@ describe('RomPort', () => {
     expect(port.stats.coalesced).toBe(2);
   });
 
+  // POK-331 #18. HandleBusy and HandleClock store what they are handed and nothing more,
+  // so the last of a seat's queued busy/clock is all of them. A tab back from the
+  // background handed the ROM every CLOCK of the minutes it was away, one after another.
+  it("lets a seat's queued busy or clock go for its next one, and nothing jumps ahead", () => {
+    const rom = fakeRom();
+    const port = new RomPort(rom.mailbox);
+    port.push({ t: 'busy', seat: 3, kind: 'menu' });
+    port.flush(); // already the ROM's: nothing to take back
+    rom.tick();
+    rom.wedge();
+
+    port.push({ t: 'busy', seat: 3, kind: 'battle' });
+    port.push({ t: 'clock', seat: 0, left: 50 });
+    port.push({ t: 'out', seat: 9 });
+    port.push({ t: 'busy', seat: 4, kind: 'menu' }); // another seat's is its own
+    port.push({ t: 'busy', seat: 3 }); // back on the map
+    port.push({ t: 'clock', seat: 0, left: 45 });
+    expect(port.queued).toBe(4);
+    expect(port.stats.coalesced).toBe(2);
+
+    rom.unwedge();
+    port.flush();
+    rom.tick();
+    expect(rom.heard).toEqual([
+      { t: 'busy', seat: 3, kind: 'menu' },
+      { t: 'out', seat: 9 },
+      { t: 'busy', seat: 4, kind: 'menu' },
+      { t: 'busy', seat: 3 },
+      { t: 'clock', seat: 0, left: 45 },
+    ]);
+  });
+
   it('comes back from a long wait to a capped backlog, every event, and where everybody ended up', () => {
     // A tab in the background: frames stop, the room does not.
     const rom = fakeRom();
