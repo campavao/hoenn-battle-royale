@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MatchSession, type SessionDeps, type SessionView } from './session';
 import { EndGrace } from './grace';
+import type { DirectorWorld } from './director';
 import { botRows } from './lifecycle';
 import { loadCareer } from './career';
 import { loadLog } from './log';
 import { Roster } from './roster';
 import type { Bots } from '../bots/brain';
+import { createHostBots, type HostBots } from '../bots/host';
+import regionmapData from '../data/regionmap.json';
 import { Bridge } from '../net/bridge';
 import { fakeEmulator, fakeRelay, memoryStore } from '../net/fakes.testutil';
 import type { RosterEvent } from '../net/relay';
@@ -275,6 +278,121 @@ describe("one match's books (POK-330 #42)", () => {
     expect(session.parties.size).toBe(0);
     session.note({ t: 'party', seat: 7, mons: [mon] }, { from: 7 });
     expect(view.partyLate).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Solo keeps its books in the same session as the room (POK-330 #42), and the two had
+// drifted before: solo never routed its fights to the bots (#17). What stays different
+// is on purpose -- no champion's team under the results (D1) and no restock on arrival
+// (D2) -- and the grace is solo's own: 8 s out to the lobby, not 4 s back to a room.
+describe('solo, on the same books', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** The session the way runSolo builds it: seat 0, nobody's party kept, and the
+   *  lobby for an exit. */
+  function solo(over: Partial<SessionDeps> = {}, paradeDone?: () => boolean) {
+    return books({
+      keepParties: false,
+      grace: new EndGrace({ graceMs: 8_000, winMaxMs: 60_000, pollMs: 500, paradeDone }),
+      ...over,
+    });
+  }
+
+  it("hands our own ROM's challenge to the bot it names, and the bot's card comes to seat 0 (#17)", () => {
+    const cards: { seat: number; msg: Msg }[] = [];
+    let hb: HostBots | null = null;
+    const { session } = solo({ bots: () => hb?.bots ?? null });
+    hb = createHostBots({
+      send: (m) => session.note(m, 'page'),
+      sendTo: (seat, msg) => void cards.push({ seat, msg }),
+      takenSeats: [0],
+      seed: 20260916,
+      fill: 7,
+      loot: session.loot,
+      players: () => [],
+      busy: (seat) => session.busy.has(seat),
+      sections: regionmapData.sections as DirectorWorld['sections'],
+      now: () => 0,
+      every: () => () => {},
+    });
+    const bot = hb.seats[0];
+    session.note({ t: 'challenge', seat: 0, opponent: bot, nonce: 1 }, 'rom');
+    expect(cards).toHaveLength(1);
+    expect(cards[0].seat).toBe(0);
+    expect(cards[0].msg).toMatchObject({ t: 'trainer', seat: bot });
+  });
+
+  it("counts the bots going out, and the director's win for us goes to the lobby 8 s later", () => {
+    const { session, store, toRom, exit, view } = solo();
+    session.match.botSeats = new Set([31, 30]);
+    session.note(start([0, 31, 30]), 'page');
+    session.note({ t: 'out', seat: 31 }, 'page');
+    session.note({ t: 'out', seat: 30 }, 'page');
+    session.note({ t: 'win', seat: 0 }, 'page');
+
+    expect(session.results.forSeat(0, 0).placement).toBe(1);
+    expect(session.results.forSeat(31, 0).placement).toBe(3);
+    expect(session.results.forSeat(30, 0).placement).toBe(2);
+    expect(view.decided).toHaveBeenCalledTimes(1);
+    expect(view.decided).toHaveBeenCalledWith('1 played · 1 won · best 1st');
+    expect(loadLog(store)).toHaveLength(1);
+    expect(loadLog(store)[0].winner).toBe(0);
+    expect(toRom).toEqual([{ t: 'result', seat: 0, outcome: 'win' }]);
+
+    vi.advanceTimersByTime(7_999);
+    expect(exit).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(exit).toHaveBeenCalledTimes(1);
+  });
+
+  it('a champion with a parade to watch leaves on the first poll that finds it over, or at 60 s', () => {
+    let done = false;
+    const watched = solo({}, () => done);
+    watched.session.note(start([0, 31]), 'page');
+    watched.session.note({ t: 'out', seat: 31 }, 'page');
+    watched.session.note({ t: 'win', seat: 0 }, 'page');
+    vi.advanceTimersByTime(10_000); // past the 8 s a loser waits
+    expect(watched.exit).not.toHaveBeenCalled();
+    done = true;
+    vi.advanceTimersByTime(500);
+    expect(watched.exit).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(60_000);
+    expect(watched.exit).toHaveBeenCalledTimes(1);
+
+    const stuck = solo({}, () => false);
+    stuck.session.note(start([0, 31]), 'page');
+    stuck.session.note({ t: 'out', seat: 31 }, 'page');
+    stuck.session.note({ t: 'win', seat: 0 }, 'page');
+    vi.advanceTimersByTime(59_999);
+    expect(stuck.exit).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(stuck.exit).toHaveBeenCalledTimes(1);
+    stuck.session.grace.cancel();
+  });
+
+  it('keeps no party, mid-match or after the win (D1)', () => {
+    const { session, view } = solo();
+    session.note(start([0, 31]), 'page');
+    session.note({ t: 'party', seat: 0, mons: [mon] }, 'rom');
+    expect(session.parties.size).toBe(0);
+    session.note({ t: 'win', seat: 0 }, 'page');
+    session.note({ t: 'party', seat: 0, mons: [mon] }, 'rom');
+    expect(session.parties.size).toBe(0);
+    expect(view.partyLate).not.toHaveBeenCalled();
+  });
+
+  it("pushes nothing when our own ROM arrives on a map with loot on it: solo never restocks (D2)", () => {
+    const { session, toRom } = solo();
+    session.note(bag(31), 'page');
+    session.note(place(0, ROUTE_101), 'rom');
+    session.note(place(0, ROUTE_102), 'rom');
+    expect(toRom).toEqual([]);
+    expect(session.loot.forMap(ROUTE_101)?.bag?.key).toBe(0x1fff); // still on the table
   });
 });
 

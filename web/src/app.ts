@@ -18,12 +18,10 @@ import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin
 import { DEFAULT_SAFARI_SECS, Director, type DirectorState, type DirectorWorld } from './match/director';
 import { nameBstart, romReplaying, Spectate } from './match/spectate';
 import { bossAt } from './match/bosses';
-import { Loot } from './match/loot';
-import { Results } from './match/results';
+import type { Results } from './match/results';
 import { EndGrace } from './match/grace';
-import { giveBag, MatchSession } from './match/session';
+import { MatchSession } from './match/session';
 import { createHostBots, type BotResume, type HostBots } from './bots/host';
-import { routeToBots } from './bots/adapt';
 import { romCell } from './bots/space';
 import { type BotVoice, lineAt, nextLine, voiceFor } from './bots/lines';
 import * as Ticker from './match/ticker';
@@ -62,7 +60,6 @@ import { TouchLayer } from './touch';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, stickKeys, type AxisSense, type StickMap } from './pad';
 import { BAND, FieldView } from './field';
 import { speciesName } from './bots/party';
-import { MatchLog, saveMatch } from './match/log';
 import { ProxyDuels } from './bots/proxy';
 import {
   careerLine,
@@ -75,7 +72,6 @@ import {
   skinNote,
   skinUnlocked,
   ordinal,
-  recordMatch,
   saveProfile,
   SKINS,
 } from './match/career';
@@ -83,7 +79,7 @@ import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './
 import worldData from './data/world.json';
 import { DOORSTEPS, HAND, LANDING } from './match/landing';
 import { cardFor } from './match/card';
-import { MatchRecord, recordLines } from './match/record';
+import { type MatchRecord, recordLines } from './match/record';
 import {
   botRows,
   catchUp,
@@ -1177,19 +1173,6 @@ function botFill(): number {
   return import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('nobots') ? 0 : BOT_FILL;
 }
 
-/** Who is in a battle or a menu right now, off the ROMs' own `busy` (POK-230). The
- *  eyeline needs it: a bot does not challenge somebody already fighting. */
-const busySeats = new Set<number>();
-
-function noteBusy(msg: Msg): void {
-  if (msg.t === 'busy') {
-    if (msg.kind === 'battle') busySeats.add(msg.seat);
-    else busySeats.delete(msg.seat);
-  } else if (msg.t === 'out') {
-    busySeats.delete(msg.seat);
-  }
-}
-
 // ---- results (POK-228) --------------------------------------------------------------
 
 /** Where we came, how long we lasted, and what that does to the career record. Shown
@@ -1500,7 +1483,6 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   if (seatBase !== undefined) writeMySeat(emu, seatBase, 0);
 
   let out: ((seat: number) => void) | null = null;
-  const log = new MatchLog();
   // SOLO VS BOTS, with the bots (POK-275). The row has promised them since the lobby
   // was built and the bots were only ever started from the room path, so solo was one
   // seat in an empty Hoenn -- and a director whose field starts at one can never
@@ -1510,50 +1492,58 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // messages go straight into our own ROM's in-ring, which is what the room's host
   // does for itself anyway (nobody hears their own messages).
   const roster = new Roster();
-  const loot = new Loot();
   const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
   roster.setMySeat(0);
-  // A solo match ended in complete silence: the director declared a winner, the round
-  // was written down, and the player was left standing in Hoenn with nothing on screen
-  // to say so. `Results` was only ever built in the room path. Solo has everything it
-  // needs -- a seat, a roster and the same messages -- so it gets the same panel, the
-  // same career line, and the same grace before the exit.
-  const results = new Results();
-  const record = new MatchRecord();
   const matchBase = symbols?.get('gBrMatch');
-  let fieldSize = 0;
-  let recorded = false;
   const soloGrace = new EndGrace({
     graceMs: SOLO_END_GRACE_MS,
     winMaxMs: SOLO_WIN_GRACE_MAX_MS,
     pollMs: SOLO_PARADE_POLL_MS,
     paradeDone: matchBase !== undefined ? () => emu.read(matchBase, 8) === BR_PHASE_DONE : undefined,
   });
-  const noteResult = (msg: Msg): void => {
-    if (msg.t === 'start') {
-      fieldSize = msg.spawns.length;
-      results.start(fieldSize, performance.now());
-      record.start();
-      recorded = false;
-    }
-    results.note(msg, performance.now());
-    record.note(msg);
-    if (msg.t !== 'win' || recorded) return;
-    recorded = true;
-    ($('#results-career') as HTMLElement).textContent =
-      careerLine(recordMatch(results.forSeat(0, performance.now()).placement));
-    // Solo has never kept anybody's party, so the champion's team is not drawn here.
-    renderResults(0, roster, { results, record, parties: new Map(), fieldSize, seed });
-    // The parade, the same as a room's (POK-281). Solo is seat 0, so a `win` naming it
-    // is ours; naming a bot, it is the seat whose fight a spectating player was watching.
-    // A `win` with no seat at all is a draw and there is nobody to crown.
-    if (msg.seat !== undefined) rom.push({ t: 'result', seat: msg.seat, outcome: 'win' });
-    // Solo has no room to go back to, so the exit is the lobby -- which is what
-    // backToLobby does, and there is no socket here for it to scatter. Won, it waits for
-    // the Hall of Fame rather than a timer, the same as the room's champion.
-    soloGrace.arm(backToLobby, msg.seat === 0);
-  };
-  const solo = createHostBots({
+  let solo: HostBots | null = null;
+  // A solo match ended in complete silence: the director declared a winner, the round
+  // was written down, and the player was left standing in Hoenn with nothing on screen
+  // to say so. `Results` was only ever built in the room path. Solo has everything it
+  // needs -- a seat, a roster and the same messages -- so it keeps its books in the
+  // room's own session (POK-330 #42), and gets the same panel, the same career line,
+  // and the same grace before the exit. Built before the bots: they are placed as
+  // they are dealt, and every place is booked.
+  const session = new MatchSession(
+    {
+      mySeat: () => 0,
+      nameOf: (seat) => roster.nameOf(seat),
+      rows: () => roster,
+      relayRoster: () => null,
+      // This page deals every solo match, and has set its bot seats before the `start`.
+      dealing: () => true,
+      bots: () => solo?.bots ?? null,
+      toRom: (m) => rom.push(m),
+      // The director's own; a solo `start` always names its fog anyway.
+      defaultFog: () => 120,
+      store: localStorage,
+      grace: soloGrace,
+      // Solo has no room to go back to, so the exit is the lobby -- which is what
+      // backToLobby does, and there is no socket here for it to scatter. Won, it waits
+      // for the Hall of Fame rather than a timer, the same as the room's champion.
+      exit: backToLobby,
+      // Solo has never kept anybody's party, so the champion's team is not drawn here.
+      keepParties: false,
+    },
+    {
+      decided: (line) => {
+        ($('#results-career') as HTMLElement).textContent = line;
+        renderResults(0, roster, {
+          results: session.results,
+          record: session.record,
+          parties: session.parties,
+          fieldSize: session.fieldSize,
+          seed,
+        });
+      },
+    },
+  );
+  solo = createHostBots({
     send: (msg) => {
       // Into the ROM's coordinate space on the way out (net/cells.ts): the brain walks
       // the exporter's grid, the ROM draws in the one seven tiles further out.
@@ -1561,14 +1551,12 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
 
       rom.push(wire);
       roster.applyMsg(wire);
-      loot.note(wire);
-      log.note(wire, performance.now());
-      noteResult(wire);
+      session.note(wire, 'page');
       if (wire.t === 'out') out?.(wire.seat);
     },
     takenSeats: [0],
     seed,
-    loot,
+    loot: session.loot,
     players: () => roster.all(),
     // No relay, so a trainer card for our own seat is a direct push and a card for
     // anybody else has nowhere to go.
@@ -1578,10 +1566,12 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     fill: botFill(),
     safariSecs: paceOptions()?.safariSecs ?? DEFAULT_SAFARI_SECS,
     zonePool: () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
-    busy: (s) => busySeats.has(s),
+    busy: (s) => session.busy.has(s),
     sections: WORLD.sections,
     settle: proxyDuels ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b) : undefined,
   });
+  // The session's `start` seats the bots this page dealt, the way the room's host does.
+  session.match.botSeats = new Set(solo.seats);
   // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):
   // nothing else names them, so solo's results and saved round said P31 won.
   roster.seatBots(botRows(seed, solo.seats));
@@ -1602,13 +1592,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
         solo.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r }, msg.phase);
       }
       // Solo rounds are written down too (POK-248): a match nobody else saw is the
-      // one whose seed is hardest to come by afterwards.
-      log.note(msg, performance.now(), (seat) => roster.nameOf(seat));
-      if (msg.t === 'win') {
-        const round = log.current(performance.now());
-        if (round) saveMatch(round);
-      }
-      noteResult(msg);
+      // one whose seed is hardest to come by afterwards. The session saves it on the win.
+      session.note(msg, 'page');
     },
     now: () => performance.now(),
     onOut: (handler) => {
@@ -1624,21 +1609,15 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // a `land` that could never arrive (POK-255). A room has the Bridge for this; solo
   // has no Bridge, so it needs the one answer the ROM cannot go on without.
   const fromRom = (msg: Msg) => {
-    log.note(msg, performance.now());
-    noteResult(msg);
-    giveBag(loot, msg, (m) => rom.push(m));
-    // Our own pickups come off this page's table too. Only the bots' did, so a ball the
-    // player had already taken stayed on the solo table for ever and a bot could walk
-    // over to "take" it again -- the room path has always done this (app.ts's out
-    // observer) and solo never did.
-    loot.note(msg);
-    roster.applyMsg(msg); // our own ghost, so the bots' eyeline can see us
-    // And our fights with the bots, routed exactly as the room routes them (POK-330
-    // #17). Solo never did: a bot we beat was never eliminated, a bot we spotted first
-    // never sent its card, and with nothing feeding `busy` a second bot could stage its
-    // team into the battle we were already in.
-    noteBusy(msg);
-    routeToBots(solo.bots, msg, 0);
+    // Our own ghost, so the bots' eyeline can see us -- first, as the Bridge does it.
+    roster.applyMsg(msg);
+    // The same books as the room's: a bag we take hands its contents over, our own
+    // pickups come off this page's table (only the bots' did, so a bot could walk over
+    // to "take" a ball the player already had), and our fights with the bots are routed
+    // under seat 0 (POK-330 #17). Solo never routed them: a bot we beat was never
+    // eliminated, a bot we spotted first never sent its card, and with nothing feeding
+    // `busy` a second bot could stage its team into the battle we were already in.
+    session.note(msg, 'rom');
     if (msg.t === 'pick') rom.push({ t: 'land', ...director.landFor(msg.seat, msg.section) });
     else if (msg.t === 'out') out?.(msg.seat);
   };
