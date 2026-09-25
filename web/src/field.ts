@@ -52,8 +52,8 @@ const BORDER_ORIGIN = -TILE;
 const BORDER_SIZE = 2 * TILE;
 
 /** `struct CameraObject` (include/field_camera.h): callback, spriteId, speedX, speedY, x, y. */
-const CAMERA_X = 16;
-const CAMERA_Y = 20;
+export const CAMERA_X = 16;
+export const CAMERA_Y = 20;
 /** `struct SaveBlock1` (include/global.h): pos at 0, then location {group, num, ...}. */
 export const SB1_POS_X = 0;
 export const SB1_POS_Y = 2;
@@ -62,15 +62,15 @@ export const SB1_MAP_NUM = 5;
 /** `struct PaletteFadeControl` (include/palette.h), packed by agbcc as read off
  *  tools/br/drivers/fade-trace.txt: the u16 at +4 is delayCounter:6, y:5, targetY:5;
  *  the u16 at +6 is blendColor:15, active:1. y runs 0..16, 16 = all blendColor. */
-const FADE_Y_WORD = 4;
-const FADE_COLOR_WORD = 6;
+export const FADE_Y_WORD = 4;
+export const FADE_COLOR_WORD = 6;
 /** `multipurpose1` at +0: during a fade, the bitmask of palettes it touches (bits 0..15
  *  the BG palettes, 16..31 the OBJ palettes). A catch's white flash fades only OBJ
  *  palettes, and the field's ground is BG: the composite follows a fade only when it
  *  reaches the BG palettes (Cam's 2026-09-18 play-test: the map going white around a
  *  battle picture that had not). */
-const FADE_SELECTED = 0;
-const FADE_BG_PALETTES = 0xffff;
+export const FADE_SELECTED = 0;
+export const FADE_BG_PALETTES = 0xffff;
 /** A map load leaves y at 0 for ~13 frames before its fade-in; a hold that lasts longer
  *  than a second is not that, it is a fade the ROM never started (after a battle, say),
  *  and the field is visible under it. */
@@ -100,8 +100,10 @@ export const OBJ_PLAYER_BYTE = 2; // bit 0
 export const OBJ_SPRITE_ID = 4;
 export const OBJ_GFX = 5;
 /** Graphics ids from OBJ_EVENT_GFX_VARS up name a VAR_OBJ_GFX_ID_n (include/constants). */
-const GFX_VARS = 240;
+export const GFX_VARS = 240;
 export const VAR_OBJ_GFX_ID_0 = 0x4010;
+/** VARS_START (include/constants/vars.h): where the var ids start, and gSaveBlock1Ptr->vars[0]. */
+export const VARS_START = 0x4000;
 export const SB1_VARS = 0x139c;
 /** `struct Sprite` (include/sprite.h), 0x44 bytes. x/y are the centre; centerToCorner
  *  takes them to the OAM's top-left; the coord offset is the camera's, when enabled. */
@@ -115,18 +117,25 @@ export const SPR_CTC_X = 0x28;
 export const SPR_CTC_Y = 0x29;
 export const SPR_ANIM_NUM = 0x2a;
 export const SPR_ANIM_CMD = 0x2b;
-export const SPR_FLAGS = 0x3e; // u16: inUse 1, coordOffsetEnabled 2, invisible 4, hFlip 0x100
+/** The u16 of flag bits at 0x3e: inUse, coordOffsetEnabled, invisible, and hFlip in the
+ *  next byte. */
+export const SPR_FLAGS = 0x3e;
+export const SPR_IN_USE = 0x1;
+export const SPR_ON_CAMERA = 0x2;
+export const SPR_INVISIBLE = 0x4;
+export const SPR_HFLIP = 0x100;
 const ROM_BASE = 0x08000000;
 
 // The fog (WEATHER_FOG_HORIZONTAL, what the ring's outside looks like): twenty 64x64
 // sprites tiling the screen, scrolled with the camera and drifting left a pixel every
 // four frames (FogHorizontal_Main), alpha-blended fog*EVA/16 + ground*EVB/16 with the
-// coefficients easing to 12/8. `struct Weather` (include/field_weather.h), offsets
-// probed with the compiler:
-const WEATHER_CURR = 0x6d0;
-const WEATHER_FOG_X = 0x6ee;
-const WEATHER_EVA = 0x730;
-const WEATHER_EVB = 0x732;
+// coefficients easing to 12/8. `struct Weather` (include/field_weather.h) carries no
+// offset comments: these were probed with the compiler, and parity.test.ts lays the
+// struct out from the header to hold them.
+export const WEATHER_CURR = 0x6d0;
+export const WEATHER_FOG_X = 0x6ee;
+export const WEATHER_EVA = 0x730;
+export const WEATHER_EVB = 0x732;
 export const WEATHER_FOG_HORIZONTAL = 6;
 const FOG_TILE = 64;
 /** `struct BrRing` (include/br/br_ring.h): outside, and the frames to the next bleed. */
@@ -653,20 +662,20 @@ export class FieldView {
       if (bits & OBJ_INVISIBLE_BIT) continue;
       if (emu.read(o + OBJ_PLAYER_BYTE, 8) & 1) continue;
       let gfx = emu.read(o + OBJ_GFX, 8);
-      if (gfx >= GFX_VARS) gfx = emu.read(sb1 + SB1_VARS + 2 * (VAR_OBJ_GFX_ID_0 + gfx - GFX_VARS - 0x4000), 16) & 0xff;
+      if (gfx >= GFX_VARS) gfx = emu.read(sb1 + SB1_VARS + 2 * (VAR_OBJ_GFX_ID_0 + gfx - GFX_VARS - VARS_START), 16) & 0xff;
       if (!SHEETS[String(gfx)]) continue;
       const s = sprs + emu.read(o + OBJ_SPRITE_ID, 8) * SPR_SIZE;
       const flags = emu.read(s + SPR_FLAGS, 16);
-      if (!(flags & 1)) continue;
+      if (!(flags & SPR_IN_USE)) continue;
       // A sprite the ROM hid for a reason other than the picture's edge is nobody's to
       // draw: not under the picture (the band would show it anyway) and not over it.
       const offScreen = (bits & OBJ_OFFSCREEN_BIT) !== 0;
-      if ((flags & 4) && !offScreen) continue;
-      const onCamera = (flags & 2) !== 0;
+      if ((flags & SPR_INVISIBLE) && !offScreen) continue;
+      const onCamera = (flags & SPR_ON_CAMERA) !== 0;
       const x = s16(emu.read(s + SPR_X, 16)) + s16(emu.read(s + SPR_X2, 16)) + s8(emu.read(s + SPR_CTC_X, 8)) + (onCamera ? coX : 0);
       const y = s16(emu.read(s + SPR_Y, 16)) + s16(emu.read(s + SPR_Y2, 16)) + s8(emu.read(s + SPR_CTC_Y, 8)) + (onCamera ? coY : 0);
       const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
-      out.push({ gfx, frame, hFlip: (flags & 0x100) !== 0, x, y, hidden: offScreen });
+      out.push({ gfx, frame, hFlip: (flags & SPR_HFLIP) !== 0, x, y, hidden: offScreen });
     }
     return out;
   }

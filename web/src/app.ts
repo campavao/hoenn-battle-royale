@@ -126,6 +126,8 @@ const BR_BOOT_FLAG_TESTMON = 0x80;
 const MALE = 0;
 const FEMALE = 1;
 const LITTLEROOT = { group: 0, num: 9, x: 5, y: 8 };
+/** `struct BrBoot` (include/br/br_boot.h): where writeBootBlock puts each field. */
+const BOOT_AT = { mode: 0, gender: 1, mapGroup: 2, mapNum: 3, x: 4, y: 6, name: 8 };
 
 /** One of the page's own elements. Throws with the selector rather than handing back a
  *  null dressed as an element: POK-320 removed a button and solo fell over on it with a
@@ -1004,15 +1006,15 @@ function writeBootBlock(
   skin = 0,
 ): void {
   const boot = mailboxBase + MAILBOX.OFF_BOOT;
-  emu.write(boot + 0, mode, 8);
+  emu.write(boot + BOOT_AT.mode, mode, 8);
   // The four sprites are BRENDAN, MAY, RIVAL BRENDAN, RIVAL MAY -- the odd ones are
   // the girls, and the player's own avatar should be what they picked for their ghost.
-  emu.write(boot + 1, skin % 2 === 1 ? FEMALE : MALE, 8);
-  emu.write(boot + 2, LITTLEROOT.group, 8);
-  emu.write(boot + 3, LITTLEROOT.num, 8);
-  emu.write(boot + 4, LITTLEROOT.x, 16);
-  emu.write(boot + 6, LITTLEROOT.y, 16);
-  const nameField = emu.bytes(boot + 8, 8);
+  emu.write(boot + BOOT_AT.gender, skin % 2 === 1 ? FEMALE : MALE, 8);
+  emu.write(boot + BOOT_AT.mapGroup, LITTLEROOT.group, 8);
+  emu.write(boot + BOOT_AT.mapNum, LITTLEROOT.num, 8);
+  emu.write(boot + BOOT_AT.x, LITTLEROOT.x, 16);
+  emu.write(boot + BOOT_AT.y, LITTLEROOT.y, 16);
+  const nameField = emu.bytes(boot + BOOT_AT.name, MAILBOX.BOOT_BYTES - BOOT_AT.name);
   nameField.fill(0xff); // EOS (include/constants/characters.h) pads whatever the name doesn't fill
   nameField.set(encodeGen3(name, 7));
 }

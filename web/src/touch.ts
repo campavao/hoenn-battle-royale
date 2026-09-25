@@ -51,11 +51,11 @@ export const MENU_SAFARI = 3;
 /** `struct ChooseMoveStruct` sits at gBattleBufferA[battler][4]; its first field is the
  *  four move ids (include/battle.h). Battler 0 is always the local player on their own
  *  machine, link battles included. */
-const BUFFER_A_ROW = 0x200;
-const CHOOSE_MOVE_MOVES = 4;
+export const BUFFER_A_ROW = 0x200;
+export const CHOOSE_MOVE_MOVES = 4;
 
-/** Emerald's facing directions (include/constants/event_objects.h). */
-const DIR_OF: Record<SeamDir, number> = { south: 1, north: 2, west: 3, east: 4 };
+/** Emerald's facing directions (include/constants/global.h). */
+export const DIR_OF: Record<SeamDir, number> = { south: 1, north: 2, west: 3, east: 4 };
 const KEY_OF: Record<SeamDir, GbaKey> = { south: 'down', north: 'up', west: 'left', east: 'right' };
 
 /** A walk that shows no progress for this long is blocked: an NPC, a ledge, a dialog. */
