@@ -248,6 +248,24 @@ describe('Emulator', () => {
     expect(() => emu.read(EWRAM_BASE + 4, 8)).toThrow('no GBA core loaded');
   });
 
+  // A reboot's loadGame returns before the core thread swaps cores: the old core's last
+  // frames still run the listeners, and a view made there must not outlive the frame.
+  it("a core that moves its RAM after loadGame returned is followed from the next frame", async () => {
+    const { emu, m, frame } = await make();
+    let wramAt = 0x1000;
+    m._brWramPtr = () => wramAt;
+    await emu.start(new Uint8Array([1]));
+    m.HEAPU8[0x1000 + 4] = 0x11;
+    const seen: number[] = [];
+    emu.onFrame(() => seen.push(emu.read(EWRAM_BASE + 4, 8)));
+    await emu.reboot();
+    frame(); // the old core's last frame, still reporting the old RAM
+    wramAt = 0x5000; // ...and now the new core is up somewhere else
+    m.HEAPU8[0x5000 + 4] = 0x55;
+    frame();
+    expect(seen).toEqual([0x11, 0x55]);
+  });
+
   it('delivers frame callbacks registered after loadGame', async () => {
     const { emu, frame } = await make();
     let n = 0;

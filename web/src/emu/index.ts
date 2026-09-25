@@ -240,6 +240,11 @@ export class Emulator {
       // the mailbox undrained, nothing on screen (POK-330 #35). So no listener's bug
       // gets out of here, and the picture is presented whatever happened.
       videoFrameEndedCallback: () => {
+        // The views are remade once a frame, not once a boot. loadGame returns before the
+        // core thread has swapped cores, so the old core's last frames still run
+        // listeners, and a read there kept the dead core's RAM for the whole next match:
+        // the replay's mailbox never woke and PLAY AGAIN hung on the results panel.
+        this.views = null;
         try {
           for (const l of this.frameListeners) {
             try {
