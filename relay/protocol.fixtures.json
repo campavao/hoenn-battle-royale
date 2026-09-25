@@ -1,0 +1,64 @@
+{
+  "about": "What the page sends through the relay's version gate (POK-330 #3), read by relay/relay.test.js and web/src/net/relay.test.ts alike. The two suites once passed side by side with a string patch on one and a number on the other, while the gate compared nothing. `patch` is the sha1 of the ROM running in the tab; `protocol` is br-version.json's. CODE stands for the room code a test is handed.",
+  "host_room": {
+    "type": "host_room",
+    "name": "HOST",
+    "open": true,
+    "max": 8,
+    "skin": "SPRITE_BRENDAN",
+    "patch": "cbcd04f5a8ddc946110cda0f93ae04347eaf044a",
+    "protocol": 1
+  },
+  "join_room": {
+    "type": "join_room",
+    "code": "CODE",
+    "name": "GUEST",
+    "skin": "SPRITE_MAY",
+    "patch": "cbcd04f5a8ddc946110cda0f93ae04347eaf044a",
+    "protocol": 1
+  },
+  "join_room_other_build": {
+    "type": "join_room",
+    "code": "CODE",
+    "name": "STALE",
+    "skin": "SPRITE_MAY",
+    "patch": "774165ffe947bfe1dc725ba7d1d215729fdeffee",
+    "protocol": 1
+  },
+  "watch_other_build": {
+    "type": "join_room",
+    "code": "CODE",
+    "name": "WATCHER",
+    "skin": "SPRITE_MAY",
+    "spectate": true,
+    "patch": "774165ffe947bfe1dc725ba7d1d215729fdeffee",
+    "protocol": 1
+  },
+  "join_room_unversioned": {
+    "type": "join_room",
+    "code": "CODE",
+    "name": "OLDPAGE"
+  },
+  "quick_join": {
+    "type": "quick_join",
+    "name": "QUICK",
+    "skin": "SPRITE_MAY",
+    "patch": "cbcd04f5a8ddc946110cda0f93ae04347eaf044a",
+    "protocol": 1
+  },
+  "daily_join": {
+    "type": "daily_join",
+    "name": "DAILY",
+    "skin": "SPRITE_MAY",
+    "patch": "cbcd04f5a8ddc946110cda0f93ae04347eaf044a",
+    "protocol": 1
+  },
+  "version_refused": {
+    "type": "room_error",
+    "reason": "version",
+    "host": {
+      "patch": "cbcd04f5a8ddc946110cda0f93ae04347eaf044a",
+      "protocol": 1
+    }
+  }
+}

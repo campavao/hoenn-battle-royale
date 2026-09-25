@@ -32,7 +32,7 @@ Client -> server:
 | `set_pass` | `pass` | host only: passcode, live; empty/absent clears it |
 | `set_skin` | `skin` | what this member looks like, live |
 | `list_rooms` | | `rooms {rooms:[...]}`: every joinable lobby |
-| `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?, token?` | `room_joined {code, id, host, token}` or `room_error {reason}`. With a `token` naming a seat the room is still holding (a socket that dropped within `rejoinMs`, 60 s), the same `id` comes back whatever the door says -- locked or full -- and the token is spent (POK-284). A member who sent `leave_room` or was removed is not held |
+| `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?, token?` | `room_joined {code, id, host, token}` or `room_error {reason}`. With a `token` naming a seat the room is still holding (a socket that dropped within `rejoinMs`, 60 s), the same `id` comes back whatever the door says -- locked, full or passcoded -- and the token is spent (POK-284). A token whose socket the relay still has (a page that gave up on a half-open one) takes the seat over, host and all, and the old socket is closed. A member who sent `leave_room` or was removed is not held |
 | `stat` | `id, v, solo, since` | play counter; logged, counted, never answered |
 | `lock_room` | `locked, bots?` | host only: refuse new joiners (match in progress). `bots`: the seats the host dealt its bots, never handed to a member until the unlock |
 | `kick` | `id` | host only: remove a member, ban their address and their resume token from the room |
@@ -42,8 +42,8 @@ Client -> server:
 | `all` | `m` | `m` to every other member |
 | `ping` | | -> `pong` |
 | `info` | | -> `info {motd, rooms, conns, minProtocol, daily?}` |
-| `daily_join` | `name` | the one shared DAILY GAME room |
-| `quick_join` | `name, patch?, protocol?` | joins the fullest open room, or hosts one |
+| `daily_join` | `name, skin?, patch?, protocol?` | the one shared DAILY GAME room: joins it, hosts it, or `match_in_progress` while it runs. A daily of another build is skipped (the version gate), so each build gets its own. A daily waiting on its dropped host is still the daily: its lobby takes you (and your `can_host` makes you its host), its match is answered `match_in_progress` |
+| `quick_join` | `name, skin?, patch?, protocol?` | joins the fullest open room of the same build, or `no_open_rooms` (the page then hosts one) |
 | `set_open` | `open` | host only: open/close the room to `quick_join` |
 
 Server -> client:
@@ -53,7 +53,7 @@ Server -> client:
 | `roster` | `code, host, open, max, seats, pass, members:[{id,name,spectate?}]` | on every room change. `max`: the humans the room seats (the host's MAX, clamped to 16); `seats`: the MAX the host asked for (up to 30), which bots fill |
 | `rooms` | `rooms:[{code, host, skin?, players, seats, pass, full}]` | reply to `list_rooms`. `full`: the door would refuse a join (it counts watchers and free ids, which `players`/`seats` cannot) |
 | `recv` | `from, m` | a `to`/`all` delivery |
-| `room_closed` | `reason` | the host left with no heir, or you were kicked (`reason:"removed"`) |
+| `room_closed` | `reason` | the host left with no heir, or dropped and did not come back inside the seat hold (`host_gone`), or you were kicked (`removed`). The room is over: the page closes its socket rather than reconnecting to it |
 | `room_hosted` | `code, id, token` | your `host_room`/`daily_join` succeeded; `token` claims this seat back after a drop |
 | `room_joined` | `code, id, host, token` | your `join_room`/`quick_join` succeeded; `token` claims this seat back after a drop |
 | `room_error` | `reason` (`not_found`, `full`, `locked`, `passcode`, `removed`, `already_in_room`, `server_full`, `version`) | a request was refused |
@@ -67,17 +67,33 @@ BOTS'), the lowest one that is not a member's, not held for one who dropped,
 and not used since the match locked the door -- nor a bot's. When none is left
 the door says `full`, whatever MAX says. The heir is the earliest arrival that
 can host, by the room's own count, since the lowest id is no longer the
-oldest. The host is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
+oldest. A host that drops with no heir (alone with its bots, or the last one
+standing) is waited for through the same seat hold: the roster keeps naming
+it, the door takes nobody new (except the daily's lobby, which is
+nobody's in particular), and its token makes it host again. A member
+that sends `can_host` meanwhile takes the room over instead; if nobody does
+and the hold runs out, the room closes with `host_gone`. The host is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
 (no `0 O 1 I L`), so a code read aloud never has to be checked twice.
 
 ### The version gate
 
-`host_room` may carry `{patch, protocol}` -- the host's version -- which the
-room remembers. `join_room` and `quick_join` may carry the same pair for the
-joining client. When both sides said something and it disagrees, the join is
-refused with `room_error {reason: "version", host: {patch, protocol}}`.
-Either side saying nothing (an older client, or one that opts out) skips the
-check entirely -- nobody is refused for silence.
+`host_room` and `daily_join` may carry `{patch, protocol}` -- the host's
+version -- which the room remembers. Every other way in may carry the same
+pair for the joining client. `patch` is the sha1 of the ROM running in the
+page's tab (POK-330 #3), a string; a number from an older page is compared as
+its string. `protocol.fixtures.json` in this directory is exactly what the
+page sends, and both test suites read it.
+
+When both sides said something and it disagrees, a door you named
+(`join_room`, watchers included) refuses with
+`room_error {reason: "version", host: {patch, protocol}}`. A door the relay
+picks for you walks past the room instead: `quick_join` takes the fullest room
+of your own build (or answers `no_open_rooms`, and you host), and `daily_join`
+seats you in the daily of your own build, opening one if there is none. Right
+after a deploy the fullest room is often the old build's, and telling an
+up-to-date player to reload cannot help them. Either side saying nothing (an
+older client, or one that opts out) skips the check entirely -- nobody is
+refused for silence.
 
 `info` also carries `minProtocol`, read from `BR_MIN_PROTOCOL` (default `1`)
 so a client can decide for itself whether it is too old to bother connecting,
@@ -145,6 +161,12 @@ flood disconnect, the idle/unbound sweep, and `/health`.
 ```sh
 railway up
 ```
+
+Rooms live in memory, so a deploy ends every one. On SIGTERM the relay logs
+its counters once more (`SIGTERM: shutting down | rooms ...`), lets go of
+every room without a roster or an heir, and closes each socket with 1012
+(service restart), which the page tells apart from its own network dropping. `/health` answers `{status, rooms, conns, locked}`, where
+`locked` is the matches running: deploy at `locked: 0`.
 
 Run from inside `relay/` -- the service is **`hoenn-relay`**, separate from
 the Kanto mod's relay (`kanto-br-relay`) and its own Railway project.

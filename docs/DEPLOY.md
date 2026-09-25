@@ -89,7 +89,8 @@ it still applies to the pinned commit.
 ## The relay (Railway)
 
 Only when `relay/` changed. A relay deploy restarts it and **drops every room**, so do it
-when nobody is playing (`/play.html` shows who is on).
+when nobody is playing (`/play.html` shows who is on) and wait until
+`https://hoenn-relay-production.up.railway.app/health` says `"locked":0`, no match running.
 
 ```bash
 cd relay && railway up --detach
@@ -111,8 +112,9 @@ railway logs
 ```
 
 The relay's test suite is `cd relay && node --test`. Both sides of a link battle must run
-the same patch and the relay gates rooms on `br-version.json`'s `protocol`, so a relay that
-raises `minProtocol` needs the site deployed first.
+the same build, and the relay gates rooms on the sha1 of the ROM each tab runs and on
+`br-version.json`'s `protocol` (POK-330 #3), so a relay that raises `minProtocol` needs the
+site deployed first.
 
 ## By tag (CI does all of the above)
 

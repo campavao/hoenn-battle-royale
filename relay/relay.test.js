@@ -11,7 +11,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, limitsFromEnv, stats } from "./server.js";
+import { readFileSync } from "node:fs";
+import { EventEmitter } from "node:events";
+import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, exitOnSignal, limitsFromEnv, stats } from "./server.js";
 
 class Client {
   // headers: what a proxy in front of the relay would add (POK-330 #19)
@@ -563,9 +565,10 @@ test("the room ceiling holds, refuses cleanly, and frees up again", async () => 
     quick.send({ type: "quick_join", name: "QUICK" });
     assert.equal((await quick.next()).type, "no_open_rooms");
 
-    // ...and a room closing gives the slot back
-    a.end();
-    await new Promise((r) => setTimeout(r, 50));
+    // ...and a room closing gives the slot back (a host that LEAVES closes it; one
+    // that drops is waited for, POK-330 #47)
+    a.send({ type: "leave_room" });
+    await a.settled();
     const fourth = await connect(port);
     fourth.send({ type: "host_room", name: "FOUR" });
     assert.equal((await fourth.until("room_hosted")).code.length, CODE_LENGTH);
@@ -954,6 +957,41 @@ test("daily_join shares one room, and quick_join never seats there", async () =>
   }
 });
 
+// The daily's door was its own copy of the filter, and it had lost the version
+// gate and the ceiling's log line on the way (POK-330 #46).
+test("the daily door checks the version, and logs the room ceiling, like the others", async () => {
+  const lines = [];
+  const relay = createRelay({ daily: "19:00|America/Chicago|7PM CENTRAL",
+                              limits: { rooms: 2 }, log: (l) => lines.push(l) });
+  const addr = await relay.listen(0, "127.0.0.1");
+  try {
+    const a = await connect(addr.port);
+    a.send({ type: "daily_join", name: "EARLY", protocol: 1 });
+    const first = await a.until("room_hosted");
+
+    // another build is not seated beside it: it gets a daily room of its own
+    const b = await connect(addr.port);
+    b.send({ type: "daily_join", name: "OTHER", protocol: 2 });
+    const second = await b.next();
+    assert.equal(second.type, "room_hosted");
+    assert.notEqual(second.code, first.code);
+
+    // the same build still lands in the first one
+    const c = await connect(addr.port);
+    c.send({ type: "daily_join", name: "SAME", protocol: 1 });
+    assert.equal((await c.next()).code, first.code);
+
+    // a third build finds no room it can share and the ceiling reached
+    const d = await connect(addr.port);
+    d.send({ type: "daily_join", name: "THIRD", protocol: 3 });
+    assert.deepEqual(await d.next(), { type: "room_error", reason: "server_full" });
+    assert.ok(lines.includes("room refused: at the 2-room ceiling"), lines.join("\n"));
+    a.end(); b.end(); c.end(); d.end();
+  } finally {
+    await relay.close();
+  }
+});
+
 // ------- the lobby list and the passcode (2026-09-13)
 
 test("list_rooms shows every joinable lobby: host, skin, trainers over seats, the lock", async () => {
@@ -1222,24 +1260,88 @@ test("a host that never said its version never gates a join on one", async () =>
   });
 });
 
-test("quick_join gates on the target room's version the same way join_room does", async () => {
+// What the page actually sends (POK-330 #3): the same fixtures web/src/net/relay.test.ts
+// holds RelayClient to, so the two suites cannot pass on two different ideas of `patch`
+// again -- this one sent "1.2.0", the page sent 7, and the relay dropped every number.
+const F = JSON.parse(readFileSync(new URL("./protocol.fixtures.json", import.meta.url), "utf8"));
+const inRoom = (msg, code) => ({ ...msg, code });
+
+test("the gate compares the ROM the page runs: its sha1, as protocol.fixtures.json sends it", async () => {
   await withRelay(async (port) => {
     const host = await connect(port);
-    host.send({ type: "host_room", name: "HOST", open: true, patch: "2.0.0", protocol: 5 });
-    await host.until("room_hosted");
+    host.send(F.host_room);
+    const code = (await host.until("room_hosted")).code;
+    await host.until("roster");
 
-    const mismatched = await connect(port);
-    mismatched.send({ type: "quick_join", name: "SEEK", patch: "1.0.0", protocol: 5 });
-    const refused = await mismatched.next();
-    assert.equal(refused.type, "room_error");
-    assert.equal(refused.reason, "version");
-    assert.deepEqual(refused.host, { patch: "2.0.0", protocol: 5 });
+    const stale = await connect(port);
+    stale.send(inRoom(F.join_room_other_build, code));
+    assert.deepEqual(await stale.next(), F.version_refused);
 
-    const matched = await connect(port);
-    matched.send({ type: "quick_join", name: "SEEK2", patch: "2.0.0", protocol: 5 });
-    assert.equal((await matched.next()).type, "room_joined");
+    const same = await connect(port);
+    same.send(inRoom(F.join_room, code));
+    assert.equal((await same.next()).type, "room_joined");
 
-    host.end(); mismatched.end(); matched.end();
+    // a page from before the gate says nothing, and is refused nothing
+    const old = await connect(port);
+    old.send(inRoom(F.join_room_unversioned, code));
+    assert.equal((await old.next()).type, "room_joined");
+
+    // a watcher is a link to the same match: the gate is at its door too
+    host.send({ type: "lock_room", locked: true });
+    await host.settled();
+    const watcher = await connect(port);
+    watcher.send(inRoom(F.watch_other_build, code));
+    assert.deepEqual(await watcher.next(), F.version_refused);
+
+    for (const c of [host, stale, same, old, watcher]) c.end();
+  });
+});
+
+test("an older page's patch number is compared too, not dropped for being a number", async () => {
+  await withRelay(async (port) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST", patch: 12, protocol: 1 });
+    const code = (await host.until("room_hosted")).code;
+    const older = await connect(port);
+    older.send({ type: "join_room", code, name: "OLDER", patch: 11, protocol: 1 });
+    assert.deepEqual(await older.next(),
+      { type: "room_error", reason: "version", host: { patch: "12", protocol: 1 } });
+    const same = await connect(port);
+    same.send({ type: "join_room", code, name: "SAME", patch: 12, protocol: 1 });
+    assert.equal((await same.next()).type, "room_joined");
+    host.end(); older.end(); same.end();
+  });
+});
+
+test("quick play walks past a room of another build to one of its own, or hosts", async () => {
+  await withRelay(async (port) => {
+    // the fullest room is the other build's
+    const other = await connect(port);
+    other.send({ ...F.host_room, patch: F.join_room_other_build.patch });
+    const otherCode = (await other.until("room_hosted")).code;
+    const otherGuest = await connect(port);
+    otherGuest.send(inRoom(F.join_room_other_build, otherCode));
+    await otherGuest.until("room_joined");
+    const mine = await connect(port);
+    mine.send(F.host_room);
+    const mineCode = (await mine.until("room_hosted")).code;
+
+    const q = await connect(port);
+    q.send(F.quick_join);
+    const joined = await q.next();
+    assert.equal(joined.type, "room_joined");
+    assert.equal(joined.code, mineCode, "not the fuller room of another build");
+
+    // nothing of its own build open, and the other build's match running: it hosts,
+    // rather than being told to watch a match it could not join
+    mine.end();
+    q.end();
+    other.send({ type: "lock_room", locked: true });
+    await other.settled();
+    const q2 = await connect(port);
+    q2.send(F.quick_join);
+    assert.equal((await q2.next()).type, "no_open_rooms");
+    other.end(); otherGuest.end(); q2.end();
   });
 });
 
@@ -1297,6 +1399,8 @@ test("GET /health answers 200 with room and connection counts", async () => {
     const a = await connect(port);
     a.send({ type: "host_room", name: "A" });
     await a.until("room_hosted");
+    a.send({ type: "lock_room", locked: true });
+    await a.settled();
 
     const body = await new Promise((resolve, reject) => {
       http.get(`http://127.0.0.1:${port}/health`, (res) => {
@@ -1310,6 +1414,7 @@ test("GET /health answers 200 with room and connection counts", async () => {
     assert.equal(parsed.status, "ok");
     assert.equal(parsed.rooms, 1);
     assert.equal(parsed.conns, 1);
+    assert.equal(parsed.locked, 1, "a match running, which a deploy would end");
 
     a.end();
   });
@@ -1814,4 +1919,273 @@ test("a listed room is full when its door would say so, not by trainers over sea
     assert.equal((await late.next()).reason, "full");
     for (const c of [host, seeker, watcher, late]) c.end();
   }, { members: 2 });
+});
+
+// ------- POK-330 #47: a host's drop, and a relay's restart
+
+// A host alone with its bots, or the last one standing, has nobody to hand the room to.
+// Its drop used to close the room two lines after holding its seat.
+test("a host that drops with nobody to take over gets its room back, as host, inside the hold", async () => {
+  await withRelay(async (port, relay) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "OUT" }); // never says it can host
+    await b.until("room_joined"); await b.until("roster");
+    a.send({ type: "lock_room", locked: true });
+    await a.settled();
+
+    a.end(); // a drop, not a leave
+    const waiting = await b.until("roster");
+    assert.equal(waiting.host, 1, "the room still names the host it is waiting for");
+    assert.deepEqual(waiting.members.map((m) => m.id), [2]);
+    assert.equal(relay.rooms.size, 1);
+
+    // nobody new comes in meanwhile, not even to watch
+    const c = await connect(port);
+    c.send({ type: "join_room", code: hosted.code, name: "NEW", spectate: true });
+    assert.equal((await c.next()).reason, "locked");
+
+    const a2 = await connect(port);
+    a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
+    const back = await a2.next();
+    assert.equal(back.type, "room_joined");
+    assert.equal(back.id, 1);
+    assert.equal(back.host, 1, "it is the host again");
+    assert.deepEqual((await b.until("roster")).members.map((m) => m.id).sort(), [1, 2]);
+    // ...with the host's say over the room
+    a2.send({ type: "set_max", max: 4 });
+    assert.equal((await b.until("roster")).max, 4);
+    for (const x of [a2, b, c]) x.end();
+  });
+});
+
+test("a room whose dropped host never comes back closes when the hold runs out", async () => {
+  await withRelay(async (port, relay) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "OUT" });
+    await b.until("room_joined"); await b.until("roster");
+    a.end();
+    assert.equal((await b.until("roster")).host, 1, "waited for, at first");
+    assert.deepEqual(await b.until("room_closed"), { type: "room_closed", reason: "host_gone" });
+    assert.equal(relay.rooms.size, 0);
+    // the host that turns up late finds nothing, which is what re-hosts its match
+    const a2 = await connect(port);
+    a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
+    assert.equal((await a2.next()).reason, "not_found");
+    b.end(); a2.end();
+  }, { rejoinMs: 50, sweepMs: 20 });
+});
+
+test("a member able to run the room takes it while its host is away", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "BLUE" });
+    await b.until("room_joined"); await b.until("roster");
+    a.end();
+    assert.equal((await b.until("roster")).host, 1, "nobody could take it when it went");
+    // BLUE was backgrounded, say, and is back: it can run the match now
+    b.send({ type: "can_host", ok: true });
+    const roster = await b.until("roster");
+    assert.equal(roster.host, 2);
+    // and the old host comes back to its seat, as a member of the room
+    const a2 = await connect(port);
+    a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
+    const back = await a2.next();
+    assert.equal(back.id, 1);
+    assert.equal(back.host, 2);
+    a2.end(); b.end();
+  });
+});
+
+test("SIGTERM logs the counters once more and closes every socket as a restart", async () => {
+  const lines = [];
+  const relay = createRelay({ log: (l) => lines.push(l) });
+  const addr = await relay.listen(0, "127.0.0.1");
+  const a = await connect(addr.port);
+  a.send({ type: "host_room", name: "RED" });
+  await a.until("roster");
+  const code = new Promise((resolve) => a.ws.addEventListener("close", (ev) => resolve(ev.code)));
+
+  const proc = new EventEmitter();
+  const exited = new Promise((resolve) => { proc.exit = resolve; });
+  exitOnSignal(relay, proc);
+  proc.emit("SIGTERM");
+  assert.equal(await exited, 0);
+  assert.equal(await code, 1012, "service restart, not an abnormal 1006");
+  assert.ok(lines.some((l) => /^SIGTERM: shutting down \| rooms 1\/40 conns 1\/200 \| sent /.test(l)),
+    lines.join("\n"));
+});
+
+// ------- POK-330 #47 review: the seat hold's edges
+
+// A page calls its socket dead after two missed pings and rejoins on a new one; a
+// half-open socket goes on the relay's side only at idleMs, a minute later.
+test("a rejoin over a socket the relay has not seen go gets the same seat, mid-match", async () => {
+  await withRelay(async (port, relay) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "BLUE" });
+    const joined = await b.until("room_joined");
+    a.send({ type: "lock_room", locked: true });
+    await a.settled();
+
+    const b2 = await connect(port);
+    b2.send({ type: "join_room", code: hosted.code, name: "BLUE", token: joined.token });
+    const back = await b2.next();
+    assert.equal(back.type, "room_joined", "not refused `locked` as a stranger");
+    assert.equal(back.id, 2);
+    await b.until("__closed"); // the old socket is let go of
+    // the next roster is the seat taken again: nobody saw BLUE go
+    assert.deepEqual((await a.until("roster")).members.map((m) => m.id), [1, 2]);
+    assert.equal(relay.conns.size, 2);
+    assert.equal(relay.rooms.get(hosted.code).held.size, 0);
+    a.end(); b2.end();
+  });
+});
+
+test("a host's rejoin over its old socket is the host, not a guest of its own room", async () => {
+  const lines = [];
+  const relay = createRelay({ log: (l) => lines.push(l) });
+  const { port } = await relay.listen(0, "127.0.0.1");
+  try {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "BLUE" });
+    await b.until("room_joined"); await b.until("roster");
+    b.send({ type: "can_host", ok: true }); // an heir, were this a drop
+    await b.settled();
+
+    const a2 = await connect(port);
+    a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
+    const back = await a2.next();
+    assert.equal(back.type, "room_joined");
+    assert.equal(back.id, 1, "its own seat, not the next free one");
+    assert.equal(back.host, 1);
+    await a.until("__closed");
+    const roster = await b.until("roster");
+    assert.equal(roster.host, 1, "no heir was elected for a socket that was replaced");
+    assert.deepEqual(roster.members.map((m) => m.id).sort(), [1, 2]);
+    assert.equal(relay.rooms.get(hosted.code).hostToken, null);
+    // ...with the host's say over the room
+    a2.send({ type: "set_max", max: 4 });
+    assert.equal((await b.until("roster")).max, 4);
+    assert.ok(!lines.some((l) => /promoted|dropped, held/.test(l)), lines.join("\n"));
+    a2.end(); b.end();
+  } finally {
+    await relay.close();
+  }
+});
+
+// A host sets the passcode after opening the room, so its page never has it to rejoin
+// with; a guest's is stale once the host changes it.
+test("a passcoded room takes its members back on their token alone", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    a.send({ type: "set_pass", pass: "ABCD" });
+    await a.settled();
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "BLUE", pass: "ABCD" });
+    const joined = await b.until("room_joined");
+    a.send({ type: "lock_room", locked: true });
+    a.send({ type: "set_pass", pass: "EFGH" });
+    await a.settled();
+
+    b.end();
+    await rosterWhere(a, (r) => r.members.length === 1);
+    const b2 = await connect(port);
+    b2.send({ type: "join_room", code: hosted.code, name: "BLUE", pass: "ABCD", token: joined.token });
+    const guest = await b2.next();
+    assert.equal(guest.type, "room_joined", "a guest's old passcode is not asked");
+    assert.equal(guest.id, 2);
+
+    a.end(); // nobody to take over: the room waits for its host
+    await rosterWhere(b2, (r) => r.members.length === 1);
+    const a2 = await connect(port);
+    a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
+    const host = await a2.next();
+    assert.equal(host.type, "room_joined", "the host's page never had the passcode");
+    assert.equal(host.id, 1);
+    assert.equal(host.host, 1);
+    // a stranger still needs it
+    const c = await connect(port);
+    c.send({ type: "join_room", code: hosted.code, name: "NEW", spectate: true });
+    assert.equal((await c.next()).reason, "passcode");
+    for (const x of [a2, b2, c]) x.end();
+  });
+});
+
+test("a restart tells nobody they are the host on its way out", async () => {
+  const lines = [];
+  const relay = createRelay({ log: (l) => lines.push(l) });
+  const addr = await relay.listen(0, "127.0.0.1");
+  const a = await connect(addr.port);
+  a.send({ type: "host_room", name: "RED" });
+  const hosted = await a.until("room_hosted");
+  const b = await connect(addr.port);
+  b.send({ type: "join_room", code: hosted.code, name: "BLUE" });
+  await b.until("room_joined");
+  b.send({ type: "can_host", ok: true });
+  await b.settled();
+
+  await relay.shutdown("SIGTERM");
+  // the host's socket closes first: BLUE used to be promoted, and told, before its own
+  // close landed, and its page started a takeover the restart then cut off
+  const heard = [];
+  for (let m = await b.next(); m.type !== "__closed"; m = await b.next()) heard.push(m.type);
+  assert.deepEqual(heard, []);
+  assert.ok(!lines.some((l) => /promoted|dropped, held|closed \(/.test(l)), lines.join("\n"));
+});
+
+// The daily is nobody's room in particular: passed over while it waited on its host,
+// the next press opened a second one, which started alone at the hour.
+test("a daily waiting on its dropped host is still the daily: its lobby takes the next press, its match is running", async () => {
+  await withRelay(async (port, relay) => {
+    const a = await connect(port);
+    a.send({ type: "daily_join", name: "RED" });
+    const hosted = await a.until("room_hosted");
+    const out = await connect(port);
+    out.send({ type: "daily_join", name: "OUT" }); // never says it can host
+    await out.until("room_joined");
+
+    a.end(); // the lone daily host's phone blips
+    await rosterWhere(out, (r) => r.members.length === 1 && r.host === 1);
+    const b = await connect(port);
+    b.send({ type: "daily_join", name: "BLUE" });
+    const joined = await b.until("room_joined");
+    assert.equal(joined.code, hosted.code, "the daily, not a second one");
+    assert.equal(relay.rooms.size, 1);
+    b.send({ type: "can_host", ok: true });
+    assert.equal((await rosterWhere(b, (r) => r.host !== 1)).host, joined.id, "and it runs it now");
+    // the old host comes back to its seat, as a member of the room
+    const a2 = await connect(port);
+    a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
+    assert.equal((await a2.next()).host, joined.id);
+
+    // The hour: BLUE starts it and drops, with nobody able to take over.
+    b.send({ type: "lock_room", locked: true });
+    await b.settled();
+    b.end();
+    await rosterWhere(out, (r) => !r.members.some((m) => m.id === joined.id));
+    const c = await connect(port);
+    c.send({ type: "daily_join", name: "LATE" });
+    const answer = await c.next();
+    assert.equal(answer.type, "match_in_progress", "a match is running, host or no host");
+    assert.equal(answer.code, hosted.code);
+    assert.equal(relay.rooms.size, 1);
+    for (const x of [a2, out, c]) x.end();
+  });
 });

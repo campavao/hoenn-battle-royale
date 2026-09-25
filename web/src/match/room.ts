@@ -9,6 +9,7 @@
 // "does FILL say how many bots", "is START refused with nobody in the room", "does a
 // guest see the host's settings and not the host's buttons".
 import type { RosterEvent } from '../net/relay';
+import { isFinalRingPhase } from './clock';
 
 /** What MAX cycles through. Kanto's ladder, and the same one the relay clamps to: the
  *  humans are capped by the relay (16, the roster's `max`) and everything above that
@@ -85,6 +86,49 @@ export function startNote(view: RoomView): string {
   if (total < 2) return 'Nobody to play against. Turn FILL on, or wait for somebody.';
   const bots = view.fill > 0 ? ` and ${view.fill} bot${view.fill === 1 ? '' : 's'}` : '';
   return `START: ${view.players} trainer${view.players === 1 ? '' : 's'}${bots}.`;
+}
+
+// ---- a door that will not open -----------------------------------------------------
+
+/** The seat a new room gives the member who opens it: relay/server.js hands out the
+ *  lowest free id, and in a new room that is 1. */
+export const OPENER_SEAT = 1;
+
+/** Refusals that leave nothing to do in this room: the page offers the lobby. */
+const DEAD_ENDS = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server_full', 'version'];
+
+/** What the page does with the relay's `room_error` (POK-330 #47). A rejoin refused
+ *  because the room is gone -- a relay restart, or a seat hold that ran out -- is not a
+ *  dead end for the page that was running the match: the match lives in its tab, so it
+ *  hosts a new room and carries on there. Only from the opener's seat, which is the one
+ *  the new room will give it back; from any other it would come back as somebody else,
+ *  mid-match. That branch was written once and never ran, because the refusal went
+ *  straight to the dead end. */
+export function onRefused(
+  reason: string,
+  page: { rejoining: boolean; wasHost: boolean; seat: number | null },
+): 'rehost' | 'dead-end' | 'status' {
+  if (reason === 'not_found' && page.rejoining && page.wasHost && page.seat === OPENER_SEAT) return 'rehost';
+  return DEAD_ENDS.includes(reason) ? 'dead-end' : 'status';
+}
+
+// ---- the clock a match is picked up from ---------------------------------------------
+
+/** Seconds to the next ring move once a `ring` lands: the whole phase, or none once the
+ *  fog is everywhere -- what the director counts on the host. It was kept as 0, and
+ *  nothing sends a `clock` during the ring, so a page picking the match up (an heir, or
+ *  a host back from its own drop) read the phase as spent and moved the fog on the
+ *  moment it resumed (POK-330 #47 review). */
+export function ringClockLeft(phase: number, fogSecs: number): number {
+  return isFinalRingPhase(phase - 1) ? 0 : fogSecs;
+}
+
+/** The seconds left in the running phase at `now`: the last clock this page heard or
+ *  kept, counted off since it arrived. What a guest's strip draws, and what a director
+ *  resumes from -- a host back after a 40-second drop is 40 seconds further on. */
+export function clockLeftAt(clock: { clockLeft: number; clockAt: number }, now: number): number {
+  const gone = Math.floor(Math.max(0, now - clock.clockAt) / 1000);
+  return Math.max(0, clock.clockLeft - gone);
 }
 
 // ---- match options (POK-241) --------------------------------------------------------

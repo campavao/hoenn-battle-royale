@@ -30,6 +30,7 @@ import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { NpcFog } from './match/npcfog';
 import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
+import { clockLeftAt, onRefused, ringClockLeft } from './match/room';
 import { Stage } from './ui/stage';
 import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
 import {
@@ -184,10 +185,10 @@ function versionText(info: ReleaseInfo): string {
  *  constant and `shell` is package.json's, so neither moves when a build does -- and
  *  the play-test spent a night reporting bugs from a ROM three hours older than the
  *  fixes for them, with nothing on screen able to say so. This is that, said out loud:
- *  the sha1 of the ROM in the tab, and the one the sidecar expects beside it when they
- *  differ. */
-async function buildLine(info: ReleaseInfo, running: Uint8Array): Promise<string> {
-  const mine = (await sha1Hex(running)).slice(0, 7);
+ *  the sha1 of the ROM in the tab (`running`), and the one the sidecar expects beside
+ *  it when they differ. */
+function buildLine(info: ReleaseInfo, running: string): string {
+  const mine = running.slice(0, 7);
   const want = (info.romSha1 ?? '').slice(0, 7);
 
   if (!want || mine === want) return `rom ${mine}`;
@@ -313,9 +314,11 @@ interface PatchResult {
    *  there is no BR-aware ROM running to have a mailbox at all. */
   mailboxBase?: number;
   protocol?: number;
-  /** The patch number this ROM was built from, for the relay's version gate
-   *  (POK-244): both sides of a link battle must be on the same one. */
-  patch?: number;
+  /** The sha1 of the ROM running in this tab, for the relay's version gate (POK-244):
+   *  both sides of a link battle must run the same build. It was br-version.json's
+   *  `patch`, a hand-bumped number that had never moved, and which the relay dropped for
+   *  not being a string, so any two builds shared a room (POK-330 #3). */
+  patch?: string;
   /** The full symbol table alongside mailboxBase -- gBrHud/gBrMySeat's addresses
    *  (director.ts's HUD wiring, POK-222/224/228) come from here rather than a
    *  second hard-coded constant (per CLAUDE.md: never hard-code an EWRAM address). */
@@ -353,11 +356,13 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
     // things that were already fixed (2026-09-17). The sidecar knows the sha1 of the
     // build it was written for, so ask.
     let bytes = stored;
-    if (side.info.romSha1 && (await sha1Hex(stored)) !== side.info.romSha1) {
+    let running = await sha1Hex(stored);
+    if (side.info.romSha1 && running !== side.info.romSha1) {
       statusEl.textContent = 'Your stored ROM is an older build -- fetching this one…';
       const fresh = await fetchLocalBuild();
       if (fresh) {
         bytes = fresh;
+        running = await sha1Hex(fresh);
         await emu.importRom(fresh); // so the next reload starts here rather than fetching again
       } else {
         bannerEl.textContent =
@@ -368,13 +373,13 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
         bannerEl.hidden = false;
       }
     }
-    setVersionLine(`${versionText(side.info)} · local build · ${await buildLine(side.info, bytes)}`);
+    setVersionLine(`${versionText(side.info)} · local build · ${buildLine(side.info, running)}`);
     return {
       bytes,
       usingPatched: true,
       mailboxBase: side.symbols.get('gBrMailbox'),
       protocol: side.info.protocol,
-      patch: side.info.patch,
+      patch: running,
       symbols: side.symbols,
     };
   }
@@ -410,14 +415,15 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   // The same line the local-build path gets: which ROM is in the tab, in seven
   // characters. This is the path a stock ROM takes, and it is just as able to be
   // running something other than the build everyone is talking about.
-  setVersionLine(`${versionText(release.info)} · ${await buildLine(release.info, release.rom)}`);
+  const running = await sha1Hex(release.rom);
+  setVersionLine(`${versionText(release.info)} · ${buildLine(release.info, running)}`);
   roomsRefused = release.stale;
   return {
     bytes: release.rom,
     usingPatched: true,
     mailboxBase: release.symbols.get('gBrMailbox'),
     protocol: release.info.protocol,
-    patch: release.info.patch,
+    patch: running,
     symbols: release.symbols,
   };
 }
@@ -1631,8 +1637,7 @@ function renderGuestStrip(
   setInMatch(true);
   // The CLOCK lands every five seconds; the seconds in between are counted off here,
   // the same way the ROM counts them off against its own frame timer.
-  const gone = Math.floor(Math.max(0, now - match.clockAt) / 1000);
-  const left = Math.max(0, match.clockLeft - gone);
+  const left = clockLeftAt(match, now);
   const mm = Math.floor(left / 60);
   const ss = String(left % 60).padStart(2, '0');
   const alive = bridge.roster.all().filter((e) => e.alive).length;
@@ -1971,7 +1976,7 @@ function wireRoom(
   protocol: number | undefined,
   symbols: Map<string, number> | undefined,
   hash: RoomHash,
-  patch?: number,
+  patch?: string,
 ): void {
   if (mailboxBase === undefined || hash.mode === 'solo') return; // solo: no socket at all
 
@@ -2021,6 +2026,11 @@ function wireRoom(
   let announceOut: ((seat: number) => void) | null = null;
   let stopDirectorLoop: (() => void) | null = null;
   let isHost = false;
+  /** A rejoin is out: a refusal is about the room we were in, not one we asked into. */
+  let rejoining = false;
+  /** The room is ours again after our own drop (POK-330 #47), and the match with it:
+   *  the director the drop stopped starts again on the next roster that says so. */
+  let resumeHost = false;
   /** The host's room settings between roster events (POK-241). */
   const controls: RoomControls = {
     fill: true, roster: null, textSpeed: 3, animations: true, fogSecs: 120,
@@ -2407,7 +2417,9 @@ function wireRoom(
       director.resume({
         ringPhase: match.ringPhase,
         centre: match.centre,
-        secsLeftInPhase: match.clockLeft,
+        // counted off since it was heard or kept: a host back from a drop is that much
+        // further on, as every guest's ROM is
+        secsLeftInPhase: clockLeftAt(match, performance.now()),
         out: [...match.out, ...gone],
         // The old host's list of dealt cells left with it. What `start` dealt, and where
         // everybody stands now (a `land` is unicast, so a trainer who dropped and has not
@@ -2447,6 +2459,9 @@ function wireRoom(
   /** Everything a promoted client needs to pick the match up (POK-252), and reset by
    *  returnToRoom for the next one (match/lifecycle.ts). */
   const match: MatchSnapshot = freshMatch();
+  /** The match's fog phase, from its `start`: what a `ring` puts on the clock. A watcher
+   *  who walked in late never heard one, and has the default the director would use. */
+  let matchFog = controls.fogSecs;
   let fieldSize = 0;
   let recorded = false;
   const log = new MatchLog();
@@ -2467,13 +2482,14 @@ function wireRoom(
         botSeats: director ? match.botSeats : new Set(botSeatsOf(msg.spawns.map((s) => s.seat), controls.roster)),
         active: true,
       });
+      matchFog = msg.fog ?? controls.fogSecs;
       bridge?.roster.seatBots(botRows(msg.seed, match.botSeats));
       hideRoomScreen();
     } else if (msg.t === 'ring') {
       match.ringPhase = msg.phase;
       match.centre = { sx: msg.sx, sy: msg.sy, place: msg.place };
       match.ringR = msg.r;
-      match.clockLeft = 0;
+      match.clockLeft = ringClockLeft(msg.phase, matchFog); // nothing sends a `clock` in the ring
       match.clockAt = performance.now();
       match.active = true; // a watcher's late start: it never heard the `start`
     } else if (msg.t === 'clock') {
@@ -2622,7 +2638,12 @@ function wireRoom(
     // Whose room it is, as the relay says: ours when we opened it, whoever it names when
     // we joined. The hash said `host` on a rejoin too, after the relay had already handed
     // the room to an heir when our socket went (POK-330 #13).
+    const wasHost = isHost;
     isHost = host === seat;
+    rejoining = false;
+    // Ours before the drop and ours again: the relay waited for us, or the room had gone
+    // and we opened another (POK-330 #47). The match lives in this tab.
+    resumeHost = wasHost && isHost && director === null && onPromotion(match) === 'take-over';
     // A rejoin mid-match gets a fresh Bridge and with it a fresh roster: the bots go
     // back on it by name, the same as they went on at the `start` (POK-330 #51).
     if (match.seed !== 0) bridge.roster.seatBots(botRows(match.seed, match.botSeats));
@@ -2995,6 +3016,13 @@ function wireRoom(
       console.info('[room] stood down as host');
       teardownHost();
     }
+    // Back as the host after our own drop (POK-330 #47): the drop stopped the director,
+    // and it picks the match up the way a promoted heir does, from where it stands.
+    if (resumeHost && bridge && isHost && ev.host === bridge.seat) {
+      resumeHost = false;
+      console.info('[room] host again after a drop');
+      startDirector(ev.members.map((m) => m.id), true);
+    }
     // Somebody arrived while the match is running: tell them where the fog is, now
     // (POK-260). Kanto calls this the late start -- a watcher who has to wait for the
     // next ring to learn the state spends up to two minutes looking at nothing. Not once
@@ -3035,36 +3063,44 @@ function wireRoom(
       }, director !== null);
     }
   });
+  /** A dead end is not one unless the page says where else to go: BACK TO LOBBY. */
+  const deadEnd = (): void => {
+    if (room.fatal) return;
+    room.fatal = true;
+    noteEl.textContent = '';
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.textContent = 'BACK TO LOBBY';
+    back.addEventListener('click', () => backToLobby());
+    noteEl.appendChild(back);
+    // The drawer says so, under no screen: a dead end is not worth drawing.
+    stage.hide();
+  };
   relay.on('room_error', (ev) => {
-    // Kanto's door: a room on another patch is not one you can play in, and the fix is
-    // always the same -- get the build they have, which here means a reload.
-    if (ev.reason === 'version') {
-      const theirs = ev.host?.patch ?? '?';
-      setStatus(`That room is on patch ${theirs}; you have ${patch ?? '?'}. Reload to update.`);
+    // `locked` is the common refusal: a room mid-match, which is exactly what you rejoin
+    // if you reload an old link. Which ones are dead ends is match/room.ts's onRefused.
+    const next = onRefused(ev.reason, { rejoining, wasHost: isHost, seat: bridge?.seat ?? null });
+    rejoining = false;
+    // The room we were running is gone -- a relay restart, or the seat hold ran out
+    // (POK-330 #47). The match is still in this tab, so it goes on in a new room.
+    if (next === 'rehost') {
+      setStatus('The room was gone. Hosting it again…');
+      relay.host({ ...me, open: true, max: BOT_FILL });
       return;
     }
-    // A door that will not open is a dead end unless the page says where else to go.
-    // `locked` is the common one: a room mid-match, which is exactly what you rejoin
-    // if you reload an old link.
-    const FATAL = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server_full'];
-    setStatus(`Couldn't join: ${ev.reason}`);
-    if (FATAL.includes(ev.reason)) {
-      room.fatal = true;
-      noteEl.textContent = '';
-      const back = document.createElement('button');
-      back.type = 'button';
-      back.textContent = 'BACK TO LOBBY';
-      back.addEventListener('click', () => backToLobby());
-      noteEl.appendChild(back);
-      // The drawer says so, under no screen: a dead end is not worth drawing.
-      stage.hide();
-    }
+    // Kanto's door: a room on another build is not one you can play in (POK-330 #3). A
+    // reload fixes it when this tab is the stale one; when the room is, the lobby does.
+    if (ev.reason === 'version') {
+      const rom = (sha?: string) => (sha ? sha.slice(0, 7) : '?');
+      setStatus(`That room runs rom ${rom(ev.host?.patch)}, this tab rom ${rom(patch)}: the older one reloads to update.`);
+    } else setStatus(`Couldn't join: ${ev.reason}`);
+    if (next === 'dead-end') deadEnd();
   });
   // QUICK PLAY found nothing to join: host one and let the bots fill it, which is what
   // Kanto does rather than leaving somebody looking at an empty list (POK-240).
   relay.on('no_open_rooms', () => {
     setStatus('No game going. Hosting one…');
-    relay.host({ name: careerName(), open: true, max: BOT_FILL, skin });
+    relay.host({ ...me, open: true, max: BOT_FILL }); // our build with it, or the gate has nothing to hold
   });
   // Everything open is mid-match: WATCH PLAY NEXT. Joining as a spectator gets you the
   // match now and a seat in the next one.
@@ -3073,36 +3109,45 @@ function wireRoom(
     setStatus(`Watching ${ev.code}…`);
     setRoomHash('join', ev.code);
     amWatching = true;
-    relay.join(ev.code, { name: careerName(), skin, spectate: true });
+    relay.join(ev.code, { ...me, spectate: true }); // a watcher's replay is a link battle: the gate's
   });
   relay.on('closed', (ev) => {
-    setStatus(`Disconnected: ${ev.reason}`);
-    // A host's socket going is the room going to an heir, or closing: either way this
-    // page is not running the match any more, and a director left standing here would
-    // answer picks next to the heir's once the rejoin lands.
+    // A host's socket going is the room going to an heir, or waiting for us: either way
+    // this page is not running the match any more, and a director left standing here
+    // would answer picks next to the heir's once the rejoin lands. A host the relay
+    // waited for starts its director again from attach (POK-330 #47), from the clock
+    // this one stopped at.
+    if (director && director.state.phase !== 'ended') {
+      match.clockLeft = director.state.clockLeft;
+      match.clockAt = performance.now();
+    }
     teardownHost();
     stopSpectateLoop?.();
+    // The room itself is over -- the host left, its hold ran out, or it showed us out --
+    // and no new socket is coming (POK-330 #47): the same dead end a refused door is.
+    if (!ev.reconnecting) {
+      setStatus(`The room closed: ${ev.reason}`);
+      deadEnd();
+      return;
+    }
+    setStatus(ev.reason === 'restart' ? 'The server is restarting. Reconnecting…' : `Disconnected: ${ev.reason}`);
   });
   // ...and it comes back. The socket retries on its own, but nothing ever un-said
   // `Disconnected`, so a page that had recovered still read as dead for the rest of
   // the match (play-test: the line was on the strip in every frame of the video).
-  //
-  // A room does not come back with it. The relay forgets a member the moment its
-  // socket goes, and the id it hands out on a rejoin is a NEW one -- which is this
-  // page's seat, so rejoining mid-match would change who we are. The host is the
-  // exception: everybody else has been dropped from its room anyway, the match it is
-  // running lives in this tab, and hosting again is how anyone finds it.
   relay.on('open', (ev) => {
     if (!ev.reconnected) return;
     // Back to the seat we had (POK-284): the relay holds it for a minute after a
     // socket drops, and the id it hands back is the one every ROM in the room already
     // knows us by. A host that dropped finds an heir running the match and comes back
-    // as a member of it (POK-116); the room only closed if nobody could take it, and
-    // then the rejoin is refused and we host again as before.
+    // as a member of it (POK-116), or finds the room waited and is its host again; if
+    // the room is gone (a relay restart), room_error's onRefused hosts a new one.
     if (relay.rejoin()) {
+      rejoining = true;
       setStatus('Reconnected. Rejoining…');
       return;
     }
+    // A relay that gave us no token to come back with.
     if (isHost) {
       setStatus('Reconnected. Hosting again…');
       relay.host({ ...me, open: true, max: BOT_FILL });
@@ -3140,9 +3185,10 @@ function wireRoom(
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
   const skin = String(careerSkin());
   // What we are running, so the relay's version gate can do its job (POK-244). Both
-  // sides of a link battle must be on the same patch or the block exchange desyncs
+  // sides of a link battle must run the same build or the block exchange desyncs
   // silently -- and saying nothing means never being refused, which is the wrong end
-  // of that trade once there is more than one patch in the world.
+  // of that trade once there is more than one build in the world. Every way in says
+  // it: the quick-play host and the watcher's join used to leave it out.
   const me = { name: careerName(), skin, patch, protocol };
   relay.connect(relayUrl);
   // Whatever solo play never got to tell the relay about itself (POK-243): `wireRoom`
@@ -3539,6 +3585,16 @@ async function main(): Promise<void> {
   if (mailboxBase !== undefined) {
     await waitForMailbox(emu, mailboxBase);
     emu.pause();
+    // The ROM's own mailbox says which wire it speaks and how big it is (POK-330 #3): a
+    // page that reads it differently would get every message in a room wrong, so it
+    // plays solo only. Nothing ever asked before.
+    if (!roomsRefused && protocol !== undefined) {
+      try {
+        new Mailbox(emu, mailboxBase).assertCompatible(protocol);
+      } catch (err) {
+        roomsRefused = err instanceof Error ? err.message : String(err);
+      }
+    }
   }
   const fromHash = parseRoomHash();
   let roomHash = fromHash;

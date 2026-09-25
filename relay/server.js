@@ -83,13 +83,17 @@
 //                                      once, unasked, the moment a socket
 //                                      connects, so a client learns
 //                                      minProtocol before it sends anything.
-//   {type:"daily_join", name}          -> the one shared DAILY GAME room:
-//                                      joins it, creates it as its host, or
+//   {type:"daily_join", name, skin?,   -> the one shared DAILY GAME room:
+//         patch?, protocol?}           joins it, creates it as its host, or
 //                                      answers match_in_progress while its
 //                                      match runs.  quick_join never seats
-//                                      anyone in a daily room.
+//                                      anyone in a daily room.  Behind the
+//                                      same door as every other way in: a
+//                                      daily of another build is not yours,
+//                                      and you get one of your own
 //   {type:"quick_join", name,          same as join_room, but the relay picks
-//         patch?, protocol?}           the fullest open room rather than a code
+//         patch?, protocol?}           the fullest open room rather than a code,
+//                                      passing over any of another build
 // Server -> client
 //   {type:"roster", code, host, open, max, seats, pass,
 //         members:[{id,name,spectate?}]}
@@ -102,16 +106,26 @@
 //   {type:"recv", from, m}
 //   {type:"room_closed", reason}       the host left and nobody could take
 //                                      the room over -- or, reason
-//                                      "removed", the host showed YOU out
+//                                      "removed", the host showed YOU out.
+//                                      A host that DROPS with no heir is
+//                                      waited for through the seat hold
+//                                      (POK-330 #47): the roster keeps
+//                                      naming it, the door takes nobody new,
+//                                      its token makes it host again, and a
+//                                      member sending can_host takes over;
+//                                      when the hold runs out, "host_gone"
 //   {type:"match_in_progress", code, members}  quick_join's third answer
 //                                      (POK-133): nothing joinable, but a
 //                                      match is running -- watch it and
 //                                      play the next one
 //   {type:"room_error", reason:        the host's client is on a different
-//        "version", host:              patch or protocol than this one; the
+//        "version", host:              build or protocol than this one; the
 //        {patch, protocol}}            reasons list above already has
 //                                       "not_found"/"full"/"locked"/etc, this
-//                                       adds one more
+//                                       adds one more.  `patch` is the sha1 of
+//                                       the ROM running in the tab (POK-330
+//                                       #3), a string; relay/protocol.fixtures
+//                                       .json is what the page sends
 //
 // Ids are 1..MAX_SEAT, the lowest one free: not a member's, not held for one
 // who dropped, and not used since the match locked the door (nor a bot's).
@@ -249,8 +263,15 @@ function cleanSkin(skin) {
 // neither field, and the gate below treats "nothing sent" as "nothing to
 // check" on both ends -- a version gate that refuses a client for saying
 // less than a newer one would is worse than no gate.
+//
+// `patch` is the sha1 of the ROM running in the client's tab (POK-330 #3):
+// forty characters, which the old 32 cut off.  A page older than that sends
+// the hand-bumped patch number, which is compared as a string -- dropped for
+// not being one, it left the gate comparing nothing but a protocol that has
+// never moved.
 function cleanVersion(msg) {
-  const patch = typeof msg.patch === "string" && msg.patch.length <= 32 ? msg.patch : undefined;
+  const raw = Number.isFinite(msg.patch) ? String(msg.patch) : msg.patch;
+  const patch = typeof raw === "string" && raw.length > 0 && raw.length <= 64 ? raw : undefined;
   const protocol = Number.isInteger(msg.protocol) ? msg.protocol : undefined;
   if (patch === undefined && protocol === undefined) return null;
   return { patch, protocol };
@@ -415,6 +436,8 @@ class Room {
     // shared daily room, "host" for the lobby's HOST row.  Fixed at
     // opening -- an heir after a migration inherits the room, not a mode.
     this.mode = "host";
+    // the one shared DAILY GAME room, which quick play and the list walk past
+    this.daily = false;
     // when the current match locked the door, or null between matches
     this.lockedAt = null;
     // Addresses the host has removed (POK-130).  Per-room and in-memory,
@@ -438,6 +461,13 @@ class Room {
     // the same id back -- and the id is the page's seat, so its ghost, its
     // loot keys, its spectator target and everything in flight still fit.
     this.held = new Map();
+    // The token of the HOST's held seat while the room waits for it to come
+    // back (POK-330 #47), else null.  A host that drops with nobody to take
+    // over -- alone with its bots, or late in a match when everybody else is
+    // out -- used to close the room two lines after holding its seat.  Now
+    // the room outlives the drop by the hold: `host` still names the one it
+    // is waiting for, and the door takes nobody new meanwhile.
+    this.hostToken = null;
   }
 
   // The id the next newcomer gets: the lowest in 1..MAX_SEAT that nobody is
@@ -493,6 +523,11 @@ class Room {
       conn.joined = held.joined;
       conn.canHost = held.canHost;
       conn.spectator = held.spectator;
+      // the host the room was waiting for: it is theirs again
+      if (token === this.hostToken) {
+        this.host = conn;
+        this.hostToken = null;
+      }
     } else {
       conn.id = this.freeId();
       conn.joined = ++this.joined;
@@ -510,6 +545,23 @@ class Room {
     if (!conn.token) return;
     this.held.set(conn.token, { id: conn.id, name: conn.name, canHost: conn.canHost,
                                 spectator: conn.spectator, joined: conn.joined, at: now });
+  }
+
+  // The member whose token this is, while its socket is still in the room: a
+  // page that called that socket dead and came back on a new one before the
+  // relay saw the old one go (POK-330 #47 review).
+  holder(token) {
+    if (typeof token !== "string") return null;
+    for (const m of this.members.values()) if (m.token === token) return m;
+    return null;
+  }
+
+  // ...whose seat is held for that token, as a drop would hold it, for the new
+  // socket to claim; a host's say goes with the seat.
+  release(conn, now) {
+    this.remove(conn);
+    this.hold(conn, now);
+    if (this.host === conn) this.hostToken = conn.token;
   }
 
   // Is this token a seat this room is still holding?
@@ -651,7 +703,9 @@ class Conn {
     }
   }
 
-  destroy(reason) {
+  // `code`, when there is one to say: a close frame the page can read (1012,
+  // the relay restarting) rather than a cut it cannot tell from its own network
+  destroy(reason, code) {
     if (this.closed) return;
     this.closed = true;
     // Why a connection went away is the first thing you need when a match
@@ -663,7 +717,9 @@ class Conn {
       + ` | in ${this.census()}`
       + ` | headroom ${Math.round(this.minTokens)}/${this.relay.limits.burstLines}`);
     this.relay.onClose(this, reason);
-    try { this.ws.terminate(); } catch { /* already gone */ }
+    try {
+      if (code) this.ws.close(code, reason); else this.ws.terminate();
+    } catch { /* already gone */ }
   }
 }
 
@@ -740,18 +796,43 @@ export function createRelay(options = {}) {
             + ` ${heir.name}#${heir.id} promoted`);
         return;
       }
-      // Nobody could take it: the old ending, for a room of old clients or
-      // one whose last eligible member has been eliminated.
-      room.broadcast({ type: "room_closed", reason: reason || "host_left" });
-      for (const m of [...room.members.values()]) {
-        room.remove(m);
+      // Nobody could take it, but the host only dropped: the room waits the
+      // seat hold out for it (POK-330 #47).  A lone host playing bots is the
+      // common case, and a phone's blip ended their match on the spot.  The
+      // roster still names them as host; the door takes nobody new.
+      if (conn.token && room.held.has(conn.token)) {
+        room.hostToken = conn.token;
+        room.broadcast(room.roster());
+        log(`room ${room.code}: host ${conn.name}#${conn.id} dropped, held`
+            + ` ${Math.round(limits.rejoinMs / 1000)}s`);
+        return;
       }
-      rooms.delete(room.code);
-      log(`room ${room.code} closed (${reason || "host_left"}, no heir)`);
+      // Left on purpose: the old ending, for a room of old clients or one
+      // whose last eligible member has been eliminated.
+      closeRoom(room, reason || "host_left");
     } else {
       room.broadcast(room.roster());
       log(`room ${room.code}: ${conn.name}#${conn.id} left`);
     }
+  }
+
+  // The room is over: everybody still in it is told, and its code is gone.
+  function closeRoom(room, reason) {
+    room.broadcast({ type: "room_closed", reason });
+    for (const m of [...room.members.values()]) {
+      room.remove(m);
+    }
+    rooms.delete(room.code);
+    log(`room ${room.code} closed (${reason}, no heir)`);
+  }
+
+  // Lets go of seats held past rejoinMs, and closes a room whose host's was
+  // one of them.  False when the room is gone.
+  function reap(room, now) {
+    room.expireHeld(now, limits.rejoinMs);
+    if (room.hostToken === null || room.held.has(room.hostToken)) return true;
+    closeRoom(room, "host_gone");
+    return false;
   }
 
   function infoFor() {
@@ -772,6 +853,84 @@ export function createRelay(options = {}) {
     if (clientVersion.protocol !== undefined && room.version.protocol !== undefined
         && clientVersion.protocol !== room.version.protocol) return true;
     return false;
+  }
+
+  // Why `conn` may not come through `room`'s door, or null when it may
+  // (POK-330 #46).  Every way in asks this one question -- the list, a code,
+  // quick play, the daily -- where each used to keep its own copy of the
+  // filter, and the daily's copy had quietly lost the version gate.  The order
+  // is the answer a stranger gets: removed, then the passcode (without it you
+  // learn nothing past "not yours"), then the version, then the door's state.
+  // A member coming back to a seat the room is holding is past the passcode and
+  // the door's state: they were already inside.  The passcode above all
+  // (POK-330 #47 review): a host sets it after opening, so its page never has it
+  // to rejoin with, and a guest's is stale once the host changes it.
+  function canEnter(room, conn, { token, pass, version, spectate = false, resuming = false } = {}) {
+    if (room.banned.has(conn.ip)
+        || (typeof token === "string" && room.bannedTokens.has(token))) return "removed";
+    if (!resuming && room.pass !== null && cleanPass(pass) !== room.pass) return "passcode";
+    if (versionMismatch(room, version)) return "version";
+    if (resuming) return null;
+    // waiting on its dropped host (POK-330 #47): nobody would run the lobby
+    // or the match for a newcomer, so the door is shut to watchers too.  Not
+    // the daily's lobby, which is nobody's in particular: a newcomer's can_host
+    // makes it the host there, where passing the room over opened a second daily
+    if (room.hostToken !== null && !(room.daily && !room.locked)) return "locked";
+    if (room.locked && !spectate) return "locked";
+    if (room.full()) return "full";
+    return null;
+  }
+
+  // canEnter's answer, said to the client that asked; a version refusal says
+  // what the room runs, so the page can tell its player which of them is stale
+  function refuse(conn, room, why) {
+    conn.send(why === "version"
+      ? { type: "room_error", reason: why, host: room.version }
+      : { type: "room_error", reason: why });
+  }
+
+  // A new room with `conn` as its host: the lobby's HOST row, quick play that
+  // found nothing, and the daily's first press.  Null, having said why, at the
+  // room ceiling.
+  function openRoom(conn, msg, { mode, open, pass = null, max }) {
+    if (rooms.size >= limits.rooms) {
+      traffic.rejected += 1;
+      conn.send({ type: "room_error", reason: "server_full" });
+      log(`room refused: at the ${limits.rooms}-room ceiling`);
+      return null;
+    }
+    conn.name = cleanName(msg.name);
+    conn.skin = cleanSkin(msg.skin);
+    conn.spectator = undefined; // a host is never watching, whatever it did last room
+    const room = new Room(makeCode(rooms), conn, cleanMax(max));
+    room.seats = cleanSeats(max);
+    room.mode = mode;
+    room.daily = mode === "daily";
+    room.open = open;
+    room.pass = pass;
+    room.version = cleanVersion(msg);
+    rooms.set(room.code, room);
+    room.add(conn);
+    traffic.roomsOpened += 1;
+    if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
+    conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
+    conn.send(room.roster());
+    log(`room ${room.code} hosted by ${conn.name}#${conn.id}`
+        + (room.daily ? " (daily)"
+           : (room.open ? " (open)" : "") + (room.pass ? " (passcode)" : "")));
+    return room;
+  }
+
+  // `conn` walks into `room`: the one place a room_joined is made, whichever
+  // door it came through.  `token` names the seat of a member coming back.
+  function admit(conn, room, msg, how, { spectate = false, token } = {}) {
+    conn.name = cleanName(msg.name);
+    conn.skin = cleanSkin(msg.skin);
+    conn.spectator = spectate || undefined;
+    room.add(conn, token);
+    conn.send({ type: "room_joined", code: room.code, id: conn.id, host: room.host.id, token: conn.token });
+    room.broadcast(room.roster());
+    log(`room ${room.code}: ${conn.name}#${conn.id} ${how}`);
   }
 
   function handle(conn, msg) {
@@ -798,9 +957,11 @@ export function createRelay(options = {}) {
         conn.browsedAt = Date.now();
         const list = [];
         for (const room of rooms.values()) {
-          if (!room.open || room.locked || room.daily
-              || room.banned.has(conn.ip)) continue;
-          list.push(room.listing());
+          if (!room.open || room.daily) continue;
+          // the door as somebody holding the passcode would find it: a full
+          // room is still a row, marked, and so is a passcoded one
+          const why = canEnter(room, conn, { pass: room.pass });
+          if (why === null || why === "full") list.push(room.listing());
         }
         list.sort((a, b) => b.players - a.players || (a.code < b.code ? -1 : 1));
         // The DAILY GAME (2026-09-13): inside the last half hour before
@@ -836,17 +997,18 @@ export function createRelay(options = {}) {
         if (conn.room) { conn.send({ type: "room_error", reason: "already_in_room" }); return; }
         let open = null, running = null;
         for (const room of rooms.values()) {
-          if (!room.daily || room.banned.has(conn.ip)) continue;
-          if (room.full()) continue;
-          if (room.locked) { running = running || room; continue; }
-          open = open || room;
+          if (!room.daily) continue;
+          // a daily match already running is watched, like quick play's
+          const why = canEnter(room, conn, { version: cleanVersion(msg), spectate: room.locked });
+          // ...and one running while its host is away is still running (POK-330
+          // #47 review), not a reason to open a second daily beside it
+          if (why === "locked") { running = running || room; continue; }
+          if (why !== null) continue;
+          if (room.locked) running = running || room;
+          else open = open || room;
         }
         if (open) {
-          conn.name = cleanName(msg.name);
-          open.add(conn);
-          conn.send({ type: "room_joined", code: open.code, id: conn.id, host: open.host.id, token: conn.token });
-          open.broadcast(open.roster());
-          log(`room ${open.code}: ${conn.name}#${conn.id} joined the daily`);
+          admit(conn, open, msg, "joined the daily");
           return;
         }
         if (running) {
@@ -854,50 +1016,19 @@ export function createRelay(options = {}) {
                       members: running.members.size });
           return;
         }
-        if (rooms.size >= limits.rooms) {
-          traffic.rejected += 1;
-          conn.send({ type: "room_error", reason: "server_full" });
-          return;
-        }
-        conn.name = cleanName(msg.name);
-        const room = new Room(makeCode(rooms), conn, limits.members);
-        room.daily = true;
-        room.mode = "daily";
-        room.open = true;   // discoverable for spectate; quick_join skips it
-        rooms.set(room.code, room);
-        room.add(conn);
-        traffic.roomsOpened += 1;
-        if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
-        conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
-        conn.send(room.roster());
-        log(`room ${room.code} hosted by ${conn.name}#${conn.id} (daily)`);
+        // open, so it is discoverable to watch; quick_join and the list skip it
+        openRoom(conn, msg, { mode: "daily", open: true });
         return;
       }
 
       case "host_room": {
         if (conn.room) { conn.send({ type: "room_error", reason: "already_in_room" }); return; }
-        if (rooms.size >= limits.rooms) {
-          traffic.rejected += 1;
-          conn.send({ type: "room_error", reason: "server_full" });
-          log(`room refused: at the ${limits.rooms}-room ceiling`);
-          return;
-        }
-        conn.name = cleanName(msg.name);
-        conn.skin = cleanSkin(msg.skin);
-        const room = new Room(makeCode(rooms), conn, cleanMax(msg.max));
-        room.seats = cleanSeats(msg.max);
-        room.open = msg.open === true;
-        room.pass = cleanPass(msg.pass);
-        room.version = cleanVersion(msg);
-        if (conn.seen.get("quick_join")) room.mode = "quick";
-        rooms.set(room.code, room);
-        room.add(conn);
-        traffic.roomsOpened += 1;
-        if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
-        conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
-        conn.send(room.roster());
-        log(`room ${room.code} hosted by ${conn.name}#${conn.id}` +
-            (room.open ? " (open)" : "") + (room.pass ? " (passcode)" : ""));
+        openRoom(conn, msg, {
+          mode: conn.seen.get("quick_join") ? "quick" : "host",
+          open: msg.open === true,
+          pass: cleanPass(msg.pass),
+          max: msg.max,
+        });
         return;
       }
 
@@ -905,45 +1036,41 @@ export function createRelay(options = {}) {
         if (conn.room) { conn.send({ type: "room_error", reason: "already_in_room" }); return; }
         const code = typeof msg.code === "string" ? msg.code.toUpperCase() : "";
         const room = rooms.get(code);
-        if (!room) { conn.send({ type: "room_error", reason: "not_found" }); return; }
-        if (room.banned.has(conn.ip)
-            || (typeof msg.token === "string" && room.bannedTokens.has(msg.token))) {
-          conn.send({ type: "room_error", reason: "removed" });
-          return;
-        }
-        // The passcode is checked before the door's state is told: a
-        // stranger without it learns nothing about the room past "not
-        // yours".  Watchers need it too -- a passcoded room is a room
-        // with friends in it, and the match is theirs to show.
-        if (room.pass !== null && cleanPass(msg.pass) !== room.pass) {
-          conn.send({ type: "room_error", reason: "passcode" });
-          return;
-        }
-        if (versionMismatch(room, cleanVersion(msg))) {
-          conn.send({ type: "room_error", reason: "version", host: room.version });
-          return;
-        }
+        // a room whose host's hold ran out is closed here, not at the next sweep:
+        // that host is told not_found, which is what re-hosts its match
+        if (!room || !reap(room, Date.now())) { conn.send({ type: "room_error", reason: "not_found" }); return; }
         // Coming back to a seat the room is still holding (POK-284): the
         // door's state is not asked, because they were already inside.
         // A stale or unknown token is an ordinary join.
-        const resuming = room.holding(msg.token, Date.now(), limits.rejoinMs);
+        //
+        // ...or to one it has not let go of yet (POK-330 #47 review).  A page
+        // calls its socket dead after two missed pings, 20-30 s in; a half-open
+        // socket goes on the relay's side only at idleMs, a minute after its
+        // last line.  Asked as a stranger, that rejoin was refused `locked`
+        // mid-match, or seated a host as a guest of its own room.
+        const now = Date.now();
+        const stale = room.holder(msg.token);
+        const resuming = stale !== null || room.holding(msg.token, now, limits.rejoinMs);
         // A spectator's door opens where a player's is barred (POK-133):
         // lock_room exists to stop competitors joining a running match,
         // and somebody who asks to WATCH is not one.  The flag rides the
         // roster so every client knows who is a guest of the next match
-        // rather than a trainer in this one.
+        // rather than a trainer in this one.  Watchers need the passcode
+        // too -- a passcoded room is a room with friends in it, and the
+        // match is theirs to show.
         const spectate = msg.spectate === true;
-        if (!resuming) {
-          if (room.locked && !spectate) { conn.send({ type: "room_error", reason: "locked" }); return; }
-          if (room.full()) { conn.send({ type: "room_error", reason: "full" }); return; }
+        const why = canEnter(room, conn, { token: msg.token, pass: msg.pass,
+                                           version: cleanVersion(msg), spectate, resuming });
+        if (why) { refuse(conn, room, why); return; }
+        // the old socket goes out of the room first, so its close is not a drop:
+        // no hold, no heir, nobody told the host has gone
+        if (stale) {
+          room.release(stale, now);
+          stale.destroy("replaced");
         }
-        conn.name = cleanName(msg.name);
-        conn.skin = cleanSkin(msg.skin);
-        conn.spectator = spectate || undefined;
-        room.add(conn, resuming ? msg.token : undefined);
-        conn.send({ type: "room_joined", code: room.code, id: conn.id, host: room.host.id, token: conn.token });
-        room.broadcast(room.roster());
-        log(`room ${room.code}: ${conn.name}#${conn.id} ${resuming ? "rejoined" : spectate ? "spectates" : "joined"}`);
+        admit(conn, room, msg, stale ? "rejoined over its old socket"
+              : resuming ? "rejoined" : spectate ? "spectates" : "joined",
+              { spectate, token: resuming ? msg.token : undefined });
         return;
       }
 
@@ -953,13 +1080,18 @@ export function createRelay(options = {}) {
       // gather into one match instead of scattering one-per-room.
       case "quick_join": {
         if (conn.room) { conn.send({ type: "room_error", reason: "already_in_room" }); return; }
+        // A room of another build is passed over, not refused (POK-330 #3):
+        // right after a deploy the fullest room may be the old build's, and
+        // telling every up-to-date arrival to reload -- which cannot help
+        // them -- turned quick play off until it emptied.  Walking past it
+        // finds a room of their own build, or hosts one.
+        const version = cleanVersion(msg);
         let best = null;
         for (const room of rooms.values()) {
           // a daily room waits for its hour; quick play wants a game NOW,
-          // and a passcoded room wants somebody who knows the host
-          if (!room.open || room.locked || room.daily || room.pass !== null
-              || room.banned.has(conn.ip)) continue;
-          if (room.full()) continue;
+          // and a passcoded room (no pass is asked here) wants somebody who
+          // knows the host
+          if (!room.open || room.daily || canEnter(room, conn, { version }) !== null) continue;
           if (!best || room.members.size > best.members.size) best = room;
         }
         if (!best) {
@@ -971,9 +1103,8 @@ export function createRelay(options = {}) {
           // join it as a spectator and be seated in the next match.
           let running = null;
           for (const room of rooms.values()) {
-            if (!room.open || !room.locked || room.pass !== null
-                || room.banned.has(conn.ip)) continue;
-            if (room.full()) continue;
+            if (!room.open || !room.locked
+                || canEnter(room, conn, { version, spectate: true }) !== null) continue;
             if (!running || room.members.size > running.members.size) running = room;
           }
           if (running) {
@@ -984,16 +1115,7 @@ export function createRelay(options = {}) {
           conn.send({ type: "no_open_rooms" });
           return;
         }
-        if (versionMismatch(best, cleanVersion(msg))) {
-          conn.send({ type: "room_error", reason: "version", host: best.version });
-          return;
-        }
-        conn.name = cleanName(msg.name);
-        conn.skin = cleanSkin(msg.skin);
-        best.add(conn);
-        conn.send({ type: "room_joined", code: best.code, id: conn.id, host: best.host.id, token: conn.token });
-        best.broadcast(best.roster());
-        log(`room ${best.code}: ${conn.name}#${conn.id} quick-joined`);
+        admit(conn, best, msg, "quick-joined");
         return;
       }
 
@@ -1096,6 +1218,19 @@ export function createRelay(options = {}) {
       // already adopts it.
       case "can_host": {
         conn.canHost = msg.ok !== false;
+        // A room waiting on its dropped host takes the first member able to
+        // run it (POK-330 #47): a guest coming back from the same blip, say.
+        // The old host's seat is still held, as an ordinary one.
+        const waiting = conn.room && conn.room.hostToken !== null ? conn.room : null;
+        if (conn.canHost && waiting) {
+          const gone = waiting.host;
+          waiting.host = conn;
+          waiting.hostToken = null;
+          waiting.broadcast(waiting.roster());
+          log(`room ${waiting.code}: host ${gone.name}#${gone.id} left,`
+              + ` ${conn.name}#${conn.id} promoted`);
+          return;
+        }
         if (conn.canHost || !conn.room || conn.room.host !== conn) return;
         const successor = heirOf(conn.room);
         if (!successor) return; // nobody to take it: it stays where it is
@@ -1252,7 +1387,10 @@ export function createRelay(options = {}) {
   // else's). Everything else on this port is the WebSocket upgrade below.
   const httpServer = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
-      const body = JSON.stringify({ status: "ok", rooms: rooms.size, conns: conns.size });
+      // `locked`: matches running, which a relay deploy would end (docs/DEPLOY.md)
+      let locked = 0;
+      for (const room of rooms.values()) if (room.locked) locked += 1;
+      const body = JSON.stringify({ status: "ok", rooms: rooms.size, conns: conns.size, locked });
       res.writeHead(200, { "Content-Type": "application/json",
                             "Content-Length": Buffer.byteLength(body) });
       res.end(body);
@@ -1303,16 +1441,16 @@ export function createRelay(options = {}) {
   });
 
   // One line every few minutes: enough to see whether the box is busy or
-  // idle and what it has moved, without shipping a metrics stack.
-  const reporter = setInterval(() => {
-    log(`rooms ${rooms.size}/${limits.rooms} conns ${conns.size}/${limits.conns}`
-        + ` | sent ${human(traffic.bytesOut)} in ${traffic.linesOut} lines`
-        + ` | peak ${traffic.peakRooms} rooms ${traffic.peakConns} conns`
-        + (traffic.matches ? ` | matches ${traffic.matches}` : "")
-        + (traffic.statSeen
-           ? ` | stats ${traffic.statSeen} (solo ${traffic.statSolo})` : "")
-        + (traffic.rejected ? ` | refused ${traffic.rejected}` : ""));
-  }, 5 * 60_000);
+  // idle and what it has moved, without shipping a metrics stack.  Once more
+  // on the way out, or a deploy loses everything since the last one.
+  const report = () => `rooms ${rooms.size}/${limits.rooms} conns ${conns.size}/${limits.conns}`
+      + ` | sent ${human(traffic.bytesOut)} in ${traffic.linesOut} lines`
+      + ` | peak ${traffic.peakRooms} rooms ${traffic.peakConns} conns`
+      + (traffic.matches ? ` | matches ${traffic.matches}` : "")
+      + (traffic.statSeen
+         ? ` | stats ${traffic.statSeen} (solo ${traffic.statSolo})` : "")
+      + (traffic.rejected ? ` | refused ${traffic.rejected}` : "");
+  const reporter = setInterval(() => log(report()), 5 * 60_000);
   reporter.unref();
 
   const sweeper = setInterval(() => {
@@ -1325,11 +1463,26 @@ export function createRelay(options = {}) {
         conn.destroy("unbound");
       }
     }
-    for (const room of rooms.values()) room.expireHeld(now, limits.rejoinMs);
+    for (const room of [...rooms.values()]) reap(room, now);
   }, limits.sweepMs);
   sweeper.unref();
 
   httpServer.on("error", (err) => log(`server error: ${err && err.message}`));
+
+  // Every socket goes, cut or -- with a `code` -- closed with one.  The rooms go
+  // first, and quietly (POK-330 #47 review): socket by socket, the host's close
+  // elected an heir and told it so before the heir's own close landed, and its
+  // page started a takeover a moment before the restart cut it off too.
+  function close(code) {
+    clearInterval(sweeper);
+    clearInterval(reporter);
+    for (const room of rooms.values()) {
+      for (const m of room.members.values()) m.room = null;
+    }
+    rooms.clear();
+    for (const conn of [...conns]) conn.destroy("shutdown", code);
+    return new Promise((resolve) => httpServer.close(() => resolve()));
+  }
 
   return {
     server: httpServer,
@@ -1346,13 +1499,29 @@ export function createRelay(options = {}) {
         });
       });
     },
-    close() {
-      clearInterval(sweeper);
-      clearInterval(reporter);
-      for (const conn of [...conns]) conn.destroy("shutdown");
-      return new Promise((resolve) => httpServer.close(() => resolve()));
+    close,
+    // A deploy stops the old process with SIGTERM (POK-330 #47).  Every room
+    // dies with it -- they live in memory -- so what a clean stop buys is the
+    // counters since the last report, which a deploy used to lose, and a close
+    // code (1012, service restart) a page can tell from its own network going.
+    shutdown(signal) {
+      log(`${signal}: shutting down | ${report()}`);
+      return close(1012);
     },
   };
+}
+
+// The process's end of a deploy: SIGTERM shuts the relay down and exits once
+// every socket has closed, or after graceMs for a peer that never answers its
+// close frame.
+export function exitOnSignal(relay, proc = process, graceMs = 3000) {
+  proc.once("SIGTERM", () => {
+    const force = setTimeout(() => proc.exit(0), graceMs);
+    relay.shutdown("SIGTERM").finally(() => {
+      clearTimeout(force);
+      proc.exit(0);
+    });
+  });
 }
 
 const isMain = process.argv[1] && import.meta.url === new URL(`file://${process.argv[1].replace(/\\/g, "/")}`).href
@@ -1365,6 +1534,7 @@ if (isMain) {
   const relay = createRelay({ limits: limitsFromEnv(process.env, log), log });
   process.on("uncaughtException", (err) => console.error("uncaught:", err));
   process.on("unhandledRejection", (err) => console.error("unhandled:", err));
+  exitOnSignal(relay);
   relay.listen(port, host).then((addr) => {
     console.log(`hoenn battle royale relay listening on ${addr.address}:${addr.port}`);
   });
