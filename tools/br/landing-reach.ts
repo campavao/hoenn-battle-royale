@@ -40,9 +40,12 @@ const CUT = true;
 
 const seen = new Map<string, number>();
 const components: { id: number; cells: number }[] = [];
+// A bridge's level is a place of its own (POK-331 #2): the Route 110 cycling road and the
+// path under it share three cells, and reaching them from below first must not close
+// them to the road.
+const key = (s: Spot) => (s.z === undefined ? `${s.map}:${s.x},${s.y}` : `${s.map}:${s.x},${s.y}@${s.z}`);
 
 function flood(from: Spot, id: number): number {
-  const key = (s: Spot) => `${s.map}:${s.x},${s.y}`;
   if (seen.has(key(from))) return 0;
   let n = 0;
   const queue: Spot[] = [from];
@@ -70,8 +73,12 @@ const biggest = components.reduce((a, b) => (b.cells > a.cells ? b : a), { id: -
 let off = 0;
 const byMap = new Map<string, number>();
 for (const cell of landing) {
-  const id = seen.get(`${cell.map}:${cell.x},${cell.y}`);
-  if (id === biggest.id) {
+  // A cell on a bridge is dropped onto at no level -- pret spawns a trainer at height 0,
+  // off at either -- which is a place nothing else walks onto, so its own flood is the
+  // bridge and little more. It is in if either level is: it can walk off at that one.
+  const at = { map: cell.map, x: cell.x, y: cell.y };
+  const inside = [at, ...world.levels(cell.map, cell.x, cell.y).map((z) => ({ ...at, z }))];
+  if (inside.some((s) => seen.get(key(s)) === biggest.id)) {
     delete cell.off;
   } else {
     cell.off = 1;

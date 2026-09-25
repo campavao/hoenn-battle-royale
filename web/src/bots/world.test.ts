@@ -5,9 +5,9 @@ import worldData from '../data/world.json';
 
 // A hand-built pair of maps, so the rules are readable and a failure points at one of
 // them rather than at Hoenn. Classes: 0 ground, 1 wall, 2 water, 3 a south-facing
-// ledge, 7 grass.
-function grid(rows: string[]): string {
-  const cells = rows.join('').split('').map(Number);
+// ledge, 7 grass. Heights are one hex digit a cell (radix 16), 15 an F.
+function grid(rows: string[], radix = 10): string {
+  const cells = rows.join('').split('').map((c) => parseInt(c, radix));
   const tokens: string[] = [];
   for (let i = 0; i < cells.length; ) {
     let n = 1;
@@ -205,7 +205,17 @@ describe('the cell graph', () => {
       }
     }
     expect(bad.slice(0, 5)).toEqual([]);
-    expect(hoenn.cellCount).toBe(n);
+    // Past the last cell, the bridges' levels (POK-331 #2): each a height-15 cell again,
+    // once for every height its edges step off at, and it reads back as that level.
+    expect(hoenn.cellCount - n).toBeGreaterThan(400);
+    for (let k = n; k < hoenn.cellCount; k++) {
+      const at = hoenn.spotAt(k);
+      const cell = hoenn.key({ map: at.map, x: at.x, y: at.y });
+      if (at.z === undefined || hoenn.height(at.map, at.x, at.y) !== 15 || hoenn.key(at) !== k || hoenn.cellOf(k) !== cell) {
+        bad.push(`level ${k}: ${at.map} ${at.x},${at.y}@${at.z}`);
+      }
+    }
+    expect(bad.slice(0, 5)).toEqual([]);
     expect(hoenn.key({ map: maps[0].id, x: -1, y: 0 })).toBe(-1);
     expect(hoenn.key({ map: 'MAP_NOWHERE_AT_ALL', x: 0, y: 0 })).toBe(-1);
   });
@@ -213,20 +223,17 @@ describe('the cell graph', () => {
   it('steps on the numbers exactly as it steps on spots, everywhere, with and without HMs', () => {
     const bad: string[] = [];
     const kit: [boolean, boolean][] = [[false, false], [true, false], [false, true], [true, true]];
-    for (const m of maps) {
-      for (let y = 0; y < m.h; y++) {
-        for (let x = 0; x < m.w; x++) {
-          const spot = { map: m.id, x, y };
-          const k = hoenn.key(spot);
-          for (const [surf, cut] of kit) {
-            for (let d = 0; d < 4; d++) {
-              const landed = hoenn.step(spot, DIRS[d], surf, cut);
-              // A step to somewhere with no number would be one the search cannot take.
-              if (landed && hoenn.key(landed) < 0) bad.push(`${m.id} ${x},${y} ${DIRS[d]} lands off the grid`);
-              const want = landed ? hoenn.key(landed) : -1;
-              if (hoenn.stepKey(k, d, surf, cut) !== want) bad.push(`${m.id} ${x},${y} ${DIRS[d]} surf=${surf} cut=${cut}`);
-            }
-          }
+    // Every node: each cell, and each level of a bridge.
+    for (let k = 0; k < hoenn.cellCount; k++) {
+      const spot = hoenn.spotAt(k);
+      const at = `${spot.map} ${spot.x},${spot.y}${spot.z === undefined ? '' : `@${spot.z}`}`;
+      for (const [surf, cut] of kit) {
+        for (let d = 0; d < 4; d++) {
+          const landed = hoenn.step(spot, DIRS[d], surf, cut);
+          // A step to somewhere with no number would be one the search cannot take.
+          if (landed && hoenn.key(landed) < 0) bad.push(`${at} ${DIRS[d]} lands off the grid`);
+          const want = landed ? hoenn.key(landed) : -1;
+          if (hoenn.stepKey(k, d, surf, cut) !== want) bad.push(`${at} ${DIRS[d]} surf=${surf} cut=${cut}`);
         }
       }
     }
@@ -321,6 +328,145 @@ describe('water and doors', () => {
     expect(world.entryCells('LAKE', 'HUT')).toEqual([{ map: 'HUT', x: 0, y: 0 }]);
     expect(world.entryCells('HUT', 'LAKE')).toEqual([{ map: 'LAKE', x: 3, y: 0 }]);
     expect(world.entryCells('LAKE', 'NOWHERE')).toEqual([]);
+  });
+});
+
+// POK-331 #2: Emerald keeps you off a cliff by height, not by the collision bit, and
+// world.json had no heights -- so a bot walked straight up the Safari Zone's cliffs.
+// pret's rule is IsElevationMismatchAt (event_object_movement.c): a step between two
+// heights is refused unless one is 0 (a transition) or the cell is 15 (a bridge).
+describe('heights', () => {
+  // Ground at 3 on the left, a plateau at 4 on the right, a stair (0) at the top
+  // between them, and the sea (1) along the bottom.
+  const CLIFF: WorldMap = {
+    id: 'CLIFF', group: 0, num: 11, w: 4, h: 3, section: 'S', outdoor: true,
+    grid: grid(['0000', '0000', '2222']),
+    elev: grid(['3044', '3344', '1111'], 16),
+    seams: [],
+  };
+  const w = new World([CLIFF]);
+  const at = (x: number, y: number) => ({ map: 'CLIFF', x, y });
+
+  it('will not step up or down a cliff face', () => {
+    expect(w.step(at(1, 1), 'east')).toBeNull();
+    expect(w.step(at(2, 1), 'west')).toBeNull();
+    expect(w.step(at(1, 1), 'east', true, true)).toBeNull();
+  });
+
+  it('takes the stairs: a transition meets every height', () => {
+    expect(w.step(at(1, 1), 'north')).toEqual(at(1, 0));
+    expect(w.step(at(1, 0), 'east')).toEqual(at(2, 0));
+    expect(w.step(at(2, 0), 'west')).toEqual(at(1, 0));
+    const path = findPath(w, at(1, 1), at(2, 1));
+    expect(path.steps.map((s) => s.to)).toEqual([at(1, 0), at(2, 0), at(2, 1)]);
+  });
+
+  it('surfs off the ground and back onto it -- but not off the plateau, a cliff over the sea', () => {
+    expect(w.step(at(0, 1), 'south')).toBeNull();
+    expect(w.step(at(0, 1), 'south', true)).toEqual(at(0, 2));
+    expect(w.step(at(0, 2), 'north', true)).toEqual(at(0, 1));
+    expect(w.step(at(3, 1), 'south', true)).toBeNull();
+    expect(w.step(at(3, 2), 'north', true)).toBeNull();
+  });
+
+  it('never asks a door or a ledge', () => {
+    // A door is pressed into, not climbed onto, and pret tries a ledge before the height.
+    const DOOR: WorldMap = {
+      ...CLIFF, id: 'DOOR', w: 2, h: 3,
+      grid: grid(['00', '03', '00']),
+      elev: grid(['55', '35', '33'], 16),
+      warps: [{ x: 0, y: 0, to: 'DOOR', toX: 1, toY: 2, kind: 'door' }],
+    };
+    const d = new World([DOOR]);
+    expect(d.step({ map: 'DOOR', x: 0, y: 1 }, 'north')).toEqual({ map: 'DOOR', x: 1, y: 2 });
+    expect(d.step({ map: 'DOOR', x: 1, y: 0 }, 'south')).toEqual({ map: 'DOOR', x: 1, y: 2 });
+  });
+
+  it('holds across a seam', () => {
+    const LOW: WorldMap = {
+      ...CLIFF, id: 'LOW', w: 2, h: 1, grid: grid(['00']), elev: grid(['33'], 16),
+      seams: [{ dir: 'north', to: 'HIGH', offset: 0 }],
+    };
+    const HIGH: WorldMap = {
+      ...CLIFF, id: 'HIGH', w: 2, h: 1, grid: grid(['00']), elev: grid(['30'], 16),
+      seams: [{ dir: 'south', to: 'LOW', offset: 0 }],
+    };
+    expect(new World([LOW, HIGH]).step({ map: 'LOW', x: 0, y: 0 }, 'north')).toEqual({ map: 'HIGH', x: 0, y: 0 });
+    const cliff = new World([LOW, { ...HIGH, elev: grid(['40'], 16) }]);
+    expect(cliff.step({ map: 'LOW', x: 0, y: 0 }, 'north')).toBeNull();
+    expect(cliff.step({ map: 'LOW', x: 1, y: 0 }, 'north')).toEqual({ map: 'HIGH', x: 1, y: 0 });
+  });
+
+  // A bridge remembers: a trainer on a height-15 cell keeps the height they came on at
+  // (ObjectEventUpdateElevation), so a road at 4 over a path at 3 cross without meeting.
+  describe('a bridge', () => {
+    const CROSS: WorldMap = {
+      ...CLIFF, id: 'CROSS', w: 3, h: 3,
+      grid: grid(['101', '000', '101']),
+      elev: grid(['040', '3F3', '040'], 16),
+    };
+    const b = new World([CROSS]);
+    const c = (x: number, y: number, z?: number) => (z === undefined ? { map: 'CROSS', x, y } : { map: 'CROSS', x, y, z });
+
+    it('is two places, one a level', () => {
+      expect(b.cellCount).toBe(9 + 2);
+      expect(b.step(c(0, 1), 'east')).toEqual(c(1, 1, 3));
+      expect(b.step(c(1, 0), 'south')).toEqual(c(1, 1, 4));
+    });
+
+    it('lets each level off only at its own height', () => {
+      expect(b.step(c(1, 1, 3), 'east')).toEqual(c(2, 1));
+      expect(b.step(c(1, 1, 3), 'north')).toBeNull();
+      expect(b.step(c(1, 1, 4), 'south')).toEqual(c(1, 2));
+      expect(b.step(c(1, 1, 4), 'west')).toBeNull();
+      expect(findPath(b, c(0, 1), c(1, 0)).found).toBe(false);
+      expect(findPath(b, c(1, 0), c(1, 2)).steps.map((s) => s.to)).toEqual([c(1, 1, 4), c(1, 2)]);
+    });
+
+    it('lets a trainer on it at no level off at any height: dropped there, pret starts them at 0', () => {
+      expect(b.neighbours(c(1, 1)).map((n) => n.dir).sort()).toEqual(['east', 'north', 'south', 'west']);
+    });
+  });
+
+  describe('in Hoenn', () => {
+    const hoenn = new World((worldData as { maps: WorldMap[] }).maps);
+    const north = (x: number, y: number) => ({ map: 'MAP_SAFARI_ZONE_NORTH', x, y });
+
+    it('keeps the Safari Zone North plateau off the ground below it', () => {
+      // The case the ticket names: one step apart, and a cliff between.
+      expect(hoenn.height('MAP_SAFARI_ZONE_NORTH', 22, 29)).toBe(5);
+      expect(hoenn.height('MAP_SAFARI_ZONE_NORTH', 22, 28)).toBe(3);
+      expect(hoenn.standable('MAP_SAFARI_ZONE_NORTH', 22, 28)).toBe(true);
+      expect(hoenn.step(north(22, 29), 'north', true, true)).toBeNull();
+      expect(hoenn.step(north(22, 28), 'south', true, true)).toBeNull();
+      // The way down is the stairs at (22,23), and the route takes them.
+      const path = findPath(hoenn, north(22, 29), north(22, 28), 4000, false, true);
+      expect(path.found).toBe(true);
+      expect(path.steps.length).toBeGreaterThan(10);
+      expect(path.steps.some((s) => s.to.x === 22 && s.to.y === 23)).toBe(true);
+    });
+
+    it('leaves the stairs open', () => {
+      expect(hoenn.height('MAP_SAFARI_ZONE_NORTH', 22, 23)).toBe(0);
+      expect(hoenn.step(north(22, 24), 'north')).toEqual(north(22, 23));
+      expect(hoenn.step(north(22, 23), 'north')).toEqual(north(22, 22));
+      expect(hoenn.step(north(22, 22), 'south')).toEqual(north(22, 23));
+      expect(hoenn.step(north(22, 23), 'south')).toEqual(north(22, 24));
+    });
+
+    it('runs the cycling road over the Route 110 path without the two meeting', () => {
+      const r110 = (x: number, y: number, z?: number) =>
+        z === undefined ? { map: 'MAP_ROUTE110', x, y } : { map: 'MAP_ROUTE110', x, y, z };
+      expect(hoenn.height('MAP_ROUTE110', 26, 15)).toBe(15);
+      const under = hoenn.step(r110(25, 15), 'east');
+      expect(under).toEqual(r110(26, 15, 3));
+      expect(hoenn.step(under!, 'north')).toBeNull();
+      expect(hoenn.step(under!, 'east')).toEqual(r110(27, 15, 3));
+      const over = hoenn.step(r110(26, 14), 'south');
+      expect(over).toEqual(r110(26, 15, 4));
+      expect(hoenn.step(over!, 'south')).toEqual(r110(26, 16));
+      expect(hoenn.step(over!, 'west')).toBeNull();
+    });
   });
 });
 

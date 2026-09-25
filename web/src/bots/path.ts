@@ -122,7 +122,8 @@ class Heap {
   }
 }
 
-/** What a search is looking for, and where it may look. */
+/** What a search is looking for, and where it may look. The search walks nodes -- a cell,
+ *  or one level of a bridge (World.cellOf) -- but it looks for cells. */
 interface Goal {
   /** The one cell wanted, or -1 (then `any`, or nothing reachable at all). */
   cell: number;
@@ -155,7 +156,9 @@ function search(world: World, start: number, goal: Goal, maxVisited: number, sur
     state[at] = settled;
     visited++;
 
-    if (at === goal.cell || (goal.any !== null && goal.any.has(at))) {
+    // A goal is a cell, whichever level of a bridge it is reached on (POK-331 #2).
+    const cell = world.cellOf(at);
+    if (cell === goal.cell || (goal.any !== null && goal.any.has(cell))) {
       const steps: { dir: SeamDir; to: Spot }[] = [];
       for (let k = at; from[k] >= 0; k = from[k] >> 2) steps.push({ dir: DIRS[from[k] & 3], to: world.spotAt(k) });
       steps.reverse();
@@ -169,7 +172,7 @@ function search(world: World, start: number, goal: Goal, maxVisited: number, sur
       // findPathToAny stays on its map, stepping off it only onto a goal: the goals are
       // where this map's exits come out, and wandering onto the neighbour mid-search is
       // how a "route to the next map" becomes a route across Hoenn.
-      if (goal.stayOn >= 0 && world.mapOf(to) !== goal.stayOn && !goal.any?.has(to)) continue;
+      if (goal.stayOn >= 0 && world.mapOf(to) !== goal.stayOn && !goal.any?.has(world.cellOf(to))) continue;
       const was = state[to];
       if (was === settled) continue;
       if (was === open && cost[to] <= next) continue;
@@ -197,7 +200,7 @@ export function findPath(world: World, from: Spot, to: Spot, maxVisited = DEFAUL
   return search(
     world,
     start,
-    { cell: world.key(to), any: null, map: world.mapNumber(to.map), x: to.x, y: to.y, stayOn: -1 },
+    { cell: world.cellOf(world.key(to)), any: null, map: world.mapNumber(to.map), x: to.x, y: to.y, stayOn: -1 },
     maxVisited,
     surf,
     cut,
@@ -223,10 +226,10 @@ export function findPathToAny(world: World, from: Spot, goals: readonly Spot[], 
   const wanted = new Set<number>();
   for (const g of goals) {
     const k = world.key(g);
-    if (k >= 0) wanted.add(k);
+    if (k >= 0) wanted.add(world.cellOf(k));
   }
   const start = world.key(from);
-  if (start >= 0 ? wanted.has(start) : goals.some((g) => sameSpot(g, from))) return { steps: [], found: true, visited: 0 };
+  if (start >= 0 ? wanted.has(world.cellOf(start)) : goals.some((g) => sameSpot(g, from))) return { steps: [], found: true, visited: 0 };
   if (start < 0) return nowhere(maxVisited);
   return search(world, start, { cell: -1, any: wanted, map: -1, x: 0, y: 0, stayOn: world.mapOf(start) }, maxVisited, surf, cut);
 }

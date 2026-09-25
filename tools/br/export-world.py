@@ -8,7 +8,7 @@ Reads:
   data/maps/*/map.json                      -> layout, connections, warps,
                                                 object_events, section, etc.
   data/layouts/layouts.json                 -> per-layout dims + tileset refs
-  data/layouts/<Layout>/map.bin             -> u16 collision grid
+  data/layouts/<Layout>/map.bin             -> u16 collision + elevation grid
   data/tilesets/{primary,secondary}/<name>/metatile_attributes.bin
                                              -> u16 behavior/layer per metatile
   include/constants/metatile_behaviors.h    -> MB_* ordinal ids (a plain enum,
@@ -83,6 +83,7 @@ MB = load_metatile_behaviors()
 MAPGRID_METATILE_ID_MASK = 0x03FF
 MAPGRID_COLLISION_MASK = 0x0C00
 MAPGRID_COLLISION_SHIFT = 10
+MAPGRID_ELEVATION_SHIFT = 12
 METATILE_ATTR_BEHAVIOR_MASK = 0x00FF
 
 # include/fieldmap.h
@@ -236,7 +237,7 @@ def classify_warp_kind(src_folder, dest_map_id, maps_by_id):
 
 
 def rle_encode(cells):
-    """Run-length encode a flat list of small ints (0-9) as
+    """Run-length encode a flat list of small ints (a class 0-9, a height 0-15) as
     '<count>x<class>;<count>x<class>;...' -- compact, ASCII, trivially
     decodable, and gzip loves the repetition even before this pass."""
     out = []
@@ -296,8 +297,10 @@ def export():
             warn.append(f"{map_id}: blockdata {cell_count} cells != {w}x{h}={w*h}")
 
         classes = [0] * (w * h)
+        heights = [0] * (w * h)
         for i in range(min(cell_count, w * h)):
             val = cells_raw[i]
+            heights[i] = val >> MAPGRID_ELEVATION_SHIFT
             metatile_id = val & MAPGRID_METATILE_ID_MASK
             collision = (val & MAPGRID_COLLISION_MASK) >> MAPGRID_COLLISION_SHIFT
             behavior = metatile_behavior_name(primary_behaviors, secondary_behaviors, metatile_id)
@@ -354,6 +357,18 @@ def export():
                 "toX": to_x, "toY": to_y, "kind": kind,
             })
 
+        # Heights (POK-331 #2): Emerald keeps you off a cliff top one step away by the
+        # grid's elevation, not its collision bit -- a step between two heights is refused
+        # unless one is 0 (a transition: stairs, a ramp) or 15 (a bridge, both levels at
+        # once). The walker (web/src/bots/world.ts) asks only about cells it can stand on,
+        # so a wall carries the height before it: the same answer, a quarter the bytes.
+        carry = 0
+        for i in range(w * h):
+            if classes[i] == 1:
+                heights[i] = carry
+            else:
+                carry = heights[i]
+
         centre = None
         if "PokemonCenter_1F" in folder:
             for oe in mj.get("object_events") or []:
@@ -376,7 +391,8 @@ def export():
         result_maps.append({
             "id": map_id, "group": group, "num": num, "w": w, "h": h,
             "section": section, "outdoor": outdoor,
-            "grid": rle_encode(classes), "seams": seams, "warps": warps,
+            "grid": rle_encode(classes), "elev": rle_encode(heights),
+            "seams": seams, "warps": warps,
             "centre": centre,
             "_folder": folder,  # internal use only, stripped before writing
         })

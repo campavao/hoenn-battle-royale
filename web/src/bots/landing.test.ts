@@ -18,8 +18,10 @@ const live = LANDING;
  *  does. Surfing is deliberately not allowed: SURF needs a water mon that a trainer
  *  may never be dealt, so a drop cell that requires it is a drop cell that strands
  *  somebody (Route 108, the Abandoned Ship's island, was the case that proved it). */
+/** A place: a cell, or one level of a bridge (POK-331 #2), which is somewhere of its own. */
+const key = (s: Spot) => (s.z === undefined ? `${s.map}:${s.x},${s.y}` : `${s.map}:${s.x},${s.y}@${s.z}`);
+
 function component(from: Spot): Set<string> {
-  const key = (s: Spot) => `${s.map}:${s.x},${s.y}`;
   const seen = new Set([key(from)]);
   const queue = [from];
   while (queue.length > 0) {
@@ -37,9 +39,16 @@ function component(from: Spot): Set<string> {
 
 const reach = component({ map: live[0].map, x: live[0].x, y: live[0].y });
 
+/** Is a drop here in the rest of the pool? On a bridge, a trainer is dropped at no level
+ *  (pret spawns them at height 0, off at either), which is a place nothing else walks
+ *  onto: they are in if either level is. landing-reach.ts judges it the same way. */
+function joined(c: Spot): boolean {
+  return [c, ...world.levels(c.map, c.x, c.y).map((z) => ({ ...c, z }))].some((s) => reach.has(key(s)));
+}
+
 describe('the drop pool', () => {
   it('is every bit one connected piece of Hoenn', () => {
-    const stranded = live.filter((c) => !reach.has(`${c.map}:${c.x},${c.y}`));
+    const stranded = live.filter((c) => !joined({ map: c.map, x: c.x, y: c.y }));
     expect(stranded.slice(0, 5)).toEqual([]);
   });
 
@@ -52,7 +61,7 @@ describe('the drop pool', () => {
   it('marks off only cells that really are cut off', () => {
     // The other direction: nothing should be marked off that the flood can reach, or
     // the pool is being trimmed for no reason.
-    const wrongly = cells.filter((c) => c.off && reach.has(`${c.map}:${c.x},${c.y}`));
+    const wrongly = cells.filter((c) => c.off && joined({ map: c.map, x: c.x, y: c.y }));
     expect(wrongly.slice(0, 5)).toEqual([]);
   });
 });
