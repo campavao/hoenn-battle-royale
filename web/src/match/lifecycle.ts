@@ -6,7 +6,7 @@
 // room's worst bugs were those decisions going wrong. They are pure functions here, which
 // is also the first step of pulling the match out of that closure (#42).
 import type { RosterEvent } from '../net/relay';
-import type { MapRef, Msg } from '../net/wire';
+import type { MapRef, Msg, SpillMsg } from '../net/wire';
 import { dealBots, MAX_SEATS } from '../bots/roster';
 import type { DirectorState } from './director';
 
@@ -146,4 +146,21 @@ export function catchUp(hostSeat: number, state: Pick<DirectorState, 'ring' | 'c
   }
   for (const seat of state.placements) out.push({ t: 'out', seat });
   return out;
+}
+
+/** The loot a seat caught up by catchUp() is owed, once (POK-330 #25): what is lying on the
+ *  map its own message says it is on. A `step` says so as well as a `place`, and it is all
+ *  a seat walking one route ever sends -- the ROM sends a `place` only on a map change, a
+ *  warp, a ledge or the first frame after a menu or a battle (br_ghosts.c) -- so waiting
+ *  for a `place` left a player back from a blip without the loot on the route it kept
+ *  walking, and then handed it the next map's, which its own page already had. */
+export function lootOwed(
+  owed: Set<number>,
+  m: Msg,
+  from: number,
+  forMap: (map: MapRef) => SpillMsg | null,
+): SpillMsg | null {
+  if (m.t !== 'place' && m.t !== 'step') return null;
+  if (!m.map || m.seat !== from || !owed.delete(from)) return null;
+  return forMap(m.map);
 }

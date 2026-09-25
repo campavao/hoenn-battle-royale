@@ -86,6 +86,7 @@ import {
   catchUp,
   departedSeats,
   freshMatch,
+  lootOwed,
   onAgain,
   onPromotion,
   seatsFor,
@@ -2739,9 +2740,9 @@ function wireRoom(
         else bridge!.relay.to(m.seat, { t: 'land', ...land });
       }
       // A seat the host has just caught up on the match learns what is lying where it
-      // stands, once its first `place` has said where that is (POK-330 #25).
-      if (m.t === 'place' && m.map && director && owedLoot.delete(from)) {
-        const standing = loot.forMap(m.map);
+      // stands, once its first `place` or `step` has said where that is (POK-330 #25).
+      if (director) {
+        const standing = lootOwed(owedLoot, m, from, (map) => loot.forMap(map));
         if (standing) bridge!.relay.to(from, standing);
       }
       // Somebody else's ROM challenged one of our bots, or fought one. Same as our own
