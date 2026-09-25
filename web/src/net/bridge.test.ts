@@ -315,6 +315,18 @@ function drainMsgs(romDrainIn: () => BinarySlot[]): Msg[] {
   return out;
 }
 
+/** What the ROM reads over a few frames, reading its in-ring after each one as
+ *  br_main.c's BrNet_Tick does. A link block goes in only once the ROM has read the one
+ *  before it (romport.ts), so a burst of them takes a frame each. */
+function readAcrossFrames(frame: () => void, romDrainIn: () => BinarySlot[], frames = 6): Msg[] {
+  const out: Msg[] = [];
+  for (let i = 0; i < frames; i++) {
+    frame();
+    out.push(...drainMsgs(romDrainIn));
+  }
+  return out;
+}
+
 /** A room we have joined as seat 2, with seat 1 its host and 7 and 9 in it too. */
 function joined() {
   const gba = fakeEmulator(BASE);
@@ -498,8 +510,7 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     socket.receive({ type: 'recv', from: 7, m: block(7, 1) });
     socket.receive({ type: 'recv', from: 7, m: block(7, 1) }); // said again after a gap
     socket.receive({ type: 'recv', from: 7, m: block(7, 2) });
-    frame();
-    expect(drainMsgs(romDrainIn)).toEqual([block(7, 1), block(7, 2)]);
+    expect(readAcrossFrames(frame, romDrainIn)).toEqual([block(7, 1), block(7, 2)]);
     expect(bridge.stats.refused).toBe(1);
   });
 
@@ -512,8 +523,7 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     frame();
     socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 2 } });
     socket.receive({ type: 'recv', from: 7, m: block(7, 1) });
-    frame();
-    expect(drainMsgs(romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1), block(7, 2), block(7, 1)]);
+    expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1), block(7, 2), block(7, 1)]);
   });
 
   it('says its last blocks again when the opponent is back in the room', () => {
@@ -574,8 +584,7 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     socket.receive({ type: 'recv', from: 7, m: block(7, 2) });
     socket.sent.length = 0;
     romEmit({ t: 'bt', seat: 0, seq: 1, data: [1] });
-    frame();
-    expect(drainMsgs(romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1), block(7, 2)]);
+    expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1), block(7, 2)]);
     expect(socket.sent).toEqual([{ type: 'to', id: 7, m: block(2, 1) }]);
 
     // Our RESULT is the end of it: the next challenge is a new fight.
@@ -621,8 +630,7 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
     new Bridge({ emu, mailboxBase: BASE, relay, seat: 2, carry, rom: bridge.rom });
     socket.receive({ type: 'recv', from: 9, m: { t: 'challenge', seat: 9, opponent: 2, nonce: 1 } });
     socket.receive({ type: 'recv', from: 7, m: block(7, 2) });
-    frame();
-    expect(drainMsgs(romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1), block(7, 2)]);
+    expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1), block(7, 2)]);
   });
 });
 

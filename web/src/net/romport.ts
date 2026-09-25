@@ -15,6 +15,12 @@
 //     after it into itself rather than going, since only a place carries the skin.
 //   - Everything else (ring, out, challenge, result, start, bt, ...) is an event: never
 //     dropped, never reordered.
+//   - A link block (`bt`) goes in only once the ROM has read the one before it. The ROM
+//     hands a block to the battle through gBlockRecvBuffer, which the battle empties once
+//     a frame (TryReceiveLinkBattleData, at VBlank), so two read in one BrNet_Tick are one
+//     block lost -- and the link waiting on it for good. A slow battle frame runs the main
+//     loop over two, and the page, which flushes at each frame's end, put the next block
+//     in before the ROM had read the last.
 import { MAILBOX, type Mailbox } from './mailbox';
 import { BR_CONT_FLAG, BR_MSG, crossesToRom, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
 import type { Msg, PlaceMsg, StepMsg } from './wire';
@@ -52,6 +58,9 @@ export class RomPort {
   private pushedCount = 0;
   private coalescedCount = 0;
   private cappedCount = 0;
+  /** Slots pushed since the last `bt`, while its slots may still be unread in the ring;
+   *  null when none is. */
+  private sinceBlock: number | null = null;
 
   constructor(
     readonly mailbox: Mailbox,
@@ -95,7 +104,10 @@ export class RomPort {
     while (this.queue.length > 0) {
       const next = this.queue[0];
       if (MAILBOX.RING_SLOTS - this.mailbox.pending() < next.slots.length) break;
+      if (next.msg.t === 'bt' && this.blockUnread()) break;
       for (const slot of next.slots) this.mailbox.push(slot.type, slot.payload);
+      if (next.msg.t === 'bt') this.sinceBlock = 0;
+      else if (this.sinceBlock !== null) this.sinceBlock += next.slots.length;
       this.queue.shift();
       if (next.move) this.positional--;
       n++;
@@ -138,6 +150,15 @@ export class RomPort {
     }
     if (failed) throw failure;
     return bad;
+  }
+
+  /** The last `bt` is still in the ring: more is pending than went in after it. A ROM
+   *  that has rebooted has an empty ring, and has read everything. */
+  private blockUnread(): boolean {
+    if (this.sinceBlock === null) return false;
+    if (this.mailbox.pending() > this.sinceBlock) return true;
+    this.sinceBlock = null;
+    return false;
   }
 
   /** A `place` says where the seat is: whatever of its movement is still queued is moot. */

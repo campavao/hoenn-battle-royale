@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAILBOX, Mailbox, type RamAccess } from './mailbox';
 import { POSITIONAL_CAP, RomPort } from './romport';
 import { BR_CONT_FLAG, BR_MSG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
-import type { Msg, SpillMsg, StepMsg } from './wire';
+import type { BlockMsg, Msg, SpillMsg, StepMsg } from './wire';
 
 const BASE = 0x0203d178;
 
@@ -242,6 +242,33 @@ describe('RomPort', () => {
       ['face', 1, 2],
       ['face', 1, 3],
     ]);
+  });
+
+  // br_netlink.c's HandleBt copies a link block into gBlockRecvBuffer, and the battle takes
+  // it from there at VBlank, once a frame. A second block read in the same BrNet_Tick lands
+  // on the first before the battle has seen it. The page flushes at every frame's end, and a
+  // busy battle frame runs the ROM's main loop over two: a block pushed at the end of the
+  // lag frame was read with the one before it, that one was lost, and both sides of the link
+  // waited on each other for good (spectate.spec's fight that stopped mid-turn).
+  it('hands the ROM one link block a tick, the next only once it has read the last', () => {
+    const rom = fakeRom();
+    const port = new RomPort(rom.mailbox);
+    const block = (seq: number): BlockMsg => ({ t: 'bt', seat: 2, seq, data: [1, 0, 4, 0, 0, 0, 0, 0, seq] });
+    port.push(block(1));
+    port.push(block(2));
+    port.push({ t: 'out', seat: 9 }); // and what came after them waits its turn
+    port.flush(); // a frame's end
+    port.flush(); // a lag frame's end: the ROM's main loop has not run since
+
+    const perTick: number[][] = [];
+    for (let frame = 0; frame < 3; frame++) {
+      const before = rom.heard.length;
+      rom.tick();
+      perTick.push(rom.heard.slice(before).flatMap((m) => (m.t === 'bt' ? [m.seq] : [])));
+      port.flush();
+    }
+    expect(perTick).toEqual([[1], [2], []]);
+    expect(rom.heard.map((m) => m.t)).toEqual(['bt', 'bt', 'out']);
   });
 
   it('refuses what the ROM cannot take, and leaves the queue alone', () => {
