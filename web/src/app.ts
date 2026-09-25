@@ -1815,6 +1815,9 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     paceOptions()?.safariSecs ?? DEFAULT_SAFARI_SECS,
     () => readZonePool((a, b) => emu.read(a, b), symbols?.get('gBrZone'), seed),
   );
+  // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):
+  // nothing else names them, so solo's results and saved round said P31 won.
+  roster.seatBots(botRows(seed, solo.seats));
   const director = new Director({
     seats: [0, ...solo.seats],
     // `#quick` is a dev pace, and solo is where a change gets looked at first -- it had
@@ -1833,7 +1836,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       }
       // Solo rounds are written down too (POK-248): a match nobody else saw is the
       // one whose seed is hardest to come by afterwards.
-      log.note(msg, performance.now());
+      log.note(msg, performance.now(), (seat) => roster.nameOf(seat));
       if (msg.t === 'win') {
         const round = log.current(performance.now());
         if (round) saveMatch(round);
