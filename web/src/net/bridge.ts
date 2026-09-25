@@ -493,13 +493,16 @@ export class Bridge {
     // Challenges are broadcast, so most of them are about two other people: noting one
     // of those would point our own battle traffic at a seat we are not fighting.
     if (msg.seat !== this.seat && msg.opponent !== this.seat) return;
+    const them = msg.seat === this.seat ? msg.opponent : msg.seat;
+    // Noted even when ignored below: `fighting` can outlast the ROM's link by a few frames
+    // (a hello the watchdog closed says so only with its `busy`), and a ROM free by then
+    // starts this one, which followRom must name as this one and not their last.
+    this.fights.set(them, fightOf(msg));
     // Somebody else's challenge to us while we fight is one our ROM ignores (#20). Our
     // own is never mid-fight: br_engage.c only challenges from the field. The ROM says it
     // is in one from the frame it starts it (POK-331 #5), before this page can have seen
     // a block move.
     if (msg.seat !== this.seat && (this.fighting || this.romLink()?.active)) return;
-    const them = msg.seat === this.seat ? msg.opponent : msg.seat;
-    this.fights.set(them, fightOf(msg));
     this.pointAt(them, fightOf(msg));
   }
 

@@ -597,6 +597,36 @@ describe("the ROM's own word on the fight it is in (POK-331 #5)", () => {
     socket.receive({ type: 'recv', from: 7, m: block(7, 1, F(7, 1)) });
     expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1)]);
   });
+
+  // A hello the ROM's watchdog closed leaves `fighting` up until the ROM's `busy` says it is
+  // back on the map. A challenge in that window is ignored here and started by the ROM, and
+  // followRom named the fight by the last challenge it had noted from that seat: an old
+  // fight's, whose blocks the other page refuses.
+  it('names the fight the ROM started by its own challenge, even one heard while a closed hello still looked like a fight', () => {
+    const { socket, frame, romEmit, ram } = joined({ symbols: SYMBOLS });
+    // An earlier fight with 7, played out.
+    socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 1 } });
+    link(ram, 7);
+    romEmit({ t: 'bt', seat: 0, seq: 1, data: [1] });
+    frame();
+    link(ram, null);
+    romEmit({ t: 'result', seat: 0, outcome: 'win' });
+    frame();
+    // 9's challenge: our start block goes, 9 never answers, and the watchdog closes it.
+    socket.receive({ type: 'recv', from: 9, m: { t: 'challenge', seat: 9, opponent: 2, nonce: 1 } });
+    link(ram, 9);
+    romEmit({ t: 'bt', seat: 0, seq: 1, data: [1] });
+    frame();
+    link(ram, null);
+    frame();
+    // 7 again, before our ROM's `busy`: the page ignores it, the ROM (free) starts it.
+    socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 5 } });
+    link(ram, 7);
+    socket.sent.length = 0;
+    romEmit({ t: 'bt', seat: 0, seq: 1, data: [1] });
+    frame();
+    expect(socket.sent).toEqual([{ type: 'to', id: 7, m: block(2, 1, F(7, 5)) }]);
+  });
 });
 
 // POK-331 #3, #7's backstop. A fight whose opponent stays in the room but sends nothing
