@@ -11,6 +11,11 @@ import bridgeSource from './net/bridge.ts?raw';
 
 const specs = import.meta.glob<string>('../e2e/*.spec.ts', { query: '?raw', import: 'default', eager: true });
 
+/** What has come out of app.ts, which has to stay off the page: vitest drives it with no
+ *  DOM, and solo and the room both run it. Each step of the split adds its module. */
+const PAGE_FREE = ['./bots/host.ts'];
+const pageFree = import.meta.glob<string>(['./bots/host.ts'], { query: '?raw', import: 'default', eager: true });
+
 /** Every field of `__br` the page writes, and so every one a spec may read. */
 const FIELDS = ['bridge', 'roster', 'mailbox', 'director', 'botCount', 'match', 'watch', 'spectate', 'controls'];
 
@@ -48,5 +53,18 @@ describe('the e2e dev surface', () => {
   it('__hbr is the emulator, which is all a spec reads of it', () => {
     expect([...fieldsRead(/__hbr\??\.(\w+)/g)]).toEqual(['emu']);
     expect(appSource).toMatch(/__hbr = \{ emu \}/);
+  });
+});
+
+describe('what came out of app.ts', () => {
+  it('never touches the page', () => {
+    // A file that moved or was renamed would drop out of the glob and pass by saying nothing.
+    expect(Object.keys(pageFree).sort()).toEqual([...PAGE_FREE].sort());
+    for (const [file, source] of Object.entries(pageFree)) {
+      // The code, not what its comments say about the page.
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      const touches = Array.from(code.matchAll(/\b(?:document|window|location|localStorage)\b|\$\(/g), (m) => m[0]);
+      expect(touches, file).toEqual([]);
+    }
   });
 });
