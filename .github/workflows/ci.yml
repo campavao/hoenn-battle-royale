@@ -397,22 +397,11 @@ jobs:
             exit 0
           fi
           npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
-          # The same four checks as release-web.sh. Production is public, so plain curl.
-          fail=0
-          check() {
-            code="$(curl -s -o /dev/null -w '%{http_code}' "$SITE$1")"
-            if [ "$code" = "$2" ]; then echo "  ok   $1 -> $code"; else echo "  FAIL $1 -> $code (wanted $2)"; fail=1; fi
-          }
-          check /patch/br-version.json 200
-          check /patch/br-symbols.json 200
-          check /patch/hoenn-br.bps 200
-          # A 200 here means a copyrighted ROM is on the internet.
-          check /patch/pokeemerald.gba 404
-          [ "$fail" -eq 0 ]
-          live="$(curl -s "$SITE/patch/br-version.json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["romSha1"][:7])')"
-          want="$(python3 -c 'import json;print(json.load(open("web/public/patch/br-version.json"))["romSha1"][:7])')"
-          echo "live rom $live, this build $want"
-          [ "$live" = "$want" ]
+          # The same checks release-web.sh runs: the three patch files answer, the ROM
+          # 404s, and the live br-version.json names this build. Production is public,
+          # so plain curl.
+          want="$(python3 -c 'import json;print(json.load(open("web/public/patch/br-version.json"))["romSha1"])')"
+          tools/br/verify-site.sh "$SITE" "$want"
 
       - name: Relay to Railway, if relay/ changed since the previous tag
         env:

@@ -8,12 +8,15 @@
 # path is the CLI from a machine that has the ROM.
 #
 #   1. refuse unless the built ROM matches the sidecars and the patch, so the site never
-#      publishes a patch for a build nobody has, and refuse a patch over the size ceiling
+#      publishes a patch for a build nobody has, and refuse a patch over the size ceiling;
+#      refuse uncommitted changes, and sidecars stamped at any commit but HEAD
 #   2. deploy from the REPO ROOT, because the Vercel project's Root Directory is "web"
-#   3. verify the live URL serves the patch and 404s the ROM
+#   3. verify the live URL serves the patch, 404s the ROM and names this build
+#      (tools/br/verify-site.sh, the same checks CI's release job runs)
 #
 # The ROM is kept out by three separate things, on purpose: .vercelignore at the root,
-# vite.config.ts's br-drop-roms plugin, and web/scripts/no-rom.mjs. Publishing somebody
+# vite.config.ts's br-drop-roms plugin, and web/scripts/no-rom.mjs (which also knows a
+# ROM by its header, whatever it is called). Publishing somebody
 # else's copyright is the one mistake here that cannot be taken back.
 set -euo pipefail
 
@@ -65,6 +68,25 @@ fi
   echo "re-run dev-patch.sh with the retail ROM; it builds the patch with flips."
   exit 1
 }
+
+# What goes out has to be a commit. `vercel deploy` uploads the working tree, and the
+# version line names a commit, so uncommitted changes -- tracked anywhere (a ROM built
+# from them), or new files under web/ (the shell) -- would publish something no commit
+# reproduces. And the sidecars have to be stamped at that commit, not before it
+# (DEPLOY.md's "run it again after committing", which used to be on trust).
+dirty="$({ git status --porcelain --untracked-files=no; git status --porcelain -- web; } | sort -u)"
+if [[ -n "$dirty" ]]; then
+  echo "uncommitted changes would go out with this deploy:"
+  printf '%s\n' "$dirty" | head -20
+  echo "commit them, then re-run dev-patch.sh."
+  exit 1
+fi
+stamped="$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['commit'])" "$PATCH_DIR/br-version.json")"
+if [[ "$stamped" != "$(git rev-parse HEAD)" ]]; then
+  echo "br-version.json names commit $stamped, but HEAD is $(git rev-parse HEAD)"
+  echo "re-run dev-patch.sh so the version line names what is going out."
+  exit 1
+fi
 echo "publishing rom $have, commit $(git rev-parse --short HEAD)"
 
 if [[ "$PROD" -eq 1 ]]; then
@@ -76,22 +98,12 @@ else
 fi
 printf '%s\n' "$out" | tail -3
 echo
-echo "checking $url"
 
-fail=0
-# Through `vercel curl` rather than plain curl: a preview URL sits behind Deployment
-# Protection, so a bare request gets a 302 to the SSO page and every check "fails" on a
-# deploy that is perfectly fine. Production is public and works either way.
-check() { # path expected-status
-  code="$(npx vercel curl "$url$1" --scope "$SCOPE" -- -s -o /dev/null -w '%{http_code}' 2>/dev/null | tail -1)"
-  if [[ "$code" == "$2" ]]; then echo "  ok   $1 -> $code"; else echo "  FAIL $1 -> $code (wanted $2)"; fail=1; fi
-}
-check /patch/br-version.json 200
-check /patch/br-symbols.json 200
-check /patch/hoenn-br.bps 200
-# The one that matters most. A 200 here means a copyrighted ROM is on the internet.
-check /patch/pokeemerald.gba 404
-
-[[ "$fail" -eq 0 ]] || { echo "the deploy is up but wrong -- do not announce it"; exit 1; }
+# The same checks CI's release job runs (verify-site.sh), including the one that matters
+# most: /patch/pokeemerald.gba must 404. A preview sits behind Deployment Protection, so
+# it is checked through `vercel curl`; production is public.
+if [[ "$PROD" -eq 1 ]]; then via=(); else via=(--vercel-scope "$SCOPE"); fi
+bash "$HERE/verify-site.sh" "$url" "$have" ${via[@]+"${via[@]}"} \
+  || { echo "the deploy is up but wrong -- do not announce it"; exit 1; }
 echo
 echo "live: $url"

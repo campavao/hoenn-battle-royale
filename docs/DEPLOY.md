@@ -40,7 +40,9 @@ behind.
    file is under 2 MB. Expect about 0.7 MB. A patch near 10 MB is shifted retail ROM,
    which is what the old same-offset encoder shipped until 2026-09-24.
 
-   Run it again after committing, so `br-version.json` names the right commit.
+   Run it after committing, so `br-version.json` names the commit that is going out;
+   `release-web.sh` refuses sidecars stamped at any other commit (a build of uncommitted
+   changes is stamped `<sha>-dirty`) and a tree with uncommitted changes.
 
 3. **Deploy**:
 
@@ -51,7 +53,8 @@ behind.
    It refuses to publish unless the sidecars and the patch match the ROM on disk and the
    patch is under the ceiling, deploys from the repo
    root (the Vercel project's Root Directory is `web`), and then checks the live site
-   serves the three patch files and **404s the ROM**. `live: https://hoenn-battle-royale.vercel.app`
+   serves the three patch files, names this build's `romSha1` and **404s the ROM**
+   (`tools/br/verify-site.sh`, which a tag's CI runs too). `live: https://hoenn-battle-royale.vercel.app`
    at the end means it worked.
 
 4. **Prove it** against the real site, with a stock ROM, the way a player arrives:
