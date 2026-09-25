@@ -2593,11 +2593,21 @@ function wireRoom(
   const greeted = new Set<number>();
   let bots: ReturnType<typeof startBots> | null = null;
 
-  const attach = (seat: number, code: string) => {
+  /** Unsubscribes this page's own `recv` handler below. */
+  let offRecv: (() => void) | null = null;
+
+  const attach = (seat: number, code: string, host: number) => {
     if (bridge) bridge.dispose(); // a re-join after a reconnect must not leave two pumps on one ring
+    // ...nor two copies of the page's handler: every rejoin after a blip used to add one,
+    // and each counted the record, took from a bot's bag and answered a peek again.
+    offRecv?.();
+    offRecv = null;
     console.info(`[room] attached as seat ${seat} in ${code}`);
     bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol });
-    isHost = hash.mode === 'host'; // known from our own hash, not worth waiting on a roster event
+    // Whose room it is, as the relay says: ours when we opened it, whoever it names when
+    // we joined. The hash said `host` on a rejoin too, after the relay had already handed
+    // the room to an heir when our socket went (POK-330 #13).
+    isHost = host === seat;
     setStatus(`Room ${code}`);
     renderRoom(bridge);
     const seatBase = symbols?.get('gBrMySeat');
@@ -2685,7 +2695,7 @@ function wireRoom(
         }
       }
     });
-    bridge.relay.on('recv', (ev) => {
+    offRecv = bridge.relay.on('recv', (ev) => {
       try {
         const m = decode(JSON.stringify(ev.m));
         // What the trainer we are watching just took (POK-268). Drawn here rather than
@@ -2824,9 +2834,7 @@ function wireRoom(
     playAgainButton.disabled = true;
     try {
       endGrace();
-      stopDirectorLoop?.();
-      stopDirectorLoop = null;
-      director = null;
+      teardownHost();
       if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
       else await emu.reboot();
       recorded = false;
@@ -2857,8 +2865,8 @@ function wireRoom(
   }
   playAgainButton.addEventListener('click', () => void returnToRoom());
 
-  relay.on('room_hosted', (ev) => attach(ev.id, ev.code));
-  relay.on('room_joined', (ev) => attach(ev.id, ev.code));
+  relay.on('room_hosted', (ev) => attach(ev.id, ev.code, ev.id));
+  relay.on('room_joined', (ev) => attach(ev.id, ev.code, ev.host));
   /** Seats the roster has stopped listing, with the timer that will finish them off
    *  (POK-271). A tab that reconnects inside the grace keeps its place: a blip on
    *  somebody's wifi is not a forfeit, and the relay hands a returning client the seat
@@ -2867,6 +2875,26 @@ function wireRoom(
    *  it on. */
   const leaving = new Map<number, ReturnType<typeof setTimeout>>();
   const LEFT_GRACE_MS = 10_000;
+
+  /** Everything that makes this page the one running the match, undone at once
+   *  (POK-330 #13). Standing down, a dropped socket and the way back to the room each
+   *  used to null their own share of it and none called director.stop(), so the
+   *  Director's `out` subscription outlived it: every later elimination was narrated a
+   *  second time, with a stale count, and the orphan could send a second `win`. */
+  const teardownHost = (): void => {
+    director?.stop(); // lets go of its `out` subscription, and localOut/announceOut with it
+    stopDirectorLoop?.();
+    stopDirectorLoop = null;
+    director = null;
+    localOut = null;
+    announceOut = null;
+    for (const timer of leaving.values()) clearTimeout(timer);
+    leaving.clear();
+    if (import.meta.env.DEV) {
+      const dev = (window as unknown as { __br?: Record<string, unknown> }).__br;
+      if (dev) dev.director = undefined;
+    }
+  };
 
   relay.on('roster', (ev) => {
     controls.roster = ev;
@@ -2907,8 +2935,9 @@ function wireRoom(
     if (bridge && ev.host === bridge.seat && !isHost) {
       isHost = true;
       console.info('[room] promoted to host');
-      // Quick play's own host is "promoted" the moment the relay seats it, with no match
-      // to take over: that room starts itself, after the STARTS IN count (POK-320).
+      // An heir to a room that starts itself (quick play, the daily) before any match
+      // counts it down, after the STARTS IN count (POK-320); the room's own first host
+      // does that from attach(), which knows it opened the room.
       // Before any match, an heir inherits the room and nothing else: a hosted room still
       // waits for START, now this page's (play-test 2026-09-19: the host switched apps,
       // iOS dropped its socket, and the guest it handed to started the match unasked).
@@ -2927,14 +2956,7 @@ function wireRoom(
     else if (bridge && isHost && ev.host !== bridge.seat) {
       isHost = false;
       console.info('[room] stood down as host');
-      stopDirectorLoop?.();
-      stopDirectorLoop = null;
-      director = null;
-      localOut = null;
-      if (import.meta.env.DEV) {
-        const dev = (window as unknown as { __br?: Record<string, unknown> }).__br;
-        if (dev) dev.director = undefined;
-      }
+      teardownHost();
     }
     // Somebody arrived while the match is running: tell them where the fog is, now
     // (POK-260). Kanto calls this the late start -- a watcher who has to wait for the
@@ -3016,7 +3038,10 @@ function wireRoom(
   });
   relay.on('closed', (ev) => {
     setStatus(`Disconnected: ${ev.reason}`);
-    stopDirectorLoop?.();
+    // A host's socket going is the room going to an heir, or closing: either way this
+    // page is not running the match any more, and a director left standing here would
+    // answer picks next to the heir's once the rejoin lands.
+    teardownHost();
     stopSpectateLoop?.();
   });
   // ...and it comes back. The socket retries on its own, but nothing ever un-said
