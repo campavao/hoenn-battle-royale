@@ -547,6 +547,23 @@ class Room {
                                 spectator: conn.spectator, joined: conn.joined, at: now });
   }
 
+  // The member whose token this is, while its socket is still in the room: a
+  // page that called that socket dead and came back on a new one before the
+  // relay saw the old one go (POK-330 #47 review).
+  holder(token) {
+    if (typeof token !== "string") return null;
+    for (const m of this.members.values()) if (m.token === token) return m;
+    return null;
+  }
+
+  // ...whose seat is held for that token, as a drop would hold it, for the new
+  // socket to claim; a host's say goes with the seat.
+  release(conn, now) {
+    this.remove(conn);
+    this.hold(conn, now);
+    if (this.host === conn) this.hostToken = conn.token;
+  }
+
   // Is this token a seat this room is still holding?
   holding(token, now, rejoinMs) {
     const held = typeof token === "string" ? this.held.get(token) : undefined;
@@ -844,12 +861,14 @@ export function createRelay(options = {}) {
   // filter, and the daily's copy had quietly lost the version gate.  The order
   // is the answer a stranger gets: removed, then the passcode (without it you
   // learn nothing past "not yours"), then the version, then the door's state.
-  // A member coming back to a seat the room is holding is past the door's
-  // state: they were already inside.
+  // A member coming back to a seat the room is holding is past the passcode and
+  // the door's state: they were already inside.  The passcode above all
+  // (POK-330 #47 review): a host sets it after opening, so its page never has it
+  // to rejoin with, and a guest's is stale once the host changes it.
   function canEnter(room, conn, { token, pass, version, spectate = false, resuming = false } = {}) {
     if (room.banned.has(conn.ip)
         || (typeof token === "string" && room.bannedTokens.has(token))) return "removed";
-    if (room.pass !== null && cleanPass(pass) !== room.pass) return "passcode";
+    if (!resuming && room.pass !== null && cleanPass(pass) !== room.pass) return "passcode";
     if (versionMismatch(room, version)) return "version";
     if (resuming) return null;
     // waiting on its dropped host (POK-330 #47): nobody would run the lobby
@@ -1017,7 +1036,15 @@ export function createRelay(options = {}) {
         // Coming back to a seat the room is still holding (POK-284): the
         // door's state is not asked, because they were already inside.
         // A stale or unknown token is an ordinary join.
-        const resuming = room.holding(msg.token, Date.now(), limits.rejoinMs);
+        //
+        // ...or to one it has not let go of yet (POK-330 #47 review).  A page
+        // calls its socket dead after two missed pings, 20-30 s in; a half-open
+        // socket goes on the relay's side only at idleMs, a minute after its
+        // last line.  Asked as a stranger, that rejoin was refused `locked`
+        // mid-match, or seated a host as a guest of its own room.
+        const now = Date.now();
+        const stale = room.holder(msg.token);
+        const resuming = stale !== null || room.holding(msg.token, now, limits.rejoinMs);
         // A spectator's door opens where a player's is barred (POK-133):
         // lock_room exists to stop competitors joining a running match,
         // and somebody who asks to WATCH is not one.  The flag rides the
@@ -1029,7 +1056,14 @@ export function createRelay(options = {}) {
         const why = canEnter(room, conn, { token: msg.token, pass: msg.pass,
                                            version: cleanVersion(msg), spectate, resuming });
         if (why) { refuse(conn, room, why); return; }
-        admit(conn, room, msg, resuming ? "rejoined" : spectate ? "spectates" : "joined",
+        // the old socket goes out of the room first, so its close is not a drop:
+        // no hold, no heir, nobody told the host has gone
+        if (stale) {
+          room.release(stale, now);
+          stale.destroy("replaced");
+        }
+        admit(conn, room, msg, stale ? "rejoined over its old socket"
+              : resuming ? "rejoined" : spectate ? "spectates" : "joined",
               { spectate, token: resuming ? msg.token : undefined });
         return;
       }

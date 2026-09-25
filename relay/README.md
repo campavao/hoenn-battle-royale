@@ -32,7 +32,7 @@ Client -> server:
 | `set_pass` | `pass` | host only: passcode, live; empty/absent clears it |
 | `set_skin` | `skin` | what this member looks like, live |
 | `list_rooms` | | `rooms {rooms:[...]}`: every joinable lobby |
-| `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?, token?` | `room_joined {code, id, host, token}` or `room_error {reason}`. With a `token` naming a seat the room is still holding (a socket that dropped within `rejoinMs`, 60 s), the same `id` comes back whatever the door says -- locked or full -- and the token is spent (POK-284). A member who sent `leave_room` or was removed is not held |
+| `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?, token?` | `room_joined {code, id, host, token}` or `room_error {reason}`. With a `token` naming a seat the room is still holding (a socket that dropped within `rejoinMs`, 60 s), the same `id` comes back whatever the door says -- locked, full or passcoded -- and the token is spent (POK-284). A token whose socket the relay still has (a page that gave up on a half-open one) takes the seat over, host and all, and the old socket is closed. A member who sent `leave_room` or was removed is not held |
 | `stat` | `id, v, solo, since` | play counter; logged, counted, never answered |
 | `lock_room` | `locked, bots?` | host only: refuse new joiners (match in progress). `bots`: the seats the host dealt its bots, never handed to a member until the unlock |
 | `kick` | `id` | host only: remove a member, ban their address and their resume token from the room |
