@@ -1036,14 +1036,27 @@ function setRoomHash(key: RoomMode, value?: string): void {
  *  loop's redraw every tick would otherwise quietly take the host's KICK away again. */
 let roomKick: RelayClient | null = null;
 
+/** What the room views last showed, so the spectate loop's call every 500 ms redraws
+ *  only on a change: a list rebuilt under a finger mid-tap loses the tap (POK-330 #33). */
+let roomDrawn: { bridge: Bridge; key: string } | null = null;
+
 /** The room, as everybody in it sees it. */
 function renderRoom(bridge: Bridge): void {
-  const canKick = roomKick !== null;
-  const relay = roomKick;
   const list = $('#match-roster') as HTMLElement;
   const card = $('#match-card') as HTMLElement;
+  const entries = bridge.roster.all();
+  // A card left open on somebody who has gone is a card about nobody.
+  if (card.dataset.seat && !entries.some((e) => String(e.seat) === card.dataset.seat)) {
+    card.hidden = true;
+    card.dataset.seat = '';
+  }
+  // All either view shows of a person: the drawer's names, the drawn room's seats and
+  // its card. Where on a map they stand is not in it.
+  const key = JSON.stringify(entries.map((e) => [e.seat, bridge.roster.nameOf(e.seat), e.skin, e.alive, e.isMe, e.map?.group, e.map?.num]));
+  if (roomDrawn?.bridge === bridge && roomDrawn.key === key) return;
+  roomDrawn = { bridge, key };
   list.innerHTML = '';
-  for (const entry of bridge.roster.all()) {
+  for (const entry of entries) {
     const li = document.createElement('li');
     const label = bridge.roster.nameOf(entry.seat);
     // A name is a button now (POK-268): Kanto's drawn lobby opens a trainer's card on
@@ -1058,9 +1071,12 @@ function renderRoom(bridge: Bridge): void {
         card.dataset.seat = '';
         return;
       }
-      const mapId = entry.map ? mapIdOf(entry.map) : undefined;
+      // The list outlives the entries it was drawn from: the card is of them as they are now.
+      const now = bridge.roster.get(entry.seat) ?? entry;
+      const relay = roomKick;
+      const mapId = now.map ? mapIdOf(now.map) : undefined;
       card.innerHTML = '';
-      for (const line of cardFor(entry, mapId)) {
+      for (const line of cardFor(now, mapId)) {
         const row = document.createElement('div');
         row.className = 'card-line';
         row.textContent = line.label ? `${line.label}: ${line.value}` : line.value;
@@ -1068,7 +1084,7 @@ function renderRoom(bridge: Bridge): void {
       }
       // The host's one power over another seat, and it lives on the card rather than
       // as a row of buttons beside every name (POK-241).
-      if (canKick && relay && !entry.isMe) {
+      if (relay && !now.isMe) {
         const kick = document.createElement('button');
         kick.type = 'button';
         kick.className = 'card-kick';
@@ -1085,11 +1101,6 @@ function renderRoom(bridge: Bridge): void {
     });
     li.appendChild(button);
     list.appendChild(li);
-  }
-  // A card left open on somebody who has gone is a card about nobody.
-  if (card.dataset.seat && !bridge.roster.all().some((e) => String(e.seat) === card.dataset.seat)) {
-    card.hidden = true;
-    card.dataset.seat = '';
   }
   // The drawn room shows the same people (POK-320).
   stage?.redraw();

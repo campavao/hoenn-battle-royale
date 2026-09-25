@@ -59,6 +59,132 @@ export function stageScale(cssW: number, cssH: number): number {
 
 export const STAGE_WIDTH = 240;
 
+/** What a widget is called between paints: its id, or its text within its parent. */
+function widgetKey(w: Widget): string {
+  return w.id ?? `${w.parent ?? ''}/${w.text}`;
+}
+
+/** Put `want` into `parent` in that order, moving only what is out of place: a node
+ *  that is taken out and put back loses the tap in progress on it. */
+function arrange(parent: HTMLElement, want: HTMLElement[]): void {
+  want.forEach((node, i) => {
+    const at = parent.childNodes[i] ?? null;
+    if (at !== node) parent.insertBefore(node, at);
+  });
+  while (parent.childNodes.length > want.length) parent.removeChild(parent.childNodes[want.length]);
+}
+
+/** The DOM copy of a painted screen (POK-320), kept element for element across paints.
+ *
+ *  The room repaints twice a second and more, and a finger's tap takes 100-200 ms. When
+ *  every paint rebuilt the copy, the button under the finger at pointerdown was gone by
+ *  pointerup, so the click never came, and focus went back to nothing each time
+ *  (POK-330 #33). Now an element stays as long as its widget does, is updated in place,
+ *  and one listener on the whole copy presses whatever widget holds that element at
+ *  the moment of the click. */
+export class Mirror {
+  /** By key: the element, and the <li> it sits in when its parent is a list. */
+  private els = new Map<string, HTMLElement>();
+  private items = new Map<HTMLElement, HTMLElement>();
+  private boxes = new Map<string, HTMLElement>();
+  private pressable = new Map<HTMLElement, Widget>();
+
+  constructor(
+    private readonly hits: HTMLElement,
+    press: (w: Widget) => void,
+  ) {
+    hits.addEventListener('click', (ev) => {
+      for (let n = ev.target as HTMLElement | null; n && n !== hits; n = n.parentNode as HTMLElement | null) {
+        const w = this.pressable.get(n);
+        if (!w) continue;
+        if (!w.disabled) press(w);
+        return;
+      }
+    });
+  }
+
+  /** Match the copy to `p`, drawn at `scale` with the 240-wide screen `ox` in. */
+  sync(p: Painted, scale: number, ox: number): void {
+    const doc = this.hits.ownerDocument;
+    const boxes = new Map<string, HTMLElement>();
+    const inBox = new Map<string, HTMLElement[]>();
+    const top: HTMLElement[] = [];
+    for (const def of p.containers ?? []) {
+      const tag = (def.tag ?? 'div').toUpperCase();
+      let el = this.boxes.get(def.id);
+      if (!el || el.tagName !== tag) {
+        el = doc.createElement(tag.toLowerCase());
+        el.id = def.id;
+      }
+      el.className = def.cls ?? '';
+      el.hidden = def.hidden === true;
+      boxes.set(def.id, el);
+      inBox.set(def.id, []);
+      top.push(el);
+    }
+
+    const els = new Map<string, HTMLElement>();
+    const items = new Map<HTMLElement, HTMLElement>();
+    const pressable = new Map<HTMLElement, Widget>();
+    const seen = new Map<string, number>();
+    for (const w of p.widgets) {
+      // Two widgets can say the same thing in the same place (two trainers both named
+      // TRAINER): the second is its own element all the same.
+      const base = widgetKey(w);
+      const n = seen.get(base) ?? 0;
+      seen.set(base, n + 1);
+      const key = n === 0 ? base : `${base}#${n}`;
+      const tag = w.onPress ? 'BUTTON' : 'DIV';
+      let el = this.els.get(key);
+      if (!el || el.tagName !== tag) {
+        el = doc.createElement(tag.toLowerCase());
+        if (w.onPress) (el as HTMLButtonElement).type = 'button';
+      }
+      els.set(key, el);
+      if (w.onPress) {
+        (el as HTMLButtonElement).disabled = w.disabled === true;
+        pressable.set(el, w);
+      }
+      if (el.textContent !== w.text) el.textContent = w.text;
+      if (w.id) el.id = w.id;
+      else el.removeAttribute('id');
+      el.className = w.cls ?? '';
+      el.style.left = `${(w.rect.x + ox) * scale}px`;
+      el.style.top = `${w.rect.y * scale}px`;
+      el.style.width = `${w.rect.w * scale}px`;
+      el.style.height = `${w.rect.h * scale}px`;
+
+      const box = w.parent ? boxes.get(w.parent) : undefined;
+      if (box?.tagName === 'UL') {
+        let li = this.items.get(el);
+        if (!li) li = doc.createElement('li');
+        if (el.parentNode !== li) li.appendChild(el);
+        items.set(el, li);
+        inBox.get(w.parent!)!.push(li);
+      } else if (box) {
+        inBox.get(w.parent!)!.push(el);
+      } else {
+        top.push(el);
+      }
+    }
+
+    arrange(this.hits, top);
+    for (const [id, box] of boxes) arrange(box, inBox.get(id)!);
+    this.els = els;
+    this.items = items;
+    this.boxes = boxes;
+    this.pressable = pressable;
+  }
+
+  clear(): void {
+    this.hits.replaceChildren();
+    this.els.clear();
+    this.items.clear();
+    this.boxes.clear();
+    this.pressable.clear();
+  }
+}
+
 export class Stage {
   readonly canvas: EmeraldCanvas;
   private screen: DrawnScreen | null = null;
@@ -67,12 +193,17 @@ export class Stage {
   private cursorKey: string | null = null;
   private observer: ResizeObserver | null = null;
   private pending: ReturnType<typeof setTimeout> | null = null;
+  private readonly mirror: Mirror;
 
   constructor(
     private readonly root: HTMLElement,
     canvasEl: HTMLCanvasElement,
-    private readonly hits: HTMLElement,
+    hits: HTMLElement,
   ) {
+    this.mirror = new Mirror(hits, (w) => {
+      this.cursorKey = this.keyOf(w);
+      w.onPress?.();
+    });
     this.canvas = new EmeraldCanvas(canvasEl);
     this.canvas.onLoad = () => this.redraw();
     if (typeof ResizeObserver !== 'undefined') {
@@ -119,7 +250,7 @@ export class Stage {
     this.root.hidden = true;
     this.screen = null;
     this.stack = [];
-    this.hits.replaceChildren();
+    this.mirror.clear();
   }
 
   /** Paint again, soon: many things change at once and one pass is enough. A timer
@@ -148,7 +279,7 @@ export class Stage {
     c.clear();
     const painted = this.screen.paint(c, h);
     this.widgets = painted.widgets;
-    this.syncMirror(painted, scale);
+    this.mirror.sync(painted, scale, c.origin);
     const sel = this.selected();
     if (sel) {
       const at = sel.cursor ?? { x: sel.rect.x - 8, y: sel.rect.y + Math.floor((sel.rect.h - 11) / 2) };
@@ -157,7 +288,7 @@ export class Stage {
   }
 
   private keyOf(w: Widget): string {
-    return w.id ?? `${w.parent ?? ''}/${w.text}`;
+    return widgetKey(w);
   }
 
   private selectable(): Widget[] {
@@ -171,54 +302,6 @@ export class Stage {
     const sel = found ?? all[0];
     this.cursorKey = this.keyOf(sel);
     return sel;
-  }
-
-  private syncMirror(p: Painted, scale: number): void {
-    const { hits } = this;
-    hits.replaceChildren();
-    const ox = this.canvas.origin;
-    const place = (el: HTMLElement, r: Rect) => {
-      el.style.left = `${(r.x + ox) * scale}px`;
-      el.style.top = `${r.y * scale}px`;
-      el.style.width = `${r.w * scale}px`;
-      el.style.height = `${r.h * scale}px`;
-    };
-    const parents = new Map<string, HTMLElement>();
-    for (const def of p.containers ?? []) {
-      const el = document.createElement(def.tag ?? 'div');
-      el.id = def.id;
-      if (def.cls) el.className = def.cls;
-      el.hidden = def.hidden === true;
-      hits.appendChild(el);
-      parents.set(def.id, el);
-    }
-    for (const w of p.widgets) {
-      let el: HTMLElement;
-      if (w.onPress) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.disabled = w.disabled === true;
-        b.addEventListener('click', () => {
-          this.cursorKey = this.keyOf(w);
-          w.onPress?.();
-        });
-        el = b;
-      } else {
-        el = document.createElement('div');
-      }
-      el.textContent = w.text;
-      if (w.id) el.id = w.id;
-      if (w.cls) el.className = w.cls;
-      place(el, w.rect);
-      const parent = w.parent ? parents.get(w.parent) : undefined;
-      if (parent?.tagName === 'UL') {
-        const li = document.createElement('li');
-        li.appendChild(el);
-        parent.appendChild(li);
-      } else {
-        (parent ?? hits).appendChild(el);
-      }
-    }
   }
 
   /** A GBA key while a screen is up. Returns whether it was for the screen (always,
