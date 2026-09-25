@@ -1,0 +1,47 @@
+# challenge-own: a CHALLENGE naming ourselves as the challenger starts nothing while we
+# are fading into a fight or already in one (POK-331 #12).
+#
+# Our engage starts its own side of a link from the field (br_engage.c's TickWait), so
+# the only way our own challenge reaches HandleChallenge is a page handing it back. That
+# branch had none of the guards the answering side has: under a bot fight's fade it
+# opened a link whose start task the battle's own init then killed, and ten seconds
+# later the hello watchdog forfeited the bot fight for it -- engage-wait-fade.txt's
+# failure, by another door. In the battle itself it was the same link under a fight
+# that was never its own. Drivers still start a link this way from the open field
+# (netlink-loop.txt), which is left as it was.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# Bot 31's TREECKO card (bot-fight.txt's), staged, and its ghost on our map out of our
+# eyeline.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 10
+# Bot 31's CHALLENGE: its fight starts fading in.
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 5
+# Our own CHALLENGE to seat 1, handed back under the fade: no link.
+pokebytes gDecompressionBuffer 00 01 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 5
+expect u8 gBrNetlink 0
+wait 300
+# In the bot fight, and the same challenge again: still no link. Poked again, because
+# the battle decompresses its graphics through this buffer.
+expect u8 gBrBotFight+2 1
+pokebytes gDecompressionBuffer 00 01 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 5
+expect u8 gBrNetlink 0
+shot fighting
+# Past the hello watchdog's ten seconds: the bot fight was never forfeited for a link.
+wait 700
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+shot still-fighting
+say challenge own ok

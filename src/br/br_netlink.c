@@ -163,8 +163,15 @@ static void HandleChallenge(const u8 *payload, u8 len)
             gBrNetlink.pendingPeer = d[0];
         return;
     }
+    // Our own challenge, handed back: our engage starts its own side from the field
+    // (TickWait), and nowhere else is a link ours to open. Under a fade the battle's own
+    // init killed the start task, in a battle the link sat under a fight not its own,
+    // and either way the hello watchdog forfeited that fight for it (POK-331 #12).
     if (d[0] == gBrMySeat)
-        BrNetlink_StartBattle(0, d[1]);
+    {
+        if (FieldFree())
+            BrNetlink_StartBattle(0, d[1]);
+    }
     else if (d[1] == gBrMySeat)
     {
         if (FieldFree())
