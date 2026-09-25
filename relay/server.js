@@ -461,9 +461,13 @@ class Room {
              pass: this.pass !== null };
   }
 
+  // Serialized once for the whole room, not once per member: a host's place
+  // or ring line goes to everybody, and this is the relay's hottest path.
   broadcast(msg, except) {
+    const line = JSON.stringify(msg);
+    const bytes = Buffer.byteLength(line);
     for (const m of this.members.values()) {
-      if (m !== except) m.send(msg);
+      if (m !== except) m.sendRaw(line, bytes);
     }
   }
 }
@@ -520,6 +524,13 @@ class Conn {
 
   send(msg) {
     if (this.closed) return;
+    const line = JSON.stringify(msg);
+    this.sendRaw(line, Buffer.byteLength(line));
+  }
+
+  // One already-serialized line, and its byte count for the traffic total.
+  sendRaw(line, bytes) {
+    if (this.closed) return;
     // ws queues whatever a socket cannot take yet, without limit.  A client
     // that stops reading -- a frozen tab, or one doing it on purpose -- would
     // grow that queue until the process ran out of heap and dropped every
@@ -529,8 +540,7 @@ class Conn {
       return;
     }
     try {
-      const line = JSON.stringify(msg);
-      traffic.bytesOut += Buffer.byteLength(line);
+      traffic.bytesOut += bytes;
       traffic.linesOut += 1;
       this.ws.send(line);
     } catch {

@@ -1512,3 +1512,36 @@ test("a frame past the line limit closes the socket", async () => {
     assert.equal(closed.type, "__closed");
   }, { line: 1024 });
 });
+
+// ------- POK-330 #66: a broadcast is serialized once, not once per member
+
+test("a broadcast is serialized once for the whole room", async () => {
+  await withRelay(async (port) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST" });
+    const { code } = await host.until("room_hosted");
+    const guests = [];
+    for (const name of ["A", "B", "C"]) {
+      const g = await connect(port);
+      g.send({ type: "join_room", code, name });
+      await g.until("room_joined");
+      guests.push(g);
+    }
+    await host.settled();
+
+    const real = JSON.stringify;
+    let recvs = 0;
+    JSON.stringify = function (value, ...rest) {
+      if (value && value.type === "recv") recvs += 1;
+      return real.call(this, value, ...rest);
+    };
+    try {
+      host.send({ type: "all", m: { t: "ring", phase: 1 } });
+      for (const g of guests) assert.deepEqual((await g.until("recv")).m, { t: "ring", phase: 1 });
+    } finally {
+      JSON.stringify = real;
+    }
+    assert.equal(recvs, 1, "three recipients, one stringify");
+    host.end(); for (const g of guests) g.end();
+  });
+});
