@@ -16,7 +16,6 @@ import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { nameBstart, romReplaying, Spectate } from './match/spectate';
-import { bossAt } from './match/bosses';
 import type { Results } from './match/results';
 import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
@@ -2143,22 +2142,13 @@ function wireRoom(
     // challenge, which is the one message that reaches the other side before a fight.
     bridge.myLines = careerVoiceLines();
     bridge.setOutFilter(() => !amWatching);
-    // A gym leader fell (POK-295): every page in the room says so, off the `npcout` that
-    // already takes the sprite off every map. Nothing new crosses the wire.
-    const bossFell = (m: Msg) => {
-      if (m.t !== 'npcout' || m.fog || !bridge) return; // the fog taking a gym is not a win
-      const boss = bossAt(m.map, m.localId);
-      if (!boss) return;
-      const line = Ticker.felled(m.seat, bridge.roster.nameOf(m.seat), boss);
-      if (line) bridge.pushToRom(line);
-    };
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);
-      bossFell(msg); // our own win never comes back over the relay
       // Into the books, bag and all -- and our own ROM challenging one of our bots, or
       // fighting one and saying how it went (POK-238), goes to the brain from there: the
       // host walks the bot, and nobody hears their own messages come back. Arriving on a
-      // new map, the books hand our ROM what is lying on it.
+      // new map, the books hand our ROM what is lying on it; beating a gym leader, the
+      // line that says so (our own win never comes back over the relay).
       session.note(msg, 'rom');
       // Our own pick answered, and our own `out` counted: the match we run hears our
       // ROM straight from here, since nothing comes back to us over the relay.
@@ -2201,10 +2191,10 @@ function wireRoom(
         const line = Ticker.chest(m.seat, bridge.roster.nameOf(m.seat));
         if (line) bridge.pushToRom(line);
       }
-      bossFell(m);
       // Into the books -- and somebody else's ROM challenging one of our bots, or fighting
       // one, goes to the brain from there: the host is the only page that has the bot's
-      // team, and the relay's `from` is what says whose ROM it was.
+      // team, and the relay's `from` is what says whose ROM it was. A gym leader they beat
+      // is a line on our ticker from there too.
       session.note(m, { from });
       // ...and to the match we run, when we run it: the director's ear, the drop, the loot
       // a latecomer is owed, a peek at one of our bots, and a bot that is out.

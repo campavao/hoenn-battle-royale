@@ -6,13 +6,15 @@
 // host's results never saw its own bots go out (#16), PLAY AGAIN kept half the last
 // match (#22). So everything the page learns about the match it is in goes through
 // one note(msg, via), and the books are here: the match as anybody can see it, the loot,
-// the results, the record, the round's log, who is busy, and the verdict.
+// the results, the record, the round's log, who is busy, and the verdict -- and the one
+// line every page draws for itself off what it hears, a gym leader falling.
 //
 // No page here: storage, the ROM and the screen are handed in, so vitest drives it.
 import { routeToBots } from '../bots/adapt';
 import type { Bots } from '../bots/brain';
 import type { RosterEvent } from '../net/relay';
-import type { Msg, PackedMon, SpillMsg } from '../net/wire';
+import type { Msg, PackedMon, SpillMsg, TickerMsg } from '../net/wire';
+import { bossAt } from './bosses';
 import { careerLine, recordMatch } from './career';
 import { DEFAULT_FOG_SECS } from './director';
 import type { EndGrace } from './grace';
@@ -22,6 +24,7 @@ import { Loot } from './loot';
 import { MatchRecord } from './record';
 import { Results } from './results';
 import type { Roster } from './roster';
+import * as Ticker from './ticker';
 
 /** Where a message came from, which decides what else it does.
  *  - 'page': made here -- our bots, our director, the host speaking for a seat. Booked,
@@ -87,6 +90,15 @@ export function giveBag(loot: Loot, msg: Msg, push: (m: Msg) => void): void {
   if (msg.t !== 'pickup' || msg.item !== undefined) return;
   const items = loot.bagItems(msg.key);
   if (items && items.length > 0) push({ t: 'give', items });
+}
+
+/** A gym leader fell (POK-295): the line every page draws off the `npcout` that already
+ *  takes the sprite off every map, so nothing new crosses the wire. Not the fog taking a
+ *  gym, which is nobody's win. */
+function bossFell(msg: Msg, nameOf: (seat: number) => string): TickerMsg | null {
+  if (msg.t !== 'npcout' || msg.fog) return null;
+  const boss = bossAt(msg.map, msg.localId);
+  return boss ? Ticker.felled(msg.seat, nameOf(msg.seat), boss) : null;
 }
 
 /** Who is in a battle or a menu right now, off the ROMs' own `busy` (POK-230). The
@@ -183,7 +195,8 @@ export class MatchSession {
    *      the ROM told who won, and the grace armed;
    *   8. anything the page did not make itself: who is busy;
    *   9. ...and a fight with one of our bots, to the brain, with whose ROM said it;
-   *  10. our own ROM arriving on a map: what is lying there, back into it (POK-232). */
+   *  10. our own ROM arriving on a map: what is lying there, back into it (POK-232);
+   *  11. a gym leader beaten, by us or by the room: the line, into our own ROM. */
   note(msg: Msg, via: Via): void {
     const now = this.now();
     if (via === 'rom') giveBag(this.lootTable, msg, (m) => this.deps.toRom(m));
@@ -233,6 +246,10 @@ export class MatchSession {
       const standing = this.standingLoot(msg);
       if (standing) this.deps.toRom(standing);
     }
+    // Every page says so for itself -- our own win never comes back over the relay -- and
+    // here, solo says it too (POK-331 #26): Kanto's news has a fallen leader in a solo match.
+    const fell = bossFell(msg, (seat) => this.deps.nameOf(seat));
+    if (fell) this.deps.toRom(fell);
   }
 
   private decide(winner: number | undefined, me: number, now: number): void {
