@@ -187,7 +187,7 @@ export class World {
   private readonly exitCache = new Map<string, readonly Spot[]>();
   private readonly entryCache = new Map<string, readonly Spot[]>();
 
-  constructor(maps: WorldMap[]) {
+  constructor(maps: readonly WorldMap[]) {
     let total = 0;
     for (const m of maps) {
       this.maps.set(m.id, m);

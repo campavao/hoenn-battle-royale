@@ -28,8 +28,8 @@
 import { KEY_BIT, type Band, type Emulator, type GbaKey } from './emu';
 import { GBA_H, GBA_W, lcdRect, readCameraPos, tileAt, type CameraPos } from './field';
 import { findPath } from './bots/path';
-import { World, type SeamDir, type Spot, type WorldMap } from './bots/world';
-import worldData from './data/world.json';
+import type { SeamDir, Spot } from './bots/world';
+import { HOENN } from './bots/hoenn';
 import { MAP_OFFSET } from './net/cells';
 
 // Offsets into the ROM's structs. parity.test.ts reads the headers and holds these to them.
@@ -132,8 +132,6 @@ export function menuSlot(which: number, px: number, py: number): number {
 }
 
 export class TouchLayer {
-  private world: World | null = null;
-  private byRef = new Map<string, string>();
   /** The key this file is holding right now, if any. */
   private held: GbaKey | null = null;
   private heldFrames = 0;
@@ -200,7 +198,7 @@ export class TouchLayer {
     const sx = emu.read(base + OWN_X, 16);
     const sy = emu.read(base + OWN_Y, 16);
     return {
-      map: this.ensureWorld() && this.byRef.get(`${group}:${num}`),
+      map: HOENN.idOf({ group, num }),
       x: ((sx << 16) >> 16) - MAP_OFFSET,
       y: ((sy << 16) >> 16) - MAP_OFFSET,
       dir: emu.read(base + OWN_DIR, 8),
@@ -226,15 +224,6 @@ export class TouchLayer {
     return this.deps.emu.read(base + 0 * BUFFER_A_ROW + CHOOSE_MOVE_MOVES + slot * 2, 16);
   }
 
-  private ensureWorld(): World {
-    if (!this.world) {
-      const maps = (worldData as { maps: WorldMap[] }).maps;
-      this.world = new World(maps);
-      for (const m of maps) this.byRef.set(`${m.group}:${m.num}`, m.id);
-    }
-    return this.world;
-  }
-
   // ---- a tap ----------------------------------------------------------------------------
 
   private tap(px: number, py: number): void {
@@ -247,7 +236,7 @@ export class TouchLayer {
     if (!own || !own.map) return;
     // What is on screen is last frame's camera. Across a seam that one counts from the
     // map we just left, and the latest is the one on ours.
-    const ours = (c: CameraPos | null): c is CameraPos => c !== null && this.byRef.get(`${c.group}:${c.num}`) === own.map;
+    const ours = (c: CameraPos | null): c is CameraPos => c !== null && HOENN.idOf(c) === own.map;
     const cam = ours(this.shownCamera) ? this.shownCamera : readCameraPos(this.deps.emu, (name) => this.sym(name));
     if (!ours(cam)) return;
     this.tapField({ ...own, map: own.map }, tileAt(cam, px, py));
@@ -255,7 +244,7 @@ export class TouchLayer {
 
   /** A tap on map tile `at` (world.json's coordinates), from where we stand. */
   private tapField(own: Own & { map: string }, at: { x: number; y: number }): void {
-    const world = this.ensureWorld();
+    const world = HOENN.world;
     const dx = at.x - own.x;
     const dy = at.y - own.y;
     if (dx === 0 && dy === 0) return;

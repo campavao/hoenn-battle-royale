@@ -74,7 +74,7 @@ import {
   SKINS,
 } from './match/career';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
-import worldData from './data/world.json';
+import { HOENN } from './bots/hoenn';
 import { DOORSTEPS, HAND, LANDING } from './match/landing';
 import { cardFor } from './match/card';
 import { type MatchRecord, recordLines } from './match/record';
@@ -94,7 +94,7 @@ import { parseRoomHash as parseHash, withoutRoom, withRoom, type RoomHash, type 
 // (DESIGN.md §6), and director.ts only reads the handful of fields it documents on
 // `DirectorMapEntry`/`LandingCell`/`RegionSection` -- a wider real shape satisfies it.
 const WORLD: DirectorWorld = {
-  maps: worldData.maps as DirectorWorld['maps'],
+  maps: HOENN.maps,
   landing: LANDING,
   doorsteps: DOORSTEPS,
   hand: HAND,
@@ -1105,9 +1105,7 @@ function renderRoom(bridge: Bridge): void {
 
 /** world.json's id for a wire MapRef, for the places a card names. */
 function mapIdOf(map: MapRef): string | undefined {
-  return (worldData as { maps: { id: string; group: number; num: number }[] }).maps.find(
-    (m) => m.group === map.group && m.num === map.num,
-  )?.id;
+  return HOENN.idOf(map);
 }
 
 // ---- the room screen (POK-241) ------------------------------------------------------
