@@ -21,7 +21,7 @@ import { Mailbox, type RamAccess } from './mailbox';
 import { closeAsSilent, readNetlink, type LinkState } from './netlink';
 import { RomPort } from './romport';
 import { crossesToRom } from './slots';
-import { decode, type BlockMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg } from './wire';
+import { decode, type BlockMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg, type PickMsg } from './wire';
 import { Roster } from '../match/roster';
 import { RelayClient, type RecvEvent, type RosterEvent } from './relay';
 import { admits } from './trust';
@@ -85,6 +85,8 @@ export interface LinkCarry {
   lastRecvSeq: number;
   fighting: boolean;
   fight: number | null;
+  /** ...and the drop's `pick`, while no `land` has answered it (POK-331 #4). */
+  pick?: PickMsg | null;
 }
 
 /** How many of our own last blocks are kept to say again. The link is lockstep -- one
@@ -161,6 +163,14 @@ export class Bridge {
   /** Our opponent dropped off the relay's roster mid-fight: the blocks we sent while it
    *  was gone went nowhere, and are said again when it is back. */
   private opponentAway = false;
+  /** Our ROM's `pick` that no `land` has answered (POK-331 #4). The drop waits on a black
+   *  screen for the host's cell, and a pick our socket was down for never reached it --
+   *  POK-255's black screen. br_pick.c asks once more after five seconds and gives up at
+   *  fifteen, both into the same gap; the page asks again when it is back in the room. */
+  private pick: PickMsg | null = null;
+  /** The host that pick was last put to, and whether the room has lost them since. */
+  private pickHost: number | null = null;
+  private pickHostAway = false;
   private readonly listeners = new Set<(msg: Msg, from: number) => void>();
   /** An extra gate on relay -> ROM, set by the page (match/spectate.ts). A ROM handed
    *  a `bstart` starts replaying a fight, and `bstart`/`turn` are broadcasts, so a
@@ -208,6 +218,7 @@ export class Bridge {
       this.lastRecvSeq = opts.carry.lastRecvSeq;
       this.fighting = opts.carry.fighting;
       this.fightId = opts.carry.fight;
+      this.pick = opts.carry.pick ?? null;
     }
 
     this.unsubs.push(opts.emu.onFrame(() => this.onFrame()));
@@ -245,6 +256,7 @@ export class Bridge {
       lastRecvSeq: this.lastRecvSeq,
       fighting: this.fighting,
       fight: this.fightId,
+      pick: this.pick,
     };
   }
 
@@ -255,6 +267,18 @@ export class Bridge {
   resendBlocks(): void {
     if (this.opponentSeat === null) return;
     for (const block of this.sentBlocks) this.relay.to(this.opponentSeat, block);
+  }
+
+  /** Asks the room's host for our drop again, if nothing has answered the last ask (POK-331
+   *  #4): after our own socket's gap, and whenever the room's host changes or comes back.
+   *  Only then, because the host answers every ask and the ROM warps to every `land` it
+   *  gets: those are the gaps a first answer cannot have come through (a `land` from a
+   *  host that no longer holds the room is refused on the way in). */
+  resendPick(): void {
+    if (!this.pick) return;
+    this.pickHost = this.relay.hostId;
+    this.pickHostAway = false;
+    this.relay.all(this.pick);
   }
 
   /** Throws unless the ROM's mailbox is awake and speaking this protocol. Call once
@@ -295,6 +319,15 @@ export class Bridge {
     if (stamped.t === 'challenge' && this.myLines) stamped = { ...stamped, lines: this.myLines };
     this.noteChallenge(stamped);
     this.roster.applyMsg(stamped);
+    // The drop: our pick waits on the host's `land`, and our own next place or step says
+    // the ROM has come down, on that cell or on its own after giving up (br_pick.c).
+    if (stamped.t === 'pick') {
+      this.pick = stamped;
+      this.pickHost = this.relay.hostId;
+      this.pickHostAway = false;
+    } else if (stamped.t === 'place' || stamped.t === 'step') {
+      this.pick = null;
+    }
     // Our ROM is out of the fight: its RESULT, or -- when the link never got going and
     // the watchdog closed it with no RESULT -- back on the map, which it never is while
     // gBrNetlink.active. Our last blocks are kept all the same: the ROM says RESULT
@@ -368,6 +401,9 @@ export class Bridge {
       this.sentBlocks = [];
       this.opponentDone = true;
     }
+    // Our drop answered -- or a match begun or ended, and a pick of the last one is
+    // nothing to ask the next one's host.
+    if ((msg.t === 'land' && msg.seat === this.seat) || msg.t === 'start' || msg.t === 'win') this.pick = null;
 
     this.noteChallenge(msg);
     this.roster.applyMsg(msg);
@@ -408,10 +444,21 @@ export class Bridge {
   private onRoster(ev: RosterEvent): void {
     this.roster.applyRoster(ev);
     this.members = new Set(ev.members.map((m) => m.id));
+    this.repick(ev.host);
     if (this.opponentSeat === null) return;
     const here = this.members.has(this.opponentSeat);
     if (here && this.opponentAway) this.resendBlocks();
     this.opponentAway = !here;
+  }
+
+  /** The host our pick went to left the room, or it has a new host: ask whoever holds it
+   *  now, once they are here. Not ourselves -- our own ROM's pick is our own director's to
+   *  answer, from the ROM, and the ROM gives up on its own. */
+  private repick(host: number): void {
+    if (!this.pick) return;
+    if (this.pickHost !== null && !this.members.has(this.pickHost)) this.pickHostAway = true;
+    if (host === this.seat || !this.members.has(host)) return;
+    if (host !== this.pickHost || this.pickHostAway) this.resendPick();
   }
 
   setRomFilter(fn: ((msg: Msg) => boolean) | null): void {
@@ -430,6 +477,7 @@ export class Bridge {
   /** Hands a message straight to this ROM without it ever touching the relay: the
    *  spectator's own `follow`, which is a page's word to its own ROM (docs/WIRE.md). */
   pushToRom(msg: Msg): void {
+    if (msg.t === 'land' && msg.seat === this.seat) this.pick = null; // the host's own drop
     if (!crossesToRom(msg.t)) return;
     if (!this.rom.push(msg)) this.dropCount++;
   }

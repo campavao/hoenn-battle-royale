@@ -695,6 +695,85 @@ describe("a bot's RESULT (POK-330 #20)", () => {
   });
 });
 
+// POK-331 #4. A `pick` our ROM sent while our socket was down reached nobody, and the ROM
+// waited on a black screen for a cell no host had been asked for (POK-255). br_pick.c asks
+// once more five seconds on and gives up at fifteen -- both into the same gap.
+describe('the drop we asked for, across a gap (POK-331 #4)', () => {
+  const MAP = { group: 0, num: 16 };
+  const pick = { t: 'pick', seat: 2, section: 9 } as const;
+  const land = { t: 'land', seat: 2, map: MAP, x: 4, y: 5 } as const;
+  const asked = (sent: Record<string, unknown>[]) => sent.filter((f) => (f.m as Msg | undefined)?.t === 'pick');
+
+  it('asks the host again from the Bridge a rejoin builds, until a land answers it', () => {
+    const { romEmit, frame, socket, bridge, relay, emu } = joined();
+    romEmit({ t: 'pick', seat: 0, section: 9 });
+    frame(); // into a socket that is down, as far as anybody hears it
+
+    const carry = bridge.carry();
+    bridge.dispose();
+    const again = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2, carry, rom: bridge.rom });
+    socket.sent.length = 0;
+    again.resendPick();
+    expect(socket.sent).toEqual([{ type: 'all', m: pick }]);
+
+    socket.receive({ type: 'recv', from: 1, m: land });
+    socket.sent.length = 0;
+    again.resendPick();
+    expect(socket.sent).toEqual([]);
+  });
+
+  it('lets the pick go once our ROM is down on its own, having given up on the host', () => {
+    const { romEmit, frame, socket, bridge } = joined();
+    romEmit({ t: 'pick', seat: 0, section: 9 });
+    frame();
+    romEmit({ t: 'place', v: PROTOCOL, seat: 0, map: MAP, x: 3, y: 3, f: 1, st: 'alive' }); // DropWithoutTheHost
+    frame();
+    socket.sent.length = 0;
+    bridge.resendPick();
+    expect(socket.sent).toEqual([]);
+  });
+
+  it('never asks the next match for the last one', () => {
+    const { romEmit, frame, socket, bridge } = joined();
+    romEmit({ t: 'pick', seat: 0, section: 9 });
+    frame();
+    socket.receive({ type: 'recv', from: 1, m: { t: 'win', seat: 7 } });
+    socket.sent.length = 0;
+    bridge.resendPick();
+    expect(socket.sent).toEqual([]);
+  });
+
+  it("asks again when the host it asked has gone and the room's new host is here, and not before", () => {
+    const { romEmit, frame, socket } = joined();
+    const room = (host: number, ids: number[]) =>
+      socket.receive({
+        type: 'roster', code: 'ABC123', host, open: true, max: 8, pass: false,
+        members: ids.map((id) => ({ id, name: `P${id}` })),
+      });
+    romEmit({ t: 'pick', seat: 0, section: 9 });
+    frame();
+    socket.sent.length = 0;
+    room(1, [1, 2, 7, 9]); // nothing has changed
+    expect(asked(socket.sent)).toEqual([]);
+    room(1, [2, 7, 9]); // the host's socket went, and the relay holds its seat
+    expect(asked(socket.sent)).toEqual([]);
+    room(1, [1, 2, 7, 9]); // back
+    expect(asked(socket.sent)).toEqual([{ type: 'all', m: pick }]);
+    room(7, [2, 7, 9]); // gone again, and 7 has the room now
+    expect(asked(socket.sent)).toHaveLength(2);
+  });
+
+  it("stops asking once the host's own land goes into its own ROM", () => {
+    const { romEmit, frame, socket, bridge } = joined();
+    romEmit({ t: 'pick', seat: 0, section: 9 });
+    frame();
+    bridge.pushToRom(land);
+    socket.sent.length = 0;
+    bridge.resendPick();
+    expect(socket.sent).toEqual([]);
+  });
+});
+
 // POK-330 #44. The room's messages queued for the ROM with no cap, and a tab in the
 // background (no frames, the socket still delivering) came back to seconds of stale steps
 // with every `out` behind them. The host's director had a second queue into the same ring.

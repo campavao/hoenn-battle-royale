@@ -2083,8 +2083,9 @@ function wireRoom(
     for (const out of match.out) bridge.roster.applyMsg({ t: 'out', seat: out });
     if (rejoin) {
       // ...and what we last said to the seat we are fighting, which the blip may have
-      // swallowed (#7).
+      // swallowed (#7), and the drop we asked for and got no cell for (POK-331 #4).
       bridge.resendBlocks();
+      bridge.resendPick();
       // So may our own `out`, and a host that never hears it waits on us for ever
       // (POK-330 #25). A second one is harmless everywhere.
       if (match.out.has(seat) && !match.ended) relay.all({ t: 'out', seat });
