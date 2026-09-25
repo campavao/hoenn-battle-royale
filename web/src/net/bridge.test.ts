@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { BLOCKS_KEPT, Bridge, fightOf, type BridgeOptions } from './bridge';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BLOCKS_KEPT, Bridge, fightOf, STALL_AFTER_RESULT_FRAMES, STALL_FRAMES, type BridgeOptions } from './bridge';
 import { MAILBOX, Mailbox, type RamAccess } from './mailbox';
 import { NETLINK } from './netlink';
 import { POSITIONAL_CAP, RomPort } from './romport';
@@ -552,9 +552,13 @@ describe('a link battle, across a blip (POK-330 #20, #7)', () => {
   });
 });
 
-// gBrNetlink where the fake ROM keeps it.
+// gBrNetlink where the fake ROM keeps it, and gBattleOutcome.
 const NETLINK_AT = 0x02030000;
-const SYMBOLS = new Map([['gBrNetlink', NETLINK_AT]]);
+const OUTCOME_AT = 0x02030100;
+const SYMBOLS = new Map([
+  ['gBrNetlink', NETLINK_AT],
+  ['gBattleOutcome', OUTCOME_AT],
+]);
 /** br_netlink.c's BrNetlink_StartBattle with `peer` (or its Close, with null). */
 function link(ram: RamAccess, peer: number | null): void {
   ram.write(NETLINK_AT + NETLINK.OFF_ACTIVE, peer === null ? 0 : 1, 8);
@@ -592,6 +596,86 @@ describe("the ROM's own word on the fight it is in (POK-331 #5)", () => {
     socket.receive({ type: 'recv', from: 9, m: block(9, 1, F(9, 4)) });
     socket.receive({ type: 'recv', from: 7, m: block(7, 1, F(7, 1)) });
     expect(readAcrossFrames(frame, romDrainIn).filter((m) => m.t === 'bt')).toEqual([block(7, 1)]);
+  });
+});
+
+// POK-331 #3, #7's backstop. A fight whose opponent stays in the room but sends nothing
+// more waited for ever: the ROM's watchdog covers only the hello, and a peer going out.
+describe('a link battle gone quiet (POK-331 #3)', () => {
+  // The page says so in the log when it closes one.
+  beforeEach(() => void vi.spyOn(console, 'warn').mockImplementation(() => {}));
+  afterEach(() => void vi.restoreAllMocks());
+
+  /** We are fighting 7, and 7's last block has just come in. */
+  function fight(opts: Partial<BridgeOptions> = {}) {
+    const j = joined({ symbols: SYMBOLS, ...opts });
+    j.socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 1 } });
+    link(j.ram, 7);
+    j.ram.write(NETLINK_AT + NETLINK.OFF_BLOCKS_RECV, 5, 16);
+    j.socket.receive({ type: 'recv', from: 7, m: block(7, 1, F(7, 1)) });
+    const run = (frames: number) => {
+      for (let i = 0; i < frames; i++) {
+        j.frame();
+        j.romDrainIn();
+      }
+    };
+    /** The state br_netlink.c's TickWatchdog closes a link in on its next frame. */
+    const closing = () =>
+      j.ram.read(NETLINK_AT + NETLINK.OFF_BLOCKS_RECV, 16) === 0 &&
+      j.ram.read(NETLINK_AT + NETLINK.OFF_SILENT, 16) >= NETLINK.HELLO_FRAMES;
+    return { ...j, run, closing };
+  }
+
+  it('hands the fight to the ROM watchdog after STALL_FRAMES with nothing from the opponent, and not a frame before', () => {
+    const f = fight();
+    f.run(STALL_FRAMES - 1);
+    expect(f.closing()).toBe(false);
+    f.run(1);
+    expect(f.closing()).toBe(true);
+    expect(console.warn).toHaveBeenCalledOnce();
+  });
+
+  it("counts from the opponent's last block", () => {
+    const f = fight();
+    f.run(STALL_FRAMES - 10);
+    f.socket.receive({ type: 'recv', from: 7, m: block(7, 2, F(7, 1)) });
+    f.run(STALL_FRAMES - 1);
+    expect(f.closing()).toBe(false);
+    f.run(1);
+    expect(f.closing()).toBe(true);
+  });
+
+  it('never while our tab is hidden, our socket is down, the opponent is out of the room, or the engine has decided', () => {
+    const cases: [string, (f: ReturnType<typeof fight>) => void, Partial<BridgeOptions>][] = [
+      ['hidden', () => {}, { hidden: () => true }],
+      ['socket down', (f) => void (f.socket.readyState = 3), {}],
+      ['opponent gone', (f) => roster(f.socket, [1, 2, 9]), {}],
+      ['decided', (f) => f.ram.write(OUTCOME_AT, 1, 8), {}], // B_OUTCOME_WON: the ending plays out
+      ['no gBrNetlink', () => {}, { symbols: new Map() }],
+    ];
+    for (const [why, set, opts] of cases) {
+      const f = fight(opts);
+      set(f);
+      f.run(STALL_FRAMES + 1);
+      expect(f.closing(), why).toBe(false);
+    }
+  });
+
+  it("gives our ROM thirty seconds once the opponent's RESULT says its ROM is out of the fight", () => {
+    const f = fight();
+    f.socket.receive({ type: 'recv', from: 7, m: { t: 'result', seat: 7, outcome: 'forfeit' } });
+    f.run(STALL_AFTER_RESULT_FRAMES - 1);
+    expect(f.closing()).toBe(false);
+    f.run(1);
+    expect(f.closing()).toBe(true);
+  });
+
+  it('takes a block after that RESULT as the fight going on, so a RESULT that crossed our challenge cuts nothing short', () => {
+    const f = fight();
+    f.socket.receive({ type: 'recv', from: 7, m: { t: 'result', seat: 7, outcome: 'lose' } });
+    f.socket.receive({ type: 'recv', from: 7, m: block(7, 2, F(7, 1)) });
+    f.run(STALL_AFTER_RESULT_FRAMES + 1);
+    expect(f.closing()).toBe(false);
   });
 });
 

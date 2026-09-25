@@ -18,7 +18,7 @@
 // wire-up test (slots.ts's comment on BR_MSG.ECHO) and have no `wire.ts` Msg
 // counterpart to forward.
 import { Mailbox, type RamAccess } from './mailbox';
-import { readNetlink, type LinkState } from './netlink';
+import { closeAsSilent, readNetlink, type LinkState } from './netlink';
 import { RomPort } from './romport';
 import { crossesToRom } from './slots';
 import { decode, type BlockMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg } from './wire';
@@ -65,9 +65,13 @@ export interface BridgeOptions {
    *  Bridge: a rejoin builds a new Bridge over the same ROM, and the host's director
    *  pushes through the same port. Unset, the Bridge makes its own. */
   rom?: RomPort;
-  /** br-symbols.json, for gBrNetlink: the ROM's own word on the fight it is in, which the
-   *  page follows (POK-331 #5). Unset, the page goes by the messages it has seen. */
+  /** br-symbols.json. gBrNetlink is the ROM's own word on the fight it is in, which the
+   *  page follows (POK-331 #5) and ends a quiet fight through (#3); gBattleOutcome says
+   *  whether the engine has decided one. Unset, the page goes by the messages it has
+   *  seen, and a quiet fight waits for the ROM's own ways out. */
   symbols?: ReadonlyMap<string, number>;
+  /** Whether our own tab is hidden. Unset, the document's. */
+  hidden?: () => boolean;
 }
 
 /** What a link battle needs to outlive the Bridge it started under (POK-330 #20, #7). A
@@ -93,6 +97,15 @@ export function fightOf(c: ChallengeMsg): number {
   return c.seat * 0x10000 + (c.nonce & 0xffff);
 }
 
+/** How long a link battle may go with no block from an opponent still in the room before
+ *  the page ends it (POK-331 #3): three minutes of our own frames. A lockstep fight waits
+ *  on the other side for one shot clock (br_battle.h's 30 s) and a turn's animations at
+ *  most; six of those with nothing is a block lost for good or a ROM stuck over there. */
+export const STALL_FRAMES = 3 * 60 * 60;
+/** ...and once the opponent's own RESULT says its ROM has left the fight. Ours plays its
+ *  own ending out within seconds of theirs, and nothing more is coming. */
+export const STALL_AFTER_RESULT_FRAMES = 30 * 60;
+
 function msgSeat(msg: Msg): number | undefined {
   return 'seat' in msg ? (msg as { seat?: number }).seat : undefined;
 }
@@ -117,6 +130,8 @@ export class Bridge {
   private readonly protocol: number;
   private readonly ram: RamAccess;
   private readonly netlinkBase: number | undefined;
+  private readonly outcomeBase: number | undefined;
+  private readonly hidden: () => boolean;
   private opponentSeat: number | null = null;
   /** The fight our blocks are part of (fightOf its challenge), stamped on each one we send
    *  and checked on each one we take: a rejoin says its last few again, and after a new
@@ -125,6 +140,10 @@ export class Bridge {
   /** The latest challenge between us and each seat, for following the ROM to whichever
    *  one it started (followRom). */
   private readonly fights = new Map<number, number>();
+  /** Our frames since the opponent's last block, while nothing else explains the wait. */
+  private quietFrames = 0;
+  /** The opponent's RESULT for this fight is in: its ROM is out of it. */
+  private opponentDone = false;
   /** Our last few blocks of the current fight, for saying again after a gap (#7). */
   private sentBlocks: BlockMsg[] = [];
   /** The last block of the current fight the ROM was handed. The other side says its
@@ -179,6 +198,8 @@ export class Bridge {
     this.protocol = opts.protocol ?? PROTOCOL;
     this.ram = opts.emu;
     this.netlinkBase = opts.symbols?.get('gBrNetlink');
+    this.outcomeBase = opts.symbols?.get('gBattleOutcome');
+    this.hidden = opts.hidden ?? (() => typeof document !== 'undefined' && document.hidden);
     this.roster.setMySeat(opts.seat);
     if (opts.carry) {
       this.opponentSeat = opts.carry.opponentSeat;
@@ -261,6 +282,7 @@ export class Bridge {
     // Not `dropCount += drain(...)`: that reads the count before the handler adds to it.
     const unreadable = this.rom.drain((msg) => this.handleFromRom(msg));
     this.dropCount += unreadable;
+    this.watchStall();
   }
 
   /** One message our ROM sent, on its way to the room. */
@@ -341,8 +363,11 @@ export class Bridge {
     if (msgSeat(msg) === this.seat && ev.from !== host) return;
     if (msg.t === 'bt' && !this.takesBlock(msg, ev.from)) return;
     // The opponent's ROM has played the fight out, so it has every block of ours it will
-    // ever need.
-    if (msg.t === 'result' && msg.seat === this.opponentSeat && ev.from === msg.seat) this.sentBlocks = [];
+    // ever need -- and ours will get none more from it (watchStall).
+    if (msg.t === 'result' && msg.seat === this.opponentSeat && ev.from === msg.seat) {
+      this.sentBlocks = [];
+      this.opponentDone = true;
+    }
 
     this.noteChallenge(msg);
     this.roster.applyMsg(msg);
@@ -371,6 +396,10 @@ export class Bridge {
     if (msg.seq <= this.lastRecvSeq) return false;
     this.lastRecvSeq = msg.seq;
     this.fighting = true;
+    this.quietFrames = 0;
+    // A RESULT from them that this block came after was their last fight's, crossing our
+    // new challenge on the way: they are in this one.
+    this.opponentDone = false;
     return true;
   }
 
@@ -434,6 +463,8 @@ export class Bridge {
     this.lastRecvSeq = 0;
     this.opponentAway = false;
     this.fighting = false;
+    this.opponentDone = false;
+    this.quietFrames = 0;
   }
 
   /** gBrNetlink, read fresh (POK-331 #5); null with no symbol to read it by. */
@@ -449,6 +480,36 @@ export class Bridge {
     const link = this.romLink();
     if (!link?.active || link.peerSeat === this.opponentSeat) return;
     this.pointAt(link.peerSeat, this.fights.get(link.peerSeat) ?? null);
+  }
+
+  /** #7's backstop (POK-331 #3). The ROM's own watchdog covers the hello and a peer that
+   *  goes out; a fight whose opponent is still in the room but has stopped sending -- a
+   *  block lost past what the resends cover, a ROM stuck over there -- waited on a black
+   *  screen for good. Past STALL_FRAMES the page hands the fight to that watchdog, which
+   *  closes it as unanswered: forfeited, unwound, and a RESULT out (net/netlink.ts).
+   *
+   *  Counted in our own frames, so a hidden tab, which runs none, never counts (and is
+   *  asked besides); and only while our socket is up, the opponent is in the room, and the
+   *  engine has not decided the fight -- an ending is the ROM's to play out. */
+  private watchStall(): void {
+    const link = this.romLink();
+    const quiet =
+      link !== null && link.active && link.peerSeat === this.opponentSeat && this.members.has(link.peerSeat) &&
+      this.relay.isOpen() && !this.hidden() && !this.decided();
+    if (!quiet) {
+      this.quietFrames = 0;
+      return;
+    }
+    const limit = this.opponentDone ? STALL_AFTER_RESULT_FRAMES : STALL_FRAMES;
+    if (++this.quietFrames < limit) return;
+    this.quietFrames = 0;
+    console.warn(`[link] no block from seat ${link.peerSeat} in ${limit} frames: closing the fight as unanswered`);
+    closeAsSilent(this.ram, this.netlinkBase!);
+  }
+
+  /** gBattleOutcome is set: the engine has decided the fight (StartBattle zeroes it). */
+  private decided(): boolean {
+    return this.outcomeBase !== undefined && this.ram.read(this.outcomeBase, 8) !== 0;
   }
 
   /** What a seat said when it challenged somebody (POK-274), or undefined if this page

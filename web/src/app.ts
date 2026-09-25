@@ -2048,7 +2048,8 @@ function wireRoom(
     if (bridge) bridge.dispose();
     attachedTo = { seat, code };
     console.info(`[room] attached as seat ${seat} in ${code}`);
-    // `symbols` for gBrNetlink: which fight the ROM is really in (POK-331 #5).
+    // `symbols` for gBrNetlink: which fight the ROM is really in (POK-331 #5), and the way
+    // out of one gone quiet (#3).
     bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol, carry, rom, symbols });
     // Whose room it is, as the relay says: ours when we opened it, whoever it names when
     // we joined. The hash said `host` on a rejoin too, after the relay had already handed
