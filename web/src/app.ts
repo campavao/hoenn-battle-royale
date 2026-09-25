@@ -34,6 +34,7 @@ import {
   decideStart,
   onRefused,
   StartCountdown,
+  startLabel,
   type StartDecision,
   type StartState,
 } from './match/room';
@@ -1591,6 +1592,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     isHost: true,
     roomStarted: false,
     countingDown: false,
+    played: false,
     match: { active: false, ended: false, seed },
   };
   const off = emu.onFrame(() => {
@@ -1686,6 +1688,8 @@ function wireRoom(
     card: null as { seat: number } | null,
     /** The match is on: the room screen is down and its controls gone. */
     started: false,
+    /** A match has been played here and we are back from it (StartState.played). */
+    played: false,
     onStart: () => {},
   };
   roomCardSeat = () => room.card?.seat ?? null;
@@ -1823,6 +1827,8 @@ function wireRoom(
       isHost: view?.isHost ?? false,
       started: room.started,
       canStart: view ? canStart(view) : false,
+      // Not startState(): the first paint is before it exists.
+      startLabel: startLabel({ mode: hash.mode, autoStarts: autoStarts(), played: room.played, countingDown: countdown.running }),
       countdown: startsIn,
       options: view?.isHost ? hostOptions(view) : null,
       card: cardEntry
@@ -1945,6 +1951,7 @@ function wireRoom(
     isHost,
     roomStarted: room.started,
     countingDown: countdown.running,
+    played: room.played,
     match,
   });
   /** Carries out what decideStart said. A countdown asks again when it runs out. */
@@ -1952,6 +1959,15 @@ function wireRoom(
     if (decision.do === 'count-down') countdown.arm(() => act(decideStart({ t: 'countdown' }, startState())));
     else if (decision.do === 'deal') startDirector(decision.members);
     else if (decision.do === 'take-over') startDirector(decision.members, true);
+  };
+  /** START pressed, drawn with `members`. A deal takes the room screen and START down
+   *  with it (the director locks the room itself); READY UP only armed the count, and the
+   *  room stays up with START on it to deal at once. */
+  const pressStart = (members?: number[]): void => {
+    const decision = decideStart({ t: 'start', members }, startState());
+    act(decision);
+    if (decision.do === 'count-down') stage.redraw();
+    else if (bridge) renderRoomPanel(controls, bridge.seat, relay, () => {}, true);
   };
 
   const spectate = new Spectate();
@@ -2290,6 +2306,9 @@ function wireRoom(
       session.grace.cancel();
       teardownHost();
       resetMatch();
+      // The room's next match is its host's to call (READY UP, Kanto's POK-167) -- from
+      // now, not after the reboot: a roster arriving during it would buzz the room off.
+      room.played = true;
       if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
       else await emu.reboot();
       // Last match's champion is not this match's (POK-243). PLAY AGAIN used to reload
@@ -2305,10 +2324,7 @@ function wireRoom(
         renderSpectate(bridge, spectate);
         // The host gets its START back: a new match is dealt from the room, the same
         // way the first one was.
-        renderRoomPanel(controls, bridge.seat, relay, () => {
-          act(decideStart({ t: 'start', members: controls.roster?.members.map((m) => m.id) }, startState())); // locks the room itself
-          renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
-        }, false);
+        renderRoomPanel(controls, bridge.seat, relay, () => pressStart(controls.roster?.members.map((m) => m.id)), false);
       }
     } finally {
       returning = false;
@@ -2395,12 +2411,9 @@ function wireRoom(
     matchLeave.hidden = isHost;
     if (bridge) renderSpectate(bridge, spectate);
     if (bridge) {
-      renderRoomPanel(controls, bridge.seat, relay, () => {
-        // START: the host shuts the door and deals the match. This is what the
-        // ten-second timer was standing in for.
-        act(decideStart({ t: 'start', members: ev.members.map((m) => m.id) }, startState())); // locks the room itself
-        renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
-      }, host !== null);
+      // START: the host shuts the door and deals the match. This is what the ten-second
+      // timer was standing in for.
+      renderRoomPanel(controls, bridge.seat, relay, () => pressStart(ev.members.map((m) => m.id)), host !== null);
     }
   });
   /** A dead end is not one unless the page says where else to go: BACK TO LOBBY. */

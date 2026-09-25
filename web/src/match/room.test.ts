@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, type StartState } from './room';
+import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState } from './room';
 import { freshMatch, noteMatch, ringClockLeft } from './lifecycle';
 import { Director, type DirectorWorld } from './director';
 import type { RosterEvent } from '../net/relay';
@@ -100,6 +100,7 @@ describe('when a match starts (POK-330 #42)', () => {
     isHost: true,
     roomStarted: false,
     countingDown: false,
+    played: false,
     match: freshMatch(),
     ...over,
   });
@@ -168,12 +169,42 @@ describe('when a match starts (POK-330 #42)', () => {
     expect(decideStart({ t: 'solo' }, page({ mode: 'solo' }))).toEqual({ do: 'deal' });
   });
 
-  it('quirk kept: nothing counts down after PLAY AGAIN, so a quick room of one never starts again', () => {
-    // back in the room: no match, no count, and only a roster event left to deal
-    const back = page({ match: freshMatch(), countingDown: false });
-    expect(decideStart({ t: 'roster', members: [1] }, back)).toEqual({ do: 'nothing' });
-    // ...and a room of two or more deals on its next roster at once, with no count
-    expect(decideStart({ t: 'roster', members: [1, 2] }, back)).toEqual({ do: 'deal', members: [1, 2] });
+  // The #42 split pinned this as it was: back from a match nothing counted a quick room
+  // down, so a room of one never started again unless its host pressed START, and one of
+  // two or more dealt on its next roster at once, results still up (POK-331 #13). Kanto's
+  // rematch (POK-167): the first lobby starts itself, the next match is READY UP's.
+  describe('back in a room that starts itself after a match: READY UP', () => {
+    const back = (over: Partial<StartState> = {}) => page({ played: true, match: freshMatch(), ...over });
+
+    it('neither buzzes, counts down on an attach, nor counts down for an heir', () => {
+      expect(decideStart({ t: 'roster', members: [1, 2] }, back())).toEqual({ do: 'nothing' });
+      expect(decideStart({ t: 'roster', members: [1, 2, 3, 4] }, back({ mode: 'daily' }))).toEqual({ do: 'nothing' });
+      expect(decideStart({ t: 'attached' }, back())).toEqual({ do: 'nothing' });
+      expect(decideStart({ t: 'promoted', members: [2] }, back())).toEqual({ do: 'nothing' });
+    });
+
+    it("START arms the first lobby's count, and START inside it deals at once", () => {
+      expect(startLabel(back())).toBe('READY UP');
+      expect(decideStart({ t: 'start', members: [1] }, back())).toEqual({ do: 'count-down' });
+      // a quick room of one restarts: the count runs out and deals
+      expect(decideStart({ t: 'countdown' }, back({ countingDown: false }))).toEqual({ do: 'deal' });
+      const counting = back({ countingDown: true });
+      expect(startLabel(counting)).toBe('START');
+      expect(decideStart({ t: 'start', members: [1, 2] }, counting)).toEqual({ do: 'deal', members: [1, 2] });
+    });
+
+    it('a hosted room, or any under #noauto, deals on START as it always has', () => {
+      for (const s of [back({ mode: 'host' }), back({ autoStarts: false })]) {
+        expect(startLabel(s)).toBe('START');
+        expect(decideStart({ t: 'start', members: [1, 2] }, s)).toEqual({ do: 'deal', members: [1, 2] });
+      }
+    });
+
+    it('the first lobby is unchanged: it starts itself, and START deals', () => {
+      expect(startLabel(page())).toBe('START');
+      expect(decideStart({ t: 'start', members: [1] }, page())).toEqual({ do: 'deal', members: [1] });
+      expect(decideStart({ t: 'roster', members: [1, 2] }, page())).toEqual({ do: 'deal', members: [1, 2] });
+    });
   });
 });
 

@@ -188,6 +188,8 @@ export interface RoomModel {
   isHost: boolean;
   started: boolean;
   canStart: boolean;
+  /** START, or READY UP when a press arms the room's count instead (match/room.ts). */
+  startLabel: string;
   /** Seconds until the room starts itself (quick play, the daily), or null. */
   countdown: number | null;
   /** The host's controls, in the order they are shown; null for a guest. */
@@ -281,7 +283,7 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
 
       if (!m.started && !m.fatal) {
         const buttons: ButtonSpec[] = m.isHost
-          ? [{ label: 'START', id: 'room-start', disabled: !m.canStart, onPress: m.onStart }]
+          ? [{ label: m.startLabel, id: 'room-start', disabled: !m.canStart, onPress: m.onStart }]
           : [{ label: 'LEAVE', id: 'room-leave', cls: 'room-leave', onPress: m.onLeave }];
         widgets.push(...paintButtons(c, Math.min(y, h - 28), buttons));
       }
