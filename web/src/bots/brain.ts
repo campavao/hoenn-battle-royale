@@ -750,6 +750,10 @@ export class Bots {
       return;
     }
     if (!walker.path || walker.stepIndex >= walker.path.steps.length) {
+      // A walked route is dropped before the next is chosen: chooseTarget has ways out
+      // that set none (a ring with no landing cell left in it), and the old one read
+      // past its last step every tick after.
+      walker.path = null as Walker['path']; // widened: chooseTarget sets it
       this.chooseTarget(walker, now);
       if (!walker.path || walker.path.steps.length === 0) return;
     }

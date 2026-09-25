@@ -268,6 +268,21 @@ describe('a bot with nowhere it can route to', () => {
     expect([...maps]).toEqual(['MID']);
     expect(world.hops(bots.spotOf(bot.seat)!.map, 'IN')).toBe(1);
   });
+
+  // The ring can close past every landing cell. chooseTarget then has nothing to aim at
+  // and returned without touching the route it had just walked to the end of, so the
+  // next tick read the step after the last one -- a TypeError every tick, for every bot,
+  // for the rest of the match (seen in the merged play-again e2e).
+  it('walks on when the ring has no landing cell left in it', () => {
+    let inside: (mapId: string) => boolean = () => true;
+    const { bots, dealt } = run(4, 0, (id) => inside(id));
+    for (let t = STEP_MS; t <= 20_000; t += STEP_MS) bots.tick(t);
+    inside = () => false;
+    expect(() => {
+      for (let t = 20_000 + STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    }).not.toThrow();
+    for (const bot of dealt) expect(bots.spotOf(bot.seat)).toBeDefined();
+  });
 });
 
 // POK-330 #49 review: the route to the next map ended ON this map, at the cells that
