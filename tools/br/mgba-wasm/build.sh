@@ -7,7 +7,9 @@
 #   bash tools/br/mgba-wasm/build.sh <dir>
 #
 # <dir> is wiped and becomes the source tree; the core lands in <dir>/build-wasm/wasm/
-# (mgba.js, mgba.wasm, mgba.d.ts, mgba.wasm.map).
+# (mgba.js, mgba.wasm, mgba.d.ts, mgba.wasm.map). It must be new, empty, or one this
+# script made: the patch is edited as uncommitted changes in ~/mgba-wasm, and a slip of
+# `build.sh ~/mgba-wasm` would wipe them.
 #
 # Emscripten's output is byte-stable across machines: a WSL box and an Actions runner
 # built the same sha256s from the same checkout. mGBA's is not, quite: version.cmake
@@ -26,6 +28,13 @@ dir="${1:?usage: build.sh <dir>}"
 here="$(cd "$(dirname "$0")" && pwd)"
 # A Windows checkout has CRLF in both; WSL reads them through /mnt/c.
 commit="$(tr -d '\r' < "$here/COMMIT")"
+# Each tree this script makes carries this, in .git so the work tree mGBA stamps is still
+# a clone's. A directory with files in it and no marker is not wiped.
+marker="$dir/.git/hbr-mgba-build"
+if [ -e "$dir" ] && [ ! -e "$marker" ] && [ -n "$(ls -A "$dir")" ]; then
+  echo "build.sh: $dir has files and build.sh did not make it; not wiping it (pass a new directory)" >&2
+  exit 1
+fi
 
 got_emcc="$(emcc -dumpversion)"
 if [ "$got_emcc" != "$want_emcc" ]; then
@@ -36,6 +45,7 @@ fi
 rm -rf "$dir"
 mkdir -p "$dir"
 git -C "$dir" init -q
+: > "$marker"
 # Into a branch, not FETCH_HEAD: fetch follows tags only for a refspec with a destination.
 git -C "$dir" fetch -q --depth 1 https://github.com/thenick775/mgba "$commit:refs/heads/feature/wasm"
 git -C "$dir" checkout -q feature/wasm

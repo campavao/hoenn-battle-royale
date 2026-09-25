@@ -7,6 +7,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { findBash } from './bash.testutil';
 
 const repo = resolve(__dirname, '../..');
 
@@ -26,19 +27,6 @@ function relayStep(): { env: Record<string, string>; run: string } {
   const run: string[] = [];
   for (i++; i < lines.length && (lines[i] === '' || lines[i].startsWith(indent)); i++) run.push(lines[i].slice(indent.length));
   return { env, run: run.join('\n') };
-}
-
-/** bash: the runner's, or Git for Windows' own usr/bin/bash.exe -- a bare `bash` there
- *  can be WSL's, and Git's bin/bash.exe puts its own git ahead of the stubs on PATH. */
-function findBash(): string | null {
-  if (process.platform !== 'win32') return 'bash';
-  try {
-    const gitCore = execFileSync('git', ['--exec-path'], { encoding: 'utf8' }).trim();
-    const bash = join(resolve(gitCore, '../../..'), 'usr', 'bin', 'bash.exe');
-    return existsSync(bash) ? bash : null;
-  } catch {
-    return null;
-  }
 }
 
 const bash = findBash();

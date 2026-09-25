@@ -88,7 +88,8 @@ changes: `git diff` there is the patch file. Build with the script, not in that 
 `build-wasm`: mGBA stamps the checkout's git state into the core (the branch, the commit
 count, a tag at HEAD), so the same source in a differently shaped clone is different
 bytes. The script's fresh depth-1 checkout is the shape CI builds, and it reproduced the
-tracked core byte for byte on 2026-09-25. It needs emcc 6.0.5 and refuses any other.
+tracked core byte for byte on 2026-09-25. It needs emcc 6.0.5 and refuses any other, and
+it wipes only a new, empty or earlier build.sh directory, never `~/mgba-wasm`.
 
 ## The relay (Railway)
 
