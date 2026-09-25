@@ -1870,6 +1870,12 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     // observer) and solo never did.
     loot.note(msg);
     roster.applyMsg(msg); // our own ghost, so the bots' eyeline can see us
+    // And our fights with the bots, routed exactly as the room routes them (POK-330
+    // #17). Solo never did: a bot we beat was never eliminated, a bot we spotted first
+    // never sent its card, and with nothing feeding `busy` a second bot could stage its
+    // team into the battle we were already in.
+    noteBusy(msg);
+    routeToBots(solo.bots, msg, 0);
     if (msg.t === 'pick') rom.push({ t: 'land', ...director.landFor(msg.seat, msg.section) });
     else if (msg.t === 'out') out?.(msg.seat);
   };

@@ -164,6 +164,62 @@ describe('a fight with a bot, as its ROM reports it', () => {
     expect(bots.count()).toBe(0);
   });
 
+  // Solo has no Bridge and no relay: runSolo drains its ROM itself and hands every
+  // message here as the ROM wrote it, from seat 0 (POK-330 #17).
+  describe('in solo, where nothing stamps the ROM', () => {
+    function solo() {
+      const sent: Msg[] = [];
+      const cards: Msg[] = [];
+      const me: PlayerView = { seat: HOST, mapId: 'ELSEWHERE', x: 1, y: 3, dir: 2 };
+      const bots = new Bots({
+        world: new World([FIELD]),
+        targets: [{ mapId: 'FIELD', x: 4, y: 4 }],
+        mapRef: () => REF,
+        send: (m) => void sent.push(m),
+        sendTo: (seat, m) => void (seat === HOST && cards.push(m)),
+        rng: mulberry32(7),
+        engage: { players: () => [me] },
+        deal: () => [{ ...MON }],
+        bagFor: () => [{ id: 13, n: 2 }],
+      });
+      const dealt = dealBots(1, 1, [HOST], [{ mapId: 'FIELD', map: REF, x: 1, y: 1 }]);
+      bots.start(dealt, 0);
+      bots.tick(STEP_MS);
+      return { bots, bot: dealt[0].seat, sent, cards, me };
+    }
+
+    it('stages the card when we spot the bot first', () => {
+      const { bots, bot, cards } = solo();
+      routeToBots(bots, { t: 'challenge', seat: HOST, opponent: bot, nonce: 1 }, HOST);
+      expect(cards).toHaveLength(1);
+      expect((cards[0] as { seat: number }).seat).toBe(bot);
+    });
+
+    it('puts out a bot we beat, and spills what it had', () => {
+      const { bots, bot, sent } = solo();
+      routeToBots(bots, { t: 'challenge', seat: HOST, opponent: bot, nonce: 1 }, HOST);
+      // br_bot.c's report when the bot lost, unstamped: both RESULTs keep their seats.
+      routeToBots(bots, { t: 'party', seat: bot, mons: [{ ...MON, hp: 0 }] }, HOST);
+      routeToBots(bots, { t: 'spent', seat: bot, items: [13] }, HOST);
+      routeToBots(bots, { t: 'result', seat: HOST, outcome: 'win' }, HOST);
+      routeToBots(bots, { t: 'result', seat: bot, outcome: 'lose' }, HOST);
+      expect(sent.some((m) => m.t === 'spill' && m.seat === bot)).toBe(true);
+      expect(sent.some((m) => m.t === 'out' && m.seat === bot)).toBe(true);
+      expect(bots.count()).toBe(0);
+    });
+
+    it('lets a bot that beat us walk on, a potion lighter', () => {
+      const { bots, bot, sent } = solo();
+      routeToBots(bots, { t: 'challenge', seat: HOST, opponent: bot, nonce: 1 }, HOST);
+      routeToBots(bots, { t: 'party', seat: bot, mons: [{ ...MON, hp: 4 }] }, HOST);
+      routeToBots(bots, { t: 'spent', seat: bot, items: [13] }, HOST);
+      routeToBots(bots, { t: 'result', seat: HOST, outcome: 'lose' }, HOST);
+      expect(released(sent, bot)).toBe(true);
+      expect(bots.bagOf(bot)).toEqual([{ id: 13, n: 1 }]);
+      expect(bots.partyOf(bot)[0].hp).toBe(4);
+    });
+  });
+
   it('answers a challenge only from the challenger itself', () => {
     const { bots, bot, sent } = host();
     routeToBots(bots, { t: 'party', seat: bot, mons: [{ ...MON }] }, HOST); // the first fight is over
