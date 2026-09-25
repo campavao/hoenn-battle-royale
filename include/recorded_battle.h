@@ -16,7 +16,7 @@ u8 RecordedBattle_GetBattlerAction(u8 battler);
 u8 RecordedBattle_BufferNewBattlerData(u8 *dst);
 void RecordedBattle_RecordAllBattlerData(u8 *src);
 #if BR
-u8 RecordedBattle_BufferSpectateDelta(u8 *dst); // POK-233: the spectator action stream
+u8 RecordedBattle_BufferSpectateDelta(u8 *dst, u8 cap); // POK-233: the spectator action stream
 struct Pokemon;
 void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
     struct Pokemon *eParty, const u8 *names, const u8 *genders, void (*CB2_After)(void));
@@ -24,7 +24,8 @@ void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
 // the record the replay reads from. Its own write cursor, so it never disturbs the read.
 void RecordedBattle_FeedSpectate(const u8 *delta, u8 n);
 // TRUE when `count` more action bytes have arrived for this battler -- the spectator's
-// controllers hold their turn until they have, so the replay waits a turn behind.
+// controllers hold their turn until they have, so the replay waits a turn behind -- or
+// the stream has ended, and nothing more will.
 bool8 RecordedBattle_HasBattlerAction(u8 battler, u8 count);
 // The fight is over on the fighters' side: let the replay finish what it has and quit
 // instead of waiting for a turn that will never come.

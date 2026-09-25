@@ -275,23 +275,28 @@ u8 RecordedBattle_BufferNewBattlerData(u8 *dst)
 // last call, as [battler, count, bytes...] runs, against a cursor of our own so the
 // link's own delta exchange (BufferNewBattlerData / sBattlerPrevRecordSizes) is
 // untouched. The challenger streams this out as BR_MSG_TURN; a spectator feeds it back
-// through RecordedBattle_RecordAllBattlerData to replay a turn behind.
-u8 RecordedBattle_BufferSpectateDelta(u8 *dst)
+// through RecordedBattle_RecordAllBattlerData to replay a turn behind. At most `cap`
+// bytes: what does not fit stays behind the cursor for the next call (POK-330 #12).
+u8 RecordedBattle_BufferSpectateDelta(u8 *dst, u8 cap)
 {
     u8 i, j;
     u8 idx = 0;
+    u16 n;
 
     for (i = 0; i < MAX_BATTLERS_COUNT; i++)
     {
-        if (sBattlerRecordSizes[i] != sSpectatePrevSizes[i])
+        if (sBattlerRecordSizes[i] > sSpectatePrevSizes[i] && idx + 2 < cap)
         {
+            n = sBattlerRecordSizes[i] - sSpectatePrevSizes[i];
+            if (n > cap - idx - 2)
+                n = cap - idx - 2;
             dst[idx++] = i;
-            dst[idx++] = sBattlerRecordSizes[i] - sSpectatePrevSizes[i];
+            dst[idx++] = n;
 
-            for (j = 0; j < sBattlerRecordSizes[i] - sSpectatePrevSizes[i]; j++)
+            for (j = 0; j < n; j++)
                 dst[idx++] = sBattleRecords[i][sSpectatePrevSizes[i] + j];
 
-            sSpectatePrevSizes[i] = sBattlerRecordSizes[i];
+            sSpectatePrevSizes[i] += n;
         }
     }
 
@@ -753,7 +758,10 @@ bool8 RecordedBattle_HasBattlerAction(u8 battler, u8 count)
 {
     u8 i;
 
-    if (battler >= MAX_BATTLERS_COUNT)
+    // The stream is closed (POK-330 #12): what has not come is not coming, so say it
+    // has, and GetBattlerAction takes its own way out on the first byte that is not
+    // there. Waiting on it kept the viewer in the fight until the page reloaded.
+    if (battler >= MAX_BATTLERS_COUNT || sSpectateEnded)
         return TRUE;
     for (i = 0; i < count; i++)
     {

@@ -1,0 +1,46 @@
+# spectate-end: a fight that ends before its replay can finish lets the viewer go
+# (POK-330 #12). The replay waits a turn behind for the next action; a RESULT from either
+# fighter closes the stream, and the controllers waiting on it must see that. They
+# asked HasBattlerAction, which never looked, so the quit in GetBattlerAction was never
+# reached and a disconnect, a forfeit or a lost TURN left the viewer in the battle until
+# the page reloaded. spectate-watch.txt's setup: one turn streamed, then nothing.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+expect u8 gBrSpectate+5 1
+pokebytes gDecompressionBuffer+300 00 01 00 03 00 00 01 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer+300 12
+wait 1200
+# the turn played, and the replay is waiting on the next one
+expect u8 gBattleMons+0x24 34
+expect u8 gBrSpectate+5 1
+expect u8 gBattleOutcome 0
+# RESULT from seat 1, one of the two fighting (it lost): the stream is closed.
+pokebytes gDecompressionBuffer+400 01 01
+mailsend gBrMailbox 16 gDecompressionBuffer+400 2
+wait 400
+# the replay quit on the byte that never came, and the viewer is back on the field
+expect u8 gBrSpectate+5 0
+shot field
+# A RESULT that lands while the field is still fading into the next replay: the
+# replay's own start cleared it, so it waited on a first turn that was never coming.
+# (The battle used gDecompressionBuffer for its graphics: the bstart is written again.)
+wait 200
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+pokebytes gDecompressionBuffer+400 01 01
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+mailsend gBrMailbox 16 gDecompressionBuffer+400 2
+wait 10
+expect u8 gBrSpectate+5 1
+wait 1500
+expect u8 gBrSpectate+5 0
+say spectate end ok

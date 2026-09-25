@@ -44,6 +44,10 @@ EWRAM_DATA struct BrSpectate gBrSpectate = {0};
 // fighting never spectates (ParseBstart refuses while the netlink is up) and a ROM that
 // is spectating never emits (BrSpectate_Tick's first guard).
 static EWRAM_DATA u8 sTurnBuf[BR_CAP_TURN] = {0};
+// A TURN the out ring had no room for, still in sTurnBuf: its length, 0 for none. It
+// goes out before anything newer, or it would be gone -- the delta's cursor had already
+// moved past it (POK-330 #12).
+static EWRAM_DATA u8 sTurnLen = 0;
 static EWRAM_DATA struct BrAssembler sBstartAsm = {0};
 static EWRAM_DATA struct BrAssembler sTurnAsm = {0};
 
@@ -165,6 +169,8 @@ static EWRAM_DATA u8 sPendGenders[2] = {0};
 // exists; held here, they are flushed into the record the moment it does.
 static EWRAM_DATA u8 sEarlyTurns[64] = {0};
 static EWRAM_DATA u8 sEarlyLen = 0;
+// ...and a RESULT that lands in the same window: the replay's own start would clear it.
+static EWRAM_DATA bool8 sEndEarly = FALSE;
 
 static void CB2_BrReturnFromSpectate(void)
 {
@@ -226,6 +232,11 @@ static void Task_BrStartSpectate(u8 taskId)
             RecordedBattle_FeedSpectate(sEarlyTurns, sEarlyLen);
             sEarlyLen = 0;
         }
+        if (sEndEarly)
+        {
+            RecordedBattle_EndSpectate();
+            sEndEarly = FALSE;
+        }
         DestroyTask(taskId);
         break;
     }
@@ -277,6 +288,10 @@ static void ParseBstart(const u8 *d, u16 n)
     sPendFlags = flags;
     sPendParties = parties;
     sEarlyLen = 0;
+    sEndEarly = FALSE;
+    // sTurnBuf is the reassembly buffer from here on; a fighter's unsent TURN in it is
+    // one no spectator is waiting for any more.
+    sTurnLen = 0;
     gBrSpectate.watching = TRUE;
     gBrSpectate.watchId = id;
     CreateTask(Task_BrStartSpectate, 80);
@@ -939,8 +954,33 @@ void BrSpectate_OnResult(u8 seat)
 {
     if (!gBrSpectate.watching)
         return;
-    if (seat == (gBrSpectate.watchId & 0xFF) || seat == (gBrSpectate.watchId >> 8))
+    if (seat != (gBrSpectate.watchId & 0xFF) && seat != (gBrSpectate.watchId >> 8))
+        return;
+    // Still fading in, the replay does not exist yet, and starting it clears the end:
+    // held, and handed over the moment it does (POK-330 #12).
+    if (sPendParties != NULL)
+        sEndEarly = TRUE;
+    else
         RecordedBattle_EndSpectate();
+}
+
+// One TURN out of sTurnBuf. A single slot holds BR_FRAME_DATA_MAX once framed -- the
+// test here was the slot's own size, so a 60..62-byte turn went to BrWire_Send, which
+// refuses those, and was lost.
+static bool8 SendTurn(u8 len)
+{
+    bool8 sent;
+
+    if (len <= BR_FRAME_DATA_MAX)
+        sent = BrWire_Send(BR_MSG_TURN, sTurnBuf, len);
+    else
+        sent = BrWire_SendLarge(BR_MSG_TURN, sTurnBuf, len);
+    if (sent)
+    {
+        gBrSpectate.turns++;
+        gBrSpectate.bytes += len - 2;
+    }
+    return sent;
 }
 
 // Only the challenger (link id 0) publishes: it records its own actions and receives
@@ -970,6 +1010,14 @@ void BrSpectate_Tick(void)
             gBrSpectate.watching = FALSE;
         return;
     }
+    // A turn the ring refused is retried before anything newer is taken: dropped, the
+    // replay read the next turn's bytes as this one's, or waited on it for good.
+    if (sTurnLen != 0)
+    {
+        if (!SendTurn(sTurnLen))
+            return;
+        sTurnLen = 0;
+    }
     if (!Publishing())
         return;
     if (!gMain.inBattle)
@@ -989,13 +1037,7 @@ void BrSpectate_Tick(void)
     id = BattleId();
     sTurnBuf[0] = id & 0xFF;
     sTurnBuf[1] = id >> 8;
-    n = RecordedBattle_BufferSpectateDelta(sTurnBuf + 2);
-    if (n == 0)
-        return;
-    if ((u16)(2 + n) <= BR_SLOT_PAYLOAD_MAX)
-        BrWire_Send(BR_MSG_TURN, sTurnBuf, 2 + n);
-    else
-        BrWire_SendLarge(BR_MSG_TURN, sTurnBuf, 2 + n);
-    gBrSpectate.turns++;
-    gBrSpectate.bytes += n;
+    n = RecordedBattle_BufferSpectateDelta(sTurnBuf + 2, sizeof(sTurnBuf) - 2);
+    if (n != 0 && !SendTurn(2 + n))
+        sTurnLen = 2 + n;
 }
