@@ -11,7 +11,7 @@ import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
-import type { BstartMsg, Msg, PackedMon, TurnMsg } from './net/wire';
+import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
@@ -931,6 +931,22 @@ async function rebootIntoBr(emu: Emulator, mailboxBase: number, bootMode: number
   emu.pause();
   writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
   emu.resume();
+}
+
+/** Resolves once the ROM has taken its boot block (the ROM clears `mode`): past the
+ *  copyright screen and into a game that a START can deal into. Before that, StartGameAt
+ *  resets the options a START's pace just set (POK-331 #18). Ten seconds at most, since
+ *  a START late is better than none. Never call this paused: it counts emulated frames. */
+function waitForBoot(emu: Emulator, mailboxBase: number): Promise<void> {
+  return new Promise((resolve) => {
+    let frames = 0;
+    const off = emu.onFrame(() => {
+      if (emu.read(mailboxBase + MAILBOX.OFF_BOOT + BOOT_AT.mode, 8) === 0 || ++frames > 600) {
+        off();
+        resolve();
+      }
+    });
+  });
 }
 
 /** The boot mode for a way in. Hoisted out of main() because PLAY AGAIN needs the same
@@ -2086,8 +2102,9 @@ function wireRoom(
     // longest-standing one that has. Nobody ever said it before, so `heirOf` never
     // found anybody and a host leaving closed the room on everybody in it.
     relay.canHost(true);
-    // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast.
-    bridge.setRomFilter((msg) => spectate.wantsFromRelay(msg));
+    // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast. And the
+    // next match's start is for the ROM that will play it, not this one (POK-331 #18).
+    bridge.setRomFilter((msg) => !holdsStart(msg) && spectate.wantsFromRelay(msg));
     // Two bots fighting can be watched (POK-300): the proxy instance publishes its duel
     // the way a player's ROM publishes a link battle, and this page is its relay -- to
     // the room, and through the same gate to our own ROM if we are following either bot.
@@ -2143,6 +2160,17 @@ function wireRoom(
     // The room, as the Bridge hands it over: decoded once, from somebody entitled to say
     // it, with who said it (POK-330 #24). Released by bridge.dispose() on the next attach.
     bridge.onMessage((m, from) => {
+      // The next match, dealt before this page was out of the last (POK-331 #18): a guest
+      // still in its grace -- a champion's parade runs up to a minute -- or on its way out.
+      // It went into the ROM about to be thrown away and into books about to be wiped, and
+      // that seat stood in Littleroot while the room played on. Kanto's onStart: a match
+      // still on screen is a reason to tear it down first, never to lose the START. So the
+      // exit now, and the start to the ROM that exit boots.
+      if (holdsStart(m)) {
+        nextStart = { msg: m as StartMsg, from };
+        void returnToRoom();
+        return;
+      }
       // What the trainer we are watching just took (POK-268). Drawn here rather than
       // sent: a `pickup` reaches the whole room, and only the page following that
       // seat has any business saying so. The describe() has to happen before the
@@ -2203,6 +2231,8 @@ function wireRoom(
         // The relay's last roster, so a test can ask who the room thinks is watching
         // (POK-260) rather than inferring it from the screen.
         dev.controls = controls;
+        // The grace, so a test can hold a guest in it the way a champion's parade does.
+        dev.grace = session.grace;
         dev.watch = (target: number | null) => {
           for (const m of spectate.follow(target)) bridge!.pushToRom(m);
           renderSpectate(bridge!, spectate);
@@ -2263,6 +2293,10 @@ function wireRoom(
    *  so is the grace timer below; nothing else may take the exit, because a reload
    *  (backToLobby) scatters the eight people you have just played with (POK-258). */
   let returning = false;
+  /** The next match's `start`, heard before this page was out of the last one (POK-331
+   *  #18), for the ROM that returnToRoom boots. */
+  let nextStart: { msg: StartMsg; from: number } | null = null;
+  const holdsStart = (m: Msg): boolean => m.t === 'start' && (returning || session.grace.armed);
   /** Forgets the last match (POK-330 #22): what the room heard of it, its loot, who was
    *  busy in it, who had been caught up on it, and its bots on the roster. PLAY AGAIN
    *  used to keep all of that, and each piece went wrong in the next match its own way:
@@ -2284,6 +2318,8 @@ function wireRoom(
       session.grace.cancel();
       teardownHost();
       resetMatch();
+      // Nothing still queued for the last match's ROM is for the next one (POK-331 #18).
+      rom.clear();
       if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
       else await emu.reboot();
       // Last match's champion is not this match's (POK-243). PLAY AGAIN used to reload
@@ -2303,6 +2339,15 @@ function wireRoom(
           act(decideStart({ t: 'start', members: controls.roster?.members.map((m) => m.id) }, startState())); // locks the room itself
           renderRoomPanel(controls, bridge!.seat, relay, () => {}, true);
         }, false);
+      }
+      // ...and the next match's start, if the host dealt it before we were out: to the ROM
+      // just booted once it is into a game, and into the books, as if it came now.
+      if (nextStart && mailboxBase !== undefined) await waitForBoot(emu, mailboxBase);
+      const next = nextStart;
+      nextStart = null;
+      if (next && bridge) {
+        bridge.pushToRom(next.msg);
+        session.note(next.msg, { from: next.from });
       }
     } finally {
       returning = false;

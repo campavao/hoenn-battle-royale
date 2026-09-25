@@ -21,7 +21,7 @@ const pageFree = import.meta.glob<string>(['./bots/host.ts', './match/grace.ts',
 });
 
 /** Every field of `__br` the page writes, and so every one a spec may read. */
-const FIELDS = ['bridge', 'roster', 'mailbox', 'director', 'botCount', 'match', 'watch', 'spectate', 'controls'];
+const FIELDS = ['bridge', 'roster', 'mailbox', 'director', 'botCount', 'match', 'watch', 'spectate', 'controls', 'grace'];
 
 /** What the specs read: `__br.x` and `__br?.x`, and `br.x` off a local copy of it. The
  *  lookbehind keeps out `hoenn-br.bps`, the patch's file name. */

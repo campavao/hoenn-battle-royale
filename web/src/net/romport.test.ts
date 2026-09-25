@@ -303,6 +303,29 @@ describe('RomPort', () => {
     expect(rom.heard.map((m) => m.t)).toEqual(['bt', 'bt', 'out']);
   });
 
+  // POK-331 #18: PLAY AGAIN reboots the ROM, and the port was not told. What the last match
+  // had queued -- a background tab's worth of it, or whatever the ring was too full for --
+  // flowed into the rebooted ROM the moment its mailbox woke, into Littleroot.
+  it('lets the last match go at a reboot, and the next ROM gets only what came after', () => {
+    const rom = fakeRom();
+    const port = new RomPort(rom.mailbox);
+    rom.wedge();
+    port.push(step(3, 1));
+    port.push(spill(3));
+    port.push({ t: 'ring', seat: 0, phase: 2, sx: 1, sy: 1, r: 3 });
+    expect(port.clear()).toBe(3);
+    expect(port.queued).toBe(0);
+    expect(port.stats.cleared).toBe(3);
+
+    rom.unwedge(); // BrMailbox_Init: an empty ring
+    const next: Msg = { t: 'start', seed: 7, spawns: [{ seat: 3, map: MAP, x: 1, y: 2 }] };
+    port.push(next);
+    port.push(step(3, 2));
+    port.flush();
+    rom.tick();
+    expect(rom.heard).toEqual([asRomReads(next), asRomReads(step(3, 2))]);
+  });
+
   it('refuses what the ROM cannot take, and leaves the queue alone', () => {
     const port = new RomPort(fakeRom().mailbox);
     expect(port.push({ t: 'win', seat: 1 } as Msg)).toBe(false); // JSON-only

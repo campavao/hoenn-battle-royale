@@ -60,6 +60,8 @@ export interface RomPortStats {
   coalesced: number;
   /** Positional messages let go past POSITIONAL_CAP. */
   capped: number;
+  /** Messages let go because the ROM they were for is starting over (clear()). */
+  cleared: number;
 }
 
 export class RomPort {
@@ -68,6 +70,7 @@ export class RomPort {
   private pushedCount = 0;
   private coalescedCount = 0;
   private cappedCount = 0;
+  private clearedCount = 0;
   /** Slots pushed since the last `bt`, while its slots may still be unread in the ring;
    *  null when none is. */
   private sinceBlock: number | null = null;
@@ -78,7 +81,7 @@ export class RomPort {
   ) {}
 
   get stats(): RomPortStats {
-    return { pushed: this.pushedCount, coalesced: this.coalescedCount, capped: this.cappedCount };
+    return { pushed: this.pushedCount, coalesced: this.coalescedCount, capped: this.cappedCount, cleared: this.clearedCount };
   }
 
   /** Messages waiting for room in the ring. */
@@ -126,6 +129,20 @@ export class RomPort {
     }
     this.pushedCount += n;
     return n;
+  }
+
+  /** Lets go of everything still queued, because the ROM it was for is about to start
+   *  over (PLAY AGAIN, POK-331 #18): the last match's movement, ticker lines and ring are
+   *  nothing to a ROM booting into Littleroot for the next one, and it drew the last
+   *  match's ghosts there. The reboot empties the ring too, so no block is left unread.
+   *  Returns how many went. */
+  clear(): number {
+    const gone = this.queue.length;
+    this.queue = [];
+    this.positional = 0;
+    this.sinceBlock = null;
+    this.clearedCount += gone;
+    return gone;
   }
 
   /** Everything the ROM has sent since the last call, as whole messages: each base slot
