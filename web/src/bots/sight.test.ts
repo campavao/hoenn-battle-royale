@@ -48,4 +48,20 @@ describe('the eyeline', () => {
     expect(eitherSees(world, a, b)).toBe(true);
     expect(eitherSees(world, { ...a, map: 'ELSEWHERE' }, b)).toBe(false);
   });
+
+  // The ROM's `Sees` stops on MapGridGetCollisionAt and nothing else, and it is the rule
+  // a player's ROM engages a bot by -- so the bot's eyeline is the same one (POK-330 #67).
+  // Water is clear of collision (export-world.py writes class 2 only where it is), a
+  // ledge is, and a cuttable tree is an object standing on a clear metatile.
+  it('looks across a pond, a ledge and a cuttable tree, as the ROM does', () => {
+    const POND: WorldMap = {
+      id: 'POND', group: 0, num: 2, w: 7, h: 3, section: 'S', outdoor: true,
+      grid: grid(['0222220', '0333330', '0999990']),
+      seams: [],
+    };
+    const pond = new World([POND]);
+    expect(sees(pond, { map: 'POND', x: 0, y: 0, dir: 4 }, 5, 0), 'across the water').toBe(true);
+    expect(sees(pond, { map: 'POND', x: 0, y: 1, dir: 4 }, 5, 1), 'along a ledge').toBe(true);
+    expect(sees(pond, { map: 'POND', x: 0, y: 2, dir: 4 }, 5, 2), 'past the trees').toBe(true);
+  });
 });

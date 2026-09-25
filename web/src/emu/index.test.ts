@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { ALL_KEYS, EWRAM_BASE, Emulator, IWRAM_BASE, KEY_BIT, type CoreModule } from './index';
+import { describe, expect, it, vi } from 'vitest';
+import { ALL_KEYS, EWRAM_BASE, Emulator, IWRAM_BASE, KEY_BIT, type CoreModule, type GbaKey } from './index';
 
 // A fake core: a 1 MiB heap with EWRAM at 0x1000 and IWRAM at 0x50000, a file map,
 // and a log of every call, so the wrapper's bookkeeping can be checked without wasm.
@@ -99,10 +99,39 @@ describe('Emulator', () => {
     const patched = new Uint8Array([9, 9, 9, 9]);
     await emu.startBytes(patched);
 
-    expect(calls).toEqual(['sync', 'load /data/games/patched.gba']);
-    expect(files.get('/data/games/patched.gba')).toEqual(patched);
+    expect(calls).toEqual(['load /patched.gba']);
+    expect(files.get('/patched.gba')).toEqual(patched);
     expect(emu.readRom()).toEqual(original);
     expect(emu.isRunning()).toBe(true);
+  });
+
+  it('never stores the patched image in IndexedDB: nothing under /data but the ROM, no sync (POK-330 #40)', async () => {
+    const { emu, calls, files } = await make();
+    await emu.start(new Uint8Array([1, 2, 3]));
+    calls.length = 0;
+    await emu.startBytes(new Uint8Array([9, 9]));
+    await emu.reboot();
+    expect(calls).not.toContain('sync');
+    expect([...files.keys()].filter((p) => p.startsWith('/data/'))).toEqual(['/data/games/emerald.gba']);
+  });
+
+  it('drops the patched copy an older shell stored, once, and Forget takes it too (POK-330 #40)', async () => {
+    const core = fakeCore();
+    core.files.set('/data/games/patched.gba', new Uint8Array([7]));
+    await Emulator.create({} as HTMLCanvasElement, async () => core.m);
+    expect(core.files.has('/data/games/patched.gba')).toBe(false);
+    expect(core.calls).toEqual(['sync']);
+
+    // A second start finds nothing to drop and writes nothing.
+    core.calls.length = 0;
+    const emu = await Emulator.create({} as HTMLCanvasElement, async () => core.m);
+    expect(core.calls).toEqual([]);
+
+    // An old copy that reappears (another tab on an old shell) goes with the ROM.
+    await emu.start(new Uint8Array([1]));
+    core.files.set('/data/games/patched.gba', new Uint8Array([7]));
+    await emu.forgetRom();
+    expect([...core.files.keys()].filter((p) => p.startsWith('/data/'))).toEqual([]);
   });
 
   it('sends only key transitions', async () => {
@@ -134,6 +163,91 @@ describe('Emulator', () => {
     expect(() => emu.read(0x08000000)).toThrow('not in EWRAM');
   });
 
+  describe('the keyboard (POK-330 #56)', () => {
+    const MAP = { ArrowUp: 'up', z: 'a' } as const;
+    const key = (type: string, k: string, repeat = false) => Object.assign(new Event(type, { cancelable: true }), { key: k, repeat });
+    async function bound(divert?: (key: GbaKey, repeat: boolean) => boolean) {
+      const got = await make();
+      const win = new EventTarget();
+      const doc = Object.assign(new EventTarget(), { hidden: false });
+      const unbind = got.emu.bindKeyboard(MAP, divert, { win, doc });
+      got.calls.length = 0;
+      return { ...got, win, doc, unbind };
+    }
+
+    it('a release reaches the core even while a drawn screen has the presses', async () => {
+      let drawn = false;
+      const taken: GbaKey[] = [];
+      const { win, calls } = await bound((k, repeat) => {
+        if (!drawn) return false;
+        if (!repeat) taken.push(k);
+        return true;
+      });
+      win.dispatchEvent(key('keydown', 'ArrowUp')); // walking...
+      drawn = true; // ...when the room screen comes up
+      win.dispatchEvent(key('keydown', 'z'));
+      win.dispatchEvent(key('keyup', 'ArrowUp'));
+      expect(taken).toEqual(['a']);
+      expect(calls).toEqual(['press up', 'release up']);
+    });
+
+    it('lets go of everything when the window blurs or the tab hides', async () => {
+      const { emu, win, doc, calls } = await bound();
+      win.dispatchEvent(key('keydown', 'ArrowUp'));
+      emu.press('b'); // a pad or the touch layer, holding its own
+      win.dispatchEvent(new Event('blur'));
+      expect(emu.keys()).toBe(0);
+      expect(calls).toEqual(['press up', 'press b', 'release b', 'release up']);
+
+      win.dispatchEvent(key('keydown', 'z'));
+      doc.dispatchEvent(new Event('visibilitychange')); // shown: nothing to do
+      expect(emu.keys()).toBe(1 << KEY_BIT.a);
+      doc.hidden = true;
+      doc.dispatchEvent(new Event('visibilitychange'));
+      expect(emu.keys()).toBe(0);
+    });
+
+    it('ignores keys it does not map, and unbinds', async () => {
+      const { emu, win, calls, unbind } = await bound();
+      const other = key('keydown', 'q');
+      win.dispatchEvent(other);
+      expect(other.defaultPrevented).toBe(false);
+      unbind();
+      win.dispatchEvent(key('keydown', 'z'));
+      expect(emu.keys()).toBe(0);
+      expect(calls).toEqual([]);
+    });
+  });
+
+  it('keeps its RAM views between reads, and remakes them for a new core or a new heap (POK-330 #65)', async () => {
+    const { emu, m } = await make();
+    let wramAt = 0x1000;
+    let asked = 0;
+    m._brWramPtr = () => (asked++, wramAt);
+    await emu.start(new Uint8Array([1]));
+    m.HEAPU8[0x1000 + 4] = 0x2a;
+    for (let i = 0; i < 100; i++) expect(emu.read(EWRAM_BASE + 4, 8)).toBe(0x2a);
+    expect(asked).toBe(1);
+
+    // A reboot builds a new core, whose RAM can be anywhere.
+    wramAt = 0x3000;
+    m.HEAPU8[0x3000 + 4] = 0x33;
+    await emu.reboot();
+    expect(emu.read(EWRAM_BASE + 4, 8)).toBe(0x33);
+    expect(asked).toBe(2);
+
+    // Memory growth replaces the heap under the same pointers.
+    const grown = new Uint8Array(2 << 20);
+    grown[0x3000 + 4] = 0x44;
+    m.HEAPU8 = grown;
+    expect(emu.read(EWRAM_BASE + 4, 8)).toBe(0x44);
+
+    // A stopped core has no RAM to read.
+    emu.stop();
+    wramAt = 0;
+    expect(() => emu.read(EWRAM_BASE + 4, 8)).toThrow('no GBA core loaded');
+  });
+
   it('delivers frame callbacks registered after loadGame', async () => {
     const { emu, frame } = await make();
     let n = 0;
@@ -145,6 +259,52 @@ describe('Emulator', () => {
     off();
     frame();
     expect(n).toBe(2);
+  });
+
+  it('a throwing frame listener stops neither the others nor the present, and is logged once (POK-330 #35)', async () => {
+    const { emu, m, frame } = await make();
+    let presents = 0;
+    m._brPresent = () => void presents++;
+    let after = 0;
+    emu.onFrame(() => {
+      throw new Error('bad pointer');
+    });
+    emu.onFrame(() => void after++);
+    await emu.start(new Uint8Array([1]));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      // A throw out of this callback is a core thread blocked for good.
+      expect(() => frame()).not.toThrow();
+      frame();
+      frame();
+      expect(after).toBe(3);
+      expect(presents).toBe(3);
+      expect(logged).toHaveBeenCalledTimes(1);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it('onListenerError hears each listener\'s first throw instead of the console', async () => {
+    const { emu, frame } = await make();
+    const heard: string[] = [];
+    emu.onFrame(() => {
+      throw new Error('one');
+    });
+    emu.onFrame(() => {
+      throw new Error('two');
+    });
+    emu.onListenerError((err) => heard.push((err as Error).message));
+    await emu.start(new Uint8Array([1]));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      frame();
+      frame();
+      expect(heard).toEqual(['one', 'two']);
+      expect(logged).not.toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it('returns screenshot bytes', async () => {

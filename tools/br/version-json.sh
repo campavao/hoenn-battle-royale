@@ -50,6 +50,11 @@ else
 fi
 
 COMMIT="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+# A build of uncommitted changes is no commit's build: say so, rather than name a HEAD
+# that does not reproduce it. Tracked files only; an untracked scratch file is not in it.
+if [[ "$COMMIT" != unknown && -n "$(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+  COMMIT="$COMMIT-dirty"
+fi
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 mkdir -p "$(dirname "$OUT")"

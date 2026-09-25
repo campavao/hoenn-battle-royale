@@ -30,13 +30,14 @@
 //                                         the matching `pass`
 //   {type:"set_skin", skin}               what this member looks like, live
 //   {type:"list_rooms"}                -> rooms {rooms:[{code, host, skin,
-//                                         players, seats, pass}]}: every
+//                                         players, seats, pass, full}]}: every
 //                                         lobby a stranger may walk into --
 //                                         open, not mid-match, not the daily.
 //                                         `players` counts trainers, never
 //                                         watchers; `seats` is the host's MAX
 //                                         as they set it; `pass` says a
-//                                         passcode is needed.  A browser that
+//                                         passcode is needed; `full` says the
+//                                         door would refuse a join.  A browser that
 //                                         keeps asking is kept alive past the
 //                                         unbound sweep.  Inside the half hour
 //                                         before the DAILY GAME its row leads
@@ -56,13 +57,17 @@
 //                                      Never a trainer name. Logged, counted, not
 //                                      answered -- the client sends it on a
 //                                      connection it already had (POK-124).
-//   {type:"lock_room", locked}         host only: refuse new joiners (a match
+//   {type:"lock_room", locked, bots?}  host only: refuse new joiners (a match
 //                                      in progress).  Logged as one `match`
 //                                      line at the lock and one at the
 //                                      unlock -- the relay's only record of
-//                                      a match as a thing that happened
+//                                      a match as a thing that happened.
+//                                      bots: the seats the host dealt its
+//                                      bots, never handed to a member until
+//                                      the unlock
 //   {type:"kick", id}                  host only: remove a member and refuse
-//                                      their IP for the room's life (POK-130)
+//                                      their address and their resume
+//                                      token for the room's life (POK-130)
 //   {type:"leave_room"}
 //   {type:"can_host", ok}             may this client be promoted to host
 //                                     if the current one drops (POK-116)
@@ -86,9 +91,13 @@
 //   {type:"quick_join", name,          same as join_room, but the relay picks
 //         patch?, protocol?}           the fullest open room rather than a code
 // Server -> client
-//   {type:"roster", code, host, open, max, pass, members:[{id,name,spectate?}]}
-//                                      on every change (pass: whether a
-//                                      passcode is set, never the code)
+//   {type:"roster", code, host, open, max, seats, pass,
+//         members:[{id,name,spectate?}]}
+//                                      on every change (max: the humans the
+//                                      room seats; seats: the host's MAX as
+//                                      asked, bots filling the rest; pass:
+//                                      whether a passcode is set, never the
+//                                      code)
 //   {type:"rooms", rooms:[...]}        the lobby list, see list_rooms
 //   {type:"recv", from, m}
 //   {type:"room_closed", reason}       the host left and nobody could take
@@ -104,8 +113,10 @@
 //                                       "not_found"/"full"/"locked"/etc, this
 //                                       adds one more
 //
-// Ids are small integers handed out per room, never reused within it; the
-// host is whoever created the room.  Codes use the same 0/O/1/I/L-free
+// Ids are 1..MAX_SEAT, the lowest one free: not a member's, not held for one
+// who dropped, and not used since the match locked the door (nor a bot's).
+// None left is `full`.  The host is whoever created the room.  Codes use the
+// same 0/O/1/I/L-free
 // alphabet as the game's room-code entry widget, so a code read aloud never
 // has to be checked twice.
 
@@ -115,6 +126,11 @@ import { WebSocketServer } from "ws";
 
 export const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 export const CODE_LENGTH = 6;
+
+// The highest member id.  An id is the page's seat and the ROM's gBrMySeat,
+// and both have 32 of them (web/src/net/wire.ts MAX_SEAT, br_config.h
+// BR_MAX_SEATS); seat 0 is SOLO VS BOTS', so a room hands out 1..31.
+export const MAX_SEAT = 31;
 
 export const DEFAULT_LIMITS = Object.freeze({
   line: 16 * 1024,      // bytes per message; the game caps at the same order
@@ -139,6 +155,17 @@ export const DEFAULT_LIMITS = Object.freeze({
   // magnitude above this; the multiplier only lifts the ceiling off the
   // one connection whose legitimate rate scales with the room.
   hostLines: 4,
+  // Bytes as well as lines (POK-330 #18): a line may be `line` bytes, so the
+  // line bucket alone let one guest push 120 x 16 KB a second into a room
+  // that hands each of them to fifteen others.  Play is a few KB a second; a
+  // fog sweep or a spectator's catch-up is tens of KB at once.  The host's
+  // bucket scales by hostLines, like its line bucket.
+  bytesPerSec: 64 * 1024,
+  burstBytes: 1024 * 1024,
+  // A socket whose unsent output passes this is not reading.  A busy room
+  // sends ~10 KB/s, so a megabyte is over a minute behind, and every byte of
+  // it sits in this process's heap until it is dropped.
+  sendBuffer: 1024 * 1024,
   badLines: 20,         // unparsable frames before we give up on a socket
   members: 16,
   // The widest room the lobby list may claim: the host's MAX as the mod
@@ -167,6 +194,37 @@ export const DEFAULT_LIMITS = Object.freeze({
   // are gone, and a phone coming back from a tunnel takes what it takes.
   rejoinMs: 60_000,
 });
+
+// Env vars for the ceilings above.  A limit that is not a positive number is
+// dropped with a log line, not used: NaN compares false with everything, so
+// BR_MAX_ROOMS=forty used to switch the room cap off rather than set it.
+const ENV_LIMITS = {
+  BR_MAX_ROOMS: "rooms",
+  BR_MAX_CONNS: "conns",
+  BR_LINES_PER_SEC: "linesPerSec",
+  BR_BURST_LINES: "burstLines",
+};
+
+export function limitsFromEnv(env, log = () => {}) {
+  const limits = {};
+  for (const [name, key] of Object.entries(ENV_LIMITS)) {
+    if (env[name] === undefined || env[name] === "") continue;
+    const n = Number(env[name]);
+    if (Number.isFinite(n) && n > 0) limits[key] = n;
+    else log(`ignoring ${name}=${JSON.stringify(env[name])}: not a positive number`);
+  }
+  return limits;
+}
+
+// The message types handle() answers.  The per-connection census counts
+// these by name and everything else as "other": keyed by whatever string a
+// client sent, it was a Map that grew by one entry per junk type for the
+// life of the socket (16 MB from one probe, POK-330 #18).
+const HANDLED = new Set([
+  "ping", "info", "list_rooms", "daily_join", "host_room", "join_room",
+  "quick_join", "set_open", "set_max", "set_pass", "set_skin", "lock_room",
+  "can_host", "kick", "leave_room", "to", "all", "stat",
+]);
 
 const NAME_MAX = 10;
 // A passcode: the code-entry alphabet, one to eight of them, uppercased so
@@ -300,12 +358,43 @@ export function originAllowed(allowlist, origin) {
   return allowlist.includes(origin);
 }
 
+// Who a connection is, for the per-IP cap and a kick's ban (POK-330 #19).
+// Behind a proxy -- Railway's edge -- every socket's own address is the
+// proxy's, so strangers shared one cap and a kick banned everybody who came
+// through the same edge.  With trustProxy (BR_TRUST_PROXY=1) the address is
+// the proxy's X-Real-IP, or failing that the entry it APPENDED to
+// X-Forwarded-For (the last one: the ones before it are whatever the client
+// sent).  Off by default, because without a proxy in front both headers are
+// the client's to invent.
+const IP_RE = /^[0-9A-Fa-f:.]{2,45}$/;
+
+export function clientAddress(req, trustProxy) {
+  const direct = (req.socket && req.socket.remoteAddress) || "?";
+  if (!trustProxy) return direct;
+  const real = req.headers["x-real-ip"];
+  if (typeof real === "string" && IP_RE.test(real.trim())) return real.trim();
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") {
+    const appended = forwarded.split(",").pop().trim();
+    if (IP_RE.test(appended)) return appended;
+  }
+  return direct;
+}
+
 class Room {
   constructor(code, host, max) {
     this.code = code;
     this.host = host;
     this.members = new Map();
-    this.nextId = 1;
+    // How many have come in, for seniority: ids are reused now, so the
+    // lowest one is no longer the longest-standing (heirOf).
+    this.joined = 0;
+    // Ids spoken for since the match locked the door (POK-330 #6): everyone
+    // in the room or held at the lock, everyone seated since, and the seats
+    // the host dealt its bots.  An id in here is somebody's ghost, loot keys
+    // and roster row on every page and ROM until the match ends, so no
+    // latecomer is handed it.  Emptied at the unlock.
+    this.spent = new Set();
     this.locked = false;
     // an open room is one quick_join is allowed to hand strangers; a room
     // is private until its host says otherwise
@@ -328,12 +417,17 @@ class Room {
     this.mode = "host";
     // when the current match locked the door, or null between matches
     this.lockedAt = null;
-    // IPs the host has removed (POK-130).  Per-room and in-memory, like
-    // everything else here: a removal lasts as long as the room does.  IP
-    // is the only identity a connection has -- coarse (a shared NAT goes
-    // together), but the alternative is a removed guest quick-joining
-    // straight back in, which makes the REMOVE row a revolving door.
+    // Addresses the host has removed (POK-130).  Per-room and in-memory,
+    // like everything else here: a removal lasts as long as the room does.
+    // Coarse (a shared NAT goes together), but the alternative is a removed
+    // guest quick-joining straight back in, which makes the REMOVE row a
+    // revolving door.
     this.banned = new Set();
+    // ...and the resume tokens they held (POK-330 #19).  An address is
+    // coarse both ways: behind one proxy it is everybody's, and a phone
+    // changes it walking out of wifi.  The token is the removed client's
+    // own, and its page presents it on every automatic rejoin.
+    this.bannedTokens = new Set();
     // The host's {patch, protocol}, from host_room -- null when the host's
     // client sent neither (an older client, or one that opts out of the
     // gate entirely).
@@ -346,19 +440,64 @@ class Room {
     this.held = new Map();
   }
 
+  // The id the next newcomer gets: the lowest in 1..MAX_SEAT that nobody is
+  // in, nobody is coming back to, and the running match has not already
+  // used (POK-330 #6).  It used to be a counter that only went up, so each
+  // reload spent an id, and a room that had seen 32 arrivals handed out ids
+  // no page, wire message or ROM table has a slot for.  Null when none is
+  // left, which the doors answer as `full`.
+  freeId() {
+    const taken = new Set(this.members.keys());
+    for (const held of this.held.values()) taken.add(held.id);
+    for (let id = 1; id <= MAX_SEAT; id++) {
+      if (!taken.has(id) && !this.spent.has(id)) return id;
+    }
+    return null;
+  }
+
+  // Would a newcomer be turned away?  Past the host's MAX, or out of ids.
+  full() {
+    return this.members.size >= this.max || this.freeId() === null;
+  }
+
+  // The door shuts on a match (or opens after one).  Shutting spends every id
+  // in the room or held; `bots` are the seats the host dealt its bots, sent
+  // in a second lock once it has dealt them.  A seat held for a dropped
+  // member that a bot now has is not theirs to come back to: they get a
+  // new one rather than a bot's.
+  setLocked(locked, bots) {
+    const was = this.locked;
+    this.locked = locked;
+    if (!locked) { this.spent.clear(); return; }
+    if (!was) {
+      for (const id of this.members.keys()) this.spent.add(id);
+      for (const held of this.held.values()) this.spent.add(held.id);
+    }
+    for (const id of bots) {
+      this.spent.add(id);
+      for (const [token, held] of this.held) {
+        if (held.id === id) this.held.delete(token);
+      }
+    }
+  }
+
   // A member's seat, and a fresh token that can claim it back.  With a
   // `token` that names a held seat, the SAME id as before; otherwise the
-  // next one.  The token is new either way: the old one has done its job.
+  // lowest free one (the caller has checked full() first).  The token is new
+  // either way: the old one has done its job.
   add(conn, token) {
     const held = token ? this.held.get(token) : undefined;
     if (held) {
       this.held.delete(token);
       conn.id = held.id;
+      conn.joined = held.joined;
       conn.canHost = held.canHost;
       conn.spectator = held.spectator;
     } else {
-      conn.id = this.nextId++;
+      conn.id = this.freeId();
+      conn.joined = ++this.joined;
     }
+    if (this.locked) this.spent.add(conn.id);
     conn.token = randomBytes(12).toString("hex");
     conn.room = this;
     this.members.set(conn.id, conn);
@@ -370,7 +509,7 @@ class Room {
   hold(conn, now) {
     if (!conn.token) return;
     this.held.set(conn.token, { id: conn.id, name: conn.name, canHost: conn.canHost,
-                                spectator: conn.spectator, at: now });
+                                spectator: conn.spectator, joined: conn.joined, at: now });
   }
 
   // Is this token a seat this room is still holding?
@@ -398,9 +537,12 @@ class Room {
       members.push({ id: m.id, name: m.name,
                      spectate: m.spectator || undefined });
     }
+    // `seats` is the host's MAX as asked (up to limits.seats), `max` the
+    // humans it is clamped to: the page labels MAX and deals its bots from
+    // the first, and read the second as both, so MAX stuck at 16 (POK-330 #29)
     return { type: "roster", code: this.code, host: this.host.id,
-             open: this.open, max: this.max, pass: this.pass !== null,
-             members };
+             open: this.open, max: this.max, seats: this.seats,
+             pass: this.pass !== null, members };
   }
 
   // trainers seated, never watchers: a list that said 3/30 for a lobby
@@ -413,15 +555,22 @@ class Room {
 
   // The row the lobby list shows for this room.  The host's name and
   // skin, never their id or IP; the passcode's existence, never the code.
+  // `full` is the door's own answer: `players` counts trainers against the
+  // seats asked for, while the door counts watchers too, against the human
+  // ceiling and the ids left, so the list could not work it out (POK-330 #29)
   listing() {
     return { code: this.code, host: this.host.name, skin: this.host.skin,
              players: this.trainerCount(), seats: this.seats,
-             pass: this.pass !== null };
+             pass: this.pass !== null, full: this.full() };
   }
 
+  // Serialized once for the whole room, not once per member: a host's place
+  // or ring line goes to everybody, and this is the relay's hottest path.
   broadcast(msg, except) {
+    const line = JSON.stringify(msg);
+    const bytes = Buffer.byteLength(line);
     for (const m of this.members.values()) {
-      if (m !== except) m.send(msg);
+      if (m !== except) m.sendRaw(line, bytes);
     }
   }
 }
@@ -441,6 +590,7 @@ class Conn {
     // unbound by definition, and the sweep must not take it mid-look
     this.browsedAt = 0;
     this.tokens = relay.limits.burstLines;
+    this.byteTokens = relay.limits.burstBytes;
     this.tokenAt = this.lastSeen;
     this.minTokens = this.tokens;   // how close real play came to the wall
     this.badLines = 0;
@@ -462,7 +612,8 @@ class Conn {
   }
 
   note(type, bytes) {
-    this.seen.set(type, (this.seen.get(type) || 0) + 1);
+    const key = HANDLED.has(type) ? type : "other";
+    this.seen.set(key, (this.seen.get(key) || 0) + 1);
     this.bytesIn += bytes;
   }
 
@@ -476,9 +627,23 @@ class Conn {
 
   send(msg) {
     if (this.closed) return;
+    const line = JSON.stringify(msg);
+    this.sendRaw(line, Buffer.byteLength(line));
+  }
+
+  // One already-serialized line, and its byte count for the traffic total.
+  sendRaw(line, bytes) {
+    if (this.closed) return;
+    // ws queues whatever a socket cannot take yet, without limit.  A client
+    // that stops reading -- a frozen tab, or one doing it on purpose -- would
+    // grow that queue until the process ran out of heap and dropped every
+    // room, so it goes first.
+    if (this.ws.bufferedAmount > this.relay.limits.sendBuffer) {
+      this.destroy("slow_consumer");
+      return;
+    }
     try {
-      const line = JSON.stringify(msg);
-      traffic.bytesOut += Buffer.byteLength(line);
+      traffic.bytesOut += bytes;
       traffic.linesOut += 1;
       this.ws.send(line);
     } catch {
@@ -503,7 +668,14 @@ class Conn {
 }
 
 export function createRelay(options = {}) {
-  const limits = { ...DEFAULT_LIMITS, ...(options.limits || {}) };
+  const log = options.log || (() => {});
+  // Every ceiling is a positive number or it is the default: a NaN or a zero
+  // here would not fail loudly, it would quietly switch the cap off.
+  const limits = { ...DEFAULT_LIMITS };
+  for (const [key, value] of Object.entries(options.limits || {})) {
+    if (Number.isFinite(value) && value > 0) limits[key] = value;
+    else log(`limit ${key}=${value} is not a positive number: keeping ${DEFAULT_LIMITS[key]}`);
+  }
   // a host's MAX: a whole number from two up to the member ceiling; anything
   // else (an older client sends nothing) is the ceiling
   const cleanMax = (n) => Number.isInteger(n)
@@ -513,7 +685,6 @@ export function createRelay(options = {}) {
   // human ceiling it is actually held to
   const cleanSeats = (n) => Number.isInteger(n)
     ? Math.max(2, Math.min(limits.seats, n)) : limits.members;
-  const log = options.log || (() => {});
   const motd = cleanMotd(options.motd ?? process.env.BR_MOTD);
   const daily = parseDaily(options.daily ?? process.env.BR_DAILY);
   const minProtocol = Number.isInteger(options.minProtocol)
@@ -522,20 +693,23 @@ export function createRelay(options = {}) {
   const originAllowlist = "origins" in options
     ? options.origins
     : parseOrigins(process.env.BR_ORIGINS);
+  const trustProxy = "trustProxy" in options
+    ? options.trustProxy === true
+    : process.env.BR_TRUST_PROXY === "1";
   const rooms = new Map();
   const conns = new Set();
   const perIp = new Map();
 
   // Who inherits a room whose host just went.  The longest-standing member
-  // that said it could take it: ids are handed out in join order and never
-  // reused, so the lowest is the one that has been here longest and has seen
-  // the most of the match.  The relay knows nothing about who is still alive
-  // -- that is the client's business, and a client that has been eliminated
-  // withdraws by sending can_host false.
+  // that said it could take it -- the earliest arrival, by the room's own
+  // count rather than by id, since ids are reused -- is the one that has
+  // seen the most of the match.  The relay knows nothing about who is still
+  // alive -- that is the client's business, and a client that has been
+  // eliminated withdraws by sending can_host false.
   function heirOf(room) {
     let heir = null;
     for (const m of room.members.values()) {
-      if (m.canHost && (!heir || m.id < heir.id)) heir = m;
+      if (m.canHost && (!heir || m.joined < heir.joined)) heir = m;
     }
     return heir;
   }
@@ -663,7 +837,7 @@ export function createRelay(options = {}) {
         let open = null, running = null;
         for (const room of rooms.values()) {
           if (!room.daily || room.banned.has(conn.ip)) continue;
-          if (room.members.size >= limits.members) continue;
+          if (room.full()) continue;
           if (room.locked) { running = running || room; continue; }
           open = open || room;
         }
@@ -732,7 +906,11 @@ export function createRelay(options = {}) {
         const code = typeof msg.code === "string" ? msg.code.toUpperCase() : "";
         const room = rooms.get(code);
         if (!room) { conn.send({ type: "room_error", reason: "not_found" }); return; }
-        if (room.banned.has(conn.ip)) { conn.send({ type: "room_error", reason: "removed" }); return; }
+        if (room.banned.has(conn.ip)
+            || (typeof msg.token === "string" && room.bannedTokens.has(msg.token))) {
+          conn.send({ type: "room_error", reason: "removed" });
+          return;
+        }
         // The passcode is checked before the door's state is told: a
         // stranger without it learns nothing about the room past "not
         // yours".  Watchers need it too -- a passcoded room is a room
@@ -757,7 +935,7 @@ export function createRelay(options = {}) {
         const spectate = msg.spectate === true;
         if (!resuming) {
           if (room.locked && !spectate) { conn.send({ type: "room_error", reason: "locked" }); return; }
-          if (room.members.size >= room.max) { conn.send({ type: "room_error", reason: "full" }); return; }
+          if (room.full()) { conn.send({ type: "room_error", reason: "full" }); return; }
         }
         conn.name = cleanName(msg.name);
         conn.skin = cleanSkin(msg.skin);
@@ -781,7 +959,7 @@ export function createRelay(options = {}) {
           // and a passcoded room wants somebody who knows the host
           if (!room.open || room.locked || room.daily || room.pass !== null
               || room.banned.has(conn.ip)) continue;
-          if (room.members.size >= room.max) continue;
+          if (room.full()) continue;
           if (!best || room.members.size > best.members.size) best = room;
         }
         if (!best) {
@@ -795,7 +973,7 @@ export function createRelay(options = {}) {
           for (const room of rooms.values()) {
             if (!room.open || !room.locked || room.pass !== null
                 || room.banned.has(conn.ip)) continue;
-            if (room.members.size >= limits.members) continue;
+            if (room.full()) continue;
             if (!running || room.members.size > running.members.size) running = room;
           }
           if (running) {
@@ -864,7 +1042,13 @@ export function createRelay(options = {}) {
         const room = conn.room;
         if (!room || room.host !== conn) return;
         const was = room.locked;
-        room.locked = msg.locked !== false;
+        // The host's second lock carries the seats it dealt its bots, which
+        // the relay must not hand a latecomer (POK-330 #6)
+        const bots = Array.isArray(msg.bots)
+          ? msg.bots.slice(0, MAX_SEAT + 1)
+              .filter((id) => Number.isInteger(id) && id >= 1 && id <= MAX_SEAT)
+          : [];
+        room.setLocked(msg.locked !== false, bots);
         // The lock IS the match starting and the unlock IS it ending, and
         // until this line the only trace either left was a lock_room count
         // on the host's drop line -- from which "how many matches, with
@@ -928,14 +1112,16 @@ export function createRelay(options = {}) {
       // starts the match -- neither is a way out once somebody is in.
       // The removed client is told the room closed, which its POK-115 exit
       // already handles cleanly; its connection stays up (it may want to
-      // host or quick-play elsewhere), but this room will not take its IP
-      // back for the life of the room.
+      // host or quick-play elsewhere), but this room will not take its
+      // address, or the token its page rejoins with, back for the life of
+      // the room.
       case "kick": {
         const room = conn.room;
         if (!room || room.host !== conn) return;
         const target = room.members.get(Number(msg.id));
         if (!target || target === conn) return;
         room.banned.add(target.ip);
+        if (target.token) room.bannedTokens.add(target.token);
         room.remove(target);
         target.token = null; // no seat is held for the removed (POK-284)
         target.send({ type: "room_closed", reason: "removed" });
@@ -997,6 +1183,9 @@ export function createRelay(options = {}) {
   function onMessage(conn, data, isBinary) {
     const now = Date.now();
     conn.lastSeen = now;
+    // ws hands a text frame over as a Buffer: its length is the byte count,
+    // with no second decode to measure it
+    const bytes = typeof data === "string" ? Buffer.byteLength(data) : data.length;
 
     const mul = (conn.room && conn.room.host === conn) ? limits.hostLines : 1;
     if (mul > 1 && !conn.hostDepth) {
@@ -1004,12 +1193,18 @@ export function createRelay(options = {}) {
       // whatever a guest's was down to
       conn.hostDepth = true;
       conn.tokens += limits.burstLines * (mul - 1);
+      conn.byteTokens += limits.burstBytes * (mul - 1);
     }
+    const elapsed = (now - conn.tokenAt) / 1000;
     conn.tokens = Math.min(limits.burstLines * mul,
-      conn.tokens + ((now - conn.tokenAt) / 1000) * limits.linesPerSec * mul);
+      conn.tokens + elapsed * limits.linesPerSec * mul);
+    conn.byteTokens = Math.min(limits.burstBytes * mul,
+      conn.byteTokens + elapsed * limits.bytesPerSec * mul);
     conn.tokenAt = now;
     if (conn.tokens < 1) { conn.destroy("flood"); return; }
+    if (conn.byteTokens < bytes) { conn.destroy("flood_bytes"); return; }
     conn.tokens -= 1;
+    conn.byteTokens -= bytes;
     if (conn.tokens < conn.minTokens) conn.minTokens = conn.tokens;
 
     // One JSON object per text frame -- a binary frame or one that does not
@@ -1028,8 +1223,7 @@ export function createRelay(options = {}) {
       if (++conn.badLines > limits.badLines) conn.destroy("bad_input");
       return;
     }
-    const byteLength = isBinary ? data.length : Buffer.byteLength(String(data));
-    conn.note(msg.type, byteLength);
+    conn.note(msg.type, bytes);
     try {
       handle(conn, msg);
     } catch (err) {
@@ -1077,7 +1271,7 @@ export function createRelay(options = {}) {
       socket.destroy();
       return;
     }
-    const ip = socket.remoteAddress || "?";
+    const ip = clientAddress(req, trustProxy);
     const ipCount = (perIp.get(ip) || 0) + 1;
     if (conns.size >= limits.conns || ipCount > limits.connsPerIp) {
       // silently dropping these made a full relay look like a network
@@ -1142,6 +1336,7 @@ export function createRelay(options = {}) {
     wss,
     rooms,
     conns,
+    limits,
     listen(port, host) {
       return new Promise((resolve, reject) => {
         httpServer.once("error", reject);
@@ -1166,13 +1361,8 @@ const isMain = process.argv[1] && import.meta.url === new URL(`file://${process.
 if (isMain) {
   const port = Number(process.env.PORT || process.env.BR_RELAY_PORT || 7790);
   const host = process.env.HOST || "0.0.0.0";
-  const limits = {};
-  if (process.env.BR_MAX_ROOMS) limits.rooms = Number(process.env.BR_MAX_ROOMS);
-  if (process.env.BR_MAX_CONNS) limits.conns = Number(process.env.BR_MAX_CONNS);
-  if (process.env.BR_LINES_PER_SEC) limits.linesPerSec = Number(process.env.BR_LINES_PER_SEC);
-  if (process.env.BR_BURST_LINES) limits.burstLines = Number(process.env.BR_BURST_LINES);
-  const relay = createRelay({ limits,
-    log: (line) => console.log(new Date().toISOString(), line) });
+  const log = (line) => console.log(new Date().toISOString(), line);
+  const relay = createRelay({ limits: limitsFromEnv(process.env, log), log });
   process.on("uncaughtException", (err) => console.error("uncaught:", err));
   process.on("unhandledRejection", (err) => console.error("unhandled:", err));
   relay.listen(port, host).then((addr) => {

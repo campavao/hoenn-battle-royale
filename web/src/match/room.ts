@@ -11,7 +11,8 @@
 import type { RosterEvent } from '../net/relay';
 
 /** What MAX cycles through. Kanto's ladder, and the same one the relay clamps to: the
- *  humans are capped by the relay (16) and everything above that is bot seats. */
+ *  humans are capped by the relay (16, the roster's `max`) and everything above that
+ *  is bot seats (the roster's `seats`, which is what MAX shows and FILL counts to). */
 export const MAX_STEPS = [2, 4, 6, 8, 12, 16, 20, 26, 30];
 
 export interface RoomView {
@@ -37,15 +38,19 @@ export function roomView(roster: RosterEvent, mySeat: number, fillOn: boolean): 
     spectating: m.spectate === true,
   }));
   const players = members.filter((m) => !m.spectating).length;
+  // The seats the host asked for, not the humans the relay clamps them to: reading
+  // `max` held MAX at 16 and dealt no room more than sixteen (POK-330 #29). An older
+  // relay sends no `seats`, and its `max` is all there is.
+  const max = roster.seats ?? roster.max;
   return {
     code: roster.code,
     isHost: roster.host === mySeat,
     members,
     players,
-    max: roster.max,
+    max,
     open: roster.open,
     pass: roster.pass,
-    fill: fillOn ? Math.max(0, roster.max - players) : 0,
+    fill: fillOn ? Math.max(0, max - players) : 0,
   };
 }
 

@@ -78,8 +78,14 @@ export type CoreFactory = (opts: { canvas: HTMLCanvasElement; brHeadless?: boole
 
 const ROM_PATH = '/data/games/emerald.gba';
 // A patched image boots from a separate path so start() never overwrites the
-// player's original, stored ROM with the patched bytes (POK-213).
-const PATCHED_ROM_PATH = '/data/games/patched.gba';
+// player's original, stored ROM with the patched bytes (POK-213). Outside /data, which
+// is the IndexedDB mount: the image is rebuilt from the BPS on every launch, so storing
+// it was 16 MiB written per boot and a whole game left behind by 'Forget stored ROM'
+// (POK-330 #40). Same basename as before, so the core's save and auto-save names --
+// /data/saves/patched.sav, /autosave/patched_auto.ss -- do not move.
+const PATCHED_ROM_PATH = '/patched.gba';
+/** Where every boot before POK-330 #40 left the patched image, in IndexedDB. */
+const LEGACY_PATCHED_PATH = '/data/games/patched.gba';
 const SCREENSHOT_PATH = '/data/screenshots/shot.png';
 const AUTOSAVE_DIR = '/autosave';
 
@@ -92,11 +98,16 @@ export async function loadCoreFactory(url = '/emu/mgba.js'): Promise<CoreFactory
 export class Emulator {
   private held = 0;
   private frameListeners = new Set<() => void>();
+  /** Listeners that have thrown, so each is reported once and not sixty times a second. */
+  private failedListeners = new WeakSet<() => void>();
+  private errorListeners = new Set<(err: unknown) => void>();
   /** What boot() last loaded, so reboot() can load it again. */
   private bootedPath: string | null = null;
   private crashListeners = new Set<() => void>();
   private running = false;
   private band: Band | null = null;
+  /** EWRAM and IWRAM over the heap, made once per boot (see wram()). */
+  private views: { heap: Uint8Array; buffer: ArrayBufferLike; ewram: Uint8Array | null; iwram: Uint8Array | null } | null = null;
 
   private constructor(private readonly m: CoreModule) {}
 
@@ -106,7 +117,20 @@ export class Emulator {
     const f = factory ?? (await loadCoreFactory());
     const m = await f({ canvas, brHeadless: headless });
     await m.FSInit();
-    return new Emulator(m);
+    const emu = new Emulator(m);
+    await emu.dropLegacyPatched();
+    return emu;
+  }
+
+  /** The patched image an older shell stored in IndexedDB (POK-330 #40): gone the first
+   *  time a newer one starts, and a no-op every time after. */
+  private async dropLegacyPatched(): Promise<void> {
+    try {
+      this.m.FS.unlink(LEGACY_PATCHED_PATH);
+    } catch {
+      return; // never stored, or already dropped
+    }
+    await this.m.FSSync();
   }
 
   // ---- ROM storage: the player's own ROM, imported once, kept in the core's IDBFS ----
@@ -126,10 +150,13 @@ export class Emulator {
   }
 
   async forgetRom(): Promise<void> {
-    try {
-      this.m.FS.unlink(ROM_PATH);
-    } catch {
-      /* nothing stored */
+    // The legacy patched copy too: it is a whole game, and the button says the ROM is gone.
+    for (const path of [ROM_PATH, LEGACY_PATCHED_PATH]) {
+      try {
+        this.m.FS.unlink(path);
+      } catch {
+        /* nothing stored */
+      }
     }
     await this.m.FSSync();
   }
@@ -171,10 +198,10 @@ export class Emulator {
 
   /** Boots arbitrary bytes -- typically a BPS-patched image -- from a separate path,
    * leaving the stored original ROM at rest untouched. Use this instead of start()
-   * whenever `bytes` is a patched copy rather than the player's own ROM file. */
+   * whenever `bytes` is a patched copy rather than the player's own ROM file. The copy
+   * lives in memory only: nothing is synced to IndexedDB. */
   async startBytes(bytes: Uint8Array): Promise<void> {
     this.m.FS.writeFile(PATCHED_ROM_PATH, bytes);
-    await this.m.FSSync();
     await this.boot(PATCHED_ROM_PATH);
   }
 
@@ -202,17 +229,33 @@ export class Emulator {
       const b = this.band ?? { left: 0, top: 0, right: 0, bottom: 0 };
       this.m._brSetViewport(b.left, b.top, b.right, b.bottom);
     }
+    // loadGame builds a new core, and its RAM with it: the old views point at nothing.
+    this.views = null;
     if (!this.m.loadGame(path)) throw new Error('loadGame failed');
     this.running = true;
     // addCoreCallbacks is a no-op until a core exists, so this must follow loadGame.
     this.m.addCoreCallbacks({
+      // This runs inside a synchronous proxy from the core's thread: a throw out of it
+      // never completes the call, and the core waits on it for good -- the game frozen,
+      // the mailbox undrained, nothing on screen (POK-330 #35). So no listener's bug
+      // gets out of here, and the picture is presented whatever happened.
       videoFrameEndedCallback: () => {
-        for (const l of this.frameListeners) l();
-        // The listeners drew around the picture for this frame; now the picture.
-        this.m._brPresent?.();
+        try {
+          for (const l of this.frameListeners) {
+            try {
+              l();
+            } catch (err) {
+              this.listenerFailed(l, err);
+            }
+          }
+        } finally {
+          // The listeners drew around the picture for this frame; now the picture.
+          this.m._brPresent?.();
+        }
       },
       coreCrashedCallback: () => {
         this.running = false;
+        this.views = null;
         for (const l of this.crashListeners) l();
       },
     });
@@ -222,6 +265,7 @@ export class Emulator {
     if (!this.running) return;
     this.m.quitGame();
     this.running = false;
+    this.views = null;
   }
 
   pause(): void {
@@ -245,6 +289,29 @@ export class Emulator {
   onCrash(listener: () => void): () => void {
     this.crashListeners.add(listener);
     return () => this.crashListeners.delete(listener);
+  }
+
+  /** Hears the first throw of each frame listener (the listener stays subscribed). With
+   *  nobody listening, it goes to the console. Returns an unsubscribe. */
+  onListenerError(listener: (err: unknown) => void): () => void {
+    this.errorListeners.add(listener);
+    return () => this.errorListeners.delete(listener);
+  }
+
+  private listenerFailed(l: () => void, err: unknown): void {
+    if (this.failedListeners.has(l)) return;
+    this.failedListeners.add(l);
+    if (!this.errorListeners.size) {
+      console.error('[emu] a frame listener threw; the frame carries on without it', err);
+      return;
+    }
+    for (const report of this.errorListeners) {
+      try {
+        report(err);
+      } catch {
+        /* a reporter's own bug is not the frame's */
+      }
+    }
   }
 
   // ---- input ------------------------------------------------------------------------
@@ -275,46 +342,107 @@ export class Emulator {
     return this.held;
   }
 
+  /** Lets go of every key the core holds, whoever pressed it. */
+  releaseAll(): void {
+    this.setKeys(0);
+  }
+
+  /** A keyboard, as GBA keys (POK-330 #56). A press can be taken by something drawn
+   *  over the game (`divert` returns true); a release always reaches the core, since
+   *  letting go of a key that is not down is nothing -- a key held as a drawn screen
+   *  came up used to stay down into the next match. And every key is let go when the
+   *  page loses the player (the window blurs, the tab hides): the keyup for a key held
+   *  across that lands somewhere this page never hears. Returns an unbind. */
+  bindKeyboard(
+    map: Readonly<Record<string, GbaKey>>,
+    divert: (key: GbaKey, repeat: boolean) => boolean = () => false,
+    on: { win: EventTarget; doc: EventTarget & { readonly hidden: boolean } } = { win: window, doc: document },
+  ): () => void {
+    const keyOf = (e: Event): GbaKey | undefined => {
+      const key = map[(e as KeyboardEvent).key] as GbaKey | undefined;
+      if (key) e.preventDefault();
+      return key;
+    };
+    const down = (e: Event) => {
+      const key = keyOf(e);
+      if (key && !divert(key, (e as KeyboardEvent).repeat)) this.press(key);
+    };
+    const up = (e: Event) => {
+      const key = keyOf(e);
+      if (key) this.release(key);
+    };
+    const away = () => this.releaseAll();
+    const hidden = () => {
+      if (on.doc.hidden) this.releaseAll();
+    };
+    on.win.addEventListener('keydown', down);
+    on.win.addEventListener('keyup', up);
+    on.win.addEventListener('blur', away);
+    on.doc.addEventListener('visibilitychange', hidden);
+    return () => {
+      on.win.removeEventListener('keydown', down);
+      on.win.removeEventListener('keyup', up);
+      on.win.removeEventListener('blur', away);
+      on.doc.removeEventListener('visibilitychange', hidden);
+    };
+  }
+
   // ---- memory -----------------------------------------------------------------------
-  // Views over the shared heap. Take them fresh each time: the heap buffer can only
-  // change if the core is torn down, but it costs nothing and keeps callers honest.
+  // Views over the shared heap, made once per boot and kept (POK-330 #65): the frame
+  // listeners make ~290 reads a frame while the core thread waits on them, and a wasm
+  // call plus two allocations for each was all overhead. A view is dropped when the
+  // core is rebuilt, stopped or crashes (its RAM moves with it), and remade when the
+  // heap itself is replaced (memory growth).
+
+  private heapViews(): NonNullable<Emulator['views']> {
+    const heap = this.m.HEAPU8;
+    const v = this.views;
+    if (v && v.heap === heap && v.buffer === heap.buffer) return v;
+    return (this.views = { heap, buffer: heap.buffer, ewram: null, iwram: null });
+  }
 
   /** EWRAM, 256 KiB, mapped at 0x02000000. */
   wram(): Uint8Array {
+    const v = this.heapViews();
+    if (v.ewram) return v.ewram;
     const p = this.m._brWramPtr();
     if (!p) throw new Error('no GBA core loaded');
-    return this.m.HEAPU8.subarray(p, p + EWRAM_SIZE);
+    return (v.ewram = v.heap.subarray(p, p + EWRAM_SIZE));
   }
 
   /** IWRAM, 32 KiB, mapped at 0x03000000. */
   iwram(): Uint8Array {
+    const v = this.heapViews();
+    if (v.iwram) return v.iwram;
     const p = this.m._brIwramPtr();
     if (!p) throw new Error('no GBA core loaded');
-    return this.m.HEAPU8.subarray(p, p + IWRAM_SIZE);
+    return (v.iwram = v.heap.subarray(p, p + IWRAM_SIZE));
   }
 
   /** Reads a little-endian value at a GBA bus address in EWRAM or IWRAM. */
   read(addr: number, width: 8 | 16 | 32 = 32): number {
-    const [view, off] = this.locate(addr);
+    const view = this.viewAt(addr);
+    const off = addr - (addr >= IWRAM_BASE ? IWRAM_BASE : EWRAM_BASE);
     let v = 0;
     for (let i = width / 8 - 1; i >= 0; i--) v = (v << 8) | view[off + i];
     return v >>> 0;
   }
 
   write(addr: number, value: number, width: 8 | 16 | 32 = 32): void {
-    const [view, off] = this.locate(addr);
+    const view = this.viewAt(addr);
+    const off = addr - (addr >= IWRAM_BASE ? IWRAM_BASE : EWRAM_BASE);
     for (let i = 0; i < width / 8; i++) view[off + i] = (value >>> (8 * i)) & 0xff;
   }
 
   /** Bytes at a GBA bus address, as a view (writes go straight to the core). */
   bytes(addr: number, len: number): Uint8Array {
-    const [view, off] = this.locate(addr);
-    return view.subarray(off, off + len);
+    const off = addr - (addr >= IWRAM_BASE ? IWRAM_BASE : EWRAM_BASE);
+    return this.viewAt(addr).subarray(off, off + len);
   }
 
-  private locate(addr: number): [Uint8Array, number] {
-    if (addr >= EWRAM_BASE && addr < EWRAM_BASE + EWRAM_SIZE) return [this.wram(), addr - EWRAM_BASE];
-    if (addr >= IWRAM_BASE && addr < IWRAM_BASE + IWRAM_SIZE) return [this.iwram(), addr - IWRAM_BASE];
+  private viewAt(addr: number): Uint8Array {
+    if (addr >= EWRAM_BASE && addr < EWRAM_BASE + EWRAM_SIZE) return this.wram();
+    if (addr >= IWRAM_BASE && addr < IWRAM_BASE + IWRAM_SIZE) return this.iwram();
     throw new Error(`address 0x${addr.toString(16)} is not in EWRAM or IWRAM`);
   }
 

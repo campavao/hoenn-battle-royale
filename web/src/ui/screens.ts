@@ -226,7 +226,10 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.status, cls: 'room-status', cursor: null });
       y += 20;
 
-      const lay = layoutSeats(y, Math.max(m.max, m.seats.length));
+      // Four rows at most: MAX reaches 30 now (POK-330 #29), and eight rows of seats
+      // push START over the options on a phone. Every human still gets a cell -- the
+      // relay seats sixteen -- and the note says how many bots the rest are.
+      const lay = layoutSeats(y, Math.max(Math.min(m.max, 4 * SEAT_COLS), m.seats.length));
       c.drawFrame(lay.frame);
       const taken = m.seats.length;
       lay.cells.forEach((cell, i) => {

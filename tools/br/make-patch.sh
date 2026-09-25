@@ -1,37 +1,51 @@
 #!/usr/bin/env bash
-# Build patch/hoenn-br.bps: a BPS diff from the baseline pokeemerald.gba (agbcc, pret at
-# tools/br/BASELINE_COMMIT) to this fork's own agbcc build. Linux-only (CI, or WSL locally);
-# the release patch is always the agbcc build, never `make modern` (a modern build
-# recompiles every function, so the diff would carry a full recompilation of Nintendo's
-# code alongside our changes).
+# Build the release patch: a BPS from retail Emerald (U) to this fork's agbcc build.
 #
 #     tools/br/make-patch.sh <baseline.gba> <new.gba> <out.bps>
+#
+# The one way the project makes its patch. CI's rom job (baseline = the pret build at
+# tools/br/BASELINE_COMMIT, which check-rom.sh has just proved is retail byte for byte)
+# and tools/br/dev-patch.sh (the hand release; baseline = the retail ROM on disk) both
+# come here, so a tag and a hand release ship the same bytes for the same ROM:
+#
+#   1. flips, pinned (tools/br/flips.sh), in delta mode -- it finds the blocks every
+#      upstream hook shifted, so the patch is our changes and not re-emitted retail ROM
+#   2. tools/br/make-bps.ts applies it with the page's own decoder: the baseline has to
+#      be retail, the result has to be <new.gba> byte for byte, and the file has to be
+#      under the size ceiling
+#   3. only then does it replace <out.bps>, so a patch that fails never overwrites the
+#      last good one
+#
+# The release patch is always the agbcc build, never `make modern` (a modern build
+# recompiles every function, so the diff would carry a full recompilation of Nintendo's
+# code alongside our changes). Needs node and web/node_modules (`npm ci` in web/).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-FLIPS_DIR="$HERE/.flips"
-FLIPS_BIN="$FLIPS_DIR/flips"
+ROOT="$(cd "$HERE/../.." && pwd)"
 
-BASELINE="${1:?usage: make-patch.sh <baseline.gba> <new.gba> <out.bps>}"
-NEW="${2:?usage: make-patch.sh <baseline.gba> <new.gba> <out.bps>}"
-OUT="${3:?usage: make-patch.sh <baseline.gba> <new.gba> <out.bps>}"
+usage="usage: make-patch.sh <baseline.gba> <new.gba> <out.bps>"
+BASELINE="${1:?$usage}"
+NEW="${2:?$usage}"
+OUT="${3:?$usage}"
 
 [[ -f "$BASELINE" ]] || { echo "no baseline rom: $BASELINE" >&2; exit 2; }
 [[ -f "$NEW" ]] || { echo "no fork rom: $NEW" >&2; exit 2; }
+VITE_NODE="$ROOT/web/node_modules/.bin/vite-node"
+[[ -x "$VITE_NODE" ]] || { echo "no $VITE_NODE: run npm ci in web/ first" >&2; exit 2; }
 
-if [[ ! -x "$FLIPS_BIN" ]]; then
-  echo "building flips into $FLIPS_DIR"
-  rm -rf "$FLIPS_DIR"
-  git clone --depth 1 https://github.com/Alcaro/Flips "$FLIPS_DIR"
-  # Plain `make` targets the GTK GUI and needs pkg-config + libgtk-3-dev, neither of
-  # which CI (or a bare WSL box) has. TARGET=cli builds the headless binary we actually
-  # want, which is also all `--create --bps` needs.
-  ( cd "$FLIPS_DIR" && TARGET=cli make )
-  [[ -x "$FLIPS_BIN" ]] || { echo "flips build did not produce $FLIPS_BIN" >&2; exit 2; }
-fi
-
+# Absolute before the cd into web/ below: a relative "pokeemerald.gba" means the repo
+# root to the caller and web/ to the subshell, which is a file that does not exist.
+abs() { echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; }
+BASELINE="$(abs "$BASELINE")"
+NEW="$(abs "$NEW")"
 mkdir -p "$(dirname "$OUT")"
-"$FLIPS_BIN" --create --bps "$BASELINE" "$NEW" "$OUT"
+OUT="$(abs "$OUT")"
+TMP="$OUT.tmp"
+trap 'rm -f "$TMP"' EXIT
 
-SIZE="$(stat -c%s "$OUT" 2>/dev/null || stat -f%z "$OUT")"
-echo "patch size: $SIZE bytes ($OUT)"
+# --exact: never strip a "copier header" (a SNES-era guess flips makes from file sizes).
+bash "$HERE/flips.sh" --create --bps-delta --exact "$BASELINE" "$NEW" "$TMP"
+( cd "$ROOT/web" && "$VITE_NODE" "$HERE/make-bps.ts" -- "$BASELINE" "$NEW" "$TMP" )
+mv "$TMP" "$OUT"
+echo "patch size: $(wc -c < "$OUT" | tr -d ' ') bytes ($OUT)"

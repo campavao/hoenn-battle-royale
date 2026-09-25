@@ -86,3 +86,46 @@ describe('Roster', () => {
     expect(roster.all()).toEqual([]);
   });
 });
+
+// POK-330 #51. Bots are never relay members, so their rows had no name (P21..P31 in the
+// ticker, the results and the saved round) and every relay roster event wiped them.
+describe("the match's bots on the roster", () => {
+  const BOTS = [
+    { seat: 31, name: 'WALLY', skin: 2 },
+    { seat: 30, name: 'ROXANNE', skin: 1 },
+  ];
+
+  it('have the names they were dealt', () => {
+    const roster = new Roster();
+    roster.applyMsg({ t: 'step', seat: 31, d: 1, x: 3, y: 3, map: { group: 0, num: 1 } });
+    roster.seatBots(BOTS);
+    expect(roster.nameOf(31)).toBe('WALLY');
+    expect(roster.get(30)).toMatchObject({ name: 'ROXANNE', skin: '1' });
+    expect(roster.nameOf(7), 'anybody unnamed is still a seat number').toBe('P7');
+  });
+
+  it('survive a relay roster event, which only prunes the people it no longer lists', () => {
+    const roster = new Roster();
+    roster.applyRoster(ROOM);
+    roster.seatBots(BOTS);
+    roster.applyMsg({ t: 'out', seat: 30 });
+    roster.applyMsg({ t: 'step', seat: 9, d: 1, x: 0, y: 0, map: { group: 0, num: 1 } }); // nobody's
+    roster.applyRoster({ ...ROOM, members: [{ id: 2, name: 'ASH' }] });
+    expect(roster.all().map((e) => e.seat)).toEqual([2, 30, 31]);
+    expect(roster.get(30)?.alive, 'and a bot that went out stays out').toBe(false);
+  });
+
+  it('leave with the match, and everybody still here stands up again', () => {
+    const roster = new Roster();
+    roster.applyRoster(ROOM);
+    roster.seatBots(BOTS);
+    roster.applyMsg({ t: 'out', seat: 5 });
+    roster.endMatch();
+    expect(roster.all().map((e) => e.seat)).toEqual([2, 5]);
+    expect(roster.get(5)?.alive).toBe(true);
+    // ...and the next roster event prunes them like anybody else's row.
+    roster.applyMsg({ t: 'step', seat: 31, d: 1, x: 0, y: 0, map: { group: 0, num: 1 } });
+    roster.applyRoster(ROOM);
+    expect(roster.get(31)).toBeUndefined();
+  });
+});

@@ -33,7 +33,16 @@ behind.
    bash tools/br/dev-patch.sh pokeemerald.map "C:/Users/cam95/Downloads/Pokemon - Emerald Version (U).gba"
    ```
 
-   Run it again after committing, so `br-version.json` names the right commit.
+   The patch comes from `tools/br/make-patch.sh`, the same script CI runs for a tag:
+   flips at a pinned commit (`tools/br/flips.sh`; the first run clones and builds it in
+   the MSYS2 shell, about 15 s), then `tools/br/make-bps.ts` applies it with the page's
+   own decoder and refuses it unless retail + patch is this ROM byte for byte and the
+   file is under 2 MB. Expect about 0.7 MB. A patch near 10 MB is shifted retail ROM,
+   which is what the old same-offset encoder shipped until 2026-09-24.
+
+   Run it after committing, so `br-version.json` names the commit that is going out;
+   `release-web.sh` refuses sidecars stamped at any other commit (a build of uncommitted
+   changes is stamped `<sha>-dirty`) and a tree with uncommitted changes.
 
 3. **Deploy**:
 
@@ -41,9 +50,11 @@ behind.
    bash tools/br/release-web.sh --prod
    ```
 
-   It refuses to publish unless the sidecars match the ROM on disk, deploys from the repo
+   It refuses to publish unless the sidecars and the patch match the ROM on disk and the
+   patch is under the ceiling, deploys from the repo
    root (the Vercel project's Root Directory is `web`), and then checks the live site
-   serves the three patch files and **404s the ROM**. `live: https://hoenn-battle-royale.vercel.app`
+   serves the three patch files, names this build's `romSha1` and **404s the ROM**
+   (`tools/br/verify-site.sh`, which a tag's CI runs too). `live: https://hoenn-battle-royale.vercel.app`
    at the end means it worked.
 
 4. **Prove it** against the real site, with a stock ROM, the way a player arrives:
@@ -62,8 +73,10 @@ its caches).
 `web/public/emu/` (mgba.js, mgba.wasm, mgba.d.ts) is tracked and goes out with the shell.
 It is thenick775's `feature/wasm` at `tools/br/mgba-wasm/COMMIT` plus
 `tools/br/mgba-wasm/hbr-exports.patch` (the EWRAM pointers and, since POK-319, the
-picture past the LCD). When the patch changes, rebuild in WSL and copy the output in
-before deploying; a tagged release's CI builds the same thing from the patch:
+picture past the LCD). The tracked files are what the site serves and what the e2e
+boots; nothing in CI replaces them. CI's `wasm` job rebuilds the core from the patch on
+every push and warns ("wasm core drift") when its sha256s differ from the tracked
+ones. When the patch changes, rebuild in WSL and copy the output in before deploying:
 
 ```bash
 wsl.exe -e bash -lc 'source ~/emsdk/emsdk_env.sh; cd ~/mgba-wasm/build-wasm && make -j8 && cp wasm/mgba.js wasm/mgba.wasm wasm/mgba.d.ts wasm/mgba.wasm.map /mnt/c/Users/cam95/Documents/Github/hoenn-battle-royale/web/public/emu/'
