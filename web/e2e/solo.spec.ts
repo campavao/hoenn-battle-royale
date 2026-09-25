@@ -29,6 +29,8 @@ test('a solo match ends on its results, then goes back to the lobby by itself', 
   expect(round.seats, 'bots filled the field').toBeGreaterThan(1);
   const outs = new Set((round.events as { t: string; seat?: number }[]).filter((e) => e.t === 'out').map((e) => e.seat));
   expect(outs.size, 'everybody but the winner went out').toBeGreaterThanOrEqual(round.seats - 1);
+  // A room of one, us by our own name (POK-331 #26): the ticker and the round said P0.
+  expect(round.roster[0], 'the player is named, as a room names them').not.toBe('P0');
 
   // Solo never opens a socket, and never gets the room's dev surface.
   expect(await page.evaluate(() => (window as unknown as { __br?: unknown }).__br !== undefined)).toBe(false);
