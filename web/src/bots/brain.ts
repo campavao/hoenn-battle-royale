@@ -80,12 +80,27 @@ const HUNT_AT = 3;
  *  for the rest of the match -- on the host's tab, beside an emulator. It walks
  *  instead, and asks again in a couple of seconds. */
 const RETRY_MS = 2000;
-/** How many route searches the whole roster may do in one tick. A* over Hoenn is the
- *  expensive thing here, and eight bots deciding at once is eight of them in one main
- *  thread task -- measured at 159 ms on a CPU throttled to phone speed, which is a
- *  visible hitch in a game running at 60. Whoever misses out keeps walking the route
- *  they had, or waits a tick: at four tiles a second nobody can see the difference. */
-const SEARCHES_PER_TICK = 2;
+/** How much route-finding the whole roster may do in one tick, in A* nodes settled. A*
+ *  over Hoenn is the expensive thing here, and eight bots deciding at once is eight of
+ *  them in one main thread task -- measured at 159 ms on a CPU throttled to phone speed,
+ *  which is a visible hitch in a game running at 60. Whoever misses out keeps walking
+ *  the route they had, or waits a tick: at four tiles a second nobody can see the
+ *  difference.
+ *
+ *  Counted in nodes, not in searches (POK-330 #49). It was two decisions a tick, and a
+ *  decision is anything from a forty-node walk to the loot at your feet to a stuck bot's
+ *  whole ladder -- the Centre, the loot, the goal maps and four wander picks, every one
+ *  failing at its full budget. Two of those in one tick was the 15-20 ms p99 at thirty
+ *  bots, while the cheap ones queued behind a limit they did not need. One full-size
+ *  search's worth a tick (HOP_BUDGET, CENTRE_BUDGET) brought thirty bots' tick to a 1 ms
+ *  p99 on desktop, with a third of the waiting.
+ *
+ *  A decision starts only while there is budget left, and then runs to the end: every
+ *  search inside it keeps its own cap, so a route is the route it always was. Cutting a
+ *  search short at the tick's edge would read as "no way there" -- a stuck bot and a two
+ *  second backoff -- and a decision bigger than a tick would never finish at all. What a
+ *  decision spends past the budget is the one overrun a tick can have. */
+const NODES_PER_TICK = 3000;
 /** BR_FOG_TICK_FRAMES in include/br/br_ring.h: 240 frames, four seconds. The ROM takes
  *  a tenth of each mon's max HP off the player on this beat while they are outside the
  *  ring; a bot standing in the same fog has to lose the same thing on the same beat, or
@@ -357,7 +372,7 @@ export class Bots {
   private readonly fighting = new Map<number, Fight>();
   private nonce = 0;
   private now = 0;
-  /** Route searches left in this tick (SEARCHES_PER_TICK). */
+  /** A* nodes left to settle in this tick (NODES_PER_TICK). */
   private budget = 0;
   /** Nothing starts another bot-vs-bot fight before this (POK-273). Room-wide, not
    *  per bot: what needed slowing down was the rate the field eliminated itself at,
@@ -604,7 +619,7 @@ export class Bots {
    *  here, not in the caller, so a slow frame makes bots catch up rather than crawl. */
   tick(now: number): void {
     this.now = now;
-    this.budget = SEARCHES_PER_TICK;
+    this.budget = NODES_PER_TICK;
     this.expireFights(now);
     // Both loops walk a snapshot: the fog and a lost duel both take a bot out of the
     // list mid-pass, and splicing the array being iterated skips whoever came next.
@@ -977,7 +992,7 @@ export class Bots {
       (c) => c.mapId !== walker.at.map && this.opts.world.map(c.mapId)?.section === section,
     );
     for (const c of [...here, ...town]) {
-      const path = findPath(this.opts.world, walker.at, { map: c.mapId, x: c.x, y: c.y }, CENTRE_BUDGET, canSurf(walker.party), canCut(walker.party));
+      const path = this.route(walker, { map: c.mapId, x: c.x, y: c.y }, CENTRE_BUDGET);
       if (path.found) return path;
     }
     return null;
@@ -1023,7 +1038,6 @@ export class Bots {
       this.wanderOneStep(walker, 'wait');
       return;
     }
-    this.budget--;
     // Centre when hurt, third on Kanto's list -- after the fog and the ball at your
     // feet, before going anywhere else. A bot walks in, gets healed, walks out.
     const centre = this.centreRoute(walker);
@@ -1052,7 +1066,7 @@ export class Bots {
           (Math.abs(b.x - walker.at.x) + Math.abs(b.y - walker.at.y)),
       );
     for (const piece of loot.slice(0, 2)) {
-      const path = findPath(this.opts.world, walker.at, { map: piece.mapId, x: piece.x, y: piece.y }, WANDER_BUDGET, canSurf(walker.party), canCut(walker.party));
+      const path = this.route(walker, { map: piece.mapId, x: piece.x, y: piece.y }, WANDER_BUDGET);
       if (path.found && path.steps.length > 0) {
         walker.path = path;
         walker.stepIndex = 0;
@@ -1065,14 +1079,7 @@ export class Bots {
     if ((this.opts.alive?.() ?? 99) <= HUNT_AT) {
       for (const player of this.opts.engage?.players() ?? []) {
         if (player.busy) continue;
-        const path = findPath(
-          this.opts.world,
-          walker.at,
-          { map: player.mapId, x: player.x, y: player.y },
-          WANDER_BUDGET,
-          canSurf(walker.party),
-          canCut(walker.party),
-        );
+        const path = this.route(walker, { map: player.mapId, x: player.x, y: player.y }, WANDER_BUDGET);
         if (path.found && path.steps.length > 0) {
           walker.path = path;
           walker.stepIndex = 0;
@@ -1100,6 +1107,13 @@ export class Bots {
     // almost always past the A* budget: the replay tool had bots failing to route
     // 94% of the time, standing still while they did it. Own map, then own section,
     // then anywhere, so the cheap pick is also the one a trainer would make.
+    //
+    // "Anywhere" mostly fails, at its full budget, and aimAcrossMaps has usually asked
+    // the same question better -- but not always: the ones that land are a map or two
+    // over, reached through an exit the goal ladder never tried. Without them the fog
+    // took more bots (POK-330 #49: 46 fog outs against 27 over the same six thirty-bot
+    // matches, and more of the field outside the ring), so they stay, paid for out of
+    // the tick's node budget like everything else.
     const section = this.opts.world.map(walker.at.map)?.section;
     const pools = [
       targets.filter((t) => t.mapId === walker.at.map),
@@ -1111,7 +1125,7 @@ export class Bots {
       const pick = pool[Math.floor(this.opts.rng() * pool.length)];
       const to: Spot = { map: pick.mapId, x: pick.x, y: pick.y };
       if (sameSpot(to, walker.at)) continue;
-      const path = findPath(this.opts.world, walker.at, to, WANDER_BUDGET, canSurf(walker.party), canCut(walker.party));
+      const path = this.route(walker, to, WANDER_BUDGET);
       if (path.found && path.steps.length > 0) {
         walker.path = path;
         walker.stepIndex = 0;
@@ -1126,6 +1140,13 @@ export class Bots {
     // until the backoff is up.
     walker.retryAfter = now + RETRY_MS;
     this.wanderOneStep(walker);
+  }
+
+  /** findPath from where the bot stands, paid for out of the tick's budget. */
+  private route(walker: Walker, to: Spot, cap: number): Path {
+    const path = findPath(this.opts.world, walker.at, to, cap, canSurf(walker.party), canCut(walker.party));
+    this.budget -= path.visited;
+    return path;
   }
 
   /** Head for a target on ANOTHER map by walking to the edge that leads towards it.
@@ -1151,11 +1172,18 @@ export class Bots {
     // Kanto's ladder (main.lua:3380): the best next map, then the next best, then any --
     // "any seam beats standing still". Only when every one of them is unreachable from
     // where we stand does this give up and let the caller take its one random step.
+    // Goal maps in one direction share their next hop, and a hop that failed for the
+    // first fails the same way for the rest -- same start, same exits, same budget -- so
+    // it is searched once (POK-330 #49): a stuck bot paid for it three times.
+    const tried = new Set<string>();
     for (const goal of goals.slice(0, GOAL_TRIES)) {
       for (const hop of world.nextHops(walker.at.map, goal.mapId)) {
+        if (tried.has(hop)) continue;
+        tried.add(hop);
         const doors = world.exitCells(walker.at.map, hop, surf, cut);
         if (doors.length === 0) continue;
         const path = findPathToAny(world, walker.at, doors, HOP_BUDGET, surf, cut);
+        this.budget -= path.visited;
         if (!path.found || path.steps.length === 0) continue;
         walker.path = path;
         walker.stepIndex = 0;

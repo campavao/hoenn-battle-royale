@@ -1,11 +1,11 @@
 // What a match costs (POK-247, the measuring half).
 //
 // The ticket says measure first, so this does: it runs a real match at `#fast` pace
-// with the host walking eight bots, and samples what actually matters on a phone --
-// the emulator's frame rate, and how long the longest main-thread task was while the
-// bots were thinking. The host is the worst case by construction: it runs the
-// director, the bots' A*, the loot table and the ticker on top of the emulator that
-// every other client runs alone.
+// with the host walking a full room of bots (twenty-nine of them), and samples what
+// actually matters on a phone -- the emulator's frame rate, and how long the longest
+// main-thread task was while the bots were thinking. The host is the worst case by
+// construction: it runs the director, the bots' A*, the loot table and the ticker on
+// top of the emulator that every other client runs alone.
 //
 // A desktop is not a phone, so the CPU is throttled 4x through CDP -- roughly a
 // mid-range Android against this machine. It still asserts a floor rather than a
@@ -50,6 +50,16 @@ test('the host carries a match without the emulator falling over', async ({ brow
       // One tab hosting, bots filling it: START deals the same match anybody would get.
       await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
       await host.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
+      // A full room, not the default eight (POK-330 #49): rooms fill to thirty now, and
+      // thirty bots' route-finding is the host's worst case -- the one the tick budget
+      // is sized for. MAX climbs its ladder a press at a time, and each press is the
+      // relay's to answer before the next.
+      const max = host.locator('#room-max');
+      await expect(max).toBeVisible({ timeout: 60_000 });
+      for (const want of [12, 16, 20, 26, 30]) {
+        await max.click();
+        await expect(max).toContainText(`MAX ${want}`, { timeout: 15_000 });
+      }
       await startWith(host, 1);
 
       // Count emulator frames ourselves, and watch for long main-thread tasks -- a
