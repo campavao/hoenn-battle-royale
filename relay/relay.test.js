@@ -2386,3 +2386,14 @@ test("a match hosted again after a restart keeps the seat it is played from (POK
     await after.close();
   }
 });
+
+// The drop line's census counts the types handle() answers by name, and since the
+// split (POK-331 #19) the list it counts from is conn.js's HANDLED, a file away from
+// the switch: a type added to one and not the other is `other` on every drop line.
+test("the census names exactly the types handle() answers (POK-331 #19)", async () => {
+  const { HANDLED } = await import("./conn.js");
+  const source = readFileSync(new URL("./server.js", import.meta.url), "utf8");
+  const cases = [...source.matchAll(/^\s*case "([a-z_]+)":/gm)].map((m) => m[1]);
+  assert.ok(cases.length > 0, "handle()'s cases found");
+  assert.deepEqual([...HANDLED].sort(), [...new Set(cases)].sort());
+});

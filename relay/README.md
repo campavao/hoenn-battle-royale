@@ -13,6 +13,18 @@ someone drops. Game rules live in the host player's client.
 
 One dependency: `ws`.
 
+## Files
+
+| file | holds |
+| --- | --- |
+| `server.js` | `createRelay`: the message handlers, the one door every way in goes through (`canEnter`, `openRoom`, `admit`), host migration, the sweep, `/health`, SIGTERM, and the entry point (`node server.js`). It still exports everything below that it exported before the split |
+| `room.js` | `Room`: its members, seat ids and the seats held for a drop, the lock, the roster and its lobby row. `MAX_SEAT` |
+| `conn.js` | `Conn`: one socket's rate buckets, its census for the drop line, and its output |
+| `clean.js` | what arrives from outside, made safe: names, skins, passcodes, versions, `BR_MOTD`, `BR_DAILY`, `BR_ORIGINS`, the proxy's address headers, the limit env vars |
+| `relay.test.js` | the suite (`node --test`) |
+| `protocol.fixtures.json` | what the page sends each door; both suites read it |
+| `railway.json` | Railway's builder and start command |
+
 ## Running it
 
 ```sh

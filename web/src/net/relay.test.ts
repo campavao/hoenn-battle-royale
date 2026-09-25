@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import serverSource from '../../../relay/server.js?raw';
+import roomSource from '../../../relay/room.js?raw';
 import F from '../../../relay/protocol.fixtures.json';
 import { REJOIN_MS, RelayClient, type WebSocketLike } from './relay';
 import { MAX_SEAT } from './wire';
@@ -357,7 +357,7 @@ describe('RelayClient', () => {
   });
 
   it('agrees with the relay on the highest seat', () => {
-    expect(serverSource).toMatch(new RegExp(`export const MAX_SEAT = ${MAX_SEAT};`));
+    expect(roomSource).toMatch(new RegExp(`export const MAX_SEAT = ${MAX_SEAT};`));
   });
 
   // The relay's suite sends these same payloads through its gate (POK-330 #3). The two
