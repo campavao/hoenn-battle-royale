@@ -1,7 +1,8 @@
 # field-scroll: what the LCD shows of the map, at rest and mid-step, next to the camera
-# state the page reads to draw the field past the picture (POK-317). tools/br/field-scroll.py
-# matches each shot against web/public/field-maps/MAP_LITTLEROOT_TOWN.png and reports the
-# offset that lines them up, so the page's formula is measured, not guessed.
+# state the page reads to draw the field past the picture (POK-317). Each shot lined up
+# against web/public/field-maps/MAP_LITTLEROOT_TOWN.png gives the offset the page's
+# formula has to produce, so it is measured, not guessed.
+# capture-only: shots and camera dumps to measure against; the matching is done by hand
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400

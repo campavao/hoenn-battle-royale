@@ -1,4 +1,5 @@
 # field-scroll-trace: the camera, frame by frame, through a run to the right (POK-317).
+# capture-only: the camera dumped frame by frame, for reading the scroll off by hand
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400

@@ -2,6 +2,7 @@
 # engage battle; screenshots of the action menu (bg0 scrolled 20) and the move menu
 # (scrolled 40) both show the seconds top-right. No pixel assert -- the harness reads
 # memory, not the screen -- so this is a capture driver for a human/agent eyeball.
+# capture-only: the shots are for an eyeball; the harness reads memory, not pixels
 drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF

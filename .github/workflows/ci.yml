@@ -181,19 +181,11 @@ jobs:
         # would either re-download the ROM as an artifact (banned - see above) or
         # rebuild it from scratch, doubling the build time for no reason when the ROM
         # this job just built is sitting right here on disk.
-        run: |
-          fail=0
-          for d in tools/br/drivers/*.txt; do
-            n=$(basename "$d" .txt)
-            if tools/br/drive.sh "$n" pokeemerald.gba > "/tmp/$n.log" 2>&1; then
-              echo "ok   $n"
-            else
-              echo "FAIL $n"
-              tail -20 "/tmp/$n.log"
-              fail=1
-            fi
-          done
-          exit $fail
+        #
+        # drive-all.sh also fails a driver that asserts nothing: the harness passes a
+        # driver with no expect, so each one carries expects, a `# checked-by:` script
+        # (objects-band -> objects-band.py) or an explicit `# capture-only:`.
+        run: tools/br/drive-all.sh pokeemerald.gba
 
       - name: Sidecars for the web shell's local-build path (POK-220)
         # web/e2e drives the shell the same way `npm run dev` does: a pre-patched ROM

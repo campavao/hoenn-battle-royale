@@ -10,6 +10,18 @@ Works from Git Bash (it re-execs itself in the MSYS2 UCRT64 shell). Needs the st
 libmgba at `C:\Users\cam95\Documents\Github\mgba-src\build\libmgba.a` (override with
 `MGBA_SRC`). The ROM defaults to `pokeemerald.gba`, then `pokeemerald_modern.gba`.
 
+`tools/br/drive-all.sh [rom]` runs every driver the way CI does, and fails any driver
+that asserts nothing (the harness alone passes a driver with no `expect`). Each driver
+is checked one of three ways:
+
+- `expect` lines, which the harness asserts;
+- a `# checked-by: <script>` line: the run's output is piped into that python script
+  (repo-relative), which must exit 0 (`objects-band` -> `tools/br/objects-band.py`);
+- a `# capture-only: <why>` line, for drivers that only write frames or dumps for a
+  person to read. They still have to run clean.
+
+`drive-all.sh --lint` checks the markers without running anything.
+
 Driver grammar (one action per line, `#` comments):
 
 | action | meaning |

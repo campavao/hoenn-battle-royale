@@ -2,6 +2,7 @@
 # The page mirrors the ROM's palette fade over the field it draws past the picture, and
 # agbcc packs the struct's bitfields its own way: this is where the y/blendColor/active
 # bytes were read off, not guessed. tools/br/drive.sh fade-trace | python - dedupes.
+# capture-only: gPaletteFade dumped frame by frame, for reading the bitfields off by hand
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
 wait 1
