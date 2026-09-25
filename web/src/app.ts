@@ -30,6 +30,7 @@ import {
   BOT_FILL,
   botFillFor,
   clockLeftAt,
+  dealable,
   decideStart,
   onRefused,
   type StartDecision,
@@ -41,6 +42,7 @@ import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, 
 import {
   canStart,
   doorOf,
+  fillLabel,
   nextDoor,
   nextFog,
   nextMax,
@@ -1731,7 +1733,7 @@ function wireRoom(
       { id: 'room-max', label: `MAX ${view.max}`, onPress: () => relay.setMax(nextMax(view.max)) },
       {
         id: 'room-fill',
-        label: view.fill > 0 ? `FILL ${view.fill}` : 'FILL OFF',
+        label: fillLabel(view),
         onPress: () => {
           controls.fill = !controls.fill;
           redraw();
@@ -1893,6 +1895,12 @@ function wireRoom(
     if (host || !bridge || !isHost) return;
     const seats = seatsFor(controls.roster, members);
     if (seats.length === 0) return;
+    // How many bots the host is filling to (POK-241's FILL), held to what the room has
+    // room for, and none with FILL off (POK-331 #8). A deal nobody could win is refused
+    // however it was asked for: START is held to the same rule, but the countdown is not
+    // a button. `#nobots` empties the room after the rule, the way a test wants it.
+    const fill = botFillFor(controls.roster, seats.length, controls.fill);
+    if (!takeOver && !dealable(seats.length, fill)) return;
     const plan = dealPlan(match, seats, bridge.seat, takeOver, () => fixedSeed() ?? Math.floor(Math.random() * 0x7fff_ffff) + 1);
     host = new HostRole({
       session,
@@ -1901,9 +1909,7 @@ function wireRoom(
       seats,
       present: (controls.roster?.members ?? []).map((m) => m.id),
       plan,
-      // How many bots the host is filling to (POK-241's FILL), held to what the room
-      // has room for.
-      fill: botFill() === 0 ? 0 : botFillFor(controls.roster, seats.length),
+      fill: botFill() === 0 ? 0 : fill,
       botSafariSecs: paceOptions()?.safariSecs ?? controls.safariSecs,
       options: paceOptions() ?? {
         safariSecs: controls.safariSecs,

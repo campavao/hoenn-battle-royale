@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOT_FILL, botFillFor, canStart, clockLeftAt, decideStart, doorOf, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, type StartState } from './room';
+import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, type StartState } from './room';
 import { freshMatch, noteMatch, ringClockLeft } from './lifecycle';
 import { Director, type DirectorWorld } from './director';
 import type { RosterEvent } from '../net/relay';
@@ -165,17 +165,52 @@ describe('when a match starts (POK-330 #42)', () => {
 
 describe('how many bots the host fills to', () => {
   it('fills to the seats asked for, past the relay\'s sixteen humans (POK-330 #29)', () => {
-    expect(botFillFor({ max: 16, seats: 30 }, 2)).toBe(28);
+    expect(botFillFor({ max: 16, seats: 30 }, 2, true)).toBe(28);
   });
 
   it('reads an older relay\'s max, and the default with no roster at all', () => {
-    expect(botFillFor({ max: 8 }, 3)).toBe(5);
-    expect(botFillFor(null, 1)).toBe(BOT_FILL - 1);
+    expect(botFillFor({ max: 8 }, 3, true)).toBe(5);
+    expect(botFillFor(null, 1, true)).toBe(BOT_FILL - 1);
   });
 
   it('is never negative', () => {
-    expect(botFillFor({ max: 2 }, 3)).toBe(0);
-    expect(botFillFor({ max: 16, seats: 4 }, 6)).toBe(0);
+    expect(botFillFor({ max: 2 }, 3, true)).toBe(0);
+    expect(botFillFor({ max: 16, seats: 4 }, 6, true)).toBe(0);
+  });
+
+  // The room screen said FILL OFF and drew no bot seats, and START dealt six bots anyway:
+  // the deal read MAX and never the control (POK-331 #8). Kanto's botsAtStart: nothing to
+  // fill to while FILL is off.
+  it('deals none with FILL off, whatever MAX says', () => {
+    expect(botFillFor({ max: 8 }, 2, false)).toBe(0);
+    expect(botFillFor({ max: 16, seats: 30 }, 1, false)).toBe(0);
+    expect(botFillFor(null, 1, false)).toBe(0);
+    // ...and the room screen draws what START deals
+    const off = roomView(roster({ max: 8 }), 1, false);
+    expect(off.fill).toBe(botFillFor(roster({ max: 8 }), off.players, false));
+    const on = roomView(roster({ max: 16, seats: 30 }), 1, true);
+    expect(on.fill).toBe(botFillFor(roster({ max: 16, seats: 30 }), on.players, true));
+  });
+
+  it('refuses a deal nobody could win, bots counted, however it is asked for (Kanto POK-197)', () => {
+    // a quick room of one with FILL off counts itself down to exactly this
+    expect(dealable(1, botFillFor({ max: 8 }, 1, false))).toBe(false);
+    expect(dealable(1, botFillFor({ max: 8 }, 1, true))).toBe(true);
+    expect(dealable(2, 0)).toBe(true);
+    expect(dealable(0, 1)).toBe(false);
+  });
+});
+
+describe('the FILL control (POK-331 #8)', () => {
+  it('says what the host set: the bots START would deal, or OFF', () => {
+    expect(fillLabel(roomView(roster({ max: 8 }), 1, true))).toBe('FILL 6');
+    expect(fillLabel(roomView(roster({ max: 8 }), 1, false))).toBe('FILL OFF');
+  });
+
+  it('reads ON for a room full to MAX, so pressing it turns FILL off rather than on', () => {
+    const full = roomView(roster({ max: 2 }), 1, true);
+    expect(full.fill).toBe(0);
+    expect(fillLabel(full)).toBe('FILL 0');
   });
 });
 

@@ -28,6 +28,8 @@ export interface RoomView {
   max: number;
   open: boolean;
   pass: boolean;
+  /** FILL is on: bots take the seats nobody has. */
+  fillOn: boolean;
   /** Bots the host would deal at START to make the room up to MAX. */
   fill: number;
 }
@@ -52,8 +54,16 @@ export function roomView(roster: RosterEvent, mySeat: number, fillOn: boolean): 
     max,
     open: roster.open,
     pass: roster.pass,
-    fill: fillOn ? Math.max(0, max - players) : 0,
+    fillOn,
+    fill: botFillFor(roster, players, fillOn), // what START deals: the same rule
   };
+}
+
+/** The FILL control: how many bots START would deal, or OFF. What the host set, not what
+ *  it comes to -- a room full to MAX with FILL on read FILL OFF, and pressing it to turn
+ *  FILL "on" turned it off. */
+export function fillLabel(view: Pick<RoomView, 'fillOn' | 'fill'>): string {
+  return view.fillOn ? `FILL ${view.fill}` : 'FILL OFF';
 }
 
 /** The next MAX up the ladder, wrapping -- one control, one button. */
@@ -77,7 +87,16 @@ export function nextDoor(door: Door): Door {
 /** Can the host start? A match needs somebody in it -- with FILL off and nobody else
  *  here, START would deal a one-trainer battle royale. */
 export function canStart(view: RoomView): boolean {
-  return view.isHost && view.players + view.fill >= 2;
+  return view.isHost && dealable(view.players, view.fill);
+}
+
+/** Would a deal of these make a match anybody can win? Two in it at least, bots counted:
+ *  a director whose field starts at one never declares a winner. Kanto's canStart
+ *  (POK-197), which refuses every way in -- START, the countdown, the buzzer -- and not
+ *  only the button: with FILL off, a quick room of one counts itself down to exactly
+ *  that match. */
+export function dealable(humans: number, bots: number): boolean {
+  return humans + bots >= 2;
 }
 
 /** The one line under the roster: what pressing START would actually make. */
@@ -107,8 +126,11 @@ export function startsItself(mode: RoomMode): boolean {
 
 /** How many bots the host fills to (POK-241's FILL), held to what the room has room
  *  for. `seats` is MAX as the host set it; `max` is only the humans (POK-330 #29), and
- *  all an older relay sends. */
-export function botFillFor(roster: Pick<RosterEvent, 'seats' | 'max'> | null, humans: number): number {
+ *  all an older relay sends. None with FILL off: the room screen has said "FILL OFF" and
+ *  drawn no bot seats since POK-241, and START dealt them anyway (POK-331 #8). Kanto's
+ *  botsAtStart is the same rule -- its fill target is zero while FILL is off. */
+export function botFillFor(roster: Pick<RosterEvent, 'seats' | 'max'> | null, humans: number, fillOn: boolean): number {
+  if (!fillOn) return 0;
   return Math.max(0, (roster?.seats ?? roster?.max ?? BOT_FILL) - humans);
 }
 
