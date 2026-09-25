@@ -83,11 +83,14 @@
 //                                      once, unasked, the moment a socket
 //                                      connects, so a client learns
 //                                      minProtocol before it sends anything.
-//   {type:"daily_join", name}          -> the one shared DAILY GAME room:
-//                                      joins it, creates it as its host, or
+//   {type:"daily_join", name, skin?,   -> the one shared DAILY GAME room:
+//         patch?, protocol?}           joins it, creates it as its host, or
 //                                      answers match_in_progress while its
 //                                      match runs.  quick_join never seats
-//                                      anyone in a daily room.
+//                                      anyone in a daily room.  Behind the
+//                                      same door as every other way in: a
+//                                      daily of another build is not yours,
+//                                      and you get one of your own
 //   {type:"quick_join", name,          same as join_room, but the relay picks
 //         patch?, protocol?}           the fullest open room rather than a code
 // Server -> client
@@ -415,6 +418,8 @@ class Room {
     // shared daily room, "host" for the lobby's HOST row.  Fixed at
     // opening -- an heir after a migration inherits the room, not a mode.
     this.mode = "host";
+    // the one shared DAILY GAME room, which quick play and the list walk past
+    this.daily = false;
     // when the current match locked the door, or null between matches
     this.lockedAt = null;
     // Addresses the host has removed (POK-130).  Per-room and in-memory,
@@ -774,6 +779,77 @@ export function createRelay(options = {}) {
     return false;
   }
 
+  // Why `conn` may not come through `room`'s door, or null when it may
+  // (POK-330 #46).  Every way in asks this one question -- the list, a code,
+  // quick play, the daily -- where each used to keep its own copy of the
+  // filter, and the daily's copy had quietly lost the version gate.  The order
+  // is the answer a stranger gets: removed, then the passcode (without it you
+  // learn nothing past "not yours"), then the version, then the door's state.
+  // A member coming back to a seat the room is holding is past the door's
+  // state: they were already inside.
+  function canEnter(room, conn, { token, pass, version, spectate = false, resuming = false } = {}) {
+    if (room.banned.has(conn.ip)
+        || (typeof token === "string" && room.bannedTokens.has(token))) return "removed";
+    if (room.pass !== null && cleanPass(pass) !== room.pass) return "passcode";
+    if (versionMismatch(room, version)) return "version";
+    if (resuming) return null;
+    if (room.locked && !spectate) return "locked";
+    if (room.full()) return "full";
+    return null;
+  }
+
+  // canEnter's answer, said to the client that asked; a version refusal says
+  // what the room runs, so the page can tell its player which of them is stale
+  function refuse(conn, room, why) {
+    conn.send(why === "version"
+      ? { type: "room_error", reason: why, host: room.version }
+      : { type: "room_error", reason: why });
+  }
+
+  // A new room with `conn` as its host: the lobby's HOST row, quick play that
+  // found nothing, and the daily's first press.  Null, having said why, at the
+  // room ceiling.
+  function openRoom(conn, msg, { mode, open, pass = null, max }) {
+    if (rooms.size >= limits.rooms) {
+      traffic.rejected += 1;
+      conn.send({ type: "room_error", reason: "server_full" });
+      log(`room refused: at the ${limits.rooms}-room ceiling`);
+      return null;
+    }
+    conn.name = cleanName(msg.name);
+    conn.skin = cleanSkin(msg.skin);
+    conn.spectator = undefined; // a host is never watching, whatever it did last room
+    const room = new Room(makeCode(rooms), conn, cleanMax(max));
+    room.seats = cleanSeats(max);
+    room.mode = mode;
+    room.daily = mode === "daily";
+    room.open = open;
+    room.pass = pass;
+    room.version = cleanVersion(msg);
+    rooms.set(room.code, room);
+    room.add(conn);
+    traffic.roomsOpened += 1;
+    if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
+    conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
+    conn.send(room.roster());
+    log(`room ${room.code} hosted by ${conn.name}#${conn.id}`
+        + (room.daily ? " (daily)"
+           : (room.open ? " (open)" : "") + (room.pass ? " (passcode)" : "")));
+    return room;
+  }
+
+  // `conn` walks into `room`: the one place a room_joined is made, whichever
+  // door it came through.  `token` names the seat of a member coming back.
+  function admit(conn, room, msg, how, { spectate = false, token } = {}) {
+    conn.name = cleanName(msg.name);
+    conn.skin = cleanSkin(msg.skin);
+    conn.spectator = spectate || undefined;
+    room.add(conn, token);
+    conn.send({ type: "room_joined", code: room.code, id: conn.id, host: room.host.id, token: conn.token });
+    room.broadcast(room.roster());
+    log(`room ${room.code}: ${conn.name}#${conn.id} ${how}`);
+  }
+
   function handle(conn, msg) {
     switch (msg.type) {
       case "ping":
@@ -798,9 +874,11 @@ export function createRelay(options = {}) {
         conn.browsedAt = Date.now();
         const list = [];
         for (const room of rooms.values()) {
-          if (!room.open || room.locked || room.daily
-              || room.banned.has(conn.ip)) continue;
-          list.push(room.listing());
+          if (!room.open || room.daily) continue;
+          // the door as somebody holding the passcode would find it: a full
+          // room is still a row, marked, and so is a passcoded one
+          const why = canEnter(room, conn, { pass: room.pass });
+          if (why === null || why === "full") list.push(room.listing());
         }
         list.sort((a, b) => b.players - a.players || (a.code < b.code ? -1 : 1));
         // The DAILY GAME (2026-09-13): inside the last half hour before
@@ -836,17 +914,14 @@ export function createRelay(options = {}) {
         if (conn.room) { conn.send({ type: "room_error", reason: "already_in_room" }); return; }
         let open = null, running = null;
         for (const room of rooms.values()) {
-          if (!room.daily || room.banned.has(conn.ip)) continue;
-          if (room.full()) continue;
-          if (room.locked) { running = running || room; continue; }
-          open = open || room;
+          if (!room.daily) continue;
+          // a daily match already running is watched, like quick play's
+          if (canEnter(room, conn, { version: cleanVersion(msg), spectate: room.locked }) !== null) continue;
+          if (room.locked) running = running || room;
+          else open = open || room;
         }
         if (open) {
-          conn.name = cleanName(msg.name);
-          open.add(conn);
-          conn.send({ type: "room_joined", code: open.code, id: conn.id, host: open.host.id, token: conn.token });
-          open.broadcast(open.roster());
-          log(`room ${open.code}: ${conn.name}#${conn.id} joined the daily`);
+          admit(conn, open, msg, "joined the daily");
           return;
         }
         if (running) {
@@ -854,50 +929,19 @@ export function createRelay(options = {}) {
                       members: running.members.size });
           return;
         }
-        if (rooms.size >= limits.rooms) {
-          traffic.rejected += 1;
-          conn.send({ type: "room_error", reason: "server_full" });
-          return;
-        }
-        conn.name = cleanName(msg.name);
-        const room = new Room(makeCode(rooms), conn, limits.members);
-        room.daily = true;
-        room.mode = "daily";
-        room.open = true;   // discoverable for spectate; quick_join skips it
-        rooms.set(room.code, room);
-        room.add(conn);
-        traffic.roomsOpened += 1;
-        if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
-        conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
-        conn.send(room.roster());
-        log(`room ${room.code} hosted by ${conn.name}#${conn.id} (daily)`);
+        // open, so it is discoverable to watch; quick_join and the list skip it
+        openRoom(conn, msg, { mode: "daily", open: true });
         return;
       }
 
       case "host_room": {
         if (conn.room) { conn.send({ type: "room_error", reason: "already_in_room" }); return; }
-        if (rooms.size >= limits.rooms) {
-          traffic.rejected += 1;
-          conn.send({ type: "room_error", reason: "server_full" });
-          log(`room refused: at the ${limits.rooms}-room ceiling`);
-          return;
-        }
-        conn.name = cleanName(msg.name);
-        conn.skin = cleanSkin(msg.skin);
-        const room = new Room(makeCode(rooms), conn, cleanMax(msg.max));
-        room.seats = cleanSeats(msg.max);
-        room.open = msg.open === true;
-        room.pass = cleanPass(msg.pass);
-        room.version = cleanVersion(msg);
-        if (conn.seen.get("quick_join")) room.mode = "quick";
-        rooms.set(room.code, room);
-        room.add(conn);
-        traffic.roomsOpened += 1;
-        if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
-        conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
-        conn.send(room.roster());
-        log(`room ${room.code} hosted by ${conn.name}#${conn.id}` +
-            (room.open ? " (open)" : "") + (room.pass ? " (passcode)" : ""));
+        openRoom(conn, msg, {
+          mode: conn.seen.get("quick_join") ? "quick" : "host",
+          open: msg.open === true,
+          pass: cleanPass(msg.pass),
+          max: msg.max,
+        });
         return;
       }
 
@@ -906,23 +950,6 @@ export function createRelay(options = {}) {
         const code = typeof msg.code === "string" ? msg.code.toUpperCase() : "";
         const room = rooms.get(code);
         if (!room) { conn.send({ type: "room_error", reason: "not_found" }); return; }
-        if (room.banned.has(conn.ip)
-            || (typeof msg.token === "string" && room.bannedTokens.has(msg.token))) {
-          conn.send({ type: "room_error", reason: "removed" });
-          return;
-        }
-        // The passcode is checked before the door's state is told: a
-        // stranger without it learns nothing about the room past "not
-        // yours".  Watchers need it too -- a passcoded room is a room
-        // with friends in it, and the match is theirs to show.
-        if (room.pass !== null && cleanPass(msg.pass) !== room.pass) {
-          conn.send({ type: "room_error", reason: "passcode" });
-          return;
-        }
-        if (versionMismatch(room, cleanVersion(msg))) {
-          conn.send({ type: "room_error", reason: "version", host: room.version });
-          return;
-        }
         // Coming back to a seat the room is still holding (POK-284): the
         // door's state is not asked, because they were already inside.
         // A stale or unknown token is an ordinary join.
@@ -931,19 +958,15 @@ export function createRelay(options = {}) {
         // lock_room exists to stop competitors joining a running match,
         // and somebody who asks to WATCH is not one.  The flag rides the
         // roster so every client knows who is a guest of the next match
-        // rather than a trainer in this one.
+        // rather than a trainer in this one.  Watchers need the passcode
+        // too -- a passcoded room is a room with friends in it, and the
+        // match is theirs to show.
         const spectate = msg.spectate === true;
-        if (!resuming) {
-          if (room.locked && !spectate) { conn.send({ type: "room_error", reason: "locked" }); return; }
-          if (room.full()) { conn.send({ type: "room_error", reason: "full" }); return; }
-        }
-        conn.name = cleanName(msg.name);
-        conn.skin = cleanSkin(msg.skin);
-        conn.spectator = spectate || undefined;
-        room.add(conn, resuming ? msg.token : undefined);
-        conn.send({ type: "room_joined", code: room.code, id: conn.id, host: room.host.id, token: conn.token });
-        room.broadcast(room.roster());
-        log(`room ${room.code}: ${conn.name}#${conn.id} ${resuming ? "rejoined" : spectate ? "spectates" : "joined"}`);
+        const why = canEnter(room, conn, { token: msg.token, pass: msg.pass,
+                                           version: cleanVersion(msg), spectate, resuming });
+        if (why) { refuse(conn, room, why); return; }
+        admit(conn, room, msg, resuming ? "rejoined" : spectate ? "spectates" : "joined",
+              { spectate, token: resuming ? msg.token : undefined });
         return;
       }
 
@@ -956,10 +979,9 @@ export function createRelay(options = {}) {
         let best = null;
         for (const room of rooms.values()) {
           // a daily room waits for its hour; quick play wants a game NOW,
-          // and a passcoded room wants somebody who knows the host
-          if (!room.open || room.locked || room.daily || room.pass !== null
-              || room.banned.has(conn.ip)) continue;
-          if (room.full()) continue;
+          // and a passcoded room (no pass is asked here) wants somebody who
+          // knows the host
+          if (!room.open || room.daily || canEnter(room, conn) !== null) continue;
           if (!best || room.members.size > best.members.size) best = room;
         }
         if (!best) {
@@ -971,9 +993,8 @@ export function createRelay(options = {}) {
           // join it as a spectator and be seated in the next match.
           let running = null;
           for (const room of rooms.values()) {
-            if (!room.open || !room.locked || room.pass !== null
-                || room.banned.has(conn.ip)) continue;
-            if (room.full()) continue;
+            if (!room.open || !room.locked
+                || canEnter(room, conn, { spectate: true }) !== null) continue;
             if (!running || room.members.size > running.members.size) running = room;
           }
           if (running) {
@@ -984,16 +1005,9 @@ export function createRelay(options = {}) {
           conn.send({ type: "no_open_rooms" });
           return;
         }
-        if (versionMismatch(best, cleanVersion(msg))) {
-          conn.send({ type: "room_error", reason: "version", host: best.version });
-          return;
-        }
-        conn.name = cleanName(msg.name);
-        conn.skin = cleanSkin(msg.skin);
-        best.add(conn);
-        conn.send({ type: "room_joined", code: best.code, id: conn.id, host: best.host.id, token: conn.token });
-        best.broadcast(best.roster());
-        log(`room ${best.code}: ${conn.name}#${conn.id} quick-joined`);
+        const why = canEnter(best, conn, { version: cleanVersion(msg) });
+        if (why) { refuse(conn, best, why); return; }
+        admit(conn, best, msg, "quick-joined");
         return;
       }
 

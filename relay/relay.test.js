@@ -954,6 +954,41 @@ test("daily_join shares one room, and quick_join never seats there", async () =>
   }
 });
 
+// The daily's door was its own copy of the filter, and it had lost the version
+// gate and the ceiling's log line on the way (POK-330 #46).
+test("the daily door checks the version, and logs the room ceiling, like the others", async () => {
+  const lines = [];
+  const relay = createRelay({ daily: "19:00|America/Chicago|7PM CENTRAL",
+                              limits: { rooms: 2 }, log: (l) => lines.push(l) });
+  const addr = await relay.listen(0, "127.0.0.1");
+  try {
+    const a = await connect(addr.port);
+    a.send({ type: "daily_join", name: "EARLY", protocol: 1 });
+    const first = await a.until("room_hosted");
+
+    // another build is not seated beside it: it gets a daily room of its own
+    const b = await connect(addr.port);
+    b.send({ type: "daily_join", name: "OTHER", protocol: 2 });
+    const second = await b.next();
+    assert.equal(second.type, "room_hosted");
+    assert.notEqual(second.code, first.code);
+
+    // the same build still lands in the first one
+    const c = await connect(addr.port);
+    c.send({ type: "daily_join", name: "SAME", protocol: 1 });
+    assert.equal((await c.next()).code, first.code);
+
+    // a third build finds no room it can share and the ceiling reached
+    const d = await connect(addr.port);
+    d.send({ type: "daily_join", name: "THIRD", protocol: 3 });
+    assert.deepEqual(await d.next(), { type: "room_error", reason: "server_full" });
+    assert.ok(lines.includes("room refused: at the 2-room ceiling"), lines.join("\n"));
+    a.end(); b.end(); c.end(); d.end();
+  } finally {
+    await relay.close();
+  }
+});
+
 // ------- the lobby list and the passcode (2026-09-13)
 
 test("list_rooms shows every joinable lobby: host, skin, trainers over seats, the lock", async () => {

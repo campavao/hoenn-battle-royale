@@ -42,7 +42,7 @@ Client -> server:
 | `all` | `m` | `m` to every other member |
 | `ping` | | -> `pong` |
 | `info` | | -> `info {motd, rooms, conns, minProtocol, daily?}` |
-| `daily_join` | `name` | the one shared DAILY GAME room |
+| `daily_join` | `name, skin?, patch?, protocol?` | the one shared DAILY GAME room: joins it, hosts it, or `match_in_progress` while it runs. A daily of another build is skipped (the version gate), so each build gets its own |
 | `quick_join` | `name, patch?, protocol?` | joins the fullest open room, or hosts one |
 | `set_open` | `open` | host only: open/close the room to `quick_join` |
 
