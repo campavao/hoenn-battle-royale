@@ -19,6 +19,7 @@
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
 #include "br/br_field.h"
+#include "br/br_engage.h"
 
 EWRAM_DATA struct BrSeat gBrSeats[BR_MAX_SEATS] = {0};
 EWRAM_DATA u8 gBrSeatBusy[BR_MAX_SEATS] = {0};
@@ -116,6 +117,19 @@ u8 BrGhosts_Wanted(void)
     for (seat = 0; seat < BR_MAX_SEATS; seat++)
         if (InView(&gBrSeats[seat]))
             n++;
+    return n;
+}
+
+u8 BrGhosts_WantedNear(void)
+{
+    u8 seat, n = 0;
+
+    for (seat = 0; seat < BR_MAX_SEATS; seat++)
+    {
+        if (InView(&gBrSeats[seat])
+         && BrField_ViewDistance(gBrSeats[seat].x, gBrSeats[seat].y) <= BR_SIGHT_RANGE)
+            n++;
+    }
     return n;
 }
 

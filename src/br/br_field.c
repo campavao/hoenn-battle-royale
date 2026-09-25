@@ -177,6 +177,7 @@ u16 BrField_ViewDistance(s16 x, s16 y)
 void BrField_ShareObjects(u8 *ghosts, u8 *loot)
 {
     u8 wantGhosts = BrGhosts_Wanted();
+    u8 nearGhosts = BrGhosts_WantedNear();
     u8 wantLoot = BrLoot_Wanted();
     u8 i, room = 0, owed;
 
@@ -187,7 +188,11 @@ void BrField_ShareObjects(u8 *ghosts, u8 *loot)
             room++;
     }
     room = room > BR_NPC_HEADROOM ? room - BR_NPC_HEADROOM : 0;
-    owed = min(min(wantLoot, BR_LOOT_SHARE), room);
+    // The loot's share is what the ghosts close enough to engage leave of it. One of
+    // those with no object is neither drawn nor challenged by us, though it is the lower
+    // seat that challenges; a ball, even at our feet, can wait for a slot.
+    owed = room > nearGhosts ? room - nearGhosts : 0;
+    owed = min(min(wantLoot, BR_LOOT_SHARE), owed);
     *ghosts = min(min(wantGhosts, BR_MAX_GHOSTS), room - owed);
     *loot = min(min(wantLoot, BR_MAX_LOOT), room - *ghosts);
 }

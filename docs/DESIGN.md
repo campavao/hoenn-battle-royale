@@ -146,7 +146,8 @@ out, and one that comes in waits as it would in a menu.
   `place`, walked by `step`, turned by `face`. A seat on another map, or outside the box
   the engine keeps objects in, is a roster row with no object. The sixteen object slots
   are shared out every frame (`BrField_ShareObjects`): the map's own people keep the last
-  three free ones, loot is owed two, and the nearest ghosts get the rest, twelve at most.
+  three free ones, loot is owed two once every ghost in engage range has one, and the
+  nearest ghosts get the rest, twelve at most.
   Ghosts are not solid (POK-310), and an `out` takes a seat off every map for good. Skins
   are player and NPC sprites.
 - **Loot** (`br_loot.h`): a `spill` puts a fallen trainer's team down as balls and its

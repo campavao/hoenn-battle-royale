@@ -1,0 +1,69 @@
+# object-slots-near: when the view is crowded, a ghost close enough to engage gets an
+# object before the loot's share does (POK-330 #48, the review).
+#
+# object-slots.txt's share gave loot up to BR_LOOT_SHARE (2) slots ahead of every ghost,
+# however far the balls and however near the ghosts. A ghost with no object is neither
+# drawn nor engaged (BrEngage_Tick skips it, and the lower seat is the one that
+# challenges), so a trainer two steps away could stand there invisible and unchallenged
+# while two balls across the screen were drawn. Now the share is what the ghosts within
+# BR_SIGHT_RANGE (5) steps leave of it.
+#
+# Route 103 from (9,8), object-slots.txt's start: nothing else on the view, so the room
+# is 16 - the player - BR_NPC_HEADROOM (3) = 12. Map coords below include MAP_OFFSET (7):
+# we stand at (16,15).
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 12 09 00 08 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr 9
+# Eleven ghosts within five steps: seats 1..5 at (11..15, 15) and 6..10 at (17..21, 15),
+# one to five steps either side, and seat 11 five steps south at (16, 20). Seat 12 eight
+# steps south at (16, 23), still in view.
+pokebytes gDecompressionBuffer 01 01 00 12 0B 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 02 01 00 12 0C 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 03 01 00 12 0D 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 04 01 00 12 0E 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 05 01 00 12 0F 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 06 01 00 12 11 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 07 01 00 12 12 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 08 01 00 12 13 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 09 01 00 12 14 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 0A 01 00 12 15 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 0B 01 00 12 10 00 14 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 0C 01 00 12 10 00 17 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+# ...and a spill of two balls from seat 20, thirteen and fourteen steps off at (24, 20)
+# and (25, 20): seat, map 0:18, count 2, then key, x, y, species, level a row.
+pokebytes gDecompressionBuffer 14 00 12 02 00 14 18 00 14 00 15 01 05 01 14 19 00 14 00 15 01 05 00
+mailsend gBrMailbox 11 gDecompressionBuffer 23
+wait 30
+# Twelve slots: the eleven near ghosts, and one ball in the one that is left. Seat 11 was
+# the one the old share dropped -- five steps away, the lower seats ahead of it on the
+# tie -- with seat 12, so that both balls could be up.
+expectne u8 gBrSeats+25 0xFF
+expectne u8 gBrSeats+105 0xFF
+expectne u8 gBrSeats+169 0xFF
+expectne u8 gBrSeats+185 0xFF
+expect u8 gBrSeats+201 0xFF
+expect u8 gBrLoot+0xA0 2
+expect u8 gBrLoot+0xA1 1
+shot crowd
+# Seat 11 walks off past engage range, to (16, 22): now only ten are near, and the second
+# ball has its slot back ahead of it.
+pokebytes gDecompressionBuffer 0B 01 00 12 10 00 16 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 30
+expect u8 gBrSeats+185 0xFF
+expect u8 gBrLoot+0xA1 2
+shot ball-back
+say object slots near ok

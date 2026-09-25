@@ -60,7 +60,8 @@ void BrField_CancelLeave(void (*enter)(void));
 // OBJECT_EVENTS_COUNT is 16, and the map's own people -- its trainers above all -- need
 // theirs as they scroll into view. BR's ghosts and loot never take the last
 // BR_NPC_HEADROOM free slots (and give theirs back when the map's people eat into them),
-// and loot is owed up to BR_LOOT_SHARE of what is left before the ghosts take the rest.
+// and loot is owed up to BR_LOOT_SHARE of what is left before the ghosts take the rest
+// -- after the ghosts within engage range, which cannot be challenged without one.
 #define BR_NPC_HEADROOM 3
 #define BR_LOOT_SHARE 2
 // Inside the box RemoveObjectEventIfOutsideView keeps an object in (object coords,

@@ -59,6 +59,9 @@ void BrGhosts_Face(u8 seat, u8 dir);
 void BrGhosts_Remove(u8 seat);
 // Seats standing on this map inside the view box: how many ghosts want an object.
 u8 BrGhosts_Wanted(void);
+// ...and how many of them are within BR_SIGHT_RANGE steps of us: close enough to
+// engage, which a ghost with no object cannot be (BrEngage_Tick skips it).
+u8 BrGhosts_WantedNear(void);
 // The seat is out of the match (BR_MSG_OUT): its ghost goes, and stays gone. An
 // eliminated trainer's page keeps sending where it is -- it is spectating now -- so a
 // PLACE or STEP after the OUT is not them coming back (POK-330 #5).

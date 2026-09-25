@@ -15,7 +15,8 @@
 //
 // The table only has to hold what could be on one map at once. The object event table
 // is 16 slots, and BrField_ShareObjects gives the ground its share of them: up to
-// BR_LOOT_SHARE ahead of the ghosts, and whatever they leave after that.
+// BR_LOOT_SHARE ahead of the ghosts (but behind any in engage range), and whatever
+// they leave after that.
 
 #define BR_MAX_LOOT 8
 // Object-event local ids for loot, 0xC0..0xC7: just below the ghosts' 0xC8 (br_config.h)
