@@ -99,10 +99,39 @@ describe('Emulator', () => {
     const patched = new Uint8Array([9, 9, 9, 9]);
     await emu.startBytes(patched);
 
-    expect(calls).toEqual(['sync', 'load /data/games/patched.gba']);
-    expect(files.get('/data/games/patched.gba')).toEqual(patched);
+    expect(calls).toEqual(['load /patched.gba']);
+    expect(files.get('/patched.gba')).toEqual(patched);
     expect(emu.readRom()).toEqual(original);
     expect(emu.isRunning()).toBe(true);
+  });
+
+  it('never stores the patched image in IndexedDB: nothing under /data but the ROM, no sync (POK-330 #40)', async () => {
+    const { emu, calls, files } = await make();
+    await emu.start(new Uint8Array([1, 2, 3]));
+    calls.length = 0;
+    await emu.startBytes(new Uint8Array([9, 9]));
+    await emu.reboot();
+    expect(calls).not.toContain('sync');
+    expect([...files.keys()].filter((p) => p.startsWith('/data/'))).toEqual(['/data/games/emerald.gba']);
+  });
+
+  it('drops the patched copy an older shell stored, once, and Forget takes it too (POK-330 #40)', async () => {
+    const core = fakeCore();
+    core.files.set('/data/games/patched.gba', new Uint8Array([7]));
+    await Emulator.create({} as HTMLCanvasElement, async () => core.m);
+    expect(core.files.has('/data/games/patched.gba')).toBe(false);
+    expect(core.calls).toEqual(['sync']);
+
+    // A second start finds nothing to drop and writes nothing.
+    core.calls.length = 0;
+    const emu = await Emulator.create({} as HTMLCanvasElement, async () => core.m);
+    expect(core.calls).toEqual([]);
+
+    // An old copy that reappears (another tab on an old shell) goes with the ROM.
+    await emu.start(new Uint8Array([1]));
+    core.files.set('/data/games/patched.gba', new Uint8Array([7]));
+    await emu.forgetRom();
+    expect([...core.files.keys()].filter((p) => p.startsWith('/data/'))).toEqual([]);
   });
 
   it('sends only key transitions', async () => {

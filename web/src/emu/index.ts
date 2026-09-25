@@ -78,8 +78,14 @@ export type CoreFactory = (opts: { canvas: HTMLCanvasElement; brHeadless?: boole
 
 const ROM_PATH = '/data/games/emerald.gba';
 // A patched image boots from a separate path so start() never overwrites the
-// player's original, stored ROM with the patched bytes (POK-213).
-const PATCHED_ROM_PATH = '/data/games/patched.gba';
+// player's original, stored ROM with the patched bytes (POK-213). Outside /data, which
+// is the IndexedDB mount: the image is rebuilt from the BPS on every launch, so storing
+// it was 16 MiB written per boot and a whole game left behind by 'Forget stored ROM'
+// (POK-330 #40). Same basename as before, so the core's save and auto-save names --
+// /data/saves/patched.sav, /autosave/patched_auto.ss -- do not move.
+const PATCHED_ROM_PATH = '/patched.gba';
+/** Where every boot before POK-330 #40 left the patched image, in IndexedDB. */
+const LEGACY_PATCHED_PATH = '/data/games/patched.gba';
 const SCREENSHOT_PATH = '/data/screenshots/shot.png';
 const AUTOSAVE_DIR = '/autosave';
 
@@ -106,7 +112,20 @@ export class Emulator {
     const f = factory ?? (await loadCoreFactory());
     const m = await f({ canvas, brHeadless: headless });
     await m.FSInit();
-    return new Emulator(m);
+    const emu = new Emulator(m);
+    await emu.dropLegacyPatched();
+    return emu;
+  }
+
+  /** The patched image an older shell stored in IndexedDB (POK-330 #40): gone the first
+   *  time a newer one starts, and a no-op every time after. */
+  private async dropLegacyPatched(): Promise<void> {
+    try {
+      this.m.FS.unlink(LEGACY_PATCHED_PATH);
+    } catch {
+      return; // never stored, or already dropped
+    }
+    await this.m.FSSync();
   }
 
   // ---- ROM storage: the player's own ROM, imported once, kept in the core's IDBFS ----
@@ -126,10 +145,13 @@ export class Emulator {
   }
 
   async forgetRom(): Promise<void> {
-    try {
-      this.m.FS.unlink(ROM_PATH);
-    } catch {
-      /* nothing stored */
+    // The legacy patched copy too: it is a whole game, and the button says the ROM is gone.
+    for (const path of [ROM_PATH, LEGACY_PATCHED_PATH]) {
+      try {
+        this.m.FS.unlink(path);
+      } catch {
+        /* nothing stored */
+      }
     }
     await this.m.FSSync();
   }
@@ -171,10 +193,10 @@ export class Emulator {
 
   /** Boots arbitrary bytes -- typically a BPS-patched image -- from a separate path,
    * leaving the stored original ROM at rest untouched. Use this instead of start()
-   * whenever `bytes` is a patched copy rather than the player's own ROM file. */
+   * whenever `bytes` is a patched copy rather than the player's own ROM file. The copy
+   * lives in memory only: nothing is synced to IndexedDB. */
   async startBytes(bytes: Uint8Array): Promise<void> {
     this.m.FS.writeFile(PATCHED_ROM_PATH, bytes);
-    await this.m.FSSync();
     await this.boot(PATCHED_ROM_PATH);
   }
 
