@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { botRows, botSeatsOf, departedSeats, freshMatch, onAgain, onPromotion, seatsFor } from './lifecycle';
+import { botRows, botSeatsOf, catchUp, departedSeats, freshMatch, onAgain, onPromotion, seatsFor } from './lifecycle';
 import { dealBots } from '../bots/roster';
 import type { RosterEvent } from '../net/relay';
 
@@ -93,5 +93,25 @@ describe("the host's `again`", () => {
   it('means nothing to the host that sent it, or to a page already back in the room', () => {
     expect(onAgain({ running: true, match: inMatch, graceArmed: false })).toBe('ignore');
     expect(onAgain({ running: false, match: freshMatch(), graceArmed: false })).toBe('ignore');
+  });
+});
+
+// POK-330 #25: a seat back from a blip is a late arrival. The relay held it, but nobody told
+// it what happened while it was gone -- its own elimination above all.
+describe('catching a seat up on the match', () => {
+  const ring = { phase: 2, sx: 3, sy: -1, r: 4, place: 'ROUTE 104' };
+
+  it('says where the fog is, how long it has, and who is out, in the order they went', () => {
+    expect(catchUp(1, { ring, clockLeft: 42, placements: [30, 7, 31] })).toEqual([
+      { t: 'ring', seat: 1, ...ring },
+      { t: 'clock', seat: 1, left: 42 },
+      { t: 'out', seat: 30 },
+      { t: 'out', seat: 7 },
+      { t: 'out', seat: 31 },
+    ]);
+  });
+
+  it('still names the fallen before the fog has moved', () => {
+    expect(catchUp(1, { clockLeft: 90, placements: [7] })).toEqual([{ t: 'out', seat: 7 }]);
   });
 });

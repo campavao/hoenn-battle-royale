@@ -330,7 +330,12 @@ export class Bridge {
       this.refusedCount++;
       return;
     }
-    if (msgSeat(msg) === this.seat && !ADDRESSED_TO_SEAT.has(msg.t)) return; // our own message, echoed back
+    // Our own message, echoed back -- except the host telling us we are out, which is
+    // how a seat that comes back from a blip learns it was eliminated while it was gone
+    // (POK-330 #25). Nobody else may say that about us, and we cannot hear it from
+    // ourselves.
+    const echo = msgSeat(msg) === this.seat && !ADDRESSED_TO_SEAT.has(msg.t);
+    if (echo && !(msg.t === 'out' && ev.from === host)) return;
     if (msg.t === 'bt' && !this.takesBlock(msg, ev.from)) return;
 
     this.noteChallenge(msg);

@@ -405,6 +405,19 @@ describe('who may say what (POK-330 #24)', () => {
     socket.receive({ type: 'recv', from: 9, m: { t: 'out', seat: 9 } });
     expect(heard).toHaveLength(1);
   });
+
+  // POK-330 #25: a seat back from a blip learns it was eliminated while it was gone from
+  // the host, which is the one `out` naming us that is not our own echo.
+  it('passes an `out` naming us from the host, and from nobody else', () => {
+    const { socket, frame, romDrainIn, bridge, heard } = joined();
+    socket.receive({ type: 'recv', from: 7, m: { t: 'out', seat: 2 } });
+    expect(heard).toEqual([]);
+    socket.receive({ type: 'recv', from: 1, m: { t: 'out', seat: 2 } });
+    frame();
+    expect(heard).toEqual([[{ t: 'out', seat: 2 }, 1]]);
+    expect(bridge.roster.get(2)?.alive).toBe(false);
+    expect(drainMsgs(romDrainIn)).toEqual([{ t: 'out', seat: 2 }]);
+  });
 });
 
 // POK-330 #20 and #7: a link battle's blocks go to the one seat being fought and are

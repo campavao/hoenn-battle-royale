@@ -844,7 +844,7 @@ export function createRelay(options = {}) {
         if (open) {
           conn.name = cleanName(msg.name);
           open.add(conn);
-          conn.send({ type: "room_joined", code: open.code, id: conn.id, host: open.host.id, token: conn.token });
+          conn.send({ type: "room_joined", code: open.code, id: conn.id, host: open.host.id, token: conn.token, rejoinMs: limits.rejoinMs });
           open.broadcast(open.roster());
           log(`room ${open.code}: ${conn.name}#${conn.id} joined the daily`);
           return;
@@ -868,7 +868,7 @@ export function createRelay(options = {}) {
         room.add(conn);
         traffic.roomsOpened += 1;
         if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
-        conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
+        conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token, rejoinMs: limits.rejoinMs });
         conn.send(room.roster());
         log(`room ${room.code} hosted by ${conn.name}#${conn.id} (daily)`);
         return;
@@ -894,7 +894,7 @@ export function createRelay(options = {}) {
         room.add(conn);
         traffic.roomsOpened += 1;
         if (rooms.size > traffic.peakRooms) traffic.peakRooms = rooms.size;
-        conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token });
+        conn.send({ type: "room_hosted", code: room.code, id: conn.id, token: conn.token, rejoinMs: limits.rejoinMs });
         conn.send(room.roster());
         log(`room ${room.code} hosted by ${conn.name}#${conn.id}` +
             (room.open ? " (open)" : "") + (room.pass ? " (passcode)" : ""));
@@ -941,7 +941,7 @@ export function createRelay(options = {}) {
         conn.skin = cleanSkin(msg.skin);
         conn.spectator = spectate || undefined;
         room.add(conn, resuming ? msg.token : undefined);
-        conn.send({ type: "room_joined", code: room.code, id: conn.id, host: room.host.id, token: conn.token });
+        conn.send({ type: "room_joined", code: room.code, id: conn.id, host: room.host.id, token: conn.token, rejoinMs: limits.rejoinMs });
         room.broadcast(room.roster());
         log(`room ${room.code}: ${conn.name}#${conn.id} ${resuming ? "rejoined" : spectate ? "spectates" : "joined"}`);
         return;
@@ -991,7 +991,7 @@ export function createRelay(options = {}) {
         conn.name = cleanName(msg.name);
         conn.skin = cleanSkin(msg.skin);
         best.add(conn);
-        conn.send({ type: "room_joined", code: best.code, id: conn.id, host: best.host.id, token: conn.token });
+        conn.send({ type: "room_joined", code: best.code, id: conn.id, host: best.host.id, token: conn.token, rejoinMs: limits.rejoinMs });
         best.broadcast(best.roster());
         log(`room ${best.code}: ${conn.name}#${conn.id} quick-joined`);
         return;

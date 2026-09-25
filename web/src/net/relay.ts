@@ -161,6 +161,9 @@ const PING_EVERY_MS = 10_000;
 const MISSED_PINGS = 2;
 const BACKOFF_START_MS = 500;
 const BACKOFF_MAX_MS = 15_000;
+/** How long the relay holds a dropped seat, when it does not say (relay/server.js's
+ *  limits.rejoinMs). */
+export const REJOIN_MS = 60_000;
 
 export interface HostOpts {
   name: string;
@@ -198,6 +201,10 @@ export class RelayClient {
    *  dropped socket gets the id it had, which is the page's seat. Spent by the rejoin;
    *  the relay hands out a new one with every room_hosted/room_joined. */
   token: string | null = null;
+  /** How long the relay holds a dropped seat for its rejoin, as it says in room_hosted/
+   *  room_joined. A host gives a vanished player exactly this long (POK-330 #25): any
+   *  shorter and a seat could come back into a match that had already eliminated it. */
+  rejoinMs = REJOIN_MS;
   /** What we last joined or hosted as, and where, so a rejoin can ask the same way.
    *  `code` above is cleared with the socket; this survives it, which is the point. */
   private lastOpts: JoinOpts | null = null;
@@ -329,6 +336,7 @@ export class RelayClient {
         this.hostId = msg.id as number;
         this.token = typeof msg.token === 'string' ? msg.token : null;
         this.lastCode = this.code;
+        this.noteRejoinMs(msg.rejoinMs);
         this.emit('room_hosted', { code: this.code, id: this.id });
         return;
       case 'room_joined':
@@ -337,6 +345,7 @@ export class RelayClient {
         this.hostId = msg.host as number;
         this.token = typeof msg.token === 'string' ? msg.token : null;
         this.lastCode = this.code;
+        this.noteRejoinMs(msg.rejoinMs);
         this.emit('room_joined', { code: this.code, id: this.id, host: this.hostId });
         return;
       case 'roster':
@@ -388,6 +397,11 @@ export class RelayClient {
       default:
         return; // an older/newer relay's unknown chatter is not fatal
     }
+  }
+
+  /** An older relay does not say, and keeps the default. */
+  private noteRejoinMs(ms: unknown): void {
+    this.rejoinMs = typeof ms === 'number' && Number.isFinite(ms) && ms > 0 ? ms : REJOIN_MS;
   }
 
   private handleClose(reason: string): void {

@@ -83,6 +83,7 @@ import { MatchRecord, recordLines } from './match/record';
 import {
   botRows,
   botSeatsOf,
+  catchUp,
   departedSeats,
   freshMatch,
   onAgain,
@@ -2196,6 +2197,9 @@ function wireRoom(
     const seats = seatsFor(controls.roster, members);
     if (seats.length === 0) return;
     const hostSeat = bridge.seat;
+    // Everybody in the room now was dealt in, or on a takeover has been hearing the match
+    // all along: only somebody who arrives, or comes back, needs catching up.
+    for (const m of controls.roster?.members ?? []) greeted.add(m.id);
     // The door shuts when the match starts, wherever the start came from (POK-260).
     // It used to be the START button's job alone, so a match dealt by the ten-second
     // buzzer left the room open -- latecomers walked into a running match as players,
@@ -2612,8 +2616,12 @@ function wireRoom(
     }
     renderSpectate(bridge, spectate);
   };
-  /** Seats this client has already caught up on the running match. */
+  /** Seats this client has already caught up on the running match. A seat that leaves is
+   *  taken off it, so coming back is a late arrival like any other (POK-330 #25). */
   const greeted = new Set<number>();
+  /** Seats caught up on everything but the loot where they stand, which waits for their
+   *  first `place` to say where that is. */
+  const owedLoot = new Set<number>();
   let bots: ReturnType<typeof startBots> | null = null;
   /** The room we are attached to, so a second attach can tell a rejoin of it (the relay
    *  handed our seat back) from a new room. */
@@ -2636,11 +2644,18 @@ function wireRoom(
     // the room to an heir when our socket went (POK-330 #13).
     isHost = host === seat;
     // A rejoin mid-match gets a fresh Bridge and with it a fresh roster: the bots go
-    // back on it by name, the same as they went on at the `start` (POK-330 #51).
+    // back on it by name, the same as they went on at the `start` (POK-330 #51), and the
+    // fallen go back on it fallen.
     if (match.seed !== 0) bridge.roster.seatBots(botRows(match.seed, match.botSeats));
-    // ...and what we last said to the seat we are fighting, which the blip may have
-    // swallowed (#7).
-    if (rejoin) bridge.resendBlocks();
+    for (const out of match.out) bridge.roster.applyMsg({ t: 'out', seat: out });
+    if (rejoin) {
+      // ...and what we last said to the seat we are fighting, which the blip may have
+      // swallowed (#7).
+      bridge.resendBlocks();
+      // So may our own `out`, and a host that never hears it waits on us for ever
+      // (POK-330 #25). A second one is harmless everywhere.
+      if (match.out.has(seat) && !match.ended) relay.all({ t: 'out', seat });
+    }
     setStatus(`Room ${code}`);
     renderRoom(bridge);
     const seatBase = symbols?.get('gBrMySeat');
@@ -2763,6 +2778,12 @@ function wireRoom(
         if (m.seat === bridge!.seat) bridge!.pushToRom({ t: 'land', ...land });
         else bridge!.relay.to(m.seat, { t: 'land', ...land });
       }
+      // A seat the host has just caught up on the match learns what is lying where it
+      // stands, once its first `place` has said where that is (POK-330 #25).
+      if (m.t === 'place' && m.map && director && owedLoot.delete(from)) {
+        const standing = loot.forMap(m.map);
+        if (standing) bridge!.relay.to(from, standing);
+      }
       // Somebody else's ROM challenged one of our bots, or fought one. Same as our own
       // ROM's above -- the host is the only page that has the bot's team -- and the
       // relay's `from` is what says whose ROM it was.
@@ -2782,6 +2803,12 @@ function wireRoom(
       else if (m.t === 'result') spectate.noteResult(m.seat);
       else if (m.t === 'out') {
         bots?.bots.remove(m.seat); // a bot that is out stops being walked around
+        // The host saying we are out: we went while our socket was down and came back to
+        // a match that had buried us (POK-330 #25). Out is watching, as for anybody.
+        if (m.seat === seat) {
+          relay.canHost(false);
+          autoWatch();
+        }
         renderSpectate(bridge!, spectate);
       }
     });
@@ -2869,6 +2896,7 @@ function wireRoom(
     lootMap = null;
     busySeats.clear();
     greeted.clear();
+    owedLoot.clear();
     room.startAt = null;
     if (bridge) {
       bridge.roster.endMatch();
@@ -2920,9 +2948,12 @@ function wireRoom(
    *  somebody's wifi is not a forfeit, and the relay hands a returning client the seat
    *  it had. The wait is a timer rather than the next roster event, because a
    *  departure is usually the LAST roster event -- nothing else is coming to notice
-   *  it on. */
+   *  it on.
+   *
+   *  The grace is the relay's own seat hold (relay.rejoinMs), so there is one window: it
+   *  was ten seconds here against the relay's sixty, and a seat that came back in the
+   *  fifty between walked into a match that had already eliminated it (POK-330 #25). */
   const leaving = new Map<number, ReturnType<typeof setTimeout>>();
-  const LEFT_GRACE_MS = 10_000;
 
   /** Everything that makes this page the one running the match, undone at once
    *  (POK-330 #13). Standing down, a dropped socket and the way back to the room each
@@ -2970,7 +3001,7 @@ function wireRoom(
             if ((controls.roster?.members ?? []).some((m) => m.id === seat)) return;
             console.info(`[room] seat ${seat} left the match`);
             announceOut?.(seat);
-          }, LEFT_GRACE_MS),
+          }, relay.rejoinMs),
         );
       }
     }
@@ -3014,22 +3045,24 @@ function wireRoom(
     // next ring to learn the state spends up to two minutes looking at nothing. Not once
     // it has been won: the room is open again, and somebody walking in on the wait for
     // PLAY AGAIN would be handed a match that is over and lose the room screen to it.
+    // A player back from a blip is somebody arriving too (POK-330 #25): the relay held
+    // their seat, and everything said while they were gone -- who went out, them above
+    // all -- went to nobody. So a seat that leaves is forgotten here, and caught up again
+    // when it is back: the fog, the clock, one `out` per seat gone, and (on its first
+    // `place`) the loot where it stands.
     if (director && bridge && director.state.phase !== 'ended') {
       const state = director.state;
+      const here = new Set(ev.members.map((m) => m.id));
+      for (const seat of [...greeted]) {
+        if (here.has(seat)) continue;
+        greeted.delete(seat);
+        owedLoot.delete(seat);
+      }
       for (const m of ev.members) {
         if (m.id === bridge.seat || greeted.has(m.id)) continue;
         greeted.add(m.id);
-        if (!state.ring) continue;
-        relay.to(m.id, {
-          t: 'ring',
-          seat: bridge.seat,
-          phase: state.ring.phase,
-          sx: state.ring.sx,
-          sy: state.ring.sy,
-          r: state.ring.r,
-          place: state.ring.place,
-        });
-        relay.to(m.id, { t: 'clock', seat: bridge.seat, left: state.clockLeft });
+        owedLoot.add(m.id);
+        for (const msg of catchUp(bridge.seat, state)) relay.to(m.id, msg);
       }
     }
     // The buzzer, before the panel is drawn: a director created after the draw would

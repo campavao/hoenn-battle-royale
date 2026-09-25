@@ -1815,3 +1815,31 @@ test("a listed room is full when its door would say so, not by trainers over sea
     for (const c of [host, seeker, watcher, late]) c.end();
   }, { members: 2 });
 });
+
+// POK-330 #25: the page's host gives a vanished seat exactly as long as the relay holds
+// it. The two used to disagree (ten seconds against sixty), and a seat that came back in
+// between walked into a match that had already eliminated it.
+test("every door says how long a dropped seat is held", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "A", open: true });
+    const hosted = await a.until("room_hosted");
+    assert.equal(hosted.rejoinMs, 7_000);
+
+    const b = await connect(port);
+    b.send({ type: "join_room", code: hosted.code, name: "B" });
+    assert.equal((await b.until("room_joined")).rejoinMs, 7_000);
+
+    const c = await connect(port);
+    c.send({ type: "quick_join", name: "C" });
+    assert.equal((await c.until("room_joined")).rejoinMs, 7_000);
+
+    const d = await connect(port);
+    d.send({ type: "daily_join", name: "D" });
+    assert.equal((await d.until("room_hosted")).rejoinMs, 7_000);
+    const e = await connect(port);
+    e.send({ type: "daily_join", name: "E" });
+    assert.equal((await e.until("room_joined")).rejoinMs, 7_000);
+    for (const x of [a, b, c, d, e]) x.end();
+  }, { rejoinMs: 7_000 });
+});

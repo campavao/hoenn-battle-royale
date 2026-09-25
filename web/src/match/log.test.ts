@@ -53,6 +53,15 @@ describe('the match log', () => {
     expect(match.events[0]).toMatchObject({ map: '0:16', x: 12, y: 3 });
   });
 
+  it('writes a seat down as out once, however many times it hears so', () => {
+    // A page caught up after a blip hears every `out` again from the host (POK-330 #25).
+    const log = new MatchLog();
+    log.note(START, 0);
+    log.note({ t: 'out', seat: 1 }, 5_000);
+    log.note({ t: 'out', seat: 1 }, 9_000);
+    expect(log.current(9_000)?.events).toEqual([{ at: 5, t: 'out', seat: 1 }]);
+  });
+
   it('says nothing before a match has started', () => {
     const log = new MatchLog();
     log.note({ t: 'out', seat: 3 }, 500);
