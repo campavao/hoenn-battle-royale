@@ -20,10 +20,15 @@ for (const headless of [true, false]) {
     const mod = await import('/emu/mgba.js');
     const syms = await (await fetch('/patch/br-symbols.json')).json();
     const gMain = parseInt(syms.gMain, 16);
+    // The image the page booted, out of its core's memory: since POK-330 #40 the patched
+    // game is never stored in IndexedDB, so a second core is handed the bytes and writes
+    // them itself, as the bots' core does (app.ts, other.startBytes).
+    const image = window.__hbr.emu.m.FS.readFile('/patched.gba');
     const hidden = document.createElement('canvas');
     const m = await mod.default({ canvas: hidden, brHeadless: headless });
     await m.FSInit();
-    const ok = m.loadGame('/data/games/patched.gba');
+    m.FS.writeFile('/patched.gba', image);
+    const ok = m.loadGame('/patched.gba');
     const rd = () => { const u = m.HEAPU8; const p = m._brIwramPtr() + (gMain + 4 - 0x03000000); return ((u[p] | (u[p + 1] << 8) | (u[p + 2] << 16) | (u[p + 3] << 24)) >>> 0).toString(16); };
     await new Promise((r) => setTimeout(r, 4000));
     const cb2 = rd();
