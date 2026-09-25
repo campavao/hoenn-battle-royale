@@ -138,7 +138,13 @@ Two repo secrets make it fully automatic (GitHub → Settings → Secrets → Ac
 | secret | from | without it |
 |---|---|---|
 | `VERCEL_TOKEN` | Vercel → Account Settings → Tokens | the site step warns and skips; run `release-web.sh --prod` by hand |
-| `RAILWAY_TOKEN` | Railway account token (set 2026-09-18) | the relay step warns and skips; `railway up` by hand |
+| `RAILWAY_PROJECT_TOKEN` | Railway → `kanto-br-relay` → Settings → Tokens, environment `production` (set 2026-09-25) | the relay step falls back to `RAILWAY_TOKEN`, and warns and skips without either; `railway up` by hand |
+
+The relay step hands the project token to the CLI as `RAILWAY_TOKEN`, which names its own
+project and environment, so it deploys with `railway up --service hoenn-relay` and no
+`railway link`. The play log (`.github/workflows/play-log.yml`) reads the relay's logs with
+the same secret. `RAILWAY_TOKEN`, an account token set 2026-09-18, is only the fallback for
+both: Railway answers it with Not Authorized for this project.
 
 ## What must never happen
 

@@ -424,20 +424,30 @@ jobs:
 
       - name: Relay to Railway, if relay/ changed since the previous tag
         env:
-          # The account token (the same secret the play log reads with). The CLI calls
-          # it RAILWAY_API_TOKEN; RAILWAY_TOKEN to the CLI would mean a project token.
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          # The project token first (production only; the play log reads with it), the
+          # account token if there is none -- Railway answers the account one with Not
+          # Authorized for this project. To the CLI a project token is RAILWAY_TOKEN and
+          # an account token RAILWAY_API_TOKEN, and it sends RAILWAY_TOKEN whenever that
+          # is set at all, even empty, so the run exports exactly one of them.
+          PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
+          ACCOUNT_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           prev="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"
           if [ -n "$prev" ] && git diff --quiet "$prev" "$TAG" -- relay/; then
             echo "relay/ unchanged since $prev; the relay stays up"
             exit 0
           fi
-          if [ -z "$RAILWAY_API_TOKEN" ]; then
-            echo "::warning::relay/ changed but there is no RAILWAY_TOKEN in this repo's secrets; deploy it by hand: cd relay && railway up --detach"
+          if [ -z "$PROJECT_TOKEN$ACCOUNT_TOKEN" ]; then
+            echo "::warning::relay/ changed but there is no RAILWAY_PROJECT_TOKEN or RAILWAY_TOKEN in this repo's secrets; deploy it by hand: cd relay && railway up --detach"
             exit 0
           fi
           npm i -g @railway/cli
           cd relay
-          railway link --project 34e1da0b-5125-40be-9954-d90fafa3e156 --environment production --service hoenn-relay
+          if [ -n "$PROJECT_TOKEN" ]; then
+            # The token names its own project and environment: nothing to link.
+            export RAILWAY_TOKEN="$PROJECT_TOKEN"
+          else
+            export RAILWAY_API_TOKEN="$ACCOUNT_TOKEN"
+            railway link --project 34e1da0b-5125-40be-9954-d90fafa3e156 --environment production --service hoenn-relay
+          fi
           railway up --service hoenn-relay --detach --ci
