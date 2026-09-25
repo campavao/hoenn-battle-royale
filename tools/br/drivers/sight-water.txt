@@ -1,0 +1,37 @@
+# sight-water: water does not block the eyeline; a wall does (POK-330 #67).
+# Sees() stops only on a cell whose collision bit is set. Emerald's water and ledges
+# have none -- it is their behaviour that keeps a walker out -- so a trainer on the
+# shore sees straight across a pond, and one on a boat is seen from the shore. The
+# page's bots/sight.ts follows the same collision-only rule; this pins the ROM's half.
+#
+# Route 110's islet (16,26) south of the cycling road: a tree one tile north of us,
+# open sea three tiles south, then the road. Map coords below include MAP_OFFSET (7).
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 19 10 00 1A 00 BD BB C7 FF
+wait 400
+expect u8 gBrOwnPos 0
+expect u8 gBrOwnPos+1 25
+expect u16 gBrOwnPos+2 23
+expect u16 gBrOwnPos+4 33
+# the eyeline only fires in a started match (gBrMatch.phase = BR_PHASE_PLAY)
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# Seat 2 two tiles north, behind the tree, facing SOUTH at us: the tree blocks it.
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 02 01 00 19 17 00 1F 00 01 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrSeats+32 1
+expect u16 gBrEngage+4 0
+# Seat 1 on the road four tiles south, across three tiles of sea, facing NORTH at us.
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 01 01 00 19 17 00 25 00 02 01 01
+poke u16 gBrMailbox+0x0C 2
+wait 20
+expect u8 gBrSeats+16 1
+expect u16 gBrEngage+4 1
+expect u8 gBrEngage 1
+# ...and it went out naming them: CHALLENGE {challenger 0, opponent 1}
+expectmsg 5 u8 0 0
+expectmsg 5 u8 1 1
+shot across
+say sight water ok

@@ -290,9 +290,13 @@ struct BrLootItem *BrLoot_At(s16 x, s16 y)
 }
 
 // Where a dropped thing lands: our own cell first, then the ring of cells around it,
-// skipping anything impassable or already holding loot. Kanto scatters within two
-// tiles; this walks out in the same order every time, which is what keeps a spill
-// deterministic for everyone reading the message.
+// skipping a cell whose collision bit is set and one this spill has already used.
+// Only the collision bit, as the eyeline (br_engage.c): water and ledges are open
+// ground, so a trainer who goes out at sea still leaves their team behind, and the
+// page's match/loot.ts deals a bot's spill by the same rule (POK-330 #67). Loot an
+// earlier spill left is not looked at; a new piece can land on top of it. Kanto
+// scatters within two tiles; this walks out in the same order every time, which is
+// what keeps a spill deterministic for everyone reading the message.
 static const s8 sSpillDx[] = { 0, 1, -1, 0,  0, 1, -1,  1, -1, 2, -2,  0,  0 };
 static const s8 sSpillDy[] = { 0, 0,  0, 1, -1, 1,  1, -1, -1, 0,  0,  2, -2 };
 #define BR_SPILL_CELLS (sizeof(sSpillDx) / sizeof(sSpillDx[0]))

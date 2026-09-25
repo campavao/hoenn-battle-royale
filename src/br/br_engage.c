@@ -80,7 +80,10 @@ static void ReportBusy(void)
 }
 
 // Does a straight look from (x, y) facing dir reach (tx, ty) within range, with no
-// blocking tile in between? Ledges, water and walls all count as collision.
+// blocking tile in between? Only a cell's collision bit blocks it: walls, trees and
+// buildings do, while water, ledges and tall grass do not -- in Emerald their behaviour
+// is what keeps a walker out, not their collision. So a pond is seen across, which the
+// page's bots/sight.ts matches (POK-330 #67; tools/br/drivers/sight-water.txt).
 static bool8 Sees(s16 x, s16 y, u8 dir, s16 tx, s16 ty)
 {
     s16 dx = 0, dy = 0, i;
