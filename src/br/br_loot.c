@@ -191,9 +191,15 @@ static void ParseSpill(const u8 *d, u16 n)
     for (i = 0; i < count; i++)
     {
         const u8 *row = d + 4 + 9 * i;
+        u16 species = BrWire_Species(BrWire_ReadU16(row + 6));
 
+        // A ball of a species the ROM has no mon for stays off the ground: its name is
+        // what the held line and TOOK copy into a 42-byte line, and its CreateMon is what
+        // taking it runs (POK-330 #43). The rest of the spill still lands.
+        if (species == SPECIES_NONE)
+            continue;
         Add(BrWire_ReadU16(row), mapGroup, mapNum, (s16)BrWire_ReadU16(row + 2),
-            (s16)BrWire_ReadU16(row + 4), BrWire_ReadU16(row + 6), row[8], BR_LOOT_MON, 0);
+            (s16)BrWire_ReadU16(row + 4), species, BrWire_Level(row[8]), BR_LOOT_MON, 0);
     }
     off = 4 + 9 * count;
     if (off < n && d[off] != 0 && (u16)(off + 7) <= n)

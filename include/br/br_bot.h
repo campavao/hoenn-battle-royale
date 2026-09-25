@@ -44,8 +44,9 @@ extern struct BrBotFight gBrBotFight;
 
 void BrBot_Init(void);
 // One wire PackedMon row into a real mon. br_duel.c builds both of its parties with
-// it, so a duel's mons are made exactly the way a staged bot's are.
-void BrBot_BuildMon(const u8 *row, struct Pokemon *mon);
+// it, so a duel's mons are made exactly the way a staged bot's are. FALSE, and nothing
+// built, when the row's species is not a real one (BrWire_Species).
+bool8 BrBot_BuildMon(const u8 *row, struct Pokemon *mon);
 // The heap was re-initialised: anything this module was holding there is gone.
 void BrBot_HeapReset(void);
 void BrBot_Tick(void);

@@ -278,7 +278,9 @@ void BrGhosts_Place(u8 seat, u8 skin, u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 d
 {
     struct BrSeat *s;
 
-    if (seat >= BR_MAX_SEATS)
+    // A map gMapGroups does not have is nowhere: following that seat would warp there
+    // (br_spectate.c's FollowTick), so it is not placed at all (POK-330 #43).
+    if (seat >= BR_MAX_SEATS || !BrWire_MapOk(mapGroup, mapNum))
         return;
     s = &gBrSeats[seat];
     // A place is authoritative: drop whatever the object was doing and put it there.

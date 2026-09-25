@@ -1,0 +1,108 @@
+# wire-ids: species, move, level and map ids off the wire are checked before they reach
+# an engine table or a warp, one row at a time (POK-330 #43).
+#
+# The page's decoders refuse all of these first (web/src/net/rom-limits.test.ts); this is
+# the ROM's backstop. SPILL rows went into the ground unchecked, and their species' name
+# into a 42-byte line; TRAINER and DUEL rows into CreateMon, their moves into gBattleMoves
+# and their levels into the experience tables; LAND, START and PLACE maps into
+# SetWarpDestination, through gMapGroups past its end. A bad row is dropped and the rest
+# of its message still lands.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMySeat 0
+# SPILL from seat 5 on this map, four balls: species 0xFFFF, 260 (a "?"), 0, and a
+# KADABRA at level 250, keyed 0x0501..0x0504
+pokebytes gDecompressionBuffer 05 00 09 04 01 05 14 00 14 00 FF FF 1E 02 05 15 00 14 00 04 01 1E 03 05 16 00 14 00 00 00 1E 04 05 17 00 14 00 40 00 FA 00
+mailsend gBrMailbox 11 gDecompressionBuffer 41
+wait 10
+# only the KADABRA is on the ground, at level 100, and nothing after it
+expect u16 gBrLoot 0x0504
+expect u16 gBrLoot+6 64
+expect u8 gBrLoot+10 100
+expect u8 gBrLoot+11 1
+expect u8 gBrLoot+31 0
+# TRAINER from seat 30, "BOT": 0xFFFF, a MUDKIP at level 250, and 262 (a "?")
+pokebytes gDecompressionBuffer 1E 03 BC C9 CE 03 FF FF 1E 00 00 00 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+100 00 00 00 00 00 00 1B 01 FA 00 00 00 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+200 00 00 00 00 00 00 06 01 1E 00 00 00 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+300 00 00 00 00 00 00
+mailsend gBrMailbox 23 gDecompressionBuffer 306
+wait 30
+# staged with the one real mon, first in the party, at level 100; the slot behind it empty
+expect u8 gBrBotFight 1
+expect u8 gBrBotFight+1 30
+expect u8 gBrBotFight+3 1
+expect u8 gBrBotFight+4 0xBC
+expect u8 gEnemyParty+84 100
+expect u8 gEnemyParty+184 0
+# the same bot again with nothing real on the card (0 and EGG): no fight staged, and the
+# party it wiped is not left staged either
+pokebytes gDecompressionBuffer 1E 03 BC C9 CE 02 00 00 1E 00 00 00 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+100 00 00 00 00 00 00 9C 01 1E 00 00 00 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+200 00 00 00 00 00 00
+mailsend gBrMailbox 23 gDecompressionBuffer 206
+wait 30
+expect u8 gBrBotFight 0
+# PLACE seats 5 and 6 on map 255:0 and 0:57 (group 0 has 57 maps), and seat 7 on 0:9
+pokebytes gDecompressionBuffer 05 01 FF 00 0E 00 15 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 06 01 00 39 0E 00 15 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 07 01 00 09 0E 00 15 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 30
+expect u8 gBrSeats+0x50 0
+expect u8 gBrSeats+0x60 0
+expect u8 gBrSeats+0x70 1
+# LAND for us on map 255:1, then on 0:57: no cell is taken, and nothing warps us -- a
+# LAND with no picker open warps straight from the field, which is where the old code
+# sent us through gMapGroups past its end
+pokebytes gDecompressionBuffer 00 FF 01 0A 00 28 00
+mailsend gBrMailbox 25 gDecompressionBuffer 7
+pokebytes gDecompressionBuffer 00 00 39 0A 00 28 00
+mailsend gBrMailbox 25 gDecompressionBuffer 7
+wait 60
+expect u8 gBrPick+1 0
+expect u8 gBrPick+2 0
+expect u8 gBrPick+3 0
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+# DUEL, seat 29's two against seat 28's one: A is 0xFFFF, then a TREECKO at level 250
+# with move 512 and TACKLE; B is a TORCHIC. A's side goes into our own party, and a PEEK
+# about us answers with it, unencrypted.
+pokebytes gDecompressionBuffer 1D 1C 02 01 FF FF 1E 00 00 00 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+100 00 00 00 00 15 01 FA 00 00 00 00 00 00 02 23 00 21 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+200 00 00 00 00 18 01 05 00 00 00 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+300 00 00 00 00
+mailsend gBrMailbox 27 gDecompressionBuffer 304
+# six rows of CreateMon hold the drain up for a few frames
+wait 20
+expect u8 gBrDuel+4 1
+expect u8 gBrDuel+5 1
+expect u16 gBrMailbox+0x08 2
+pokebytes gDecompressionBuffer 01 00
+mailsend gBrMailbox 21 gDecompressionBuffer 2
+wait 4
+# out[2] is our PARTY: seat 0, one mon, TREECKO (0x0115) at level 100; its first move is
+# CreateMon's own, not 512 (0x0200), and its second is TACKLE (0x21)
+expect u8 gBrMailbox+0x98 7
+expect u8 gBrMailbox+0x9D 0
+expect u8 gBrMailbox+0x9E 1
+expect u8 gBrMailbox+0x9F 0x15
+expect u8 gBrMailbox+0xA0 0x01
+expect u8 gBrMailbox+0xA1 100
+expectne u8 gBrMailbox+0xA7 0
+expectle u8 gBrMailbox+0xA8 1
+expect u8 gBrMailbox+0xAB 0x21
+expect u8 gBrMailbox+0xAC 0
+# START with three rows: seat 1 on 255:0, seat 2 on 0:57, seat 3 on 0:9. Only seat 3 is
+# dealt a spawn.
+pokebytes gDecompressionBuffer 78 56 34 12 03 00 00 00 00 00 01 FF 00 0A 00 08 00 00 02 00 39 0A 00 08 00 00 03 00 09 0A 00 08 00 00
+mailsend gBrMailbox 14 gDecompressionBuffer 34
+wait 10
+expect u8 gBrMatch+1 1
+expect u8 gBrMatch+17 0
+expect u8 gBrMatch+18 0
+expect u8 gBrMatch+19 1
+say wire ids ok

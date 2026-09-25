@@ -15,7 +15,9 @@
 // than room state. See docs/WIRE.md for the message table and the ones this file
 // does NOT carry (with why), and `slots.ts` for the binary subset that also crosses
 // into the ROM's mailbox.
-//
+
+import { MAP_GROUP_SIZES, MAX_LEVEL, MOVES_COUNT, NUM_SPECIES, SPECIES_UNOWN_GAP } from './rom-limits';
+
 // A peer that speaks a different PROTOCOL is refused at `place`, same as Kanto.
 export const PROTOCOL = 1;
 
@@ -650,13 +652,25 @@ function reqDir(m: Record<string, unknown>, field: string): Dir {
   return v;
 }
 
+// A map the ROM actually has: its group, and a number under that group's count
+// (rom-limits.ts, from map_groups.json). Any u8 pair used to pass, and a LAND or a START
+// row naming group 255 sent its ROM warping through gMapGroups past the end (POK-330 #43).
 function isMapRef(v: unknown): v is MapRef {
   if (!isPlainObject(v)) return false;
   const { group, num } = v;
   return (
-    typeof group === 'number' && Number.isInteger(group) && group >= 0 && group <= 255 &&
-    typeof num === 'number' && Number.isInteger(num) && num >= 0 && num <= 255
+    typeof group === 'number' && Number.isInteger(group) && group >= 0 && group < MAP_GROUP_SIZES.length &&
+    typeof num === 'number' && Number.isInteger(num) && num >= 0 && num < MAP_GROUP_SIZES[group]
   );
+}
+
+// A species the ROM has a name and a picture for: under NUM_SPECIES, and not one of the
+// "?" placeholders between CELEBI and TREECKO. Anything up to 0xFFFF used to pass, and
+// indexed gSpeciesNames on every ROM that saw the row (POK-330 #43).
+function reqSpecies(m: Record<string, unknown>): number {
+  const v = reqInt(m, 'species', 1, NUM_SPECIES - 1);
+  if (v >= SPECIES_UNOWN_GAP[0] && v <= SPECIES_UNOWN_GAP[1]) fail(`placeholder species ${v}`);
+  return v;
 }
 
 function reqMapRef(m: Record<string, unknown>, field = 'map'): MapRef {
@@ -1032,8 +1046,8 @@ const decoders: Record<string, Decoder> = {
         key: reqInt(raw, 'key', 0, 0xffff),
         x: reqCell(raw, 'x'),
         y: reqCell(raw, 'y'),
-        species: reqInt(raw, 'species', 1, 0xffff),
-        level: reqInt(raw, 'level', 1, 100),
+        species: reqSpecies(raw),
+        level: reqInt(raw, 'level', 1, MAX_LEVEL),
       };
     });
     const bagRaw = m.bag;
@@ -1090,7 +1104,7 @@ const decoders: Record<string, Decoder> = {
       const hpFrac = raw.hpFrac;
       if (typeof hpFrac !== 'number' || !Number.isFinite(hpFrac)) fail('bad botrec hp');
       return {
-        species: reqInt(raw, 'species', 1, 0xffff),
+        species: reqSpecies(raw),
         hpFrac: Math.max(0, Math.min(1, hpFrac)),
         traded: raw.traded === true ? true : undefined,
       };
@@ -1140,15 +1154,15 @@ function validateMon(raw: unknown): PackedMon {
     for (const mv of moves) {
       if (!isPlainObject(mv)) fail('bad move');
       packedMoves.push({
-        id: reqInt(mv, 'id', 0, 0xffff),
+        id: reqInt(mv, 'id', 0, MOVES_COUNT - 1),
         pp: reqInt(mv, 'pp', 0, 99),
         ppUps: reqInt(mv, 'ppUps', 0, 3),
       });
     }
   }
   return {
-    species: reqInt(raw, 'species', 1, 0xffff),
-    level: reqInt(raw, 'level', 1, 100),
+    species: reqSpecies(raw),
+    level: reqInt(raw, 'level', 1, MAX_LEVEL),
     hp: reqInt(raw, 'hp', 0, 999),
     maxHp: reqInt(raw, 'maxHp', 1, 999),
     status: reqInt(raw, 'status', 0, 255),

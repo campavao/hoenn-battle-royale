@@ -41,4 +41,17 @@ bool8 BrWire_Assemble(struct BrAssembler *as, u8 baseType, bool8 isCont, const u
 u16 BrWire_ReadU16(const u8 *p);
 void BrWire_WriteU16(u8 *p, u16 v);
 
+// Ids off the wire, checked before they index an engine table (POK-330 #43). The page's
+// decoders refuse all of these first (web/src/net/rom-limits.ts); this is the backstop
+// for one that got past them, and a caller drops that one row, not the whole message.
+// A species with a name and a picture, or SPECIES_NONE: not EGG or past it, and not one
+// of the "?" placeholders between CELEBI and TREECKO.
+u16 BrWire_Species(u16 species);
+// A move gBattleMoves has, or MOVE_NONE.
+u16 BrWire_Move(u16 move);
+// No higher than MAX_LEVEL. 0 is left alone: each caller gives it its own meaning.
+u8 BrWire_Level(u8 level);
+// A map gMapGroups has: a group under MAP_GROUPS_COUNT and a number under its count.
+bool8 BrWire_MapOk(u8 mapGroup, u8 mapNum);
+
 #endif // GUARD_BR_WIRE_C_H

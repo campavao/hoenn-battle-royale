@@ -37,7 +37,7 @@ static EWRAM_DATA struct BrAssembler sDuelAsm = {0};
 // the result back, since both of them are played by the AI.
 static void ParseDuel(const u8 *d, u16 n)
 {
-    u8 countA, countB, i, side;
+    u8 countA, countB, builtA, builtB, i, side;
     u16 off;
 
     if (n < 4)
@@ -50,19 +50,31 @@ static void ParseDuel(const u8 *d, u16 n)
     if ((u16)(off + (countA + countB) * 100) > n)
         return;
 
+    // A row with no real species is left out and the side closes up behind it, the way
+    // ParseTrainer does; the DRESULT reports the mons that were built (POK-330 #43).
     ZeroPlayerPartyMons();
     ZeroEnemyPartyMons();
+    builtA = 0;
+    builtB = 0;
     for (i = 0; i < countA; i++)
-        BrBot_BuildMon(d + off + i * 100, &gPlayerParty[i]);
+    {
+        if (BrBot_BuildMon(d + off + i * 100, &gPlayerParty[builtA]))
+            builtA++;
+    }
     for (i = 0; i < countB; i++)
-        BrBot_BuildMon(d + off + (countA + i) * 100, &gEnemyParty[i]);
+    {
+        if (BrBot_BuildMon(d + off + (countA + i) * 100, &gEnemyParty[builtB]))
+            builtB++;
+    }
     // Filling the array is not enough: the battle reads the count, and a stale one
     // sends the wrong number of mons into the fight.
     CalculatePlayerPartyCount();
+    if (builtA == 0 || builtB == 0)
+        return;
     gBrDuel.seatA = d[0];
     gBrDuel.seatB = d[1];
-    gBrDuel.countA = countA;
-    gBrDuel.countB = countB;
+    gBrDuel.countA = builtA;
+    gBrDuel.countB = builtB;
     // The two bags, after the parties (POK-237): a count then that many u16s, A's
     // first. Absent -- an older page, or two bots with nothing left -- and the duel is
     // fought bare, which is what it did before there were bags at all.

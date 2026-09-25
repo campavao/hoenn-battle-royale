@@ -42,20 +42,26 @@ static EWRAM_DATA struct BrAssembler sTrainerAsm = {0};
 // species and level make the stats, the moves make the fight, the HP makes it a mon
 // that has already been somewhere. Shared with br_duel.c, which reads the same rows
 // for both sides of a bot-vs-bot fight (POK-238).
-void BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
+//
+// FALSE, and nothing built, for a species the ROM has no mon for: CreateMon would read
+// gSpeciesInfo and the pic tables past their ends (POK-330 #43). A move past gBattleMoves
+// is left to CreateMon's own, as MOVE_NONE always was, and a level past 100 is 100.
+bool8 BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
 {
-    u16 species = BrWire_ReadU16(row);
-    u8 level = row[2];
+    u16 species = BrWire_Species(BrWire_ReadU16(row));
+    u8 level = BrWire_Level(row[2]);
     u16 hp = BrWire_ReadU16(row + 3);
     u8 nickname[POKEMON_NAME_LENGTH + 1];
     u8 i, len;
 
+    if (species == SPECIES_NONE)
+        return FALSE;
     if (level == 0)
         level = 5;
     CreateMon(mon, species, level, USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
-        u16 move = BrWire_ReadU16(row + 8 + i * 4);
+        u16 move = BrWire_Move(BrWire_ReadU16(row + 8 + i * 4));
         u8 pp = row[10 + i * 4];
 
         if (move == MOVE_NONE)
@@ -73,6 +79,7 @@ void BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
     (void)nickname;
     if (hp > 0)
         SetMonData(mon, MON_DATA_HP, &hp);
+    return TRUE;
 }
 
 // TRAINER: seat, nameLen, name, count, count * PackedMon. Straight into gEnemyParty,
@@ -80,7 +87,7 @@ void BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
 // it, because BrBot_PartyIsStaged tells CB2_InitBattleInternal not to ask gTrainers.
 static void ParseTrainer(const u8 *d, u16 n)
 {
-    u8 nameLen, count, i;
+    u8 nameLen, count, built, i;
     u16 off;
 
     if (n < 3)
@@ -95,14 +102,25 @@ static void ParseTrainer(const u8 *d, u16 n)
     if ((u16)(off + count * 100) > n)
         return;
 
+    // A row with no real species is left out, not the card: the rest close up behind it,
+    // since the engine reads a party up to its first empty slot. Nothing left, no fight.
     ZeroEnemyPartyMons();
+    built = 0;
     for (i = 0; i < count; i++)
-        BrBot_BuildMon(d + off + i * 100, &gEnemyParty[i]);
+    {
+        if (BrBot_BuildMon(d + off + i * 100, &gEnemyParty[built]))
+            built++;
+    }
+    if (built == 0)
+    {
+        gBrBotFight.staged = FALSE; // whatever was staged is gone with gEnemyParty
+        return;
+    }
     for (i = 0; i < nameLen; i++)
         gBrBotFight.name[i] = d[2 + i];
     gBrBotFight.name[nameLen] = EOS;
     gBrBotFight.seat = d[0];
-    gBrBotFight.count = count;
+    gBrBotFight.count = built;
     // The bag, after the party: itemCount then that many u16s (POK-237). An older page
     // sends no tail at all, and a bot with an empty bag sends a zero -- both leave the
     // AI on the rung's own potion, which is what it had before there was a bag.

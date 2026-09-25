@@ -33,6 +33,10 @@ static void HandleLand(const u8 *payload, u8 len)
 
     if (n < 7 || d[0] != gBrMySeat)
         return;
+    // A map gMapGroups does not have is no cell at all: the drop's own timeout deals one
+    // (POK-330 #43).
+    if (!BrWire_MapOk(d[1], d[2]))
+        return;
     gBrPick.mapGroup = d[1];
     gBrPick.mapNum = d[2];
     gBrPick.x = (s16)BrWire_ReadU16(d + 3);

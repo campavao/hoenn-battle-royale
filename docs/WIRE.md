@@ -18,6 +18,15 @@ an arbitrary `as`/id. The relay's own envelope still adds `from` (the connection
 on forward, same as Kanto -- that is a property of the transport, not of `Msg`, so
 it is not a field on any message here.
 
+Ids that index a ROM table are bounded by that ROM's own tables (POK-330 #43): a
+species below `NUM_SPECIES` and outside the "?" block between CELEBI and TREECKO, a
+move below `MOVES_COUNT`, a level up to `MAX_LEVEL`, and a map a group actually has.
+`web/src/net/rom-limits.ts` and `include/br/br_rom_limits.h` carry them, generated
+by `tools/br/rom-limits.py` from the pret sources and checked against them by
+`rom-limits.test.ts`; re-run the script after a pret merge adds a species, a move or
+a map. `decode` refuses a message with one out of range, and the ROM drops the one
+row (`BrWire_Species`/`Move`/`Level`/`MapOk` in `src/br/br_wire.c`) as a backstop.
+
 ## Continuation scheme
 
 A slot's payload is at most 62 bytes. Every packed message -- even one that fits in

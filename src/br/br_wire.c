@@ -1,8 +1,18 @@
 // Slot framing helpers (POK-217). See include/br/br_wire_c.h.
 #include "global.h"
+#include "constants/map_groups.h"
+#include "constants/moves.h"
+#include "constants/pokemon.h"
+#include "constants/species.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
+#include "br/br_rom_limits.h"
+
+// How many maps each group has. Nothing else in C knows: gMapGroups is an array of
+// pointer arrays with no counts beside them.
+static const u8 sMapGroupSizes[] = BR_MAP_GROUP_SIZES;
+STATIC_ASSERT(ARRAY_COUNT(sMapGroupSizes) == MAP_GROUPS_COUNT, BrMapGroupSizesCoverEveryGroup)
 
 u16 BrWire_ReadU16(const u8 *p)
 {
@@ -120,4 +130,26 @@ u8 BrWire_Unframe(const u8 *payload, u8 len, const u8 **data)
         return 0;
     *data = payload + BR_FRAME_HDR;
     return (u8)total;
+}
+
+u16 BrWire_Species(u16 species)
+{
+    if (species >= NUM_SPECIES || (species >= SPECIES_OLD_UNOWN_B && species <= SPECIES_OLD_UNOWN_Z))
+        return SPECIES_NONE;
+    return species;
+}
+
+u16 BrWire_Move(u16 move)
+{
+    return move < MOVES_COUNT ? move : MOVE_NONE;
+}
+
+u8 BrWire_Level(u8 level)
+{
+    return level > MAX_LEVEL ? MAX_LEVEL : level;
+}
+
+bool8 BrWire_MapOk(u8 mapGroup, u8 mapNum)
+{
+    return mapGroup < MAP_GROUPS_COUNT && mapNum < sMapGroupSizes[mapGroup];
 }

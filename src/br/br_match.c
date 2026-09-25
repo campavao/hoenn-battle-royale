@@ -71,7 +71,9 @@ static void ParseStart(const u8 *d, u16 n)
         const u8 *row = d + 10 + 8 * i;
         u8 seat = row[0];
 
-        if (seat >= BR_MAX_SEATS)
+        // A row naming a map gMapGroups does not have deals that seat no spawn, as if it
+        // never came, rather than a warp through the end of the table (POK-330 #43).
+        if (seat >= BR_MAX_SEATS || !BrWire_MapOk(row[1], row[2]))
             continue;
         gBrMatch.spawns[seat].mapGroup = row[1];
         gBrMatch.spawns[seat].mapNum = row[2];
