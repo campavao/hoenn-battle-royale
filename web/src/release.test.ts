@@ -354,11 +354,41 @@ describe('the service worker (POK-330 #23)', () => {
     await sw.get('/', { mode: 'navigate' });
     await sw.get('/assets/main-NEW.js');
     await sw.get('/assets/bps.worker-NEW.js');
-    expect(sw.cache.paths().filter((p) => p.startsWith('/assets/'))).toEqual(['/assets/bps.worker-NEW.js', '/assets/main-NEW.js']);
+    // Not yet: the page arrived before the script it names, which could not be read.
+    expect(sw.cache.paths().filter((p) => p.startsWith('/assets/'))).toHaveLength(4);
 
-    // And the next load keeps the worker main names, though the page never does.
+    // The next load prunes, and keeps the worker main names, though the page never does.
     await sw.get('/', { mode: 'navigate' });
     expect(sw.cache.paths().filter((p) => p.startsWith('/assets/'))).toEqual(['/assets/bps.worker-NEW.js', '/assets/main-NEW.js']);
+  });
+
+  it('keeps the world data main fetches on demand, and a release that moves no map keeps its copy', async () => {
+    // As the build names them: main imports its chunks relative to itself, lists their
+    // preloads with no leading slash, and a chunk can name a chunk of its own.
+    const files: Record<string, string> = {
+      '/': '<script type="module" src="/assets/main-A.js"></script>',
+      '/assets/main-A.js': 'import("./world-W.js");import("./landing-A.js");const d=["assets/shared-A.js"]',
+      '/assets/world-W.js': 'world',
+      '/assets/landing-A.js': 'import("./deep-A.js")',
+      '/assets/shared-A.js': 'shared',
+      '/assets/deep-A.js': 'deep',
+    };
+    const sw = runWorker(files);
+    await sw.get('/', { mode: 'navigate' });
+    for (const p of ['main-A', 'world-W', 'landing-A', 'shared-A', 'deep-A']) await sw.get(`/assets/${p}.js`);
+    await sw.get('/', { mode: 'navigate' }); // the load that prunes
+    const assets = () => sw.cache.paths().filter((p) => p.startsWith('/assets/'));
+    expect(assets()).toEqual(['/assets/deep-A.js', '/assets/landing-A.js', '/assets/main-A.js', '/assets/shared-A.js', '/assets/world-W.js']);
+
+    // New code, the same world.json: its chunk has the same name, and is never asked for again.
+    files['/'] = '<script type="module" src="/assets/main-B.js"></script>';
+    files['/assets/main-B.js'] = 'import("./world-W.js");import("./landing-B.js")';
+    files['/assets/landing-B.js'] = 'landing';
+    await sw.get('/', { mode: 'navigate' });
+    for (const p of ['main-B', 'world-W', 'landing-B']) await sw.get(`/assets/${p}.js`);
+    await sw.get('/', { mode: 'navigate' });
+    expect(assets()).toEqual(['/assets/landing-B.js', '/assets/main-B.js', '/assets/world-W.js']);
+    expect(sw.net.asked.filter((p) => p === '/assets/world-W.js')).toHaveLength(1);
   });
 
   it('everything else is served from the cache and freshened behind it', async () => {

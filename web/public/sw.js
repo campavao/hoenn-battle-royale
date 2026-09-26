@@ -22,7 +22,9 @@
 //     page asks with `cache: 'reload'`, which it does when a copy failed its check. One
 //     copy per file is kept; the one it replaces goes.
 //   - `/assets/*`: the build's hashed files. Cache first, never revalidated; the ones no
-//     longer reachable from the current page are pruned.
+//     longer reachable from the current page are pruned. The world data (world.json and
+//     landing.json, fetched on demand) is two of them, so a release that moves no map
+//     does not send it again.
 //   - `/emu/*`: the core, a js/wasm pair that must match. Network first, so both come
 //     from the same deploy: the HTTP cache makes that a 304 when nothing moved.
 //   - anything else of ours (map stills, sprites, icons): cache first, revalidated in
@@ -200,22 +202,38 @@ async function revalidate(request) {
   }
 }
 
-/** Every /assets/ name a page or script mentions. */
-function assetRefs(text) {
-  return text.match(/\/assets\/[A-Za-z0-9_.-]+/g) ?? [];
+/** Every /assets/ name a page or script mentions. A script names the chunks it imports
+ *  relative to itself -- main's `import("./world-XXXX.js")`, the world data -- and lists
+ *  their preloads with no leading slash, so a script (`from`, its own path) is read for
+ *  those too. */
+function assetRefs(text, from = null) {
+  const refs = text.match(/\/assets\/[A-Za-z0-9_.-]+/g) ?? [];
+  if (from) {
+    const dir = from.slice(0, from.lastIndexOf('/') + 1);
+    for (const [, name] of text.matchAll(/["'`]\.\/([A-Za-z0-9_.-]+\.js)["'`]/g)) refs.push(dir + name);
+    for (const [, name] of text.matchAll(/["'`](assets\/[A-Za-z0-9_.-]+)["'`]/g)) refs.push('/' + name);
+  }
+  return refs;
 }
 
 /** Drops the hashed files of builds gone by: everything under /assets/ that neither the
- *  page nor a script it loads (the patch worker is only named in main's) mentions. A
- *  script not cached yet is not read -- a new build's arrive after its page -- which
- *  can cost a file the next load fetches again, never a file this one still needs. */
+ *  page nor a script it loads (the patch worker is only named in main's) mentions.
+ *
+ *  A script the page names that is not cached yet is a new build's, arriving after its
+ *  page, and cannot say what it imports -- so nothing goes until the next load can read
+ *  it. Pruning without it dropped the world data on every release, map change or not,
+ *  and the new build fetched the same 440 KB again. */
 async function pruneAssets(html) {
   const cache = await caches.open(CACHE);
-  const keep = new Set(assetRefs(html));
-  for (const ref of [...keep]) {
+  const named = assetRefs(html);
+  const keep = new Set(named);
+  // The set itself, not a copy: it visits what is added while it runs, so a chunk named
+  // only by a chunk the page names is kept too.
+  for (const ref of keep) {
     if (!ref.endsWith('.js')) continue;
     const script = await cache.match(ref);
-    if (script) for (const inner of assetRefs(await script.text())) keep.add(inner);
+    if (script) for (const inner of assetRefs(await script.text(), ref)) keep.add(inner);
+    else if (named.includes(ref)) return;
   }
   for (const key of await cache.keys()) {
     const path = new URL(key.url).pathname;
