@@ -33,7 +33,18 @@ expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
 expect u32 gDisplayedStringBattle+8 0xCEC9CAFE
 expect u32 gDisplayedStringBattle+12 0xABC8C9C3
 expect u8 gDisplayedStringBattle+16 0xFF
-wait 830
+wait 130
+# The peer's X ATTACK is the AI's script, whose line is its trainer's -- and a replay's
+# trainer is TRAINER_LINK_OPPONENT, past the end of gTrainers: garbage on agbcc, and on
+# modern a line with no end that the replay waited on for good. It names the peer, link
+# player 1, as the potion's line did: "CAN used", a new line, "X ATTACK!"
+expect u32 gDisplayedStringBattle 0x00C8BBBD
+expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
+expect u32 gDisplayedStringBattle+8 0xBB00D2FE
+expect u32 gDisplayedStringBattle+12 0xBDBBCECE
+expect u16 gDisplayedStringBattle+16 0xABC5
+expect u8 gDisplayedStringBattle+18 0xFF
+wait 700
 shot items
 # The benched mon took the potion: 5 HP and 20 more is all of it (19 or 20, by IVs).
 expectge u16 gPlayerParty+186 19

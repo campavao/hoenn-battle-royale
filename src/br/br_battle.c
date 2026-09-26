@@ -13,6 +13,8 @@
 #include "battle_scripts.h"
 #include "item.h"
 #include "battle_message.h"
+#include "battle_setup.h"
+#include "constants/trainers.h"
 #include "constants/battle_script_commands.h"
 #include "constants/battle_string_ids.h"
 #include "main.h"
@@ -516,6 +518,13 @@ void BrBattle_SayItemUsed(void)
 
 bool8 BrBattle_BufferString(u16 stringId)
 {
+    // An AI's item in a replay -- a bot's X ATTACK in a duel we are watching -- is its
+    // trainer's line, and a replay's trainer is TRAINER_LINK_OPPONENT: 2048, far past the
+    // end of gTrainers, so the class and name came out of whatever ROM bytes lie there.
+    // On agbcc that was garbage; on modern it never ended, and the replay waited on the
+    // message for good. The AI's script already set the battler, so it gets our line.
+    if (stringId == STRINGID_TRAINER1USEDITEM && gTrainerBattleOpponent_A == TRAINER_LINK_OPPONENT)
+        stringId = BR_STRINGID_USED_ITEM;
     if (stringId != BR_STRINGID_USED_ITEM)
         return FALSE;
     BattleStringExpandPlaceholdersToDisplayedString(sText_UsedItem);
