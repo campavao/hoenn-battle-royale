@@ -225,9 +225,6 @@ static void ParseTrainer(const u8 *d, u16 n)
     gBrBotFight.staged = TRUE;
 }
 
-// The AI reached for one of the four (battle_ai_switch_items.c). Remembered as a bit
-// rather than a list: the page knows what it handed over and in what order, so which
-// slots went is the whole report.
 // A bot is not in gTrainers -- it is a seat the host's tab walks around -- so what it
 // may spend comes over on its trainer card, out of a bag that is really being carried
 // and really runs down (POK-237). A card with no bag on it (an older page, or a bot
@@ -256,6 +253,9 @@ bool8 BrBot_LoadAiItems(void)
     return TRUE;
 }
 
+// The AI reached for one of the four (battle_ai_switch_items.c). Remembered as a bit
+// rather than a list: the page knows what it handed over and in what order, so which
+// slots went is the whole report.
 void BrBot_NoteItemUsed(u16 item)
 {
     u8 i;
