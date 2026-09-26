@@ -50,10 +50,18 @@ export default defineConfig({
   // It was the opening dealing the host and the guest into different Safari areas five
   // times in six (see the seed pinned in that spec), and a fresh browser per file did
   // not change that by itself.
-  projects: readdirSync(resolve(__dirname, 'e2e'))
-    .filter((f) => f.endsWith('.spec.ts'))
-    .sort()
-    .map((f) => ({ name: f.replace(/\.spec\.ts$/, ''), testMatch: f, use: { ...devices['Desktop Chrome'] } })),
+  projects: [
+    ...readdirSync(resolve(__dirname, 'e2e'))
+      .filter((f) => f.endsWith('.spec.ts'))
+      .sort()
+      .map((f) => ({ name: f.replace(/\.spec\.ts$/, ''), testMatch: f, use: { ...devices['Desktop Chrome'] } })),
+    // The match played in Firefox too (POK-327): Cam's 2026-09-18 play-test was in it, and
+    // the squashed picture was Firefox's alone. Every local run has it; CI runs it on a
+    // tag only (HBR_PLAY_FIREFOX, ci.yml), because it is five more minutes on every push.
+    ...(!process.env.CI || process.env.HBR_PLAY_FIREFOX
+      ? [{ name: 'play-firefox', testMatch: 'play.spec.ts', use: { ...devices['Desktop Firefox'] } }]
+      : []),
+  ],
   webServer: [
     {
       command: `node ../relay/server.js`,

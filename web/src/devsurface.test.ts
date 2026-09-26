@@ -8,6 +8,8 @@
 import { describe, expect, it } from 'vitest';
 import appSource from './app.ts?raw';
 import bridgeSource from './net/bridge.ts?raw';
+import playSource from '../e2e/play.ts?raw';
+import * as field from './field';
 
 const specs = import.meta.glob<string>('../e2e/*.spec.ts', { query: '?raw', import: 'default', eager: true });
 
@@ -80,5 +82,18 @@ describe('the dev flags a match is set up with', () => {
     // To the end of the signature's line: a return type can have braces of its own.
     const guarded = new RegExp(String.raw`function ${fn}\(\)[^\n]*\{\s*if \(!import\.meta\.env\.DEV\) return (?:null|undefined);`);
     expect(appSource).toMatch(guarded);
+  });
+});
+
+// The play spec's recorder reads the ROM's structs at field.ts's offsets, from a copy: a
+// Playwright spec cannot import field.ts (it imports world.json with no import attribute).
+// A copy that drifted would check the picture against the wrong byte.
+describe("play.ts's copy of field.ts's offsets", () => {
+  it('is field.ts, number for number', () => {
+    const copied = new Map(Array.from(playSource.matchAll(/^export const (\w+) = (0x[0-9a-f]+|\d+);/gm), (m) => [m[1], Number(m[2])]));
+    const exported = field as unknown as Record<string, unknown>;
+    const shared = [...copied.keys()].filter((name) => name in exported);
+    expect(shared.length, 'a regex that matched nothing would pass by saying nothing').toBeGreaterThanOrEqual(10);
+    for (const name of shared) expect(copied.get(name), name).toBe(exported[name]);
   });
 });
