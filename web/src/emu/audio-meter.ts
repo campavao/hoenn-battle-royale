@@ -6,8 +6,11 @@
 // on the page longer than that can make the speaker click, and nothing measured it. Two
 // ways a buffer goes wrong, and both are counted here:
 //
-//   late     the callback ran after its buffer was due to play (`playbackTime` already
-//            behind the context's clock): the page was busy, and the output skipped.
+//   late     the page was too busy to run the callback in time, and the output
+//            skipped. Two ways to see it: the buffer's `playbackTime` is already behind
+//            the context's clock, or -- Chromium, which stamps playbackTime when the
+//            event runs, so it is never behind -- more than two buffers' time passed
+//            since the last callback, and a ScriptProcessorNode has only two.
 //   starved  the core had fewer samples than the buffer wanted. mGBA's SDL callback
 //            fills the rest with zeros (sdl-audio.c, `available < len`), so the tail of
 //            a buffer that had sound in it goes flat: the emulator fell behind.
@@ -69,17 +72,15 @@ export function tapNode(
   now: () => number = () => performance.now(),
 ): void {
   const own = node.onaudioprocess;
+  let last: number | null = null;
   node.onaudioprocess = function (this: ScriptProcessorNode, e: AudioProcessingEvent) {
-    const late = e.playbackTime < ctx.currentTime;
-    own?.call(this, e);
+    const at = now();
     const out = e.outputBuffer;
-    emit({
-      at: now(),
-      bufferMs: (out.length * 1000) / (out.sampleRate || ctx.sampleRate),
-      late,
-      starved: silentTail(out) >= STARVED_TAIL,
-      state: ctx.state,
-    });
+    const bufferMs = (out.length * 1000) / (out.sampleRate || ctx.sampleRate);
+    const late = e.playbackTime < ctx.currentTime || (last !== null && at - last > 2 * bufferMs);
+    last = at;
+    own?.call(this, e);
+    emit({ at, bufferMs, late, starved: silentTail(out) >= STARVED_TAIL, state: ctx.state });
   };
 }
 

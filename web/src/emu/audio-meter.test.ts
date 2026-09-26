@@ -53,6 +53,16 @@ describe('the audio meter (POK-247)', () => {
     expect(ticks[0].state).toBe('running');
   });
 
+  it("counts a callback more than two buffers after the last as late: Chromium's playbackTime is never behind", () => {
+    const ctx = { currentTime: 0, sampleRate: 48000, state: 'running' as AudioContextState };
+    const node = sdlNode(() => {});
+    const ticks: AudioTick[] = [];
+    const at = [0, 21, 42, 150, 151];
+    tapNode(node, ctx, (tick) => void ticks.push(tick), () => at.shift()!);
+    for (let i = 0; i < 5; i++) node.onaudioprocess!.call(node, event(buffer(1024), 1)); // stamped ahead, always
+    expect(ticks.map((k) => k.late)).toEqual([false, false, false, true, false]);
+  });
+
   it('counts a buffer the core could not fill as starved', () => {
     const ctx = { currentTime: 0, sampleRate: 48000, state: 'running' as AudioContextState };
     const node = sdlNode((out) => {
