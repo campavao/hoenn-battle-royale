@@ -84,9 +84,10 @@ export interface DirectorWorld {
    *  nobody can walk to strands everybody who cannot surf. */
   doorsteps?: LandingCell[];
   /** Cam's own picks (POK-314), landing-hand.json. A section with any of these deals
-   *  from them and nothing else: hand-painted beats ordinary beats doorsteps, and a
-   *  hand-painted cell is exempt from the flood by definition -- if Cam says you can
-   *  drop in Fortree, you can drop in Fortree. */
+   *  from them first: hand-painted beats ordinary beats doorsteps, and a hand-painted
+   *  cell is exempt from the flood by definition -- if Cam says you can drop in Fortree,
+   *  you can drop in Fortree. His vetoes are already off `landing` and `doorsteps`
+   *  (match/landing.ts), so nothing here has to know about them. */
   hand?: LandingCell[];
 }
 
@@ -349,36 +350,53 @@ export class Director {
    *  standable, which is how Cam picked Fortree City and landed on Route 117 -- a
    *  different map, forty maps away, behind the Day Care's fence (POK-307). And it was
    *  not a rare corner: the reachability flood runs on foot, most of eastern Hoenn is
-   *  across water, and that left seven of the towns the picker offers with every cell
-   *  marked off.
+   *  across water, and that left eight of the sixteen towns the picker offers (Lavaridge
+   *  too, behind the cable car) with every cell marked off.
    *
    *  So the fallback stays inside the section the trainer actually chose: a doorstep,
    *  Cam's own rule -- "if a location cannot be found, drop them in front of a Poke
    *  Center, a Poke Mart, or a Building". Only if the section has neither does this
-   *  leave it, and then for the NEAREST section with cells rather than a random one. */
+   *  leave it, and then for the NEAREST section with cells rather than a random one.
+   *
+   *  Cam's painted cells come first (POK-314), and each pool is taken in turn as the one
+   *  before it runs out: three painted spots and five trainers is the three spots, then
+   *  the town's ordinary cells, then its doorsteps -- not two trainers on one tile, which
+   *  is what a town with nothing but its painted cells to give used to do. */
   landFor(seat: number, section: number): { seat: number; map: MapRef; x: number; y: number } {
-    const wanted = this.sections.find((s) => s.section.num === section);
-    const hand = this.hand.get(section);
-    const pool: Cell[] =
-      hand && hand.length > 0
-        ? hand
-        : wanted && wanted.cells.length > 0
-          ? wanted.cells
-          : (this.doorsteps.get(section) ?? this.nearestCells(section));
-    for (let attempt = 0; attempt < DEAL_RETRY_LIMIT; attempt++) {
-      // A doorstep list is short and ranked -- centre, mart, gym, door -- so it is walked
-      // in order rather than sampled: the first free one is the nicest one. A painted
-      // list is short too and not ranked at all: sampled, so a town's drops spread over
-      // the spots Cam chose rather than filling them in the order he clicked.
-      const ordered = pool !== hand && pool.length <= DOORSTEP_ORDERED;
-      const cell = ordered ? pool[attempt % pool.length] : pool[pickIndex(this.rng, pool.length)];
-      const key = cellKey(cell);
-      if (this.dealtCells.has(key) && attempt < DEAL_RETRY_LIMIT - 1) continue;
-      this.dealtCells.add(key);
+    const hand = this.hand.get(section) ?? [];
+    const cells = this.sections.find((s) => s.section.num === section)?.cells ?? [];
+    const pools = [hand, cells, this.doorsteps.get(section) ?? []].filter((p) => p.length > 0);
+    if (pools.length === 0) pools.push(this.nearestCells(section));
+    // A doorstep list is short and ranked -- centre, mart, gym, door -- so it is walked in
+    // order rather than sampled: the first free one is the nicest one. A painted list is
+    // short too and not ranked at all: sampled, so a town's drops spread over the spots
+    // Cam chose rather than filling them in the order he clicked.
+    const ordered = (pool: Cell[]) => pool !== hand && pool.length <= DOORSTEP_ORDERED;
+    for (const pool of pools) {
+      const cell = this.freeCell(pool, ordered(pool));
+      if (!cell) continue;
+      this.dealtCells.add(cellKey(cell));
       return { seat, map: cell.map, x: cell.x, y: cell.y };
     }
-    const fallback = pool[0] ?? this.sections[0].cells[0];
-    return { seat, map: fallback.map, x: fallback.x, y: fallback.y };
+    // Every cell of every pool is somebody's: a second trainer on a tile in the town they
+    // picked beats one in a town they did not.
+    const pool = pools[0];
+    const cell = ordered(pool) ? pool[0] : pool[pickIndex(this.rng, pool.length)];
+    return { seat, map: cell.map, x: cell.x, y: cell.y };
+  }
+
+  /** A cell of `pool` nobody has been dealt, or undefined when it has none left: the first
+   *  free one of an ordered pool, a sample of any other -- drawn the way it always was, so
+   *  a pool with room in it deals what it dealt before this took pools in turn. */
+  private freeCell(pool: Cell[], ordered: boolean): Cell | undefined {
+    const free = pool.filter((c) => !this.dealtCells.has(cellKey(c)));
+    if (free.length === 0) return undefined;
+    if (ordered) return free[0];
+    for (let attempt = 0; attempt < DEAL_RETRY_LIMIT; attempt++) {
+      const cell = pool[pickIndex(this.rng, pool.length)];
+      if (!this.dealtCells.has(cellKey(cell))) return cell;
+    }
+    return free[pickIndex(this.rng, free.length)];
   }
 
   /** The cells of the section closest on the region map to the one asked for. Only ever
