@@ -30,6 +30,20 @@ describe('the hand-painted drop cells', () => {
     expect(DOORSTEPS.filter((c) => VETO.has(cellKey(c)))).toEqual([]);
   });
 
+  // Mossdeep's north-east is a plateau at heights 4 and 5 over a town at 3: 72 cells the
+  // class grid calls ground and a four-way flood over it walks straight onto. The painter
+  // used that flood; a pick there would drop somebody on a cliff top.
+  it('refuse a cliff top the class grid alone would pass', () => {
+    const top = { map: 'MAP_MOSSDEEP_CITY', x: 24, y: 6 };
+    expect(HOENN.world.standable(top.map, top.x, top.y)).toBe(true);
+    expect(HOENN.world.height(top.map, top.x, top.y)).toBe(4);
+    const seeds = [...LANDING, ...DOORSTEPS];
+    expect(handProblems([top], HOENN.byId, HOENN.world, seeds)).toEqual([
+      'pick MAP_MOSSDEEP_CITY:24,6: cannot walk from there to any cell the drop deals on its map -- a cliff top, a tree top or a pit',
+    ]);
+    expect(handProblems([{ ...top, x: 30, y: 20 }], HOENN.byId, HOENN.world, seeds)).toEqual([]);
+  });
+
   // The painter only lets Cam pick where walksTo says, so it had better say yes to a town:
   // each of the eight towns the flood left with doorsteps alone has a street to paint.
   it('leave every doorstep-only town a street to paint', () => {
