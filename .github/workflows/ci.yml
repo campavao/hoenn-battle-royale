@@ -371,6 +371,55 @@ jobs:
       - name: Test the play log's parser
         run: node --test tools/br/play-log.test.mjs
 
+  # A tag only: `make BR=0` is retail Emerald, byte for byte (docs/C-STYLE.md). Every
+  # hook compiles away without BR, so a mismatch is BR code that got out of its guard
+  # somewhere neither guards step can see -- a macro, a data table, a linker line. A
+  # clean agbcc build is ~9 minutes, so it waits for a release instead of every push,
+  # and the release waits for it. The agbcc cache is the rom job's.
+  pret:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libpng-dev gcc-arm-none-eabi binutils-arm-none-eabi
+
+      - name: Checkout agbcc
+        uses: actions/checkout@v4
+        with:
+          repository: pret/agbcc
+          path: agbcc
+
+      - name: agbcc HEAD sha
+        id: agbcc-sha
+        run: echo "sha=$(git -C agbcc rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache agbcc build
+        id: agbcc-cache
+        uses: actions/cache@v4
+        with:
+          path: agbcc
+          key: agbcc-${{ steps.agbcc-sha.outputs.sha }}
+
+      - name: Build agbcc
+        if: steps.agbcc-cache.outputs.cache-hit != 'true'
+        working-directory: agbcc
+        run: ./build.sh
+
+      - name: Install agbcc into fork
+        run: ( cd agbcc && ./install.sh .. )
+
+      - name: Build with BR=0
+        run: make BR=0 -j"$(nproc)"
+
+      - name: BR=0 is retail
+        run: tools/br/check-rom.sh pokeemerald_pret.gba
+
   # A tag is a release (POK-248). Three things go out, in this order, each only after
   # the one before it held:
   #
@@ -387,7 +436,7 @@ jobs:
   # Nothing here runs on a branch push; a broken tag can be deleted and re-pushed.
   release:
     if: github.ref_type == 'tag'
-    needs: [rom, web, relay]
+    needs: [rom, web, relay, pret]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

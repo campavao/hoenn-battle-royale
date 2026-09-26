@@ -54,8 +54,9 @@ lenient one.
   between them alone, and the blank line that sets a BR block apart goes inside its
   guard, before the `#endif`.
 - **`make BR=0` is retail.** It leaves `src/br` out, builds into `build/pret`, and
-  `tools/br/check-rom.sh pokeemerald_pret.gba` must print OK (it did on 2026-09-25). The
-  two scripts see names and lines; this sees bytes, so run it after touching a pret file.
+  `tools/br/check-rom.sh pokeemerald_pret.gba` must print OK; CI's `pret` job builds it
+  on every tag, and a release waits for it. The two scripts see names and lines; this
+  sees bytes, so run it after touching a pret file.
 - **Strings.** Game text is in the Gen 3 charmap (`_("...")` in C, `.string` in scripts).
   Plain C strings are only for `gBrVersionString`-style ROM markers.
 - **Names.** `Br<System>_<Verb>` for functions (`BrMailbox_Push`), `gBr*` for globals
