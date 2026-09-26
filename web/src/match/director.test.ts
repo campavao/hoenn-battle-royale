@@ -12,7 +12,7 @@ const world: DirectorWorld = {
     { id: 'MAP_ALPHA', group: 0, num: 1, section: 'SEC_ALPHA', outdoor: true },
     { id: 'MAP_BETA', group: 0, num: 2, section: 'SEC_BETA', outdoor: true },
     { id: 'MAP_INDOOR', group: 0, num: 3, section: 'SEC_ALPHA', outdoor: false },
-    // POK-307: a section the reachability flood left with nothing, which is what seven
+    // POK-307: a section the reachability flood left with nothing, which is what eight
     // of Hoenn's real towns look like -- every ordinary cell across water and marked off.
     { id: 'MAP_GAMMA', group: 0, num: 4, section: 'SEC_GAMMA', outdoor: true },
     // ...and one with no buildings either, which only a cave or an underwater route is.
@@ -243,8 +243,9 @@ describe('picking up a match in progress (POK-252)', () => {
 
 // POK-307. Cam picked Fortree City from the drop and landed on Route 117, forty maps
 // away, behind the Day Care's fence. The fallback for a section with nothing standable
-// in it was ANYWHERE IN HOENN -- and seven of the towns the picker offers are in that
-// state, because the reachability flood walks and most of eastern Hoenn is across water.
+// in it was ANYWHERE IN HOENN -- and eight of the sixteen towns the picker offers are in
+// that state (Lavaridge too, behind the cable car), because the reachability flood walks
+// and most of eastern Hoenn is across water.
 describe('where a pick actually lands you (POK-307)', () => {
   const seats = [0, 1, 2, 3];
 
