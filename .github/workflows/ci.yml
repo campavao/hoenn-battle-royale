@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Upstream edits are guarded
         run: python3 tools/br/check-guards.py
       # The lint sees names; this sees lines. With the guards taken out, every pret file
@@ -57,7 +57,7 @@ jobs:
       rom-sha1: ${{ steps.fork-rom.outputs.sha1 }}
       patch-size: ${{ steps.patch.outputs.size }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install build deps
         run: |
@@ -73,7 +73,7 @@ jobs:
         run: echo "sha=$(cat tools/br/BASELINE_COMMIT)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout agbcc
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: pret/agbcc
           path: agbcc
@@ -84,7 +84,7 @@ jobs:
 
       - name: Cache agbcc build
         id: agbcc-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: agbcc
           key: agbcc-${{ steps.agbcc-sha.outputs.sha }}
@@ -95,7 +95,7 @@ jobs:
         run: ./build.sh
 
       - name: Checkout baseline pokeemerald
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: pret/pokeemerald
           ref: ${{ steps.baseline.outputs.sha }}
@@ -103,7 +103,7 @@ jobs:
 
       - name: Cache baseline ROM
         id: baseline-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: baseline/pokeemerald.gba
           # The baseline never changes without BASELINE_COMMIT changing, so once this
@@ -143,7 +143,7 @@ jobs:
       # Before the patch: make-patch.sh checks what flips wrote with the page's own BPS
       # decoder (tools/br/make-bps.ts, under vite-node), and the e2e steps at the end of
       # this job need the same install.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -175,7 +175,7 @@ jobs:
             echo "- baseline commit: ${{ steps.baseline.outputs.sha }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: patch
           # Exactly these three files - never the ROM itself, on principle (see
@@ -188,7 +188,7 @@ jobs:
 
       - name: Cache libmgba (harness)
         id: mgba-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: tools/br/.mgba
           key: libmgba-harness-0.10.5-v2-${{ runner.os }}
@@ -230,7 +230,7 @@ jobs:
           HBR_BASE_ROM: ${{ github.workspace }}/baseline/pokeemerald.gba
         run: npm run e2e
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-shots
@@ -240,43 +240,32 @@ jobs:
 
   # Is the shipped core the one the committed patch builds? web/public/emu is tracked,
   # it is what Vercel serves and what the e2e boots, and it comes from a WSL build on a
-  # dev box (docs/DEPLOY.md). This rebuilds mGBA's wasm fork at tools/br/mgba-wasm/COMMIT
-  # plus hbr-exports.patch and compares sha256s. It used to download its build over the
-  # tracked core in rom and web, so CI tested a core nobody shipped, and rom waited
-  # ~1m45s for it. A mismatch WARNS rather than fails until a run shows emscripten's
-  # output is byte-stable across machines; the built core is uploaded either way.
+  # dev box (docs/DEPLOY.md). This runs the same script, tools/br/mgba-wasm/build.sh
+  # (mGBA's wasm fork at COMMIT plus hbr-exports.patch), and fails unless the sha256s are
+  # the tracked ones. Emscripten is byte-stable across machines; what used to differ was
+  # the git state mGBA stamps into the core, from a full detached clone here and a
+  # depth-1 branch clone there, and build.sh now checks out the same shape on both.
   wasm:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: emscripten-core/setup-emsdk@v16
         with:
-          version: 6.0.5
-
-      - name: Clone mgba-wasm at the pinned commit
-        run: |
-          git clone --branch feature/wasm https://github.com/thenick775/mgba mgba-wasm-src
-          git -C mgba-wasm-src checkout "$(cat tools/br/mgba-wasm/COMMIT)"
-
-      - name: Apply the EWRAM/IWRAM export patch
-        working-directory: mgba-wasm-src
-        run: git apply "$GITHUB_WORKSPACE/tools/br/mgba-wasm/hbr-exports.patch"
+          version: 6.0.5 # build.sh refuses any other emcc
+          # emsdk itself, which picks the node emcc runs on: the dev box's (24.19.0).
+          # Unset, v15+ fetches emsdk at `version`, whose 6.0.5 tag runs node 22.
+          emsdk-version: 6.0.9
 
       # No build cache here: CMakeCache pins the emsdk path, which is a per-run temp dir.
       - name: Build the wasm core
-        working-directory: mgba-wasm-src
-        run: |
-          mkdir -p build-wasm
-          cd build-wasm
-          emcmake cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
-          make -j"$(nproc)"
+        run: bash tools/br/mgba-wasm/build.sh mgba-wasm-src
 
       - name: Compare with the tracked core
         run: |
           drift=0
-          for f in mgba.wasm mgba.js; do
+          for f in mgba.wasm mgba.js mgba.d.ts; do
             want="$(sha256sum "web/public/emu/$f" | cut -d' ' -f1)"
             got="$(sha256sum "mgba-wasm-src/build-wasm/wasm/$f" | cut -d' ' -f1)"
             if [ "$want" = "$got" ]; then
@@ -287,20 +276,22 @@ jobs:
             fi
           done
           if [ "$drift" -eq 1 ]; then
-            echo "::warning title=wasm core drift::web/public/emu is not what hbr-exports.patch builds here. The site ships the tracked core: rebuild and commit it (docs/DEPLOY.md), or, if the patch did not change, emscripten's output is not byte-stable and this guard needs another comparison."
+            echo "::error title=wasm core drift::web/public/emu is not what tools/br/mgba-wasm/build.sh builds from hbr-exports.patch. The site ships the tracked core: rebuild it with that script and commit it (docs/DEPLOY.md). The build is the emu-built artifact."
             echo "### wasm core: tracked != built (artifact emu-built)" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "### wasm core: tracked == built" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
+          echo "### wasm core: tracked == built" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
+        # On drift too: the build it disagreed with is the thing to look at.
+        if: ${{ !cancelled() }}
         with:
           name: emu-built
           path: |
             mgba-wasm-src/build-wasm/wasm/mgba.js
             mgba-wasm-src/build-wasm/wasm/mgba.wasm
             mgba-wasm-src/build-wasm/wasm/mgba.d.ts
-          if-no-files-found: error
+          if-no-files-found: warn
 
   # The shell's own checks: typecheck, the unit suite, and a production build with the
   # no-ROM check after it. None of it reads public/patch (the unit tests stub the
@@ -312,9 +303,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -353,9 +344,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -445,11 +436,11 @@ jobs:
       TAG: ${{ github.ref_name }}
       SITE: https://hoenn-battle-royale.vercel.app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # the previous tag, for the relay's "did it change" check
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: patch, path: web/public/patch }
 
       - name: GitHub release
@@ -468,7 +459,7 @@ jobs:
               web/public/patch/hoenn-br.bps web/public/patch/br-symbols.json web/public/patch/br-version.json
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -493,20 +484,30 @@ jobs:
 
       - name: Relay to Railway, if relay/ changed since the previous tag
         env:
-          # The account token (the same secret the play log reads with). The CLI calls
-          # it RAILWAY_API_TOKEN; RAILWAY_TOKEN to the CLI would mean a project token.
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          # The project token first (production only; the play log reads with it), the
+          # account token if there is none -- Railway answers the account one with Not
+          # Authorized for this project. To the CLI a project token is RAILWAY_TOKEN and
+          # an account token RAILWAY_API_TOKEN, and it sends RAILWAY_TOKEN whenever that
+          # is set at all, even empty, so the run exports exactly one of them.
+          PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
+          ACCOUNT_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           prev="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"
           if [ -n "$prev" ] && git diff --quiet "$prev" "$TAG" -- relay/; then
             echo "relay/ unchanged since $prev; the relay stays up"
             exit 0
           fi
-          if [ -z "$RAILWAY_API_TOKEN" ]; then
-            echo "::warning::relay/ changed but there is no RAILWAY_TOKEN in this repo's secrets; deploy it by hand: cd relay && railway up --detach"
+          if [ -z "$PROJECT_TOKEN$ACCOUNT_TOKEN" ]; then
+            echo "::warning::relay/ changed but there is no RAILWAY_PROJECT_TOKEN or RAILWAY_TOKEN in this repo's secrets; deploy it by hand: cd relay && railway up --detach"
             exit 0
           fi
           npm i -g @railway/cli
           cd relay
-          railway link --project 34e1da0b-5125-40be-9954-d90fafa3e156 --environment production --service hoenn-relay
+          if [ -n "$PROJECT_TOKEN" ]; then
+            # The token names its own project and environment: nothing to link.
+            export RAILWAY_TOKEN="$PROJECT_TOKEN"
+          else
+            export RAILWAY_API_TOKEN="$ACCOUNT_TOKEN"
+            railway link --project 34e1da0b-5125-40be-9954-d90fafa3e156 --environment production --service hoenn-relay
+          fi
           railway up --service hoenn-relay --detach --ci

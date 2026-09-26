@@ -73,18 +73,23 @@ its caches).
 `web/public/emu/` (mgba.js, mgba.wasm, mgba.d.ts) is tracked and goes out with the shell.
 It is thenick775's `feature/wasm` at `tools/br/mgba-wasm/COMMIT` plus
 `tools/br/mgba-wasm/hbr-exports.patch` (the EWRAM pointers and, since POK-319, the
-picture past the LCD). The tracked files are what the site serves and what the e2e
-boots; nothing in CI replaces them. CI's `wasm` job rebuilds the core from the patch on
-every push and warns ("wasm core drift") when its sha256s differ from the tracked
-ones. When the patch changes, rebuild in WSL and copy the output in before deploying:
+picture past the LCD), built by `tools/br/mgba-wasm/build.sh`. The tracked files are
+what the site serves and what the e2e boots; nothing in CI replaces them. CI's `wasm` job
+runs the same script on every push and fails ("wasm core drift") unless its sha256s are
+the tracked ones. When the patch changes, rebuild in WSL and copy the output in before
+deploying:
 
 ```bash
-wsl.exe -e bash -lc 'source ~/emsdk/emsdk_env.sh; cd ~/mgba-wasm/build-wasm && make -j8 && cp wasm/mgba.js wasm/mgba.wasm wasm/mgba.d.ts wasm/mgba.wasm.map /mnt/c/Users/cam95/Documents/Github/hoenn-battle-royale/web/public/emu/'
+wsl.exe -e bash -lc 'source ~/emsdk/emsdk_env.sh && cd /mnt/c/Users/cam95/Documents/Github/hoenn-battle-royale && bash tools/br/mgba-wasm/build.sh ~/hbr-mgba-build && cp ~/hbr-mgba-build/build-wasm/wasm/{mgba.js,mgba.wasm,mgba.d.ts,mgba.wasm.map} web/public/emu/'
 ```
 
-The WSL tree at `~/mgba-wasm` keeps the patch as uncommitted changes; `git diff` there
-is the patch file, and `git stash && git apply --check <patch> && git stash pop` proves
-it still applies to the pinned commit.
+The patch is edited in the WSL tree at `~/mgba-wasm`, which keeps it as uncommitted
+changes: `git diff` there is the patch file. Build with the script, not in that tree's
+`build-wasm`: mGBA stamps the checkout's git state into the core (the branch, the commit
+count, a tag at HEAD), so the same source in a differently shaped clone is different
+bytes. The script's fresh depth-1 checkout is the shape CI builds, and it reproduced the
+tracked core byte for byte on 2026-09-25. It needs emcc 6.0.5 and refuses any other, and
+it wipes only a new, empty or earlier build.sh directory, never `~/mgba-wasm`.
 
 ## The relay (Railway)
 
@@ -134,7 +139,13 @@ Two repo secrets make it fully automatic (GitHub → Settings → Secrets → Ac
 | secret | from | without it |
 |---|---|---|
 | `VERCEL_TOKEN` | Vercel → Account Settings → Tokens | the site step warns and skips; run `release-web.sh --prod` by hand |
-| `RAILWAY_TOKEN` | Railway account token (set 2026-09-18) | the relay step warns and skips; `railway up` by hand |
+| `RAILWAY_PROJECT_TOKEN` | Railway → `kanto-br-relay` → Settings → Tokens, environment `production` (set 2026-09-25) | the relay step falls back to `RAILWAY_TOKEN`, and warns and skips without either; `railway up` by hand |
+
+The relay step hands the project token to the CLI as `RAILWAY_TOKEN`, which names its own
+project and environment, so it deploys with `railway up --service hoenn-relay` and no
+`railway link`. The play log (`.github/workflows/play-log.yml`) reads the relay's logs with
+the same secret. `RAILWAY_TOKEN`, an account token set 2026-09-18, is only the fallback for
+both: Railway answers it with Not Authorized for this project.
 
 ## What must never happen
 

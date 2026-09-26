@@ -32,8 +32,9 @@ judge, unset only when it needs this session's reasoning.
     agbcc                C:\Users\cam95\Documents\Github\agbcc, installed into tools/agbcc
                          -> `make` (release, byte-matching, ~1 min incremental, ~9 min clean)
     tools/br/check-rom.sh  prints OK/MISMATCH for pokeemerald.gba against rom.sha1
-    mGBA wasm core       built in WSL from thenick775/mgba feature/wasm + tools/br/mgba-wasm/hbr-exports.patch
-                         (emsdk 6.0.5 at ~/emsdk, source at ~/mgba-wasm, output copied to web/public/emu/)
+    mGBA wasm core       thenick775/mgba feature/wasm + tools/br/mgba-wasm/hbr-exports.patch, built in WSL
+                         by `tools/br/mgba-wasm/build.sh ~/hbr-mgba-build` (emsdk 6.0.5 at ~/emsdk; the
+                         patch is edited in ~/mgba-wasm), output copied to web/public/emu/ (docs/DEPLOY.md)
     libmgba (static)     C:\Users\cam95\Documents\Github\mgba-src\build\libmgba.a (0.10.5)
     Emerald ROM (U)      sha1 f3ae088181bf583e55daf962a92bb46f4f1d07b7
     WSL2 Ubuntu          available as the fallback build host
