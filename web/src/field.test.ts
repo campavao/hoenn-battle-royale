@@ -324,6 +324,25 @@ describe('the people the ROM let go of reach the overlay (POK-318)', () => {
   });
 
   // POK-323: the page walks the other seats off its own roster.
+  it("a seat the page walks is its walker's past the box, and not gBrSeats' standing copy as well", () => {
+    const map = HOENN.maps.find((m) => m.outdoor)!;
+    // The roster has seat 1 a row further on than the ROM's copy does: only the walker's is drawn.
+    const seats = ram(map).step([rowAt(map, 1, 20 + 7, 34 + 7)]).sprites.filter((s) => s.seat === 1);
+    expect(seats).toEqual([{ gfx: SKIN_GFX[0], frame: 0, hFlip: false, x: 112, y: 56 + 14 * 16, hidden: true, seat: 1 }]);
+  });
+
+  it("on the field a walker inside the box, or one whose ghost the ROM still has an object for, is the ROM's", () => {
+    const map = HOENN.maps.find((m) => m.outdoor)!;
+    const r = ram(map);
+    const obj = OBJS + 1 * 0x24;
+    r.w(obj, 1, 8);
+    r.w(obj + OBJ_LOCAL_ID, 0xc8 + 3, 8);
+    r.w(obj + OBJ_MAP_NUM, map.num, 8);
+    r.w(obj + OBJ_MAP_GROUP, map.group, 8);
+    const cam = r.step([rowAt(map, 2, 22 + 7, 20 + 7), rowAt(map, 3, 24 + 7, 35 + 7), rowAt(map, 4, 26 + 7, 35 + 7)]);
+    expect(cam.sprites.filter((s) => s.seat !== undefined && s.seat !== 1).map((s) => [s.seat, s.hidden])).toEqual([[4, true]]);
+  });
+
   it('off the field the map\'s people stand where they stood and the ghosts walk on, all of them, under the picture', () => {
     const map = HOENN.maps.find((m) => m.outdoor)!;
     const r = ram(map);

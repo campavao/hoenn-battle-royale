@@ -22,7 +22,7 @@
 // number is held to the C by parity.test.ts.
 //
 // And the ghosts that walk on (POK-323, the end of this file): the other seats, walked by
-// the page from its own roster, off the field.
+// the page from its own roster, off the field and past the box.
 import spritesData from './data/sprites.json';
 import { SKIN_GFX } from './ui/emerald';
 import { skinIndex } from './net/slots';
@@ -337,7 +337,9 @@ function onPicture(info: { w: number; h: number }, px: number, py: number, origi
 // overworld is not on top (lib/ghosts.lua's advance: "a ghost is a live opponent, not
 // scenery"), and leaves its own NPCs frozen, as field.ts leaves Hoenn's.
 //
-// Never on a map but the one we are on, as Kanto's are.
+// On the field the ROM walks every ghost inside its box, so these are drawn only past it
+// -- the rows past the box on a phone, where gBrSeats could only stand a ghost on a tile
+// (POK-318) -- and never on a map but the one we are on.
 
 /** Walk-normal: sStep1Funcs, sixteen frames of a pixel each (NpcTakeStep at
  *  MOVE_SPEED_NORMAL, which GetWalkNormalMovementAction's actions ask for). */

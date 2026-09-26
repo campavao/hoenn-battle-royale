@@ -9,9 +9,10 @@
 // What the border is not: tile animation. The ROM never rendered it out there. The
 // people are the ROM's where it has them and the page's own reading of its tables past
 // that (POK-318, field-ghosts.ts); the fog is the ROM's weather, drawn to its numbers.
-// Off the field, where the ROM walks and draws nobody, the other seats are walked by the
-// page off its own roster (POK-323): a battle or the bag leaves the map's own people
-// standing where they were, and everybody in the match walking on around it.
+// The other seats past the box are walked by the page off its own roster (POK-323), and
+// so are all of them off the field, where the ROM walks and draws nobody: a battle or
+// the bag leaves the map's own people standing where they were, and everybody in the
+// match walking on around it.
 //
 // Then POK-319: the emulator draws a picture bigger than the LCD -- the same BG and OBJ
 // state, a band of pixels on each side (BAND below, matching include/br/br_field.h) --
@@ -37,7 +38,7 @@ import spritesData from './data/sprites.json';
 import type { Band, Emulator } from './emu';
 import {
   DESPAWN_COUNT, DESPAWN_SIZE, GHOST_LOCAL_ID_BASE, GhostWalkers, LOOT_COUNT, LOOT_SIZE, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
-  TEMPLATE_COUNT, TEMPLATE_SIZE, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, objectKey, placePeople, standingFrame,
+  TEMPLATE_COUNT, TEMPLATE_SIZE, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, inObjectView, initialFacing, objectKey, placePeople, standingFrame,
 } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 
@@ -391,7 +392,7 @@ export interface FieldDeps {
   /** The ROM the emulator is running, for the sprites' animation tables. */
   rom?: Uint8Array | null;
   /** Where every seat is, as the page knows it (the match's roster): the ghosts the page
-   *  walks on off the field (POK-323). FieldView.setPeople sets it later. */
+   *  walks on off the field and past the box (POK-323). FieldView.setPeople sets it later. */
   people?: () => readonly RosterEntry[];
 }
 
@@ -663,8 +664,8 @@ export class FieldView {
     return cam;
   }
 
-  /** Everybody on the field this frame, on the picture. On it: the ROM's objects and what
-   *  it knows of past its box (POK-318). Off it the
+  /** Everybody on the field this frame, on the picture. On it: the ROM's objects, what it
+   *  knows of past its box (POK-318), and the page's walkers past that box. Off it the
    *  sprites are the battle's or the menu's -- read as people, every frame of a fight was
    *  somebody new -- so the map's people and the loot stand where the last frame on the
    *  field had them, and every ghost walks on (POK-323). */
@@ -683,8 +684,14 @@ export class FieldView {
     const live = this.liveObjects();
     const rom = [...this.readSprites(sb1), ...this.readDropped(sb1, c, live)];
     this.still = { group: c.group, num: c.num, origin, sprites: rom.filter((s) => s.seat === undefined) };
-    this.ghosts = { rom: rom.filter((s) => s.seat !== undefined), drawn: [] };
-    return rom;
+    // Inside the box the ROM walks them; and one it still holds an object for is its,
+    // wherever the roster has already put it.
+    const pos = { x: c.x, y: c.y };
+    const drawn = outdoors
+      ? this.walkers.sprites(c, origin, (seat, x, y) => !inObjectView(pos, x, y) && !live.has(objectKey(GHOST_LOCAL_ID_BASE + seat, c.num, c.group)), true)
+      : [];
+    this.ghosts = { rom: rom.filter((s) => s.seat !== undefined), drawn };
+    return [...rom, ...drawn];
   }
 
   /** objectKey of every active object. */
@@ -769,7 +776,8 @@ export class FieldView {
 
   /** The people the ROM knows of past the box it keeps objects in, and holds none for
    *  (POK-318): read here, in the same frame as the live objects, so a person the ROM
-   *  spawns or lets go of this frame is in exactly one of the two lists. */
+   *  spawns or lets go of this frame is in exactly one of the two lists. A seat the page
+   *  walks (POK-323) is the walker's to draw, not gBrSeats' standing copy. */
   private readDropped(sb1: number, cam: CameraPos, live: ReadonlySet<string>): FieldSprite[] {
     // Indoors there is no field past the picture to stand on.
     if (this.sym('gObjectEvents') === undefined || !HOENN.byRef.get(`${cam.group}:${cam.num}`)?.outdoor) return [];
@@ -789,7 +797,7 @@ export class FieldView {
       flag: (id) => ((emu.read(sb1 + SB1_FLAGS + (id >> 3), 8) >> (id & 7)) & 1) !== 0,
       facing: (movementType) => initialFacing(rom, facings, movementType),
       despawned: decodeDespawned(table('gBrDespawned', DESPAWN_COUNT * DESPAWN_SIZE)),
-      seats: decodeSeats(table('gBrSeats', SEAT_COUNT * SEAT_SIZE)),
+      seats: decodeSeats(table('gBrSeats', SEAT_COUNT * SEAT_SIZE)).filter((s) => !this.walkers.has(s.seat)),
       mySeat: mySeat === undefined ? -1 : emu.read(mySeat, 8),
       loot: decodeLoot(table('gBrLoot', LOOT_COUNT * LOOT_SIZE)),
       live,
