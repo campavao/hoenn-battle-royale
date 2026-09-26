@@ -14,6 +14,7 @@
 #include "constants/abilities.h"
 #if BR
 #include "br/br_duel.h"
+#include "br/br_battle.h"
 #endif
 
 static EWRAM_DATA u8 sLinkSendTaskId = 0;
@@ -961,6 +962,9 @@ static void Task_HandleCopyReceivedLinkBuffersData(u8 taskId)
             break;
         case B_COMM_TO_ENGINE:
             memcpy(gBattleBufferB[battler], &gLinkBattleRecvBuffer[gTasks[taskId].tCurrentBlock_Start + LINK_BUFF_DATA], blockSize);
+#if BR
+            BrBattle_PeerItem(battler); // the other trainer's bag item, on our copy of their mon (POK-331 #7)
+#endif
             break;
         case B_COMM_CONTROLLER_IS_DONE:
             playerId = BYTE_TO_RECEIVE(LINK_BUFF_DATA);

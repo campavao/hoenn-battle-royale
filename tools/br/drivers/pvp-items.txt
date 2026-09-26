@@ -1,0 +1,87 @@
+# pvp-items: a POTION in a link battle heals the same mon on both ROMs, and the fight
+# goes on (POK-331 #7). The two-page e2e (web/e2e/pvp-items.spec.ts) is where both
+# halves were found; this is the one ROM's share of it.
+#
+# The fight goes on. A bag item is used in the party menu, and pret's
+# PokemonUseItemEffects then asks the healed battler's controller for its data. Over a
+# link that ask is a command sent from inside the menu to a queue both ROMs run in order,
+# and on the challenger's ROM the controller it names is its own, still holding the bag:
+# the queue waited on it, the bag's answer (the item, then "done") was queued behind the
+# ask, and both ROMs sat in the turn for good.
+#
+# The same mon. The other ROM heard only "item 13" and ran the engine's opponent branch,
+# which does what an AI's item type says -- nothing, for a person -- so a potion healed
+# one screen's copy of the mon and not the other's. The return value now carries whom the
+# item went to, and each ROM uses the other trainer's item on its own copy.
+#
+# pvp-bag.txt's session: a CHALLENGE with loopback on, so our own blocks come back as the
+# peer's -- a peer that chooses what we choose, which here is the same POTION on its own
+# (mirrored) Treecko. Both at 5 HP, a POTION in the ITEMS pocket (ids in the clear, and
+# the quantity too: a fresh boot's key is 0).
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u16 gPlayerParty+0x56 5
+pokebytes *gSaveBlock1Ptr+0x560 0D 00 03 00
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 00 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 600
+expect u8 gBrNetlink 1
+expect u16 gEnemyParty+0x56 5
+tap A
+wait 90
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+# BAG, the POTION, USE, onto the one mon, and the "restored" line read.
+tap RIGHT
+wait 30
+tap A
+wait 120
+expect u8 gBattleCommunication 3
+tap A
+wait 30
+tap A
+wait 150
+tap A
+wait 150
+shot healed
+tap A
+wait 200
+shot back
+# Ours: the party and the engine's own copy of the mon out.
+expect u16 gPlayerParty+0x56 20
+expect u16 gBattleMons+0x28 20
+# The bag's answer reached the engine -- CONTROLLER_ONERETURNVALUE, POTION, and whom it
+# went to: party slot 0, sent as 0 + 1 (BR_ITEM_TARGET) -- and so did the peer's.
+expect u8 gBattleBufferB 0x23
+expect u8 gBattleBufferB+1 13
+expect u8 gBattleBufferB+2 0
+expect u8 gBattleBufferB+3 1
+expect u8 gBattleBufferB+0x203 1
+# Theirs, on our copy of their mon and in the engine, which deals the next move off it.
+expect u16 gEnemyParty+0x56 20
+expect u16 gBattleMons+0x80 20
+# And the turn went by: the next one's action menu is up. The old ROM never left
+# STATE_WAIT_ACTION_CASE_CHOSEN (3), with the action's own return value still waiting.
+expect u8 gBrBattle+8 1
+expect u8 gBattleCommunication 2
+# The spectators' record of the turn: each battler USE_ITEM, POTION (0x0D, 0), then whom
+# it went to. Ours is slot 0, move 0; theirs is BR_ITEM_PEER | slot 0, so a replay uses it
+# on its copy of their mon rather than reading 0x40 as an AI's item type (spectate-items).
+expectmsg 19 u8 2 0
+expectmsg 19 u8 3 5
+expectmsg 19 u8 4 1
+expectmsg 19 u8 5 0x0D
+expectmsg 19 u8 7 0
+expectmsg 19 u8 8 0
+expectmsg 19 u8 9 1
+expectmsg 19 u8 10 5
+expectmsg 19 u8 11 1
+expectmsg 19 u8 12 0x0D
+expectmsg 19 u8 14 0x40
+expectmsg 19 u8 15 0
+say pvp items ok

@@ -4726,7 +4726,7 @@ void CopyPlayerPartyMonToBattleData(u8 battler, u8 partyIndex)
 bool8 ExecuteTableBasedItemEffect(struct Pokemon *mon, u16 item, u8 partyIndex, u8 moveIndex)
 {
 #if BR
-    BrBattle_NoteItemTarget(partyIndex, moveIndex); // whom a bag item went to (POK-330 #12)
+    BrBattle_NoteItemTarget(item, partyIndex, moveIndex); // whom a bag item went to (POK-330 #12)
 #endif
     return PokemonUseItemEffects(mon, item, partyIndex, moveIndex, FALSE);
 }
@@ -4796,7 +4796,11 @@ bool8 PokemonUseItemEffects(struct Pokemon *mon, u16 item, u8 partyIndex, u8 mov
     if (gMain.inBattle)
     {
         gActiveBattler = gBattlerInMenuId;
+#if BR
+        i = BrBattle_FirstOnSide(gActiveBattler); // the challenged ROM's player is battler 1 (POK-331 #7)
+#else
         i = (GetBattlerSide(gActiveBattler) != B_SIDE_PLAYER);
+#endif
         while (i < gBattlersCount)
         {
             if (gBattlerPartyIndexes[i] == partyIndex)
@@ -5107,8 +5111,12 @@ bool8 PokemonUseItemEffects(struct Pokemon *mon, u16 item, u8 partyIndex, u8 mov
 
                                         temp2 = gActiveBattler;
                                         gActiveBattler = battler;
+#if BR
+                                        BrBattle_AfterItemHeal(); // not over our link, which it jams (POK-331 #7)
+#else
                                         BtlController_EmitGetMonData(B_COMM_TO_CONTROLLER, REQUEST_ALL_BATTLE, 0);
                                         MarkBattlerForControllerExec(gActiveBattler);
+#endif
                                         gActiveBattler = temp2;
                                     }
                                 }

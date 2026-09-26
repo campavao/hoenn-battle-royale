@@ -1467,7 +1467,11 @@ static void CompleteWhenChoseItem(void)
 {
     if (gMain.callback2 == BattleMainCB2 && !gPaletteFade.active)
     {
+#if BR
+        BrBattle_EmitItemChoice(gSpecialVar_ItemId); // and whom it went to (POK-331 #7)
+#else
         BtlController_EmitOneReturnValue(B_COMM_TO_ENGINE, gSpecialVar_ItemId);
+#endif
         PlayerBufferExecCompleted();
     }
 }

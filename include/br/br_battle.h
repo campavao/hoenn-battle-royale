@@ -74,21 +74,42 @@ void BrBattle_HideClock(void);
 // never answered, or one that went out mid-fight.
 void BrBattle_Unwind(void);
 
+// A bag item's return value is Emerald's CONTROLLER_ONERETURNVALUE, [cmd][id lo][id hi]
+// and a last byte pret leaves 0. Ours says whom the item went to, so the other ROM of a
+// link battle can use it on its own copy of the same mon (POK-331 #7):
+//   bits 0-2  the party slot + 1 (0: nobody -- a ball, a doll, a bag closed empty)
+//   bits 4-5  the move a PP item chose
+#define BR_ITEM_TARGET(slot, move) ((u8)(((slot) + 1) | (((move) & 3) << 4)))
+#define BR_ITEM_TARGET_SLOT(t) ((u8)(((t) & 7) - 1)) // 0xFF for nobody
+#define BR_ITEM_TARGET_MOVE(t) (((t) >> 4) & 3)
+
 // The spectator's replay (POK-330 #12) reads a fight off its record, so what the record
 // did not carry, the replay could not do. A bag item goes on it as four bytes after its
 // action, none of them 0xFF, which is the record's "not here yet":
 //   [item & 0x7F][item >> 7][a][b]
 // For a battler on the player's side, a is the party slot the bag's item went to
-// (PARTY_SIZE for none: a ball, a doll, the AI's) and b the move slot a PP item chose;
-// on the opponent's side they are the AI's item type and flags, which its script reads.
+// (PARTY_SIZE for none: a ball, a doll, the AI's) and b the move slot a PP item chose.
+// On the opponent's side they are the AI's item type and flags, which its script reads --
+// or, when the other side is a person, BR_ITEM_PEER | the slot, and the move.
 #define BR_ITEM_RECORD_BYTES 4
+#define BR_ITEM_PEER 0x40
 // battle_main.c: the bag works in our link battles, and so in a replay of one.
 bool8 BrBattle_ItemsAllowed(void);
 // battle_main.c, as the choices go on the record: RUN's kind after it, a bag item's bytes.
 void BrBattle_RecordChoice(u8 battler);
 void BrBattle_RecordItem(u8 battler);
 // pokemon.c's ExecuteTableBasedItemEffect: which party slot, and move, a bag item went to.
-void BrBattle_NoteItemTarget(u8 partyIndex, u8 moveIndex);
+void BrBattle_NoteItemTarget(u16 item, u8 partyIndex, u8 moveIndex);
+// battle_controller_player.c, the bag closing: the item, and whom it went to.
+void BrBattle_EmitItemChoice(u16 item);
+// battle_controllers.c, a return value arriving over the link: the other trainer's bag
+// item, used on this ROM's copy of their mon.
+void BrBattle_PeerItem(u8 battler);
+// pokemon.c, PokemonUseItemEffects: the first battler on a side, whichever ROM this is.
+u8 BrBattle_FirstOnSide(u8 battler);
+// pokemon.c, PokemonUseItemEffects: pret's request for a healed battler's data, which
+// jams our link.
+void BrBattle_AfterItemHeal(void);
 // recorded_battle.c: a recorded item played onto the replay. Returns its id.
 u16 BrBattle_ReplayItem(u8 battler, const u8 *rec);
 // battle_main.c: TRUE while the battlers are still choosing, when the engine may yet take

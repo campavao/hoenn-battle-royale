@@ -4,7 +4,8 @@
 # DOLL rode in RUN's return value, which the record never carried, so the replay said
 # "Can't escape!" and then waited on a turn that was never coming.
 #
-# spectate-watch.txt's setup, with a second mon for the challenger at 5 HP on the bench.
+# spectate-watch.txt's setup, with a second mon for the challenger at 5 HP on the bench,
+# and the peer's one at 5 HP too.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -14,6 +15,7 @@ copy gDecompressionBuffer+129 gPlayerParty 100
 pokebytes gDecompressionBuffer+215 05 00
 pokebytes gDecompressionBuffer+229 01
 copy gDecompressionBuffer+230 gPlayerParty 100
+pokebytes gDecompressionBuffer+316 05 00
 mailsend gBrMailbox 18 gDecompressionBuffer 330
 wait 10
 expect u8 gBrSpectate+5 1
@@ -30,7 +32,20 @@ expectge u16 gPlayerParty+186 19
 # The peer's X ATTACK went up a stage on the replay too: ATK is statStages[1] at +0x19.
 expect u8 gBattleMons+0x71 7
 expect u8 gBrSpectate+5 1
-# Turn two: the challenger RUNs with a POKe DOLL (RUN, BR_RUN_DOLL); the peer FIGHTs.
+expect u16 gEnemyParty+0x56 5
+# Turn two. The challenger drinks another POTION into the same mon, full now, so it does
+# nothing. The peer drinks one too, and the peer is a person: their bag put it on their
+# mon, which the record says as BR_ITEM_PEER | the slot (0x40, their one mon) and the
+# move. The replay plays it on its copy of their mon, as the challenger's ROM did on its
+# own (POK-331 #7) -- the AI's branch would have read 0x40 as an item type.
+pokebytes gDecompressionBuffer+400 00 01 00 05 01 0D 00 01 00 01 05 01 0D 00 40 00
+mailsend gBrMailbox 19 gDecompressionBuffer+400 16
+wait 900
+shot peer-potion
+expectge u16 gEnemyParty+0x56 19
+expectge u16 gBattleMons+0x80 19
+expect u8 gBrSpectate+5 1
+# Turn three: the challenger RUNs with a POKe DOLL (RUN, BR_RUN_DOLL); the peer FIGHTs.
 pokebytes gDecompressionBuffer+400 00 01 00 02 03 01 01 03 00 00 00
 mailsend gBrMailbox 19 gDecompressionBuffer+400 11
 wait 600
