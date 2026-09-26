@@ -58,6 +58,13 @@ export function withoutRoom(hash: string): string {
   return textOf(params);
 }
 
+/** `#perf`: frame times, audio, the heap and the proxy in the corner (POK-247), in a
+ *  build as well as in DEV. It only reads, so it is safe on the live site -- which is
+ *  where a phone's numbers come from. It rides along through every door (withRoom). */
+export function perfWanted(hash: string): boolean {
+  return paramsOf(hash).has('perf');
+}
+
 // ---- dev flags (the page reads these in DEV only) ----------------------------------------
 
 /** A whole number of seconds, or undefined for anything else. */

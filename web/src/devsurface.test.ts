@@ -56,9 +56,9 @@ describe('the e2e dev surface', () => {
     expect(FIELDS.filter((f) => !brWritten.has(f))).toEqual([]);
   });
 
-  it('__hbr is the emulator, which is all a spec reads of it', () => {
-    expect([...fieldsRead(/__hbr\??\.(\w+)/g)]).toEqual(['emu']);
-    expect(appSource).toMatch(/__hbr = \{ emu \}/);
+  it('__hbr is the emulator and a meter of it (POK-247), which is all a spec reads of it', () => {
+    expect([...fieldsRead(/__hbr\??\.(\w+)/g)].filter((f) => f !== 'emu' && f !== 'perf')).toEqual([]);
+    expect(appSource).toMatch(/__hbr = \{ emu, perf: \(\) => new PerfProbe\(/);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { devLand, devPace, parseRoomHash, ROOM_HASH_KEYS, withoutRoom, withRoom } from './hash';
+import { devLand, devPace, parseRoomHash, perfWanted, ROOM_HASH_KEYS, withoutRoom, withRoom } from './hash';
 
 describe('the room in the URL', () => {
   it('reads every door', () => {
@@ -31,6 +31,16 @@ describe('the room in the URL', () => {
 });
 
 // POK-327: the play-a-match e2e sets its own opening and fog, and where it lands.
+describe('#perf (POK-247)', () => {
+  it('asks for the readout, and keeps asking through a door and back out', () => {
+    expect(perfWanted('#perf')).toBe(true);
+    expect(perfWanted('#host&perf')).toBe(true);
+    expect(perfWanted('#host')).toBe(false);
+    expect(perfWanted(`#${withRoom('#perf', 'host')}`)).toBe(true);
+    expect(perfWanted(`#${withoutRoom('#join=ABCD&perf')}`)).toBe(true);
+  });
+});
+
 describe('the dev flags a test plays a match with', () => {
   it('reads the pace: #fast, and #safari / #fog over it or alone', () => {
     expect(devPace('#solo')).toBeUndefined();

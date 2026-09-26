@@ -38,7 +38,7 @@ import {
   type StartState,
 } from './match/room';
 import { Stage } from './ui/stage';
-import { FrameMeter } from './ui/fps';
+import { PerfProbe, frameLine, perfLines } from './ui/fps';
 import { drawerKey, drawerLabel, stageKey } from './ui/roomkeys';
 import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
 import {
@@ -93,7 +93,7 @@ import {
   type MatchSnapshot,
 } from './match/lifecycle';
 import regionmapData from './data/regionmap.json';
-import { devLand, devPace, parseRoomHash as parseHash, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
+import { devLand, devPace, parseRoomHash as parseHash, perfWanted, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
 // Cast rather than re-declared: these three JSON files are the exporter's own output
@@ -874,17 +874,27 @@ function wireSettings(emu: Emulator): void {
   });
 }
 
-// ---- fps readout, dev only ---------------------------------------------------------------
+// ---- the readout in the corner: DEV always, a build with #perf -------------------------
+
+/** What the proxy instance has done, for a readout: null before there is one. */
+function proxyCounts() {
+  return proxyDuels?.stats ?? null;
+}
 
 function wireFps(emu: Emulator): void {
-  if (!import.meta.env.DEV) return;
+  const perf = perfWanted(location.hash);
+  if (!import.meta.env.DEV && !perf) return;
   const el = $('#fps') as HTMLElement;
   el.hidden = false;
   // ...and how many frame listeners have thrown: the emulator reports each one's first
   // throw only and goes on calling it, so the page carries on looking fine (POK-331 #29).
-  const meter = new FrameMeter(emu);
+  const now = new PerfProbe(emu, proxyCounts);
+  // #perf (POK-247): the whole page so far under this second, over every screen, so the
+  // end of a match on a phone is one screenshot.
+  el.classList.toggle('perf', perf);
+  const all = perf ? new PerfProbe(emu, proxyCounts, { log: () => {} }) : null;
   setInterval(() => {
-    el.textContent = meter.read();
+    el.textContent = all ? perfLines(now.sample(), all.sample(false)).join('\n') : frameLine(now.sample().frames);
   }, 1000);
 }
 
@@ -2976,7 +2986,8 @@ async function main(): Promise<void> {
 
   // Dev only, for the e2e harness (POK-220): solo play never builds a Bridge, so this
   // is the only way in to read the emulator's memory from outside the page.
-  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu };
+  // `perf` makes a meter of the spec's own (POK-247), read from the moment it asks.
+  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu, perf: () => new PerfProbe(emu, proxyCounts, { log: () => {} }) };
 
   // The proxy's own instance is not booted here -- only made available. It costs a
   // second wasm core and a second copy of the ROM, so it is paid for on the first bot

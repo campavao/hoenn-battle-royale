@@ -211,6 +211,8 @@
         padding: 2px 6px;
         border-radius: 4px;
       }
+      /* #perf (POK-247): over every screen, the results included, and in the way of no tap. */
+      .fps.perf { position: fixed; z-index: 1000; white-space: pre-line; pointer-events: none; max-width: calc(100vw - 12px); }
 
       #pad {
         flex: 1;
