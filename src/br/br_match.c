@@ -298,13 +298,15 @@ void BrMatch_Init(void)
 // Four cells per area, picked off the exported collision grid: open ground or tall
 // grass with open ground on all eight sides, three tiles clear of every edge (a seam
 // is a map away and a spawn on top of one is a warp nobody asked for), two clear of
-// every warp, and spread within the area by farthest-point sampling. The areas are all
-// connected by seams, so a trainer can walk the whole Zone from any of them.
+// every warp, and spread within the area by farthest-point sampling. And each is a walk
+// from every other one: joined areas were not enough, and NORTHEAST (3,3) was a 34-cell
+// pocket walled in by collision, where whoever was dealt it spent the opening (POK-331).
+// web/src/match/safari.test.ts floods from each cell over world.json to hold it.
 static const u8 sSafariCells[][3] =   // mapNum, x, y -- all six are map group 26
 {
     {  0,  6,  7 }, {  0, 36, 15 }, {  0, 13, 22 }, {  0, 29, 32 },  // NORTHWEST
     {  1,  5, 11 }, {  1, 29, 19 }, {  1, 19, 32 }, {  1,  3, 36 },  // NORTH
-    { 12,  3,  3 }, { 12, 27,  9 }, { 12, 21, 26 }, { 12,  7, 36 },  // NORTHEAST
+    { 12, 10, 13 }, { 12, 27,  9 }, { 12, 21, 26 }, { 12,  7, 36 },  // NORTHEAST
     {  2,  8,  5 }, {  2, 36,  7 }, {  2, 16, 25 }, {  2, 34, 36 },  // SOUTHWEST
     {  3, 29,  3 }, {  3,  5,  5 }, {  3, 24, 26 }, {  3,  4, 36 },  // SOUTH
     { 13, 31,  3 }, { 13, 15, 14 }, { 13, 14, 32 }, { 13, 31, 36 },  // SOUTHEAST

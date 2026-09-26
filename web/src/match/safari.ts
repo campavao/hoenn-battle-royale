@@ -8,7 +8,10 @@
 //
 // All six areas, not just the south one: the Zone's areas are joined by seams, so a
 // trainer can walk the whole of it from wherever they start, and an opening that used
-// one sixth of the map was an opening where everybody met in the same corner.
+// one sixth of the map was an opening where everybody met in the same corner. Joined
+// areas are not the same as joined cells: NORTHEAST (3,3) was a 34-cell pocket walled in
+// by collision, so whoever was dealt it spent the opening there (POK-331). It is (10,13)
+// now, and `safari.test.ts` floods from every cell to every other.
 //
 // Two copies of a table is a parity risk, so it is worth saying which is which: the
 // ROM's copy places the player it is running on, this one places the bots the host
@@ -36,7 +39,7 @@ export const SAFARI_CELLS: readonly { map: string; x: number; y: number }[] = [
   { map: 'MAP_SAFARI_ZONE_NORTH', x: 29, y: 19 },
   { map: 'MAP_SAFARI_ZONE_NORTH', x: 19, y: 32 },
   { map: 'MAP_SAFARI_ZONE_NORTH', x: 3, y: 36 },
-  { map: 'MAP_SAFARI_ZONE_NORTHEAST', x: 3, y: 3 },
+  { map: 'MAP_SAFARI_ZONE_NORTHEAST', x: 10, y: 13 },
   { map: 'MAP_SAFARI_ZONE_NORTHEAST', x: 27, y: 9 },
   { map: 'MAP_SAFARI_ZONE_NORTHEAST', x: 21, y: 26 },
   { map: 'MAP_SAFARI_ZONE_NORTHEAST', x: 7, y: 36 },
