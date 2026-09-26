@@ -65,3 +65,44 @@ test('a guest gets into a passcoded room with the code, and is asked again for a
     await hostCtx.close();
   }
 });
+
+test('JOIN BY CODE into a passcoded room asks for the passcode, and the code gets in', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&noauto&nobots&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+    const door = host.locator('#room-door');
+    await expect(door).toHaveText('LISTED', { timeout: 30_000 });
+    await door.click();
+    await expect(door).toHaveText('UNLISTED', { timeout: 15_000 });
+    await door.click();
+    await expect(host.locator('#entry-text')).toBeVisible();
+    await host.keyboard.type('WXYZ');
+    await host.keyboard.press('Enter');
+    await expect(door).toHaveText('PASS WXYZ', { timeout: 15_000 });
+
+    // The code on the entry, and the relay's `passcode` refusal is a question, not a dead end.
+    const guest = await guestCtx.newPage();
+    await guest.goto(`/#rom=${rom}`);
+    const join = guest.locator('#lobby-rows button', { hasText: 'JOIN BY CODE' });
+    await expect(join).toBeEnabled({ timeout: 60_000 });
+    await join.click();
+    await guest.keyboard.type(code);
+    await guest.keyboard.press('Enter');
+    await expect(guest.locator('#entry-title')).toHaveText('PASSCODE', { timeout: 60_000 });
+    await expect(guest.locator('#entry-note'), 'asked, not told it was wrong').toContainText('locked');
+    await guest.keyboard.type('WXYZ');
+    await guest.keyboard.press('Enter');
+    await expect(guest.locator('#room-code')).toHaveText(`Room ${code}`, { timeout: 60_000 });
+    await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 30_000 });
+  } finally {
+    await guestCtx.close();
+    await hostCtx.close();
+  }
+});
