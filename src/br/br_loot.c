@@ -266,6 +266,26 @@ static void ParseSpill(const u8 *d, u16 n)
 // The bag Take() last sent the pickup for, kept until its GIVE arrives: the key and the
 // cell anything that does not fit goes back to. kind BR_LOOT_NONE when there is none.
 static EWRAM_DATA struct BrLootItem sGivenBag = {0};
+// [seat, map, 0 mons, bag, key, x, y, itemCount, 8 * (id, n), money, nameLen]:
+// BrLoot_SpillOwn's bag with nobody's name on it and the cash already taken.
+#define BR_GIVE_BACK_MAX (4 + 1 + 6 + 1 + 8 * 3 + 4 + 1)
+// A give-back the out ring had no room for, held until it has (POK-331 #6). It lands on
+// our own ground only as it goes out: the page records a bag from its SPILL, so a bag
+// that was here and never sent was one the next taker got no GIVE for.
+static EWRAM_DATA u8 sGiveBack[BR_GIVE_BACK_MAX] = {0};
+static EWRAM_DATA u8 sGiveBackLen = 0;
+
+// Out to the room first, then onto our own ground, as every spill is. FALSE when the ring
+// is full: the held give-back stays held.
+static bool8 SendGiveBack(void)
+{
+    if (!BrWire_SendLarge(BR_MSG_SPILL, sGiveBack, sGiveBackLen))
+        return FALSE;
+    ParseSpill(sGiveBack, sGiveBackLen);
+    sGiveBackLen = 0;
+    return TRUE;
+}
+
 static const u8 sText_NoRoom[] = _("NO ROOM FOR IT");
 static const u8 sText_NoRoomRest[] = _("NO ROOM FOR THE REST");
 // Defined with Take(): the FOUND line, and under it the NO ROOM one.
@@ -284,9 +304,7 @@ static void HandleGive(const u8 *payload, u8 len)
 {
     const u8 *d;
     u8 n = BrWire_Unframe(payload, len, &d);
-    // [seat, map, 0 mons, bag, key, x, y, itemCount, 8 * (id, n), money, nameLen]:
-    // BrLoot_SpillOwn's bag with nobody's name on it and the cash already taken.
-    u8 buf[4 + 1 + 6 + 1 + 8 * 3 + 4 + 1];
+    u8 buf[BR_GIVE_BACK_MAX];
     u8 count, i, left = 0;
     u16 at = 12;
 
@@ -334,8 +352,16 @@ static void HandleGive(const u8 *payload, u8 len)
     buf[at++] = 0;
     buf[at++] = 0; // no name: the ROM never kept whose it was
     sGivenBag.kind = BR_LOOT_NONE;
-    BrWire_SendLarge(BR_MSG_SPILL, buf, at);
-    ParseSpill(buf, at);
+    // One held at a time. The page answers only a PICKUP it read, and BrLoot_Tick sends
+    // the held one before TryTake can put a PICKUP in the ring, so a second GIVE finds
+    // the first gone; should it not, the first keeps its place and this rest is lost on
+    // both sides alike.
+    if (sGiveBackLen != 0 && !SendGiveBack())
+        return;
+    for (i = 0; i < at; i++)
+        sGiveBack[i] = buf[i];
+    sGiveBackLen = at;
+    SendGiveBack();
 }
 
 static void HandleSpill(const u8 *payload, u8 len)
@@ -1009,6 +1035,7 @@ void BrLoot_Init(void)
     CpuFill32(0, &gBrLoot, sizeof(gBrLoot));
     CpuFill32(0, gBrDespawned, sizeof(gBrDespawned));
     sGivenBag.kind = BR_LOOT_NONE;
+    sGiveBackLen = 0;
     sSpillAsm.buf = sSpillBuf;
     sSpillAsm.cap = sizeof(sSpillBuf);
     sSpillAsm.type = 0;
@@ -1023,6 +1050,8 @@ void BrLoot_Tick(void)
 {
     u8 i, count = 0, spawned = 0, ghosts, limit, keep;
 
+    if (sGiveBackLen != 0)
+        SendGiveBack(); // before TryTake below can put a PICKUP in front of it
     if (!BrField_OverworldRunning())
     {
         for (i = 0; i < BR_MAX_LOOT; i++)
