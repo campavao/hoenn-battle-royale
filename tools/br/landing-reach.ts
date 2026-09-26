@@ -6,26 +6,27 @@
 // on one of those has no route to the rest of the match -- the fog closes on a section
 // they cannot walk to, and they bleed out in a corner having never met anybody.
 //
-// So: flood the real world graph with the real World class (no second implementation
-// of seams, warps, ledges and surf to drift out of step), find the components, and mark
-// every landing cell outside the biggest one `off`. The Director and the bots skip
-// those; nothing else changes.
+// So: flood the real world graph -- the very World the bots walk, bots/hoenn.ts's (no
+// second implementation of seams, warps, ledges and surf to drift out of step) -- find
+// the components, and mark every landing cell outside the biggest one `off`. The
+// Director and the bots skip those; nothing else changes.
 //
 //   npx vite-node tools/br/landing-reach.ts
 //
 // Run it after tools/br/export-world.py. It rewrites web/src/data/landing.json.
 import fs from 'node:fs';
 import path from 'node:path';
-import { World, type Spot, type WorldMap } from '../../web/src/bots/world';
+import { HOENN } from '../../web/src/bots/hoenn';
+import type { Spot } from '../../web/src/bots/world';
 
 const DATA = path.resolve(import.meta.dirname, '../../web/src/data');
-const maps = (JSON.parse(fs.readFileSync(path.join(DATA, 'world.json'), 'utf8')) as { maps: WorldMap[] }).maps;
 type Row = { map: string; x: number; y: number; off?: 1; door?: number };
 const landing = (JSON.parse(fs.readFileSync(path.join(DATA, 'landing.json'), 'utf8')) as Row[])
   // The doorsteps below are rebuilt from scratch every run, so a previous run's are not
   // flooded as if they were ordinary cells.
   .filter((c) => c.door === undefined);
-const world = new World(maps);
+// world.json, indexed the one way the page indexes it (POK-331 #20).
+const { maps, world } = HOENN;
 
 // On foot. Surfing needs a water mon that knows SURF, which a trainer may never be
 // dealt and a bot does not have until rung 30 -- so a drop that requires it is a drop
