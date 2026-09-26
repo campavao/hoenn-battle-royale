@@ -1,7 +1,8 @@
 // The phone layout (POK-245). A GBA screen and a thumb are the two fixed sizes here,
 // so what this checks is that both fit: the screen is not shrunk to nothing, the pad is
 // reachable, and turning the phone sideways puts the controls either side of the screen
-// rather than under it.
+// rather than under it. And a desktop's (POK-320): the in-match sheet docked beside the
+// game leaves the game most of the window, however narrow the window is.
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -89,6 +90,38 @@ test('a phone gets the screen and both thumbs, either way up', async ({ browser 
     expect(wideAb.x, 'the buttons are right of it').toBeGreaterThanOrEqual(wide.x + wide.width - 8);
     expect(wide.y + wide.height, 'and the screen still fits').toBeLessThanOrEqual(LANDSCAPE.height + 1);
     await page.screenshot({ path: path.join(OUT_DIR, 'phone-landscape.png') });
+  } finally {
+    await ctx.close();
+  }
+});
+
+// POK-320 review: the dock was 480px on every desktop window, so a window snapped to half
+// a 1366px laptop screen left the game about 200px. Under 960px wide (or 640 tall) the
+// sheet is drawn at the picture's own size instead.
+test('a desktop keeps most of the window for the game, beside the docked sheet', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const HALF = { width: 683, height: 768 };
+  const FULL = { width: 1366, height: 768 };
+  const ctx = await browser.newContext({ viewport: HALF });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(`/#solo&rom=${romHashParam()}`);
+    await page.waitForSelector('body.docked #stage[data-look="dock"]', { timeout: 90_000 });
+    const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
+
+    const sheet = await box('#stage');
+    const game = await box('#screen-wrap');
+    expect(sheet.width, "the sheet at the picture's own size").toBe(240);
+    expect(game.x, 'the game beside it, not under it').toBeGreaterThanOrEqual(sheet.x + sheet.width - 1);
+    expect(game.width, 'and the rest of the window is the game').toBeGreaterThanOrEqual(HALF.width - 240 - 2);
+
+    // A wide window has the room for the sheet at twice that, and the game still gets more.
+    await page.setViewportSize(FULL);
+    await expect.poll(async () => (await box('#stage')).width).toBe(480);
+    const wide = await box('#screen-wrap');
+    expect(wide.x).toBeGreaterThanOrEqual(480 - 1);
+    expect(wide.width).toBeGreaterThanOrEqual(FULL.width - 480 - 2);
+    await page.screenshot({ path: path.join(OUT_DIR, 'desktop-dock.png') });
   } finally {
     await ctx.close();
   }

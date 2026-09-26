@@ -49,9 +49,14 @@
       /* Over the game still running under it: the in-match sheet on a phone (POK-320). */
       #stage[data-look='overlay'] { background: transparent; }
       /* Beside the game: the sheet on a desktop, where the room panel always was, in view
-         all match. The game makes room for it (body.docked, set by the stage). */
-      #stage[data-look='dock'] { right: auto; width: 480px; z-index: 3; }
-      body.docked #screen-playing { margin-left: 480px; }
+         all match. The game makes room for it (body.docked, set by the stage). At twice
+         the picture's size only when the window can spare that and still give the game
+         as much, and is tall enough for whole pixels; at its own size otherwise, so a
+         window snapped to half a laptop screen keeps most of itself for the game. */
+      :root { --dock: 240px; }
+      @media (min-width: 960px) and (min-height: 640px) { :root { --dock: 480px; } }
+      #stage[data-look='dock'] { right: auto; width: var(--dock); z-index: 3; }
+      body.docked #screen-playing { margin-left: var(--dock); }
       #stage-box { position: relative; }
       /* Emerald's fade from black over a cut (POK-320, Stage.cut): the room giving way to
          the match, the match to its results. Four steps, as the game's palette fades go. */
