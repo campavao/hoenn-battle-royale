@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState } from './room';
+import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorLabel, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState } from './room';
 import { freshMatch, noteMatch, ringClockLeft } from './lifecycle';
 import { Director, type DirectorWorld } from './director';
 import type { RosterEvent } from '../net/relay';
@@ -72,6 +72,14 @@ describe('the host controls', () => {
     expect(nextDoor('open')).toBe('private');
     expect(nextDoor('private')).toBe('pass');
     expect(nextDoor('pass')).toBe('open');
+  });
+
+  it("show the host the passcode it set, as Kanto's OPEN: PASS 1234 does (POK-320)", () => {
+    expect(doorLabel('pass', 'AB23')).toBe('PASS AB23');
+    // A host that took the room over never knew it.
+    expect(doorLabel('pass', null)).toBe('PASSCODE');
+    expect(doorLabel('open', null)).toBe('LISTED');
+    expect(doorLabel('private', 'AB23')).toBe('UNLISTED');
   });
 });
 

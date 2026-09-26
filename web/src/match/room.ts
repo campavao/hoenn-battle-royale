@@ -84,6 +84,13 @@ export function nextDoor(door: Door): Door {
   return door === 'open' ? 'private' : door === 'private' ? 'pass' : 'open';
 }
 
+/** What the door control says. The host sees the passcode it set, as Kanto's OPEN: PASS
+ *  1234 does (menu.lua), to read it out; a host that took the room over never knew it. */
+export function doorLabel(door: Door, pass: string | null): string {
+  if (door === 'pass') return pass ? `PASS ${pass}` : 'PASSCODE';
+  return door === 'open' ? 'LISTED' : 'UNLISTED';
+}
+
 /** Can the host start? A match needs somebody in it -- with FILL off and nobody else
  *  here, START would deal a one-trainer battle royale. */
 export function canStart(view: RoomView): boolean {

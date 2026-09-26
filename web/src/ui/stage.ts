@@ -40,12 +40,25 @@ export interface Painted {
   containers?: Container[];
 }
 
+/** How the stage shows a screen: over everything (the default), over the game still
+ *  running under it (the in-match sheet on a phone), or beside the game, taking no key
+ *  from it (the sheet on a desktop, which keeps its room panel in view). */
+export type Look = 'full' | 'overlay' | 'dock';
+
 export interface DrawnScreen {
   /** Draw onto `c`, which is `h` pixels tall and 240 wide (its origin is set), and
    *  say what was drawn where. */
   paint(c: EmeraldCanvas, h: number): Painted;
   /** B, or the browser's back: what leaving this screen means, if anything. */
   back?(): void;
+  /** A GBA key, before the stage's own cursor sees it: true when the screen took it.
+   *  The code entry scrubs its letters with the D-pad this way, as Kanto's does. */
+  key?(k: GbaKey): boolean;
+  /** A key off a real keyboard, by its KeyboardEvent.key ('a', 'Backspace', 'Enter'):
+   *  true when the screen took it, and then nothing else hears it -- the entry types a
+   *  Z rather than pressing A. */
+  char?(key: string): boolean;
+  look?(): Look;
 }
 
 /** The scale a stage shows at: whole pixels once it can afford two, the picture's own
@@ -203,6 +216,8 @@ export class Stage {
     this.mirror = new Mirror(hits, (w) => {
       this.cursorKey = this.keyOf(w);
       w.onPress?.();
+      // What a tap changed is drawn: a key typed into an entry, a card opened.
+      this.redraw();
     });
     this.canvas = new EmeraldCanvas(canvasEl);
     this.canvas.onLoad = () => this.redraw();
@@ -212,8 +227,22 @@ export class Stage {
     }
   }
 
+  /** A screen is up and has the keys: the game under it hears none. A docked screen
+   *  sits beside the game and leaves it the keys. */
   get active(): boolean {
-    return this.screen !== null && !this.root.hidden;
+    return this.screen !== null && !this.root.hidden && this.look() !== 'dock';
+  }
+
+  private look(): Look {
+    return this.screen?.look?.() ?? 'full';
+  }
+
+  /** The root says how it is shown (index.html's #stage[data-look]), and the page makes
+   *  room beside a docked one (body.docked). */
+  private applyLook(): void {
+    const look = this.root.hidden ? '' : this.look();
+    if (this.root.dataset.look !== look) this.root.dataset.look = look;
+    this.root.ownerDocument.body.classList.toggle('docked', look === 'dock');
   }
 
   get current(): DrawnScreen | null {
@@ -251,6 +280,7 @@ export class Stage {
     this.screen = null;
     this.stack = [];
     this.mirror.clear();
+    this.applyLook();
   }
 
   /** Paint again, soon: many things change at once and one pass is enough. A timer
@@ -267,6 +297,7 @@ export class Stage {
   /** Paint now. Tests and a key press want the mirror in place before they look. */
   paintNow(): void {
     if (!this.screen || this.root.hidden) return;
+    this.applyLook();
     const cssW = this.root.clientWidth;
     const cssH = this.root.clientHeight;
     if (cssW === 0 || cssH === 0) return;
@@ -276,7 +307,9 @@ export class Stage {
     const c = this.canvas;
     if (c.width !== w || c.height !== h || c.scale !== scale) c.resize(w, h, scale);
     c.origin = Math.floor((w - STAGE_WIDTH) / 2);
-    c.clear();
+    // Over the running game the canvas is clear, and the screen dims what it wants dimmed.
+    if (this.look() === 'overlay') c.clearAll();
+    else c.clear();
     const painted = this.screen.paint(c, h);
     this.widgets = painted.widgets;
     this.mirror.sync(painted, scale, c.origin);
@@ -308,6 +341,10 @@ export class Stage {
    *  while one is showing: the game underneath must not hear it). */
   key(k: GbaKey): boolean {
     if (!this.active) return false;
+    if (this.screen?.key?.(k)) {
+      this.paintNow();
+      return true;
+    }
     if (k === 'a') {
       const sel = this.selected();
       if (sel?.onPress) {
@@ -329,6 +366,15 @@ export class Stage {
       return true;
     }
     return true;
+  }
+
+  /** A key off the keyboard, for a screen that types (ui/entry.ts). False when there is
+   *  no such screen up, and the key goes on to the game's own keyboard map. */
+  char(key: string): boolean {
+    if (!this.active || !this.screen?.char) return false;
+    const took = this.screen.char(key);
+    if (took) this.paintNow();
+    return took;
   }
 
   /** The nearest selectable widget in a direction, by centres; wraps to the far end

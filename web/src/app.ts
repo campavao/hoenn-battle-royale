@@ -37,12 +37,14 @@ import {
   type StartDecision,
   type StartState,
 } from './match/room';
-import { Stage } from './ui/stage';
+import { Stage, type DrawnScreen } from './ui/stage';
 import { FrameMeter } from './ui/fps';
 import { drawerKey, drawerLabel, stageKey } from './ui/roomkeys';
-import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
+import { menuScreen, noticeScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
+import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from './ui/entry';
 import {
   canStart,
+  doorLabel,
   doorOf,
   fillLabel,
   nextDoor,
@@ -447,13 +449,25 @@ const KEYBOARD_MAP: Record<string, GbaKey> = {
 };
 
 function wireKeyboard(emu: Emulator): () => void {
+  // A screen that types (ui/entry.ts) has the keyboard's letters first, on the way down
+  // (the capture phase), before the game's map turns a Z into the A button.
+  const typed = (e: KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || !stage?.char(e.key)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+  addEventListener('keydown', typed, true);
   // A drawn screen (POK-320) has the presses; the game under it hears nothing -- except
   // the releases, which always go through (POK-330 #56, Emulator.bindKeyboard).
-  return emu.bindKeyboard(KEYBOARD_MAP, (key, repeat) => {
+  const unbind = emu.bindKeyboard(KEYBOARD_MAP, (key, repeat) => {
     if (!stage?.active) return false;
     if (!repeat) stage.key(key);
     return true;
   });
+  return () => {
+    removeEventListener('keydown', typed, true);
+    unbind();
+  };
 }
 
 // ---- input: gamepad -------------------------------------------------------------------
@@ -1658,8 +1672,9 @@ function saveCareerFile(): void {
   setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
-/** ...and back in. A file that is not one of ours changes nothing and says so. */
-function loadCareerFile(then: () => void): void {
+/** ...and back in. A file that is not one of ours changes nothing and says so, on the
+ *  trainer's own screen rather than in a browser alert (POK-320). */
+function loadCareerFile(then: (note: string) => void): void {
   const input = document.createElement('input');
 
   input.type = 'file';
@@ -1669,11 +1684,8 @@ function loadCareerFile(then: () => void): void {
     if (!file) return;
     void file
       .text()
-      .then((text) => {
-        if (importCareer(text)) then();
-        else alert('That is not a Hoenn Battle Royale career file.');
-      })
-      .catch(() => alert('That file could not be read.'));
+      .then((text) => then(importCareer(text) ? 'Career loaded.' : 'That is not a Hoenn Battle Royale career file.'))
+      .catch(() => then('That file could not be read.'));
   });
   input.click();
 }
@@ -1758,6 +1770,12 @@ function wireRoom(
     safariSecs: DEFAULT_SAFARI_SECS,
   };
 
+  /** The passcode this page put on the door, to show on it; null when it set none, or
+   *  took over from a host who did. Never in the URL. */
+  let hostPass: string | null = null;
+  /** The passcode entry over the room screen, while the host types one. */
+  let doorEntry: DrawnScreen | null = null;
+
   // ---- the room, drawn (POK-320) ----
   // Kanto's lobby: the code, a 2x4 of seats with everybody's sprite, what START would
   // make, the host's options, START or LEAVE. It covers the game until the match is
@@ -1776,15 +1794,28 @@ function wireRoom(
       },
       {
         id: 'room-door',
-        label: { open: 'LISTED', private: 'UNLISTED', pass: 'PASSCODE' }[doorOf(view)],
+        // Kanto's OPEN: PASS 1234 -- the host sees the code it set, to read out.
+        label: doorLabel(doorOf(view), hostPass),
         onPress: () => {
           const next = nextDoor(doorOf(view));
           if (next === 'pass') {
-            const code = (prompt('Passcode for the door? (4 characters)') ?? '').trim().toUpperCase();
-            if (!code) return;
-            relay.setPass(code);
-            relay.setOpen(true);
+            // Typed on the drawn entry (POK-320). BACK leaves the door as it was.
+            const state = newEntry(PASS_ENTRY);
+            doorEntry = entryScreen(() => ({
+              title: 'PASSCODE',
+              state,
+              note: 'Guests type this to come in.',
+              onDone: (code) => {
+                hostPass = code;
+                relay.setPass(code);
+                relay.setOpen(true);
+                stage.pop();
+              },
+              onBack: () => stage.pop(),
+            }));
+            stage.push(doorEntry);
           } else {
+            hostPass = null;
             relay.setPass(null);
             relay.setOpen(next === 'open');
           }
@@ -1894,7 +1925,8 @@ function wireRoom(
     countdown.cancel();
     if (room.started) return;
     room.started = true;
-    if (stage.current === roomScreenView) stage.hide();
+    // ...and the passcode entry over it, should a count run out on a host still typing.
+    if (stage.current === roomScreenView || (doorEntry !== null && stage.current === doorEntry)) stage.hide();
   };
   hideRoomHook = hideRoomScreen;
   roomPanelHook = (onStart, started) => {
@@ -2659,6 +2691,8 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
   let rooms: RoomListing[] = [];
   /** The line under the main menu: a rejected code, or nothing. */
   let note = '';
+  /** The line under the trainer's rows: what became of a career file. */
+  let trainerNote = '';
 
   return new Promise<RoomHash>((resolve) => {
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -2673,9 +2707,21 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
     const press = (action: LobbyAction) => {
       switch (action.kind) {
         case 'name': {
-          const typed = cleanName(prompt('Your name? (7 characters)') ?? '');
-          if (typed) saveProfile({ name: typed });
-          redraw();
+          // Typed on the drawn entry (POK-320), Emerald's seven letters.
+          const state = newEntry(NAME_ENTRY, careerName());
+          stage.push(
+            entryScreen(() => ({
+              title: 'YOUR NAME',
+              state,
+              note: 'Seven letters, as Emerald keeps it.',
+              onDone: (text) => {
+                const typed = cleanName(text);
+                if (typed) saveProfile({ name: typed });
+                stage.pop();
+              },
+              onBack: () => stage.pop(),
+            })),
+          );
           return;
         }
         case 'skin':
@@ -2702,8 +2748,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
           // Kanto's career is a file somebody can carry between machines; ours lives
           // in a localStorage nobody can copy, so this is the door (POK-243). Save
           // writes it out; load takes one back and re-reads the profile from it.
-          if (confirm('Save your career to a file?\n\nCancel to load one instead.')) saveCareerFile();
-          else loadCareerFile(redraw);
+          stage.push(careerAsk);
           return;
         case 'lobbies':
           stage.push(lobbies);
@@ -2723,17 +2768,32 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
           setRoomHash('daily');
           return done({ mode: 'daily' });
         case 'code': {
-          const code = (prompt('Room code?') ?? '').trim().toUpperCase();
-          // The relay never issues 0/O/1/I/L -- they read alike at a glance -- so a
-          // code with one of those in it, or the wrong length, could not be real
-          // (POK-240). Catching that here beats waiting on the relay's `not_found`.
-          if (!isRoomCode(code)) {
-            note = code ? `${code} is not a room code.` : '';
-            redraw();
-            return;
-          }
-          setRoomHash('join', code);
-          return done({ mode: 'join', code });
+          // The relay never issues 0/O/1/I/L -- they read alike at a glance -- and the
+          // entry's keys are the relay's own alphabet (POK-320), so a code that could not
+          // be real cannot be typed. The check stays: it is what the relay would say.
+          const state = newEntry(CODE_ENTRY);
+          stage.push(
+            entryScreen(() => ({
+              title: 'ROOM CODE',
+              state,
+              note,
+              noteIsError: note !== '',
+              onDone: (code) => {
+                if (!isRoomCode(code)) {
+                  note = `${code} is not a room code.`;
+                  return;
+                }
+                note = '';
+                setRoomHash('join', code);
+                done({ mode: 'join', code });
+              },
+              onBack: () => {
+                note = '';
+                stage.pop();
+              },
+            })),
+          );
+          return;
         }
         case 'join':
         case 'watch':
@@ -2771,8 +2831,39 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         record: record(),
       }).map(row),
       rowsId: 'trainer-rows',
-      note: '',
+      note: trainerNote,
+      noteId: 'trainer-note',
       buttons: [{ label: 'BACK', id: 'trainer-back', onPress: () => stage.pop() }],
+      onBack: () => stage.pop(),
+    }));
+    /** MY CAREER: out to a file, or back in from one -- a question in the frame, where
+     *  the page used to ask with confirm() (POK-320). */
+    const careerAsk = noticeScreen(() => ({
+      title: 'MY CAREER',
+      lines: [{ text: 'Your career lives in this browser. Save it to a file to keep it, or load one to carry it here.' }],
+      buttons: [
+        {
+          label: 'SAVE',
+          id: 'career-save',
+          onPress: () => {
+            saveCareerFile();
+            trainerNote = 'Saved to a file.';
+            stage.pop();
+          },
+        },
+        {
+          label: 'LOAD',
+          id: 'career-load',
+          onPress: () => {
+            stage.pop();
+            loadCareerFile((said) => {
+              trainerNote = said;
+              redraw();
+            });
+          },
+        },
+        { label: 'BACK', id: 'career-back', onPress: () => stage.pop() },
+      ],
       onBack: () => stage.pop(),
     }));
     const lobbies = menuScreen(() => ({

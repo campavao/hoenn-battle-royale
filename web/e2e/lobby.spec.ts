@@ -290,9 +290,16 @@ test('the lobby is where you say who you are', async ({ page }) => {
   await page.locator('#wardrobe-back').click();
   await expect(skin).toContainText('MAY');
 
-  // And the name is yours to set -- seven characters, Emerald's own limit.
-  page.once('dialog', (d) => d.accept('wallyfromthegym'));
+  // And the name is yours to set -- seven characters, Emerald's own limit -- on the drawn
+  // entry (POK-320), typed from the keyboard: the old name out, a long one in, Enter.
   await name.click();
+  const typed = page.locator('#entry-text');
+  await expect(typed).toBeVisible();
+  for (let i = 0; i < 7; i++) await page.keyboard.press('Backspace');
+  await expect(typed).toHaveText('');
+  await page.keyboard.type('wallyfromthegym');
+  await expect(typed).toHaveText('WALLYFR');
+  await page.keyboard.press('Enter');
   await expect(name).toContainText('WALLYFR');
 
   // It survives a reload, because it lives beside the record rather than in the tab.
@@ -348,19 +355,24 @@ test('QUICK PLAY hosts a game when there is nothing to join', async ({ page }) =
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 30_000 });
 });
 
-test('JOIN BY CODE rejects a code the relay could never have issued (POK-240)', async ({ page }) => {
+test('JOIN BY CODE cannot type a code the relay could never have issued (POK-240)', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(`/#rom=${romHashParam()}`);
   const join = page.locator('#lobby-rows button', { hasText: 'JOIN BY CODE' });
   await expect(join).toBeVisible({ timeout: 60_000 });
   await expect(join).toBeEnabled({ timeout: 30_000 }); // the socket came up
-
-  // Every character the relay's CODE_ALPHABET never hands out (0/O/1/I/L), so this
-  // could not be a real code no matter what the relay says.
-  page.once('dialog', (d) => d.accept('O0IL1X'));
   await join.click();
-  await expect(page.locator('#lobby-note')).toContainText('is not a room code');
-  // Rejected before it ever reached the relay -- still on the lobby, not a dead join.
+
+  // The drawn entry's keys are the relay's CODE_ALPHABET (POK-320): none of the
+  // characters it never hands out (0/O/1/I/L) is on the grid...
+  await expect(page.locator('#entry-key-A')).toBeVisible();
+  for (const ch of ['0', 'O', '1', 'I', 'L']) await expect(page.locator(`#entry-key-${ch}`), ch).toHaveCount(0);
+  // ...and typed on a keyboard they go nowhere; the one real letter goes in.
+  await page.keyboard.type('O0IL1X');
+  await expect(page.locator('#entry-text')).toHaveText('X');
+  await expect(page.locator('#entry-ok'), 'a code is all six of its letters').toBeDisabled();
+  // BACK is the lobby again, not a dead join.
+  await page.locator('#entry-back').click();
   await expect(page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible();
 });
 

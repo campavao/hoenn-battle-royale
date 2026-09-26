@@ -18,8 +18,9 @@ import {
   fitText,
   measure,
   skinSheet,
+  wrapText,
 } from './emerald';
-import type { DrawnScreen, Painted, Widget } from './stage';
+import type { Container, DrawnScreen, Painted, Widget } from './stage';
 
 export const ROW_H = 16;
 export const SEAT_W = 56;
@@ -362,6 +363,84 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
         y += 52;
       }
       if (m.buttons?.length) widgets.push(...paintButtons(c, Math.min(y, h - 28), m.buttons));
+      return { widgets, containers };
+    },
+  };
+}
+
+// ---- a notice ----------------------------------------------------------------------------
+
+export interface NoticeLine {
+  text: string;
+  id?: string;
+  cls?: string;
+  color?: TextColor;
+}
+
+export interface NoticeModel {
+  title: string;
+  titleId?: string;
+  /** Said in one frame, each wrapped to fit; an empty one is left out. */
+  lines: NoticeLine[];
+  buttons?: ButtonSpec[];
+  /** The mirror container the buttons go in, when a test knows them by it. */
+  buttonsId?: string;
+  containers?: Container[];
+  /** A last line at the bottom, small: the version. */
+  footer?: string;
+  onBack?(): void;
+}
+
+/** A title, a few sentences in a frame and the buttons that answer them: the import and
+ *  patch screens, a door that will not open, a question with SAVE or LOAD in it. */
+export function noticeScreen(model: () => NoticeModel): DrawnScreen {
+  return {
+    back() {
+      model().onBack?.();
+    },
+    paint(c, h): Painted {
+      const m = model();
+      const widgets: Widget[] = [];
+      const containers: Container[] = [...(m.containers ?? [])];
+      if (m.buttonsId) containers.push({ id: m.buttonsId });
+      let y = 4;
+      paintTitle(c, fitText(m.title, W - 8), y);
+      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.title, id: m.titleId, cursor: null });
+      y += 20;
+
+      const bottom = h - 28 - (m.footer ? ROW_H : 0);
+      // As many rows as the screen has room for: a startup error carries its stack.
+      let room = Math.max(1, Math.floor((bottom - y - 20) / ROW_H));
+      const blocks = m.lines
+        .filter((l) => l.text)
+        .map((line) => {
+          const rows = wrapText(line.text, W - 24).slice(0, room);
+          room = Math.max(0, room - rows.length);
+          return { line, rows };
+        })
+        .filter((b) => b.rows.length > 0);
+      const count = blocks.reduce((n, b) => n + b.rows.length, 0);
+      if (count > 0) {
+        const frame = { x: 0, y, w: W, h: count * ROW_H + 16 };
+        c.drawFrame(frame);
+        let ly = y + 8;
+        for (const b of blocks) {
+          const top = ly;
+          for (const row of b.rows) {
+            c.drawText(row, 12, ly, b.line.color ?? TEXT_DARK);
+            ly += ROW_H;
+          }
+          widgets.push({ rect: { x: 8, y: top, w: W - 16, h: ly - top }, text: b.line.text, id: b.line.id, cls: b.line.cls, cursor: null });
+        }
+        y = frame.y + frame.h + 4;
+      }
+      if (m.buttons?.length) {
+        widgets.push(...paintButtons(c, Math.min(y, bottom), m.buttons.map((b) => ({ ...b, parent: b.parent ?? m.buttonsId }))));
+      }
+      if (m.footer) {
+        c.drawTextCentred(fitText(m.footer, W - 8), W / 2, h - ROW_H, TEXT_GRAY);
+        widgets.push({ rect: { x: 0, y: h - ROW_H, w: W, h: ROW_H }, text: m.footer, cls: 'version', cursor: null });
+      }
       return { widgets, containers };
     },
   };
