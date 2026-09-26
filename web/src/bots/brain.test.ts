@@ -471,8 +471,10 @@ describe('a bot meeting a player', () => {
 
   // A bot's bag starts empty (POK-322). Beating one still pays its purse: the bag goes
   // down with the cash in it and nothing else, which the ROM pays out like any other.
+  // The empty bag comes in through bagFor, as the host's dealt one did: the ring's old
+  // restock ran only for a Bots with a bagFor, so without one the ring check could not fail.
   it('drops its purse as a bag with no items when it had nothing (POK-322)', () => {
-    const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 });
+    const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }, [MON], []);
     const seat = dealt[0].seat;
     expect(bots.bagOf(seat)).toEqual([]);
     const card = sent.find((m) => m.t === 'trainer') as { items?: number[] };
@@ -502,6 +504,8 @@ describe('a bot meeting a player', () => {
       },
       rng: mulberry32(7),
       deal: () => [MON],
+      // Empty, but there: the ring's old restock ran only for a Bots with a bagFor.
+      bagFor: () => [],
       // A bag lying on the cell the bot was dealt onto.
       loot: {
         all: () => (lying ? [{ key: KEY, mapId: 'FIELD', ...pageCell(1, 1) }] : []),
@@ -515,7 +519,7 @@ describe('a bot meeting a player', () => {
     bots.tick(STEP_MS);
     expect(sent.filter((m) => m.t === 'pickup')).toEqual([{ t: 'pickup', seat, key: KEY, item: 13 }]);
     expect(bots.bagOf(seat)).toEqual([{ id: 13, n: 1 }]);
-    // The ring moving used to put a free potion in every bag that had one.
+    // The ring moving used to put a free potion in every standing bot's bag.
     bots.ringMoved(1);
     expect(bots.bagOf(seat)).toEqual([{ id: 13, n: 1 }]);
     expect(bots.challenged(seat, 0)).toBe(true);
