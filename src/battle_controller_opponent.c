@@ -1622,6 +1622,9 @@ static void OpponentHandleChooseMove(void)
 
 static void OpponentHandleChooseItem(void)
 {
+#if BR
+    if (!BrDuel_ChooseItem()) // a duel's side A uses its item as a bag does (POK-331 leftover h)
+#endif
     BtlController_EmitOneReturnValue(B_COMM_TO_ENGINE, *(gBattleStruct->chosenItem + (gActiveBattler / 2) * 2));
     OpponentBufferExecCompleted();
 }

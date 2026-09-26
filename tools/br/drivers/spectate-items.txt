@@ -71,7 +71,23 @@ shot peer-potion
 expectge u16 gEnemyParty+0x56 19
 expectge u16 gBattleMons+0x80 19
 expect u8 gBrSpectate+5 1
-# Turn three: the challenger RUNs with a POKe DOLL (RUN, BR_RUN_DOLL); the peer FIGHTs.
+# Turn three: the challenger's X ATTACK on the mon that is out, slot 0, and the peer
+# FIGHTs. It is the record a duel's side A writes for its AI's item now (duel.txt,
+# POK-331 leftover h): a bag's, which the replay plays as the bag did, straight onto
+# battler 0's ATK, and names -- "CAM used", a new line, "X ATTACK!"
+expect u8 gBattleMons+0x19 6
+pokebytes gDecompressionBuffer+400 00 01 00 05 01 4B 00 00 00 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer+400 14
+wait 100
+expect u32 gDisplayedStringBattle 0x00C7BBBD
+expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
+expect u32 gDisplayedStringBattle+8 0xBB00D2FE
+expect u32 gDisplayedStringBattle+12 0xBDBBCECE
+expect u16 gDisplayedStringBattle+16 0xABC5
+expect u8 gBattleMons+0x19 7
+wait 400
+expect u8 gBrSpectate+5 1
+# Turn four: the challenger RUNs with a POKe DOLL (RUN, BR_RUN_DOLL); the peer FIGHTs.
 pokebytes gDecompressionBuffer+400 00 01 00 02 03 01 01 03 00 00 00
 mailsend gBrMailbox 19 gDecompressionBuffer+400 11
 wait 600

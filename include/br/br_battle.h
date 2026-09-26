@@ -106,6 +106,9 @@ void BrBattle_RecordItem(u8 battler);
 void BrBattle_NoteItemTarget(u16 item, u8 partyIndex, u8 moveIndex);
 // battle_controller_player.c, the bag closing: the item, and whom it went to.
 void BrBattle_EmitItemChoice(u16 item);
+// br_duel.c: a bot's item on the player's side of a duel, used as a bag uses one, and
+// handed back to the engine as the bag's choice is.
+void BrBattle_UseAsBag(u8 battler, struct Pokemon *party, u16 item);
 // battle_controllers.c, a return value arriving over the link: the other trainer's bag
 // item, used on this ROM's copy of their mon.
 void BrBattle_PeerItem(u8 battler);

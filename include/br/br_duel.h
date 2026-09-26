@@ -68,6 +68,10 @@ struct Pokemon *BrDuel_ControllerParty(void);
 void BrDuel_LoadItems(u8 battler);
 // The AI reached for one. Recorded per side, so the page can spend the right bag.
 void BrDuel_NoteItemUsed(u16 item);
+// battle_controller_opponent.c, the engine asking which item: TRUE when it was side A's,
+// which is used as a bag uses one and answered here (POK-331 leftover h). FALSE leaves it
+// to pret's answer, the AI's chosen item for side B.
+bool8 BrDuel_ChooseItem(void);
 
 void BrDuel_Init(void);
 void BrDuel_HeapReset(void);

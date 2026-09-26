@@ -373,6 +373,20 @@ static void UseItemOn(u8 battler, struct Pokemon *party, u8 slot, u16 item, u8 m
         UpdateHealthboxAttribute(gHealthboxSpriteIds[battler], &party[slot], HEALTHBOX_ALL);
 }
 
+// A duel's side A is a bot on the player's side (POK-331 leftover h). pret sends the
+// player's side's items down the player's script, which does nothing -- a bag has already
+// used them -- so A's AI spent its X ATTACK out of the bag and nothing went up. It is used
+// here the way a bag would, as its choice is handed back, on the mon that is out; and it
+// is recorded as a bag item, so a spectator's replay plays exactly this call again.
+void BrBattle_UseAsBag(u8 battler, struct Pokemon *party, u16 item)
+{
+    u8 slot = gBattlerPartyIndexes[battler];
+
+    UseItemOn(battler, party, slot, item, 0);
+    BrBattle_NoteItemTarget(item, slot, 0);
+    BrBattle_EmitItemChoice(item);
+}
+
 void BrBattle_PeerItem(u8 battler)
 {
     const u8 *ret;

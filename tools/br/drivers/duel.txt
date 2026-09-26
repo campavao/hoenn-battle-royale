@@ -66,6 +66,18 @@ tap A
 wait 20
 tap A
 wait 20
+# A's X ATTACK went up, on its own mon: battler 0's ATK is statStages[1] at +0x19
+# (POK-331 leftover h). Side A stands on the player's side, and pret sends that side's
+# item down the player's script, which leaves it to a bag that has already used it --
+# so A's AI spent it out of the bag and nothing went up. It is used the way a bag uses
+# one now, and the first turn's record says it the way a bag's does: battler 0,
+# USE_ITEM, X ATTACK (0x4B), on party slot 0, the mon that is out. That is what a
+# spectator's replay plays (spectate-items.txt, the challenger's X ATTACK).
+expect u8 gBattleMons+0x19 7
+expectmsg 19 u8 2 0
+expectmsg 19 u8 4 1
+expectmsg 19 u16 5 0x4B
+expectmsg 19 u8 7 0
 tap A
 wait 20
 tap A

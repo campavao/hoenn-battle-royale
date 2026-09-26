@@ -25,6 +25,7 @@
 #include "constants/items.h"
 #include "br/br_duel.h"
 #include "br/br_field.h"
+#include "br/br_battle.h"
 
 EWRAM_DATA struct BrDuel gBrDuel = {0};
 // Two parties and two bags is 1222 bytes: the heap, for the few frames between the
@@ -35,6 +36,9 @@ static EWRAM_DATA struct BrAssembler sDuelAsm = {0};
 // Each built mon's card maxHp, [side][slot]: the DRESULT reports HP on the card's scale,
 // so the page's share comes back as a share (POK-330 #30).
 static EWRAM_DATA u16 sCardMax[2][BR_DUEL_MAX_MONS] = {0};
+// The item side A's AI chose this turn. pret keeps one per side pair (battler / 2), and in
+// a single battle that is battlers 0 and 1 both: B's choice, made a moment later, took it.
+static EWRAM_DATA u16 sChosenA = 0;
 
 // DUEL: seatA, seatB, countA, countB, then countA + countB PackedMon rows. A goes into
 // gPlayerParty and B into gEnemyParty -- which side is which matters only for reading
@@ -141,6 +145,8 @@ void BrDuel_NoteItemUsed(u16 item)
     if (!gBrDuel.running)
         return;
     side = SideOf(gActiveBattler);
+    if (side == 0)
+        sChosenA = item;
     for (i = 0; i < gBrDuel.itemCount[side]; i++)
     {
         if (gBrDuel.items[side][i] == item && !(gBrDuel.spent[side] & (1 << i)))
@@ -149,6 +155,14 @@ void BrDuel_NoteItemUsed(u16 item)
             return;
         }
     }
+}
+
+bool8 BrDuel_ChooseItem(void)
+{
+    if (!gBrDuel.running || SideOf(gActiveBattler) != 0)
+        return FALSE;
+    BrBattle_UseAsBag(gActiveBattler, gPlayerParty, sChosenA);
+    return TRUE;
 }
 
 static void DoneWithBuffer(void)
@@ -297,6 +311,7 @@ static void EnterDuel(void)
 void BrDuel_Init(void)
 {
     CpuFill32(0, &gBrDuel, sizeof(gBrDuel));
+    sChosenA = ITEM_NONE;
     sDuelAsm.buf = NULL;
     sDuelAsm.cap = 0;
     sDuelAsm.type = 0;
