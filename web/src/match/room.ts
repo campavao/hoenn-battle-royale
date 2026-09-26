@@ -332,6 +332,23 @@ export function decideStart(trigger: StartTrigger, s: StartState): StartDecision
  *  older relay does (net/relay.ts). */
 const DEAD_ENDS = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server_full', 'version', 'seat'];
 
+/** What a shut door says, in Kanto's words (browse.lua's REFUSALS) and Emerald's font,
+ *  which has no apostrophe: the relay's reason is a word for a log, not for a player. */
+const REFUSALS: Record<string, string> = {
+  passcode: 'WRONG PASSCODE',
+  full: 'THAT GAME IS FULL',
+  locked: 'THAT GAME STARTED',
+  not_found: 'THAT GAME IS GONE',
+  removed: 'HOST REMOVED YOU',
+  already_in_room: 'ALREADY IN A GAME',
+  server_full: 'THE SERVER IS FULL',
+  version: 'THAT GAME RUNS ANOTHER BUILD',
+};
+
+export function refusalLine(reason: string): string {
+  return REFUSALS[reason] ?? 'COULD NOT JOIN';
+}
+
 /** What the page does with the relay's `room_error` (POK-330 #47). A rejoin refused
  *  because the room is gone -- a relay restart, or a seat hold that ran out -- is not a
  *  dead end for the page that was running the match: the match lives in its tab, so it

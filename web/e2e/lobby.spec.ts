@@ -405,7 +405,8 @@ test('a room that will not let you in offers the way back', async ({ browser }) 
     // a way out rather than leaving them on a dead end.
     const guest = await guestCtx.newPage();
     await guest.goto(`/#join=${code}&rom=${rom}`);
-    await expect(guest.locator('#room-code')).toContainText('locked', { timeout: 60_000 });
+    // In Kanto's words (browse.lua), drawn (POK-320).
+    await expect(guest.locator('#room-code')).toHaveText('THAT GAME STARTED', { timeout: 60_000 });
     const back = guest.locator('#room-note button', { hasText: 'BACK TO LOBBY' });
     await expect(back).toBeVisible();
 

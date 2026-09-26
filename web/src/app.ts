@@ -32,6 +32,7 @@ import {
   dealable,
   decideStart,
   onRefused,
+  refusalLine,
   StartCountdown,
   startLabel,
   type StartDecision,
@@ -1937,10 +1938,8 @@ function wireRoom(
             canKick: (view?.isHost ?? false) && !cardEntry.isMe,
           }
         : null,
-      fatal: room.fatal,
       onStart: () => room.onStart(),
       onLeave: () => backToLobby(),
-      onBack: () => backToLobby(),
       onSeat: (seat) => {
         room.card = room.card?.seat === seat ? null : { seat };
         stage.redraw();
@@ -2606,13 +2605,26 @@ function wireRoom(
       renderRoomPanel(controls, bridge.seat, relay, () => pressStart(ev.members.map((m) => m.id)), host !== null);
     }
   });
-  /** A dead end is not one unless the page says where else to go: BACK TO LOBBY, on the
-   *  room screen, whatever was up. */
-  const deadEnd = (): void => {
+  /** A dead end is not one unless the page says where else to go: the door's word for it
+   *  in Kanto's own (browse.lua's REFUSALS), what the relay said, and BACK TO LOBBY --
+   *  drawn over whatever was up, the match included. */
+  const deadEnd = (title: string, detail: string): void => {
     countdown.cancel();
     if (room.fatal) return;
     room.fatal = true;
-    stage.show(roomScreenView);
+    room.status = title;
+    stage.show(
+      noticeScreen(() => ({
+        title,
+        titleId: 'room-code',
+        lines: [{ text: detail, id: 'room-refusal' }],
+        buttons: [{ label: 'BACK TO LOBBY', onPress: () => backToLobby() }],
+        // #room-note, where BACK TO LOBBY always was (lobby.spec).
+        buttonsId: 'room-note',
+        footer: versionLine,
+        onBack: () => backToLobby(),
+      })),
+    );
   };
   /** The passcode, over the room screen: typed, the knock goes again with it; BACK is
    *  the lobby, since the room will not have us without it. */
@@ -2657,11 +2669,13 @@ function wireRoom(
     }
     // Kanto's door: a room on another build is not one you can play in (POK-330 #3). A
     // reload fixes it when this tab is the stale one; when the room is, the lobby does.
-    if (ev.reason === 'version') {
-      const rom = (sha?: string) => (sha ? sha.slice(0, 7) : '?');
-      setStatus(`That room runs rom ${rom(ev.host?.patch)}, this tab rom ${rom(patch)}: the older one reloads to update.`);
-    } else setStatus(`Couldn't join: ${ev.reason}`);
-    if (next === 'dead-end') deadEnd();
+    const rom = (sha?: string) => (sha ? sha.slice(0, 7) : '?');
+    const detail =
+      ev.reason === 'version'
+        ? `That room runs rom ${rom(ev.host?.patch)}, this tab rom ${rom(patch)}: the older one reloads to update.`
+        : `The relay said: ${ev.reason}.`;
+    if (next === 'dead-end') deadEnd(refusalLine(ev.reason), detail);
+    else setStatus(refusalLine(ev.reason));
   });
   // QUICK PLAY found nothing to join: host one and let the bots fill it, which is what
   // Kanto does rather than leaving somebody looking at an empty list (POK-240).
@@ -2696,8 +2710,7 @@ function wireRoom(
     // The room itself is over -- the host left, its hold ran out, or it showed us out --
     // and no new socket is coming (POK-330 #47): the same dead end a refused door is.
     if (!ev.reconnecting) {
-      setStatus(`The room closed: ${ev.reason}`);
-      deadEnd();
+      deadEnd('THE ROOM CLOSED', `The relay said: ${ev.reason}.`);
       return;
     }
     setStatus(ev.reason === 'restart' ? 'The server is restarting. Reconnecting…' : `Disconnected: ${ev.reason}`);

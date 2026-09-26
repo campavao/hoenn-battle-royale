@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorLabel, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState } from './room';
+import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorLabel, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, refusalLine, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState } from './room';
 import { freshMatch, noteMatch, ringClockLeft } from './lifecycle';
 import { Director, type DirectorWorld } from './director';
 import type { RosterEvent } from '../net/relay';
@@ -394,6 +394,15 @@ describe('a door that will not open (POK-330 #47)', () => {
     // an older relay opened the room again as a seat that is not ours
     expect(onRefused('seat', { ...host, rejoining: false })).toBe('dead-end');
     expect(onRefused('already_in_room', host)).toBe('status');
+  });
+
+  it("says why in Kanto's words, not the relay's (POK-320)", () => {
+    expect(refusalLine('locked')).toBe('THAT GAME STARTED');
+    expect(refusalLine('full')).toBe('THAT GAME IS FULL');
+    expect(refusalLine('not_found')).toBe('THAT GAME IS GONE');
+    expect(refusalLine('removed')).toBe('HOST REMOVED YOU');
+    expect(refusalLine('passcode')).toBe('WRONG PASSCODE');
+    expect(refusalLine('something new')).toBe('COULD NOT JOIN');
   });
 
   it('asks for the passcode at a passcoded door, and again after a wrong one (POK-320)', () => {

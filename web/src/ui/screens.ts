@@ -196,11 +196,8 @@ export interface RoomModel {
   /** The host's controls, in the order they are shown; null for a guest. */
   options: { label: string; id: string; onPress: () => void }[] | null;
   card: { seat: number; lines: CardLine[]; canKick: boolean } | null;
-  /** The room refused us: the one thing to offer is the way back. */
-  fatal: boolean;
   onStart(): void;
   onLeave(): void;
-  onBack(): void;
   onSeat(seat: number): void;
   onKick(seat: number): void;
   onCloseCard(): void;
@@ -258,14 +255,9 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       y = lay.frame.y + lay.frame.h + 2;
 
       const noteText = m.countdown !== null && !m.started ? `STARTS IN ${m.countdown}` : m.note;
-      const noteRect = paintNote(c, m.fatal ? '' : noteText, y, m.countdown !== null ? TEXT_WHITE : TEXT_GRAY);
-      if (m.fatal) {
-        widgets.push(...paintButtons(c, y, [{ label: 'BACK TO LOBBY', parent: 'room-note', onPress: m.onBack }]));
-        y += 28;
-      } else {
-        widgets.push({ rect: noteRect, text: noteText, parent: 'room-note', cursor: null });
-        y += ROW_H + 2;
-      }
+      const noteRect = paintNote(c, noteText, y, m.countdown !== null ? TEXT_WHITE : TEXT_GRAY);
+      widgets.push({ rect: noteRect, text: noteText, parent: 'room-note', cursor: null });
+      y += ROW_H + 2;
 
       if (m.options && !m.started) {
         const opts = paintOptions(c, y, m.options, 'room-controls');
@@ -273,7 +265,7 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
         y = opts.bottom + 4;
       }
 
-      if (!m.started && !m.fatal) {
+      if (!m.started) {
         const buttons: ButtonSpec[] = m.isHost
           ? [{ label: m.startLabel, id: 'room-start', disabled: !m.canStart, onPress: m.onStart }]
           : [{ label: 'LEAVE', id: 'room-leave', cls: 'room-leave', onPress: m.onLeave }];
