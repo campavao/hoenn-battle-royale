@@ -273,6 +273,22 @@ export function heldFade(prev: Camera | null, cur: Camera, held: boolean): boole
   return prev !== null && prev.fade >= 16 && cur.fade === 0;
 }
 
+/** The fade the map past the picture is under: the ROM's, when it reaches the BG
+ *  palettes. A running fade says so by its mask. A finished one cannot -- the ROM clears
+ *  the mask on a fade's last step and leaves y where it ended (palette.c) -- so `bg`,
+ *  what the last fade reached while it ran, comes back for the next frame. A catch's
+ *  ball fades to white on its own OBJ palette and stays there, and the map stayed white
+ *  under it until the next fade (POK-327's play spec). */
+export function mapFade(
+  fade: { y: number; color: number; active: boolean },
+  selected: number,
+  bg: boolean,
+): { fade: { y: number; color: number; active: boolean }; bg: boolean } {
+  const reached = fade.active && selected !== 0 ? (selected & FADE_BG_PALETTES) !== 0 : bg;
+  const onMap = fade.active ? (selected & FADE_BG_PALETTES) !== 0 : reached;
+  return { fade: onMap ? fade : { ...fade, y: 0, active: false }, bg: reached };
+}
+
 /** A 15-bit GBA colour the way mGBA shows it. */
 export function gbaColor(c: number): string {
   const up = (v: number) => (v << 3) | (v >> 2);
@@ -589,6 +605,9 @@ export class FieldView {
     return this.deps.symbols?.get(name);
   }
 
+  /** Whether the last fade the ROM ran reached the BG palettes (mapFade). */
+  private fadeBg = true;
+
   private read(): Camera | null {
     const { emu } = this.deps;
     const sb = this.sym('gSaveBlock1Ptr');
@@ -599,14 +618,12 @@ export class FieldView {
     const fadeBase = this.sym('gPaletteFade');
     const main = this.sym('gMain');
     const cb2 = this.sym('CB2_Overworld');
-    const fade = fadeBase === undefined
-      ? { y: 0, color: 0, active: false }
-      : fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16));
-    // A fade that leaves the BG palettes alone leaves the map alone.
-    if (fadeBase !== undefined && fade.active && (emu.read(fadeBase + FADE_SELECTED, 32) & FADE_BG_PALETTES) === 0) {
-      fade.y = 0;
-      fade.active = false;
-    }
+    // A fade that leaves the BG palettes alone leaves the map alone, running or done.
+    const seen = fadeBase === undefined
+      ? { fade: { y: 0, color: 0, active: false }, bg: this.fadeBg }
+      : mapFade(fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16)), emu.read(fadeBase + FADE_SELECTED, 32), this.fadeBg);
+    const fade = seen.fade;
+    this.fadeBg = seen.bg;
     const pick = this.sym('gBrPick');
     return {
       ...pos,

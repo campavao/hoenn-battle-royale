@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAND, type Camera, FieldImages, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
+import { BAND, type Camera, FieldImages, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
 import type { WorldMap } from './bots/world';
 import fieldHeader from '../../include/br/br_field.h?raw';
 
@@ -71,6 +71,25 @@ describe('the fade', () => {
     expect(heldFade(cam(0, false), cam(16, true), true), 'the fade-in begins').toBe(false);
     expect(heldFade(cam(14, true), cam(12, true), false), 'an ordinary fade').toBe(false);
     expect(heldFade(null, cam(0, false), false), 'the first frame').toBe(false);
+  });
+
+  // POK-327's play spec, in the frames it saw after a Safari catch: the ball's palette
+  // fading to white (OBJ palette 6), its last steps with the mask cleared, then done at
+  // 16 -- where the map went white for up to a second.
+  it("keeps the map out of a fade that never reached it, running or done", () => {
+    const white = (y: number, active: boolean) => ({ y, color: 0x7fff, active });
+    let s = mapFade(white(12, true), 0x400000, true);
+    expect(s).toEqual({ fade: { y: 0, color: 0x7fff, active: false }, bg: false });
+    s = mapFade(white(16, true), 0, s.bg);
+    expect(s.fade.y, 'its last steps').toBe(0);
+    s = mapFade(white(16, false), 0, s.bg);
+    expect(s.fade.y, 'done').toBe(0);
+    expect(s.bg).toBe(false);
+    // A fade to black over everything: followed, and still followed once it is done.
+    s = mapFade({ y: 8, color: 0, active: true }, 0xffffffff, s.bg);
+    expect(s).toEqual({ fade: { y: 8, color: 0, active: true }, bg: true });
+    s = mapFade({ y: 16, color: 0, active: false }, 0, s.bg);
+    expect(s.fade).toEqual({ y: 16, color: 0, active: false });
   });
 
   it('shows a GBA colour the way mGBA does', () => {
