@@ -59,7 +59,7 @@ import {
 import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
 import { TouchLayer } from './touch';
-import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, stickKeys, type AxisSense, type StickMap } from './pad';
+import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, pollPads, stickKeys, type AxisSense, type StickMap } from './pad';
 import { BAND, FieldView } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
@@ -638,14 +638,8 @@ function wireGamepad(emu: Emulator): () => void {
     if (padLine) padLine.textContent = KEY_LEGEND;
     padLine = null;
   };
-  const id = setInterval(poll, 16);
-  addEventListener('gamepadconnected', note);
-  addEventListener('gamepaddisconnected', gone);
-  return () => {
-    clearInterval(id);
-    removeEventListener('gamepadconnected', note);
-    removeEventListener('gamepaddisconnected', gone);
-  };
+  // Only while a pad is connected (POK-247): pad.ts pollPads.
+  return pollPads(poll, note, gone, { win: window, pads: () => navigator.getGamepads() });
 }
 
 /** The remap wizard: one prompt per key, bind by pressing the button you want. Six
