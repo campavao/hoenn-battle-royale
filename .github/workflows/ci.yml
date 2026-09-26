@@ -438,7 +438,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install build deps
         run: |
@@ -447,7 +447,7 @@ jobs:
             build-essential libpng-dev gcc-arm-none-eabi binutils-arm-none-eabi
 
       - name: Checkout agbcc
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: pret/agbcc
           path: agbcc
@@ -458,7 +458,7 @@ jobs:
 
       - name: Cache agbcc build
         id: agbcc-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: agbcc
           key: agbcc-${{ steps.agbcc-sha.outputs.sha }}
