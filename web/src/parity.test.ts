@@ -38,6 +38,7 @@ import battleH from '../../include/br/br_battle.h?raw';
 import ghostsH from '../../include/br/br_ghosts.h?raw';
 import matchH from '../../include/br/br_match.h?raw';
 import engageH from '../../include/br/br_engage.h?raw';
+import lootH from '../../include/br/br_loot.h?raw';
 import levelsC from '../../src/br/br_levels.c?raw';
 import matchC from '../../src/br/br_match.c?raw';
 import engageC from '../../src/br/br_engage.c?raw';
@@ -64,6 +65,11 @@ import controllersH from '../../include/battle_controllers.h?raw';
 import controllersC from '../../src/battle_controllers.c?raw';
 import playerControllerC from '../../src/battle_controller_player.c?raw';
 import ioRegH from '../../include/gba/io_reg.h?raw';
+import fieldmapFnH from '../../include/fieldmap.h?raw';
+import flagsH from '../../include/constants/flags.h?raw';
+import movementH from '../../include/constants/event_object_movement.h?raw';
+import objectEventsC from '../../src/event_object_movement.c?raw';
+import graphicsInfoPointersH from '../../src/data/object_events/object_event_graphics_info_pointers.h?raw';
 import serverJs from '../../relay/server.js?raw';
 // Copies that are not exported: read as text, the same way as the C.
 import appTs from './app.ts?raw';
@@ -83,6 +89,7 @@ import { LINE_MAX } from './match/ticker';
 import { CODE_ALPHABET, CODE_LENGTH } from './match/lobby';
 import { KEY_BIT } from './emu';
 import * as field from './field';
+import * as ghosts from './field-ghosts';
 import * as touch from './touch';
 
 // ---- reading C -----------------------------------------------------------------------
@@ -495,6 +502,51 @@ describe("the BR structs the page reads at an offset", () => {
       define(battleH, 'BR_MENU_SAFARI'),
     ]);
   });
+
+  it('gBrSeats, gBrLoot and gBrDespawned: the people past the object box (field-ghosts.ts)', () => {
+    const seat = layout(ghostsH, 'BrSeat');
+    expect([ghosts.SEAT_PRESENT, ghosts.SEAT_SKIN, ghosts.SEAT_MAP_GROUP, ghosts.SEAT_MAP_NUM, ghosts.SEAT_X, ghosts.SEAT_Y, ghosts.SEAT_DIR]).toEqual([
+      seat.at.present, seat.at.skin, seat.at.mapGroup, seat.at.mapNum, seat.at.x, seat.at.y, seat.at.dir,
+    ]);
+    expect([ghosts.SEAT_SIZE, ghosts.SEAT_COUNT]).toEqual([seat.size, define(configH, 'BR_MAX_SEATS')]);
+    const item = layout(lootH, 'BrLootItem');
+    expect(layout(lootH, 'BrLoot').at.items).toBe(0);
+    expect([ghosts.LOOT_X, ghosts.LOOT_Y, ghosts.LOOT_MAP_GROUP, ghosts.LOOT_MAP_NUM, ghosts.LOOT_KIND]).toEqual([
+      item.at.x, item.at.y, item.at.mapGroup, item.at.mapNum, item.at.kind,
+    ]);
+    expect([ghosts.LOOT_SIZE, ghosts.LOOT_COUNT]).toEqual([item.size, define(lootH, 'BR_MAX_LOOT')]);
+    expect([ghosts.LOOT_NONE, ghosts.LOOT_BAG]).toEqual([define(lootH, 'BR_LOOT_NONE'), define(lootH, 'BR_LOOT_BAG')]);
+    const gone = layout(lootH, 'BrDespawned');
+    expect([ghosts.DESPAWN_MAP_GROUP, ghosts.DESPAWN_MAP_NUM, ghosts.DESPAWN_LOCAL_ID]).toEqual([gone.at.mapGroup, gone.at.mapNum, gone.at.localId]);
+    expect([ghosts.DESPAWN_SIZE, ghosts.DESPAWN_COUNT]).toEqual([gone.size, define(lootH, 'BR_MAX_DESPAWN')]);
+    // A live object's local id says which seat's ghost or which row's ball it is.
+    expect([ghosts.GHOST_LOCAL_ID_BASE, ghosts.LOOT_LOCAL_ID_BASE]).toEqual([define(configH, 'BR_GHOST_LOCAL_ID_BASE'), define(lootH, 'BR_LOOT_LOCAL_ID_BASE')]);
+    // ...and what br_loot.c's Spawn draws the ground as.
+    const spawn = /it->kind == BR_LOOT_BAG \? (OBJ_EVENT_GFX_\w+) : (OBJ_EVENT_GFX_\w+);/.exec(lootC);
+    expect(spawn, "br_loot.c's Spawn picks the bag or the ball").not.toBeNull();
+    expect([ghosts.GFX_BIRCHS_BAG, ghosts.GFX_ITEM_BALL]).toEqual([define(eventObjectsH, spawn![1]), define(eventObjectsH, spawn![2])]);
+  });
+
+  it("the box the ROM keeps objects in: BrField_InObjectView, and Emerald's own spawn and cull", () => {
+    const brField = brSources['../../src/br/br_field.c'];
+    const view = /BrField_InObjectView\(s16 x, s16 y\)\s*\{\s*return x >= gSaveBlock1Ptr->pos\.x - (\d+) && x <= gSaveBlock1Ptr->pos\.x \+ (\d+)\s*&& y >= gSaveBlock1Ptr->pos\.y && y <= gSaveBlock1Ptr->pos\.y \+ (\d+);/.exec(brField);
+    expect(view, 'BrField_InObjectView reads as four bounds on pos').not.toBeNull();
+    expect(ghosts.VIEW).toEqual({ left: -Number(view![1]), right: Number(view![2]), top: 0, bottom: Number(view![3]) });
+    // The map's own people: spawned in one box and culled outside another, and both are it.
+    const box = (fn: string): Record<string, number> => {
+      const m = new RegExp(`${fn}\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`).exec(objectEventsC.replace(/\r\n/g, '\n'));
+      if (!m) throw new Error(`no ${fn}`);
+      const at = (side: string, axis: string): number => {
+        const b = new RegExp(`s16 ${side} =\\s*gSaveBlock1Ptr->pos\\.${axis}(?:\\s*([+-])\\s*([^;]+))?;`).exec(m[1]);
+        if (!b) throw new Error(`${fn}: no ${side}`);
+        return b[1] ? (b[1] === '-' ? -1 : 1) * evaluate([fieldmapFnH], b[2].trim()) : 0;
+      };
+      return { left: at('left', 'x'), right: at('right', 'x'), top: at('top', 'y'), bottom: at('bottom', 'y') };
+    };
+    expect(box('void TrySpawnObjectEvents')).toEqual(ghosts.VIEW);
+    expect(box('static void RemoveObjectEventIfOutsideView')).toEqual(ghosts.VIEW);
+    expect(ghosts.MAP_OFFSET).toBe(define(fieldmapFnH, 'MAP_OFFSET'));
+  });
 });
 
 /** The C's pins of pret's structs (src/br/br_pins.c), by `Struct.field`, or `sizeof Struct`
@@ -673,6 +725,45 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
       l: 'L_BUTTON',
     };
     for (const [key, bit] of Object.entries(KEY_BIT)) expect(1 << bit, key).toBe(define(ioRegH, io[key as keyof typeof KEY_BIT]));
+  });
+
+  it("the map's own people: its templates, the flags that hide them, and an object's local id (field-ghosts.ts)", () => {
+    const sb1 = watch('SaveBlock1', layout(globalH, 'SaveBlock1'));
+    expect([ghosts.SB1_TEMPLATES, ghosts.SB1_FLAGS]).toEqual([sb1.at.objectEventTemplates, sb1.at.flags]);
+    expect(ghosts.TEMPLATE_COUNT).toBe(define(constantsGlobalH, 'OBJECT_EVENT_TEMPLATES_COUNT'));
+    expect(ghosts.SPECIAL_FLAGS_START).toBe(define(flagsH, 'SPECIAL_FLAGS_START'));
+    const tpl = watch('ObjectEventTemplate', layout(fieldmapH, 'ObjectEventTemplate'));
+    expect([ghosts.TPL_LOCAL_ID, ghosts.TPL_GFX, ghosts.TPL_X, ghosts.TPL_Y, ghosts.TPL_MOVEMENT_TYPE, ghosts.TPL_FLAG_ID]).toEqual([
+      tpl.at.localId, tpl.at.graphicsId, tpl.at.x, tpl.at.y, tpl.at.movementType, tpl.at.flagId,
+    ]);
+    // Its last field is flagId, and it holds a pointer, so the row rounds up to a word.
+    expect(ghosts.TEMPLATE_SIZE).toBe(Math.ceil((tpl.at.flagId + 2) / 4) * 4);
+    expect(pinned('sizeof ObjectEventTemplate'), 'src/br/br_pins.c').toBe(ghosts.TEMPLATE_SIZE);
+    const obj = watch('ObjectEvent', layout(fieldmapH, 'ObjectEvent'));
+    expect([ghosts.OBJ_LOCAL_ID, ghosts.OBJ_MAP_NUM, ghosts.OBJ_MAP_GROUP]).toEqual([obj.at.localId, obj.at.mapNum, obj.at.mapGroup]);
+  });
+
+  it("a person's standing frame and the way they face, off the ROM's own tables", () => {
+    const info = watch('ObjectEventGraphicsInfo', layout(fieldmapH, 'ObjectEventGraphicsInfo'));
+    expect(ghosts.GFX_INFO_ANIMS).toBe(info.at.anims);
+    const cmd = watch('AnimFrameCmd', natural(spriteH, 'AnimFrameCmd'));
+    expect(ghosts.ANIM_HFLIP_BIT).toBe(cmd.bits.hFlip.bit);
+    expect(cmd.size, 'one word: the command is read as a u32').toBe(4);
+    // The two tables the page reads off the ROM, by the symbols tools/br/symbols.py exports:
+    // a pointer a graphics id, and a direction byte a movement type.
+    expect(graphicsInfoPointersH).toMatch(/^const struct ObjectEventGraphicsInfo \*const gObjectEventGraphicsInfoPointers\[/m);
+    expect(objectEventsC).toMatch(/^const u8 gInitialMovementTypeFacingDirections\[\] = \{/m);
+    expect(ghosts.NUM_MOVEMENT_TYPES).toBe(define(movementH, 'NUM_MOVEMENT_TYPES'));
+    // sFaceDirectionAnimNums: a direction's face anim.
+    const faces = /\bsFaceDirectionAnimNums\[\]\s*=\s*\{([^}]*)\}/.exec(objectEventsC);
+    expect(faces, 'sFaceDirectionAnimNums in event_object_movement.c').not.toBeNull();
+    const table: number[] = [];
+    for (const [, dir, anim] of faces![1].matchAll(/\[(DIR_\w+)\]\s*=\s*(ANIM_STD_\w+)/g)) table[define(constantsGlobalH, dir)] = define(movementH, anim);
+    expect(ghosts.FACE_ANIM).toEqual(table);
+    expect(ghosts.DIR_SOUTH).toBe(define(constantsGlobalH, 'DIR_SOUTH'));
+    expect(ghosts.HIDDEN_MOVEMENT_TYPES).toEqual(
+      ['MOVEMENT_TYPE_BERRY_TREE_GROWTH', 'MOVEMENT_TYPE_TREE_DISGUISE', 'MOVEMENT_TYPE_MOUNTAIN_DISGUISE', 'MOVEMENT_TYPE_BURIED', 'MOVEMENT_TYPE_INVISIBLE'].map((n) => define(movementH, n)),
+    );
   });
 
   // Last: it checks what the tests above read (POK-331 #22).

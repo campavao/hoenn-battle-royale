@@ -81,6 +81,24 @@ BR_OFFSET(Weather, fogHScrollPosX, 0x6EE)
 BR_OFFSET(Weather, currBlendEVA, 0x730)
 BR_OFFSET(Weather, currBlendEVB, 0x732)
 
+// The people past the object box (web/src/field-ghosts.ts, POK-318): the map's own
+// templates and the flags that hide them (SB1_TEMPLATES, SB1_FLAGS), a template's row, an
+// object's local id and map (OBJ_LOCAL_ID, OBJ_MAP_NUM), and the anims a graphics info
+// starts a sprite on (GFX_INFO_ANIMS), whose frame command keeps hFlip in its first word.
+BR_OFFSET(SaveBlock1, objectEventTemplates, 0xC70)
+BR_OFFSET(SaveBlock1, flags, 0x1270)
+BR_SIZE(ObjectEventTemplate, 0x18)
+BR_OFFSET(ObjectEventTemplate, localId, 0x00)
+BR_OFFSET(ObjectEventTemplate, graphicsId, 0x01)
+BR_OFFSET(ObjectEventTemplate, x, 0x04)
+BR_OFFSET(ObjectEventTemplate, y, 0x06)
+BR_OFFSET(ObjectEventTemplate, movementType, 0x09)
+BR_OFFSET(ObjectEventTemplate, flagId, 0x14)
+BR_OFFSET(ObjectEvent, localId, 0x08)
+BR_OFFSET(ObjectEvent, mapNum, 0x09)
+BR_OFFSET(ObjectEventGraphicsInfo, anims, 0x18)
+BR_SIZE(AnimFrameCmd, 4)
+
 // gBattleBufferA: a battler's row (BUFFER_A_ROW), and the move ids leading the struct the
 // move menu is sent (CHOOSE_MOVE_MOVES is the controller command's four bytes before it).
 STATIC_ASSERT(sizeof(gBattleBufferA[0]) == 0x200, BrPin_gBattleBufferA_row)

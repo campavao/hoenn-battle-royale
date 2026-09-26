@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BAND, type Camera, FieldImages, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
+import { BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
+import { OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
+import { HOENN } from './bots/hoenn';
+import { SKIN_GFX } from './ui/emerald';
 import type { WorldMap } from './bots/world';
 import fieldHeader from '../../include/br/br_field.h?raw';
 
@@ -226,5 +229,73 @@ describe('the PNGs past the picture (POK-330 #65)', () => {
     expect(loads).toBe(1);
     expect(images.get('field-maps/A', '/field-maps/A.png')).toBe(made[1]);
     expect(images.settled).toBe(true);
+  });
+});
+
+describe('the people the ROM let go of reach the overlay (POK-318)', () => {
+  // A RAM with a save block, the object table and the seats, read the way FieldView reads
+  // a frame. We stand at (20, 20); a trainer twelve rows down, a second inside the box
+  // with no object (the ROM's to leave out), a third with its object live, and seat 1's
+  // ghost thirteen rows down.
+  const SB = 0x02000000;
+  const SB1 = 0x02010000;
+  const CAM = 0x02000100;
+  const OBJS = 0x02000200;
+  const SEATS = 0x02001000;
+  function frame(map: WorldMap): Camera | null {
+    const mem = new Uint8Array(0x20000);
+    const at = (a: number) => a - 0x02000000;
+    const emu = {
+      read: (a: number, width: 8 | 16 | 32 = 32) => {
+        let v = 0;
+        for (let i = width / 8 - 1; i >= 0; i--) v = (v << 8) | mem[at(a) + i];
+        return v >>> 0;
+      },
+      bytes: (a: number, len: number) => mem.subarray(at(a), at(a) + len),
+    };
+    const w = (a: number, v: number, width: 8 | 16 | 32) => { for (let i = 0; i < width / 8; i++) mem[at(a) + i] = (v >>> (8 * i)) & 0xff; };
+    w(SB, SB1, 32);
+    w(SB1 + SB1_POS_X, 20, 16);
+    w(SB1 + SB1_POS_Y, 20, 16);
+    w(SB1 + SB1_MAP_GROUP, map.group, 8);
+    w(SB1 + SB1_MAP_NUM, map.num, 8);
+    const template = (i: number, localId: number, y: number) => {
+      const t = SB1 + SB1_TEMPLATES + i * TEMPLATE_SIZE;
+      w(t + TPL_LOCAL_ID, localId, 8);
+      w(t + TPL_GFX, 7, 8);
+      w(t + TPL_X, 20, 16);
+      w(t + TPL_Y, y, 16);
+      w(t + TPL_MOVEMENT_TYPE, 1, 8);
+    };
+    template(0, 1, 32);
+    template(1, 2, 25);
+    template(2, 3, 33);
+    w(OBJS, 1, 8); // active
+    w(OBJS + OBJ_LOCAL_ID, 3, 8);
+    w(OBJS + OBJ_MAP_NUM, map.num, 8);
+    w(OBJS + OBJ_MAP_GROUP, map.group, 8);
+    const seat = SEATS + 1 * SEAT_SIZE;
+    w(seat, 1, 8);
+    w(seat + 2, map.group, 8);
+    w(seat + 3, map.num, 8);
+    w(seat + 4, 20 + 7, 16);
+    w(seat + 6, 33 + 7, 16);
+    w(seat + 8, 1, 8);
+    const symbols = new Map([['gSaveBlock1Ptr', SB], ['gFieldCamera', CAM], ['gObjectEvents', OBJS], ['gBrSeats', SEATS]]);
+    const view = new FieldView({ emu, symbols } as unknown as FieldDeps);
+    return (view as unknown as { read(): Camera | null }).read();
+  }
+
+  it('outdoors, everybody past the box is on the camera, on the overlay, where the ROM would stand them', () => {
+    const map = HOENN.maps.find((m) => m.outdoor)!;
+    const cam = frame(map)!;
+    expect(cam.sprites).toEqual([
+      { gfx: 7, frame: 0, hFlip: false, x: 112, y: 56 + 12 * 16, hidden: true },
+      { gfx: SKIN_GFX[0], frame: 0, hFlip: false, x: 112, y: 56 + 13 * 16, hidden: true },
+    ]);
+  });
+
+  it('indoors, nobody', () => {
+    expect(frame(HOENN.maps.find((m) => !m.outdoor)!)!.sprites).toEqual([]);
   });
 });

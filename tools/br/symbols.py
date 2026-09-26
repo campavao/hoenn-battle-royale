@@ -37,6 +37,10 @@ ENGINE_SYMBOLS = [
     "gFieldCamera", "gPaletteFade",
     # ...and the people on it: where a sprite is on screen (POK-318).
     "gSpriteCoordOffsetX", "gSpriteCoordOffsetY",
+    # ...and the ones past the object box, drawn standing from the ROM's own tables: a
+    # graphics id's standing frame, and the way a map person starts out facing
+    # (POK-318, web/src/field-ghosts.ts).
+    "gObjectEventGraphicsInfoPointers", "gInitialMovementTypeFacingDirections",
     # ...and the fog over it, drawn past the picture at the ROM's own scroll (POK-318).
     "gWeather",
     # The overworld's main callback: the page shows the picture past the LCD only while

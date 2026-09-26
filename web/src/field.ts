@@ -6,8 +6,9 @@
 // under the picture, at the picture's own scale. Nothing is zoomed and nothing is
 // stretched -- the picture is where the ROM's window is, and the map continues out of it.
 //
-// What the border is not: object events (people, ghosts, loot balls), tile animation,
-// weather. The ROM never rendered those out there and the page does not know them.
+// What the border is not: tile animation. The ROM never rendered it out there. The
+// people are the ROM's where it has them and the page's own reading of its tables past
+// that (POK-318, field-ghosts.ts); the fog is the ROM's weather, drawn to its numbers.
 //
 // Then POK-319: the emulator draws a picture bigger than the LCD -- the same BG and OBJ
 // state, a band of pixels on each side (BAND below, matching include/br/br_field.h) --
@@ -31,6 +32,10 @@ import type { WorldMap } from './bots/world';
 import { HOENN } from './bots/hoenn';
 import spritesData from './data/sprites.json';
 import type { Band, Emulator } from './emu';
+import {
+  DESPAWN_COUNT, DESPAWN_SIZE, LOOT_COUNT, LOOT_SIZE, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
+  TEMPLATE_COUNT, TEMPLATE_SIZE, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, objectKey, placePeople, standingFrame,
+} from './field-ghosts';
 
 export const GBA_W = 240;
 export const GBA_H = 160;
@@ -176,7 +181,8 @@ export interface FieldSprite {
   x: number;
   y: number;
   /** The ROM hid the object for being past the picture the core draws (its offScreen
-   *  bit), and for no other reason: the overlay's cue. */
+   *  bit), and for no other reason -- or holds no object for it at all, past the box it
+   *  keeps them in (field-ghosts.ts): the overlay's cue. */
   hidden: boolean;
 }
 
@@ -613,7 +619,7 @@ export class FieldView {
       fade: fade.y,
       fadeColor: fade.color,
       fadeActive: fade.active,
-      sprites: this.readSprites(p),
+      sprites: [...this.readSprites(p), ...this.readDropped(p, pos)],
       fog: this.readFog(),
       outside: ring !== undefined && emu.read(ring + RING_OUTSIDE, 8) !== 0,
       ringTimer: ring === undefined ? 0 : emu.read(ring + RING_TIMER, 16),
@@ -654,8 +660,7 @@ export class FieldView {
       const bits = emu.read(o + OBJ_INVISIBLE_BYTE, 8);
       if (bits & OBJ_INVISIBLE_BIT) continue;
       if (emu.read(o + OBJ_PLAYER_BYTE, 8) & 1) continue;
-      let gfx = emu.read(o + OBJ_GFX, 8);
-      if (gfx >= GFX_VARS) gfx = emu.read(sb1 + SB1_VARS + 2 * (VAR_OBJ_GFX_ID_0 + gfx - GFX_VARS - VARS_START), 16) & 0xff;
+      const gfx = this.gfxOf(sb1, emu.read(o + OBJ_GFX, 8));
       if (!SHEETS[String(gfx)]) continue;
       const s = sprs + emu.read(o + OBJ_SPRITE_ID, 8) * SPR_SIZE;
       const flags = emu.read(s + SPR_FLAGS, 16);
@@ -671,6 +676,48 @@ export class FieldView {
       out.push({ gfx, frame, hFlip: (flags & SPR_HFLIP) !== 0, x, y, hidden: offScreen });
     }
     return out;
+  }
+
+  /** A graphics id past the table names a var holding the real one. */
+  private gfxOf(sb1: number, gfx: number): number {
+    if (gfx < GFX_VARS) return gfx;
+    return this.deps.emu.read(sb1 + SB1_VARS + 2 * (VAR_OBJ_GFX_ID_0 + gfx - GFX_VARS - VARS_START), 16) & 0xff;
+  }
+
+  /** The people the ROM knows of past the box it keeps objects in, and holds none for
+   *  (POK-318): read here, in the same frame as the live objects, so a person the ROM
+   *  spawns or lets go of this frame is in exactly one of the two lists. */
+  private readDropped(sb1: number, cam: CameraPos): FieldSprite[] {
+    const objs = this.sym('gObjectEvents');
+    // Indoors there is no field past the picture to stand on.
+    if (objs === undefined || !HOENN.byRef.get(`${cam.group}:${cam.num}`)?.outdoor) return [];
+    const { emu } = this.deps;
+    const rom = this.deps.rom ?? null;
+    const live = new Set<string>();
+    for (let i = 0; i < OBJ_COUNT; i++) {
+      const o = objs + i * OBJ_SIZE;
+      if (emu.read(o + OBJ_ACTIVE_BYTE, 8) & 1) live.add(objectKey(emu.read(o + OBJ_LOCAL_ID, 8), emu.read(o + OBJ_MAP_NUM, 8), emu.read(o + OBJ_MAP_GROUP, 8)));
+    }
+    const table = (name: string, bytes: number): Uint8Array => {
+      const at = this.sym(name);
+      return at === undefined ? new Uint8Array(0) : emu.bytes(at, bytes);
+    };
+    const mySeat = this.sym('gBrMySeat');
+    const facings = this.sym('gInitialMovementTypeFacingDirections');
+    const infos = this.sym('gObjectEventGraphicsInfoPointers');
+    const people = droppedPeople({
+      map: { group: cam.group, num: cam.num },
+      pos: { x: cam.x, y: cam.y },
+      templates: decodeTemplates(emu.bytes(sb1 + SB1_TEMPLATES, TEMPLATE_COUNT * TEMPLATE_SIZE)).map((t) => ({ ...t, gfx: this.gfxOf(sb1, t.gfx) })),
+      flag: (id) => ((emu.read(sb1 + SB1_FLAGS + (id >> 3), 8) >> (id & 7)) & 1) !== 0,
+      facing: (movementType) => initialFacing(rom, facings, movementType),
+      despawned: decodeDespawned(table('gBrDespawned', DESPAWN_COUNT * DESPAWN_SIZE)),
+      seats: decodeSeats(table('gBrSeats', SEAT_COUNT * SEAT_SIZE)),
+      mySeat: mySeat === undefined ? -1 : emu.read(mySeat, 8),
+      loot: decodeLoot(table('gBrLoot', LOOT_COUNT * LOOT_SIZE)),
+      live,
+    });
+    return placePeople(people, lcdOrigin(cam), (gfx, dir) => standingFrame(rom, infos, gfx, dir));
   }
 
   private image(id: string, dir = 'field-maps'): HTMLImageElement | null {

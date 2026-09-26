@@ -122,10 +122,12 @@ struct BrDespawned
     /* 0 */ u8 mapGroup;
     /* 1 */ u8 mapNum;
     /* 2 */ u8 localId; // 0 = empty
-};                      // 3 bytes; 4 under agbcc, so drivers read only the first row
+};                      // 4 bytes: agbcc and GCC's apcs-gnu both round a struct to a word
 BR_OFFSET(BrDespawned, mapGroup, 0)
 BR_OFFSET(BrDespawned, mapNum, 1)
 BR_OFFSET(BrDespawned, localId, 2)
+// The page reads the rows at this stride (web/src/field-ghosts.ts, POK-318).
+BR_SIZE(BrDespawned, 4)
 
 extern struct BrLoot gBrLoot;
 extern struct BrDespawned gBrDespawned[BR_MAX_DESPAWN];
