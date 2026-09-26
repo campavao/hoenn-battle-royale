@@ -215,6 +215,9 @@ export class Stage {
   ) {
     this.mirror = new Mirror(hits, (w) => {
       this.cursorKey = this.keyOf(w);
+      // Beside the game the keyboard is the game's: a button left focused would take the
+      // next Space as a second click.
+      if (this.look() === 'dock') (root.ownerDocument.activeElement as HTMLElement | null)?.blur?.();
       w.onPress?.();
       // What a tap changed is drawn: a key typed into an entry, a card opened.
       this.redraw();

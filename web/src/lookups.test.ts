@@ -14,8 +14,9 @@ const lookups = Array.from(appSource.matchAll(/\$(?:<[^>()]+>)?\((['"`])#([^'"`]
 
 describe("app.ts's element lookups", () => {
   it('finds the lookups at all', () => {
-    // A regex that silently matches nothing would make the next test vacuous.
-    expect(lookups.length).toBeGreaterThan(30);
+    // A regex that silently matches nothing would make the next test vacuous. (Fewer
+    // than once: the drawer's and the import screen's ids are the stage's now, POK-320.)
+    expect(lookups.length).toBeGreaterThan(15);
   });
 
   it('every literal id is in index.html', () => {

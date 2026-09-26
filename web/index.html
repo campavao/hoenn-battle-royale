@@ -47,29 +47,6 @@
       .banner { background: #33424c; border-radius: 8px; padding: 8px 12px; color: #ffe08a; }
 
       #screen-playing { padding: 0; align-items: center; position: relative; }
-      /* The lobby (POK-240): Kanto's one screen of rows, as a page. */
-      .lobby-rows { list-style: none; margin: 0 0 18px; padding: 0; width: 100%; max-width: 480px; }
-      .lobby-rows li { margin: 0 0 6px; }
-      .lobby-rows button {
-        width: 100%;
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 12px 14px;
-        background: #1a2128;
-        color: #e6edf3;
-        border: 1px solid #2b3742;
-        border-radius: 6px;
-        font: inherit;
-        font-weight: 600;
-        text-align: left;
-        cursor: pointer;
-      }
-      .lobby-rows button:hover { background: #22303a; }
-      .lobby-rows button:disabled { opacity: 0.5; cursor: default; }
-      .lobby-rows .sub { font-weight: 400; color: #9fb3c0; }
-      .lobby-head { width: 100%; max-width: 480px; color: #9fb3c0; font-size: 12px; margin-bottom: 6px; }
-      .lobby-note { color: #9fb3c0; font-size: 12px; min-height: 1.2em; }
       #stage {
         position: fixed; inset: 0; z-index: 9;
         background: #101418;
@@ -78,6 +55,12 @@
         padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
       }
       #stage[hidden] { display: none; }
+      /* Over the game still running under it: the in-match sheet on a phone (POK-320). */
+      #stage[data-look='overlay'] { background: transparent; }
+      /* Beside the game: the sheet on a desktop, where the room panel always was, in view
+         all match. The game makes room for it (body.docked, set by the stage). */
+      #stage[data-look='dock'] { right: auto; width: 480px; z-index: 3; }
+      body.docked #screen-playing { margin-left: 480px; }
       #stage-box { position: relative; }
       #ui { display: block; image-rendering: pixelated; }
       #ui-hits { position: absolute; inset: 0; }
@@ -95,66 +78,6 @@
       #ui-hits button { cursor: pointer; touch-action: manipulation; }
       #ui-hits button:disabled { cursor: default; }
       #ui-hits [hidden] { display: none; }
-      .room-panel {
-        width: 100%;
-        max-width: 480px;
-        padding: 6px calc(16px + env(safe-area-inset-right)) 6px calc(16px + env(safe-area-inset-left));
-        background: #1a2128;
-        font-size: 12px;
-      }
-      .room-code { font-weight: 600; color: #9fb3c0; margin-bottom: 4px; }
-      .room-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-      /* A class that sets `display` outranks the UA's [hidden] rule, so every element
-         that has both needs this said out loud -- otherwise `hidden` does nothing and a
-         guest sees the host's buttons. */
-      .room-controls[hidden],
-      .spectate-strip[hidden] { display: none; }
-      .room-controls button {
-        padding: 6px 10px;
-        background: #22303a;
-        color: #e6edf3;
-        border: 1px solid #2b3742;
-        border-radius: 4px;
-        font: inherit;
-        font-size: 11px;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      .room-controls button:disabled { opacity: 0.45; cursor: default; }
-      #room-start { background: #2d4a2f; border-color: #3c6440; }
-      .room-note { color: #9fb3c0; font-size: 11px; margin-top: 6px; min-height: 1.2em; }
-      .room-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
-      .room-roster li { color: #cfe3ef; }
-      /* A name is a button (POK-268) -- it opens that trainer's card -- but it should
-         read as a name, not as a control, so it borrows nothing from the button. */
-      .roster-name {
-        background: none; border: 0; padding: 0; margin: 0;
-        font: inherit; color: inherit; cursor: pointer; text-align: left;
-      }
-      .roster-name:hover { text-decoration: underline; }
-      .trainer-card {
-        margin-top: 6px; padding: 6px 10px; border-radius: 8px;
-        background: #1a2128; color: #cfe3ef; font-size: 12px; max-width: 320px;
-      }
-      .trainer-card[hidden] { display: none; }
-      .card-kick {
-        margin-top: 6px; font: inherit; font-size: 11px; cursor: pointer;
-        background: #5a2d2d; color: #ffd9d9; border: 0; border-radius: 6px; padding: 3px 10px;
-      }
-      /* The way out of a room, for everybody who is not running it (POK-241). */
-      .room-leave {
-        margin-top: 6px; font: inherit; font-size: 11px; cursor: pointer;
-        background: #33424c; color: #cfe3ef; border: 0; border-radius: 6px; padding: 3px 12px;
-      }
-      .room-leave[hidden] { display: none; }
-      .card-line { line-height: 1.5; }
-      .spectate-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
-      .spectate-strip .label { color: #9fb3c0; }
-      .spectate-strip button {
-        font: inherit; background: #33424c; color: #cfe3ef;
-        border: 0; border-radius: 6px; padding: 3px 9px; cursor: pointer;
-      }
-      .spectate-strip button[aria-pressed='true'] { background: #4f6b7d; color: #fff; }
       /* The picture and the field around it (POK-317, web/src/field.ts). #screen-wrap is
          the whole area the game may take; field.ts places the 240x160 picture inside it at
          one scale and draws the map past its edges on #field at the same scale. Out of a
@@ -249,9 +172,6 @@
           gap: 0 10px;
           padding: 0 calc(10px + env(safe-area-inset-right)) 4px calc(10px + env(safe-area-inset-left));
         }
-        /* The settings are the last row, not the first cell the grid happens to have
-           spare -- they live inside this section, so auto-placement grabs them. */
-        #screen-playing .drawer { grid-column: 1 / -1; grid-row: 1; }
         /* `width: 100%` would make the middle column take everything and push the
            pad off the left edge, so here the screen is exactly as wide as it is. */
         #screen-wrap { grid-column: 2; grid-row: 2; width: auto; max-width: none; align-self: stretch; justify-self: stretch; aspect-ratio: auto; min-height: 0; }
@@ -265,21 +185,6 @@
         /* Sideways the pad is in the grid's side columns, not over the field. */
         body.in-match #pad { position: static; }
         header h1 { font-size: 15px; }
-        .settings { padding-top: 2px; padding-bottom: 4px; }
-      }
-
-      /* Nothing on screen said which keys these were, so the answer was "it has no
-         keyboard support". It has had one all along. */
-      /* The remap wizard's prompt. Always visible when it has something to say --
-         a pad is as likely on a phone in a dock as on a desk. */
-      .keys-note { text-align: center; color: #ffe08a; font-size: 12px; padding: 0 12px 4px; min-height: 1.2em; }
-
-      .keys {
-        display: none;
-        text-align: center;
-        color: #7d8f9c;
-        font-size: 11px;
-        padding: 0 12px 8px;
       }
 
       /* A computer is not a phone (POK-253). With a keyboard and a mouse the touch
@@ -290,28 +195,14 @@
       @media (hover: hover) and (pointer: fine) {
         #pad { display: none; }
         #screen-playing { padding: 0; }
-        /* The room panel is not a game control: it is how a host runs the match, so
-           it stays. It sits over the screen rather than pushing it down. */
-        #room-panel { width: 100%; }
-        .drawer { width: 100%; }
         /* basis 0, not auto: on `auto` the picture sizes the box and the box then
            overflows the window instead of the picture shrinking to fit it. The game
            takes the window, match or not; field.ts fits the picture and fills the rest. */
         #screen-wrap { flex: 1 1 0; min-height: 0; width: 100%; max-width: none; aspect-ratio: auto; }
-        .settings { padding: 6px 12px 10px; }
-        .keys { display: block; }
       }
-      /* ---- the drawer (phone chrome) ----
-         Out of a match the drawer is simply in the flow: the room screen IS the drawer's
-         contents. In a match (body.in-match) it goes behind the menu button and comes
-         back as a sheet over the game; the results open it on their own. */
-      .drawer { width: 100%; max-width: 480px; }
-      .drawer-head { display: none; justify-content: space-between; align-items: center; gap: 12px;
-                     flex-wrap: wrap; padding: 6px 0 8px; font-weight: 600; }
-      .drawer-close { margin-left: auto; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
-                      background: #4c7a99; color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; }
-      .drawer-note { display: none; color: #7d8f9c; font-size: 11px; text-align: center; margin: 0; padding: 0 12px 6px; }
-      body.in-match.drawer-open .drawer-note { display: block; }
+      /* The phone's menu button (POK-320): in a match, the sheet -- the room, LEAVE, the
+         settings -- is drawn over the game behind it. A desktop has the sheet beside the
+         game instead, and no pad to put a button in. */
       .menu-btn {
         display: none;
         width: 44px; height: 36px; border: 0; border-radius: 10px;
@@ -319,35 +210,9 @@
         place-items: center; touch-action: manipulation;
       }
       body.in-match .menu-btn { display: grid; }
-      body.in-match .drawer { display: none; }
-      body.in-match.drawer-open .drawer {
-        display: block;
-        position: fixed; inset: 0; z-index: 5;
-        max-width: none; overflow: auto;
-        background: rgba(16, 20, 24, 0.96);
-        padding: calc(12px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
-      }
-      body.in-match.drawer-open .drawer-head { display: flex; }
-      /* The header is the drawer's job on the playing screen. Every screen before it keeps it. */
+      /* The header is not a player's on the playing screen. Every screen before it keeps it. */
       body.playing header { display: none; }
-      /* The wide-window layout keeps its header and never hides the panel. */
-      @media (hover: hover) and (pointer: fine) {
-        body.playing header { display: flex; }
-        body.in-match .menu-btn { display: none; }
-        body.in-match .drawer { display: block; }
-        body.in-match.drawer-open .drawer { position: static; padding: 0; background: none; max-width: none; }
-        body.in-match.drawer-open .drawer-head { display: none; }
-        .drawer { max-width: none; }
-      }
-      .settings {
-        display: flex;
-        gap: 8px;
-        justify-content: center;
-        padding: 8px calc(16px + env(safe-area-inset-right)) 16px calc(16px + env(safe-area-inset-left));
-        flex-wrap: wrap;
-      }
       button, input { font: inherit; }
-      .settings button { padding: 8px 14px; border-radius: 8px; border: 0; background: #26313a; color: #cfe3ef; }
     </style>
   </head>
   <body>
@@ -376,41 +241,9 @@
       <section id="screen-lobby" class="screen" hidden></section>
 
       <section id="screen-playing" class="screen" hidden>
-        <!-- The phone's chrome (Cam, 2026-09-18): during a match only game controls are
-             on the glass. Everything else -- the room, the host's buttons, the results,
-             the settings -- is behind this button, in the drawer below it. -->
-        <div id="drawer" class="drawer">
-        <div class="drawer-head">
-          <span>Hoenn Battle Royale</span>
-          <span id="drawer-version" class="version"></span>
-          <button id="drawer-close" class="drawer-close" type="button">BACK TO GAME</button>
-        </div>
-        <!-- The room before a match is drawn on #stage (POK-320). What is left here is
-             the match: the strip, who is still in, who you are watching, the results. -->
-        <div id="room-panel" class="room-panel" hidden>
-          <div id="room-code" class="room-code"></div>
-          <div id="match-strip" class="room-code" hidden></div>
-          <div id="room-note" class="room-note"></div>
-          <ul id="match-roster" class="room-roster"></ul>
-          <div id="match-card" class="trainer-card" hidden></div>
-          <div id="spectate-strip" class="spectate-strip" hidden></div>
-          <!-- The way out during a match: solo always, a room's guests always. Not
-               #room-leave -- that id is the drawn room's button now (POK-320). -->
-          <button id="match-leave" type="button" class="room-leave" hidden>LEAVE</button>
-        </div>
-        <div class="settings">
-          <button id="mute" type="button">Mute</button>
-          <button id="forget-rom" type="button">Forget stored ROM</button>
-          <button id="remap" type="button">Remap pad</button>
-          <button id="remap-reset" type="button">Reset pad</button>
-        </div>
-        <div id="remap-line" class="keys-note"></div>
-        <div class="keys">
-          Arrows move &middot; Z = A &middot; X = B &middot; A = L &middot; S = R &middot;
-          Enter = START &middot; Shift = SELECT &middot; a gamepad works too
-        </div>
-        <p class="drawer-note">Tap the map to walk there, or tap a move to use it.</p>
-        </div>
+        <!-- During a match only game controls are on the glass (Cam, 2026-09-18). The
+             room, LEAVE and the settings are the sheet, drawn on #stage (POK-320): beside
+             the game on a desktop, behind #menu-btn on a phone. -->
         <div id="screen-wrap">
           <!-- The field past the picture, drawn by field.ts; the picture sits over it. -->
           <canvas id="field" width="240" height="160" aria-hidden="true"></canvas>
@@ -430,7 +263,7 @@
             <!-- Not over the picture: the ROM draws its own corner top-right and the
                  ticker along the bottom, so the one place a button covers nothing is
                  in the pad. -->
-            <button id="menu-btn" class="menu-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="drawer">&#9776;</button>
+            <button id="menu-btn" class="menu-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="stage">&#9776;</button>
             <div class="btn" data-key="start">START</div>
           </div>
         </div>
