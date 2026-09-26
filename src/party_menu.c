@@ -2326,10 +2326,8 @@ static void DisplayPartyPokemonLevelCheck(struct Pokemon *mon, struct PartyMenuB
 static void DisplayPartyPokemonLevel(u8 level, struct PartyMenuBox *menuBox)
 {
 #if BR
-    // No level numbers during a round (POK-266, Kanto v0.37.0). The rung is shared, so
-    // a number that is the same for everybody is noise on every screen it is on -- and
-    // reading an opponent by their team rather than by a number is the point.
-    if (gBrMatch.phase != BR_PHASE_NONE)
+    // No level during a round (br_match.c).
+    if (BrMatch_InRound())
         return;
 #endif
     ConvertIntToDecimalStringN(gStringVar2, level, STR_CONV_MODE_LEFT_ALIGN, 3);

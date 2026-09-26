@@ -417,6 +417,15 @@ bool8 BrMatch_BuzzerClosing(void)
     return gBrRing.active || (gBrMatch.started && gBrMatch.clockLeft == 0);
 }
 
+// No level numbers during a round (POK-266, Kanto v0.37.0). The rung is shared, so a
+// number that is the same for everybody is noise on every screen it is on -- and
+// reading an opponent by their team rather than by a number is the point. A screen that
+// hides one keeps its space; there is simply no number in it.
+bool8 BrMatch_InRound(void)
+{
+    return gBrMatch.phase != BR_PHASE_NONE;
+}
+
 void BrMatch_Tick(void)
 {
     if (sWinPending && BrField_OverworldRunning() && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked())

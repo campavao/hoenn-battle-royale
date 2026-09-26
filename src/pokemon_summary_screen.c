@@ -2783,9 +2783,9 @@ static void PrintNotEggInfo(void)
             SetMonPicBackgroundPalette(TRUE);
     }
 #if BR
-    // No level numbers during a round (POK-266). The braces close below; pret's four
-    // lines inside them are left as pret wrote them.
-    if (gBrMatch.phase == BR_PHASE_NONE)
+    // No level during a round (br_match.c). The braces close below; pret's four lines
+    // inside them are left as pret wrote them.
+    if (!BrMatch_InRound())
     {
 #endif
     StringCopy(gStringVar1, gText_LevelSymbol);

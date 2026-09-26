@@ -1114,10 +1114,9 @@ static void UpdateLvlInHealthbox(u8 healthboxSpriteId, u8 lvl)
     u8 *objVram;
 
 #if BR
-    // Not during a round (POK-266). The box keeps its space; there is simply no number
-    // in it, which is what a shared rung is worth saying. (agbcc is C89: the guard has
-    // to come after the declarations, not before them.)
-    if (gBrMatch.phase != BR_PHASE_NONE)
+    // No level during a round (br_match.c). The guard comes after the declarations:
+    // agbcc is C89.
+    if (BrMatch_InRound())
         return;
 
 #endif

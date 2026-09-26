@@ -75,6 +75,9 @@ const struct BrSpawn *BrMatch_MySpawn(void);
 void BrMatch_SafariCell(u8 *mapNum, u8 *x, u8 *y);
 // The opening's buzzer is going off and we are in a battle: the controllers press RUN.
 bool8 BrMatch_BuzzerClosing(void);
+// A round is on, so no screen shows a level: the party menu, the summary and the
+// battle's healthbox each ask this before they print one (POK-266).
+bool8 BrMatch_InRound(void);
 // Enter the Safari opening on the current map (the boot warped us there).
 void BrMatch_BeginSafari(void);
 // The opening is over for us: out of time, steps or balls. Empty party -> OUT,
