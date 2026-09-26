@@ -22,6 +22,12 @@ void BrLevels_Tick(void);
 u8 BrLevels_WildLevel(void);
 // The Mart's shelf for the current tier (ITEM_NONE-terminated), for CreatePokemartMenu.
 const u16 *BrLevels_MartItems(void);
+// What an item costs, for GetItemPrice: the match's own price for the few Emerald
+// never sells, else `price`, the item table's.
+u16 BrLevels_ItemPrice(u16 itemId, u16 price);
+// The potion a trainer's AI carries at a lead of `level` when there is no bag to give
+// it: a bot whose card came without one (br_bot.c).
+u16 BrLevels_RungPotion(u8 level);
 // The starting bag: an OLD ROD and a few balls. Called once by the boot.
 void BrLevels_GiveStartingBag(void);
 bool8 BrLevels_NoExp(void);

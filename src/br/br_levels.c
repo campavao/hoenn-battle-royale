@@ -16,6 +16,7 @@
 #include "constants/battle_move_effects.h"
 #include "constants/moves.h"
 #include "br/br_moves.h"
+#include "br/br_match.h"
 #include "br/br_levels.h"
 
 EWRAM_DATA struct BrLevels gBrLevels = {0};
@@ -536,6 +537,32 @@ const u16 *BrLevels_MartItems(void)
     if (InTheDeptStore())
         return sDeptStore;
     return sMarts[gBrLevels.tier];
+}
+
+u16 BrLevels_ItemPrice(u16 itemId, u16 price)
+{
+    // The Master Ball has a price during a match (POK-268, Kanto v0.48.0). Emerald
+    // gives it none because it is never for sale; here it is the top shelf's one real
+    // decision, and five thousand is most of a match's money.
+    if (itemId == ITEM_MASTER_BALL && BrMatch_InRound())
+        return 5000;
+    // ...and so does the MOON STONE (POK-309). Emerald prices it at nothing because it
+    // is never for sale -- you find it -- so putting it on a shelf handed it out free,
+    // which Cam caught. The other five stones are 2100 in the item table; this is the
+    // sixth of a matched set, not a number of its own.
+    if (itemId == ITEM_MOON_STONE && BrMatch_InRound())
+        return 2100;
+    return price;
+}
+
+// Kanto's potion rule (POK-236), as the thing Emerald's AI already knows: the rung's
+// own potion, a step up the shelf every twenty-odd levels.
+u16 BrLevels_RungPotion(u8 level)
+{
+    return level >= 75 ? ITEM_FULL_RESTORE
+         : level >= 50 ? ITEM_HYPER_POTION
+         : level >= 30 ? ITEM_SUPER_POTION
+                       : ITEM_POTION;
 }
 
 void BrLevels_Tick(void)

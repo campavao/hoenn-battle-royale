@@ -68,7 +68,9 @@ void BrBot_Tick(void);
 // The engage asks before it opens a netlink: is this seat a bot with a party staged?
 bool8 BrBot_IsStaged(u8 seat);
 // The AI's setup asks what this bot is carrying (battle_ai_script_commands.c) and the
-// fight tells us back which of them it used.
+// fight tells us back which of them it used. LoadAiItems fills the AI's trainer items
+// and is TRUE in a bot's fight; FALSE leaves them to pret's gTrainers loop.
+bool8 BrBot_LoadAiItems(void);
 void BrBot_NoteItemUsed(u16 item);
 // Starts the trainer battle against the staged party. TRUE when it took the fight.
 bool8 BrBot_StartFight(u8 seat);

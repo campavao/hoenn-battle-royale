@@ -19,6 +19,7 @@
 #include "constants/trainers.h"
 #include "constants/moves.h"
 #include "malloc.h"
+#include "data.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -227,6 +228,34 @@ static void ParseTrainer(const u8 *d, u16 n)
 // The AI reached for one of the four (battle_ai_switch_items.c). Remembered as a bit
 // rather than a list: the page knows what it handed over and in what order, so which
 // slots went is the whole report.
+// A bot is not in gTrainers -- it is a seat the host's tab walks around -- so what it
+// may spend comes over on its trainer card, out of a bag that is really being carried
+// and really runs down (POK-237). A card with no bag on it (an older page, or a bot
+// that has spent everything) falls back to the rung's own potion, which is what the AI
+// was given before there was a bag.
+bool8 BrBot_LoadAiItems(void)
+{
+    s32 i;
+
+    if (!gBrBotFight.fighting)
+        return FALSE;
+    if (gBrBotFight.itemCount > 0)
+    {
+        for (i = 0; i < gBrBotFight.itemCount && i < MAX_TRAINER_ITEMS; i++)
+            gBattleResources->battleHistory->trainerItems[i] = gBrBotFight.items[i];
+        gBattleResources->battleHistory->itemsNo = i;
+    }
+    else
+    {
+        u16 potion = BrLevels_RungPotion(GetMonData(&gEnemyParty[0], MON_DATA_LEVEL, NULL));
+
+        gBattleResources->battleHistory->trainerItems[0] = potion;
+        gBattleResources->battleHistory->trainerItems[1] = potion;
+        gBattleResources->battleHistory->itemsNo = 2;
+    }
+    return TRUE;
+}
+
 void BrBot_NoteItemUsed(u16 item)
 {
     u8 i;
