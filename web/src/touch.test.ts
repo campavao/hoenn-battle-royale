@@ -174,6 +174,10 @@ class FieldEmu {
   camera = { x: 10, y: 10, subX: 0, subY: 0 };
   /** gBrOwnPos: object-event coordinates, MAP_OFFSET on. */
   own = { x: 17, y: 17, dir: 1 };
+  /** The map, in the save block's location and gBrOwnPos alike: Littleroot. */
+  map = { group: 0, num: 9 };
+  /** The player's object, gObjectEvents[0]: its currentElevation. */
+  elevation = 3;
   private listeners: (() => void)[] = [];
   press(k: GbaKey) {
     this.held |= 1 << KEY_BIT[k];
@@ -187,15 +191,18 @@ class FieldEmu {
       case 5000: return 6000; // gSaveBlock1Ptr
       case 6000: return this.camera.x & 0xffff; // ->pos
       case 6002: return this.camera.y & 0xffff;
-      case 6004: return 0; // ->location: MAP_LITTLEROOT_TOWN is group 0 ...
-      case 6005: return 9; // ... num 9
+      case 6004: return this.map.group; // ->location
+      case 6005: return this.map.num;
       case 7016: return this.camera.subX >>> 0; // gFieldCamera.x
       case 7020: return this.camera.subY >>> 0;
-      case 8000: return 0; // gBrOwnPos
-      case 8001: return 9;
+      case 8000: return this.map.group; // gBrOwnPos
+      case 8001: return this.map.num;
       case 8002: return this.own.x;
       case 8004: return this.own.y;
       case 8006: return this.own.dir;
+      case 9000: return 1; // gObjectEvents[0]: active ...
+      case 9002: return 1; // ... and the player
+      case 9011: return this.elevation;
       default: return 0; // gMain.inBattle among them: not in a battle
     }
   }
@@ -206,7 +213,7 @@ class FieldEmu {
 
 function fieldLayer(emu: FieldEmu) {
   const canvas = { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 240, height: 160 }) } as unknown as HTMLCanvasElement;
-  const symbols = new Map([['gMain', 0], ['gSaveBlock1Ptr', 5000], ['gFieldCamera', 7000], ['gBrOwnPos', 8000]]);
+  const symbols = new Map([['gMain', 0], ['gSaveBlock1Ptr', 5000], ['gFieldCamera', 7000], ['gBrOwnPos', 8000], ['gObjectEvents', 9000]]);
   const t = new TouchLayer({ emu: emu as never, canvas, symbols });
   t.attach();
   return (x: number, y: number) => (t as unknown as { tap(x: number, y: number): void }).tap(x, y);
@@ -261,5 +268,29 @@ describe('a tap in the field is the tile the picture shows there (POK-330 #34)',
     tap(120, 101);
     for (let i = 0; i < 10; i++) emu.frame();
     expect(emu.pressed).toEqual([]);
+  });
+});
+
+describe('a tap on a bridge walks at the level we stand at (POK-331 #2 review)', () => {
+  // Route 110 (26, 15): the cycling road runs north-south over it at height 4, the path
+  // east-west under it at 3. The tile west of us is the path's: a step from the path,
+  // and from the road a cliff face the ROM refuses -- the road goes round.
+  function tapWest(elevation: number): GbaKey[] {
+    const emu = new FieldEmu();
+    emu.map = { group: 0, num: 25 }; // MAP_ROUTE110
+    emu.camera = { x: 26, y: 15, subX: 0, subY: 0 };
+    emu.own = { x: 26 + 7, y: 15 + 7, dir: 1 };
+    emu.elevation = elevation;
+    fieldLayer(emu)(104, 80);
+    emu.frame();
+    return emu.pressed;
+  }
+
+  it('on the road, round by the road', () => {
+    expect(tapWest(4)).toEqual(['up']);
+  });
+
+  it('on the path, straight there', () => {
+    expect(tapWest(3)).toEqual(['left']);
   });
 });
