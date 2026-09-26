@@ -10,9 +10,12 @@
 #include "br/br_rom_limits.h"
 #include "br/br_version.h"
 
-// The wire table is part of the protocol (POK-331 #21): a new shape needs a new
-// BR_PROTOCOL, and its hash pinned beside it in br_version.h.
-STATIC_ASSERT(BR_WIRE_HASH == BR_PROTOCOL_WIRE_HASH, BumpBrProtocolForANewWireTable)
+// The wire table is part of the protocol (POK-331 #21). tools/br/wire-protocols.txt
+// lists each table's hash under its protocol, append-only; wire-ids.py writes nothing
+// until the table is its last row, and writes that row's protocol as BR_WIRE_PROTOCOL.
+// A new table is a new row, so it does not build without a new BR_PROTOCOL. A row
+// edited in place is caught by web/src/net/wire-ids.test.ts, not here.
+STATIC_ASSERT(BR_WIRE_PROTOCOL == BR_PROTOCOL, BumpBrProtocolForANewWireTable)
 
 // How many maps each group has. Nothing else in C knows: gMapGroups is an array of
 // pointer arrays with no counts beside them.

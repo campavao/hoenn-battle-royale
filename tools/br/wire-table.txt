@@ -10,10 +10,11 @@
 #
 # Add at the end. No id may set 0x80, the continuation bit (BR_MSG_CONT), or reach
 # BR_MSG_COUNT, the ROM's dispatch table. The name, id and cap of every row hash to
-# BR_WIRE_HASH, and include/br/br_version.h pins that hash next to BR_PROTOCOL: a message
-# added, retired or renumbered, or a cap moved, is a new protocol, and neither the ROM nor
-# the tests build until BR_PROTOCOL is bumped and the new hash pinned beside it. The notes
-# after a `#` are not hashed.
+# BR_WIRE_HASH, and that hash is the last row of tools/br/wire-protocols.txt, under
+# BR_PROTOCOL: a message added, retired or renumbered, or a cap moved, is a new protocol.
+# wire-ids.py writes nothing until the new hash is a new row there, and the ROM does not
+# build until BR_PROTOCOL is that row's (wire-protocols.txt says what else holds it). The
+# notes after a `#` are not hashed.
 #
 # name       id   cap
 NONE          0

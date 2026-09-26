@@ -96,7 +96,8 @@ That is all of it. Everything else the page reads is a global of its own (`gBrSe
   the ROM is packed and pushed into `in`.
 - **Layouts**: `include/br/br_wire.h` has every crossing message's bytes, one comment
   block per `BR_MSG_*`; the ids and reassembly caps are generated from
-  `tools/br/wire-table.txt`, whose hash is pinned next to `BR_PROTOCOL`; `docs/WIRE.md`
+  `tools/br/wire-table.txt`, whose hash is the last row of the append-only
+  `tools/br/wire-protocols.txt`, under `BR_PROTOCOL`; `docs/WIRE.md`
   has the table and the framing. Every struct
   field the page or a driver reads by offset is pinned with `BR_OFFSET` where it is
   declared, or in `src/br/br_pins.c` for one of pret's structs, so moving one fails the

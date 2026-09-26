@@ -303,7 +303,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # The whole history, without the blobs nobody reads: web/scripts/wire-protocols.test.ts
+      # holds every committed version of tools/br/wire-protocols.txt to the rows it had,
+      # and refuses a shallow clone (POK-331 #21).
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
 
       - uses: actions/setup-node@v7
         with:

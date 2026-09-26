@@ -51,6 +51,7 @@ export const BR_CAP = {
   DUEL: 1222,       // 4 + 12 * 100, then two bags of (count, 4 * u16)
 } as const;
 
-/** The table's shape (BR_WIRE_HASH), which include/br/br_version.h pins next to
- *  BR_PROTOCOL. */
+/** The table's shape (BR_WIRE_HASH), and the protocol tools/br/wire-protocols.txt lists
+ *  it under (BR_WIRE_PROTOCOL): wire-ids.test.ts holds that to wire.ts's PROTOCOL. */
 export const WIRE_HASH = 0x777CC3AA;
+export const WIRE_PROTOCOL = 1;

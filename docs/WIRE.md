@@ -119,9 +119,13 @@ are written once, in `tools/br/wire-table.txt`, and `tools/br/wire-ids.py` makes
 `include/br/br_wire_ids.h` (which `br_wire.h` includes) and `web/src/net/wire-ids.ts`
 (which `slots.ts` exports as `BR_MSG`) from it (POK-331 #21). `wire-ids.test.ts`
 fails when either has drifted from the table. The table's hash is part of the
-protocol: `include/br/br_version.h` pins it next to `BR_PROTOCOL`, and a message
-added, retired or renumbered, or a cap moved, fails that test and the ROM's build
-(`br_wire.c`) until `BR_PROTOCOL` is bumped and the new hash pinned beside it. A `PackedMon` (the `party` message's per-mon row) is
+protocol: `tools/br/wire-protocols.txt` lists every table's hash under the protocol
+it went out in, append-only. A message added, retired or renumbered, or a cap moved,
+is a new row under the next protocol: `wire-ids.py` writes nothing until the row is
+there, the ROM's build (`br_wire.c`) fails until `BR_PROTOCOL` is that row's, and
+`wire-ids.test.ts` fails until `wire.ts`'s `PROTOCOL` is too. A new hash pasted over
+an old row passes all three; `web/scripts/wire-protocols.test.ts` reads the file's
+history out of git and fails once that row has been committed with another hash. A `PackedMon` (the `party` message's per-mon row) is
 100 bytes, matching the size of the ROM's own `struct Pokemon` so that a full
 6-mon party's continuation-slot math (600 bytes) lines up with a real party; it is
 **not** that encrypted struct, just a fixed unencrypted shape carrying the fields

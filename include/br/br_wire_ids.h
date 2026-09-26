@@ -53,8 +53,9 @@
 #define BR_CAP_TRAINER 619    // seat, 1 + 7 name, count, 6 * 100, items, 4 * u16
 #define BR_CAP_DUEL 1222      // 4 + 12 * 100, then two bags of (count, 4 * u16)
 
-// The table's shape. br_version.h pins it next to BR_PROTOCOL, and br_wire.c will not
-// build while the two differ.
+// The table's shape, and the protocol tools/br/wire-protocols.txt lists it under (its
+// last row). br_wire.c will not build unless that protocol is BR_PROTOCOL.
 #define BR_WIRE_HASH 0x777CC3AA
+#define BR_WIRE_PROTOCOL 1
 
 #endif // GUARD_BR_WIRE_IDS_H

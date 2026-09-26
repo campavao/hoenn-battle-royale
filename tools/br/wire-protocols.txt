@@ -1,0 +1,17 @@
+# Every message table the wire protocol has had (POK-331 #21): one row a BR_PROTOCOL,
+# oldest first, the protocol and the hash tools/br/wire-ids.py prints for
+# tools/br/wire-table.txt (BR_WIRE_HASH).
+#
+# Append-only. The last row is the table as it stands, and three things hold it there:
+#   - wire-ids.py writes nothing while the table's hash is not the last row's;
+#   - it writes the last row's protocol into include/br/br_wire_ids.h as
+#     BR_WIRE_PROTOCOL, and br_wire.c does not build unless that is BR_PROTOCOL;
+#   - web/src/net/wire-ids.test.ts fails unless the last row is the table's hash, its
+#     protocol is BR_PROTOCOL and wire.ts's PROTOCOL, and every row in every committed
+#     version of this file (read out of git) is still here unchanged.
+# So a table that changes shape -- a message added, retired or renumbered, or a cap
+# moved -- is a new row under the next protocol. A new hash pasted over an old row
+# builds, and fails the test once that row has been committed.
+#
+# protocol  hash
+1           0x777CC3AA

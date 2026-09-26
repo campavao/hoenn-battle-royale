@@ -15,9 +15,11 @@ web/src/net/wire-ids.test.ts reads the table and fails when either file has drif
 it; re-run this after editing the table.
 
 BR_WIRE_HASH is FNV-1a (32-bit) over the rows sorted by id, one `NAME ID` or `NAME ID CAP`
-line each, joined by newlines -- the notes are not in it. include/br/br_version.h pins it
-next to BR_PROTOCOL, and br_wire.c STATIC_ASSERTs the two equal: the table's shape is
-part of the protocol.
+line each, joined by newlines -- the notes are not in it. The table's shape is part of
+the protocol: tools/br/wire-protocols.txt lists every table's hash under the protocol it
+went out in, append-only, and this writes nothing while the table's hash is not its last
+row's. The last row's protocol goes into br_wire_ids.h as BR_WIRE_PROTOCOL, which
+br_wire.c STATIC_ASSERTs is BR_PROTOCOL.
 """
 import os
 import re
@@ -25,6 +27,7 @@ import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TABLE = "tools/br/wire-table.txt"
+PROTOCOLS = "tools/br/wire-protocols.txt"
 CONT = 0x80
 
 ROW = re.compile(r"^([A-Z][A-Z0-9_]*)\s+(\d+)(?:\s+(\d+))?\s*(?:#\s*(.*?))?\s*$")
@@ -56,6 +59,26 @@ def rows():
     return out
 
 
+def protocols():
+    """[(protocol, hash)] from wire-protocols.txt, oldest first."""
+    out = []
+    with open(os.path.join(ROOT, PROTOCOLS), encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            m = re.match(r"^(\d+)\s+0x([0-9A-F]{8})$", line)
+            if not m:
+                sys.exit("%s:%d: not PROTOCOL 0xHASH: %s" % (PROTOCOLS, n, line))
+            out.append((int(m.group(1)), int(m.group(2), 16)))
+    if not out:
+        sys.exit("%s: no rows" % PROTOCOLS)
+    for a, b in zip(out, out[1:]):
+        if b[0] <= a[0]:
+            sys.exit("%s: protocol %d comes after %d; rows go oldest first" % (PROTOCOLS, b[0], a[0]))
+    return out
+
+
 def canonical(table):
     lines = []
     for name, ident, cap, _ in sorted(table, key=lambda r: r[1]):
@@ -77,6 +100,18 @@ def main():
     last = by_id[-1][0]
     digest = "0x%08X" % fnv1a(canonical(table))
     width = max(len(r[0]) for r in table)
+    rows_p = protocols()
+    protocol, pinned = rows_p[-1]
+    if "0x%08X" % pinned != digest:
+        sys.exit(
+            "%s is %s, and the last row of %s is protocol %d at 0x%08X.\n"
+            "The table changed shape, which is a new protocol: append the row\n"
+            "    %d           %s\n"
+            "to %s, bump BR_PROTOCOL in include/br/br_version.h and PROTOCOL in\n"
+            "web/src/net/wire.ts to %d, and run this again. Never change a row that is\n"
+            "already there." % (TABLE, digest, PROTOCOLS, protocol, pinned, protocol + 1, digest,
+                                 PROTOCOLS, protocol + 1)
+        )
 
     h_ids = "\n".join("#define BR_MSG_%s %d" % (r[0], r[1]) for r in by_id)
     h_caps = "\n".join(
@@ -101,9 +136,10 @@ def main():
 // for it has to hold (br_wire.h says why).
 {h_caps}
 
-// The table's shape. br_version.h pins it next to BR_PROTOCOL, and br_wire.c will not
-// build while the two differ.
+// The table's shape, and the protocol tools/br/wire-protocols.txt lists it under (its
+// last row). br_wire.c will not build unless that protocol is BR_PROTOCOL.
 #define BR_WIRE_HASH {digest}
+#define BR_WIRE_PROTOCOL {protocol}
 
 #endif // GUARD_BR_WIRE_IDS_H
 """
@@ -126,15 +162,16 @@ export const BR_CAP = {{
 {ts_caps}
 }} as const;
 
-/** The table's shape (BR_WIRE_HASH), which include/br/br_version.h pins next to
- *  BR_PROTOCOL. */
+/** The table's shape (BR_WIRE_HASH), and the protocol tools/br/wire-protocols.txt lists
+ *  it under (BR_WIRE_PROTOCOL): wire-ids.test.ts holds that to wire.ts's PROTOCOL. */
 export const WIRE_HASH = {digest};
+export const WIRE_PROTOCOL = {protocol};
 """
     for rel, text in (("include/br/br_wire_ids.h", h), ("web/src/net/wire-ids.ts", ts)):
         with open(os.path.join(ROOT, rel), "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
         print("wrote " + rel)
-    print("BR_WIRE_HASH " + digest)
+    print("BR_WIRE_HASH %s, protocol %d" % (digest, protocol))
 
 
 if __name__ == "__main__":
