@@ -9,6 +9,15 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import type { Browser, CDPSession } from '@playwright/test';
 
+/** What the page's own meter says (ui/fps.ts PerfSample, via DEV's __hbr.perf()), as
+ *  far as a spec reads it: a spec cannot import the page's code. */
+export interface PageSample {
+  frames: { frames: number; fps: number; p50: number; p95: number; p99: number; max: number; work: { mean: number; p95: number; max: number } };
+  audio: { callbacks: number; late: number; cut: number; maxGapMs: number; state: string };
+  heapMb: number | null;
+  proxy: { booted: boolean; frames: number; fought: number; timedOut: number; fellBack: number } | null;
+}
+
 export interface ProcSnapshot {
   at: number;
   /** pid -> its type and CPU-seconds so far. */

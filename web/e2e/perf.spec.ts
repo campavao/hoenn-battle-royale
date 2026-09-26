@@ -15,25 +15,18 @@
 //
 // The numbers are the emulator's own (POK-247), not requestAnimationFrame's: frames the
 // core delivered and the time between them as a p95, the page's share of each, the
-// speaker's late and starved buffers, and what the processes cost -- CPU-seconds a
+// speaker's late and cut buffers, and what the processes cost -- CPU-seconds a
 // second and the renderer's resident memory. perf.json has the lot.
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { cost, costLine, processes, snapshot } from './proc';
+import { cost, costLine, processes, snapshot, type PageSample } from './proc';
 import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
 const BR_PHASE_PLAY = 2;
 type RamWindow = { __br: { mailbox: { ram: { read(a: number, w: 8 | 16 | 32): number } } } };
-/** What the page's own meter says (ui/fps.ts PerfSample), as far as a spec reads it. */
-export interface PageSample {
-  frames: { frames: number; fps: number; p50: number; p95: number; p99: number; max: number; work: { mean: number; p95: number; max: number } };
-  audio: { callbacks: number; late: number; starved: number; maxGapMs: number; state: string };
-  heapMb: number | null;
-  proxy: { booted: boolean; frames: number; fought: number; timedOut: number; fellBack: number } | null;
-}
 type PerfWindow = {
   __perf: { long: number; longest: number; probe: { sample(reset?: boolean): PageSample } };
   __hbr: { perf(): { sample(reset?: boolean): PageSample } };
@@ -116,7 +109,7 @@ test('the host carries a match without the emulator falling over', async ({ brow
         `host over ${proc.seconds.toFixed(1)}s of match at 4x CPU throttle: ${frames.fps.toFixed(1)} fps, ` +
           `frame p50 ${frames.p50.toFixed(1)} p95 ${frames.p95.toFixed(1)} p99 ${frames.p99.toFixed(1)} max ${frames.max.toFixed(0)} ms, ` +
           `work ${frames.work.mean.toFixed(2)} ms (p95 ${frames.work.p95.toFixed(1)}), ` +
-          `audio ${audio.callbacks} callbacks ${audio.late} late ${audio.starved} starved (${audio.state}), ` +
+          `audio ${audio.callbacks} callbacks ${audio.late} late ${audio.cut} cut (${audio.state}), ` +
           `${read.long} long tasks, longest ${read.longest.toFixed(0)}ms\n  ${costLine(proc)}, heap ${read.sample.heapMb} MB` +
           (proxy ? `, proxy ${proxy.fought} fought ${proxy.fellBack} fell back ${proxy.frames} frames` : ''),
       );
