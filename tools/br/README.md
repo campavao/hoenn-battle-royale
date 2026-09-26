@@ -78,6 +78,12 @@ Run order matters for 1 → 2 and 1 → 3; the rest stand alone (5's skins name 
 version file are per build, not per data change: `symbols.py` and `version-json.sh`, run
 by `dev-patch.sh` and CI after every ROM build.
 
+Two more write the mailbox's contract into C and TypeScript both, and a vitest fails
+when either side is stale: `rom-limits.py` (the species, move, level and map bounds, from
+the pret sources) and `wire-ids.py` (the message ids and reassembly caps, from
+`wire-table.txt` -- edit the table, never its outputs; a table that changes shape is a
+`BR_PROTOCOL` bump, pinned in `include/br/br_version.h`).
+
 Not generators: `bots-replay.ts` and `zone-occupancy.ts` (the bot brain run offline, for
 questions), `moveset-sim.py` (eyeballs br_levels.c's move picks), `transcribe.py`
 (play-test videos), `play-log.mjs` (the relay's play log, CI).

@@ -24,6 +24,7 @@
 // fail this whole file at import: map ids come from data/maps instead.
 import { describe, expect, it } from 'vitest';
 import wireH from '../../include/br/br_wire.h?raw';
+import wireIdsH from '../../include/br/br_wire_ids.h?raw';
 import mailboxH from '../../include/br/br_mailbox.h?raw';
 import configH from '../../include/br/br_config.h?raw';
 import versionH from '../../include/br/br_version.h?raw';
@@ -377,10 +378,10 @@ describe('the C and its own offset comments', () => {
 
 // ---- the wire and the mailbox ----------------------------------------------------------
 
-describe('the wire (include/br/br_wire.h, br_version.h)', () => {
+describe('the wire (include/br/br_wire.h, br_wire_ids.h, br_version.h)', () => {
   it('every message id, both ways', () => {
     const c: Record<string, number> = {};
-    for (const m of wireH.matchAll(/^#define BR_MSG_(\w+)\s+(0x[0-9a-fA-F]+|\d+)\b/gm)) c[m[1]] = Number(m[2]);
+    for (const m of `${wireH}\n${wireIdsH}`.matchAll(/^#define BR_MSG_(\w+)\s+(0x[0-9a-fA-F]+|\d+)\b/gm)) c[m[1]] = Number(m[2]);
     // Not message types: the continuation bit, and how many types the table has room for.
     const cont = c.CONT;
     delete c.CONT;

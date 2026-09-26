@@ -1,10 +1,13 @@
 #ifndef GUARD_BR_WIRE_H
 #define GUARD_BR_WIRE_H
 
-// Message types on the mailbox rings. The page's web/src/net/slots.ts carries the
-// same numbers (BR_MSG in that file); docs/WIRE.md is the table of record (POK-217).
-// Keep them stable; add at the end; never reuse a retired number within a protocol
-// version.
+#include "br/br_wire_ids.h"
+
+// Every message on the mailbox rings has a block below, under its name, with its bytes.
+// Its id and reassembly cap are in tools/br/wire-table.txt, which tools/br/wire-ids.py
+// makes into br_wire_ids.h and the page's web/src/net/wire-ids.ts (POK-331 #21), and
+// whose hash is pinned next to BR_PROTOCOL. docs/WIRE.md says what each message is for
+// (POK-217).
 //
 // Continuation scheme (slots.ts): a slot's payload is at most BR_SLOT_PAYLOAD_MAX
 // (62) bytes. Every packed message -- even a one-slot one -- opens with a 3-byte
@@ -16,13 +19,13 @@
 // silently reassemble into a different message -- the reader has to see the seq gap.
 #define BR_MSG_CONT 0x80
 
-#define BR_MSG_NONE 0
+// BR_MSG_ECHO
 // page -> ROM: payload echoed back as BR_MSG_ECHO. The bridge's heartbeat and the
 // harness's first test.
-#define BR_MSG_ECHO 1
 
 // ---- overworld --------------------------------------------------------------
 
+// BR_MSG_PLACE
 // ROM <-> page, ~4x/second per seat: where a seat is and its status.
 // Payload (11 bytes before framing):
 //   0:    seat      u8   0..31
@@ -34,8 +37,8 @@
 //   8:    facing    u8   DIR_SOUTH=1 DIR_NORTH=2 DIR_WEST=3 DIR_EAST=4
 //   9:    status    u8   0=lobby 1=alive 2=battle 3=out
 //   10:   spriteId  u8   0 = default skin
-#define BR_MSG_PLACE 2
 
+// BR_MSG_STEP
 // ROM <-> page: a step just committed.
 // Payload (8 bytes):
 //   0:    seat  u8
@@ -44,18 +47,18 @@
 //   4..5: y     s16 LE
 //   6:    mapGroup u8
 //   7:    mapNum   u8
-#define BR_MSG_STEP 3
 
+// BR_MSG_FACE
 // ROM <-> page: a turn in place.
 // Payload (4 bytes):
 //   0: seat     u8
 //   1: f        u8   facing, as BR_MSG_PLACE
 //   2: mapGroup u8
 //   3: mapNum   u8
-#define BR_MSG_FACE 4
 
 // ---- battle ------------------------------------------------------------------
 
+// BR_MSG_CHALLENGE
 // page -> ROM: the resolved engage. Sent to BOTH sides once a challenge/accept
 // negotiation (JSON-only, web/src/net/wire.ts) settles, so each side's
 // `br_netlink.c` knows who to exchange link blocks with.
@@ -63,8 +66,8 @@
 //   0:   seat     u8   the challenger
 //   1:   opponent u8   the seat being engaged
 //   2..3: nonce   u16 LE  (the wire's own nonce, truncated to 16 bits)
-#define BR_MSG_CHALLENGE 5
 
+// BR_MSG_BT
 // ROM <-> page: one raw GBA link-block exchange -- the actual bytes
 // `SendBlock`/`gBlockRecvBuffer` trade, carried across the mailbox instead of a
 // cable. `seq` is the link exchange's own counter (distinct from the mailbox slot
@@ -74,8 +77,8 @@
 //   1..2: seq  u16 LE
 //   3..4: len  u16 LE
 //   5..: data  len bytes
-#define BR_MSG_BT 6
 
+// BR_MSG_PARTY
 // ROM <-> page: a trainer's party -- either a bot roster seat's (so
 // `CreateNPCTrainerParty` can build a trainer battle from it) or a player's, for the
 // Hall of Fame. Spans slots: 6 mons * 100 bytes is well past one slot.
@@ -107,20 +110,20 @@
 //   55:     flags       u8   bit0 = traded; bit1 = the moves are a ROM's own, from a
 //                             PARTY report: a card with it fights with them (POK-330 #50)
 //   56..99: reserved    zero
-#define BR_MSG_PARTY 7
 #define BR_MON_OFF_FLAGS 55
 #define BR_MON_TRADED 0x01
 #define BR_MON_ROM_MOVES 0x02
 
+// BR_MSG_FAINT
 // ROM -> page: a party slot fainted (spectator/HUD state, not elimination).
 // Payload (2 bytes): seat u8, index u8 (0..5)
-#define BR_MSG_FAINT 8
 
+// BR_MSG_OUT
 // ROM <-> page: this seat has been eliminated from the match. A ROM hearing it takes the
 // seat's ghost off for good and wins an undecided link battle against it (br_match.c).
 // Payload (1 byte): seat u8
-#define BR_MSG_OUT 9
 
+// BR_MSG_PICKUP
 // ROM <-> page: a ground item is gone, or part of a bag is (a bare key with
 // item/n/cash all zero is the whole piece; with item set, that many left the bag
 // and the rest is still there).
@@ -131,8 +134,8 @@
 //   4..5: item    u16 LE
 //   6:    n       u8      1..99
 //   7:    cash    u8      0/1
-#define BR_MSG_PICKUP 10
 
+// BR_MSG_SPILL
 // ROM <-> page: a trainer's team hit the ground, optionally with their bag.
 // Spans slots when the bag is present.
 // Payload:
@@ -146,8 +149,8 @@
 //   if hasBag: key u16 LE, x s16 LE, y s16 LE, itemCount u8 (<=8),
 //              itemCount * (id u16 LE, n u8), money u32 LE,
 //              nameLen u8 (<=7) + name (Gen 3 charmap bytes)
-#define BR_MSG_SPILL 11
 
+// BR_MSG_RING
 // Host -> page/ROM: where the fog is now. `sx`/`sy` are region-map SECTION
 // coordinates (gRegionMapEntries), Hoenn's analogue of Kanto's town-map cell.
 // Payload (up to 25 bytes):
@@ -160,13 +163,13 @@
 //   6..: place    Gen 3 charmap bytes, placeLen of them
 //   next: hasElapsed u8
 //   next..+1: elapsed u16 LE   seconds since the match began
-#define BR_MSG_RING 12
 
+// BR_MSG_CLOCK
 // Host -> page/ROM: a countdown the room is watching (the Safari opening's clock
 // today; generic so any future shared countdown can reuse it).
 // Payload (3 bytes): seat u8, left u16 LE (seconds, 0..3600)
-#define BR_MSG_CLOCK 13
 
+// BR_MSG_START
 // Host -> page/ROM: the match begins. Spans slots once there are more than a
 // handful of spawns.
 // Payload:
@@ -178,8 +181,8 @@
 //                          bits2..3 = text speed index (0->1, 1->3, 2->5)
 //   10..: spawnCount rows, 8 bytes each: seat u8, mapGroup u8, mapNum u8,
 //         x s16 LE, y s16 LE, outFlag u8 (only ever set on a `late`-derived resend)
-#define BR_MSG_START 14
 
+// BR_MSG_TICKER
 // Host/page -> ROM: a line for the overworld ticker/HUD window (kill feed, system
 // line, or a chat line riding the same pipe -- Hoenn has no separate chat).
 // Payload (3 + textLen bytes):
@@ -188,19 +191,19 @@
 //   2: textLen u8 (<= 96 on the wire; the ROM reads one slot, 56, and draws
 //                  BR_HUD_LINE_MAX, 40 -- the page cuts every line to 40)
 //   3..: text  Gen 3 charmap bytes
-#define BR_MSG_TICKER 15
 
+// BR_MSG_RESULT
 // ROM -> page: a link/trainer battle this seat was in just concluded. Distinct from
 // the room's overall winner and from BR_MSG_OUT -- a lost PvP fight does not by
 // itself eliminate anyone.
 // Payload (2 bytes): seat u8, outcome u8 (0=win 1=lose 2=draw 3=forfeit)
-#define BR_MSG_RESULT 16
 
+// BR_MSG_BUSY
 // ROM <-> page: what a seat is doing that is not walking, edge-triggered (POK-230).
 // The engage skips a seat in a battle; a menu is not a hiding place and is not skipped.
 // Payload (2 bytes): seat u8, kind u8 (0 on the map, 1 in a menu, 2 in a battle)
-#define BR_MSG_BUSY 17
 
+// BR_MSG_BSTART
 // ROM -> page -> spectators: a link battle starting, so a spectator can replay it as a
 // BATTLE_TYPE_RECORDED (POK-233). The challenger emits it (it has both sides). Spans
 // slots: two 6-mon parties are ~1.2 KB. Payload (variable):
@@ -211,8 +214,8 @@
 //   ..:    genders   u8 player, u8 opponent
 //   ..:    party     u8 pCount, then pCount struct Pokemon (100 bytes; portable, keyed
 //                    by each mon's own personality^otId), then u8 oCount + oCount mons
-#define BR_MSG_BSTART 18
 
+// BR_MSG_TURN
 // ROM -> page -> spectators: the action bytes a battle produced since the last turn
 // message, streamed so the spectator's recorded replay stays a turn behind (POK-233).
 // The challenger emits it, once every battler has chosen -- a choice can still be taken
@@ -222,28 +225,28 @@
 // Payload (variable, the RecordedBattle delta):
 //   0..1:  battle  u16 LE
 //   2..:   one or more [battler u8, count u8, count action bytes] runs
-#define BR_MSG_TURN 19
 
+// BR_MSG_FOLLOW
 // page -> ROM: watch this seat walk around (POK-233). The spectator's camera rides
 // their ghost; the seat's own ROM never sees this. 0xFF stops following and gives the
 // camera, the sprite and the controls back.
 // Payload (1 byte): seat u8 (0xFF = stop)
-#define BR_MSG_FOLLOW 20
 
+// BR_MSG_PEEK
 // A spectator asks what the trainer they watch is carrying (POK-233). Broadcast, so
 // every ROM sees it and only `target` answers -- with a BR_MSG_PARTY of its own party,
 // which is how the asker's peek box gets its rows and how the answerer counts the eyes
 // on it.
 // Payload (2 bytes): asker u8, target u8
-#define BR_MSG_PEEK 21
 
+// BR_MSG_SHOT
 // ROM -> page -> spectators: the seconds left on a fighter's shot clock (POK-231), so
 // somebody watching sees the pressure the fighter is under. Each fighter publishes its
 // own; a spectator draws the one belonging to the seat it follows. 0 means the choice
 // is made and the clock is gone.
 // Payload (2 bytes): seat u8, secs u8 (0..30)
-#define BR_MSG_SHOT 22
 
+// BR_MSG_TRAINER
 // page -> ROM: the party of a bot about to challenge us (POK-238). A bot has no ROM on
 // the other end of a link, so the fight is an ordinary trainer battle and this is the
 // trainer: the ROM builds these straight into gEnemyParty and leaves gTrainers alone.
@@ -257,15 +260,15 @@
 //   ..:   items    u8   how many of its bag it may spend here, 0..4 (POK-237)
 //   ..:   ids      items * u16  Gen 3 item ids, straight into BATTLE_HISTORY
 // The tail is optional: a card without one leaves the AI on the rung's own potion.
-#define BR_MSG_TRAINER 23
 
+// BR_MSG_PICK
 // pick: ROM -> page -> host: the section this trainer chose to drop into (POK-223).
 // Sent when the drop's map closes, and once more if no LAND has come back.
 // Payload (3 bytes):
 //   0:    seat     u8
 //   1..2: section  u16 LE   MAPSEC_*
-#define BR_MSG_PICK 24
 
+// BR_MSG_LAND
 // land: host -> page -> ROM: the cell the host dealt that trainer inside the section.
 // Addressed to one seat; the ROM ignores one for anybody else, and one for a map it
 // does not have. With none at all the drop falls back to the START's spawn.
@@ -275,16 +278,16 @@
 //   2:    mapNum   u8
 //   3..4: x        s16 LE   map coords, no MAP_OFFSET (what SetWarpDestination takes)
 //   5..6: y        s16 LE
-#define BR_MSG_LAND 25
 
+// BR_MSG_SPENT
 // spent: which of a bot's staked items this fight actually used (POK-237). The bag
 // lives on the host's page and the fight does not, so this is the only report of it.
 // Payload:
 //   0:    seat     u8   the bot's roster seat, not the sender's
 //   1:    count    u8   0..4
 //   2..:  ids      count * u16
-#define BR_MSG_SPENT 26
 
+// BR_MSG_DUEL
 // duel: two bot parties for the hidden proxy instance to fight properly (POK-238).
 // Only that instance ever receives one -- it has no seat and is in no room.
 // Payload (variable):
@@ -297,8 +300,8 @@
 //   ..:   bagB     the same for the other side
 // The bags are optional: without them the duel is fought bare, which is what it did
 // before there were bags at all.
-#define BR_MSG_DUEL 27
 
+// BR_MSG_DRESULT
 // dresult: how it went. Not the mons -- the page sent them and still holds them --
 // only what the fight changed.
 //   0:    seatA    u8
@@ -310,8 +313,8 @@
 //                  mon's own card's scale, as the DUEL sent its maxHp (POK-330 #30)
 //   ..:   usedA    u8 count then count * u16: what side A spent out of its bag
 //   ..:   usedB    the same for the other side
-#define BR_MSG_DRESULT 28
 
+// BR_MSG_FLED
 // fled: this trainer just ran from that one (POK-266, Kanto v0.49.0). Its own signal
 // rather than a fourth BUSY kind: BUSY means "cannot be challenged", and POK-231's rule
 // is that only the FLEER is held off the PURSUER -- everybody else may still walk up to
@@ -320,8 +323,8 @@
 // Payload:
 //   0:    seat     u8   who ran
 //   1:    from     u8   who they ran from
-#define BR_MSG_FLED 29
 
+// BR_MSG_GIVE
 // give: put these items in the bag (POK-280). Kanto's rule is that a fallen trainer's
 // BAG is items AND money, taken whole in one press; ours handed over the cash and left
 // the items on the floor, because `ParseSpill` never kept them -- the ROM's loot table
@@ -336,8 +339,8 @@
 // Payload:
 //   0:    count    u8   1..8 stacks
 //   1..:  stacks   count * (id u16, n u8)
-#define BR_MSG_GIVE 30
 
+// BR_MSG_NPCOUT
 // npcout: one of Hoenn's own route trainers has been beaten, so its sprite goes away
 // for EVERYBODY (POK-287). Kanto's rule, README: "beaten means gone" -- the world is a
 // record of the match, and reading a route as "somebody got here first" is the point.
@@ -356,13 +359,11 @@
 //   1:    group    u8   the map they were standing on
 //   2:    num      u8
 //   3:    localId  u8   the object event's local id on that map
-#define BR_MSG_NPCOUT 31
 
-// The highest type in use, and how many the ROM's dispatch table has room for
-// (br_mailbox.c; a STATIC_ASSERT there keeps LAST below COUNT). A new message moves
+// How many types the ROM's dispatch table has room for (br_mailbox.c; a STATIC_ASSERT
+// there keeps BR_MSG_LAST, the highest in the table, below it). A new message moves
 // LAST; the table grows only when LAST reaches COUNT, and it costs 8 bytes of EWRAM a
 // type when it does. Anything at or past COUNT is dropped on arrival.
-#define BR_MSG_LAST BR_MSG_NPCOUT
 #define BR_MSG_COUNT 48
 
 // ---- reassembly caps ------------------------------------------------------------
@@ -373,16 +374,9 @@
 // TRAINER and DUEL caps predated the item tails (POK-237), and a six-mon bot with a
 // seven-letter name, or any 6v6 duel, was dropped (POK-330 #11).
 //
-// Plain numbers, on purpose: web/src/net/caps.test.ts reads them out of this file and
-// packs the page's largest instance of each message against them, and every C file that
-// sizes a buffer by one STATIC_ASSERTs it against its own layout.
-#define BR_CAP_BT 261       // seat, seq u16, len u16, a 256-byte block
-#define BR_CAP_PARTY 667    // seat, count, 6 * 100, then money u32, stacks, 20 * (id, n)
-#define BR_CAP_SPILL 128    // 4 + 6 * 9, bag flag, key/x/y, 8 * 3 items, money, 1 + 7 name
-#define BR_CAP_START 266    // 10 + 32 spawn rows * 8
-#define BR_CAP_TRAINER 619  // seat, 1 + 7 name, count, 6 * 100, items, 4 * u16
-#define BR_CAP_DUEL 1222    // 4 + 12 * 100, then two bags of (count, 4 * u16)
-#define BR_CAP_BSTART 1230  // 28 + 2 * (count + 6 * 100): what a fighter's ROM sends
-#define BR_CAP_TURN 128     // what a fighter's ROM sends in one frame
+// The caps are BR_CAP_* in br_wire_ids.h, out of the wire table like the ids:
+// web/src/net/caps.test.ts packs the page's largest instance of each message against
+// them, and every C file that sizes a buffer by one STATIC_ASSERTs it against its own
+// layout.
 
 #endif // GUARD_BR_WIRE_H

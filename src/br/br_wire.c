@@ -8,6 +8,11 @@
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
 #include "br/br_rom_limits.h"
+#include "br/br_version.h"
+
+// The wire table is part of the protocol (POK-331 #21): a new shape needs a new
+// BR_PROTOCOL, and its hash pinned beside it in br_version.h.
+STATIC_ASSERT(BR_WIRE_HASH == BR_PROTOCOL_WIRE_HASH, BumpBrProtocolForANewWireTable)
 
 // How many maps each group has. Nothing else in C knows: gMapGroups is an array of
 // pointer arrays with no counts beside them.

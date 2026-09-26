@@ -6,8 +6,8 @@
 # over its cap without a word, so the late-game bot's card never staged -- the CHALLENGE
 # behind it then opened a link battle with a bot, which the watchdog forfeited -- and
 # every 6v6 duel went to the seeded resolver instead of a fight. The caps are now read
-# off the full layout (br_wire.h's BR_CAP_*), and web/src/net/caps.test.ts packs the
-# page's largest instance of each message against them.
+# off the full layout (BR_CAP_*, tools/br/wire-table.txt), and web/src/net/caps.test.ts
+# packs the page's largest instance of each message against them.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400

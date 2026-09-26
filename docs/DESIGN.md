@@ -95,7 +95,9 @@ That is all of it. Everything else the page reads is a global of its own (`gBrSe
   (`slots.ts`), and forwards it as JSON (`wire.ts`) through the relay; relay traffic for
   the ROM is packed and pushed into `in`.
 - **Layouts**: `include/br/br_wire.h` has every crossing message's bytes, one comment
-  block per `BR_MSG_*`; `docs/WIRE.md` has the table and the framing. Every struct
+  block per `BR_MSG_*`; the ids and reassembly caps are generated from
+  `tools/br/wire-table.txt`, whose hash is pinned next to `BR_PROTOCOL`; `docs/WIRE.md`
+  has the table and the framing. Every struct
   field the page or a driver reads by offset is pinned with `BR_OFFSET` where it is
   declared, so moving one fails the build.
 - **Addresses** come from the link map. `tools/br/symbols.py` writes `br-symbols.json`

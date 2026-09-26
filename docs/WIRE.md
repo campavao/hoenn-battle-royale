@@ -67,7 +67,7 @@ continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 | `out` | `BR_MSG_OUT` 9 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | the eliminated seat. A ROM takes that seat's ghost off every map for good (a later `place` or `step` from it is a spectator walking, and is ignored), drops a parked challenge from it, and wins a link battle against it that has no outcome yet (POK-330 #5) |
 | `pickup` | `BR_MSG_PICKUP` 10 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | whoever picked something up off the ground |
 | `spill` | `BR_MSG_SPILL` 11 | page&lt;-&gt;page, page&lt;-&gt;ROM | yes | the defeated trainer's client, on elimination |
-| `npcout` | 31 | page&lt;-&gt;page, page-&gt;ROM | yes | whoever beat one of Hoenn's own route trainers -- or the host's fog clock, with `fog: true` (POK-299): every trainer on a map the ring has held outside for forty seconds leaves every ROM the same way, and the record card and the boss line both skip a fog one. to the ROM a fog one crosses under seat `0xFF` (`BR_NO_SEAT`): despawn if standing there, but do not remember it -- `gBrDespawned` is sixteen slots and a sweep is a hundred trainers |
+| `npcout` | `BR_MSG_NPCOUT` 31 | page&lt;-&gt;page, page-&gt;ROM | yes | whoever beat one of Hoenn's own route trainers -- or the host's fog clock, with `fog: true` (POK-299): every trainer on a map the ring has held outside for forty seconds leaves every ROM the same way, and the record card and the boss line both skip a fog one. to the ROM a fog one crosses under seat `0xFF` (`BR_NO_SEAT`): despawn if standing there, but do not remember it -- `gBrDespawned` is sixteen slots and a sweep is a hundred trainers |
 | `ring` | `BR_MSG_RING` 12 | host-&gt;page&lt;-&gt;ROM | yes | host, on every fog shrink |
 | `clock` | `BR_MSG_CLOCK` 13 | host-&gt;page&lt;-&gt;ROM | yes | host, ticking down a shared countdown (the Safari opening today) |
 | `start` | `BR_MSG_START` 14 | host-&gt;page&lt;-&gt;ROM | yes | host, when the match begins |
@@ -112,9 +112,16 @@ global.h`).
 ## Binary layout (web/src/net/slots.ts, include/br/br_wire.h)
 
 The exact byte-offset layout for every crossing message lives in
-`include/br/br_wire.h` as a comment block above its `BR_MSG_*` define -- that
-header is written to be sufficient on its own for the C side, and `slots.ts`
-implements it field for field. A `PackedMon` (the `party` message's per-mon row) is
+`include/br/br_wire.h` as a comment block under its name (`// BR_MSG_PLACE`) --
+that header is written to be sufficient on its own for the C side, and `slots.ts`
+implements it field for field. The ids and the reassembly caps are not in it: they
+are written once, in `tools/br/wire-table.txt`, and `tools/br/wire-ids.py` makes
+`include/br/br_wire_ids.h` (which `br_wire.h` includes) and `web/src/net/wire-ids.ts`
+(which `slots.ts` exports as `BR_MSG`) from it (POK-331 #21). `wire-ids.test.ts`
+fails when either has drifted from the table. The table's hash is part of the
+protocol: `include/br/br_version.h` pins it next to `BR_PROTOCOL`, and a message
+added, retired or renumbered, or a cap moved, fails that test and the ROM's build
+(`br_wire.c`) until `BR_PROTOCOL` is bumped and the new hash pinned beside it. A `PackedMon` (the `party` message's per-mon row) is
 100 bytes, matching the size of the ROM's own `struct Pokemon` so that a full
 6-mon party's continuation-slot math (600 bytes) lines up with a real party; it is
 **not** that encrypted struct, just a fixed unencrypted shape carrying the fields
@@ -135,8 +142,8 @@ leaders get (POK-311). HM moves a page keeps for pathing never reach a fight.
 
 `web/src/net/slots.test.ts` pins the packed size of the fixed-layout messages
 (`FIXED_LAYOUT_SIZES`) against real `packSlot()` output, and round-trips every codec.
-Nothing reads `br_wire.h` itself: a header change needs its `slots.ts` twin by hand,
-and a driver that sends the new bytes to a real ROM.
+The layouts themselves are still copied by hand: a change to a block in `br_wire.h`
+needs its `slots.ts` twin, and a driver that sends the new bytes to a real ROM.
 
 ## What did not carry over from Kanto, and why
 

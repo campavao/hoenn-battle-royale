@@ -1,20 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import wireHeader from '../../../include/br/br_wire.h?raw';
+import idsHeader from '../../../include/br/br_wire_ids.h?raw';
 import { BR_MSG, packSlot, reassembleSlots } from './slots';
+import { BR_CAP } from './wire-ids';
 import { PARTY_BAG_MAX } from './wire';
 import type { Msg, PackedMon } from './wire';
 
 // The ROM reassembles a message that spans slots into a buffer of a fixed size, and
-// BrWire_Assemble drops one that claims more without a word. So every cap in br_wire.h
-// has to hold the page's largest encoding of its message -- which the TRAINER and DUEL
-// caps did not, once the item tails arrived (POK-330 #11): a six-mon card with a
-// seven-letter name, and every 6v6 duel, never reached the ROM at all.
+// BrWire_Assemble drops one that claims more without a word. So every cap in the wire
+// table (tools/br/wire-table.txt: BR_CAP here, BR_CAP_* in br_wire_ids.h) has to hold
+// the page's largest encoding of its message -- which the TRAINER and DUEL caps did not,
+// once the item tails arrived (POK-330 #11): a six-mon card with a seven-letter name, and
+// every 6v6 duel, never reached the ROM at all.
 
-const CAPS: Record<string, number> = {};
-for (const [, name, n] of wireHeader.matchAll(/^#define BR_CAP_(\w+) (\d+)/gm)) CAPS[name] = Number(n);
+const CAPS: Record<string, number> = { ...BR_CAP };
 const define = (name: string): number => {
-  const m = new RegExp(`^#define ${name} (\\d+)`, 'm').exec(wireHeader);
-  if (!m) throw new Error(`no ${name} in br_wire.h`);
+  const m = new RegExp(`^#define ${name} (\\d+)`, 'm').exec(`${wireHeader}\n${idsHeader}`);
+  if (!m) throw new Error(`no ${name} in br_wire.h or br_wire_ids.h`);
   return Number(m[1]);
 };
 
@@ -74,7 +76,7 @@ const LARGEST: Record<string, Msg> = {
   DUEL: { t: 'duel', seatA: 30, seatB: 31, a: six, b: six, itemsA: fourItems, itemsB: fourItems },
 };
 
-describe('the ROM holds the largest message the page sends it (br_wire.h BR_CAP_*)', () => {
+describe('the ROM holds the largest message the page sends it (BR_CAP_*)', () => {
   it('has a cap for every message that spans slots, and no others', () => {
     // bstart and turn are the fighter's ROM's bytes, relayed as they are; the rest the
     // page composes itself.
@@ -106,8 +108,8 @@ describe('every message type fits the ROM dispatch table (br_wire.h BR_MSG_COUNT
     const count = define('BR_MSG_COUNT');
     const ids = Object.values(BR_MSG);
     expect(Math.max(...ids)).toBeLessThan(count);
-    expect(wireHeader).toMatch(/^#define BR_MSG_LAST BR_MSG_(\w+)/m);
-    const last = /^#define BR_MSG_LAST BR_MSG_(\w+)/m.exec(wireHeader)![1];
+    expect(idsHeader).toMatch(/^#define BR_MSG_LAST BR_MSG_(\w+)/m);
+    const last = /^#define BR_MSG_LAST BR_MSG_(\w+)/m.exec(idsHeader)![1];
     expect(define(`BR_MSG_${last}`)).toBe(Math.max(...ids));
   });
 });

@@ -22,6 +22,7 @@
 // state machine for every message type instead of one path for framed and one for
 // bare.
 import { MAILBOX } from './mailbox';
+import { BR_MSG } from './wire-ids';
 import { packGen3String, unpackGen3String } from '../text/gen3';
 import { PARTY_BAG_MAX, PROTOCOL } from './wire';
 import type {
@@ -63,42 +64,11 @@ import type {
   ResultMsg,
 } from './wire';
 
-// ---- the message-type table (mirrors include/br/br_wire.h) ----------------
+// ---- the message-type table (tools/br/wire-table.txt, via wire-ids.ts) ------
 
-export const BR_MSG = {
-  NONE: 0,
-  ECHO: 1,
-  PLACE: 2,
-  STEP: 3,
-  FACE: 4,
-  CHALLENGE: 5,
-  BT: 6,
-  PARTY: 7,
-  FAINT: 8,
-  OUT: 9,
-  BUSY: 17,
-  BSTART: 18,
-  TURN: 19,
-  FOLLOW: 20,
-  PEEK: 21,
-  SHOT: 22,
-  PICKUP: 10,
-  SPILL: 11,
-  RING: 12,
-  CLOCK: 13,
-  START: 14,
-  TICKER: 15,
-  RESULT: 16,
-  TRAINER: 23,
-  SPENT: 26,
-  DUEL: 27,
-  DRESULT: 28,
-  FLED: 29,
-  GIVE: 30,
-  NPCOUT: 31,
-  PICK: 24,
-  LAND: 25,
-} as const;
+// Generated from the same table as the ROM's br_wire_ids.h (POK-331 #21), and still
+// exported from here, where every reader has always found it.
+export { BR_MSG };
 
 /** Set on a continuation slot's `type` byte; `type & ~BR_CONT_FLAG` names the message. */
 export const BR_CONT_FLAG = 0x80;
