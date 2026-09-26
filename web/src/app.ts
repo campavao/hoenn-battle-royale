@@ -2413,10 +2413,11 @@ function wireRoom(
     const next = onRefused(ev.reason, { rejoining, wasHost: isHost, seat: bridge?.seat ?? null });
     rejoining = false;
     // The room we were running is gone -- a relay restart, or the seat hold ran out
-    // (POK-330 #47). The match is still in this tab, so it goes on in a new room.
+    // (POK-330 #47). The match is still in this tab, so it goes on in a new room, from
+    // the seat it is played from: an heir's is not the opener's 1 (POK-331 #14).
     if (next === 'rehost') {
       setStatus('The room was gone. Hosting it again…');
-      relay.host({ ...me, open: true, max: BOT_FILL });
+      relay.host({ ...me, open: true, max: BOT_FILL, seat: bridge?.seat });
       return;
     }
     // Kanto's door: a room on another build is not one you can play in (POK-330 #3). A
@@ -2550,8 +2551,9 @@ const LOBBY_REFRESH_MS = 5000;
 
 /** Kanto's one screen: every way into a match is a row on it. Resolves with the choice,
  *  having closed the browsing socket first -- SOLO VS BOTS must reach the ROM with no
- *  connection open, which is the whole point of it. */
-function runLobby(): Promise<RoomHash> {
+ *  connection open, which is the whole point of it. `version` is the tab's, which the
+ *  list is asked with: its DAILY row is our own build's daily (POK-331 #14). */
+function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomHash> {
   showScreen('lobby');
   const stage = theStage();
   const relay = new RelayClient();
@@ -2726,7 +2728,7 @@ function runLobby(): Promise<RoomHash> {
         online = up;
         redraw();
       }
-      if (up) relay.listRooms();
+      if (up) relay.listRooms(version);
     };
     setTimeout(beat, 200);
     timer = setInterval(beat, LOBBY_REFRESH_MS);
@@ -2929,7 +2931,7 @@ async function main(): Promise<void> {
   }
   const fromHash = parseRoomHash();
   let roomHash = fromHash;
-  if (!roomHash) roomHash = await runLobby();
+  if (!roomHash) roomHash = await runLobby({ patch, protocol });
   if (roomsRefused && roomHash.mode !== 'solo') return refuseRoom(roomsRefused);
   const bootMode = bootModeFor(roomHash.mode);
 

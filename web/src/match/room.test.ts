@@ -214,15 +214,19 @@ describe('a door that will not open (POK-330 #47)', () => {
   it('hosts again when the room it was running is gone', () => {
     // a relay restart, or the seat hold ran out: the match is still in this tab
     expect(onRefused('not_found', host)).toBe('rehost');
+    // ...from whatever seat it runs it: an heir's is not the opener's (POK-331 #14), and
+    // the new room is opened as it (relay host_room's `seat`)
+    expect(onRefused('not_found', { ...host, seat: 3 })).toBe('rehost');
   });
 
   it('is a dead end for anybody else, or for any other refusal', () => {
     expect(onRefused('not_found', { ...host, wasHost: false })).toBe('dead-end'); // a guest
     expect(onRefused('not_found', { ...host, rejoining: false })).toBe('dead-end'); // an old link
-    // a new room seats its opener at 1: from any other seat we would come back as somebody else
-    expect(onRefused('not_found', { ...host, seat: 3 })).toBe('dead-end');
+    expect(onRefused('not_found', { ...host, seat: null })).toBe('dead-end'); // no seat to keep
     expect(onRefused('removed', host)).toBe('dead-end');
     expect(onRefused('version', host)).toBe('dead-end');
+    // an older relay opened the room again as a seat that is not ours
+    expect(onRefused('seat', { ...host, rejoining: false })).toBe('dead-end');
     expect(onRefused('already_in_room', host)).toBe('status');
   });
 });

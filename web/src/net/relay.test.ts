@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import serverSource from '../../../relay/server.js?raw';
+import roomSource from '../../../relay/room.js?raw';
 import F from '../../../relay/protocol.fixtures.json';
 import { REJOIN_MS, RelayClient, type WebSocketLike } from './relay';
 import { MAX_SEAT } from './wire';
@@ -298,6 +298,38 @@ describe('RelayClient', () => {
     expect(joined).toHaveBeenCalledWith({ code: 'ABC123', id: MAX_SEAT, host: 1 });
   });
 
+  // A match hosted again after a relay restart keeps the seat it is played from, which
+  // for an heir is not the opener's 1 (POK-331 #14).
+  it('hosts as the seat it asks for, and gives back a room opened as another', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    const hosted = vi.fn();
+    const error = vi.fn();
+    relay.on('room_hosted', hosted);
+    relay.on('room_error', error);
+
+    relay.host({ name: 'BLUE', open: true, max: 8, seat: 2 });
+    expect(sockets[0].sent.at(-1)).toMatchObject({ type: 'host_room', seat: 2 });
+    sockets[0].receive({ type: 'room_hosted', code: 'NEW111', id: 2, token: 't' });
+    expect(hosted).toHaveBeenCalledWith({ code: 'NEW111', id: 2 });
+    expect(relay.id).toBe(2);
+
+    // an older relay does not know `seat` and opens the room as 1: somebody else's
+    relay.host({ name: 'BLUE', open: true, max: 8, seat: 2 });
+    sockets[0].receive({ type: 'room_hosted', code: 'NEW222', id: 1, token: 't' });
+    expect(hosted).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith({ reason: 'seat' });
+    expect(sockets[0].sent.at(-1)).toEqual({ type: 'leave_room' });
+
+    // ...and a host that asked for nothing takes what it is given
+    relay.host({ name: 'RED', open: true, max: 8 });
+    expect(sockets[0].sent.at(-1)).not.toHaveProperty('seat');
+    sockets[0].receive({ type: 'room_hosted', code: 'NEW333', id: 1, token: 't' });
+    expect(hosted).toHaveBeenLastCalledWith({ code: 'NEW333', id: 1 });
+  });
+
   it('locks with the bots\' seats so the relay never hands one out (POK-330 #6)', () => {
     const { factory, sockets } = makeFactory();
     const relay = new RelayClient(factory);
@@ -325,7 +357,7 @@ describe('RelayClient', () => {
   });
 
   it('agrees with the relay on the highest seat', () => {
-    expect(serverSource).toMatch(new RegExp(`export const MAX_SEAT = ${MAX_SEAT};`));
+    expect(roomSource).toMatch(new RegExp(`export const MAX_SEAT = ${MAX_SEAT};`));
   });
 
   // The relay's suite sends these same payloads through its gate (POK-330 #3). The two
@@ -343,7 +375,11 @@ describe('RelayClient', () => {
     relay.quickJoin({ name: 'QUICK', skin: 'SPRITE_MAY', ...version });
     relay.dailyJoin({ name: 'DAILY', skin: 'SPRITE_MAY', ...version });
     relay.join('CODE', { name: 'OLDPAGE' });
-    expect(sockets[0].sent).toEqual([F.host_room, F.join_room, F.watch_other_build, F.quick_join, F.daily_join, F.join_room_unversioned]);
+    // ...and the list, whose DAILY row is the daily of our own build (POK-331 #14)
+    relay.listRooms(version);
+    expect(sockets[0].sent).toEqual([
+      F.host_room, F.join_room, F.watch_other_build, F.quick_join, F.daily_join, F.join_room_unversioned, F.list_rooms,
+    ]);
     expect(F.host_room.patch).toMatch(/^[0-9a-f]{40}$/); // a ROM's sha1, not a patch number
 
     const error = vi.fn();

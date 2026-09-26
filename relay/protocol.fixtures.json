@@ -53,6 +53,11 @@
     "patch": "cbcd04f5a8ddc946110cda0f93ae04347eaf044a",
     "protocol": 1
   },
+  "list_rooms": {
+    "type": "list_rooms",
+    "patch": "cbcd04f5a8ddc946110cda0f93ae04347eaf044a",
+    "protocol": 1
+  },
   "version_refused": {
     "type": "room_error",
     "reason": "version",

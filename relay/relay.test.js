@@ -14,7 +14,7 @@ import http from "node:http";
 import { readFileSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { WebSocket as WsClient } from "ws";
-import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, exitOnSignal, limitsFromEnv, stats } from "./server.js";
+import { createRelay, clientAddress, CODE_ALPHABET, CODE_LENGTH, exitOnSignal, limitsFromEnv, MAX_SEAT, stats } from "./server.js";
 
 class Client {
   // headers: what a proxy in front of the relay would add (POK-330 #19)
@@ -1905,25 +1905,26 @@ test("the roster carries the seats asked for beside the humans seated", async ()
 
 test("a listed room is full when its door would say so, not by trainers over seats", async () => {
   await withRelay(async (port) => {
-    // thirty seats, two humans allowed: a trainer and a watcher fill it
+    // thirty seats, two humans allowed: two trainers fill it (a watcher cannot be in a
+    // listed room: nobody watches a lobby, POK-331 #9 review)
     const host = await connect(port);
     host.send({ type: "host_room", name: "HOST", open: true, max: 30 });
     const { code } = await host.until("room_hosted");
     const seeker = await connect(port);
     seeker.send({ type: "list_rooms" });
     assert.equal((await seeker.until("rooms")).rooms[0].full, false);
-    const watcher = await connect(port);
-    watcher.send({ type: "join_room", code, name: "W", spectate: true });
-    await watcher.until("room_joined");
+    const guest = await connect(port);
+    guest.send({ type: "join_room", code, name: "G" });
+    await guest.until("room_joined");
     seeker.send({ type: "list_rooms" });
     const [row] = (await seeker.until("rooms")).rooms;
-    assert.equal(row.players, 1, "the watcher is not a trainer");
+    assert.equal(row.players, 2, "two trainers of thirty seats");
     assert.equal(row.seats, 30);
     assert.equal(row.full, true, "but the door is shut all the same");
     const late = await connect(port);
     late.send({ type: "join_room", code, name: "L" });
     assert.equal((await late.next()).reason, "full");
-    for (const c of [host, seeker, watcher, late]) c.end();
+    for (const c of [host, seeker, guest, late]) c.end();
   }, { members: 2 });
 });
 
@@ -1948,10 +1949,18 @@ test("a host that drops with nobody to take over gets its room back, as host, in
     assert.deepEqual(waiting.members.map((m) => m.id), [2]);
     assert.equal(relay.rooms.size, 1);
 
-    // nobody new comes in meanwhile, not even to watch
+    // nobody new comes in to play meanwhile; a watcher does (POK-331 #14), and is
+    // not made the host for saying it could be
+    const p = await connect(port);
+    p.send({ type: "join_room", code: hosted.code, name: "NEW" });
+    assert.equal((await p.next()).reason, "locked");
     const c = await connect(port);
+    c.send({ type: "can_host", ok: true });
     c.send({ type: "join_room", code: hosted.code, name: "NEW", spectate: true });
-    assert.equal((await c.next()).reason, "locked");
+    const watching = await c.next();
+    assert.equal(watching.type, "room_joined", "the match is there to watch");
+    assert.equal(watching.host, 1, "and still waits for its host");
+    await rosterWhere(b, (r) => r.members.length === 2);
 
     const a2 = await connect(port);
     a2.send({ type: "join_room", code: hosted.code, name: "RED", token: hosted.token });
@@ -1959,11 +1968,11 @@ test("a host that drops with nobody to take over gets its room back, as host, in
     assert.equal(back.type, "room_joined");
     assert.equal(back.id, 1);
     assert.equal(back.host, 1, "it is the host again");
-    assert.deepEqual((await b.until("roster")).members.map((m) => m.id).sort(), [1, 2]);
+    assert.deepEqual((await b.until("roster")).members.map((m) => m.id).sort(), [1, 2, 3]);
     // ...with the host's say over the room
     a2.send({ type: "set_max", max: 4 });
     assert.equal((await b.until("roster")).max, 4);
-    for (const x of [a2, b, c]) x.end();
+    for (const x of [a2, b, c, p]) x.end();
   });
 });
 
@@ -2192,6 +2201,13 @@ test("a daily waiting on its dropped host is still the daily: its lobby takes th
     assert.equal(answer.type, "match_in_progress", "a match is running, host or no host");
     assert.equal(answer.code, hosted.code);
     assert.equal(relay.rooms.size, 1);
+    // ...and the watch it says to go and do is let in (POK-331 #14): it was refused
+    // `locked` while the host was away, a dead end
+    c.send({ type: "join_room", code: answer.code, name: "LATE", spectate: true });
+    const watching = await c.next();
+    assert.equal(watching.type, "room_joined");
+    assert.equal((await rosterWhere(out, (r) => r.members.some((m) => m.name === "LATE")))
+      .members.find((m) => m.name === "LATE").spectate, true);
     for (const x of [a2, out, c]) x.end();
   });
 });
@@ -2222,4 +2238,223 @@ test("every door says how long a dropped seat is held", async () => {
     assert.equal((await e.until("room_joined")).rejoinMs, 7_000);
     for (const x of [a, b, c, d, e]) x.end();
   }, { rejoinMs: 7_000 });
+});
+
+// ------- POK-331: the doors' leftovers
+
+// Every page says can_host the moment it has a seat, watchers included. The relay made
+// one the heir of the match it was watching, and handed it a room waiting on its host.
+test("a watcher is never the heir: the room waits for its host rather than hand it over (POK-331 #9)", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const { code } = await a.until("room_hosted");
+    const p = await connect(port);
+    p.send({ type: "join_room", code, name: "OUT" }); // a trainer, not (yet) able to host
+    assert.equal((await p.until("room_joined")).id, 2);
+    a.send({ type: "lock_room", locked: true });
+    const w = await connect(port);
+    w.send({ type: "can_host", ok: true });
+    w.send({ type: "join_room", code, spectate: true, name: "WATCH" });
+    assert.equal((await w.until("room_joined")).id, 3);
+    await rosterWhere(p, (r) => r.members.length === 3);
+
+    a.end(); // the host drops mid-match
+    assert.equal((await rosterWhere(p, (r) => r.members.length === 2)).host, 1,
+      "waited for: the watcher is not its heir");
+    w.send({ type: "can_host", ok: true });
+    await w.settled();
+    p.send({ type: "can_host", ok: true });
+    assert.equal((await rosterWhere(w, (r) => r.host !== 1)).host, 2,
+      "the trainer takes it, not the watcher that asked first");
+
+    // the match ends and the unlock seats the watcher: now it may run the room
+    p.send({ type: "lock_room", locked: false });
+    await rosterWhere(w, (r) => r.members.every((m) => !m.spectate));
+    p.send({ type: "leave_room" });
+    assert.equal((await rosterWhere(w, (r) => r.members.length === 1)).host, 3);
+    p.end(); w.end();
+  });
+});
+
+// ...and nobody watches a lobby. A watch asked of a room between matches, or a watcher's
+// seat held across the unlock, came in flagged; never heir, it let the room close under it.
+async function leftAlone(c) {
+  for (;;) {
+    const msg = await c.next();
+    assert.notEqual(msg.type, "room_closed", "the room closed rather than pass to it");
+    if (msg.type === "roster" && msg.members.length === 1) return msg;
+  }
+}
+
+test("a watch asked of a lobby is a seat in it, and the room's heir (POK-331 #9 review)", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const { code } = await a.until("room_hosted");
+    // a #watch reload once the match is over, or a match_in_progress that lost the race
+    // with the unlock
+    const w = await connect(port);
+    w.send({ type: "can_host", ok: true });
+    w.send({ type: "join_room", code, spectate: true, name: "WATCH" });
+    assert.equal((await w.until("room_joined")).id, 2);
+    const roster = await rosterWhere(a, (r) => r.members.length === 2);
+    assert.equal(roster.members.find((m) => m.id === 2).spectate, undefined,
+      "no match to watch: a player of the next one");
+    a.send({ type: "leave_room" });
+    assert.equal((await leftAlone(w)).host, 2);
+    a.end(); w.end();
+  });
+});
+
+test("a watcher whose seat was held across the unlock comes back seated (POK-331 #9 review)", async () => {
+  await withRelay(async (port) => {
+    const a = await connect(port);
+    a.send({ type: "host_room", name: "RED" });
+    const { code } = await a.until("room_hosted");
+    a.send({ type: "lock_room", locked: true });
+    const w = await connect(port);
+    w.send({ type: "join_room", code, spectate: true, name: "WATCH" });
+    const joined = await w.until("room_joined");
+    await rosterWhere(a, (r) => r.members.length === 2);
+    w.end(); // its socket blips across the match's end
+    await rosterWhere(a, (r) => r.members.length === 1);
+    a.send({ type: "lock_room", locked: false });
+    await a.settled();
+
+    // the page asks again as it first asked: to watch
+    const w2 = await connect(port);
+    w2.send({ type: "join_room", code, spectate: true, name: "WATCH", token: joined.token });
+    assert.equal((await w2.until("room_joined")).id, joined.id, "its own seat back");
+    w2.send({ type: "can_host", ok: true });
+    const roster = await rosterWhere(w2, (r) => r.members.length === 2);
+    assert.equal(roster.members.find((m) => m.id === joined.id).spectate, undefined,
+      "seated, as the unlock seated everybody else watching");
+    await w2.settled();
+    a.send({ type: "leave_room" });
+    assert.equal((await leftAlone(w2)).host, joined.id);
+    a.end(); w2.end();
+  });
+});
+
+// The DAILY row took the first unlocked daily of any build for its code and count, and
+// went missing while any build's daily ran: right after a deploy, the old build's.
+test("the DAILY row is the daily this browser's press would land in, by its own build (POK-331 #14)", async () => {
+  const relay = createRelay({ daily: dailyIn(20) });
+  const addr = await relay.listen(0, "127.0.0.1");
+  const ours = { patch: F.list_rooms.patch, protocol: F.list_rooms.protocol };
+  const theirs = { patch: F.join_room_other_build.patch, protocol: 1 };
+  const row = async (c, version) => {
+    c.send({ type: "list_rooms", ...version });
+    return (await c.until("rooms")).rooms.find((r) => r.daily);
+  };
+  // the relay sees a socket go when it sees it: ask until the row says so
+  const rowWhere = async (c, version, pred) => {
+    for (let i = 0; i < 100; i++) {
+      const r = await row(c, version);
+      if (pred(r)) return r;
+    }
+    assert.fail("the row never changed");
+  };
+  try {
+    // the old build's daily is running
+    const old = await connect(addr.port);
+    old.send({ type: "daily_join", name: "OLD", ...theirs });
+    await old.until("room_hosted");
+    old.send({ type: "lock_room", locked: true });
+    await old.settled();
+
+    const seeker = await connect(addr.port);
+    const fresh = await row(seeker, ours);
+    assert.ok(fresh, "not ours: our press opens a daily of our own, so the row is there");
+    assert.equal(fresh.code, "");
+    assert.equal(fresh.players, 0);
+    assert.equal(await row(seeker, theirs), undefined, "theirs is running");
+
+    // ours opens, and the row names it to us, not to them
+    const early = await connect(addr.port);
+    early.send({ type: "daily_join", name: "EARLY", ...ours });
+    const hosted = await early.until("room_hosted");
+    const named = await row(seeker, ours);
+    assert.equal(named.code, hosted.code);
+    assert.equal(named.players, 1);
+    assert.equal(await row(seeker, theirs), undefined);
+
+    // its host drops: its lobby still takes the press (POK-330 #47 review), so the
+    // row still names it
+    early.end();
+    assert.equal((await rowWhere(seeker, ours, (r) => r.players === 0)).code, hosted.code);
+    seeker.send({ type: "daily_join", name: "SEEKER", ...ours });
+    assert.equal((await seeker.until("room_joined")).code, hosted.code);
+    seeker.send({ type: "can_host", ok: true });
+    await rosterWhere(seeker, (r) => r.host !== 1);
+
+    // and once ours runs, host or no host, the press is a watch: no row
+    seeker.send({ type: "lock_room", locked: true });
+    await seeker.settled();
+    seeker.end();
+    const late = await connect(addr.port);
+    await rowWhere(late, ours, (r) => r === undefined);
+    late.send({ type: "daily_join", name: "LATE", ...ours });
+    assert.equal((await late.until("match_in_progress")).code, hosted.code);
+    for (const c of [old, late]) c.end();
+  } finally {
+    await relay.close();
+  }
+});
+
+// An heir runs the match from its own seat. A relay restart takes every room with it,
+// and the page running the match hosts it again (match/room.ts onRefused) -- which
+// opened it as seat 1, another trainer's in that match, so only seat 1 could.
+test("a match hosted again after a restart keeps the seat it is played from (POK-331 #14)", async () => {
+  const before = createRelay();
+  const addr = await before.listen(0, "127.0.0.1");
+  const a = await connect(addr.port);
+  a.send({ type: "host_room", name: "RED" });
+  const { code } = await a.until("room_hosted");
+  const b = await connect(addr.port);
+  b.send({ type: "can_host", ok: true });
+  b.send({ type: "join_room", code, name: "BLUE" });
+  const joined = await b.until("room_joined");
+  a.send({ type: "lock_room", locked: true });
+  a.send({ type: "leave_room" });
+  assert.equal((await rosterWhere(b, (r) => r.host !== 1)).host, 2, "BLUE is the heir");
+  await before.shutdown("SIGTERM");
+
+  const after = createRelay();
+  const port = (await after.listen(0, "127.0.0.1")).port;
+  try {
+    const b2 = await connect(port);
+    b2.send({ type: "join_room", code, name: "BLUE", token: joined.token });
+    assert.equal((await b2.next()).reason, "not_found", "the room went with the restart");
+    b2.send({ type: "host_room", name: "BLUE", open: true, seat: joined.id });
+    const hosted = await b2.until("room_hosted");
+    assert.equal(hosted.id, 2, "its own seat, not the opener's");
+    assert.equal((await b2.until("roster")).host, 2);
+    // the next one in gets the lowest seat free
+    const c = await connect(port);
+    c.send({ type: "join_room", code: hosted.code, name: "NEW" });
+    assert.equal((await c.until("room_joined")).id, 1);
+    // and a seat that is no seat is not asked for
+    for (const seat of [0, MAX_SEAT + 1, "2", 2.5]) {
+      const d = await connect(port);
+      d.send({ type: "host_room", name: "D", seat });
+      assert.equal((await d.until("room_hosted")).id, 1, `seat ${JSON.stringify(seat)}`);
+      d.end();
+    }
+    for (const x of [a, b, b2, c]) x.end();
+  } finally {
+    await after.close();
+  }
+});
+
+// The drop line's census counts the types handle() answers by name, and since the
+// split (POK-331 #19) the list it counts from is conn.js's HANDLED, a file away from
+// the switch: a type added to one and not the other is `other` on every drop line.
+test("the census names exactly the types handle() answers (POK-331 #19)", async () => {
+  const { HANDLED } = await import("./conn.js");
+  const source = readFileSync(new URL("./server.js", import.meta.url), "utf8");
+  const cases = [...source.matchAll(/^\s*case "([a-z_]+)":/gm)].map((m) => m[1]);
+  assert.ok(cases.length > 0, "handle()'s cases found");
+  assert.deepEqual([...HANDLED].sort(), [...new Set(cases)].sort());
 });

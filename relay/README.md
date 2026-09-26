@@ -13,6 +13,18 @@ someone drops. Game rules live in the host player's client.
 
 One dependency: `ws`.
 
+## Files
+
+| file | holds |
+| --- | --- |
+| `server.js` | `createRelay`: the message handlers, the one door every way in goes through (`canEnter`, `openRoom`, `admit`), host migration, the sweep, `/health`, SIGTERM, and the entry point (`node server.js`). It still exports everything below that it exported before the split |
+| `room.js` | `Room`: its members, seat ids and the seats held for a drop, the lock, the roster and its lobby row. `MAX_SEAT` |
+| `conn.js` | `Conn`: one socket's rate buckets, its census for the drop line, and its output |
+| `clean.js` | what arrives from outside, made safe: names, skins, passcodes, versions, `BR_MOTD`, `BR_DAILY`, `BR_ORIGINS`, the proxy's address headers, the limit env vars |
+| `relay.test.js` | the suite (`node --test`) |
+| `protocol.fixtures.json` | what the page sends each door; both suites read it |
+| `railway.json` | Railway's builder and start command |
+
 ## Running it
 
 ```sh
@@ -27,11 +39,11 @@ Client -> server:
 
 | type | fields | does |
 | --- | --- | --- |
-| `host_room` | `name, open?, max?, skin?, pass?, patch?, protocol?` | opens a room; `room_hosted {code, id, token}` then a roster |
+| `host_room` | `name, open?, max?, skin?, pass?, patch?, protocol?, seat?` | opens a room; `room_hosted {code, id, token}` then a roster. `seat` (1..31): the id to open it as instead of 1 -- a match hosted again after its room went (a relay restart) is played from the seat it had, an heir's included |
 | `set_max` | `max` | host only: room size, live |
 | `set_pass` | `pass` | host only: passcode, live; empty/absent clears it |
 | `set_skin` | `skin` | what this member looks like, live |
-| `list_rooms` | | `rooms {rooms:[...]}`: every joinable lobby |
+| `list_rooms` | `patch?, protocol?` | `rooms {rooms:[...]}`: every joinable lobby. Inside the half hour before the DAILY GAME its row leads, and describes the daily this client's `daily_join` would land in: its own build's lobby (code, players), none yet (`code: ""`), or no row while its build's daily match runs |
 | `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?, token?` | `room_joined {code, id, host, token}` or `room_error {reason}`. With a `token` naming a seat the room is still holding (a socket that dropped within `rejoinMs`, 60 s), the same `id` comes back whatever the door says -- locked, full or passcoded -- and the token is spent (POK-284). A token whose socket the relay still has (a page that gave up on a half-open one) takes the seat over, host and all, and the old socket is closed. A member who sent `leave_room` or was removed is not held |
 | `stat` | `id, v, solo, since` | play counter; logged, counted, never answered |
 | `lock_room` | `locked, bots?` | host only: refuse new joiners (match in progress). `bots`: the seats the host dealt its bots, never handed to a member until the unlock |
@@ -51,7 +63,7 @@ Server -> client:
 | type | fields | when |
 | --- | --- | --- |
 | `roster` | `code, host, open, max, seats, pass, members:[{id,name,spectate?}]` | on every room change. `max`: the humans the room seats (the host's MAX, clamped to 16); `seats`: the MAX the host asked for (up to 30), which bots fill |
-| `rooms` | `rooms:[{code, host, skin?, players, seats, pass, full}]` | reply to `list_rooms`. `full`: the door would refuse a join (it counts watchers and free ids, which `players`/`seats` cannot) |
+| `rooms` | `rooms:[{code, host, skin?, players, seats, pass, full}]` | reply to `list_rooms`. `full`: the door would refuse a join (it counts the humans' ceiling and free ids, which `players`/`seats` cannot) |
 | `recv` | `from, m` | a `to`/`all` delivery |
 | `room_closed` | `reason` | the host left with no heir, or dropped and did not come back inside the seat hold (`host_gone`), or you were kicked (`removed`). The room is over: the page closes its socket rather than reconnecting to it |
 | `room_hosted` | `code, id, token` | your `host_room`/`daily_join` succeeded; `token` claims this seat back after a drop |
@@ -67,11 +79,15 @@ BOTS'), the lowest one that is not a member's, not held for one who dropped,
 and not used since the match locked the door -- nor a bot's. When none is left
 the door says `full`, whatever MAX says. The heir is the earliest arrival that
 can host, by the room's own count, since the lowest id is no longer the
-oldest. A host that drops with no heir (alone with its bots, or the last one
+oldest, and never a watcher: it is not in the match (every page says
+`can_host` on arrival, watchers too), and the unlock that seats it makes it
+eligible. Nobody watches a lobby: `spectate` asked of an unlocked room, or a
+watcher's seat held across the unlock, comes back seated. A host that drops with no heir (alone with its bots, or the last one
 standing) is waited for through the same seat hold: the roster keeps naming
 it, the door takes nobody new (except the daily's lobby, which is
-nobody's in particular), and its token makes it host again. A member
-that sends `can_host` meanwhile takes the room over instead; if nobody does
+nobody's in particular, and a watcher of its match: watching needs nobody to
+run anything), and its token makes it host again. A member
+(not a watcher) that sends `can_host` meanwhile takes the room over instead; if nobody does
 and the hold runs out, the room closes with `host_gone`. The host is whoever created the room. Codes use the alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
 (no `0 O 1 I L`), so a code read aloud never has to be checked twice.
 
@@ -89,7 +105,8 @@ When both sides said something and it disagrees, a door you named
 `room_error {reason: "version", host: {patch, protocol}}`. A door the relay
 picks for you walks past the room instead: `quick_join` takes the fullest room
 of your own build (or answers `no_open_rooms`, and you host), and `daily_join`
-seats you in the daily of your own build, opening one if there is none. Right
+seats you in the daily of your own build, opening one if there is none (and
+`list_rooms`, asked with the same pair, gives its DAILY row that daily). Right
 after a deploy the fullest room is often the old build's, and telling an
 up-to-date player to reload cannot help them. Either side saying nothing (an
 older client, or one that opts out) skips the check entirely -- nobody is
