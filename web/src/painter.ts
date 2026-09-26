@@ -17,8 +17,10 @@
 import { decodeGrid, type WorldMap } from './bots/world';
 import worldData from './data/world.json';
 import regionmapData from './data/regionmap.json';
-import { DOORSTEPS, HAND, LANDING, LANDING_ALL } from './match/landing';
+import { DOORSTEPS, HAND, LANDING, LANDING_ALL, worldReady } from './match/landing';
 import type { LandingCell } from './match/director';
+
+await worldReady(); // the landing tables are fetched on demand, as the page's are
 
 const CELL = 16; // one map block, so the render lines up under the grid
 const maps = (worldData as { maps: WorldMap[] }).maps.filter((m) => m.outdoor);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { decodeGrid, type WorldMap } from '../bots/world';
 import worldData from '../data/world.json';
 import { HAND } from './landing';
@@ -27,5 +27,28 @@ describe('the hand-painted drop cells', () => {
   it('are written once each', () => {
     const keys = HAND.map((c) => `${c.map}:${c.x},${c.y}`);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+// world.json and landing.json are a chunk of their own, fetched as the page starts (the
+// audit's leftover e): a module fresh off the import has neither, says so when read,
+// and has both once worldReady() is done.
+describe('the world data', () => {
+  it('is fetched on demand: read before worldReady() it throws, after it answers', async () => {
+    vi.resetModules();
+    const hoenn = await import('../bots/hoenn');
+    const landing = await import('./landing');
+    expect(() => hoenn.HOENN.maps).toThrow('HOENN was read before worldReady()');
+    expect(() => landing.LANDING.length).toThrow('LANDING was read before worldReady()');
+    expect(() => [...landing.DOORSTEPS]).toThrow('DOORSTEPS was read before worldReady()');
+    expect(() => landing.LANDING_ALL.filter(Boolean)).toThrow('LANDING_ALL was read before worldReady()');
+
+    const once = landing.worldReady();
+    expect(landing.worldReady()).toBe(once);
+    await once;
+    expect(hoenn.HOENN.maps).toHaveLength(maps.size);
+    expect(landing.LANDING_ALL.length).toBe(landing.LANDING.length + landing.DOORSTEPS.length + landing.LANDING_ALL.filter((c) => c.off && c.door === undefined).length);
+    expect(landing.LANDING.every((c) => !c.off && c.door === undefined)).toBe(true);
+    expect(landing.DOORSTEPS.length).toBeGreaterThan(0);
   });
 });

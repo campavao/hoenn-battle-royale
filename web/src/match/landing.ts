@@ -9,11 +9,14 @@
 // the same pool, so keeping it here also keeps the fog off places nobody can be -- and
 // anything else that wants landing cells (the bots, the replay tool, the tests) gets
 // the same answer instead of quietly reading the raw file.
-import landingData from '../data/landing.json';
+//
+// landing.json is fetched on demand, as world.json is (bots/hoenn.ts): the tables below
+// are live bindings that throw until worldReady() has filled them.
 import handData from '../data/landing-hand.json';
+import { loadHoenn, notYet } from '../bots/hoenn';
 import type { LandingCell } from './director';
 
-export const LANDING: LandingCell[] = (landingData as LandingCell[]).filter((c) => !c.off && c.door === undefined);
+export let LANDING: LandingCell[] = notYet('LANDING');
 
 /** Where a town's buildings put you when you step out (POK-307).
  *
@@ -27,7 +30,7 @@ export const LANDING: LandingCell[] = (landingData as LandingCell[]).filter((c) 
  *  Already ranked by `landing-reach.ts`, nicest first: a CENTRE, then a MART, then a
  *  gym, then any other door. A fallback only -- never mixed into the ordinary pool, or
  *  every drop would cluster on doorsteps. */
-export const DOORSTEPS: LandingCell[] = (landingData as LandingCell[]).filter((c) => c.door !== undefined);
+export let DOORSTEPS: LandingCell[] = notYet('DOORSTEPS');
 
 /** Cam's own picks (POK-314): "maybe we should have a follow up where I paint droppable
  *  lines for you and you can save those coordinates?" Painted in web/painter.html, saved
@@ -38,4 +41,18 @@ export const DOORSTEPS: LandingCell[] = (landingData as LandingCell[]).filter((c
 export const HAND: LandingCell[] = handData as LandingCell[];
 
 /** Every cell the exporter found, marks and all -- for the tools that check the marks. */
-export const LANDING_ALL = landingData as LandingCell[];
+export let LANDING_ALL: LandingCell[] = notYet('LANDING_ALL');
+
+let loading: Promise<void> | undefined;
+
+/** The world data -- world.json into HOENN, landing.json into the tables above -- fetched
+ *  once. The page asks as it starts and waits before anything walks or deals; the tests
+ *  (vitest.setup.ts) and the tools wait before they read. */
+export function worldReady(): Promise<void> {
+  loading ??= Promise.all([loadHoenn(), import('../data/landing.json')]).then(([, m]) => {
+    LANDING_ALL = m.default as LandingCell[];
+    LANDING = LANDING_ALL.filter((c) => !c.off && c.door === undefined);
+    DOORSTEPS = LANDING_ALL.filter((c) => c.door !== undefined);
+  });
+  return loading;
+}

@@ -10,6 +10,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
+      setupFiles: ['./vitest.setup.ts'],
     },
   }),
 );

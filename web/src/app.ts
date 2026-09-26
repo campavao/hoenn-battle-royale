@@ -79,7 +79,7 @@ import {
 } from './match/career';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import { HOENN } from './bots/hoenn';
-import { DOORSTEPS, HAND, LANDING } from './match/landing';
+import { DOORSTEPS, HAND, LANDING, worldReady } from './match/landing';
 import { cardFor } from './match/card';
 import { type MatchRecord, recordLines } from './match/record';
 import {
@@ -99,13 +99,19 @@ import { parseRoomHash as parseHash, withoutRoom, withRoom, type RoomHash, type 
 // Cast rather than re-declared: these three JSON files are the exporter's own output
 // (DESIGN.md §6), and director.ts only reads the handful of fields it documents on
 // `DirectorMapEntry`/`LandingCell`/`RegionSection` -- a wider real shape satisfies it.
-const WORLD: DirectorWorld = {
-  maps: HOENN.maps,
-  landing: LANDING,
-  doorsteps: DOORSTEPS,
-  hand: HAND,
-  sections: regionmapData.sections as DirectorWorld['sections'],
-};
+// Built on first use, not on load: world.json and landing.json are fetched on demand, and
+// main() has waited for them (worldReady()) before any host deals.
+let world: DirectorWorld | undefined;
+function directorWorld(): DirectorWorld {
+  world ??= {
+    maps: HOENN.maps,
+    landing: LANDING,
+    doorsteps: DOORSTEPS,
+    hand: HAND,
+    sections: regionmapData.sections as DirectorWorld['sections'],
+  };
+  return world;
+}
 
 const MUTE_STORAGE_KEY = 'hbr:muted';
 const UNMUTED_VOLUME = 100;
@@ -1567,7 +1573,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   host = new HostRole({
     session,
     link: soloLink(roster, (msg) => rom.push(msg)),
-    world: WORLD,
+    world: directorWorld(),
     seats: [0],
     present: [],
     plan,
@@ -1940,7 +1946,7 @@ function wireRoom(
     host = new HostRole({
       session,
       link: roomLink,
-      world: WORLD,
+      world: directorWorld(),
       seats,
       present: (controls.roster?.members ?? []).map((m) => m.id),
       plan,
@@ -2944,6 +2950,10 @@ async function runFreshIfAsked(): Promise<boolean> {
 async function main(): Promise<void> {
   if (await runFreshIfAsked()) return;
   registerServiceWorker();
+  // The world data is a chunk of its own (the audit's leftover e): asked for now, so it
+  // comes down while the ROM is found and patched, and waited on before the game starts.
+  const worldIn = worldReady();
+  worldIn.catch(() => undefined); // a failure is the await's to report, below
   void askToKeepStorage();
   setVersionLine('—');
   const canvas = $('#canvas') as HTMLCanvasElement;
@@ -2954,6 +2964,7 @@ async function main(): Promise<void> {
 
   await runImportScreen(emu);
   const { bytes, usingPatched, mailboxBase, protocol, symbols, patch } = await runPatchingScreen(emu);
+  await worldIn;
 
   showScreen('playing');
   if (usingPatched) await emu.startBytes(bytes);

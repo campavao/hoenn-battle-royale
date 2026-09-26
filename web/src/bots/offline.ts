@@ -15,7 +15,7 @@ import type { BotsOptions } from './brain';
 import { HOENN } from './hoenn';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, Director, type DirectorWorld } from '../match/director';
 import { botRows } from '../match/lifecycle';
-import { DOORSTEPS, HAND, LANDING } from '../match/landing';
+import { DOORSTEPS, HAND, LANDING, worldReady } from '../match/landing';
 import { Loot } from '../match/loot';
 import { sectionInside, type RingCircle } from '../match/ring';
 import { Roster } from '../match/roster';
@@ -25,6 +25,9 @@ import regionmapData from '../data/regionmap.json';
 
 /** One beat of the loop: the host's own pump. */
 export const BEAT_MS = BOT_TICK_MS;
+
+// No page here to fetch the world data as it starts: the tools that run this wait here.
+await worldReady();
 
 /** The director's world, built the way app.ts builds it. */
 const WORLD: DirectorWorld = {
