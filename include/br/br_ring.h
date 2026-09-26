@@ -8,6 +8,12 @@
 // the circle. Outside, the weather is fog and the party bleeds; the fog never clamps,
 // the last phase is everywhere (r = -1).
 
+// The ring's centre by name, as the host's RING names it -- "VERDANTURF TOWN" -- kept so
+// the HUD corner and the map can say it all phase long, not only in the box on a move
+// (POK-325). It cannot be worked back out of cx/cy: sections overlap on the region map
+// (PETALBURG WOODS sits inside ROUTE 104). The page's encodeRing cuts it at 16.
+#define BR_RING_PLACE_MAX 16
+
 struct BrRing
 {
     /* 0 */ u8 active;      // a ring message has arrived
@@ -22,8 +28,9 @@ struct BrRing
     /* 10 */ u16 damageDealt; // total HP taken by the fog, for drivers
     /* 12 */ u8 appliedMapGroup;
     /* 13 */ u8 appliedMapNum;
-    /* 14 */ u8 pad[2];
-};                          // 16 bytes
+    /* 14 */ u8 place[BR_RING_PLACE_MAX + 1]; // what the last RING named, EOS-ended (POK-325)
+    /* 31 */ u8 pad[1];
+};                          // 32 bytes
 // web/src/field.ts reads `outside` and `damageTimer` (RING_OUTSIDE, RING_TIMER).
 BR_OFFSET(BrRing, active, 0)
 BR_OFFSET(BrRing, phase, 1)
@@ -37,7 +44,8 @@ BR_OFFSET(BrRing, damageTimer, 8)
 BR_OFFSET(BrRing, damageDealt, 10)
 BR_OFFSET(BrRing, appliedMapGroup, 12)
 BR_OFFSET(BrRing, appliedMapNum, 13)
-BR_SIZE(BrRing, 16)
+BR_OFFSET(BrRing, place, 14)
+BR_SIZE(BrRing, 32)
 
 #define BR_FOG_TICK_FRAMES 240
 
@@ -51,5 +59,7 @@ bool8 BrRing_SectionInside(u8 mapsec);
 bool8 BrRing_CellInside(s16 x, s16 y);
 // Special for scripts: 1 when this map is outside the ring.
 u16 BrRing_Outside(void);
+// The last phase has no inside (r = -1): what the corner and the map say then.
+extern const u8 gBrText_FogEverywhere[];
 
 #endif // GUARD_BR_RING_H

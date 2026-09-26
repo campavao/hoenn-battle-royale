@@ -80,6 +80,10 @@ bool8 BrRing_CellInside(s16 x, s16 y)
 // The bottom box on a ring move: the place the fog is closing on, which the host
 // already sends and nothing was reading. Two lines, 90 frames, above the ticker.
 static const u8 sText_FogCloses[] = _("THE FOG CLOSES IN ON");
+// ...except on the last phase, which has no inside: Kanto's "The fog covers all of
+// KANTO!", where naming the old centre would send the player somewhere that is fog too.
+static const u8 sText_FogCoversAll[] = _("THE FOG COVERS\nALL OF HOENN!");
+const u8 gBrText_FogEverywhere[] = _("FOG EVERYWHERE");
 
 static void SayFog(const u8 *place, u8 len)
 {
@@ -101,13 +105,28 @@ static void HandleRing(const u8 *payload, u8 len)
 {
     const u8 *d;
     u8 n = BrWire_Unframe(payload, len, &d);
+    u8 i, placeLen = 0;
 
     if (n < 5)
         return;
+    if (n >= 6 && d[5] > 0 && (u16)(6 + d[5]) <= n)
+        placeLen = d[5];
     // A new phase, with a place named: say where. The corner's FOG! flash is the
     // page's own (gBrHud.flashFog); this is the sentence that goes with it.
-    if (d[1] != gBrRing.phase && n >= 6 && d[5] > 0 && (u16)(6 + d[5]) <= n)
-        SayFog(d + 6, d[5]);
+    if (d[1] != gBrRing.phase && (s8)d[4] < 0)
+        BrHud_Box(sText_FogCoversAll);
+    else if (d[1] != gBrRing.phase && placeLen > 0)
+        SayFog(d + 6, placeLen);
+    // ...and keep the name, from every RING and not just a new phase's, so a late
+    // snapshot or a resync names it too. The box above is ninety frames and the play-test
+    // missed it: "if you weren't paying attention to the beginning... it doesn't tell
+    // you where it's actually closing in on" (POK-325). The corner says it from now on.
+    if (placeLen > BR_RING_PLACE_MAX)
+        placeLen = BR_RING_PLACE_MAX;
+    for (i = 0; i < placeLen; i++)
+        gBrRing.place[i] = d[6 + i];
+    gBrRing.place[placeLen] = EOS;
+    gBrHud.dirty |= BR_HUD_DIRTY_CORNER;
     gBrRing.active = TRUE;
     gBrRing.phase = d[1];
     gBrRing.cx = (s8)d[2];

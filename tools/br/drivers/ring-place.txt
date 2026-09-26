@@ -1,0 +1,125 @@
+# ring-place: the HUD corner names where the ring is closing, all ring phase long
+# (POK-325). The play-test missed the ninety-frame "THE FOG CLOSES IN ON" box and had
+# nothing else to go on. The corner is 9x3 now (cols 20..28, frame 19..29): "N LEFT" and
+# the clock on its first line, the place -- or FOG EVERYWHERE on the last phase -- right
+# on its second, the eye left of it or taking turns with it. Shots are for the eye.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the page writes 12 left and 12:34: the widest first line there is
+poke u8 gBrHud+0x00 12
+poke u16 gBrHud+0x02 754
+# RING phase 1, centre (25,12), r 28 -- Littleroot is inside -- naming LITTLEROOT:
+# type 0C, len 0x14 = frame (11 00 00) + seat 00 phase 01 sx 19 sy 0C r 1C placeLen 0A
+# + C6 C3 CE CE C6 BF CC C9 C9 CE + hasElapsed 00
+pokebytes gBrMailbox+0x1018 0C 14 11 00 00 00 01 19 0C 1C 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+# the name is kept, EOS-ended, at gBrRing+14
+expect u8 gBrRing+4 0x1C
+expect u8 gBrRing+5 0
+expect u8 gBrRing+14 0xC6
+expect u8 gBrRing+15 0xC3
+expect u8 gBrRing+16 0xCE
+expect u8 gBrRing+17 0xCE
+expect u8 gBrRing+18 0xC6
+expect u8 gBrRing+19 0xBF
+expect u8 gBrRing+20 0xCC
+expect u8 gBrRing+21 0xC9
+expect u8 gBrRing+22 0xC9
+expect u8 gBrRing+23 0xCE
+expect u8 gBrRing+24 0xFF
+# the phase's box is up too (a new phase with a place) and the ticker has the level
+# line (shown = CORNER|TICKER|BOX), and the tiles run on from the corner's 27: BG0's tilemap is 0x0600F800, 32 cells a row, palette 15. The corner's
+# first cell (20,1) is 0x23D and its last (28,3) 0x257; the box's first (1,11) is 0x290,
+# which is where the ticker's 56 end. Its frame is on the screen at (19,0).
+expect u8 gBrHud+0x08 2
+expect u8 gBrHud+0x09 7
+expect u16 0x0600F868 0xF23D
+expect u16 0x0600F8F8 0xF257
+expect u16 0x0600FAC2 0xF290
+expectne u16 0x0600F826 0
+shot corner-place
+# the box goes after its ninety frames; the corner keeps the name
+wait 90
+expect u8 gBrHud+0x09 3
+expect u16 0x0600F868 0xF23D
+shot corner-place-quiet
+# START: the menu covers cols 21..29 and the corner's two columns left of it are
+# cleared rather than left as half a frame beside it -- (19,0..4) and (20,0..4) are 0
+tap START
+wait 20
+expect u8 gBrHud+0x09 0
+expect u16 0x0600F826 0
+expect u16 0x0600F828 0
+expect u16 0x0600F866 0
+expect u16 0x0600F868 0
+expect u16 0x0600F8A6 0
+expect u16 0x0600F8A8 0
+expect u16 0x0600F8E6 0
+expect u16 0x0600F8E8 0
+expect u16 0x0600F926 0
+expect u16 0x0600F928 0
+# ...and the menu's own frame is there at (21,0)
+expectne u16 0x0600F82A 0
+shot corner-menu
+# B: the whole corner comes back, frame and all
+tap B
+wait 20
+expectge u8 gBrHud+0x09 1
+expect u16 0x0600F868 0xF23D
+expect u16 0x0600F8F8 0xF257
+expectne u16 0x0600F826 0
+expectne u16 0x0600F926 0
+shot corner-back
+# phase 2 names a route, and three spectators come: ROUTE 104 is 42 px and the eye fits
+# beside it, so nothing takes turns (gBrHud.drawnAlt 0)
+# ROUTE 104 = CC C9 CF CE BF 00 A2 A1 A5; len 0x13 = frame (10 00 00) + 16
+pokebytes gBrMailbox+0x1058 0C 13 10 00 00 00 02 19 0C 1C 09 CC C9 CF CE BF 00 A2 A1 A5 00
+poke u16 gBrMailbox+0x0C 2
+poke u8 gBrHud+0x0F 3
+wait 10
+expect u8 gBrRing+14 0xCC
+expect u8 gBrRing+23 0xFF
+expect u8 gBrHud+0x14 3
+expect u8 gBrHud+0x17 0
+shot corner-route-eye
+# phase 3 names the widest centre there is, PETALBURG WOODS at 72 px: it fills the line,
+# so with the eye it takes turns (drawnAlt not 0), and alone it fits to the pixel
+# CA BF CE BB C6 BC CF CC C1 00 D1 C9 C9 BE CD; len 0x19 = frame (16 00 00) + 22
+pokebytes gBrMailbox+0x1098 0C 19 16 00 00 00 03 19 0C 1C 0F CA BF CE BB C6 BC CF CC C1 00 D1 C9 C9 BE CD 00
+poke u16 gBrMailbox+0x0C 3
+wait 10
+expect u8 gBrRing+28 0xCD
+expect u8 gBrRing+29 0xFF
+expectne u8 gBrHud+0x17 0
+poke u8 gBrHud+0x0F 0
+wait 4
+expect u8 gBrHud+0x17 0
+shot corner-widest
+poke u8 gBrHud+0x0F 3
+# the last phase, r = -1: FOG EVERYWHERE, 67 px, and the eye does not fit beside it --
+# they take turns, 120 frames each, counted in gBrHud.altFrames (+0x16)
+pokebytes gBrMailbox+0x10D8 0C 14 11 00 00 00 09 19 0C FF 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00
+poke u16 gBrMailbox+0x0C 4
+poke u8 gBrHud+0x16 0
+wait 10
+expect u8 gBrRing+4 0xFF
+expect u8 gBrRing+5 1
+expect u8 gBrHud+0x17 1
+# ...and the phase's box says so, as Kanto's does, where it named LITTLEROOT: "THE FOG
+# COVERS" (its O at +9, not CLOSES' L) and a newline, in gBrHud.box.text (+0x14E)
+expect u8 gBrHud+0x157 0xC9
+expect u8 gBrHud+0x15C 0xFE
+shot corner-everywhere-name
+poke u8 gBrHud+0x16 120
+wait 4
+expect u8 gBrHud+0x17 2
+shot corner-everywhere-eye
+# nobody watching: the words alone
+poke u8 gBrHud+0x0F 0
+wait 4
+expect u8 gBrHud+0x17 0
+wait 100
+shot corner-everywhere
+say ring place ok

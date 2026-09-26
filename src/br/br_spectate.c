@@ -37,6 +37,7 @@
 #include "br/br_spectate.h"
 #include "br/br_duel.h"
 #include "br/br_field.h"
+#include "br/br_hud.h"
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
 // The per-frame turn scratch, kept in EWRAM on purpose: a plain function-local static
@@ -364,7 +365,10 @@ static EWRAM_DATA u8 sPeekWin = WINDOW_NONE;
 // multichoice), none of which can open while we are following somebody -- field controls
 // are locked. It used to share the HUD box's 0x294, which ran to 0x347: past the end of
 // BG0's tiles at 0x300 and clean through BG2's tilemap. See br_hud.h's tile map.
-static const struct WindowTemplate sPeekTemplate = { 0, 2, 2, 18, 10, 15, 0x008 };
+// Col 1, not 2: the HUD corner's frame reaches col 19 since it grew for the ring's place
+// (POK-325), and the box has no frame of its own to spare.
+static const struct WindowTemplate sPeekTemplate = { 0, 1, 2, 18, 10, 15, 0x008 };
+STATIC_ASSERT(1 + 18 <= BR_HUD_CORNER_LEFT - 1, BrPeekClearOfTheHudCornerFrame)
 STATIC_ASSERT(0x008 + 18 * 10 <= 0x107, BrPeekFitsBelowTheMapNamePopup)
 static const u8 sPeekColors[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY };
 static const u8 sText_PeekLv[] = _(" Lv");

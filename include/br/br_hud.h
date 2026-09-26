@@ -6,20 +6,28 @@
 // The overworld HUD (POK-226): text windows on BG0 that live only while the
 // overworld runs, redrawn from gBrHud every frame something changed.
 //
-//   corner  cols 24..29, rows 0..2   "N LEFT" over the clock "M:SS" (or a FOG! flash),
-//                                    with an eye and a count left of the clock while
-//                                    anyone is spectating this trainer (POK-233)
-//   ticker  cols  1..28, rows 18..19 one line of news, 180 frames each, kill feed etc.
-//   box     cols  1..28, rows 14..17  the bottom box: a transient two-line message
-//                                     (the fog closing in), 90 frames, above the ticker
+//   corner  cols 20..28, rows 1..3   "N LEFT" and the clock "M:SS" (or a FOG! flash) on
+//           (frame 19..29, 0..4)     one line; under them, all ring phase long, where
+//                                    the ring is closing -- "VERDANTURF TOWN", or FOG
+//                                    EVERYWHERE on the last phase (POK-325) -- and an eye
+//                                    and a count while anyone is spectating this trainer
+//                                    (POK-233), beside the name or taking turns with it
+//   ticker  cols  1..28, rows 17..18 one line of news, 180 frames each, kill feed etc.
+//   box     cols  1..28, rows 11..14 the bottom box: a transient two-line message
+//                                    (the fog closing in), 90 frames, above the ticker
 //
 // There was a wound bar under the corner too -- a glyph per party mon, full / hurt /
 // fainted -- from POK-226 until the 2026-09-16 play-test: "under the seven left and
 // time display there's an empty looking box... I don't think we need that, let's get
 // rid of it." Its window slot is free now and its tiles (0x24C) are the ticker's.
 //
-// Tiles: the corner is at baseBlock 0x23D..0x24E, the ticker at 0x24F..0x286, the bottom
-// box at 0x287..0x2F6. The overworld's BG0 already uses 0x008 (Safari balls, money,
+// Tiles: the HUD is one run of 195 -- the corner's 27 (9x3) at 0x23D..0x257, the ticker's
+// 56 at 0x258..0x28F, the bottom box's 112 at 0x290..0x2FF -- laid out from the one base,
+// BR_HUD_TILE_CORNER, so moving the HUD (POK-329's ring wants these tiles' VRAM) is
+// moving that base. The corner was 6x3 until POK-325 took the last nine tiles for a
+// place name: PETALBURG WOODS is 72 px in the small font. Not a tile is spare now.
+//
+// The overworld's BG0 already uses 0x008 (Safari balls, money,
 // script menus -- and the spectator's peek box, br_spectate.c), 0x107 (map name), 0x125
 // (yes/no), 0x139 (start menu), 0x194 (message box), 0x200/0x214 (the two frames) and
 // 0x21D..0x23C (the map-name frame edges: a 0x400-byte load, thirty-two tiles, not the
@@ -34,13 +42,27 @@
 // the windows are gone (tileData NULL or the slot re-used) and re-adds them the next
 // overworld frame; it removes them itself when the overworld stops, so the battle's
 // own BG0 layout starts clean. While the start menu is up the corner is left alone
-// (the menu draws over it and clears the cells when it closes);
+// (the menu draws over it and clears the cells when it closes) but for the two columns
+// the menu does not reach, which the HUD clears itself and draws again on the way back;
 // the ticker is likewise left alone while a field message box or a script is up.
 // The tilemap is put again on the way back, never cleared while another window owns
 // the cells.
 //
 // The page writes `left`, `clockSecs` and `flashFog` straight into EWRAM (offsets
 // below, mirrored in web/src/net/hud.ts); everything else is the ROM's.
+
+// The corner's window, in tiles (see the tile map above). Nine wide is the widest place
+// name, 72 px; the start menu (cols 21..29) still covers all but its two left columns,
+// which BrHud_Tick clears while the menu is up.
+#define BR_HUD_CORNER_LEFT 20
+#define BR_HUD_CORNER_WIDTH 9
+#define BR_HUD_CORNER_HEIGHT 3
+#define BR_HUD_TILE_CORNER 0x23D
+#define BR_HUD_TILE_TICKER (BR_HUD_TILE_CORNER + BR_HUD_CORNER_WIDTH * BR_HUD_CORNER_HEIGHT)
+#define BR_HUD_TILE_BOX (BR_HUD_TILE_TICKER + 28 * 2)
+#define BR_HUD_TILE_END (BR_HUD_TILE_BOX + 28 * 4)
+// A name and an eye too wide to share the corner's second line take turns on it.
+#define BR_HUD_ALT_FRAMES 120
 
 // Six, not eight: eighteen seconds of backlog at 180 frames a line is already more
 // than anyone reads, and EWRAM is at 99.9%.
@@ -97,7 +119,8 @@ struct BrHud
     /* 0x13 */ u8 drawnFog;      // 0 clock, 1 flash-off, 2 flash-on
     /* 0x14 */ u8 drawnEyes;     // what the corner last drew
     /* 0x15 */ u8 popupWas;      // the map-name popup was up on the last tick
-    /* 0x16 */ u8 pad[2];
+    /* 0x16 */ u8 altFrames;     // 0..2*BR_HUD_ALT_FRAMES-1: the name's turn, then the eye's
+    /* 0x17 */ u8 drawnAlt;      // 0 both fit, 1 name drawn, 2 eye drawn
     /* 0x18 */ struct BrHudLine heldLine;             // 44 bytes
     /* 0x44 */ struct BrHudLine queue[BR_HUD_QUEUE];  // 264 bytes
     /* 0x14C */ struct BrHudLine box;                 // 44 bytes, the bottom box

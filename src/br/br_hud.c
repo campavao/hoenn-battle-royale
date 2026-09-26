@@ -7,6 +7,7 @@
 #include "text.h"
 #include "menu.h"
 #include "palette.h"
+#include "bg.h"
 #include "script.h"
 #include "string_util.h"
 #include "field_message_box.h"
@@ -16,6 +17,7 @@
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
 #include "br/br_field.h"
+#include "br/br_ring.h"
 
 EWRAM_DATA struct BrHud gBrHud = {0};
 
@@ -32,9 +34,10 @@ EWRAM_DATA struct BrHud gBrHud = {0};
 // wrote its last three over the corner's first three. That, and the popup putting its
 // own palette in slot 14 (see BrHud_Tick), is the play-test's "counter framed in RED with
 // garbage tiles in its corner"; it was blamed on a weather fade for two days.
-static const struct WindowTemplate sCornerTemplate = { 0, 23, 1, 6, 3, 15, 0x23D };
-static const struct WindowTemplate sTickerTemplate = { 0, 1, 17, 28, 2, 15, 0x24F };
-static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, 0x287 };
+static const struct WindowTemplate sCornerTemplate = { 0, BR_HUD_CORNER_LEFT, 1,
+    BR_HUD_CORNER_WIDTH, BR_HUD_CORNER_HEIGHT, 15, BR_HUD_TILE_CORNER };
+static const struct WindowTemplate sTickerTemplate = { 0, 1, 17, 28, 2, 15, BR_HUD_TILE_TICKER };
+static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, BR_HUD_TILE_BOX };
 
 // BG0's tiles are char block 2 (0x06008000) and the first thing after them is not BG0's
 // own tilemap, it is BG2's, at 0x0600E000: tile 0x300. The box sat at 0x294..0x303 for a
@@ -43,8 +46,13 @@ static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, 0x287 }
 // and nothing had scrolled to redraw them, which is the DAY CARE's whole floor
 // (2026-09-17), and very likely the "orange bars across the top" of an earlier play-test.
 #define BR_HUD_TILE_CEILING 0x300
-STATIC_ASSERT(0x287 + 28 * 4 <= BR_HUD_TILE_CEILING, BrHudBoxFitsBelowBg2Tilemap)
-STATIC_ASSERT(0x21D + 0x400 / 32 <= 0x23D, BrHudCornerClearOfTheMapNamePopup)
+STATIC_ASSERT(BR_HUD_TILE_END <= BR_HUD_TILE_CEILING, BrHudBoxFitsBelowBg2Tilemap)
+STATIC_ASSERT(0x21D + 0x400 / 32 <= BR_HUD_TILE_CORNER, BrHudCornerClearOfTheMapNamePopup)
+// The corner's frame is one tile outside it on every side and must stay on the screen.
+STATIC_ASSERT(BR_HUD_CORNER_LEFT + BR_HUD_CORNER_WIDTH <= 29, BrHudCornerFrameOnScreen)
+// The two columns the start menu (window at col 22, frame from 21) leaves showing.
+#define BR_HUD_MENU_FRAME_LEFT 21
+#define BR_HUD_CORNER_PX (BR_HUD_CORNER_WIDTH * 8)
 
 // The message box's own background, which is what makes it look like one.
 #define BR_HUD_BOX PIXEL_FILL(1)
@@ -146,50 +154,83 @@ static u8 FogPhase(void)
 static void PrintRight(u8 id, const u8 *str, u8 y, const u8 *colors)
 {
     s32 w = GetStringWidth(FONT_SMALL, str, 0);
-    s32 x = 47 - w;
+    s32 x = BR_HUD_CORNER_PX - 1 - w;
 
     if (x < 0)
         x = 0;
     AddTextPrinterParameterized3(id, FONT_SMALL, (u8)x, y, colors, (s8)TEXT_SKIP_DRAW, str);
 }
 
+// The corner's second line: where the ring is closing, all ring phase long (POK-325).
+// Nothing before the ring (the Safari) or when the host named no place.
+static const u8 *CornerPlace(void)
+{
+    if (!gBrRing.active)
+        return NULL;
+    if (gBrRing.r < 0)
+        return gBrText_FogEverywhere;
+    if (gBrRing.place[0] == EOS)
+        return NULL;
+    return gBrRing.place;
+}
+
+// Whose turn it is on the second line when the name and the eye do not both fit.
+static u8 AltTurn(void)
+{
+    return gBrHud.altFrames < BR_HUD_ALT_FRAMES ? 1 : 2;
+}
+
 static void DrawCorner(void)
 {
     struct BrHud *h = &gBrHud;
     u8 buf[16];
+    u8 eye[8];
     u8 *p;
     u8 fog = FogPhase();
+    const u8 *place = CornerPlace();
+    u8 alt = 0;
+    u8 clockY;
 
     DrawStdWindowFrame(h->winCorner, FALSE);
+    // Line one: how many are left, and the clock on the right -- or the FOG! flash in the
+    // clock's place. With no place to name (the Safari, before the ring) the clock keeps
+    // the second line to itself, as the corner always had it, rather than leave that
+    // line an empty strip -- the wound bar's "empty looking box" (2026-09-16).
+    clockY = place != NULL ? 0 : 12;
     p = ConvertIntToDecimalStringN(buf, h->left, STR_CONV_MODE_LEFT_ALIGN, 2);
     StringCopy(p, sText_Left);
-    PrintRight(h->winCorner, buf, 0, sColorsText);
+    AddTextPrinterParameterized3(h->winCorner, FONT_SMALL, 0, 0, sColorsText,
+        (s8)TEXT_SKIP_DRAW, buf);
     if (fog == 2)
     {
-        PrintRight(h->winCorner, sText_Fog, 12, sColorsFog);
+        PrintRight(h->winCorner, sText_Fog, clockY, sColorsFog);
     }
     else if (fog == 0)
     {
         p = ConvertIntToDecimalStringN(buf, h->clockSecs / 60, STR_CONV_MODE_LEFT_ALIGN, 2);
         *p++ = CHAR_COLON;
         ConvertIntToDecimalStringN(p, h->clockSecs % 60, STR_CONV_MODE_LEADING_ZEROS, 2);
-        PrintRight(h->winCorner, buf, 12, sColorsText);
+        PrintRight(h->winCorner, buf, clockY, sColorsText);
     }
+    // Line two: the place on the right, the eye and its count on the left. The eye is a
+    // two-byte escape (F9 D8), so the count goes where StringCopy left the terminator.
+    // A route fits beside the eye; VERDANTURF TOWN and FOG EVERYWHERE do not, and those
+    // take turns with it, two seconds each.
     if (h->eyes != 0)
-    {
-        // Left of the clock, on the same line: the corner is two lines tall and both
-        // are spoken for.
-        // The eye is a two-byte escape (F9 D8), so the count goes where StringCopy
-        // left the terminator, not at buf[1].
-        ConvertIntToDecimalStringN(StringCopy(buf, sText_Eye), h->eyes,
-            STR_CONV_MODE_LEFT_ALIGN, 2);
+        ConvertIntToDecimalStringN(StringCopy(eye, sText_Eye), h->eyes, STR_CONV_MODE_LEFT_ALIGN, 2);
+    if (h->eyes != 0 && place != NULL
+     && GetStringWidth(FONT_SMALL, eye, 0) + 4 + GetStringWidth(FONT_SMALL, place, 0) > BR_HUD_CORNER_PX)
+        alt = AltTurn();
+    if (place != NULL && alt != 2)
+        PrintRight(h->winCorner, place, 12, gBrRing.r < 0 ? sColorsFog : sColorsText);
+    if (h->eyes != 0 && alt != 1)
         AddTextPrinterParameterized3(h->winCorner, FONT_SMALL, 0, 12, sColorsText,
-            (s8)TEXT_SKIP_DRAW, buf);
-    }
+            (s8)TEXT_SKIP_DRAW, eye);
     h->drawnClock = h->clockSecs;
     h->drawnLeft = h->left;
     h->drawnFog = fog;
     h->drawnEyes = h->eyes;
+    h->drawnAlt = alt;
 }
 
 static void TickCorner(bool8 blocked)
@@ -199,11 +240,22 @@ static void TickCorner(bool8 blocked)
 
     if (blocked)
     {
+        // The start menu covers the corner but for its two left columns, frame and all:
+        // left there, half a frame and the first letters of the place hang beside the
+        // menu. Cleared once, and the whole corner drawn again when the menu goes.
+        if (h->shown & BR_HUD_SHOWN_CORNER)
+        {
+            FillBgTilemapBufferRect_Palette0(0, 0, BR_HUD_CORNER_LEFT - 1, 0,
+                BR_HUD_MENU_FRAME_LEFT - (BR_HUD_CORNER_LEFT - 1), BR_HUD_CORNER_HEIGHT + 2);
+            ScheduleBgCopyTilemapToVram(0);
+            h->dirty |= BR_HUD_DIRTY_CORNER;
+        }
         h->shown &= ~BR_HUD_SHOWN_CORNER;
         return;
     }
     if ((h->dirty & BR_HUD_DIRTY_CORNER) || h->drawnClock != h->clockSecs || h->drawnLeft != h->left
-        || h->drawnFog != FogPhase() || h->drawnEyes != h->eyes)
+        || h->drawnFog != FogPhase() || h->drawnEyes != h->eyes
+        || (h->drawnAlt != 0 && h->drawnAlt != AltTurn()))
     {
         DrawCorner();
         h->dirty &= ~BR_HUD_DIRTY_CORNER;
@@ -357,6 +409,8 @@ void BrHud_Init(void)
     h->dirty = 0;
     h->scriptWas = 0;
     h->popupWas = 0;
+    h->altFrames = 0;
+    h->drawnAlt = 0;
     h->drawnClock = 0xFFFF;
     h->drawnLeft = 0xFF;
     h->drawnFog = 0xFF;
@@ -478,6 +532,8 @@ void BrHud_Tick(void)
     }
     if (h->fogFrames > 0)
         h->fogFrames--;
+    if (++h->altFrames >= 2 * BR_HUD_ALT_FRAMES)
+        h->altFrames = 0;
     // A box said on the way out of a battle (the gym's purse, POK-295) spent most of its
     // ninety frames behind the fade back to the map. The fade does not count against it.
     if (h->boxFrames > 0 && !gPaletteFade.active)
