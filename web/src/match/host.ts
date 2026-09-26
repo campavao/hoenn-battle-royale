@@ -284,8 +284,9 @@ export class HostRole {
     }
     // A seat the host has just caught up on the match learns what is lying where it
     // stands, once its first `place` or `step` has said where that is (POK-330 #25).
-    const standing = lootOwed(this.session.owedLoot, msg, from, (map) => this.session.loot.forMap(map));
-    if (standing) this.link.toSeat(from, standing);
+    for (const standing of lootOwed(this.session.owedLoot, msg, from, (map) => this.session.loot.forMap(map))) {
+      this.link.toSeat(from, standing);
+    }
     if (msg.t === 'peek' && msg.target !== this.link.seat) {
       // A bot has no ROM to answer for it, so the host that walks it does.
       const party = this.bots.partyFor(msg.target);

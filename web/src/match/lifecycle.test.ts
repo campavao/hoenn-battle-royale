@@ -176,26 +176,35 @@ describe('the loot a seat back from a blip is owed', () => {
   it('is paid on its first step, not only on a place', () => {
     const loot = table();
     const owed = new Set([7]);
-    expect(lootOwed(owed, step(7), 7, (m) => loot.forMap(m))).toMatchObject({ t: 'spill', seat: 9, map: ROUTE });
+    expect(lootOwed(owed, step(7), 7, (m) => loot.forMap(m))).toMatchObject([{ t: 'spill', seat: 9, map: ROUTE }]);
     expect(owed.has(7)).toBe(false);
-    expect(lootOwed(owed, step(7), 7, (m) => loot.forMap(m))).toBeNull(); // once
+    expect(lootOwed(owed, step(7), 7, (m) => loot.forMap(m))).toEqual([]); // once
   });
 
   it('is paid on a place that says where it is, and waits out one that does not', () => {
     const loot = table();
     const owed = new Set([7]);
     const lobby: Msg = { t: 'place', v: 1, seat: 7, f: 1, st: 'alive' };
-    expect(lootOwed(owed, lobby, 7, (m) => loot.forMap(m))).toBeNull();
+    expect(lootOwed(owed, lobby, 7, (m) => loot.forMap(m))).toEqual([]);
     expect(owed.has(7)).toBe(true);
     const there: Msg = { ...lobby, map: ROUTE, x: 3, y: 5 } as Msg;
-    expect(lootOwed(owed, there, 7, (m) => loot.forMap(m))?.map).toEqual(ROUTE);
+    expect(lootOwed(owed, there, 7, (m) => loot.forMap(m)).map((s) => s.map)).toEqual([ROUTE]);
+  });
+
+  // POK-331 #6: a map can hold two seats' loot -- a fallen trainer's balls, and beside
+  // them the rest of their bag that would not fit, back down under the taker's seat.
+  it('is every seat with something on that map', () => {
+    const loot = table();
+    loot.note({ t: 'spill', seat: 5, map: ROUTE, mons: [], bag: { key: 0x09ff, x: 3, y: 3, items: [{ id: 110, n: 1 }], money: 0 } });
+    const owed = new Set([7]);
+    expect(lootOwed(owed, step(7), 7, (m) => loot.forMap(m)).map((s) => s.seat).sort()).toEqual([5, 9]);
   });
 
   it("is nobody else's to collect, and nothing for a seat that is owed nothing", () => {
     const loot = table();
     const owed = new Set([7]);
-    expect(lootOwed(owed, step(30), 1, (m) => loot.forMap(m))).toBeNull(); // the host walking a bot
-    expect(lootOwed(owed, step(8), 8, (m) => loot.forMap(m))).toBeNull();
+    expect(lootOwed(owed, step(30), 1, (m) => loot.forMap(m))).toEqual([]); // the host walking a bot
+    expect(lootOwed(owed, step(8), 8, (m) => loot.forMap(m))).toEqual([]);
     expect(owed.has(7)).toBe(true);
   });
 });

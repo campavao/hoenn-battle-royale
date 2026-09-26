@@ -218,7 +218,7 @@ describe("one match's books (POK-330 #42)", () => {
     expect(toRom).toEqual([]);
     session.note({ t: 'pickup', seat: 0, key: spill.bag!.key }, 'rom');
     expect(toRom).toEqual([{ t: 'give', items: [{ id: 13, n: 1 }, { id: 75, n: 1 }] }]);
-    expect(session.loot.forMap(ROUTE_101)).toBeNull();
+    expect(session.loot.forMap(ROUTE_101)).toEqual([]);
   });
 
   it('hands our own ROM the loot where it stands, once per map it arrives on', () => {
@@ -239,6 +239,16 @@ describe("one match's books (POK-330 #42)", () => {
     session.note(place(0, ROUTE_102), 'page');
     session.note(place(7, ROUTE_101), { from: 7 });
     expect(spilled()).toEqual([0x07ff, 0x07ff]);
+  });
+
+  // POK-331 #6: the rest of a bag that would not fit goes back down under the taker's
+  // seat, so a map can hold loot from two seats -- and our ROM is owed both.
+  it('hands our own ROM every seat\'s loot on the map it arrives on', () => {
+    const { session, toRom } = books();
+    session.note({ ...bag(7), mons: [{ key: 0x0700, x: 5, y: 5, species: 252, level: 5 }] }, { from: 7 });
+    session.note(bag(9), { from: 9 });
+    session.note(place(0, ROUTE_101), 'rom');
+    expect(toRom.map((m) => m.t === 'spill' && m.seat)).toEqual([7, 9]);
   });
 
   // POK-330 #22: PLAY AGAIN kept the last match, and each piece went wrong in the next.
@@ -532,7 +542,7 @@ describe('the books behind a Bridge, wired the way the room wires them', () => {
     frame(); // the Bridge reads the pickup, and the answer is queued
     frame(); // ...and written
     expect(drainMsgs(romDrainIn)).toEqual([{ t: 'give', items: [{ id: 13, n: 2 }, { id: 75, n: 1 }] }]);
-    expect(session.loot.forMap(ROUTE_101)).toBeNull();
+    expect(session.loot.forMap(ROUTE_101)).toEqual([]);
   });
 
   it("takes the host's start as a match on", () => {

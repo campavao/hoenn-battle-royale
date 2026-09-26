@@ -33,16 +33,17 @@ describe('the match-wide loot table', () => {
     const loot = new Loot();
     loot.note(spill(1, LITTLEROOT, [0x0100, 0x0101], 0x01ff));
     expect(loot.size()).toBe(3);
-    const back = loot.forMap(LITTLEROOT);
+    const [back, ...more] = loot.forMap(LITTLEROOT);
     expect(back?.mons.map((m) => m.key)).toEqual([0x0100, 0x0101]);
     expect(back?.bag?.key).toBe(0x01ff);
     expect(back?.seat).toBe(1);
+    expect(more).toEqual([]);
   });
 
   it('says nothing about a map with nothing on it', () => {
     const loot = new Loot();
     loot.note(spill(1, LITTLEROOT, [0x0100]));
-    expect(loot.forMap(ROUTE101)).toBeNull();
+    expect(loot.forMap(ROUTE101)).toEqual([]);
   });
 
   it('forgets a piece somebody picked up', () => {
@@ -50,7 +51,7 @@ describe('the match-wide loot table', () => {
     loot.note(spill(1, LITTLEROOT, [0x0100, 0x0101]));
     loot.note({ t: 'pickup', seat: 2, key: 0x0100 });
     expect(loot.size()).toBe(1);
-    expect(loot.forMap(LITTLEROOT)?.mons.map((m) => m.key)).toEqual([0x0101]);
+    expect(loot.forMap(LITTLEROOT)[0]?.mons.map((m) => m.key)).toEqual([0x0101]);
   });
 
   it('keeps the bag when only part of it was taken', () => {
@@ -58,10 +59,10 @@ describe('the match-wide loot table', () => {
     loot.note(spill(1, LITTLEROOT, [], 0x01ff));
     loot.note({ t: 'pickup', seat: 2, key: 0x01ff, item: 13, n: 1 });
     expect(loot.size()).toBe(1);
-    expect(loot.forMap(LITTLEROOT)?.bag?.key).toBe(0x01ff);
+    expect(loot.forMap(LITTLEROOT)[0]?.bag?.key).toBe(0x01ff);
     // ...one POTION lighter, so the next trainer to stand on it takes what is left
     // rather than the same one for ever (POK-237).
-    expect(loot.forMap(LITTLEROOT)?.bag?.items).toEqual([{ id: 13, n: 1 }, { id: 75, n: 1 }]);
+    expect(loot.forMap(LITTLEROOT)[0]?.bag?.items).toEqual([{ id: 13, n: 1 }, { id: 75, n: 1 }]);
     expect(loot.bagAt(0x01ff)).toBe(13);
   });
 
@@ -86,19 +87,38 @@ describe('the match-wide loot table', () => {
     expect(loot.size()).toBe(1);
   });
 
-  it('speaks for one seat at a time, the one with the most down', () => {
+  it('speaks for every seat with something down, the one with the most first', () => {
     const loot = new Loot();
     loot.note(spill(1, LITTLEROOT, [0x0100]));
     loot.note(spill(2, LITTLEROOT, [0x0200, 0x0201]));
     const back = loot.forMap(LITTLEROOT);
-    expect(back?.seat).toBe(2);
-    expect(back?.mons).toHaveLength(2);
+    expect(back.map((m) => m.seat)).toEqual([2, 1]);
+    expect(back.map((m) => m.mons.length)).toEqual([2, 1]);
+  });
+
+  // POK-331 #6: a bag whose rest would not fit goes back down under the TAKER's seat
+  // (br_loot.c's HandleGive), beside the fallen trainer's balls. Handing a late arrival
+  // only the seat with the most on the map sent them the balls and never the bag.
+  it("hands a late arrival the bag put back under the taker's seat, beside the balls", () => {
+    const loot = new Loot();
+    loot.note(spill(3, LITTLEROOT, [0x0300, 0x0301, 0x0302, 0x0303, 0x0304, 0x0305], 0x03ff));
+    loot.note({ t: 'pickup', seat: 5, key: 0x03ff }); // seat 5 takes the whole bag...
+    // ...and the NUGGET its pocket had no room for comes back down, under seat 5.
+    loot.note({
+      t: 'spill', seat: 5, map: LITTLEROOT, mons: [],
+      bag: { key: 0x03ff, x: 9, y: 12, items: [{ id: 110, n: 1 }], money: 0 },
+    });
+    const back = loot.forMap(LITTLEROOT);
+    expect(back.map((m) => m.seat)).toEqual([3, 5]);
+    expect(back[0].mons).toHaveLength(6);
+    expect(back[0].bag).toBeUndefined();
+    expect(back[1].bag).toMatchObject({ key: 0x03ff, items: [{ id: 110, n: 1 }] });
   });
 
   it('never hands the ROM more mons than a spill can carry', () => {
     const loot = new Loot();
     loot.note(spill(1, LITTLEROOT, [1, 2, 3, 4, 5, 6, 7, 8]));
-    expect(loot.forMap(LITTLEROOT)?.mons).toHaveLength(6);
+    expect(loot.forMap(LITTLEROOT)[0]?.mons).toHaveLength(6);
   });
 
   // POK-280: Kanto's rule is items AND money, the whole bag in one press. The ROM never

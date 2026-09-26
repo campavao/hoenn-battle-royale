@@ -276,8 +276,7 @@ export class MatchSession {
     // In the books, not the room's out-observer (POK-331 #26): solo had no such ear, so it
     // never restocked, and a spill the ROM's eight-piece ground had no room for was lost.
     if (via === 'rom') {
-      const standing = this.standingLoot(msg);
-      if (standing) this.deps.toRom(standing);
+      for (const standing of this.standingLoot(msg)) this.deps.toRom(standing);
     }
     // Every page says so for itself -- our own win never comes back over the relay -- and
     // here, solo says it too (POK-331 #26): Kanto's news has a fallen leader in a solo match.
@@ -312,10 +311,10 @@ export class MatchSession {
    *  have arrived" message, and this one is already on the wire four times a second.
    *  The ROM holds eight pieces for the whole match, and a spill with no room left is
    *  dropped until the page sends it again (br_loot.c, Add): this is that again. */
-  private standingLoot(msg: Msg): SpillMsg | null {
-    if (msg.t !== 'place' || !msg.map) return null;
+  private standingLoot(msg: Msg): SpillMsg[] {
+    if (msg.t !== 'place' || !msg.map) return [];
     const key = `${msg.map.group}:${msg.map.num}`;
-    if (key === this.lootMap) return null;
+    if (key === this.lootMap) return [];
     this.lootMap = key;
     return this.lootTable.forMap(msg.map);
   }

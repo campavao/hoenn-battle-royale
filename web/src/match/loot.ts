@@ -114,12 +114,17 @@ export class Loot {
     return this.pieces.size;
   }
 
-  /** The loot standing on one map, as a `spill` the ROM can be handed, or null when
-   *  there is nothing there. Mons past the ROM's six-a-message limit are dropped:
-   *  the ROM has room for eight pieces in total and this is a redelivery, not a record.
-   *  One spill can only speak for one seat, so this picks the seat with the most on
-   *  that map and leaves the rest for a later arrival to ask about. */
-  forMap(map: MapRef): SpillMsg | null {
+  /** The loot standing on one map, as the `spill`s the ROM can be handed: one for each
+   *  seat with something down there, the seat with the most first, and none when the
+   *  map is bare. Mons past the ROM's six-a-message limit are dropped: the ROM has room
+   *  for eight pieces in total and this is a redelivery, not a record.
+   *
+   *  One spill speaks for one seat, and this used to hand over only the seat with the
+   *  most. A bag whose rest would not fit goes back on the ground under the taker's seat
+   *  (br_loot.c's HandleGive, POK-331 #6), usually beside the fallen trainer's balls, so
+   *  anybody arriving after it dropped was sent the balls and never the bag. The ROM's
+   *  ParseSpill ignores the seat byte and takes each spill as it comes. */
+  forMap(map: MapRef): SpillMsg[] {
     const bySeat = new Map<number, Piece[]>();
     for (const piece of this.pieces.values()) {
       if (!sameMap(piece.map, map)) continue;
@@ -127,16 +132,14 @@ export class Loot {
       if (list) list.push(piece);
       else bySeat.set(piece.seat, [piece]);
     }
-    let best: { seat: number; pieces: Piece[] } | null = null;
-    for (const [seat, pieces] of bySeat) {
-      if (!best || pieces.length > best.pieces.length) best = { seat, pieces };
-    }
-    if (!best) return null;
-    const mons = best.pieces.filter((p) => p.mon).map((p) => p.mon as SpillMon).slice(0, 6);
-    const bag = best.pieces.find((p) => p.bag)?.bag;
-    const msg: SpillMsg = { t: 'spill', seat: best.seat, map, mons };
-    if (bag) msg.bag = bag;
-    return msg;
+    const seats = [...bySeat].sort((a, b) => b[1].length - a[1].length);
+    return seats.map(([seat, pieces]) => {
+      const mons = pieces.filter((p) => p.mon).map((p) => p.mon as SpillMon).slice(0, 6);
+      const bag = pieces.find((p) => p.bag)?.bag;
+      const msg: SpillMsg = { t: 'spill', seat, map, mons };
+      if (bag) msg.bag = bag;
+      return msg;
+    });
   }
 
   /** What is under this key, in the words a ticker line would use -- or null when this

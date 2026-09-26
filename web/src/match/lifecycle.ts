@@ -286,9 +286,9 @@ export function lootOwed(
   owed: Set<number>,
   m: Msg,
   from: number,
-  forMap: (map: MapRef) => SpillMsg | null,
-): SpillMsg | null {
-  if (m.t !== 'place' && m.t !== 'step') return null;
-  if (!m.map || m.seat !== from || !owed.delete(from)) return null;
+  forMap: (map: MapRef) => SpillMsg[],
+): SpillMsg[] {
+  if (m.t !== 'place' && m.t !== 'step') return [];
+  if (!m.map || m.seat !== from || !owed.delete(from)) return [];
   return forMap(m.map);
 }
