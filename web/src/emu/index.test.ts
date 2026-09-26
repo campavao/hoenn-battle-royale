@@ -373,6 +373,45 @@ describe('Emulator', () => {
       expect(heard).toEqual([false, true, true]);
     });
 
+    it('turns rewind and the auto-save state off before the core loads anything', async () => {
+      // Rewind was a full savestate every frame, diffed on a thread of its own, and the
+      // auto-save a SAVESTATE_ALL on the main thread every 30 s synced to IndexedDB --
+      // in both cores, for a page that never rewinds and deletes the auto-save anyway.
+      const core = fakeCore();
+      const order: string[] = [];
+      core.m.setCoreSettings = (settings) => void order.push(`settings ${JSON.stringify(settings)}`);
+      const load = core.m.loadGame;
+      core.m.loadGame = (p, o) => (order.push('load'), load(p, o));
+      const emu = await Emulator.create({} as HTMLCanvasElement, async () => core.m);
+      await emu.start(new Uint8Array([1]));
+      await emu.reboot();
+      expect(order).toEqual(['settings {"rewindEnable":false,"autoSaveStateEnable":false,"restoreAutoSaveStateOnLoad":false}', 'load', 'load']);
+    });
+
+    it('a headless core keeps its sound paused after every boot and every resume; a shown one plays', async () => {
+      const heard: string[] = [];
+      const hidden = fakeCore();
+      hidden.m.pauseAudio = () => void heard.push('hidden');
+      const emu = await Emulator.create({} as HTMLCanvasElement, async () => hidden.m, true);
+      await emu.startBytes(new Uint8Array([1]));
+      hidden.frame(); // SDL opened the audio as the thread started, and resumed it
+      hidden.frame();
+      expect(heard).toEqual(['hidden']);
+      emu.pause();
+      emu.resume(); // resumeGame resumes SDL's audio too
+      hidden.frame();
+      await emu.reboot();
+      hidden.frame();
+      expect(heard).toEqual(['hidden', 'hidden', 'hidden']);
+
+      const shown = fakeCore();
+      shown.m.pauseAudio = () => void heard.push('shown');
+      const visible = await Emulator.create({} as HTMLCanvasElement, async () => shown.m);
+      await visible.startBytes(new Uint8Array([1]));
+      shown.frame();
+      expect(heard).not.toContain('shown');
+    });
+
     it('counts every stop the page makes, so a meter skips the gap across it', async () => {
       const { emu } = await make();
       await emu.start(new Uint8Array([1]));

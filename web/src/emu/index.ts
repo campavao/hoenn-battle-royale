@@ -63,6 +63,10 @@ export interface CoreModule {
   HEAPU8: Uint8Array;
   /** SDL2's audio output, once a game's thread has opened it (audio-meter.ts). */
   SDL2?: SdlAudio;
+  /** The renderer's settings, which every loadGame after the call takes. */
+  setCoreSettings?(settings: { rewindEnable?: boolean; autoSaveStateEnable?: boolean; restoreAutoSaveStateOnLoad?: boolean }): void;
+  /** Silences SDL's output without pausing the game; resumeGame undoes it. */
+  pauseAudio?(): void;
 }
 
 /** Pixels the core draws past the LCD on each side (POK-319). */
@@ -110,6 +114,8 @@ export class Emulator {
   /** The output node audio-meter.ts is listening to; SDL makes a new one every boot. */
   private tappedAudio: ScriptProcessorNode | null = null;
   private halts = 0;
+  /** A headless core's sound has been paused since its last boot or resume. */
+  private quiet = false;
   /** What boot() last loaded, so reboot() can load it again. */
   private bootedPath: string | null = null;
   private crashListeners = new Set<() => void>();
@@ -118,15 +124,24 @@ export class Emulator {
   /** EWRAM and IWRAM over the heap, made once per boot (see wram()). */
   private views: { heap: Uint8Array; buffer: ArrayBufferLike; ewram: Uint8Array | null; iwram: Uint8Array | null } | null = null;
 
-  private constructor(private readonly m: CoreModule) {}
+  private constructor(
+    private readonly m: CoreModule,
+    private readonly headless = false,
+  ) {}
 
   /** Instantiates the core against a canvas and mounts its IndexedDB-backed filesystem.
    *  `headless` for any core but the page's first: it draws to nothing (see CoreFactory). */
   static async create(canvas: HTMLCanvasElement, factory?: CoreFactory, headless = false): Promise<Emulator> {
     const f = factory ?? (await loadCoreFactory());
     const m = await f({ canvas, brHeadless: headless });
+    // Nothing here rewinds, and every boot deletes the auto-save anyway (boot()), so
+    // neither runs (POK-247): rewind was a whole savestate every frame, diffed on a
+    // thread of its own, and the auto-save a SAVESTATE_ALL on the main thread every
+    // 30 s, synced to IndexedDB -- in both cores. They are the renderer's settings, so
+    // every loadGame from here on, PLAY AGAIN's included, keeps them.
+    m.setCoreSettings?.({ rewindEnable: false, autoSaveStateEnable: false, restoreAutoSaveStateOnLoad: false });
     await m.FSInit();
-    const emu = new Emulator(m);
+    const emu = new Emulator(m, headless);
     await emu.dropLegacyPatched();
     return emu;
   }
@@ -225,6 +240,7 @@ export class Emulator {
   private async boot(path: string): Promise<void> {
     this.bootedPath = path;
     this.halts++;
+    this.quiet = false;
     // The core auto-saves a state every 30 s and restores it on the next loadGame of
     // the same file. A match must always start from power-on, so drop those first.
     try {
@@ -269,7 +285,7 @@ export class Emulator {
           this.m._brPresent?.();
         }
         try {
-          this.metered(started);
+          this.afterFrame(started);
         } catch {
           /* a meter's bug is not the frame's */
         }
@@ -298,6 +314,7 @@ export class Emulator {
 
   resume(): void {
     this.m.resumeGame();
+    this.quiet = false;
   }
 
   isRunning(): boolean {
@@ -331,7 +348,15 @@ export class Emulator {
     return this.halts;
   }
 
-  private metered(started: number): void {
+  private afterFrame(started: number): void {
+    // Nobody hears a headless core, and SDL feeds its speaker on the main thread -- the
+    // proxy's at 8x, through a sinc resampler, 47 times a second (POK-247). SDL opens
+    // and resumes it when the core's thread starts, and resumeGame resumes it, so it is
+    // paused again at the first frame after either.
+    if (this.headless && !this.quiet) {
+      this.quiet = true;
+      this.m.pauseAudio?.();
+    }
     if (started >= 0) {
       const ms = performance.now() - started;
       for (const l of this.workListeners) l(ms);
