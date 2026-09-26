@@ -44,6 +44,19 @@ moment that needs more, cut a contact sheet: `ffmpeg -ss <t> -t 10 -i <video> -v
 POK-323 the world moving during a battle, POK-324 ticker noise, POK-325 the ring's target
 in the game, POK-326 fog at spawn in Mossdeep, POK-327 a test that plays a match.
 
+**Fixed since** (the page and the ROM ship together):
+
+* POK-322 -- a bot's bag starts empty and holds only what it picks up, with no potion
+  when the ring moves (page `4fd563592`), and a card with no items hands the AI none
+  where the ROM used to add two of the rung's potions (rom `97ed4da8d`).
+* POK-324 -- a ring move is one ticker line in Kanto's words and a repeat of the last
+  line is dropped (rom `a10371785`); the fog's sweep of Hoenn's trainers is tallied in the
+  page log, and the page's ticker says only what a player acts on (page `ce512c060`,
+  `f547dcf33`).
+* POK-325 -- the HUD corner names where the fog is closing all ring phase long (rom
+  `68bde100b`), and START's MAP says it under the map (rom `a9f8f5982`); FOG EVERYWHERE
+  on the last phase in both.
+
 * "Everything got squished" after the battle at 02:41, and for the rest of the video --
   and again on the phone after the first fix shipped. **The bots' second emulator
   core.** It boots on the first bot fight (the console's first `[proxy] ... fought` is
