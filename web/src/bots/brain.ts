@@ -13,7 +13,7 @@ import { findPath, findPathToAny, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
 import { MOVE_CUT, MOVE_FLY, MOVE_SURF } from './party';
-import { battleItems, merge as mergeBag, purse, quaff, restock, spend, type Stack } from './bag';
+import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
 import { sameSpot, spotKey, type SeamDir, type Spot, type World } from './world';
 import { pageCell, type PageCell } from './space';
@@ -250,8 +250,9 @@ export interface BotsOptions {
   /** A bot's starting team, and the mons it picks up as the rung climbs. `mapId` is
    *  where the drop put it, which is where a trainer's mons come from (POK-237). */
   deal?: (bot: Bot, phase: number, mapId: string) => PackedMon[];
-  /** And its bag (POK-237). Dealt the same way, from the seed and the grade, so a
-   *  rookie's two POTIONs and an ace's X ATTACK are the same on every client. */
+  /** And its bag (POK-237) at the start. Empty in a match, where nothing is dealt: a
+   *  bot carries only what it picks up (POK-322). A test hands one in to stand for a
+   *  bot that has already been out and got something. */
   bagFor?: (bot: Bot, phase: number) => Stack[];
   /** How many trainers are still in, bots included. The hunt starts at HUNT_AT. */
   alive?: () => number;
@@ -531,10 +532,8 @@ export class Bots {
       walker.path = null;
       const fresh = this.opts.deal?.(walker.bot, phase, walker.home);
       if (fresh) walker.party = climb(walker.party, fresh);
-      // A trainer still standing at the new rung has restocked (POK-237) -- one
-      // potion of the tier it is now on, not a fresh bag, so what it has spent
-      // stays spent.
-      if (this.opts.bagFor) restock(walker.bag, phase);
+      // No restock: it was a free potion a ring, called a Mart visit, and no Mart was
+      // ever visited (POK-322). What a bot has spent stays spent.
     }
   }
 
@@ -719,13 +718,17 @@ export class Bots {
       // The bag takes the cell after the team's. Nowhere left to put it means no bag
       // rather than a bag nobody can reach: a piece sharing a cell with another is a
       // piece that does not exist.
-      if (walker.bag.length > 0 && cells.length > party.length) {
+      // An empty bag still goes down when there is a purse in it: a bot's bag starts
+      // empty now (POK-322), and beating one has always paid its cash -- the ROM pays a
+      // bag's money whatever is in it (br_loot.c, Take).
+      const money = purse(this.phase, walker.bot.grade);
+      if ((walker.bag.length > 0 || money > 0) && cells.length > party.length) {
         spill.bag = {
           key: ((walker.bot.seat & 0xff) << 8) | 0xff,
           x: cells[party.length].x,
           y: cells[party.length].y,
           items: walker.bag.map((stack) => ({ ...stack })),
-          money: purse(this.phase, walker.bot.grade),
+          money,
           name: walker.bot.name.slice(0, 7),
         };
       }

@@ -128,6 +128,25 @@ describe('the host deals its bots (POK-330 #42)', () => {
     });
   });
 
+  // Cam's rule: a bot's bag is what it picked up or bought, nothing dealt. The deal
+  // handed a rookie a POTION and an ace three and two X items, and every ring moved put
+  // a free potion in every bag.
+  it('deals every bot an empty bag, the ring moving fills none, and its card stakes nothing (POK-322)', () => {
+    const bot = dealBots(SEED, 7, [0], GROUND.spawns)[0];
+    const me: RosterEntry = {
+      seat: 0, name: 'CAM', alive: true, map: bot.map, x: bot.x + MAP_OFFSET, y: bot.y - 1 + MAP_OFFSET, dir: 1, isMe: true,
+    };
+    const { hb, to } = host({ players: () => [me] });
+    for (const seat of hb.seats) expect(hb.bots.bagOf(seat), `seat ${seat}`).toEqual([]);
+    hb.setRing({ sx: 0, sy: 0, r: 99 }, 3);
+    for (const seat of hb.seats) expect(hb.bots.bagOf(seat), `seat ${seat} after a ring`).toEqual([]);
+    expect(hb.partyFor(hb.seats[0])).toMatchObject({ bag: { items: [] } });
+    hb.tick(STEP_MS);
+    const card = to.find((c) => c.seat === 0 && c.msg.t === 'trainer');
+    expect(card).toBeDefined();
+    expect(card!.msg).not.toHaveProperty('items');
+  });
+
   it('asks who is busy when a bot looks, not when it was dealt (POK-230)', () => {
     const bot = dealBots(SEED, 7, [0], GROUND.spawns)[0];
     // One cell north of the first bot, facing it: in the eyeline the moment it looks.

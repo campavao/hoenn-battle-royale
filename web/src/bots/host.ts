@@ -8,7 +8,6 @@ import { lootView, resumeAt } from './adapt';
 import type { RomCell } from './space';
 import { dealBots, type Bot } from './roster';
 import { dealParty } from './party';
-import { dealBag } from './bag';
 import type { World } from './world';
 import { HOENN, type WorldIndex } from './hoenn';
 import type { DirectorWorld } from '../match/director';
@@ -198,9 +197,7 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
     // Where the bot is standing is where its mons came from (POK-237): the drop put
     // it on a route, and that route's own table is what a trainer there would have.
     deal: (bot, atPhase, mapId) => dealParty(seed, bot.seat, atPhase, mapId, bot.grade, zonePool()),
-    // And the bag it spends from (POK-237): the potions it drinks between fights, the
-    // X ATTACKs its opponent's ROM pops on its behalf, and what a player finds on it.
-    bagFor: (bot, atPhase) => dealBag(seed, bot.seat, atPhase, bot.grade),
+    // And no bag: a bot carries only what it picks up (POK-322), so it starts empty.
     seed,
     onDuel: opts.onDuel ?? (() => {}),
     // Nobody fights in the Zone -- not a player, not another bot.

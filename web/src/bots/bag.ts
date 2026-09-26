@@ -13,7 +13,11 @@
 // `trainer` card, and the ROM reports back which of them it actually used (`spent`).
 // What is left is still in the bag, and what is in the bag when the bot falls is what
 // hits the ground.
-import { mulberry32 } from '../match/clock';
+//
+// And what is in it is only what the bot picked up (POK-322): nothing is dealt at the
+// drop and nothing appears when the ring moves. Kanto deals BOT_LOOT and a graded kit;
+// Cam's play-test met bots opening fights with "two potions off the start" and the rule
+// here is his -- a bag that holds something the bot never went and got is a prop again.
 import { Grade } from './roster';
 import { rungForPhase } from './party';
 import type { PackedMon } from '../net/wire';
@@ -51,49 +55,12 @@ const HEAL: Record<number, number> = {
   [ITEM.FULL_RESTORE]: 9999,
 };
 
-/** The stat boosters, in the order a trainer would reach for them. */
-const BOOSTS = [ITEM.X_ATTACK, ITEM.X_SPEED, ITEM.X_DEFEND, ITEM.DIRE_HIT, ITEM.GUARD_SPEC];
-
 /** Emerald's MAX_TRAINER_ITEMS: the AI reads four and no more. */
 export const BATTLE_ITEMS = 2;
 
 /** Is this something a quaff could drink? */
 export function isMedicine(id: number): boolean {
   return HEAL[id] !== undefined;
-}
-
-/** The medicine a trainer at this rung would be carrying -- the same ladder the AI
- *  branch used to fake before there was a bag behind it. */
-export function potionFor(level: number): number {
-  if (level >= 75) return ITEM.FULL_RESTORE;
-  if (level >= 50) return ITEM.HYPER_POTION;
-  if (level >= 30) return ITEM.SUPER_POTION;
-  return ITEM.POTION;
-}
-
-/** A bot's bag at the drop. Dealt from the seed and the seat like everything else it
- *  owns, so every client that cares to work it out agrees -- and by grade, because
- *  what separates an ace from a rookie is as much what it is carrying as what it is
- *  leading with (POK-265). */
-export function dealBag(seed: number, seat: number, phase: number, grade: Grade = Grade.Regular): Stack[] {
-  const rng = mulberry32((seed ^ (seat * 0x2f1b) ^ 0xba6) >>> 0);
-  const level = rungForPhase(phase);
-  const potions = grade === Grade.Ace ? 3 : grade === Grade.Rookie ? 1 : 2;
-  const boosts = grade === Grade.Ace ? 2 : grade === Grade.Rookie ? 0 : 1;
-  const bag: Stack[] = [{ id: potionFor(level), n: potions }];
-
-  for (let i = 0; i < boosts; i++) add(bag, BOOSTS[Math.floor(rng() * BOOSTS.length)], 1);
-  // An ace at the deep end of the ladder also carries the cure, which is the item
-  // that makes a status move against it a wasted turn rather than the whole fight.
-  if (grade === Grade.Ace && level >= 50) add(bag, ITEM.FULL_HEAL, 1);
-  return bag;
-}
-
-/** The ring moved: a trainer who is still standing has been back to a Mart. One
- *  potion of the new rung's tier, and nothing else -- a top-up, not a re-deal, so a
- *  bag that has been spent stays spent. */
-export function restock(bag: Stack[], phase: number): void {
-  add(bag, potionFor(rungForPhase(phase)), 1);
 }
 
 /** Take one of `id`. TRUE when there was one to take. */
@@ -167,25 +134,30 @@ export function quaff(party: PackedMon[], bag: Stack[]): number | null {
  *  One medicine at most, then a booster. It was four and two, and Emerald's AI spends
  *  what it is given the moment it is behind: the play-test met bots drinking "three to
  *  five potions per battle, usually all at once", which is not a fight, it is a wall.
- *  A bot that has been restocked at every ring is carrying nothing but potions by the
- *  late rungs, so medicine goes first but only once -- the second slot is where its
- *  X ATTACK gets to exist.
+ *  A bot that has looted somebody's bag can be carrying nothing but potions, so
+ *  medicine goes first but only once -- the second slot is where its X ATTACK gets to
+ *  exist.
+ *
+ *  Never more units than the bag holds: the last pour is the medicine the first one
+ *  left, and it used to pour the first one's again, so a bot with one POTION went in
+ *  with two and the second was spent out of nothing (POK-322).
  *
  *  Nothing is taken out of the bag here. The ROM says what it used when the fight is
  *  over (`spent`), and a fight that ended on the first turn leaves the bag full. */
 export function battleItems(bag: Stack[]): number[] {
   const out: number[] = [];
+  const left = bag.map((stack) => stack.n);
   const pour = (want: (id: number) => boolean, cap = BATTLE_ITEMS) => {
-    for (const stack of bag) {
-      if (!want(stack.id)) continue;
-      for (let i = 0; i < stack.n && out.length < cap; i++) out.push(stack.id);
-    }
+    bag.forEach((stack, i) => {
+      if (!want(stack.id)) return;
+      for (; left[i] > 0 && out.length < cap; left[i]--) out.push(stack.id);
+    });
   };
 
   pour((id) => isMedicine(id), MEDICINE_FIRST);
   pour((id) => !isMedicine(id));
   pour((id) => isMedicine(id));
-  return out.slice(0, BATTLE_ITEMS);
+  return out;
 }
 
 /** How many of the two go to medicine before the boosters get a look in. */

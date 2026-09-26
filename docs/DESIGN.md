@@ -282,7 +282,8 @@ play opens no socket. Backfill is wrong for a battle royale.
 
 Changed: the lobby is the page's, not the ROM's -- but drawn in Emerald's font and frames
 since POK-320, with Kanto's room of seats. Fast-forward stays available to the **proxy
-duel instance only**.
+duel instance only**. A bot's bag starts empty and holds only what it picks up: nothing
+dealt at the drop, no potion when the ring moves (POK-322; Kanto deals BOT_LOOT).
 
 ## 11. Decisions (2026-09-15) and what is still open
 
