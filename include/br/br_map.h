@@ -51,5 +51,8 @@ void BrMap_TakeFlight(void);
 // has cleared BLDCNT for itself. Both do nothing unless this is a look with a ring.
 void BrMap_ShadeFog(u16 *frame, u8 *tiles, u8 left, u8 top, u8 width, u8 height);
 void BrMap_BlendFog(void);
+// The prompt under a look (region_map.c): "FOG: <the ring's centre>", or FOG EVERYWHERE on
+// the last phase, or "The FOG." with no place named. Built in gStringVar4.
+const u8 *BrMap_Prompt(void);
 
 #endif // GUARD_BR_MAP_H

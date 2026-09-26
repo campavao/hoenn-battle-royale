@@ -122,4 +122,19 @@ wait 4
 expect u8 gBrHud+0x17 0
 wait 100
 shot corner-everywhere
+# and the map says it too: START, MAP (two below the top in a match), FOG EVERYWHERE
+poke u8 gBrMatch 2
+tap START
+wait 40
+tap DOWN
+wait 20
+tap DOWN
+wait 20
+tap A
+wait 240
+expect u8 gBrMap 1
+shot map-everywhere
+tap B
+wait 200
+expect u8 gBrMap 0
 say ring place ok

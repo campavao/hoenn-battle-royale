@@ -9,6 +9,8 @@
 #include "field_screen_effect.h"
 #include "field_weather.h"
 #include "constants/field_weather.h"
+#include "string_util.h"
+#include "text.h"
 #include "region_map.h"
 #include "pokemon.h"
 #include "party_menu.h"
@@ -24,6 +26,24 @@ EWRAM_DATA struct BrMap gBrMap = {0};
 // The START menu row, and the prompt over the map once it is open.
 const u8 gBrText_MenuMap[] = _("MAP");
 const u8 gBrText_TheFog[] = _("The FOG.");
+static const u8 sText_FogAt[] = _("FOG: ");
+
+// The prompt names the ring's centre (POK-325), as Kanto's menu row does: "FOG:
+// VERDANTURF TOWN". WIN_FLY_TO_WHERE is 14 tiles, 112 px, and that one is 111 in the
+// normal font; anything wider than the window keeps the old prompt rather than run off.
+const u8 *BrMap_Prompt(void)
+{
+    if (!gBrRing.active)
+        return gBrText_TheFog;
+    if (gBrRing.r < 0)
+        return gBrText_FogEverywhere;
+    if (gBrRing.place[0] == EOS)
+        return gBrText_TheFog;
+    StringCopy(StringCopy(gStringVar4, sText_FogAt), gBrRing.place);
+    if (GetStringWidth(FONT_NORMAL, gStringVar4, 0) > 14 * 8)
+        return gBrText_TheFog;
+    return gStringVar4;
+}
 
 void BrMap_Init(void)
 {

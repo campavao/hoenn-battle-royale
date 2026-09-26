@@ -46,6 +46,8 @@ ENGINE_SYMBOLS = [
     "gRfuLinkStatus",
     # The battle's message box, as the last line was expanded into it (pvp-items.txt).
     "gDisplayedStringBattle",
+    # The fog map's prompt, "FOG: <place>", is built here (br_map.c, ring-map.txt).
+    "gStringVar4",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

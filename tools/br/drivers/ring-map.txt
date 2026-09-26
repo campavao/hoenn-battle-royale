@@ -13,13 +13,15 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
-# a match, dropped, with a ring around Rustboro-ish: centre (4,5), radius 4
+# a match, dropped, with a ring around Rustboro-ish: centre (4,5), radius 4, and the
+# host's name for it (POK-325) -- LITTLEROOT will do, the name is only a label here
 poke u8 gBrMatch 2
 poke u8 gBrRing 1
 poke u8 gBrRing+1 1
 poke u8 gBrRing+2 4
 poke u8 gBrRing+3 5
 poke u8 gBrRing+4 4
+pokebytes gBrRing+14 C6 C3 CE CE C6 BF CC C9 C9 CE FF
 tap START
 wait 40
 tap DOWN
@@ -44,6 +46,16 @@ expect u16 0x0500015E 0x586D
 # ...and the blend: BG1 over BG2 and the backdrop, 10/16 fog over 6/16 map
 expect u16 0x04000050 0x2442
 expect u16 0x04000052 0x060A
+# the prompt under it names the place (POK-325): "FOG: LITTLEROOT", built in gStringVar4
+# -- F O G : space, then the name, then EOS
+expect u8 gStringVar4 0xC0
+expect u8 gStringVar4+1 0xC9
+expect u8 gStringVar4+2 0xC1
+expect u8 gStringVar4+3 0xF0
+expect u8 gStringVar4+4 0x00
+expect u8 gStringVar4+5 0xC6
+expect u8 gStringVar4+14 0xCE
+expect u8 gStringVar4+15 0xFF
 # the map is up and it is a look, not a pick: the drop is not running
 expect u8 gBrMap 1
 expect u8 gBrPick 0

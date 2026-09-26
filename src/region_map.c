@@ -1723,7 +1723,7 @@ void CB2_OpenFlyMap(void)
         FillWindowPixelBuffer(WIN_FLY_TO_WHERE, PIXEL_FILL(0));
 #if BR
         AddTextPrinterParameterized(WIN_FLY_TO_WHERE, FONT_NORMAL,
-                                    BrMap_Looking() ? gBrText_TheFog :
+                                    BrMap_Looking() ? BrMap_Prompt() :
                                     BrPick_Picking() ? gBrText_DropWhere :
                                     gText_FlyToWhere, 0, 1, 0, NULL);
 #else

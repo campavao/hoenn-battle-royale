@@ -172,8 +172,10 @@ out, and one that comes in waits as it would in a menu.
   the ROM drops at the spawn the `start` dealt it. The Safari opening keeps its Kanto
   shape because Hoenn has a Safari Zone too; its catch pool and item balls are dealt
   from the match seed on every ROM alike (`br_zone.h`).
-- **HUD** (`br_hud.h`): the corner (trainers left over the clock, and an eye while
-  anyone watches), the ticker and the bottom box, as overworld windows on BG0.
+- **HUD** (`br_hud.h`): the corner (trainers left and the clock; under them where the
+  ring is closing, all ring phase long, or FOG EVERYWHERE on the last phase; and an eye
+  while anyone watches), the ticker and the bottom box, as overworld windows on BG0.
+  START's MAP says the same under the fog: `FOG: <place>`.
 - **Rules**: one clock (`br_levels.h`: the ring phase is the level rung, no EXP), the
   catch with a full party (`br_catch.h`), the MOVES row (`br_moves.h`), gym leaders as
   one-shot bosses (`br_gym.h`), the shot clock and RUN (`br_battle.h`).
