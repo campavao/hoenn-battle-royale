@@ -13,7 +13,10 @@
 //            since the last callback, and a ScriptProcessorNode has only two.
 //   starved  the core had fewer samples than the buffer wanted. mGBA's SDL callback
 //            fills the rest with zeros (sdl-audio.c, `available < len`), so the tail of
-//            a buffer that had sound in it goes flat: the emulator fell behind.
+//            a buffer goes flat: the emulator fell behind. Heard only when the sound
+//            is cut off, not when a quiet passage happens to end on a run of zeros --
+//            the first soak counted a thousand of those a sample, in a match whose
+//            frames and CPU never moved.
 //
 // Pure over the Web Audio types, so it runs under vitest with a hand-made event.
 
@@ -25,6 +28,8 @@ export interface AudioTick {
   bufferMs: number;
   late: boolean;
   starved: boolean;
+  /** Ended on a flat run after sound: the zero-fill's shape, and a quiet passage's too. */
+  flat: boolean;
   state: AudioContextState;
 }
 
@@ -45,6 +50,11 @@ export interface SdlAudio {
  *  zero-fill. */
 export const STARVED_TAIL = 16;
 
+/** How loud the sound just before that tail must be for its end to be a cut: 1/512 of
+ *  full scale. Quiet music is mostly zeros, and a run of them ending a buffer is the
+ *  music, not the core. */
+export const STARVED_LEVEL = 1 / 512;
+
 type Buffer = Pick<AudioBuffer, 'numberOfChannels' | 'length' | 'getChannelData'>;
 
 /** How many samples at the end of the buffer are silent on every channel, when
@@ -61,6 +71,25 @@ export function silentTail(buffer: Buffer): number {
     }
   }
   return lastSound < 0 ? 0 : buffer.length - 1 - lastSound;
+}
+
+/** The loudest of the `span` samples, on any channel, just before the last `tail`. */
+export function levelBefore(buffer: Buffer, tail: number, span = STARVED_TAIL): number {
+  const end = buffer.length - tail;
+  let peak = 0;
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const data = buffer.getChannelData(c);
+    for (let i = Math.max(0, end - span); i < end; i++) peak = Math.max(peak, Math.abs(data[i]));
+  }
+  return peak;
+}
+
+/** How a buffer ends: flat, on a run of zeros after sound, and starved when that run
+ *  cuts off sound worth hearing -- a buffer the core could not fill. */
+export function ending(buffer: Buffer): { flat: boolean; starved: boolean } {
+  const tail = silentTail(buffer);
+  const flat = tail >= STARVED_TAIL;
+  return { flat, starved: flat && levelBefore(buffer, tail) >= STARVED_LEVEL };
 }
 
 /** Hears every callback of `node` from now on; the core's own callback runs first and
@@ -80,7 +109,7 @@ export function tapNode(
     const late = e.playbackTime < ctx.currentTime || (last !== null && at - last > 2 * bufferMs);
     last = at;
     own?.call(this, e);
-    emit({ at, bufferMs, late, starved: silentTail(out) >= STARVED_TAIL, state: ctx.state });
+    emit({ at, bufferMs, late, ...ending(out), state: ctx.state });
   };
 }
 
@@ -89,6 +118,8 @@ export interface AudioStats {
   callbacks: number;
   late: number;
   starved: number;
+  /** Buffers ending flat, cut or quiet: with `starved`, which of the two a count was. */
+  flat: number;
   /** The longest wait between two callbacks, ms: past two buffers, one was missed. */
   maxGapMs: number;
   bufferMs: number;
@@ -103,6 +134,7 @@ export class AudioMeter {
   private callbacks = 0;
   private late = 0;
   private starved = 0;
+  private flat = 0;
   private maxGap = 0;
   private lastAt: number | null = null;
   private bufferMs = 0;
@@ -113,6 +145,7 @@ export class AudioMeter {
       this.callbacks++;
       if (tick.late) this.late++;
       if (tick.starved) this.starved++;
+      if (tick.flat) this.flat++;
       if (this.lastAt !== null) this.maxGap = Math.max(this.maxGap, tick.at - this.lastAt);
       this.lastAt = tick.at;
       this.bufferMs = tick.bufferMs;
@@ -126,6 +159,7 @@ export class AudioMeter {
       callbacks: this.callbacks,
       late: this.late,
       starved: this.starved,
+      flat: this.flat,
       maxGapMs: this.maxGap,
       bufferMs: this.bufferMs,
       state: this.state,
@@ -134,6 +168,7 @@ export class AudioMeter {
       this.callbacks = 0;
       this.late = 0;
       this.starved = 0;
+      this.flat = 0;
       this.maxGap = 0;
     }
     return out;

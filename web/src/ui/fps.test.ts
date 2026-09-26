@@ -147,7 +147,7 @@ describe('the #perf readout (POK-247)', () => {
       clock.t += 16;
       gba.frame(1.2);
     }
-    gba.audio({ at: 0, bufferMs: 21.3, late: true, starved: false, state: 'running' });
+    gba.audio({ at: 0, bufferMs: 21.3, late: true, starved: false, flat: false, state: 'running' });
     clock.t = 1000;
     const lines = perfLines(now.sample(), all.sample(false));
     expect(lines).toEqual([

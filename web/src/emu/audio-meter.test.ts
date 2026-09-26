@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AudioMeter, STARVED_TAIL, silentTail, tapNode, type AudioTick, type Heard } from './audio-meter';
+import { AudioMeter, STARVED_TAIL, ending, silentTail, tapNode, type AudioTick, type Heard } from './audio-meter';
 
 /** A stereo buffer of `n` samples, all sound, with the last `silent` of them zero. */
 function buffer(n: number, silent = 0, sound = 0.25) {
@@ -35,6 +35,13 @@ describe('the audio meter (POK-247)', () => {
     const mixed = buffer(1024, 40);
     mixed.getChannelData(1).fill(0.1);
     expect(silentTail(mixed)).toBe(0);
+  });
+
+  it('a quiet passage ending on zeros is the music; a cut from sound is the core', () => {
+    expect(ending(buffer(1024, 40))).toEqual({ flat: true, starved: true });
+    // One or two steps of a quiet song, and then its own zeros: nothing was cut.
+    expect(ending(buffer(1024, 40, 1 / 32768))).toEqual({ flat: true, starved: false });
+    expect(ending(buffer(1024, STARVED_TAIL - 1))).toEqual({ flat: false, starved: false });
   });
 
   it("counts a callback whose buffer was due before it ran as late, after SDL's own callback ran", () => {
@@ -85,14 +92,14 @@ describe('the audio meter (POK-247)', () => {
     };
     const meter = new AudioMeter(source);
     expect(meter.stats().state).toBe('none');
-    const tick = (at: number, late = false, starved = false): AudioTick => ({ at, bufferMs: 21.3, late, starved, state: 'running' });
+    const tick = (at: number, late = false, starved = false): AudioTick => ({ at, bufferMs: 21.3, late, starved, flat: starved, state: 'running' });
     emit(tick(0));
     emit(tick(21, true));
     emit(tick(90, false, true)); // two buffers missed
     emit(tick(111));
-    expect(meter.stats()).toEqual({ callbacks: 4, late: 1, starved: 1, maxGapMs: 69, bufferMs: 21.3, state: 'running' });
+    expect(meter.stats()).toEqual({ callbacks: 4, late: 1, starved: 1, flat: 1, maxGapMs: 69, bufferMs: 21.3, state: 'running' });
     emit(tick(132));
     // The gap from the last window's final callback still counts.
-    expect(meter.stats()).toEqual({ callbacks: 1, late: 0, starved: 0, maxGapMs: 21, bufferMs: 21.3, state: 'running' });
+    expect(meter.stats()).toEqual({ callbacks: 1, late: 0, starved: 0, flat: 0, maxGapMs: 21, bufferMs: 21.3, state: 'running' });
   });
 });
