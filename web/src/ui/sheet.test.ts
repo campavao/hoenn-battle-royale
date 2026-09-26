@@ -103,6 +103,19 @@ describe('the sheet', () => {
     for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(360);
   });
 
+  it('takes as many rows of seats as there are seats, and no more than there is room for', () => {
+    const rows = (m: SheetModel, h: number) => {
+      const { painted } = paint(m, h);
+      const cells = painted.widgets.filter((w) => w.parent === 'match-roster').map((w) => w.rect.y);
+      return new Set(cells).size;
+    };
+    expect(rows(model(), 480), 'three seats, one row').toBe(1);
+    const thirty = Array.from({ length: 30 }, (_, i) => seat(i + 1, { isMe: i === 0 }));
+    expect(rows(model({ seats: thirty }), 480)).toBe(4);
+    const { painted } = paint(model({ seats: thirty }), 480);
+    expect(painted.widgets.find((w) => w.text === '15 more'), 'the rest, counted in the last cell').toBeDefined();
+  });
+
   it('a host has LEAVE taken away; a guest keeps it', () => {
     expect(paint(model({ canLeave: false })).byId('match-leave')).toBeUndefined();
   });

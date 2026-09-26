@@ -385,14 +385,28 @@ export function cycleWatch(alive: readonly number[], on: number | null, dir: 1 |
 /** How tall everything under the seats is, so the seats take what is left. */
 function sheetBelow(m: SheetModel): number {
   return (
-    ROW_H + 2 + // the note
+    (m.note ? ROW_H + 2 : 0) +
     (m.watch ? ROW_H + 28 : 0) +
-    28 + // LEAVE, BACK TO GAME
+    (sheetActions(m).length > 0 ? 28 : 0) +
     2 * 20 + 16 + 4 + // the settings
     (m.remapLine ? ROW_H : 0) +
     m.help.length * ROW_H +
-    ROW_H // the version
+    versionLines(m.version).length * ROW_H
   );
+}
+
+/** LEAVE for whoever may, and BACK TO GAME over the game. */
+function sheetActions(m: SheetModel): ButtonSpec[] {
+  const actions: ButtonSpec[] = [];
+  if (m.canLeave) actions.push({ label: 'LEAVE', id: 'match-leave', cls: 'room-leave', onPress: m.onLeave });
+  if (m.look === 'overlay') actions.push({ label: 'BACK TO GAME', id: 'drawer-close', onPress: m.onClose });
+  return actions;
+}
+
+/** The version line in at most two lines: its last part, the rom, is the one a report
+ *  needs, and cutting it to fit one line cut exactly that. */
+export function versionLines(version: string): string[] {
+  return wrapText(version, W - 8).slice(0, 2);
 }
 
 /** The in-match sheet (POK-320), where the page's HTML drawer was: the room's line and
@@ -433,8 +447,10 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
       }
       y += 4;
 
-      // As many rows of seats as the rest leaves room for: a desktop's dock is short.
-      const rows = Math.max(1, Math.min(4, Math.floor((h - y - sheetBelow(m) - 18) / SEAT_H)));
+      // As many rows of seats as there are seats, and as the rest leaves room for: a
+      // desktop's dock is short, and a room of thirty does not fit in four.
+      const room = Math.floor((h - y - sheetBelow(m) - 18) / SEAT_H);
+      const rows = Math.max(1, Math.min(4, room, Math.ceil(m.seats.length / SEAT_COLS)));
       const lay = layoutSeats(y, rows * SEAT_COLS);
       const { shown, more } = sheetSeats(m.seats, lay.cells.length);
       c.drawFrame(lay.frame);
@@ -460,8 +476,8 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
       if (m.note) {
         const r = paintNote(c, m.note, y);
         widgets.push({ rect: r, text: m.note, parent: 'room-note', cursor: null });
+        y += ROW_H + 2;
       }
-      y += ROW_H + 2;
 
       if (m.watch) {
         const line = `WATCHING ${m.watch.name ?? 'NOBODY'}`;
@@ -477,11 +493,11 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
         y += 28;
       }
 
-      const actions: ButtonSpec[] = [];
-      if (m.canLeave) actions.push({ label: 'LEAVE', id: 'match-leave', cls: 'room-leave', onPress: m.onLeave });
-      if (m.look === 'overlay') actions.push({ label: 'BACK TO GAME', id: 'drawer-close', onPress: m.onClose });
-      if (actions.length > 0) widgets.push(...paintButtons(c, y, actions));
-      y += 28;
+      const actions = sheetActions(m);
+      if (actions.length > 0) {
+        widgets.push(...paintButtons(c, y, actions));
+        y += 28;
+      }
 
       const settings = paintOptions(
         c,
@@ -510,9 +526,10 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
         }
         widgets.push({ rect: { x: 0, y: top, w: W, h: y - top }, text: m.help.join(' '), cls: 'keys', cursor: null });
       }
-      const vy = Math.max(y, h - ROW_H);
-      c.drawTextCentred(fitText(m.version, W - 8), W / 2, vy, TEXT_GRAY);
-      widgets.push({ rect: { x: 0, y: vy, w: W, h: ROW_H }, text: m.version, cls: 'version', cursor: null });
+      const version = versionLines(m.version);
+      const vy = Math.max(y, h - version.length * ROW_H);
+      version.forEach((line, i) => c.drawTextCentred(line, W / 2, vy + i * ROW_H, TEXT_GRAY));
+      widgets.push({ rect: { x: 0, y: vy, w: W, h: version.length * ROW_H }, text: m.version, cls: 'version', cursor: null });
 
       if (m.card) widgets.push(...paintCard(c, h, lay.frame.y + 8, m.card, 'match-card', m.onKick, m.onCloseCard));
       return { widgets, containers };
@@ -617,7 +634,7 @@ export function noticeScreen(model: () => NoticeModel): DrawnScreen {
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.title, id: m.titleId, cursor: null });
       y += 20;
 
-      const bottom = h - 28 - (m.footer ? ROW_H : 0);
+      const bottom = h - 28 - (m.footer ? versionLines(m.footer).length * ROW_H : 0);
       // As many rows as the screen has room for: a startup error carries its stack.
       let room = Math.max(1, Math.floor((bottom - y - 20) / ROW_H));
       const blocks = m.lines
@@ -647,8 +664,10 @@ export function noticeScreen(model: () => NoticeModel): DrawnScreen {
         widgets.push(...paintButtons(c, Math.min(y, bottom), m.buttons.map((b) => ({ ...b, parent: b.parent ?? m.buttonsId }))));
       }
       if (m.footer) {
-        c.drawTextCentred(fitText(m.footer, W - 8), W / 2, h - ROW_H, TEXT_GRAY);
-        widgets.push({ rect: { x: 0, y: h - ROW_H, w: W, h: ROW_H }, text: m.footer, cls: 'version', cursor: null });
+        const lines = versionLines(m.footer);
+        const fy = h - lines.length * ROW_H;
+        lines.forEach((line, i) => c.drawTextCentred(line, W / 2, fy + i * ROW_H, TEXT_GRAY));
+        widgets.push({ rect: { x: 0, y: fy, w: W, h: lines.length * ROW_H }, text: m.footer, cls: 'version', cursor: null });
       }
       return { widgets, containers };
     },

@@ -567,6 +567,7 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
       }
     }
     setVersionLine(`${versionText(side.info)} · local build · ${buildLine(side.info, running)}`);
+    sayPatch('Starting the game…');
     return {
       bytes,
       usingPatched: true,
