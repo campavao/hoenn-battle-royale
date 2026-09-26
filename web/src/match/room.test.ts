@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { BOT_FILL, botFillFor, canStart, clockLeftAt, decideStart, doorOf, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, type StartState } from './room';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState } from './room';
 import { freshMatch, noteMatch, ringClockLeft } from './lifecycle';
 import { Director, type DirectorWorld } from './director';
 import type { RosterEvent } from '../net/relay';
@@ -100,6 +100,7 @@ describe('when a match starts (POK-330 #42)', () => {
     isHost: true,
     roomStarted: false,
     countingDown: false,
+    played: false,
     match: freshMatch(),
     ...over,
   });
@@ -109,8 +110,22 @@ describe('when a match starts (POK-330 #42)', () => {
     expect(decideStart({ t: 'attached' }, page({ isHost: false }))).toEqual({ do: 'nothing' });
     expect(decideStart({ t: 'attached' }, page({ mode: 'quick' }))).toEqual({ do: 'count-down' });
     expect(decideStart({ t: 'attached' }, page({ mode: 'daily' }))).toEqual({ do: 'count-down' });
-    // quirk kept: an attach looks at no count already running, nor at a match already on
-    expect(decideStart({ t: 'attached' }, page({ countingDown: true, roomStarted: true, match: inFlight }))).toEqual({ do: 'count-down' });
+  });
+
+  // An attach looked at no count already running, nor at a match already on: every rejoin
+  // counted down again, mid-match included (POK-331 #13).
+  it('an attach into a match, one that has been won, or a count already running counts nothing', () => {
+    expect(decideStart({ t: 'attached' }, page({ roomStarted: true, match: inFlight }))).toEqual({ do: 'nothing' });
+    // a host back from a blip mid-match: the room screen was never down on its page
+    expect(decideStart({ t: 'attached' }, page({ match: inFlight }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'attached' }, page({ roomStarted: true, match: { ...inFlight, ended: true } }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'attached' }, page({ countingDown: true }))).toEqual({ do: 'nothing' });
+  });
+
+  it('neither the buzzer nor a count that ran out deals over a match that is on', () => {
+    expect(decideStart({ t: 'roster', members: [1, 2, 3] }, page({ match: inFlight }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'countdown' }, page({ match: inFlight }))).toEqual({ do: 'nothing' });
+    expect(decideStart({ t: 'countdown' }, page({ match: { ...inFlight, ended: true } }))).toEqual({ do: 'nothing' });
   });
 
   it('a hosted, joined or watched room never counts down or buzzes, nor any under #noauto', () => {
@@ -132,9 +147,17 @@ describe('when a match starts (POK-330 #42)', () => {
     for (const mode of ['quick', 'host'] as const) {
       expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ mode, match: inFlight }))).toEqual({ do: 'take-over', members: [2, 3] });
     }
-    // quirk kept: a match whose seed was never heard (a watcher's late start) is dealt afresh
-    expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ match: { ...inFlight, seed: 0 } }))).toEqual({ do: 'deal', members: [2, 3] });
     expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ match: { ...inFlight, ended: true } }))).toEqual({ do: 'nothing' });
+  });
+
+  // The #42 split pinned a deal: a new `start` under every ROM in the room, mid-match,
+  // fresh seed and fresh bots (POK-331 #13). The seed is what a match is picked up from.
+  it('an heir that never heard the match dealt (a watcher) hands the room on rather than dealing one', () => {
+    const unheard = { ...inFlight, seed: 0 };
+    for (const mode of ['quick', 'host'] as const) {
+      expect(decideStart({ t: 'promoted', members: [2, 3] }, page({ mode, match: unheard }))).toEqual({ do: 'step-aside' });
+    }
+    expect(decideStart({ t: 'host-again', members: [1, 2] }, page({ mode: 'host', match: unheard }))).toEqual({ do: 'step-aside' });
   });
 
   it('a host back from its own drop takes its match back', () => {
@@ -154,28 +177,163 @@ describe('when a match starts (POK-330 #42)', () => {
     expect(decideStart({ t: 'solo' }, page({ mode: 'solo' }))).toEqual({ do: 'deal' });
   });
 
-  it('quirk kept: nothing counts down after PLAY AGAIN, so a quick room of one never starts again', () => {
-    // back in the room: no match, no count, and only a roster event left to deal
-    const back = page({ match: freshMatch(), countingDown: false });
-    expect(decideStart({ t: 'roster', members: [1] }, back)).toEqual({ do: 'nothing' });
-    // ...and a room of two or more deals on its next roster at once, with no count
-    expect(decideStart({ t: 'roster', members: [1, 2] }, back)).toEqual({ do: 'deal', members: [1, 2] });
+  // The #42 split pinned this as it was: back from a match nothing counted a quick room
+  // down, so a room of one never started again unless its host pressed START, and one of
+  // two or more dealt on its next roster at once, results still up (POK-331 #13). Kanto's
+  // rematch (POK-167): the first lobby starts itself, the next match is READY UP's.
+  describe('back in a room that starts itself after a match: READY UP', () => {
+    const back = (over: Partial<StartState> = {}) => page({ played: true, match: freshMatch(), ...over });
+
+    it('neither buzzes, counts down on an attach, nor counts down for an heir', () => {
+      expect(decideStart({ t: 'roster', members: [1, 2] }, back())).toEqual({ do: 'nothing' });
+      expect(decideStart({ t: 'roster', members: [1, 2, 3, 4] }, back({ mode: 'daily' }))).toEqual({ do: 'nothing' });
+      expect(decideStart({ t: 'attached' }, back())).toEqual({ do: 'nothing' });
+      expect(decideStart({ t: 'promoted', members: [2] }, back())).toEqual({ do: 'nothing' });
+    });
+
+    it("START arms the first lobby's count, and START inside it deals at once", () => {
+      expect(startLabel(back())).toBe('READY UP');
+      expect(decideStart({ t: 'start', members: [1] }, back())).toEqual({ do: 'count-down' });
+      // a quick room of one restarts: the count runs out and deals
+      expect(decideStart({ t: 'countdown' }, back({ countingDown: false }))).toEqual({ do: 'deal' });
+      const counting = back({ countingDown: true });
+      expect(startLabel(counting)).toBe('START');
+      expect(decideStart({ t: 'start', members: [1, 2] }, counting)).toEqual({ do: 'deal', members: [1, 2] });
+    });
+
+    it('a hosted room, or any under #noauto, deals on START as it always has', () => {
+      for (const s of [back({ mode: 'host' }), back({ autoStarts: false })]) {
+        expect(startLabel(s)).toBe('START');
+        expect(decideStart({ t: 'start', members: [1, 2] }, s)).toEqual({ do: 'deal', members: [1, 2] });
+      }
+    });
+
+    it('the first lobby is unchanged: it starts itself, and START deals', () => {
+      expect(startLabel(page())).toBe('START');
+      expect(decideStart({ t: 'start', members: [1] }, page())).toEqual({ do: 'deal', members: [1] });
+      expect(decideStart({ t: 'roster', members: [1, 2] }, page())).toEqual({ do: 'deal', members: [1, 2] });
+    });
+  });
+});
+
+// It was a bare setTimeout per count and a one-second redraw for the page's life, and
+// neither was ever cleared (POK-331 #13).
+describe("a room's countdown to its own start", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  const counting = () => {
+    const clock = { t: 0 };
+    const redraw = vi.fn();
+    const go = vi.fn();
+    const count = new StartCountdown({ ms: 10_000, redraw, now: () => clock.t });
+    const pass = (ms: number) => {
+      clock.t += ms;
+      vi.advanceTimersByTime(ms);
+    };
+    return { count, redraw, go, pass };
+  };
+
+  it('counts whole seconds down to the start, redrawing each one, and is over before it deals', () => {
+    const { count, redraw, go, pass } = counting();
+    expect(count.running).toBe(false);
+    expect(count.secondsLeft()).toBeNull();
+    let seenRunning: boolean | null = null;
+    go.mockImplementation(() => (seenRunning = count.running));
+    count.arm(go);
+    expect(count.secondsLeft()).toBe(10);
+    pass(2_500);
+    expect(count.secondsLeft()).toBe(8);
+    expect(redraw).toHaveBeenCalledTimes(2);
+    pass(7_500);
+    expect(go).toHaveBeenCalledTimes(1);
+    expect(seenRunning).toBe(false); // what `go` asks sees no count running
+    expect(vi.getTimerCount()).toBe(0); // and nothing left ticking
+    // nine ticks, and once after the deal: one refused leaves the room up, STARTS IN gone
+    expect(redraw).toHaveBeenCalledTimes(10);
+    expect(redraw.mock.invocationCallOrder[9]).toBeGreaterThan(go.mock.invocationCallOrder[0]);
+    expect(count.secondsLeft()).toBeNull();
+    pass(10_000);
+    expect(redraw).toHaveBeenCalledTimes(10);
+    expect(go).toHaveBeenCalledTimes(1);
+  });
+
+  it('a start some other way lets go of the count and its redraw, and the count never deals', () => {
+    const { count, redraw, go, pass } = counting();
+    count.arm(go);
+    pass(3_000);
+    count.cancel(); // START pressed inside the count, or the page stood down
+    expect(count.running).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    pass(60_000);
+    expect(go).not.toHaveBeenCalled();
+    expect(redraw).toHaveBeenCalledTimes(3);
+  });
+
+  it('counts one count at a time: arming again starts over', () => {
+    const { count, go, pass } = counting();
+    count.arm(go);
+    pass(6_000);
+    count.arm(go);
+    expect(vi.getTimerCount()).toBe(2); // one timer, one redraw
+    pass(6_000);
+    expect(go).not.toHaveBeenCalled();
+    pass(4_000);
+    expect(go).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('how many bots the host fills to', () => {
   it('fills to the seats asked for, past the relay\'s sixteen humans (POK-330 #29)', () => {
-    expect(botFillFor({ max: 16, seats: 30 }, 2)).toBe(28);
+    expect(botFillFor({ max: 16, seats: 30 }, 2, true)).toBe(28);
   });
 
   it('reads an older relay\'s max, and the default with no roster at all', () => {
-    expect(botFillFor({ max: 8 }, 3)).toBe(5);
-    expect(botFillFor(null, 1)).toBe(BOT_FILL - 1);
+    expect(botFillFor({ max: 8 }, 3, true)).toBe(5);
+    expect(botFillFor(null, 1, true)).toBe(BOT_FILL - 1);
   });
 
   it('is never negative', () => {
-    expect(botFillFor({ max: 2 }, 3)).toBe(0);
-    expect(botFillFor({ max: 16, seats: 4 }, 6)).toBe(0);
+    expect(botFillFor({ max: 2 }, 3, true)).toBe(0);
+    expect(botFillFor({ max: 16, seats: 4 }, 6, true)).toBe(0);
+  });
+
+  // The room screen said FILL OFF and drew no bot seats, and START dealt six bots anyway:
+  // the deal read MAX and never the control (POK-331 #8). Kanto's botsAtStart: nothing to
+  // fill to while FILL is off.
+  it('deals none with FILL off, whatever MAX says', () => {
+    expect(botFillFor({ max: 8 }, 2, false)).toBe(0);
+    expect(botFillFor({ max: 16, seats: 30 }, 1, false)).toBe(0);
+    expect(botFillFor(null, 1, false)).toBe(0);
+    // ...and the room screen draws what START deals
+    const off = roomView(roster({ max: 8 }), 1, false);
+    expect(off.fill).toBe(botFillFor(roster({ max: 8 }), off.players, false));
+    const on = roomView(roster({ max: 16, seats: 30 }), 1, true);
+    expect(on.fill).toBe(botFillFor(roster({ max: 16, seats: 30 }), on.players, true));
+  });
+
+  it('refuses a deal nobody could win, bots counted, however it is asked for (Kanto POK-197)', () => {
+    // a quick room of one with FILL off counts itself down to exactly this
+    expect(dealable(1, botFillFor({ max: 8 }, 1, false))).toBe(false);
+    expect(dealable(1, botFillFor({ max: 8 }, 1, true))).toBe(true);
+    expect(dealable(2, 0)).toBe(true);
+    expect(dealable(0, 1)).toBe(false);
+  });
+});
+
+describe('the FILL control (POK-331 #8)', () => {
+  it('says what the host set: the bots START would deal, or OFF', () => {
+    expect(fillLabel(roomView(roster({ max: 8 }), 1, true))).toBe('FILL 6');
+    expect(fillLabel(roomView(roster({ max: 8 }), 1, false))).toBe('FILL OFF');
+  });
+
+  it('reads ON for a room full to MAX, so pressing it turns FILL off rather than on', () => {
+    const full = roomView(roster({ max: 2 }), 1, true);
+    expect(full.fill).toBe(0);
+    expect(fillLabel(full)).toBe('FILL 0');
   });
 });
 

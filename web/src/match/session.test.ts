@@ -6,6 +6,7 @@ import { botRows } from './lifecycle';
 import { loadCareer } from './career';
 import { loadLog } from './log';
 import { Roster } from './roster';
+import { soloRoster } from './host';
 import type { Bots } from '../bots/brain';
 import { createHostBots, type HostBots } from '../bots/host';
 import regionmapData from '../data/regionmap.json';
@@ -13,11 +14,12 @@ import { Bridge } from '../net/bridge';
 import { fakeEmulator, fakeRelay, memoryStore } from '../net/fakes.testutil';
 import type { RosterEvent } from '../net/relay';
 import { BR_CONT_FLAG, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
-import { PROTOCOL, type MapRef, type Msg, type NpcOutMsg, type PackedMon, type SpillMsg, type StartMsg } from '../net/wire';
+import { PROTOCOL, type MapRef, type Msg, type NpcOutMsg, type PackedMon, type SpillMsg, type StartMsg, type TickerMsg } from '../net/wire';
 
 const BASE = 0x0203d178; // gBrMailbox, per br-symbols.json
 const ROUTE_101: MapRef = { group: 0, num: 16 };
 const ROUTE_102: MapRef = { group: 0, num: 17 };
+const RUSTBORO_GYM: MapRef = { group: 11, num: 3 }; // ROXANNE is local id 1 (bosses.ts)
 
 const start = (seats: number[], seed = 20260916): StartMsg => ({
   t: 'start',
@@ -48,12 +50,11 @@ function spyBots() {
 }
 
 /** The books as a host at seat 0 keeps them, on a clock the test holds. */
-function books(over: Partial<SessionDeps> = {}) {
+function books(over: Partial<SessionDeps> = {}, roster = new Roster()) {
   let now = 1_000;
   const store = memoryStore();
   const toRom: Msg[] = [];
   const exit = vi.fn();
-  const roster = new Roster();
   roster.setMySeat(0);
   const view = { started: vi.fn(), decided: vi.fn(), partyLate: vi.fn() } satisfies SessionView;
   const deps: SessionDeps = {
@@ -68,7 +69,6 @@ function books(over: Partial<SessionDeps> = {}) {
     store,
     grace: new EndGrace({ graceMs: 4_000, winMaxMs: 60_000, pollMs: 500 }),
     exit,
-    keepParties: true,
     now: () => now,
     ...over,
   };
@@ -168,13 +168,6 @@ describe("one match's books (POK-330 #42)", () => {
     session.note({ t: 'party', seat: 7, mons: [mon, mon] }, { from: 7 });
     expect(view.partyLate).toHaveBeenCalledTimes(1);
     expect(session.parties.get(7)).toHaveLength(2);
-
-    const solo = books({ keepParties: false });
-    solo.session.note(start([0, 7]), 'page');
-    solo.session.note({ t: 'win', seat: 7 }, 'page');
-    solo.session.note({ t: 'party', seat: 7, mons: [mon] }, 'rom');
-    expect(solo.session.parties.size).toBe(0);
-    expect(solo.view.partyLate).not.toHaveBeenCalled();
   });
 
   it('what the page made itself is nobody busy and nothing for the bots', () => {
@@ -228,23 +221,49 @@ describe("one match's books (POK-330 #42)", () => {
     expect(session.loot.forMap(ROUTE_101)).toBeNull();
   });
 
-  it('hands over the loot where we stand once per map we arrive on', () => {
-    const { session } = books();
+  it('hands our own ROM the loot where it stands, once per map it arrives on', () => {
+    const { session, toRom } = books();
+    const spilled = () => toRom.filter((m): m is SpillMsg => m.t === 'spill').map((m) => m.bag?.key);
     session.note(bag(7), { from: 7 });
-    expect(session.standingLoot(place(0, ROUTE_101))?.bag?.key).toBe(0x07ff);
-    expect(session.standingLoot(place(0, ROUTE_101))).toBeNull();
-    expect(session.standingLoot({ t: 'out', seat: 0 })).toBeNull();
-    expect(session.standingLoot(place(0, ROUTE_102))).toBeNull(); // nothing lying there
-    expect(session.standingLoot(place(0, ROUTE_101))?.bag?.key).toBe(0x07ff);
+    session.note(place(0, ROUTE_101), 'rom');
+    expect(spilled()).toEqual([0x07ff]);
+    session.note(place(0, ROUTE_101), 'rom');
+    session.note({ t: 'out', seat: 0 }, 'rom');
+    expect(spilled()).toEqual([0x07ff]);
+    session.note(place(0, ROUTE_102), 'rom'); // nothing lying there
+    expect(spilled()).toEqual([0x07ff]);
+    session.note(place(0, ROUTE_101), 'rom');
+    expect(spilled()).toEqual([0x07ff, 0x07ff]);
+    // Somebody else arriving is nothing to our ROM, and neither is our own page's word.
+    session.note(place(7, ROUTE_102), { from: 7 });
+    session.note(place(0, ROUTE_102), 'page');
+    session.note(place(7, ROUTE_101), { from: 7 });
+    expect(spilled()).toEqual([0x07ff, 0x07ff]);
   });
 
   // POK-330 #22: PLAY AGAIN kept the last match, and each piece went wrong in the next.
+  // POK-295: every page draws the line itself, off the `npcout` the room already hears --
+  // and our own, which never comes back over the relay.
+  it('says a gym leader fell, whoever beat them, and not when the fog took the gym', () => {
+    const { session, toRom, roster } = books();
+    roster.seatBots([{ seat: 7, name: 'WALLY', skin: 0 }]);
+    const lines = () => toRom.filter((m) => m.t === 'ticker').map((m) => (m as TickerMsg).text);
+    session.note({ t: 'npcout', seat: 7, map: RUSTBORO_GYM, localId: 1 }, { from: 7 });
+    expect(lines()).toEqual(['WALLY BEAT ROXANNE!']);
+    session.note({ t: 'npcout', seat: 0, map: RUSTBORO_GYM, localId: 1 }, 'rom');
+    expect(lines()).toEqual(['WALLY BEAT ROXANNE!', 'P0 BEAT ROXANNE!']);
+    session.note({ t: 'npcout', seat: 7, map: RUSTBORO_GYM, localId: 1, fog: true }, { from: 7 });
+    session.note({ t: 'npcout', seat: 7, map: RUSTBORO_GYM, localId: 2 }, { from: 7 }); // a gym trainer
+    session.note({ t: 'npcout', seat: 7, map: RUSTBORO_GYM, localId: 1 }, 'page'); // the page's own word
+    expect(lines()).toHaveLength(2);
+  });
+
   it('ends a match without letting go of the match object, and starts the next table clean', () => {
-    const { session } = books();
+    const { session, toRom } = books();
     const match = session.match;
     session.note(start([0, 7]), 'page');
     session.note(bag(7), { from: 7 });
-    session.standingLoot(place(0, ROUTE_101));
+    session.note(place(0, ROUTE_101), 'rom');
     session.note({ t: 'busy', seat: 7, kind: 'battle' }, { from: 7 });
     session.greeted.add(7);
     session.owedLoot.add(7);
@@ -262,7 +281,9 @@ describe("one match's books (POK-330 #42)", () => {
     expect(session.log.current(0)?.winner).toBe(0);
     // ...and the map we stand on is news again to the next table.
     session.note(bag(7), { from: 7 });
-    expect(session.standingLoot(place(0, ROUTE_101))?.bag?.key).toBe(0x07ff);
+    toRom.length = 0;
+    session.note(place(0, ROUTE_101), 'rom');
+    expect(toRom).toEqual([expect.objectContaining({ t: 'spill', bag: expect.objectContaining({ key: 0x07ff }) })]);
   });
 
   // POK-331 #4. A trainer beaten while a seat's socket was down still stood on its screen,
@@ -311,9 +332,9 @@ describe("one match's books (POK-330 #42)", () => {
 });
 
 // Solo keeps its books in the same session as the room (POK-330 #42), and the two had
-// drifted before: solo never routed its fights to the bots (#17). What stays different
-// is on purpose -- no champion's team under the results (D1) and no restock on arrival
-// (D2) -- and the grace is solo's own: 8 s out to the lobby, not 4 s back to a room.
+// drifted before: solo never routed its fights to the bots (#17), and kept no champion's
+// team (POK-331 #26). Kanto's solo is the room with nobody else in it (lib/localroom.lua),
+// so what stays different is only the grace: 8 s out to the lobby, not 4 s back to a room.
 describe('solo, on the same books', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -322,15 +343,17 @@ describe('solo, on the same books', () => {
     vi.useRealTimers();
   });
 
-  /** The session the way runSolo builds it: seat 0, nobody's party kept, no fog of its
-   *  own, and the lobby for an exit. */
+  /** The session the way runSolo builds it: seat 0 by our own name, no fog of its own, and
+   *  the lobby for an exit. */
   function solo(over: Partial<SessionDeps> = {}, paradeDone?: () => boolean) {
-    return books({
-      keepParties: false,
-      defaultFog: undefined,
-      grace: new EndGrace({ graceMs: 8_000, winMaxMs: 60_000, pollMs: 500, paradeDone }),
-      ...over,
-    });
+    return books(
+      {
+        defaultFog: undefined,
+        grace: new EndGrace({ graceMs: 8_000, winMaxMs: 60_000, pollMs: 500, paradeDone }),
+        ...over,
+      },
+      soloRoster('MAY'),
+    );
   }
 
   it("starts from the director's own fog, not a copy of it", () => {
@@ -418,24 +441,35 @@ describe('solo, on the same books', () => {
     stuck.session.grace.cancel();
   });
 
-  it('keeps no party, mid-match or after the win (D1)', () => {
+  // POK-331 #26 (D1): solo kept no party, so a solo champion's parade had nothing under
+  // the results -- where the room's champion sees YOUR TEAM.
+  it("keeps our own ROM's team as the parade starts, and draws the results again for it", () => {
     const { session, view } = solo();
     session.note(start([0, 31]), 'page');
-    session.note({ t: 'party', seat: 0, mons: [mon] }, 'rom');
-    expect(session.parties.size).toBe(0);
+    session.note({ t: 'out', seat: 31 }, 'page');
     session.note({ t: 'win', seat: 0 }, 'page');
-    session.note({ t: 'party', seat: 0, mons: [mon] }, 'rom');
-    expect(session.parties.size).toBe(0);
     expect(view.partyLate).not.toHaveBeenCalled();
+    session.note({ t: 'party', seat: 0, mons: [mon] }, 'rom');
+    expect(session.parties.get(0)).toEqual([mon]);
+    expect(view.partyLate).toHaveBeenCalledTimes(1);
   });
 
-  it("pushes nothing when our own ROM arrives on a map with loot on it: solo never restocks (D2)", () => {
+  // POK-331 #26 (D4): the gym line was drawn only by the room's own ear on our ROM.
+  it('says so on our ticker when we beat a gym leader', () => {
+    const { session, toRom } = solo();
+    session.note({ t: 'npcout', seat: 0, map: RUSTBORO_GYM, localId: 1 }, 'rom');
+    expect(toRom).toEqual([{ t: 'ticker', seat: 0, kind: 'kill', text: 'MAY BEAT ROXANNE!' }]);
+  });
+
+  // POK-331 #26 (D2): solo never restocked, so a bot's spill that the ROM's eight-piece
+  // ground had no room for when it fell was never on the map when we got there.
+  it("hands our own ROM a bot's spill when we arrive on its map, and again on coming back", () => {
     const { session, toRom } = solo();
     session.note(bag(31), 'page');
     session.note(place(0, ROUTE_101), 'rom');
     session.note(place(0, ROUTE_102), 'rom');
-    expect(toRom).toEqual([]);
-    expect(session.loot.forMap(ROUTE_101)?.bag?.key).toBe(0x1fff); // still on the table
+    session.note(place(0, ROUTE_101), 'rom');
+    expect(toRom.map((m) => m.t === 'spill' && m.bag?.key)).toEqual([0x1fff, 0x1fff]);
   });
 });
 
@@ -480,7 +514,6 @@ describe('the books behind a Bridge, wired the way the room wires them', () => {
         store: memoryStore(),
         grace: new EndGrace({ graceMs: 4_000, winMaxMs: 60_000, pollMs: 500 }),
         exit: () => {},
-        keepParties: true,
       },
       view,
     );

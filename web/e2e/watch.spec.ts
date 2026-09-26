@@ -40,11 +40,31 @@ test('a watcher walks in on a running match, and the match is not theirs', async
     const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
     if (!code) throw new Error('could not parse a room code');
     const watcher = await watcherCtx.newPage();
+    // What the watcher tells the relay about running the room, in the order it says it.
+    const offers: boolean[] = [];
+    watcher.on('websocket', (ws) =>
+      ws.on('framesent', (frame) => {
+        try {
+          const msg = JSON.parse(String(frame.payload)) as { type?: string; ok?: boolean };
+          if (msg.type === 'can_host') offers.push(msg.ok !== false);
+        } catch {
+          /* not a line of ours */
+        }
+      }),
+    );
     await watcher.goto(`/#watch=${code}&rom=${rom}`);
     await watcher.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
 
     // The late start: the fog's position arrives at once rather than at the next ring.
     await expect(watcher.locator('#match-strip')).toContainText(/RING \d/, { timeout: 60_000 });
+
+    // POK-331 #13 review: a page that never heard the match dealt has no seed to pick it
+    // up from. It offered to run it anyway, and made host it could only stand aside --
+    // with nobody else in the room, keeping a match nobody ran. Kanto's late start takes
+    // itself off the heir list, and so does this page, once the ring says a match is on.
+    await expect
+      .poll(() => offers.at(-1), { message: 'the watcher withdrew from the succession', timeout: 10_000 })
+      .toBe(false);
 
     // POK-330 #4: walking in is a roster event, and no roster lists a bot -- so the host
     // counted every bot still standing as departed and, when the ten-second grace ran

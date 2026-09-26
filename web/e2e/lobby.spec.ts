@@ -135,6 +135,48 @@ test('the host gets the room controls and START, and the guest does not', async 
   }
 });
 
+// POK-331 #8. The room said FILL OFF, drew no bot seats and promised two trainers, and
+// START dealt the bots anyway: the deal read MAX and never the control.
+test('FILL OFF deals a match of the people in the room and no bots', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&fast&testmon&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+    const guest = await guestCtx.newPage();
+    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
+    await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 60_000 });
+
+    await expect(host.locator('#room-fill')).toContainText(/FILL \d+/, { timeout: 30_000 });
+    await host.locator('#room-fill').click();
+    await expect(host.locator('#room-fill')).toHaveText('FILL OFF');
+    await expect(host.locator('#room-note')).toHaveText('START: 2 trainers.');
+
+    await host.locator('#room-start').click();
+    await host.waitForFunction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => (window as any).__br?.director?.state?.phase === 'safari',
+      undefined,
+      { timeout: 30_000 },
+    );
+    const dealt = await host.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const br = (window as any).__br;
+      return { bots: br.botCount() as number, alive: br.director.state.alive as number, seats: br.match.seats.length as number };
+    });
+    expect(dealt).toEqual({ bots: 0, alive: 2, seats: 2 });
+  } finally {
+    await hostCtx.close();
+    await guestCtx.close();
+  }
+});
+
 // No `noauto` here on purpose: that flag is what kept every other room test off the
 // path a real player takes. A host that drops before START (iOS closes the socket when
 // you switch apps) hands the room to a guest, and the guest used to start the match.

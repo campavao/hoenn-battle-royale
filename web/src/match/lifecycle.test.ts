@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { botRows, botSeatsOf, catchUp, dealPlan, departedSeats, freshMatch, lootOwed, noteMatch, onAgain, onPromotion, ringClockLeft, seatsFor } from './lifecycle';
+import { botRows, botSeatsOf, catchUp, dealPlan, departedSeats, freshMatch, lootOwed, noteMatch, offersToHost, onAgain, onPromotion, ringClockLeft, seatsFor, unheardMatch } from './lifecycle';
 import { Loot } from './loot';
 import { dealBots } from '../bots/roster';
 import type { RosterEvent } from '../net/relay';
@@ -73,6 +73,40 @@ describe('the next match, after PLAY AGAIN', () => {
     // where START is the heir's. Taking it over restarted its clock and bots on ROMs
     // that had rebooted into Littleroot.
     expect(onPromotion({ active: true, ended: true })).toBe('none');
+  });
+});
+
+// POK-331 #13 review: a page that walked in on a match -- or whose socket was down for its
+// `start` -- has no seed to pick it up from. It offered to run it anyway, so the relay made
+// it host, it stood aside (can_host false), and with nobody else the room kept it: no
+// clock, no ring, bots standing still, and no `win` ever.
+describe('who offers to run the room', () => {
+  const inFlight = () => ({ ...freshMatch(), seed: 7, active: true });
+
+  it('a trainer in the match, and not one who is out', () => {
+    const match = inFlight();
+    expect(offersToHost(match, 1)).toBe(true);
+    match.out.add(1);
+    expect(offersToHost(match, 1)).toBe(false);
+    expect(offersToHost(match, 2), 'somebody else going out is not us').toBe(true);
+  });
+
+  it('not a page in a match it never heard dealt: a ring or a clock with no start before it', () => {
+    const match = freshMatch();
+    const watcher = { dealing: false, roster: null, defaultFog: 120 };
+    noteMatch(match, 120, { t: 'ring', seat: 1, phase: 2, sx: 0, sy: 0, r: 9, place: 'ROUTE 104' }, 0, watcher);
+    expect(unheardMatch(match)).toBe(true);
+    expect(offersToHost(match, 5)).toBe(false);
+    const late = freshMatch();
+    noteMatch(late, 120, { t: 'clock', seat: 1, left: 30 }, 0, watcher);
+    expect(offersToHost(late, 5), 'the clock of a match whose start we missed').toBe(false);
+  });
+
+  it('everybody between matches, and a page that heard the start', () => {
+    expect(offersToHost(freshMatch(), 5), 'before any match, or back from one').toBe(true);
+    expect(unheardMatch(inFlight())).toBe(false);
+    const won = { ...freshMatch(), active: true, ended: true };
+    expect(offersToHost(won, 5), 'a match that has been won is nobody\'s to run').toBe(true);
   });
 });
 

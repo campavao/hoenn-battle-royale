@@ -28,6 +28,8 @@ export interface RoomView {
   max: number;
   open: boolean;
   pass: boolean;
+  /** FILL is on: bots take the seats nobody has. */
+  fillOn: boolean;
   /** Bots the host would deal at START to make the room up to MAX. */
   fill: number;
 }
@@ -52,8 +54,16 @@ export function roomView(roster: RosterEvent, mySeat: number, fillOn: boolean): 
     max,
     open: roster.open,
     pass: roster.pass,
-    fill: fillOn ? Math.max(0, max - players) : 0,
+    fillOn,
+    fill: botFillFor(roster, players, fillOn), // what START deals: the same rule
   };
+}
+
+/** The FILL control: how many bots START would deal, or OFF. What the host set, not what
+ *  it comes to -- a room full to MAX with FILL on read FILL OFF, and pressing it to turn
+ *  FILL "on" turned it off. */
+export function fillLabel(view: Pick<RoomView, 'fillOn' | 'fill'>): string {
+  return view.fillOn ? `FILL ${view.fill}` : 'FILL OFF';
 }
 
 /** The next MAX up the ladder, wrapping -- one control, one button. */
@@ -77,7 +87,16 @@ export function nextDoor(door: Door): Door {
 /** Can the host start? A match needs somebody in it -- with FILL off and nobody else
  *  here, START would deal a one-trainer battle royale. */
 export function canStart(view: RoomView): boolean {
-  return view.isHost && view.players + view.fill >= 2;
+  return view.isHost && dealable(view.players, view.fill);
+}
+
+/** Would a deal of these make a match anybody can win? Two in it at least, bots counted:
+ *  a director whose field starts at one never declares a winner. Kanto's canStart
+ *  (POK-197), which refuses every way in -- START, the countdown, the buzzer -- and not
+ *  only the button: with FILL off, a quick room of one counts itself down to exactly
+ *  that match. */
+export function dealable(humans: number, bots: number): boolean {
+  return humans + bots >= 2;
 }
 
 /** The one line under the roster: what pressing START would actually make. */
@@ -98,6 +117,66 @@ export const BOT_FILL = 8;
 
 export const AUTO_START_MS = 10_000; // "for now": a room starts 10s after hosting, or once 2+ seats
 
+/** A room's count to its own start (quick play, the daily), and the once-a-second redraw
+ *  that shows STARTS IN ticking: one count at a time, and the two let go of together
+ *  (POK-331 #13). They were a bare setTimeout per count and a redraw interval for the
+ *  page's life, and nothing cleared either: a START inside the count left it armed, to
+ *  deal again whenever it ran out -- Kanto's POK-167, "the room just went again" -- and a
+ *  page that had lost its socket or stood down counted on to a deal no longer its own. */
+export class StartCountdown {
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private tick: ReturnType<typeof setInterval> | null = null;
+  private due: number | null = null;
+
+  constructor(
+    private readonly opts: {
+      ms: number;
+      /** Draws the room again, for the seconds left. */
+      redraw(): void;
+      now?(): number;
+    },
+  ) {}
+
+  private now(): number {
+    return this.opts.now ? this.opts.now() : performance.now();
+  }
+
+  /** A count is running. */
+  get running(): boolean {
+    return this.due !== null;
+  }
+
+  /** Whole seconds to the start, for STARTS IN; null with no count running. */
+  secondsLeft(): number | null {
+    return this.due === null ? null : Math.max(0, Math.ceil((this.due - this.now()) / 1000));
+  }
+
+  /** Count down to `go`, dropping any count already running. The count is over before
+   *  `go` runs, so what `go` asks sees none; and the room is drawn once more after it,
+   *  since a deal refused (FILL off, nobody else here) leaves the room up with STARTS IN
+   *  still on it. */
+  arm(go: () => void): void {
+    this.cancel();
+    this.due = this.now() + this.opts.ms;
+    this.timer = setTimeout(() => {
+      this.cancel();
+      go();
+      this.opts.redraw();
+    }, this.opts.ms);
+    this.tick = setInterval(() => this.opts.redraw(), 1000);
+  }
+
+  /** Stop counting: a match started some other way, or this page is no longer the one
+   *  to start it. */
+  cancel(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    if (this.tick !== null) clearInterval(this.tick);
+    this.timer = null;
+    this.tick = null;
+    this.due = null;
+  }
+}
+
 /** Which rooms start on their own (POK-320, Cam: "if I click an option that isn't quick
  *  play, the game should not start automatically"). Quick play and the daily are
  *  games that are going; a hosted room waits for its host's START. */
@@ -107,8 +186,11 @@ export function startsItself(mode: RoomMode): boolean {
 
 /** How many bots the host fills to (POK-241's FILL), held to what the room has room
  *  for. `seats` is MAX as the host set it; `max` is only the humans (POK-330 #29), and
- *  all an older relay sends. */
-export function botFillFor(roster: Pick<RosterEvent, 'seats' | 'max'> | null, humans: number): number {
+ *  all an older relay sends. None with FILL off: the room screen has said "FILL OFF" and
+ *  drawn no bot seats since POK-241, and START dealt them anyway (POK-331 #8). Kanto's
+ *  botsAtStart is the same rule -- its fill target is zero while FILL is off. */
+export function botFillFor(roster: Pick<RosterEvent, 'seats' | 'max'> | null, humans: number, fillOn: boolean): number {
+  if (!fillOn) return 0;
   return Math.max(0, (roster?.seats ?? roster?.max ?? BOT_FILL) - humans);
 }
 
@@ -139,6 +221,12 @@ export interface StartState {
   roomStarted: boolean;
   /** A countdown is running already. */
   countingDown: boolean;
+  /** A match has been played in this room and we are back from it: the next one is the
+   *  host's to call (Kanto's READY UP, POK-167). This page's, not the room's: one that
+   *  came in after the match, or reloaded, has not played. Everybody who has is back on
+   *  the heir list ahead of it (they came first), so it inherits only a room none of
+   *  them can run, and counts that down as its first lobby. */
+  played: boolean;
   match: Pick<MatchSnapshot, 'active' | 'ended' | 'seed'>;
 }
 
@@ -148,20 +236,53 @@ export type StartDecision =
   /** Deal a new match to `members`, or to the relay's last roster when absent. */
   | { do: 'deal'; members?: number[] }
   /** Pick up the match in flight from what the wire has said of it. */
-  | { do: 'take-over'; members: number[] };
+  | { do: 'take-over'; members: number[] }
+  /** Made host of a match this page never heard dealt: hand the room on (can_host false). */
+  | { do: 'step-aside' };
 
-/** The one start policy: whether a match starts now, later, or not at all. Each rule is
- *  the condition its call site wrote out for itself, quirks and all:
- *  - nothing counts down after PLAY AGAIN, so a quick room of one never starts again and
- *    one of two or more deals on its next roster at once;
- *  - `attached` counts down on every attach, a rejoin mid-match included;
- *  - a takeover of a match whose seed was never heard (a watcher's) deals a fresh one.
+/** READY UP (Kanto's POK-167): back in a room that starts itself after a match, START
+ *  arms the first lobby's count instead of dealing, and START inside that count deals at
+ *  once. Quick play's promise is a game now, and the first lobby keeps it; the match after
+ *  it is the one nobody asked for, so the host says when, and the count is everybody
+ *  else's window to read their result, check their party, or leave. */
+function readiesUp(s: Pick<StartState, 'mode' | 'autoStarts' | 'played' | 'countingDown'>): boolean {
+  return s.played && startsItself(s.mode) && s.autoStarts && !s.countingDown;
+}
+
+/** What START says: READY UP when a press arms the count rather than dealing. */
+export function startLabel(s: Pick<StartState, 'mode' | 'autoStarts' | 'played' | 'countingDown'>): string {
+  return readiesUp(s) ? 'READY UP' : 'START';
+}
+
+/** Picking a match up needs its seed: the bots' names, teams and walks are dealt from it
+ *  (relay/server.js's migration note). A page that never heard the `start` -- a watcher
+ *  who walked in on the match -- cannot run it, and dealing one afresh put a new `start`
+ *  under every ROM in the room mid-match (POK-331 #13). Kanto keeps that page off the
+ *  heir list (a late start sends can_host false), and so does this one, from the first
+ *  `ring` or `clock` it hears (lifecycle.ts's offersToHost); one promoted before that
+ *  hands the room on, to somebody who heard the deal. */
+function pickUp(s: StartState, members: number[]): StartDecision {
+  return s.match.seed !== 0 ? { do: 'take-over', members } : { do: 'step-aside' };
+}
+
+/** The one start policy: whether a match starts now, later, or not at all, one rule per
+ *  place the page used to decide it for itself (POK-330 #42).
+ *  A room that starts itself does so once (POK-331 #13, Kanto's POK-167): back from a
+ *  match nothing counts it down or buzzes it -- one of two or more used to deal on its
+ *  next roster at once, the results still up -- and START readies it up.
+ *  Nothing counts down, or deals, over a match that is on (POK-331 #13): an attach was a
+ *  count on every rejoin, mid-match included, and the buzzer and a count that ran out
+ *  leaned on startDirector finding a director already there.
  *  What the page cannot do anyway -- a director already running, no seat, not the host,
  *  nobody to deal to -- is startDirector's to refuse. */
 export function decideStart(trigger: StartTrigger, s: StartState): StartDecision {
   switch (trigger.t) {
     case 'attached':
-      return s.isHost && s.autoStarts && startsItself(s.mode) ? { do: 'count-down' } : { do: 'nothing' };
+      // The room's first host, in a room waiting for its first match: a rejoin into a
+      // match, into one that has been won, or into a count already running is none.
+      return s.isHost && s.autoStarts && startsItself(s.mode) && !s.roomStarted && !s.match.active && !s.countingDown && !s.played
+        ? { do: 'count-down' }
+        : { do: 'nothing' };
     case 'promoted': {
       // An heir to a room that starts itself (quick play, the daily) before any match
       // counts it down, after the STARTS IN count (POK-320); the room's own first host
@@ -170,30 +291,28 @@ export function decideStart(trigger: StartTrigger, s: StartState): StartDecision
       // waits for START, now this page's (play-test 2026-09-19: the host switched apps,
       // iOS dropped its socket, and the guest it handed to started the match unasked).
       // After one it is the same, once the grace brings everybody back: a match that has
-      // been won is not one to take over (POK-330 #22).
+      // been won is not one to take over (POK-330 #22), and the next is READY UP's.
       const next = onPromotion(s.match);
       if (next === 'room') {
-        return !s.roomStarted && startsItself(s.mode) && s.autoStarts && !s.countingDown
+        return !s.roomStarted && startsItself(s.mode) && s.autoStarts && !s.countingDown && !s.played
           ? { do: 'count-down' }
           : { do: 'nothing' };
       }
-      if (next === 'take-over') {
-        return s.match.seed !== 0
-          ? { do: 'take-over', members: trigger.members }
-          : { do: 'deal', members: trigger.members };
-      }
+      if (next === 'take-over') return pickUp(s, trigger.members);
       return { do: 'nothing' };
     }
     case 'host-again':
-      return { do: 'take-over', members: trigger.members };
+      return pickUp(s, trigger.members);
     case 'roster':
-      // The buzzer: a room that starts itself goes once two are in it.
-      return trigger.members.length >= 2 && s.autoStarts && startsItself(s.mode)
+      // The buzzer: a room that starts itself goes once two are in it -- a room waiting
+      // for its first match, not one running or one back from it.
+      return trigger.members.length >= 2 && s.autoStarts && startsItself(s.mode) && !s.match.active && !s.played
         ? { do: 'deal', members: trigger.members }
         : { do: 'nothing' };
     case 'start':
-      return { do: 'deal', members: trigger.members };
+      return readiesUp(s) ? { do: 'count-down' } : { do: 'deal', members: trigger.members };
     case 'countdown':
+      return s.match.active ? { do: 'nothing' } : { do: 'deal' };
     case 'solo':
       return { do: 'deal' };
   }

@@ -151,6 +151,18 @@ test("a guest reads its result for the whole grace, whatever the host's `again` 
     await expect(panel).toBeHidden({ timeout: 90_000 });
     expect(Date.now() - shownAt, 'the result stayed up for the grace').toBeGreaterThanOrEqual(3_500);
     await expect(guest.locator('#room-code')).toHaveText(`Room ${code}`, { timeout: 30_000 });
+
+    // POK-331 #13 review: back in the room, whoever went out is on the heir list again. A
+    // guest out in the match said can_host false and nothing ever said true, so a host
+    // leaving between matches found nobody to hand the room to -- or handed it to a
+    // newcomer ahead of everybody who had played. The host goes; the guest has the room.
+    const seat = await guest.evaluate(() => (window as unknown as BrWindow).__br.bridge.seat as number);
+    await hostCtx.close();
+    await guest.waitForFunction(
+      (me) => (window as unknown as BrWindow).__br.controls?.roster?.host === me,
+      seat,
+      { timeout: 30_000 },
+    );
   } finally {
     await guestCtx.close();
     await hostCtx.close().catch(() => {});

@@ -80,6 +80,23 @@ export function onPromotion(match: Pick<MatchSnapshot, 'active' | 'ended'>): 'ta
   return match.ended ? 'none' : 'take-over';
 }
 
+/** A match this page is in but never heard dealt: a watcher who walked in on it, or a seat
+ *  whose socket was down for the `start`. A `ring` or a `clock` says it is on, and only
+ *  the `start` carries the seed it is picked up from (the bots are dealt from it). */
+export function unheardMatch(match: Pick<MatchSnapshot, 'active' | 'ended' | 'seed'>): boolean {
+  return match.active && !match.ended && match.seed === 0;
+}
+
+/** Whether this page offers to run the room if its host goes (POK-252's `can_host`). Not a
+ *  trainer who is out: the authority stays with somebody who has a reason to stay (Kanto's
+ *  POK-116). Nor a page in a match it never heard dealt, which, made host, could only hand
+ *  it on (POK-331 #13): off the heir list from the start, as Kanto's late start is, it
+ *  leaves the relay to wait for the host or close the room when nobody else can run it,
+ *  rather than to promote a page that runs nothing. Between matches everybody offers. */
+export function offersToHost(match: Pick<MatchSnapshot, 'active' | 'ended' | 'seed' | 'out'>, seat: number): boolean {
+  return !match.out.has(seat) && !unheardMatch(match);
+}
+
 /** What a page does with the host's `again` (POK-258). The host sends it with the `win`,
  *  for a page whose socket blinked over that and would otherwise sit in a finished match
  *  for ever: recovery, not the way out. The way out is each page's own grace, and a page

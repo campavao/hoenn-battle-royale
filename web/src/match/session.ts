@@ -6,13 +6,15 @@
 // host's results never saw its own bots go out (#16), PLAY AGAIN kept half the last
 // match (#22). So everything the page learns about the match it is in goes through
 // one note(msg, via), and the books are here: the match as anybody can see it, the loot,
-// the results, the record, the round's log, who is busy, and the verdict.
+// the results, the record, the round's log, who is busy, and the verdict -- and the one
+// line every page draws for itself off what it hears, a gym leader falling.
 //
 // No page here: storage, the ROM and the screen are handed in, so vitest drives it.
 import { routeToBots } from '../bots/adapt';
 import type { Bots } from '../bots/brain';
 import type { RosterEvent } from '../net/relay';
-import type { Msg, NpcOutMsg, PackedMon, SpillMsg } from '../net/wire';
+import type { Msg, NpcOutMsg, PackedMon, SpillMsg, TickerMsg } from '../net/wire';
+import { bossAt } from './bosses';
 import { careerLine, recordMatch } from './career';
 import { DEFAULT_FOG_SECS } from './director';
 import type { EndGrace } from './grace';
@@ -22,6 +24,7 @@ import { Loot } from './loot';
 import { MatchRecord } from './record';
 import { Results } from './results';
 import type { Roster } from './roster';
+import * as Ticker from './ticker';
 
 /** Where a message came from, which decides what else it does.
  *  - 'page': made here -- our bots, our director, the host speaking for a seat. Booked,
@@ -53,9 +56,6 @@ export interface SessionDeps {
   grace: EndGrace;
   /** Out of a decided match, once its grace is up. */
   exit(): void;
-  /** Keep every seat's last `party`, for the champion's team under the results
-   *  (POK-243). The room's; solo has never shown one. */
-  keepParties: boolean;
   now?(): number;
 }
 
@@ -65,8 +65,9 @@ export interface SessionView {
   started?(): void;
   /** Our match was decided: draw the results, with the career line under them. */
   decided(careerLine: string): void;
-  /** A team arrived after the results were drawn: the champion's parade (POK-243). */
-  partyLate?(): void;
+  /** A team arrived after the results were drawn: the champion's parade (POK-243).
+   *  Not optional: solo went without it, and its champion's team was never drawn. */
+  partyLate(): void;
 }
 
 /** A bag we just took hands its contents over (POK-280).
@@ -89,6 +90,15 @@ export function giveBag(loot: Loot, msg: Msg, push: (m: Msg) => void): void {
   if (msg.t !== 'pickup' || msg.item !== undefined) return;
   const items = loot.bagItems(msg.key);
   if (items && items.length > 0) push({ t: 'give', items });
+}
+
+/** A gym leader fell (POK-295): the line every page draws off the `npcout` that already
+ *  takes the sprite off every map, so nothing new crosses the wire. Not the fog taking a
+ *  gym, which is nobody's win. */
+function bossFell(msg: Msg, nameOf: (seat: number) => string): TickerMsg | null {
+  if (msg.t !== 'npcout' || msg.fog) return null;
+  const boss = bossAt(msg.map, msg.localId);
+  return boss ? Ticker.felled(msg.seat, nameOf(msg.seat), boss) : null;
 }
 
 /** Who is in a battle or a menu right now, off the ROMs' own `busy` (POK-230). The
@@ -116,10 +126,12 @@ export class MatchSession {
   /** What each seat did in the match, for the card under the parade (POK-303). */
   readonly record = new MatchRecord();
   readonly log = new MatchLog();
-  /** The last team each seat was seen carrying, from any `party` that crossed the page
-   *  (keepParties). Kept for one thing (POK-243): the champion's own ROM sends its party
-   *  as the parade starts, and the results screen is the shell's half of that parade. A
-   *  `party` is otherwise an answer to a spectator's peek and belongs to whoever asked. */
+  /** The last team each seat was seen carrying, from any `party` that crossed the page.
+   *  Kept for one thing (POK-243): the champion's own ROM sends its party as the parade
+   *  starts, and the results screen is the shell's half of that parade. A `party` is
+   *  otherwise an answer to a spectator's peek and belongs to whoever asked. Solo keeps
+   *  them too (POK-331 #26): Kanto's solo is the room with nobody else in it, and a solo
+   *  champion's parade has the same team under it as a room's. */
   readonly parties = new Map<number, PackedMon[]>();
   /** Who is in a battle or a menu (noteBusy). */
   readonly busy = new Set<number>();
@@ -207,7 +219,9 @@ export class MatchSession {
    *   7. the first `win` we hear: the round saved, the career counted, the results drawn,
    *      the ROM told who won, and the grace armed;
    *   8. anything the page did not make itself: who is busy;
-   *   9. ...and a fight with one of our bots, to the brain, with whose ROM said it. */
+   *   9. ...and a fight with one of our bots, to the brain, with whose ROM said it;
+   *  10. our own ROM arriving on a map: what is lying there, back into it (POK-232);
+   *  11. a gym leader beaten, by us or by the room: the line, into our own ROM. */
   note(msg: Msg, via: Via): void {
     const now = this.now();
     if (msg.t === 'npcout' && !msg.fog) {
@@ -231,12 +245,12 @@ export class MatchSession {
       this.deps.rows()?.seatBots(botRows(msg.seed, this.match.botSeats));
       this.view.started?.();
     }
-    if (msg.t === 'party' && this.deps.keepParties) {
+    if (msg.t === 'party') {
       this.parties.set(msg.seat, msg.mons);
       // The champion's own party arrives after the `win` that put the results on
       // screen -- their ROM sends it as the parade starts (POK-243) -- so the panel
       // is drawn again rather than waiting for a team that came too late.
-      if (this.booked) this.view.partyLate?.();
+      if (this.booked) this.view.partyLate();
     }
     if (msg.t === 'start') {
       this.field = msg.spawns.length;
@@ -259,6 +273,16 @@ export class MatchSession {
     const bots = this.deps.bots();
     const from = via === 'rom' ? me : via.from;
     if (bots && from !== null) routeToBots(bots, msg, from);
+    // In the books, not the room's out-observer (POK-331 #26): solo had no such ear, so it
+    // never restocked, and a spill the ROM's eight-piece ground had no room for was lost.
+    if (via === 'rom') {
+      const standing = this.standingLoot(msg);
+      if (standing) this.deps.toRom(standing);
+    }
+    // Every page says so for itself -- our own win never comes back over the relay -- and
+    // here, solo says it too (POK-331 #26): Kanto's news has a fallen leader in a solo match.
+    const fell = bossFell(msg, (seat) => this.deps.nameOf(seat));
+    if (fell) this.deps.toRom(fell);
   }
 
   private decide(winner: number | undefined, me: number, now: number): void {
@@ -285,8 +309,10 @@ export class MatchSession {
 
   /** The loot standing where our own trainer has just arrived, once per map (POK-232).
    *  Our own `place` is how the page learns we changed maps -- there is no separate "I
-   *  have arrived" message, and this one is already on the wire four times a second. */
-  standingLoot(msg: Msg): SpillMsg | null {
+   *  have arrived" message, and this one is already on the wire four times a second.
+   *  The ROM holds eight pieces for the whole match, and a spill with no room left is
+   *  dropped until the page sends it again (br_loot.c, Add): this is that again. */
+  private standingLoot(msg: Msg): SpillMsg | null {
     if (msg.t !== 'place' || !msg.map) return null;
     const key = `${msg.map.group}:${msg.map.num}`;
     if (key === this.lootMap) return null;
