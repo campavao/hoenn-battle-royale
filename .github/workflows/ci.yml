@@ -30,6 +30,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Upstream edits are guarded
         run: python3 tools/br/check-guards.py
+      # The lint sees names; this sees lines. With the guards taken out, every pret file
+      # must be pret's at the commit we fork from -- no reformatted line, no trailing
+      # comma, no blank line beside a hook. The shallow checkout lacks that commit, so it
+      # is fetched by sha first (it is reachable from this branch).
+      - name: Pret's lines are pret's outside the guards
+        run: |
+          git fetch --depth=1 --no-tags origin "$(cat tools/br/BASELINE_COMMIT)"
+          python3 tools/br/pret-intact.py
 
   # Builds both ROMs (baseline pret, and this fork) with agbcc - the byte-matching
   # compiler, because the release patch must be a diff of our changes only, never a

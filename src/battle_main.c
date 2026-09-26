@@ -699,14 +699,15 @@ static void CB2_InitBattleInternal(void)
     else
         SetMainCallback2(CB2_HandleStartBattle);
 
-    if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED))
 #if BR
-     // A bot's party is already in gEnemyParty, put there from the wire (POK-238):
-     // asking gTrainers for one would throw it away. A duel stages both sides the
-     // same way, and CreateNPCTrainerParty would clobber the enemy half of it.
-     && !BrBot_PartyIsStaged() && !BrDuel_Running()
+    // A bot's party is already in gEnemyParty, put there from the wire (POK-238):
+    // asking gTrainers for one would throw it away. A duel stages both sides the
+    // same way, and CreateNPCTrainerParty would clobber the enemy half of it.
+    if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED))
+     && !BrBot_PartyIsStaged() && !BrDuel_Running())
+#else
+    if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED)))
 #endif
-    )
     {
         CreateNPCTrainerParty(&gEnemyParty[0], gTrainerBattleOpponent_A, TRUE);
         if (gBattleTypeFlags & BATTLE_TYPE_TWO_OPPONENTS)
@@ -1944,8 +1945,8 @@ bool8 BrBattle_Choosing(void)
 {
     return gBattleMainFunc == HandleTurnActionSelectionState;
 }
-#endif
 
+#endif
 #define sState data[0]
 #define sDelay data[4]
 
@@ -4272,19 +4273,18 @@ static void HandleTurnActionSelectionState(void)
                     }
                     break;
                 case B_ACTION_USE_ITEM:
-                    if (
 #if BR
-                        // The bag works against a person (POK-207 in Kanto). Emerald
-                        // bans items in every link battle -- Nintendo's own link rules,
-                        // not a limit of the cable -- and a battle royale where the bag
-                        // works against a bot and not against a player is two games.
-                        // Our link is the mailbox (br_netlink.c) and the item action
-                        // crosses it like any other, so the ban is lifted for ours --
-                        // and for a spectator's replay of one (POK-330 #12) -- and left
-                        // alone for everybody else's.
-                        !BrBattle_ItemsAllowed() &&
+                    // The bag works against a person (POK-207 in Kanto). Emerald bans
+                    // items in every link battle -- Nintendo's own link rules, not a
+                    // limit of the cable -- and a battle royale where the bag works
+                    // against a bot and not against a player is two games. Our link is
+                    // the mailbox (br_netlink.c) and the item action crosses it like
+                    // any other, so the ban is lifted for ours -- and for a spectator's
+                    // replay of one (POK-330 #12) -- and left alone for everybody else's.
+                    if (!BrBattle_ItemsAllowed() && gBattleTypeFlags & (BATTLE_TYPE_LINK
+#else
+                    if (gBattleTypeFlags & (BATTLE_TYPE_LINK
 #endif
-                        gBattleTypeFlags & (BATTLE_TYPE_LINK
                                             | BATTLE_TYPE_FRONTIER_NO_PYRAMID
                                             | BATTLE_TYPE_EREADER_TRAINER
                                             | BATTLE_TYPE_RECORDED_LINK))
@@ -4394,11 +4394,12 @@ static void HandleTurnActionSelectionState(void)
                     *(gBattleStruct->stateIdAfterSelScript + gActiveBattler) = STATE_BEFORE_ACTION_CHOSEN;
                     return;
                 }
-                else if (
 #if BR
-                         FALSE && // a match lets you try to run from any trainer (POK-231)
+                // A match lets you try to run from any trainer (POK-231).
+                else if (FALSE && gBattleTypeFlags & BATTLE_TYPE_TRAINER
+#else
+                else if (gBattleTypeFlags & BATTLE_TYPE_TRAINER
 #endif
-                         gBattleTypeFlags & BATTLE_TYPE_TRAINER
                          && !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK))
                          && gBattleBufferB[gActiveBattler][1] == B_ACTION_RUN)
                 {

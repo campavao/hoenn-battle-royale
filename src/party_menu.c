@@ -2798,8 +2798,8 @@ static void CursorCb_BrMoves(u8 taskId)
     sPartyMenuInternal->exitCallback = CB2_ReturnToField;
     Task_ClosePartyMenu(taskId);
 }
-#endif
 
+#endif
 static void CursorCb_Summary(u8 taskId)
 {
     PlaySE(SE_SELECT);

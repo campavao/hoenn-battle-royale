@@ -45,9 +45,17 @@ lenient one.
   `Br*`/`gBr*`/`BR_*` name or `br/` include outside a guard, comments included. BR's own
   specials go at the end of `data/specials.inc`, so pret's keep their numbers, and a
   changed graphic is a new file picked under `#if BR`, never an edit to pret's.
+- **Outside the guards a pret file is pret's, line for line.** `tools/br/pret-intact.py`
+  (the same job) takes the BR branches and guard lines out of every pret file we touch
+  and fails unless what is left is pret's file at `tools/br/BASELINE_COMMIT`. So a hook
+  that adds to a pret line keeps pret's whole line under `#else` (a trailing comma, a
+  condition: `#if BR` / our line / `#else` / pret's line / `#endif`), a hook that
+  wraps pret's lines opens and closes its braces inside two guards and leaves the lines
+  between them alone, and the blank line that sets a BR block apart goes inside its
+  guard, before the `#endif`.
 - **`make BR=0` is retail.** It leaves `src/br` out, builds into `build/pret`, and
   `tools/br/check-rom.sh pokeemerald_pret.gba` must print OK (it did on 2026-09-25). The
-  lint only sees names; this sees bytes, so run it after touching a pret file.
+  two scripts see names and lines; this sees bytes, so run it after touching a pret file.
 - **Strings.** Game text is in the Gen 3 charmap (`_("...")` in C, `.string` in scripts).
   Plain C strings are only for `gBrVersionString`-style ROM markers.
 - **Names.** `Br<System>_<Verb>` for functions (`BrMailbox_Push`), `gBr*` for globals

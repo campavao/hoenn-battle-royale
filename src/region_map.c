@@ -1726,12 +1726,14 @@ void CB2_OpenFlyMap(void)
         LoadPalette(sRegionMapFramePal, BG_PLTT_ID(1), sizeof(sRegionMapFramePal));
         PutWindowTilemap(WIN_FLY_TO_WHERE);
         FillWindowPixelBuffer(WIN_FLY_TO_WHERE, PIXEL_FILL(0));
-        AddTextPrinterParameterized(WIN_FLY_TO_WHERE, FONT_NORMAL,
 #if BR
+        AddTextPrinterParameterized(WIN_FLY_TO_WHERE, FONT_NORMAL,
                                     BrMap_Looking() ? gBrText_TheFog :
                                     BrPick_Picking() ? gBrText_DropWhere :
-#endif
                                     gText_FlyToWhere, 0, 1, 0, NULL);
+#else
+        AddTextPrinterParameterized(WIN_FLY_TO_WHERE, FONT_NORMAL, gText_FlyToWhere, 0, 1, 0, NULL);
+#endif
         ScheduleBgCopyTilemapToVram(0);
         gMain.state++;
         break;
@@ -1943,8 +1945,8 @@ static void BrBlendTheFog(void)
     SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_BG1 | BLDCNT_EFFECT_BLEND | BLDCNT_TGT2_BG2 | BLDCNT_TGT2_BD);
     SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(BR_FOG_EVA, BR_FOG_EVB));
 }
-#endif
 
+#endif
 static void CreateFlyDestIcons(void)
 {
     u16 canFlyFlag;

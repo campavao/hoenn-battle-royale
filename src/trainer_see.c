@@ -145,12 +145,14 @@ static const struct SpriteFrameImage sSpriteImageTable_ExclamationQuestionMark[]
     {
         .data = sEmotion_QuestionMarkGfx,
         .size = sizeof(sEmotion_QuestionMarkGfx)
-    },
 #if BR
+    },
     {
         .data = sEmotion_BrBootGfx,
         .size = sizeof(sEmotion_BrBootGfx)
     },
+#else
+    }
 #endif
 };
 
@@ -180,14 +182,16 @@ static const union AnimCmd sSpriteAnim_Icons3[] =
     ANIMCMD_FRAME(2, 60),
     ANIMCMD_END
 };
-#endif
 
+#endif
 static const union AnimCmd *const sSpriteAnimTable_Icons[] =
 {
     sSpriteAnim_Icons1,
-    sSpriteAnim_Icons2,
 #if BR
+    sSpriteAnim_Icons2,
     sSpriteAnim_Icons3,
+#else
+    sSpriteAnim_Icons2
 #endif
 };
 
@@ -760,8 +764,8 @@ u8 FldEff_BrBootIcon(void)
 
     return 0;
 }
-#endif
 
+#endif
 u8 FldEff_HeartIcon(void)
 {
     u8 spriteId = CreateSpriteAtEnd(&sSpriteTemplate_HeartIcon, 0, 0, 0x52);

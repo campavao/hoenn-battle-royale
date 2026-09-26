@@ -402,8 +402,8 @@ static void CreateWildMon(u16 species, u8 level)
         if (dealt != SPECIES_NONE)
             species = dealt;
     }
-#endif
 
+#endif
     ZeroEnemyPartyMons();
     checkCuteCharm = TRUE;
 

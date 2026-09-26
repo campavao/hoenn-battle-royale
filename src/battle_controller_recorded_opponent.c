@@ -1428,8 +1428,8 @@ static void RecordedOpponentWaitForItem(void)
     if (RecordedBattle_BrEmitItem(gActiveBattler))
         RecordedOpponentBufferExecCompleted();
 }
-#endif
 
+#endif
 static void RecordedOpponentHandleChooseAction(void)
 {
 #if BR

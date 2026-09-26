@@ -1438,8 +1438,8 @@ static void RecordedPlayerWaitForItem(void)
     if (RecordedBattle_BrEmitItem(gActiveBattler))
         RecordedPlayerBufferExecCompleted();
 }
-#endif
 
+#endif
 static void ChooseActionInBattlePalace(void)
 {
     if (gBattleCommunication[4] >= gBattlersCount / 2)

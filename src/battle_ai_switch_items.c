@@ -597,16 +597,16 @@ void AI_TrySwitchOrUseItem(void)
             *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = *(gBattleStruct->AI_monToSwitchIntoId + gActiveBattler);
             return;
         }
-        else
-        {
 #if BR
-            // A duel has two trainers in it and BATTLE_HISTORY has room for one
-            // (POK-238): the side about to decide gets its own bag loaded first. A
-            // no-op in every other battle.
-            BrDuel_LoadItems(gActiveBattler);
+        // A duel has two trainers in it and BATTLE_HISTORY has room for one (POK-238):
+        // the side about to decide gets its own bag loaded first. A no-op in every
+        // other battle.
+        else if (BrDuel_LoadItems(gActiveBattler), ShouldUseItem())
+#else
+        else if (ShouldUseItem())
 #endif
-            if (ShouldUseItem())
-                return;
+        {
+            return;
         }
     }
 

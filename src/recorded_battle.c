@@ -305,8 +305,8 @@ u8 RecordedBattle_BufferSpectateDelta(u8 *dst, u8 cap)
 
     return idx;
 }
-#endif
 
+#endif
 void RecordedBattle_RecordAllBattlerData(u8 *src)
 {
     s32 i;
@@ -847,8 +847,8 @@ bool8 RecordedBattle_BrEmitItem(u8 battler)
     BtlController_EmitOneReturnValue(B_COMM_TO_ENGINE, BrBattle_ReplayItem(battler, rec));
     return TRUE;
 }
-#endif
 
+#endif
 #undef tFramesToWait
 
 static void CB2_RecordedBattle(void)

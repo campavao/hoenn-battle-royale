@@ -66,9 +66,11 @@ enum
     MENU_ACTION_PLAYER_LINK,
     MENU_ACTION_REST_FRONTIER,
     MENU_ACTION_RETIRE_FRONTIER,
-    MENU_ACTION_PYRAMID_BAG,
 #if BR
+    MENU_ACTION_PYRAMID_BAG,
     MENU_ACTION_BR_MAP, // the ring, mid-match (POK-263)
+#else
+    MENU_ACTION_PYRAMID_BAG
 #endif
 };
 
@@ -722,8 +724,8 @@ static bool8 StartMenuBrMapCallback(void)
 
     return TRUE;
 }
-#endif
 
+#endif
 static bool8 StartMenuBagCallback(void)
 {
     if (!gPaletteFade.active)

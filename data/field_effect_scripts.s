@@ -346,8 +346,8 @@ gFieldEffectScript_DestroyDeoxysRock::
 gFieldEffectScript_MoveDeoxysRock::
 	field_eff_callnative FldEff_MoveDeoxysRock
 	field_eff_end
-
 .if BR
+
 @ POK-266: the runner's mark, drawn like the exclamation and the question mark.
 gFieldEffectScript_BrBootIcon::
 	field_eff_callnative FldEff_BrBootIcon

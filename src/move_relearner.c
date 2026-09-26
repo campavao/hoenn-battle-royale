@@ -981,8 +981,8 @@ static void BrBackToList(void)
     sMoveRelearnerMenuState.listRow = sel - sMoveRelearnerMenuState.listOffset;
     sMoveRelearnerStruct->moveListMenuTask = ListMenuInit(&gMultiuseListMenuTemplate, sMoveRelearnerMenuState.listOffset, sMoveRelearnerMenuState.listRow);
 }
-#endif
 
+#endif
 static void CreateLearnableMovesList(void)
 {
     s32 i;

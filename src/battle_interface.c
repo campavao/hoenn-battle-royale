@@ -1119,8 +1119,8 @@ static void UpdateLvlInHealthbox(u8 healthboxSpriteId, u8 lvl)
     // to come after the declarations, not before them.)
     if (gBrMatch.phase != BR_PHASE_NONE)
         return;
-#endif
 
+#endif
     text[0] = CHAR_EXTRA_SYMBOL;
     text[1] = CHAR_LV_2;
 

@@ -280,8 +280,8 @@ static void HandleInputChooseAction(void)
     }
     gBrBattle.menu = BR_MENU_ACTION;
     BrBattle_DrawClock();
-#endif
 
+#endif
     DoBounceEffect(gActiveBattler, BOUNCE_HEALTHBOX, 7, 1);
     DoBounceEffect(gActiveBattler, BOUNCE_MON, 7, 1);
 
@@ -551,8 +551,8 @@ static void HandleInputChooseMove(void)
     }
     gBrBattle.menu = BR_MENU_MOVE;
     BrBattle_DrawClock();
-#endif
 
+#endif
     if (JOY_HELD(DPAD_ANY) && gSaveBlock2Ptr->optionsButtonMode == OPTIONS_BUTTON_MODE_L_EQUALS_A)
         gPlayerDpadHoldFrames++;
     else
