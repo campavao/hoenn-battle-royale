@@ -25,7 +25,15 @@ expect u8 gBrSpectate+5 1
 # (AI_ITEM_X_STAT), flags 1 (X ATTACK).
 pokebytes gDecompressionBuffer+400 00 01 00 05 01 0D 00 01 00 01 05 01 4B 00 04 01
 mailsend gBrMailbox 19 gDecompressionBuffer+400 16
-wait 1500
+wait 670
+# The replay says whose potion it was, as the fighters' screens did (POK-331 #7): the
+# challenger is link player 0, CAM. "CAM used", a new line, "POTION!"
+expect u32 gDisplayedStringBattle 0x00C7BBBD
+expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
+expect u32 gDisplayedStringBattle+8 0xCEC9CAFE
+expect u32 gDisplayedStringBattle+12 0xABC8C9C3
+expect u8 gDisplayedStringBattle+16 0xFF
+wait 830
 shot items
 # The benched mon took the potion: 5 HP and 20 more is all of it (19 or 20, by IVs).
 expectge u16 gPlayerParty+186 19
@@ -40,7 +48,14 @@ expect u16 gEnemyParty+0x56 5
 # own (POK-331 #7) -- the AI's branch would have read 0x40 as an item type.
 pokebytes gDecompressionBuffer+400 00 01 00 05 01 0D 00 01 00 01 05 01 0D 00 40 00
 mailsend gBrMailbox 19 gDecompressionBuffer+400 16
-wait 900
+wait 250
+# ...and the peer's is theirs, CAN's, where the AI's branch would have said nothing.
+# "CAN used", a new line, "POTION!"
+expect u32 gDisplayedStringBattle 0x00C8BBBD
+expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
+expect u32 gDisplayedStringBattle+8 0xCEC9CAFE
+expect u32 gDisplayedStringBattle+12 0xABC8C9C3
+wait 650
 shot peer-potion
 expectge u16 gEnemyParty+0x56 19
 expectge u16 gBattleMons+0x80 19

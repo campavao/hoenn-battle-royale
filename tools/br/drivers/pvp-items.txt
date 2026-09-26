@@ -50,7 +50,29 @@ tap A
 wait 150
 shot healed
 tap A
+# Whose item it was, in the turn (POK-331 #7). Both potions were used in the bag -- ours in
+# the party menu, theirs as their choice arrived -- so pret's script for them said nothing
+# and the healthbar just jumped. Kanto says "RED used POTION!". The engine prints a line
+# before each item's own script, naming whoever's battler it was from this ROM's link
+# players: ours first (battler 0, the save's CAM), then theirs (the link's RIVAL).
 wait 200
+# "CAM used", a new line, "POTION!"
+expect u32 gDisplayedStringBattle 0x00C7BBBD
+expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
+expect u32 gDisplayedStringBattle+8 0xCEC9CAFE
+expect u32 gDisplayedStringBattle+12 0xABC8C9C3
+expect u8 gDisplayedStringBattle+16 0xFF
+shot said-ours
+wait 150
+# "RIVAL used", a new line, "POTION!"
+expect u32 gDisplayedStringBattle 0xBBD0C3CC
+expect u32 gDisplayedStringBattle+4 0xE7E900C6
+expect u32 gDisplayedStringBattle+8 0xCAFED8D9
+expect u32 gDisplayedStringBattle+12 0xC9C3CEC9
+expect u16 gDisplayedStringBattle+16 0xABC8
+expect u8 gDisplayedStringBattle+18 0xFF
+shot said-theirs
+wait 100
 shot back
 # Ours: the party and the engine's own copy of the mon out.
 expect u16 gPlayerParty+0x56 20

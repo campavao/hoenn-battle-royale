@@ -30,6 +30,7 @@
 #include "constants/weather.h"
 #if BR
 #include "br/br_bot.h"
+#include "br/br_battle.h"
 #endif
 
 struct BattleWindowText
@@ -1984,6 +1985,11 @@ void BufferStringBattle(u16 stringID)
         gBattleTextBuff3[i] = gBattleMsgDataPtr->textBuffs[2][i];
     }
 
+#if BR
+    if (BrBattle_BufferString(stringID)) // the battle's own lines, past pret's table (POK-331 #7)
+        return;
+
+#endif
     switch (stringID)
     {
     case STRINGID_INTROMSG: // first battle msg

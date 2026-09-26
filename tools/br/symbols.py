@@ -44,6 +44,8 @@ ENGINE_SYMBOLS = [
     "CB2_Overworld",
     # What every netlink VBlank's RfuVSync reads (include/br/br_netlink.h, netlink-loop.txt).
     "gRfuLinkStatus",
+    # The battle's message box, as the last line was expanded into it (pvp-items.txt).
+    "gDisplayedStringBattle",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

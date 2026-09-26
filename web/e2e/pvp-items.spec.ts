@@ -15,10 +15,14 @@
 //     in the link queue behind a request the party menu had sent to the controller still
 //     holding the bag. Nothing ever timed it out.
 // tools/br/drivers/pvp-items.txt is the one-ROM half of this.
+//
+// And the other screen says whose potion it was (Kanto's "RED used POTION!"): the ROM
+// used to heal the mon with no line at all, and the healthbar just jumped.
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
+import { encodeGen3 } from '../src/text/gen3';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
@@ -43,6 +47,10 @@ const ENCRYPTION_KEY = 0xac;
 const BR_MENU_ACTION = 1;
 const BR_MENU_MOVE = 2;
 const HURT = 5;
+/** What the watching screen's message box says as the other trainer drinks: every ROM's
+ *  link partner is RIVAL (br_netlink.c's FillLinkPlayers), and the line breaks after
+ *  "used" (0xFE) and ends in EOS (0xFF). */
+const RIVAL_USED_POTION = [...encodeGen3('RIVAL used'), 0xfe, ...encodeGen3('POTION!'), 0xff];
 
 type Ram = { read(addr: number, width: 8 | 16 | 32): number; write(addr: number, value: number, width: 8 | 16 | 32): void };
 type RamWindow = { __br: { mailbox: { ram: Ram } } };
@@ -290,10 +298,28 @@ test('a potion in a link battle heals the same mon on both ROMs, whoever drinks 
       }
       return out;
     };
+    /** From now on, every frame: has this page's battle message box said `line`? */
+    const watchLine = (p: Page, line: number[]) =>
+      p.evaluate(
+        ([addr, want]) => {
+          type W = { __hbr: { emu: { onFrame(fn: () => void): () => void } }; __sawLine?: boolean } & RamWindow;
+          const w = window as unknown as W;
+          w.__sawLine = false;
+          const off = w.__hbr.emu.onFrame(() => {
+            for (let i = 0; i < want.length; i++) if (w.__br.mailbox.ram.read(addr + i, 8) !== want[i]) return;
+            w.__sawLine = true;
+            off();
+          });
+        },
+        [symbols.gDisplayedStringBattle, line] as const,
+      );
+    const sawLine = (p: Page) => p.evaluate(() => (window as unknown as { __sawLine?: boolean }).__sawLine === true);
     const turn = async (drinker: Page, label: string) => {
       const other = drinker === challenger ? challenged : challenger;
+      await watchLine(other, RIVAL_USED_POTION);
       await Promise.all([drink(drinker), leer(other)]);
       await Promise.all(pages.map(toActionMenu));
+      expect(await sawLine(other), `${label}: the other screen said whose potion it was`).toBe(true);
       const [d, o] = [await view(drinker), await view(other)];
       const c = drinker === challenger ? d : o;
       console.log(label, JSON.stringify({ drinker: d, other: o }));

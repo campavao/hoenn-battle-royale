@@ -116,6 +116,13 @@ u8 BrBattle_FirstOnSide(u8 battler);
 void BrBattle_AfterItemHeal(void);
 // recorded_battle.c: a recorded item played onto the replay. Returns its id.
 u16 BrBattle_ReplayItem(u8 battler, const u8 *rec);
+// battle_util.c, HandleAction_UseItem: a person's bag item in a link battle or a replay
+// of one says whose it was, "<NAME> used POTION!", before its own script (POK-331 #7).
+void BrBattle_SayItemUsed(void);
+// The battle's own lines, past the end of pret's string table. battle_message.c's
+// BufferStringBattle hands every id here first; FALSE for one of pret's.
+#define BR_STRINGID_USED_ITEM BATTLESTRINGS_COUNT
+bool8 BrBattle_BufferString(u16 stringId);
 // battle_main.c: TRUE while the battlers are still choosing, when the engine may yet take
 // a recorded byte back off the record.
 bool8 BrBattle_Choosing(void);

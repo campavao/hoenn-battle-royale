@@ -12,12 +12,15 @@
 #include "battle_util.h"
 #include "battle_scripts.h"
 #include "item.h"
+#include "battle_message.h"
+#include "constants/battle_script_commands.h"
 #include "constants/battle_string_ids.h"
 #include "main.h"
 #include "pokemon.h"
 #include "recorded_battle.h"
 #include "constants/characters.h"
 #include "constants/items.h"
+#include "constants/songs.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -466,4 +469,55 @@ u16 BrBattle_ReplayItem(u8 battler, const u8 *rec)
         *(gBattleStruct->AI_itemFlags + battler / 2) = rec[3];
     }
     return item;
+}
+
+// ---- whose item it was (POK-331 #7) ----------------------------------------------------
+//
+// A bag item is used by the time its turn comes -- in the drinker's party menu, and on the
+// other ROM and in a replay the moment the choice arrived (BrBattle_PeerItem,
+// BrBattle_ReplayItem) -- so pret's script for it, the player's, says nothing. For the
+// other trainer that was the AI's script, and a person has no AI item type, so it was the
+// player's too: the watching screen's healthbar just jumped. Kanto's link battle says
+// "RED used POTION!" there.
+//
+// The line goes before the item's own script, and that script runs after it as it did.
+// The engine runs on the challenger's ROM alone and every line it prints goes to both, so
+// it names whoever's battler used it, from each ROM's own gLinkPlayers: the other trainer
+// on the watching screen, the drinker's own name on theirs, the fighter in a replay.
+
+extern const u8 *const gBattlescriptsForUsingItem[];
+
+static const u8 sText_UsedItem[] = _("{B_LINK_SCR_TRAINER_NAME} used\n{B_LAST_ITEM}!");
+
+// BattleScript_OpponentUsesHealItem's first five lines (data/battle_scripts_2.s) with our
+// line in place of its trainer's, then back to the script the engine picked.
+static const u8 sScript_UsedItem[] =
+{
+    B_SCR_OP_PRINTSTRING, STRINGID_EMPTYSTRING3 & 0xFF, STRINGID_EMPTYSTRING3 >> 8,
+    B_SCR_OP_PAUSE, B_WAIT_TIME_MED & 0xFF, B_WAIT_TIME_MED >> 8,
+    B_SCR_OP_PLAYSE, SE_USE_ITEM & 0xFF, SE_USE_ITEM >> 8,
+    B_SCR_OP_PRINTSTRING, BR_STRINGID_USED_ITEM & 0xFF, BR_STRINGID_USED_ITEM >> 8,
+    B_SCR_OP_WAITMESSAGE, B_WAIT_TIME_LONG & 0xFF, B_WAIT_TIME_LONG >> 8,
+    B_SCR_OP_RETURN,
+};
+
+void BrBattle_SayItemUsed(void)
+{
+    if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK)))
+        return;
+    // Only the player's script: a ball, a doll and an AI's own item (a duel's replay)
+    // have theirs, and the AI's says its trainer's line already.
+    if (gBattlescriptCurrInstr != gBattlescriptsForUsingItem[0] || gLastUsedItem == ITEM_NONE)
+        return;
+    gBattleScripting.battler = gBattlerAttacker;
+    BattleScriptPush(gBattlescriptCurrInstr);
+    gBattlescriptCurrInstr = sScript_UsedItem;
+}
+
+bool8 BrBattle_BufferString(u16 stringId)
+{
+    if (stringId != BR_STRINGID_USED_ITEM)
+        return FALSE;
+    BattleStringExpandPlaceholdersToDisplayedString(sText_UsedItem);
+    return TRUE;
 }

@@ -404,6 +404,9 @@ void HandleAction_UseItem(void)
 
         gBattlescriptCurrInstr = gBattlescriptsForUsingItem[*(gBattleStruct->AI_itemType + gBattlerAttacker / 2)];
     }
+#if BR
+    BrBattle_SayItemUsed(); // "<NAME> used POTION!" for a person's bag item (POK-331 #7)
+#endif
     gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
 }
 
