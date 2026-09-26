@@ -381,8 +381,20 @@ export class Bots {
   /** The ring phase, as the last `ringMoved` left it. The rung a bot falls at is what
    *  its purse is worth (POK-237). */
   private phase = 0;
+  /** The director has said who won (decide()): nobody goes out after that. */
+  private decided = false;
 
   constructor(private readonly opts: BotsOptions) {}
+
+  /** The match is decided: the director's `win` is out. The last ring bleeds every bot
+   *  in it at the same rate, so a field of bots tends to fall on one tick, and the
+   *  director crowns whoever of them is left when the rest have gone out -- in the
+   *  middle of this tick's pass. The pass used to go on and put the winner out too, and
+   *  the room's roster and results had a champion who was also eliminated. Called from
+   *  inside that `out`, so the rest of the pass sees it. */
+  decide(): void {
+    this.decided = true;
+  }
 
   /** Puts the dealt bots on the map and tells the room where they are. */
   start(bots: Bot[], now: number): void {
@@ -677,6 +689,7 @@ export class Bots {
    *  the same `spill` a player's ROM sends on a whiteout (POK-232), so the balls are
    *  pickable by anybody -- and then it is out and stops being walked around. */
   private eliminate(walker: Walker): void {
+    if (this.decided) return;
     const map = this.opts.mapRef(walker.at.map);
     if (map && walker.party.length > 0) {
       // Scattered, not stacked. Every piece used to be written to the dropper's own

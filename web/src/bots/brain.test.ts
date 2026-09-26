@@ -796,6 +796,32 @@ describe('a bot caught in the fog', () => {
     expect(bots.count()).toBe(0);
   });
 
+  // The last ring bleeds every bot in it at one rate, so a field of bots falls on one
+  // tick -- and the director crowns whoever is left once the rest are out, in the middle
+  // of that tick's pass. The pass went on and put the winner out too: a champion the
+  // room's roster and results had as eliminated (bots/offline.test.ts's seed found it).
+  it('puts nobody out once the match is decided, not even in the pass that decided it', () => {
+    const sent: Msg[] = [];
+    const bots: Bots = new Bots({
+      world: new World([FIELD, PATH]),
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      // The director, for two bots: the first `out` leaves one standing, and that is the win.
+      send: (m) => {
+        sent.push(m);
+        if (m.t === 'out') bots.decide();
+      },
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      inside: () => false,
+    });
+    const spawns = [1, 2].map((x) => ({ mapId: 'FIELD', map: REFS.FIELD, x, y: 1 }));
+    bots.start(dealBots(1, 2, [0], spawns), 0);
+    for (let t = STEP_MS; t <= 60_000; t += STEP_MS) bots.tick(t);
+    expect(sent.filter((m) => m.t === 'out')).toHaveLength(1);
+    expect(bots.count()).toBe(1);
+  });
+
   // A bot the fog takes at sea drops its team on the water, the way a player beaten
   // while surfing does -- it used to drop nothing (POK-330 #67). And its bag goes down
   // under the ROM's own key for a bag, 0xFF, not the page's old 6.

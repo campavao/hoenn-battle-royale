@@ -423,6 +423,9 @@ export class HostRole {
     // latecomers out of a running match, and leaving it locked is what turned the end
     // of a match into everybody scattering -- a reload could not get back in.
     if (msg.t === 'win') {
+      // The verdict is the director's: the bots' pass that crowned somebody does not go
+      // on to put them out too (Bots.decide).
+      this.bots.bots.decide();
       this.link.lock?.(false);
       // And says so: a client that never saw the `win` -- a socket that blinked over the
       // last fight -- still gets taken out of the match. `again` has been defined in the

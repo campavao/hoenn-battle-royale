@@ -122,6 +122,7 @@ export function offlineMatch(opts: OfflineOptions): OfflineMatch {
         host.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r }, msg.phase);
       } else if (msg.t === 'win') {
         winner = msg.seat ?? null;
+        host.bots.decide(); // HostRole.directorSends: nobody goes out after the verdict
       }
     },
     now: () => now,
