@@ -23,7 +23,6 @@ One dependency: `ws`.
 | `clean.js` | what arrives from outside, made safe: names, skins, passcodes, versions, `BR_MOTD`, `BR_DAILY`, `BR_ORIGINS`, the proxy's address headers, the limit env vars |
 | `relay.test.js` | the suite (`node --test`) |
 | `protocol.fixtures.json` | what the page sends each door; both suites read it |
-| `railway.json` | Railway's builder and start command |
 
 ## Running it
 
@@ -187,7 +186,10 @@ every room without a roster or an heir, and closes each socket with 1012
 
 Run from inside `relay/` -- the service is **`hoenn-relay`**, separate from
 the Kanto mod's relay (`kanto-br-relay`) and its own Railway project.
-`railway.json` in this directory pins the Nixpacks builder and start command.
+Railway builds it with Railpack and runs `npm start`, so the start command -- and its
+192 MB heap cap, the ceiling the relay's own memory limits are sized against -- lives in
+`package.json`. (A `railway.json` used to carry it; the service never read it, so the
+relay ran uncapped until 2026-09-26.)
 
 On Railway: Settings -> Networking -> **turn App Sleeping off** (a sleeping
 relay drops every room it is holding), and set the healthcheck path to

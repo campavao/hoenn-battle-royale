@@ -5,7 +5,7 @@
   "description": "N-player room relay for the Hoenn Battle Royale mod (WebSocket, one JSON object per text frame, one dependency)",
   "type": "module",
   "main": "server.js",
-  "scripts": { "start": "node server.js", "test": "node --test" },
+  "scripts": { "start": "node --max-old-space-size=192 server.js", "test": "node --test" },
   "engines": { "node": ">=18" },
   "dependencies": {
     "ws": "^8.18.0"
