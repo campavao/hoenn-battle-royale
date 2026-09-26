@@ -9,6 +9,8 @@
 // Everything Emerald-specific stays out of here; this file knows GBA memory, keys,
 // files and frames, nothing about save blocks or the match.
 
+import { tapNode, type AudioTick, type SdlAudio } from './audio-meter';
+
 export type GbaKey = 'a' | 'b' | 'select' | 'start' | 'right' | 'left' | 'up' | 'down' | 'r' | 'l';
 
 /** Bit positions match mGBA's GBA_KEY_* order, so a mask round-trips to the harness. */
@@ -59,6 +61,8 @@ export interface CoreModule {
    *  the same frame. Older cores lack it and present on their own tick. */
   _brPresent?(): void;
   HEAPU8: Uint8Array;
+  /** SDL2's audio output, once a game's thread has opened it (audio-meter.ts). */
+  SDL2?: SdlAudio;
 }
 
 /** Pixels the core draws past the LCD on each side (POK-319). */
@@ -101,6 +105,11 @@ export class Emulator {
   /** Listeners that have thrown, so each is reported once and not sixty times a second. */
   private failedListeners = new WeakSet<() => void>();
   private errorListeners = new Set<(err: unknown) => void>();
+  private workListeners = new Set<(ms: number) => void>();
+  private audioListeners = new Set<(tick: AudioTick) => void>();
+  /** The output node audio-meter.ts is listening to; SDL makes a new one every boot. */
+  private tappedAudio: ScriptProcessorNode | null = null;
+  private halts = 0;
   /** What boot() last loaded, so reboot() can load it again. */
   private bootedPath: string | null = null;
   private crashListeners = new Set<() => void>();
@@ -215,6 +224,7 @@ export class Emulator {
 
   private async boot(path: string): Promise<void> {
     this.bootedPath = path;
+    this.halts++;
     // The core auto-saves a state every 30 s and restores it on the next loadGame of
     // the same file. A match must always start from power-on, so drop those first.
     try {
@@ -240,6 +250,7 @@ export class Emulator {
       // the mailbox undrained, nothing on screen (POK-330 #35). So no listener's bug
       // gets out of here, and the picture is presented whatever happened.
       videoFrameEndedCallback: () => {
+        const started = this.workListeners.size ? performance.now() : -1;
         // The views are remade once a frame, not once a boot. loadGame returns before the
         // core thread has swapped cores, so the old core's last frames still run
         // listeners, and a read there kept the dead core's RAM for the whole next match:
@@ -257,10 +268,16 @@ export class Emulator {
           // The listeners drew around the picture for this frame; now the picture.
           this.m._brPresent?.();
         }
+        try {
+          this.metered(started);
+        } catch {
+          /* a meter's bug is not the frame's */
+        }
       },
       coreCrashedCallback: () => {
         this.running = false;
         this.views = null;
+        this.halts++;
         for (const l of this.crashListeners) l();
       },
     });
@@ -271,10 +288,12 @@ export class Emulator {
     this.m.quitGame();
     this.running = false;
     this.views = null;
+    this.halts++;
   }
 
   pause(): void {
     this.m.pauseGame();
+    this.halts++;
   }
 
   resume(): void {
@@ -289,6 +308,42 @@ export class Emulator {
   onFrame(listener: () => void): () => void {
     this.frameListeners.add(listener);
     return () => this.frameListeners.delete(listener);
+  }
+
+  /** After every frame, how long the page's own part of it took on the main thread,
+   *  in ms: the frame listeners and the present. The core thread waits on all of it
+   *  (POK-247). Returns an unsubscribe. */
+  onFrameWork(listener: (ms: number) => void): () => void {
+    this.workListeners.add(listener);
+    return () => this.workListeners.delete(listener);
+  }
+
+  /** Every callback of the core's audio output, late or starved or fine (audio-meter.ts).
+   *  Heard from the first frame after SDL opens it, and again after every boot. */
+  onAudio(listener: (tick: AudioTick) => void): () => void {
+    this.audioListeners.add(listener);
+    return () => this.audioListeners.delete(listener);
+  }
+
+  /** Goes up whenever the frames stop for a reason of the page's own -- a pause, a
+   *  boot, a stop, a crash -- so a meter does not read the gap across one as a frame. */
+  get pauses(): number {
+    return this.halts;
+  }
+
+  private metered(started: number): void {
+    if (started >= 0) {
+      const ms = performance.now() - started;
+      for (const l of this.workListeners) l(ms);
+    }
+    if (!this.audioListeners.size) return;
+    const sdl = this.m.SDL2;
+    const node = sdl?.audio?.scriptProcessorNode;
+    if (!node || !sdl.audioContext || node === this.tappedAudio) return;
+    this.tappedAudio = node;
+    tapNode(node, sdl.audioContext, (tick) => {
+      for (const l of this.audioListeners) l(tick);
+    });
   }
 
   onCrash(listener: () => void): () => void {

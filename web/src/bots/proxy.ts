@@ -32,6 +32,20 @@ export interface DuelOutcome {
   usedB: number[];
 }
 
+/** What the instance has done, for the `#perf` readout and the soak (POK-247): the
+ *  only way to tell a match where the bots fought for real from one where every
+ *  meeting fell back, and what the second core cost while it did. */
+export interface ProxyCounts {
+  booted: boolean;
+  /** Frames the instance has run. */
+  frames: number;
+  fought: number;
+  timedOut: number;
+  /** Duels answered with null, for the caller's seeded resolver: a timeout, a full
+   *  queue, a draw, an instance that never came up. */
+  fellBack: number;
+}
+
 /** One side of a duel: the team, and the units it may spend in there. */
 export interface DuelSide {
   seat: number;
@@ -97,6 +111,7 @@ export class ProxyDuels {
   private queue: (() => void)[] = [];
   private frames = 0;
   private broken = false;
+  private readonly counts: ProxyCounts = { booted: false, frames: 0, fought: 0, timedOut: 0, fellBack: 0 };
 
   constructor(private readonly opts: ProxyOptions) {}
 
@@ -106,9 +121,19 @@ export class ProxyDuels {
     return this.broken;
   }
 
+  get stats(): ProxyCounts {
+    return { ...this.counts };
+  }
+
   /** Fights one, or answers null when the proxy could not (and the caller should fall
    *  back to the seeded resolver). Duels queue: one instance, one fight at a time. */
   async fight(a: DuelSide, b: DuelSide): Promise<DuelOutcome | null> {
+    const out = await this.attempt(a, b);
+    if (!out) this.counts.fellBack++;
+    return out;
+  }
+
+  private async attempt(a: DuelSide, b: DuelSide): Promise<DuelOutcome | null> {
     if (this.broken || a.party.length === 0 || b.party.length === 0) return null;
     if (this.busy && this.queue.length >= MAX_QUEUED) {
       this.note('queue full: settling this one the cheap way');
@@ -171,6 +196,7 @@ export class ProxyDuels {
       // A fight that will not end is worse than no proxy at all: the instance is left
       // in a battle nobody can finish, so it goes and the next duel boots a new one.
       this.note('duel timed out');
+      this.counts.timedOut++;
       this.dispose();
       return null;
     }
@@ -179,6 +205,7 @@ export class ProxyDuels {
     // from one where every meeting fell back to the resolver. Failures say so below;
     // without this, silence meant both.
     this.note(`seat ${a.seat} vs seat ${b.seat}: fought, winner ${result.winner === 0 ? a.seat : b.seat}`);
+    this.counts.fought++;
     if (result.winner > 1) return null; // a draw is the caller's to settle
     return {
       winner: result.winner === 0 ? result.seatA : result.seatB,
@@ -263,6 +290,8 @@ export class ProxyDuels {
     this.booting = (async () => {
       try {
         const emu = await this.opts.boot();
+        this.counts.booted = true;
+        emu.onFrame(() => this.counts.frames++);
         this.opts.writeBoot(emu, this.opts.mailboxBase);
         const mailbox = new Mailbox(
           {

@@ -325,6 +325,67 @@ describe('Emulator', () => {
     }
   });
 
+  describe('what a phone needs measured (POK-247)', () => {
+    it("times the page's own share of each frame, the present included", async () => {
+      const { emu, m, frame } = await make();
+      let clock = 0;
+      const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      try {
+        m._brPresent = () => void (clock += 2);
+        emu.onFrame(() => void (clock += 3));
+        const work: number[] = [];
+        emu.onFrameWork((ms) => void work.push(ms));
+        await emu.start(new Uint8Array([1]));
+        frame();
+        frame();
+        expect(work).toEqual([5, 5]);
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it("hears the core's audio output from the first frame SDL has opened it, and again after a boot", async () => {
+      const { emu, m, frame } = await make();
+      const ctx = { currentTime: 1, sampleRate: 48000, state: 'running' } as AudioContext;
+      const out = { numberOfChannels: 1, length: 1024, sampleRate: 48000, getChannelData: () => new Float32Array(1024).fill(0.5) };
+      const node = () => ({ onaudioprocess: () => {} }) as unknown as ScriptProcessorNode;
+      const play = (n: ScriptProcessorNode, playbackTime: number) =>
+        n.onaudioprocess!.call(n, { outputBuffer: out, playbackTime } as unknown as AudioProcessingEvent);
+      const heard: boolean[] = [];
+      emu.onAudio((tick) => void heard.push(tick.late));
+      await emu.start(new Uint8Array([1]));
+      frame(); // no audio opened yet: nothing to hear, nothing thrown
+
+      const first = node();
+      m.SDL2 = { audio: { scriptProcessorNode: first }, audioContext: ctx };
+      frame();
+      frame(); // the same node is not wrapped twice
+      play(first, 1.02);
+      play(first, 0.9);
+      expect(heard).toEqual([false, true]);
+
+      // A boot opens the audio again, on a node of its own.
+      await emu.reboot();
+      const second = node();
+      m.SDL2 = { audio: { scriptProcessorNode: second }, audioContext: ctx };
+      frame();
+      play(second, 0.5);
+      expect(heard).toEqual([false, true, true]);
+    });
+
+    it('counts every stop the page makes, so a meter skips the gap across it', async () => {
+      const { emu } = await make();
+      await emu.start(new Uint8Array([1]));
+      const booted = emu.pauses;
+      emu.pause();
+      emu.resume();
+      expect(emu.pauses).toBe(booted + 1);
+      await emu.reboot();
+      emu.stop();
+      expect(emu.pauses).toBe(booted + 3);
+    });
+  });
+
   it('returns screenshot bytes', async () => {
     const { emu } = await make();
     await emu.start(new Uint8Array([1]));

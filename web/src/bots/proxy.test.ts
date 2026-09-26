@@ -185,6 +185,17 @@ describe('the proxy duel instance', () => {
     expect(inst.stopped).toBe(true);
   });
 
+  it('counts what it fought, what fell back and the frames it ran (POK-247)', async () => {
+    const inst = fakeInstance();
+    const proxy = proxyOver(inst);
+    expect(proxy.stats).toEqual({ booted: false, frames: 0, fought: 0, timedOut: 0, fellBack: 0 });
+    await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst);
+    expect(await proxy.fight({ seat: 4, party: [] }, { seat: 7, party: [mon()] })).toBeNull();
+    const { frames, ...rest } = proxy.stats;
+    expect(rest).toEqual({ booted: true, fought: 1, timedOut: 0, fellBack: 1 });
+    expect(frames).toBeGreaterThan(0);
+  });
+
   it('falls back when the instance never wakes, and does not try again', async () => {
     const inst = fakeInstance({ wakes: false });
     const notes: string[] = [];
