@@ -26,6 +26,13 @@ pokebytes gDecompressionBuffer 1F 00 00 00
 mailsend gBrMailbox 5 gDecompressionBuffer 4
 wait 300
 expect u8 gBrBotFight+2 1
+# ...and the AI is handed exactly that one: gBattleResources->battleHistory (the pointer
+# at +0x18, copied into scratch to follow it), trainerItems at +0x48, itemsNo at +0x50.
+# A bag of one stakes one, never a second out of nothing (POK-322).
+copy gDecompressionBuffer *gBattleResources+0x18 4
+expect u8 *gDecompressionBuffer+0x50 1
+expect u16 *gDecompressionBuffer+0x48 0x4B
+expect u16 *gDecompressionBuffer+0x4A 0
 # Through the intro and into the first turn: FIGHT, the first move, and the AI's own
 # action against it. An X item is a first-turn item in Emerald's AI, so this is the
 # turn the bag gets spent.

@@ -205,7 +205,7 @@ static void ParseTrainer(const u8 *d, u16 n)
     gBrBotFight.count = built;
     // The bag, after the party: itemCount then that many u16s (POK-237). An older page
     // sends no tail at all, and a bot with an empty bag sends a zero -- both leave the
-    // AI on the rung's own potion, which is what it had before there was a bag.
+    // AI with nothing to spend (POK-322).
     gBrBotFight.itemCount = 0;
     gBrBotFight.spent = 0;
     off += count * 100;
@@ -228,28 +228,19 @@ static void ParseTrainer(const u8 *d, u16 n)
 // A bot is not in gTrainers -- it is a seat the host's tab walks around -- so what it
 // may spend comes over on its trainer card, out of a bag that is really being carried
 // and really runs down (POK-237). A card with no bag on it (an older page, or a bot
-// that has spent everything) falls back to the rung's own potion, which is what the AI
-// was given before there was a bag.
+// that has picked nothing up or spent everything) gives the AI nothing: BATTLE_HISTORY
+// is zeroed before this runs, so itemsNo stays 0. It used to fall back to two of the
+// rung's potions, and the play-test met bots with "two potions off the start" -- a bag
+// holds what the bot went and got, and nothing else (POK-322).
 bool8 BrBot_LoadAiItems(void)
 {
     s32 i;
 
     if (!gBrBotFight.fighting)
         return FALSE;
-    if (gBrBotFight.itemCount > 0)
-    {
-        for (i = 0; i < gBrBotFight.itemCount && i < MAX_TRAINER_ITEMS; i++)
-            gBattleResources->battleHistory->trainerItems[i] = gBrBotFight.items[i];
-        gBattleResources->battleHistory->itemsNo = i;
-    }
-    else
-    {
-        u16 potion = BrLevels_RungPotion(GetMonData(&gEnemyParty[0], MON_DATA_LEVEL, NULL));
-
-        gBattleResources->battleHistory->trainerItems[0] = potion;
-        gBattleResources->battleHistory->trainerItems[1] = potion;
-        gBattleResources->battleHistory->itemsNo = 2;
-    }
+    for (i = 0; i < gBrBotFight.itemCount && i < MAX_TRAINER_ITEMS; i++)
+        gBattleResources->battleHistory->trainerItems[i] = gBrBotFight.items[i];
+    gBattleResources->battleHistory->itemsNo = i;
     return TRUE;
 }
 

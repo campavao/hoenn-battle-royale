@@ -48,6 +48,9 @@ ENGINE_SYMBOLS = [
     "gDisplayedStringBattle",
     # The fog map's prompt, "FOG: <place>", is built here (br_map.c, ring-map.txt).
     "gStringVar4",
+    # What a bot's AI was handed out of its bag, and what it chose to do with its turn
+    # (bot-bag.txt, bot-bag-empty.txt).
+    "gBattleResources", "gChosenActionByBattler",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

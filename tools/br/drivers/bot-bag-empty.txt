@@ -1,0 +1,50 @@
+# bot-bag-empty: a bot with nothing in its bag has nothing to spend (POK-322). Cam's
+# play-test met bots opening fights with "two potions off the start": a card with no
+# items on it -- which is every bot now, until it picks something up -- used to hand the
+# AI two of the rung's potions anyway. So this bot walks in at 1 HP with an empty bag,
+# and the AI has no items and fights with a move.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# bot-fight.txt's card -- seat 31, "BOT", one level 5 TREKO -- at 1 of 19 HP, with the
+# bag tail every page sends now: a count of 0 and no ids.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 01 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+pokebytes gDecompressionBuffer+106 00
+mailsend gBrMailbox 23 gDecompressionBuffer 107
+wait 10
+# staged, with an empty bag, and a sliver of HP: the AI's cue to drink if it had anything
+expect u8 gBrBotFight 1
+expect u8 gBrBotFight+0xC 0
+expect u16 gEnemyParty+86 1
+# Seat 31's ghost on our map (out of our eyeline), then its CHALLENGE.
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+expect u8 gBrBotFight+2 1
+# What the AI was given: gBattleResources->battleHistory (the pointer at +0x18), whose
+# trainerItems are at +0x48 and itemsNo at +0x50 (include/battle.h). The pointer is
+# copied into scratch first, because an address is only dereferenced once.
+copy gDecompressionBuffer *gBattleResources+0x18 4
+expect u8 *gDecompressionBuffer+0x50 0
+expect u16 *gDecompressionBuffer+0x48 0
+expect u16 *gDecompressionBuffer+0x4A 0
+# Into the first turn: FIGHT and the first move. At 1 HP with a POTION the AI would
+# have used it (B_ACTION_USE_ITEM, 1); with nothing it chose a move (B_ACTION_USE_MOVE,
+# 0), and nothing was spent.
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 90
+tap A
+wait 150
+tap A
+wait 150
+shot empty-turn
+expect u8 gChosenActionByBattler+1 0
+expect u8 gBrBotFight+0xD 0
+say bot bag empty ok

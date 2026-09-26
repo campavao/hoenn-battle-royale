@@ -555,16 +555,6 @@ u16 BrLevels_ItemPrice(u16 itemId, u16 price)
     return price;
 }
 
-// Kanto's potion rule (POK-236), as the thing Emerald's AI already knows: the rung's
-// own potion, a step up the shelf every twenty-odd levels.
-u16 BrLevels_RungPotion(u8 level)
-{
-    return level >= 75 ? ITEM_FULL_RESTORE
-         : level >= 50 ? ITEM_HYPER_POTION
-         : level >= 30 ? ITEM_SUPER_POTION
-                       : ITEM_POTION;
-}
-
 void BrLevels_Tick(void)
 {
     u8 phase = gBrRing.active ? gBrRing.phase : 0;

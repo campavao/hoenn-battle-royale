@@ -262,7 +262,8 @@
 //   ..:   party    count * PackedMon (100 bytes each, as BR_MSG_PARTY)
 //   ..:   items    u8   how many of its bag it may spend here, 0..4 (POK-237)
 //   ..:   ids      items * u16  Gen 3 item ids, straight into BATTLE_HISTORY
-// The tail is optional: a card without one leaves the AI on the rung's own potion.
+// The tail is optional: a card without one, like a zero count, gives the AI nothing to
+// spend (POK-322).
 
 // BR_MSG_PICK
 // pick: ROM -> page -> host: the section this trainer chose to drop into (POK-223).
