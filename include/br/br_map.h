@@ -44,5 +44,12 @@ bool8 BrMap_CanFly(void);
 // A town was chosen and we can get there: the flier becomes the party menu's selection,
 // which is the mon Emerald's own fly animation carries us on, and the look is over.
 void BrMap_TakeFlight(void);
+// The fog over a look (POK-277), from CB2_OpenFlyMap once the map is in VRAM: every
+// cell outside the ring shaded on the frame layer. region_map.c hands over what only it
+// knows -- the frame's tilemap and tiles, and where the width x height grid of cells
+// starts on that tilemap. BlendFog sets the blend the shade needs, after the fly map
+// has cleared BLDCNT for itself. Both do nothing unless this is a look with a ring.
+void BrMap_ShadeFog(u16 *frame, u8 *tiles, u8 left, u8 top, u8 width, u8 height);
+void BrMap_BlendFog(void);
 
 #endif // GUARD_BR_MAP_H

@@ -63,6 +63,20 @@ bool8 BrRing_SectionInside(u8 mapsec)
     return dx * dx + dy * dy <= (s16)gBrRing.r * gBrRing.r;
 }
 
+// Is this cell of the region-map grid inside the ring? The ring is a disc in exactly
+// these coordinates (BrRing_SectionInside above measures the same way against a
+// section's own rectangle), so this is that test with the rectangle shrunk to a point.
+// The fog over the region map asks it of every cell (br_map.c).
+bool8 BrRing_CellInside(s16 x, s16 y)
+{
+    s16 dx = x - gBrRing.cx;
+    s16 dy = y - gBrRing.cy;
+
+    if (gBrRing.r < 0)
+        return FALSE;
+    return dx * dx + dy * dy <= (s16)gBrRing.r * gBrRing.r;
+}
+
 // The bottom box on a ring move: the place the fog is closing on, which the host
 // already sends and nothing was reading. Two lines, 90 frames, above the ticker.
 static const u8 sText_FogCloses[] = _("THE FOG CLOSES IN ON");

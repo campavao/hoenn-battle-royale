@@ -115,10 +115,6 @@ static void SpriteCB_FlyDestIcon(struct Sprite *sprite);
 static void CB_FadeInFlyMap(void);
 static void CB_HandleFlyMapInput(void);
 static void CB_ExitFlyMap(void);
-#if BR
-static void BrShadeTheFog(void);
-static void BrBlendTheFog(void);
-#endif
 
 static const u16 sRegionMapCursorPal[] = INCGFX_U16("graphics/pokenav/region_map/cursor.pal", ".gbapal");
 static const u32 sRegionMapCursorSmallGfxLZ[] = INCGFX_U32("graphics/pokenav/region_map/cursor_small.png", ".4bpp.lz");
@@ -136,7 +132,6 @@ static const u8 sRegionMapPlayerIcon_MayGfx[] = INCGFX_U8("graphics/pokenav/regi
 #if BR
 #include "br/br_pick.h"
 #include "br/br_map.h"
-#include "br/br_ring.h"
 #endif
 
 static const mapsec_u16_t sRegionMap_SpecialPlaceLocations[][2] =
@@ -1740,10 +1735,10 @@ void CB2_OpenFlyMap(void)
     case 8:
         LoadFlyDestIcons();
 #if BR
-        // The tilemaps are all in VRAM by now (InitRegionMap above runs the whole load
-        // in one go) and nothing is shown until case 10, so this is the moment.
-        if (BrMap_Looking())
-            BrShadeTheFog();
+        // The fog over a look (br_map.c). The tilemaps are all in VRAM by now
+        // (InitRegionMap above runs the whole load in one go) and nothing is shown until
+        // case 10, so this is the moment. The frame is BG1, loaded in cases 5 and 6.
+        BrMap_ShadeFog((u16 *)BG_SCREEN_ADDR(30), (u8 *)BG_CHAR_ADDR(3), MAPCURSOR_X_MIN, MAPCURSOR_Y_MIN, MAP_WIDTH, MAP_HEIGHT);
 #endif
         gMain.state++;
         break;
@@ -1755,8 +1750,7 @@ void CB2_OpenFlyMap(void)
     case 10:
         SetGpuReg(REG_OFFSET_BLDCNT, 0);
 #if BR
-        if (BrMap_Looking())
-            BrBlendTheFog();
+        BrMap_BlendFog(); // after the BLDCNT above, which clears it
 #endif
         SetGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_OBJ_1D_MAP | DISPCNT_OBJ_ON);
         ShowBg(0);
@@ -1869,84 +1863,6 @@ static void LoadFlyDestIcons(void)
 #define sIconMapSec   data[0]
 #define sFlickerTimer data[1]
 
-#if BR
-// Is this cell of the region-map grid inside the ring? The ring is a disc in exactly
-// these coordinates (br_ring.c's BrRing_SectionInside measures the same way against a
-// section's own rectangle), so this is that test with the rectangle shrunk to a point.
-static bool8 BrCellInside(s16 x, s16 y)
-{
-    s16 dx = x - gBrRing.cx;
-    s16 dy = y - gBrRing.cy;
-
-    if (gBrRing.r < 0)
-        return FALSE;
-    return dx * dx + dy * dy <= (s16)gBrRing.r * gBrRing.r;
-}
-
-// The fog itself (POK-277). POK-263 drew the ring's *edge* as red outline sprites,
-// because the fogged area is most of Hoenn and OAM has 128 -- and the play-test read
-// the result as markers rather than weather: "instead of red arrows, we should just
-// show the purple overlay like we did in Kanto".
-//
-// So it is shaded instead, and it costs no sprites at all.
-//
-// The map itself cannot be tinted a cell at a time: BG2 here is an affine background in
-// 256 colours (mode 1, sFlyMapBgTemplates), so its tilemap is one byte per cell with no
-// palette field to point somewhere else, and there is no room beside its 233 tiles for a
-// second, darker copy of them. The overlay goes on BG1 instead -- the frame layer, a
-// text background with a palette field and nothing of its own over the map area -- as
-// one solid tile in one colour, and the hardware blends it with the map underneath. A
-// purple overlay, in the literal sense.
-#define BR_FOG_PLTT 10                 // a 16-colour slot the map's own palette does not reach
-#define BR_FOG_COLOUR RGB(13, 3, 22)   // the overworld's fog weather, in one colour
-#define BR_FOG_EVA 10                  // ...and how much of it: 10/16 fog over 6/16 map
-#define BR_FOG_EVB 6
-
-static void BrShadeTheFog(void)
-{
-    u16 *frame = (u16 *)BG_SCREEN_ADDR(30); // BG1's tilemap: text, one u16 per cell
-    u8 *tiles = (u8 *)BG_CHAR_ADDR(3);      // ...and its tiles, 4bpp, 32 bytes each
-    u16 pal[16];
-    u16 tile = 0;
-    u16 i;
-    s16 x, y;
-
-    if (!gBrRing.active)
-        return;
-    // A tile of our own, after the last one the frame uses.
-    for (i = 0; i < 32 * 21; i++)
-    {
-        if ((frame[i] & 0x3FF) > tile)
-            tile = frame[i] & 0x3FF;
-    }
-    if (++tile >= 512)
-        return; // no room: the map stays as it was rather than drawing rubbish
-    for (i = 0; i < 32; i++)
-        tiles[tile * 32 + i] = 0x11; // every pixel colour 1 of whatever palette it is given
-    for (i = 0; i < 16; i++)
-        pal[i] = BR_FOG_COLOUR;
-    LoadPalette(pal, BG_PLTT_ID(BR_FOG_PLTT), sizeof(pal));
-    for (y = 0; y < MAP_HEIGHT; y++)
-    {
-        for (x = 0; x < MAP_WIDTH; x++)
-        {
-            if (BrCellInside(x, y))
-                continue;
-            frame[(y + MAPCURSOR_Y_MIN) * 32 + (x + MAPCURSOR_X_MIN)] = tile | (BR_FOG_PLTT << 12);
-        }
-    }
-}
-
-// The blend the overlay needs, set after CB2_OpenFlyMap has cleared BLDCNT for itself.
-static void BrBlendTheFog(void)
-{
-    if (!gBrRing.active)
-        return;
-    SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_BG1 | BLDCNT_EFFECT_BLEND | BLDCNT_TGT2_BG2 | BLDCNT_TGT2_BD);
-    SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(BR_FOG_EVA, BR_FOG_EVB));
-}
-
-#endif
 static void CreateFlyDestIcons(void)
 {
     u16 canFlyFlag;

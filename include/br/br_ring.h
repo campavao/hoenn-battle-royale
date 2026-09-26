@@ -47,6 +47,8 @@ void BrRing_Init(void);
 void BrRing_Tick(void);
 // Geometry, exposed for the page's tests and other systems: is the section inside?
 bool8 BrRing_SectionInside(u8 mapsec);
+// ...and one cell of the region-map grid: the same test, the rectangle a point.
+bool8 BrRing_CellInside(s16 x, s16 y);
 // Special for scripts: 1 when this map is outside the ring.
 u16 BrRing_Outside(void);
 

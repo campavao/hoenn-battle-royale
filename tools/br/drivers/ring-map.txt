@@ -3,8 +3,10 @@
 #
 # The fog is drawn as a purple overlay over everything outside the ring (POK-277) --
 # blended on BG1 rather than outlined in sprites, which is what the play-test asked for
-# and what `shot ring` below is the record of. There is nothing in RAM that says what
-# colour the map is, so the frame is the assertion: read it, do not trust it.
+# and what `shot ring` below is the record of. VRAM says which cells it covers: the
+# expects after the shot read BG1's tilemap, the fog's palette and the blend registers
+# (br_map.c's BrMap_ShadeFog / BrMap_BlendFog, which POK-331 #24 moved out of
+# region_map.c without changing a write).
 #
 # The menu in a match is POKEMON / BAG / MAP / <name> / EXIT (start-menu.txt pins the
 # first two), so MAP is two below the top with a party in the bag.
@@ -27,6 +29,21 @@ wait 20
 tap A
 wait 240
 shot ring
+# BG1's tilemap is screen block 30 (0x0600F000), 32 cells a row, and the region-map grid
+# starts at its cell (1,2). The fog is one tile of its own after the frame's last
+# (0x15 here) in palette 10: 0xA015. Inside the ring the frame's own cell stays:
+# (4,5) the centre, and (8,5), four cells out on a radius of 4 -- the edge is inside,
+# the test is <=. One further, (9,5), is fog, and so is the far corner (27,14).
+expect u16 0x0600F1CA 0x1000
+expect u16 0x0600F1D2 0x1000
+expect u16 0x0600F1D4 0xA015
+expect u16 0x0600F438 0xA015
+# the fog's colour, RGB(13,3,22), in palette 10...
+expect u16 0x05000140 0x586D
+expect u16 0x0500015E 0x586D
+# ...and the blend: BG1 over BG2 and the backdrop, 10/16 fog over 6/16 map
+expect u16 0x04000050 0x2442
+expect u16 0x04000052 0x060A
 # the map is up and it is a look, not a pick: the drop is not running
 expect u8 gBrMap 1
 expect u8 gBrPick 0
