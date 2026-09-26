@@ -208,6 +208,8 @@ type FakeRequest = { url: string; method: string; mode: string; cache: string };
 
 class FakeCache {
   entries = new Map<string, Response>();
+  /** Paths whose store fails, as a disk over its quota fails it. */
+  refuse = new Set<string>();
   private key(r: string | { url: string }): string {
     return typeof r === 'string' ? new URL(r, ORIGIN).href : r.url;
   }
@@ -217,7 +219,9 @@ class FakeCache {
     return hit?.clone();
   }
   async put(r: string | { url: string }, res: Response): Promise<void> {
-    this.entries.set(this.key(r), res);
+    const k = this.key(r);
+    if (this.refuse.has(k.slice(ORIGIN.length))) throw Object.assign(new Error('quota'), { name: 'QuotaExceededError' });
+    this.entries.set(k, res);
   }
   async delete(r: string | { url: string }): Promise<boolean> {
     return this.entries.delete(this.key(r));
@@ -265,7 +269,8 @@ function runWorker(files: Record<string, string>) {
     listeners.fetch({ request, respondWith: (p: Promise<Response>) => void (responded = p), waitUntil: (p: Promise<unknown>) => void waits.push(p) });
     if (!responded) return null;
     const res: Response = await responded;
-    for (let i = 0; i < waits.length; i++) await waits[i];
+    // A store the fake disk refuses fails its waitUntil, as a real one does; the response stands.
+    for (let i = 0; i < waits.length; i++) await waits[i].catch((e: Error) => { if (e.name !== 'QuotaExceededError') throw e; });
     return res.text();
   }
   return { get, cache, net };
@@ -389,6 +394,33 @@ describe('the service worker (POK-330 #23)', () => {
     await sw.get('/', { mode: 'navigate' });
     expect(assets()).toEqual(['/assets/landing-B.js', '/assets/main-B.js', '/assets/world-W.js']);
     expect(sw.net.asked.filter((p) => p === '/assets/world-W.js')).toHaveLength(1);
+  });
+
+  it('a script that never caches (a disk over quota) keeps one build back, not every build', async () => {
+    const files: Record<string, string> = {
+      '/': '<script type="module" src="/assets/main-A.js"></script>',
+      '/assets/main-A.js': 'import("./world-W.js")',
+      '/assets/world-W.js': 'world',
+    };
+    const sw = runWorker(files);
+    const assets = () => sw.cache.paths().filter((p) => p.startsWith('/assets/'));
+    await sw.get('/', { mode: 'navigate' });
+    for (const p of ['main-A', 'world-W']) await sw.get(`/assets/${p}.js`);
+
+    // A deploy whose main the disk will not take, on this load or any after it.
+    files['/'] = '<script type="module" src="/assets/main-B.js"></script>';
+    files['/assets/main-B.js'] = 'import("./world-W.js");import("./landing-B.js")';
+    files['/assets/landing-B.js'] = 'landing';
+    sw.cache.refuse.add('/assets/main-B.js');
+    await sw.get('/', { mode: 'navigate' });
+    for (const p of ['main-B', 'world-W', 'landing-B']) expect(await sw.get(`/assets/${p}.js`)).toBe(files[`/assets/${p}.js`]);
+    // The first load keeps the build it replaced: B may import A's chunks.
+    expect(assets()).toEqual(['/assets/landing-B.js', '/assets/main-A.js', '/assets/world-W.js']);
+
+    // The next still prunes, though B's main never became readable: A's main goes, and
+    // B's chunks with it, since nothing cached names them (B fetches them again).
+    await sw.get('/', { mode: 'navigate' });
+    expect(assets()).toEqual([]);
   });
 
   it('everything else is served from the cache and freshened behind it', async () => {
