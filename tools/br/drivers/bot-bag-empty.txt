@@ -31,9 +31,11 @@ copy gDecompressionBuffer *gBattleResources+0x18 4
 expect u8 *gDecompressionBuffer+0x50 0
 expect u16 *gDecompressionBuffer+0x48 0
 expect u16 *gDecompressionBuffer+0x4A 0
-# Into the first turn: FIGHT and the first move. At 1 HP with a POTION the AI would
-# have used it (B_ACTION_USE_ITEM, 1); with nothing it chose a move (B_ACTION_USE_MOVE,
-# 0), and nothing was spent.
+# Through the intro to our first move select: the AI chooses its action as the turn
+# opens, alongside ours, so it has chosen by the time POUND is on the screen. At 1 HP
+# with a POTION it would have used it (B_ACTION_USE_ITEM, 1); with nothing it chose a
+# move (B_ACTION_USE_MOVE, 0). (gBrBotFight.spent is no check here: it only marks
+# slots on the card, and this card has none.)
 tap A
 wait 60
 tap A
@@ -46,5 +48,10 @@ tap A
 wait 150
 shot empty-turn
 expect u8 gChosenActionByBattler+1 0
-expect u8 gBrBotFight+0xD 0
+# POUND, and the turn runs: the foe is still at 1 HP or fainted, never drunk up. Handed
+# two POTIONs, the same card drinks to 20 before the POUND and is at 17 here.
+tap A
+wait 600
+shot empty-turn-done
+expectle u16 gEnemyParty+86 1
 say bot bag empty ok
