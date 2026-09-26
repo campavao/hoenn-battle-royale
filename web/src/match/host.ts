@@ -13,7 +13,7 @@ import type { BotsOptions } from '../bots/brain';
 import { voiceFor, type BotVoice } from '../bots/lines';
 import { romCell } from '../bots/space';
 import { MAP_OFFSET, toRomCells } from '../net/cells';
-import type { Lines, Msg, TickerMsg } from '../net/wire';
+import type { Lines, Msg } from '../net/wire';
 import { Director, type DirectorOptions, type DirectorWorld } from './director';
 import { catchUp, departedSeats, lootOwed, type DealPlan } from './lifecycle';
 import { clockLeftAt } from './room';
@@ -179,12 +179,8 @@ export class HostRole {
       seed,
       loot: session.loot,
       players: () => link.roster.all(),
-      // A trainer card is for the one player it is a challenge to. The host's own ROM
-      // never hears itself over the relay, so its copy is a direct push.
-      sendTo: (toSeat, msg) => {
-        if (toSeat === link.seat) link.toRom(msg);
-        else link.toSeat(toSeat, msg);
-      },
+      // A trainer card is for the one player it is a challenge to.
+      sendTo: (toSeat, msg) => this.sendTo(toSeat, msg),
       // The kill feed. A duel is the only moment both sides of a fight are known at
       // once -- an `out` on its own cannot say who did it -- so the loser's out, which
       // follows at once, says it: `W BEAT L - N LEFT`, one line. It was four, the two
@@ -193,7 +189,7 @@ export class HostRole {
       // Walking up to somebody is when a bot has something to say (POK-239) -- to them
       // (POK-324): the rest of the room was not walked up to. Dealt from the seed, so
       // the same bot has the same voice all match on every client that works it out.
-      onEngage: (seat, target) => this.sayTo(target, Ticker.said(seat, this.nameOf(seat), this.myVoice(seat, seed).intro)),
+      onEngage: (seat, target) => this.sendTo(target, Ticker.said(seat, this.nameOf(seat), this.myVoice(seat, seed).intro)),
       fill: opts.fill,
       resume,
       safariSecs: opts.botSafariSecs,
@@ -378,8 +374,9 @@ export class HostRole {
     return this.link.roster.nameOf(seat);
   }
 
-  /** A line for one seat only: into our own ROM when it is ours. */
-  private sayTo(seat: number, msg: TickerMsg | null): void {
+  /** A message for one seat only -- a trainer card, a bot's intro. Into our own ROM when
+   *  it is ours: the host never hears itself over the relay. */
+  private sendTo(seat: number, msg: Msg | null): void {
     if (!msg) return;
     if (seat === this.link.seat) this.link.toRom(msg);
     else this.link.toSeat(seat, msg);

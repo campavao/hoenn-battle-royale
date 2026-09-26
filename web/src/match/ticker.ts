@@ -125,7 +125,6 @@ export class OutFeed {
       nameOf: (seat: number) => string;
       /** How many are still in, with every out so far counted. */
       left: () => number;
-      later?: (fn: () => void, ms: number) => () => void;
     },
   ) {}
 
@@ -148,16 +147,11 @@ export class OutFeed {
       return;
     }
     if (this.cancel) return;
-    const later =
-      this.o.later ??
-      ((fn: () => void, ms: number) => {
-        const id = setTimeout(fn, ms);
-        return () => clearTimeout(id);
-      });
-    this.cancel = later(() => {
+    const id = setTimeout(() => {
       this.cancel = null;
       this.flush();
     }, OUT_BATCH_MS);
+    this.cancel = () => clearTimeout(id);
   }
 
   /** Whatever is gathered, as one line, now. */
