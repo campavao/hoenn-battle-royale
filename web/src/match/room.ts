@@ -342,8 +342,11 @@ const DEAD_ENDS = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server
 export function onRefused(
   reason: string,
   page: { rejoining: boolean; wasHost: boolean; seat: number | null },
-): 'rehost' | 'dead-end' | 'status' {
+): 'rehost' | 'ask-pass' | 'dead-end' | 'status' {
   if (reason === 'not_found' && page.rejoining && page.wasHost && page.seat !== null) return 'rehost';
+  // A passcoded door asks for the code, and again when it was wrong (POK-320, Kanto's
+  // WRONG PASSCODE) -- a knock, never a rejoin, which the relay lets past the passcode.
+  if (reason === 'passcode' && !page.rejoining) return 'ask-pass';
   return DEAD_ENDS.includes(reason) ? 'dead-end' : 'status';
 }
 

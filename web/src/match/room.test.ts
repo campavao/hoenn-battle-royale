@@ -395,6 +395,13 @@ describe('a door that will not open (POK-330 #47)', () => {
     expect(onRefused('seat', { ...host, rejoining: false })).toBe('dead-end');
     expect(onRefused('already_in_room', host)).toBe('status');
   });
+
+  it('asks for the passcode at a passcoded door, and again after a wrong one (POK-320)', () => {
+    const knock = { rejoining: false, wasHost: false, seat: null };
+    expect(onRefused('passcode', knock)).toBe('ask-pass');
+    // A rejoin carries its token past the passcode; refused anyway, the room is gone to us.
+    expect(onRefused('passcode', { ...knock, rejoining: true })).toBe('dead-end');
+  });
 });
 
 describe('the clock a match is picked up from (POK-330 #47 review)', () => {

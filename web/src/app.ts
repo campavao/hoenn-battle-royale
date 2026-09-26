@@ -1002,6 +1002,11 @@ function careerSkin(): number {
  *  saved, so wandering into the locked half and leaving still leaves you dressed. */
 let browsedSkin: number | null = null;
 
+/** The passcode typed for the room we are knocking on (POK-320): kept here and nowhere
+ *  else -- never in the URL hash, which a link carries and a reload reads, and never in
+ *  the log. The relay client keeps its own copy for a rejoin. */
+let joinPass: string | null = null;
+
 /** MY VOICE: the three lines this seat speaks with when its own duels get announced
  *  (POK-243, split into three by POK-283). Each is an index into `LINES`; an unpicked
  *  one falls back to the head of the pool rather than to a deal, because a profile is
@@ -2534,6 +2539,28 @@ function wireRoom(
     // The drawer says so, under no screen: a dead end is not worth drawing.
     stage.hide();
   };
+  /** The passcode, over the room screen: typed, the knock goes again with it; BACK is
+   *  the lobby, since the room will not have us without it. */
+  const askPass = (code: string): void => {
+    const wrong = joinPass !== null;
+    setStatus(`Room ${code} has a passcode.`);
+    const state = newEntry(PASS_ENTRY);
+    stage.push(
+      entryScreen(() => ({
+        title: 'PASSCODE',
+        state,
+        note: wrong ? 'WRONG PASSCODE' : `Room ${code} is locked.`,
+        noteIsError: wrong,
+        onDone: (pass) => {
+          joinPass = pass;
+          stage.pop();
+          setStatus(`Joining ${code}…`);
+          relay.join(code, { ...me, spectate: hash.mode === 'watch', pass });
+        },
+        onBack: () => backToLobby(),
+      })),
+    );
+  };
   relay.on('room_error', (ev) => {
     // `locked` is the common refusal: a room mid-match, which is exactly what you rejoin
     // if you reload an old link. Which ones are dead ends is match/room.ts's onRefused.
@@ -2545,6 +2572,12 @@ function wireRoom(
     if (next === 'rehost') {
       setStatus('The room was gone. Hosting it again…');
       relay.host({ ...me, open: true, max: BOT_FILL, seat: bridge?.seat });
+      return;
+    }
+    // A passcoded door asks for the code, and asks again when the one typed was wrong --
+    // Kanto's WRONG PASSCODE (browse.lua) -- rather than ending the knock.
+    if (next === 'ask-pass' && hash.code) {
+      askPass(hash.code);
       return;
     }
     // Kanto's door: a room on another build is not one you can play in (POK-330 #3). A
@@ -2668,7 +2701,7 @@ function wireRoom(
   if (hash.mode === 'host') relay.host({ ...me, open: true, max: BOT_FILL });
   else if (hash.mode === 'quick') relay.quickJoin(me);
   else if (hash.mode === 'daily') relay.dailyJoin(me);
-  else relay.join(hash.code!, { ...me, spectate: hash.mode === 'watch' });
+  else relay.join(hash.code!, { ...me, spectate: hash.mode === 'watch', pass: joinPass ?? undefined });
 }
 
 // ---- the lobby (POK-240) -----------------------------------------------------------
@@ -2796,6 +2829,28 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
           return;
         }
         case 'join':
+          // A locked row asks for the passcode before it knocks (Kanto's browse.lua), on
+          // the same entry the code is typed on; BACK leaves the list where it was.
+          if (action.pass) {
+            const { code } = action;
+            const state = newEntry(PASS_ENTRY);
+            stage.push(
+              entryScreen(() => ({
+                title: 'PASSCODE',
+                state,
+                note: `Room ${code} is locked.`,
+                onDone: (pass) => {
+                  joinPass = pass;
+                  setRoomHash('join', code);
+                  done({ mode: 'join', code });
+                },
+                onBack: () => stage.pop(),
+              })),
+            );
+            return;
+          }
+          setRoomHash('join', action.code);
+          return done({ mode: 'join', code: action.code });
         case 'watch':
           setRoomHash('join', action.code);
           return done({ mode: 'join', code: action.code });
