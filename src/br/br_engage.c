@@ -293,7 +293,7 @@ void BrEngage_OnBattleEnd(u8 peerSeat, u8 outcome)
         // which is the only way a room learns that somebody ran rather than won.
         buf[0] = gBrMySeat;
         buf[1] = peerSeat;
-        BrWire_Send(BR_MSG_FLED, buf, 2);
+        BrWire_SendOrHold(BR_MSG_FLED, buf, 2);
     }
 }
 

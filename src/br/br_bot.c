@@ -329,7 +329,8 @@ bool8 BrBot_PartyIsStaged(void)
 
 // What the AI spent out of the bot's bag (POK-237), under the bot's own seat. Sent
 // even when nothing went: the page staked those units on this fight and a silent
-// report would leave them staked for ever.
+// report would leave them staked for ever -- so a full ring holds it rather than lose it.
+STATIC_ASSERT(2 + BR_BOT_ITEMS * 2 <= BR_HELD_DATA_MAX, BrSpentFitsTheHold)
 static void SendSpent(void)
 {
     u8 buf[2 + BR_BOT_ITEMS * 2];
@@ -345,7 +346,7 @@ static void SendSpent(void)
         buf[len++] = (gBrBotFight.items[i] >> 8) & 0xFF;
         buf[1]++;
     }
-    BrWire_Send(BR_MSG_SPENT, buf, len);
+    BrWire_SendOrHold(BR_MSG_SPENT, buf, len);
 }
 
 // Where the fight comes back to. The same errand as the netlink's own return: say what

@@ -5,6 +5,7 @@
 #include "br/br_config.h"
 #include "br/br_main.h"
 #include "br/br_mailbox.h"
+#include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
 #include "br/br_boot.h"
 #include "br/br_ring.h"
@@ -61,6 +62,7 @@ void BrHeapReset(void)
 
 void BrFrame(void)
 {
+    BrWire_FlushHeld(); // what a full ring held back goes before anything newer
     BrNet_Tick();
     BrBoot_Tick();
     BrGhosts_Tick();

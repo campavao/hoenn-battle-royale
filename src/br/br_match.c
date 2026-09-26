@@ -178,7 +178,7 @@ void BrMatch_SendResult(u8 seat, u8 outcome)
     case B_OUTCOME_DREW: buf[1] = 2; break;
     default: buf[1] = 3; break;
     }
-    BrWire_Send(BR_MSG_RESULT, buf, 2);
+    BrWire_SendOrHold(BR_MSG_RESULT, buf, 2);
 }
 
 // OUT {seat}: somebody is out of the match -- beaten, fogged, or gone from the room (the
@@ -343,7 +343,7 @@ void BrMatch_Out(void)
     if (gBrMatch.phase == BR_PHASE_OUT)
         return;
     gBrMatch.phase = BR_PHASE_OUT;
-    BrWire_Send(BR_MSG_OUT, &seat, 1);
+    BrWire_SendOrHold(BR_MSG_OUT, &seat, 1);
     // Then what we were carrying: the room hears the elimination first, and the spill
     // that goes with it right behind (POK-232).
     BrLoot_SpillOwn();

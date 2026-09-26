@@ -16,6 +16,19 @@ bool8 BrWire_Send(u8 type, const u8 *data, u8 len);
 // the header and 59 bytes, continuation slots (type | BR_MSG_CONT) 61 more each.
 // All or nothing: FALSE (and nothing pushed) when the ring lacks the room.
 bool8 BrWire_SendLarge(u8 type, const u8 *data, u16 len);
+// A one-shot message -- an event the room hears once and never again: OUT, RESULT, a
+// PICKUP, SPENT, FLED, NPCOUT. BrWire_Send's FALSE on a full ring lost it for good
+// (POK-331 leftover c). This sends it, or holds it until the ring has room, behind
+// anything already held so they go out in the order they were made; BrWire_FlushHeld
+// sends what is held, first thing every frame. FALSE only when it is longer than
+// BR_HELD_DATA_MAX or the hold itself is full -- lost, as it always was.
+#define BR_HELD_DATA_MAX 10
+bool8 BrWire_SendOrHold(u8 type, const u8 *data, u8 len);
+void BrWire_FlushHeld(void);
+// Room to send or hold one more of `len` bytes: a caller about to do something the room
+// must hear about asks first, rather than do it and have the message fall on the floor.
+bool8 BrWire_CanHold(u8 len);
+void BrWire_ResetHeld(void);
 // Unframes a single-slot payload: points *data at the message bytes and returns their
 // length. A frame that is a continuation, claims more than one slot or is too short to
 // be a frame at all returns 0 with *data at a zero byte, so a handler's own `n < K`

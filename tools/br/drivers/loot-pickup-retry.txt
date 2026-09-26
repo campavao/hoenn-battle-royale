@@ -1,0 +1,43 @@
+# loot-pickup-retry: a piece taken while the out ring is full still tells the room, once
+# there is room (POK-331 leftover c).
+#
+# SendPickup ignored BrWire_Send's FALSE: the ball went into our bag and off our ground,
+# and on a full ring the room never heard. Every other screen kept it on the ground for
+# the next trainer to take again. The PICKUP is now held (BrWire_SendOrHold) and goes out
+# first thing on the first frame the ring has room -- loot-give-retry's rule, for the
+# small one-shot messages.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMySeat 4
+# One of the Zone's item balls on the tile we face: key 0x8F02, (12,16), map 0:9, kind 3
+# (BR_LOOT_ITEM), objId BR_NO_OBJ, and the item is a POTION (13).
+pokebytes gBrLoot 02 8F 0C 00 10 00 0D 00 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+# The page stops taking slots, and the ring is full: 64 slots between tail and head.
+drain 0x0
+poke u16 gBrMailbox+0x0A 0
+poke u16 gBrMailbox+0x08 64
+tap A
+wait 20
+# "FOUND POTION!": it is in the ITEMS pocket and off our ground...
+expect u16 *gSaveBlock1Ptr+0x560 13
+expect u8 gBrLoot+11 0
+expect u8 gBrLoot+0xA2 1
+# ...and nothing got out, not even into the count of drops: it is held, not lost.
+expect u16 gBrMailbox+0x08 64
+expect u32 gBrMailbox+0x14 0
+wait 30
+expect u16 gBrMailbox+0x08 64
+# The page takes slots again, and the held PICKUP goes out: our seat, the ball's key, no
+# item named (the whole piece left the ground), not a bag.
+drain gBrMailbox
+wait 3
+expectmsg 10 u8 0 4
+expectmsg 10 u16 1 0x8F02
+expectmsg 10 u8 3 0
+expectmsg 10 u8 7 0
+expect u16 gBrMailbox+0x08 65
+shot sent
+say loot pickup retry ok

@@ -537,10 +537,12 @@ static const u8 sText_Found[] = _("FOUND ");
 static const u8 sText_Bang[] = _("!");
 
 // Tell the room it is gone, and take it off our own ground: nobody hears their own
-// message come back.
+// message come back. A full ring holds the PICKUP until there is room (Take() asks
+// first): dropped, the room kept a piece on its ground that was in our bag.
+#define BR_PICKUP_LEN 8
 static void SendPickup(struct BrLootItem *it)
 {
-    u8 buf[8];
+    u8 buf[BR_PICKUP_LEN];
 
     buf[0] = gBrMySeat;
     BrWire_WriteU16(buf + 1, it->key);
@@ -549,7 +551,7 @@ static void SendPickup(struct BrLootItem *it)
     buf[5] = 0;
     buf[6] = 0;
     buf[7] = it->kind == BR_LOOT_BAG ? 1 : 0;
-    BrWire_Send(BR_MSG_PICKUP, buf, 8);
+    BrWire_SendOrHold(BR_MSG_PICKUP, buf, BR_PICKUP_LEN);
     gBrLoot.taken++;
     Drop(it);
 }
@@ -609,6 +611,10 @@ static void Take(struct BrLootItem *it)
     u16 species;
     u8 *p;
 
+    // Nothing leaves the ground without its PICKUP on the way: with the ring full and the
+    // hold full too, the press does nothing and the piece is there for the next one.
+    if (!BrWire_CanHold(BR_PICKUP_LEN))
+        return;
     DropHeldLine(); // it is about to say what was taken; the held name has done its job
     if (it->kind == BR_LOOT_BAG)
     {
@@ -961,7 +967,7 @@ void BrLoot_TrainerBeaten(u16 trainerId, u8 localId)
         out[1] = group;
         out[2] = num;
         out[3] = localId;
-        BrWire_Send(BR_MSG_NPCOUT, out, 4);
+        BrWire_SendOrHold(BR_MSG_NPCOUT, out, 4);
     }
     RememberDespawned(group, num, localId);
     Despawn_Trainer(group, num, localId);

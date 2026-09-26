@@ -51,6 +51,14 @@ increments by exactly 1 with no gap -- a dropped or reordered slot must fail lou
 rather than reassemble into a different message. `0x80` is reserved as the
 continuation flag for every message type; no `BR_MSG_*` number may set that bit.
 
+A full out ring refuses a push. Position and step updates can afford that -- the next
+one says the same thing -- but an event the room hears once cannot: `out`, `result`,
+`pickup`, `spent`, `fled` and `npcout` go through `BrWire_SendOrHold`, which keeps up
+to 40 bytes of them in order and sends them first thing on the next frame with room
+(POK-331 leftover c). A pickup is not taken while that hold is full. Of the large ones,
+a bag's give-back `spill`, `bstart` and `turn` have retries of their own; a fallen
+trainer's `spill` and a duel's `dresult` do not yet.
+
 ## Message table
 
 | Name | Type # | Direction(s) | Crosses to ROM | Sent by / when |

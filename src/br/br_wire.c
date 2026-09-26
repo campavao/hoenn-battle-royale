@@ -47,6 +47,66 @@ bool8 BrWire_Send(u8 type, const u8 *data, u8 len)
     return BrMailbox_Push(type, buf, BR_FRAME_HDR + len);
 }
 
+// The held one-shots, packed back to back as [type, len, data...]. Forty bytes is a bot
+// fight's whole way home -- two RESULTs, SPENT and OUT -- with a PICKUP behind it.
+#define BR_HELD_BYTES 40
+static EWRAM_DATA u8 sHeld[BR_HELD_BYTES] = {0};
+static EWRAM_DATA u8 sHeldLen = 0;
+
+static bool8 RingHasRoom(void)
+{
+    return (u16)(gBrMailbox.outHead - gBrMailbox.outTail) < BR_RING_SLOTS;
+}
+
+bool8 BrWire_CanHold(u8 len)
+{
+    if (len > BR_HELD_DATA_MAX)
+        return FALSE;
+    return (sHeldLen == 0 && RingHasRoom()) || sHeldLen + 2 + len <= BR_HELD_BYTES;
+}
+
+bool8 BrWire_SendOrHold(u8 type, const u8 *data, u8 len)
+{
+    u8 i;
+
+    if (len > BR_HELD_DATA_MAX)
+        return FALSE;
+    // Behind anything already held, even with room in the ring: a PICKUP that overtook
+    // the OUT before it would say a player who is out took something.
+    if (sHeldLen == 0 && RingHasRoom())
+        return BrWire_Send(type, data, len);
+    if (sHeldLen + 2 + len > BR_HELD_BYTES)
+        return FALSE;
+    sHeld[sHeldLen++] = type;
+    sHeld[sHeldLen++] = len;
+    for (i = 0; i < len; i++)
+        sHeld[sHeldLen++] = data[i];
+    return TRUE;
+}
+
+// Asks the ring before each push, so a held message waiting on a full ring is not counted
+// in gBrMailbox.dropped every frame it waits.
+void BrWire_FlushHeld(void)
+{
+    u8 at = 0, i;
+
+    while (at < sHeldLen && RingHasRoom())
+    {
+        BrWire_Send(sHeld[at], sHeld + at + 2, sHeld[at + 1]);
+        at += 2 + sHeld[at + 1];
+    }
+    if (at == 0)
+        return;
+    for (i = at; i < sHeldLen; i++)
+        sHeld[i - at] = sHeld[i];
+    sHeldLen -= at;
+}
+
+void BrWire_ResetHeld(void)
+{
+    sHeldLen = 0;
+}
+
 bool8 BrWire_SendLarge(u8 type, const u8 *data, u16 len)
 {
     u8 buf[BR_SLOT_PAYLOAD_MAX];

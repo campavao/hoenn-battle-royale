@@ -2,6 +2,7 @@
 #include "global.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
+#include "br/br_wire_c.h"
 
 EWRAM_DATA struct BrMailbox gBrMailbox = {0};
 // One row for first slots, one for continuations (type | BR_MSG_CONT), BR_MSG_COUNT wide.
@@ -34,6 +35,7 @@ void BrMailbox_Init(void)
 {
     CpuFill32(0, sHandlers, sizeof(sHandlers));
     CpuFill32(0, &gBrMailbox, sizeof(gBrMailbox));
+    BrWire_ResetHeld(); // what was held was for the ring just emptied
     gBrMailbox.protocol = BR_PROTOCOL;
     gBrMailbox.patch = BR_PATCH_VERSION;
     gBrMailbox.size = sizeof(struct BrMailbox);
