@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AudioMeter, STARVED_TAIL, ending, silentTail, tapNode, type AudioTick, type Heard } from './audio-meter';
+import { AudioMeter, CUT_SILENCE, cutOff, tapNode, type AudioTick, type Heard } from './audio-meter';
 
 /** A stereo buffer of `n` samples, all sound, with the last `silent` of them zero. */
 function buffer(n: number, silent = 0, sound = 0.25) {
@@ -9,6 +9,16 @@ function buffer(n: number, silent = 0, sound = 0.25) {
     return data;
   });
   return { numberOfChannels: 2, length: n, sampleRate: 48000, getChannelData: (c: number) => channels[c] };
+}
+
+/** Both channels set by `at(i)`. */
+function shaped(n: number, at: (i: number) => number) {
+  const out = buffer(n);
+  for (let c = 0; c < 2; c++) {
+    const d = out.getChannelData(c);
+    for (let i = 0; i < n; i++) d[i] = at(i);
+  }
+  return out;
 }
 
 /** A ScriptProcessorNode as SDL leaves it: its own callback fills the output. */
@@ -26,34 +36,26 @@ function event(out: ReturnType<typeof buffer>, playbackTime: number) {
 }
 
 describe('the audio meter (POK-247)', () => {
-  it("reads a zero-filled tail after sound as the core's short buffer", () => {
-    expect(silentTail(buffer(1024, 40))).toBe(40);
-    expect(silentTail(buffer(1024))).toBe(0);
-    // Silence all the way through is a quiet song or a paused device, not a short one.
-    expect(silentTail(buffer(1024, 1024))).toBe(0);
-    // One channel with sound to the end is sound to the end.
-    const mixed = buffer(1024, 40);
-    mixed.getChannelData(1).fill(0.1);
-    expect(silentTail(mixed)).toBe(0);
+  it("hears the core's zero-fill: sound, then silence to the end", () => {
+    expect(cutOff(buffer(1024, 40))).toBe(true);
+    expect(cutOff(buffer(1024, CUT_SILENCE - 1))).toBe(false);
+    expect(cutOff(buffer(1024))).toBe(false);
+    // Silence all the way through is a quiet song or a paused device, not a cut.
+    expect(cutOff(buffer(1024, 1024))).toBe(false);
   });
 
-  it('a quiet passage ending on zeros is the music; a cut from sound is the core', () => {
-    expect(ending(buffer(1024, 40))).toEqual({ flat: true, starved: true });
-    // One or two steps of a quiet song, and then its own zeros: nothing was cut.
-    expect(ending(buffer(1024, 40, 1 / 32768))).toEqual({ flat: true, starved: false });
-    expect(ending(buffer(1024, STARVED_TAIL - 1))).toEqual({ flat: false, starved: false });
+  it('hears a dropout anywhere in the buffer: what a player who is out heard, every frame', () => {
+    // The probe's shape: ~173 samples of sound, then ~627 of silence, per 800-sample frame.
+    expect(cutOff(shaped(1024, (i) => ((i + 244) % 800 < 173 ? 0.17 : 0)))).toBe(true);
   });
 
-  it("a square wave's low half ending a buffer is the wave: its earlier halves are as long", () => {
-    // What a player who was out heard while watching a fight: a 577-sample period, half
-    // of it flat zero, sliding past the buffer (tails 254, 479, 126, ...).
-    const wave = buffer(1024);
-    for (let c = 0; c < 2; c++) {
-      const d = wave.getChannelData(c);
-      for (let i = 0; i < 1024; i++) d[i] = (i + 96) % 577 < 289 ? 0.25 : 0;
-    }
-    expect(silentTail(wave)).toBe(254);
-    expect(ending(wave)).toEqual({ flat: true, starved: false });
+  it('a quiet passage, and a sound too short to be music, are not cuts', () => {
+    // One step of a quiet song, then its own zeros.
+    expect(cutOff(buffer(1024, 40, 1 / 32768))).toBe(false);
+    // A click between silences.
+    expect(cutOff(shaped(1024, (i) => (i % 578 < 3 ? 0.3 : 0)))).toBe(false);
+    // Music crossing zero on both channels for a sample or two.
+    expect(cutOff(shaped(1024, (i) => (i % 97 < 2 ? 0 : 0.2)))).toBe(false);
   });
 
   it("counts a callback whose buffer was due before it ran as late, after SDL's own callback ran", () => {
@@ -82,16 +84,16 @@ describe('the audio meter (POK-247)', () => {
     expect(ticks.map((k) => k.late)).toEqual([false, false, false, true, false]);
   });
 
-  it('counts a buffer the core could not fill as starved', () => {
+  it('reads the buffer SDL filled, not the one it was handed', () => {
     const ctx = { currentTime: 0, sampleRate: 48000, state: 'running' as AudioContextState };
     const node = sdlNode((out) => {
       // sdl-audio.c: `available < len` -> the rest is memset to zero.
-      for (let c = 0; c < 2; c++) out.getChannelData(c).fill(0, 1024 - STARVED_TAIL);
+      for (let c = 0; c < 2; c++) out.getChannelData(c).fill(0, 1024 - CUT_SILENCE);
     });
     const ticks: AudioTick[] = [];
     tapNode(node, ctx, (tick) => void ticks.push(tick));
     node.onaudioprocess!.call(node, event(buffer(1024), 1));
-    expect(ticks[0].starved).toBe(true);
+    expect(ticks[0].cut).toBe(true);
   });
 
   it('adds up a window, the longest gap with it, and starts the next from nothing', () => {
@@ -104,14 +106,14 @@ describe('the audio meter (POK-247)', () => {
     };
     const meter = new AudioMeter(source);
     expect(meter.stats().state).toBe('none');
-    const tick = (at: number, late = false, starved = false): AudioTick => ({ at, bufferMs: 21.3, late, starved, flat: starved, state: 'running' });
+    const tick = (at: number, late = false, cut = false): AudioTick => ({ at, bufferMs: 21.3, late, cut, state: 'running' });
     emit(tick(0));
     emit(tick(21, true));
     emit(tick(90, false, true)); // two buffers missed
     emit(tick(111));
-    expect(meter.stats()).toEqual({ callbacks: 4, late: 1, starved: 1, flat: 1, maxGapMs: 69, bufferMs: 21.3, state: 'running' });
+    expect(meter.stats()).toEqual({ callbacks: 4, late: 1, cut: 1, maxGapMs: 69, bufferMs: 21.3, state: 'running' });
     emit(tick(132));
     // The gap from the last window's final callback still counts.
-    expect(meter.stats()).toEqual({ callbacks: 1, late: 0, starved: 0, flat: 0, maxGapMs: 21, bufferMs: 21.3, state: 'running' });
+    expect(meter.stats()).toEqual({ callbacks: 1, late: 0, cut: 0, maxGapMs: 21, bufferMs: 21.3, state: 'running' });
   });
 });

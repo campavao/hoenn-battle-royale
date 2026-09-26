@@ -335,7 +335,7 @@ export class Emulator {
     return () => this.workListeners.delete(listener);
   }
 
-  /** Every callback of the core's audio output, late or starved or fine (audio-meter.ts).
+  /** Every callback of the core's audio output, late, cut or fine (audio-meter.ts).
    *  Heard from the first frame after SDL opens it, and again after every boot. */
   onAudio(listener: (tick: AudioTick) => void): () => void {
     this.audioListeners.add(listener);

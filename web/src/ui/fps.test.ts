@@ -147,12 +147,12 @@ describe('the #perf readout (POK-247)', () => {
       clock.t += 16;
       gba.frame(1.2);
     }
-    gba.audio({ at: 0, bufferMs: 21.3, late: true, starved: false, flat: false, state: 'running' });
+    gba.audio({ at: 0, bufferMs: 21.3, late: true, cut: false, state: 'running' });
     clock.t = 1000;
     const lines = perfLines(now.sample(), all.sample(false));
     expect(lines).toEqual([
-      '60 fps · p95 16 · max 16 ms · work 1.2 ms · audio 1 late 0 starved',
-      'all 60 frames · p95 16 p99 16 max 16 ms · work p95 1.2 ms · audio 1 late 0 starved · heap 93 MB · proxy 3 fought 1 fell back 480 frames',
+      '60 fps · p95 16 · max 16 ms · work 1.2 ms · audio 1 late 0 cut',
+      'all 60 frames · p95 16 p99 16 max 16 ms · work p95 1.2 ms · audio 1 late 0 cut · heap 93 MB · proxy 3 fought 1 fell back 480 frames',
     ]);
     // The second's window starts over; the whole page's does not.
     expect(now.sample().frames.frames).toBe(0);

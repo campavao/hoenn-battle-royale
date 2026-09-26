@@ -6,19 +6,18 @@
 // on the page longer than that can make the speaker click, and nothing measured it. Two
 // ways a buffer goes wrong, and both are counted here:
 //
-//   late     the page was too busy to run the callback in time, and the output
-//            skipped. Two ways to see it: the buffer's `playbackTime` is already behind
-//            the context's clock, or -- Chromium, which stamps playbackTime when the
-//            event runs, so it is never behind -- more than two buffers' time passed
-//            since the last callback, and a ScriptProcessorNode has only two.
-//   starved  the core had fewer samples than the buffer wanted. mGBA's SDL callback
-//            fills the rest with zeros (sdl-audio.c, `available < len`), so the tail of
-//            a buffer goes flat: the emulator fell behind. Only when the sound is cut
-//            off, and the tail is the longest silence in the buffer: a quiet passage
-//            ends on zeros of its own, and so does a square wave's low half. The first
-//            soaks counted a thousand a sample of the second kind while a player who
-//            was out watched a fight: the tails cycled 254, 479, 126, 351, 575, 223 --
-//            a wave's period sliding past the buffer's, not a core running short.
+//   late  the page was too busy to run the callback in time, and the output skipped.
+//         Two ways to see it: the buffer's `playbackTime` is already behind the
+//         context's clock, or -- Chromium, which stamps playbackTime when the event
+//         runs, so it is never behind -- more than two buffers' time passed since the
+//         last callback, and a ScriptProcessorNode has only two.
+//   cut   sound stopped dead inside the buffer: a stretch of it, then digital silence.
+//         mGBA's SDL callback fills whatever the core could not supply with zeros
+//         (sdl-audio.c, `available < len`), which is one cut, at the end; a dropout in
+//         the game's own output is another, anywhere. Music fades; it does not drop to
+//         exact zero sixteen samples at a time. The first soaks found the second kind:
+//         a player who is out hears, in every 800-sample frame, ~173 samples of sound
+//         and ~627 of silence.
 //
 // Pure over the Web Audio types, so it runs under vitest with a hand-made event.
 
@@ -29,9 +28,7 @@ export interface AudioTick {
   /** Its buffer's length, ms. */
   bufferMs: number;
   late: boolean;
-  starved: boolean;
-  /** Ended on a flat run after sound: the zero-fill's shape, and a quiet passage's too. */
-  flat: boolean;
+  cut: boolean;
   state: AudioContextState;
 }
 
@@ -47,64 +44,40 @@ export interface SdlAudio {
   audioContext?: AudioContext;
 }
 
-/** Samples of flat silence a buffer must end on, after sound, to count as starved. A
- *  sample of music crosses zero now and then; sixteen in a row at the very end is the
- *  zero-fill. */
-export const STARVED_TAIL = 16;
-
-/** How loud the sound just before that tail must be for its end to be a cut: 1/512 of
- *  full scale. Quiet music is mostly zeros, and a run of them ending a buffer is the
- *  music, not the core. */
-export const STARVED_LEVEL = 1 / 512;
+/** Samples of unbroken sound a cut must stop: music at a level worth hearing is almost
+ *  never exactly zero on every channel at once. */
+export const CUT_SOUND = 64;
+/** ...at least this loud somewhere in them, 1/512 of full scale: quiet music is mostly
+ *  zeros, and its silences are its own. */
+export const CUT_LEVEL = 1 / 512;
+/** Samples of digital silence, on every channel, that make it a cut. */
+export const CUT_SILENCE = 16;
 
 type Buffer = Pick<AudioBuffer, 'numberOfChannels' | 'length' | 'getChannelData'>;
 
-/** How many samples at the end of the buffer are silent on every channel, when
- *  something before them was not; 0 for a buffer with sound to the end, or none at all. */
-export function silentTail(buffer: Buffer): number {
-  let lastSound = -1;
-  for (let c = 0; c < buffer.numberOfChannels; c++) {
-    const data = buffer.getChannelData(c);
-    for (let i = data.length - 1; i > lastSound; i--) {
-      if (data[i] !== 0) {
-        lastSound = i;
-        break;
-      }
+/** Does sound stop dead anywhere in the buffer: CUT_SOUND samples of it, reaching
+ *  CUT_LEVEL, and then CUT_SILENCE of silence? */
+export function cutOff(buffer: Buffer): boolean {
+  const channels = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+  let sound = 0;
+  let peak = 0;
+  let silence = 0;
+  let heard = false; // the sound run before this silence was one worth cutting
+  for (let i = 0; i < buffer.length; i++) {
+    let loudest = 0;
+    for (const d of channels) loudest = Math.max(loudest, Math.abs(d[i]));
+    if (loudest === 0) {
+      if (silence === 0) heard = sound >= CUT_SOUND && peak >= CUT_LEVEL;
+      if (++silence >= CUT_SILENCE && heard) return true;
+      sound = 0;
+      peak = 0;
+    } else {
+      silence = 0;
+      sound++;
+      peak = Math.max(peak, loudest);
     }
   }
-  return lastSound < 0 ? 0 : buffer.length - 1 - lastSound;
-}
-
-/** The loudest of the `span` samples, on any channel, just before the last `tail`. */
-export function levelBefore(buffer: Buffer, tail: number, span = STARVED_TAIL): number {
-  const end = buffer.length - tail;
-  let peak = 0;
-  for (let c = 0; c < buffer.numberOfChannels; c++) {
-    const data = buffer.getChannelData(c);
-    for (let i = Math.max(0, end - span); i < end; i++) peak = Math.max(peak, Math.abs(data[i]));
-  }
-  return peak;
-}
-
-/** How a buffer ends: flat, on a run of zeros after sound, and starved when that run
- *  cuts off sound worth hearing and is the longest silence in it -- a buffer the core
- *  could not fill. */
-export function ending(buffer: Buffer): { flat: boolean; starved: boolean } {
-  const tail = silentTail(buffer);
-  const flat = tail >= STARVED_TAIL;
-  return { flat, starved: flat && levelBefore(buffer, tail) >= STARVED_LEVEL && longestSilence(buffer, tail) < tail };
-}
-
-/** The longest run of samples silent on every channel before the last `tail`. */
-export function longestSilence(buffer: Buffer, tail: number): number {
-  const channels = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
-  let run = 0;
-  let longest = 0;
-  for (let i = 0; i < buffer.length - tail; i++) {
-    run = channels.every((d) => d[i] === 0) ? run + 1 : 0;
-    if (run > longest) longest = run;
-  }
-  return longest;
+  return false;
 }
 
 /** Hears every callback of `node` from now on; the core's own callback runs first and
@@ -124,7 +97,7 @@ export function tapNode(
     const late = e.playbackTime < ctx.currentTime || (last !== null && at - last > 2 * bufferMs);
     last = at;
     own?.call(this, e);
-    emit({ at, bufferMs, late, ...ending(out), state: ctx.state });
+    emit({ at, bufferMs, late, cut: cutOff(out), state: ctx.state });
   };
 }
 
@@ -132,9 +105,7 @@ export function tapNode(
 export interface AudioStats {
   callbacks: number;
   late: number;
-  starved: number;
-  /** Buffers ending flat, cut or quiet: with `starved`, which of the two a count was. */
-  flat: number;
+  cut: number;
   /** The longest wait between two callbacks, ms: past two buffers, one was missed. */
   maxGapMs: number;
   bufferMs: number;
@@ -148,8 +119,7 @@ export interface AudioStats {
 export class AudioMeter {
   private callbacks = 0;
   private late = 0;
-  private starved = 0;
-  private flat = 0;
+  private cut = 0;
   private maxGap = 0;
   private lastAt: number | null = null;
   private bufferMs = 0;
@@ -159,8 +129,7 @@ export class AudioMeter {
     source.onAudio((tick) => {
       this.callbacks++;
       if (tick.late) this.late++;
-      if (tick.starved) this.starved++;
-      if (tick.flat) this.flat++;
+      if (tick.cut) this.cut++;
       if (this.lastAt !== null) this.maxGap = Math.max(this.maxGap, tick.at - this.lastAt);
       this.lastAt = tick.at;
       this.bufferMs = tick.bufferMs;
@@ -173,8 +142,7 @@ export class AudioMeter {
     const out: AudioStats = {
       callbacks: this.callbacks,
       late: this.late,
-      starved: this.starved,
-      flat: this.flat,
+      cut: this.cut,
       maxGapMs: this.maxGap,
       bufferMs: this.bufferMs,
       state: this.state,
@@ -182,8 +150,7 @@ export class AudioMeter {
     if (reset) {
       this.callbacks = 0;
       this.late = 0;
-      this.starved = 0;
-      this.flat = 0;
+      this.cut = 0;
       this.maxGap = 0;
     }
     return out;

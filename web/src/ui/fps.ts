@@ -10,7 +10,7 @@
 // And what a phone needs measured (POK-247): the time between emulated frames as a
 // histogram -- the p95 the ticket's acceptance is written in, not a frames-a-second
 // average that hides every hitch -- the page's own share of each frame, the speaker's
-// late and starved buffers (emu/audio-meter.ts), the JS heap where the browser tells, and
+// late and cut buffers (emu/audio-meter.ts), the JS heap where the browser tells, and
 // what the proxy duel instance is doing. In DEV always; in a build with `#perf`.
 
 import type { ProxyCounts } from '../bots/proxy';
@@ -211,7 +211,7 @@ function jsHeap(): number | null {
  *  screenshots at the end of a match on a phone. */
 export function perfLines(now: PerfSample, all: PerfSample): string[] {
   const audio = (a: AudioStats) =>
-    a.callbacks === 0 ? `audio ${a.state === 'none' ? 'off' : a.state}` : `audio ${a.late} late ${a.starved} starved`;
+    a.callbacks === 0 ? `audio ${a.state === 'none' ? 'off' : a.state}` : `audio ${a.late} late ${a.cut} cut`;
   const first = `${frameLine(now.frames)} · work ${now.frames.work.mean.toFixed(1)} ms · ${audio(now.audio)}`;
   const f = all.frames;
   const parts = [
