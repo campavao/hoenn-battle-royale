@@ -29,6 +29,21 @@ test.beforeAll(() => {
 test('a stock Emerald ROM is patched in the browser and boots battle royale', async ({ page }) => {
   test.setTimeout(60_000);
 
+  // Every paint of the patch screen, as its mirror has it: what it said and the version
+  // line it ended on. POK-320 review: this path said 'Starting the game…' before it knew
+  // the version, and nothing painted the screen again while the core booted, so the
+  // drawn line stayed a dash.
+  await page.addInitScript(() => {
+    const seen: { status: string; footer: string }[] = [];
+    (window as unknown as { __patchPaints: typeof seen }).__patchPaints = seen;
+    new MutationObserver(() => {
+      const status = document.querySelector('#patch-status')?.textContent ?? '';
+      const footer = document.querySelector('#ui-hits .version')?.textContent ?? '';
+      const last = seen[seen.length - 1];
+      if (status && (!last || last.status !== status || last.footer !== footer)) seen.push({ status, footer });
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+
   await page.goto('/#solo');
   await expect(page.locator('#screen-importing')).toBeVisible();
   // The import screen is drawn in Emerald's frame (POK-320); its PICK ROM opens the
@@ -40,6 +55,16 @@ test('a stock Emerald ROM is patched in the browser and boots battle royale', as
   // started the ROM as it came, which is the bug this is here to catch.
   await expect(page.locator('#version')).not.toContainText('unpatched', { timeout: 45_000 });
   await expect(page.locator('#version')).toContainText('patch', { timeout: 45_000 });
+
+  // ...and the drawn screen says it too, from the first paint that says the game is starting.
+  const version = (await page.locator('#version').textContent()) ?? '';
+  const starting = await page.evaluate(() =>
+    (window as unknown as { __patchPaints: { status: string; footer: string }[] }).__patchPaints.filter((p) =>
+      p.status.startsWith('Starting the game'),
+    ),
+  );
+  expect(starting.length, 'the patch screen said it was starting the game').toBeGreaterThan(0);
+  for (const p of starting) expect(p.footer, 'the version line under it').toBe(version);
 
   // And it really is our ROM running, not a lucky label: the mailbox only exists in a
   // patched build, and only BrMailbox_Init writes that magic.

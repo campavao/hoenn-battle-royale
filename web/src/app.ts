@@ -186,7 +186,8 @@ let versionLine = '—';
 function setVersionLine(text: string): void {
   versionLine = text;
   $('#version').textContent = text;
-  redrawSheet();
+  // Whichever drawn screen is up ends on it: the patch screen, the lobby, the sheet.
+  stage?.redraw();
 }
 
 // ---- the sheet: everything in a match that is not the game (POK-320) -----------------
@@ -624,10 +625,12 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
 
   // The same line the local-build path gets: which ROM is in the tab, in seven
   // characters. This is the path a stock ROM takes, and it is just as able to be
-  // running something other than the build everyone is talking about.
-  sayPatch('Starting the game…');
+  // running something other than the build everyone is talking about. Said before the
+  // patch screen says it is starting, which is the screen that ends on it while the core
+  // boots (POK-320 review: it kept the dash).
   const running = await sha1Hex(release.rom);
   setVersionLine(`${versionText(release.info)} · ${buildLine(release.info, running)}`);
+  sayPatch('Starting the game…');
   roomsRefused = release.stale;
   return {
     bytes: release.rom,
