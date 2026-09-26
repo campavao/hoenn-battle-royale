@@ -30,6 +30,7 @@ import {
   botFillFor,
   clockLeftAt,
   dealable,
+  DeadEnd,
   decideStart,
   onRefused,
   refusalLine,
@@ -1849,8 +1850,6 @@ function wireRoom(
           : hash.mode === 'daily'
             ? 'Joining the daily…'
             : `Joining ${hash.code}…`,
-    /** The room refused us; BACK TO LOBBY is all there is. */
-    fatal: false,
     /** Whose card is open over the seats. */
     card: null as { seat: number } | null,
     /** The match is on: the room screen is down and its controls gone. */
@@ -2218,7 +2217,8 @@ function wireRoom(
   let career = '';
   /** The results, drawn from the match's books over the room's roster. */
   const drawResults = (): void => {
-    if (!bridge) return;
+    // A dead end's notice is the last screen for this room: nothing is drawn over it.
+    if (!bridge || dead.reached) return;
     const seat = bridge.seat;
     renderResults(
       seat,
@@ -2556,7 +2556,8 @@ function wireRoom(
     }
   };
   async function returnToRoom(): Promise<void> {
-    if (returning) return;
+    // No room to go back to after a dead end (DeadEnd): its notice stays up.
+    if (returning || dead.reached) return;
     returning = true;
     // PLAY AGAIN greys out while it is on its way -- on the results, when they are up.
     if (resultsUp && stage.current === resultsUp.screen) drawResults();
@@ -2687,13 +2688,21 @@ function wireRoom(
       renderRoomPanel(controls, bridge.seat, relay, () => pressStart(ev.members.map((m) => m.id)), host !== null);
     }
   });
+  /** The room refused us, closed or showed us out: BACK TO LOBBY is all there is, and
+   *  nothing on its way back to the room -- the end grace above all -- may take the page
+   *  there (match/room.ts). */
+  const dead = new DeadEnd({
+    countdown,
+    grace: session.grace,
+    dropHeldStart: () => {
+      nextStart = null;
+    },
+  });
   /** A dead end is not one unless the page says where else to go: the door's word for it
    *  in Kanto's own (browse.lua's REFUSALS), what the relay said, and BACK TO LOBBY --
-   *  drawn over whatever was up, the match included. */
+   *  drawn over whatever was up, the match and its results included. */
   const deadEnd = (title: string, detail: string): void => {
-    countdown.cancel();
-    if (room.fatal) return;
-    room.fatal = true;
+    if (!dead.reach()) return;
     room.status = title;
     stage.show(
       noticeScreen(() => ({

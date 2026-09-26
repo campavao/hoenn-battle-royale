@@ -367,6 +367,42 @@ export function onRefused(
   return DEAD_ENDS.includes(reason) ? 'dead-end' : 'status';
 }
 
+/** The room's last word (POK-320 review): a door refused, the room closed, the host
+ *  showed us out. Its notice -- BACK TO LOBBY -- is the last thing the page draws for the
+ *  room, so reaching it stops everything still on its way back there: the count to a
+ *  start, the end grace, and a next match's `start` held for the way back. The grace was
+ *  the one that bit. A room closed within four seconds of the `win` rebooted the ROM for
+ *  a room that was gone, and drew that room over the notice; the page asks `reached`
+ *  before it goes back or draws results. */
+export class DeadEnd {
+  private at = false;
+
+  constructor(
+    private readonly stops: {
+      countdown: { cancel(): void };
+      grace: { cancel(): void };
+      /** Forget a `start` held for the way back (returnToRoom's nextStart). */
+      dropHeldStart(): void;
+    },
+  ) {}
+
+  /** The room has come to its end: nothing goes back to it. */
+  get reached(): boolean {
+    return this.at;
+  }
+
+  /** The room is gone. Everything on its way back stops, every time; true only the first
+   *  time, when the notice is the page's to draw. */
+  reach(): boolean {
+    this.stops.countdown.cancel();
+    this.stops.grace.cancel();
+    this.stops.dropHeldStart();
+    if (this.at) return false;
+    this.at = true;
+    return true;
+  }
+}
+
 // ---- the clock a match is picked up from ---------------------------------------------
 
 /** The seconds left in the running phase at `now`: the last clock this page heard or
