@@ -44,6 +44,18 @@ describe('the audio meter (POK-247)', () => {
     expect(ending(buffer(1024, STARVED_TAIL - 1))).toEqual({ flat: false, starved: false });
   });
 
+  it("a square wave's low half ending a buffer is the wave: its earlier halves are as long", () => {
+    // What a player who was out heard while watching a fight: a 577-sample period, half
+    // of it flat zero, sliding past the buffer (tails 254, 479, 126, ...).
+    const wave = buffer(1024);
+    for (let c = 0; c < 2; c++) {
+      const d = wave.getChannelData(c);
+      for (let i = 0; i < 1024; i++) d[i] = (i + 96) % 577 < 289 ? 0.25 : 0;
+    }
+    expect(silentTail(wave)).toBe(254);
+    expect(ending(wave)).toEqual({ flat: true, starved: false });
+  });
+
   it("counts a callback whose buffer was due before it ran as late, after SDL's own callback ran", () => {
     const ctx = { currentTime: 10, sampleRate: 48000, state: 'running' as AudioContextState };
     let filled = 0;

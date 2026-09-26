@@ -13,10 +13,12 @@
 //            since the last callback, and a ScriptProcessorNode has only two.
 //   starved  the core had fewer samples than the buffer wanted. mGBA's SDL callback
 //            fills the rest with zeros (sdl-audio.c, `available < len`), so the tail of
-//            a buffer goes flat: the emulator fell behind. Heard only when the sound
-//            is cut off, not when a quiet passage happens to end on a run of zeros --
-//            the first soak counted a thousand of those a sample, in a match whose
-//            frames and CPU never moved.
+//            a buffer goes flat: the emulator fell behind. Only when the sound is cut
+//            off, and the tail is the longest silence in the buffer: a quiet passage
+//            ends on zeros of its own, and so does a square wave's low half. The first
+//            soaks counted a thousand a sample of the second kind while a player who
+//            was out watched a fight: the tails cycled 254, 479, 126, 351, 575, 223 --
+//            a wave's period sliding past the buffer's, not a core running short.
 //
 // Pure over the Web Audio types, so it runs under vitest with a hand-made event.
 
@@ -85,11 +87,24 @@ export function levelBefore(buffer: Buffer, tail: number, span = STARVED_TAIL): 
 }
 
 /** How a buffer ends: flat, on a run of zeros after sound, and starved when that run
- *  cuts off sound worth hearing -- a buffer the core could not fill. */
+ *  cuts off sound worth hearing and is the longest silence in it -- a buffer the core
+ *  could not fill. */
 export function ending(buffer: Buffer): { flat: boolean; starved: boolean } {
   const tail = silentTail(buffer);
   const flat = tail >= STARVED_TAIL;
-  return { flat, starved: flat && levelBefore(buffer, tail) >= STARVED_LEVEL };
+  return { flat, starved: flat && levelBefore(buffer, tail) >= STARVED_LEVEL && longestSilence(buffer, tail) < tail };
+}
+
+/** The longest run of samples silent on every channel before the last `tail`. */
+export function longestSilence(buffer: Buffer, tail: number): number {
+  const channels = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+  let run = 0;
+  let longest = 0;
+  for (let i = 0; i < buffer.length - tail; i++) {
+    run = channels.every((d) => d[i] === 0) ? run + 1 : 0;
+    if (run > longest) longest = run;
+  }
+  return longest;
 }
 
 /** Hears every callback of `node` from now on; the core's own callback runs first and
