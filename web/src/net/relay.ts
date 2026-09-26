@@ -223,6 +223,11 @@ export class RelayClient {
    *  room_joined. A host gives a vanished player exactly this long (POK-330 #25): any
    *  shorter and a seat could come back into a match that had already eliminated it. */
   rejoinMs = REJOIN_MS;
+  /** When the latest ping the relay answered went out, by our own clock (POK-331 #4). A
+   *  socket keeps its frames in order, so all we sent before then reached the relay; what
+   *  went after may have gone into a socket already dead, which takes two missed pings to
+   *  find out. Kept past a close, which is when it is read. */
+  heardUntil = 0;
   /** What we last joined or hosted as, and where, so a rejoin can ask the same way.
    *  `code` above is cleared with the socket; this survives it, which is the point. */
   private lastOpts: JoinOpts | null = null;
@@ -437,6 +442,7 @@ export class RelayClient {
         });
         return;
       case 'pong':
+        if (typeof msg.t === 'number' && msg.t > this.heardUntil) this.heardUntil = msg.t;
         return;
       default:
         return; // an older/newer relay's unknown chatter is not fatal

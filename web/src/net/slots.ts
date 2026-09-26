@@ -311,6 +311,17 @@ function decodeTurn(bytes: Uint8Array): TurnMsg {
 }
 
 const MON_BYTES = 100;
+// br_wire.h's PackedMon from byte 36 on: each string in its own fixed field, and the flags
+// at 55, where every ROM reads and writes them (br_spectate.c's PackOwnMon, br_bot.c's
+// BuildMon). The page used to write the strings back to back, so its `traded` bit landed
+// wherever the OT happened to end and the flags a ROM sent were never read (POK-331 #1).
+const MON_OFF_NICK = 36; // nicknameLen u8, then 10 bytes
+const MON_OFF_OT = 47; // otLen u8, then 7 bytes
+const MON_OFF_FLAGS = 55;
+const MON_TRADED = 0x01;
+/** The moves are a ROM's own, from a `party` report: a card carrying them fights with
+ *  them (POK-330 #50). */
+const MON_ROM_MOVES = 0x02;
 function encodeMon(mon: PackedMon): Uint8Array {
   const w = new Writer();
   w.u16(mon.species).u8(mon.level).u16(mon.hp).u16(mon.maxHp).u8(mon.status);
@@ -320,13 +331,17 @@ function encodeMon(mon: PackedMon): Uint8Array {
     else w.u16(0).u8(0).u8(0);
   }
   w.u16(mon.heldItem).u16(mon.otId).u32(mon.personality).u32(mon.exp);
-  writeGen3(w, mon.nickname, 10);
-  writeGen3(w, mon.ot, 7);
-  w.u8(mon.traded ? 1 : 0);
-  const bytes = w.toBytes();
-  const padded = new Uint8Array(MON_BYTES);
-  padded.set(bytes.subarray(0, MON_BYTES));
-  return padded;
+  const row = new Uint8Array(MON_BYTES);
+  row.set(w.toBytes());
+  row.set(packGen3String(mon.nickname, 10), MON_OFF_NICK);
+  row.set(packGen3String(mon.ot, 7), MON_OFF_OT);
+  row[MON_OFF_FLAGS] = (mon.traded ? MON_TRADED : 0) | (mon.romMoves ? MON_ROM_MOVES : 0);
+  return row;
+}
+/** A PackedMon string field: its length byte, then that many of its `max` bytes. */
+function monText(row: Uint8Array, at: number, max: number): string {
+  if (row[at] > max) throw new SlotError(`string of length ${row[at]} in a ${max}-byte field`);
+  return unpackGen3String(row.subarray(at, at + 1 + max)).text;
 }
 function decodeMon(bytes: Uint8Array): PackedMon {
   const r = new Reader(bytes);
@@ -346,12 +361,13 @@ function decodeMon(bytes: Uint8Array): PackedMon {
   const otId = r.u16();
   const personality = r.u32();
   const exp = r.u32();
-  const nickname = r.gen3String();
-  const ot = r.gen3String();
-  const traded = r.u8() === 1;
+  const flags = bytes[MON_OFF_FLAGS];
   return {
     species, level, hp, maxHp, status, moves, heldItem, otId, personality, exp,
-    nickname, ot, traded: traded ? true : undefined,
+    nickname: monText(bytes, MON_OFF_NICK, 10),
+    ot: monText(bytes, MON_OFF_OT, 7),
+    traded: flags & MON_TRADED ? true : undefined,
+    romMoves: flags & MON_ROM_MOVES ? true : undefined,
   };
 }
 

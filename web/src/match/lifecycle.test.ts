@@ -116,6 +116,15 @@ describe('catching a seat up on the match', () => {
   it('still names the fallen before the fog has moved', () => {
     expect(catchUp(1, { clockLeft: 90, placements: [7] })).toEqual([{ t: 'out', seat: 7 }]);
   });
+
+  // POK-331 #4: and the trainers beaten while it was gone, which its ROM still has standing.
+  it('hands over the trainers beaten, after who is out', () => {
+    const beaten = [
+      { t: 'npcout', seat: 7, map: { group: 0, num: 17 }, localId: 3 },
+      { t: 'npcout', seat: 1, map: { group: 0, num: 16 }, localId: 2 },
+    ] as const;
+    expect(catchUp(1, { clockLeft: 90, placements: [7] }, beaten)).toEqual([{ t: 'out', seat: 7 }, ...beaten]);
+  });
 });
 
 // The ROM sends a `place` only on a map change, a warp, a ledge or the first frame after a

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MatchSession, type SessionDeps, type SessionView } from './session';
+import { BEATEN_KEPT, MatchSession, type SessionDeps, type SessionView } from './session';
 import { EndGrace } from './grace';
 import { Director, type DirectorWorld } from './director';
 import { botRows } from './lifecycle';
@@ -13,7 +13,7 @@ import { Bridge } from '../net/bridge';
 import { fakeEmulator, fakeRelay, memoryStore } from '../net/fakes.testutil';
 import type { RosterEvent } from '../net/relay';
 import { BR_CONT_FLAG, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
-import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg, type StartMsg } from '../net/wire';
+import { PROTOCOL, type MapRef, type Msg, type NpcOutMsg, type PackedMon, type SpillMsg, type StartMsg } from '../net/wire';
 
 const BASE = 0x0203d178; // gBrMailbox, per br-symbols.json
 const ROUTE_101: MapRef = { group: 0, num: 16 };
@@ -263,6 +263,35 @@ describe("one match's books (POK-330 #42)", () => {
     // ...and the map we stand on is news again to the next table.
     session.note(bag(7), { from: 7 });
     expect(session.standingLoot(place(0, ROUTE_101))?.bag?.key).toBe(0x07ff);
+  });
+
+  // POK-331 #4. A trainer beaten while a seat's socket was down still stood on its screen,
+  // to be beaten again. The host hands that seat the newest a ROM remembers when it is
+  // back, and the ones it already had must not count twice on its card.
+  it("keeps the match's beaten trainers for a seat back from a blip, and books each once", () => {
+    const { session } = books();
+    const beat = (seat: number, localId: number, fog?: true): NpcOutMsg => ({ t: 'npcout', seat, map: ROUTE_102, localId, ...(fog ? { fog } : {}) });
+    session.note(start([0, 7]), 'page');
+    session.note(beat(7, 3), { from: 7 });
+    session.note(beat(7, 3), { from: 0 }); // handed again by a host catching us up
+    session.note(beat(0, 4), 'rom');
+    session.note(beat(0, 5, true), 'page'); // the fog's: no ROM remembers it, nor do we
+    expect(session.record.forSeat(7).trainers).toBe(1);
+    expect(session.beaten).toEqual([beat(7, 3), beat(0, 4)]);
+    expect(session.hasBeaten(beat(7, 3))).toBe(true);
+
+    for (let id = 10; id < 40; id++) session.note(beat(7, id), { from: 7 });
+    expect(session.beaten).toHaveLength(BEATEN_KEPT);
+    expect(session.beaten.at(-1)).toEqual(beat(7, 39));
+    expect(session.record.forSeat(7).trainers).toBe(31);
+
+    // A new match is a new world: the same trainer can fall in it again.
+    session.note(start([0, 7], 99), 'page');
+    expect(session.beaten).toEqual([]);
+    session.note(beat(7, 3), { from: 7 });
+    expect(session.record.forSeat(7).trainers).toBe(1);
+    session.endMatch();
+    expect(session.beaten).toEqual([]);
   });
 
   it("keeps drawing the champion's team through the reboot, and forgets it after", () => {

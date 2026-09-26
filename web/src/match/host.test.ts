@@ -321,6 +321,27 @@ describe('the page that runs the match (POK-330 #42)', () => {
     host.dispose();
   });
 
+  // POK-331 #4: a trainer beaten while a seat's socket was down still stood on its screen.
+  it('hands a newcomer the trainers beaten so far, the room\'s and our own ROM\'s', () => {
+    const room = hosting();
+    const host = room.deal();
+    host.begin();
+    const theirs: Msg = { t: 'npcout', seat: 1, map: ROUTE_101, localId: 3 };
+    const ours: Msg = { t: 'npcout', seat: 0, map: ROUTE_101, localId: 4 };
+    room.recv(1, theirs);
+    room.romEmit(ours);
+    room.frame();
+    room.recv(1, { t: 'npcout', seat: 1, map: ROUTE_101, localId: 9, fog: true }); // nobody's win
+    room.frames().length = 0;
+    host.greet([0, 1, 2, 3]);
+    const caught = room.frames().filter((f) => f.m?.t === 'npcout');
+    expect(caught.map((f) => [f.type, f.id, f.m])).toEqual([
+      ['to', 3, theirs],
+      ['to', 3, ours],
+    ]);
+    host.dispose();
+  });
+
   it('greets nobody once the match is won', () => {
     const room = hosting();
     const host = room.deal();

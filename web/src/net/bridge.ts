@@ -18,9 +18,10 @@
 // wire-up test (slots.ts's comment on BR_MSG.ECHO) and have no `wire.ts` Msg
 // counterpart to forward.
 import { Mailbox, type RamAccess } from './mailbox';
+import { closeAsSilent, readNetlink, type LinkState } from './netlink';
 import { RomPort } from './romport';
 import { crossesToRom } from './slots';
-import { decode, type BlockMsg, type Lines, PROTOCOL, type Msg } from './wire';
+import { decode, type BlockMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg, type NpcOutMsg, type PickMsg } from './wire';
 import { Roster } from '../match/roster';
 import { RelayClient, type RecvEvent, type RosterEvent } from './relay';
 import { admits } from './trust';
@@ -64,6 +65,13 @@ export interface BridgeOptions {
    *  Bridge: a rejoin builds a new Bridge over the same ROM, and the host's director
    *  pushes through the same port. Unset, the Bridge makes its own. */
   rom?: RomPort;
+  /** br-symbols.json. gBrNetlink is the ROM's own word on the fight it is in, which the
+   *  page follows (POK-331 #5) and ends a quiet fight through (#3); gBattleOutcome says
+   *  whether the engine has decided one. Unset, the page goes by the messages it has
+   *  seen, and a quiet fight waits for the ROM's own ways out. */
+  symbols?: ReadonlyMap<string, number>;
+  /** Whether our own tab is hidden. Unset, the document's. */
+  hidden?: () => boolean;
 }
 
 /** What a link battle needs to outlive the Bridge it started under (POK-330 #20, #7). A
@@ -76,11 +84,35 @@ export interface LinkCarry {
   sent: BlockMsg[];
   lastRecvSeq: number;
   fighting: boolean;
+  fight: number | null;
+  /** ...and the drop's `pick`, while no `land` has answered it (POK-331 #4). */
+  pick?: PickMsg | null;
+  /** ...and our ROM's npcouts the room may not have heard (POK-331 #4). */
+  npcouts?: NpcOutMsg[];
 }
 
 /** How many of our own last blocks are kept to say again. The link is lockstep -- one
  *  block each way, then the next -- so what a blip can lose is the last one or two. */
 export const BLOCKS_KEPT = 4;
+
+/** How many of our own unheard npcouts are kept to say again: gBrDespawned's size
+ *  (br_loot.h's BR_MAX_DESPAWN, session.ts's BEATEN_KEPT). A ROM keeps no more. */
+const NPCOUTS_KEPT = 16;
+
+/** A fight is the challenge that started it: the challenger's seat and its ROM's nonce
+ *  (POK-331 #3). Both pages heard that one challenge, so both name the fight alike. */
+export function fightOf(c: ChallengeMsg): number {
+  return c.seat * 0x10000 + (c.nonce & 0xffff);
+}
+
+/** How long a link battle may go with no block from an opponent still in the room before
+ *  the page ends it (POK-331 #3): three minutes of our own frames. A lockstep fight waits
+ *  on the other side for one shot clock (br_battle.h's 30 s) and a turn's animations at
+ *  most; six of those with nothing is a block lost for good or a ROM stuck over there. */
+export const STALL_FRAMES = 3 * 60 * 60;
+/** ...and once the opponent's own RESULT says its ROM has left the fight. Ours plays its
+ *  own ending out within seconds of theirs, and nothing more is coming. */
+export const STALL_AFTER_RESULT_FRAMES = 30 * 60;
 
 function msgSeat(msg: Msg): number | undefined {
   return 'seat' in msg ? (msg as { seat?: number }).seat : undefined;
@@ -104,7 +136,22 @@ export class Bridge {
   readonly seat: number;
 
   private readonly protocol: number;
+  private readonly ram: RamAccess;
+  private readonly netlinkBase: number | undefined;
+  private readonly outcomeBase: number | undefined;
+  private readonly hidden: () => boolean;
   private opponentSeat: number | null = null;
+  /** The fight our blocks are part of (fightOf its challenge), stamped on each one we send
+   *  and checked on each one we take: a rejoin says its last few again, and after a new
+   *  challenge between the same two seats they are the last fight's (POK-331 #3). */
+  private fightId: number | null = null;
+  /** The latest challenge between us and each seat, for following the ROM to whichever
+   *  one it started (followRom). */
+  private readonly fights = new Map<number, number>();
+  /** Our frames since the opponent's last block, while nothing else explains the wait. */
+  private quietFrames = 0;
+  /** The opponent's RESULT for this fight is in: its ROM is out of it. */
+  private opponentDone = false;
   /** Our last few blocks of the current fight, for saying again after a gap (#7). */
   private sentBlocks: BlockMsg[] = [];
   /** The last block of the current fight the ROM was handed. The other side says its
@@ -122,6 +169,23 @@ export class Bridge {
   /** Our opponent dropped off the relay's roster mid-fight: the blocks we sent while it
    *  was gone went nowhere, and are said again when it is back. */
   private opponentAway = false;
+  /** Our ROM's `pick` that no `land` has answered (POK-331 #4). The drop waits on a black
+   *  screen for the host's cell, and a pick our socket was down for never reached it --
+   *  POK-255's black screen. br_pick.c asks once more after five seconds and gives up at
+   *  fifteen, both into the same gap; the page asks again when it is back in the room. */
+  private pick: PickMsg | null = null;
+  /** The host that pick was last put to, and whether the room has lost them since. */
+  private pickHost: number | null = null;
+  private pickHostAway = false;
+  /** Our ROM's `npcout`s the room may not have heard (POK-331 #4): sent while we were out
+   *  of it, or after the last ping the relay answered on a socket that then went. Every
+   *  other ROM has that trainer standing until it hears, and the host's catch-up covers
+   *  only what the host heard. These and no others are said again on the rejoin: one the
+   *  room had goes back into any gBrDespawned that has rolled past it since, over the
+   *  oldest there, which is a trainer beaten after it (br_loot.c's RememberDespawned). */
+  private unheard: NpcOutMsg[] = [];
+  /** ...and the ones since, with when they went, until a pong says they got there. */
+  private unconfirmed: { msg: NpcOutMsg; at: number }[] = [];
   private readonly listeners = new Set<(msg: Msg, from: number) => void>();
   /** An extra gate on relay -> ROM, set by the page (match/spectate.ts). A ROM handed
    *  a `bstart` starts replaying a fight, and `bstart`/`turn` are broadcasts, so a
@@ -157,6 +221,10 @@ export class Bridge {
     this.relay = opts.relay;
     this.seat = opts.seat;
     this.protocol = opts.protocol ?? PROTOCOL;
+    this.ram = opts.emu;
+    this.netlinkBase = opts.symbols?.get('gBrNetlink');
+    this.outcomeBase = opts.symbols?.get('gBattleOutcome');
+    this.hidden = opts.hidden ?? (() => typeof document !== 'undefined' && document.hidden);
     this.roster.setMySeat(opts.seat);
     if (opts.carry) {
       this.opponentSeat = opts.carry.opponentSeat;
@@ -164,11 +232,15 @@ export class Bridge {
       this.sentBlocks = [...opts.carry.sent];
       this.lastRecvSeq = opts.carry.lastRecvSeq;
       this.fighting = opts.carry.fighting;
+      this.fightId = opts.carry.fight;
+      this.pick = opts.carry.pick ?? null;
+      this.unheard = [...(opts.carry.npcouts ?? [])];
     }
 
     this.unsubs.push(opts.emu.onFrame(() => this.onFrame()));
     this.unsubs.push(this.relay.on('recv', (ev) => this.onRelayRecv(ev)));
     this.unsubs.push(this.relay.on('roster', (ev) => this.onRoster(ev)));
+    this.unsubs.push(this.relay.on('closed', () => this.onClosed()));
 
     if (typeof window !== 'undefined' && import.meta.env.DEV) {
       (window as unknown as { __br?: unknown }).__br = { bridge: this, roster: this.roster, mailbox: this.mailbox };
@@ -200,6 +272,9 @@ export class Bridge {
       sent: [...this.sentBlocks],
       lastRecvSeq: this.lastRecvSeq,
       fighting: this.fighting,
+      fight: this.fightId,
+      pick: this.pick,
+      npcouts: [...this.unheard],
     };
   }
 
@@ -210,6 +285,32 @@ export class Bridge {
   resendBlocks(): void {
     if (this.opponentSeat === null) return;
     for (const block of this.sentBlocks) this.relay.to(this.opponentSeat, block);
+  }
+
+  /** Asks the room's host for our drop again, if nothing has answered the last ask (POK-331
+   *  #4): after our own socket's gap, and whenever the room's host changes or comes back.
+   *  Only then, because the host answers every ask and the ROM warps to every `land` it
+   *  gets: those are the gaps a first answer cannot have come through (a `land` from a
+   *  host that no longer holds the room is refused on the way in). */
+  resendPick(): void {
+    if (!this.pick) return;
+    this.pickHost = this.relay.hostId;
+    this.pickHostAway = false;
+    this.relay.all(this.pick);
+  }
+
+  /** Says our ROM's npcouts the room may not have heard, once we are back in it (POK-331
+   *  #4), and forgets them. */
+  resendNpcOuts(): void {
+    for (const msg of this.unheard.splice(0)) this.sayNpcOut(msg);
+  }
+
+  /** The match is over for this page: what it owed the room of that one is nothing to say
+   *  to the next. */
+  endMatch(): void {
+    this.roster.endMatch();
+    this.unheard = [];
+    this.unconfirmed = [];
   }
 
   /** Throws unless the ROM's mailbox is awake and speaking this protocol. Call once
@@ -232,10 +333,12 @@ export class Bridge {
   private onFrame(): void {
     this.framesCount++;
     if (!this.mailbox.isAwake()) return; // BrMailbox_Init has not run yet
+    this.followRom();
     this.inCount += this.rom.flush();
     // Not `dropCount += drain(...)`: that reads the count before the handler adds to it.
     const unreadable = this.rom.drain((msg) => this.handleFromRom(msg));
     this.dropCount += unreadable;
+    this.watchStall();
   }
 
   /** One message our ROM sent, on its way to the room. */
@@ -248,6 +351,15 @@ export class Bridge {
     if (stamped.t === 'challenge' && this.myLines) stamped = { ...stamped, lines: this.myLines };
     this.noteChallenge(stamped);
     this.roster.applyMsg(stamped);
+    // The drop: our pick waits on the host's `land`, and our own next place or step says
+    // the ROM has come down, on that cell or on its own after giving up (br_pick.c).
+    if (stamped.t === 'pick') {
+      this.pick = stamped;
+      this.pickHost = this.relay.hostId;
+      this.pickHostAway = false;
+    } else if (stamped.t === 'place' || stamped.t === 'step') {
+      this.pick = null;
+    }
     // Our ROM is out of the fight: its RESULT, or -- when the link never got going and
     // the watchdog closed it with no RESULT -- back on the map, which it never is while
     // gBrNetlink.active. Our last blocks are kept all the same: the ROM says RESULT
@@ -272,16 +384,39 @@ export class Bridge {
         return;
       }
       this.fighting = true;
-      this.sentBlocks.push(stamped);
+      const block: BlockMsg = this.fightId === null ? stamped : { ...stamped, fight: this.fightId };
+      this.sentBlocks.push(block);
       if (this.sentBlocks.length > BLOCKS_KEPT) this.sentBlocks.shift();
-      this.relay.to(this.opponentSeat, stamped);
+      this.relay.to(this.opponentSeat, block);
       return;
     }
     // A challenge is broadcast too, not addressed: a bot is not a member of the room, so
     // `to` a bot's seat reached nobody and the host that walks it never heard one of its
     // bots had been challenged (POK-238). br_netlink.c's HandleChallenge ignores one that
     // names neither side.
-    this.relay.all(stamped);
+    if (stamped.t === 'npcout') this.sayNpcOut(stamped);
+    else this.relay.all(stamped);
+  }
+
+  /** An npcout of ours to the room, kept until we know the room heard it (POK-331 #4). */
+  private sayNpcOut(msg: NpcOutMsg): void {
+    if (!this.relay.isOpen() || this.relay.code === null) {
+      // No socket, or one not back in the room yet: the relay drops it.
+      this.unheard.push(msg);
+      if (this.unheard.length > NPCOUTS_KEPT) this.unheard.shift();
+    } else {
+      this.unconfirmed = this.unconfirmed.filter((u) => u.at >= this.relay.heardUntil);
+      this.unconfirmed.push({ msg, at: Date.now() });
+      if (this.unconfirmed.length > NPCOUTS_KEPT) this.unconfirmed.shift();
+    }
+    this.relay.all(msg);
+  }
+
+  /** Our socket went: whatever of ours no pong has vouched for may have gone with it. */
+  private onClosed(): void {
+    for (const u of this.unconfirmed) if (u.at >= this.relay.heardUntil) this.unheard.push(u.msg);
+    this.unconfirmed = [];
+    if (this.unheard.length > NPCOUTS_KEPT) this.unheard.splice(0, this.unheard.length - NPCOUTS_KEPT);
   }
 
   /** Whether a message our ROM sent keeps the seat it wrote, rather than ours. A report
@@ -315,8 +450,18 @@ export class Bridge {
     if (msgSeat(msg) === this.seat && ev.from !== host) return;
     if (msg.t === 'bt' && !this.takesBlock(msg, ev.from)) return;
     // The opponent's ROM has played the fight out, so it has every block of ours it will
-    // ever need.
-    if (msg.t === 'result' && msg.seat === this.opponentSeat && ev.from === msg.seat) this.sentBlocks = [];
+    // ever need -- and ours will get none more from it (watchStall).
+    if (msg.t === 'result' && msg.seat === this.opponentSeat && ev.from === msg.seat) {
+      this.sentBlocks = [];
+      this.opponentDone = true;
+    }
+    // Our drop answered -- or a match begun or ended, and a pick of the last one is
+    // nothing to ask the next one's host.
+    if ((msg.t === 'land' && msg.seat === this.seat) || msg.t === 'start' || msg.t === 'win') this.pick = null;
+    if (msg.t === 'start' || msg.t === 'win') {
+      this.unheard = [];
+      this.unconfirmed = [];
+    }
 
     this.noteChallenge(msg);
     this.roster.applyMsg(msg);
@@ -336,9 +481,19 @@ export class Bridge {
       this.refusedCount++;
       return false;
     }
+    // ...and from this fight: the last one's, said again by a rejoin, would be read as this
+    // one's next (POK-331 #3). A block with no fight on it is from a page before that.
+    if (msg.fight !== undefined && this.fightId !== null && msg.fight !== this.fightId) {
+      this.refusedCount++;
+      return false;
+    }
     if (msg.seq <= this.lastRecvSeq) return false;
     this.lastRecvSeq = msg.seq;
     this.fighting = true;
+    this.quietFrames = 0;
+    // A RESULT from them that this block came after was their last fight's, crossing our
+    // new challenge on the way: they are in this one.
+    this.opponentDone = false;
     return true;
   }
 
@@ -347,10 +502,21 @@ export class Bridge {
   private onRoster(ev: RosterEvent): void {
     this.roster.applyRoster(ev);
     this.members = new Set(ev.members.map((m) => m.id));
+    this.repick(ev.host);
     if (this.opponentSeat === null) return;
     const here = this.members.has(this.opponentSeat);
     if (here && this.opponentAway) this.resendBlocks();
     this.opponentAway = !here;
+  }
+
+  /** The host our pick went to left the room, or it has a new host: ask whoever holds it
+   *  now, once they are here. Not ourselves -- our own ROM's pick is our own director's to
+   *  answer, from the ROM, and the ROM gives up on its own. */
+  private repick(host: number): void {
+    if (!this.pick) return;
+    if (this.pickHost !== null && !this.members.has(this.pickHost)) this.pickHostAway = true;
+    if (host === this.seat || !this.members.has(host)) return;
+    if (host !== this.pickHost || this.pickHostAway) this.resendPick();
   }
 
   setRomFilter(fn: ((msg: Msg) => boolean) | null): void {
@@ -369,6 +535,7 @@ export class Bridge {
   /** Hands a message straight to this ROM without it ever touching the relay: the
    *  spectator's own `follow`, which is a page's word to its own ROM (docs/WIRE.md). */
   pushToRom(msg: Msg): void {
+    if (msg.t === 'land' && msg.seat === this.seat) this.pick = null; // the host's own drop
     if (!crossesToRom(msg.t)) return;
     if (!this.rom.push(msg)) this.dropCount++;
   }
@@ -384,15 +551,74 @@ export class Bridge {
     // Challenges are broadcast, so most of them are about two other people: noting one
     // of those would point our own battle traffic at a seat we are not fighting.
     if (msg.seat !== this.seat && msg.opponent !== this.seat) return;
+    const them = msg.seat === this.seat ? msg.opponent : msg.seat;
+    // Noted even when ignored below: `fighting` can outlast the ROM's link by a few frames
+    // (a hello the watchdog closed says so only with its `busy`), and a ROM free by then
+    // starts this one, which followRom must name as this one and not their last.
+    this.fights.set(them, fightOf(msg));
     // Somebody else's challenge to us while we fight is one our ROM ignores (#20). Our
-    // own is never mid-fight: br_engage.c only challenges from the field.
-    if (msg.seat !== this.seat && this.fighting) return;
-    this.opponentSeat = msg.seat === this.seat ? msg.opponent : msg.seat;
-    // A new fight, and a new count: the ROM numbers every fight's blocks from one.
+    // own is never mid-fight: br_engage.c only challenges from the field. The ROM says it
+    // is in one from the frame it starts it (POK-331 #5), before this page can have seen
+    // a block move.
+    if (msg.seat !== this.seat && (this.fighting || this.romLink()?.active)) return;
+    this.pointAt(them, fightOf(msg));
+  }
+
+  /** A new fight, and a new count: the ROM numbers every fight's blocks from one. */
+  private pointAt(seat: number, fight: number | null): void {
+    this.opponentSeat = seat;
+    this.fightId = fight;
     this.sentBlocks = [];
     this.lastRecvSeq = 0;
     this.opponentAway = false;
     this.fighting = false;
+    this.opponentDone = false;
+    this.quietFrames = 0;
+  }
+
+  /** gBrNetlink, read fresh (POK-331 #5); null with no symbol to read it by. */
+  private romLink(): LinkState | null {
+    if (this.netlinkBase === undefined || !this.mailbox.isAwake()) return null;
+    return readNetlink(this.ram, this.netlinkBase);
+  }
+
+  /** Two challenges that land before the ROM runs a frame are taken the other way round:
+   *  on the field the ROM starts on the first and ignores the second, where this page
+   *  pointed at the latest. Whoever the ROM is linked with is who the blocks are for. */
+  private followRom(): void {
+    const link = this.romLink();
+    if (!link?.active || link.peerSeat === this.opponentSeat) return;
+    this.pointAt(link.peerSeat, this.fights.get(link.peerSeat) ?? null);
+  }
+
+  /** #7's backstop (POK-331 #3). The ROM's own watchdog covers the hello and a peer that
+   *  goes out; a fight whose opponent is still in the room but has stopped sending -- a
+   *  block lost past what the resends cover, a ROM stuck over there -- waited on a black
+   *  screen for good. Past STALL_FRAMES the page hands the fight to that watchdog, which
+   *  closes it as unanswered: forfeited, unwound, and a RESULT out (net/netlink.ts).
+   *
+   *  Counted in our own frames, so a hidden tab, which runs none, never counts (and is
+   *  asked besides); and only while our socket is up, the opponent is in the room, and the
+   *  engine has not decided the fight -- an ending is the ROM's to play out. */
+  private watchStall(): void {
+    const link = this.romLink();
+    const quiet =
+      link !== null && link.active && link.peerSeat === this.opponentSeat && this.members.has(link.peerSeat) &&
+      this.relay.isOpen() && !this.hidden() && !this.decided();
+    if (!quiet) {
+      this.quietFrames = 0;
+      return;
+    }
+    const limit = this.opponentDone ? STALL_AFTER_RESULT_FRAMES : STALL_FRAMES;
+    if (++this.quietFrames < limit) return;
+    this.quietFrames = 0;
+    console.warn(`[link] no block from seat ${link.peerSeat} in ${limit} frames: closing the fight as unanswered`);
+    closeAsSilent(this.ram, this.netlinkBase!);
+  }
+
+  /** gBattleOutcome is set: the engine has decided the fight (StartBattle zeroes it). */
+  private decided(): boolean {
+    return this.outcomeBase !== undefined && this.ram.read(this.outcomeBase, 8) !== 0;
   }
 
   /** What a seat said when it challenged somebody (POK-274), or undefined if this page

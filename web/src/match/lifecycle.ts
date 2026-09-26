@@ -6,7 +6,7 @@
 // room's worst bugs were those decisions going wrong. They are pure functions here, which
 // is also the first step of pulling the match out of that closure (#42).
 import type { RosterEvent } from '../net/relay';
-import type { MapRef, Msg, SpillMsg } from '../net/wire';
+import type { MapRef, Msg, NpcOutMsg, SpillMsg } from '../net/wire';
 import { dealBots, MAX_SEATS } from '../bots/roster';
 import type { DirectorState } from './director';
 import { isFinalRingPhase } from './clock';
@@ -240,8 +240,14 @@ export function departedSeats(
  *  gone, in the order they went. A player back from a socket blip is a late arrival too
  *  (POK-330 #25): the relay held its seat, but everything said while it was away went to
  *  nobody -- its own elimination above all, which its page cannot hear from itself and
- *  nobody had ever told it, so it walked on as a ghost the room had already buried. */
-export function catchUp(hostSeat: number, state: Pick<DirectorState, 'ring' | 'clockLeft' | 'placements'>): Msg[] {
+ *  nobody had ever told it, so it walked on as a ghost the room had already buried. And
+ *  the trainers beaten meanwhile (POK-331 #4), still standing on its screen to be beaten
+ *  again: `beaten` is the session's, the newest a ROM remembers. */
+export function catchUp(
+  hostSeat: number,
+  state: Pick<DirectorState, 'ring' | 'clockLeft' | 'placements'>,
+  beaten: readonly NpcOutMsg[] = [],
+): Msg[] {
   const out: Msg[] = [];
   if (state.ring) {
     const { phase, sx, sy, r, place } = state.ring;
@@ -249,6 +255,7 @@ export function catchUp(hostSeat: number, state: Pick<DirectorState, 'ring' | 'c
     out.push({ t: 'clock', seat: hostSeat, left: state.clockLeft });
   }
   for (const seat of state.placements) out.push({ t: 'out', seat });
+  out.push(...beaten);
   return out;
 }
 

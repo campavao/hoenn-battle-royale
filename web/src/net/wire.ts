@@ -172,6 +172,7 @@ export interface BlockMsg {
   seat: number; // whose block this is
   seq: number; // 0..65535, the link exchange's own counter
   data: number[]; // the block bytes, at most 256 (Emerald's BLOCK_BUFFER_SIZE)
+  fight?: number; // the challenge that started the fight (bridge.ts's fightOf); JSON only
 }
 
 /** A link battle starting, published by the challenger so a spectator can replay it as
@@ -326,6 +327,7 @@ export interface PackedMon {
   nickname: string; // Gen 3 charmap text, at most 10 chars
   ot: string; // original trainer name, at most 7 chars
   traded?: boolean; // this row changed hands (Kanto POK-181's trade line)
+  romMoves?: boolean; // the moves are a ROM's own, from a `party` report (POK-330 #50)
 }
 
 /** A Pokemon in battle fainted -- ROM-emitted, for spectator/HUD state (which party
@@ -699,6 +701,15 @@ function optShortString(m: Record<string, unknown>, field: string, max = MAX_ID)
   return v as string;
 }
 
+/** optShortString for a field that may be blank: one a ROM writes empty rather than
+ *  leaves out. */
+function optText(m: Record<string, unknown>, field: string, max: number): string | undefined {
+  const v = m[field];
+  if (v === undefined) return undefined;
+  if (typeof v !== 'string' || v.length > max) fail(`bad string '${field}': ${JSON.stringify(v)}`);
+  return v;
+}
+
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
@@ -909,7 +920,10 @@ const decoders: Record<string, Decoder> = {
     const data = m.data;
     if (!Array.isArray(data) || data.length > 256) fail('bad block data');
     for (const b of data) if (typeof b !== 'number' || !Number.isInteger(b) || b < 0 || b > 255) fail('bad block byte');
-    return { t: 'bt', seat: reqSeat(m), seq: reqInt(m, 'seq', 0, 0xffff), data: data as number[] };
+    const out: BlockMsg = { t: 'bt', seat: reqSeat(m), seq: reqInt(m, 'seq', 0, 0xffff), data: data as number[] };
+    const fight = optInt(m, 'fight', 0, (MAX_SEAT + 1) * 0x10000 - 1);
+    if (fight !== undefined) out.fight = fight;
+    return out;
   },
 
   // A published battle's setup and its action stream (POK-233). Both carry raw ROM
@@ -1180,9 +1194,14 @@ function validateMon(raw: unknown): PackedMon {
     otId: optInt(raw, 'otId', 0, 0xffff) ?? 0,
     personality: optInt(raw, 'personality', 0, 0xffffffff) ?? 0,
     exp: optInt(raw, 'exp', 0, 0xffffffff) ?? 0,
-    nickname: optShortString(raw, 'nickname', 10) ?? '',
-    ot: optShortString(raw, 'ot', 7) ?? '',
+    // Either may be blank, and from a ROM the OT always is: br_spectate.c's PackOwnMon
+    // fills only what a spectator may see, and the trainer's name is not that. Refusing an
+    // empty one refused every `party` a ROM ever sent -- the peek box, a guest's report
+    // on a bot it fought, the parade's team (POK-331 #1).
+    nickname: optText(raw, 'nickname', 10) ?? '',
+    ot: optText(raw, 'ot', 7) ?? '',
     traded: raw.traded === true ? true : undefined,
+    romMoves: raw.romMoves === true ? true : undefined,
   };
 }
 

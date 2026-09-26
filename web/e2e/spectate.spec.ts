@@ -110,6 +110,14 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
       [symbols.gBattleTypeFlags, BATTLE_TYPE_RECORDED],
       { timeout: 30_000 },
     );
+    // ...and the peek box holds the fighter's team: its ROM's answer to our peek crossed the
+    // relay (gBrSpectate.peekMons, +11). Every `party` a ROM sent used to be refused by every
+    // other page for the blank OT the ROM leaves in it (POK-331 #1).
+    await watcher.waitForFunction(
+      (addr) => (window as unknown as RamWindow).__br.mailbox.ram.read(addr + 11, 8) > 0,
+      symbols.gBrSpectate,
+      { timeout: 3 * PEEK_INTERVAL_MS + 5_000 },
+    );
 
     // Now make something faint under it (POK-250). Nobody was driving the fighters'
     // input, so the replay had only the start block to chew on and a faint -- the case

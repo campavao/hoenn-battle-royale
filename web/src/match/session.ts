@@ -12,7 +12,7 @@
 import { routeToBots } from '../bots/adapt';
 import type { Bots } from '../bots/brain';
 import type { RosterEvent } from '../net/relay';
-import type { Msg, PackedMon, SpillMsg } from '../net/wire';
+import type { Msg, NpcOutMsg, PackedMon, SpillMsg } from '../net/wire';
 import { careerLine, recordMatch } from './career';
 import { DEFAULT_FOG_SECS } from './director';
 import type { EndGrace } from './grace';
@@ -102,6 +102,12 @@ export function noteBusy(busy: Set<number>, msg: Msg): void {
   }
 }
 
+/** How many beaten trainers a ROM remembers (br_loot.c's gBrDespawned, BR_MAX_DESPAWN,
+ *  newest kept): as many as are worth handing a seat back from a blip. */
+export const BEATEN_KEPT = 16;
+
+const beatenKey = (m: NpcOutMsg): string => `${m.seat}:${m.map.group}:${m.map.num}:${m.localId}`;
+
 export class MatchSession {
   /** Everything a promoted client needs to pick the match up (POK-252). One object for
    *  the page's whole life -- the e2e reads it -- so a new match fills it in again. */
@@ -124,6 +130,13 @@ export class MatchSession {
    *  first `place` to say where that is. */
   readonly owedLoot = new Set<number>();
   readonly grace: EndGrace;
+  /** Hoenn's own trainers beaten this match, newest last and at most BEATEN_KEPT (POK-331
+   *  #4): every ROM despawns and remembers one on its `npcout`, and one whose socket was
+   *  down for it still has the trainer standing. The host hands these to a seat back from
+   *  a blip; a page that has booked one already books it once. The fog's are not kept: a
+   *  ROM does not remember those, and a sweep is a hundred. */
+  private beatenList: NpcOutMsg[] = [];
+  private readonly beatenKeys = new Set<string>();
 
   // The ROM only holds the loot for the map it is standing on, and forgets it on the way
   // out; the page holds the match's whole table and hands back the piece that matters
@@ -155,6 +168,16 @@ export class MatchSession {
     return this.lootTable;
   }
 
+  get beaten(): readonly NpcOutMsg[] {
+    return this.beatenList;
+  }
+
+  /** This page has booked that trainer's fall already: a seat caught up after a blip is
+   *  handed the ones it may have missed, and some it had not. */
+  hasBeaten(msg: NpcOutMsg): boolean {
+    return !msg.fog && this.beatenKeys.has(beatenKey(msg));
+  }
+
   get fog(): number {
     return this.fogSecs;
   }
@@ -172,6 +195,8 @@ export class MatchSession {
   /** Everything that decides a placement crosses the page one way or another: our own
    *  ROM's messages on the way up, everybody else's on the way in, and whatever the page
    *  makes itself. In this order:
+   *   0. a trainer's fall booked already -- handed again to a seat back from a blip
+   *      (POK-331 #4) -- is nothing more; a new one is kept for that catch-up;
    *   1. our own ROM taking a whole bag: its contents go back (giveBag, before the loot);
    *   2. the loot table;
    *   3. the match (noteMatch); on a `start`, the bots on the roster by name, before the
@@ -185,6 +210,13 @@ export class MatchSession {
    *   9. ...and a fight with one of our bots, to the brain, with whose ROM said it. */
   note(msg: Msg, via: Via): void {
     const now = this.now();
+    if (msg.t === 'npcout' && !msg.fog) {
+      // Booked once: the catch-up hands a seat back from a blip what it may have missed.
+      if (this.hasBeaten(msg)) return;
+      this.beatenKeys.add(beatenKey(msg));
+      this.beatenList.push(msg);
+      if (this.beatenList.length > BEATEN_KEPT) this.beatenList.shift();
+    }
     if (via === 'rom') giveBag(this.lootTable, msg, (m) => this.deps.toRom(m));
     this.lootTable.note(msg); // a bot taking a ball takes it off this page's table too
     // The match, as anybody in the room can see it.
@@ -211,6 +243,7 @@ export class MatchSession {
       this.results.start(this.field, now);
       this.record.start();
       this.booked = false;
+      this.forgetBeaten();
     }
     this.results.note(msg, now);
     this.record.note(msg);
@@ -272,6 +305,12 @@ export class MatchSession {
     this.busy.clear();
     this.greeted.clear();
     this.owedLoot.clear();
+    this.forgetBeaten();
+  }
+
+  private forgetBeaten(): void {
+    this.beatenList = [];
+    this.beatenKeys.clear();
   }
 
   /** ...and the verdict, once it has: last match's champion is not this match's, and the

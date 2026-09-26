@@ -156,3 +156,70 @@ test("a guest reads its result for the whole grace, whatever the host's `again` 
     await hostCtx.close().catch(() => {});
   }
 });
+
+// POK-331 #18. The host can deal the next match while a guest is still reading the last
+// one: a champion's parade runs up to a minute, and a host who lost is back in four
+// seconds. The guest's `start` went into a ROM about to be rebooted and into books about
+// to be wiped, and the grace then took that seat into Littleroot with no match at all --
+// alive on every roster, a phantom nobody could reach. Kanto's onStart: a START that finds
+// the last match still on screen tears it down, and plays. Here the guest's grace is held
+// open for good, the way a long parade holds it, so only the START can move it.
+test("a guest still in its grace when the host deals again goes into the new match", async ({ browser }) => {
+  test.setTimeout(420_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+  const BR_PHASE_SAFARI = 1;
+  const BR_PHASE_PLAY = 2;
+
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&fast&seed=20260916&testmon&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+
+    const guest = await guestCtx.newPage();
+    await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
+    await startWith(host, 2);
+
+    await expect(guest.locator('#results-panel')).toBeVisible({ timeout: 240_000 });
+    // The grace's own exit becomes nothing: the guest stays in it until something else moves it.
+    await guest.evaluate(() => (window as unknown as BrWindow).__br.grace.arm(() => {}));
+
+    // The host reads its own result, comes back to the room, and deals again.
+    await expect(host.locator('#room-start')).toBeVisible({ timeout: 120_000 });
+    await host.locator('#room-start').click();
+    await host.waitForFunction(() => (window as unknown as BrWindow).__br?.director?.state?.phase === 'safari', undefined, {
+      timeout: 30_000,
+    });
+    const seed = await host.evaluate(() => (window as unknown as BrWindow).__br.match.seed as number);
+
+    // The guest is in it: its books hold the new match, its results are down, and its ROM
+    // -- rebooted, not the one that played the last match -- is in the new opening.
+    await guest.waitForFunction(
+      (s) => {
+        const m = (window as unknown as BrWindow).__br.match;
+        return m.active === true && m.seed === s;
+      },
+      seed,
+      { timeout: 60_000 },
+    );
+    await expect(guest.locator('#results-panel')).toBeHidden({ timeout: 10_000 });
+    const symbols = loadSymbols();
+    await guest.waitForFunction(
+      ([base, safari, play]) => {
+        const phase = (window as unknown as HbrWindow).__hbr.emu.read(base, 8);
+        return phase === safari || phase === play;
+      },
+      [symbols.gBrMatch, BR_PHASE_SAFARI, BR_PHASE_PLAY],
+      { timeout: 60_000 },
+    );
+    const romSeed = await guest.evaluate((base) => (window as unknown as HbrWindow).__hbr.emu.read(base + 8, 32), symbols.gBrMatch);
+    expect(romSeed >>> 0, "the guest's ROM plays the host's new deal").toBe(seed >>> 0);
+  } finally {
+    await guestCtx.close();
+    await hostCtx.close().catch(() => {});
+  }
+});

@@ -223,6 +223,26 @@ describe('RelayClient', () => {
     expect(sockets).toHaveLength(1);
   });
 
+  // POK-331 #4: what went out before an answered ping reached the relay; what went after
+  // may have gone into a dead socket, and the Bridge says those again on the rejoin.
+  it('marks how far the relay has heard us by the pings it answered, past a close', () => {
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    expect(relay.heardUntil).toBe(0);
+
+    vi.advanceTimersByTime(10_000);
+    const ping = sockets[0].sent[0] as { t: number };
+    sockets[0].receive({ type: 'pong', t: ping.t });
+    expect(relay.heardUntil).toBe(ping.t);
+    sockets[0].receive({ type: 'pong', t: ping.t - 5_000 }); // a late answer to an older one
+    sockets[0].receive({ type: 'pong' }); // an older relay's, with nothing to go by
+    expect(relay.heardUntil).toBe(ping.t);
+    sockets[0].onclose?.({});
+    expect(relay.heardUntil).toBe(ping.t);
+  });
+
   it('reconnects with backoff after an unexpected close, and stops pinging meanwhile', () => {
     const { factory, sockets } = makeFactory();
     const relay = new RelayClient(factory);

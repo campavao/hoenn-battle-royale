@@ -13,6 +13,8 @@
 //     that seat's queued place/step/face go. Past POSITIONAL_CAP, the oldest step or face
 //     a later one of the same seat has made moot goes; a moot `place` takes the step
 //     after it into itself rather than going, since only a place carries the skin.
+//   - busy/clock say a seat's state outright, and the ROM only stores it: a newer one for
+//     the same seat makes the queued one moot, and it goes (POK-331 #18).
 //   - Everything else (ring, out, challenge, result, start, bt, ...) is an event: never
 //     dropped, never reordered.
 //   - A link block (`bt`) goes in only once the ROM has read the one before it. The ROM
@@ -29,14 +31,21 @@ import type { Msg, PlaceMsg, StepMsg } from './wire';
  *  says it again, which is what makes them safe to let go. */
 const POSITIONAL = new Set<string>(['place', 'step', 'face']);
 
+/** Messages that are a seat's whole state rather than something that happened to it: a
+ *  `busy`'s kind and a `clock`'s seconds left, which the ROM just stores (br_ghosts.c's
+ *  HandleBusy, br_match.c's HandleClock). A tab back from the background used to hand the
+ *  ROM every `clock` of the minutes it missed, in order, ahead of what came after them. */
+const ABSOLUTE = new Set<string>(['busy', 'clock']);
+
 /** How much movement may wait for the ROM: one ring's worth, which it gets through in
  *  four frames (16 a frame), and room for every seat's latest word twice over. */
 export const POSITIONAL_CAP = MAILBOX.RING_SLOTS;
 
 interface Queued {
   msg: Msg;
-  /** A place/step/face, and whose. */
+  /** A place/step/face. */
   move: boolean;
+  /** Whose, for a place/step/face or a busy/clock; -1 otherwise. */
   seat: number;
   slots: BinarySlot[];
   /** Carries a whole position (step and place do; face is only which way). */
@@ -46,10 +55,13 @@ interface Queued {
 export interface RomPortStats {
   /** Messages handed to the ROM's in-ring. */
   pushed: number;
-  /** Positional messages let go because a newer `place` for the same seat came in. */
+  /** Messages let go because a newer one for the same seat said all they did: movement
+   *  under a `place`, a `busy` or `clock` under the next. */
   coalesced: number;
   /** Positional messages let go past POSITIONAL_CAP. */
   capped: number;
+  /** Messages let go because the ROM they were for is starting over (clear()). */
+  cleared: number;
 }
 
 export class RomPort {
@@ -58,6 +70,7 @@ export class RomPort {
   private pushedCount = 0;
   private coalescedCount = 0;
   private cappedCount = 0;
+  private clearedCount = 0;
   /** Slots pushed since the last `bt`, while its slots may still be unread in the ring;
    *  null when none is. */
   private sinceBlock: number | null = null;
@@ -68,7 +81,7 @@ export class RomPort {
   ) {}
 
   get stats(): RomPortStats {
-    return { pushed: this.pushedCount, coalesced: this.coalescedCount, capped: this.cappedCount };
+    return { pushed: this.pushedCount, coalesced: this.coalescedCount, capped: this.cappedCount, cleared: this.clearedCount };
   }
 
   /** Messages waiting for room in the ring. */
@@ -89,8 +102,10 @@ export class RomPort {
     }
     if (slots.length > MAILBOX.RING_SLOTS) return false;
     const move = POSITIONAL.has(msg.t);
-    const seat = move ? (msg as { seat: number }).seat : -1;
+    const absolute = ABSOLUTE.has(msg.t);
+    const seat = move || absolute ? (msg as { seat: number }).seat : -1;
     if (msg.t === 'place') this.supersede(seat);
+    if (absolute) this.restate(msg.t, seat);
     this.queue.push({ msg, move, seat, slots, fix: msg.t === 'place' || msg.t === 'step' });
     if (move && ++this.positional > this.positionalCap) this.trim();
     return true;
@@ -114,6 +129,20 @@ export class RomPort {
     }
     this.pushedCount += n;
     return n;
+  }
+
+  /** Lets go of everything still queued, because the ROM it was for is about to start
+   *  over (PLAY AGAIN, POK-331 #18): the last match's movement, ticker lines and ring are
+   *  nothing to a ROM booting into Littleroot for the next one, and it drew the last
+   *  match's ghosts there. The reboot empties the ring too, so no block is left unread.
+   *  Returns how many went. */
+  clear(): number {
+    const gone = this.queue.length;
+    this.queue = [];
+    this.positional = 0;
+    this.sinceBlock = null;
+    this.clearedCount += gone;
+    return gone;
   }
 
   /** Everything the ROM has sent since the last call, as whole messages: each base slot
@@ -168,6 +197,15 @@ export class RomPort {
     const gone = before - this.queue.length;
     this.positional -= gone;
     this.coalescedCount += gone;
+  }
+
+  /** A seat's `busy` or `clock` says its state outright: the one of the same queued before
+   *  it says only what was true then. It goes, and this one takes its turn at the back,
+   *  so the ROM never learns a state ahead of anything that came before it. */
+  private restate(t: string, seat: number): void {
+    const before = this.queue.length;
+    this.queue = this.queue.filter((q) => !(q.msg.t === t && q.seat === seat));
+    this.coalescedCount += before - this.queue.length;
   }
 
   /** One positional message over the cap goes. First the oldest step or face that a later

@@ -263,6 +263,58 @@ describe('fixed-layout byte counts', () => {
   });
 });
 
+// POK-331 #1: a row is br_wire.h's PackedMon, byte for byte, both ways. The page wrote and
+// read the nickname and OT back to back, so a ROM's flags byte (55) was never read, and
+// the moves a ROM reported for a bot were fought with a learnset's instead (POK-330 #50).
+describe('a PackedMon row, as br_wire.h lays it out (POK-331 #1)', () => {
+  /** A row the way br_spectate.c's PackOwnMon writes one: nickname, flags, no OT. */
+  function romRow(): Uint8Array {
+    const row = new Uint8Array(100);
+    row.set([277 & 0xff, 277 >> 8, 21, 40, 0, 52, 0, 1]); // TREECKO Lv21 40/52 SLP
+    row.set([1, 0, 7, 0], 8); // POUND at 7 PP
+    row[55] = 0x02; // BR_MON_ROM_MOVES
+    row.set([7, 0xce, 0xcc, 0xbf, 0xbf, 0xbd, 0xc5, 0xc9], 36); // 'TREECKO'
+    return row;
+  }
+
+  it("reads a ROM's row: its nickname, its blank OT and its flags", () => {
+    const payload = new Uint8Array(2 + 100);
+    payload.set([30, 1]);
+    payload.set(romRow(), 2);
+    const party = unpackSlot(BR_MSG.PARTY, payload);
+    expect(party).toEqual({
+      t: 'party', seat: 30,
+      mons: [{
+        species: 277, level: 21, hp: 40, maxHp: 52, status: 1, moves: [{ id: 1, pp: 7, ppUps: 0 }],
+        heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: 'TREECKO', ot: '', romMoves: true,
+      }],
+    });
+  });
+
+  it("writes each string in its own field and the flags where br_bot.c's BuildMon reads them", () => {
+    const { payload } = reassembleSlots(packSlot({ t: 'party', seat: 0, mons: [mon({ traded: true, romMoves: true })] }));
+    const row = payload.subarray(2);
+    expect(row[36]).toBe(5); // 'BULBY'
+    expect(row[47]).toBe(3); // 'ASH'
+    expect(row[55]).toBe(0x03);
+    expect(Array.from(row.subarray(56))).toEqual(new Array(44).fill(0));
+  });
+
+  it("hands a bot's reported moves back to the ROM on its next card", () => {
+    const payload = new Uint8Array(2 + 100);
+    payload.set([30, 1]);
+    payload.set(romRow(), 2);
+    const reported = unpackSlot(BR_MSG.PARTY, payload) as { mons: PackedMon[] };
+    // ...over the relay to the host, which keeps the team (bots/brain.ts's setParty)...
+    const kept = (decode(JSON.stringify(reported)) as { mons: PackedMon[] }).mons;
+    // ...and stages it for the bot's next fight.
+    const card = reassembleSlots(packSlot({ t: 'trainer', seat: 30, name: 'MAX', mons: kept })).payload;
+    const row = card.subarray(1 + 1 + 3 + 1); // seat, nameLen, 'MAX', count
+    expect(row[55]).toBe(0x02);
+    expect(Array.from(row.subarray(8, 12))).toEqual([1, 0, 7, 0]);
+  });
+});
+
 describe("a party's bag (POK-297)", () => {
   const bag = { money: 12_345, items: [{ id: 13, n: 3 }, { id: 19, n: 1 }, { id: 327, n: 1 }] };
 
