@@ -16,7 +16,10 @@ lenient one.
   rounds every struct up to a whole word, so a 6-byte struct is 8 in the release ROM and
   an array of them strides differently in the two builds. `BR_SIZE` only for sizes that
   are already a multiple of 4, and never stride an array of an odd-sized struct from
-  outside the ROM.
+  outside the ROM. A field of one of pret's structs the page reads is pinned the same
+  way in `src/br/br_pins.c`, since pret's headers are not ours to add to; for a bitfield,
+  pin the plain fields either side of its run. web/src/parity.test.ts fails on an offset
+  the page derives that is not pinned there.
 - **RAM.** `EWRAM_DATA` for anything the shell reads. Never `static` inside a function
   for match state: the shell cannot find it. IWRAM is scarce; keep it for the engine.
   EWRAM is nearly full: `tools/br/ram-headroom.py <map>` prints what is left, and CI

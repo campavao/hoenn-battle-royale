@@ -99,7 +99,8 @@ That is all of it. Everything else the page reads is a global of its own (`gBrSe
   `tools/br/wire-table.txt`, whose hash is pinned next to `BR_PROTOCOL`; `docs/WIRE.md`
   has the table and the framing. Every struct
   field the page or a driver reads by offset is pinned with `BR_OFFSET` where it is
-  declared, so moving one fails the build.
+  declared, or in `src/br/br_pins.c` for one of pret's structs, so moving one fails the
+  build.
 - **Addresses** come from the link map. `tools/br/symbols.py` writes `br-symbols.json`
   next to the patch and the page loads both. Never hard-code an address: the modern and
   agbcc builds put things in different places.

@@ -9,7 +9,9 @@
 // them. A STATIC_ASSERT(offsetof(...)) or sizeof pin in the C is held to the same
 // comment, so once the ROM pins a struct, the compiler, the comment and the page all
 // have to agree. pret's structs with no offset comments (CameraObject, PaletteFadeControl,
-// Weather, ChooseMoveStruct) are laid out from their declarations the way agbcc does.
+// Weather, ChooseMoveStruct) are laid out from their declarations the way agbcc does, and
+// every offset the page derives of pret's structs is pinned in src/br/br_pins.c: the last
+// test of that block fails on one the ROM does not pin at the same number (POK-331 #22).
 //
 // (zone.test.ts, ticker.test.ts, relay.test.ts, caps.test.ts and field.test.ts already
 // hold their own: BrZone, BR_CHEST_KEY, MAX_SEAT to the relay, the reassembly caps and
@@ -334,6 +336,52 @@ const brSources = {
   ...import.meta.glob<string>('../../src/br/*.c', { query: '?raw', import: 'default', eager: true }),
 };
 
+const brAll = Object.values(brSources);
+
+/** The BR source that declares `struct name`, if one does. A struct none does is pret's. */
+const brStructSource = (name: string) => brAll.find((s) => new RegExp(`^struct ${name}\\s*\\{`, 'm').test(s));
+
+interface Pin {
+  file: string;
+  /** The struct, or for an array's row `gBattleBufferA[0]`. */
+  struct: string;
+  /** The field; none on a size pin. */
+  field?: string;
+  /** The number as the C writes it: a literal or a BR #define. */
+  text: string;
+}
+
+/** A pin's number. */
+function pinValue(text: string): number {
+  if (/^(0x[0-9a-fA-F]+|\d+)$/.test(text)) return Number(text);
+  const src = brAll.find((s) => new RegExp(`#define\\s+${text}\\s`).test(s));
+  if (!src) throw new Error(`no #define ${text} in the BR sources`);
+  return define(src, text);
+}
+
+/** Every offset and size the C pins -- BR_OFFSET, BR_SIZE, STATIC_ASSERT(offsetof(...))
+ *  and STATIC_ASSERT(sizeof(...)) -- in every BR source. */
+function cPins(): Pin[] {
+  const out: Pin[] = [];
+  for (const [file, src] of Object.entries(brSources)) {
+    const code = src.replace(/^[ \t]*#define.*$/gm, ''); // not the macros' own definitions
+    const offsets = [
+      ...code.matchAll(/\bBR_OFFSET\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)/g),
+      ...code.matchAll(/STATIC_ASSERT\(\s*offsetof\(\s*struct\s+(\w+)\s*,\s*(\w+)\s*\)\s*==\s*\(?\s*(\w+)\s*\)?\s*,/g),
+    ];
+    for (const [, struct, field, text] of offsets) out.push({ file, struct, field, text });
+    const sizes = [
+      ...code.matchAll(/\bBR_SIZE\(\s*(\w+)\s*,\s*(\w+)\s*\)/g),
+      ...code.matchAll(/STATIC_ASSERT\(\s*sizeof\(\s*struct\s+(\w+)\s*\)\s*==\s*\(?\s*(\w+)\s*\)?\s*,/g),
+    ];
+    for (const [, struct, text] of sizes) out.push({ file, struct, text });
+    for (const [, array, text] of code.matchAll(/STATIC_ASSERT\(\s*sizeof\(\s*(\w+)\s*\[\s*0\s*\]\s*\)\s*==\s*\(?\s*(\w+)\s*\)?\s*,/g)) {
+      out.push({ file, struct: `${array}[0]`, text });
+    }
+  }
+  return out;
+}
+
 describe('the C and its own offset comments', () => {
   it('reads every BR source', () => {
     expect(Object.keys(brSources).length).toBeGreaterThan(30);
@@ -341,36 +389,17 @@ describe('the C and its own offset comments', () => {
   });
 
   it("every offset and size the C pins (BR_OFFSET, BR_SIZE, STATIC_ASSERT) is the struct's comment", () => {
-    const all = Object.values(brSources);
-    const structOf = (name: string): Layout => {
-      const src = all.find((s) => new RegExp(`^struct ${name}\\s*\\{`, 'm').test(s));
-      if (!src) throw new Error(`struct ${name} is in no BR source`);
-      return layout(src, name);
-    };
-    const value = (v: string): number => {
-      if (/^(0x[0-9a-fA-F]+|\d+)$/.test(v)) return Number(v);
-      const src = all.find((s) => new RegExp(`#define\\s+${v}\\s`).test(s));
-      if (!src) throw new Error(`no #define ${v} in the BR sources`);
-      return define(src, v);
-    };
-    for (const [file, src] of Object.entries(brSources)) {
-      const code = src.replace(/^[ \t]*#define.*$/gm, ''); // not the macros' own definitions
-      const offsets = [
-        ...code.matchAll(/\bBR_OFFSET\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*\)/g),
-        ...code.matchAll(/STATIC_ASSERT\(\s*offsetof\(\s*struct\s+(\w+)\s*,\s*(\w+)\s*\)\s*==\s*\(?\s*(\w+)\s*\)?\s*,/g),
-      ];
-      for (const [, struct, f, v] of offsets) {
-        const at = structOf(struct).at[f];
+    // pret's structs are held further down, to what the page derives of them.
+    for (const { file, struct, field, text } of cPins()) {
+      const src = brStructSource(struct);
+      if (!src) continue;
+      if (field !== undefined) {
+        const at = layout(src, struct).at[field];
         // A field with no comment has nothing to disagree with; the compiler holds the pin.
-        if (at !== undefined) expect(at, `${file}: ${struct}.${f} is pinned at ${v}`).toBe(value(v));
-      }
-      const sizes = [
-        ...code.matchAll(/\bBR_SIZE\(\s*(\w+)\s*,\s*(\w+)\s*\)/g),
-        ...code.matchAll(/STATIC_ASSERT\(\s*sizeof\(\s*struct\s+(\w+)\s*\)\s*==\s*\(?\s*(\w+)\s*\)?\s*,/g),
-      ];
-      for (const [, struct, v] of sizes) {
-        const size = structOf(struct).size;
-        if (size !== undefined) expect(size, `${file}: sizeof(struct ${struct}) is pinned at ${v}`).toBe(value(v));
+        if (at !== undefined) expect(at, `${file}: ${struct}.${field} is pinned at ${text}`).toBe(pinValue(text));
+      } else {
+        const size = layout(src, struct).size;
+        if (size !== undefined) expect(size, `${file}: sizeof(struct ${struct}) is pinned at ${text}`).toBe(pinValue(text));
       }
     }
   });
@@ -468,19 +497,56 @@ describe("the BR structs the page reads at an offset", () => {
   });
 });
 
+/** The C's pins of pret's structs (src/br/br_pins.c), by `Struct.field`, or `sizeof Struct`
+ *  for a size. */
+const pretPins = new Map(
+  cPins()
+    .filter((p) => !brStructSource(p.struct))
+    .map((p) => [p.field === undefined ? `sizeof ${p.struct}` : `${p.struct}.${p.field}`, p]),
+);
+const pinned = (key: string): number | undefined => {
+  const pin = pretPins.get(key);
+  return pin && pinValue(pin.text);
+};
+
+/** What the tests of pret's structs below read, struct by struct: the layout they derived,
+ *  and the fields they took out of it (`sizeof` for its size). */
+const pretReads = new Map<string, { layout: Layout | Natural; read: Set<string> }>();
+
+/** `l`, noting each field a test reads out of it, so the last test can hold the ROM to
+ *  having pinned every one (POK-331 #22). */
+function watch<T extends Layout | Natural>(struct: string, l: T): T {
+  const entry = pretReads.get(struct) ?? { layout: l, read: new Set<string>() };
+  pretReads.set(struct, entry);
+  const note = (o: object) =>
+    new Proxy(o, {
+      get(target, key, receiver) {
+        if (typeof key === 'string' && key in target) entry.read.add(key);
+        return Reflect.get(target, key, receiver);
+      },
+    });
+  return new Proxy(l, {
+    get(target, key, receiver) {
+      if (key === 'at' || key === 'bits') return note(Reflect.get(target, key, receiver));
+      if (key === 'size') entry.read.add('sizeof');
+      return Reflect.get(target, key, receiver);
+    },
+  });
+}
+
 describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () => {
   // These move only on a pret merge, and their headers carry the offsets in comments.
   it('gMain: callback2, and inBattle in its bitfield', () => {
-    const main = layout(mainH, 'Main');
+    const main = watch('Main', layout(mainH, 'Main'));
     expect(field.MAIN_CALLBACK2).toBe(main.at.callback2);
     expect(touch.MAIN_IN_BATTLE_BYTE).toBe(main.bits.inBattle.byte);
     expect(touch.MAIN_IN_BATTLE_BIT).toBe(1 << main.bits.inBattle.bit);
   });
 
   it('gSaveBlock1Ptr: where we stand, on which map, and the vars', () => {
-    const sb1 = layout(globalH, 'SaveBlock1');
-    const coords = natural(globalH, 'Coords16').at;
-    const warp = natural(globalH, 'WarpData').at;
+    const sb1 = watch('SaveBlock1', layout(globalH, 'SaveBlock1'));
+    const coords = watch('Coords16', natural(globalH, 'Coords16')).at;
+    const warp = watch('WarpData', natural(globalH, 'WarpData')).at;
     expect([field.SB1_POS_X, field.SB1_POS_Y]).toEqual([sb1.at.pos + coords.x, sb1.at.pos + coords.y]);
     expect([field.SB1_MAP_GROUP, field.SB1_MAP_NUM]).toEqual([sb1.at.location + warp.mapGroup, sb1.at.location + warp.mapNum]);
     expect(field.SB1_VARS).toBe(sb1.at.vars);
@@ -489,12 +555,12 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
   });
 
   it('gFieldCamera: x and y, where the sub-tile offset is', () => {
-    const cam = natural(fieldCameraH, 'CameraObject');
+    const cam = watch('CameraObject', natural(fieldCameraH, 'CameraObject'));
     expect([field.CAMERA_X, field.CAMERA_Y]).toEqual([cam.at.x, cam.at.y]);
   });
 
   it('gPaletteFade: the palettes it touches, and y, blendColor and active, bit for bit', () => {
-    const fade = natural(paletteH, 'PaletteFadeControl');
+    const fade = watch('PaletteFadeControl', natural(paletteH, 'PaletteFadeControl'));
     expect(field.FADE_SELECTED).toBe(fade.at.multipurpose1);
     expect(field.FADE_BG_PALETTES).toBe(define(paletteH, 'PALETTES_BG'));
     // field.ts reads the bitfields a u16 at a time: the word each sits in, then its bits.
@@ -514,7 +580,7 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
   });
 
   it('gObjectEvents', () => {
-    const obj = layout(fieldmapH, 'ObjectEvent');
+    const obj = watch('ObjectEvent', layout(fieldmapH, 'ObjectEvent'));
     expect(field.OBJ_SIZE).toBe(obj.size);
     expect(field.OBJ_COUNT).toBe(define(constantsGlobalH, 'OBJECT_EVENTS_COUNT'));
     expect(obj.bits.active).toEqual({ byte: field.OBJ_ACTIVE_BYTE, bit: 0 });
@@ -527,7 +593,7 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
   });
 
   it('gSprites', () => {
-    const spr = layout(spriteH, 'Sprite');
+    const spr = watch('Sprite', layout(spriteH, 'Sprite'));
     expect({
       anims: field.SPR_ANIMS,
       x: field.SPR_X,
@@ -551,8 +617,9 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
       animCmdIndex: spr.at.animCmdIndex,
       inUse: spr.at.inUse,
     });
-    // The last field is a u8.
+    // The last field is a u8, and the stride is the ROM's sizeof.
     expect(field.SPR_SIZE).toBe(spr.at.subpriority + 1);
+    expect(pinned('sizeof Sprite'), 'src/br/br_pins.c').toBe(field.SPR_SIZE);
     // The flags, as bits of the u16 at SPR_FLAGS.
     const flag = (f: string) => 1 << ((spr.bits[f].byte - field.SPR_FLAGS) * 8 + spr.bits[f].bit);
     expect([field.SPR_IN_USE, field.SPR_ON_CAMERA, field.SPR_INVISIBLE, field.SPR_HFLIP]).toEqual([
@@ -568,7 +635,7 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
   });
 
   it("gWeather: the weather, the fog's scroll and the blend", () => {
-    const weather = natural(fieldWeatherH, 'Weather', [fieldWeatherH, weatherCountsH]);
+    const weather = watch('Weather', natural(fieldWeatherH, 'Weather', [fieldWeatherH, weatherCountsH]));
     expect(field.WEATHER_FOG_HORIZONTAL).toBe(define(weatherH, 'WEATHER_FOG_HORIZONTAL'));
     expect([field.WEATHER_CURR, field.WEATHER_FOG_X, field.WEATHER_EVA, field.WEATHER_EVB]).toEqual([
       weather.at.currWeather,
@@ -582,12 +649,13 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     const row = /\bgBattleBufferA\[\s*\w+\s*\]\[\s*(0x[0-9a-fA-F]+|\d+)\s*\]/.exec(pretBattleH);
     expect(row, 'gBattleBufferA in battle.h').not.toBeNull();
     expect(touch.BUFFER_A_ROW).toBe(Number(row![1]));
+    expect(pinned('sizeof gBattleBufferA[0]'), 'src/br/br_pins.c').toBe(touch.BUFFER_A_ROW);
     // The controller command's four bytes, then the struct: the player's controller reads
     // it where BtlController_EmitChooseMove wrote it, and the move ids lead it.
     const read = /\(struct ChooseMoveStruct \*\)\(&gBattleBufferA\[gActiveBattler\]\[(\d+)\]\)/.exec(playerControllerC);
     const wrote = /sBattleBuffersTransferData\[(\d+) \+ i\] = \*\(\(u8 \*\)\(movePPData\) \+ i\)/.exec(controllersC);
     expect([Number(read?.[1]), Number(wrote?.[1])]).toEqual([touch.CHOOSE_MOVE_MOVES, touch.CHOOSE_MOVE_MOVES]);
-    expect(natural(controllersH, 'ChooseMoveStruct', [constantsGlobalH]).at.moves).toBe(0);
+    expect(watch('ChooseMoveStruct', natural(controllersH, 'ChooseMoveStruct', [constantsGlobalH])).at.moves).toBe(0);
   });
 
   it("the keys are KEYINPUT's bits", () => {
@@ -604,6 +672,42 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
       l: 'L_BUTTON',
     };
     for (const [key, bit] of Object.entries(KEY_BIT)) expect(1 << bit, key).toBe(define(ioRegH, io[key as keyof typeof KEY_BIT]));
+  });
+
+  // Last: it checks what the tests above read (POK-331 #22).
+  it('every offset above is pinned in the ROM, at the number derived here (src/br/br_pins.c)', () => {
+    expect(pretReads.size, 'run it with the tests above: it checks what they read').toBeGreaterThan(0);
+    // What has to be pinned, and at what: each plain field read, each size read, and for a
+    // bitfield the plain fields either side of its run -- or the size, where the run ends
+    // the struct -- since a bitfield has no offsetof.
+    const want = new Map<string, number | undefined>();
+    for (const [struct, { layout: l, read }] of pretReads) {
+      const bits: Record<string, { byte?: number; bit: number }> = l.bits;
+      const plain = Object.entries(l.at).filter(([f]) => !(f in bits) && !f.includes('.'));
+      for (const f of read) {
+        if (f === 'sizeof') want.set(`sizeof ${struct}`, l.size);
+        else if (!(f in bits)) want.set(`${struct}.${f}`, l.at[f]);
+        else {
+          const byte = bits[f].byte ?? Math.floor(bits[f].bit / 8);
+          const before = plain.filter(([, at]) => at < byte).sort((a, b) => b[1] - a[1])[0];
+          const after = plain.filter(([, at]) => at > byte).sort((a, b) => a[1] - b[1])[0];
+          if (before) want.set(`${struct}.${before[0]}`, before[1]);
+          if (after) want.set(`${struct}.${after[0]}`, after[1]);
+          else if (l.size !== undefined) want.set(`sizeof ${struct}`, l.size);
+        }
+      }
+    }
+    expect(want.size).toBeGreaterThan(30);
+    for (const [key, at] of want) {
+      expect(at, `${key}: derived`).toBeDefined();
+      expect(pinned(key), `${key}: pin it in src/br/br_pins.c`).toBe(at);
+    }
+    // And a pin of one of these structs the page does not read still agrees with the rest.
+    for (const [key, { file, struct, field: f }] of pretPins) {
+      const l = pretReads.get(struct)?.layout;
+      const at = f === undefined ? l?.size : l?.at[f];
+      if (at !== undefined) expect(pinned(key), `${file}: ${key}`).toBe(at);
+    }
   });
 });
 
