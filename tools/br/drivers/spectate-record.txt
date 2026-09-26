@@ -35,15 +35,18 @@ tap A
 wait 20
 expect u16 gBrSpectate 1
 expectmsg 19 u16 0 0x0201
-# Battler 0 (side A, the AI in the player's place): USE_ITEM, X ATTACK (0x4B), and 6 --
-# no bag of a player's put it on anybody; the engine's player branch does nothing with it.
+# Battler 0 (side A, the AI in the player's place): USE_ITEM, X ATTACK (0x4B), on party
+# slot 0 with move 0 -- a bag's record. Side A's item is used the way a bag uses one, on
+# the mon that is out, so the replay plays it the same way (POK-331 leftover h). It was
+# 6, nobody: the engine's player branch did nothing with it, here or in the replay.
 expectmsg 19 u8 2 0
 expectmsg 19 u8 3 5
 expectmsg 19 u8 4 1
 expectmsg 19 u8 5 0x4B
 expectmsg 19 u8 6 0
-expectmsg 19 u8 7 6
+expectmsg 19 u8 7 0
 expectmsg 19 u8 8 0
+expect u8 gBattleMons+0x19 7
 # Battler 1: the same item, and what its AI made of it: type 4 (AI_ITEM_X_STAT) and
 # flags 1 (X ATTACK), which the replay's own opponent branch reads to raise the stat.
 expectmsg 19 u8 9 1
