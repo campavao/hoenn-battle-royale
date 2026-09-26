@@ -29,12 +29,14 @@ expect u8 gBrRing+21 0xC9
 expect u8 gBrRing+22 0xC9
 expect u8 gBrRing+23 0xCE
 expect u8 gBrRing+24 0xFF
-# the phase's box is up too (a new phase with a place) and the ticker has the level
-# line (shown = CORNER|TICKER|BOX), and the tiles run on from the corner's 27: BG0's tilemap is 0x0600F800, 32 cells a row, palette 15. The corner's
+# the phase's box is up too (a new phase with a place), and the ticker has nothing: the
+# first ring's rung is the one the match had (POK-324), so shown = CORNER|BOX. The tiles
+# run on from the corner's 27: BG0's tilemap is 0x0600F800, 32 cells a row, palette 15. The corner's
 # first cell (20,1) is 0x23D and its last (28,3) 0x257; the box's first (1,11) is 0x290,
 # which is where the ticker's 56 end. Its frame is on the screen at (19,0).
 expect u8 gBrHud+0x08 2
-expect u8 gBrHud+0x09 7
+expect u8 gBrHud+0x09 5
+expect u8 gBrHud+0x0A 0
 expect u16 0x0600F868 0xF23D
 expect u16 0x0600F8F8 0xF257
 expect u16 0x0600FAC2 0xF290
@@ -42,7 +44,7 @@ expectne u16 0x0600F826 0
 shot corner-place
 # the box goes after its ninety frames; the corner keeps the name
 wait 90
-expect u8 gBrHud+0x09 3
+expect u8 gBrHud+0x09 1
 expect u16 0x0600F868 0xF23D
 shot corner-place-quiet
 # START: the menu covers cols 21..29 and the corner's two columns left of it are
@@ -107,10 +109,16 @@ wait 10
 expect u8 gBrRing+4 0xFF
 expect u8 gBrRing+5 1
 expect u8 gBrHud+0x17 1
-# ...and the phase's box says so, as Kanto's does, where it named LITTLEROOT: "THE FOG
-# COVERS" (its O at +9, not CLOSES' L) and a newline, in gBrHud.box.text (+0x14E)
-expect u8 gBrHud+0x157 0xC9
-expect u8 gBrHud+0x15C 0xFE
+# ...and the ticker says so, as Kanto's does: THE FOG COVERS ALL OF HOENN! (28, its C at
+# +8) behind phase 2's THE FOG SPREADS!, which phase 3 said again and was dropped as a
+# repeat (queue[1] at +0x70). The box has nothing of its own to add -- the ring's one
+# line is the ticker's (POK-324) -- so it is still phase 3's, PETALBURG WOODS (its P
+# after "THE FOG CLOSES IN ON" and the newline, gBrHud.box.text +0x14E + 21), where it
+# used to name LITTLEROOT, which is fog too.
+expect u8 gBrHud+0x0A 2
+expect u8 gBrHud+0x71 0x1C
+expect u8 gBrHud+0x7A 0xBD
+expect u8 gBrHud+0x163 0xCA
 shot corner-everywhere-name
 poke u8 gBrHud+0x16 120
 wait 4

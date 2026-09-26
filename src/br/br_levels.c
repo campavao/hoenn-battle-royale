@@ -26,10 +26,6 @@ static const u8 sLadder[] = { 5, 15, 30, 50, 75, 100 };
 
 // One rod per pair of rungs: OLD, OLD, GOOD, GOOD, SUPER, SUPER.
 static const u16 sRods[] = { ITEM_OLD_ROD, ITEM_OLD_ROD, ITEM_GOOD_ROD, ITEM_GOOD_ROD, ITEM_SUPER_ROD, ITEM_SUPER_ROD };
-static const u8 sText_OldRod[] = _("OLD ROD");
-static const u8 sText_GoodRod[] = _("GOOD ROD");
-static const u8 sText_SuperRod[] = _("SUPER ROD");
-static const u8 *const sRodNames[] = { sText_OldRod, sText_OldRod, sText_GoodRod, sText_GoodRod, sText_SuperRod, sText_SuperRod };
 
 // The Mart shelf per tier: the shelf grows with the rung. The stones are not here at
 // all -- they are Lilycove's (POK-309, sDeptStore) -- but the POKe DOLL is on every
@@ -64,26 +60,17 @@ static const u16 sDeptStore[] = { ITEM_MASTER_BALL, ITEM_ULTRA_BALL, ITEM_MAX_PO
                                   ITEM_GUARD_SPEC, ITEM_DIRE_HIT, ITEM_POKE_DOLL, ITEM_FIRE_STONE, ITEM_WATER_STONE,
                                   ITEM_THUNDER_STONE, ITEM_LEAF_STONE, ITEM_SUN_STONE, ITEM_MOON_STONE, ITEM_NONE };
 
-static const u8 sText_Lv[] = _("LV ");
-static const u8 sText_Sep[] = _(" - ");
-static const u8 sText_Fog[] = _("FOG ");
+// The ring's one ticker line, in Kanto's words (main.lua, "ONE box per shrink"): that
+// the fog moved and everything got stronger is the news, and the level number and the
+// rod's name -- "LV 5 - OLD ROD - FOG 1", which the play-test ignored with the rest of
+// the ticker (POK-324) -- were the detail nobody was reading. Where it is closing is the
+// bottom box's and the corner's; on the last phase there is nowhere, and this says so.
+static const u8 sText_FogSpreads[] = _("THE FOG SPREADS! ALL GREW STRONGER!");
+static const u8 sText_FogCoversAll[] = _("THE FOG COVERS ALL OF HOENN!");
 
-// The line lives on the stack: BrHud_Say copies it into the queue at once, and forty
-// bytes of EWRAM for a string nobody reads twice was forty bytes EWRAM did not have.
 static void SayPhase(void)
 {
-    u8 line[40];
-    u8 *p = line;
-
-    p = StringCopy(p, sText_Lv);
-    p = ConvertIntToDecimalStringN(p, gBrLevels.rung, STR_CONV_MODE_LEFT_ALIGN, 3);
-    p = StringCopy(p, sText_Sep);
-    p = StringCopy(p, sRodNames[gBrLevels.tier]);
-    p = StringCopy(p, sText_Sep);
-    p = StringCopy(p, sText_Fog);
-    p = ConvertIntToDecimalStringN(p, gBrLevels.phaseSeen, STR_CONV_MODE_LEFT_ALIGN, 2);
-    *p = EOS;
-    BrHud_Say(line);
+    BrHud_Say(gBrRing.r < 0 ? sText_FogCoversAll : sText_FogSpreads);
 }
 
 static void SwapRod(u16 rod)
@@ -568,8 +555,10 @@ void BrLevels_Tick(void)
     gBrLevels.rung = sLadder[gBrLevels.tier];
     LiftParty(gBrLevels.rung);
     SwapRod(sRods[gBrLevels.tier]);
-    // One line per ring move, never three: ring, level and rod are one event.
-    if (phase > 0)
+    // One line per ring move, never three: ring, level and rod are one event. And none
+    // for the first ring, which keeps the rung the match already had (phase 1 is tier 0,
+    // as no ring is): nothing grew stronger, and the box saying where it closes is the news.
+    if (phase > 1)
         SayPhase();
 }
 

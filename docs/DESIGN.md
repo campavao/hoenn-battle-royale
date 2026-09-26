@@ -175,7 +175,10 @@ out, and one that comes in waits as it would in a menu.
 - **HUD** (`br_hud.h`): the corner (trainers left and the clock; under them where the
   ring is closing, all ring phase long, or FOG EVERYWHERE on the last phase; and an eye
   while anyone watches), the ticker and the bottom box, as overworld windows on BG0.
-  START's MAP says the same under the fog: `FOG: <place>`.
+  START's MAP says the same under the fog: `FOG: <place>`. A ring move is one ticker
+  line, Kanto's -- `THE FOG SPREADS! ALL GREW STRONGER!`, or `THE FOG COVERS ALL OF
+  HOENN!` on the last, none on the first -- and the box names the place but on the
+  last. A line identical to the last one queued is dropped (POK-324).
 - **Rules**: one clock (`br_levels.h`: the ring phase is the level rung, no EXP), the
   catch with a full party (`br_catch.h`), the MOVES row (`br_moves.h`), gym leaders as
   one-shot bosses (`br_gym.h`), the shot clock and RUN (`br_battle.h`).

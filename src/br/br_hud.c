@@ -278,11 +278,36 @@ static void SetLine(struct BrHudLine *line, u8 kind, const u8 *text, u8 len)
     line->text[len] = EOS;
 }
 
+// Kanto's Ticker.push (lib/ticker.lua): a line identical to the last one queued -- or to
+// the one on screen, when nothing waits behind it -- is dropped. A beat two paths both
+// announce is one line, whichever side of the mailbox said it first (POK-324).
+static bool8 SameAsLast(const u8 *text, u8 len)
+{
+    const struct BrHudLine *last;
+    u8 i;
+
+    if (gBrHud.queueLen == 0)
+        return FALSE;
+    last = &gBrHud.queue[gBrHud.queueLen - 1];
+    if (last->len != len)
+        return FALSE;
+    for (i = 0; i < len; i++)
+    {
+        if (last->text[i] != text[i])
+            return FALSE;
+    }
+    return TRUE;
+}
+
 static void Push(u8 kind, const u8 *text, u8 len)
 {
     struct BrHud *h = &gBrHud;
     u8 i;
 
+    if (len > BR_HUD_LINE_MAX)
+        len = BR_HUD_LINE_MAX;
+    if (SameAsLast(text, len))
+        return;
     if (h->queueLen >= BR_HUD_QUEUE)
     {
         // Full: the oldest line goes, and if it was on screen the next one starts fresh.
