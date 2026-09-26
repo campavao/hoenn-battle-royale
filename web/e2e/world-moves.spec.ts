@@ -4,7 +4,8 @@
 // nobody, so the page walks the other seats itself off its roster (web/src/field-ghosts.ts,
 // GhostWalkers); on the field it leaves every ghost in the ROM's box to the ROM.
 //
-// This hands the field a roster of one -- seat 31, which solo never deals -- and puts the
+// First, solo's own bots are on the page's walkers: runSolo hands the field its roster.
+// Then this hands the field a roster of one -- seat 31, which solo never deals -- and puts the
 // same seat in the ROM's gBrSeats two tiles east of us, where the ROM gives it an object.
 // On the field the ROM's ghost and the page's walker stand on the same pixel, and the page
 // draws nothing. With the bag open (START, A: the first row of the Zone's menu with no
@@ -33,7 +34,7 @@ const SKIN = 15;
 const EAST = 2;
 
 type Sprite = { gfx: number; frame: number; hFlip: boolean; x: number; y: number; hidden: boolean; seat?: number };
-type Peek = { onField: boolean; rom: Sprite[]; walkers: Sprite[]; drawn: Sprite[] };
+type Peek = { onField: boolean; rom: Sprite[]; walkers: Sprite[]; drawn: Sprite[]; seats: number[] };
 type Row = { seat: number; name: string; alive: boolean; isMe: boolean; map: { group: number; num: number }; x: number; y: number; dir: number; skin: string };
 type Emu = {
   read(addr: number, width: 8 | 16 | 32): number;
@@ -104,6 +105,11 @@ test('the other seats walk on past the picture in the bag, and are the ROM\'s ag
       here = now;
     }
     expect(here.group, 'standing somewhere real').toBeGreaterThan(0);
+
+    // Solo's bots, dealt into the Zone, are walked off solo's own roster, wherever they
+    // stand: the field was handed it, not only the rows this spec hands it below.
+    await expect.poll(async () => (await peek(page))?.seats.length ?? 0, { timeout: 15_000, message: "solo's roster reached the walkers" }).toBeGreaterThan(0);
+    expect((await peek(page))!.seats, 'nobody walks our own seat').not.toContain(0);
 
     // Seat 31, on the page's roster and in the ROM's, two tiles east, facing south.
     const row: Row = { seat: SEAT, name: 'T', alive: true, isMe: false, map: { group: here.group, num: here.num }, x: here.x + EAST, y: here.y, dir: DIR_SOUTH, skin: String(SKIN) };

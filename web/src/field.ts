@@ -682,7 +682,9 @@ export class FieldView {
       return [...stood, ...drawn];
     }
     const live = this.liveObjects();
-    const rom = [...this.readSprites(sb1), ...this.readDropped(sb1, c, live)];
+    const objects = this.readSprites(sb1);
+    const dropped = this.readDropped(sb1, c, live);
+    const rom = [...objects, ...dropped];
     this.still = { group: c.group, num: c.num, origin, sprites: rom.filter((s) => s.seat === undefined) };
     // Inside the box the ROM walks them; and one it still holds an object for is its,
     // wherever the roster has already put it.
@@ -690,7 +692,8 @@ export class FieldView {
     const drawn = outdoors
       ? this.walkers.sprites(c, origin, (seat, x, y) => !inObjectView(pos, x, y) && !live.has(objectKey(GHOST_LOCAL_ID_BASE + seat, c.num, c.group)), true)
       : [];
-    this.ghosts = { rom: rom.filter((s) => s.seat !== undefined), drawn };
+    // gBrSeats' standing copy past the box is the page's drawing, not an object of the ROM's.
+    this.ghosts = { rom: objects.filter((s) => s.seat !== undefined), drawn: [...dropped.filter((s) => s.seat !== undefined), ...drawn] };
     return [...rom, ...drawn];
   }
 
@@ -707,12 +710,14 @@ export class FieldView {
     return live;
   }
 
-  /** The ghosts of the last frame read (DEV, for the e2e): the ones the ROM drew, every
-   *  walker on the camera's map wherever it is, and the walkers the page drew. */
-  peek(): { onField: boolean; rom: FieldSprite[]; walkers: FieldSprite[]; drawn: FieldSprite[] } | null {
+  /** The ghosts of the last frame read (DEV, for the e2e): the ones the ROM has an object
+   *  for, every walker on the camera's map wherever it is, the ones the page drew (its
+   *  walkers, and gBrSeats' standing copy of a seat it does not walk), and every seat it
+   *  walks on any map -- which is the match's roster reaching it. */
+  peek(): { onField: boolean; rom: FieldSprite[]; walkers: FieldSprite[]; drawn: FieldSprite[]; seats: number[] } | null {
     const c = this.prev;
     if (!c) return null;
-    return { onField: c.onField, rom: this.ghosts.rom, walkers: this.walkers.sprites(c, lcdOrigin(c), () => true, false), drawn: this.ghosts.drawn };
+    return { onField: c.onField, rom: this.ghosts.rom, walkers: this.walkers.sprites(c, lcdOrigin(c), () => true, false), drawn: this.ghosts.drawn, seats: this.walkers.seats() };
   }
 
   private readFog(): Fog | null {

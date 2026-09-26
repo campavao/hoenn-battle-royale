@@ -6,6 +6,7 @@ import { HOENN } from './bots/hoenn';
 import { SKIN_GFX } from './ui/emerald';
 import type { WorldMap } from './bots/world';
 import fieldHeader from '../../include/br/br_field.h?raw';
+import appSource from './app.ts?raw';
 
 describe('the picture past the LCD (POK-319)', () => {
   it('the band is the ROM\'s: include/br/br_field.h says the same four numbers', () => {
@@ -294,15 +295,17 @@ describe('the people the ROM let go of reach the overlay (POK-318)', () => {
       ['gSaveBlock1Ptr', SB], ['gFieldCamera', CAM], ['gObjectEvents', OBJS], ['gBrSeats', SEATS], ['gMain', MAIN], ['CB2_Overworld', CB2_OVERWORLD],
     ]);
     const view = new FieldView({ emu, symbols } as unknown as FieldDeps);
-    const inner = view as unknown as { read(): Camera | null; walkers: GhostWalkers };
+    const inner = view as unknown as { read(): Camera | null; walkers: GhostWalkers; prev: Camera | null };
     return {
       w,
       read: () => inner.read(),
       /** An emulator frame, as frame() runs one: the walkers step on the roster, then the RAM is read. */
       step: (rows: RosterEntry[]): Camera => {
         inner.walkers.update(rows);
-        return inner.read()!;
+        inner.prev = inner.read()!;
+        return inner.prev;
       },
+      peek: () => view.peek(),
       onField: (on: boolean) => w(MAIN + 4, on ? CB2_OVERWORLD | 1 : 0x08000001, 32),
     };
   }
@@ -329,6 +332,20 @@ describe('the people the ROM let go of reach the overlay (POK-318)', () => {
     // The roster has seat 1 a row further on than the ROM's copy does: only the walker's is drawn.
     const seats = ram(map).step([rowAt(map, 1, 20 + 7, 34 + 7)]).sprites.filter((s) => s.seat === 1);
     expect(seats).toEqual([{ gfx: SKIN_GFX[0], frame: 0, hFlip: false, x: 112, y: 56 + 14 * 16, hidden: true, seat: 1 }]);
+  });
+
+  it("peek keeps the ROM's objects apart from what the page drew, and names every seat it walks", () => {
+    const map = HOENN.maps.find((m) => m.outdoor)!;
+    const other = HOENN.maps.find((m) => m.outdoor && m.num !== map.num)!;
+    const r = ram(map);
+    // Seat 1 is only in gBrSeats, thirteen rows down; seat 2 is on the roster, on another map.
+    r.step([rowAt(other, 2, 20 + 7, 20 + 7)]);
+    const p = r.peek()!;
+    // The ROM has an object for nobody: seat 1's standing copy is the page's drawing.
+    expect(p.rom).toEqual([]);
+    expect(p.drawn).toEqual([{ gfx: SKIN_GFX[0], frame: 0, hFlip: false, x: 112, y: 56 + 13 * 16, hidden: true, seat: 1 }]);
+    expect(p.walkers, 'nobody walks this map').toEqual([]);
+    expect(p.seats, 'the roster reached the walkers all the same').toEqual([2]);
   });
 
   it("on the field a walker inside the box, or one whose ghost the ROM still has an object for, is the ROM's", () => {
@@ -379,5 +396,31 @@ describe('the people the ROM let go of reach the overlay (POK-318)', () => {
     r.w(SB1 + SB1_MAP_GROUP, other.group, 8);
     r.w(SB1 + SB1_MAP_NUM, other.num, 8);
     expect(r.step([]).sprites, 'a whiteout warps').toEqual([]);
+  });
+});
+
+describe("the match's roster reaches the field (POK-323)", () => {
+  // app.ts runs on the page and no unit test drives it, and the e2e hands the field a
+  // roster of its own: without these two lines the other seats stand still in a battle,
+  // and nothing else fails.
+  /** A top-level function's body, up to the next one. */
+  const body = (name: string): string => {
+    const from = appSource.indexOf(`\nfunction ${name}(`);
+    expect(from, name).toBeGreaterThan(0);
+    const to = appSource.indexOf('\nfunction ', from + 1);
+    return appSource.slice(from, to < 0 ? undefined : to);
+  };
+
+  it("solo hands it solo's roster, and a room its Bridge's, whichever is current", () => {
+    expect(body('runSolo')).toMatch(/\n\s*fieldView\?\.setPeople\(\(\) => roster\.all\(\)\);/);
+    expect(body('wireRoom')).toMatch(/\n\s*fieldView\?\.setPeople\(\(\) => bridge\?\.roster\.all\(\) \?\? \[\]\);/);
+  });
+
+  it('the field is made before either asks for it', () => {
+    expect(body('wirePlayScreen')).toMatch(/\n\s*fieldView = new FieldView\(/);
+    const made = appSource.indexOf('\n  wirePlayScreen(emu, ');
+    expect(made).toBeGreaterThan(0);
+    expect(appSource.indexOf('runSolo(emu, mailboxBase, symbols)')).toBeGreaterThan(made);
+    expect(appSource.indexOf('wireRoom(emu, mailboxBase, ')).toBeGreaterThan(made);
   });
 });

@@ -470,6 +470,11 @@ export class GhostWalkers {
     return this.walkers.has(seat);
   }
 
+  /** Every seat the page is walking, on whatever map. */
+  seats(): number[] {
+    return Array.from(this.walkers.keys()).sort((a, b) => a - b);
+  }
+
   /** The walkers on a map as sprites on the picture, `origin` the map pixel at its
    *  top-left (field.ts's lcdOrigin). `keep` is asked of each by its seat and its tile;
    *  `hidden` puts them on the overlay. */
