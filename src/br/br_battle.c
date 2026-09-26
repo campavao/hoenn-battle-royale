@@ -10,6 +10,9 @@
 #include "battle_interface.h"
 #include "battle_controllers.h"
 #include "battle_util.h"
+#include "battle_scripts.h"
+#include "item.h"
+#include "constants/battle_string_ids.h"
 #include "main.h"
 #include "pokemon.h"
 #include "recorded_battle.h"
@@ -217,12 +220,63 @@ bool8 BrBattle_ShotTick(void)
 // Nothing is rolled here at all, so the two ROMs of a link battle cannot disagree: the
 // doll was spent on the runner's own machine at selection and the fact of it rides in
 // the action's return value, which both sides read.
-bool8 BrBattle_TakeRun(bool8 doll)
+static bool8 TakeRun(bool8 doll)
 {
     gBrBattle.runRolls++;
     if (!doll)
         return FALSE;
     gBrBattle.runEscapes++;
+    return TRUE;
+}
+
+// RUN at selection (POK-231, POK-293). The doll is spent here, on the runner's own bag
+// alone, and the action's return value says so, so both ROMs of a link battle agree.
+// BR_RUN_ROLL is "asked to leave, had nothing to leave with". Every Mart sells them.
+u8 BrBattle_ChooseRun(void)
+{
+    if (CheckBagHasItem(ITEM_POKE_DOLL, 1))
+    {
+        RemoveBagItem(ITEM_POKE_DOLL, 1);
+        return BR_RUN_DOLL;
+    }
+    return BR_RUN_ROLL;
+}
+
+bool8 BrBattle_HandleRun(void)
+{
+    u8 how = gBattleBufferB[gBattlerAttacker][2];
+
+    if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK))
+    {
+        // A forfeit is not a flee (POK-292). The shot clock ran out, and that has a
+        // definite loser and a definite winner -- which is pret's own link branch, so
+        // this steps aside and lets it run.
+        if (how == BR_RUN_FORFEIT)
+            return FALSE;
+    }
+    // A bot's fight is a TRAINER battle rather than a link one, and pret decides RUN
+    // there by the speed roll -- while the POKe DOLL had already been spent at
+    // selection: you paid and got a coin toss (POK-293). So it gets the same rule.
+    // Against a wild Pokemon RUN is left to pret, because the Zone is not somebody
+    // else's time; and the AI's side never runs from a trainer.
+    else if (GetBattlerSide(gBattlerAttacker) != B_SIDE_PLAYER
+          || !(gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+    {
+        return FALSE;
+    }
+    if (!TakeRun(how == BR_RUN_DOLL))
+    {
+        ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
+        gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_CANT_ESCAPE_2;
+        gBattlescriptCurrInstr = BattleScript_PrintFailedToRunString;
+        gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
+        return TRUE;
+    }
+    gCurrentTurnActionNumber = gBattlersCount;
+    if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
+        gBattleOutcome = B_OUTCOME_RAN;
+    else
+        gBattleOutcome = B_OUTCOME_MON_FLED;
     return TRUE;
 }
 

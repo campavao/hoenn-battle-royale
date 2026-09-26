@@ -56,11 +56,15 @@ bool8 BrBattle_ShotTick(void);
 // Every frame from BrFrame, whatever is on top: the same clock over the BAG and the
 // party screen, which the two above cannot see (POK-292).
 void BrBattle_TickStall(void);
-// HandleAction_Run, link battles: TRUE when the runner gets away. Not a roll -- Cam's
-// rule (POK-293) is that a POKe DOLL is the only way out of a fight with another
-// trainer, and without one there is no way out. `doll` is what the RUN action carried,
-// decided and spent on the runner's own machine and read back here on both.
-bool8 BrBattle_TakeRun(bool8 doll);
+// RUN from a fight with another trainer. Not a roll -- Cam's rule (POK-293) is that a
+// POKe DOLL is the only way out, and without one there is no way out.
+// ChooseRun: the player's controller, RUN chosen: spends a doll if there is one and
+// returns the BR_RUN_* the action carries.
+u8 BrBattle_ChooseRun(void);
+// HandleRun: HandleAction_Run, first thing. TRUE when it decided the RUN (got away, or
+// "Can't escape!"), from what the action carried, the same on both ROMs of a link
+// battle; FALSE leaves it to pret: a forfeit, a wild battle, the AI's side.
+bool8 BrBattle_HandleRun(void);
 // The drawn shot clock: the seconds left, top-right of the battle screen. Draw each
 // frame a choice menu is open (it follows bg0's scroll so it stays top-right in both
 // the action and move menus); hide it when selection ends.

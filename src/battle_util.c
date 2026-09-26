@@ -491,35 +491,15 @@ void HandleAction_Run(void)
 {
     gBattlerAttacker = gBattlerByTurnOrder[gCurrentTurnActionNumber];
 
+#if BR
+    // RUN from another trainer, a person's or a bot's, is a POKe DOLL or nothing
+    // (br_battle.c). A forfeit, and RUN from a wild one, are pret's, below.
+    if (BrBattle_HandleRun())
+        return;
+
+#endif
     if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK))
     {
-#if BR
-        // RUN against another trainer takes a POKe DOLL (POK-293): with one it is a sure
-        // getaway and nobody is eliminated by it; without one it fails and the turn goes
-        // on. No roll: the doll is spent at RUN selection on the runner's own machine and
-        // flagged in the action's return value, so both ROMs read the same byte and
-        // cannot come to different answers.
-        // A forfeit is not a flee (POK-292). The shot clock ran out, and that has a
-        // definite loser and a definite winner -- which is vanilla's own link branch
-        // just below, so this one steps aside and lets it run.
-        if (gBattleBufferB[gBattlerAttacker][2] != BR_RUN_FORFEIT)
-        {
-            if (!BrBattle_TakeRun(gBattleBufferB[gBattlerAttacker][2] == BR_RUN_DOLL))
-            {
-                ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
-                gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_CANT_ESCAPE_2;
-                gBattlescriptCurrInstr = BattleScript_PrintFailedToRunString;
-                gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
-                return;
-            }
-            gCurrentTurnActionNumber = gBattlersCount;
-            if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
-                gBattleOutcome = B_OUTCOME_RAN;
-            else
-                gBattleOutcome = B_OUTCOME_MON_FLED;
-            return;
-        }
-#endif
         gCurrentTurnActionNumber = gBattlersCount;
 
         for (gActiveBattler = 0; gActiveBattler < gBattlersCount; gActiveBattler++)
@@ -543,27 +523,6 @@ void HandleAction_Run(void)
     {
         if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
         {
-#if BR
-            // A bot's fight is a TRAINER battle rather than a link one, so it came down
-            // here and was decided by the vanilla speed roll -- while the POKe DOLL had
-            // already been spent at selection. You paid and got a coin toss (POK-293).
-            // The same rule as above: a doll or nothing, and against a wild Pokemon this
-            // is left alone, because the Zone is not somebody else's time.
-            if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
-            {
-                if (!BrBattle_TakeRun(gBattleBufferB[gBattlerAttacker][2] == BR_RUN_DOLL))
-                {
-                    ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
-                    gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_CANT_ESCAPE_2;
-                    gBattlescriptCurrInstr = BattleScript_PrintFailedToRunString;
-                    gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
-                    return;
-                }
-                gCurrentTurnActionNumber = gBattlersCount;
-                gBattleOutcome = B_OUTCOME_RAN;
-                return;
-            }
-#endif
             if (!TryRunFromBattle(gBattlerAttacker)) // failed to run away
             {
                 ClearFuryCutterDestinyBondGrudge(gBattlerAttacker);
