@@ -5,21 +5,19 @@
 // area in two minutes -- so the opening may be too spread out to feel like a shared
 // place. A pacing decision, and one to make with a number rather than a feeling.
 //
-// Runs the real bot brain over the real Zone -- the same `Bots` the host walks, on the
-// same twenty-four cells the ROM deals the player -- for the opening's length, across
-// many seeds, and counts company: how often two contestants share an area, how long
-// before the first two do, and how long before two are within an eyeline of each other.
+// Runs the host's own match (bots/offline.ts: createHostBots and the Director, the same
+// pair a room runs) for the opening's length, across many seeds, on the same
+// twenty-four Zone cells the ROM deals the player, and counts company: how often two
+// contestants share an area, how long before the first two do, and how long before two
+// are within an eyeline of each other. The opening ends at the director's first ring,
+// which is the buzzer that sends everybody out into Hoenn, so the last second sampled is
+// the one before it.
 //
 //   npx vite-node tools/br/zone-occupancy.ts -- --seeds 40 --contestants 12 --secs 120
 //
 // Every contestant is a bot here. A player walks about as much as one does in the
 // Zone, and it is the bots' own walk that is being asked about.
-import { Bots, STEP_MS } from '../../web/src/bots/brain';
-import { dealBots } from '../../web/src/bots/roster';
-import { dealBag } from '../../web/src/bots/bag';
-import { dealParty } from '../../web/src/bots/party';
-import { botGround } from '../../web/src/bots/host';
-import { mulberry32 } from '../../web/src/match/clock';
+import { BEAT_MS, offlineMatch } from '../../web/src/bots/offline';
 import { SAFARI_MAPS } from '../../web/src/match/safari';
 
 function arg(name: string, fallback: number): number {
@@ -34,10 +32,6 @@ const contestants = arg('contestants', 12);
 const secs = arg('secs', 120);
 /** How near is "you would have seen them": the eyeline is four cells (POK-259). */
 const EYELINE = 4;
-
-// The Zone as the host's bots walk it (bots/host.ts): the opening's own cells.
-const { world, refById, safariTargets: targets } = botGround();
-const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
 
 interface Run {
   /** Seconds until two contestants first stood on the same area, or null. */
@@ -60,24 +54,12 @@ interface Run {
 }
 
 function run(seed: number): Run {
-  const bots = new Bots({
-    world,
-    targets,
-    mapRef: (id) => refById.get(id),
-    send: () => {},
-    rng: mulberry32(seed ^ 0x51ce),
-    inside: () => true, // no fog in the opening
-    deal: (bot, phase) => dealParty(seed, bot.seat, phase),
-    bagFor: (bot, phase) => dealBag(seed, bot.seat, phase, bot.grade),
-    seed,
-    fights: () => false, // nobody fights in the Zone
-    centres: () => world.centres(),
-  });
-  const dealt = dealBots(seed, contestants, [], spawns);
-  bots.start(dealt, 0);
+  // The opening is the match's own: bots dealt into the Zone, nobody fighting, no fog.
+  const m = offlineMatch({ seed, bots: contestants, safariSecs: secs });
+  const dealt = m.host.bots.positions();
   const visited = new Set<string>();
   // Who started where, so a pair stacked at the deal is not counted as having met.
-  const startCell = new Map(dealt.map((b) => [b.seat, `${b.mapId}:${b.x},${b.y}`]));
+  const startCell = new Map(dealt.map((b) => [b.seat, `${b.map}:${b.x},${b.y}`]));
   const together = (a: number, b: number) => startCell.get(a) === startCell.get(b);
   let stacked = 0;
   for (let i = 0; i < dealt.length; i++) for (let j = i + 1; j < dealt.length; j++) if (together(dealt[i].seat, dealt[j].seat)) stacked++;
@@ -88,12 +70,12 @@ function run(seed: number): Run {
   let samples = 0;
   let peak = 0;
   let nextSample = 1000;
-  for (let t = STEP_MS; t <= secs * 1000; t += STEP_MS) {
-    bots.tick(t);
+  for (let t = BEAT_MS; t < secs * 1000; t += BEAT_MS) {
+    m.tick(t);
     if (t < nextSample) continue;
     nextSample += 1000;
     samples++;
-    const where = bots.positions();
+    const where = m.host.bots.positions();
     const byMap = new Map<string, { seat: number; x: number; y: number }[]>();
     for (const w of where) {
       visited.add(w.map);

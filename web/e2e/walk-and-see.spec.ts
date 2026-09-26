@@ -53,10 +53,11 @@ test.beforeAll(() => {
 // its ghost was, correctly, never drawn. So this seed deals seats 1 and 2 cells 10 and 11
 // of the ROM's table, both in the NORTHEAST area -- the host on (21,26), the guest on
 // (7,36) -- and the guest walks right seven tiles and up three into the host's view. The
-// route was read off the ROM's own map data, not world.json, which knows no elevation
-// (Safari North's cliff tops look like open ground to it): one elevation or a crossing
-// the whole way, a wall ending the climb whichever of the last two columns the guest
-// stops in, and no tall grass, which would roll a wild encounter and end the walk.
+// route was read off the ROM's own map data, not world.json, which knew no elevation
+// then (Safari North's cliff tops looked like open ground to it until POK-331 #2): one
+// elevation or a crossing the whole way, a wall ending the climb whichever of the last
+// two columns the guest stops in, and no tall grass, which would roll a wild encounter
+// and end the walk.
 // Change the table and re-derive both.
 const SAME_AREA_SEED = 1640534095;
 const SAFARI_NORTHEAST = 12;

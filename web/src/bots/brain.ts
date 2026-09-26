@@ -15,7 +15,7 @@ import { Grade, type Bot } from './roster';
 import { MOVE_CUT, MOVE_FLY, MOVE_SURF } from './party';
 import { battleItems, merge as mergeBag, purse, quaff, restock, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
-import { sameSpot, type SeamDir, type Spot, type World } from './world';
+import { sameSpot, spotKey, type SeamDir, type Spot, type World } from './world';
 import { pageCell, type PageCell } from './space';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg } from '../net/wire';
 import { spillCells } from '../match/loot';
@@ -1056,6 +1056,11 @@ export class Bots {
     // she is free and heals everything, and the potions keep for the road. It is not
     // the errand itself: the bot drinks and then goes wherever it was going.
     this.tryQuaff(walker, now);
+    // What it can walk to without leaving this map (POK-331 #27). A lake or a wood cuts
+    // Route 104 and Route 103 in two, and a piece or a cell on the far side was a search
+    // that settled all of this side before it gave up -- every time the bot stopped to
+    // think, and out of the whole roster's budget.
+    const reach = this.opts.world.reachOnMap(walker.at, canSurf(walker.party), canCut(walker.party));
     // Fog first. Aiming only at cells inside the ring is the whole rule: a bot already
     // inside wanders inside, and a bot caught outside walks in, because the route to
     // anywhere it may aim at crosses the edge on the way.
@@ -1063,7 +1068,7 @@ export class Bots {
     // among the pieces on its own map -- distances across a seam are not comparable,
     // and a bot that crosses one will see that map's loot when it gets there.
     const loot = (this.opts.loot?.all() ?? [])
-      .filter((l) => (!inside || inside(l.mapId)) && l.mapId === walker.at.map)
+      .filter((l) => (!inside || inside(l.mapId)) && l.mapId === walker.at.map && reach.cell(l.x, l.y))
       .sort(
         (a, b) =>
           Math.abs(a.x - walker.at.x) + Math.abs(a.y - walker.at.y) -
@@ -1124,16 +1129,22 @@ export class Bots {
     // empty. Without them the fog takes more bots (POK-330 #49: 10 fog outs against 7
     // over six thirty-bot replays, and 2,784 stuck steps against 1,763), so they stay,
     // paid for out of the tick's node budget like everything else.
+    //
+    // This map's own cells are the ones it can walk to without leaving it (POK-331 #27):
+    // a bot with none on its side of the water goes to the ladder first, which is how it
+    // gets round.
     const section = this.opts.world.map(walker.at.map)?.section;
+    const mine = (t: { mapId: string }) => t.mapId === walker.at.map;
     const pools = [
-      targets.filter((t) => t.mapId === walker.at.map),
-      targets.filter((t) => t.mapId !== walker.at.map && this.opts.world.map(t.mapId)?.section === section),
-      targets,
+      targets.filter((t) => mine(t) && reach.cell(t.x, t.y)),
+      targets.filter((t) => !mine(t) && this.opts.world.map(t.mapId)?.section === section),
+      targets.filter((t) => !mine(t) || reach.cell(t.x, t.y)),
     ].filter((pool) => pool.length > 0);
     // The ladder's turn: after this map's own pick, when there is one to make.
-    const crossAt = pools[0][0].mapId === walker.at.map ? 1 : 0;
+    const crossAt = pools.length > 0 && mine(pools[0][0]) ? 1 : 0;
     for (let i = 0; i < 4; i++) {
       if (i === crossAt && this.aimAcrossMaps(walker, targets, now)) return;
+      if (pools.length === 0) break;
       const pool = pools[Math.min(i, pools.length - 1)];
       const pick = pool[Math.floor(this.opts.rng() * pool.length)];
       const to: Spot = { map: pick.mapId, x: pick.x, y: pick.y };
@@ -1177,7 +1188,7 @@ export class Bots {
       wanted.set(t.mapId, (wanted.get(t.mapId) ?? 0) + 1);
     }
     const goals = [...wanted.entries()]
-      .map(([mapId, n]) => ({ mapId, n, hops: world.hops(walker.at.map, mapId) }))
+      .map(([mapId, n]) => ({ mapId, n, hops: world.hops(walker.at.map, mapId, surf, cut) }))
       .filter((g) => g.hops !== undefined && g.hops > 0)
       .sort((a, b) => a.hops! - b.hops! || b.n - a.n);
     if (goals.length === 0) return false;
@@ -1185,28 +1196,36 @@ export class Bots {
     // Kanto's ladder (main.lua:3380): the best next map, then the next best, then any --
     // "any seam beats standing still". Only when every one of them is unreachable from
     // where we stand does this give up and let the caller take its one random step.
-    // Goal maps in one direction share their next hop, and a hop that failed for the
-    // first fails the same way for the rest -- same start, same exits, same budget -- so
-    // it is searched once (POK-330 #49): a stuck bot paid for it three times.
+    // Goal maps in one direction share their crossing, and a crossing that failed for
+    // the first fails the same way for the rest -- same start, same goals, same budget --
+    // so it is searched once (POK-330 #49): a stuck bot paid for it three times.
+    //
+    // The crossing is the first of the way there region by region (POK-331 #27): the
+    // plan's next map when this side of the water can get to it, and the way round when
+    // it cannot -- Route 104's north half to Petalburg is through the wood. It is not paid
+    // for out of the node budget: each region is flooded once for the tab, and the search
+    // over them settles a few dozen -- a couple of hundred at the most, the long way round.
     const tried = new Set<string>();
     for (const goal of goals.slice(0, GOAL_TRIES)) {
-      for (const hop of world.nextHops(walker.at.map, goal.mapId)) {
-        if (tried.has(hop)) continue;
-        tried.add(hop);
-        // Where the crossing comes out, not the edge or door it starts from, so the route
-        // takes the step over: a door is never a cell a route can end on, and a bot
-        // already on the edge would be "there" with nowhere to walk (POK-330 #49 review).
-        const over = world.entryCells(walker.at.map, hop, surf, cut);
-        if (over.length === 0) continue;
-        const path = findPathToAny(world, walker.at, over, HOP_BUDGET, surf, cut);
-        this.budget -= path.visited;
-        if (!path.found || path.steps.length === 0) continue;
-        walker.path = path;
-        walker.stepIndex = 0;
-        walker.retryAfter = 0;
-        this.note(walker, 'wander', `-> ${hop} (for ${goal.mapId})`);
-        return true;
-      }
+      // Where the crossing comes out, not the edge or door it starts from, so the route
+      // takes the step over: a door is never a cell a route can end on, and a bot already
+      // on the edge would be "there" with nowhere to walk (POK-330 #49 review).
+      // ...and ends in a part of the goal map with a target in reach: a pocket off its
+      // edge is on the map, and nowhere to arrive.
+      const there = targets.filter((t) => t.mapId === goal.mapId);
+      const over = world.firstCrossing(walker.at, goal.mapId, surf, cut, (reach) => there.some((t) => reach.cell(t.x, t.y)));
+      if (!over || over.length === 0) continue;
+      const asked = spotKey(over[0]);
+      if (tried.has(asked)) continue;
+      tried.add(asked);
+      const path = findPathToAny(world, walker.at, over, HOP_BUDGET, surf, cut);
+      this.budget -= path.visited;
+      if (!path.found || path.steps.length === 0) continue;
+      walker.path = path;
+      walker.stepIndex = 0;
+      walker.retryAfter = 0;
+      this.note(walker, 'wander', `-> ${over[0].map} (for ${goal.mapId})`);
+      return true;
     }
     return false;
   }
@@ -1219,16 +1238,18 @@ export class Bots {
    *  seconds is a random walk, and a random walk does not cross Hoenn -- it is what the
    *  bots were doing for the whole back half of a match (POK-302). */
   private wanderOneStep(walker: Walker, why: 'stuck' | 'wait' = 'stuck'): void {
-    const open = this.opts.world.neighbours(walker.at, canSurf(walker.party), canCut(walker.party));
+    const surf = canSurf(walker.party);
+    const cut = canCut(walker.party);
+    const open = this.opts.world.neighbours(walker.at, surf, cut);
     if (open.length === 0) {
       this.note(walker, why);
       walker.path = null;
       return;
     }
-    const goal = this.driftGoal(walker);
+    const goal = this.driftGoal(walker, surf, cut);
     const closer = goal === undefined ? [] : open.filter((o) => {
-      const here = this.opts.world.hops(walker.at.map, goal);
-      const there = this.opts.world.hops(o.to.map, goal);
+      const here = this.opts.world.hops(walker.at.map, goal, surf, cut);
+      const there = this.opts.world.hops(o.to.map, goal, surf, cut);
       return there !== undefined && (here === undefined || there <= here);
     });
     const pick = closer.length > 0 ? closer : open;
@@ -1246,7 +1267,7 @@ export class Bots {
    *  bot on any map with a landing cell took uniform random steps even in the fog,
    *  and anywhere else drifted towards the nearest landing map whichever side of the
    *  ring it was on. */
-  private driftGoal(walker: Walker): string | undefined {
+  private driftGoal(walker: Walker, surf: boolean, cut: boolean): string | undefined {
     const inside = this.opts.inside;
     const seen = new Set<string>();
     let best: string | undefined;
@@ -1258,7 +1279,7 @@ export class Bots {
       seen.add(t.mapId);
       if (inside && !inside(t.mapId)) continue;
       if (t.mapId === walker.at.map) return undefined; // already where the targets are
-      const h = this.opts.world.hops(walker.at.map, t.mapId);
+      const h = this.opts.world.hops(walker.at.map, t.mapId, surf, cut);
       if (h !== undefined && h < bestHops) {
         bestHops = h;
         best = t.mapId;

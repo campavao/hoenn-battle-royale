@@ -28,7 +28,7 @@
 // the VBlank that ends a frame's logic and drawn during the next -- so what is drawn here
 // is the state read the frame BEFORE.
 import type { WorldMap } from './bots/world';
-import worldData from './data/world.json';
+import { HOENN } from './bots/hoenn';
 import spritesData from './data/sprites.json';
 import type { Band, Emulator } from './emu';
 
@@ -347,7 +347,7 @@ export interface Placed {
 }
 
 /** The maps joined to this one along its edges, where each one's origin falls. */
-export function neighbours(map: WorldMap, byId: Map<string, WorldMap>): Placed[] {
+export function neighbours(map: WorldMap, byId: ReadonlyMap<string, WorldMap>): Placed[] {
   const out: Placed[] = [];
   for (const seam of map.seams) {
     const other = byId.get(seam.to);
@@ -443,8 +443,6 @@ export class FieldImages<T extends FieldImage> {
 }
 
 export class FieldView {
-  private byRef = new Map<string, WorldMap>();
-  private byId = new Map<string, WorldMap>();
   private images = new FieldImages<HTMLImageElement>(
     () => {
       const img = new Image();
@@ -470,12 +468,7 @@ export class FieldView {
   private off: (() => void) | null = null;
   private observer: ResizeObserver | null = null;
 
-  constructor(private readonly deps: FieldDeps) {
-    for (const m of (worldData as { maps: WorldMap[] }).maps) {
-      this.byRef.set(`${m.group}:${m.num}`, m);
-      this.byId.set(m.id, m);
-    }
-  }
+  constructor(private readonly deps: FieldDeps) {}
 
   attach(): void {
     this.layout();
@@ -741,7 +734,7 @@ export class FieldView {
       this.drawnMap = at;
       this.images.retry();
     }
-    const map = this.byRef.get(at);
+    const map = HOENN.byRef.get(at);
     const people = c.sprites.map((s) => `${s.gfx}/${s.frame}/${s.hFlip ? 1 : 0}/${s.x}/${s.y}/${s.hidden ? 1 : 0}`).join(',');
     const fog = c.fog ? `${c.fog.x}/${c.fog.y}/${c.fog.eva}/${c.fog.evb}` : '';
     const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}:${c.onField ? 1 : 0}`;
@@ -780,7 +773,7 @@ export class FieldView {
       const still = this.image(map.id);
       if (still) ctx.drawImage(still, -ox, -oy);
       else complete = false;
-      for (const n of neighbours(map, this.byId)) {
+      for (const n of neighbours(map, HOENN.byId)) {
         if (!n.map.outdoor) continue;
         const img = this.image(n.map.id);
         if (img) ctx.drawImage(img, n.x - ox, n.y - oy);

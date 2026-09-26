@@ -84,6 +84,8 @@ the pret sources) and `wire-ids.py` (the message ids and reassembly caps, from
 `wire-table.txt` -- edit the table, never its outputs; a table that changes shape is a
 `BR_PROTOCOL` bump, pinned in `include/br/br_version.h`).
 
-Not generators: `bots-replay.ts` and `zone-occupancy.ts` (the bot brain run offline, for
-questions), `moveset-sim.py` (eyeballs br_levels.c's move picks), `transcribe.py`
+Not generators: `bots-replay.ts` and `zone-occupancy.ts` (the host's match run offline, for
+questions: `web/src/bots/offline.ts` wires createHostBots to the Director the way a room
+does, so what they print is what a room plays -- opening, drop, the director's rings and
+its `win`), `moveset-sim.py` (eyeballs br_levels.c's move picks), `transcribe.py`
 (play-test videos), `play-log.mjs` (the relay's play log, CI).

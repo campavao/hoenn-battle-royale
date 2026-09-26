@@ -1,14 +1,16 @@
 // The host's bots (POK-236): the page that runs the match deals them, walks them and
 // speaks for them. Out of app.ts (POK-330 #42) so solo and the room start them one way
-// and a test can drive them: nothing here touches the page or keeps module state, and
-// the clock and the pump are the caller's to hand in.
+// and a test can drive them: nothing here touches the page or keeps module state -- the
+// World they walk is bots/hoenn.ts's, built once for the tab -- and the clock and the
+// pump are the caller's to hand in.
 import { Bots, type BotsOptions } from './brain';
 import { lootView, resumeAt } from './adapt';
 import type { RomCell } from './space';
 import { dealBots, type Bot } from './roster';
 import { dealParty } from './party';
 import { dealBag } from './bag';
-import { World, type WorldMap } from './world';
+import type { World } from './world';
+import { HOENN, type WorldIndex } from './hoenn';
 import type { DirectorWorld } from '../match/director';
 import type { Loot } from '../match/loot';
 import type { RosterEntry } from '../match/roster';
@@ -20,7 +22,6 @@ import { LANDING } from '../match/landing';
 import { SAFARI_CELLS } from '../match/safari';
 import { MAP_OFFSET } from '../net/cells';
 import { PARTY_BAG_MAX, type MapRef, type Msg } from '../net/wire';
-import worldData from '../data/world.json';
 import TRAINERS from '../data/trainers.json';
 
 /** The bots' own pump. Faster than one step, so the pace comes out of `Bots.tick`
@@ -48,8 +49,10 @@ export interface BotResume {
 type Cell = { mapId: string; x: number; y: number };
 
 /** What the bots walk on, off world.json: the graph, both names for a map, and the
- *  cells a bot is dealt onto and walks to. One function, so the offline tools
- *  (tools/br/bots-replay.ts, zone-occupancy.ts) walk the ground the host's bots do. */
+ *  cells a bot is dealt onto and walks to. One function, so the offline match
+ *  (bots/offline.ts, which the tools run) walks the ground the host's bots do.
+ *  The graph is the index's own (POK-331 #20): every match walks the one World the tab
+ *  built, rather than decoding Hoenn again each time bots are dealt. */
 export interface BotGround {
   world: World;
   refById: Map<string, MapRef>;
@@ -63,8 +66,8 @@ export interface BotGround {
   spawns: (Cell & { map: MapRef })[];
 }
 
-export function botGround(maps: WorldMap[] = (worldData as { maps: WorldMap[] }).maps): BotGround {
-  const world = new World(maps);
+export function botGround(index: WorldIndex = HOENN): BotGround {
+  const { maps, world } = index;
   const refById = new Map(maps.map((m) => [m.id, { group: m.group, num: m.num }]));
   const outdoor = new Set(maps.filter((m) => m.outdoor).map((m) => m.id));
   // The same pool the drop deals from: known-walkable, outdoor, already in the bundle.
@@ -83,8 +86,7 @@ export function botGround(maps: WorldMap[] = (worldData as { maps: WorldMap[] })
     y: c.y,
   }));
   const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
-  const idByRef = new Map(maps.map((m) => [`${m.group}:${m.num}`, m.id]));
-  const idOf = (map: MapRef) => idByRef.get(`${map.group}:${map.num}`);
+  const idOf = (map: MapRef) => index.idOf(map);
   const spawns = targets.map((t) => ({ mapId: t.mapId, map: refById.get(t.mapId)!, x: t.x, y: t.y }));
   return { world, refById, idOf, sectionOf, targets, safariTargets, spawns };
 }
@@ -118,6 +120,9 @@ export interface HostBotsOptions {
   /** This match's Zone pool, read out of the ROM (match/zone.ts). Asked for at every deal
    *  rather than once: the first deal can come before the ROM has dealt the pool. */
   zonePool?: () => number[];
+  /** What they walk on: botGround()'s. bots/offline.ts hands in one whose spawns are a
+   *  single map's, to deal the whole field onto it. */
+  ground?: BotGround;
   /** The clock and the pump, for a test to drive: performance.now and setInterval. */
   now?: () => number;
   every?: (fn: () => void, ms: number) => () => void;
@@ -148,7 +153,7 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
       const id = setInterval(fn, ms);
       return () => clearInterval(id);
     });
-  const { world, refById, idOf, sectionOf, targets, safariTargets, spawns } = botGround();
+  const { world, refById, idOf, sectionOf, targets, safariTargets, spawns } = opts.ground ?? botGround();
   const opening = safariSecs > 0 && safariTargets.length > 0 && resume === undefined;
   const safariSpawns = safariTargets.map((t) => ({ ...t, map: refById.get(t.mapId)! }));
   let inOpening = opening;

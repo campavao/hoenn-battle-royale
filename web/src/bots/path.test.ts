@@ -49,6 +49,12 @@ interface Node {
   from?: { key: string; dir: SeamDir };
 }
 
+/** A node of the search: a cell, or one level of a bridge (POK-331 #2). Goals are cells,
+ *  so they stay on `spotKey`. */
+function nodeKey(s: Spot): string {
+  return s.z === undefined ? spotKey(s) : `${spotKey(s)}@${s.z}`;
+}
+
 function heuristic(a: Spot, b: Spot): number {
   if (a.map !== b.map) return 0;
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
@@ -57,7 +63,7 @@ function heuristic(a: Spot, b: Spot): number {
 function oldFindPath(world: World, from: Spot, to: Spot, maxVisited = 4000, surf = false, cut = false): Path {
   if (sameSpot(from, to)) return { steps: [], found: true, visited: 0 };
   const open: Node[] = [{ spot: from, cost: 0, estimate: heuristic(from, to) }];
-  const seen = new Map<string, Node>([[spotKey(from), open[0]]]);
+  const seen = new Map<string, Node>([[nodeKey(from), open[0]]]);
   const closed = new Set<string>();
   let visited = 0;
   while (open.length > 0 && visited < maxVisited) {
@@ -66,7 +72,7 @@ function oldFindPath(world: World, from: Spot, to: Spot, maxVisited = 4000, surf
       if (open[i].cost + open[i].estimate < open[best].cost + open[best].estimate) best = i;
     }
     const node = open.splice(best, 1)[0];
-    const key = spotKey(node.spot);
+    const key = nodeKey(node.spot);
     if (closed.has(key)) continue;
     closed.add(key);
     visited++;
@@ -81,7 +87,7 @@ function oldFindPath(world: World, from: Spot, to: Spot, maxVisited = 4000, surf
       return { steps, found: true, visited };
     }
     for (const { dir, to: next } of world.neighbours(node.spot, surf, cut)) {
-      const nextKey = spotKey(next);
+      const nextKey = nodeKey(next);
       if (closed.has(nextKey)) continue;
       const cost = node.cost + 1;
       const known = seen.get(nextKey);
@@ -99,7 +105,7 @@ function oldFindPathToAny(world: World, from: Spot, goals: readonly Spot[], maxV
   if (wanted.size === 0) return { steps: [], found: false, visited: 0 };
   if (wanted.has(spotKey(from))) return { steps: [], found: true, visited: 0 };
   const open: Node[] = [{ spot: from, cost: 0, estimate: 0 }];
-  const seen = new Map<string, Node>([[spotKey(from), open[0]]]);
+  const seen = new Map<string, Node>([[nodeKey(from), open[0]]]);
   const closed = new Set<string>();
   let visited = 0;
   while (open.length > 0 && visited < maxVisited) {
@@ -108,11 +114,11 @@ function oldFindPathToAny(world: World, from: Spot, goals: readonly Spot[], maxV
       if (open[i].cost < open[best].cost) best = i;
     }
     const node = open.splice(best, 1)[0];
-    const key = spotKey(node.spot);
+    const key = nodeKey(node.spot);
     if (closed.has(key)) continue;
     closed.add(key);
     visited++;
-    if (wanted.has(key)) {
+    if (wanted.has(spotKey(node.spot))) {
       const steps: { dir: SeamDir; to: Spot }[] = [];
       let at: Node | undefined = node;
       while (at && at.from) {
@@ -124,7 +130,7 @@ function oldFindPathToAny(world: World, from: Spot, goals: readonly Spot[], maxV
     }
     for (const { dir, to: next } of world.neighbours(node.spot, surf, cut)) {
       if (next.map !== from.map && !wanted.has(spotKey(next))) continue;
-      const nextKey = spotKey(next);
+      const nextKey = nodeKey(next);
       if (closed.has(nextKey)) continue;
       const cost = node.cost + 1;
       const known = seen.get(nextKey);
@@ -272,20 +278,22 @@ describe('the search on cell numbers', () => {
       asked.on = false;
     }
     const calls = asked.calls.splice(0);
-    // About thirteen hundred on this seed: dozens of them over to the next map, and
-    // hundreds that found nothing -- the searches that spend their whole budget. (Before
-    // the ladder crossed doors, and ran only once a map's own pick had, it was near two
-    // thousand, most of them to a map's edge.)
-    expect(calls.length).toBeGreaterThan(1000);
+    // About 750 on this seed, 87 of them over to the next map. Only fifteen find nothing:
+    // since the brain asks only for what it can reach (POK-331 #27) it hardly ever runs a
+    // search that spends its whole budget, where it used to run hundreds -- the first test
+    // above is the one that holds failing searches to the old answer. (Before the ladder
+    // crossed doors, and ran only once a map's own pick had, it was near two thousand,
+    // most of them to a map's edge.)
+    expect(calls.length).toBeGreaterThan(600);
     expect(calls.filter((c) => c.any).length).toBeGreaterThan(50);
-    expect(calls.filter((c) => !c.got.found).length).toBeGreaterThan(300);
+    expect(calls.filter((c) => !c.got.found).length).toBeGreaterThan(5);
     for (const { any, args, got } of calls) {
       const want = any
         ? oldFindPathToAny(...(args as Parameters<typeof oldFindPathToAny>))
         : oldFindPath(...(args as Parameters<typeof oldFindPath>));
       expect(got).toEqual(want);
     }
-    // Slow on purpose: ~2,200 searches through the old one, which is the cost this
+    // Slow on purpose: ~750 searches through the old one, which is the cost this
     // ticket took out. Seconds here, and more on a shared runner.
   }, 60_000);
 });

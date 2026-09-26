@@ -1,8 +1,8 @@
 // The world as something to walk on (POK-236).
 //
-// `world.json` is the exporter's output (POK-235): one row a map, a run-length
-// walkability grid, and the seams that join maps edge to edge. The Director reads the
-// same file for landing cells and sections, but it never has to ask "can I stand
+// `world.json` is the exporter's output (POK-235): one row a map, run-length grids of
+// walkability and height, and the seams that join maps edge to edge. The Director reads
+// the same file for landing cells and sections, but it never has to ask "can I stand
 // here" or "where does this step land" -- a bot does, four times a second, for as long
 // as the match runs. So this decodes the grids once and answers those two questions.
 //
@@ -20,6 +20,12 @@ export interface WorldMap {
   section: string;
   outdoor: boolean;
   grid: string;
+  /** Each cell's height, run-length like `grid` (POK-331 #2): the map grid's top four
+   *  bits, which is how Emerald keeps you off a cliff top a single step away. A wall's
+   *  is never asked, so the exporter writes whatever keeps the run going. Absent, every
+   *  cell is 0 -- a transition, which blocks nothing -- so a hand-built map walks as it
+   *  always did. */
+  elev?: string;
   seams: { dir: SeamDir; to: string; offset: number }[];
   /** Doors, stairs and mats: stepping onto one lands you somewhere else entirely.
    *  The exporter writes each map's own, and Emerald's warps come in pairs, so the
@@ -45,6 +51,40 @@ export interface Spot {
   map: string;
   x: number;
   y: number;
+  /** On a bridge (height 15, a cell on two levels at once): the level the trainer walked
+   *  onto it at, which the cell itself cannot say. Absent everywhere else -- and absent
+   *  on a bridge means "don't know", which lets them off at either level. */
+  z?: number;
+}
+
+/** What a trainer can walk to without leaving the map they stand on (World.reachOnMap). */
+export interface Reach {
+  /** A cell of this map: true if they can walk onto it, at either level of a bridge. */
+  cell(x: number, y: number): boolean;
+  /** A spot on another map: true if a step off this one lands there. */
+  across(spot: Spot): boolean;
+}
+
+const NO_REACH: Reach = { cell: () => false, across: () => false };
+
+/** A region (POK-331 #27): nodes of one map joined by steps that go both ways, so all of
+ *  them reach the same places. Found as bots stand in them, for one kit. */
+interface Region {
+  map: number;
+  /** A node in it, to flood its reach from. */
+  rep: number;
+  reach?: Reach;
+  /** The nodes on other maps a step off its reach lands on. */
+  out?: number[];
+  /** Those landings by the region they are in. */
+  next?: Map<number, number[]>;
+}
+
+/** One map's regions for one kit: each node's region's number + 1, so 0 is "not yet". */
+interface Regions {
+  cell: Int32Array;
+  /** A bridge's level nodes, by node number. */
+  level: Map<number, number>;
 }
 
 /** The exporter's cell classes. 0 is plain ground, 7 tall grass, 8 a door or warp
@@ -100,6 +140,25 @@ function canStand(cls: number, surf: boolean, cut: boolean): boolean {
   return cls !== CLASS_WATER || surf;
 }
 
+/** Heights, pret's ELEVATION_*: 0 a transition (stairs, a ramp), 1 the water's, 3 the
+ *  ground's, 15 a bridge -- a cell on two levels at once. */
+const H_TRANSITION = 0;
+const H_SURF = 1;
+const H_GROUND = 3;
+const H_BRIDGE = 15;
+
+/** May a trainer at height `from` step onto a cell at height `to`? pret's
+ *  IsElevationMismatchAt (event_object_movement.c), the other way round: a different
+ *  height is a cliff face, unless either is a transition or the cell is a bridge. SURF
+ *  is the one way across, and only between water and the ground: onto the water from
+ *  height 3 (IsPlayerFacingSurfableFishableWater) and off it onto height 3
+ *  (CanStopSurfing, field_player_avatar.c). A ledge jump and a door never ask. */
+function heightsMeet(from: number, to: number, toCls: number, surf: boolean): boolean {
+  if (from === H_TRANSITION || to === H_TRANSITION || to === H_BRIDGE || to === from) return true;
+  if (!surf) return false;
+  return (from === H_SURF && to === H_GROUND) || (from === H_GROUND && toCls === CLASS_WATER);
+}
+
 export function decodeGrid(grid: string, cells: number): Uint8Array {
   const out = new Uint8Array(cells);
   let at = 0;
@@ -132,9 +191,21 @@ export class World {
   private readonly bases: number[] = [];
   private readonly widths: number[] = [];
   private readonly heights: number[] = [];
-  /** Per cell: its class, and which map it is on. */
+  /** Per cell: its class, its height, and which map it is on. */
   private readonly classes: Uint8Array;
+  private readonly elev: Uint8Array;
   private readonly cellMap: Uint16Array;
+  /** How many cells: the nodes past this are a bridge's levels. */
+  private readonly cells: number;
+  /** A bridge (POK-331 #2) is where pret's height rule has a memory: a trainer on a
+   *  height-15 cell keeps the height they walked on at, so the cycling road over Route
+   *  110 and the path under it cross without meeting. A bridge whose edges are at two
+   *  heights gets a node per height on each of its cells, numbered after the last cell:
+   *  `levelFirst` is a cell's first (an index into the two below; -1 for none), and each
+   *  level node has its cell and its height. */
+  private readonly levelFirst: Int32Array;
+  private readonly levelCell: Int32Array;
+  private readonly levelZ: Uint8Array;
   /** Per cell: where a door on it lands, as a cell number -- or NO_WARP / DEAD_WARP. */
   private readonly warpTo: Int32Array;
   /** Per map number and direction (m * 4 + d): the seams off that edge, in world.json's
@@ -146,7 +217,7 @@ export class World {
   private readonly exitCache = new Map<string, readonly Spot[]>();
   private readonly entryCache = new Map<string, readonly Spot[]>();
 
-  constructor(maps: WorldMap[]) {
+  constructor(maps: readonly WorldMap[]) {
     let total = 0;
     for (const m of maps) {
       this.maps.set(m.id, m);
@@ -158,13 +229,16 @@ export class World {
       total += m.w * m.h;
       for (const w of m.warps ?? []) this.warps.set(`${m.id}:${w.x},${w.y}`, w);
     }
+    this.cells = total;
     this.classes = new Uint8Array(total);
+    this.elev = new Uint8Array(total);
     this.cellMap = new Uint16Array(total);
     this.warpTo = new Int32Array(total).fill(NO_WARP);
     maps.forEach((m, n) => {
       const base = this.bases[n];
       const cells = m.w * m.h;
       this.classes.set(decodeGrid(m.grid, cells), base);
+      this.elev.set(decodeGrid(m.elev ?? '', cells), base);
       this.grids.set(m.id, this.classes.subarray(base, base + cells));
       this.cellMap.fill(n, base, base + cells);
       for (let d = 0; d < 4; d++) {
@@ -187,21 +261,75 @@ export class World {
         this.warpTo[this.bases[n] + w.y * m.w + w.x] = landing < 0 ? DEAD_WARP : landing;
       }
     });
+    // The bridges: each run of height-15 cells, and the heights its edges step off at.
+    // One height (or none) needs no memory -- off is the only way off -- so only a bridge
+    // with two gets its levels: two dozen of Hoenn's, about 450 cells between them.
+    this.levelFirst = new Int32Array(total).fill(-1);
+    const levelCell: number[] = [];
+    const levelZ: number[] = [];
+    const seen = new Uint8Array(total);
+    maps.forEach((m, n) => {
+      const base = this.bases[n];
+      for (let c = base; c < base + m.w * m.h; c++) {
+        if (seen[c] || !this.bridge(c)) continue;
+        seen[c] = 1;
+        const run = [c];
+        const zs = new Set<number>();
+        for (let i = 0; i < run.length; i++) {
+          const local = run[i] - base;
+          const y = (local / m.w) | 0;
+          const x = local - y * m.w;
+          for (let d = 0; d < 4; d++) {
+            const nx = x + DX[d];
+            const ny = y + DY[d];
+            if (nx < 0 || ny < 0 || nx >= m.w || ny >= m.h) continue;
+            const next = base + ny * m.w + nx;
+            if (this.bridge(next)) {
+              if (!seen[next]) {
+                seen[next] = 1;
+                run.push(next);
+              }
+            } else if (this.classes[next] !== CLASS_WALL && this.elev[next] !== H_TRANSITION) {
+              zs.add(this.elev[next]);
+            }
+          }
+        }
+        if (zs.size < 2) continue;
+        const sorted = [...zs].sort((a, b) => a - b);
+        for (const cell of run.sort((a, b) => a - b)) {
+          this.levelFirst[cell] = levelCell.length;
+          for (const z of sorted) {
+            levelCell.push(cell);
+            levelZ.push(z);
+          }
+        }
+      }
+    });
+    this.levelCell = Int32Array.from(levelCell);
+    this.levelZ = Uint8Array.from(levelZ);
   }
 
-  /** How many cells the whole world has: the size of a search's bookkeeping. */
+  /** How many nodes the cell graph has -- every cell, and each level of a bridge again:
+   *  the size of a search's bookkeeping. */
   get cellCount(): number {
-    return this.classes.length;
+    return this.cells + this.levelCell.length;
   }
 
-  /** The cell a spot stands on, or -1 for the void off a map and for a map the world
-   *  does not have. */
+  /** The node a spot stands on, or -1 for the void off a map and for a map the world
+   *  does not have. That is its cell, except on a bridge with the spot's `z` one of its
+   *  levels. */
   key(spot: Spot): number {
     const n = this.numbers.get(spot.map);
     if (n === undefined) return -1;
     const w = this.widths[n];
     if (spot.x < 0 || spot.y < 0 || spot.x >= w || spot.y >= this.heights[n]) return -1;
-    return this.bases[n] + spot.y * w + spot.x;
+    const cell = this.bases[n] + spot.y * w + spot.x;
+    return spot.z === undefined ? cell : this.onLevel(cell, spot.z);
+  }
+
+  /** The cell a node stands on: itself, or the bridge cell under one of its levels. */
+  cellOf(key: number): number {
+    return key < this.cells ? key : this.levelCell[key - this.cells];
   }
 
   /** A map's number, or -1. */
@@ -209,41 +337,47 @@ export class World {
     return this.numbers.get(id) ?? -1;
   }
 
-  /** Which map a cell is on, by number. */
+  /** Which map a node is on, by number. */
   mapOf(key: number): number {
-    return this.cellMap[key];
+    return this.cellMap[this.cellOf(key)];
   }
 
-  /** The spot a cell number stands for. */
+  /** The spot a node stands for, with its level on a bridge. */
   spotAt(key: number): Spot {
-    const n = this.cellMap[key];
-    const local = key - this.bases[n];
+    const cell = this.cellOf(key);
+    const n = this.cellMap[cell];
+    const local = cell - this.bases[n];
     const w = this.widths[n];
     const y = (local / w) | 0;
-    return { map: this.ids[n], x: local - y * w, y };
+    const at: Spot = { map: this.ids[n], x: local - y * w, y };
+    if (key >= this.cells) at.z = this.levelZ[key - this.cells];
+    return at;
   }
 
-  /** A*'s estimate from a cell to (gx, gy) on map `goal`: Manhattan on that map, and
+  /** A*'s estimate from a node to (gx, gy) on map `goal`: Manhattan on that map, and
    *  zero anywhere else, where the coordinates mean nothing. */
   estimate(key: number, goal: number, gx: number, gy: number): number {
-    const n = this.cellMap[key];
+    const cell = this.cellOf(key);
+    const n = this.cellMap[cell];
     if (n !== goal) return 0;
-    const local = key - this.bases[n];
+    const local = cell - this.bases[n];
     const w = this.widths[n];
     const y = (local / w) | 0;
     return Math.abs(local - y * w - gx) + Math.abs(y - gy);
   }
 
   /** `step` on cell numbers: where one step in direction `d` (an index into DIRS) from
-   *  cell `key` lands, or -1. Rule for rule the same as `step` -- the ledge first, then
-   *  the feet, then a door, then the seams off the edge -- and world.test.ts holds it to
-   *  that on every cell of Hoenn. */
+   *  node `key` lands, or -1. Rule for rule the same as `step` -- the ledge first, then
+   *  the feet, then a door, then the height, then the seams off the edge -- and
+   *  world.test.ts holds it to that on every node of Hoenn. */
   stepKey(key: number, d: number, surf: boolean, cut: boolean): number {
-    const n = this.cellMap[key];
+    const from = this.carried(key);
+    const cell = this.cellOf(key);
+    const n = this.cellMap[cell];
     const base = this.bases[n];
     const w = this.widths[n];
     const h = this.heights[n];
-    const local = key - base;
+    const local = cell - base;
     const y = (local / w) | 0;
     const x = local - y * w;
     const nx = x + DX[d];
@@ -260,8 +394,8 @@ export class World {
       }
       if (!canStand(cls, surf, cut)) return -1;
       const warp = this.warpTo[next];
-      if (warp === NO_WARP) return next;
-      return warp; // DEAD_WARP is -1: a door to nowhere is no step
+      if (warp !== NO_WARP) return warp; // DEAD_WARP is -1: a door to nowhere is no step
+      return this.climb(from, next, cls, surf);
     }
     for (const seam of this.seamsOut[n * 4 + d]) {
       const to = seam.to;
@@ -284,9 +418,63 @@ export class World {
       }
       if (lx < 0 || ly < 0 || lx >= tw || ly >= th) continue;
       const landing = this.bases[to] + ly * tw + lx;
-      if (canStand(this.classes[landing], surf, cut)) return landing;
+      const cls = this.classes[landing];
+      if (!canStand(cls, surf, cut)) continue;
+      const onto = this.climb(from, landing, cls, surf);
+      if (onto >= 0) return onto;
     }
     return -1;
+  }
+
+  /** The height a trainer on this node walks at: the cell's own, or on a bridge the
+   *  level they came on at. A bridge cell with no level known -- a spot with no `z`, or
+   *  a bridge with only one -- walks at a transition's, off at any height: pret would
+   *  know the height they had, and guessing wrong would strand them. */
+  private carried(key: number): number {
+    if (key >= this.cells) return this.levelZ[key - this.cells];
+    const h = this.elev[key];
+    return h === H_BRIDGE ? H_TRANSITION : h;
+  }
+
+  /** Where a step at height `from` onto `cell` lands, or -1 for a cliff face: the cell,
+   *  or on a bridge the level they walked on at. */
+  private climb(from: number, cell: number, cls: number, surf: boolean): number {
+    const to = this.elev[cell];
+    if (!heightsMeet(from, to, cls, surf)) return -1;
+    return to === H_BRIDGE ? this.onLevel(cell, from) : cell;
+  }
+
+  /** A bridge cell's node at height `z`: its level, or the cell when it has none. */
+  private onLevel(cell: number, z: number): number {
+    const first = this.levelFirst[cell];
+    if (first < 0) return cell;
+    for (let v = first; v < this.levelCell.length && this.levelCell[v] === cell; v++) {
+      if (this.levelZ[v] === z) return this.cells + v;
+    }
+    return cell;
+  }
+
+  /** On a bridge, and not a wall: height 15 is written into walls too. */
+  private bridge(cell: number): boolean {
+    return this.elev[cell] === H_BRIDGE && this.classes[cell] !== CLASS_WALL;
+  }
+
+  /** A cell's height (pret's elevation, 0-15), or 0 -- a transition -- off the map. */
+  height(id: string, x: number, y: number): number {
+    const k = this.key({ map: id, x, y });
+    return k < 0 ? H_TRANSITION : this.elev[k];
+  }
+
+  /** The levels a bridge cell is walked on at, as the `z` a spot on it carries; none
+   *  anywhere else, and none on a bridge whose edges are all one height. */
+  levels(id: string, x: number, y: number): number[] {
+    const cell = this.key({ map: id, x, y });
+    const out: number[] = [];
+    if (cell < 0) return out;
+    for (let v = this.levelFirst[cell]; v >= 0 && v < this.levelCell.length && this.levelCell[v] === cell; v++) {
+      out.push(this.levelZ[v]);
+    }
+    return out;
   }
 
   /** The warp on this cell, if there is one. A door is a tile you walk onto, not a
@@ -345,12 +533,15 @@ export class World {
   }
 
   /** Where one step in `dir` from `spot` lands -- the next cell, the map across a
-   *  seam, or null when it is a wall, the void, or a ledge facing the wrong way. */
+   *  seam, or null when it is a wall, the void, a ledge facing the wrong way, or a cliff
+   *  face: a cell at another height (POK-331 #2). */
   step(spot: Spot, dir: SeamDir, surf = false, cut = false): Spot | null {
     const m = this.maps.get(spot.map);
     if (!m) return null;
     const move = STEP_OF[dir];
     if (!move) return null;
+    const here = this.key(spot);
+    const from = here < 0 ? H_TRANSITION : this.carried(here);
     const nx = spot.x + move.dx;
     const ny = spot.y + move.dy;
     if (nx >= 0 && ny >= 0 && nx < m.w && ny < m.h) {
@@ -368,15 +559,22 @@ export class World {
         // `place` on the wire rather than a step -- the same as crossing a seam.
         return this.maps.has(warp.to) ? { map: warp.to, x: warp.toX, y: warp.toY } : null;
       }
-      return { map: spot.map, x: nx, y: ny };
+      return this.climbOnto({ map: spot.map, x: nx, y: ny }, from, surf);
     }
-    return this.acrossSeam(m, spot, dir, surf, cut);
+    return this.acrossSeam(m, spot, dir, surf, cut, from);
+  }
+
+  /** `climb` on spots: where a step at height `from` onto a standable `at` lands. */
+  private climbOnto(at: Spot, from: number, surf: boolean): Spot | null {
+    const cell = this.key(at);
+    const onto = this.climb(from, cell, this.classes[cell], surf);
+    return onto < 0 ? null : this.spotAt(onto);
   }
 
   /** Off the edge: the seam that joins this map to the next, at the offset the
    *  exporter recorded. A connection's offset shifts the neighbour's axis, which is
    *  why this is not just "same coordinate on the other map". */
-  private acrossSeam(m: WorldMap, spot: Spot, dir: SeamDir, surf = false, cut = false): Spot | null {
+  private acrossSeam(m: WorldMap, spot: Spot, dir: SeamDir, surf: boolean, cut: boolean, from: number): Spot | null {
     // EVERY seam on that side, not the first. Two maps have two connections on one
     // edge -- ROUTE111 west runs to ROUTE113 at offset 0 and ROUTE112 at offset 20, and
     // ROUTE124 east to ROUTE125 and MOSSDEEP_CITY -- so a `.find()` resolved Route 111's
@@ -384,7 +582,7 @@ export class World {
     // Chimney out of the walkable world entirely.
     for (const seam of m.seams) {
       if (seam.dir !== dir) continue;
-      const landed = this.landAcross(seam, spot, dir, surf, cut);
+      const landed = this.landAcross(seam, spot, dir, surf, cut, from);
       if (landed) return landed;
     }
     return null;
@@ -396,6 +594,7 @@ export class World {
     dir: SeamDir,
     surf: boolean,
     cut: boolean,
+    from: number,
   ): Spot | null {
     const to = this.maps.get(seam.to);
     if (!to) return null;
@@ -421,7 +620,7 @@ export class World {
     }
     // Off the neighbour's own axis: this offset's seam is not the one this cell uses.
     if (x < 0 || y < 0 || x >= to.w || y >= to.h) return null;
-    return this.standable(seam.to, x, y, surf, cut) ? { map: seam.to, x, y } : null;
+    return this.standable(seam.to, x, y, surf, cut) ? this.climbOnto({ map: seam.to, x, y }, from, surf) : null;
   }
 
   // ---- the map-level plan (POK-302) ----------------------------------------------
@@ -433,19 +632,31 @@ export class World {
   // cross-world search either (lib/bots.lua's exits/homeward, then a per-map BFS).
   //
   // This is the coarse half: a graph whose nodes are maps and whose edges are the seams
-  // and warps between them. 518 nodes, about 1,450 edges, built once.
+  // and warps between them. 518 nodes, 903 edges, built once for each kit.
+  //
+  // For each kit, because an edge is only an edge if a step really crosses it (POK-331
+  // #27). Route 114's west edge is joined to Route 115, and no cell of it crosses -- it
+  // is rock the whole way down, and the way to Route 115 is through Meteor Falls. A
+  // graph that counted the seam as a hop aimed every bot on Route 114 at a crossing that
+  // is not there, and never at the Falls, a hop further by that count: thirty bots dealt
+  // there logged 5,941 stuck steps and 52 fog outs over five replays. 38 of the 903
+  // edges are not there on foot, and 12 are not there at all.
 
-  private mapGraph?: Map<string, Set<string>>;
-  /** goal map -> hops from every map that can reach it. One table per goal, shared by
-   *  the whole roster: the ring moves a handful of times a match, the bots re-aim
-   *  constantly. */
+  /** Per kit (surf * 2 + cut): map -> the maps a step off it lands on. */
+  private readonly mapGraphs = new Map<number, Map<string, Set<string>>>();
+  /** goal map and kit -> hops from every map that can reach it. One table per goal,
+   *  shared by the whole roster: the ring moves a handful of times a match, the bots
+   *  re-aim constantly. */
   private readonly hopCache = new Map<string, Map<string, number>>();
 
-  private graph(): Map<string, Set<string>> {
-    if (this.mapGraph) return this.mapGraph;
+  private graph(surf: boolean, cut: boolean): Map<string, Set<string>> {
+    const kit = (surf ? 2 : 0) + (cut ? 1 : 0);
+    const built = this.mapGraphs.get(kit);
+    if (built) return built;
     const g = new Map<string, Set<string>>();
     const link = (a: string, b: string) => {
-      if (!this.maps.has(a) || !this.maps.has(b) || a === b) return;
+      if (!this.maps.has(a) || !this.maps.has(b) || a === b || g.get(a)?.has(b)) return;
+      if (this.entryCells(a, b, surf, cut).length === 0) return;
       if (!g.has(a)) g.set(a, new Set());
       g.get(a)!.add(b);
     };
@@ -453,16 +664,17 @@ export class World {
       for (const seam of m.seams) link(m.id, seam.to);
       for (const w of m.warps ?? []) link(m.id, w.to);
     }
-    this.mapGraph = g;
+    this.mapGraphs.set(kit, g);
     return g;
   }
 
   /** How many map crossings from each map to `goal`, by breadth-first search from the
    *  goal outwards. Undefined entries are maps that cannot reach it at all. */
-  private hopsTo(goal: string): Map<string, number> {
-    const cached = this.hopCache.get(goal);
+  private hopsTo(goal: string, surf: boolean, cut: boolean): Map<string, number> {
+    const asked = `${goal}:${surf ? 1 : 0}${cut ? 1 : 0}`;
+    const cached = this.hopCache.get(asked);
     if (cached) return cached;
-    const g = this.graph();
+    const g = this.graph(surf, cut);
     // The graph is built from each map's own seams and warps, and Emerald's are written
     // on both sides -- but not always, so this walks it backwards over the reverse
     // edges rather than trusting symmetry.
@@ -486,23 +698,23 @@ export class World {
       }
       edge = next;
     }
-    this.hopCache.set(goal, dist);
+    this.hopCache.set(asked, dist);
     return dist;
   }
 
   /** Map crossings from `from` to `goal`, or undefined when there is no way at all. */
-  hops(from: string, goal: string): number | undefined {
-    return this.hopsTo(goal).get(from);
+  hops(from: string, goal: string, surf = false, cut = false): number | undefined {
+    return this.hopsTo(goal, surf, cut).get(from);
   }
 
   /** The neighbouring maps that take a step closer to `goal`, nearest first. Empty when
    *  we are already there, or when nothing from here reaches it. */
-  nextHops(from: string, goal: string): string[] {
-    const dist = this.hopsTo(goal);
+  nextHops(from: string, goal: string, surf = false, cut = false): string[] {
+    const dist = this.hopsTo(goal, surf, cut);
     const here = dist.get(from);
     if (here === undefined || here === 0) return [];
     const out: string[] = [];
-    for (const to of this.graph().get(from) ?? []) {
+    for (const to of this.graph(surf, cut).get(from) ?? []) {
       const d = dist.get(to);
       if (d !== undefined && d < here) out.push(to);
     }
@@ -586,6 +798,192 @@ export class World {
       }
     }
     return out;
+  }
+
+  // ---- regions (POK-331 #27) -------------------------------------------------------
+  //
+  // A lake, a river or a wood can cut a map in two. Route 104's north half and its south
+  // are joined only through Petalburg Woods, a map of their own, so on the north half a
+  // bot drawing a cell of its own map to wander to drew one it could not walk to about
+  // half the time, and a search spent a whole budget finding that out. Worse, the
+  // map-level plan says Petalburg is one hop from all of Route 104 -- so a bot on the
+  // north half with the ring closing on Petalburg was aimed at a crossing on the far
+  // side of the wood, and stood in the fog until it went out. Kanto's per-map BFS only
+  // ever sees what it can reach (lib/bots.lua); this is the same knowledge, kept.
+  //
+  // A map splits into regions: nodes joined by steps that go both ways, so all of them
+  // reach the same places. A region is found the first time somebody stands in it or a
+  // search lands in it, and its reach -- the cells of its map, and the landings off it --
+  // is flooded once. Only a ledge or a door makes a step one way. On foot Hoenn has about
+  // 3,950 regions, 490 of them bigger than fifty cells.
+
+  /** Per map number and kit (n * 4 + surf * 2 + cut): its nodes' regions so far. */
+  private readonly regionMaps = new Map<number, Regions>();
+  /** Every region found, any map, any kit: a region's number is its place here. */
+  private readonly regionList: Region[] = [];
+
+  /** The region a node is in, found now if nobody has asked before. */
+  private regionOf(key: number, surf: boolean, cut: boolean): number {
+    const n = this.mapOf(key);
+    const base = this.bases[n];
+    const slot = n * 4 + (surf ? 2 : 0) + (cut ? 1 : 0);
+    let found = this.regionMaps.get(slot);
+    if (!found) {
+      found = { cell: new Int32Array(this.widths[n] * this.heights[n]), level: new Map() };
+      this.regionMaps.set(slot, found);
+    }
+    const r = found;
+    const get = (k: number) => (k < this.cells ? r.cell[k - base] : r.level.get(k) ?? 0) - 1;
+    const set = (k: number, id: number) => {
+      if (k < this.cells) r.cell[k - base] = id + 1;
+      else r.level.set(k, id + 1);
+    };
+    const known = get(key);
+    if (known >= 0) return known;
+    const id = this.regionList.length;
+    this.regionList.push({ map: n, rep: key });
+    set(key, id);
+    const queue = [key];
+    for (let i = 0; i < queue.length; i++) {
+      const at = queue[i];
+      for (let d = 0; d < 4; d++) {
+        const to = this.stepKey(at, d, surf, cut);
+        if (to < 0 || this.mapOf(to) !== n || get(to) >= 0) continue;
+        // Both ways: d ^ 1 is the opposite direction in DIRS.
+        if (this.stepKey(to, d ^ 1, surf, cut) !== at) continue;
+        set(to, id);
+        queue.push(to);
+      }
+    }
+    return id;
+  }
+
+  /** A region with its reach flooded: from any node of it, since they all have one. */
+  private flooded(id: number, surf: boolean, cut: boolean): Region {
+    const region = this.regionList[id];
+    if (region.reach) return region;
+    const n = region.map;
+    const base = this.bases[n];
+    const w = this.widths[n];
+    const h = this.heights[n];
+    const cells = new Uint32Array((w * h + 31) >> 5);
+    const across = new Set<number>();
+    const out: number[] = [];
+    const seen = new Set<number>([region.rep]);
+    const queue = [region.rep];
+    for (let i = 0; i < queue.length; i++) {
+      const at = queue[i];
+      const c = this.cellOf(at) - base;
+      cells[c >> 5] |= 1 << (c & 31);
+      for (let d = 0; d < 4; d++) {
+        const to = this.stepKey(at, d, surf, cut);
+        if (to < 0 || seen.has(to)) continue;
+        seen.add(to);
+        if (this.mapOf(to) === n) {
+          queue.push(to);
+        } else {
+          across.add(this.cellOf(to));
+          out.push(to);
+        }
+      }
+    }
+    region.out = out;
+    region.reach = {
+      cell: (x, y) => {
+        const c = y * w + x;
+        return x >= 0 && y >= 0 && x < w && y < h && (cells[c >> 5] & (1 << (c & 31))) !== 0;
+      },
+      across: (spot) => {
+        const k = this.key(spot);
+        return k >= 0 && across.has(this.cellOf(k));
+      },
+    };
+    return region;
+  }
+
+  /** The regions a step off this one's reach lands in, with the landings in each. */
+  private nextOf(id: number, surf: boolean, cut: boolean): Map<number, number[]> {
+    const region = this.flooded(id, surf, cut);
+    if (region.next) return region.next;
+    const next = new Map<number, number[]>();
+    for (const landing of region.out!) {
+      const to = this.regionOf(landing, surf, cut);
+      const list = next.get(to);
+      if (list) list.push(landing);
+      else next.set(to, [landing]);
+    }
+    region.next = next;
+    return next;
+  }
+
+  /** What a trainer standing at `from` can walk to without stepping off its map: the
+   *  cells of that map, and where the steps off it land. */
+  reachOnMap(from: Spot, surf = false, cut = false): Reach {
+    const start = this.key(from);
+    if (start < 0) return NO_REACH;
+    return this.flooded(this.regionOf(start, surf, cut), surf, cut).reach!;
+  }
+
+  /** The crossing to take first on the way from `from` to map `goal`: the cells of the
+   *  next map a step off this one lands on, all in the one region of it that is on the
+   *  way. Undefined when there is no way, or none within `limit` regions, or `from` is
+   *  on `goal` already. With `arrive`, only a region of `goal` whose reach it accepts is
+   *  somewhere to arrive: a pocket off the edge of the map the targets are on is on that
+   *  map, and a bot that aimed at it came back out and aimed at it again, all match.
+   *
+   *  The map-level plan, region by region: an A* whose steps are crossings and whose
+   *  estimate is the plan's hop count -- never more than the crossings really needed, so
+   *  the way found is a shortest one. Where the plan's crossing is on this side of the
+   *  water it is the plan; where it is not, this goes round.
+   *
+   *  No limit by default (POK-331 #27 review). It had one of 200 regions, and the way
+   *  round can be most of Hoenn: Route 115's south shore to Oldale with CUT goes by
+   *  Meteor Falls and settles 203, so seven pairs of drop maps had no crossing and those
+   *  bots drifted. A trainer can reach about 265 regions on foot and 525 with SURF, each
+   *  flooded once for the tab, so the whole of it is a few dozen ms once and under one
+   *  after. */
+  firstCrossing(
+    from: Spot,
+    goal: string,
+    surf = false,
+    cut = false,
+    arrive?: (reach: Reach) => boolean,
+    limit = Infinity,
+  ): Spot[] | undefined {
+    const start = this.key(from);
+    const goalMap = this.numbers.get(goal);
+    if (start < 0 || goalMap === undefined) return undefined;
+    const origin = this.regionOf(start, surf, cut);
+    const left = (id: number) => this.hops(this.ids[this.regionList[id].map], goal, surf, cut);
+    const h0 = left(origin);
+    if (h0 === undefined || h0 === 0) return undefined;
+    const cost = new Map<number, number>([[origin, 0]]);
+    // Each region reached, by the region the way to it began with.
+    const via = new Map<number, number>();
+    const open: { id: number; f: number }[] = [{ id: origin, f: h0 }];
+    const closed = new Set<number>();
+    while (open.length > 0 && closed.size < limit) {
+      // The lowest estimate, the first one pushed on a tie.
+      let best = 0;
+      for (let i = 1; i < open.length; i++) if (open[i].f < open[best].f) best = i;
+      const { id } = open.splice(best, 1)[0];
+      if (closed.has(id)) continue;
+      closed.add(id);
+      if (this.regionList[id].map === goalMap && (!arrive || arrive(this.flooded(id, surf, cut).reach!))) {
+        const landings = this.nextOf(origin, surf, cut).get(via.get(id)!)!;
+        return landings.map((k) => this.spotAt(k));
+      }
+      const g = cost.get(id)! + 1;
+      for (const to of this.nextOf(id, surf, cut).keys()) {
+        if (closed.has(to) || (cost.get(to) ?? Infinity) <= g) continue;
+        const rest = left(to);
+        if (rest === undefined) continue;
+        cost.set(to, g);
+        via.set(to, id === origin ? to : via.get(id)!);
+        open.push({ id: to, f: g + rest });
+      }
+    }
+    return undefined;
   }
 
   /** Every step a trainer could take from here, with the direction that took it. */

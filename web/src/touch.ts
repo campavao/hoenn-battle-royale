@@ -26,10 +26,21 @@
 // and that is the thumb taking over. In a battle the walker stops; a menu open in the
 // field (START, a dialog) shows up as a walk that goes nowhere, and a stall is a stop.
 import { KEY_BIT, type Band, type Emulator, type GbaKey } from './emu';
-import { GBA_H, GBA_W, lcdRect, readCameraPos, tileAt, type CameraPos } from './field';
+import {
+  GBA_H,
+  GBA_W,
+  OBJ_ACTIVE_BYTE,
+  OBJ_COUNT,
+  OBJ_PLAYER_BYTE,
+  OBJ_SIZE,
+  lcdRect,
+  readCameraPos,
+  tileAt,
+  type CameraPos,
+} from './field';
 import { findPath } from './bots/path';
-import { World, type SeamDir, type Spot, type WorldMap } from './bots/world';
-import worldData from './data/world.json';
+import type { SeamDir, Spot } from './bots/world';
+import { HOENN } from './bots/hoenn';
 import { MAP_OFFSET } from './net/cells';
 
 // Offsets into the ROM's structs. parity.test.ts reads the headers and holds these to them.
@@ -53,6 +64,8 @@ export const MENU_SAFARI = 3;
  *  machine, link battles included. */
 export const BUFFER_A_ROW = 0x200;
 export const CHOOSE_MOVE_MOVES = 4;
+/** `struct ObjectEvent.currentElevation`, the low nibble of this byte (include/global.fieldmap.h). */
+export const OBJ_ELEVATION_BYTE = 0x0b;
 
 /** Emerald's facing directions (include/constants/global.h). */
 export const DIR_OF: Record<SeamDir, number> = { south: 1, north: 2, west: 3, east: 4 };
@@ -132,8 +145,6 @@ export function menuSlot(which: number, px: number, py: number): number {
 }
 
 export class TouchLayer {
-  private world: World | null = null;
-  private byRef = new Map<string, string>();
   /** The key this file is holding right now, if any. */
   private held: GbaKey | null = null;
   private heldFrames = 0;
@@ -200,11 +211,29 @@ export class TouchLayer {
     const sx = emu.read(base + OWN_X, 16);
     const sy = emu.read(base + OWN_Y, 16);
     return {
-      map: this.ensureWorld() && this.byRef.get(`${group}:${num}`),
+      map: HOENN.idOf({ group, num }),
       x: ((sx << 16) >> 16) - MAP_OFFSET,
       y: ((sy << 16) >> 16) - MAP_OFFSET,
       dir: emu.read(base + OWN_DIR, 8),
     };
+  }
+
+  /** The level we stand at on a bridge (world.levels): the player object's
+   *  currentElevation, which ObjectEventUpdateElevation leaves alone on a height-15
+   *  cell, so it is the level we walked on at. Undefined off a bridge, where the cell
+   *  says, and when the ROM's answer is not one of the bridge's levels. */
+  private level(map: string, x: number, y: number): number | undefined {
+    const levels = HOENN.world.levels(map, x, y);
+    const objs = this.sym('gObjectEvents');
+    if (!levels.length || objs === undefined) return undefined;
+    const { emu } = this.deps;
+    for (let i = 0; i < OBJ_COUNT; i++) {
+      const o = objs + i * OBJ_SIZE;
+      if (!(emu.read(o + OBJ_ACTIVE_BYTE, 8) & 1) || !(emu.read(o + OBJ_PLAYER_BYTE, 8) & 1)) continue;
+      const z = emu.read(o + OBJ_ELEVATION_BYTE, 8) & 0xf;
+      return levels.includes(z) ? z : undefined;
+    }
+    return undefined;
   }
 
   private battleMenu(): number {
@@ -226,15 +255,6 @@ export class TouchLayer {
     return this.deps.emu.read(base + 0 * BUFFER_A_ROW + CHOOSE_MOVE_MOVES + slot * 2, 16);
   }
 
-  private ensureWorld(): World {
-    if (!this.world) {
-      const maps = (worldData as { maps: WorldMap[] }).maps;
-      this.world = new World(maps);
-      for (const m of maps) this.byRef.set(`${m.group}:${m.num}`, m.id);
-    }
-    return this.world;
-  }
-
   // ---- a tap ----------------------------------------------------------------------------
 
   private tap(px: number, py: number): void {
@@ -247,7 +267,7 @@ export class TouchLayer {
     if (!own || !own.map) return;
     // What is on screen is last frame's camera. Across a seam that one counts from the
     // map we just left, and the latest is the one on ours.
-    const ours = (c: CameraPos | null): c is CameraPos => c !== null && this.byRef.get(`${c.group}:${c.num}`) === own.map;
+    const ours = (c: CameraPos | null): c is CameraPos => c !== null && HOENN.idOf(c) === own.map;
     const cam = ours(this.shownCamera) ? this.shownCamera : readCameraPos(this.deps.emu, (name) => this.sym(name));
     if (!ours(cam)) return;
     this.tapField({ ...own, map: own.map }, tileAt(cam, px, py));
@@ -255,7 +275,7 @@ export class TouchLayer {
 
   /** A tap on map tile `at` (world.json's coordinates), from where we stand. */
   private tapField(own: Own & { map: string }, at: { x: number; y: number }): void {
-    const world = this.ensureWorld();
+    const world = HOENN.world;
     const dx = at.x - own.x;
     const dy = at.y - own.y;
     if (dx === 0 && dy === 0) return;
@@ -292,7 +312,11 @@ export class TouchLayer {
       if (!nearer.length) return;
       target = nearer[0];
     }
+    // On a bridge, the level too: without it the search may step off at the other
+    // height, and the ROM refuses the step (POK-331 #2 review).
     const from: Spot = { map: own.map, x: own.x, y: own.y };
+    const z = this.level(own.map, own.x, own.y);
+    if (z !== undefined) from.z = z;
     const path = findPath(world, from, target);
     if (!path.found || !path.steps.length) return;
     this.cancel();

@@ -1,21 +1,29 @@
 // Why did that bot go there? (POK-236, Kanto's `Bots.decisions`.)
 //
-// A match is sixteen minutes of eight bots walking, and the only honest way to answer
-// a question about one of them is to watch the rule fire. This runs the real brain --
-// the same `Bots` the host's tab runs, on the real world.json -- with the clock in a
-// loop instead of a timer, and prints every decision it made with the time on it.
+// A match is eighteen minutes of bots walking, and the only honest way to answer a
+// question about one of them is to watch the rule fire. This runs the host's own match
+// -- createHostBots and the Director, on the real world.json, through bots/offline.ts --
+// with the clock in a loop instead of a timer, and prints every decision it made with
+// the time on it.
 //
-//   npx vite-node tools/br/bots-replay.ts -- --seed 1234 --minutes 16 --seat 31
+//   npx vite-node tools/br/bots-replay.ts -- --seed 1234 --seat 31
+//
+// It plays the match a room would (POK-331 #25): the opening in the Zone, the drop at the
+// first ring, the director's rings round the centre the seed picks, and it stops at the
+// director's `win` -- or five minutes into the last ring, which is everywhere, if nobody
+// has won by then. `--minutes` stops it sooner; `--safari` and `--fog` set the pace in
+// seconds, as the room's FOG and SAFARI buttons do (#quick is `--safari 25 --fog 15`).
+//
+// `--map MAP_ROUTE104` deals every bot onto that map's own cells, to watch a start there:
+// Route 104 and Route 114 are the maps a lake or a river splits in two (POK-331 #27). With
+// the opening that is where the drop puts them; add `--safari 0` to start them there.
 //
 // No emulator, no relay, no page: the brain has never needed any of them.
-import { Bots, STEP_MS, type Decision } from '../../web/src/bots/brain';
-import { dealBots } from '../../web/src/bots/roster';
-import { dealBag } from '../../web/src/bots/bag';
-import { dealParty } from '../../web/src/bots/party';
-import { botGround } from '../../web/src/bots/host';
-import { mulberry32 } from '../../web/src/match/clock';
-import { sectionInside } from '../../web/src/match/ring';
-import regionmapData from '../../web/src/data/regionmap.json';
+import type { Decision } from '../../web/src/bots/brain';
+import { BEAT_MS, offlineMatch } from '../../web/src/bots/offline';
+import { RING_RADII } from '../../web/src/match/clock';
+import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS } from '../../web/src/match/director';
+import type { RingMsg } from '../../web/src/net/wire';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -25,13 +33,19 @@ function arg(name: string, fallback: number): number {
 }
 
 const seed = arg('seed', 1234);
-const minutes = arg('minutes', 16);
+const safari = arg('safari', DEFAULT_SAFARI_SECS);
+const fog = arg('fog', DEFAULT_FOG_SECS);
+// The whole match: the opening, a ring every `fog` until the last, which is everywhere,
+// and long enough in that one for the fog to finish whoever the fights did not.
+const minutes = arg('minutes', (safari + fog * (RING_RADII.length - 1)) / 60 + 5);
 const only = arg('seat', -1);
 const count = arg('bots', 8);
+const onMap = process.argv.includes('--map') ? process.argv[process.argv.indexOf('--map') + 1] : undefined;
 
-// The ground the host's bots walk (bots/host.ts): Hoenn's landing cells to wander to and
-// the spawns the deal draws from.
-const { world, refById, sectionOf, targets, spawns } = botGround();
+const stamp = (ms: number) => {
+  const t = Math.floor(ms / 1000);
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+};
 
 const lines: string[] = [];
 const tally = new Map<string, number>();
@@ -41,72 +55,53 @@ const tally = new Map<string, number>();
 // identical in a decision tally.
 const outs: { at: number; seat: number }[] = [];
 let duels = 0;
-let now = 0;
-const bots = new Bots({
-  world,
-  targets,
-  mapRef: (id) => refById.get(id),
-  send: (m) => {
-    if (m.t === 'out') outs.push({ at: now, seat: m.seat });
-  },
-  onDuel: () => void duels++,
-  rng: mulberry32(seed ^ 0x51ce),
-  inside: (id: string) => ring === undefined || inFog(id),
-  deal: (bot, phase) => dealParty(seed, bot.seat, phase),
-  // The bag too (POK-237), so a `quaff` shows up in the decision list next to the
-  // walk to a Centre it was instead of.
-  bagFor: (bot, phase) => dealBag(seed, bot.seat, phase, bot.grade),
+// The smallest ring anybody can be inside: the last one is everywhere, and a bot is
+// outside that one wherever it stands.
+let lastRing: RingMsg | undefined;
+const m = offlineMatch({
   seed,
-  centres: () => world.centres(),
+  bots: count,
+  safariSecs: safari,
+  fogSecs: fog,
+  onMap,
+  onDuel: () => void duels++,
+  onMsg: (msg, at) => {
+    if (msg.t === 'out') outs.push({ at, seat: msg.seat });
+    if (msg.t !== 'ring') return;
+    if (msg.r >= 0) lastRing = msg;
+    lines.push(`${stamp(at)}  ring ${msg.phase}  r ${msg.r}  round ${msg.place ?? `${msg.sx},${msg.sy}`}`);
+  },
   onDecision: (d: Decision) => {
     if (only >= 0 && d.seat !== only) return;
     tally.set(d.rule, (tally.get(d.rule) ?? 0) + 1);
-    const t = Math.floor(d.at / 1000);
-    const clock = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
     lines.push(
-      `${clock}  seat ${String(d.seat).padStart(2)}  ${d.rule.padEnd(7)}  ` +
+      `${stamp(d.at)}  seat ${String(d.seat).padStart(2)}  ${d.rule.padEnd(7)}  ` +
         `${d.spot.map} ${d.spot.x},${d.spot.y}${d.detail ? `  (${d.detail})` : ''}`,
     );
   },
 });
+const dealt = m.host.seats;
 
-// The fog, which this tool never modelled: `inside` was left undefined, so every rule
-// that asks about the ring -- aiming into it, bleeding outside it, and now flying out
-// of it -- was dead in here while being alive in a match. The ring closes on the first
-// section of the world, the way a Director's would, and shrinks a rung at a time.
-const RADII = [12, 9, 7, 5, 4, 3, 2, -1];
-const SECTIONS = regionmapData.sections as Record<string, { x: number; y: number; w: number; h: number; name: string; num?: number }>;
-const eye = SECTIONS[Object.keys(SECTIONS)[0]];
-let ring: { sx: number; sy: number; r: number } | undefined;
-const inFog = (mapId: string) => sectionInside(SECTIONS[sectionOf.get(mapId) ?? ''], ring);
-
-const dealt = dealBots(seed, count, [], spawns);
-bots.start(dealt, 0);
-// The ring phase climbs the way the Director moves it: six rungs over the match.
 const end = minutes * 60_000;
-const perPhase = end / 6;
-let phase = 0;
-for (let t = STEP_MS; t <= end; t += STEP_MS) {
-  now = t;
-  const next = Math.floor(t / perPhase);
-  if (next !== phase) {
-    phase = next;
-    ring = { sx: eye.x, sy: eye.y, r: RADII[Math.min(phase, RADII.length - 1)] };
-    bots.ringMoved(phase);
-  }
-  bots.tick(t);
+let ran = 0;
+for (let t = BEAT_MS; t <= end && m.winner === undefined; t += BEAT_MS) {
+  m.tick(t);
+  ran = t;
 }
 
 console.log(lines.join('\n'));
-console.log(`\n${lines.length} decisions over ${minutes} min, seed ${seed}, ${dealt.length} bots`);
+console.log(
+  `\n${lines.length} lines over ${stamp(ran)}, seed ${seed}, ${dealt.length} bots${onMap ? ` dealt on ${onMap}` : ''}` +
+    `, ${safari}s opening, ${fog}s rings`,
+);
 console.log([...tally].map(([r, n]) => `${r} ${n}`).join('  '));
 
 // The survivor curve: how many were still standing at each minute, and what took the
 // rest. `duel` and `fog` are the only two ways a bot goes out in here -- there is no
 // player in a replay -- so the split says which one is running the match.
-const fog = tally.get('fog') ?? 0;
+const fogOuts = tally.get('fog') ?? 0;
 const curve: string[] = [];
-for (let t = 60_000; t <= end; t += 60_000) {
+for (let t = 60_000; t <= ran; t += 60_000) {
   curve.push(`${String(t / 60_000).padStart(2)}m ${String(dealt.length - outs.filter((o) => o.at <= t).length).padStart(3)}`);
 }
 console.log(`
@@ -114,20 +109,23 @@ survivors: ${curve.join('  ')}`);
 // The question this tool exists to answer since POK-302: can a bot GET to the last
 // ring? A survivor standing outside it at the end is one the fog is about to take for
 // no reason but navigation, and for a long time that was almost all of them.
-const standing = dealt.filter((b) => !outs.some((o) => o.seat === b.seat));
-const where = bots.positions();
-const insideNow = where.filter((w) => inFog(w.map));
+const where = m.host.bots.positions();
+const insideNow = where.filter((w) => m.inside(w.map, lastRing));
 console.log(
-  `final ring: ${insideNow.length}/${where.length} of the bots still walking are inside it` +
+  `${lastRing ? `ring ${lastRing.phase} (r ${lastRing.r})` : 'no ring yet'}: ` +
+    `${insideNow.length}/${where.length} of the bots still walking are inside it` +
     (where.length > insideNow.length
-      ? ` -- outside: ${where.filter((w) => !inFog(w.map)).map((w) => w.map).join(', ')}`
+      ? ` -- outside: ${where.filter((w) => !m.inside(w.map, lastRing)).map((w) => w.map).join(', ')}`
       : ''),
 );
-void standing;
 
 const half = outs[Math.floor(dealt.length / 2) - 1];
 console.log(
-  `${outs.length} out of ${dealt.length} over ${minutes} min` +
+  `${outs.length} out of ${dealt.length} by ${stamp(ran)}` +
     (half ? `, half the field gone by ${Math.round(half.at / 1000)}s` : ', the field held') +
-    ` -- ${duels} duels, ${fog} to the fog`,
+    ` -- ${duels} duels, ${fogOuts} to the fog` +
+    (m.winner === undefined ? ', no winner yet' : m.winner === null ? ', a draw' : `, won by seat ${m.winner} (${m.roster.nameOf(m.winner)})`) +
+    // The fog can take the last two on one beat: the director has crowned whichever went
+    // out second by the time its `out` arrives, and a match that is over stays over.
+    (m.winner != null && outs.some((o) => o.seat === m.winner) ? ', who went out on the same beat' : ''),
 );
