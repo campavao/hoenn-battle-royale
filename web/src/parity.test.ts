@@ -70,6 +70,8 @@ import flagsH from '../../include/constants/flags.h?raw';
 import movementH from '../../include/constants/event_object_movement.h?raw';
 import objectEventsC from '../../src/event_object_movement.c?raw';
 import graphicsInfoPointersH from '../../src/data/object_events/object_event_graphics_info_pointers.h?raw';
+import objectEventGraphicsInfoH from '../../src/data/object_events/object_event_graphics_info.h?raw';
+import objectEventAnimsH from '../../src/data/object_events/object_event_anims.h?raw';
 import serverJs from '../../relay/server.js?raw';
 // Copies that are not exported: read as text, the same way as the C.
 import appTs from './app.ts?raw';
@@ -546,6 +548,63 @@ describe("the BR structs the page reads at an offset", () => {
     expect(box('void TrySpawnObjectEvents')).toEqual(ghosts.VIEW);
     expect(box('static void RemoveObjectEventIfOutsideView')).toEqual(ghosts.VIEW);
     expect(ghosts.MAP_OFFSET).toBe(define(fieldmapFnH, 'MAP_OFFSET'));
+  });
+
+  it("a ghost the page walks walks as DriveGhost walks its object: the queue, the pace, the stride (field-ghosts.ts, POK-323)", () => {
+    expect(ghosts.STEP_QUEUE).toBe(define(ghostsH, 'BR_STEP_QUEUE'));
+    // A queued step is a walk-normal...
+    expect(ghostsC).toMatch(/ObjectEventSetHeldMovement\(obj, GetWalkNormalMovementAction\(dir\)\);/);
+    const moves = objectEventsC.replace(/\r\n/g, '\n');
+    for (const d of ['Down', 'Up', 'Left', 'Right']) {
+      expect(moves, `WalkNormal${d}`).toMatch(new RegExp(`MovementAction_WalkNormal${d}_Step0\\([^)]*\\)\\s*\\{\\s*InitMovementNormal\\(objectEvent, sprite, DIR_\\w+, MOVE_SPEED_NORMAL\\);`));
+    }
+    // ...a pixel a frame, for as many frames as sStep1Funcs has entries.
+    expect(moves).toMatch(/\[MOVE_SPEED_NORMAL\] = ARRAY_COUNT\(sStep1Funcs\),/);
+    expect(/\bsStep1Funcs\[\]\s*=\s*\{([^}]*)\}/.exec(moves)![1].match(/\bStep1\b/g)!.length).toBe(ghosts.WALK_FRAMES);
+    expect(moves).toMatch(/static void Step1\(struct Sprite \*sprite, u8 dir\)\s*\{\s*sprite->x \+= sDirectionToVectors\[dir\]\.x;\s*sprite->y \+= sDirectionToVectors\[dir\]\.y;\s*\}/);
+    // The feet alternate by the step table's animPos, read the way the page reads it.
+    expect(moves).toMatch(/static void InitMovementNormal\([^)]*\)\s*\{[^}]*SetStepAnimHandleAlternation\(objectEvent, sprite, /);
+    expect(moves).toMatch(
+      /if \(sprite->animCmdIndex == stepTable->animPos\[0\]\)\s*sprite->animCmdIndex\s*= stepTable->animPos\[3\];\s*else if \(sprite->animCmdIndex == stepTable->animPos\[1\]\)\s*sprite->animCmdIndex = stepTable->animPos\[2\];/,
+    );
+
+    // The stride and the standing frames, by direction.
+    const anims = objectEventAnimsH.replace(/\r\n/g, '\n');
+    const frames = (name: string) => {
+      const m = new RegExp(`\\b${name}\\[\\]\\s*=\\s*\\{([^}]*)\\}`).exec(anims);
+      if (!m) throw new Error(`no ${name}`);
+      return [...m[1].matchAll(/ANIMCMD_FRAME\((\d+),\s*(\d+)(,\s*\.hFlip\s*=\s*TRUE)?\)/g)].map((f) => ({ frame: Number(f[1]), ticks: Number(f[2]), hFlip: !!f[3] }));
+    };
+    const dirs = { South: 'DIR_SOUTH', North: 'DIR_NORTH', West: 'DIR_WEST', East: 'DIR_EAST' };
+    for (const [name, macro] of Object.entries(dirs)) {
+      const dir = define(constantsGlobalH, macro);
+      const east = dir === ghosts.DIR_EAST;
+      const go = frames(`sAnim_Go${name}`);
+      expect(go.map((f) => f.frame), `sAnim_Go${name}`).toEqual(ghosts.GO_FRAMES[dir]);
+      expect(go.every((f) => f.ticks === ghosts.GO_FRAME_TICKS && f.hFlip === east), `sAnim_Go${name}'s ticks and mirror`).toBe(true);
+      const face = frames(`sAnim_Face${name}`)[0];
+      expect([face.frame, face.hFlip], `sAnim_Face${name}`).toEqual([ghosts.FACE_FRAMES[dir], east]);
+    }
+    expect([ghosts.DIR_NORTH, ghosts.DIR_WEST, ghosts.DIR_EAST]).toEqual(['DIR_NORTH', 'DIR_WEST', 'DIR_EAST'].map((d) => define(constantsGlobalH, d)));
+    expect(ghosts.GO_FRAME_TICKS * 2, 'a stride is two of its commands').toBe(ghosts.WALK_FRAMES);
+
+    // ...which is what every skin walks on: its graphics' anim table has these for its
+    // face and go anims, and its step table alternates at STEP_ANIM_POS.
+    const infos = objectEventGraphicsInfoH.replace(/\r\n/g, '\n');
+    for (const skin of names(ghostsC, 'sSkinGraphics', 'OBJ_EVENT_GFX_')) {
+      const info = new RegExp(`\\[${skin}\\]\\s*=\\s*&(\\w+),`).exec(graphicsInfoPointersH)?.[1];
+      const table = info && new RegExp(`\\b${info} = \\{[^}]*\\.anims = (\\w+),`).exec(infos)?.[1];
+      expect(table, `${skin}'s anim table`).toBeTruthy();
+      const body = new RegExp(`\\b${table}\\[\\]\\s*=\\s*\\{([^}]*)\\}`).exec(anims)![1];
+      for (const [name, macro] of Object.entries(dirs)) {
+        const std = macro.replace('DIR_', '');
+        expect(body, `${table}: face ${name}`).toMatch(new RegExp(`\\[ANIM_STD_FACE_${std}\\] = sAnim_Face${name},`));
+        expect(body, `${table}: go ${name}`).toMatch(new RegExp(`\\[ANIM_STD_GO_${std}\\] = sAnim_Go${name},`));
+      }
+      const pos = new RegExp(`\\.anims = ${table},\\s*\\.animPos = \\{([^}]*)\\}`).exec(anims);
+      expect(pos, `${table} in sStepAnimTables`).not.toBeNull();
+      expect(pos![1].split(',').map((n) => Number(n.trim()))).toEqual(ghosts.STEP_ANIM_POS);
+    }
   });
 });
 

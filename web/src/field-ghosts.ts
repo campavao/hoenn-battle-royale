@@ -20,9 +20,15 @@
 //
 // These are pure: field.ts reads the RAM and hands the bytes over. Every offset and
 // number is held to the C by parity.test.ts.
+//
+// And the ghosts that walk on (POK-323, the end of this file): the other seats, walked by
+// the page from its own roster, off the field.
 import spritesData from './data/sprites.json';
 import { SKIN_GFX } from './ui/emerald';
+import { skinIndex } from './net/slots';
+import { romCell, toPage } from './bots/space';
 import type { FieldSprite } from './field';
+import type { RosterEntry } from './match/roster';
 
 const TILE = 16;
 const ROM_BASE = 0x08000000;
@@ -219,12 +225,14 @@ export interface Known {
   live: ReadonlySet<string>;
 }
 
-/** Somebody to draw: their graphics, the way they face, and their tile (the map's own). */
+/** Somebody to draw: their graphics, the way they face, and their tile (the map's own).
+ *  A seat's ghost says whose it is. */
 export interface Person {
   gfx: number;
   dir: number;
   x: number;
   y: number;
+  seat?: number;
 }
 
 /** Is a grid cell (MAP_OFFSET included) inside the box the ROM keeps objects in? */
@@ -250,7 +258,7 @@ export function droppedPeople(k: Known): Person[] {
     if (!s.present || s.seat === k.mySeat || !here(s.group, s.num) || live(GHOST_LOCAL_ID_BASE + s.seat)) continue;
     if (inObjectView(k.pos, s.x, s.y)) continue;
     // br_ghosts.c's Spawn clamps a skin it does not know to the first.
-    out.push({ gfx: SKIN_GFX[s.skin] ?? SKIN_GFX[0], dir: s.dir, x: s.x - MAP_OFFSET, y: s.y - MAP_OFFSET });
+    out.push({ gfx: SKIN_GFX[s.skin] ?? SKIN_GFX[0], dir: s.dir, x: s.x - MAP_OFFSET, y: s.y - MAP_OFFSET, seat: s.seat });
   }
   for (const l of k.loot) {
     if (l.kind === LOOT_NONE || !here(l.group, l.num) || live(LOOT_LOCAL_ID_BASE + l.slot)) continue;
@@ -303,14 +311,183 @@ export function placePeople(
     const info = SHEETS[String(p.gfx)];
     if (!info) continue;
     const { frame, hFlip } = face(p.gfx, p.dir);
-    out.push({
-      gfx: p.gfx,
-      frame,
-      hFlip,
-      x: p.x * TILE - origin.left + TILE / 2 - (info.w >> 1),
-      y: p.y * TILE - origin.top + TILE - info.h,
-      hidden: true,
-    });
+    const sprite: FieldSprite = { gfx: p.gfx, frame, hFlip, ...onPicture(info, p.x * TILE, p.y * TILE, origin), hidden: true };
+    if (p.seat !== undefined) sprite.seat = p.seat;
+    out.push(sprite);
   }
   return out;
+}
+
+/** A sprite's top-left on the picture for a person whose tile's top-left is map pixel
+ *  (px, py): centred on the tile, feet on its bottom row (TrySetupObjectEventSprite). */
+function onPicture(info: { w: number; h: number }, px: number, py: number, origin: { left: number; top: number }): { x: number; y: number } {
+  return { x: px - origin.left + TILE / 2 - (info.w >> 1), y: py - origin.top + TILE - info.h };
+}
+
+// ---- the ghosts that walk on (POK-323) -----------------------------------------------------
+//
+// Off the field -- a battle, the bag, the party -- the ROM walks no objects and draws none,
+// and the field past the picture was the map with nobody on it. Cam's play-test: "if there
+// was a bot at the bottom of the screen it should continue moving... the rest of the world
+// should keep going." Where the other seats are does not come from the ROM, though: the
+// page's roster has every one of them off the wire, and the host's bots are on it too. So
+// the page walks them itself, a copy of br_ghosts.c's DriveGhost -- a step queued for each
+// tile the roster moves, walked at walk-normal on the ROM's own walk frames, BR_STEP_QUEUE
+// held behind the one in flight and a snap past that. Kanto does the same while its
+// overworld is not on top (lib/ghosts.lua's advance: "a ghost is a live opponent, not
+// scenery"), and leaves its own NPCs frozen, as field.ts leaves Hoenn's.
+//
+// Never on a map but the one we are on, as Kanto's are.
+
+/** Walk-normal: sStep1Funcs, sixteen frames of a pixel each (NpcTakeStep at
+ *  MOVE_SPEED_NORMAL, which GetWalkNormalMovementAction's actions ask for). */
+export const WALK_FRAMES = 16;
+/** BR_STEP_QUEUE: the steps a ghost holds behind the one it is walking. One more and the
+ *  ROM snaps it to the roster's cell. */
+export const STEP_QUEUE = 5;
+export const DIR_NORTH = 2;
+export const DIR_WEST = 3;
+export const DIR_EAST = 4;
+/** sAnim_GoSouth/North/West/East, by DIR_*: a stride's four frames, GO_FRAME_TICKS each.
+ *  East is West's frames mirrored, and so is its standing frame. */
+export const GO_FRAMES: Readonly<Record<number, readonly number[]>> = { 1: [3, 0, 4, 0], 2: [5, 1, 6, 1], 3: [7, 2, 8, 2], 4: [7, 2, 8, 2] };
+export const GO_FRAME_TICKS = 8;
+/** sAnim_FaceSouth/North/West/East: the frame a person stands on. */
+export const FACE_FRAMES: Readonly<Record<number, number>> = { 1: 0, 2: 1, 3: 2, 4: 2 };
+/** sStepAnimTables' animPos for the people's anim tables (SetStepAnimHandleAlternation):
+ *  a stride that rests on command [0] makes the next start at [3], one resting on [1]
+ *  at [2] -- so back-to-back steps alternate feet, and a turn, which restarts the anim,
+ *  starts them over. */
+export const STEP_ANIM_POS = [1, 3, 0, 2];
+const STEP: Readonly<Record<number, readonly [number, number]>> = { 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] };
+
+interface Walker {
+  seat: number;
+  gfx: number;
+  group: number;
+  num: number;
+  /** The tile it stands on, or is stepping onto: a live cell (MAP_OFFSET included). */
+  x: number;
+  y: number;
+  facing: number;
+  /** The roster's facing, turned to once nothing is left to walk. */
+  dir: number;
+  /** The step in flight (a DIR_*, 0 at rest) and its frames to go. */
+  step: number;
+  left: number;
+  /** The walk anim's command: where the step in flight started, or where the last rested. */
+  cmd: number;
+  queue: number[];
+  /** The roster's cell as last seen: what is queued walks from the tile to here. */
+  seenX: number;
+  seenY: number;
+}
+
+/** A place: the ROM's Spawn, or DriveGhost's snap -- on the tile, turned, the anim fresh. */
+function stand(w: Walker, x: number, y: number): void {
+  w.x = w.seenX = x;
+  w.y = w.seenY = y;
+  w.facing = w.dir;
+  w.step = 0;
+  w.left = 0;
+  w.cmd = 0;
+  w.queue = [];
+}
+
+/** One frame of DriveGhost and the object under it. */
+function walk(w: Walker): void {
+  if (w.step === 0) {
+    const next = w.queue.shift();
+    if (next !== undefined) {
+      const [dx, dy] = STEP[next];
+      // The object's tile moves as the step begins (ShiftObjectEventCoords); the sprite
+      // walks the pixels behind it.
+      w.x += dx;
+      w.y += dy;
+      w.step = w.facing = next;
+      w.left = WALK_FRAMES;
+      w.cmd = w.cmd === STEP_ANIM_POS[0] ? STEP_ANIM_POS[3] : w.cmd === STEP_ANIM_POS[1] ? STEP_ANIM_POS[2] : w.cmd;
+    } else if (w.facing !== w.dir) {
+      w.facing = w.dir;
+      w.cmd = 0;
+    }
+  }
+  // Step0 takes the first pixel in the frame it starts (MovementAction_WalkNormal*_Step0).
+  if (w.step !== 0 && --w.left === 0) {
+    w.step = 0;
+    w.cmd += 1; // paused on the stride's second command: the standing frame
+  }
+}
+
+/** The other seats, walked on the page. Fed the roster once an emulator frame. */
+export class GhostWalkers {
+  private walkers = new Map<number, Walker>();
+
+  /** The roster as it is this frame: a tile moved is a step queued, a new facing a turn,
+   *  a new map or more than the queue holds a snap. Our own seat, a seat that is out and
+   *  one with nowhere to stand (the lobby) are nobody's to draw. */
+  update(rows: readonly RosterEntry[]): void {
+    const here = new Set<number>();
+    for (const r of rows) {
+      if (r.isMe || !r.alive || !r.map || r.x === undefined || r.y === undefined) continue;
+      here.add(r.seat);
+      // Spawn's clamp: a skin past the table is the first; BrGhosts_Place's, a facing
+      // that is not one is south.
+      const gfx = SKIN_GFX[skinIndex(r.skin)] ?? SKIN_GFX[0];
+      const dir = r.dir >= DIR_SOUTH && r.dir <= DIR_EAST ? r.dir : DIR_SOUTH;
+      let w = this.walkers.get(r.seat);
+      if (!w || w.group !== r.map.group || w.num !== r.map.num) {
+        w = { seat: r.seat, gfx, group: r.map.group, num: r.map.num, x: 0, y: 0, facing: dir, dir, step: 0, left: 0, cmd: 0, queue: [], seenX: 0, seenY: 0 };
+        stand(w, r.x, r.y);
+        this.walkers.set(r.seat, w);
+        continue;
+      }
+      w.gfx = gfx;
+      w.dir = dir;
+      const dx = r.x - w.seenX;
+      const dy = r.y - w.seenY;
+      const n = Math.abs(dx) + Math.abs(dy);
+      if (n === 0) continue;
+      if (w.queue.length + n > STEP_QUEUE) {
+        stand(w, r.x, r.y);
+        continue;
+      }
+      // A run of steps seen at once (a ledge hop, a frame the page missed) is walked
+      // across, then down: at sixteen frames a tile the corner it cut is not there to see.
+      for (let i = 0; i < Math.abs(dx); i++) w.queue.push(dx > 0 ? DIR_EAST : DIR_WEST);
+      for (let i = 0; i < Math.abs(dy); i++) w.queue.push(dy > 0 ? DIR_SOUTH : DIR_NORTH);
+      w.seenX = r.x;
+      w.seenY = r.y;
+    }
+    for (const seat of Array.from(this.walkers.keys())) if (!here.has(seat)) this.walkers.delete(seat);
+    for (const w of this.walkers.values()) walk(w);
+  }
+
+  /** A seat the page is walking: gBrSeats' standing copy of it is not drawn as well. */
+  has(seat: number): boolean {
+    return this.walkers.has(seat);
+  }
+
+  /** The walkers on a map as sprites on the picture, `origin` the map pixel at its
+   *  top-left (field.ts's lcdOrigin). `keep` is asked of each by its seat and its tile;
+   *  `hidden` puts them on the overlay. */
+  sprites(
+    map: { group: number; num: number },
+    origin: { left: number; top: number },
+    keep: (seat: number, x: number, y: number) => boolean,
+    hidden: boolean,
+  ): FieldSprite[] {
+    const out: FieldSprite[] = [];
+    for (const w of this.walkers.values()) {
+      if (w.group !== map.group || w.num !== map.num || !keep(w.seat, w.x, w.y)) continue;
+      const info = SHEETS[String(w.gfx)];
+      if (!info) continue;
+      const tile = toPage(romCell(w.x, w.y));
+      const [dx, dy] = STEP[w.step] ?? [0, 0];
+      const at = onPicture(info, tile.x * TILE - dx * w.left, tile.y * TILE - dy * w.left, origin);
+      const frame = w.step === 0 ? FACE_FRAMES[w.facing] : GO_FRAMES[w.step][w.cmd + (WALK_FRAMES - w.left > GO_FRAME_TICKS ? 1 : 0)];
+      out.push({ gfx: w.gfx, frame, hFlip: w.facing === DIR_EAST, ...at, hidden, seat: w.seat });
+    }
+    return out;
+  }
 }

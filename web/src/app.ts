@@ -1501,6 +1501,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // does for itself anyway (nobody hears their own messages). A room of one: us, by the
   // name a room would know us by.
   const roster = soloRoster(careerName());
+  fieldView?.setPeople(() => roster.all());
   const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
   const matchBase = symbols?.get('gBrMatch');
   const soloGrace = new EndGrace({
@@ -1743,6 +1744,8 @@ function wireRoom(
    *  the Bridge's, and two writers could put one `spill`'s slots between another's. */
   const rom = new RomPort(new Mailbox(emu, mailboxBase));
   let bridge: Bridge | null = null;
+  // Whichever Bridge is current: a rejoin's new one is picked up by the next frame.
+  fieldView?.setPeople(() => bridge?.roster.all() ?? []);
   /** The match this page runs, while it runs one (match/host.ts): its director, its bots
    *  and everything they hear, let go of in one teardownHost. */
   let host: HostRole | null = null;
@@ -2835,6 +2838,10 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
 
 // ---- wiring -------------------------------------------------------------------------------
 
+/** The field past the picture: the match's roster is handed to it once there is one, so
+ *  the other seats walk on past the box and off the field (POK-323). */
+let fieldView: FieldView | null = null;
+
 function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined, rom: Uint8Array | null = null): void {
   wireKeyboard(emu);
   wireGamepad(emu);
@@ -2848,7 +2855,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
   wireFps(emu);
   // The picture in its box and the field drawn past it (field.ts, POK-317). Without the
   // symbol table the picture is still placed; the field around it stays dark.
-  new FieldView({
+  fieldView = new FieldView({
     emu,
     symbols: symbols ?? null,
     box: $('#screen-wrap') as HTMLElement,
@@ -2857,7 +2864,10 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     overlay: $('#overlay') as HTMLCanvasElement,
     pad: $('#pad') as HTMLElement,
     rom,
-  }).attach();
+  });
+  fieldView.attach();
+  // Dev only: where the page walks the ghosts, for the e2e (POK-323, world-moves.spec.ts).
+  if (import.meta.env.DEV) Object.assign((window as unknown as { __hbr?: object }).__hbr ?? {}, { field: fieldView });
   // Tapping the map (touch.ts). Needs the symbol table: without it there is no reading
   // where we stand or which menu is up, and a tap does nothing.
   if (symbols) {

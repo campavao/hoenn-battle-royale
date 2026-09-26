@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   DESPAWN_LOCAL_ID, DESPAWN_MAP_NUM, DESPAWN_SIZE, GFX_BIRCHS_BAG, GFX_ITEM_BALL, HIDDEN_MOVEMENT_TYPES, type Known, LOOT_KIND, LOOT_MAP_NUM, LOOT_SIZE, LOOT_X, LOOT_Y,
   MAP_OFFSET, SEAT_DIR, SEAT_MAP_NUM, SEAT_PRESENT, SEAT_SIZE, SEAT_SKIN, SEAT_X, SEAT_Y, TEMPLATE_SIZE, TPL_FLAG_ID, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X,
-  TPL_Y, type Template, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, inObjectView, objectKey, placePeople, standingFrame,
+  TPL_Y, type Template, GhostWalkers, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, inObjectView, objectKey, placePeople, standingFrame,
 } from './field-ghosts';
+import type { RosterEntry } from './match/roster';
 import { lcdOrigin } from './field';
 import { SKIN_GFX } from './ui/emerald';
 
@@ -74,7 +75,7 @@ describe("the people past the ROM's box (POK-318)", () => {
   });
 
   it("a ghost past the box stands at its roster cell in its skin, and only another seat's, present, on this map", () => {
-    expect(droppedPeople(known({ seats: [seat(2)] }))).toEqual([{ gfx: SKIN_GFX[5], dir: 4, x: 20, y: 31 }]);
+    expect(droppedPeople(known({ seats: [seat(2)] }))).toEqual([{ gfx: SKIN_GFX[5], dir: 4, x: 20, y: 31, seat: 2 }]);
     expect(droppedPeople(known({ seats: [seat(2, { present: false })] })), 'absent or out').toEqual([]);
     expect(droppedPeople(known({ seats: [seat(2)], mySeat: 2 })), 'our own').toEqual([]);
     expect(droppedPeople(known({ seats: [seat(2, { num: 15 })] })), 'another map').toEqual([]);
@@ -204,5 +205,132 @@ describe('where they are drawn, on which frame', () => {
     expect(initialFacing(rom, base + 0x90, 0x51), 'no such movement type').toBe(1);
     expect(initialFacing(null, base + 0x90, 3)).toBe(1);
     expect(initialFacing(rom, undefined, 3)).toBe(1);
+  });
+});
+
+describe('the ghosts walk on (POK-323)', () => {
+  // We stand at (20, 20) on MAP again; seat 2 two tiles east of us, at rest, facing south.
+  const origin = lcdOrigin({ x: 20, y: 20, subX: 0, subY: 0 });
+  const row = (seat: number, over: Partial<RosterEntry> = {}): RosterEntry =>
+    ({ seat, name: '', alive: true, isMe: false, map: MAP, x: 22 + MAP_OFFSET, y: 20 + MAP_OFFSET, dir: 1, skin: '5', ...over });
+  const all = () => true;
+  const at = (w: GhostWalkers, seat = 2) => w.sprites(MAP, origin, all, false).find((s) => s.seat === seat);
+  /** `frames` updates with the same rows, and what seat 2 looked like after each. */
+  const run = (w: GhostWalkers, rows: RosterEntry[], frames: number) =>
+    Array.from({ length: frames }, () => {
+      w.update(rows);
+      const s = at(w)!;
+      return { x: s.x, y: s.y, frame: s.frame, hFlip: s.hFlip };
+    });
+
+  it('at rest two tiles east of our tile a ghost stands where the ROM would put it, in its skin', () => {
+    const w = new GhostWalkers();
+    w.update([row(2)]);
+    expect(at(w)).toEqual({ gfx: SKIN_GFX[5], frame: 0, hFlip: false, x: 144, y: 56, hidden: false, seat: 2 });
+    // ...which is where POK-318 stands a person on that tile.
+    expect(placePeople([{ gfx: SKIN_GFX[5], dir: 1, x: 22, y: 20 }], origin, () => ({ frame: 0, hFlip: false }))[0]).toMatchObject({ x: 144, y: 56 });
+  });
+
+  it("a step is sixteen frames of a pixel each, on the ROM's stride: 3 then 0, and 4 then 0 on the next", () => {
+    const w = new GhostWalkers();
+    w.update([row(2)]);
+    const one = run(w, [row(2, { y: 21 + MAP_OFFSET })], 16);
+    expect(one.map((s) => s.y)).toEqual(Array.from({ length: 16 }, (_, i) => 57 + i));
+    expect(one.map((s) => s.frame)).toEqual([3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const two = run(w, [row(2, { y: 22 + MAP_OFFSET })], 16);
+    expect(two.map((s) => s.frame), 'the other foot').toEqual([4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(two[15].y).toBe(56 + 32);
+    const three = run(w, [row(2, { y: 23 + MAP_OFFSET })], 16);
+    expect(three[0].frame, 'and back to the first').toBe(3);
+  });
+
+  it("East is West's frames mirrored, and so is standing facing it", () => {
+    const west = new GhostWalkers();
+    west.update([row(2)]);
+    expect(run(west, [row(2, { x: 21 + MAP_OFFSET, dir: 3 })], 16).map((s) => [s.frame, s.hFlip])).toEqual([
+      ...Array(8).fill([7, false]), ...Array(8).fill([2, false]),
+    ]);
+    const east = new GhostWalkers();
+    east.update([row(2)]);
+    const steps = run(east, [row(2, { x: 23 + MAP_OFFSET, dir: 4 })], 16);
+    expect(steps.map((s) => [s.frame, s.hFlip])).toEqual([...Array(8).fill([7, true]), ...Array(8).fill([2, true])]);
+    expect(steps.map((s) => s.x)).toEqual(Array.from({ length: 16 }, (_, i) => 145 + i));
+  });
+
+  it('steps seen at once are walked one after another, BR_STEP_QUEUE of them; one more is a snap', () => {
+    const w = new GhostWalkers();
+    w.update([row(2)]);
+    const both = run(w, [row(2, { x: 24 + MAP_OFFSET, dir: 4 })], 32);
+    expect([both[15].x, both[31].x]).toEqual([160, 176]);
+    expect(both.map((s) => s.x)).toEqual(Array.from({ length: 32 }, (_, i) => 145 + i));
+
+    const full = new GhostWalkers();
+    full.update([row(2)]);
+    full.update([row(2, { x: 27 + MAP_OFFSET, dir: 4 })]); // five: one walking, four held
+    full.update([row(2, { x: 28 + MAP_OFFSET, dir: 4 })]); // the fifth held
+    expect(at(full)!.x, 'still walking the first').toBe(146);
+    full.update([row(2, { x: 29 + MAP_OFFSET, dir: 4 })]); // no room: DriveGhost snaps to the roster
+    expect(at(full)).toMatchObject({ x: 144 + 7 * 16, frame: 2, hFlip: true });
+
+    const six = new GhostWalkers();
+    six.update([row(2)]);
+    six.update([row(2, { y: 26 + MAP_OFFSET })]);
+    expect(at(six), 'six at once').toMatchObject({ x: 144, y: 56 + 6 * 16, frame: 0 });
+  });
+
+  it('a turn waits for the walking to stop, and starts the feet over', () => {
+    const w = new GhostWalkers();
+    w.update([row(2)]);
+    w.update([row(2, { y: 21 + MAP_OFFSET })]); // a step south...
+    const turned = run(w, [row(2, { y: 21 + MAP_OFFSET, dir: 3 })], 16); // ...then a face west
+    expect(turned.slice(0, 15).every((s) => s.frame !== 2), 'not mid-stride, nor the frame the stride ends').toBe(true);
+    expect(turned[14], 'the stride done, facing the way it went').toMatchObject({ frame: 0, y: 72 });
+    expect(turned[15], 'and turned on the next').toMatchObject({ frame: 2, hFlip: false, y: 72 });
+    // The step after it starts on the first foot, where one straight on from the step
+    // south would have started on the second.
+    expect(run(w, [row(2, { x: 21 + MAP_OFFSET, y: 21 + MAP_OFFSET, dir: 3 })], 1)[0].frame).toBe(7);
+    const straight = new GhostWalkers();
+    straight.update([row(2)]);
+    straight.update([row(2, { y: 21 + MAP_OFFSET })]);
+    expect(run(straight, [row(2, { x: 21 + MAP_OFFSET, y: 21 + MAP_OFFSET, dir: 3 })], 16)[15].frame, 'no turn: round the corner').toBe(8);
+  });
+
+  it('a new map, or a cell further than the queue, is a place: on the tile, standing', () => {
+    const w = new GhostWalkers();
+    w.update([row(2)]);
+    const other = { group: 0, num: 15 };
+    w.update([row(2, { map: other, x: 23 + MAP_OFFSET })]);
+    expect(at(w), 'not on our map').toBeUndefined();
+    expect(w.sprites(other, origin, all, false)[0]).toMatchObject({ x: 160, y: 56, frame: 0 });
+  });
+
+  it('nobody out, in the lobby, ours or on another map is drawn, and a seat that goes out goes', () => {
+    const w = new GhostWalkers();
+    w.update([
+      row(1, { alive: false }), row(2, { map: undefined }), row(3, { isMe: true }), row(4, { map: { group: 0, num: 15 } }), row(5, { x: undefined }), row(6),
+    ]);
+    expect(w.sprites(MAP, origin, all, false).map((s) => s.seat)).toEqual([6]);
+    expect([1, 2, 3, 4, 5, 6].map((s) => w.has(s))).toEqual([false, false, false, true, false, true]);
+    w.update([row(6, { alive: false })]);
+    expect(w.sprites(MAP, origin, all, false)).toEqual([]);
+    expect(w.has(6)).toBe(false);
+  });
+
+  it("a skin is the ROM's graphics through sSkinGraphics, and one past it the first, as Spawn clamps", () => {
+    const gfx = (skin: string | undefined) => {
+      const w = new GhostWalkers();
+      w.update([row(2, { skin })]);
+      return at(w)!.gfx;
+    };
+    expect(Array.from({ length: SKIN_GFX.length }, (_, i) => gfx(String(i)))).toEqual(SKIN_GFX);
+    expect([gfx('16'), gfx('200'), gfx(undefined)]).toEqual([SKIN_GFX[0], SKIN_GFX[0], SKIN_GFX[0]]);
+    expect(gfx('CAM'), "a name stands in by its length, as the wire's PLACE says it").toBe(SKIN_GFX[3]);
+  });
+
+  it('the field asks which to draw by seat and tile, and says which canvas', () => {
+    const w = new GhostWalkers();
+    w.update([row(2), row(3, { y: 32 + MAP_OFFSET })]);
+    const far = w.sprites(MAP, origin, (_seat, x, y) => !inObjectView(POS, x, y), true);
+    expect(far.map((s) => [s.seat, s.hidden])).toEqual([[3, true]]);
   });
 });

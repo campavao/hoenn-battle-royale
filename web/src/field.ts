@@ -9,6 +9,9 @@
 // What the border is not: tile animation. The ROM never rendered it out there. The
 // people are the ROM's where it has them and the page's own reading of its tables past
 // that (POK-318, field-ghosts.ts); the fog is the ROM's weather, drawn to its numbers.
+// Off the field, where the ROM walks and draws nobody, the other seats are walked by the
+// page off its own roster (POK-323): a battle or the bag leaves the map's own people
+// standing where they were, and everybody in the match walking on around it.
 //
 // Then POK-319: the emulator draws a picture bigger than the LCD -- the same BG and OBJ
 // state, a band of pixels on each side (BAND below, matching include/br/br_field.h) --
@@ -33,9 +36,10 @@ import { HOENN } from './bots/hoenn';
 import spritesData from './data/sprites.json';
 import type { Band, Emulator } from './emu';
 import {
-  DESPAWN_COUNT, DESPAWN_SIZE, LOOT_COUNT, LOOT_SIZE, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
+  DESPAWN_COUNT, DESPAWN_SIZE, GHOST_LOCAL_ID_BASE, GhostWalkers, LOOT_COUNT, LOOT_SIZE, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
   TEMPLATE_COUNT, TEMPLATE_SIZE, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, objectKey, placePeople, standingFrame,
 } from './field-ghosts';
+import type { RosterEntry } from './match/roster';
 
 export const GBA_W = 240;
 export const GBA_H = 160;
@@ -184,6 +188,8 @@ export interface FieldSprite {
    *  bit), and for no other reason -- or holds no object for it at all, past the box it
    *  keeps them in (field-ghosts.ts): the overlay's cue. */
   hidden: boolean;
+  /** Another seat's ghost, whoever draws it: not one the field freezes in a battle. */
+  seat?: number;
 }
 
 /** The image index the sprite is showing: `anims[animNum][animCmdIndex].frame.imageValue`,
@@ -384,6 +390,18 @@ export interface FieldDeps {
   pad?: HTMLElement | null;
   /** The ROM the emulator is running, for the sprites' animation tables. */
   rom?: Uint8Array | null;
+  /** Where every seat is, as the page knows it (the match's roster): the ghosts the page
+   *  walks on off the field (POK-323). FieldView.setPeople sets it later. */
+  people?: () => readonly RosterEntry[];
+}
+
+/** What the field looked like at the last frame on it: the map's own people and the
+ *  loot, left standing there while a battle or a menu has the screen. */
+interface Still {
+  group: number;
+  num: number;
+  origin: { left: number; top: number };
+  sprites: FieldSprite[];
 }
 
 interface SheetInfo {
@@ -473,8 +491,21 @@ export class FieldView {
   private drawn: string | null = null;
   private off: (() => void) | null = null;
   private observer: ResizeObserver | null = null;
+  /** The other seats, walked by the page (POK-323), and where the roster comes from. */
+  private readonly walkers = new GhostWalkers();
+  private roster: (() => readonly RosterEntry[]) | null;
+  private still: Still | null = null;
+  /** The last read's ghosts, for peek(). */
+  private ghosts: { rom: FieldSprite[]; drawn: FieldSprite[] } = { rom: [], drawn: [] };
 
-  constructor(private readonly deps: FieldDeps) {}
+  constructor(private readonly deps: FieldDeps) {
+    this.roster = deps.people ?? null;
+  }
+
+  /** The match's roster, once there is one: solo's, or the room's Bridge's. */
+  setPeople(people: (() => readonly RosterEntry[]) | null): void {
+    this.roster = people;
+  }
 
   attach(): void {
     this.layout();
@@ -571,6 +602,8 @@ export class FieldView {
     // The core sizes its buffer when it loads a game; a reboot can change it under us.
     const { lcd } = this.deps;
     if (lcd.width !== this.canvasW || lcd.height !== this.canvasH) this.layout();
+    // Every frame, on the field too, so they are in step when a battle takes it.
+    this.walkers.update(this.roster?.() ?? []);
     const cur = this.read();
     if (this.prev) this.draw(this.prev);
     this.clip(cur?.onField ?? false);
@@ -614,18 +647,65 @@ export class FieldView {
       fade.active = false;
     }
     const pick = this.sym('gBrPick');
-    return {
+    const cam: Camera = {
       ...pos,
       fade: fade.y,
       fadeColor: fade.color,
       fadeActive: fade.active,
-      sprites: [...this.readSprites(p), ...this.readDropped(p, pos)],
+      sprites: [],
       fog: this.readFog(),
       outside: ring !== undefined && emu.read(ring + RING_OUTSIDE, 8) !== 0,
       ringTimer: ring === undefined ? 0 : emu.read(ring + RING_TIMER, 16),
       onField: main !== undefined && cb2 !== undefined && (emu.read(main + MAIN_CALLBACK2, 32) & ~1) === cb2
         && !(pick !== undefined && emu.read(pick + PICK_ACTIVE, 8) !== 0),
     };
+    cam.sprites = this.people(cam, p);
+    return cam;
+  }
+
+  /** Everybody on the field this frame, on the picture. On it: the ROM's objects and what
+   *  it knows of past its box (POK-318). Off it the
+   *  sprites are the battle's or the menu's -- read as people, every frame of a fight was
+   *  somebody new -- so the map's people and the loot stand where the last frame on the
+   *  field had them, and every ghost walks on (POK-323). */
+  private people(c: Camera, sb1: number): FieldSprite[] {
+    const origin = lcdOrigin(c);
+    const outdoors = !!HOENN.byRef.get(`${c.group}:${c.num}`)?.outdoor;
+    if (!c.onField) {
+      const still = this.still !== null && this.still.group === c.group && this.still.num === c.num ? this.still : null;
+      const stood = still === null ? [] : still.sprites.map((s) => ({
+        ...s, x: s.x + still.origin.left - origin.left, y: s.y + still.origin.top - origin.top, hidden: false,
+      }));
+      const drawn = outdoors ? this.walkers.sprites(c, origin, () => true, false) : [];
+      this.ghosts = { rom: [], drawn };
+      return [...stood, ...drawn];
+    }
+    const live = this.liveObjects();
+    const rom = [...this.readSprites(sb1), ...this.readDropped(sb1, c, live)];
+    this.still = { group: c.group, num: c.num, origin, sprites: rom.filter((s) => s.seat === undefined) };
+    this.ghosts = { rom: rom.filter((s) => s.seat !== undefined), drawn: [] };
+    return rom;
+  }
+
+  /** objectKey of every active object. */
+  private liveObjects(): Set<string> {
+    const objs = this.sym('gObjectEvents');
+    const live = new Set<string>();
+    if (objs === undefined) return live;
+    const { emu } = this.deps;
+    for (let i = 0; i < OBJ_COUNT; i++) {
+      const o = objs + i * OBJ_SIZE;
+      if (emu.read(o + OBJ_ACTIVE_BYTE, 8) & 1) live.add(objectKey(emu.read(o + OBJ_LOCAL_ID, 8), emu.read(o + OBJ_MAP_NUM, 8), emu.read(o + OBJ_MAP_GROUP, 8)));
+    }
+    return live;
+  }
+
+  /** The ghosts of the last frame read (DEV, for the e2e): the ones the ROM drew, every
+   *  walker on the camera's map wherever it is, and the walkers the page drew. */
+  peek(): { onField: boolean; rom: FieldSprite[]; walkers: FieldSprite[]; drawn: FieldSprite[] } | null {
+    const c = this.prev;
+    if (!c) return null;
+    return { onField: c.onField, rom: this.ghosts.rom, walkers: this.walkers.sprites(c, lcdOrigin(c), () => true, false), drawn: this.ghosts.drawn };
   }
 
   private readFog(): Fog | null {
@@ -673,7 +753,10 @@ export class FieldView {
       const x = s16(emu.read(s + SPR_X, 16)) + s16(emu.read(s + SPR_X2, 16)) + s8(emu.read(s + SPR_CTC_X, 8)) + (onCamera ? coX : 0);
       const y = s16(emu.read(s + SPR_Y, 16)) + s16(emu.read(s + SPR_Y2, 16)) + s8(emu.read(s + SPR_CTC_Y, 8)) + (onCamera ? coY : 0);
       const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
-      out.push({ gfx, frame, hFlip: (flags & SPR_HFLIP) !== 0, x, y, hidden: offScreen });
+      const sprite: FieldSprite = { gfx, frame, hFlip: (flags & SPR_HFLIP) !== 0, x, y, hidden: offScreen };
+      const seat = emu.read(o + OBJ_LOCAL_ID, 8) - GHOST_LOCAL_ID_BASE;
+      if (seat >= 0 && seat < SEAT_COUNT) sprite.seat = seat;
+      out.push(sprite);
     }
     return out;
   }
@@ -687,17 +770,11 @@ export class FieldView {
   /** The people the ROM knows of past the box it keeps objects in, and holds none for
    *  (POK-318): read here, in the same frame as the live objects, so a person the ROM
    *  spawns or lets go of this frame is in exactly one of the two lists. */
-  private readDropped(sb1: number, cam: CameraPos): FieldSprite[] {
-    const objs = this.sym('gObjectEvents');
+  private readDropped(sb1: number, cam: CameraPos, live: ReadonlySet<string>): FieldSprite[] {
     // Indoors there is no field past the picture to stand on.
-    if (objs === undefined || !HOENN.byRef.get(`${cam.group}:${cam.num}`)?.outdoor) return [];
+    if (this.sym('gObjectEvents') === undefined || !HOENN.byRef.get(`${cam.group}:${cam.num}`)?.outdoor) return [];
     const { emu } = this.deps;
     const rom = this.deps.rom ?? null;
-    const live = new Set<string>();
-    for (let i = 0; i < OBJ_COUNT; i++) {
-      const o = objs + i * OBJ_SIZE;
-      if (emu.read(o + OBJ_ACTIVE_BYTE, 8) & 1) live.add(objectKey(emu.read(o + OBJ_LOCAL_ID, 8), emu.read(o + OBJ_MAP_NUM, 8), emu.read(o + OBJ_MAP_GROUP, 8)));
-    }
     const table = (name: string, bytes: number): Uint8Array => {
       const at = this.sym(name);
       return at === undefined ? new Uint8Array(0) : emu.bytes(at, bytes);
@@ -789,9 +866,10 @@ export class FieldView {
     const ctx = field.getContext('2d');
     if (!ctx) return;
     // With a band the ROM draws the people nearest the window itself, and the ones it
-    // hid go on the overlay, above the picture; without one they all go under it.
+    // hid go on the overlay, above the picture; without one they all go under it. Off
+    // the field the band is clipped away and everybody is under it, the fight on top.
     const overlay = this.band ? this.deps.overlay ?? null : null;
-    const under = overlay ? [] : c.sprites;
+    const under = overlay && c.onField ? [] : c.sprites;
     ctx.imageSmoothingEnabled = false;
     ctx.globalAlpha = 1;
     ctx.fillStyle = '#000';

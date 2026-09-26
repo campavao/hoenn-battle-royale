@@ -54,9 +54,10 @@ describe('the e2e dev surface', () => {
     expect(FIELDS.filter((f) => !brWritten.has(f))).toEqual([]);
   });
 
-  it('__hbr is the emulator, which is all a spec reads of it', () => {
-    expect([...fieldsRead(/__hbr\??\.(\w+)/g)]).toEqual(['emu']);
+  it('__hbr is the emulator and the field past the picture, which is all a spec reads of it', () => {
+    expect([...fieldsRead(/__hbr\??\.(\w+)/g)].sort()).toEqual(['emu', 'field']);
     expect(appSource).toMatch(/__hbr = \{ emu \}/);
+    expect(appSource).toMatch(/__hbr \?\? \{\}, \{ field: fieldView \}\)/);
   });
 });
 
