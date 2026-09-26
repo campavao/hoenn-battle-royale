@@ -97,6 +97,17 @@ export class HostRole {
   private readonly startLoop: (director: Director) => () => void;
   private readonly now: () => number;
   private readonly seen = new Set<number>(); // seats already announced out, so a repeat is quiet
+  /** The ticker, to the room and our own ROM, never the same line twice running (POK-324). */
+  private readonly say = Ticker.once((msg) => {
+    this.link.toRoom(msg);
+    this.link.toRom(msg);
+  });
+  /** The outs, gathered into one line while the field is big (POK-324). */
+  private readonly outs = new Ticker.OutFeed({
+    say: (msg) => this.say(msg),
+    nameOf: (seat) => this.nameOf(seat),
+    left: () => this.director.state.alive,
+  });
   /** The director's own elimination handler, for `out`s this page makes itself. */
   private localOut: ((seat: number) => void) | null = null;
   /** Announces a seat out of the match to the whole room (POK-271). A seat that closed its
@@ -175,21 +186,14 @@ export class HostRole {
         else link.toSeat(toSeat, msg);
       },
       // The kill feed. A duel is the only moment both sides of a fight are known at
-      // once -- an `out` on its own cannot say who did it.
-      onDuel: (winner, loser) => {
-        this.say(Ticker.beat(winner, this.nameOf(winner), this.nameOf(loser)));
-        // And they say something about it (POK-239). Dealt from the seed, so the same
-        // bot has the same voice all match on every client that works it out -- unless
-        // the seat that just fought is this client's own, in which case it is whatever
-        // voice its profile picked (POK-243): the same pipe a bot gets, handed to the
-        // one player who actually gets to choose it. Any *other* real player still
-        // falls back to the seed, the same as a bot -- their own pick lives only in
-        // their own localStorage, and nothing on the wire carries it here yet.
-        this.say(Ticker.said(winner, this.nameOf(winner), this.myVoice(winner, seed).win));
-        this.say(Ticker.said(loser, this.nameOf(loser), this.myVoice(loser, seed).lose));
-      },
-      // Walking up to somebody is the other time a bot has something to say.
-      onEngage: (seat) => this.say(Ticker.said(seat, this.nameOf(seat), this.myVoice(seat, seed).intro)),
+      // once -- an `out` on its own cannot say who did it -- so the loser's out, which
+      // follows at once, says it: `W BEAT L - N LEFT`, one line. It was four, the two
+      // bots' win and lose lines among them, for a fight nobody saw (POK-324).
+      onDuel: (winner, loser) => this.outs.beat(winner, loser),
+      // Walking up to somebody is when a bot has something to say (POK-239) -- to them
+      // (POK-324): the rest of the room was not walked up to. Dealt from the seed, so
+      // the same bot has the same voice all match on every client that works it out.
+      onEngage: (seat, target) => this.sayTo(target, Ticker.said(seat, this.nameOf(seat), this.myVoice(seat, seed).intro)),
       fill: opts.fill,
       resume,
       safariSecs: opts.botSafariSecs,
@@ -357,6 +361,7 @@ export class HostRole {
     this.stopLoop?.();
     this.stopLoop = null;
     this.bots.dispose();
+    this.outs.dispose(); // an out still gathering is the heir's to tell, off its catch-up
     this.localOut = null;
     this.announceOut = null;
     for (const timer of this.leaving.values()) clearTimeout(timer);
@@ -373,14 +378,16 @@ export class HostRole {
     return this.link.roster.nameOf(seat);
   }
 
-  private say(msg: TickerMsg | null): void {
+  /** A line for one seat only: into our own ROM when it is ours. */
+  private sayTo(seat: number, msg: TickerMsg | null): void {
     if (!msg) return;
-    this.link.toRoom(msg);
-    this.link.toRom(msg);
+    if (seat === this.link.seat) this.link.toRom(msg);
+    else this.link.toSeat(seat, msg);
   }
 
   /** The seed's voice for anyone, except this client's own seat, which speaks with
-   *  whatever its profile picked (POK-243) -- see the onDuel/onEngage callbacks. */
+   *  whatever its profile picked (POK-243). Any *other* real player falls back to the
+   *  seed, the same as a bot, unless their challenge said what they picked. */
   private myVoice(seat: number, matchSeed: number): BotVoice {
     if (seat === this.link.seat) return this.narration.mine();
     // What they actually picked, if their challenge told us (POK-274). A bot never
@@ -410,6 +417,8 @@ export class HostRole {
   }
 
   private directorSends(msg: Msg): void {
+    // The last out's line goes before the win it made (POK-324): out, win, WINS.
+    if (msg.t === 'win') this.outs.flush();
     // Guests' ROMs act on this over the relay; the host's own ROM would too,
     // eventually, but ring/clock/win carry `seat: hostSeat` and bridge.ts's own
     // echo-guard (msgSeat(msg) === this.seat) drops exactly those coming back
@@ -441,12 +450,12 @@ export class HostRole {
       this.bots.setRing({ sx: msg.sx, sy: msg.sy, r: msg.r }, msg.phase);
     }
     // The match, narrated. These are the director's own messages on their way out,
-    // which is the one place every one of them passes through.
+    // which is the one place every one of them passes through. Not the ring: the ROM
+    // says that one itself, once, and names the place in its box -- a page line on top
+    // made one move three announcements (POK-324). And not the head count at the start,
+    // which the corner already shows.
     if (msg.t === 'start') {
       this.say(Ticker.opening(this.hostSeat, msg.safari ?? 0));
-      this.say(Ticker.dropped(this.hostSeat, msg.spawns.length));
-    } else if (msg.t === 'ring') {
-      this.say(Ticker.fog(this.hostSeat, msg.phase, msg.r < 0));
     } else if (msg.t === 'win' && msg.seat !== undefined && msg.seat !== null) {
       this.say(Ticker.won(msg.seat, this.nameOf(msg.seat)));
     }
@@ -461,10 +470,11 @@ export class HostRole {
     const narrate = (seat: number) => {
       if (this.seen.has(seat)) return;
       this.seen.add(seat);
-      const left = Math.max(0, this.director.state.alive - 1);
-      this.say(Ticker.out(seat, this.nameOf(seat), left));
-      if (left === 3) this.say(Ticker.fewLeft(seat, left));
+      // Gathered before the director counts it, so the `win` it makes can flush it first;
+      // said after, with the count that includes it.
+      this.outs.add(seat);
       handler(seat);
+      this.outs.settle();
     };
     this.localOut = narrate;
     // ...and the same door for a seat that simply vanished (POK-271): the relay's

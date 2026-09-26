@@ -6,6 +6,14 @@
 // where a battle royale gets its pulse -- who just beat whom, how many are left, the
 // fog about to move -- and this is that, as lines.
 //
+// And then it said so much that nobody read it (POK-324): in one minute of Cam's
+// play-test, two fog-sweep tallies, a level line, an out and the ring's box, and he
+// ignored all of them. So a line is something the player acts on or would ask about:
+// who is out and how many are left (outs that land together as one line), the ring
+// (the ROM's one line and its box), a gym falling, the DAY CARE emptied, what the
+// trainer you are watching picked up, the opening and the win. Tallies go to the log,
+// a bot's intro goes to the player it walked up to, and two bots fighting is one line.
+//
 // Every line is at most BR_HUD_LINE_MAX (40) Gen 3 characters, because that is what the
 // window draws; a longer one is not truncated somewhere clever, it is not written.
 import type { TickerMsg } from '../net/wire';
@@ -28,21 +36,6 @@ function line(seat: number, text: string, kind?: TickerMsg['kind']): TickerMsg |
 /** The opening. Everybody is in the Zone with a few balls and a clock. */
 export function opening(seat: number, secs: number): TickerMsg | null {
   return line(seat, `CATCH WHAT YOU CAN! ${secs}s`);
-}
-
-/** The drop: the opening is over and the match proper starts. */
-export function dropped(seat: number, count: number): TickerMsg | null {
-  return line(seat, `${count} TRAINERS ARE LOOSE IN HOENN!`);
-}
-
-/** The fog moved. Phase 1 is the first close; the last one closes on everything. */
-export function fog(seat: number, phase: number, last: boolean): TickerMsg | null {
-  return line(seat, last ? 'THE FOG TAKES EVERYTHING!' : `THE FOG CLOSES IN! (${phase})`);
-}
-
-/** One trainer beat another. The kill feed, which is the line people actually read. */
-export function beat(seat: number, winner: string, loser: string): TickerMsg | null {
-  return line(seat, `${short(winner)} BEAT ${short(loser)}!`, 'kill');
 }
 
 /** A trainer's own words -- a bot's dealt line (POK-239), or a player's chat. The
@@ -83,26 +76,121 @@ export function felled(seat: number, name: string, boss: string): TickerMsg | nu
   return line(seat, `${short(name)} BEAT ${boss}!`, 'kill');
 }
 
-/** The fog took a map with Hoenn's own trainers on it (POK-299). Kanto: "the ring
- *  cleared N static trainers across M map(s)" -- one line for the whole sweep, never
- *  one per map, because a sweep that read like eliminations once looked like half the
- *  lobby dying at once. */
-export function cleared(seat: number, trainers: number, maps: number): TickerMsg | null {
-  return line(seat, `THE FOG CLEARED ${trainers} TRAINERS ON ${maps} MAP${maps === 1 ? '' : 'S'}`);
-}
-
 /** Somebody is out, however it happened, and how many are left after it. */
 export function out(seat: number, name: string, left: number): TickerMsg | null {
-  if (left <= 0) return line(seat, `${short(name)} IS OUT!`, 'kill');
-  return line(seat, `${short(name)} IS OUT - ${left} LEFT`, 'kill');
+  return outs(seat, [name], left);
 }
 
-/** Down to the last few: the match's own countdown, and the cue to go hunting. */
-export function fewLeft(seat: number, left: number): TickerMsg | null {
-  return line(seat, `${left} LEFT!`);
+/** Everybody who went out together, as one line (POK-324), and how many are left after
+ *  them. `by` is who beat a lone one, when two bots fought it out: the kill feed and the
+ *  count in one line, where it was four -- a win, two chat lines and the out -- for a
+ *  fight nobody saw. Every name is cut before the line is built, so the worst case,
+ *  `ABCDEFG AND HIJKLMN ARE OUT - 32 LEFT`, is 37. */
+export function outs(seat: number, names: string[], left: number, by?: string): TickerMsg | null {
+  if (names.length === 0) return null;
+  const who =
+    names.length === 1
+      ? by !== undefined
+        ? `${short(by)} BEAT ${short(names[0])}`
+        : `${short(names[0])} IS OUT`
+      : names.length === 2
+        ? `${short(names[0])} AND ${short(names[1])} ARE OUT`
+        : `${short(names[0])} AND ${names.length - 1} MORE ARE OUT`;
+  return line(seat, left > 0 ? `${who} - ${left} LEFT` : `${who}!`, 'kill');
 }
 
 /** The winner. */
 export function won(seat: number, name: string): TickerMsg | null {
   return line(seat, `${short(name)} WINS!`);
+}
+
+/** How long outs gather before they go out as one line (POK-324). */
+export const OUT_BATCH_MS = 1500;
+
+/** At this many left or fewer every out is its own line, at once: the endgame's count is
+ *  the news, and the last out has to land before the win does. */
+export const OUT_BATCH_UNTIL = 3;
+
+/** The outs, as the ticker says them: gathered for OUT_BATCH_MS while more than
+ *  OUT_BATCH_UNTIL are left, so a ring that takes five bots on one tick is one line, not
+ *  five. The count is read when the line goes, so it is the count after all of them. */
+export class OutFeed {
+  private pending: number[] = [];
+  private readonly by = new Map<number, number>();
+  private cancel: (() => void) | null = null;
+
+  constructor(
+    private readonly o: {
+      say: (msg: TickerMsg | null) => void;
+      nameOf: (seat: number) => string;
+      /** How many are still in, with every out so far counted. */
+      left: () => number;
+      later?: (fn: () => void, ms: number) => () => void;
+    },
+  ) {}
+
+  /** Two bots settled it: `loser`'s out says who did it, when it goes out alone. */
+  beat(winner: number, loser: number): void {
+    this.by.set(loser, winner);
+  }
+
+  /** Somebody is out. Held until settle(), which the caller runs once the director has
+   *  counted it -- or until flush(), which the director's `win` runs first. */
+  add(seat: number): void {
+    this.pending.push(seat);
+  }
+
+  /** The line now, when few enough are left; otherwise the batch's timer, if it has none. */
+  settle(): void {
+    if (this.pending.length === 0) return;
+    if (this.o.left() <= OUT_BATCH_UNTIL) {
+      this.flush();
+      return;
+    }
+    if (this.cancel) return;
+    const later =
+      this.o.later ??
+      ((fn: () => void, ms: number) => {
+        const id = setTimeout(fn, ms);
+        return () => clearTimeout(id);
+      });
+    this.cancel = later(() => {
+      this.cancel = null;
+      this.flush();
+    }, OUT_BATCH_MS);
+  }
+
+  /** Whatever is gathered, as one line, now. */
+  flush(): void {
+    this.cancel?.();
+    this.cancel = null;
+    if (this.pending.length === 0) return;
+    const seats = this.pending;
+    this.pending = [];
+    const by = seats.length === 1 ? this.by.get(seats[0]) : undefined;
+    for (const seat of seats) this.by.delete(seat);
+    const { nameOf } = this.o;
+    this.o.say(outs(seats[0], seats.map(nameOf), this.o.left(), by === undefined ? undefined : nameOf(by)));
+  }
+
+  /** Let go without a word: a page that stands down leaves the match's narration to its
+   *  heir, whose catch-up carries the `out`s themselves. */
+  dispose(): void {
+    this.cancel?.();
+    this.cancel = null;
+    this.pending = [];
+    this.by.clear();
+  }
+}
+
+/** The page's end of the ticker: a line identical to the last one sent is dropped, as
+ *  Kanto's Ticker.push drops one (lib/ticker.lua) -- a beat two paths both announce is
+ *  one line. */
+export function once(send: (msg: TickerMsg) => void): (msg: TickerMsg | null) => void {
+  let last: string | undefined;
+  return (msg) => {
+    if (!msg || msg.text === last) return;
+    last = msg.text;
+    send(msg);
+  };
 }

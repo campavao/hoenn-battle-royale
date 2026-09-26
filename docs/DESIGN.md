@@ -278,7 +278,9 @@ nurse asks one question. A menu is not a hiding place. Every PC is out of order.
 balls are gifts. A ball that changes hands is a trade and triggers trade evolutions.
 Beaten sprites vanish, balls remain. Gyms are one-shot bosses, first-to-beat closes them.
 Bots use their own bag. Two bots fighting is a real battle. Quick play has no host. Solo
-play opens no socket. Backfill is wrong for a battle royale.
+play opens no socket. Backfill is wrong for a battle royale. One ticker line when the ring
+moves, and a ticker line is something you act on or would ask about -- outs (the ones that
+land together as one line), a gym, the win; a tally goes to the log (POK-324).
 
 Changed: the lobby is the page's, not the ROM's -- but drawn in Emerald's font and frames
 since POK-320, with Kanto's room of seats. Fast-forward stays available to the **proxy
