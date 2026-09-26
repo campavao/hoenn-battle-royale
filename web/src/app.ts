@@ -38,6 +38,7 @@ import {
   type StartState,
 } from './match/room';
 import { Stage, type DrawnScreen } from './ui/stage';
+import { ParadeHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
 import { FrameMeter } from './ui/fps';
 import { drawerKey, drawerLabel, stageKey } from './ui/roomkeys';
 import { menuScreen, noticeScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
@@ -75,7 +76,6 @@ import {
   peekSkin,
   skinNote,
   skinUnlocked,
-  ordinal,
   saveProfile,
   SKINS,
 } from './match/career';
@@ -1205,11 +1205,16 @@ function botFill(): number {
 
 // ---- results (POK-228) --------------------------------------------------------------
 
-/** Where we came, how long we lasted, and what that does to the career record. Shown
- *  once, when the match ends: `recordMatch` folds the placement in and the line under
- *  it is the record it produced. PLAY AGAIN reloads the page on the same hash, which
- *  re-imports the ROM from IndexedDB and rejoins the same room -- the blunt way, and
- *  the one that cannot leave half a match's state behind. */
+/** The results screen up now, and what it shows (POK-320). One at a time: the room's
+ *  exit or solo's reload takes it down, and a late `party` redraws it in place. */
+let resultsUp: { screen: DrawnScreen; model: ResultsModel } | null = null;
+
+/** Where we came, how long we lasted, and what that does to the career record, drawn on
+ *  the stage when the match ends: `recordMatch` folds the placement in and the career
+ *  line is the record it produced. Under it the champion's team (POK-243: the ROM's own
+ *  parade runs on the winner's screen, and this is the only place the room sees what
+ *  took the match) and what you did in there (POK-303: RINGS is an answer even at zero).
+ *  `held` is the champion's own, before their Hall of Fame is over: nothing covers it. */
 function renderResults(
   seat: number,
   roster: Roster,
@@ -1221,81 +1226,27 @@ function renderResults(
     fieldSize: number;
     seed?: number;
   },
+  shown: { career: string; held: boolean; again: ResultsModel['again'] },
 ): void {
-  const { results, fieldSize: seats, seed } = books;
-  const panel = $('#results-panel') as HTMLElement;
-  openDrawer(true);
-  const mine = results.forSeat(seat, performance.now());
-  if (!mine.ended) {
-    panel.hidden = true;
+  const mine = books.results.forSeat(seat, performance.now());
+  if (!mine.ended || shown.held) return;
+  const nameOf = (s: number) => roster.nameOf(s);
+  const model: ResultsModel = {
+    view: resultsView(mine, books.fieldSize, seat, nameOf, books.seed),
+    career: shown.career,
+    fame: fameOf(mine.winner, seat, mine.winner === undefined ? undefined : books.parties.get(mine.winner), nameOf, speciesName),
+    record: recordLines(books.record.forSeat(seat)),
+    again: shown.again,
+  };
+  const stage = theStage();
+  if (resultsUp && stage.current === resultsUp.screen) {
+    resultsUp.model = model;
+    stage.redraw();
     return;
   }
-  panel.hidden = false;
-  const parts: string[] = [];
-  if (mine.placement !== undefined) parts.push(`${ordinal(mine.placement)} of ${seats}`);
-  if (mine.survived !== undefined) {
-    const mm = Math.floor(mine.survived / 60);
-    const ss = String(mine.survived % 60).padStart(2, '0');
-    parts.push(`survived ${mm}:${ss}`);
-  }
-  if (mine.winner !== undefined) {
-    parts.push(mine.winner === seat ? 'you won' : `${roster.nameOf(mine.winner)} won`);
-  } else {
-    parts.push('a draw');
-  }
-  // The seed last, because it is the question anybody asks about a round afterwards
-  // and the round is written down under it (POK-248, match/log.ts).
-  if (seed !== undefined) parts.push(`seed ${seed}`);
-  ($('#results-line') as HTMLElement).textContent = parts.join(' · ');
-  renderFame(roster, mine.winner, seat, books.parties);
-  renderRecord(seat, books.record);
-}
-
-/** The champion's team under the result (POK-243, Kanto's Hall of Fame parade). The
- *  ROM's own parade runs on the winner's screen; everybody else gets this, which is
- *  the only place the room ever sees what actually took the match. Silent when the
- *  champion's `party` never arrived -- a bot's never does, since a bot has no ROM to
- *  send one. */
-function renderFame(
-  roster: Roster,
-  winner: number | undefined,
-  seat: number,
-  parties: ReadonlyMap<number, PackedMon[]>,
-): void {
-  const el = $('#results-fame') as HTMLElement;
-  const party = winner === undefined ? undefined : parties.get(winner);
-
-  if (winner === undefined || !party || party.length === 0) {
-    el.hidden = true;
-    return;
-  }
-  const who = winner === seat ? 'YOUR TEAM' : `${roster.nameOf(winner)}'S TEAM`;
-  const team = party
-    .filter((mon) => mon.species > 0)
-    .map((mon) => `${mon.nickname || speciesName(mon.species)} L${mon.level}`)
-    .join(' · ');
-  el.innerHTML = '';
-  const label = document.createElement('b');
-  label.textContent = `${who}: `;
-  el.append(label, document.createTextNode(team));
-  el.hidden = false;
-}
-
-/** What you did in there, under the parade (POK-303). Cam asked for "how many rings you
- *  survived, how many trainers you beat"; `record.ts` counts those off the wire and this
- *  is where they land. Always drawn -- RINGS is an answer even at zero, and a match you
- *  were eliminated from thirty seconds into is exactly when you want to see the number. */
-function renderRecord(seat: number, record: MatchRecord): void {
-  const el = $('#results-record') as HTMLElement;
-  el.innerHTML = '';
-  for (const line of recordLines(record.forSeat(seat))) {
-    const row = document.createElement('span');
-    const label = document.createElement('b');
-    label.textContent = line.label;
-    row.append(label, document.createTextNode(` ${line.value}`));
-    el.append(row);
-  }
-  el.hidden = false;
+  const up: { screen: DrawnScreen; model: ResultsModel } = { screen: resultsScreen(() => up.model), model };
+  resultsUp = up;
+  stage.show(up.screen);
 }
 
 // ---- spectating (POK-233) -----------------------------------------------------------
@@ -1522,12 +1473,20 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const roster = soloRoster(careerName());
   const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
   const matchBase = symbols?.get('gBrMatch');
+  /** Won, the results wait for our own Hall of Fame (POK-320), and the grace runs after. */
+  const paraded = new ParadeHold({
+    done: () => matchBase !== undefined && emu.read(matchBase, 8) === BR_PHASE_DONE,
+    graceMs: SOLO_END_GRACE_MS,
+    onParaded: () => drawResults(),
+  });
   const soloGrace = new EndGrace({
     graceMs: SOLO_END_GRACE_MS,
     winMaxMs: SOLO_WIN_GRACE_MAX_MS,
     pollMs: SOLO_PARADE_POLL_MS,
-    paradeDone: matchBase !== undefined ? () => emu.read(matchBase, 8) === BR_PHASE_DONE : undefined,
+    paradeDone: matchBase !== undefined ? paraded.finished : undefined,
   });
+  /** The career line the match produced, for the results. */
+  let career = '';
   let host: HostRole | null = null;
   /** The way out of solo: the lobby, having let go of the match -- its director's loop,
    *  its bots' pump -- the way the room's teardownHost does, rather than leaving it all to
@@ -1563,7 +1522,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     },
     {
       decided: (line) => {
-        ($('#results-career') as HTMLElement).textContent = line;
+        career = line;
         drawResults();
       },
       // The champion's team under the results, as the room draws it (POK-331 #26): our
@@ -1572,13 +1531,23 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     },
   );
   const drawResults = (): void =>
-    renderResults(0, roster, {
-      results: session.results,
-      record: session.record,
-      parties: session.parties,
-      fieldSize: session.fieldSize,
-      seed,
-    });
+    renderResults(
+      0,
+      roster,
+      {
+        results: session.results,
+        record: session.record,
+        parties: session.parties,
+        fieldSize: session.fieldSize,
+        seed,
+      },
+      {
+        career,
+        held: matchBase !== undefined && session.results.forSeat(0, performance.now()).winner === 0 && !paraded.paraded,
+        // No room to go back to: the lobby, now or when the grace is up.
+        again: { label: 'LOBBY', id: 'results-lobby', onPress: leaveSolo },
+      },
+    );
   // The seed is solo's own, dealt as it always was: `#seed` is the room's (fixedSeed).
   const plan = dealPlan(session.match, [0], 0, false, () => seed);
   // The room's own host (POK-330 #42), on a link with nobody at the other end. Dealt now,
@@ -2055,16 +2024,34 @@ function wireRoom(
   const WIN_GRACE_MAX_MS = 60_000;
   const PARADE_POLL_MS = 500;
   const gBrMatch = symbols?.get('gBrMatch');
-  /** The results panel, drawn from the match's books over the room's roster. */
+  /** Won, the results wait for our own Hall of Fame (POK-320): the grace starts after it. */
+  const paraded = new ParadeHold({
+    done: () => gBrMatch !== undefined && emu.read(gBrMatch, 8) === BR_PHASE_DONE,
+    graceMs: END_GRACE_MS,
+    onParaded: () => drawResults(),
+  });
+  /** The career line the match produced, for the results. */
+  let career = '';
+  /** The results, drawn from the match's books over the room's roster. */
   const drawResults = (): void => {
     if (!bridge) return;
-    renderResults(bridge.seat, bridge.roster, {
-      results: session.results,
-      record: session.record,
-      parties: session.parties,
-      fieldSize: session.fieldSize,
-      seed: match.seed,
-    });
+    const seat = bridge.seat;
+    renderResults(
+      seat,
+      bridge.roster,
+      {
+        results: session.results,
+        record: session.record,
+        parties: session.parties,
+        fieldSize: session.fieldSize,
+        seed: match.seed,
+      },
+      {
+        career,
+        held: gBrMatch !== undefined && session.results.forSeat(seat, performance.now()).winner === seat && !paraded.paraded,
+        again: { label: 'PLAY AGAIN', id: 'play-again', disabled: returning, onPress: () => void returnToRoom() },
+      },
+    );
   };
   /** The match's books (match/session.ts). Everything that decides a placement crosses
    *  this page one way or the other -- our own ROM's messages on the way up, everybody
@@ -2085,7 +2072,7 @@ function wireRoom(
         graceMs: END_GRACE_MS,
         winMaxMs: WIN_GRACE_MAX_MS,
         pollMs: PARADE_POLL_MS,
-        paradeDone: gBrMatch !== undefined ? () => emu.read(gBrMatch, 8) === BR_PHASE_DONE : undefined,
+        paradeDone: gBrMatch !== undefined ? paraded.finished : undefined,
       }),
       // Back to the room, not out of it: the host did not even have a LEAVE button, and
       // keeping the room makes the next match a press of START rather than eight people
@@ -2095,7 +2082,7 @@ function wireRoom(
     {
       started: hideRoomScreen,
       decided: (line) => {
-        ($('#results-career') as HTMLElement).textContent = line;
+        career = line;
         drawResults();
       },
       partyLate: drawResults,
@@ -2364,7 +2351,6 @@ function wireRoom(
   // that is what migration is for -- so this is offered to guests only.
   const matchLeave = $('#match-leave') as HTMLButtonElement;
   matchLeave.addEventListener('click', () => backToLobby());
-  const playAgainButton = $('#play-again') as HTMLButtonElement;
 
   /** Out of the match and back into the room: the ROM starts over, the results panel
    *  comes down, and the room -- socket, roster, code -- is exactly as it was. This is
@@ -2384,6 +2370,7 @@ function wireRoom(
   const resetMatch = (): void => {
     session.endMatch();
     countdown.cancel();
+    paraded.reset();
     if (bridge) {
       bridge.endMatch(); // its roster, and what it owed the room of this match
       if (controls.roster) bridge.roster.applyRoster(controls.roster);
@@ -2392,7 +2379,7 @@ function wireRoom(
   async function returnToRoom(): Promise<void> {
     if (returning) return;
     returning = true;
-    playAgainButton.disabled = true;
+    drawResults(); // PLAY AGAIN greys out while it is on its way
     try {
       session.grace.cancel();
       teardownHost();
@@ -2416,7 +2403,6 @@ function wireRoom(
       session.forgetResult();
       // Whoever we were watching is not in a match any more.
       for (const m of spectate.follow(null)) bridge?.pushToRom(m);
-      ($('#results-panel') as HTMLElement).hidden = true;
       setInMatch(false);
       showRoomScreen();
       if (bridge) {
@@ -2437,10 +2423,8 @@ function wireRoom(
       }
     } finally {
       returning = false;
-      playAgainButton.disabled = false;
     }
   }
-  playAgainButton.addEventListener('click', () => void returnToRoom());
 
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code, ev.id));
   relay.on('room_joined', (ev) => attach(ev.id, ev.code, ev.host));
