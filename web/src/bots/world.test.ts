@@ -696,6 +696,27 @@ describe('what a trainer can walk to without leaving the map', () => {
       expect(new Set(south.map((s) => s.map))).toEqual(new Set(['MAP_PETALBURG_CITY']));
     });
 
+    it('goes the long way round when that is the way: Route 115 south to Oldale by Meteor Falls', () => {
+      // 203 regions settled: a cap of 200 found nothing, and the bot drifted (POK-331 #27 review).
+      const over = hoenn.firstCrossing({ map: 'MAP_ROUTE115', x: 25, y: 40 }, 'MAP_OLDALE_TOWN', false, true)!;
+      expect(new Set(over.map((s) => s.map))).toEqual(new Set(['MAP_METEOR_FALLS_1F_1R']));
+    });
+
+    it('has a crossing from every drop map to every other, with the kit a bot carries', () => {
+      // On foot, CUT always on (brain.ts canCut). The drop cells are the ones landing-reach
+      // left live, all one component, so each pair has a way; a cap on the search lost seven.
+      const firsts = new Map<string, Spot>();
+      for (const c of LANDING) if (!firsts.has(c.map)) firsts.set(c.map, c);
+      const lost: string[] = [];
+      for (const from of firsts.values()) {
+        for (const goal of firsts.keys()) {
+          if (goal !== from.map && !hoenn.firstCrossing(from, goal, false, true)) lost.push(`${from.map} -> ${goal}`);
+        }
+      }
+      expect(firsts.size).toBeGreaterThan(20);
+      expect(lost).toEqual([]);
+    });
+
 
     it('keeps the north half, the woods and Rustboro apart from the beach and Petalburg', () => {
       const north = hoenn.reachOnMap(r104(10, 29));

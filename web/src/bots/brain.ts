@@ -1204,7 +1204,7 @@ export class Bots {
     // plan's next map when this side of the water can get to it, and the way round when
     // it cannot -- Route 104's north half to Petalburg is through the wood. It is not paid
     // for out of the node budget: each region is flooded once for the tab, and the search
-    // over them settles a few dozen.
+    // over them settles a few dozen -- a couple of hundred at the most, the long way round.
     const tried = new Set<string>();
     for (const goal of goals.slice(0, GOAL_TRIES)) {
       // Where the crossing comes out, not the edge or door it starts from, so the route

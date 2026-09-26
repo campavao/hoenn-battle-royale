@@ -87,11 +87,6 @@ interface Regions {
   level: Map<number, number>;
 }
 
-/** How many regions a crossing's search may settle before it gives up. Two hundred is
- *  most of the way across Hoenn: the search follows the map-level plan and only strays
- *  from it where the plan's crossing is on the far side of something. */
-const REGION_LIMIT = 200;
-
 /** The exporter's cell classes. 0 is plain ground, 7 tall grass, 8 a door or warp
  *  tile -- all real tiles a trainer stands on. 3..6 are the four ledge directions,
  *  which can be stood on and only jumped one way. 1 and 2 are wall and water. */
@@ -939,14 +934,21 @@ export class World {
    *  The map-level plan, region by region: an A* whose steps are crossings and whose
    *  estimate is the plan's hop count -- never more than the crossings really needed, so
    *  the way found is a shortest one. Where the plan's crossing is on this side of the
-   *  water it is the plan; where it is not, this goes round. */
+   *  water it is the plan; where it is not, this goes round.
+   *
+   *  No limit by default (POK-331 #27 review). It had one of 200 regions, and the way
+   *  round can be most of Hoenn: Route 115's south shore to Oldale with CUT goes by
+   *  Meteor Falls and settles 203, so seven pairs of drop maps had no crossing and those
+   *  bots drifted. A trainer can reach about 265 regions on foot and 525 with SURF, each
+   *  flooded once for the tab, so the whole of it is a few dozen ms once and under one
+   *  after. */
   firstCrossing(
     from: Spot,
     goal: string,
     surf = false,
     cut = false,
     arrive?: (reach: Reach) => boolean,
-    limit = REGION_LIMIT,
+    limit = Infinity,
   ): Spot[] | undefined {
     const start = this.key(from);
     const goalMap = this.numbers.get(goal);
