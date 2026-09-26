@@ -57,6 +57,14 @@ def changed(ref, only):
     return pairs
 
 
+def same_but_eol(ref, rel):
+    """A Windows checkout's CRLF, seen by a git that does not convert (MSYS2's), is not
+    a change. The sources are eol=lf (.gitattributes), so this only meets the rest."""
+    ours = open(os.path.join(ROOT, rel), 'rb').read().replace(b'\r\n', b'\n')
+    pret = git('cat-file', 'blob', '%s:%s' % (ref, rel)).replace(b'\r\n', b'\n')
+    return ours == pret
+
+
 def pret_view(text, is_c):
     """(line number, line) for each line a `make BR=0` preprocessor would see as pret's."""
     directive = guards.C_DIRECTIVE if is_c else guards.ASM_DIRECTIVE
@@ -133,8 +141,11 @@ def main(argv):
             files.append(a)
     if ref is None:
         ref = open(os.path.join(HERE, 'BASELINE_COMMIT')).read().strip()
+    # `-t`, not `-e <ref>^{commit}`: an MSYS2 git started from a native python expands
+    # the braces in its arguments, and then no commit is ever found.
     try:
-        git('cat-file', '-e', ref + '^{commit}')
+        if git('cat-file', '-t', ref).strip() != b'commit':
+            raise subprocess.CalledProcessError(1, 'git cat-file')
     except subprocess.CalledProcessError:
         print('pret-intact: no commit %s here; fetch it first: git fetch --depth=1 origin %s'
               % (ref, ref))
@@ -150,7 +161,7 @@ def main(argv):
             bad += 1
             continue
         if not rel.endswith(guards.C_EXT + guards.ASM_EXT):
-            if rel not in NOT_SOURCE:
+            if rel not in NOT_SOURCE and not same_but_eol(ref, rel):
                 print('%s: a pret file with no guard syntax differs; list it in NOT_SOURCE '
                       '(tools/br/pret-intact.py) with why, or restore it' % rel)
                 bad += 1
