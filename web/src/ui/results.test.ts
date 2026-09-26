@@ -67,7 +67,7 @@ describe("the champion's Hall of Fame comes first (POK-320)", () => {
     // The page's own wiring: EndGrace polls the hold as its paradeDone.
     let over = false;
     const drawn = vi.fn();
-    const hold = new ParadeHold({ done: () => over, graceMs: 4_000, onParaded: drawn, now: () => Date.now() });
+    const hold = new ParadeHold({ done: () => over, graceMs: 4_000, giveUpMs: 55_000, onParaded: drawn, now: () => Date.now() });
     const grace = new EndGrace({ graceMs: 4_000, winMaxMs: 60_000, pollMs: 500, paradeDone: hold.finished });
     const exit = vi.fn();
     grace.arm(exit, true);
@@ -89,7 +89,7 @@ describe("the champion's Hall of Fame comes first (POK-320)", () => {
   it('the next match waits for the next parade', () => {
     let over = true;
     let now = 0;
-    const hold = new ParadeHold({ done: () => over, graceMs: 1_000, onParaded: () => {}, now: () => now });
+    const hold = new ParadeHold({ done: () => over, graceMs: 1_000, giveUpMs: 55_000, onParaded: () => {}, now: () => now });
     expect(hold.finished()).toBe(false);
     now = 1_000;
     expect(hold.finished()).toBe(true);
@@ -97,5 +97,48 @@ describe("the champion's Hall of Fame comes first (POK-320)", () => {
     over = false;
     expect(hold.paraded).toBe(false);
     expect(hold.finished()).toBe(false);
+  });
+
+  it("a parade that never ends still shows its champion the results, for the grace, before the deadline's exit", () => {
+    // POK-320 review: the results waited on BR_PHASE_DONE alone, and EndGrace's deadline
+    // took the exit regardless -- a stuck parade's champion never saw a placement at all.
+    const drawn = vi.fn();
+    const giveUpMs = 60_000 - 4_000 - 2 * 500; // app.ts's: winMaxMs less a grace and two polls
+    const hold = new ParadeHold({ done: () => false, graceMs: 4_000, giveUpMs, onParaded: drawn, now: () => Date.now() });
+    const grace = new EndGrace({ graceMs: 4_000, winMaxMs: 60_000, pollMs: 500, paradeDone: hold.finished });
+    const exit = vi.fn();
+    grace.arm(exit, true);
+    vi.advanceTimersByTime(55_000);
+    expect(drawn, 'still waiting on the parade').not.toHaveBeenCalled();
+    expect(hold.holds(1, 1)).toBe(true);
+    vi.advanceTimersByTime(500);
+    expect(drawn, 'given up on: the results go up').toHaveBeenCalledTimes(1);
+    expect(hold.holds(1, 1)).toBe(false);
+    vi.advanceTimersByTime(3_500);
+    expect(exit, 'and are read for the grace').not.toHaveBeenCalled();
+    vi.advanceTimersByTime(500);
+    expect(exit).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(10_000);
+    expect(exit, 'one exit: the poll took it, and the deadline with it').toHaveBeenCalledTimes(1);
+    expect(drawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds only the champion's own results, only until the parade, and nothing on a build that cannot say", () => {
+    let over = false;
+    let now = 0;
+    const hold = new ParadeHold({ done: () => over, graceMs: 1_000, giveUpMs: 55_000, onParaded: () => {}, now: () => now });
+    expect(hold.holds(1, 1), 'our own win waits for our parade').toBe(true);
+    expect(hold.holds(2, 1), "somebody else's win is read at once").toBe(false);
+    expect(hold.holds(undefined, 1), 'so is a draw').toBe(false);
+    over = true;
+    now = 500;
+    hold.finished();
+    expect(hold.holds(1, 1), 'the parade is over').toBe(false);
+    hold.reset();
+    over = false;
+    expect(hold.holds(1, 1), "the next match's champion waits for the next one").toBe(true);
+    // No gBrMatch: the ROM cannot say when its parade is over, and nothing waits on it.
+    const blind = new ParadeHold({ graceMs: 1_000, giveUpMs: 55_000, onParaded: () => {} });
+    expect(blind.holds(1, 1)).toBe(false);
   });
 });

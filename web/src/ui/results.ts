@@ -83,15 +83,24 @@ export function fameOf(
 /** The champion's results wait for their Hall of Fame (BR_PHASE_DONE), then stay up for
  *  the grace everybody else gets. EndGrace polls `finished` as its paradeDone, so the one
  *  poll does both: the first time the parade is seen over, the results are drawn
- *  (`onParaded`); the exit comes `graceMs` after that. */
+ *  (`onParaded`); the exit comes `graceMs` after that. A parade that never ends is given
+ *  up on after `giveUpMs`, and the results go up anyway. */
 export class ParadeHold {
   private seenAt: number | null = null;
+  private waitingSince: number | null = null;
 
   constructor(
     private readonly opts: {
-      /** The ROM's parade is over. */
-      done(): boolean;
+      /** The ROM's parade is over. Undefined when the build cannot say (no gBrMatch), and
+       *  then nothing is held: the results go up at the `win`, as anybody's do. */
+      done?(): boolean;
       graceMs: number;
+      /** How long the parade is waited for, from the grace's first look: EndGrace's
+       *  winMaxMs less a grace and two polls, so the results are read for the grace and
+       *  the poll takes the exit just ahead of that deadline. The deadline takes it
+       *  regardless, and a stuck parade used to hold the results past it: its champion
+       *  never saw them at all (POK-320 review). */
+      giveUpMs: number;
       onParaded(): void;
       now?(): number;
     },
@@ -106,11 +115,18 @@ export class ParadeHold {
     return this.seenAt !== null;
   }
 
+  /** Whether `seat`'s results wait: its own win, with the parade still to be seen over.
+   *  The room and solo each asked this themselves, and nothing pinned either. */
+  holds(winner: number | undefined, seat: number): boolean {
+    return this.opts.done !== undefined && winner === seat && !this.paraded;
+  }
+
   /** For EndGrace: the parade over, and the results read for the grace since. */
   finished = (): boolean => {
     const now = this.now();
     if (this.seenAt === null) {
-      if (!this.opts.done()) return false;
+      this.waitingSince ??= now;
+      if (!this.opts.done?.() && now - this.waitingSince < this.opts.giveUpMs) return false;
       this.seenAt = now;
       this.opts.onParaded();
     }
@@ -120,6 +136,7 @@ export class ParadeHold {
   /** The next match's champion waits for the next parade. */
   reset(): void {
     this.seenAt = null;
+    this.waitingSince = null;
   }
 }
 

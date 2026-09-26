@@ -1617,8 +1617,9 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const matchBase = symbols?.get('gBrMatch');
   /** Won, the results wait for our own Hall of Fame (POK-320), and the grace runs after. */
   const paraded = new ParadeHold({
-    done: () => matchBase !== undefined && emu.read(matchBase, 8) === BR_PHASE_DONE,
+    done: matchBase !== undefined ? () => emu.read(matchBase, 8) === BR_PHASE_DONE : undefined,
     graceMs: SOLO_END_GRACE_MS,
+    giveUpMs: SOLO_WIN_GRACE_MAX_MS - SOLO_END_GRACE_MS - 2 * SOLO_PARADE_POLL_MS,
     onParaded: () => drawResults(),
   });
   const soloGrace = new EndGrace({
@@ -1685,7 +1686,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       },
       {
         career,
-        held: matchBase !== undefined && session.results.forSeat(0, performance.now()).winner === 0 && !paraded.paraded,
+        held: paraded.holds(session.results.forSeat(0, performance.now()).winner, 0),
         // No room to go back to: the lobby, now or when the grace is up.
         again: { label: 'LOBBY', id: 'results-lobby', onPress: leaveSolo },
       },
@@ -2209,8 +2210,9 @@ function wireRoom(
   const gBrMatch = symbols?.get('gBrMatch');
   /** Won, the results wait for our own Hall of Fame (POK-320): the grace starts after it. */
   const paraded = new ParadeHold({
-    done: () => gBrMatch !== undefined && emu.read(gBrMatch, 8) === BR_PHASE_DONE,
+    done: gBrMatch !== undefined ? () => emu.read(gBrMatch, 8) === BR_PHASE_DONE : undefined,
     graceMs: END_GRACE_MS,
+    giveUpMs: WIN_GRACE_MAX_MS - END_GRACE_MS - 2 * PARADE_POLL_MS,
     onParaded: () => drawResults(),
   });
   /** The career line the match produced, for the results. */
@@ -2232,7 +2234,7 @@ function wireRoom(
       },
       {
         career,
-        held: gBrMatch !== undefined && session.results.forSeat(seat, performance.now()).winner === seat && !paraded.paraded,
+        held: paraded.holds(session.results.forSeat(seat, performance.now()).winner, seat),
         again: { label: 'PLAY AGAIN', id: 'play-again', disabled: returning, onPress: () => void returnToRoom() },
       },
     );
