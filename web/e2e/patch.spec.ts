@@ -31,6 +31,9 @@ test('a stock Emerald ROM is patched in the browser and boots battle royale', as
 
   await page.goto('/#solo');
   await expect(page.locator('#screen-importing')).toBeVisible();
+  // The import screen is drawn in Emerald's frame (POK-320); its PICK ROM opens the
+  // page's own file input, which is where the file goes.
+  await expect(page.locator('#pick-rom')).toBeVisible({ timeout: 30_000 });
   await page.setInputFiles('#rom-input', baseRom);
 
   // The version line is the patcher's own verdict: `unpatched` means it gave up and

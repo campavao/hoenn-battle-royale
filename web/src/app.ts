@@ -42,10 +42,12 @@ import { Stage, type DrawnScreen } from './ui/stage';
 import { ParadeHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
 import { FrameMeter } from './ui/fps';
 import { stageKey } from './ui/roomkeys';
+import { TEXT_RED } from './ui/emerald';
 import {
   cycleWatch,
   menuScreen,
   noticeScreen,
+  type ButtonSpec,
   roomScreen,
   sheetScreen,
   wardrobeScreen,
@@ -157,9 +159,10 @@ const $ = <T extends Element>(sel: string): T => {
 type Screen = 'importing' | 'patching' | 'lobby' | 'playing';
 const SCREENS: Screen[] = ['importing', 'patching', 'lobby', 'playing'];
 
+/** Which of the page's own sections holds the layout: everything outside the game is
+ *  drawn on the stage over them (POK-320), so this is the game's box and little else. */
 function showScreen(screen: Screen): void {
   for (const s of SCREENS) $(`#screen-${s}`).toggleAttribute('hidden', s !== screen);
-  // On the playing screen the header's job moves into the drawer (index.html).
   document.body.classList.toggle('playing', screen === 'playing');
 }
 
@@ -332,17 +335,56 @@ let roomsRefused: string | null = null;
 /** Said instead of joining a room, with the one way out: a reload. */
 function refuseRoom(why: string): void {
   showScreen('patching');
-  ($('#patch-status') as HTMLElement).textContent = 'Online play is off in this tab.';
-  const banner = $('#patch-banner') as HTMLElement;
-  banner.textContent =
+  sayPatch(
+    'Online play is off in this tab.',
     `It could not get the current release (${why}), and everybody in a room has to run`
-    + ' the same build. Reload to try again -- SOLO VS BOTS still works.';
-  banner.hidden = false;
-  const reload = document.createElement('button');
-  reload.type = 'button';
-  reload.textContent = 'RELOAD';
-  reload.addEventListener('click', () => backToLobby());
-  banner.after(reload);
+      + ' the same build. Reload to try again -- SOLO VS BOTS still works.',
+    [{ label: 'RELOAD', id: 'patch-reload', onPress: () => backToLobby() }],
+  );
+}
+
+// ---- the screens before the game, drawn (POK-320) -------------------------------------
+
+/** What the patch screen says: what the patcher is doing, a banner when something is
+ *  off, and a way on when there is one to offer. */
+const patchView: { status: string; banner: string; buttons: ButtonSpec[] } = { status: '', banner: '', buttons: [] };
+let patchScreenView: DrawnScreen | null = null;
+
+function patchScreen(): DrawnScreen {
+  patchScreenView ??= noticeScreen(() => ({
+    title: 'HOENN BATTLE ROYALE',
+    // The ids the page always had: the patcher's verdict is what patch.spec reads.
+    lines: [
+      { text: patchView.status, id: 'patch-status' },
+      { text: patchView.banner, id: 'patch-banner', color: TEXT_RED },
+    ],
+    buttons: patchView.buttons,
+    footer: versionLine,
+  }));
+  return patchScreenView;
+}
+
+/** The patch screen, saying `status` -- and `banner` and `buttons` when given. It is also
+ *  the screen the page boots on, until it knows whether a ROM is stored. */
+function sayPatch(status: string, banner?: string, buttons?: ButtonSpec[]): void {
+  patchView.status = status;
+  if (banner !== undefined) patchView.banner = banner;
+  if (buttons !== undefined) patchView.buttons = buttons;
+  const st = theStage();
+  if (st.current !== patchScreen()) st.show(patchScreen());
+  else st.redraw();
+}
+
+/** Why the page could not start, in the frame, with a RELOAD. */
+function showFailure(message: string): void {
+  theStage().show(
+    noticeScreen(() => ({
+      title: 'HOENN BATTLE ROYALE',
+      lines: [{ text: `Startup failed: ${message}`, id: 'import-error', color: TEXT_RED }],
+      buttons: [{ label: 'RELOAD', id: 'failure-reload', onPress: () => location.reload() }],
+      footer: versionLine,
+    })),
+  );
 }
 
 // ---- BPS patching, off the main thread ---------------------------------------------
@@ -375,17 +417,36 @@ async function runImportScreen(emu: Emulator): Promise<void> {
 
   showScreen('importing');
   const input = $('#rom-input') as HTMLInputElement;
-  const dropzone = $('#dropzone') as HTMLElement;
-  const errorEl = $('#import-error') as HTMLElement;
+  /** Why the last file was not one: said under the question, in red. */
+  let error = '';
+  // Drawn in Emerald's frame (POK-320): PICK ROM opens the page's own file input, and a
+  // file dropped anywhere on the page is taken as well.
+  theStage().show(
+    noticeScreen(() => ({
+      title: 'HOENN BATTLE ROYALE',
+      lines: [
+        { text: 'Pick your own POKEMON EMERALD (U) ROM, 16 MiB, or drop it on this page.' },
+        { text: 'It stays on this device, in this browser. Nothing is uploaded.' },
+        { text: error, id: 'import-error', color: TEXT_RED },
+      ],
+      buttons: [{ label: 'PICK ROM', id: 'pick-rom', onPress: () => input.click() }],
+      // Where a file can be dropped: the whole page.
+      containers: [{ id: 'dropzone', cls: 'dropzone' }],
+      footer: versionLine,
+    })),
+  );
+  const dragover = (e: DragEvent) => e.preventDefault();
+  let drop: ((e: DragEvent) => void) | null = null;
 
   const bytes = await new Promise<Uint8Array>((resolve) => {
     const showError = (reason: string) => {
-      errorEl.textContent = reason;
-      errorEl.hidden = false;
+      error = reason;
+      stage?.redraw();
     };
 
     const handle = async (file: File) => {
-      errorEl.hidden = true;
+      error = '';
+      stage?.redraw();
       const fileBytes = new Uint8Array(await file.arrayBuffer());
       if (import.meta.env.DEV && isPrePatched(fileBytes)) {
         resolve(fileBytes); // a local build: dev runs it without a patch
@@ -393,7 +454,7 @@ async function runImportScreen(emu: Emulator): Promise<void> {
       }
       const result = await checkEmerald(fileBytes);
       if (!result.ok) {
-        showError(result.reason ?? 'not a Pokémon Emerald (U) ROM, 16 MiB');
+        showError(result.reason ?? 'not a Pokemon Emerald (U) ROM, 16 MiB');
         return;
       }
       resolve(fileBytes);
@@ -407,8 +468,9 @@ async function runImportScreen(emu: Emulator): Promise<void> {
     // nothing would ever read it.
     //
     // `#screen-importing` is the page's default screen -- it carries no `hidden` in
-    // index.html -- so the dropzone and the file picker are live from the first paint,
-    // while this listener is not attached until runImportScreen runs, which is after
+    // index.html -- so the file input is live from the first paint (a test's
+    // setInputFiles reaches it there), while this listener is not attached until
+    // runImportScreen runs, which is after
     // `await Emulator.create()`: five pthread workers and a 1.8 MB wasm core. Over a slow
     // connection that is seconds, and a change event fired in the gap lands on nothing.
     // The file is silently never read and the shell waits for ever, which looks exactly
@@ -423,14 +485,18 @@ async function runImportScreen(emu: Emulator): Promise<void> {
         .then(async (r) => handle(new File([await r.arrayBuffer()], 'dev.gba')))
         .catch((e) => showError(`dev ROM: ${String(e)}`));
     }
-    dropzone.addEventListener('dragover', (e) => e.preventDefault());
-    dropzone.addEventListener('drop', (e) => {
+    drop = (e: DragEvent) => {
       e.preventDefault();
       const file = e.dataTransfer?.files[0];
       if (file) void handle(file);
-    });
+    };
+    addEventListener('dragover', dragover);
+    addEventListener('drop', drop);
   });
+  removeEventListener('dragover', dragover);
+  if (drop) removeEventListener('drop', drop);
 
+  sayPatch('Storing the ROM…');
   await emu.importRom(bytes);
 }
 
@@ -471,10 +537,7 @@ async function fetchLocalBuild(): Promise<Uint8Array | null> {
 
 async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   showScreen('patching');
-  const statusEl = $('#patch-status') as HTMLElement;
-  const bannerEl = $('#patch-banner') as HTMLElement;
-
-  statusEl.textContent = 'Checking for a release…';
+  sayPatch('Checking for a release…', '');
   const stored = emu.readRom();
   if (import.meta.env.DEV && isPrePatched(stored)) {
     const side = await loadSidecars();
@@ -487,19 +550,20 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
     let bytes = stored;
     let running = await sha1Hex(stored);
     if (side.info.romSha1 && running !== side.info.romSha1) {
-      statusEl.textContent = 'Your stored ROM is an older build -- fetching this one…';
+      sayPatch('Your stored ROM is an older build -- fetching this one…');
       const fresh = await fetchLocalBuild();
       if (fresh) {
         bytes = fresh;
         running = await sha1Hex(fresh);
         await emu.importRom(fresh); // so the next reload starts here rather than fetching again
       } else {
-        bannerEl.textContent =
+        sayPatch(
+          patchView.status,
           'The ROM stored in this browser is NOT the build in this repo, and'
-          + ' patch/pokeemerald.gba is not being served -- run tools/br/dev-patch.sh.'
-          + ' Nothing built since that ROM is in this tab. Forget stored ROM and import'
-          + ' pokeemerald.gba from the repo root.';
-        bannerEl.hidden = false;
+            + ' patch/pokeemerald.gba is not being served -- run tools/br/dev-patch.sh.'
+            + ' Nothing built since that ROM is in this tab. Forget stored ROM and import'
+            + ' pokeemerald.gba from the repo root.',
+        );
       }
     }
     setVersionLine(`${versionText(side.info)} · local build · ${buildLine(side.info, running)}`);
@@ -517,33 +581,47 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   let release: CheckedRelease;
   try {
     release = await loadCheckedRelease((patch) => {
-      statusEl.textContent = 'Applying the patch…';
+      sayPatch('Applying the patch…');
       return applyPatchInWorker(emu.readRom(), patch);
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    statusEl.textContent = `Patch failed: ${message}`;
+    sayPatch(`Patch failed: ${message}`);
     throw err;
   }
 
   if (release.status === 'unpublished') {
     setVersionLine('unpatched');
-    statusEl.textContent = 'No patch published yet -- starting the unpatched ROM.';
     // A stock ROM on the dev server boots into vanilla Emerald -- NEW GAME, the real
     // intro, no battle royale -- and the only clue was one word in the corner. Say
-    // what to do about it instead.
-    bannerEl.textContent = import.meta.env.DEV
-      ? 'This is a stock ROM and the dev server has no BPS to apply, so nothing here is'
-        + ' battle royale. Forget stored ROM, then import the build this repo just made:'
-        + ' pokeemerald.gba in the repo root.'
-      : `Running the unpatched ROM (${release.reason}). Battle royale features are not active.`;
-    bannerEl.hidden = false;
+    // what to do about it instead, and wait for the player to have read it: the banner
+    // used to go by with the screen it was on.
+    await new Promise<void>((go) =>
+      sayPatch(
+        'No patch published yet -- the ROM would start unpatched.',
+        import.meta.env.DEV
+          ? 'This is a stock ROM and the dev server has no BPS to apply, so nothing here is'
+            + ' battle royale. Forget stored ROM, then import the build this repo just made:'
+            + ' pokeemerald.gba in the repo root.'
+          : `Running the unpatched ROM (${release.reason}). Battle royale features are not active.`,
+        [
+          { label: 'PLAY ANYWAY', id: 'patch-play', onPress: () => go() },
+          {
+            label: 'FORGET ROM',
+            id: 'patch-forget',
+            onPress: () => void emu.forgetRom().then(() => location.reload()),
+          },
+        ],
+      ),
+    );
+    sayPatch('Starting the unpatched ROM…', '', []);
     return { bytes: emu.readRom(), usingPatched: false };
   }
 
   // The same line the local-build path gets: which ROM is in the tab, in seven
   // characters. This is the path a stock ROM takes, and it is just as able to be
   // running something other than the build everyone is talking about.
+  sayPatch('Starting the game…');
   const running = await sha1Hex(release.rom);
   setVersionLine(`${versionText(release.info)} · ${buildLine(release.info, running)}`);
   roomsRefused = release.stale;
@@ -3185,6 +3263,8 @@ async function main(): Promise<void> {
   registerServiceWorker();
   void askToKeepStorage();
   setVersionLine('—');
+  // The page's first screen, drawn, while the core loads (POK-320).
+  sayPatch('Loading…');
   const canvas = $('#canvas') as HTMLCanvasElement;
   const emu = await Emulator.create(canvas);
   // The picture past the LCD (POK-319, field.ts): the core draws a band around the
@@ -3280,6 +3360,8 @@ async function main(): Promise<void> {
   showScreen('playing');
   if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols);
   else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch);
+  // An unpatched ROM has no room and no sheet: the game, and nothing over it.
+  if (mailboxBase === undefined) theStage().hide();
 }
 
 main().catch((err) => {
@@ -3287,7 +3369,5 @@ main().catch((err) => {
   const message = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
   console.error('shell startup failed', err);
   showScreen('importing');
-  const el = $('#import-error') as HTMLElement;
-  el.textContent = `Startup failed: ${message}`;
-  el.hidden = false;
+  showFailure(message);
 });

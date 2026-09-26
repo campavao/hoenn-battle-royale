@@ -21,15 +21,12 @@
       }
       #app { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
-      header {
-        padding: 8px calc(16px + env(safe-area-inset-right)) 8px calc(16px + env(safe-area-inset-left));
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        gap: 12px;
+      /* Read by a screen reader and a test, drawn by the stage: the version line is on
+         the drawn screens' last line (POK-320). */
+      .sr-only {
+        position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+        overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
       }
-      header h1 { font-size: 15px; margin: 0; }
-      .version { font-variant-numeric: tabular-nums; color: #9fb3c0; font-size: 12px; white-space: nowrap; }
 
       .screen {
         flex: 1;
@@ -39,12 +36,6 @@
         padding: 0 calc(16px + env(safe-area-inset-right)) 16px calc(16px + env(safe-area-inset-left));
       }
       .screen[hidden] { display: none; }
-      .screen p { margin: 8px 0; }
-
-      .dropzone { border: 2px dashed #33424c; border-radius: 12px; padding: 28px 16px; text-align: center; color: #9fb3c0; }
-      .dropzone input { display: block; margin: 0 auto 8px; }
-      .error { color: #ff8a80; }
-      .banner { background: #33424c; border-radius: 8px; padding: 8px 12px; color: #ffe08a; }
 
       #screen-playing { padding: 0; align-items: center; position: relative; }
       #stage {
@@ -184,7 +175,6 @@
         #pad .sys { grid-column: 1 / -1; grid-row: 3; }
         /* Sideways the pad is in the grid's side columns, not over the field. */
         body.in-match #pad { position: static; }
-        header h1 { font-size: 15px; }
       }
 
       /* A computer is not a phone (POK-253). With a keyboard and a mouse the touch
@@ -210,34 +200,22 @@
         place-items: center; touch-action: manipulation;
       }
       body.in-match .menu-btn { display: grid; }
-      /* The header is not a player's on the playing screen. Every screen before it keeps it. */
-      body.playing header { display: none; }
       button, input { font: inherit; }
     </style>
   </head>
   <body>
     <div id="app">
-      <header>
-        <h1>Hoenn Battle Royale</h1>
-        <div id="version" class="version">—</div>
-      </header>
+      <p id="version" class="sr-only">—</p>
 
+      <!-- The screens before the game are drawn on #stage (web/src/ui, POK-320): these
+           sections only keep the page's own layout while they are up. The file input is
+           the one real control, live from the first paint; the drawn PICK ROM opens it. -->
       <section id="screen-importing" class="screen">
-        <p>Pick your own <b>Pokémon Emerald (U)</b> ROM, 16 MiB. It stays on this device (IndexedDB); nothing is uploaded.</p>
-        <div id="dropzone" class="dropzone">
-          <input id="rom-input" type="file" accept=".gba" />
-          <p>or drop the file here</p>
-        </div>
-        <p id="import-error" class="error" hidden></p>
+        <input id="rom-input" class="sr-only" type="file" accept=".gba" aria-label="Pokemon Emerald (U) ROM" />
       </section>
 
-      <section id="screen-patching" class="screen" hidden>
-        <p id="patch-status">Loading release…</p>
-        <p id="patch-banner" class="banner" hidden></p>
-      </section>
+      <section id="screen-patching" class="screen" hidden></section>
 
-      <!-- The lobby is drawn on #stage (web/src/ui, POK-320); this section only keeps
-           the page's own layout while it is up. -->
       <section id="screen-lobby" class="screen" hidden></section>
 
       <section id="screen-playing" class="screen" hidden>
