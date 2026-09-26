@@ -1,13 +1,12 @@
-# gym-out: the fog takes the last HP right after a gym trainer is beaten (POK-328's
-# hypothesis: Cam's black screen with corrupted music in the Mossdeep gym). Beat
-# PRESTON, then put the map outside a tiny ring with the party at 1 HP and the bleed a
-# second away, and photograph what the ROM does with the OUT inside a gym. Cam's
-# 2026-09-18 phone play-test: "battled a trainer in the Mossdeep gym, beat him, and then
-# just got hit with this black screen; the music corrupted and I couldn't get out."
+# gym-out: the fog's OUT inside a building, right after a gym trainer is beaten. It is
+# not POK-328's repro -- Cam's black screen with corrupted music in the Mossdeep gym, from
+# the 2026-09-18 phone play-test, has not been reproduced -- but it pins the ticket's
+# working hypothesis: the fog took the last HP on the way out of the fight.
 #
 # PRESTON stands at (1,30) in Mossdeep Gym (14:0) facing down with sight 1; booting at
 # (1,31) puts us in front of him and he walks up on his own (A does not start a fight).
-# The win is forced the way gym-boss.txt does it; then the map must come back.
+# The win is forced the way gym-boss.txt does it. Then the map goes outside a one-section
+# ring with the whole party at 1 HP and the bleed a second away.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 0E 00 01 00 1F 00 BD BB C7 FF
 wait 400
@@ -70,28 +69,39 @@ shot won
 tap B
 wait 70
 shot after-1
+# Both of the boot's mons at 1 HP. The first version poked the lead's alone, the second
+# soaked the bleed, and the OUT this driver was written for never happened.
 say fog-in-the-gym
+expect u8 gPlayerPartyCount 2
+poke u16 gPlayerParty+0x56 1
+poke u16 gPlayerParty+0xBA 1
 poke u8 gBrRing 1
 poke u8 gBrRing+2 0
 poke u8 gBrRing+3 0
 poke u8 gBrRing+4 1
 poke u16 gBrRing+8 30
-poke u16 gPlayerParty+0x56 1
-wait 45
-shot bleed
-say ring
-dump gBrRing 16
-wait 120
+wait 60
 shot out-1
-say ring-later
-dump gBrRing 16
-say callback2
-dump gMain+4 4
-wait 240
+# OUT, inside the gym: the match phase (BR_PHASE_OUT), the fog's own flag, and the map
+# has not moved.
+expect u8 gBrMatch 3
+expect u8 gBrRing+7 1
+expect u8 *gSaveBlock1Ptr+4 14
+expect u8 *gSaveBlock1Ptr+5 0
+# ...and the ROM goes on running: its heartbeat, gBrMailbox.frame (one a main-loop pass,
+# what the page watches), counts the next 300 frames. Zeroed first, so the count is this
+# stretch's alone; nothing in the ROM reads it.
+poke u32 gBrMailbox+0x10 0
+wait 300
+expectge u32 gBrMailbox+0x10 290
+expectle u32 gBrMailbox+0x10 300
 shot out-2
 tap A
 wait 120
+tap A
+wait 120
 shot out-3
-say callback2-later
-dump gMain+4 4
-say ok
+expect u8 gBrMatch 3
+expect u8 *gSaveBlock1Ptr+4 14
+expectge u32 gBrMailbox+0x10 520
+say gym out ok
