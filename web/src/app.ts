@@ -59,7 +59,7 @@ import {
 import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
 import { TouchLayer } from './touch';
-import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, pollPads, stickKeys, type AxisSense, type StickMap } from './pad';
+import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, stickKeys, type AxisSense, type StickMap } from './pad';
 import { BAND, FieldView } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
@@ -638,8 +638,20 @@ function wireGamepad(emu: Emulator): () => void {
     if (padLine) padLine.textContent = KEY_LEGEND;
     padLine = null;
   };
-  // Only while a pad is connected (POK-247): pad.ts pollPads.
-  return pollPads(poll, note, gone, { win: window, pads: () => navigator.getGamepads() });
+  // From load to unload, pad or no pad (POK-247): it is the page's only timer under
+  // 32 ms, and on Windows Chromium keeps 1 ms timer resolution only while one exists.
+  // The core's pthread paces its frames with timed waits, so without it they land on
+  // the OS's 15.6 ms tick: frame p95 31/26/30.5/25.5 ms against 24/18.5/24/19 with it,
+  // alternating 20 s windows of one match. Polling only while a pad was connected
+  // saved a phone 60 no-op wakeups a second next to its ~170 others.
+  const id = setInterval(poll, 16);
+  addEventListener('gamepadconnected', note);
+  addEventListener('gamepaddisconnected', gone);
+  return () => {
+    clearInterval(id);
+    removeEventListener('gamepadconnected', note);
+    removeEventListener('gamepaddisconnected', gone);
+  };
 }
 
 /** The remap wizard: one prompt per key, bind by pressing the button you want. Six
