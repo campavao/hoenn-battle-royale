@@ -3,8 +3,9 @@
 // is where a match once ended in complete silence -- no results, no way out but the URL.
 //
 // This plays a whole solo match at the dev pace, pressing nothing, and asserts the page
-// draws the result and then takes the player back to the lobby by itself. Solo ignores
-// `#seed` (it deals a fresh one every match), so the seed is only checked for being there.
+// draws the result and then takes the player back to the lobby by itself. With no `#seed`
+// solo deals a fresh one every match, so the seed is only checked for being there
+// (play.spec.ts pins one, POK-327).
 import { test, expect } from '@playwright/test';
 import { romExists, romHashParam, romPath } from './symbols';
 

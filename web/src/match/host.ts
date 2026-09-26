@@ -13,7 +13,7 @@ import type { BotsOptions } from '../bots/brain';
 import { voiceFor, type BotVoice } from '../bots/lines';
 import { romCell } from '../bots/space';
 import { MAP_OFFSET, toRomCells } from '../net/cells';
-import type { Lines, Msg, TickerMsg } from '../net/wire';
+import type { Lines, MapRef, Msg, TickerMsg } from '../net/wire';
 import { Director, type DirectorOptions, type DirectorWorld } from './director';
 import { catchUp, departedSeats, lootOwed, type DealPlan } from './lifecycle';
 import { clockLeftAt } from './room';
@@ -80,6 +80,9 @@ export interface HostOptions {
   /** The director's HUD pump; hands back its disposer. */
   startLoop(director: Director): () => void;
   now?(): number;
+  /** Where our own seat's drop lands, whatever it picked: the dev hash's `#land`, so a
+   *  test can be put in front of a known trainer (POK-327). Never the room's seats. */
+  land?: { map: MapRef; x: number; y: number };
 }
 
 type Departures = { rejoinMs: number; isHost(): boolean; stillHere(seat: number): boolean };
@@ -96,6 +99,7 @@ export class HostRole {
   private readonly narration: { mine(): BotVoice };
   private readonly startLoop: (director: Director) => () => void;
   private readonly now: () => number;
+  private readonly ownLand: HostOptions['land'];
   private readonly seen = new Set<number>(); // seats already announced out, so a repeat is quiet
   /** The director's own elimination handler, for `out`s this page makes itself. */
   private localOut: ((seat: number) => void) | null = null;
@@ -132,6 +136,7 @@ export class HostRole {
     this.narration = opts.narration;
     this.startLoop = opts.startLoop;
     this.now = opts.now ?? (() => performance.now());
+    this.ownLand = opts.land;
     const seed = this.seed;
     // Everybody in the room now was dealt in, or on a takeover has been hearing the match
     // all along: only somebody who arrives, or comes back, needs catching up.
@@ -265,7 +270,7 @@ export class HostRole {
   hear(msg: Msg, via: 'rom' | { from: number }): void {
     if (via === 'rom') {
       // Our own ROM's pick never comes back over the relay either.
-      if (msg.t === 'pick') this.link.pushToRom({ t: 'land', ...this.director.landFor(msg.seat, msg.section) });
+      if (msg.t === 'pick') this.link.pushToRom({ t: 'land', ...this.landFor(msg.seat, msg.section) });
       // Our own ROM saying we are out. Nobody hears their own messages come back over
       // the relay, so without this the director never counts this client's own
       // elimination and the match it is running cannot reach a winner.
@@ -278,7 +283,7 @@ export class HostRole {
     // inside it that nobody else has. Only the host answers -- everyone hears the
     // `pick`, and two answers would put two trainers on two different tiles.
     if (msg.t === 'pick') {
-      const land = this.director.landFor(msg.seat, msg.section);
+      const land = this.landFor(msg.seat, msg.section);
       if (msg.seat === this.link.seat) this.link.pushToRom({ t: 'land', ...land });
       else this.link.toSeat(msg.seat, { t: 'land', ...land });
     }
@@ -294,6 +299,13 @@ export class HostRole {
     } else if (msg.t === 'out') {
       this.bots.bots.remove(msg.seat); // a bot that is out stops being walked around
     }
+  }
+
+  /** The cell a pick is answered with: the director's deal, or for our own seat the
+   *  override the page was handed. */
+  private landFor(seat: number, section: number): { seat: number; map: MapRef; x: number; y: number } {
+    const own = seat === this.link.seat ? this.ownLand : undefined;
+    return own ? { seat, map: own.map, x: own.x, y: own.y } : this.director.landFor(seat, section);
   }
 
   /** Who is gone, off the relay's members: a timer each, and whoever is still gone when it

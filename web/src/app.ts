@@ -93,7 +93,7 @@ import {
   type MatchSnapshot,
 } from './match/lifecycle';
 import regionmapData from './data/regionmap.json';
-import { parseRoomHash as parseHash, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
+import { devLand, devPace, parseRoomHash as parseHash, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
 // Cast rather than re-declared: these three JSON files are the exporter's own output
@@ -1174,10 +1174,21 @@ function renderRoomPanel(
  *  what QUICK PLAY puts in the hash, so every quick-play game in dev ran at the dev
  *  pace: Cam's play-test had eight fog phases inside two minutes while the room's own
  *  control said FOG 120s, and there was no time to catch anything. Two meanings, one
- *  word, and the one that lost was the game. */
+ *  word, and the one that lost was the game. `#safari=N` and `#fog=N` set either one
+ *  (hash.ts's devPace). */
 function paceOptions(): { safariSecs?: number; fogSecs?: number } | undefined {
-  if (!import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('fast')) return undefined;
-  return { safariSecs: 25, fogSecs: 15 };
+  if (!import.meta.env.DEV) return undefined;
+  return devPace(location.hash);
+}
+
+/** `#land=MAP_ID,x,y`: our own drop lands on that cell, whatever section was picked
+ *  (POK-327: the play-a-match e2e meets the same route trainer every run). Dev only,
+ *  like `#seed`. */
+function landOverride(): { map: MapRef; x: number; y: number } | undefined {
+  if (!import.meta.env.DEV) return undefined;
+  const land = devLand(location.hash);
+  const map = land && HOENN.refOf(land.id);
+  return land && map ? { map, x: land.x, y: land.y } : undefined;
 }
 
 function botFill(): number {
@@ -1290,6 +1301,9 @@ const SOLO_END_GRACE_MS = 8_000;
  *  the map (include/br/br_match.h). The one byte the page reads out of the match struct:
  *  everything else it needs comes through the mailbox. */
 const BR_PHASE_DONE = 5;
+/** `gBrMatch.seed` (include/br/br_match.h): BR_BOOT_SAFARI deals the opening's cell off
+ *  it when it is not zero (BrMatch_SafariCell). */
+const MATCH_SEED = 8;
 
 /** The champion's own exit waits for their parade instead of a timer, and this is how
  *  long it waits before going anyway. Kanto's END_DEADLINE_SECONDS, the same idea. */
@@ -1482,7 +1496,7 @@ function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director:
 /** Solo play (no `#host`/`#join`): there is no room, so there is no Bridge either --
  *  just a RomPort into this ROM's own mailbox (net/romport.ts), and the room's own books
  *  and host (POK-330 #42) on a link with no room at the other end of it. */
-function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number> | undefined): void {
+function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number> | undefined, seed: number): void {
   // The relay cannot see this: no socket opens for solo play, ever (that is the whole
   // point of the mode). The count rides along on whatever real connection comes next
   // (POK-243, match/stats.ts) -- a local bump now, nothing that touches the network.
@@ -1501,7 +1515,6 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // does for itself anyway (nobody hears their own messages). A room of one: us, by the
   // name a room would know us by.
   const roster = soloRoster(careerName());
-  const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
   const matchBase = symbols?.get('gBrMatch');
   const soloGrace = new EndGrace({
     graceMs: SOLO_END_GRACE_MS,
@@ -1560,7 +1573,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       fieldSize: session.fieldSize,
       seed,
     });
-  // The seed is solo's own, dealt as it always was: `#seed` is the room's (fixedSeed).
+  // The seed main() wrote into the ROM before its boot, so the opening's cell is dealt off
+  // it too (POK-327).
   const plan = dealPlan(session.match, [0], 0, false, () => seed);
   // The room's own host (POK-330 #42), on a link with nobody at the other end. Dealt now,
   // so the bots walk from the start; the match itself waits for the frame gate below.
@@ -1582,6 +1596,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     // room with nobody in it, and its ticker says everything a room's does.
     narration: { mine: careerVoiceLines },
     startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director),
+    land: landOverride(),
   });
   // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):
   // nothing else names them, so solo's results and saved round said P31 won.
@@ -3032,14 +3047,21 @@ async function main(): Promise<void> {
   if (!roomHash) roomHash = await runLobby({ patch, protocol });
   if (roomsRefused && roomHash.mode !== 'solo') return refuseRoom(roomsRefused);
   const bootMode = bootModeFor(roomHash.mode);
+  // Solo's seed goes into the ROM before its boot (POK-327): BR_BOOT_SAFARI deals the
+  // opening's cell off gBrMatch.seed when there is one, and off Random32 when there is
+  // not -- so the seed the results print used to be every part of the match but its
+  // first minute. `#seed` pins it in dev, as it pins a room's.
+  const soloSeed = fixedSeed() ?? Math.floor(Math.random() * 0x7fff_ffff) + 1;
 
   if (mailboxBase !== undefined) {
+    const matchBase = symbols?.get('gBrMatch');
+    if (roomHash.mode === 'solo' && matchBase !== undefined) emu.write(matchBase + MATCH_SEED, soloSeed, 32);
     writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
     emu.resume();
   }
 
   showScreen('playing');
-  if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols);
+  if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols, soloSeed);
   else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch);
 }
 
