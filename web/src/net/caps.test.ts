@@ -43,7 +43,9 @@ const fourItems = [13, 75, 22, 23];
 
 /** The largest instance of every message the page packs into a ROM that spans slots. */
 const LARGEST: Record<string, Msg> = {
-  BT: { t: 'bt', seat: 31, seq: 0xffff, data: new Array(256).fill(0xff) },
+  // With the name the page puts on a fight's first block (POK-331 leftover b), which it
+  // leaves off rather than go past the cap.
+  BT: { t: 'bt', seat: 31, seq: 0xffff, data: new Array(256).fill(0xff), name: NAME },
   PARTY: {
     t: 'party',
     seat: 31,

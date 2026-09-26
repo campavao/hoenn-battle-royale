@@ -468,9 +468,21 @@ export class Bridge {
     // JSON-only messages (accept/decline/win/ready/...) have nothing to push, and reach
     // the page all the same.
     if (crossesToRom(msg.t) && (!this.romFilter || this.romFilter(msg))) {
-      if (!this.rom.push(msg)) this.dropCount++; // the ROM cannot take it; the page still hears it
+      if (!this.rom.push(this.named(msg))) this.dropCount++; // the ROM cannot take it; the page still hears it
     }
     for (const fn of [...this.listeners]) fn(msg, ev.from);
+  }
+
+  /** The fight's first block goes to our ROM with the opponent's name on it (POK-331
+   *  leftover b). The cable swaps names in a handshake our link does not have, so each ROM
+   *  called the other trainer RIVAL -- in the intro, in "RIVAL used POTION!", and in the
+   *  BSTART a spectator's replay names both sides from. The first block reaches both ROMs,
+   *  challenger and challenged, before any of those; a challenge reaches only one. The
+   *  name is the relay's roster's, never the block's own: a `name` off the wire is not read. */
+  private named(msg: Msg): Msg {
+    if (msg.t !== 'bt' || msg.seq !== 1) return msg;
+    const name = this.roster.nameOf(msg.seat);
+    return name === `P${msg.seat}` ? msg : { ...msg, name };
   }
 
   /** A block is taken from the seat we are fighting and nobody else (#20) -- the ROM

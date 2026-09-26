@@ -125,6 +125,32 @@ describe('slots round trip (spans multiple slots)', () => {
   });
 });
 
+// POK-331 leftover b: the page puts the other trainer's name after the fight's first block
+// it hands its ROM, where br_netlink.c's TakePeerName reads [len 1..7][Gen 3 bytes].
+describe("a block's name tail", () => {
+  const packed = (msg: Msg) => reassembleSlots(packSlot(msg)).payload;
+
+  it('follows the block: seat, seq, len, the data, then the name', () => {
+    const bytes = packed({ t: 'bt', seat: 7, seq: 1, data: [1, 2, 3, 4], name: 'Can' });
+    expect(Array.from(bytes)).toEqual([7, 1, 0, 4, 0, 1, 2, 3, 4, 3, 0xbd, 0xbb, 0xc8]);
+    // The ROM never sends one, and the page reads a block the way it always has.
+    expect(unpackSlot(BR_MSG.BT, bytes)).toEqual({ t: 'bt', seat: 7, seq: 1, data: [1, 2, 3, 4] });
+  });
+
+  it('is cut to a trainer name box, seven letters', () => {
+    const bytes = packed({ t: 'bt', seat: 7, seq: 1, data: [1], name: 'MAXWELLS' });
+    expect(bytes.length).toBe(5 + 1 + 1 + 7);
+    expect(bytes[6]).toBe(7);
+  });
+
+  it('is left off a block it would take past the ROM cap, and a name the charmap cannot say', () => {
+    const full = Array.from({ length: 256 }, () => 1);
+    expect(packed({ t: 'bt', seat: 7, seq: 1, data: full, name: 'CAN' }).length).toBe(5 + 256);
+    expect(packed({ t: 'bt', seat: 7, seq: 1, data: [1], name: '漢' }).length).toBe(5 + 1);
+    expect(packed({ t: 'bt', seat: 7, seq: 1, data: [1], name: '' }).length).toBe(5 + 1);
+  });
+});
+
 describe('reassembleSlots', () => {
   it('rejects a seq gap', () => {
     const slots = packSlot({ t: 'bt', seat: 0, seq: 0, data: Array.from({ length: 256 }, () => 1) });

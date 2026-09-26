@@ -35,6 +35,10 @@ mailsend gBrMailbox 6 gDecompressionBuffer 9
 wait 30
 expect u16 gBrNetlink+14 1
 expectge u8 gBattleCommunication 3
+# A block with nothing after it names nobody: the peer is still RIVAL (netlink-name.txt
+# has the name that comes after one).
+expect u32 gLinkPlayers+8 0xBBD0C3CC
+expect u16 gLinkPlayers+12 0xFFC6
 # Seat 2 goes out, and the fight is ours (out-peer.txt): back to the field.
 pokebytes gDecompressionBuffer 02
 mailsend gBrMailbox 9 gDecompressionBuffer 1

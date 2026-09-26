@@ -23,6 +23,7 @@
 #include "constants/battle.h"
 #include "constants/songs.h"
 #include "constants/trainers.h"
+#include "constants/characters.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -89,8 +90,31 @@ static void DeliverMirrored(u8 who, const u8 *data, u16 len)
         dst[BR_LINK_BUFF_DATA + 3] ^= 1; // the move's target is the other battler
 }
 
+// The other trainer's name: [len 1..7][name], after the block, on the first block of a
+// fight -- which the page hands its ROM whichever side of the challenge it is on, before
+// the intro and before a spectator's BSTART (POK-331 leftover b). The cable swaps names
+// in a handshake our link does not have, so FillLinkPlayers starts the peer as RIVAL,
+// and RIVAL is what stays when no name comes: an older page, or one the charmap lacks.
+static void TakePeerName(u16 blockLen)
+{
+    const u8 *tail = sRecvBuf + BR_BT_HDR + blockLen;
+    u8 *name = gLinkPlayers[gBrNetlink.myId ^ 1].name;
+    u8 n, i;
+
+    if (BR_BT_HDR + blockLen + 1 > sRecvAsm.total)
+        return;
+    n = tail[0];
+    if (n == 0 || n > PLAYER_NAME_LENGTH || BR_BT_HDR + blockLen + 1 + n > sRecvAsm.total)
+        return;
+    for (i = 0; i < n; i++)
+        name[i] = tail[1 + i];
+    name[n] = EOS;
+}
+
 static void HandleBt(const u8 *payload, u8 len, bool8 isCont)
 {
+    u16 blockLen;
+
     if (!BrWire_Assemble(&sRecvAsm, BR_MSG_BT, isCont, payload, len))
         return;
     if (sRecvAsm.total < BR_BT_HDR || !gBrNetlink.active)
@@ -102,7 +126,9 @@ static void HandleBt(const u8 *payload, u8 len, bool8 isCont)
         return;
     gBrNetlink.recvSeq = BrWire_ReadU16(sRecvBuf + 1);
     gBrNetlink.blocksRecv++;
-    Deliver(gBrNetlink.myId ^ 1, sRecvBuf + BR_BT_HDR, BrWire_ReadU16(sRecvBuf + 3));
+    blockLen = BrWire_ReadU16(sRecvBuf + 3);
+    TakePeerName(blockLen);
+    Deliver(gBrNetlink.myId ^ 1, sRecvBuf + BR_BT_HDR, blockLen);
 }
 
 static void HandleBtFirst(const u8 *payload, u8 len) { HandleBt(payload, len, FALSE); }

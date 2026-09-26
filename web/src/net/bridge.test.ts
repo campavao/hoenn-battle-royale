@@ -3,7 +3,7 @@ import { BLOCKS_KEPT, Bridge, fightOf, STALL_AFTER_RESULT_FRAMES, STALL_FRAMES, 
 import { MAILBOX, Mailbox, type RamAccess } from './mailbox';
 import { NETLINK } from './netlink';
 import { POSITIONAL_CAP, RomPort } from './romport';
-import { BR_CONT_FLAG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
+import { BR_CONT_FLAG, BR_MSG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
 import { PROTOCOL, type Msg, type NpcOutMsg, type SpillMsg, type StepMsg } from './wire';
 import { FakeSocket, fakeEmulator, fakeRelay } from './fakes.testutil';
 import { RelayClient } from './relay';
@@ -569,6 +569,70 @@ function link(ram: RamAccess, peer: number | null): void {
 // POK-331 #5. The page learnt its ROM was in a fight from the first block to move, and the
 // ROM starts one a second or more before that: a challenge that landed in between still
 // pointed the page somewhere else. gBrNetlink says so from the frame the fight starts.
+/** The bytes of every block the ROM is handed over a few frames, as br_netlink.c's
+ *  HandleBt reads them: seat, seq, len, the block, and whatever follows it. */
+function blockBytes(frame: () => void, romDrainIn: () => BinarySlot[], frames = 6): number[][] {
+  const out: number[][] = [];
+  for (let i = 0; i < frames; i++) {
+    frame();
+    const slots = romDrainIn();
+    for (let j = 0; j < slots.length; ) {
+      const group = [slots[j++]];
+      while (j < slots.length && (slots[j].type & BR_CONT_FLAG) !== 0) group.push(slots[j++]);
+      const r = reassembleSlots(group);
+      if (r.type === BR_MSG.BT) out.push(Array.from(r.payload));
+    }
+  }
+  return out;
+}
+
+// POK-331 leftover b. The ROM called the other trainer RIVAL: the cable's handshake swaps
+// names and ours has none. The first block of a fight reaches both ROMs before the intro,
+// so it carries the name -- [len][Gen 3 bytes] after the block (br_netlink.c TakePeerName).
+describe("the other trainer's name, after the fight's first block", () => {
+  const MAY = [3, 0xc7, 0xbb, 0xd3];
+  const WALLY = [5, 0xd1, 0xbb, 0xc6, 0xc6, 0xd3];
+
+  it('rides on the first block our ROM is handed when they challenged us, and on no other', () => {
+    const { socket, frame, romDrainIn } = joined();
+    socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 1 } });
+    socket.receive({ type: 'recv', from: 7, m: block(7, 1) });
+    socket.receive({ type: 'recv', from: 7, m: block(7, 2) });
+    expect(blockBytes(frame, romDrainIn)).toEqual([
+      [7, 1, 0, 1, 0, 1, ...MAY],
+      [7, 2, 0, 1, 0, 2],
+    ]);
+  });
+
+  it('and when we challenged them: a challenge reaches one ROM, the first block both', () => {
+    const { romEmit, socket, frame, romDrainIn } = joined();
+    romEmit({ t: 'challenge', seat: 0, opponent: 9, nonce: 4 });
+    frame();
+    romDrainIn();
+    socket.receive({ type: 'recv', from: 9, m: block(9, 1, F(2, 4)) });
+    expect(blockBytes(frame, romDrainIn)).toEqual([[9, 1, 0, 1, 0, 1, ...WALLY]]);
+  });
+
+  it("is the room's name for them, never one a block arrives with", () => {
+    const { socket, frame, romDrainIn } = joined();
+    socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 1 } });
+    socket.receive({ type: 'recv', from: 7, m: { ...block(7, 1), name: 'EVIL' } });
+    socket.receive({ type: 'recv', from: 7, m: { ...block(7, 2), name: 'EVIL' } });
+    expect(blockBytes(frame, romDrainIn)).toEqual([
+      [7, 1, 0, 1, 0, 1, ...MAY],
+      [7, 2, 0, 1, 0, 2],
+    ]);
+  });
+
+  it('is nothing for a seat the room has not named, and the ROM keeps RIVAL', () => {
+    const { socket, frame, romDrainIn } = joined();
+    roster(socket, [1, 2, 7]); // P1, P2, P7: nameOf's own fallback
+    socket.receive({ type: 'recv', from: 7, m: { t: 'challenge', seat: 7, opponent: 2, nonce: 1 } });
+    socket.receive({ type: 'recv', from: 7, m: block(7, 1) });
+    expect(blockBytes(frame, romDrainIn)).toEqual([[7, 1, 0, 1, 0, 1]]);
+  });
+});
+
 describe("the ROM's own word on the fight it is in (POK-331 #5)", () => {
   it("ignores a third seat's challenge once the ROM has started a fight, before any block has moved", () => {
     const { socket, frame, romDrainIn, romEmit, ram } = joined({ symbols: SYMBOLS });

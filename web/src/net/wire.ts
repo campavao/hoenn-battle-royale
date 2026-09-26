@@ -173,6 +173,10 @@ export interface BlockMsg {
   seq: number; // 0..65535, the link exchange's own counter
   data: number[]; // the block bytes, at most 256 (Emerald's BLOCK_BUFFER_SIZE)
   fight?: number; // the challenge that started the fight (bridge.ts's fightOf); JSON only
+  /** The other trainer's name, put on the fight's first block by the page that hands it to
+   *  its own ROM (POK-331 leftover b): mailbox only, never read off the relay, where anybody
+   *  could have written it. */
+  name?: string;
 }
 
 /** A link battle starting, published by the challenger so a spectator can replay it as

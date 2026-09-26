@@ -47,10 +47,11 @@ const ENCRYPTION_KEY = 0xac;
 const BR_MENU_ACTION = 1;
 const BR_MENU_MOVE = 2;
 const HURT = 5;
-/** What the watching screen's message box says as the other trainer drinks: every ROM's
- *  link partner is RIVAL (br_netlink.c's FillLinkPlayers), and the line breaks after
- *  "used" (0xFE) and ends in EOS (0xFF). */
-const RIVAL_USED_POTION = [...encodeGen3('RIVAL used'), 0xfe, ...encodeGen3('POTION!'), 0xff];
+/** What the watching screen's message box says as the other trainer drinks: that trainer's
+ *  own name, which their page put on the fight's first block (POK-331 leftover b) where
+ *  every ROM's link partner used to be RIVAL, then a break after "used" (0xFE) and EOS
+ *  (0xFF). */
+const usedPotion = (name: number[]) => [...name, ...encodeGen3(' used'), 0xfe, ...encodeGen3('POTION!'), 0xff];
 
 type Ram = { read(addr: number, width: 8 | 16 | 32): number; write(addr: number, value: number, width: 8 | 16 | 32): void };
 type RamWindow = { __br: { mailbox: { ram: Ram } } };
@@ -314,9 +315,20 @@ test('a potion in a link battle heals the same mon on both ROMs, whoever drinks 
         [symbols.gDisplayedStringBattle, line] as const,
       );
     const sawLine = (p: Page) => p.evaluate(() => (window as unknown as { __sawLine?: boolean }).__sawLine === true);
+    /** A ROM's own trainer name as it holds it, up to its EOS: SaveBlock2's first field. */
+    const playerName = async (p: Page) => {
+      const at = await read(p, symbols.gSaveBlock2Ptr, 32);
+      const out: number[] = [];
+      for (let i = 0; i < 7; i++) {
+        const b = await read(p, at + i, 8);
+        if (b === 0xff) break;
+        out.push(b);
+      }
+      return out;
+    };
     const turn = async (drinker: Page, label: string) => {
       const other = drinker === challenger ? challenged : challenger;
-      await watchLine(other, RIVAL_USED_POTION);
+      await watchLine(other, usedPotion(await playerName(drinker)));
       await Promise.all([drink(drinker), leer(other)]);
       await Promise.all(pages.map(toActionMenu));
       expect(await sawLine(other), `${label}: the other screen said whose potion it was`).toBe(true);

@@ -22,7 +22,7 @@
 // state machine for every message type instead of one path for framed and one for
 // bare.
 import { MAILBOX } from './mailbox';
-import { BR_MSG } from './wire-ids';
+import { BR_CAP, BR_MSG } from './wire-ids';
 import { packGen3String, unpackGen3String } from '../text/gen3';
 import { PARTY_BAG_MAX, PROTOCOL } from './wire';
 import type {
@@ -259,7 +259,21 @@ function encodeBlock(m: BlockMsg): Uint8Array {
   // fit an 8-bit count.
   const w = new Writer().u8(m.seat).u16(m.seq).u16(m.data.length);
   w.raw(m.data);
+  // The other trainer's name after the block, for br_netlink.c's TakePeerName (POK-331
+  // leftover b) -- left off when it would take the block past the ROM's assembler, which
+  // drops a longer message whole, or when the charmap cannot say it: RIVAL stays.
+  const name = m.name === undefined ? null : blockName(m.name);
+  if (name && 5 + m.data.length + name.length <= BR_CAP.BT) w.raw(name);
   return w.toBytes();
+}
+/** [len 1..7][Gen 3 bytes], or null for a name the ROM cannot hold. */
+function blockName(name: string): Uint8Array | null {
+  try {
+    const packed = packGen3String(name.toUpperCase(), 7);
+    return packed[0] === 0 ? null : packed;
+  } catch {
+    return null;
+  }
 }
 function decodeBlock(bytes: Uint8Array): BlockMsg {
   const r = new Reader(bytes);

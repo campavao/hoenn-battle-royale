@@ -1,0 +1,47 @@
+# netlink-name: a link battle names the other trainer (POK-331 leftover b). The cable
+# swaps names in a handshake our link does not have, so every ROM called its peer RIVAL
+# -- in the intro, in "RIVAL used POTION!", and in the BSTART a spectator's replay takes
+# its names from. Kanto shows the real one. The page puts the opponent's name after the
+# fight's first block it hands its ROM, and HandleBt takes it.
+#
+# netlink-peer.txt's session: seat 2 (placed out of our eyeline) challenges us, so we are
+# link id 1 and the peer is gLinkPlayers[0], whose name is at +8.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 02 01 00 09 14 00 08 00 01 01 02
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 02 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+1 1
+# RIVAL until a name comes: R I V A L, EOS.
+expect u32 gLinkPlayers+8 0xBBD0C3CC
+expect u16 gLinkPlayers+12 0xFFC6
+# A header with a name on it from seat 5, somebody else's fight: refused, name and all.
+# seat, seq u16, len u16, 4 bytes of block, then the name: 3, W A L.
+pokebytes gDecompressionBuffer 05 01 00 04 00 00 00 00 00 03 D1 BB C6
+mailsend gBrMailbox 6 gDecompressionBuffer 13
+wait 30
+expect u16 gBrNetlink+14 0
+expect u32 gLinkPlayers+8 0xBBD0C3CC
+# Seat 2's header with its trainer's name after it: 3, C A N.
+pokebytes gDecompressionBuffer 02 01 00 04 00 00 00 00 00 03 BD BB C8
+mailsend gBrMailbox 6 gDecompressionBuffer 13
+wait 30
+expect u16 gBrNetlink+14 1
+# C A N, EOS.
+expect u32 gLinkPlayers+8 0xFFC8BBBD
+# ...and the block itself is the four bytes it said, no more: the start exchange took it
+# and moved on to the parties, as netlink-peer.txt's bare one does.
+expectge u8 gBattleCommunication 3
+# Seat 2 goes out, and the fight is ours: back to the field.
+pokebytes gDecompressionBuffer 02
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 200
+expect u8 gBrNetlink 0
+shot back
+say netlink name ok

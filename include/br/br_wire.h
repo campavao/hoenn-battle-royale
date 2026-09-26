@@ -72,11 +72,14 @@
 // `SendBlock`/`gBlockRecvBuffer` trade, carried across the mailbox instead of a
 // cable. `seq` is the link exchange's own counter (distinct from the mailbox slot
 // continuation's seq). Spans slots: a full block is BLOCK_BUFFER_SIZE (256) bytes.
-// Payload (4 + len bytes, len up to 256):
+// Payload (5 + len bytes, len up to 256):
 //   0:   seat  u8   the sender; a ROM drops a block from anybody but its own peer
 //   1..2: seq  u16 LE
 //   3..4: len  u16 LE
 //   5..: data  len bytes
+//   then, page -> ROM on a fight's first block only, when it fits BR_CAP_BT: the other
+//   trainer's name, nameLen u8 (1..7) + that many Gen 3 bytes (POK-331 leftover b).
+//   A ROM never sends one.
 
 // BR_MSG_PARTY
 // ROM <-> page: a trainer's party -- either a bot roster seat's (so
