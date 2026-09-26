@@ -2558,7 +2558,8 @@ function wireRoom(
   async function returnToRoom(): Promise<void> {
     if (returning) return;
     returning = true;
-    drawResults(); // PLAY AGAIN greys out while it is on its way
+    // PLAY AGAIN greys out while it is on its way -- on the results, when they are up.
+    if (resultsUp && stage.current === resultsUp.screen) drawResults();
     try {
       session.grace.cancel();
       teardownHost();
