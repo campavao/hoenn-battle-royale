@@ -53,6 +53,12 @@
       #stage[data-look='dock'] { right: auto; width: 480px; z-index: 3; }
       body.docked #screen-playing { margin-left: 480px; }
       #stage-box { position: relative; }
+      /* Emerald's fade from black over a cut (POK-320, Stage.cut): the room giving way to
+         the match, the match to its results. Four steps, as the game's palette fades go. */
+      #stage-fade { position: fixed; inset: 0; z-index: 10; background: #000; opacity: 0; pointer-events: none; }
+      #stage-fade.go { animation: stage-fade 320ms steps(4, end); }
+      @keyframes stage-fade { from { opacity: 1; } to { opacity: 0; } }
+      @media (prefers-reduced-motion: reduce) { #stage-fade.go { animation: none; } }
       #ui { display: block; image-rendering: pixelated; }
       #ui-hits { position: absolute; inset: 0; }
       #ui-hits ul, #ui-hits li { list-style: none; margin: 0; padding: 0; }
@@ -257,6 +263,7 @@
         <div id="ui-hits"></div>
       </div>
     </div>
+    <div id="stage-fade" aria-hidden="true"></div>
     <script type="module" src="/src/app.ts"></script>
   </body>
 </html>

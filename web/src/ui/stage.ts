@@ -72,6 +72,14 @@ export function stageScale(cssW: number, cssH: number): number {
 
 export const STAGE_WIDTH = 240;
 
+/** Whether going from one way of showing to another is a cut worth Emerald's fade to
+ *  black (POK-320): the stage covering the page, or leaving it -- the room giving way to
+ *  the match, the match to its results. `null` is the stage hidden. Opening the sheet
+ *  over the game, or docking it beside it, is not: that is a menu, not a scene. */
+export function fadesBetween(was: Look | null, now: Look | null): boolean {
+  return (was === 'full') !== (now === 'full');
+}
+
 /** What a widget is called between paints: its id, or its text within its parent. */
 function widgetKey(w: Widget): string {
   return w.id ?? `${w.parent ?? ''}/${w.text}`;
@@ -212,6 +220,8 @@ export class Stage {
     private readonly root: HTMLElement,
     canvasEl: HTMLCanvasElement,
     hits: HTMLElement,
+    /** A black sheet over everything that fades out on a cut (index.html's #stage-fade). */
+    private readonly fade: HTMLElement | null = null,
   ) {
     this.mirror = new Mirror(hits, (w) => {
       this.cursorKey = this.keyOf(w);
@@ -252,13 +262,29 @@ export class Stage {
     return this.screen;
   }
 
+  /** How the stage is showing now, or null when it is not. */
+  private shown(): Look | null {
+    return this.root.hidden || !this.screen ? null : this.look();
+  }
+
+  /** Emerald's fade from black, over a cut: stepped, as its palette fades are. */
+  private cut(was: Look | null): void {
+    const f = this.fade;
+    if (!f || !fadesBetween(was, this.shown())) return;
+    f.classList.remove('go');
+    void f.offsetWidth; // start the animation again from its first step
+    f.classList.add('go');
+  }
+
   /** Show `screen`, forgetting any screen it could have gone back to. */
   show(screen: DrawnScreen): void {
+    const was = this.shown();
     this.stack = [];
     this.screen = screen;
     this.cursorKey = null;
     this.root.hidden = false;
     this.paintNow();
+    this.cut(was);
   }
 
   /** Show `screen` over the current one; `pop` comes back. */
@@ -279,11 +305,13 @@ export class Stage {
   }
 
   hide(): void {
+    const was = this.shown();
     this.root.hidden = true;
     this.screen = null;
     this.stack = [];
     this.mirror.clear();
     this.applyLook();
+    this.cut(was);
   }
 
   /** Paint again, soon: many things change at once and one pass is enough. A timer

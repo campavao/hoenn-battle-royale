@@ -180,3 +180,17 @@ describe('a notice', () => {
     expect(painted.widgets.find((w) => w.cls === 'version')?.rect.y, 'the footer on the bottom line').toBe(320 - 16);
   });
 });
+
+describe("Emerald's fade over a cut (POK-320)", () => {
+  it('fades when the stage covers the page or leaves it, not when the sheet opens or docks', async () => {
+    const { fadesBetween } = await import('./stage');
+    expect(fadesBetween('full', null), 'the room giving way to the match').toBe(true);
+    expect(fadesBetween(null, 'full'), 'the match giving way to its results').toBe(true);
+    expect(fadesBetween('dock', 'full'), 'a desktop match to its results').toBe(true);
+    expect(fadesBetween('full', 'dock'), 'the room to a desktop match').toBe(true);
+    expect(fadesBetween(null, 'overlay'), 'the sheet opening').toBe(false);
+    expect(fadesBetween('overlay', null), 'the sheet closing').toBe(false);
+    expect(fadesBetween('full', 'full'), 'one screen to the next').toBe(false);
+    expect(fadesBetween(null, 'dock')).toBe(false);
+  });
+});

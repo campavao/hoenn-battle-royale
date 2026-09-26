@@ -170,7 +170,9 @@ function showScreen(screen: Screen): void {
  *  match and the room before START. One canvas, made when first needed. */
 let stage: Stage | null = null;
 function theStage(): Stage {
-  if (!stage) stage = new Stage($('#stage') as HTMLElement, $('#ui') as HTMLCanvasElement, $('#ui-hits') as HTMLElement);
+  if (!stage) {
+    stage = new Stage($('#stage') as HTMLElement, $('#ui') as HTMLCanvasElement, $('#ui-hits') as HTMLElement, $('#stage-fade') as HTMLElement);
+  }
   return stage;
 }
 /** What a match starting does to the room screen: set by wireRoom, called by anything
