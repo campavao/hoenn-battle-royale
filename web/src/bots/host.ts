@@ -13,7 +13,6 @@ import { HOENN, type WorldIndex } from './hoenn';
 import type { DirectorWorld } from '../match/director';
 import type { Loot } from '../match/loot';
 import type { RosterEntry } from '../match/roster';
-import * as Ticker from '../match/ticker';
 import { NpcFog } from '../match/npcfog';
 import { sectionInside } from '../match/ring';
 import { mulberry32 } from '../match/clock';
@@ -227,7 +226,9 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
   bots.start(dealt, clock());
   // The fog clears Hoenn's own trainers off a map it has taken (POK-299): the host runs
   // the per-map clock, and each trainer leaves every ROM as `npcout`, the way a beaten
-  // one does. The seat on it is only a seat; `fog` says nobody beat them.
+  // one does. The seat on it is only a seat; `fog` says nobody beat them. The tally is
+  // the log's, as Kanto's is (main.lua, log:say): on the ticker it was a line nobody
+  // could act on, twice a minute (POK-324).
   const npcFog = new NpcFog(TRAINERS as Record<string, number[]>, (id) => opts.sections[sectionOf.get(id) ?? '']);
   const fogSeat = takenSeats[0] ?? 0;
   const tick = (now: number): void => {
@@ -244,11 +245,7 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
         cleared++;
       }
     }
-    if (cleared > 0) {
-      const line = Ticker.cleared(fogSeat, cleared, died.length);
-
-      if (line) send(line);
-    }
+    if (cleared > 0) console.info(`[fog] cleared ${cleared} trainers on ${died.length} maps`);
   };
   const stop = every(() => tick(clock()), BOT_TICK_MS);
   return {

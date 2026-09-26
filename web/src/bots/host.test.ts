@@ -198,10 +198,11 @@ describe('the host deals its bots (POK-330 #42)', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('clears the fog\'s trainers under the first taken seat, and says so in one line (POK-299)', () => {
+  it('clears the fog\'s trainers under the first taken seat, and tallies it in the log, not the ticker (POK-299, POK-324)', () => {
     const everyone = Object.entries(TRAINERS as Record<string, number[]>)
       .filter(([id]) => GROUND.refById.has(id))
       .reduce((n, [, ids]) => n + ids.length, 0);
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {});
     const fog = (opening: boolean) => {
       const { hb, sent } = host({ fill: 0, takenSeats: [2], safariSecs: opening ? 120 : 0 });
       hb.setRing({ sx: 0, sy: 0, r: -1 }, 6); // the last phase: fog on everything
@@ -210,11 +211,15 @@ describe('the host deals its bots (POK-330 #42)', () => {
     };
     // Nobody's trainers go while everybody is still in the Zone.
     expect(fog(true)).toEqual([]);
+    expect(log).not.toHaveBeenCalled();
     const sent = fog(false);
     const outs = sent.filter((m) => m.t === 'npcout');
     expect(outs).toHaveLength(everyone);
     expect(outs.every((m) => m.seat === 2 && m.fog === true)).toBe(true);
-    expect(sent.filter((m) => m.t === 'ticker')).toHaveLength(1);
-    expect(sent.at(-1)).toMatchObject({ t: 'ticker', seat: 2 });
+    // The tally was a ticker line nobody could act on, twice a minute in Cam's play-test.
+    expect(sent.filter((m) => m.t === 'ticker')).toEqual([]);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls[0][0]).toMatch(new RegExp(`^\\[fog\\] cleared ${everyone} trainers on \\d+ maps$`));
+    log.mockRestore();
   });
 });
