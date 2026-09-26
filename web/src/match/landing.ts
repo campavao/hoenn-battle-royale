@@ -5,16 +5,18 @@
 // game, and the genuinely gated corners (Sootopolis, Mt Chimney, Southern Island).
 // Dropping somebody there strands them for the whole match.
 //
-// This is the one place that filter lives. The Director builds its ring sections from
-// the same pool, so keeping it here also keeps the fog off places nobody can be -- and
-// anything else that wants landing cells (the bots, the replay tool, the tests) gets
-// the same answer instead of quietly reading the raw file.
+// This is the one place that filter lives, and Cam's painted vetoes come off with it
+// (POK-314, below). The Director builds its ring sections from the same pool, so keeping
+// it here also keeps the fog off places nobody can be -- and anything else that wants
+// landing cells (the bots, the replay tool, the tests) gets the same answer instead of
+// quietly reading the raw file.
 //
 // landing.json is fetched on demand, as world.json is (bots/hoenn.ts): the tables below
 // are live bindings that throw until worldReady() has filled them.
 import handData from '../data/landing-hand.json';
 import { loadHoenn, notYet } from '../bots/hoenn';
 import type { LandingCell } from './director';
+import { splitHand, withoutVetoes } from './hand';
 
 export let LANDING: LandingCell[] = notYet('LANDING');
 
@@ -25,22 +27,33 @@ export let LANDING: LandingCell[] = notYet('LANDING');
  *  one either way, and half the towns the picker offers have nothing else to give him --
  *  the flood above runs on foot, and on foot most of eastern Hoenn is across water, so
  *  Fortree, Lilycove, Mossdeep, Dewford, Pacifidlog, Sootopolis and Ever Grande come out
- *  of it with every ordinary cell marked off.
+ *  of it with every ordinary cell marked off, and so does Lavaridge, behind the cable car:
+ *  eight of the sixteen.
  *
  *  Already ranked by `landing-reach.ts`, nicest first: a CENTRE, then a MART, then a
  *  gym, then any other door. A fallback only -- never mixed into the ordinary pool, or
  *  every drop would cluster on doorsteps. */
 export let DOORSTEPS: LandingCell[] = notYet('DOORSTEPS');
 
-/** Cam's own picks (POK-314): "maybe we should have a follow up where I paint droppable
- *  lines for you and you can save those coordinates?" Painted in web/painter.html, saved
- *  to landing-hand.json by hand and committed; landing-reach.ts never writes that file,
- *  so hand work survives every re-export. A section with any of these deals from them
- *  alone. landing.test.ts holds every one to a standable cell in the current world.json,
- *  so a re-export that moves a map fails a test rather than dropping somebody in a wall. */
-export const HAND: LandingCell[] = handData as LandingCell[];
+// Cam's own cells (POK-314): "maybe we should have a follow up where I paint droppable
+// lines for you and you can save those coordinates?" Painted in web/painter.html, saved to
+// landing-hand.json by hand and committed; landing-reach.ts never writes that file, so hand
+// work survives every re-export. landing.test.ts holds every row to the current world.json
+// (match/hand.ts's handProblems), so a re-export that moves a map fails a test rather than
+// dropping somebody in a wall.
+const hand = splitHand(handData as unknown[]);
 
-/** Every cell the exporter found, marks and all -- for the tools that check the marks. */
+/** His picks. A section with any deals from them first, then its ordinary cells, then its
+ *  doorsteps (Director.landFor). */
+export const HAND: LandingCell[] = hand.picks;
+
+/** His vetoes, as match/hand.ts's cellKeys: cells nobody would ever stand on. worldReady()
+ *  takes them off LANDING and DOORSTEPS, which is every pool the drop, the ring, the
+ *  START's deal and the bots draw from. */
+export const VETO: ReadonlySet<string> = hand.veto;
+
+/** Every cell the exporter found, marks and all, vetoed or not -- for the tools that check
+ *  the marks. */
 export let LANDING_ALL: LandingCell[] = notYet('LANDING_ALL');
 
 let loading: Promise<void> | undefined;
@@ -51,8 +64,7 @@ let loading: Promise<void> | undefined;
 export function worldReady(): Promise<void> {
   loading ??= Promise.all([loadHoenn(), import('../data/landing.json')]).then(([, m]) => {
     LANDING_ALL = m.default as LandingCell[];
-    LANDING = LANDING_ALL.filter((c) => !c.off && c.door === undefined);
-    DOORSTEPS = LANDING_ALL.filter((c) => c.door !== undefined);
+    ({ landing: LANDING, doorsteps: DOORSTEPS } = withoutVetoes(LANDING_ALL, VETO));
   });
   return loading;
 }
