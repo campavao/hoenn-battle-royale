@@ -3007,6 +3007,12 @@ async function main(): Promise<void> {
         other.setSpeed(8); // ...and it is in a hurry: a duel is a fight nobody watches
         return other;
       },
+      // A fight that would not end power-cycles this same instance (POK-247): another
+      // would be a whole second module, and quitGame frees none of the first.
+      restart: async (e) => {
+        await (e as Emulator).reboot();
+        (e as Emulator).setVolume(0); // a new core starts at full volume
+      },
       writeBoot: (e, base) => writeBootBlock(e as Emulator, base, PROXY_NAME),
       onNote: (what) => console.info('[proxy]', what),
       onStream: (msg) => proxyStream?.(msg),

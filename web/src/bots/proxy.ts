@@ -16,7 +16,13 @@
 // deadline; anything that goes wrong (no core, a crash, a fight that will not end)
 // falls back to the seeded resolver, which is why this can be an upgrade rather than a
 // dependency.
-import { Mailbox } from '../net/mailbox';
+//
+// And it runs only while it fights (POK-247). It used to boot on the first meeting and
+// then run at 8x -- 480 frames a second, each a main-thread callback -- through the
+// results, the lobby and PLAY AGAIN until the page closed, on a phone's battery. Now it
+// is paused whenever no duel is in flight, and a fight that will not end power-cycles
+// this same instance rather than making another.
+import { MAILBOX, Mailbox } from '../net/mailbox';
 import { packSlot, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
 import { BR_MSG, BR_CONT_FLAG } from '../net/slots';
 import type { BstartMsg, DresultMsg, Msg, PackedMon, TurnMsg } from '../net/wire';
@@ -63,6 +69,10 @@ export interface ProxyEmulator {
   release(key: 'a'): void;
   onFrame(listener: () => void): () => void;
   stop(): void;
+  /** Never from inside a frame listener: a pause waits on the core's thread, which is
+   *  waiting on that listener. */
+  pause(): void;
+  resume(): void;
 }
 
 export interface ProxyOptions {
@@ -70,6 +80,10 @@ export interface ProxyOptions {
   boot: () => Promise<ProxyEmulator>;
   /** gBrMailbox, the same address the visible instance uses. */
   mailboxBase: number;
+  /** Power-cycles the instance in place, for a fight that would not end: the same core
+   *  from the same image. Without it such an instance is let go, and the next duel
+   *  boots another -- a whole second module, which is never freed. */
+  restart?: (emu: ProxyEmulator) => Promise<void>;
   /** Writes the boot block into a freshly booted instance (app.ts's writeBootBlock). */
   writeBoot: (emu: ProxyEmulator, mailboxBase: number) => void;
   /** Give up on a duel after this long and let the caller fall back. */
@@ -111,6 +125,8 @@ export class ProxyDuels {
   private queue: (() => void)[] = [];
   private frames = 0;
   private broken = false;
+  /** The instance was left in a fight that would not end: the next duel restarts it. */
+  private stale = false;
   private readonly counts: ProxyCounts = { booted: false, frames: 0, fought: 0, timedOut: 0, fellBack: 0 };
 
   constructor(private readonly opts: ProxyOptions) {}
@@ -165,6 +181,7 @@ export class ProxyDuels {
     this.emu = null;
     this.mailbox = null;
     this.booting = null;
+    this.stale = false;
   }
 
   private note(what: string): void {
@@ -191,13 +208,18 @@ export class ProxyDuels {
     }
 
     const deadline = this.opts.deadlineMs ?? DEADLINE_MS;
+    emu.resume();
     const result = await this.awaitResult(emu, mailbox, deadline);
+    // Idle until the next meeting. Here, after the await, and not in the frame listener
+    // that finished the duel: a pause from in there would wait on its own caller.
+    if (this.emu === emu) emu.pause();
     if (!result) {
       // A fight that will not end is worse than no proxy at all: the instance is left
-      // in a battle nobody can finish, so it goes and the next duel boots a new one.
+      // in a battle nobody can finish, so the next duel starts it over first.
       this.note('duel timed out');
       this.counts.timedOut++;
-      this.dispose();
+      if (this.opts.restart && this.emu === emu) this.stale = true;
+      else this.dispose();
       return null;
     }
     // Said out loud, once per duel: this is the only way anybody -- a soak, a host
@@ -283,30 +305,52 @@ export class ProxyDuels {
     else if (phase === TAP_HELD_FRAMES) emu.release('a');
   }
 
-  /** Boots the instance if it is not up, at most once at a time. */
+  /** Boots the instance if it is not up, or restarts a stale one, at most once at a
+   *  time; either way it is left awake and paused. */
   private ensure(): Promise<void> {
-    if (this.emu && this.mailbox) return Promise.resolve();
+    if (this.emu && this.mailbox && !this.stale) return Promise.resolve();
     if (this.booting) return this.booting;
     this.booting = (async () => {
+      let emu = this.emu;
       try {
-        const emu = await this.opts.boot();
-        this.counts.booted = true;
-        emu.onFrame(() => this.counts.frames++);
-        this.opts.writeBoot(emu, this.opts.mailboxBase);
+        if (emu && this.stale && this.opts.restart) {
+          this.stale = false;
+          this.mailbox = null;
+          // A reboot need not clear RAM, and the magic the old run left would read as a
+          // ROM already awake (app.ts's rebootIntoBr does the same).
+          emu.write(this.opts.mailboxBase + MAILBOX.OFF_MAGIC, 0, 16);
+          emu.resume();
+          await this.opts.restart(emu);
+        } else {
+          emu = await this.opts.boot();
+          this.counts.booted = true;
+          emu.onFrame(() => this.counts.frames++);
+        }
+        const up = emu;
+        this.opts.writeBoot(up, this.opts.mailboxBase);
         const mailbox = new Mailbox(
           {
-            read: (addr, width) => emu.read(addr, width),
-            write: (addr, value, width) => emu.write(addr, value, width),
-            bytes: (addr, len) => emu.bytes(addr, len),
+            read: (addr, width) => up.read(addr, width),
+            write: (addr, value, width) => up.write(addr, value, width),
+            bytes: (addr, len) => up.bytes(addr, len),
           },
           this.opts.mailboxBase,
         );
-        await this.awaitWake(emu, mailbox);
-        this.emu = emu;
+        await this.awaitWake(up, mailbox);
+        up.pause(); // awake, and idle until a duel wants it
+        this.emu = up;
         this.mailbox = mailbox;
       } catch (err) {
         this.broken = true;
         this.note(`no proxy instance: ${String(err)}`);
+        // Nothing will ask it anything again, so it is not left running at 8x either.
+        try {
+          emu?.stop();
+        } catch {
+          /* never came up */
+        }
+        this.emu = null;
+        this.mailbox = null;
         throw err;
       } finally {
         this.booting = null;
