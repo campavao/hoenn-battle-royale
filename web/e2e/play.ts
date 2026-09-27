@@ -420,8 +420,14 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
       // runs and kept after -- on every frame, not every sample, or a short fade could
       // name its palettes between two samples.
       let lastBg = true;
-      // Frames in a row the ROM has had the map under a whole fade (y 16).
+      // Frames in a row the ROM has had the map under a whole fade (y 16), in one colour:
+      // the composite is drawn from the frame before, so a whole fade that changes colour
+      // -- the end of a Safari catch fills the picture white, and the fade to black out of
+      // it starts at 16 -- has the composite a frame behind it, and a sample on the frame
+      // it changed read the white as the black unfaded (Firefox's play spec, one run in
+      // two, by which frame the change fell on).
       let fullRun = 0;
+      let fullColor = -1;
       // A fast fade out that has ended, and how long ago: the picture is its colour until
       // the next fade begins.
       let fastEnd: { color: number; frames: number } | null = null;
@@ -505,7 +511,8 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
           ? ((fw8 & 1) === 1 ? 16 - (fadeY >> 1) : fadeY >> 1)
           : fastCut ? ((fw8 & 1) === 1 ? 0 : 16) : fastEnd ? 16 : lastBg ? fadeY : 0;
         const faded = fast || fastCut ? (fastWhite ? 0x7fff : 0) : fastEnd ? fastEnd.color : fadeColor;
-        fullRun = bgFaded >= 16 ? fullRun + 1 : 0;
+        fullRun = bgFaded >= 16 ? (faded === fullColor ? fullRun + 1 : 1) : 0;
+        fullColor = bgFaded >= 16 ? faded : -1;
         whiteOk.push(bgFaded >= 12 && faded >= 0x7000);
         blackOk.push(bgFaded >= 12 && faded <= 0x0421);
         if (whiteOk.length > k.HELD_FRAMES + 4) whiteOk.shift();
