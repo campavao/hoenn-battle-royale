@@ -14,53 +14,178 @@
 #include "br/br_ghosts.h"
 #include "br/br_loot.h"
 
-// The ring is 16x16 metatiles from gSaveBlock1Ptr->pos; CurrentMapDrawMetatileAt takes a
-// map position and finds the ring slot itself (MapPosToBgTilemapOffset accepts +15).
-//
-// WHEN matters, because the ring is a torus and the band shows all of it. On a step
-// down the tile offset advances on the step's first frame while the scroll lags it by
-// 12, 8, 4 pixels, and the sixteenth slot -- (yTileOffset + 30) mod 32 -- is the slot
-// the band's top 12 rows are still showing, the OLD pos.y row. Drawing pos.y+15 into it
-// then puts the far row at the top of the band for three frames (Cam's 2026-09-18
-// phone: "jittering on the top left, up, down, based on which way you're going"; a
-// step right does the same to the picture's left 12 columns). So the slice redraw only
-// marks the far slice, and it is drawn on the frame the step completes, when that
-// slot is at the far edge and nowhere else.
-static u8 sFarRowPending;
+// THE RING (br_field.h). Bit (dy + BR_RING_ABOVE) of sStaleRows: grid row pos.y + dy
+// still to (re)draw. Its top bit is the far row, which a step down leaves there and
+// which waits for the step to complete: until then its slot is the one the band's top
+// rows show (the old top row, a row above the new one).
+static u32 sStaleRows;
+// A step right's far column, pos.x + 15, likewise: its slot is the band's left edge
+// until the step completes.
 static u8 sFarColumnPending;
+// This frame's step drew its slices: stale rows wait for a frame with less to do.
+static u8 sSliced;
 
-void BrField_MarkFarRow(void)
+#define ROW_BIT(dy) (1u << ((dy) + BR_RING_ABOVE))
+#define FAR_ROW (BR_RING_ROWS - 1 - BR_RING_ABOVE)
+#define FAR_COLUMN 15
+// Rows pos.y..pos.y+14: pret draws each one as it comes in, so they are never stale.
+#define PRET_ROWS (ROW_BIT(15) - ROW_BIT(0))
+// Every ring row.
+#define ALL_ROWS 0xFFFFFFFFu
+// Stale rows BrField_Tick draws a frame: 16 metatiles each, the cost of one of pret's
+// slices.
+#define ROWS_A_FRAME 2
+
+// The ring's row dy, and it is no longer stale. The far column's cell waits with it.
+static void DrawRingRow(s16 dy)
 {
-    sFarRowPending = TRUE;
+    int i;
+    int n = sFarColumnPending ? FAR_COLUMN : 16;
+
+    for (i = 0; i < n; i++)
+        CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + i, gSaveBlock1Ptr->pos.y + dy);
+    sStaleRows &= ~ROW_BIT(dy);
 }
 
-void BrField_MarkFarColumn(void)
+// All 32 rows of the ring's column dx.
+static void DrawRingColumn(s16 dx)
 {
-    sFarColumnPending = TRUE;
+    int i;
+
+    for (i = -BR_RING_ABOVE; i < BR_RING_ROWS - BR_RING_ABOVE; i++)
+        CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + dx, gSaveBlock1Ptr->pos.y + i);
+}
+
+// The stale row nearest the LCD, among `rows`: pos.y+15 and pos.y-1 first, then
+// outwards. 0 when there is none (row 0 is pret's, never stale).
+static s16 NearestStaleRow(u32 rows)
+{
+    s16 k;
+
+    for (k = 0; 15 + k <= FAR_ROW || k < BR_RING_ABOVE; k++)
+    {
+        if (15 + k <= FAR_ROW && (rows & ROW_BIT(15 + k)))
+            return 15 + k;
+        if (k < BR_RING_ABOVE && (rows & ROW_BIT(-1 - k)))
+            return -1 - k;
+    }
+    return 0;
+}
+
+s32 BrField_RingOffset(u8 xTileOffset, u8 yTileOffset, s32 x, s32 y)
+{
+    x -= gSaveBlock1Ptr->pos.x;
+    y -= gSaveBlock1Ptr->pos.y;
+    if (x < 0 || x >= 16 || y < -BR_RING_ABOVE || y >= BR_RING_ROWS - BR_RING_ABOVE)
+        return -1;
+    return ((yTileOffset + 2 * y) & (BR_RING_TILE_ROWS - 1)) * 32 + ((xTileOffset + 2 * x) & 31);
+}
+
+// pret's whole-map draw, rows pos.y..pos.y+15, on its frame; the ring's other rows are
+// stale, and BrField_Tick has them whole within about eight frames.
+void BrField_DrawWholeRing(void)
+{
+    int i, j;
+
+    for (i = 0; i < 16; i++)
+    {
+        for (j = 0; j < 16; j++)
+            CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + j, gSaveBlock1Ptr->pos.y + i);
+    }
+    sStaleRows = ALL_ROWS & ~(ROW_BIT(16) - ROW_BIT(0));
+}
+
+// pret's four slices, in pret's order, each as pret draws it -- then BR's part of the
+// step (br_field.h, THE RING).
+void BrField_RedrawSlices(int x, int y)
+{
+    int i;
+    u32 fresh = 0;
+
+    if (x > 0)
+    {
+        for (i = 0; i < 16; i++)
+            CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + 14, gSaveBlock1Ptr->pos.y + i);
+        sFarColumnPending = TRUE;
+    }
+    if (x < 0)
+    {
+        for (i = 0; i < 16; i++)
+            CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x, gSaveBlock1Ptr->pos.y + i);
+        // The rest of the new column, now: its slot is the band's right edge, which
+        // shows the column that just left until the step is done either way.
+        for (i = -BR_RING_ABOVE; i < 0; i++)
+            CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x, gSaveBlock1Ptr->pos.y + i);
+        for (i = 16; i < BR_RING_ROWS - BR_RING_ABOVE; i++)
+            CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x, gSaveBlock1Ptr->pos.y + i);
+    }
+    if (y > 0)
+    {
+        for (i = 0; i < 16; i++)
+            CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + i, gSaveBlock1Ptr->pos.y + 14);
+        // Every row moves up one; the new bottom row waits for the step to complete.
+        sStaleRows = (sStaleRows >> 1) | ROW_BIT(FAR_ROW);
+    }
+    if (y < 0)
+    {
+        for (i = 0; i < 16; i++)
+            CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + i, gSaveBlock1Ptr->pos.y);
+        // Every row moves down one, the bottom one out of the ring, and the new top row
+        // goes into its slot now: nothing shows that slot.
+        sStaleRows <<= 1;
+        DrawRingRow(-BR_RING_ABOVE);
+        fresh = ROW_BIT(-BR_RING_ABOVE);
+    }
+    sStaleRows &= ~PRET_ROWS;
+    // A map connection: the ring's rows past pret's were drawn from the last map, and
+    // one more than MAP_OFFSET past its edge is its border, where this map may be.
+    if (gCamera.active)
+        sStaleRows |= ALL_ROWS & ~PRET_ROWS & ~fresh;
+    sSliced = TRUE;
 }
 
 void BrField_Tick(void)
 {
-    int i;
-    if (sFarRowPending && gFieldCamera.y == 0)
-    {
-        for (i = 0; i < 16; i++)
-            CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + i, gSaveBlock1Ptr->pos.y + 15);
-        sFarRowPending = FALSE;
-    }
+    s16 dy;
+    u8 budget = ROWS_A_FRAME;
+    u32 rows;
+
     if (sFarColumnPending && gFieldCamera.x == 0)
     {
-        for (i = 0; i < 16; i++)
-            CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + 15, gSaveBlock1Ptr->pos.y + i);
         sFarColumnPending = FALSE;
+        DrawRingColumn(FAR_COLUMN);
+        budget = 0;
+    }
+    if ((sStaleRows & ROW_BIT(FAR_ROW)) && gFieldCamera.y == 0)
+    {
+        DrawRingRow(FAR_ROW);
+        if (budget != 0)
+            budget--;
+    }
+    if (sSliced)
+    {
+        sSliced = FALSE;
+        return;
+    }
+    rows = sStaleRows;
+    if (gFieldCamera.y != 0)
+        rows &= ~ROW_BIT(FAR_ROW);
+    for (; budget != 0; budget--)
+    {
+        dy = NearestStaleRow(rows);
+        if (dy == 0)
+            break;
+        DrawRingRow(dy);
+        rows &= ~ROW_BIT(dy);
     }
 }
 
-// pret's six lines, with the map bases moved down (br_field.h). InitBgsFromTemplates
-// has just set BG1..3 to sOverworldBgTemplates' 29/28/30; this changes only the base,
-// in the config every tilemap copy reads its destination from, before
-// InitOverworldGraphicsRegisters schedules the first one -- so nothing is ever copied to
-// the old blocks -- and its ShowBg writes it to BGxCNT.
+// pret's six lines, with the map bases moved down and the maps twice as tall
+// (br_field.h). InitBgsFromTemplates has just set BG1..3 to sOverworldBgTemplates'
+// 29/28/30 at 256x256; this changes the base and the size, in the config every tilemap
+// copy reads its destination and length from, before InitOverworldGraphicsRegisters
+// schedules the first one -- so nothing is ever copied to the old blocks, and every copy
+// is the whole 4 KB -- and its ShowBg writes them to BGxCNT.
 void BrField_InitRingBgs(void)
 {
     gOverworldTilemapBuffer_Bg1 = AllocZeroed(BR_RING_MAP_SIZE);
@@ -72,6 +197,9 @@ void BrField_InitRingBgs(void)
     SetBgAttribute(1, BG_ATTR_MAPBASEINDEX, BR_FIELD_MAP_BASE_BG1);
     SetBgAttribute(2, BG_ATTR_MAPBASEINDEX, BR_FIELD_MAP_BASE_BG2);
     SetBgAttribute(3, BG_ATTR_MAPBASEINDEX, BR_FIELD_MAP_BASE_BG3);
+    SetBgAttribute(1, BG_ATTR_SCREENSIZE, BR_RING_SCREEN_SIZE);
+    SetBgAttribute(2, BG_ATTR_SCREENSIZE, BR_RING_SCREEN_SIZE);
+    SetBgAttribute(3, BG_ATTR_SCREENSIZE, BR_RING_SCREEN_SIZE);
 }
 
 // The picture the core is asked to draw, and the sprite window it reads OAM y against

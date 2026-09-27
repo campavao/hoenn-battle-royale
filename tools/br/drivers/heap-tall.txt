@@ -1,0 +1,83 @@
+# heap-tall: the field's tilemap buffers are 4 KB a layer since BG1..3 went 256x512
+# (POK-329, include/br/br_field.h THE RING): 6 KB more heap, and every window on the
+# overworld still gets its buffer. AllocZeroed hands back NULL when the heap is out, and
+# a window with no tileData is simply never drawn -- the start menu or a sign would open
+# as nothing at all, and hud-vram.py would not see it (the harness lists only windows
+# that have a buffer).
+#
+# Littleroot with the whole HUD up -- the corner (window 1), the ticker (2) and the
+# ring's box (3), as hud-vram.txt -- then START over them (window 4) and, after it,
+# Brendan's house sign in the message box (window 0). gWindows is 12 bytes a window,
+# tileData at +8.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u32 gMain+4 CB2_Overworld+1
+# the three layers' buffers
+expectne u32 gOverworldTilemapBuffer_Bg1 0
+expectne u32 gOverworldTilemapBuffer_Bg2 0
+expectne u32 gOverworldTilemapBuffer_Bg3 0
+poke u8 gBrMatch 2
+poke u8 gBrHud+0x00 7
+poke u16 gBrHud+0x02 125
+pokebytes gBrMailbox+0x1018 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+poke u16 gBrMailbox+0x0C 1
+wait 4
+pokebytes gBrMailbox+0x1058 0C 14 11 00 00 00 01 19 0C 1C 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00
+wait 2
+poke u16 gBrMailbox+0x0C 2
+wait 10
+say hud-up
+expect u8 gBrHud+0x09 7
+expectne u32 gWindows+8 0
+expectne u32 gWindows+20 0
+expectne u32 gWindows+32 0
+expectne u32 gWindows+44 0
+# START with the box held up under it: five items, 7x12 at (22,1)
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0B 0
+tap START
+wait 24
+say start-menu-up
+expect u8 gWindows+48 0
+expect u8 gWindows+49 22
+expect u8 gWindows+51 7
+expect u8 gWindows+52 12
+expectne u32 gWindows+8 0
+expectne u32 gWindows+20 0
+expectne u32 gWindows+32 0
+expectne u32 gWindows+44 0
+expectne u32 gWindows+56 0
+expectne u32 gOverworldTilemapBuffer_Bg1 0
+expectne u32 gOverworldTilemapBuffer_Bg2 0
+expectne u32 gOverworldTilemapBuffer_Bg3 0
+tap B
+wait 20
+# the sign, (7,8): two east of the door and face north
+hold RIGHT 8
+wait 10
+hold RIGHT 8
+wait 10
+hold RIGHT 8
+wait 10
+tap UP
+wait 10
+expect u16 *gSaveBlock1Ptr 7
+expect u16 *gSaveBlock1Ptr+2 9
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0B 0
+tap A
+wait 40
+say sign-up
+# the message box is up on the ticker's and the box's tiles, window 0 with its buffer
+expectbits u16 0x0600FBC4 0x3FF 0x194
+expectne u32 gWindows+8 0
+expectne u32 gWindows+20 0
+expectne u32 gWindows+32 0
+expectne u32 gWindows+44 0
+expectne u32 gOverworldTilemapBuffer_Bg1 0
+expectne u32 gOverworldTilemapBuffer_Bg2 0
+expectne u32 gOverworldTilemapBuffer_Bg3 0
+tap A
+wait 20
+say ok

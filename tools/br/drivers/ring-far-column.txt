@@ -1,6 +1,7 @@
 # ring-far-column: the ring's sixteenth column after a step right (POK-319). Emerald's
 # slice redraw draws columns pos.x..pos.x+14 and leaves the sixteenth stale; the band
-# past the LCD shows it, so BrField_DrawFarColumn draws metatile pos.x+15 into it.
+# past the LCD shows it, so BrField_Tick draws metatile column pos.x+15 into it -- all 32
+# of the ring's rows since POK-329 (include/br/br_field.h, THE RING).
 #
 # From Littleroot (5,9) one step right puts pos at (6,9) with the ring's x tile offset at
 # 2, so the sixteenth slot is tile columns (2 + 30) % 32 = 0..1 of every row of BG2's
@@ -10,6 +11,10 @@
 # are the edge of a building, not the plain grass the stale column 20 would show. The
 # same address tells the whole story: metatile 5 at rest, still metatile 5 mid-step,
 # metatile 21 once the step is done (BrField_Tick draws it on the completing frame).
+# Tile rows 32..33 (0x0600D000) are ring row pos.y+16, past pret's sixteen: the old
+# column there is the map's west edge (0x20092180), the far one a path, 0x20032002 --
+# what the boot at (6,9) has in tile columns 30..31 there. In the parent's 256-row ring
+# that address is not BG2's map, and it is 0.
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 09 00 BD BB C7 FF
 wait 400
@@ -22,11 +27,13 @@ expect u32 0x0600CB00 0x20092180
 # offset has advanced, so slot 0 is now also "slot 30", and it must STILL hold metatile 5:
 # the scroll lags the tile by 12 pixels and those are on screen. Drawing the far column
 # here was the "jitter on the top left" of Cam's 2026-09-18 phone play-test.
+expect u32 0x0600D000 0x20092180
 hold RIGHT 9
 say mid-step-camera
 dump gFieldCamera+16 4
 expectne u32 gFieldCamera+16 0
 expect u32 0x0600CB00 0x20092180
+expect u32 0x0600D000 0x20092180
 wait 40
 say pos-after-a-step-right
 dump *gSaveBlock1Ptr 4
@@ -40,4 +47,7 @@ expect u32 0x0600CB00 0x628C628B
 expect u32 0x0600CB40 0x629C629B
 expect u32 0x0600CB80 0x52515250
 expect u32 0x0600CBC0 0x52615260
+say far-column-row-16
+expect u32 0x0600D000 0x20032002
+expect u32 0x0600D040 0x20022003
 say ok

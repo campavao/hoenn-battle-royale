@@ -37,15 +37,15 @@ watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
 watch 0x0400000A 6
-watch 0x0600C800 2048
-watch 0x0600D800 2048
-watch 0x0600E800 2048
+watch 0x0600C800 4096
+watch 0x0600D800 4096
+watch 0x0600E800 4096
 watch gOverworldTilemapBuffer_Bg1 4
 watch gOverworldTilemapBuffer_Bg2 4
 watch gOverworldTilemapBuffer_Bg3 4
-watch *gOverworldTilemapBuffer_Bg1 2048
-watch *gOverworldTilemapBuffer_Bg2 2048
-watch *gOverworldTilemapBuffer_Bg3 2048
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
 wait 2
 tap A
 wait 70
@@ -64,15 +64,15 @@ watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
 watch 0x0400000A 6
-watch 0x0600C800 2048
-watch 0x0600D800 2048
-watch 0x0600E800 2048
+watch 0x0600C800 4096
+watch 0x0600D800 4096
+watch 0x0600E800 4096
 watch gOverworldTilemapBuffer_Bg1 4
 watch gOverworldTilemapBuffer_Bg2 4
 watch gOverworldTilemapBuffer_Bg3 4
-watch *gOverworldTilemapBuffer_Bg1 2048
-watch *gOverworldTilemapBuffer_Bg2 2048
-watch *gOverworldTilemapBuffer_Bg3 2048
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
 wait 2
 tap A
 wait 30
@@ -95,15 +95,15 @@ watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
 watch 0x0400000A 6
-watch 0x0600C800 2048
-watch 0x0600D800 2048
-watch 0x0600E800 2048
+watch 0x0600C800 4096
+watch 0x0600D800 4096
+watch 0x0600E800 4096
 watch gOverworldTilemapBuffer_Bg1 4
 watch gOverworldTilemapBuffer_Bg2 4
 watch gOverworldTilemapBuffer_Bg3 4
-watch *gOverworldTilemapBuffer_Bg1 2048
-watch *gOverworldTilemapBuffer_Bg2 2048
-watch *gOverworldTilemapBuffer_Bg3 2048
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
 wait 2
 tap A
 wait 40

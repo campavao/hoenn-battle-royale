@@ -12,7 +12,9 @@
 // reading -- and draws it once, at its true rows, which for a person whose top is near
 // the window's bottom run on past it. Past the window a BG is drawn only if it is 512
 // rows tall, and the weather's semi-transparent sprites repeat every 256 rows, as its
-// 64x64 grid is laid out to.
+// 64x64 grid is laid out to. The field's BG1..3 are 512 rows since POK-329 (the ROM's
+// ring, include/br/br_field.h), so past the window the core draws the map from them --
+// its own rows, not the window's again -- and nothing of BG0 or of a person twice.
 //
 // Pinned: SEED puts seat 0 on SAFARI ZONE SOUTHEAST (15,14), as play.spec's does, and
 // #nobots keeps anybody else off the screen, so the rows past the window hold nothing
@@ -174,6 +176,46 @@ function learn(page: Page, key: string, r: Rect, frames: number): Promise<void> 
   }), [key, r, frames] as const);
 }
 
+/** Of __pic's rows [from, to) (LCD rows), the share of pixels equal to the one `by` rows
+ *  away: 1 for rows that are another rows' echo. */
+function sameAs(page: Page, from: number, to: number, by: number): Promise<number> {
+  return page.evaluate(([a, b, d]) => {
+    const p = (window as unknown as PicWindow).__pic!;
+    const px = new Uint32Array(p.data.buffer);
+    let same = 0;
+    let all = 0;
+    for (let y = Math.max(0, p.top + a); y < Math.min(p.height, p.top + b); y++) {
+      if (y + d < 0 || y + d >= p.height) continue;
+      for (let x = 0; x < p.width; x++, all++) same += px[y * p.width + x] === px[(y + d) * p.width + x] ? 1 : 0;
+    }
+    return all ? same / all : 1;
+  }, [from, to, by] as const);
+}
+
+/** Keeps __pic as __pic0, to compare a later picture with. */
+function keep(page: Page): Promise<void> {
+  return page.evaluate(() => {
+    const w = window as unknown as PicWindow & { __pic0?: Pic };
+    w.__pic0 = { ...w.__pic!, data: new Uint8Array(w.__pic!.data) };
+  });
+}
+
+/** Of __pic's rows [from, to), the share of pixels that differ from __pic0's. */
+function changed(page: Page, from: number, to: number): Promise<number> {
+  return page.evaluate(([a, b]) => {
+    const w = window as unknown as PicWindow & { __pic0?: Pic };
+    const p = w.__pic!;
+    const now = new Uint32Array(p.data.buffer);
+    const then = new Uint32Array(w.__pic0!.data.buffer);
+    let diff = 0;
+    let all = 0;
+    for (let y = Math.max(0, p.top + a); y < Math.min(p.height, p.top + b); y++) {
+      for (let x = 0; x < p.width; x++, all++) diff += now[y * p.width + x] !== then[y * p.width + x] ? 1 : 0;
+    }
+    return all ? diff / all : 0;
+  }, [from, to] as const);
+}
+
 /** Over `frames` frames, how many pixels of `r` took a value __seen[key] never had. */
 function strange(page: Page, key: string, r: Rect, frames: number): Promise<number> {
   return page.evaluate(([k, rect, n]) => new Promise<number>((resolve) => {
@@ -213,7 +255,7 @@ async function ghost(page: Page, sym: Record<string, number>, present: boolean):
   }, [sym.gBrSeats + SEAT * SEAT_SIZE, row] as const);
 }
 
-test('a band taller than 256 rows shows nothing twice: past the sprite window, the backdrop and the weather', async ({ browser }) => {
+test("a band taller than 256 rows shows nothing twice: past the sprite window, the ring's own rows and the weather", async ({ browser }) => {
   test.setTimeout(180_000);
   const sym = loadSymbols();
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
@@ -226,59 +268,57 @@ test('a band taller than 256 rows shows nothing twice: past the sprite window, t
     });
     expect(emuBand, 'the core was asked for the tall band, drawn with the 256-row window').toEqual({ viewport: { left: 0, top: TALL.top, right: 16, bottom: TALL.bottom }, sprites: WINDOW });
 
-    // (a) Rows past the window: one colour, the backdrop. The old core drew the ring's
-    // rows there again, and the HUD's corner 256 rows under itself.
+    // (a) Rows past the window: the map, from BG1..3's 512 rows -- the ring's rows past
+    // the 256 the window holds, not those 256 again. The core before POK-329 drew every
+    // BG's rows there a second time (and the HUD's corner 256 rows under itself); the ROM
+    // before it had no rows there to draw, and the core drew the backdrop.
     const pic = await grab(page);
     expect({ width: pic.width, height: pic.height, top: pic.top }).toEqual({ width: 256, height: 160 + TALL.top + TALL.bottom, top: TALL.top });
     await save(page, 'tall');
     const outer = pastWindow(pic);
     expect(outer).toEqual([[-TALL.top, -WINDOW.top], [160 + WINDOW.bottom, 160 + TALL.bottom]]);
-    const backdrop = new Set<number>();
-    for (const [a, b] of outer) for (const c of await coloursIn(page, a, b)) backdrop.add(c);
-    expect(backdrop.size, `rows past the window are the backdrop alone, not the ring again (${[...backdrop].slice(0, 6).map((c) => c.toString(16))})`).toBe(1);
+    for (const [a, b] of outer) {
+      expect((await coloursIn(page, a, b)).length, `rows ${a}..${b - 1} past the window are the map`).toBeGreaterThan(4);
+    }
+    const echo = { above: await sameAs(page, -TALL.top, -WINDOW.top, 256), below: await sameAs(page, 160 + WINDOW.bottom, 160 + TALL.bottom, -256) };
+    console.log(`picture: past the window, ${(100 * echo.above).toFixed(0)}% / ${(100 * echo.below).toFixed(0)}% of pixels match the rows 256 away`);
+    expect(echo.above, 'the rows above the window are not the rows 256 below them').toBeLessThan(0.9);
+    expect(echo.below, 'nor the rows below it the rows 256 above').toBeLessThan(0.9);
     // ...and the window's own band rows are the map.
     expect((await coloursIn(page, -WINDOW.top, 0)).length, 'the rows above the LCD are the map').toBeGreaterThan(4);
     expect((await coloursIn(page, 160, 160 + WINDOW.bottom)).length, 'and so are the rows below it').toBeGreaterThan(4);
 
     // (c) A person nine rows down, their legs past the window's bottom: drawn there, once,
-    // at their true rows -- over the backdrop -- and never at the band's top.
+    // at their true rows -- over the map -- and never at the band's top.
     const top: Rect = { x: GHOST.x, y: -WINDOW.top, w: GHOST.w, h: 16 };
     const legs: Rect = { x: GHOST.x, y: 160 + WINDOW.bottom, w: GHOST.w, h: GHOST.y + GHOST.h - (160 + WINDOW.bottom) };
     await learn(page, 'top', top, 120);
+    await learn(page, 'legs', legs, 120);
     await ghost(page, sym, true);
     await expect
-      .poll(async () => {
-        await grab(page);
-        const [a, b] = [legs.y, legs.y + legs.h];
-        return (await coloursIn(page, a, b)).length;
-      }, { timeout: 15_000, message: 'the ghost\'s legs are drawn past the window, over the backdrop' })
-      .toBeGreaterThan(1);
+      .poll(() => strange(page, 'legs', legs, 4), { timeout: 15_000, message: "the ghost's legs are drawn past the window, over the map" })
+      .toBeGreaterThan(8);
+    await grab(page);
     await save(page, 'tall-ghost');
-    expect(await strange(page, 'top', top, 30), 'nothing of the ghost at the band\'s top').toBe(0);
+    expect(await strange(page, 'top', top, 30), "nothing of the ghost at the band's top").toBe(0);
     await ghost(page, sym, false);
-    await expect.poll(async () => {
-      await grab(page);
-      return (await coloursIn(page, legs.y, legs.y + legs.h)).length;
-    }, { timeout: 15_000, message: 'and they go with it' }).toBe(1);
+    await expect.poll(() => strange(page, 'legs', legs, 4), { timeout: 15_000, message: 'and they go with it' }).toBe(0);
 
     // (b) The fog: WEATHER_FOG_HORIZONTAL, the ring's outside. Its 64x64s are a 256-row
     // grid that scrolls by wrapping, drawn every 256 rows, so the rows past the window
-    // are fog over the backdrop -- its pattern, and nothing of the map.
+    // are fogged too: every 32-row stripe of them changes when it comes on.
+    await grab(page);
+    await keep(page);
     await page.evaluate(([at, fog]) => (window as unknown as PicWindow).__hbr.emu.write(at, fog, 8), [sym.gWeather + WEATHER_NEXT, WEATHER_FOG_HORIZONTAL] as const);
     await expect.poll(() => page.evaluate((at) => (window as unknown as PicWindow).__hbr.emu.read(at, 8), sym.gWeather + WEATHER_CURR), { timeout: 10_000 }).toBe(WEATHER_FOG_HORIZONTAL);
     await page.waitForTimeout(3_000);
     await grab(page);
     await save(page, 'tall-fog');
-    const fogged = new Set<number>();
     for (const [a, b] of outer) {
       for (let y = a; y < b; y += 32) {
-        const stripe = await coloursIn(page, y, Math.min(b, y + 32));
-        expect(stripe.length, `fog in rows ${y}..${Math.min(b, y + 32) - 1}`).toBeGreaterThan(1);
-        for (const c of stripe) fogged.add(c);
+        expect(await changed(page, y, Math.min(b, y + 32)), `fog in rows ${y}..${Math.min(b, y + 32) - 1}`).toBeGreaterThan(0.5);
       }
     }
-    // The fog's palette is 16 colours, each blended over the one backdrop.
-    expect(fogged.size, 'fog over the backdrop, and nothing of the map').toBeLessThanOrEqual(17);
   } finally {
     await ctx.close();
   }

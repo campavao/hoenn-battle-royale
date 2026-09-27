@@ -1,34 +1,38 @@
-# ring-rows: the ring's sixteenth row after a step down (POK-319), the row half of
-# ring-far-column.txt. The LCD sits at ring rows 5..24 at rest (BG VOFS 40), so the band
-# past the picture shows rows 0..4 above it and 25..31 below, and every one of them has
-# to hold the map. Emerald's slice redraw draws rows pos.y..pos.y+14 on a step and
-# leaves the sixteenth stale; BrField_MarkFarRow notes it and BrField_Tick draws
-# metatile row pos.y+15 into it on the frame the step completes, not before.
+# ring-rows: the ring's far row after a step down (POK-319, POK-329), the row half of
+# ring-far-column.txt. The ring is 32 metatile rows, pos.y-4..pos.y+27, grid row pos.y+dy
+# in tile rows (yTileOffset + 2*dy) & 63 of 64 (include/br/br_field.h, THE RING). A step
+# down moves every row up one and leaves the new bottom row, pos.y+27, to be drawn into
+# the slot the old top row had -- which is the new pos.y-5, the row the band's top shows
+# until the step is done. So BrField_RedrawSlices only marks it and BrField_Tick draws it
+# on the frame the step completes, not before (Cam's 2026-09-18 phone: "jittering on the
+# top left, up, down, based on which way you're going").
 #
-# From Littleroot (5,9) one step down puts pos at (5,10) with the ring's y tile offset
-# at 2, so the sixteenth slot is tile rows (2 + 30) % 32 = 0..1 of BG2's tilemap
-# (0x0600C800, the middle layer, 64 bytes a row). Tile columns 10..11 (u32 at +0x14)
-# are the witness: plain path at rest (0x20032002), and 0x21FD21FC / 0x21FF21FE once the
-# row is drawn -- what a whole-map draw booted straight at (5,10) has in tile rows
-# 30..31 (u32 at 0x0600CF94 and 0x0600CFD4), and not the plain path the stale slot held.
+# Rustboro City (21,25), landed, so the tile offsets are 0: the ring's top row, grid row
+# 21 (map row 14), is in tile rows 56..57 -- BG2's tilemap (0x0600C800, the middle layer,
+# 64 bytes a tile row) at 0x0600D600. One step down puts pos at (21,26) and the offset at
+# 2, and (2 + 2*27) & 63 is 56 again: the far row, grid row 53 (map row 46), goes into
+# that same slot. Tile columns 0..1 (u32 at +0) are the witness: 0xB33BB33B for the top
+# row, 0x82E082E1 for the far one -- what a whole-map draw booted straight at (21,26) has
+# at dy 27, tile rows 54..55 (0x0600D580), read off that boot. VRAM trails the buffers by
+# a frame, so the mid-step read (the camera 12 pixels in) is the step's fifth frame.
+# The parent's 256-row ring has no tile rows past 31: 0x0600D600 is not BG2's map at all.
 wait 30
-pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 09 00 BD BB C7 FF
+pokebytes gBrMailbox+0x2018 01 00 00 03 15 00 19 00 BD BB C7 FF
 wait 400
 say rest
-expect u16 *gSaveBlock1Ptr+2 9
-expect u32 0x0600C814 0x20032002
-expect u32 0x0600C854 0x20022003
-# Already facing south, so the step starts at once and pos moves with its first frame.
-# Four frames later the step is still under way and the band's top rows are still
-# showing that slot: it must not have been drawn yet (Cam's 2026-09-18 phone jitter).
+expect u16 *gSaveBlock1Ptr+2 25
+expect u32 0x0600D600 0xB33BB33B
+expect u32 0x0600D640 0xB34BB34B
+# Already facing south, so the step starts on the first frame DOWN is held.
 hold DOWN 1
 wait 4
 say mid-step
-expect u16 *gSaveBlock1Ptr+2 10
-expect u32 0x0600C814 0x20032002
+expect u16 *gSaveBlock1Ptr+2 26
+expect u32 gFieldCamera+20 12
+expect u32 0x0600D600 0xB33BB33B
 wait 40
 say after-a-step-down
-expect u16 *gSaveBlock1Ptr+2 10
-expect u32 0x0600C814 0x21FD21FC
-expect u32 0x0600C854 0x21FF21FE
+expect u16 *gSaveBlock1Ptr+2 26
+expect u32 0x0600D600 0x82E082E1
+expect u32 0x0600D640 0x82E082E2
 say ok

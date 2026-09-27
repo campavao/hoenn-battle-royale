@@ -255,11 +255,13 @@ picture with the LCD at (0, 40) inside it: the ring of tiles Emerald already kee
 around the camera (32×32 tiles, the LCD at rows 40..199 with the standing vertical pan),
 so the 40 rows above, 56 below and 16 columns right of the window are real BG and OBJ
 state -- tile animation, people, the fog's own blend. The ROM's part is small
-(`src/br/br_field.c`): draw the ring's sixteenth row and column after a step (the slice
-redraws leave them stale), and hide an object by its sprite's TOP, not its bottom, so
-every visible sprite's OAM y is unambiguous. The composite fills everything past the
-band; an overlay above the picture draws the people the ROM hid for being past it. Off
-the field the band is clipped away and the composite shows through. The numbers are
+(`src/br/br_field.c`): draw the part of the ring pret's slice redraws leave stale after a
+step -- since POK-329 the ring is 32×64 tiles on 256×512 BGs, pos.y-4..pos.y+27, with a
+row or column that would land in a slot still on screen drawn when the step completes
+(THE RING in `include/br/br_field.h`) -- and hide an object by its sprite's TOP, not its
+bottom, so every visible sprite's OAM y is unambiguous. The composite fills everything
+past the band; an overlay above the picture draws the people the ROM hid for being past
+it. Off the field the band is clipped away and the composite shows through. The numbers are
 `include/br/br_field.h`'s, pinned by `web/src/field.test.ts`; the harness's libmgba is
 unpatched and photographs 240×160 only.
 

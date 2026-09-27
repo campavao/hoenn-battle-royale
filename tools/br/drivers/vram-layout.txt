@@ -6,7 +6,9 @@
 # follows the config, so the three maps in VRAM are the field's buffers wherever they
 # are (hud-vram.py checks that, frame by frame, through every window over the HUD).
 #
-# BGxCNT's map base is bits 8..12: 27 is 0x1B00, 25 0x1900, 29 0x1D00.
+# BGxCNT's map base is bits 8..12: 27 is 0x1B00, 25 0x1900, 29 0x1D00. Its size is bits
+# 14..15, and BG1..3 are 256x512 (size 2, 0x8000): the ring's 64 tile rows (THE RING in
+# include/br/br_field.h), set with the bases every time.
 #
 # Route 102 under CALVIN (npcout-in-battle.txt's boot): a map load, then his fight, won,
 # and back.
@@ -19,6 +21,9 @@ dump 0x04000008 8
 expectbits u16 0x0400000A 0x1F00 0x1B00
 expectbits u16 0x0400000C 0x1F00 0x1900
 expectbits u16 0x0400000E 0x1F00 0x1D00
+expectbits u16 0x0400000A 0xC000 0x8000
+expectbits u16 0x0400000C 0xC000 0x8000
+expectbits u16 0x0400000E 0xC000 0x8000
 # ...and BG0 where it was, block 31
 expectbits u16 0x04000008 0x1F00 0x1F00
 # the middle layer is drawn where BG2CNT says: the ring's first row, a tile a cell
@@ -103,6 +108,9 @@ dump 0x04000008 8
 expectbits u16 0x0400000A 0x1F00 0x1B00
 expectbits u16 0x0400000C 0x1F00 0x1900
 expectbits u16 0x0400000E 0x1F00 0x1D00
+expectbits u16 0x0400000A 0xC000 0x8000
+expectbits u16 0x0400000C 0xC000 0x8000
+expectbits u16 0x0400000E 0xC000 0x8000
 expectbits u16 0x04000008 0x1F00 0x1F00
 expectne u16 0x0600C800 0
 expectne u16 0x0600C83E 0

@@ -6,18 +6,17 @@
 // The picture past the LCD (POK-319). In the browser the emulator draws the field's BG
 // and OBJ state onto a picture bigger than 240x160, from the same registers, so the map
 // keeps going past the GBA's window. The ROM's part is small, because Emerald already
-// keeps a 256x256 ring of tiles around the camera (32x32 tiles at BG1..3's tilemaps)
-// and object events two tiles past the screen:
+// keeps a ring of tiles around the camera (256x256 in pret, 32x32 tiles at BG1..3's
+// tilemaps; 256x512 since POK-329, THE RING below) and object events two tiles past the
+// screen:
 //
-//   * The LCD sits at ring rows 40..199 at rest (BG VOFS = 8 + the 32 of the camera's
-//     standing vertical pan) and columns 0..239, so the ring holds 40 rows above, 56
-//     below and 16 columns to the right. That is the whole 256-row period of the
-//     hardware's 8-bit sprite y, so the band is exactly one ring.
-//   * The ring's sixteenth row and column are stale: the slice redraws on a step draw
-//     rows pos.y..pos.y+14 and columns pos.x..pos.x+14 only. BrField_MarkFarRow and
-//     BrField_MarkFarColumn note the sixteenth after a step down or right and BrField_Tick
-//     draws it when the step completes (a step up or left rotates a fresh one in on its
-//     own; drawing it earlier would paint over the slot still on screen).
+//   * The LCD sits 40 rows below pos.y's top at rest (BG VOFS = 8 + the 32 of the
+//     camera's standing vertical pan) and at column 0, so pret's 16x16 metatiles hold 40
+//     rows above it, 56 below and 16 columns to the right. That is the whole 256-row
+//     period of the hardware's 8-bit sprite y: the sprite window below.
+//   * pret's slice redraws on a step draw rows pos.y..pos.y+14 and columns
+//     pos.x..pos.x+14 only, so the ring's sixteenth column (and row, before POK-329) is
+//     BR's to draw, when the step completes (THE RING).
 //   * Emerald hides an object's sprite once it is 16 pixels past the LCD. The band's
 //     sprites need their OAM y to be unambiguous -- 8 bits, so a top in [-40, 0) is
 //     216..255 and a top in [160, 216) is 160..215 -- which is why BrField_OffScreen
@@ -33,16 +32,46 @@
 // different deploys never disagree about the picture: a ROM without the symbol gets
 // the legacy band, 0/40/16/56 with the window 40/56.
 
-// Metatile rows of the ring above pos.y (the ring's top is pos.y - BR_RING_ABOVE):
-// none yet. The view's top may reach no further up than the ring does.
-#define BR_RING_ABOVE 0
+// THE RING (POK-329). BG1..3 are 256x512 text BGs, so the ring is 32x64 tiles: 16
+// metatile columns (pos.x .. pos.x+15, as pret's) and 32 metatile rows, pos.y -
+// BR_RING_ABOVE .. pos.y + 31 - BR_RING_ABOVE. Grid row pos.y + dy lives in tile rows
+// (yTileOffset + 2*dy) & 63, which is where pret keeps pos.y (dy 0) too, so the LCD sees
+// the same tiles at the same scroll: VOFS is 9 bits now (yPixelOffset is a u16,
+// field_camera.c) and at rest points at pos.y's slot + 40, as it did.
+//
+//   * pret's own draws stay exactly as they were -- rows pos.y..pos.y+15 on a whole-map
+//     draw, row pos.y on a step up and pos.y+14 on a step down, column pos.x on a step
+//     left and pos.x+14 on a step right, 16 metatiles each -- so every row the LCD can
+//     show is drawn when pret draws it, from the map pret would read.
+//   * The rest is BR's (BrField_RedrawSlices): a step up draws the new top row pos.y -
+//     BR_RING_ABOVE at once, into the slot the old bottom row leaves (off every picture:
+//     the view keeps one metatile of the ring spare below it). A step left draws the new
+//     column's other 16 rows at once. A step down marks the new bottom row, and a step
+//     right the far column pos.x+15 (32 rows): each goes into the slot the band's top
+//     rows, or its left columns, show until the step completes, so BrField_Tick draws it
+//     on that frame, not before (Cam's 2026-09-18 "jittering on the top left").
+//   * The ring's other rows -- the BR_RING_ABOVE above pos.y and pos.y+15 down -- were
+//     drawn from the map of their day, and a row drawn more than MAP_OFFSET past a map's
+//     edge is border. So a whole-map draw and a map connection mark them stale, and
+//     BrField_Tick redraws them, the nearest first, two rows a frame on the frames no
+//     step draws: a whole-map draw costs pret's 256 metatiles on its frame, and the ring
+//     is whole about eight frames later.
+
+// Metatile rows of the ring above pos.y. The view's top may reach no further up than
+// the ring does, and its bottom must leave the ring one row spare.
+#define BR_RING_ABOVE 4
+// Tile rows in the ring: 64, two screen blocks a layer.
+#define BR_RING_TILE_ROWS 64
+#define BR_RING_ROWS (BR_RING_TILE_ROWS / 2)
 
 // The sprite window: rows above and below the LCD, 256 - 160 between them.
 #define BR_SPRITE_TOP    40
 #define BR_SPRITE_BOTTOM 56
 
-// The view: what the core draws past the LCD on each side. Set by hand until the ring
-// is tall enough to feed more rows than the window.
+// The view: what the core draws past the LCD on each side. Still the sprite window, so
+// the picture is the one it was, fed from the middle of the taller ring (rows
+// pos.y..pos.y+15 at rest) and no longer wrapping it; the asserts below say how much
+// further the ring could feed.
 #define BR_VIEW_LEFT   0
 #define BR_VIEW_TOP    40
 #define BR_VIEW_RIGHT  16
@@ -52,6 +81,12 @@ STATIC_ASSERT(BR_SPRITE_TOP + BR_SPRITE_BOTTOM == 256 - DISPLAY_HEIGHT, BrSprite
 STATIC_ASSERT(BR_SPRITE_TOP % 8 == 0 && BR_SPRITE_BOTTOM % 8 == 0, BrSpriteWindowInEights)
 STATIC_ASSERT(BR_VIEW_LEFT % 8 == 0 && BR_VIEW_TOP % 8 == 0 && BR_VIEW_RIGHT % 8 == 0 && BR_VIEW_BOTTOM % 8 == 0, BrViewInEights)
 STATIC_ASSERT(BR_VIEW_TOP <= BR_SPRITE_TOP + 16 * BR_RING_ABOVE, BrViewTopInsideRing)
+// At rest the picture runs from pos.y's top + 40 - BR_VIEW_TOP down; mid-step up it is
+// up to one metatile lower, and that row has to be in the ring too.
+STATIC_ASSERT(BR_SPRITE_TOP + DISPLAY_HEIGHT + BR_VIEW_BOTTOM + 16 <= 16 * (BR_RING_ROWS - BR_RING_ABOVE), BrViewBottomInsideRing)
+// pret's rows pos.y..pos.y+15 are ring rows; BrField_Tick's stale rows are one u32.
+STATIC_ASSERT(BR_RING_ABOVE >= 0 && BR_RING_ABOVE + 16 <= BR_RING_ROWS, BrPretRowsInsideRing)
+STATIC_ASSERT(BR_RING_ROWS == 32, BrRingRowsAreOneWord)
 
 // Where the ring lives in VRAM (POK-329). pret puts BG2's tilemap at screen block 28,
 // BG1's at 29 and BG3's at 30, one 2 KB block each, right under BG0's at 31. A 256x512
@@ -64,16 +99,28 @@ STATIC_ASSERT(BR_VIEW_TOP <= BR_SPRITE_TOP + 16 * BR_RING_ABOVE, BrViewTopInside
 #define BR_FIELD_MAP_BASE_BG3 29
 // BG0's tilemap, sOverworldBgTemplates' (src/overworld.c): the blocks stop short of it.
 #define BR_FIELD_MAP_BASE_BG0 31
-// Each layer's tilemap: one screen block while the ring is 256x256.
-#define BR_RING_MAP_SIZE BG_SCREEN_SIZE
+// Each layer's tilemap: two screen blocks, a 256x512 text BG (BGxCNT size 2).
+#define BR_RING_SCREEN_SIZE 2
+#define BR_RING_MAP_SIZE (2 * BG_SCREEN_SIZE)
 
 STATIC_ASSERT(BR_FIELD_MAP_BASE_BG1 == BR_FIELD_MAP_BASE_BG2 + 2 && BR_FIELD_MAP_BASE_BG3 == BR_FIELD_MAP_BASE_BG1 + 2
     && BR_FIELD_MAP_BASE_BG0 == BR_FIELD_MAP_BASE_BG3 + 2, BrRingMapsTwoBlocksApart)
 STATIC_ASSERT(BR_RING_MAP_SIZE <= 2 * BG_SCREEN_SIZE, BrRingMapFitsItsBlocks)
+STATIC_ASSERT(BR_RING_MAP_SIZE == BR_RING_TILE_ROWS * 32 * 2, BrRingMapIsTheRing)
 
 // InitOverworldBgs's tilemap buffers and where they go (src/overworld.c, `#if BR`): the
-// three BR_RING_MAP_SIZE buffers, and BG1..3's map bases above.
+// three BR_RING_MAP_SIZE buffers, BG1..3's map bases above, and their 256x512 size.
 void BrField_InitRingBgs(void);
+
+// field_camera.c's ring, under `#if BR` (see THE RING above):
+// DrawWholeMapViewInternal: pret's rows pos.y..pos.y+15, the rest marked stale.
+void BrField_DrawWholeRing(void);
+// MapPosToBgTilemapOffset: the tilemap index of grid cell (x, y)'s top-left tile, -1
+// when it is not in the ring.
+s32 BrField_RingOffset(u8 xTileOffset, u8 yTileOffset, s32 x, s32 y);
+// RedrawMapSlicesForCameraUpdate: a step's slices, pret's and BR's (x, y as pret passes
+// them: twice the step, in tiles).
+void BrField_RedrawSlices(int x, int y);
 
 // What the page reads out of the patched ROM before it boots the core (web/src/field.ts
 // romBand), every field a u16. In ROM: it costs no RAM.
@@ -96,10 +143,8 @@ BR_SIZE(BrFieldView, 12)
 
 extern const struct BrFieldView gBrFieldView;
 
-// A step down or right leaves the ring's sixteenth row or column stale: mark it, and
-// BrField_Tick (every frame from CameraUpdate) draws it once the step has completed.
-void BrField_MarkFarRow(void);
-void BrField_MarkFarColumn(void);
+// Every frame from CameraUpdate: the far row or column once its step has completed, and
+// then stale rows (see THE RING above).
 void BrField_Tick(void);
 // TRUE when a sprite whose top-left is (x, y) and right edge x2 is past the picture.
 bool8 BrField_OffScreen(s16 x, s16 x2, s16 y);
