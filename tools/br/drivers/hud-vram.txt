@@ -1,0 +1,217 @@
+# hud-vram: the HUD shares BG0's tiles with the start menu and the message box, and
+# every window that comes up over it gets them clean (POK-329). The corner is 0x139..
+# 0x153 (the start menu's head), the box 0x154..0x1C3 (the menu's tail and the message
+# box's head), the ticker 0x1C8..0x1FF (the message box's tail): BG2's tilemap comes
+# down to screen block 25 for the 512-row ring, and BG0 keeps no tile from 0x240 on.
+# BrHud_Yield hands a HUD window's tiles over on the frame another window comes up over
+# it, and BrHud_Tick draws it again the frame after that window goes.
+#
+# Littleroot: 7 LEFT and the clock, a kill line on the ticker, and the ring's box coming
+# up beside them; then, one after another over all three, the START menu (five items,
+# the box still up), Brendan's house sign, the spectator's peek box, and the map-name
+# popup after a warp, with the box running out under it. Every frame through each is
+# watched (VRAM's tilemap and tiles, every live BG0 window, gBrHud's first 16 bytes) and
+# tools/br/hud-vram.py checks each cell naming a shared tile shows its owner's pixels,
+# that none names a tile at or above 0x240, and that the corner and the ticker are back
+# the frame after whatever was over them goes.
+# checked-by: tools/br/hud-vram.py
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the match is on (MAP is a START row while it is), and the page writes 7 left, 2:05
+poke u8 gBrMatch 2
+poke u8 gBrHud+0x00 7
+poke u16 gBrHud+0x02 125
+# a kill line from seat 1 (TICKER, as hud.txt): "MAY GOT BRENDAN"
+pokebytes gBrMailbox+0x1018 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+poke u16 gBrMailbox+0x0C 1
+wait 4
+# RING phase 1 naming LITTLEROOT (as ring-place.txt): the corner names it and the box
+# comes up to say the fog closes in on it -- 0x154..0x1C3, beside the corner's tiles and
+# the ticker's, and the one HUD window that comes and goes on its own
+pokebytes gBrMailbox+0x1058 0C 14 11 00 00 00 01 19 0C 1C 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00
+say box-open
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+poke u16 gBrMailbox+0x0C 2
+wait 10
+unwatch
+say box-up
+# all three up: shown = CORNER|TICKER|BOX, each first cell its own base tile. BG0's
+# tilemap is 0x0600F800, 32 cells a row, palette 15: (20,1) the corner, (1,11) the box,
+# (1,17) the ticker
+expect u8 gBrHud+0x09 7
+expect u16 0x0600F868 0xF139
+expect u16 0x0600FAC2 0xF154
+expect u16 0x0600FC42 0xF1C8
+shot hud-up
+#
+# START over the box. The menu is five rows, 0x139..0x18C, cols 22..28 and rows 1..12,
+# its frame from (21,0) to (29,13): it covers the corner's tiles and the box's first
+# fifty-seven. The box and the ticker stay up while it opens (boxFrames 255, the
+# ticker's line started over).
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0B 0
+say start-menu-open
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap START
+wait 14
+unwatch
+say start-menu-up
+wait 10
+expect u8 gBrHud+0x09 0
+# the menu's own cells and frame are whole where it reaches the box's rows -- (22,12) is
+# its tile 0x186 and (22,13) its frame's foot, 0x21B. The box used to take its whole
+# rectangle off with ClearStdWindowAndFrame, rows 10..15 right across, menu and all.
+expectbits u16 0x0600FB2C 0x3FF 0x186
+expectbits u16 0x0600FB6C 0x3FF 0x21B
+# ...and the HUD's cells outside the menu are gone: the corner's two left columns and
+# the box's first cell
+expect u16 0x0600F826 0
+expect u16 0x0600F868 0
+expect u16 0x0600FAC2 0
+shot menu-over-box
+say start-menu-close
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap B
+wait 10
+unwatch
+say start-menu-closed
+expect u8 gBrHud+0x09 7
+expect u16 0x0600F868 0xF139
+expect u16 0x0600FAC2 0xF154
+expect u16 0x0600FC42 0xF1C8
+shot menu-closed
+#
+# Brendan's house sign, (7,8): two east of the door and face north (the first hold only
+# turns us). Its message box is window 0, 0x194..0x1FF: the box's last forty-eight and
+# the whole ticker.
+hold RIGHT 8
+wait 10
+hold RIGHT 8
+wait 10
+hold RIGHT 8
+wait 10
+tap UP
+wait 10
+say sign-pos
+expect u16 *gSaveBlock1Ptr 7
+expect u16 *gSaveBlock1Ptr+2 9
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0B 0
+say sign-open
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap A
+wait 40
+unwatch
+say sign-up
+# the corner stays (nothing covers it); the ticker and the box are the message box's
+expect u8 gBrHud+0x09 1
+expect u16 0x0600F868 0xF139
+expectbits u16 0x0600FBC4 0x3FF 0x194
+shot sign
+say sign-close
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap A
+wait 12
+unwatch
+say sign-closed
+wait 10
+expect u8 gBrHud+0x09 7
+expect u16 0x0600FAC2 0xF154
+expect u16 0x0600FC42 0xF1C8
+shot sign-closed
+#
+# The peek box. Seat 1 stands two east of us (PLACE, as spectate-follow.txt: map 0:9,
+# (16,16) with MAP_OFFSET) and we FOLLOW it; START then opens the box of what it
+# carries, (1,2) 18x10 from tile 0x008, no frame. It shares no tile with the HUD but
+# its last two rows are where the bottom box's top is, so the box yields to it.
+pokebytes gBrMailbox+0x1098 02 0E 0B 00 00 01 01 00 09 10 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 3
+wait 10
+pokebytes gBrMailbox+0x10D8 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 4
+wait 30
+expect u8 gBrSpectate+8 1
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0B 0
+wait 4
+expect u8 gBrHud+0x09 7
+say peek-open
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap START
+wait 12
+unwatch
+say peek-up
+expect u8 gBrSpectate+10 1
+# the box is down and the peek box's last row is its own: (1,11) is its tile 0x0AA
+expectbits u8 gBrHud+0x09 4 0
+expectbits u16 0x0600FAC2 0x3FF 0x0AA
+shot peek
+say peek-close
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap B
+wait 12
+unwatch
+say peek-closed
+expect u8 gBrSpectate+10 0
+expect u8 gBrHud+0x09 7
+expect u16 0x0600FAC2 0xF154
+shot peek-closed
+#
+# FOLLOW 0xFF puts us back on our own tile with a warp, and the map load brings the
+# map-name popup up over the corner's side of the screen: 0x107..0x124 and its outline
+# 0x21D..0x23C, sliding BG0 down and back. It reloads the frame's palette over ours;
+# the HUD puts itself again when it goes.
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0B 0
+pokebytes gBrMailbox+0x1118 14 04 01 00 00 FF
+poke u16 gBrMailbox+0x0C 5
+say popup
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 260
+unwatch
+say popup-gone
+expect u8 gBrSpectate+8 0xFF
+expectbits u8 gBrHud+0x09 1 1
+expect u16 0x0600F868 0xF139
+shot popup-gone
+say hud vram ok

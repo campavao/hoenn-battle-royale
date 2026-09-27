@@ -67,6 +67,7 @@
 #include "constants/trainer_hill.h"
 #include "constants/weather.h"
 #if BR
+#include "br/br_hud.h"
 #include "br/br_match.h"
 #endif
 
@@ -1475,6 +1476,9 @@ static void OverworldBasic(void)
     BuildOamBuffer();
     UpdatePaletteFade();
     UpdateTilesetAnimations();
+#if BR
+    BrHud_Yield();
+#endif
     DoScheduledBgTilemapCopiesToVram();
 }
 

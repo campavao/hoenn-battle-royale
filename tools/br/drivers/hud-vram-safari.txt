@@ -1,0 +1,56 @@
+# hud-vram-safari: the Safari's START menu over the HUD (POK-329). hud-vram.txt has the
+# model and the five-row menu out in Hoenn; the Zone's is four rows (safari-menu.txt),
+# 0x139..0x17E, with the balls window beside it from tile 0x008. It covers the corner's
+# tiles and the box's first forty-three. Every frame through its opening and closing is
+# watched, the box up the whole time, and tools/br/hud-vram.py checks every cell naming
+# a shared tile.
+# checked-by: tools/br/hud-vram.py
+wait 30
+poke u32 gBrMatch+8 0x00000C00
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+poke u8 gBrHud+0x00 7
+poke u16 gBrHud+0x02 125
+pokebytes gBrMailbox+0x1018 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+poke u16 gBrMailbox+0x0C 1
+pokebytes gBrHud+0x14C 00 05 C2 BF C6 C6 C9 FF
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0D 4
+wait 4
+poke u8 gBrHud+0x0B 0
+expect u8 gBrHud+0x09 7
+shot hud-up
+say safari-menu-open
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap START
+wait 14
+unwatch
+say safari-menu-up
+# four rows: the menu is rows 1..10 and its frame's foot row 11, 0x21B at (22,11), whole
+# where it runs into the box's rows; the box is down, its first cell off
+expectbits u16 0x0600FAEC 0x3FF 0x21B
+expect u16 0x0600FAC2 0
+expect u8 gBrHud+0x09 0
+shot menu
+say safari-menu-close
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap B
+wait 10
+unwatch
+say safari-menu-closed
+expect u8 gBrHud+0x09 7
+expect u16 0x0600F868 0xF139
+expect u16 0x0600FAC2 0xF154
+shot hud-back
+say hud vram safari ok

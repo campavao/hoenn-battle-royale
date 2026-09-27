@@ -1,0 +1,85 @@
+# hud-vram-centre: the nurse's question over the HUD (POK-329). hud-vram.txt has the
+# model; this is Oldale's Centre (map 2:2), where the nurse's message box takes the
+# ticker's tiles and the box's last forty-eight, and her YES/NO -- (21,9) 5x4 from tile
+# 0x125, framed from (20,8) -- sits where the bottom box's frame would be. Every frame
+# from A to the question, through YES, and from her last line to the HUD coming back is
+# watched, and tools/br/hud-vram.py checks every cell naming a shared tile.
+# checked-by: tools/br/hud-vram.py
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 02 02 07 00 04 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+poke u16 gPlayerParty+0x56 1
+poke u8 gBrHud+0x00 7
+poke u16 gBrHud+0x02 125
+# a kill line on the ticker (TICKER, as hud.txt) and a box of our own: "HELLO", 255
+# frames, dirty
+pokebytes gBrMailbox+0x1018 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+poke u16 gBrMailbox+0x0C 1
+pokebytes gBrHud+0x14C 00 05 C2 BF C6 C6 C9 FF
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0D 4
+hold UP 6
+wait 10
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0B 0
+wait 2
+expect u8 gBrHud+0x09 7
+expect u16 0x0600F868 0xF139
+expect u16 0x0600FAC2 0xF154
+expect u16 0x0600FC42 0xF1C8
+shot hud-up
+say nurse-ask
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap A
+wait 70
+unwatch
+say nurse-asking
+# her message box is up (its first cell (2,15) is window 0's 0x194), the box is down,
+# and the YES/NO's first cell (21,9) is its own 0x125
+expectbits u16 0x0600FBC4 0x3FF 0x194
+expectbits u8 gBrHud+0x09 6 0
+expectbits u16 0x0600FA6A 0x3FF 0x125
+shot question
+say nurse-yes
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap A
+wait 30
+unwatch
+say nurse-healing
+wait 400
+expectge u16 gPlayerParty+0x56 15
+# the ticker's line and the box ran out behind her: a line and the box again for the
+# way back
+pokebytes gBrMailbox+0x1058 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+poke u16 gBrMailbox+0x0C 2
+pokebytes gBrHud+0x14C 00 05 C2 BF C6 C6 C9 FF
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0D 4
+wait 2
+say nurse-done
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+wait 2
+tap A
+wait 40
+unwatch
+say nurse-gone
+expect u8 gBrHud+0x09 7
+expect u16 0x0600FAC2 0xF154
+expect u16 0x0600FC42 0xF1C8
+shot hud-back
+say hud vram centre ok

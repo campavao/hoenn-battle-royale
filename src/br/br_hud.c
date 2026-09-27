@@ -29,29 +29,51 @@ EWRAM_DATA struct BrHud gBrHud = {0};
 // palette 14, from the border set in OPTIONS (POK-256). A window flush against the top
 // of the screen has nowhere to put its lid.
 //
-// The floor is 0x23D, not 0x23A. The map-name popup loads its outline at 0x21D and the
-// load is 0x400 bytes -- thirty-two tiles, 0x21D..0x23C -- so on every outdoor map it
-// wrote its last three over the corner's first three. That, and the popup putting its
-// own palette in slot 14 (see BrHud_Tick), is the play-test's "counter framed in RED with
-// garbage tiles in its corner"; it was blamed on a weather fade for two days.
+// The tiles are shared with the start menu and the message box (br_hud.h's tile map,
+// POK-329). They were 0x23D..0x2FF, a run of their own, until BG2's tilemap came down
+// to screen block 25 for the 512-row ring and took everything from 0x240.
 static const struct WindowTemplate sCornerTemplate = { 0, BR_HUD_CORNER_LEFT, 1,
     BR_HUD_CORNER_WIDTH, BR_HUD_CORNER_HEIGHT, 15, BR_HUD_TILE_CORNER };
-static const struct WindowTemplate sTickerTemplate = { 0, 1, 17, 28, 2, 15, BR_HUD_TILE_TICKER };
-static const struct WindowTemplate sBoxTemplate = { 0, 1, 11, 28, 4, 15, BR_HUD_TILE_BOX };
+static const struct WindowTemplate sTickerTemplate = { 0, 1, 17,
+    BR_HUD_TICKER_WIDTH, BR_HUD_TICKER_HEIGHT, 15, BR_HUD_TILE_TICKER };
+static const struct WindowTemplate sBoxTemplate = { 0, 1, 11,
+    BR_HUD_BOX_WIDTH, BR_HUD_BOX_HEIGHT, 15, BR_HUD_TILE_BOX };
 
-// BG0's tiles are char block 2 (0x06008000) and the first thing after them is not BG0's
-// own tilemap, it is BG2's, at 0x0600E000: tile 0x300. The box sat at 0x294..0x303 for a
-// month and every line it printed wrote 0x80 bytes of PIXEL_FILL(1) over the first two
-// rows of the map's middle layer -- a magenta band wherever those rows were on screen
-// and nothing had scrolled to redraw them, which is the DAY CARE's whole floor
-// (2026-09-17), and very likely the "orange bars across the top" of an earlier play-test.
-#define BR_HUD_TILE_CEILING 0x300
-STATIC_ASSERT(BR_HUD_TILE_END <= BR_HUD_TILE_CEILING, BrHudBoxFitsBelowBg2Tilemap)
-STATIC_ASSERT(0x21D + 0x400 / 32 <= BR_HUD_TILE_CORNER, BrHudCornerClearOfTheMapNamePopup)
+#define BR_HUD_CORNER_END (BR_HUD_TILE_CORNER + BR_HUD_CORNER_WIDTH * BR_HUD_CORNER_HEIGHT)
+#define BR_HUD_BOX_END (BR_HUD_TILE_BOX + BR_HUD_BOX_WIDTH * BR_HUD_BOX_HEIGHT)
+#define BR_HUD_TICKER_END (BR_HUD_TILE_TICKER + BR_HUD_TICKER_WIDTH * BR_HUD_TICKER_HEIGHT)
+// Pret's windows the tiles are laid out against (menu.c): the start menu, 7 wide and
+// 2n + 2 tall from 0x139, and the message box, window 0, 27x4 from 0x194 up to the
+// dialogue frame's tiles at 0x200. The map-name popup is 0x107..0x124 and yes/no
+// 0x125..0x138, just under the corner.
+#define BR_HUD_START_MENU 0x139
+#define BR_HUD_START_MENU_END(items) (BR_HUD_START_MENU + 7 * (2 * (items) + 2))
+#define BR_HUD_MESSAGE_BOX 0x194
+#define BR_HUD_MESSAGE_BOX_END (BR_HUD_MESSAGE_BOX + 27 * 4)
+#define BR_HUD_YES_NO_END (0x125 + 5 * 4)
+
+// Every start menu, one item or pret's nine, covers the whole corner: on screen the
+// menu sits over it, so the corner is never up with its tiles in the menu.
+STATIC_ASSERT(BR_HUD_TILE_CORNER >= BR_HUD_START_MENU && BR_HUD_CORNER_END <= BR_HUD_START_MENU_END(1), BrHudCornerUnderEveryStartMenu)
+// The box shares the start menu's tail and the message box's head, after the corner.
+STATIC_ASSERT(BR_HUD_TILE_BOX >= BR_HUD_CORNER_END && BR_HUD_BOX_END <= 0x1C4, BrHudBoxAfterTheCorner)
+// The ticker shares the message box's tail and nothing else: past the longest start
+// menu pret can draw (nine items, to 0x1C4) and past the box, short of the frames.
+STATIC_ASSERT(BR_HUD_TILE_TICKER >= BR_HUD_START_MENU_END(9) && BR_HUD_TILE_TICKER >= BR_HUD_BOX_END, BrHudTickerPastEveryStartMenu)
+STATIC_ASSERT(BR_HUD_TILE_TICKER >= BR_HUD_MESSAGE_BOX && BR_HUD_TICKER_END <= BR_HUD_MESSAGE_BOX_END, BrHudTickerInsideTheMessageBox)
+// Nothing at or above the ceiling, BG2's tilemap at screen block 25 (POK-329). A tile
+// past it is a write over the map's middle layer: the box once ran four tiles over the
+// old ceiling, 0x300, and every line it printed put a magenta band across the DAY CARE's
+// floor (2026-09-17).
+STATIC_ASSERT(BR_HUD_TILE_CEILING == (25 * 0x800 - 0x8000) / 32, BrHudCeilingIsScreenBlock25)
+STATIC_ASSERT(BR_HUD_CORNER_END <= BR_HUD_TILE_CEILING && BR_HUD_BOX_END <= BR_HUD_TILE_CEILING
+    && BR_HUD_TICKER_END <= BR_HUD_TILE_CEILING, BrHudBelowTheCeiling)
+// ...and clear of the map-name popup and the nurse's yes/no, which open beside the HUD
+// without covering it and must not have their pixels drawn over.
+STATIC_ASSERT(BR_HUD_TILE_CORNER >= BR_HUD_YES_NO_END && BR_HUD_TILE_BOX >= BR_HUD_YES_NO_END
+    && BR_HUD_TILE_TICKER >= BR_HUD_YES_NO_END, BrHudClearOfThePopupAndYesNo)
 // The corner's frame is one tile outside it on every side and must stay on the screen.
 STATIC_ASSERT(BR_HUD_CORNER_LEFT + BR_HUD_CORNER_WIDTH <= 29, BrHudCornerFrameOnScreen)
-// The two columns the start menu (window at col 22, frame from 21) leaves showing.
-#define BR_HUD_MENU_FRAME_LEFT 21
 #define BR_HUD_CORNER_PX (BR_HUD_CORNER_WIDTH * 8)
 
 // The message box's own background, which is what makes it look like one.
@@ -70,15 +92,24 @@ static const u8 sText_Fog[] = _("FOG!");
 static const u8 sText_Eye[] = _("{EMOJI_LEFT_EYE}");
 // ---- windows ------------------------------------------------------------------
 
-// The slot still holds our window: a map load frees the buffer (tileData NULL) and
-// the next InitWindows may hand the slot to someone else (baseBlock differs).
-static bool8 Live(u8 id, const struct WindowTemplate *t)
+// The slot holds our template: the same BG, base tile and place. The base alone is not
+// enough since the tiles are shared (POK-329) -- the start menu's base is the corner's.
+static bool8 Ours(u8 id, const struct WindowTemplate *t)
 {
+    const struct WindowTemplate *w;
+
     if (id == WINDOW_NONE)
         return FALSE;
-    return gWindows[id].tileData != NULL
-        && gWindows[id].window.bg == t->bg
-        && gWindows[id].window.baseBlock == t->baseBlock;
+    w = &gWindows[id].window;
+    return w->bg == t->bg && w->baseBlock == t->baseBlock
+        && w->tilemapLeft == t->tilemapLeft && w->tilemapTop == t->tilemapTop;
+}
+
+// The slot still holds our window: a map load frees the buffer (tileData NULL) and
+// the next InitWindows may hand the slot to someone else.
+static bool8 Live(u8 id, const struct WindowTemplate *t)
+{
+    return Ours(id, t) && gWindows[id].tileData != NULL;
 }
 
 static u8 Ensure(u8 id, const struct WindowTemplate *t)
@@ -90,7 +121,7 @@ static u8 Ensure(u8 id, const struct WindowTemplate *t)
     // than track whether the field has done it on this map yet.
     LoadMessageBoxAndBorderGfx();
     // Our template with no buffer: the engine freed it without an InitWindows since.
-    if (id != WINDOW_NONE && gWindows[id].window.bg == t->bg && gWindows[id].window.baseBlock == t->baseBlock)
+    if (Ours(id, t))
         RemoveWindow(id);
     return (u8)AddWindow(t);
 }
@@ -102,13 +133,310 @@ static void Drop(u8 *id, const struct WindowTemplate *t)
     *id = WINDOW_NONE;
 }
 
-// Puts or clears a window's tilemap cells, but only across a change, and only when
-// nothing else owns the cells (the caller checks that). `pixels` says the buffer was
-// redrawn this frame and needs a tile copy too.
-static void Present(u8 id, u8 bit, bool8 want, bool8 pixels)
+// ---- sharing tiles (POK-329) ----------------------------------------------------
+
+// A window's cells and the frame round it, in tilemap cells, inclusive.
+struct BrHudExtent
+{
+    s8 left;
+    s8 top;
+    s8 right;
+    s8 bottom;
+};
+
+// The most windows over the HUD whose cells TakeOff keeps: more than the field ever has up.
+#define BR_HUD_KEEP_MAX 8
+
+static u16 *Bg0Map(void)
+{
+    return (u16 *)GetBgTilemapBuffer(0);
+}
+
+// The cell at (x, y) names `tile`. For a window's first cell and its base tile, that is
+// the window being on the tilemap: BG0's base tile is 0 on the overworld.
+static bool8 Names(const u16 *map, s16 x, s16 y, u16 tile)
+{
+    if (map == NULL || x < 0 || y < 0 || x >= 32 || y >= 32)
+        return FALSE;
+    return (map[y * 32 + x] & 0x3FF) == tile;
+}
+
+static bool8 IsHudWindow(u8 id)
+{
+    struct BrHud *h = &gBrHud;
+
+    return (id == h->winCorner && Ours(id, &sCornerTemplate))
+        || (id == h->winTicker && Ours(id, &sTickerTemplate))
+        || (id == h->winBox && Ours(id, &sBoxTemplate));
+}
+
+// Another window whose cells are on BG0, or are about to be: any live one that is not
+// the HUD's -- and window 0, the field's message box, which lives as long as the field
+// does, only while its box is up. Its mode goes back to hidden as soon as the text has
+// printed, with the box still on screen waiting for A, so its first cell says the rest
+// (a mart's clerk talks there without the field message box at all).
+static bool8 Occupies(u8 id, const u16 *map)
+{
+    const struct Window *w = &gWindows[id];
+
+    if (w->tileData == NULL || w->window.bg != 0 || IsHudWindow(id))
+        return FALSE;
+    if (id == 0)
+        return !IsFieldMessageBoxHidden()
+            || Names(map, w->window.tilemapLeft, w->window.tilemapTop, w->window.baseBlock);
+    return TRUE;
+}
+
+static void Extent(const struct WindowTemplate *t, u8 left, u8 other, struct BrHudExtent *e)
+{
+    e->left = t->tilemapLeft - left;
+    e->top = t->tilemapTop - other;
+    e->right = t->tilemapLeft + t->width - 1 + other;
+    e->bottom = t->tilemapTop + t->height - 1 + other;
+}
+
+// Where an occupying window draws: its cells, and its frame -- window 0's dialogue frame
+// two cells to the left and one on every other side, anybody else's standard frame one
+// all round, when it has one. It has one when the cell beside its first row is a frame
+// tile (the dialogue and standard frames and the popup's outline, 0x200..0x23C); the
+// spectator's peek box has none, and a margin kept round it would leave our cells there.
+static void OccupantExtent(u8 id, const u16 *map, struct BrHudExtent *e)
+{
+    const struct WindowTemplate *t = &gWindows[id].window;
+    s16 x = t->tilemapLeft > 0 ? t->tilemapLeft - 1 : t->tilemapLeft + t->width;
+    u16 tile;
+
+    if (id == 0)
+    {
+        Extent(t, 2, 1, e);
+        return;
+    }
+    tile = (x < 32 && t->tilemapTop < 32 && map != NULL) ? (map[t->tilemapTop * 32 + x] & 0x3FF) : 0;
+    if (tile >= 0x200 && tile < 0x23D)
+        Extent(t, 1, 1, e);
+    else
+        Extent(t, 0, 0, e);
+}
+
+static bool8 Meet(const struct BrHudExtent *a, const struct BrHudExtent *b)
+{
+    return a->left <= b->right && b->left <= a->right && a->top <= b->bottom && b->top <= a->bottom;
+}
+
+static bool8 SharesTiles(const struct WindowTemplate *a, const struct WindowTemplate *b)
+{
+    return a->baseBlock < b->baseBlock + b->width * b->height
+        && b->baseBlock < a->baseBlock + a->width * a->height;
+}
+
+// The three windows, for the loops below.
+static const struct WindowTemplate *const sHudTemplates[] = { &sCornerTemplate, &sTickerTemplate, &sBoxTemplate };
+static const u8 sHudBits[] = { BR_HUD_SHOWN_CORNER, BR_HUD_SHOWN_TICKER, BR_HUD_SHOWN_BOX };
+
+static u8 HudId(u8 i)
+{
+    if (i == 0)
+        return gBrHud.winCorner;
+    if (i == 1)
+        return gBrHud.winTicker;
+    return gBrHud.winBox;
+}
+
+// Which of the HUD's windows another window covers now, as BR_HUD_SHOWN_* bits: it
+// shares the HUD window's tiles, or it draws where the HUD window does. `sharers`, when
+// not NULL, gets the bits whose tiles a window other than window 0 shares. One pass
+// over the window table -- this runs three times a frame.
+static u8 CoveredBits(u8 *sharers)
+{
+    const u16 *map = Bg0Map();
+    struct BrHudExtent ours[ARRAY_COUNT(sHudTemplates)];
+    struct BrHudExtent theirs;
+    const struct WindowTemplate *w;
+    u8 i, k, live = 0, bits = 0, shared = 0;
+
+    for (k = 0; k < ARRAY_COUNT(sHudTemplates); k++)
+    {
+        if (Live(HudId(k), sHudTemplates[k]))
+        {
+            live |= sHudBits[k];
+            Extent(sHudTemplates[k], 1, 1, &ours[k]);
+        }
+    }
+    for (i = 0; live != 0 && i < WINDOWS_MAX; i++)
+    {
+        if (gWindows[i].tileData == NULL || !Occupies(i, map))
+            continue;
+        w = &gWindows[i].window;
+        OccupantExtent(i, map, &theirs);
+        for (k = 0; k < ARRAY_COUNT(sHudTemplates); k++)
+        {
+            if (!(live & sHudBits[k]))
+                continue;
+            if (SharesTiles(sHudTemplates[k], w))
+            {
+                bits |= sHudBits[k];
+                if (i != 0)
+                    shared |= sHudBits[k];
+            }
+            else if (Meet(&ours[k], &theirs))
+            {
+                bits |= sHudBits[k];
+            }
+        }
+    }
+    if (sharers != NULL)
+        *sharers = shared;
+    return bits;
+}
+
+// Takes a HUD window's cells and frame off the tilemap -- but not where a window over it
+// has put its own (or, for the message box, is about to): those cells are that window's
+// now. ClearStdWindowAndFrame took the whole rectangle, and a five-item start menu opened
+// over the bottom box lost the foot of its frame to it. TRUE when a cell changed.
+static bool8 TakeOff(const struct WindowTemplate *t)
+{
+    u16 *map = Bg0Map();
+    struct BrHudExtent keep[BR_HUD_KEEP_MAX];
+    struct BrHudExtent ours;
+    const struct WindowTemplate *w;
+    u8 i, n, k;
+    s16 x, y;
+    bool8 changed = FALSE;
+
+    if (map == NULL)
+        return FALSE;
+    n = 0;
+    for (i = 0; i < WINDOWS_MAX && n < BR_HUD_KEEP_MAX; i++)
+    {
+        w = &gWindows[i].window;
+        if (gWindows[i].tileData != NULL && Occupies(i, map)
+         && (i == 0 || Names(map, w->tilemapLeft, w->tilemapTop, w->baseBlock)))
+            OccupantExtent(i, map, &keep[n++]);
+    }
+    Extent(t, 1, 1, &ours);
+    for (y = ours.top; y <= ours.bottom; y++)
+    {
+        for (x = ours.left; x <= ours.right; x++)
+        {
+            if (x < 0 || y < 0 || x >= 32 || y >= 32 || map[y * 32 + x] == 0)
+                continue;
+            for (k = 0; k < n; k++)
+            {
+                if (x >= keep[k].left && x <= keep[k].right && y >= keep[k].top && y <= keep[k].bottom)
+                    break;
+            }
+            if (k == n)
+            {
+                map[y * 32 + x] = 0;
+                changed = TRUE;
+            }
+        }
+    }
+    return changed;
+}
+
+void BrHud_Yield(void)
+{
+    struct BrHud *h = &gBrHud;
+    const u16 *map;
+    const struct WindowTemplate *t;
+    u8 k, id, bit, covered, sharers, share = 0;
+    bool8 shown, first, copy = FALSE;
+    u16 ime;
+
+    if (!BrField_OverworldRunning() || gWindows[0].tileData == NULL)
+        return;
+    map = Bg0Map();
+    if (map == NULL)
+        return;
+    covered = CoveredBits(&sharers);
+    for (k = 0; k < ARRAY_COUNT(sHudTemplates); k++)
+    {
+        id = HudId(k);
+        t = sHudTemplates[k];
+        bit = sHudBits[k];
+        if (!Live(id, t))
+            continue;
+        // Up: we put it, or its first cell is still ours -- the ticker, paused, leaves
+        // its cells where they are.
+        shown = (h->shown & bit) != 0;
+        first = Names(map, t->tilemapLeft, t->tilemapTop, t->baseBlock);
+        if (!shown && !first)
+            continue;
+        if (covered & bit)
+        {
+            if (TakeOff(t) || shown)
+            {
+                copy = TRUE;
+                share |= bit & sharers;
+            }
+            h->shown &= ~bit;
+            h->dirty |= bit;
+        }
+        else if (shown && !first)
+        {
+            // Somebody's clear took our cells: put the window again, frame and all.
+            h->shown &= ~bit;
+            h->dirty |= bit;
+        }
+    }
+    if (!copy)
+        return;
+    // The cells first, then the covering windows' pixels into the shared tiles -- so a
+    // copy the 40 KB cap splits over two VBlanks changes the tiles under cells that are
+    // already their own -- and the VBlank interrupt held off between the two requests:
+    // a frame that runs long takes its VBlank wherever the code is, and the start menu's
+    // opening frame can (hud-vram.txt caught the corner handed over a frame before the
+    // box). Window 0's pixels never go: its box copies its cells and pixels together
+    // (DrawDialogueFrame), and until then its buffer holds the last message.
+    ime = REG_IME;
+    REG_IME = 0;
+    CopyBgTilemapBufferToVram(0);
+    for (id = 1; share != 0 && id < WINDOWS_MAX; id++)
+    {
+        if (gWindows[id].tileData == NULL || !Occupies(id, map))
+            continue;
+        for (k = 0; k < ARRAY_COUNT(sHudTemplates); k++)
+        {
+            if ((share & sHudBits[k]) && SharesTiles(sHudTemplates[k], &gWindows[id].window))
+            {
+                CopyWindowToVram(id, COPYWIN_GFX);
+                break;
+            }
+        }
+    }
+    REG_IME = ime;
+}
+
+// The standard frame round a window, into the tilemap buffer: menu.c's
+// WindowFunc_DrawStandardFrame (static there), with the border OPTIONS chose at 0x214 in
+// palette 14. DrawStdWindowFrame does the same and also puts the window's cells and
+// wipes its pixels, all at once -- which is the order this cannot have.
+#define BR_HUD_STD_FRAME 0x214
+#define BR_HUD_STD_FRAME_PALETTE 14
+static void PutFrame(const struct WindowTemplate *t)
+{
+    u8 l = t->tilemapLeft, top = t->tilemapTop, w = t->width, ht = t->height;
+
+    FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 0, l - 1, top - 1, 1, 1, BR_HUD_STD_FRAME_PALETTE);
+    FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 1, l, top - 1, w, 1, BR_HUD_STD_FRAME_PALETTE);
+    FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 2, l + w, top - 1, 1, 1, BR_HUD_STD_FRAME_PALETTE);
+    FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 3, l - 1, top, 1, ht, BR_HUD_STD_FRAME_PALETTE);
+    FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 5, l + w, top, 1, ht, BR_HUD_STD_FRAME_PALETTE);
+    FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 6, l - 1, top + ht, 1, 1, BR_HUD_STD_FRAME_PALETTE);
+    FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 7, l, top + ht, w, 1, BR_HUD_STD_FRAME_PALETTE);
+    FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 8, l + w, top + ht, 1, 1, BR_HUD_STD_FRAME_PALETTE);
+}
+
+// Puts or takes off a window's tilemap cells, but only across a change, and only when
+// nothing covers it (the caller checks that). `pixels` says the buffer was redrawn this
+// frame and needs a tile copy too. The drawing functions only fill and print: the frame
+// and the cells go on here.
+static void Present(u8 id, const struct WindowTemplate *t, u8 bit, bool8 want, bool8 pixels)
 {
     struct BrHud *h = &gBrHud;
     bool8 have = (h->shown & bit) != 0;
+    u16 ime;
 
     if (want && !have)
     {
@@ -120,20 +448,27 @@ static void Present(u8 id, u8 bit, bool8 want, bool8 pixels)
         // popup and the box's tiles, see the templates above.) Idempotent, and this runs
         // on a show, not every frame.
         LoadMessageBoxAndBorderGfx();
-        // The frame goes on with the window. DrawStdWindowFrame fills the buffer as it
-        // goes, so this has to happen before the content is printed -- which is why the
-        // drawing functions call it in place of their own FillWindowPixelBuffer, and
-        // this branch only has to put the tilemap up.
+        // Pixels first, then the frame and the cells: the tiles are shared (POK-329), and
+        // until our copy lands they hold whatever the last window over us left there --
+        // the start menu's blank box, say. Any tilemap copy that ran in between would
+        // show our cells over it. The two requests go with the VBlank interrupt held off,
+        // so they land in the same VBlank however long the frame runs: the frame a start
+        // menu closes redraws all three windows, and it runs long.
+        ime = REG_IME;
+        REG_IME = 0;
+        CopyWindowToVram(id, COPYWIN_GFX);
+        PutFrame(t);
         PutWindowTilemap(id);
-        CopyWindowToVram(id, COPYWIN_FULL);
+        CopyBgTilemapBufferToVram(0);
+        REG_IME = ime;
         h->shown |= bit;
     }
     else if (!want && have)
     {
         // And comes off with it: a cleared window with its border still drawn is a
-        // frame around a hole in the map.
-        ClearStdWindowAndFrame(id, FALSE);
-        CopyWindowToVram(id, COPYWIN_MAP);
+        // frame around a hole in the map. What another window put over it stays.
+        TakeOff(t);
+        CopyBgTilemapBufferToVram(0);
         h->shown &= ~bit;
     }
     else if (want && pixels)
@@ -191,7 +526,7 @@ static void DrawCorner(void)
     u8 alt = 0;
     u8 clockY;
 
-    DrawStdWindowFrame(h->winCorner, FALSE);
+    FillWindowPixelBuffer(h->winCorner, BR_HUD_BOX);
     // Line one: how many are left, and the clock on the right -- or the FOG! flash in the
     // clock's place. With no place to name (the Safari, before the ring) the clock keeps
     // the second line to itself, as the corner always had it, rather than leave that
@@ -233,24 +568,18 @@ static void DrawCorner(void)
     h->drawnAlt = alt;
 }
 
-static void TickCorner(bool8 blocked)
+static void TickCorner(bool8 covered)
 {
     struct BrHud *h = &gBrHud;
     bool8 pixels = FALSE;
 
-    if (blocked)
+    if (covered)
     {
-        // The start menu covers the corner but for its two left columns, frame and all:
-        // left there, half a frame and the first letters of the place hang beside the
-        // menu. Cleared once, and the whole corner drawn again when the menu goes.
-        if (h->shown & BR_HUD_SHOWN_CORNER)
-        {
-            FillBgTilemapBufferRect_Palette0(0, 0, BR_HUD_CORNER_LEFT - 1, 0,
-                BR_HUD_MENU_FRAME_LEFT - (BR_HUD_CORNER_LEFT - 1), BR_HUD_CORNER_HEIGHT + 2);
-            ScheduleBgCopyTilemapToVram(0);
-            h->dirty |= BR_HUD_DIRTY_CORNER;
-        }
+        // The start menu, most often. BrHud_Yield took the corner off where the menu does
+        // not draw -- its two left columns, frame and all -- and it is drawn whole again
+        // when the menu goes: the menu's pixels are in its tiles by then.
         h->shown &= ~BR_HUD_SHOWN_CORNER;
+        h->dirty |= BR_HUD_DIRTY_CORNER;
         return;
     }
     if ((h->dirty & BR_HUD_DIRTY_CORNER) || h->drawnClock != h->clockSecs || h->drawnLeft != h->left
@@ -261,7 +590,7 @@ static void TickCorner(bool8 blocked)
         h->dirty &= ~BR_HUD_DIRTY_CORNER;
         pixels = TRUE;
     }
-    Present(h->winCorner, BR_HUD_SHOWN_CORNER, TRUE, pixels);
+    Present(h->winCorner, &sCornerTemplate, BR_HUD_SHOWN_CORNER, TRUE, pixels);
 }
 
 
@@ -369,18 +698,26 @@ static void DrawTicker(const struct BrHudLine *line)
         colors = sColorsKill;
     else if (line->kind == BR_HUD_KIND_SAY)
         colors = sColorsSay;
-    DrawStdWindowFrame(gBrHud.winTicker, FALSE);
+    FillWindowPixelBuffer(gBrHud.winTicker, BR_HUD_BOX);
     AddTextPrinterParameterized3(gBrHud.winTicker, FONT_SMALL, 2, 1, colors, (s8)TEXT_SKIP_DRAW, line->text);
 }
 
-static void TickTicker(bool8 blocked)
+static void TickTicker(bool8 paused, bool8 covered)
 {
     struct BrHud *h = &gBrHud;
     const struct BrHudLine *line = CurrentLine();
     bool8 pixels = FALSE;
 
-    if (blocked)
+    if (covered)
     {
+        // The message box: BrHud_Yield handed it the tiles. Drawn again once it goes.
+        h->shown &= ~BR_HUD_SHOWN_TICKER;
+        h->dirty |= BR_HUD_DIRTY_TICKER;
+        return;
+    }
+    if (paused)
+    {
+        // Frozen where it is: the cells stay, and are put again on the way back.
         h->shown &= ~BR_HUD_SHOWN_TICKER;
         return;
     }
@@ -390,7 +727,7 @@ static void TickTicker(bool8 blocked)
         h->dirty &= ~BR_HUD_DIRTY_TICKER;
         pixels = TRUE;
     }
-    Present(h->winTicker, BR_HUD_SHOWN_TICKER, line != NULL, pixels);
+    Present(h->winTicker, &sTickerTemplate, BR_HUD_SHOWN_TICKER, line != NULL, pixels);
 }
 
 // BR_MSG_TICKER: seat, kind, textLen, text. One slot only; a line the page split
@@ -448,7 +785,7 @@ static void DrawBox(void)
 {
     struct BrHud *h = &gBrHud;
 
-    DrawStdWindowFrame(h->winBox, FALSE);
+    FillWindowPixelBuffer(h->winBox, BR_HUD_BOX);
     // CHAR_NEWLINE in the text gives the second line; the printer handles the rest.
     AddTextPrinterParameterized3(h->winBox, FONT_SMALL, 2, 2, sColorsText,
         (s8)TEXT_SKIP_DRAW, h->box.text);
@@ -463,11 +800,12 @@ static void TickBox(bool8 blocked)
         return;
     if (blocked || h->boxFrames == 0)
     {
-        // Taking it down wipes its pixels as well as its cells (ClearStdWindowAndFrame),
-        // so a box that outlives whatever blocked it has to be drawn again, not just put
-        // again. It was not: the purse line after a gym (POK-295) came back from the
-        // win's own script as a white slab with no frame and nothing written on it.
-        Present(h->winBox, BR_HUD_SHOWN_BOX, FALSE, FALSE);
+        // Taken down, its cells come off (but for any another window has put over them),
+        // so a box that outlives whatever blocked it is drawn again, frame and all, not
+        // just put again. It was not once: the purse line after a gym (POK-295) came
+        // back from the win's own script as a white slab with no frame and nothing
+        // written on it.
+        Present(h->winBox, &sBoxTemplate, BR_HUD_SHOWN_BOX, FALSE, FALSE);
         h->dirty |= BR_HUD_DIRTY_BOX;
         return;
     }
@@ -477,7 +815,7 @@ static void TickBox(bool8 blocked)
         h->dirty &= ~BR_HUD_DIRTY_BOX;
         pixels = TRUE;
     }
-    Present(h->winBox, BR_HUD_SHOWN_BOX, TRUE, pixels);
+    Present(h->winBox, &sBoxTemplate, BR_HUD_SHOWN_BOX, TRUE, pixels);
 }
 
 void BrHud_Box(const u8 *text)
@@ -529,8 +867,8 @@ void BrHud_Release(void)
 void BrHud_Tick(void)
 {
     struct BrHud *h = &gBrHud;
-    bool8 scriptOn, menuUp, popupUp;
-    u8 live;
+    bool8 scriptOn, menuUp, popupUp, paused;
+    u8 live, covered;
 
     if (h->flashFog)
     {
@@ -569,6 +907,10 @@ void BrHud_Tick(void)
     // this map; before that there is no BG0 tilemap buffer to draw into.
     if (gWindows[0].tileData == NULL)
         return;
+
+    // Whatever came up over the HUD since OverworldBasic's hand-over last frame -- a
+    // window the page's messages opened earlier in BrFrame, say.
+    BrHud_Yield();
 
     live = 0;
     h->winCorner = Ensure(h->winCorner, &sCornerTemplate);
@@ -623,9 +965,13 @@ void BrHud_Tick(void)
         h->shown = 0;
     h->scriptWas = scriptOn;
 
+    // A covered window is neither drawn nor put: its tiles are somebody else's. The
+    // ticker and the box also pause for the start menu, a script or a field message.
+    paused = menuUp || scriptOn || !IsFieldMessageBoxHidden();
+    covered = CoveredBits(NULL);
     if (h->winCorner != WINDOW_NONE)
-        TickCorner(menuUp);
+        TickCorner((covered & BR_HUD_SHOWN_CORNER) != 0);
     if (h->winTicker != WINDOW_NONE)
-        TickTicker(menuUp || scriptOn || !IsFieldMessageBoxHidden());
-    TickBox(menuUp || scriptOn || !IsFieldMessageBoxHidden());
+        TickTicker(paused, (covered & BR_HUD_SHOWN_TICKER) != 0);
+    TickBox(paused || (covered & BR_HUD_SHOWN_BOX));
 }

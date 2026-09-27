@@ -52,6 +52,9 @@ Driver grammar (one action per line, `#` comments):
 | `*sym+off` as an addr | dereference the u32 pointer at `sym` first (`*gSaveBlock1Ptr+4` is the location) |
 | `poke u8/u16/u32 <addr> <value>` / `pokebytes <addr> <hex...>` | write RAM |
 | `dump <addr> <len>` | hex dump |
+| `watch <addr> <len>` | from now on, after every frame run, print `frame <n>` and dump `<len>` bytes at `<addr>` (re-resolved each frame) -- every frame of a transition without a `wait 1` per line |
+| `watch windows <bg>` | ...and every live window on that BG: `window <slot> <bg> <left> <top> <width> <height> <palette> <baseBlock>` and a dump of its pixel buffer (`hud-vram.txt`) |
+| `unwatch` | stop watching |
 | `copy <dst> <src> <len>` | copy bytes from src to dst |
 | `title` / `say <text>` | print the game code / echo |
 

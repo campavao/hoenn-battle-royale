@@ -25,6 +25,12 @@
 //                               (splitting across continuation slots), playing the page
 //   say <text>                  echo
 //   title                       print the game code at 0x080000AC
+//   watch <addr> <len>          from now on, after EVERY frame run, print `frame <n>` and
+//                               dump <len> bytes at <addr> (re-resolved each frame)
+//   watch windows <bg>          ...and every live window on <bg>: `window <slot> <bg>
+//                               <left> <top> <width> <height> <palette> <baseBlock>`,
+//                               then a dump of its pixel buffer (needs gWindows)
+//   unwatch                     stop watching
 #include <mgba/core/core.h>
 #include <mgba/core/config.h>
 #include <mgba/core/log.h>
@@ -171,11 +177,56 @@ static void checkNetlinkStall(void) {
     }
 }
 
+// ---- watches -------------------------------------------------------------------
+// `watch` dumps a region after every frame from then on, for checks that need every
+// frame of a transition (hud-vram.py reads VRAM and the windows through a start menu's
+// opening, POK-329) without a driver of a thousand `wait 1` lines.
+#define WATCH_MAX 16
+struct Watch { char addr[64]; int len; int windowsBg; };
+static struct Watch watches[WATCH_MAX];
+static int nwatches;
+static unsigned long frameNo;
+
+static void dumpRange(uint32_t addr, int len) {
+    printf("dump 0x%08X:", addr);
+    for (int i = 0; i < len; ++i) printf("%s%02x", (i % 16 == 0) ? "\n  " : " ", core->busRead8(core, addr + i));
+    printf("\n");
+}
+
+// pret's struct Window: a WindowTemplate (bg, tilemapLeft, tilemapTop, width, height,
+// paletteNum, baseBlock u16) and the u8 *tileData, 12 bytes; WINDOWS_MAX is 32.
+static void dumpWindows(int bg) {
+    uint32_t base;
+    if (!parseAddr("gWindows", &base)) return;
+    for (int i = 0; i < 32; ++i) {
+        uint32_t w = base + (uint32_t)i * 12;
+        uint32_t data = core->busRead32(core, w + 8);
+        int b = core->busRead8(core, w);
+        if (b != bg || data == 0) continue;
+        int width = core->busRead8(core, w + 3), height = core->busRead8(core, w + 4);
+        printf("window %d %d %d %d %d %d %d %d\n", i, b, core->busRead8(core, w + 1), core->busRead8(core, w + 2),
+            width, height, core->busRead8(core, w + 5), core->busRead16(core, w + 6));
+        dumpRange(data, width * height * 32);
+    }
+}
+
+static void runWatches(void) {
+    if (!nwatches) return;
+    printf("frame %lu\n", frameNo);
+    for (int i = 0; i < nwatches; ++i) {
+        uint32_t addr;
+        if (watches[i].windowsBg >= 0) { dumpWindows(watches[i].windowsBg); continue; }
+        if (parseAddr(watches[i].addr, &addr)) dumpRange(addr, watches[i].len);
+    }
+}
+
 static void runN(int n) {
     for (int i = 0; i < n; ++i) {
         core->runFrame(core);
+        frameNo++;
         if (drainAddr) core->busWrite16(core, drainAddr + 0xA, core->busRead16(core, drainAddr + 0x8));
         checkNetlinkStall();
+        runWatches();
     }
 }
 
@@ -401,12 +452,25 @@ static int runLine(char* line) {
     }
     if (strcmp(a, "dump") == 0 && n >= 3) {
         uint32_t addr; if (!parseAddr(b, &addr)) return 4;
-        int len = atoi(c);
-        printf("dump 0x%08X:", addr);
-        for (int i = 0; i < len; ++i) printf("%s%02x", (i % 16 == 0) ? "\n  " : " ", core->busRead8(core, addr + i));
-        printf("\n");
+        dumpRange(addr, atoi(c));
         return 0;
     }
+    if (strcmp(a, "watch") == 0 && n >= 3) {
+        uint32_t addr;
+        if (nwatches >= WATCH_MAX) { printf("line %d: more than %d watches\n", lineNo, WATCH_MAX); return 4; }
+        if (strcmp(b, "windows") == 0) {
+            if (!parseAddr("gWindows", &addr)) return 4;
+            watches[nwatches].windowsBg = atoi(c);
+        } else {
+            if (!parseAddr(b, &addr)) return 4;
+            watches[nwatches].windowsBg = -1;
+            snprintf(watches[nwatches].addr, sizeof watches[nwatches].addr, "%s", b);
+            watches[nwatches].len = atoi(c);
+        }
+        nwatches++;
+        return 0;
+    }
+    if (strcmp(a, "unwatch") == 0) { nwatches = 0; return 0; }
     printf("line %d: unknown action: %s\n", lineNo, p);
     return 4;
 }

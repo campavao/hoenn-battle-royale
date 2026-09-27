@@ -30,22 +30,23 @@ expect u8 gBrRing+22 0xC9
 expect u8 gBrRing+23 0xCE
 expect u8 gBrRing+24 0xFF
 # the phase's box is up too (a new phase with a place), and the ticker has nothing: the
-# first ring's rung is the one the match had (POK-324), so shown = CORNER|BOX. The tiles
-# run on from the corner's 27: BG0's tilemap is 0x0600F800, 32 cells a row, palette 15. The corner's
-# first cell (20,1) is 0x23D and its last (28,3) 0x257; the box's first (1,11) is 0x290,
-# which is where the ticker's 56 end. Its frame is on the screen at (19,0).
+# first ring's rung is the one the match had (POK-324), so shown = CORNER|BOX. BG0's
+# tilemap is 0x0600F800, 32 cells a row, palette 15. The corner's first cell (20,1) is
+# 0x139 and its last (28,3) 0x153; the box's first (1,11) is 0x154, right after it -- the
+# HUD shares the start menu's and the message box's tiles (POK-329, br_hud.h). Its frame
+# is on the screen at (19,0).
 expect u8 gBrHud+0x08 2
 expect u8 gBrHud+0x09 5
 expect u8 gBrHud+0x0A 0
-expect u16 0x0600F868 0xF23D
-expect u16 0x0600F8F8 0xF257
-expect u16 0x0600FAC2 0xF290
+expect u16 0x0600F868 0xF139
+expect u16 0x0600F8F8 0xF153
+expect u16 0x0600FAC2 0xF154
 expectne u16 0x0600F826 0
 shot corner-place
 # the box goes after its ninety frames; the corner keeps the name
 wait 90
 expect u8 gBrHud+0x09 1
-expect u16 0x0600F868 0xF23D
+expect u16 0x0600F868 0xF139
 shot corner-place-quiet
 # START: the menu covers cols 21..29 and the corner's two columns left of it are
 # cleared rather than left as half a frame beside it -- (19,0..4) and (20,0..4) are 0
@@ -69,8 +70,8 @@ shot corner-menu
 tap B
 wait 20
 expectge u8 gBrHud+0x09 1
-expect u16 0x0600F868 0xF23D
-expect u16 0x0600F8F8 0xF257
+expect u16 0x0600F868 0xF139
+expect u16 0x0600F8F8 0xF153
 expectne u16 0x0600F826 0
 expectne u16 0x0600F926 0
 shot corner-back
