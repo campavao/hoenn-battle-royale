@@ -4,6 +4,7 @@
 // directly, per the project CLAUDE.md.
 
 import { KEY_BIT, Emulator, type GbaKey } from './emu';
+import { stallLine, watch } from './emu/watchdog';
 import { checkEmerald, isPrePatched, sha1Hex } from './rom/emerald';
 import { loadCheckedRelease, loadSidecars, type CheckedRelease, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
@@ -19,6 +20,7 @@ import { nameBstart, romReplaying, Spectate } from './match/spectate';
 import type { Results } from './match/results';
 import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
+import { saveMatch, type MatchLog } from './match/log';
 import { HostRole, soloLink, soloRoster, type HostLink } from './match/host';
 import { type BotVoice, lineAt, nextLine } from './bots/lines';
 import * as Ticker from './match/ticker';
@@ -160,7 +162,11 @@ function theStage(): Stage {
  *  that learns a match is on. */
 let hideRoomHook: (() => void) | null = null;
 
+/** The version line as last set: what a stall's overlay names (POK-328). */
+let versionNow = '—';
+
 function setVersionLine(text: string): void {
+  versionNow = text;
   $('#version').textContent = text;
   $('#drawer-version').textContent = text;
 }
@@ -904,6 +910,36 @@ function wireFps(emu: Emulator): void {
   }, 1000);
 }
 
+// ---- the game stopping under the player (POK-328) -------------------------------------
+
+/** The round's log, once a match has one: where a stall is written down. */
+let stallLog: MatchLog | null = null;
+
+/** Watches the page's own emulator -- never the proxy's -- for its frames stopping, the
+ *  ROM's heartbeat stopping or the core crashing (emu/watchdog.ts), and says so over the
+ *  picture with the way out, so a phone screenshot carries the evidence and the player
+ *  is never stuck: Cam's Mossdeep Gym black screen had the pad up and nothing else. */
+function wireWatchdog(emu: Emulator, symbols: Map<string, number> | undefined): void {
+  const box = $('#stall') as HTMLElement;
+  ($('#stall-reload') as HTMLButtonElement).addEventListener('click', () => location.reload());
+  ($('#stall-leave') as HTMLButtonElement).addEventListener('click', () => backToLobby());
+  watch({
+    emu,
+    symbols: symbols ?? null,
+    onStall: (report) => {
+      const line = stallLine(report, versionNow);
+      ($('#stall-line') as HTMLElement).textContent = line;
+      box.hidden = false;
+      console.error('[watchdog] the game stopped:', line);
+      const round = stallLog?.stall(performance.now(), report.kind, line, report.map ?? undefined);
+      if (round) saveMatch(round);
+    },
+    onBack: () => {
+      box.hidden = true;
+    },
+  });
+}
+
 // ---- boot: start in Littleroot under the career name (br_boot.h) ------------------------
 
 /** Wait for the ROM to wake its mailbox.
@@ -1581,6 +1617,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       partyLate: () => drawResults(),
     },
   );
+  stallLog = session.log;
   const drawResults = (): void =>
     renderResults(0, roster, {
       results: session.results,
@@ -2095,6 +2132,7 @@ function wireRoom(
       partyLate: drawResults,
     },
   );
+  stallLog = session.log;
   /** Everything a promoted client needs to pick the match up (POK-252), and reset by
    *  returnToRoom for the next one (match/lifecycle.ts): the session's, one object for
    *  the page's life. */
@@ -2877,6 +2915,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
   wireSettings(emu);
   wireDrawer();
   wireFps(emu);
+  wireWatchdog(emu, symbols);
   // The picture in its box and the field drawn past it (field.ts, POK-317). Without the
   // symbol table the picture is still placed; the field around it stays dark.
   new FieldView({

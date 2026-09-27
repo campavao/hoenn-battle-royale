@@ -256,6 +256,7 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
       const field = document.querySelector('#field') as HTMLCanvasElement;
       const overlay = document.querySelector('#overlay') as HTMLCanvasElement;
       const box = document.querySelector('#screen-wrap') as HTMLElement;
+      const stall = document.querySelector('#stall') as HTMLElement | null;
       const outdoors = new Set(outdoor);
       const log = {
         samples: 0,
@@ -321,6 +322,9 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
       };
       emu.onFrame(() => {
         frame++;
+        // The watchdog (POK-328) calls no stop anywhere in a match played end to end: its
+        // overlay is up on a frame only for a stop it has not yet taken back.
+        if (stall && !stall.hidden) fail('stall', document.querySelector('#stall-line')?.textContent ?? '');
         const sprites = drawn.splice(0);
         const fw4 = emu.read(s.gPaletteFade + k.FADE_Y_WORD, 16);
         const fw6 = emu.read(s.gPaletteFade + k.FADE_COLOR_WORD, 16);
