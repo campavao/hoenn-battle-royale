@@ -222,8 +222,10 @@ test("a name in the room opens that trainer's card (POK-268)", async ({ page }) 
   await expect(card).toBeVisible();
   await expect(card).toContainText('TRAINER:');
   await expect(card).toContainText('THIS IS YOU');
-  // And pressing the same name again puts it away.
-  await me.click();
+  // And CLOSE puts it away. The card opens over the seats with the screen dimmed under
+  // it (POK-320's drawn room), so the name it came from is under it: pressing that again
+  // was the HTML drawer's way, and in the drawn room every click on it hit the card.
+  await card.locator('.card-close').click();
   await expect(card).toBeHidden();
 });
 
