@@ -163,10 +163,10 @@ function theStage(): Stage {
 let hideRoomHook: (() => void) | null = null;
 
 /** The version line as last set: what a stall's overlay names (POK-328). */
-let versionNow = '—';
+let versionLine = '—';
 
 function setVersionLine(text: string): void {
-  versionNow = text;
+  versionLine = text;
   $('#version').textContent = text;
   $('#drawer-version').textContent = text;
 }
@@ -916,7 +916,7 @@ function wireWatchdog(emu: Emulator, symbols: Map<string, number> | undefined): 
     emu,
     symbols: symbols ?? null,
     onStall: (report) => {
-      const line = stallLine(report, versionNow);
+      const line = stallLine(report, versionLine);
       ($('#stall-line') as HTMLElement).textContent = line;
       box.hidden = false;
       console.error('[watchdog] the game stopped:', line);
