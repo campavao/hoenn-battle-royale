@@ -23,6 +23,7 @@
 #include "br/br_pick.h"
 #include "br/br_map.h"
 #include "br/br_zone.h"
+#include "br/br_field.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
 // running it: `strings pokeemerald.gba | grep HOENN-BR`.
@@ -64,6 +65,9 @@ void BrFrame(void)
 {
     BrWire_FlushHeld(); // what a full ring held back goes before anything newer
     BrNet_Tick();
+    // What the messages asked off a map while it could not be touched goes now, before
+    // a ghost or a ball respawns under the same local id (POK-328).
+    BrField_RemoveHeld();
     BrBoot_Tick();
     BrGhosts_Tick();
     BrLoot_Tick();

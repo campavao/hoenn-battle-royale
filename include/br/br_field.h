@@ -42,6 +42,22 @@ bool8 BrField_OffScreen(s16 x, s16 x2, s16 y);
 
 // The overworld with no battle over it: where every field tick does its work.
 bool8 BrField_OverworldRunning(void);
+
+// Every object BR takes off a map goes through here (POK-328). A battle -- or the bag,
+// or any screen that is not the field -- leaves the object table standing and rebuilds
+// the objects' sprites on the way back (SpawnObjectEventsOnReturnToField), so while it
+// is up an object's spriteId is an old number, and the sprite under it is the other
+// screen's. RemoveObjectEventByLocalIdAndMap destroys that sprite: an NPCOUT for a
+// trainer on our map, heard mid-fight, took a battle sprite out from under the battle
+// (sprites 1 and 2 at Route 102's action menu, npcout-in-battle.txt).
+//
+// So off the field the object is held -- left in the table, sprite and all -- and
+// BrField_RemoveHeld takes it off on the first frame the field runs again, while the
+// screen is still black from the way back. TRUE when the object is there and is gone
+// or going; FALSE when there is no such object, or it is already on its way.
+bool8 BrField_RemoveObject(u8 localId, u8 mapNum, u8 mapGroup);
+// BrFrame, every frame, before the ticks that spawn: does nothing off the field.
+void BrField_RemoveHeld(void);
 // Leave the field for another screen (a battle, a replay, the fly map): fade to black,
 // let the fade finish, wait `frames` more, hand the overworld's windows and tilemaps
 // back before the next screen claims the heap, then enter(), which sets callback2.

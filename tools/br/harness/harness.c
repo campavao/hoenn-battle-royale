@@ -282,6 +282,18 @@ static int runLine(char* line) {
         printf("expect ok %s 0x%08X = 0x%X\n", b, addr, got);
         return 0;
     }
+    if (strcmp(a, "expectbits") == 0 && n >= 5) {
+        // `expectbits <w> <addr> <mask> <value>`: (got & mask) == value, for one field of a
+        // bitfield byte -- ObjectEvent.active, Sprite.inUse -- whose neighbours move.
+        int w = widthOf(b); uint32_t addr, mask, want, got;
+        if (!w || !parseAddr(c, &addr)) return 4;
+        mask = (uint32_t)strtoul(d, NULL, 0);
+        want = (uint32_t)strtoul(e, NULL, 0);
+        got = readW(w, addr);
+        if ((got & mask) != want) { printf("line %d: EXPECT FAILED %s at 0x%08X: got 0x%X, & 0x%X is 0x%X, want 0x%X\n", lineNo, b, addr, got, mask, got & mask, want); return 1; }
+        printf("expect ok %s 0x%08X & 0x%X = 0x%X\n", b, addr, mask, want);
+        return 0;
+    }
     if (strcmp(a, "expectmsg") == 0 && n >= 5) {
         // What the ROM last said of a type, read the way the page would take it:
         // `expectmsg <type> <u8|u16> <dataOff> <value>` finds the newest first slot of

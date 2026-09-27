@@ -26,11 +26,12 @@
 //     `#fog=20` has CALVIN beaten well before the fourth phase. Once in about twenty
 //     runs (Firefox, where the walk is slower) the fight with him never ended, with the
 //     fog's sweep having taken two of Route 102's trainers during it (gBrLoot.gone 2).
-//     br_loot.c Despawn_Trainer removes the object mid-battle, and RemoveObjectEvent
-//     destroys gSprites[its old overworld id] -- a battle sprite by then -- but drivers
-//     that sweep the map mid-fight (Route 102 with CALVIN, Rustboro and Mossdeep Gyms,
-//     at the intro and during the move) all come back to the field, so the cause is not
-//     pinned. Reported with POK-328; a fight that never ends here fails with its state.
+//     br_loot.c Despawn_Trainer removed the object mid-battle, and RemoveObjectEvent
+//     destroyed gSprites[its old overworld id] -- a battle sprite by then: the foe's
+//     healthbox at Route 102's action menu. The ROM now holds an object asked off the
+//     map until the field is back (BrField_RemoveObject; npcout-in-battle.txt), which is
+//     POK-328's lead; the drivers that swept a fight never hung, so a fight that never
+//     ends here still fails with its state.
 //   - `#testmon`: a TREECKO at the boot, so an opening that catches nothing still has a
 //     party at the buzzer (an empty one is an elimination).
 // Every fight is rigged once it is under way (play.ts's `rig`), so it ends the same way

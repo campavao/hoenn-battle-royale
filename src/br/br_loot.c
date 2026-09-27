@@ -756,15 +756,16 @@ static void TryTake(void)
 // Take the sprite off the map now, and keep taking it off every time the map comes
 // back. Emerald only remembers that a beaten trainer will not fight again; Kanto's
 // rule is that they are gone.
+//
+// "Now" is the field's now (POK-328): an NPCOUT heard in a battle -- the fog's sweep of
+// the map we are fighting on, or a peer who beat somebody on it -- holds the trainer in
+// the object table until the field is back, rather than destroying a battle sprite by
+// the trainer's old sprite number. Held, the one we are fighting is still there when the
+// battle ends, so BrLoot_TrainerBeaten still finds where to drop their team.
 static void Despawn_Trainer(u8 mapGroup, u8 mapNum, u8 localId)
 {
-    u8 id = GetObjectEventIdByLocalIdAndMap(localId, mapNum, mapGroup);
-
-    if (id < OBJECT_EVENTS_COUNT)
-    {
-        RemoveObjectEventByLocalIdAndMap(localId, mapNum, mapGroup);
+    if (BrField_RemoveObject(localId, mapNum, mapGroup))
         gBrLoot.gone++;
-    }
 }
 
 // Where the ring writes next once every slot is taken.

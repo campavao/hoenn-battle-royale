@@ -70,6 +70,80 @@ bool8 BrField_OverworldRunning(void)
     return gMain.callback2 == CB2_Overworld && !gMain.inBattle;
 }
 
+// ---- taking objects off the map (POK-328) ------------------------------------------
+
+// What was asked off the map while the field was not running: local id and map, which
+// is what the engine finds an object by. One per object slot is the most there can be
+// -- only an object that is in the table is held, and never twice.
+struct BrHeldObject
+{
+    u8 localId;
+    u8 mapNum;
+    u8 mapGroup;
+};
+static EWRAM_DATA struct BrHeldObject sHeld[OBJECT_EVENTS_COUNT] = {0};
+static EWRAM_DATA u8 sHeldCount = 0;
+
+static bool8 IsHeld(u8 localId, u8 mapNum, u8 mapGroup)
+{
+    u8 i;
+
+    for (i = 0; i < sHeldCount; i++)
+    {
+        if (sHeld[i].localId == localId && sHeld[i].mapNum == mapNum && sHeld[i].mapGroup == mapGroup)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+// A map load took whatever it held; those have nothing left to remove.
+static void DropGoneHeld(void)
+{
+    u8 i, kept = 0;
+
+    for (i = 0; i < sHeldCount; i++)
+    {
+        if (GetObjectEventIdByLocalIdAndMap(sHeld[i].localId, sHeld[i].mapNum, sHeld[i].mapGroup) < OBJECT_EVENTS_COUNT)
+            sHeld[kept++] = sHeld[i];
+    }
+    sHeldCount = kept;
+}
+
+bool8 BrField_RemoveObject(u8 localId, u8 mapNum, u8 mapGroup)
+{
+    if (GetObjectEventIdByLocalIdAndMap(localId, mapNum, mapGroup) >= OBJECT_EVENTS_COUNT)
+        return FALSE;
+    if (BrField_OverworldRunning())
+    {
+        RemoveObjectEventByLocalIdAndMap(localId, mapNum, mapGroup);
+        return TRUE;
+    }
+    if (IsHeld(localId, mapNum, mapGroup))
+        return FALSE;
+    if (sHeldCount >= ARRAY_COUNT(sHeld))
+        DropGoneHeld();
+    if (sHeldCount >= ARRAY_COUNT(sHeld))
+        return FALSE; // sixteen live objects all held: there is no seventeenth to hold
+    sHeld[sHeldCount].localId = localId;
+    sHeld[sHeldCount].mapNum = mapNum;
+    sHeld[sHeldCount].mapGroup = mapGroup;
+    sHeldCount++;
+    return TRUE;
+}
+
+void BrField_RemoveHeld(void)
+{
+    u8 i;
+
+    if (sHeldCount == 0 || !BrField_OverworldRunning())
+        return;
+    // By local id and map, not by slot: a map load in between leaves nothing to find,
+    // and removes nothing it should not.
+    for (i = 0; i < sHeldCount; i++)
+        RemoveObjectEventByLocalIdAndMap(sHeld[i].localId, sHeld[i].mapNum, sHeld[i].mapGroup);
+    sHeldCount = 0;
+}
+
 #define tState  data[0]
 #define tTimer  data[1]
 #define tFrames data[2]

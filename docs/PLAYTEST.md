@@ -42,7 +42,23 @@ moment that needs more, cut a contact sheet: `ffmpeg -ss <t> -t 10 -i <video> -v
 
 **Filed:** POK-321 analog sticks on a non-standard pad, POK-322 bots' starting potions,
 POK-323 the world moving during a battle, POK-324 ticker noise, POK-325 the ring's target
-in the game, POK-326 fog at spawn in Mossdeep, POK-327 a test that plays a match.
+in the game, POK-326 fog at spawn in Mossdeep, POK-327 a test that plays a match, and from
+the same day's phone session POK-328, a black screen after a Mossdeep Gym trainer.
+
+**POK-328, the lead** (not reproduced; the ticket stays open on it). Cam had dropped into
+Mossdeep already in the fog (POK-326), and the fog's sweep sends an NPCOUT for every
+trainer on a map it has held for forty seconds -- including the map you are fighting on.
+A battle keeps the map's object events and rebuilds their sprites on the way back, so an
+object's `spriteId` mid-fight is an old number and the sprite under it is the battle's;
+`Despawn_Trainer` removed the object anyway, and `RemoveObjectEvent` ran `DestroySprite`
+on it. At Route 102's action menu that took sprites 1 and 2, the foe's healthbox, out from
+under the fight. play.spec's Firefox run met a fight that never ended once in about
+twenty, with the sweep having taken two trainers during it. Every object BR takes off a
+map now goes through `BrField_RemoveObject`, which off the field holds it in the table
+until the first field frame (`npcout-in-battle.txt`).
+Held, the trainer you are fighting is still there when the battle ends, so their team
+drops -- a swept opponent used to drop nothing. If it happens again: the stall overlay's
+line (kind, version, cb2, map), and whether the results panel was behind the black.
 
 **Fixed since** (the page and the ROM ship together):
 

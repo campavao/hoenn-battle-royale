@@ -1,0 +1,134 @@
+# npcout-in-battle: an NPCOUT heard in the middle of a trainer battle leaves the object
+# table alone until the field is back (POK-328).
+#
+# A battle keeps the map's object events and rebuilds their sprites on the way back, so
+# while it is up an object's spriteId is an old number and the sprite under it is the
+# battle's. The fog's sweep of the map we are fighting on (seat 0xFF), or a peer who beat
+# somebody on it, used to go straight to RemoveObjectEvent -> DestroySprite, and took
+# sprites 1 and 2 -- the foe's healthbox -- out from under this fight. That is the lead
+# for Cam's black screen after a Mossdeep Gym trainer: he had dropped into the fog.
+#
+# Route 102: CALVIN (local id 2) stands at (33,14) with sight 3; booting at (33,15) puts
+# us under him, facing up. RICK (local id 3) is in view eight tiles west. Both are in the
+# object table, CALVIN in slot 1 on sprite 1 and RICK in slot 2 on sprite 2.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 21 00 0F 00 BD BB C7 FF
+wait 400
+# A started match at rung 30, as trainer-drop.txt has it.
+poke u8 gBrMatch 2
+poke u8 gBrMatch+1 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 3C 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gObjectEvents+0x2C 2
+expect u8 gObjectEvents+0x50 3
+expect u8 gBrLoot+0xA3 0
+# Talk to CALVIN, then through his challenge and the intro to the action menu.
+tap UP
+wait 20
+tap A
+wait 240
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+shot menu
+expectne u32 gMain+4 CB2_Overworld+1
+expect u32 gBattleTypeFlags 0xC
+# The two trainers' old sprite numbers, and the battle's sprites that now have them.
+expect u8 gObjectEvents+0x28 1
+expect u8 gObjectEvents+0x4C 2
+expectbits u8 gSprites+0x82 1 1
+expectbits u8 gSprites+0xC6 1 1
+# NPCOUT x2, the fog's (seat FF): type 31, framed len 7 = hdr(04 00 00) + FF 00 11 <id>
+pokebytes gBrMailbox+0x1058 1F 07 04 00 00 FF 00 11 02
+poke u16 gBrMailbox+0x0C 2
+wait 2
+pokebytes gBrMailbox+0x1098 1F 07 04 00 00 FF 00 11 03
+poke u16 gBrMailbox+0x0C 3
+wait 10
+shot heard
+# Counted as gone, and held: both still in the table (ObjectEvent.active, bit 0 of
+# byte 0), and the battle's sprites 1 and 2 still in use (Sprite.inUse, bit 0 of +0x3E).
+# The old ROM had cleared all four.
+expect u8 gBrLoot+0xA3 2
+expectbits u8 gObjectEvents+0x24 1 1
+expectbits u8 gObjectEvents+0x48 1 1
+expectbits u8 gSprites+0x82 1 1
+expectbits u8 gSprites+0xC6 1 1
+# The fight is called (B_OUTCOME_WON at the next turn boundary): FIGHT, the first move,
+# and through the turn...
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+# ...then out on B: A on the field would take CALVIN's ball, which lands in front of us.
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+shot back
+expect u32 gMain+4 CB2_Overworld+1
+# Held, CALVIN was still there when the battle ended, so his team is on the ground where
+# he stood. Taken off a map mid-fight the old way, BrLoot_TrainerBeaten found no object
+# and dropped nothing.
+expectge u8 gBrLoot+0xA0 1
+# ...he is remembered as beaten (the sweep keeps him off this map), and not counted twice
+# for it: he was already on his way.
+expect u8 gBrDespawned 0
+expect u8 gBrDespawned+1 17
+expect u8 gBrDespawned+2 2
+expect u8 gBrLoot+0xA3 2
+# And now both are off the map. RICK's slot is free; CALVIN's has been handed to his
+# ball, which is drawn where he stood (local id 0xC0 is the first piece of loot).
+expectbits u8 gObjectEvents+0x48 1 0
+expectbits u8 gObjectEvents+0x24 1 1
+expect u8 gObjectEvents+0x2C 0xC0
+expectge u8 gBrLoot+0xA1 1
+say npcout in battle ok
