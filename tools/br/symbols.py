@@ -64,6 +64,9 @@ ENGINE_SYMBOLS = [
     # ...and the field's three tilemap buffers, which VRAM's BG1..3 maps must match
     # wherever BrField_InitRingBgs put them (hud-vram.py, POK-329).
     "gOverworldTilemapBuffer_Bg1", "gOverworldTilemapBuffer_Bg2", "gOverworldTilemapBuffer_Bg3",
+    # The per-line scroll a battle transition's HBlank writes into BG1..3VOFS, which is 9
+    # bits on the ring's 512-row BGs (shuffle-vofs.txt, POK-329).
+    "gScanlineEffectRegBuffers",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

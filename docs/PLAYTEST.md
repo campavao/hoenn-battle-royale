@@ -53,6 +53,16 @@ dev server on 5199 and fails on the ROM before the switch.
   until PLAY AGAIN boots it again. Worth a look if Cam starts on his side; the fix is the
   core resizing its texture while a game runs, which today only `loadGame` does.
 
+**Fixed after review:**
+
+* **A cave trainer's SHUFFLE scrolled the ring 256 rows off for two frames.**
+  `Shuffle_Init` seeded the line buffer its HBlank writes into BG1..3VOFS with pret's
+  `memset`, a byte fill, so every line read `(cameraY & 0xFF) * 0x101`: on the ring's
+  512-row BGs that is 256 rows off whenever the camera's bit 8 is set -- half of all
+  positions, three steps up from a map load among them -- until Shuffle_End's first copy.
+  It fills halfwords now (`shuffle-vofs.txt`, Rusturf Tunnel's HIKER MIKE). The other
+  transitions store whole u16s.
+
 **Accepted as is:**
 
 * **Battle transitions on BG0.** The wipes into a battle draw on BG0, a 256-row map, so

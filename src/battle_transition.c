@@ -1261,7 +1261,14 @@ static bool8 Shuffle_Init(struct Task *task)
     ScanlineEffect_Clear();
 
     BeginNormalPaletteFade(PALETTES_ALL, 4, 0, 16, RGB_BLACK);
+#if BR
+    // BG1..3 are 512 rows (the ring, br_field.h), so VOFS bit 8 counts: a byte fill made
+    // every line (cameraY & 0xFF) * 0x101, 256 rows off whenever the camera's bit 8 is set
+    // (shuffle-vofs.txt). Halfwords hold the whole value.
+    CpuFill16(sTransitionData->cameraY, gScanlineEffectRegBuffers[1], DISPLAY_HEIGHT * 2);
+#else
     memset(gScanlineEffectRegBuffers[1], sTransitionData->cameraY, DISPLAY_HEIGHT * 2);
+#endif
 
     SetVBlankCallback(VBlankCB_Shuffle);
     SetHBlankCallback(HBlankCB_Shuffle);

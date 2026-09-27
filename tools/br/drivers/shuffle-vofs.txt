@@ -1,0 +1,55 @@
+# shuffle-vofs: a cave trainer's SHUFFLE transition scrolls BG1..3 by the camera's whole
+# value, bit 8 and all (POK-329). The ring's BGs are 512 rows (include/br/br_field.h), so
+# VOFS is 9 bits there. Shuffle_Init filled the HBlank's line buffer with pret's memset,
+# a byte fill, so every line read (cameraY & 0xFF) * 0x101: 256 rows off whenever the
+# camera's bit 8 is set. For the Init frame and the one after it -- until Shuffle_End's
+# first DMA -- the LCD showed the ring 16 metatiles away. Ripple and Wave store u16s.
+#
+# A cave's trainer fight is the SHUFFLE when our lead's level is the higher
+# (GetTrainerBattleTransition). Rusturf Tunnel: HIKER MIKE stands at (32,13) facing left
+# with sight 3; we boot at (30,16), three rows below his line, and walk up into it. A map
+# load puts the camera at 40 (the standing pan and its 8), each step up takes 16 off, so
+# three steps up leave it at -8: 0x1F8 in nine bits, bit 8 set, bit 0 clear -- the byte
+# fill reads 0x0F8. gSpriteCoordOffsetY is the camera's negation (field_camera.c).
+#
+# tools/br/shuffle-vofs.py reads every frame of the line buffer from a sentinel on:
+# the first frame it changes is the Init's fill, and every line must be the camera; each
+# frame after, while the field is still up, within the wobble Shuffle_End adds.
+# checked-by: tools/br/shuffle-vofs.py
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Rusturf Tunnel (group 24, num 4), x=30, y=16
+pokebytes gBrMailbox+0x2018 81 00 18 04 1E 00 10 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 24
+expect u8 *gSaveBlock1Ptr+5 4
+expect u16 gSpriteCoordOffsetY 0xFFD8
+# our Treecko at 100, so MIKE's lead is the lower level and the fight is the SHUFFLE
+poke u8 gPlayerParty+0x54 100
+# a turn, then up until he sees us at (30,13): his eyeline stops the walk there
+hold UP 60
+wait 60
+expect u16 *gSaveBlock1Ptr+2 13
+expect u16 gSpriteCoordOffsetY 8
+say rest
+dump gSpriteCoordOffsetY 2
+shot spotted
+# a sentinel in the first and last lines of the buffer the HBlank reads
+poke u16 gScanlineEffectRegBuffers+0x780 0x5A5A
+poke u16 gScanlineEffectRegBuffers+0x8BE 0x5A5A
+say watch
+watch gMain+4 4
+watch gScanlineEffectRegBuffers+0x780 320
+# his lines, then the transition
+wait 240
+tap A
+wait 120
+tap A
+wait 120
+tap A
+wait 120
+tap A
+wait 300
+unwatch
+shot fight
+expectbits u16 gBattleTypeFlags 8 8
+say shuffle vofs ok
