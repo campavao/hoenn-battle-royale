@@ -2392,6 +2392,14 @@ static u16 GetObjectEventFlagIdByLocalIdAndMap(u8 localId, u8 mapNum, u8 mapGrou
     if (obj == NULL)
         return 0;
 #endif // UBFIX
+#if BR
+    // ...and on agbcc too, where UBFIX is off: every ghost and ball the match takes off a
+    // map has no template, and the flag RemoveObjectEventByLocalIdAndMap set for it was
+    // read from address 0x14: 0xC002 off mGBA's BIOS open bus, a bit 4 KB past the special
+    // flags, in gWeather (objects-no-template.txt).
+    if (obj == NULL)
+        return 0;
+#endif
     return obj->flagId;
 }
 

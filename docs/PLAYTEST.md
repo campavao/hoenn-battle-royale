@@ -74,6 +74,12 @@ PICKUP go the same way (`ghost-loot-in-battle.txt`); a PLACE comes every time an
 changes maps, so that was the commoner path. And the loot keeps its objects through a
 battle: it used to forget them there, which left a piece in view drawn by an object
 nothing owned -- still standing after it was taken, and in the way of the next piece.
+Found on the way, and live in every build shipped so far: a ghost or a ball has no
+template in the map's object table, and two engine lookups read one through NULL. On
+agbcc (the release) every one taken off a map set flag 0xC002 -- mGBA's BIOS open bus --
+which is bit 2 of a byte in gWeather; and an A press facing one ran whatever script the
+open bus pointed at, harmless on most presses and a warp into a house on one
+(`objects-no-template.txt`, `loot-full-pocket.txt`). Both lookups now stop at a BR object.
 Held, the trainer you are fighting is still there when the battle ends, so their team
 drops -- a swept opponent used to drop nothing. If it happens again: the stall overlay's
 line (kind, version, cb2, map), and whether the results panel was behind the black.

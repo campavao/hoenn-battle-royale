@@ -24,6 +24,12 @@ expect u8 gBrLoot+0xA2 0
 expect u8 gBrHud+0x14D 14
 expect u8 gBrHud+0x14E 0xC8
 expect u16 *gSaveBlock1Ptr+0x5D4 42
+# ...and the press did nothing else. The field's own A handler looked the ball's script up
+# through a template it does not have and ran whatever the BIOS's open bus pointed at; on
+# the modern build that once warped us into the house behind (objects-no-template.txt).
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
 # room in the last slot, and the same press takes it: "FOUND NUGGET!"
 poke u16 *gSaveBlock1Ptr+0x5D4 0
 wait 100

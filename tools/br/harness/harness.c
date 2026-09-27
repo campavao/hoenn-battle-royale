@@ -294,6 +294,17 @@ static int runLine(char* line) {
         printf("expect ok %s 0x%08X & 0x%X = 0x%X\n", b, addr, mask, want);
         return 0;
     }
+    if (strcmp(a, "expectsame") == 0 && n >= 4) {
+        // `expectsame <w> <addr> <addr2>`: the two hold the same value. With `copy` first,
+        // "this has not changed" -- for a byte whose value differs between the builds.
+        int w = widthOf(b); uint32_t addr, addr2, got, want;
+        if (!w || !parseAddr(c, &addr) || !parseAddr(d, &addr2)) return 4;
+        got = readW(w, addr);
+        want = readW(w, addr2);
+        if (got != want) { printf("line %d: EXPECT FAILED %s at 0x%08X: got 0x%X, 0x%08X holds 0x%X\n", lineNo, b, addr, got, addr2, want); return 1; }
+        printf("expect ok %s 0x%08X = 0x%X, the same as 0x%08X\n", b, addr, got, addr2);
+        return 0;
+    }
     if (strcmp(a, "expectmsg") == 0 && n >= 5) {
         // What the ROM last said of a type, read the way the page would take it:
         // `expectmsg <type> <u8|u16> <dataOff> <value>` finds the newest first slot of

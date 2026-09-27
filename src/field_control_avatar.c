@@ -36,6 +36,7 @@
 #include "constants/trainer_hill.h"
 #if BR
 #include "br/br_match.h"
+#include "br/br_ghosts.h"
 #endif
 
 static EWRAM_DATA u8 sWildEncounterImmunitySteps = 0;
@@ -302,6 +303,14 @@ static const u8 *GetInteractedObjectEventScript(struct MapPosition *position, u8
         if (objectEventId == OBJECT_EVENTS_COUNT || gObjectEvents[objectEventId].localId == LOCALID_PLAYER)
             return NULL;
     }
+#if BR
+    // A ghost or a ball the match put down has no template, so no script: the lookup
+    // below read one through a NULL template, out of the BIOS's open bus, and ran it --
+    // loot-full-pocket.txt's A on a ball warped into a house. A ball's press is
+    // br_loot.c's own (TryTake); a ghost has nothing to say to one.
+    if (BrGhosts_Insubstantial(gObjectEvents[objectEventId].localId))
+        return NULL;
+#endif
 
     gSelectedObjectEvent = objectEventId;
     gSpecialVar_LastTalked = gObjectEvents[objectEventId].localId;

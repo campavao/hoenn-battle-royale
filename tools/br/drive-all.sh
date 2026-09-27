@@ -8,7 +8,7 @@
 # all: six drivers printed `ok` in CI while asserting nothing (POK-330 #37). So every
 # driver says how it is checked, and one that says nothing fails:
 #
-#   expect/expectge/expectle/expectne/expectbits/expectmsg lines   the harness asserts them
+#   expect/expectge/expectle/expectne/expectbits/expectmsg/expectsame lines   the harness asserts them
 #   # checked-by: <script>    the run's output goes to <script> (python, repo-relative),
 #                             which must exit 0 -- for checks too big for an expect line
 #   # capture-only: <why>     frames and dumps for a person to read; it still has to run
@@ -31,7 +31,7 @@ how() {
   local checker
   checker="$(sed -nE 's/^#[[:space:]]*checked-by:[[:space:]]*([^[:space:]]+).*/\1/p' "$1" | head -1)"
   if [[ -n "$checker" ]]; then echo "checked-by $checker"
-  elif grep -qE '^[[:space:]]*expect(ge|le|ne|bits|msg)?[[:space:]]' "$1"; then echo "expect"
+  elif grep -qE '^[[:space:]]*expect(ge|le|ne|bits|msg|same)?[[:space:]]' "$1"; then echo "expect"
   elif grep -qE '^#[[:space:]]*capture-only:' "$1"; then echo "capture-only"
   else echo "hollow"
   fi

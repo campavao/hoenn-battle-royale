@@ -46,11 +46,13 @@ Driver grammar (one action per line, `#` comments):
 | `expectle u8/u16/u32 <addr> <value>` | assert got <= value |
 | `expectne u8/u16/u32 <addr> <value>` | assert got != value |
 | `expectbits u8/u16/u32 <addr> <mask> <value>` | assert (got & mask) == value: one field of a bitfield whose neighbours move (`expectbits u8 gObjectEvents+0x24 1 0` is "slot 1 is free") |
+| `expectsame u8/u16/u32 <addr> <addr2>` | assert the two hold the same value; after `copy <addr2> <addr> <len>`, "this has not changed" for a value the two builds do not share |
 | `expectmsg <type> u8/u16 <off> <value>` | assert on the newest out-ring message of that type: its data at byte `off`, across continuation slots. Draining does not erase it |
 | `drain gBrMailbox` | from now on take every out-ring slot each frame, as the page would. **Every driver that opens a netlink session needs this.** Without it a link battle fills the ring in seconds, `gBrNetlink.pendingLen` sticks, and the fight freezes mid-turn looking exactly like a game bug -- it cost POK-312 a High ticket. The harness fails a run whose `pendingLen` holds for 300 frames rather than driving on in a dead ROM. `drain 0x0` stops it again (a page that has stopped reading) |
 | `*sym+off` as an addr | dereference the u32 pointer at `sym` first (`*gSaveBlock1Ptr+4` is the location) |
 | `poke u8/u16/u32 <addr> <value>` / `pokebytes <addr> <hex...>` | write RAM |
 | `dump <addr> <len>` | hex dump |
+| `copy <dst> <src> <len>` | copy bytes from src to dst |
 | `title` / `say <text>` | print the game code / echo |
 
 Lessons carried from the Emerson harness: hold a direction across many frames for a

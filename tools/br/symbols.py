@@ -55,6 +55,9 @@ ENGINE_SYMBOLS = [
     # What a bot's AI was handed out of its bag, and what it chose to do with its turn
     # (bot-bag.txt, bot-bag-empty.txt).
     "gBattleResources", "gChosenActionByBattler",
+    # event_data.c's EWRAM, in declaration order: sSpecialFlags is static and sits 0x24
+    # past this, so a flag set off the end of it can be found (objects-no-template.txt).
+    "gSpecialVar_0x8000",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

@@ -1,0 +1,59 @@
+# objects-no-template: a ghost or a ball the match puts on a map has no template in the
+# map's object table (SpawnSpecialObjectEventParameterized keeps its template on the
+# stack), and two engine lookups read one anyway, through NULL.
+#
+#   - RemoveObjectEventByLocalIdAndMap sets the object's flag, read from NULL+0x14. On the
+#     modern build UBFIX returns 0 there; on agbcc -- the release -- it read the BIOS's
+#     open bus, 0xC002 under mGBA, and FlagSet(0xC002) set bit 2 of the byte 4 KB past the
+#     special flags (gWeather's, on this layout) every time a ghost moved away or a ball
+#     was taken.
+#   - An A press on one looked up its script at NULL+0x10 and ran whatever that was --
+#     which open bus it read depends on the last IRQ or SWI, so on most presses it was
+#     harmless and on some it was not: loot-full-pocket.txt's press on a ball warped the
+#     modern build into BRENDAN's house once POK-328 moved a lag frame.
+#
+# sSpecialFlags is static; it sits 0x24 past gSpecialVar_0x8000 in event_data.c's EWRAM,
+# so the byte FlagSet(0xC002) writes is gSpecialVar_0x8000 + 0x24 + (0xC002-0x4000)/8.
+# What is there differs between the builds (gWeather on agbcc, the map buffer on modern),
+# so it is copied aside -- into the pad of loot row 7, which nothing reads -- and held to
+# that copy.
+#
+# Littleroot, where loot-full-pocket.txt boots: facing south at (12,16), with a match on
+# (PLAY) so nobody walks up to talk.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+copy gBrLoot+0x99 gSpecialVar_0x8000+0x1024 1
+# PLACE seat 2 on 0:9 at (15,16), three tiles east, in view: it gets an object
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 02 01 00 09 0F 00 10 00 01 01 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expectne u8 gBrSeats+0x29 0xFF
+# ...and away to Route 101: the ghost is taken off the map, and no flag goes with it.
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 02 01 00 10 0A 00 0A 00 01 01 00
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u8 gBrSeats+0x29 0xFF
+expectsame u8 gSpecialVar_0x8000+0x1024 gBrLoot+0x99
+shot ghost-gone
+# A ball one tile west, from seat 1: SPILL, one mon, key 0x0101 at (11,16), species 25 at 5.
+pokebytes gBrMailbox+0x1098 0B 11 0E 00 00 01 00 09 01 01 01 0B 00 10 00 19 00 05 00
+poke u16 gBrMailbox+0x0C 3
+wait 30
+expect u8 gBrLoot+0xA1 1
+# Turn to it (a hold of 8 frames is a turn) and press A: the ball is ours -- there is room
+# in the party -- and taken off the map by our own ROM, still with no flag, and the press
+# ran no script: the field is still up and we are still in Littleroot.
+hold LEFT 8
+wait 20
+tap A
+wait 60
+shot taken
+expect u8 gBrLoot+0xA2 1
+expect u8 gBrLoot+0x0B 0
+expectsame u8 gSpecialVar_0x8000+0x1024 gBrLoot+0x99
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+say objects no template ok
