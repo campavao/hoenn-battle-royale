@@ -74,7 +74,8 @@ test('a player out at the buzzer is taken to the trainer they watch, and hears t
           const follow = ram.read(spectate + off.follow, 8);
           const me = ram.read(mySeat, 8);
           const save = ram.read(sb1, 32);
-          const ours = `${ram.read(save + off.sbGroup, 8)}.${ram.read(save + off.sbNum, 8)}`;
+          // A core rebooting at the match's end has no save block yet: nowhere, not a throw.
+          const ours = save === 0 ? 'none' : `${ram.read(save + off.sbGroup, 8)}.${ram.read(save + off.sbNum, 8)}`;
           const mapOf = (seat: number) => `${ram.read(seats + seat * off.seat + off.group, 8)}.${ram.read(seats + seat * off.seat + off.num, 8)}`;
           // Everybody the ROM has a row for, somewhere other than here: who to watch next.
           const elsewhere: number[] = [];
