@@ -241,8 +241,10 @@ export class Emulator {
     this.bootedPath = path;
     this.halts++;
     this.quiet = false;
-    // The core auto-saves a state every 30 s and restores it on the next loadGame of
-    // the same file. A match must always start from power-on, so drop those first.
+    // A core left to its defaults auto-saves a state every 30 s and restores it on the
+    // next loadGame of the same file. create() turns both off, but a shell from before
+    // POK-247 left those files in IndexedDB, and a match must always start from
+    // power-on, so drop them first.
     try {
       for (const f of this.m.FS.readdir(AUTOSAVE_DIR)) {
         if (f !== '.' && f !== '..') this.m.FS.unlink(`${AUTOSAVE_DIR}/${f}`);
