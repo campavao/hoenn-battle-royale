@@ -149,6 +149,45 @@ describe('the fade', () => {
     expect(mapFade({ y: 1, color: 0, active: true }, 0, false, (FAST_FADE << 8) | 0).fade.y).toBe(0);
   });
 
+  // Firefox's play spec, the end of a Safari catch (frames 1268..1300): the ball fades its
+  // OBJ palette to white, and the battle's fast fade to black begins inside that fade's
+  // four finishing frames -- which end it before its first step (palette.c). The mode
+  // stays fast, y stays 31, and nothing on the picture moved.
+  it('leaves the map as it was under a fast fade that was ended before it began', () => {
+    const trace: [number, number, number, number, number, number][] = [
+      [1268, 2, 0x7fff, 1, 0xffff0000, 0],
+      [1282, 16, 0x7fff, 1, 0xffff0000, 0],
+      [1284, 16, 0x7fff, 1, 0, 0],
+      [1286, 31, 0x7fff, 1, 0, 0x0143],
+      [1288, 31, 0x7fff, 0, 0, 0x0143],
+      [1292, 31, 0x7fff, 0, 0, 0x0143],
+      [1294, 0, 0, 0, 0, 0x0143],
+      [1298, 0, 0, 0, 0, 0x0143],
+      [1300, 16, 0, 1, 0xffffffff, 0x0003],
+    ];
+    const cam = (fade: { y: number; color: number; active: boolean }): Camera =>
+      ({ group: 26, num: 13, x: 20, y: 20, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, onField: false });
+    let bg = true;
+    let prev: Camera | null = null;
+    let hold = { on: false, frames: 0 };
+    const seen: Record<number, number> = {};
+    for (const [frame, y, color, active, mask, mode] of trace) {
+      const s = mapFade({ y, color, active: active === 1 }, mask, bg, mode);
+      bg = s.bg;
+      const cur = cam(s.fade);
+      hold = holdFade(prev, cur, hold);
+      seen[frame] = cur.fade;
+      prev = cur;
+    }
+    expect(seen[1282], 'the ball is an OBJ fade: the map stays lit').toBe(0);
+    expect(seen[1286], 'the fast fade as it starts, a sixteenth').toBe(1);
+    // Not the white of y 31 in the struct's colour, and nothing held from it.
+    for (const frame of [1288, 1292, 1294, 1298]) expect(seen[frame], `frame ${frame}`).toBe(0);
+    expect(seen[1300], 'the next real fade').toBe(16);
+    // A fast fade IN ended before it began is its colour: Begin filled the palettes.
+    expect(mapFade({ y: 31, color: 0x7fff, active: false }, 0, false, (FAST_FADE << 8) | 2).fade).toEqual({ y: 16, color: 0, active: false });
+  });
+
   it('shows a GBA colour the way mGBA does', () => {
     expect(gbaColor(0)).toBe('rgb(0,0,0)');
     expect(gbaColor(0x7fff)).toBe('rgb(255,255,255)');

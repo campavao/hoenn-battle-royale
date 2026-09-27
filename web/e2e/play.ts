@@ -234,7 +234,7 @@ export interface PlayLog {
   trails: Record<string, string[]>;
   counts: Record<string, number>;
   /** How often something the spec wants to have happened was seen. */
-  seen: { battle: number; pick: number; shake: number; outside: number; bgFade: number; white: number; black: number; full: number; overlay: number };
+  seen: { battle: number; pick: number; shake: number; outside: number; bgFade: number; white: number; black: number; full: number; overlay: number; fastCut: number };
   damage: number;
   longestBlack: number;
 }
@@ -264,7 +264,7 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         bad: [] as string[],
         trails: {} as Record<string, string[]>,
         counts: {} as Record<string, number>,
-        seen: { battle: 0, pick: 0, shake: 0, outside: 0, bgFade: 0, white: 0, black: 0, full: 0, overlay: 0 },
+        seen: { battle: 0, pick: 0, shake: 0, outside: 0, bgFade: 0, white: 0, black: 0, full: 0, overlay: 0, fastCut: 0 },
         damage: 0,
         longestBlack: 0,
       };
@@ -341,7 +341,13 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         // step (palette.c, UpdateFastPaletteFade), with y at 0.
         const fastMode = ((fw8 >> 8) & 3) === k.FAST_FADE;
         const fast = fadeActive && fastMode;
-        const fastWhite = fast && (fw8 & 0x3f) <= k.FAST_WHITE_MAX;
+        const fastWhite = fastMode && (fw8 & 0x3f) <= k.FAST_WHITE_MAX;
+        // ...so one stopped with the mode still fast never took a step: begun inside the
+        // last fade's four finishing frames, it is ended by them first (palette.c,
+        // UpdateFastPaletteFade). A fade out left the picture as it was; a fade in had
+        // filled it with its colour as it began. Until the next normal fade (field.ts
+        // mapFade; the end of a Safari catch, in Firefox).
+        const fastCut = fastMode && !fadeActive;
         if (fast) lastBg = true;
         else if (fadeActive && selected !== 0) lastBg = (selected & k.FADE_BG_PALETTES) !== 0;
         // How far the map is under the ROM's fade, 0..16, and in what colour. A normal
@@ -352,15 +358,19 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         // -- which the composite holds for up to HELD_FRAMES (field.ts holdFade). Every
         // battle ends on one to black, and the map stayed lit past a picture gone black.
         if (fast) fastEnd = (fw8 & 1) === 1 ? { color: fastWhite ? 0x7fff : 0, frames: 0 } : null;
+        else if (fastCut) fastEnd = null;
         else if (fastEnd && (fadeActive && selected !== 0 || ++fastEnd.frames > k.HELD_FRAMES)) fastEnd = null;
-        const bgFaded = fast ? ((fw8 & 1) === 1 ? 16 - (fadeY >> 1) : fadeY >> 1) : fastEnd ? 16 : lastBg ? fadeY : 0;
-        const faded = fast ? (fastWhite ? 0x7fff : 0) : fastEnd ? fastEnd.color : fadeColor;
+        const bgFaded = fast
+          ? ((fw8 & 1) === 1 ? 16 - (fadeY >> 1) : fadeY >> 1)
+          : fastCut ? ((fw8 & 1) === 1 ? 0 : 16) : fastEnd ? 16 : lastBg ? fadeY : 0;
+        const faded = fast || fastCut ? (fastWhite ? 0x7fff : 0) : fastEnd ? fastEnd.color : fadeColor;
         fullRun = bgFaded >= 16 ? fullRun + 1 : 0;
         whiteOk.push(bgFaded >= 12 && faded >= 0x7000);
         blackOk.push(bgFaded >= 12 && faded <= 0x0421);
         if (whiteOk.length > k.HELD_FRAMES + 4) whiteOk.shift();
         if (blackOk.length > k.HELD_FRAMES + 4) blackOk.shift();
         if (fast || (fadeActive && (selected & k.FADE_BG_PALETTES) !== 0)) log.seen.bgFade++;
+        if (fastCut) log.seen.fastCut++;
         const sb1 = emu.read(s.gSaveBlock1Ptr, 32);
         const map = sb1 ? `${emu.read(sb1 + k.SB1_MAP_GROUP, 8)}:${emu.read(sb1 + k.SB1_MAP_NUM, 8)}` : '';
 
@@ -439,7 +449,7 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
             const black = px.every((p) => p[0] <= 8 && p[1] <= 8 && p[2] <= 8);
             trail.push(
               `${frame} y${fadeY}${fadeActive ? 'a' : ''}${selected & k.FADE_BG_PALETTES ? 'B' : ''}${selected >>> 16 ? 'O' : ''}${fastMode ? `f${fw8 & 0x3f}` : ''}` +
-                `${lastBg ? '' : ' (obj)'}${!fast && fastEnd ? ' end' : ''} c${fadeColor.toString(16)} u${bgFaded} ${white ? 'WHITE' : black ? 'BLACK' : '-'}${inBattle ? ' battle' : ''}`,
+                `${lastBg ? '' : ' (obj)'}${fastCut ? ' cut' : !fast && fastEnd ? ' end' : ''} c${fadeColor.toString(16)} u${bgFaded} ${white ? 'WHITE' : black ? 'BLACK' : '-'}${inBattle ? ' battle' : ''}`,
             );
             if (trail.length > 40) trail.shift();
             if (white) {
@@ -457,7 +467,7 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
               const up = (v: number) => (v << 3) | (v >> 2);
               const want = [up(faded & 31), up((faded >> 5) & 31), up((faded >> 10) & 31)];
               if (!px.every((p) => p.slice(0, 3).every((v, i) => Math.abs(v - want[i]) <= 8))) {
-                fail('unfaded', `map ${map} shows under a whole fade to ${faded.toString(16)}${fast ? ' (fast)' : fastEnd ? ' (a fast fade ended)' : ''}: corners ${JSON.stringify(px.map((p) => p.slice(0, 3)))}`);
+                fail('unfaded', `map ${map} shows under a whole fade to ${faded.toString(16)}${fast ? ' (fast)' : fastCut ? ' (a fast fade ended before it began)' : fastEnd ? ' (a fast fade ended)' : ''}: corners ${JSON.stringify(px.map((p) => p.slice(0, 3)))}`);
               }
             }
             if (black) log.seen.black++;

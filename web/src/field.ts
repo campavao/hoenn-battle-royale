@@ -321,17 +321,28 @@ export function holdFade(prev: Camera | null, cur: Camera, hold: { on: boolean; 
  *  of 31 towards its colour, so the map is under it by a sixteenth a step. It ends with
  *  y at 0 and the mode back to normal, and after an OUT the picture stays that colour
  *  -- which is heldFade's to keep, from the 16 the last step reached. The battle's end
- *  was read as no fade at all, and the map stayed lit past a picture gone black. */
+ *  was read as no fade at all, and the map stayed lit past a picture gone black.
+ *
+ *  So a fast fade stopped with the mode still fast never took a step. One begun inside
+ *  the last fade's four finishing frames is ended by them first (UpdateFastPaletteFade
+ *  asks IsSoftwarePaletteFadeFinishing before it moves a colour): the catch's ball fades
+ *  its OBJ palette white, the battle's fast fade to black starts on the heels of it, and
+ *  never runs. A fade out leaves the picture as it was; a fade in was filled with its
+ *  colour as it began. Read as a normal fade at y 31 in the struct's colour, the map
+ *  went white past a picture that had not changed, and was held white (POK-327, in
+ *  Firefox's play spec). The mode stays fast until the next normal fade begins. */
 export function mapFade(
   fade: { y: number; color: number; active: boolean },
   selected: number,
   bg: boolean,
   mode = 0,
 ): { fade: { y: number; color: number; active: boolean }; bg: boolean } {
-  if (fade.active && ((mode >> 8) & 3) === FAST_FADE) {
+  if (((mode >> 8) & 3) === FAST_FADE) {
     const sub = mode & 0x3f;
+    const color = sub <= FAST_WHITE_MAX ? 0x7fff : 0;
+    if (!fade.active) return { fade: { y: sub & 1 ? 0 : 16, color, active: false }, bg: true };
     const steps = 16 - (fade.y >> 1);
-    return { fade: { y: sub & 1 ? steps : 16 - steps, color: sub <= FAST_WHITE_MAX ? 0x7fff : 0, active: true }, bg: true };
+    return { fade: { y: sub & 1 ? steps : 16 - steps, color, active: true }, bg: true };
   }
   const reached = fade.active && selected !== 0 ? (selected & FADE_BG_PALETTES) !== 0 : bg;
   const onMap = fade.active ? (selected & FADE_BG_PALETTES) !== 0 : reached;
