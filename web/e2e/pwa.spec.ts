@@ -64,6 +64,8 @@ test('after one visit the shell comes back with the network gone', async ({ brow
   const ctx = await browser.newContext();
   try {
     const page = await ctx.newPage();
+    const said: string[] = [];
+    page.on('console', (m) => said.push(m.text()));
     await page.goto(`${PREVIEW}/`);
     // The import screen is the shell being up; the ROM is the player's and we have not
     // given it one, which is exactly the state a first visit is in.
@@ -72,13 +74,30 @@ test('after one visit the shell comes back with the network gone', async ({ brow
       timeout: 30_000,
     });
 
+    // ...and everything that visit ran on is kept, the core too -- all of it fetched
+    // before the worker existed, and handed to it once it took over (sw-warm.ts).
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            const kept = async (p: string) => (await caches.match(p, { ignoreVary: true })) !== undefined;
+            return (await kept('/emu/mgba.js')) && (await kept('/emu/mgba.wasm'));
+          }),
+        { timeout: 30_000, message: 'the core is on the device' },
+      )
+      .toBe(true);
+
     // Now take the network away entirely and come back.
     await ctx.setOffline(true);
+    said.length = 0;
     await page.reload();
     await expect(page.locator('#screen-importing')).toBeVisible({ timeout: 30_000 });
     // Not an error page: the real shell, with its own import screen -- drawn on the
     // stage once the core is up (POK-320), so it gets the core's time.
     await expect(page.locator('#dropzone')).toBeVisible({ timeout: 30_000 });
+    // And the core came up behind it: offline, a core that could not be fetched said so.
+    await page.waitForTimeout(3_000);
+    expect(said.filter((line) => /startup failed|Aborted\(/.test(line)), 'the core booted offline').toEqual([]);
   } finally {
     await ctx.setOffline(false);
     await ctx.close();

@@ -204,24 +204,36 @@ describe('what a release builds (POK-330 #23)', () => {
 // ---- the service worker (web/public/sw.js), run against fake caches and network ------
 
 const ORIGIN = 'https://hbr.test';
-type FakeRequest = { url: string; method: string; mode: string; cache: string };
+type FakeRequest = { url: string; method: string; mode: string; cache: string; headers?: Record<string, string> };
+type MatchOpts = { ignoreSearch?: boolean; ignoreVary?: boolean };
+
+/** The request's Origin header, as a cache compares it for a `Vary: Origin` response. */
+const originOf = (r: string | { headers?: Record<string, string> }): string => (typeof r === 'string' ? '' : (r.headers?.origin ?? ''));
 
 class FakeCache {
   entries = new Map<string, Response>();
+  /** The Origin each entry was stored under: a real cache matches a `Vary: Origin`
+   *  response only to a request with the same Origin, unless asked to ignore Vary. */
+  origins = new Map<string, string>();
   /** Paths whose store fails, as a disk over its quota fails it. */
   refuse = new Set<string>();
   private key(r: string | { url: string }): string {
     return typeof r === 'string' ? new URL(r, ORIGIN).href : r.url;
   }
-  async match(r: string | { url: string }, opts?: { ignoreSearch?: boolean }): Promise<Response | undefined> {
+  async match(r: string | { url: string; headers?: Record<string, string> }, opts?: MatchOpts): Promise<Response | undefined> {
     const k = this.key(r);
-    const hit = this.entries.get(k) ?? (opts?.ignoreSearch ? [...this.entries].find(([e]) => e.split('?')[0] === k.split('?')[0])?.[1] : undefined);
-    return hit?.clone();
+    const found = this.entries.has(k) ? k : opts?.ignoreSearch ? [...this.entries.keys()].find((e) => e.split('?')[0] === k.split('?')[0]) : undefined;
+    if (found === undefined) return undefined;
+    const hit = this.entries.get(found)!;
+    const varies = /\borigin\b/i.test(hit.headers.get('vary') ?? '');
+    if (varies && !opts?.ignoreVary && this.origins.get(found) !== originOf(r)) return undefined;
+    return hit.clone();
   }
-  async put(r: string | { url: string }, res: Response): Promise<void> {
+  async put(r: string | { url: string; headers?: Record<string, string> }, res: Response): Promise<void> {
     const k = this.key(r);
     if (this.refuse.has(k.slice(ORIGIN.length))) throw Object.assign(new Error('quota'), { name: 'QuotaExceededError' });
     this.entries.set(k, res);
+    this.origins.set(k, originOf(r));
   }
   async delete(r: string | { url: string }): Promise<boolean> {
     return this.entries.delete(this.key(r));
@@ -245,24 +257,26 @@ function runWorker(files: Record<string, string>) {
   };
   const caches = {
     open: async () => cache,
-    match: (r: string | { url: string }, o?: { ignoreSearch?: boolean }) => cache.match(r, o),
+    match: (r: string | { url: string }, o?: MatchOpts) => cache.match(r, o),
   };
   const fetch = async (req: FakeRequest) => {
     const u = new URL(req.url);
     net.asked.push(u.pathname + u.search);
     if (net.offline) throw new TypeError('Failed to fetch');
     const body = files[u.pathname + u.search] ?? files[u.pathname];
-    return body === undefined ? new Response('nope', { status: 404 }) : new Response(body, { status: 200 });
+    // vite preview answers every file with `Vary: Origin`, as a CORS-aware server may.
+    return body === undefined ? new Response('nope', { status: 404 }) : new Response(body, { status: 200, headers: { vary: 'Origin' } });
   };
   new Function('self', 'caches', 'fetch', swSource)(self, caches, fetch);
 
   /** One fetch through the worker; null when it leaves the request alone. */
-  async function get(path: string, init: { mode?: string; cache?: string; method?: string } = {}): Promise<string | null> {
+  async function get(path: string, init: { mode?: string; cache?: string; method?: string; origin?: string } = {}): Promise<string | null> {
     const request: FakeRequest = {
       url: /^https?:/.test(path) ? path : ORIGIN + path,
       method: init.method ?? 'GET',
       mode: init.mode ?? 'cors',
       cache: init.cache ?? 'default',
+      headers: init.origin ? { origin: init.origin } : {},
     };
     let responded: Promise<Response> | null = null;
     const waits: Promise<unknown>[] = [];
@@ -277,6 +291,19 @@ function runWorker(files: Record<string, string>) {
 }
 
 describe('the service worker (POK-330 #23)', () => {
+  // POK-246's "after one visit": the first visit's files come through the worker as the
+  // page's own plain fetches (sw-warm.ts), and offline a module script asks for them with
+  // an Origin header. Matched on Vary, every one missed and the page came back without
+  // its script (pwa.spec).
+  it("serves a file it kept from a plain fetch to a module script's request, Vary: Origin or not", async () => {
+    const sw = runWorker({ '/assets/main-a.js': 'MAIN', '/emu/mgba.wasm': 'WASM', '/ui/font.png': 'FONT' });
+    for (const path of ['/assets/main-a.js', '/emu/mgba.wasm', '/ui/font.png']) await sw.get(path);
+    sw.net.offline = true;
+    expect(await sw.get('/assets/main-a.js', { origin: ORIGIN })).toBe('MAIN');
+    expect(await sw.get('/emu/mgba.wasm', { origin: ORIGIN })).toBe('WASM');
+    expect(await sw.get('/ui/font.png', { origin: ORIGIN })).toBe('FONT');
+  });
+
   it('keeps a patch named by its build for good, without asking the network again', async () => {
     const sw = runWorker({ '/patch/hoenn-br.bps': 'BPS-A' });
     expect(await sw.get('/patch/hoenn-br.bps?v=aaa')).toBe('BPS-A');

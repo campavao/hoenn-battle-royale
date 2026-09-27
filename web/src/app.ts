@@ -113,6 +113,7 @@ import {
 } from './match/lifecycle';
 import regionmapData from './data/regionmap.json';
 import { devLand, devPace, parseRoomHash as parseHash, perfWanted, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
+import { warm, warmList } from './sw-warm';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
 // Cast rather than re-declared: these three JSON files are the exporter's own output
@@ -3307,6 +3308,24 @@ function registerServiceWorker(): void {
   // After load, so it never competes with the shell and the wasm core for the network
   // on a first visit -- which is the visit that decides whether anybody comes back.
   window.addEventListener('load', () => {
+    // A worker newly in control of this page has seen none of what it loaded -- that all
+    // came before the worker existed -- so it is asked for again, through it (sw-warm.ts):
+    // one visit then leaves the whole shell on the device, not just the page. A page
+    // that loaded under a worker already fetched everything through it.
+    const hand = (entries: PerformanceEntryList) =>
+      void warm(warmList(entries as PerformanceResourceTiming[], location.origin), (path) => fetch(path));
+    navigator.serviceWorker.addEventListener(
+      'controllerchange',
+      () => {
+        hand(performance.getEntriesByType('resource'));
+        try {
+          new PerformanceObserver((list) => hand(list.getEntries())).observe({ type: 'resource' });
+        } catch {
+          /* no observer: what was loading then is cached on the next visit instead */
+        }
+      },
+      { once: true },
+    );
     navigator.serviceWorker.register('/sw.js').catch((err) => {
       // A blocked worker (private mode, an http:// origin, a policy) costs offline and
       // nothing else, so it is worth a line in the console and not a word on screen.

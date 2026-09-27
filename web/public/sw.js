@@ -40,6 +40,13 @@ const CACHE = 'hbr-v2'; // v1 kept a patch per URL for ever; activate drops it
 
 const VERSION_PATH = '/patch/br-version.json';
 
+/** Every lookup ignores Vary. A server may answer our own static files with `Vary:
+ *  Origin` (vite preview does), and the first visit's files come through here as the
+ *  page's plain fetches (sw-warm.ts) while a module script asks with an Origin header:
+ *  matched on Vary, all of them missed offline and the page came back without its script
+ *  (pwa.spec, POK-246). Nothing we serve differs by who asks. */
+const MATCH = { ignoreVary: true };
+
 /** The one thing runtime caching cannot reach on its own. The navigation that loads the
  *  page happens BEFORE this worker controls anything, so `/` is never a fetch we see --
  *  and the next navigation is the offline one. Everything else the page asks for goes
@@ -116,7 +123,7 @@ async function put(request, response) {
   // The same bytes again (a 304 the HTTP cache answered) need not be written again.
   const etag = response.headers.get('etag');
   if (etag) {
-    const had = await cache.match(request);
+    const had = await cache.match(request, MATCH);
     if (had && had.headers.get('etag') === etag) return;
   }
   await cache.put(request, response);
@@ -132,7 +139,7 @@ async function networkFirst(event, request, { page = false } = {}) {
           // Pruned before this page is stored: it reads the page this one replaces, and
           // still runs when a disk over its quota refuses the store.
           if (page && new URL(request.url).pathname === '/') {
-            const was = await caches.match(request, { ignoreSearch: true });
+            const was = await caches.match(request, { ...MATCH, ignoreSearch: true });
             await pruneAssets(await copy.clone().text(), was ? await was.text() : '');
           }
           await put(request, copy);
@@ -143,7 +150,7 @@ async function networkFirst(event, request, { page = false } = {}) {
   } catch (err) {
     // Offline: the last one we saw is better than nothing, and the page handles a
     // version it cannot reach. A page asked for with a query is still the page.
-    const cached = await caches.match(request, { ignoreSearch: page });
+    const cached = await caches.match(request, { ...MATCH, ignoreSearch: page });
     if (cached) return cached;
     throw err;
   }
@@ -153,7 +160,7 @@ async function networkOnly(request) {
   try {
     return await fetch(request);
   } catch (err) {
-    const cached = await caches.match(request);
+    const cached = await caches.match(request, MATCH);
     if (cached) return cached;
     throw err;
   }
@@ -163,7 +170,7 @@ async function networkOnly(request) {
  *  page asks past every cache (`cache: 'reload'`) because a copy failed its check. */
 async function immutable(event, request, { onePerPath = false } = {}) {
   if (request.cache !== 'reload') {
-    const cached = await caches.match(request);
+    const cached = await caches.match(request, MATCH);
     if (cached) return cached;
   }
   const response = await fetch(request);
@@ -187,7 +194,7 @@ async function immutable(event, request, { onePerPath = false } = {}) {
 }
 
 async function cacheFirst(event, request) {
-  const cached = await caches.match(request);
+  const cached = await caches.match(request, MATCH);
   if (cached) {
     // Freshen it for next time, but do not make this load wait on the network.
     event.waitUntil(revalidate(request));
@@ -232,7 +239,7 @@ async function reachable(cache, html) {
   // only by a chunk the page names is kept too.
   for (const ref of keep) {
     if (!ref.endsWith('.js')) continue;
-    const script = await cache.match(ref);
+    const script = await cache.match(ref, MATCH);
     if (script) for (const inner of assetRefs(await script.text(), ref)) keep.add(inner);
     else if (named.includes(ref)) missing = true;
   }
