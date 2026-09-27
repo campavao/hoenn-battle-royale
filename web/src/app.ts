@@ -1436,9 +1436,9 @@ function landOverride(): { map: MapRef; x: number; y: number } | undefined {
 }
 
 /** `#band=T,B`: ask the core for T rows above the LCD and B below instead of the ROM's,
- *  the sides as the ROM has them (POK-329: picture.spec holds a band taller than the
- *  ROM's ring to the sprite window). Dev only: past the ring there is nothing of the map
- *  to show, and a player would see the backdrop. */
+ *  the sides as the ROM has them (POK-329: picture.spec asks for the legacy 40/56). Dev
+ *  only: past the ROM's ring there is nothing of the map to show, and a player would see
+ *  the backdrop. */
 function devBand(rom: Band): Band | undefined {
   if (!import.meta.env.DEV) return undefined;
   const rows = devBandOf(location.hash);

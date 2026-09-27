@@ -3,19 +3,36 @@
 // write what the canvas, its clip and the layout say every second, with screenshots.
 //
 //   node scripts/firefox-probe.mjs "<rom path>" [seconds] [firefox|webkit|chromium]
+//
+// With --check it walks seam-probe.mjs --check's walk in that engine instead (POK-329:
+// the ROM's 496-row band held to the map's still, scripts/still-walk.mjs), writes each
+// direction's worst picture under e2e/out/<engine>/ and exits 1 unless it is clean.
+//
+//   node scripts/firefox-probe.mjs "<rom path>" --check [firefox|webkit|chromium]
 import { firefox, webkit, chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
+import { checkWalk, landingHash } from './still-walk.mjs';
 
-const rom = (process.argv[2] ?? '').replace(/\\/g, '/');
-const seconds = Number(process.argv[3] ?? 90);
-const engine = { firefox, webkit, chromium }[process.argv[4] ?? 'firefox'];
-const out = path.resolve(`e2e/out/${process.argv[4] ?? 'firefox'}`);
+const check = process.argv.includes('--check');
+const argv = process.argv.filter((a) => a !== '--check');
+const rom = (argv[2] ?? '').replace(/\\/g, '/');
+const seconds = Number(check ? 0 : argv[3] ?? 90);
+const name = (check ? argv[3] : argv[4]) ?? 'firefox';
+const engine = { firefox, webkit, chromium }[name];
+const out = path.resolve(`e2e/out/${name}`);
 fs.mkdirSync(out, { recursive: true });
 
 const browser = await engine.launch();
-const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: process.argv[4] === 'webkit', deviceScaleFactor: Number(process.env.DPR ?? 1) });
+const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: name === 'webkit', deviceScaleFactor: Number(process.env.DPR ?? 1) });
 page.on('console', (m) => { if (m.type() === 'error' || m.text().includes('[proxy]')) console.log('console:', m.text()); });
+if (check) {
+  await page.goto(`http://localhost:5199/${landingHash(rom)}`);
+  const { clean } = await checkWalk(page, { every: 40, out });
+  await browser.close();
+  console.log(clean ? 'clean' : 'NOT clean');
+  process.exit(clean ? 0 : 1);
+}
 await page.goto(`http://localhost:5199/#solo&rom=${rom}`);
 await page.waitForFunction(() => window.__hbr !== undefined, null, { timeout: 120_000 });
 await page.waitForSelector('body.in-match', { timeout: 120_000 });

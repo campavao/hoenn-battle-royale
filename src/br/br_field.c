@@ -14,11 +14,11 @@
 #include "br/br_ghosts.h"
 #include "br/br_loot.h"
 
-// THE RING (br_field.h). Bit (dy + BR_RING_ABOVE) of sStaleRows: grid row pos.y + dy
-// still to (re)draw. Its top bit is the far row, which a step down leaves there and
-// which waits for the step to complete: until then its slot is the one the band's top
-// rows show (the old top row, a row above the new one).
-static u32 sStaleRows;
+// THE RING (br_field.h): gBrRingStale's bits are the rows still to (re)draw. Its top bit
+// is the far row, which a step down leaves there and which waits for the step to
+// complete: until then its slot is the one the band's top rows show (the old top row, a
+// row above the new one).
+EWRAM_DATA u32 gBrRingStale = 0;
 // A step right's far column, pos.x + 15, likewise: its slot is the band's left edge
 // until the step completes.
 static u8 sFarColumnPending;
@@ -44,7 +44,7 @@ static void DrawRingRow(s16 dy)
 
     for (i = 0; i < n; i++)
         CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + i, gSaveBlock1Ptr->pos.y + dy);
-    sStaleRows &= ~ROW_BIT(dy);
+    gBrRingStale &= ~ROW_BIT(dy);
 }
 
 // All 32 rows of the ring's column dx.
@@ -92,7 +92,7 @@ void BrField_DrawWholeRing(void)
         for (j = 0; j < 16; j++)
             CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + j, gSaveBlock1Ptr->pos.y + i);
     }
-    sStaleRows = ALL_ROWS & ~(ROW_BIT(16) - ROW_BIT(0));
+    gBrRingStale = ALL_ROWS & ~(ROW_BIT(16) - ROW_BIT(0));
 }
 
 // pret's four slices, in pret's order, each as pret draws it -- then BR's part of the
@@ -124,7 +124,7 @@ void BrField_RedrawSlices(int x, int y)
         for (i = 0; i < 16; i++)
             CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + i, gSaveBlock1Ptr->pos.y + 14);
         // Every row moves up one; the new bottom row waits for the step to complete.
-        sStaleRows = (sStaleRows >> 1) | ROW_BIT(FAR_ROW);
+        gBrRingStale = (gBrRingStale >> 1) | ROW_BIT(FAR_ROW);
     }
     if (y < 0)
     {
@@ -132,15 +132,15 @@ void BrField_RedrawSlices(int x, int y)
             CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + i, gSaveBlock1Ptr->pos.y);
         // Every row moves down one, the bottom one out of the ring, and the new top row
         // goes into its slot now: nothing shows that slot.
-        sStaleRows <<= 1;
+        gBrRingStale <<= 1;
         DrawRingRow(-BR_RING_ABOVE);
         fresh = ROW_BIT(-BR_RING_ABOVE);
     }
-    sStaleRows &= ~PRET_ROWS;
+    gBrRingStale &= ~PRET_ROWS;
     // A map connection: the ring's rows past pret's were drawn from the last map, and
     // one more than MAP_OFFSET past its edge is its border, where this map may be.
     if (gCamera.active)
-        sStaleRows |= ALL_ROWS & ~PRET_ROWS & ~fresh;
+        gBrRingStale |= ALL_ROWS & ~PRET_ROWS & ~fresh;
     sSliced = TRUE;
 }
 
@@ -156,7 +156,7 @@ void BrField_Tick(void)
         DrawRingColumn(FAR_COLUMN);
         budget = 0;
     }
-    if ((sStaleRows & ROW_BIT(FAR_ROW)) && gFieldCamera.y == 0)
+    if ((gBrRingStale & ROW_BIT(FAR_ROW)) && gFieldCamera.y == 0)
     {
         DrawRingRow(FAR_ROW);
         if (budget != 0)
@@ -167,7 +167,7 @@ void BrField_Tick(void)
         sSliced = FALSE;
         return;
     }
-    rows = sStaleRows;
+    rows = gBrRingStale;
     if (gFieldCamera.y != 0)
         rows &= ~ROW_BIT(FAR_ROW);
     for (; budget != 0; budget--)

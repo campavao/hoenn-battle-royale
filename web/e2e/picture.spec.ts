@@ -14,7 +14,11 @@
 // rows tall, and the weather's semi-transparent sprites repeat every 256 rows, as its
 // 64x64 grid is laid out to. The field's BG1..3 are 512 rows since POK-329 (the ROM's
 // ring, include/br/br_field.h), so past the window the core draws the map from them --
-// its own rows, not the window's again -- and nothing of BG0 or of a person twice.
+// its own rows, not the window's again -- and nothing of BG0 or of a person twice. And
+// the ROM declares the whole ring less its one spare row (gBrFieldView: 104 above the
+// LCD, 232 below, 496 rows), so that is the band the page asks for, and inside the map
+// every row of it past the LCD is the map's own: the still render-maps.py draws of it
+// (still.ts), standing and walking every way.
 //
 // Pinned: SEED puts seat 0 on SAFARI ZONE SOUTHEAST (15,14), as play.spec's does, and
 // #nobots keeps anybody else off the screen, so the rows past the window hold nothing
@@ -24,6 +28,7 @@ import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
 import { clipAndCamera, edgeCut, insetOf, ram, tap } from './play';
+import { installStill, type StillReport } from './still';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out', 'picture');
@@ -36,8 +41,11 @@ const BR_PHASE_SAFARI = 1;
 /** field.ts's SPRITE_BAND, the sprite window the page asks the core for: copied, as a
  *  spec cannot import field.ts. */
 const WINDOW = { top: 40, bottom: 56 };
-/** A band taller than 256 rows: POK-329's split, 104 above and 232 below. */
+/** The ROM's band (gBrFieldView, include/br/br_field.h): the 512-row ring less one row,
+ *  104 above the LCD and 232 below. phone.spec holds the page to the ROM's own bytes. */
 const TALL = { top: 104, bottom: 232 };
+/** A 256-row band, the legacy one: the ring before POK-329, and the sprite window's rows. */
+const LEGACY = { top: WINDOW.top, bottom: WINDOW.bottom };
 /** field.ts's LCD_LEFT/LCD_TOP: where our own tile sits on the LCD. */
 const LCD_LEFT = 112;
 const LCD_TOP = 72;
@@ -53,15 +61,29 @@ const SKIN = 15;
 const GHOST_ROWS_DOWN = 9;
 const GHOST = { x: LCD_LEFT, y: LCD_TOP + GHOST_ROWS_DOWN * 16 + 16 - 32, w: 16, h: 32 };
 /** Route 103 (80x22), whose bottom edge is Oldale Town's top: column 9 is the path south,
- *  open from row 13 to the edge. At rest on row 13 the band's last row is the map's last
- *  (13*16 - 72 + 160 + 56 = 22*16), and each step down puts 16 more of it past the edge
- *  until all 56 are. */
+ *  open from row 13 to the edge. At rest on row 13 the band's last row is 176 past the
+ *  map's last (13*16 - 72 + 160 + 232 - 22*16), and each step down puts 16 more of it past
+ *  the edge until all 232 are. */
 const ROUTE_103 = { id: 'MAP_ROUTE103', ref: '0:18', w: 80, h: 22 };
 const EDGE_COLUMN = 9;
 const EDGE_FROM = 13;
-/** field.ts's LEGACY_BAND's bottom, which is gBrFieldView's today (phone.spec holds the
- *  page to the ROM's). */
-const BAND_BOTTOM = 56;
+const BAND_BOTTOM = TALL.bottom;
+/** Rustboro City (40x60): column 21 is clear from row 0 to row 39 -- no grass, no trainer,
+ *  nobody walking into it -- and so is row 11 from column 21 to 27 (ring-tall.txt walks
+ *  both). Standing anywhere from (7..31, 11..40) the band's 31 rows and 16 columns (the
+ *  player's -11..+19 and -7..+8) are all inside the map, so none of it is clipped. */
+const RUSTBORO = { id: 'MAP_RUSTBORO_CITY', ref: '0:3', w: 40, h: 60 };
+const RUSTBORO_LAND = { x: 21, y: 25 };
+/** Rustboro's top edge is Route 115's bottom (40x80, no offset), and column 21 runs on up
+ *  it to row 77 at least (ring-tall.txt walks it too). */
+const ROUTE_115 = { id: 'MAP_ROUTE115', ref: '0:30', w: 40, h: 80 };
+/** still.ts's thresholds: a 16x16 cell of the picture is the still when half the pixels it
+ *  compares are, within mGBA's colour rounding -- a flower's frames change up to 40% of
+ *  its cell, another metatile's cell matches under 20%, and a column past the ring's
+ *  none -- and a cell that compares under 64 says nothing. Every picture as a whole is
+ *  90% the still. */
+const STILL = { tolerance: 10, pass: 0.5, minPixels: 64 };
+const FRAME_PASS = 0.9;
 /** `struct Weather` (include/field_weather.h): the weather Task_WeatherMain changes to. */
 const WEATHER_CURR = 0x6d0;
 const WEATHER_NEXT = 0x6d1;
@@ -255,18 +277,18 @@ async function ghost(page: Page, sym: Record<string, number>, present: boolean):
   }, [sym.gBrSeats + SEAT * SEAT_SIZE, row] as const);
 }
 
-test("a band taller than 256 rows shows nothing twice: past the sprite window, the ring's own rows and the weather", async ({ browser }) => {
+test("the ROM's band, 496 rows, shows nothing twice: past the sprite window, the ring's own rows and the weather", async ({ browser }) => {
   test.setTimeout(180_000);
   const sym = loadSymbols();
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await boot(page, sym, `&band=${TALL.top},${TALL.bottom}`);
+    await boot(page, sym, '');
     const emuBand = await page.evaluate(() => {
       const emu = (window as unknown as PicWindow).__hbr.emu;
       return { viewport: emu.viewport, sprites: emu.spriteBand };
     });
-    expect(emuBand, 'the core was asked for the tall band, drawn with the 256-row window').toEqual({ viewport: { left: 0, top: TALL.top, right: 16, bottom: TALL.bottom }, sprites: WINDOW });
+    expect(emuBand, "the core was asked for the ROM's band, taller than 256 rows, drawn with the 256-row window").toEqual({ viewport: { left: 0, top: TALL.top, right: 16, bottom: TALL.bottom }, sprites: WINDOW });
 
     // (a) Rows past the window: the map, from BG1..3's 512 rows -- the ring's rows past
     // the 256 the window holds, not those 256 again. The core before POK-329 drew every
@@ -324,13 +346,15 @@ test("a band taller than 256 rows shows nothing twice: past the sprite window, t
   }
 });
 
-test("the page's band: a person crossing its bottom is drawn once, and the window it asks for is the core's own", async ({ browser }) => {
+// A 256-row band (#band=40,56: the legacy one, a ROM without gBrFieldView's) is the
+// sprite window's own rows, so the window the page asks for must draw what no window does.
+test("a 256-row band: a person crossing its bottom is drawn once, and the window the page asks for is the core's own", async ({ browser }) => {
   test.setTimeout(180_000);
   const sym = loadSymbols();
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await boot(page, sym, '');
+    await boot(page, sym, `&band=${LEGACY.top},${LEGACY.bottom}`);
     const pic = await grab(page);
     expect({ width: pic.width, height: pic.height, left: pic.left, top: pic.top }).toEqual({ width: 256, height: 256, left: 0, top: WINDOW.top });
 
@@ -420,7 +444,7 @@ test("the band stops at the map's edge: walking down to Route 103's last row, th
       .toBe(`${EDGE_COLUMN},${EDGE_FROM}`);
     await page.waitForTimeout(2_000);
     const band = await page.evaluate(() => (window as unknown as PicWindow).__hbr.emu.viewport);
-    expect(band?.bottom).toBe(BAND_BOTTOM);
+    expect(band, "the ROM's band").toEqual({ left: 0, top: TALL.top, right: 16, bottom: BAND_BOTTOM });
 
     const bottoms: number[] = [];
     for (let y = EDGE_FROM; y < ROUTE_103.h; y++) {
@@ -435,8 +459,9 @@ test("the band stops at the map's edge: walking down to Route 103's last row, th
       const inset = insetOf(clip);
       expect(inset, `a clip-path the page could have set ("${clip}")`).not.toBeNull();
       const [top, right, bottom, left] = inset!.map((v) => Math.round(v / scale));
-      // The rows past the edge: the band's last row is 16y + 144, the map's 16h.
-      const past = Math.max(0, Math.min(BAND_BOTTOM, 16 * y + 144 - 16 * ROUTE_103.h));
+      // The rows past the edge: the band's last row is 16y - 72 + 160 + its bottom, the
+      // map's 16h. None past the top: row 13's band starts on the map's row 2.
+      const past = Math.max(0, Math.min(BAND_BOTTOM, 16 * y - LCD_TOP + 160 + BAND_BOTTOM - 16 * ROUTE_103.h));
       expect({ top, right, bottom, left }, `row ${y}: the rows past the edge, and nothing else (clip-path "${clip}")`).toEqual({ top: 0, right: 0, bottom: past, left: 0 });
       expect(edgeCut(cam, band!), "play.ts's copy agrees").toEqual({ left: 0, top: 0, right: 0, bottom: past });
       bottoms.push(bottom);
@@ -454,8 +479,127 @@ test("the band stops at the map's edge: walking down to Route 103's last row, th
         }
       }
     }
-    expect(bottoms, 'none on row 13, then 16 more a step until the band is all past the edge').toEqual([0, 16, 32, 48, 56, 56, 56, 56, 56]);
+    expect(bottoms, '176 on row 13, then 16 more a step until the band is all past the edge').toEqual([176, 192, 208, 224, 232, 232, 232, 232, 232]);
     await page.screenshot({ path: path.join(OUT_DIR, 'edge.png') });
+  } finally {
+    await ctx.close();
+  }
+});
+
+/** Holds `key` until `done` says the walk is over (or `ms` pass), then lets go. */
+async function walk(page: Page, key: string, done: () => Promise<boolean>, ms: number): Promise<void> {
+  await page.keyboard.down(key);
+  try {
+    const until = Date.now() + ms;
+    while (Date.now() < until && !(await done())) await page.waitForTimeout(20);
+  } finally {
+    await page.keyboard.up(key);
+  }
+  // The step under way finishes, and the camera comes to rest.
+  await page.waitForTimeout(500);
+}
+
+/** One line per cell that was not the still, for the log. */
+function misses(r: StillReport): string {
+  return r.misses.filter((m, i) => i < 6 || m.share < 0.5).slice(0, 30).map((m) => `cell ${m.x},${m.y} ${(100 * m.share).toFixed(0)}% of ${m.compared} (control ${(100 * m.control).toFixed(0)}%) at ${m.cam.x},${m.cam.y} sub ${m.cam.subX},${m.cam.subY} clip ${m.clip.join(' ')} fit ${m.fit?.join(',')} next ${JSON.stringify(m.next)}`).join(NL);
+}
+const NL = String.fromCharCode(10);
+
+test("inside the map the ROM's band is the map, every row of it past the LCD: standing, walking every way, under the START menu and over a connection", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const sym = loadSymbols();
+  const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${RUSTBORO_LAND.x},${RUSTBORO_LAND.y}&rom=${romHashParam()}`);
+    await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
+    await page.waitForSelector('body.in-match', { timeout: 60_000 });
+    await expect
+      .poll(async () => {
+        const r = await ram(page, sym);
+        if (r.pick) await tap(page, 'z');
+        return !r.pick && r.onOverworld && r.map === RUSTBORO.ref ? `${r.x},${r.y}` : '';
+      }, { timeout: 90_000, intervals: [1_000], message: 'landed in Rustboro' })
+      .toBe(`${RUSTBORO_LAND.x},${RUSTBORO_LAND.y}`);
+    // The map-name popup and the landing's lines come and go.
+    await page.waitForTimeout(3_000);
+
+    const pic = await grab(page);
+    expect({ width: pic.width, height: pic.height, left: pic.left, top: pic.top }, "the core draws the ROM's band: 256x496, the LCD at its row 104").toEqual({ width: 256, height: 160 + TALL.top + TALL.bottom, left: 0, top: TALL.top });
+    await save(page, 'rustboro');
+
+    await page.evaluate(installStill, {
+      sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld },
+      stills: { [RUSTBORO.ref]: `/field-maps/${RUSTBORO.id}.png`, [ROUTE_115.ref]: `/field-maps/${ROUTE_115.id}.png` },
+      every: 0,
+      keep: 12,
+      ...STILL,
+    });
+    const start = () => page.evaluate(() => (window as unknown as { __still: { start(): void } }).__still.start());
+    const stop = () => page.evaluate(() => (window as unknown as { __still: { stop(): StillReport } }).__still.stop());
+    const hold = async (what: string, report: StillReport) => {
+      const w = report.worstAt;
+      console.log(`picture: ${what}: ${report.samples} frames (${report.moving} mid-step, ${report.lagged} lagged, ${report.popup} with the popup), ${report.cells} cells, ${report.missed} missed, worst frame ${(100 * report.worstFrame).toFixed(1)}% (control at best ${(100 * report.controlFrame).toFixed(1)}%), worst cell ${(100 * report.worst).toFixed(1)}%${w ? ` (cell ${w.x},${w.y} at ${w.cam.x},${w.cam.y} sub ${w.cam.subX},${w.cam.subY})` : ''}, gaps ${report.gaps}`);
+      const png = await page.evaluate(() => (window as unknown as { __still: { worstPng(): string | null } }).__still.worstPng());
+      const slug = what.replace(/\W+/g, '-').toLowerCase();
+      fs.writeFileSync(path.join(OUT_DIR, `rustboro-${slug}-trace.txt`), report.trace.join(NL));
+      fs.writeFileSync(path.join(OUT_DIR, `rustboro-${slug}-misses.json`), JSON.stringify(report.misses));
+      if (png) fs.writeFileSync(path.join(OUT_DIR, `rustboro-${slug}-worst.png`), Buffer.from(png.split(',')[1], 'base64'));
+      const kept = await page.evaluate(() => (window as unknown as { __still: { missPngs(): string[] } }).__still.missPngs());
+      kept.forEach((k, i) => fs.writeFileSync(path.join(OUT_DIR, `rustboro-${slug}-miss-${i}.png`), Buffer.from(k.split(',')[1], 'base64')));
+      expect(report.samples, `${what}: frames compared`).toBeGreaterThan(10);
+      expect(report.picture, `${what}: the ROM's band`).toEqual({ width: 256, height: 160 + TALL.top + TALL.bottom, left: 0, top: TALL.top });
+      expect(report.missed, `${what}: every cell of every frame is the still\n${misses(report)}`).toBe(0);
+      expect(report.worstFrame, `${what}: every frame is the still`).toBeGreaterThanOrEqual(FRAME_PASS);
+      // The check has teeth: no picture is the still one metatile down.
+      expect(report.controlFrame, `${what}: the still one row off would pass`).toBeLessThan(FRAME_PASS);
+    };
+    const here = async () => { const r = await ram(page, sym); return { x: r.x, y: r.y, map: r.map }; };
+    // The ring's rows the ROM has still to draw, which the page cuts off the band: none,
+    // a moment after the camera comes to rest -- the cut is for the frames a redraw takes.
+    const stale = () => page.evaluate((at) => (window as unknown as PicWindow).__hbr.emu.read(at, 32) >>> 0, sym.gBrRingStale);
+
+    // Standing: a second of frames.
+    await start();
+    await page.waitForTimeout(1_000);
+    await hold('standing', await stop());
+    expect(await stale(), 'at rest the ring is whole').toBe(0);
+
+    // Walking, every frame of every step: down six, up twenty (to row 11), right six, left six.
+    await start();
+    await walk(page, 'ArrowDown', async () => (await here()).y >= RUSTBORO_LAND.y + 6, 5_000);
+    await walk(page, 'ArrowUp', async () => (await here()).y <= 11, 12_000);
+    expect(await here(), 'up column 21 to row 11').toEqual({ x: RUSTBORO_LAND.x, y: 11, map: RUSTBORO.ref });
+    await walk(page, 'ArrowRight', async () => (await here()).x >= RUSTBORO_LAND.x + 6, 5_000);
+    await walk(page, 'ArrowLeft', async () => (await here()).x <= RUSTBORO_LAND.x, 5_000);
+    const walked = await stop();
+    await hold('walking', walked);
+    // At a run a step is 8 frames (the page's player has the running shoes).
+    expect(walked.moving, 'every frame of 38 steps, near enough').toBeGreaterThan(38 * 6);
+
+    // START: the menu is BG0's, in the LCD, and nothing of it -- nor of the corner -- is
+    // drawn past the window, where the band's rows must still be the map.
+    await tap(page, 'Enter');
+    await page.waitForTimeout(1_000);
+    await start();
+    await page.waitForTimeout(1_000);
+    const menu = await stop();
+    await grab(page);
+    await save(page, 'rustboro-start');
+    await hold('START up', menu);
+    await tap(page, 'x');
+    await page.waitForTimeout(1_000);
+
+    // Over the connection, north into Route 115: the ring's rows past pret's were drawn
+    // from Rustboro's grid, and the ones more than MAP_OFFSET above its edge are its
+    // border -- inside Route 115 now. Until the ROM has drawn them again (gBrRingStale)
+    // the page cuts them and the still shows there: Route 115 on every frame.
+    await start();
+    await walk(page, 'ArrowUp', async () => { const h = await here(); return h.map === ROUTE_115.ref && h.y <= ROUTE_115.h - 4; }, 8_000);
+    const crossed = await stop();
+    expect(await here(), 'up column 21 over the connection').toEqual({ x: RUSTBORO_LAND.x, y: ROUTE_115.h - 4, map: ROUTE_115.ref });
+    await hold('over the connection', crossed);
+    expect(await stale(), "at rest on Route 115 the ring is Route 115's").toBe(0);
   } finally {
     await ctx.close();
   }

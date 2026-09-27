@@ -85,24 +85,41 @@ const SIZES: Record<string, [number, number]> = Object.fromEntries(
 );
 
 type Band = { left: number; top: number; right: number; bottom: number };
-/** The camera, as field.ts reads it: the pos tile, its map, and the sub-tile offsets. */
-export type Cam = { map: string; x: number; y: number; subX: number; subY: number };
+/** The camera, as field.ts reads it: the pos tile, its map, the sub-tile offsets, and the
+ *  ring rows the ROM has still to draw (gBrRingStale). */
+export type Cam = { map: string; x: number; y: number; subX: number; subY: number; stale?: number };
+
+/** The ROM's ring (field.ts RING_ABOVE, RING_ROWS): bit (dy + 4) of gBrRingStale is grid
+ *  row pos.y + dy, map row pos.y + dy - 7; pret's rows 0..14 are never stale. */
+const RING_ABOVE = 4;
+const RING_ROWS = 32;
 
 /** What field.ts cuts off the band on the field (bandClip, POK-329), worked out again
  *  here: what lies past the edge of the map the picture was drawn on, HEAD_ROOM kept past
- *  its top, never into the LCD. A map the page does not know is not cut. */
+ *  its top; what lies past the ring's 16 columns mid-step (field.ts ringColumns:
+ *  pos.x..pos.x+15, pos.x-1..pos.x+14 mid-step right); and the ring's rows the ROM has
+ *  still to draw (ringRows) -- never into the LCD. A map the page does not know has no
+ *  edge to cut at. */
 export function edgeCut(cam: Cam, band: Band): Band {
   const size = SIZES[cam.map];
-  if (!size) return { left: 0, top: 0, right: 0, bottom: 0 };
   const sub = (v: number) => (v > 0 ? v - 16 : v < 0 ? v + 16 : 0);
   const left = cam.x * 16 - LCD_LEFT + sub(cam.subX);
   const top = cam.y * 16 - LCD_TOP + sub(cam.subY);
+  const ringLeft = cam.x * 16 - LCD_LEFT - (cam.subX > 0 ? 16 : 0);
+  const stale = cam.stale ?? 0;
+  let staleTop = -Infinity;
+  let staleBottom = Infinity;
+  for (let dy = -1; dy >= -RING_ABOVE; dy--) if ((stale >>> (dy + RING_ABOVE)) & 1) { staleTop = (cam.y + dy + 1 - 7) * 16; break; }
+  for (let dy = 15; dy < RING_ROWS - RING_ABOVE; dy++) if ((stale >>> (dy + RING_ABOVE)) & 1) { staleBottom = (cam.y + dy - 7) * 16; break; }
+  const w = size ? size[0] * 16 : Infinity;
+  const h = size ? size[1] * 16 : Infinity;
+  const bottom = top + GBA_H + band.bottom;
   const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
   return {
-    left: cut(band.left - left, band.left),
-    top: cut(band.top - top - HEAD_ROOM, band.top),
-    right: cut(left + GBA_W + band.right - size[0] * 16, band.right),
-    bottom: cut(top + GBA_H + band.bottom - size[1] * 16, band.bottom),
+    left: cut(Math.max(band.left - left, ringLeft - (left - band.left)), band.left),
+    top: cut(Math.max(size ? band.top - top - HEAD_ROOM : 0, staleTop - (top - band.top)), band.top),
+    right: cut(Math.max(left + GBA_W + band.right - w, left + GBA_W + band.right - (ringLeft + 256)), band.right),
+    bottom: cut(Math.max(bottom - h, bottom - staleBottom), band.bottom),
   };
 }
 
@@ -187,6 +204,7 @@ export function clipAndCamera(page: Page, sym: Record<string, number>): Promise<
         y: s16(emu.read(sb1 + 2, 16)),
         subX: emu.read(s.gFieldCamera + k.CAMERA_X, 32) | 0,
         subY: emu.read(s.gFieldCamera + k.CAMERA_Y, 32) | 0,
+        stale: s.gBrRingStale === undefined ? 0 : emu.read(s.gBrRingStale, 32) >>> 0,
       };
     };
     let cam: ReturnType<typeof read> | null = null;
@@ -360,22 +378,29 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
       let frame = 0;
       let clipOff = 0;
       // The camera read on the frame before: field.ts cuts the band from it (POK-329).
-      type Cam = { map: string; x: number; y: number; subX: number; subY: number };
+      type Cam = { map: string; x: number; y: number; subX: number; subY: number; stale: number };
       let camBefore: Cam | null = null;
       const s16 = (v: number) => (v << 16) >> 16;
       const sub = (v: number) => (v > 0 ? v - 16 : v < 0 ? v + 16 : 0);
       // field.ts's bandClip, as play.ts's edgeCut has it.
       const edgeCut = (c: Cam, band: Band): Band => {
         const size = (sizes as Record<string, [number, number]>)[c.map];
-        if (!size) return { left: 0, top: 0, right: 0, bottom: 0 };
         const left = c.x * 16 - k.LCD_LEFT + sub(c.subX);
         const top = c.y * 16 - k.LCD_TOP + sub(c.subY);
+        const ringLeft = c.x * 16 - k.LCD_LEFT - (c.subX > 0 ? 16 : 0);
+        let staleTop = -Infinity;
+        let staleBottom = Infinity;
+        for (let dy = -1; dy >= -4; dy--) if ((c.stale >>> (dy + 4)) & 1) { staleTop = (c.y + dy + 1 - 7) * 16; break; }
+        for (let dy = 15; dy < 28; dy++) if ((c.stale >>> (dy + 4)) & 1) { staleBottom = (c.y + dy - 7) * 16; break; }
+        const w = size ? size[0] * 16 : Infinity;
+        const h = size ? size[1] * 16 : Infinity;
+        const bottom = top + k.GBA_H + band.bottom;
         const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
         return {
-          left: cut(band.left - left, band.left),
-          top: cut(band.top - top - k.HEAD_ROOM, band.top),
-          right: cut(left + k.GBA_W + band.right - size[0] * 16, band.right),
-          bottom: cut(top + k.GBA_H + band.bottom - size[1] * 16, band.bottom),
+          left: cut(Math.max(band.left - left, ringLeft - (left - band.left)), band.left),
+          top: cut(Math.max(size ? band.top - top - k.HEAD_ROOM : 0, staleTop - (top - band.top)), band.top),
+          right: cut(Math.max(left + k.GBA_W + band.right - w, left + k.GBA_W + band.right - (ringLeft + 256)), band.right),
+          bottom: cut(Math.max(bottom - h, bottom - staleBottom), band.bottom),
         };
       };
       const insetOf = (clip: string): number[] | null => {
@@ -491,7 +516,14 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         const map = sb1 ? `${emu.read(sb1 + k.SB1_MAP_GROUP, 8)}:${emu.read(sb1 + k.SB1_MAP_NUM, 8)}` : '';
         const before = camBefore;
         camBefore = sb1
-          ? { map, x: s16(emu.read(sb1, 16)), y: s16(emu.read(sb1 + 2, 16)), subX: emu.read(s.gFieldCamera + k.CAMERA_X, 32) | 0, subY: emu.read(s.gFieldCamera + k.CAMERA_Y, 32) | 0 }
+          ? {
+            map,
+            x: s16(emu.read(sb1, 16)),
+            y: s16(emu.read(sb1 + 2, 16)),
+            subX: emu.read(s.gFieldCamera + k.CAMERA_X, 32) | 0,
+            subY: emu.read(s.gFieldCamera + k.CAMERA_Y, 32) | 0,
+            stale: s.gBrRingStale === undefined ? 0 : emu.read(s.gBrRingStale, 32) >>> 0,
+          }
           : null;
 
         // The overlay carries only the people the ROM hid for being past its band: never

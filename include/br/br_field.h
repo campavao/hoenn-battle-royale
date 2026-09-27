@@ -68,19 +68,36 @@
 #define BR_SPRITE_TOP    40
 #define BR_SPRITE_BOTTOM 56
 
-// The view: what the core draws past the LCD on each side. Still the sprite window, so
-// the picture is the one it was, fed from the middle of the taller ring (rows
-// pos.y..pos.y+15 at rest) and no longer wrapping it; the asserts below say how much
-// further the ring could feed.
+// The view: what the core draws past the LCD on each side. Sideways it is the ring's 256
+// columns, as it always was. Up and down it is the whole ring less the one spare row a
+// step needs: its top is the ring's top at rest (BR_RING_ABOVE rows above pos.y, which
+// the LCD's top sits 40 below), and its bottom leaves the ring's last row spare, so
+// 160 + 104 + 232 = 496 rows, 31 of the ring's 32 -- at rest the player's rows -11 to +19.
+// Past the sprite window the core draws only BG1..3 (512 rows) and the weather; the
+// people out there are the page's (web/src/field.ts's overlay), since the ROM hides every
+// sprite whose top leaves the window.
+//
+// Why 104 above and 232 below, not the same each way: a portrait phone puts the LCD high,
+// above the pad, so it has much more field below the picture than above it. 390x844 with
+// the pad (layoutField: scale 1.625, LCD at canvas row 118) shows 118 rows above and 242
+// below; 390x763 (the installed app) 93 and 217; 390x664 (Safari) 63 and 186, and all
+// but the first fit. With one ring row fewer above (BR_RING_ABOVE 3) 390x844 would be 30
+// rows short at the top; with one more (5), 26 short at the bottom and 390x763 one.
 #define BR_VIEW_LEFT   0
-#define BR_VIEW_TOP    40
+#define BR_VIEW_TOP    104
 #define BR_VIEW_RIGHT  16
-#define BR_VIEW_BOTTOM 56
+#define BR_VIEW_BOTTOM 232
 
 STATIC_ASSERT(BR_SPRITE_TOP + BR_SPRITE_BOTTOM == 256 - DISPLAY_HEIGHT, BrSpriteWindowIsOneOamPeriod)
 STATIC_ASSERT(BR_SPRITE_TOP % 8 == 0 && BR_SPRITE_BOTTOM % 8 == 0, BrSpriteWindowInEights)
 STATIC_ASSERT(BR_VIEW_LEFT % 8 == 0 && BR_VIEW_TOP % 8 == 0 && BR_VIEW_RIGHT % 8 == 0 && BR_VIEW_BOTTOM % 8 == 0, BrViewInEights)
 STATIC_ASSERT(BR_VIEW_TOP <= BR_SPRITE_TOP + 16 * BR_RING_ABOVE, BrViewTopInsideRing)
+// ...and it is exactly the ring's top: every row the ring holds above pos.y is shown.
+STATIC_ASSERT(BR_VIEW_TOP == BR_SPRITE_TOP + 16 * BR_RING_ABOVE, BrViewTopIsTheRingsTop)
+// The view is the ring less one metatile row: the slot a step down fills when it lands.
+STATIC_ASSERT(DISPLAY_HEIGHT + BR_VIEW_TOP + BR_VIEW_BOTTOM == 16 * BR_RING_ROWS - 16, BrViewIsTheRingLessOneRow)
+// The core draws at most 256 rows on a side (hbr-exports.patch's _brClampBand).
+STATIC_ASSERT(BR_VIEW_TOP <= 256 && BR_VIEW_BOTTOM <= 256 && BR_VIEW_LEFT <= 128 && BR_VIEW_RIGHT <= 128, BrViewTheCoreDraws)
 // At rest the picture runs from pos.y's top + 40 - BR_VIEW_TOP down; mid-step up it is
 // up to one metatile lower, and that row has to be in the ring too.
 STATIC_ASSERT(BR_SPRITE_TOP + DISPLAY_HEIGHT + BR_VIEW_BOTTOM + 16 <= 16 * (BR_RING_ROWS - BR_RING_ABOVE), BrViewBottomInsideRing)
@@ -146,6 +163,12 @@ extern const struct BrFieldView gBrFieldView;
 // Every frame from CameraUpdate: the far row or column once its step has completed, and
 // then stale rows (see THE RING above).
 void BrField_Tick(void);
+// The ring's rows not yet (re)drawn: bit (dy + BR_RING_ABOVE) is grid row pos.y + dy, and
+// the top bit, mid-step down, the far row that waits for the landing. The page cuts the
+// band's rows that fall in one off the picture (web/src/field.ts bandClip), so the few
+// frames a whole-map draw or a map connection takes to redraw them show the composite's
+// map, not the rows the last map left there -- its border, past MAP_OFFSET.
+extern u32 gBrRingStale;
 // TRUE when a sprite whose top-left is (x, y) and right edge x2 is past the picture.
 bool8 BrField_OffScreen(s16 x, s16 x2, s16 y);
 

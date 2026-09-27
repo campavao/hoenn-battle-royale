@@ -14,6 +14,53 @@ named; when one is created later, put its id at the top of the entry and leave t
 
 ---
 
+## 2026-09-27, POK-329's switch: what to look at on the phone (not yet play-tested)
+
+The ROM now declares the whole ring as its picture (`gBrFieldView` 0/104/16/232): the core
+draws 256x496, the LCD at its row 104, so on a portrait phone nearly everything above and
+below the picture is the ROM's own map -- animated, with its people and its fog -- where
+it used to be the page's still past 40 rows up and 56 down. On Playwright's 390x844 the
+layout wants 118 rows above and 242 below, so the top 14 and bottom 10 (under the status
+bar and the home bar) are still the composite; the installed app (390x763) and Safari
+(390x664) are covered. `web/e2e/picture.spec.ts` holds every cell of the band past the LCD
+to the map's still, standing, walking all four ways at a run, with START up and over
+Rustboro's connection into Route 115; `node web/scripts/seam-probe.mjs "<rom>" --check`
+(and `firefox-probe.mjs "<rom>" --check [firefox|webkit]`) does the same by hand against a
+dev server on 5199 and fails on the ROM before the switch.
+
+**Look at:**
+
+* **The two seams.** The band's top edge (14 rows below the phone's top) and bottom edge
+  (10 above its foot) while walking up and down: the map must run straight across them,
+  no row jumping as a step starts or lands.
+* **People from about ten rows down.** Anybody whose sprite's top leaves the sprite
+  window (40 rows above the LCD, 56 below) is drawn by the page's overlay, over the
+  ROM's map; one crossing that line should not blink, double or lose their legs.
+* **The fog.** It is the ROM's all the way up and down now: one blend, continuous across
+  the old band edges at 40 above and 56 below.
+* **The HUD after every window.** START, a sign, the nurse's yes/no, a mart: the corner and
+  the ticker come back whole, and nothing of a window shows past the picture.
+* **Crossing a map edge.** For the few frames the ROM takes to redraw the ring's outer
+  rows (two a frame), the page cuts them and the still shows there; that should read as
+  nothing at all. Anything that looks like trees or water flashing at the top or bottom
+  edge right after a crossing is this going wrong.
+
+**Known, not fixed here (follow-ups):**
+
+* **The map-name popup scrolls all of BG0** (`map_name_popup.c`: BG0VOFS 40 from the
+  moment you enter a new area, half a second before it prints, then 40 to 0 and back), so
+  for that time the HUD corner rides up into the 40 rows above the picture, and the popup
+  slides down through them, over the map. This has been so since POK-319's band (those 40
+  rows were always in it); the fix is the core drawing BG0 only on the LCD's rows, or the
+  ROM moving the popup without scrolling BG0. `still.ts` leaves those rows out while the
+  popup's task runs.
+* **A lag frame at a step right's landing** shows the band's rightmost column a frame
+  late: the ROM's logic ran past the VBlank, which took the new scroll before the far
+  column was asked for. Seen once in six landings running in Rustboro; only a phone on
+  its side or a desktop shows that column at all.
+
+---
+
 ## 2026-09-18, Cam, the first video play-test (desktop Firefox, rom ea0d106; fixes live as rom 304b564)
 
 **How this one was read.** Cam recorded the browser while playing and talking, and

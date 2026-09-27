@@ -7,6 +7,9 @@
 // This puts an unused seat's row into the ROM's gBrSeats twelve rows below us -- a ghost
 // the ROM gives no object, being past its box -- and looks for its sprite on the overlay
 // where the ROM would stand it, then takes the row away again and sees it go.
+//
+// Since POK-329 the core's own picture reaches that row (the ROM's band runs 232 rows
+// below the LCD), so the ghost must be drawn once: on the overlay, and not by the core.
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -35,9 +38,12 @@ const H = 32;
 /** Rows below us to try, past the box's 9: the first with nobody already on it. */
 const ROWS_DOWN = [12, 13, 11];
 
+type Pic = { width: number; height: number; left: number; top: number; data: Uint8Array };
 type Emu = {
   read(addr: number, width: 8 | 16 | 32): number;
   write(addr: number, value: number, width: 8 | 16 | 32): void;
+  onFrame(fn: () => void): () => void;
+  picture(): Pic | null;
   viewport: { left: number; top: number; right: number; bottom: number } | null;
 };
 type EmuWindow = { __hbr: { emu: Emu } };
@@ -69,6 +75,39 @@ async function opaqueAt(page: Page, rect: { x: number; y: number; w: number; h: 
     for (let i = 3; i < px.length; i += 4) if (px[i] > 0) n++;
     return n;
   }, rect);
+}
+
+/** The core's picture over `rect` (LCD pixels) for `frames` frames: every value each pixel
+ *  took, as `seen` -- and, given a `seen` from before, how many pixels took one it never
+ *  had. -1 when the rect is not all inside the picture. */
+function corePixels(page: Page, rect: { x: number; y: number; w: number; h: number }, frames: number, seen: number[][] | null): Promise<{ seen: number[][]; strange: number }> {
+  return page.evaluate(([r, n, before]) => new Promise((resolve) => {
+    const emu = (window as unknown as EmuWindow).__hbr.emu;
+    const sets = Array.from({ length: r.w * r.h }, (_, i) => new Set<number>(before ? before[i] : []));
+    const odd = new Set<number>();
+    let got = 0;
+    const off = emu.onFrame(() => {
+      const p = emu.picture();
+      if (!p) return;
+      if (r.x + p.left < 0 || r.y + p.top < 0 || r.x + p.left + r.w > p.width || r.y + p.top + r.h > p.height) {
+        off();
+        resolve({ seen: [], strange: -1 });
+        return;
+      }
+      const px = new Uint32Array(p.data.buffer);
+      for (let y = 0; y < r.h; y++) {
+        for (let x = 0; x < r.w; x++) {
+          const v = px[(p.top + r.y + y) * p.width + p.left + r.x + x] >>> 0;
+          if (before && !sets[y * r.w + x].has(v)) odd.add(y * r.w + x);
+          if (!before) sets[y * r.w + x].add(v);
+        }
+      }
+      if (++got >= n) {
+        off();
+        resolve({ seen: sets.map((set) => [...set]), strange: odd.size });
+      }
+    });
+  }), [rect, frames, seen] as const);
 }
 
 test('a ghost past the box is drawn on the overlay where the ROM would stand it, and goes with its row', async ({ browser }) => {
@@ -116,6 +155,9 @@ test('a ghost past the box is drawn on the overlay where the ROM would stand it,
     }
     expect(down, 'a clear row past the box').toBeGreaterThan(0);
 
+    // What the core draws there without anybody: the map, its animation included.
+    const bare = await corePixels(page, rect, 90, null);
+
     // Seat 16 there: present, a skin, our map, the cell (MAP_OFFSET included, as the ROM
     // keeps it), facing south, no object.
     const seat = symbols.gBrSeats + SEAT * SEAT_SIZE;
@@ -127,6 +169,8 @@ test('a ghost past the box is drawn on the overlay where the ROM would stand it,
     await poke(row);
     await expect.poll(() => opaqueAt(page, rect), { timeout: 10_000, message: 'the ghost is drawn twelve rows down' }).toBeGreaterThan(40);
     expect(await page.evaluate((base) => (window as unknown as EmuWindow).__hbr.emu.read(base + 9, 8), seat), 'and the ROM gave it no object').toBe(BR_NO_OBJ);
+    // ...so the core, whose picture reaches the row, draws nothing of it: drawn once.
+    expect((await corePixels(page, rect, 30, bare.seen)).strange, "the core's picture there is the bare map (-1: the band does not reach the row)").toBe(0);
     await page.screenshot({ path: path.join(OUT_DIR, 'people-past-box.png') });
 
     // Out of the match (present 0): gone.

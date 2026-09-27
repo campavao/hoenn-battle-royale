@@ -89,6 +89,16 @@ test('a phone gets the screen and both thumbs, either way up', async ({ browser 
     // an element sized for 160 was "everything got squished" (Cam, 2026-09-18).
     const buffer = await page.evaluate(() => { const c = document.querySelector('#canvas') as HTMLCanvasElement; return { w: c.width, h: c.height }; });
     expect(canvas.width / canvas.height, 'the picture is never squashed or stretched').toBeCloseTo(buffer.w / buffer.h, 2);
+    // The ROM's band on a portrait phone (POK-329): the core draws 256x496 -- its 512-row
+    // ring less one row, 104 above the LCD and 232 below -- at the picture's own 1.625, and
+    // the LCD is where the layout put it, over the pad: canvas row 118 on this glass.
+    expect(buffer, "the ROM's whole band").toEqual({ w: 256, h: 496 });
+    expect(bandScale, 'at the scale the width gives').toBeCloseTo(390 / 240, 3);
+    expect(canvas.height, 'drawn 496 rows tall').toBeCloseTo(496 * bandScale, 0);
+    const pad = await box('#pad');
+    const lcdRow = Math.round(((screen.height - pad.height) / bandScale - 160) / 2);
+    expect((picture.y - screen.y) / bandScale, `the LCD at the layout's row ${lcdRow}`).toBeCloseTo(lcdRow, 0);
+    expect((canvas.y - screen.y) / bandScale, "the picture's top 104 rows above it").toBeCloseTo(lcdRow - 104, 0);
     expect(field.width).toBeGreaterThanOrEqual(screen.width - 2);
     expect(field.height).toBeGreaterThanOrEqual(screen.height - 2);
     await page.screenshot({ path: path.join(OUT_DIR, 'phone-portrait.png') });

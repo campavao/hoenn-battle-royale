@@ -250,20 +250,29 @@ picture's own scale, with the palette fade mirrored from `gPaletteFade`. In a ba
 menu the picture shows that and the field stays around it. Nothing is zoomed or
 stretched. A tap out there walks there like a tap on the picture. `web/src/field.ts`.
 
-**The nearest band of that is the ROM's own** (POK-319). The core renders a 256×256
-picture with the LCD at (0, 40) inside it: the ring of tiles Emerald already keeps
-around the camera (32×32 tiles, the LCD at rows 40..199 with the standing vertical pan),
-so the 40 rows above, 56 below and 16 columns right of the window are real BG and OBJ
-state -- tile animation, people, the fog's own blend. The ROM's part is small
+**The nearest band of that is the ROM's own** (POK-319, POK-329). The core renders the
+ring of tiles Emerald keeps around the camera, past the LCD, from the same registers:
+real BG and OBJ state -- tile animation, people, the fog's own blend. POK-319 drew pret's
+32×32-tile ring once, 256×256 with the LCD at (0, 40). Since POK-329 the ring is 32×64
+tiles on 256×512 BGs, pos.y-4..pos.y+27, and the ROM declares the picture it feeds in
+`gBrFieldView`: 256×496, the LCD at row 104 -- the whole ring but the one spare row a
+step needs, the player's rows -11..+19, which covers a portrait phone above and below
+the pad (the page reads it out of the patched image and asks the core for exactly that;
+a ROM without it gets the legacy band). Past the 256 rows around the LCD where each 8-bit
+OAM y has one reading (the sprite window, 40 above and 56 below) the core draws only the
+512-row BGs and the weather; the people out there are the overlay's. The ROM's part
 (`src/br/br_field.c`): draw the part of the ring pret's slice redraws leave stale after a
-step -- since POK-329 the ring is 32×64 tiles on 256×512 BGs, pos.y-4..pos.y+27, with a
-row or column that would land in a slot still on screen drawn when the step completes
-(THE RING in `include/br/br_field.h`) -- and hide an object by its sprite's TOP, not its
-bottom, so every visible sprite's OAM y is unambiguous. The composite fills everything
-past the band; an overlay above the picture draws the people the ROM hid for being past
-it. Off the field the band is clipped away and the composite shows through. The numbers are
-`include/br/br_field.h`'s, pinned by `web/src/field.test.ts`; the harness's libmgba is
-unpatched and photographs 240×160 only.
+step, with a row or column that would land in a slot still on screen drawn when the step
+completes (THE RING in `include/br/br_field.h`), say which rows are still to draw
+(`gBrRingStale`), and hide an object by its sprite's TOP, so every visible sprite's OAM y
+is unambiguous. The page cuts the band where it is not the map: past the current map's
+edge, past the ring's 16 columns mid-step, and over the rows still to draw; the
+composite fills everything the band does not cover, and an overlay above the picture
+draws the people the ROM hid. Off the field the band is clipped away and the composite
+shows through. The numbers are `include/br/br_field.h`'s, pinned by
+`web/src/field.test.ts`; `web/e2e/picture.spec.ts` holds the core's picture to the map's
+still walking every way (`web/scripts/seam-probe.mjs --check` does it by hand); the
+harness's libmgba is unpatched and photographs 240×160 only.
 
 ## 8. Relay
 

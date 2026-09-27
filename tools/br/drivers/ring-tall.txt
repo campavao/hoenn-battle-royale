@@ -27,6 +27,9 @@ wait 400
 expect u32 gMain+4 CB2_Overworld+1
 expect u16 *gSaveBlock1Ptr 21
 expect u16 *gSaveBlock1Ptr+2 25
+# ...and every ring row is drawn: gBrRingStale is the rows the page cuts off the band
+# until they are (web/src/field.ts ringRows).
+expect u32 gBrRingStale 0
 say rest landed
 dump *gSaveBlock1Ptr 8
 dump gFieldCamera 24
@@ -2087,4 +2090,5 @@ dump *gOverworldTilemapBuffer_Bg1 4096
 dump *gOverworldTilemapBuffer_Bg2 4096
 dump *gOverworldTilemapBuffer_Bg3 4096
 expect u16 *gSaveBlock1Ptr+2 77
+expect u32 gBrRingStale 0
 say ok

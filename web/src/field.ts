@@ -22,7 +22,8 @@
 // sprite's top is past the band (the OAM's 8-bit y would put them at the wrong end).
 // Off the field -- a battle, a menu -- the band is clipped away and the composite shows
 // through, so the fight sits in the middle of the field it was on; on it, the band is
-// cut where the map ends (bandClip), and the neighbour past it is the composite's.
+// cut where the map ends and where the ROM's ring does not hold the map (yet) -- a
+// step's 17th column, rows still to redraw (bandClip) -- and the composite shows there.
 //
 // Where the window sits on the map was MEASURED, not derived (tools/br/drivers/
 // field-scroll.txt and field-scroll-trace.txt, matched against the render): with the ROM
@@ -309,6 +310,8 @@ export interface Camera extends CameraPos {
   /** Outside the ring, and the ring's frames to the next bleed. */
   outside: boolean;
   ringTimer: number;
+  /** gBrRingStale: the ring's rows the ROM has still to (re)draw (bandClip). */
+  stale: number;
   /** The overworld is what the ROM is running (gMain.callback2 == CB2_Overworld). */
   onField: boolean;
 }
@@ -458,20 +461,77 @@ export function bandOf(drawn: Band | null, canvas: { width: number; height: numb
  *  first row, whose sprites stand a tile above their feet. */
 export const HEAD_ROOM = TILE;
 
+/** The map pixels the ROM's ring holds sideways, for the camera a picture was drawn from
+ *  (POK-329): 16 metatile columns, 256 pixels -- 32 tiles, all a BG row has -- so a
+ *  picture 256 wide that does not start on a metatile, which is every frame of a step
+ *  left or right, straddles 17, and one of them is the wrong column's slot. A step left
+ *  draws its new column at once, into the slot the picture's right edge still shows until
+ *  the step lands; a step right's far column waits in the slot its left edge shows, so
+ *  the columns are pos.x-1..pos.x+14 until the step lands (include/br/br_field.h, THE
+ *  RING). Up and down the ring is 32 rows and the ROM's view 31, so it always holds the
+ *  picture. */
+export function ringColumns(cam: { x: number; subX: number }): { left: number; right: number } {
+  const left = cam.x * TILE - LCD_LEFT - (cam.subX > 0 ? TILE : 0);
+  return { left, right: left + 16 * TILE };
+}
+
+/** The ROM's ring up and down (include/br/br_field.h, THE RING): 32 metatile rows,
+ *  RING_ABOVE of them above pos.y. Bit (dy + RING_ABOVE) of gBrRingStale is grid row
+ *  pos.y + dy, which is map row pos.y + dy - MAP_OFFSET. */
+export const RING_ABOVE = 4;
+export const RING_ROWS = 32;
+const MAP_OFFSET = 7;
+/** pret's own rows, pos.y..pos.y+14: drawn as each comes in, never stale. */
+const PRET_ROWS = 15;
+
+/** The map rows the band may show, for the stale rows the ROM reported with the camera
+ *  (POK-329): a whole-map draw leaves the ring's rows past pret's to be drawn over the
+ *  next frames, and a map connection the rows the last map drew as its border -- two a
+ *  frame, the nearest the LCD first -- so the band stops short of the nearest stale row
+ *  above pos.y and the nearest below pret's. In map pixels, [top, bottom). */
+export function ringRows(cam: { y: number }, stale: number): { top: number; bottom: number } {
+  let top = -Infinity;
+  let bottom = Infinity;
+  for (let dy = -1; dy >= -RING_ABOVE; dy--) {
+    if ((stale >>> (dy + RING_ABOVE)) & 1) {
+      top = (cam.y + dy + 1 - MAP_OFFSET) * TILE;
+      break;
+    }
+  }
+  for (let dy = PRET_ROWS; dy < RING_ROWS - RING_ABOVE; dy++) {
+    if ((stale >>> (dy + RING_ABOVE)) & 1) {
+      bottom = (cam.y + dy - MAP_OFFSET) * TILE;
+      break;
+    }
+  }
+  return { top, bottom };
+}
+
 /** How much of the band to cut away, side by side, in GBA pixels (POK-329): what lies past
- *  the current map's edge. The ROM keeps only MAP_OFFSET (7) rows and columns of a
- *  neighbour, drawn with this map's tilesets, and border blocks past that; the composite
- *  under the picture has the neighbour whole, from its own still. `cam` is the state the
- *  picture on screen was drawn from -- the read one frame before (see the top of this
- *  file). HEAD_ROOM is kept past the top edge, and the LCD is never cut. */
-export function bandClip(cam: { x: number; y: number; subX: number; subY: number }, map: { w: number; h: number }, band: Band): Band {
+ *  the current map's edge, and what the ring does not hold yet. The ROM keeps only
+ *  MAP_OFFSET (7) rows and columns of a neighbour, drawn with this map's tilesets, and
+ *  border blocks past that; the composite under the picture has the neighbour whole, from
+ *  its own still. Mid-step sideways up to 15 columns of the band's right are another
+ *  column's slot (ringColumns), and for a few frames after a map is drawn or crossed into
+ *  its outer rows are the last map's (ringRows, from `stale`, gBrRingStale): the
+ *  composite has all of those too. `cam` is the state the picture on screen was drawn
+ *  from -- the read one frame before (see the top of this file). HEAD_ROOM is kept past
+ *  the top edge, and the LCD is never cut. A map the page does not know (null) has no
+ *  edge to cut at; the ring is cut all the same. */
+export function bandClip(cam: { x: number; y: number; subX: number; subY: number }, map: { w: number; h: number } | null, band: Band, stale = 0): Band {
   const o = lcdOrigin(cam);
+  const ring = ringColumns(cam);
+  const rows = ringRows(cam, stale);
   const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
+  const w = map ? map.w * TILE : Infinity;
+  const h = map ? map.h * TILE : Infinity;
+  const top = o.top - band.top;
+  const bottom = o.top + GBA_H + band.bottom;
   return {
-    left: cut(band.left - o.left, band.left),
-    top: cut(band.top - o.top - HEAD_ROOM, band.top),
-    right: cut(o.left + GBA_W + band.right - map.w * TILE, band.right),
-    bottom: cut(o.top + GBA_H + band.bottom - map.h * TILE, band.bottom),
+    left: cut(Math.max(band.left - o.left, ring.left - (o.left - band.left)), band.left),
+    top: cut(Math.max(map ? band.top - o.top - HEAD_ROOM : 0, rows.top - top), band.top),
+    right: cut(Math.max(o.left + GBA_W + band.right - w, o.left + GBA_W + band.right - ring.right), band.right),
+    bottom: cut(Math.max(bottom - h, bottom - rows.bottom), band.bottom),
   };
 }
 
@@ -713,14 +773,11 @@ export class FieldView {
    *  from `cam`, the state the picture was drawn from); anywhere else the picture is the
    *  LCD alone. The composite shows through wherever the band is cut. One clip-path,
    *  set only when it changes. */
-  private clip(onField: boolean, cam: CameraPos | null): void {
+  private clip(onField: boolean, cam: (CameraPos & { stale?: number }) | null): void {
     const b = this.band;
     let cut: Band | null = null;
     if (b && !onField) cut = b;
-    else if (b && cam) {
-      const map = HOENN.byRef.get(`${cam.group}:${cam.num}`);
-      if (map) cut = bandClip(cam, map, b);
-    }
+    else if (b && cam) cut = bandClip(cam, HOENN.byRef.get(`${cam.group}:${cam.num}`) ?? null, b, cam.stale ?? 0);
     const s = this.lay.scale;
     const want = cut && (cut.left || cut.top || cut.right || cut.bottom)
       ? `inset(${cut.top * s}px ${cut.right * s}px ${cut.bottom * s}px ${cut.left * s}px)`
@@ -796,6 +853,7 @@ export class FieldView {
       fog: this.readFog(),
       outside: ring !== undefined && emu.read(ring + RING_OUTSIDE, 8) !== 0,
       ringTimer: ring === undefined ? 0 : emu.read(ring + RING_TIMER, 16),
+      stale: this.readStale(),
       onField: main !== undefined && cb2 !== undefined && (emu.read(main + MAIN_CALLBACK2, 32) & ~1) === cb2
         && !(pick !== undefined && emu.read(pick + PICK_ACTIVE, 8) !== 0),
     };
@@ -857,6 +915,12 @@ export class FieldView {
     const c = this.prev;
     if (!c) return null;
     return { onField: c.onField, rom: this.ghosts.rom, walkers: this.walkers.sprites(c, lcdOrigin(c), () => true, false), drawn: this.ghosts.drawn, seats: this.walkers.seats() };
+  }
+
+  /** gBrRingStale, read with the camera: its bits are relative to the pos read with it. */
+  private readStale(): number {
+    const at = this.sym('gBrRingStale');
+    return at === undefined ? 0 : this.deps.emu.read(at, 32) >>> 0;
   }
 
   private readFog(): Fog | null {

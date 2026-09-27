@@ -2,12 +2,14 @@
 # page reads it out of the patched image before it boots the core: the band to draw past
 # the LCD (left, top, right, bottom) and the sprite window it reads each OAM y against
 # (spriteTop, spriteBottom), every field a u16. A ROM without it gets the page's legacy
-# band, which is these same six numbers -- until the ring grows.
+# band, 0/40/16/56 with the same window: one 256-row ring. This ROM's ring is 512 rows,
+# and the view is all of it but the spare row a step needs: 104 above the LCD and 232
+# below, 496 rows (include/br/br_field.h).
 wait 30
 expect u16 gBrFieldView+0 0
-expect u16 gBrFieldView+2 40
+expect u16 gBrFieldView+2 104
 expect u16 gBrFieldView+4 16
-expect u16 gBrFieldView+6 56
+expect u16 gBrFieldView+6 232
 expect u16 gBrFieldView+8 40
 expect u16 gBrFieldView+10 56
 say ok

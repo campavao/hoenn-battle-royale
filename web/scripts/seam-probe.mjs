@@ -4,19 +4,43 @@
 // solo in Chromium at phone size, holds Up then Down, and saves a strip around the band's
 // top edge ten times a second into e2e/out/seam/<dir>-NN.png plus the layout numbers.
 //
-//   node scripts/seam-probe.mjs "<rom path>"
+//   node scripts/seam-probe.mjs "<rom path>" [--url http://localhost:5199]
+//
+// --check (POK-329) holds the picture to the map instead of photographing it: dropped on
+// Rustboro City, it walks down, up, right and left and compares every 16x16 cell of the
+// band the page shows -- all of it past the LCD, top to bottom -- with the map's still,
+// sprites left out, every 40 ms (scripts/still-walk.mjs, e2e/still.ts). It prints a line
+// a direction, saves each one's worst picture (e2e/out/seam/check-<dir>-worst.png, what
+// was not the still in magenta) and exits 1 unless all four are clean and the band is the
+// ROM's whole ring: a ROM before POK-329's switch draws 40 rows above the LCD and 56
+// below, and the rows past those are the page's still.
+//
+//   node scripts/seam-probe.mjs "<rom path>" --check
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
+import { checkWalk, landingHash } from './still-walk.mjs';
 
-const rom = (process.argv[2] ?? '').replace(/\\/g, '/');
+const args = process.argv.slice(2);
+const rom = (args.find((a) => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--url') ?? '').replace(/\\/g, '/');
+const base = args.includes('--url') ? args[args.indexOf('--url') + 1] : 'http://localhost:5199';
+const check = args.includes('--check');
 const out = path.resolve('e2e/out/seam');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
-await page.goto(`http://localhost:5199/#solo&rom=${rom}`);
+const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: check, hasTouch: true });
+
+if (check) {
+  await page.goto(`${base}/${landingHash(rom)}`);
+  const { clean } = await checkWalk(page, { every: 40, out });
+  await browser.close();
+  console.log(clean ? 'clean' : 'NOT clean');
+  process.exit(clean ? 0 : 1);
+}
+
+await page.goto(`${base}/#solo&rom=${rom}`);
 await page.waitForSelector('body.in-match', { timeout: 180_000 });
 await page.waitForTimeout(3000);
 

@@ -100,8 +100,8 @@ export function devLand(hash: string): { id: string; x: number; y: number } | un
 }
 
 /** `#band=T,B`: the rows the core is asked to draw above and below the LCD (POK-329),
- *  multiples of 8 up to 256 as the core takes them. A test holds a band taller than the
- *  ROM's ring to the sprite window with it. */
+ *  multiples of 8 up to 256 as the core takes them. picture.spec asks for the legacy
+ *  256-row band with it, to hold the sprite window to a band that is exactly one. */
 export function devBand(hash: string): { top: number; bottom: number } | undefined {
   const m = /^(\d+),(\d+)$/.exec(paramsOf(hash).get('band') ?? '');
   if (!m) return undefined;
