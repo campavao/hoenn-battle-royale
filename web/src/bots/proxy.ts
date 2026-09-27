@@ -192,6 +192,20 @@ export class ProxyDuels {
     }
   }
 
+  /** Boots the instance now, ahead of any duel, and leaves it paused (POK-247): its
+   *  first boot is a whole second core, 110-150 ms of main thread on a throttled phone,
+   *  and it used to land on the first bot-vs-bot meeting of the match. Nobody fights
+   *  in the Safari, so the page calls this there. Never throws: an instance that will
+   *  not come up is noted and fallen back from, as a duel would have found. */
+  async warm(): Promise<void> {
+    if (this.broken) return;
+    try {
+      await this.ensure();
+    } catch {
+      /* noted in ensure(); every duel falls back */
+    }
+  }
+
   /** Lets the instance go. The next duel boots a fresh one. */
   dispose(): void {
     this.unframe?.();

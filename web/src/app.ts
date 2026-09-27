@@ -1257,6 +1257,19 @@ let proxyDuels: ProxyDuels | null = null;
  *  there is a room to tell; the room path sets this when it has one. */
 let proxyStream: ((msg: BstartMsg | TurnMsg) => void) | null = null;
 
+/** How far into the opening the proxy boots: clear of the warp into the Zone, and long
+ *  before the first bot-vs-bot meeting, which cannot come until the drop. */
+const PROXY_WARM_MS = 5_000;
+
+/** A match with bots in it has begun on this page: its proxy boots now, in the Safari
+ *  (POK-247). Its first boot is a whole second core -- 110-150 ms of main thread on a
+ *  throttled phone -- and it used to land on the match's first bot-vs-bot meeting. */
+function warmProxy(bots: number): void {
+  const duels = proxyDuels;
+  if (!duels || bots === 0) return;
+  setTimeout(() => void duels.warm(), PROXY_WARM_MS);
+}
+
 /** Which of the four trainer sprites is your ghost on everybody else's screen. */
 function careerSkin(): number {
   return loadCareer().skin ?? 0;
@@ -1818,7 +1831,9 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const off = emu.onFrame(() => {
     if (++frames < 200) return;
     off();
-    if (decideStart({ t: 'solo' }, soloState).do === 'deal') host.begin();
+    if (decideStart({ t: 'solo' }, soloState).do !== 'deal') return;
+    host.begin();
+    warmProxy(host.botCount());
   });
   // One pump for both directions: the port is the only thing that writes the ring.
   emu.onFrame(() => {
@@ -2223,6 +2238,7 @@ function wireRoom(
       }
     }
     host.begin();
+    warmProxy(host.botCount());
   };
   /** What match/room.ts's decideStart is asked from: this page, as it stands. The mode is
    *  the door we came in by, not a re-read of the hash, which match_in_progress rewrites. */

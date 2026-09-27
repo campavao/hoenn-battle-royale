@@ -373,6 +373,33 @@ describe('the proxy duel instance', () => {
     expect(notes).toContain('seat 1 vs seat 2: a side with nothing standing');
   });
 
+  it('boots ahead of the first duel when warmed, paused, and only once (POK-247)', async () => {
+    const inst = fakeInstance();
+    let boots = 0;
+    const proxy = new ProxyDuels({
+      boot: async () => (boots++, inst.emu),
+      mailboxBase: BASE,
+      writeBoot: () => {},
+      deadlineMs: 5_000,
+      wakeFrames: 5,
+    });
+    await settle(proxy.warm(), inst);
+    expect(proxy.stats.booted).toBe(true);
+    expect(inst.life, 'awake and idle').toEqual(['pause']);
+
+    await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst);
+    expect(boots, 'the duel fought on the warmed instance').toBe(1);
+    expect(inst.life).toEqual(['pause', 'resume', 'pause']);
+  });
+
+  it('warms quietly when the instance will not come up, and falls back after', async () => {
+    const inst = fakeInstance({ wakes: false });
+    const proxy = proxyOver(inst);
+    await settle(proxy.warm(), inst);
+    expect(proxy.failed).toBe(true);
+    expect(await proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] })).toBeNull();
+  });
+
   it('sends the overflow to the cheap resolver rather than queue the whole room', async () => {
     const inst = fakeInstance({ answers: false });
     const notes: string[] = [];

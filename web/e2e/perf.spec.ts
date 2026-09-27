@@ -25,11 +25,14 @@ import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symb
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
+const BR_PHASE_SAFARI = 1;
 const BR_PHASE_PLAY = 2;
 type RamWindow = { __br: { mailbox: { ram: { read(a: number, w: 8 | 16 | 32): number } } } };
 type PerfWindow = {
   __perf: { long: number; longest: number; probe: { sample(reset?: boolean): PageSample } };
   __hbr: { perf(): { sample(reset?: boolean): PageSample } };
+  /** One probe for the boot check: each perf() is a meter of its own, for good. */
+  __boot?: { sample(reset?: boolean): PageSample };
 };
 
 test.beforeAll(() => {
@@ -73,6 +76,24 @@ test('the host carries a match without the emulator falling over', async ({ brow
         await expect(max).toContainText(`MAX ${want}`, { timeout: 15_000 });
       }
       await startWith(host, 1);
+
+      // The proxy's first boot -- a whole second core, the page's longest task -- comes
+      // in the opening, where nobody fights (POK-247), not on the first bot duel.
+      const phase = () =>
+        host.evaluate((addr) => (window as unknown as Partial<RamWindow>).__br?.mailbox.ram.read(addr, 8) ?? 0, symbols.gBrMatch);
+      await expect.poll(phase, { timeout: 60_000 }).toBe(BR_PHASE_SAFARI);
+      await expect
+        .poll(
+          () =>
+            host.evaluate(() => {
+              const w = window as unknown as PerfWindow;
+              w.__boot ??= w.__hbr.perf();
+              return w.__boot.sample().proxy?.booted ?? false;
+            }),
+          { timeout: 20_000 },
+        )
+        .toBe(true);
+      expect(await phase(), 'booted while the opening was still on').toBe(BR_PHASE_SAFARI);
 
       // Wait out the opening and the drop, then measure the part with bots in it.
       await host.waitForFunction(
