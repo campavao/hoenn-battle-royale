@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, HEAD_ROOM, LEGACY_BAND, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP } from './field';
+import { FIELD_VIEW_SIZE, HEAD_ROOM, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP } from './field';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -96,22 +96,39 @@ describe('the picture past the LCD (POK-319)', () => {
       expect(LEGACY_BAND.top).toBe(40);
     });
 
-    it('main() asks after the ROM is patched and before it boots: the window, then the band, both read off the bytes it boots', () => {
+    it('main() asks after the ROM is patched and the playing screen is up, before it boots: the window, then the band, both read off the bytes it boots', () => {
       const main = appSource.slice(appSource.indexOf('async function main()'));
       const patched = main.indexOf('await runPatchingScreen(emu)');
-      const read = main.indexOf('romBand(bytes, symbols)');
-      const sprites = main.indexOf('emu.setSpriteBand(picture.sprites)');
-      const band = main.indexOf('emu.setViewport(askedBand)');
+      const read = main.indexOf('romPicture = romBand(bytes, symbols);');
+      const shown = main.indexOf("showScreen('playing')");
+      const ask = main.indexOf('askForBand(emu);');
       expect(patched).toBeGreaterThan(0);
       expect(read).toBeGreaterThan(patched);
-      expect(sprites).toBeGreaterThan(read);
-      expect(band).toBeGreaterThan(sprites);
-      expect(main.indexOf('emu.startBytes(')).toBeGreaterThan(band);
-      expect(main.indexOf('emu.start()')).toBeGreaterThan(band);
-      expect(main.slice(0, patched), 'nothing asked before the ROM is known').not.toMatch(/setViewport|setSpriteBand/);
-      expect(main).toMatch(/askedBand = devBand\(picture\.band\) \?\? picture\.band;/);
-      // The field lays out with what was asked when the emulator has nothing to say.
-      expect(appSource).toMatch(/new FieldView\(\{[^}]*\bband: askedBand,/);
+      expect(shown, 'measured on the playing screen').toBeGreaterThan(read);
+      expect(ask).toBeGreaterThan(shown);
+      expect(main.indexOf('emu.startBytes(')).toBeGreaterThan(ask);
+      expect(main.indexOf('emu.start()')).toBeGreaterThan(ask);
+      expect(main.slice(0, patched), 'nothing asked before the ROM is known').not.toMatch(/setViewport|setSpriteBand|askForBand/);
+      // askForBand: the layout's band inside the ROM's, then the window, then the band.
+      const fn = appSource.slice(appSource.indexOf('function askForBand('), appSource.indexOf('async function main()'));
+      const band = fn.indexOf('askBand(matchLayout(), romPicture)');
+      const sprites = fn.indexOf('emu.setSpriteBand(romPicture.sprites)');
+      const viewport = fn.indexOf('emu.setViewport(askedBand)');
+      expect(band).toBeGreaterThan(0);
+      expect(sprites).toBeGreaterThan(band);
+      expect(viewport).toBeGreaterThan(sprites);
+      expect(fn).toMatch(/askedBand = devBand\(romPicture\.band\) \?\? asked;/);
+      // The match's layout, whatever is up when it is measured: in-match, and docked on a desktop.
+      const measure = appSource.slice(appSource.indexOf('function matchLayout('), appSource.indexOf('function askForBand('));
+      expect(measure).toMatch(/classList\.add\('in-match'\)/);
+      expect(measure).toMatch(/classList\.toggle\('docked', desktop\(\)\)/);
+      expect(measure).toMatch(/measureLayout\(\$\('#screen-wrap'\)[^)]*, \$\('#pad'\)/);
+      // PLAY AGAIN asks again, before the boot that takes it.
+      const again = appSource.slice(appSource.indexOf('async function returnToRoom()'));
+      expect(again.indexOf('askForBand(emu);')).toBeGreaterThan(0);
+      expect(again.indexOf('askForBand(emu);')).toBeLessThan(again.indexOf('await rebootIntoBr('));
+      // The field lays out with what was last asked when the emulator has nothing to say.
+      expect(appSource).toMatch(/new FieldView\(\{[^}]*\bband: \(\) => askedBand,/);
     });
 
     it('lays out with what the core draws, else -- a buffer plainly bigger than the LCD -- with what was asked', () => {
@@ -545,6 +562,58 @@ describe('the picture in the box', () => {
       // ...and the core's picture, placed by the layout, starts on the canvas, not above it.
       expect(pictureBox(n.lay, { left: 0, top: VIEW.top, right: 16, bottom: VIEW.bottom })).toEqual({ left: 0, top: 14, width: 256, height: 496 });
     });
+  });
+
+  // POK-329: the core draws, and the page uploads, every row it is asked for, every frame.
+  describe('the page asks for the rows its layout shows, inside what the ROM declares (askBand)', () => {
+    const ROM = { band: { left: 0, top: 104, right: 16, bottom: 232 }, sprites: { top: 40, bottom: 56 } };
+    const rows = (b: Band) => ({ top: b.top, bottom: b.bottom });
+    it('a desktop: the picture takes the height, so the band is the sprite window', () => {
+      expect(askBand(layoutField(1280, 720, 0), ROM)).toEqual({ left: 0, top: 40, right: 16, bottom: 56 });
+      // ...and beside the docked sheet (1280 less its 480), 28 rows each way, still inside it.
+      expect(rows(askBand(layoutField(800, 720, 0), ROM))).toEqual({ top: 40, bottom: 56 });
+      expect(rows(askBand(layoutField(1440, 800, 0), ROM))).toEqual({ top: 40, bottom: 56 });
+    });
+    it("a portrait phone with the pad over the bottom: all the ROM has, and Safari's shorter glass less", () => {
+      expect(askBand(layoutField(390, 844, 200), ROM), 'short 14 and 10: capped at the ROM').toEqual(ROM.band);
+      expect(rows(askBand(layoutField(390, 763, 200), ROM)), 'the installed app, 93 and 217, in eights').toEqual({ top: 96, bottom: 224 });
+      expect(rows(askBand(layoutField(390, 664, 200), ROM)), 'Safari, 63 and 186').toEqual({ top: 64, bottom: 192 });
+    });
+    it('a half-screen desktop window beside its sheet: what it shows, in eights', () => {
+      // 683x768 less the 240 dock: 443x768 at 1.846, 417 rows, the LCD at 128 and 129 under it.
+      expect(rows(askBand(layoutField(443, 768, 0), ROM))).toEqual({ top: 104, bottom: 136 });
+    });
+    it('never below the sprite window, never past the ROM, the sides the ROM has', () => {
+      expect(askBand(layoutField(480, 320, 0), ROM), 'a box the picture fills').toEqual({ left: 0, top: 40, right: 16, bottom: 56 });
+      expect(askBand(layoutField(200, 2000, 0), ROM), 'a tower').toEqual(ROM.band);
+      const legacy = { band: LEGACY_BAND, sprites: LEGACY_SPRITE_BAND };
+      expect(askBand(layoutField(390, 844, 200), legacy), 'a ROM before gBrFieldView: its ring, whatever the glass').toEqual(LEGACY_BAND);
+      const sides = { band: { left: 8, top: 104, right: 24, bottom: 232 }, sprites: ROM.sprites };
+      expect(askBand(layoutField(390, 844, 200), sides)).toMatchObject({ left: 8, right: 24 });
+    });
+    it("a box with no size says nothing: the ROM's whole band, as before", () => {
+      expect(askBand(layoutField(0, 0), ROM)).toEqual(ROM.band);
+      const got = askBand(layoutField(0, 0), ROM);
+      got.top = 0;
+      expect(ROM.band.top, 'a copy').toBe(104);
+    });
+  });
+
+  it('FieldView lays out again after a boot, even at the same buffer size: PLAY AGAIN asks for its band again', () => {
+    const emu = { viewport: { left: 0, top: 64, right: 16, bottom: 192 } as Band, boots: 1 };
+    const style = {} as Record<string, string>;
+    const lcd = { width: 256, height: 416, style };
+    const field = { width: 0, height: 0, style: {} };
+    const view = new FieldView({ emu, box: { clientWidth: 390, clientHeight: 664 }, lcd, field, symbols: null } as unknown as FieldDeps);
+    const inner = view as unknown as { frame(): void };
+    const lay = layoutField(390, 664, 0);
+    inner.frame();
+    expect(style.top).toBe(`${(lay.lcdRow - 64) * lay.scale}px`);
+    // The next boot's band is the same 416 rows, split another way.
+    emu.viewport = { left: 0, top: 72, right: 16, bottom: 184 };
+    emu.boots = 2;
+    inner.frame();
+    expect(style.top, "the LCD where the new band puts it").toBe(`${(lay.lcdRow - 72) * lay.scale}px`);
   });
 });
 

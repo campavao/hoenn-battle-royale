@@ -17,11 +17,16 @@
 // core delivered and the time between them as a p95, the page's share of each, the
 // speaker's late and cut buffers, and what the processes cost -- CPU-seconds a
 // second and the renderer's resident memory. perf.json has the lot.
+//
+// Twice: in a desktop's window, and on a portrait phone's glass (POK-329). The phone is
+// the one that pays for the picture past the LCD -- the core draws 256x496 there, the
+// ROM's whole band, against a desktop's 256x256 (field.ts askBand: the rows the layout
+// shows) -- so it is the phone the floor has to hold on. perf-phone.json is its lot.
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect } from '@playwright/test';
+import { test, expect, type Browser, type BrowserContextOptions } from '@playwright/test';
 import { cost, costLine, processes, snapshot, type PageSample } from './proc';
-import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath, romView, startWith } from './symbols';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
@@ -34,18 +39,35 @@ type PerfWindow = {
   /** One probe for the boot check: each perf() is a meter of its own, for good. */
   __boot?: { sample(reset?: boolean): PageSample };
 };
+type Band = { left: number; top: number; right: number; bottom: number };
+type BandWindow = { __hbr: { emu: { viewport: Band | null } } };
+
+/** Where each run is: its window, the files it leaves, and the band its layout asks for
+ *  -- the ROM's sprite window on a desktop (the picture takes the window's height, and
+ *  the sheet docked beside it leaves 28 rows each way), all of the ROM's band on the
+ *  phone (it shows 118 above and 242 below, and the ROM has 104 and 232). */
+const RUNS: { name: string; file: string; context: BrowserContextOptions; band: (rom: ReturnType<typeof romView>) => Band }[] = [
+  { name: 'desktop', file: 'perf', context: {}, band: (rom) => ({ ...rom.viewport, top: rom.sprites.top, bottom: rom.sprites.bottom }) },
+  { name: 'phone', file: 'perf-phone', context: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, band: (rom) => rom.viewport },
+];
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
 });
 
-test('the host carries a match without the emulator falling over', async ({ browser }) => {
-  test.setTimeout(240_000);
+for (const run of RUNS) {
+  test(`the host carries a match without the emulator falling over (${run.name})`, async ({ browser }) => {
+    test.setTimeout(240_000);
+    await hostsAMatch(browser, run);
+  });
+}
+
+async function hostsAMatch(browser: Browser, run: (typeof RUNS)[number]): Promise<void> {
   const rom = romHashParam();
   const symbols = loadSymbols();
 
-  const ctx = await browser.newContext();
+  const ctx = await browser.newContext(run.context);
   try {
     const host = await ctx.newPage();
     // 4x slower than this machine: the point is to find out what the host's own work
@@ -126,16 +148,18 @@ test('the host carries a match without the emulator falling over', async ({ brow
         return { sample: w.__perf.probe.sample(), long: w.__perf.long, longest: w.__perf.longest };
       });
       const { frames, audio, proxy } = read.sample;
+      const band = await host.evaluate(() => (window as unknown as BandWindow).__hbr.emu.viewport);
+      const drawn = band ? `${240 + band.left + band.right}x${160 + band.top + band.bottom}` : '240x160';
       console.log(
-        `host over ${proc.seconds.toFixed(1)}s of match at 4x CPU throttle: ${frames.fps.toFixed(1)} fps, ` +
+        `${run.name} host over ${proc.seconds.toFixed(1)}s of match at 4x CPU throttle, picture ${drawn}: ${frames.fps.toFixed(1)} fps, ` +
           `frame p50 ${frames.p50.toFixed(1)} p95 ${frames.p95.toFixed(1)} p99 ${frames.p99.toFixed(1)} max ${frames.max.toFixed(0)} ms, ` +
           `work ${frames.work.mean.toFixed(2)} ms (p95 ${frames.work.p95.toFixed(1)}), ` +
           `audio ${audio.callbacks} callbacks ${audio.late} late ${audio.cut} cut (${audio.state}), ` +
           `${read.long} long tasks, longest ${read.longest.toFixed(0)}ms\n  ${costLine(proc)}, heap ${read.sample.heapMb} MB` +
           (proxy ? `, proxy ${proxy.fought} fought ${proxy.fellBack} fell back ${proxy.frames} frames` : ''),
       );
-      fs.writeFileSync(path.join(OUT_DIR, 'perf.json'), `${JSON.stringify({ ...read, proc }, null, 2)}\n`);
-      await host.screenshot({ path: path.join(OUT_DIR, 'perf-host.png') });
+      fs.writeFileSync(path.join(OUT_DIR, `${run.file}.json`), `${JSON.stringify({ ...read, proc, band }, null, 2)}\n`);
+      await host.screenshot({ path: path.join(OUT_DIR, `${run.file}-host.png`) });
       // The #perf readout is up, with the whole page's line under this second's.
       await expect(host.locator('#fps')).toContainText(/fps[\s\S]*all \d+ frames/);
 
@@ -150,13 +174,16 @@ test('the host carries a match without the emulator falling over', async ({ brow
       // audio number reads 0.
       expect(audio.state, 'the AudioContext is running').toBe('running');
       expect(audio.callbacks, 'the speaker asked the core for sound').toBeGreaterThan(0);
+      // ...and it was the picture this layout shows that was paid for (POK-329): a desktop
+      // draws no row past the sprite window, a phone the ROM's whole band.
+      expect(band, `the band a ${run.name} asks for`).toEqual(run.band(romView()));
     } finally {
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     }
   } finally {
     await ctx.close();
   }
-});
+}
 
 // A hidden host tab used to say so, because the match was waiting on it. It no longer
 // waits: the host hands the room over the moment its tab goes to the background, and

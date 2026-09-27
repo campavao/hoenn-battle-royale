@@ -91,6 +91,33 @@ bytes. The script's fresh depth-1 checkout is the shape CI builds, and it reprod
 tracked core byte for byte on 2026-09-25. It needs emcc 6.0.5 and refuses any other, and
 it wipes only a new, empty or earlier build.sh directory, never `~/mgba-wasm`.
 
+### The core, the patch and the page are one release (POK-329)
+
+The picture past the LCD takes all three: the ROM declares the band it feeds
+(`gBrFieldView`, `include/br/br_field.h`), the core draws it (`_brSetViewport`, and
+`_brSetSpriteBand` for the sprite window), and the page reads the declaration out of the
+patched image and asks the core for the part its layout shows (`web/src/field.ts` romBand
+and askBand). `release-web.sh --prod` sends `web/public/emu/`, `web/public/patch/` and the
+shell out in one Vercel deployment, so a deploy never splits them: rebuild the core first
+when `hbr-exports.patch` changed (above), and the patch when the ROM did (step 2).
+
+A player can still end up with a mix -- the service worker keeps what a visit loaded
+(POK-246), and a phone left open across a deploy runs the old page -- and every mix falls
+back to a picture that is right, only smaller. The page checks what it has, never a
+version number:
+
+| What the player has | What they see |
+|---|---|
+| a ROM without `gBrFieldView` (a patch from before 2026-09-27) | the legacy band, 256x256 (0/40/16/56, window 40/56): POK-319's picture |
+| a core without `_brSetSpriteBand` | no more band than the sprite window, 256x256, drawn as POK-319's core drew it |
+| a core without `_brSetViewport` | the LCD alone; the page's still fills the rest (POK-317) |
+| a page from before POK-329 | it asks for 0/40/16/56 and no window: POK-319's picture on any ROM |
+
+On a portrait phone the current three draw 256x496; a desktop, or a phone on its side,
+asks for the sprite window only (256x256), since its picture fills the box's height. The
+band is sized when a game loads, so a phone turned after it booted keeps its boot's band
+until PLAY AGAIN, and the page's still shows past it.
+
 ## The relay (Railway)
 
 Only when `relay/` changed. A relay deploy restarts it and **drops every room**, so do it

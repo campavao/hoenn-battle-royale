@@ -434,6 +434,36 @@ export function layoutField(boxW: number, boxH: number, bottomInset = 0): FieldL
   return { scale, cols, rows, lcdCol, lcdRow };
 }
 
+/** The layout a box gives the picture: the box's size, less the pad when it floats over
+ *  the box's bottom (a phone in a match), as FieldView lays out with. */
+export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefined): FieldLayout {
+  let inset = 0;
+  if (pad && getComputedStyle(pad).position === 'absolute') inset = pad.getBoundingClientRect().height;
+  return layoutField(box.clientWidth, box.clientHeight, inset);
+}
+
+/** The band to ask the core for (POK-329): the rows above and below the LCD this layout
+ *  shows, and no more -- each row past the LCD is 256 more pixels the core draws every
+ *  frame and the page uploads, and on a desktop, or a phone on its side, the picture
+ *  fills the box's height and shows none of the ROM's 336. So: the layout's rows, in
+ *  eights (what the core takes); never fewer than the sprite window, which is the ring
+ *  every ROM before POK-329 fed and the rows the ROM keeps its people to one reading in;
+ *  never more than the ROM declares. The sides are the ROM's: 16 columns at most, and a
+ *  portrait phone's picture is the glass's width. A box with no size (a hidden screen)
+ *  says nothing, and gets the ROM's whole band. */
+export function askBand(lay: FieldLayout, rom: FieldPicture): Band {
+  const { band, sprites } = rom;
+  if (!(lay.scale > 0)) return { ...band };
+  const eights = (n: number) => Math.ceil(Math.max(0, n) / 8) * 8;
+  const rows = (need: number, window: number, most: number) => Math.min(most, Math.max(window, eights(need)));
+  return {
+    left: band.left,
+    top: rows(lay.lcdRow, sprites.top, band.top),
+    right: band.right,
+    bottom: rows(lay.rows - lay.lcdRow - GBA_H, sprites.bottom, band.bottom),
+  };
+}
+
 /** Where the core's whole picture -- the LCD plus its band -- sits on the field canvas,
  *  in GBA pixels, given where the LCD was placed. `canvas` is the core's own buffer
  *  size, which is the truth of what is being drawn: the element is always sized to it,
@@ -575,9 +605,10 @@ export interface FieldDeps {
   box: HTMLElement;
   /** The emulator's own 240x160 canvas. */
   lcd: HTMLCanvasElement;
-  /** The band the page asked the core for (romBand): laid out with when the buffer is
-   *  bigger than the LCD and the emulator has no band to say. */
-  band?: Band | null;
+  /** The band the page asked the core for (askBand), or where to read it -- PLAY AGAIN
+   *  asks again: laid out with when the buffer is bigger than the LCD and the emulator
+   *  has no band to say. */
+  band?: Band | null | (() => Band | null);
   /** The canvas the field is drawn on, under the picture. */
   field: HTMLCanvasElement;
   /** A canvas over the picture for the people the ROM hides past its band (POK-319).
@@ -678,9 +709,10 @@ export class FieldView {
   private drawnMap: string | null = null;
   private lay: FieldLayout = { scale: 0, cols: 0, rows: 0, lcdCol: 0, lcdRow: 0 };
   private band: Band | null = null;
-  /** The core's buffer size the layout was made for; a change re-lays out. */
+  /** The core's buffer size the layout was made for, and the boot; a change re-lays out. */
   private canvasW = 0;
   private canvasH = 0;
+  private boots = 0;
   /** The clip-path on the picture, as last set: the whole band while the ROM is not on
    *  the field, and what lies past the map's edge while it is. Null: set it again. */
   private clipped: string | null = null;
@@ -726,16 +758,17 @@ export class FieldView {
 
   private onResize = (): void => this.layout();
 
+  private askedBand(): Band | null {
+    const b = this.deps.band;
+    return (typeof b === 'function' ? b() : b) ?? null;
+  }
+
   /** The picture placed in the box, the field canvas sized to the box, both at one scale. */
   layout(): void {
     const { box, lcd, field, pad } = this.deps;
-    const w = box.clientWidth;
-    const h = box.clientHeight;
-    let inset = 0;
-    if (pad && getComputedStyle(pad).position === 'absolute') inset = pad.getBoundingClientRect().height;
-    const lay = layoutField(w, h, inset);
+    const lay = measureLayout(box, pad);
     if (!lay.scale) return;
-    const band = bandOf(this.deps.emu.viewport, lcd, this.deps.band ?? null);
+    const band = bandOf(this.deps.emu.viewport, lcd, this.askedBand());
     const sameBand = (band === null) === (this.band === null)
       && (!band || !this.band || (band.left === this.band.left && band.top === this.band.top && band.right === this.band.right && band.bottom === this.band.bottom));
     const same = sameBand && lcd.width === this.canvasW && lcd.height === this.canvasH
@@ -798,9 +831,13 @@ export class FieldView {
   private shake = 0;
 
   private frame(): void {
-    // The core sizes its buffer when it loads a game; a reboot can change it under us.
-    const { lcd } = this.deps;
-    if (lcd.width !== this.canvasW || lcd.height !== this.canvasH) this.layout();
+    // The core sizes its buffer when it loads a game; a reboot can change it under us --
+    // and the band, which PLAY AGAIN asks for again (askBand), even at the same size.
+    const { lcd, emu } = this.deps;
+    if (lcd.width !== this.canvasW || lcd.height !== this.canvasH || emu.boots !== this.boots) {
+      this.boots = emu.boots;
+      this.layout();
+    }
     // Every frame, on the field too, so they are in step when a battle takes it.
     this.walkers.update(this.roster?.() ?? []);
     const cur = this.read();

@@ -44,6 +44,24 @@ dev server on 5199 and fails on the ROM before the switch.
   rows (two a frame), the page cuts them and the still shows there; that should read as
   nothing at all. Anything that looks like trees or water flashing at the top or bottom
   edge right after a crossing is this going wrong.
+* **Turning the phone.** The page asks the core for the rows its layout shows past the
+  picture, measured before the game boots (`field.ts` askBand): a portrait phone all
+  of the ROM's 104 above and 232 below, a desktop or a phone on its side the sprite
+  window's 40 and 56 (its picture fills the height, so it shows none). The band is sized
+  when a game loads, so a phone opened on its side and then turned upright shows the
+  ROM's map only 40 rows above the picture and 56 below, and the page's still past that,
+  until PLAY AGAIN boots it again. Worth a look if Cam starts on his side; the fix is the
+  core resizing its texture while a game runs, which today only `loadGame` does.
+
+**Accepted as is:**
+
+* **Battle transitions on BG0.** The wipes into a battle draw on BG0, a 256-row map, so
+  they cover the LCD and the sprite window's rows (40 above, 56 below) and no more; past
+  that, for the second the transition runs, the band shows the live map, still on the
+  field as far as the page can tell (`gMain.callback2` is CB2_Overworld until the battle
+  starts). Before the switch the page's still showed there. If Cam flags it, the signal
+  is a BR byte set by a one-line hook in `BattleTransition_StartOnField`
+  (`src/battle_transition.c`) that the page reads as off the field.
 
 **Known, not fixed here (follow-ups):**
 

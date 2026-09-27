@@ -80,7 +80,7 @@ import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
 import { TouchLayer } from './touch';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, stickKeys, type AxisSense, type StickMap } from './pad';
-import { FieldView, romBand } from './field';
+import { FieldView, askBand, measureLayout, romBand, type FieldLayout, type FieldPicture } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
 import {
@@ -1448,6 +1448,43 @@ function devBand(rom: Band): Band | undefined {
 /** The band the core was asked for at the last boot: the field lays out with it when the
  *  emulator has none to say (field.ts bandOf). */
 let askedBand: Band | null = null;
+/** The picture the ROM declares (gBrFieldView, field.ts romBand), read off the image
+ *  booted: every ask is inside it. */
+let romPicture: FieldPicture | null = null;
+
+/** The layout the match gives the picture, measured now, whatever screen is up: the
+ *  field only opens past the picture in a match (body.in-match), with the sheet docked
+ *  beside it on a desktop (body.docked). Both classes are put on for the measure and
+ *  back as they were before anything is drawn. */
+function matchLayout(): FieldLayout {
+  const body = document.body;
+  const was = { inMatch: body.classList.contains('in-match'), docked: body.classList.contains('docked') };
+  body.classList.add('in-match');
+  body.classList.toggle('docked', desktop());
+  try {
+    return measureLayout($('#screen-wrap') as HTMLElement, $('#pad') as HTMLElement);
+  } finally {
+    body.classList.toggle('in-match', was.inMatch);
+    body.classList.toggle('docked', was.docked);
+  }
+}
+
+/** Ask the core for the picture past the LCD its next boot draws (POK-319, POK-329): the
+ *  sprite window the ROM declares, then as much of the ROM's band as the match's layout
+ *  shows (askBand) -- on a desktop or a phone on its side the picture takes the box's
+ *  height and the band is the window alone; a portrait phone gets the ROM's 104 rows
+ *  above and 232 below. The window first: a core that knows it draws no sprite twice,
+ *  and one that does not is asked for no more band than the window. A core without the
+ *  band draws the LCD alone. Asked before the first boot and again before PLAY AGAIN's:
+ *  the band is sized when a game loads, so a phone turned after its boot keeps the band
+ *  it booted with, and the composite fills past it. */
+function askForBand(emu: Emulator): void {
+  if (!romPicture) return;
+  const asked = askBand(matchLayout(), romPicture);
+  emu.setSpriteBand(romPicture.sprites);
+  askedBand = devBand(romPicture.band) ?? asked;
+  emu.setViewport(askedBand);
+}
 
 function botFill(): number {
   return import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('nobots') ? 0 : BOT_FILL;
@@ -2677,6 +2714,9 @@ function wireRoom(
       // and counted a quick room down where the room was waiting on READY UP (POK-331 #13
       // review). A host's yes is a no-op.
       relay.canHost(true);
+      // The window may have turned or been resized since the last boot: the band is the
+      // match's layout's now (askForBand), and a boot is the one time the core takes it.
+      askForBand(emu);
       if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
       else await emu.reboot();
       // Last match's champion is not this match's (POK-243). PLAY AGAIN used to reload
@@ -3283,7 +3323,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     symbols: symbols ?? null,
     box: $('#screen-wrap') as HTMLElement,
     lcd: $('#canvas') as HTMLCanvasElement,
-    band: askedBand,
+    band: () => askedBand,
     field: $('#field') as HTMLCanvasElement,
     overlay: $('#overlay') as HTMLCanvasElement,
     pad: $('#pad') as HTMLElement,
@@ -3419,15 +3459,12 @@ async function main(): Promise<void> {
   // The picture past the LCD (POK-319, field.ts): the core draws a band around the
   // 240x160 from the same registers, and the ROM says how big (gBrFieldView, POK-329) --
   // read out of the very image about to boot, so a core, a ROM and a page from different
-  // deploys never disagree; a ROM that does not say gets the legacy band. The sprite
-  // window first: a core that knows it draws no sprite twice, and one that does not is
-  // asked for no more band than the window. A core without the band draws the LCD alone.
-  const picture = romBand(bytes, symbols);
-  emu.setSpriteBand(picture.sprites);
-  askedBand = devBand(picture.band) ?? picture.band;
-  emu.setViewport(askedBand);
+  // deploys never disagree; a ROM that does not say gets the legacy band. How much of it
+  // is asked for is the layout's (askForBand), measured once the playing screen is up.
+  romPicture = romBand(bytes, symbols);
 
   showScreen('playing');
+  askForBand(emu);
   if (usingPatched) await emu.startBytes(bytes);
   else await emu.start();
 

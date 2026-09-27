@@ -438,6 +438,31 @@ describe('Emulator', () => {
       expect(calls.some((c) => c.startsWith('sprites'))).toBe(false);
     });
 
+    it("a band asked while a game runs is the next boot's: the viewport is what the running game draws", async () => {
+      // PLAY AGAIN asks for the band its layout shows (field.ts askBand) before it reboots:
+      // until then the picture on screen is still the old band's, and a tap or a layout
+      // made off the new one would put the LCD in the wrong rows.
+      const { emu, calls } = await banded({ spriteBand: true });
+      emu.setSpriteBand(WINDOW);
+      const SHORT = { left: 0, top: 40, right: 16, bottom: 56 };
+      expect(emu.setViewport(SHORT), 'what the next boot draws').toEqual(SHORT);
+      expect(emu.viewport, 'nothing booted: the first boot is the one').toEqual(SHORT);
+      await emu.start(new Uint8Array([1]));
+      const boots = emu.boots;
+      expect(emu.setViewport(TALL)).toEqual(TALL);
+      expect(emu.viewport, 'still the band it booted with').toEqual(SHORT);
+      await emu.reboot();
+      expect(calls.slice(-3)).toEqual(['viewport 0,104,16,232', 'sprites 40,56', 'load /data/games/emerald.gba']);
+      expect(emu.viewport).toEqual(TALL);
+      expect(emu.boots, 'one more boot').toBe(boots + 1);
+      // No band at all: the LCD alone, from the boot that takes it.
+      emu.setViewport(null);
+      expect(emu.viewport).toEqual(TALL);
+      await emu.reboot();
+      expect(emu.viewport).toBeNull();
+      expect(calls.at(-3)).toBe('viewport 0,0,0,0');
+    });
+
     it('a window that is not 256 rows is none, and a boot clears the one before it', async () => {
       const { emu, calls } = await banded({ spriteBand: true });
       emu.setViewport(TALL);

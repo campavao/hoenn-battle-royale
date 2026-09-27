@@ -159,8 +159,10 @@ export class Emulator {
   /** The band the page asked for, and the sprite window (POK-319, POK-329). */
   private askedBand: Band | null = null;
   private sprites: SpriteBand | null = null;
-  /** The band the loaded game's texture was made with. */
-  private bootedBand: Band = { left: 0, top: 0, right: 0, bottom: 0 };
+  /** The band the loaded game's texture was made with: null, the LCD alone. */
+  private bootedBand: Band | null = null;
+  /** Games loaded so far: a boot can change the band under whoever laid out with it. */
+  private loads = 0;
   /** EWRAM and IWRAM over the heap, made once per boot (see wram()). */
   private views: { heap: Uint8Array; buffer: ArrayBufferLike; ewram: Uint8Array | null; iwram: Uint8Array | null } | null = null;
 
@@ -234,11 +236,12 @@ export class Emulator {
   // ---- the picture past the LCD (POK-319) --------------------------------------------
 
   /** Ask the core to draw a band past the LCD on every boot from now on. Takes effect
-   *  at the next boot (the core sizes its texture when it loads a game). Returns what
-   *  the core will draw, or null when this core cannot. */
+   *  at the next boot (the core sizes its texture when it loads a game), so a game
+   *  already running keeps drawing the band it was booted with (viewport). Returns what
+   *  the next boot will draw, or null when this core cannot. */
   setViewport(band: Band | null): Band | null {
     this.askedBand = band ? { ...band } : null;
-    return this.viewport;
+    return this.nextBand();
   }
 
   /** The sprite window the band is drawn with, on every boot from now on (POK-329): the
@@ -268,10 +271,23 @@ export class Emulator {
     return this.m._brSetSpriteBand && this.sprites ? { ...this.sprites } : null;
   }
 
-  /** The band the core draws past the LCD: null on a core without the export or when
-   *  none was asked for. The canvas is (240 + left + right) x (160 + top + bottom) with
-   *  the LCD at (left, top). */
+  /** The band the core draws past the LCD: the one the loaded game was booted with --
+   *  a band asked for since is the next boot's -- or, before any, the one the first boot
+   *  will draw. Null on a core without the export or when none was asked for. The canvas
+   *  is (240 + left + right) x (160 + top + bottom) with the LCD at (left, top). */
   get viewport(): Band | null {
+    if (this.bootedPath) return this.bootedBand ? { ...this.bootedBand } : null;
+    return this.nextBand();
+  }
+
+  /** Games loaded so far, for anyone laid out with a boot's band (field.ts). */
+  get boots(): number {
+    return this.loads;
+  }
+
+  /** What the next boot draws: the band asked for -- on a core without the sprite window,
+   *  no more of it than the window. */
+  private nextBand(): Band | null {
     const b = this.askedBand;
     if (!b || !this.m._brSetViewport) return null;
     const w = this.sprites;
@@ -323,12 +339,13 @@ export class Emulator {
       /* no autosave dir yet */
     }
     // The band is a load-time size: the core builds its texture in loadGame.
-    const b = this.viewport ?? { left: 0, top: 0, right: 0, bottom: 0 };
-    this.m._brSetViewport?.(b.left, b.top, b.right, b.bottom);
+    const b = this.nextBand();
+    this.m._brSetViewport?.(b?.left ?? 0, b?.top ?? 0, b?.right ?? 0, b?.bottom ?? 0);
     // ...and the sprite window it is drawn with, or none, clearing one a boot before
     // this left in the core.
     this.applySpriteBand();
     this.bootedBand = b;
+    this.loads++;
     // loadGame builds a new core, and its RAM with it: the old views point at nothing.
     this.views = null;
     if (!this.m.loadGame(path)) throw new Error('loadGame failed');
@@ -646,7 +663,7 @@ export class Emulator {
     const ptr = this.m._brPicturePtr?.() ?? 0;
     const stride = this.m._brPictureStride?.() ?? 0;
     if (!ptr || !stride) return null;
-    const b = this.bootedBand;
+    const b = this.bootedBand ?? { left: 0, top: 0, right: 0, bottom: 0 };
     const width = 240 + b.left + b.right;
     const height = 160 + b.top + b.bottom;
     const data = new Uint8Array(width * height * 4);

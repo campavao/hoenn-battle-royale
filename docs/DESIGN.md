@@ -257,7 +257,9 @@ real BG and OBJ state -- tile animation, people, the fog's own blend. POK-319 dr
 tiles on 256×512 BGs, pos.y-4..pos.y+27, and the ROM declares the picture it feeds in
 `gBrFieldView`: 256×496, the LCD at row 104 -- the whole ring but the one spare row a
 step needs, the player's rows -11..+19, which covers a portrait phone above and below
-the pad (the page reads it out of the patched image and asks the core for exactly that;
+the pad (the page reads it out of the patched image and asks the core for the part of it
+the match's layout shows, measured before each boot -- all of it on a portrait phone, the
+sprite window alone on a desktop or a phone on its side, whose picture fills the height;
 a ROM without it gets the legacy band). Past the 256 rows around the LCD where each 8-bit
 OAM y has one reading (the sprite window, 40 above and 56 below) the core draws only the
 512-row BGs and the weather; the people out there are the overlay's. The ROM's part

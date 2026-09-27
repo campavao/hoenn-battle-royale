@@ -6,21 +6,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
+import { romExists, romHashParam, romPath, romView } from './symbols';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
-
-/** The picture the ROM declares (POK-329): `struct BrFieldView` (include/br/br_field.h),
- *  six u16s at gBrFieldView, read here off the ROM file the page boots -- a spec cannot
- *  import field.ts's romBand. */
-function romView(): { viewport: { left: number; top: number; right: number; bottom: number }; sprites: { top: number; bottom: number } } {
-  const at = loadSymbols().gBrFieldView;
-  if (at === undefined) throw new Error('no gBrFieldView in br-symbols.json: run tools/br/dev-patch.sh on a build that has it');
-  const rom = fs.readFileSync(romPath());
-  const u16 = (i: number) => rom.readUInt16LE(at - 0x08000000 + 2 * i);
-  return { viewport: { left: u16(0), top: u16(1), right: u16(2), bottom: u16(3) }, sprites: { top: u16(4), bottom: u16(5) } };
-}
 
 // An iPhone-ish viewport, and the same device on its side.
 const PORTRAIT = { width: 390, height: 844 };
@@ -142,6 +131,27 @@ test('a desktop keeps most of the window for the game, beside the docked sheet',
     expect(sheet.width, "the sheet at the picture's own size").toBe(240);
     expect(game.x, 'the game beside it, not under it').toBeGreaterThanOrEqual(sheet.x + sheet.width - 1);
     expect(game.width, 'and the rest of the window is the game').toBeGreaterThanOrEqual(HALF.width - 240 - 2);
+    // The core draws the rows this layout shows past the picture and no more (POK-329,
+    // field.ts askBand), measured before the boot as the match lays it out -- beside the
+    // docked sheet -- in eights, never under the sprite window nor past the ROM's band:
+    // here 128 rows above the LCD and 129 below, so all 104 of the ROM's above, 136 below.
+    await page.waitForSelector('body.in-match', { timeout: 60_000 });
+    const shows = await page.evaluate(() => {
+      const box = document.querySelector('#screen-wrap') as HTMLElement;
+      const scale = Math.min(box.clientWidth / 240, box.clientHeight / 160);
+      const rows = Math.ceil(box.clientHeight / scale);
+      const lcdRow = Math.max(0, Math.min(Math.round((box.clientHeight / scale - 160) / 2), rows - 160));
+      return { top: lcdRow, bottom: rows - lcdRow - 160 };
+    });
+    const rom = romView();
+    const eights = (n: number, window: number, most: number) => Math.min(most, Math.max(window, Math.ceil(n / 8) * 8));
+    const asked = await page.evaluate(() => (window as unknown as { __hbr: { emu: { viewport: unknown } } }).__hbr.emu.viewport);
+    expect(asked, `the rows the docked layout shows (${shows.top} above, ${shows.bottom} below)`).toEqual({
+      ...rom.viewport,
+      top: eights(shows.top, rom.sprites.top, rom.viewport.top),
+      bottom: eights(shows.bottom, rom.sprites.bottom, rom.viewport.bottom),
+    });
+    expect((asked as { bottom: number }).bottom, "fewer than the ROM's 232 below").toBeLessThan(rom.viewport.bottom);
 
     // A wide window has the room for the sheet at twice that, and the game still gets more.
     await page.setViewportSize(FULL);

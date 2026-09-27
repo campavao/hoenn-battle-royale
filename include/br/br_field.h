@@ -28,9 +28,14 @@
 // it, and the core reads each sprite's y against it. The VIEW is the band the core is
 // asked to draw, which may run past the window once BG1..3 are 512 rows tall (the core
 // draws only those, and the weather, out there). The ROM declares both in gBrFieldView
-// and the page asks the core for exactly that, so a core, a ROM and a page from
-// different deploys never disagree about the picture: a ROM without the symbol gets
-// the legacy band, 0/40/16/56 with the window 40/56.
+// and the page asks the core for the window and for no more view than that, so a core,
+// a ROM and a page from different deploys never disagree about the picture: a ROM
+// without the symbol gets the legacy band, 0/40/16/56 with the window 40/56. Of the
+// view the page asks only for the rows its layout shows past the LCD (web/src/field.ts
+// askBand, measured before each boot): a desktop, or a phone on its side, shows none of
+// them and gets the window alone; a portrait phone gets the whole view. The rows are
+// the core's to draw and the page's to upload every frame, so a row nobody sees is not
+// asked for.
 
 // THE RING (POK-329). BG1..3 are 256x512 text BGs, so the ring is 32x64 tiles: 16
 // metatile columns (pos.x .. pos.x+15, as pret's) and 32 metatile rows, pos.y -

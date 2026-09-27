@@ -37,6 +37,17 @@ export function romExists(): boolean {
   return fs.existsSync(romPath());
 }
 
+/** The picture the ROM declares (POK-329): `struct BrFieldView` (include/br/br_field.h),
+ *  six u16s at gBrFieldView, read here off the ROM file the page boots -- a spec cannot
+ *  import field.ts's romBand. */
+export function romView(): { viewport: { left: number; top: number; right: number; bottom: number }; sprites: { top: number; bottom: number } } {
+  const at = loadSymbols().gBrFieldView;
+  if (at === undefined) throw new Error('no gBrFieldView in br-symbols.json: run tools/br/dev-patch.sh on a build that has it');
+  const rom = fs.readFileSync(romPath());
+  const u16 = (i: number) => rom.readUInt16LE(at - 0x08000000 + 2 * i);
+  return { viewport: { left: u16(0), top: u16(1), right: u16(2), bottom: u16(3) }, sprites: { top: u16(4), bottom: u16(5) } };
+}
+
 /** The host presses START once `members` are seated (POK-320: a hosted room waits for
  *  its host, the way Cam asked; only quick play and the daily start themselves). The
  *  seats are counted first because a room that fills with bots has START lit before

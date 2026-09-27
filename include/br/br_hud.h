@@ -64,6 +64,11 @@
 // shows its own blank box, not the corner. A HUD window whose first cell is no longer
 // its own (somebody's clear took it) is put again.
 //
+// The picture past the LCD (POK-319, POK-329, br_field.h) never shows the HUD twice:
+// BG0's tilemap is one 256x256 screen block, and past the sprite window's 256 rows the
+// core draws only 512-row BGs (the field's BG1..3) and the weather, so the corner and
+// the ticker are on the LCD's rows and nowhere else.
+//
 // The engine wipes every window on a map load and before a battle. BrHud_Tick sees
 // the windows are gone (tileData NULL or the slot re-used) and re-adds them the next
 // overworld frame; it removes them itself when the overworld stops, so the battle's
