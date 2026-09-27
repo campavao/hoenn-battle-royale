@@ -742,6 +742,15 @@ static void HoldLineForReach(void)
 // A on the cell we stand on or the one we face. The loot has no script of its own --
 // it is spawned, not placed by a map -- so the A-press is read here rather than
 // through the field's own interaction path.
+//
+// And the press is the piece's alone: Kanto's "A takes it", nothing more. BrFrame runs
+// before the field reads its keys, and the field's own A went on past a ball's object
+// (GetInteractedObjectEventScript has no script for it) to the tile's bg event, its
+// metatile, the water: a ball on a hidden item took the item too, one spilled on the
+// water beside the shore asked about SURF, and standing on one we still talked to
+// whoever we faced (loot-press-alone.txt). So it is taken out of this frame's keys,
+// whatever Take makes of it -- a full ring or a full pocket leaves the piece lying and
+// the press spent. A ghost is not reached here: A goes past it, as a step does.
 static void TryTake(void)
 {
     struct BrLootItem *it;
@@ -749,8 +758,11 @@ static void TryTake(void)
     if (!JOY_NEW(A_BUTTON) || ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked())
         return;
     it = PieceInReach();
-    if (it != NULL)
-        Take(it);
+    if (it == NULL)
+        return;
+    gMain.newKeys &= ~A_BUTTON;
+    gMain.newAndRepeatedKeys &= ~A_BUTTON;
+    Take(it);
 }
 
 // ---- Hoenn's own trainers -------------------------------------------------------

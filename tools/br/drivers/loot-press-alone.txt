@@ -1,0 +1,77 @@
+# loot-press-alone: A on a piece of loot takes it and does nothing else (POK-328 audit).
+# Kanto's rule: "face a piece (or stand on it) ... A takes it."
+#
+# BrFrame runs before the field reads its keys, so TryTake (br_loot.c) had the ball
+# before the field saw the press -- and then the field saw it too. The ball's own object
+# has no script (GetInteractedObjectEventScript returns NULL for everything the match
+# puts down), so the press went on past it: to the tile's bg event, its metatile script,
+# the water's SURF question. A ball on a hidden item took the hidden item too; a ball
+# spilled onto the water beside the shore took the ball and asked "Would you like to use
+# SURF?" in the same frame. Standing on a ball, the press took it and still talked to
+# whatever we faced.
+#
+# Route 104's hidden SUPER POTION is at (7,6), open ground on every side. We boot at
+# (7,7) with a match on and face it: a ball on it, then a ball under us, and each press
+# must take the ball and leave the item hidden -- the bag's ITEMS pocket empty and
+# FLAG_HIDDEN_ITEM_ROUTE_104_SUPER_POTION (0x220: flags + 0x44, bit 0) clear. The control
+# is the third press, with nothing in reach: it finds the SUPER POTION (22), so the
+# first two had it in front of them. One without the other proves nothing.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 104 (group 0, num 19), x=7, y=7
+pokebytes gBrMailbox+0x2018 81 00 00 13 07 00 07 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 19
+expect u16 *gSaveBlock1Ptr 7
+expect u16 *gSaveBlock1Ptr+2 7
+expect u8 gPlayerPartyCount 1
+expect u16 *gSaveBlock1Ptr+0x560 0
+expectbits u8 *gSaveBlock1Ptr+0x12B4 1 0
+# a turn to face north, at the hidden item
+hold UP 8
+wait 20
+# a ball on it -- (14,13) in the engine's coordinates, which are the map's plus 7 --
+# seat 1's PIKACHU (25) at 5, key 0x0101, row 0
+pokebytes gBrLoot 01 01 0E 00 0D 00 19 00 00 13 05 01 FF 00 00 00 00 00 00 00
+wait 30
+expect u8 gBrLoot+0xA1 1
+tap A
+wait 60
+shot ball-in-front
+expect u8 gBrLoot+0xA2 1
+expect u8 gBrLoot+0x0B 0
+expect u8 gPlayerPartyCount 2
+expect u16 *gSaveBlock1Ptr+0x560 0
+expectbits u8 *gSaveBlock1Ptr+0x12B4 1 0
+expect u32 gMain+4 CB2_Overworld+1
+# a ball under us at (14,14), still facing the item: key 0x0102, row 1
+pokebytes gBrLoot+0x14 02 01 0E 00 0E 00 19 00 00 13 05 01 FF 00 00 00 00 00 00 00
+wait 30
+expect u8 gBrLoot+0xA1 1
+tap A
+wait 60
+shot ball-underfoot
+expect u8 gBrLoot+0xA2 2
+expect u8 gBrLoot+0x1F 0
+expect u8 gPlayerPartyCount 3
+expect u16 *gSaveBlock1Ptr+0x560 0
+expectbits u8 *gSaveBlock1Ptr+0x12B4 1 0
+expect u32 gMain+4 CB2_Overworld+1
+# the control: nothing in reach, and the same press finds the item
+wait 60
+tap A
+wait 60
+shot control
+expect u16 *gSaveBlock1Ptr+0x560 22
+# through the fanfare and "put away ... in the ITEMS POCKET", and the flag is set
+wait 240
+tap A
+wait 120
+tap A
+wait 120
+tap A
+wait 60
+shot put-away
+expectbits u8 *gSaveBlock1Ptr+0x12B4 1 1
+say loot press alone ok

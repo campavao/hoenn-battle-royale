@@ -62,6 +62,14 @@ dev server on 5199 and fails on the ROM before the switch.
   positions, three steps up from a map load among them -- until Shuffle_End's first copy.
   It fills halfwords now (`shuffle-vofs.txt`, Rusturf Tunnel's HIKER MIKE). The other
   transitions store whole u16s.
+* **A on a ball also did whatever lay past it.** `TryTake` takes the piece in reach
+  before the field reads its keys, and the field's own A went on past the ball's object
+  (which has no script) to the tile's bg event, its metatile, the water: a ball on a
+  hidden item took the item too, one spilled on the water beside the shore asked about
+  SURF, and standing on one we still talked to whoever we faced. The press is the
+  piece's alone now (`loot-press-alone.txt`: a ball on Route 104's hidden SUPER POTION,
+  then one underfoot, and the item stays hidden until a third press with nothing in
+  reach finds it). A ghost is not solid: A still goes past it, as a step does.
 
 **Accepted as is:**
 

@@ -307,7 +307,9 @@ static const u8 *GetInteractedObjectEventScript(struct MapPosition *position, u8
     // A ghost or a ball the match put down has no template, so no script: the lookup
     // below read one through a NULL template, out of the BIOS's open bus, and ran it --
     // loot-full-pocket.txt's A on a ball warped into a house. A ball's press is
-    // br_loot.c's own (TryTake); a ghost has nothing to say to one.
+    // br_loot.c's own (TryTake), which spends it, so the field never sees it
+    // (loot-press-alone.txt). A ghost is a drawing, not solid: A goes past it to
+    // whatever is there -- a sign, the water -- as a step does.
     if (BrGhosts_Insubstantial(gObjectEvents[objectEventId].localId))
         return NULL;
 #endif
