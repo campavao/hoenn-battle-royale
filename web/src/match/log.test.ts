@@ -99,6 +99,60 @@ describe('the match log', () => {
     expect(kept[0].seed).toBe(KEEP + 1);
   });
 
+  describe('a stall (POK-328)', () => {
+    it('is written down with the line the overlay showed and the last types the page heard', () => {
+      const log = new MatchLog();
+      expect(log.stall(500, 'core', 'core · patch 3', '14:0'), 'nothing to file before a start').toBeNull();
+      log.note(START, 1_000);
+      for (let i = 0; i < 5; i++) log.note({ t: 'busy', seat: i, kind: 'battle' }, 2_000 + i);
+      log.note({ t: 'land', seat: 1, map: { group: 14, num: 0 }, x: 5, y: 9 }, 3_000);
+      log.note({ t: 'ring', seat: 0, phase: 2, sx: 20, sy: 10, r: 8 }, 4_000);
+      log.note({ t: 'busy', seat: 0 }, 5_000);
+
+      const round = log.stall(31_000, 'rom', 'rom · patch 3 · cb2 CB2_Overworld · map 14:0', '14:0') as LoggedMatch;
+      expect(round.events.at(-1)).toEqual({
+        at: 30,
+        t: 'stall',
+        kind: 'rom',
+        detail: 'rom · patch 3 · cb2 CB2_Overworld · map 14:0',
+        map: '14:0',
+        last: ['start', 'busy', 'land', 'ring', 'busy'],
+      });
+    });
+
+    it('carries back the last eight types only', () => {
+      const log = new MatchLog();
+      log.note(START, 0);
+      for (const seat of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+        log.note({ t: 'out', seat }, seat);
+        log.note({ t: 'busy', seat, kind: 'battle' }, seat);
+      }
+      const round = log.stall(10_000, 'core', 'core') as LoggedMatch;
+      expect(round.events.at(-1)?.last).toEqual(['out', 'busy', 'out', 'busy', 'out', 'busy', 'out', 'busy']);
+    });
+
+    it('is written down after the winner too: the Hall of Fame runs on a ROM that can stop', () => {
+      const log = new MatchLog();
+      log.note(START, 0);
+      log.note({ t: 'win', seat: 0 }, 60_000);
+      const round = log.stall(70_000, 'rom', 'rom') as LoggedMatch;
+      expect(round.events.map((e) => e.t)).toEqual(['win', 'stall']);
+    });
+
+    it('files the round again in place of the one filed before it, not beside it', () => {
+      const disk = store();
+      const log = new MatchLog();
+      saveMatch({ started: 1, seed: 7, roster: {}, seats: 2, events: [], ran: 60 }, disk);
+      log.note(START, 0);
+      log.note({ t: 'win', seat: 0 }, 60_000);
+      saveMatch(log.current(60_000) as LoggedMatch, disk);
+      saveMatch(log.stall(70_000, 'rom', 'rom') as LoggedMatch, disk);
+      const kept = loadLog(disk);
+      expect(kept.map((m) => m.seed)).toEqual([4242, 7]);
+      expect(kept[0].events.map((e) => e.t)).toEqual(['win', 'stall']);
+    });
+  });
+
   it('treats an unreadable log as an empty one', () => {
     const disk = store();
     disk.raw.set('hbr:log', '{not json');

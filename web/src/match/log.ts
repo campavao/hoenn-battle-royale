@@ -15,13 +15,14 @@
 // It lives in localStorage, like the career: one device's own record, best effort,
 // never authority for anything. The last few matches, not all of them -- a log nobody
 // can lose is worth less than a page that still loads.
+import type { StallKind } from '../emu/watchdog';
 import type { Msg } from '../net/wire';
 
 /** One thing that happened, in the order it happened. `at` is seconds from the start,
  *  because a log anybody reads is read in minutes-and-seconds, not epoch millis. */
 export interface LogEvent {
   at: number;
-  t: 'drop' | 'ring' | 'kill' | 'out' | 'win';
+  t: 'drop' | 'ring' | 'kill' | 'out' | 'win' | 'stall';
   /** Who it happened to (the dropper, the loser, the champion). */
   seat?: number;
   /** Who did it, for a kill. */
@@ -32,6 +33,12 @@ export interface LogEvent {
   map?: string;
   x?: number;
   y?: number;
+  /** For a stall (POK-328): which stop the watchdog called (emu/watchdog.ts), the line
+   *  the overlay showed -- the build, the callbacks, the phase -- and the last message
+   *  types the page heard before it, oldest first. */
+  kind?: StallKind;
+  detail?: string;
+  last?: string[];
 }
 
 /** A finished round, as much of it as a page can see. */
@@ -52,6 +59,8 @@ export interface LoggedMatch {
  *  afford to, and five rounds is about 40 KB. */
 export const KEEP = 5;
 const KEY = 'hbr:log';
+/** How many message types a stall carries back. */
+const LAST = 8;
 
 export class MatchLog {
   private started = 0;
@@ -62,10 +71,17 @@ export class MatchLog {
   private events: LogEvent[] = [];
   private winner: number | undefined;
   private ended = false;
+  /** The last few message types heard, a run of one type kept once: what a stall says
+   *  the page was hearing when the game stopped. */
+  private recent: string[] = [];
 
   /** Every message the page sees, in the order it sees it. `now` is the page clock
    *  (performance.now), `names` answers what the roster calls a seat. */
   note(msg: Msg, now: number, names?: (seat: number) => string): void {
+    if (this.recent[this.recent.length - 1] !== msg.t) {
+      this.recent.push(msg.t);
+      if (this.recent.length > LAST) this.recent.shift();
+    }
     switch (msg.t) {
       case 'start':
         this.started = Date.now();
@@ -106,8 +122,17 @@ export class MatchLog {
     }
   }
 
+  /** The game stopped under us (POK-328), written down even after the winner: the
+   *  Hall of Fame and the results run on a ROM that can stop as well. Answers the round
+   *  so far, to be filed now -- a game that stopped never reaches the verdict that files
+   *  it. Null before a `start`. */
+  stall(now: number, kind: StallKind, detail: string, map?: string): LoggedMatch | null {
+    this.push(now, { t: 'stall', kind, detail, ...(map ? { map } : {}), last: [...this.recent] });
+    return this.current(now);
+  }
+
   private push(now: number, event: Omit<LogEvent, 'at'>): void {
-    if (this.startedAt === undefined || (this.ended && event.t !== 'win')) return;
+    if (this.startedAt === undefined || (this.ended && event.t !== 'win' && event.t !== 'stall')) return;
     this.events.push({ at: Math.max(0, Math.round((now - this.startedAt) / 1000)), ...event });
   }
 
@@ -151,9 +176,12 @@ export function loadLog(store: Pick<Storage, 'getItem' | 'setItem'> = localStora
   }
 }
 
-/** Files a finished round, keeping the last KEEP. Answers what is now on disk. */
+/** Files a round, keeping the last KEEP. A round filed again -- after a stall, or a
+ *  stall after the verdict (POK-328) -- replaces what it filed before. Answers what is
+ *  now on disk. */
 export function saveMatch(match: LoggedMatch, store: Pick<Storage, 'getItem' | 'setItem'> = localStorage): LoggedMatch[] {
-  const kept = [match, ...loadLog(store)].slice(0, KEEP);
+  const others = loadLog(store).filter((row) => row.started !== match.started || row.seed !== match.seed);
+  const kept = [match, ...others].slice(0, KEEP);
 
   try {
     store.setItem(KEY, JSON.stringify(kept));
