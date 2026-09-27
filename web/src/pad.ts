@@ -83,3 +83,65 @@ export function loadStickMap(storage: Pick<Storage, 'getItem'> | null = typeof l
     return null;
   }
 }
+
+/** What pollPads needs of the page: the window's pad events, navigator.getGamepads(), and
+ *  whether the poll is the page's clock as well as the pad's (`always`). */
+export interface PadWatch {
+  win: EventTarget;
+  pads: () => readonly (Gamepad | null)[];
+  always: boolean;
+}
+
+/** Windows, where the poll has a second job (pollPads): userAgentData where the browser
+ *  has it, the user-agent string where it does not (Firefox, Safari). */
+export function onWindows(nav: { userAgent: string; userAgentData?: { platform?: string } }): boolean {
+  const platform = nav.userAgentData?.platform;
+  return platform ? platform === 'Windows' : /Windows/.test(nav.userAgent);
+}
+
+/** Runs `poll` every 16 ms while at least one pad is connected, and not at all otherwise
+ *  (POK-247): sixty wakeups a second on a phone that has never seen a pad, next to its
+ *  ~170 others. A browser shows a page a pad once somebody presses it, and says so with
+ *  gamepadconnected; a pad the page can already see is polled from the start. The last
+ *  one going gets one more poll, which lets go of whatever it held. `note` and `gone`
+ *  hear the events as before. Returns a stop.
+ *
+ *  With `always` -- Windows -- it polls from load to unload, pad or no pad: it is the
+ *  page's only timer under 32 ms, and Chromium on Windows keeps 1 ms timer resolution
+ *  only while one exists. The core's pthread paces its frames with timed waits, so
+ *  without it they land on the OS's 15.6 ms tick: frame p95 31/26/30.5/25.5 ms against
+ *  24/18.5/24/19 with it, alternating 20 s windows of one match. A phone has no such
+ *  tick to keep the frames off. */
+export function pollPads(poll: () => void, note: (e: GamepadEvent) => void, gone: (e: GamepadEvent) => void, on: PadWatch): () => void {
+  const present = new Set<number>();
+  for (const pad of on.pads()) if (pad) present.add(pad.index);
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const settle = () => {
+    const want = on.always || present.size > 0;
+    if (want && timer === null) timer = setInterval(poll, 16);
+    if (!want && timer !== null) {
+      clearInterval(timer);
+      timer = null;
+      poll();
+    }
+  };
+  const connected = (e: Event) => {
+    present.add((e as GamepadEvent).gamepad.index);
+    note(e as GamepadEvent);
+    settle();
+  };
+  const disconnected = (e: Event) => {
+    present.delete((e as GamepadEvent).gamepad.index);
+    gone(e as GamepadEvent);
+    settle();
+  };
+  on.win.addEventListener('gamepadconnected', connected);
+  on.win.addEventListener('gamepaddisconnected', disconnected);
+  settle();
+  return () => {
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+    on.win.removeEventListener('gamepadconnected', connected);
+    on.win.removeEventListener('gamepaddisconnected', disconnected);
+  };
+}
