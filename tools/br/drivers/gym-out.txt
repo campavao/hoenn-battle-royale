@@ -88,6 +88,9 @@ expect u8 gBrMatch 3
 expect u8 gBrRing+7 1
 expect u8 *gSaveBlock1Ptr+4 14
 expect u8 *gSaveBlock1Ptr+5 0
+# ...still on the field's own callback, not stopped on some other screen. A symbol as the
+# value, so the check holds in both builds, which put CB2_Overworld in different places.
+expect u32 gMain+4 CB2_Overworld+1
 # ...and the ROM goes on running: its heartbeat, gBrMailbox.frame (one a main-loop pass,
 # what the page watches), counts the next 300 frames. Zeroed first, so the count is this
 # stretch's alone; nothing in the ROM reads it.

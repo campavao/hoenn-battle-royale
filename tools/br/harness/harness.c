@@ -269,8 +269,13 @@ static int runLine(char* line) {
     if ((strcmp(a, "expect") == 0 || strcmp(a, "expectge") == 0 || strcmp(a, "expectle") == 0 || strcmp(a, "expectne") == 0) && n >= 4) {
         int ge = a[6] == 'g', le = a[6] == 'l', ne = a[6] == 'n';
         int w = widthOf(b); uint32_t addr, want;
+        char* rest;
         if (!w || !parseAddr(c, &addr)) return 4;
-        want = (uint32_t)strtoul(d, NULL, 0);
+        // The value is a number, or else read the way an addr is: `CB2_Overworld+1` is
+        // the field's callback2 in whichever build this is (the two builds put it at
+        // different addresses, so a number here would pin one of them).
+        want = (uint32_t)strtoul(d, &rest, 0);
+        if (*rest != 0 && !parseAddr(d, &want)) return 4;
         uint32_t got = readW(w, addr);
         int bad = ge ? got < want : le ? got > want : ne ? got == want : got != want;
         if (bad) { printf("line %d: EXPECT FAILED %s at 0x%08X: got 0x%X want %s0x%X\n", lineNo, b, addr, got, ge ? ">= " : le ? "<= " : ne ? "!= " : "", want); return 1; }

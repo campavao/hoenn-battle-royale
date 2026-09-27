@@ -34,7 +34,7 @@ Driver grammar (one action per line, `#` comments):
 | `hold <KEYS> <frames>` | hold `A B SELECT START RIGHT LEFT UP DOWN R L` (join with `+`) |
 | `tap <KEYS>` | hold 4 frames, release |
 | `shot <name>` | write `<name>.png` |
-| `expect u8/u16/u32 <addr> <value>` | assert equal; addr is `0xHEX`, a symbol from `br-symbols.json`, or `sym+0xOFF` |
+| `expect u8/u16/u32 <addr> <value>` | assert equal; addr is `0xHEX`, a symbol from `br-symbols.json`, or `sym+0xOFF`. The value is a number, or else resolved like an addr, so `expect u32 gMain+4 CB2_Overworld+1` is "back on the field" in either build (the same goes for the three below) |
 | `expectge u8/u16/u32 <addr> <value>` | assert got >= value |
 | `expectle u8/u16/u32 <addr> <value>` | assert got <= value |
 | `expectne u8/u16/u32 <addr> <value>` | assert got != value |
