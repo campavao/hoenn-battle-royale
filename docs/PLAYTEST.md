@@ -40,6 +40,20 @@ moment that needs more, cut a contact sheet: `ffmpeg -ss <t> -t 10 -i <video> -v
 * Battle animations are off by default at boot (01:33), with the text speed that already
   was.
 
+**Covered since** (POK-327): `web/e2e/play.spec.ts` plays this video's match at the
+keyboard, in Chromium and Firefox -- the grass, a Safari ball, the drop map, CALVIN, the
+bleed, the results -- with a shot a step and the picture checked frame by frame, and
+`tools/br/drivers/play-match.txt` plays the same match on the ROM alone. Reverted one at
+a time, the fixes above and the squish's go red in the spec (object-fit at the boot, the
+OBJ-only fade gate in the throw, the pick clip at the drop, `brHeadless` after the first
+bot fight); the offScreen-only overlay cannot, because the ROM takes a beaten trainer's
+object off the map rather than leaving an invisible sprite for the overlay to draw. The spec found two more on its first runs, both in
+`field.ts`: a caught mon's ball fades to white on its own OBJ palette and the ROM clears
+the fade's mask on its last step, so the finished fade read as white over everything and
+the map past the picture stayed white for up to a second after a catch (`4997cb21e`);
+and a battle's last fade, a fast one to black, left that map lit past a picture gone
+black for about 0.7 s (`23e4a60bc`).
+
 **Filed:** POK-321 analog sticks on a non-standard pad, POK-322 bots' starting potions,
 POK-323 the world moving during a battle, POK-324 ticker noise, POK-325 the ring's target
 in the game, POK-326 fog at spawn in Mossdeep, POK-327 a test that plays a match, and from

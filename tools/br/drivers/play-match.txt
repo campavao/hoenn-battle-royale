@@ -1,0 +1,246 @@
+# play-match: web/e2e/play.spec.ts's match on the ROM alone (POK-327) -- the Safari
+# opening from a seeded boot, a wild battle and a ball thrown, the drop map and a pick,
+# the landing, YOUNGSTER CALVIN talked to and beaten, the fog's bleed, and the OUT. The
+# drivers that pin each beat on its own (catch-pages, safari-drop, trainer-drop,
+# ring-outside, gym-out) never chained them; this does, with play.spec's own numbers, so
+# the page's spec and this one are the same match, one with a screen and one without.
+#
+# What the page does here is done by hand: the seed goes into gBrMatch before the boot
+# (app.ts, solo), and START, CLOCK, LAND and RING are written into the mailbox as the
+# director would. Every fight is called the way the drivers call theirs. A shot a step.
+#
+# SEED 5376 deals seat 0 cell 21 of br_match.c's sSafariCells: SAFARI ZONE SOUTHEAST
+# (15,14), tall grass. `#safari=60&fog=20`. `#land=MAP_ROUTE102,36,16`: three tiles right
+# of CALVIN's column (data/maps/Route102/map.json, (33,14), local id 2).
+wait 30
+poke u32 gBrMatch+8 5376
+# boot mode 0x82: the Safari Zone, with a test TREECKO
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 260
+say boot
+expect u8 gBrMatch 1
+expect u8 *gSaveBlock1Ptr+4 26
+expect u8 *gSaveBlock1Ptr+5 13
+expect u16 *gSaveBlock1Ptr 15
+expect u16 *gSaveBlock1Ptr+2 14
+expect u8 gPlayerPartyCount 1
+expect u8 gNumSafariBalls 30
+# the seed's theme, on the ticker (zone-theme.txt)
+expectge u8 gBrHud+0x0A 1
+expect u8 gBrHud+0x46 0xBB
+shot boot
+wait 140
+say grass
+# Four tiles west and back: the grass gives a Safari battle on the way back, in both
+# builds (gBattleTypeFlags 0x84 = SAFARI | WILD... the 0x80 bit is the Safari's).
+hold LEFT 40
+wait 10
+hold RIGHT 40
+wait 300
+expectne u32 gMain+4 CB2_Overworld+1
+expectbits u32 gBattleTypeFlags 0x80 0x80
+shot wild
+say throw
+# Through the intro on B, then the foe at 1 HP (play.ts's `weak` rig) and A on BALL.
+tap B
+wait 40
+tap B
+wait 40
+tap B
+wait 40
+tap B
+wait 40
+tap B
+wait 40
+shot menu
+poke u16 gBattleMons+0x80 1
+tap A
+# The throw, the shakes, Gotcha! and the Pokedex's page are gone (catch-pages.txt); the
+# modern build runs the same catch slower, so the presses go on past it on both.
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+wait 300
+shot caught
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 gNumSafariBalls 29
+expect u8 gPlayerPartyCount 2
+say drop
+# START (seed 5376, one row, safari 60, fog 20, seat 0's fallback spawn the landing
+# cell) and CLOCK 0: the opening is over, and the drop map goes up.
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 00 15 00 00 01 3C 00 14 00 00 00 00 11 24 00 10 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 4
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 200
+expect u8 gBrMatch 2
+expect u8 gNumSafariBalls 0
+expect u8 gBrPick 1
+expectne u32 gMain+4 CB2_Overworld+1
+shot drop-map
+# A takes the section under the cursor; PICK goes out from seat 0...
+tap A
+wait 150
+expectmsg 24 u8 0 0
+shot picked
+# ...and the host's LAND {seat 0, 0:17, (36,16)}.
+pokebytes gBrMailbox+0x1098 19 0A 07 00 00 00 00 11 24 00 10 00
+poke u16 gBrMailbox+0x0C 3
+wait 200
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 gBrPick 0
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 17
+expect u16 *gSaveBlock1Ptr 36
+expect u16 *gSaveBlock1Ptr+2 16
+shot landed
+say trainer
+# Under CALVIN: a hold of 8 frames is a turn, then a tile. Three west, one north.
+hold LEFT 8
+wait 20
+hold LEFT 8
+wait 20
+hold LEFT 8
+wait 20
+hold LEFT 8
+wait 20
+hold UP 8
+wait 20
+hold UP 8
+wait 20
+expect u16 *gSaveBlock1Ptr 33
+expect u16 *gSaveBlock1Ptr+2 15
+expect u8 gBrLoot+0xA3 0
+shot face-to-face
+# Talk, through his challenge and the intro to the action menu...
+tap A
+wait 240
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+expectne u32 gMain+4 CB2_Overworld+1
+expect u32 gBattleTypeFlags 0xC
+shot trainer-battle
+# ...and the fight called: FIGHT, the first move, the turn, then out on B (A on the field
+# would take his ball, which lands in front of us).
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+shot trainer-beaten
+# Back on the field, the thing POK-328 is about, and CALVIN gone with his team where he
+# stood.
+expect u32 gMain+4 CB2_Overworld+1
+expectge u8 gBrLoot+0xA3 1
+expectge u8 gBrLoot+0xA0 1
+say bleed
+# RING, phase 4, centred on (25,12) with radius 1: Route 102 is outside, in the fog.
+pokebytes gBrMailbox+0x10D8 0C 0A 07 00 00 00 04 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 4
+wait 30
+expect u8 gBrRing 1
+expect u8 gBrRing+5 1
+wait 480
+expectge u16 gBrRing+10 2
+expect u8 gBrRing+7 0
+shot bleed
+say out
+# The last ring, fog everywhere (a negative radius), and a party at 1 HP: the next bite
+# is the OUT.
+pokebytes gBrMailbox+0x1118 0C 0A 07 00 00 00 05 19 0C FF 00 00
+poke u16 gBrMailbox+0x0C 5
+wait 10
+poke u16 gPlayerParty+0x56 1
+poke u16 gPlayerParty+0xBA 1
+wait 300
+expect u8 gBrMatch 3
+expect u8 gBrRing+7 1
+# OUT, type 9, from seat 0
+expectmsg 9 u8 0 0
+shot out
+say play match ok

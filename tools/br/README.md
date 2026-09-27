@@ -25,6 +25,13 @@ is checked one of three ways:
 
 `drive-all.sh --lint` checks the markers without running anything.
 
+Most drivers pin one beat. `play-match` plays a whole match on the ROM -- the seeded
+Safari opening, a wild battle and a ball, the drop map and a pick, CALVIN talked to and
+beaten, the fog's bleed, the OUT -- with `web/e2e/play.spec.ts`'s own numbers (seed
+5376, `#safari=60&fog=20`, `#land=MAP_ROUTE102,36,16`), standing in for the page by
+writing START, CLOCK, LAND and RING into the mailbox. The two are one match, with and
+without a screen: change the seed, the cell table or the landing in one, change the other.
+
 Driver grammar (one action per line, `#` comments):
 
 | action | meaning |
