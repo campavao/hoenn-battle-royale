@@ -134,6 +134,12 @@ sidecars to a GitHub release with the tag's message as the note, deploys the sit
 redeploys the relay only if `relay/` changed since the previous tag. The shell is named
 after the tag (`shell 0.2.0` on the version line).
 
+**The first tag has no previous tag**, so `git describe` finds nothing to diff against and
+the relay step redeploys the relay whatever changed -- and a relay deploy drops every
+room. Push the first tag only while
+`https://hoenn-relay-production.up.railway.app/health` says `"rooms":0`, the same as a
+relay deploy by hand. Every tag after it compares against the one before.
+
 Two repo secrets make it fully automatic (GitHub → Settings → Secrets → Actions):
 
 | secret | from | without it |
