@@ -7,7 +7,8 @@
 // the moment the ring moves. A map the ring re-admits before the end is reprieved (the
 // centre can move between phases); the dead stay dead. When a map dies, every trainer on
 // it leaves every ROM in the room -- `npcout`, the message a beaten trainer already
-// crosses as -- and the ticker gets one line for the whole sweep.
+// crosses as -- and the page's log gets one line for the whole sweep. Not the ticker:
+// a tally is nothing a player acts on (POK-324), and Kanto's is a log line too.
 //
 // Why: the world becomes a record of the match, and the PvE the survivors compete over
 // shrinks as the map does. Without this the ring was tiny and the trainers inside it

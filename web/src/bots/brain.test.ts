@@ -469,6 +469,68 @@ describe('a bot meeting a player', () => {
     expect(spill?.bag?.money).toBeGreaterThan(0);
   });
 
+  // A bot's bag starts empty (POK-322). Beating one still pays its purse: the bag goes
+  // down with the cash in it and nothing else, which the ROM pays out like any other.
+  // The empty bag comes in through bagFor, as the host's dealt one did: the ring's old
+  // restock ran only for a Bots with a bagFor, so without one the ring check could not fail.
+  it('drops its purse as a bag with no items when it had nothing (POK-322)', () => {
+    const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }, [MON], []);
+    const seat = dealt[0].seat;
+    expect(bots.bagOf(seat)).toEqual([]);
+    const card = sent.find((m) => m.t === 'trainer') as { items?: number[] };
+    expect(card.items, 'nothing to stake').toBeUndefined();
+    bots.ringMoved(3);
+    expect(bots.bagOf(seat), 'and the ring moving is no Mart').toEqual([]);
+    bots.setParty(seat, [{ ...MON, hp: 0 }]);
+    const spill = sent.find((m) => m.t === 'spill') as { bag?: { items: Stack[]; money: number } };
+    expect(spill?.bag?.items).toEqual([]);
+    expect(spill?.bag?.money).toBeGreaterThan(0);
+  });
+
+  // ...and what it does carry is what it went and got: a POTION off a bag on the ground
+  // is in its next fight, and on the ground where it falls (POK-322).
+  it('carries what it picked up off the ground into its next fight, and drops it (POK-322)', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    const KEY = 0x01ff;
+    let lying = true;
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => {
+        sent.push(m);
+        if (m.t === 'pickup' && m.key === KEY) lying = false;
+      },
+      rng: mulberry32(7),
+      deal: () => [MON],
+      // Empty, but there: the ring's old restock ran only for a Bots with a bagFor.
+      bagFor: () => [],
+      // A bag lying on the cell the bot was dealt onto.
+      loot: {
+        all: () => (lying ? [{ key: KEY, mapId: 'FIELD', ...pageCell(1, 1) }] : []),
+        at: (mapId, cell) => (lying && mapId === 'FIELD' && cell.x === 1 && cell.y === 1 ? KEY : undefined),
+        bagAt: (key) => (key === KEY ? 13 : undefined),
+      },
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+    const seat = dealt[0].seat;
+    bots.start(dealt, 0);
+    bots.tick(STEP_MS);
+    expect(sent.filter((m) => m.t === 'pickup')).toEqual([{ t: 'pickup', seat, key: KEY, item: 13 }]);
+    expect(bots.bagOf(seat)).toEqual([{ id: 13, n: 1 }]);
+    // The ring moving used to put a free potion in every standing bot's bag.
+    bots.ringMoved(1);
+    expect(bots.bagOf(seat)).toEqual([{ id: 13, n: 1 }]);
+    expect(bots.challenged(seat, 0)).toBe(true);
+    const card = sent.find((m) => m.t === 'trainer') as { items?: number[] };
+    // One POTION in the bag is one in the fight.
+    expect(card.items).toEqual([13]);
+    bots.setParty(seat, [{ ...MON, hp: 0 }]);
+    const spill = sent.find((m) => m.t === 'spill') as { bag?: { items: Stack[] } };
+    expect(spill?.bag?.items).toEqual([{ id: 13, n: 1 }]);
+  });
+
   it('drinks from its own bag rather than walk to a Centre (POK-237)', () => {
     const world = new World([FIELD, PATH]);
     const sent: Msg[] = [];

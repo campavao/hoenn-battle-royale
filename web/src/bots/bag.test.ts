@@ -3,13 +3,10 @@ import {
   BATTLE_ITEMS,
   ITEM,
   battleItems,
-  dealBag,
   isMedicine,
   merge,
-  potionFor,
   purse,
   quaff,
-  restock,
   spend,
   take,
   units,
@@ -26,34 +23,6 @@ function mon(hp: number, maxHp: number): PackedMon {
 }
 
 describe("a bot's own bag", () => {
-  it('deals the same bag twice for the same seed and seat', () => {
-    expect(dealBag(99, 3, 2, Grade.Ace)).toEqual(dealBag(99, 3, 2, Grade.Ace));
-  });
-
-  it('gives an ace more to spend than a rookie', () => {
-    const ace = units(dealBag(4, 1, 0, Grade.Ace));
-    const rookie = units(dealBag(4, 1, 0, Grade.Rookie));
-    expect(ace).toBeGreaterThan(rookie);
-  });
-
-  it('carries the medicine of the rung it is on', () => {
-    expect(potionFor(5)).toBe(ITEM.POTION);
-    expect(potionFor(30)).toBe(ITEM.SUPER_POTION);
-    expect(potionFor(50)).toBe(ITEM.HYPER_POTION);
-    expect(potionFor(100)).toBe(ITEM.FULL_RESTORE);
-    // Phase 0 is level 5, so a bot at the drop is carrying POTIONs.
-    expect(dealBag(1, 0, 0, Grade.Regular).some((s) => s.id === ITEM.POTION)).toBe(true);
-  });
-
-  it('restocks one potion a ring, rather than dealing a fresh bag', () => {
-    const bag = dealBag(1, 0, 0, Grade.Rookie);
-    const before = units(bag);
-    take(bag, bag[0].id);
-    restock(bag, 0);
-    // One out, one in: a bag that has been spent stays spent.
-    expect(units(bag)).toBe(before);
-  });
-
   it('drinks the weakest thing that helps, onto the worst-hurt mon', () => {
     const party = [mon(19, 19), mon(4, 20)];
     const bag = [{ id: ITEM.POTION, n: 1 }, { id: ITEM.HYPER_POTION, n: 1 }];
@@ -89,6 +58,18 @@ describe("a bot's own bag", () => {
 
   it('fills the rest with medicine when there are no boosters', () => {
     expect(battleItems([{ id: ITEM.POTION, n: 9 }])).toEqual([ITEM.POTION, ITEM.POTION]);
+  });
+
+  it('never hands over more than the bag holds (POK-322)', () => {
+    // The last pour used to pour the first one's POTION again: one in the bag, two in
+    // the fight, and the second spent out of nothing.
+    expect(battleItems([{ id: ITEM.POTION, n: 1 }])).toEqual([ITEM.POTION]);
+    expect(battleItems([{ id: ITEM.POTION, n: 1 }, { id: ITEM.X_ATTACK, n: 1 }])).toEqual([ITEM.POTION, ITEM.X_ATTACK]);
+    expect(battleItems([{ id: ITEM.POTION, n: 1 }, { id: ITEM.SUPER_POTION, n: 1 }])).toEqual([
+      ITEM.POTION,
+      ITEM.SUPER_POTION,
+    ]);
+    expect(battleItems([])).toEqual([]);
   });
 
   it('spends only what the fight says it used', () => {

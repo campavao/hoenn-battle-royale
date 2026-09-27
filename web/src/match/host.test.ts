@@ -150,6 +150,7 @@ function hosting(members = [0, 1, 2]) {
     attach,
     frames: () => socket.sent as Frame[],
     socket: () => socket,
+    nameOf: (seat: number) => bridge.roster.nameOf(seat),
   };
 }
 
@@ -196,7 +197,8 @@ describe('the page that runs the match (POK-330 #42)', () => {
     expect(room.session.match.active).toBe(true);
     expect(room.session.match.seats).toEqual([0, 1, 2]);
     expect(room.view.started).toHaveBeenCalledTimes(1);
-    expect(tickers(room.frames())).toEqual(['CATCH WHAT YOU CAN! 0s', '3 TRAINERS ARE LOOSE IN HOENN!']);
+    // Not how many are loose: the corner says that (POK-324).
+    expect(tickers(room.frames())).toEqual(['CATCH WHAT YOU CAN! 0s']);
     host.begin(); // once
     expect(room.frames().filter((f) => f.m?.t === 'start')).toHaveLength(1);
     host.dispose();
@@ -404,6 +406,83 @@ describe('the page that runs the match (POK-330 #42)', () => {
     host.dispose();
   });
 
+  // POK-324: Cam's play-test read none of the ticker, because most of it was about things
+  // he could do nothing about.
+  it('says nothing of its own when the ring moves: the ROM says it, once (POK-324)', () => {
+    const room = hosting();
+    const host = room.deal();
+    host.begin();
+    room.frames().length = 0;
+    vi.advanceTimersByTime(5_000); // the first clock, and with no opening the ring
+    expect(room.frames().some((f) => f.m?.t === 'ring')).toBe(true);
+    expect(tickers(room.frames())).toEqual([]);
+    expect(room.toRom.filter((m) => m.t === 'ticker').map((m) => (m as TickerMsg).text)).toEqual(['CATCH WHAT YOU CAN! 0s']);
+    host.dispose();
+  });
+
+  it("puts a bot's intro in front of the player it walked up to, and nobody else (POK-324)", () => {
+    const room = hosting();
+    const host = room.deal({ fill: 2 });
+    host.begin();
+    room.frames().length = 0;
+    const bot = host.bots.seats[0];
+    room.recv(1, { t: 'challenge', seat: 1, opponent: bot, nonce: 1 });
+    const intro = Ticker.said(bot, room.nameOf(bot), voiceFor(SEED, bot).intro)!;
+    expect(room.frames().filter((f) => f.m?.t === 'ticker')).toEqual([{ type: 'to', id: 1, m: intro }]);
+    expect(room.toRom.filter((m) => m.t === 'ticker' && m.kind === 'say')).toEqual([]);
+    host.dispose();
+  });
+
+  it('gathers outs while more than three are left into one line, said once the batch is up (POK-324)', () => {
+    const room = hosting();
+    const host = room.deal({ fill: 4 }); // seven in it
+    host.begin();
+    room.frames().length = 0;
+    room.recv(1, { t: 'out', seat: 1 });
+    vi.advanceTimersByTime(1_000);
+    room.recv(2, { t: 'out', seat: 2 });
+    expect(tickers(room.frames())).toEqual([]);
+    expect(host.director.state.alive).toBe(5); // the director counted them at once
+    vi.advanceTimersByTime(Ticker.OUT_BATCH_MS - 1_000);
+    expect(tickers(room.frames())).toEqual(['P1 AND P2 ARE OUT - 5 LEFT']);
+    host.dispose();
+  });
+
+  it('says a bot duel as one line, who beat whom and how many are left, with nothing from either bot (POK-324)', () => {
+    const room = hosting();
+    const host = room.deal({ fill: 2 }); // five in it
+    host.begin();
+    room.frames().length = 0;
+    // Stood face to face: the first bot looks south, straight at the second.
+    const [a, b] = host.bots.seats;
+    const at = host.bots.bots.spotOf(a)!;
+    host.bots.bots.placeAt(b, { map: at.map, x: at.x, y: at.y + 1 });
+    vi.advanceTimersByTime(1_000);
+    const out = room.frames().find((f) => f.m?.t === 'out')?.m as { seat: number } | undefined;
+    expect(out, 'they fought').toBeDefined();
+    const loser = out!.seat;
+    const winner = loser === a ? b : a;
+    expect(tickers(room.frames()), 'four left: gathered').toEqual([]);
+    vi.advanceTimersByTime(Ticker.OUT_BATCH_MS);
+    const lines = room.frames().filter((f) => f.m?.t === 'ticker').map((f) => f.m as TickerMsg);
+    expect(lines).toEqual([
+      { t: 'ticker', seat: loser, kind: 'kill', text: `${Ticker.short(room.nameOf(winner))} BEAT ${Ticker.short(room.nameOf(loser))} - 4 LEFT` },
+    ]);
+    host.dispose();
+  });
+
+  it('lets a gathering out go unsaid when it stands down: the heir has the match (POK-324)', () => {
+    const room = hosting();
+    const host = room.deal({ fill: 4 });
+    host.begin();
+    room.frames().length = 0;
+    room.recv(1, { t: 'out', seat: 1 });
+    host.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(10_000);
+    expect(tickers(room.frames())).toEqual([]);
+  });
+
   it('speaks on whichever Bridge the page has now: a rejoin swaps it mid-match', () => {
     const room = hosting();
     const host = room.deal();
@@ -528,7 +607,7 @@ describe('solo link', () => {
     expect(start.spawns.map((s) => s.seat)).toEqual([0, ...bots]);
     expect(solo.session.match.active).toBe(true);
     solo.frame();
-    expect(solo.drained().map((m) => m.t)).toEqual(['start', 'ticker', 'ticker']);
+    expect(solo.drained().map((m) => m.t)).toEqual(['start', 'ticker']);
     solo.host.dispose();
   });
 
@@ -539,6 +618,9 @@ describe('solo link', () => {
     solo.host.begin();
     solo.beat(solo.host.bots.seats[0]); // ...which is the match won
     expect(solo.toSeat).not.toHaveBeenCalled();
+    // The bot's intro was for us, into our own ROM, and not for a room (POK-324).
+    expect(solo.toRom.some((m) => m.t === 'ticker' && m.kind === 'say')).toBe(true);
+    expect(solo.toRoom.mock.calls.some(([m]) => m.t === 'ticker' && m.kind === 'say')).toBe(false);
     // What the room's host would have told the room went nowhere, `again` with it.
     expect(solo.toRoom.mock.calls.map(([m]) => m.t).filter((t) => t !== 'ticker')).toEqual([
       'place', 'start', 'busy', 'spill', 'out', 'win', 'again',
@@ -558,7 +640,6 @@ describe('solo link', () => {
     solo.beat(bot);
     const lines = [
       'CATCH WHAT YOU CAN! 0s',
-      '2 TRAINERS ARE LOOSE IN HOENN!',
       Ticker.said(bot, botName, voiceFor(SEED, bot).intro)!.text, // it walked up to us
       Ticker.out(bot, botName, 1)!.text,
       'MAY WINS!',
