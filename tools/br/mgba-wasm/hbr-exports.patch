@@ -12,10 +12,10 @@ index ed16917..f0ae805 100644
  CXX_GUARD_END
  
 diff --git a/include/mgba/internal/gba/renderers/video-software.h b/include/mgba/internal/gba/renderers/video-software.h
-index ce91877..71adee8 100644
+index ce91877..f0013c4 100644
 --- a/include/mgba/internal/gba/renderers/video-software.h
 +++ b/include/mgba/internal/gba/renderers/video-software.h
-@@ -75,10 +75,16 @@ struct WindowControl {
+@@ -75,10 +75,18 @@ struct WindowControl {
  #define MAX_WINDOW 5
  
  struct Window {
@@ -25,15 +25,17 @@ index ce91877..71adee8 100644
  };
  
 +/* Hoenn Battle Royale (POK-319): the row buffer is wide enough for a band of up to
-+ * BR_BAND_MAX pixels either side of the LCD. */
++ * BR_BAND_MAX pixels either side of the LCD. Rows need no buffer, so above and below
++ * the band may reach BR_BAND_MAX_ROWS (POK-329). */
 +#define BR_BAND_MAX 128
++#define BR_BAND_MAX_ROWS 256
 +#define BR_ROW_MAX (GBA_VIDEO_HORIZONTAL_PIXELS + 2 * BR_BAND_MAX)
 +#define BR_ROW_WIDTH(R) (GBA_VIDEO_HORIZONTAL_PIXELS + (R)->brLeft + (R)->brRight)
 +
  struct GBAVideoSoftwareRenderer {
  	struct GBAVideoRenderer d;
  
-@@ -89,8 +95,8 @@ struct GBAVideoSoftwareRenderer {
+@@ -89,8 +97,8 @@ struct GBAVideoSoftwareRenderer {
  
  	GBARegisterDISPCNT dispcnt;
  
@@ -44,7 +46,7 @@ index ce91877..71adee8 100644
  	int32_t spriteCyclesRemaining;
  
  	// BLDCNT
-@@ -151,6 +157,14 @@ struct GBAVideoSoftwareRenderer {
+@@ -151,6 +159,20 @@ struct GBAVideoSoftwareRenderer {
  	int end;
  
  	uint8_t lastHighlightAmount;
@@ -56,6 +58,12 @@ index ce91877..71adee8 100644
 +	int brTop;
 +	int brRight;
 +	int brBottom;
++	/* Hoenn Battle Royale (POK-329): the sprite window, the 256 rows around the LCD in
++	 * which an OAM y has one reading -- brSpriteTop above the LCD, brSpriteBottom below,
++	 * summing to 96. -1 for none: every sprite repeats every 256 rows, as on the
++	 * hardware, and every layer is drawn in every band row. */
++	int brSpriteTop;
++	int brSpriteBottom;
  };
  
  void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer);
@@ -165,7 +173,7 @@ index 4f7e9f8..6d31d51 100644
  	int mosaicWait = 0;                                                                                               \
  	int32_t localX;                                                                                                   \
 diff --git a/src/gba/renderers/video-software.c b/src/gba/renderers/video-software.c
-index c5bc37b..4090540 100644
+index c5bc37b..720275a 100644
 --- a/src/gba/renderers/video-software.c
 +++ b/src/gba/renderers/video-software.c
 @@ -27,6 +27,7 @@ static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer,
@@ -247,7 +255,7 @@ index c5bc37b..4090540 100644
  						if (VIDEO_CHECKS && activeWindow >= MAX_WINDOW) {
  							mLOG(GBA_VIDEO, FATAL, "Out of bounds window write will occur");
  							return;
-@@ -610,10 +617,19 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -610,10 +617,33 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	CLEAN_SCANLINE(softwareRenderer, y);
  
@@ -255,12 +263,26 @@ index c5bc37b..4090540 100644
 +	_brDrawLine(softwareRenderer, y, false);
 +}
 +
++/* Hoenn BR (POK-329): is picture row `y` past the sprite window -- a row the 8-bit
++ * hardware never has, 256 rows or more from some row it does? Never without a window. */
++static bool _brPastSpriteWindow(const struct GBAVideoSoftwareRenderer* renderer, int y) {
++	return renderer->brSpriteBottom >= 0 && (y < -renderer->brSpriteTop || y >= GBA_VIDEO_VERTICAL_PIXELS + renderer->brSpriteBottom);
++}
++
++/* Hoenn BR (POK-329): may text BG X be drawn on this row? Past the sprite window a
++ * 256-row BG would show its rows a second time -- the HUD's corner under the message
++ * box, the ring's top row below its bottom one -- so only a BG whose BGCNT makes it 512
++ * rows tall (size bit 1), with rows of its own that far out, is drawn there; the rest
++ * is the backdrop, and the weather's sprites over it. */
++#define BR_TEXT_BG_SHOWN(X) (!outer || (softwareRenderer->bg[X].size & 2))
++
 +/* Hoenn BR (POK-319): one row of the wide picture -- the LCD's 240 pixels plus the band
 + * either side -- into the output buffer at row `y`, which may be negative or past 159
 + * for a band row. A band row is drawn from the frame's final register state, never
 + * caches, never advances the affine or enable state, and only shows text layers. */
 +static void _brDrawLine(struct GBAVideoSoftwareRenderer* softwareRenderer, int y, bool band) {
 +	int width = BR_ROW_WIDTH(softwareRenderer);
++	bool outer = band && _brPastSpriteWindow(softwareRenderer, y);
 +	mColor* row = &softwareRenderer->outputBuffer[softwareRenderer->outputBufferStride * y - softwareRenderer->brLeft];
  	if (GBARegisterDISPCNTIsForcedBlank(softwareRenderer->dispcnt)) {
  		int x;
@@ -269,7 +291,25 @@ index c5bc37b..4090540 100644
  			row[x] = M_COLOR_WHITE;
  		}
  		return;
-@@ -648,15 +664,27 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -635,28 +665,43 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+ 			if (spriteLayers & (1 << priority)) {
+ 				GBAVideoSoftwareRendererPostprocessSprite(softwareRenderer, priority);
+ 			}
+-			if (TEST_LAYER_ENABLED(0) && GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) < 2) {
++			if (TEST_LAYER_ENABLED(0) && GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) < 2 && BR_TEXT_BG_SHOWN(0)) {
+ 				GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[0], y);
+ 			}
+-			if (TEST_LAYER_ENABLED(1) && GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) < 2) {
++			if (TEST_LAYER_ENABLED(1) && GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) < 2 && BR_TEXT_BG_SHOWN(1)) {
+ 				GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[1], y);
+ 			}
+ 			if (TEST_LAYER_ENABLED(2)) {
+ 				switch (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt)) {
+ 				case 0:
++					if (!BR_TEXT_BG_SHOWN(2)) {
++						break;
++					}
+ 					GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[2], y);
  					break;
  				case 1:
  				case 2:
@@ -297,7 +337,13 @@ index c5bc37b..4090540 100644
  					GBAVideoSoftwareRendererDrawBackgroundMode5(softwareRenderer, &softwareRenderer->bg[2], y);
  					break;
  				}
-@@ -667,6 +695,9 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -664,9 +709,15 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+ 			if (TEST_LAYER_ENABLED(3)) {
+ 				switch (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt)) {
+ 				case 0:
++					if (!BR_TEXT_BG_SHOWN(3)) {
++						break;
++					}
  					GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[3], y);
  					break;
  				case 2:
@@ -307,7 +353,7 @@ index c5bc37b..4090540 100644
  					GBAVideoSoftwareRendererDrawBackgroundMode2(softwareRenderer, &softwareRenderer->bg[3], y);
  					break;
  				}
-@@ -676,6 +707,11 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -676,6 +727,11 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	GBAVideoSoftwareRendererPostprocessBuffer(softwareRenderer);
  
@@ -319,7 +365,7 @@ index c5bc37b..4090540 100644
  	if (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) != 0) {
  		if (softwareRenderer->bg[2].enabled == ENABLED_MAX) {
  			softwareRenderer->bg[2].sx += softwareRenderer->bg[2].dmx;
-@@ -706,7 +742,7 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -706,7 +762,7 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	int x;
  	if (softwareRenderer->stereo) {
@@ -328,7 +374,7 @@ index c5bc37b..4090540 100644
  			row[x] = softwareRenderer->row[x] & (M_COLOR_RED | M_COLOR_BLUE);
  			row[x] |= softwareRenderer->row[x + 1] & M_COLOR_GREEN;
  			row[x + 1] = softwareRenderer->row[x + 1] & (M_COLOR_RED | M_COLOR_BLUE);
-@@ -719,21 +755,65 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -719,21 +775,65 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  		}
  	} else {
  #ifdef COLOR_16_BIT
@@ -396,7 +442,7 @@ index c5bc37b..4090540 100644
  	softwareRenderer->nextY = 0;
  	if (softwareRenderer->temporaryBuffer) {
  		mappedMemoryFree(softwareRenderer->temporaryBuffer, GBA_VIDEO_HORIZONTAL_PIXELS * GBA_VIDEO_VERTICAL_PIXELS * 4);
-@@ -893,14 +973,15 @@ void GBAVideoSoftwareRendererStepWindow(struct GBAVideoSoftwareRenderer* softwar
+@@ -893,14 +993,15 @@ void GBAVideoSoftwareRendererStepWindow(struct GBAVideoSoftwareRenderer* softwar
  
  void GBAVideoSoftwareRendererPreprocessBuffer(struct GBAVideoSoftwareRenderer* softwareRenderer) {
  	int x;
@@ -414,7 +460,34 @@ index c5bc37b..4090540 100644
  	softwareRenderer->nWindows = 1;
  	if (GBARegisterDISPCNTIsWin0Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsWin1Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsObjwinEnable(softwareRenderer->dispcnt)) {
  		softwareRenderer->windows[0].control = softwareRenderer->winout;
-@@ -1021,7 +1102,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1016,12 +1117,34 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
+ 	}
+ }
+ 
++/* Hoenn BR (POK-329): does `sprite` cover picture row `y`? On the LCD's rows, the
++ * hardware's answer: the OAM's y is 8 bits, so a sprite covers every row within its
++ * height of it mod 256. A band row reads the y against the sprite window instead -- a
++ * y at or past 160 + brSpriteBottom is that far above the LCD -- and draws the sprite
++ * once, at its true rows: the hardware's answer would draw it again 256 rows away, a
++ * person's legs at the top of a band that holds both. The weather's semi-transparent
++ * sprites -- the fog, the ash, the sandstorm: grids of 64x64s a 256-row screen tall
++ * that scroll by wrapping -- do repeat every 256 rows, so they cover the whole band.
++ * With no window every sprite repeats, as on the hardware. */
++static bool _brSpriteOnRow(const struct GBAVideoSoftwareRenderer* renderer, const struct GBAVideoRendererSprite* sprite, int y) {
++	int height = sprite->endY - sprite->y;
++	int top;
++	if ((y >= 0 && y < GBA_VIDEO_VERTICAL_PIXELS) || renderer->brSpriteBottom < 0 || GBAObjAttributesAGetMode(sprite->obj.a) == OBJ_MODE_SEMITRANSPARENT) {
++		return ((y - sprite->y) & 0xFF) < height;
++	}
++	top = GBAObjAttributesAGetY(sprite->obj.a) + renderer->objOffsetY;
++	if (top >= GBA_VIDEO_VERTICAL_PIXELS + renderer->brSpriteBottom) {
++		top -= 256;
++	}
++	return y >= top && y < top + height;
++}
++
+ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRenderer* renderer, int y) {
+ 	int w;
  	int spriteLayers = 0;
  	if (GBARegisterDISPCNTIsObjEnable(renderer->dispcnt) && !renderer->d.disableOBJ) {
  		if (renderer->oamDirty) {
@@ -423,12 +496,12 @@ index c5bc37b..4090540 100644
  			renderer->oamDirty = false;
  		}
  		int mosaicV = GBAMosaicControlGetObjV(renderer->mosaic) + 1;
-@@ -1037,7 +1118,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1037,7 +1160,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  			if (renderer->spriteCyclesRemaining <= 0) {
  				break;
  			}
 -			if (y < sprite->y || y >= sprite->endY) {
-+			if (((y - sprite->y) & 0xFF) >= sprite->endY - sprite->y) {
++			if (!_brSpriteOnRow(renderer, sprite, y)) {
  				continue;
  			}
  			if (GBAObjAttributesAIsMosaic(sprite->obj.a) && mosaicV > 1) {
@@ -446,7 +519,7 @@ index 751e8b1..59daede 100644
  	-s ENVIRONMENT='web,worker' \
  	-s PTHREAD_POOL_SIZE=5 \
 diff --git a/src/platform/wasm/main.c b/src/platform/wasm/main.c
-index 14d9a8a..9b78c21 100644
+index 14d9a8a..9aba6af 100644
 --- a/src/platform/wasm/main.c
 +++ b/src/platform/wasm/main.c
 @@ -12,6 +12,10 @@
@@ -460,7 +533,7 @@ index 14d9a8a..9b78c21 100644
  
  #include "platform/sdl/sdl-audio.h"
  #include "platform/sdl/sdl-events.h"
-@@ -146,6 +150,161 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
+@@ -146,6 +150,231 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
  		return 0.0;
  }
  
@@ -468,7 +541,8 @@ index 14d9a8a..9b78c21 100644
 +// pixels on each side before loadGame; the texture and canvas grow to fit, the core's
 +// video buffer pointer is the LCD's top-left inside that texture, and the software
 +// renderer fills the band at VBlank from the same registers. Multiples of 8, at most
-+// BR_BAND_MAX a side (the renderer's row buffer).
++// BR_BAND_MAX left and right (the renderer's row buffer) and BR_BAND_MAX_ROWS above
++// and below.
 +static int brBandLeft = 0;
 +static int brBandTop = 0;
 +static int brBandRight = 0;
@@ -486,22 +560,29 @@ index 14d9a8a..9b78c21 100644
 +// while the core runs on, and the picture can be a frame ahead of the page's drawing
 +// (a 4 px step between the map copy and the band while walking, 2026-09-18).
 +static bool brPagePresents = false;
++// Hoenn BR (POK-329): the sprite window the page declared with brSetSpriteBand, -1 for
++// none. Without one the band is the window when it is 256 rows (160 + 96), and there is
++// no window otherwise (see _brApplyViewport).
++static int brSpriteTop = -1;
++static int brSpriteBottom = -1;
 +
-+static int _brClampBand(int v) {
++// A side of the band: a multiple of 8 in [0, max]. Columns are held in the renderer's
++// row buffer, BR_BAND_MAX a side; rows are not, and may go to BR_BAND_MAX_ROWS.
++static int _brClampBand(int v, int max) {
 +	if (v < 0) {
 +		v = 0;
 +	}
-+	if (v > BR_BAND_MAX) {
-+		v = BR_BAND_MAX;
++	if (v > max) {
++		v = max;
 +	}
 +	return v & ~7;
 +}
 +
 +EMSCRIPTEN_KEEPALIVE void brSetViewport(int left, int top, int right, int bottom) {
-+	brBandLeft = _brClampBand(left);
-+	brBandTop = _brClampBand(top);
-+	brBandRight = _brClampBand(right);
-+	brBandBottom = _brClampBand(bottom);
++	brBandLeft = _brClampBand(left, BR_BAND_MAX);
++	brBandTop = _brClampBand(top, BR_BAND_MAX_ROWS);
++	brBandRight = _brClampBand(right, BR_BAND_MAX);
++	brBandBottom = _brClampBand(bottom, BR_BAND_MAX_ROWS);
 +	// Size the window now, before a game is loaded: the first loadGame after the window
 +	// was made at the LCD's size otherwise resizes it under a fresh renderer, and the
 +	// canvas came up blank that way.
@@ -586,21 +667,83 @@ index 14d9a8a..9b78c21 100644
 +	_brPresentFrame();
 +}
 +
-+// Tell the software renderer about the band, once the core has installed it.
-+static void _brApplyViewport(void) {
-+	if (!renderer->core || renderer->core->platform(renderer->core) != mPLATFORM_GBA) {
-+		return;
++// The loaded core's software renderer, or NULL.
++static struct GBAVideoSoftwareRenderer* _brSoftwareRenderer(void) {
++	if (!renderer || !renderer->core || renderer->core->platform(renderer->core) != mPLATFORM_GBA) {
++		return NULL;
 +	}
 +	struct GBA* gba = (struct GBA*) renderer->core->board;
 +	struct GBAVideoRenderer* vr = gba->video.renderer;
 +	if (!vr || !vr->rendererId || vr->rendererId(vr) != 0x6E727773) {
++		return NULL;
++	}
++	return (struct GBAVideoSoftwareRenderer*) vr;
++}
++
++// The sprite window into the renderer (POK-329): the one declared, or the renderer's
++// own band when that is 256 rows, or none.
++static void _brApplySpriteWindow(struct GBAVideoSoftwareRenderer* sr) {
++	if (brSpriteBottom >= 0) {
++		sr->brSpriteTop = brSpriteTop;
++		sr->brSpriteBottom = brSpriteBottom;
++	} else if (sr->brTop + sr->brBottom == BR_BAND_MAX_ROWS - GBA_VIDEO_VERTICAL_PIXELS) {
++		sr->brSpriteTop = sr->brTop;
++		sr->brSpriteBottom = sr->brBottom;
++	} else {
++		sr->brSpriteTop = -1;
++		sr->brSpriteBottom = -1;
++	}
++}
++
++// Tell the software renderer about the band, once the core has installed it. Only at
++// loadGame: the band is the texture's size, which is made there.
++static void _brApplyViewport(void) {
++	struct GBAVideoSoftwareRenderer* sr = _brSoftwareRenderer();
++	if (!sr) {
 +		return;
 +	}
-+	struct GBAVideoSoftwareRenderer* sr = (struct GBAVideoSoftwareRenderer*) vr;
 +	sr->brLeft = brBandLeft;
 +	sr->brTop = brBandTop;
 +	sr->brRight = brBandRight;
 +	sr->brBottom = brBandBottom;
++	_brApplySpriteWindow(sr);
++}
++
++// Hoenn BR (POK-329): the sprite window -- the 256 rows around the LCD where the ROM
++// keeps each sprite's 8-bit OAM y to one reading, `top` above the LCD and `bottom`
++// below (multiples of 8, summing to 96). A band row reads each sprite's y against it
++// and draws the sprite once, at its true rows; past it only 512-row BGs and the
++// weather's semi-transparent sprites are drawn, so a band taller than 256 rows shows
++// no row of a 256-row BG, and no sprite, twice. Anything that is not such a window
++// (0, 0 for one) clears it: then the band is the window when it is 256 rows, and there
++// is none otherwise -- every sprite and BG repeating every 256 rows, as before this.
++// Takes effect at once -- the band's rows are drawn at VBlank, on the core's thread, so
++// a call while it runs may land mid-band -- and at every loadGame after.
++EMSCRIPTEN_KEEPALIVE void brSetSpriteBand(int top, int bottom) {
++	struct GBAVideoSoftwareRenderer* sr;
++	top = _brClampBand(top, BR_BAND_MAX_ROWS);
++	bottom = _brClampBand(bottom, BR_BAND_MAX_ROWS);
++	if (top + bottom == BR_BAND_MAX_ROWS - GBA_VIDEO_VERTICAL_PIXELS) {
++		brSpriteTop = top;
++		brSpriteBottom = bottom;
++	} else {
++		brSpriteTop = -1;
++		brSpriteBottom = -1;
++	}
++	sr = _brSoftwareRenderer();
++	if (sr) {
++		_brApplySpriteWindow(sr);
++	}
++}
++
++// Hoenn BR (POK-329): the sprite window the loaded core draws with, as `top << 16 |
++// bottom`, or -1 for none (or no core): what the page's tests read back.
++EMSCRIPTEN_KEEPALIVE int brSpriteWindow(void) {
++	struct GBAVideoSoftwareRenderer* sr = _brSoftwareRenderer();
++	if (!sr || sr->brSpriteBottom < 0) {
++		return -1;
++	}
++	return (sr->brSpriteTop << 16) | sr->brSpriteBottom;
 +}
 +
 +// Hoenn Battle Royale: byte offsets into the wasm heap of the GBA's work RAM, so the
@@ -622,7 +765,7 @@ index 14d9a8a..9b78c21 100644
  EMSCRIPTEN_KEEPALIVE int getMainLoopTimingMode() {
  	int mode = -1;
  	int value = -1;
-@@ -427,28 +586,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
+@@ -427,28 +656,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
  	mSDLInitBindingsGBA(&renderer->core->inputMap);
  
  	unsigned w, h;
@@ -670,7 +813,7 @@ index 14d9a8a..9b78c21 100644
  
  	emscripten_resume_main_loop();
  	return true;
-@@ -744,19 +905,11 @@ void runLoop() {
+@@ -744,19 +975,11 @@ void runLoop() {
  				};
  			}
  			if (mCoreSyncWaitFrameStart(&renderer->thread->impl->sync)) {
@@ -695,7 +838,7 @@ index 14d9a8a..9b78c21 100644
  			}
  			mCoreSyncWaitFrameEnd(&renderer->thread->impl->sync);
  		}
-@@ -860,11 +1013,16 @@ int main() {
+@@ -860,11 +1083,16 @@ int main() {
  
  	mLogSetDefaultLogger(&logCtx);
  
@@ -717,18 +860,29 @@ index 14d9a8a..9b78c21 100644
  	// exclude specific key events
  	SDL_SetEventFilter(excludeKeys, NULL);
 diff --git a/src/platform/wasm/mgba.d.ts b/src/platform/wasm/mgba.d.ts
-index edad1b1..d279d1b 100644
+index edad1b1..3a0dad4 100644
 --- a/src/platform/wasm/mgba.d.ts
 +++ b/src/platform/wasm/mgba.d.ts
-@@ -296,6 +296,32 @@ declare namespace mGBA {
+@@ -296,6 +296,43 @@ declare namespace mGBA {
       * @returns Current volume multiplier.
       */
      getVolume(): number;
 +    /** Hoenn BR (POK-319): render a band of pixels past the LCD on each side, from the
-+     *  same registers. Call before loadGame; multiples of 8, at most 128 a side. The
-+     *  canvas becomes (240 + left + right) x (160 + top + bottom) with the LCD at
-+     *  (left, top). */
++     *  same registers. Call before loadGame; multiples of 8, at most 128 left and right
++     *  and 256 above and below (POK-329). The canvas becomes (240 + left + right) x
++     *  (160 + top + bottom) with the LCD at (left, top). */
 +    _brSetViewport(left: number, top: number, right: number, bottom: number): void;
++    /** Hoenn BR (POK-329): the sprite window, the 256 rows around the LCD in which the ROM
++     *  keeps each sprite's 8-bit OAM y to one reading: `top` rows above the LCD and
++     *  `bottom` below, multiples of 8 summing to 96. Band rows draw each sprite once at
++     *  its true rows (semi-transparent ones, the weather, every 256 rows), and past the
++     *  window only 512-row BGs. Anything else, (0, 0) say, clears it: the band is then
++     *  the window when it is 256 rows, and there is none otherwise. Takes effect at
++     *  once and at every loadGame after. */
++    _brSetSpriteBand(top: number, bottom: number): void;
++    /** Hoenn BR (POK-329): the sprite window the loaded core draws with, as
++     *  `top << 16 | bottom`, or -1 for none (or no game loaded). */
++    _brSpriteWindow(): number;
 +    /** Hoenn BR: pass `brHeadless: true` in the module options to make an instance that
 +     *  draws to nothing -- no SDL window, no canvas. A page's second core must, because
 +     *  SDL's emscripten video names its canvas "#canvas" by selector, whichever element

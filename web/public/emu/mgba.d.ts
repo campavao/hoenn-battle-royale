@@ -297,10 +297,21 @@ declare namespace mGBA {
      */
     getVolume(): number;
     /** Hoenn BR (POK-319): render a band of pixels past the LCD on each side, from the
-     *  same registers. Call before loadGame; multiples of 8, at most 128 a side. The
-     *  canvas becomes (240 + left + right) x (160 + top + bottom) with the LCD at
-     *  (left, top). */
+     *  same registers. Call before loadGame; multiples of 8, at most 128 left and right
+     *  and 256 above and below (POK-329). The canvas becomes (240 + left + right) x
+     *  (160 + top + bottom) with the LCD at (left, top). */
     _brSetViewport(left: number, top: number, right: number, bottom: number): void;
+    /** Hoenn BR (POK-329): the sprite window, the 256 rows around the LCD in which the ROM
+     *  keeps each sprite's 8-bit OAM y to one reading: `top` rows above the LCD and
+     *  `bottom` below, multiples of 8 summing to 96. Band rows draw each sprite once at
+     *  its true rows (semi-transparent ones, the weather, every 256 rows), and past the
+     *  window only 512-row BGs. Anything else, (0, 0) say, clears it: the band is then
+     *  the window when it is 256 rows, and there is none otherwise. Takes effect at
+     *  once and at every loadGame after. */
+    _brSetSpriteBand(top: number, bottom: number): void;
+    /** Hoenn BR (POK-329): the sprite window the loaded core draws with, as
+     *  `top << 16 | bottom`, or -1 for none (or no game loaded). */
+    _brSpriteWindow(): number;
     /** Hoenn BR: pass `brHeadless: true` in the module options to make an instance that
      *  draws to nothing -- no SDL window, no canvas. A page's second core must, because
      *  SDL's emscripten video names its canvas "#canvas" by selector, whichever element

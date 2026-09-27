@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { devLand, devPace, parseRoomHash, perfWanted, ROOM_HASH_KEYS, withoutRoom, withRoom } from './hash';
+import { devBand, devLand, devPace, parseRoomHash, perfWanted, ROOM_HASH_KEYS, withoutRoom, withRoom } from './hash';
 
 describe('the room in the URL', () => {
   it('reads every door', () => {
@@ -57,5 +57,15 @@ describe('the dev flags a test plays a match with', () => {
     expect(devLand('#solo')).toBeUndefined();
     expect(devLand('#solo&land=ROUTE102,36,16')).toBeUndefined();
     expect(devLand('#solo&land=MAP_ROUTE102,36')).toBeUndefined();
+  });
+
+  it('reads the band the core is asked for, rows above and below, as the core takes them (POK-329)', () => {
+    expect(devBand('#solo&band=104,232')).toEqual({ top: 104, bottom: 232 });
+    expect(devBand('#solo&band=0,256')).toEqual({ top: 0, bottom: 256 });
+    expect(devBand('#solo')).toBeUndefined();
+    // Not a multiple of 8, past 256, or half of it: the page's own band.
+    expect(devBand('#solo&band=100,232')).toBeUndefined();
+    expect(devBand('#solo&band=104,264')).toBeUndefined();
+    expect(devBand('#solo&band=104')).toBeUndefined();
   });
 });

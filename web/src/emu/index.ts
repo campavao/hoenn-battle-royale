@@ -56,6 +56,17 @@ export interface CoreModule {
   /** The picture past the LCD (POK-319): a band of pixels on each side, drawn by the
    *  core from the same registers. Older cores lack it. */
   _brSetViewport?(left: number, top: number, right: number, bottom: number): void;
+  /** The sprite window (POK-329): the 256 rows around the LCD where each OAM y has one
+   *  reading. Band rows draw a sprite once at its true rows, and past the window only
+   *  512-row BGs and the weather. (0, 0) clears it. Older cores lack it, and repeat
+   *  everything every 256 rows. */
+  _brSetSpriteBand?(top: number, bottom: number): void;
+  /** The window the loaded core draws with, `top << 16 | bottom`, or -1 for none. */
+  _brSpriteWindow?(): number;
+  /** The picture's ABGR8888 pixels in the heap -- the texture's top-left, the LCD at
+   *  (left, top) inside it -- and its pixels a row; 0 with no game. */
+  _brPicturePtr?(): number;
+  _brPictureStride?(): number;
   /** Present the frame to the canvas from the frame-ended callback, where the core
    *  thread is paused: what the page drew in that callback and the picture are then
    *  the same frame. Older cores lack it and present on their own tick. */
@@ -75,6 +86,27 @@ export interface Band {
   top: number;
   right: number;
   bottom: number;
+}
+
+/** The sprite window (POK-329): the rows above and below the LCD, 96 between them, in
+ *  which the ROM keeps every sprite's 8-bit OAM y to one reading. A band that reaches
+ *  past it needs a core that knows it; any other core draws rows 256 apart alike. */
+export interface SpriteBand {
+  top: number;
+  bottom: number;
+}
+
+/** A GBA has 256 rows of OAM y; the LCD is 160 of them. */
+const SPRITE_WINDOW_ROWS = 256 - 160;
+
+/** The picture as the core drew it, for tests (POK-329): RGBA, `width` x `height`, the
+ *  LCD's top-left at (`left`, `top`). */
+export interface Picture {
+  width: number;
+  height: number;
+  left: number;
+  top: number;
+  data: Uint8Array;
 }
 
 /** `brHeadless`: an instance that draws to nothing. A page's SECOND core must be one:
@@ -124,7 +156,11 @@ export class Emulator {
   private paused = false;
   /** Frame listeners that have thrown, each counted at its first throw. */
   private threwCount = 0;
-  private band: Band | null = null;
+  /** The band the page asked for, and the sprite window (POK-319, POK-329). */
+  private askedBand: Band | null = null;
+  private sprites: SpriteBand | null = null;
+  /** The band the loaded game's texture was made with. */
+  private bootedBand: Band = { left: 0, top: 0, right: 0, bottom: 0 };
   /** EWRAM and IWRAM over the heap, made once per boot (see wram()). */
   private views: { heap: Uint8Array; buffer: ArrayBufferLike; ewram: Uint8Array | null; iwram: Uint8Array | null } | null = null;
 
@@ -201,19 +237,46 @@ export class Emulator {
    *  at the next boot (the core sizes its texture when it loads a game). Returns what
    *  the core will draw, or null when this core cannot. */
   setViewport(band: Band | null): Band | null {
-    if (!band || !this.m._brSetViewport) {
-      this.band = null;
-      return null;
-    }
-    this.band = { ...band };
-    return this.band;
+    this.askedBand = band ? { ...band } : null;
+    return this.viewport;
+  }
+
+  /** The sprite window the band is drawn with, on every boot from now on (POK-329): the
+   *  rows above and below the LCD, 96 between them, where the ROM keeps each sprite's
+   *  OAM y to one reading. Anything else is no window. A core without the export draws
+   *  rows 256 apart alike, so it is asked for no more band than the window: past it,
+   *  that core would show the ring, the HUD and every sprite a second time. A running
+   *  core takes the window at once (it sizes nothing). Returns the window the core will
+   *  use, or null. */
+  setSpriteBand(window: SpriteBand | null): SpriteBand | null {
+    const ok = window && window.top >= 0 && window.bottom >= 0 && window.top % 8 === 0 && window.bottom % 8 === 0
+      && window.top + window.bottom === SPRITE_WINDOW_ROWS;
+    this.sprites = ok ? { top: window.top, bottom: window.bottom } : null;
+    if (this.running) this.applySpriteBand();
+    return this.spriteBand;
+  }
+
+  /** The window into the core, or none: (0, 0) clears one it holds. */
+  private applySpriteBand(): void {
+    const w = this.spriteBand;
+    this.m._brSetSpriteBand?.(w?.top ?? 0, w?.bottom ?? 0);
+  }
+
+  /** The sprite window the core draws the band with: null on a core without the export
+   *  or when none was asked for. */
+  get spriteBand(): SpriteBand | null {
+    return this.m._brSetSpriteBand && this.sprites ? { ...this.sprites } : null;
   }
 
   /** The band the core draws past the LCD: null on a core without the export or when
    *  none was asked for. The canvas is (240 + left + right) x (160 + top + bottom) with
    *  the LCD at (left, top). */
   get viewport(): Band | null {
-    return this.band;
+    const b = this.askedBand;
+    if (!b || !this.m._brSetViewport) return null;
+    const w = this.sprites;
+    if (!w || this.m._brSetSpriteBand) return { ...b };
+    return { ...b, top: Math.min(b.top, w.top), bottom: Math.min(b.bottom, w.bottom) };
   }
 
   // ---- running --------------------------------------------------------------------
@@ -260,10 +323,12 @@ export class Emulator {
       /* no autosave dir yet */
     }
     // The band is a load-time size: the core builds its texture in loadGame.
-    if (this.m._brSetViewport) {
-      const b = this.band ?? { left: 0, top: 0, right: 0, bottom: 0 };
-      this.m._brSetViewport(b.left, b.top, b.right, b.bottom);
-    }
+    const b = this.viewport ?? { left: 0, top: 0, right: 0, bottom: 0 };
+    this.m._brSetViewport?.(b.left, b.top, b.right, b.bottom);
+    // ...and the sprite window it is drawn with, or none, clearing one a boot before
+    // this left in the core.
+    this.applySpriteBand();
+    this.bootedBand = b;
     // loadGame builds a new core, and its RAM with it: the old views point at nothing.
     this.views = null;
     if (!this.m.loadGame(path)) throw new Error('loadGame failed');
@@ -570,6 +635,24 @@ export class Emulator {
 
   loadState(slot = 1): boolean {
     return this.m.loadState(slot);
+  }
+
+  /** The picture as the core drew it, band and all, copied out of the heap: what the
+   *  e2e holds the band to (POK-329), in DEV only. Take it in a frame listener, where
+   *  the core's thread is paused; anywhere else the core may be halfway into the next
+   *  frame. Null on a core without the exports, or with nothing loaded. */
+  picture(): Picture | null {
+    if (!import.meta.env.DEV) return null;
+    const ptr = this.m._brPicturePtr?.() ?? 0;
+    const stride = this.m._brPictureStride?.() ?? 0;
+    if (!ptr || !stride) return null;
+    const b = this.bootedBand;
+    const width = 240 + b.left + b.right;
+    const height = 160 + b.top + b.bottom;
+    const data = new Uint8Array(width * height * 4);
+    const heap = this.m.HEAPU8;
+    for (let y = 0; y < height; y++) data.set(heap.subarray(ptr + y * stride * 4, ptr + (y * stride + width) * 4), y * width * 4);
+    return { width, height, left: b.left, top: b.top, data };
   }
 
   /** PNG bytes of the current frame. */

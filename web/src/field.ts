@@ -35,7 +35,7 @@
 import type { WorldMap } from './bots/world';
 import { HOENN } from './bots/hoenn';
 import spritesData from './data/sprites.json';
-import type { Band, Emulator } from './emu';
+import type { Band, Emulator, SpriteBand } from './emu';
 import {
   DESPAWN_COUNT, DESPAWN_SIZE, GHOST_LOCAL_ID_BASE, GhostWalkers, LOOT_COUNT, LOOT_SIZE, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
   TEMPLATE_COUNT, TEMPLATE_SIZE, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, inObjectView, initialFacing, objectKey, placePeople, standingFrame,
@@ -48,6 +48,12 @@ export const GBA_H = 160;
  *  sits at its rows 40..199, so this is the ring, exactly once. The numbers are
  *  include/br/br_field.h's; field.test.ts pins them. */
 export const BAND: Band = { left: 0, top: 40, right: 16, bottom: 56 };
+/** The sprite window (POK-329): the 256 rows around the LCD in which the ROM keeps every
+ *  sprite's 8-bit OAM y to one reading -- BrField_OffScreen hides a sprite whose top is
+ *  outside it. The core draws each sprite once, at its true rows, from it; the old one
+ *  drew every sprite again 256 rows away, so a person whose top was in the band's last
+ *  32 rows had their legs drawn at its top. Today it is the band's own rows. */
+export const SPRITE_BAND: SpriteBand = { top: BAND.top, bottom: BAND.bottom };
 /** `struct Main` (include/main.h): callback1 at 0, callback2 at 4. The picture past the
  *  LCD shows only while callback2 is CB2_Overworld; a function pointer carries the
  *  Thumb bit. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, shakeOffset, subTile, SPR_OAM_HFLIP } from './field';
+import { BAND, SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, shakeOffset, subTile, SPR_OAM_HFLIP } from './field';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 import { HOENN } from './bots/hoenn';
@@ -22,6 +22,18 @@ describe('the picture past the LCD (POK-319)', () => {
     expect(160 + BAND.top + BAND.bottom).toBe(256);
     expect(240 + BAND.left + BAND.right).toBe(256);
     for (const v of Object.values(BAND)) expect(v % 8, 'the core wants multiples of 8').toBe(0);
+  });
+
+  it("the page asks the core for the sprite window, and it is the band's own 256 rows (POK-329)", () => {
+    expect(SPRITE_BAND).toEqual({ top: BAND.top, bottom: BAND.bottom });
+    expect(160 + SPRITE_BAND.top + SPRITE_BAND.bottom, 'one reading of each 8-bit OAM y').toBe(256);
+    // Asked before the band, and both before the game is booted: the core takes them at loadGame.
+    const main = appSource.slice(appSource.indexOf('async function main()'));
+    const sprites = main.indexOf('emu.setSpriteBand(SPRITE_BAND)');
+    const band = main.indexOf('emu.setViewport(devBand() ?? BAND)');
+    expect(sprites).toBeGreaterThan(0);
+    expect(band).toBeGreaterThan(sprites);
+    expect(main.indexOf('emu.startBytes(')).toBeGreaterThan(band);
   });
 
   it('the core\'s canvas is placed so the LCD lands where the layout put it', () => {

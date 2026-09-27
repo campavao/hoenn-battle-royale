@@ -402,6 +402,82 @@ describe('Emulator', () => {
     });
   });
 
+  describe('the picture past the LCD (POK-319, POK-329)', () => {
+    /** A core with the band's exports, each call logged beside loadGame's. */
+    async function banded(opts: { spriteBand: boolean }) {
+      const made = await make();
+      const { m, calls } = made;
+      m._brSetViewport = (l, t, r, b) => void calls.push(`viewport ${l},${t},${r},${b}`);
+      if (opts.spriteBand) m._brSetSpriteBand = (t, b) => void calls.push(`sprites ${t},${b}`);
+      return made;
+    }
+    const TALL = { left: 0, top: 104, right: 16, bottom: 232 };
+    const WINDOW = { top: 40, bottom: 56 };
+
+    it('hands the core the sprite window with the band, before loadGame, on every boot', async () => {
+      const { emu, calls } = await banded({ spriteBand: true });
+      expect(emu.setSpriteBand(WINDOW)).toEqual(WINDOW);
+      expect(emu.setViewport(TALL)).toEqual(TALL);
+      await emu.start(new Uint8Array([1]));
+      expect(calls.slice(-3)).toEqual(['viewport 0,104,16,232', 'sprites 40,56', 'load /data/games/emerald.gba']);
+      await emu.reboot();
+      expect(calls.slice(-3)).toEqual(['viewport 0,104,16,232', 'sprites 40,56', 'load /data/games/emerald.gba']);
+      expect(emu.viewport).toEqual(TALL);
+      expect(emu.spriteBand).toEqual(WINDOW);
+    });
+
+    it('a core without the window is asked for no more band than the window', async () => {
+      // Its band rows 256 apart are alike: past the window it would show the ring, the
+      // HUD and every sprite a second time.
+      const { emu, calls } = await banded({ spriteBand: false });
+      emu.setSpriteBand(WINDOW);
+      expect(emu.setViewport(TALL)).toEqual({ left: 0, top: 40, right: 16, bottom: 56 });
+      expect(emu.spriteBand).toBeNull();
+      await emu.start(new Uint8Array([1]));
+      expect(calls.slice(-2)).toEqual(['viewport 0,40,16,56', 'load /data/games/emerald.gba']);
+      expect(calls.some((c) => c.startsWith('sprites'))).toBe(false);
+    });
+
+    it('a window that is not 256 rows is none, and a boot clears the one before it', async () => {
+      const { emu, calls } = await banded({ spriteBand: true });
+      emu.setViewport(TALL);
+      emu.setSpriteBand(WINDOW);
+      await emu.start(new Uint8Array([1]));
+      for (const bad of [{ top: 40, bottom: 48 }, { top: 36, bottom: 60 }, { top: -8, bottom: 104 }]) expect(emu.setSpriteBand(bad), JSON.stringify(bad)).toBeNull();
+      await emu.reboot();
+      expect(calls.slice(-2)).toEqual(['sprites 0,0', 'load /data/games/emerald.gba']);
+    });
+
+    it('a running core takes a new window at once; one not yet booted, at its boot', async () => {
+      const { emu, calls } = await banded({ spriteBand: true });
+      emu.setSpriteBand(WINDOW);
+      expect(calls.some((c) => c.startsWith('sprites')), 'nothing loaded yet').toBe(false);
+      await emu.start(new Uint8Array([1]));
+      emu.setSpriteBand({ top: 96, bottom: 0 });
+      expect(calls.at(-1)).toBe('sprites 96,0');
+      emu.setSpriteBand(null);
+      expect(calls.at(-1)).toBe('sprites 0,0');
+    });
+
+    it("copies the picture out of the core's texture, band and all, a row at a time", async () => {
+      const { emu, m, heap } = await banded({ spriteBand: true });
+      emu.setViewport({ left: 0, top: 8, right: 16, bottom: 8 });
+      await emu.start(new Uint8Array([1]));
+      // A texture row a few pixels longer than the picture's, as a pitch may be.
+      const at = 0x60000;
+      const stride = 256 + 4;
+      m._brPicturePtr = () => at;
+      m._brPictureStride = () => stride;
+      for (let y = 0; y < 176; y++) heap.fill(y, at + y * stride * 4, at + (y * stride + 256) * 4);
+      const pic = emu.picture()!;
+      expect({ width: pic.width, height: pic.height, left: pic.left, top: pic.top }).toEqual({ width: 256, height: 176, left: 0, top: 8 });
+      expect(pic.data.length).toBe(256 * 176 * 4);
+      for (const y of [0, 8, 167, 175]) expect(pic.data[y * 256 * 4 + 255 * 4], `row ${y}`).toBe(y);
+      m._brPicturePtr = () => 0;
+      expect(emu.picture(), 'nothing loaded').toBeNull();
+    });
+  });
+
   it('returns screenshot bytes', async () => {
     const { emu } = await make();
     await emu.start(new Uint8Array([1]));

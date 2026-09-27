@@ -3,7 +3,7 @@
 // (docs/DEPLOY.md). This runs the script under bash with emcc and git stubbed -- the stub
 // git makes .git on `init` and fails everything else, so a run that gets past the guard
 // stops at the fetch -- and reads back what was left on disk (POK-331 #16 review).
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
@@ -79,5 +79,22 @@ describe.skipIf(!bash)('tools/br/mgba-wasm/build.sh', { timeout: 30_000 }, () =>
     mkdirSync(dir);
     expect(build(dir).stderr).toContain(' fetch ');
     expect(existsSync(marker(dir))).toBe(true);
+  });
+});
+
+// The page calls the core's Hoenn BR exports by name (src/emu/index.ts). CI's wasm job
+// holds web/public/emu to the patch byte for byte, but a core copied in from a build of
+// an older patch -- or a patch edited and never built -- is a page calling what is not
+// there, found in a browser. So each export is in the patch, in the glue that ships and
+// in its types. _brSetSpriteBand and _brSpriteWindow are POK-329's sprite window.
+describe('the Hoenn BR exports of the core web/public/emu ships', () => {
+  const emu = resolve(__dirname, '../public/emu');
+  const patch = readFileSync(resolve(__dirname, '../../tools/br/mgba-wasm/hbr-exports.patch'), 'utf8');
+  const glue = readFileSync(join(emu, 'mgba.js'), 'utf8');
+  const types = readFileSync(join(emu, 'mgba.d.ts'), 'utf8');
+  it.each(['_brSetViewport', '_brSetSpriteBand', '_brSpriteWindow', '_brPicturePtr', '_brPictureStride', '_brPresent', '_brWramPtr', '_brIwramPtr'])('%s', (name) => {
+    expect(patch, 'defined in hbr-exports.patch').toMatch(new RegExp(String.raw`\+EMSCRIPTEN_KEEPALIVE [^\n(]*\b${name.slice(1)}\(`));
+    expect(glue, 'exported by mgba.js').toContain(`Module["${name}"]`);
+    expect(types, 'declared in mgba.d.ts').toMatch(new RegExp(String.raw`\b${name}\(`));
   });
 });

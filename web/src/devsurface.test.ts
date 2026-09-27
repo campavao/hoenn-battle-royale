@@ -77,9 +77,10 @@ describe('what came out of app.ts', () => {
 });
 
 // POK-327: the play-a-match e2e sets its match up from the hash -- the seed, the pace,
-// where the drop lands. Each is a way to rig a match, so none of them is read in a build.
+// where the drop lands -- and picture.spec the band the core draws (POK-329). Each is a
+// way to rig a match or its picture, so none of them is read in a build.
 describe('the dev flags a match is set up with', () => {
-  it.each(['fixedSeed', 'paceOptions', 'landOverride'])('%s reads nothing outside DEV', (fn) => {
+  it.each(['fixedSeed', 'paceOptions', 'landOverride', 'devBand'])('%s reads nothing outside DEV', (fn) => {
     // To the end of the signature's line: a return type can have braces of its own.
     const guarded = new RegExp(String.raw`function ${fn}\(\)[^\n]*\{\s*if \(!import\.meta\.env\.DEV\) return (?:null|undefined);`);
     expect(appSource).toMatch(guarded);

@@ -3,7 +3,7 @@
 // goes through emu/index.ts's Emulator wrapper -- this file never touches the core
 // directly, per the project CLAUDE.md.
 
-import { KEY_BIT, Emulator, type GbaKey } from './emu';
+import { KEY_BIT, Emulator, type Band, type GbaKey } from './emu';
 import { stallLine, watch } from './emu/watchdog';
 import { checkEmerald, isPrePatched, sha1Hex } from './rom/emerald';
 import { loadCheckedRelease, loadSidecars, type CheckedRelease, type ReleaseInfo } from './release';
@@ -80,7 +80,7 @@ import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
 import { TouchLayer } from './touch';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, stickKeys, type AxisSense, type StickMap } from './pad';
-import { BAND, FieldView } from './field';
+import { BAND, FieldView, SPRITE_BAND } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
 import {
@@ -112,7 +112,7 @@ import {
   type MatchSnapshot,
 } from './match/lifecycle';
 import regionmapData from './data/regionmap.json';
-import { devLand, devPace, parseRoomHash as parseHash, perfWanted, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
+import { devBand as devBandOf, devLand, devPace, parseRoomHash as parseHash, perfWanted, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
 import { warm, warmList } from './sw-warm';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
@@ -1433,6 +1433,16 @@ function landOverride(): { map: MapRef; x: number; y: number } | undefined {
   const land = devLand(location.hash);
   const map = land && HOENN.refOf(land.id);
   return land && map ? { map, x: land.x, y: land.y } : undefined;
+}
+
+/** `#band=T,B`: ask the core for T rows above the LCD and B below instead of BAND's, the
+ *  sides as BAND has them (POK-329: picture.spec holds a band taller than the ROM's ring
+ *  to the sprite window). Dev only: past the ring there is nothing of the map to show,
+ *  and a player would see the backdrop. */
+function devBand(): Band | undefined {
+  if (!import.meta.env.DEV) return undefined;
+  const rows = devBandOf(location.hash);
+  return rows && { left: BAND.left, top: rows.top, right: BAND.right, bottom: rows.bottom };
 }
 
 function botFill(): number {
@@ -3398,7 +3408,10 @@ async function main(): Promise<void> {
   const emu = await Emulator.create(canvas);
   // The picture past the LCD (POK-319, field.ts): the core draws a band around the
   // 240x160 from the same registers. A core without the export draws the LCD alone.
-  emu.setViewport(BAND);
+  // The sprite window is the band's own 256 rows (POK-329): a core that knows it draws
+  // no sprite twice, where the old one put a person's legs at the band's top.
+  emu.setSpriteBand(SPRITE_BAND);
+  emu.setViewport(devBand() ?? BAND);
 
   await runImportScreen(emu);
   const { bytes, usingPatched, mailboxBase, protocol, symbols, patch } = await runPatchingScreen(emu);

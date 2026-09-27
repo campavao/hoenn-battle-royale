@@ -72,12 +72,12 @@ its caches).
 
 `web/public/emu/` (mgba.js, mgba.wasm, mgba.d.ts) is tracked and goes out with the shell.
 It is thenick775's `feature/wasm` at `tools/br/mgba-wasm/COMMIT` plus
-`tools/br/mgba-wasm/hbr-exports.patch` (the EWRAM pointers and, since POK-319, the
-picture past the LCD), built by `tools/br/mgba-wasm/build.sh`. The tracked files are
-what the site serves and what the e2e boots; nothing in CI replaces them. CI's `wasm` job
-runs the same script on every push and fails ("wasm core drift") unless its sha256s are
-the tracked ones. When the patch changes, rebuild in WSL and copy the output in before
-deploying:
+`tools/br/mgba-wasm/hbr-exports.patch` (the EWRAM pointers, since POK-319 the picture
+past the LCD, and since POK-329 the sprite window it is drawn with), built by
+`tools/br/mgba-wasm/build.sh`. The tracked files are what the site serves and what the
+e2e boots; nothing in CI replaces them. CI's `wasm` job runs the same script on every
+push and fails ("wasm core drift") unless its sha256s are the tracked ones. When the
+patch changes, rebuild in WSL and copy the output in before deploying:
 
 ```bash
 wsl.exe -e bash -lc 'source ~/emsdk/emsdk_env.sh && cd /mnt/c/Users/cam95/Documents/Github/hoenn-battle-royale && bash tools/br/mgba-wasm/build.sh ~/hbr-mgba-build && cp ~/hbr-mgba-build/build-wasm/wasm/{mgba.js,mgba.wasm,mgba.d.ts,mgba.wasm.map} web/public/emu/'
