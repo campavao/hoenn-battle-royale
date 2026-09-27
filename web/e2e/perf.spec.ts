@@ -124,6 +124,11 @@ test('the host carries a match without the emulator falling over', async ({ brow
       // And no single hitch long enough to be felt as a freeze.
       expect(frames.max, 'no frame long enough to look like a hang').toBeLessThan(1000);
       expect(read.longest, 'no main-thread task long enough to look like a hang').toBeLessThan(1000);
+      // And the speaker was playing, so "0 late, 0 cut" is a speaker heard rather than one
+      // that never started: a headless AudioContext can sit suspended, and then every
+      // audio number reads 0.
+      expect(audio.state, 'the AudioContext is running').toBe('running');
+      expect(audio.callbacks, 'the speaker asked the core for sound').toBeGreaterThan(0);
     } finally {
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     }
