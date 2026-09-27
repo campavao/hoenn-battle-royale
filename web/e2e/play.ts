@@ -229,7 +229,8 @@ export interface PlayLog {
   bad: string[];
   /** The last samples before the first break of each kind: frame, fade (y, a = active,
    *  B/O = the palettes it reaches, fN = a fast fade and its submode, (obj) = the last
-   *  fade reached no BG palette), colour, and what the corners showed. */
+   *  fade reached no BG palette, end = a fast fade out has ended), colour, uN = how far
+   *  under its fade the map should be, and what the corners showed. */
   trails: Record<string, string[]>;
   counts: Record<string, number>;
   /** How often something the spec wants to have happened was seen. */
@@ -280,6 +281,9 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
       let lastBg = true;
       // Frames in a row the ROM has had the map under a whole fade (y 16).
       let fullRun = 0;
+      // A fast fade out that has ended, and how long ago: the picture is its colour until
+      // the next fade begins.
+      let fastEnd: { color: number; frames: number } | null = null;
       // The composite is drawn from the frame before and holds a finished fade for up
       // to a second, so a fade excuses it for that long after it has moved on.
       const whiteOk: boolean[] = [];
@@ -333,19 +337,27 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         const fadeActive = (fw6 & 0x8000) !== 0;
         const fadeColor = fw6 & 0x7fff;
         const fw8 = emu.read(s.gPaletteFade + k.FADE_MODE_WORD, 16);
-        // A fast fade, running or finished: the mode stays until the next fade begins.
+        // A fast fade, while it runs: the ROM puts the mode back to normal on its last
+        // step (palette.c, UpdateFastPaletteFade), with y at 0.
         const fastMode = ((fw8 >> 8) & 3) === k.FAST_FADE;
         const fast = fadeActive && fastMode;
-        if (!fastMode && fadeActive && selected !== 0) lastBg = (selected & k.FADE_BG_PALETTES) !== 0;
-        // The map is under the fade only when the fade reached it. A fast fade's y and
-        // colour are not a blend (it steps every palette by 2 towards its submode's
-        // colour, and ends at y 31), so under one the map may go that colour, and only
-        // that one.
-        const bgFaded = !fastMode && lastBg ? fadeY : 0;
+        const fastWhite = fast && (fw8 & 0x3f) <= k.FAST_WHITE_MAX;
+        if (fast) lastBg = true;
+        else if (fadeActive && selected !== 0) lastBg = (selected & k.FADE_BG_PALETTES) !== 0;
+        // How far the map is under the ROM's fade, 0..16, and in what colour. A normal
+        // fade reaches it only where it reached the BG palettes. A fast fade reaches every
+        // palette with no blend: y runs from 31 down by 2 every other frame, each step
+        // moving every channel 2 of 31 towards the submode's colour. One that fades out
+        // leaves the whole picture that colour when it ends, until the next fade begins
+        // -- which the composite holds for up to HELD_FRAMES (field.ts holdFade). Every
+        // battle ends on one to black, and the map stayed lit past a picture gone black.
+        if (fast) fastEnd = (fw8 & 1) === 1 ? { color: fastWhite ? 0x7fff : 0, frames: 0 } : null;
+        else if (fastEnd && (fadeActive && selected !== 0 || ++fastEnd.frames > k.HELD_FRAMES)) fastEnd = null;
+        const bgFaded = fast ? ((fw8 & 1) === 1 ? 16 - (fadeY >> 1) : fadeY >> 1) : fastEnd ? 16 : lastBg ? fadeY : 0;
+        const faded = fast ? (fastWhite ? 0x7fff : 0) : fastEnd ? fastEnd.color : fadeColor;
         fullRun = bgFaded >= 16 ? fullRun + 1 : 0;
-        const fastWhite = fastMode && (fw8 & 0x3f) <= k.FAST_WHITE_MAX;
-        whiteOk.push(fastWhite || (bgFaded >= 12 && fadeColor >= 0x7000));
-        blackOk.push((fastMode && !fastWhite) || (bgFaded >= 12 && fadeColor <= 0x0421));
+        whiteOk.push(bgFaded >= 12 && faded >= 0x7000);
+        blackOk.push(bgFaded >= 12 && faded <= 0x0421);
         if (whiteOk.length > k.HELD_FRAMES + 4) whiteOk.shift();
         if (blackOk.length > k.HELD_FRAMES + 4) blackOk.shift();
         if (fast || (fadeActive && (selected & k.FADE_BG_PALETTES) !== 0)) log.seen.bgFade++;
@@ -427,7 +439,7 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
             const black = px.every((p) => p[0] <= 8 && p[1] <= 8 && p[2] <= 8);
             trail.push(
               `${frame} y${fadeY}${fadeActive ? 'a' : ''}${selected & k.FADE_BG_PALETTES ? 'B' : ''}${selected >>> 16 ? 'O' : ''}${fastMode ? `f${fw8 & 0x3f}` : ''}` +
-                `${lastBg ? '' : ' (obj)'} c${fadeColor.toString(16)} ${white ? 'WHITE' : black ? 'BLACK' : '-'}${inBattle ? ' battle' : ''}`,
+                `${lastBg ? '' : ' (obj)'}${!fast && fastEnd ? ' end' : ''} c${fadeColor.toString(16)} u${bgFaded} ${white ? 'WHITE' : black ? 'BLACK' : '-'}${inBattle ? ' battle' : ''}`,
             );
             if (trail.length > 40) trail.shift();
             if (white) {
@@ -443,9 +455,9 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
             if (fullRun >= 3) {
               log.seen.full++;
               const up = (v: number) => (v << 3) | (v >> 2);
-              const want = [up(fadeColor & 31), up((fadeColor >> 5) & 31), up((fadeColor >> 10) & 31)];
+              const want = [up(faded & 31), up((faded >> 5) & 31), up((faded >> 10) & 31)];
               if (!px.every((p) => p.slice(0, 3).every((v, i) => Math.abs(v - want[i]) <= 8))) {
-                fail('unfaded', `map ${map} shows under a whole fade to ${fadeColor.toString(16)}: corners ${JSON.stringify(px.map((p) => p.slice(0, 3)))}`);
+                fail('unfaded', `map ${map} shows under a whole fade to ${faded.toString(16)}${fast ? ' (fast)' : fastEnd ? ' (a fast fade ended)' : ''}: corners ${JSON.stringify(px.map((p) => p.slice(0, 3)))}`);
               }
             }
             if (black) log.seen.black++;
