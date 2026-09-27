@@ -53,6 +53,28 @@ STATIC_ASSERT(BR_SPRITE_TOP % 8 == 0 && BR_SPRITE_BOTTOM % 8 == 0, BrSpriteWindo
 STATIC_ASSERT(BR_VIEW_LEFT % 8 == 0 && BR_VIEW_TOP % 8 == 0 && BR_VIEW_RIGHT % 8 == 0 && BR_VIEW_BOTTOM % 8 == 0, BrViewInEights)
 STATIC_ASSERT(BR_VIEW_TOP <= BR_SPRITE_TOP + 16 * BR_RING_ABOVE, BrViewTopInsideRing)
 
+// Where the ring lives in VRAM (POK-329). pret puts BG2's tilemap at screen block 28,
+// BG1's at 29 and BG3's at 30, one 2 KB block each, right under BG0's at 31. A 256x512
+// ring needs two blocks a layer, so BrField_InitRingBgs moves them down to 25, 27 and 29
+// -- pret's order, each with the block after it free to grow into -- and BG0 keeps 31.
+// BG2's map at 25 (0x0600C800) is then the first thing past BG0's text tiles in char
+// block 2 (0x06008000): tile 0x240 is their ceiling (br_hud.h), where it was 0x300.
+#define BR_FIELD_MAP_BASE_BG2 25
+#define BR_FIELD_MAP_BASE_BG1 27
+#define BR_FIELD_MAP_BASE_BG3 29
+// BG0's tilemap, sOverworldBgTemplates' (src/overworld.c): the blocks stop short of it.
+#define BR_FIELD_MAP_BASE_BG0 31
+// Each layer's tilemap: one screen block while the ring is 256x256.
+#define BR_RING_MAP_SIZE BG_SCREEN_SIZE
+
+STATIC_ASSERT(BR_FIELD_MAP_BASE_BG1 == BR_FIELD_MAP_BASE_BG2 + 2 && BR_FIELD_MAP_BASE_BG3 == BR_FIELD_MAP_BASE_BG1 + 2
+    && BR_FIELD_MAP_BASE_BG0 == BR_FIELD_MAP_BASE_BG3 + 2, BrRingMapsTwoBlocksApart)
+STATIC_ASSERT(BR_RING_MAP_SIZE <= 2 * BG_SCREEN_SIZE, BrRingMapFitsItsBlocks)
+
+// InitOverworldBgs's tilemap buffers and where they go (src/overworld.c, `#if BR`): the
+// three BR_RING_MAP_SIZE buffers, and BG1..3's map bases above.
+void BrField_InitRingBgs(void);
+
 // What the page reads out of the patched ROM before it boots the core (web/src/field.ts
 // romBand), every field a u16. In ROM: it costs no RAM.
 struct BrFieldView

@@ -5,7 +5,8 @@
 # lines after the first are not the field message box at all (DisplayItemMessageOnField),
 # which is why the HUD reads window 0's first cell as well as the message box's mode.
 # Every frame from A to the choice, and from SEE YA to the HUD coming back, is watched,
-# and tools/br/hud-vram.py checks every cell naming a shared tile.
+# and tools/br/hud-vram.py checks every cell naming a shared tile, and that BG1..3 show
+# the field's own tilemaps throughout.
 # checked-by: tools/br/hud-vram.py
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 02 04 01 00 04 00 BD BB C7 FF
@@ -33,6 +34,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 2
 tap A
 wait 60
@@ -44,6 +55,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 2
 tap A
 wait 60
@@ -66,6 +87,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 2
 tap A
 wait 60
@@ -86,6 +117,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 40
 unwatch
 say mart-after

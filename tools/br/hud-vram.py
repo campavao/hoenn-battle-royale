@@ -9,15 +9,22 @@ comes up (BrHud_Yield, src/br/br_hud.c). The drivers that pipe into this watch e
 frame through each window opening and closing over the HUD (`watch`, tools/br/README.md):
 gMain.callback2 (4 bytes), gBrHud's first 16 bytes, BG0's tilemap in VRAM (0x0600F800),
 the tiles 0x139..0x1FF in VRAM (0x0600A720), and every live BG0 window -- its template
-and its pixel buffer.
+and its pixel buffer. And the ring's three layers: BG1..3CNT (0x0400000A, 6 bytes), each
+layer's tilemap in VRAM where BrField_InitRingBgs puts it (0x0600C800, 0x0600D800,
+0x0600E800), and the field's three tilemap buffers, pointer (gOverworldTilemapBuffer_BgN,
+4 bytes) and heap buffer (*gOverworldTilemapBuffer_BgN) both.
 
 A frame's VRAM is what the frame before it queued: the harness stops at VBlank's start,
 before the handler runs the DMA queue, so the tilemap and tiles dumped at frame f are
 the buffers as they stood at frame f - 1. So for every overworld frame f whose frame
 f - 1 was watched too:
 
-  * no BG0 cell names a tile at or above 0x240, BG2's tilemap once the ring is 512 rows
-    tall (the HUD's own cells did, 0x23D..0x2FF, until this ticket);
+  * no BG0 cell names a tile at or above 0x240, where BG2's tilemap starts (the HUD's own
+    cells did, 0x23D..0x2FF, until this ticket);
+  * BG1, BG2 and BG3 each show the field's own buffer: the tilemap at the screen block
+    its BGxCNT names holds, at f, what the buffer held at f - 1. A text tile run past the
+    ceiling lands in BG2's map and fails here, and so does a copy to a block the register
+    does not name;
   * every cell naming a tile in 0x139..0x1FF has an owner at f - 1: a live window whose
     rectangle holds the cell and maps it to that tile;
   * and the tile holds that owner's pixels: its 32 bytes are ones some owner's buffer
@@ -28,8 +35,9 @@ f - 1 was watched too:
     start menu), are back -- first cell and every tile -- within two frames of the last
     window over them going: BrHud_Tick draws them the frame after.
 
-Exits 1 on any failure, and 2 when no window ever covered a HUD window: a driver that
-never opens one over the HUD proves nothing.
+Exits 1 on any failure, and 2 when no window ever covered a HUD window or no frame's
+BG1..3 maps were compared with their buffers: a driver that never opens one over the HUD,
+or never watches the ring, proves nothing.
 """
 import json
 import re
@@ -39,6 +47,15 @@ MAP_ADDR = 0x0600F800
 TILES_ADDR = 0x06008000 + 0x139 * 32
 FIRST, END = 0x139, 0x200
 CEILING = 0x240
+# BG1CNT, BG2CNT, BG3CNT; the field's buffer for each layer (symbols.py exports them).
+BGCNT_ADDR = 0x0400000A
+# A map load's tilemap copies wait in the DMA queue behind its tilesets (40 KB a VBlank),
+# so for the first few overworld frames after one -- five on the warp in hud-vram.txt,
+# under a fade still at full black, and the same in pret's layout -- VRAM's maps are
+# still the load's cleared blocks. A layer may lag its buffer that long, and only until
+# it first matches.
+LOAD_LAG = 30
+RING = {1: "gOverworldTilemapBuffer_Bg1", 2: "gOverworldTilemapBuffer_Bg2", 3: "gOverworldTilemapBuffer_Bg3"}
 # The HUD's windows (br_hud.c's templates): (left, top, base) -> name.
 HUD = {(20, 1, 0x139): "corner", (1, 11, 0x154): "box", (1, 17, 0x1C8): "ticker"}
 START_MENU = (22, 1, 0x139)
@@ -79,10 +96,24 @@ def meet(a, b):
     return a[0] <= b[2] and b[0] <= a[2] and a[1] <= b[3] and b[1] <= a[3]
 
 
+def sym(symbols, name):
+    return int(symbols[name], 16) if symbols and name in symbols else None
+
+
+def read(frame, addr, n):
+    """n bytes at addr out of whichever of the frame's dumps holds them, or None."""
+    for a, d in frame["at"].items():
+        if a <= addr and addr + n <= a + len(d):
+            return d[addr - a:addr - a + n]
+    return None
+
+
 def parse(stream):
     """`frame n` lines open a frame; the dumps and windows after it are its watches. A
     `say` line (a bare lowercase word) labels the frames after it, and closes the frame
-    so a driver's own dump is not read as a watch."""
+    so a driver's own dump is not read as a watch. Every dump is kept by its address;
+    gMain.callback2 and gBrHud are found by theirs (by their length, 4 and 16, when the
+    run names no symbol table)."""
     frames = []
     symbols = None
     cur = None
@@ -99,21 +130,28 @@ def parse(stream):
             if pending_win is not None:
                 cur["windows"].append(Win(pending_win, data))
                 pending_win = None
-            elif buf_addr == MAP_ADDR:
-                cur["map"] = [data[i] | data[i + 1] << 8 for i in range(0, len(data), 2)]
-            elif buf_addr == TILES_ADDR:
-                cur["tiles"] = data
-            elif len(data) == 4:
-                cur["cb2"] = int.from_bytes(data, "little")
-            elif len(data) == 16:
-                cur["hud"] = data
+            else:
+                cur["at"][buf_addr] = data
+                if buf_addr == MAP_ADDR:
+                    cur["map"] = [data[i] | data[i + 1] << 8 for i in range(0, len(data), 2)]
+                elif buf_addr == TILES_ADDR:
+                    cur["tiles"] = data
+                elif symbols is not None:
+                    if buf_addr == sym(symbols, "gMain") + 4:
+                        cur["cb2"] = int.from_bytes(data, "little")
+                    elif buf_addr == sym(symbols, "gBrHud"):
+                        cur["hud"] = data
+                elif len(data) == 4:
+                    cur["cb2"] = int.from_bytes(data, "little")
+                elif len(data) == 16:
+                    cur["hud"] = data
             buf = None
         m = re.match(r"^symbols: \d+ from (.+)$", line.strip())
         if m:
             symbols = json.load(open(m.group(1), encoding="utf-8"))
             continue
         if line.startswith("frame "):
-            cur = {"n": int(line.split()[1]), "windows": [], "label": label}
+            cur = {"n": int(line.split()[1]), "windows": [], "at": {}, "label": label}
             frames.append(cur)
             continue
         if line.startswith("window ") and cur is not None:
@@ -140,6 +178,9 @@ def main():
     bad = 0
     checked = 0
     covered_frames = 0
+    ring_checked = 0
+    ring_settled = set()   # layers that have matched their buffer since the field came back
+    loaded_at = None       # the first overworld frame after a watched frame that was not
     due = {}       # "corner"/"ticker" -> the frame by which it must be back
     wanted = {}    # "corner"/"ticker" -> whether it should be up, last frame
     prev = None
@@ -149,6 +190,46 @@ def main():
         bad += 1
         if bad <= 40:
             print(f"frame {f['n']} ({f['label']}): {msg}")
+
+    def check_ring(f, prev):
+        # Each of BG1..3: the tilemap VRAM holds at the block its BGxCNT names (both as
+        # frame f - 1 left them), against the field's buffer at f - 1. Right after a map
+        # load a layer may lag its buffer while it has never matched it (see LOAD_LAG).
+        nonlocal ring_checked, loaded_at
+        if prev.get("cb2") != f.get("cb2"):
+            loaded_at = f["n"]
+            ring_settled.clear()
+        cnt = read(f, BGCNT_ADDR, 6)
+        if cnt is None or not all(sym(symbols, n) is not None for n in RING.values()):
+            return
+        for bg in (1, 2, 3):
+            v = cnt[2 * (bg - 1)] | cnt[2 * (bg - 1) + 1] << 8
+            base = 0x06000000 + ((v >> 8) & 0x1F) * 0x800
+            size = 0x800 * (1, 2, 2, 4)[v >> 14]
+            vram = read(f, base, size)
+            if vram is None:
+                fail(f, f"BG{bg}CNT is 0x{v:04X}, and its tilemap (0x{base:08X}, {size} bytes) is not watched")
+                continue
+            ptr = read(prev, sym(symbols, RING[bg]), 4)
+            if ptr is None:
+                fail(f, f"{RING[bg]} is not watched")
+                continue
+            heap = read(prev, int.from_bytes(ptr, "little"), size)
+            if heap is None:
+                fail(f, f"*{RING[bg]} (0x{int.from_bytes(ptr, 'little'):08X}, {size} bytes) is not watched")
+                continue
+            ring_checked += 1
+            if vram == heap:
+                ring_settled.add(bg)
+                continue
+            if bg not in ring_settled and loaded_at is not None and f["n"] - loaded_at < LOAD_LAG:
+                continue
+            ring_settled.add(bg)
+            i = next(i for i in range(0, size, 2) if vram[i:i + 2] != heap[i:i + 2])
+            cell = i // 2
+            fail(f, f"BG{bg}'s tilemap at 0x{base:08X} is not its buffer at frame {prev['n']}: cell "
+                    f"({cell % 32},{cell // 32}) is 0x{vram[i] | vram[i + 1] << 8:04X} in VRAM and "
+                    f"0x{heap[i] | heap[i + 1] << 8:04X} in the buffer")
 
     def remember(f):
         # What each window's buffer held at frame f, for the frame after it to check
@@ -170,8 +251,12 @@ def main():
             prev = f
             due.clear()
             wanted.clear()
+            if not consecutive:
+                loaded_at = None
+                ring_settled.clear()
             continue
         checked += 1
+        check_ring(f, prev)
         m = f["map"]
         before = prev["windows"]
         for y in range(32):
@@ -231,10 +316,11 @@ def main():
                 del due[name]
         remember(f)
         prev = f
-    print(f"{len(frames)} frames watched, {checked} checked, {covered_frames} with a window over the HUD, {bad} failures")
+    print(f"{len(frames)} frames watched, {checked} checked, {covered_frames} with a window over the HUD, "
+          f"{ring_checked} ring maps compared with their buffers, {bad} failures")
     if bad:
         sys.exit(1)
-    if not covered_frames:
+    if not covered_frames or not ring_checked:
         sys.exit(2)
 
 

@@ -1,0 +1,109 @@
+# vram-layout: the field's BG1..3 tilemaps are at screen blocks 27, 25 and 29, not pret's
+# 29, 28 and 30 (POK-329). Two blocks a layer, so each can grow to 256x512 in place, and
+# BG2's map at block 25 (0x0600C800) is where BG0's text tiles end: tile 0x240, the
+# HUD's ceiling (br_hud.h). BrField_InitRingBgs sets them every time the field builds
+# its BGs -- a map load and the way back from a battle both -- and every tilemap copy
+# follows the config, so the three maps in VRAM are the field's buffers wherever they
+# are (hud-vram.py checks that, frame by frame, through every window over the HUD).
+#
+# BGxCNT's map base is bits 8..12: 27 is 0x1B00, 25 0x1900, 29 0x1D00.
+#
+# Route 102 under CALVIN (npcout-in-battle.txt's boot): a map load, then his fight, won,
+# and back.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 21 00 0F 00 BD BB C7 FF
+wait 400
+expect u32 gMain+4 CB2_Overworld+1
+say after-a-map-load
+dump 0x04000008 8
+expectbits u16 0x0400000A 0x1F00 0x1B00
+expectbits u16 0x0400000C 0x1F00 0x1900
+expectbits u16 0x0400000E 0x1F00 0x1D00
+# ...and BG0 where it was, block 31
+expectbits u16 0x04000008 0x1F00 0x1F00
+# the middle layer is drawn where BG2CNT says: the ring's first row, a tile a cell
+expectne u16 0x0600C800 0
+expectne u16 0x0600C83E 0
+# A started match at rung 30, as npcout-in-battle.txt has it, and CALVIN talked to.
+poke u8 gBrMatch 2
+poke u8 gBrMatch+1 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 3C 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+tap UP
+wait 20
+tap A
+wait 240
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+expectne u32 gMain+4 CB2_Overworld+1
+expect u32 gBattleTypeFlags 0xC
+# The fight is called (B_OUTCOME_WON at the next turn boundary) and we are let out on B:
+# A on the field would take CALVIN's ball, which lands in front of us.
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+shot back
+expect u32 gMain+4 CB2_Overworld+1
+say after-a-battle
+dump 0x04000008 8
+expectbits u16 0x0400000A 0x1F00 0x1B00
+expectbits u16 0x0400000C 0x1F00 0x1900
+expectbits u16 0x0400000E 0x1F00 0x1D00
+expectbits u16 0x04000008 0x1F00 0x1F00
+expectne u16 0x0600C800 0
+expectne u16 0x0600C83E 0
+say ok

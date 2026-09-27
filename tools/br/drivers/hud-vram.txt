@@ -1,8 +1,8 @@
 # hud-vram: the HUD shares BG0's tiles with the start menu and the message box, and
 # every window that comes up over it gets them clean (POK-329). The corner is 0x139..
 # 0x153 (the start menu's head), the box 0x154..0x1C3 (the menu's tail and the message
-# box's head), the ticker 0x1C8..0x1FF (the message box's tail): BG2's tilemap comes
-# down to screen block 25 for the 512-row ring, and BG0 keeps no tile from 0x240 on.
+# box's head), the ticker 0x1C8..0x1FF (the message box's tail): BG2's tilemap is at
+# screen block 25 (BrField_InitRingBgs), and BG0 keeps no tile from 0x240 on.
 # BrHud_Yield hands a HUD window's tiles over on the frame another window comes up over
 # it, and BrHud_Tick draws it again the frame after that window goes.
 #
@@ -10,10 +10,11 @@
 # up beside them; then, one after another over all three, the START menu (five items,
 # the box still up), Brendan's house sign, the spectator's peek box, and the map-name
 # popup after a warp, with the box running out under it. Every frame through each is
-# watched (VRAM's tilemap and tiles, every live BG0 window, gBrHud's first 16 bytes) and
-# tools/br/hud-vram.py checks each cell naming a shared tile shows its owner's pixels,
-# that none names a tile at or above 0x240, and that the corner and the ticker are back
-# the frame after whatever was over them goes.
+# watched (VRAM's tilemap and tiles, every live BG0 window, gBrHud's first 16 bytes, and
+# BG1..3's control registers, their tilemaps in VRAM and the field's buffers for them)
+# and tools/br/hud-vram.py checks each cell naming a shared tile shows its owner's pixels,
+# that none names a tile at or above 0x240, that the corner and the ticker are back the
+# frame after whatever was over them goes, and that BG1..3 show the field's own tilemaps.
 # checked-by: tools/br/hud-vram.py
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
@@ -36,6 +37,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 2
 poke u16 gBrMailbox+0x0C 2
 wait 10
@@ -62,6 +73,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 2
 tap START
 wait 14
@@ -86,6 +107,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 2
 tap B
 wait 10
@@ -119,6 +150,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 2
 tap A
 wait 40
@@ -135,6 +176,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 2
 tap A
 wait 12
@@ -167,6 +218,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 2
 tap START
 wait 12
@@ -183,6 +244,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 2
 tap B
 wait 12
@@ -207,6 +278,16 @@ watch gBrHud 16
 watch 0x0600F800 2048
 watch 0x0600A720 6368
 watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 2048
+watch 0x0600D800 2048
+watch 0x0600E800 2048
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 2048
+watch *gOverworldTilemapBuffer_Bg2 2048
+watch *gOverworldTilemapBuffer_Bg3 2048
 wait 260
 unwatch
 say popup-gone

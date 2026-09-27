@@ -1,6 +1,8 @@
 // The picture past the LCD (POK-319). See include/br/br_field.h.
 #include "global.h"
+#include "bg.h"
 #include "main.h"
+#include "malloc.h"
 #include "overworld.h"
 #include "palette.h"
 #include "task.h"
@@ -52,6 +54,24 @@ void BrField_Tick(void)
             CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + 15, gSaveBlock1Ptr->pos.y + i);
         sFarColumnPending = FALSE;
     }
+}
+
+// pret's six lines, with the map bases moved down (br_field.h). InitBgsFromTemplates
+// has just set BG1..3 to sOverworldBgTemplates' 29/28/30; this changes only the base,
+// in the config every tilemap copy reads its destination from, before
+// InitOverworldGraphicsRegisters schedules the first one -- so nothing is ever copied to
+// the old blocks -- and its ShowBg writes it to BGxCNT.
+void BrField_InitRingBgs(void)
+{
+    gOverworldTilemapBuffer_Bg1 = AllocZeroed(BR_RING_MAP_SIZE);
+    gOverworldTilemapBuffer_Bg2 = AllocZeroed(BR_RING_MAP_SIZE);
+    gOverworldTilemapBuffer_Bg3 = AllocZeroed(BR_RING_MAP_SIZE);
+    SetBgTilemapBuffer(1, gOverworldTilemapBuffer_Bg1);
+    SetBgTilemapBuffer(2, gOverworldTilemapBuffer_Bg2);
+    SetBgTilemapBuffer(3, gOverworldTilemapBuffer_Bg3);
+    SetBgAttribute(1, BG_ATTR_MAPBASEINDEX, BR_FIELD_MAP_BASE_BG1);
+    SetBgAttribute(2, BG_ATTR_MAPBASEINDEX, BR_FIELD_MAP_BASE_BG2);
+    SetBgAttribute(3, BG_ATTR_MAPBASEINDEX, BR_FIELD_MAP_BASE_BG3);
 }
 
 // The picture the core is asked to draw, and the sprite window it reads OAM y against

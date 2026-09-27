@@ -22,6 +22,11 @@ poke u8 gBrRing+2 4
 poke u8 gBrRing+3 5
 poke u8 gBrRing+4 4
 pokebytes gBrRing+14 C6 C3 CE CE C6 BF CC C9 C9 CE FF
+# Below the frame's twenty rows BG1's block holds whatever was there before: the field's
+# BG3 tilemap until POK-329, and what any screen leaves. Tile 511 in row 20 (the fly map
+# decompresses rows 0..19 over the rest) is not the frame's, and must not move the fog's
+# tile -- read as the frame's last, it put the fog at 512, past BG1's room, and none drew.
+poke u16 0x0600F500 0x01FF
 tap START
 wait 40
 tap DOWN
@@ -33,13 +38,13 @@ wait 240
 shot ring
 # BG1's tilemap is screen block 30 (0x0600F000), 32 cells a row, and the region-map grid
 # starts at its cell (1,2). The fog is one tile of its own after the frame's last
-# (0x15 here) in palette 10: 0xA015. Inside the ring the frame's own cell stays:
+# (0x04, so 0x05) in palette 10: 0xA005. Inside the ring the frame's own cell stays:
 # (4,5) the centre, and (8,5), four cells out on a radius of 4 -- the edge is inside,
 # the test is <=. One further, (9,5), is fog, and so is the far corner (27,14).
 expect u16 0x0600F1CA 0x1000
 expect u16 0x0600F1D2 0x1000
-expect u16 0x0600F1D4 0xA015
-expect u16 0x0600F438 0xA015
+expect u16 0x0600F1D4 0xA005
+expect u16 0x0600F438 0xA005
 # the fog's colour, RGB(13,3,22), in palette 10...
 expect u16 0x05000140 0x586D
 expect u16 0x0500015E 0x586D

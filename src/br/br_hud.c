@@ -61,11 +61,11 @@ STATIC_ASSERT(BR_HUD_TILE_BOX >= BR_HUD_CORNER_END && BR_HUD_BOX_END <= 0x1C4, B
 // menu pret can draw (nine items, to 0x1C4) and past the box, short of the frames.
 STATIC_ASSERT(BR_HUD_TILE_TICKER >= BR_HUD_START_MENU_END(9) && BR_HUD_TILE_TICKER >= BR_HUD_BOX_END, BrHudTickerPastEveryStartMenu)
 STATIC_ASSERT(BR_HUD_TILE_TICKER >= BR_HUD_MESSAGE_BOX && BR_HUD_TICKER_END <= BR_HUD_MESSAGE_BOX_END, BrHudTickerInsideTheMessageBox)
-// Nothing at or above the ceiling, BG2's tilemap at screen block 25 (POK-329). A tile
+// Nothing at or above the ceiling, BG2's tilemap at screen block 25 (br_field.h). A tile
 // past it is a write over the map's middle layer: the box once ran four tiles over the
 // old ceiling, 0x300, and every line it printed put a magenta band across the DAY CARE's
 // floor (2026-09-17).
-STATIC_ASSERT(BR_HUD_TILE_CEILING == (25 * 0x800 - 0x8000) / 32, BrHudCeilingIsScreenBlock25)
+STATIC_ASSERT(BR_HUD_TILE_CEILING == (BR_FIELD_MAP_BASE_BG2 * BG_SCREEN_SIZE - 2 * BG_CHAR_SIZE) / TILE_SIZE_4BPP, BrHudCeilingIsBg2Map)
 STATIC_ASSERT(BR_HUD_CORNER_END <= BR_HUD_TILE_CEILING && BR_HUD_BOX_END <= BR_HUD_TILE_CEILING
     && BR_HUD_TICKER_END <= BR_HUD_TILE_CEILING, BrHudBelowTheCeiling)
 // ...and clear of the map-name popup and the nurse's yes/no, which open beside the HUD

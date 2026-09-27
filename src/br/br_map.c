@@ -134,6 +134,7 @@ bool8 BrMap_Open(void)
 // the frame layer, a text background with a palette field and nothing of its own over
 // the map area -- as one solid tile in one colour, and the hardware blends it with the
 // map underneath. A purple overlay, in the literal sense.
+#define BR_MAP_FRAME_CELLS (32 * 20)   // the frame's own tilemap, from its top-left cell
 #define BR_FOG_PLTT 10                 // a 16-colour slot the map's own palette does not reach
 #define BR_FOG_COLOUR RGB(13, 3, 22)   // the overworld's fog weather, in one colour
 #define BR_FOG_EVA 10                  // ...and how much of it: 10/16 fog over 6/16 map
@@ -150,8 +151,12 @@ void BrMap_ShadeFog(u16 *frame, u8 *tiles, u8 left, u8 top, u8 width, u8 height)
 
     if (!BrMap_Looking() || !gBrRing.active)
         return;
-    // A tile of our own, after the last one the frame uses.
-    for (i = 0; i < 32 * 21; i++)
+    // A tile of our own, after the last one the frame uses. The frame is 32x20 cells
+    // (region_map.c's frame.bin, the screen and no more): below it, BG1's screen block
+    // holds whatever the last screen left there, which is not the frame's. It was the
+    // field's BG3 tilemap until POK-329 moved that to block 29, and a tile number out of
+    // its row 20 made the fog's tile 0x15 in Littleroot -- and 511 or more, no fog at all.
+    for (i = 0; i < BR_MAP_FRAME_CELLS; i++)
     {
         if ((frame[i] & 0x3FF) > tile)
             tile = frame[i] & 0x3FF;

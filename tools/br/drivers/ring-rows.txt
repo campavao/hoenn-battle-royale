@@ -7,17 +7,17 @@
 #
 # From Littleroot (5,9) one step down puts pos at (5,10) with the ring's y tile offset
 # at 2, so the sixteenth slot is tile rows (2 + 30) % 32 = 0..1 of BG2's tilemap
-# (0x0600E000, the middle layer, 64 bytes a row). Tile columns 10..11 (u32 at +0x14)
+# (0x0600C800, the middle layer, 64 bytes a row). Tile columns 10..11 (u32 at +0x14)
 # are the witness: plain path at rest (0x20032002), and 0x21FD21FC / 0x21FF21FE once the
 # row is drawn -- what a whole-map draw booted straight at (5,10) has in tile rows
-# 30..31 (u32 at 0x0600E794 and 0x0600E7D4), and not the plain path the stale slot held.
+# 30..31 (u32 at 0x0600CF94 and 0x0600CFD4), and not the plain path the stale slot held.
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 09 00 BD BB C7 FF
 wait 400
 say rest
 expect u16 *gSaveBlock1Ptr+2 9
-expect u32 0x0600E014 0x20032002
-expect u32 0x0600E054 0x20022003
+expect u32 0x0600C814 0x20032002
+expect u32 0x0600C854 0x20022003
 # Already facing south, so the step starts at once and pos moves with its first frame.
 # Four frames later the step is still under way and the band's top rows are still
 # showing that slot: it must not have been drawn yet (Cam's 2026-09-18 phone jitter).
@@ -25,10 +25,10 @@ hold DOWN 1
 wait 4
 say mid-step
 expect u16 *gSaveBlock1Ptr+2 10
-expect u32 0x0600E014 0x20032002
+expect u32 0x0600C814 0x20032002
 wait 40
 say after-a-step-down
 expect u16 *gSaveBlock1Ptr+2 10
-expect u32 0x0600E014 0x21FD21FC
-expect u32 0x0600E054 0x21FF21FE
+expect u32 0x0600C814 0x21FD21FC
+expect u32 0x0600C854 0x21FF21FE
 say ok

@@ -22,14 +22,19 @@
 // rid of it." Its window slot and its tiles are free now.
 //
 // Tiles (POK-329). BG0's tiles are char block 2 (0x06008000), and BG2's tilemap at
-// screen block 25 (0x0600C800) is the first thing past them once the ring is 512 rows
-// tall: **tile 0x240 is the ceiling**. Pret's own overworld windows fill 0x008..0x23C --
-// the transient boxes (Safari balls, money, a script's multichoice, the spectator's peek
-// box in br_spectate.c) from 0x008, the map-name popup 0x107, yes/no 0x125, the start
-// menu 0x139, the message box 0x194..0x1FF, the two frames 0x200 and 0x214, and the
-// popup's outline 0x21D..0x23C (a 0x400-byte load, thirty-two tiles). There is no run
-// of 195 spare below the ceiling, so the HUD SHARES tiles, and only with the two windows
-// that cover it on screen whenever they are up:
+// screen block 25 (0x0600C800), where BrField_InitRingBgs puts it to leave the ring room
+// to grow to 512 rows, is the first thing past them: **tile 0x240 is the ceiling**.
+// Pret's own overworld windows fill 0x008..0x23C -- the transient boxes (Safari balls,
+// money, a script's multichoice, the spectator's peek box in br_spectate.c) from 0x008,
+// the map-name popup 0x107, yes/no 0x125, the start menu 0x139, the message box
+// 0x194..0x1FF, the two frames 0x200 and 0x214, and the popup's outline 0x21D..0x23C
+// (a 0x400-byte load, thirty-two tiles). One pret window runs past the ceiling: the
+// PokeNav's match call, its text from 0x200 and its frame and icon from 0x270, which
+// would write into BG2's map -- and a match never has a PokeNav (br_boot.c sets no
+// FLAG_HAS_MATCH_CALL, and the scripted calls' flags are set only by the story and the
+// gym ceremonies a match skips). There is no run of 195 spare below the ceiling, so the
+// HUD SHARES tiles, and only with the two windows that cover it on screen whenever they
+// are up:
 //
 //   corner  0x139..0x153 (27)  the start menu's head: a start menu of any length covers
 //                              all of them, and sits over the corner on screen

@@ -61,6 +61,9 @@ ENGINE_SYMBOLS = [
     # The window table: the harness's `watch windows` reads each live window's template
     # and pixel buffer out of it (hud-vram.txt, POK-329).
     "gWindows",
+    # ...and the field's three tilemap buffers, which VRAM's BG1..3 maps must match
+    # wherever BrField_InitRingBgs put them (hud-vram.py, POK-329).
+    "gOverworldTilemapBuffer_Bg1", "gOverworldTilemapBuffer_Bg2", "gOverworldTilemapBuffer_Bg3",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

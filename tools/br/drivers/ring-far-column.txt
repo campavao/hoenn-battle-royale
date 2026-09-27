@@ -4,9 +4,9 @@
 #
 # From Littleroot (5,9) one step right puts pos at (6,9) with the ring's x tile offset at
 # 2, so the sixteenth slot is tile columns (2 + 30) % 32 = 0..1 of every row of BG2's
-# tilemap (0x0600E000, the middle layer): u32 at 0x0600E000 + row * 64. The values are
+# tilemap (0x0600C800, the middle layer): u32 at 0x0600C800 + row * 64. The values are
 # metatile (21, 9 + row/2)'s, read off a whole-map draw booted straight at (6,9), where
-# that metatile sits in tile columns 30..31 (u32 at 0x0600E03C + row * 64): rows 12..15
+# that metatile sits in tile columns 30..31 (u32 at 0x0600C83C + row * 64): rows 12..15
 # are the edge of a building, not the plain grass the stale column 20 would show. The
 # same address tells the whole story: metatile 5 at rest, still metatile 5 mid-step,
 # metatile 21 once the step is done (BrField_Tick draws it on the completing frame).
@@ -17,7 +17,7 @@ say pos-at-rest
 dump *gSaveBlock1Ptr 4
 expect u16 *gSaveBlock1Ptr 5
 say rest-slot-0-row-12-is-metatile-5
-expect u32 0x0600E300 0x20092180
+expect u32 0x0600CB00 0x20092180
 # Ten frames in (hold N is N+1 frames; the first eight face and start the step) the tile
 # offset has advanced, so slot 0 is now also "slot 30", and it must STILL hold metatile 5:
 # the scroll lags the tile by 12 pixels and those are on screen. Drawing the far column
@@ -26,18 +26,18 @@ hold RIGHT 9
 say mid-step-camera
 dump gFieldCamera+16 4
 expectne u32 gFieldCamera+16 0
-expect u32 0x0600E300 0x20092180
+expect u32 0x0600CB00 0x20092180
 wait 40
 say pos-after-a-step-right
 dump *gSaveBlock1Ptr 4
 expect u16 *gSaveBlock1Ptr 6
 say far-column-rows-12-15
-dump 0x0600E300 4
-dump 0x0600E340 4
-dump 0x0600E380 4
-dump 0x0600E3C0 4
-expect u32 0x0600E300 0x628C628B
-expect u32 0x0600E340 0x629C629B
-expect u32 0x0600E380 0x52515250
-expect u32 0x0600E3C0 0x52615260
+dump 0x0600CB00 4
+dump 0x0600CB40 4
+dump 0x0600CB80 4
+dump 0x0600CBC0 4
+expect u32 0x0600CB00 0x628C628B
+expect u32 0x0600CB40 0x629C629B
+expect u32 0x0600CB80 0x52515250
+expect u32 0x0600CBC0 0x52615260
 say ok
