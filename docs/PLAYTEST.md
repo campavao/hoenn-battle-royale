@@ -55,7 +55,11 @@ on it. At Route 102's action menu that took sprites 1 and 2, the foe's healthbox
 under the fight. play.spec's Firefox run met a fight that never ended once in about
 twenty, with the sweep having taken two trainers during it. Every object BR takes off a
 map now goes through `BrField_RemoveObject`, which off the field holds it in the table
-until the first field frame (`npcout-in-battle.txt`).
+until the first field frame (`npcout-in-battle.txt`). A ghost's PLACE and a piece's
+PICKUP go the same way (`ghost-loot-in-battle.txt`); a PLACE comes every time anybody
+changes maps, so that was the commoner path. And the loot keeps its objects through a
+battle: it used to forget them there, which left a piece in view drawn by an object
+nothing owned -- still standing after it was taken, and in the way of the next piece.
 Held, the trainer you are fighting is still there when the battle ends, so their team
 drops -- a swept opponent used to drop nothing. If it happens again: the stall overlay's
 line (kind, version, cb2, map), and whether the results panel was behind the black.

@@ -161,12 +161,15 @@ static u32 Keep(u8 limit)
     return keep;
 }
 
+// A PLACE, an OUT or a GONE is heard in a battle as often as on the field -- somebody is
+// always changing maps -- and off the field the ghost's object is held rather than
+// removed under a battle sprite's feet (BrField_RemoveObject, POK-328).
 static void Despawn(u8 seat)
 {
     struct ObjectEvent *obj = GhostObject(seat);
 
     if (obj != NULL)
-        RemoveObjectEventByLocalIdAndMap(obj->localId, obj->mapNum, obj->mapGroup);
+        BrField_RemoveObject(obj->localId, obj->mapNum, obj->mapGroup);
     gBrSeats[seat].objId = BR_NO_OBJ;
     gBrSeats[seat].queued = 0;
 }

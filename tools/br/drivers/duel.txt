@@ -36,8 +36,13 @@ expect u8 gBrDuel+1 1
 # few frames, so how many people were standing on Littleroot decided who won this fight.
 # Hiding the story's NPCs changed the count and flipped it. Seeded here rather than at the
 # mailsend because a battle has no wandering NPCs in it, so from this frame on the run is
-# a pure function of the seed. 3 is the smallest one where B takes it.
-poke u32 gRngValue 3
+# a pure function of the seed -- and of the frames. Outside a link battle Emerald rolls
+# the RNG once a VBlank, so a frame that runs long moves every roll after it, and a change
+# in how long our own ticks take can hand the fight over: 3 went to A when the loot stopped
+# walking its rows on every battle frame (POK-328). 5 is the smallest one where B takes it
+# on both builds; re-find it the same way if this line goes red after a change that should
+# not touch a duel.
+poke u32 gRngValue 5
 shot duel-intro
 # ...and it is being published under the two bots' seats (POK-300): the bstart went out
 # once the seed and both parties were up, with the battle id 1 | 2 << 8

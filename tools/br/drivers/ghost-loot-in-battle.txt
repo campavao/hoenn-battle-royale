@@ -1,0 +1,136 @@
+# ghost-loot-in-battle: a ghost's PLACE and a piece's PICKUP heard in the middle of a
+# battle leave the object table alone until the field is back, and the loot on the map
+# is still ours after the battle (POK-328's audit).
+#
+# npcout-in-battle.txt is the trainers' half. A ghost is the more common case: a PLACE
+# comes every time anybody changes maps, and it despawned the ghost under whatever the
+# battle had put in its old sprite slot. The loot was safe from that only because its
+# tick forgot every object id off the field ("the object table is gone with the map") --
+# which a battle does not do: the piece stayed drawn by an object nothing owned, so a
+# pickup never took it off the map, and the next piece to want its local id could not
+# spawn at all.
+#
+# Route 102, as npcout-in-battle.txt: under CALVIN, facing up. Seat 2's ghost three
+# tiles east and a ball one tile west, both in view; CALVIN and RICK hold slots 1 and 2,
+# so the ghost is slot 3 (local id 0xCA, sprite 4) and the ball slot 4 (0xC0, sprite 5).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 21 00 0F 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrMatch+1 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 3C 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+# PLACE seat 2 on 0:17 at (43,22): type 2, framed len 14 = hdr(0B 00 00) + 11
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 02 01 00 11 2B 00 16 00 01 01 00
+poke u16 gBrMailbox+0x0C 2
+wait 2
+# SPILL from seat 1: one mon, key 0x0101, at (39,22), species 25 at 5, no bag
+pokebytes gBrMailbox+0x1098 0B 11 0E 00 00 01 00 11 01 01 01 27 00 16 00 19 00 05 00
+poke u16 gBrMailbox+0x0C 3
+wait 30
+shot field
+expect u8 gBrSeats+0x29 3
+expect u8 gObjectEvents+0x74 0xCA
+expect u8 gObjectEvents+0x98 0xC0
+expect u8 gBrLoot+0xA1 1
+tap UP
+wait 20
+tap A
+wait 240
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+shot menu
+expectne u32 gMain+4 CB2_Overworld+1
+# The ghost's old sprite number is a sprite the battle is using.
+expect u8 gObjectEvents+0x70 4
+expectbits u8 gSprites+0x14E 1 1
+# Mid-fight: seat 2 moves to Route 101 (0:16), and seat 1 takes the ball.
+pokebytes gBrMailbox+0x10D8 02 0E 0B 00 00 02 01 00 10 0A 00 0A 00 01 01 00
+poke u16 gBrMailbox+0x0C 4
+wait 2
+# PICKUP: type 10, framed len 11 = hdr(08 00 00) + seat 1, key 0x0101, whole piece
+pokebytes gBrMailbox+0x1118 0A 0B 08 00 00 01 01 01 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 5
+wait 10
+shot heard
+# Both heard -- the ghost is on another map and the piece is nobody's -- and both
+# objects held: still active, and the battle's sprite 4 still in use. The old ROM
+# despawned the ghost here and cleared the sprite.
+expect u8 gBrSeats+0x23 16
+expect u8 gBrSeats+0x29 0xFF
+# (row 0's kind: BR_LOOT_NONE)
+expect u8 gBrLoot+0x0B 0
+expectbits u8 gObjectEvents+0x6C 1 1
+expectbits u8 gObjectEvents+0x90 1 1
+expectbits u8 gSprites+0x14E 1 1
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+# ...then out on B: A on the field would take CALVIN's ball, which lands in front of us.
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+shot back
+expect u32 gMain+4 CB2_Overworld+1
+# Back on the field, both are gone: the ghost, and the ball that was taken. The old ROM
+# left that ball standing (its object forgotten in the battle, so the pickup could not
+# find it)...
+expectbits u8 gObjectEvents+0x6C 1 0
+expectbits u8 gObjectEvents+0x90 1 0
+# ...and CALVIN's team, which wants the same local id, lay on the ground unseen. Here it
+# is spawned where he stood, in his old slot.
+expectge u8 gBrLoot+0xA0 1
+expect u8 gBrLoot+0xA1 1
+expect u8 gObjectEvents+0x2C 0xC0
+say ghost loot in battle ok

@@ -75,12 +75,14 @@ static struct ObjectEvent *LootObject(struct BrLootItem *it)
     return obj;
 }
 
+// Off the field -- a PICKUP or a SPILL heard in a battle -- the object is held, not
+// removed under a battle sprite's feet (BrField_RemoveObject, POK-328).
 static void Despawn(struct BrLootItem *it)
 {
     struct ObjectEvent *obj = LootObject(it);
 
     if (obj != NULL)
-        RemoveObjectEventByLocalIdAndMap(obj->localId, obj->mapNum, obj->mapGroup);
+        BrField_RemoveObject(obj->localId, obj->mapNum, obj->mapGroup);
     it->objId = BR_NO_OBJ;
 }
 
@@ -1039,7 +1041,13 @@ void BrLoot_Released(struct Pokemon *mon)
 
 void BrLoot_Init(void)
 {
+    u8 i;
+
     CpuFill32(0, &gBrLoot, sizeof(gBrLoot));
+    // Nothing is spawned. The off-field tick used to say so on the first frame of the
+    // boot; it keeps the ids now, so the zeros would name slot 0 until a row was used.
+    for (i = 0; i < BR_MAX_LOOT; i++)
+        gBrLoot.items[i].objId = BR_NO_OBJ;
     CpuFill32(0, gBrDespawned, sizeof(gBrDespawned));
     sGivenBag.kind = BR_LOOT_NONE;
     sGiveBackLen = 0;
@@ -1061,8 +1069,10 @@ void BrLoot_Tick(void)
         SendGiveBack(); // before TryTake below can put a PICKUP in front of it
     if (!BrField_OverworldRunning())
     {
-        for (i = 0; i < BR_MAX_LOOT; i++)
-            gBrLoot.items[i].objId = BR_NO_OBJ; // the object table is gone with the map
+        // The objects are kept track of. A map load does take the table with it, and
+        // LootObject's local-id check lets go of those; a battle does not, and forgetting
+        // them there left every piece in view drawn by an object nothing owned -- one
+        // Spawn could not replace (the local id was taken) and a pickup could not remove.
         gBrLoot.spawned = 0;
         DropHeldLine(); // a battle is not the place to still be naming a ball
         return;
