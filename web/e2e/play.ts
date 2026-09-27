@@ -549,8 +549,8 @@ export async function rig(page: Page, sym: Record<string, number>, how: 'weak' |
 }
 
 /** Where a battle that will not end is, for the message: the battle's main function,
- *  each side's controller, the outcome, and a bot fight's own state (staged, seat,
- *  fighting, mons). The functions are bus addresses -- look them up in the build's .map. */
+ *  each side's controller, the outcome, a bot fight's own state (staged, seat,
+ *  fighting, mons), and what the battle waits on. The functions are bus addresses -- look them up in the build's .map. */
 export function battleState(page: Page, sym: Record<string, number>): Promise<string> {
   return page.evaluate((s) => {
     const emu = (window as unknown as EmuWindow).__hbr.emu;
@@ -561,6 +561,11 @@ export function battleState(page: Page, sym: Record<string, number>): Promise<st
       `callback2 ${hex(emu.read(s.gMain + 4, 32))}`,
       `outcome ${emu.read(s.gBattleOutcome, 8)}`,
       `bot fight ${[0, 1, 2, 3].map((i) => emu.read(s.gBrBotFight + i, 8)).join('/')}`,
+      // What a battle waits on: a move's animation (its script and its sprite and sound
+      // tasks -- a sprite destroyed out from under it never counts itself off) or a
+      // controller.
+      `anim ${emu.read(s.gAnimScriptActive, 8)} visual ${emu.read(s.gAnimVisualTaskCount, 8)} sound ${emu.read(s.gAnimSoundTaskCount, 8)}`,
+      `exec ${hex(emu.read(s.gBattleControllerExecFlags, 32))}`,
     ].join(', ');
   }, sym);
 }

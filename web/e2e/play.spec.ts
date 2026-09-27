@@ -23,9 +23,14 @@
 //     trainers fight only when talked to (trainer_see.c, POK-259), so the walk ends under
 //     him and A starts it.
 //   - `#safari=60` leaves time to walk into the grass and throw before the buzzer, and
-//     `#fog=20` has CALVIN beaten well before the fourth phase: the fog clearing a map's
-//     trainers while one of them is fighting us left the battle black for good in
-//     Firefox, where the walk is slower (reported with POK-327; not this spec's to pin).
+//     `#fog=20` has CALVIN beaten well before the fourth phase. Once in about twenty
+//     runs (Firefox, where the walk is slower) the fight with him never ended, with the
+//     fog's sweep having taken two of Route 102's trainers during it (gBrLoot.gone 2).
+//     br_loot.c Despawn_Trainer removes the object mid-battle, and RemoveObjectEvent
+//     destroys gSprites[its old overworld id] -- a battle sprite by then -- but drivers
+//     that sweep the map mid-fight (Route 102 with CALVIN, Rustboro and Mossdeep Gyms,
+//     at the intro and during the move) all come back to the field, so the cause is not
+//     pinned. Reported with POK-328; a fight that never ends here fails with its state.
 //   - `#testmon`: a TREECKO at the boot, so an opening that catches nothing still has a
 //     party at the buzzer (an empty one is an elimination).
 // Every fight is rigged once it is under way (play.ts's `rig`), so it ends the same way
