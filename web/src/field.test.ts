@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
+import { BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 import { HOENN } from './bots/hoenn';
@@ -76,6 +76,77 @@ describe('the fade', () => {
     expect(heldFade(cam(0, false), cam(16, true), true), 'the fade-in begins').toBe(false);
     expect(heldFade(cam(14, true), cam(12, true), false), 'an ordinary fade').toBe(false);
     expect(heldFade(null, cam(0, false), false), 'the first frame').toBe(false);
+  });
+
+  // POK-327's play spec, in the frames it saw after a Safari catch: the ball's palette
+  // fading to white (OBJ palette 6), its last steps with the mask cleared, then done at
+  // 16 -- where the map went white for up to a second.
+  it("keeps the map out of a fade that never reached it, running or done", () => {
+    const white = (y: number, active: boolean) => ({ y, color: 0x7fff, active });
+    let s = mapFade(white(12, true), 0x400000, true);
+    expect(s).toEqual({ fade: { y: 0, color: 0x7fff, active: false }, bg: false });
+    s = mapFade(white(16, true), 0, s.bg);
+    expect(s.fade.y, 'its last steps').toBe(0);
+    s = mapFade(white(16, false), 0, s.bg);
+    expect(s.fade.y, 'done').toBe(0);
+    expect(s.bg).toBe(false);
+    // A fade to black over everything: followed, and still followed once it is done.
+    s = mapFade({ y: 8, color: 0, active: true }, 0xffffffff, s.bg);
+    expect(s).toEqual({ fade: { y: 8, color: 0, active: true }, bg: true });
+    s = mapFade({ y: 16, color: 0, active: false }, 0, s.bg);
+    expect(s.fade).toEqual({ y: 16, color: 0, active: false });
+  });
+
+  // The end of a trainer battle on Route 102, gPaletteFade frame by frame (a driver: the
+  // first move, then A): the battle's fast fade to black (mode 1, submode 3, the mask
+  // left at 0 and the colour at the white of the move's flash), its finish, the reset,
+  // and the field's fade-in from black. [frame, y, colour, active, mask, the u16 at 8].
+  it('follows a fast fade over every palette, and holds the black a battle ends on until the field fades in', () => {
+    const trace: [number, number, number, number, number, number][] = [
+      [1056, 25, 0x7fff, 1, 0, 0x0143],
+      [1063, 17, 0x7fff, 1, 0, 0x0143],
+      [1077, 3, 0x7fff, 1, 0, 0x0143],
+      [1079, 1, 0x7fff, 1, 0, 0x0143],
+      [1081, 0, 0x7fff, 1, 0, 0x0043],
+      [1086, 0, 0x7fff, 0, 0, 0x0043],
+      [1092, 0, 0, 0, 0, 0],
+      [1097, 16, 0, 1, 0xffffffff, 0x0040],
+      [1104, 10, 0, 1, 0xffffffff, 0x0040],
+      [1114, 0, 0, 1, 0xffffffff, 0x0040],
+      [1116, 0, 0, 1, 0, 0x0040],
+      [1121, 0, 0, 0, 0, 0x0040],
+    ];
+    const cam = (fade: { y: number; color: number; active: boolean }): Camera =>
+      ({ group: 0, num: 17, x: 33, y: 15, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, onField: true });
+    let bg = true; // the move's flash reached BG palettes 1..3 (mask 0xe)
+    let prev: Camera | null = null;
+    let hold = { on: false, frames: 0 };
+    const seen: Record<number, [number, number]> = {};
+    for (const [frame, y, color, active, mask, mode] of trace) {
+      const s = mapFade({ y, color, active: active === 1 }, mask, bg, mode);
+      bg = s.bg;
+      const cur = cam(s.fade);
+      hold = holdFade(prev, cur, hold);
+      seen[frame] = [cur.fade, cur.fadeColor];
+      prev = cur;
+    }
+    // Black, a sixteenth a step, whatever the stale colour and mask say...
+    expect(seen[1056]).toEqual([4, 0]);
+    expect(seen[1063]).toEqual([8, 0]);
+    expect(seen[1077]).toEqual([15, 0]);
+    expect(seen[1079], 'the last step: every channel is 0').toEqual([16, 0]);
+    // ...held black through the finish and the reset, not the white the struct names...
+    expect(seen[1081]).toEqual([16, 0]);
+    expect(seen[1086]).toEqual([16, 0]);
+    expect(seen[1092]).toEqual([16, 0]);
+    // ...and then the field's own fade-in, to the map.
+    expect(seen[1097]).toEqual([16, 0]);
+    expect(seen[1104]).toEqual([10, 0]);
+    expect(seen[1116][0]).toBe(0);
+    expect(seen[1121][0]).toBe(0);
+    // A fast fade in from white is white, going.
+    expect(mapFade({ y: 31, color: 0, active: true }, 0, false, (FAST_FADE << 8) | 0).fade).toEqual({ y: 15, color: 0x7fff, active: true });
+    expect(mapFade({ y: 1, color: 0, active: true }, 0, false, (FAST_FADE << 8) | 0).fade.y).toBe(0);
   });
 
   it('shows a GBA colour the way mGBA does', () => {
@@ -420,7 +491,7 @@ describe("the match's roster reaches the field (POK-323)", () => {
     expect(body('wirePlayScreen')).toMatch(/\n\s*fieldView = new FieldView\(/);
     const made = appSource.indexOf('\n  wirePlayScreen(emu, ');
     expect(made).toBeGreaterThan(0);
-    expect(appSource.indexOf('runSolo(emu, mailboxBase, symbols)')).toBeGreaterThan(made);
+    expect(appSource.indexOf('runSolo(emu, mailboxBase, symbols, ')).toBeGreaterThan(made);
     expect(appSource.indexOf('wireRoom(emu, mailboxBase, ')).toBeGreaterThan(made);
   });
 });

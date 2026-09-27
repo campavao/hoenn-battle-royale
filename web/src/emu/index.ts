@@ -9,6 +9,8 @@
 // Everything Emerald-specific stays out of here; this file knows GBA memory, keys,
 // files and frames, nothing about save blocks or the match.
 
+import { tapNode, type AudioTick, type SdlAudio } from './audio-meter';
+
 export type GbaKey = 'a' | 'b' | 'select' | 'start' | 'right' | 'left' | 'up' | 'down' | 'r' | 'l';
 
 /** Bit positions match mGBA's GBA_KEY_* order, so a mask round-trips to the harness. */
@@ -59,6 +61,12 @@ export interface CoreModule {
    *  the same frame. Older cores lack it and present on their own tick. */
   _brPresent?(): void;
   HEAPU8: Uint8Array;
+  /** SDL2's audio output, once a game's thread has opened it (audio-meter.ts). */
+  SDL2?: SdlAudio;
+  /** The renderer's settings, which every loadGame after the call takes. */
+  setCoreSettings?(settings: { rewindEnable?: boolean; autoSaveStateEnable?: boolean; restoreAutoSaveStateOnLoad?: boolean }): void;
+  /** Silences SDL's output without pausing the game; resumeGame undoes it. */
+  pauseAudio?(): void;
 }
 
 /** Pixels the core draws past the LCD on each side (POK-319). */
@@ -101,23 +109,44 @@ export class Emulator {
   /** Listeners that have thrown, so each is reported once and not sixty times a second. */
   private failedListeners = new WeakSet<() => void>();
   private errorListeners = new Set<(err: unknown) => void>();
+  private workListeners = new Set<(ms: number) => void>();
+  private audioListeners = new Set<(tick: AudioTick) => void>();
+  /** The output node audio-meter.ts is listening to; SDL makes a new one every boot. */
+  private tappedAudio: ScriptProcessorNode | null = null;
+  private halts = 0;
+  /** A headless core's sound has been paused since its last boot or resume. */
+  private quiet = false;
   /** What boot() last loaded, so reboot() can load it again. */
   private bootedPath: string | null = null;
   private crashListeners = new Set<() => void>();
   private running = false;
+  /** Held by pause() and not yet resume()d: its frames stopped on purpose (POK-328). */
+  private paused = false;
+  /** Frame listeners that have thrown, each counted at its first throw. */
+  private threwCount = 0;
   private band: Band | null = null;
   /** EWRAM and IWRAM over the heap, made once per boot (see wram()). */
   private views: { heap: Uint8Array; buffer: ArrayBufferLike; ewram: Uint8Array | null; iwram: Uint8Array | null } | null = null;
 
-  private constructor(private readonly m: CoreModule) {}
+  private constructor(
+    private readonly m: CoreModule,
+    /** Draws to nothing: the proxy's core (see CoreFactory). */
+    readonly headless = false,
+  ) {}
 
   /** Instantiates the core against a canvas and mounts its IndexedDB-backed filesystem.
    *  `headless` for any core but the page's first: it draws to nothing (see CoreFactory). */
   static async create(canvas: HTMLCanvasElement, factory?: CoreFactory, headless = false): Promise<Emulator> {
     const f = factory ?? (await loadCoreFactory());
     const m = await f({ canvas, brHeadless: headless });
+    // Nothing here rewinds, and every boot deletes the auto-save anyway (boot()), so
+    // neither runs (POK-247): rewind was a whole savestate every frame, diffed on a
+    // thread of its own, and the auto-save a SAVESTATE_ALL on the main thread every
+    // 30 s, synced to IndexedDB -- in both cores. They are the renderer's settings, so
+    // every loadGame from here on, PLAY AGAIN's included, keeps them.
+    m.setCoreSettings?.({ rewindEnable: false, autoSaveStateEnable: false, restoreAutoSaveStateOnLoad: false });
     await m.FSInit();
-    const emu = new Emulator(m);
+    const emu = new Emulator(m, headless);
     await emu.dropLegacyPatched();
     return emu;
   }
@@ -215,8 +244,14 @@ export class Emulator {
 
   private async boot(path: string): Promise<void> {
     this.bootedPath = path;
-    // The core auto-saves a state every 30 s and restores it on the next loadGame of
-    // the same file. A match must always start from power-on, so drop those first.
+    this.halts++;
+    this.quiet = false;
+    // loadGame starts a core thread of its own, running.
+    this.paused = false;
+    // A core left to its defaults auto-saves a state every 30 s and restores it on the
+    // next loadGame of the same file. create() turns both off, but a shell from before
+    // POK-247 left those files in IndexedDB, and a match must always start from
+    // power-on, so drop them first.
     try {
       for (const f of this.m.FS.readdir(AUTOSAVE_DIR)) {
         if (f !== '.' && f !== '..') this.m.FS.unlink(`${AUTOSAVE_DIR}/${f}`);
@@ -240,6 +275,7 @@ export class Emulator {
       // the mailbox undrained, nothing on screen (POK-330 #35). So no listener's bug
       // gets out of here, and the picture is presented whatever happened.
       videoFrameEndedCallback: () => {
+        const started = this.workListeners.size ? performance.now() : -1;
         // The views are remade once a frame, not once a boot. loadGame returns before the
         // core thread has swapped cores, so the old core's last frames still run
         // listeners, and a read there kept the dead core's RAM for the whole next match:
@@ -257,10 +293,16 @@ export class Emulator {
           // The listeners drew around the picture for this frame; now the picture.
           this.m._brPresent?.();
         }
+        try {
+          this.afterFrame(started);
+        } catch {
+          /* a meter's bug is not the frame's */
+        }
       },
       coreCrashedCallback: () => {
         this.running = false;
         this.views = null;
+        this.halts++;
         for (const l of this.crashListeners) l();
       },
     });
@@ -271,24 +313,79 @@ export class Emulator {
     this.m.quitGame();
     this.running = false;
     this.views = null;
+    this.halts++;
   }
 
   pause(): void {
     this.m.pauseGame();
+    this.paused = true;
+    this.halts++;
   }
 
   resume(): void {
     this.m.resumeGame();
+    this.paused = false;
+    this.quiet = false;
   }
 
   isRunning(): boolean {
     return this.running;
   }
 
+  /** The page is holding it still (pause() without a resume() since): the boot block's
+   *  hold, a reboot's. A watchdog does not call that a stop (watchdog.ts). */
+  isPaused(): boolean {
+    return this.paused;
+  }
+
   /** Fires on the main thread after every emulated frame. Returns an unsubscribe. */
   onFrame(listener: () => void): () => void {
     this.frameListeners.add(listener);
     return () => this.frameListeners.delete(listener);
+  }
+
+  /** After every frame, how long the page's own part of it took on the main thread,
+   *  in ms: the frame listeners and the present. The core thread waits on all of it
+   *  (POK-247). Returns an unsubscribe. */
+  onFrameWork(listener: (ms: number) => void): () => void {
+    this.workListeners.add(listener);
+    return () => this.workListeners.delete(listener);
+  }
+
+  /** Every callback of the core's audio output, late, cut or fine (audio-meter.ts).
+   *  Heard from the first frame after SDL opens it, and again after every boot. */
+  onAudio(listener: (tick: AudioTick) => void): () => void {
+    this.audioListeners.add(listener);
+    return () => this.audioListeners.delete(listener);
+  }
+
+  /** Goes up whenever the frames stop for a reason of the page's own -- a pause, a
+   *  boot, a stop, a crash -- so a meter does not read the gap across one as a frame. */
+  get pauses(): number {
+    return this.halts;
+  }
+
+  private afterFrame(started: number): void {
+    // Nobody hears a headless core, and SDL feeds its speaker on the main thread -- the
+    // proxy's at 8x, through a sinc resampler, 47 times a second (POK-247). SDL opens
+    // and resumes it when the core's thread starts, and resumeGame resumes it, so it is
+    // paused again at the first frame after either.
+    if (this.headless && !this.quiet) {
+      this.quiet = true;
+      this.m.pauseAudio?.();
+    }
+    if (started >= 0) {
+      const ms = performance.now() - started;
+      for (const l of this.workListeners) l(ms);
+    }
+    if (!this.audioListeners.size) return;
+    const sdl = this.m.SDL2;
+    const node = sdl?.audio?.scriptProcessorNode;
+    if (!node || !sdl.audioContext || node === this.tappedAudio) return;
+    this.tappedAudio = node;
+    tapNode(node, sdl.audioContext, (tick) => {
+      for (const l of this.audioListeners) l(tick);
+    });
   }
 
   onCrash(listener: () => void): () => void {
@@ -303,9 +400,15 @@ export class Emulator {
     return () => this.errorListeners.delete(listener);
   }
 
+  /** How many frame listeners have thrown so far, each once. */
+  get threw(): number {
+    return this.threwCount;
+  }
+
   private listenerFailed(l: () => void, err: unknown): void {
     if (this.failedListeners.has(l)) return;
     this.failedListeners.add(l);
+    this.threwCount++;
     if (!this.errorListeners.size) {
       console.error('[emu] a frame listener threw; the frame carries on without it', err);
       return;

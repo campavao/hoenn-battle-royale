@@ -122,7 +122,9 @@ describe('the page asks nothing with the browser (POK-320)', () => {
   // Every question outside the game is drawn now: the name, the code and the passcode on
   // the entry, the career's SAVE or LOAD on a notice. A prompt() or an alert() is a grey
   // box from another world in the middle of Emerald's.
-  const sources = import.meta.glob<string>(['../**/*.ts', '!../**/*.test.ts'], { query: '?raw', import: 'default', eager: true });
+  // The painter (painter.html, POK-314) is Cam's own tool for picking drop cells, never a
+  // screen a player meets, so its one confirm() before throwing away a painting stays.
+  const sources = import.meta.glob<string>(['../**/*.ts', '!../**/*.test.ts', '!../painter.ts'], { query: '?raw', import: 'default', eager: true });
   const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 
   it('finds the page', () => {

@@ -81,6 +81,14 @@ export const FADE_COLOR_WORD = 6;
  *  battle picture that had not). */
 export const FADE_SELECTED = 0;
 export const FADE_BG_PALETTES = 0xffff;
+/** The u16 at +8: a fast fade's submode in bits 0..5, `mode` in bits 8..9 (NORMAL_FADE
+ *  0, FAST_FADE 1). A fast fade steps every palette, BG and OBJ, whatever the mask says,
+ *  towards its submode's colour: IN_FROM_WHITE 0, OUT_TO_WHITE 1, IN_FROM_BLACK 2,
+ *  OUT_TO_BLACK 3 -- white up to 1, and the odd ones fade out. Every battle ends on
+ *  OUT_TO_BLACK (battle_main.c): 0x0143 in a trace of one. */
+export const FADE_MODE_WORD = 8;
+export const FAST_FADE = 1;
+export const FAST_WHITE_MAX = 1;
 /** A map load leaves y at 0 for ~13 frames before its fade-in; a hold that lasts longer
  *  than a second is not that, it is a fade the ROM never started (after a battle, say),
  *  and the field is visible under it. */
@@ -284,6 +292,50 @@ export function heldFade(prev: Camera | null, cur: Camera, held: boolean): boole
   if (cur.fadeActive) return false;
   if (held) return true;
   return prev !== null && prev.fade >= 16 && cur.fade === 0;
+}
+
+/** A frame of the hold (heldFade), for at most HELD_FADE_MAX frames: while it is on,
+ *  `cur` is under the whole fade, in the colour the fade reached. Not the struct's: a
+ *  fast fade's colour is its submode's, and the struct still names whatever the last
+ *  normal fade blended towards (the white of a move's flash, at the end of a battle). */
+export function holdFade(prev: Camera | null, cur: Camera, hold: { on: boolean; frames: number }): { on: boolean; frames: number } {
+  let on = heldFade(prev, cur, hold.on);
+  const frames = on ? hold.frames + 1 : 0;
+  if (frames > HELD_FADE_MAX) on = false;
+  if (on) {
+    cur.fade = 16;
+    if (prev) cur.fadeColor = prev.fadeColor;
+  }
+  return { on, frames };
+}
+
+/** The fade the map past the picture is under: the ROM's, when it reaches the BG
+ *  palettes. A running fade says so by its mask. A finished one cannot -- the ROM clears
+ *  the mask on a fade's last step and leaves y where it ended (palette.c) -- so `bg`,
+ *  what the last fade reached while it ran, comes back for the next frame. A catch's
+ *  ball fades to white on its own OBJ palette and stays there, and the map stayed white
+ *  under it until the next fade (POK-327's play spec).
+ *
+ *  A fast fade (`mode`, the u16 at FADE_MODE_WORD) reaches every palette and has no
+ *  blend: y runs from 31 down by 2 every other frame, each step moving every channel 2
+ *  of 31 towards its colour, so the map is under it by a sixteenth a step. It ends with
+ *  y at 0 and the mode back to normal, and after an OUT the picture stays that colour
+ *  -- which is heldFade's to keep, from the 16 the last step reached. The battle's end
+ *  was read as no fade at all, and the map stayed lit past a picture gone black. */
+export function mapFade(
+  fade: { y: number; color: number; active: boolean },
+  selected: number,
+  bg: boolean,
+  mode = 0,
+): { fade: { y: number; color: number; active: boolean }; bg: boolean } {
+  if (fade.active && ((mode >> 8) & 3) === FAST_FADE) {
+    const sub = mode & 0x3f;
+    const steps = 16 - (fade.y >> 1);
+    return { fade: { y: sub & 1 ? steps : 16 - steps, color: sub <= FAST_WHITE_MAX ? 0x7fff : 0, active: true }, bg: true };
+  }
+  const reached = fade.active && selected !== 0 ? (selected & FADE_BG_PALETTES) !== 0 : bg;
+  const onMap = fade.active ? (selected & FADE_BG_PALETTES) !== 0 : reached;
+  return { fade: onMap ? fade : { ...fade, y: 0, active: false }, bg: reached };
 }
 
 /** A 15-bit GBA colour the way mGBA shows it. */
@@ -595,8 +647,7 @@ export class FieldView {
 
   // ---- every frame ----------------------------------------------------------------------
 
-  private held = false;
-  private heldFor = 0;
+  private hold = { on: false, frames: 0 };
   private shake = 0;
 
   private frame(): void {
@@ -609,10 +660,7 @@ export class FieldView {
     if (this.prev) this.draw(this.prev);
     this.clip(cur?.onField ?? false);
     if (cur) {
-      this.held = heldFade(this.prev, cur, this.held);
-      this.heldFor = this.held ? this.heldFor + 1 : 0;
-      if (this.heldFor > HELD_FADE_MAX) this.held = false;
-      if (this.held) cur.fade = 16;
+      this.hold = holdFade(this.prev, cur, this.hold);
       // The ring's bleed: the timer reloads the frame it bites. The whole box shakes,
       // picture and field together; the pad is not in the box and stays put.
       if (cur.outside && this.prev && cur.ringTimer > this.prev.ringTimer) this.shake = SHAKE_FRAMES;
@@ -629,6 +677,9 @@ export class FieldView {
     return this.deps.symbols?.get(name);
   }
 
+  /** Whether the last fade the ROM ran reached the BG palettes (mapFade). */
+  private fadeBg = true;
+
   private read(): Camera | null {
     const { emu } = this.deps;
     const sb = this.sym('gSaveBlock1Ptr');
@@ -639,14 +690,12 @@ export class FieldView {
     const fadeBase = this.sym('gPaletteFade');
     const main = this.sym('gMain');
     const cb2 = this.sym('CB2_Overworld');
-    const fade = fadeBase === undefined
-      ? { y: 0, color: 0, active: false }
-      : fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16));
-    // A fade that leaves the BG palettes alone leaves the map alone.
-    if (fadeBase !== undefined && fade.active && (emu.read(fadeBase + FADE_SELECTED, 32) & FADE_BG_PALETTES) === 0) {
-      fade.y = 0;
-      fade.active = false;
-    }
+    // A fade that leaves the BG palettes alone leaves the map alone, running or done.
+    const seen = fadeBase === undefined
+      ? { fade: { y: 0, color: 0, active: false }, bg: this.fadeBg }
+      : mapFade(fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16)), emu.read(fadeBase + FADE_SELECTED, 32), this.fadeBg, emu.read(fadeBase + FADE_MODE_WORD, 16));
+    const fade = seen.fade;
+    this.fadeBg = seen.bg;
     const pick = this.sym('gBrPick');
     const cam: Camera = {
       ...pos,

@@ -714,3 +714,25 @@ describe('solo link', () => {
     solo.host.dispose();
   });
 });
+
+// POK-327: `#land` puts our own drop on one cell, so the play-a-match e2e meets the same
+// route trainer every run. Only our own seat: everybody else is dealt as before.
+describe('a landing the page was handed', () => {
+  it("answers our own ROM's pick with it, and anybody else's with the director's deal", () => {
+    const room = hosting();
+    const land = { map: { group: 0, num: 17 }, x: 36, y: 16 };
+    const host = room.deal({ land });
+    host.begin();
+    room.romEmit({ t: 'pick', seat: 0, section: SECTION });
+    room.frame();
+    expect(room.pushed).toEqual([{ t: 'land', seat: 0, ...land }]);
+
+    room.frames().length = 0;
+    room.recv(2, { t: 'pick', seat: 2, section: SECTION });
+    const theirs = room.frames().filter((f) => f.m?.t === 'land').map((f) => f.m as Msg & { map: MapRef; x: number; y: number });
+    expect(theirs).toHaveLength(1);
+    expect(theirs[0]).toMatchObject({ seat: 2 });
+    expect(theirs[0]).not.toMatchObject({ map: land.map, x: land.x, y: land.y });
+    host.dispose();
+  });
+});

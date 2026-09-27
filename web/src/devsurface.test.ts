@@ -8,6 +8,8 @@
 import { describe, expect, it } from 'vitest';
 import appSource from './app.ts?raw';
 import bridgeSource from './net/bridge.ts?raw';
+import playSource from '../e2e/play.ts?raw';
+import * as field from './field';
 
 const specs = import.meta.glob<string>('../e2e/*.spec.ts', { query: '?raw', import: 'default', eager: true });
 
@@ -54,9 +56,9 @@ describe('the e2e dev surface', () => {
     expect(FIELDS.filter((f) => !brWritten.has(f))).toEqual([]);
   });
 
-  it('__hbr is the emulator and the field past the picture, which is all a spec reads of it', () => {
-    expect([...fieldsRead(/__hbr\??\.(\w+)/g)].sort()).toEqual(['emu', 'field']);
-    expect(appSource).toMatch(/__hbr = \{ emu \}/);
+  it('__hbr is the emulator, a meter of it (POK-247) and the field past the picture, which is all a spec reads of it', () => {
+    expect([...fieldsRead(/__hbr\??\.(\w+)/g)].filter((f) => !['emu', 'perf', 'field'].includes(f))).toEqual([]);
+    expect(appSource).toMatch(/__hbr = \{ emu, perf: \(\) => new PerfProbe\(/);
     expect(appSource).toMatch(/__hbr \?\? \{\}, \{ field: fieldView \}\)/);
   });
 });
@@ -71,5 +73,28 @@ describe('what came out of app.ts', () => {
       const touches = Array.from(code.matchAll(/\b(?:document|window|location|localStorage)\b|\$\(/g), (m) => m[0]);
       expect(touches, file).toEqual([]);
     }
+  });
+});
+
+// POK-327: the play-a-match e2e sets its match up from the hash -- the seed, the pace,
+// where the drop lands. Each is a way to rig a match, so none of them is read in a build.
+describe('the dev flags a match is set up with', () => {
+  it.each(['fixedSeed', 'paceOptions', 'landOverride'])('%s reads nothing outside DEV', (fn) => {
+    // To the end of the signature's line: a return type can have braces of its own.
+    const guarded = new RegExp(String.raw`function ${fn}\(\)[^\n]*\{\s*if \(!import\.meta\.env\.DEV\) return (?:null|undefined);`);
+    expect(appSource).toMatch(guarded);
+  });
+});
+
+// The play spec's recorder reads the ROM's structs at field.ts's offsets, from a copy: a
+// Playwright spec cannot import field.ts (it imports world.json with no import attribute).
+// A copy that drifted would check the picture against the wrong byte.
+describe("play.ts's copy of field.ts's offsets", () => {
+  it('is field.ts, number for number', () => {
+    const copied = new Map(Array.from(playSource.matchAll(/^export const (\w+) = (0x[0-9a-f]+|\d+);/gm), (m) => [m[1], Number(m[2])]));
+    const exported = field as unknown as Record<string, unknown>;
+    const shared = [...copied.keys()].filter((name) => name in exported);
+    expect(shared.length, 'a regex that matched nothing would pass by saying nothing').toBeGreaterThanOrEqual(10);
+    for (const name of shared) expect(copied.get(name), name).toBe(exported[name]);
   });
 });

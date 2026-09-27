@@ -57,3 +57,44 @@ export function withoutRoom(hash: string): string {
   for (const k of ROOM_HASH_KEYS) params.delete(k);
   return textOf(params);
 }
+
+/** `#perf`: frame times, audio, the heap and the proxy in the corner (POK-247), in a
+ *  build as well as in DEV. It only reads, so it is safe on the live site -- which is
+ *  where a phone's numbers come from. It rides along through every door (withRoom). */
+export function perfWanted(hash: string): boolean {
+  return paramsOf(hash).has('perf');
+}
+
+// ---- dev flags (the page reads these in DEV only) ----------------------------------------
+
+/** A whole number of seconds, or undefined for anything else. */
+function secs(params: URLSearchParams, key: string): number | undefined {
+  const raw = params.get(key);
+  const n = raw === null || raw === '' ? NaN : Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+/** The dev pace. `#fast` is a 25-second opening and 15-second fog phases, so a whole
+ *  match can be looked at in three minutes; `#safari=N` and `#fog=N` set either one
+ *  on its own, over `#fast` or without it (POK-327: a test that plays the opening
+ *  needs time to walk into the grass and throw before the buzzer). Undefined when the
+ *  hash asks for no pace at all, which is the room's own. */
+export function devPace(hash: string): { safariSecs?: number; fogSecs?: number } | undefined {
+  const params = paramsOf(hash);
+  const fast = params.has('fast');
+  const safari = secs(params, 'safari');
+  const fog = secs(params, 'fog');
+  if (!fast && safari === undefined && fog === undefined) return undefined;
+  const pace: { safariSecs?: number; fogSecs?: number } = fast ? { safariSecs: 25, fogSecs: 15 } : {};
+  if (safari !== undefined) pace.safariSecs = safari;
+  if (fog !== undefined) pace.fogSecs = fog;
+  return pace;
+}
+
+/** `#land=MAP_ID,x,y`: where our own drop lands, whatever section was picked, in the
+ *  map's own coordinates (a `land` is map data, net/cells.ts). A test that meets a
+ *  particular route trainer has to be put in front of them (POK-327). */
+export function devLand(hash: string): { id: string; x: number; y: number } | undefined {
+  const m = /^(MAP_[A-Z0-9_]+),(\d+),(\d+)$/.exec(paramsOf(hash).get('land') ?? '');
+  return m ? { id: m[1], x: Number(m[2]), y: Number(m[3]) } : undefined;
+}

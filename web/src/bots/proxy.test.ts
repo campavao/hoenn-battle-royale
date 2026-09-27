@@ -19,7 +19,8 @@ function mon(over: Partial<PackedMon> = {}): PackedMon {
  *  a little of br_duel.c's behaviour -- it wakes its mailbox, reads a DUEL off the in
  *  ring, and after a few frames pushes a DRESULT back. */
 function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: number } = {}) {
-  const { wakes = true, answers = true, afterFrames = 3 } = opts;
+  const { wakes = true, afterFrames = 3 } = opts;
+  let answering = opts.answers ?? true;
   const mem = new Uint8Array(0x40000);
   const at = (addr: number) => addr - 0x02000000;
   const read = (addr: number, width: 8 | 16 | 32 = 32) => {
@@ -40,6 +41,8 @@ function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: 
   let sinceDuel = 0;
   let stopped = false;
   let result: Msg | null = null;
+  /** pause / resume / reboot, in order: the instance's lifecycle as the proxy drives it. */
+  const life: string[] = [];
 
   const emu: ProxyEmulator = {
     read, write, bytes,
@@ -58,6 +61,12 @@ function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: 
     },
     stop() {
       stopped = true;
+    },
+    pause() {
+      life.push('pause');
+    },
+    resume() {
+      life.push('resume');
     },
   };
 
@@ -79,7 +88,7 @@ function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: 
       tail = (tail + 1) & 0xffff;
     }
     write(BASE + MAILBOX.OFF_IN_TAIL, tail, 16);
-    if (!sawDuel || !answers) return;
+    if (!sawDuel || !answering) return;
     if (++sinceDuel !== afterFrames) return;
     // One answer per DUEL: the next one starts its own count, the way the instance
     // starts its next battle.
@@ -98,6 +107,21 @@ function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: 
   return {
     emu,
     taps,
+    life,
+    /** A power cycle in place: whatever the ROM was doing is gone, and it wakes again. */
+    reboot() {
+      life.push('reboot');
+      sawDuel = false;
+      sinceDuel = 0;
+      mem.fill(0);
+      if (wakes) {
+        write(BASE + MAILBOX.OFF_MAGIC, MAILBOX.MAGIC, 16);
+        write(BASE + MAILBOX.OFF_SIZE, MAILBOX.SIZE, 16);
+      }
+    },
+    set answers(on: boolean) {
+      answering = on;
+    },
     get stopped() {
       return stopped;
     },
@@ -185,6 +209,59 @@ describe('the proxy duel instance', () => {
     expect(inst.stopped).toBe(true);
   });
 
+  it('counts what it fought, what fell back and the frames it ran (POK-247)', async () => {
+    const inst = fakeInstance();
+    const proxy = proxyOver(inst);
+    expect(proxy.stats).toEqual({ booted: false, frames: 0, fought: 0, timedOut: 0, fellBack: 0 });
+    await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst);
+    expect(await proxy.fight({ seat: 4, party: [] }, { seat: 7, party: [mon()] })).toBeNull();
+    const { frames, ...rest } = proxy.stats;
+    expect(rest).toEqual({ booted: true, fought: 1, timedOut: 0, fellBack: 1 });
+    expect(frames).toBeGreaterThan(0);
+  });
+
+  it('runs the instance only while it fights: paused once awake, resumed for a duel, paused after (POK-247)', async () => {
+    const inst = fakeInstance();
+    const proxy = proxyOver(inst);
+    await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst);
+    expect(inst.life).toEqual(['pause', 'resume', 'pause']);
+    await settle(proxy.fight({ seat: 5, party: [mon()] }, { seat: 6, party: [mon()] }), inst);
+    expect(inst.life).toEqual(['pause', 'resume', 'pause', 'resume', 'pause']);
+  });
+
+  it('restarts the same instance in place after a fight that would not end, never a second core (POK-247)', async () => {
+    const inst = fakeInstance({ answers: false });
+    const notes: string[] = [];
+    let boots = 0;
+    let restarts = 0;
+    const proxy = new ProxyDuels({
+      boot: async () => (boots++, inst.emu),
+      restart: async (emu) => {
+        expect(emu).toBe(inst.emu);
+        restarts++;
+        inst.reboot();
+      },
+      mailboxBase: BASE,
+      writeBoot: () => {},
+      deadlineMs: 50,
+      wakeFrames: 5,
+      onNote: (w) => void notes.push(w),
+    });
+    expect(await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst, 400)).toBeNull();
+    expect(notes).toContain('duel timed out');
+    expect(inst.stopped, 'the instance is kept, not let go').toBe(false);
+    expect(inst.life.at(-1)).toBe('pause');
+    expect(restarts, 'nothing is restarted until there is a duel for it').toBe(0);
+
+    // The next meeting power-cycles it, waits for it to wake, and fights on it.
+    inst.answers = true;
+    const out = await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst);
+    expect(out).not.toBeNull();
+    expect({ boots, restarts }).toEqual({ boots: 1, restarts: 1 });
+    expect(inst.life).toEqual(['pause', 'resume', 'pause', 'resume', 'reboot', 'pause', 'resume', 'pause']);
+    expect(proxy.stats).toMatchObject({ fought: 1, timedOut: 1, fellBack: 1 });
+  });
+
   it('falls back when the instance never wakes, and does not try again', async () => {
     const inst = fakeInstance({ wakes: false });
     const notes: string[] = [];
@@ -193,6 +270,7 @@ describe('the proxy duel instance', () => {
     expect(await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst)).toBeNull();
     expect(proxy.failed).toBe(true);
     expect(notes.some((n) => n.includes('never woke'))).toBe(true);
+    expect(inst.stopped, 'and it is not left running at 8x for nothing (POK-247)').toBe(true);
     // A second caller is answered immediately, without booting anything.
     expect(await proxy.fight({ seat: 3, party: [mon()] }, { seat: 4, party: [mon()] })).toBeNull();
   });

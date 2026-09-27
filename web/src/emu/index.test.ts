@@ -1,61 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ALL_KEYS, EWRAM_BASE, Emulator, IWRAM_BASE, KEY_BIT, type CoreModule, type GbaKey } from './index';
-
-// A fake core: a 1 MiB heap with EWRAM at 0x1000 and IWRAM at 0x50000, a file map,
-// and a log of every call, so the wrapper's bookkeeping can be checked without wasm.
-function fakeCore() {
-  const heap = new Uint8Array(1 << 20);
-  const files = new Map<string, Uint8Array>();
-  const calls: string[] = [];
-  let cb: Parameters<CoreModule['addCoreCallbacks']>[0] = {};
-  const m: CoreModule = {
-    FSInit: async () => {},
-    FSSync: async () => {
-      calls.push('sync');
-    },
-    FS: {
-      writeFile: (p, d) => void files.set(p, d),
-      readFile: (p) => {
-        const f = files.get(p);
-        if (!f) throw new Error('ENOENT');
-        return f;
-      },
-      unlink: (p) => {
-        if (!files.delete(p)) throw new Error('ENOENT');
-      },
-      stat: (p) => {
-        if (!files.has(p)) throw new Error('ENOENT');
-        return {};
-      },
-      readdir: (dir) => ['.', '..', ...[...files.keys()].filter((k) => k.startsWith(dir + '/')).map((k) => k.slice(dir.length + 1))],
-    },
-    loadGame: (p) => {
-      calls.push(`load ${p}`);
-      return files.has(p);
-    },
-    quitGame: () => calls.push('quit'),
-    pauseGame: () => calls.push('pause'),
-    resumeGame: () => calls.push('resume'),
-    buttonPress: (n) => calls.push(`press ${n}`),
-    buttonUnpress: (n) => calls.push(`release ${n}`),
-    setVolume: () => {},
-    getVolume: () => 1,
-    setFastForwardMultiplier: (x) => calls.push(`speed ${x}`),
-    saveState: () => true,
-    loadState: () => true,
-    screenshot: (p) => {
-      files.set(p!, new Uint8Array([0x89, 0x50]));
-      return true;
-    },
-    addCoreCallbacks: (c) => {
-      cb = c;
-    },
-    _brWramPtr: () => 0x1000,
-    _brIwramPtr: () => 0x50000,
-    HEAPU8: heap,
-  };
-  return { m, heap, files, calls, frame: () => cb.videoFrameEndedCallback?.() };
-}
+import { fakeCore } from './fake-core';
+import { ALL_KEYS, EWRAM_BASE, Emulator, IWRAM_BASE, KEY_BIT, type GbaKey } from './index';
 
 async function make() {
   const canvas = {} as HTMLCanvasElement;
@@ -323,6 +268,138 @@ describe('Emulator', () => {
     } finally {
       logged.mockRestore();
     }
+  });
+
+  describe('what a phone needs measured (POK-247)', () => {
+    it("times the page's own share of each frame, the present included", async () => {
+      const { emu, m, frame } = await make();
+      let clock = 0;
+      const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      try {
+        m._brPresent = () => void (clock += 2);
+        emu.onFrame(() => void (clock += 3));
+        const work: number[] = [];
+        emu.onFrameWork((ms) => void work.push(ms));
+        await emu.start(new Uint8Array([1]));
+        frame();
+        frame();
+        expect(work).toEqual([5, 5]);
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it("hears the core's audio output from the first frame SDL has opened it, and again after a boot", async () => {
+      const { emu, m, frame } = await make();
+      const ctx = { currentTime: 1, sampleRate: 48000, state: 'running' } as AudioContext;
+      const out = { numberOfChannels: 1, length: 1024, sampleRate: 48000, getChannelData: () => new Float32Array(1024).fill(0.5) };
+      const node = () => ({ onaudioprocess: () => {} }) as unknown as ScriptProcessorNode;
+      const play = (n: ScriptProcessorNode, playbackTime: number) =>
+        n.onaudioprocess!.call(n, { outputBuffer: out, playbackTime } as unknown as AudioProcessingEvent);
+      const heard: boolean[] = [];
+      emu.onAudio((tick) => void heard.push(tick.late));
+      await emu.start(new Uint8Array([1]));
+      frame(); // no audio opened yet: nothing to hear, nothing thrown
+
+      const first = node();
+      m.SDL2 = { audio: { scriptProcessorNode: first }, audioContext: ctx };
+      frame();
+      frame(); // the same node is not wrapped twice
+      play(first, 1.02);
+      play(first, 0.9);
+      expect(heard).toEqual([false, true]);
+
+      // A boot opens the audio again, on a node of its own.
+      await emu.reboot();
+      const second = node();
+      m.SDL2 = { audio: { scriptProcessorNode: second }, audioContext: ctx };
+      frame();
+      play(second, 0.5);
+      expect(heard).toEqual([false, true, true]);
+    });
+
+    it('turns rewind and the auto-save state off before the core loads anything', async () => {
+      // Rewind was a full savestate every frame, diffed on a thread of its own, and the
+      // auto-save a SAVESTATE_ALL on the main thread every 30 s synced to IndexedDB --
+      // in both cores, for a page that never rewinds and deletes the auto-save anyway.
+      const core = fakeCore();
+      const order: string[] = [];
+      core.m.setCoreSettings = (settings) => void order.push(`settings ${JSON.stringify(settings)}`);
+      const load = core.m.loadGame;
+      core.m.loadGame = (p, o) => (order.push('load'), load(p, o));
+      const emu = await Emulator.create({} as HTMLCanvasElement, async () => core.m);
+      await emu.start(new Uint8Array([1]));
+      await emu.reboot();
+      expect(order).toEqual(['settings {"rewindEnable":false,"autoSaveStateEnable":false,"restoreAutoSaveStateOnLoad":false}', 'load', 'load']);
+    });
+
+    it('a headless core keeps its sound paused after every boot and every resume; a shown one plays', async () => {
+      const heard: string[] = [];
+      const hidden = fakeCore();
+      hidden.m.pauseAudio = () => void heard.push('hidden');
+      const emu = await Emulator.create({} as HTMLCanvasElement, async () => hidden.m, true);
+      await emu.startBytes(new Uint8Array([1]));
+      hidden.frame(); // SDL opened the audio as the thread started, and resumed it
+      hidden.frame();
+      expect(heard).toEqual(['hidden']);
+      emu.pause();
+      emu.resume(); // resumeGame resumes SDL's audio too
+      hidden.frame();
+      await emu.reboot();
+      hidden.frame();
+      expect(heard).toEqual(['hidden', 'hidden', 'hidden']);
+
+      const shown = fakeCore();
+      shown.m.pauseAudio = () => void heard.push('shown');
+      const visible = await Emulator.create({} as HTMLCanvasElement, async () => shown.m);
+      await visible.startBytes(new Uint8Array([1]));
+      shown.frame();
+      expect(heard).not.toContain('shown');
+    });
+
+    it('counts every stop the page makes, so a meter skips the gap across it', async () => {
+      const { emu } = await make();
+      await emu.start(new Uint8Array([1]));
+      const booted = emu.pauses;
+      emu.pause();
+      emu.resume();
+      expect(emu.pauses).toBe(booted + 1);
+      await emu.reboot();
+      emu.stop();
+      expect(emu.pauses).toBe(booted + 3);
+    });
+  });
+
+  describe('what a watchdog reads (POK-328)', () => {
+    it('says it is paused from pause() to resume(), and a boot starts it running', async () => {
+      const { emu } = await make();
+      await emu.start(new Uint8Array([1]));
+      expect(emu.isPaused()).toBe(false);
+      emu.pause();
+      expect(emu.isPaused()).toBe(true);
+      emu.resume();
+      expect(emu.isPaused()).toBe(false);
+      emu.pause();
+      await emu.reboot();
+      expect(emu.isPaused()).toBe(false);
+    });
+
+    it('counts the frame listeners that have thrown, each once', async () => {
+      const { emu, frame } = await make();
+      emu.onListenerError(() => {});
+      emu.onFrame(() => {
+        throw new Error('one');
+      });
+      emu.onFrame(() => {
+        throw new Error('two');
+      });
+      emu.onFrame(() => {});
+      await emu.start(new Uint8Array([1]));
+      expect(emu.threw).toBe(0);
+      frame();
+      frame();
+      expect(emu.threw).toBe(2);
+    });
   });
 
   it('returns screenshot bytes', async () => {

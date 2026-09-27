@@ -123,6 +123,24 @@
         padding: 2px 6px;
         border-radius: 4px;
       }
+      /* #perf (POK-247): over every screen, the results included, and in the way of no tap. */
+      .fps.perf { position: fixed; z-index: 1000; white-space: pre-line; pointer-events: none; max-width: calc(100vw - 12px); }
+      /* The game stopped (POK-328, emu/watchdog.ts): over everything but #perf, with the
+         line a screenshot has to carry and the two ways out. */
+      .stall {
+        position: fixed;
+        inset: 0;
+        z-index: 999;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.6);
+      }
+      .stall[hidden] { display: none; }
+      .stall-box { max-width: 420px; background: #1a2128; border: 2px solid #33424c; border-radius: 10px; padding: 14px 16px; }
+      .stall-head { margin: 0 0 6px; font-weight: 600; color: #ffe08a; letter-spacing: 0.04em; }
+      .stall-line { margin: 0 0 12px; font: 12px/1.5 ui-monospace, monospace; color: #cfe3ef; overflow-wrap: anywhere; }
+      .stall-box button { font: inherit; background: #4f6b7d; color: #fff; border: 0; border-radius: 6px; padding: 6px 14px; margin-right: 8px; cursor: pointer; }
 
       #pad {
         flex: 1;
@@ -269,6 +287,16 @@
       </div>
     </div>
     <div id="stage-fade" aria-hidden="true"></div>
+    <!-- The game stopped under the player (POK-328): web/src/emu/watchdog.ts calls it,
+         app.ts wireWatchdog fills the line in, and it goes again if the game comes back. -->
+    <div id="stall" class="stall" role="alertdialog" aria-labelledby="stall-head" aria-describedby="stall-line" hidden>
+      <div class="stall-box">
+        <p id="stall-head" class="stall-head">THE GAME STOPPED</p>
+        <p id="stall-line" class="stall-line"></p>
+        <button id="stall-reload" type="button">RELOAD</button>
+        <button id="stall-leave" type="button">LEAVE</button>
+      </div>
+    </div>
     <script type="module" src="/src/app.ts"></script>
   </body>
 </html>

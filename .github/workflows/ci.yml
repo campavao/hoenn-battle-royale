@@ -223,6 +223,8 @@ jobs:
       - working-directory: relay
         run: npm ci --ignore-scripts
 
+      # Every spec in Chromium, play.spec.ts's whole match among them (POK-327: a shot a
+      # step under e2e/out/play/chromium). Its Firefox project is the play-firefox job's.
       - working-directory: web
         env:
           HBR_ROM: ${{ github.workspace }}/pokeemerald.gba
@@ -235,6 +237,64 @@ jobs:
         with:
           name: e2e-shots
           # Screenshots only, never the ROM (see the artifact-upload comment above).
+          path: web/e2e/out
+          if-no-files-found: warn
+
+  # A tag only: the match played in Firefox (POK-327). The rom job plays it in Chromium
+  # on every push; Firefox is where Cam's 2026-09-18 video had the picture squashed, and
+  # a second browser on every push is five more minutes, so it waits for a release. The
+  # ROM never leaves the rom job, so this one starts where a player does: the retail
+  # baseline (the rom job's cache, proved retail there) patched in the tab with the
+  # patch the rom job built. Not in release's `needs` until it has been green on a tag:
+  # headless Firefox with WebGL and SharedArrayBuffer is unproven on this runner.
+  play-firefox:
+    if: github.ref_type == 'tag'
+    needs: rom
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read baseline commit
+        id: baseline
+        run: echo "sha=$(cat tools/br/BASELINE_COMMIT)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore baseline ROM
+        uses: actions/cache/restore@v6
+        with:
+          path: baseline/pokeemerald.gba
+          key: baseline-rom-${{ steps.baseline.outputs.sha }}
+          fail-on-cache-miss: true
+
+      - uses: actions/download-artifact@v8
+        with: { name: patch, path: web/public/patch }
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - working-directory: web
+        run: |
+          npm ci
+          npx playwright install --with-deps firefox
+
+      # Playwright's first webServer is the relay (see the rom job).
+      - working-directory: relay
+        run: npm ci --ignore-scripts
+
+      - working-directory: web
+        env:
+          # Retail: the page patches it, as it does a player's ROM.
+          HBR_ROM: ${{ github.workspace }}/baseline/pokeemerald.gba
+          HBR_PLAY_FIREFOX: '1'
+        run: npx playwright test --project play-firefox
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-shots-firefox
           path: web/e2e/out
           if-no-files-found: warn
 
@@ -378,7 +438,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install build deps
         run: |
@@ -387,7 +447,7 @@ jobs:
             build-essential libpng-dev gcc-arm-none-eabi binutils-arm-none-eabi
 
       - name: Checkout agbcc
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: pret/agbcc
           path: agbcc
@@ -398,7 +458,7 @@ jobs:
 
       - name: Cache agbcc build
         id: agbcc-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: agbcc
           key: agbcc-${{ steps.agbcc-sha.outputs.sha }}

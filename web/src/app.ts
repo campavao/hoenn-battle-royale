@@ -4,6 +4,7 @@
 // directly, per the project CLAUDE.md.
 
 import { KEY_BIT, Emulator, type GbaKey } from './emu';
+import { stallLine, watch } from './emu/watchdog';
 import { checkEmerald, isPrePatched, sha1Hex } from './rom/emerald';
 import { loadCheckedRelease, loadSidecars, type CheckedRelease, type ReleaseInfo } from './release';
 import type { PatchWorkerRequest, PatchWorkerResponse } from './patch/bps.worker';
@@ -19,6 +20,7 @@ import { nameBstart, romReplaying, Spectate } from './match/spectate';
 import type { Results } from './match/results';
 import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
+import { saveMatch, type MatchLog } from './match/log';
 import { HostRole, soloLink, soloRoster, type HostLink } from './match/host';
 import { type BotVoice, lineAt, nextLine } from './bots/lines';
 import * as Ticker from './match/ticker';
@@ -41,7 +43,7 @@ import {
 } from './match/room';
 import { Stage, type DrawnScreen } from './ui/stage';
 import { ParadeHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
-import { FrameMeter } from './ui/fps';
+import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
 import { stageKey } from './ui/roomkeys';
 import { TEXT_RED } from './ui/emerald';
 import {
@@ -77,7 +79,7 @@ import {
 import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
 import { TouchLayer } from './touch';
-import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, stickKeys, type AxisSense, type StickMap } from './pad';
+import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, stickKeys, type AxisSense, type StickMap } from './pad';
 import { BAND, FieldView } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
@@ -110,7 +112,7 @@ import {
   type MatchSnapshot,
 } from './match/lifecycle';
 import regionmapData from './data/regionmap.json';
-import { parseRoomHash as parseHash, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
+import { devLand, devPace, parseRoomHash as parseHash, perfWanted, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
 // Cast rather than re-declared: these three JSON files are the exporter's own output
@@ -186,7 +188,8 @@ function theStage(): Stage {
  *  that learns a match is on. */
 let hideRoomHook: (() => void) | null = null;
 
-/** The version line, for the drawn screens that end on it. */
+/** The version line as last set: for the drawn screens that end on it, and what a stall's
+ *  overlay names (POK-328). */
 let versionLine = '—';
 
 function setVersionLine(text: string): void {
@@ -867,14 +870,9 @@ function wireGamepad(emu: Emulator): () => void {
     settings.pad = null;
     redrawSheet();
   };
-  const id = setInterval(poll, 16);
-  addEventListener('gamepadconnected', note);
-  addEventListener('gamepaddisconnected', gone);
-  return () => {
-    clearInterval(id);
-    removeEventListener('gamepadconnected', note);
-    removeEventListener('gamepaddisconnected', gone);
-  };
+  // Only while a pad is connected, except on Windows, where it is also the timer that
+  // keeps the core's frames off the OS tick (POK-247): pad.ts pollPads.
+  return pollPads(poll, note, gone, { win: window, pads: () => navigator.getGamepads(), always: onWindows(navigator) });
 }
 
 /** The remap wizard: one prompt per key, bind by pressing the button you want. Six
@@ -1117,18 +1115,58 @@ function wireSettings(emu: Emulator): void {
   };
 }
 
-// ---- fps readout, dev only ---------------------------------------------------------------
+// ---- the readout in the corner: DEV always, a build with #perf -------------------------
+
+/** What the proxy instance has done, for a readout: null before there is one. */
+function proxyCounts() {
+  return proxyDuels?.stats ?? null;
+}
 
 function wireFps(emu: Emulator): void {
-  if (!import.meta.env.DEV) return;
+  const perf = perfWanted(location.hash);
+  if (!import.meta.env.DEV && !perf) return;
   const el = $('#fps') as HTMLElement;
   el.hidden = false;
   // ...and how many frame listeners have thrown: the emulator reports each one's first
   // throw only and goes on calling it, so the page carries on looking fine (POK-331 #29).
-  const meter = new FrameMeter(emu);
+  const now = new PerfProbe(emu, proxyCounts);
+  // #perf (POK-247): the whole page so far under this second, over every screen, so the
+  // end of a match on a phone is one screenshot.
+  el.classList.toggle('perf', perf);
+  const all = perf ? new PerfProbe(emu, proxyCounts, { log: () => {} }) : null;
   setInterval(() => {
-    el.textContent = meter.read();
+    el.textContent = all ? perfLines(now.sample(), all.sample(false)).join('\n') : frameLine(now.sample().frames);
   }, 1000);
+}
+
+// ---- the game stopping under the player (POK-328) -------------------------------------
+
+/** The round's log, once a match has one: where a stall is written down. */
+let stallLog: MatchLog | null = null;
+
+/** Watches the page's own emulator -- never the proxy's -- for its frames stopping, the
+ *  ROM's heartbeat stopping or the core crashing (emu/watchdog.ts), and says so over the
+ *  picture with the way out, so a phone screenshot carries the evidence and the player
+ *  is never stuck: Cam's Mossdeep Gym black screen had the pad up and nothing else. */
+function wireWatchdog(emu: Emulator, symbols: Map<string, number> | undefined): void {
+  const box = $('#stall') as HTMLElement;
+  ($('#stall-reload') as HTMLButtonElement).addEventListener('click', () => location.reload());
+  ($('#stall-leave') as HTMLButtonElement).addEventListener('click', () => backToLobby());
+  watch({
+    emu,
+    symbols: symbols ?? null,
+    onStall: (report) => {
+      const line = stallLine(report, versionLine);
+      ($('#stall-line') as HTMLElement).textContent = line;
+      box.hidden = false;
+      console.error('[watchdog] the game stopped:', line);
+      const round = stallLog?.stall(performance.now(), report.kind, line, report.map ?? undefined);
+      if (round) saveMatch(round);
+    },
+    onBack: () => {
+      box.hidden = true;
+    },
+  });
 }
 
 // ---- boot: start in Littleroot under the career name (br_boot.h) ------------------------
@@ -1366,10 +1404,21 @@ function renderRoomPanel(
  *  what QUICK PLAY puts in the hash, so every quick-play game in dev ran at the dev
  *  pace: Cam's play-test had eight fog phases inside two minutes while the room's own
  *  control said FOG 120s, and there was no time to catch anything. Two meanings, one
- *  word, and the one that lost was the game. */
+ *  word, and the one that lost was the game. `#safari=N` and `#fog=N` set either one
+ *  (hash.ts's devPace). */
 function paceOptions(): { safariSecs?: number; fogSecs?: number } | undefined {
-  if (!import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('fast')) return undefined;
-  return { safariSecs: 25, fogSecs: 15 };
+  if (!import.meta.env.DEV) return undefined;
+  return devPace(location.hash);
+}
+
+/** `#land=MAP_ID,x,y`: our own drop lands on that cell, whatever section was picked
+ *  (POK-327: the play-a-match e2e meets the same route trainer every run). Dev only,
+ *  like `#seed`. */
+function landOverride(): { map: MapRef; x: number; y: number } | undefined {
+  if (!import.meta.env.DEV) return undefined;
+  const land = devLand(location.hash);
+  const map = land && HOENN.refOf(land.id);
+  return land && map ? { map, x: land.x, y: land.y } : undefined;
 }
 
 function botFill(): number {
@@ -1433,6 +1482,9 @@ const SOLO_END_GRACE_MS = 8_000;
  *  the map (include/br/br_match.h). The one byte the page reads out of the match struct:
  *  everything else it needs comes through the mailbox. */
 const BR_PHASE_DONE = 5;
+/** `gBrMatch.seed` (include/br/br_match.h): BR_BOOT_SAFARI deals the opening's cell off
+ *  it when it is not zero (BrMatch_SafariCell). */
+const MATCH_SEED = 8;
 
 /** The champion's own exit waits for their parade instead of a timer, and this is how
  *  long it waits before going anyway. Kanto's END_DEADLINE_SECONDS, the same idea. */
@@ -1603,7 +1655,7 @@ function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director:
 /** Solo play (no `#host`/`#join`): there is no room, so there is no Bridge either --
  *  just a RomPort into this ROM's own mailbox (net/romport.ts), and the room's own books
  *  and host (POK-330 #42) on a link with no room at the other end of it. */
-function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number> | undefined): void {
+function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number> | undefined, seed: number): void {
   // The relay cannot see this: no socket opens for solo play, ever (that is the whole
   // point of the mode). The count rides along on whatever real connection comes next
   // (POK-243, match/stats.ts) -- a local bump now, nothing that touches the network.
@@ -1623,7 +1675,6 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   // name a room would know us by.
   const roster = soloRoster(careerName());
   fieldView?.setPeople(() => roster.all());
-  const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
   const matchBase = symbols?.get('gBrMatch');
   /** Won, the results wait for our own Hall of Fame (POK-320), and the grace runs after. */
   const paraded = new ParadeHold({
@@ -1683,6 +1734,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       partyLate: () => drawResults(),
     },
   );
+  stallLog = session.log;
   const drawResults = (): void =>
     renderResults(
       0,
@@ -1701,7 +1753,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
         again: { label: 'LOBBY', id: 'results-lobby', onPress: leaveSolo },
       },
     );
-  // The seed is solo's own, dealt as it always was: `#seed` is the room's (fixedSeed).
+  // The seed main() wrote into the ROM before its boot, so the opening's cell is dealt off
+  // it too (POK-327).
   const plan = dealPlan(session.match, [0], 0, false, () => seed);
   // The room's own host (POK-330 #42), on a link with nobody at the other end. Dealt now,
   // so the bots walk from the start; the match itself waits for the frame gate below.
@@ -1723,6 +1776,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     // room with nobody in it, and its ticker says everything a room's does.
     narration: { mine: careerVoiceLines },
     startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director),
+    land: landOverride(),
   });
   // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):
   // nothing else names them, so solo's results and saved round said P31 won.
@@ -2286,6 +2340,7 @@ function wireRoom(
       partyLate: drawResults,
     },
   );
+  stallLog = session.log;
   /** Everything a promoted client needs to pick the match up (POK-252), and reset by
    *  returnToRoom for the next one (match/lifecycle.ts): the session's, one object for
    *  the page's life. */
@@ -3189,6 +3244,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
   wireSettings(emu);
   wireDrawer();
   wireFps(emu);
+  wireWatchdog(emu, symbols);
   // The picture in its box and the field drawn past it (field.ts, POK-317). Without the
   // symbol table the picture is still placed; the field around it stays dark.
   fieldView = new FieldView({
@@ -3319,7 +3375,8 @@ async function main(): Promise<void> {
 
   // Dev only, for the e2e harness (POK-220): solo play never builds a Bridge, so this
   // is the only way in to read the emulator's memory from outside the page.
-  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu };
+  // `perf` makes a meter of the spec's own (POK-247), read from the moment it asks.
+  if (import.meta.env.DEV) (window as unknown as { __hbr?: unknown }).__hbr = { emu, perf: () => new PerfProbe(emu, proxyCounts, { log: () => {} }) };
 
   // The proxy's own instance is not booted here -- only made available. It costs a
   // second wasm core and a second copy of the ROM, so it is paid for on the first bot
@@ -3338,6 +3395,12 @@ async function main(): Promise<void> {
         other.setVolume(0); // it is not on screen and it is not to be heard
         other.setSpeed(8); // ...and it is in a hurry: a duel is a fight nobody watches
         return other;
+      },
+      // A fight that would not end power-cycles this same instance (POK-247): another
+      // would be a whole second module, and quitGame frees none of the first.
+      restart: async (e) => {
+        await (e as Emulator).reboot();
+        (e as Emulator).setVolume(0); // a new core starts at full volume
       },
       writeBoot: (e, base) => writeBootBlock(e as Emulator, base, PROXY_NAME),
       onNote: (what) => console.info('[proxy]', what),
@@ -3390,14 +3453,21 @@ async function main(): Promise<void> {
   if (!roomHash) roomHash = await runLobby({ patch, protocol });
   if (roomsRefused && roomHash.mode !== 'solo') return refuseRoom(roomsRefused);
   const bootMode = bootModeFor(roomHash.mode);
+  // Solo's seed goes into the ROM before its boot (POK-327): BR_BOOT_SAFARI deals the
+  // opening's cell off gBrMatch.seed when there is one, and off Random32 when there is
+  // not -- so the seed the results print used to be every part of the match but its
+  // first minute. `#seed` pins it in dev, as it pins a room's.
+  const soloSeed = fixedSeed() ?? Math.floor(Math.random() * 0x7fff_ffff) + 1;
 
   if (mailboxBase !== undefined) {
+    const matchBase = symbols?.get('gBrMatch');
+    if (roomHash.mode === 'solo' && matchBase !== undefined) emu.write(matchBase + MATCH_SEED, soloSeed, 32);
     writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
     emu.resume();
   }
 
   showScreen('playing');
-  if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols);
+  if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols, soloSeed);
   else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch);
   // An unpatched ROM has no room and no sheet: the game, and nothing over it.
   if (mailboxBase === undefined) theStage().hide();
