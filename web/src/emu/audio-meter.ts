@@ -16,8 +16,9 @@
 //         (sdl-audio.c, `available < len`), which is one cut, at the end; a dropout in
 //         the game's own output is another, anywhere. Music fades; it does not drop to
 //         exact zero sixteen samples at a time. The first soaks found the second kind:
-//         a player who is out hears, in every 800-sample frame, ~173 samples of sound
-//         and ~627 of silence.
+//         a player who was out heard, in every 800-sample frame, ~173 samples of sound
+//         and ~627 of silence -- the ROM's follow starting its warp, and SE_EXIT, again
+//         every frame (br_spectate.c FollowTick; e2e/out-watch.spec.ts holds it).
 //
 // Pure over the Web Audio types, so it runs under vitest with a hand-made event.
 

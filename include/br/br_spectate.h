@@ -19,7 +19,8 @@ struct BrSpectate
     /* 11 */ u8 peekMons; // party rows held for the followed seat, 0..PARTY_SIZE
     /* 12 */ u8 shotSecs; // the followed seat's shot clock, 0 = no choice pending
     /* 13 */ u8 peekPage; // which page of the peek box: team, a mon's moves, the bag (POK-297)
-    /* 14 */ u8 pad[2];
+    /* 14 */ u8 warpWait; // frames a warp to the followed seat's map is left to get going
+    /* 15 */ u8 pad;
 };
 
 // gBrSpectate.follow when nobody is being followed. Matches the wire's stop byte.

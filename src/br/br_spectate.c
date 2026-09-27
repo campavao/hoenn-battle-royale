@@ -827,6 +827,10 @@ static void HandleFollow(const u8 *payload, u8 len)
     BrSpectate_Follow(d[0]);
 }
 
+// How long a warp to the followed seat's map has to reach its map load before it is
+// asked for again: its fade and the old map's music take about a second between them.
+#define BR_FOLLOW_WARP_FRAMES 120
+
 // Each frame while following: get onto their map, then ride their ghost. The camera
 // object tracks a sprite's movement rather than jumping to it, so the warp is what
 // puts us beside them and the camera is what keeps us there as they walk.
@@ -834,6 +838,10 @@ static void FollowTick(void)
 {
     struct BrSeat *them;
 
+    // Off the field -- a warp's map load among the rest -- the warp we asked for has
+    // happened, or something bigger overtook it.
+    if (!BrField_OverworldRunning())
+        gBrSpectate.warpWait = 0;
     if (gBrSpectate.follow == BR_NO_SEAT)
         return;
     them = &gBrSeats[gBrSpectate.follow];
@@ -847,14 +855,28 @@ static void FollowTick(void)
     if (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
      || gSaveBlock1Ptr->location.mapNum != them->mapNum)
     {
+        // One warp at a time (POK-247). DoWarp only starts the errand: its task waits
+        // out the fade and the old map's music, then loads the map -- and this runs
+        // before that task every frame. Asked again each frame, it started a new fade the
+        // frame the last one finished, so the task never saw one finished, and it played
+        // SE_EXIT again every frame: a player who was out, watching somebody on another
+        // map, sat on a black screen with the sound chopped at 60 Hz. The latch lets go
+        // at the map load, or after BR_FOLLOW_WARP_FRAMES if the warp never got going.
+        if (gBrSpectate.warpWait != 0)
+        {
+            gBrSpectate.warpWait--;
+            return;
+        }
         // They are somewhere else: go there. Warp coords carry no MAP_OFFSET; the
         // roster's do, the way an object event holds them.
         gBrSpectate.followed = FALSE;
         SetWarpDestination(them->mapGroup, them->mapNum, WARP_ID_NONE,
             them->x - MAP_OFFSET, them->y - MAP_OFFSET);
         DoWarp();
+        gBrSpectate.warpWait = BR_FOLLOW_WARP_FRAMES;
         return;
     }
+    gBrSpectate.warpWait = 0;
     // START opens what they are carrying, and closes it again. Field controls are
     // locked while following, so the start menu never sees the press.
     if (JOY_NEW(START_BUTTON) || (gBrSpectate.peeking && JOY_NEW(B_BUTTON)))

@@ -1,0 +1,37 @@
+# spectate-follow-warp: following a seat on another map warps there, once (POK-247).
+# FollowTick runs before the warp's task every frame; it used to call DoWarp again each
+# frame, which began a new fade the frame the last one ended -- the task never saw one
+# ended -- and played SE_EXIT every frame: an out player watching somebody on another
+# map sat on a black screen with the sound chopped at 60 Hz. Now one warp, latched
+# (gBrSpectate.warpWait, +14) until the map load.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 9
+# seat 1 placed on ROUTE 101 (group 0, num 16) at (10, 10) -- 17, 17 with MAP_OFFSET --
+# facing south: type 2, len 14 = hdr(0b 00 00) + seat 01, hasMap 01, group 00, num 10,
+# x 11 00, y 11 00, facing 01, status 01, sprite 01
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 10 11 00 11 00 01 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrSeats+16 1
+expect u8 gBrSeats+19 0x10
+# FOLLOW seat 1: type 20 (0x14), len 4 = hdr(01 00 00) + seat
+pokebytes gBrMailbox+0x1058 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u8 gBrSpectate+8 1
+# the warp is under way and latched: asked once, not once a frame
+expectge u8 gBrSpectate+14 100
+shot warping
+# the fade, the old map's music and the load: on their map inside two seconds
+wait 110
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 0x10
+expect u8 gBrSpectate+14 0
+# and on their ghost once it has spawned there
+wait 60
+expect u8 gBrSpectate+9 1
+shot followed
+say spectate follow warp ok
