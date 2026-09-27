@@ -22,7 +22,9 @@
 //     page asks with `cache: 'reload'`, which it does when a copy failed its check. One
 //     copy per file is kept; the one it replaces goes.
 //   - `/assets/*`: the build's hashed files. Cache first, never revalidated; the ones no
-//     longer reachable from the current page are pruned.
+//     longer reachable from the current page are pruned. The world data (world.json and
+//     landing.json, fetched on demand) is two of them, so a release that moves no map
+//     does not send it again.
 //   - `/emu/*`: the core, a js/wasm pair that must match. Network first, so both come
 //     from the same deploy: the HTTP cache makes that a 304 when nothing moved.
 //   - anything else of ours (map stills, sprites, icons): cache first, revalidated in
@@ -127,8 +129,13 @@ async function networkFirst(event, request, { page = false } = {}) {
       const copy = response.clone();
       event.waitUntil(
         (async () => {
-          await put(request, copy.clone());
-          if (page && new URL(request.url).pathname === '/') await pruneAssets(await copy.text());
+          // Pruned before this page is stored: it reads the page this one replaces, and
+          // still runs when a disk over its quota refuses the store.
+          if (page && new URL(request.url).pathname === '/') {
+            const was = await caches.match(request, { ignoreSearch: true });
+            await pruneAssets(await copy.clone().text(), was ? await was.text() : '');
+          }
+          await put(request, copy);
         })(),
       );
     }
@@ -200,23 +207,51 @@ async function revalidate(request) {
   }
 }
 
-/** Every /assets/ name a page or script mentions. */
-function assetRefs(text) {
-  return text.match(/\/assets\/[A-Za-z0-9_.-]+/g) ?? [];
+/** Every /assets/ name a page or script mentions. A script names the chunks it imports
+ *  relative to itself -- main's `import("./world-XXXX.js")`, the world data -- and lists
+ *  their preloads with no leading slash, so a script (`from`, its own path) is read for
+ *  those too. */
+function assetRefs(text, from = null) {
+  const refs = text.match(/\/assets\/[A-Za-z0-9_.-]+/g) ?? [];
+  if (from) {
+    const dir = from.slice(0, from.lastIndexOf('/') + 1);
+    for (const [, name] of text.matchAll(/["'`]\.\/([A-Za-z0-9_.-]+\.js)["'`]/g)) refs.push(dir + name);
+    for (const [, name] of text.matchAll(/["'`](assets\/[A-Za-z0-9_.-]+)["'`]/g)) refs.push('/' + name);
+  }
+  return refs;
+}
+
+/** The /assets/ files a page reaches: what it names, and what each cached script among
+ *  them names in turn. `missing`: a script the page names is not cached, so what it
+ *  imports is not known. */
+async function reachable(cache, html) {
+  const named = assetRefs(html);
+  const keep = new Set(named);
+  let missing = false;
+  // The set itself, not a copy: it visits what is added while it runs, so a chunk named
+  // only by a chunk the page names is kept too.
+  for (const ref of keep) {
+    if (!ref.endsWith('.js')) continue;
+    const script = await cache.match(ref);
+    if (script) for (const inner of assetRefs(await script.text(), ref)) keep.add(inner);
+    else if (named.includes(ref)) missing = true;
+  }
+  return { keep, missing };
 }
 
 /** Drops the hashed files of builds gone by: everything under /assets/ that neither the
- *  page nor a script it loads (the patch worker is only named in main's) mentions. A
- *  script not cached yet is not read -- a new build's arrive after its page -- which
- *  can cost a file the next load fetches again, never a file this one still needs. */
-async function pruneAssets(html) {
+ *  page nor a script it loads (the patch worker is only named in main's) mentions.
+ *
+ *  A script the page names that is not cached yet is a new build's, arriving after its
+ *  page, and cannot say what it imports -- so what the page it replaced (`was`) reaches
+ *  stays too, for this load. Pruning without it dropped the world data on every release,
+ *  map change or not, and the new build fetched the same 440 KB again. Waiting for the
+ *  script instead pruned nothing ever again when it never cached (a disk over quota),
+ *  just when the space mattered most; this keeps one build back, never more. */
+async function pruneAssets(html, was) {
   const cache = await caches.open(CACHE);
-  const keep = new Set(assetRefs(html));
-  for (const ref of [...keep]) {
-    if (!ref.endsWith('.js')) continue;
-    const script = await cache.match(ref);
-    if (script) for (const inner of assetRefs(await script.text())) keep.add(inner);
-  }
+  const { keep, missing } = await reachable(cache, html);
+  if (missing && was) for (const ref of (await reachable(cache, was)).keep) keep.add(ref);
   for (const key of await cache.keys()) {
     const path = new URL(key.url).pathname;
     if (path.startsWith('/assets/') && !keep.has(path)) await cache.delete(key);

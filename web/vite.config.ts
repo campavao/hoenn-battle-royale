@@ -48,6 +48,40 @@ function dropRoms(): Plugin {
   };
 }
 
+// The main script's budget (the audit's leftover e). It was 800 KB, and 571 KB of that
+// was world.json and landing.json, imported statically and parsed before the page could
+// draw its first screen. They are a chunk of their own now, fetched as the page starts
+// (match/landing.ts's worldReady()); this keeps them out, and keeps main from growing
+// back past the line with nobody noticing. The build fails -- CI's `npm run build` too --
+// rather than warns.
+export const MAIN_BUDGET = 350_000;
+const LAZY_DATA = /[\\/]src[\\/]data[\\/](world|landing)\.json$/;
+
+/** What is wrong with the entry chunk `main`, as the build names it; empty when nothing. */
+export function overBudget(main: { fileName: string; code: string; moduleIds: readonly string[] }): string[] {
+  const problems: string[] = [];
+  const bytes = Buffer.byteLength(main.code);
+  if (bytes > MAIN_BUDGET) problems.push(`${main.fileName} is ${bytes} B, over the ${MAIN_BUDGET} B budget`);
+  for (const id of main.moduleIds.filter((m) => LAZY_DATA.test(m))) {
+    problems.push(`${main.fileName} carries ${id}, which is fetched on demand: import it with import()`);
+  }
+  return problems;
+}
+
+function bundleBudget(): Plugin {
+  return {
+    name: 'br-bundle-budget',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      for (const out of Object.values(bundle)) {
+        if (out.type !== 'chunk' || !out.isEntry || out.name !== 'main') continue;
+        const problems = overBudget(out);
+        if (problems.length > 0) this.error(problems.join('\n'));
+      }
+    },
+  };
+}
+
 // What the dev server hands out through /@fs/: the repo root, where the pre-patched ROM
 // the e2e and `#rom=` load lives, plus HBR_ROM's folder when a run points elsewhere. It
 // used to be ['.', 'C:/Users/cam95/Documents/Github']: every sibling repo, readable from
@@ -61,7 +95,7 @@ if (process.env.HBR_ROM) fsAllow.push(dirname(resolve(process.env.HBR_ROM)));
 const lan = process.env.HBR_LAN === '1';
 
 export default defineConfig({
-  plugins: [dropRoms()],
+  plugins: [dropRoms(), bundleBudget()],
   server: {
     headers: isolation,
     host: lan,

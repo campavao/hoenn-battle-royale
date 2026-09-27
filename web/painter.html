@@ -7,27 +7,52 @@
       body { margin: 0; padding: 12px; font: 14px system-ui, sans-serif; background: #14181c; color: #dfe6ea; }
       header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
       select, button, textarea { font: inherit; }
-      canvas { image-rendering: pixelated; border: 1px solid #333; cursor: crosshair; display: block; }
+      canvas { image-rendering: pixelated; border: 1px solid #333; cursor: crosshair; display: block; user-select: none; }
       textarea { width: 100%; height: 160px; margin-top: 8px; background: #0e1114; color: #dfe6ea; border: 1px solid #333; }
+      .modes label { margin-right: 8px; }
+      kbd { font: 12px ui-monospace, monospace; border: 1px solid #555; border-radius: 3px; padding: 0 3px; color: #9fb3c0; }
+      .legend { margin-bottom: 8px; }
       .legend span { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin: 0 4px 0 10px; }
+      .legend span:first-child { margin-left: 0; }
+      .legend .veto { background: repeating-linear-gradient(135deg, #ff5050 0 2px, rgba(220, 40, 40, 0.35) 2px 5px); }
       #status { color: #9fb3c0; }
+      #problems { color: #ff8a80; margin: 8px 0 0; }
     </style>
   </head>
   <body>
     <header>
       <label>Map <select id="map"></select></label>
-      <button id="clear">Clear this map</button>
+      <span class="modes">
+        <label><input type="radio" name="mode" value="pick" checked /> Pick <kbd>P</kbd></label>
+        <label><input type="radio" name="mode" value="veto" /> Veto <kbd>V</kbd></label>
+      </span>
+      <button id="clear">Clear this map’s picks</button>
+      <button id="reset">Back to the file</button>
       <button id="copy">Copy JSON</button>
       <span id="status"></span>
-      <span class="legend">
-        <span style="background:#2b7a3b"></span>ordinary cell
-        <span style="background:#2f6fd1"></span>doorstep
-        <span style="background:#f28c28"></span>painted
-        <span style="background:#7a2b2b"></span>off (flood)
-      </span>
     </header>
+    <div class="legend">
+      <span style="background:#2b7a3b"></span>ordinary cell
+      <span style="background:#2f6fd1"></span>doorstep
+      <span style="background:#f28c28"></span>picked
+      <span class="veto"></span>vetoed
+      <span style="background:#7a2b2b"></span>off (flood)
+      <span style="background:rgba(0,0,0,0.55); outline:1px solid #333"></span>darkened: nowhere to walk off to
+    </div>
     <canvas id="grid"></canvas>
-    <p>Click a cell to paint it, click again to clear. Paste the JSON into <code>web/src/data/landing-hand.json</code> and commit; <code>landing.test.ts</code> holds every cell to the current map data.</p>
+    <p>
+      <b>Pick</b> marks where the drop should put people: a town with any picks deals from them first, then its
+      ordinary cells, then its doorsteps. <b>Veto</b> marks where nobody would ever stand (a yard behind a fence,
+      a roof, a strip behind a building): it comes out of the drop, the ring and the bots. Click a cell to paint
+      it, click again to clear. Drag to paint a rectangle; shift-drag to clear one. A pick has to be somewhere
+      you can walk off from; a veto can go on anything feet could be on.
+    </p>
+    <p>
+      Unsaved painting is kept in this browser. Copy the JSON over <code>web/src/data/landing-hand.json</code>
+      and commit; <code>landing.test.ts</code> holds every row to the current map data, and the list below is the
+      same check.
+    </p>
+    <ul id="problems"></ul>
     <textarea id="json" readonly></textarea>
     <script type="module" src="/src/painter.ts"></script>
   </body>

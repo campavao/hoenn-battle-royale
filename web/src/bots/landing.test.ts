@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { World, type Spot, type WorldMap } from './world';
 import worldData from '../data/world.json';
-import { DOORSTEPS, LANDING, LANDING_ALL } from '../match/landing';
+import { DOORSTEPS, HAND, LANDING, LANDING_ALL } from '../match/landing';
 
 const maps = (worldData as { maps: WorldMap[] }).maps;
 const world = new World(maps);
@@ -69,9 +69,9 @@ describe('the drop pool', () => {
 
 // POK-307. Cam picked Fortree City from the drop and landed on Route 117, behind the Day
 // Care's fence, because Fortree had no droppable cell and the fallback was anywhere in
-// Hoenn. Seven of Hoenn's towns are in that state -- the flood above walks, and most of
+// Hoenn. Eight of Hoenn's towns are in that state -- the flood above walks, and most of
 // eastern Hoenn is across water -- so this is the invariant that says a town the picker
-// offers always has somewhere to put you.
+// offers always has somewhere to put you, and Cam's vetoes (POK-314) cannot take it away.
 describe('every town you can pick has somewhere to land (POK-307)', () => {
   /** A section is a town you can pick if one of its maps has a POKeMON CENTER on it.
    *  That is what MAPSECTYPE_CITY_CANFLY means in practice, and unlike the ROM's own
@@ -80,7 +80,7 @@ describe('every town you can pick has somewhere to land (POK-307)', () => {
     maps.filter((m) => m.outdoor && (m.warps ?? []).some((w) => w.kind === 'centre')).map((m) => m.section),
   );
   const sectionOf = new Map(maps.map((m) => [m.id, m.section]));
-  const withCells = new Set([...live, ...DOORSTEPS].map((c) => sectionOf.get(c.map)));
+  const withCells = new Set([...live, ...DOORSTEPS, ...HAND].map((c) => sectionOf.get(c.map)));
 
   it('finds the towns at all', () => {
     // Hoenn has sixteen of them; a number far off that means world.json changed shape.

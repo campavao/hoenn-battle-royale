@@ -11,7 +11,12 @@
 // shared by whatever walks -- the bots and a tap -- which is safe because nothing in it
 // changes once built but its caches of fixed answers, and a search runs to the end
 // before the next one starts (bots/path.ts keeps its bookkeeping per World).
-import worldData from '../data/world.json';
+//
+// The file itself is fetched on demand (the audit's leftover e). Its 440 KB were over half
+// an 800 KB main script that had to arrive and parse before the page showed anything; it
+// is a chunk of its own now, asked for as the page starts and kept by the service worker
+// apart from the code, so a release that moves no map does not send it again.
+// match/landing.ts's worldReady() is the one wait, and nothing reads HOENN before it.
 import type { MapRef } from '../net/wire';
 import { World, type WorldMap } from './world';
 
@@ -47,5 +52,25 @@ export class WorldIndex {
   }
 }
 
-/** The real world, off web/src/data/world.json. */
-export const HOENN = new WorldIndex((worldData as { maps: WorldMap[] }).maps);
+/** What a table is until its file is in: every read throws and says why, rather than
+ *  answering from an empty world nobody would notice was empty. */
+export function notYet<T extends object>(name: string): T {
+  return new Proxy({} as T, {
+    get() {
+      throw new Error(`${name} was read before worldReady(): the world data is fetched on demand`);
+    },
+  });
+}
+
+/** The real world, off web/src/data/world.json -- once loadHoenn() has fetched it. */
+export let HOENN: WorldIndex = notYet('HOENN');
+
+let loading: Promise<WorldIndex> | undefined;
+
+/** Fetches world.json, once, and makes HOENN the index of it. */
+export function loadHoenn(): Promise<WorldIndex> {
+  loading ??= import('../data/world.json').then(
+    (m) => (HOENN = new WorldIndex((m.default as { maps: WorldMap[] }).maps)),
+  );
+  return loading;
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Director, type DirectorWorld } from './director';
+import { cellKey, withoutVetoes } from './hand';
 import type { ClockMsg, Msg, RingMsg, StartMsg, WinMsg } from '../net/wire';
 
 // A small synthetic world -- not the real regionmap.json/landing.json/world.json,
@@ -11,7 +12,7 @@ const world: DirectorWorld = {
     { id: 'MAP_ALPHA', group: 0, num: 1, section: 'SEC_ALPHA', outdoor: true },
     { id: 'MAP_BETA', group: 0, num: 2, section: 'SEC_BETA', outdoor: true },
     { id: 'MAP_INDOOR', group: 0, num: 3, section: 'SEC_ALPHA', outdoor: false },
-    // POK-307: a section the reachability flood left with nothing, which is what seven
+    // POK-307: a section the reachability flood left with nothing, which is what eight
     // of Hoenn's real towns look like -- every ordinary cell across water and marked off.
     { id: 'MAP_GAMMA', group: 0, num: 4, section: 'SEC_GAMMA', outdoor: true },
     // ...and one with no buildings either, which only a cave or an underwater route is.
@@ -242,8 +243,9 @@ describe('picking up a match in progress (POK-252)', () => {
 
 // POK-307. Cam picked Fortree City from the drop and landed on Route 117, forty maps
 // away, behind the Day Care's fence. The fallback for a section with nothing standable
-// in it was ANYWHERE IN HOENN -- and seven of the towns the picker offers are in that
-// state, because the reachability flood walks and most of eastern Hoenn is across water.
+// in it was ANYWHERE IN HOENN -- and eight of the sixteen towns the picker offers are in
+// that state (Lavaridge too, behind the cable car), because the reachability flood walks
+// and most of eastern Hoenn is across water.
 describe('where a pick actually lands you (POK-307)', () => {
   const seats = [0, 1, 2, 3];
 
@@ -311,14 +313,51 @@ describe('hand-painted drop cells (POK-314)', () => {
 
   it('beat doorsteps: a painted town drops on the painted cells, not the doors', () => {
     const d = make(99);
-    const cells = [0, 1, 2].map((s) => d.landFor(s, 3));
+    const cells = [0, 1].map((s) => d.landFor(s, 3));
     for (const c of cells) expect(c.map).toEqual({ group: 0, num: 4 });
-    for (const c of cells) expect([1, 2]).toContain(c.x);
+    expect(cells.map((c) => c.x).sort()).toEqual([1, 2]);
   });
 
-  it('beat ordinary cells: a section with any painted cell deals only from them', () => {
+  it('beat ordinary cells: a section with any painted cell deals from them first', () => {
     const d = make(7);
-    for (let i = 0; i < 10; i++) expect(d.landFor(i, 1)).toMatchObject({ x: 30, y: 30 });
+    expect(d.landFor(0, 1)).toMatchObject({ x: 30, y: 30 });
+    // ...and once it is taken, from the section's ordinary cells: not a second trainer
+    // on Cam's one spot.
+    for (let i = 1; i < 10; i++) expect(d.landFor(i, 1)).toMatchObject({ map: { num: 1 }, y: 0 });
+  });
+
+  it("run out into the town's ordinary cells, then its doorsteps, and only then stack", () => {
+    const town: DirectorWorld = {
+      ...world,
+      landing: [...world.landing, { map: 'MAP_GAMMA', x: 4, y: 4 }],
+      hand: [1, 2, 3].map((x) => ({ map: 'MAP_GAMMA', x, y: 1 })),
+    };
+    const d = new Director({ seats: [0], seed: 5, world: town, send: () => {}, now: () => 0, onOut: () => () => {} });
+    const lands = Array.from({ length: 8 }, (_, seat) => d.landFor(seat, 3));
+    for (const l of lands) expect(l.map).toEqual({ group: 0, num: 4 });
+    const at = lands.map((l) => `${l.x},${l.y}`);
+    // Five trainers, three painted spots: five tiles, the painted three first.
+    expect(new Set(at.slice(0, 3))).toEqual(new Set(['1,1', '2,1', '3,1']));
+    expect(at.slice(3, 7)).toEqual(['4,4', '7,7', '8,8', '9,9']);
+    // The eighth finds every tile in GAMMA taken, and shares one rather than leave it.
+    expect(at.slice(0, 3)).toContain(at[7]);
+  });
+
+  it('never deal a vetoed cell, to a pick or in the START', () => {
+    // ALPHA's first thirty cells vetoed, as match/landing.ts vetoes the real pools.
+    const veto = new Set(Array.from({ length: 30 }, (_, x) => cellKey({ map: 'MAP_ALPHA', x, y: 0 })));
+    const all = [...world.landing, ...(world.doorsteps ?? []), { map: 'MAP_GAMMA', x: 7, y: 7, door: 0 }];
+    const kept = withoutVetoes(all, veto);
+    const vetoed = { ...world, landing: kept.landing, doorsteps: kept.doorsteps };
+    for (let seed = 1; seed <= 20; seed++) {
+      const sent: Msg[] = [];
+      const seats = Array.from({ length: 20 }, (_, i) => i);
+      const d = new Director({ seats, seed, world: vetoed, send: (m) => sent.push(m), now: () => 0, onOut: () => () => {} });
+      d.start();
+      const start = sent.find((m) => m.t === 'start') as StartMsg;
+      for (const s of start.spawns) expect(s.map.num !== 1 || s.x >= 30, `seed ${seed}: ${s.x}`).toBe(true);
+      for (let i = 0; i < 5; i++) expect(d.landFor(i, 1).x).toBeGreaterThanOrEqual(30);
+    }
   });
 
   it('are sampled, not walked in click order', () => {

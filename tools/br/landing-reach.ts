@@ -16,7 +16,7 @@
 // Run it after tools/br/export-world.py. It rewrites web/src/data/landing.json.
 import fs from 'node:fs';
 import path from 'node:path';
-import { HOENN } from '../../web/src/bots/hoenn';
+import { loadHoenn } from '../../web/src/bots/hoenn';
 import type { Spot } from '../../web/src/bots/world';
 
 const DATA = path.resolve(import.meta.dirname, '../../web/src/data');
@@ -25,8 +25,9 @@ const landing = (JSON.parse(fs.readFileSync(path.join(DATA, 'landing.json'), 'ut
   // The doorsteps below are rebuilt from scratch every run, so a previous run's are not
   // flooded as if they were ordinary cells.
   .filter((c) => c.door === undefined);
-// world.json, indexed the one way the page indexes it (POK-331 #20).
-const { maps, world } = HOENN;
+// world.json, indexed the one way the page indexes it (POK-331 #20), and fetched the way
+// the page fetches it.
+const { maps, world } = await loadHoenn();
 
 // On foot. Surfing needs a water mon that knows SURF, which a trainer may never be
 // dealt and a bot does not have until rung 30 -- so a drop that requires it is a drop
