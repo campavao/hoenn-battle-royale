@@ -402,6 +402,21 @@ describe('Emulator', () => {
     });
   });
 
+  it("turns the core's own keyboard off after every loadGame: the keys are the page's alone", async () => {
+    // mGBA's SDL map has X as A and Z as B, the page's the other way round: left on, X
+    // pressed B from the page and A from SDL a frame later.
+    const { emu, m, calls } = await make();
+    m.toggleInput = (on) => void calls.push(`input ${on}`);
+    await emu.start(new Uint8Array([1]));
+    expect(calls.slice(-2)).toEqual(['load /data/games/emerald.gba', 'input false']);
+    await emu.reboot();
+    expect(calls.slice(-2)).toEqual(['load /data/games/emerald.gba', 'input false']);
+    // A core without the export boots all the same.
+    const bare = await make();
+    await bare.emu.start(new Uint8Array([1]));
+    expect(bare.emu.isRunning()).toBe(true);
+  });
+
   describe('the picture past the LCD (POK-319, POK-329)', () => {
     /** A core with the band's exports, each call logged beside loadGame's. */
     async function banded(opts: { spriteBand: boolean }) {

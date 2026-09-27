@@ -78,6 +78,9 @@ export interface CoreModule {
   setCoreSettings?(settings: { rewindEnable?: boolean; autoSaveStateEnable?: boolean; restoreAutoSaveStateOnLoad?: boolean }): void;
   /** Silences SDL's output without pausing the game; resumeGame undoes it. */
   pauseAudio?(): void;
+  /** SDL's own keyboard and mouse events into the core, through mGBA's key map: on (true)
+   *  until told otherwise. */
+  toggleInput?(enabled: boolean): void;
 }
 
 /** Pixels the core draws past the LCD on each side (POK-319). */
@@ -349,6 +352,13 @@ export class Emulator {
     // loadGame builds a new core, and its RAM with it: the old views point at nothing.
     this.views = null;
     if (!this.m.loadGame(path)) throw new Error('loadGame failed');
+    // The keyboard is the page's alone (bindKeyboard). Left on, SDL hears it too, through
+    // mGBA's own map -- X is A there and Z is B, the page's the other way round -- so X
+    // pressed A a frame after the page's B, and Z B after its A: B closing the START menu
+    // opened the party screen (picture.spec, 2026-09-27), and a drawn screen's keys
+    // reached the game under it (POK-330 #56). Once SDL is up, so after loadGame, and on
+    // every boot.
+    this.m.toggleInput?.(false);
     this.running = true;
     // addCoreCallbacks is a no-op until a core exists, so this must follow loadGame.
     this.m.addCoreCallbacks({
