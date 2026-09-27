@@ -1,61 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ALL_KEYS, EWRAM_BASE, Emulator, IWRAM_BASE, KEY_BIT, type CoreModule, type GbaKey } from './index';
-
-// A fake core: a 1 MiB heap with EWRAM at 0x1000 and IWRAM at 0x50000, a file map,
-// and a log of every call, so the wrapper's bookkeeping can be checked without wasm.
-function fakeCore() {
-  const heap = new Uint8Array(1 << 20);
-  const files = new Map<string, Uint8Array>();
-  const calls: string[] = [];
-  let cb: Parameters<CoreModule['addCoreCallbacks']>[0] = {};
-  const m: CoreModule = {
-    FSInit: async () => {},
-    FSSync: async () => {
-      calls.push('sync');
-    },
-    FS: {
-      writeFile: (p, d) => void files.set(p, d),
-      readFile: (p) => {
-        const f = files.get(p);
-        if (!f) throw new Error('ENOENT');
-        return f;
-      },
-      unlink: (p) => {
-        if (!files.delete(p)) throw new Error('ENOENT');
-      },
-      stat: (p) => {
-        if (!files.has(p)) throw new Error('ENOENT');
-        return {};
-      },
-      readdir: (dir) => ['.', '..', ...[...files.keys()].filter((k) => k.startsWith(dir + '/')).map((k) => k.slice(dir.length + 1))],
-    },
-    loadGame: (p) => {
-      calls.push(`load ${p}`);
-      return files.has(p);
-    },
-    quitGame: () => calls.push('quit'),
-    pauseGame: () => calls.push('pause'),
-    resumeGame: () => calls.push('resume'),
-    buttonPress: (n) => calls.push(`press ${n}`),
-    buttonUnpress: (n) => calls.push(`release ${n}`),
-    setVolume: () => {},
-    getVolume: () => 1,
-    setFastForwardMultiplier: (x) => calls.push(`speed ${x}`),
-    saveState: () => true,
-    loadState: () => true,
-    screenshot: (p) => {
-      files.set(p!, new Uint8Array([0x89, 0x50]));
-      return true;
-    },
-    addCoreCallbacks: (c) => {
-      cb = c;
-    },
-    _brWramPtr: () => 0x1000,
-    _brIwramPtr: () => 0x50000,
-    HEAPU8: heap,
-  };
-  return { m, heap, files, calls, frame: () => cb.videoFrameEndedCallback?.() };
-}
+import { fakeCore } from './fake-core';
+import { ALL_KEYS, EWRAM_BASE, Emulator, IWRAM_BASE, KEY_BIT, type GbaKey } from './index';
 
 async function make() {
   const canvas = {} as HTMLCanvasElement;
@@ -422,6 +367,38 @@ describe('Emulator', () => {
       await emu.reboot();
       emu.stop();
       expect(emu.pauses).toBe(booted + 3);
+    });
+  });
+
+  describe('what a watchdog reads (POK-328)', () => {
+    it('says it is paused from pause() to resume(), and a boot starts it running', async () => {
+      const { emu } = await make();
+      await emu.start(new Uint8Array([1]));
+      expect(emu.isPaused()).toBe(false);
+      emu.pause();
+      expect(emu.isPaused()).toBe(true);
+      emu.resume();
+      expect(emu.isPaused()).toBe(false);
+      emu.pause();
+      await emu.reboot();
+      expect(emu.isPaused()).toBe(false);
+    });
+
+    it('counts the frame listeners that have thrown, each once', async () => {
+      const { emu, frame } = await make();
+      emu.onListenerError(() => {});
+      emu.onFrame(() => {
+        throw new Error('one');
+      });
+      emu.onFrame(() => {
+        throw new Error('two');
+      });
+      emu.onFrame(() => {});
+      await emu.start(new Uint8Array([1]));
+      expect(emu.threw).toBe(0);
+      frame();
+      frame();
+      expect(emu.threw).toBe(2);
     });
   });
 

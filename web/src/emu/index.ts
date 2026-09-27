@@ -120,13 +120,18 @@ export class Emulator {
   private bootedPath: string | null = null;
   private crashListeners = new Set<() => void>();
   private running = false;
+  /** Held by pause() and not yet resume()d: its frames stopped on purpose (POK-328). */
+  private paused = false;
+  /** Frame listeners that have thrown, each counted at its first throw. */
+  private threwCount = 0;
   private band: Band | null = null;
   /** EWRAM and IWRAM over the heap, made once per boot (see wram()). */
   private views: { heap: Uint8Array; buffer: ArrayBufferLike; ewram: Uint8Array | null; iwram: Uint8Array | null } | null = null;
 
   private constructor(
     private readonly m: CoreModule,
-    private readonly headless = false,
+    /** Draws to nothing: the proxy's core (see CoreFactory). */
+    readonly headless = false,
   ) {}
 
   /** Instantiates the core against a canvas and mounts its IndexedDB-backed filesystem.
@@ -241,6 +246,8 @@ export class Emulator {
     this.bootedPath = path;
     this.halts++;
     this.quiet = false;
+    // loadGame starts a core thread of its own, running.
+    this.paused = false;
     // A core left to its defaults auto-saves a state every 30 s and restores it on the
     // next loadGame of the same file. create() turns both off, but a shell from before
     // POK-247 left those files in IndexedDB, and a match must always start from
@@ -311,16 +318,24 @@ export class Emulator {
 
   pause(): void {
     this.m.pauseGame();
+    this.paused = true;
     this.halts++;
   }
 
   resume(): void {
     this.m.resumeGame();
+    this.paused = false;
     this.quiet = false;
   }
 
   isRunning(): boolean {
     return this.running;
+  }
+
+  /** The page is holding it still (pause() without a resume() since): the boot block's
+   *  hold, a reboot's. A watchdog does not call that a stop (watchdog.ts). */
+  isPaused(): boolean {
+    return this.paused;
   }
 
   /** Fires on the main thread after every emulated frame. Returns an unsubscribe. */
@@ -385,9 +400,15 @@ export class Emulator {
     return () => this.errorListeners.delete(listener);
   }
 
+  /** How many frame listeners have thrown so far, each once. */
+  get threw(): number {
+    return this.threwCount;
+  }
+
   private listenerFailed(l: () => void, err: unknown): void {
     if (this.failedListeners.has(l)) return;
     this.failedListeners.add(l);
+    this.threwCount++;
     if (!this.errorListeners.size) {
       console.error('[emu] a frame listener threw; the frame carries on without it', err);
       return;
