@@ -48,7 +48,7 @@ test.beforeAll(() => {
 });
 
 test('a player out at the buzzer is taken to the trainer they watch, and hears the game there', async ({ browser }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(600_000);
   const sym = loadSymbols();
   const ctx = await browser.newContext();
   try {
@@ -100,13 +100,26 @@ test('a player out at the buzzer is taken to the trainer they watch, and hears t
           },
         },
       );
-    const arrive = async () =>
-      expect
-        .poll(async () => {
-          const w = await where();
-          return w.theirs !== null && w.ours === w.theirs ? 'there' : JSON.stringify({ ...w, elsewhere: undefined });
-        }, { timeout: 30_000, intervals: [250] })
-        .toBe('there');
+    const onField = () =>
+      host.evaluate(
+        ([main, cb2]) => ((window as unknown as OutWindow).__br.mailbox.ram.read(main + 4, 32) & ~1) === cb2,
+        [sym.gMain, sym.CB2_Overworld] as const,
+      );
+    // Onto the map of the trainer it follows. A watch can be a fight first -- following a
+    // trainer who is in one is watching it on the battle screen (POK-300), a bot's at the
+    // pace the proxy fought it -- so only time on the field counts: 30 s there, off the
+    // map it follows, is a follow that is stuck (the old warp loop was all field frames).
+    const arrive = async () => {
+      let stuck = 0;
+      for (const end = Date.now() + 240_000; Date.now() < end && stuck <= 30_000; ) {
+        const w = await where();
+        if (w.theirs !== null && w.ours === w.theirs) return;
+        stuck = (await onField()) ? stuck + 250 : 0;
+        await host.waitForTimeout(250);
+      }
+      const w = await where();
+      expect(JSON.stringify({ ...w, elsewhere: undefined }), 'on the map of the trainer it follows').toBe(JSON.stringify({ ...w, ours: w.theirs, elsewhere: undefined }));
+    };
     await arrive();
 
     // Then somebody on another map, picked from the field -- NEXT on the strip, as a
