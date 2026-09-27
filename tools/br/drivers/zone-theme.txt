@@ -1,0 +1,29 @@
+# zone-theme: a seed that is already there when the opening begins still gets its
+# "A <TYPE> MATCH!" line. zone-pool.txt's seed arrives in a START after the boot, with
+# the opening already on; a solo page writes its seed into gBrMatch before the boot, and
+# a room's START comes before the warp into the Zone. Both of those reach
+# BrMatch_BeginSafari with the seed in hand, and it dealt the pool before it set the
+# phase: SayTheme saw PHASE_NONE and said nothing, and dealtFor made every later deal a
+# no-op. No solo match and no room announced its theme.
+#
+# zone-pool.txt's seed, so the deal is its GRASS match.
+wait 30
+poke u32 gBrMatch+8 0x12345678
+# boot mode 2 = the Safari Zone
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+# The boot lands about 200 frames on, and a ticker line is up for 180 field frames
+# after that (BR_HUD_LINE_FRAMES): this looks in the middle of its time on screen.
+wait 260
+expect u8 gBrMatch 1
+# dealt at the boot, from the seed that was waiting for it
+expect u32 gBrZone 0x12345678
+expect u16 gBrZone+4 283
+# ...and said: the ticker's first line is "A GRASS MATCH!" (A, space, G, R)
+expectge u8 gBrHud+0x0A 1
+expect u8 gBrHud+0x46 0xBB
+expect u8 gBrHud+0x47 0x00
+expect u8 gBrHud+0x48 0xC1
+expect u8 gBrHud+0x49 0xCC
+wait 30
+shot theme
+say zone theme ok

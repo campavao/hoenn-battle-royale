@@ -328,10 +328,15 @@ void BrMatch_SafariCell(u8 *mapNum, u8 *x, u8 *y)
 void BrMatch_BeginSafari(void)
 {
     EnterSafariMode();
+    // The phase first: the deal says "A <TYPE> MATCH!" only in the opening (SayTheme),
+    // and a seed that is already here -- a room's START came before this warp, and a
+    // solo page writes its seed before the boot -- is dealt on the next line. Dealt
+    // under PHASE_NONE the line was dropped, and dealtFor made every later Ensure a
+    // no-op, so neither ever said what the match was about.
+    gBrMatch.phase = BR_PHASE_SAFARI;
     // The catch pool belongs to the opening, so it is dealt when the opening starts
     // rather than on the first encounter that asks (POK-255).
     BrZone_Ensure();
-    gBrMatch.phase = BR_PHASE_SAFARI;
     gBrMatch.clockLeft = gBrMatch.safariSecs;
     gBrMatch.clockFrames = 60;
 }
