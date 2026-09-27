@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
+import { BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, shakeOffset, subTile, SPR_OAM_HFLIP } from './field';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 import { HOENN } from './bots/hoenn';
@@ -186,6 +186,20 @@ describe('the fade', () => {
     expect(seen[1300], 'the next real fade').toBe(16);
     // A fast fade IN ended before it began is its colour: Begin filled the palettes.
     expect(mapFade({ y: 31, color: 0x7fff, active: false }, 0, false, (FAST_FADE << 8) | 2).fade).toEqual({ y: 16, color: 0, active: false });
+  });
+
+  // An object facing east is its west frame with the animation's flip, which the sprite
+  // code puts in the OAM (SetSpriteOamFlipBits) and never in Sprite.hFlip: read from
+  // Sprite.hFlip, the ROM's people past the picture faced west whenever they faced east.
+  it("reads a ROM sprite's flip where the hardware does, from its OAM", () => {
+    const x = 120;
+    expect(oamFlipped(0, SPR_OAM_HFLIP | x), 'facing east').toBe(true);
+    expect(oamFlipped(0, x), 'facing west').toBe(false);
+    // An affine sprite's matrixNum is a matrix: no flips there.
+    expect(oamFlipped(1, SPR_OAM_HFLIP | x)).toBe(false);
+    expect(oamFlipped(3, SPR_OAM_HFLIP | x)).toBe(false);
+    // ST_OAM_AFFINE_ERASE only hides it; the bits are still flips.
+    expect(oamFlipped(2, SPR_OAM_HFLIP | x)).toBe(true);
   });
 
   it('shows a GBA colour the way mGBA does', () => {

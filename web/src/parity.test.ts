@@ -56,6 +56,7 @@ import globalH from '../../include/global.h?raw';
 import fieldmapH from '../../include/global.fieldmap.h?raw';
 import mainH from '../../include/main.h?raw';
 import spriteH from '../../include/sprite.h?raw';
+import gbaTypesH from '../../include/gba/types.h?raw';
 import fieldCameraH from '../../include/field_camera.h?raw';
 import paletteH from '../../include/palette.h?raw';
 import fieldWeatherH from '../../include/field_weather.h?raw';
@@ -734,12 +735,20 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(pinned('sizeof Sprite'), 'src/br/br_pins.c').toBe(field.SPR_SIZE);
     // The flags, as bits of the u16 at SPR_FLAGS.
     const flag = (f: string) => 1 << ((spr.bits[f].byte - field.SPR_FLAGS) * 8 + spr.bits[f].bit);
-    expect([field.SPR_IN_USE, field.SPR_ON_CAMERA, field.SPR_INVISIBLE, field.SPR_HFLIP]).toEqual([
+    expect([field.SPR_IN_USE, field.SPR_ON_CAMERA, field.SPR_INVISIBLE]).toEqual([
       flag('inUse'),
       flag('coordOffsetEnabled'),
       flag('invisible'),
-      flag('hFlip'),
     ]);
+    // The flip the hardware draws is the OAM's (field.ts oamFlipped): the OamData the
+    // Sprite starts with, matrixNum's ST_OAM_HFLIP in the u16 at 2, after x's bits.
+    expect(/^\s*\/\*0x00\*\/ struct OamData oam;/m.test(/struct Sprite\s*\{([\s\S]*?)\};/.exec(spriteH)![1]), 'oam first').toBe(true);
+    const oam = /struct OamData\s*\{([\s\S]*?)\};/.exec(gbaTypesH)![1];
+    expect(oam).toMatch(/\/\*0x02\*\/ u32 x:9;\s*u32 matrixNum:5;/);
+    expect(oam).toMatch(/\/\*0x01\*\/ u32 affineMode:2;/);
+    expect([field.SPR_OAM_MODE, field.SPR_OAM_ATTR1]).toEqual([1, 2]);
+    expect(field.SPR_OAM_HFLIP).toBe(evaluate([gbaTypesH], 'ST_OAM_HFLIP') << 9);
+    expect(field.OAM_AFFINE_ON).toBe(evaluate([gbaTypesH], 'ST_OAM_AFFINE_ON_MASK'));
   });
 
   it('a graphics id past the table names a var', () => {

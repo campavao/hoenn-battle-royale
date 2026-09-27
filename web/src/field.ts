@@ -141,7 +141,22 @@ export const SPR_FLAGS = 0x3e;
 export const SPR_IN_USE = 0x1;
 export const SPR_ON_CAMERA = 0x2;
 export const SPR_INVISIBLE = 0x4;
-export const SPR_HFLIP = 0x100;
+/** The sprite's OAM, the first thing in `struct Sprite` (include/gba/types.h OamData):
+ *  affineMode in the low bits of byte 1, and the u16 at 2 is x:9, matrixNum:5, size:2 --
+ *  matrixNum's bit 3 (ST_OAM_HFLIP) at bit 12. */
+export const SPR_OAM_MODE = 0x01;
+export const SPR_OAM_ATTR1 = 0x02;
+export const SPR_OAM_HFLIP = 0x08 << 9;
+export const OAM_AFFINE_ON = 1;
+
+/** Whether the hardware draws a sprite flipped: the OAM's own bit, which sprite.c's
+ *  SetSpriteOamFlipBits sets to the animation frame's flip XOR Sprite.hFlip. An object
+ *  facing east is its west frame flipped by the animation, with Sprite.hFlip clear, so the
+ *  ROM's people past the picture, read by Sprite.hFlip, faced west whenever they faced
+ *  east (world-moves.spec). An affine sprite's matrixNum names its matrix instead. */
+export function oamFlipped(mode: number, attr1: number): boolean {
+  return (mode & OAM_AFFINE_ON) === 0 && (attr1 & SPR_OAM_HFLIP) !== 0;
+}
 const ROM_BASE = 0x08000000;
 
 // The fog (WEATHER_FOG_HORIZONTAL, what the ring's outside looks like): twenty 64x64
@@ -825,7 +840,8 @@ export class FieldView {
       const x = s16(emu.read(s + SPR_X, 16)) + s16(emu.read(s + SPR_X2, 16)) + s8(emu.read(s + SPR_CTC_X, 8)) + (onCamera ? coX : 0);
       const y = s16(emu.read(s + SPR_Y, 16)) + s16(emu.read(s + SPR_Y2, 16)) + s8(emu.read(s + SPR_CTC_Y, 8)) + (onCamera ? coY : 0);
       const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
-      const sprite: FieldSprite = { gfx, frame, hFlip: (flags & SPR_HFLIP) !== 0, x, y, hidden: offScreen };
+      const hFlip = oamFlipped(emu.read(s + SPR_OAM_MODE, 8), emu.read(s + SPR_OAM_ATTR1, 16));
+      const sprite: FieldSprite = { gfx, frame, hFlip, x, y, hidden: offScreen };
       const seat = emu.read(o + OBJ_LOCAL_ID, 8) - GHOST_LOCAL_ID_BASE;
       if (seat >= 0 && seat < SEAT_COUNT) sprite.seat = seat;
       out.push(sprite);
