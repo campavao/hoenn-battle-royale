@@ -139,7 +139,7 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     await startRecorder(page, sym);
     await page.waitForTimeout(1_000);
     await shot('boot');
-    await expectLayout(page, { onField: true }, 'boot');
+    await expectLayout(page, { onField: true }, 'boot', sym);
     await expectClean(page, 'boot');
     await proxyClean();
   });
@@ -180,7 +180,7 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     expect(after.balls, 'a ball was thrown').toBeLessThan(before.balls);
     await page.waitForTimeout(1_000);
     await shot('back-on-the-field');
-    await expectLayout(page, { onField: true }, 'after the catch');
+    await expectLayout(page, { onField: true }, 'after the catch', sym);
     await expectClean(page, 'the throw');
     await proxyClean();
   });
@@ -202,7 +202,7 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     expect({ x: r.x, y: r.y }).toEqual(LAND);
     await page.waitForTimeout(1_500);
     await shot('landed');
-    await expectLayout(page, { onField: true }, 'landed');
+    await expectLayout(page, { onField: true }, 'landed', sym);
     await expectClean(page, 'the drop');
     await proxyClean();
   });
@@ -239,7 +239,7 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     const after = await ram(page, sym);
     expect(after.gone, 'CALVIN is gone from the map').toBeGreaterThan(gone);
     await shot('trainer-beaten');
-    await expectLayout(page, { onField: true }, 'after the trainer');
+    await expectLayout(page, { onField: true }, 'after the trainer', sym);
     await expectClean(page, 'the trainer');
     await proxyClean();
   });

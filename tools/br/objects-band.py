@@ -7,8 +7,10 @@ Reads the driver's dumps of gSpriteCoordOffsetX/Y, gObjectEvents (16 x 0x24) and
 gSprites (64 x 0x44), and for every active object that is not the player asserts that
 its sprite is invisible exactly when BrField_OffScreen (src/br/br_field.c) says so:
 
-    x >= 240 + 16 + 16  or  x + width < -16  or  y >= 160 + 56  or  y < -40
+    x >= 240 + BR_VIEW_RIGHT + 16  or  x + width < -BR_VIEW_LEFT - 16
+    or  y >= 160 + BR_SPRITE_BOTTOM  or  y < -BR_SPRITE_TOP
 
+(today 16/0 columns and the 40/56 sprite window, read out of include/br/br_field.h),
 with (x, y) the sprite's top-left the way UpdateObjectEventOffscreen computes it. The
 widths come from the sprite sheets the page exports (web/src/data/sprites.json), keyed
 by graphics id. Exits 1 on any mismatch, and 2 when no object was in the band at all --
@@ -22,7 +24,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SHEETS = json.loads((ROOT / "web/src/data/sprites.json").read_text(encoding="utf-8"))
 
-BAND_LEFT, BAND_TOP, BAND_RIGHT, BAND_BOTTOM = 0, 40, 16, 56
+FIELD_H = (ROOT / "include/br/br_field.h").read_text(encoding="utf-8")
+
+
+def define(name):
+    """A plain-number #define of br_field.h's: the columns BrField_OffScreen keeps and
+    the sprite window it keeps a top inside (POK-329)."""
+    m = re.search(r"^#define\s+%s\s+(\d+)\s*$" % name, FIELD_H, re.M)
+    if not m:
+        sys.exit("objects-band.py: no plain #define %s in include/br/br_field.h" % name)
+    return int(m.group(1))
+
+
+VIEW_LEFT, VIEW_RIGHT = define("BR_VIEW_LEFT"), define("BR_VIEW_RIGHT")
+SPRITE_TOP, SPRITE_BOTTOM = define("BR_SPRITE_TOP"), define("BR_SPRITE_BOTTOM")
 OBJ_SIZE, OBJ_COUNT = 0x24, 16
 SPR_SIZE = 0x44
 
@@ -79,7 +94,7 @@ def main():
         x = s16(int.from_bytes(s[0x20:0x22], "little")) + s16(int.from_bytes(s[0x24:0x26], "little")) + s8(s[0x28]) + (off_x if on_camera else 0)
         y = s16(int.from_bytes(s[0x22:0x24], "little")) + s16(int.from_bytes(s[0x26:0x28], "little")) + s8(s[0x29]) + (off_y if on_camera else 0)
         invisible = bool(flags & 4)
-        want = x >= 240 + BAND_RIGHT + 16 or x + sheet["w"] < -BAND_LEFT - 16 or y >= 160 + BAND_BOTTOM or y < -BAND_TOP
+        want = x >= 240 + VIEW_RIGHT + 16 or x + sheet["w"] < -VIEW_LEFT - 16 or y >= 160 + SPRITE_BOTTOM or y < -SPRITE_TOP
         on_lcd = 0 <= x < 240 and 0 <= y < 160
         band = not want and not on_lcd
         in_band += band

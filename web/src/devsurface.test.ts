@@ -81,8 +81,9 @@ describe('what came out of app.ts', () => {
 // way to rig a match or its picture, so none of them is read in a build.
 describe('the dev flags a match is set up with', () => {
   it.each(['fixedSeed', 'paceOptions', 'landOverride', 'devBand'])('%s reads nothing outside DEV', (fn) => {
-    // To the end of the signature's line: a return type can have braces of its own.
-    const guarded = new RegExp(String.raw`function ${fn}\(\)[^\n]*\{\s*if \(!import\.meta\.env\.DEV\) return (?:null|undefined);`);
+    // To the end of the signature's line: a return type can have braces of its own, and
+    // devBand takes the ROM's band to keep its sides (POK-329).
+    const guarded = new RegExp(String.raw`function ${fn}\([^)]*\)[^\n]*\{\s*if \(!import\.meta\.env\.DEV\) return (?:null|undefined);`);
     expect(appSource).toMatch(guarded);
   });
 });

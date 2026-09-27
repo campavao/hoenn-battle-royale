@@ -6,10 +6,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { romExists, romHashParam, romPath } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
+
+/** The picture the ROM declares (POK-329): `struct BrFieldView` (include/br/br_field.h),
+ *  six u16s at gBrFieldView, read here off the ROM file the page boots -- a spec cannot
+ *  import field.ts's romBand. */
+function romView(): { viewport: { left: number; top: number; right: number; bottom: number }; sprites: { top: number; bottom: number } } {
+  const at = loadSymbols().gBrFieldView;
+  if (at === undefined) throw new Error('no gBrFieldView in br-symbols.json: run tools/br/dev-patch.sh on a build that has it');
+  const rom = fs.readFileSync(romPath());
+  const u16 = (i: number) => rom.readUInt16LE(at - 0x08000000 + 2 * i);
+  return { viewport: { left: u16(0), top: u16(1), right: u16(2), bottom: u16(3) }, sprites: { top: u16(4), bottom: u16(5) } };
+}
 
 // An iPhone-ish viewport, and the same device on its side.
 const PORTRAIT = { width: 390, height: 844 };
@@ -49,6 +60,13 @@ test('a phone gets the screen and both thumbs, either way up', async ({ browser 
     // The core's canvas is the LCD plus a band past it on each side (POK-319), so the
     // picture the layout places is the LCD inside that canvas, not the canvas itself.
     const band = await page.evaluate(() => (window as unknown as { __hbr: { emu: { viewport: { left: number; top: number; right: number; bottom: number } | null } } }).__hbr.emu.viewport);
+    // ...and the band is the one the ROM declares, drawn with the sprite window it
+    // declares (POK-329): the page asked for what the ROM was built to feed.
+    const asked = await page.evaluate(() => {
+      const emu = (window as unknown as { __hbr: { emu: { viewport: unknown; spriteBand: unknown } } }).__hbr.emu;
+      return { viewport: emu.viewport, sprites: emu.spriteBand };
+    });
+    expect(asked, "the core draws the ROM's own picture").toEqual(romView());
     const canvas = await box('#canvas');
     const bandScale = canvas.width / (240 + (band?.left ?? 0) + (band?.right ?? 0));
     const picture = {

@@ -1,6 +1,8 @@
 #ifndef GUARD_BR_FIELD_H
 #define GUARD_BR_FIELD_H
 
+#include "br/br_config.h"
+
 // The picture past the LCD (POK-319). In the browser the emulator draws the field's BG
 // and OBJ state onto a picture bigger than 240x160, from the same registers, so the map
 // keeps going past the GBA's window. The ROM's part is small, because Emerald already
@@ -22,13 +24,55 @@
 //     keys on the sprite's TOP, not its bottom: a top below -40 would be read as a
 //     row near the band's bottom. The page draws what the ROM hides (web/src/field.ts).
 //
-// The page's field.ts carries the same four numbers; web/src/field.test.ts pins them
-// against this header.
+// POK-329 splits the band in two. The SPRITE WINDOW is those 256 rows of OAM y, and it
+// stays 40/56 whatever the ring does: BrField_OffScreen keeps every sprite's top inside
+// it, and the core reads each sprite's y against it. The VIEW is the band the core is
+// asked to draw, which may run past the window once BG1..3 are 512 rows tall (the core
+// draws only those, and the weather, out there). The ROM declares both in gBrFieldView
+// and the page asks the core for exactly that, so a core, a ROM and a page from
+// different deploys never disagree about the picture: a ROM without the symbol gets
+// the legacy band, 0/40/16/56 with the window 40/56.
 
+// Metatile rows of the ring above pos.y (the ring's top is pos.y - BR_RING_ABOVE):
+// none yet. The view's top may reach no further up than the ring does.
+#define BR_RING_ABOVE 0
+
+// The sprite window: rows above and below the LCD, 256 - 160 between them.
+#define BR_SPRITE_TOP    40
+#define BR_SPRITE_BOTTOM 56
+
+// The view: what the core draws past the LCD on each side. Set by hand until the ring
+// is tall enough to feed more rows than the window.
 #define BR_VIEW_LEFT   0
 #define BR_VIEW_TOP    40
 #define BR_VIEW_RIGHT  16
 #define BR_VIEW_BOTTOM 56
+
+STATIC_ASSERT(BR_SPRITE_TOP + BR_SPRITE_BOTTOM == 256 - DISPLAY_HEIGHT, BrSpriteWindowIsOneOamPeriod)
+STATIC_ASSERT(BR_SPRITE_TOP % 8 == 0 && BR_SPRITE_BOTTOM % 8 == 0, BrSpriteWindowInEights)
+STATIC_ASSERT(BR_VIEW_LEFT % 8 == 0 && BR_VIEW_TOP % 8 == 0 && BR_VIEW_RIGHT % 8 == 0 && BR_VIEW_BOTTOM % 8 == 0, BrViewInEights)
+STATIC_ASSERT(BR_VIEW_TOP <= BR_SPRITE_TOP + 16 * BR_RING_ABOVE, BrViewTopInsideRing)
+
+// What the page reads out of the patched ROM before it boots the core (web/src/field.ts
+// romBand), every field a u16. In ROM: it costs no RAM.
+struct BrFieldView
+{
+    /* 0 */ u16 left;
+    /* 2 */ u16 top;
+    /* 4 */ u16 right;
+    /* 6 */ u16 bottom;
+    /* 8 */ u16 spriteTop;
+    /* 10 */ u16 spriteBottom;
+};
+BR_OFFSET(BrFieldView, left, 0)
+BR_OFFSET(BrFieldView, top, 2)
+BR_OFFSET(BrFieldView, right, 4)
+BR_OFFSET(BrFieldView, bottom, 6)
+BR_OFFSET(BrFieldView, spriteTop, 8)
+BR_OFFSET(BrFieldView, spriteBottom, 10)
+BR_SIZE(BrFieldView, 12)
+
+extern const struct BrFieldView gBrFieldView;
 
 // A step down or right leaves the ring's sixteenth row or column stale: mark it, and
 // BrField_Tick (every frame from CameraUpdate) draws it once the step has completed.

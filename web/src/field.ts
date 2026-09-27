@@ -15,13 +15,14 @@
 // match walking on around it.
 //
 // Then POK-319: the emulator draws a picture bigger than the LCD -- the same BG and OBJ
-// state, a band of pixels on each side (BAND below, matching include/br/br_field.h) --
-// so the map, its animation, the people and the fog nearest the window are the ROM's
-// own. The composite keeps filling everything past that band, and an overlay above the
-// picture draws the one thing the band cannot: a person the ROM hid because their
+// state, a band of pixels on each side (the one the ROM declares in gBrFieldView, romBand
+// below) -- so the map, its animation, the people and the fog nearest the window are the
+// ROM's own. The composite keeps filling everything past that band, and an overlay above
+// the picture draws the one thing the band cannot: a person the ROM hid because their
 // sprite's top is past the band (the OAM's 8-bit y would put them at the wrong end).
 // Off the field -- a battle, a menu -- the band is clipped away and the composite shows
-// through, so the fight sits in the middle of the field it was on.
+// through, so the fight sits in the middle of the field it was on; on it, the band is
+// cut where the map ends (bandClip), and the neighbour past it is the composite's.
 //
 // Where the window sits on the map was MEASURED, not derived (tools/br/drivers/
 // field-scroll.txt and field-scroll-trace.txt, matched against the render): with the ROM
@@ -44,16 +45,44 @@ import type { RosterEntry } from './match/roster';
 
 export const GBA_W = 240;
 export const GBA_H = 160;
-/** What the core draws past the LCD (POK-319): the ROM's ring is 256x256 and the LCD
- *  sits at its rows 40..199, so this is the ring, exactly once. The numbers are
- *  include/br/br_field.h's; field.test.ts pins them. */
-export const BAND: Band = { left: 0, top: 40, right: 16, bottom: 56 };
+/** What the core draws past the LCD for a ROM that does not say (POK-319): the ring is
+ *  256x256 and the LCD sits at its rows 40..199, so this is the ring, exactly once --
+ *  what every ROM before gBrFieldView was built for. A ROM that says draws what it says
+ *  (romBand, POK-329). */
+export const LEGACY_BAND: Band = { left: 0, top: 40, right: 16, bottom: 56 };
 /** The sprite window (POK-329): the 256 rows around the LCD in which the ROM keeps every
  *  sprite's 8-bit OAM y to one reading -- BrField_OffScreen hides a sprite whose top is
  *  outside it. The core draws each sprite once, at its true rows, from it; the old one
  *  drew every sprite again 256 rows away, so a person whose top was in the band's last
- *  32 rows had their legs drawn at its top. Today it is the band's own rows. */
-export const SPRITE_BAND: SpriteBand = { top: BAND.top, bottom: BAND.bottom };
+ *  32 rows had their legs drawn at its top. For a ROM that does not say, the legacy
+ *  band's own rows. */
+export const LEGACY_SPRITE_BAND: SpriteBand = { top: LEGACY_BAND.top, bottom: LEGACY_BAND.bottom };
+
+/** The picture a ROM declares, and the window its sprites are read against. */
+export interface FieldPicture {
+  band: Band;
+  sprites: SpriteBand;
+}
+
+/** `struct BrFieldView` (include/br/br_field.h), in ROM: six u16s. */
+export const FIELD_VIEW_SIZE = 12;
+
+/** The picture the ROM declares in gBrFieldView (POK-329), read out of the image the core
+ *  is about to boot -- so a core, a ROM and a page from different deploys (the service
+ *  worker keeps each one, POK-246) always ask for the picture the ROM was built to feed.
+ *  A ROM without the symbol, or one whose numbers the core could not take (a side past
+ *  256, not a multiple of 8, a window that is not 96 rows), gets the legacy band. */
+export function romBand(rom: Uint8Array | null | undefined, symbols: ReadonlyMap<string, number> | null | undefined): FieldPicture {
+  const legacy: FieldPicture = { band: { ...LEGACY_BAND }, sprites: { ...LEGACY_SPRITE_BAND } };
+  const at = symbols?.get('gBrFieldView');
+  if (!rom || at === undefined) return legacy;
+  const o = at - ROM_BASE;
+  if (o < 0 || o + FIELD_VIEW_SIZE > rom.length) return legacy;
+  const u16 = (i: number) => rom[o + 2 * i] | (rom[o + 2 * i + 1] << 8);
+  const v = [0, 1, 2, 3, 4, 5].map(u16);
+  if (v.some((n) => n % 8 !== 0 || n > 256) || v[4] + v[5] !== 256 - GBA_H) return legacy;
+  return { band: { left: v[0], top: v[1], right: v[2], bottom: v[3] }, sprites: { top: v[4], bottom: v[5] } };
+}
 /** `struct Main` (include/main.h): callback1 at 0, callback2 at 4. The picture past the
  *  LCD shows only while callback2 is CB2_Overworld; a function pointer carries the
  *  Thumb bit. */
@@ -418,12 +447,32 @@ export function pictureBox(
   return { left: lay.lcdCol - b.left, top: lay.lcdRow - b.top, width: canvas.width, height: canvas.height };
 }
 
-/** The band to lay out with: what the core was asked for, or, when the page has no
- *  answer but the buffer is plainly bigger than the LCD, the one band this shell ever
- *  asks for. */
-export function bandOf(asked: Band | null, canvas: { width: number; height: number }): Band | null {
-  if (asked) return asked;
-  return canvas.width > GBA_W || canvas.height > GBA_H ? BAND : null;
+/** The band to lay out with: what the core says it draws, or, when it has no answer but
+ *  the buffer is plainly bigger than the LCD, the band the page asked it for. */
+export function bandOf(drawn: Band | null, canvas: { width: number; height: number }, asked: Band | null = null): Band | null {
+  if (drawn) return drawn;
+  return canvas.width > GBA_W || canvas.height > GBA_H ? asked : null;
+}
+
+/** Rows of a map past its top edge the band still shows: the heads of the people on its
+ *  first row, whose sprites stand a tile above their feet. */
+export const HEAD_ROOM = TILE;
+
+/** How much of the band to cut away, side by side, in GBA pixels (POK-329): what lies past
+ *  the current map's edge. The ROM keeps only MAP_OFFSET (7) rows and columns of a
+ *  neighbour, drawn with this map's tilesets, and border blocks past that; the composite
+ *  under the picture has the neighbour whole, from its own still. `cam` is the state the
+ *  picture on screen was drawn from -- the read one frame before (see the top of this
+ *  file). HEAD_ROOM is kept past the top edge, and the LCD is never cut. */
+export function bandClip(cam: { x: number; y: number; subX: number; subY: number }, map: { w: number; h: number }, band: Band): Band {
+  const o = lcdOrigin(cam);
+  const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
+  return {
+    left: cut(band.left - o.left, band.left),
+    top: cut(band.top - o.top - HEAD_ROOM, band.top),
+    right: cut(o.left + GBA_W + band.right - map.w * TILE, band.right),
+    bottom: cut(o.top + GBA_H + band.bottom - map.h * TILE, band.bottom),
+  };
 }
 
 /** The LCD's own box inside the picture canvas's box on screen (CSS pixels). */
@@ -466,6 +515,9 @@ export interface FieldDeps {
   box: HTMLElement;
   /** The emulator's own 240x160 canvas. */
   lcd: HTMLCanvasElement;
+  /** The band the page asked the core for (romBand): laid out with when the buffer is
+   *  bigger than the LCD and the emulator has no band to say. */
+  band?: Band | null;
   /** The canvas the field is drawn on, under the picture. */
   field: HTMLCanvasElement;
   /** A canvas over the picture for the people the ROM hides past its band (POK-319).
@@ -569,8 +621,9 @@ export class FieldView {
   /** The core's buffer size the layout was made for; a change re-lays out. */
   private canvasW = 0;
   private canvasH = 0;
-  /** The band is clipped off the picture while the ROM is not on the field. */
-  private clipped: boolean | null = null;
+  /** The clip-path on the picture, as last set: the whole band while the ROM is not on
+   *  the field, and what lies past the map's edge while it is. Null: set it again. */
+  private clipped: string | null = null;
   /** The state the picture on screen was drawn from: one frame behind the struct. */
   private prev: Camera | null = null;
   private drawn: string | null = null;
@@ -622,7 +675,7 @@ export class FieldView {
     if (pad && getComputedStyle(pad).position === 'absolute') inset = pad.getBoundingClientRect().height;
     const lay = layoutField(w, h, inset);
     if (!lay.scale) return;
-    const band = bandOf(this.deps.emu.viewport, lcd);
+    const band = bandOf(this.deps.emu.viewport, lcd, this.deps.band ?? null);
     const sameBand = (band === null) === (this.band === null)
       && (!band || !this.band || (band.left === this.band.left && band.top === this.band.top && band.right === this.band.right && band.bottom === this.band.bottom));
     const same = sameBand && lcd.width === this.canvasW && lcd.height === this.canvasH
@@ -656,20 +709,25 @@ export class FieldView {
     if (this.prev) this.draw(this.prev);
   }
 
-  /** Show the band only on the field; anywhere else the picture is the LCD alone and the
-   *  composite shows through around it. */
-  private clip(onField: boolean): void {
+  /** Show the band only on the field, and there only as far as the map goes (bandClip,
+   *  from `cam`, the state the picture was drawn from); anywhere else the picture is the
+   *  LCD alone. The composite shows through wherever the band is cut. One clip-path,
+   *  set only when it changes. */
+  private clip(onField: boolean, cam: CameraPos | null): void {
     const b = this.band;
-    const want = !!b && !onField;
-    if (want === this.clipped) return;
-    this.clipped = want;
-    const { lcd } = this.deps;
-    if (!want || !b) {
-      lcd.style.clipPath = '';
-      return;
+    let cut: Band | null = null;
+    if (b && !onField) cut = b;
+    else if (b && cam) {
+      const map = HOENN.byRef.get(`${cam.group}:${cam.num}`);
+      if (map) cut = bandClip(cam, map, b);
     }
     const s = this.lay.scale;
-    lcd.style.clipPath = `inset(${b.top * s}px ${b.right * s}px ${b.bottom * s}px ${b.left * s}px)`;
+    const want = cut && (cut.left || cut.top || cut.right || cut.bottom)
+      ? `inset(${cut.top * s}px ${cut.right * s}px ${cut.bottom * s}px ${cut.left * s}px)`
+      : '';
+    if (want === this.clipped) return;
+    this.clipped = want;
+    this.deps.lcd.style.clipPath = want;
   }
 
   /** Where the picture is, for anyone turning a screen point into a GBA pixel. */
@@ -690,7 +748,7 @@ export class FieldView {
     this.walkers.update(this.roster?.() ?? []);
     const cur = this.read();
     if (this.prev) this.draw(this.prev);
-    this.clip(cur?.onField ?? false);
+    this.clip(cur?.onField ?? false, this.prev);
     if (cur) {
       this.hold = holdFade(this.prev, cur, this.hold);
       // The ring's bleed: the timer reloads the frame it bites. The whole box shakes,

@@ -1,51 +1,209 @@
 import { describe, expect, it } from 'vitest';
-import { BAND, SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, shakeOffset, subTile, SPR_OAM_HFLIP } from './field';
+import { FIELD_VIEW_SIZE, HEAD_ROOM, LEGACY_BAND, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP } from './field';
+import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 import { HOENN } from './bots/hoenn';
 import { SKIN_GFX } from './ui/emerald';
 import type { WorldMap } from './bots/world';
 import fieldHeader from '../../include/br/br_field.h?raw';
+import fieldSource from '../../src/br/br_field.c?raw';
 import appSource from './app.ts?raw';
 
 describe('the picture past the LCD (POK-319)', () => {
-  it('the band is the ROM\'s: include/br/br_field.h says the same four numbers', () => {
-    const define = (name: string): number => {
-      const m = fieldHeader.match(new RegExp(`#define\\s+${name}\\s+(\\d+)`));
-      if (!m) throw new Error(`${name} not in br_field.h`);
-      return Number(m[1]);
+  const define = (name: string): number => {
+    const m = fieldHeader.match(new RegExp(`#define\\s+${name}\\s+(\\d+)`));
+    if (!m) throw new Error(`${name} not in br_field.h`);
+    return Number(m[1]);
+  };
+
+  it("the ROM's picture (include/br/br_field.h): a sprite window of one OAM period, every side in eights, the view's top inside the ring", () => {
+    const view = { left: define('BR_VIEW_LEFT'), top: define('BR_VIEW_TOP'), right: define('BR_VIEW_RIGHT'), bottom: define('BR_VIEW_BOTTOM') };
+    const sprites = { top: define('BR_SPRITE_TOP'), bottom: define('BR_SPRITE_BOTTOM') };
+    expect(160 + sprites.top + sprites.bottom, 'one reading of each 8-bit OAM y').toBe(256);
+    for (const v of [...Object.values(view), ...Object.values(sprites)]) expect(v % 8, 'the core wants multiples of 8').toBe(0);
+    expect(view.top, 'no higher than the ring reaches').toBeLessThanOrEqual(sprites.top + 16 * define('BR_RING_ABOVE'));
+    // Until the ring grows (POK-329's later steps) the view IS the legacy band.
+    expect(view).toEqual(LEGACY_BAND);
+    expect(sprites).toEqual(LEGACY_SPRITE_BAND);
+  });
+
+  it('gBrFieldView is six u16s in the order romBand reads them, and br_field.c fills them from the header', () => {
+    const struct = fieldHeader.match(/struct BrFieldView\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect([...struct.matchAll(/u16 (\w+);/g)].map((m) => m[1])).toEqual(['left', 'top', 'right', 'bottom', 'spriteTop', 'spriteBottom']);
+    expect(FIELD_VIEW_SIZE).toBe(6 * 2);
+    const init = fieldSource.match(/const struct BrFieldView gBrFieldView\s*=\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(init.split(',').map((t) => t.trim()).filter(Boolean)).toEqual(['BR_VIEW_LEFT', 'BR_VIEW_TOP', 'BR_VIEW_RIGHT', 'BR_VIEW_BOTTOM', 'BR_SPRITE_TOP', 'BR_SPRITE_BOTTOM']);
+  });
+
+  it('the legacy band is one ring: 256 rows of the 8-bit sprite y, 256 columns of the tilemap, and its window is its own rows', () => {
+    expect(LEGACY_BAND).toEqual({ left: 0, top: 40, right: 16, bottom: 56 });
+    expect(160 + LEGACY_BAND.top + LEGACY_BAND.bottom).toBe(256);
+    expect(240 + LEGACY_BAND.left + LEGACY_BAND.right).toBe(256);
+    expect(LEGACY_SPRITE_BAND).toEqual({ top: LEGACY_BAND.top, bottom: LEGACY_BAND.bottom });
+  });
+
+  describe('the ROM declares its picture, and the page asks for what it declares (POK-329)', () => {
+    const AT = 0x08000100;
+    const image = (words: number[]): Uint8Array => {
+      const rom = new Uint8Array(0x200);
+      words.forEach((v, i) => {
+        rom[AT - 0x08000000 + 2 * i] = v & 0xff;
+        rom[AT - 0x08000000 + 2 * i + 1] = v >> 8;
+      });
+      return rom;
     };
-    expect(BAND).toEqual({ left: define('BR_VIEW_LEFT'), top: define('BR_VIEW_TOP'), right: define('BR_VIEW_RIGHT'), bottom: define('BR_VIEW_BOTTOM') });
+    const syms = new Map([['gBrFieldView', AT]]);
+
+    it('reads the six u16s at gBrFieldView out of the patched image', () => {
+      expect(romBand(image([0, 104, 16, 232, 40, 56]), syms)).toEqual({ band: { left: 0, top: 104, right: 16, bottom: 232 }, sprites: { top: 40, bottom: 56 } });
+      expect(romBand(image([8, 40, 24, 56, 16, 80]), syms)).toEqual({ band: { left: 8, top: 40, right: 24, bottom: 56 }, sprites: { top: 16, bottom: 80 } });
+    });
+
+    it('a ROM that does not say -- or says what no core can draw -- gets the legacy band', () => {
+      const legacy = { band: LEGACY_BAND, sprites: LEGACY_SPRITE_BAND };
+      expect(romBand(image([0, 104, 16, 232, 40, 56]), new Map()), 'no symbol').toEqual(legacy);
+      expect(romBand(image([0, 104, 16, 232, 40, 56]), null), 'no table').toEqual(legacy);
+      expect(romBand(null, syms), 'no image').toEqual(legacy);
+      expect(romBand(new Uint8Array(0x100 + 6), syms), 'off the end of the image').toEqual(legacy);
+      expect(romBand(image([0, 100, 16, 232, 40, 56]), syms), 'not in eights').toEqual(legacy);
+      expect(romBand(image([0, 264, 16, 232, 40, 56]), syms), 'a side past 256').toEqual(legacy);
+      expect(romBand(image([0, 104, 16, 232, 40, 64]), syms), 'a window that is not one OAM period').toEqual(legacy);
+      // ...and a fresh copy each time: nobody's edit reaches the constant.
+      const got = romBand(null, null);
+      got.band.top = 0;
+      expect(LEGACY_BAND.top).toBe(40);
+    });
+
+    it('main() asks after the ROM is patched and before it boots: the window, then the band, both read off the bytes it boots', () => {
+      const main = appSource.slice(appSource.indexOf('async function main()'));
+      const patched = main.indexOf('await runPatchingScreen(emu)');
+      const read = main.indexOf('romBand(bytes, symbols)');
+      const sprites = main.indexOf('emu.setSpriteBand(picture.sprites)');
+      const band = main.indexOf('emu.setViewport(askedBand)');
+      expect(patched).toBeGreaterThan(0);
+      expect(read).toBeGreaterThan(patched);
+      expect(sprites).toBeGreaterThan(read);
+      expect(band).toBeGreaterThan(sprites);
+      expect(main.indexOf('emu.startBytes(')).toBeGreaterThan(band);
+      expect(main.indexOf('emu.start()')).toBeGreaterThan(band);
+      expect(main.slice(0, patched), 'nothing asked before the ROM is known').not.toMatch(/setViewport|setSpriteBand/);
+      expect(main).toMatch(/askedBand = devBand\(picture\.band\) \?\? picture\.band;/);
+      // The field lays out with what was asked when the emulator has nothing to say.
+      expect(appSource).toMatch(/new FieldView\(\{[^}]*\bband: askedBand,/);
+    });
+
+    it('lays out with what the core draws, else -- a buffer plainly bigger than the LCD -- with what was asked', () => {
+      const tall: Band = { left: 0, top: 104, right: 16, bottom: 232 };
+      expect(bandOf(LEGACY_BAND, { width: 256, height: 256 }, tall)).toBe(LEGACY_BAND);
+      expect(bandOf(null, { width: 256, height: 496 }, tall)).toBe(tall);
+      expect(bandOf(null, { width: 256, height: 496 })).toBeNull();
+      expect(bandOf(null, { width: 240, height: 160 }, tall), 'an LCD-sized buffer has no band').toBeNull();
+    });
   });
 
-  it('the band is one ring: 256 rows of the 8-bit sprite y, 256 columns of the tilemap', () => {
-    expect(160 + BAND.top + BAND.bottom).toBe(256);
-    expect(240 + BAND.left + BAND.right).toBe(256);
-    for (const v of Object.values(BAND)) expect(v % 8, 'the core wants multiples of 8').toBe(0);
-  });
+  describe("the band stops at the map's edge (POK-329)", () => {
+    const map = { w: 20, h: 20 };
+    const at = (x: number, y: number, subX = 0, subY = 0) => ({ x, y, subX, subY });
+    const none = { left: 0, top: 0, right: 0, bottom: 0 };
 
-  it("the page asks the core for the sprite window, and it is the band's own 256 rows (POK-329)", () => {
-    expect(SPRITE_BAND).toEqual({ top: BAND.top, bottom: BAND.bottom });
-    expect(160 + SPRITE_BAND.top + SPRITE_BAND.bottom, 'one reading of each 8-bit OAM y').toBe(256);
-    // Asked before the band, and both before the game is booted: the core takes them at loadGame.
-    const main = appSource.slice(appSource.indexOf('async function main()'));
-    const sprites = main.indexOf('emu.setSpriteBand(SPRITE_BAND)');
-    const band = main.indexOf('emu.setViewport(devBand() ?? BAND)');
-    expect(sprites).toBeGreaterThan(0);
-    expect(band).toBeGreaterThan(sprites);
-    expect(main.indexOf('emu.startBytes(')).toBeGreaterThan(band);
+    it('mid-map, nothing is cut', () => {
+      expect(bandClip(at(10, 10), { w: 30, h: 30 }, LEGACY_BAND)).toEqual(none);
+    });
+
+    it('near the last row, the rows past it are cut -- never more than the band has', () => {
+      // At rest on row y the picture's top is map row 16y - 72, so the band's last row
+      // is 16y - 72 + 160 + 56 = 16y + 144: row 11 ends it on the edge (320).
+      expect(bandClip(at(10, 11), map, LEGACY_BAND).bottom, 'the band ends on the edge').toBe(0);
+      expect(bandClip(at(10, 12), map, LEGACY_BAND).bottom).toBe(16);
+      expect(bandClip(at(10, 13), map, LEGACY_BAND).bottom).toBe(32);
+      expect(bandClip(at(10, 19), map, LEGACY_BAND).bottom, 'on the last row, all of it').toBe(LEGACY_BAND.bottom);
+      // A taller band: on the last row all of it goes (the LCD's own 72 rows past the
+      // edge stay), and on row 14 the rows from the edge down.
+      expect(bandClip(at(10, 19), map, { left: 0, top: 104, right: 16, bottom: 232 }).bottom).toBe(232);
+      expect(bandClip(at(10, 14), map, { left: 0, top: 104, right: 16, bottom: 232 }).bottom).toBe(14 * 16 + 88 + 232 - 320);
+    });
+
+    it('mid-step, from the camera the picture was drawn from: the tile has moved, the offset walks it back', () => {
+      // A step down onto row 13: the offset runs 4, 8, 12 and the step lands at 0.
+      expect([4, 8, 12, 0].map((sub) => bandClip(at(10, 13, 0, sub), map, LEGACY_BAND).bottom)).toEqual([20, 24, 28, 32]);
+      // ...and back up onto row 12, the offset negative.
+      expect([-4, -8, -12, 0].map((sub) => bandClip(at(10, 12, 0, sub), map, LEGACY_BAND).bottom)).toEqual([28, 24, 20, 16]);
+    });
+
+    it('the right edge, at rest and mid-step', () => {
+      expect(bandClip(at(11, 10), map, LEGACY_BAND).right).toBe(0);
+      expect(bandClip(at(12, 10), map, LEGACY_BAND).right).toBe(16);
+      expect(bandClip(at(12, 10, 8, 0), map, LEGACY_BAND).right, 'half a step onto column 12').toBe(8);
+      expect(bandClip(at(19, 10), map, LEGACY_BAND).right).toBe(LEGACY_BAND.right);
+    });
+
+    it("the top edge keeps HEAD_ROOM rows: the heads of the map's first row", () => {
+      expect(HEAD_ROOM).toBe(16);
+      expect(bandClip(at(10, 6), map, LEGACY_BAND).top).toBe(0);
+      // Row 5: the band runs from map row -32 to 8; -32..-16 go, -16..8 stay.
+      expect(bandClip(at(10, 5), map, LEGACY_BAND).top).toBe(16);
+      expect(bandClip(at(10, 0), map, LEGACY_BAND).top).toBe(LEGACY_BAND.top);
+    });
+
+    it('the left edge, for a band that has one', () => {
+      const wide: Band = { left: 16, top: 40, right: 16, bottom: 56 };
+      expect(bandClip(at(7, 10), map, wide).left).toBe(16);
+      expect(bandClip(at(8, 10), map, wide).left).toBe(0);
+    });
+
+    it('never cuts into the LCD, however small the map', () => {
+      const tall: Band = { left: 8, top: 104, right: 16, bottom: 232 };
+      expect(bandClip(at(2, 2), { w: 5, h: 5 }, tall)).toEqual(tall);
+      expect(bandClip(at(2, 2), { w: 5, h: 5 }, LEGACY_BAND)).toEqual(LEGACY_BAND);
+    });
+
+    it('FieldView puts it and the off-field cut in one clip-path, set only when it changes', () => {
+      const route = HOENN.byId.get('MAP_ROUTE101')!;
+      expect({ w: route.w, h: route.h }).toEqual({ w: 20, h: 20 });
+      const sets: string[] = [];
+      let clipPath = '';
+      const style = {} as { clipPath: string };
+      Object.defineProperty(style, 'clipPath', {
+        get: () => clipPath,
+        set: (v: string) => {
+          clipPath = v;
+          sets.push(v);
+        },
+      });
+      const lcd = { width: 256, height: 256, style };
+      const view = new FieldView({ emu: { viewport: LEGACY_BAND }, lcd } as unknown as FieldDeps);
+      const inner = view as unknown as { band: Band | null; lay: { scale: number }; clip(onField: boolean, cam: Camera | null): void };
+      inner.band = { ...LEGACY_BAND };
+      inner.lay = { ...inner.lay, scale: 2 };
+      const cam = (y: number, where: { group: number; num: number } = route) => ({ group: where.group, num: where.num, x: 10, y, subX: 0, subY: 0 }) as Camera;
+
+      inner.clip(true, cam(8));
+      inner.clip(true, cam(9));
+      expect(sets, 'mid-map: no clip, set once').toEqual(['']);
+      inner.clip(true, cam(13));
+      expect(clipPath, 'the 32 rows past the last row, at the scale').toBe('inset(0px 0px 64px 0px)');
+      inner.clip(true, cam(13));
+      expect(sets.length, 'the same cut is not set again').toBe(2);
+      inner.clip(false, cam(13));
+      expect(clipPath, 'off the field, the whole band').toBe('inset(80px 32px 112px 0px)');
+      inner.clip(true, cam(13, { group: 99, num: 99 }));
+      expect(clipPath, 'a map the page does not know: nothing cut').toBe('');
+      inner.clip(true, null);
+      expect(sets.length, 'no camera yet: nothing cut, and nothing set again').toBe(4);
+    });
   });
 
   it('the core\'s canvas is placed so the LCD lands where the layout put it', () => {
     const lay = layoutField(390, 844, 0);
-    const pic = pictureBox(lay, BAND);
-    expect(pic).toEqual({ left: lay.lcdCol - BAND.left, top: lay.lcdRow - BAND.top, width: 256, height: 256 });
+    const pic = pictureBox(lay, LEGACY_BAND);
+    expect(pic).toEqual({ left: lay.lcdCol - LEGACY_BAND.left, top: lay.lcdRow - LEGACY_BAND.top, width: 256, height: 256 });
     expect(pictureBox(lay, null), 'no band: the canvas is the LCD').toEqual({ left: lay.lcdCol, top: lay.lcdRow, width: 240, height: 160 });
   });
 
   it('a tap or a spec finds the LCD inside the bigger canvas on screen', () => {
     const picture = { left: 10, top: 20, width: 512, height: 512 };
-    expect(lcdRect(picture, BAND)).toEqual({ left: 10, top: 20 + 80, width: 480, height: 320 });
+    expect(lcdRect(picture, LEGACY_BAND)).toEqual({ left: 10, top: 20 + 80, width: 480, height: 320 });
     expect(lcdRect(picture, null)).toBe(picture);
   });
 });

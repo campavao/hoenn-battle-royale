@@ -54,11 +54,27 @@ void BrField_Tick(void)
     }
 }
 
+// The picture the core is asked to draw, and the sprite window it reads OAM y against
+// (POK-329): the page reads these twelve bytes out of the patched ROM before it boots
+// the core. field-view.txt pins them.
+const struct BrFieldView gBrFieldView =
+{
+    BR_VIEW_LEFT,
+    BR_VIEW_TOP,
+    BR_VIEW_RIGHT,
+    BR_VIEW_BOTTOM,
+    BR_SPRITE_TOP,
+    BR_SPRITE_BOTTOM,
+};
+
+// Sideways the view's own columns (16 more for a sprite's width); up and down the sprite
+// window, where a top has one reading -- past it the core would draw the sprite at the
+// other end, however tall the view is.
 bool8 BrField_OffScreen(s16 x, s16 x2, s16 y)
 {
     if (x >= DISPLAY_WIDTH + BR_VIEW_RIGHT + 16 || x2 < -BR_VIEW_LEFT - 16)
         return TRUE;
-    if (y >= DISPLAY_HEIGHT + BR_VIEW_BOTTOM || y < -BR_VIEW_TOP)
+    if (y >= DISPLAY_HEIGHT + BR_SPRITE_BOTTOM || y < -BR_SPRITE_TOP)
         return TRUE;
     return FALSE;
 }

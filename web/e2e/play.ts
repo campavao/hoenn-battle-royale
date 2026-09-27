@@ -64,13 +64,60 @@ export const BATTLE_TYPE_SAFARI = 0x80;
 /** Longest the map past the picture may be black with no fade to say so: a still on its
  *  way from the server, and field.ts's own one-second hold after a warp. */
 export const BLACK_MAX_FRAMES = 180;
+/** Where the picture sits on the map (field.ts lcdOrigin): its top-left is this far left
+ *  of and above the pos tile's at rest, and `struct CameraObject`'s x and y (gFieldCamera)
+ *  hold the sub-tile offset mid-step. */
+export const LCD_LEFT = 112;
+export const LCD_TOP = 72;
+export const CAMERA_X = 16;
+export const CAMERA_Y = 20;
+/** Rows past a map's top edge the band keeps (field.ts): the heads on its first row. */
+export const HEAD_ROOM = 16;
 
 /** The outdoor maps, `group:num`: the only ones the composite draws a map for. */
 const OUTDOOR = (worldData as { maps: { group: number; num: number; outdoor: boolean }[] }).maps
   .filter((m) => m.outdoor)
   .map((m) => `${m.group}:${m.num}`);
 
+/** Every map's size in tiles, `group:num`: the band stops at the edge (POK-329). */
+const SIZES: Record<string, [number, number]> = Object.fromEntries(
+  (worldData as { maps: { group: number; num: number; w: number; h: number }[] }).maps.map((m) => [`${m.group}:${m.num}`, [m.w, m.h]]),
+);
+
 type Band = { left: number; top: number; right: number; bottom: number };
+/** The camera, as field.ts reads it: the pos tile, its map, and the sub-tile offsets. */
+export type Cam = { map: string; x: number; y: number; subX: number; subY: number };
+
+/** What field.ts cuts off the band on the field (bandClip, POK-329), worked out again
+ *  here: what lies past the edge of the map the picture was drawn on, HEAD_ROOM kept past
+ *  its top, never into the LCD. A map the page does not know is not cut. */
+export function edgeCut(cam: Cam, band: Band): Band {
+  const size = SIZES[cam.map];
+  if (!size) return { left: 0, top: 0, right: 0, bottom: 0 };
+  const sub = (v: number) => (v > 0 ? v - 16 : v < 0 ? v + 16 : 0);
+  const left = cam.x * 16 - LCD_LEFT + sub(cam.subX);
+  const top = cam.y * 16 - LCD_TOP + sub(cam.subY);
+  const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
+  return {
+    left: cut(band.left - left, band.left),
+    top: cut(band.top - top - HEAD_ROOM, band.top),
+    right: cut(left + GBA_W + band.right - size[0] * 16, band.right),
+    bottom: cut(top + GBA_H + band.bottom - size[1] * 16, band.bottom),
+  };
+}
+
+/** A clip-path's inset in CSS pixels, top/right/bottom/left ('' and none are no cut); null
+ *  for anything else. The browser may give it back shortened, as CSS allows. */
+export function insetOf(clip: string): [number, number, number, number] | null {
+  if (clip === '' || clip === 'none') return [0, 0, 0, 0];
+  const m = /^inset\(([^)]*)\)$/.exec(clip.trim());
+  if (!m) return null;
+  const v = m[1].trim().split(/\s+/).map((t) => (/^-?[\d.]+(px)?$/.test(t) ? Number.parseFloat(t) : NaN));
+  if (!v.length || v.length > 4 || v.some((n) => !Number.isFinite(n))) return null;
+  const [t, r = t, b = t, l = r] = v;
+  return [t, r, b, l];
+}
+
 type Emu = {
   read(addr: number, width: 8 | 16 | 32): number;
   write(addr: number, value: number, width: 8 | 16 | 32): void;
@@ -124,6 +171,38 @@ export function ram(page: Page, sym: Record<string, number>): Promise<Ram> {
 
 // ---- the picture, once -----------------------------------------------------------------
 
+/** The clip-path on the picture and the camera it was cut for: field.ts cuts on each
+ *  frame from the camera it read the frame before, which is the state the picture on
+ *  screen was drawn from. Read across two frames here the same way. */
+export function clipAndCamera(page: Page, sym: Record<string, number>): Promise<{ cam: Cam; clip: string; scale: number }> {
+  return page.evaluate(([s, k]) => new Promise((resolve, reject) => {
+    const emu = (window as unknown as EmuWindow).__hbr.emu;
+    const lcd = document.querySelector('#canvas') as HTMLCanvasElement;
+    const read = () => {
+      const sb1 = emu.read(s.gSaveBlock1Ptr, 32);
+      const s16 = (v: number) => (v << 16) >> 16;
+      return {
+        map: `${emu.read(sb1 + k.SB1_MAP_GROUP, 8)}:${emu.read(sb1 + k.SB1_MAP_NUM, 8)}`,
+        x: s16(emu.read(sb1, 16)),
+        y: s16(emu.read(sb1 + 2, 16)),
+        subX: emu.read(s.gFieldCamera + k.CAMERA_X, 32) | 0,
+        subY: emu.read(s.gFieldCamera + k.CAMERA_Y, 32) | 0,
+      };
+    };
+    let cam: ReturnType<typeof read> | null = null;
+    const timer = setTimeout(() => reject(new Error('no frame')), 10_000);
+    const off = emu.onFrame(() => {
+      if (!cam) {
+        cam = read();
+        return;
+      }
+      off();
+      clearTimeout(timer);
+      resolve({ cam, clip: lcd.style.clipPath, scale: lcd.getBoundingClientRect().width / lcd.width });
+    });
+  }), [sym, { SB1_MAP_GROUP, SB1_MAP_NUM, CAMERA_X, CAMERA_Y }] as const);
+}
+
 /** Where the picture is on the page: the core's canvas, its band (from the emulator,
  *  never a copy of field.ts's: POK-329 will change it), and the LCD inside it. */
 export async function picture(page: Page): Promise<{
@@ -157,11 +236,12 @@ export async function picture(page: Page): Promise<{
 /** The picture's layout, checked the way a player would see it (the maths phone.spec.ts
  *  started): the element is the buffer's own aspect and fills its box, the buffer is the
  *  LCD plus the band the emulator was asked for, the LCD is 3:2 and inside the box, and
- *  -- given where the ROM is -- the band is clipped off exactly when it is not on the
- *  field: a battle, a menu, the drop map. (The recorder holds the clip to the ROM on
- *  every other frame; a caller that cannot know where the ROM will be two frames on
- *  leaves `onField` out.) */
-export async function expectLayout(page: Page, want: { onField?: boolean }, what: string): Promise<void> {
+ *  -- given where the ROM is -- the band is clipped off when it is not on the field (a
+ *  battle, a menu, the drop map) and on it only past the map's edge (POK-329). (The
+ *  recorder holds the clip to the ROM on every other frame; a caller that cannot know
+ *  where the ROM will be two frames on leaves `onField` out.) `sym` is for the camera the
+ *  on-field cut is worked out from. */
+export async function expectLayout(page: Page, want: { onField?: boolean }, what: string, sym?: Record<string, number>): Promise<void> {
   // Two frames first: field.ts lays the picture out from a ResizeObserver, which runs
   // before the next paint, so a box that has just changed size -- the drawer opening on
   // the results -- is only laid out a frame later. A picture that stays wrong still fails.
@@ -181,12 +261,20 @@ export async function expectLayout(page: Page, want: { onField?: boolean }, what
   expect(p.lcd.y + p.lcd.height, `${what}: the LCD is inside the box`).toBeLessThanOrEqual(p.box.y + p.box.height + 1);
   if (want.onField === undefined) return;
   if (want.onField) {
-    expect(p.clip, `${what}: the band shows on the field`).toBe('');
+    // The band shows on the field, cut only past the map's edge.
+    if (!sym) throw new Error('expectLayout: the camera is read through the symbols');
+    const { cam, clip, scale } = await clipAndCamera(page, sym);
+    const inset = insetOf(clip);
+    expect(inset, `${what}: a clip-path the page could have set ("${clip}")`).not.toBeNull();
+    const cut = edgeCut(cam, band);
+    const [top, right, bottom, left] = inset!.map((v) => v / scale);
+    expect({ top, right, bottom, left }, `${what}: the band shows on the field, less what is past the edge of ${cam.map} at ${JSON.stringify(cam)} (clip-path "${clip}")`)
+      .toEqual({ top: expect.closeTo(cut.top, 0), right: expect.closeTo(cut.right, 0), bottom: expect.closeTo(cut.bottom, 0), left: expect.closeTo(cut.left, 0) });
   } else {
     const s = p.canvas.width / p.buffer.w;
-    const inset = /^inset\(([\d.]+)px ([\d.]+)px ([\d.]+)px ([\d.]+)px\)$/.exec(p.clip);
-    expect(inset, `${what}: the band is clipped off the field (clip-path "${p.clip}")`).not.toBeNull();
-    const [top, right, bottom, left] = inset!.slice(1).map(Number);
+    const inset = insetOf(p.clip);
+    expect(inset && inset.some((v) => v > 0), `${what}: the band is clipped off the field (clip-path "${p.clip}")`).toBe(true);
+    const [top, right, bottom, left] = inset!;
     expect(top).toBeCloseTo(band.top * s, 1);
     expect(right).toBeCloseTo(band.right * s, 1);
     expect(bottom).toBeCloseTo(band.bottom * s, 1);
@@ -246,7 +334,7 @@ export interface PlayLog {
  *  on every frame; the picture's layout and the composite's corners on every other. */
 export async function startRecorder(page: Page, sym: Record<string, number>): Promise<void> {
   await page.evaluate(
-    ([s, k, outdoor]) => {
+    ([s, k, outdoor, sizes]) => {
       type Band = { left: number; top: number; right: number; bottom: number };
       const w = window as unknown as {
         __hbr: { emu: { read(a: number, w: 8 | 16 | 32): number; onFrame(fn: () => void): () => void; viewport: Band | null } };
@@ -271,6 +359,34 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
       w.__play = log;
       let frame = 0;
       let clipOff = 0;
+      // The camera read on the frame before: field.ts cuts the band from it (POK-329).
+      type Cam = { map: string; x: number; y: number; subX: number; subY: number };
+      let camBefore: Cam | null = null;
+      const s16 = (v: number) => (v << 16) >> 16;
+      const sub = (v: number) => (v > 0 ? v - 16 : v < 0 ? v + 16 : 0);
+      // field.ts's bandClip, as play.ts's edgeCut has it.
+      const edgeCut = (c: Cam, band: Band): Band => {
+        const size = (sizes as Record<string, [number, number]>)[c.map];
+        if (!size) return { left: 0, top: 0, right: 0, bottom: 0 };
+        const left = c.x * 16 - k.LCD_LEFT + sub(c.subX);
+        const top = c.y * 16 - k.LCD_TOP + sub(c.subY);
+        const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
+        return {
+          left: cut(band.left - left, band.left),
+          top: cut(band.top - top - k.HEAD_ROOM, band.top),
+          right: cut(left + k.GBA_W + band.right - size[0] * 16, band.right),
+          bottom: cut(top + k.GBA_H + band.bottom - size[1] * 16, band.bottom),
+        };
+      };
+      const insetOf = (clip: string): number[] | null => {
+        if (clip === '' || clip === 'none') return [0, 0, 0, 0];
+        const m = /^inset\(([^)]*)\)$/.exec(clip.trim());
+        if (!m) return null;
+        const v = m[1].trim().split(/\s+/).map((t) => (/^-?[\d.]+(px)?$/.test(t) ? Number.parseFloat(t) : NaN));
+        if (!v.length || v.length > 4 || v.some((n) => !Number.isFinite(n))) return null;
+        const [t, r = t, b = t, l = r] = v;
+        return [t, r, b, l];
+      };
       let blackRun = 0;
       // Whether the fade that ran last reached the BG palettes. A fade names its palettes
       // only while it steps: on reaching its target the ROM clears the mask and runs four
@@ -373,6 +489,10 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         if (fastCut) log.seen.fastCut++;
         const sb1 = emu.read(s.gSaveBlock1Ptr, 32);
         const map = sb1 ? `${emu.read(sb1 + k.SB1_MAP_GROUP, 8)}:${emu.read(sb1 + k.SB1_MAP_NUM, 8)}` : '';
+        const before = camBefore;
+        camBefore = sb1
+          ? { map, x: s16(emu.read(sb1, 16)), y: s16(emu.read(sb1 + 2, 16)), subX: emu.read(s.gFieldCamera + k.CAMERA_X, 32) | 0, subY: emu.read(s.gFieldCamera + k.CAMERA_Y, 32) | 0 }
+          : null;
 
         // The overlay carries only the people the ROM hid for being past its band: never
         // one over the LCD, where the ROM draws everybody itself (the video's beaten
@@ -421,10 +541,15 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         if (band && (lcd.width !== k.GBA_W + band.left + band.right || lcd.height !== k.GBA_H + band.top + band.bottom)) {
           fail('buffer', `${lcd.width}x${lcd.height} with a band ${JSON.stringify(band)}`);
         }
-        if (band) {
-          const clipped = lcd.style.clipPath !== '' && lcd.style.clipPath !== 'none';
-          clipOff = clipped === onField ? clipOff + 1 : 0;
-          if (clipOff > 1) fail('clip', `clip-path "${lcd.style.clipPath}" with cb2 ${cb2.toString(16)}, pick ${pick}`);
+        // Off the field the whole band is cut; on it, what lies past the edge of the map
+        // the picture was drawn on (POK-329).
+        if (band && (!onField || before)) {
+          const want = onField && before ? edgeCut(before, band) : band;
+          const sc = r.width / lcd.width;
+          const got = insetOf(lcd.style.clipPath);
+          const ok = !!got && [want.top, want.right, want.bottom, want.left].every((v, i) => Math.abs(got[i] / sc - v) < 0.5);
+          clipOff = ok ? 0 : clipOff + 1;
+          if (clipOff > 1) fail('clip', `clip-path "${lcd.style.clipPath}" for a cut of ${JSON.stringify(want)} with cb2 ${cb2.toString(16)}, pick ${pick}, camera ${JSON.stringify(before)}`);
         }
         const place = lcdAt();
         if (!place) return;
@@ -499,8 +624,14 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         SB1_MAP_GROUP,
         SB1_MAP_NUM,
         BLACK_MAX_FRAMES,
+        LCD_LEFT,
+        LCD_TOP,
+        CAMERA_X,
+        CAMERA_Y,
+        HEAD_ROOM,
       },
       OUTDOOR,
+      SIZES,
     ] as const,
   );
 }

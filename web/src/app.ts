@@ -80,7 +80,7 @@ import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
 import { TouchLayer } from './touch';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, stickKeys, type AxisSense, type StickMap } from './pad';
-import { BAND, FieldView, SPRITE_BAND } from './field';
+import { FieldView, romBand } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
 import {
@@ -1435,15 +1435,19 @@ function landOverride(): { map: MapRef; x: number; y: number } | undefined {
   return land && map ? { map, x: land.x, y: land.y } : undefined;
 }
 
-/** `#band=T,B`: ask the core for T rows above the LCD and B below instead of BAND's, the
- *  sides as BAND has them (POK-329: picture.spec holds a band taller than the ROM's ring
- *  to the sprite window). Dev only: past the ring there is nothing of the map to show,
- *  and a player would see the backdrop. */
-function devBand(): Band | undefined {
+/** `#band=T,B`: ask the core for T rows above the LCD and B below instead of the ROM's,
+ *  the sides as the ROM has them (POK-329: picture.spec holds a band taller than the
+ *  ROM's ring to the sprite window). Dev only: past the ring there is nothing of the map
+ *  to show, and a player would see the backdrop. */
+function devBand(rom: Band): Band | undefined {
   if (!import.meta.env.DEV) return undefined;
   const rows = devBandOf(location.hash);
-  return rows && { left: BAND.left, top: rows.top, right: BAND.right, bottom: rows.bottom };
+  return rows && { left: rom.left, top: rows.top, right: rom.right, bottom: rows.bottom };
 }
+
+/** The band the core was asked for at the last boot: the field lays out with it when the
+ *  emulator has none to say (field.ts bandOf). */
+let askedBand: Band | null = null;
 
 function botFill(): number {
   return import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('nobots') ? 0 : BOT_FILL;
@@ -3279,6 +3283,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     symbols: symbols ?? null,
     box: $('#screen-wrap') as HTMLElement,
     lcd: $('#canvas') as HTMLCanvasElement,
+    band: askedBand,
     field: $('#field') as HTMLCanvasElement,
     overlay: $('#overlay') as HTMLCanvasElement,
     pad: $('#pad') as HTMLElement,
@@ -3406,16 +3411,21 @@ async function main(): Promise<void> {
   sayPatch('Loading…');
   const canvas = $('#canvas') as HTMLCanvasElement;
   const emu = await Emulator.create(canvas);
-  // The picture past the LCD (POK-319, field.ts): the core draws a band around the
-  // 240x160 from the same registers. A core without the export draws the LCD alone.
-  // The sprite window is the band's own 256 rows (POK-329): a core that knows it draws
-  // no sprite twice, where the old one put a person's legs at the band's top.
-  emu.setSpriteBand(SPRITE_BAND);
-  emu.setViewport(devBand() ?? BAND);
 
   await runImportScreen(emu);
   const { bytes, usingPatched, mailboxBase, protocol, symbols, patch } = await runPatchingScreen(emu);
   await worldIn;
+
+  // The picture past the LCD (POK-319, field.ts): the core draws a band around the
+  // 240x160 from the same registers, and the ROM says how big (gBrFieldView, POK-329) --
+  // read out of the very image about to boot, so a core, a ROM and a page from different
+  // deploys never disagree; a ROM that does not say gets the legacy band. The sprite
+  // window first: a core that knows it draws no sprite twice, and one that does not is
+  // asked for no more band than the window. A core without the band draws the LCD alone.
+  const picture = romBand(bytes, symbols);
+  emu.setSpriteBand(picture.sprites);
+  askedBand = devBand(picture.band) ?? picture.band;
+  emu.setViewport(askedBand);
 
   showScreen('playing');
   if (usingPatched) await emu.startBytes(bytes);

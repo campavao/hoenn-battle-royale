@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
-import { ram } from './play';
+import { clipAndCamera, edgeCut, insetOf, ram, tap } from './play';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out', 'picture');
@@ -50,6 +50,16 @@ const SKIN = 15;
  *  LCD row 200 and whose legs run on to 231, past the window's 216. */
 const GHOST_ROWS_DOWN = 9;
 const GHOST = { x: LCD_LEFT, y: LCD_TOP + GHOST_ROWS_DOWN * 16 + 16 - 32, w: 16, h: 32 };
+/** Route 103 (80x22), whose bottom edge is Oldale Town's top: column 9 is the path south,
+ *  open from row 13 to the edge. At rest on row 13 the band's last row is the map's last
+ *  (13*16 - 72 + 160 + 56 = 22*16), and each step down puts 16 more of it past the edge
+ *  until all 56 are. */
+const ROUTE_103 = { id: 'MAP_ROUTE103', ref: '0:18', w: 80, h: 22 };
+const EDGE_COLUMN = 9;
+const EDGE_FROM = 13;
+/** field.ts's LEGACY_BAND's bottom, which is gBrFieldView's today (phone.spec holds the
+ *  page to the ROM's). */
+const BAND_BOTTOM = 56;
 /** `struct Weather` (include/field_weather.h): the weather Task_WeatherMain changes to. */
 const WEATHER_CURR = 0x6d0;
 const WEATHER_NEXT = 0x6d1;
@@ -344,6 +354,68 @@ test("the page's band: a person crossing its bottom is drawn once, and the windo
     expect(differ(asked, none), 'the window asked for draws what no window does').toBe(0);
     expect(differ(asked, flipped, top), 'a window that reads the ghost as above the LCD draws its legs at the top').toBeGreaterThan(16);
     await page.evaluate(() => (window as unknown as PicWindow).__hbr.emu.resume());
+  } finally {
+    await ctx.close();
+  }
+});
+
+test("the band stops at the map's edge: walking down to Route 103's last row, the clip cuts exactly the rows past it", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const sym = loadSymbols();
+  const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
+  try {
+    const page = await ctx.newPage();
+    // A short opening, then the drop: #land puts us on the path, whatever is picked.
+    // #testmon, as play.spec has it: a party that caught nothing is out at the buzzer.
+    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_103.id},${EDGE_COLUMN},${EDGE_FROM}&rom=${romHashParam()}`);
+    await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
+    await page.waitForSelector('body.in-match', { timeout: 60_000 });
+    // A on the drop map takes the section under the cursor, once it is taking presses.
+    await expect
+      .poll(async () => {
+        const r = await ram(page, sym);
+        if (r.pick) await tap(page, 'z');
+        return !r.pick && r.onOverworld && r.map === ROUTE_103.ref ? `${r.x},${r.y}` : '';
+      }, { timeout: 90_000, intervals: [1_000], message: 'landed on the path' })
+      .toBe(`${EDGE_COLUMN},${EDGE_FROM}`);
+    await page.waitForTimeout(2_000);
+    const band = await page.evaluate(() => (window as unknown as PicWindow).__hbr.emu.viewport);
+    expect(band?.bottom).toBe(BAND_BOTTOM);
+
+    const bottoms: number[] = [];
+    for (let y = EDGE_FROM; y < ROUTE_103.h; y++) {
+      await expect.poll(async () => {
+        const r = await ram(page, sym);
+        return `${r.x},${r.y}`;
+      }, { timeout: 10_000, message: `standing on row ${y}` }).toBe(`${EDGE_COLUMN},${y}`);
+      // At rest: the camera's offset back to 0, two frames on so the cut is the rest's.
+      await page.waitForTimeout(300);
+      const { cam, clip, scale } = await clipAndCamera(page, sym);
+      expect({ x: cam.x, y: cam.y, subY: cam.subY }, 'at rest on the row').toEqual({ x: EDGE_COLUMN, y, subY: 0 });
+      const inset = insetOf(clip);
+      expect(inset, `a clip-path the page could have set ("${clip}")`).not.toBeNull();
+      const [top, right, bottom, left] = inset!.map((v) => Math.round(v / scale));
+      // The rows past the edge: the band's last row is 16y + 144, the map's 16h.
+      const past = Math.max(0, Math.min(BAND_BOTTOM, 16 * y + 144 - 16 * ROUTE_103.h));
+      expect({ top, right, bottom, left }, `row ${y}: the rows past the edge, and nothing else (clip-path "${clip}")`).toEqual({ top: 0, right: 0, bottom: past, left: 0 });
+      expect(edgeCut(cam, band!), "play.ts's copy agrees").toEqual({ left: 0, top: 0, right: 0, bottom: past });
+      bottoms.push(bottom);
+      if (y === ROUTE_103.h - 1) break;
+      // One step down: held until the tile moves -- which is the step's first frame -- and
+      // let go well inside the step, so a slow page never walks two (B between tries, past
+      // whatever box the landing left up).
+      for (let i = 0; i < 4 && (await ram(page, sym)).y === y; i++) {
+        if (i) await tap(page, 'x');
+        await page.keyboard.down('ArrowDown');
+        try {
+          for (let t = 0; t < 60 && (await ram(page, sym)).y === y; t++) await page.waitForTimeout(25);
+        } finally {
+          await page.keyboard.up('ArrowDown');
+        }
+      }
+    }
+    expect(bottoms, 'none on row 13, then 16 more a step until the band is all past the edge').toEqual([0, 16, 32, 48, 56, 56, 56, 56, 56]);
+    await page.screenshot({ path: path.join(OUT_DIR, 'edge.png') });
   } finally {
     await ctx.close();
   }
