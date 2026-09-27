@@ -21,9 +21,10 @@ const BR_PHASE_SAFARI = 1;
  *  refuses. */
 const LCD_LEFT = 112;
 const LCD_TOP = 72;
-/** `struct BrSeat` (include/br/br_ghosts.h), 16 bytes a seat; BR_MAX_SEATS is 32 and
- *  solo deals nowhere near the last. */
-const SEAT = 31;
+/** `struct BrSeat` (include/br/br_ghosts.h), 16 bytes a seat. Solo is seat 0 and its
+ *  eight bots count down from 31 (bots/roster.ts dealBots): 31 was a live bot, whose own
+ *  rows moved it off this spec's cell. 16 is nobody's. */
+const SEAT = 16;
 const SEAT_SIZE = 16;
 const BR_NO_OBJ = 0xff;
 const DIR_SOUTH = 1;
@@ -115,7 +116,7 @@ test('a ghost past the box is drawn on the overlay where the ROM would stand it,
     }
     expect(down, 'a clear row past the box').toBeGreaterThan(0);
 
-    // Seat 31 there: present, a skin, our map, the cell (MAP_OFFSET included, as the ROM
+    // Seat 16 there: present, a skin, our map, the cell (MAP_OFFSET included, as the ROM
     // keeps it), facing south, no object.
     const seat = symbols.gBrSeats + SEAT * SEAT_SIZE;
     const row = [1, SKIN, here.group, here.num, here.x & 0xff, (here.x >> 8) & 0xff, (here.y + down) & 0xff, ((here.y + down) >> 8) & 0xff, DIR_SOUTH, BR_NO_OBJ, 0, 0, 0, 0, 0, 0];

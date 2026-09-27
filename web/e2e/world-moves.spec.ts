@@ -5,7 +5,7 @@
 // GhostWalkers); on the field it leaves every ghost in the ROM's box to the ROM.
 //
 // First, solo's own bots are on the page's walkers: runSolo hands the field its roster.
-// Then this hands the field a roster of one -- seat 31, which solo never deals -- and puts the
+// Then this hands the field a roster of one -- seat 16, which solo never deals -- and puts the
 // same seat in the ROM's gBrSeats two tiles east of us, where the ROM gives it an object.
 // On the field the ROM's ghost and the page's walker stand on the same pixel, and the page
 // draws nothing. With the bag open (START, A: the first row of the Zone's menu with no
@@ -20,8 +20,10 @@ const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
 const PORTRAIT = { width: 390, height: 844 };
 const BR_PHASE_SAFARI = 1;
-/** `struct BrSeat` (include/br/br_ghosts.h), 16 bytes a seat; solo deals nowhere near 31. */
-const SEAT = 31;
+/** `struct BrSeat` (include/br/br_ghosts.h), 16 bytes a seat. Solo is seat 0 and its
+ *  eight bots count down from 31 (bots/roster.ts dealBots): 31 was a live bot, whose own
+ *  rows took the seat back from under this spec. 16 is nobody's. */
+const SEAT = 16;
 const SEAT_SIZE = 16;
 const BR_NO_OBJ = 0xff;
 /** BR_STEP_QUEUE (include/br/br_ghosts.h). */
@@ -111,7 +113,7 @@ test('the other seats walk on past the picture in the bag, and are the ROM\'s ag
     await expect.poll(async () => (await peek(page))?.seats.length ?? 0, { timeout: 15_000, message: "solo's roster reached the walkers" }).toBeGreaterThan(0);
     expect((await peek(page))!.seats, 'nobody walks our own seat').not.toContain(0);
 
-    // Seat 31, on the page's roster and in the ROM's, two tiles east, facing south.
+    // Seat 16, on the page's roster and in the ROM's, two tiles east, facing south.
     const row: Row = { seat: SEAT, name: 'T', alive: true, isMe: false, map: { group: here.group, num: here.num }, x: here.x + EAST, y: here.y, dir: DIR_SOUTH, skin: String(SKIN) };
     const setRow = (r: Row) => page.evaluate((next) => {
       (window as unknown as W).__worldRows = [next];
@@ -122,7 +124,7 @@ test('the other seats walk on past the picture in the bag, and are the ROM\'s ag
       w.__hbr.field.setPeople(() => w.__worldRows ?? []);
     });
     const seat = symbols.gBrSeats + SEAT * SEAT_SIZE;
-    /** Bytes of the ROM's row for seat 31, by offset into `struct BrSeat`. */
+    /** Bytes of the ROM's row for seat 16, by offset into `struct BrSeat`. */
     const pokeSeat = (bytes: [number, number][]) => page.evaluate(([base, b]) => {
       const emu = (window as unknown as W).__hbr.emu;
       for (const [off, v] of b) emu.write(base + off, v, 8);
@@ -136,7 +138,7 @@ test('the other seats walk on past the picture in the bag, and are the ROM\'s ag
 
     // On the field: the ROM has an object for it and draws it, the page's walker stands
     // on the same pixel in the same frame, and the page draws nothing of it.
-    await expect.poll(async () => seatOf((await peek(page))?.rom) !== undefined, { timeout: 10_000, message: 'the ROM gave seat 31 an object' }).toBe(true);
+    await expect.poll(async () => seatOf((await peek(page))?.rom) !== undefined, { timeout: 10_000, message: 'the ROM gave seat 16 an object' }).toBe(true);
     const onField = (await peek(page))!;
     expect(onField.onField).toBe(true);
     expect(place(seatOf(onField.walkers)), 'the walker stands where the ROM does').toEqual(place(seatOf(onField.rom)));
