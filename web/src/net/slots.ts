@@ -178,7 +178,7 @@ const TEXT_SPEED_ORDER = [1, 3, 5] as const;
  *  numeric sprite key IS that index -- a bot deals one straight out of the table --
  *  and anything else is a name we have no table for yet, whose length stands in the
  *  way it always has. */
-function skinIndex(sprite?: string): number {
+export function skinIndex(sprite?: string): number {
   if (!sprite) return 0;
   const n = Number(sprite);
   if (Number.isInteger(n) && n >= 0 && n <= 255) return n;

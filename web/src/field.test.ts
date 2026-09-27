@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { BAND, type Camera, FieldImages, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
+import { BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, fadeOf, fogOrigin, frameOf, gbaColor, heldFade, layoutField, lcdOrigin, lcdRect, neighbours, pictureBox, shakeOffset, subTile } from './field';
+import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
+import type { RosterEntry } from './match/roster';
+import { HOENN } from './bots/hoenn';
+import { SKIN_GFX } from './ui/emerald';
 import type { WorldMap } from './bots/world';
 import fieldHeader from '../../include/br/br_field.h?raw';
+import appSource from './app.ts?raw';
 
 describe('the picture past the LCD (POK-319)', () => {
   it('the band is the ROM\'s: include/br/br_field.h says the same four numbers', () => {
@@ -226,5 +231,196 @@ describe('the PNGs past the picture (POK-330 #65)', () => {
     expect(loads).toBe(1);
     expect(images.get('field-maps/A', '/field-maps/A.png')).toBe(made[1]);
     expect(images.settled).toBe(true);
+  });
+});
+
+describe('the people the ROM let go of reach the overlay (POK-318)', () => {
+  // A RAM with a save block, the object table and the seats, read the way FieldView reads
+  // a frame. We stand at (20, 20); a trainer twelve rows down, a second inside the box
+  // with no object (the ROM's to leave out), a third with its object live, and seat 1's
+  // ghost thirteen rows down.
+  const SB = 0x02000000;
+  const SB1 = 0x02010000;
+  const CAM = 0x02000100;
+  const OBJS = 0x02000200;
+  const SEATS = 0x02001000;
+  const MAIN = 0x02000800;
+  /** CB2_Overworld, a Thumb function: gMain.callback2 holds it with the low bit set. */
+  const CB2_OVERWORLD = 0x080862fc;
+  function frame(map: WorldMap): Camera | null {
+    return ram(map).read();
+  }
+  /** The RAM below, and a FieldView reading it. `onField` flips gMain.callback2. */
+  function ram(map: WorldMap) {
+    const mem = new Uint8Array(0x20000);
+    const at = (a: number) => a - 0x02000000;
+    const emu = {
+      read: (a: number, width: 8 | 16 | 32 = 32) => {
+        let v = 0;
+        for (let i = width / 8 - 1; i >= 0; i--) v = (v << 8) | mem[at(a) + i];
+        return v >>> 0;
+      },
+      bytes: (a: number, len: number) => mem.subarray(at(a), at(a) + len),
+    };
+    const w = (a: number, v: number, width: 8 | 16 | 32) => { for (let i = 0; i < width / 8; i++) mem[at(a) + i] = (v >>> (8 * i)) & 0xff; };
+    w(MAIN + 4, CB2_OVERWORLD | 1, 32);
+    w(SB, SB1, 32);
+    w(SB1 + SB1_POS_X, 20, 16);
+    w(SB1 + SB1_POS_Y, 20, 16);
+    w(SB1 + SB1_MAP_GROUP, map.group, 8);
+    w(SB1 + SB1_MAP_NUM, map.num, 8);
+    const template = (i: number, localId: number, y: number) => {
+      const t = SB1 + SB1_TEMPLATES + i * TEMPLATE_SIZE;
+      w(t + TPL_LOCAL_ID, localId, 8);
+      w(t + TPL_GFX, 7, 8);
+      w(t + TPL_X, 20, 16);
+      w(t + TPL_Y, y, 16);
+      w(t + TPL_MOVEMENT_TYPE, 1, 8);
+    };
+    template(0, 1, 32);
+    template(1, 2, 25);
+    template(2, 3, 33);
+    w(OBJS, 1, 8); // active
+    w(OBJS + OBJ_LOCAL_ID, 3, 8);
+    w(OBJS + OBJ_MAP_NUM, map.num, 8);
+    w(OBJS + OBJ_MAP_GROUP, map.group, 8);
+    const seat = SEATS + 1 * SEAT_SIZE;
+    w(seat, 1, 8);
+    w(seat + 2, map.group, 8);
+    w(seat + 3, map.num, 8);
+    w(seat + 4, 20 + 7, 16);
+    w(seat + 6, 33 + 7, 16);
+    w(seat + 8, 1, 8);
+    const symbols = new Map([
+      ['gSaveBlock1Ptr', SB], ['gFieldCamera', CAM], ['gObjectEvents', OBJS], ['gBrSeats', SEATS], ['gMain', MAIN], ['CB2_Overworld', CB2_OVERWORLD],
+    ]);
+    const view = new FieldView({ emu, symbols } as unknown as FieldDeps);
+    const inner = view as unknown as { read(): Camera | null; walkers: GhostWalkers; prev: Camera | null };
+    return {
+      w,
+      read: () => inner.read(),
+      /** An emulator frame, as frame() runs one: the walkers step on the roster, then the RAM is read. */
+      step: (rows: RosterEntry[]): Camera => {
+        inner.walkers.update(rows);
+        inner.prev = inner.read()!;
+        return inner.prev;
+      },
+      peek: () => view.peek(),
+      onField: (on: boolean) => w(MAIN + 4, on ? CB2_OVERWORLD | 1 : 0x08000001, 32),
+    };
+  }
+  /** A roster row on `map`, at a live cell (MAP_OFFSET included). */
+  const rowAt = (map: WorldMap, seat: number, x: number, y: number, over: Partial<RosterEntry> = {}): RosterEntry =>
+    ({ seat, name: '', alive: true, isMe: false, map: { group: map.group, num: map.num }, x, y, dir: 1, skin: '0', ...over });
+
+  it('outdoors, everybody past the box is on the camera, on the overlay, where the ROM would stand them', () => {
+    const map = HOENN.maps.find((m) => m.outdoor)!;
+    const cam = frame(map)!;
+    expect(cam.sprites).toEqual([
+      { gfx: 7, frame: 0, hFlip: false, x: 112, y: 56 + 12 * 16, hidden: true },
+      { gfx: SKIN_GFX[0], frame: 0, hFlip: false, x: 112, y: 56 + 13 * 16, hidden: true, seat: 1 },
+    ]);
+  });
+
+  it('indoors, nobody', () => {
+    expect(frame(HOENN.maps.find((m) => !m.outdoor)!)!.sprites).toEqual([]);
+  });
+
+  // POK-323: the page walks the other seats off its own roster.
+  it("a seat the page walks is its walker's past the box, and not gBrSeats' standing copy as well", () => {
+    const map = HOENN.maps.find((m) => m.outdoor)!;
+    // The roster has seat 1 a row further on than the ROM's copy does: only the walker's is drawn.
+    const seats = ram(map).step([rowAt(map, 1, 20 + 7, 34 + 7)]).sprites.filter((s) => s.seat === 1);
+    expect(seats).toEqual([{ gfx: SKIN_GFX[0], frame: 0, hFlip: false, x: 112, y: 56 + 14 * 16, hidden: true, seat: 1 }]);
+  });
+
+  it("peek keeps the ROM's objects apart from what the page drew, and names every seat it walks", () => {
+    const map = HOENN.maps.find((m) => m.outdoor)!;
+    const other = HOENN.maps.find((m) => m.outdoor && m.num !== map.num)!;
+    const r = ram(map);
+    // Seat 1 is only in gBrSeats, thirteen rows down; seat 2 is on the roster, on another map.
+    r.step([rowAt(other, 2, 20 + 7, 20 + 7)]);
+    const p = r.peek()!;
+    // The ROM has an object for nobody: seat 1's standing copy is the page's drawing.
+    expect(p.rom).toEqual([]);
+    expect(p.drawn).toEqual([{ gfx: SKIN_GFX[0], frame: 0, hFlip: false, x: 112, y: 56 + 13 * 16, hidden: true, seat: 1 }]);
+    expect(p.walkers, 'nobody walks this map').toEqual([]);
+    expect(p.seats, 'the roster reached the walkers all the same').toEqual([2]);
+  });
+
+  it("on the field a walker inside the box, or one whose ghost the ROM still has an object for, is the ROM's", () => {
+    const map = HOENN.maps.find((m) => m.outdoor)!;
+    const r = ram(map);
+    const obj = OBJS + 1 * 0x24;
+    r.w(obj, 1, 8);
+    r.w(obj + OBJ_LOCAL_ID, 0xc8 + 3, 8);
+    r.w(obj + OBJ_MAP_NUM, map.num, 8);
+    r.w(obj + OBJ_MAP_GROUP, map.group, 8);
+    const cam = r.step([rowAt(map, 2, 22 + 7, 20 + 7), rowAt(map, 3, 24 + 7, 35 + 7), rowAt(map, 4, 26 + 7, 35 + 7)]);
+    expect(cam.sprites.filter((s) => s.seat !== undefined && s.seat !== 1).map((s) => [s.seat, s.hidden])).toEqual([[4, true]]);
+  });
+
+  it('off the field the map\'s people stand where they stood and the ghosts walk on, all of them, under the picture', () => {
+    const map = HOENN.maps.find((m) => m.outdoor)!;
+    const r = ram(map);
+    const far = rowAt(map, 1, 20 + 7, 33 + 7);
+    const near = rowAt(map, 2, 22 + 7, 20 + 7);
+    r.step([far, near]);
+    // The battle: callback2 is somebody else's, and the tables the field was read from
+    // are nobody's to read -- the template the field drew is gone from them.
+    r.onField(false);
+    r.w(SB1 + SB1_TEMPLATES + TPL_LOCAL_ID, 0, 8);
+    const cam = r.step([far, near]);
+    expect(cam.onField).toBe(false);
+    expect(cam.sprites).toEqual([
+      { gfx: 7, frame: 0, hFlip: false, x: 112, y: 56 + 12 * 16, hidden: false },
+      { gfx: SKIN_GFX[0], frame: 0, hFlip: false, x: 112, y: 56 + 13 * 16, hidden: false, seat: 1 },
+      { gfx: SKIN_GFX[0], frame: 0, hFlip: false, x: 144, y: 56, hidden: false, seat: 2 },
+    ]);
+    // A step east, in the middle of the fight.
+    const walking = r.step([{ ...far, x: far.x! + 1, dir: 4 }, near]).sprites.find((s) => s.seat === 1);
+    expect(walking).toMatchObject({ x: 113, frame: 7, hFlip: true });
+    // A seat that goes out goes.
+    expect(r.step([near]).sprites.some((s) => s.seat === 1)).toBe(false);
+  });
+
+  it('off the field on another map, or with nobody read on the field first, nobody stands still', () => {
+    const map = HOENN.maps.find((m) => m.outdoor)!;
+    const r = ram(map);
+    r.onField(false);
+    expect(r.step([]).sprites, 'never on the field').toEqual([]);
+    r.onField(true);
+    r.step([]);
+    r.onField(false);
+    const other = HOENN.maps.find((m) => m.outdoor && m.num !== map.num)!;
+    r.w(SB1 + SB1_MAP_GROUP, other.group, 8);
+    r.w(SB1 + SB1_MAP_NUM, other.num, 8);
+    expect(r.step([]).sprites, 'a whiteout warps').toEqual([]);
+  });
+});
+
+describe("the match's roster reaches the field (POK-323)", () => {
+  // app.ts runs on the page and no unit test drives it, and the e2e hands the field a
+  // roster of its own: without these two lines the other seats stand still in a battle,
+  // and nothing else fails.
+  /** A top-level function's body, up to the next one. */
+  const body = (name: string): string => {
+    const from = appSource.indexOf(`\nfunction ${name}(`);
+    expect(from, name).toBeGreaterThan(0);
+    const to = appSource.indexOf('\nfunction ', from + 1);
+    return appSource.slice(from, to < 0 ? undefined : to);
+  };
+
+  it("solo hands it solo's roster, and a room its Bridge's, whichever is current", () => {
+    expect(body('runSolo')).toMatch(/\n\s*fieldView\?\.setPeople\(\(\) => roster\.all\(\)\);/);
+    expect(body('wireRoom')).toMatch(/\n\s*fieldView\?\.setPeople\(\(\) => bridge\?\.roster\.all\(\) \?\? \[\]\);/);
+  });
+
+  it('the field is made before either asks for it', () => {
+    expect(body('wirePlayScreen')).toMatch(/\n\s*fieldView = new FieldView\(/);
+    const made = appSource.indexOf('\n  wirePlayScreen(emu, ');
+    expect(made).toBeGreaterThan(0);
+    expect(appSource.indexOf('runSolo(emu, mailboxBase, symbols)')).toBeGreaterThan(made);
+    expect(appSource.indexOf('wireRoom(emu, mailboxBase, ')).toBeGreaterThan(made);
   });
 });

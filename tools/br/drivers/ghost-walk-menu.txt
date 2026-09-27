@@ -1,0 +1,53 @@
+# ghost-walk-menu: the start menu leaves the overworld running, and a ghost walks on under
+# it (POK-323). The page walks the other seats itself only off the field -- a battle, the
+# bag, the party -- where gMain.callback2 is somebody else's (web/src/field-ghosts.ts's
+# GhostWalkers); under the start menu callback2 stays CB2_Overworld, the page leaves every
+# ghost in the ROM's box to the ROM, and so the ROM has to keep walking them. It does:
+# BrGhosts_Tick drains a ghost's queue only while BrField_OverworldRunning, and the walk
+# unfreezes the object the menu froze (ObjectEventSetHeldMovement). This pins both.
+#
+# Route 103 from (9,8), as object-slots.txt: the player is object 0 and nobody else is in
+# view, so the ghost takes object 1. Map coords below include MAP_OFFSET (7): we stand on
+# (16,15).
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 12 09 00 08 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr 9
+# seat 1 two tiles east of us, facing west, skin 1: object 1, local id 0xC8 + 1, on (18,15)
+# PLACE: type 2, len 14 = hdr(0b 00 00) + seat 01, hasMap 01, group 00, num 12, x 12 00, y 0f 00, facing 03, status 01, sprite 01
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 12 12 00 0F 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrSeats+25 1
+expect u8 gObjectEvents+44 0xC9
+expect u16 gObjectEvents+52 0x12
+expect u8 gObjectEvents+37 0
+# START: ShowStartMenu freezes every object but ours -- the ghost's frozen bit (byte 1,
+# bit 0; nothing else in that byte is set on a ghost) says the menu is up.
+tap START
+wait 30
+expect u8 gObjectEvents+37 1
+shot menu-open
+# A step east arrives with the menu still up.
+# STEP: type 3, len 11 = hdr(08 00 00) + seat 01, d 04 (EAST), x 13 00, y 0f 00, group 00, num 12
+pokebytes gBrMailbox+0x1058 03 0B 08 00 00 01 04 13 00 0F 00 00 12
+poke u16 gBrMailbox+0x0C 2
+wait 40
+# The tick ran and took the step off the queue, the walk unfroze the object, and it is on
+# the next tile: sixteen frames of walk-normal, well inside the forty.
+expect u16 gBrSeats+20 0x13
+expect u8 gBrSeats+26 0
+expect u8 gBrSeats+25 1
+expect u8 gObjectEvents+37 0
+expect u16 gObjectEvents+52 0x13
+shot stepped-under-menu
+# And the menu had the pad the whole time: RIGHT moves nobody until B closes it.
+hold RIGHT 20
+wait 10
+expect u16 gBrOwnPos+2 16
+tap B
+wait 30
+hold RIGHT 20
+wait 10
+expectge u16 gBrOwnPos+2 17
+say ghost walks under the start menu ok
