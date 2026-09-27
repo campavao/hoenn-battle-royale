@@ -57,12 +57,13 @@
 // window's own pixels into the shared tiles -- in that order, so a DMA split across two
 // VBlanks never shows one window's cells over the other's pixels. A covered window is
 // not drawn and not put; it is drawn again, frame and all, the frame after the last
-// window covering it goes. BrHud_Yield runs at the top of BrHud_Tick and again in
-// OverworldBasic just before the frame's tilemap copies, which is the first moment a
-// window a task or a script opened that frame can be seen: the start menu puts its cells
-// on its third frame and copies its text five frames later, so for those five frames it
-// shows its own blank box, not the corner. A HUD window whose first cell is no longer
-// its own (somebody's clear took it) is put again.
+// window covering it goes. BrHud_Yield runs at the top of BrHud_Tick, from AddWindow
+// (BrHud_WindowAdded: a pass of the main loop that runs past a VBlank has its copies made
+// on the way), and again in OverworldBasic just before the frame's tilemap copies, which
+// is the first moment a window a task or a script opened that frame can be seen: the
+// start menu puts its cells on its third frame and copies its text five frames later, so
+// for those five frames it shows its own blank box, not the corner. A HUD window whose
+// first cell is no longer its own (somebody's clear took it) is put again.
 //
 // The picture past the LCD (POK-319, POK-329, br_field.h) never shows the HUD twice:
 // BG0's tilemap is one 256x256 screen block, and past the sprite window's 256 rows the
@@ -192,6 +193,14 @@ void BrHud_Tick(void);
 // the tile map above). From BrHud_Tick, and from OverworldBasic just before the frame's
 // tilemap copies. Does nothing off the overworld.
 void BrHud_Yield(void);
+// From AddWindow, for every window but the HUD's own: the hand-over, now. The frame's
+// own BrHud_Yield comes at the end of the main loop's pass, and a pass can run for
+// several frames -- the PC's WITHDRAW ITEM makes four windows and copies two of them
+// into the HUD's tiles in one call that runs three to five (hud-vram-pc.txt). Each
+// VBlank on the way runs the DMA queue, so those pixels reached VRAM under the box's
+// cells. Handed over at AddWindow, the HUD's cells are queued off before anything the
+// new window copies.
+void BrHud_WindowAdded(u8 windowId);
 // Queue a system line for the ticker (EOS-terminated Gen 3 text, cut at 40 bytes).
 // The oldest queued line goes if the queue is full.
 void BrHud_Say(const u8 *text);

@@ -408,6 +408,18 @@ void BrHud_Yield(void)
     REG_IME = ime;
 }
 
+void BrHud_WindowAdded(u8 windowId)
+{
+    u8 k;
+
+    for (k = 0; k < ARRAY_COUNT(sHudTemplates); k++)
+    {
+        if (Ours(windowId, sHudTemplates[k]))
+            return;
+    }
+    BrHud_Yield();
+}
+
 // The standard frame round a window, into the tilemap buffer: menu.c's
 // WindowFunc_DrawStandardFrame (static there), with the border OPTIONS chose at 0x214 in
 // palette 14. DrawStdWindowFrame does the same and also puts the window's cells and

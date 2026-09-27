@@ -3,6 +3,9 @@
 #include "malloc.h"
 #include "bg.h"
 #include "blit.h"
+#if BR
+#include "br/br_hud.h"
+#endif
 
 // This global is set to 0 and never changed.
 COMMON_DATA u8 gTransparentTileNumber = 0;
@@ -174,6 +177,9 @@ u16 AddWindow(const struct WindowTemplate *template)
         gWindows[win].window.baseBlock = allocatedBaseBlock;
         BgTileAllocOp(bgLayer, allocatedBaseBlock, gWindows[win].window.width * gWindows[win].window.height, 1);
     }
+#if BR
+    BrHud_WindowAdded(win);
+#endif
 
     return win;
 }

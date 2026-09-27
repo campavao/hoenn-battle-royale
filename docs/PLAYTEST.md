@@ -38,8 +38,9 @@ dev server on 5199 and fails on the ROM before the switch.
   ROM's map; one crossing that line should not blink, double or lose their legs.
 * **The fog.** It is the ROM's all the way up and down now: one blend, continuous across
   the old band edges at 40 above and 56 below.
-* **The HUD after every window.** START, a sign, the nurse's yes/no, a mart: the corner and
-  the ticker come back whole, and nothing of a window shows past the picture.
+* **The HUD after every window.** START, a sign, the nurse's yes/no, a mart, the bedroom
+  PC's ITEM STORAGE: the corner and the ticker come back whole, and nothing of a window
+  shows past the picture.
 * **Crossing a map edge.** For the few frames the ROM takes to redraw the ring's outer
   rows (two a frame), the page cuts them and the still shows there; that should read as
   nothing at all. Anything that looks like trees or water flashing at the top or bottom
@@ -70,6 +71,16 @@ dev server on 5199 and fails on the ROM before the switch.
   piece's alone now (`loot-press-alone.txt`: a ball on Route 104's hidden SUPER POTION,
   then one underfoot, and the item stays hidden until a third press with nothing in
   reach finds it). A ghost is not solid: A still goes past it, as a step does.
+* **The PC's ITEM STORAGE drew into the box's tiles under the box.** A bedroom PC -- the
+  PCs a match leaves working; a Centre's says OUT OF ORDER -- makes WITHDRAW ITEM's four
+  windows and copies two of them into the HUD's tiles in one call that runs three to
+  five frames, and each VBlank on the way ran the DMA queue before the frame's hand-over
+  took the box's cells off: the box showed the item icon's pixels, and on the way back
+  the list's, for those frames. The HUD hands over from `AddWindow` as well now
+  (`hud-vram-pc.txt`). `hud-vram.py` no longer compares the ring's maps with their
+  buffers on a frame the main loop's pass was still running at: the PC's turn-on flicker
+  redraws the whole map five times, three frames a pass, and a half-drawn buffer's copy
+  is queued at the pass's end, as pret's always was.
 
 **Accepted as is:**
 

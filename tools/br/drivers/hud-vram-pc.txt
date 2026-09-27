@@ -1,0 +1,215 @@
+# hud-vram-pc: the PC's ITEM STORAGE over the HUD (POK-329). hud-vram.txt has the model;
+# this is the bedroom PC in BRENDAN's house (map 1:1, the PC at (0,1)). The two bedroom
+# PCs are the ones a match leaves working -- every Centre's says OUT OF ORDER
+# (data/scripts/pc.inc) -- and the only way to ITEM STORAGE. WITHDRAW ITEM draws four windows of player_pc.c's
+# on the field's BG0 inside the HUD's tiles: the title (1,1) 13x2 from 0x139, the
+# corner's; the item's icon (1,8) 3x3 from 0x153; and, for a quantity or a YES/NO,
+# 0x15C and 0x168 up to 0x17B, the box's -- with the list (16,1) and the message (1,13)
+# below 0x139. Before that the PC's line is the field's message box (the ticker's
+# tiles), and its two menus stand at the top left beside the corner.
+#
+# The corner (7 LEFT, 2:05), a kill line on the ticker and a box of our own are up, and
+# every frame is watched from the first A through PLAYER's PC, ITEM STORAGE and WITHDRAW
+# ITEM, then back out with B three times to the field, and tools/br/hud-vram.py checks
+# every cell naming a shared tile shows its owner's pixels, that the corner and the
+# ticker are back when the PC goes, and that BG1..3 show the field's own tilemaps.
+# checked-by: tools/br/hud-vram.py
+wait 30
+# BR_BOOT_MAP | TESTMON, male, BRENDAN's house 2F (group 1, num 1), x=0, y=2
+pokebytes gBrMailbox+0x2018 81 00 01 01 00 00 02 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 1
+expect u8 *gSaveBlock1Ptr+5 1
+expect u16 *gSaveBlock1Ptr 0
+expect u16 *gSaveBlock1Ptr+2 2
+poke u8 gBrHud+0x00 7
+poke u16 gBrHud+0x02 125
+# a kill line on the ticker (TICKER, as hud.txt) and a box of our own: "HELLO", 255
+# frames, dirty
+pokebytes gBrMailbox+0x1018 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+poke u16 gBrMailbox+0x0C 1
+pokebytes gBrHud+0x14C 00 05 C2 BF C6 C6 C9 FF
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0D 4
+# a turn to face the PC, north
+hold UP 8
+wait 10
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0B 0
+wait 2
+expect u8 gBrHud+0x09 7
+expect u16 0x0600F868 0xF139
+expect u16 0x0600FAC2 0xF154
+expect u16 0x0600FC42 0xF1C8
+shot hud-up
+say pc-boot
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 4096
+watch 0x0600D800 4096
+watch 0x0600E800 4096
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+wait 2
+tap A
+wait 70
+unwatch
+# "CAM booted up the PC." in the field's message box: its first cell (2,15) is window
+# 0's 0x194, and the ticker and the box are down
+expectbits u16 0x0600FBC4 0x3FF 0x194
+expectbits u8 gBrHud+0x09 6 0
+shot booted
+say pc-menu
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 4096
+watch 0x0600D800 4096
+watch 0x0600E800 4096
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+wait 2
+tap A
+wait 50
+unwatch
+shot menu
+say pc-storage
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 4096
+watch 0x0600D800 4096
+watch 0x0600E800 4096
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+wait 2
+tap A
+wait 50
+unwatch
+shot storage
+say pc-withdraw
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 4096
+watch 0x0600D800 4096
+watch 0x0600E800 4096
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+wait 2
+tap A
+wait 60
+unwatch
+# the list: the title's first cell (1,1) is its own 0x139 -- the corner's first tile --
+# and the icon's (1,8) its 0x153
+expectbits u16 0x0600F842 0x3FF 0x139
+expectbits u16 0x0600FA02 0x3FF 0x153
+shot withdraw
+say pc-list-back
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 4096
+watch 0x0600D800 4096
+watch 0x0600E800 4096
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+wait 2
+tap B
+wait 50
+unwatch
+shot storage-again
+say pc-storage-back
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 4096
+watch 0x0600D800 4096
+watch 0x0600E800 4096
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+wait 2
+tap B
+wait 50
+unwatch
+shot menu-again
+# the ticker's line and the box ran out behind the PC: a line and the box again for
+# the way back
+pokebytes gBrMailbox+0x1058 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+poke u16 gBrMailbox+0x0C 2
+pokebytes gBrHud+0x14C 00 05 C2 BF C6 C6 C9 FF
+poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x0D 4
+wait 2
+say pc-off
+watch gMain+4 4
+watch gBrHud 16
+watch 0x0600F800 2048
+watch 0x0600A720 6368
+watch windows 0
+watch 0x0400000A 6
+watch 0x0600C800 4096
+watch 0x0600D800 4096
+watch 0x0600E800 4096
+watch gOverworldTilemapBuffer_Bg1 4
+watch gOverworldTilemapBuffer_Bg2 4
+watch gOverworldTilemapBuffer_Bg3 4
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+wait 2
+tap B
+wait 60
+unwatch
+say pc-gone
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 gBrHud+0x09 7
+expect u16 0x0600F868 0xF139
+expect u16 0x0600FAC2 0xF154
+expect u16 0x0600FC42 0xF1C8
+shot hud-back
+say hud vram pc ok

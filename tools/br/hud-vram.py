@@ -24,7 +24,11 @@ f - 1 was watched too:
   * BG1, BG2 and BG3 each show the field's own buffer: the tilemap at the screen block
     its BGxCNT names holds, at f, what the buffer held at f - 1. A text tile run past the
     ceiling lands in BG2's map and fails here, and so does a copy to a block the register
-    does not name;
+    does not name. Unless the main loop's pass was still running at f - 1: its buffers
+    are half drawn there, and their copies are queued at the pass's end (the PC's
+    turn-on flicker redraws the whole map five times, three frames a pass, in
+    hud-vram-pc.txt). BrHud_Tick counts gBrHud.clockFrames once a pass, so a frame
+    whose count is the one before's started no pass since, and is not compared;
   * every cell naming a tile in 0x139..0x1FF has an owner at f - 1: a live window whose
     rectangle holds the cell and maps it to that tile;
   * and the tile holds that owner's pixels: its 32 bytes are ones some owner's buffer
@@ -61,8 +65,9 @@ HUD = {(20, 1, 0x139): "corner", (1, 11, 0x154): "box", (1, 17, 0x1C8): "ticker"
 START_MENU = (22, 1, 0x139)
 MESSAGE_BOX = (2, 15, 0x194)
 BACK_WITHIN = 2
-# gBrHud: shown at +0x09, queueLen +0x0A, held +0x0C, scriptWas +0x0E (br_hud.h).
-HUD_SHOWN, HUD_QUEUE, HUD_HELD, HUD_SCRIPT = 0x09, 0x0A, 0x0C, 0x0E
+# gBrHud: clockFrames at +0x04, shown +0x09, queueLen +0x0A, held +0x0C, scriptWas +0x0E
+# (br_hud.h).
+HUD_CLOCK, HUD_SHOWN, HUD_QUEUE, HUD_HELD, HUD_SCRIPT = 0x04, 0x09, 0x0A, 0x0C, 0x0E
 
 
 class Win:
@@ -179,6 +184,7 @@ def main():
     checked = 0
     covered_frames = 0
     ring_checked = 0
+    ring_mid_pass = 0
     ring_settled = set()   # layers that have matched their buffer since the field came back
     loaded_at = None       # the first overworld frame after a watched frame that was not
     due = {}       # "corner"/"ticker" -> the frame by which it must be back
@@ -195,10 +201,13 @@ def main():
         # Each of BG1..3: the tilemap VRAM holds at the block its BGxCNT names (both as
         # frame f - 1 left them), against the field's buffer at f - 1. Right after a map
         # load a layer may lag its buffer while it has never matched it (see LOAD_LAG).
-        nonlocal ring_checked, loaded_at
+        nonlocal ring_checked, ring_mid_pass, loaded_at
         if prev.get("cb2") != f.get("cb2"):
             loaded_at = f["n"]
             ring_settled.clear()
+        if prev.get("hud") is not None and f.get("hud") is not None                 and prev["hud"][HUD_CLOCK] == f["hud"][HUD_CLOCK]:
+            ring_mid_pass += 1
+            return
         cnt = read(f, BGCNT_ADDR, 6)
         if cnt is None or not all(sym(symbols, n) is not None for n in RING.values()):
             return
@@ -317,7 +326,8 @@ def main():
         remember(f)
         prev = f
     print(f"{len(frames)} frames watched, {checked} checked, {covered_frames} with a window over the HUD, "
-          f"{ring_checked} ring maps compared with their buffers, {bad} failures")
+          f"{ring_checked} ring maps compared with their buffers ({ring_mid_pass} frames mid-pass not), "
+          f"{bad} failures")
     if bad:
         sys.exit(1)
     if not covered_frames or not ring_checked:
