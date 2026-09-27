@@ -117,3 +117,80 @@ describe('the drawn screens (POK-320)', () => {
     expect(fitText('SHORT', 100)).toBe('SHORT');
   });
 });
+
+describe('the page asks nothing with the browser (POK-320)', () => {
+  // Every question outside the game is drawn now: the name, the code and the passcode on
+  // the entry, the career's SAVE or LOAD on a notice. A prompt() or an alert() is a grey
+  // box from another world in the middle of Emerald's.
+  const sources = import.meta.glob<string>(['../**/*.ts', '!../**/*.test.ts'], { query: '?raw', import: 'default', eager: true });
+  const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+
+  it('finds the page', () => {
+    expect(Object.keys(sources)).toContain('../app.ts');
+  });
+
+  it('calls no prompt(), confirm() or alert()', () => {
+    const calls = Object.entries(sources).flatMap(([file, text]) =>
+      [...code(text).matchAll(/(?<![\w.])(?:window\.)?(prompt|confirm|alert)\s*\(/g)].map((m) => `${file}: ${m[0]}`),
+    );
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('a notice', () => {
+  it('breaks a sentence at its spaces to fit a line, and cuts a word too long for one', async () => {
+    const { wrapText, measure } = await import('./emerald');
+    const lines = wrapText('Pick your own POKEMON EMERALD ROM. It stays on this device.', 120);
+    expect(lines.length).toBeGreaterThan(1);
+    for (const l of lines) expect(measure(l)).toBeLessThanOrEqual(120);
+    expect(lines.join(' ')).toBe('Pick your own POKEMON EMERALD ROM. It stays on this device.');
+    const [cut] = wrapText('ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJ', 60);
+    expect(measure(cut)).toBeLessThanOrEqual(60);
+  });
+
+  it('draws its title, its lines and its buttons, each where the mirror says', async () => {
+    const { noticeScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const pressed: string[] = [];
+    const screen = noticeScreen(() => ({
+      title: 'MY CAREER',
+      titleId: 'notice-title',
+      lines: [{ text: 'Save it, or load one.', id: 'notice-line' }, { text: '' }],
+      buttons: [
+        { label: 'SAVE', id: 'career-save', onPress: () => pressed.push('save') },
+        { label: 'BACK', onPress: () => pressed.push('back') },
+      ],
+      buttonsId: 'notice-buttons',
+      footer: 'rom abc1234',
+      onBack: () => pressed.push('b'),
+    }));
+    const { canvas, frames } = fakeCanvas();
+    const painted = screen.paint(canvas, 320);
+    const byId = (id: string) => painted.widgets.find((w) => w.id === id);
+    expect(byId('notice-title')?.text).toBe('MY CAREER');
+    expect(byId('notice-line')?.text).toBe('Save it, or load one.');
+    expect(frames.length, 'one frame of lines, one per button').toBe(3);
+    const back = painted.widgets.find((w) => w.text === 'BACK')!;
+    expect(back.parent, 'in the container a test knows them by').toBe('notice-buttons');
+    expect(painted.containers).toContainEqual({ id: 'notice-buttons' });
+    back.onPress!();
+    byId('career-save')!.onPress!();
+    screen.back!();
+    expect(pressed).toEqual(['back', 'save', 'b']);
+    expect(painted.widgets.find((w) => w.cls === 'version')?.rect.y, 'the footer on the bottom line').toBe(320 - 16);
+  });
+});
+
+describe("Emerald's fade over a cut (POK-320)", () => {
+  it('fades when the stage covers the page or leaves it, not when the sheet opens or docks', async () => {
+    const { fadesBetween } = await import('./stage');
+    expect(fadesBetween('full', null), 'the room giving way to the match').toBe(true);
+    expect(fadesBetween(null, 'full'), 'the match giving way to its results').toBe(true);
+    expect(fadesBetween('dock', 'full'), 'a desktop match to its results').toBe(true);
+    expect(fadesBetween('full', 'dock'), 'the room to a desktop match').toBe(true);
+    expect(fadesBetween(null, 'overlay'), 'the sheet opening').toBe(false);
+    expect(fadesBetween('overlay', null), 'the sheet closing').toBe(false);
+    expect(fadesBetween('full', 'full'), 'one screen to the next').toBe(false);
+    expect(fadesBetween(null, 'dock')).toBe(false);
+  });
+});

@@ -217,8 +217,25 @@ key while a screen is up.
 starts (the ROM idles in Littleroot under it); only quick play and the daily start
 themselves, with a STARTS IN count on the screen. Everything the host used to have to set
 "ahead of time" -- MAX, FILL, the door, TEXT, ANIM, FOG, SAFARI -- is on the room screen
-beside START. PLAY AGAIN brings the room screen back. The drawer keeps only what belongs
-to a running match: the strip, who is still in, WATCH, the results.
+beside START. PLAY AGAIN brings the room screen back.
+
+**Everything else outside the game is drawn too.** A name, a room code and a passcode are
+typed on a drawn entry (`web/src/ui/entry.ts`, Kanto's CodeEntry: the D-pad scrubs a
+letter, a key grid takes a tap, the keyboard types); MY CAREER, FORGET ROM and PLAY
+ANYWAY ask in the frame, and the page calls no `prompt()`, `confirm()` or `alert()`
+(`ui.test.ts` fails on one). A door that will not open is its own screen, in Kanto's words
+(THAT GAME STARTED, THAT GAME IS FULL, HOST REMOVED YOU), with what the relay said and
+BACK TO LOBBY -- and it is the room's last word: the end grace, a count to a start and a
+`start` held for the way back all stop there (`match/room.ts`, `DeadEnd`). The import and
+patch screens are drawn in the same frame and end on the version line; the page has no
+HTML header. The results come at the `win` for everybody but the champion, whose come
+after their own Hall of Fame (`web/src/ui/results.ts`, `ParadeHold`: BR_PHASE_DONE, or a
+grace before the parade's deadline if it never gets there). In a match, the room's line,
+the strip, who is still in, WATCH, LEAVE and the settings are the in-match sheet
+(`sheetScreen`): over the running game behind the menu button on a phone, and docked
+beside the game on a desktop -- in view all match, taking no keys, 480 px wide where the
+window can spare it (960×640 and up) and the picture's own 240 below that. A cut between
+the stage and the game fades from black in Emerald's four steps.
 
 Career (name, skin, wins), stats opt-out and pace live in IndexedDB. Touch controls are
 the shell's, with the emulator's `buttonPress` API. PWA manifest + service worker so a

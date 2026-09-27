@@ -18,8 +18,9 @@ import {
   fitText,
   measure,
   skinSheet,
+  wrapText,
 } from './emerald';
-import type { DrawnScreen, Painted, Widget } from './stage';
+import type { Container, DrawnScreen, Painted, Widget } from './stage';
 
 export const ROW_H = 16;
 export const SEAT_W = 56;
@@ -195,11 +196,8 @@ export interface RoomModel {
   /** The host's controls, in the order they are shown; null for a guest. */
   options: { label: string; id: string; onPress: () => void }[] | null;
   card: { seat: number; lines: CardLine[]; canKick: boolean } | null;
-  /** The room refused us: the one thing to offer is the way back. */
-  fatal: boolean;
   onStart(): void;
   onLeave(): void;
-  onBack(): void;
   onSeat(seat: number): void;
   onKick(seat: number): void;
   onCloseCard(): void;
@@ -219,13 +217,13 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       const widgets: Widget[] = [];
       const containers: Painted['containers'] = [
         { id: 'room-roster', tag: 'ul', cls: 'room-roster' },
-        { id: 'room-note-drawn', cls: 'room-note' },
+        { id: 'room-note', cls: 'room-note' },
         { id: 'room-controls', cls: 'room-controls', hidden: !m.options || m.started },
         { id: 'trainer-card', cls: 'trainer-card', hidden: !m.card },
       ];
       let y = 4;
       paintTitle(c, fitText(m.status, W - 8), y);
-      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.status, cls: 'room-status', cursor: null });
+      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.status, id: 'room-code', cls: 'room-status', cursor: null });
       y += 20;
 
       // Four rows at most: MAX reaches 30 now (POK-330 #29), and eight rows of seats
@@ -257,54 +255,283 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       y = lay.frame.y + lay.frame.h + 2;
 
       const noteText = m.countdown !== null && !m.started ? `STARTS IN ${m.countdown}` : m.note;
-      const noteRect = paintNote(c, m.fatal ? '' : noteText, y, m.countdown !== null ? TEXT_WHITE : TEXT_GRAY);
-      if (m.fatal) {
-        widgets.push(...paintButtons(c, y, [{ label: 'BACK TO LOBBY', parent: 'room-note-drawn', onPress: m.onBack }]));
-        y += 28;
-      } else {
-        widgets.push({ rect: noteRect, text: noteText, parent: 'room-note-drawn', cursor: null });
-        y += ROW_H + 2;
-      }
+      const noteRect = paintNote(c, noteText, y, m.countdown !== null ? TEXT_WHITE : TEXT_GRAY);
+      widgets.push({ rect: noteRect, text: noteText, parent: 'room-note', cursor: null });
+      y += ROW_H + 2;
 
       if (m.options && !m.started) {
-        // Two columns of the host's controls, each a small framed button.
-        const cols = 2;
-        const cw = Math.floor((W - 16) / cols);
-        const rows = Math.ceil(m.options.length / cols);
-        const frame = { x: 0, y, w: W, h: rows * 20 + 16 };
-        c.drawFrame(frame);
-        m.options.forEach((o, i) => {
-          const r = { x: 8 + (i % cols) * cw + 8, y: y + 8 + Math.floor(i / cols) * 20 + 2, w: cw - 8, h: ROW_H };
-          c.drawText(fitText(o.label, r.w - 10), r.x + 8, r.y, TEXT_DARK);
-          widgets.push({ rect: r, text: o.label, id: o.id, parent: 'room-controls', onPress: o.onPress, cursor: { x: r.x, y: r.y + 2 } });
-        });
-        y = frame.y + frame.h + 4;
+        const opts = paintOptions(c, y, m.options, 'room-controls');
+        widgets.push(...opts.widgets);
+        y = opts.bottom + 4;
       }
 
-      if (!m.started && !m.fatal) {
+      if (!m.started) {
         const buttons: ButtonSpec[] = m.isHost
           ? [{ label: m.startLabel, id: 'room-start', disabled: !m.canStart, onPress: m.onStart }]
           : [{ label: 'LEAVE', id: 'room-leave', cls: 'room-leave', onPress: m.onLeave }];
         widgets.push(...paintButtons(c, Math.min(y, h - 28), buttons));
       }
 
-      if (m.card) {
-        const lines = m.card.lines;
-        const box = { x: 16, y: lay.frame.y + 8, w: W - 32, h: lines.length * ROW_H + 16 + 28 };
-        c.fillRect({ x: 0, y: 0, w: W, h }, '#000', 0.35);
-        c.drawFrame(box);
-        lines.forEach((line, i) => {
-          const text = line.label ? `${line.label}: ${line.value}` : line.value;
-          const r = { x: box.x + 8, y: box.y + 8 + i * ROW_H, w: box.w - 16, h: ROW_H };
-          c.drawText(fitText(text, r.w), r.x, r.y, line.label ? TEXT_DARK : TEXT_BLUE);
-          widgets.push({ rect: r, text, cls: 'card-line', parent: 'trainer-card', cursor: null });
-        });
-        const seat = m.card.seat;
-        const buttons: ButtonSpec[] = [];
-        if (m.card.canKick) buttons.push({ label: 'KICK', cls: 'card-kick', parent: 'trainer-card', onPress: () => m.onKick(seat) });
-        buttons.push({ label: 'CLOSE', cls: 'card-close', parent: 'trainer-card', onPress: m.onCloseCard });
-        widgets.push(...paintButtons(c, box.y + box.h - 28, buttons));
+      if (m.card) widgets.push(...paintCard(c, h, lay.frame.y + 8, m.card, 'trainer-card', m.onKick, m.onCloseCard));
+      return { widgets, containers };
+    },
+  };
+}
+
+/** Two columns of small framed controls at `y` -- the host's options, the sheet's
+ *  settings -- each in the container `parent`. */
+export function paintOptions(
+  c: EmeraldCanvas,
+  y: number,
+  options: { label: string; id: string; onPress: () => void }[],
+  parent: string,
+): { widgets: Widget[]; bottom: number } {
+  const cols = 2;
+  const cw = Math.floor((W - 16) / cols);
+  const rows = Math.ceil(options.length / cols);
+  const frame = { x: 0, y, w: W, h: rows * 20 + 16 };
+  c.drawFrame(frame);
+  const widgets = options.map((o, i): Widget => {
+    const r = { x: 8 + (i % cols) * cw + 8, y: y + 8 + Math.floor(i / cols) * 20 + 2, w: cw - 8, h: ROW_H };
+    c.drawText(fitText(o.label, r.w - 10), r.x + 8, r.y, TEXT_DARK);
+    return { rect: r, text: o.label, id: o.id, parent, onPress: o.onPress, cursor: { x: r.x, y: r.y + 2 } };
+  });
+  return { widgets, bottom: frame.y + frame.h };
+}
+
+/** A trainer's card over the seats, the screen dimmed under it: its lines, KICK for the
+ *  host (POK-241), CLOSE. `parent` is its container: #trainer-card in the room,
+ *  #match-card in a match. */
+export function paintCard(
+  c: EmeraldCanvas,
+  h: number,
+  y: number,
+  card: { seat: number; lines: CardLine[]; canKick: boolean },
+  parent: string,
+  onKick: (seat: number) => void,
+  onClose: () => void,
+): Widget[] {
+  const widgets: Widget[] = [];
+  const lines = card.lines;
+  const box = { x: 16, y, w: W - 32, h: lines.length * ROW_H + 16 + 28 };
+  c.fillRect({ x: 0, y: 0, w: W, h }, '#000', 0.35);
+  c.drawFrame(box);
+  lines.forEach((line, i) => {
+    const text = line.label ? `${line.label}: ${line.value}` : line.value;
+    const r = { x: box.x + 8, y: box.y + 8 + i * ROW_H, w: box.w - 16, h: ROW_H };
+    c.drawText(fitText(text, r.w), r.x, r.y, line.label ? TEXT_DARK : TEXT_BLUE);
+    widgets.push({ rect: r, text, cls: 'card-line', parent, cursor: null });
+  });
+  const buttons: ButtonSpec[] = [];
+  if (card.canKick) buttons.push({ label: 'KICK', cls: 'card-kick', parent, onPress: () => onKick(card.seat) });
+  buttons.push({ label: 'CLOSE', cls: 'card-close', parent, onPress: onClose });
+  widgets.push(...paintButtons(c, box.y + box.h - 28, buttons));
+  return widgets;
+}
+
+// ---- the in-match sheet -----------------------------------------------------------------
+
+export interface SheetModel {
+  /** Over the game on a phone, with BACK TO GAME; beside it on a desktop, always there. */
+  look: 'dock' | 'overlay';
+  /** The room's line (Room ABCDEF, Reconnecting…), or SOLO VS BOTS. */
+  status: string;
+  /** SAFARI / RING 3 (PLACE) · 8 left · 1:23, while a match is on. */
+  strip: string | null;
+  note: string;
+  seats: RoomSeat[];
+  card: { seat: number; lines: CardLine[]; canKick: boolean } | null;
+  /** Who you are watching, once you are out; null while you are in the match. */
+  watch: { name: string | null } | null;
+  canLeave: boolean;
+  muted: boolean;
+  remapping: boolean;
+  /** The remap wizard's question, or what it did. */
+  remapLine: string;
+  /** The keys (or what a pad is doing) on a desktop; how to tap on a phone. */
+  help: string[];
+  version: string;
+  onSeat(seat: number): void;
+  onKick(seat: number): void;
+  onCloseCard(): void;
+  onWatch(dir: 1 | -1): void;
+  onStopWatch(): void;
+  onLeave(): void;
+  onClose(): void;
+  onMute(): void;
+  onRemap(): void;
+  onResetPad(): void;
+  onForget(): void;
+}
+
+/** The seats the sheet has room for, you first and then whoever is still in: all of them
+ *  when they fit, else the first `cells - 1` and a count of the rest in the last cell. */
+export function sheetSeats(seats: readonly RoomSeat[], cells: number): { shown: RoomSeat[]; more: number } {
+  const order = [...seats].sort((a, b) => Number(b.isMe) - Number(a.isMe) || Number(b.alive) - Number(a.alive));
+  if (order.length <= cells) return { shown: order, more: 0 };
+  const shown = order.slice(0, Math.max(0, cells - 1));
+  return { shown, more: order.length - shown.length };
+}
+
+/** Who WATCH moves to next, round the living, from whoever it is on (none: the first, or
+ *  the last going back). Null with nobody left to watch. */
+export function cycleWatch(alive: readonly number[], on: number | null, dir: 1 | -1): number | null {
+  if (alive.length === 0) return null;
+  const at = on === null ? -1 : alive.indexOf(on);
+  if (at < 0) return dir > 0 ? alive[0] : alive[alive.length - 1];
+  return alive[(at + dir + alive.length) % alive.length];
+}
+
+/** How tall everything under the seats is, so the seats take what is left. */
+function sheetBelow(m: SheetModel): number {
+  return (
+    (m.note ? ROW_H + 2 : 0) +
+    (m.watch ? ROW_H + 28 : 0) +
+    (sheetActions(m).length > 0 ? 28 : 0) +
+    2 * 20 + 16 + 4 + // the settings
+    (m.remapLine ? ROW_H : 0) +
+    m.help.length * ROW_H +
+    versionLines(m.version).length * ROW_H
+  );
+}
+
+/** LEAVE for whoever may, and BACK TO GAME over the game. */
+function sheetActions(m: SheetModel): ButtonSpec[] {
+  const actions: ButtonSpec[] = [];
+  if (m.canLeave) actions.push({ label: 'LEAVE', id: 'match-leave', cls: 'room-leave', onPress: m.onLeave });
+  if (m.look === 'overlay') actions.push({ label: 'BACK TO GAME', id: 'drawer-close', onPress: m.onClose });
+  return actions;
+}
+
+/** The version line in at most two lines: its last part, the rom, is the one a report
+ *  needs, and cutting it to fit one line cut exactly that. */
+export function versionLines(version: string): string[] {
+  return wrapText(version, W - 8).slice(0, 2);
+}
+
+/** The in-match sheet (POK-320), where the page's HTML drawer was: the room's line and
+ *  the strip, everybody in it as their sprite (a tap opens the card, with KICK for the
+ *  host), who you watch once you are out, LEAVE, the settings, and the version. The
+ *  mirror keeps the drawer's ids: #drawer, #room-code, #match-strip, #match-roster,
+ *  #match-card, #room-note, #spectate-strip, #match-leave, #drawer-close, #mute,
+ *  #remap, #remap-reset, #forget-rom, #remap-line. */
+export function sheetScreen(model: () => SheetModel): DrawnScreen {
+  return {
+    look: () => model().look,
+    back() {
+      const m = model();
+      if (m.card) m.onCloseCard();
+      else m.onClose();
+    },
+    paint(c, h): Painted {
+      const m = model();
+      const widgets: Widget[] = [];
+      const containers: Container[] = [
+        { id: 'drawer', cls: 'drawer' },
+        { id: 'match-roster', tag: 'ul', cls: 'room-roster' },
+        { id: 'room-note', cls: 'room-note' },
+        { id: 'spectate-strip', cls: 'spectate-strip', hidden: !m.watch },
+        { id: 'settings', cls: 'settings' },
+        { id: 'match-card', cls: 'trainer-card', hidden: !m.card },
+      ];
+      // Over the game, the game dimmed: it is still running under the sheet.
+      if (m.look === 'overlay') c.fillRect({ x: -c.origin, y: 0, w: c.width, h }, '#000', 0.6);
+      let y = 4;
+      paintTitle(c, fitText(m.status, W - 8), y);
+      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.status, id: 'room-code', cls: 'room-status', cursor: null });
+      y += ROW_H;
+      if (m.strip !== null) {
+        paintTitle(c, fitText(m.strip, W - 8), y);
+        widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.strip, id: 'match-strip', cls: 'room-code', cursor: null });
+        y += ROW_H;
       }
+      y += 4;
+
+      // As many rows of seats as there are seats, and as the rest leaves room for: a
+      // desktop's dock is short, and a room of thirty does not fit in four.
+      const room = Math.floor((h - y - sheetBelow(m) - 18) / SEAT_H);
+      const rows = Math.max(1, Math.min(4, room, Math.ceil(m.seats.length / SEAT_COLS)));
+      const lay = layoutSeats(y, rows * SEAT_COLS);
+      const { shown, more } = sheetSeats(m.seats, lay.cells.length);
+      c.drawFrame(lay.frame);
+      shown.forEach((who, i) => {
+        const cell = lay.cells[i];
+        paintPerson(c, cell, who.skin, who.alive ? who.name : 'OUT', who.alive && !who.spectating ? 1 : 0.5, who.isMe ? TEXT_BLUE : TEXT_DARK);
+        widgets.push({
+          rect: cell,
+          text: `${who.name}${who.isMe ? ' (you)' : ''}${who.alive ? '' : ' -- OUT'}${who.spectating ? ' (watching)' : ''}`,
+          cls: 'roster-name',
+          parent: 'match-roster',
+          onPress: () => m.onSeat(who.seat),
+          cursor: { x: cell.x + 2, y: cell.y + 10 },
+        });
+      });
+      if (more > 0) {
+        const cell = lay.cells[shown.length];
+        c.drawTextCentred(`+${more}`, cell.x + cell.w / 2, cell.y + 16, TEXT_GRAY);
+        widgets.push({ rect: cell, text: `${more} more`, cursor: null });
+      }
+      y = lay.frame.y + lay.frame.h + 2;
+
+      if (m.note) {
+        const r = paintNote(c, m.note, y);
+        widgets.push({ rect: r, text: m.note, parent: 'room-note', cursor: null });
+        y += ROW_H + 2;
+      }
+
+      if (m.watch) {
+        const line = `WATCHING ${m.watch.name ?? 'NOBODY'}`;
+        c.drawTextCentred(fitText(line, W - 8), W / 2, y, TEXT_WHITE);
+        widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: line, id: 'spectate-name', parent: 'spectate-strip', cursor: null });
+        y += ROW_H;
+        const buttons: ButtonSpec[] = [
+          { label: 'PREV', id: 'spectate-prev', parent: 'spectate-strip', onPress: () => m.onWatch(-1) },
+          { label: 'NEXT', id: 'spectate-next', parent: 'spectate-strip', onPress: () => m.onWatch(1) },
+        ];
+        if (m.watch.name !== null) buttons.push({ label: 'STOP', id: 'spectate-stop', parent: 'spectate-strip', onPress: m.onStopWatch });
+        widgets.push(...paintButtons(c, y, buttons));
+        y += 28;
+      }
+
+      const actions = sheetActions(m);
+      if (actions.length > 0) {
+        widgets.push(...paintButtons(c, y, actions));
+        y += 28;
+      }
+
+      const settings = paintOptions(
+        c,
+        y,
+        [
+          { label: m.muted ? 'UNMUTE' : 'MUTE', id: 'mute', onPress: m.onMute },
+          { label: m.remapping ? 'CANCEL REMAP' : 'REMAP PAD', id: 'remap', onPress: m.onRemap },
+          { label: 'RESET PAD', id: 'remap-reset', onPress: m.onResetPad },
+          { label: 'FORGET ROM', id: 'forget-rom', onPress: m.onForget },
+        ],
+        'settings',
+      );
+      widgets.push(...settings.widgets);
+      y = settings.bottom + 4;
+
+      if (m.remapLine) {
+        c.drawTextCentred(fitText(m.remapLine, W - 8), W / 2, y, TEXT_WHITE);
+        widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.remapLine, id: 'remap-line', cls: 'keys-note', cursor: null });
+        y += ROW_H;
+      }
+      if (m.help.length > 0) {
+        const top = y;
+        for (const line of m.help) {
+          c.drawTextCentred(fitText(line, W - 8), W / 2, y, TEXT_GRAY);
+          y += ROW_H;
+        }
+        widgets.push({ rect: { x: 0, y: top, w: W, h: y - top }, text: m.help.join(' '), cls: 'keys', cursor: null });
+      }
+      const version = versionLines(m.version);
+      const vy = Math.max(y, h - version.length * ROW_H);
+      version.forEach((line, i) => c.drawTextCentred(line, W / 2, vy + i * ROW_H, TEXT_GRAY));
+      widgets.push({ rect: { x: 0, y: vy, w: W, h: version.length * ROW_H }, text: m.version, cls: 'version', cursor: null });
+
+      if (m.card) widgets.push(...paintCard(c, h, lay.frame.y + 8, m.card, 'match-card', m.onKick, m.onCloseCard));
       return { widgets, containers };
     },
   };
@@ -362,6 +589,86 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
         y += 52;
       }
       if (m.buttons?.length) widgets.push(...paintButtons(c, Math.min(y, h - 28), m.buttons));
+      return { widgets, containers };
+    },
+  };
+}
+
+// ---- a notice ----------------------------------------------------------------------------
+
+export interface NoticeLine {
+  text: string;
+  id?: string;
+  cls?: string;
+  color?: TextColor;
+}
+
+export interface NoticeModel {
+  title: string;
+  titleId?: string;
+  /** Said in one frame, each wrapped to fit; an empty one is left out. */
+  lines: NoticeLine[];
+  buttons?: ButtonSpec[];
+  /** The mirror container the buttons go in, when a test knows them by it. */
+  buttonsId?: string;
+  containers?: Container[];
+  /** A last line at the bottom, small: the version. */
+  footer?: string;
+  onBack?(): void;
+}
+
+/** A title, a few sentences in a frame and the buttons that answer them: the import and
+ *  patch screens, a door that will not open, a question with SAVE or LOAD in it. */
+export function noticeScreen(model: () => NoticeModel): DrawnScreen {
+  return {
+    back() {
+      model().onBack?.();
+    },
+    paint(c, h): Painted {
+      const m = model();
+      const widgets: Widget[] = [];
+      const containers: Container[] = [...(m.containers ?? [])];
+      if (m.buttonsId) containers.push({ id: m.buttonsId });
+      let y = 4;
+      paintTitle(c, fitText(m.title, W - 8), y);
+      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.title, id: m.titleId, cursor: null });
+      y += 20;
+
+      const bottom = h - 28 - (m.footer ? versionLines(m.footer).length * ROW_H : 0);
+      // As many rows as the screen has room for: a startup error carries its stack.
+      let room = Math.max(1, Math.floor((bottom - y - 20) / ROW_H));
+      const blocks = m.lines
+        .filter((l) => l.text)
+        .map((line) => {
+          const rows = wrapText(line.text, W - 24).slice(0, room);
+          room = Math.max(0, room - rows.length);
+          return { line, rows };
+        })
+        .filter((b) => b.rows.length > 0);
+      const count = blocks.reduce((n, b) => n + b.rows.length, 0);
+      if (count > 0) {
+        const frame = { x: 0, y, w: W, h: count * ROW_H + 16 };
+        c.drawFrame(frame);
+        let ly = y + 8;
+        for (const b of blocks) {
+          const top = ly;
+          for (const row of b.rows) {
+            c.drawText(row, 12, ly, b.line.color ?? TEXT_DARK);
+            ly += ROW_H;
+          }
+          widgets.push({ rect: { x: 8, y: top, w: W - 16, h: ly - top }, text: b.line.text, id: b.line.id, cls: b.line.cls, cursor: null });
+        }
+        y = frame.y + frame.h + 4;
+      }
+      if (m.buttons?.length) {
+        widgets.push(...paintButtons(c, Math.min(y, bottom), m.buttons.map((b) => ({ ...b, parent: b.parent ?? m.buttonsId }))));
+      }
+      if (m.footer) {
+        const lines = versionLines(m.footer);
+        const fy = h - lines.length * ROW_H;
+        lines.forEach((line, i) => c.drawTextCentred(line, W / 2, fy + i * ROW_H, TEXT_GRAY));
+        widgets.push({ rect: { x: 0, y: fy, w: W, h: lines.length * ROW_H }, text: m.footer, cls: 'version', cursor: null });
+      }
       return { widgets, containers };
     },
   };

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, decideStart, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState } from './room';
+import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, DeadEnd, decideStart, doorLabel, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, refusalLine, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState } from './room';
 import { freshMatch, noteMatch, ringClockLeft } from './lifecycle';
+import { EndGrace } from './grace';
 import { Director, type DirectorWorld } from './director';
 import type { RosterEvent } from '../net/relay';
 import type { Msg } from '../net/wire';
@@ -72,6 +73,14 @@ describe('the host controls', () => {
     expect(nextDoor('open')).toBe('private');
     expect(nextDoor('private')).toBe('pass');
     expect(nextDoor('pass')).toBe('open');
+  });
+
+  it("show the host the passcode it set, as Kanto's OPEN: PASS 1234 does (POK-320)", () => {
+    expect(doorLabel('pass', 'AB23')).toBe('PASS AB23');
+    // A host that took the room over never knew it.
+    expect(doorLabel('pass', null)).toBe('PASSCODE');
+    expect(doorLabel('open', null)).toBe('LISTED');
+    expect(doorLabel('private', 'AB23')).toBe('UNLISTED');
   });
 });
 
@@ -386,6 +395,80 @@ describe('a door that will not open (POK-330 #47)', () => {
     // an older relay opened the room again as a seat that is not ours
     expect(onRefused('seat', { ...host, rejoining: false })).toBe('dead-end');
     expect(onRefused('already_in_room', host)).toBe('status');
+  });
+
+  it("says why in Kanto's words, not the relay's (POK-320)", () => {
+    expect(refusalLine('locked')).toBe('THAT GAME STARTED');
+    expect(refusalLine('full')).toBe('THAT GAME IS FULL');
+    expect(refusalLine('not_found')).toBe('THAT GAME IS GONE');
+    expect(refusalLine('removed')).toBe('HOST REMOVED YOU');
+    expect(refusalLine('passcode')).toBe('WRONG PASSCODE');
+    expect(refusalLine('something new')).toBe('COULD NOT JOIN');
+  });
+
+  it('asks for the passcode at a passcoded door, and again after a wrong one (POK-320)', () => {
+    const knock = { rejoining: false, wasHost: false, seat: null };
+    expect(onRefused('passcode', knock)).toBe('ask-pass');
+    // A rejoin carries its token past the passcode; refused anyway, the room is gone to us.
+    expect(onRefused('passcode', { ...knock, rejoining: true })).toBe('dead-end');
+  });
+});
+
+describe('the dead end is the last word on the room (POK-320 review)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** A page just past a `win`: the end grace armed to take it back to the room, a
+   *  quick room counting to its next start, and the host's next `start` held for the
+   *  way back. */
+  const page = (won: boolean) => {
+    const back = vi.fn();
+    const grace = new EndGrace({ graceMs: 4_000, winMaxMs: 60_000, pollMs: 500, paradeDone: () => false });
+    grace.arm(back, won);
+    const deal = vi.fn();
+    const countdown = new StartCountdown({ ms: 10_000, redraw: () => {} });
+    countdown.arm(deal);
+    const held: { start: object | null } = { start: { t: 'start' } };
+    const dead = new DeadEnd({
+      countdown,
+      grace,
+      dropHeldStart: () => {
+        held.start = null;
+      },
+    });
+    return { back, deal, grace, held, dead };
+  };
+
+  it('a room closed inside the end grace keeps its notice: the grace never takes the page back', () => {
+    // The kick, or room_closed, within four seconds of the `win`: the grace went on to
+    // reboot the ROM and draw a room that was gone over BACK TO LOBBY.
+    const p = page(false);
+    expect(p.dead.reached).toBe(false);
+    expect(p.dead.reach(), 'the notice is drawn').toBe(true);
+    expect(p.dead.reached).toBe(true);
+    vi.advanceTimersByTime(60_000);
+    expect(p.back, 'no way back to a room that is gone').not.toHaveBeenCalled();
+    expect(p.deal, 'nor a start dealt into it').not.toHaveBeenCalled();
+    expect(p.held.start, 'nor the next match it had heard of').toBeNull();
+  });
+
+  it("so does a champion's: the parade's deadline takes nobody back either", () => {
+    const p = page(true);
+    p.dead.reach();
+    vi.advanceTimersByTime(120_000);
+    expect(p.back).not.toHaveBeenCalled();
+  });
+
+  it('is drawn once, and stops what was armed since each time it is reached again', () => {
+    const p = page(false);
+    expect(p.dead.reach()).toBe(true);
+    // A refused door, then the socket's own `closed`: one notice, and a grace armed in
+    // between (the host's `again`) is stopped all the same.
+    const again = vi.fn();
+    p.grace.arm(again);
+    expect(p.dead.reach(), 'the notice is already up').toBe(false);
+    vi.advanceTimersByTime(10_000);
+    expect(again).not.toHaveBeenCalled();
   });
 });
 

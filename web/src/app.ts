@@ -30,19 +30,37 @@ import {
   botFillFor,
   clockLeftAt,
   dealable,
+  DeadEnd,
   decideStart,
   onRefused,
+  refusalLine,
   StartCountdown,
   startLabel,
   type StartDecision,
   type StartState,
 } from './match/room';
-import { Stage } from './ui/stage';
+import { Stage, type DrawnScreen } from './ui/stage';
+import { ParadeHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
 import { FrameMeter } from './ui/fps';
-import { drawerKey, drawerLabel, stageKey } from './ui/roomkeys';
-import { menuScreen, roomScreen, wardrobeScreen, type RoomModel, type RoomSeat, type RowSpec } from './ui/screens';
+import { stageKey } from './ui/roomkeys';
+import { TEXT_RED } from './ui/emerald';
+import {
+  cycleWatch,
+  menuScreen,
+  noticeScreen,
+  type ButtonSpec,
+  roomScreen,
+  sheetScreen,
+  wardrobeScreen,
+  type RoomModel,
+  type RoomSeat,
+  type RowSpec,
+  type SheetModel,
+} from './ui/screens';
+import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from './ui/entry';
 import {
   canStart,
+  doorLabel,
   doorOf,
   fillLabel,
   nextDoor,
@@ -73,7 +91,6 @@ import {
   peekSkin,
   skinNote,
   skinUnlocked,
-  ordinal,
   saveProfile,
   SKINS,
 } from './match/career';
@@ -149,9 +166,10 @@ const $ = <T extends Element>(sel: string): T => {
 type Screen = 'importing' | 'patching' | 'lobby' | 'playing';
 const SCREENS: Screen[] = ['importing', 'patching', 'lobby', 'playing'];
 
+/** Which of the page's own sections holds the layout: everything outside the game is
+ *  drawn on the stage over them (POK-320), so this is the game's box and little else. */
 function showScreen(screen: Screen): void {
   for (const s of SCREENS) $(`#screen-${s}`).toggleAttribute('hidden', s !== screen);
-  // On the playing screen the header's job moves into the drawer (index.html).
   document.body.classList.toggle('playing', screen === 'playing');
 }
 
@@ -159,31 +177,146 @@ function showScreen(screen: Screen): void {
  *  match and the room before START. One canvas, made when first needed. */
 let stage: Stage | null = null;
 function theStage(): Stage {
-  if (!stage) stage = new Stage($('#stage') as HTMLElement, $('#ui') as HTMLCanvasElement, $('#ui-hits') as HTMLElement);
+  if (!stage) {
+    stage = new Stage($('#stage') as HTMLElement, $('#ui') as HTMLCanvasElement, $('#ui-hits') as HTMLElement, $('#stage-fade') as HTMLElement);
+  }
   return stage;
 }
 /** What a match starting does to the room screen: set by wireRoom, called by anything
  *  that learns a match is on. */
 let hideRoomHook: (() => void) | null = null;
 
+/** The version line, for the drawn screens that end on it. */
+let versionLine = '—';
+
 function setVersionLine(text: string): void {
+  versionLine = text;
   $('#version').textContent = text;
-  $('#drawer-version').textContent = text;
+  // Whichever drawn screen is up ends on it: the patch screen, the lobby, the sheet.
+  stage?.redraw();
+}
+
+// ---- the sheet: everything in a match that is not the game (POK-320) -----------------
+
+/** A computer, with a mouse and a keyboard (POK-253's test): the sheet sits beside the
+ *  game there, always in view, as the room panel always was. A phone keeps it behind
+ *  the menu button, over the game. */
+const DESKTOP = '(hover: hover) and (pointer: fine)';
+function desktop(): boolean {
+  return typeof matchMedia === 'function' && matchMedia(DESKTOP).matches;
+}
+
+/** This page's in-match sheet, the room's or solo's: set by whichever runs. */
+let sheet: DrawnScreen | null = null;
+/** The phone's sheet is open over the game. */
+let sheetOpen = false;
+/** The line under the room's: SAFARI / RING 3 (PLACE) · 8 left · 1:23, while a match is on. */
+let matchStrip: string | null = null;
+/** Whose card the sheet has open. */
+let sheetCard: number | null = null;
+
+function redrawSheet(): void {
+  if (sheet && stage?.current === sheet) stage.redraw();
+}
+
+/** The game, with what the stage keeps beside or over it: the sheet docked beside it on
+ *  a desktop, over it on a phone while it is open, nothing otherwise. Called only when
+ *  the stage holds the game's side of things: the room screen and the results take it
+ *  down themselves. */
+function showGame(): void {
+  const st = theStage();
+  if (sheet && (desktop() || sheetOpen)) {
+    if (st.current !== sheet) st.show(sheet);
+    else st.redraw();
+  } else st.hide();
+}
+
+/** The menu button: the sheet over the game, or back to the game. */
+function openSheet(open: boolean): void {
+  sheetOpen = open;
+  ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', String(open));
+  showGame();
+}
+
+function setStrip(text: string | null): void {
+  if (matchStrip === text) return;
+  matchStrip = text;
+  redrawSheet();
 }
 
 /** The phone's chrome (Cam, 2026-09-18): in a match, only game controls are on the
- *  glass and everything else waits behind the menu button. The results open the
- *  drawer themselves, because "you are out" is not something to go looking for. */
+ *  glass and everything else waits behind the menu button. */
 function setInMatch(on: boolean): void {
   document.body.classList.toggle('in-match', on);
   if (on) hideRoomHook?.();
-  if (!on) document.body.classList.remove('drawer-open');
-  ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', String(document.body.classList.contains('drawer-open')));
+  if (!on && sheetOpen) {
+    sheetOpen = false;
+    ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', 'false');
+  }
 }
 
-function openDrawer(open: boolean): void {
-  document.body.classList.toggle('drawer-open', open);
-  ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', String(open));
+/** What the sheet's settings say and do: wireSettings, wireRemap and wireGamepad each
+ *  fill in their own. */
+const settings = {
+  muted: false,
+  remapping: false,
+  /** The remap wizard's question, or what it did. */
+  remapLine: '',
+  /** What a plugged-in pad is doing, in place of the keys (wireGamepad). */
+  pad: null as string | null,
+  mute: (): void => {},
+  remap: (): void => {},
+  resetPad: (): void => {},
+  forget: (): void => {},
+};
+
+/** The keys on a desktop, in the sheet's two lines. */
+const KEY_LINES = ['Arrows move  Z: A  X: B  A: L  S: R', 'Enter: START  Shift: SELECT  pads too'];
+/** ...and on a phone, what a finger can do that a pad cannot. */
+const TAP_LINES = ['Tap the map to walk there,', 'or tap a move to use it.'];
+
+type SheetPart = Pick<
+  SheetModel,
+  'status' | 'seats' | 'card' | 'watch' | 'canLeave' | 'onSeat' | 'onKick' | 'onCloseCard' | 'onWatch' | 'onStopWatch' | 'onLeave'
+>;
+
+/** A sheet, from what the room (or solo) knows and what the page does. */
+function makeSheet(part: () => SheetPart): DrawnScreen {
+  return sheetScreen(() => ({
+    ...part(),
+    look: desktop() ? 'dock' : 'overlay',
+    strip: matchStrip,
+    note: '',
+    muted: settings.muted,
+    remapping: settings.remapping,
+    remapLine: settings.remapLine,
+    help: desktop() ? (settings.pad ? [settings.pad] : KEY_LINES) : TAP_LINES,
+    version: versionLine,
+    onClose: () => openSheet(false),
+    onMute: () => settings.mute(),
+    onRemap: () => settings.remap(),
+    onResetPad: () => settings.resetPad(),
+    onForget: () => settings.forget(),
+  }));
+}
+
+/** Everybody on a roster, as the sheet's seats. */
+function seatsOf(roster: Roster, watching: (seat: number) => boolean = () => false): RoomSeat[] {
+  return roster.all().map((e) => ({
+    seat: e.seat,
+    name: roster.nameOf(e.seat),
+    skin: Number(e.skin ?? 0) || 0,
+    isMe: e.isMe,
+    spectating: watching(e.seat),
+    alive: e.alive,
+  }));
+}
+
+/** The card of `seat` as it is now, or none when it has gone: a card about nobody. */
+function cardOf(roster: Roster, seat: number | null, canKick: boolean): SheetModel['card'] {
+  const e = seat === null ? undefined : roster.get(seat);
+  if (!e) return null;
+  return { seat: e.seat, lines: cardFor(e, e.map ? mapIdOf(e.map) : undefined), canKick: canKick && !e.isMe };
 }
 
 function versionText(info: ReleaseInfo): string {
@@ -212,17 +345,56 @@ let roomsRefused: string | null = null;
 /** Said instead of joining a room, with the one way out: a reload. */
 function refuseRoom(why: string): void {
   showScreen('patching');
-  ($('#patch-status') as HTMLElement).textContent = 'Online play is off in this tab.';
-  const banner = $('#patch-banner') as HTMLElement;
-  banner.textContent =
+  sayPatch(
+    'Online play is off in this tab.',
     `It could not get the current release (${why}), and everybody in a room has to run`
-    + ' the same build. Reload to try again -- SOLO VS BOTS still works.';
-  banner.hidden = false;
-  const reload = document.createElement('button');
-  reload.type = 'button';
-  reload.textContent = 'RELOAD';
-  reload.addEventListener('click', () => backToLobby());
-  banner.after(reload);
+      + ' the same build. Reload to try again -- SOLO VS BOTS still works.',
+    [{ label: 'RELOAD', id: 'patch-reload', onPress: () => backToLobby() }],
+  );
+}
+
+// ---- the screens before the game, drawn (POK-320) -------------------------------------
+
+/** What the patch screen says: what the patcher is doing, a banner when something is
+ *  off, and a way on when there is one to offer. */
+const patchView: { status: string; banner: string; buttons: ButtonSpec[] } = { status: '', banner: '', buttons: [] };
+let patchScreenView: DrawnScreen | null = null;
+
+function patchScreen(): DrawnScreen {
+  patchScreenView ??= noticeScreen(() => ({
+    title: 'HOENN BATTLE ROYALE',
+    // The ids the page always had: the patcher's verdict is what patch.spec reads.
+    lines: [
+      { text: patchView.status, id: 'patch-status' },
+      { text: patchView.banner, id: 'patch-banner', color: TEXT_RED },
+    ],
+    buttons: patchView.buttons,
+    footer: versionLine,
+  }));
+  return patchScreenView;
+}
+
+/** The patch screen, saying `status` -- and `banner` and `buttons` when given. It is also
+ *  the screen the page boots on, until it knows whether a ROM is stored. */
+function sayPatch(status: string, banner?: string, buttons?: ButtonSpec[]): void {
+  patchView.status = status;
+  if (banner !== undefined) patchView.banner = banner;
+  if (buttons !== undefined) patchView.buttons = buttons;
+  const st = theStage();
+  if (st.current !== patchScreen()) st.show(patchScreen());
+  else st.redraw();
+}
+
+/** Why the page could not start, in the frame, with a RELOAD. */
+function showFailure(message: string): void {
+  theStage().show(
+    noticeScreen(() => ({
+      title: 'HOENN BATTLE ROYALE',
+      lines: [{ text: `Startup failed: ${message}`, id: 'import-error', color: TEXT_RED }],
+      buttons: [{ label: 'RELOAD', id: 'failure-reload', onPress: () => location.reload() }],
+      footer: versionLine,
+    })),
+  );
 }
 
 // ---- BPS patching, off the main thread ---------------------------------------------
@@ -255,17 +427,36 @@ async function runImportScreen(emu: Emulator): Promise<void> {
 
   showScreen('importing');
   const input = $('#rom-input') as HTMLInputElement;
-  const dropzone = $('#dropzone') as HTMLElement;
-  const errorEl = $('#import-error') as HTMLElement;
+  /** Why the last file was not one: said under the question, in red. */
+  let error = '';
+  // Drawn in Emerald's frame (POK-320): PICK ROM opens the page's own file input, and a
+  // file dropped anywhere on the page is taken as well.
+  theStage().show(
+    noticeScreen(() => ({
+      title: 'HOENN BATTLE ROYALE',
+      lines: [
+        { text: 'Pick your own POKEMON EMERALD (U) ROM, 16 MiB, or drop it on this page.' },
+        { text: 'It stays on this device, in this browser. Nothing is uploaded.' },
+        { text: error, id: 'import-error', color: TEXT_RED },
+      ],
+      buttons: [{ label: 'PICK ROM', id: 'pick-rom', onPress: () => input.click() }],
+      // Where a file can be dropped: the whole page.
+      containers: [{ id: 'dropzone', cls: 'dropzone' }],
+      footer: versionLine,
+    })),
+  );
+  const dragover = (e: DragEvent) => e.preventDefault();
+  let drop: ((e: DragEvent) => void) | null = null;
 
   const bytes = await new Promise<Uint8Array>((resolve) => {
     const showError = (reason: string) => {
-      errorEl.textContent = reason;
-      errorEl.hidden = false;
+      error = reason;
+      stage?.redraw();
     };
 
     const handle = async (file: File) => {
-      errorEl.hidden = true;
+      error = '';
+      stage?.redraw();
       const fileBytes = new Uint8Array(await file.arrayBuffer());
       if (import.meta.env.DEV && isPrePatched(fileBytes)) {
         resolve(fileBytes); // a local build: dev runs it without a patch
@@ -273,7 +464,7 @@ async function runImportScreen(emu: Emulator): Promise<void> {
       }
       const result = await checkEmerald(fileBytes);
       if (!result.ok) {
-        showError(result.reason ?? 'not a Pokémon Emerald (U) ROM, 16 MiB');
+        showError(result.reason ?? 'not a Pokemon Emerald (U) ROM, 16 MiB');
         return;
       }
       resolve(fileBytes);
@@ -287,8 +478,9 @@ async function runImportScreen(emu: Emulator): Promise<void> {
     // nothing would ever read it.
     //
     // `#screen-importing` is the page's default screen -- it carries no `hidden` in
-    // index.html -- so the dropzone and the file picker are live from the first paint,
-    // while this listener is not attached until runImportScreen runs, which is after
+    // index.html -- so the file input is live from the first paint (a test's
+    // setInputFiles reaches it there), while this listener is not attached until
+    // runImportScreen runs, which is after
     // `await Emulator.create()`: five pthread workers and a 1.8 MB wasm core. Over a slow
     // connection that is seconds, and a change event fired in the gap lands on nothing.
     // The file is silently never read and the shell waits for ever, which looks exactly
@@ -303,14 +495,18 @@ async function runImportScreen(emu: Emulator): Promise<void> {
         .then(async (r) => handle(new File([await r.arrayBuffer()], 'dev.gba')))
         .catch((e) => showError(`dev ROM: ${String(e)}`));
     }
-    dropzone.addEventListener('dragover', (e) => e.preventDefault());
-    dropzone.addEventListener('drop', (e) => {
+    drop = (e: DragEvent) => {
       e.preventDefault();
       const file = e.dataTransfer?.files[0];
       if (file) void handle(file);
-    });
+    };
+    addEventListener('dragover', dragover);
+    addEventListener('drop', drop);
   });
+  removeEventListener('dragover', dragover);
+  if (drop) removeEventListener('drop', drop);
 
+  sayPatch('Storing the ROM…');
   await emu.importRom(bytes);
 }
 
@@ -351,10 +547,7 @@ async function fetchLocalBuild(): Promise<Uint8Array | null> {
 
 async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   showScreen('patching');
-  const statusEl = $('#patch-status') as HTMLElement;
-  const bannerEl = $('#patch-banner') as HTMLElement;
-
-  statusEl.textContent = 'Checking for a release…';
+  sayPatch('Checking for a release…', '');
   const stored = emu.readRom();
   if (import.meta.env.DEV && isPrePatched(stored)) {
     const side = await loadSidecars();
@@ -367,22 +560,24 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
     let bytes = stored;
     let running = await sha1Hex(stored);
     if (side.info.romSha1 && running !== side.info.romSha1) {
-      statusEl.textContent = 'Your stored ROM is an older build -- fetching this one…';
+      sayPatch('Your stored ROM is an older build -- fetching this one…');
       const fresh = await fetchLocalBuild();
       if (fresh) {
         bytes = fresh;
         running = await sha1Hex(fresh);
         await emu.importRom(fresh); // so the next reload starts here rather than fetching again
       } else {
-        bannerEl.textContent =
+        sayPatch(
+          patchView.status,
           'The ROM stored in this browser is NOT the build in this repo, and'
-          + ' patch/pokeemerald.gba is not being served -- run tools/br/dev-patch.sh.'
-          + ' Nothing built since that ROM is in this tab. Forget stored ROM and import'
-          + ' pokeemerald.gba from the repo root.';
-        bannerEl.hidden = false;
+            + ' patch/pokeemerald.gba is not being served -- run tools/br/dev-patch.sh.'
+            + ' Nothing built since that ROM is in this tab. Forget stored ROM and import'
+            + ' pokeemerald.gba from the repo root.',
+        );
       }
     }
     setVersionLine(`${versionText(side.info)} · local build · ${buildLine(side.info, running)}`);
+    sayPatch('Starting the game…');
     return {
       bytes,
       usingPatched: true,
@@ -397,35 +592,51 @@ async function runPatchingScreen(emu: Emulator): Promise<PatchResult> {
   let release: CheckedRelease;
   try {
     release = await loadCheckedRelease((patch) => {
-      statusEl.textContent = 'Applying the patch…';
+      sayPatch('Applying the patch…');
       return applyPatchInWorker(emu.readRom(), patch);
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    statusEl.textContent = `Patch failed: ${message}`;
+    sayPatch(`Patch failed: ${message}`);
     throw err;
   }
 
   if (release.status === 'unpublished') {
     setVersionLine('unpatched');
-    statusEl.textContent = 'No patch published yet -- starting the unpatched ROM.';
     // A stock ROM on the dev server boots into vanilla Emerald -- NEW GAME, the real
     // intro, no battle royale -- and the only clue was one word in the corner. Say
-    // what to do about it instead.
-    bannerEl.textContent = import.meta.env.DEV
-      ? 'This is a stock ROM and the dev server has no BPS to apply, so nothing here is'
-        + ' battle royale. Forget stored ROM, then import the build this repo just made:'
-        + ' pokeemerald.gba in the repo root.'
-      : `Running the unpatched ROM (${release.reason}). Battle royale features are not active.`;
-    bannerEl.hidden = false;
+    // what to do about it instead, and wait for the player to have read it: the banner
+    // used to go by with the screen it was on.
+    await new Promise<void>((go) =>
+      sayPatch(
+        'No patch published yet -- the ROM would start unpatched.',
+        import.meta.env.DEV
+          ? 'This is a stock ROM and the dev server has no BPS to apply, so nothing here is'
+            + ' battle royale. Forget stored ROM, then import the build this repo just made:'
+            + ' pokeemerald.gba in the repo root.'
+          : `Running the unpatched ROM (${release.reason}). Battle royale features are not active.`,
+        [
+          { label: 'PLAY ANYWAY', id: 'patch-play', onPress: () => go() },
+          {
+            label: 'FORGET ROM',
+            id: 'patch-forget',
+            onPress: () => void emu.forgetRom().then(() => location.reload()),
+          },
+        ],
+      ),
+    );
+    sayPatch('Starting the unpatched ROM…', '', []);
     return { bytes: emu.readRom(), usingPatched: false };
   }
 
   // The same line the local-build path gets: which ROM is in the tab, in seven
   // characters. This is the path a stock ROM takes, and it is just as able to be
-  // running something other than the build everyone is talking about.
+  // running something other than the build everyone is talking about. Said before the
+  // patch screen says it is starting, which is the screen that ends on it while the core
+  // boots (POK-320 review: it kept the dash).
   const running = await sha1Hex(release.rom);
   setVersionLine(`${versionText(release.info)} · ${buildLine(release.info, running)}`);
+  sayPatch('Starting the game…');
   roomsRefused = release.stale;
   return {
     bytes: release.rom,
@@ -453,13 +664,25 @@ const KEYBOARD_MAP: Record<string, GbaKey> = {
 };
 
 function wireKeyboard(emu: Emulator): () => void {
+  // A screen that types (ui/entry.ts) has the keyboard's letters first, on the way down
+  // (the capture phase), before the game's map turns a Z into the A button.
+  const typed = (e: KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || !stage?.char(e.key)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+  addEventListener('keydown', typed, true);
   // A drawn screen (POK-320) has the presses; the game under it hears nothing -- except
   // the releases, which always go through (POK-330 #56, Emulator.bindKeyboard).
-  return emu.bindKeyboard(KEYBOARD_MAP, (key, repeat) => {
+  const unbind = emu.bindKeyboard(KEYBOARD_MAP, (key, repeat) => {
     if (!stage?.active) return false;
     if (!repeat) stage.key(key);
     return true;
   });
+  return () => {
+    removeEventListener('keydown', typed, true);
+    unbind();
+  };
 }
 
 // ---- input: gamepad -------------------------------------------------------------------
@@ -515,10 +738,6 @@ let padCapture: ((index: number) => void) | null = null;
 let axisCapture: ((sense: AxisSense | null) => void) | null = null;
 /** The stick, once the wizard has been shown it; null means the parity guess. */
 let stickMap: StickMap | null = loadStickMap();
-
-/** The line under the buttons, when no pad has taken it over. */
-const KEY_LEGEND =
-  'Arrows move · Z = A · X = B · A = L · S = R · Enter = START · Shift = SELECT · a gamepad works too';
 
 /** Eight hat positions, evenly spaced over -1..1, starting at up and going clockwise. */
 const HAT: GbaKey[][] = [
@@ -623,26 +842,30 @@ function wireGamepad(emu: Emulator): () => void {
     // What the pad is doing, on screen. A pad the page cannot see, a pad it has mapped
     // wrong and a pad with a stuck axis all look identical from the sofa; this is the
     // difference, and it is the line that would have found the stuck axis in seconds.
-    if (padLine !== null) {
+    if (padName !== null) {
       const keys = [...held].join(' ');
       // The axes that have moved, by number, so a pad that does nothing can be told
       // apart from a pad whose stick is somewhere this code is not looking -- which is
       // the difference this line existed to show and could not.
       const axes = moved.length > 0 ? ` [axes ${moved.join(' ')}]` : '';
-      padLine.textContent = `${padName}${keys ? ` -- ${keys}` : ''}${axes}`;
+      const line = `${padName}${keys ? ` -- ${keys}` : ''}${axes}`;
+      // On the sheet, drawn again only when it says something new.
+      if (settings.pad !== line) {
+        settings.pad = line;
+        redrawSheet();
+      }
     }
   };
-  let padLine: HTMLElement | null = null;
-  let padName = '';
+  let padName: string | null = null;
   const note = (e: GamepadEvent) => {
     padName = `Gamepad: ${e.gamepad.id} (${e.gamepad.mapping || 'non-standard'})`;
-    padLine = document.querySelector('.keys');
     rest.delete(e.gamepad.index); // a pad that just arrived gets its rest read again
   };
   const gone = (e: GamepadEvent) => {
     rest.delete(e.gamepad.index);
-    if (padLine) padLine.textContent = KEY_LEGEND;
-    padLine = null;
+    padName = null;
+    settings.pad = null;
+    redrawSheet();
   };
   const id = setInterval(poll, 16);
   addEventListener('gamepadconnected', note);
@@ -658,16 +881,19 @@ function wireGamepad(emu: Emulator): () => void {
  *  presses and a pad whose face buttons are the wrong way round is the right way
  *  round, for good -- it is stored per device. */
 function wireRemap(): void {
-  const button = $('#remap') as HTMLButtonElement;
-  const line = $('#remap-line') as HTMLElement;
   let cancel: (() => void) | null = null;
+  /** The wizard's line on the sheet. */
+  const say = (text: string) => {
+    settings.remapLine = text;
+    redrawSheet();
+  };
 
   const stop = (note: string) => {
     padCapture = null;
     axisCapture = null;
     cancel = null;
-    line.textContent = note;
-    button.textContent = 'Remap pad';
+    settings.remapping = false;
+    say(note);
   };
 
   const run = () => {
@@ -677,7 +903,7 @@ function wireRemap(): void {
     // axis moves (any button skips, for a pad without one).
     let up: AxisSense | null = null;
     const askStick = (which: 'up' | 'right') => {
-      line.textContent = `Push the stick ${which.toUpperCase()} (any button to skip, Esc to cancel)`;
+      say(`Push the stick ${which.toUpperCase()}. Any button skips.`);
       axisCapture = (sense) => {
         axisCapture = null;
         if (which === 'up') {
@@ -706,24 +932,23 @@ function wireRemap(): void {
         askStick('up');
         return;
       }
-      line.textContent = `Press the button for ${REMAP_ORDER[i].toUpperCase()} (Esc to cancel)`;
+      say(`Press the button for ${REMAP_ORDER[i].toUpperCase()}. Esc cancels.`);
       padCapture = (index) => {
         taken[index] = REMAP_ORDER[i];
         i++;
         ask();
       };
     };
-    button.textContent = 'Cancel';
+    settings.remapping = true;
     cancel = () => stop('Remap cancelled.');
     ask();
   };
 
-  button.addEventListener('click', () => (cancel ? cancel() : run()));
+  settings.remap = () => (cancel ? cancel() : run());
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && cancel) cancel();
   });
-  const reset = $('#remap-reset') as HTMLButtonElement;
-  reset.addEventListener('click', () => {
+  settings.resetPad = () => {
     gamepadMap = { ...GAMEPAD_DEFAULT };
     stickMap = null;
     try {
@@ -733,7 +958,7 @@ function wireRemap(): void {
       // nothing stored, nothing to clear
     }
     stop('Pad mapping reset.');
-  });
+  };
 }
 
 // ---- input: touch pad -------------------------------------------------------------------
@@ -853,23 +1078,19 @@ function wireDpad(el: HTMLElement, emu: Emulator): void {
 // ---- settings: volume + forget ROM -------------------------------------------------------
 
 function wireSettings(emu: Emulator): void {
-  const muteBtn = $('#mute') as HTMLButtonElement;
-  const forgetBtn = $('#forget-rom') as HTMLButtonElement;
-
   const applyMute = (muted: boolean) => {
     emu.setVolume(muted ? 0 : UNMUTED_VOLUME);
-    muteBtn.textContent = muted ? 'Unmute' : 'Mute';
-    muteBtn.setAttribute('aria-pressed', String(muted));
+    settings.muted = muted;
+    redrawSheet();
   };
   applyMute(localStorage.getItem(MUTE_STORAGE_KEY) === '1');
-
-  muteBtn.addEventListener('click', () => {
-    const muted = muteBtn.getAttribute('aria-pressed') !== 'true';
+  settings.mute = () => {
+    const muted = !settings.muted;
     localStorage.setItem(MUTE_STORAGE_KEY, muted ? '1' : '0');
     applyMute(muted);
-  });
+  };
 
-  forgetBtn.addEventListener('click', async () => {
+  const forget = async () => {
     // Unlinked and flushed BEFORE the core is stopped: forgetRom's own FSSync is the
     // thing that writes the deletion through to IndexedDB, and a stopped core is a
     // poor time to ask it to. The play-test pressed this and came back into the same
@@ -877,7 +1098,23 @@ function wireSettings(emu: Emulator): void {
     await emu.forgetRom();
     emu.stop();
     location.reload();
-  });
+  };
+  // Asked in the frame first: the sheet is a small screen under a thumb, and a stray tap
+  // should not cost a re-import.
+  settings.forget = () => {
+    const st = theStage();
+    st.push(
+      noticeScreen(() => ({
+        title: 'FORGET ROM',
+        lines: [{ text: 'Forget the ROM stored in this browser? You will pick it again to play.' }],
+        buttons: [
+          { label: 'FORGET', id: 'forget-yes', onPress: () => void forget() },
+          { label: 'BACK', id: 'forget-no', onPress: () => st.pop() },
+        ],
+        onBack: () => st.pop(),
+      })),
+    );
+  };
 }
 
 // ---- fps readout, dev only ---------------------------------------------------------------
@@ -994,6 +1231,11 @@ function careerSkin(): number {
  *  saved, so wandering into the locked half and leaving still leaves you dressed. */
 let browsedSkin: number | null = null;
 
+/** The passcode typed for the room we are knocking on (POK-320): kept here and nowhere
+ *  else -- never in the URL hash, which a link carries and a reload reads, and never in
+ *  the log. The relay client keeps its own copy for a rejoin. */
+let joinPass: string | null = null;
+
 /** MY VOICE: the three lines this seat speaks with when its own duels get announced
  *  (POK-243, split into three by POK-283). Each is an index into `LINES`; an unpicked
  *  one falls back to the head of the pool rather than to a deal, because a profile is
@@ -1053,78 +1295,22 @@ function setRoomHash(key: RoomMode, value?: string): void {
 let roomKick: RelayClient | null = null;
 
 /** What the room views last showed, so the spectate loop's call every 500 ms redraws
- *  only on a change: a list rebuilt under a finger mid-tap loses the tap (POK-330 #33). */
-let roomDrawn: { bridge: Bridge; list: string; stage: string } | null = null;
+ *  only on a change: a copy rebuilt under a finger mid-tap loses the tap (POK-330 #33). */
+let roomDrawn: { bridge: Bridge; stage: string } | null = null;
 
 /** Whose card the drawn room has open, for its key (ui/roomkeys.ts). Set by wireRoom. */
 let roomCardSeat: () => number | null = () => null;
 
-/** The room, as everybody in it sees it. */
+/** The room, as everybody in it sees it: the room screen before a match and the sheet
+ *  in one (POK-320), drawn again when who is in it changes. Walking is not a change: in
+ *  a match every seat walks, and a key on the map would repaint on most ticks. */
 function renderRoom(bridge: Bridge): void {
-  const list = $('#match-roster') as HTMLElement;
-  const card = $('#match-card') as HTMLElement;
   const entries = bridge.roster.all();
-  // A card left open on somebody who has gone is a card about nobody.
-  if (card.dataset.seat && !entries.some((e) => String(e.seat) === card.dataset.seat)) {
-    card.hidden = true;
-    card.dataset.seat = '';
-  }
-  // Each view keyed on what it shows. Walking is in neither: in a match every seat walks,
-  // and a list keyed on the map is rebuilt on most ticks.
   const nameOf = (seat: number) => bridge.roster.nameOf(seat);
-  const listKey = drawerKey(entries, nameOf);
   const stageAt = stageKey(entries, nameOf, roomCardSeat());
   const last = roomDrawn?.bridge === bridge ? roomDrawn : null;
-  roomDrawn = { bridge, list: listKey, stage: stageAt };
-  // The drawn room shows the same people (POK-320).
+  roomDrawn = { bridge, stage: stageAt };
   if (last?.stage !== stageAt) stage?.redraw();
-  if (last?.list === listKey) return;
-  list.innerHTML = '';
-  for (const entry of entries) {
-    const li = document.createElement('li');
-    // A name is a button now (POK-268): Kanto's drawn lobby opens a trainer's card on
-    // A, and this is the same idea in the shape this front end has.
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'roster-name';
-    button.textContent = drawerLabel(entry, nameOf(entry.seat));
-    button.addEventListener('click', () => {
-      if (card.dataset.seat === String(entry.seat) && !card.hidden) {
-        card.hidden = true;
-        card.dataset.seat = '';
-        return;
-      }
-      // The list outlives the entries it was drawn from: the card is of them as they are now.
-      const now = bridge.roster.get(entry.seat) ?? entry;
-      const relay = roomKick;
-      const mapId = now.map ? mapIdOf(now.map) : undefined;
-      card.innerHTML = '';
-      for (const line of cardFor(now, mapId)) {
-        const row = document.createElement('div');
-        row.className = 'card-line';
-        row.textContent = line.label ? `${line.label}: ${line.value}` : line.value;
-        card.appendChild(row);
-      }
-      // The host's one power over another seat, and it lives on the card rather than
-      // as a row of buttons beside every name (POK-241).
-      if (relay && !now.isMe) {
-        const kick = document.createElement('button');
-        kick.type = 'button';
-        kick.className = 'card-kick';
-        kick.textContent = 'KICK';
-        kick.addEventListener('click', () => {
-          relay.kick(entry.seat);
-          card.hidden = true;
-          card.dataset.seat = '';
-        });
-        card.appendChild(kick);
-      }
-      card.dataset.seat = String(entry.seat);
-      card.hidden = false;
-    });
-    li.appendChild(button);
-    list.appendChild(li);
-  }
 }
 
 /** world.json's id for a wire MapRef, for the places a card names. */
@@ -1192,11 +1378,16 @@ function botFill(): number {
 
 // ---- results (POK-228) --------------------------------------------------------------
 
-/** Where we came, how long we lasted, and what that does to the career record. Shown
- *  once, when the match ends: `recordMatch` folds the placement in and the line under
- *  it is the record it produced. PLAY AGAIN reloads the page on the same hash, which
- *  re-imports the ROM from IndexedDB and rejoins the same room -- the blunt way, and
- *  the one that cannot leave half a match's state behind. */
+/** The results screen up now, and what it shows (POK-320). One at a time: the room's
+ *  exit or solo's reload takes it down, and a late `party` redraws it in place. */
+let resultsUp: { screen: DrawnScreen; model: ResultsModel } | null = null;
+
+/** Where we came, how long we lasted, and what that does to the career record, drawn on
+ *  the stage when the match ends: `recordMatch` folds the placement in and the career
+ *  line is the record it produced. Under it the champion's team (POK-243: the ROM's own
+ *  parade runs on the winner's screen, and this is the only place the room sees what
+ *  took the match) and what you did in there (POK-303: RINGS is an answer even at zero).
+ *  `held` is the champion's own, before their Hall of Fame is over: nothing covers it. */
 function renderResults(
   seat: number,
   roster: Roster,
@@ -1208,81 +1399,27 @@ function renderResults(
     fieldSize: number;
     seed?: number;
   },
+  shown: { career: string; held: boolean; again: ResultsModel['again'] },
 ): void {
-  const { results, fieldSize: seats, seed } = books;
-  const panel = $('#results-panel') as HTMLElement;
-  openDrawer(true);
-  const mine = results.forSeat(seat, performance.now());
-  if (!mine.ended) {
-    panel.hidden = true;
+  const mine = books.results.forSeat(seat, performance.now());
+  if (!mine.ended || shown.held) return;
+  const nameOf = (s: number) => roster.nameOf(s);
+  const model: ResultsModel = {
+    view: resultsView(mine, books.fieldSize, seat, nameOf, books.seed),
+    career: shown.career,
+    fame: fameOf(mine.winner, seat, mine.winner === undefined ? undefined : books.parties.get(mine.winner), nameOf, speciesName),
+    record: recordLines(books.record.forSeat(seat)),
+    again: shown.again,
+  };
+  const stage = theStage();
+  if (resultsUp && stage.current === resultsUp.screen) {
+    resultsUp.model = model;
+    stage.redraw();
     return;
   }
-  panel.hidden = false;
-  const parts: string[] = [];
-  if (mine.placement !== undefined) parts.push(`${ordinal(mine.placement)} of ${seats}`);
-  if (mine.survived !== undefined) {
-    const mm = Math.floor(mine.survived / 60);
-    const ss = String(mine.survived % 60).padStart(2, '0');
-    parts.push(`survived ${mm}:${ss}`);
-  }
-  if (mine.winner !== undefined) {
-    parts.push(mine.winner === seat ? 'you won' : `${roster.nameOf(mine.winner)} won`);
-  } else {
-    parts.push('a draw');
-  }
-  // The seed last, because it is the question anybody asks about a round afterwards
-  // and the round is written down under it (POK-248, match/log.ts).
-  if (seed !== undefined) parts.push(`seed ${seed}`);
-  ($('#results-line') as HTMLElement).textContent = parts.join(' · ');
-  renderFame(roster, mine.winner, seat, books.parties);
-  renderRecord(seat, books.record);
-}
-
-/** The champion's team under the result (POK-243, Kanto's Hall of Fame parade). The
- *  ROM's own parade runs on the winner's screen; everybody else gets this, which is
- *  the only place the room ever sees what actually took the match. Silent when the
- *  champion's `party` never arrived -- a bot's never does, since a bot has no ROM to
- *  send one. */
-function renderFame(
-  roster: Roster,
-  winner: number | undefined,
-  seat: number,
-  parties: ReadonlyMap<number, PackedMon[]>,
-): void {
-  const el = $('#results-fame') as HTMLElement;
-  const party = winner === undefined ? undefined : parties.get(winner);
-
-  if (winner === undefined || !party || party.length === 0) {
-    el.hidden = true;
-    return;
-  }
-  const who = winner === seat ? 'YOUR TEAM' : `${roster.nameOf(winner)}'S TEAM`;
-  const team = party
-    .filter((mon) => mon.species > 0)
-    .map((mon) => `${mon.nickname || speciesName(mon.species)} L${mon.level}`)
-    .join(' · ');
-  el.innerHTML = '';
-  const label = document.createElement('b');
-  label.textContent = `${who}: `;
-  el.append(label, document.createTextNode(team));
-  el.hidden = false;
-}
-
-/** What you did in there, under the parade (POK-303). Cam asked for "how many rings you
- *  survived, how many trainers you beat"; `record.ts` counts those off the wire and this
- *  is where they land. Always drawn -- RINGS is an answer even at zero, and a match you
- *  were eliminated from thirty seconds into is exactly when you want to see the number. */
-function renderRecord(seat: number, record: MatchRecord): void {
-  const el = $('#results-record') as HTMLElement;
-  el.innerHTML = '';
-  for (const line of recordLines(record.forSeat(seat))) {
-    const row = document.createElement('span');
-    const label = document.createElement('b');
-    label.textContent = line.label;
-    row.append(label, document.createTextNode(` ${line.value}`));
-    el.append(row);
-  }
-  el.hidden = false;
+  const up: { screen: DrawnScreen; model: ResultsModel } = { screen: resultsScreen(() => up.model), model };
+  resultsUp = up;
+  stage.show(up.screen);
 }
 
 // ---- spectating (POK-233) -----------------------------------------------------------
@@ -1304,49 +1441,34 @@ const SOLO_PARADE_POLL_MS = 500;
 
 const SPECTATE_TICK_MS = 500; // the peek timer is 3s; this only has to not miss it by much
 
-/** The strip of who an eliminated player can watch. Alive only, ourselves never, and
- *  nothing at all while we are still in the match -- watching is what being out is
- *  for. Clicking a seat hands our own ROM a `follow`; clicking the one we are on, or
- *  STOP, gives the camera back. */
+/** Who an eliminated player can watch, on the sheet: alive only, ourselves never, and
+ *  nothing at all while we are still in the match -- watching is what being out is for.
+ *  PREV and NEXT hand our own ROM a `follow`; STOP gives the camera back. */
 function renderSpectate(bridge: Bridge, spectate: Spectate): void {
-  const strip = $('#spectate-strip') as HTMLElement;
   const me = bridge.roster.get(bridge.seat);
   const out = me !== undefined && !me.alive;
-  strip.hidden = !out;
-  if (!out) {
-    if (spectate.watchingSeat() !== null) for (const m of spectate.follow(null)) bridge.pushToRom(m);
-    strip.innerHTML = '';
-    return;
-  }
-  strip.innerHTML = '';
-  const label = document.createElement('span');
-  label.className = 'label';
-  label.textContent = 'WATCH';
-  strip.appendChild(label);
-  const watching = spectate.watchingSeat();
-  for (const entry of bridge.roster.all()) {
-    if (!entry.alive || entry.seat === bridge.seat) continue;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = bridge.roster.nameOf(entry.seat);
-    button.setAttribute('aria-pressed', String(watching === entry.seat));
-    button.addEventListener('click', () => {
-      const next = spectate.watchingSeat() === entry.seat ? null : entry.seat;
-      for (const m of spectate.follow(next)) bridge.pushToRom(m);
-      renderSpectate(bridge, spectate);
-    });
-    strip.appendChild(button);
-  }
-  if (watching !== null) {
-    const stop = document.createElement('button');
-    stop.type = 'button';
-    stop.textContent = 'STOP';
-    stop.addEventListener('click', () => {
-      for (const m of spectate.follow(null)) bridge.pushToRom(m);
-      renderSpectate(bridge, spectate);
-    });
-    strip.appendChild(stop);
-  }
+  if (!out && spectate.watchingSeat() !== null) for (const m of spectate.follow(null)) bridge.pushToRom(m);
+  redrawSheet();
+}
+
+/** The sheet's WATCH row for the room: who we follow, once we are out. */
+function watchOf(bridge: Bridge, spectate: Spectate): SheetModel['watch'] {
+  const me = bridge.roster.get(bridge.seat);
+  if (me === undefined || me.alive) return null;
+  const on = spectate.watchingSeat();
+  return { name: on === null ? null : bridge.roster.nameOf(on) };
+}
+
+/** PREV / NEXT: the next trainer still in, round the field. */
+function stepWatch(bridge: Bridge, spectate: Spectate, dir: 1 | -1): void {
+  const alive = bridge.roster
+    .all()
+    .filter((e) => e.alive && e.seat !== bridge.seat)
+    .map((e) => e.seat);
+  const next = cycleWatch(alive, spectate.watchingSeat(), dir);
+  if (next === null) return;
+  for (const m of spectate.follow(next)) bridge.pushToRom(m);
+  renderSpectate(bridge, spectate);
 }
 
 /** The battle id our ROM is replaying, from gBrSpectate (include/br/br_spectate.h:
@@ -1416,18 +1538,15 @@ function renderGuestStrip(
   match: Pick<MatchSnapshot, 'ringPhase' | 'ringR' | 'centre' | 'clockLeft' | 'clockAt' | 'active'>,
   now: number,
 ): { alive: number; clockLeft: number } | null {
-  const strip = $('#match-strip') as HTMLElement;
   // A watcher arrives mid-match and never hears the START, so the seed is not the test
   // for "is there a match": what it has is the late burst the host sent it, a ring and
   // a clock (POK-260) -- which `active` counts. And PLAY AGAIN puts it back to false:
   // reading "a match was once heard" as "a match is on" is what took the room screen
   // and its START away a second after every return (POK-330 #22).
   if (!match.active) {
-    strip.hidden = true;
+    setStrip(null);
     return null;
   }
-  ($('#room-panel') as HTMLElement).hidden = false;
-  strip.hidden = false;
   setInMatch(true);
   // The CLOCK lands every five seconds; the seconds in between are counted off here,
   // the same way the ROM counts them off against its own frame timer.
@@ -1440,15 +1559,11 @@ function renderGuestStrip(
   // A watcher's roster fills up as people move, so "0 left" is only ever "nobody has
   // moved yet" -- say nothing rather than something wrong.
   const standing = alive > 0 ? ` · ${alive} left` : '';
-  strip.textContent = `${phaseLabel}${standing} · ${mm}:${ss}`;
+  setStrip(`${phaseLabel}${standing} · ${mm}:${ss}`);
   return { alive, clockLeft: left };
 }
 
 function renderMatchStrip(state: DirectorState): void {
-  const panel = $('#room-panel') as HTMLElement;
-  const strip = $('#match-strip') as HTMLElement;
-  panel.hidden = false;
-  strip.hidden = false;
   setInMatch(true);
   const mm = Math.floor(state.clockLeft / 60);
   const ss = String(state.clockLeft % 60).padStart(2, '0');
@@ -1462,7 +1577,7 @@ function renderMatchStrip(state: DirectorState): void {
             ? `P${state.winner} WINS`
             : 'DRAW'
           : 'WAITING';
-  strip.textContent = `${phaseLabel} · ${state.alive} left · ${mm}:${ss}`;
+  setStrip(`${phaseLabel} · ${state.alive} left · ${mm}:${ss}`);
 }
 
 /** Starts the director's own 1Hz pump: `tick()` (fires the due clock/ring messages),
@@ -1510,12 +1625,21 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   fieldView?.setPeople(() => roster.all());
   const seed = Math.floor(Math.random() * 0x7fff_ffff) + 1;
   const matchBase = symbols?.get('gBrMatch');
+  /** Won, the results wait for our own Hall of Fame (POK-320), and the grace runs after. */
+  const paraded = new ParadeHold({
+    done: matchBase !== undefined ? () => emu.read(matchBase, 8) === BR_PHASE_DONE : undefined,
+    graceMs: SOLO_END_GRACE_MS,
+    giveUpMs: SOLO_WIN_GRACE_MAX_MS - SOLO_END_GRACE_MS - 2 * SOLO_PARADE_POLL_MS,
+    onParaded: () => drawResults(),
+  });
   const soloGrace = new EndGrace({
     graceMs: SOLO_END_GRACE_MS,
     winMaxMs: SOLO_WIN_GRACE_MAX_MS,
     pollMs: SOLO_PARADE_POLL_MS,
-    paradeDone: matchBase !== undefined ? () => emu.read(matchBase, 8) === BR_PHASE_DONE : undefined,
+    paradeDone: matchBase !== undefined ? paraded.finished : undefined,
   });
+  /** The career line the match produced, for the results. */
+  let career = '';
   let host: HostRole | null = null;
   /** The way out of solo: the lobby, having let go of the match -- its director's loop,
    *  its bots' pump -- the way the room's teardownHost does, rather than leaving it all to
@@ -1551,7 +1675,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     },
     {
       decided: (line) => {
-        ($('#results-career') as HTMLElement).textContent = line;
+        career = line;
         drawResults();
       },
       // The champion's team under the results, as the room draws it (POK-331 #26): our
@@ -1560,13 +1684,23 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     },
   );
   const drawResults = (): void =>
-    renderResults(0, roster, {
-      results: session.results,
-      record: session.record,
-      parties: session.parties,
-      fieldSize: session.fieldSize,
-      seed,
-    });
+    renderResults(
+      0,
+      roster,
+      {
+        results: session.results,
+        record: session.record,
+        parties: session.parties,
+        fieldSize: session.fieldSize,
+        seed,
+      },
+      {
+        career,
+        held: paraded.holds(session.results.forSeat(0, performance.now()).winner, 0),
+        // No room to go back to: the lobby, now or when the grace is up.
+        again: { label: 'LOBBY', id: 'results-lobby', onPress: leaveSolo },
+      },
+    );
   // The seed is solo's own, dealt as it always was: `#seed` is the room's (fixedSeed).
   const plan = dealPlan(session.match, [0], 0, false, () => seed);
   // The room's own host (POK-330 #42), on a link with nobody at the other end. Dealt now,
@@ -1638,12 +1772,29 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     rom.flush();
     rom.drain(fromRom);
   });
-  // LEAVE works in here too (POK-276). The strip is drawn for every mode and the
-  // button was only ever wired in `wireRoom`, so the one way out of a solo match was
-  // editing the URL.
-  const leave = $('#match-leave') as HTMLButtonElement;
-  leave.hidden = false;
-  leave.addEventListener('click', leaveSolo);
+  // The sheet (POK-320): beside the game on a desktop, behind the menu button on a
+  // phone. LEAVE works in here too (POK-276): it was only ever wired in `wireRoom`, so
+  // the one way out of a solo match was editing the URL.
+  sheet = makeSheet(() => ({
+    status: 'SOLO VS BOTS',
+    seats: seatsOf(roster),
+    card: cardOf(roster, sheetCard, false),
+    watch: null,
+    canLeave: true,
+    onSeat: (s) => {
+      sheetCard = sheetCard === s ? null : s;
+      redrawSheet();
+    },
+    onKick: () => {},
+    onCloseCard: () => {
+      sheetCard = null;
+      redrawSheet();
+    },
+    onWatch: () => {},
+    onStopWatch: () => {},
+    onLeave: leaveSolo,
+  }));
+  showGame();
 }
 
 // ---- room: relay + bridge, opted into by the URL hash ------------------------------------
@@ -1665,8 +1816,9 @@ function saveCareerFile(): void {
   setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
-/** ...and back in. A file that is not one of ours changes nothing and says so. */
-function loadCareerFile(then: () => void): void {
+/** ...and back in. A file that is not one of ours changes nothing and says so, on the
+ *  trainer's own screen rather than in a browser alert (POK-320). */
+function loadCareerFile(then: (note: string) => void): void {
   const input = document.createElement('input');
 
   input.type = 'file';
@@ -1676,11 +1828,8 @@ function loadCareerFile(then: () => void): void {
     if (!file) return;
     void file
       .text()
-      .then((text) => {
-        if (importCareer(text)) then();
-        else alert('That is not a Hoenn Battle Royale career file.');
-      })
-      .catch(() => alert('That file could not be read.'));
+      .then((text) => then(importCareer(text) ? 'Career loaded.' : 'That is not a Hoenn Battle Royale career file.'))
+      .catch(() => then('That file could not be read.'));
   });
   input.click();
 }
@@ -1702,8 +1851,6 @@ function wireRoom(
 ): void {
   if (mailboxBase === undefined || hash.mode === 'solo') return; // solo: no socket at all
 
-  const panel = $('#room-panel') as HTMLElement;
-  panel.hidden = false;
   /** The drawn room's own state (POK-320): what no roster event carries. */
   const room = {
     status:
@@ -1714,8 +1861,6 @@ function wireRoom(
           : hash.mode === 'daily'
             ? 'Joining the daily…'
             : `Joining ${hash.code}…`,
-    /** The room refused us; BACK TO LOBBY is all there is. */
-    fatal: false,
     /** Whose card is open over the seats. */
     card: null as { seat: number } | null,
     /** The match is on: the room screen is down and its controls gone. */
@@ -1724,15 +1869,11 @@ function wireRoom(
     played: false,
     onStart: () => {},
   };
-  roomCardSeat = () => room.card?.seat ?? null;
+  roomCardSeat = () => room.card?.seat ?? sheetCard;
   const stage = theStage();
-  // The same status and note in the drawer, where they stay through the match (the room
-  // screen comes down when it starts): what the strip sits under, and what a test reads.
-  const codeEl = $('#room-code') as HTMLElement;
-  const noteEl = $('#room-note') as HTMLElement;
+  /** The room's line: on the room screen before the match, on the sheet during it. */
   const setStatus = (text: string) => {
     room.status = text;
-    codeEl.textContent = text;
     stage.redraw();
   };
   setStatus(room.status);
@@ -1767,6 +1908,12 @@ function wireRoom(
     safariSecs: DEFAULT_SAFARI_SECS,
   };
 
+  /** The passcode this page put on the door, to show on it; null when it set none, or
+   *  took over from a host who did. Never in the URL. */
+  let hostPass: string | null = null;
+  /** The passcode entry over the room screen, while the host types one. */
+  let doorEntry: DrawnScreen | null = null;
+
   // ---- the room, drawn (POK-320) ----
   // Kanto's lobby: the code, a 2x4 of seats with everybody's sprite, what START would
   // make, the host's options, START or LEAVE. It covers the game until the match is
@@ -1785,15 +1932,28 @@ function wireRoom(
       },
       {
         id: 'room-door',
-        label: { open: 'LISTED', private: 'UNLISTED', pass: 'PASSCODE' }[doorOf(view)],
+        // Kanto's OPEN: PASS 1234 -- the host sees the code it set, to read out.
+        label: doorLabel(doorOf(view), hostPass),
         onPress: () => {
           const next = nextDoor(doorOf(view));
           if (next === 'pass') {
-            const code = (prompt('Passcode for the door? (4 characters)') ?? '').trim().toUpperCase();
-            if (!code) return;
-            relay.setPass(code);
-            relay.setOpen(true);
+            // Typed on the drawn entry (POK-320). BACK leaves the door as it was.
+            const state = newEntry(PASS_ENTRY);
+            doorEntry = entryScreen(() => ({
+              title: 'PASSCODE',
+              state,
+              note: 'Guests type this to come in.',
+              onDone: (code) => {
+                hostPass = code;
+                relay.setPass(code);
+                relay.setOpen(true);
+                stage.pop();
+              },
+              onBack: () => stage.pop(),
+            }));
+            stage.push(doorEntry);
           } else {
+            hostPass = null;
             relay.setPass(null);
             relay.setOpen(next === 'open');
           }
@@ -1851,7 +2011,6 @@ function wireRoom(
     const cardEntry = room.card ? bridge?.roster.get(room.card.seat) : undefined;
     const startsIn = room.started ? null : countdown.secondsLeft();
     const note = view && !room.started ? startNote(view) : '';
-    if (!room.fatal) noteEl.textContent = note;
     return {
       status: room.status,
       note,
@@ -1872,10 +2031,8 @@ function wireRoom(
             canKick: (view?.isHost ?? false) && !cardEntry.isMe,
           }
         : null,
-      fatal: room.fatal,
       onStart: () => room.onStart(),
       onLeave: () => backToLobby(),
-      onBack: () => backToLobby(),
       onSeat: (seat) => {
         room.card = room.card?.seat === seat ? null : { seat };
         stage.redraw();
@@ -1903,9 +2060,45 @@ function wireRoom(
     countdown.cancel();
     if (room.started) return;
     room.started = true;
-    if (stage.current === roomScreenView) stage.hide();
+    // ...and the passcode entry over it, should a count run out on a host still typing.
+    // The game, with the sheet beside it on a desktop.
+    if (stage.current === roomScreenView || (doorEntry !== null && stage.current === doorEntry)) showGame();
   };
   hideRoomHook = hideRoomScreen;
+  /** Who the relay says is only watching (POK-260). */
+  const watchingSeat = (seat: number) => (controls.roster?.members ?? []).some((m) => m.id === seat && m.spectate === true);
+  sheet = makeSheet(() => ({
+    status: room.status,
+    seats: bridge ? seatsOf(bridge.roster, watchingSeat) : [],
+    // The host's one power over another seat, on the card (POK-241).
+    card: bridge ? cardOf(bridge.roster, sheetCard, roomKick !== null) : null,
+    watch: bridge ? watchOf(bridge, spectate) : null,
+    // A host leaving closes the room for everybody -- that is what migration is for --
+    // so the in-match LEAVE is a guest's (POK-241).
+    canLeave: !isHost,
+    onSeat: (seat) => {
+      sheetCard = sheetCard === seat ? null : seat;
+      redrawSheet();
+    },
+    onKick: (seat) => {
+      relay.kick(seat);
+      sheetCard = null;
+      redrawSheet();
+    },
+    onCloseCard: () => {
+      sheetCard = null;
+      redrawSheet();
+    },
+    onWatch: (dir) => {
+      if (bridge) stepWatch(bridge, spectate, dir);
+    },
+    onStopWatch: () => {
+      if (!bridge) return;
+      for (const m of spectate.follow(null)) bridge.pushToRom(m);
+      renderSpectate(bridge, spectate);
+    },
+    onLeave: () => backToLobby(),
+  }));
   roomPanelHook = (onStart, started) => {
     room.onStart = onStart;
     if (started) hideRoomScreen();
@@ -2027,16 +2220,36 @@ function wireRoom(
   const WIN_GRACE_MAX_MS = 60_000;
   const PARADE_POLL_MS = 500;
   const gBrMatch = symbols?.get('gBrMatch');
-  /** The results panel, drawn from the match's books over the room's roster. */
+  /** Won, the results wait for our own Hall of Fame (POK-320): the grace starts after it. */
+  const paraded = new ParadeHold({
+    done: gBrMatch !== undefined ? () => emu.read(gBrMatch, 8) === BR_PHASE_DONE : undefined,
+    graceMs: END_GRACE_MS,
+    giveUpMs: WIN_GRACE_MAX_MS - END_GRACE_MS - 2 * PARADE_POLL_MS,
+    onParaded: () => drawResults(),
+  });
+  /** The career line the match produced, for the results. */
+  let career = '';
+  /** The results, drawn from the match's books over the room's roster. */
   const drawResults = (): void => {
-    if (!bridge) return;
-    renderResults(bridge.seat, bridge.roster, {
-      results: session.results,
-      record: session.record,
-      parties: session.parties,
-      fieldSize: session.fieldSize,
-      seed: match.seed,
-    });
+    // A dead end's notice is the last screen for this room: nothing is drawn over it.
+    if (!bridge || dead.reached) return;
+    const seat = bridge.seat;
+    renderResults(
+      seat,
+      bridge.roster,
+      {
+        results: session.results,
+        record: session.record,
+        parties: session.parties,
+        fieldSize: session.fieldSize,
+        seed: match.seed,
+      },
+      {
+        career,
+        held: paraded.holds(session.results.forSeat(seat, performance.now()).winner, seat),
+        again: { label: 'PLAY AGAIN', id: 'play-again', disabled: returning, onPress: () => void returnToRoom() },
+      },
+    );
   };
   /** The match's books (match/session.ts). Everything that decides a placement crosses
    *  this page one way or the other -- our own ROM's messages on the way up, everybody
@@ -2057,7 +2270,7 @@ function wireRoom(
         graceMs: END_GRACE_MS,
         winMaxMs: WIN_GRACE_MAX_MS,
         pollMs: PARADE_POLL_MS,
-        paradeDone: gBrMatch !== undefined ? () => emu.read(gBrMatch, 8) === BR_PHASE_DONE : undefined,
+        paradeDone: gBrMatch !== undefined ? paraded.finished : undefined,
       }),
       // Back to the room, not out of it: the host did not even have a LEAVE button, and
       // keeping the room makes the next match a press of START rather than eight people
@@ -2067,7 +2280,7 @@ function wireRoom(
     {
       started: hideRoomScreen,
       decided: (line) => {
-        ($('#results-career') as HTMLElement).textContent = line;
+        career = line;
         drawResults();
       },
       partyLate: drawResults,
@@ -2332,12 +2545,6 @@ function wireRoom(
   // So it reloads nothing. The socket, the bridge and the roster stay up and only the
   // ROM starts over -- which is also the only way the next match is fair, since a ROM
   // that has just finished one is carrying that match's team and an empty ball pocket.
-  // The way out of a room (POK-241). A host leaving closes the room for everybody --
-  // that is what migration is for -- so this is offered to guests only.
-  const matchLeave = $('#match-leave') as HTMLButtonElement;
-  matchLeave.addEventListener('click', () => backToLobby());
-  const playAgainButton = $('#play-again') as HTMLButtonElement;
-
   /** Out of the match and back into the room: the ROM starts over, the results panel
    *  comes down, and the room -- socket, roster, code -- is exactly as it was. This is
    *  the one funnel, the way Kanto has one `endMatch`. PLAY AGAIN is a press of it and
@@ -2356,15 +2563,18 @@ function wireRoom(
   const resetMatch = (): void => {
     session.endMatch();
     countdown.cancel();
+    paraded.reset();
     if (bridge) {
       bridge.endMatch(); // its roster, and what it owed the room of this match
       if (controls.roster) bridge.roster.applyRoster(controls.roster);
     }
   };
   async function returnToRoom(): Promise<void> {
-    if (returning) return;
+    // No room to go back to after a dead end (DeadEnd): its notice stays up.
+    if (returning || dead.reached) return;
     returning = true;
-    playAgainButton.disabled = true;
+    // PLAY AGAIN greys out while it is on its way -- on the results, when they are up.
+    if (resultsUp && stage.current === resultsUp.screen) drawResults();
     try {
       session.grace.cancel();
       teardownHost();
@@ -2388,7 +2598,6 @@ function wireRoom(
       session.forgetResult();
       // Whoever we were watching is not in a match any more.
       for (const m of spectate.follow(null)) bridge?.pushToRom(m);
-      ($('#results-panel') as HTMLElement).hidden = true;
       setInMatch(false);
       showRoomScreen();
       if (bridge) {
@@ -2409,10 +2618,8 @@ function wireRoom(
       }
     } finally {
       returning = false;
-      playAgainButton.disabled = false;
     }
   }
-  playAgainButton.addEventListener('click', () => void returnToRoom());
 
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code, ev.id));
   relay.on('room_joined', (ev) => attach(ev.id, ev.code, ev.host));
@@ -2487,9 +2694,7 @@ function wireRoom(
     // leave the host's controls on screen for the rest of the match.
     act(decideStart({ t: 'roster', members: ev.members.map((m) => m.id) }, startState()));
     if (bridge) renderRoom(bridge);
-    // A host leaving closes the room for everybody -- that is what migration is for --
-    // so the in-match LEAVE is a guest's button (POK-241).
-    matchLeave.hidden = isHost;
+    // The in-match LEAVE is a guest's (POK-241): who is host may have just changed.
     if (bridge) renderSpectate(bridge, spectate);
     if (bridge) {
       // START: the host shuts the door and deals the match. This is what the ten-second
@@ -2497,19 +2702,56 @@ function wireRoom(
       renderRoomPanel(controls, bridge.seat, relay, () => pressStart(ev.members.map((m) => m.id)), host !== null);
     }
   });
-  /** A dead end is not one unless the page says where else to go: BACK TO LOBBY. */
-  const deadEnd = (): void => {
-    countdown.cancel();
-    if (room.fatal) return;
-    room.fatal = true;
-    noteEl.textContent = '';
-    const back = document.createElement('button');
-    back.type = 'button';
-    back.textContent = 'BACK TO LOBBY';
-    back.addEventListener('click', () => backToLobby());
-    noteEl.appendChild(back);
-    // The drawer says so, under no screen: a dead end is not worth drawing.
-    stage.hide();
+  /** The room refused us, closed or showed us out: BACK TO LOBBY is all there is, and
+   *  nothing on its way back to the room -- the end grace above all -- may take the page
+   *  there (match/room.ts). */
+  const dead = new DeadEnd({
+    countdown,
+    grace: session.grace,
+    dropHeldStart: () => {
+      nextStart = null;
+    },
+  });
+  /** A dead end is not one unless the page says where else to go: the door's word for it
+   *  in Kanto's own (browse.lua's REFUSALS), what the relay said, and BACK TO LOBBY --
+   *  drawn over whatever was up, the match and its results included. */
+  const deadEnd = (title: string, detail: string): void => {
+    if (!dead.reach()) return;
+    room.status = title;
+    stage.show(
+      noticeScreen(() => ({
+        title,
+        titleId: 'room-code',
+        lines: [{ text: detail, id: 'room-refusal' }],
+        buttons: [{ label: 'BACK TO LOBBY', onPress: () => backToLobby() }],
+        // #room-note, where BACK TO LOBBY always was (lobby.spec).
+        buttonsId: 'room-note',
+        footer: versionLine,
+        onBack: () => backToLobby(),
+      })),
+    );
+  };
+  /** The passcode, over the room screen: typed, the knock goes again with it; BACK is
+   *  the lobby, since the room will not have us without it. */
+  const askPass = (code: string): void => {
+    const wrong = joinPass !== null;
+    setStatus(`Room ${code} has a passcode.`);
+    const state = newEntry(PASS_ENTRY);
+    stage.push(
+      entryScreen(() => ({
+        title: 'PASSCODE',
+        state,
+        note: wrong ? 'WRONG PASSCODE' : `Room ${code} is locked.`,
+        noteIsError: wrong,
+        onDone: (pass) => {
+          joinPass = pass;
+          stage.pop();
+          setStatus(`Joining ${code}…`);
+          relay.join(code, { ...me, spectate: hash.mode === 'watch', pass });
+        },
+        onBack: () => backToLobby(),
+      })),
+    );
   };
   relay.on('room_error', (ev) => {
     // `locked` is the common refusal: a room mid-match, which is exactly what you rejoin
@@ -2524,13 +2766,21 @@ function wireRoom(
       relay.host({ ...me, open: true, max: BOT_FILL, seat: bridge?.seat });
       return;
     }
+    // A passcoded door asks for the code, and asks again when the one typed was wrong --
+    // Kanto's WRONG PASSCODE (browse.lua) -- rather than ending the knock.
+    if (next === 'ask-pass' && hash.code) {
+      askPass(hash.code);
+      return;
+    }
     // Kanto's door: a room on another build is not one you can play in (POK-330 #3). A
     // reload fixes it when this tab is the stale one; when the room is, the lobby does.
-    if (ev.reason === 'version') {
-      const rom = (sha?: string) => (sha ? sha.slice(0, 7) : '?');
-      setStatus(`That room runs rom ${rom(ev.host?.patch)}, this tab rom ${rom(patch)}: the older one reloads to update.`);
-    } else setStatus(`Couldn't join: ${ev.reason}`);
-    if (next === 'dead-end') deadEnd();
+    const rom = (sha?: string) => (sha ? sha.slice(0, 7) : '?');
+    const detail =
+      ev.reason === 'version'
+        ? `That room runs rom ${rom(ev.host?.patch)}, this tab rom ${rom(patch)}: the older one reloads to update.`
+        : `The relay said: ${ev.reason}.`;
+    if (next === 'dead-end') deadEnd(refusalLine(ev.reason), detail);
+    else setStatus(refusalLine(ev.reason));
   });
   // QUICK PLAY found nothing to join: host one and let the bots fill it, which is what
   // Kanto does rather than leaving somebody looking at an empty list (POK-240).
@@ -2565,8 +2815,7 @@ function wireRoom(
     // The room itself is over -- the host left, its hold ran out, or it showed us out --
     // and no new socket is coming (POK-330 #47): the same dead end a refused door is.
     if (!ev.reconnecting) {
-      setStatus(`The room closed: ${ev.reason}`);
-      deadEnd();
+      deadEnd('THE ROOM CLOSED', `The relay said: ${ev.reason}.`);
       return;
     }
     setStatus(ev.reason === 'restart' ? 'The server is restarting. Reconnecting…' : `Disconnected: ${ev.reason}`);
@@ -2645,7 +2894,7 @@ function wireRoom(
   if (hash.mode === 'host') relay.host({ ...me, open: true, max: BOT_FILL });
   else if (hash.mode === 'quick') relay.quickJoin(me);
   else if (hash.mode === 'daily') relay.dailyJoin(me);
-  else relay.join(hash.code!, { ...me, spectate: hash.mode === 'watch' });
+  else relay.join(hash.code!, { ...me, spectate: hash.mode === 'watch', pass: joinPass ?? undefined });
 }
 
 // ---- the lobby (POK-240) -----------------------------------------------------------
@@ -2668,6 +2917,8 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
   let rooms: RoomListing[] = [];
   /** The line under the main menu: a rejected code, or nothing. */
   let note = '';
+  /** The line under the trainer's rows: what became of a career file. */
+  let trainerNote = '';
 
   return new Promise<RoomHash>((resolve) => {
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -2682,9 +2933,21 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
     const press = (action: LobbyAction) => {
       switch (action.kind) {
         case 'name': {
-          const typed = cleanName(prompt('Your name? (7 characters)') ?? '');
-          if (typed) saveProfile({ name: typed });
-          redraw();
+          // Typed on the drawn entry (POK-320), Emerald's seven letters.
+          const state = newEntry(NAME_ENTRY, careerName());
+          stage.push(
+            entryScreen(() => ({
+              title: 'YOUR NAME',
+              state,
+              note: 'Seven letters, as Emerald keeps it.',
+              onDone: (text) => {
+                const typed = cleanName(text);
+                if (typed) saveProfile({ name: typed });
+                stage.pop();
+              },
+              onBack: () => stage.pop(),
+            })),
+          );
           return;
         }
         case 'skin':
@@ -2711,8 +2974,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
           // Kanto's career is a file somebody can carry between machines; ours lives
           // in a localStorage nobody can copy, so this is the door (POK-243). Save
           // writes it out; load takes one back and re-reads the profile from it.
-          if (confirm('Save your career to a file?\n\nCancel to load one instead.')) saveCareerFile();
-          else loadCareerFile(redraw);
+          stage.push(careerAsk);
           return;
         case 'lobbies':
           stage.push(lobbies);
@@ -2732,19 +2994,56 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
           setRoomHash('daily');
           return done({ mode: 'daily' });
         case 'code': {
-          const code = (prompt('Room code?') ?? '').trim().toUpperCase();
-          // The relay never issues 0/O/1/I/L -- they read alike at a glance -- so a
-          // code with one of those in it, or the wrong length, could not be real
-          // (POK-240). Catching that here beats waiting on the relay's `not_found`.
-          if (!isRoomCode(code)) {
-            note = code ? `${code} is not a room code.` : '';
-            redraw();
-            return;
-          }
-          setRoomHash('join', code);
-          return done({ mode: 'join', code });
+          // The relay never issues 0/O/1/I/L -- they read alike at a glance -- and the
+          // entry's keys are the relay's own alphabet (POK-320), so a code that could not
+          // be real cannot be typed. The check stays: it is what the relay would say.
+          const state = newEntry(CODE_ENTRY);
+          stage.push(
+            entryScreen(() => ({
+              title: 'ROOM CODE',
+              state,
+              note,
+              noteIsError: note !== '',
+              onDone: (code) => {
+                if (!isRoomCode(code)) {
+                  note = `${code} is not a room code.`;
+                  return;
+                }
+                note = '';
+                setRoomHash('join', code);
+                done({ mode: 'join', code });
+              },
+              onBack: () => {
+                note = '';
+                stage.pop();
+              },
+            })),
+          );
+          return;
         }
         case 'join':
+          // A locked row asks for the passcode before it knocks (Kanto's browse.lua), on
+          // the same entry the code is typed on; BACK leaves the list where it was.
+          if (action.pass) {
+            const { code } = action;
+            const state = newEntry(PASS_ENTRY);
+            stage.push(
+              entryScreen(() => ({
+                title: 'PASSCODE',
+                state,
+                note: `Room ${code} is locked.`,
+                onDone: (pass) => {
+                  joinPass = pass;
+                  setRoomHash('join', code);
+                  done({ mode: 'join', code });
+                },
+                onBack: () => stage.pop(),
+              })),
+            );
+            return;
+          }
+          setRoomHash('join', action.code);
+          return done({ mode: 'join', code: action.code });
         case 'watch':
           setRoomHash('join', action.code);
           return done({ mode: 'join', code: action.code });
@@ -2780,8 +3079,39 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         record: record(),
       }).map(row),
       rowsId: 'trainer-rows',
-      note: '',
+      note: trainerNote,
+      noteId: 'trainer-note',
       buttons: [{ label: 'BACK', id: 'trainer-back', onPress: () => stage.pop() }],
+      onBack: () => stage.pop(),
+    }));
+    /** MY CAREER: out to a file, or back in from one -- a question in the frame, where
+     *  the page used to ask with confirm() (POK-320). */
+    const careerAsk = noticeScreen(() => ({
+      title: 'MY CAREER',
+      lines: [{ text: 'Your career lives in this browser. Save it to a file to keep it, or load one to carry it here.' }],
+      buttons: [
+        {
+          label: 'SAVE',
+          id: 'career-save',
+          onPress: () => {
+            saveCareerFile();
+            trainerNote = 'Saved to a file.';
+            stage.pop();
+          },
+        },
+        {
+          label: 'LOAD',
+          id: 'career-load',
+          onPress: () => {
+            stage.pop();
+            loadCareerFile((said) => {
+              trainerNote = said;
+              redraw();
+            });
+          },
+        },
+        { label: 'BACK', id: 'career-back', onPress: () => stage.pop() },
+      ],
       onBack: () => stage.pop(),
     }));
     const lobbies = menuScreen(() => ({
@@ -2887,9 +3217,14 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
 }
 
 function wireDrawer(): void {
-  const btn = $('#menu-btn') as HTMLButtonElement;
-  btn.addEventListener('click', () => openDrawer(!document.body.classList.contains('drawer-open')));
-  ($('#drawer-close') as HTMLButtonElement).addEventListener('click', () => openDrawer(false));
+  ($('#menu-btn') as HTMLButtonElement).addEventListener('click', () => openSheet(!sheetOpen));
+  // A window moved between a mouse and a touch screen: the sheet goes where the new one
+  // keeps it -- unless the room screen or the results have the stage.
+  if (typeof matchMedia === 'function') {
+    matchMedia(DESKTOP).addEventListener?.('change', () => {
+      if (sheet && (stage?.current === sheet || !stage?.current)) showGame();
+    });
+  }
 }
 
 /** Registers the service worker (POK-246), so a second visit works with no network and
@@ -2966,6 +3301,8 @@ async function main(): Promise<void> {
   worldIn.catch(() => undefined); // a failure is the await's to report, below
   void askToKeepStorage();
   setVersionLine('—');
+  // The page's first screen, drawn, while the core loads (POK-320).
+  sayPatch('Loading…');
   const canvas = $('#canvas') as HTMLCanvasElement;
   const emu = await Emulator.create(canvas);
   // The picture past the LCD (POK-319, field.ts): the core draws a band around the
@@ -3062,6 +3399,8 @@ async function main(): Promise<void> {
   showScreen('playing');
   if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols);
   else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch);
+  // An unpatched ROM has no room and no sheet: the game, and nothing over it.
+  if (mailboxBase === undefined) theStage().hide();
 }
 
 main().catch((err) => {
@@ -3069,7 +3408,5 @@ main().catch((err) => {
   const message = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
   console.error('shell startup failed', err);
   showScreen('importing');
-  const el = $('#import-error') as HTMLElement;
-  el.textContent = `Startup failed: ${message}`;
-  el.hidden = false;
+  showFailure(message);
 });

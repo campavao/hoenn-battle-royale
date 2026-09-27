@@ -40,6 +40,17 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
   // A whole match at the dev pace: 25s opening, 15s ring phases, bots filling the room.
   await expect(page.locator('#results-panel')).toBeVisible({ timeout: 240_000 });
 
+  // POK-320: a champion's results come after their ROM's own Hall of Fame, never over it.
+  // Only when this page won, which a bot usually does: nothing here can crown the host
+  // without a dev hook. The page's side of it is pinned whatever the outcome in
+  // ui/results.test.ts (ParadeHold.holds, which the room and solo both ask).
+  const parade = await page.evaluate((base) => {
+    const round = JSON.parse(localStorage.getItem('hbr:log') ?? '[]')[0];
+    const won = round?.winner === (window as unknown as BrWindow).__br.bridge.seat;
+    return { won, phase: (window as unknown as HbrWindow).__hbr.emu.read(base, 8) };
+  }, loadSymbols().gBrMatch);
+  if (parade.won) expect(parade.phase, 'the Hall of Fame is over (BR_PHASE_DONE) before the results show').toBe(5);
+
   // ...and the card under it says what the match was (POK-303). RINGS is always there,
   // counted off the `ring` messages this page has been watching go past all match.
   const card = page.locator('#results-record');

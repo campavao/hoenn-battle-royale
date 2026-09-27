@@ -84,6 +84,13 @@ export function nextDoor(door: Door): Door {
   return door === 'open' ? 'private' : door === 'private' ? 'pass' : 'open';
 }
 
+/** What the door control says. The host sees the passcode it set, as Kanto's OPEN: PASS
+ *  1234 does (menu.lua), to read it out; a host that took the room over never knew it. */
+export function doorLabel(door: Door, pass: string | null): string {
+  if (door === 'pass') return pass ? `PASS ${pass}` : 'PASSCODE';
+  return door === 'open' ? 'LISTED' : 'UNLISTED';
+}
+
 /** Can the host start? A match needs somebody in it -- with FILL off and nobody else
  *  here, START would deal a one-trainer battle royale. */
 export function canStart(view: RoomView): boolean {
@@ -325,6 +332,23 @@ export function decideStart(trigger: StartTrigger, s: StartState): StartDecision
  *  older relay does (net/relay.ts). */
 const DEAD_ENDS = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server_full', 'version', 'seat'];
 
+/** What a shut door says, in Kanto's words (browse.lua's REFUSALS) and Emerald's font,
+ *  which has no apostrophe: the relay's reason is a word for a log, not for a player. */
+const REFUSALS: Record<string, string> = {
+  passcode: 'WRONG PASSCODE',
+  full: 'THAT GAME IS FULL',
+  locked: 'THAT GAME STARTED',
+  not_found: 'THAT GAME IS GONE',
+  removed: 'HOST REMOVED YOU',
+  already_in_room: 'ALREADY IN A GAME',
+  server_full: 'THE SERVER IS FULL',
+  version: 'THAT GAME RUNS ANOTHER BUILD',
+};
+
+export function refusalLine(reason: string): string {
+  return REFUSALS[reason] ?? 'COULD NOT JOIN';
+}
+
 /** What the page does with the relay's `room_error` (POK-330 #47). A rejoin refused
  *  because the room is gone -- a relay restart, or a seat hold that ran out -- is not a
  *  dead end for the page that was running the match: the match lives in its tab, so it
@@ -335,9 +359,48 @@ const DEAD_ENDS = ['locked', 'full', 'not_found', 'removed', 'passcode', 'server
 export function onRefused(
   reason: string,
   page: { rejoining: boolean; wasHost: boolean; seat: number | null },
-): 'rehost' | 'dead-end' | 'status' {
+): 'rehost' | 'ask-pass' | 'dead-end' | 'status' {
   if (reason === 'not_found' && page.rejoining && page.wasHost && page.seat !== null) return 'rehost';
+  // A passcoded door asks for the code, and again when it was wrong (POK-320, Kanto's
+  // WRONG PASSCODE) -- a knock, never a rejoin, which the relay lets past the passcode.
+  if (reason === 'passcode' && !page.rejoining) return 'ask-pass';
   return DEAD_ENDS.includes(reason) ? 'dead-end' : 'status';
+}
+
+/** The room's last word (POK-320 review): a door refused, the room closed, the host
+ *  showed us out. Its notice -- BACK TO LOBBY -- is the last thing the page draws for the
+ *  room, so reaching it stops everything still on its way back there: the count to a
+ *  start, the end grace, and a next match's `start` held for the way back. The grace was
+ *  the one that bit. A room closed within four seconds of the `win` rebooted the ROM for
+ *  a room that was gone, and drew that room over the notice; the page asks `reached`
+ *  before it goes back or draws results. */
+export class DeadEnd {
+  private at = false;
+
+  constructor(
+    private readonly stops: {
+      countdown: { cancel(): void };
+      grace: { cancel(): void };
+      /** Forget a `start` held for the way back (returnToRoom's nextStart). */
+      dropHeldStart(): void;
+    },
+  ) {}
+
+  /** The room has come to its end: nothing goes back to it. */
+  get reached(): boolean {
+    return this.at;
+  }
+
+  /** The room is gone. Everything on its way back stops, every time; true only the first
+   *  time, when the notice is the page's to draw. */
+  reach(): boolean {
+    this.stops.countdown.cancel();
+    this.stops.grace.cancel();
+    this.stops.dropHeldStart();
+    if (this.at) return false;
+    this.at = true;
+    return true;
+  }
 }
 
 // ---- the clock a match is picked up from ---------------------------------------------

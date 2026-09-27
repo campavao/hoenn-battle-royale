@@ -40,12 +40,25 @@ export interface Painted {
   containers?: Container[];
 }
 
+/** How the stage shows a screen: over everything (the default), over the game still
+ *  running under it (the in-match sheet on a phone), or beside the game, taking no key
+ *  from it (the sheet on a desktop, which keeps its room panel in view). */
+export type Look = 'full' | 'overlay' | 'dock';
+
 export interface DrawnScreen {
   /** Draw onto `c`, which is `h` pixels tall and 240 wide (its origin is set), and
    *  say what was drawn where. */
   paint(c: EmeraldCanvas, h: number): Painted;
   /** B, or the browser's back: what leaving this screen means, if anything. */
   back?(): void;
+  /** A GBA key, before the stage's own cursor sees it: true when the screen took it.
+   *  The code entry scrubs its letters with the D-pad this way, as Kanto's does. */
+  key?(k: GbaKey): boolean;
+  /** A key off a real keyboard, by its KeyboardEvent.key ('a', 'Backspace', 'Enter'):
+   *  true when the screen took it, and then nothing else hears it -- the entry types a
+   *  Z rather than pressing A. */
+  char?(key: string): boolean;
+  look?(): Look;
 }
 
 /** The scale a stage shows at: whole pixels once it can afford two, the picture's own
@@ -58,6 +71,14 @@ export function stageScale(cssW: number, cssH: number): number {
 }
 
 export const STAGE_WIDTH = 240;
+
+/** Whether going from one way of showing to another is a cut worth Emerald's fade to
+ *  black (POK-320): the stage covering the page, or leaving it -- the room giving way to
+ *  the match, the match to its results. `null` is the stage hidden. Opening the sheet
+ *  over the game, or docking it beside it, is not: that is a menu, not a scene. */
+export function fadesBetween(was: Look | null, now: Look | null): boolean {
+  return (was === 'full') !== (now === 'full');
+}
 
 /** What a widget is called between paints: its id, or its text within its parent. */
 function widgetKey(w: Widget): string {
@@ -199,10 +220,17 @@ export class Stage {
     private readonly root: HTMLElement,
     canvasEl: HTMLCanvasElement,
     hits: HTMLElement,
+    /** A black sheet over everything that fades out on a cut (index.html's #stage-fade). */
+    private readonly fade: HTMLElement | null = null,
   ) {
     this.mirror = new Mirror(hits, (w) => {
       this.cursorKey = this.keyOf(w);
+      // Beside the game the keyboard is the game's: a button left focused would take the
+      // next Space as a second click.
+      if (this.look() === 'dock') (root.ownerDocument.activeElement as HTMLElement | null)?.blur?.();
       w.onPress?.();
+      // What a tap changed is drawn: a key typed into an entry, a card opened.
+      this.redraw();
     });
     this.canvas = new EmeraldCanvas(canvasEl);
     this.canvas.onLoad = () => this.redraw();
@@ -212,21 +240,51 @@ export class Stage {
     }
   }
 
+  /** A screen is up and has the keys: the game under it hears none. A docked screen
+   *  sits beside the game and leaves it the keys. */
   get active(): boolean {
-    return this.screen !== null && !this.root.hidden;
+    return this.screen !== null && !this.root.hidden && this.look() !== 'dock';
+  }
+
+  private look(): Look {
+    return this.screen?.look?.() ?? 'full';
+  }
+
+  /** The root says how it is shown (index.html's #stage[data-look]), and the page makes
+   *  room beside a docked one (body.docked). */
+  private applyLook(): void {
+    const look = this.root.hidden ? '' : this.look();
+    if (this.root.dataset.look !== look) this.root.dataset.look = look;
+    this.root.ownerDocument.body.classList.toggle('docked', look === 'dock');
   }
 
   get current(): DrawnScreen | null {
     return this.screen;
   }
 
+  /** How the stage is showing now, or null when it is not. */
+  private shown(): Look | null {
+    return this.root.hidden || !this.screen ? null : this.look();
+  }
+
+  /** Emerald's fade from black, over a cut: stepped, as its palette fades are. */
+  private cut(was: Look | null): void {
+    const f = this.fade;
+    if (!f || !fadesBetween(was, this.shown())) return;
+    f.classList.remove('go');
+    void f.offsetWidth; // start the animation again from its first step
+    f.classList.add('go');
+  }
+
   /** Show `screen`, forgetting any screen it could have gone back to. */
   show(screen: DrawnScreen): void {
+    const was = this.shown();
     this.stack = [];
     this.screen = screen;
     this.cursorKey = null;
     this.root.hidden = false;
     this.paintNow();
+    this.cut(was);
   }
 
   /** Show `screen` over the current one; `pop` comes back. */
@@ -247,10 +305,13 @@ export class Stage {
   }
 
   hide(): void {
+    const was = this.shown();
     this.root.hidden = true;
     this.screen = null;
     this.stack = [];
     this.mirror.clear();
+    this.applyLook();
+    this.cut(was);
   }
 
   /** Paint again, soon: many things change at once and one pass is enough. A timer
@@ -267,6 +328,7 @@ export class Stage {
   /** Paint now. Tests and a key press want the mirror in place before they look. */
   paintNow(): void {
     if (!this.screen || this.root.hidden) return;
+    this.applyLook();
     const cssW = this.root.clientWidth;
     const cssH = this.root.clientHeight;
     if (cssW === 0 || cssH === 0) return;
@@ -276,7 +338,9 @@ export class Stage {
     const c = this.canvas;
     if (c.width !== w || c.height !== h || c.scale !== scale) c.resize(w, h, scale);
     c.origin = Math.floor((w - STAGE_WIDTH) / 2);
-    c.clear();
+    // Over the running game the canvas is clear, and the screen dims what it wants dimmed.
+    if (this.look() === 'overlay') c.clearAll();
+    else c.clear();
     const painted = this.screen.paint(c, h);
     this.widgets = painted.widgets;
     this.mirror.sync(painted, scale, c.origin);
@@ -308,6 +372,10 @@ export class Stage {
    *  while one is showing: the game underneath must not hear it). */
   key(k: GbaKey): boolean {
     if (!this.active) return false;
+    if (this.screen?.key?.(k)) {
+      this.paintNow();
+      return true;
+    }
     if (k === 'a') {
       const sel = this.selected();
       if (sel?.onPress) {
@@ -329,6 +397,15 @@ export class Stage {
       return true;
     }
     return true;
+  }
+
+  /** A key off the keyboard, for a screen that types (ui/entry.ts). False when there is
+   *  no such screen up, and the key goes on to the game's own keyboard map. */
+  char(key: string): boolean {
+    if (!this.active || !this.screen?.char) return false;
+    const took = this.screen.char(key);
+    if (took) this.paintNow();
+    return took;
   }
 
   /** The nearest selectable widget in a direction, by centres; wraps to the far end

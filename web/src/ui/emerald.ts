@@ -69,6 +69,24 @@ export function fitText(text: string, maxW: number): string {
   return `${out.trimEnd()}…`;
 }
 
+/** `text` broken into lines of at most `maxW` pixels, at the spaces; a word too long
+ *  for a line of its own is cut to fit. What a message box does with a sentence. */
+export function wrapText(text: string, maxW: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (measure(next) <= maxW) {
+      line = next;
+      continue;
+    }
+    if (line) lines.push(line);
+    line = measure(word) <= maxW ? word : fitText(word, maxW);
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 export interface Rect {
   x: number;
   y: number;
@@ -199,6 +217,11 @@ export class EmeraldCanvas {
   clear(color = STAGE_FILL): void {
     this.ctx.fillStyle = color;
     this.ctx.fillRect(0, 0, this.width, this.height);
+  }
+
+  /** Nothing at all: the game under an overlay shows through. */
+  clearAll(): void {
+    this.ctx.clearRect(0, 0, this.width, this.height);
   }
 
   fillRect(r: Rect, color: string, alpha = 1): void {

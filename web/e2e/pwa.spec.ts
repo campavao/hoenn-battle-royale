@@ -76,8 +76,9 @@ test('after one visit the shell comes back with the network gone', async ({ brow
     await ctx.setOffline(true);
     await page.reload();
     await expect(page.locator('#screen-importing')).toBeVisible({ timeout: 30_000 });
-    // Not an error page: the real shell, with its own markup.
-    await expect(page.locator('#dropzone')).toBeVisible();
+    // Not an error page: the real shell, with its own import screen -- drawn on the
+    // stage once the core is up (POK-320), so it gets the core's time.
+    await expect(page.locator('#dropzone')).toBeVisible({ timeout: 30_000 });
   } finally {
     await ctx.setOffline(false);
     await ctx.close();
