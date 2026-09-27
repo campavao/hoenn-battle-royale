@@ -86,7 +86,10 @@ export interface ProxyOptions {
   restart?: (emu: ProxyEmulator) => Promise<void>;
   /** Writes the boot block into a freshly booted instance (app.ts's writeBootBlock). */
   writeBoot: (emu: ProxyEmulator, mailboxBase: number) => void;
-  /** Give up on a duel after this long and let the caller fall back. */
+  /** Give up on a duel after this many of the instance's own frames and let the caller
+   *  fall back. */
+  deadlineFrames?: number;
+  /** ...or after this long, whatever the frames: an instance that stops sending any. */
   deadlineMs?: number;
   /** Frames to wait for the mailbox to wake before giving up on the instance. */
   wakeFrames?: number;
@@ -104,13 +107,26 @@ export interface ProxyOptions {
  *  With both battlers on the AI there is no menu a press could go wrong in. */
 const TAP_EVERY_FRAMES = 12;
 const TAP_HELD_FRAMES = 4;
-const DEADLINE_MS = 30_000;
+/** A duel's deadline is in the instance's own frames, not the page's seconds (POK-247).
+ *  It was thirty seconds, which at 8x is 14,400 frames on a desktop -- and on a 4x-
+ *  throttled one, where the instance runs at about 250 frames a second, 7,500: a 2v2
+ *  at level 75 still trading blows was cut off and the instance power-cycled. The
+ *  longest fight measured at full speed took 10,834 frames (3v4, level 75); five
+ *  minutes of game time is room for six-a-side. */
+const DEADLINE_FRAMES = 18_000;
+/** And the wall-clock cap, for an instance that stops sending frames at all. */
+const DEADLINE_MS = 90_000;
 /** How many duels may be waiting behind the one in flight before the rest are sent to
  *  the seeded resolver. One instance fights one battle at a time and a battle takes
  *  real seconds; a room where everybody meets at once would otherwise leave half the
  *  field standing still, which is worse than a coin flip nobody can see. */
 const MAX_QUEUED = 2;
 const WAKE_FRAMES = 600;
+
+/** Anything in the team still able to fight. */
+function standing(party: PackedMon[]): boolean {
+  return party.some((mon) => mon.hp > 0);
+}
 
 export class ProxyDuels {
   private emu: ProxyEmulator | null = null;
@@ -151,6 +167,13 @@ export class ProxyDuels {
 
   private async attempt(a: DuelSide, b: DuelSide): Promise<DuelOutcome | null> {
     if (this.broken || a.party.length === 0 || b.party.length === 0) return null;
+    // A side with nothing standing is no fight: the ROM stages none (br_duel.c's
+    // ParseDuel, BrBot_AnyStanding) and says nothing, so the duel sat out the whole
+    // deadline and cost the instance a restart (POK-247).
+    if (!standing(a.party) || !standing(b.party)) {
+      this.note(`seat ${a.seat} vs seat ${b.seat}: a side with nothing standing`);
+      return null;
+    }
     if (this.busy && this.queue.length >= MAX_QUEUED) {
       this.note('queue full: settling this one the cheap way');
       return null;
@@ -207,16 +230,18 @@ export class ProxyDuels {
       }
     }
 
-    const deadline = this.opts.deadlineMs ?? DEADLINE_MS;
+    const from = this.counts.frames;
     emu.resume();
-    const result = await this.awaitResult(emu, mailbox, deadline);
+    const result = await this.awaitResult(emu, mailbox, this.opts.deadlineFrames ?? DEADLINE_FRAMES, this.opts.deadlineMs ?? DEADLINE_MS);
     // Idle until the next meeting. Here, after the await, and not in the frame listener
     // that finished the duel: a pause from in there would wait on its own caller.
     if (this.emu === emu) emu.pause();
     if (!result) {
       // A fight that will not end is worse than no proxy at all: the instance is left
       // in a battle nobody can finish, so the next duel starts it over first.
-      this.note('duel timed out');
+      // Which fight, and how long it ran in its own frames: a soak's only lead on a
+      // fight that runs past five minutes of game time, or one that stopped.
+      this.note(`duel timed out: seat ${a.seat} vs seat ${b.seat}, ${this.counts.frames - from} frames`);
       this.counts.timedOut++;
       if (this.opts.restart && this.emu === emu) this.stale = true;
       else this.dispose();
@@ -226,7 +251,7 @@ export class ProxyDuels {
     // watching their own console -- can tell a match where the bots fought for real
     // from one where every meeting fell back to the resolver. Failures say so below;
     // without this, silence meant both.
-    this.note(`seat ${a.seat} vs seat ${b.seat}: fought, winner ${result.winner === 0 ? a.seat : b.seat}`);
+    this.note(`seat ${a.seat} vs seat ${b.seat}: fought, ${result.winner > 1 ? 'a draw' : `winner ${result.winner === 0 ? a.seat : b.seat}`}`);
     this.counts.fought++;
     if (result.winner > 1) return null; // a draw is the caller's to settle
     return {
@@ -239,17 +264,19 @@ export class ProxyDuels {
     };
   }
 
-  /** Runs the instance until a `dresult` comes back or the deadline passes, tapping A
-   *  through the boxes the whole time. */
-  private awaitResult(emu: ProxyEmulator, mailbox: Mailbox, deadlineMs: number): Promise<DresultMsg | null> {
+  /** Runs the instance until a `dresult` comes back or the deadline passes -- its own
+   *  frames, or the wall clock for an instance that stopped -- tapping A through the
+   *  boxes the whole time. */
+  private awaitResult(emu: ProxyEmulator, mailbox: Mailbox, deadlineFrames: number, deadlineMs: number): Promise<DresultMsg | null> {
     return new Promise((resolve) => {
-      const started = Date.now();
+      let frames = 0;
       // Slots of a message that spans several, held until the last one lands -- one
       // run per type, since a bstart spans a dozen slots and a turn can land between.
       let parts: BinarySlot[] = [];
       const streamParts = new Map<number, BinarySlot[]>();
       const finish = (value: DresultMsg | null) => {
         stop();
+        clearTimeout(cap);
         this.unframe = null;
         try {
           emu.release('a');
@@ -263,6 +290,7 @@ export class ProxyDuels {
       // sends no more frames: without this the promise would never settle and `busy`
       // would hold the queue shut for the rest of the match.
       this.unframe = () => finish(null);
+      const cap = setTimeout(() => finish(null), deadlineMs);
       const stop = emu.onFrame(() => {
         this.tap(emu);
         for (const raw of mailbox.poll()) {
@@ -293,7 +321,7 @@ export class ProxyDuels {
           finish(msg);
           return;
         }
-        if (Date.now() - started > deadlineMs) finish(null);
+        if (++frames > deadlineFrames) finish(null);
       });
     });
   }
@@ -327,7 +355,6 @@ export class ProxyDuels {
           emu.onFrame(() => this.counts.frames++);
         }
         const up = emu;
-        this.opts.writeBoot(up, this.opts.mailboxBase);
         const mailbox = new Mailbox(
           {
             read: (addr, width) => up.read(addr, width),
@@ -336,8 +363,18 @@ export class ProxyDuels {
           },
           this.opts.mailboxBase,
         );
+        // The boot block goes in once the mailbox is up, the way the page's own core
+        // does it (app.ts's rebootIntoBr), and the instance is ready when the ROM has
+        // taken it (POK-247). Written before, it raced the ROM's mailbox init, which
+        // clears the whole mailbox, boot block and all. Called ready at the wake -- the
+        // copyright screen, before the boot -- the first DUEL was staged there and then
+        // wiped with both parties by the boot's NewGameInitData: the first fight of
+        // every match, and the first after every restart, was two empty teams and a
+        // draw, settled by the coin flip.
         await this.awaitWake(up, mailbox);
-        up.pause(); // awake, and idle until a duel wants it
+        this.opts.writeBoot(up, this.opts.mailboxBase);
+        await this.awaitBoot(up);
+        up.pause(); // booted, and idle until a duel wants it
         this.emu = up;
         this.mailbox = mailbox;
       } catch (err) {
@@ -372,6 +409,27 @@ export class ProxyDuels {
         if (++frames > limit) {
           stop();
           reject(new Error('the instance never woke its mailbox'));
+        }
+      });
+    });
+  }
+
+  /** Until the ROM has taken its boot block: it clears `mode` when it starts the game
+   *  the block describes (br_boot.c, BrBoot_Tick), after the copyright screen. */
+  private awaitBoot(emu: ProxyEmulator): Promise<void> {
+    const mode = this.opts.mailboxBase + MAILBOX.OFF_BOOT;
+    return new Promise((resolve, reject) => {
+      let frames = 0;
+      const limit = this.opts.wakeFrames ?? WAKE_FRAMES;
+      const stop = emu.onFrame(() => {
+        if (emu.read(mode, 8) === 0) {
+          stop();
+          resolve();
+          return;
+        }
+        if (++frames > limit) {
+          stop();
+          reject(new Error('the instance never took its boot block'));
         }
       });
     });

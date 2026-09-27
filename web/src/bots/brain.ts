@@ -118,8 +118,10 @@ const FIGHT_TIMEOUT_MS = 5 * 60_000;
 /** A fight whose opponent has not been in a battle by now never started: their ROM
  *  was already in something else when the card landed, or never took it at all. */
 const FIGHT_START_MS = 20_000;
-/** And a duel in the hidden instance: thirty seconds a fight (proxy.ts), up to two
- *  queued ahead of it, and a boot. Past this the instance is not going to answer. */
+/** And a duel in the hidden instance: 18,000 of its frames a fight (proxy.ts), about 37
+ *  seconds at full speed, up to two queued ahead of it, and a boot. Past this the
+ *  instance is not going to answer -- or is on a host too slow to wait for, and the
+ *  seeded resolver settles the pair either way. */
 const PROXY_TIMEOUT_MS = 2 * 60_000;
 
 /** A bot standing still because its fight is running somewhere else. */

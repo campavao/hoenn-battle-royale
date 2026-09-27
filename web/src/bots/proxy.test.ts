@@ -17,9 +17,16 @@ function mon(over: Partial<PackedMon> = {}): PackedMon {
 
 /** A hidden instance, without a wasm core: RAM as an array, frames driven by hand, and
  *  a little of br_duel.c's behaviour -- it wakes its mailbox, reads a DUEL off the in
- *  ring, and after a few frames pushes a DRESULT back. */
-function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: number } = {}) {
-  const { wakes = true, afterFrames = 3 } = opts;
+ *  ring, and after a few frames pushes a DRESULT back.
+ *
+ *  With `bootFrames` it boots like the ROM: the mailbox wakes `wakeAfter` frames in,
+ *  clearing the whole mailbox as BrMailbox_Init does (a boot block written before then
+ *  is gone); a boot block is taken `bootFrames` frames after it lands; a DUEL that
+ *  arrived before the boot is wiped by it, as NewGameInitData wipes the parties; and
+ *  nothing is fought until a boot has been taken -- there is no field before one. */
+function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: number; bootFrames?: number; wakeAfter?: number } = {}) {
+  const { wakes = true, afterFrames = 3, bootFrames, wakeAfter = 0 } = opts;
+  const boots = bootFrames !== undefined;
   let answering = opts.answers ?? true;
   const mem = new Uint8Array(0x40000);
   const at = (addr: number) => addr - 0x02000000;
@@ -41,6 +48,10 @@ function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: 
   let sinceDuel = 0;
   let stopped = false;
   let result: Msg | null = null;
+  let booting = 0;
+  let wiped = 0;
+  let booted = 0;
+  let frame = 0;
   /** pause / resume / reboot, in order: the instance's lifecycle as the proxy drives it. */
   const life: string[] = [];
 
@@ -70,13 +81,25 @@ function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: 
     },
   };
 
-  if (wakes) {
+  const wake = () => {
+    bytes(BASE, MAILBOX.OFF_BOOT + MAILBOX.BOOT_BYTES).fill(0);
     write(BASE + MAILBOX.OFF_MAGIC, MAILBOX.MAGIC, 16);
     write(BASE + MAILBOX.OFF_SIZE, MAILBOX.SIZE, 16);
-  }
+  };
+  if (wakes && wakeAfter === 0) wake();
 
-  // The ROM's half of one frame: drain the in ring, and answer a DUEL a few frames on.
+  // The ROM's half of one frame: wake, take a boot block, drain the in ring, and answer
+  // a DUEL a few frames on.
   const romFrame = () => {
+    if (wakes && wakeAfter > 0 && ++frame === wakeAfter) wake();
+    if (boots && read(BASE + MAILBOX.OFF_MAGIC, 16) === MAILBOX.MAGIC && read(BASE + MAILBOX.OFF_BOOT, 8) !== 0 && ++booting >= bootFrames) {
+      write(BASE + MAILBOX.OFF_BOOT, 0, 8);
+      booting = 0;
+      booted++;
+      if (sawDuel) wiped++;
+      sawDuel = false;
+      sinceDuel = 0;
+    }
     let tail = read(BASE + MAILBOX.OFF_IN_TAIL, 16);
     const head = read(BASE + MAILBOX.OFF_IN_HEAD, 16);
     while (tail !== head) {
@@ -88,6 +111,8 @@ function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: 
       tail = (tail + 1) & 0xffff;
     }
     write(BASE + MAILBOX.OFF_IN_TAIL, tail, 16);
+    // A duel waits for the field (BrDuel_Tick), and there is no field before a boot.
+    if (boots && (booted === 0 || read(BASE + MAILBOX.OFF_BOOT, 8) !== 0)) return;
     if (!sawDuel || !answering) return;
     if (++sinceDuel !== afterFrames) return;
     // One answer per DUEL: the next one starts its own count, the way the instance
@@ -127,6 +152,14 @@ function fakeInstance(opts: { wakes?: boolean; answers?: boolean; afterFrames?: 
     },
     get duels() {
       return duels;
+    },
+    /** DUELs the boot wiped: handed over before the ROM had taken its boot block. */
+    get wiped() {
+      return wiped;
+    },
+    /** Boot blocks the ROM took. */
+    get booted() {
+      return booted;
     },
     answerWith(msg: Msg) {
       result = msg;
@@ -205,7 +238,7 @@ describe('the proxy duel instance', () => {
     const out = await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst, 400);
 
     expect(out).toBeNull();
-    expect(notes).toContain('duel timed out');
+    expect(notes.some((n) => n.startsWith('duel timed out: seat 1 vs seat 2'))).toBe(true);
     expect(inst.stopped).toBe(true);
   });
 
@@ -248,7 +281,7 @@ describe('the proxy duel instance', () => {
       onNote: (w) => void notes.push(w),
     });
     expect(await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst, 400)).toBeNull();
-    expect(notes).toContain('duel timed out');
+    expect(notes.some((n) => n.startsWith('duel timed out'))).toBe(true);
     expect(inst.stopped, 'the instance is kept, not let go').toBe(false);
     expect(inst.life.at(-1)).toBe('pause');
     expect(restarts, 'nothing is restarted until there is a duel for it').toBe(0);
@@ -275,11 +308,69 @@ describe('the proxy duel instance', () => {
     expect(await proxy.fight({ seat: 3, party: [mon()] }, { seat: 4, party: [mon()] })).toBeNull();
   });
 
-  it('leaves a draw to the caller', async () => {
+  it('leaves a draw to the caller, and calls it a draw', async () => {
     const inst = fakeInstance();
     inst.answerWith({ t: 'dresult', seatA: 1, seatB: 2, winner: 2, a: [], b: [] });
-    const proxy = proxyOver(inst);
+    const notes: string[] = [];
+    const proxy = proxyOver(inst, notes);
     expect(await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst)).toBeNull();
+    // It used to say "winner 2" -- seat B -- for a fight nobody won.
+    expect(notes).toContain('seat 1 vs seat 2: fought, a draw');
+  });
+
+  it('writes its boot block once the mailbox is up, and fights nothing until the ROM has taken it (POK-247)', async () => {
+    // Written before the wake, the block was cleared by the ROM's mailbox init and the
+    // instance never booted; handed a duel at the wake, the boot that came after wiped
+    // both parties. Either way the first fight of every match, and the first after
+    // every restart, was two empty teams and a draw.
+    const inst = fakeInstance({ wakeAfter: 10, bootFrames: 30 });
+    inst.answerWith({ t: 'dresult', seatA: 4, seatB: 7, winner: 0, a: [{ hp: 12, status: 0 }], b: [{ hp: 0, status: 0 }] });
+    const proxy = new ProxyDuels({
+      boot: async () => inst.emu,
+      mailboxBase: BASE,
+      writeBoot: (emu, base) => emu.write(base + MAILBOX.OFF_BOOT, 1, 8),
+      deadlineMs: 2_000,
+      wakeFrames: 100,
+    });
+    const out = await settle(proxy.fight({ seat: 4, party: [mon()] }, { seat: 7, party: [mon()] }), inst);
+
+    expect(inst.booted, 'the boot block survived the wake and was taken').toBe(1);
+    expect(inst.wiped, 'no duel reached the ROM before its boot').toBe(0);
+    expect(out?.winner).toBe(4);
+  });
+
+  it('counts its deadline in the instance frames, not the page seconds (POK-247)', async () => {
+    // A throttled host runs the instance at half speed: thirty seconds were half a
+    // fight, and a fight still going was cut off. The frames are the fight's own time.
+    const inst = fakeInstance({ afterFrames: 100 });
+    const notes: string[] = [];
+    const proxy = new ProxyDuels({
+      boot: async () => inst.emu,
+      mailboxBase: BASE,
+      writeBoot: () => {},
+      deadlineFrames: 50,
+      deadlineMs: 60_000,
+      wakeFrames: 5,
+      onNote: (w) => void notes.push(w),
+    });
+    const out = await settle(proxy.fight({ seat: 1, party: [mon()] }, { seat: 2, party: [mon()] }), inst, 400);
+
+    expect(out).toBeNull();
+    // ...and says which fight, and how far it got in its own frames.
+    expect(notes).toContain('duel timed out: seat 1 vs seat 2, 51 frames');
+  });
+
+  it('sends no duel with a side that has nothing standing, and does not wait on one (POK-247)', async () => {
+    // The ROM stages no such fight and says nothing, so the page waited out the whole
+    // deadline for an answer that was never coming, then restarted the instance.
+    const inst = fakeInstance();
+    const notes: string[] = [];
+    const proxy = proxyOver(inst, notes, 60_000);
+    const out = await settle(proxy.fight({ seat: 1, party: [mon({ hp: 0 }), mon({ hp: 0 })] }, { seat: 2, party: [mon()] }), inst);
+
+    expect(out).toBeNull();
+    expect(inst.duels).toBe(0);
+    expect(notes).toContain('seat 1 vs seat 2: a side with nothing standing');
   });
 
   it('sends the overflow to the cheap resolver rather than queue the whole room', async () => {
