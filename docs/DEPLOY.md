@@ -165,6 +165,8 @@ session ships, since it can't push tags but can dispatch a workflow (the GitHub 
 `actions_run_trigger`, `run_workflow`, `ci.yml`, ref `hoenn-battle-royale`, inputs
 `{version, notes}`). The run is the tag's run; once everything is green the release job
 tags the commit it built and carries on as below. The tag it pushes starts no second run.
+If a deploy fails after the tag, dispatch the same version on the same commit again: a tag
+that already names the commit goes through, one naming any other commit stops the run.
 
 `.github/workflows/ci.yml`'s `release` job builds the ROM with agbcc, diffs it against
 the baseline pret build into the BPS (no retail ROM needed), attaches the patch and its
