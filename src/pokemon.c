@@ -6588,6 +6588,9 @@ const struct CompressedSpritePalette *GetMonSpritePalStructFromOtIdPersonality(u
 bool32 IsHMMove2(u16 move)
 {
     int i = 0;
+#if BR
+    return FALSE; // every move comes off and goes on freely, HMs too (2026-10-06 play-test)
+#endif
     while (sHMMoves[i] != HM_MOVES_END)
     {
         if (sHMMoves[i++] == move)

@@ -1005,7 +1005,9 @@ static void BrTaught(void)
 {
     BrMoves_Spend(GetCurrentSelectedMove());
     BrMoves_Keep(sMoveRelearnerStruct->partyMon, GetCurrentSelectedMove());
-    gSpecialVar_0x8004 = TRUE;
+    // Not pret's gSpecialVar_0x8004 = TRUE: pret leaves the screen after one move, but
+    // this one stays, and the summary screen's way back in reads 0x8004 as the party
+    // slot -- TRUE there made the second move of a visit go to party slot 1.
     PlaySE(SE_USE_ITEM);
     sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
 }

@@ -4726,6 +4726,9 @@ bool8 IsMoveHm(u16 move)
 {
     u8 i;
 
+#if BR
+    return FALSE; // every move comes off and goes on freely, HMs too (2026-10-06 play-test)
+#endif
     for (i = 0; i < NUM_HIDDEN_MACHINES; i++)
     {
         if (sTMHMMoves[i + NUM_TECHNICAL_MACHINES] == move)
