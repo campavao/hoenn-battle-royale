@@ -159,6 +159,13 @@ Or, from a phone: GitHub → Releases → Draft a new release, a new tag on
 `hoenn-battle-royale`, Publish. The tag starts the same run, and the release job puts the
 patch on the release you published (your notes stay) instead of making its own.
 
+Or with no tag at all: GitHub → Actions → BR CI → Run workflow, branch
+`hoenn-battle-royale`, a `version` (`v0.2.2`) and an optional note. This is how a Claude
+session ships, since it can't push tags but can dispatch a workflow (the GitHub MCP's
+`actions_run_trigger`, `run_workflow`, `ci.yml`, ref `hoenn-battle-royale`, inputs
+`{version, notes}`). The run is the tag's run; once everything is green the release job
+tags the commit it built and carries on as below. The tag it pushes starts no second run.
+
 `.github/workflows/ci.yml`'s `release` job builds the ROM with agbcc, diffs it against
 the baseline pret build into the BPS (no retail ROM needed), attaches the patch and its
 sidecars to a GitHub release with the tag's message as the note, deploys the site, and
