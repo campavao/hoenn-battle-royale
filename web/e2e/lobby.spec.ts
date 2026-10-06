@@ -324,16 +324,26 @@ test('the lobby offers a voice and a stats toggle, and the wardrobe starts locke
   await skin.click();
   await expect(page.locator('#wardrobe button', { hasText: 'HIKER' })).toContainText('LOCKED');
   await page.locator('#wardrobe button', { hasText: 'HIKER' }).click();
-  await expect(page.locator('#wardrobe-note')).toContainText('LOCKED -- 5 wins');
+  await expect(page.locator('#wardrobe-note')).toContainText('LOCKED -- 3 wins');
   await expect(page.locator('#wardrobe-wear')).toBeDisabled();
   await page.locator('#wardrobe-back').click();
 
   // MY VOICE is three rows since POK-283 -- walking up, when you win, when you lose --
-  // each showing its line, and cycling one changes that line.
+  // each showing its line. A row opens the whole pool a page at a time (2026-10-05
+  // play-test); NEXT turns the page, and a line pressed is the row's line.
   const voice = rows.nth(2);
   const before = await voice.textContent();
   await voice.click();
+  const lines = page.locator('#voice-lines button');
+  await expect(lines.first()).toBeVisible();
+  await expect(page.locator('#voice-page')).toContainText('PAGE 1/');
+  await page.screenshot({ path: path.join(OUT_DIR, 'voice-picker.png') });
+  await page.locator('#voice-next').click();
+  await expect(page.locator('#voice-page')).toContainText('PAGE 2/');
+  const chosen = (await lines.nth(1).textContent()) ?? '';
+  await lines.nth(1).click();
   await expect(voice).not.toHaveText(before ?? '');
+  await expect(voice).toContainText(chosen.trim());
 
   // PLAY STATS starts shared, and pressing it toggles the opt-out and back.
   const stats = rows.nth(5);

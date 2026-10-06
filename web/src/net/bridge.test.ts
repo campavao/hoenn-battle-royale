@@ -4,7 +4,7 @@ import { MAILBOX, Mailbox, type RamAccess } from './mailbox';
 import { NETLINK } from './netlink';
 import { POSITIONAL_CAP, RomPort } from './romport';
 import { BR_CONT_FLAG, BR_MSG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
-import { PROTOCOL, type Msg, type NpcOutMsg, type SpillMsg, type StepMsg } from './wire';
+import { PROTOCOL, type Msg, type NpcOutMsg, type SpillMsg, type StepMsg, type TickerMsg } from './wire';
 import { FakeSocket, fakeEmulator, fakeRelay } from './fakes.testutil';
 import { RelayClient } from './relay';
 
@@ -192,6 +192,61 @@ describe("the battle lines you picked (POK-274)", () => {
     // every duel announced, not only its own.
     expect(bridge.linesFor(9)).toBeUndefined();
     expect(bridge.linesFor(2)).toBeUndefined();
+  });
+
+  // 2026-10-05 play-test: "the chosen text should show in battle". Each side's ROM says
+  // the other's lines in the fight, so each has to be handed them before it starts.
+  const ROOM = { type: 'roster', code: 'ABC123', host: 2, open: true, max: 8, pass: false, members: [{ id: 2, name: 'ASH' }, { id: 5, name: 'MAY' }] } as const;
+  const voiceOf = (msgs: Msg[]) => msgs.filter((m) => m.t === 'ticker').map((m) => [m.seat, (m as TickerMsg).kind, (m as TickerMsg).text]);
+
+  it("puts a challenger's lines into our ROM ahead of the challenge, and answers with ours", () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, frame, romInit, romDrainIn } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    bridge.myLines = { intro: 'FOUND YOU.', win: 'TOLD YOU.', lose: 'GOOD FIGHT.' };
+    socket.receive(ROOM);
+
+    socket.receive({ type: 'recv', from: 5, m: { t: 'challenge', seat: 5, opponent: 2, nonce: 3, lines: { intro: 'HI', win: 'NEXT!' } } });
+    frame();
+
+    const msgs = drainMsgs(romDrainIn);
+    expect(voiceOf(msgs)).toEqual([[5, 'intro', 'HI'], [5, 'win', 'NEXT!']]);
+    expect(msgs.map((m) => m.t)).toEqual(['ticker', 'ticker', 'challenge']);
+    expect(socket.sent.at(-1)).toEqual({ type: 'to', id: 5, m: { t: 'accept', seat: 2, opponent: 5, nonce: 3, lines: bridge.myLines } });
+  });
+
+  it("hears the answer to our own challenge: the challenged trainer's lines, into our ROM", () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, frame, romInit, romEmit, romDrainIn } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    socket.receive(ROOM);
+    romEmit({ t: 'challenge', seat: 0, opponent: 5, nonce: 4 });
+    frame();
+    romDrainIn();
+
+    socket.receive({ type: 'recv', from: 5, m: { t: 'accept', seat: 5, opponent: 2, nonce: 4, lines: { lose: 'OOF' } } });
+    frame();
+    expect(voiceOf(drainMsgs(romDrainIn))).toEqual([[5, 'lose', 'OOF']]);
+    expect(bridge.linesFor(5)).toEqual({ lose: 'OOF' });
+
+    // Somebody else's answer, to a fight we are not in, is not ours to say.
+    socket.receive({ type: 'recv', from: 5, m: { t: 'accept', seat: 5, opponent: 7, nonce: 9, lines: { lose: 'NO' } } });
+    frame();
+    expect(voiceOf(drainMsgs(romDrainIn))).toEqual([]);
+  });
+
+  it("answers no bot: a bot is nobody on the relay, and its host sends its lines", () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, romInit } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    bridge.myLines = { intro: 'FOUND YOU.' };
+    socket.receive(ROOM);
+    const before = socket.sent.length;
+    socket.receive({ type: 'recv', from: 2, m: { t: 'challenge', seat: 30, opponent: 2, nonce: 1 } });
+    expect(socket.sent.slice(before).some((f) => (f.m as Msg | undefined)?.t === 'accept')).toBe(false);
   });
 
   it('says nothing about a seat that has never challenged anybody', () => {

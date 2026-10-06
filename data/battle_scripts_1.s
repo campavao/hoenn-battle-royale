@@ -2948,6 +2948,17 @@ BattleScript_LocalBattleLost::
 	jumpifbattletype BATTLE_TYPE_TRAINER_HILL, BattleScript_LocalBattleLostPrintTrainersWinText
 	jumpifbattletype BATTLE_TYPE_EREADER_TRAINER, BattleScript_LocalBattleLostEnd
 	jumpifhalfword CMP_EQUAL, gTrainerBattleOpponent_A, TRAINER_SECRET_BASE, BattleScript_LocalBattleLostEnd
+.if BR
+	@ A bot that beat us slides back in and says its own line (2026-10-05 play-test), as
+	@ a Frontier trainer does; the white-out lines follow. gBrBotFight.fighting is +2.
+	jumpifbyte CMP_EQUAL, gBrBotFight + 2, 0, BattleScript_LocalBattleLostPrintWhiteOut
+	returnopponentmon1toball BS_ATTACKER
+	waitstate
+	trainerslidein BS_ATTACKER
+	waitstate
+	printstring STRINGID_TRAINER1WINTEXT
+	waitmessage B_WAIT_TIME_LONG
+.endif
 BattleScript_LocalBattleLostPrintWhiteOut::
 	printstring STRINGID_PLAYERWHITEOUT
 	waitmessage B_WAIT_TIME_LONG

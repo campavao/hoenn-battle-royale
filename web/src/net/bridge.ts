@@ -23,6 +23,7 @@ import { RomPort } from './romport';
 import { crossesToRom } from './slots';
 import { decode, type BlockMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg, type NpcOutMsg, type PickMsg } from './wire';
 import { Roster } from '../match/roster';
+import { voice } from '../match/ticker';
 import { RelayClient, type RecvEvent, type RosterEvent } from './relay';
 import { admits } from './trust';
 
@@ -559,7 +560,12 @@ export class Bridge {
     // A challenge is broadcast, so the lines on one are worth keeping whoever it is
     // about: the room hears every duel announced, not just its own.
     if (msg.lines && msg.seat !== this.seat) this.heardLines.set(msg.seat, msg.lines);
-    if (msg.t !== 'challenge') return;
+    // The answer to our own challenge: what the trainer we are about to fight says, for
+    // our ROM to say in the fight (2026-10-05 play-test).
+    if (msg.t === 'accept') {
+      if (msg.opponent === this.seat && msg.seat === this.opponentSeat && msg.lines) this.voiceToRom(msg.seat, msg.lines);
+      return;
+    }
     // Challenges are broadcast, so most of them are about two other people: noting one
     // of those would point our own battle traffic at a seat we are not fighting.
     if (msg.seat !== this.seat && msg.opponent !== this.seat) return;
@@ -574,6 +580,23 @@ export class Bridge {
     // a block move.
     if (msg.seat !== this.seat && (this.fighting || this.romLink()?.active)) return;
     this.pointAt(them, fightOf(msg));
+    // Each side's ROM says the other's lines in the fight. A challenge carries the
+    // challenger's; the challenged answers with an `accept` carrying theirs, which is the
+    // only way the challenger hears them. Ours to them goes before the challenge reaches
+    // our ROM, so the fight starts knowing them.
+    if (msg.seat === this.seat) {
+      const heard = this.heardLines.get(them);
+      if (heard) this.voiceToRom(them, heard);
+      return;
+    }
+    if (msg.lines) this.voiceToRom(them, msg.lines);
+    // A bot is nobody on the relay: its lines come from the host with its card.
+    if (this.myLines && this.members.has(them)) this.relay.to(them, { t: 'accept', seat: this.seat, opponent: them, nonce: msg.nonce, lines: this.myLines });
+  }
+
+  /** A trainer's three lines into our ROM, kept for the fight with them (br_battle.c). */
+  private voiceToRom(seat: number, lines: Lines): void {
+    for (const msg of voice(seat, lines)) if (!this.rom.push(msg)) this.dropCount++;
   }
 
   /** A new fight, and a new count: the ROM numbers every fight's blocks from one. */

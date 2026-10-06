@@ -767,3 +767,85 @@ export function wardrobeScreen(model: () => WardrobeModel): DrawnScreen {
     },
   };
 }
+
+// ---- MY VOICE: a line, picked from the list ------------------------------------------
+
+/** How many lines a page of the picker holds on a screen `h` tall: the title, the frame,
+ *  the note under it and the buttons take the rest. Never fewer than four. */
+export function linePageSize(h: number): number {
+  return Math.max(4, Math.floor((h - 24 - 16 - (ROW_H + 2) - 32) / ROW_H));
+}
+
+/** The page a line is on, `size` to a page. */
+export function linePageOf(index: number, size: number): number {
+  return Math.max(0, Math.floor(index / size));
+}
+
+export interface LinePickerModel {
+  /** What the line is for: WALKING UP, WHEN YOU WIN, WHEN YOU LOSE. */
+  title: string;
+  lines: readonly string[];
+  /** The one you say now. */
+  picked: number;
+  /** The page on screen, or null for the one `picked` is on. */
+  page: number | null;
+  onPage(page: number): void;
+  onPick(index: number): void;
+  onBack(): void;
+}
+
+/** MY VOICE's three rows each open this (2026-10-05 play-test: "battle text needs a
+ *  better selection UI"): the whole pool a page at a time, where a row used to step
+ *  through it one line per press. A press picks a line and goes back; L and R, or PREV
+ *  and NEXT, turn the page. */
+export function linePickerScreen(model: () => LinePickerModel): DrawnScreen {
+  let size = 8;
+  const pages = (m: LinePickerModel) => Math.max(1, Math.ceil(m.lines.length / size));
+  const pageOf = (m: LinePickerModel) => Math.min(pages(m) - 1, m.page ?? linePageOf(m.picked, size));
+  const turn = (by: number) => {
+    const m = model();
+    const n = pages(m);
+    m.onPage((pageOf(m) + by + n) % n);
+  };
+  return {
+    back() {
+      model().onBack();
+    },
+    key(k) {
+      if (k === 'l') turn(-1);
+      else if (k === 'r') turn(1);
+      else return false;
+      return true;
+    },
+    paint(c, h): Painted {
+      const m = model();
+      size = linePageSize(h);
+      const page = pageOf(m);
+      const first = page * size;
+      let y = 4;
+      paintTitle(c, m.title, y);
+      y += 20;
+      const rows: RowSpec[] = m.lines.slice(first, first + size).map((text, i) => ({
+        label: text,
+        color: first + i === m.picked ? TEXT_BLUE : undefined,
+        cls: 'line',
+        onPress: () => m.onPick(first + i),
+      }));
+      const list = paintRows(c, y, rows, 'voice-lines');
+      const widgets = [...list.widgets];
+      y = list.bottom + 2;
+      const note = `PAGE ${page + 1}/${pages(m)}  L/R TURNS`;
+      paintNote(c, note, y);
+      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: note, id: 'voice-page', cursor: null });
+      y += ROW_H + 4;
+      widgets.push(
+        ...paintButtons(c, Math.min(y, h - 28), [
+          { label: 'PREV', id: 'voice-prev', onPress: () => turn(-1) },
+          { label: 'NEXT', id: 'voice-next', onPress: () => turn(1) },
+          { label: 'BACK', id: 'voice-back', onPress: m.onBack },
+        ]),
+      );
+      return { widgets, containers: [{ id: 'voice-lines', tag: 'ul', cls: 'voice-lines' }] };
+    },
+  };
+}

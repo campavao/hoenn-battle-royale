@@ -420,16 +420,18 @@ describe('the page that runs the match (POK-330 #42)', () => {
     host.dispose();
   });
 
-  it("puts a bot's intro in front of the player it walked up to, and nobody else (POK-324)", () => {
+  it("puts a bot's lines in front of the player it walked up to, for the fight, and nobody else (POK-324)", () => {
     const room = hosting();
     const host = room.deal({ fill: 2 });
     host.begin();
     room.frames().length = 0;
     const bot = host.bots.seats[0];
     room.recv(1, { t: 'challenge', seat: 1, opponent: bot, nonce: 1 });
-    const intro = Ticker.said(bot, room.nameOf(bot), voiceFor(SEED, bot).intro)!;
-    expect(room.frames().filter((f) => f.m?.t === 'ticker')).toEqual([{ type: 'to', id: 1, m: intro }]);
-    expect(room.toRom.filter((m) => m.t === 'ticker' && m.kind === 'say')).toEqual([]);
+    // Said in the fight now (2026-10-05 play-test): its three lines, to that player's ROM.
+    const lines = Ticker.voice(bot, voiceFor(SEED, bot));
+    expect(lines.map((m) => m.kind)).toEqual(['intro', 'win', 'lose']);
+    expect(room.frames().filter((f) => f.m?.t === 'ticker')).toEqual(lines.map((m) => ({ type: 'to', id: 1, m })));
+    expect(room.toRom.filter((m) => m.t === 'ticker' && m.kind !== undefined && m.kind !== 'kill')).toEqual([]);
     host.dispose();
   });
 
@@ -618,9 +620,9 @@ describe('solo link', () => {
     solo.host.begin();
     solo.beat(solo.host.bots.seats[0]); // ...which is the match won
     expect(solo.toSeat).not.toHaveBeenCalled();
-    // The bot's intro was for us, into our own ROM, and not for a room (POK-324).
-    expect(solo.toRom.some((m) => m.t === 'ticker' && m.kind === 'say')).toBe(true);
-    expect(solo.toRoom.mock.calls.some(([m]) => m.t === 'ticker' && m.kind === 'say')).toBe(false);
+    // The bot's lines were for us, into our own ROM, and not for a room (POK-324).
+    expect(solo.toRom.some((m) => m.t === 'ticker' && m.kind === 'intro')).toBe(true);
+    expect(solo.toRoom.mock.calls.some(([m]) => m.t === 'ticker' && m.kind === 'intro')).toBe(false);
     // What the room's host would have told the room went nowhere, `again` with it.
     expect(solo.toRoom.mock.calls.map(([m]) => m.t).filter((t) => t !== 'ticker')).toEqual([
       'place', 'start', 'busy', 'spill', 'out', 'win', 'again',
@@ -640,7 +642,7 @@ describe('solo link', () => {
     solo.beat(bot);
     const lines = [
       'CATCH WHAT YOU CAN! 0s',
-      Ticker.said(bot, botName, voiceFor(SEED, bot).intro)!.text, // it walked up to us
+      ...Ticker.voice(bot, voiceFor(SEED, bot)).map((m) => m.text), // it walked up to us: its lines for the fight
       Ticker.out(bot, botName, 1)!.text,
       'MAY WINS!',
     ];

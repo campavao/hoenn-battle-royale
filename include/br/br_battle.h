@@ -127,6 +127,17 @@ void BrBattle_SayItemUsed(void);
 #define BR_STRINGID_USED_ITEM BATTLESTRINGS_COUNT
 #define BR_STRINGID_FOG_HURT (BATTLESTRINGS_COUNT + 1) // br_ring.c, the fog's turn
 bool8 BrBattle_BufferString(u16 stringId);
+// A trainer's own three lines in the battle with them (2026-10-05 play-test: "the chosen
+// text should show in battle"). The page sends the opponent's before the fight, as TICKER
+// kinds 3..5 (br_hud.c): which is BR_VOICE_*, text is charmap bytes, len without an EOS.
+#define BR_VOICE_INTRO 0
+#define BR_VOICE_WIN 1
+#define BR_VOICE_LOSE 2
+#define BR_VOICE_LEN 30
+void BrBattle_SetVoice(u8 seat, u8 which, const u8 *text, u8 len);
+// battle_message.c, the end of BufferStringBattle: the intro and a link battle's last
+// line get the opponent's own after them, on a page of its own.
+void BrBattle_AfterString(u16 stringId);
 // The room's TEXT and ANIM in every battle (2026-10-05 play-test: "animations off and
 // text fast don't seem to be applying"). pret ignores both in a link battle -- every
 // animation plays, every line prints at 1 and then holds 49 frames for the cable -- and

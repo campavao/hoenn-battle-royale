@@ -22,7 +22,7 @@ import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
 import { saveMatch, type MatchLog } from './match/log';
 import { HostRole, soloLink, soloRoster, type HostLink } from './match/host';
-import { type BotVoice, lineAt, nextLine } from './bots/lines';
+import { type BotVoice, LINES, lineAt } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
@@ -54,6 +54,7 @@ import {
   roomScreen,
   sheetScreen,
   wardrobeScreen,
+  linePickerScreen,
   type RoomModel,
   type RoomSeat,
   type RowSpec,
@@ -273,6 +274,9 @@ const settings = {
   resetPad: (): void => {},
   forget: (): void => {},
 };
+
+/** The picker's title for each of MY VOICE's rows. */
+const VOICE_TITLES = { intro: 'WALKING UP', win: 'WHEN YOU WIN', lose: 'WHEN YOU LOSE' } as const;
 
 /** The keys on a desktop, in the sheet's two lines. */
 const KEY_LINES = ['Arrows move  Z: A  X: B  A: L  S: R', 'Enter: START  Shift: SELECT  pads too'];
@@ -3095,11 +3099,28 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         case 'win':
         case 'lose': {
           // Three rows, three independent picks (POK-283). One index for all three meant
-          // choosing a win line you did not want to get the intro you did.
+          // choosing a win line you did not want to get the intro you did. Each opens the
+          // whole pool a page at a time (2026-10-05 play-test: "a better selection UI");
+          // a row used to step through it one line per press.
           const which = action.kind;
-          const career = loadCareer();
-          saveProfile({ [which]: nextLine(career[which] ?? 0) });
-          redraw();
+          let page: number | null = null;
+          stage.push(
+            linePickerScreen(() => ({
+              title: VOICE_TITLES[which],
+              lines: LINES,
+              picked: loadCareer()[which] ?? 0,
+              page,
+              onPage: (p) => {
+                page = p;
+                redraw();
+              },
+              onPick: (i) => {
+                saveProfile({ [which]: i });
+                stage.pop();
+              },
+              onBack: () => stage.pop(),
+            })),
+          );
           return;
         }
         case 'stats':

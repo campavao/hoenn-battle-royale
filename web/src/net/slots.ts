@@ -166,7 +166,8 @@ const MAP_REF_BYTES = 2; // an Emerald MapRef packs as group:u8, num:u8
 
 const STATUS_ORDER = ['lobby', 'alive', 'battle', 'out'] as const;
 const OUTCOME_ORDER: Outcome[] = ['win', 'lose', 'draw', 'forfeit'];
-const TICKER_KIND_ORDER: TickerKind[] = ['system', 'kill', 'say'];
+// br_hud.h's BR_HUD_KIND_*, in order.
+const TICKER_KIND_ORDER: TickerKind[] = ['system', 'kill', 'say', 'intro', 'win', 'lose'];
 const TEXT_SPEED_ORDER = [1, 3, 5] as const;
 
 // ---- per-message binary codecs ---------------------------------------------

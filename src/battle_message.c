@@ -2255,6 +2255,9 @@ void BufferStringBattle(u16 stringID)
     }
 
     BattleStringExpandPlaceholdersToDisplayedString(stringPtr);
+#if BR
+    BrBattle_AfterString(stringID); // the opponent's own line after the intro and the end
+#endif
 }
 
 u32 BattleStringExpandPlaceholdersToDisplayedString(const u8 *src)

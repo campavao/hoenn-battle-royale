@@ -194,7 +194,11 @@ export class HostRole {
       // Walking up to somebody is when a bot has something to say (POK-239) -- to them
       // (POK-324): the rest of the room was not walked up to. Dealt from the seed, so
       // the same bot has the same voice all match on every client that works it out.
-      onEngage: (seat, target) => this.sendTo(target, Ticker.said(seat, this.nameOf(seat), this.myVoice(seat, seed).intro)),
+      // Said in the fight itself now (2026-10-05 play-test), not on the ticker: all three
+      // lines go to that player's ROM ahead of the challenge.
+      onEngage: (seat, target) => {
+        for (const msg of Ticker.voice(seat, this.myVoice(seat, seed))) this.sendTo(target, msg);
+      },
       fill: opts.fill,
       resume,
       safariSecs: opts.botSafariSecs,

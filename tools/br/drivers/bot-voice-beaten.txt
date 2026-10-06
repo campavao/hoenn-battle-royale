@@ -1,0 +1,79 @@
+# bot-voice-beaten: bot-voice.txt with the bot's TREECKO on 1 HP, so we win and it
+# says its lose line, GOOD FIGHT., where pret's trainer says its defeat speech.
+#
+# bot-voice: a bot says its own lines in the fight (2026-10-05 play-test: "the chosen
+# text should show in battle").
+#
+# The page sends the opponent's three lines before the fight, as TICKER kinds 3..5 (the
+# ticker never draws them). The intro goes on a page of its own after "would like to
+# battle!"; at the end the bot slides back in and says its win or lose line. Here seat
+# 31 (bot-fight.txt's card) says FOUND YOU. / TOLD YOU. / GOOD FIGHT.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 01 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+# the three lines: seat 1F, kind, length, text
+pokebytes gDecompressionBuffer 1F 03 0A C0 C9 CF C8 BE 00 D3 C9 CF AD
+mailsend gBrMailbox 15 gDecompressionBuffer 13
+pokebytes gDecompressionBuffer 1F 04 09 CE C9 C6 BE 00 D3 C9 CF AD
+mailsend gBrMailbox 15 gDecompressionBuffer 12
+pokebytes gDecompressionBuffer 1F 05 0B C1 C9 C9 BE 00 C0 C3 C1 C2 CE AD
+mailsend gBrMailbox 15 gDecompressionBuffer 14
+wait 4
+# none of them is a ticker line
+expect u8 gBrHud+0x0A 0
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 0F
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+# the intro, then its own page: "PKMN TRAINER BOT\nwould like to battle!\pFOUND YOU.\p"
+expect u32 gDisplayedStringBattle+36 0xCFC9C0FB
+expect u32 gDisplayedStringBattle+40 0xD300BEC8
+expect u32 gDisplayedStringBattle+44 0xFBADCFC9
+expect u8 gDisplayedStringBattle+48 0xFF
+shot intro
+tap A
+wait 40
+shot intro-line
+# FIGHT, POUND: one hit, "<PLAYER> defeated PKMN TRAINER BOT!", and its line.
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+tap A
+wait 50
+expect u32 gDisplayedStringBattle 0xBEC9C9C1
+expect u32 gDisplayedStringBattle+4 0xC1C3C000
+expect u32 gDisplayedStringBattle+8 0xFBADCEC2
+expect u8 gDisplayedStringBattle+12 0xFF
+wait 20
+shot beaten-line
+say bot voice beaten ok

@@ -119,6 +119,11 @@
 #define BR_HUD_KIND_SYSTEM 0
 #define BR_HUD_KIND_KILL 1
 #define BR_HUD_KIND_SAY 2
+// Not lines for the ticker: a trainer's own battle text, kept for the fight it is about
+// to have with us (br_battle.c's BrBattle_SetVoice). Intro, win, lose, in that order.
+#define BR_HUD_KIND_INTRO 3
+#define BR_HUD_KIND_WIN 4
+#define BR_HUD_KIND_LOSE 5
 
 struct BrHudLine
 {

@@ -44,6 +44,22 @@ export function said(seat: number, name: string, text: string): TickerMsg | null
   return line(seat, `${short(name)}: ${text}`, 'say');
 }
 
+/** BR_VOICE_LEN in include/br/br_battle.h: what the ROM keeps of each battle line. */
+export const VOICE_MAX = 30;
+
+/** A trainer's three lines for the player about to fight them (2026-10-05 play-test:
+ *  "the chosen text should show in battle"). Not ticker lines: the ROM keeps them for
+ *  that one seat, says the intro after "would like to battle!", and the win or the lose
+ *  line when the fight ends (br_battle.c). */
+export function voice(seat: number, lines: { intro?: string; win?: string; lose?: string }): TickerMsg[] {
+  const out: TickerMsg[] = [];
+  for (const kind of ['intro', 'win', 'lose'] as const) {
+    const text = (lines[kind] ?? '').trim().slice(0, VOICE_MAX);
+    if (text.length > 0) out.push({ t: 'ticker', seat, kind, text });
+  }
+  return out;
+}
+
 /** What the trainer you are watching just picked up (POK-268). Kanto tells a spectator
  *  when the bot they are following catches something (v0.48.0); Hoenn's bots are dealt
  *  their teams rather than catching, so the moment worth reporting is the one where

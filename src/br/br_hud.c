@@ -19,6 +19,7 @@
 #include "br/br_wire_c.h"
 #include "br/br_field.h"
 #include "br/br_ring.h"
+#include "br/br_battle.h"
 
 EWRAM_DATA struct BrHud gBrHud = {0};
 
@@ -767,6 +768,11 @@ static void HandleTicker(const u8 *payload, u8 len)
     textLen = d[2];
     if (textLen > n - 3)
         textLen = n - 3;
+    if (d[1] >= BR_HUD_KIND_INTRO && d[1] <= BR_HUD_KIND_LOSE)
+    {
+        BrBattle_SetVoice(d[0], d[1] - BR_HUD_KIND_INTRO, d + 3, textLen);
+        return;
+    }
     Push(d[1], d + 3, textLen);
 }
 
