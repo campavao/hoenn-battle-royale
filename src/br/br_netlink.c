@@ -256,8 +256,8 @@ static void TickPendingChallenge(void)
         if (!FieldFree())
             return; // a script (a sign, the nurse) runs to its end, a fade to its screen
         // The field again: the settle starts it, as HandleChallenge's would have.
-        if (BrEngage_Settle(gBrNetlink.pendingPeer,
-                            BrBot_IsStaged(gBrNetlink.pendingPeer) ? BR_SETTLE_BOT : BR_SETTLE_LINK_ANSWER))
+        if (Answer(gBrNetlink.pendingPeer,
+                   BrBot_IsStaged(gBrNetlink.pendingPeer) ? BR_SETTLE_BOT : BR_SETTLE_LINK_ANSWER))
             gBrNetlink.pendingPeer = 0xFF;
         return;
     }

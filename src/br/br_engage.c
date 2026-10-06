@@ -48,6 +48,7 @@ static EWRAM_DATA u8 sBusyStable = 0;  // frames it has held
 #define BR_SETTLE_MAX 120
 static EWRAM_DATA u8 sSettleHow = 0;
 static EWRAM_DATA u8 sSettleFrames = 0;
+static EWRAM_DATA u8 sSettlePresent = 0; // the seat was on the board when the settle began
 
 // Tell the room what we are doing, once it has held long enough to be a state and
 // not a transition (a warp's map load is a menu for a few frames). Nothing is said
@@ -297,6 +298,7 @@ bool8 BrEngage_Settle(u8 seat, u8 how)
     gBrEngage.settleSeat = seat;
     sSettleHow = how;
     sSettleFrames = 0;
+    sSettlePresent = gBrSeats[seat].present;
     LockPlayerFieldControls();
     return TRUE;
 }
@@ -319,15 +321,29 @@ static void TickSettle(void)
     if (seat == 0xFF)
         return;
     // Somebody else's fight got there first, or this one is already on its way.
-    if (gBrNetlink.active || gMain.inBattle || BrField_Leaving())
+    if (gBrNetlink.active || gMain.inBattle)
     {
         gBrEngage.settleSeat = 0xFF;
         return;
     }
-    // Nothing left to fight for: we are out (the fog), or the card a bot fight was going
-    // to use has gone. A link whose peer has left is the hello watchdog's, as it always
-    // was: a seat with no ghost has nothing on screen to wait for, so it starts at once.
-    if (gBrMatch.phase != BR_PHASE_PLAY || (sSettleHow == BR_SETTLE_BOT && !BrBot_IsStaged(seat)))
+    // Something else is taking us off the field. A challenge to us is parked as one that
+    // lands in a menu would be (TickPendingChallenge), so the challenger, already
+    // committed to its side of the fight, still finds us once that has settled.
+    if (BrField_Leaving())
+    {
+        if (sSettleHow != BR_SETTLE_LINK_FIRST)
+            gBrNetlink.pendingPeer = seat;
+        gBrEngage.settleSeat = 0xFF;
+        return;
+    }
+    // Nothing left to fight for: we are out (the fog), the card a bot fight was going to
+    // use has gone, or the seat left the match or, as the side that challenged, went into
+    // somebody else's fight meanwhile -- TickWait's own reasons. A seat that was never on
+    // the board has nothing on screen to wait for, and is the hello watchdog's, as always.
+    if (gBrMatch.phase != BR_PHASE_PLAY
+     || (sSettleHow == BR_SETTLE_BOT && !BrBot_IsStaged(seat))
+     || (sSettlePresent && !gBrSeats[seat].present)
+     || (sSettleHow == BR_SETTLE_LINK_FIRST && gBrSeatBusy[seat] == BR_BUSY_BATTLE))
     {
         gBrEngage.settleSeat = 0xFF;
         Unfreeze();
@@ -368,6 +384,7 @@ void BrEngage_Init(void)
     gBrEngage.settleSeat = 0xFF;
     sSettleHow = 0;
     sSettleFrames = 0;
+    sSettlePresent = 0;
     sOwnBusy = 0xFF;
     sBusyKind = 0;
     sBusyStable = 0;
