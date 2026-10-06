@@ -2023,9 +2023,10 @@ function wireRoom(
   /** The room is ours again after our own drop (POK-330 #47), and the match with it:
    *  the director the drop stopped starts again on the next roster that says so. */
   let resumeHost = false;
-  /** The host's room settings between roster events (POK-241). */
+  /** The host's room settings between roster events (POK-241). TEXT FAST and ANIM OFF to
+   *  start, the boot's own pace (br_boot.c): a room used to put MID and every animation back. */
   const controls: RoomControls = {
-    fill: true, roster: null, textSpeed: 3, animations: true, fogSecs: DEFAULT_FOG_SECS,
+    fill: true, roster: null, textSpeed: 5, animations: false, fogSecs: DEFAULT_FOG_SECS,
     safariSecs: DEFAULT_SAFARI_SECS,
   };
 

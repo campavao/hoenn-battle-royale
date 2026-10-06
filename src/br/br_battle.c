@@ -18,6 +18,7 @@
 #include "constants/battle_script_commands.h"
 #include "constants/battle_string_ids.h"
 #include "main.h"
+#include "menu.h"
 #include "pokemon.h"
 #include "recorded_battle.h"
 #include "constants/characters.h"
@@ -145,6 +146,34 @@ void BrBattle_Init(void)
     sItemSlot = PARTY_SIZE;
     sItemMove = 0;
     sItemNoted = ITEM_NONE;
+}
+
+bool8 BrBattle_AnimationsOff(void)
+{
+    return gSaveBlock2Ptr->optionsBattleSceneOff == TRUE;
+}
+
+u8 BrBattle_LinkTextSpeed(void)
+{
+    return GetPlayerTextSpeedDelay();
+}
+
+// SLOW keeps pret's hold; MID and FAST give a line about two thirds and a third of it.
+// Long enough to read a line at a glance, and the same on both ROMs of a link battle,
+// which got one TEXT at START.
+u8 BrBattle_AutoScrollFrames(void)
+{
+    if (!gMain.inBattle)
+        return 49;
+    switch (gSaveBlock2Ptr->optionsTextSpeed)
+    {
+    case OPTIONS_TEXT_SPEED_FAST:
+        return 18;
+    case OPTIONS_TEXT_SPEED_MID:
+        return 32;
+    default:
+        return 49;
+    }
 }
 
 void BrBattle_ShotReset(void)

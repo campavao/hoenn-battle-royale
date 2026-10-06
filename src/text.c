@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_battle.h"
+#endif
 #include "battle.h"
 #include "main.h"
 #include "m4a.h"
@@ -851,7 +854,11 @@ bool8 TextPrinterWaitAutoMode(struct TextPrinter *textPrinter)
 {
     struct TextPrinterSubStruct *subStruct = (struct TextPrinterSubStruct *)(&textPrinter->subStructFields);
 
+#if BR
+    if (subStruct->autoScrollDelay >= BrBattle_AutoScrollFrames()) // the room's TEXT, in a battle
+#else
     if (subStruct->autoScrollDelay == 49)
+#endif
     {
         return TRUE;
     }

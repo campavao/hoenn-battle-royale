@@ -3131,6 +3131,13 @@ static void BattleStartClearSetData(void)
 
     gHitMarker = 0;
 
+#if BR
+    // ANIM OFF is the room's, so it holds in every battle of the match: our link battles
+    // and the replays of them too, where pret plays every animation whatever the
+    // options say. Both ROMs of a fight got the same pace at START.
+    if (BrBattle_AnimationsOff())
+        gHitMarker |= HITMARKER_NO_ANIMATIONS;
+#else
     if (!(gBattleTypeFlags & BATTLE_TYPE_RECORDED))
     {
         if (!(gBattleTypeFlags & BATTLE_TYPE_LINK) && gSaveBlock2Ptr->optionsBattleSceneOff == TRUE)
@@ -3140,6 +3147,7 @@ static void BattleStartClearSetData(void)
     {
         gHitMarker |= HITMARKER_NO_ANIMATIONS;
     }
+#endif
 
     gBattleScripting.battleStyle = gSaveBlock2Ptr->optionsBattleStyle;
 

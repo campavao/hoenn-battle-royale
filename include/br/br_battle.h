@@ -127,6 +127,17 @@ void BrBattle_SayItemUsed(void);
 #define BR_STRINGID_USED_ITEM BATTLESTRINGS_COUNT
 #define BR_STRINGID_FOG_HURT (BATTLESTRINGS_COUNT + 1) // br_ring.c, the fog's turn
 bool8 BrBattle_BufferString(u16 stringId);
+// The room's TEXT and ANIM in every battle (2026-10-05 play-test: "animations off and
+// text fast don't seem to be applying"). pret ignores both in a link battle -- every
+// animation plays, every line prints at 1 and then holds 49 frames for the cable -- and
+// those are the fights a match is made of.
+// battle_main.c: HITMARKER_NO_ANIMATIONS, in a link battle and a replay of one too.
+bool8 BrBattle_AnimationsOff(void);
+// battle_message.c: a link battle's print speed, the player's own.
+u8 BrBattle_LinkTextSpeed(void);
+// text.c: how long an auto-scrolling line holds (pret: 49 frames). Shorter on a faster
+// TEXT, in a battle; pret's 49 everywhere else.
+u8 BrBattle_AutoScrollFrames(void);
 // battle_main.c: TRUE while the battlers are still choosing, when the engine may yet take
 // a recorded byte back off the record.
 bool8 BrBattle_Choosing(void);
