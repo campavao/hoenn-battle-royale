@@ -2629,11 +2629,9 @@ function wireRoom(
       else if (m.t === 'result') spectate.noteResult(m.seat);
       else if (m.t === 'busy') spectate.noteBusy(m.seat, m.kind);
       else if (m.t === 'out') {
-        // An out ends whatever fight that seat was in. A bot's duel never sends a RESULT
-        // -- its loser is simply out -- so its stream sat in the cache, and whoever
-        // followed the winner later was handed a finished fight that played to its last
-        // turn and then waited on the next for good (2026-10-05 play-test).
-        spectate.noteResult(m.seat);
+        // An out ends whatever fight that seat was in, for anyone who starts watching
+        // after it (a bot's duel never sends a RESULT; spectate.ts noteOut).
+        spectate.noteOut(m.seat);
         // The host saying we are out: we went while our socket was down and came back to
         // a match that had buried us (POK-330 #25). Out is watching, as for anybody.
         if (m.seat === seat) relay.canHost(false);

@@ -267,6 +267,19 @@ export class Spectate {
     }
   }
 
+  /** A seat went out. A bot's duel sends no RESULT -- its loser is simply out -- so its
+   *  stream would sit here and a later follower of the winner be handed a fight that
+   *  played to its last turn and then waited on the next for good (2026-10-05 play-test).
+   *  Only that hand-over is dropped: a watch already on the fight keeps it, because the
+   *  loser's OUT and the winner's last TURN come from two sockets in either order, and
+   *  clearing the watch here dropped the turns still in flight. */
+  noteOut(seat: number): void {
+    for (const battle of [...this.live.keys()]) {
+      const [lo, hi] = battleSeats(battle);
+      if (seat === lo || seat === hi) this.live.delete(battle);
+    }
+  }
+
   /** A fight ended: the stream for it is over, so a later fight between other seats
    *  cannot be mistaken for it, and there is nothing left to join. */
   noteResult(seat: number): void {

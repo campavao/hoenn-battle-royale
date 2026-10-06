@@ -1164,6 +1164,10 @@ export class FieldView {
     try {
       this.paint(c);
     } catch (e) {
+      // Only that: any other throw is a bug in paint, and reallocating on it every frame
+      // would hide it behind a flickering field.
+      const err = e as { name?: string; message?: string } | null;
+      if (err?.name !== 'InvalidStateError' && !/error state/i.test(err?.message ?? '')) throw e;
       const { field, overlay } = this.deps;
       console.warn('[field] the field canvas failed; reallocating it', e);
       this.drawn = null;

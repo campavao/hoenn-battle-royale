@@ -355,6 +355,22 @@ describe('a wild fight (2026-10-05 play-test)', () => {
     expect(s.streamFor(4)).toEqual([]);
   });
 
+  it('is not handed to a later watcher once its loser is out, but a watch on it keeps the last turns', () => {
+    const DUEL = battleId(4, 9);
+    const s = new Spectate();
+    s.follow(4);
+    s.wantsFromRelay(bstart(DUEL));
+    s.noteOut(9);
+    // the winner's last turn, behind the loser's out on another socket
+    expect(s.wantsFromRelay(turn(DUEL))).toBe(true);
+    expect(s.watchingBattle()).toBe(DUEL);
+    const late = new Spectate();
+    late.wantsFromRelay(bstart(DUEL));
+    late.noteOut(9);
+    expect(late.follow(4)).toEqual([{ t: 'follow', seat: 4 }]);
+    expect(late.streamFor(4)).toEqual([]);
+  });
+
   it('leaves a fight between two seats to its RESULT', () => {
     const s = new Spectate();
     s.follow(4);

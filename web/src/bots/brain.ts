@@ -831,6 +831,8 @@ export class Bots {
       if (items.length > 0) (card as { items?: number[] }).items = items;
       if (this.opts.sendTo) this.opts.sendTo(player.seat, card);
       else this.opts.send(card);
+      // The bot's lines (host.ts onEngage) ahead of its challenge, like its card.
+      this.opts.onEngage?.(walker.bot.seat, player.seat);
       this.nonce = (this.nonce + 1) & 0xffff;
       this.opts.send({
         t: 'challenge',
@@ -839,7 +841,6 @@ export class Bots {
         nonce: this.nonce,
       });
       this.note(walker, 'engage', `seat ${player.seat}`);
-      this.opts.onEngage?.(walker.bot.seat, player.seat);
       this.hold(walker, player.seat, now);
       walker.engageAfter = now + cooldownFor(walker.bot);
       return true;
