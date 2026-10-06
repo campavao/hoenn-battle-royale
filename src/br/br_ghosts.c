@@ -105,10 +105,83 @@ static u8 SpawnedCount(void)
     return n;
 }
 
-// Where this map is drawn: on it, and inside the box the engine keeps objects in.
-static bool8 InView(const struct BrSeat *s)
+// A cell on another map, in this map's coordinates, when that map is one of this one's
+// N/S/E/W connections (object coords both ways, MAP_OFFSET included). Cell (0,0) of a
+// map to the NORTH sits `offset` tiles along and its own height above ours; the rest
+// follow from that.
+static bool8 AcrossConnection(u8 mapGroup, u8 mapNum, s16 *x, s16 *y)
 {
-    return s->present && OnCurrentMap(s) && BrField_InObjectView(s->x, s->y);
+    const struct MapConnections *all = gMapHeader.connections;
+    const struct MapConnection *c;
+    const struct MapLayout *theirs;
+    s32 i;
+
+    if (all == NULL || all->connections == NULL)
+        return FALSE;
+    for (i = 0, c = all->connections; i < all->count; i++, c++)
+    {
+        if (c->mapGroup != mapGroup || c->mapNum != mapNum)
+            continue;
+        theirs = Overworld_GetMapHeaderByGroupAndId(mapGroup, mapNum)->mapLayout;
+        switch (c->direction)
+        {
+        case CONNECTION_NORTH:
+            *x += c->offset;
+            *y -= theirs->height;
+            return TRUE;
+        case CONNECTION_SOUTH:
+            *x += c->offset;
+            *y += gMapHeader.mapLayout->height;
+            return TRUE;
+        case CONNECTION_EAST:
+            *x += gMapHeader.mapLayout->width;
+            *y += c->offset;
+            return TRUE;
+        case CONNECTION_WEST:
+            *x -= theirs->width;
+            *y += c->offset;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+// Where a seat stands in this map's coordinates. Its own, on this map; and the seat a
+// spectator rides keeps a ghost across a seam too (2026-10-06 play-test: a bot walking
+// out of Rustboro "teleported" into Route 116). It walks over the seam the way a player
+// does, the camera with it, and the camera's own crossing loads the next map.
+static bool8 LocalPos(u8 seat, s16 *x, s16 *y)
+{
+    const struct BrSeat *s = &gBrSeats[seat];
+
+    *x = s->x;
+    *y = s->y;
+    if (OnCurrentMap(s))
+        return TRUE;
+    return seat == gBrSpectate.follow && AcrossConnection(s->mapGroup, s->mapNum, x, y);
+}
+
+bool8 BrGhosts_LocalPos(u8 seat, s16 *x, s16 *y)
+{
+    if (seat >= BR_MAX_SEATS || !gBrSeats[seat].present)
+        return FALSE;
+    return LocalPos(seat, x, y);
+}
+
+// Where this map is drawn: on it, and inside the box the engine keeps objects in.
+static bool8 InView(u8 seat)
+{
+    s16 x, y;
+
+    return gBrSeats[seat].present && LocalPos(seat, &x, &y) && BrField_InObjectView(x, y);
+}
+
+static u16 Distance(u8 seat)
+{
+    s16 x, y;
+
+    LocalPos(seat, &x, &y);
+    return BrField_ViewDistance(x, y);
 }
 
 u8 BrGhosts_Wanted(void)
@@ -116,7 +189,7 @@ u8 BrGhosts_Wanted(void)
     u8 seat, n = 0;
 
     for (seat = 0; seat < BR_MAX_SEATS; seat++)
-        if (InView(&gBrSeats[seat]))
+        if (InView(seat))
             n++;
     return n;
 }
@@ -127,8 +200,7 @@ u8 BrGhosts_WantedNear(void)
 
     for (seat = 0; seat < BR_MAX_SEATS; seat++)
     {
-        if (InView(&gBrSeats[seat])
-         && BrField_ViewDistance(gBrSeats[seat].x, gBrSeats[seat].y) <= BR_SIGHT_RANGE)
+        if (InView(seat) && Distance(seat) <= BR_SIGHT_RANGE)
             n++;
     }
     return n;
@@ -145,14 +217,14 @@ static u32 Keep(u8 limit)
 
     for (seat = 0; seat < BR_MAX_SEATS; seat++)
     {
-        if (!InView(&gBrSeats[seat]))
+        if (!InView(seat))
             continue;
-        d = BrField_ViewDistance(gBrSeats[seat].x, gBrSeats[seat].y);
+        d = Distance(seat);
         for (other = 0, nearer = 0; other < BR_MAX_SEATS && nearer < limit; other++)
         {
-            if (other == seat || !InView(&gBrSeats[other]))
+            if (other == seat || !InView(other))
                 continue;
-            e = BrField_ViewDistance(gBrSeats[other].x, gBrSeats[other].y);
+            e = Distance(other);
             if (e < d || (e == d && other < seat))
                 nearer++;
         }
@@ -169,6 +241,10 @@ static void Despawn(u8 seat)
 {
     struct ObjectEvent *obj = GhostObject(seat);
 
+    // The camera rides this sprite's movement: off it first, or the freed sprite's
+    // jump to (0,0) is a jump the camera makes too.
+    if (obj != NULL && seat == gBrSpectate.follow)
+        BrSpectate_LetGo();
     if (obj != NULL)
         BrField_RemoveObject(obj->localId, obj->mapNum, obj->mapGroup);
     gBrSeats[seat].objId = BR_NO_OBJ;
@@ -199,11 +275,12 @@ static void Spawn(u8 seat)
     struct BrSeat *s = &gBrSeats[seat];
     u8 gfx = SkinGraphic(s->skin);
     u8 id;
+    s16 x, y;
 
-    if (SpawnedCount() >= BR_MAX_GHOSTS)
+    if (SpawnedCount() >= BR_MAX_GHOSTS || !LocalPos(seat, &x, &y))
         return;
     id = SpawnSpecialObjectEventParameterized(gfx, MOVEMENT_TYPE_NONE, BR_GHOST_LOCAL_ID_BASE + seat,
-                                              s->x, s->y, MapGridGetElevationAt(s->x, s->y));
+                                              x, y, MapGridGetElevationAt(x, y));
     if (id >= OBJECT_EVENTS_COUNT)
         return;
     s->objId = id;
@@ -357,6 +434,48 @@ void BrGhosts_Init(void)
     sOutSeats = 0;
 }
 
+// A walker's first step onto the next map is a PLACE (a ROM's own WatchOwn says so on any
+// map change, and so does the bot brain): it cannot be a STEP, because the cell is in
+// another map's numbers. For the seat being watched that despawned the ghost and warped
+// the spectator after it. When the new cell is one step from where the ghost stands,
+// across a connection of this map, it is that step, and the ghost walks it.
+static bool8 CrossedSeam(u8 seat, u8 mapGroup, u8 mapNum, s16 x, s16 y)
+{
+    struct BrSeat *s = &gBrSeats[seat];
+    s16 ox, oy, nx = x, ny = y;
+    u8 dir;
+
+    if (seat != gBrSpectate.follow || !s->present || GhostObject(seat) == NULL)
+        return FALSE;
+    if (mapGroup == s->mapGroup && mapNum == s->mapNum)
+        return FALSE;
+    if (!LocalPos(seat, &ox, &oy))
+        return FALSE;
+    if (!(mapGroup == gSaveBlock1Ptr->location.mapGroup && mapNum == gSaveBlock1Ptr->location.mapNum)
+     && !AcrossConnection(mapGroup, mapNum, &nx, &ny))
+        return FALSE;
+    if (nx == ox && ny == oy + 1)
+        dir = DIR_SOUTH;
+    else if (nx == ox && ny == oy - 1)
+        dir = DIR_NORTH;
+    else if (ny == oy && nx == ox - 1)
+        dir = DIR_WEST;
+    else if (ny == oy && nx == ox + 1)
+        dir = DIR_EAST;
+    else
+        return FALSE;
+    s->mapGroup = mapGroup;
+    s->mapNum = mapNum;
+    s->x = x;
+    s->y = y;
+    s->dir = dir;
+    if (s->queued < BR_STEP_QUEUE)
+        s->queue[s->queued++] = dir;
+    else
+        s->queued = BR_STEP_QUEUE + 1;
+    return TRUE;
+}
+
 void BrGhosts_Place(u8 seat, u8 skin, u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 dir)
 {
     struct BrSeat *s;
@@ -369,6 +488,8 @@ void BrGhosts_Place(u8 seat, u8 skin, u8 mapGroup, u8 mapNum, s16 x, s16 y, u8 d
     if (SEAT_IS_OUT(seat))
         return;
     s = &gBrSeats[seat];
+    if (CrossedSeam(seat, mapGroup, mapNum, x, y))
+        return;
     // A place is authoritative: drop whatever the object was doing and put it there.
     Despawn(seat);
     s->present = TRUE;
@@ -440,14 +561,19 @@ static void DriveGhost(u8 seat)
     struct BrSeat *s = &gBrSeats[seat];
     struct ObjectEvent *obj = GhostObject(seat);
     u8 i;
+    s16 x, y;
 
     if (obj == NULL)
         return;
     if (s->queued > BR_STEP_QUEUE)
     {
-        // Overflowed: teleport to the roster position and start clean.
+        // Overflowed: teleport to the roster position and start clean -- with the camera
+        // let go of first, if it rides this one (FollowTick takes it back, centred).
+        if (seat == gBrSpectate.follow)
+            BrSpectate_LetGo();
+        LocalPos(seat, &x, &y);
         ObjectEventClearHeldMovementIfActive(obj);
-        MoveObjectEventToMapCoords(obj, s->x, s->y);
+        MoveObjectEventToMapCoords(obj, x, y);
         ObjectEventTurn(obj, s->dir);
         s->queued = 0;
         return;
@@ -684,12 +810,12 @@ void BrGhosts_Tick(void)
     // the slot this frame (POK-330 #48).
     for (seat = 0; seat < BR_MAX_SEATS; seat++)
     {
-        if (gBrSeats[seat].objId != BR_NO_OBJ && !(InView(&gBrSeats[seat]) && (keep & (1u << seat))))
+        if (gBrSeats[seat].objId != BR_NO_OBJ && !(InView(seat) && (keep & (1u << seat))))
             Despawn(seat);
     }
     for (seat = 0; seat < BR_MAX_SEATS; seat++)
     {
-        if (!InView(&gBrSeats[seat]) || !(keep & (1u << seat)))
+        if (!InView(seat) || !(keep & (1u << seat)))
             continue;
         if (GhostObject(seat) == NULL)
             Spawn(seat);

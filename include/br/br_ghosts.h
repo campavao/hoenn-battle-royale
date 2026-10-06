@@ -66,6 +66,10 @@ u8 BrGhosts_WantedNear(void);
 // eliminated trainer's page keeps sending where it is -- it is spectating now -- so a
 // PLACE or STEP after the OUT is not them coming back (POK-330 #5).
 void BrGhosts_Out(u8 seat);
+// Where a seat stands in this map's coordinates (object coords): on this map, or -- the
+// seat a spectator follows only -- on a map across one of this map's connections. FALSE
+// when it is anywhere else, or not in the match.
+bool8 BrGhosts_LocalPos(u8 seat, s16 *x, s16 *y);
 // The busy bubble over one seat's ghost (POK-266): "!" in a fight, "?" in a menu.
 // TRUE when one fired.
 bool8 BrGhosts_Emote(u8 seat);

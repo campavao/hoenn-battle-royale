@@ -408,6 +408,28 @@ u16 BrField_ViewDistance(s16 x, s16 y)
     return (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
 }
 
+void BrField_MoveCamera(s16 dx, s16 dy)
+{
+    s16 sx, sy;
+
+    if (dx == 0 && dy == 0)
+        return;
+    while (dx != 0 || dy != 0)
+    {
+        sx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+        sy = sx != 0 ? 0 : (dy > 0 ? 1 : -1);
+        // field_camera.c's MoveCameraAndRedrawMap, a tile at a time: CameraMove only
+        // finds the connection it is crossing for a one-tile move.
+        CameraMove(sx, sy);
+        UpdateObjectEventsForCameraUpdate(sx, sy);
+        gTotalCameraPixelOffsetX -= sx * 16;
+        gTotalCameraPixelOffsetY -= sy * 16;
+        dx -= sx;
+        dy -= sy;
+    }
+    DrawWholeMapView();
+}
+
 // Ghosts and loot used to spawn wherever their cell was, in seat order, and again every
 // frame after the engine culled them: twelve far ghosts held twelve slots at the very
 // moment a route's trainers scrolling into view needed them, and those trainers were

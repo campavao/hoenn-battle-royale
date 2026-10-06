@@ -14,7 +14,7 @@ struct BrSpectate
     /* 5 */ u8 watching; // a replay of someone else's battle is on screen
     /* 6 */ u16 watchId; // the battle being watched, as BR_MSG_BSTART's battle id
     /* 8 */ u8 follow;   // seat whose walk we are watching, BR_NO_SEAT for nobody
-    /* 9 */ u8 followed; // the camera is actually on them (0 while warping to their map)
+    /* 9 */ u8 followed; // the camera is on their ghost: its sprite id + 1 (0 while warping to their map)
     /* 10 */ u8 peeking; // the peek box is up
     /* 11 */ u8 peekMons; // party rows held for the followed seat, 0..PARTY_SIZE
     /* 12 */ u8 shotSecs; // the followed seat's shot clock, 0 = no choice pending
@@ -46,6 +46,10 @@ void BrSpectate_OnBusy(u8 seat);
 // Watch a seat walk (BR_NO_SEAT to stop). The camera rides their ghost, our own
 // trainer goes invisible where it stood, and field controls are locked.
 void BrSpectate_Follow(u8 seat);
+// The camera off the followed ghost and back on our own trainer, where it stands, for
+// as long as that ghost's sprite is about to go or jump (br_ghosts.c). FollowTick takes
+// the ghost up again, centred, once it is at rest.
+void BrSpectate_LetGo(void);
 // The heap was just re-initialised (malloc.c's InitHeap, which CB2_InitBattle calls on
 // the way into every battle). Everything this module is holding there is gone with it.
 void BrSpectate_HeapReset(void);

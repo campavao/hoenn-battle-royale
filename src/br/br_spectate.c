@@ -9,6 +9,7 @@
 #include "task.h"
 #include "script.h"
 #include "fieldmap.h"
+#include "field_camera.h"
 #include "field_screen_effect.h"
 #include "sprite.h"
 #include "event_object_movement.h"
@@ -866,13 +867,23 @@ static void ShowOwnTrainer(bool8 shown)
 // our own tile: the camera object tracks a sprite's movement instead of jumping to it,
 // so on its own it would stay wherever the ghost left it, with our trainer off screen.
 // Switching to another seat skips that -- the follow warp is about to move us anyway.
+// A ride over a map seam can leave our own tile behind on the map we came from, out of
+// this one's bounds: then the cell in the middle of the view is where we stop.
 static void StopFollowing(bool8 recentre)
 {
     struct ObjectEvent *self;
+    s16 x, y;
 
     if (BrField_OverworldRunning())
     {
         self = &gObjectEvents[gPlayerAvatar.objectEventId];
+        x = self->currentCoords.x - MAP_OFFSET;
+        y = self->currentCoords.y - MAP_OFFSET;
+        if (x < 0 || y < 0 || x >= gMapHeader.mapLayout->width || y >= gMapHeader.mapLayout->height)
+        {
+            x = gSaveBlock1Ptr->pos.x;
+            y = gSaveBlock1Ptr->pos.y;
+        }
         ShowOwnTrainer(TRUE);
         CameraObjectSetFollowedSpriteId(self->spriteId);
         UnlockPlayerFieldControls();
@@ -880,12 +891,18 @@ static void StopFollowing(bool8 recentre)
         if (recentre && gBrSpectate.followed)
         {
             SetWarpDestination(gSaveBlock1Ptr->location.mapGroup,
-                gSaveBlock1Ptr->location.mapNum, WARP_ID_NONE,
-                self->currentCoords.x - MAP_OFFSET, self->currentCoords.y - MAP_OFFSET);
+                gSaveBlock1Ptr->location.mapNum, WARP_ID_NONE, x, y);
             DoWarp();
         }
     }
-    gBrSpectate.followed = FALSE;
+    gBrSpectate.followed = 0;
+}
+
+void BrSpectate_LetGo(void)
+{
+    if (gBrSpectate.followed && BrField_OverworldRunning())
+        CameraObjectSetFollowedSpriteId(gObjectEvents[gPlayerAvatar.objectEventId].spriteId);
+    gBrSpectate.followed = 0;
 }
 
 void BrSpectate_Follow(u8 seat)
@@ -903,7 +920,7 @@ void BrSpectate_Follow(u8 seat)
         else
         {
             ClosePeek();
-            gBrSpectate.followed = FALSE;
+            BrSpectate_LetGo();
         }
         // NEXT in the middle of somebody's fight: the replay of it ends at its next read
         // and the field takes us to the new seat. It used to sit there, starved of turns
@@ -940,6 +957,8 @@ static void HandleFollow(const u8 *payload, u8 len)
 static void FollowTick(void)
 {
     struct BrSeat *them;
+    struct ObjectEvent *ghost;
+    s16 x, y;
 
     // Off the field -- a warp's map load among the rest -- the warp we asked for has
     // happened, or something bigger overtook it.
@@ -987,9 +1006,10 @@ static void FollowTick(void)
      && (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
       || gSaveBlock1Ptr->location.mapNum != them->mapNum))
         return;
-    if (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
-     || gSaveBlock1Ptr->location.mapNum != them->mapNum
-     || (them->objId == BR_NO_OBJ && !BrField_InObjectView(them->x, them->y)))
+    // On our map, or across one of its seams (BrGhosts_LocalPos): their ghost walks over
+    // it and the camera with it, rather than a warp and a fade at every route's end.
+    if (!BrGhosts_LocalPos(gBrSpectate.follow, &x, &y)
+     || (them->objId == BR_NO_OBJ && !BrField_InObjectView(x, y)))
     {
         // One warp at a time (POK-247). DoWarp only starts the errand: its task waits
         // out the fade and the old map's music, then loads the map -- and this runs
@@ -1005,7 +1025,7 @@ static void FollowTick(void)
         }
         // They are somewhere else: go there. Warp coords carry no MAP_OFFSET; the
         // roster's do, the way an object event holds them.
-        gBrSpectate.followed = FALSE;
+        gBrSpectate.followed = 0;
         SetWarpDestination(them->mapGroup, them->mapNum, WARP_ID_NONE,
             them->x - MAP_OFFSET, them->y - MAP_OFFSET);
         DoWarp();
@@ -1032,10 +1052,26 @@ static void FollowTick(void)
     }
     if (them->objId == BR_NO_OBJ)
         return; // their ghost has not spawned on this map yet
+    ghost = &gObjectEvents[them->objId];
+    // A ghost that came back as another sprite is not the one the camera is on.
+    if (gBrSpectate.followed && gBrSpectate.followed != ghost->spriteId + 1)
+        BrSpectate_LetGo();
+    // The camera only ever moves by the sprite it follows, so whatever lies between the
+    // middle of the view and their ghost when it takes them on stays there: they walked
+    // on while the warp loaded, and were drawn at the top or the right of the screen from
+    // then on (2026-10-06 play-test). So the view jumps onto them first -- both at rest,
+    // a whole number of tiles apart -- and it does again if they ever drift apart.
+    if ((ghost->heldMovementActive && !ghost->heldMovementFinished)
+     || gFieldCamera.x != 0 || gFieldCamera.y != 0)
+        return;
+    x = ghost->currentCoords.x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET);
+    y = ghost->currentCoords.y - (gSaveBlock1Ptr->pos.y + MAP_OFFSET);
+    if (x != 0 || y != 0)
+        BrField_MoveCamera(x, y);
     if (!gBrSpectate.followed)
     {
-        CameraObjectSetFollowedSpriteId(gObjectEvents[them->objId].spriteId);
-        gBrSpectate.followed = TRUE;
+        CameraObjectSetFollowedSpriteId(ghost->spriteId);
+        gBrSpectate.followed = ghost->spriteId + 1;
     }
 }
 
