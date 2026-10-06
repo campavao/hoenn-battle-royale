@@ -513,6 +513,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A release published from GitHub's own page (Releases -> Draft a new release,
+          # which is how a phone ships one) already exists with its author's notes: the
+          # patch goes onto it. `gh release create` there failed the job before the site.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" --clobber \
+              web/public/patch/hoenn-br.bps web/public/patch/br-symbols.json web/public/patch/br-version.json
+            exit 0
+          fi
           # An annotated tag's message is the release note, in the author's own words;
           # a bare tag gets GitHub's list of commits since the last one.
           notes="$(git tag -l --format='%(contents)' "$TAG")"
