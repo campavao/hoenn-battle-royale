@@ -40,6 +40,9 @@ void BrSpectate_Tick(void);
 // we are watching, the stream is closed: the replay plays out what it has and ends
 // rather than waiting for a turn that is never coming.
 void BrSpectate_OnResult(u8 seat);
+// A seat's BUSY changed (br_ghosts.c). A wild POKeMON's fight sends no RESULT -- nobody
+// else's seat is in it -- so its fighter being back on the map is what ends its replay.
+void BrSpectate_OnBusy(u8 seat);
 // Watch a seat walk (BR_NO_SEAT to stop). The camera rides their ghost, our own
 // trainer goes invisible where it stood, and field controls are locked.
 void BrSpectate_Follow(u8 seat);

@@ -2519,6 +2519,9 @@ function wireRoom(
     bridge.setOutFilter(() => !amWatching);
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);
+      // Our own wild fight is over when our ROM says it is back on the map: nobody else
+      // will say so, and a later watcher must not be handed it (spectate.ts noteBusy).
+      if (msg.t === 'busy') spectate.noteBusy(bridge!.seat, msg.kind);
       // Into the books, bag and all -- and our own ROM challenging one of our bots, or
       // fighting one and saying how it went (POK-238), goes to the brain from there: the
       // host walks the bot, and nobody hears their own messages come back. Arriving on a
@@ -2598,6 +2601,7 @@ function wireRoom(
         for (const part of spectate.streamFor(seat, m.have)) bridge!.relay.to(m.seat, part);
       }
       else if (m.t === 'result') spectate.noteResult(m.seat);
+      else if (m.t === 'busy') spectate.noteBusy(m.seat, m.kind);
       else if (m.t === 'out') {
         // An out ends whatever fight that seat was in. A bot's duel never sends a RESULT
         // -- its loser is simply out -- so its stream sat in the cache, and whoever

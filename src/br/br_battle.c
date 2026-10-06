@@ -603,6 +603,11 @@ static const u8 sSkinPics[] =
     TRAINER_PIC_LASS,
 };
 
+bool8 BrBattle_RecordedWildOpponent(void)
+{
+    return RecordedBattle_IsSpectateLive();
+}
+
 u32 BrBattle_OpponentPic(u32 pic)
 {
     u8 seat;

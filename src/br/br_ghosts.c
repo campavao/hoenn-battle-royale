@@ -20,6 +20,7 @@
 #include "br/br_wire_c.h"
 #include "br/br_field.h"
 #include "br/br_engage.h"
+#include "br/br_spectate.h"
 
 EWRAM_DATA struct BrSeat gBrSeats[BR_MAX_SEATS] = {0};
 EWRAM_DATA u8 gBrSeatBusy[BR_MAX_SEATS] = {0};
@@ -225,6 +226,7 @@ static void HandleBusy(const u8 *payload, u8 len)
         // Say so now, not up to three seconds from now: the moment somebody steps into
         // a fight is exactly the moment the trainer walking towards them needs it.
         BrGhosts_Emote(d[0]);
+        BrSpectate_OnBusy(d[0]);
         return;
     }
     gBrSeatBusy[d[0]] = d[1];

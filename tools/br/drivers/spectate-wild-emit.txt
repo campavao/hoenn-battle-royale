@@ -1,0 +1,44 @@
+# spectate-wild-emit: a wild fight goes out to the room the way a link battle does
+# (2026-10-05 play-test: "spectator mode can't see wild pokemon battles").
+#
+# Only a link battle's master and the proxy duel ever published; a fight the player's
+# own ROM ran alone -- a wild POKeMON, a bot, a gym -- left whoever followed them looking
+# at an empty field. Now it is published under the player's seat and BR_NO_SEAT (0xFF),
+# with its own flags: no LINK, so the watcher replays a wild battle (spectate-wild.txt).
+#
+# The grass walk is fog-in-battle.txt's.
+drain gBrMailbox
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9 -- the middle grass patch
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+hold RIGHT 60
+hold LEFT 60
+hold RIGHT 60
+hold LEFT 60
+hold RIGHT 60
+hold LEFT 60
+hold RIGHT 60
+hold LEFT 60
+wait 200
+expect u16 gBattleTypeFlags 4
+# BSTART is out: seat 0 (this boot's) and nobody, the wild flags, the player's name and
+# an empty one
+expect u8 gBrSpectate+4 1
+expectmsg 18 u16 0 0xFF00
+expectmsg 18 u16 6 4
+expectmsg 18 u8 10 0xBD
+expectmsg 18 u8 18 0xFF
+# FIGHT, the first move, and the turn goes out under the same id
+hold A 4
+wait 250
+shot menu
+tap A
+wait 40
+tap A
+wait 400
+shot turn
+expectge u16 gBrSpectate 1
+expectmsg 19 u16 0 0xFF00
+say spectate wild emit ok

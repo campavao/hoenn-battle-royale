@@ -54,6 +54,10 @@ export function nameBstart(msg: BstartMsg, nameOf: (seat: number) => string): Bs
  *  dropped ask does not blink the eye off. */
 export const EYE_WINDOW_MS = 8000;
 
+/** The ROM's BR_NO_SEAT: the other side of a fight nobody else's seat is in -- a wild
+ *  POKeMON's, a gym's -- which its fighter publishes as (their seat, NO_SEAT). */
+export const NO_SEAT = 0xff;
+
 /** A battle id as BR_MSG_BSTART carries it: the seat pair, low seat then high. */
 export function battleId(a: number, b: number): number {
   const lo = Math.min(a, b);
@@ -243,6 +247,24 @@ export class Spectate {
     // Too long to replay from the top: drop it rather than grow. Anyone already
     // watching keeps getting turns; only joining late is off the table.
     if (fight.bytes > CACHE_MAX_BYTES) this.live.delete(msg.battle);
+  }
+
+  /** A seat's BUSY changed. A fight with nobody else's seat in it -- a wild POKeMON's, a
+   *  gym's -- sends no RESULT (there is no second fighter to report one), so its fighter
+   *  being anywhere but a battle again is its end. A fight against another seat still
+   *  waits on its RESULT: the replay runs a turn behind, and the fighters' link winds down
+   *  after the faint. */
+  noteBusy(seat: number, kind?: string): void {
+    if (kind === 'battle') return;
+    const solo = (battle: number) => {
+      const [lo, hi] = battleSeats(battle);
+      return lo === seat && hi === NO_SEAT;
+    };
+    for (const battle of [...this.live.keys()]) if (solo(battle)) this.live.delete(battle);
+    if (this.battle !== null && solo(this.battle)) {
+      this.battle = null;
+      this.played = null;
+    }
   }
 
   /** A fight ended: the stream for it is over, so a later fight between other seats

@@ -212,7 +212,11 @@ static void InitSinglePlayerBtlControllers(void)
                 gBattlerControllerFuncs[B_BATTLER_0] = SetControllerToRecordedPlayer;
                 gBattlerPositions[B_BATTLER_0] = B_POSITION_PLAYER_LEFT;
 
+#if BR
+                gBattlerControllerFuncs[B_BATTLER_1] = BrBattle_RecordedWildOpponent() ? SetControllerToRecordedOpponent : SetControllerToOpponent;
+#else
                 gBattlerControllerFuncs[B_BATTLER_1] = SetControllerToOpponent;
+#endif
                 gBattlerPositions[B_BATTLER_1] = B_POSITION_OPPONENT_LEFT;
             }
         }

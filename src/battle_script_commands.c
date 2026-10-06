@@ -10063,7 +10063,11 @@ static void Cmd_handleballthrow(void)
 static void Cmd_givecaughtmon(void)
 {
 #if BR
-    if (BrCatch_TryPark(&gEnemyParty[gBattlerPartyIndexes[BATTLE_OPPOSITE(gBattlerAttacker)]]))
+    if (RecordedBattle_IsSpectateLive())
+    {
+        // Somebody else's catch, replayed: it is theirs, not this watcher's.
+    }
+    else if (BrCatch_TryPark(&gEnemyParty[gBattlerPartyIndexes[BATTLE_OPPOSITE(gBattlerAttacker)]]))
     {
         // Parked for the release picker back in the overworld; no PC, no message.
     }
@@ -10102,7 +10106,12 @@ static void Cmd_trysetcaughtmondexflags(void)
     u16 species = GetMonData(&gEnemyParty[0], MON_DATA_SPECIES, NULL);
     u32 personality = GetMonData(&gEnemyParty[0], MON_DATA_PERSONALITY, NULL);
 
+#if BR
+    // ...nor the watcher's POKeDEX, whose page would sit there waiting on an A press.
+    if (GetSetPokedexFlag(SpeciesToNationalPokedexNum(species), FLAG_GET_CAUGHT) || RecordedBattle_IsSpectateLive())
+#else
     if (GetSetPokedexFlag(SpeciesToNationalPokedexNum(species), FLAG_GET_CAUGHT))
+#endif
     {
         gBattlescriptCurrInstr = T1_READ_PTR(gBattlescriptCurrInstr + 1);
     }

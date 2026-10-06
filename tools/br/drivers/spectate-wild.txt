@@ -1,0 +1,55 @@
+# spectate-wild: somebody's fight with a wild POKeMON can be watched (2026-10-05
+# play-test: "spectator mode can't see wild pokemon battles").
+#
+# The fighter publishes it under its own seat and BR_NO_SEAT (spectate-wild-emit.txt);
+# this is the watcher's half. A BSTART whose flags carry no LINK is replayed as the wild
+# battle it was -- BATTLE_TYPE_RECORDED on IS_MASTER, no RECORDED_LINK, so its intro, its
+# RUN and its BALLs are pret's wild ones -- and with the wild side read off the record
+# too: pret's own non-link replay would put it back on the AI, which for a wild POKeMON
+# is a Random() the fighter's ROM already rolled.
+#
+# Nothing ends a wild fight on the wire -- no RESULT, no other seat to go out -- so the
+# fighter's BUSY going back to the map is what lets the replay finish and go home.
+#
+# The layout is spectate-watch.txt's.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# Seat 2 walks into the grass and is in a fight: BUSY, kind 2 (BR_BUSY_BATTLE)
+pokebytes gBrMailbox+0x1018 11 05 02 00 00 02 02
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrSeatBusy+2 2
+# battle 0xFF02 (seat 2 and nobody), seed, flags 4 (IS_MASTER: a wild fight), the
+# fighter's name and an empty one, genders, then the fighter's party and the wild one
+pokebytes gDecompressionBuffer 02 FF 78 56 34 12 04 00 00 00 BD BB C7 FF 00 00 00 00 FF 00 00 00 00 00 00 00 00 00 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+expect u8 gBrSpectate+5 1
+expect u16 gBrSpectate+6 0xFF02
+# One turn: both sides FIGHT with their first move.
+pokebytes gDecompressionBuffer 02 FF 00 03 00 00 01 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+wait 1200
+# A wild replay: RECORDED | IS_MASTER, and not RECORDED_LINK
+expect u32 gBattleTypeFlags 0x01000004
+expect u8 gBattleOutcome 0
+shot wild-replay
+# both sides spent the move the record said: PP 35 -> 34
+expect u8 gBattleMons+0x24 34
+expect u8 gBattleMons+0x7C 34
+# and it waits a turn behind rather than quitting
+wait 300
+expect u8 gBrSpectate+5 1
+# Seat 2 is back on the map: the fight is over, and the replay plays out what it has
+# and goes home.
+pokebytes gBrMailbox+0x1198 11 05 02 00 00 02 00
+poke u16 gBrMailbox+0x0C 7
+wait 600
+expect u8 gBrSpectate+5 0
+expect u8 gMain+0x439 0
+shot home
+say spectate wild ok

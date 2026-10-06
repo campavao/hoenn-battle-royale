@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { encodeGen3 } from '../text/gen3';
-import { battleId, battleSeats, CACHE_MAX_BYTES, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, romReplaying, Spectate } from './spectate';
+import { battleId, battleSeats, CACHE_MAX_BYTES, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, romReplaying, Spectate } from './spectate';
 import type { Msg } from '../net/wire';
 
 const bstart = (battle: number): Msg => ({ t: 'bstart', battle, data: [1, 2, 3] });
@@ -328,5 +328,38 @@ describe('the fight so far, handed over once (POK-330 #10)', () => {
     expect(s.duePeek(WATCHER, PEEK_INTERVAL_MS, null)).toEqual({ t: 'peek', seat: WATCHER, target: FIGHTER, have: battle });
     // A page with no RAM to read goes by what it handed over.
     expect(s.duePeek(WATCHER, 2 * PEEK_INTERVAL_MS)).toMatchObject({ have: battle });
+  });
+});
+
+describe('a wild fight (2026-10-05 play-test)', () => {
+  const WILD = battleId(4, NO_SEAT);
+
+  it('is watched like any other: following its fighter hands over the fight so far', () => {
+    const s = new Spectate();
+    expect(s.wantsFromRelay(bstart(WILD))).toBe(false); // nobody followed yet, but it is held
+    expect(s.follow(4)).toContainEqual(bstart(WILD));
+    expect(s.watchingBattle()).toBe(WILD);
+  });
+
+  it('ends when its fighter is back on the map, since nobody sends its RESULT', () => {
+    const s = new Spectate();
+    s.follow(4);
+    expect(s.wantsFromRelay(bstart(WILD))).toBe(true);
+    s.noteBusy(4, 'battle');
+    expect(s.watchingBattle()).toBe(WILD);
+    s.noteBusy(4);
+    expect(s.watchingBattle()).toBe(null);
+    // a later watcher is not handed the finished fight
+    const late = s.follow(null) && s.follow(4);
+    expect(late).toEqual([{ t: 'follow', seat: 4 }]);
+    expect(s.streamFor(4)).toEqual([]);
+  });
+
+  it('leaves a fight between two seats to its RESULT', () => {
+    const s = new Spectate();
+    s.follow(4);
+    s.wantsFromRelay(bstart(battleId(4, 9)));
+    s.noteBusy(4);
+    expect(s.watchingBattle()).toBe(battleId(4, 9));
   });
 });

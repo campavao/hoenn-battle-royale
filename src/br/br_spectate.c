@@ -40,6 +40,10 @@
 #include "br/br_field.h"
 #include "br/br_match.h"
 #include "br/br_hud.h"
+#include "br/br_bot.h"
+#include "battle_setup.h"
+#include "strings.h"
+#include "constants/trainers.h"
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
 // The per-frame turn scratch, kept in EWRAM on purpose: a plain function-local static
@@ -61,24 +65,83 @@ static EWRAM_DATA struct BrAssembler sTurnAsm = {0};
 // A proxy duel (POK-238) is two bots' seats, neither of them ours: the hidden instance
 // has no seat at all. Its fight is published under the pair the same way (POK-300), so
 // a spectator following either bot is handed it like any other.
+//
+// A fight with nobody else's seat in it -- a wild POKeMON, a gym's own trainer -- is
+// published under ours and BR_NO_SEAT, which sorts high (2026-10-05 play-test: "spectator
+// mode can't see wild pokemon battles"). A bot's fight is under the bot's seat.
 static u16 BattleId(void)
 {
     u8 mine = gBrDuel.running ? gBrDuel.seatA : gBrMySeat;
-    u8 theirs = gBrDuel.running ? gBrDuel.seatB : gBrNetlink.peerSeat;
+    u8 theirs = gBrDuel.running ? gBrDuel.seatB
+              : gBrNetlink.active ? gBrNetlink.peerSeat
+              : gBrBotFight.fighting ? gBrBotFight.seat
+              : BR_NO_SEAT;
     u8 lo = mine < theirs ? mine : theirs;
     u8 hi = mine < theirs ? theirs : mine;
 
     return lo | (hi << 8);
 }
 
-// Who publishes: the master of a link battle, and the proxy instance for the duel it is
-// fighting (POK-300). Nobody else -- a spectator never emits, and the bot fight in a
-// player's own ROM is that player's, not a thing the room watches.
+// Who publishes: the master of a link battle, the proxy instance for the duel it is
+// fighting (POK-300), and a player in any fight their own ROM runs alone -- a bot's, a
+// wild POKeMON's, a gym's -- since somebody following them wants to see it as much as a
+// link battle (2026-10-05 play-test). Not the slave of a link battle (the master speaks
+// for both), not a replay, and not the Safari: its controller is one no replay has.
 static bool8 Publishing(void)
 {
     if (gBrDuel.running)
         return TRUE;
-    return gBrNetlink.active && gBrNetlink.myId == 0;
+    if (gBrNetlink.active)
+        return gBrNetlink.myId == 0;
+    return gMain.inBattle && gBrMySeat < BR_MAX_SEATS
+        && !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED | BATTLE_TYPE_SAFARI
+                                 | BATTLE_TYPE_WALLY_TUTORIAL | BATTLE_TYPE_DOUBLE));
+}
+
+// Who is on each side, for the replay's names and pictures. A link battle and a duel
+// have it in gLinkPlayers already; a fight this ROM runs alone has the player, and the
+// bot, the trainer or (a wild POKeMON) nobody.
+static void PutTrainers(u8 *buf)
+{
+    const u8 *names[2];
+    u8 genders[2];
+    u8 i, j;
+
+    if (gBrNetlink.active || gBrDuel.running)
+    {
+        names[0] = gLinkPlayers[0].name;
+        names[1] = gLinkPlayers[1].name;
+        genders[0] = gLinkPlayers[0].gender;
+        genders[1] = gLinkPlayers[1].gender;
+    }
+    else
+    {
+        names[0] = gSaveBlock2Ptr->playerName;
+        genders[0] = gSaveBlock2Ptr->playerGender;
+        names[1] = gText_EmptyString2;
+        genders[1] = MALE;
+        if (gBrBotFight.fighting)
+        {
+            names[1] = gBrBotFight.name;
+            if (gBrBotFight.seat < BR_MAX_SEATS)
+                genders[1] = gBrSeats[gBrBotFight.seat].skin & 1;
+        }
+        else if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
+        {
+            names[1] = gTrainers[gTrainerBattleOpponent_A].trainerName;
+            genders[1] = (gTrainers[gTrainerBattleOpponent_A].encounterMusic_gender & F_TRAINER_FEMALE) ? FEMALE : MALE;
+        }
+    }
+    for (i = 0; i < 2; i++)
+    {
+        // Every name is padded out with EOS: the replay copies all eight bytes.
+        for (j = 0; j < PLAYER_NAME_LENGTH + 1 && names[i][j] != EOS; j++)
+            buf[i * (PLAYER_NAME_LENGTH + 1) + j] = names[i][j];
+        for (; j < PLAYER_NAME_LENGTH + 1; j++)
+            buf[i * (PLAYER_NAME_LENGTH + 1) + j] = EOS;
+    }
+    buf[2 * (PLAYER_NAME_LENGTH + 1)] = genders[0];
+    buf[2 * (PLAYER_NAME_LENGTH + 1) + 1] = genders[1];
 }
 
 // The seed and both parties are up: the recorded replay can be built. The seed is set
@@ -124,7 +187,6 @@ static bool8 SendBstart(void)
     u8 *buf = Alloc(28 + 2 * (1 + PARTY_SIZE * sizeof(struct Pokemon)));
     u16 len = 0, id;
     u32 seed, flags;
-    u8 i;
     bool8 sent;
 
     if (buf == NULL)
@@ -140,21 +202,25 @@ static bool8 SendBstart(void)
     // A duel is BATTLE_TYPE_TRAINER with both sides on the AI. The replay is built for a
     // link fight's flags (RecordedBattle_StartSpectate masks LINK off and puts RECORDED_LINK
     // on), so a duel goes out looking like one: the same shape the replay already plays.
+    //
+    // A fight against a trainer that is not over a link -- a bot's, a gym's -- is the
+    // duel's shape exactly: one side on the AI. A wild POKeMON's goes out as it is, and
+    // the replay is built as a wild battle (RecordedBattle_StartSpectate).
     flags = gBattleTypeFlags;
-    if (gBrDuel.running)
+    if (gBrDuel.running || (!gBrNetlink.active && (flags & BATTLE_TYPE_TRAINER)))
         flags |= BATTLE_TYPE_LINK | BATTLE_TYPE_IS_MASTER;
     buf[len++] = flags & 0xFF;
     buf[len++] = (flags >> 8) & 0xFF;
     buf[len++] = (flags >> 16) & 0xFF;
     buf[len++] = (flags >> 24) & 0xFF;
-    for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)
-        buf[len++] = gLinkPlayers[0].name[i];
-    for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)
-        buf[len++] = gLinkPlayers[1].name[i];
+    PutTrainers(buf + len);
+    len += 2 * (PLAYER_NAME_LENGTH + 1) + 2;
     // The player's gender byte carries the fog too (BR_BSTART_FOG): whether this fight is
     // fought in it, which the replay must know to play the fog's turns as the engine did.
-    buf[len++] = gLinkPlayers[0].gender | (gBrRing.battleFog && !gBrDuel.running ? BR_BSTART_FOG : 0);
-    buf[len++] = gLinkPlayers[1].gender;
+    // Only a fight between contestants has the fog's turns; a wild one bleeds on the
+    // clock (br_ring.c), and battleFog is whatever the last contest left it.
+    if (gBrRing.battleFog && (gBrNetlink.active || gBrBotFight.fighting))
+        buf[len - 2] |= BR_BSTART_FOG;
     len += PackParty(gPlayerParty, buf + len);
     len += PackParty(gEnemyParty, buf + len);
     sent = BrWire_SendLarge(BR_MSG_BSTART, buf, len);
@@ -1014,6 +1080,14 @@ void BrSpectate_OnResult(u8 seat)
         sEndEarly = TRUE;
     else
         RecordedBattle_EndSpectate();
+}
+
+void BrSpectate_OnBusy(u8 seat)
+{
+    if (!gBrSpectate.watching || seat >= BR_MAX_SEATS || gBrSeatBusy[seat] == BR_BUSY_BATTLE)
+        return;
+    if ((gBrSpectate.watchId & 0xFF) == seat && (gBrSpectate.watchId >> 8) == BR_NO_SEAT)
+        BrSpectate_OnResult(seat);
 }
 
 // One TURN out of sTurnBuf. A single slot holds BR_FRAME_DATA_MAX once framed -- the

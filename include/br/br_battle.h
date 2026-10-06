@@ -145,5 +145,10 @@ bool8 BrBattle_Choosing(void);
 // skin that seat walks around in, so the HIKER on the map is the HIKER in the battle
 // (2026-10-05 play-test). Anything else keeps pret's pick.
 u32 BrBattle_OpponentPic(u32 pic);
+// battle_controllers.c: a spectator's replay of somebody's wild battle (br_spectate.c).
+// pret's own non-link replay runs the opponent on the AI again, which only works for a
+// frontier trainer whose AI is all there is to it; a wild POKeMON chooses with Random(),
+// and the fighter's ROM recorded what it chose, so the replay reads that instead.
+bool8 BrBattle_RecordedWildOpponent(void);
 
 #endif // GUARD_BR_BATTLE_H
