@@ -29,7 +29,8 @@ struct BrRing
     /* 12 */ u8 appliedMapGroup;
     /* 13 */ u8 appliedMapNum;
     /* 14 */ u8 place[BR_RING_PLACE_MAX + 1]; // what the last RING named, EOS-ended (POK-325)
-    /* 31 */ u8 pad[1];
+    /* 31 */ u8 battleFog;  // this fight between contestants is fought in the fog: the
+                            // engine hurts the mons on the field at each turn's end
 };                          // 32 bytes
 // web/src/field.ts reads `outside` and `damageTimer` (RING_OUTSIDE, RING_TIMER).
 BR_OFFSET(BrRing, active, 0)
@@ -45,6 +46,7 @@ BR_OFFSET(BrRing, damageDealt, 10)
 BR_OFFSET(BrRing, appliedMapGroup, 12)
 BR_OFFSET(BrRing, appliedMapNum, 13)
 BR_OFFSET(BrRing, place, 14)
+BR_OFFSET(BrRing, battleFog, 31)
 BR_SIZE(BrRing, 32)
 
 #define BR_FOG_TICK_FRAMES 240
@@ -52,6 +54,14 @@ BR_SIZE(BrRing, 32)
 extern struct BrRing gBrRing;
 
 void BrRing_Init(void);
+// A fight between contestants -- a bot's, a link one, a replay of one -- is about to
+// start: is it in the fog? Decided once, by the side that runs the engine, and handed to
+// a replay in the bstart (POK-262 reversed: the fog reaches every fight).
+void BrRing_DecideBattleFog(void);
+void BrRing_SetBattleFog(bool8 fog);
+// battle_util.c, DoFieldEndTurnEffects' last step: the fog's turn. TRUE when it started
+// a script, which comes back here when it ends.
+bool8 BrRing_FogEndTurn(void);
 void BrRing_Tick(void);
 // Geometry, exposed for the page's tests and other systems: is the section inside?
 bool8 BrRing_SectionInside(u8 mapsec);

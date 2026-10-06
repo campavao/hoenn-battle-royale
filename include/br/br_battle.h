@@ -125,6 +125,7 @@ void BrBattle_SayItemUsed(void);
 // The battle's own lines, past the end of pret's string table. battle_message.c's
 // BufferStringBattle hands every id here first; FALSE for one of pret's.
 #define BR_STRINGID_USED_ITEM BATTLESTRINGS_COUNT
+#define BR_STRINGID_FOG_HURT (BATTLESTRINGS_COUNT + 1) // br_ring.c, the fog's turn
 bool8 BrBattle_BufferString(u16 stringId);
 // battle_main.c: TRUE while the battlers are still choosing, when the engine may yet take
 // a recorded byte back off the record.

@@ -1,0 +1,41 @@
+# fog-in-duel: the fog reaches into a fight between contestants (2026-10-05 play-test:
+# "players not taking fog damage if in a battle"). It used to be the half of
+# fog-in-battle.txt that said it did not (POK-262, Kanto v0.3.1); Cam reversed it.
+#
+# Not on the field's clock: in a link battle only the challenger's ROM runs the engine,
+# so the engine does it, at the end of each turn, to whoever is on the field, down to 1
+# HP (br_ring.c, BrRing_FogEndTurn). Whether the fight is in the fog is decided once, as
+# it starts, so the ring closes first here and then the challenge comes.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# the fog closes somewhere else: RING phase 1, centre (25,12), r 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 60
+expect u8 gBrRing+5 1
+poke u8 gBrNetlink+8 1
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 2
+wait 900
+# in the duel, and it knows it is in the fog
+expectge u8 gBattlersCount 2
+expect u8 gBrRing+31 1
+# the field's clock has stopped: what bleeds from here is the engine's turn
+poke u16 gBrRing+10 0
+wait 300
+expect u16 gBrRing+10 0
+# one turn: FIGHT, the first move
+tap A
+wait 30
+tap A
+wait 1500
+shot fog-turn
+# it reached in, and ended nobody
+expectge u16 gBrRing+10 1
+expect u8 gBattleOutcome 0
+expect u8 gBrRing+7 0
+expectge u8 gBattlersCount 2
+say fog in duel ok

@@ -33,6 +33,7 @@
 #include "br/br_battle.h"
 #include "br/br_bot.h"
 #include "br/br_netlink.h"
+#include "br/br_ring.h"
 #include "br/br_field.h"
 
 EWRAM_DATA struct BrNetlink gBrNetlink = {0};
@@ -406,6 +407,7 @@ static void EnterLinkBattle(void)
     PlayMapChosenOrBattleBGM(MUS_VS_TRAINER);
     gBattleTypeFlags = BATTLE_TYPE_LINK | BATTLE_TYPE_TRAINER;
     gTrainerBattleOpponent_A = TRAINER_LINK_OPPONENT;
+    BrRing_DecideBattleFog();
     SetMainCallback2(CB2_InitBattle);
     gMain.savedCallback = CB2_BrReturnFromBattle;
     gBrNetlink.startState = 0;

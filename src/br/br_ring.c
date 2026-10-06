@@ -21,21 +21,43 @@
 #include "br/br_bot.h"
 #include "br/br_duel.h"
 #include "br/br_field.h"
+#include "br/br_battle.h"
+#include "battle_util.h"
+#include "recorded_battle.h"
+#include "constants/battle_script_commands.h"
+#include "constants/battle_string_ids.h"
+#include "util.h"
 
 EWRAM_DATA struct BrRing gBrRing = {0};
 
-// Does the fog reach into this battle (POK-262)? Kanto's rule, v0.3.1: a wild or route
-// fight fought outside the ring drains you, and a fight between contestants does not.
-// Both halves matter. Without the first, a battle is somewhere to hide from the fog --
-// step outside the ring, pick a fight with the grass, and the clock stops mattering.
-// Without the second, a duel is decided by whose map the ring happens to be over.
+// Does the fog's clock reach into this battle (POK-262)? A wild or route fight fought
+// outside the ring drains the whole party on the clock, as on the field: without that, a
+// battle is somewhere to hide from the fog -- step outside the ring, pick a fight with
+// the grass, and the clock stops mattering.
+//
+// A fight between contestants is in the fog too (Cam, 2026-10-05 play-test: "players not
+// taking fog damage if in a battle"), which reverses Kanto's v0.3.1 rule -- but not on
+// this clock. Two ROMs fight a link battle and only the challenger's runs the engine, so
+// each ROM bleeding its own party on its own clock would leave the two copies of every mon
+// disagreeing. The engine does it instead, at the end of each turn (BrRing_FogEndTurn),
+// where everything it changes reaches the other ROM and a replay the way a sandstorm does.
 static bool8 FogReachesThisBattle(void)
 {
     if (!gMain.inBattle)
         return FALSE;
-    if (gBrNetlink.active || gBrBotFight.fighting || gBrDuel.running)
-        return FALSE; // a fight between contestants is theirs to lose
+    if (gBrNetlink.active || gBrBotFight.fighting || gBrDuel.running
+     || RecordedBattle_IsSpectateLive())
+        return FALSE; // the engine's own turn does it (BrRing_FogEndTurn)
     return TRUE;
+}
+
+// Is a fight between contestants, on this ROM, one the end-of-turn fog belongs to? Not a
+// duel: two bots fighting in the host's hidden instance are standing nowhere.
+static bool8 ContestBattle(void)
+{
+    if (!gMain.inBattle || gBrDuel.running)
+        return FALSE;
+    return gBrNetlink.active || gBrBotFight.fighting || RecordedBattle_IsSpectateLive();
 }
 
 // Distance from the centre to the nearest point of the section's rectangle, squared,
@@ -153,7 +175,13 @@ static void Bleed(void)
     // weather mid-turn would take the elimination -- and the spill, and the OUT -- out
     // of the battle engine's hands while it was still running a turn, so it waits at
     // 1 HP and the next tick in the overworld does the rest.
-    bool8 floorAtOne = FogReachesThisBattle();
+    //
+    // And a fight that is on its way in is as good as started: the challenge's "!", the
+    // walk and the fade off the field (BrField_Leave) are still the overworld's frames,
+    // and a team the fog finished there went into the battle with nobody standing -- the
+    // lead at 0 HP, the screen hung on its send-out (2026-10-05 play-test).
+    bool8 floorAtOne = FogReachesThisBattle() || BrField_Leaving()
+                    || gBrNetlink.active || gBrBotFight.fighting;
 
     for (i = 0; i < count; i++)
     {
@@ -189,6 +217,83 @@ static void Bleed(void)
         gBrRing.out = TRUE;
         BrMatch_Out();
     }
+}
+
+// ---- the fog in a fight between contestants -------------------------------------------
+
+// Where the turn's fog has got to: the turn it is for and the next battler to look at.
+static EWRAM_DATA u8 sFogTurn = 0;
+static EWRAM_DATA u8 sFogNext = 0;
+
+void BrRing_SetBattleFog(bool8 fog)
+{
+    gBrRing.battleFog = fog ? TRUE : FALSE;
+    sFogTurn = 0xFF;
+    sFogNext = 0;
+}
+
+// The two trainers of a link battle stand on one map (a challenge is only taken from a
+// ghost on our own), so the challenger's answer is both of theirs; a bot stands where
+// we do. Decided once, at the start: the replay has to be told it, in the bstart.
+void BrRing_DecideBattleFog(void)
+{
+    BrRing_SetBattleFog(gBrRing.active && !BrRing_SectionInside(gMapHeader.regionMapSectionId));
+}
+
+// "<MON> is hurt by the fog!", the bar, the HP. Like the sandstorm's, minus the faint: in
+// a battle the fog hurts but never finishes anybody (see Bleed), so there is nothing to
+// faint and nobody's team to lose here.
+static const u8 sScript_FogHurts[] =
+{
+    B_SCR_OP_PRINTSTRING, BR_STRINGID_FOG_HURT & 0xFF, BR_STRINGID_FOG_HURT >> 8,
+    B_SCR_OP_WAITMESSAGE, B_WAIT_TIME_LONG & 0xFF, B_WAIT_TIME_LONG >> 8,
+    B_SCR_OP_HEALTHBARUPDATE, BS_ATTACKER,
+    B_SCR_OP_DATAHPUPDATE, BS_ATTACKER,
+    B_SCR_OP_END2,
+};
+
+#define FOG_HIT_MARKERS (HITMARKER_IGNORE_SUBSTITUTE | HITMARKER_PASSIVE_HP_UPDATE | HITMARKER_IGNORE_BIDE)
+
+// A tenth of each fighter's max HP at the end of every turn, on whoever is on the field,
+// down to 1. The bench is the field's to bleed afterwards: the other trainer's bench on
+// a link battle is a copy the engine never sends back.
+bool8 BrRing_FogEndTurn(void)
+{
+    u8 turn = gBattleResults.battleTurnCounter;
+    u8 b;
+
+    if (!ContestBattle() || !gBrRing.battleFog || gBattleOutcome != 0)
+        return FALSE;
+    // The slave of a link battle runs no engine; this is never reached there.
+    if (sFogTurn != turn)
+    {
+        sFogTurn = turn;
+        sFogNext = 0;
+    }
+    gHitMarker &= ~FOG_HIT_MARKERS;
+    for (b = sFogNext; b < gBattlersCount; b++)
+    {
+        u16 hp = gBattleMons[b].hp;
+        s32 dmg = gBattleMons[b].maxHP / 10;
+
+        if (gAbsentBattlerFlags & gBitTable[b])
+            continue;
+        if (hp <= 1)
+            continue;
+        if (dmg < 1)
+            dmg = 1;
+        if (dmg >= hp)
+            dmg = hp - 1;
+        sFogNext = b + 1;
+        gBattlerAttacker = b;
+        gBattleMoveDamage = dmg;
+        gBrRing.damageDealt += dmg;
+        gHitMarker |= FOG_HIT_MARKERS;
+        BattleScriptExecute(sScript_FogHurts);
+        return TRUE;
+    }
+    sFogNext = gBattlersCount;
+    return FALSE;
 }
 
 u16 BrRing_Outside(void)

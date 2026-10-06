@@ -504,6 +504,7 @@ u16 BrBattle_ReplayItem(u8 battler, const u8 *rec)
 extern const u8 *const gBattlescriptsForUsingItem[];
 
 static const u8 sText_UsedItem[] = _("{B_LINK_SCR_TRAINER_NAME} used\n{B_LAST_ITEM}!");
+static const u8 sText_FogHurt[] = _("{B_ATK_NAME_WITH_PREFIX} is hurt\nby the fog!");
 
 // BattleScript_OpponentUsesHealItem's first five lines (data/battle_scripts_2.s) with our
 // line in place of its trainer's, then back to the script the engine picked.
@@ -539,6 +540,11 @@ bool8 BrBattle_BufferString(u16 stringId)
     // message for good. The AI's script already set the battler, so it gets our line.
     if (stringId == STRINGID_TRAINER1USEDITEM && gTrainerBattleOpponent_A == TRAINER_LINK_OPPONENT)
         stringId = BR_STRINGID_USED_ITEM;
+    if (stringId == BR_STRINGID_FOG_HURT)
+    {
+        BattleStringExpandPlaceholdersToDisplayedString(sText_FogHurt);
+        return TRUE;
+    }
     if (stringId != BR_STRINGID_USED_ITEM)
         return FALSE;
     BattleStringExpandPlaceholdersToDisplayedString(sText_UsedItem);

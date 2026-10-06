@@ -29,6 +29,7 @@
 #include "br/br_engage.h"
 #include "br/br_levels.h"
 #include "br/br_bot.h"
+#include "br/br_ring.h"
 #include "br/br_field.h"
 
 EWRAM_DATA struct BrBotFight gBrBotFight = {0};
@@ -372,6 +373,7 @@ static void EnterBotFight(void)
     gTrainerBattleOpponent_A = 0;
     gTrainerBattleOpponent_B = 0;
     gBrBotFight.fighting = TRUE;
+    BrRing_DecideBattleFog();
     gMain.savedCallback = CB2_BrReturnFromBotFight;
     SetMainCallback2(CB2_InitBattle);
 }

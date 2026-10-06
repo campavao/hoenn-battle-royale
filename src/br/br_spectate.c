@@ -33,6 +33,7 @@
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
 #include "br/br_netlink.h"
+#include "br/br_ring.h"
 #include "br/br_battle.h"
 #include "br/br_spectate.h"
 #include "br/br_duel.h"
@@ -110,6 +111,9 @@ static u16 PackParty(struct Pokemon *party, u8 *dst)
     return idx;
 }
 
+// A gender is 0 or 1; the player's carries the fight's fog above it.
+#define BR_BSTART_FOG 0x80
+
 // Publish the battle so a spectator can build the BATTLE_TYPE_RECORDED: the seed, both
 // trainers' names and genders, and both real parties. Assembled on the heap -- ~1.2 KB
 // once per battle is no place for a permanent EWRAM buffer. FALSE when it did not go
@@ -146,7 +150,9 @@ static bool8 SendBstart(void)
         buf[len++] = gLinkPlayers[0].name[i];
     for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)
         buf[len++] = gLinkPlayers[1].name[i];
-    buf[len++] = gLinkPlayers[0].gender;
+    // The player's gender byte carries the fog too (BR_BSTART_FOG): whether this fight is
+    // fought in it, which the replay must know to play the fog's turns as the engine did.
+    buf[len++] = gLinkPlayers[0].gender | (gBrRing.battleFog && !gBrDuel.running ? BR_BSTART_FOG : 0);
     buf[len++] = gLinkPlayers[1].gender;
     len += PackParty(gPlayerParty, buf + len);
     len += PackParty(gEnemyParty, buf + len);
@@ -169,6 +175,7 @@ static EWRAM_DATA u32 sPendSeed = 0;
 static EWRAM_DATA u32 sPendFlags = 0;
 static EWRAM_DATA u8 sPendNames[2 * (PLAYER_NAME_LENGTH + 1)] = {0};
 static EWRAM_DATA u8 sPendGenders[2] = {0};
+static EWRAM_DATA bool8 sPendFog = FALSE;
 // Turns that arrive while the field is still fading out. The fighters do not wait for
 // a spectator to be ready, so the opening turn of a fight can land before the replay
 // exists; held here, they are flushed into the record the moment it does.
@@ -210,6 +217,7 @@ static u16 UnpackParty(const u8 *d, u16 avail, struct Pokemon *party)
 // back first; skipping that is what made the spectate crash the sound driver on agbcc).
 static void EnterSpectate(void)
 {
+    BrRing_SetBattleFog(sPendFog);
     RecordedBattle_StartSpectate(sPendSeed, sPendFlags, sPendParties,
         sPendParties + PARTY_SIZE, sPendNames, sPendGenders, CB2_BrReturnFromSpectate);
     Free(sPendParties);
@@ -265,7 +273,8 @@ static void ParseBstart(const u8 *d, u16 n)
 
     for (used = 0; used < (u16)sizeof(sPendNames); used++)
         sPendNames[used] = d[10 + used];
-    sPendGenders[0] = d[26];
+    sPendGenders[0] = d[26] & ~BR_BSTART_FOG;
+    sPendFog = (d[26] & BR_BSTART_FOG) != 0;
     sPendGenders[1] = d[27];
     sPendSeed = seed;
     sPendFlags = flags;
