@@ -11,9 +11,21 @@
  *  worker (workerStart 0), once each, as paths with their query -- a patch is named by its
  *  `?v=`. One still loading when the worker took over, the core's wasm among them, is not
  *  an entry until it lands, and came through nobody: the page hands those on as they
- *  land, too. */
-export function warmList(entries: readonly { name: string; workerStart?: number }[], origin: string): string[] {
-  const out = new Set<string>();
+ *  land, too.
+ *
+ *  `asked`: every path handed on so far, kept by the caller for the page's life, and
+ *  never handed on again. The warm's own fetches are resource entries too, and only
+ *  workerStart kept them out -- Safari reports 0 for one the worker answered from its
+ *  cache, so the manifest and the icon (cached at install, sw.js SHELL) came back as new
+ *  entries, were warmed again, and every round revalidated them over the network: 278k
+ *  requests from two Safari tabs in half an hour, and Vercel's DDoS mitigation denied
+ *  the player (2026-10-05). */
+export function warmList(
+  entries: readonly { name: string; workerStart?: number }[],
+  origin: string,
+  asked: Set<string> = new Set(),
+): string[] {
+  const out: string[] = [];
   for (const { name, workerStart } of entries) {
     if ((workerStart ?? 0) > 0) continue; // the worker saw it, and kept it by its rules
     let url: URL;
@@ -23,9 +35,12 @@ export function warmList(entries: readonly { name: string; workerStart?: number 
       continue;
     }
     if (url.origin !== origin) continue;
-    out.add(url.pathname + url.search);
+    const path = url.pathname + url.search;
+    if (asked.has(path)) continue;
+    asked.add(path);
+    out.push(path);
   }
-  return [...out];
+  return out;
 }
 
 /** Fetches `paths` one at a time -- the core is a large file, and none of this is urgent

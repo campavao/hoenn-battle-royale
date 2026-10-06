@@ -29,6 +29,31 @@ describe('what a first visit hands the service worker (POK-246)', () => {
     expect(warmList([{ name: `${origin}/a.js`, workerStart: 12.5 }, { name: `${origin}/b.js`, workerStart: 0 }, { name: `${origin}/c.js` }], origin)).toEqual(['/b.js', '/c.js']);
   });
 
+  it('hands each path on once for the life of the page, whatever workerStart says', () => {
+    // Safari: the warm's fetch of a file the worker answered from its cache comes back
+    // as an entry with workerStart 0. Handing it on again looped for ever (2026-10-05).
+    const asked = new Set<string>();
+    const round = [{ name: `${origin}/manifest.webmanifest`, workerStart: 0 }, { name: `${origin}/icon.svg`, workerStart: 0 }];
+    expect(warmList(round, origin, asked)).toEqual(['/manifest.webmanifest', '/icon.svg']);
+    expect(warmList(round, origin, asked)).toEqual([]);
+    expect(warmList([...round, { name: `${origin}/ui/frame-1.png`, workerStart: 0 }], origin, asked)).toEqual(['/ui/frame-1.png']);
+  });
+
+  it('feeds its own fetches back through the observer and still stops (the Safari loop)', async () => {
+    const asked = new Set<string>();
+    const fetched: string[] = [];
+    let pending: { name: string; workerStart: number }[] = [{ name: `${origin}/icon.svg`, workerStart: 0 }];
+    for (let round = 0; round < 50 && pending.length; round++) {
+      const next: { name: string; workerStart: number }[] = [];
+      await warm(warmList(pending, origin, asked), async (path) => {
+        fetched.push(path);
+        next.push({ name: origin + path, workerStart: 0 }); // what Safari's observer sees
+      });
+      pending = next;
+    }
+    expect(fetched).toEqual(['/icon.svg']);
+  });
+
   it('fetches them one at a time and gets past one that fails', async () => {
     const asked: string[] = [];
     const got = await warm(['/a.js', '/gone.png', '/b.js'], async (path) => {
@@ -48,6 +73,8 @@ describe('what a first visit hands the service worker (POK-246)', () => {
     expect(to, 'set up before the worker is registered').toBeGreaterThan(from);
     const wiring = appSource.slice(from, to);
     expect(wiring).toContain('warm(warmList(');
+    // ...with one `asked` set for the page, so nothing is warmed twice.
+    expect(wiring).toContain('location.origin, asked)');
     expect(wiring).toContain("addEventListener(\n      'controllerchange'");
     // ...and what was still loading then, as it lands.
     expect(wiring).toContain("observe({ type: 'resource' })");

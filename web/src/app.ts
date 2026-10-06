@@ -3366,9 +3366,11 @@ function registerServiceWorker(): void {
     // A worker newly in control of this page has seen none of what it loaded -- that all
     // came before the worker existed -- so it is asked for again, through it (sw-warm.ts):
     // one visit then leaves the whole shell on the device, not just the page. A page
-    // that loaded under a worker already fetched everything through it.
+    // that loaded under a worker already fetched everything through it. Each path once:
+    // the warm's own fetches are entries too (sw-warm.ts, the Safari loop).
+    const asked = new Set<string>();
     const hand = (entries: PerformanceEntryList) =>
-      void warm(warmList(entries as PerformanceResourceTiming[], location.origin), (path) => fetch(path));
+      void warm(warmList(entries as PerformanceResourceTiming[], location.origin, asked), (path) => fetch(path));
     navigator.serviceWorker.addEventListener(
       'controllerchange',
       () => {
