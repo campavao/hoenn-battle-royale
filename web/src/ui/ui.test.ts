@@ -96,7 +96,7 @@ describe('the drawn screens (POK-320)', () => {
     expect(wardrobeNote(0, 0, 0)).toBe('your sprite');
     expect(wardrobeNote(1, 0, 0)).toBe('press WEAR');
     expect(wardrobeNote(2, 0, 0)).toBe('LOCKED -- 1 win');
-    expect(wardrobeNote(4, 3, 0)).toBe('LOCKED -- 5 wins');
+    expect(wardrobeNote(4, 2, 0)).toBe('LOCKED -- 3 wins');
     expect(wardrobeNote(4, 5, 0)).toBe('press WEAR');
   });
 

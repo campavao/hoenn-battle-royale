@@ -257,7 +257,7 @@ describe('the wardrobe (POK-282)', () => {
   it('says what a locked one costs, and says nothing about one you own', () => {
     expect(skinNote(0, 0)).toBe('your sprite');
     expect(skinNote(2, 0)).toBe('LOCKED -- 1 win');
-    expect(skinNote(4, 0)).toBe('LOCKED -- 5 wins');
+    expect(skinNote(4, 0)).toBe('LOCKED -- 3 wins');
     expect(skinNote(3, 1)).toBe('your sprite');
   });
 

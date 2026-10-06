@@ -66,8 +66,9 @@ export const SKINS = [
  *
  *  A PAIR AT A TIME, so every rung offers both genders: unlocking one of a pair and not
  *  the other would hand somebody a wardrobe that cannot dress them. Your own two starting
- *  trainers are free; everything after is won. */
-export const SKIN_UNLOCK_WINS = [0, 0, 1, 1, 5, 5, 8, 8, 12, 12, 16, 16, 20, 20, 25, 25];
+ *  trainers are free; everything after is won: the first at 1 win, then 3, 5, 10 and every
+ *  5 after that (Cam, 2026-10-05). */
+export const SKIN_UNLOCK_WINS = [0, 0, 1, 1, 3, 3, 5, 5, 10, 10, 15, 15, 20, 20, 25, 25];
 
 export function skinUnlocked(skin: number, wins: number): boolean {
   return wins >= (SKIN_UNLOCK_WINS[skin] ?? 0);
