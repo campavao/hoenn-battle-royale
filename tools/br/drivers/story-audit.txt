@@ -1,0 +1,34 @@
+# story-audit: what a full audit of the maps' OnLoad/OnTransition scripts found still set
+# up as if the story were running (2026-10-06, Cam: "do a full audit of all events").
+#
+# The one a player walks into: Sootopolis locks its gym door until Archie and Maxie
+# leave, and Juan is one of the eight bosses. br_boot.c's ClearTheLateStory now sets
+# FLAG_SOOTOPOLIS_ARCHIE_MAXIE_LEAVE with the rest; pret's ROM stays in the city.
+#
+# Booted into SOOTOPOLIS CITY (0:7) at (31,33), one step south of the gym door.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 07 1F 00 21 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 7
+shot door
+hold UP 16
+wait 120
+shot inside
+# SOOTOPOLIS CITY GYM 1F is (15:0)
+expect u8 *gSaveBlock1Ptr+4 15
+expect u8 *gSaveBlock1Ptr+5 0
+# The other flags the audit set (SaveBlock1+0x1270 + flag/8):
+# FLAG_TEAM_AQUA_ESCAPED_IN_SUBMARINE 0x70, Lilycove's Wailmer
+expectbits u8 *gSaveBlock1Ptr+0x127E 0x01 0x01
+# FLAG_RECEIVED_POTION_OLDALE 0x84, the Oldale clerk
+expectbits u8 *gSaveBlock1Ptr+0x1280 0x10 0x10
+# FLAG_RETURNED_DEVON_GOODS 0x90, Devon's stair guard
+expectbits u8 *gSaveBlock1Ptr+0x1282 0x01 0x01
+# FLAG_ENTERED_ELITE_FOUR 0x107, the League's door guards
+expectbits u8 *gSaveBlock1Ptr+0x1290 0x80 0x80
+# FLAG_MET_SCOTT_IN_EVERGRANDE 0x1CF, Scott in Ever Grande's Pokemon Center
+expectbits u8 *gSaveBlock1Ptr+0x12A9 0x80 0x80
+# VAR_WEATHER_INSTITUTE_STATE (0x40B3) 2: Aqua have left the Weather Institute
+expect u16 *gSaveBlock1Ptr+0x1502 2
+say story audit ok

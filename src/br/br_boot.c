@@ -249,6 +249,19 @@ static void ClearTheLateStory(void)
     VarSet(VAR_NEW_MAUVILLE_STATE, 2);
     VarSet(VAR_VICTORY_ROAD_1F_STATE, 3);
     VarSet(VAR_SKY_PILLAR_RAYQUAZA_CRY_DONE, 1);
+    VarSet(VAR_WEATHER_INSTITUTE_STATE, 2);
+    // The rest of a 2026-10-06 audit of every map's OnLoad/OnTransition: the flags a
+    // story scene leaves set that a map asks before it is drawn. Sootopolis locks its gym
+    // door (Juan, a boss) until Archie and Maxie leave; Lilycove's Wailmer block the sea
+    // east until Aqua's submarine is gone; Devon's stairs, the League's door guards and
+    // the Oldale mart clerk each stand in the way until their scene has run; and Ever
+    // Grande's Pokemon Center un-hides Scott for anyone with six badges.
+    FlagSet(FLAG_SOOTOPOLIS_ARCHIE_MAXIE_LEAVE);
+    FlagSet(FLAG_TEAM_AQUA_ESCAPED_IN_SUBMARINE);
+    FlagSet(FLAG_RETURNED_DEVON_GOODS);
+    FlagSet(FLAG_ENTERED_ELITE_FOUR);
+    FlagSet(FLAG_RECEIVED_POTION_OLDALE);
+    FlagSet(FLAG_MET_SCOTT_IN_EVERGRANDE);
     // NORMAN is one of the eight bosses (web/src/match/bosses.ts), and the only leader
     // whose sprite is hide-gated: the first sweep left Petalburg's gym empty (2026-10-06).
     FlagClear(FLAG_HIDE_PETALBURG_GYM_NORMAN);
