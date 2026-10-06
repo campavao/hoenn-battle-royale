@@ -781,6 +781,21 @@ void RecordedBattle_EndSpectate(void)
     sSpectateEnded = TRUE;
 }
 
+void RecordedBattle_AbortSpectate(void)
+{
+    u8 i;
+
+    if (!sSpectateLive)
+        return;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        if (sBattlerRecordSizes[i] < BATTLER_RECORD_SIZE)
+            sBattleRecords[i][sBattlerRecordSizes[i]] = 0xFF;
+        sBattlerSavedRecordSizes[i] = BATTLER_RECORD_SIZE; // and nothing more is fed
+    }
+    sSpectateEnded = TRUE;
+}
+
 bool8 RecordedBattle_IsSpectateLive(void)
 {
     return sSpectateLive;

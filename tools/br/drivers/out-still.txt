@@ -1,0 +1,20 @@
+# out-still: out is out (2026-10-05 play-test: "I'm dead, but still playing, since I died
+# by the fog"). A trainer the match is done with does not walk the field -- watching
+# somebody or not, and after STOP too -- and is not drawn on it.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u16 *gSaveBlock1Ptr+0 5
+# in the match, walking east moves us
+hold RIGHT 20
+wait 20
+expect u16 *gSaveBlock1Ptr+0 7
+# out: the same walk goes nowhere
+poke u8 gBrMatch 3
+wait 5
+hold RIGHT 20
+wait 20
+expect u16 *gSaveBlock1Ptr+0 7
+shot out
+say out still ok

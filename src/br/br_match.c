@@ -195,6 +195,8 @@ static void HandleOut(const u8 *payload, u8 len)
         return;
     BrGhosts_Out(d[0]);
     BrNetlink_PeerOut(d[0]);
+    // Their fight is over, whether or not a RESULT ever says so: a bot's duel has none.
+    BrSpectate_OnResult(d[0]);
 }
 
 static void HandleClock(const u8 *payload, u8 len)

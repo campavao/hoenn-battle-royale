@@ -38,6 +38,7 @@
 #include "br/br_spectate.h"
 #include "br/br_duel.h"
 #include "br/br_field.h"
+#include "br/br_match.h"
 #include "br/br_hud.h"
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
@@ -821,7 +822,29 @@ void BrSpectate_Follow(u8 seat)
     if (seat != BR_NO_SEAT && (seat >= BR_MAX_SEATS || seat == gBrMySeat))
         return;
     if (gBrSpectate.follow != BR_NO_SEAT && seat != gBrSpectate.follow)
-        StopFollowing(seat == BR_NO_SEAT);
+    {
+        // From one seat to the next the controls stay ours to keep: handing them back
+        // here and taking them again only once the new seat's ghost was in view left a
+        // spectator walking their own trainer -- for good, when the next seat was on the
+        // same map but out of sight (2026-10-05 play-test). Only STOP gives them back.
+        if (seat == BR_NO_SEAT)
+            StopFollowing(TRUE);
+        else
+        {
+            ClosePeek();
+            gBrSpectate.followed = FALSE;
+        }
+        // NEXT in the middle of somebody's fight: the replay of it ends at its next read
+        // and the field takes us to the new seat. It used to sit there, starved of turns
+        // the page no longer passed on, until that fight's RESULT came.
+        if (gBrSpectate.watching)
+        {
+            if (sPendParties != NULL)
+                sEndEarly = TRUE;
+            else
+                RecordedBattle_AbortSpectate();
+        }
+    }
     gBrSpectate.follow = seat;
     gBrSpectate.shotSecs = 0;
 }
@@ -851,18 +874,39 @@ static void FollowTick(void)
     // happened, or something bigger overtook it.
     if (!BrField_OverworldRunning())
         gBrSpectate.warpWait = 0;
+    if (!BrField_OverworldRunning() || ScriptContext_IsEnabled())
+        return;
+    // Out is out (2026-10-05 play-test: "I'm dead, but still playing, since I died by
+    // the fog"): a trainer the match is done with is not on the field to walk it, whoever
+    // they are watching or not. Beaten sprites vanish (DESIGN §10), ours too.
+    if (gBrMatch.phase == BR_PHASE_OUT)
+    {
+        ShowOwnTrainer(FALSE);
+        LockPlayerFieldControls();
+    }
     if (gBrSpectate.follow == BR_NO_SEAT)
         return;
+    // Following anybody, the controls are the watch's from the first frame -- not from
+    // the frame their ghost turns up, which on the same map out of sight was never.
+    ShowOwnTrainer(FALSE);
+    LockPlayerFieldControls();
     them = &gBrSeats[gBrSpectate.follow];
     // No roster row yet: wait. A spectator who starts watching mid-fight has never
     // heard a place from that seat -- they are in a battle, not walking -- and giving
     // up here would cancel the watch before it began.
     if (!them->present)
         return;
-    if (!BrField_OverworldRunning() || ScriptContext_IsEnabled())
+    // Picking where to drop is the fly map, and their last cell is still where they
+    // stood before it -- in the Safari, at the buzzer -- so a warp there put everybody
+    // watching back in the Zone, then took them on again when the seat landed (2026-10-05
+    // play-test). Their next PLACE says where they came down.
+    if (gBrSeatBusy[gBrSpectate.follow] == BR_BUSY_MENU && gBrMatch.phase != BR_PHASE_SAFARI
+     && (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
+      || gSaveBlock1Ptr->location.mapNum != them->mapNum))
         return;
     if (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
-     || gSaveBlock1Ptr->location.mapNum != them->mapNum)
+     || gSaveBlock1Ptr->location.mapNum != them->mapNum
+     || (them->objId == BR_NO_OBJ && !BrField_InObjectView(them->x, them->y)))
     {
         // One warp at a time (POK-247). DoWarp only starts the errand: its task waits
         // out the fade and the old map's music, then loads the map -- and this runs
@@ -905,10 +949,6 @@ static void FollowTick(void)
     }
     if (them->objId == BR_NO_OBJ)
         return; // their ghost has not spawned on this map yet
-    // Reasserted every frame: a map load rebuilds our object event, and it comes back
-    // visible and in charge.
-    ShowOwnTrainer(FALSE);
-    LockPlayerFieldControls();
     if (!gBrSpectate.followed)
     {
         CameraObjectSetFollowedSpriteId(gObjectEvents[them->objId].spriteId);

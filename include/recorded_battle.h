@@ -30,6 +30,9 @@ bool8 RecordedBattle_HasBattlerAction(u8 battler, u8 count);
 // The fight is over on the fighters' side: let the replay finish what it has and quit
 // instead of waiting for a turn that will never come.
 void RecordedBattle_EndSpectate(void);
+// The watcher went to somebody else: quit at the replay's next read, and play nothing of
+// what is still waiting on the record.
+void RecordedBattle_AbortSpectate(void);
 bool8 RecordedBattle_IsSpectateLive(void);
 // A live replay's controllers, waiting on the stream (POK-330 #12): TRUE once the choice
 // has arrived and gone to the engine, and the controller may complete.
