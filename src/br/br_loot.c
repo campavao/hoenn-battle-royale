@@ -658,6 +658,8 @@ static void Take(struct BrLootItem *it)
     // the rung: the DAY CARE's chest (POK-306) has been on that floor since the drop.
     CreateMon(&mon, species, it->level != 0 ? it->level : BrLevels_WildLevel(),
               USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    BrLevels_Settle(&mon); // a ZUBAT taken at 50 is a CROBAT, and says so
+    species = GetMonData(&mon, MON_DATA_SPECIES, NULL);
     p = BrHud_Append(line, last, sText_Took);
     p = BrHud_Append(p, last, gSpeciesNames[species]);
     BrHud_Append(p, last, sText_Bang);

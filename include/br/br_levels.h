@@ -34,5 +34,8 @@ void BrLevels_LiftTrainer(struct Pokemon *party, u8 count);
 // Every move its learnset would have taught it by `level`, the walk the party and the
 // trainers get on a rung (POK-311): how a bot's mon, built from a card, gets its moves.
 void BrLevels_TeachUpTo(struct Pokemon *mon, u8 level);
+// A mon joining the party (a ball taken, a catch): evolved and taught as a lift to its
+// level would have left it.
+void BrLevels_Settle(struct Pokemon *mon);
 
 #endif // GUARD_BR_LEVELS_H

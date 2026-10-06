@@ -115,8 +115,18 @@ static void GrowUp(struct Pokemon *mon)
     for (i = 0; i < 3; i++)
     {
         u16 before = GetMonData(mon, MON_DATA_SPECIES, NULL);
-        u16 target = GetEvolutionTargetSpecies(mon, EVO_MODE_NORMAL, ITEM_NONE);
+        u8 friendship = GetMonData(mon, MON_DATA_FRIENDSHIP, NULL);
+        u8 full = MAX_FRIENDSHIP;
+        u16 target;
         u8 nickname[POKEMON_NAME_LENGTH + 1];
+
+        // A friendship evolution is a level-up one too -- GOLBAT to CROBAT happens on a
+        // level-up -- but nothing in a match ever raises friendship, so it never came:
+        // a ZUBAT taken at 50 was a GOLBAT at most (2026-10-05 play-test). Asked as if
+        // the mon were as fond as it can be; what it really is stays on it.
+        SetMonData(mon, MON_DATA_FRIENDSHIP, &full);
+        target = GetEvolutionTargetSpecies(mon, EVO_MODE_NORMAL, ITEM_NONE);
+        SetMonData(mon, MON_DATA_FRIENDSHIP, &friendship);
 
         if (target == SPECIES_NONE || target == before)
             break;
@@ -411,6 +421,16 @@ static void LearnThrough(struct Pokemon *mon, u8 slot, u8 to)
             RemoveMonPPBonus(mon, i);
         SetMonMoveSlot(mon, moves[i], i);
     }
+}
+
+// A mon that joins the party at the rung -- a ball off the ground, a catch -- is where a
+// lift would have left it: evolved as far as levelling evolves it, and knowing the four
+// a lift would teach. Nothing else ever did it, so a ZUBAT taken at 50 stayed a ZUBAT
+// until the ring next moved, and for good on the last phase (2026-10-05 play-test).
+void BrLevels_Settle(struct Pokemon *mon)
+{
+    GrowUp(mon);
+    LearnThrough(mon, PARTY_SIZE, GetMonData(mon, MON_DATA_LEVEL, NULL));
 }
 
 // A bot's mon, built from a card, knows what a player's or a gym leader's would at this
