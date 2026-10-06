@@ -55,21 +55,6 @@ wait 70
 poke u8 gBattleOutcome 1
 tap A
 wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
 shot won
 tap B
 wait 70

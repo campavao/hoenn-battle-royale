@@ -25,6 +25,10 @@ bool8 BrGym_IsBoss(u16 trainerId);
 // other trainer's text comes back untouched. The one hook in ShowTrainerIntroSpeech.
 const u8 *BrGym_Intro(u16 trainerId, const u8 *speech);
 
+// The same for the speech a boss loses with, in place in the expanded text: it runs on
+// into handing over the badge. The one hook in GetTrainerALoseText.
+void BrGym_CutLoseText(u16 trainerId, u8 *text);
+
 // The script a win goes on to: the gym's own (badge, fanfare, TM, explanation) for
 // anybody else, and for a boss one that lets go of the player and ends. The one hook in
 // BattleSetup_GetTrainerPostBattleScript.

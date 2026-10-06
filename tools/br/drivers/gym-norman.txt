@@ -1,0 +1,62 @@
+# gym-norman: NORMAN fights like every other leader (2026-10-06 play-test).
+#
+# Cam: "Beaten gym leaders give a badge and a long dialogue. They should just disappear
+# and drop their Pokemon." Every other leader runs trainerbattle_single straight from
+# their script; NORMAN's branches on VAR_PETALBURG_GYM_STATE, which the boot's
+# after-the-story state (7) sends to "here is the TM" and no battle at all. Under BR
+# his script jumps to BR_EventScript_Norman (data/scripts/br.inc), gym-boss.txt's shape.
+#
+# After the story (FLAG_SYS_GAME_CLEAR) his OnTransition stands him at the entrance,
+# (4,107) in Petalburg Gym (8:1). The boot names (4,109); one step up is in front of him.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 08 01 04 00 6D 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 8
+expect u8 *gSaveBlock1Ptr+5 1
+poke u8 gBrMatch 2
+hold UP 20
+wait 30
+tap A
+wait 30
+tap A
+wait 200
+shot one-page
+tap A
+wait 500
+shot fight
+# a trainer battle, a boss's: the same flags ROXANNE's fight raises
+expect u32 gBattleTypeFlags 0xC
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+poke u8 gBattleOutcome 1
+tap A
+wait 70
+shot won
+tap B
+wait 70
+# won: the purse line (TM FACADE and the money) is up, as for ROXANNE in gym-boss.txt
+expectge u8 gBrHud+0x178 1
+shot line
+say gym norman ok

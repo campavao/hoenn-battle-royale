@@ -1554,6 +1554,9 @@ const u8 *GetTrainerALoseText(void)
         string = sTrainerADefeatSpeech;
 
     StringExpandPlaceholders(gStringVar4, ReturnEmptyStringIfNull(string));
+#if BR
+    BrGym_CutLoseText(gTrainerBattleOpponent_A, gStringVar4); // a leader's first page only: no badge talk
+#endif
     return gStringVar4;
 }
 

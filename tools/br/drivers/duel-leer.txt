@@ -1,0 +1,119 @@
+# duel-leer: a duel's side A aims a both-foes move at side B (2026-10-06 play-test).
+#
+# Cam watched a TORCHIC use GROWL and saw its own ATTACK fall, while the MAGNEMITE's
+# SCREECH landed on the TORCHIC as it should. Side A of a proxy duel stands on the
+# player's side but chooses on the opponent controller, and pret's opponent controller
+# aims a both-foes move (GROWL, LEER, TAIL WHIP) at the player's side by name -- itself,
+# for side A. BrBattle_FoeOf turns that round.
+#
+# duel.txt's fight with side A's TREECKO down to one move, LEER, once it is out (its
+# gBattleMons row: moves at +0x0C, PP at +0x24). It spends its X ATTACK first and LEERs
+# from then on. LEER is DEFENSE, statStages[2] at +0x1A; a battler's row is 0x58 long.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 01 02 01 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 1B 01 05 14 00 14 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 C7 CF BE C5 C3 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 4B 00 01 0D 00
+mailsend gBrMailbox 27 gDecompressionBuffer 210
+wait 10
+expect u8 gBrDuel 1
+wait 300
+expect u8 gBrDuel+1 1
+poke u32 gRngValue 5
+pokebytes gBattleMons+0x0C 2B 00 00 00 00 00 00 00
+poke u8 gBattleMons+0x24 30
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+tap A
+wait 20
+shot leered
+# A's own DEFENSE is untouched, and B's has come down from 6.
+expect u8 gBattleMons+0x1A 6
+expectle u8 gBattleMons+0x72 5
+say duel-leer ok
