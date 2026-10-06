@@ -842,6 +842,7 @@ static void HandleNpcOut(const u8 *payload, u8 len)
     // Remembered first: the sweep is what hides it when we walk onto that map later, and
     // Despawn_Trainer only does anything if we are standing on it right now.
     RememberDespawned(d[1], d[2], d[3]);
+    BrGym_NoteOut(d[1], d[2], d[3]);
     Despawn_Trainer(d[1], d[2], d[3]);
 }
 
@@ -1063,6 +1064,7 @@ void BrLoot_Init(void)
     for (i = 0; i < BR_MAX_LOOT; i++)
         gBrLoot.items[i].objId = BR_NO_OBJ;
     CpuFill32(0, gBrDespawned, sizeof(gBrDespawned));
+    BrGym_Init();
     sGivenBag.kind = BR_LOOT_NONE;
     sGiveBackLen = 0;
     sSpillAsm.buf = sSpillBuf;

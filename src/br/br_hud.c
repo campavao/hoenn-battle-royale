@@ -758,6 +758,12 @@ static void HandleTicker(const u8 *payload, u8 len)
 
     if (n < 3)
         return;
+    // Who went out and who beat a gym leader are not the banner's news (2026-10-05
+    // play-test: "don't announce deaths or gym leader defeats in the bottom banner"):
+    // the corner's count says how many are left, and the MAP's gray heads say which gyms
+    // are down (br_gym.c). Both are the page's KILL lines and nothing else is.
+    if (d[1] == BR_HUD_KIND_KILL)
+        return;
     textLen = d[2];
     if (textLen > n - 3)
         textLen = n - 3;

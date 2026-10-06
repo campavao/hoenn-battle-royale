@@ -40,8 +40,8 @@ shot phase-two
 # A line identical to the last one queued is dropped. Inside the ring, where the fog's
 # bite does not stop the overworld's clock: the page's kill line twice, in two slots
 # (hud.txt's MAY GOT BRENDAN) -- the second is one line behind the fog's, not two.
-pokebytes gBrMailbox+0x1098 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
-pokebytes gBrMailbox+0x10D8 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+pokebytes gBrMailbox+0x1098 0F 15 12 00 00 01 00 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+pokebytes gBrMailbox+0x10D8 0F 15 12 00 00 01 00 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
 poke u16 gBrMailbox+0x0C 4
 wait 4
 expect u8 gBrHud+0x0A 2
@@ -52,11 +52,11 @@ expect u8 gBrHud+0x71 0x0F
 wait 180
 expect u8 gBrHud+0x0A 1
 expect u8 gBrHud+0x46 0xC7
-pokebytes gBrMailbox+0x1118 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+pokebytes gBrMailbox+0x1118 0F 15 12 00 00 01 00 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
 poke u16 gBrMailbox+0x0C 5
 wait 4
 expect u8 gBrHud+0x0A 1
-pokebytes gBrMailbox+0x1158 0F 14 11 00 00 01 01 0E C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB
+pokebytes gBrMailbox+0x1158 0F 14 11 00 00 01 00 0E C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB
 poke u16 gBrMailbox+0x0C 6
 wait 4
 expect u8 gBrHud+0x0A 2

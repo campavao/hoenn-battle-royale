@@ -32,6 +32,8 @@ extern const u8 gBrText_MenuMap[];
 extern const u8 gBrText_TheFog[];
 
 void BrMap_Init(void);
+// The gym leaders' heads over their towns, in a match's MAP and its drop (br_gym.c).
+void BrMap_DrawGyms(s16 left, s16 top);
 // TRUE while the region map is open to look at the fog rather than to drop into it.
 bool8 BrMap_Looking(void);
 // START menu's MAP row. TRUE when it took the press.
