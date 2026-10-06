@@ -125,9 +125,53 @@ void BrBattle_SayItemUsed(void);
 // The battle's own lines, past the end of pret's string table. battle_message.c's
 // BufferStringBattle hands every id here first; FALSE for one of pret's.
 #define BR_STRINGID_USED_ITEM BATTLESTRINGS_COUNT
+#define BR_STRINGID_FOG_HURT (BATTLESTRINGS_COUNT + 1) // br_ring.c, the fog's turn
 bool8 BrBattle_BufferString(u16 stringId);
+// A trainer's own three lines in the battle with them (2026-10-05 play-test: "the chosen
+// text should show in battle"). The page sends the opponent's before the fight, as TICKER
+// kinds 3..5 (br_hud.c): which is BR_VOICE_*, text is charmap bytes, len without an EOS.
+#define BR_VOICE_INTRO 0
+#define BR_VOICE_WIN 1
+#define BR_VOICE_LOSE 2
+#define BR_VOICE_LEN 30
+void BrBattle_SetVoice(u8 seat, u8 which, const u8 *text, u8 len);
+// battle_message.c, the end of BufferStringBattle: the intro and a link battle's last
+// line get the opponent's own after them, on a page of its own.
+void BrBattle_AfterString(u16 stringId);
+// The room's TEXT and ANIM in every battle (2026-10-05 play-test: "animations off and
+// text fast don't seem to be applying"). pret ignores both in a link battle -- every
+// animation plays, every line prints at 1 and then holds 49 frames for the cable -- and
+// those are the fights a match is made of.
+// battle_main.c: HITMARKER_NO_ANIMATIONS, in a link battle and a replay of one too.
+bool8 BrBattle_AnimationsOff(void);
+// battle_message.c: a link battle's print speed, the player's own.
+u8 BrBattle_LinkTextSpeed(void);
+// text.c: how long an auto-scrolling line holds (pret: 49 frames). Shorter on a faster
+// TEXT, in a battle; pret's 49 everywhere else.
+u8 BrBattle_AutoScrollFrames(void);
+// The battle over the map, an experiment (2026-10-05 play-test: "disable the white battle
+// background so the battle overlays the map"). [0] the page writes: nonzero asks for it.
+// [1] the ROM keeps: frames left in which a battle drew its picture see-through, 2 from
+// every battle VBlank, one off each BrFrame -- the page keys the picture while it is up.
+// See-through is no terrain (BG3) and the backdrop BR_SEE_THROUGH_KEY, pure blue, which
+// the page's filter makes transparent so the field it draws under the picture shows.
+#define BR_SEE_THROUGH_KEY RGB(0, 0, 31)
+extern u8 gBrSeeThrough[2];
+// battle_main.c, VBlankCB_Battle, before the palettes go up.
+void BrBattle_SeeThrough(void);
+// br_main.c, every frame.
+void BrBattle_TickSeeThrough(void);
 // battle_main.c: TRUE while the battlers are still choosing, when the engine may yet take
 // a recorded byte back off the record.
 bool8 BrBattle_Choosing(void);
+// The opponent's front picture, in a bot's fight or a netlink: the trainer class of the
+// skin that seat walks around in, so the HIKER on the map is the HIKER in the battle
+// (2026-10-05 play-test). Anything else keeps pret's pick.
+u32 BrBattle_OpponentPic(u32 pic);
+// battle_controllers.c: a spectator's replay of somebody's wild battle (br_spectate.c).
+// pret's own non-link replay runs the opponent on the AI again, which only works for a
+// frontier trainer whose AI is all there is to it; a wild POKeMON chooses with Random(),
+// and the fighter's ROM recorded what it chose, so the replay reads that instead.
+bool8 BrBattle_RecordedWildOpponent(void);
 
 #endif // GUARD_BR_BATTLE_H

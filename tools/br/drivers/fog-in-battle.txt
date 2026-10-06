@@ -2,14 +2,21 @@
 # rule, v0.3.1. Without it you step outside the ring, pick a fight with the grass, and
 # the clock stops mattering.
 #
-# The ring is turned on AFTER the encounter starts on purpose: the bleed counter is
-# cumulative, so a ring that was already up while we walked would have spent ticks
-# before the battle and "did it grow" would prove nothing.
+# Since wild fights are published for spectators (2026-10-05 play-test), the fog in one
+# is the engine's, at the end of each turn, as in a fight between contestants
+# (fog-in-duel.txt): a replay is built from the fight's seed and its choices, and a bleed
+# on the field's clock is neither, so the replay's mon stood at an HP the fighter's never
+# had. Decided as the fight starts, so the ring closes first here and then we walk.
 wait 30
 # BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9 -- the middle grass patch
 pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
+# the fog closes somewhere else: RING phase 1, centre (25,12), r 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 60
+expect u8 gBrRing+5 1
 # walk the patch until something jumps out
 hold RIGHT 60
 hold LEFT 60
@@ -24,15 +31,24 @@ shot wild
 # in a battle, and it is a wild one: BATTLE_TYPE_IS_MASTER only, no TRAINER (0x8)
 expectge u8 gBattlersCount 2
 expect u16 gBattleTypeFlags 4
-# nothing has bled yet
+# and it knows it is in the fog
+expect u8 gBrRing+31 1
+# the field's clock has stopped: what bleeds from here is the engine's turn
+poke u16 gBrRing+10 0
+wait 300
 expect u16 gBrRing+10 0
-# now the fog closes somewhere else: RING phase 1, centre (25,12), r 1
-pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
-poke u16 gBrMailbox+0x0C 1
-wait 400
-# it reached in
+# one turn: past "Wild POOCHYENA appeared!" and "Go! TREECKO!", then FIGHT, the first move
+tap A
+wait 60
+tap A
+wait 300
+shot menu
+tap A
+wait 60
+tap A
+wait 1500
+shot fog-turn
+# it reached in, and ended nobody
 expectge u16 gBrRing+10 1
-# but it did not end anybody mid-turn: still fighting, still in
-expectge u8 gBattlersCount 2
 expect u8 gBrRing+7 0
 say fog in battle ok

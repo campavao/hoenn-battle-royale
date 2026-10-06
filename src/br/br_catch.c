@@ -16,6 +16,7 @@
 #include "br/br_hud.h"
 #include "br/br_spectate.h"
 #include "br/br_catch.h"
+#include "br/br_levels.h"
 #include "br/br_loot.h"
 #include "br/br_moves.h"
 
@@ -50,6 +51,8 @@ bool8 BrCatch_TryPark(struct Pokemon *mon)
 
 bool8 BrCatch_TryParkFrom(struct Pokemon *mon, u16 key)
 {
+    // Every way into the party comes through here, kept or parked: settle it first.
+    BrLevels_Settle(mon);
     if (CalculatePlayerPartyCount() < PARTY_SIZE)
         return FALSE;
     gBrPendingCatch = *mon;

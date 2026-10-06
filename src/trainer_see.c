@@ -19,6 +19,7 @@
 #include "constants/field_effects.h"
 #include "constants/trainer_types.h"
 #if BR
+#include "br/br_ghosts.h"
 #include "br/br_match.h"
 #endif
 
@@ -799,8 +800,12 @@ static void SpriteCB_TrainerIcons(struct Sprite *sprite)
 {
     u8 objEventId;
 
+#if BR
+    if (BrGhosts_DropMark(sprite, TryGetObjectEventIdByLocalIdAndMap(sprite->sLocalId, sprite->sMapNum, sprite->sMapGroup, &objEventId)))
+#else
     if (TryGetObjectEventIdByLocalIdAndMap(sprite->sLocalId, sprite->sMapNum, sprite->sMapGroup, &objEventId)
      || sprite->animEnded)
+#endif
     {
         FieldEffectStop(sprite, sprite->sFldEffId);
     }

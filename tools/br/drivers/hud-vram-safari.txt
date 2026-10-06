@@ -12,7 +12,7 @@ wait 400
 expect u8 gBrMatch 1
 poke u8 gBrHud+0x00 7
 poke u16 gBrHud+0x02 125
-pokebytes gBrMailbox+0x1018 0F 15 12 00 00 01 01 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
+pokebytes gBrMailbox+0x1018 0F 15 12 00 00 01 00 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8
 poke u16 gBrMailbox+0x0C 1
 pokebytes gBrHud+0x14C 00 05 C2 BF C6 C6 C9 FF
 poke u8 gBrHud+0x178 255

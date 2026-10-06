@@ -1,5 +1,6 @@
 // Match phases, START and CLOCK, the Safari opening's end and the drop (POK-222).
 #include "global.h"
+#include "pokeblock.h"
 #include "main.h"
 #include "overworld.h"
 #include "field_screen_effect.h"
@@ -195,6 +196,8 @@ static void HandleOut(const u8 *payload, u8 len)
         return;
     BrGhosts_Out(d[0]);
     BrNetlink_PeerOut(d[0]);
+    // Their fight is over, whether or not a RESULT ever says so: a bot's duel has none.
+    BrSpectate_OnResult(d[0]);
 }
 
 static void HandleClock(const u8 *payload, u8 len)
@@ -325,9 +328,32 @@ void BrMatch_SafariCell(u8 *mapNum, u8 *x, u8 *y)
     *y = cell[2];
 }
 
+// POKeBLOCKs to throw in the Zone (2026-10-05 play-test: "give pokeblocks in safari").
+// Emerald's Safari battle has the row and EnterSafariMode hands out only balls, so the
+// row opened an empty case. Two of each of the five plain flavours, at a middling 20: a
+// block a mon's nature likes calms it more, which is the choice the row offers.
+static const struct Pokeblock sSafariBlocks[] =
+{
+    {PBLOCK_CLR_RED,    20, 0, 0, 0, 0, 20},
+    {PBLOCK_CLR_BLUE,   0, 20, 0, 0, 0, 20},
+    {PBLOCK_CLR_PINK,   0, 0, 20, 0, 0, 20},
+    {PBLOCK_CLR_GREEN,  0, 0, 0, 20, 0, 20},
+    {PBLOCK_CLR_YELLOW, 0, 0, 0, 0, 20, 20},
+};
+
+static void GiveSafariBlocks(void)
+{
+    u8 i;
+
+    ClearPokeblocks();
+    for (i = 0; i < 2 * ARRAY_COUNT(sSafariBlocks); i++)
+        AddPokeblock(&sSafariBlocks[i % ARRAY_COUNT(sSafariBlocks)]);
+}
+
 void BrMatch_BeginSafari(void)
 {
     EnterSafariMode();
+    GiveSafariBlocks();
     // The phase first: the deal says "A <TYPE> MATCH!" only in the opening (SayTheme),
     // and a seed that is already here -- a room's START came before this warp, and a
     // solo page writes its seed before the boot -- is dealt on the next line. Dealt

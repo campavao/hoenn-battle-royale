@@ -168,7 +168,10 @@ out, and one that comes in waits as it would in a menu.
   map section a rectangle on the 28x15 Hoenn map, the analogue of Kanto's town-map grid.
   The host sends the centre and radius in sections (`ring`); a map is inside when its
   rectangle touches the circle. Outside, the weather is `WEATHER_FOG_HORIZONTAL` and the
-  party bleeds a tenth of max HP every four seconds, in a wild or route fight too. The
+  party bleeds a tenth of max HP every four seconds, in a wild or route fight too. A fight
+  between contestants (a bot's, a link one, a replay of one) that starts outside is fought
+  in the fog as well: the engine takes a tenth from each mon on the field at every turn's
+  end, down to 1, so both ROMs and a spectator see the same HP (`BrRing_FogEndTurn`). The
   fog never clamps: the last phase is everywhere.
 - **The drop** (`br_pick.h`): the fly map (`CB2_OpenFlyMap`) is the picker, every
   section selectable. The ROM does not know where a trainer can stand, so it sends

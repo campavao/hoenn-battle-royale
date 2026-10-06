@@ -431,3 +431,108 @@ u16 BrZone_Pick(void)
     // same mon; the twelve themselves are the seed's, which is what everybody shares.
     return gBrZone.species[Random() % BR_ZONE_SLOTS];
 }
+
+// ---- the national dex on the routes (2026-10-05 play-test) -------------------------
+//
+// Cam: "use the national dex to increase Pokemon variety". Emerald's own tables put about
+// a third of the 386 in the grass, the same third every match. Outside the opening (the
+// Zone deals its own, above), half of what a map's table would put in front of you is
+// swapped this match for something of its weight from anywhere in the dex: a species
+// within BR_NATIONAL_BAND of its base stat total that shares one of its types, so a
+// route's ZIGZAGOON is a SENTRET or a RATTATA this match and a pond is still water.
+// Seeded by the match, the map and the species: a route is the same route all match, and
+// every ROM agrees, which a spectator's replay of the fight never has to (it plays the
+// record).
+
+#define BR_NATIONAL_BAND 30
+
+static const u16 sNotWild[] =
+{
+    SPECIES_ARTICUNO, SPECIES_ZAPDOS, SPECIES_MOLTRES, SPECIES_MEWTWO, SPECIES_MEW,
+    SPECIES_UNOWN, SPECIES_RAIKOU, SPECIES_ENTEI, SPECIES_SUICUNE, SPECIES_LUGIA,
+    SPECIES_HO_OH, SPECIES_CELEBI, SPECIES_SHEDINJA, SPECIES_REGIROCK, SPECIES_REGICE,
+    SPECIES_REGISTEEL, SPECIES_KYOGRE, SPECIES_GROUDON, SPECIES_RAYQUAZA, SPECIES_LATIAS,
+    SPECIES_LATIOS, SPECIES_JIRACHI, SPECIES_DEOXYS,
+};
+
+static u32 Mix(u32 x)
+{
+    x *= 0x9E3779B1;
+    x ^= x >> 15;
+    x *= 0x85EBCA77;
+    x ^= x >> 13;
+    return x;
+}
+
+static u16 StatTotal(u16 species)
+{
+    const struct SpeciesInfo *info = &gSpeciesInfo[species];
+
+    return info->baseHP + info->baseAttack + info->baseDefense
+         + info->baseSpeed + info->baseSpAttack + info->baseSpDefense;
+}
+
+static bool8 Wild(u16 species)
+{
+    u8 i;
+
+    if (species == SPECIES_NONE || species >= NUM_SPECIES
+     || (species >= SPECIES_OLD_UNOWN_B && species <= SPECIES_OLD_UNOWN_Z))
+        return FALSE;
+    for (i = 0; i < ARRAY_COUNT(sNotWild); i++)
+    {
+        if (sNotWild[i] == species)
+            return FALSE;
+    }
+    return TRUE;
+}
+
+// How many stand in for `native` within `band`; with `pick` below that count, which one.
+static u16 StandIns(u16 native, u16 band, u16 pick, u16 *out)
+{
+    const u8 *types = gSpeciesInfo[native].types;
+    u16 total = StatTotal(native);
+    u16 species, n = 0;
+
+    for (species = 1; species < NUM_SPECIES; species++)
+    {
+        u16 st;
+
+        if (species == native || !Wild(species))
+            continue;
+        if (!HasType(species, types[0]) && !HasType(species, types[1]))
+            continue;
+        st = StatTotal(species);
+        if (st + band < total || st > total + band)
+            continue;
+        if (n == pick)
+            *out = species;
+        n++;
+    }
+    return n;
+}
+
+u16 BrZone_National(u16 native)
+{
+    u32 h;
+    u16 band, n, out = native;
+
+    if (gBrMatch.seed == 0 || !Wild(native))
+        return native;
+    h = Mix(gBrMatch.seed ^ ((u32)gSaveBlock1Ptr->location.mapGroup << 24)
+            ^ ((u32)gSaveBlock1Ptr->location.mapNum << 16) ^ native);
+    if (h & 1)
+        return native; // half of them stay Hoenn's
+    h = Mix(h);
+    for (band = BR_NATIONAL_BAND; band <= 2 * BR_NATIONAL_BAND; band += BR_NATIONAL_BAND)
+    {
+        n = StandIns(native, band, 0xFFFF, &out);
+        if (n != 0)
+        {
+            StandIns(native, band, h % n, &out);
+            return out;
+        }
+    }
+    return native;
+}
+

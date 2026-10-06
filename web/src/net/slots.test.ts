@@ -52,6 +52,8 @@ describe('slots round trip (single slot)', () => {
     { t: 'follow', seat: null },
     { t: 'ticker', seat: 1, kind: 'kill', text: 'ASH KO MISTY' },
     { t: 'ticker', seat: 1, text: 'the fog is closing in' },
+    { t: 'ticker', seat: 30, kind: 'intro', text: 'What a high level you are!' },
+    { t: 'ticker', seat: 30, kind: 'lose', text: 'Huh? Did I just lose?' },
     {
       t: 'start', seed: 42, safari: 300, fog: 60,
       spawns: [{ seat: 0, map: { group: 0, num: 1 }, x: 1, y: 1 }],

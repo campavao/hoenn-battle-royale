@@ -2,6 +2,9 @@
 #include "global.h"
 #include "random.h"
 #include "window.h"
+#include "gpu_regs.h"
+#include "palette.h"
+#include "constants/rgb.h"
 #include "text.h"
 #include "string_util.h"
 #include "battle.h"
@@ -18,6 +21,7 @@
 #include "constants/battle_script_commands.h"
 #include "constants/battle_string_ids.h"
 #include "main.h"
+#include "menu.h"
 #include "pokemon.h"
 #include "recorded_battle.h"
 #include "constants/characters.h"
@@ -29,8 +33,20 @@
 #include "br/br_ghosts.h"
 #include "br/br_netlink.h"
 #include "br/br_battle.h"
+#include "br/br_bot.h"
+#include "br/br_spectate.h"
 
 EWRAM_DATA struct BrBattle gBrBattle = {0};
+EWRAM_DATA u8 gBrSeeThrough[2] = {0};
+
+// The opponent's three lines, for the one seat they are about (BrBattle_SetVoice).
+struct BrVoice
+{
+    u8 seat;
+    u8 text[3][BR_VOICE_LEN + 1];
+    u8 pad;
+};
+static EWRAM_DATA struct BrVoice sVoice = {0};
 // The party slot, and move, the last bag item in this battle went to (PARTY_SIZE: none),
 // and which item that was.
 static EWRAM_DATA u8 sItemSlot = 0;
@@ -145,6 +161,52 @@ void BrBattle_Init(void)
     sItemSlot = PARTY_SIZE;
     sItemMove = 0;
     sItemNoted = ITEM_NONE;
+    sVoice.seat = BR_NO_SEAT;
+}
+
+bool8 BrBattle_AnimationsOff(void)
+{
+    return gSaveBlock2Ptr->optionsBattleSceneOff == TRUE;
+}
+
+void BrBattle_SeeThrough(void)
+{
+    if (!gBrSeeThrough[0])
+        return;
+    ClearGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_BG3_ON);
+    gPlttBufferUnfaded[0] = BR_SEE_THROUGH_KEY;
+    if (!gPaletteFade.active)
+        gPlttBufferFaded[0] = BR_SEE_THROUGH_KEY;
+    gBrSeeThrough[1] = 2;
+}
+
+void BrBattle_TickSeeThrough(void)
+{
+    if (gBrSeeThrough[1] != 0)
+        gBrSeeThrough[1]--;
+}
+
+u8 BrBattle_LinkTextSpeed(void)
+{
+    return GetPlayerTextSpeedDelay();
+}
+
+// SLOW keeps pret's hold; MID and FAST give a line about two thirds and a third of it.
+// Long enough to read a line at a glance, and the same on both ROMs of a link battle,
+// which got one TEXT at START.
+u8 BrBattle_AutoScrollFrames(void)
+{
+    if (!gMain.inBattle)
+        return 49;
+    switch (gSaveBlock2Ptr->optionsTextSpeed)
+    {
+    case OPTIONS_TEXT_SPEED_FAST:
+        return 18;
+    case OPTIONS_TEXT_SPEED_MID:
+        return 32;
+    default:
+        return 49;
+    }
 }
 
 void BrBattle_ShotReset(void)
@@ -504,6 +566,13 @@ u16 BrBattle_ReplayItem(u8 battler, const u8 *rec)
 extern const u8 *const gBattlescriptsForUsingItem[];
 
 static const u8 sText_UsedItem[] = _("{B_LINK_SCR_TRAINER_NAME} used\n{B_LAST_ITEM}!");
+static const u8 sText_FogHurt[] = _("{B_ATK_NAME_WITH_PREFIX} is hurt\nby the fog!");
+static const u8 sText_NewPage[] = _("\p");
+// A bot whose lines never arrived still says something when it slides back in: pret's
+// own speech for TRAINER_NONE is whatever the last trainerbattle script left behind.
+static const u8 sText_BotLost[] = _("Huh? Did I just lose?");
+static const u8 sText_BotWon[] = _("Better luck next time!");
+
 
 // BattleScript_OpponentUsesHealItem's first five lines (data/battle_scripts_2.s) with our
 // line in place of its trainer's, then back to the script the engine picked.
@@ -530,6 +599,46 @@ void BrBattle_SayItemUsed(void)
     gBattlescriptCurrInstr = sScript_UsedItem;
 }
 
+// Whom this battle is against: the bot we are fighting, or the netlink's other side.
+static u8 OpponentSeat(void)
+{
+    if (gBrBotFight.fighting)
+        return gBrBotFight.seat;
+    if (gBrNetlink.active)
+        return gBrNetlink.peerSeat;
+    return BR_NO_SEAT;
+}
+
+// One of the opponent's lines, or NULL when they have not told us that one.
+static const u8 *Said(u8 which)
+{
+    u8 seat = OpponentSeat();
+
+    if (seat == BR_NO_SEAT || sVoice.seat != seat || which > BR_VOICE_LOSE || sVoice.text[which][0] == EOS)
+        return NULL;
+    return sVoice.text[which];
+}
+
+void BrBattle_SetVoice(u8 seat, u8 which, const u8 *text, u8 len)
+{
+    u8 i;
+
+    if (which > BR_VOICE_LOSE || seat == BR_NO_SEAT)
+        return;
+    // One trainer's lines at a time: the next one we are about to fight.
+    if (sVoice.seat != seat)
+    {
+        sVoice.seat = seat;
+        for (i = 0; i < 3; i++)
+            sVoice.text[i][0] = EOS;
+    }
+    if (len > BR_VOICE_LEN)
+        len = BR_VOICE_LEN;
+    for (i = 0; i < len && text[i] != EOS; i++)
+        sVoice.text[which][i] = text[i];
+    sVoice.text[which][i] = EOS;
+}
+
 bool8 BrBattle_BufferString(u16 stringId)
 {
     // An AI's item in a replay -- a bot's X ATTACK in a duel we are watching -- is its
@@ -539,8 +648,94 @@ bool8 BrBattle_BufferString(u16 stringId)
     // message for good. The AI's script already set the battler, so it gets our line.
     if (stringId == STRINGID_TRAINER1USEDITEM && gTrainerBattleOpponent_A == TRAINER_LINK_OPPONENT)
         stringId = BR_STRINGID_USED_ITEM;
+    if (stringId == BR_STRINGID_FOG_HURT)
+    {
+        BattleStringExpandPlaceholdersToDisplayedString(sText_FogHurt);
+        return TRUE;
+    }
+    // A bot slides back in at the end of its fight and says its own line, won or lost.
+    if (gBrBotFight.fighting && (stringId == STRINGID_TRAINER1LOSETEXT || stringId == STRINGID_TRAINER1WINTEXT))
+    {
+        const u8 *line = Said(stringId == STRINGID_TRAINER1WINTEXT ? BR_VOICE_WIN : BR_VOICE_LOSE);
+
+        if (line == NULL)
+            line = stringId == STRINGID_TRAINER1WINTEXT ? sText_BotWon : sText_BotLost;
+        // ...and holds it for A: the money line comes straight after.
+        StringAppend(StringCopy(gDisplayedStringBattle, line), sText_NewPage);
+        return TRUE;
+    }
     if (stringId != BR_STRINGID_USED_ITEM)
         return FALSE;
     BattleStringExpandPlaceholdersToDisplayedString(sText_UsedItem);
     return TRUE;
+}
+
+void BrBattle_AfterString(u16 stringId)
+{
+    const u8 *line = NULL;
+    u16 end;
+    bool8 held;
+
+    if (stringId == STRINGID_INTROMSG)
+        line = Said(BR_VOICE_INTRO);
+    // A link battle's last line, "<PLAYER> defeated <NAME>!": theirs after it. The bot's
+    // end is its own slide-in (BrBattle_BufferString). The outcome is the one pret just
+    // buffered the line from, turned to this ROM's side: gBattleOutcome is still 0 on the
+    // side that runs no engine until after this line (EndLinkBattle).
+    else if (stringId == STRINGID_BATTLEEND && gBrNetlink.active && gBattleTextBuff1[0] == B_OUTCOME_WON)
+        line = Said(BR_VOICE_LOSE);
+    else if (stringId == STRINGID_BATTLEEND && gBrNetlink.active && gBattleTextBuff1[0] == B_OUTCOME_LOST)
+        line = Said(BR_VOICE_WIN);
+    if (line == NULL)
+        return;
+    // A trainer's intro already ends on a page break, to hold before "sent out": the
+    // line goes on the page after it, and the break after the line.
+    end = StringLength(gDisplayedStringBattle);
+    held = end > 0 && gDisplayedStringBattle[end - 1] == CHAR_PROMPT_CLEAR;
+    if (held)
+        gDisplayedStringBattle[end - 1] = EOS;
+    StringAppend(gDisplayedStringBattle, sText_NewPage);
+    StringAppend(gDisplayedStringBattle, line);
+    if (held)
+        StringAppend(gDisplayedStringBattle, sText_NewPage);
+}
+
+// Index for index with br_ghosts.c's sSkinGraphics and the page's SKINS: the walking
+// sprite's own trainer class. The two rival skins are the same BRENDAN and MAY.
+static const u8 sSkinPics[] =
+{
+    TRAINER_PIC_BRENDAN,
+    TRAINER_PIC_MAY,
+    TRAINER_PIC_BRENDAN,
+    TRAINER_PIC_MAY,
+    TRAINER_PIC_HIKER,
+    TRAINER_PIC_BEAUTY,
+    TRAINER_PIC_CAMPER,
+    TRAINER_PIC_PICNICKER,
+    TRAINER_PIC_SWIMMER_M,
+    TRAINER_PIC_SWIMMER_F,
+    TRAINER_PIC_EXPERT_M,
+    TRAINER_PIC_EXPERT_F,
+    TRAINER_PIC_POKEFAN_M,
+    TRAINER_PIC_POKEFAN_F,
+    TRAINER_PIC_YOUNGSTER,
+    TRAINER_PIC_LASS,
+};
+
+bool8 BrBattle_RecordedWildOpponent(void)
+{
+    return RecordedBattle_IsSpectateLive();
+}
+
+u32 BrBattle_OpponentPic(u32 pic)
+{
+    u8 seat = OpponentSeat();
+    u8 skin;
+
+    if (seat >= BR_MAX_SEATS || !gBrSeats[seat].present)
+        return pic;
+    skin = gBrSeats[seat].skin;
+    if (skin >= ARRAY_COUNT(sSkinPics))
+        return pic;
+    return sSkinPics[skin];
 }

@@ -2255,6 +2255,9 @@ void BufferStringBattle(u16 stringID)
     }
 
     BattleStringExpandPlaceholdersToDisplayedString(stringPtr);
+#if BR
+    BrBattle_AfterString(stringID); // the opponent's own line after the intro and the end
+#endif
 }
 
 u32 BattleStringExpandPlaceholdersToDisplayedString(const u8 *src)
@@ -3025,8 +3028,13 @@ void BattlePutTextOnWindow(const u8 *text, u8 windowId)
 
     if (windowId == B_WIN_MSG || windowId == ARENA_WIN_JUDGMENT_TEXT)
     {
+#if BR
+        if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK))
+            speed = BrBattle_LinkTextSpeed(); // the room's TEXT, not the cable's fixed 1
+#else
         if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK))
             speed = 1;
+#endif
         else if (gBattleTypeFlags & BATTLE_TYPE_RECORDED)
             speed = sRecordedBattleTextSpeeds[GetTextSpeedInRecordedBattle()];
         else

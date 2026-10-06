@@ -1,0 +1,29 @@
+# bot-pic: a bot fights in the clothes it walks in (2026-10-05 play-test).
+#
+# Cam: "bots need different avatars -- right now everyone is Brendan or May". The page now
+# deals bots across all sixteen skins; this is the battle's half. A bot's fight runs as
+# trainer 0 (TRAINER_NONE), whose picture is a HIKER whatever the bot looked like on the
+# map. BrBattle_OpponentPic swaps in the seat's own skin: here seat 31 is placed wearing
+# skin 15, LASS, so the picture is TRAINER_PIC_LASS (77).
+#
+# The card is bot-fight.txt's. The opponent's sprite is read off its OAM: a trainer front
+# picture keeps its pic id in oam.affineParam (u16 at +6). gBattlerSpriteIds[1] is
+# sprite 4 on this boot, struct Sprite is 0x44 bytes.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+# seat 31's ghost, skin 15 (the last byte), then its CHALLENGE
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 0F
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+expect u8 gBrBotFight+2 1
+shot intro
+expect u8 gBattlerSpriteIds+1 4
+expect u16 gSprites+0x116 77
+say bot pic ok

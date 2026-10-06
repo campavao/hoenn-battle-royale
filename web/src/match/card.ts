@@ -10,6 +10,7 @@
 // message. The honest card is name, skin, whether they are still in, and where they
 // were last seen.
 import type { RosterEntry } from './roster';
+import { SKINS } from './career';
 
 export interface CardLine {
   label: string;
@@ -25,7 +26,8 @@ function placeOf(mapId: string | undefined): string | null {
 export function cardFor(entry: RosterEntry, mapId?: string): CardLine[] {
   const lines: CardLine[] = [{ label: 'TRAINER', value: entry.name || `P${entry.seat}` }];
 
-  if (entry.skin) lines.push({ label: 'LOOKS LIKE', value: entry.skin.toUpperCase() });
+  // The wire carries a skin as its index ("3"); the card says what that looks like.
+  if (entry.skin) lines.push({ label: 'LOOKS LIKE', value: (SKINS[Number(entry.skin)] ?? entry.skin).toUpperCase() });
   lines.push({ label: 'STATUS', value: entry.alive ? 'IN THE MATCH' : 'OUT' });
   const place = placeOf(mapId);
   // Where somebody is, is worth knowing only while they are still in it.

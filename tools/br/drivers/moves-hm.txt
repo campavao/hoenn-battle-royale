@@ -1,0 +1,120 @@
+# moves-hm: an HM comes off as easily as anything else (2026-10-06 play-test: "I could not
+# replace/remove HM moves. Ideally all moves come off and on easily").
+#
+# moves-full.txt's Lv30 GROVYLE with four moves and a loot TM06 (TOXIC); the eight HMs
+# are in every match's bag from the boot. ROCK SMASH (HM06) goes in over the first move,
+# then TOXIC goes in over ROCK SMASH in the same visit, which pret refused ("HM moves
+# can't be forgotten now"). TOXIC leaving the pocket is the witness that the slot was
+# written; ROCK SMASH back on the list is the picture of it.
+#
+# The same visit matters: a second move taught before leaving used to land on party
+# slot 1 (BrTaught set 0x8004, the slot the summary screen's way back reads, to TRUE),
+# leaving a blank list and nothing written.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrLoot 01 00 0C 00 10 00 26 01 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 90
+expect u16 *gSaveBlock1Ptr+0x6B0 294
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gPlayerParty+0x54 30
+tap START
+wait 40
+tap A
+wait 80
+tap A
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 240
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap UP
+wait 20
+tap UP
+wait 20
+shot on-rock-smash
+tap A
+wait 150
+tap A
+wait 150
+shot rock-smash-taught
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap UP
+wait 20
+shot on-toxic
+tap A
+wait 150
+expect u16 *gSaveBlock1Ptr+0x6B0 294
+shot picker
+tap A
+wait 150
+shot toxic-taught
+expect u16 *gSaveBlock1Ptr+0x6B0 0
+say moves hm ok

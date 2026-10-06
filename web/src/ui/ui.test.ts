@@ -91,12 +91,22 @@ describe('the drawn screens (POK-320)', () => {
     expect(wear.x).toBe(240 - (back.x + back.w));
   });
 
+  it('pages MY VOICE to the screen, and opens on the page your line is on', async () => {
+    const { linePageSize, linePageOf } = await import('./screens');
+    // 320 is the shortest screen anybody draws for: fourteen lines and the buttons.
+    expect(linePageSize(320)).toBe(14);
+    expect(linePageSize(100)).toBe(4);
+    expect(linePageOf(0, 14)).toBe(0);
+    expect(linePageOf(13, 14)).toBe(0);
+    expect(linePageOf(14, 14)).toBe(1);
+  });
+
   it("says what the wardrobe's line says: yours, wearable, or the price", async () => {
     const { wardrobeNote } = await import('./screens');
     expect(wardrobeNote(0, 0, 0)).toBe('your sprite');
     expect(wardrobeNote(1, 0, 0)).toBe('press WEAR');
     expect(wardrobeNote(2, 0, 0)).toBe('LOCKED -- 1 win');
-    expect(wardrobeNote(4, 3, 0)).toBe('LOCKED -- 5 wins');
+    expect(wardrobeNote(4, 2, 0)).toBe('LOCKED -- 3 wins');
     expect(wardrobeNote(4, 5, 0)).toBe('press WEAR');
   });
 

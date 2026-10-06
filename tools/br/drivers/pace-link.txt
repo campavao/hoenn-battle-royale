@@ -1,0 +1,23 @@
+# pace-link: the room's ANIM and TEXT hold in a link battle too (2026-10-05 play-test:
+# "animations off and text fast don't seem to be applying correctly"). pret plays every
+# animation in a link battle whatever the options say, prints its lines at 1 and holds
+# each for 49 frames; a match is made of those fights.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the boot's own pace (br_boot.c), which is what START's pace 0x09 sets (pace.txt):
+# text FAST, and optionsBattleSceneOff -- bit 2 of byte 0x15 -- on
+dump *gSaveBlock2Ptr+0x14 2
+expect u8 *gSaveBlock2Ptr+0x14 0x02
+# a loopback link battle, as fog-in-duel.txt starts one
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 900
+expectge u8 gBattlersCount 2
+expect u32 gBattleTypeFlags 0x0000002E
+dump gHitMarker 4
+# HITMARKER_NO_ANIMATIONS (bit 7) is on
+expect u8 gHitMarker 0x80
+say pace link ok

@@ -22,7 +22,7 @@ import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
 import { saveMatch, type MatchLog } from './match/log';
 import { HostRole, soloLink, soloRoster, type HostLink } from './match/host';
-import { type BotVoice, lineAt, nextLine } from './bots/lines';
+import { type BotVoice, LINES, lineAt } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
@@ -54,6 +54,7 @@ import {
   roomScreen,
   sheetScreen,
   wardrobeScreen,
+  linePickerScreen,
   type RoomModel,
   type RoomSeat,
   type RowSpec,
@@ -273,6 +274,31 @@ const settings = {
   resetPad: (): void => {},
   forget: (): void => {},
 };
+
+/** The battle over the map (2026-10-05 play-test: "disable the white battle background so
+ *  the battle overlays the map"). An experiment, so a switch on the trainer's screen and
+ *  off until somebody turns it on; this browser's alone. */
+const SEE_THROUGH_KEY = 'hbr-see-through';
+
+function seeThrough(): boolean {
+  try {
+    return localStorage.getItem(SEE_THROUGH_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setSeeThrough(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(SEE_THROUGH_KEY, '1');
+    else localStorage.removeItem(SEE_THROUGH_KEY);
+  } catch {
+    // A browser that keeps nothing keeps the battle as it was.
+  }
+}
+
+/** The picker's title for each of MY VOICE's rows. */
+const VOICE_TITLES = { intro: 'WALKING UP', win: 'WHEN YOU WIN', lose: 'WHEN YOU LOSE' } as const;
 
 /** The keys on a desktop, in the sheet's two lines. */
 const KEY_LINES = ['Arrows move  Z: A  X: B  A: L  S: R', 'Enter: START  Shift: SELECT  pads too'];
@@ -2023,9 +2049,10 @@ function wireRoom(
   /** The room is ours again after our own drop (POK-330 #47), and the match with it:
    *  the director the drop stopped starts again on the next roster that says so. */
   let resumeHost = false;
-  /** The host's room settings between roster events (POK-241). */
+  /** The host's room settings between roster events (POK-241). TEXT FAST and ANIM OFF to
+   *  start, the boot's own pace (br_boot.c): a room used to put MID and every animation back. */
   const controls: RoomControls = {
-    fill: true, roster: null, textSpeed: 3, animations: true, fogSecs: DEFAULT_FOG_SECS,
+    fill: true, roster: null, textSpeed: 5, animations: false, fogSecs: DEFAULT_FOG_SECS,
     safariSecs: DEFAULT_SAFARI_SECS,
   };
 
@@ -2518,6 +2545,9 @@ function wireRoom(
     bridge.setOutFilter(() => !amWatching);
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);
+      // Our own wild fight is over when our ROM says it is back on the map: nobody else
+      // will say so, and a later watcher must not be handed it (spectate.ts noteBusy).
+      if (msg.t === 'busy') spectate.noteBusy(bridge!.seat, msg.kind);
       // Into the books, bag and all -- and our own ROM challenging one of our bots, or
       // fighting one and saying how it went (POK-238), goes to the brain from there: the
       // host walks the bot, and nobody hears their own messages come back. Arriving on a
@@ -2597,13 +2627,17 @@ function wireRoom(
         for (const part of spectate.streamFor(seat, m.have)) bridge!.relay.to(m.seat, part);
       }
       else if (m.t === 'result') spectate.noteResult(m.seat);
+      else if (m.t === 'busy') spectate.noteBusy(m.seat, m.kind);
       else if (m.t === 'out') {
+        // An out ends whatever fight that seat was in, for anyone who starts watching
+        // after it (a bot's duel never sends a RESULT; spectate.ts noteOut).
+        spectate.noteOut(m.seat);
         // The host saying we are out: we went while our socket was down and came back to
         // a match that had buried us (POK-330 #25). Out is watching, as for anybody.
-        if (m.seat === seat) {
-          relay.canHost(false);
-          autoWatch();
-        }
+        if (m.seat === seat) relay.canHost(false);
+        // ...and the seat we watch going out moves the watch on now, not at the next
+        // tick of the interval, during which the field was ours to walk.
+        autoWatch();
         renderSpectate(bridge!, spectate);
       }
     });
@@ -3085,15 +3119,36 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         case 'win':
         case 'lose': {
           // Three rows, three independent picks (POK-283). One index for all three meant
-          // choosing a win line you did not want to get the intro you did.
+          // choosing a win line you did not want to get the intro you did. Each opens the
+          // whole pool a page at a time (2026-10-05 play-test: "a better selection UI");
+          // a row used to step through it one line per press.
           const which = action.kind;
-          const career = loadCareer();
-          saveProfile({ [which]: nextLine(career[which] ?? 0) });
-          redraw();
+          let page: number | null = null;
+          stage.push(
+            linePickerScreen(() => ({
+              title: VOICE_TITLES[which],
+              lines: LINES,
+              picked: loadCareer()[which] ?? 0,
+              page,
+              onPage: (p) => {
+                page = p;
+                redraw();
+              },
+              onPick: (i) => {
+                saveProfile({ [which]: i });
+                stage.pop();
+              },
+              onBack: () => stage.pop(),
+            })),
+          );
           return;
         }
         case 'stats':
           setStatsOff(!loadStats().off);
+          redraw();
+          return;
+        case 'seethrough':
+          setSeeThrough(!seeThrough());
           redraw();
           return;
         case 'career':
@@ -3202,6 +3257,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         skin: SKINS[careerSkin()],
         lines: careerVoiceLines(),
         statsOn: !loadStats().off,
+        seeThrough: seeThrough(),
         record: record(),
       }).map(row),
       rowsId: 'trainer-rows',
@@ -3328,6 +3384,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     overlay: $('#overlay') as HTMLCanvasElement,
     pad: $('#pad') as HTMLElement,
     rom,
+    seeThrough,
   });
   fieldView.attach();
   // Dev only: where the page walks the ghosts, for the e2e (POK-323, world-moves.spec.ts).

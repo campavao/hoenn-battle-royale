@@ -1,6 +1,7 @@
 #include "global.h"
 #if BR
 #include "br/br_battle.h"
+#include "br/br_ring.h"
 #endif
 #include "battle.h"
 #include "battle_anim.h"
@@ -1439,6 +1440,9 @@ u8 DoFieldEndTurnEffects(void)
             gBattleStruct->turnCountersTracker++;
             break;
         case ENDTURN_FIELD_COUNT:
+#if BR
+            BrRing_FogEndTurn(); // the fog, in a fight between contestants (br_ring.c)
+#endif
             effect++;
             break;
         }

@@ -69,6 +69,11 @@ void BrGhosts_Out(u8 seat);
 // The busy bubble over one seat's ghost (POK-266): "!" in a fight, "?" in a menu.
 // TRUE when one fired.
 bool8 BrGhosts_Emote(u8 seat);
+// trainer_see.c's icon callback, each frame: TRUE to take the mark down. A busy mark over
+// a ghost stays up while that seat is still that kind of busy; every other mark keeps
+// pret's rule, down when its animation ends or its object goes (objectGone).
+struct Sprite;
+bool8 BrGhosts_DropMark(struct Sprite *sprite, bool8 objectGone);
 // The runner's mark over a seat's ghost (POK-266). An event rather than a state: it is
 // drawn once, when the news arrives, and nothing repeats it.
 bool8 BrGhosts_Fled(u8 seat);

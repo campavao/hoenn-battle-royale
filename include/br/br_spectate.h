@@ -40,6 +40,9 @@ void BrSpectate_Tick(void);
 // we are watching, the stream is closed: the replay plays out what it has and ends
 // rather than waiting for a turn that is never coming.
 void BrSpectate_OnResult(u8 seat);
+// A seat's BUSY changed (br_ghosts.c). A wild POKeMON's fight sends no RESULT -- nobody
+// else's seat is in it -- so its fighter being back on the map is what ends its replay.
+void BrSpectate_OnBusy(u8 seat);
 // Watch a seat walk (BR_NO_SEAT to stop). The camera rides their ghost, our own
 // trainer goes invisible where it stood, and field controls are locked.
 void BrSpectate_Follow(u8 seat);
@@ -52,5 +55,9 @@ void BrSpectate_SendParty(void);
 // The same message for somebody else's party under somebody else's seat -- how a bot's
 // team gets back to the page that walks it after a fight it lost mons in (POK-238).
 void BrSpectate_SendPartyOf(struct Pokemon *party, u8 seat);
+// Is this ROM publishing the fight it is in? A replay is built from the fight's seed and
+// its choices alone, so a published fight must draw nothing from the generator the
+// replay does not: no turn of it on the frame (VBlankCB_Battle), no fog on the clock.
+bool8 BrSpectate_Publishing(void);
 
 #endif // GUARD_BR_SPECTATE_H

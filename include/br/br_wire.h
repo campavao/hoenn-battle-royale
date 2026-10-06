@@ -190,7 +190,8 @@
 // line, or a chat line riding the same pipe -- Hoenn has no separate chat).
 // Payload (3 + textLen bytes):
 //   0: seat u8   who said it / who the line is about
-//   1: kind u8   0=system 1=kill 2=say
+//   1: kind u8   0=system 1=kill 2=say; 3=intro 4=win 5=lose are a trainer's battle
+//                text, kept for the fight with that seat and never drawn (br_battle.c)
 //   2: textLen u8 (<= 96 on the wire; the ROM reads one slot, 56, and draws
 //                  BR_HUD_LINE_MAX, 40 -- the page cuts every line to 40)
 //   3..: text  Gen 3 charmap bytes

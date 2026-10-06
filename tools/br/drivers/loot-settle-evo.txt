@@ -1,0 +1,22 @@
+# loot-settle-evo: a ball taken at the rung is where a lift would have left it (2026-10-05
+# play-test: "zubat did not evolve when picked up at around level 50"). ZUBAT evolves at
+# 22 and GOLBAT on friendship, which nothing in a match ever raises -- so a ZUBAT at 50
+# comes out a CROBAT. The same shape as loot-trade-evo.txt.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 0
+# SPILL from seat 2: one ZUBAT (species 41) at level 50, on the cell we face
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 02 00 09 01 00 02 0C 00 10 00 29 00 32 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+expect u8 gBrLoot+0xA0 1
+tap A
+wait 30
+expect u8 gPlayerPartyCount 1
+# out[3] is the PARTY that follows the pickup: CROBAT (169), not the ZUBAT on the ground
+expect u8 gBrMailbox+0xD8 7
+expect u8 gBrMailbox+0xDF 0xA9
+expect u8 gBrMailbox+0xE0 0x00
+shot settled
+say loot settle evo ok

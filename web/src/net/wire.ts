@@ -517,7 +517,12 @@ export interface BotRecMsg {
   bag?: { items: { id: number; n: number }[]; money: number };
 }
 
-export type TickerKind = 'kill' | 'system' | 'say';
+const TICKER_KINDS: readonly string[] = ['kill', 'system', 'say', 'intro', 'win', 'lose'];
+
+/** `intro`/`win`/`lose` are not lines for the ticker: they are a trainer's own battle
+ *  text, sent into the ROM of the player about to fight them, which says them in the
+ *  fight (2026-10-05 play-test; br_battle.c's BrBattle_SetVoice). */
+export type TickerKind = 'kill' | 'system' | 'say' | 'intro' | 'win' | 'lose';
 
 /** A line for the overworld ticker/HUD (new for Hoenn: DESIGN.md §6 draws the
  *  ticker as a ROM window, so unlike Kanto's same-process HUD, the text has to
@@ -1150,7 +1155,7 @@ const decoders: Record<string, Decoder> = {
     return {
       t: 'ticker',
       seat: reqSeat(m),
-      kind: kind === 'kill' || kind === 'system' || kind === 'say' ? kind : undefined,
+      kind: TICKER_KINDS.includes(kind as TickerKind) ? (kind as TickerKind) : undefined,
       text: optShortString(m, 'text', MAX_TEXT) ?? fail('bad ticker text'),
     };
   },

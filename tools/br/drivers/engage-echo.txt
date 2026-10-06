@@ -1,0 +1,33 @@
+# engage-echo: our own challenge, handed back by the page, ends the challenger's wait for
+# a person, so its side of the link starts with the other's rather than 1.5 s later.
+#
+# Challenge() freezes the challenger (engage-settle.txt), which made the echo's "only from
+# a free field" never true: the wait always ran out its 90 frames, and the challenged
+# side, which settles the moment the challenge lands, was in the fight by then. The wait
+# read that as the seat busy in somebody else's battle and gave up; the other side sat in
+# a link with nobody until the hello watchdog (pvp-items.spec.ts, every run on CI).
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# Seat 1 at (15,16) facing WEST on Littleroot, three tiles east of us: engage.txt's spot.
+pokebytes gDecompressionBuffer 01 01 00 09 0F 00 10 00 03 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 20
+expect u16 gBrEngage+4 1
+expect u8 gBrEngage+7 1
+expect u8 gBrNetlink 0
+# Our CHALLENGE to seat 1 (nonce 1), back from the room long before the wait is up.
+pokebytes gDecompressionBuffer 00 01 01 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 5
+expect u8 gBrEngage+7 0xFF
+# Their ghost is already standing where they are: the link starts now, as the challenger.
+wait 10
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+1 0
+expect u8 gBrNetlink+2 1
+shot started
+say engage echo ok

@@ -26,3 +26,10 @@ describe("a trainer's card (POK-268)", () => {
     expect(cardFor({ ...base, isMe: true }).some((l) => l.value === 'THIS IS YOU')).toBe(true);
   });
 });
+
+describe('a skin on the card', () => {
+  it('names the trainer class, not the index the wire carries', () => {
+    expect(cardFor({ ...base, skin: '15' })).toContainEqual({ label: 'LOOKS LIKE', value: 'LASS' });
+    expect(cardFor({ ...base, skin: 'may' })).toContainEqual({ label: 'LOOKS LIKE', value: 'MAY' });
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, HEAD_ROOM, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP } from './field';
+import { FIELD_VIEW_SIZE, HEAD_ROOM, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha } from './field';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -617,6 +617,27 @@ describe('the picture in the box', () => {
   });
 });
 
+describe('a field canvas in error state', () => {
+  it("throws, reallocates its store, and draws whole again (Firefox's \"Canvas is already in error state\")", () => {
+    const emu = { viewport: null, boots: 1 };
+    const lcd = { width: 240, height: 160, style: {} };
+    const widths: number[] = [];
+    let w = 0;
+    const field = {
+      get width() { return w; },
+      set width(v: number) { w = v; widths.push(v); },
+      height: 0, style: {},
+      getContext: () => { throw new DOMException('Canvas is already in error state.', 'InvalidStateError'); },
+    };
+    const view = new FieldView({ emu, box: { clientWidth: 390, clientHeight: 664 }, lcd, field, symbols: null } as unknown as FieldDeps);
+    const inner = view as unknown as { lay: { cols: number }; draw(c: unknown): void };
+    view.layout();
+    expect(inner.lay.cols).toBeGreaterThan(0);
+    inner.draw({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade: 0, fadeColor: 0, sprites: [], onField: true });
+    expect(widths.slice(-2), 'emptied, then its size again').toEqual([0, inner.lay.cols]);
+  });
+});
+
 describe('which frame a sprite is on', () => {
   // A ROM of 64 bytes at 0x08000000: anims table at +0x10 (two anims), the second
   // anim's commands at +0x20: FRAME(3, 8), FRAME(0, 8), JUMP(0).
@@ -911,5 +932,23 @@ describe("the match's roster reaches the field (POK-323)", () => {
     expect(made).toBeGreaterThan(0);
     expect(appSource.indexOf('runSolo(emu, mailboxBase, symbols, ')).toBeGreaterThan(made);
     expect(appSource.indexOf('wireRoom(emu, mailboxBase, ')).toBeGreaterThan(made);
+  });
+});
+
+// The battle over the map, an experiment (2026-10-05 play-test). The ROM paints a
+// see-through battle's backdrop BR_SEE_THROUGH_KEY, pure blue; the page's filter has to
+// clear that and nothing a battle actually draws.
+describe('the see-through battle', () => {
+  it("clears the key, however the core widens 31 to eight bits", () => {
+    expect(seeThroughAlpha(0, 0, 1)).toBe(0);
+    expect(seeThroughAlpha(0, 0, 248 / 255)).toBe(0);
+  });
+
+  it('leaves a pixel with any red or green in it, and blacks and navies, whole', () => {
+    expect(seeThroughAlpha(0, 0, 0)).toBe(1);
+    expect(seeThroughAlpha(8 / 255, 0, 1)).toBe(1);
+    expect(seeThroughAlpha(0, 8 / 255, 1)).toBe(1);
+    expect(seeThroughAlpha(0, 0, 0.5)).toBe(1);
+    expect(seeThroughAlpha(1, 1, 1)).toBe(1);
   });
 });

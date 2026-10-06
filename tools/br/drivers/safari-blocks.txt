@@ -1,0 +1,16 @@
+# safari-blocks: the Zone hands out POKeBLOCKs with the balls (2026-10-05 play-test:
+# "give pokeblocks in safari"). Two each of RED, BLUE, PINK, GREEN and YELLOW; the
+# battle's POKeBLOCK row opened an empty case before. pokeblocks[] is SaveBlock1+0x848,
+# eight bytes each in agbcc's layout (seven, rounded to a word), colour first.
+wait 30
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gBrMatch 1
+expect u8 *gSaveBlock1Ptr+0x848 1
+expect u8 *gSaveBlock1Ptr+0x84E 20
+expect u8 *gSaveBlock1Ptr+0x868 5
+expect u8 *gSaveBlock1Ptr+0x870 1
+expect u8 *gSaveBlock1Ptr+0x890 5
+# and no eleventh
+expect u8 *gSaveBlock1Ptr+0x898 0
+say safari blocks ok

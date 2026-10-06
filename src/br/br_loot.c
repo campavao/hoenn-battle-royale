@@ -658,6 +658,8 @@ static void Take(struct BrLootItem *it)
     // the rung: the DAY CARE's chest (POK-306) has been on that floor since the drop.
     CreateMon(&mon, species, it->level != 0 ? it->level : BrLevels_WildLevel(),
               USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    BrLevels_Settle(&mon); // a ZUBAT taken at 50 is a CROBAT, and says so
+    species = GetMonData(&mon, MON_DATA_SPECIES, NULL);
     p = BrHud_Append(line, last, sText_Took);
     p = BrHud_Append(p, last, gSpeciesNames[species]);
     BrHud_Append(p, last, sText_Bang);
@@ -840,6 +842,7 @@ static void HandleNpcOut(const u8 *payload, u8 len)
     // Remembered first: the sweep is what hides it when we walk onto that map later, and
     // Despawn_Trainer only does anything if we are standing on it right now.
     RememberDespawned(d[1], d[2], d[3]);
+    BrGym_NoteOut(d[1], d[2], d[3]);
     Despawn_Trainer(d[1], d[2], d[3]);
 }
 
@@ -1061,6 +1064,7 @@ void BrLoot_Init(void)
     for (i = 0; i < BR_MAX_LOOT; i++)
         gBrLoot.items[i].objId = BR_NO_OBJ;
     CpuFill32(0, gBrDespawned, sizeof(gBrDespawned));
+    BrGym_Init();
     sGivenBag.kind = BR_LOOT_NONE;
     sGiveBackLen = 0;
     sSpillAsm.buf = sSpillBuf;

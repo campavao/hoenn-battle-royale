@@ -65,6 +65,7 @@
 #include "br/br_duel.h"
 #include "br/br_levels.h"
 #include "br/br_battle.h"
+#include "br/br_spectate.h"
 #endif
 #include "cable_club.h"
 
@@ -2134,7 +2135,13 @@ static void UNUSED HBlankCB_Battle(void)
 
 void VBlankCB_Battle(void)
 {
+#if BR
+    BrBattle_SeeThrough(); // the battle over the map, when the page asks (an experiment)
+#endif
     // Change gRngSeed every vblank unless the battle could be recorded.
+#if BR
+    if (!BrSpectate_Publishing()) // a replay of it is recorded, however its flags read
+#endif
     if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_FRONTIER | BATTLE_TYPE_RECORDED)))
         Random();
 
@@ -3131,6 +3138,13 @@ static void BattleStartClearSetData(void)
 
     gHitMarker = 0;
 
+#if BR
+    // ANIM OFF is the room's, so it holds in every battle of the match: our link battles
+    // and the replays of them too, where pret plays every animation whatever the
+    // options say. Both ROMs of a fight got the same pace at START.
+    if (BrBattle_AnimationsOff())
+        gHitMarker |= HITMARKER_NO_ANIMATIONS;
+#else
     if (!(gBattleTypeFlags & BATTLE_TYPE_RECORDED))
     {
         if (!(gBattleTypeFlags & BATTLE_TYPE_LINK) && gSaveBlock2Ptr->optionsBattleSceneOff == TRUE)
@@ -3140,6 +3154,7 @@ static void BattleStartClearSetData(void)
     {
         gHitMarker |= HITMARKER_NO_ANIMATIONS;
     }
+#endif
 
     gBattleScripting.battleStyle = gSaveBlock2Ptr->optionsBattleStyle;
 

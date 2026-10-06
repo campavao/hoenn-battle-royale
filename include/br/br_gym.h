@@ -14,7 +14,9 @@
 // The closing is not here: a beaten trainer already leaves every ROM's map (NPCOUT,
 // POK-287), a leader included, and the page draws the cross-map line off that same
 // message (web/src/match/bosses.ts). What is here is the speech, the prize and the
-// ceremony that no longer plays. Everything is `static const`: no EWRAM.
+// ceremony that no longer plays. One byte of EWRAM: which of the eight are down, for the
+// MAP's leader heads (2026-10-05 play-test: "show gym leader icons on the map, grayed out
+// when defeated", in place of the ticker's line).
 
 // Is this one of the eight? Rematch ids are not: nothing in a match can reach one.
 bool8 BrGym_IsBoss(u16 trainerId);
@@ -31,5 +33,15 @@ const u8 *BrGym_AfterScript(u16 trainerId, const u8 *script);
 // The purse: the gym's TM and 1000, straight into the bag, and one line saying so.
 // Called from BrLoot_TrainerBeaten, which every trainer win already goes through.
 void BrGym_Beaten(u16 trainerId);
+
+// Bit i: sBosses[i] has been beaten, by us or by anybody (NPCOUT). Not by the fog: a gym
+// the fog swept is closed, not won.
+extern u8 gBrGymsBeaten;
+void BrGym_Init(void);
+// NPCOUT from a seat: if that trainer was a leader, they are down.
+void BrGym_NoteOut(u8 mapGroup, u8 mapNum, u8 localId);
+// The MAP's leader heads (br_map.c / region_map.c): one 16x16 head per gym over its
+// town, grayed once beaten.
+void BrGym_DrawOnMap(s16 left, s16 top);
 
 #endif // GUARD_BR_GYM_H

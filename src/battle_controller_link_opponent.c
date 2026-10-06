@@ -17,6 +17,9 @@
 #include "pokeball.h"
 #include "pokemon.h"
 #include "recorded_battle.h"
+#if BR
+#include "br/br_battle.h"
+#endif
 #include "reshow_battle_screen.h"
 #include "sound.h"
 #include "string_util.h"
@@ -1285,6 +1288,9 @@ static void LinkOpponentHandleDrawTrainerPic(void)
         }
     }
 
+#if BR
+    trainerPicId = BrBattle_OpponentPic(trainerPicId);
+#endif
     DecompressTrainerFrontPic(trainerPicId, gActiveBattler);
     SetMultiuseSpriteTemplateToTrainerBack(trainerPicId, GetBattlerPosition(gActiveBattler));
     gBattlerSpriteIds[gActiveBattler] = CreateSprite(&gMultiuseSpriteTemplate,
@@ -1310,6 +1316,9 @@ static void LinkOpponentHandleTrainerSlide(void)
     else
         trainerPicId = GetFrontierTrainerFrontSpriteId(gTrainerBattleOpponent_B);
 
+#if BR
+    trainerPicId = BrBattle_OpponentPic(trainerPicId);
+#endif
     DecompressTrainerFrontPic(trainerPicId, gActiveBattler);
     SetMultiuseSpriteTemplateToTrainerBack(trainerPicId, GetBattlerPosition(gActiveBattler));
     gBattlerSpriteIds[gActiveBattler] = CreateSprite(&gMultiuseSpriteTemplate, 176, (8 - gTrainerFrontPicCoords[trainerPicId].size) * 4 + 40, 0x1E);

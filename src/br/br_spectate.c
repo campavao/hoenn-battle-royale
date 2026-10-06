@@ -33,13 +33,23 @@
 #include "br/br_wire_c.h"
 #include "br/br_ghosts.h"
 #include "br/br_netlink.h"
+#include "br/br_ring.h"
 #include "br/br_battle.h"
 #include "br/br_spectate.h"
 #include "br/br_duel.h"
 #include "br/br_field.h"
+#include "br/br_match.h"
 #include "br/br_hud.h"
+#include "br/br_bot.h"
+#include "battle_setup.h"
+#include "strings.h"
+#include "constants/trainers.h"
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
+// FollowTick took the field off us for being out (2026-10-05 play-test).
+static EWRAM_DATA bool8 sOutHeld = FALSE;
+// This battle's fog asked (BrRing_DecideSoloFog), for a fight published alone.
+static EWRAM_DATA bool8 sFogDecided = FALSE;
 // The per-frame turn scratch, kept in EWRAM on purpose: a plain function-local static
 // lands in the battle-tight IWRAM, and the stream is never on a hot path. It doubles as
 // the receive side's reassembly buffer -- the two never overlap, because a ROM that is
@@ -59,24 +69,84 @@ static EWRAM_DATA struct BrAssembler sTurnAsm = {0};
 // A proxy duel (POK-238) is two bots' seats, neither of them ours: the hidden instance
 // has no seat at all. Its fight is published under the pair the same way (POK-300), so
 // a spectator following either bot is handed it like any other.
+//
+// A fight with nobody else's seat in it -- a wild POKeMON, a gym's own trainer -- is
+// published under ours and BR_NO_SEAT, which sorts high (2026-10-05 play-test: "spectator
+// mode can't see wild pokemon battles"). A bot's fight is under the bot's seat.
 static u16 BattleId(void)
 {
     u8 mine = gBrDuel.running ? gBrDuel.seatA : gBrMySeat;
-    u8 theirs = gBrDuel.running ? gBrDuel.seatB : gBrNetlink.peerSeat;
+    u8 theirs = gBrDuel.running ? gBrDuel.seatB
+              : gBrNetlink.active ? gBrNetlink.peerSeat
+              : gBrBotFight.fighting ? gBrBotFight.seat
+              : BR_NO_SEAT;
     u8 lo = mine < theirs ? mine : theirs;
     u8 hi = mine < theirs ? theirs : mine;
 
     return lo | (hi << 8);
 }
 
-// Who publishes: the master of a link battle, and the proxy instance for the duel it is
-// fighting (POK-300). Nobody else -- a spectator never emits, and the bot fight in a
-// player's own ROM is that player's, not a thing the room watches.
-static bool8 Publishing(void)
+// Who publishes: the master of a link battle, the proxy instance for the duel it is
+// fighting (POK-300), and a player in any fight their own ROM runs alone -- a bot's, a
+// wild POKeMON's, a gym's -- since somebody following them wants to see it as much as a
+// link battle (2026-10-05 play-test). Not the slave of a link battle (the master speaks
+// for both), not a replay, and not the Safari: its controller is one no replay has.
+bool8 BrSpectate_Publishing(void)
 {
     if (gBrDuel.running)
         return TRUE;
-    return gBrNetlink.active && gBrNetlink.myId == 0;
+    if (gBrNetlink.active)
+        return gBrNetlink.myId == 0;
+    return gMain.inBattle && gBrMySeat < BR_MAX_SEATS
+        && !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED | BATTLE_TYPE_SAFARI
+                                 | BATTLE_TYPE_WALLY_TUTORIAL | BATTLE_TYPE_DOUBLE));
+}
+
+// Who is on each side, for the replay's names and pictures. A link battle and a duel
+// have it in gLinkPlayers already; a fight this ROM runs alone has the player, and the
+// bot, the trainer or (a wild POKeMON) nobody.
+static void PutTrainers(u8 *buf)
+{
+    const u8 *names[2];
+    u8 genders[2];
+    u8 i, j;
+
+    if (gBrNetlink.active || gBrDuel.running)
+    {
+        names[0] = gLinkPlayers[0].name;
+        names[1] = gLinkPlayers[1].name;
+        genders[0] = gLinkPlayers[0].gender;
+        genders[1] = gLinkPlayers[1].gender;
+    }
+    else
+    {
+        names[0] = gSaveBlock2Ptr->playerName;
+        genders[0] = gSaveBlock2Ptr->playerGender;
+        names[1] = gText_EmptyString2;
+        genders[1] = MALE;
+        if (gBrBotFight.fighting)
+        {
+            names[1] = gBrBotFight.name;
+            if (gBrBotFight.seat < BR_MAX_SEATS)
+                genders[1] = gBrSeats[gBrBotFight.seat].skin & 1;
+        }
+        else if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
+        {
+            names[1] = gTrainers[gTrainerBattleOpponent_A].trainerName;
+            genders[1] = (gTrainers[gTrainerBattleOpponent_A].encounterMusic_gender & F_TRAINER_FEMALE) ? FEMALE : MALE;
+        }
+    }
+    for (i = 0; i < 2; i++)
+    {
+        // Every name is padded out with EOS, and the eighth byte is always one: the replay
+        // copies all eight bytes into a LinkPlayer's name, and a trainer's is up to 12.
+        for (j = 0; j < PLAYER_NAME_LENGTH && names[i][j] != EOS; j++)
+            buf[i * (PLAYER_NAME_LENGTH + 1) + j] = names[i][j];
+        for (; j < PLAYER_NAME_LENGTH + 1; j++)
+            buf[i * (PLAYER_NAME_LENGTH + 1) + j] = EOS;
+    }
+    buf[2 * (PLAYER_NAME_LENGTH + 1)] = genders[0];
+    buf[2 * (PLAYER_NAME_LENGTH + 1) + 1] = genders[1];
 }
 
 // The seed and both parties are up: the recorded replay can be built. The seed is set
@@ -110,6 +180,9 @@ static u16 PackParty(struct Pokemon *party, u8 *dst)
     return idx;
 }
 
+// A gender is 0 or 1; the player's carries the fight's fog above it.
+#define BR_BSTART_FOG 0x80
+
 // Publish the battle so a spectator can build the BATTLE_TYPE_RECORDED: the seed, both
 // trainers' names and genders, and both real parties. Assembled on the heap -- ~1.2 KB
 // once per battle is no place for a permanent EWRAM buffer. FALSE when it did not go
@@ -119,7 +192,6 @@ static bool8 SendBstart(void)
     u8 *buf = Alloc(28 + 2 * (1 + PARTY_SIZE * sizeof(struct Pokemon)));
     u16 len = 0, id;
     u32 seed, flags;
-    u8 i;
     bool8 sent;
 
     if (buf == NULL)
@@ -135,19 +207,25 @@ static bool8 SendBstart(void)
     // A duel is BATTLE_TYPE_TRAINER with both sides on the AI. The replay is built for a
     // link fight's flags (RecordedBattle_StartSpectate masks LINK off and puts RECORDED_LINK
     // on), so a duel goes out looking like one: the same shape the replay already plays.
+    //
+    // A fight against a trainer that is not over a link -- a bot's, a gym's -- is the
+    // duel's shape exactly: one side on the AI. A wild POKeMON's goes out as it is, and
+    // the replay is built as a wild battle (RecordedBattle_StartSpectate).
     flags = gBattleTypeFlags;
-    if (gBrDuel.running)
+    if (gBrDuel.running || (!gBrNetlink.active && (flags & BATTLE_TYPE_TRAINER)))
         flags |= BATTLE_TYPE_LINK | BATTLE_TYPE_IS_MASTER;
     buf[len++] = flags & 0xFF;
     buf[len++] = (flags >> 8) & 0xFF;
     buf[len++] = (flags >> 16) & 0xFF;
     buf[len++] = (flags >> 24) & 0xFF;
-    for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)
-        buf[len++] = gLinkPlayers[0].name[i];
-    for (i = 0; i < PLAYER_NAME_LENGTH + 1; i++)
-        buf[len++] = gLinkPlayers[1].name[i];
-    buf[len++] = gLinkPlayers[0].gender;
-    buf[len++] = gLinkPlayers[1].gender;
+    PutTrainers(buf + len);
+    len += 2 * (PLAYER_NAME_LENGTH + 1) + 2;
+    // The player's gender byte carries the fog too (BR_BSTART_FOG): whether this fight is
+    // fought in it, which the replay must know to play the fog's turns as the engine did.
+    // Every published fight but a duel decided it at its start (a contest at its door,
+    // one fought alone in BrSpectate_Tick); a duel's two bots stand nowhere.
+    if (gBrRing.battleFog && !gBrDuel.running)
+        buf[len - 2] |= BR_BSTART_FOG;
     len += PackParty(gPlayerParty, buf + len);
     len += PackParty(gEnemyParty, buf + len);
     sent = BrWire_SendLarge(BR_MSG_BSTART, buf, len);
@@ -169,6 +247,7 @@ static EWRAM_DATA u32 sPendSeed = 0;
 static EWRAM_DATA u32 sPendFlags = 0;
 static EWRAM_DATA u8 sPendNames[2 * (PLAYER_NAME_LENGTH + 1)] = {0};
 static EWRAM_DATA u8 sPendGenders[2] = {0};
+static EWRAM_DATA bool8 sPendFog = FALSE;
 // Turns that arrive while the field is still fading out. The fighters do not wait for
 // a spectator to be ready, so the opening turn of a fight can land before the replay
 // exists; held here, they are flushed into the record the moment it does.
@@ -210,6 +289,7 @@ static u16 UnpackParty(const u8 *d, u16 avail, struct Pokemon *party)
 // back first; skipping that is what made the spectate crash the sound driver on agbcc).
 static void EnterSpectate(void)
 {
+    BrRing_SetBattleFog(sPendFog);
     RecordedBattle_StartSpectate(sPendSeed, sPendFlags, sPendParties,
         sPendParties + PARTY_SIZE, sPendNames, sPendGenders, CB2_BrReturnFromSpectate);
     Free(sPendParties);
@@ -265,7 +345,8 @@ static void ParseBstart(const u8 *d, u16 n)
 
     for (used = 0; used < (u16)sizeof(sPendNames); used++)
         sPendNames[used] = d[10 + used];
-    sPendGenders[0] = d[26];
+    sPendGenders[0] = d[26] & ~BR_BSTART_FOG;
+    sPendFog = (d[26] & BR_BSTART_FOG) != 0;
     sPendGenders[1] = d[27];
     sPendSeed = seed;
     sPendFlags = flags;
@@ -812,7 +893,29 @@ void BrSpectate_Follow(u8 seat)
     if (seat != BR_NO_SEAT && (seat >= BR_MAX_SEATS || seat == gBrMySeat))
         return;
     if (gBrSpectate.follow != BR_NO_SEAT && seat != gBrSpectate.follow)
-        StopFollowing(seat == BR_NO_SEAT);
+    {
+        // From one seat to the next the controls stay ours to keep: handing them back
+        // here and taking them again only once the new seat's ghost was in view left a
+        // spectator walking their own trainer -- for good, when the next seat was on the
+        // same map but out of sight (2026-10-05 play-test). Only STOP gives them back.
+        if (seat == BR_NO_SEAT)
+            StopFollowing(TRUE);
+        else
+        {
+            ClosePeek();
+            gBrSpectate.followed = FALSE;
+        }
+        // NEXT in the middle of somebody's fight: the replay of it ends at its next read
+        // and the field takes us to the new seat. It used to sit there, starved of turns
+        // the page no longer passed on, until that fight's RESULT came.
+        if (gBrSpectate.watching)
+        {
+            if (sPendParties != NULL)
+                sEndEarly = TRUE;
+            else
+                RecordedBattle_AbortSpectate();
+        }
+    }
     gBrSpectate.follow = seat;
     gBrSpectate.shotSecs = 0;
 }
@@ -842,18 +945,51 @@ static void FollowTick(void)
     // happened, or something bigger overtook it.
     if (!BrField_OverworldRunning())
         gBrSpectate.warpWait = 0;
+    if (!BrField_OverworldRunning() || ScriptContext_IsEnabled())
+        return;
+    // Out is out (2026-10-05 play-test: "I'm dead, but still playing, since I died by
+    // the fog"): a trainer the match is done with is not on the field to walk it, whoever
+    // they are watching or not. Beaten sprites vanish (DESIGN §10), ours too.
+    if (gBrMatch.phase == BR_PHASE_OUT)
+    {
+        ShowOwnTrainer(FALSE);
+        LockPlayerFieldControls();
+        sOutHeld = TRUE;
+    }
+    // ...and a phase that is not out any more -- a new match on this boot -- gives the
+    // field back, unless a watch is keeping it.
+    else if (sOutHeld)
+    {
+        sOutHeld = FALSE;
+        if (gBrSpectate.follow == BR_NO_SEAT)
+        {
+            ShowOwnTrainer(TRUE);
+            UnlockPlayerFieldControls();
+        }
+    }
     if (gBrSpectate.follow == BR_NO_SEAT)
         return;
+    // Following anybody, the controls are the watch's from the first frame -- not from
+    // the frame their ghost turns up, which on the same map out of sight was never.
+    ShowOwnTrainer(FALSE);
+    LockPlayerFieldControls();
     them = &gBrSeats[gBrSpectate.follow];
     // No roster row yet: wait. A spectator who starts watching mid-fight has never
     // heard a place from that seat -- they are in a battle, not walking -- and giving
     // up here would cancel the watch before it began.
     if (!them->present)
         return;
-    if (!BrField_OverworldRunning() || ScriptContext_IsEnabled())
+    // Picking where to drop is the fly map, and their last cell is still where they
+    // stood before it -- in the Safari, at the buzzer -- so a warp there put everybody
+    // watching back in the Zone, then took them on again when the seat landed (2026-10-05
+    // play-test). Their next PLACE says where they came down.
+    if (gBrSeatBusy[gBrSpectate.follow] == BR_BUSY_MENU && gBrMatch.phase != BR_PHASE_SAFARI
+     && (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
+      || gSaveBlock1Ptr->location.mapNum != them->mapNum))
         return;
     if (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
-     || gSaveBlock1Ptr->location.mapNum != them->mapNum)
+     || gSaveBlock1Ptr->location.mapNum != them->mapNum
+     || (them->objId == BR_NO_OBJ && !BrField_InObjectView(them->x, them->y)))
     {
         // One warp at a time (POK-247). DoWarp only starts the errand: its task waits
         // out the fade and the old map's music, then loads the map -- and this runs
@@ -896,10 +1032,6 @@ static void FollowTick(void)
     }
     if (them->objId == BR_NO_OBJ)
         return; // their ghost has not spawned on this map yet
-    // Reasserted every frame: a map load rebuilds our object event, and it comes back
-    // visible and in charge.
-    ShowOwnTrainer(FALSE);
-    LockPlayerFieldControls();
     if (!gBrSpectate.followed)
     {
         CameraObjectSetFollowedSpriteId(gObjectEvents[them->objId].spriteId);
@@ -967,6 +1099,14 @@ void BrSpectate_OnResult(u8 seat)
         RecordedBattle_EndSpectate();
 }
 
+void BrSpectate_OnBusy(u8 seat)
+{
+    if (!gBrSpectate.watching || seat >= BR_MAX_SEATS || gBrSeatBusy[seat] == BR_BUSY_BATTLE)
+        return;
+    if ((gBrSpectate.watchId & 0xFF) == seat && (gBrSpectate.watchId >> 8) == BR_NO_SEAT)
+        BrSpectate_OnResult(seat);
+}
+
 // One TURN out of sTurnBuf. A single slot holds BR_FRAME_DATA_MAX once framed -- the
 // test here was the slot's own size, so a 60..62-byte turn went to BrWire_Send, which
 // refuses those, and was lost.
@@ -1021,19 +1161,30 @@ void BrSpectate_Tick(void)
             return;
         sTurnLen = 0;
     }
-    if (!Publishing())
-        return;
+    // Ahead of the publishing test, which a fight fought alone fails off the field: the
+    // reset sat behind it, so a wild fight's `started` outlived it and the next one alone
+    // never sent its bstart.
     if (!gMain.inBattle)
     {
         gBrSpectate.started = FALSE; // ready for the next battle
+        sFogDecided = FALSE;
         return;
     }
+    if (!BrSpectate_Publishing())
+        return;
 
     // A BSTART the ring had no room for is tried again next frame, as a TURN is, and
     // nothing of the fight goes out ahead of it: `started` was set whether it went or
     // not, so a full ring lost the whole fight for anybody watching (POK-331 #10).
     if (!gBrSpectate.started && BattleReady())
     {
+        // Once, and before the first try: a bstart the ring refused goes again later,
+        // and the engine's end of turn has read the answer by then.
+        if (!sFogDecided)
+        {
+            BrRing_DecideSoloFog();
+            sFogDecided = TRUE;
+        }
         if (!SendBstart())
             return;
         gBrSpectate.started = TRUE;

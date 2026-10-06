@@ -80,6 +80,7 @@ void BrFrame(void)
     BrCatch_Tick();
     BrNetlink_Tick();
     BrBattle_TickStall();
+    BrBattle_TickSeeThrough();
     BrEngage_Tick();
     BrSpectate_Tick();
     BrPick_Tick();

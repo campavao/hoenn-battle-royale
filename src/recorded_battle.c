@@ -708,7 +708,18 @@ void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
                       | BATTLE_TYPE_RECORDED_LINK | BATTLE_TYPE_RECORDED_IS_MASTER;
     save->multiplayerId = 0;
     save->opponentA = TRAINER_LINK_OPPONENT;
+    // A wild POKeMON's fight was never a link one (2026-10-05 play-test, br_spectate.c):
+    // replayed as what it was, a wild battle, its intro, its RUN and its BALLs pret's own
+    // wild ones. Both controllers still read the record (BrBattle_RecordedWildOpponent).
+    if (!(flags & BATTLE_TYPE_LINK))
+    {
+        save->battleFlags = flags;
+        save->opponentA = 0;
+    }
     save->battleScene = TRUE;
+    // A link replay prints at the room's TEXT (BrBattle_LinkTextSpeed); a wild one takes
+    // pret's recorded speed from here, which zeroed was the slowest there is.
+    save->textSpeed = gSaveBlock2Ptr->optionsTextSpeed;
 
     RecordedBattle_SaveParties();
     SetVariablesForRecordedBattle(save);
@@ -778,6 +789,21 @@ bool8 RecordedBattle_HasBattlerAction(u8 battler, u8 count)
 
 void RecordedBattle_EndSpectate(void)
 {
+    sSpectateEnded = TRUE;
+}
+
+void RecordedBattle_AbortSpectate(void)
+{
+    u8 i;
+
+    if (!sSpectateLive)
+        return;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        if (sBattlerRecordSizes[i] < BATTLER_RECORD_SIZE)
+            sBattleRecords[i][sBattlerRecordSizes[i]] = 0xFF;
+        sBattlerSavedRecordSizes[i] = BATTLER_RECORD_SIZE; // and nothing more is fed
+    }
     sSpectateEnded = TRUE;
 }
 

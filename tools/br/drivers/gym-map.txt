@@ -1,0 +1,37 @@
+# gym-map: the leaders on the MAP, grayed once beaten (2026-10-05 play-test: "don't
+# announce gym leader defeats in the bottom banner -- show gym leader icons on the map,
+# grayed out when defeated").
+#
+# Each leader is a 16x16 head over their town, the top of their own standing frame. A
+# leader somebody else beat arrives as NPCOUT (POK-287), the same message that takes the
+# sprite off every map; one we beat ourselves goes through BrGym_Beaten. TATE&LIZA are
+# two sprites, and beating either is beating the gym.
+#
+# The MAP is two below the top of START in a match (ring-map.txt).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gBrGymsBeaten 0
+# NPCOUT: seat 3 beat ROXANNE (RUSTBORO GYM, 11:3, local id 1); seat 5 beat LIZA
+# (MOSSDEEP GYM, 14:0, local id 9)
+pokebytes gBrMailbox+0x1018 1F 07 04 00 00 03 0B 03 01
+pokebytes gBrMailbox+0x1058 1F 07 04 00 00 05 0E 00 09
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u8 gBrGymsBeaten 0x41
+# ...and the fog taking a gym is not beating it
+pokebytes gBrMailbox+0x1098 1F 07 04 00 00 FF 0A 00 01
+poke u16 gBrMailbox+0x0C 3
+wait 10
+expect u8 gBrGymsBeaten 0x41
+tap START
+wait 40
+tap DOWN
+wait 20
+tap DOWN
+wait 20
+tap A
+wait 240
+shot gyms
+say gym map ok
