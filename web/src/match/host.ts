@@ -305,6 +305,15 @@ export class HostRole {
     }
   }
 
+  /** Our own page's `peek` at a bot we walk (2026-10-06 play-test: the host watching a
+   *  bot pressed START and got an empty box). The relay never hands a seat its own
+   *  messages back, so `hear` never sees it: the party goes straight to our ROM. */
+  answerOwnPeek(msg: Msg): void {
+    if (msg.t !== 'peek' || msg.target === this.link.seat) return;
+    const party = this.bots.partyFor(msg.target);
+    if (party) this.link.pushToRom(party);
+  }
+
   /** The cell a pick is answered with: the director's deal, or for our own seat the
    *  override the page was handed. */
   private landFor(seat: number, section: number): { seat: number; map: MapRef; x: number; y: number } {

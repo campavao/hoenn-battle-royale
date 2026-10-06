@@ -17,6 +17,7 @@
 #include "window.h"
 #include "text.h"
 #include "menu.h"
+#include "text_window.h"
 #include "string_util.h"
 #include "constants/characters.h"
 #include "field_weather.h"
@@ -442,19 +443,23 @@ static EWRAM_DATA struct BrAssembler sPartyAsm = {0};
 static EWRAM_DATA u8 sPeekSeat = 0xFF;
 static EWRAM_DATA u8 sPeekWin = WINDOW_NONE;
 
-// bg, left, top, width, height, palette, baseBlock. Palette 15, and the 180 tiles from
+// bg, left, top, width, height, palette, baseBlock. Palette 15, and the 170 tiles from
 // 0x008: where the field puts its own transient boxes (Safari balls, money, a script's
 // multichoice), none of which can open while we are following somebody -- field controls
 // are locked. It used to share the HUD box's 0x294, which ran to 0x347: past the end of
 // BG0's tiles at 0x300 and clean through BG2's tilemap. See br_hud.h's tile map.
-// Col 1, not 2: the HUD corner's frame reaches col 19 since it grew for the ring's place
-// (POK-325), and the box has no frame of its own to spare.
-static const struct WindowTemplate sPeekTemplate = { 0, 1, 2, 18, 10, 15, 0x008 };
-STATIC_ASSERT(1 + 18 <= BR_HUD_CORNER_LEFT - 1, BrPeekClearOfTheHudCornerFrame)
-STATIC_ASSERT(0x008 + 18 * 10 <= 0x107, BrPeekFitsBelowTheMapNamePopup)
-static const u8 sPeekColors[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY };
+// The standard frame round it, as every other box on the field has (2026-10-06
+// play-test: "a weird gray box"): cols 0 and 18, clear of the HUD corner's frame at 19.
+static const struct WindowTemplate sPeekTemplate = { 0, 1, 2, 17, 10, 15, 0x008 };
+STATIC_ASSERT(1 + 17 <= BR_HUD_CORNER_LEFT - 2, BrPeekFrameClearOfTheHudCornerFrame)
+STATIC_ASSERT(0x008 + 17 * 10 <= 0x107, BrPeekFitsBelowTheMapNamePopup)
+// The frame's tiles and colours: the HUD's own copy (br_hud.c's BR_HUD_STD_FRAME), in the
+// palette nothing on the field loads over.
+#define BR_PEEK_FRAME 0x214
+#define BR_PEEK_FRAME_PALETTE 13
+static const u8 sPeekColors[] = { TEXT_COLOR_WHITE, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY };
 static const u8 sText_PeekLv[] = _(" Lv");
-static const u8 sText_PeekNone[] = _("no party seen yet");
+static const u8 sText_PeekNone[] = _("Waiting for their team...");
 
 // Which one, not just whether (POK-297): a spectator judging the next fight wants to know
 // SLP from PAR. 0 none, then the order sText_PeekStatus is written in.
@@ -793,7 +798,7 @@ static void DrawPeekBag(u8 page)
 
 static void DrawPeek(void)
 {
-    FillWindowPixelBuffer(sPeekWin, PIXEL_FILL(TEXT_COLOR_DARK_GRAY));
+    FillWindowPixelBuffer(sPeekWin, PIXEL_FILL(TEXT_COLOR_WHITE));
     if (gBrSpectate.peekMons == 0 || sPartyAsm.buf == NULL || sPeekSeat != gBrSpectate.follow)
     {
         PeekLine(0, sText_PeekNone);
@@ -833,8 +838,7 @@ static void ClosePeek(void)
 {
     if (sPeekWin != WINDOW_NONE)
     {
-        ClearWindowTilemap(sPeekWin);
-        CopyWindowToVram(sPeekWin, COPYWIN_MAP);
+        ClearStdWindowAndFrameToTransparent(sPeekWin, TRUE);
         RemoveWindow(sPeekWin);
         sPeekWin = WINDOW_NONE;
     }
@@ -847,8 +851,9 @@ static void OpenPeek(void)
     if (sPeekWin == WINDOW_NONE)
         return;
     gBrSpectate.peekPage = 0;
+    LoadUserWindowBorderGfxOnBg(0, BR_PEEK_FRAME, BG_PLTT_ID(BR_PEEK_FRAME_PALETTE));
+    DrawStdFrameWithCustomTileAndPalette(sPeekWin, FALSE, BR_PEEK_FRAME, BR_PEEK_FRAME_PALETTE);
     DrawPeek();
-    PutWindowTilemap(sPeekWin);
     CopyWindowToVram(sPeekWin, COPYWIN_FULL);
     gBrSpectate.peeking = TRUE;
 }
@@ -1162,12 +1167,17 @@ static bool8 SendTurn(u8 len)
     return sent;
 }
 
+// Action bytes behind, per battler, that start and stop the fast-forward: a turn is
+// about three (action, move, target), and a live replay sits one or two turns back.
+#define BR_CATCH_UP_ON 9
+#define BR_CATCH_UP_OFF 3
+
 // Only the challenger (link id 0) publishes: it records its own actions and receives
 // the peer's over the netlink, so it alone holds both sides of the fight.
 void BrSpectate_Tick(void)
 {
     u16 id;
-    u8 n;
+    u16 n;
 
     FollowTick();
     // Spectating: the replay owns the screen until it ends, and nothing is published.
@@ -1183,12 +1193,24 @@ void BrSpectate_Tick(void)
             else
                 BrBattle_HideClock();
         }
+        // A watcher who joins a fight late is handed every turn of it so far, and the
+        // replay plays them all from the first (2026-10-06 play-test: "watching someone
+        // in a battle restarts the whole battle"). A replay is the fight's seed and its
+        // choices, so there is no skipping to the turn they are on -- but the page can
+        // run us at speed until we get there. Hysteresis, so it does not flicker on the
+        // turn or two a live replay is always behind by.
+        n = RecordedBattle_SpectateBacklog();
+        if (n > BR_CATCH_UP_ON)
+            gBrSpectate.catchUp = TRUE;
+        else if (n <= BR_CATCH_UP_OFF)
+            gBrSpectate.catchUp = FALSE;
         // sPendParties outlives the parse until the fade task hands it to the battle:
         // the replay is not live yet, and the watch must not retire underneath it.
         if (sPendParties == NULL && !RecordedBattle_IsSpectateLive())
             gBrSpectate.watching = FALSE;
         return;
     }
+    gBrSpectate.catchUp = FALSE;
     // A turn the ring refused is retried before anything newer is taken: dropped, the
     // replay read the next turn's bytes as this one's, or waited on it for good.
     if (sTurnLen != 0)

@@ -812,6 +812,24 @@ bool8 RecordedBattle_IsSpectateLive(void)
     return sSpectateLive;
 }
 
+// How far the replay is behind what has arrived: the most action bytes any battler has
+// waiting on the record, unread.
+u16 RecordedBattle_SpectateBacklog(void)
+{
+    u8 i;
+    u16 most = 0;
+
+    if (!sSpectateLive)
+        return 0;
+    for (i = 0; i < MAX_BATTLERS_COUNT; i++)
+    {
+        if (sBattlerSavedRecordSizes[i] > sBattlerRecordSizes[i]
+         && sBattlerSavedRecordSizes[i] - sBattlerRecordSizes[i] > most)
+            most = sBattlerSavedRecordSizes[i] - sBattlerRecordSizes[i];
+    }
+    return most;
+}
+
 // What a live replay's controllers hand the engine, written once for both sides
 // (POK-330 #12; the player's and the opponent's copies had drifted into two). Each is
 // TRUE once the battler's bytes have arrived and gone to the engine, and the caller
