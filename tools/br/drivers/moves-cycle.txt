@@ -1,0 +1,48 @@
+# moves-cycle: LEFT and RIGHT on the relearner step through the party (2026-10-06
+# play-test: "left/right should cycle between pokemon instead of switching between
+# battle info and contest info").
+#
+# moves-row.txt's setup -- Treecko at L30, a GROVYLE by then -- and a second one in slot
+# 1: the first's hundred bytes copied (as they read after the rung, dumped from this same
+# setup) with the nickname's first letter made an A, AROVYLE. The nickname is outside
+# the encrypted substructs, so the copy's checksum still holds.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gPlayerParty+0x54 30
+pokebytes gPlayerParty+100 7C B1 00 0B 00 00 F9 B2 BB CC C9 D0 D3 C6 BF FF 00 00 02 02 BD BB C7 FF 00
+pokebytes gPlayerParty+125 00 00 00 69 11 00 00 7C B1 F9 B9 7C B1 F9 B9 7C B1 F9 B9 6A B0 F9 B9 7C E4
+pokebytes gPlayerParty+150 F9 B9 7C F7 F9 B9 98 B1 D2 B9 20 B0 9B B9 68 AF F6 A7 7C B1 7C 98 F4 5F AF
+pokebytes gPlayerParty+175 9F 7C B1 F9 B9 00 00 00 00 1E FF 48 00 48 00 32 00 28 00 41 00 39 00 31 00
+poke u8 gPlayerPartyCount 2
+tap START
+wait 40
+tap A
+wait 80
+tap A
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 240
+shot first
+# 0x8004 is the party slot the screen is teaching
+expect u16 gSpecialVar_0x8000+8 0
+tap RIGHT
+wait 30
+shot second
+expect u16 gSpecialVar_0x8000+8 1
+# "Teach which move to AROVYLE?" -- the prompt is reprinted for the new one
+expect u8 gStringVar4+20 0xBB
+tap RIGHT
+wait 30
+expect u16 gSpecialVar_0x8000+8 0
+expect u8 gStringVar4+20 0xC1
+tap LEFT
+wait 30
+expect u16 gSpecialVar_0x8000+8 1
+shot back
+say moves cycle ok
