@@ -4,6 +4,7 @@
 #include "overworld.h"
 #include "fieldmap.h"
 #include "script.h"
+#include "field_screen_effect.h"
 #include "constants/battle.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
@@ -40,6 +41,14 @@ static EWRAM_DATA u8 sBusyStable = 0;  // frames it has held
 // the wait is short and its end is the link battle exactly as before.
 #define BR_ENGAGE_WAIT 90       // 1.5 s for a card, or for the seat to say it cannot
 
+// The settle's ceiling (see br_engage.h). A ghost with a full queue has five walks to play
+// at 16 frames each, and a queue that overflowed snaps in one frame, so two seconds is
+// past anything the wire can owe us. It is a ceiling, not a wait: a ghost already
+// standing where its owner is lets the fight start on the next frame.
+#define BR_SETTLE_MAX 120
+static EWRAM_DATA u8 sSettleHow = 0;
+static EWRAM_DATA u8 sSettleFrames = 0;
+
 // Tell the room what we are doing, once it has held long enough to be a state and
 // not a transition (a warp's map load is a menu for a few frames). Nothing is said
 // before the first map: the boot is not a menu.
@@ -49,8 +58,9 @@ static void ReportBusy(void)
 
     if (gMain.inBattle)
         kind = BR_BUSY_BATTLE;
-    else if (gMain.callback2 != CB2_Overworld || ArePlayerFieldControlsLocked())
-        kind = BR_BUSY_MENU;
+    else if (gMain.callback2 != CB2_Overworld
+          || (ArePlayerFieldControlsLocked() && gBrEngage.waitSeat == 0xFF && gBrEngage.settleSeat == 0xFF))
+        kind = BR_BUSY_MENU; // an engage's freeze is not a menu: a "?" over us would say we walked off
     else
         kind = BR_BUSY_MAP;
     if (kind != sBusyKind)
@@ -189,8 +199,8 @@ static bool8 CanEngage(void)
         return FALSE;
     if (gBrNetlink.active || gBrEngage.cooldown)
         return FALSE;
-    if (gBrEngage.waitSeat != 0xFF)
-        return FALSE; // one is already out and waiting for its answer
+    if (gBrEngage.waitSeat != 0xFF || gBrEngage.settleSeat != 0xFF)
+        return FALSE; // one is already out and waiting for its answer, or settling
     if (gBrMatch.phase != BR_PHASE_PLAY)
         return FALSE; // the eyeline is a match rule: not in the lobby, not in the
                       // Safari opening, and not once you are out
@@ -201,6 +211,15 @@ static bool8 CanEngage(void)
     if (BrField_Leaving())
         return FALSE;
     return TRUE;
+}
+
+// Let go of the trainer an engage froze, when nothing else has taken the field since:
+// the fog's OUT hands it to spectating, which keeps it locked for its own reasons.
+static void Unfreeze(void)
+{
+    if (gBrMatch.phase == BR_PHASE_PLAY && gMain.callback2 == CB2_Overworld
+     && !ScriptContext_IsEnabled() && !BrField_Leaving())
+        UnlockPlayerFieldControls();
 }
 
 static void Challenge(u8 target)
@@ -216,10 +235,15 @@ static void Challenge(u8 target)
     gBrEngage.lastTarget = target;
     gBrEngage.cooldown = 120;
     gBrEngage.challenges++;
+    // We stand where we were when we saw them, from now until the fight. The cell the
+    // challenge was sent from is the one their screen is about to draw us on; a trainer
+    // who kept walking through the wait went into the fight from somewhere their
+    // opponent never saw them (Cam's play-test, 2026-10-05).
+    LockPlayerFieldControls();
     // A bot has no ROM on the other end of a link. If the page has staged its party
     // (POK-238), this is a trainer battle instead -- the same engage, a different
     // kind of fight. The CHALLENGE still goes out so the room sees the pair engage.
-    if (BrBot_StartFight(target))
+    if (BrBot_IsStaged(target) && BrEngage_Settle(target, BR_SETTLE_BOT))
         return;
     // Nothing staged: this is a person, or it is a bot whose card is still on its
     // way. TickWait decides which, and only then does anything start.
@@ -240,16 +264,19 @@ static void TickWait(void)
         return;
     }
     // The card landed: a bot, and an ordinary trainer battle (POK-238).
-    if (BrBot_IsStaged(seat) && BrBot_StartFight(seat))
+    if (BrBot_IsStaged(seat))
     {
         gBrEngage.waitSeat = 0xFF;
+        BrEngage_Settle(seat, BR_SETTLE_BOT);
         return;
     }
     // ...or the seat answered that it cannot: it left the match, or it is already in
-    // somebody else's fight. Either way there is nothing here to link with.
-    if (!gBrSeats[seat].present || gBrSeatBusy[seat] == BR_BUSY_BATTLE)
+    // somebody else's fight. Either way there is nothing here to link with. Out of the
+    // match ourselves meanwhile (the fog) is the same.
+    if (!gBrSeats[seat].present || gBrSeatBusy[seat] == BR_BUSY_BATTLE || gBrMatch.phase != BR_PHASE_PLAY)
     {
         gBrEngage.waitSeat = 0xFF;
+        Unfreeze();
         return;
     }
     // Off the field meanwhile (a bot's challenge, the fly map): see where to first. A
@@ -260,7 +287,72 @@ static void TickWait(void)
     if (gBrEngage.waitFrames > 0 && --gBrEngage.waitFrames > 0)
         return;
     gBrEngage.waitSeat = 0xFF;
-    BrNetlink_StartBattle(0, seat);
+    BrEngage_Settle(seat, BR_SETTLE_LINK_FIRST);
+}
+
+bool8 BrEngage_Settle(u8 seat, u8 how)
+{
+    if (seat >= BR_MAX_SEATS || gBrEngage.settleSeat != 0xFF || gBrNetlink.active || gMain.inBattle)
+        return FALSE;
+    gBrEngage.settleSeat = seat;
+    sSettleHow = how;
+    sSettleFrames = 0;
+    LockPlayerFieldControls();
+    return TRUE;
+}
+
+bool8 BrEngage_YieldWait(void)
+{
+    if (gBrEngage.waitSeat == 0xFF || gBrEngage.settleSeat != 0xFF)
+        return FALSE;
+    gBrEngage.waitSeat = 0xFF;
+    return TRUE;
+}
+
+// Both screens the same before the fight: we have stopped, and their ghost has played
+// every step the wire gave it, so it stands on the cell they are frozen on. Each side
+// waits for the other's ghost on its own screen, and the two pictures meet.
+static void TickSettle(void)
+{
+    u8 seat = gBrEngage.settleSeat;
+
+    if (seat == 0xFF)
+        return;
+    // Somebody else's fight got there first, or this one is already on its way.
+    if (gBrNetlink.active || gMain.inBattle || BrField_Leaving())
+    {
+        gBrEngage.settleSeat = 0xFF;
+        return;
+    }
+    // Nothing left to fight for: we are out (the fog), or the card a bot fight was going
+    // to use has gone. A link whose peer has left is the hello watchdog's, as it always
+    // was: a seat with no ghost has nothing on screen to wait for, so it starts at once.
+    if (gBrMatch.phase != BR_PHASE_PLAY || (sSettleHow == BR_SETTLE_BOT && !BrBot_IsStaged(seat)))
+    {
+        gBrEngage.settleSeat = 0xFF;
+        Unfreeze();
+        return;
+    }
+    if (sSettleFrames < BR_SETTLE_MAX)
+    {
+        sSettleFrames++;
+        if (!IsPlayerStandingStill() || !BrGhosts_Idle(seat))
+            return;
+    }
+    switch (sSettleHow)
+    {
+    case BR_SETTLE_BOT:
+        if (!BrBot_StartFight(seat))
+            return; // the field is not ready for the fade yet; the next frame is
+        break;
+    case BR_SETTLE_LINK_ANSWER:
+        BrNetlink_StartBattle(1, seat);
+        break;
+    default:
+        BrNetlink_StartBattle(0, seat);
+        break;
+    }
+    gBrEngage.settleSeat = 0xFF;
 }
 
 void BrEngage_Init(void)
@@ -273,6 +365,9 @@ void BrEngage_Init(void)
     gBrEngage.fledLockout = 0;
     gBrEngage.waitSeat = 0xFF;
     gBrEngage.waitFrames = 0;
+    gBrEngage.settleSeat = 0xFF;
+    sSettleHow = 0;
+    sSettleFrames = 0;
     sOwnBusy = 0xFF;
     sBusyKind = 0;
     sBusyStable = 0;
@@ -320,6 +415,7 @@ void BrEngage_Tick(void)
         gBrEngage.fledFrom = 0xFF;
     ReportBusy();
     TickWait();
+    TickSettle();
     if (sSafariSaid != 0)
         sSafariSaid--;
     // In the Zone the eyeline does nothing, so this is the only thing that tells you
