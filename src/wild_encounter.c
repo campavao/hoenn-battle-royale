@@ -401,6 +401,8 @@ static void CreateWildMon(u16 species, u8 level)
 
         if (dealt != SPECIES_NONE)
             species = dealt;
+        else
+            species = BrZone_National(species); // the national dex on the routes (2026-10-05)
     }
 
 #endif
