@@ -153,6 +153,7 @@ void BrMatch_HeapReset(void)
 }
 
 static EWRAM_DATA u8 sWinPending = 0;
+static EWRAM_DATA u8 sBackOutFrames = 0;
 
 // RESULT {seat, outcome}: outcome 0 for our seat means we are the last one standing.
 static void HandleResult(const u8 *payload, u8 len)
@@ -459,6 +460,29 @@ bool8 BrMatch_InRound(void)
     return gBrMatch.phase != BR_PHASE_NONE;
 }
 
+// The opening is over and we are in a menu: the party, a summary, the bag, the move
+// relearner (2026-10-06 play-test: Cam was teaching moves when the buzzer went, and the
+// drop waited for him to come out, which he did not know to do). The drop opens from
+// the field, so we go back to it the way the player would, B by B: every screen's own
+// way out frees what it took and hands the field its callback, which no jump straight
+// into the fly map could do for all of them. The battle has its own buzzer
+// (BrMatch_BuzzerClosing); a map load or a fade takes a B as nothing.
+#define BR_BACK_OUT_FRAMES 12
+
+static void BackOutOfMenus(void)
+{
+    if (gMain.inBattle || !(gBrRing.active || (gBrMatch.started && gBrMatch.clockLeft == 0)))
+    {
+        sBackOutFrames = 0;
+        return;
+    }
+    if (++sBackOutFrames < BR_BACK_OUT_FRAMES)
+        return;
+    sBackOutFrames = 0;
+    gMain.newKeys |= B_BUTTON;
+    gMain.newAndRepeatedKeys |= B_BUTTON;
+}
+
 void BrMatch_Tick(void)
 {
     if (sWinPending && BrField_OverworldRunning() && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked())
@@ -515,7 +539,11 @@ void BrMatch_Tick(void)
     // And the balls it dealt go on the ground, once (POK-261).
     BrZone_PlaceItems();
     if (!BrField_OverworldRunning())
+    {
+        BackOutOfMenus();
         return;
+    }
+    sBackOutFrames = 0;
     // The fog is up: the opening is over whatever our own clock says. It has to be
     // this way round, because the CLOCK the page sends during the ring phases is the
     // ring's countdown and HandleClock cannot tell the two apart -- so a ring clock
