@@ -617,6 +617,27 @@ describe('the picture in the box', () => {
   });
 });
 
+describe('a field canvas in error state', () => {
+  it("throws, reallocates its store, and draws whole again (Firefox's \"Canvas is already in error state\")", () => {
+    const emu = { viewport: null, boots: 1 };
+    const lcd = { width: 240, height: 160, style: {} };
+    const widths: number[] = [];
+    let w = 0;
+    const field = {
+      get width() { return w; },
+      set width(v: number) { w = v; widths.push(v); },
+      height: 0, style: {},
+      getContext: () => { throw new DOMException('Canvas is already in error state.', 'InvalidStateError'); },
+    };
+    const view = new FieldView({ emu, box: { clientWidth: 390, clientHeight: 664 }, lcd, field, symbols: null } as unknown as FieldDeps);
+    const inner = view as unknown as { lay: { cols: number }; draw(c: unknown): void };
+    view.layout();
+    expect(inner.lay.cols).toBeGreaterThan(0);
+    inner.draw({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade: 0, fadeColor: 0, sprites: [], onField: true });
+    expect(widths.slice(-2), 'emptied, then its size again').toEqual([0, inner.lay.cols]);
+  });
+});
+
 describe('which frame a sprite is on', () => {
   // A ROM of 64 bytes at 0x08000000: anims table at +0x10 (two anims), the second
   // anim's commands at +0x20: FRAME(3, 8), FRAME(0, 8), JUMP(0).

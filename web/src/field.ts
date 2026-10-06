@@ -1103,7 +1103,28 @@ export class FieldView {
     return complete;
   }
 
+  /** A canvas whose backing store went away -- Firefox, after the GPU process resets or
+   *  a tab comes back from the background -- throws "Canvas is already in error state"
+   *  from every call on its context, for good: in the 2026-10-05 play-test that was every
+   *  frame and every resize, and the field around the picture stopped moving. Giving the
+   *  canvas its size again allocates a new store; the next draw is a whole one. */
   private draw(c: Camera): void {
+    try {
+      this.paint(c);
+    } catch (e) {
+      const { field, overlay } = this.deps;
+      console.warn('[field] the field canvas failed; reallocating it', e);
+      this.drawn = null;
+      field.width = 0;
+      field.width = this.lay.cols;
+      if (overlay) {
+        overlay.width = 0;
+        overlay.width = this.lay.cols;
+      }
+    }
+  }
+
+  private paint(c: Camera): void {
     const { field } = this.deps;
     const lay = this.lay;
     if (!lay.scale) return;
