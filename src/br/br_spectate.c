@@ -46,6 +46,8 @@
 #include "constants/trainers.h"
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
+// FollowTick took the field off us for being out (2026-10-05 play-test).
+static EWRAM_DATA bool8 sOutHeld = FALSE;
 // The per-frame turn scratch, kept in EWRAM on purpose: a plain function-local static
 // lands in the battle-tight IWRAM, and the stream is never on a hot path. It doubles as
 // the receive side's reassembly buffer -- the two never overlap, because a ROM that is
@@ -949,6 +951,18 @@ static void FollowTick(void)
     {
         ShowOwnTrainer(FALSE);
         LockPlayerFieldControls();
+        sOutHeld = TRUE;
+    }
+    // ...and a phase that is not out any more -- a new match on this boot -- gives the
+    // field back, unless a watch is keeping it.
+    else if (sOutHeld)
+    {
+        sOutHeld = FALSE;
+        if (gBrSpectate.follow == BR_NO_SEAT)
+        {
+            ShowOwnTrainer(TRUE);
+            UnlockPlayerFieldControls();
+        }
     }
     if (gBrSpectate.follow == BR_NO_SEAT)
         return;
