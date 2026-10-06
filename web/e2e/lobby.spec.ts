@@ -104,10 +104,11 @@ test('the host gets the room controls and START, and the guest does not', async 
     await expect(guest.locator('#room-controls')).toBeHidden();
     await expect(guest.locator('#room-note')).toContainText('Waiting for the host');
 
-    // The match options are the host's too, and cycle.
-    await expect(host.locator('#room-text')).toContainText('TEXT MID');
-    await host.locator('#room-text').click();
+    // The match options are the host's too, and cycle. A room starts at FAST, the
+    // boot's own (2026-10-05 play-test), and wraps round to SLOW.
     await expect(host.locator('#room-text')).toContainText('TEXT FAST');
+    await host.locator('#room-text').click();
+    await expect(host.locator('#room-text')).toContainText('TEXT SLOW');
     await host.locator('#room-fog').click();
     await expect(host.locator('#room-fog')).toContainText(/FOG \d+s/);
 

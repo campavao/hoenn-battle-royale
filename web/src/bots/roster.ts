@@ -107,6 +107,9 @@ export function dealBots(seed: number, count: number, takenSeats: number[], spaw
     const name = names.length > 0 ? names.splice(pickIndex(rng, names.length), 1)[0] : `BOT${seat}`;
     if (deck.length === 0) deck = [...spawns];
     const spawn = deck.splice(pickIndex(rng, deck.length), 1)[0];
+    // The skin's old draw, still made and now unused, so every bot after this one is dealt
+    // the name and the cell it always was for its seed (play.spec's SEED walks past them).
+    pickIndex(rng, 4);
     bots.push({
       seat,
       grade: gradeOf(seed, seat),

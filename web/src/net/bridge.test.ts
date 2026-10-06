@@ -237,6 +237,26 @@ describe("the battle lines you picked (POK-274)", () => {
     expect(voiceOf(drainMsgs(romDrainIn))).toEqual([]);
   });
 
+  it('hands our own challenge to a person back to our ROM, so its wait for a bot card ends', () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, frame, romInit, romEmit, romDrainIn } = fakeEmulator(BASE);
+    romInit();
+    new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    socket.receive(ROOM);
+    romEmit({ t: 'challenge', seat: 0, opponent: 5, nonce: 4 });
+    frame();
+    frame();
+    expect(drainMsgs(romDrainIn).filter((m) => m.t === 'challenge')).toEqual([
+      expect.objectContaining({ t: 'challenge', seat: 2, opponent: 5, nonce: 4 }),
+    ]);
+
+    // A bot is nobody on the relay: its card is what ends that wait.
+    romEmit({ t: 'challenge', seat: 0, opponent: 30, nonce: 5 });
+    frame();
+    frame();
+    expect(drainMsgs(romDrainIn).filter((m) => m.t === 'challenge')).toEqual([]);
+  });
+
   it("answers no bot: a bot is nobody on the relay, and its host sends its lines", () => {
     const { relay, socket } = fakeRelay();
     const { emu, romInit } = fakeEmulator(BASE);

@@ -587,6 +587,11 @@ export class Bridge {
     if (msg.seat === this.seat) {
       const heard = this.heardLines.get(them);
       if (heard) this.voiceToRom(them, heard);
+      // And the challenge itself, handed back: a person, not a bot whose card is still on
+      // its way, so our ROM's wait for that card can end now (br_netlink.c HandleChallenge).
+      // Waited out, it ran 1.5 s while the challenged side, settling on landing, went into
+      // the fight, and the wait read them as busy in somebody else's and gave up.
+      if (this.members.has(them) && !this.rom.push(msg)) this.dropCount++;
       return;
     }
     if (msg.lines) this.voiceToRom(them, msg.lines);

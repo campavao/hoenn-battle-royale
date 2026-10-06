@@ -207,9 +207,15 @@ static void HandleChallenge(const u8 *payload, u8 len)
     // (TickWait), and nowhere else is a link ours to open. Under a fade the battle's own
     // init killed the start task, in a battle the link sat under a fight not its own,
     // and either way the hello watchdog forfeited that fight for it (POK-331 #12).
+    // The wait for it is one: Challenge() froze us, so the field is never free here, and
+    // the wait ran its whole 1.5 s while the challenged side, which settles on landing,
+    // went into the fight -- a seat our wait reads as busy in somebody else's, so we gave
+    // up, and they sat in a link with nobody until the hello watchdog. A bot's card that
+    // has landed is still TickWait's.
     if (d[0] == gBrMySeat)
     {
-        if (FieldFree())
+        if (FieldFree()
+         || (gBrEngage.waitSeat == d[1] && !BrBot_IsStaged(d[1]) && BrEngage_YieldWait()))
             BrEngage_Settle(d[1], BR_SETTLE_LINK_FIRST);
     }
     else if (d[1] == gBrMySeat)

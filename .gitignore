@@ -50,6 +50,7 @@ node_modules/
 web/dist/
 tools/br/harness/frames/
 tools/br/harness/*.exe
+tools/br/harness/harness
 # Build outputs of tools/br's own helpers: flips (flips.sh), libmgba on Linux (drive.sh).
 tools/br/.flips/
 tools/br/.mgba/
