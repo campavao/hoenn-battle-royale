@@ -1,0 +1,25 @@
+# ghost-may-palette: a MAY ghost beside a BRENDAN player keeps her colours (2026-10-05
+# play-test: "may sometimes has her hat go black from time to time"). BRENDAN and MAY
+# both draw from the player's palette slot, 0, and whichever was loaded last coloured
+# both. A ghost of the other gender now wears the RIVAL graphic -- the same picture --
+# from slot 10, and one of ours the player's own.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 10 07 00 0F 00 BD BB C7 FF
+wait 400
+# we are BRENDAN
+expect u8 *gSaveBlock2Ptr+8 0
+# seat 1, skin 1 (MAY), one tile west; seat 2, skin 0 (BRENDAN), one tile east
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 10 0D 00 16 00 04 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 40
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 02 01 00 10 0F 00 16 00 03 01 00
+poke u16 gBrMailbox+0x0C 2
+wait 90
+expect u8 gBrSeats+25 2
+expect u8 gBrSeats+41 3
+# object 2 (0x24 bytes each, graphicsId at +5) is MAY as the rival, 105; object 3 is
+# BRENDAN as the player's own, 0
+expect u8 gObjectEvents+0x4D 105
+expect u8 gObjectEvents+0x71 0
+shot may-and-brendan
+say ghost may palette ok

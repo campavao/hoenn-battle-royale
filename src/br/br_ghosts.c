@@ -174,10 +174,29 @@ static void Despawn(u8 seat)
     gBrSeats[seat].queued = 0;
 }
 
+// BRENDAN and MAY draw from the player's own palette slot, 0, and a ghost of the other
+// one loaded its colours there over ours: whichever was loaded last coloured both, so a
+// MAY beside a BRENDAN went dark-haired every time either was drawn again -- "May
+// sometimes has her hat go black" (2026-10-05 play-test). The RIVAL graphics are the
+// same pictures from slot 10, so a ghost of the other gender wears those, and one of
+// ours the player's own, which slot 0 already holds.
+static u8 SkinGraphic(u8 skin)
+{
+    u8 gfx = sSkinGraphics[skin < BR_SKIN_COUNT ? skin : 0];
+    bool8 male;
+
+    if (skin >= 4)
+        return gfx;
+    male = (skin & 1) == 0;
+    if (male == (gSaveBlock2Ptr->playerGender == MALE))
+        return male ? OBJ_EVENT_GFX_BRENDAN_NORMAL : OBJ_EVENT_GFX_MAY_NORMAL;
+    return male ? OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL : OBJ_EVENT_GFX_RIVAL_MAY_NORMAL;
+}
+
 static void Spawn(u8 seat)
 {
     struct BrSeat *s = &gBrSeats[seat];
-    u8 gfx = sSkinGraphics[s->skin < BR_SKIN_COUNT ? s->skin : 0];
+    u8 gfx = SkinGraphic(s->skin);
     u8 id;
 
     if (SpawnedCount() >= BR_MAX_GHOSTS)
