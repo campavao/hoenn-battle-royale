@@ -6,6 +6,7 @@
 #include "window.h"
 #include "text.h"
 #include "menu.h"
+#include "text_window.h"
 #include "palette.h"
 #include "bg.h"
 #include "script.h"
@@ -425,7 +426,11 @@ void BrHud_WindowAdded(u8 windowId)
 // palette 14. DrawStdWindowFrame does the same and also puts the window's cells and
 // wipes its pixels, all at once -- which is the order this cannot have.
 #define BR_HUD_STD_FRAME 0x214
-#define BR_HUD_STD_FRAME_PALETTE 14
+// Palette 14 is the frame's own, and the map-name popup loads its sign's colours over it
+// while it is up: every HUD box went red-framed for as long as a route's name showed
+// (2026-10-05 play-test). The HUD keeps its own copy of the frame's colours in 13, which
+// nothing on the field uses -- the map's own tilesets stop at 12.
+#define BR_HUD_STD_FRAME_PALETTE 13
 static void PutFrame(const struct WindowTemplate *t)
 {
     u8 l = t->tilemapLeft, top = t->tilemapTop, w = t->width, ht = t->height;
@@ -460,6 +465,7 @@ static void Present(u8 id, const struct WindowTemplate *t, u8 bit, bool8 want, b
         // popup and the box's tiles, see the templates above.) Idempotent, and this runs
         // on a show, not every frame.
         LoadMessageBoxAndBorderGfx();
+        LoadUserWindowBorderGfxOnBg(0, BR_HUD_STD_FRAME, BG_PLTT_ID(BR_HUD_STD_FRAME_PALETTE));
         // Pixels first, then the frame and the cells: the tiles are shared (POK-329), and
         // until our copy lands they hold whatever the last window over us left there --
         // the start menu's blank box, say. Any tilemap copy that ran in between would
@@ -965,6 +971,7 @@ void BrHud_Tick(void)
     if (h->popupWas && !popupUp)
     {
         LoadMessageBoxAndBorderGfx();
+        LoadUserWindowBorderGfxOnBg(0, BR_HUD_STD_FRAME, BG_PLTT_ID(BR_HUD_STD_FRAME_PALETTE));
         h->shown = 0;
     }
     h->popupWas = popupUp;

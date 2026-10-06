@@ -236,7 +236,14 @@ void ShowMapNamePopup(void)
         {
             // New pop up window
             sPopupTaskId = CreateTask(Task_MapNamePopUpWindow, 90);
+#if BR
+            // The popup shares BG0 with the HUD (br_hud.c), and sliding it slid the
+            // corner, the ticker and the box with it on every route change: it appears
+            // and goes in place instead (2026-10-05 play-test).
+            SetGpuReg(REG_OFFSET_BG0VOFS, 0);
+#else
             SetGpuReg(REG_OFFSET_BG0VOFS, POPUP_OFFSCREEN_Y);
+#endif
             gTasks[sPopupTaskId].tState = STATE_PRINT;
             gTasks[sPopupTaskId].tYOffset = POPUP_OFFSCREEN_Y;
         }
@@ -313,7 +320,11 @@ static void Task_MapNamePopUpWindow(u8 taskId)
         HideMapNamePopUpWindow();
         return;
     }
+#if BR
+    SetGpuReg(REG_OFFSET_BG0VOFS, 0); // in place: see ShowMapNamePopup
+#else
     SetGpuReg(REG_OFFSET_BG0VOFS, task->tYOffset);
+#endif
 }
 
 void HideMapNamePopUpWindow(void)
