@@ -151,6 +151,10 @@
 // list straight back, so a bag of four TMs is four presses rather than four trips through
 // "1, 2, and... Poof!" with the fog closing. 34 is the next free number.
 #define MENU_STATE_BR_BACK_TO_LIST 34
+// And no "Teach X?" either (2026-10-05 play-test: "remove the dialog boxes when training
+// moves"). A row pressed is a move taught: into a free slot at once, or straight to the
+// summary screen's pick of which one goes. Backing out of either asks nothing.
+#define MENU_STATE_BR_TEACH 35
 #endif
 
 // The different versions of hearts are selected using animation
@@ -368,6 +372,7 @@ static void DoMoveRelearnerMain(void);
 static void CreateLearnableMovesList(void);
 #if BR
 static void BrBackToList(void);
+static void BrTaught(void);
 #endif
 static void CreateUISprites(void);
 static void CB2_MoveRelearnerMain(void);
@@ -544,18 +549,7 @@ static void DoMoveRelearnerMain(void)
                 if (GiveMoveToMon(&gPlayerParty[sMoveRelearnerStruct->partyMon], GetCurrentSelectedMove()) != MON_HAS_MAX_MOVES)
                 {
 #if BR
-                    // A TM that taught it is spent, an HM is not. Here rather than at the
-                    // selection: the summary screen's round trip rebuilds this list from
-                    // the bag, so a machine taken out before the move is written would
-                    // shift every row under the cursor.
-                    BrMoves_Spend(GetCurrentSelectedMove());
-                    // The player chose this one, so the rung's automatic learning will
-                    // not take the slot back off them (POK-290). Whichever slot
-                    // GiveMoveToMon used -- it does not say, so it is found by the move.
-                    BrMoves_Keep(sMoveRelearnerStruct->partyMon, GetCurrentSelectedMove());
-                    gSpecialVar_0x8004 = TRUE;
-                    PlaySE(SE_USE_ITEM);
-                    sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
+                    BrTaught();
 #else
                     PrintMessageWithPlaceholders(gText_MoveRelearnerPkmnLearnedMove);
                     gSpecialVar_0x8004 = TRUE;
@@ -737,7 +731,11 @@ static void DoMoveRelearnerMain(void)
         {
             if (sMoveRelearnerStruct->moveSlot == MAX_MON_MOVES)
             {
+#if BR
+                sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
+#else
                 sMoveRelearnerStruct->state = MENU_STATE_PRINT_STOP_TEACHING;
+#endif
             }
             else
             {
@@ -747,11 +745,7 @@ static void DoMoveRelearnerMain(void)
                 // After the slot is written: RemoveBagItem compacts the pocket, and
                 // GetCurrentSelectedMove reads a row out of a list built against the
                 // ordering it had before.
-                BrMoves_Spend(GetCurrentSelectedMove());
-                BrMoves_Keep(sMoveRelearnerStruct->partyMon, GetCurrentSelectedMove());
-                gSpecialVar_0x8004 = TRUE;
-                PlaySE(SE_USE_ITEM);
-                sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
+                BrTaught();
 #else
                 u16 move = GetMonData(&gPlayerParty[sMoveRelearnerStruct->partyMon], MON_DATA_MOVE1 + sMoveRelearnerStruct->moveSlot);
 
@@ -795,6 +789,17 @@ static void DoMoveRelearnerMain(void)
         }
         break;
 #if BR
+    case MENU_STATE_BR_TEACH:
+        if (GiveMoveToMon(&gPlayerParty[sMoveRelearnerStruct->partyMon], GetCurrentSelectedMove()) != MON_HAS_MAX_MOVES)
+        {
+            BrTaught();
+        }
+        else
+        {
+            sMoveRelearnerStruct->state = MENU_STATE_SHOW_MOVE_SUMMARY_SCREEN;
+            BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+        }
+        break;
     case MENU_STATE_BR_BACK_TO_LIST:
         BrBackToList();
         if (sMoveRelearnerMenuState.showContestInfo == FALSE)
@@ -865,17 +870,26 @@ static void HandleInput(bool8 showContest)
     case LIST_CANCEL:
         PlaySE(SE_SELECT);
         RemoveScrollArrows();
+#if BR
+        // Out, with whatever was taught on the way still taught: 0x8004 is left as it is.
+        sMoveRelearnerStruct->state = MENU_STATE_FADE_AND_RETURN;
+#else
         sMoveRelearnerStruct->state = MENU_STATE_PRINT_GIVE_UP_PROMPT;
         StringExpandPlaceholders(gStringVar4, gText_MoveRelearnerGiveUp);
         MoveRelearnerPrintMessage(gStringVar4);
+#endif
         break;
     default:
         PlaySE(SE_SELECT);
         RemoveScrollArrows();
+#if BR
+        sMoveRelearnerStruct->state = MENU_STATE_BR_TEACH;
+#else
         sMoveRelearnerStruct->state = MENU_STATE_PRINT_TEACH_MOVE_PROMPT;
         StringCopy(gStringVar2, gMoveNames[itemId]);
         StringExpandPlaceholders(gStringVar4, gText_MoveRelearnerTeachMoveConfirm);
         MoveRelearnerPrintMessage(gStringVar4);
+#endif
         break;
     }
 }
@@ -980,6 +994,20 @@ static void BrBackToList(void)
         sMoveRelearnerMenuState.listOffset = sel + 1 - sMoveRelearnerStruct->numToShowAtOnce;
     sMoveRelearnerMenuState.listRow = sel - sMoveRelearnerMenuState.listOffset;
     sMoveRelearnerStruct->moveListMenuTask = ListMenuInit(&gMultiuseListMenuTemplate, sMoveRelearnerMenuState.listOffset, sMoveRelearnerMenuState.listRow);
+}
+
+// The move is in its slot. A TM that taught it is spent, an HM is not: here rather than
+// at the selection, because the summary screen's round trip rebuilds this list from the
+// bag, so a machine taken out before the move is written would shift every row under the
+// cursor. The player chose this one, so the rung's automatic learning will not take the
+// slot back off them (POK-290); whichever slot it went in is found by the move.
+static void BrTaught(void)
+{
+    BrMoves_Spend(GetCurrentSelectedMove());
+    BrMoves_Keep(sMoveRelearnerStruct->partyMon, GetCurrentSelectedMove());
+    gSpecialVar_0x8004 = TRUE;
+    PlaySE(SE_USE_ITEM);
+    sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
 }
 
 #endif
