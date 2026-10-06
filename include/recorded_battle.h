@@ -34,6 +34,9 @@ void RecordedBattle_EndSpectate(void);
 // what is still waiting on the record.
 void RecordedBattle_AbortSpectate(void);
 bool8 RecordedBattle_IsSpectateLive(void);
+// Action bytes arrived and not yet played, for the battler furthest behind: a watcher
+// who came in mid-fight has every turn so far to get through (br_spectate.c's catchUp).
+u16 RecordedBattle_SpectateBacklog(void);
 // A live replay's controllers, waiting on the stream (POK-330 #12): TRUE once the choice
 // has arrived and gone to the engine, and the controller may complete.
 bool8 RecordedBattle_BrEmitAction(u8 battler);

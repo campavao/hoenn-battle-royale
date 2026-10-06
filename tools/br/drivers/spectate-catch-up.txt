@@ -1,0 +1,34 @@
+# spectate-catch-up: a watcher who joins a fight late is told to hurry (2026-10-06
+# play-test: "watching someone in a battle restarts the whole battle"). The page hands a
+# late joiner the BSTART and every TURN so far, and a replay can only play them from the
+# first. gBrSpectate.catchUp (+15) says the replay is turns behind what has arrived; the
+# page runs the core fast and silent while it is set (web/src/app.ts).
+#
+# spectate-watch.txt's fight, with five turns arriving at once instead of one.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+expect u8 gBrSpectate+5 1
+expect u8 gBrSpectate+15 0
+# battle 0x0100; battler 0 picks FIGHT, move 0, at 1 five times; battler 1 the same at 0
+pokebytes gDecompressionBuffer 00 01 00 0F 00 00 01 00 00 01 00 00 01 00 00 01 00 00 01 01 0F 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 36
+# fifteen bytes a battler unplayed, once the replay is live (it fades in first): behind,
+# hurry. It stays up about 1370 frames here, at 1x; the page runs them at 8x.
+wait 100
+expect u8 gBrSpectate+15 1
+shot catching
+
+# ...and once it has played its way to the last turn that came, back to normal speed
+wait 3000
+expect u8 gBrSpectate+15 0
+# it played them, not skipped them: more than one FIGHT out of slot 0's 35 PP
+expectle u8 gBattleMons+0x24 33
+shot caught-up
+say spectate catch up ok

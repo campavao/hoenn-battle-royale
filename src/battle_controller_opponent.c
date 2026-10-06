@@ -1600,6 +1600,9 @@ static void OpponentHandleChooseMove(void)
                     gBattlerTarget = GetBattlerAtPosition(B_POSITION_PLAYER_LEFT);
                     if (gAbsentBattlerFlags & gBitTable[gBattlerTarget])
                         gBattlerTarget = GetBattlerAtPosition(B_POSITION_PLAYER_RIGHT);
+#if BR
+                    gBattlerTarget = BrBattle_FoeOf(gActiveBattler, gBattlerTarget); // a duel's side A aims across too
+#endif
                 }
                 BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, (chosenMoveId) | (gBattlerTarget << 8));
                 break;

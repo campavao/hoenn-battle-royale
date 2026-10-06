@@ -17,6 +17,15 @@ BR_EventScript_BossBeaten::
 	releaseall
 	end
 
+@ NORMAN is a leader like the other seven (2026-10-06 play-test). His own script is a
+@ switch over the story -- VAR_PETALBURG_GYM_STATE 7, past the boot, is the TM and
+@ "Dad is going to keep training" -- and its fight is a trainerbattle_no_intro with the
+@ badge written inline after it, so a match takes him the way it takes ROXANNE.
+BR_EventScript_Norman::
+	trainerbattle_single TRAINER_NORMAN_1, PetalburgCity_Gym_Text_NormanIntro, PetalburgCity_Gym_Text_NormanDefeat, BR_EventScript_BossBeaten, NO_MUSIC
+	release
+	end
+
 BR_Text_PartyFull:
 	.string "Your party is full.\n"
 	.string "Release one for the new catch?$"

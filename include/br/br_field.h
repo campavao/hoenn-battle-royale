@@ -226,6 +226,11 @@ bool8 BrField_InObjectView(s16 x, s16 y);
 // Tiles from the middle of the view, which is where the player stands (or the ghost a
 // spectator rides): who gets a slot first when there are not enough.
 u16 BrField_ViewDistance(s16 x, s16 y);
+// Move the view by whole tiles at once, as walking would have moved it a tile at a
+// time: map seams crossed and objects spawned and culled on the way, the map redrawn
+// once at the end. The camera object is not touched; what it follows stays put on the
+// map, and is that many tiles nearer the middle of the screen.
+void BrField_MoveCamera(s16 dx, s16 dy);
 // This frame's share of the object table: how many ghosts and how many pieces of loot
 // may be up, the nearest first. BR's own spawns and despawns do not change it, so the
 // two ticks agree whichever runs first.

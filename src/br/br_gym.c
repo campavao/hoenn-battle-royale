@@ -88,6 +88,26 @@ const u8 *BrGym_Intro(u16 trainerId, const u8 *speech)
     return gStringVar4;
 }
 
+// Every leader's defeat speech runs on into the badge: "The POKeMON LEAGUE's rules state
+// that TRAINERS are to be given this..." (2026-10-06 play-test: "beating a gym leader has
+// them give you a badge and has a whole dialogue"). Everybody already has all eight, so the
+// speech stops where its first page does, as the intro does.
+void BrGym_CutLoseText(u16 trainerId, u8 *text)
+{
+    u16 i;
+
+    if (Find(trainerId) == NULL)
+        return;
+    for (i = 0; i < 999 && text[i] != EOS; i++)
+    {
+        if (text[i] == CHAR_PROMPT_CLEAR)
+        {
+            text[i] = EOS;
+            return;
+        }
+    }
+}
+
 const u8 *BrGym_AfterScript(u16 trainerId, const u8 *script)
 {
     return Find(trainerId) != NULL ? BR_EventScript_BossBeaten : script;

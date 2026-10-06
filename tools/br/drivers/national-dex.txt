@@ -2,21 +2,22 @@
 # dex to increase Pokemon variety"). Half of what a map's table picks is swapped, this
 # match, for a species of its weight sharing one of its types (br_zone.c, BrZone_National).
 #
-# fog-in-battle.txt's walk on Route 102's grass, under match seed 4: the WURMPLE the
-# table picked is a KAKUNA (14) this match -- BUG, 205 to its 195. Read off the wild
-# battler, gBattleMons[1].species.
+# Route 102's grass under match seed 4: the WURMPLE the table picked is a KAKUNA (14)
+# this match -- BUG, 205 to its 195. Read off the wild battler, gBattleMons[1].species.
+#
+# The walk used to be fog-in-battle.txt's, eight holds back and forth until something
+# turned up, and which step that was rode on the RNG the VBlank turns every frame: any
+# change that moved a lag frame (2026-10-06: the spectator camera, which runs nothing
+# here) met a different mon or none. So the generator is set at the start of the walk
+# that meets it: a walk right, out of the encounter immunity a map load gives, then
+# gRngValue 3 and back left, the same KAKUNA on every build tried.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
 poke u32 gBrMatch+8 4
 hold RIGHT 60
-hold LEFT 60
-hold RIGHT 60
-hold LEFT 60
-hold RIGHT 60
-hold LEFT 60
-hold RIGHT 60
+poke u32 gRngValue 3
 hold LEFT 60
 wait 200
 expect u16 gBattleTypeFlags 4

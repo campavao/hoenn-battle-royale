@@ -9,6 +9,7 @@
 #include "task.h"
 #include "script.h"
 #include "fieldmap.h"
+#include "field_camera.h"
 #include "field_screen_effect.h"
 #include "sprite.h"
 #include "event_object_movement.h"
@@ -16,6 +17,7 @@
 #include "window.h"
 #include "text.h"
 #include "menu.h"
+#include "text_window.h"
 #include "string_util.h"
 #include "constants/characters.h"
 #include "field_weather.h"
@@ -441,19 +443,23 @@ static EWRAM_DATA struct BrAssembler sPartyAsm = {0};
 static EWRAM_DATA u8 sPeekSeat = 0xFF;
 static EWRAM_DATA u8 sPeekWin = WINDOW_NONE;
 
-// bg, left, top, width, height, palette, baseBlock. Palette 15, and the 180 tiles from
+// bg, left, top, width, height, palette, baseBlock. Palette 15, and the 170 tiles from
 // 0x008: where the field puts its own transient boxes (Safari balls, money, a script's
 // multichoice), none of which can open while we are following somebody -- field controls
 // are locked. It used to share the HUD box's 0x294, which ran to 0x347: past the end of
 // BG0's tiles at 0x300 and clean through BG2's tilemap. See br_hud.h's tile map.
-// Col 1, not 2: the HUD corner's frame reaches col 19 since it grew for the ring's place
-// (POK-325), and the box has no frame of its own to spare.
-static const struct WindowTemplate sPeekTemplate = { 0, 1, 2, 18, 10, 15, 0x008 };
-STATIC_ASSERT(1 + 18 <= BR_HUD_CORNER_LEFT - 1, BrPeekClearOfTheHudCornerFrame)
-STATIC_ASSERT(0x008 + 18 * 10 <= 0x107, BrPeekFitsBelowTheMapNamePopup)
-static const u8 sPeekColors[] = { TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY };
+// The standard frame round it, as every other box on the field has (2026-10-06
+// play-test: "a weird gray box"): cols 0 and 18, clear of the HUD corner's frame at 19.
+static const struct WindowTemplate sPeekTemplate = { 0, 1, 2, 17, 10, 15, 0x008 };
+STATIC_ASSERT(1 + 17 <= BR_HUD_CORNER_LEFT - 2, BrPeekFrameClearOfTheHudCornerFrame)
+STATIC_ASSERT(0x008 + 17 * 10 <= 0x107, BrPeekFitsBelowTheMapNamePopup)
+// The frame's tiles and colours: the HUD's own copy (br_hud.c's BR_HUD_STD_FRAME), in the
+// palette nothing on the field loads over.
+#define BR_PEEK_FRAME 0x214
+#define BR_PEEK_FRAME_PALETTE 13
+static const u8 sPeekColors[] = { TEXT_COLOR_WHITE, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY };
 static const u8 sText_PeekLv[] = _(" Lv");
-static const u8 sText_PeekNone[] = _("no party seen yet");
+static const u8 sText_PeekNone[] = _("Waiting for their team...");
 
 // Which one, not just whether (POK-297): a spectator judging the next fight wants to know
 // SLP from PAR. 0 none, then the order sText_PeekStatus is written in.
@@ -792,7 +798,7 @@ static void DrawPeekBag(u8 page)
 
 static void DrawPeek(void)
 {
-    FillWindowPixelBuffer(sPeekWin, PIXEL_FILL(TEXT_COLOR_DARK_GRAY));
+    FillWindowPixelBuffer(sPeekWin, PIXEL_FILL(TEXT_COLOR_WHITE));
     if (gBrSpectate.peekMons == 0 || sPartyAsm.buf == NULL || sPeekSeat != gBrSpectate.follow)
     {
         PeekLine(0, sText_PeekNone);
@@ -832,8 +838,7 @@ static void ClosePeek(void)
 {
     if (sPeekWin != WINDOW_NONE)
     {
-        ClearWindowTilemap(sPeekWin);
-        CopyWindowToVram(sPeekWin, COPYWIN_MAP);
+        ClearStdWindowAndFrameToTransparent(sPeekWin, TRUE);
         RemoveWindow(sPeekWin);
         sPeekWin = WINDOW_NONE;
     }
@@ -846,8 +851,9 @@ static void OpenPeek(void)
     if (sPeekWin == WINDOW_NONE)
         return;
     gBrSpectate.peekPage = 0;
+    LoadUserWindowBorderGfxOnBg(0, BR_PEEK_FRAME, BG_PLTT_ID(BR_PEEK_FRAME_PALETTE));
+    DrawStdFrameWithCustomTileAndPalette(sPeekWin, FALSE, BR_PEEK_FRAME, BR_PEEK_FRAME_PALETTE);
     DrawPeek();
-    PutWindowTilemap(sPeekWin);
     CopyWindowToVram(sPeekWin, COPYWIN_FULL);
     gBrSpectate.peeking = TRUE;
 }
@@ -866,13 +872,23 @@ static void ShowOwnTrainer(bool8 shown)
 // our own tile: the camera object tracks a sprite's movement instead of jumping to it,
 // so on its own it would stay wherever the ghost left it, with our trainer off screen.
 // Switching to another seat skips that -- the follow warp is about to move us anyway.
+// A ride over a map seam can leave our own tile behind on the map we came from, out of
+// this one's bounds: then the cell in the middle of the view is where we stop.
 static void StopFollowing(bool8 recentre)
 {
     struct ObjectEvent *self;
+    s16 x, y;
 
     if (BrField_OverworldRunning())
     {
         self = &gObjectEvents[gPlayerAvatar.objectEventId];
+        x = self->currentCoords.x - MAP_OFFSET;
+        y = self->currentCoords.y - MAP_OFFSET;
+        if (x < 0 || y < 0 || x >= gMapHeader.mapLayout->width || y >= gMapHeader.mapLayout->height)
+        {
+            x = gSaveBlock1Ptr->pos.x;
+            y = gSaveBlock1Ptr->pos.y;
+        }
         ShowOwnTrainer(TRUE);
         CameraObjectSetFollowedSpriteId(self->spriteId);
         UnlockPlayerFieldControls();
@@ -880,12 +896,18 @@ static void StopFollowing(bool8 recentre)
         if (recentre && gBrSpectate.followed)
         {
             SetWarpDestination(gSaveBlock1Ptr->location.mapGroup,
-                gSaveBlock1Ptr->location.mapNum, WARP_ID_NONE,
-                self->currentCoords.x - MAP_OFFSET, self->currentCoords.y - MAP_OFFSET);
+                gSaveBlock1Ptr->location.mapNum, WARP_ID_NONE, x, y);
             DoWarp();
         }
     }
-    gBrSpectate.followed = FALSE;
+    gBrSpectate.followed = 0;
+}
+
+void BrSpectate_LetGo(void)
+{
+    if (gBrSpectate.followed && BrField_OverworldRunning())
+        CameraObjectSetFollowedSpriteId(gObjectEvents[gPlayerAvatar.objectEventId].spriteId);
+    gBrSpectate.followed = 0;
 }
 
 void BrSpectate_Follow(u8 seat)
@@ -903,7 +925,7 @@ void BrSpectate_Follow(u8 seat)
         else
         {
             ClosePeek();
-            gBrSpectate.followed = FALSE;
+            BrSpectate_LetGo();
         }
         // NEXT in the middle of somebody's fight: the replay of it ends at its next read
         // and the field takes us to the new seat. It used to sit there, starved of turns
@@ -940,6 +962,8 @@ static void HandleFollow(const u8 *payload, u8 len)
 static void FollowTick(void)
 {
     struct BrSeat *them;
+    struct ObjectEvent *ghost;
+    s16 x, y;
 
     // Off the field -- a warp's map load among the rest -- the warp we asked for has
     // happened, or something bigger overtook it.
@@ -987,9 +1011,10 @@ static void FollowTick(void)
      && (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
       || gSaveBlock1Ptr->location.mapNum != them->mapNum))
         return;
-    if (gSaveBlock1Ptr->location.mapGroup != them->mapGroup
-     || gSaveBlock1Ptr->location.mapNum != them->mapNum
-     || (them->objId == BR_NO_OBJ && !BrField_InObjectView(them->x, them->y)))
+    // On our map, or across one of its seams (BrGhosts_LocalPos): their ghost walks over
+    // it and the camera with it, rather than a warp and a fade at every route's end.
+    if (!BrGhosts_LocalPos(gBrSpectate.follow, &x, &y)
+     || (them->objId == BR_NO_OBJ && !BrField_InObjectView(x, y)))
     {
         // One warp at a time (POK-247). DoWarp only starts the errand: its task waits
         // out the fade and the old map's music, then loads the map -- and this runs
@@ -1005,7 +1030,7 @@ static void FollowTick(void)
         }
         // They are somewhere else: go there. Warp coords carry no MAP_OFFSET; the
         // roster's do, the way an object event holds them.
-        gBrSpectate.followed = FALSE;
+        gBrSpectate.followed = 0;
         SetWarpDestination(them->mapGroup, them->mapNum, WARP_ID_NONE,
             them->x - MAP_OFFSET, them->y - MAP_OFFSET);
         DoWarp();
@@ -1032,10 +1057,26 @@ static void FollowTick(void)
     }
     if (them->objId == BR_NO_OBJ)
         return; // their ghost has not spawned on this map yet
+    ghost = &gObjectEvents[them->objId];
+    // A ghost that came back as another sprite is not the one the camera is on.
+    if (gBrSpectate.followed && gBrSpectate.followed != ghost->spriteId + 1)
+        BrSpectate_LetGo();
+    // The camera only ever moves by the sprite it follows, so whatever lies between the
+    // middle of the view and their ghost when it takes them on stays there: they walked
+    // on while the warp loaded, and were drawn at the top or the right of the screen from
+    // then on (2026-10-06 play-test). So the view jumps onto them first -- both at rest,
+    // a whole number of tiles apart -- and it does again if they ever drift apart.
+    if ((ghost->heldMovementActive && !ghost->heldMovementFinished)
+     || gFieldCamera.x != 0 || gFieldCamera.y != 0)
+        return;
+    x = ghost->currentCoords.x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET);
+    y = ghost->currentCoords.y - (gSaveBlock1Ptr->pos.y + MAP_OFFSET);
+    if (x != 0 || y != 0)
+        BrField_MoveCamera(x, y);
     if (!gBrSpectate.followed)
     {
-        CameraObjectSetFollowedSpriteId(gObjectEvents[them->objId].spriteId);
-        gBrSpectate.followed = TRUE;
+        CameraObjectSetFollowedSpriteId(ghost->spriteId);
+        gBrSpectate.followed = ghost->spriteId + 1;
     }
 }
 
@@ -1126,12 +1167,17 @@ static bool8 SendTurn(u8 len)
     return sent;
 }
 
+// Action bytes behind, per battler, that start and stop the fast-forward: a turn is
+// about three (action, move, target), and a live replay sits one or two turns back.
+#define BR_CATCH_UP_ON 9
+#define BR_CATCH_UP_OFF 3
+
 // Only the challenger (link id 0) publishes: it records its own actions and receives
 // the peer's over the netlink, so it alone holds both sides of the fight.
 void BrSpectate_Tick(void)
 {
     u16 id;
-    u8 n;
+    u16 n;
 
     FollowTick();
     // Spectating: the replay owns the screen until it ends, and nothing is published.
@@ -1147,12 +1193,24 @@ void BrSpectate_Tick(void)
             else
                 BrBattle_HideClock();
         }
+        // A watcher who joins a fight late is handed every turn of it so far, and the
+        // replay plays them all from the first (2026-10-06 play-test: "watching someone
+        // in a battle restarts the whole battle"). A replay is the fight's seed and its
+        // choices, so there is no skipping to the turn they are on -- but the page can
+        // run us at speed until we get there. Hysteresis, so it does not flicker on the
+        // turn or two a live replay is always behind by.
+        n = RecordedBattle_SpectateBacklog();
+        if (n > BR_CATCH_UP_ON)
+            gBrSpectate.catchUp = TRUE;
+        else if (n <= BR_CATCH_UP_OFF)
+            gBrSpectate.catchUp = FALSE;
         // sPendParties outlives the parse until the fade task hands it to the battle:
         // the replay is not live yet, and the watch must not retire underneath it.
         if (sPendParties == NULL && !RecordedBattle_IsSpectateLive())
             gBrSpectate.watching = FALSE;
         return;
     }
+    gBrSpectate.catchUp = FALSE;
     // A turn the ring refused is retried before anything newer is taken: dropped, the
     // replay read the next turn's bytes as this one's, or waited on it for good.
     if (sTurnLen != 0)

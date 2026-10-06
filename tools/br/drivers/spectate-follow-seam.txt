@@ -1,0 +1,58 @@
+# spectate-follow-seam: a watched trainer walks over a map seam, and so does the camera
+# (2026-10-06 play-test: "a bot walked out of Rustboro north and jumped somewhere into the
+# next route"). Their first step onto the next map comes as a PLACE in that map's numbers,
+# which despawned the ghost and warped the spectator after it, fade and all. Now the
+# ghost walks that step (br_ghosts.c's CrossedSeam), the camera rides it over, and the
+# camera's own crossing loads the route the way walking does.
+#
+# Littleroot (0:9) and Route 101 (0:16) are both 20x20, Route 101 above at offset 0, so
+# Littleroot's (10,0) has Route 101's (10,19) one step north of it.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 9
+# seat 1 on Littleroot at (10,2) -- 17, 9 with MAP_OFFSET -- facing north
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 11 00 09 00 02 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+# FOLLOW seat 1
+pokebytes gBrMailbox+0x1058 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 2
+wait 30
+expectge u8 gBrSpectate+9 1
+# the view is centred on them: pos (10,2)
+expect u16 *gSaveBlock1Ptr+0 10
+expect u16 *gSaveBlock1Ptr+2 2
+shot on-them
+# two steps north, to Littleroot's top row
+pokebytes gBrMailbox+0x1098 03 0B 08 00 00 01 02 11 00 08 00 00 09
+poke u16 gBrMailbox+0x0C 3
+wait 20
+pokebytes gBrMailbox+0x10D8 03 0B 08 00 00 01 02 11 00 07 00 00 09
+poke u16 gBrMailbox+0x0C 4
+wait 30
+expect u16 *gSaveBlock1Ptr+2 0
+# ...and over the seam: PLACE on Route 101 (0:16) at (10,19), 17, 26 with MAP_OFFSET
+pokebytes gBrMailbox+0x1118 02 0E 0B 00 00 01 01 00 10 11 00 1A 00 02 01 01
+poke u16 gBrMailbox+0x0C 5
+wait 4
+shot mid-seam
+# no warp asked for
+expect u8 gBrSpectate+14 0
+wait 30
+# on Route 101 by the camera's crossing, centred on them, still riding the ghost
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 16
+expect u16 *gSaveBlock1Ptr+0 10
+expect u16 *gSaveBlock1Ptr+2 19
+expect u8 gBrSpectate+14 0
+expectge u8 gBrSpectate+9 1
+shot over
+# and on up the route, an ordinary step
+pokebytes gBrMailbox+0x1158 03 0B 08 00 00 01 02 11 00 19 00 00 10
+poke u16 gBrMailbox+0x0C 6
+wait 30
+expect u16 *gSaveBlock1Ptr+2 18
+expectge u8 gBrSpectate+9 1
+shot route
+say spectate follow seam ok

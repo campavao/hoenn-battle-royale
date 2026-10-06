@@ -388,6 +388,23 @@ describe('the page that runs the match (POK-330 #42)', () => {
     host.dispose();
   });
 
+  it("answers its own page's peek at one of its bots into its own ROM, and nothing to the room", () => {
+    const room = hosting();
+    const host = room.deal({ fill: 2 });
+    host.begin();
+    room.frames().length = 0;
+    room.pushed.length = 0;
+    const bot = host.bots.seats[0];
+    host.answerOwnPeek({ t: 'peek', seat: 0, target: bot });
+    expect(room.pushed.filter((m) => m.t === 'party')).toMatchObject([{ t: 'party', seat: bot }]);
+    expect(room.frames().filter((f) => f.m?.t === 'party')).toHaveLength(0);
+    // a peek at ourselves is our own ROM's to answer
+    room.pushed.length = 0;
+    host.answerOwnPeek({ t: 'peek', seat: 0, target: 0 });
+    expect(room.pushed).toHaveLength(0);
+    host.dispose();
+  });
+
   it("answers our own ROM's pick into our ROM, and anybody else's to them", () => {
     const room = hosting();
     const host = room.deal();

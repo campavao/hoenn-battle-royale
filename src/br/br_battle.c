@@ -739,3 +739,10 @@ u32 BrBattle_OpponentPic(u32 pic)
         return pic;
     return sSkinPics[skin];
 }
+
+u8 BrBattle_FoeOf(u8 battler, u8 target)
+{
+    if (GetBattlerSide(battler) != GetBattlerSide(target))
+        return target;
+    return GetBattlerAtPosition(GetBattlerPosition(target) ^ BIT_SIDE);
+}

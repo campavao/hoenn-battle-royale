@@ -173,5 +173,11 @@ u32 BrBattle_OpponentPic(u32 pic);
 // frontier trainer whose AI is all there is to it; a wild POKeMON chooses with Random(),
 // and the fighter's ROM recorded what it chose, so the replay reads that instead.
 bool8 BrBattle_RecordedWildOpponent(void);
+// battle_controller_opponent.c: the battler a both-foes move (GROWL, LEER, TAIL WHIP) is
+// aimed at. pret's opponent controller names the player's side outright, which is right
+// for the side it was written for -- and in a proxy duel side A is on this controller too,
+// so its GROWL lowered its own ATTACK (2026-10-06 play-test, seen on the replay). The
+// mirror of `target` when it is on the chooser's own side; `target` otherwise.
+u8 BrBattle_FoeOf(u8 battler, u8 target);
 
 #endif // GUARD_BR_BATTLE_H

@@ -1622,20 +1622,41 @@ function romWatching(emu: Emulator, base: number | undefined): number | null | u
   return emu.read(base + 5, 8) !== 0 ? emu.read(base + 6, 16) : null;
 }
 
+/** Whether our ROM's replay is turns behind what has arrived (gBrSpectate.catchUp, +15):
+ *  a fight joined late is handed every turn so far and can only play them from the
+ *  first, so the page runs the core at CATCH_UP_SPEED, silent, until it is level. */
+function romCatchingUp(emu: Emulator, base: number | undefined): boolean {
+  return base !== undefined && emu.read(base + 15, 8) !== 0;
+}
+const CATCH_UP_SPEED = 8;
+
 /** The spectator's own pump: re-ask the trainer we watch what they carry (the ask is
- *  also what tells them they are being watched), and mirror how many are watching US
- *  into the corner eye. Returns a disposer. */
+ *  also what tells them they are being watched), mirror how many are watching US into
+ *  the corner eye, and fast-forward a replay that is catching up. Returns a disposer. */
 function startSpectateLoop(
   emu: Emulator,
   hudBase: number | undefined,
   bridge: Bridge,
   spectate: Spectate,
   spectateBase?: number,
+  answerOwn?: (ask: Msg) => void,
 ): () => void {
+  let catching = false;
+  const hurry = (on: boolean) => {
+    catching = on;
+    emu.setSpeed(on ? CATCH_UP_SPEED : 1);
+    emu.setVolume(on || settings.muted ? 0 : UNMUTED_VOLUME);
+  };
   const id = setInterval(() => {
     const now = performance.now();
+    if (romCatchingUp(emu, spectateBase) !== catching) hurry(!catching);
     const ask = spectate.duePeek(bridge.seat, now, romReplaying(bridge.rom, () => romWatching(emu, spectateBase)));
-    if (ask) bridge.relay.all(ask);
+    if (ask) {
+      bridge.relay.all(ask);
+      // ...and a host watching one of its own bots answers itself: the relay does not
+      // hand a seat back its own peek.
+      answerOwn?.(ask);
+    }
     // Bots join by walking, not by joining: their seats appear in the roster from a
     // `place`, and there is no relay event to redraw the list on.
     // This loop has no `isHost` of its own, and the roster it would ask lives in the
@@ -1645,7 +1666,10 @@ function startSpectateLoop(
     renderRoom(bridge);
     if (hudBase !== undefined) writeHudEyes(emu, hudBase, spectate.eyes(now));
   }, SPECTATE_TICK_MS);
-  return () => clearInterval(id);
+  return () => {
+    clearInterval(id);
+    if (catching) hurry(false);
+  };
 }
 
 // ---- the match director's page-side wiring (POK-222/223/224/228) ------------------------
@@ -2661,7 +2685,9 @@ function wireRoom(
       }
     }
     stopSpectateLoop?.();
-    stopSpectateLoop = startSpectateLoop(emu, symbols?.get('gBrHud'), bridge, spectate, symbols?.get('gBrSpectate'));
+    stopSpectateLoop = startSpectateLoop(emu, symbols?.get('gBrHud'), bridge, spectate, symbols?.get('gBrSpectate'), (ask) =>
+      host?.answerOwnPeek(ask),
+    );
     // A second's cadence, like the director's own loop. It stands down the moment this
     // client becomes the one running the match, which draws the real one.
     stopGuestStrip?.();

@@ -372,6 +372,7 @@ static void DoMoveRelearnerMain(void);
 static void CreateLearnableMovesList(void);
 #if BR
 static void BrBackToList(void);
+static bool8 BrCycleMon(void);
 static void BrTaught(void);
 // Whether this visit taught anything: 0x8004 is the party slot while the screen is up
 // (BrTaught), and pret's answer to its caller only once it is left.
@@ -852,6 +853,9 @@ static void HandleInput(bool8 showContest)
     switch (itemId)
     {
     case LIST_NOTHING_CHOSEN:
+#if BR
+        if (BrCycleMon()) break; // LEFT/RIGHT walk the party; L/R still flip to contest info
+#endif
         if (!(JOY_NEW(DPAD_LEFT | DPAD_RIGHT)) && !GetLRKeysPressed())
             break;
 
@@ -1002,6 +1006,49 @@ static void BrBackToList(void)
         sMoveRelearnerMenuState.listOffset = sel + 1 - sMoveRelearnerStruct->numToShowAtOnce;
     sMoveRelearnerMenuState.listRow = sel - sMoveRelearnerMenuState.listOffset;
     sMoveRelearnerStruct->moveListMenuTask = ListMenuInit(&gMultiuseListMenuTemplate, sMoveRelearnerMenuState.listOffset, sMoveRelearnerMenuState.listRow);
+}
+
+// LEFT and RIGHT step to the previous or next POKeMON in the party that has something
+// to learn, as the summary screen's UP and DOWN do (2026-10-06 play-test: "left/right
+// should cycle between pokemon instead of switching between battle info and contest
+// info"). The list starts again at its top for the new one; 0x8004 follows, because
+// the summary screen's way back in reads it as the party slot.
+static bool8 BrCycleMon(void)
+{
+    s8 step;
+    u8 i, slot;
+
+    if (JOY_NEW(DPAD_LEFT))
+        step = -1;
+    else if (JOY_NEW(DPAD_RIGHT))
+        step = 1;
+    else
+        return FALSE;
+    slot = sMoveRelearnerStruct->partyMon;
+    for (i = 1; i < PARTY_SIZE; i++)
+    {
+        slot = (slot + PARTY_SIZE + step) % PARTY_SIZE;
+        if (slot < gPlayerPartyCount
+         && !GetMonData(&gPlayerParty[slot], MON_DATA_IS_EGG)
+         && BrMoves_HasAny(&gPlayerParty[slot]))
+            break;
+    }
+    if (i == PARTY_SIZE)
+        return TRUE;
+    PlaySE(SE_SELECT);
+    RemoveScrollArrows();
+    DestroyListMenuTask(sMoveRelearnerStruct->moveListMenuTask, NULL, NULL);
+    sMoveRelearnerStruct->partyMon = slot;
+    gSpecialVar_0x8004 = slot;
+    sMoveRelearnerMenuState.listOffset = 0;
+    sMoveRelearnerMenuState.listRow = 0;
+    CreateLearnableMovesList();
+    sMoveRelearnerStruct->moveListMenuTask = ListMenuInit(&gMultiuseListMenuTemplate, 0, 0);
+    if (sMoveRelearnerMenuState.showContestInfo)
+        sMoveRelearnerStruct->state = MENU_STATE_SETUP_CONTEST_MODE;
+    else
+        sMoveRelearnerStruct->state = MENU_STATE_SETUP_BATTLE_MODE;
+    return TRUE;
 }
 
 // The move is in its slot. A TM that taught it is spent, an HM is not: here rather than

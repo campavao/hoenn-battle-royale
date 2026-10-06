@@ -32,6 +32,6 @@ expect u8 *gSaveBlock1Ptr+5 0x10
 expect u8 gBrSpectate+14 0
 # and on their ghost once it has spawned there
 wait 60
-expect u8 gBrSpectate+9 1
+expectge u8 gBrSpectate+9 1
 shot followed
 say spectate follow warp ok

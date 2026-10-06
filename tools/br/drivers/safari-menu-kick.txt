@@ -1,0 +1,37 @@
+# safari-menu-kick: the buzzer takes you out of a menu too (2026-10-06 play-test).
+#
+# Cam was teaching moves when the opening ended, and the drop waited for him: BrMatch_Tick
+# only ends the opening on the field. Now, time up and a menu open, it backs out of it
+# one B at a time (BackOutOfMenus), each screen leaving the way it always does, and the
+# drop opens the moment the field is back.
+#
+# The relearner is the deepest a player gets: START, POKEMON, the mon, MOVES. Then the
+# host's CLOCK says 0, as safari-drop.txt has it say.
+wait 30
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+tap START
+wait 40
+tap A
+wait 80
+tap A
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 240
+shot relearner
+expect u8 gBrMatch 1
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 300
+# nobody pressed anything: out of the relearner, the party, the START menu, and the
+# opening is over with the drop map up
+expect u8 gBrMatch 2
+expect u8 gBrPick 1
+shot pickmap
+say safari menu kick ok

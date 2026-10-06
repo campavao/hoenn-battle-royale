@@ -56,27 +56,12 @@ wait 70
 poke u8 gBattleOutcome 1
 tap A
 wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
 shot won
 tap B
 wait 70
 # the purse line is up, drawn, on the first frames back on the map -- one press past
-# the money text now that battle animations are off (it lasts 90 frames; three presses
-# used to be owed here and the third now lands after it has gone)
+# the money text now that battle animations are off and a leader says one page only (it
+# lasts 90 frames; presses beyond these land after it has gone)
 expectge u8 gBrHud+0x178 1
 shot line
 tap B
