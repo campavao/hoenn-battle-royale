@@ -1,0 +1,47 @@
+# engage-settle-answer: the challenged side freezes when the challenge lands, and starts
+# its link battle only once the challenger's ghost has walked the steps the wire gave it
+# (BrEngage_Settle, Cam's play-test 2026-10-05). It used to start the link on the frame
+# the CHALLENGE arrived, with the challenger's ghost still somewhere else on the screen.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# Seat 2 at (20,13) facing WEST, three rows north of us and out of our eyeline.
+pokebytes gDecompressionBuffer 02 01 00 09 14 00 0D 00 03 01 02
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 20
+expect u8 gBrSeats+32 1
+# Three steps WEST, to (17,13), and the CHALLENGE 2 -> 0 right behind them, the order
+# the wire delivers them in.
+pokebytes gDecompressionBuffer 02 03 13 00 0D 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 02 03 12 00 0D 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 02 03 11 00 0D 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 02 00 01 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 10
+# Settling: frozen, the ghost still walking, no link yet.
+expect u8 gBrEngage+11 2
+expect u8 gBrNetlink 0
+expect u16 gBrSeats+36 17
+hold LEFT 20
+expect u16 gBrOwnPos+2 12
+shot settling
+wait 40
+# The ghost is on (17,13) and the link is open, as link id 1.
+expect u8 gBrEngage+11 0xFF
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+1 1
+expect u8 gBrNetlink+2 2
+expect u16 gBrOwnPos+2 12
+shot started
+# Seat 2 goes out and the session closes (out-peer.txt), so nothing is left running.
+pokebytes gDecompressionBuffer 02
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+wait 300
+expect u8 gBrNetlink 0
+say engage settle answer ok

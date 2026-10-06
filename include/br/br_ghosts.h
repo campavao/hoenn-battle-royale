@@ -77,6 +77,10 @@ bool8 BrGhosts_DropMark(struct Sprite *sprite, bool8 objectGone);
 // The runner's mark over a seat's ghost (POK-266). An event rather than a state: it is
 // drawn once, when the news arrives, and nothing repeats it.
 bool8 BrGhosts_Fled(u8 seat);
+// The seat's ghost is standing on its roster cell, facing its roster way, with nothing
+// left to play: what this screen shows of them is everything the wire has said. TRUE as
+// well when it has no object here, since then there is nothing on screen to catch up.
+bool8 BrGhosts_Idle(u8 seat);
 // Called every frame from BrFrame; only acts while the overworld is running.
 void BrGhosts_Tick(void);
 

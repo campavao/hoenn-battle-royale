@@ -157,6 +157,18 @@ static bool8 OnOurMap(u8 seat)
         && s->mapNum == gSaveBlock1Ptr->location.mapNum;
 }
 
+// A challenge to us, taken on the field: the settle first, so the fight starts with their
+// ghost standing where they really are (br_engage.h), then the fight. From the field with
+// nothing open, or from our own engage's wait -- theirs got here first, and ours is
+// dropped rather than left to start a second fight under this one. FALSE when neither:
+// the caller parks it.
+static bool8 Answer(u8 seat, u8 how)
+{
+    if (!FieldFree() && !BrEngage_YieldWait())
+        return FALSE;
+    return BrEngage_Settle(seat, how);
+}
+
 // A menu is not a hiding place (POK-230): a CHALLENGE that lands with something open
 // waits in pendingPeer; BrNetlink_Tick closes the START menu, lets a sub-screen (bag,
 // party, fly map) settle and starts the fight from inside it, and waits out a running
@@ -184,9 +196,10 @@ static void HandleChallenge(const u8 *payload, u8 len)
     // A bot has no ROM to link with: if its party is already staged, this is a trainer
     // battle, not an exchange (POK-238) -- now, or from the menu it found us in once
     // that has settled, but never a link, which would wait for blocks nobody sends.
+    // Either way it starts once the settle has shown us where they really are.
     if (d[1] == gBrMySeat && BrBot_IsStaged(d[0]))
     {
-        if (!BrBot_StartFight(d[0]))
+        if (!Answer(d[0], BR_SETTLE_BOT))
             gBrNetlink.pendingPeer = d[0];
         return;
     }
@@ -197,13 +210,11 @@ static void HandleChallenge(const u8 *payload, u8 len)
     if (d[0] == gBrMySeat)
     {
         if (FieldFree())
-            BrNetlink_StartBattle(0, d[1]);
+            BrEngage_Settle(d[1], BR_SETTLE_LINK_FIRST);
     }
     else if (d[1] == gBrMySeat)
     {
-        if (FieldFree())
-            BrNetlink_StartBattle(1, d[0]);
-        else
+        if (!Answer(d[0], BR_SETTLE_LINK_ANSWER))
             gBrNetlink.pendingPeer = d[0];
     }
 }
@@ -245,6 +256,11 @@ static void TickPendingChallenge(void)
         }
         if (!FieldFree())
             return; // a script (a sign, the nurse) runs to its end, a fade to its screen
+        // The field again: the settle starts it, as HandleChallenge's would have.
+        if (Answer(gBrNetlink.pendingPeer,
+                   BrBot_IsStaged(gBrNetlink.pendingPeer) ? BR_SETTLE_BOT : BR_SETTLE_LINK_ANSWER))
+            gBrNetlink.pendingPeer = 0xFF;
+        return;
     }
     else
     {

@@ -1,0 +1,38 @@
+# engage-settle-bot: a bot that spotted us gets its trainer battle once its ghost has
+# walked the steps the wire gave it, not on the frame its CHALLENGE lands with the ghost
+# still somewhere else on our screen (BrEngage_Settle, Cam's play-test 2026-10-05).
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# Seat 1 at (20,13) facing WEST, three rows north of us and out of our eyeline.
+pokebytes gDecompressionBuffer 01 01 00 09 14 00 0D 00 03 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 20
+# Three steps WEST to (17,13), its card (bot-eyeline.txt's: "BOT", TREKO 5), and its
+# CHALLENGE 1 -> 0, in the order the host page sends them.
+pokebytes gDecompressionBuffer 01 03 13 00 0D 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 03 12 00 0D 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 03 11 00 0D 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+pokebytes gDecompressionBuffer 01 00 01 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 10
+expect u8 gBrBotFight 1
+expect u8 gBrEngage+11 1
+expect u8 gBrBotFight+2 0
+hold LEFT 20
+expect u16 gBrOwnPos+2 12
+shot settling
+wait 200
+expect u8 gBrEngage+11 0xFF
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+shot fighting
+say engage settle bot ok

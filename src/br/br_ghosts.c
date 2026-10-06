@@ -621,6 +621,25 @@ bool8 BrGhosts_Fled(u8 seat)
     return TRUE;
 }
 
+bool8 BrGhosts_Idle(u8 seat)
+{
+    const struct BrSeat *s;
+    struct ObjectEvent *obj;
+
+    if (seat >= BR_MAX_SEATS)
+        return TRUE;
+    s = &gBrSeats[seat];
+    obj = GhostObject(seat);
+    if (obj == NULL)
+        return TRUE;
+    if (s->queued != 0)
+        return FALSE;
+    if (ObjectEventIsMovementOverridden(obj) && ObjectEventCheckHeldMovementStatus(obj) == 0)
+        return FALSE; // its last walk or turn is still playing
+    return obj->currentCoords.x == s->x && obj->currentCoords.y == s->y
+        && obj->facingDirection == s->dir;
+}
+
 static void EmoteBusyGhosts(void)
 {
     u8 seat;

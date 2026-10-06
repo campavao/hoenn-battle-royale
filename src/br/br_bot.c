@@ -170,8 +170,10 @@ static void ParseTrainer(const u8 *d, u16 n)
     // is dropped, as the unstage in BrBot_Tick would have dropped it (POK-330 #17).
     // The staged party is that fight's from its challenge on, fade and all: two bots
     // that spot us on one step land their cards a frame apart, and the second one's
-    // used to be the team the first one's fight was fought with.
-    if (gBrBotFight.fighting || gMain.inBattle || BrField_LeavingFor(EnterBotFight))
+    // used to be the team the first one's fight was fought with. That includes the
+    // settle before the fade (br_engage.h): the card is spoken for from the challenge.
+    if (gBrBotFight.fighting || gMain.inBattle || BrField_LeavingFor(EnterBotFight)
+     || (gBrBotFight.staged && gBrEngage.settleSeat == gBrBotFight.seat))
         return;
     nameLen = d[1];
     if (nameLen > PLAYER_NAME_LENGTH || (u16)(2 + nameLen + 1) > n)

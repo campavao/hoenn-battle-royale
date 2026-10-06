@@ -117,8 +117,12 @@ runs `BATTLE_TYPE_LINK` exactly as a cable battle would; internet latency is fin
 link battles wait for the other side's block per turn. The fight starts from the eyeline
 (`br_engage.c`): the page relays a `challenge` to both ROMs, and a ROM accepts one only in
 the match proper and from a ghost on its own map; one that lands in a menu waits for it
-to settle, and a battle drops it. A watchdog closes a link that never hears from the other
-side, and an `out` for the peer wins an undecided fight.
+to settle, and a battle drops it. Before any engage's fight starts, player or bot, both
+sides settle: the challenger freezes from its challenge on, the challenged freezes when it
+lands, and each waits (up to two seconds) for the other's ghost to play out the steps the
+wire already gave it, so both screens show the same two trainers when the fight opens. A
+watchdog closes a link that never hears from the other side, and an `out` for the peer
+wins an undecided fight.
 
 **Spectating is a recorded battle, streamed live.** The challenger's ROM sees both
 sides, so it publishes the fight: `bstart` (seed, both parties, names), then `turn` (the
