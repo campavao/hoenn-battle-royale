@@ -155,6 +155,10 @@ git tag -a v0.2.0 -m "what changed, in a sentence or two"
 git push origin v0.2.0
 ```
 
+Or, from a phone: GitHub → Releases → Draft a new release, a new tag on
+`hoenn-battle-royale`, Publish. The tag starts the same run, and the release job puts the
+patch on the release you published (your notes stay) instead of making its own.
+
 `.github/workflows/ci.yml`'s `release` job builds the ROM with agbcc, diffs it against
 the baseline pret build into the BPS (no retail ROM needed), attaches the patch and its
 sidecars to a GitHub release with the tag's message as the note, deploys the site, and
