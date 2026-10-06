@@ -6,6 +6,7 @@
 // and hands the stage what it drew. The layouts (where a seat is, where a row is) are
 // plain functions so ui.test.ts can pin them without a canvas.
 import { SKINS, SKIN_UNLOCK_WINS, skinUnlocked } from '../match/career';
+import { botSeats, botSkin } from '../bots/roster';
 import {
   type EmeraldCanvas,
   type Rect,
@@ -232,6 +233,8 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       const lay = layoutSeats(y, Math.max(Math.min(m.max, 4 * SEAT_COLS), m.seats.length));
       c.drawFrame(lay.frame);
       const taken = m.seats.length;
+      // The bots to come, in the clothes they will be dealt (bots/roster.ts botSkin).
+      const botsToCome = botSeats(m.fill, m.seats.map((who) => who.seat));
       lay.cells.forEach((cell, i) => {
         const who = m.seats[i];
         if (who) {
@@ -247,7 +250,7 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
             cursor: { x: cell.x + 2, y: cell.y + 10 },
           });
         } else if (i - taken < m.fill && !m.started) {
-          paintPerson(c, cell, (i % 2) + 4, 'BOT', 0.45);
+          paintPerson(c, cell, botSkin(botsToCome[i - taken] ?? 0), 'BOT', 0.45);
         } else {
           paintPerson(c, cell, i % 2, '- - -', 0.25);
         }

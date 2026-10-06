@@ -30,6 +30,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_netlink.h"
 #include "br/br_battle.h"
+#include "br/br_bot.h"
 
 EWRAM_DATA struct BrBattle gBrBattle = {0};
 // The party slot, and move, the last bag item in this battle went to (PARTY_SIZE: none),
@@ -578,4 +579,45 @@ bool8 BrBattle_BufferString(u16 stringId)
         return FALSE;
     BattleStringExpandPlaceholdersToDisplayedString(sText_UsedItem);
     return TRUE;
+}
+
+// Index for index with br_ghosts.c's sSkinGraphics and the page's SKINS: the walking
+// sprite's own trainer class. The two rival skins are the same BRENDAN and MAY.
+static const u8 sSkinPics[] =
+{
+    TRAINER_PIC_BRENDAN,
+    TRAINER_PIC_MAY,
+    TRAINER_PIC_BRENDAN,
+    TRAINER_PIC_MAY,
+    TRAINER_PIC_HIKER,
+    TRAINER_PIC_BEAUTY,
+    TRAINER_PIC_CAMPER,
+    TRAINER_PIC_PICNICKER,
+    TRAINER_PIC_SWIMMER_M,
+    TRAINER_PIC_SWIMMER_F,
+    TRAINER_PIC_EXPERT_M,
+    TRAINER_PIC_EXPERT_F,
+    TRAINER_PIC_POKEFAN_M,
+    TRAINER_PIC_POKEFAN_F,
+    TRAINER_PIC_YOUNGSTER,
+    TRAINER_PIC_LASS,
+};
+
+u32 BrBattle_OpponentPic(u32 pic)
+{
+    u8 seat;
+    u8 skin;
+
+    if (gBrBotFight.fighting)
+        seat = gBrBotFight.seat;
+    else if (gBrNetlink.active)
+        seat = gBrNetlink.peerSeat;
+    else
+        return pic;
+    if (seat >= BR_MAX_SEATS || !gBrSeats[seat].present)
+        return pic;
+    skin = gBrSeats[seat].skin;
+    if (skin >= ARRAY_COUNT(sSkinPics))
+        return pic;
+    return sSkinPics[skin];
 }

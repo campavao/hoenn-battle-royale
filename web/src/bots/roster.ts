@@ -37,6 +37,26 @@ export function gradeOf(seed: number, seat: number): Grade {
   return GRADES[pickIndex(rng, GRADES.length)];
 }
 
+/** The skins a bot walks and fights in: every trainer class in the wardrobe past the two
+ *  rivals, so no bot is mistaken for a player in the starting BRENDAN or MAY (2026-10-05
+ *  play-test: "everyone is Brendan or May, which is not cool to watch"). Dealt by seat
+ *  rather than drawn, so the lobby can show a bot's clothes before the match deals it:
+ *  the seats count down from 31 and the classes go round in wardrobe order, a man then a
+ *  woman. */
+export const BOT_SKINS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+export function botSkin(seat: number): number {
+  return BOT_SKINS[(((MAX_SEATS - 1 - seat) % BOT_SKINS.length) + BOT_SKINS.length) % BOT_SKINS.length];
+}
+
+/** The seats dealBots will give its first `count` bots: the highest free ones, down. */
+export function botSeats(count: number, takenSeats: number[]): number[] {
+  const taken = new Set(takenSeats);
+  const out: number[] = [];
+  for (let seat = MAX_SEATS - 1; seat >= 0 && out.length < count; seat--) if (!taken.has(seat)) out.push(seat);
+  return out;
+}
+
 export interface Bot {
   seat: number;
   name: string;
@@ -91,7 +111,7 @@ export function dealBots(seed: number, count: number, takenSeats: number[], spaw
       seat,
       grade: gradeOf(seed, seat),
       name,
-      skin: pickIndex(rng, 4),
+      skin: botSkin(seat),
       map: spawn.map,
       mapId: spawn.mapId,
       x: spawn.x,

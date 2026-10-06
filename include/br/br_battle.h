@@ -141,5 +141,9 @@ u8 BrBattle_AutoScrollFrames(void);
 // battle_main.c: TRUE while the battlers are still choosing, when the engine may yet take
 // a recorded byte back off the record.
 bool8 BrBattle_Choosing(void);
+// The opponent's front picture, in a bot's fight or a netlink: the trainer class of the
+// skin that seat walks around in, so the HIKER on the map is the HIKER in the battle
+// (2026-10-05 play-test). Anything else keeps pret's pick.
+u32 BrBattle_OpponentPic(u32 pic);
 
 #endif // GUARD_BR_BATTLE_H

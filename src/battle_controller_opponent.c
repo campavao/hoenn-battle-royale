@@ -34,6 +34,7 @@
 #include "constants/trainers.h"
 #include "trainer_hill.h"
 #if BR
+#include "br/br_battle.h"
 #include "br/br_duel.h"
 // A proxy duel puts BOTH battlers on this controller (POK-238), and the one standing in
 // the player's position owns gPlayerParty -- so every read and write below follows the
@@ -1314,6 +1315,9 @@ static void OpponentHandleDrawTrainerPic(void)
         xPos = 176;
     }
 
+#if BR
+    trainerPicId = BrBattle_OpponentPic(trainerPicId);
+#endif
     DecompressTrainerFrontPic(trainerPicId, gActiveBattler);
     SetMultiuseSpriteTemplateToTrainerBack(trainerPicId, GetBattlerPosition(gActiveBattler));
     gBattlerSpriteIds[gActiveBattler] = CreateSprite(&gMultiuseSpriteTemplate,
@@ -1386,6 +1390,9 @@ static void OpponentHandleTrainerSlide(void)
         trainerPicId = gTrainers[gTrainerBattleOpponent_A].trainerPic;
     }
 
+#if BR
+    trainerPicId = BrBattle_OpponentPic(trainerPicId);
+#endif
     DecompressTrainerFrontPic(trainerPicId, gActiveBattler);
     SetMultiuseSpriteTemplateToTrainerBack(trainerPicId, GetBattlerPosition(gActiveBattler));
     gBattlerSpriteIds[gActiveBattler] = CreateSprite(&gMultiuseSpriteTemplate, 176, (8 - gTrainerFrontPicCoords[trainerPicId].size) * 4 + 40, 0x1E);
