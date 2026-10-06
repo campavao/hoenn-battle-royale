@@ -69,9 +69,6 @@ static const u16 sKeepVisible[] =
     FLAG_HIDE_LILYCOVE_HARBOR_SSTIDAL,
     FLAG_HIDE_SLATEPORT_CITY_HARBOR_PATRONS,
     FLAG_HIDE_SLATEPORT_CITY_HARBOR_SS_TIDAL,
-    // NORMAN is one of the eight bosses (web/src/match/bosses.ts), and the only leader
-    // whose sprite is hide-gated: the sweep left Petalburg's gym empty (2026-10-06).
-    FLAG_HIDE_PETALBURG_GYM_NORMAN,
 };
 
 // The same, for the second block: shopkeepers, gifts and wild POKeMON, nobody's story.
@@ -192,37 +189,7 @@ static void GiveTheRunOfHoenn(void)
         if (!keep)
             FlagSet(flag);
     }
-    // ...and the second hide block, 0x3C0..0x3E7, where the late story keeps its people:
-    // Steven on Routes 118 and 120 and in Sootopolis, the Kecleon that stand invisible in
-    // Fortree's gym door and across Route 120's bridge (2026-10-06 play-test: "talking to
-    // Steven starts the event to get the scope"), Scott in Petalburg and the Pokemon School,
-    // the rival in Oldale and Lilycove, the three legends in Sootopolis. Not the people in
-    // it who only sell or give something: sKeepVisibleLate.
-    for (flag = FLAG_HIDE_ROUTE_111_SECRET_POWER_MAN; flag <= FLAG_HIDE_RUSTBORO_CITY_POKEMON_SCHOOL_SCOTT; flag++)
-    {
-        keep = FALSE;
-        for (k = 0; k < ARRAY_COUNT(sKeepVisibleLate); k++)
-        {
-            if (sKeepVisibleLate[k] == flag)
-                keep = TRUE;
-        }
-        if (!keep)
-            FlagSet(flag);
-    }
     FlagSet(FLAG_HIDE_CONTEST_POKE_BALL);
-    // The DEVON SCOPE is had, so Route 120's bridge is drawn clear (its OnTransition asks
-    // this flag and nothing else), and the Kecleon fled Fortree.
-    FlagSet(FLAG_RECEIVED_DEVON_SCOPE);
-    FlagSet(FLAG_KECLEON_FLED_FORTREE);
-    // The coord triggers outside the 0x4050 block that a walk sets off (2026-10-06
-    // play-test: walking into Petalburg from the west started Scott's scene). Each one is
-    // the value its own scene leaves behind, so each map reads as it does after the story.
-    VarSet(VAR_SCOTT_PETALBURG_ENCOUNTER, 1);
-    VarSet(VAR_METEOR_FALLS_STATE, 1);
-    VarSet(VAR_MT_PYRE_STATE, 3);
-    VarSet(VAR_NEW_MAUVILLE_STATE, 2);
-    VarSet(VAR_VICTORY_ROAD_1F_STATE, 3);
-    VarSet(VAR_SKY_PILLAR_RAYQUAZA_CRY_DONE, 1);
     // And the tunnel is already open, so Rock Smash in Rusturf is Rock Smash and not a
     // cutscene: TryUpdateRusturfTunnelState (src/field_specials.c) is guarded on nothing
     // but this flag, and it is what reunites the couple.
@@ -240,6 +207,51 @@ static void GiveTheRunOfHoenn(void)
     // hidden with the rest of the story, so that scene would have spent a lockall
     // walking an object that is not there.
     VarSet(VAR_SS_TIDAL_SCOTT_STATE, 1);
+}
+
+// The late story, cleared after the match's first mon is made rather than with the rest
+// of the run of Hoenn: the VBlank interrupt turns the RNG over every frame, so anything
+// added ahead of ScriptGiveMon moves which frame's numbers its IVs are, and every driver
+// fought with the test mon fights a different fight.
+static void ClearTheLateStory(void)
+{
+    u16 flag;
+    u8 k;
+    bool8 keep;
+
+    // ...and the second hide block, 0x3C0..0x3E7, where the late story keeps its people:
+    // Steven on Routes 118 and 120 and in Sootopolis, the Kecleon that stand invisible in
+    // Fortree's gym door and across Route 120's bridge (2026-10-06 play-test: "talking to
+    // Steven starts the event to get the scope"), Scott in Petalburg and the Pokemon School,
+    // the rival in Oldale and Lilycove, the three legends in Sootopolis. Not the people in
+    // it who only sell or give something: sKeepVisibleLate.
+    for (flag = FLAG_HIDE_ROUTE_111_SECRET_POWER_MAN; flag <= FLAG_HIDE_RUSTBORO_CITY_POKEMON_SCHOOL_SCOTT; flag++)
+    {
+        keep = FALSE;
+        for (k = 0; k < ARRAY_COUNT(sKeepVisibleLate); k++)
+        {
+            if (sKeepVisibleLate[k] == flag)
+                keep = TRUE;
+        }
+        if (!keep)
+            FlagSet(flag);
+    }
+    // The DEVON SCOPE is had, so Route 120's bridge is drawn clear (its OnTransition asks
+    // this flag and nothing else), and the Kecleon fled Fortree.
+    FlagSet(FLAG_RECEIVED_DEVON_SCOPE);
+    FlagSet(FLAG_KECLEON_FLED_FORTREE);
+    // The coord triggers outside the 0x4050 block that a walk sets off (2026-10-06
+    // play-test: walking into Petalburg from the west started Scott's scene). Each one is
+    // the value its own scene leaves behind, so each map reads as it does after the story.
+    VarSet(VAR_SCOTT_PETALBURG_ENCOUNTER, 1);
+    VarSet(VAR_METEOR_FALLS_STATE, 1);
+    VarSet(VAR_MT_PYRE_STATE, 3);
+    VarSet(VAR_NEW_MAUVILLE_STATE, 2);
+    VarSet(VAR_VICTORY_ROAD_1F_STATE, 3);
+    VarSet(VAR_SKY_PILLAR_RAYQUAZA_CRY_DONE, 1);
+    // NORMAN is one of the eight bosses (web/src/match/bosses.ts), and the only leader
+    // whose sprite is hide-gated: the first sweep left Petalburg's gym empty (2026-10-06).
+    FlagClear(FLAG_HIDE_PETALBURG_GYM_NORMAN);
 }
 
 static void StartGameAt(const struct BrBoot *b)
@@ -326,6 +338,7 @@ void BrBoot_Tick(void)
             if (slot < PARTY_SIZE)
                 SetMonData(&gPlayerParty[slot], MON_DATA_MOVE4, &move);
         }
+        ClearTheLateStory();
         if (BR_BOOT_MODE(b->mode) == BR_BOOT_SAFARI)
             BrMatch_BeginSafari();
     }
