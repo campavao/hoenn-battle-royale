@@ -507,24 +507,81 @@ static void WatchOwn(void)
     sOwnValid = TRUE;
 }
 
-// How often a busy trainer says so (POK-266). A bubble that fires once would be missed
-// by whoever was looking the other way; one that never stops would be wallpaper.
-#define BR_EMOTE_FRAMES (3 * 60)
+// How often the busy marks are looked over (POK-266). A mark stays up for as long as its
+// trainer is busy (2026-10-05 play-test: "it pops up, fades out, then pops back up after
+// a few seconds; it should persist until the user is done"), so this only puts one over a
+// ghost that has none: one that walked into view busy, or came back after a map load.
+#define BR_EMOTE_FRAMES 30
 static EWRAM_DATA u16 sEmoteTimer = 0;
+// The mark over each seat's ghost, as its sprite id + 1; 0 for none. Checked against the
+// sprite itself before it is believed: a map load frees every sprite without asking.
+EWRAM_DATA u8 gBrGhostMark[BR_MAX_SEATS] = {0}; // named for the drivers (emote-busy.txt)
 
 // What everybody else is doing, over their head (POK-266, Kanto v0.29.0). The engage
 // already refuses a trainer who is in a menu or a battle -- that is POK-230's rule --
 // and nothing showed it, so a trainer standing still in a fight looked exactly like one
 // standing still waiting to take yours. Emerald's own trainer-sight icons do the job:
 // "!" for a battle, "?" for a menu.
-// The bubble for one seat, if it has a ghost here and is busy. TRUE when it fired.
-// One bubble at a time: the field-effect list is short, and two marks over two ghosts
-// in the same frame is a fight over it rather than two marks.
-static bool8 BubbleBusy(void)
+//
+// trainer_see.c's icon sprite keeps the field effect's id in data[7] and the object's
+// local id in data[0]; data[6] is free, and says a mark is being held past its end.
+#define MARK_LOCAL_ID(sprite) ((sprite)->data[0])
+#define MARK_HELD(sprite)     ((sprite)->data[6])
+#define MARK_EFFECT(sprite)   ((sprite)->data[7])
+
+static u8 MarkFor(u8 busy)
 {
-    return FieldEffectActiveListContains(FLDEFF_EXCLAMATION_MARK_ICON)
-        || FieldEffectActiveListContains(FLDEFF_QUESTION_MARK_ICON)
-        || FieldEffectActiveListContains(FLDEFF_BR_BOOT_ICON);
+    if (busy == BR_BUSY_BATTLE)
+        return FLDEFF_EXCLAMATION_MARK_ICON;
+    if (busy == BR_BUSY_MENU)
+        return FLDEFF_QUESTION_MARK_ICON;
+    return 0xFF;
+}
+
+// The seat's ghost already wears this mark.
+static bool8 Marked(u8 seat, u8 effect)
+{
+    struct Sprite *sprite;
+
+    if (gBrGhostMark[seat] == 0)
+        return FALSE;
+    sprite = &gSprites[gBrGhostMark[seat] - 1];
+    if (sprite->inUse && MARK_LOCAL_ID(sprite) == BR_GHOST_LOCAL_ID_BASE + seat && MARK_EFFECT(sprite) == effect)
+        return TRUE;
+    gBrGhostMark[seat] = 0;
+    return FALSE;
+}
+
+bool8 BrGhosts_DropMark(struct Sprite *sprite, bool8 objectGone)
+{
+    s16 localId = MARK_LOCAL_ID(sprite);
+    u8 seat;
+
+    // Anybody else's mark, and the runner's boot, are pret's: up, bob, gone.
+    if (localId < BR_GHOST_LOCAL_ID_BASE || localId >= BR_GHOST_LOCAL_ID_BASE + BR_MAX_SEATS
+     || (MARK_EFFECT(sprite) != FLDEFF_EXCLAMATION_MARK_ICON && MARK_EFFECT(sprite) != FLDEFF_QUESTION_MARK_ICON))
+        return objectGone || sprite->animEnded;
+    seat = localId - BR_GHOST_LOCAL_ID_BASE;
+    if (objectGone || MARK_EFFECT(sprite) != MarkFor(gBrSeatBusy[seat]))
+    {
+        if (gBrGhostMark[seat] == sprite - gSprites + 1)
+            gBrGhostMark[seat] = 0;
+        // Back on the list for the FieldEffectStop that follows to take off again.
+        if (MARK_HELD(sprite))
+            FieldEffectActiveListAdd(MARK_EFFECT(sprite));
+        return TRUE;
+    }
+    // Still busy, and still this kind of busy: held on its last frame, over their head.
+    // Off the active list once the bounce is done, though: a trainer who spots the player
+    // waits for no "!" on that list before walking over (trainer_see.c), and a held one
+    // would keep him standing there for as long as somebody else's fight went on.
+    if (sprite->animEnded && !MARK_HELD(sprite))
+    {
+        MARK_HELD(sprite) = TRUE;
+        FieldEffectActiveListRemove(MARK_EFFECT(sprite));
+    }
+    gBrGhostMark[seat] = sprite - gSprites + 1;
+    return FALSE;
 }
 
 // Points the field-effect arguments at a seat's ghost. FALSE when it has none here.
@@ -535,7 +592,7 @@ static bool8 AimAtGhost(u8 seat)
     if (seat >= BR_MAX_SEATS || !BrField_OverworldRunning())
         return FALSE;
     obj = GhostObject(seat);
-    if (obj == NULL || BubbleBusy())
+    if (obj == NULL)
         return FALSE;
     ObjectEventGetLocalIdAndMap(obj, &gFieldEffectArguments[0], &gFieldEffectArguments[1],
                                 &gFieldEffectArguments[2]);
@@ -544,11 +601,11 @@ static bool8 AimAtGhost(u8 seat)
 
 bool8 BrGhosts_Emote(u8 seat)
 {
-    u8 busy = seat < BR_MAX_SEATS ? gBrSeatBusy[seat] : BR_BUSY_MAP;
+    u8 effect = seat < BR_MAX_SEATS ? MarkFor(gBrSeatBusy[seat]) : 0xFF;
 
-    if (busy == BR_BUSY_MAP || !AimAtGhost(seat))
+    if (effect == 0xFF || Marked(seat, effect) || !AimAtGhost(seat))
         return FALSE;
-    FieldEffectStart(busy == BR_BUSY_BATTLE ? FLDEFF_EXCLAMATION_MARK_ICON : FLDEFF_QUESTION_MARK_ICON);
+    FieldEffectStart(effect);
     return TRUE;
 }
 
@@ -569,8 +626,7 @@ static void EmoteBusyGhosts(void)
     if (++sEmoteTimer < BR_EMOTE_FRAMES)
         return;
     sEmoteTimer = 0;
-    // One at a time: the field-effect list is short, and two bubbles in the same frame is
-    // a fight over it rather than two bubbles.
+    // One new mark a pass is plenty: a pass is half a second.
     for (seat = 0; seat < BR_MAX_SEATS; seat++)
     {
         if (BrGhosts_Emote(seat))

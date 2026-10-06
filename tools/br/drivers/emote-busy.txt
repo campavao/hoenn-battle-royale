@@ -3,8 +3,12 @@
 # nothing showed it, so a trainer standing still in a fight looked exactly like one
 # standing still waiting to take yours.
 #
-# A ghost two tiles east, then BUSY says it is fighting. The bubble fires on a three
-# second timer, so the shot is taken after one.
+# And the mark stays up for as long as they are busy (2026-10-05 play-test: "it pops up,
+# fades out, then pops back up after a few seconds -- it should persist until the user is
+# done with their action"). pret's icon is gone when its 60-frame animation ends; a busy
+# ghost's is held on its last frame until BUSY says otherwise.
+#
+# A ghost two tiles east, then BUSY says it is in a menu, then a fight, then neither.
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -13,20 +17,30 @@ pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 01
 poke u16 gBrMailbox+0x0C 1
 wait 30
 expect u8 gBrSeats+16 1
-# BUSY: type 17 (0x11), framed len 5 = hdr(02 00 00) + seat 01, kind 02 (BR_BUSY_BATTLE)
-pokebytes gBrMailbox+0x1058 11 05 02 00 00 01 02
+# BUSY: type 17 (0x11), framed len 5 = hdr(02 00 00) + seat 01, kind 01 (BR_BUSY_MENU)
+pokebytes gBrMailbox+0x1058 11 05 02 00 00 01 01
 poke u16 gBrMailbox+0x0C 2
 wait 20
-expect u8 gBrSeatBusy+1 2
-# The bubble fires on the message, not on the three-second repeat, so this frame has
-# it: the moment somebody steps into a fight is the moment it is worth showing.
-wait 20
-shot bang
-# it goes quiet again when they do
-pokebytes gBrMailbox+0x1098 11 05 02 00 00 01 00
+expect u8 gBrSeatBusy+1 1
+# The mark fires on the message, and is still up four seconds on: well past pret's 60
+# frames and past the old three-second repeat that used to bring it back.
+expectge u8 gBrGhostMark+1 1
+wait 240
+shot question
+expectge u8 gBrGhostMark+1 1
+# into a fight: the "?" comes down and a "!" goes up in its place
+pokebytes gBrMailbox+0x1098 11 05 02 00 00 01 02
 poke u16 gBrMailbox+0x0C 3
+wait 60
+expect u8 gBrSeatBusy+1 2
+expectge u8 gBrGhostMark+1 1
+shot bang
+# ...and it goes when they are done
+pokebytes gBrMailbox+0x10D8 11 05 02 00 00 01 00
+poke u16 gBrMailbox+0x0C 4
 wait 20
 expect u8 gBrSeatBusy+1 0
-wait 220
+expect u8 gBrGhostMark+1 0
+wait 120
 shot quiet
 say emote busy ok
