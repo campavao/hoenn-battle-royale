@@ -1,0 +1,57 @@
+# engage-settle: the challenger stands still from its challenge to its fight, and the
+# fight waits for the opponent's ghost to stand where the wire says they are.
+#
+# Cam's play-test (2026-10-05): "make sure what one person is seeing in the overworld
+# ahead of time is the same as the other". Two things let the screens disagree. The
+# challenger kept walking through BR_ENGAGE_WAIT (90 frames) and went into the fight from
+# somewhere the other screen never drew it; and the fight started with the opponent's
+# ghost still playing steps the wire had already given it. Now the challenge freezes us,
+# and the fight starts only once the ghost has caught up (BrEngage_Settle).
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+expect u16 gBrOwnPos+2 12
+# Seat 1 at (15,16) facing WEST on Littleroot, three tiles east of us: engage.txt's spot.
+pokebytes gDecompressionBuffer 01 01 00 09 0F 00 10 00 03 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 20
+expect u16 gBrEngage+4 1
+expect u8 gBrEngage+7 1
+# The wait: we try to walk off west, and stay on the cell we challenged from.
+hold LEFT 40
+expect u16 gBrOwnPos+2 12
+expect u16 gBrOwnPos+4 16
+expect u8 gBrNetlink 0
+# The steps they took before our challenge reached them, landing late: five EAST, to
+# (20,16). Eighty frames of walking for the ghost, past the end of our wait.
+pokebytes gDecompressionBuffer 01 04 10 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 04 11 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 04 12 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 04 13 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 04 14 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 60
+# The wait is over and the ghost is still walking: settling with seat 1, no link yet.
+expect u8 gBrEngage+7 0xFF
+expect u8 gBrEngage+11 1
+expect u8 gBrNetlink 0
+expect u16 gBrSeats+20 20
+shot settling
+# The ghost reaches (20,16), and only then does the link battle start.
+wait 60
+expect u8 gBrEngage+11 0xFF
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+1 0
+expect u8 gBrNetlink+2 1
+expect u16 gBrOwnPos+2 12
+shot started
+wait 600
+shot vs
+say engage settle ok
