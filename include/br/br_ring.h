@@ -58,6 +58,7 @@ void BrRing_Init(void);
 // start: is it in the fog? Decided once, by the side that runs the engine, and handed to
 // a replay in the bstart (POK-262 reversed: the fog reaches every fight).
 void BrRing_DecideBattleFog(void);
+void BrRing_DecideSoloFog(void);
 void BrRing_SetBattleFog(bool8 fog);
 // battle_util.c, DoFieldEndTurnEffects' last step: the fog's turn. TRUE when it started
 // a script, which comes back here when it ends.

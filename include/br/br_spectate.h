@@ -55,5 +55,9 @@ void BrSpectate_SendParty(void);
 // The same message for somebody else's party under somebody else's seat -- how a bot's
 // team gets back to the page that walks it after a fight it lost mons in (POK-238).
 void BrSpectate_SendPartyOf(struct Pokemon *party, u8 seat);
+// Is this ROM publishing the fight it is in? A replay is built from the fight's seed and
+// its choices alone, so a published fight must draw nothing from the generator the
+// replay does not: no turn of it on the frame (VBlankCB_Battle), no fog on the clock.
+bool8 BrSpectate_Publishing(void);
 
 #endif // GUARD_BR_SPECTATE_H

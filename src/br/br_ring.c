@@ -22,6 +22,7 @@
 #include "br/br_duel.h"
 #include "br/br_field.h"
 #include "br/br_battle.h"
+#include "br/br_spectate.h"
 #include "battle_util.h"
 #include "recorded_battle.h"
 #include "constants/battle_script_commands.h"
@@ -41,12 +42,23 @@ EWRAM_DATA struct BrRing gBrRing = {0};
 // each ROM bleeding its own party on its own clock would leave the two copies of every mon
 // disagreeing. The engine does it instead, at the end of each turn (BrRing_FogEndTurn),
 // where everything it changes reaches the other ROM and a replay the way a sandstorm does.
+//
+// And a fight this ROM runs alone that it is publishing -- a wild one, a gym's -- has the
+// engine's fog too: somebody may be replaying it from its seed and its choices, and a
+// bleed on the clock is neither, so the replay's mon would stand at an HP the fighter's
+// never had. Decided at its start like a contest's (BrRing_DecideSoloFog).
+static bool8 PublishedAlone(void)
+{
+    return !gBrNetlink.active && !gBrBotFight.fighting && !gBrDuel.running
+        && BrSpectate_Publishing();
+}
+
 static bool8 FogReachesThisBattle(void)
 {
     if (!gMain.inBattle)
         return FALSE;
     if (gBrNetlink.active || gBrBotFight.fighting || gBrDuel.running
-     || RecordedBattle_IsSpectateLive())
+     || RecordedBattle_IsSpectateLive() || PublishedAlone())
         return FALSE; // the engine's own turn does it (BrRing_FogEndTurn)
     return TRUE;
 }
@@ -57,7 +69,8 @@ static bool8 ContestBattle(void)
 {
     if (!gMain.inBattle || gBrDuel.running)
         return FALSE;
-    return gBrNetlink.active || gBrBotFight.fighting || RecordedBattle_IsSpectateLive();
+    return gBrNetlink.active || gBrBotFight.fighting || RecordedBattle_IsSpectateLive()
+        || PublishedAlone();
 }
 
 // Distance from the centre to the nearest point of the section's rectangle, squared,
@@ -238,6 +251,14 @@ void BrRing_SetBattleFog(bool8 fog)
 void BrRing_DecideBattleFog(void)
 {
     BrRing_SetBattleFog(gBrRing.active && !BrRing_SectionInside(gMapHeader.regionMapSectionId));
+}
+
+// The same for a fight this ROM runs alone and publishes (PublishedAlone), asked by the
+// publisher before its bstart: a contest decides where it starts, this has no such door.
+void BrRing_DecideSoloFog(void)
+{
+    if (PublishedAlone())
+        BrRing_DecideBattleFog();
 }
 
 // "<MON> is hurt by the fog!", the bar, the HP. Like the sandstorm's, minus the faint: in

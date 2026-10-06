@@ -679,10 +679,12 @@ void BrBattle_AfterString(u16 stringId)
     if (stringId == STRINGID_INTROMSG)
         line = Said(BR_VOICE_INTRO);
     // A link battle's last line, "<PLAYER> defeated <NAME>!": theirs after it. The bot's
-    // end is its own slide-in (BrBattle_BufferString), and a run or a forfeit has no line.
-    else if (stringId == STRINGID_BATTLEEND && gBrNetlink.active && gBattleOutcome == B_OUTCOME_WON)
+    // end is its own slide-in (BrBattle_BufferString). The outcome is the one pret just
+    // buffered the line from, turned to this ROM's side: gBattleOutcome is still 0 on the
+    // side that runs no engine until after this line (EndLinkBattle).
+    else if (stringId == STRINGID_BATTLEEND && gBrNetlink.active && gBattleTextBuff1[0] == B_OUTCOME_WON)
         line = Said(BR_VOICE_LOSE);
-    else if (stringId == STRINGID_BATTLEEND && gBrNetlink.active && gBattleOutcome == B_OUTCOME_LOST)
+    else if (stringId == STRINGID_BATTLEEND && gBrNetlink.active && gBattleTextBuff1[0] == B_OUTCOME_LOST)
         line = Said(BR_VOICE_WIN);
     if (line == NULL)
         return;

@@ -48,6 +48,8 @@
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
 // FollowTick took the field off us for being out (2026-10-05 play-test).
 static EWRAM_DATA bool8 sOutHeld = FALSE;
+// This battle's fog asked (BrRing_DecideSoloFog), for a fight published alone.
+static EWRAM_DATA bool8 sFogDecided = FALSE;
 // The per-frame turn scratch, kept in EWRAM on purpose: a plain function-local static
 // lands in the battle-tight IWRAM, and the stream is never on a hot path. It doubles as
 // the receive side's reassembly buffer -- the two never overlap, because a ROM that is
@@ -89,7 +91,7 @@ static u16 BattleId(void)
 // wild POKeMON's, a gym's -- since somebody following them wants to see it as much as a
 // link battle (2026-10-05 play-test). Not the slave of a link battle (the master speaks
 // for both), not a replay, and not the Safari: its controller is one no replay has.
-static bool8 Publishing(void)
+bool8 BrSpectate_Publishing(void)
 {
     if (gBrDuel.running)
         return TRUE;
@@ -136,8 +138,9 @@ static void PutTrainers(u8 *buf)
     }
     for (i = 0; i < 2; i++)
     {
-        // Every name is padded out with EOS: the replay copies all eight bytes.
-        for (j = 0; j < PLAYER_NAME_LENGTH + 1 && names[i][j] != EOS; j++)
+        // Every name is padded out with EOS, and the eighth byte is always one: the replay
+        // copies all eight bytes into a LinkPlayer's name, and a trainer's is up to 12.
+        for (j = 0; j < PLAYER_NAME_LENGTH && names[i][j] != EOS; j++)
             buf[i * (PLAYER_NAME_LENGTH + 1) + j] = names[i][j];
         for (; j < PLAYER_NAME_LENGTH + 1; j++)
             buf[i * (PLAYER_NAME_LENGTH + 1) + j] = EOS;
@@ -219,9 +222,9 @@ static bool8 SendBstart(void)
     len += 2 * (PLAYER_NAME_LENGTH + 1) + 2;
     // The player's gender byte carries the fog too (BR_BSTART_FOG): whether this fight is
     // fought in it, which the replay must know to play the fog's turns as the engine did.
-    // Only a fight between contestants has the fog's turns; a wild one bleeds on the
-    // clock (br_ring.c), and battleFog is whatever the last contest left it.
-    if (gBrRing.battleFog && (gBrNetlink.active || gBrBotFight.fighting))
+    // Every published fight but a duel decided it at its start (a contest at its door,
+    // one fought alone in BrSpectate_Tick); a duel's two bots stand nowhere.
+    if (gBrRing.battleFog && !gBrDuel.running)
         buf[len - 2] |= BR_BSTART_FOG;
     len += PackParty(gPlayerParty, buf + len);
     len += PackParty(gEnemyParty, buf + len);
@@ -1158,19 +1161,30 @@ void BrSpectate_Tick(void)
             return;
         sTurnLen = 0;
     }
-    if (!Publishing())
-        return;
+    // Ahead of the publishing test, which a fight fought alone fails off the field: the
+    // reset sat behind it, so a wild fight's `started` outlived it and the next one alone
+    // never sent its bstart.
     if (!gMain.inBattle)
     {
         gBrSpectate.started = FALSE; // ready for the next battle
+        sFogDecided = FALSE;
         return;
     }
+    if (!BrSpectate_Publishing())
+        return;
 
     // A BSTART the ring had no room for is tried again next frame, as a TURN is, and
     // nothing of the fight goes out ahead of it: `started` was set whether it went or
     // not, so a full ring lost the whole fight for anybody watching (POK-331 #10).
     if (!gBrSpectate.started && BattleReady())
     {
+        // Once, and before the first try: a bstart the ring refused goes again later,
+        // and the engine's end of turn has read the answer by then.
+        if (!sFogDecided)
+        {
+            BrRing_DecideSoloFog();
+            sFogDecided = TRUE;
+        }
         if (!SendBstart())
             return;
         gBrSpectate.started = TRUE;

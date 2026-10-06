@@ -373,6 +373,9 @@ static void CreateLearnableMovesList(void);
 #if BR
 static void BrBackToList(void);
 static void BrTaught(void);
+// Whether this visit taught anything: 0x8004 is the party slot while the screen is up
+// (BrTaught), and pret's answer to its caller only once it is left.
+static EWRAM_DATA bool8 sBrTaughtAny = FALSE;
 #endif
 static void CreateUISprites(void);
 static void CB2_MoveRelearnerMain(void);
@@ -399,6 +402,9 @@ static void VBlankCB_MoveRelearner(void)
 void TeachMoveRelearnerMove(void)
 {
     LockPlayerFieldControls();
+#if BR
+    sBrTaughtAny = FALSE;
+#endif
     CreateTask(Task_WaitForFadeOut, 10);
     // Fade to black
     BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 0x10, RGB_BLACK);
@@ -871,7 +877,9 @@ static void HandleInput(bool8 showContest)
         PlaySE(SE_SELECT);
         RemoveScrollArrows();
 #if BR
-        // Out, with whatever was taught on the way still taught: 0x8004 is left as it is.
+        // Out, with whatever was taught on the way still taught, and pret's answer for a
+        // caller that reads one (Fallarbor's relearner takes a Heart Scale on TRUE).
+        gSpecialVar_0x8004 = sBrTaughtAny;
         sMoveRelearnerStruct->state = MENU_STATE_FADE_AND_RETURN;
 #else
         sMoveRelearnerStruct->state = MENU_STATE_PRINT_GIVE_UP_PROMPT;
@@ -1008,6 +1016,7 @@ static void BrTaught(void)
     // Not pret's gSpecialVar_0x8004 = TRUE: pret leaves the screen after one move, but
     // this one stays, and the summary screen's way back in reads 0x8004 as the party
     // slot -- TRUE there made the second move of a visit go to party slot 1.
+    sBrTaughtAny = TRUE;
     PlaySE(SE_USE_ITEM);
     sMoveRelearnerStruct->state = MENU_STATE_BR_BACK_TO_LIST;
 }

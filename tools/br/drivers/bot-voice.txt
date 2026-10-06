@@ -92,16 +92,6 @@ tap A
 wait 50
 tap A
 wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
 shot won-line
 expect u32 gDisplayedStringBattle 0xBEC6C9CE
 expect u32 gDisplayedStringBattle+4 0xCFC9D300

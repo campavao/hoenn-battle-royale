@@ -65,6 +65,7 @@
 #include "br/br_duel.h"
 #include "br/br_levels.h"
 #include "br/br_battle.h"
+#include "br/br_spectate.h"
 #endif
 #include "cable_club.h"
 
@@ -2138,6 +2139,9 @@ void VBlankCB_Battle(void)
     BrBattle_SeeThrough(); // the battle over the map, when the page asks (an experiment)
 #endif
     // Change gRngSeed every vblank unless the battle could be recorded.
+#if BR
+    if (!BrSpectate_Publishing()) // a replay of it is recorded, however its flags read
+#endif
     if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_FRONTIER | BATTLE_TYPE_RECORDED)))
         Random();
 
