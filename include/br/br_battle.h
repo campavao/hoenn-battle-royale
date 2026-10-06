@@ -149,6 +149,18 @@ u8 BrBattle_LinkTextSpeed(void);
 // text.c: how long an auto-scrolling line holds (pret: 49 frames). Shorter on a faster
 // TEXT, in a battle; pret's 49 everywhere else.
 u8 BrBattle_AutoScrollFrames(void);
+// The battle over the map, an experiment (2026-10-05 play-test: "disable the white battle
+// background so the battle overlays the map"). [0] the page writes: nonzero asks for it.
+// [1] the ROM keeps: frames left in which a battle drew its picture see-through, 2 from
+// every battle VBlank, one off each BrFrame -- the page keys the picture while it is up.
+// See-through is no terrain (BG3) and the backdrop BR_SEE_THROUGH_KEY, pure blue, which
+// the page's filter makes transparent so the field it draws under the picture shows.
+#define BR_SEE_THROUGH_KEY RGB(0, 0, 31)
+extern u8 gBrSeeThrough[2];
+// battle_main.c, VBlankCB_Battle, before the palettes go up.
+void BrBattle_SeeThrough(void);
+// br_main.c, every frame.
+void BrBattle_TickSeeThrough(void);
 // battle_main.c: TRUE while the battlers are still choosing, when the engine may yet take
 // a recorded byte back off the record.
 bool8 BrBattle_Choosing(void);

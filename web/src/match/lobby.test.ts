@@ -106,9 +106,13 @@ describe('the profile rows', () => {
     expect(rows[0].label).toBe('WALLY');
     expect(rows[0].detail).toBe('3 played');
     expect(rows[1].label).toBe('MAY');
-    // name, sprite, three voice rows (POK-283), stats, career -- then the ways in.
-    expect(rows[6].label).toBe('MY CAREER');
-    expect(rows[7].label).toBe('QUICK PLAY');
+    // name, sprite, three voice rows (POK-283), stats, the battle's background (an
+    // experiment, 2026-10-05), career -- then the ways in.
+    expect(rows[6].label).toBe('BATTLE BG');
+    expect(rows[6].detail).toBe('shown');
+    expect(fixedRows(true, { name: 'WALLY', skin: 'MAY', seeThrough: true })[6].detail).toBe('off: over the map (test)');
+    expect(rows[7].label).toBe('MY CAREER');
+    expect(rows[8].label).toBe('QUICK PLAY');
     expect(rows[rows.length - 1].label).toBe('SOLO VS BOTS');
   });
 

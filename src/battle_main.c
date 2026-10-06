@@ -2134,6 +2134,9 @@ static void UNUSED HBlankCB_Battle(void)
 
 void VBlankCB_Battle(void)
 {
+#if BR
+    BrBattle_SeeThrough(); // the battle over the map, when the page asks (an experiment)
+#endif
     // Change gRngSeed every vblank unless the battle could be recorded.
     if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_FRONTIER | BATTLE_TYPE_RECORDED)))
         Random();

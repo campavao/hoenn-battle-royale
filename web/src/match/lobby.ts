@@ -41,6 +41,7 @@ export type LobbyAction =
   | { kind: 'win' }
   | { kind: 'lose' }
   | { kind: 'stats' }
+  | { kind: 'seethrough' }
   | { kind: 'career' }
   | { kind: 'join'; code: string; pass: boolean }
   | { kind: 'watch'; code: string };
@@ -82,6 +83,8 @@ export interface Profile {
     /** Whether play is being shared with the relay's own count -- undefined reads as
      *  "shared", the same default `stats.ts`'s `off` field defaults to. */
     statsOn?: boolean;
+    /** The battle over the map (an experiment, 2026-10-05 play-test). */
+    seeThrough?: boolean;
     record?: string;
 }
 
@@ -97,6 +100,11 @@ export function profileRows(profile: Profile): LobbyRow[] {
       label: 'PLAY STATS',
       detail: profile.statsOn === false ? 'not shared' : 'shared',
       action: { kind: 'stats' as const },
+    },
+    {
+      label: 'BATTLE BG',
+      detail: profile.seeThrough ? 'off: over the map (test)' : 'shown',
+      action: { kind: 'seethrough' as const },
     },
     // Kanto's career is a file on disk somebody can copy to another machine;
     // localStorage cannot be copied at all, so it needs a door (POK-243).

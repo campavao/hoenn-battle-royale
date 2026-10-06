@@ -275,6 +275,28 @@ const settings = {
   forget: (): void => {},
 };
 
+/** The battle over the map (2026-10-05 play-test: "disable the white battle background so
+ *  the battle overlays the map"). An experiment, so a switch on the trainer's screen and
+ *  off until somebody turns it on; this browser's alone. */
+const SEE_THROUGH_KEY = 'hbr-see-through';
+
+function seeThrough(): boolean {
+  try {
+    return localStorage.getItem(SEE_THROUGH_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setSeeThrough(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(SEE_THROUGH_KEY, '1');
+    else localStorage.removeItem(SEE_THROUGH_KEY);
+  } catch {
+    // A browser that keeps nothing keeps the battle as it was.
+  }
+}
+
 /** The picker's title for each of MY VOICE's rows. */
 const VOICE_TITLES = { intro: 'WALKING UP', win: 'WHEN YOU WIN', lose: 'WHEN YOU LOSE' } as const;
 
@@ -3127,6 +3149,10 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
           setStatsOff(!loadStats().off);
           redraw();
           return;
+        case 'seethrough':
+          setSeeThrough(!seeThrough());
+          redraw();
+          return;
         case 'career':
           // Kanto's career is a file somebody can carry between machines; ours lives
           // in a localStorage nobody can copy, so this is the door (POK-243). Save
@@ -3233,6 +3259,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         skin: SKINS[careerSkin()],
         lines: careerVoiceLines(),
         statsOn: !loadStats().off,
+        seeThrough: seeThrough(),
         record: record(),
       }).map(row),
       rowsId: 'trainer-rows',
@@ -3359,6 +3386,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     overlay: $('#overlay') as HTMLCanvasElement,
     pad: $('#pad') as HTMLElement,
     rom,
+    seeThrough,
   });
   fieldView.attach();
   // Dev only: where the page walks the ghosts, for the e2e (POK-323, world-moves.spec.ts).

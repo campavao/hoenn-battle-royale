@@ -621,6 +621,39 @@ export interface FieldDeps {
   /** Where every seat is, as the page knows it (the match's roster): the ghosts the page
    *  walks on off the field and past the box (POK-323). FieldView.setPeople sets it later. */
   people?: () => readonly RosterEntry[];
+  /** The battle over the map, an experiment (2026-10-05 play-test): asked of the ROM
+   *  every frame, and the picture keyed while a battle draws see-through. */
+  seeThrough?: () => boolean;
+}
+
+/** The filter that makes a see-through battle's backdrop transparent: the ROM's
+ *  BR_SEE_THROUGH_KEY, pure blue. Alpha is 128R + 128G - 10B + 9, so a pixel with any red
+ *  or green in it, or less than about nine-tenths blue, is untouched; the key is gone. */
+export const SEE_THROUGH_FILTER = 'hbr-see-through';
+export const SEE_THROUGH_MATRIX = '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  128 128 -10 0 9';
+
+/** The alpha that matrix gives a pixel, channels 0..1: what the browser computes. */
+export function seeThroughAlpha(r: number, g: number, b: number): number {
+  return Math.max(0, Math.min(1, 128 * r + 128 * g - 10 * b + 9));
+}
+
+function ensureSeeThroughFilter(doc: Document): void {
+  if (doc.getElementById(SEE_THROUGH_FILTER)) return;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = doc.createElementNS(ns, 'svg');
+  svg.setAttribute('width', '0');
+  svg.setAttribute('height', '0');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.style.position = 'absolute';
+  const filter = doc.createElementNS(ns, 'filter');
+  filter.id = SEE_THROUGH_FILTER;
+  filter.setAttribute('color-interpolation-filters', 'sRGB');
+  const matrix = doc.createElementNS(ns, 'feColorMatrix');
+  matrix.setAttribute('type', 'matrix');
+  matrix.setAttribute('values', SEE_THROUGH_MATRIX);
+  filter.appendChild(matrix);
+  svg.appendChild(filter);
+  doc.body.appendChild(svg);
 }
 
 /** What the field looked like at the last frame on it: the map's own people and the
@@ -843,6 +876,7 @@ export class FieldView {
     const cur = this.read();
     if (this.prev) this.draw(this.prev);
     this.clip(cur?.onField ?? false, this.prev);
+    this.seeThrough();
     if (cur) {
       this.hold = holdFade(this.prev, cur, this.hold);
       // The ring's bleed: the timer reloads the frame it bites. The whole box shakes,
@@ -855,6 +889,24 @@ export class FieldView {
       this.deps.box.style.transform = `translate(${dx * this.lay.scale}px, ${dy * this.lay.scale}px)`;
       if (--this.shake === 0) this.deps.box.style.transform = '';
     }
+  }
+
+  /** The filter on the picture, as last set. */
+  private keyed = false;
+
+  /** Ask the ROM for a see-through battle, or not, and key the picture while one draws:
+   *  gBrSeeThrough[0] is the page's, [1] the ROM's count of frames left (br_battle.h). */
+  private seeThrough(): void {
+    const base = this.sym('gBrSeeThrough');
+    if (base === undefined) return;
+    const want = this.deps.seeThrough?.() ?? false;
+    const { emu, lcd } = this.deps;
+    emu.write(base, want ? 1 : 0, 8);
+    const keyed = want && emu.read(base + 1, 8) > 0;
+    if (keyed === this.keyed) return;
+    this.keyed = keyed;
+    if (keyed) ensureSeeThroughFilter(lcd.ownerDocument);
+    lcd.style.filter = keyed ? `url(#${SEE_THROUGH_FILTER})` : '';
   }
 
   private sym(name: string): number | undefined {

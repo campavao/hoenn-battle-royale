@@ -2,6 +2,9 @@
 #include "global.h"
 #include "random.h"
 #include "window.h"
+#include "gpu_regs.h"
+#include "palette.h"
+#include "constants/rgb.h"
 #include "text.h"
 #include "string_util.h"
 #include "battle.h"
@@ -34,6 +37,7 @@
 #include "br/br_spectate.h"
 
 EWRAM_DATA struct BrBattle gBrBattle = {0};
+EWRAM_DATA u8 gBrSeeThrough[2] = {0};
 
 // The opponent's three lines, for the one seat they are about (BrBattle_SetVoice).
 struct BrVoice
@@ -163,6 +167,23 @@ void BrBattle_Init(void)
 bool8 BrBattle_AnimationsOff(void)
 {
     return gSaveBlock2Ptr->optionsBattleSceneOff == TRUE;
+}
+
+void BrBattle_SeeThrough(void)
+{
+    if (!gBrSeeThrough[0])
+        return;
+    ClearGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_BG3_ON);
+    gPlttBufferUnfaded[0] = BR_SEE_THROUGH_KEY;
+    if (!gPaletteFade.active)
+        gPlttBufferFaded[0] = BR_SEE_THROUGH_KEY;
+    gBrSeeThrough[1] = 2;
+}
+
+void BrBattle_TickSeeThrough(void)
+{
+    if (gBrSeeThrough[1] != 0)
+        gBrSeeThrough[1]--;
 }
 
 u8 BrBattle_LinkTextSpeed(void)
