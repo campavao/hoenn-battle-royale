@@ -4,8 +4,9 @@
 # The page asks with gBrSeeThrough[0]; a battle then draws its backdrop and the
 # environment's sky and ground stripes pure blue, BR_SEE_THROUGH_KEY, which the page's
 # filter makes transparent so the field it draws under the picture shows through. The
-# platforms keep their colours (2026-10-07 play-test: "the circles ... still visible"). [1] counts down
-# from 2 every battle VBlank, so the page keys the picture only while a battle draws it.
+# platforms keep their colours (2026-10-07 play-test: "the circles ... still visible").
+# [1] counts down from 2 every battle VBlank, so the page keys the picture only while a
+# battle draws it.
 # bot-fight.txt's card and challenge.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
@@ -28,6 +29,7 @@ expectge u8 gBrSeeThrough+1 1
 expect u16 0x05000000 0x7C00
 expect u16 0x05000042 0x7C00
 expect u16 0x05000056 0x7C00
+expect u16 0x0500005A 0x7C00
 expect u16 0x0500005E 0x7C00
 expect u16 0x05000062 0x7C00
 expect u16 0x0500007E 0x7C00
