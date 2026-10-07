@@ -1,12 +1,12 @@
 {
- "readAt": "2026-10-07T13:54:54.987Z",
+ "readAt": "2026-10-07T19:38:09.498Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "H9HG23",
    "at": "2026-10-07T13:38:01.985Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-10-07T13:56:30.468Z",
+   "secs": 1108,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -25,7 +25,6 @@
      "secs": 959
     }
    ],
-   "live": true,
    "exact": true
   },
   {
