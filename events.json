@@ -1,5 +1,5 @@
-{"readAt":"2026-10-07T19:38:09.498Z",
- "swept":{"47f192a6-84bb-40f6-a53d-46b0bf8e3aa3":{"at":"2026-09-25T22:17:06.793Z","status":"SUCCESS"},"7372a377-5b16-4bdb-8b06-0ca0b142d379":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"},"6069d3c7-954d-4746-bb5d-dfa3dc8468c4":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"},"635232b1-61c6-4406-8989-7b83c8f67aff":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"},"314a84ee-efab-41d4-ac23-3d348b86840e":{"at":"2026-09-28T00:41:01.712Z","status":"SUCCESS"},"a6b19829-cd80-4bf0-93b1-d5ca4d39b62c":{"at":"2026-09-26T12:12:37.501Z","status":"REMOVED"},"3de9a417-aa43-4b5c-9735-35aeef7b04df":{"at":"2026-10-07T19:38:09.498Z","status":"SUCCESS"}},
+{"readAt":"2026-10-07T23:48:27.183Z",
+ "swept":{"47f192a6-84bb-40f6-a53d-46b0bf8e3aa3":{"at":"2026-09-25T22:17:06.793Z","status":"SUCCESS"},"7372a377-5b16-4bdb-8b06-0ca0b142d379":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"},"6069d3c7-954d-4746-bb5d-dfa3dc8468c4":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"},"635232b1-61c6-4406-8989-7b83c8f67aff":{"at":"2026-09-18T04:59:46.150Z","status":"REMOVED"},"314a84ee-efab-41d4-ac23-3d348b86840e":{"at":"2026-09-28T00:41:01.712Z","status":"SUCCESS"},"a6b19829-cd80-4bf0-93b1-d5ca4d39b62c":{"at":"2026-09-26T12:12:37.501Z","status":"REMOVED"},"3de9a417-aa43-4b5c-9735-35aeef7b04df":{"at":"2026-10-07T23:48:27.183Z","status":"SUCCESS"}},
  "events":[
   {"t":"2026-09-16T22:07:57.080Z","kind":"drop","who":"4ab5#-","code":null,"why":"closed","secs":31,"sent":{"list_rooms":6,"ping":1},"deploy":"635232b1"},
   {"t":"2026-09-16T22:25:53.926Z","kind":"drop","who":"4ab5#-","code":null,"why":"closed","secs":292,"sent":{"list_rooms":58,"ping":14},"deploy":"635232b1"},
@@ -644,5 +644,13 @@
   {"t":"2026-10-07T13:55:18.198Z","kind":"join","code":"H9HG23","who":"a202#1","how":"rejoin","deploy":"3de9a417"},
   {"t":"2026-10-07T13:55:26.358Z","kind":"drop","who":"a202#1","code":"H9HG23","why":"closed","secs":8,"sent":{"join_room":1,"can_host":1},"deploy":"3de9a417"},
   {"t":"2026-10-07T13:56:13.374Z","kind":"drop","who":"4ab5#-","code":null,"why":"closed","secs":46,"sent":{"list_rooms":7,"ping":3},"deploy":"3de9a417"},
-  {"t":"2026-10-07T13:56:30.468Z","kind":"close","code":"H9HG23","why":"host_gone","deploy":"3de9a417"}
+  {"t":"2026-10-07T13:56:30.468Z","kind":"close","code":"H9HG23","why":"host_gone","deploy":"3de9a417"},
+  {"t":"2026-10-07T23:06:58.740Z","kind":"drop","who":"4ab5#-","code":null,"why":"closed","secs":13,"sent":{"list_rooms":2,"ping":1},"deploy":"3de9a417"},
+  {"t":"2026-10-07T23:06:58.981Z","kind":"host","code":"53J9A2","who":"a202#1","door":"open","deploy":"3de9a417"},
+  {"t":"2026-10-07T23:07:02.096Z","kind":"match","code":"53J9A2","mode":"quick","trainers":1,"watching":0,"max":8,"deploy":"3de9a417"},
+  {"t":"2026-10-07T23:12:31.616Z","kind":"drop","who":"a202#1","code":"53J9A2","why":"closed","secs":333,"sent":{"all":8716,"ping":33,"can_host":3,"lock_room":2,"quick_join":1,"host_room":1},"deploy":"3de9a417"},
+  {"t":"2026-10-07T23:12:33.181Z","kind":"join","code":"53J9A2","who":"a202#2","how":"spectate","deploy":"3de9a417"},
+  {"t":"2026-10-07T23:12:36.421Z","kind":"drop","who":"a202#2","code":"53J9A2","why":"closed","secs":3,"sent":{"quick_join":1,"join_room":1,"can_host":1},"deploy":"3de9a417"},
+  {"t":"2026-10-07T23:12:36.421Z","kind":"left","code":"53J9A2","who":"a202#2","how":"left","deploy":"3de9a417"},
+  {"t":"2026-10-07T23:13:33.834Z","kind":"close","code":"53J9A2","why":"host_gone","deploy":"3de9a417"}
  ]}
