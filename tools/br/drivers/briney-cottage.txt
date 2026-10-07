@@ -1,0 +1,29 @@
+# briney-cottage: MR. BRINEY is home when you walk into his cottage (2026-10-07 play-test).
+#
+# The other end of briney-ferry: booted inside the cottage (map 17:0) at (5,5), two
+# steps south of him at (5,3), with VAR_BRINEY_LOCATION at the boot's 255. He and PEEKO
+# are shown (hide flags 0x2E3 and 0x371: bit 3 of SaveBlock1 +0x12CC, bit 1 of +0x12DE),
+# Route 104's boat is (0x2E6, bit 6 of +0x12CC) and the other two stops' are not.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 11 00 05 00 05 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 17
+expect u8 *gSaveBlock1Ptr+5 0
+expect u16 *gSaveBlock1Ptr+0x14C8 1
+expectbits u8 *gSaveBlock1Ptr+0x12CC 0xF8 0xB0
+expectbits u8 *gSaveBlock1Ptr+0x12CD 0x01 0x01
+expectbits u8 *gSaveBlock1Ptr+0x12DE 0x02 0x00
+shot home
+# Up to him and ask: the cottage's own menu, DEWFORD or EXIT.
+hold UP 16
+wait 20
+tap A
+wait 90
+tap A
+wait 60
+shot where-bound
+tap B
+wait 60
+tap A
+wait 60
+say briney cottage ok

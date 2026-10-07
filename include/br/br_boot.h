@@ -40,5 +40,8 @@ BR_OFFSET(BrBoot, name, 8)
 BR_SIZE(BrBoot, 16)
 
 void BrBoot_Tick(void);
+// script.c, RunOnTransitionMapScript: MR. BRINEY ashore at the stop being loaded, if it
+// is one of his three (br_boot.c).
+void BrBoot_PlaceBriney(void);
 
 #endif // GUARD_BR_BOOT_H

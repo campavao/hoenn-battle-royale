@@ -103,7 +103,7 @@ export function profileRows(profile: Profile): LobbyRow[] {
     },
     {
       label: 'BATTLE BG',
-      detail: profile.seeThrough ? 'off: over the map (test)' : 'shown',
+      detail: profile.seeThrough ? 'off: over the map' : 'shown',
       action: { kind: 'seethrough' as const },
     },
     // Kanto's career is a file on disk somebody can copy to another machine;

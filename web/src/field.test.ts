@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, HEAD_ROOM, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha } from './field';
+import { FIELD_VIEW_SIZE, HEAD_ROOM, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, edgeReach } from './field';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -269,6 +269,29 @@ describe('the picture past the LCD (POK-319)', () => {
       });
     });
 
+    // 2026-10-07 play-test: "in certain areas the water animation isn't present" -- the
+    // still under the band, past an edge the ROM draws right itself.
+    it('runs past an edge with nothing joined to it: the ROM draws the border, animated', () => {
+      const sea = { w: 30, h: 20, seams: [{ dir: 'north' as const }] };
+      expect(bandClip(at(10, 19), sea, LEGACY_BAND).bottom, 'no neighbour south').toBe(0);
+      expect(bandClip(at(10, 19), { w: 30, h: 20 }, LEGACY_BAND).bottom, 'a bare size cuts as it did').toBe(LEGACY_BAND.bottom);
+      expect(bandClip(at(10, 0), sea, LEGACY_BAND).top, 'a neighbour north: cut past the head room').toBe(LEGACY_BAND.top);
+      expect(edgeReach(sea, 'south')).toBe(Infinity);
+      expect(edgeReach(sea, 'north')).toBe(0);
+    });
+
+    it("runs MAP_OFFSET cells into a neighbour that shares the tilesets, the ROM's own copy of it", () => {
+      const tall: Band = { left: 0, top: 104, right: 16, bottom: 232 };
+      const joined = { w: 30, h: 20, seams: [{ dir: 'south' as const, same: true }, { dir: 'north' as const, same: true }] };
+      // The band's last row at y 19: 19*16 - 72 + 160 + 232 = 624, the edge 320, 7 cells 112.
+      expect(bandClip(at(10, 19), joined, tall).bottom).toBe(624 - 320 - 112);
+      expect(bandClip(at(10, 13), joined, tall).bottom, 'within the seven: nothing').toBe(Math.max(0, 13 * 16 - 72 + 160 + 232 - 320 - 112));
+      // At the top: 104 rows above a picture whose top is map row -72: 176 past, 112 kept.
+      expect(bandClip(at(10, 0), joined, tall).top).toBe(176 - 112);
+      const mixed = { w: 30, h: 20, seams: [{ dir: 'south' as const, same: true }, { dir: 'south' as const }] };
+      expect(edgeReach(mixed, 'south'), 'one neighbour drawn wrong cuts the side').toBe(0);
+    });
+
     it('never cuts into the LCD, however small the map', () => {
       const tall: Band = { left: 8, top: 104, right: 16, bottom: 232 };
       expect(bandClip(at(2, 2), { w: 5, h: 5 }, tall)).toEqual(tall);
@@ -276,8 +299,9 @@ describe('the picture past the LCD (POK-319)', () => {
     });
 
     it('FieldView puts it and the off-field cut in one clip-path, set only when it changes', () => {
-      const route = HOENN.byId.get('MAP_ROUTE101')!;
-      expect({ w: route.w, h: route.h }).toEqual({ w: 20, h: 20 });
+      // Verdanturf, south of Route 116, is drawn with other tilesets: cut at the edge.
+      const route = HOENN.byId.get('MAP_ROUTE116')!;
+      expect({ h: route.h, south: route.seams.filter((s) => s.dir === 'south').map((s) => s.same ?? false) }).toEqual({ h: 20, south: [false] });
       const sets: string[] = [];
       let clipPath = '';
       const style = {} as { clipPath: string };

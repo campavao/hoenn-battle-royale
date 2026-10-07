@@ -400,6 +400,37 @@ bool8 BrField_InObjectView(s16 x, s16 y)
         && y >= gSaveBlock1Ptr->pos.y && y <= gSaveBlock1Ptr->pos.y + 16;
 }
 
+void BrField_KeepWhereLeft(struct ObjectEvent *objectEvent)
+{
+    struct ObjectEventTemplate *t;
+    u8 i;
+
+    switch (objectEvent->movementType)
+    {
+    case MOVEMENT_TYPE_WANDER_AROUND:
+    case MOVEMENT_TYPE_WANDER_UP_AND_DOWN:
+    case MOVEMENT_TYPE_WANDER_DOWN_AND_UP:
+    case MOVEMENT_TYPE_WANDER_LEFT_AND_RIGHT:
+    case MOVEMENT_TYPE_WANDER_RIGHT_AND_LEFT:
+        break;
+    default:
+        return;
+    }
+    if (objectEvent->mapNum != gSaveBlock1Ptr->location.mapNum
+     || objectEvent->mapGroup != gSaveBlock1Ptr->location.mapGroup)
+        return;
+    for (i = 0; i < OBJECT_EVENT_TEMPLATES_COUNT; i++)
+    {
+        t = &gSaveBlock1Ptr->objectEventTemplates[i];
+        if (t->localId == objectEvent->localId)
+        {
+            t->x = objectEvent->currentCoords.x - MAP_OFFSET;
+            t->y = objectEvent->currentCoords.y - MAP_OFFSET;
+            return;
+        }
+    }
+}
+
 u16 BrField_ViewDistance(s16 x, s16 y)
 {
     s16 dx = x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET);

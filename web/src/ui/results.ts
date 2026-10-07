@@ -13,7 +13,7 @@ import { ordinal } from '../match/career';
 import type { RecordLine } from '../match/record';
 import type { MatchResult } from '../match/results';
 import { TEXT_BLUE, TEXT_DARK, fitText } from './emerald';
-import { ROW_H, W, paintButtons, paintRows, paintTitle } from './screens';
+import { ROW_H, W, paintButtons, paintRows, paintTitle, type ButtonSpec } from './screens';
 import type { DrawnScreen, Painted, Widget } from './stage';
 
 export interface ResultsView {
@@ -148,6 +148,9 @@ export interface ResultsModel {
   record: RecordLine[];
   /** PLAY AGAIN in a room; solo's way back to the lobby. */
   again: { label: string; id: string; disabled?: boolean; onPress(): void } | null;
+  /** MAIN MENU, beside PLAY AGAIN: a room's results were the one screen with no way off
+   *  it but the URL (2026-10-07 play-test). Solo's `again` already is the menu. */
+  menu?: () => void;
 }
 
 /** The results screen. The mirror keeps the ids the page always had: #results-panel,
@@ -195,10 +198,10 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
         y = rec.bottom + 4;
       }
 
-      if (m.again) {
-        const a = m.again;
-        widgets.push(...paintButtons(c, Math.min(y, h - 28), [{ label: a.label, id: a.id, disabled: a.disabled, onPress: a.onPress }]));
-      }
+      const buttons: ButtonSpec[] = [];
+      if (m.again) buttons.push({ label: m.again.label, id: m.again.id, disabled: m.again.disabled, onPress: m.again.onPress });
+      if (m.menu) buttons.push({ label: 'MAIN MENU', id: 'results-menu', onPress: m.menu });
+      if (buttons.length) widgets.push(...paintButtons(c, Math.min(y, h - 28), buttons));
       return { widgets, containers: [{ id: 'results-panel', cls: 'results' }] };
     },
   };

@@ -26,7 +26,9 @@ export interface WorldMap {
    *  cell is 0 -- a transition, which blocks nothing -- so a hand-built map walks as it
    *  always did. */
   elev?: string;
-  seams: { dir: SeamDir; to: string; offset: number }[];
+  /** `same`: the neighbour shares this map's tilesets, so the ROM draws the MAP_OFFSET
+   *  cells of it that it keeps right (field.ts edgeReach). */
+  seams: { dir: SeamDir; to: string; offset: number; same?: boolean }[];
   /** Doors, stairs and mats: stepping onto one lands you somewhere else entirely.
    *  The exporter writes each map's own, and Emerald's warps come in pairs, so the
    *  way back is on the other map's list. */

@@ -1713,6 +1713,9 @@ static void RemoveObjectEventIfOutsideView(struct ObjectEvent *objectEvent)
     if (objectEvent->initialCoords.x >= left && objectEvent->initialCoords.x <= right
      && objectEvent->initialCoords.y >= top && objectEvent->initialCoords.y <= bottom)
         return;
+#if BR
+    BrField_KeepWhereLeft(objectEvent);
+#endif
     RemoveObjectEvent(objectEvent);
 }
 

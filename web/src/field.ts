@@ -34,7 +34,7 @@
 // the picture lags the struct by exactly one frame -- the scroll registers are written at
 // the VBlank that ends a frame's logic and drawn during the next -- so what is drawn here
 // is the state read the frame BEFORE.
-import type { WorldMap } from './bots/world';
+import type { SeamDir, WorldMap } from './bots/world';
 import { HOENN } from './bots/hoenn';
 import spritesData from './data/sprites.json';
 import type { Band, Emulator, SpriteBand } from './emu';
@@ -537,31 +537,50 @@ export function ringRows(cam: { y: number }, stale: number): { top: number; bott
   return { top, bottom };
 }
 
+/** How far past a map's edge on side `dir` the ROM's own picture is the world, in map
+ *  pixels (2026-10-07 play-test: "in certain areas the water animation isn't present").
+ *  The ROM keeps MAP_OFFSET (7) cells of a neighbour, drawn with THIS map's tilesets, and
+ *  border blocks past that. So: an edge with nothing joined to it is border all the way
+ *  out, which is what the ROM draws -- animated -- and the still only copied; an edge
+ *  whose every neighbour shares the tilesets is the ROM's for MAP_OFFSET cells; any other
+ *  is the still's from the edge. A map without its seams (a test's bare size) cuts at the
+ *  edge, as before. */
+export function edgeReach(map: { seams?: readonly { dir: SeamDir; same?: boolean }[] }, dir: SeamDir): number {
+  if (!map.seams) return 0;
+  const joined = map.seams.filter((s) => s.dir === dir);
+  if (joined.length === 0) return Infinity;
+  return joined.every((s) => s.same) ? MAP_OFFSET * TILE : 0;
+}
+
 /** How much of the band to cut away, side by side, in GBA pixels (POK-329): what lies past
- *  the current map's edge, and what the ring does not hold yet. The ROM keeps only
- *  MAP_OFFSET (7) rows and columns of a neighbour, drawn with this map's tilesets, and
- *  border blocks past that; the composite under the picture has the neighbour whole, from
- *  its own still. Mid-step sideways up to 15 columns of the band's right are another
+ *  the current map's edge (edgeReach), and what the ring does not hold yet. The composite
+ *  under the picture has a neighbour whole, from its own still. Mid-step sideways up to 15 columns of the band's right are another
  *  column's slot (ringColumns), and for a few frames after a map is drawn or crossed into
  *  its outer rows are the last map's (ringRows, from `stale`, gBrRingStale): the
  *  composite has all of those too. `cam` is the state the picture on screen was drawn
  *  from -- the read one frame before (see the top of this file). HEAD_ROOM is kept past
  *  the top edge, and the LCD is never cut. A map the page does not know (null) has no
  *  edge to cut at; the ring is cut all the same. */
-export function bandClip(cam: { x: number; y: number; subX: number; subY: number }, map: { w: number; h: number } | null, band: Band, stale = 0): Band {
+export function bandClip(
+  cam: { x: number; y: number; subX: number; subY: number },
+  map: { w: number; h: number; seams?: readonly { dir: SeamDir; same?: boolean }[] } | null,
+  band: Band,
+  stale = 0,
+): Band {
   const o = lcdOrigin(cam);
   const ring = ringColumns(cam);
   const rows = ringRows(cam, stale);
   const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
+  const reach = (dir: SeamDir) => (map ? edgeReach(map, dir) : Infinity);
   const w = map ? map.w * TILE : Infinity;
   const h = map ? map.h * TILE : Infinity;
   const top = o.top - band.top;
   const bottom = o.top + GBA_H + band.bottom;
   return {
-    left: cut(Math.max(band.left - o.left, ring.left - (o.left - band.left)), band.left),
-    top: cut(Math.max(map ? band.top - o.top - HEAD_ROOM : 0, rows.top - top), band.top),
-    right: cut(Math.max(o.left + GBA_W + band.right - w, o.left + GBA_W + band.right - ring.right), band.right),
-    bottom: cut(Math.max(bottom - h, bottom - rows.bottom), band.bottom),
+    left: cut(Math.max(band.left - o.left - reach('west'), ring.left - (o.left - band.left)), band.left),
+    top: cut(Math.max(map ? band.top - o.top - Math.max(HEAD_ROOM, reach('north')) : 0, rows.top - top), band.top),
+    right: cut(Math.max(o.left + GBA_W + band.right - w - reach('east'), o.left + GBA_W + band.right - ring.right), band.right),
+    bottom: cut(Math.max(bottom - h - reach('south'), bottom - rows.bottom), band.bottom),
   };
 }
 

@@ -1,0 +1,64 @@
+# briney-ferry: MR. BRINEY is ashore wherever his boat is, and sails (2026-10-07 play-test).
+#
+# Cam on Route 109's beach: "the ship guy is not present, he should be here and able to
+# give you rides". The boot's hide sweep took him from all three of his stops. Now each
+# stop's map, loaded with him not at sea, puts him there (br_boot.c BrBoot_PlaceBriney),
+# and his errands are run, so he goes straight to "where are we bound?".
+#
+# Booted on ROUTE 109 (map 0:24) at (21,23), a step north of where he stands (21,24) with
+# the boat at (21,26). VAR_BRINEY_LOCATION is SaveBlock1 + 0x139C + 2*(0x4096 - 0x4000) =
+# +0x14C8; the hide flags are at +0x1270: 0x2E4..0x2E8 are bits 4..7 of +0x12CC and bit 0
+# of +0x12CD.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 18 15 00 17 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 24
+# He is at Route 109, and nowhere else: 109's man and boat shown, Dewford's hidden.
+expect u16 *gSaveBlock1Ptr+0x14C8 3
+expectbits u8 *gSaveBlock1Ptr+0x12CC 0xB0 0x90
+expectbits u8 *gSaveBlock1Ptr+0x12CD 0x01 0x00
+shot ashore
+# Face him and talk: "where are we bound?" with DEWFORD and CANCEL.
+hold DOWN 2
+wait 10
+tap A
+wait 90
+tap A
+wait 60
+shot where-bound
+# The cursor starts on CANCEL; up to DEWFORD.
+tap UP
+wait 10
+tap A
+wait 30
+# "DEWFORD it is, then!" and "Anchors aweigh!", a page each, each printed before its A.
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+# The voyage: he boards, the boat runs south off Route 109 and round to Dewford.
+wait 400
+shot voyage
+wait 1200
+shot ashore-dewford
+# "Ahoy! We've hit land in DEWFORD!" and its second page; the var comes back after them.
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+shot landed
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 11
+# Ashore again: the trip's 0 is gone (pret puts back what it was, which only ever
+# meant "not at sea" in a game past the story -- the flags say where he is).
+expectne u16 *gSaveBlock1Ptr+0x14C8 0
+# Dewford's man and boat shown; Route 109's hidden behind us.
+expectbits u8 *gSaveBlock1Ptr+0x12CC 0xB0 0x20
+expectbits u8 *gSaveBlock1Ptr+0x12CD 0x01 0x01
+say briney ferry ok

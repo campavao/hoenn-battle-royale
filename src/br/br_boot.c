@@ -265,6 +265,67 @@ static void ClearTheLateStory(void)
     // NORMAN is one of the eight bosses (web/src/match/bosses.ts), and the only leader
     // whose sprite is hide-gated: the first sweep left Petalburg's gym empty (2026-10-06).
     FlagClear(FLAG_HIDE_PETALBURG_GYM_NORMAN);
+    // MR. BRINEY's errands are run (2026-10-07 play-test: "the ship guy is not present, he
+    // should be here and able to give you rides"). Unset, each of his three stops asks
+    // about the LETTER or the DEVON GOODS before it sails, and the cottage tells the
+    // story of PEEKO first; set, all three go straight to "where are we bound?".
+    FlagSet(FLAG_MR_BRINEY_SAILING_INTRO);
+    FlagSet(FLAG_DELIVERED_STEVEN_LETTER);
+    FlagSet(FLAG_DELIVERED_DEVON_GOODS);
+}
+
+// MR. BRINEY is one man in pret, at one of three stops -- his cottage on Route 104,
+// Dewford's dock, Route 109's beach -- and VAR_BRINEY_LOCATION says which (1, 2, 3; 0
+// while he is at sea). The boot's hide sweep took him from all three. In a match he is
+// wherever the player walks up to his boat: each stop's map, loaded with him ashore,
+// moves him there the way pret's own EventScript_MoveMrBriney* does after a whiteout,
+// before the map's objects are made. A sail runs untouched -- its scripts back the var
+// up to 0 for the trip and put it back on landing, and the stop they land at is his.
+static const u16 sBrineyFlags[] =
+{
+    FLAG_HIDE_BRINEYS_HOUSE_MR_BRINEY,
+    FLAG_HIDE_BRINEYS_HOUSE_PEEKO,
+    FLAG_HIDE_ROUTE_104_MR_BRINEY_BOAT,
+    FLAG_HIDE_MR_BRINEY_DEWFORD_TOWN,
+    FLAG_HIDE_MR_BRINEY_BOAT_DEWFORD_TOWN,
+    FLAG_HIDE_ROUTE_109_MR_BRINEY,
+    FLAG_HIDE_ROUTE_109_MR_BRINEY_BOAT,
+};
+
+// The stop whose flags each entry above is: 1 the cottage, 2 Dewford, 3 Route 109.
+static const u8 sBrineyStop[] = {1, 1, 1, 2, 2, 3, 3};
+
+void BrBoot_PlaceBriney(void)
+{
+    u8 stop;
+    u8 i;
+
+    if (VarGet(VAR_BRINEY_LOCATION) == 0)
+        return;
+    if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_ROUTE104)
+     && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_ROUTE104))
+        stop = 1;
+    else if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_ROUTE104_MR_BRINEYS_HOUSE)
+          && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_ROUTE104_MR_BRINEYS_HOUSE))
+        stop = 1;
+    else if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_DEWFORD_TOWN)
+          && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_DEWFORD_TOWN))
+        stop = 2;
+    else if (gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_ROUTE109)
+          && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_ROUTE109))
+        stop = 3;
+    else
+        return;
+    for (i = 0; i < ARRAY_COUNT(sBrineyFlags); i++)
+    {
+        if (sBrineyStop[i] == stop)
+            FlagClear(sBrineyFlags[i]);
+        else
+            FlagSet(sBrineyFlags[i]);
+    }
+    // The one who walks down to the boat on Route 104 is only there for a boarding.
+    FlagSet(FLAG_HIDE_ROUTE_104_MR_BRINEY);
+    VarSet(VAR_BRINEY_LOCATION, stop);
 }
 
 static void StartGameAt(const struct BrBoot *b)
