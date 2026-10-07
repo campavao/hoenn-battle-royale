@@ -91,7 +91,9 @@ jobs:
             echo "::error::version '$VERSION' is not vMAJOR.MINOR.PATCH"; exit 1
           fi
           # Peeled last, so an annotated tag answers with its commit.
-          at="$(git ls-remote origin "refs/tags/$VERSION" "refs/tags/$VERSION^{}" | tail -n1 | cut -f1)"
+          # On its own line: in a pipe (no pipefail here) a failed lookup read as "new".
+          refs="$(git ls-remote origin "refs/tags/$VERSION" "refs/tags/$VERSION^{}")"
+          at="$(printf '%s\n' "$refs" | tail -n1 | cut -f1)"
           if [ -n "$at" ] && [ "$at" != "$GITHUB_SHA" ]; then
             echo "::error::$VERSION already exists, at $at"; exit 1
           fi
