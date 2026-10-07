@@ -167,6 +167,8 @@ session ships, since it can't push tags but can dispatch a workflow (the GitHub 
 tags the commit it built and carries on as below. The tag it pushes starts no second run.
 If a deploy fails after the tag, dispatch the same version on the same commit again: a tag
 that already names the commit goes through, one naming any other commit stops the run.
+A dispatch is a release like any other: check Cam isn't playing first, and a `relay/` change
+since the last tag restarts the relay, which drops every room.
 
 `.github/workflows/ci.yml`'s `release` job builds the ROM with agbcc, diffs it against
 the baseline pret build into the BPS (no retail ROM needed), attaches the patch and its
