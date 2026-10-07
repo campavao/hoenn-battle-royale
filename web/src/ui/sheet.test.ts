@@ -116,7 +116,7 @@ describe('the sheet', () => {
     expect(painted.widgets.find((w) => w.text === '15 more'), 'the rest, counted in the last cell').toBeDefined();
   });
 
-  it('LEAVE goes when canLeave is false (a host still in the match)', () => {
+  it('LEAVE goes when canLeave is false', () => {
     expect(paint(model({ canLeave: false })).byId('match-leave')).toBeUndefined();
   });
 

@@ -2248,11 +2248,10 @@ function wireRoom(
     // The host's one power over another seat, on the card (POK-241).
     card: bridge ? cardOf(bridge.roster, sheetCard, roomKick !== null) : null,
     watch: bridge ? watchOf(bridge, spectate) : null,
-    // A host leaving mid-fight hands the match to an heir (migration, POK-252), so the
-    // in-match LEAVE is a guest's while the host is still in it (POK-241) -- and the
-    // host's too once it is out and only watching (2026-10-07 play-test: every screen has
-    // a way back to the menu).
-    canLeave: !isHost || (bridge !== null && watchOf(bridge, spectate) !== null),
+    // Everybody's, the host's too (2026-10-07 play-test: "there doesn't seem to be a way to
+    // leave the match"): a host leaving mid-fight is a host closing the tab, which hands
+    // the match to an heir (migration, POK-252), and a reload was the only way out anyway.
+    canLeave: true,
     onSeat: (seat) => {
       sheetCard = sheetCard === seat ? null : seat;
       redrawSheet();
@@ -2886,7 +2885,7 @@ function wireRoom(
     // leave the host's controls on screen for the rest of the match.
     act(decideStart({ t: 'roster', members: ev.members.map((m) => m.id) }, startState()));
     if (bridge) renderRoom(bridge);
-    // The in-match LEAVE depends on who is host (POK-241), which may have just changed.
+    // The sheet's watch row depends on who is still in it, which may have just changed.
     if (bridge) renderSpectate(bridge, spectate);
     if (bridge) {
       // START: the host shuts the door and deals the match. This is what the ten-second
