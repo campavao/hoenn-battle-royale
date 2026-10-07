@@ -1,0 +1,29 @@
+# seam-midframe: gBrMidFrame says when a VBlank lands mid main-loop iteration
+# (2026-10-07 play-test: "flashing happening as I move between routes").
+#
+# Crossing a map seam loads the next map inside CameraMove, and the load runs past a
+# VBlank or two. The page reads RAM at each one, and there the struct is half-written:
+# the map is already the new one, the position not yet stepped onto it (pret sets it
+# from the connection, loads the map, then adds the step). The page drew those frames a
+# whole tile off. gBrMidFrame is 1 from BrFrame to BrFrameEnd, and the page holds its
+# last whole frame while it is.
+#
+# Booted in MAUVILLE CITY (0:2) at (16,16); DOWN walks out the south gap into ROUTE 110
+# (0:25). The run is deterministic: the two torn frames follow 25 frames of DOWN.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 02 10 00 10 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 2
+expect u8 gBrMidFrame 0
+hold DOWN 25
+# Mid-load: ROUTE 110 already, y still -1 (the connection's, before the step's +1).
+expect u8 *gSaveBlock1Ptr+5 25
+expect u16 *gSaveBlock1Ptr+2 0xFFFF
+expect u8 gBrMidFrame 1
+hold DOWN 2
+# The iteration finished: on its first row, and whole again.
+expect u16 *gSaveBlock1Ptr+2 0
+expect u8 gBrMidFrame 0
+hold DOWN 30
+expect u8 gBrMidFrame 0
+say seam midframe ok

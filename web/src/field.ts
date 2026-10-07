@@ -894,7 +894,10 @@ export class FieldView {
     }
     // Every frame, on the field too, so they are in step when a battle takes it.
     this.walkers.update(this.roster?.() ?? []);
-    const cur = this.read();
+    // A main loop still mid-iteration at this VBlank (a map loading as a seam is crossed)
+    // has the struct half-written: the last whole frame stands (gBrMidFrame, br_main.h).
+    const mid = this.sym('gBrMidFrame');
+    const cur = mid !== undefined && this.deps.emu.read(mid, 8) !== 0 && this.prev ? this.prev : this.read();
     if (this.prev) this.draw(this.prev);
     this.clip(cur?.onField ?? false, this.prev);
     this.seeThrough();
