@@ -34,20 +34,30 @@ get() { # <path> <curl args...>
 fail=0
 check() { # <path> <status>
   local code
-  code="$(get "$1" -s -o /dev/null -w '%{http_code}' | tail -1 || true)"
+  code="$(get "$1" -s -m 10 -o /dev/null -w '%{http_code}' | tail -1 || true)"
   if [[ "$code" == "$2" ]]; then echo "  ok   $1 -> $code"; else echo "  FAIL $1 -> $code (wanted $2)"; fail=1; fi
 }
 
 echo "checking $URL"
-check /patch/br-version.json 200
-check /patch/br-symbols.json 200
-check /patch/hoenn-br.bps 200
-check /patch/pokeemerald.gba 404
-live="$(get /patch/br-version.json -s | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("romSha1", ""))' 2>/dev/null || true)"
+# The ROM first, polled: the alias moves to a fresh deploy some seconds after `vercel
+# deploy` returns (v0.2.2's check, a second after it, read the old build), and the file
+# checks below only mean something once they are asking the new build. Up to 3 minutes,
+# well past any flip seen so far, since a false red costs a whole release run; a match
+# ends the wait at once.
+live=""
+for i in $(seq 36); do
+  live="$(get /patch/br-version.json -s -m 10 | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("romSha1", ""))' 2>/dev/null || true)"
+  if [[ "$live" == "$WANT" ]]; then break; fi
+  if [[ "$i" -lt 36 ]]; then sleep 5; fi
+done
 if [[ "$live" == "$WANT" ]]; then
   echo "  ok   live rom ${live:0:7}"
 else
   echo "  FAIL live rom ${live:0:7} (wanted ${WANT:0:7})"
   fail=1
 fi
+check /patch/br-version.json 200
+check /patch/br-symbols.json 200
+check /patch/hoenn-br.bps 200
+check /patch/pokeemerald.gba 404
 [[ "$fail" -eq 0 ]]
