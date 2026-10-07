@@ -146,7 +146,7 @@ export interface ResultsModel {
   career: string;
   fame: Fame | null;
   record: RecordLine[];
-  /** PLAY AGAIN in a room; solo's way back to the lobby. */
+  /** PLAY AGAIN in a room; solo's MAIN MENU (id `results-lobby`, as the e2e has it). */
   again: { label: string; id: string; disabled?: boolean; onPress(): void } | null;
   /** MAIN MENU, beside PLAY AGAIN: a room's results were the one screen with no way off
    *  it but the URL (2026-10-07 play-test). Solo's `again` already is the menu. */

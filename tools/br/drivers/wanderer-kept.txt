@@ -27,4 +27,14 @@ expectle u16 *gSaveBlock1Ptr+2 30
 shot left-behind
 # His template is where he stood, not (16,46).
 expect u32 *gSaveBlock1Ptr+0xDC4 0x002D0011
+# Back down: he is made again where he stood, and still wanders round his home
+# (BrField_KeepHome), not round that spot -- his range never walks off. Object slot 5
+# (0x24 each): local id at +8, initialCoords at +0xC, currentCoords at +0x10, both
+# MAP_OFFSET (7) in.
+hold DOWN 120
+wait 2
+shot back
+expect u8 gObjectEvents+0xBC 15
+expect u32 gObjectEvents+0xC0 0x00350017
+expect u32 gObjectEvents+0xC4 0x00340018
 say wanderer kept ok

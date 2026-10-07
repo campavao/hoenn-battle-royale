@@ -285,7 +285,8 @@ describe('the picture past the LCD (POK-319)', () => {
       const joined = { w: 30, h: 20, seams: [{ dir: 'south' as const, same: true }, { dir: 'north' as const, same: true }] };
       // The band's last row at y 19: 19*16 - 72 + 160 + 232 = 624, the edge 320, 7 cells 112.
       expect(bandClip(at(10, 19), joined, tall).bottom).toBe(624 - 320 - 112);
-      expect(bandClip(at(10, 13), joined, tall).bottom, 'within the seven: nothing').toBe(Math.max(0, 13 * 16 - 72 + 160 + 232 - 320 - 112));
+      expect(bandClip(at(10, 13), joined, tall).bottom, 'six rows past the seven').toBe(96);
+      expect(bandClip(at(10, 7), joined, tall).bottom, 'the band ending on the seventh: nothing').toBe(0);
       // At the top: 104 rows above a picture whose top is map row -72: 176 past, 112 kept.
       expect(bandClip(at(10, 0), joined, tall).top).toBe(176 - 112);
       const mixed = { w: 30, h: 20, seams: [{ dir: 'south' as const, same: true }, { dir: 'south' as const }] };

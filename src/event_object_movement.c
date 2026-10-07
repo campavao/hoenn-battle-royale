@@ -1331,6 +1331,9 @@ static u8 InitObjectEventStateFromTemplate(const struct ObjectEventTemplate *tem
         if (objectEvent->range.rangeY == 0)
             objectEvent->range.rangeY++;
     }
+#if BR
+    BrField_KeepHome(objectEvent);
+#endif
     return objectEventId;
 }
 

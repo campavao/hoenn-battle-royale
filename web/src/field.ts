@@ -543,8 +543,10 @@ export function ringRows(cam: { y: number }, stale: number): { top: number; bott
  *  border blocks past that. So: an edge with nothing joined to it is border all the way
  *  out, which is what the ROM draws -- animated -- and the still only copied; an edge
  *  whose every neighbour shares the tilesets is the ROM's for MAP_OFFSET cells; any other
- *  is the still's from the edge. A map without its seams (a test's bare size) cuts at the
- *  edge, as before. */
+ *  is the still's from the edge. A seam that covers part of a side counts for all of it:
+ *  the rows past it with nothing joined show the ROM's border for MAP_OFFSET cells, then
+ *  the still. A map without its seams (a test's bare size) cuts at the edge, as before;
+ *  an interior has none listed and is uncut, the ROM's border (black, mostly) round it. */
 export function edgeReach(map: { seams?: readonly { dir: SeamDir; same?: boolean }[] }, dir: SeamDir): number {
   if (!map.seams) return 0;
   const joined = map.seams.filter((s) => s.dir === dir);
