@@ -43,7 +43,14 @@ check /patch/br-version.json 200
 check /patch/br-symbols.json 200
 check /patch/hoenn-br.bps 200
 check /patch/pokeemerald.gba 404
-live="$(get /patch/br-version.json -s | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("romSha1", ""))' 2>/dev/null || true)"
+# Polled: the alias moves to a fresh deploy a moment after `vercel deploy` returns, and
+# v0.2.2's check, a second after it, still read the old build (it was live a minute later).
+live=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  live="$(get /patch/br-version.json -s | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("romSha1", ""))' 2>/dev/null || true)"
+  [[ "$live" == "$WANT" ]] && break
+  sleep 5
+done
 if [[ "$live" == "$WANT" ]]; then
   echo "  ok   live rom ${live:0:7}"
 else
