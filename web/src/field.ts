@@ -554,9 +554,9 @@ export function edgeReach(map: { seams?: readonly { dir: SeamDir; same?: boolean
 
 /** How much of the band to cut away, side by side, in GBA pixels (POK-329): what lies past
  *  the current map's edge (edgeReach), and what the ring does not hold yet. The composite
- *  under the picture has a neighbour whole, from its own still. Mid-step sideways up to 15 columns of the band's right are another
- *  column's slot (ringColumns), and for a few frames after a map is drawn or crossed into
- *  its outer rows are the last map's (ringRows, from `stale`, gBrRingStale): the
+ *  under the picture has a neighbour whole, from its own still. Mid-step sideways up to
+ *  15 columns of the band's right are another column's slot (ringColumns), and for a
+ *  few frames after a map is drawn or crossed into its outer rows are the last map's (ringRows, from `stale`, gBrRingStale): the
  *  composite has all of those too. `cam` is the state the picture on screen was drawn
  *  from -- the read one frame before (see the top of this file). HEAD_ROOM is kept past
  *  the top edge, and the LCD is never cut. A map the page does not know (null) has no

@@ -1,0 +1,51 @@
+# briney-cottage-sail: from his cottage MR. BRINEY sails to DEWFORD, with no call on the way
+# (2026-10-07 review of the play-test fix).
+#
+# The cottage's sail is Route 104's (data/maps/Route104/scripts.inc), which rings DAD on
+# the POKENAV first unless FLAG_ENABLE_NORMAN_MATCH_CALL is set: ten seconds of a match on
+# a call. The boot sets it. Booted in the cottage (17:0) at (5,5) as briney-cottage is;
+# the hide flags are SaveBlock1 +0x1270 (see briney-ferry for the bits).
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 11 00 05 00 05 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 17
+expect u8 *gSaveBlock1Ptr+5 0
+# FLAG_ENABLE_NORMAN_MATCH_CALL, 0x132: bit 2 of +0x1296.
+expectbits u8 *gSaveBlock1Ptr+0x1296 0x04 0x04
+hold UP 16
+wait 20
+tap A
+wait 90
+tap A
+wait 60
+shot where-bound
+# The cursor starts on EXIT; up to DEWFORD.
+tap UP
+wait 10
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+shot after-a
+wait 600
+shot boarding
+wait 1200
+shot ashore-dewford
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+shot landed
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 11
+expectne u16 *gSaveBlock1Ptr+0x14C8 0
+# At Dewford: its man and boat shown, the cottage's and Route 109's hidden.
+expectbits u8 *gSaveBlock1Ptr+0x12CC 0xF8 0x68
+expectbits u8 *gSaveBlock1Ptr+0x12CD 0x01 0x01
+say briney cottage sail ok

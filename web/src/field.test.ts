@@ -292,6 +292,16 @@ describe('the picture past the LCD (POK-319)', () => {
       expect(edgeReach(mixed, 'south'), 'one neighbour drawn wrong cuts the side').toBe(0);
     });
 
+    it('reads west and east the same way', () => {
+      const side = { w: 30, h: 20, seams: [{ dir: 'west' as const, same: true }, { dir: 'east' as const }] };
+      expect(edgeReach(side, 'west')).toBe(7 * 16);
+      expect(edgeReach(side, 'east')).toBe(0);
+      const open = { w: 30, h: 20, seams: [] };
+      expect(edgeReach(open, 'west')).toBe(Infinity);
+      expect(bandClip(at(29, 10), side, LEGACY_BAND).right, 'a neighbour drawn wrong east: cut there').toBe(LEGACY_BAND.right);
+      expect(bandClip(at(29, 10), open, LEGACY_BAND).right, 'nothing east: the border, uncut').toBe(0);
+    });
+
     it('never cuts into the LCD, however small the map', () => {
       const tall: Band = { left: 8, top: 104, right: 16, bottom: 232 };
       expect(bandClip(at(2, 2), { w: 5, h: 5 }, tall)).toEqual(tall);

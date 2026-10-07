@@ -403,6 +403,8 @@ bool8 BrField_InObjectView(s16 x, s16 y)
 void BrField_KeepWhereLeft(struct ObjectEvent *objectEvent)
 {
     struct ObjectEventTemplate *t;
+    const struct ObjectEventTemplate *home;
+    s16 x, y;
     u8 i;
 
     switch (objectEvent->movementType)
@@ -423,11 +425,31 @@ void BrField_KeepWhereLeft(struct ObjectEvent *objectEvent)
     {
         t = &gSaveBlock1Ptr->objectEventTemplates[i];
         if (t->localId == objectEvent->localId)
-        {
-            t->x = objectEvent->currentCoords.x - MAP_OFFSET;
-            t->y = objectEvent->currentCoords.y - MAP_OFFSET;
-            return;
-        }
+            break;
+    }
+    if (i == OBJECT_EVENT_TEMPLATES_COUNT)
+        return;
+    x = objectEvent->currentCoords.x - MAP_OFFSET;
+    y = objectEvent->currentCoords.y - MAP_OFFSET;
+    // Each respawn wanders from the new spot, so without a fence the home would walk
+    // off a range at a time; held to the map's own home and range, it stays the
+    // ground the man was given (2026-10-07 review).
+    for (i = 0; i < gMapHeader.events->objectEventCount; i++)
+    {
+        home = &gMapHeader.events->objectEvents[i];
+        if (home->localId != objectEvent->localId)
+            continue;
+        if (x < home->x - home->movementRangeX)
+            x = home->x - home->movementRangeX;
+        if (x > home->x + home->movementRangeX)
+            x = home->x + home->movementRangeX;
+        if (y < home->y - home->movementRangeY)
+            y = home->y - home->movementRangeY;
+        if (y > home->y + home->movementRangeY)
+            y = home->y + home->movementRangeY;
+        t->x = x;
+        t->y = y;
+        return;
     }
 }
 

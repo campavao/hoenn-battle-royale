@@ -481,7 +481,7 @@ test("the band stops past the map's edge: walking down to Route 103's last row, 
         }
       }
     }
-    expect(bottoms, '176 on row 13, then 16 more a step until the band is all past the edge').toEqual([176, 192, 208, 224, 232, 232, 232, 232, 232]);
+    expect(bottoms, "64 on row 13, then 16 more a step: Oldale's seven rows are never cut").toEqual([64, 80, 96, 112, 128, 144, 160, 176, 192]);
     await page.screenshot({ path: path.join(OUT_DIR, 'edge.png') });
   } finally {
     await ctx.close();

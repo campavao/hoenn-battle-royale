@@ -2091,7 +2091,7 @@ function wireRoom(
 
   // ---- the room, drawn (POK-320) ----
   // Kanto's lobby: the code, a 2x4 of seats with everybody's sprite, what START would
-  // make, the host's options, START or LEAVE. It covers the game until the match is
+  // make, the host's options, START (the host's) and LEAVE. It covers the game until the match is
   // on: nobody walks Littleroot while the host is still choosing the fog.
   const hostOptions = (view: RoomView) => {
     const redraw = () => stage.redraw();
@@ -2451,9 +2451,9 @@ function wireRoom(
         pollMs: PARADE_POLL_MS,
         paradeDone: gBrMatch !== undefined ? paraded.finished : undefined,
       }),
-      // Back to the room, not out of it: the host did not even have a LEAVE button, and
-      // keeping the room makes the next match a press of START rather than eight people
-      // finding each other again.
+      // Back to the room, not out of it (MAIN MENU is the way out): keeping the room
+      // makes the next match a press of START rather than eight people finding each
+      // other again.
       exit: () => void returnToRoom(),
     },
     {
@@ -2886,7 +2886,7 @@ function wireRoom(
     // leave the host's controls on screen for the rest of the match.
     act(decideStart({ t: 'roster', members: ev.members.map((m) => m.id) }, startState()));
     if (bridge) renderRoom(bridge);
-    // The in-match LEAVE is a guest's (POK-241): who is host may have just changed.
+    // The in-match LEAVE depends on who is host (POK-241), which may have just changed.
     if (bridge) renderSpectate(bridge, spectate);
     if (bridge) {
       // START: the host shuts the door and deals the match. This is what the ten-second

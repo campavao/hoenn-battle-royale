@@ -16,7 +16,7 @@ expect u8 *gSaveBlock1Ptr+4 0
 expect u8 *gSaveBlock1Ptr+5 24
 # He is at Route 109, and nowhere else: 109's man and boat shown, Dewford's hidden.
 expect u16 *gSaveBlock1Ptr+0x14C8 3
-expectbits u8 *gSaveBlock1Ptr+0x12CC 0xB0 0x90
+expectbits u8 *gSaveBlock1Ptr+0x12CC 0xF8 0xD8
 expectbits u8 *gSaveBlock1Ptr+0x12CD 0x01 0x00
 shot ashore
 # Face him and talk: "where are we bound?" with DEWFORD and CANCEL.
@@ -59,6 +59,6 @@ expect u8 *gSaveBlock1Ptr+5 11
 # meant "not at sea" in a game past the story -- the flags say where he is).
 expectne u16 *gSaveBlock1Ptr+0x14C8 0
 # Dewford's man and boat shown; Route 109's hidden behind us.
-expectbits u8 *gSaveBlock1Ptr+0x12CC 0xB0 0x20
+expectbits u8 *gSaveBlock1Ptr+0x12CC 0xF8 0x68
 expectbits u8 *gSaveBlock1Ptr+0x12CD 0x01 0x01
 say briney ferry ok

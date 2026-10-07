@@ -272,6 +272,11 @@ static void ClearTheLateStory(void)
     FlagSet(FLAG_MR_BRINEY_SAILING_INTRO);
     FlagSet(FLAG_DELIVERED_STEVEN_LETTER);
     FlagSet(FLAG_DELIVERED_DEVON_GOODS);
+    // The cottage's sail rings DAD on the POKENAV the first time unless this is set: ten
+    // seconds of a match spent on a call (2026-10-07 review). MR. STONE would hand out an
+    // EXP. SHARE for the delivered LETTER; marked had, DEVON gives what it gave before.
+    FlagSet(FLAG_ENABLE_NORMAN_MATCH_CALL);
+    FlagSet(FLAG_RECEIVED_EXP_SHARE);
 }
 
 // MR. BRINEY is one man in pret, at one of three stops -- his cottage on Route 104,
@@ -280,7 +285,9 @@ static void ClearTheLateStory(void)
 // wherever the player walks up to his boat: each stop's map, loaded with him ashore,
 // moves him there the way pret's own EventScript_MoveMrBriney* does after a whiteout,
 // before the map's objects are made. A sail runs untouched -- its scripts back the var
-// up to 0 for the trip and put it back on landing, and the stop they land at is his.
+// up to 0 for the trip and copy the old stop back on landing, so after a sail the var
+// can name the stop he left: the hide flags are where he is, and the next stop map
+// loaded sets both again. 0 is the only value read here, as "at sea".
 static const u16 sBrineyFlags[] =
 {
     FLAG_HIDE_BRINEYS_HOUSE_MR_BRINEY,

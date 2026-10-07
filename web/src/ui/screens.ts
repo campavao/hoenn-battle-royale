@@ -205,12 +205,13 @@ export interface RoomModel {
 }
 
 /** The room, Kanto's lobby: code on top, the seats, the note, the host's options,
- *  START or LEAVE. A trainer's card opens over the seats. */
+ *  START (the host's) and LEAVE. A trainer's card opens over the seats. */
 export function roomScreen(model: () => RoomModel): DrawnScreen {
   return {
     back() {
       const m = model();
       if (m.card) m.onCloseCard();
+      // Not B for the host: a stray B would hand the room to a guest. LEAVE is theirs.
       else if (!m.isHost) m.onLeave();
     },
     paint(c, h): Painted {
