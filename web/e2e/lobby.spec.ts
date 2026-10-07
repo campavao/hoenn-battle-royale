@@ -253,9 +253,9 @@ test('the host can set the opening length, and show somebody the door (POK-241)'
     const guest = await guestCtx.newPage();
     await guest.goto(`/#join=${code}&noauto&rom=${romHashParam()}`);
     await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 60_000 });
-    // The guest has a way out of their own, which the host does not.
+    // Both have a way out (2026-10-07 play-test: the host's room screen had START alone).
     await expect(guest.locator('#room-leave')).toBeVisible({ timeout: 30_000 });
-    await expect(host.locator('#room-leave')).toBeHidden();
+    await expect(host.locator('#room-leave')).toBeVisible();
 
     await host.locator('#room-roster .roster-name').nth(1).click();
     await host.locator('#trainer-card .card-kick').click();

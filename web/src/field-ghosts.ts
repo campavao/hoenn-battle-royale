@@ -8,7 +8,9 @@
 //
 //   - Hoenn's people: the map's object templates in the save block, minus a set hide
 //     flag, a trainer somebody beat (gBrDespawned) and the movement types that are never
-//     a plain standing sprite. A wanderer stands at its home tile until the ROM has it.
+//     a plain standing sprite. A wanderer stands where the ROM let it go: the ROM moves
+//     its template there as it despawns (br_field.c BrField_KeepWhereLeft), so the
+//     handover to and from the page is in place, not a jump back to its home tile.
 //   - other players' ghosts: gBrSeats, the ROM's own copy of where every seat is.
 //   - the loot on the ground: gBrLoot.
 //

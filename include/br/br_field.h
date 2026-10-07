@@ -223,6 +223,20 @@ void BrField_CancelLeave(void (*enter)(void));
 // MAP_OFFSET included). The engine removes anything outside it on every camera step,
 // so a ghost or a ball is spawned only in it.
 bool8 BrField_InObjectView(s16 x, s16 y);
+// event_object_movement.c, RemoveObjectEventIfOutsideView: a wanderer let go of stays on
+// the tile it was let go on (2026-10-07 play-test: "npcs flashing on the screen when
+// moving around ... when they'd be off screen"). The box ends 40 rows above the LCD and
+// 72 below, inside a phone's field, and the page draws whoever the ROM lets go of from
+// their template (web/src/field-ghosts.ts): a wanderer a tile from home jumped there as
+// it went. Its template now says where it was, for the page and for the ROM's own
+// respawn alike; BrField_KeepHome keeps his range round the home he had. Not covered: walkers on a fixed
+// route (moving their home would break the route), the facing (the page draws a
+// type's first one), and a man still out when you cross a connection and back (the
+// map's templates are read afresh there).
+void BrField_KeepWhereLeft(struct ObjectEvent *objectEvent);
+// event_object_movement.c, InitObjectEventStateFromTemplate: a wanderer respawned from
+// where BrField_KeepWhereLeft left him wanders round his old home, not round that spot.
+void BrField_KeepHome(struct ObjectEvent *objectEvent);
 // Tiles from the middle of the view, which is where the player stands (or the ghost a
 // spectator rides): who gets a slot first when there are not enough.
 u16 BrField_ViewDistance(s16 x, s16 y);

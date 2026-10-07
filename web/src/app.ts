@@ -276,24 +276,26 @@ const settings = {
 };
 
 /** The battle over the map (2026-10-05 play-test: "disable the white battle background so
- *  the battle overlays the map"). An experiment, so a switch on the trainer's screen and
- *  off until somebody turns it on; this browser's alone. */
+ *  the battle overlays the map"). Still an experiment, a switch on the trainer's screen,
+ *  but on until somebody turns it off (2026-10-07: "can we hide the background of the
+ *  battle so that you can see underneath?"); this browser's alone. '0' is off; anything
+ *  else, nothing stored included, is on. */
 const SEE_THROUGH_KEY = 'hbr-see-through';
 
 function seeThrough(): boolean {
   try {
-    return localStorage.getItem(SEE_THROUGH_KEY) === '1';
+    return localStorage.getItem(SEE_THROUGH_KEY) !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
 function setSeeThrough(on: boolean): void {
   try {
-    if (on) localStorage.setItem(SEE_THROUGH_KEY, '1');
-    else localStorage.removeItem(SEE_THROUGH_KEY);
+    if (on) localStorage.removeItem(SEE_THROUGH_KEY);
+    else localStorage.setItem(SEE_THROUGH_KEY, '0');
   } catch {
-    // A browser that keeps nothing keeps the battle as it was.
+    // A browser that keeps nothing keeps the default.
   }
 }
 
@@ -1539,7 +1541,7 @@ function renderResults(
     fieldSize: number;
     seed?: number;
   },
-  shown: { career: string; held: boolean; again: ResultsModel['again'] },
+  shown: { career: string; held: boolean; again: ResultsModel['again']; menu?: () => void },
 ): void {
   const mine = books.results.forSeat(seat, performance.now());
   if (!mine.ended || shown.held) return;
@@ -1550,6 +1552,7 @@ function renderResults(
     fame: fameOf(mine.winner, seat, mine.winner === undefined ? undefined : books.parties.get(mine.winner), nameOf, speciesName),
     record: recordLines(books.record.forSeat(seat)),
     again: shown.again,
+    menu: shown.menu,
   };
   const stage = theStage();
   if (resultsUp && stage.current === resultsUp.screen) {
@@ -1865,7 +1868,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
         career,
         held: paraded.holds(session.results.forSeat(0, performance.now()).winner, 0),
         // No room to go back to: the lobby, now or when the grace is up.
-        again: { label: 'LOBBY', id: 'results-lobby', onPress: leaveSolo },
+        again: { label: 'MAIN MENU', id: 'results-lobby', onPress: leaveSolo },
       },
     );
   // The seed main() wrote into the ROM before its boot, so the opening's cell is dealt off
@@ -2088,7 +2091,7 @@ function wireRoom(
 
   // ---- the room, drawn (POK-320) ----
   // Kanto's lobby: the code, a 2x4 of seats with everybody's sprite, what START would
-  // make, the host's options, START or LEAVE. It covers the game until the match is
+  // make, the host's options, START (the host's) and LEAVE. It covers the game until the match is
   // on: nobody walks Littleroot while the host is still choosing the fog.
   const hostOptions = (view: RoomView) => {
     const redraw = () => stage.redraw();
@@ -2245,9 +2248,11 @@ function wireRoom(
     // The host's one power over another seat, on the card (POK-241).
     card: bridge ? cardOf(bridge.roster, sheetCard, roomKick !== null) : null,
     watch: bridge ? watchOf(bridge, spectate) : null,
-    // A host leaving closes the room for everybody -- that is what migration is for --
-    // so the in-match LEAVE is a guest's (POK-241).
-    canLeave: !isHost,
+    // A host leaving mid-fight hands the match to an heir (migration, POK-252), so the
+    // in-match LEAVE is a guest's while the host is still in it (POK-241) -- and the
+    // host's too once it is out and only watching (2026-10-07 play-test: every screen has
+    // a way back to the menu).
+    canLeave: !isHost || (bridge !== null && watchOf(bridge, spectate) !== null),
     onSeat: (seat) => {
       sheetCard = sheetCard === seat ? null : seat;
       redrawSheet();
@@ -2421,6 +2426,7 @@ function wireRoom(
         career,
         held: paraded.holds(session.results.forSeat(seat, performance.now()).winner, seat),
         again: { label: 'PLAY AGAIN', id: 'play-again', disabled: returning, onPress: () => void returnToRoom() },
+        menu: () => backToLobby(),
       },
     );
   };
@@ -2445,9 +2451,9 @@ function wireRoom(
         pollMs: PARADE_POLL_MS,
         paradeDone: gBrMatch !== undefined ? paraded.finished : undefined,
       }),
-      // Back to the room, not out of it: the host did not even have a LEAVE button, and
-      // keeping the room makes the next match a press of START rather than eight people
-      // finding each other again.
+      // Back to the room, not out of it (MAIN MENU is the way out): keeping the room
+      // makes the next match a press of START rather than eight people finding each
+      // other again.
       exit: () => void returnToRoom(),
     },
     {
@@ -2880,7 +2886,7 @@ function wireRoom(
     // leave the host's controls on screen for the rest of the match.
     act(decideStart({ t: 'roster', members: ev.members.map((m) => m.id) }, startState()));
     if (bridge) renderRoom(bridge);
-    // The in-match LEAVE is a guest's (POK-241): who is host may have just changed.
+    // The in-match LEAVE depends on who is host (POK-241), which may have just changed.
     if (bridge) renderSpectate(bridge, spectate);
     if (bridge) {
       // START: the host shuts the door and deals the match. This is what the ten-second

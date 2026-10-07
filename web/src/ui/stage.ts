@@ -363,9 +363,11 @@ export class Stage {
     const all = this.selectable();
     if (all.length === 0) return null;
     const found = this.cursorKey === null ? undefined : all.find((w) => this.keyOf(w) === this.cursorKey);
-    const sel = found ?? all[0];
-    this.cursorKey = this.keyOf(sel);
-    return sel;
+    // The first thing, until a key or a tap picks: not kept, so a screen whose first
+    // thing arrives late (the room's seats, after its LEAVE) starts the cursor there
+    // and not on whatever stood first a frame before (2026-10-07: a host's cursor sat
+    // on LEAVE).
+    return found ?? all[0];
   }
 
   /** A GBA key while a screen is up. Returns whether it was for the screen (always,

@@ -75,7 +75,7 @@ export class Results {
   }
 
   /** Is the match over? Asked by the room, which has to answer it without a seat (the
-   *  host's LEAVE button appears at the end of a match and only then). */
+   *  host's match LEAVE appears once it is out of the match). */
   isOver(): boolean {
     return this.ended;
   }

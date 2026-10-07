@@ -332,7 +332,18 @@ def export():
         for conn in mj.get("connections") or []:
             d = DIR_MAP.get(conn["direction"])
             if d:
-                seams.append({"dir": d, "to": conn["map"], "offset": conn["offset"]})
+                seam = {"dir": d, "to": conn["map"], "offset": conn["offset"]}
+                # The ROM copies MAP_OFFSET (7) cells of a neighbour into its own grid and
+                # draws them with THIS map's tilesets: right when the two share both, which
+                # is what lets the page show the ROM's own picture of them (field.ts
+                # bandClip) -- animated water and all -- instead of a still.
+                other = maps_meta.get(conn["map"])
+                other_layout = layouts.get(other["json"]["layout"]) if other else None
+                if other_layout and (other_layout["primary_tileset"], other_layout.get("secondary_tileset")) == (
+                    layout["primary_tileset"], layout.get("secondary_tileset")
+                ):
+                    seam["same"] = True
+                seams.append(seam)
 
         # warps (overlay class 8 after cut-tree/rock so warp tiles always read as doors)
         warps = []

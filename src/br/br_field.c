@@ -400,6 +400,88 @@ bool8 BrField_InObjectView(s16 x, s16 y)
         && y >= gSaveBlock1Ptr->pos.y && y <= gSaveBlock1Ptr->pos.y + 16;
 }
 
+// The homes of the wanderers BrField_KeepWhereLeft has moved, by map and local id (0 is
+// an empty entry: local ids start at 1). A respawn spawns where the man was left -- his
+// template -- and wanders round his home, as pret's spawn would have him: the template
+// alone would move the middle of his range too, a range a time (2026-10-07 review).
+struct BrWanderHome
+{
+    u8 localId;
+    u8 mapNum;
+    u8 mapGroup;
+    struct Coords16 home;
+};
+
+#define BR_WANDER_HOMES 16
+static EWRAM_DATA struct BrWanderHome sWanderHome[BR_WANDER_HOMES] = {0};
+static EWRAM_DATA u8 sWanderNext = 0;
+
+static struct BrWanderHome *WanderHomeOf(struct ObjectEvent *objectEvent)
+{
+    u8 i;
+
+    for (i = 0; i < BR_WANDER_HOMES; i++)
+    {
+        if (sWanderHome[i].localId == objectEvent->localId
+         && sWanderHome[i].mapNum == objectEvent->mapNum
+         && sWanderHome[i].mapGroup == objectEvent->mapGroup)
+            return &sWanderHome[i];
+    }
+    return NULL;
+}
+
+void BrField_KeepWhereLeft(struct ObjectEvent *objectEvent)
+{
+    struct ObjectEventTemplate *t;
+    struct BrWanderHome *home;
+    u8 i;
+
+    switch (objectEvent->movementType)
+    {
+    case MOVEMENT_TYPE_WANDER_AROUND:
+    case MOVEMENT_TYPE_WANDER_UP_AND_DOWN:
+    case MOVEMENT_TYPE_WANDER_DOWN_AND_UP:
+    case MOVEMENT_TYPE_WANDER_LEFT_AND_RIGHT:
+    case MOVEMENT_TYPE_WANDER_RIGHT_AND_LEFT:
+        break;
+    default:
+        return;
+    }
+    if (objectEvent->mapNum != gSaveBlock1Ptr->location.mapNum
+     || objectEvent->mapGroup != gSaveBlock1Ptr->location.mapGroup)
+        return;
+    for (i = 0; i < OBJECT_EVENT_TEMPLATES_COUNT; i++)
+    {
+        t = &gSaveBlock1Ptr->objectEventTemplates[i];
+        if (t->localId == objectEvent->localId)
+            break;
+    }
+    if (i == OBJECT_EVENT_TEMPLATES_COUNT)
+        return;
+    // His home is the middle of the range he was spawned with: the map's, or the one
+    // this kept for him at his last respawn (BrField_KeepHome).
+    home = WanderHomeOf(objectEvent);
+    if (home == NULL)
+    {
+        home = &sWanderHome[sWanderNext];
+        sWanderNext = (sWanderNext + 1) % BR_WANDER_HOMES;
+        home->localId = objectEvent->localId;
+        home->mapNum = objectEvent->mapNum;
+        home->mapGroup = objectEvent->mapGroup;
+    }
+    home->home = objectEvent->initialCoords;
+    t->x = objectEvent->currentCoords.x - MAP_OFFSET;
+    t->y = objectEvent->currentCoords.y - MAP_OFFSET;
+}
+
+void BrField_KeepHome(struct ObjectEvent *objectEvent)
+{
+    struct BrWanderHome *home = WanderHomeOf(objectEvent);
+
+    if (home != NULL)
+        objectEvent->initialCoords = home->home;
+}
+
 u16 BrField_ViewDistance(s16 x, s16 y)
 {
     s16 dx = x - (gSaveBlock1Ptr->pos.x + MAP_OFFSET);

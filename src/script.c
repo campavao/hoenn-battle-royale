@@ -5,6 +5,9 @@
 #include "util.h"
 #include "constants/event_objects.h"
 #include "constants/map_scripts.h"
+#if BR
+#include "br/br_boot.h"
+#endif
 
 #define RAM_SCRIPT_MAGIC 51
 
@@ -332,6 +335,9 @@ void RunOnLoadMapScript(void)
 
 void RunOnTransitionMapScript(void)
 {
+#if BR
+    BrBoot_PlaceBriney();
+#endif
     MapHeaderRunScriptType(MAP_SCRIPT_ON_TRANSITION);
 }
 

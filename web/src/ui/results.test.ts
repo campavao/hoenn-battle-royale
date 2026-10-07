@@ -57,6 +57,30 @@ describe('what the results say', () => {
     expect(model.again!.onPress).toHaveBeenCalled();
     for (const w of painted.widgets) expect(w.rect.y + w.rect.h, w.text).toBeLessThanOrEqual(320);
   });
+
+  // 2026-10-07 play-test: "there is no menu button after a game, meaning there is no way to
+  // exit without modifying the url".
+  it('has MAIN MENU beside PLAY AGAIN, side by side and both on the screen', () => {
+    const menu = vi.fn();
+    const model: ResultsModel = {
+      view: resultsView({ ended: true, winner: 2, placement: 2, survived: 30 }, 8, 1, nameOf),
+      career: '1 played · 0 won · best 2nd',
+      fame: null,
+      record: [],
+      again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
+      menu,
+    };
+    const painted = resultsScreen(() => model).paint(fakeCanvas().canvas, 320);
+    const again = painted.widgets.find((w) => w.id === 'play-again')!;
+    const out = painted.widgets.find((w) => w.id === 'results-menu')!;
+    expect(out.text).toBe('MAIN MENU');
+    expect(out.rect.y, 'one row').toBe(again.rect.y);
+    expect(out.rect.x, 'no overlap').toBeGreaterThanOrEqual(again.rect.x + again.rect.w);
+    out.onPress!();
+    expect(menu).toHaveBeenCalled();
+    const without = resultsScreen(() => ({ ...model, menu: undefined })).paint(fakeCanvas().canvas, 320);
+    expect(without.widgets.find((w) => w.id === 'results-menu'), "solo's own button is the menu").toBeUndefined();
+  });
 });
 
 describe("the champion's Hall of Fame comes first (POK-320)", () => {

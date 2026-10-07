@@ -1331,6 +1331,9 @@ static u8 InitObjectEventStateFromTemplate(const struct ObjectEventTemplate *tem
         if (objectEvent->range.rangeY == 0)
             objectEvent->range.rangeY++;
     }
+#if BR
+    BrField_KeepHome(objectEvent);
+#endif
     return objectEventId;
 }
 
@@ -1713,6 +1716,9 @@ static void RemoveObjectEventIfOutsideView(struct ObjectEvent *objectEvent)
     if (objectEvent->initialCoords.x >= left && objectEvent->initialCoords.x <= right
      && objectEvent->initialCoords.y >= top && objectEvent->initialCoords.y <= bottom)
         return;
+#if BR
+    BrField_KeepWhereLeft(objectEvent);
+#endif
     RemoveObjectEvent(objectEvent);
 }
 

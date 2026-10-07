@@ -205,12 +205,13 @@ export interface RoomModel {
 }
 
 /** The room, Kanto's lobby: code on top, the seats, the note, the host's options,
- *  START or LEAVE. A trainer's card opens over the seats. */
+ *  START (the host's) and LEAVE. A trainer's card opens over the seats. */
 export function roomScreen(model: () => RoomModel): DrawnScreen {
   return {
     back() {
       const m = model();
       if (m.card) m.onCloseCard();
+      // Not B for the host: a stray B would hand the room to a guest. LEAVE is theirs.
       else if (!m.isHost) m.onLeave();
     },
     paint(c, h): Painted {
@@ -269,9 +270,12 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       }
 
       if (!m.started) {
+        // LEAVE for the host too (2026-10-07 play-test: every screen has a way back to the
+        // menu): the relay hands the room to a guest, or closes it with nobody in it.
         const buttons: ButtonSpec[] = m.isHost
           ? [{ label: m.startLabel, id: 'room-start', disabled: !m.canStart, onPress: m.onStart }]
-          : [{ label: 'LEAVE', id: 'room-leave', cls: 'room-leave', onPress: m.onLeave }];
+          : [];
+        buttons.push({ label: 'LEAVE', id: 'room-leave', cls: 'room-leave', onPress: m.onLeave });
         widgets.push(...paintButtons(c, Math.min(y, h - 28), buttons));
       }
 

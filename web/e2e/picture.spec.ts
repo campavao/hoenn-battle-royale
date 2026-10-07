@@ -423,7 +423,7 @@ test("a 256-row band: a person crossing its bottom is drawn once, and the window
   }
 });
 
-test("the band stops at the map's edge: walking down to Route 103's last row, the clip cuts exactly the rows past it", async ({ browser }) => {
+test("the band stops past the map's edge: walking down to Route 103's last row, the clip cuts exactly the rows past Oldale's first seven", async ({ browser }) => {
   test.setTimeout(240_000);
   const sym = loadSymbols();
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
@@ -460,8 +460,10 @@ test("the band stops at the map's edge: walking down to Route 103's last row, th
       expect(inset, `a clip-path the page could have set ("${clip}")`).not.toBeNull();
       const [top, right, bottom, left] = inset!.map((v) => Math.round(v / scale));
       // The rows past the edge: the band's last row is 16y - 72 + 160 + its bottom, the
-      // map's 16h. None past the top: row 13's band starts on the map's row 2.
-      const past = Math.max(0, Math.min(BAND_BOTTOM, 16 * y - LCD_TOP + 160 + BAND_BOTTOM - 16 * ROUTE_103.h));
+      // map's 16h -- less the 7 rows of Oldale the ROM keeps below it and draws right, the
+      // two sharing their tilesets (field.ts edgeReach). None past the top: row 13's band
+      // starts on the map's row 2.
+      const past = Math.max(0, Math.min(BAND_BOTTOM, 16 * y - LCD_TOP + 160 + BAND_BOTTOM - 16 * ROUTE_103.h - 7 * 16));
       expect({ top, right, bottom, left }, `row ${y}: the rows past the edge, and nothing else (clip-path "${clip}")`).toEqual({ top: 0, right: 0, bottom: past, left: 0 });
       expect(edgeCut(cam, band!), "play.ts's copy agrees").toEqual({ left: 0, top: 0, right: 0, bottom: past });
       bottoms.push(bottom);
@@ -479,7 +481,7 @@ test("the band stops at the map's edge: walking down to Route 103's last row, th
         }
       }
     }
-    expect(bottoms, '176 on row 13, then 16 more a step until the band is all past the edge').toEqual([176, 192, 208, 224, 232, 232, 232, 232, 232]);
+    expect(bottoms, "64 on row 13, then 16 more a step: Oldale's seven rows are never cut").toEqual([64, 80, 96, 112, 128, 144, 160, 176, 192]);
     await page.screenshot({ path: path.join(OUT_DIR, 'edge.png') });
   } finally {
     await ctx.close();

@@ -110,7 +110,7 @@ describe('the profile rows', () => {
     // experiment, 2026-10-05), career -- then the ways in.
     expect(rows[6].label).toBe('BATTLE BG');
     expect(rows[6].detail).toBe('shown');
-    expect(fixedRows(true, { name: 'WALLY', skin: 'MAY', seeThrough: true })[6].detail).toBe('off: over the map (test)');
+    expect(fixedRows(true, { name: 'WALLY', skin: 'MAY', seeThrough: true })[6].detail).toBe('off: over the map');
     expect(rows[7].label).toBe('MY CAREER');
     expect(rows[8].label).toBe('QUICK PLAY');
     expect(rows[rows.length - 1].label).toBe('SOLO VS BOTS');

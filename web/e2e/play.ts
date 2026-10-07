@@ -79,9 +79,21 @@ const OUTDOOR = (worldData as { maps: { group: number; num: number; outdoor: boo
   .filter((m) => m.outdoor)
   .map((m) => `${m.group}:${m.num}`);
 
-/** Every map's size in tiles, `group:num`: the band stops at the edge (POK-329). */
-const SIZES: Record<string, [number, number]> = Object.fromEntries(
-  (worldData as { maps: { group: number; num: number; w: number; h: number }[] }).maps.map((m) => [`${m.group}:${m.num}`, [m.w, m.h]]),
+/** How far past an edge the ROM's picture is the world, in map pixels (field.ts
+ *  edgeReach): all the way where nothing is joined (1e9), MAP_OFFSET cells where every
+ *  neighbour shares the tilesets, none otherwise. */
+type Seam = { dir: string; same?: boolean };
+const reachOf = (seams: Seam[], dir: string): number => {
+  const joined = seams.filter((s) => s.dir === dir);
+  return joined.length === 0 ? 1e9 : joined.every((s) => s.same) ? 7 * 16 : 0;
+};
+/** Every map's size in tiles and its reach past each edge, north, south, west, east,
+ *  `group:num`: the band stops there (POK-329). */
+const SIZES: Record<string, [number, number, number, number, number, number]> = Object.fromEntries(
+  (worldData as { maps: { group: number; num: number; w: number; h: number; seams: Seam[] }[] }).maps.map((m) => [
+    `${m.group}:${m.num}`,
+    [m.w, m.h, reachOf(m.seams, 'north'), reachOf(m.seams, 'south'), reachOf(m.seams, 'west'), reachOf(m.seams, 'east')],
+  ]),
 );
 
 type Band = { left: number; top: number; right: number; bottom: number };
@@ -113,13 +125,14 @@ export function edgeCut(cam: Cam, band: Band): Band {
   for (let dy = 15; dy < RING_ROWS - RING_ABOVE; dy++) if ((stale >>> (dy + RING_ABOVE)) & 1) { staleBottom = (cam.y + dy - 7) * 16; break; }
   const w = size ? size[0] * 16 : Infinity;
   const h = size ? size[1] * 16 : Infinity;
+  const [north, south, west, east] = size ? size.slice(2) : [Infinity, Infinity, Infinity, Infinity];
   const bottom = top + GBA_H + band.bottom;
   const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
   return {
-    left: cut(Math.max(band.left - left, ringLeft - (left - band.left)), band.left),
-    top: cut(Math.max(size ? band.top - top - HEAD_ROOM : 0, staleTop - (top - band.top)), band.top),
-    right: cut(Math.max(left + GBA_W + band.right - w, left + GBA_W + band.right - (ringLeft + 256)), band.right),
-    bottom: cut(Math.max(bottom - h, bottom - staleBottom), band.bottom),
+    left: cut(Math.max(band.left - left - west, ringLeft - (left - band.left)), band.left),
+    top: cut(Math.max(size ? band.top - top - Math.max(HEAD_ROOM, north) : 0, staleTop - (top - band.top)), band.top),
+    right: cut(Math.max(left + GBA_W + band.right - w - east, left + GBA_W + band.right - (ringLeft + 256)), band.right),
+    bottom: cut(Math.max(bottom - h - south, bottom - staleBottom), band.bottom),
   };
 }
 
@@ -384,7 +397,7 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
       const sub = (v: number) => (v > 0 ? v - 16 : v < 0 ? v + 16 : 0);
       // field.ts's bandClip, as play.ts's edgeCut has it.
       const edgeCut = (c: Cam, band: Band): Band => {
-        const size = (sizes as Record<string, [number, number]>)[c.map];
+        const size = (sizes as Record<string, [number, number, number, number, number, number]>)[c.map];
         const left = c.x * 16 - k.LCD_LEFT + sub(c.subX);
         const top = c.y * 16 - k.LCD_TOP + sub(c.subY);
         const ringLeft = c.x * 16 - k.LCD_LEFT - (c.subX > 0 ? 16 : 0);
@@ -394,13 +407,14 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         for (let dy = 15; dy < 28; dy++) if ((c.stale >>> (dy + 4)) & 1) { staleBottom = (c.y + dy - 7) * 16; break; }
         const w = size ? size[0] * 16 : Infinity;
         const h = size ? size[1] * 16 : Infinity;
+        const [north, south, west, east] = size ? size.slice(2) : [Infinity, Infinity, Infinity, Infinity];
         const bottom = top + k.GBA_H + band.bottom;
         const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
         return {
-          left: cut(Math.max(band.left - left, ringLeft - (left - band.left)), band.left),
-          top: cut(Math.max(size ? band.top - top - k.HEAD_ROOM : 0, staleTop - (top - band.top)), band.top),
-          right: cut(Math.max(left + k.GBA_W + band.right - w, left + k.GBA_W + band.right - (ringLeft + 256)), band.right),
-          bottom: cut(Math.max(bottom - h, bottom - staleBottom), band.bottom),
+          left: cut(Math.max(band.left - left - west, ringLeft - (left - band.left)), band.left),
+          top: cut(Math.max(size ? band.top - top - Math.max(k.HEAD_ROOM, north) : 0, staleTop - (top - band.top)), band.top),
+          right: cut(Math.max(left + k.GBA_W + band.right - w - east, left + k.GBA_W + band.right - (ringLeft + 256)), band.right),
+          bottom: cut(Math.max(bottom - h - south, bottom - staleBottom), band.bottom),
         };
       };
       const insetOf = (clip: string): number[] | null => {
