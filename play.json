@@ -1,7 +1,33 @@
 {
- "readAt": "2026-10-06T21:21:56.171Z",
+ "readAt": "2026-10-07T13:54:54.987Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "H9HG23",
+   "at": "2026-10-07T13:38:01.985Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-07T13:38:12.051Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 959
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "PBVXTX",
    "at": "2026-10-06T19:26:25.274Z",
