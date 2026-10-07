@@ -153,8 +153,9 @@ u8 BrBattle_AutoScrollFrames(void);
 // background so the battle overlays the map"). [0] the page writes: nonzero asks for it.
 // [1] the ROM keeps: frames left in which a battle drew its picture see-through, 2 from
 // every battle VBlank, one off each BrFrame -- the page keys the picture while it is up.
-// See-through is no terrain (BG3) and the backdrop BR_SEE_THROUGH_KEY, pure blue, which
-// the page's filter makes transparent so the field it draws under the picture shows.
+// See-through keys the backdrop and the environment's stripes BR_SEE_THROUGH_KEY, pure
+// blue, which the page's filter makes transparent so the field it draws under the picture
+// shows; the platforms stay, in the environment's colours (2026-10-07 play-test).
 #define BR_SEE_THROUGH_KEY RGB(0, 0, 31)
 extern u8 gBrSeeThrough[2];
 // battle_main.c, VBlankCB_Battle, before the palettes go up.
