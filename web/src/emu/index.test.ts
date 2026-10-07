@@ -136,6 +136,15 @@ describe('Emulator', () => {
       expect(calls).toEqual(['press up', 'release up']);
     });
 
+    it('takes a letter in either case: Caps Lock, or Shift held', async () => {
+      const { win, calls } = await bound();
+      win.dispatchEvent(key('keydown', 'Z'));
+      win.dispatchEvent(key('keyup', 'z'));
+      win.dispatchEvent(key('keydown', 'z'));
+      win.dispatchEvent(key('keyup', 'Z'));
+      expect(calls).toEqual(['press a', 'release a', 'press a', 'release a']);
+    });
+
     it('lets go of everything when the window blurs or the tab hides', async () => {
       const { emu, win, doc, calls } = await bound();
       win.dispatchEvent(key('keydown', 'ArrowUp'));
