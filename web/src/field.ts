@@ -1052,9 +1052,9 @@ export class FieldView {
     return { x, y, eva, evb };
   }
 
-  /** Every object the ROM has on the map except the player, where its sprite is. */
-  /** The map's objects the page draws, and the player's, which the picture draws on the
-   *  field and the still keeps for under a battle. */
+  /** Every object the ROM has on the map, where its sprite is: the people the page draws,
+   *  and the player apart, whom the picture draws on the field and the still keeps for
+   *  under a battle. */
   private readSprites(sb1: number): { people: FieldSprite[]; player: FieldSprite | null } {
     const objs = this.sym('gObjectEvents');
     const sprs = this.sym('gSprites');
