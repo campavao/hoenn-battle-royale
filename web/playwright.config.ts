@@ -63,10 +63,12 @@ export default defineConfig({
           {
             name: 'play-firefox',
             testMatch: 'play.spec.ts',
-            // Headless Firefox on a GPU-less runner turns WebGL off, and without it the
-            // core draws nothing at all (no texture: brPicturePtr 0, emscripten's context
-            // none, 2026-10-08). Force it on, in software, so the picture is drawn.
-            use: { ...devices['Desktop Firefox'], launchOptions: { firefoxUserPrefs: { 'webgl.force-enabled': true, 'webgl.disabled': false } } },
+            // Headless Firefox on a GPU-less runner has no WebGL (forcing it on in the
+            // prefs did not take), and without it the core draws nothing at all: no
+            // texture, brPicturePtr 0, emscripten's context none (2026-10-08). CI runs it
+            // headed under xvfb instead (HBR_FIREFOX_HEADED, ci.yml), where Mesa's
+            // software GL backs it.
+            use: { ...devices['Desktop Firefox'], headless: !process.env.HBR_FIREFOX_HEADED },
           },
         ]
       : []),
