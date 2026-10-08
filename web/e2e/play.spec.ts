@@ -181,13 +181,23 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     // See-through is on by default: the page keys its own copy of the LCD over the
     // picture, which Safari never drew through the url() filter (Cam's 2026-10-08 shot,
     // a battle all key blue). Composited, no more than a sliver of the LCD is the key.
-    const p = await picture(page);
-    const layer = await page.evaluate(() => {
+    // A slower browser (Firefox's software WebGL) is still in the transition at 1.5 s,
+    // before the battle's VBlank keys anything: wait for the layer, and say why if never.
+    const seen = async () => page.evaluate((see) => {
       const k = document.querySelector('#key-layer') as HTMLCanvasElement;
       const r = k.getBoundingClientRect();
-      return { shown: !k.hidden, lcd: (document.querySelector('#canvas') as HTMLElement).style.visibility, x: r.x, y: r.y, width: r.width, height: r.height };
-    });
-    expect(layer, 'the keyed copy stands in for the picture, on the LCD').toEqual({
+      const emu = (window as unknown as { __hbr: { emu: { read(a: number, bits: number): number; lcdPixels(out: Uint8ClampedArray): boolean } } }).__hbr.emu;
+      const why = { rom: [emu.read(see, 8), emu.read(see + 1, 8)], copy: emu.lcdPixels(new Uint8ClampedArray(240 * 160 * 4)) };
+      return { shown: !k.hidden, lcd: (document.querySelector('#canvas') as HTMLElement).style.visibility, x: r.x, y: r.y, width: r.width, height: r.height, why };
+    }, sym.gBrSeeThrough);
+    let layer = await seen();
+    for (let i = 0; i < 40 && !layer.shown; i++) {
+      await page.waitForTimeout(250);
+      layer = await seen();
+    }
+    const p = await picture(page);
+    const { why, ...shown } = layer;
+    expect(shown, `the keyed copy stands in for the picture, on the LCD (gBrSeeThrough ${why.rom}, copy ${why.copy})`).toEqual({
       shown: true, lcd: 'hidden', x: expect.closeTo(p.lcd.x, 0), y: expect.closeTo(p.lcd.y, 0), width: expect.closeTo(p.lcd.width, 0), height: expect.closeTo(p.lcd.height, 0),
     });
     expect(await keyBlue(page, p.lcd), 'the battle backdrop is see-through, not key blue').toBeLessThan(0.02);
