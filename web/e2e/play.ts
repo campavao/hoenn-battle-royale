@@ -154,7 +154,7 @@ type Emu = {
   onFrame(fn: () => void): () => void;
   viewport: Band | null;
 };
-type EmuWindow = { __hbr: { emu: Emu } };
+export type EmuWindow = { __hbr: { emu: Emu } };
 
 /** One look at the ROM, for the spec's decisions. */
 export interface Ram {

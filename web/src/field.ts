@@ -964,16 +964,30 @@ export class FieldView {
   private layered = false;
   private keyImage: ImageData | null = null;
 
-  /** This frame's picture, keyed, onto the key layer: false when there is no layer or
-   *  the core cannot hand the picture over. */
+  /** Why the last keyed frame fell back to the filter, or '' when the copy showed: for
+   *  the e2e, which plays in browsers we cannot watch. */
+  keyMiss = '';
+
+  /** This frame's picture, keyed, onto the key layer: false when there is no layer, the
+   *  core cannot hand the picture over, or the browser refuses the copy (keyMiss says). */
   private keyCopy(): boolean {
-    const ctx = this.deps.keyLayer?.getContext('2d');
-    if (!ctx) return false;
-    const img = this.keyImage ?? (this.keyImage = new ImageData(GBA_W, GBA_H));
-    if (!this.deps.emu.lcdPixels(img.data)) return false;
-    keyPicture(img.data);
-    ctx.putImageData(img, 0, 0);
-    return true;
+    try {
+      const ctx = this.deps.keyLayer?.getContext('2d');
+      if (!ctx) return this.missed(this.deps.keyLayer ? 'no 2d context' : 'no layer');
+      const img = this.keyImage ?? (this.keyImage = new ImageData(GBA_W, GBA_H));
+      if (!this.deps.emu.lcdPixels(img.data)) return this.missed('no picture from the core');
+      keyPicture(img.data);
+      ctx.putImageData(img, 0, 0);
+      this.keyMiss = '';
+      return true;
+    } catch (err) {
+      return this.missed(String(err));
+    }
+  }
+
+  private missed(why: string): false {
+    this.keyMiss = why;
+    return false;
   }
 
   private sym(name: string): number | undefined {

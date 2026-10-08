@@ -290,7 +290,8 @@ jobs:
   # patch the rom job built. Not in release's `needs` until it has been green on a tag:
   # headless Firefox with WebGL and SharedArrayBuffer is unproven on this runner.
   play-firefox:
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY (PR #10): on this PR too, for the key layer's diagnostic. Drop before merge.
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: rom
     runs-on: ubuntu-latest
     timeout-minutes: 30
