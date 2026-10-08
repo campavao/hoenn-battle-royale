@@ -3416,6 +3416,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     pad: $('#pad') as HTMLElement,
     rom,
     seeThrough,
+    keyLayer: $('#key-layer') as HTMLCanvasElement,
   });
   fieldView.attach();
   // Dev only: where the page walks the ghosts, for the e2e (POK-323, world-moves.spec.ts).

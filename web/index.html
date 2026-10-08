@@ -98,6 +98,8 @@
       canvas { image-rendering: pixelated; display: block; }
       #field { position: absolute; left: 0; top: 0; }
       #overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+      #key-layer { position: absolute; left: 0; top: 0; pointer-events: none; }
+      #key-layer[hidden] { display: none; }
       /* No object-fit: field.ts sizes the canvas to its buffer's own aspect, and Firefox
          composes object-fit with the clip-path that hides the band into a picture
          squashed to two thirds with black bars (Cam's 2026-09-18 video, "everything got
@@ -255,6 +257,8 @@
           <!-- The field past the picture, drawn by field.ts; the picture sits over it. -->
           <canvas id="field" width="240" height="160" aria-hidden="true"></canvas>
           <canvas id="canvas" width="240" height="160"></canvas>
+          <!-- The see-through battle's keyed copy of the LCD, in its place (field.ts). -->
+          <canvas id="key-layer" width="240" height="160" aria-hidden="true" hidden></canvas>
           <!-- The people the ROM hides past its band (POK-319), drawn over the picture. -->
           <canvas id="overlay" width="240" height="160" aria-hidden="true"></canvas>
           <div id="fps" class="fps" hidden></div>

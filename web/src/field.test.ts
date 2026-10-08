@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, HEAD_ROOM, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, edgeReach } from './field';
+import { FIELD_VIEW_SIZE, HEAD_ROOM, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach } from './field';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -985,5 +985,10 @@ describe('the see-through battle', () => {
     expect(seeThroughAlpha(0, 8 / 255, 1)).toBe(1);
     expect(seeThroughAlpha(0, 0, 0.5)).toBe(1);
     expect(seeThroughAlpha(1, 1, 1)).toBe(1);
+  });
+  it("keys the page's own copy the same way: Safari draws no url() filter on the WebGL picture", () => {
+    const px = new Uint8ClampedArray([0, 0, 248, 255, 0, 0, 255, 0, 8, 0, 255, 0, 0, 0, 0, 0, 120, 200, 64, 9]);
+    keyPicture(px);
+    expect([px[3], px[7], px[11], px[15], px[19]]).toEqual([0, 0, 255, 255, 255]);
   });
 });
