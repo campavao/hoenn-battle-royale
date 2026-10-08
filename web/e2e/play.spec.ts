@@ -54,6 +54,7 @@ import {
   shooter,
   startRecorder,
   tap,
+  type EmuWindow,
   type Ram,
 } from './play';
 
@@ -176,18 +177,32 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     }
     const r = await until(page, sym, 'a wild battle', (x) => x.inBattle, 5_000);
     expect(r.battleType & BATTLE_TYPE_SAFARI, 'a Safari battle').toBeTruthy();
-    await page.waitForTimeout(1_500);
-    await shot('wild');
     // See-through is on by default: the page keys its own copy of the LCD over the
     // picture, which Safari never drew through the url() filter (Cam's 2026-10-08 shot,
-    // a battle all key blue). Composited, no more than a sliver of the LCD is the key.
-    const p = await picture(page);
-    const layer = await page.evaluate(() => {
+    // a battle all key blue). The ROM keys the battle's first VBlank (gBrSeeThrough[1]);
+    // the page shows the copy the frame after. Composited, no more than a sliver of the
+    // LCD is the key.
+    const see = sym.gBrSeeThrough;
+    expect(see, 'gBrSeeThrough is in the symbol table').toBeDefined();
+    const end = Date.now() + 5_000;
+    while ((await page.evaluate((a) => (window as unknown as EmuWindow).__hbr.emu.read(a + 1, 8), see)) === 0) {
+      if (Date.now() > end) throw new Error('the ROM never keyed the battle (gBrSeeThrough[1] stayed 0)');
+      await page.waitForTimeout(100);
+    }
+    const seen = () => page.evaluate(() => {
+      const w = window as unknown as { __hbr: { field?: { keyMiss: string } } };
       const k = document.querySelector('#key-layer') as HTMLCanvasElement;
       const r = k.getBoundingClientRect();
-      return { shown: !k.hidden, lcd: (document.querySelector('#canvas') as HTMLElement).style.visibility, x: r.x, y: r.y, width: r.width, height: r.height };
+      let want = 'on';
+      try { want = localStorage.getItem('hbr-see-through') === '0' ? 'off' : 'on'; } catch { want = 'unknown'; }
+      return { shown: !k.hidden, lcd: (document.querySelector('#canvas') as HTMLElement).style.visibility, x: r.x, y: r.y, width: r.width, height: r.height, miss: w.__hbr.field?.keyMiss ?? '?', want };
     });
-    expect(layer, 'the keyed copy stands in for the picture, on the LCD').toEqual({
+    let layer = await seen();
+    for (const stop = Date.now() + 500; !layer.shown && Date.now() < stop; layer = await seen()) await page.waitForTimeout(50);
+    await shot('wild');
+    const p = await picture(page);
+    const { miss, want, ...shown } = layer;
+    expect(shown, `the keyed copy stands in for the picture, on the LCD (see-through ${want}, copy missed: "${miss}")`).toEqual({
       shown: true, lcd: 'hidden', x: expect.closeTo(p.lcd.x, 0), y: expect.closeTo(p.lcd.y, 0), width: expect.closeTo(p.lcd.width, 0), height: expect.closeTo(p.lcd.height, 0),
     });
     expect(await keyBlue(page, p.lcd), 'the battle backdrop is see-through, not key blue').toBeLessThan(0.02);

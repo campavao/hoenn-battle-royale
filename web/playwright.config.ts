@@ -59,7 +59,18 @@ export default defineConfig({
     // the squashed picture was Firefox's alone. Every local run has it; CI runs it on a
     // tag only (HBR_PLAY_FIREFOX, ci.yml), because it is five more minutes on every push.
     ...(!process.env.CI || process.env.HBR_PLAY_FIREFOX
-      ? [{ name: 'play-firefox', testMatch: 'play.spec.ts', use: { ...devices['Desktop Firefox'] } }]
+      ? [
+          {
+            name: 'play-firefox',
+            testMatch: 'play.spec.ts',
+            // Headless Firefox on a GPU-less runner has no WebGL (forcing it on in the
+            // prefs did not take), and without it the core draws nothing at all: no
+            // texture, brPicturePtr 0, emscripten's context none (2026-10-08). CI runs it
+            // headed under xvfb instead (HBR_FIREFOX_HEADED, ci.yml), where Mesa's
+            // software GL backs it.
+            use: { ...devices['Desktop Firefox'], headless: !process.env.HBR_FIREFOX_HEADED },
+          },
+        ]
       : []),
   ],
   webServer: [
