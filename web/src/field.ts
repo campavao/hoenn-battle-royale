@@ -894,7 +894,10 @@ export class FieldView {
     }
     // Every frame, on the field too, so they are in step when a battle takes it.
     this.walkers.update(this.roster?.() ?? []);
-    const cur = this.read();
+    // A main loop still mid-iteration at this VBlank (a map loading as a seam is crossed)
+    // has the struct half-written: the last whole frame stands (gBrMidFrame, br_main.h).
+    const mid = this.sym('gBrMidFrame');
+    const cur = mid !== undefined && this.deps.emu.read(mid, 8) !== 0 && this.prev ? this.prev : this.read();
     if (this.prev) this.draw(this.prev);
     this.clip(cur?.onField ?? false, this.prev);
     this.seeThrough();
@@ -989,10 +992,13 @@ export class FieldView {
       return [...stood, ...drawn];
     }
     const live = this.liveObjects();
-    const objects = this.readSprites(sb1);
+    const { people: objects, player } = this.readSprites(sb1);
     const dropped = this.readDropped(sb1, c, live);
     const rom = [...objects, ...dropped];
-    this.still = { group: c.group, num: c.num, origin, sprites: rom.filter((s) => s.seat === undefined) };
+    // The player too: the picture draws them on the field, but a see-through battle shows
+    // the field under it with them gone (2026-10-07 play-test: "my character sprite is gone").
+    const stood = rom.filter((s) => s.seat === undefined);
+    this.still = { group: c.group, num: c.num, origin, sprites: player ? [...stood, player] : stood };
     // Inside the box the ROM walks them; and one it still holds an object for is its,
     // wherever the roster has already put it.
     const pos = { x: c.x, y: c.y };
@@ -1046,25 +1052,27 @@ export class FieldView {
     return { x, y, eva, evb };
   }
 
-  /** Every object the ROM has on the map except the player, where its sprite is. */
-  private readSprites(sb1: number): FieldSprite[] {
+  /** Every object the ROM has on the map, where its sprite is: the people the page draws,
+   *  and the player apart, whom the picture draws on the field and the still keeps for
+   *  under a battle. */
+  private readSprites(sb1: number): { people: FieldSprite[]; player: FieldSprite | null } {
     const objs = this.sym('gObjectEvents');
     const sprs = this.sym('gSprites');
     const offX = this.sym('gSpriteCoordOffsetX');
     const offY = this.sym('gSpriteCoordOffsetY');
     const { emu, rom } = this.deps;
-    if (objs === undefined || sprs === undefined || offX === undefined || offY === undefined || !rom) return [];
+    if (objs === undefined || sprs === undefined || offX === undefined || offY === undefined || !rom) return { people: [], player: null };
     const s16 = (v: number) => (v << 16) >> 16;
     const s8 = (v: number) => (v << 24) >> 24;
     const coX = s16(emu.read(offX, 16));
     const coY = s16(emu.read(offY, 16));
     const out: FieldSprite[] = [];
+    let player: FieldSprite | null = null;
     for (let i = 0; i < OBJ_COUNT; i++) {
       const o = objs + i * OBJ_SIZE;
       if (!(emu.read(o + OBJ_ACTIVE_BYTE, 8) & 1)) continue;
       const bits = emu.read(o + OBJ_INVISIBLE_BYTE, 8);
       if (bits & OBJ_INVISIBLE_BIT) continue;
-      if (emu.read(o + OBJ_PLAYER_BYTE, 8) & 1) continue;
       const gfx = this.gfxOf(sb1, emu.read(o + OBJ_GFX, 8));
       if (!SHEETS[String(gfx)]) continue;
       const s = sprs + emu.read(o + OBJ_SPRITE_ID, 8) * SPR_SIZE;
@@ -1080,11 +1088,15 @@ export class FieldView {
       const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
       const hFlip = oamFlipped(emu.read(s + SPR_OAM_MODE, 8), emu.read(s + SPR_OAM_ATTR1, 16));
       const sprite: FieldSprite = { gfx, frame, hFlip, x, y, hidden: offScreen };
+      if (emu.read(o + OBJ_PLAYER_BYTE, 8) & 1) {
+        player = sprite;
+        continue;
+      }
       const seat = emu.read(o + OBJ_LOCAL_ID, 8) - GHOST_LOCAL_ID_BASE;
       if (seat >= 0 && seat < SEAT_COUNT) sprite.seat = seat;
       out.push(sprite);
     }
-    return out;
+    return { people: out, player };
   }
 
   /** A graphics id past the table names a var holding the real one. */

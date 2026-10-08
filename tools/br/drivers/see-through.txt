@@ -1,10 +1,12 @@
 # see-through: the battle over the map, an experiment (2026-10-05 play-test: "disable
 # the white battle background so the battle overlays the map").
 #
-# The page asks with gBrSeeThrough[0]; a battle then draws no terrain (BG3 off in
-# DISPCNT) and a pure blue backdrop, BR_SEE_THROUGH_KEY, which the page's filter makes
-# transparent so the field it draws under the picture shows through. [1] counts down
-# from 2 every battle VBlank, so the page keys the picture only while a battle draws it.
+# The page asks with gBrSeeThrough[0]; a battle then draws its backdrop and the
+# environment's sky and ground stripes pure blue, BR_SEE_THROUGH_KEY, which the page's
+# filter makes transparent so the field it draws under the picture shows through. The
+# platforms keep their colours (2026-10-07 play-test: "the circles ... still visible").
+# [1] counts down from 2 every battle VBlank, so the page keys the picture only while a
+# battle draws it.
 # bot-fight.txt's card and challenge.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
@@ -22,7 +24,17 @@ mailsend gBrMailbox 5 gDecompressionBuffer 4
 wait 300
 expect u8 gBrBotFight+2 1
 expectge u8 gBrSeeThrough+1 1
-# the backdrop is the key, and BG3 (DISPCNT bit 11) is off
+# the backdrop and the stripes (BG palette 2 colours 1, 11-15; 3: 1, 15) are the key;
+# the platforms' (2: 2, 3; 3: 2) are not, and BG3 (DISPCNT bit 11) is still on
 expect u16 0x05000000 0x7C00
-expectbits u16 0x04000000 0x0800 0
+expect u16 0x05000042 0x7C00
+expect u16 0x05000056 0x7C00
+expect u16 0x0500005A 0x7C00
+expect u16 0x0500005E 0x7C00
+expect u16 0x05000062 0x7C00
+expect u16 0x0500007E 0x7C00
+expectne u16 0x05000044 0x7C00
+expectne u16 0x05000046 0x7C00
+expectne u16 0x05000064 0x7C00
+expectbits u16 0x04000000 0x0800 0x0800
 shot battle

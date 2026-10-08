@@ -61,8 +61,11 @@ void BrHeapReset(void)
     BrMatch_HeapReset();
 }
 
+EWRAM_DATA u8 gBrMidFrame = 0;
+
 void BrFrame(void)
 {
+    gBrMidFrame = 1;
     BrWire_FlushHeld(); // what a full ring held back goes before anything newer
     BrNet_Tick();
     // What the messages asked off a map while it could not be touched goes now, before
@@ -84,4 +87,9 @@ void BrFrame(void)
     BrEngage_Tick();
     BrSpectate_Tick();
     BrPick_Tick();
+}
+
+void BrFrameEnd(void)
+{
+    gBrMidFrame = 0;
 }

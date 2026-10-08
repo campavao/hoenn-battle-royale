@@ -169,14 +169,30 @@ bool8 BrBattle_AnimationsOff(void)
     return gSaveBlock2Ptr->optionsBattleSceneOff == TRUE;
 }
 
+// The colours of the environment's sky and ground stripes: every environment's map draws
+// them with these indices of BG palettes 2 and 3, and its two platforms with 2..10 and
+// never these (graphics/battle_environment/*/map.bin), so keying them leaves the platforms.
+static const u8 sSeeThroughStripes[] = {
+    BG_PLTT_ID(2) + 1, BG_PLTT_ID(2) + 11, BG_PLTT_ID(2) + 12, BG_PLTT_ID(2) + 13,
+    BG_PLTT_ID(2) + 14, BG_PLTT_ID(2) + 15, BG_PLTT_ID(3) + 1, BG_PLTT_ID(3) + 15,
+};
+
+static void SeeThroughKey(u16 i)
+{
+    gPlttBufferUnfaded[i] = BR_SEE_THROUGH_KEY;
+    if (!gPaletteFade.active)
+        gPlttBufferFaded[i] = BR_SEE_THROUGH_KEY;
+}
+
 void BrBattle_SeeThrough(void)
 {
+    u8 i;
+
     if (!gBrSeeThrough[0])
         return;
-    ClearGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_BG3_ON);
-    gPlttBufferUnfaded[0] = BR_SEE_THROUGH_KEY;
-    if (!gPaletteFade.active)
-        gPlttBufferFaded[0] = BR_SEE_THROUGH_KEY;
+    SeeThroughKey(0);
+    for (i = 0; i < ARRAY_COUNT(sSeeThroughStripes); i++)
+        SeeThroughKey(sSeeThroughStripes[i]);
     gBrSeeThrough[1] = 2;
 }
 

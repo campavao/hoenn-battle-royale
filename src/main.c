@@ -173,6 +173,9 @@ void AgbMain(void)
 
         PlayTimeCounter_Update();
         MapMusicMain();
+#if BR
+        BrFrameEnd();
+#endif
         WaitForVBlank();
     }
 }

@@ -558,8 +558,11 @@ export class Emulator {
     divert: (key: GbaKey, repeat: boolean) => boolean = () => false,
     on: { win: EventTarget; doc: EventTarget & { readonly hidden: boolean } } = { win: window, doc: document },
   ): () => void {
+    // A letter is the same key in either case: with Caps Lock on, or Shift (SELECT) held,
+    // Z arrives as 'Z' (2026-10-07 play-test: every key but the arrows and Enter dead).
     const keyOf = (e: Event): GbaKey | undefined => {
-      const key = map[(e as KeyboardEvent).key] as GbaKey | undefined;
+      const k = (e as KeyboardEvent).key;
+      const key = (map[k] ?? (k.length === 1 ? map[k.toLowerCase()] : undefined)) as GbaKey | undefined;
       if (key) e.preventDefault();
       return key;
     };

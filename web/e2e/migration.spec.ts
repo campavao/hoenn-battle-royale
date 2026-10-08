@@ -17,7 +17,7 @@ test.beforeAll(() => {
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
 });
 
-test('the host drops mid-match and the guest picks up the clock', async ({ browser }) => {
+test('the host leaves mid-match and the guest picks up the clock', async ({ browser }) => {
   test.setTimeout(180_000);
   const rom = romHashParam();
   const hostCtx = await browser.newContext();
@@ -58,8 +58,12 @@ test('the host drops mid-match and the guest picks up the clock', async ({ brows
     expect(seen.seed, 'the guest heard the start').not.toBe(0);
     expect(seen.ringPhase, 'the guest heard the ring').toBeGreaterThan(0);
 
-    // The host's tab goes away mid-match, the way a closed laptop does.
-    await hostCtx.close();
+    // The host leaves mid-match by its own LEAVE (2026-10-07 play-test: "there doesn't
+    // seem to be a way to leave the match"), back to the menu. To the relay that is the
+    // host's socket closing, the same as a closed laptop.
+    await host.locator('#match-leave').click();
+    await expect(host.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({ timeout: 60_000 });
+    expect(new URL(host.url()).hash, 'out of the room').not.toMatch(/host|join=/);
 
     // The relay moves `host` on the roster and says nothing else about it, so the
     // guest finding out at all is the first half of the fix.
