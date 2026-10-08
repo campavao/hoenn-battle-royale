@@ -1,7 +1,73 @@
 {
- "readAt": "2026-10-07T23:48:27.183Z",
+ "readAt": "2026-10-08T03:28:28.116Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "62SU3Y",
+   "at": "2026-10-08T00:47:39.974Z",
+   "end": "2026-10-08T00:48:45.097Z",
+   "secs": 65,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "7KYZ4Y",
+   "at": "2026-10-08T00:38:46.222Z",
+   "end": "2026-10-08T00:40:59.968Z",
+   "secs": 134,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-08T00:38:46.295Z",
+     "mode": "host",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "P3Y8VD",
+   "at": "2026-10-08T00:08:57.729Z",
+   "end": "2026-10-08T00:25:04.713Z",
+   "secs": 967,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-08T00:09:07.797Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "53J9A2",
    "at": "2026-10-07T23:06:58.981Z",
