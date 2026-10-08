@@ -937,7 +937,7 @@ export class FieldView {
     }
   }
 
-  /** The filter on the picture, as last set. */
+  /** Whether the picture is keyed, by the copy or the filter, as last set. */
   private keyed = false;
 
   /** Ask the ROM for a see-through battle, or not, and key the picture while one draws:
@@ -962,17 +962,17 @@ export class FieldView {
 
   /** Whether the keyed copy is what shows, as last set. */
   private layered = false;
-  private keyBuf: Uint8ClampedArray<ArrayBuffer> | null = null;
+  private keyImage: ImageData | null = null;
 
   /** This frame's picture, keyed, onto the key layer: false when there is no layer or
    *  the core cannot hand the picture over. */
   private keyCopy(): boolean {
     const ctx = this.deps.keyLayer?.getContext('2d');
     if (!ctx) return false;
-    const buf = this.keyBuf ?? (this.keyBuf = new Uint8ClampedArray(GBA_W * GBA_H * 4));
-    if (!this.deps.emu.lcdPixels(buf)) return false;
-    keyPicture(buf);
-    ctx.putImageData(new ImageData(buf, GBA_W, GBA_H), 0, 0);
+    const img = this.keyImage ?? (this.keyImage = new ImageData(GBA_W, GBA_H));
+    if (!this.deps.emu.lcdPixels(img.data)) return false;
+    keyPicture(img.data);
+    ctx.putImageData(img, 0, 0);
     return true;
   }
 
