@@ -645,6 +645,10 @@ export interface FieldDeps {
   /** The battle over the map, an experiment (2026-10-05 play-test): asked of the ROM
    *  every frame, and the picture keyed while a battle draws see-through. */
   seeThrough?: () => boolean;
+  /** A 240x160 canvas over the LCD for the see-through battle's keyed copy of it, shown
+   *  in the picture's place while one draws. Without one, or on a core that cannot hand
+   *  the picture over, the picture itself takes the filter (not on Safari). */
+  keyLayer?: HTMLCanvasElement | null;
 }
 
 /** The filter that makes a see-through battle's backdrop transparent: the ROM's
@@ -656,6 +660,16 @@ export const SEE_THROUGH_MATRIX = '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  128 128 -10 
 /** The alpha that matrix gives a pixel, channels 0..1: what the browser computes. */
 export function seeThroughAlpha(r: number, g: number, b: number): number {
   return Math.max(0, Math.min(1, 128 * r + 128 * g - 10 * b + 9));
+}
+
+/** Key a copy of the picture in place, RGBA: each pixel's alpha is the filter's
+ *  (seeThroughAlpha). Safari draws the url() filter on a WebGL canvas not at all -- the
+ *  key itself, solid blue (Cam's 2026-10-08 phone shot) -- so where the core lets the
+ *  page copy the picture, the page keys the copy instead. */
+export function keyPicture(rgba: Uint8ClampedArray): void {
+  for (let i = 0; i < rgba.length; i += 4) {
+    rgba[i + 3] = Math.round(255 * seeThroughAlpha(rgba[i] / 255, rgba[i + 1] / 255, rgba[i + 2] / 255));
+  }
 }
 
 function ensureSeeThroughFilter(doc: Document): void {
@@ -840,6 +854,14 @@ export class FieldView {
     lcd.style.top = `${pic.top * lay.scale}px`;
     lcd.style.width = `${pic.width * lay.scale}px`;
     lcd.style.height = `${pic.height * lay.scale}px`;
+    const keyLayer = this.deps.keyLayer;
+    if (keyLayer) {
+      const at = lcdRect({ left: pic.left * lay.scale, top: pic.top * lay.scale, width: pic.width * lay.scale, height: pic.height * lay.scale }, this.band);
+      keyLayer.style.left = `${at.left}px`;
+      keyLayer.style.top = `${at.top}px`;
+      keyLayer.style.width = `${at.width}px`;
+      keyLayer.style.height = `${at.height}px`;
+    }
     this.clipped = null;
     if (field.width !== lay.cols) field.width = lay.cols;
     if (field.height !== lay.rows) field.height = lay.rows;
@@ -915,7 +937,7 @@ export class FieldView {
     }
   }
 
-  /** The filter on the picture, as last set. */
+  /** Whether the picture is keyed, by the copy or the filter, as last set. */
   private keyed = false;
 
   /** Ask the ROM for a see-through battle, or not, and key the picture while one draws:
@@ -927,10 +949,31 @@ export class FieldView {
     const { emu, lcd } = this.deps;
     emu.write(base, want ? 1 : 0, 8);
     const keyed = want && emu.read(base + 1, 8) > 0;
-    if (keyed === this.keyed) return;
+    const layer = keyed ? this.keyCopy() : false;
+    if (keyed === this.keyed && layer === this.layered) return;
     this.keyed = keyed;
-    if (keyed) ensureSeeThroughFilter(lcd.ownerDocument);
-    lcd.style.filter = keyed ? `url(#${SEE_THROUGH_FILTER})` : '';
+    this.layered = layer;
+    const keyLayer = this.deps.keyLayer;
+    if (keyLayer) keyLayer.hidden = !layer;
+    lcd.style.visibility = layer ? 'hidden' : '';
+    if (keyed && !layer) ensureSeeThroughFilter(lcd.ownerDocument);
+    lcd.style.filter = keyed && !layer ? `url(#${SEE_THROUGH_FILTER})` : '';
+  }
+
+  /** Whether the keyed copy is what shows, as last set. */
+  private layered = false;
+  private keyImage: ImageData | null = null;
+
+  /** This frame's picture, keyed, onto the key layer: false when there is no layer or
+   *  the core cannot hand the picture over. */
+  private keyCopy(): boolean {
+    const ctx = this.deps.keyLayer?.getContext('2d');
+    if (!ctx) return false;
+    const img = this.keyImage ?? (this.keyImage = new ImageData(GBA_W, GBA_H));
+    if (!this.deps.emu.lcdPixels(img.data)) return false;
+    keyPicture(img.data);
+    ctx.putImageData(img, 0, 0);
+    return true;
   }
 
   private sym(name: string): number | undefined {

@@ -685,6 +685,22 @@ export class Emulator {
     return { width, height, left: b.left, top: b.top, data };
   }
 
+  /** The LCD's 240x160 of the picture into `out` as RGBA (alpha whatever the core left):
+   *  the see-through battle's keyed copy (field.ts). Take it in a frame listener, as
+   *  picture(). False on a core without the exports, or with nothing loaded. */
+  lcdPixels(out: Uint8ClampedArray): boolean {
+    const ptr = this.m._brPicturePtr?.() ?? 0;
+    const stride = this.m._brPictureStride?.() ?? 0;
+    if (!ptr || !stride || out.length < 240 * 160 * 4) return false;
+    const b = this.bootedBand ?? { left: 0, top: 0, right: 0, bottom: 0 };
+    const heap = this.m.HEAPU8;
+    for (let y = 0; y < 160; y++) {
+      const at = ptr + ((b.top + y) * stride + b.left) * 4;
+      out.set(heap.subarray(at, at + 240 * 4), y * 240 * 4);
+    }
+    return true;
+  }
+
   /** PNG bytes of the current frame. */
   screenshot(): Uint8Array | null {
     if (!this.m.screenshot(SCREENSHOT_PATH)) return null;

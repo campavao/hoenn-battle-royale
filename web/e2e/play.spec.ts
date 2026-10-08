@@ -48,6 +48,7 @@ import {
   edgeBlack,
   expectClean,
   expectLayout,
+  picture,
   rig,
   ram,
   shooter,
@@ -110,6 +111,25 @@ async function fight(
   }
 }
 
+/** How much of `r` the page shows as the see-through key, composited. */
+async function keyBlue(page: Page, r: { x: number; y: number; width: number; height: number }): Promise<number> {
+  const png = await page.screenshot({ clip: { x: r.x + 1, y: r.y + 1, width: r.width - 2, height: r.height - 2 } });
+  return page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const ctx = c.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] < 8 && d[i + 1] < 8 && d[i + 2] > 230) n++;
+    return n / (d.length / 4);
+  }, png.toString('base64'));
+}
+
 test('a solo match, played at the keyboard, looks right the whole way through', async ({ page, browserName }, info) => {
   test.setTimeout(480_000);
   const sym = loadSymbols();
@@ -158,6 +178,19 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     expect(r.battleType & BATTLE_TYPE_SAFARI, 'a Safari battle').toBeTruthy();
     await page.waitForTimeout(1_500);
     await shot('wild');
+    // See-through is on by default: the page keys its own copy of the LCD over the
+    // picture, which Safari never drew through the url() filter (Cam's 2026-10-08 shot,
+    // a battle all key blue). Composited, no more than a sliver of the LCD is the key.
+    const p = await picture(page);
+    const layer = await page.evaluate(() => {
+      const k = document.querySelector('#key-layer') as HTMLCanvasElement;
+      const r = k.getBoundingClientRect();
+      return { shown: !k.hidden, lcd: (document.querySelector('#canvas') as HTMLElement).style.visibility, x: r.x, y: r.y, width: r.width, height: r.height };
+    });
+    expect(layer, 'the keyed copy stands in for the picture, on the LCD').toEqual({
+      shown: true, lcd: 'hidden', x: expect.closeTo(p.lcd.x, 0), y: expect.closeTo(p.lcd.y, 0), width: expect.closeTo(p.lcd.width, 0), height: expect.closeTo(p.lcd.height, 0),
+    });
+    expect(await keyBlue(page, p.lcd), 'the battle backdrop is see-through, not key blue').toBeLessThan(0.02);
     await expectClean(page, 'into a wild battle');
     await proxyClean();
   });
