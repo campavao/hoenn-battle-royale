@@ -975,7 +975,7 @@ export class FieldView {
       const ctx = this.deps.keyLayer?.getContext('2d');
       if (!ctx) return this.missed(this.deps.keyLayer ? 'no 2d context' : 'no layer');
       const img = this.keyImage ?? (this.keyImage = new ImageData(GBA_W, GBA_H));
-      if (!this.deps.emu.lcdPixels(img.data)) return this.missed('no picture from the core');
+      if (!this.deps.emu.lcdPixels(img.data)) return this.missed(`no picture from the core (${this.deps.emu.pictureState()})`);
       keyPicture(img.data);
       ctx.putImageData(img, 0, 0);
       this.keyMiss = '';

@@ -701,6 +701,14 @@ export class Emulator {
     return true;
   }
 
+  /** What the core reports about its picture, for a miss of lcdPixels (field.ts keyMiss):
+   *  the texture's pointer and stride, whether a game is loaded, and the canvas's context
+   *  as emscripten holds it. */
+  pictureState(): string {
+    const ctx = (this.m as unknown as { ctx?: object }).ctx;
+    return `ptr ${this.m._brPicturePtr?.() ?? 'none'}, stride ${this.m._brPictureStride?.() ?? 'none'}, ${this.bootedPath ? 'booted' : 'not booted'}, context ${ctx?.constructor?.name ?? 'none'}`;
+  }
+
   /** PNG bytes of the current frame. */
   screenshot(): Uint8Array | null {
     if (!this.m.screenshot(SCREENSHOT_PATH)) return null;
