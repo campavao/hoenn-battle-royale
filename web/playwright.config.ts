@@ -59,7 +59,16 @@ export default defineConfig({
     // the squashed picture was Firefox's alone. Every local run has it; CI runs it on a
     // tag only (HBR_PLAY_FIREFOX, ci.yml), because it is five more minutes on every push.
     ...(!process.env.CI || process.env.HBR_PLAY_FIREFOX
-      ? [{ name: 'play-firefox', testMatch: 'play.spec.ts', use: { ...devices['Desktop Firefox'] } }]
+      ? [
+          {
+            name: 'play-firefox',
+            testMatch: 'play.spec.ts',
+            // Headless Firefox on a GPU-less runner turns WebGL off, and without it the
+            // core draws nothing at all (no texture: brPicturePtr 0, emscripten's context
+            // none, 2026-10-08). Force it on, in software, so the picture is drawn.
+            use: { ...devices['Desktop Firefox'], launchOptions: { firefoxUserPrefs: { 'webgl.force-enabled': true, 'webgl.disabled': false } } },
+          },
+        ]
       : []),
   ],
   webServer: [
