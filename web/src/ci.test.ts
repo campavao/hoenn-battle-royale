@@ -23,4 +23,12 @@ describe('the BR workflows', () => {
     const split = [...versions].filter(([, v]) => v.size > 1).map(([action, v]) => `${action}@${[...v].sort().join('|')}`);
     expect(split).toEqual([]);
   });
+
+  // The data branch has no web/, Vercel's Root Directory, so every data commit failed a
+  // preview build and mailed Cam until the workflow started writing this stub there.
+  it('keep Vercel from building the play-log branch', () => {
+    const stub = playLog.match(/echo '(.+)' > play-log\/web\/vercel\.json/);
+    expect(stub).not.toBeNull();
+    expect(JSON.parse(stub![1])).toEqual({ git: { deploymentEnabled: false } });
+  });
 });

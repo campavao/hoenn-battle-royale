@@ -62,6 +62,15 @@ jobs:
           fi
           node tools/br/play-log.mjs
 
+      # Vercel builds every pushed branch from the project's Root Directory, `web`, and
+      # this branch has no web/, so each data commit failed a preview build and mailed Cam.
+      # Vercel reads vercel.json from that Root Directory on the pushed commit, so a stub
+      # there turns deploys off for this branch only. Written every run so it heals.
+      - name: keep Vercel off this branch
+        run: |
+          mkdir -p play-log/web
+          echo '{ "git": { "deploymentEnabled": false } }' > play-log/web/vercel.json
+
       - name: commit if it moved
         run: |
           cd play-log
