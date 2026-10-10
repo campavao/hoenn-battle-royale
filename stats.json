@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-10T20:48:46.264Z",
+  "at": "2026-10-10T23:53:46.356Z",
   "rooms": 0,
   "roomCap": 40,
   "conns": 1,
@@ -9,9 +9,9 @@
   "matches": 12,
   "statSeen": 4,
   "statSolo": 1,
-  "sent": "21.2MB",
-  "lines": 268652,
+  "sent": "21.3MB",
+  "lines": 271982,
   "deployedAt": "2026-09-28T02:08:16.321Z",
   "deploymentId": "3de9a417-aa43-4b5c-9735-35aeef7b04df",
-  "readAt": "2026-10-10T20:51:00.493Z"
+  "readAt": "2026-10-10T23:57:18.343Z"
 }
