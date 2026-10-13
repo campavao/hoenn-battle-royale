@@ -1,0 +1,44 @@
+# spectate-late-join-next: NEXT while a late joiner's field is still fading into the
+# replay. The fight is handed whole (spectate-late-join.txt), and NEXT used to close the
+# stream there, which plays everything already held -- every turn so far, at catch-up
+# speed -- before the field takes us on to the next seat. It aborts now, as NEXT does
+# in a replay that is already running.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# watching seat 1 (FOLLOW), which has no roster row: nothing to warp to
+pokebytes gDecompressionBuffer 01
+mailsend gBrMailbox 20 gDecompressionBuffer 1
+wait 4
+expect u8 gBrSpectate+8 1
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 4
+expect u8 gBrSpectate+5 1
+pokebytes gDecompressionBuffer 00 01 00 03 00 01 01 01 03 00 01 00
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+wait 4
+# NEXT: seat 2, still in the fade
+pokebytes gDecompressionBuffer 02
+mailsend gBrMailbox 20 gDecompressionBuffer 1
+wait 4
+expect u8 gBrSpectate+8 2
+# The replay opens and lets go at its first read, not twelve turns later
+wait 900
+expect u8 gBrSpectate+5 0
+shot back
+say spectate late join next ok

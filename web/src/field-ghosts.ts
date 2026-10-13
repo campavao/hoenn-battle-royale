@@ -334,8 +334,8 @@ function onPicture(info: { w: number; h: number }, px: number, py: number, origi
 // should keep going." Where the other seats are does not come from the ROM, though: the
 // page's roster has every one of them off the wire, and the host's bots are on it too. So
 // the page walks them itself, a copy of br_ghosts.c's DriveGhost -- a step queued for each
-// tile the roster moves, walked at walk-normal on the ROM's own walk frames, BR_STEP_QUEUE
-// held behind the one in flight and a snap past that. Kanto does the same while its
+// tile the roster moves, walked at PaceWalk's pace on the ROM's own walk frames,
+// BR_STEP_QUEUE held behind the one in flight and a snap past that. Kanto does the same while its
 // overworld is not on top (lib/ghosts.lua's advance: "a ghost is a live opponent, not
 // scenery"), and leaves its own NPCs frozen, as field.ts leaves Hoenn's.
 //
@@ -346,6 +346,14 @@ function onPicture(info: { w: number; h: number }, px: number, py: number, origi
 /** Walk-normal: sStep1Funcs, sixteen frames of a pixel each (NpcTakeStep at
  *  MOVE_SPEED_NORMAL, which GetWalkNormalMovementAction's actions ask for). */
 export const WALK_FRAMES = 16;
+/** br_ghosts.c's PaceWalk: a step's frames at each pace -- walk_normal, walk_fast
+ *  (MOVE_SPEED_FAST_1, two pixels a frame) and walk_faster (MOVE_SPEED_FASTER, four) --
+ *  and the backlogs that raise it. The go anims at those paces are the same four frames
+ *  at half and a quarter the ticks (sAnim_GoFast*, sAnim_GoFaster*). */
+export const PACE_FRAMES = [16, 8, 4] as const;
+export const PACE_FAST_AT = 2;
+export const PACE_FASTER_AT = 4;
+export const PACE_IDLE_MAX = 63;
 /** BR_STEP_QUEUE: the steps a ghost holds behind the one it is walking. One more and the
  *  ROM snaps it to the roster's cell. */
 export const STEP_QUEUE = 5;
@@ -382,6 +390,11 @@ interface Walker {
   /** The walk anim's command: where the step in flight started, or where the last rested. */
   cmd: number;
   queue: number[];
+  /** PaceWalk's pace (an index into PACE_FRAMES), the step in flight's frames, and the
+   *  frames stood with nothing to walk since the last step. */
+  pace: number;
+  frames: number;
+  idle: number;
   /** The roster's cell as last seen: what is queued walks from the tile to here. */
   seenX: number;
   seenY: number;
@@ -396,6 +409,18 @@ function stand(w: Walker, x: number, y: number): void {
   w.left = 0;
   w.cmd = 0;
   w.queue = [];
+  w.pace = 0;
+  w.idle = 0;
+}
+
+/** br_ghosts.c's PaceWalk, on the backlog left once this step is taken off it. */
+function pace(w: Walker): number {
+  const behind = w.queue.length;
+  if (behind >= PACE_FASTER_AT) w.pace = 2;
+  else if (behind >= PACE_FAST_AT && w.pace < 2) w.pace++;
+  else if (behind === 0 && w.pace !== 0 && w.idle * 2 >= PACE_FRAMES[w.pace]) w.pace--;
+  w.idle = 0;
+  return PACE_FRAMES[w.pace];
 }
 
 /** One frame of DriveGhost and the object under it. */
@@ -409,11 +434,14 @@ function walk(w: Walker): void {
       w.x += dx;
       w.y += dy;
       w.step = w.facing = next;
-      w.left = WALK_FRAMES;
+      w.left = w.frames = pace(w);
       w.cmd = w.cmd === STEP_ANIM_POS[0] ? STEP_ANIM_POS[3] : w.cmd === STEP_ANIM_POS[1] ? STEP_ANIM_POS[2] : w.cmd;
-    } else if (w.facing !== w.dir) {
-      w.facing = w.dir;
-      w.cmd = 0;
+    } else {
+      if (w.idle < PACE_IDLE_MAX) w.idle++;
+      if (w.facing !== w.dir) {
+        w.facing = w.dir;
+        w.cmd = 0;
+      }
     }
   }
   // Step0 takes the first pixel in the frame it starts (MovementAction_WalkNormal*_Step0).
@@ -441,7 +469,7 @@ export class GhostWalkers {
       const dir = r.dir >= DIR_SOUTH && r.dir <= DIR_EAST ? r.dir : DIR_SOUTH;
       let w = this.walkers.get(r.seat);
       if (!w || w.group !== r.map.group || w.num !== r.map.num) {
-        w = { seat: r.seat, gfx, group: r.map.group, num: r.map.num, x: 0, y: 0, facing: dir, dir, step: 0, left: 0, cmd: 0, queue: [], seenX: 0, seenY: 0 };
+        w = { seat: r.seat, gfx, group: r.map.group, num: r.map.num, x: 0, y: 0, facing: dir, dir, step: 0, left: 0, cmd: 0, queue: [], pace: 0, frames: WALK_FRAMES, idle: 0, seenX: 0, seenY: 0 };
         stand(w, r.x, r.y);
         this.walkers.set(r.seat, w);
         continue;
@@ -493,8 +521,9 @@ export class GhostWalkers {
       if (!info) continue;
       const tile = toPage(romCell(w.x, w.y));
       const [dx, dy] = STEP[w.step] ?? [0, 0];
-      const at = onPicture(info, tile.x * TILE - dx * w.left, tile.y * TILE - dy * w.left, origin);
-      const frame = w.step === 0 ? FACE_FRAMES[w.facing] : GO_FRAMES[w.step][w.cmd + (WALK_FRAMES - w.left > GO_FRAME_TICKS ? 1 : 0)];
+      const px = (w.left * TILE) / w.frames;
+      const at = onPicture(info, tile.x * TILE - dx * px, tile.y * TILE - dy * px, origin);
+      const frame = w.step === 0 ? FACE_FRAMES[w.facing] : GO_FRAMES[w.step][w.cmd + (w.frames - w.left > w.frames / 2 ? 1 : 0)];
       out.push({ gfx: w.gfx, frame, hFlip: w.facing === DIR_EAST, ...at, hidden, seat: w.seat });
     }
     return out;

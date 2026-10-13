@@ -259,15 +259,17 @@ static EWRAM_DATA bool8 sPendFog = FALSE;
 // turn so far in exactly this window: the rest were dropped, mid-run, and the replay
 // played six turns and then waited on bytes that were never coming -- the fight never
 // finished for them until its RESULT pulled the plug (2026-10-13 play-test).
-#define BR_EARLY_PER_BATTLER 664 // recorded_battle.c's BATTLER_RECORD_SIZE
 struct BrEarlyTurns
 {
     u16 len[MAX_BATTLERS_COUNT];
-    u8 bytes[MAX_BATTLERS_COUNT][BR_EARLY_PER_BATTLER];
+    u8 bytes[MAX_BATTLERS_COUNT][BR_SPECTATE_RECORD_SIZE];
 };
 #define PEND_EARLY ((struct BrEarlyTurns *)(sPendParties + 2 * PARTY_SIZE))
 // ...and a RESULT that lands in the same window: the replay's own start would clear it.
 static EWRAM_DATA bool8 sEndEarly = FALSE;
+// ...and NEXT in the same window: the replay starts and stops at once, without playing
+// the turns held for it -- a fight joined late is all of them, at catch-up speed.
+static EWRAM_DATA bool8 sAbortEarly = FALSE;
 
 static void CB2_BrReturnFromSpectate(void)
 {
@@ -326,11 +328,12 @@ static void EnterSpectate(void)
     }
     Free(sPendParties);
     sPendParties = NULL;
-    if (sEndEarly)
-    {
+    if (sAbortEarly)
+        RecordedBattle_AbortSpectate();
+    else if (sEndEarly)
         RecordedBattle_EndSpectate();
-        sEndEarly = FALSE;
-    }
+    sEndEarly = FALSE;
+    sAbortEarly = FALSE;
 }
 
 // A fight worth watching landed: build the recorded battle and run it. The page decides
@@ -379,6 +382,7 @@ static void ParseBstart(const u8 *d, u16 n)
     sPendFlags = flags;
     sPendParties = parties;
     sEndEarly = FALSE;
+    sAbortEarly = FALSE;
     // sTurnBuf is the reassembly buffer from here on; a fighter's unsent TURN in it is
     // one no spectator is waiting for any more.
     sTurnLen = 0;
@@ -410,7 +414,7 @@ static void ParseTurn(const u8 *d, u16 n)
             count = d[i++];
             for (; count != 0 && i < n; count--, i++)
             {
-                if (battler < MAX_BATTLERS_COUNT && early->len[battler] < BR_EARLY_PER_BATTLER)
+                if (battler < MAX_BATTLERS_COUNT && early->len[battler] < BR_SPECTATE_RECORD_SIZE)
                     early->bytes[battler][early->len[battler]++] = d[i];
             }
         }
@@ -967,7 +971,7 @@ void BrSpectate_Follow(u8 seat)
         if (gBrSpectate.watching)
         {
             if (sPendParties != NULL)
-                sEndEarly = TRUE;
+                sAbortEarly = TRUE;
             else
                 RecordedBattle_AbortSpectate();
         }

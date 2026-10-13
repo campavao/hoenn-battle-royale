@@ -252,6 +252,7 @@ static void Despawn(u8 seat)
         BrField_RemoveObject(obj->localId, obj->mapNum, obj->mapGroup);
     gBrSeats[seat].objId = BR_NO_OBJ;
     gBrSeats[seat].queued = 0;
+    sPace[seat] = 0;
 }
 
 // BRENDAN and MAY draw from the player's own palette slot, 0, and a ghost of the other
@@ -288,6 +289,7 @@ static void Spawn(u8 seat)
         return;
     s->objId = id;
     s->queued = 0;
+    sPace[seat] = 0;
     ObjectEventTurn(&gObjectEvents[id], s->dir);
 }
 
@@ -569,10 +571,14 @@ void BrGhosts_Out(u8 seat)
 // queue overflowed.
 //
 // The wire does not say how fast anybody is going, so the backlog does: two steps waiting
-// is a trainer outrunning their ghost, four a bike's top speed. And a ghost that stood
-// idle for half a walk of its own between two steps is outrunning its trainer, so it
-// slows down a pace. Running, walking and biking each settle on their own pace, and
-// a bunched-up burst is walked off at speed instead of piling up.
+// is a trainer outrunning their ghost, and it goes up a pace, again on every step that
+// still finds two waiting -- one pace that only matches the trainer's would never work
+// the backlog off, and the ghost would trail them two tiles with two slots to spare
+// before a snap. Four waiting is straight to the top. And a ghost that stood idle for
+// half a walk of its own between two steps is outrunning its trainer, so it slows down a
+// pace. Running, walking and biking each settle on their own pace, and a bunched-up burst
+// is walked off at speed instead of piling up. The Mach Bike flat out is the one pace
+// with none above it: a long stall there can still overflow the queue.
 #define BR_PACE_NORMAL 0
 #define BR_PACE_FAST 1
 #define BR_PACE_FASTER 2
@@ -592,8 +598,8 @@ static u8 PaceWalk(u8 seat, u8 dir)
 
     if (behind >= BR_PACE_FASTER_AT)
         pace = BR_PACE_FASTER;
-    else if (behind >= BR_PACE_FAST_AT && pace < BR_PACE_FAST)
-        pace = BR_PACE_FAST;
+    else if (behind >= BR_PACE_FAST_AT && pace < BR_PACE_FASTER)
+        pace++;
     else if (behind == 0 && pace != BR_PACE_NORMAL && idle * 2 >= sFrames[pace])
         pace--;
     sPace[seat] = pace;
@@ -625,6 +631,7 @@ static void DriveGhost(u8 seat)
         MoveObjectEventToMapCoords(obj, x, y);
         ObjectEventTurn(obj, s->dir);
         s->queued = 0;
+        sPace[seat] = 0;
         return;
     }
     if (ObjectEventIsMovementOverridden(obj))
