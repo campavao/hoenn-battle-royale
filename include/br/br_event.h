@@ -13,7 +13,8 @@
 // An EVENT says which section, and which key is the legendary, and the mark goes gray
 // once somebody's PICKUP names that key. It also says where the event's trader stands and
 // what he offers: A on him asks, the party menu picks one of ours, and he swaps it for
-// his at our rung. Once a match for each of us, and he keeps what he is given.
+// his at our rung (not a fainted one; what it held stays ours). Once a match with each
+// trader for each of us, and he keeps what he is given.
 
 // Phases 2, 4, 6 and 8: four.
 #define BR_EVENT_MAX 4
@@ -51,7 +52,7 @@ struct BrEvents
     /* 12 */ u8 mapsec[BR_EVENT_MAX];
     /* 16 */ u8 live;                // a bit an event that has dropped
     /* 17 */ u8 taken;               // a bit an event whose legendary somebody has
-    /* 18 */ u8 traded;              // a bit a trader we have traded with
+    /* 18 */ u8 traded;              // a bit a trader we have traded with this match
     /* 19 */ u8 trading;             // the trader the open trade script is with
     /* 20 */ struct BrEventTrader trader[BR_EVENT_MAX];
     /* 52 */ u8 objId[BR_EVENT_MAX]; // the trader's object while spawned, else BR_NO_OBJ

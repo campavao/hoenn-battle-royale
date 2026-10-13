@@ -1,6 +1,7 @@
 // Events on the MAP. See include/br/br_event.h.
 #include "global.h"
 #include "data.h"
+#include "item.h"
 #include "event_data.h"
 #include "event_object_movement.h"
 #include "field_player_avatar.h"
@@ -15,6 +16,7 @@
 #include "string_util.h"
 #include "constants/event_object_movement.h"
 #include "constants/event_objects.h"
+#include "constants/items.h"
 #include "constants/region_map_sections.h"
 #include "constants/songs.h"
 #include "constants/species.h"
@@ -50,6 +52,7 @@ STATIC_ASSERT(((BR_EVENT_MAX - 1) << 4 | 15) < 0x100, BrEventKeysStayUnder0xB100
 static const u8 sText_Traded[] = _("TRADED FOR ");
 static const u8 sText_Bang[] = _("!");
 static const u8 sText_TradedAlready[] = _("WE ALREADY TRADED");
+static const u8 sText_Fainted[] = _("NOT A FAINTED ONE");
 
 static void Despawn(u8 i)
 {
@@ -99,10 +102,14 @@ static void HandleEvent(const u8 *payload, u8 len)
     gBrEvents.mapsec[i] = d[2];
     gBrEvents.key[i] = BrWire_ReadU16(d + 3);
     gBrEvents.live |= 1 << i;
-    if (n < BR_EVENT_TRADER_LEN)
-        return;
     Despawn(i); // the same EVENT again, a catch-up, may move him
     t = &gBrEvents.trader[i];
+    if (n < BR_EVENT_TRADER_LEN)
+    {
+        // An EVENT without one: whoever stood here before does not any more.
+        t->species = SPECIES_NONE;
+        return;
+    }
     t->mapGroup = d[5];
     t->mapNum = d[6];
     t->x = (s16)BrWire_ReadU16(d + 7);
@@ -223,11 +230,22 @@ static u8 TraderFaced(void)
     return BR_EVENT_MAX;
 }
 
+// His mon as it would come to us now: the rung settles it, so a DRATINI offered at 50 is
+// the DRAGONITE we would get, and he says so.
+static u16 Offered(u8 i, struct Pokemon *mon)
+{
+    CreateMon(mon, gBrEvents.trader[i].species, BrLevels_WildLevel(), USE_RANDOM_IVS, FALSE, 0,
+              OT_ID_PLAYER_ID, 0);
+    BrLevels_Settle(mon);
+    return GetMonData(mon, MON_DATA_SPECIES, NULL);
+}
+
 // A on him, the way a ball's A is the loot's (br_loot.c TryTake): he has no template, so
 // no script the field could find, and the press is his alone.
 static void TryTalk(void)
 {
     struct ObjectEvent *self;
+    struct Pokemon mon;
     u8 i;
 
     if (!JOY_NEW(A_BUTTON) || ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked())
@@ -244,7 +262,7 @@ static void TryTalk(void)
     }
     self = &gObjectEvents[gPlayerAvatar.objectEventId];
     ObjectEventTurn(&gObjectEvents[gBrEvents.objId[i]], GetOppositeDirection(self->facingDirection));
-    StringCopy(gStringVar1, gSpeciesNames[gBrEvents.trader[i].species]);
+    StringCopy(gStringVar1, gSpeciesNames[Offered(i, &mon)]);
     gBrEvents.trading = i;
     ScriptContext_SetupScript(BR_EventScript_Trader);
 }
@@ -255,19 +273,30 @@ void BrEvent_Trade(void)
     const u8 *last = line + ARRAY_COUNT(line) - 1;
     struct Pokemon mon;
     u16 slot = gSpecialVar_0x8004;
-    u16 species;
+    u16 species, held;
     u8 i = gBrEvents.trading;
     u8 *p;
 
     if (slot >= PARTY_SIZE || i >= BR_EVENT_MAX || !TraderHere(i) || (gBrEvents.traded & (1 << i))
         || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
         return;
-    CreateMon(&mon, gBrEvents.trader[i].species, BrLevels_WildLevel(), USE_RANDOM_IVS, FALSE, 0,
-              OT_ID_PLAYER_ID, 0);
-    BrLevels_Settle(&mon);
+    // A fainted one for a healthy one would be a MAX REVIVE thrown in.
+    if (GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0)
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_Fainted);
+        return;
+    }
+    // What it held stays ours: back in the bag, or at our feet when that pocket is full.
+    held = GetMonData(&gPlayerParty[slot], MON_DATA_HELD_ITEM, NULL);
+    if (held != ITEM_NONE && !AddBagItem(held, 1))
+        BrLoot_DropItem(held);
+    // He keeps the one he is given. POK-294's "nothing ever leaves the match" is about a
+    // mon let go to make room, and is not this: dropped at our feet, it would be ours
+    // again for one press, and the trade a free mon.
+    species = Offered(i, &mon);
     gPlayerParty[slot] = mon;
     gBrEvents.traded |= 1 << i;
-    species = GetMonData(&mon, MON_DATA_SPECIES, NULL);
     p = BrHud_Append(line, last, sText_Traded);
     p = BrHud_Append(p, last, gSpeciesNames[species]);
     BrHud_Append(p, last, sText_Bang);

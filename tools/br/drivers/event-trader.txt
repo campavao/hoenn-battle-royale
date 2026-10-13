@@ -1,7 +1,7 @@
 # event-trader: an event's placed NPC (speed-up 6b). The EVENT says where its trader
 # stands and what he offers; every ROM puts him there, A on him asks, the party menu picks
-# one of ours and he swaps it for his at our rung -- once a match each. Cancelling the
-# menu trades nothing.
+# one of ours and he swaps it for his at our rung -- once a match with each trader.
+# Cancelling the menu trades nothing, and a fainted one is refused.
 #
 # catch-release's boot: one TREECKO, standing on (12,16) facing south.
 wait 30
@@ -33,6 +33,19 @@ shot picker
 tap B
 wait 120
 expect u8 gBrEvents+18 0
+# a fainted one is refused: HP is the unencrypted u16 at 86 in struct Pokemon
+poke u16 gPlayerParty+86 0
+tap A
+wait 90
+tap A
+wait 30
+tap A
+wait 90
+tap A
+wait 120
+shot fainted
+expect u8 gBrEvents+18 0
+poke u16 gPlayerParty+86 20
 # again, and pick the TREECKO this time
 tap A
 wait 90

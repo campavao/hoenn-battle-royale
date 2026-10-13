@@ -217,8 +217,10 @@ out, and one that comes in waits as it would in a menu.
   MAP with an item ball, gray once the legendary is taken; the ticker says where, and a
   late joiner gets the marks with the rest of the catch-up. The placed NPC is a trader on
   the cell past the pieces: A on him, pick any one of yours, and he swaps it for a rare
-  the event did not drop, at your rung. Once a match each; he keeps what he is given.
-  Nothing the match puts down is solid, him included.
+  the event did not drop, at your rung. Not a fainted one, and what it held goes back to
+  your bag. Once a match with each trader; he keeps what he is given (not POK-294's
+  ball at your feet, which would make the trade a free mon). Nothing the match puts
+  down is solid, him included.
 - **Rules**: one clock (`br_levels.h`: the ring phase is the level rung, no EXP), the
   catch with a full party (`br_catch.h`), the MOVES row (`br_moves.h`), gym leaders as
   one-shot bosses (`br_gym.h`), the shot clock and RUN (`br_battle.h`).
