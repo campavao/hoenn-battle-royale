@@ -41,7 +41,9 @@ import {
   startLabel,
   type StartDecision,
   type StartState,
+  waitsOnHost,
 } from './match/room';
+import { AwayDoor } from './match/away';
 import { Stage, type DrawnScreen } from './ui/stage';
 import { ParadeHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
 import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
@@ -1700,6 +1702,12 @@ function autoStarts(): boolean {
 const DIRECTOR_TICK_MS = 1000; // coarser than the 5s clock/fogSecs cadence director.ts needs
 /** How often a director on a hidden tab asks the relay to hand the match on. */
 const STAND_DOWN_EVERY_MS = 5000;
+/** How long a host's tab is hidden before its waiting room comes off the list (away.ts):
+ *  long enough to paste the code somewhere and come back. `#away=<secs>` in dev. */
+function awayMs(): number {
+  const secs = import.meta.env.DEV ? Number(new URLSearchParams(location.hash.slice(1)).get('away')) : NaN;
+  return secs > 0 ? secs * 1000 : 2 * 60_000;
+}
 
 /** The same strip, for a client that is not running the match (POK-268). The host's is
  *  drawn by the director's own loop, so until now RING / N LEFT / the clock appeared on
@@ -3077,12 +3085,20 @@ function wireRoom(
   //
   // On the way back this page is an ordinary member. It says it could host again --
   // for the next time the room needs an heir -- and does not take the match back.
+  const awayDoor = new AwayDoor({
+    awayMs: awayMs(),
+    waitingOnUs: () => waitsOnHost(startState()),
+    listed: () => controls.roster?.open === true,
+    setOpen: (open) => relay.setOpen(open),
+  });
   document.addEventListener('visibilitychange', () => {
     if (amWatching) return;
     if (document.hidden) {
       standDownIfHidden();
+      awayDoor.hidden();
       return;
     }
+    awayDoor.shown(isHost);
     const me = bridge ? bridge.roster.get(bridge.seat) : undefined;
     if ((me === undefined || me.alive) && (!bridge || offersToHost(match, bridge.seat))) relay.canHost(true);
   });

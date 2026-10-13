@@ -61,6 +61,47 @@ test('the lobby lists a room somebody else is hosting, and joining it seats you'
   }
 });
 
+test("a host away from its tab takes the room off LOBBIES, and puts it back on return", async ({ browser }) => {
+  // The play log (2026-10-13): one idle tab kept a room listed for six hours, and two
+  // strangers walked into it and out again with nobody to start it. `#away=2` is the
+  // two minutes cut to two seconds.
+  test.setTimeout(120_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+  try {
+    const host = await hostCtx.newPage();
+    await host.addInitScript(() => {
+      try { localStorage.setItem('hbr:career', JSON.stringify({ matches: 0, wins: 0, name: 'AWAY' })); } catch {}
+    });
+    await host.goto(`/#host&noauto&nobots&away=2&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+
+    const guest = await guestCtx.newPage();
+    await guest.goto(`/#rom=${rom}`);
+    await guest.locator('#lobby-rows button', { hasText: 'LOBBIES' }).click({ timeout: 60_000 });
+    const room = guest.locator('#lobby-rooms button', { hasText: 'AWAY' });
+    await expect(room).toBeVisible({ timeout: 30_000 });
+
+    const setHidden = (hidden: boolean) =>
+      host.evaluate((h) => {
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+        document.dispatchEvent(new Event('visibilitychange'));
+      }, hidden);
+
+    await setHidden(true);
+    // The list refreshes every five seconds.
+    await expect(room).toHaveCount(0, { timeout: 20_000 });
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/);
+
+    await setHidden(false);
+    await expect(room).toBeVisible({ timeout: 20_000 });
+  } finally {
+    await guestCtx.close();
+    await hostCtx.close();
+  }
+});
+
 test('SOLO VS BOTS opens no socket', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(`/#rom=${romHashParam()}`);
