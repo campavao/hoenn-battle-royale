@@ -100,6 +100,10 @@
       #overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
       #key-layer { position: absolute; left: 0; top: 0; pointer-events: none; }
       #key-layer[hidden] { display: none; }
+      /* Under the see-through battle, over the field: dims the map the battle draws on
+         (Cam, 2026-10-12: "a small overlay underneath, maybe 50% opacity"). */
+      #key-dim { position: absolute; left: 0; top: 0; pointer-events: none; background: rgba(0, 0, 0, 0.5); }
+      #key-dim[hidden] { display: none; }
       /* No object-fit: field.ts sizes the canvas to its buffer's own aspect, and Firefox
          composes object-fit with the clip-path that hides the band into a picture
          squashed to two thirds with black bars (Cam's 2026-09-18 video, "everything got
@@ -256,6 +260,8 @@
         <div id="screen-wrap">
           <!-- The field past the picture, drawn by field.ts; the picture sits over it. -->
           <canvas id="field" width="240" height="160" aria-hidden="true"></canvas>
+          <!-- The see-through battle's dim over the field, under the picture (field.ts). -->
+          <div id="key-dim" aria-hidden="true" hidden></div>
           <canvas id="canvas" width="240" height="160"></canvas>
           <!-- The see-through battle's keyed copy of the LCD, in its place (field.ts). -->
           <canvas id="key-layer" width="240" height="160" aria-hidden="true" hidden></canvas>

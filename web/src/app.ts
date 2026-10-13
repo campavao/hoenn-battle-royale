@@ -25,6 +25,7 @@ import { HostRole, soloLink, soloRoster, type HostLink } from './match/host';
 import { type BotVoice, LINES, lineAt } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
+import { ringLabel } from './match/clock';
 import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
 import {
   AUTO_START_MS,
@@ -1725,7 +1726,7 @@ function renderGuestStrip(
   const ss = String(left % 60).padStart(2, '0');
   const alive = bridge.roster.all().filter((e) => e.alive).length;
   const phaseLabel =
-    match.ringPhase <= 0 ? 'SAFARI' : `RING ${match.ringR} (${match.centre?.place ?? '?'})`;
+    match.ringPhase <= 0 ? 'SAFARI' : ringLabel(match.ringR, match.centre?.place);
   // A watcher's roster fills up as people move, so "0 left" is only ever "nobody has
   // moved yet" -- say nothing rather than something wrong.
   const standing = alive > 0 ? ` · ${alive} left` : '';
@@ -1741,7 +1742,7 @@ function renderMatchStrip(state: DirectorState): void {
     state.phase === 'safari'
       ? 'SAFARI'
       : state.phase === 'ring'
-        ? `RING ${state.ring?.r ?? '?'} (${state.ring?.place ?? '?'})`
+        ? ringLabel(state.ring?.r, state.ring?.place)
         : state.phase === 'ended'
           ? state.winner !== undefined
             ? `P${state.winner} WINS`
@@ -3417,6 +3418,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     rom,
     seeThrough,
     keyLayer: $('#key-layer') as HTMLCanvasElement,
+    keyDim: $('#key-dim') as HTMLElement,
   });
   fieldView.attach();
   // Dev only: where the page walks the ghosts, for the e2e (POK-323, world-moves.spec.ts).
