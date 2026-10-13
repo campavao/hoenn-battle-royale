@@ -1,0 +1,35 @@
+# items-loot: our own ground loot takes the item rework too (br_loot.c Take, by way of
+# BrItems_Pickup): a dealt PROTEIN ball is used on the spot, on the whole party, and a
+# dealt POKe BALL is six of them, said as "6 POKe BALLS".
+#
+# LITTLEROOT (map 0:9), the boot at (5,8); the pieces at (13,16) in loot cells, one RIGHT.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the bag's key to 0, so the pockets read plain; the boot's 5 POKe BALLs to 0
+poke u32 *gSaveBlock2Ptr+0xAC 0
+expect u16 *gSaveBlock1Ptr+0x650 4
+poke u16 *gSaveBlock1Ptr+0x652 0
+expect u16 gPlayerParty+0x5A 9
+# a PROTEIN (64) ball, keyed the way the Zone deals one
+pokebytes gBrLoot 00 8F 0D 00 10 00 40 00 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 30
+tap RIGHT
+wait 20
+tap A
+wait 30
+shot protein
+expect u8 gBrLoot+0xA2 1
+expect u16 *gSaveBlock1Ptr+0x560 0
+expect u16 gPlayerParty+0x5A 12
+# a POKe BALL (4) in the same cell, and the same press
+pokebytes gBrLoot 01 8F 0D 00 10 00 04 00 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 100
+tap A
+wait 30
+shot balls
+expect u8 gBrLoot+0xA2 2
+expect u16 *gSaveBlock1Ptr+0x650 4
+expect u16 *gSaveBlock1Ptr+0x652 6
+say items loot ok

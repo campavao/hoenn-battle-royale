@@ -62,6 +62,16 @@ BR_EventScript_FoundUsed::
 	release
 	return
 
+@ A hidden item that was used, sold or bagged as a pile (BrItems_FindHidden): the same
+@ line, and pret's own flag, so it is not there to find twice.
+BR_EventScript_FoundHiddenUsed::
+	playfanfare MUS_OBTAIN_ITEM
+	msgbox gStringVar4, MSGBOX_DEFAULT
+	waitfanfare
+	special SetHiddenItemFlag
+	releaseall
+	end
+
 BR_Text_PartyFull:
 	.string "Your party is full.\n"
 	.string "Release one for the new catch?$"

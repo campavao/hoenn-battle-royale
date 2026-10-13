@@ -12,10 +12,11 @@
 #include "text.h"
 #include "constants/items.h"
 #include "constants/songs.h"
+#include "br/br_hud.h"
 #include "br/br_items.h"
 #include "br/br_match.h"
 
-// Vitamin -> the EV it fills, in item order HP UP .. ZINC is not contiguous, so a table.
+// Vitamin -> the EV it fills. The MON_DATA_*_EV ids are not in the vitamins' order, so a table.
 static const u16 sVitamins[][2] =
 {
     { ITEM_HP_UP,   MON_DATA_HP_EV },
@@ -26,7 +27,7 @@ static const u16 sVitamins[][2] =
     { ITEM_ZINC,    MON_DATA_SPDEF_EV },
 };
 
-static const u8 sText_HpUp[] = _("HP");
+static const u8 sText_Hp[] = _("HP");
 static const u8 sText_Attack[] = _("ATTACK");
 static const u8 sText_Defense[] = _("DEFENSE");
 static const u8 sText_Speed[] = _("SPEED");
@@ -34,7 +35,7 @@ static const u8 sText_SpAtk[] = _("SP. ATK");
 static const u8 sText_SpDef[] = _("SP. DEF");
 static const u8 *const sStatNames[] =
 {
-    sText_HpUp, sText_Attack, sText_Defense, sText_Speed, sText_SpAtk, sText_SpDef,
+    sText_Hp, sText_Attack, sText_Defense, sText_Speed, sText_SpAtk, sText_SpDef,
 };
 
 // Worth nothing in a match but their price: nobody sells, so carrying one is only a stop
@@ -53,6 +54,13 @@ static const u16 sStatusHeals[] =
     ITEM_ANTIDOTE, ITEM_BURN_HEAL, ITEM_ICE_HEAL, ITEM_AWAKENING, ITEM_PARALYZE_HEAL,
     ITEM_FULL_HEAL, ITEM_LAVA_COOKIE, ITEM_HEAL_POWDER,
     ITEM_BLUE_FLUTE, ITEM_YELLOW_FLUTE, ITEM_RED_FLUTE,
+};
+
+// Bring one mon back each, as in pret: a revive was the scarce thing, and a party-wide
+// one would be a balance change of its own (Cam's call, not this rework's).
+static const u16 sRevives[] =
+{
+    ITEM_REVIVE, ITEM_MAX_REVIVE, ITEM_REVIVAL_HERB,
 };
 
 #define BR_ITEMS_BALLS 6
@@ -113,7 +121,10 @@ static u32 SellPrice(u16 item, u16 count)
     return (u32)(GetItemPrice(item) / 2) * count;
 }
 
-u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text)
+// The rule itself, for every way an item arrives: a vitamin or a sell item is used up
+// (BR_ITEMS_USED, and `text`, when not NULL, says how in one line), a status heal turns
+// into a FULL RESTORE. The ball rule is the ground's alone (BrItems_Pickup).
+static u8 Apply(u16 *item, u16 count, u8 *text)
 {
     s8 row;
     u32 money;
@@ -137,7 +148,7 @@ u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text)
     }
     if (InList(sSellItems, ARRAY_COUNT(sSellItems), *item))
     {
-        money = SellPrice(*item, *count);
+        money = SellPrice(*item, count);
         AddMoney(&gSaveBlock1Ptr->money, money);
         if (text != NULL)
         {
@@ -149,56 +160,52 @@ u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text)
     }
     if (InList(sStatusHeals, ARRAY_COUNT(sStatusHeals), *item))
         *item = ITEM_FULL_RESTORE;
-    else if (GetItemPocket(*item) == POCKET_POKE_BALLS && *item != ITEM_MASTER_BALL)
+    return BR_ITEMS_TO_BAG;
+}
+
+u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text)
+{
+    if (Apply(item, *count, text) == BR_ITEMS_USED)
+        return BR_ITEMS_USED;
+    if (gBrMatch.phase != BR_PHASE_NONE
+     && GetItemPocket(*item) == POCKET_POKE_BALLS && *item != ITEM_MASTER_BALL)
         *count = BR_ITEMS_BALLS;
     return BR_ITEMS_TO_BAG;
 }
 
 bool8 BrItems_Arrive(u16 *item, u16 count)
 {
-    s8 row;
+    u8 line[BR_HUD_LINE_MAX + 2];
 
-    if (gBrMatch.phase == BR_PHASE_NONE)
+    // Nothing the player is shown said so (a mon's held item TAKEn, a spilled bag's
+    // GIVE): the ticker does.
+    if (Apply(item, count, line) != BR_ITEMS_USED)
         return FALSE;
-    row = Vitamin(*item);
-    if (row >= 0)
-    {
-        MaxPartyEv(row);
-        return TRUE;
-    }
-    if (InList(sSellItems, ARRAY_COUNT(sSellItems), *item))
-    {
-        AddMoney(&gSaveBlock1Ptr->money, SellPrice(*item, count));
-        return TRUE;
-    }
-    if (InList(sStatusHeals, ARRAY_COUNT(sStatusHeals), *item))
-        *item = ITEM_FULL_RESTORE;
-    return FALSE;
+    BrHud_Say(line);
+    return TRUE;
 }
 
-void BrItems_FindItem(void)
+// A map's item, seen or hidden: TRUE when it was used, or a pile bagged, here, and
+// gStringVar4 says so; else *item and *count are what goes on to pret's script.
+static bool8 Found(u16 *item, u16 *count)
 {
-    u16 item = gSpecialVar_0x8000;
-    u16 count = gSpecialVar_0x8001;
-    s8 row = Vitamin(item);
+    u16 was = *item;
+    s8 row = Vitamin(was);
 
-    gSpecialVar_Result = FALSE;
-    if (BrItems_Pickup(&item, &count, NULL) == BR_ITEMS_TO_BAG)
+    if (BrItems_Pickup(item, count, NULL) == BR_ITEMS_TO_BAG)
     {
-        gSpecialVar_0x8000 = item;
-        gSpecialVar_0x8001 = count;
         // pret's lines say "found one", so a pile is taken and said here; with no room
         // the script goes on to pret's own "the BAG is full".
-        if (count > 1 && AddBagItem(item, count))
+        if (*count > 1 && AddBagItem(*item, *count))
         {
-            ConvertIntToDecimalStringN(gStringVar1, count, STR_CONV_MODE_LEFT_ALIGN, 2);
-            CopyItemNameHandlePlural(item, gStringVar2, count);
+            ConvertIntToDecimalStringN(gStringVar1, *count, STR_CONV_MODE_LEFT_ALIGN, 2);
+            CopyItemNameHandlePlural(*item, gStringVar2, *count);
             StringExpandPlaceholders(gStringVar4, sText_FoundSome);
-            gSpecialVar_Result = TRUE;
+            return TRUE;
         }
-        return;
+        return FALSE;
     }
-    CopyItemName(gSpecialVar_0x8000, gStringVar2);
+    CopyItemName(was, gStringVar2);
     if (row >= 0)
     {
         StringCopy(gStringVar1, sStatNames[row]);
@@ -206,11 +213,29 @@ void BrItems_FindItem(void)
     }
     else
     {
-        ConvertIntToDecimalStringN(gStringVar1, SellPrice(gSpecialVar_0x8000, gSpecialVar_0x8001),
-                                   STR_CONV_MODE_LEFT_ALIGN, 7);
+        ConvertIntToDecimalStringN(gStringVar1, SellPrice(was, *count), STR_CONV_MODE_LEFT_ALIGN, 7);
         StringExpandPlaceholders(gStringVar4, sText_FoundSell);
     }
-    gSpecialVar_Result = TRUE;
+    return TRUE;
+}
+
+void BrItems_FindItem(void)
+{
+    u16 item = gSpecialVar_0x8000;
+    u16 count = gSpecialVar_0x8001;
+
+    gSpecialVar_Result = Found(&item, &count);
+    gSpecialVar_0x8000 = item;
+    gSpecialVar_0x8001 = count;
+}
+
+void BrItems_FindHidden(void)
+{
+    u16 item = gSpecialVar_0x8005;
+    u16 count = 1;
+
+    gSpecialVar_Result = Found(&item, &count);
+    gSpecialVar_0x8005 = item;
 }
 
 bool8 BrItems_HealParty(u8 taskId)
@@ -219,7 +244,7 @@ bool8 BrItems_HealParty(u8 taskId)
     bool8 used = FALSE;
     u8 i;
 
-    if (gBrMatch.phase == BR_PHASE_NONE)
+    if (gBrMatch.phase == BR_PHASE_NONE || InList(sRevives, ARRAY_COUNT(sRevives), item))
         return FALSE;
     for (i = 0; i < PARTY_SIZE; i++)
     {

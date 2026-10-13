@@ -150,6 +150,10 @@ EventScript_NoRoomToPickUpItem::
 EventScript_HiddenItemScript::
 	lockall
 	waitse
+.if BR
+	callnative BrItems_FindHidden
+	goto_if_eq VAR_RESULT, TRUE, BR_EventScript_FoundHiddenUsed
+.endif
 	additem VAR_0x8005
 	copyvar VAR_0x8007, VAR_RESULT
 	bufferitemnameplural STR_VAR_2, VAR_0x8005, 1

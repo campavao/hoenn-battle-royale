@@ -662,7 +662,9 @@ static void Take(struct BrLootItem *it)
             *p++ = CHAR_SPACE;
             *p = EOS;
         }
-        p = BrHud_Append(p, last, GetItemName(item));
+        // "6 POKe BALLS", the way Std_FindItem's line says a pile.
+        CopyItemNameHandlePlural(item, gStringVar2, count);
+        p = BrHud_Append(p, last, gStringVar2);
         BrHud_Append(p, last, sText_Bang);
         PlaySE(SE_PIN);
         BrHud_Box(line);

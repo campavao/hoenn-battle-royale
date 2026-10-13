@@ -46,3 +46,35 @@ shot closed
 # The pocket closes up when the message does: the FULL RESTORE is first now.
 expect u16 *gSaveBlock1Ptr+0x560 19
 expect u16 *gSaveBlock1Ptr+0x564 0
+# A REVIVE stays on one mon (the review of #16): both down, and the BAG's REVIVE (24)
+# goes to pret's own party menu, which brings back the one picked and only that one.
+poke u16 gPlayerParty+0x56 0
+poke u16 gPlayerParty+0xBA 0
+pokebytes gDecompressionBuffer 01 18 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 4
+wait 60
+expect u16 *gSaveBlock1Ptr+0x564 24
+# out of the BAG (still open from the POTION) to the menu, and in again for the new list
+tap B
+wait 120
+shot r-menu
+tap A
+wait 120
+shot r-bag
+tap DOWN
+wait 10
+shot r-down
+tap A
+wait 30
+shot r-sub
+tap A
+wait 60
+shot r-pick
+expect u16 gPlayerParty+0x56 0
+expect u16 gPlayerParty+0xBA 0
+tap A
+wait 120
+shot r-done
+expect u16 gPlayerParty+0x56 10
+expect u16 gPlayerParty+0xBA 0
+say items heal ok
