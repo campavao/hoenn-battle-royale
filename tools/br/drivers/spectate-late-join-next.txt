@@ -18,19 +18,19 @@ copy gDecompressionBuffer+130 gPlayerParty 100
 mailsend gBrMailbox 18 gDecompressionBuffer 230
 wait 4
 expect u8 gBrSpectate+5 1
-pokebytes gDecompressionBuffer 00 01 00 03 00 01 01 01 03 00 01 00
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
+pokebytes gDecompressionBuffer 00 01 00 04 00 01 01 00 01 03 00 01 00
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
 wait 4
 # NEXT: seat 2, still in the fade
 pokebytes gDecompressionBuffer 02
