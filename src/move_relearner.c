@@ -747,6 +747,7 @@ static void DoMoveRelearnerMain(void)
             else
             {
 #if BR
+                BrMoves_Forgetting(&gPlayerParty[sMoveRelearnerStruct->partyMon], sMoveRelearnerStruct->moveSlot);
                 RemoveMonPPBonus(&gPlayerParty[sMoveRelearnerStruct->partyMon], sMoveRelearnerStruct->moveSlot);
                 SetMonMoveSlot(&gPlayerParty[sMoveRelearnerStruct->partyMon], GetCurrentSelectedMove(), sMoveRelearnerStruct->moveSlot);
                 // After the slot is written: RemoveBagItem compacts the pocket, and
@@ -1054,12 +1055,10 @@ static bool8 BrCycleMon(void)
 // The move is in its slot. A TM that taught it is spent, an HM is not: here rather than
 // at the selection, because the summary screen's round trip rebuilds this list from the
 // bag, so a machine taken out before the move is written would shift every row under the
-// cursor. The player chose this one, so the rung's automatic learning will not take the
-// slot back off them (POK-290); whichever slot it went in is found by the move.
+// cursor.
 static void BrTaught(void)
 {
     BrMoves_Spend(GetCurrentSelectedMove());
-    BrMoves_Keep(sMoveRelearnerStruct->partyMon, GetCurrentSelectedMove());
     // Not pret's gSpecialVar_0x8004 = TRUE: pret leaves the screen after one move, but
     // this one stays, and the summary screen's way back in reads 0x8004 as the party
     // slot -- TRUE there made the second move of a visit go to party slot 1.

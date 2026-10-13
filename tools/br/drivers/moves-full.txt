@@ -9,7 +9,7 @@
 # The TM pocket is the witness: BrMoves_Spend runs only after the slot is written, so the
 # TOXIC leaving slot 0 means the overwrite happened, and it still being there after B
 # means the back-out wrote nothing. See moves-spend.txt for the boot and loot conventions;
-# moves-row.txt for the rung message that makes the lead a Lv30 GROVYLE with four moves.
+# moves-row.txt for the rung message that makes the lead a Lv30 GROVYLE.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -33,6 +33,12 @@ tap DOWN
 wait 10
 tap A
 wait 240
+# The rung teaches nothing (2026-10-13), so the GROVYLE still knows only POUND and LEER:
+# the first row, twice, fills the other two from the level-up moves it has by 30.
+tap A
+wait 150
+tap A
+wait 150
 # CANCEL is the last row and TOXIC, the one TM, the row above it: run to the bottom (the
 # list does not wrap) and come back one.
 tap DOWN

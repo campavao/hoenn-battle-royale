@@ -73,9 +73,6 @@ void BrCatch_Apply(void)
         // and only then is it overwritten.
         BrLoot_Released(&gPlayerParty[slot]);
         gPlayerParty[slot] = gBrPendingCatch; // the old one takes its place on the ground
-        // A different mon in the slot, so whatever the player had chosen for the last one
-        // is not a choice about this one (POK-290).
-        BrMoves_ForgetKept(slot);
         // ...and only NOW does the ball it came out of leave the ground. Taking it first
         // meant cancelling this screen destroyed it -- the same thing POK-294 is about,
         // on the other side of the same decision.

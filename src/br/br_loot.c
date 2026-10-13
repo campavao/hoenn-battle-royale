@@ -32,6 +32,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_levels.h"
 #include "item.h"
+#include "br/br_balls.h"
 #include "br/br_items.h"
 #include "br/br_loot.h"
 #include "br/br_gym.h"
@@ -57,9 +58,10 @@ EWRAM_DATA struct BrDespawned gBrDespawned[BR_MAX_DESPAWN] = {0};
 STATIC_ASSERT(BR_CAP_SPILL >= 4 + PARTY_SIZE * 9 + 1 + 6 + 1 + 8 * 3 + 4 + 1 + PLAYER_NAME_LENGTH, BrSpillCapHoldsAFullSpill)
 static EWRAM_DATA u8 sSpillBuf[BR_CAP_SPILL] = {0};
 static EWRAM_DATA struct BrAssembler sSpillAsm = {0};
-// A trainer's key keeps its party index above an 11-bit id, and the Zone's balls and the
-// chest sit at 0x8F00 and 0x8E00 in the same space: party index 1, ids 0x700 and 0x600.
-STATIC_ASSERT(TRAINERS_COUNT <= 0x600, BrTrainerLootKeysClearOfTheZoneAndChest)
+// A trainer's key keeps its party index above an 11-bit id, and the Zone's balls, the
+// chest and the house caches sit at 0x8F00, 0x8E00 and 0x8D00 in the same space: party
+// index 1, ids 0x700, 0x600 and 0x500.
+STATIC_ASSERT(TRAINERS_COUNT <= 0x500, BrTrainerLootKeysClearOfTheZoneChestAndCaches)
 STATIC_ASSERT((PARTY_SIZE - 1) << 11 < BR_LOOT_KEY_NOBODY, BrTrainerLootKeysFitSixteenBits)
 
 static bool8 OnCurrentMap(const struct BrLootItem *it)
@@ -101,10 +103,18 @@ static void Despawn(struct BrLootItem *it)
     it->objId = BR_NO_OBJ;
 }
 
+// A bag with one thing in it and no money is that thing on the ground: a TM somebody's
+// mon forgot (BrLoot_DropItem). It travels as a bag, so the page keeps it and hands it
+// over like any other, and it is drawn and named as the ball it is.
+static bool8 OneThing(const struct BrLootItem *it)
+{
+    return it->kind == BR_LOOT_BAG && it->species != ITEM_NONE;
+}
+
 static void Spawn(struct BrLootItem *it)
 {
     // Birch's bag is the one bag-shaped object event Emerald has; a team is balls.
-    u8 gfx = it->kind == BR_LOOT_BAG ? OBJ_EVENT_GFX_BIRCHS_BAG : OBJ_EVENT_GFX_ITEM_BALL;
+    u8 gfx = it->kind == BR_LOOT_BAG && !OneThing(it) ? OBJ_EVENT_GFX_BIRCHS_BAG : OBJ_EVENT_GFX_ITEM_BALL;
     u8 id = SpawnSpecialObjectEventParameterized(gfx, MOVEMENT_TYPE_NONE, LocalId(it),
                                                  it->x, it->y, MapGridGetElevationAt(it->x, it->y));
 
@@ -195,11 +205,13 @@ static void Drop(struct BrLootItem *it)
 // map, the piece farthest from the view, as long as it is farther than the new one --
 // what lands by you is what you came for.
 //
-// Never the DAY CARE chest or a Zone ball: every ROM deals those from the seed, once, and
-// nothing ever sends them again, so a row of theirs let go is gone for good.
+// Never the DAY CARE chest, a Zone ball or a house's cache: every ROM deals those from the
+// seed and the page never sends them, so a row of theirs let go is gone until somebody
+// walks back in -- forever, for the first two.
 static bool8 Resent(u16 key)
 {
-    return key != BR_LOOT_KEY_CHEST && (key & 0xFF00) != BR_LOOT_KEY_ZONE_ITEM(0);
+    return key != BR_LOOT_KEY_CHEST && (key & 0xFF00) != BR_LOOT_KEY_ZONE_ITEM(0)
+        && (key & 0xFF00) != BR_LOOT_KEY_CACHE(0);
 }
 
 static struct BrLootItem *Evict(u8 mapGroup, u8 mapNum, s16 x, s16 y)
@@ -311,6 +323,7 @@ static void ParseSpill(const u8 *d, u16 n)
     if (off < n && d[off] != 0 && (u16)(off + 7) <= n)
     {
         u32 money = 0;
+        u16 one = ITEM_NONE;
         // off is the bag flag; its key and cell are the six bytes after it, so the
         // item count is at off+7. It was read at off+8 -- the low byte of the money
         // itself -- so `at` ran hundreds of bytes past the end, the guard below caught
@@ -324,10 +337,15 @@ static void ParseSpill(const u8 *d, u16 n)
             u16 at = cash + 1 + 3 * d[cash];
 
             if ((u16)(at + 4) <= n)
+            {
                 money = d[at] | (d[at + 1] << 8) | (d[at + 2] << 16) | ((u32)d[at + 3] << 24);
+                // One stack of one, and nothing else: drawn as that item (OneThing).
+                if (money == 0 && d[cash] == 1 && d[cash + 3] == 1)
+                    one = BrWire_ReadU16(d + cash + 1);
+            }
         }
         Add(BrWire_ReadU16(d + off + 1), mapGroup, mapNum, (s16)BrWire_ReadU16(d + off + 3),
-            (s16)BrWire_ReadU16(d + off + 5), 0, 0, BR_LOOT_BAG, money);
+            (s16)BrWire_ReadU16(d + off + 5), one, 0, BR_LOOT_BAG, money);
     }
 }
 
@@ -404,7 +422,10 @@ static void HandleGive(const u8 *payload, u8 len)
         BrHud_Box(sText_NoRoom); // no bag of ours to put it back in: nothing to point at
         return;
     }
-    SayBag(sGivenBag.money, TRUE);
+    if (OneThing(&sGivenBag))
+        BrHud_Box(sText_NoRoom); // it goes back down as it was
+    else
+        SayBag(sGivenBag.money, TRUE);
     buf[0] = gBrMySeat;
     buf[1] = sGivenBag.mapGroup;
     buf[2] = sGivenBag.mapNum;
@@ -454,6 +475,8 @@ static void HandlePickup(const u8 *payload, u8 len)
 
     if (n < 8)
         return;
+    // A house's cache is gone for us too, though we are nowhere near it.
+    BrBalls_NoteTaken(BrWire_ReadU16(d + 1));
     it = Find(BrWire_ReadU16(d + 1));
     if (it == NULL)
         return;
@@ -631,6 +654,7 @@ static void SendPickup(struct BrLootItem *it)
     buf[6] = 0;
     buf[7] = it->kind == BR_LOOT_BAG ? 1 : 0;
     BrWire_SendOrHold(BR_MSG_PICKUP, buf, BR_PICKUP_LEN);
+    BrBalls_NoteTaken(it->key);
     gBrLoot.taken++;
     Drop(it);
 }
@@ -701,7 +725,18 @@ static void Take(struct BrLootItem *it)
     {
         if (it->money != 0)
             AddMoney(&gSaveBlock1Ptr->money, it->money);
-        SayBag(it->money, FALSE);
+        if (OneThing(it))
+        {
+            // What it is, not what it was worth: it arrives with the GIVE.
+            p = BrHud_Append(line, last, sText_Found);
+            p = BrHud_Append(p, last, GetItemName(it->species));
+            BrHud_Append(p, last, sText_Bang);
+            BrHud_Box(line);
+        }
+        else
+        {
+            SayBag(it->money, FALSE);
+        }
         PlaySE(SE_PIN);
         sGivenBag = *it; // where its GIVE puts back what does not fit
         SendPickup(it);
@@ -830,7 +865,9 @@ static void HoldLineForReach(void)
     if (it->key == sHeldKey)
         return;
     sHeldKey = it->key;
-    if (it->kind == BR_LOOT_BAG)
+    if (OneThing(it))
+        StringCopy(line, GetItemName(it->species));
+    else if (it->kind == BR_LOOT_BAG)
         StringCopy(line, sText_ABag);
     else if (it->kind == BR_LOOT_ITEM)
         StringCopy(line, GetItemName(it->species));
@@ -1152,6 +1189,63 @@ void BrLoot_Released(struct Pokemon *mon)
     ParseSpill(buf, len);
 }
 
+// One item down beside us, for anybody: a TM a mon of ours just forgot (BrMoves_Forgetting).
+// A bag of one, with no money and no name, so it goes everywhere a bag goes -- the page
+// keeps it for whoever walks in later and hands it over when somebody takes it -- and
+// every ROM draws it as the ball it is (OneThing). Beside us for the reason a released mon
+// is: the A press that taught the move is still down. With nowhere free in reach it is
+// dropped where we stand rather than lost: nothing leaves a match.
+void BrLoot_DropItem(u16 item)
+{
+    u8 buf[4 + 1 + 6 + 1 + 3 + 4 + 1];
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    s16 usedX[BR_SPILL_CELLS], usedY[BR_SPILL_CELLS];
+    u8 len = 0, cell = 1;
+    s16 x, y;
+
+    if (item == ITEM_NONE)
+        return;
+    if (!NextCell(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
+    {
+        x = self->currentCoords.x;
+        y = self->currentCoords.y;
+    }
+    buf[len++] = gBrMySeat;
+    buf[len++] = gSaveBlock1Ptr->location.mapGroup;
+    buf[len++] = gSaveBlock1Ptr->location.mapNum;
+    buf[len++] = 0; // no mons
+    buf[len++] = 1; // a bag
+    // The released-mon space and its counter (POK-294): minted here, ours alone.
+    BrWire_WriteU16(buf + len, BR_LOOT_KEY_RELEASED(gBrMySeat, gBrLoot.freed));
+    BrWire_WriteU16(buf + len + 2, (u16)x);
+    BrWire_WriteU16(buf + len + 4, (u16)y);
+    len += 6;
+    gBrLoot.freed++;
+    buf[len++] = 1; // one stack
+    BrWire_WriteU16(buf + len, item);
+    buf[len + 2] = 1;
+    len += 3;
+    buf[len++] = 0; // no money
+    buf[len++] = 0;
+    buf[len++] = 0;
+    buf[len++] = 0;
+    buf[len++] = 0; // no name
+    BrWire_SendLarge(BR_MSG_SPILL, buf, len);
+    ParseSpill(buf, len);
+}
+
+u16 BrLoot_ItemFor(u8 localId)
+{
+    const struct BrLootItem *it;
+
+    if (localId < BR_LOOT_LOCAL_ID_BASE || localId >= BR_LOOT_LOCAL_ID_BASE + BR_MAX_LOOT)
+        return ITEM_NONE;
+    it = &gBrLoot.items[localId - BR_LOOT_LOCAL_ID_BASE];
+    if (it->kind == BR_LOOT_ITEM || OneThing(it))
+        return it->species;
+    return ITEM_NONE;
+}
+
 // ---- the spoils -----------------------------------------------------------------
 //
 // 2026-10-13 play-test: "still often that I beat someone and they don't drop their stuff.
@@ -1424,6 +1518,7 @@ void BrLoot_Tick(void)
         DropHeldLine(); // a battle is not the place to still be naming a ball
         return;
     }
+    BrBalls_Tick(); // this house's cache, if we just walked into one
     BrField_ShareObjects(&ghosts, &limit);
     keep = BrLoot_Wanted() <= limit ? 0xFF : Keep(limit);
     // Out of view, off this map or past the share: let go first, so a nearer piece has

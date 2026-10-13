@@ -77,6 +77,7 @@
 #include "constants/songs.h"
 #if BR
 #include "br/br_catch.h"
+#include "br/br_moves.h"
 static void CursorCb_BrMoves(u8);
 static const u8 sText_BrMoves[] = _("MOVES");
 #endif
@@ -4921,6 +4922,9 @@ static void Task_PartyMenuReplaceMove(u8 taskId)
     if (IsPartyMenuTextPrinterActive() != TRUE)
     {
         mon = &gPlayerParty[gPartyMenu.slotId];
+#if BR
+        BrMoves_Forgetting(mon, GetMoveSlotToReplace());
+#endif
         RemoveMonPPBonus(mon, GetMoveSlotToReplace());
         move = gPartyMenu.data[0];
         SetMonMoveSlot(mon, move, GetMoveSlotToReplace());

@@ -23,6 +23,7 @@
 #include "br/br_pick.h"
 #include "br/br_map.h"
 #include "br/br_zone.h"
+#include "br/br_balls.h"
 #include "br/br_field.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
@@ -48,6 +49,7 @@ void BrInit(void)
     BrPick_Init();
     BrMap_Init();
     BrZone_Init();
+    BrBalls_Init();
 }
 
 // Everything allocated a moment ago is now unowned memory that will be handed out

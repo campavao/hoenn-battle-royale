@@ -13,6 +13,7 @@
 #include "constants/items.h"
 #include "constants/songs.h"
 #include "br/br_hud.h"
+#include "br/br_balls.h"
 #include "br/br_items.h"
 #include "br/br_match.h"
 
@@ -221,7 +222,9 @@ static bool8 Found(u16 *item, u16 *count)
 
 void BrItems_FindItem(void)
 {
-    u16 item = gSpecialVar_0x8000;
+    // What this ball holds this match: a quarter of them a TM (br_balls.h).
+    u16 item = BrBalls_Deal(gSaveBlock1Ptr->location.mapGroup, gSaveBlock1Ptr->location.mapNum,
+                            gSpecialVar_LastTalked, gSpecialVar_0x8000);
     u16 count = gSpecialVar_0x8001;
 
     gSpecialVar_Result = Found(&item, &count);

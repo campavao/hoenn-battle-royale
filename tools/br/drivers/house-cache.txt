@@ -1,0 +1,47 @@
+# house-cache: a house has a ball in it (Cam, 2026-10-13: "houses get item caches"), the
+# same one for every ROM, and the first to take it takes it for everybody.
+#
+# PETALBURG CITY's HOUSE1 (map 8:2) is sHouses[33]. Under seed 0x12345678 its cache is
+# TM24 THUNDERBOLT (312), a gold one (br_balls.c, CacheItem). The boot names (3,6) and
+# leaves us just inside the door.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 08 02 03 00 06 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x12345678
+wait 30
+expect u16 gBrLoot 0x8D21
+expect u16 gBrLoot+6 312
+expect u8 gBrLoot+8 8
+expect u8 gBrLoot+9 2
+expect u8 gBrLoot+11 3
+# the middle of the room, outward: (5,4) on the carpet, beside the table and the chair
+expect u16 gBrLoot+2 12
+expect u16 gBrLoot+4 11
+shot inside
+# Out of the door: the cache stays behind, out of the table. (Row 1 is the DAY CARE's
+# chest, which is always there.)
+hold DOWN 90
+wait 200
+expect u8 gBrLoot+11 0
+shot outside
+# ...and back in: it is put down again, where it was
+hold UP 40
+wait 200
+expect u8 gBrLoot+11 3
+expect u16 gBrLoot 0x8D21
+expect u16 gBrLoot+2 12
+shot back-in
+# Somebody else takes it -- seat 1, PICKUP of key 0x8D21 -- and it goes from here too
+pokebytes gBrMailbox+0x1018 0A 0B 08 00 00 01 21 8D 00 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+expect u8 gBrLoot+11 0
+# ...and for good: out and back in, and there is nothing
+hold DOWN 90
+wait 200
+hold UP 40
+wait 200
+expect u8 gBrLoot+11 0
+shot gone
+say house cache ok

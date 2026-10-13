@@ -40,12 +40,14 @@
 //   0x0000..0x1FFF  a fallen trainer's team and bag -- `(seat << 8) | n`, the bag's n
 //                   0xFF. The page mints a bot's; our own ROM mints ours. A bag put
 //                   back with what did not fit keeps its key under the taker's spill.
-//   0x4000..0x5FFF  a Pokemon the player RELEASED to make room (POK-294). Minted in the
-//                   ROM, because nobody else is watching the moment it happens.
+//   0x4000..0x5FFF  a Pokemon the player RELEASED to make room (POK-294), or a TM one of
+//                   theirs forgot (BrLoot_DropItem). Minted in the ROM, because nobody
+//                   else is watching the moment it happens.
 //   0x8000..0xFFFF  nobody's: one of Hoenn's own trainers, `0x8000 | (party index << 11)
 //                   | id`, the Zone's dealt balls, 0x8F00 | i, and the DAY CARE chest,
 //                   0x8E00 -- clear of the trainers' keys while every trainer id is under
-//                   0x600 (br_loot.c asserts it; Emerald's last is 854).
+//                   0x600 (br_loot.c asserts it; Emerald's last is 854), and a house's
+//                   cache, 0x8D00 | its index (br_balls.c), which needs them under 0x500.
 //
 // The seat is the low five bits of the high byte in both seat spaces, which is only a
 // seat while seats are 0..31: the relay deals no other, and the ROM treats any other
@@ -61,6 +63,7 @@
 #define BR_LOOT_KEY_TRAINER(slot, trainerId) ((u16)(BR_LOOT_KEY_NOBODY | ((slot) << 11) | (trainerId)))
 #define BR_LOOT_KEY_ZONE_ITEM(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x0F00 | (i)))
 #define BR_LOOT_KEY_CHEST ((u16)(BR_LOOT_KEY_NOBODY | 0x0E00))
+#define BR_LOOT_KEY_CACHE(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x0D00 | (i)))
 
 struct BrLootItem
 {
@@ -163,6 +166,13 @@ void BrLoot_TrainerBeaten(u16 trainerId, u8 localId);
 // lands as a ball at your feet, claimable by anyone -- trading up leaves a trace."
 // Nothing ever leaves a match.
 void BrLoot_Released(struct Pokemon *mon);
+// One item on the ground beside us, for anybody, and the room told: the TM a mon of ours
+// forgot (BrMoves_Forgetting). It goes out as a bag holding just that, under a key from
+// the released space.
+void BrLoot_DropItem(u16 item);
+// The item a loot ball on this map holds, by its object's local id, or ITEM_NONE for a
+// Pokemon, a bag, or a local id that is not loot's. What colours the ball (br_balls.h).
+u16 BrLoot_ItemFor(u8 localId);
 // Puts one dealt item ball on the ground (POK-261). Every ROM deals the same ones from
 // the match seed, so nothing is sent: they simply agree. The key's top bit is set, the
 // way a beaten trainer's is -- it belongs to nobody, so nothing trade-evolves from it.
