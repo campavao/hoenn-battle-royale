@@ -2988,7 +2988,7 @@ function wireRoom(
     // the seat it is played from: an heir's is not the opener's 1 (POK-331 #14).
     if (next === 'rehost') {
       setStatus('The room was gone. Hosting it again…');
-      relay.host({ ...me, open: true, max: BOT_FILL, seat: bridge?.seat });
+      relay.host({ ...me, open: controls.roster?.open ?? true, max: BOT_FILL, seat: bridge?.seat });
       return;
     }
     // A passcoded door asks for the code, and asks again when the one typed was wrong --
@@ -3063,10 +3063,20 @@ function wireRoom(
     // A relay that gave us no token to come back with.
     if (isHost) {
       setStatus('Reconnected. Hosting again…');
-      relay.host({ ...me, open: true, max: BOT_FILL });
+      // As listed as it was: off the list while we are away (away.ts), or by the host.
+      relay.host({ ...me, open: controls.roster?.open ?? true, max: BOT_FILL });
       return;
     }
     setStatus('Reconnected, but the room carried on without you. LEAVE to start again.');
+  });
+
+  // A waiting room comes off the list while its host is away from the tab (away.ts).
+  const awayDoor = new AwayDoor({
+    awayMs: awayMs(),
+    pollMs: STAND_DOWN_EVERY_MS,
+    waitingOnUs: () => waitsOnHost(startState()),
+    listed: () => controls.roster?.open === true,
+    setOpen: (open) => relay.setOpen(open),
   });
 
   // A hidden tab gets its timers throttled and its rAF stopped, and on the host those
@@ -3085,12 +3095,6 @@ function wireRoom(
   //
   // On the way back this page is an ordinary member. It says it could host again --
   // for the next time the room needs an heir -- and does not take the match back.
-  const awayDoor = new AwayDoor({
-    awayMs: awayMs(),
-    waitingOnUs: () => waitsOnHost(startState()),
-    listed: () => controls.roster?.open === true,
-    setOpen: (open) => relay.setOpen(open),
-  });
   document.addEventListener('visibilitychange', () => {
     if (amWatching) return;
     if (document.hidden) {
