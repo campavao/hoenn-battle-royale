@@ -98,9 +98,9 @@ struct BrLoot
     /* 0xA1 */ u8 spawned;  // objects on this map right now, for drivers
     /* 0xA2 */ u8 taken;    // pieces this player has picked up, for drivers
     /* 0xA3 */ u8 gone;     // beaten trainers this sweep has taken off a map, for drivers
-    /* 0xA4 */ u8 freed;    // Pokemon this player has released (POK-294), and the low
-                            // half of their keys. Free padding: the struct was already
-                            // rounded up to here.
+    /* 0xA4 */ u8 freed;    // Pokemon this player has released (POK-294) and TMs their
+                            // mons forgot (BrLoot_DropItem), and the low half of those
+                            // keys. Free padding: the struct was already rounded up to here.
 };                          // 168 bytes
 BR_OFFSET(BrLoot, items, 0x00)
 BR_OFFSET(BrLoot, count, 0xA0)
