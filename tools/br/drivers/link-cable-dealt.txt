@@ -1,0 +1,25 @@
+# link-cable-dealt: one red ball in twelve holds a LINK CABLE this match (br_balls.c,
+# BR_BALLS_CABLE_IN), so a trade evolution is something you can find on the way.
+#
+# ROUTE 104 (map 0:19), as in balls-dealt: under seed 4 the PP UP at (39,15), local id
+# 21, is dealt a LINK CABLE (52). It stays red -- an item, not a TM. The boot leaves us
+# on (39,14), facing the ball.
+wait 30
+poke u32 gBrMatch+8 4
+pokebytes gBrMailbox+0x2018 81 00 00 13 27 00 0E 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u32 gBrMatch+8 4
+expect u16 *gSaveBlock1Ptr+0x560 0
+shot red
+tap A
+wait 60
+tap A
+wait 60
+shot found
+tap A
+wait 60
+tap A
+wait 60
+expect u16 *gSaveBlock1Ptr+0x560 52
+say link cable dealt ok

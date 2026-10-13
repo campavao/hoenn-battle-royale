@@ -679,6 +679,18 @@ const struct Item gItems[] =
         .fieldUseFunc = ItemUseOutOfBattle_CannotUse,
     },
 
+#if BR
+    [ITEM_034] =
+    {
+        .name = _("LINK CABLE"),
+        .itemId = ITEM_034,
+        .price = 2100,
+        .description = gBrText_LinkCableDesc,
+        .pocket = POCKET_ITEMS,
+        .type = ITEM_USE_PARTY_MENU,
+        .fieldUseFunc = ItemUseOutOfBattle_EvolutionStone,
+    },
+#else
     [ITEM_034] =
     {
         .name = _("????????"),
@@ -689,6 +701,7 @@ const struct Item gItems[] =
         .type = ITEM_USE_BAG_MENU,
         .fieldUseFunc = ItemUseOutOfBattle_CannotUse,
     },
+#endif
 
     [ITEM_035] =
     {

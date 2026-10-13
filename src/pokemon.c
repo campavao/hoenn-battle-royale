@@ -1,6 +1,7 @@
 #include "global.h"
 #if BR
 #include "br/br_battle.h"
+#include "br/br_items.h"
 #endif
 #include "malloc.h"
 #include "apprentice.h"
@@ -5619,6 +5620,10 @@ u16 GetEvolutionTargetSpecies(struct Pokemon *mon, u8 mode, u16 evolutionItem)
         break;
     case EVO_MODE_ITEM_USE:
     case EVO_MODE_ITEM_CHECK:
+#if BR
+        if (evolutionItem == BR_ITEM_LINK_CABLE)
+            return BrItems_CableTarget(mon, mode);
+#endif
         for (i = 0; i < EVOS_PER_MON; i++)
         {
             if (gEvolutionTable[species][i].method == EVO_ITEM

@@ -34,8 +34,8 @@ shot list-top
 hold DOWN 150
 wait 40
 shot list-bottom
-# The shelf's tail is the POKe DOLL (POK-293) and then FIRE, WATER, THUNDER, LEAF, SUN,
-# MOON STONE, all at 2100 -- the frame above is where the price is read. Down to the
+# The shelf's tail is the POKe DOLL (POK-293), then FIRE, WATER, THUNDER, LEAF, SUN,
+# MOON STONE and the LINK CABLE (br_items.h), all at 2100 -- the frame above is where the price is read. Down to the
 # MOON STONE and buy one (two down from where the hold stops, since the shelf lost its
 # FULL HEAL: br_items.h).
 tap DOWN

@@ -11,6 +11,7 @@
 #include "strings.h"
 #include "text.h"
 #include "constants/items.h"
+#include "constants/pokemon.h"
 #include "constants/songs.h"
 #include "br/br_hud.h"
 #include "br/br_balls.h"
@@ -269,4 +270,38 @@ bool8 BrItems_HealParty(u8 taskId)
     RemoveBagItem(item, 1);
     DisplayItemMessage(taskId, FONT_NORMAL, sText_PartyHealed, CloseItemMessage);
     return TRUE;
+}
+
+const u8 gBrText_LinkCableDesc[] = _(
+    "Evolves a POKéMON\n"
+    "that would evolve\n"
+    "when traded.");
+
+const u32 gBrItemIcon_LinkCable[] = INCGFX_U32("graphics/items/icons/br_link_cable.png", ".4bpp.lz");
+const u32 gBrItemIconPalette_LinkCable[] = INCGFX_U32("graphics/items/icon_palettes/br_link_cable.pal", ".gbapal.lz");
+
+// pokemon.c's, which no header declares; declared here as daycare.c does.
+extern const struct Evolution gEvolutionTable[][EVOS_PER_MON];
+
+u16 BrItems_CableTarget(struct Pokemon *mon, u8 mode)
+{
+    u16 species = GetMonData(mon, MON_DATA_SPECIES, NULL);
+    u16 held = GetMonData(mon, MON_DATA_HELD_ITEM, NULL);
+    u16 none = ITEM_NONE;
+    u8 i;
+
+    for (i = 0; i < EVOS_PER_MON; i++)
+    {
+        const struct Evolution *evo = &gEvolutionTable[species][i];
+
+        if (evo->method == EVO_TRADE)
+            return evo->targetSpecies;
+        if (evo->method == EVO_TRADE_ITEM && evo->param == held)
+        {
+            if (mode == EVO_MODE_ITEM_USE)
+                SetMonData(mon, MON_DATA_HELD_ITEM, &none);
+            return evo->targetSpecies;
+        }
+    }
+    return SPECIES_NONE;
 }
