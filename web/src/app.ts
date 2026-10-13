@@ -45,6 +45,7 @@ import {
 import { Stage, type DrawnScreen } from './ui/stage';
 import { ParadeHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
 import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
+import { KeyLegend } from './ui/keys';
 import { stageKey } from './ui/roomkeys';
 import { TEXT_RED } from './ui/emerald';
 import {
@@ -3394,6 +3395,8 @@ let fieldView: FieldView | null = null;
 
 function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined, rom: Uint8Array | null = null): void {
   wireKeyboard(emu);
+  // Shown only on a desktop in a match (index.html's #keys).
+  new KeyLegend($('#keys') as HTMLElement, emu, KEYBOARD_MAP);
   wireGamepad(emu);
   wireRemap();
   for (const el of document.querySelectorAll<HTMLElement>('#pad .btn[data-key]')) {
