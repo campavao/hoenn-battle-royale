@@ -514,8 +514,8 @@ describe("the BR structs the page reads at an offset", () => {
     expect([ghosts.SEAT_SIZE, ghosts.SEAT_COUNT]).toEqual([seat.size, define(configH, 'BR_MAX_SEATS')]);
     const item = layout(lootH, 'BrLootItem');
     expect(layout(lootH, 'BrLoot').at.items).toBe(0);
-    expect([ghosts.LOOT_X, ghosts.LOOT_Y, ghosts.LOOT_MAP_GROUP, ghosts.LOOT_MAP_NUM, ghosts.LOOT_KIND]).toEqual([
-      item.at.x, item.at.y, item.at.mapGroup, item.at.mapNum, item.at.kind,
+    expect([ghosts.LOOT_X, ghosts.LOOT_Y, ghosts.LOOT_SPECIES, ghosts.LOOT_MAP_GROUP, ghosts.LOOT_MAP_NUM, ghosts.LOOT_KIND]).toEqual([
+      item.at.x, item.at.y, item.at.species, item.at.mapGroup, item.at.mapNum, item.at.kind,
     ]);
     expect([ghosts.LOOT_SIZE, ghosts.LOOT_COUNT]).toEqual([item.size, define(lootH, 'BR_MAX_LOOT')]);
     expect([ghosts.LOOT_NONE, ghosts.LOOT_BAG]).toEqual([define(lootH, 'BR_LOOT_NONE'), define(lootH, 'BR_LOOT_BAG')]);
@@ -524,8 +524,8 @@ describe("the BR structs the page reads at an offset", () => {
     expect([ghosts.DESPAWN_SIZE, ghosts.DESPAWN_COUNT]).toEqual([gone.size, define(lootH, 'BR_MAX_DESPAWN')]);
     // A live object's local id says which seat's ghost or which row's ball it is.
     expect([ghosts.GHOST_LOCAL_ID_BASE, ghosts.LOOT_LOCAL_ID_BASE]).toEqual([define(configH, 'BR_GHOST_LOCAL_ID_BASE'), define(lootH, 'BR_LOOT_LOCAL_ID_BASE')]);
-    // ...and what br_loot.c's Spawn draws the ground as.
-    const spawn = /it->kind == BR_LOOT_BAG \? (OBJ_EVENT_GFX_\w+) : (OBJ_EVENT_GFX_\w+);/.exec(lootC);
+    // ...and what br_loot.c's Spawn draws the ground as: a bag unless it is one thing.
+    const spawn = /it->kind == BR_LOOT_BAG && !OneThing\(it\) \? (OBJ_EVENT_GFX_\w+) : (OBJ_EVENT_GFX_\w+);/.exec(lootC);
     expect(spawn, "br_loot.c's Spawn picks the bag or the ball").not.toBeNull();
     expect([ghosts.GFX_BIRCHS_BAG, ghosts.GFX_ITEM_BALL]).toEqual([define(eventObjectsH, spawn![1]), define(eventObjectsH, spawn![2])]);
   });
