@@ -590,11 +590,34 @@ static bool8 ClearTheWay(struct ObjectEvent *ghost, u8 dir)
         sCutting |= bit;
         return FALSE;
     }
-    if (!ObjectEventClearHeldMovementIfFinished(o))
-        return FALSE;
-    sCutting &= ~bit;
-    RemoveObjectEventByLocalIdAndMap(o->localId, o->mapNum, o->mapGroup);
-    return TRUE;
+    // Started: SweepCutting takes it away once the cut has played.
+    return FALSE;
+}
+
+// Every cut a ghost started, taken off the map once it has played -- whatever became of
+// the ghost meanwhile. Finished from the ghost's own walk it was left half done when the
+// ghost snapped past it (a full queue) or was despawned: an invisible tree, still solid.
+static void SweepCutting(void)
+{
+    struct ObjectEvent *o;
+    u8 id;
+
+    for (id = 0; id < OBJECT_EVENTS_COUNT && sCutting != 0; id++)
+    {
+        if (!(sCutting & (1 << id)))
+            continue;
+        o = &gObjectEvents[id];
+        if (!o->active || (o->graphicsId != OBJ_EVENT_GFX_CUTTABLE_TREE && o->graphicsId != OBJ_EVENT_GFX_BREAKABLE_ROCK))
+        {
+            sCutting &= ~(1 << id); // somebody else took it away
+            continue;
+        }
+        if (ObjectEventCheckHeldMovementStatus(o) == 0)
+            continue; // still playing
+        ObjectEventClearHeldMovementIfActive(o);
+        sCutting &= ~(1 << id);
+        RemoveObjectEventByLocalIdAndMap(o->localId, o->mapNum, o->mapGroup);
+    }
 }
 
 // Feed one queued walk to the object, or snap it when it fell too far behind.
@@ -866,6 +889,7 @@ void BrGhosts_Tick(void)
             Spawn(seat);
         DriveGhost(seat);
     }
+    SweepCutting();
     EmoteBusyGhosts();
     WatchOwn();
     EmitOwn();

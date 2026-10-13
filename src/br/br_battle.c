@@ -39,6 +39,11 @@
 
 EWRAM_DATA struct BrBattle gBrBattle = {0};
 EWRAM_DATA u8 gBrSeeThrough[2] = {0};
+// How long BrBattle_TickSeeThrough has held the count past a battle. At most
+// SEE_THROUGH_HOLD_MAX: a screen after a battle that never loads palette 0 of its own
+// (an evolution) would otherwise be keyed for as long as it is up. The flash was 8 frames.
+#define SEE_THROUGH_HOLD_MAX 30
+static EWRAM_DATA u8 sSeeThroughHeld = 0;
 
 // The opponent's three lines, for the one seat they are about (BrBattle_SetVoice).
 struct BrVoice
@@ -215,6 +220,7 @@ void BrBattle_SeeThrough(void)
     for (i = 0; i < ARRAY_COUNT(sSeeThroughStripes); i++)
         SeeThroughKey(sSeeThroughStripes[i]);
     gBrSeeThrough[1] = 2;
+    sSeeThroughHeld = 0;
 }
 
 // The count holds at 1 off the field while the key is still up: the frames between a
@@ -225,8 +231,12 @@ void BrBattle_TickSeeThrough(void)
 {
     if (gBrSeeThrough[1] == 0)
         return;
-    if (gBrSeeThrough[1] == 1 && gBrSeeThrough[0] && !BrField_OverworldRunning() && SeeThroughKeyUp())
+    if (gBrSeeThrough[1] == 1 && gBrSeeThrough[0] && !BrField_OverworldRunning() && SeeThroughKeyUp()
+     && sSeeThroughHeld < SEE_THROUGH_HOLD_MAX)
+    {
+        sSeeThroughHeld++;
         return;
+    }
     gBrSeeThrough[1]--;
 }
 

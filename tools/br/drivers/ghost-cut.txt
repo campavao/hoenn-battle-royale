@@ -29,3 +29,23 @@ wait 80
 expect u8 gBrSeats+26 0
 expectbits u8 *gSaveBlock1Ptr+0x1272 0x04 0x04
 shot cut
+# The second tree, (19,10) (FLAG_TEMP_11), and a ghost that will not wait for it: six
+# more STEPs north behind the one into the tree overflow the queue, and the ghost snaps
+# to where the roster has it, past the tree. The cut it started still finishes: no
+# invisible tree left standing.
+pokebytes gBrMailbox+0x1098 03 0B 08 00 00 01 02 1A 00 11 00 18 0B
+poke u16 gBrMailbox+0x0C 3
+wait 4
+expectbits u8 *gSaveBlock1Ptr+0x1272 0x02 0x00
+pokebytes gBrMailbox+0x10D8 03 0B 08 00 00 01 02 1A 00 10 00 18 0B
+pokebytes gBrMailbox+0x1118 03 0B 08 00 00 01 02 1A 00 0F 00 18 0B
+pokebytes gBrMailbox+0x1158 03 0B 08 00 00 01 02 1A 00 0E 00 18 0B
+pokebytes gBrMailbox+0x1198 03 0B 08 00 00 01 02 1A 00 0D 00 18 0B
+pokebytes gBrMailbox+0x11D8 03 0B 08 00 00 01 02 1A 00 0C 00 18 0B
+pokebytes gBrMailbox+0x1218 03 0B 08 00 00 01 02 1A 00 0B 00 18 0B
+poke u16 gBrMailbox+0x0C 9
+wait 4
+expect u8 gBrSeats+26 0
+wait 80
+expectbits u8 *gSaveBlock1Ptr+0x1272 0x02 0x02
+shot snapped-past
