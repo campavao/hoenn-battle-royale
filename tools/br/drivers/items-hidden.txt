@@ -1,0 +1,32 @@
+# items-hidden: a hidden item takes the item rework too, and says what happened (the
+# review of #16: pret's "found a NUGGET / put it in the ITEMS POCKET" over a NUGGET that
+# had already been sold). EventScript_HiddenItemScript asks BrItems_FindHidden first.
+#
+# FALLARBOR TOWN (map 0:13): the hidden NUGGET at (2,15), from the cell east of it.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 0D 03 00 0F 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr+0 3
+expect u16 *gSaveBlock1Ptr+2 15
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u32 *gSaveBlock1Ptr+0x490 0
+tap LEFT
+wait 20
+tap A
+wait 200
+shot found
+hold A 4
+wait 60
+shot after
+expect u32 gMain+4 CB2_Overworld+1
+# sold at its price ("It fetched ¥5000."), and nothing in the ITEMS POCKET
+expect u32 *gSaveBlock1Ptr+0x490 5000
+expect u16 *gSaveBlock1Ptr+0x560 0
+# and the same press again finds nothing: pret's own flag is set
+tap A
+wait 200
+hold A 4
+wait 60
+expect u32 *gSaveBlock1Ptr+0x490 5000
+say items hidden ok

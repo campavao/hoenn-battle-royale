@@ -1,0 +1,27 @@
+# items-balls: a ball off the ground is six of them (2026-10-13, the item rework: "balls
+# on the ground give 6 at a time"). br_items.c, by way of Std_FindItem's callnative.
+#
+# ROUTE 104 (map 0:19): the POKe BALL ball at (29,53), from the cell south of it. The boot
+# deals 5 POKe BALLs. A pocket slot's quantity is XORed with the low half of SaveBlock2's
+# key; the key and the quantity go to 0 first so it reads plain.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 13 1D 00 36 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr+0 29
+expect u16 *gSaveBlock1Ptr+2 54
+expect u16 *gSaveBlock1Ptr+0x650 4
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x652 0
+tap UP
+wait 20
+tap A
+wait 200
+shot found
+hold A 4
+wait 60
+expect u32 gMain+4 CB2_Overworld+1
+# Six, said as six ("CAM found 6 POKe BALLS!"), and the ball is gone.
+expect u16 *gSaveBlock1Ptr+0x650 4
+expect u16 *gSaveBlock1Ptr+0x652 6
+shot after

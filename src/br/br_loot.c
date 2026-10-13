@@ -32,6 +32,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_levels.h"
 #include "item.h"
+#include "br/br_items.h"
 #include "br/br_loot.h"
 #include "br/br_gym.h"
 #include "br/br_field.h"
@@ -687,6 +688,8 @@ static void Take(struct BrLootItem *it)
     const u8 *last = line + ARRAY_COUNT(line) - 1;
     struct Pokemon mon;
     u16 species;
+    u16 item;
+    u16 count;
     u8 *p;
 
     // Nothing leaves the ground without its PICKUP on the way: with the ring full and the
@@ -710,15 +713,34 @@ static void Take(struct BrLootItem *it)
         // unless its pocket is full, and then it stays where it lies for somebody with
         // room. The pickup used to go out first and AddBagItem's FALSE was never read, so
         // a full pocket threw the ball away for the whole room (POK-330 #55).
-        if (!CheckBagHasSpace(it->species, 1))
+        // A vitamin or a sell item is used on the spot, a ball is six, a status heal a
+        // FULL RESTORE (the item rework, br_items.h).
+        item = it->species;
+        count = 1;
+        if (BrItems_Pickup(&item, &count, line) == BR_ITEMS_USED)
+        {
+            PlaySE(SE_PIN);
+            BrHud_Box(line);
+            SendPickup(it);
+            return;
+        }
+        if (!CheckBagHasSpace(item, count))
         {
             PlaySE(SE_FAILURE);
             BrHud_Box(sText_NoRoom);
             return;
         }
-        AddBagItem(it->species, 1);
+        AddBagItem(item, count);
         p = BrHud_Append(line, last, sText_Found);
-        p = BrHud_Append(p, last, GetItemName(it->species));
+        if (count > 1)
+        {
+            p = ConvertIntToDecimalStringN(p, count, STR_CONV_MODE_LEFT_ALIGN, 2);
+            *p++ = CHAR_SPACE;
+            *p = EOS;
+        }
+        // "6 POKe BALLS", the way Std_FindItem's line says a pile.
+        CopyItemNameHandlePlural(item, gStringVar2, count);
+        p = BrHud_Append(p, last, gStringVar2);
         BrHud_Append(p, last, sText_Bang);
         PlaySE(SE_PIN);
         BrHud_Box(line);

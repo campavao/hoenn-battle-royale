@@ -96,6 +96,11 @@ Std_FindItem::
 	lock
 	faceplayer
 	waitse
+.if BR
+@ A vitamin or a sell item is used up here; a ball is six, a status heal a FULL RESTORE.
+	callnative BrItems_FindItem
+	goto_if_eq VAR_RESULT, TRUE, BR_EventScript_FoundUsed
+.endif
 	copyvar VAR_0x8004, ITEMID
 	copyvar VAR_0x8005, AMOUNT
 	checkitemspace ITEMID, AMOUNT
@@ -145,6 +150,10 @@ EventScript_NoRoomToPickUpItem::
 EventScript_HiddenItemScript::
 	lockall
 	waitse
+.if BR
+	callnative BrItems_FindHidden
+	goto_if_eq VAR_RESULT, TRUE, BR_EventScript_FoundHiddenUsed
+.endif
 	additem VAR_0x8005
 	copyvar VAR_0x8007, VAR_RESULT
 	bufferitemnameplural STR_VAR_2, VAR_0x8005, 1

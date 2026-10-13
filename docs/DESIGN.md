@@ -195,6 +195,11 @@ out, and one that comes in waits as it would in a menu.
   climb it, A on a dive spot and you go down. No Pokemon has to know the move, nothing
   asks first, and no field move plays its cut-in. The starting bag has no HMs, and the
   bots surf and cut as freely (`brain.ts` `canSurf`, `canCut`).
+- **Items that do not stop you** (`br_items.h`): a vitamin off the ground is used there
+  and then, on the whole party (that stat's EVs to the top); a sell item (NUGGET, PEARL,
+  STARDUST, a shard) is its sell price; a status heal is a FULL RESTORE, and no shelf sells
+  one; a ball off the ground is six (the MASTER BALL stays one); and a medicine used from
+  the BAG treats the whole party, with no one to pick.
 - **Rules**: one clock (`br_levels.h`: the ring phase is the level rung, no EXP), the
   catch with a full party (`br_catch.h`), the MOVES row (`br_moves.h`), gym leaders as
   one-shot bosses (`br_gym.h`), the shot clock and RUN (`br_battle.h`).

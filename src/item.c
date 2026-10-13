@@ -20,6 +20,7 @@
 #include "constants/moves.h"
 #include "br/br_match.h"
 #include "br/br_levels.h"
+#include "br/br_items.h"
 #endif
 
 static bool8 CheckPyramidBagHasItem(u16 itemId, u16 count);
@@ -246,6 +247,10 @@ bool8 AddBagItem(u16 itemId, u16 count)
 {
     u8 i;
 
+#if BR
+    if (BrItems_Arrive(&itemId, count)) // a vitamin, a sell item: used or sold, not kept
+        return TRUE;
+#endif
     if (GetItemPocket(itemId) == POCKET_NONE)
         return FALSE;
 
