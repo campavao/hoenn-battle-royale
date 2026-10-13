@@ -188,6 +188,10 @@ test('a guest promoted while its tab is hidden hands the match on', async ({ bro
     if (!code) throw new Error('could not parse a room code');
 
     const sleepy = await sleepyCtx.newPage();
+    const said: string[] = [];
+    sleepy.on('console', (msg) => {
+      if (msg.text().startsWith('[room]')) said.push(msg.text());
+    });
     await sleepy.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
     await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 60_000 });
     const awake = await awakeCtx.newPage();
@@ -216,6 +220,11 @@ test('a guest promoted while its tab is hidden hands the match on', async ({ bro
       () => ((window as unknown as BrWindow).__br.director.state.ring?.phase as number) ?? 0,
     );
     expect(phase, 'the visible guest resumed the ring rather than restarting the match').toBeGreaterThan(0);
+    // ...by way of the hidden one: the relay did promote it, and it stood down. Without
+    // this the test would pass on a relay that simply skipped the hidden guest.
+    const promoted = said.indexOf('[room] promoted to host');
+    expect(promoted, 'the hidden guest was made host first').toBeGreaterThanOrEqual(0);
+    expect(said.indexOf('[room] stood down as host', promoted), 'and handed it on').toBeGreaterThan(promoted);
   } finally {
     await awakeCtx.close();
     await sleepyCtx.close();
