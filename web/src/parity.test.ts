@@ -80,7 +80,7 @@ import appTs from './app.ts?raw';
 import brainTs from './bots/brain.ts?raw';
 import lootTs from './match/loot.ts?raw';
 import { PATCH_KEY_BASE } from './match/loot';
-import { EVENT_KEY_BASE, EVENT_MAX, GOLD, LEGENDS, RARES } from './match/events';
+import { EVENT_KEY_BASE, EVENT_MAX, EVENT_PIECES, GOLD, LEGENDS, RARES, traderKey } from './match/events';
 import uiData from './data/ui.json';
 import { BR_CONT_FLAG, BR_MSG } from './net/slots';
 import { MAILBOX } from './net/mailbox';
@@ -943,6 +943,26 @@ describe('the rules a bot plays by the ROM\'s way', () => {
     expect(EVENT_MAX).toBe(define(eventH, 'BR_EVENT_MAX'));
     // Past every trainer's key: 0x8000 | slot << 11 | id, slots 0..5, ids under 0x400.
     expect(EVENT_KEY_BASE).toBeGreaterThan(0x8000 | (5 << 11) | 0x3ff);
+  });
+
+  it("gBrEvents: the traders past the object box (field-ghosts.ts)", () => {
+    const eventH = brAll.find((src) => /#define\s+BR_EVENT_KEY_BASE\s/.test(src))!;
+    const events = layout(eventH, 'BrEvents');
+    expect([ghosts.EVENTS_SEED, ghosts.EVENTS_LIVE, ghosts.EVENTS_USED, ghosts.EVENTS_TRADER, ghosts.EVENTS_SIZE]).toEqual([
+      events.at.seed, events.at.live, events.at.used, events.at.trader, events.size,
+    ]);
+    const t = layout(eventH, 'BrEventTrader');
+    expect([ghosts.TRADER_X, ghosts.TRADER_Y, ghosts.TRADER_SPECIES, ghosts.TRADER_MAP_GROUP, ghosts.TRADER_MAP_NUM, ghosts.TRADER_SIZE]).toEqual([
+      t.at.x, t.at.y, t.at.species, t.at.mapGroup, t.at.mapNum, t.size,
+    ]);
+    expect([ghosts.EVENT_MAX, ghosts.EVENT_LOCAL_ID_BASE]).toEqual([define(eventH, 'BR_EVENT_MAX'), define(eventH, 'BR_EVENT_LOCAL_ID_BASE')]);
+    expect(ghosts.MATCH_SEED).toBe(layout(matchH, 'BrMatch').at.seed);
+    const eventC = brAll.find((src) => /SpawnSpecialObjectEventParameterized\((OBJ_EVENT_GFX_\w+),[\s\S]*?BR_EVENT_LOCAL_ID_BASE/.test(src))!;
+    const gfx = /SpawnSpecialObjectEventParameterized\((OBJ_EVENT_GFX_\w+),[\s\S]*?BR_EVENT_LOCAL_ID_BASE/.exec(eventC)![1];
+    expect(ghosts.GFX_TRADER).toBe(define(eventObjectsH, gfx));
+    // The trader's key is the one past every piece's.
+    expect(EVENT_PIECES).toBeLessThan(15);
+    expect(traderKey(2)).toBe(define(eventH, 'BR_EVENT_KEY_BASE') | (2 << 4) | 15);
   });
 
   it("an event's gold balls are sGold in br_balls.c, and its Pokemon are species.h's", () => {

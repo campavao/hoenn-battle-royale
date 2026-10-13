@@ -5,7 +5,7 @@
 // pump are the caller's to hand in.
 import { Bots, type BotsOptions } from './brain';
 import { lootView, resumeAt } from './adapt';
-import type { RomCell } from './space';
+import { pageCell, type RomCell } from './space';
 import { dealBots, type Bot } from './roster';
 import { dealParty } from './party';
 import type { World } from './world';
@@ -19,7 +19,8 @@ import { mulberry32 } from '../match/clock';
 import { LANDING } from '../match/landing';
 import { SAFARI_CELLS } from '../match/safari';
 import { MAP_OFFSET } from '../net/cells';
-import { PARTY_BAG_MAX, type MapRef, type Msg } from '../net/wire';
+import { PARTY_BAG_MAX, type EventMsg, type MapRef, type Msg } from '../net/wire';
+import { traderKey } from '../match/events';
 import TRAINERS from '../data/trainers.json';
 
 /** The bots' own pump. Faster than one step, so the pace comes out of `Bots.tick`
@@ -100,6 +101,9 @@ export interface HostBotsOptions {
   /** How many bots to deal. */
   fill: number;
   loot: Loot;
+  /** The events dropped so far (MatchSession.events): a trader on one that nobody has
+   *  traded with is somewhere a bot goes (speed-up 6b). */
+  events?: () => readonly EventMsg[];
   /** The whole field, bots included: the eyeline's players and the hunt's count. */
   players: () => RosterEntry[];
   /** In a battle or a menu, so not somebody a bot challenges (POK-230). */
@@ -170,6 +174,14 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
     // The table holds what the wire said, which is the ROM's space; the brain asks
     // about the grid it walks (bots/space.ts).
     loot: lootView(loot, (mapId) => refById.get(mapId), idOf),
+    // ...and so is a trader's cell: a session's event is the wire's, MAP_OFFSET in it.
+    traders: () =>
+      (opts.events?.() ?? []).flatMap((e) => {
+        const mapId = e.trader ? idOf(e.trader.map) : undefined;
+        return e.trader && mapId
+          ? [{ key: traderKey(e.n), species: e.trader.species, mapId, ...pageCell(e.trader.x - MAP_OFFSET, e.trader.y - MAP_OFFSET) }]
+          : [];
+      }),
     // The eyeline (POK-238). A bot fights a player the same way a player fights one:
     // whoever sees the other starts it. The team goes over as a `trainer` card first,
     // because the ROM has to build a party before the challenge lands.

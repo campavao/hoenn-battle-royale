@@ -183,6 +183,7 @@ export class HostRole {
       takenSeats: seats,
       seed,
       loot: session.loot,
+      events: () => session.events,
       players: () => link.roster.all(),
       // A trainer card is for the one player it is a challenge to.
       sendTo: (toSeat, msg) => this.sendTo(toSeat, msg),

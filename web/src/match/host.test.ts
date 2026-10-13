@@ -3,6 +3,7 @@
 // and a link that reads whichever Bridge the page has now. What the room hears is the
 // socket's frames; what our own ROM is handed is what went through the link.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { traderKey } from './events';
 import { HostRole, soloLink, soloRoster, type HostLink, type HostOptions } from './host';
 import type { DirectorWorld } from './director';
 import { EndGrace } from './grace';
@@ -452,6 +453,22 @@ describe('the page that runs the match (POK-330 #42)', () => {
     expect(spills.length).toBeGreaterThan(0);
     expect(spills.flatMap((s) => s.mons).map((m) => m.key)).toContain(event.key);
     expect(tickers(room.frames())).toEqual([`A LEGENDARY AT ${event.place}!`]);
+    host.dispose();
+  });
+
+  it("a trade with an event's trader takes him out of the catch-up for everybody, his event's mark kept", () => {
+    const room = hosting();
+    const host = room.deal();
+    host.begin();
+    const event: EventMsg = { t: 'event', seat: 0, n: 0, mapsec: 16, key: 0xb000, trader: { map: ROUTE_101, x: 12, y: 17, species: 131 } };
+    room.session.note(event, 'page');
+    expect(room.session.events).toEqual([event]);
+    room.recv(1, { t: 'pickup', seat: 1, key: traderKey(1) }); // another event's: nothing
+    expect(room.session.events).toEqual([event]);
+    room.recv(1, { t: 'pickup', seat: 1, key: traderKey(0) });
+    const rest: EventMsg = { ...event };
+    delete rest.trader;
+    expect(room.session.events).toEqual([rest]);
     host.dispose();
   });
 

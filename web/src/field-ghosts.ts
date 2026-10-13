@@ -96,6 +96,25 @@ export const LOOT_LOCAL_ID_BASE = 0xc0;
  *  of one thing, a dropped TM, which is drawn as the ball it is. */
 export const GFX_BIRCHS_BAG = 97;
 export const GFX_ITEM_BALL = 59;
+/** `struct BrEvents` (include/br/br_event.h): an event's trader, while he has not traded
+ *  (speed-up 6b). Read with gBrMatch's seed, because another match's are only forgotten on
+ *  this one's first `event`, and br_event.c draws none of them meanwhile. */
+export const EVENTS_SIZE = 56;
+export const EVENTS_SEED = 0;
+export const EVENTS_LIVE = 16;
+export const EVENTS_USED = 18;
+export const EVENTS_TRADER = 20;
+export const EVENT_MAX = 4;
+export const TRADER_SIZE = 8;
+export const TRADER_X = 0;
+export const TRADER_Y = 2;
+export const TRADER_SPECIES = 4;
+export const TRADER_MAP_GROUP = 6;
+export const TRADER_MAP_NUM = 7;
+export const MATCH_SEED = 8;
+export const EVENT_LOCAL_ID_BASE = 0xbc;
+/** What br_event.c's Spawn draws him as. */
+export const GFX_TRADER = 48;
 /** `struct BrDespawned`: the trainers somebody beat, a ring of sixteen. */
 export const DESPAWN_COUNT = 16;
 export const DESPAWN_SIZE = 4;
@@ -201,6 +220,30 @@ export function decodeLoot(b: Uint8Array): Loot[] {
   return out;
 }
 
+export interface Trader {
+  /** Which event: his object's local id is EVENT_LOCAL_ID_BASE + i. */
+  i: number;
+  group: number;
+  num: number;
+  x: number;
+  y: number;
+}
+
+/** The traders br_event.c would stand on a map: this match's, dropped, not traded. */
+export function decodeTraders(b: Uint8Array, matchSeed: number): Trader[] {
+  const out: Trader[] = [];
+  if (b.length < EVENTS_SIZE) return out;
+  const seed = (b[EVENTS_SEED] | (b[EVENTS_SEED + 1] << 8) | (b[EVENTS_SEED + 2] << 16) | (b[EVENTS_SEED + 3] << 24)) >>> 0;
+  if (seed !== matchSeed >>> 0) return out;
+  for (let i = 0; i < EVENT_MAX; i++) {
+    if (!((b[EVENTS_LIVE] >> i) & 1) || (b[EVENTS_USED] >> i) & 1) continue;
+    const o = EVENTS_TRADER + i * TRADER_SIZE;
+    if (u16(b, o + TRADER_SPECIES) === 0) continue;
+    out.push({ i, group: b[o + TRADER_MAP_GROUP], num: b[o + TRADER_MAP_NUM], x: s16(b, o + TRADER_X), y: s16(b, o + TRADER_Y) });
+  }
+  return out;
+}
+
 export function decodeDespawned(b: Uint8Array): Despawned[] {
   const out: Despawned[] = [];
   for (let o = 0; o + DESPAWN_SIZE <= b.length; o += DESPAWN_SIZE) {
@@ -228,6 +271,8 @@ export interface Known {
   seats: Seat[];
   mySeat: number;
   loot: Loot[];
+  /** The event traders still standing (decodeTraders). */
+  traders?: Trader[];
   /** objectKey of every active object. */
   live: ReadonlySet<string>;
 }
@@ -271,6 +316,11 @@ export function droppedPeople(k: Known): Person[] {
     if (l.kind === LOOT_NONE || !here(l.group, l.num) || live(LOOT_LOCAL_ID_BASE + l.slot)) continue;
     if (inObjectView(k.pos, l.x, l.y)) continue;
     out.push({ gfx: l.kind === LOOT_BAG && l.species === 0 ? GFX_BIRCHS_BAG : GFX_ITEM_BALL, dir: DIR_SOUTH, x: l.x - MAP_OFFSET, y: l.y - MAP_OFFSET });
+  }
+  for (const t of k.traders ?? []) {
+    if (!here(t.group, t.num) || live(EVENT_LOCAL_ID_BASE + t.i)) continue;
+    if (inObjectView(k.pos, t.x, t.y)) continue;
+    out.push({ gfx: GFX_TRADER, dir: DIR_SOUTH, x: t.x - MAP_OFFSET, y: t.y - MAP_OFFSET });
   }
   return out;
 }

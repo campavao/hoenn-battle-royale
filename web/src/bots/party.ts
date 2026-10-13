@@ -151,6 +151,28 @@ function mon(level: number, rng: () => number, mapId?: string, from: number[] = 
   };
 }
 
+/** What an event's trader hands over for one of ours (br_event.c's Offered): his mon at
+ *  the rung, grown into what the rung makes of it, at full health. */
+export function tradedMon(species: number, phase: number): PackedMon {
+  const level = rungForPhase(phase);
+  const grown = grownUp(species, level);
+  const max = hp(level);
+  return {
+    species: grown,
+    level,
+    hp: max,
+    maxHp: max,
+    status: 0,
+    moves: [{ id: 33, pp: 25, ppUps: 0 }],
+    heldItem: 0,
+    otId: 0,
+    personality: (species * 0x9e3779b1) >>> 0,
+    exp: 0,
+    nickname: speciesName(grown),
+    ot: 'BR',
+  };
+}
+
 /** A bot's team at a given ring phase: one at the drop, another every two rungs, up to
  *  Kanto's six. Dealt from the seed and the seat, so the same match always deals the
  *  same bot the same team -- including on a client that never ran the brain. */

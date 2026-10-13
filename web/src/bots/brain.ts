@@ -12,13 +12,14 @@
 import { findPath, findPathToAny, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
-import { MOVE_FLY } from './party';
+import { MOVE_FLY, tradedMon } from './party';
 import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
 import { sameSpot, spotKey, type SeamDir, type Spot, type World } from './world';
 import { pageCell, type PageCell } from './space';
 import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg } from '../net/wire';
 import { spillCells } from '../match/loot';
+import { isEventKey } from '../match/events';
 
 /** One tile per walk animation, whatever the host's tab is doing.
  *
@@ -181,6 +182,9 @@ interface Walker {
    *  `party`, then `spent`, then `result`, and the first of those is what ends it. The
    *  reports that follow are still that ROM's to make, and nobody else's. */
   foe?: number;
+  /** The slots an event's trader filled (speed-up 6b), and with what: the rung's re-deal
+   *  is by slot, and would hand the traded one back. */
+  traded?: Map<number, number>;
 }
 
 /** A player as the roster knows them -- where they are and which way they are looking.
@@ -198,6 +202,9 @@ export interface Decision {
     | 'centre'
     | 'hunt'
     | 'loot'
+    /** Heading for an event (speed-up 6), or trading with its trader. */
+    | 'event'
+    | 'trade'
     | 'wander'
     | 'stuck'
     | 'fog'
@@ -243,6 +250,10 @@ export interface BotsOptions {
   };
   /** world.json id -> the wire's group/num. */
   mapRef: (mapId: string) => MapRef | undefined;
+  /** The events' traders nobody has traded with yet (speed-up 6b), in the page's space,
+   *  with the PICKUP key that uses one up for the room. A bot goes for an event the way a
+   *  player does: its pieces are loot, and its trader takes one of its mons for his. */
+  traders?: () => ({ key: number; species: number; mapId: string } & PageCell)[];
   /** The eyeline (POK-238). A bot has no ROM, so the fight against it is a trainer
    *  battle in the player's: `party` is what that battle is built from, staged over
    *  the wire the moment the pair see each other and immediately challenged. */
@@ -374,6 +385,8 @@ export class Bots {
   private readonly fighting = new Map<number, Fight>();
   private nonce = 0;
   private now = 0;
+  /** Traders a bot here has traded with (tryTrade). */
+  private readonly tradedKeys = new Set<number>();
   /** A* nodes left to settle in this tick (NODES_PER_TICK). */
   private budget = 0;
   /** Nothing starts another bot-vs-bot fight before this (POK-273). Room-wide, not
@@ -535,6 +548,10 @@ export class Bots {
       walker.path = null;
       const fresh = this.opts.deal?.(walker.bot, phase, walker.home);
       if (fresh) walker.party = climb(walker.party, fresh);
+      for (const [slot, species] of walker.traded ?? []) {
+        const held = walker.party[slot];
+        if (held) walker.party[slot] = { ...tradedMon(species, phase), hp: held.hp, maxHp: held.maxHp, status: held.status };
+      }
       // No restock: it was a free potion a ring, called a Mart visit, and no Mart was
       // ever visited (POK-322). What a bot has spent stays spent.
     }
@@ -772,6 +789,7 @@ export class Bots {
       walker.path = null;
       return;
     }
+    if (this.tryTrade(walker)) return;
     if (!walker.path || walker.stepIndex >= walker.path.steps.length) {
       // A walked route is dropped before the next is chosen: chooseTarget has ways out
       // that set none (a ring with no landing cell left in it), and the old one read
@@ -1107,6 +1125,24 @@ export class Bots {
         return;
       }
     }
+    // Then the events (speed-up 6), the way a player goes for one: its pieces on this
+    // map are the loot above, its trader on this map is walked up to, and an event on
+    // another map is headed for over the edge that leads there.
+    const traders = this.openTraders().filter((t) => !inside || inside(t.mapId));
+    for (const t of traders.filter((t) => t.mapId === walker.at.map && reach.cell(t.x, t.y)).slice(0, 1)) {
+      const path = this.route(walker, { map: t.mapId, x: t.x, y: t.y }, WANDER_BUDGET);
+      if (path.found && path.steps.length > 0) {
+        walker.path = path;
+        walker.stepIndex = 0;
+        this.note(walker, 'event', `trader ${t.key}`);
+        return;
+      }
+    }
+    const events = [
+      ...(this.opts.loot?.all() ?? []).filter((l) => isEventKey(l.key) && (!inside || inside(l.mapId))),
+      ...traders,
+    ].filter((e) => e.mapId !== walker.at.map);
+    if (events.length > 0 && this.aimAcrossMaps(walker, events, now)) return;
     // Hunt when the field is down to a few. A player's own cell is the target, so
     // the route ends in somebody's eyeline whether or not they are looking.
     if ((this.opts.alive?.() ?? 99) <= HUNT_AT) {
@@ -1188,6 +1224,34 @@ export class Bots {
     // until the backoff is up.
     walker.retryAfter = now + RETRY_MS;
     this.wanderOneStep(walker);
+  }
+
+  /** The traders still standing: the room's word, less the ones a bot here has just
+   *  traded with and the room has not heard back about yet. */
+  private openTraders(): ({ key: number; species: number; mapId: string } & PageCell)[] {
+    return (this.opts.traders?.() ?? []).filter((t) => !this.tradedKeys.has(t.key));
+  }
+
+  /** At an event's trader, or a step from him: hand him the most hurt mon still standing
+   *  for his fresh one, the way a player at him would (br_event.c's BrEvent_Trade refuses a fainted
+   *  one). The PICKUP of his key uses him up for the whole room. */
+  private tryTrade(walker: Walker): boolean {
+    const t = this.openTraders().find(
+      (o) => o.mapId === walker.at.map && Math.abs(o.x - walker.at.x) + Math.abs(o.y - walker.at.y) <= 1,
+    );
+    if (!t) return false;
+    let slot = -1;
+    walker.party.forEach((mon, i) => {
+      if (mon.hp > 0 && (slot < 0 || mon.hp < walker.party[slot].hp)) slot = i;
+    });
+    if (slot < 0) return false;
+    this.tradedKeys.add(t.key);
+    walker.party[slot] = tradedMon(t.species, this.phase);
+    (walker.traded ??= new Map()).set(slot, t.species);
+    this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: t.key });
+    this.note(walker, 'trade', `key ${t.key} species ${t.species}`);
+    walker.path = null;
+    return true;
   }
 
   /** findPath from where the bot stands, paid for out of the tick's budget. */

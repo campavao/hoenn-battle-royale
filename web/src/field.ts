@@ -39,8 +39,8 @@ import { HOENN } from './bots/hoenn';
 import spritesData from './data/sprites.json';
 import type { Band, Emulator, SpriteBand } from './emu';
 import {
-  DESPAWN_COUNT, DESPAWN_SIZE, GHOST_LOCAL_ID_BASE, GhostWalkers, LOOT_COUNT, LOOT_SIZE, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
-  TEMPLATE_COUNT, TEMPLATE_SIZE, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, inObjectView, initialFacing, objectKey, placePeople, standingFrame,
+  DESPAWN_COUNT, DESPAWN_SIZE, EVENTS_SIZE, GHOST_LOCAL_ID_BASE, GhostWalkers, LOOT_COUNT, LOOT_SIZE, MATCH_SEED, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
+  TEMPLATE_COUNT, TEMPLATE_SIZE, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, decodeTraders, droppedPeople, inObjectView, initialFacing, objectKey, placePeople, standingFrame,
 } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 
@@ -1180,6 +1180,7 @@ export class FieldView {
       return at === undefined ? new Uint8Array(0) : emu.bytes(at, bytes);
     };
     const mySeat = this.sym('gBrMySeat');
+    const match = this.sym('gBrMatch');
     const facings = this.sym('gInitialMovementTypeFacingDirections');
     const infos = this.sym('gObjectEventGraphicsInfoPointers');
     const people = droppedPeople({
@@ -1192,6 +1193,7 @@ export class FieldView {
       seats: decodeSeats(table('gBrSeats', SEAT_COUNT * SEAT_SIZE)).filter((s) => !this.walkers.has(s.seat)),
       mySeat: mySeat === undefined ? -1 : emu.read(mySeat, 8),
       loot: decodeLoot(table('gBrLoot', LOOT_COUNT * LOOT_SIZE)),
+      traders: decodeTraders(table('gBrEvents', EVENTS_SIZE), match === undefined ? 0 : emu.read(match + MATCH_SEED, 32) >>> 0),
       live,
     });
     return placePeople(people, lcdOrigin(cam), (gfx, dir) => standingFrame(rom, infos, gfx, dir));
