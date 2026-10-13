@@ -115,9 +115,8 @@ export class Loot {
   }
 
   /** The loot standing on one map, as the `spill`s the ROM can be handed: one for each
-   *  seat with something down there, the seat with the most first, and none when the
-   *  map is bare. Mons past the ROM's six-a-message limit are dropped: the ROM has room
-   *  for eight pieces in total and this is a redelivery, not a record.
+   *  seat with something down there (more when it has more than six mons or more than one
+   *  bag), the seat with the most first, and none when the map is bare.
    *
    *  One spill speaks for one seat, and this used to hand over only the seat with the
    *  most. A bag whose rest would not fit goes back on the ground under the taker's seat
@@ -133,12 +132,21 @@ export class Loot {
       else bySeat.set(piece.seat, [piece]);
     }
     const seats = [...bySeat].sort((a, b) => b[1].length - a[1].length);
-    return seats.map(([seat, pieces]) => {
-      const mons = pieces.filter((p) => p.mon).map((p) => p.mon as SpillMon).slice(0, 6);
-      const bag = pieces.find((p) => p.bag)?.bag;
-      const msg: SpillMsg = { t: 'spill', seat, map, mons };
-      if (bag) msg.bag = bag;
-      return msg;
+    // Six mons and one bag a message, as many messages as a seat needs. A seat used to get
+    // one, its first six mons and its first bag: a winner now puts each beaten team down
+    // under their own seat (br_loot.c's spoils), so two fights on one map, or spoils
+    // beside a ball the winner released, is more than six -- and a table that has let
+    // pieces go to make room (br_loot.c's Evict) gets them back only from here.
+    return seats.flatMap(([seat, pieces]) => {
+      const mons = pieces.filter((p) => p.mon).map((p) => p.mon as SpillMon);
+      const bags = pieces.filter((p) => p.bag).map((p) => p.bag as SpillBag);
+      const out: SpillMsg[] = [];
+      for (let i = 0; i < Math.max(Math.ceil(mons.length / 6), bags.length); i++) {
+        const msg: SpillMsg = { t: 'spill', seat, map, mons: mons.slice(i * 6, i * 6 + 6) };
+        if (bags[i]) msg.bag = bags[i];
+        out.push(msg);
+      }
+      return out;
     });
   }
 

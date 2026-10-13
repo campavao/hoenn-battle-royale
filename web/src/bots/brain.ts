@@ -492,7 +492,9 @@ export class Bots {
       this.release(seat);
       return;
     }
-    this.eliminate(walker);
+    // The ROM that beat it puts the team down round its own trainer and asks which one
+    // to take (br_loot.c's spoils, 2026-10-13 play-test), so only the bag is ours to drop.
+    this.eliminate(walker, true);
   }
 
   /** What the ROM that fought this bot spent out of its bag (POK-237). The units were
@@ -688,7 +690,7 @@ export class Bots {
   /** A bot is finished. Everything it was carrying hits the ground where it fell --
    *  the same `spill` a player's ROM sends on a whiteout (POK-232), so the balls are
    *  pickable by anybody -- and then it is out and stops being walked around. */
-  private eliminate(walker: Walker): void {
+  private eliminate(walker: Walker, teamTaken = false): void {
     if (this.decided) return;
     const map = this.opts.mapRef(walker.at.map);
     if (map && walker.party.length > 0) {
@@ -697,7 +699,11 @@ export class Bots {
       // with the rest of the team underneath it and the bag under those, so a beaten bot
       // looked like it dropped a single Pokemon and no bag at all. The ROM has always
       // scattered its own spill; this is the same ring, in the same order.
-      const party = walker.party.slice(0, 6);
+      //
+      // `teamTaken`: a ROM beat it and has dropped the team itself, under these same keys,
+      // round the winner. Then the bag goes down alone, on the bot's own cell -- the cell
+      // that ROM keeps its spoils off.
+      const party = teamTaken ? [] : walker.party.slice(0, 6);
       const cells = spillCells(this.opts.world, walker.at.map, walker.at.x, walker.at.y, party.length + 1);
       const spill: SpillMsg = {
         t: 'spill',
@@ -733,7 +739,7 @@ export class Bots {
           name: walker.bot.name.slice(0, 7),
         };
       }
-      this.opts.send(spill);
+      if (spill.mons.length > 0 || spill.bag) this.opts.send(spill);
     }
     this.opts.send({ t: 'out', seat: walker.bot.seat });
     this.remove(walker.bot.seat);

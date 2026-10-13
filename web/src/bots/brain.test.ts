@@ -415,7 +415,7 @@ describe('a bot meeting a player', () => {
     expect(bots.challenged(99, 0)).toBe(false);
   });
 
-  it('goes out and drops everything when the fight comes back with a wiped team', () => {
+  it('goes out and drops its bag when the fight comes back with a wiped team', () => {
     const bag: Stack[] = [{ id: 13, n: 2 }];
     const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }, [MON], bag);
     const seat = dealt[0].seat;
@@ -424,11 +424,18 @@ describe('a bot meeting a player', () => {
     // What the ROM that fought it says when it has finished it: the same team, face down.
     bots.setParty(seat, [{ ...MON, hp: 0 }]);
 
-    const spill = sent.find((m) => m.t === 'spill') as { seat: number; mons: unknown[]; bag?: { items: unknown[] } };
-    expect(spill, 'its team is on the ground where it fell').toBeDefined();
+    const spill = sent.find((m) => m.t === 'spill') as {
+      seat: number;
+      mons: unknown[];
+      bag?: { items: unknown[]; x: number; y: number };
+    };
+    expect(spill, 'its bag is on the ground where it fell').toBeDefined();
     expect(spill.seat).toBe(seat);
-    expect(spill.mons).toHaveLength(1);
-    expect(spill.bag?.items, 'and the bag it never got to spend').toHaveLength(1);
+    // The team is the winner's ROM's to put down, round its own trainer, from a box that
+    // asks which one to take (br_loot.c's spoils): two spills of it was a ball taken from
+    // one coming back from the other.
+    expect(spill.mons).toHaveLength(0);
+    expect(spill.bag?.items, 'the bag it never got to spend').toHaveLength(1);
     expect(sent.some((m) => m.t === 'out' && m.seat === seat)).toBe(true);
     expect(bots.count(), 'and it stops being walked around').toBe(0);
   });

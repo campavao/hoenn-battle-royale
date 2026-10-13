@@ -351,6 +351,7 @@ export class Emulator {
     this.loads++;
     // loadGame builds a new core, and its RAM with it: the old views point at nothing.
     this.views = null;
+    this.muteOldSpeaker();
     if (!this.m.loadGame(path)) throw new Error('loadGame failed');
     // The keyboard is the page's alone (bindKeyboard). Left on, SDL hears it too, through
     // mGBA's own map -- X is A there and Z is B, the page's the other way round -- so X
@@ -402,10 +403,25 @@ export class Emulator {
 
   stop(): void {
     if (!this.running) return;
+    this.muteOldSpeaker();
     this.m.quitGame();
     this.running = false;
     this.views = null;
     this.halts++;
+  }
+
+  /** Takes SDL's callback off the speaker the core is about to close (2026-10-13 play-test:
+   *  "Uncaught RuntimeError: integer divide by zero" from onaudioprocess). quitGame -- and
+   *  loadGame, which quits the game before it -- closes SDL's audio device and frees it, and
+   *  SDL disconnects the node but leaves its onaudioprocess on it. An event already queued
+   *  for that node still runs, and once the new game's thread has opened a device of its
+   *  own (SDL2.audio defined again, which is all the handler checks) it calls into the
+   *  freed one: garbage for a format, a zero frame size, and SDL writing a buffer's worth of
+   *  silence wherever the freed pointer now lands. SDL clears the capture node's handler
+   *  this way; the playback node's it forgets. */
+  private muteOldSpeaker(): void {
+    const node = this.m.SDL2?.audio?.scriptProcessorNode;
+    if (node) node.onaudioprocess = null;
   }
 
   pause(): void {

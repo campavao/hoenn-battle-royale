@@ -147,6 +147,13 @@ void BrLoot_ClaimKey(u16 key);
 // other ROM spawns what this message describes; ours spawns it from the same message
 // coming back is not how it works -- we never hear our own, so we add ours here too.
 void BrLoot_SpillOwn(void);
+// Beaten in a fight whose winner puts our team down (BrLoot_WonFrom): the next
+// SpillOwn drops the bag alone. Set it round the whiteout and clear it after.
+void BrLoot_TeamTaken(bool8 taken);
+// We beat this seat, and gEnemyParty is the team they fought with: once the field is
+// back it goes down round our feet and a menu asks which one to take (2026-10-13
+// play-test). A no-op on the proxy instance.
+void BrLoot_WonFrom(u8 seat);
 // One of Hoenn's own trainers just lost to us: they leave the map for the rest of the
 // match, and one of their team is on the ground where they stood (Kanto BR-9b).
 void BrLoot_TrainerBeaten(u16 trainerId, u8 localId);

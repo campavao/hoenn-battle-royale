@@ -225,7 +225,9 @@ static bool8 SendBstart(void)
     // The player's gender byte carries the fog too (BR_BSTART_FOG): whether this fight is
     // fought in it, which the replay must know to play the fog's turns as the engine did.
     // Every published fight but a duel decided it at its start (a contest at its door,
-    // one fought alone in BrSpectate_Tick); a duel's two bots stand nowhere.
+    // one fought alone in BrSpectate_Tick); a duel's two bots stand nowhere. It is only
+    // the first turn's answer now: every turn's end writes its own into battler 0's
+    // record (br_ring.c's TurnFog), and the replay takes that one over this.
     if (gBrRing.battleFog && !gBrDuel.running)
         buf[len - 2] |= BR_BSTART_FOG;
     len += PackParty(gPlayerParty, buf + len);
