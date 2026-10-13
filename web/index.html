@@ -225,15 +225,15 @@
            takes the window, match or not; field.ts fits the picture and fills the rest. */
         #screen-wrap { flex: 1 1 0; min-height: 0; width: 100%; max-width: none; aspect-ratio: auto; }
       }
-      /* The keyboard's GBA (ui/keys.ts, Cam 2026-10-13): small, half see-through, and in
-         the bottom-RIGHT corner of the field, past the picture on any window wider than
-         3:2 -- the ticker owns the picture's bottom and the fps badge the top-left. A
-         phone has the pad instead, so this is a desktop match's only. */
+      /* The keyboard's GBA (ui/keys.ts): small and half see-through, on the field past the
+         picture and never on it -- keys.ts places it from field.ts's layout (left, top),
+         as the GBA's shape (data-mode=pad) or one row (row), or hides it where there is no
+         room. A phone has the pad instead, so this is a desktop match's only. */
       #keys { display: none; }
       @media (hover: hover) and (pointer: fine) {
         body.in-match #keys {
           display: grid;
-          position: absolute; right: 10px; bottom: 10px;
+          position: absolute; left: 0; top: 0;
           grid-template-columns: repeat(7, 26px);
           grid-template-rows: 24px 26px 26px 26px 24px;
           grid-template-areas:
@@ -263,6 +263,13 @@
         #keys .k-left { grid-area: left; } #keys .k-right { grid-area: right; }
         #keys .k-a { grid-area: a; } #keys .k-b { grid-area: b; }
         #keys .k-select { grid-area: sel; } #keys .k-start { grid-area: start; }
+        body.in-match #keys[hidden] { display: none; }
+        body.in-match #keys[data-mode='row'] {
+          grid-template: none / none; grid-template-areas: none;
+          grid-auto-flow: column; grid-auto-columns: auto; grid-auto-rows: 24px;
+        }
+        #keys[data-mode='row'] .k { grid-area: auto; flex-direction: row; gap: 4px; padding: 0 6px; }
+        #keys[data-mode='row'] .k i { margin-top: 0; }
       }
       /* The phone's menu button (POK-320): in a match, the sheet -- the room, LEAVE, the
          settings -- is drawn over the game behind it. A desktop has the sheet beside the

@@ -3395,8 +3395,11 @@ let fieldView: FieldView | null = null;
 
 function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined, rom: Uint8Array | null = null): void {
   wireKeyboard(emu);
-  // Shown only on a desktop in a match (index.html's #keys).
-  new KeyLegend($('#keys') as HTMLElement, emu, KEYBOARD_MAP);
+  // Shown only on a desktop in a match (index.html's #keys), and only past the picture.
+  const legend = new KeyLegend($('#keys') as HTMLElement, emu, KEYBOARD_MAP);
+  const wrap = $('#screen-wrap') as HTMLElement;
+  const placeLegend = () => legend.place(measureLayout(wrap, $('#pad') as HTMLElement), wrap.clientWidth, wrap.clientHeight);
+  new ResizeObserver(placeLegend).observe(wrap);
   wireGamepad(emu);
   wireRemap();
   for (const el of document.querySelectorAll<HTMLElement>('#pad .btn[data-key]')) {

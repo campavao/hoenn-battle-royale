@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KEY_BIT, type GbaKey } from '../emu';
-import { KeyLegend, capLabel, capsByKey } from './keys';
+import { layoutField } from '../field';
+import { KeyLegend, capLabel, capsByKey, placeLegend } from './keys';
 
 /** Just the element calls KeyLegend makes. */
 class FakeEl {
@@ -100,5 +101,39 @@ describe('the desktop key legend', () => {
     expect(capLabel(' ')).toBe('SPACE');
     expect(capLabel('Shift')).toBe('SHIFT');
     expect(capsByKey({ z: 'a', k: 'a' }).get('a')).toEqual(['Z', 'K']);
+  });
+
+  // The review of #17: the box is #screen-wrap, the window less the docked sheet (480px
+  // at 960x640 and up), and the legend goes where the picture is not.
+  const SIZES = { pad: { w: 200, h: 138 }, row: { w: 440, h: 24 } };
+  const at = (w: number, h: number) => placeLegend(layoutField(w, h), w, h, SIZES);
+
+  it('sits in the room right of the picture when there is room for the GBA shape', () => {
+    // 2560x1080 less the sheet: the picture is 1620 wide in 2080, 230 either side.
+    expect(at(2080, 1080)).toEqual({ mode: 'pad', x: 2080 - 210, y: 1080 - 148 });
+  });
+
+  it('is one row under the picture where only a strip is free', () => {
+    // 1280x720 less the sheet: 800x533 in 800x720, 93 under it.
+    expect(at(800, 720)).toEqual({ mode: 'row', x: 180, y: 720 - 34 });
+  });
+
+  it('is nowhere when the picture fills the box', () => {
+    // 1920x960 less the sheet is 1440x960: exactly 3:2, no field past the picture.
+    expect(at(1440, 960)).toBeNull();
+  });
+
+  it('never overlaps the picture, whatever the box', () => {
+    for (const [w, h] of [[886, 650], [960, 780], [1440, 820], [2080, 1300], [1200, 900], [700, 400]]) {
+      const lay = layoutField(w, h);
+      const p = placeLegend(lay, w, h, SIZES);
+      if (!p) continue;
+      const s = SIZES[p.mode];
+      const x0 = lay.lcdCol * lay.scale, y0 = lay.lcdRow * lay.scale;
+      const x1 = x0 + 240 * lay.scale, y1 = y0 + 160 * lay.scale;
+      const apart = p.x >= x1 || p.x + s.w <= x0 || p.y >= y1 || p.y + s.h <= y0;
+      expect(apart, `${w}x${h}`).toBe(true);
+      expect(p.x >= 0 && p.y >= 0 && p.x + s.w <= w && p.y + s.h <= h, `${w}x${h} inside`).toBe(true);
+    }
   });
 });
