@@ -81,6 +81,7 @@ import brainTs from './bots/brain.ts?raw';
 import lootTs from './match/loot.ts?raw';
 import { PATCH_KEY_BASE } from './match/loot';
 import { EVENT_KEY_BASE, EVENT_MAX, EVENT_PIECES, GOLD, LEGENDS, RARES, traderKey } from './match/events';
+import { GIFT_KEY_BASE, GIFTS } from './match/gifts';
 import uiData from './data/ui.json';
 import { BR_CONT_FLAG, BR_MSG } from './net/slots';
 import { MAILBOX } from './net/mailbox';
@@ -531,6 +532,10 @@ describe("the BR structs the page reads at an offset", () => {
     const spawn = /it->kind == BR_LOOT_BAG && !OneThing\(it\) \? (OBJ_EVENT_GFX_\w+) : (OBJ_EVENT_GFX_\w+);/.exec(lootC);
     expect(spawn, "br_loot.c's Spawn picks the bag or the ball").not.toBeNull();
     expect([ghosts.GFX_BIRCHS_BAG, ghosts.GFX_ITEM_BALL]).toEqual([define(eventObjectsH, spawn![1]), define(eventObjectsH, spawn![2])]);
+    // ...and a gift-giver as sGiftGfx says, by his key (br_loot.h's BR_LOOT_KEY_GIFT_BASE).
+    expect(ghosts.GIFT_KEY_BASE).toBe(define(lootH, 'BR_LOOT_KEY_GIFT_BASE'));
+    expect(ghosts.GIFT_GFX).toEqual(names(lootC, 'sGiftGfx', 'OBJ_EVENT_GFX_').map((n) => define(eventObjectsH, n)));
+    expect(ghosts.LOOT_KEY).toBe(item.at.key);
   });
 
   it("the box the ROM keeps objects in: BrField_InObjectView, and Emerald's own spawn and cull", () => {
@@ -963,6 +968,16 @@ describe('the rules a bot plays by the ROM\'s way', () => {
     // The trader's key is the one past every piece's.
     expect(EVENT_PIECES).toBeLessThan(15);
     expect(traderKey(2)).toBe(define(eventH, 'BR_EVENT_KEY_BASE') | (2 << 4) | 15);
+  });
+
+  it("a gift-giver's key is br_loot.h's, past every event's, and his gifts are items.h's", () => {
+    expect(GIFT_KEY_BASE).toBe(define(lootH, 'BR_LOOT_KEY_GIFT_BASE'));
+    expect(GIFT_KEY_BASE).toBeGreaterThan(EVENT_KEY_BASE | ((EVENT_MAX - 1) << 4) | 15);
+    const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
+    const ids = list.split(',').map((s) => s.trim()).filter(Boolean);
+    expect(GIFTS).toEqual(
+      ['BRIGHT_POWDER', 'WHITE_HERB', 'QUICK_CLAW', 'CHOICE_BAND', 'KINGS_ROCK', 'FOCUS_BAND', 'SCOPE_LENS', 'LEFTOVERS', 'SHELL_BELL'].map((n) => ids.indexOf(`ITEM_${n}`)),
+    );
   });
 
   it("an event's gold balls are sGold in br_balls.c, and its Pokemon are species.h's", () => {

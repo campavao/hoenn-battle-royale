@@ -226,6 +226,11 @@ out, and one that comes in waits as it would in a menu.
   are loot, an event on another map is headed for, and a bot at the trader hands him its
   most hurt mon. Two trades at the same moment can both land; the room keeps one trader
   gone either way.
+- **Gift-givers** (Cam, 2026-10-13): at the buzzer the host stands one person in every
+  town and city (`match/gifts.ts`), holding one held item (LEFTOVERS, CHOICE BAND, QUICK
+  CLAW and the like). On the wire he is a `spill` of a one-item bag under key `0xC000 | i`,
+  which br_loot.c draws as a person; A on him says "A GIFT: ...", and his `pickup` takes
+  him off every map, so the first trainer there has it. Bots take one like any piece.
 - **Rules**: one clock (`br_levels.h`: the ring phase is the level rung, no EXP), the
   catch with a full party (`br_catch.h`), the MOVES row (`br_moves.h`), gym leaders as
   one-shot bosses (`br_gym.h`), the shot clock and RUN (`br_battle.h`).

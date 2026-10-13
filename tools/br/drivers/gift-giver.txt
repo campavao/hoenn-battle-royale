@@ -1,0 +1,28 @@
+# gift-giver: a town's gift-giver (match/gifts.ts) is a one-item bag under a gift key
+# (0xC000 | i, br_loot.h), standing as a person rather than lying as a ball. A on him
+# takes it like any bag of one thing -- "A GIFT: LEFTOVERS!" -- and the PICKUP of his key
+# takes him off every map.
+#
+# object-slots-near.txt's view: Route 103 from (9,8), so we stand at (16,15) facing south.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 12 09 00 08 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr 9
+# gift 1 (an OLD WOMAN), LEFTOVERS (200), on (16,16), the cell we face
+pokebytes gDecompressionBuffer 00 00 12 00 01 01 C0 10 00 10 00 01 C8 00 01 00 00 00 00
+mailsend gBrMailbox 11 gDecompressionBuffer 19
+wait 30
+expect u16 gBrLoot+0 0xC001
+expect u8 gBrLoot+11 2
+expect u16 gBrLoot+6 200
+expectne u8 gBrLoot+12 0xFF
+# slot 1, the first after ours: an OLD WOMAN (30) with the first loot local id
+expect u8 gObjectEvents+0x29 30
+expect u8 gObjectEvents+0x2C 0xC0
+shot gift
+tap A
+wait 60
+shot given
+expectmsg 10 u16 1 0xC001
+expect u8 gBrLoot+11 0
+say gift giver ok

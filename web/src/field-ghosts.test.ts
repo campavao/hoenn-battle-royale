@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DESPAWN_LOCAL_ID, DESPAWN_MAP_NUM, DESPAWN_SIZE, GFX_BIRCHS_BAG, GFX_ITEM_BALL, HIDDEN_MOVEMENT_TYPES, type Known, LOOT_KIND, LOOT_MAP_NUM, LOOT_SIZE, LOOT_X, LOOT_Y,
+  DESPAWN_LOCAL_ID, DESPAWN_MAP_NUM, DESPAWN_SIZE, GFX_BIRCHS_BAG, GFX_ITEM_BALL, GIFT_GFX, HIDDEN_MOVEMENT_TYPES, type Known, LOOT_KIND, LOOT_MAP_NUM, LOOT_SIZE, LOOT_X, LOOT_Y,
   MAP_OFFSET, SEAT_DIR, SEAT_MAP_NUM, SEAT_PRESENT, SEAT_SIZE, SEAT_SKIN, SEAT_X, SEAT_Y, TEMPLATE_SIZE, TPL_FLAG_ID, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X,
   TPL_Y, LOOT_SPECIES, type Template, GhostWalkers, EVENTS_LIVE, EVENTS_SIZE, EVENTS_TRADER, EVENTS_USED, GFX_TRADER, TRADER_MAP_NUM, TRADER_SIZE, TRADER_SPECIES, TRADER_X, TRADER_Y,
   decodeTraders, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, inObjectView, objectKey, placePeople, standingFrame,
@@ -91,6 +91,8 @@ describe("the people past the ROM's box (POK-318)", () => {
     expect(droppedPeople(known({ loot: [ball(0)] }))[0]).toMatchObject({ x: 12, y: 10 });
     expect(droppedPeople(known({ loot: [ball(0, { kind: 0 }), ball(1, { num: 15 })] })), 'an empty row, another map').toEqual([]);
     expect(droppedPeople(known({ loot: [ball(4)], live: new Set([objectKey(0xc0 + 4, MAP.num, MAP.group)]) })), 'its own object').toEqual([]);
+    // a gift-giver stands as the person his key says (br_loot.c's sGiftGfx)
+    expect(droppedPeople(known({ loot: [ball(0, { kind: 2, species: 200, key: 0xc000 }), ball(1, { kind: 2, species: 200, key: 0xc005 })] })).map((p) => p.gfx)).toEqual([GIFT_GFX[0], GIFT_GFX[1]]);
   });
 
   // Cam's trainer, 2026-09-18: "If I'm down far enough he's gone, up high enough he's
@@ -158,7 +160,7 @@ describe('reading the tables', () => {
     loot[LOOT_SIZE + LOOT_MAP_NUM] = 7;
     loot.set([0x10, 0x00], LOOT_SIZE + LOOT_X);
     loot.set([0x11, 0x00], LOOT_SIZE + LOOT_Y);
-    expect(decodeLoot(loot)).toEqual([{ slot: 1, kind: 2, species: 0, group: 0, num: 7, x: 16, y: 17 }]);
+    expect(decodeLoot(loot)).toEqual([{ slot: 1, key: 0, kind: 2, species: 0, group: 0, num: 7, x: 16, y: 17 }]);
     // a bag of one thing carries it where a ball's species goes
     loot.set([0x26, 0x01], LOOT_SIZE + LOOT_SPECIES);
     expect(decodeLoot(loot)[0].species).toBe(294);
