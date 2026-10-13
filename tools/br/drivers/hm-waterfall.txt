@@ -1,0 +1,28 @@
+# hm-waterfall: up a waterfall with no HM and no prompt (2026-10-13, "get rid of the
+# need for HMs"). br_hm.c's BrHm_WalkInto: surfing north into a waterfall climbs it.
+#
+# ROUTE 119 (map 0:34). The shore at (16,29) faces a pool at x 17-19; the falls are
+# x 17-19, y 25-28, with more river above at y 22-24.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 00 00 22 10 00 1D 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 34
+shot booted
+expect u16 *gSaveBlock1Ptr+0 16
+expect u16 *gSaveBlock1Ptr+2 29
+# East into the pool: surfing with no prompt.
+hold RIGHT 24
+wait 150
+expectbits u8 gPlayerAvatar 0x08 0x08
+expect u16 *gSaveBlock1Ptr+0 17
+# North into the falls: no "use WATERFALL?", the climb runs to the top.
+hold UP 24
+wait 300
+shot climbed
+# At the top (y 24), still surfing, and the field is the player's again. Without the
+# hook the step lands on the falls and the current pushes it back to y 29.
+expect u16 *gSaveBlock1Ptr+0 17
+expect u16 *gSaveBlock1Ptr+2 24
+expectbits u8 gPlayerAvatar 0x08 0x08
+expect u32 gMain+4 CB2_Overworld+1

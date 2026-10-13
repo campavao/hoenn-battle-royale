@@ -9,6 +9,10 @@ same thing the ROM does when you press A on them, so gym leaders, route trainers
 the ones lying in the grass all count; a scripted rival fight in a cutscene does not,
 because the rival is not an object event that carries it.
 
+Since the map's people were cleared off (2026-10-13, src/br/br_strip.c), the only
+trainers a match still has are the eight leaders on their own gyms: everybody else never
+becomes an object, so there is nothing for the fog to clear.
+
 The output is { "MAP_ID": [localId, ...] } -- a local id is the object's place in the
 list from 1, exactly what NPCOUT names. Kanto's equivalent is the `trainerClass` flag
 its data carries on every map object.
@@ -37,6 +41,20 @@ def scripts_with_battles(inc_path):
     return out
 
 
+# br_strip.c keeps a trainer only when br_gym.c's table names it: a leader, on the gym.
+LEADERS = {
+    'OBJ_EVENT_GFX_ROXANNE', 'OBJ_EVENT_GFX_BRAWLY', 'OBJ_EVENT_GFX_WATTSON',
+    'OBJ_EVENT_GFX_FLANNERY', 'OBJ_EVENT_GFX_NORMAN', 'OBJ_EVENT_GFX_WINONA',
+    'OBJ_EVENT_GFX_TATE', 'OBJ_EVENT_GFX_LIZA', 'OBJ_EVENT_GFX_JUAN',
+}
+
+
+# The ROM keeps a leader by src/br/br_gym.c's sBosses (map and local id); this is the
+# same set read from graphics. Keep the two in step.
+def kept(m, o):
+    return o.get('graphics_id') in LEADERS and '_GYM' in m['id']
+
+
 def main():
     result = {}
     for d in sorted(os.listdir(MAPS)):
@@ -45,7 +63,7 @@ def main():
             continue
         m = json.load(open(mp, encoding='utf-8'))
         fighters = scripts_with_battles(os.path.join(MAPS, d, 'scripts.inc'))
-        ids = [i + 1 for i, o in enumerate(m.get('object_events', [])) if o.get('script') in fighters]
+        ids = [i + 1 for i, o in enumerate(m.get('object_events', [])) if o.get('script') in fighters and kept(m, o)]
         if ids:
             result[m['id']] = ids
     json.dump(result, sys.stdout, indent=1, sort_keys=True)

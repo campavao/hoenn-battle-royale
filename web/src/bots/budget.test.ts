@@ -119,8 +119,9 @@ describe('a stuck bot heading across maps', () => {
 
 // POK-331 #27: a map a lake or a wood cuts in two. A cell or a crossing on the far side
 // is a search that settles all of this side before it says no, and it was asked for
-// every time the bot stopped to think -- out of the roster's budget.
-describe('a bot on one side of the water', () => {
+// every time the bot stopped to think -- out of the roster's budget. Since the HMs went
+// (2026-10-13) every bot surfs, so a lake no longer splits a map and these are cliffs.
+describe('a bot on one side of a cliff', () => {
   it('never searches for a cell of its own map it cannot walk to', () => {
     // The only target is walled into a pocket in the far corner of a big field. It used
     // to cost four full searches, and the next bot a tick.
@@ -137,8 +138,8 @@ describe('a bot on one side of the water', () => {
   });
 
   it('wanders its own side, and every search it makes finds its cell', () => {
-    // A lake down the middle of the map, and cells to wander to on both banks.
-    const LAKE = field('LAKE', 1, Array.from({ length: 7 }, () => '0000200000'));
+    // A cliff down the middle of the map, and cells to wander to on both sides.
+    const LAKE = field('LAKE', 1, Array.from({ length: 7 }, () => '0000100000'));
     const cells = [];
     for (let y = 0; y < 7; y++) for (let x = 0; x < 10; x++) if (x !== 4) cells.push({ mapId: 'LAKE', x, y });
     const { bots, decisions } = roster([LAKE], cells, [bot(31, 'LAKE', 0, 3)]);
@@ -153,9 +154,9 @@ describe('a bot on one side of the water', () => {
   });
 
   it('goes to the next map first when nothing of its own is on its side', () => {
-    // The west bank has no cells of its own, and the east bank's are across the water.
+    // The west side has no cells of its own, and the east side's are over the cliff.
     // The ladder, which used to come second, takes it over the seam onto NEXT.
-    const LAKE = field('LAKE', 1, Array.from({ length: 5 }, () => '00200'), [{ dir: 'west', to: 'NEXT', offset: 0 }]);
+    const LAKE = field('LAKE', 1, Array.from({ length: 5 }, () => '00100'), [{ dir: 'west', to: 'NEXT', offset: 0 }]);
     const NEXT = field('NEXT', 2, Array.from({ length: 5 }, () => '000'), [{ dir: 'east', to: 'LAKE', offset: 0 }]);
     const { bots, decisions } = roster([LAKE, NEXT], [{ mapId: 'LAKE', x: 4, y: 2 }, { mapId: 'NEXT', x: 0, y: 2 }], [bot(31, 'LAKE', 0, 2)]);
     bots.tick(STEP_MS);
@@ -167,9 +168,10 @@ describe('a bot on one side of the water', () => {
     // LAKE's halves are joined only by WOOD, west of it, and GOAL is off the south half's
     // east edge -- so the map-level plan calls GOAL one hop from all of LAKE, and a bot on
     // the north half was aimed at that edge, which it cannot reach, and stood there.
+    // (Water when it was written; a cliff now that every bot surfs.)
     // (Route 104's north half, the ring on Petalburg, and Petalburg Woods.)
     const half = Array.from({ length: 20 }, () => '0'.repeat(50));
-    const LAKE = field('LAKE', 1, [...half, '2'.repeat(50), ...half], [
+    const LAKE = field('LAKE', 1, [...half, '1'.repeat(50), ...half], [
       { dir: 'west', to: 'WOOD', offset: 0 },
       { dir: 'east', to: 'GOAL', offset: 21 },
     ]);

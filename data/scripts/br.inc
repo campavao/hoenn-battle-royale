@@ -26,6 +26,32 @@ BR_EventScript_Norman::
 	release
 	end
 
+@ The water without the HMs (src/br/br_hm.c). Vanilla's own scripts, less the
+@ checkpartymove that wanted a Pokemon with the move and the YES/NO that asked first.
+@ Argument 0 is the Pokemon the cut-in would show, and BrHm_SkipCutIn skips it.
+BR_EventScript_Surf::
+	lockall
+	setfieldeffectargument 0, 0
+	dofieldeffect FLDEFF_USE_SURF
+	releaseall
+	end
+
+BR_EventScript_Waterfall::
+	lockall
+	setfieldeffectargument 0, 0
+	dofieldeffect FLDEFF_USE_WATERFALL
+	releaseall
+	end
+
+@ Down at a dive spot and up from under one alike: the warp picks the way.
+BR_EventScript_Dive::
+	lockall
+	setfieldeffectargument 0, 0
+	setfieldeffectargument 1, 1
+	dofieldeffect FLDEFF_USE_DIVE
+	releaseall
+	end
+
 BR_Text_PartyFull:
 	.string "Your party is full.\n"
 	.string "Release one for the new catch?$"

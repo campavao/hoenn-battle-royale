@@ -4,6 +4,10 @@
 # and trainer-despawn.txt only ever poked the despawn list, so the real path (win a
 # trainer battle, look at the tile) has never been driven. This is that path.
 #
+# No match phase is set, so this is pret's Hoenn and the trainer is on the map: a match
+# strips every route and gym trainer (br_strip.c, 2026-10-13). This stays as the control
+# for the battle path, which placed NPCs and events will use again.
+#
 # gym-rung.txt's own opening: Rustboro Gym, one of Roxanne's students up the hall.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 0B 03 05 00 0F 00 BD BB C7 FF

@@ -2,6 +2,10 @@
 # 2026-09-18 phone play-test: "battled a trainer in the Mossdeep gym, beat him, and then
 # just got hit with this black screen; the music corrupted and I couldn't get out."
 #
+# No match phase is set, so this is pret's Hoenn and the trainer is on the map: a match
+# strips every route and gym trainer (br_strip.c, 2026-10-13). This stays as the control
+# for the battle path, which placed NPCs and events will use again.
+#
 # PRESTON stands at (1,30) in Mossdeep Gym (14:0) facing down with sight 1; booting at
 # (1,31) puts us in front of him and he walks up on his own (A does not start a fight).
 # The win is forced the way gym-boss.txt does it; then the map must come back.

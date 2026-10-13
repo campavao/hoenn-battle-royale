@@ -55,9 +55,11 @@ describe('the fog and the trainers on a map it took', () => {
 describe('the exported trainer list', () => {
   const data = TRAINERS as Record<string, number[]>;
 
-  it('has ROXANNE at the top of her gym and HALEY on Route 104', () => {
+  it('has ROXANNE at the top of her gym and nobody on Route 104', () => {
     expect(data.MAP_RUSTBORO_CITY_GYM).toContain(1);
-    expect(data.MAP_ROUTE104).toContain(3);
+    // HALEY (3) was here until the map's people were cleared off (br_strip.c): a route
+    // trainer never becomes an object now, so there is nothing for the fog to take.
+    expect(data.MAP_ROUTE104).toBeUndefined();
   });
 
   it('is local ids from 1, sorted, on maps with a trainer at all', () => {
