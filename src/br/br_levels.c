@@ -15,7 +15,6 @@
 #include "battle.h"
 #include "constants/battle_move_effects.h"
 #include "constants/moves.h"
-#include "br/br_moves.h"
 #include "br/br_match.h"
 #include "br/br_levels.h"
 
@@ -343,11 +342,10 @@ static u16 SetWorth(const struct BrLearner *who, const u16 *moves)
     return hitters == 0 ? total / 4 : total;
 }
 
-// An empty slot if there is one; otherwise whichever swap leaves the best four, over the
-// slots the player did not choose -- and no swap at all when the four it has are better
-// than any of them with the new move in. With all four chosen nothing is learned either,
-// and this can never be a prompt: a prompt is a freeze with the fog closing.
-static void Teach(const struct BrLearner *who, u16 *moves, u8 slot, u16 move)
+// An empty slot if there is one; otherwise whichever swap leaves the best four -- and no
+// swap at all when the four it has are better than any of them with the new move in. This
+// can never be a prompt: a prompt is a freeze with the fog closing.
+static void Teach(const struct BrLearner *who, u16 *moves, u16 move)
 {
     u16 trial[MAX_MON_MOVES];
     u16 bestWorth, w;
@@ -366,8 +364,6 @@ static void Teach(const struct BrLearner *who, u16 *moves, u8 slot, u16 move)
     bestWorth = SetWorth(who, moves);
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
-        if (BrMoves_IsKept(slot, i))
-            continue;
         for (j = 0; j < MAX_MON_MOVES; j++)
             trial[j] = j == i ? move : moves[j];
         w = SetWorth(who, trial);
@@ -390,7 +386,7 @@ static void Teach(const struct BrLearner *who, u16 *moves, u8 slot, u16 move)
 // caught at 30 knows the last four things written before 30, which is the same accident
 // one level at a time. Teach only ever swaps for a better four, so offering it a move it
 // already passed over costs nothing and is how a wild GROVYLE finds LEAF BLADE.
-static void LearnThrough(struct Pokemon *mon, u8 slot, u8 to)
+static void LearnThrough(struct Pokemon *mon, u8 to)
 {
     u16 species = GetMonData(mon, MON_DATA_SPECIES, NULL);
     const u16 *learnset = gLevelUpLearnsets[species];
@@ -410,7 +406,7 @@ static void LearnThrough(struct Pokemon *mon, u8 slot, u8 to)
         u8 level = (learnset[i] & LEVEL_UP_MOVE_LV) >> 9;
 
         if (level <= to)
-            Teach(&who, moves, slot, learnset[i] & LEVEL_UP_MOVE_ID);
+            Teach(&who, moves, learnset[i] & LEVEL_UP_MOVE_ID);
     }
     // Only the slots that ended up different are written, so a move that survived the
     // whole walk keeps the PP it had and the PP UPs somebody spent on it.
@@ -431,16 +427,15 @@ static void LearnThrough(struct Pokemon *mon, u8 slot, u8 to)
 void BrLevels_Settle(struct Pokemon *mon)
 {
     GrowUp(mon);
-    LearnThrough(mon, PARTY_SIZE, GetMonData(mon, MON_DATA_LEVEL, NULL));
+    LearnThrough(mon, GetMonData(mon, MON_DATA_LEVEL, NULL));
 }
 
 // A bot's mon, built from a card, knows what a player's or a gym leader's would at this
 // level (POK-330 #50): the page has no learnsets, so it sends none worth keeping, and
 // CreateMon's last-four-written is the accident POK-311 took off everybody else.
-// PARTY_SIZE as the slot, as LiftTrainer: nothing in a bot's team is a player's decision.
 void BrLevels_TeachUpTo(struct Pokemon *mon, u8 level)
 {
-    LearnThrough(mon, PARTY_SIZE, level);
+    LearnThrough(mon, level);
 }
 
 static void LiftParty(u8 level)
@@ -461,10 +456,11 @@ static void LiftParty(u8 level)
         maxBefore = GetMonData(mon, MON_DATA_MAX_HP);
         SetMonData(mon, MON_DATA_EXP, &exp);
         CalculateMonStats(mon);
-        // Evolve before the moves are worked out, so the learnset walked is the one it
-        // will be standing in when the fighting starts.
+        // It grows up, and it learns nothing (Cam, 2026-10-13: "the rung no longer
+        // teaches moves"): moves come off the ground as TMs, and the MOVES row still
+        // offers what it would know by now. A mon that joins at the rung is the
+        // exception -- it arrives knowing its four (BrLevels_Settle).
         GrowUp(mon);
-        LearnThrough(mon, i, level);
         // Keep the wound: the new max grows, the missing HP stays missing.
         maxAfter = GetMonData(mon, MON_DATA_MAX_HP);
         if (hp > 0)
@@ -498,12 +494,11 @@ void BrLevels_LiftTrainer(struct Pokemon *party, u8 count)
         CalculateMonStats(mon);
         // ...and grows up with it (POK-290), for the same reason the player's team does:
         // a gym leader whose ZIGZAGOON never became a LINOONE is free loot at rung 75.
-        // PARTY_SIZE as the slot because nothing in somebody else's team is a decision
-        // the player made, so every move here is fair game to overwrite.
+        // Unlike the player's team it learns too: nobody is handing it TMs.
         if (level > was)
         {
             GrowUp(mon);
-            LearnThrough(mon, PARTY_SIZE, level);
+            LearnThrough(mon, level);
         }
         // A trainer's mon walks in whole, unlike the player's, which keeps its wound.
         {
@@ -520,7 +515,6 @@ void BrLevels_Init(void)
     gBrLevels.tier = 0;
     gBrLevels.phaseSeen = 0;
     gBrLevels.rod = ITEM_NONE;
-    BrMoves_ClearKept();
 }
 
 void BrLevels_GiveStartingBag(void)

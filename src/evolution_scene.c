@@ -33,6 +33,9 @@
 #include "constants/songs.h"
 #include "constants/rgb.h"
 #include "constants/items.h"
+#if BR
+#include "br/br_moves.h"
+#endif
 
 extern struct Evolution gEvolutionTable[][EVOS_PER_MON];
 
@@ -986,6 +989,9 @@ static void Task_EvolutionScene(u8 taskId)
                         // Forget move
                         PREPARE_MOVE_BUFFER(gBattleTextBuff2, move)
 
+#if BR
+                        BrMoves_Forgetting(mon, var);
+#endif
                         RemoveMonPPBonus(mon, var);
                         SetMonMoveSlot(mon, gMoveToLearn, var);
                         gTasks[taskId].tLearnMoveState++;

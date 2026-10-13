@@ -1,0 +1,27 @@
+# balls-dealt: a quarter of the maps' item balls hold a TM this match, and look it (Cam,
+# 2026-10-13: "colour-coded: red = items, blue = TMs").
+#
+# ROUTE 104 (map 0:19) has four balls. Under seed 8 the PP UP at (39,15), local id 21, is
+# dealt TM01 (289) and the other three keep what the cartridge put in them (br_balls.c,
+# BrBalls_Deal). The seed goes in before the boot, as a match's START puts it in before
+# its warp: the ball's colour is chosen when its sprite is made. The boot leaves us on
+# (39,14), facing the ball.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 81 00 00 13 27 00 0E 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u32 gBrMatch+8 8
+expect u16 *gSaveBlock1Ptr+0x690 0
+shot blue
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+shot found
+expect u16 *gSaveBlock1Ptr+0x690 289
+say balls dealt ok

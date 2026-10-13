@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DESPAWN_LOCAL_ID, DESPAWN_MAP_NUM, DESPAWN_SIZE, GFX_BIRCHS_BAG, GFX_ITEM_BALL, HIDDEN_MOVEMENT_TYPES, type Known, LOOT_KIND, LOOT_MAP_NUM, LOOT_SIZE, LOOT_X, LOOT_Y,
   MAP_OFFSET, SEAT_DIR, SEAT_MAP_NUM, SEAT_PRESENT, SEAT_SIZE, SEAT_SKIN, SEAT_X, SEAT_Y, TEMPLATE_SIZE, TPL_FLAG_ID, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X,
-  TPL_Y, type Template, GhostWalkers, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, inObjectView, objectKey, placePeople, standingFrame,
+  TPL_Y, LOOT_SPECIES, type Template, GhostWalkers, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, inObjectView, objectKey, placePeople, standingFrame,
 } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 import { lcdOrigin } from './field';
@@ -29,7 +29,7 @@ const npc = (over: Partial<Template> = {}): Template => ({ localId: 3, gfx: 7, x
 const seat = (n: number, over: Partial<Known['seats'][number]> = {}) =>
   ({ seat: n, present: true, skin: 5, group: MAP.group, num: MAP.num, x: 20 + MAP_OFFSET, y: 31 + MAP_OFFSET, dir: 4, ...over });
 const ball = (slot: number, over: Partial<Known['loot'][number]> = {}) =>
-  ({ slot, kind: 1, group: MAP.group, num: MAP.num, x: 12 + MAP_OFFSET, y: 10 + MAP_OFFSET, ...over });
+  ({ slot, kind: 1, species: 0, group: MAP.group, num: MAP.num, x: 12 + MAP_OFFSET, y: 10 + MAP_OFFSET, ...over });
 
 describe("the people past the ROM's box (POK-318)", () => {
   it('a map person just past the box stands at their home tile, facing the way their movement type starts', () => {
@@ -85,6 +85,8 @@ describe("the people past the ROM's box (POK-318)", () => {
 
   it('the loot past the box: a bag is the bag and the rest are balls', () => {
     expect(droppedPeople(known({ loot: [ball(0, { kind: 2 }), ball(1, { kind: 1 }), ball(2, { kind: 3 })] })).map((p) => p.gfx)).toEqual([GFX_BIRCHS_BAG, GFX_ITEM_BALL, GFX_ITEM_BALL]);
+    // a bag holding one thing -- a TM a mon forgot -- is drawn as the ball it is (br_loot.c's OneThing)
+    expect(droppedPeople(known({ loot: [ball(0, { kind: 2, species: 294 })] })).map((p) => p.gfx)).toEqual([GFX_ITEM_BALL]);
     expect(droppedPeople(known({ loot: [ball(0)] }))[0]).toMatchObject({ x: 12, y: 10 });
     expect(droppedPeople(known({ loot: [ball(0, { kind: 0 }), ball(1, { num: 15 })] })), 'an empty row, another map').toEqual([]);
     expect(droppedPeople(known({ loot: [ball(4)], live: new Set([objectKey(0xc0 + 4, MAP.num, MAP.group)]) })), 'its own object').toEqual([]);
@@ -131,7 +133,10 @@ describe('reading the tables', () => {
     loot[LOOT_SIZE + LOOT_MAP_NUM] = 7;
     loot.set([0x10, 0x00], LOOT_SIZE + LOOT_X);
     loot.set([0x11, 0x00], LOOT_SIZE + LOOT_Y);
-    expect(decodeLoot(loot)).toEqual([{ slot: 1, kind: 2, group: 0, num: 7, x: 16, y: 17 }]);
+    expect(decodeLoot(loot)).toEqual([{ slot: 1, kind: 2, species: 0, group: 0, num: 7, x: 16, y: 17 }]);
+    // a bag of one thing carries it where a ball's species goes
+    loot.set([0x26, 0x01], LOOT_SIZE + LOOT_SPECIES);
+    expect(decodeLoot(loot)[0].species).toBe(294);
 
     const gone = new Uint8Array(2 * DESPAWN_SIZE);
     gone[DESPAWN_SIZE + DESPAWN_MAP_NUM] = 9;

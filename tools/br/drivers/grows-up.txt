@@ -1,15 +1,16 @@
 # grows-up: the party grows up with the rung (POK-290).
 #
-# Cam, live 2026-09-17: "Pokemon are not automatically evolving as time goes on... as well
-# as just automatically teaching them moves that is for that level." A Zigzagoon caught in
-# the Zone was still a Zigzagoon at Lv75 in the last ring, with the four moves it was
-# caught with -- while a bot's team walked its evolution chain as it was dealt. At rung 75
-# you fought their SWAMPERT with your MUDKIP.
+# Cam, live 2026-09-17: "Pokemon are not automatically evolving as time goes on." A
+# Zigzagoon caught in the Zone was still a Zigzagoon at Lv75 in the last ring -- while a
+# bot's team walked its evolution chain as it was dealt. At rung 75 you fought their
+# SWAMPERT with your MUDKIP.
 #
-# Neither can hang off a level-up, because nothing in a match levels up: no battle awards
-# EXP and the rung writes the level straight on. So both happen in the lift.
+# It can't hang off a level-up, because nothing in a match levels up: no battle awards
+# EXP and the rung writes the level straight on. So it happens in the lift.
 #
-# grows-up-keeps.txt is the other half: the same lift with a move the player chose in it.
+# The lift teaches nothing (Cam, 2026-10-13: "the rung no longer teaches moves"): moves
+# come off the ground as TMs, and MOVES offers the rest. So the SCEPTILE at the end still
+# knows the POUND and LEER the TREECKO had.
 #
 # Ring phase 5 is the top of sLadder: rung 75, seventy levels in one step, which is two
 # evolutions for a TREECKO (16 GROVYLE, 36 SCEPTILE).
@@ -56,12 +57,9 @@ tap A
 wait 200
 shot fight
 expect u16 gBattleMons 279
-# POUND (1) and LEER (43) are gone, and what replaced them is a set rather than the last
-# four lines of the learnset (POK-311): PURSUIT (228), AGILITY (97), LEAF BLADE (348) and
-# SLAM (21). By the book it was AGILITY, SLAM, DETECT and FALSE SWIPE -- a SCEPTILE that
-# had never heard of LEAF BLADE. Nothing here was the player's, so the rung had all four.
-expect u16 gBattleMons+0x0C 228
-expect u16 gBattleMons+0x0E 97
-expect u16 gBattleMons+0x10 348
-expect u16 gBattleMons+0x12 21
+# POUND (1) and LEER (43), and nothing else: the rung taught it nothing on the way up.
+expect u16 gBattleMons+0x0C 1
+expect u16 gBattleMons+0x0E 43
+expect u16 gBattleMons+0x10 0
+expect u16 gBattleMons+0x12 0
 say grows up ok

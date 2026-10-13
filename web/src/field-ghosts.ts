@@ -84,13 +84,16 @@ export const LOOT_COUNT = 8;
 export const LOOT_SIZE = 20;
 export const LOOT_X = 2;
 export const LOOT_Y = 4;
+/** A ball's species, or a bag's one item when that is all it holds (br_loot.c's OneThing). */
+export const LOOT_SPECIES = 6;
 export const LOOT_MAP_GROUP = 8;
 export const LOOT_MAP_NUM = 9;
 export const LOOT_KIND = 11;
 export const LOOT_NONE = 0;
 export const LOOT_BAG = 2;
 export const LOOT_LOCAL_ID_BASE = 0xc0;
-/** What br_loot.c's Spawn draws: Birch's bag for a bag, a ball for the rest. */
+/** What br_loot.c's Spawn draws: Birch's bag for a bag, a ball for the rest -- and for a bag
+ *  of one thing, a dropped TM, which is drawn as the ball it is. */
 export const GFX_BIRCHS_BAG = 97;
 export const GFX_ITEM_BALL = 59;
 /** `struct BrDespawned`: the trainers somebody beat, a ring of sixteen. */
@@ -138,6 +141,8 @@ export interface Seat {
 export interface Loot {
   slot: number;
   kind: number;
+  /** Nonzero on a bag holding one thing: drawn as a ball. */
+  species: number;
   group: number;
   num: number;
   x: number;
@@ -191,7 +196,7 @@ export function decodeLoot(b: Uint8Array): Loot[] {
   const out: Loot[] = [];
   for (let o = 0, slot = 0; o + LOOT_SIZE <= b.length && slot < LOOT_COUNT; o += LOOT_SIZE, slot++) {
     if (b[o + LOOT_KIND] === LOOT_NONE) continue;
-    out.push({ slot, kind: b[o + LOOT_KIND], group: b[o + LOOT_MAP_GROUP], num: b[o + LOOT_MAP_NUM], x: s16(b, o + LOOT_X), y: s16(b, o + LOOT_Y) });
+    out.push({ slot, kind: b[o + LOOT_KIND], species: b[o + LOOT_SPECIES] | (b[o + LOOT_SPECIES + 1] << 8), group: b[o + LOOT_MAP_GROUP], num: b[o + LOOT_MAP_NUM], x: s16(b, o + LOOT_X), y: s16(b, o + LOOT_Y) });
   }
   return out;
 }
@@ -265,7 +270,7 @@ export function droppedPeople(k: Known): Person[] {
   for (const l of k.loot) {
     if (l.kind === LOOT_NONE || !here(l.group, l.num) || live(LOOT_LOCAL_ID_BASE + l.slot)) continue;
     if (inObjectView(k.pos, l.x, l.y)) continue;
-    out.push({ gfx: l.kind === LOOT_BAG ? GFX_BIRCHS_BAG : GFX_ITEM_BALL, dir: DIR_SOUTH, x: l.x - MAP_OFFSET, y: l.y - MAP_OFFSET });
+    out.push({ gfx: l.kind === LOOT_BAG && l.species === 0 ? GFX_BIRCHS_BAG : GFX_ITEM_BALL, dir: DIR_SOUTH, x: l.x - MAP_OFFSET, y: l.y - MAP_OFFSET });
   }
   return out;
 }

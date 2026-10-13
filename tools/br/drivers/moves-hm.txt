@@ -1,7 +1,7 @@
 # moves-hm: an HM comes off as easily as anything else (2026-10-06 play-test: "I could not
 # replace/remove HM moves. Ideally all moves come off and on easily").
 #
-# moves-full.txt's Lv30 GROVYLE with four moves and a loot TM06 (TOXIC). A match's boot
+# moves-full.txt's Lv30 GROVYLE, two moves taught to fill it, and a loot TM06 (TOXIC). A match's boot
 # deals no HMs any more (2026-10-13), so an HM06 arrives the way loot does, in a GIVE, and
 # lands after TOXIC in the pocket. ROCK SMASH (HM06) goes in over the first move,
 # then TOXIC goes in over ROCK SMASH in the same visit, which pret refused ("HM moves
@@ -38,6 +38,12 @@ tap DOWN
 wait 10
 tap A
 wait 240
+# The rung teaches nothing (2026-10-13), so the GROVYLE still knows only POUND and LEER:
+# the first row, twice, fills the other two from the level-up moves it has by 30.
+tap A
+wait 150
+tap A
+wait 150
 tap DOWN
 wait 6
 tap DOWN

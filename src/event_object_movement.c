@@ -30,6 +30,7 @@
 #include "constants/trainer_types.h"
 #include "constants/union_room.h"
 #if BR
+#include "br/br_balls.h"
 #include "br/br_ghosts.h"
 #include "br/br_field.h"
 #include "br/br_strip.h"
@@ -1504,6 +1505,9 @@ static u8 TrySpawnObjectEventTemplate(const struct ObjectEventTemplate *objectEv
         return OBJECT_EVENTS_COUNT;
 
     gSprites[gObjectEvents[objectEventId].spriteId].images = graphicsInfo->images;
+#if BR
+    BrBalls_Tint(&gObjectEvents[objectEventId], &gSprites[gObjectEvents[objectEventId].spriteId]);
+#endif
     if (subspriteTables)
         SetSubspriteTables(&gSprites[gObjectEvents[objectEventId].spriteId], subspriteTables);
 
@@ -1800,6 +1804,9 @@ static void SpawnObjectEventOnReturnToField(u8 objectEventId, s16 x, s16 y)
             SetSubspriteTables(sprite, subspriteTables);
 
         sprite->oam.paletteNum = paletteSlot;
+#if BR
+        BrBalls_Tint(objectEvent, sprite);
+#endif
         sprite->coordOffsetEnabled = TRUE;
         sprite->sObjEventId = objectEventId;
         objectEvent->spriteId = i;

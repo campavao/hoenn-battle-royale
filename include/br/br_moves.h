@@ -35,18 +35,14 @@ bool8 BrMoves_HasAny(struct Pokemon *mon);
 // A move has just been taught: take the TM that taught it out of the bag. An HM stays.
 void BrMoves_Spend(u16 move);
 
-// A move the player chose stays chosen (POK-290).
-//
-// The rung teaches moves on its own now, and Kanto's rule is that it may take a slot the
-// player left alone and never one they filled on purpose. Emerald has nowhere to write
-// "this one was a decision", so BR keeps the note: four bits a party slot, cleared when
-// the slot changes hands, and gone with the match.
-void BrMoves_ClearKept(void);
-void BrMoves_ForgetKept(u8 partyIndex);
-// Mark whichever of this mon's four slots holds `move`. Called where a move is taught
-// deliberately -- the relearner's two paths -- rather than passed a slot, because the
-// empty-slot path does not know which slot GiveMoveToMon used.
-void BrMoves_Keep(u8 partyIndex, u16 move);
-bool8 BrMoves_IsKept(u8 partyIndex, u8 slot);
+// A slot is about to be written over, from the MOVES list or a TM used from the bag.
+// TMs go round (Cam, 2026-10-13: "when that move is later overwritten, the TM drops back
+// on the ground"): a move this mon could only have had from a TM lands beside the player
+// as that TM, for anybody. A move it learns on its own by now does not -- a TM for that
+// would be one made out of nothing -- and neither does an HM's, which never left the bag.
+// A trainer's mon can come with a TM's move (a gym party's, spilled as loot when it is
+// beaten): its TM drops as well, the trainer's machine come with the mon. From the MOVES
+// list, a TM used from the bag, and a move learnt on evolving.
+void BrMoves_Forgetting(struct Pokemon *mon, u8 slot);
 
 #endif // GUARD_BR_MOVES_H

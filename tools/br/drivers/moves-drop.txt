@@ -1,0 +1,99 @@
+# moves-drop: a TM's move written over drops the TM back on the ground (Cam, 2026-10-13:
+# "TMs drop back to the ground when the move is unlearned").
+#
+# TREECKO at 5 knows POUND and LEER. Four TMs go under our feet -- TOXIC, HIDDEN POWER,
+# PROTECT, DOUBLE TEAM (294, 298, 305, 320), all four anybody can learn -- and one MOVES
+# visit teaches them all: TOXIC and HIDDEN POWER into the empty slots, then PROTECT over
+# TOXIC. TOXIC is not in TREECKO's learnset, so it could only have come from its TM, and
+# the TM lands beside us as a one-item bag (BrLoot_DropItem): drawn as a ball, and named
+# as the TM. Then DOUBLE TEAM over POUND, which TREECKO learns on its own: nothing drops,
+# or every caught mon would be a TM machine.
+#
+# See moves-spend.txt for the loot and TM-pocket conventions, moves-stay.txt for the list
+# handing itself back after a teach.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerParty+0x54 5
+pokebytes gBrLoot 01 00 0C 00 10 00 26 01 00 09 00 03 FF 00 00 00 00 00 00 00
+pokebytes gBrLoot+20 02 00 0C 00 10 00 2A 01 00 09 00 03 FF 00 00 00 00 00 00 00
+pokebytes gBrLoot+40 03 00 0C 00 10 00 31 01 00 09 00 03 FF 00 00 00 00 00 00 00
+pokebytes gBrLoot+60 04 00 0C 00 10 00 40 01 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+expect u8 gBrLoot+0xA2 4
+expect u16 *gSaveBlock1Ptr+0x690 294
+expect u16 *gSaveBlock1Ptr+0x694 298
+expect u16 *gSaveBlock1Ptr+0x698 305
+# MOVES on the party screen: TOXIC, HIDDEN POWER, PROTECT, DOUBLE TEAM, CANCEL
+tap START
+wait 40
+tap A
+wait 80
+tap A
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 240
+wait 20
+shot list
+# TOXIC into slot 2, HIDDEN POWER into slot 3, each one press with the cursor left alone
+tap A
+wait 150
+tap A
+wait 150
+expect u16 *gSaveBlock1Ptr+0x690 0
+expect u16 *gSaveBlock1Ptr+0x694 0
+# PROTECT: four known, so the slot picker; TOXIC is the third
+tap A
+wait 150
+shot picker
+tap DOWN
+wait 10
+tap DOWN
+wait 10
+tap A
+wait 150
+shot taught
+expect u16 *gSaveBlock1Ptr+0x698 0
+# TOXIC's TM is on the ground: the first free row, a bag (kind 2) holding just TM06, keyed
+# in the released space under seat 0 (0x4000), one cell east of where we stand
+expect u8 gBrLoot+11 2
+expect u16 gBrLoot+6 294
+expect u16 gBrLoot 0x4000
+expect u16 gBrLoot+2 13
+expect u16 gBrLoot+4 16
+expect u32 gBrLoot+16 0
+expect u8 gBrLoot+0xA4 1
+# DOUBLE TEAM over POUND, the first slot: POUND is TREECKO's own, so nothing drops
+tap A
+wait 150
+tap A
+wait 150
+expect u16 *gSaveBlock1Ptr+0x69C 0
+expect u8 gBrLoot+0xA4 1
+expect u8 gBrLoot+31 0
+# Back out to the field with B: the list now offers POUND again, under the cursor, and A
+# there would teach it back over DOUBLE TEAM -- dropping that TM, rightly. Then the party
+# screen and the start menu. The TM is a ball on the cell east of us, in blue, and the
+# held line names it when we face it.
+tap B
+wait 200
+tap B
+wait 150
+tap B
+wait 200
+expect u8 gBrLoot+0xA1 1
+tap RIGHT
+wait 30
+shot on-the-ground
+say moves drop ok
