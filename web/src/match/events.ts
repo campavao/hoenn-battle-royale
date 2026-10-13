@@ -15,15 +15,15 @@
 // who joins after an event has dropped.
 import { rungForPhase } from '../bots/party';
 import { MAP_OFFSET } from '../net/cells';
-import type { EventMsg, MapRef, Msg, SpillBag, SpillMon, SpillMsg } from '../net/wire';
+import { EVENT_MAX, type EventMsg, type MapRef, type Msg, type SpillBag, type SpillMon, type SpillMsg } from '../net/wire';
 import { pickIndex } from './clock';
 
 /** BR_EVENT_KEY_BASE in include/br/br_event.h: `0xB000 | n << 4 | i`, past every
  *  trainer's key (they end at 0xAB56) in the nobody's space, so no ROM reads a piece as
  *  its own and skips the trade evolution. */
 export const EVENT_KEY_BASE = 0xb000;
-/** BR_EVENT_MAX: phases 2, 4, 6 and 8. */
-export const EVENT_MAX = 4;
+/** BR_EVENT_MAX: phases 2, 4, 6 and 8. The wire's, which validates `n` against it. */
+export { EVENT_MAX };
 export const eventKey = (n: number, i: number): number => EVENT_KEY_BASE | (n << 4) | i;
 export const isEventKey = (key: number): boolean => (key & 0xf000) === EVENT_KEY_BASE;
 

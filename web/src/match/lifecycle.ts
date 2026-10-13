@@ -6,10 +6,11 @@
 // room's worst bugs were those decisions going wrong. They are pure functions here, which
 // is also the first step of pulling the match out of that closure (#42).
 import type { RosterEvent } from '../net/relay';
-import type { MapRef, Msg, NpcOutMsg, SpillMsg } from '../net/wire';
+import type { EventMsg, MapRef, Msg, NpcOutMsg, SpillMsg } from '../net/wire';
 import { dealBots, MAX_SEATS } from '../bots/roster';
 import type { DirectorState } from './director';
 import { isFinalRingPhase } from './clock';
+import { isEventKey } from './events';
 
 /** The match as any page in the room can see it (POK-252): everything a promoted client
  *  needs to pick it up arrives in messages every client hears, so a guest is always ready
@@ -259,11 +260,16 @@ export function departedSeats(
  *  nobody -- its own elimination above all, which its page cannot hear from itself and
  *  nobody had ever told it, so it walked on as a ghost the room had already buried. And
  *  the trainers beaten meanwhile (POK-331 #4), still standing on its screen to be beaten
- *  again: `beaten` is the session's, the newest a ROM remembers. */
+ *  again: `beaten` is the session's, the newest a ROM remembers. And the events dropped
+ *  meanwhile: each `event` for its mark on the MAP, what of them is still lying anywhere
+ *  (the loot owed below is only the map it stands on), and a `pickup` for each legendary
+ *  already gone, so that mark arrives gray. */
 export function catchUp(
   hostSeat: number,
   state: Pick<DirectorState, 'ring' | 'clockLeft' | 'placements'>,
   beaten: readonly NpcOutMsg[] = [],
+  events: readonly EventMsg[] = [],
+  loot?: { matching(want: (key: number) => boolean): SpillMsg[]; has(key: number): boolean },
 ): Msg[] {
   const out: Msg[] = [];
   if (state.ring) {
@@ -273,6 +279,11 @@ export function catchUp(
   }
   for (const seat of state.placements) out.push({ t: 'out', seat });
   out.push(...beaten);
+  out.push(...events);
+  if (loot && events.length > 0) {
+    out.push(...loot.matching(isEventKey));
+    for (const e of events) if (!loot.has(e.key)) out.push({ t: 'pickup', seat: hostSeat, key: e.key });
+  }
   return out;
 }
 

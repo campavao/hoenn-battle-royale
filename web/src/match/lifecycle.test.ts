@@ -3,7 +3,9 @@ import { botRows, botSeatsOf, catchUp, dealPlan, departedSeats, freshMatch, loot
 import { Loot } from './loot';
 import { dealBots } from '../bots/roster';
 import type { RosterEvent } from '../net/relay';
-import type { Msg, StartMsg } from '../net/wire';
+import type { EventMsg, Msg, SpillMsg, StartMsg } from '../net/wire';
+import { mulberry32 } from './clock';
+import { eventDrop, eventKey } from './events';
 
 const room = (members: RosterEvent['members']): RosterEvent => ({ code: 'ABC123', host: 0, open: false, max: 8, pass: false, members });
 
@@ -158,6 +160,24 @@ describe('catching a seat up on the match', () => {
       { t: 'npcout', seat: 1, map: { group: 0, num: 16 }, localId: 2 },
     ] as const;
     expect(catchUp(1, { clockLeft: 90, placements: [7] }, beaten)).toEqual([{ t: 'out', seat: 7 }, ...beaten]);
+  });
+
+  it('hands over the events: their marks, what of them is still lying anywhere, and a taken legendary as gone', () => {
+    const loot = new Loot();
+    const msgs = [
+      ...eventDrop(mulberry32(1), { n: 0, phase: 2, seat: 1, mapsec: 31, map: { group: 0, num: 16 }, cells: [{ x: 1, y: 1 }, { x: 2, y: 1 }] }),
+      ...eventDrop(mulberry32(2), { n: 1, phase: 4, seat: 1, mapsec: 11, map: { group: 0, num: 17 }, cells: [{ x: 5, y: 5 }] }),
+    ];
+    for (const m of msgs) loot.note(m);
+    loot.note({ t: 'spill', seat: 7, map: { group: 0, num: 16 }, mons: [{ key: 0x0700, x: 9, y: 9, species: 1, level: 5 }] });
+    loot.note({ t: 'pickup', seat: 3, key: eventKey(1, 0) }); // event 1's legendary is gone
+    const events = msgs.filter((m) => m.t === 'event') as EventMsg[];
+    const out = catchUp(1, { clockLeft: 90, placements: [] }, [], events, loot);
+    expect(out.slice(0, 2)).toEqual(events);
+    const spills = out.filter((m) => m.t === 'spill') as SpillMsg[];
+    expect(spills.flatMap((s) => s.mons.map((m) => m.key))).toEqual([eventKey(0, 0), eventKey(0, 1)]);
+    expect(out.filter((m) => m.t === 'pickup')).toEqual([{ t: 'pickup', seat: 1, key: eventKey(1, 0) }]);
+    expect(catchUp(1, { clockLeft: 90, placements: [] }, [], [], loot)).toEqual([]);
   });
 });
 

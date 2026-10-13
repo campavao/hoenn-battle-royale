@@ -509,19 +509,19 @@ export class Director {
 
   // ---- events (speed-up phase 6) -------------------------------------------------------
 
-  /** Event `n`, in a section inside the ring that has just closed: the ring's own centre
-   *  when the ring is down to it, so the final ring is on the last event. One cell of it
-   *  nobody has been dealt, and the pieces on the nearest free cells around that. */
+  /** Event `n`, in a section inside the NEXT ring, so it is still clear of the fog when the
+   *  ring closes again -- one inside only this ring was in the fog a phase later more than
+   *  half the time -- and in the ring's own centre once the next ring is the last, so the
+   *  final ring is on the last event. One cell of it nobody has been dealt, and the pieces
+   *  on the nearest free cells around that. */
   private dropEvent(n: number): void {
     if (!this.ringCentre) return;
-    const ring = { sx: this.ringCentre.sx, sy: this.ringCentre.sy, r: RING_RADII[this.ringIndex] };
-    const inside = this.sections.filter((s) => sectionInside(s.section, ring));
-    const section =
-      ring.r <= 0 && this.ringSection
-        ? this.ringSection
-        : inside.length > 0
-          ? inside[pickIndex(this.rng, inside.length)]
-          : this.ringSection;
+    const { sx, sy } = this.ringCentre;
+    const next = RING_RADII[Math.min(this.ringIndex + 1, RING_RADII.length - 1)];
+    const within = (r: number) => this.sections.filter((s) => sectionInside(s.section, { sx, sy, r }));
+    const inside = next > 0 ? within(next) : [];
+    const pool = inside.length > 0 ? inside : next > 0 ? within(RING_RADII[this.ringIndex]) : [];
+    const section = pool.length > 0 ? pool[pickIndex(this.rng, pool.length)] : this.ringSection;
     if (!section || section.section.num === undefined) return;
     const anchor = this.freeCell(section.cells, false) ?? section.cells[pickIndex(this.rng, section.cells.length)];
     const cells = clusterCells(section.cells, anchor, EVENT_PIECES, (c) => this.dealtCells.has(cellKey(c)));

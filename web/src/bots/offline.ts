@@ -119,6 +119,9 @@ export function offlineMatch(opts: OfflineOptions): OfflineMatch {
     world: WORLD,
     send: (msg) => {
       onMsg?.(msg, now);
+      // HostRole.directorSends puts an event's spills on the session's table, already in the
+      // ROM's space (match/events.ts): the bots walk to them like any other.
+      loot.note(msg);
       // HostRole.directorSends: the first ring is the buzzer, and every one is the bots' fog.
       if (msg.t === 'ring') {
         host.drop();

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { Director, type DirectorWorld } from './director';
 import { cellKey, withoutVetoes } from './hand';
 import type { ClockMsg, EventMsg, Msg, RingMsg, SpillMsg, StartMsg, WinMsg } from '../net/wire';
-import { LEGENDS } from './events';
+import { EVENT_PIECES, LEGENDS } from './events';
+import { sectionInside } from './ring';
 
 // A small synthetic world -- not the real regionmap.json/landing.json/world.json,
 // which would make the deal/ring math untestable (thousands of cells, real Hoenn
@@ -383,6 +384,10 @@ describe('events (speed-up phase 6)', () => {
     return h;
   }
 
+  it('keeps an event under the sixteen keys its n leaves it', () => {
+    expect(EVENT_PIECES).toBeLessThanOrEqual(16);
+  });
+
   it('drops one on every other ring from the first shrink: phases 2, 4, 6 and 8', () => {
     const h = runRing(7);
     const order = h.sent.filter((m) => m.t === 'ring' || m.t === 'event').map((m) => (m.t === 'ring' ? `r${m.phase}` : `e${(m as EventMsg).n}`));
@@ -416,6 +421,18 @@ describe('events (speed-up phase 6)', () => {
       const legend = spills.flatMap((s) => s.mons).find((m) => m.key === e.key);
       expect(legend, `event ${e.n}`).toBeDefined();
       expect(LEGENDS[e.n]).toContain(legend!.species);
+    }
+  });
+
+  it('drops each one inside the next ring, so the fog has not reached it a phase later', () => {
+    for (const seed of [1, 2, 3, 7, 11, 13]) {
+      const h = runRing(seed);
+      const rings = h.sent.filter((m) => m.t === 'ring') as RingMsg[];
+      for (const e of h.sent.filter((m) => m.t === 'event') as EventMsg[]) {
+        const section = Object.values(world.sections).find((s) => s.num === e.mapsec);
+        const next = rings[2 * e.n + 2];
+        expect(sectionInside(section, next.r > 0 ? next : { ...next, r: 0 }), `seed ${seed} event ${e.n}`).toBe(true);
+      }
     }
   });
 

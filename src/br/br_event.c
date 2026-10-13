@@ -15,7 +15,7 @@
 EWRAM_DATA struct BrEvents gBrEvents = {0};
 
 STATIC_ASSERT(BR_EVENT_MAX <= 8, BrEventBitsFitAByte)
-STATIC_ASSERT(BR_EVENT_KEY(BR_EVENT_MAX - 1, 15) > BR_EVENT_KEY_BASE, BrEventKeysFitSixteenBits)
+STATIC_ASSERT(((BR_EVENT_MAX - 1) << 4 | 15) < 0x100, BrEventKeysStayUnder0xB100)
 
 // Another match's marks are not this one's: the seed START put in says which match it is.
 static void Forget(void)

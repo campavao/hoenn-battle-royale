@@ -425,10 +425,13 @@ export interface NpcOutMsg {
  *  (match/events.ts); this says where, for the mark on every ROM's MAP, and which key is
  *  the legendary, so the mark goes gray once somebody has it. Crosses into the ROM
  *  (event). */
+/** BR_EVENT_MAX in include/br/br_event.h: the events a match drops (match/events.ts). */
+export const EVENT_MAX = 4;
+
 export interface EventMsg {
   t: 'event';
   seat: number; // the host
-  n: number; // which event, 0..3
+  n: number; // which event, 0..EVENT_MAX-1
   mapsec: number; // the region-map section it dropped in, a MAPSEC_* value
   key: number; // the legendary's loot key
   place?: string; // the section's name, for the page's line; not sent to the ROM
@@ -1120,7 +1123,7 @@ const decoders: Record<string, Decoder> = {
     const out: EventMsg = {
       t: 'event',
       seat: reqSeat(m),
-      n: reqInt(m, 'n', 0, 3),
+      n: reqInt(m, 'n', 0, EVENT_MAX - 1),
       mapsec: reqInt(m, 'mapsec', 0, 212), // under MAPSEC_NONE, which the ROM drops
       key: reqInt(m, 'key', 0, 0xffff),
     };
