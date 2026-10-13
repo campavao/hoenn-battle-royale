@@ -47,6 +47,7 @@
 #include "constants/trainers.h"
 #if BR
 #include "br/br_loot.h"
+#include "br/br_patch.h"
 #include "br/br_gym.h"
 #endif
 #include "constants/trainer_hill.h"
@@ -392,6 +393,9 @@ static void CreateBattleStartTask(u8 transition, u16 song)
 
 void BattleSetup_StartWildBattle(void)
 {
+#if BR
+    BrPatch_Take();
+#endif
     if (GetSafariZoneFlag())
         DoSafariBattle();
     else
@@ -424,6 +428,9 @@ static void DoStandardWildBattle(void)
 
 void BattleSetup_StartRoamerBattle(void)
 {
+#if BR
+    BrPatch_Take();
+#endif
     LockPlayerFieldControls();
     FreezeObjectEvents();
     StopPlayerAvatar();

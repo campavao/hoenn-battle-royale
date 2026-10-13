@@ -1,0 +1,19 @@
+# patch-cave: a patch on a cave floor is a shadow too (review of #19: the darkened puff
+# of dust was the floor's own colour, and gone between puffs).
+#
+# GRANITE CAVE 1F (map 24:7, wild header 0x10) under match seed 4: from (10,10) patch 5,
+# at (5,9) -- (0x0C,0x10) with the +7 -- is in view and drawn.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 18 07 0A 00 0A 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 120
+expect u16 gBrPatch 0x1807
+expect u16 gBrPatch+2 0x10
+expect u8 gBrPatch+4 8
+expect u16 gBrPatch+26 0x0C
+expect u16 gBrPatch+42 0x10
+expectne u8 gBrPatch+10 64
+shot cave
+say patch cave ok

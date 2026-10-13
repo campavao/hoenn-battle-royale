@@ -20,7 +20,18 @@ poke u16 gBrMatch+12 240
 # into the grass
 hold DOWN 140
 hold LEFT 100
+# Two patches either side of where that leaves us, (7,23) and (8,23) on this Safari map
+# (wild header 0x48): a step in grass meets nothing now (br_patch.h). Before each walk
+# below they grow back -- the map's byte of gBrPatchTaken cleared -- so every walk meets
+# the next mon one step along.
+pokebytes gBrPatch+16 0E 00 0F 00
+pokebytes gBrPatch+32 1E 00 1E 00
+poke u8 gBrPatch+4 2
+# and the mon they deal: the battle draws from gRngValue, which the walk leaves wherever
+# the boot did; 2 is a Safari mon the ball count below catches
+poke u32 gRngValue 2
 # find something
+poke u8 gBrPatchTaken+72 0
 hold RIGHT 70
 hold LEFT 70
 hold RIGHT 70
@@ -58,6 +69,7 @@ shot try1
 tap A
 wait 30
 # find something
+poke u8 gBrPatchTaken+72 0
 hold RIGHT 70
 hold LEFT 70
 hold RIGHT 70
@@ -91,6 +103,7 @@ shot try2
 tap A
 wait 30
 # find something
+poke u8 gBrPatchTaken+72 0
 hold RIGHT 70
 hold LEFT 70
 hold RIGHT 70
@@ -124,6 +137,7 @@ shot try3
 tap A
 wait 30
 # find something
+poke u8 gBrPatchTaken+72 0
 hold RIGHT 70
 hold LEFT 70
 hold RIGHT 70

@@ -83,6 +83,13 @@ describe('the record card', () => {
     expect(rec.forSeat(1).took).toBe(1);
   });
 
+  it('does not count a patch a wild battle started on as something taken', () => {
+    const rec = new MatchRecord();
+    rec.start();
+    feed(rec, [pickup(1, 0x2009), pickup(1, 0x0302)]);
+    expect(rec.forSeat(1).took).toBe(1);
+  });
+
   it('gives a seat that did nothing a record of doing nothing', () => {
     const rec = new MatchRecord();
     rec.start();

@@ -41,12 +41,14 @@ static const u8 *const sStatNames[] =
 
 // Worth nothing in a match but their price: nobody sells, so carrying one is only a stop
 // at a Mart. The POKe DOLL and FLUFFY TAIL stay (the way out of a fight, POK-293), and so
-// do the REPELs and the ESCAPE ROPE while there are step encounters and caves to leave.
+// does the ESCAPE ROPE while there are caves to leave. The REPELs go: nothing is met on a
+// step any more, only on a patch you walk onto (br_patch.h).
 static const u16 sSellItems[] =
 {
     ITEM_NUGGET, ITEM_PEARL, ITEM_BIG_PEARL, ITEM_STARDUST, ITEM_STAR_PIECE,
     ITEM_HEART_SCALE, ITEM_SHOAL_SALT, ITEM_SHOAL_SHELL,
     ITEM_RED_SHARD, ITEM_BLUE_SHARD, ITEM_YELLOW_SHARD, ITEM_GREEN_SHARD,
+    ITEM_REPEL, ITEM_SUPER_REPEL, ITEM_MAX_REPEL,
 };
 
 // Cures one thing each; a FULL RESTORE cures it and heals too.

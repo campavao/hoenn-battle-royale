@@ -1,0 +1,28 @@
+# patch-taken: a patch somebody else's battle started on goes off our map too, and does
+# not come back (br_patch.c, BrPatch_NoteTaken on every PICKUP).
+#
+# patch-battle.txt's ROUTE 102 under seed 4: patch 1 at (18,9) is drawn from the boot
+# cell. Seat 1's PICKUP of its key, 0x2009, lets the sprite go; stepping onto the cell
+# after it meets nothing.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 30
+expectne u8 gBrPatch+6 64
+# PICKUP [seat 1, key 0x2009, the whole piece]
+pokebytes gBrMailbox+0x1018 0A 0B 08 00 00 01 09 20 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrPatch+6 64
+shot gone
+tap LEFT
+wait 4
+tap LEFT
+wait 30
+tap LEFT
+wait 250
+expect u16 gObjectEvents+0x10 25
+expect u16 gBattleTypeFlags 0
+say patch taken ok

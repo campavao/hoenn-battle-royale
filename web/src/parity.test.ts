@@ -78,6 +78,7 @@ import serverJs from '../../relay/server.js?raw';
 import appTs from './app.ts?raw';
 import brainTs from './bots/brain.ts?raw';
 import lootTs from './match/loot.ts?raw';
+import { PATCH_KEY_BASE } from './match/loot';
 import uiData from './data/ui.json';
 import { BR_CONT_FLAG, BR_MSG } from './net/slots';
 import { MAILBOX } from './net/mailbox';
@@ -927,6 +928,11 @@ describe('the rules a bot plays by the ROM\'s way', () => {
     const rom = [];
     for (let i = 0; i < flat.length; i += 3) rom.push({ map: idOf(flat[i]), x: flat[i + 1], y: flat[i + 2] });
     expect(SAFARI_CELLS).toEqual(rom);
+  });
+
+  it("a patch's key space is br_patch.h's", () => {
+    const patchH = brAll.find((src) => /#define\s+BR_PATCH_KEY_BASE\s/.test(src))!;
+    expect(PATCH_KEY_BASE).toBe(define(patchH, 'BR_PATCH_KEY_BASE'));
   });
 
   it('seats, a ticker line, a peeked bag', () => {

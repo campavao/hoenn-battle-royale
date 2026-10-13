@@ -17,16 +17,16 @@ pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
 poke u16 gBrMailbox+0x0C 1
 wait 60
 expect u8 gBrRing+5 1
-# walk the patch until something jumps out
-hold RIGHT 60
-hold LEFT 60
-hold RIGHT 60
-hold LEFT 60
-hold RIGHT 60
-hold LEFT 60
-hold RIGHT 60
-hold LEFT 60
-wait 200
+# a patch one step west, at (19,9): grass meets nothing on a step now (br_patch.h), and
+# this boot has no match seed to deal the route's own
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+# the patch's battle opens: the transition and the mon sliding in
+wait 600
 shot wild
 # in a battle, and it is a wild one: BATTLE_TYPE_IS_MASTER only, no TRAINER (0x8)
 expectge u8 gBattlersCount 2

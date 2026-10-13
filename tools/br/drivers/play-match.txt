@@ -31,26 +31,16 @@ expect u8 gBrHud+0x46 0xBB
 shot boot
 wait 140
 say grass
-# Four tiles west and back, a tile a hold: the grass gives a Safari battle on the fourth
-# step back (gBattleTypeFlags 0x84 = SAFARI | WILD... the 0x80 bit is the Safari's). Which
-# step it is turns on the RNG, and every wandering NPC draws from it each frame: since the
-# Zone's people were cleared off (br_strip.c) the two long holds this was found nothing.
-hold LEFT 10
-wait 2
-hold LEFT 10
-wait 2
-hold LEFT 10
-wait 2
-hold LEFT 10
-wait 2
-hold RIGHT 10
-wait 2
-hold RIGHT 10
-wait 2
-hold RIGHT 10
-wait 2
-hold RIGHT 10
-wait 300
+# Grass meets nothing on a step now (br_patch.h): a patch one tile west, at (14,14), and
+# the step onto it is the Safari battle (gBattleTypeFlags' 0x80 bit). The first tap
+# turns, the second walks.
+pokebytes gBrPatch+16 15 00
+pokebytes gBrPatch+32 15 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 600
 expectne u32 gMain+4 CB2_Overworld+1
 expectbits u32 gBattleTypeFlags 0x80 0x80
 shot wild

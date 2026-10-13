@@ -12,6 +12,11 @@
 // that and the original, which is the point.
 import { speciesName } from '../bots/party';
 
+/** A patch of grass a wild battle started on (include/br/br_patch.h): its PICKUP takes it
+ *  off every ROM's map, and it was never a piece on this table. */
+export const PATCH_KEY_BASE = 0x2000;
+export const isPatchKey = (key: number): boolean => (key & 0xe000) === PATCH_KEY_BASE;
+
 // include/constants/items.h
 const TM01 = 289;
 const HM01 = 339;
