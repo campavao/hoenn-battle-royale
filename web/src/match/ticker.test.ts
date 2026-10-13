@@ -17,6 +17,8 @@ const all = (): (TickerMsg | null)[] => [
   won(0, 'WALLACE'),
   said(0, 'COURTNEY', 'THE FOG IS COMING.'),
   chest(0, 'WWWWWWWWWW'),
+  Ticker.event(0, 'WWWWWWWWWWWWWWWW'),
+  Ticker.event(0, undefined),
 ];
 
 describe('ticker lines', () => {

@@ -92,6 +92,13 @@ export function felled(seat: number, name: string, boss: string): TickerMsg | nu
   return line(seat, `${short(name)} BEAT ${boss}!`, 'kill');
 }
 
+/** An event dropped (match/events.ts). The ROM marks it on the MAP; this is how anybody
+ *  not looking at the MAP hears there is something to run for. `A LEGENDARY AT `, a
+ *  sixteen-letter section and the `!` is 31. */
+export function event(seat: number, place: string | undefined): TickerMsg | null {
+  return line(seat, place ? `A LEGENDARY AT ${place.toUpperCase()}!` : 'A LEGENDARY HAS APPEARED!');
+}
+
 /** Somebody is out, however it happened, and how many are left after it. */
 export function out(seat: number, name: string, left: number): TickerMsg | null {
   return outs(seat, [name], left);

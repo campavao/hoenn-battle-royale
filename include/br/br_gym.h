@@ -51,5 +51,9 @@ void BrGym_NoteOut(u8 mapGroup, u8 mapNum, u8 localId);
 // The MAP's leader heads (br_map.c / region_map.c): one 16x16 head per gym over its
 // town, grayed once beaten.
 void BrGym_DrawOnMap(s16 left, s16 top);
+// A sprite on the MAP in gray, out of the palette under `tag`: an event's mark once its
+// legendary is taken (br_event.c) as well as a beaten leader's head.
+struct Sprite;
+void BrGym_Gray(struct Sprite *sprite, u16 tag);
 
 #endif // GUARD_BR_GYM_H

@@ -365,6 +365,18 @@
 //   2:    num      u8
 //   3:    localId  u8   the object event's local id on that map
 
+// BR_MSG_EVENT
+// event: the host dropped an event (Cam, 2026-10-13: "start every other ring from the
+// first shrink. An event drops a cluster of items, rares and a legendary at a location
+// marked on the map"). What dropped arrives as ordinary SPILLs under keys of the event's
+// own (br_event.h); this is only where it is, for the mark on the MAP, and which of those
+// keys is the legendary, so the mark goes gray once somebody has it.
+// Payload:
+//   0:    seat     u8   the host
+//   1:    n        u8   which event, 0..BR_EVENT_MAX-1
+//   2:    mapsec   u8   the section it dropped in
+//   3:    key      u16  the legendary's loot key
+
 // How many types the ROM's dispatch table has room for (br_mailbox.c; a STATIC_ASSERT
 // there keeps BR_MSG_LAST, the highest in the table, below it). A new message moves
 // LAST; the table grows only when LAST reaches COUNT, and it costs 8 bytes of EWRAM a

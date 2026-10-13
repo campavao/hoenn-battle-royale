@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Director, type DirectorWorld } from './director';
 import { cellKey, withoutVetoes } from './hand';
-import type { ClockMsg, Msg, RingMsg, StartMsg, WinMsg } from '../net/wire';
+import type { ClockMsg, EventMsg, Msg, RingMsg, SpillMsg, StartMsg, WinMsg } from '../net/wire';
+import { LEGENDS } from './events';
 
 // A small synthetic world -- not the real regionmap.json/landing.json/world.json,
 // which would make the deal/ring math untestable (thousands of cells, real Hoenn
@@ -169,7 +170,8 @@ describe('Director in solo (one seat)', () => {
     for (let i = 0; i < 4; i++) h.advance(5000);
 
     expect(h.sent[0].t).toBe('start');
-    expect(h.sent.slice(1).map((m) => m.t)).toEqual(['clock', 'clock', 'ring', 'ring']);
+    // ...and the first shrink's event, which solo drops like a room does
+    expect(h.sent.slice(1).map((m) => m.t)).toEqual(['clock', 'clock', 'ring', 'ring', 'event', 'spill', 'spill', 'spill', 'spill']);
     expect(h.sent.some((m) => m.t === 'win')).toBe(false);
   });
 });
@@ -369,5 +371,64 @@ describe('hand-painted drop cells (POK-314)', () => {
   it('leave an unpainted section exactly as it was', () => {
     const d = make(99);
     expect(d.landFor(0, 2).map).toEqual({ group: 0, num: 2 }); // BETA's ordinary cells
+  });
+});
+
+describe('events (speed-up phase 6)', () => {
+  function runRing(seed: number) {
+    const h = harness([0, 1], seed, { safariSecs: 5, fogSecs: 10 });
+    h.director.start();
+    h.advance(5000);
+    for (let i = 0; i < 8; i++) h.advance(10000);
+    return h;
+  }
+
+  it('drops one on every other ring from the first shrink: phases 2, 4, 6 and 8', () => {
+    const h = runRing(7);
+    const order = h.sent.filter((m) => m.t === 'ring' || m.t === 'event').map((m) => (m.t === 'ring' ? `r${m.phase}` : `e${(m as EventMsg).n}`));
+    expect(order).toEqual(['r1', 'r2', 'e0', 'r3', 'r4', 'e1', 'r5', 'r6', 'e2', 'r7', 'r8', 'e3', 'r9']);
+  });
+
+  it('puts the last one in the section the ring closes on', () => {
+    for (const seed of [1, 2, 3, 7, 11]) {
+      const h = runRing(seed);
+      const ring = h.sent.find((m) => m.t === 'ring') as RingMsg;
+      const last = h.sent.filter((m) => m.t === 'event').pop() as EventMsg;
+      expect(last.place, `seed ${seed}`).toBe(ring.place);
+    }
+  });
+
+  it('spills each event on its own keys, on cells nobody was dealt, the legendary first', () => {
+    const h = runRing(7);
+    const start = h.sent.find((m) => m.t === 'start') as StartMsg;
+    const spawned = new Set(start.spawns.map((s) => `${s.map.group}:${s.map.num}:${s.x + 7}:${s.y + 7}`));
+    const spills = h.sent.filter((m) => m.t === 'spill') as SpillMsg[];
+    const pieces = spills.flatMap((s) => [...s.mons, ...(s.bag ? [s.bag] : [])].map((p) => ({ ...p, map: s.map })));
+    // Seven an event; this world's sections are one row of forty, so a crowded one drops fewer.
+    expect(pieces.length).toBeLessThanOrEqual(4 * 7);
+    expect(pieces.length).toBeGreaterThan(4 * 5);
+    expect(new Set(pieces.map((p) => p.key)).size).toBe(pieces.length);
+    expect(pieces.every((p) => p.key >= 0xb000 && p.key < 0xb040)).toBe(true);
+    const cells = pieces.map((p) => `${p.map.group}:${p.map.num}:${p.x}:${p.y}`);
+    expect(new Set(cells).size).toBe(cells.length);
+    expect(cells.some((c) => spawned.has(c))).toBe(false);
+    for (const e of h.sent.filter((m) => m.t === 'event') as EventMsg[]) {
+      const legend = spills.flatMap((s) => s.mons).find((m) => m.key === e.key);
+      expect(legend, `event ${e.n}`).toBeDefined();
+      expect(LEGENDS[e.n]).toContain(legend!.species);
+    }
+  });
+
+  it('a host that picked the match up drops the events still to come, not the ones already out', () => {
+    let t = 0;
+    const sent: Msg[] = [];
+    const d = new Director({ seats: [0, 1], seed: 3, world, options: { safariSecs: 5, fogSecs: 10 }, send: (m) => sent.push(m), now: () => t, onOut: () => () => {} });
+    d.resume({ ringPhase: 2, centre: { sx: 11, sy: 11, place: 'BETA' }, secsLeftInPhase: 1 });
+    t += 1000;
+    d.tick();
+    expect(sent.filter((m) => m.t === 'event')).toEqual([]);
+    t += 10000;
+    d.tick();
+    expect((sent.filter((m) => m.t === 'event') as EventMsg[]).map((e) => e.n)).toEqual([1]);
   });
 });

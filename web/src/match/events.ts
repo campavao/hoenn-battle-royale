@@ -1,0 +1,176 @@
+// Events (Cam, 2026-10-13): "start every other ring from the first shrink. An event drops
+// a cluster of placed NPCs, items, rares and a legendary at a location marked on the map.
+// There's no completion or claim. Final ring: centres on the last event."
+//
+// The host deals them, with the director's clock (director.ts): one on each of the ring's
+// phases 2, 4, 6 and 8, in a section inside that phase's ring, and the last one in the
+// ring's own centre, the one place the final ring still holds. What drops is ordinary
+// loot -- `spill`s under keys of the events' own -- so every ROM draws it, picks it up and
+// hands it over the way it does a fallen trainer's, the loot table re-sends it to whoever
+// walks onto the map later, and the bots go for it like any other ball inside the ring.
+// The one new message is `event`: where it is, for the mark on everybody's MAP
+// (src/br/br_event.c).
+//
+// Not here yet: the placed NPCs. They are a follow-up, and so is the mark for somebody
+// who joins after an event has dropped.
+import { rungForPhase } from '../bots/party';
+import { MAP_OFFSET } from '../net/cells';
+import type { EventMsg, MapRef, Msg, SpillBag, SpillMon, SpillMsg } from '../net/wire';
+import { pickIndex } from './clock';
+
+/** BR_EVENT_KEY_BASE in include/br/br_event.h: `0xB000 | n << 4 | i`, past every
+ *  trainer's key (they end at 0xAB56) in the nobody's space, so no ROM reads a piece as
+ *  its own and skips the trade evolution. */
+export const EVENT_KEY_BASE = 0xb000;
+/** BR_EVENT_MAX: phases 2, 4, 6 and 8. */
+export const EVENT_MAX = 4;
+export const eventKey = (n: number, i: number): number => EVENT_KEY_BASE | (n << 4) | i;
+export const isEventKey = (key: number): boolean => (key & 0xf000) === EVENT_KEY_BASE;
+
+/** The event a ring phase drops, by the director's 0-based ring index, or undefined:
+ *  every other ring from the first shrink, which is index 1. */
+export function eventForRing(ringIndex: number): number | undefined {
+  if (ringIndex < 1 || ringIndex % 2 === 0) return undefined;
+  const n = (ringIndex - 1) / 2;
+  return n < EVENT_MAX ? n : undefined;
+}
+
+// include/constants/species.h
+const REGIROCK = 401;
+const REGICE = 402;
+const REGISTEEL = 403;
+const KYOGRE = 404;
+const GROUDON = 405;
+const RAYQUAZA = 406;
+const LATIAS = 407;
+const LATIOS = 408;
+
+/** Each event's legendary, one of these: the golems first, the weather trio's last word
+ *  at the end. Jirachi and Deoxys are event Pokemon in Emerald and stay that way. */
+export const LEGENDS: readonly (readonly number[])[] = [
+  [REGIROCK, REGICE, REGISTEEL],
+  [LATIAS, LATIOS],
+  [KYOGRE, GROUDON],
+  [RAYQUAZA],
+];
+
+/** The rares, two an event: the strong ones Hoenn hides or never has in the wild. */
+export const RARES: readonly number[] = [
+  147, // DRATINI
+  246, // LARVITAR
+  131, // LAPRAS
+  123, // SCYTHER
+  142, // AERODACTYL
+  133, // EEVEE
+  392, // RALTS
+  395, // BAGON
+  398, // BELDUM
+  376, // ABSOL
+  328, // FEEBAS
+];
+export const EVENT_RARES = 2;
+
+// include/constants/items.h
+const ITEM_MASTER_BALL = 1;
+const ITEM_FULL_RESTORE = 19;
+const ITEM_MAX_REVIVE = 25;
+const ITEM_RARE_CANDY = 68;
+const ITEM_CHOICE_BAND = 186;
+const ITEM_LEFTOVERS = 200;
+
+/** `sGold` in src/br/br_balls.c: what a gold ball holds, and so what the ROM draws gold. */
+export const GOLD: readonly number[] = [
+  301, 302, 303, 310, 312, 313, 314, 317, 318, 323, 326, // TM13 14 15 22 24 25 26 29 30 35 38
+  ITEM_MASTER_BALL,
+  ITEM_LEFTOVERS,
+  ITEM_CHOICE_BAND,
+];
+export const EVENT_GOLD = 3;
+
+/** The one bag of supplies beside them. */
+export const SUPPLIES: readonly { id: number; n: number }[] = [
+  { id: ITEM_FULL_RESTORE, n: 2 },
+  { id: ITEM_MAX_REVIVE, n: 2 },
+  { id: ITEM_RARE_CANDY, n: 3 },
+];
+
+/** The legendary, the rares, the gold balls and the bag: seven, under the eight the ROM
+ *  keeps on a map, so one fallen trainer's bag can still lie beside them. */
+export const EVENT_PIECES = 1 + EVENT_RARES + EVENT_GOLD + 1;
+
+/** Some of `pool`, `n` of them, none twice. */
+function draw<T>(rng: () => number, pool: readonly T[], n: number): T[] {
+  const left = [...pool];
+  const out: T[] = [];
+  while (out.length < n && left.length > 0) out.push(left.splice(pickIndex(rng, left.length), 1)[0]);
+  return out;
+}
+
+export interface EventDrop {
+  /** Event `n` (0-based), as the director counts them. */
+  n: number;
+  /** The ring phase it drops on (1-based, the wire's), which is its level. */
+  phase: number;
+  seat: number;
+  mapsec: number;
+  place?: string;
+  map: MapRef;
+  /** Where the pieces lie, best first, in the page's space (landing.json's): the first is
+   *  the legendary's. Fewer than EVENT_PIECES drops fewer, the supplies first to go. */
+  cells: { x: number; y: number }[];
+}
+
+/** An event, as the messages that put it on the ground: the `event` first, then the
+ *  `spill`s -- six mons and one bag a spill, so the gold balls and the supplies, each a
+ *  bag, take one each. A bag of one item is drawn as a ball (br_loot.c), gold by its
+ *  item (br_balls.c). */
+export function eventDrop(rng: () => number, e: EventDrop): Msg[] {
+  const level = rungForPhase(e.phase);
+  const legends = LEGENDS[Math.min(e.n, LEGENDS.length - 1)];
+  const species = [legends[pickIndex(rng, legends.length)], ...draw(rng, RARES, EVENT_RARES)];
+  const bags: { items: { id: number; n: number }[] }[] = [
+    ...draw(rng, GOLD, EVENT_GOLD).map((id) => ({ items: [{ id, n: 1 }] })),
+    { items: SUPPLIES.map((s) => ({ ...s })) },
+  ];
+  const at = (i: number) => ({ x: e.cells[i].x + MAP_OFFSET, y: e.cells[i].y + MAP_OFFSET });
+
+  let i = 0;
+  const mons: SpillMon[] = [];
+  for (const s of species) {
+    if (i >= e.cells.length) break;
+    mons.push({ key: eventKey(e.n, i), ...at(i), species: s, level });
+    i++;
+  }
+  const out: Msg[] = [];
+  const event: EventMsg = { t: 'event', seat: e.seat, n: e.n, mapsec: e.mapsec, key: eventKey(e.n, 0) };
+  if (e.place !== undefined) event.place = e.place;
+  out.push(event);
+  const spills: SpillMsg[] = [];
+  for (const b of bags) {
+    if (i >= e.cells.length) break;
+    const bag: SpillBag = { key: eventKey(e.n, i), ...at(i), items: b.items, money: 0 };
+    spills.push({ t: 'spill', seat: e.seat, map: e.map, mons: [], bag });
+    i++;
+  }
+  if (spills.length > 0) spills[0].mons = mons;
+  else if (mons.length > 0) spills.push({ t: 'spill', seat: e.seat, map: e.map, mons });
+  return [...out, ...spills];
+}
+
+/** The cells of `pool` on `from`'s map nearest it, `n` of them, none `taken`, `from`
+ *  first; within eight tiles, so an event is one cluster and not a trail across a route
+ *  -- on open ground the seven are all within two. */
+export function clusterCells(
+  pool: readonly { map: MapRef; x: number; y: number }[],
+  from: { map: MapRef; x: number; y: number },
+  n: number,
+  taken: (c: { map: MapRef; x: number; y: number }) => boolean,
+): { x: number; y: number }[] {
+  const d = (c: { x: number; y: number }) => Math.abs(c.x - from.x) + Math.abs(c.y - from.y);
+  const near = pool
+    .filter((c) => c.map.group === from.map.group && c.map.num === from.map.num)
+    .filter((c) => d(c) <= 8 && (d(c) === 0 || !taken(c)))
+    .sort((a, b) => d(a) - d(b) || a.y - b.y || a.x - b.x)
+    .filter((c, i, all) => i === 0 || c.x !== all[i - 1].x || c.y !== all[i - 1].y);
+  return near.slice(0, n).map((c) => ({ x: c.x, y: c.y }));
+}

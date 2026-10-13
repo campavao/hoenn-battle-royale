@@ -169,7 +169,7 @@ void BrGym_NoteOut(u8 mapGroup, u8 mapNum, u8 localId)
 // other sprite drawn from the same tag, so the gray goes in a copy under a tag of its own.
 #define BR_GYM_GRAY_TAG 0x5A00
 
-static void Gray(struct Sprite *sprite, u16 tag)
+void BrGym_Gray(struct Sprite *sprite, u16 tag)
 {
     struct SpritePalette pal;
     u16 colours[16];
@@ -230,6 +230,6 @@ void BrGym_DrawOnMap(s16 left, s16 top)
         sprite->centerToCornerVecY = -8;
         sprite->oam.priority = 2; // the fly markers', in front of them on subpriority; under the cursor
         if (gBrGymsBeaten & (1 << i))
-            Gray(sprite, GetObjectEventGraphicsInfo(sBosses[i].gfx)->paletteTag);
+            BrGym_Gray(sprite, GetObjectEventGraphicsInfo(sBosses[i].gfx)->paletteTag);
     }
 }

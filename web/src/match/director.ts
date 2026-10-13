@@ -25,6 +25,8 @@
 //    locally between wire ticks (br_match.h's `clockLeft`/`clockFrames`), and the
 //    page's HUD mirror should look just as live.
 import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
+import { clusterCells, EVENT_PIECES, eventDrop, eventForRing } from './events';
+import { sectionInside } from './ring';
 import type { MapRef, Msg, Pace } from '../net/wire';
 
 export const DEFAULT_SAFARI_SECS = 120;
@@ -225,6 +227,8 @@ export class Director {
   private ringStartedAt = 0;
   private ringIndex = -1; // -1 = ring not begun
   private ringCentre?: { sx: number; sy: number; place?: string };
+  /** The section the ring closes on, which the last event drops in. */
+  private ringSection?: SectionCells;
   private readonly aliveSeats: Set<number>;
   private readonly placements: number[] = [];
   private winner: number | undefined;
@@ -307,6 +311,11 @@ export class Director {
     this.phase = 'ring';
     this.ringIndex = Math.max(0, state.ringPhase - 1);
     this.ringCentre = { sx: state.centre.sx, sy: state.centre.sy, place: state.centre.place };
+    // The wire names the centre, not the section; the section whose centre it is.
+    this.ringSection = this.sections.find((s) => {
+      const c = sectionCentre(s.section);
+      return c.sx === state.centre!.sx && c.sy === state.centre!.sy;
+    });
     // tickRing measures from the start of the WHOLE ring, not of this phase, so the
     // back-date is every phase before this one plus the part of this one that has gone.
     const goneThisPhase = Math.max(0, this.fogSecs - state.secsLeftInPhase);
@@ -468,6 +477,7 @@ export class Director {
     const section = this.sections[pickIndex(this.rng, this.sections.length)];
     const { sx, sy } = sectionCentre(section.section);
     this.ringCentre = { sx, sy, place: section.section.name };
+    this.ringSection = section;
     this.emitRing();
   }
 
@@ -493,6 +503,39 @@ export class Director {
       place: this.ringCentre.place,
       elapsed: elapsedSecs,
     });
+    const n = eventForRing(this.ringIndex);
+    if (n !== undefined) this.dropEvent(n);
+  }
+
+  // ---- events (speed-up phase 6) -------------------------------------------------------
+
+  /** Event `n`, in a section inside the ring that has just closed: the ring's own centre
+   *  when the ring is down to it, so the final ring is on the last event. One cell of it
+   *  nobody has been dealt, and the pieces on the nearest free cells around that. */
+  private dropEvent(n: number): void {
+    if (!this.ringCentre) return;
+    const ring = { sx: this.ringCentre.sx, sy: this.ringCentre.sy, r: RING_RADII[this.ringIndex] };
+    const inside = this.sections.filter((s) => sectionInside(s.section, ring));
+    const section =
+      ring.r <= 0 && this.ringSection
+        ? this.ringSection
+        : inside.length > 0
+          ? inside[pickIndex(this.rng, inside.length)]
+          : this.ringSection;
+    if (!section || section.section.num === undefined) return;
+    const anchor = this.freeCell(section.cells, false) ?? section.cells[pickIndex(this.rng, section.cells.length)];
+    const cells = clusterCells(section.cells, anchor, EVENT_PIECES, (c) => this.dealtCells.has(cellKey(c)));
+    for (const c of cells) this.dealtCells.add(cellKey({ map: anchor.map, x: c.x, y: c.y }));
+    for (const msg of eventDrop(this.rng, {
+      n,
+      phase: this.ringIndex + 1,
+      seat: this.hostSeat,
+      mapsec: section.section.num,
+      place: section.section.name,
+      map: anchor.map,
+      cells,
+    }))
+      this.opts.send(msg);
   }
 
   private currentRingState(): DirectorRingState | undefined {

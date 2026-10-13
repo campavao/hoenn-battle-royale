@@ -21,6 +21,7 @@
 #include "br/br_ring.h"
 #include "br/br_field.h"
 #include "br/br_gym.h"
+#include "br/br_event.h"
 
 EWRAM_DATA struct BrMap gBrMap = {0};
 
@@ -184,6 +185,8 @@ void BrMap_DrawGyms(s16 left, s16 top)
 {
     if (BrMap_Looking() || BrPick_Picking())
         BrGym_DrawOnMap(left, top);
+    if (BrMap_Looking())
+        BrEvent_DrawOnMap(left, top);
 }
 
 // The blend the overlay needs: BG1 over BG2 and the backdrop.

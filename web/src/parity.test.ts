@@ -49,6 +49,7 @@ import ghostsC from '../../src/br/br_ghosts.c?raw';
 import mapGroups from '../../data/maps/map_groups.json';
 import eventObjectsH from '../../include/constants/event_objects.h?raw';
 import itemsH from '../../include/constants/items.h?raw';
+import speciesH from '../../include/constants/species.h?raw';
 import varsH from '../../include/constants/vars.h?raw';
 import weatherH from '../../include/constants/weather.h?raw';
 import constantsGlobalH from '../../include/constants/global.h?raw';
@@ -79,6 +80,7 @@ import appTs from './app.ts?raw';
 import brainTs from './bots/brain.ts?raw';
 import lootTs from './match/loot.ts?raw';
 import { PATCH_KEY_BASE } from './match/loot';
+import { EVENT_KEY_BASE, EVENT_MAX, GOLD, LEGENDS, RARES } from './match/events';
 import uiData from './data/ui.json';
 import { BR_CONT_FLAG, BR_MSG } from './net/slots';
 import { MAILBOX } from './net/mailbox';
@@ -933,6 +935,31 @@ describe('the rules a bot plays by the ROM\'s way', () => {
   it("a patch's key space is br_patch.h's", () => {
     const patchH = brAll.find((src) => /#define\s+BR_PATCH_KEY_BASE\s/.test(src))!;
     expect(PATCH_KEY_BASE).toBe(define(patchH, 'BR_PATCH_KEY_BASE'));
+  });
+
+  it("an event's keys and count are br_event.h's", () => {
+    const eventH = brAll.find((src) => /#define\s+BR_EVENT_KEY_BASE\s/.test(src))!;
+    expect(EVENT_KEY_BASE).toBe(define(eventH, 'BR_EVENT_KEY_BASE'));
+    expect(EVENT_MAX).toBe(define(eventH, 'BR_EVENT_MAX'));
+    // Past every trainer's key: 0x8000 | slot << 11 | id, slots 0..5, ids under 0x400.
+    expect(EVENT_KEY_BASE).toBeGreaterThan(0x8000 | (5 << 11) | 0x3ff);
+  });
+
+  it("an event's gold balls are sGold in br_balls.c, and its Pokemon are species.h's", () => {
+    const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
+    const ids = list.split(',').map((s) => s.trim()).filter(Boolean);
+    const ballsC = brAll.find((src) => /\bsGold\[\]/.test(src))!;
+    expect(GOLD).toEqual(names(ballsC, 'sGold', 'ITEM_').map((n) => ids.indexOf(n)));
+    const species = (n: string) => define(speciesH, `SPECIES_${n}`);
+    expect(LEGENDS).toEqual([
+      ['REGIROCK', 'REGICE', 'REGISTEEL'].map(species),
+      ['LATIAS', 'LATIOS'].map(species),
+      ['KYOGRE', 'GROUDON'].map(species),
+      ['RAYQUAZA'].map(species),
+    ]);
+    expect(RARES).toEqual(
+      ['DRATINI', 'LARVITAR', 'LAPRAS', 'SCYTHER', 'AERODACTYL', 'EEVEE', 'RALTS', 'BAGON', 'BELDUM', 'ABSOL', 'FEEBAS'].map(species),
+    );
   });
 
   it('seats, a ticker line, a peeked bag', () => {

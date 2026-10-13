@@ -263,7 +263,9 @@ static void SpriteCB_Shadow(struct Sprite *sprite)
     sprite->x2 = sDrift[(sprite->sPause >> 3) & 7];
 }
 
-// The field's own sprite for what the cell is: see above.
+// The field's own sprite for what the cell is: see above. Read off the live grid, not the
+// shipped layout the deal reads: a cell the deal picked is a cell a battle starts on
+// either way, and only the picture can tell a metatile the map has since swapped.
 static void Draw(u8 i)
 {
     u8 behavior = MapGridGetMetatileBehaviorAt(gBrPatch.x[i], gBrPatch.y[i]);

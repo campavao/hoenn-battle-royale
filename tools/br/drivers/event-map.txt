@@ -1,0 +1,63 @@
+# event-map: an event's mark on the MAP (speed-up phase 6), gray once its legendary is
+# taken.
+#
+# The host drops an event as ordinary SPILLs and one EVENT that says where (br_event.c):
+# n, the section, and the legendary's key. A PICKUP of that key from anybody grays the
+# mark; a PICKUP of another piece does not. Another match's marks are forgotten when its
+# seed is not ours.
+#
+# The MAP is two below the top of START in a match (ring-map.txt).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1234
+expect u8 gBrEvents+16 0
+# EVENT 0 at ROUTE 116 (0x1F), legendary 0xB000; EVENT 1 at FORTREE CITY (0x0B), 0xB010
+pokebytes gBrMailbox+0x1018 20 08 05 00 00 00 00 1F 00 B0
+pokebytes gBrMailbox+0x1058 20 08 05 00 00 00 01 0B 10 B0
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u8 gBrEvents+16 3
+expect u32 gBrEvents 0x1234
+expect u8 gBrEvents+12 0x1F
+expect u8 gBrEvents+13 0x0B
+expect u16 gBrEvents+4 0xB000
+expect u16 gBrEvents+6 0xB010
+expect u8 gBrEvents+17 0
+# A PICKUP of event 1's second piece (0xB011) is not its legendary...
+pokebytes gBrMailbox+0x1098 0A 0B 08 00 00 03 11 B0 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 3
+wait 10
+expect u8 gBrEvents+17 0
+# ...and seat 3 taking event 0's legendary grays its mark
+pokebytes gBrMailbox+0x10D8 0A 0B 08 00 00 03 00 B0 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 4
+wait 10
+expect u8 gBrEvents+17 1
+# an out-of-range n and a section past MAPSEC_NONE are dropped
+pokebytes gBrMailbox+0x1118 20 08 05 00 00 00 04 1F 40 B0
+pokebytes gBrMailbox+0x1158 20 08 05 00 00 00 02 D5 20 B0
+poke u16 gBrMailbox+0x0C 6
+wait 10
+expect u8 gBrEvents+16 3
+tap START
+wait 40
+tap DOWN
+wait 20
+tap DOWN
+wait 20
+tap A
+wait 240
+shot events
+tap B
+wait 120
+# A new match: the old marks go with the first EVENT of the new one
+poke u32 gBrMatch+8 0x5678
+pokebytes gBrMailbox+0x1198 20 08 05 00 00 00 02 22 20 B0
+poke u16 gBrMailbox+0x0C 7
+wait 10
+expect u32 gBrEvents 0x5678
+expect u8 gBrEvents+16 4
+expect u8 gBrEvents+17 0
+say event map ok
