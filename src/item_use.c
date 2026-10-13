@@ -41,6 +41,9 @@
 #include "constants/item_effects.h"
 #include "constants/items.h"
 #include "constants/songs.h"
+#if BR
+#include "br/br_items.h"
+#endif
 
 static void SetUpItemUseCallback(u8);
 static void FieldCB_UseItemOnField(void);
@@ -741,6 +744,10 @@ static void ItemUseOnFieldCB_WailmerPailSudowoodo(u8 taskId)
 
 void ItemUseOutOfBattle_Medicine(u8 taskId)
 {
+#if BR
+    if (BrItems_HealParty(taskId)) // the whole party, no one to pick
+        return;
+#endif
     gItemUseCB = ItemUseCB_Medicine;
     SetUpItemUseCallback(taskId);
 }

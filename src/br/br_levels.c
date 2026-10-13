@@ -31,16 +31,17 @@ static const u16 sRods[] = { ITEM_OLD_ROD, ITEM_OLD_ROD, ITEM_GOOD_ROD, ITEM_GOO
 // all -- they are Lilycove's (POK-309, sDeptStore) -- but the POKe DOLL is on every
 // shelf including the first, because it is the only way out of a fight you do not want
 // (POK-293) and an escape you can only buy in one town is an escape most matches never
-// have.
-static const u16 sMart0[] = { ITEM_POKE_BALL, ITEM_POTION, ITEM_ANTIDOTE, ITEM_PARALYZE_HEAL, ITEM_POKE_DOLL, ITEM_NONE };
-static const u16 sMart1[] = { ITEM_POKE_BALL, ITEM_GREAT_BALL, ITEM_POTION, ITEM_SUPER_POTION, ITEM_ANTIDOTE, ITEM_PARALYZE_HEAL,
-                              ITEM_AWAKENING, ITEM_BURN_HEAL, ITEM_ICE_HEAL, ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_POKE_DOLL, ITEM_NONE };
-static const u16 sMart2[] = { ITEM_GREAT_BALL, ITEM_ULTRA_BALL, ITEM_SUPER_POTION, ITEM_HYPER_POTION, ITEM_REVIVE, ITEM_FULL_HEAL,
+// have. No status heals: in a match any of them is a FULL RESTORE (br_items.h), and the
+// shelf would sell one for a hundred.
+static const u16 sMart0[] = { ITEM_POKE_BALL, ITEM_POTION, ITEM_POKE_DOLL, ITEM_NONE };
+static const u16 sMart1[] = { ITEM_POKE_BALL, ITEM_GREAT_BALL, ITEM_POTION, ITEM_SUPER_POTION,
+                              ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_POKE_DOLL, ITEM_NONE };
+static const u16 sMart2[] = { ITEM_GREAT_BALL, ITEM_ULTRA_BALL, ITEM_SUPER_POTION, ITEM_HYPER_POTION, ITEM_REVIVE,
                               ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_POKE_DOLL, ITEM_NONE };
-static const u16 sMart3[] = { ITEM_ULTRA_BALL, ITEM_HYPER_POTION, ITEM_MAX_POTION, ITEM_REVIVE, ITEM_FULL_HEAL, ITEM_X_ATTACK,
+static const u16 sMart3[] = { ITEM_ULTRA_BALL, ITEM_HYPER_POTION, ITEM_MAX_POTION, ITEM_REVIVE, ITEM_X_ATTACK,
                               ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_X_ACCURACY, ITEM_GUARD_SPEC, ITEM_DIRE_HIT, ITEM_POKE_DOLL, ITEM_NONE };
 // The top shelf carries the Master Ball, priced for the match in item.c (POK-268).
-static const u16 sMart4[] = { ITEM_MASTER_BALL, ITEM_ULTRA_BALL, ITEM_MAX_POTION, ITEM_FULL_RESTORE, ITEM_REVIVE, ITEM_MAX_REVIVE, ITEM_FULL_HEAL,
+static const u16 sMart4[] = { ITEM_MASTER_BALL, ITEM_ULTRA_BALL, ITEM_MAX_POTION, ITEM_FULL_RESTORE, ITEM_REVIVE, ITEM_MAX_REVIVE,
                               ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_X_ACCURACY, ITEM_GUARD_SPEC, ITEM_DIRE_HIT, ITEM_POKE_DOLL, ITEM_NONE };
 static const u16 *const sMarts[] = { sMart0, sMart1, sMart2, sMart3, sMart4, sMart4 };
 
@@ -56,7 +57,7 @@ static const u16 *const sMarts[] = { sMart0, sMart1, sMart2, sMart3, sMart4, sMa
 // point -- and the shelf is the top one plus the stones whatever rung the match is at,
 // so arriving is worth it rather than a second-best mart.
 static const u16 sDeptStore[] = { ITEM_MASTER_BALL, ITEM_ULTRA_BALL, ITEM_MAX_POTION, ITEM_FULL_RESTORE, ITEM_REVIVE, ITEM_MAX_REVIVE,
-                                  ITEM_FULL_HEAL, ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_X_ACCURACY,
+                                  ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_X_ACCURACY,
                                   ITEM_GUARD_SPEC, ITEM_DIRE_HIT, ITEM_POKE_DOLL, ITEM_FIRE_STONE, ITEM_WATER_STONE,
                                   ITEM_THUNDER_STONE, ITEM_LEAF_STONE, ITEM_SUN_STONE, ITEM_MOON_STONE, ITEM_NONE };
 

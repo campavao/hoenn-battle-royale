@@ -52,6 +52,16 @@ BR_EventScript_Dive::
 	releaseall
 	end
 
+@ Std_FindItem's ball, when BrItems_FindItem took it: a vitamin on the whole party, a sell
+@ item for its price, a pile of balls. gStringVar4 says which.
+BR_EventScript_FoundUsed::
+	removeobject VAR_LAST_TALKED
+	playfanfare MUS_OBTAIN_ITEM
+	msgbox gStringVar4, MSGBOX_DEFAULT
+	waitfanfare
+	release
+	return
+
 BR_Text_PartyFull:
 	.string "Your party is full.\n"
 	.string "Release one for the new catch?$"

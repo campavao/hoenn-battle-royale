@@ -96,6 +96,11 @@ Std_FindItem::
 	lock
 	faceplayer
 	waitse
+.if BR
+@ A vitamin or a sell item is used up here; a ball is six, a status heal a FULL RESTORE.
+	callnative BrItems_FindItem
+	goto_if_eq VAR_RESULT, TRUE, BR_EventScript_FoundUsed
+.endif
 	copyvar VAR_0x8004, ITEMID
 	copyvar VAR_0x8005, AMOUNT
 	checkitemspace ITEMID, AMOUNT

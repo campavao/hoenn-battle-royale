@@ -1,0 +1,39 @@
+# items-vitamin: a vitamin off the ground is used there and then, on the whole party,
+# and a sell item is its price (2026-10-13, the item rework: "vitamins apply to the
+# whole party", "max that stat's EVs"; "strip low-value items"). br_items.c, by way of
+# Std_FindItem's callnative and AddBagItem.
+#
+# ROUTE 106 (map 0:21): the PROTEIN ball at (29,14), from the sand north of it.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 15 1D 00 0D 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr+0 29
+expect u16 *gSaveBlock1Ptr+2 13
+# Lv 5, ATTACK 9 with no EVs.
+expect u8 gPlayerParty+0x54 5
+expect u16 gPlayerParty+0x5A 9
+tap DOWN
+wait 20
+tap A
+wait 200
+shot found
+hold A 4
+wait 60
+hold A 4
+wait 60
+expect u32 gMain+4 CB2_Overworld+1
+# 255 ATTACK EVs are +3 at Lv 5; the ball is gone and nothing went in the bag.
+expect u16 gPlayerParty+0x5A 12
+expect u16 *gSaveBlock1Ptr+0x560 0
+shot after
+# A NUGGET by GIVE (a hidden item, a spill) is money on arrival: never in the bag. The
+# money is kept XORed with SaveBlock2's key; both go to 0 so it reads plain.
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u32 *gSaveBlock1Ptr+0x490 0
+pokebytes gDecompressionBuffer 01 6E 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 4
+wait 60
+expect u16 *gSaveBlock1Ptr+0x560 0
+# Half its 10000.
+expect u32 *gSaveBlock1Ptr+0x490 5000

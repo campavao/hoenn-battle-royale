@@ -1,0 +1,48 @@
+# items-heal: a medicine from the BAG treats the whole party, with no one to pick
+# (2026-10-13, the item rework: "heals work on the whole party"). br_items.c's
+# BrItems_HealParty, from ItemUseOutOfBattle_Medicine.
+#
+# The boot deals one mon; a copy of it goes in the second slot (a whole struct, so its
+# own checksum comes along) and both are hurt. Then a POTION by GIVE, and BAG > POTION >
+# USE.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+expect u16 gPlayerParty+0x58 20
+pokebytes gPlayerParty+0x64 7c b1 00 0b 00 00 f9 b2 ce cc bf bf bd c5 c9 ff 80 63 02 02 bd bb c7 ff 00 00 00 00 2d c7 00 00 7c b1 f9 b9 7c b1 f9 b9 7c b1 f9 b9 69 b0 f9 b9 fb b1 f9 b9 7c f7 f9 b9 7d b1 d2 b9 7c b1 f9 b9 5f af f9 b9 7c b1 7c 98 05 b9 bd 8e 7c b1 f9 b9 00 00 00 00 05 ff 14 00 14 00 09 00 08 00 0c 00 0c 00 0b 00
+poke u8 gPlayerPartyCount 2
+poke u16 gPlayerParty+0x56 1
+poke u16 gPlayerParty+0xBA 2
+# A POTION (13), and an ANTIDOTE (14) that the bag takes as a FULL RESTORE (19).
+pokebytes gDecompressionBuffer 02 0D 00 01 0E 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 7
+wait 60
+expect u16 *gSaveBlock1Ptr+0x560 13
+expect u16 *gSaveBlock1Ptr+0x564 19
+# START, down to BAG, in; the POTION is first; USE is first.
+tap START
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 120
+shot bag
+tap A
+wait 30
+shot submenu
+tap A
+wait 30
+shot used
+wait 60
+shot used2
+# Both treated by the one POTION.
+expect u16 gPlayerParty+0x56 20
+expect u16 gPlayerParty+0xBA 20
+hold A 4
+wait 60
+shot closed
+# The pocket closes up when the message does: the FULL RESTORE is first now.
+expect u16 *gSaveBlock1Ptr+0x560 19
+expect u16 *gSaveBlock1Ptr+0x564 0
