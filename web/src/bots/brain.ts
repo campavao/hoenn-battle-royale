@@ -12,7 +12,7 @@
 import { findPath, findPathToAny, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
-import { MOVE_CUT, MOVE_FLY, MOVE_SURF } from './party';
+import { MOVE_FLY } from './party';
 import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
 import { sameSpot, spotKey, type SeamDir, type Spot, type World } from './world';
@@ -305,36 +305,35 @@ export interface BotsOptions {
   rng: () => number;
 }
 
-/** Can this team cross water? One mon that knows SURF is the whole rule, the same as
- *  in the game -- and it is what gets a bot off an island the drop put it on. */
-export function canSurf(party: PackedMon[]): boolean {
-  return party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_SURF));
+/** Can this team cross water? Everybody can, since the HMs went (2026-10-13): a player
+ *  walks into the water and is surfing, no Pokemon with the move asked for (br_hm.c), so
+ *  a bot that needed one stood on the shore a player could leave. Kept a function, and
+ *  the party kept an argument, so a rule that comes back has one place to land. */
+export function canSurf(_party: PackedMon[]): boolean {
+  return CONTESTANTS_NEED_NO_HMS;
 }
 
-/** And through a tree? Kanto's bots cut (v0.46.0); ours walked through them, because
- *  the exporter has always marked a cuttable tree as its own class and nothing ever
- *  looked (POK-267).
- *
- *  It answers TRUE for anybody carrying CUT, and a bot is dealt it at the rung -- but
- *  the honest answer for a contestant is that everybody can, because the boot hands
- *  over all eight HMs (POK-256) and the relearner is one menu away (POK-225). What the
- *  move actually buys is the fight: a bot that knows CUT can use it in one. */
-/** And over it? A bird dealt FLY at the rung (POK-267). Unlike CUT this one is NOT
- *  something every contestant has -- the HMs are in everybody's bag, but a flight needs
- *  a Pokemon that can carry you, and whether this bot has one is the whole point of the
- *  rule. */
+/** And through a tree? There are no trees to cut any more: the ROM never spawns a
+ *  cuttable tree, a smash rock or a boulder (br_strip.c, 2026-10-13), so a bot walks the
+ *  cell like anybody else. The exporter still marks one as its own class (POK-267), and
+ *  this is what opens it. That a bot walked through one with the tree still standing
+ *  on a player's screen was the 2026-10-12 play-test's bug, and the strip is its fix. */
+/** And over it? A bird dealt FLY at the rung (POK-267). Unlike the water this one is
+ *  NOT something every contestant has: a flight needs a Pokemon that can carry you, and
+ *  whether this bot has one is the whole point of the rule. */
 export function canFly(party: PackedMon[]): boolean {
   return party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_FLY));
 }
 
-export function canCut(party: PackedMon[]): boolean {
-  return party.length === 0 || party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_CUT)) || CONTESTANTS_CARRY_HMS;
+export function canCut(_party: PackedMon[]): boolean {
+  return CONTESTANTS_NEED_NO_HMS;
 }
 
-/** POK-256 gave every contestant the run of Hoenn, HMs included. Named rather than
- *  inlined as `true` so that if that ever stops being so, this is the one place that
- *  has to change -- and the graph keeps modelling a tree as a tree either way. */
-const CONTESTANTS_CARRY_HMS = true;
+/** POK-256 gave every contestant the run of Hoenn, and the speed-up redesign took the
+ *  HMs out of it (2026-10-13): nothing on the map needs one. Named rather than inlined
+ *  as `true` so that if that ever stops being so, this is the one place that has to
+ *  change -- and the graph keeps modelling water and a tree as their own cells either way. */
+const CONTESTANTS_NEED_NO_HMS = true;
 
 /** The share of the team's health still standing: 1 is untouched, 0 is wiped. */
 export function health(party: PackedMon[]): number {

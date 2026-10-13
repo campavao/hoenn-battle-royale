@@ -8,6 +8,9 @@
 #include "overworld.h"
 #include "sound.h"
 #include "constants/map_types.h"
+#if BR
+#include "br/br_hm.h"
+#endif
 #include "constants/songs.h"
 
 // this file's functions
@@ -871,7 +874,11 @@ static u8 GetBikeCollision(u8 direction)
     s16 y = playerObjEvent->currentCoords.y;
     MoveCoords(direction, &x, &y);
     metatileBehavior = MapGridGetMetatileBehaviorAt(x, y);
+#if BR
+    return BrHm_BikeInto(direction, GetBikeCollisionAt(playerObjEvent, x, y, direction, metatileBehavior));
+#else
     return GetBikeCollisionAt(playerObjEvent, x, y, direction, metatileBehavior);
+#endif
 }
 
 static u8 GetBikeCollisionAt(struct ObjectEvent *objectEvent, s16 x, s16 y, u8 direction, u8 metatileBehavior)

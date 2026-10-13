@@ -1,6 +1,10 @@
 # npcout-in-battle: an NPCOUT heard in the middle of a trainer battle leaves the object
 # table alone until the field is back (POK-328).
 #
+# No match phase is set, so this is pret's Hoenn and the trainer is on the map: a match
+# strips every route and gym trainer (br_strip.c, 2026-10-13). This stays as the control
+# for the battle path, which placed NPCs and events will use again.
+#
 # A battle keeps the map's object events and rebuilds their sprites on the way back, so
 # while it is up an object's spriteId is an old number and the sprite under it is the
 # battle's. The fog's sweep of the map we are fighting on (seat 0xFF), or a peer who beat

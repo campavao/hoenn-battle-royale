@@ -113,8 +113,7 @@ static void GiveTheRunOfHoenn(void)
         GetSetPokedexFlag(dexNum, FLAG_SET_SEEN);
         GetSetPokedexFlag(dexNum, FLAG_SET_CAUGHT);
     }
-    for (flag = ITEM_HM01; flag <= ITEM_HM08; flag++)
-        AddBagItem(flag, 1);
+    // No HMs (2026-10-13): nothing on the map needs one any more (br_strip.h, br_hm.h).
     // Both bikes, and the shoes -- and in a match the shoes are the default rather than
     // a button you hold (field_player_avatar.c). Sixteen minutes of Hoenn on foot is a
     // lot of Hoenn, and the fog does not wait.

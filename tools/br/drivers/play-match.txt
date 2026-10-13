@@ -1,7 +1,7 @@
 # play-match: web/e2e/play.spec.ts's match on the ROM alone (POK-327) -- the Safari
 # opening from a seeded boot, a wild battle and a ball thrown, the drop map and a pick,
-# the landing, YOUNGSTER CALVIN talked to and beaten, the fog's bleed, and the OUT. The
-# drivers that pin each beat on its own (catch-pages, safari-drop, trainer-drop,
+# the landing, the walk onto YOUNGSTER CALVIN's empty tile, the fog's bleed, and the
+# OUT. The drivers that pin each beat on its own (catch-pages, safari-drop, clear-map,
 # ring-outside, gym-out) never chained them; this does, with play.spec's own numbers, so
 # the page's spec and this one are the same match, one with a screen and one without.
 #
@@ -31,11 +31,25 @@ expect u8 gBrHud+0x46 0xBB
 shot boot
 wait 140
 say grass
-# Four tiles west and back: the grass gives a Safari battle on the way back, in both
-# builds (gBattleTypeFlags 0x84 = SAFARI | WILD... the 0x80 bit is the Safari's).
-hold LEFT 40
-wait 10
-hold RIGHT 40
+# Four tiles west and back, a tile a hold: the grass gives a Safari battle on the fourth
+# step back (gBattleTypeFlags 0x84 = SAFARI | WILD... the 0x80 bit is the Safari's). Which
+# step it is turns on the RNG, and every wandering NPC draws from it each frame: since the
+# Zone's people were cleared off (br_strip.c) the two long holds this was found nothing.
+hold LEFT 10
+wait 2
+hold LEFT 10
+wait 2
+hold LEFT 10
+wait 2
+hold LEFT 10
+wait 2
+hold RIGHT 10
+wait 2
+hold RIGHT 10
+wait 2
+hold RIGHT 10
+wait 2
+hold RIGHT 10
 wait 300
 expectne u32 gMain+4 CB2_Overworld+1
 expectbits u32 gBattleTypeFlags 0x80 0x80
@@ -129,7 +143,9 @@ expect u16 *gSaveBlock1Ptr 36
 expect u16 *gSaveBlock1Ptr+2 16
 shot landed
 say trainer
-# Under CALVIN: a hold of 8 frames is a turn, then a tile. Three west, one north.
+# CALVIN's column, and CALVIN not in it: a match clears the map's people off (br_strip.c,
+# 2026-10-13), so the walk that used to end face to face with him goes on to stand where
+# he stood. A hold of 8 frames is a turn, then a tile. Three west, two north.
 hold LEFT 8
 wait 20
 hold LEFT 8
@@ -144,80 +160,13 @@ hold UP 8
 wait 20
 expect u16 *gSaveBlock1Ptr 33
 expect u16 *gSaveBlock1Ptr+2 15
-expect u8 gBrLoot+0xA3 0
-shot face-to-face
-# Talk, through his challenge and the intro to the action menu...
-tap A
-wait 240
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-tap A
-wait 70
-expectne u32 gMain+4 CB2_Overworld+1
-expect u32 gBattleTypeFlags 0xC
-shot trainer-battle
-# ...and the fight called: FIGHT, the first move, the turn, then out on B (A on the field
-# would take his ball, which lands in front of us).
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-poke u8 gBattleOutcome 1
-tap A
-wait 70
-tap B
-wait 70
-tap B
-wait 70
-tap B
-wait 70
-tap B
-wait 70
-tap B
-wait 70
-tap B
-wait 70
-shot trainer-beaten
-# Back on the field, the thing POK-328 is about, and CALVIN gone with his team where he
-# stood.
+hold UP 8
+wait 20
+expect u16 *gSaveBlock1Ptr 33
+expect u16 *gSaveBlock1Ptr+2 14
 expect u32 gMain+4 CB2_Overworld+1
-expectge u8 gBrLoot+0xA3 1
-expectge u8 gBrLoot+0xA0 1
+expect u8 gBrLoot+0xA3 0
+shot on-his-tile
 say bleed
 # RING, phase 4, centred on (25,12) with radius 1: Route 102 is outside, in the fog.
 pokebytes gBrMailbox+0x10D8 0C 0A 07 00 00 00 04 19 0C 01 00 00

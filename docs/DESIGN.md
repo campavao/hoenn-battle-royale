@@ -186,6 +186,15 @@ out, and one that comes in waits as it would in a menu.
   line, Kanto's -- `THE FOG SPREADS! ALL GREW STRONGER!`, or `THE FOG COVERS ALL OF
   HOENN!` on the last, none on the first -- and the box names the place but on the
   last. A line identical to the last one queued is dropped (POK-324).
+- **A clear map** (`br_strip.h`, 2026-10-13): in a match the map's own people never
+  spawn -- route trainers, gym trainers, townsfolk -- and neither do cut trees, smash rocks
+  or Strength boulders. What stays: the eight leaders on their gyms, the CENTER nurse, the
+  MART clerk, MR. BRINEY and the ferry attendants, item balls, berry trees, Pokemon and
+  props. A ROM with no match running is pret's Hoenn.
+- **No HMs** (`br_hm.h`): walk or ride into water and you are surfing, surf up a waterfall and you
+  climb it, A on a dive spot and you go down. No Pokemon has to know the move, nothing
+  asks first, and no field move plays its cut-in. The starting bag has no HMs, and the
+  bots surf and cut as freely (`brain.ts` `canSurf`, `canCut`).
 - **Rules**: one clock (`br_levels.h`: the ring phase is the level rung, no EXP), the
   catch with a full party (`br_catch.h`), the MOVES row (`br_moves.h`), gym leaders as
   one-shot bosses (`br_gym.h`), the shot clock and RUN (`br_battle.h`).

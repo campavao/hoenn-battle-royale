@@ -37,6 +37,7 @@
 #if BR
 #include "br/br_match.h"
 #include "br/br_ghosts.h"
+#include "br/br_hm.h"
 #endif
 
 static EWRAM_DATA u8 sWildEncounterImmunitySteps = 0;
@@ -461,6 +462,10 @@ static const u8 *GetInteractedMetatileScript(struct MapPosition *position, u8 me
 
 static const u8 *GetInteractedWaterScript(struct MapPosition *unused1, u8 metatileBehavior, u8 direction)
 {
+#if BR
+    if (BrHm_Free())
+        return BrHm_WaterScript(metatileBehavior);
+#endif
     if (FlagGet(FLAG_BADGE05_GET) == TRUE && PartyHasMonWithSurf() == TRUE && IsPlayerFacingSurfableFishableWater() == TRUE)
         return EventScript_UseSurf;
 
@@ -478,7 +483,11 @@ static bool32 TrySetupDiveDownScript(void)
 {
     if (FlagGet(FLAG_BADGE07_GET) && TrySetDiveWarp() == 2)
     {
+#if BR
+        ScriptContext_SetupScript(BrHm_DiveScript(EventScript_UseDive));
+#else
         ScriptContext_SetupScript(EventScript_UseDive);
+#endif
         return TRUE;
     }
     return FALSE;
@@ -488,7 +497,11 @@ static bool32 TrySetupDiveEmergeScript(void)
 {
     if (FlagGet(FLAG_BADGE07_GET) && gMapHeader.mapType == MAP_TYPE_UNDERWATER && TrySetDiveWarp() == 1)
     {
+#if BR
+        ScriptContext_SetupScript(BrHm_DiveScript(EventScript_UseDiveUnderwater));
+#else
         ScriptContext_SetupScript(EventScript_UseDiveUnderwater);
+#endif
         return TRUE;
     }
     return FALSE;

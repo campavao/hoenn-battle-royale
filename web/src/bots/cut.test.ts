@@ -30,7 +30,7 @@ describe('a tree is a tree until somebody can cut it (POK-267)', () => {
   });
 
   it('deals CUT to land mons at the rung, and SURF to the water ones', () => {
-    // canCut() answers TRUE for any contestant -- they all boot with the HMs (POK-256)
+    // canCut() answers TRUE for any contestant -- a match strips the trees (2026-10-13)
     // -- so what is worth checking is the move actually being on the team, which is
     // what a bot uses in a fight.
     const carries = (party: ReturnType<typeof dealParty>, id: number) =>
@@ -46,7 +46,7 @@ describe('a tree is a tree until somebody can cut it (POK-267)', () => {
     expect(surfers).toBeGreaterThan(0);
     // And nobody has it at the bottom rung, where the ladder starts.
     expect(carries(dealParty(99, 31, 1), 15)).toBe(false);
-    // Either way a contestant can open a tree, because the bag says so.
+    // Either way a contestant gets past a tree: in a match there are none.
     expect(canCut(dealParty(99, 31, 1))).toBe(true);
   });
 });
