@@ -168,6 +168,61 @@ test('the host tabs out and hands the match over without leaving', async ({ brow
   }
 });
 
+test('a guest promoted while its tab is hidden hands the match on', async ({ browser }) => {
+  // The tab-out above stands a host down when its tab goes hidden. A guest whose tab was
+  // already hidden when the relay made it host never saw that event, and ran the match
+  // on a background tab's throttled timers: frozen for everybody until its player came
+  // back. The relay promotes the longest-standing willing guest, so the hidden one joins
+  // first and the visible one second.
+  test.setTimeout(180_000);
+  const rom = romHashParam();
+  const hostCtx = await browser.newContext();
+  const sleepyCtx = await browser.newContext();
+  const awakeCtx = await browser.newContext();
+
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&fast&seed=20260918&testmon&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+
+    const sleepy = await sleepyCtx.newPage();
+    await sleepy.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 60_000 });
+    const awake = await awakeCtx.newPage();
+    await awake.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
+    await startWith(host, 3);
+    await expect(sleepy.locator('#match-strip')).toContainText(/RING \d/, { timeout: 120_000 });
+    await expect(awake.locator('#match-strip')).toContainText(/RING \d/, { timeout: 120_000 });
+
+    // A guest's tab going hidden sends nothing: it is not running anything to hand on.
+    await sleepy.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await host.locator('#match-leave').click();
+    await expect(host.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({ timeout: 60_000 });
+
+    // The relay hands the room to the hidden guest, which hands it straight on.
+    await awake.waitForFunction(() => (window as unknown as BrWindow).__br.director !== undefined, undefined, {
+      timeout: 60_000,
+    });
+    await sleepy.waitForFunction(() => (window as unknown as BrWindow).__br.director === undefined, undefined, {
+      timeout: 30_000,
+    });
+    const phase = await awake.evaluate(
+      () => ((window as unknown as BrWindow).__br.director.state.ring?.phase as number) ?? 0,
+    );
+    expect(phase, 'the visible guest resumed the ring rather than restarting the match').toBeGreaterThan(0);
+  } finally {
+    await awakeCtx.close();
+    await sleepyCtx.close();
+    await hostCtx.close().catch(() => {});
+  }
+});
+
 test('a socket that blips rejoins with one of everything, not two', async ({ browser }) => {
   // POK-330 #13: every rejoin re-ran attach(), which threw away the unsubscribe from the
   // page's own `recv` handler. After N blips N+1 copies handled every message: the record

@@ -2833,6 +2833,15 @@ function wireRoom(
     }
   };
 
+  /** A host in a background tab hands the match on (below, at visibilitychange). A tab
+   *  made host while it was already hidden never sees that event: it ran the match on
+   *  throttled timers, frozen for everybody, until its player came back. So a promotion
+   *  asks too. With nobody willing to take it the relay leaves the room here, which is
+   *  no worse than before. */
+  const standDownIfHidden = (): void => {
+    if (document.hidden && host && !amWatching) relay.canHost(false);
+  };
+
   relay.on('roster', (ev) => {
     controls.roster = ev;
     // Who is gone. Only the host acts on it -- it is the one client running a director
@@ -2855,6 +2864,7 @@ function wireRoom(
       isHost = true;
       console.info('[room] promoted to host');
       act(decideStart({ t: 'promoted', members: ev.members.map((m) => m.id) }, startState()));
+      standDownIfHidden();
     }
     // Stood down. The relay moved `host` off us while we are still in the room, which
     // only happens because we asked it to (the tab went to the background). The
@@ -2873,6 +2883,7 @@ function wireRoom(
       resumeHost = false;
       console.info('[room] host again after a drop');
       act(decideStart({ t: 'host-again', members: ev.members.map((m) => m.id) }, startState()));
+      standDownIfHidden();
     }
     // Somebody arrived while the match is running: tell them where the fog is, now
     // (POK-260). Kanto calls this the late start -- a watcher who has to wait for the
@@ -3058,7 +3069,7 @@ function wireRoom(
   document.addEventListener('visibilitychange', () => {
     if (amWatching) return;
     if (document.hidden) {
-      if (host) relay.canHost(false);
+      standDownIfHidden();
       return;
     }
     const me = bridge ? bridge.roster.get(bridge.seat) : undefined;
