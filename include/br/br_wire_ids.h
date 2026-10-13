@@ -38,9 +38,10 @@
 #define BR_MSG_FLED 29
 #define BR_MSG_GIVE 30
 #define BR_MSG_NPCOUT 31
+#define BR_MSG_EVENT 32
 
 // The highest type in use: br_mailbox.c keeps it below BR_MSG_COUNT.
-#define BR_MSG_LAST BR_MSG_NPCOUT
+#define BR_MSG_LAST BR_MSG_EVENT
 
 // The most bytes each message that spans slots packs to, and so what the ROM's assembler
 // for it has to hold (br_wire.h says why).
@@ -55,7 +56,7 @@
 
 // The table's shape, and the protocol tools/br/wire-protocols.txt lists it under (its
 // last row). br_wire.c will not build unless that protocol is BR_PROTOCOL.
-#define BR_WIRE_HASH 0x777CC3AA
-#define BR_WIRE_PROTOCOL 1
+#define BR_WIRE_HASH 0xA2A9EB99
+#define BR_WIRE_PROTOCOL 2
 
 #endif // GUARD_BR_WIRE_IDS_H

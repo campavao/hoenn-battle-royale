@@ -1,0 +1,65 @@
+# event-crowd: an event pulls everybody to one spot, so it is the crowded view the object
+# share was made for (PR #20 review). Loot is owed BR_LOOT_SHARE (2) slots of what the
+# ghosts within engage range leave, and with eleven of them standing round the cluster
+# that is one: six event pieces are held, one is drawn -- and a piece with no object is
+# still in reach. A takes what is in the table (PieceInReach reads BrLoot_At, not the
+# objects), so a ball the share has not drawn yet is picked up all the same, and the
+# ticker names it before the press.
+#
+# object-slots-near.txt's view: Route 103 from (9,8), so we stand at (16,15) facing south,
+# eleven ghosts on row 15 either side of us and at (16,20), one more at (16,23).
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 12 09 00 08 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr 9
+# Eleven ghosts within five steps: seats 1..5 at (11..15, 15) and 6..10 at (17..21, 15),
+# one to five steps either side, and seat 11 five steps south at (16, 20). Seat 12 eight
+# steps south at (16, 23), still in view.
+pokebytes gDecompressionBuffer 01 01 00 12 0B 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 02 01 00 12 0C 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 03 01 00 12 0D 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 04 01 00 12 0E 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 05 01 00 12 0F 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 06 01 00 12 11 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 07 01 00 12 12 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 08 01 00 12 13 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 09 01 00 12 14 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 0A 01 00 12 15 00 0F 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 0B 01 00 12 10 00 14 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 0C 01 00 12 10 00 17 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+# The event's legendary and five rares round us, keys 0xB000..0xB005 (br_event.h), all
+# within two steps: north (16,14) first in the table, south (16,16) -- the cell we face --
+# second. Same distance, so the share's one slot goes to the first.
+pokebytes gDecompressionBuffer 00 00 12 06 00 B0 10 00 0E 00 91 01 0F 01 B0 10 00 10 00 93 00 0F 02 B0 11 00 0E 00 F6 00 0F 03 B0 0F 00 0E 00 83 00 0F 04 B0 11 00 10 00 7B 00 0F 05 B0 0F 00 10 00 8E 00 0F 00
+mailsend gBrMailbox 11 gDecompressionBuffer 59
+wait 30
+expect u8 gBrLoot+0xA0 6
+expect u8 gBrLoot+0xA1 1
+expectne u8 gBrLoot+12 0xFF
+# the faced ball, the second row, has no object
+expect u16 gBrLoot+20 0xB001
+expect u8 gBrLoot+32 0xFF
+shot crowd
+# ...and A takes it anyway
+expect u8 gPlayerPartyCount 0
+tap A
+wait 60
+expect u8 gPlayerPartyCount 1
+expect u8 gBrLoot+0xA0 5
+expect u8 gBrLoot+0xA2 1
+# the one taken is the faced one: its row is empty, the drawn one north is still there
+expect u8 gBrLoot+31 0
+expectne u8 gBrLoot+11 0
+say event crowd ok

@@ -50,6 +50,8 @@
 //                   0x8E00 -- clear of the trainers' keys while every trainer id is under
 //                   0x600 (br_loot.c asserts it; Emerald's last is 854), and a house's
 //                   cache, 0x8D00 | its index (br_balls.c), which needs them under 0x500.
+//                   An event's pieces (br_event.h), 0xB000 | n << 4 | i: past every
+//                   trainer's, whose slot 5 ends at 0xAB56.
 //
 // The seat is the low five bits of the high byte in both seat spaces, which is only a
 // seat while seats are 0..31: the relay deals no other, and the ROM treats any other

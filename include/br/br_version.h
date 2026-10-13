@@ -12,6 +12,6 @@
 // The message table's shape is part of it (POK-331 #21): a message added, retired or
 // renumbered, or a cap moved, is a new row in tools/br/wire-protocols.txt under the
 // next protocol, and br_wire.c does not build until this is that row's protocol.
-#define BR_PROTOCOL 1
+#define BR_PROTOCOL 2
 
 #endif // GUARD_BR_VERSION_H

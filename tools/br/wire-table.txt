@@ -49,3 +49,4 @@ DRESULT      28
 FLED         29
 GIVE         30
 NPCOUT       31
+EVENT        32         # host -> ROM: an event dropped, for its mark on the MAP

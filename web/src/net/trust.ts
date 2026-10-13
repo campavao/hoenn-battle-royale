@@ -45,6 +45,7 @@ export const TRUST: Record<Msg['t'], Trust> = {
   land: 'host',
   trainer: 'host',
   ticker: 'host',
+  event: 'host',
   dresult: 'host',
   botout: 'host',
   botrec: 'host',

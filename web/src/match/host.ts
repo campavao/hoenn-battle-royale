@@ -366,7 +366,9 @@ export class HostRole {
       if (id === this.link.seat || greeted.has(id)) continue;
       greeted.add(id);
       owedLoot.add(id);
-      for (const msg of catchUp(this.link.seat, state, this.session.beaten)) this.link.toSeat(id, msg);
+      for (const msg of catchUp(this.link.seat, state, this.session.beaten, this.session.events, this.session.loot)) {
+        this.link.toSeat(id, msg);
+      }
     }
   }
 
@@ -478,6 +480,8 @@ export class HostRole {
     // which the corner already shows.
     if (msg.t === 'start') {
       this.say(Ticker.opening(this.hostSeat, msg.safari ?? 0));
+    } else if (msg.t === 'event') {
+      this.say(Ticker.event(this.hostSeat, msg.place));
     } else if (msg.t === 'win' && msg.seat !== undefined && msg.seat !== null) {
       this.say(Ticker.won(msg.seat, this.nameOf(msg.seat)));
     }

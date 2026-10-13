@@ -59,6 +59,7 @@ import type {
   FledMsg,
   GiveMsg,
   NpcOutMsg,
+  EventMsg,
   PickMsg,
   LandMsg,
   ResultMsg,
@@ -768,6 +769,16 @@ function decodeNpcOut(bytes: Uint8Array): NpcOutMsg {
   return { t: 'npcout', seat: r.u8(), map: { group: r.u8(), num: r.u8() }, localId: r.u8() };
 }
 
+// EVENT: where an event dropped, for the mark on the MAP (br_event.c). The name is the
+// page's; the ROM has the section's own.
+function encodeEvent(m: EventMsg): Uint8Array {
+  return new Writer().u8(m.seat).u8(m.n).u8(m.mapsec).u16(m.key).toBytes();
+}
+function decodeEvent(bytes: Uint8Array): EventMsg {
+  const r = new Reader(bytes);
+  return { t: 'event', seat: r.u8(), n: r.u8(), mapsec: r.u8(), key: r.u16() };
+}
+
 function encodeResult(m: ResultMsg): Uint8Array {
   return new Writer().u8(m.seat).u8(OUTCOME_ORDER.indexOf(m.outcome)).toBytes();
 }
@@ -809,6 +820,7 @@ const CODECS: Record<string, Codec> = {
   result: { type: BR_MSG.RESULT, encode: (m) => encodeResult(m as ResultMsg), decode: decodeResult },
   give: { type: BR_MSG.GIVE, encode: (m) => encodeGive(m as GiveMsg), decode: decodeGive },
   npcout: { type: BR_MSG.NPCOUT, encode: (m) => encodeNpcOut(m as NpcOutMsg), decode: decodeNpcOut },
+  event: { type: BR_MSG.EVENT, encode: (m) => encodeEvent(m as EventMsg), decode: decodeEvent },
 };
 
 const CODEC_BY_TYPE = new Map<number, Codec & { t: string }>(

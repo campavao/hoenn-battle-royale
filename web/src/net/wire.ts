@@ -19,7 +19,7 @@
 import { MAP_GROUP_SIZES, MAX_LEVEL, MOVES_COUNT, NUM_SPECIES, SPECIES_UNOWN_GAP } from './rom-limits';
 
 // A peer that speaks a different PROTOCOL is refused at `place`, same as Kanto.
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 
 export const MAX_SEAT = 31; // roster is 32 seats (br_mailbox.h's `struct BrRoster`)
 export const MAX_NAME = 7; // the Gen 1/3 player name box width
@@ -419,6 +419,24 @@ export interface NpcOutMsg {
   fog?: true;
 }
 
+/** The host dropped an event (Cam, 2026-10-13: "start every other ring from the first
+ *  shrink. An event drops a cluster of items, rares and a legendary at a location marked
+ *  on the map"). What dropped goes out as ordinary `spill`s under the event's own keys
+ *  (match/events.ts); this says where, for the mark on every ROM's MAP, and which key is
+ *  the legendary, so the mark goes gray once somebody has it. Crosses into the ROM
+ *  (event). */
+/** BR_EVENT_MAX in include/br/br_event.h: the events a match drops (match/events.ts). */
+export const EVENT_MAX = 4;
+
+export interface EventMsg {
+  t: 'event';
+  seat: number; // the host
+  n: number; // which event, 0..EVENT_MAX-1
+  mapsec: number; // the region-map section it dropped in, a MAPSEC_* value
+  key: number; // the legendary's loot key
+  place?: string; // the section's name, for the page's line; not sent to the ROM
+}
+
 /** The host's word on where the fog is now; `place` is the section's name so every
  *  client can announce it without a lookup. `sx`/`sy` are region-map SECTION
  *  coordinates -- Hoenn's analogue of Kanto's town-map cell (DESIGN.md §6). `elapsed`
@@ -608,6 +626,7 @@ export type Msg =
   | PickupMsg
   | SpillMsg
   | NpcOutMsg
+  | EventMsg
   | RingMsg
   | ClockMsg
   | WinMsg
@@ -1097,6 +1116,19 @@ const decoders: Record<string, Decoder> = {
   npcout: (m) => {
     const out: NpcOutMsg = { t: 'npcout', seat: reqSeat(m), map: reqMapRef(m), localId: reqInt(m, 'localId', 1, 255) };
     if (m.fog === true) out.fog = true;
+    return out;
+  },
+
+  event: (m) => {
+    const out: EventMsg = {
+      t: 'event',
+      seat: reqSeat(m),
+      n: reqInt(m, 'n', 0, EVENT_MAX - 1),
+      mapsec: reqInt(m, 'mapsec', 0, 212), // under MAPSEC_NONE, which the ROM drops
+      key: reqInt(m, 'key', 0, 0xffff),
+    };
+    const place = optShortString(m, 'place');
+    if (place !== undefined) out.place = place;
     return out;
   },
 

@@ -207,6 +207,15 @@ out, and one that comes in waits as it would in a menu.
   from that map's table, and its `pickup` (keys `0x2000..0x3FFF`) takes it off every
   map. Repels are money; Keen Eye and a repel's level skip nothing. A FISHING ROD and
   SWEET SCENT still find a mon anywhere: they never went through the step check.
+- **Events** (`br_event.h`, `web/src/match/events.ts`, 2026-10-13): every other ring from
+  the first shrink (phases 2, 4, 6 and 8) the host drops one in a section inside the
+  ring, the last in the ring's own centre so the final ring closes on it. Seven pieces on
+  the nearest free cells: a legendary (Regi, then Latias/Latios, then Kyogre/Groudon,
+  then Rayquaza) and two rares at the phase's rung, three gold balls and a bag of
+  supplies, as ordinary `spill`s under keys `0xB000 | n << 4 | i`. No claim and no
+  completion: whoever gets there takes it. An `event` marks the section on every ROM's
+  MAP with an item ball, gray once the legendary is taken; the ticker says where. Not yet:
+  the placed NPCs, and the mark for somebody who joins after the drop.
 - **Rules**: one clock (`br_levels.h`: the ring phase is the level rung, no EXP), the
   catch with a full party (`br_catch.h`), the MOVES row (`br_moves.h`), gym leaders as
   one-shot bosses (`br_gym.h`), the shot clock and RUN (`br_battle.h`).

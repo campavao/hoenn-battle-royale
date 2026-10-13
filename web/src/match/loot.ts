@@ -73,6 +73,36 @@ function sameMap(a: MapRef, b: MapRef): boolean {
   return a.group === b.group && a.num === b.num;
 }
 
+/** One map's pieces as the `spill`s the ROM can be handed: one for each seat with
+ *  something down there (more when it has more than six mons or more than one bag), the
+ *  seat with the most first.
+ *
+ *  Six mons and one bag a message, as many messages as a seat needs. A seat used to get
+ *  one, its first six mons and its first bag: a winner now puts each beaten team down
+ *  under their own seat (br_loot.c's spoils), so two fights on one map, or spoils beside a
+ *  ball the winner released, is more than six -- and a table that has let pieces go to
+ *  make room (br_loot.c's Evict) gets them back only from here. */
+function spillsOf(map: MapRef, pieces: Piece[]): SpillMsg[] {
+  const bySeat = new Map<number, Piece[]>();
+  for (const piece of pieces) {
+    const list = bySeat.get(piece.seat);
+    if (list) list.push(piece);
+    else bySeat.set(piece.seat, [piece]);
+  }
+  const seats = [...bySeat].sort((a, b) => b[1].length - a[1].length);
+  return seats.flatMap(([seat, mine]) => {
+    const mons = mine.filter((p) => p.mon).map((p) => p.mon as SpillMon);
+    const bags = mine.filter((p) => p.bag).map((p) => p.bag as SpillBag);
+    const out: SpillMsg[] = [];
+    for (let i = 0; i < Math.max(Math.ceil(mons.length / 6), bags.length); i++) {
+      const msg: SpillMsg = { t: 'spill', seat, map, mons: mons.slice(i * 6, i * 6 + 6) };
+      if (bags[i]) msg.bag = bags[i];
+      out.push(msg);
+    }
+    return out;
+  });
+}
+
 export class Loot {
   /** key -> the piece standing under it. The ROM's keys are a u16 with the dropper's
    *  seat in the high byte, so they do not collide between trainers. */
@@ -133,30 +163,27 @@ export class Loot {
    *  anybody arriving after it dropped was sent the balls and never the bag. The ROM's
    *  ParseSpill ignores the seat byte and takes each spill as it comes. */
   forMap(map: MapRef): SpillMsg[] {
-    const bySeat = new Map<number, Piece[]>();
-    for (const piece of this.pieces.values()) {
-      if (!sameMap(piece.map, map)) continue;
-      const list = bySeat.get(piece.seat);
+    return spillsOf(map, [...this.pieces.values()].filter((piece) => sameMap(piece.map, map)));
+  }
+
+  /** The pieces whose keys `want` picks, wherever they lie, as `spill`s: one map's at a
+   *  time, as forMap gives them. A seat back from a blip is handed an event's this way
+   *  (match/events.ts), since it heard none of it land. */
+  matching(want: (key: number) => boolean): SpillMsg[] {
+    const byMap = new Map<string, Piece[]>();
+    for (const [key, piece] of this.pieces) {
+      if (!want(key)) continue;
+      const id = `${piece.map.group}:${piece.map.num}`;
+      const list = byMap.get(id);
       if (list) list.push(piece);
-      else bySeat.set(piece.seat, [piece]);
+      else byMap.set(id, [piece]);
     }
-    const seats = [...bySeat].sort((a, b) => b[1].length - a[1].length);
-    // Six mons and one bag a message, as many messages as a seat needs. A seat used to get
-    // one, its first six mons and its first bag: a winner now puts each beaten team down
-    // under their own seat (br_loot.c's spoils), so two fights on one map, or spoils
-    // beside a ball the winner released, is more than six -- and a table that has let
-    // pieces go to make room (br_loot.c's Evict) gets them back only from here.
-    return seats.flatMap(([seat, pieces]) => {
-      const mons = pieces.filter((p) => p.mon).map((p) => p.mon as SpillMon);
-      const bags = pieces.filter((p) => p.bag).map((p) => p.bag as SpillBag);
-      const out: SpillMsg[] = [];
-      for (let i = 0; i < Math.max(Math.ceil(mons.length / 6), bags.length); i++) {
-        const msg: SpillMsg = { t: 'spill', seat, map, mons: mons.slice(i * 6, i * 6 + 6) };
-        if (bags[i]) msg.bag = bags[i];
-        out.push(msg);
-      }
-      return out;
-    });
+    return [...byMap.values()].flatMap((pieces) => spillsOf(pieces[0].map, pieces));
+  }
+
+  /** Is this key still on the ground somewhere? */
+  has(key: number): boolean {
+    return this.pieces.has(key);
   }
 
   /** What is under this key, in the words a ticker line would use -- or null when this

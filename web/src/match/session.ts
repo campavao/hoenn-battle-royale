@@ -13,7 +13,7 @@
 import { routeToBots } from '../bots/adapt';
 import type { Bots } from '../bots/brain';
 import type { RosterEvent } from '../net/relay';
-import type { Msg, NpcOutMsg, PackedMon, SpillMsg, TickerMsg } from '../net/wire';
+import type { EventMsg, Msg, NpcOutMsg, PackedMon, SpillMsg, TickerMsg } from '../net/wire';
 import { bossAt } from './bosses';
 import { careerLine, recordMatch } from './career';
 import { DEFAULT_FOG_SECS } from './director';
@@ -149,6 +149,9 @@ export class MatchSession {
    *  ROM does not remember those, and a sweep is a hundred. */
   private beatenList: NpcOutMsg[] = [];
   private readonly beatenKeys = new Set<string>();
+  /** The match's events so far (match/events.ts), by n: the host hands them to a seat back
+   *  from a blip, with what is still lying there, so its MAP has the marks. */
+  private readonly eventList = new Map<number, EventMsg>();
 
   // The ROM only holds the loot for the map it is standing on, and forgets it on the way
   // out; the page holds the match's whole table and hands back the piece that matters
@@ -182,6 +185,10 @@ export class MatchSession {
 
   get beaten(): readonly NpcOutMsg[] {
     return this.beatenList;
+  }
+
+  get events(): readonly EventMsg[] {
+    return [...this.eventList.values()];
   }
 
   /** This page has booked that trainer's fall already: a seat caught up after a blip is
@@ -231,6 +238,7 @@ export class MatchSession {
       this.beatenList.push(msg);
       if (this.beatenList.length > BEATEN_KEPT) this.beatenList.shift();
     }
+    if (msg.t === 'event') this.eventList.set(msg.n, msg);
     if (via === 'rom') giveBag(this.lootTable, msg, (m) => this.deps.toRom(m));
     this.lootTable.note(msg); // a bot taking a ball takes it off this page's table too
     // The match, as anybody in the room can see it.
@@ -336,6 +344,7 @@ export class MatchSession {
   private forgetBeaten(): void {
     this.beatenList = [];
     this.beatenKeys.clear();
+    this.eventList.clear();
   }
 
   /** ...and the verdict, once it has: last match's champion is not this match's, and the

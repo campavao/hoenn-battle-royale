@@ -17,7 +17,7 @@ import { Mailbox } from '../net/mailbox';
 import type { RosterEvent } from '../net/relay';
 import { RomPort } from '../net/romport';
 import { BR_CONT_FLAG, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
-import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg, type StartMsg, type TickerMsg } from '../net/wire';
+import { PROTOCOL, type EventMsg, type MapRef, type Msg, type PackedMon, type SpillMsg, type StartMsg, type TickerMsg } from '../net/wire';
 import worldData from '../data/world.json';
 import regionmapData from '../data/regionmap.json';
 
@@ -434,6 +434,24 @@ describe('the page that runs the match (POK-330 #42)', () => {
     expect(room.frames().some((f) => f.m?.t === 'ring')).toBe(true);
     expect(tickers(room.frames())).toEqual([]);
     expect(room.toRom.filter((m) => m.t === 'ticker').map((m) => (m as TickerMsg).text)).toEqual(['CATCH WHAT YOU CAN! 0s']);
+    host.dispose();
+  });
+
+  it('drops an event on the first shrink: its mark and its loot to the room and our ROM, and one line', () => {
+    const room = hosting();
+    const host = room.deal();
+    host.begin();
+    vi.advanceTimersByTime(5_000); // the opening's end: the first ring
+    room.frames().length = 0;
+    room.toRom.length = 0;
+    vi.advanceTimersByTime(60_000); // the first shrink
+    const event = room.frames().find((f) => f.m?.t === 'event')!.m as EventMsg;
+    expect(event.n).toBe(0);
+    expect(room.toRom.filter((m) => m.t === 'event')).toEqual([event]);
+    const spills = room.frames().filter((f) => f.m?.t === 'spill').map((f) => f.m as SpillMsg);
+    expect(spills.length).toBeGreaterThan(0);
+    expect(spills.flatMap((s) => s.mons).map((m) => m.key)).toContain(event.key);
+    expect(tickers(room.frames())).toEqual([`A LEGENDARY AT ${event.place}!`]);
     host.dispose();
   });
 
