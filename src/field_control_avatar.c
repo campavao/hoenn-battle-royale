@@ -694,6 +694,9 @@ void RestartWildEncounterImmunitySteps(void)
 
 static bool8 CheckStandardWildEncounter(u16 metatileBehavior)
 {
+#if BR
+    return StandardWildEncounter(metatileBehavior, metatileBehavior); // no steps' grace, no 40%: a patch is a patch
+#endif
     if (sWildEncounterImmunitySteps < 4)
     {
         sWildEncounterImmunitySteps++;

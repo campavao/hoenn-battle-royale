@@ -16,6 +16,7 @@
 // at, which is "rings survived" in the sense Cam asked for -- the fog closed this many
 // times and you were still there.
 import type { Msg } from '../net/wire';
+import { isPatchKey } from './loot';
 
 export interface SeatRecord {
   /** The ring phase this seat was still alive at. 0 before the fog's first move. */
@@ -86,7 +87,8 @@ export class MatchRecord {
         // An `item` named is one stack coming out of a bag that stays on the ground
         // (POK-237, a bot raiding it), not a piece leaving -- the same distinction
         // `giveBag` makes, and the reason taking one bag is not counted six times.
-        if (msg.item === undefined) this.row(msg.seat).took++;
+        // A patch a wild battle started on is a battle, not a piece (br_patch.h).
+        if (msg.item === undefined && !isPatchKey(msg.key)) this.row(msg.seat).took++;
         return;
       case 'dresult': {
         const a = this.row(msg.seatA);

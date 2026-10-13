@@ -40,6 +40,8 @@
 //   0x0000..0x1FFF  a fallen trainer's team and bag -- `(seat << 8) | n`, the bag's n
 //                   0xFF. The page mints a bot's; our own ROM mints ours. A bag put
 //                   back with what did not fit keeps its key under the taker's spill.
+//   0x2000..0x3FFF  a patch a wild battle started on (br_patch.h): not a row, only a key,
+//                   sent so every ROM takes it off its map.
 //   0x4000..0x5FFF  a Pokemon the player RELEASED to make room (POK-294), or a TM one of
 //                   theirs forgot (BrLoot_DropItem). Minted in the ROM, because nobody
 //                   else is watching the moment it happens.
@@ -172,6 +174,8 @@ void BrLoot_Released(struct Pokemon *mon);
 void BrLoot_DropItem(u16 item);
 // The item a loot ball on this map holds, by its object's local id, or ITEM_NONE for a
 // Pokemon, a bag, or a local id that is not loot's. What colours the ball (br_balls.h).
+// A PICKUP for something that is not one of our rows (br_patch.c).
+void BrLoot_SendTaken(u16 key);
 u16 BrLoot_ItemFor(u8 localId);
 // Puts one dealt item ball on the ground (POK-261). Every ROM deals the same ones from
 // the match seed, so nothing is sent: they simply agree. The key's top bit is set, the

@@ -1,6 +1,7 @@
 #include "global.h"
 #if BR
 #include "br/br_levels.h"
+#include "br/br_patch.h"
 #include "br/br_zone.h"
 #endif
 #include "battle_setup.h"
@@ -67,9 +68,6 @@ EWRAM_DATA static u8 sWildEncountersDisabled = 0;
 EWRAM_DATA static u32 sFeebasRngValue = 0;
 
 #include "data/wild_encounters.h"
-#if BR
-#include "br/br_match.h"
-#endif
 
 static const struct WildPokemon sWildFeebas = {20, 25, SPECIES_FEEBAS};
 
@@ -527,16 +525,10 @@ static bool8 EncounterOddsCheck(u16 encounterRate)
 // Returns true if it will try to create a wild encounter.
 static bool8 WildEncounterCheck(u32 encounterRate, bool8 ignoreAbility)
 {
-    encounterRate *= 16;
 #if BR
-    // Twice as often in the opening (POK-222). The Safari is two minutes long and it
-    // is the whole of a contestant's team-building: at Emerald's own rate a player who
-    // drew a quiet corner of the Zone walks out of it with nothing, which is not a bad
-    // run, it is a bad rule. Doubled at the source rather than by a step counter, so
-    // everything downstream -- the Repel, the ability mods, the cap -- still applies.
-    if (gBrMatch.phase == BR_PHASE_SAFARI)
-        encounterRate *= 2;
+    return BrPatch_Here(); // a step meets nothing; a patch you can see does (br_patch.h)
 #endif
+    encounterRate *= 16;
     if (TestPlayerAvatarFlags(PLAYER_AVATAR_FLAG_MACH_BIKE | PLAYER_AVATAR_FLAG_ACRO_BIKE))
         encounterRate = encounterRate * 80 / 100;
     ApplyFluteEncounterRateMod(&encounterRate);
@@ -910,6 +902,9 @@ static bool8 IsWildLevelAllowedByRepel(u8 wildLevel)
 {
     u8 i;
 
+#if BR
+    return TRUE; // a patch is walked onto on purpose, and REPELs are money now (br_items.c)
+#endif
     if (!VarGet(VAR_REPEL_STEP_COUNT))
         return TRUE;
 
@@ -933,6 +928,9 @@ static bool8 IsAbilityAllowingEncounter(u8 level)
 {
     u8 ability;
 
+#if BR
+    return TRUE; // nor does a KEEN EYE lead walk past one it stepped on
+#endif
     if (GetMonData(&gPlayerParty[0], MON_DATA_SANITY_IS_EGG))
         return TRUE;
 

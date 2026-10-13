@@ -33,6 +33,7 @@
 #include "br/br_levels.h"
 #include "item.h"
 #include "br/br_balls.h"
+#include "br/br_patch.h"
 #include "br/br_items.h"
 #include "br/br_loot.h"
 #include "br/br_gym.h"
@@ -477,6 +478,7 @@ static void HandlePickup(const u8 *payload, u8 len)
         return;
     // A house's cache is gone for us too, though we are nowhere near it.
     BrBalls_NoteTaken(BrWire_ReadU16(d + 1));
+    BrPatch_NoteTaken(BrWire_ReadU16(d + 1)); // ...and a patch somebody's battle started on
     it = Find(BrWire_ReadU16(d + 1));
     if (it == NULL)
         return;
@@ -657,6 +659,22 @@ static void SendPickup(struct BrLootItem *it)
     BrBalls_NoteTaken(it->key);
     gBrLoot.taken++;
     Drop(it);
+}
+
+// Something that is not a row of ours left the ground here -- a patch of grass a battle
+// started on (br_patch.c): the same PICKUP, so every ROM and page takes it the same way.
+void BrLoot_SendTaken(u16 key)
+{
+    u8 buf[BR_PICKUP_LEN];
+
+    buf[0] = gBrMySeat;
+    BrWire_WriteU16(buf + 1, key);
+    buf[3] = 0;
+    buf[4] = 0;
+    buf[5] = 0;
+    buf[6] = 0;
+    buf[7] = 0;
+    BrWire_SendOrHold(BR_MSG_PICKUP, buf, BR_PICKUP_LEN);
 }
 
 // A ball that changed hands finishes the trade the game would have wanted. Kanto's

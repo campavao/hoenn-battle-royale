@@ -1,0 +1,39 @@
+# patch-battle: grass meets nothing until you step on a patch you can see (Cam,
+# 2026-10-13: "no step encounters anywhere (grass, caves, water). Darkened indicators
+# you can see instead").
+#
+# ROUTE 102 (map 0:17, wild header 1) under match seed 4 deals eight patches. Two are on
+# screen from the boot cell (20,9): (18,9) and (18,12), map coordinates +7 in gBrPatch.
+# A step west onto plain grass meets nothing; the next lands on (18,9), patch 1, and the
+# battle starts -- on the first steps after a map load, which used to be immune. Its key, 0x2000 | 1 << 3 | 1, goes out
+# as a PICKUP so every ROM takes it off, and after the battle it is not drawn again.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+# a slice of the map a frame (br_patch.c), then drawn
+wait 30
+expect u16 gBrPatch 0x0011
+expect u16 gBrPatch+2 1
+expect u8 gBrPatch+4 8
+expect u16 gBrPatch+18 0x19
+expect u16 gBrPatch+34 0x10
+expectne u8 gBrPatch+6 64
+shot patches
+# one step west, onto plain grass at (19,9): nothing
+tap LEFT
+wait 4
+tap LEFT
+wait 250
+expect u16 gBattleTypeFlags 0
+expect u16 gObjectEvents+0x10 26
+drain gBrMailbox
+# and one more, onto the patch
+tap LEFT
+wait 250
+expect u16 gBattleTypeFlags 4
+expectmsg 10 u16 1 0x2009
+expectmsg 10 u8 3 0
+shot wild
+say patch battle ok

@@ -56,6 +56,11 @@ const LAND = { x: 36, y: 16 };
 /** The tile CALVIN stood on, before the map's people were cleared off. */
 const CALVIN = { x: 33, y: 14 };
 const BR_PHASE_SAFARI = 1;
+// struct BrPatch (include/br/br_patch.h): count, the first x and the first y.
+const PATCH_COUNT = 4;
+const PATCH_X = 16;
+const PATCH_Y = 32;
+const MAP_OFFSET = 7;
 
 test.describe.configure({ retries: 1 });
 // A five-minute match read every quarter second makes a trace of about a gigabyte that
@@ -157,6 +162,16 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
   });
 
   await test.step('grass: pace until something jumps out', async () => {
+    // Grass meets nothing on a step now: a battle is a patch you can see (br_patch.h), and
+    // the seed deals none within reach of the cell. A player walks to one; the spec puts
+    // one a tile west, as the drivers do (play-match.txt), and the pacing steps onto it.
+    expect(sym.gBrPatch, 'gBrPatch is in the symbol table').toBeDefined();
+    await page.evaluate(([a, k]) => {
+      const emu = (window as unknown as EmuWindow).__hbr.emu;
+      emu.write(a + k.PATCH_X, 14 + k.MAP_OFFSET, 16);
+      emu.write(a + k.PATCH_Y, 14 + k.MAP_OFFSET, 16);
+      emu.write(a + k.PATCH_COUNT, 1, 8);
+    }, [sym.gBrPatch, { PATCH_X, PATCH_Y, PATCH_COUNT, MAP_OFFSET }] as const);
     let dir = 'ArrowLeft';
     for (let i = 0; i < 120; i++) {
       const r = await ram(page, sym);
