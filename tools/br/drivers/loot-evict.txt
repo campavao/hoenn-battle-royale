@@ -1,0 +1,56 @@
+# loot-evict: a full ground makes room for a new spill (2026-10-13 play-test: "I beat
+# someone and they don't drop their stuff"). The ROM's eight rows outlive the map they
+# were for, and Add() dropped anything that found them all taken -- so a fight on a new
+# map could put down nothing at all. Now a row on another map goes first (the page sends
+# that map's pieces again on arrival), then the one on this map farthest from us, as
+# long as it is farther than the new piece.
+#
+# We stand in Littleroot (0:9) at (5,8), object coords (12,15).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# Eight balls on another map (0:1), from seats 5 and 6.
+pokebytes gDecompressionBuffer 05 00 01 04 00 05 0A 00 0A 00 15 01 05 01 05 0B 00 0A 00 15 01 05 02 05 0C 00 0A 00 15 01 05 03 05 0D 00 0A 00 15 01 05 00
+mailsend gBrMailbox 11 gDecompressionBuffer 41
+pokebytes gDecompressionBuffer 06 00 01 04 00 06 0A 00 0B 00 15 01 05 01 06 0B 00 0B 00 15 01 05 02 06 0C 00 0B 00 15 01 05 03 06 0D 00 0B 00 15 01 05 00
+mailsend gBrMailbox 11 gDecompressionBuffer 41
+wait 10
+expect u8 gBrLoot+0xA0 8
+expect u8 gBrLoot+0xA1 0
+# Seat 7 goes out on OUR map, four to six steps off: each takes an off-map row.
+pokebytes gDecompressionBuffer 07 00 09 04 00 07 12 00 0F 00 15 01 05 01 07 11 00 0F 00 15 01 05 02 07 10 00 0F 00 15 01 05 03 07 0C 00 14 00 15 01 05 00
+mailsend gBrMailbox 11 gDecompressionBuffer 41
+wait 10
+expect u8 gBrLoot+0xA0 8
+expect u16 gBrLoot+0 0x0700
+expect u16 gBrLoot+60 0x0703
+# Seat 8, a step off all round: the last four off-map rows.
+pokebytes gDecompressionBuffer 08 00 09 04 00 08 0D 00 0F 00 15 01 05 01 08 0B 00 0F 00 15 01 05 02 08 0C 00 10 00 15 01 05 03 08 0C 00 0E 00 15 01 05 00
+mailsend gBrMailbox 11 gDecompressionBuffer 41
+wait 10
+expect u8 gBrLoot+0xA0 8
+expect u16 gBrLoot+80 0x0800
+expect u16 gBrLoot+140 0x0803
+# Seat 9, two steps off, with all eight rows here: the farthest (seat 7's first, six
+# steps) makes way.
+pokebytes gDecompressionBuffer 09 00 09 01 00 09 0A 00 0F 00 15 01 05 00
+mailsend gBrMailbox 11 gDecompressionBuffer 14
+wait 10
+expect u8 gBrLoot+0xA0 8
+expect u16 gBrLoot+0 0x0900
+# Seat 10, thirteen steps off: every row is nearer, so this one waits for the page.
+pokebytes gDecompressionBuffer 0A 00 09 01 00 0A 19 00 0F 00 15 01 05 00
+mailsend gBrMailbox 11 gDecompressionBuffer 14
+wait 10
+expect u8 gBrLoot+0xA0 8
+expectne u16 gBrLoot+0 0x0A00
+expectne u16 gBrLoot+20 0x0A00
+expectne u16 gBrLoot+40 0x0A00
+expectne u16 gBrLoot+60 0x0A00
+expectne u16 gBrLoot+80 0x0A00
+expectne u16 gBrLoot+100 0x0A00
+expectne u16 gBrLoot+120 0x0A00
+expectne u16 gBrLoot+140 0x0A00
+shot evict
+say loot evict ok

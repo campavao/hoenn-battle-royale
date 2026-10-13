@@ -317,6 +317,19 @@ bool8 BrRing_FogEndTurn(void)
     u8 turn = gBattleResults.battleTurnCounter;
     u8 b;
 
+    // A duel (the host's hidden instance, two bots) has no fog, but it is published, and
+    // a replay of it is a contest's replay: it reads a fog answer off every turn. Without
+    // this one, battler 0's next choice was read as the answer and the replay ran one
+    // byte out of step for the rest of the fight.
+    if (gMain.inBattle && gBrDuel.running && gBattleOutcome == 0)
+    {
+        if (sFogTurn != turn)
+        {
+            RecordedBattle_SetBattlerAction(0, FALSE);
+            sFogTurn = turn;
+        }
+        return FALSE;
+    }
     if (!ContestBattle() || gBattleOutcome != 0)
         return FALSE;
     // The slave of a link battle runs no engine; this is never reached there.

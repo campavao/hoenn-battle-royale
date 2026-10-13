@@ -483,6 +483,12 @@ static void BackOutOfMenus(void)
     gMain.newAndRepeatedKeys |= B_BUTTON;
 }
 
+// The page has said we won and the parade is waiting on the field to come free.
+bool8 BrMatch_WinPending(void)
+{
+    return sWinPending;
+}
+
 void BrMatch_Tick(void)
 {
     if (sWinPending && BrField_OverworldRunning() && !ScriptContext_IsEnabled() && !ArePlayerFieldControlsLocked())

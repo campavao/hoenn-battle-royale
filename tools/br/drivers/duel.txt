@@ -367,6 +367,11 @@ shot duel-done
 # the fight streamed its turns as it went
 expectge u16 gBrSpectate 1
 expectge u16 gBrSpectate+2 4
+# ...with the turn's fog answer in battler 0's record at the end of every one of its five
+# turns: 0x40 bytes of choices and five zeros. A replay of a duel is a contest's replay
+# and reads one a turn (br_ring.c's TurnFog); without them it took battler 0's next
+# choice for the answer and ran a byte out of step for the rest of the fight.
+expect u16 gBrSpectate+2 0x45
 # it resolved, and the ROM is back on the overworld with the result sent
 expect u8 gBrDuel+1 0
 # ...with an outcome, which is what rides home as BR_MSG_DRESULT: 2 is B_OUTCOME_LOST,

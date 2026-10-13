@@ -35,6 +35,20 @@
 #include "br/br_loot.h"
 #include "br/br_gym.h"
 #include "br/br_field.h"
+#include "br/br_match.h"
+#include "br/br_netlink.h"
+#include "br/br_duel.h"
+#include "task.h"
+#include "window.h"
+#include "menu.h"
+#include "text_window.h"
+#include "text.h"
+#include "palette.h"
+
+// The spoils box's frame: the HUD's own copy of the standard frame, in the palette
+// nothing on the field loads over -- the peek box's (br_spectate.c).
+#define BR_SPOILS_FRAME 0x214
+#define BR_SPOILS_FRAME_PALETTE 13
 
 EWRAM_DATA struct BrLoot gBrLoot = {0};
 EWRAM_DATA struct BrDespawned gBrDespawned[BR_MAX_DESPAWN] = {0};
@@ -171,6 +185,55 @@ static void Drop(struct BrLootItem *it)
     it->key = 0;
 }
 
+// A full table made room for nothing (2026-10-13 play-test: "I beat someone and they
+// don't drop their stuff"). The eight rows outlive the map they were for -- a ball left
+// behind on the last route keeps its row until somebody walks back -- so a fight on a
+// new map could find every row taken by pieces nobody here can see, and its spill was
+// thrown away. A row on another map goes first: the page holds the whole match's ground
+// and hands that map's pieces back when we arrive on it (match/loot.ts). Then, on this
+// map, the piece farthest from the view, as long as it is farther than the new one --
+// what lands by you is what you came for.
+//
+// Never the DAY CARE chest or a Zone ball: every ROM deals those from the seed, once, and
+// nothing ever sends them again, so a row of theirs let go is gone for good.
+static bool8 Resent(u16 key)
+{
+    return key != BR_LOOT_KEY_CHEST && (key & 0xFF00) != BR_LOOT_KEY_ZONE_ITEM(0);
+}
+
+static struct BrLootItem *Evict(u8 mapGroup, u8 mapNum, s16 x, s16 y)
+{
+    struct BrLootItem *far = NULL;
+    u16 d, farD;
+    u8 i;
+
+    for (i = 0; i < BR_MAX_LOOT; i++)
+    {
+        if (!OnCurrentMap(&gBrLoot.items[i]) && Resent(gBrLoot.items[i].key))
+        {
+            Drop(&gBrLoot.items[i]);
+            return &gBrLoot.items[i];
+        }
+    }
+    if (mapGroup != gSaveBlock1Ptr->location.mapGroup || mapNum != gSaveBlock1Ptr->location.mapNum)
+        return NULL; // a piece for somewhere else never moves one we can see
+    farD = BrField_ViewDistance(x, y);
+    for (i = 0; i < BR_MAX_LOOT; i++)
+    {
+        if (!Resent(gBrLoot.items[i].key))
+            continue;
+        d = BrField_ViewDistance(gBrLoot.items[i].x, gBrLoot.items[i].y);
+        if (d > farD)
+        {
+            farD = d;
+            far = &gBrLoot.items[i];
+        }
+    }
+    if (far != NULL)
+        Drop(far);
+    return far;
+}
+
 static void Add(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u8 level, u8 kind,
                 u32 money)
 {
@@ -179,7 +242,9 @@ static void Add(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u8 l
     if (it == NULL)
         it = FreeSlot();
     if (it == NULL)
-        return; // the ground is full; the page will resend on the next map load
+        it = Evict(mapGroup, mapNum, x, y);
+    if (it == NULL)
+        return; // eight nearer pieces here already; the page resends on the next map load
     Despawn(it);
     it->key = key;
     it->mapGroup = mapGroup;
@@ -414,10 +479,11 @@ struct BrLootItem *BrLoot_At(s16 x, s16 y)
 // skipping a cell whose collision bit is set and one this spill has already used.
 // Only the collision bit, as the eyeline (br_engage.c): water and ledges are open
 // ground, so a trainer who goes out at sea still leaves their team behind, and the
-// page's match/loot.ts deals a bot's spill by the same rule (POK-330 #67). Loot an
-// earlier spill left is not looked at; a new piece can land on top of it. Kanto
-// scatters within two tiles; this walks out in the same order every time, which is
-// what keeps a spill deterministic for everyone reading the message.
+// page's match/loot.ts deals a bot's spill by the same rule (POK-330 #67). A cell that
+// already has a piece on it is skipped too: BrLoot_At answers with the first row on a
+// cell, so a ball dropped on another was a ball nobody could see or take until the one
+// on top was gone. Kanto scatters within two tiles. The cells go out in the message,
+// so nobody reading it has to walk the ring again.
 static const s8 sSpillDx[] = { 0, 1, -1, 0,  0, 1, -1,  1, -1, 2, -2,  0,  0 };
 static const s8 sSpillDy[] = { 0, 0,  0, 1, -1, 1,  1, -1, -1, 0,  0,  2, -2 };
 #define BR_SPILL_CELLS (sizeof(sSpillDx) / sizeof(sSpillDx[0]))
@@ -426,7 +492,7 @@ static bool8 CellFree(s16 x, s16 y, const s16 *usedX, const s16 *usedY, u8 used)
 {
     u8 i;
 
-    if (MapGridGetCollisionAt(x, y) != 0)
+    if (MapGridGetCollisionAt(x, y) != 0 || BrLoot_At(x, y) != NULL)
         return FALSE;
     for (i = 0; i < used; i++)
     {
@@ -456,6 +522,14 @@ static bool8 NextCell(s16 ox, s16 oy, u8 *cell, const s16 *usedX, const s16 *use
     return FALSE;
 }
 
+// BrLoot_TeamTaken's flag: the next SpillOwn leaves the team out.
+static EWRAM_DATA bool8 sTeamTaken = FALSE;
+
+void BrLoot_TeamTaken(bool8 taken)
+{
+    sTeamTaken = taken;
+}
+
 // [seat, map, count, count*(key, x, y, species, level), hasBag, bagKey, bagX, bagY,
 // itemCount, money, nameLen, name] -- br_wire.h's BR_MSG_SPILL. The bag goes out with
 // the money and the name on it; its item list is the pickup ticket's business.
@@ -473,7 +547,9 @@ void BrLoot_SpillOwn(void)
     buf[len++] = gSaveBlock1Ptr->location.mapGroup;
     buf[len++] = gSaveBlock1Ptr->location.mapNum;
     len++; // count, filled in below
-    for (i = 0; i < PARTY_SIZE; i++)
+    // Beaten in a link fight, the team is the winner's to put down (BrLoot_WonFrom):
+    // only the bag is ours to drop.
+    for (i = 0; i < PARTY_SIZE && !sTeamTaken; i++)
     {
         s16 x, y;
 
@@ -1054,6 +1130,224 @@ void BrLoot_Released(struct Pokemon *mon)
     ParseSpill(buf, len);
 }
 
+// ---- the spoils -----------------------------------------------------------------
+//
+// 2026-10-13 play-test: "still often that I beat someone and they don't drop their stuff.
+// Maybe it's dropping somewhere else? Ideally you should get a menu to select what you
+// want to take and the rest drops around you." The loser's ROM dropped its team where IT
+// stood, and its idea of where that was, and the winner's, and the host's for a bot, were
+// three different things; a full table on the winner's side dropped the spill outright.
+//
+// So the winner drops the team, from the party the fight just showed it, on the cells
+// round its own feet, and asks which one to take. B leaves them all lying there for
+// anybody. The loser's ROM drops only its bag (BrLoot_TeamTaken), and so does the host
+// page for a bot a ROM beat (bots/brain.ts). The keys are the loser's own,
+// BR_LOOT_KEY_OWN(loser, i) -- the ones its ROM or its host would have minted -- so a
+// stray second spill of the same team lands on these rows rather than beside them.
+#define BR_SPOILS_NONE 0
+#define BR_SPOILS_DROP 1 // won: the team still to put down
+#define BR_SPOILS_ASK 2  // down: the menu still to open
+// Long enough to read six names; short enough that a menu nobody answers is not a place
+// to stand still in a shrinking ring.
+#define BR_SPOILS_FRAMES (15 * 60)
+
+static EWRAM_DATA u8 sSpoilsState = BR_SPOILS_NONE;
+static EWRAM_DATA u8 sSpoilsSeat = 0;
+static EWRAM_DATA u8 sSpoilsCount = 0;
+static EWRAM_DATA u8 sSpoilsLevel[PARTY_SIZE] = {0};
+static EWRAM_DATA u16 sSpoilsSpecies[PARTY_SIZE] = {0};
+
+void BrLoot_WonFrom(u8 seat)
+{
+    u16 species;
+    u8 i;
+
+    sSpoilsState = BR_SPOILS_NONE;
+    sSpoilsCount = 0;
+    // The proxy instance fights two bots for the host; their spoils are the host's.
+    if (BrDuel_IsProxy() || seat >= BR_MAX_SEATS)
+        return;
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        species = GetMonData(&gEnemyParty[i], MON_DATA_SPECIES, NULL);
+        if (species == SPECIES_NONE || species >= NUM_SPECIES)
+            break;
+        sSpoilsSpecies[i] = species;
+        sSpoilsLevel[i] = GetMonData(&gEnemyParty[i], MON_DATA_LEVEL, NULL);
+    }
+    sSpoilsCount = i;
+    sSpoilsSeat = seat;
+    if (i != 0)
+        sSpoilsState = BR_SPOILS_DROP;
+}
+
+// Round our own feet, one cell out (BrLoot_Released's reason: a ball under us is taken
+// by an A that was meant for something else), and never on the loser's own cell, where
+// their bag is about to land.
+static void DropSpoils(void)
+{
+    u8 buf[4 + PARTY_SIZE * 9 + 1];
+    s16 usedX[BR_SPILL_CELLS], usedY[BR_SPILL_CELLS];
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    const struct BrSeat *loser = &gBrSeats[sSpoilsSeat];
+    u16 len = 0;
+    u8 count = 0, used = 0, cell = 1, i;
+    s16 x, y;
+
+    if (loser->mapGroup == gSaveBlock1Ptr->location.mapGroup
+     && loser->mapNum == gSaveBlock1Ptr->location.mapNum)
+    {
+        usedX[0] = loser->x;
+        usedY[0] = loser->y;
+        used = 1;
+    }
+    buf[len++] = gBrMySeat; // who is saying so: the relay only takes a spill as our own
+    buf[len++] = gSaveBlock1Ptr->location.mapGroup;
+    buf[len++] = gSaveBlock1Ptr->location.mapNum;
+    len++; // count, below
+    for (i = 0; i < sSpoilsCount; i++)
+    {
+        if (!NextCell(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, used, &x, &y))
+            break; // boxed in: the rest stay in their balls, as a spill of our own would
+        usedX[used] = x;
+        usedY[used] = y;
+        used++;
+        BrWire_WriteU16(buf + len, BR_LOOT_KEY_OWN(sSpoilsSeat, i));
+        BrWire_WriteU16(buf + len + 2, (u16)x);
+        BrWire_WriteU16(buf + len + 4, (u16)y);
+        BrWire_WriteU16(buf + len + 6, sSpoilsSpecies[i]);
+        buf[len + 8] = sSpoilsLevel[i];
+        len += 9;
+        count++;
+    }
+    buf[3] = count;
+    buf[len++] = 0; // no bag: that is the loser's to drop
+    if (!BrWire_SendLarge(BR_MSG_SPILL, buf, len))
+        return; // the ring is full: the next frame tries again
+    ParseSpill(buf, len);
+    sSpoilsCount = count;
+    sSpoilsState = count != 0 ? BR_SPOILS_ASK : BR_SPOILS_NONE;
+}
+
+#define tWin data[0]
+#define tTimer data[1]
+#define tKey(i) data[2 + (i)]
+
+static const u8 sText_TakeOne[] = _("TAKE ONE");
+
+static void CloseSpoils(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    if (BrField_OverworldRunning())
+        ClearStdWindowAndFrameToTransparent(tWin, TRUE);
+    RemoveWindow(tWin);
+    DestroyTask(taskId);
+    // A script or a warp that started under the box took the same lock, and lets go of
+    // it itself when it is done: letting go here would free the trainer in the middle.
+    if (!ScriptContext_IsEnabled() && !BrField_Leaving())
+        UnlockPlayerFieldControls();
+}
+
+static void Task_Spoils(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+    struct BrLootItem *it;
+    s8 pick;
+    u16 key;
+
+    // A challenge is not something a menu holds off (POK-230), nor is the parade, the
+    // ring does not wait, and the field going away takes the window with it.
+    if (!BrField_OverworldRunning() || gBrMatch.phase != BR_PHASE_PLAY || BrMatch_WinPending()
+     || gBrNetlink.pendingPeer != 0xFF || ScriptContext_IsEnabled() || BrField_Leaving()
+     || ++tTimer > BR_SPOILS_FRAMES)
+    {
+        CloseSpoils(taskId);
+        return;
+    }
+    pick = Menu_ProcessInputNoWrap();
+    if (pick == MENU_NOTHING_CHOSEN)
+        return;
+    key = pick == MENU_B_PRESSED ? BR_HELD_NONE : (u16)tKey(pick);
+    CloseSpoils(taskId);
+    if (key == BR_HELD_NONE)
+        return;
+    // Somebody else's A, or a full table on our side, can have got there first.
+    it = Find(key);
+    // ...and a full out ring leaves Take() nothing to do: it says so, where a press on
+    // the field would simply be pressed again.
+    if (it == NULL || !BrWire_CanHold(BR_PICKUP_LEN))
+    {
+        PlaySE(SE_FAILURE);
+        return;
+    }
+    Take(it); // the press, with everything it asks: a full party's release included
+}
+
+// Whatever of ours is still on the ground, in party order, in a box on the left: a name
+// a line, the way the field's own multichoice lists them. No levels: the rung is the same
+// for everybody, and the box stays narrow enough to clear the HUD's corner.
+static void AskSpoils(void)
+{
+    struct WindowTemplate t = { 0, 1, 2, 11, 2, 15, 0x008 };
+    struct BrLootItem *it;
+    s16 *data;
+    u8 taskId, n = 0, i;
+    u16 keys[PARTY_SIZE];
+
+    if (!BrField_OverworldRunning() || ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked()
+     || BrField_Leaving() || gBrNetlink.pendingPeer != 0xFF)
+        return; // not yet: a fade, a script, a challenge on the way
+    sSpoilsState = BR_SPOILS_NONE;
+    if (gBrMatch.phase != BR_PHASE_PLAY || BrMatch_WinPending())
+        return; // they lie there; we are out, or that was the last fight
+    for (i = 0; i < sSpoilsCount; i++)
+    {
+        it = Find(BR_LOOT_KEY_OWN(sSpoilsSeat, i));
+        if (it != NULL && it->kind == BR_LOOT_MON)
+            keys[n++] = it->key;
+    }
+    if (n == 0)
+        return;
+    t.height = 2 + 2 * n;
+    taskId = CreateTask(Task_Spoils, 80);
+    data = gTasks[taskId].data;
+    tWin = AddWindow(&t);
+    if (tWin == WINDOW_NONE)
+    {
+        DestroyTask(taskId);
+        return;
+    }
+    tTimer = 0;
+    LockPlayerFieldControls();
+    LoadUserWindowBorderGfxOnBg(0, BR_SPOILS_FRAME, BG_PLTT_ID(BR_SPOILS_FRAME_PALETTE));
+    DrawStdFrameWithCustomTileAndPalette(tWin, FALSE, BR_SPOILS_FRAME, BR_SPOILS_FRAME_PALETTE);
+    FillWindowPixelBuffer(tWin, PIXEL_FILL(TEXT_COLOR_WHITE));
+    AddTextPrinterParameterized(tWin, FONT_NORMAL, sText_TakeOne, 0, 1, TEXT_SKIP_DRAW, NULL);
+    for (i = 0; i < n; i++)
+    {
+        tKey(i) = (s16)keys[i];
+        AddTextPrinterParameterized(tWin, FONT_NORMAL, gSpeciesNames[Find(keys[i])->species], 8,
+                                    17 + 16 * i, TEXT_SKIP_DRAW, NULL);
+    }
+    InitMenuNormal(tWin, FONT_NORMAL, 0, 17, 16, n, 0);
+    CopyWindowToVram(tWin, COPYWIN_FULL);
+}
+
+#undef tWin
+#undef tTimer
+#undef tKey
+
+static void TickSpoils(void)
+{
+    if (sSpoilsState == BR_SPOILS_NONE || !BrField_OverworldRunning())
+        return;
+    if (sSpoilsState == BR_SPOILS_DROP)
+        DropSpoils();
+    else
+        AskSpoils();
+}
+
 void BrLoot_Init(void)
 {
     u8 i;
@@ -1067,6 +1361,8 @@ void BrLoot_Init(void)
     BrGym_Init();
     sGivenBag.kind = BR_LOOT_NONE;
     sGiveBackLen = 0;
+    sSpoilsState = BR_SPOILS_NONE;
+    sTeamTaken = FALSE;
     sSpillAsm.buf = sSpillBuf;
     sSpillAsm.cap = sizeof(sSpillBuf);
     sSpillAsm.type = 0;
@@ -1119,6 +1415,7 @@ void BrLoot_Tick(void)
     gBrLoot.count = count;
     gBrLoot.spawned = spawned;
     DespawnForThisMap();
+    TickSpoils();
     HoldLineForReach();
     TryTake();
 }

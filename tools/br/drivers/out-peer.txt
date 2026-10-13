@@ -39,6 +39,10 @@ expect u8 gWirelessCommType 0
 expect u8 gBrNetlink+11 1
 expect u8 gBrNetlink+20 0
 expect u8 gBrMatch 2
+# Won by default, and nothing put down: seat 1 went out somewhere else and spilled
+# there (br_loot.c's spoils are for a fight the engine decided).
+wait 120
+expect u8 gBrLoot+0xA0 0
 shot back
 # On our own feet: a step is taken, which is the overworld's callback1 and its input.
 expect u16 gBrOwnPos+4 16

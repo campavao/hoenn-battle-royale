@@ -31,6 +31,7 @@
 #include "br/br_bot.h"
 #include "br/br_ring.h"
 #include "br/br_field.h"
+#include "br/br_loot.h"
 
 EWRAM_DATA struct BrBotFight gBrBotFight = {0};
 // A staged party is six rows, a header and the bag's tail -- 619 bytes, which EWRAM at
@@ -356,9 +357,15 @@ static void CB2_BrReturnFromBotFight(void)
     SendSpent();
     BrEngage_OnBattleEnd(gBrBotFight.seat, gBattleOutcome);
     BrMatch_SendResult(gBrMySeat, gBattleOutcome);
-    // The bot lost: the room is told so its team hits the ground (the host spills it).
+    // The bot lost: the room is told, its team goes down round us for us to choose from
+    // (br_loot.c's spoils), and the host spills only its bag (bots/brain.ts).
     if (gBattleOutcome == B_OUTCOME_WON)
         BrMatch_SendResult(gBrBotFight.seat, B_OUTCOME_LOST);
+    // A draw is the bot's end too (its party report is all fainted, and the host drops
+    // only its bag), so its team goes down here either way; out ourselves, we are not
+    // asked to choose.
+    if (gBattleOutcome == B_OUTCOME_WON || gBattleOutcome == B_OUTCOME_DREW)
+        BrLoot_WonFrom(gBrBotFight.seat);
     if (gBattleOutcome == B_OUTCOME_LOST || gBattleOutcome == B_OUTCOME_DREW)
         BrMatch_WhiteOut();
     gFieldCallback = NULL;
