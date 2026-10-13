@@ -79,6 +79,7 @@ void BrFrame(void)
     BrField_RemoveHeld();
     BrBoot_Tick();
     BrGhosts_Tick();
+    BrEvent_Tick(); // a trader we face takes the A before a ball we stand on
     BrLoot_Tick();
     BrPatch_Tick();
     BrBot_Tick();

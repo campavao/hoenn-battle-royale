@@ -769,14 +769,23 @@ function decodeNpcOut(bytes: Uint8Array): NpcOutMsg {
   return { t: 'npcout', seat: r.u8(), map: { group: r.u8(), num: r.u8() }, localId: r.u8() };
 }
 
-// EVENT: where an event dropped, for the mark on the MAP (br_event.c). The name is the
-// page's; the ROM has the section's own.
+// EVENT: where an event dropped, for the mark on the MAP (br_event.c), then its trader --
+// map, cell and species, a species of 0 for none. The name is the page's; the ROM has the
+// section's own.
 function encodeEvent(m: EventMsg): Uint8Array {
-  return new Writer().u8(m.seat).u8(m.n).u8(m.mapsec).u16(m.key).toBytes();
+  const w = new Writer().u8(m.seat).u8(m.n).u8(m.mapsec).u16(m.key);
+  const t = m.trader;
+  return w.u8(t?.map.group ?? 0).u8(t?.map.num ?? 0).s16(t?.x ?? 0).s16(t?.y ?? 0).u16(t?.species ?? 0).toBytes();
 }
 function decodeEvent(bytes: Uint8Array): EventMsg {
   const r = new Reader(bytes);
-  return { t: 'event', seat: r.u8(), n: r.u8(), mapsec: r.u8(), key: r.u16() };
+  const out: EventMsg = { t: 'event', seat: r.u8(), n: r.u8(), mapsec: r.u8(), key: r.u16() };
+  const map = { group: r.u8(), num: r.u8() };
+  const x = r.s16();
+  const y = r.s16();
+  const species = r.u16();
+  if (species !== 0) out.trader = { map, x, y, species };
+  return out;
 }
 
 function encodeResult(m: ResultMsg): Uint8Array {

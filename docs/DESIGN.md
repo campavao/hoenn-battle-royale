@@ -214,8 +214,11 @@ out, and one that comes in waits as it would in a menu.
   then Rayquaza) and two rares at the phase's rung, three gold balls and a bag of
   supplies, as ordinary `spill`s under keys `0xB000 | n << 4 | i`. No claim and no
   completion: whoever gets there takes it. An `event` marks the section on every ROM's
-  MAP with an item ball, gray once the legendary is taken; the ticker says where. Not yet:
-  the placed NPCs, and the mark for somebody who joins after the drop.
+  MAP with an item ball, gray once the legendary is taken; the ticker says where, and a
+  late joiner gets the marks with the rest of the catch-up. The placed NPC is a trader on
+  the cell past the pieces: A on him, pick any one of yours, and he swaps it for a rare
+  the event did not drop, at your rung. Once a match each; he keeps what he is given.
+  Nothing the match puts down is solid, him included.
 - **Rules**: one clock (`br_levels.h`: the ring phase is the level rung, no EXP), the
   catch with a full party (`br_catch.h`), the MOVES row (`br_moves.h`), gym leaders as
   one-shot bosses (`br_gym.h`), the shot clock and RUN (`br_battle.h`).

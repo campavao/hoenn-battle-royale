@@ -46,6 +46,7 @@ describe('slots round trip (single slot)', () => {
     { t: 'give', items: [] },
     { t: 'npcout', seat: 2, map: { group: 0, num: 16 }, localId: 7 },
     { t: 'event', seat: 0, n: 3, mapsec: 31, key: 0xb030 },
+    { t: 'event', seat: 0, n: 1, mapsec: 11, key: 0xb010, trader: { map: { group: 0, num: 16 }, x: 19, y: 27, species: 131 } },
     { t: 'turn', battle: 0x0301, data: [0, 2, 1, 0, 1, 1, 0] },
     { t: 'follow', seat: 7 },
     { t: 'peek', seat: 2, target: 5 },

@@ -1,28 +1,87 @@
 // Events on the MAP. See include/br/br_event.h.
 #include "global.h"
+#include "data.h"
+#include "event_data.h"
 #include "event_object_movement.h"
+#include "field_player_avatar.h"
+#include "fieldmap.h"
+#include "main.h"
+#include "overworld.h"
+#include "pokemon.h"
 #include "region_map.h"
+#include "script.h"
+#include "sound.h"
 #include "sprite.h"
+#include "string_util.h"
+#include "constants/event_object_movement.h"
 #include "constants/event_objects.h"
 #include "constants/region_map_sections.h"
+#include "constants/songs.h"
+#include "constants/species.h"
 #include "br/br_event.h"
+#include "br/br_field.h"
+#include "br/br_ghosts.h"
 #include "br/br_gym.h"
+#include "br/br_hud.h"
+#include "br/br_levels.h"
+#include "br/br_loot.h"
 #include "br/br_mailbox.h"
+#include "br/br_spectate.h"
 #include "br/br_match.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
 
 EWRAM_DATA struct BrEvents gBrEvents = {0};
 
+extern const u8 BR_EventScript_Trader[];
+
+// A trader is a person the match put down, so he is in the run nothing walks into
+// (br_ghosts.c): he stands on a cell the director dealt, which can be the one way down a
+// corridor, and a trainer must never find the way shut by him.
+STATIC_ASSERT(BR_EVENT_LOCAL_ID_BASE + BR_EVENT_MAX == BR_LOOT_LOCAL_ID_BASE, BrTradersLootAndGhostsAreOneRun)
 STATIC_ASSERT(BR_EVENT_MAX <= 8, BrEventBitsFitAByte)
 STATIC_ASSERT(((BR_EVENT_MAX - 1) << 4 | 15) < 0x100, BrEventKeysStayUnder0xB100)
+
+// EVENT: seat, n, section, the legendary's key, then the trader -- map group and number,
+// x, y and his species, 0 for none.
+#define BR_EVENT_LEN 5
+#define BR_EVENT_TRADER_LEN 13
+
+static const u8 sText_Traded[] = _("TRADED FOR ");
+static const u8 sText_Bang[] = _("!");
+static const u8 sText_TradedAlready[] = _("WE ALREADY TRADED");
+
+static void Despawn(u8 i)
+{
+    struct ObjectEvent *obj;
+
+    if (gBrEvents.objId[i] == BR_NO_OBJ)
+        return;
+    obj = &gObjectEvents[gBrEvents.objId[i]];
+    if (obj->active && obj->localId == BR_EVENT_LOCAL_ID_BASE + i)
+        BrField_RemoveObject(obj->localId, obj->mapNum, obj->mapGroup);
+    gBrEvents.objId[i] = BR_NO_OBJ;
+}
+
+static void Clear(void)
+{
+    u8 i;
+
+    CpuFill32(0, &gBrEvents, sizeof(gBrEvents));
+    for (i = 0; i < BR_EVENT_MAX; i++)
+        gBrEvents.objId[i] = BR_NO_OBJ;
+}
 
 // Another match's marks are not this one's: the seed START put in says which match it is.
 static void Forget(void)
 {
+    u8 i;
+
     if (gBrEvents.seed == gBrMatch.seed)
         return;
-    CpuFill32(0, &gBrEvents, sizeof(gBrEvents));
+    for (i = 0; i < BR_EVENT_MAX; i++)
+        Despawn(i);
+    Clear();
     gBrEvents.seed = gBrMatch.seed;
 }
 
@@ -30,15 +89,27 @@ static void HandleEvent(const u8 *payload, u8 len)
 {
     const u8 *d;
     u8 n = BrWire_Unframe(payload, len, &d);
+    struct BrEventTrader *t;
     u8 i;
 
-    if (n < 5 || d[1] >= BR_EVENT_MAX || d[2] >= MAPSEC_NONE)
+    if (n < BR_EVENT_LEN || d[1] >= BR_EVENT_MAX || d[2] >= MAPSEC_NONE)
         return;
     Forget();
     i = d[1];
     gBrEvents.mapsec[i] = d[2];
     gBrEvents.key[i] = BrWire_ReadU16(d + 3);
     gBrEvents.live |= 1 << i;
+    if (n < BR_EVENT_TRADER_LEN)
+        return;
+    Despawn(i); // the same EVENT again, a catch-up, may move him
+    t = &gBrEvents.trader[i];
+    t->mapGroup = d[5];
+    t->mapNum = d[6];
+    t->x = (s16)BrWire_ReadU16(d + 7);
+    t->y = (s16)BrWire_ReadU16(d + 9);
+    t->species = BrWire_ReadU16(d + 11);
+    if (t->species >= NUM_SPECIES)
+        t->species = SPECIES_NONE;
 }
 
 void BrEvent_NoteTaken(u16 key)
@@ -83,8 +154,146 @@ void BrEvent_DrawOnMap(s16 left, s16 top)
     }
 }
 
+// ---- the traders ---------------------------------------------------------------------
+
+static bool8 TraderHere(u8 i)
+{
+    const struct BrEventTrader *t = &gBrEvents.trader[i];
+
+    return gBrEvents.seed == gBrMatch.seed && (gBrEvents.live & (1 << i)) && t->species != SPECIES_NONE
+        && t->mapGroup == gSaveBlock1Ptr->location.mapGroup && t->mapNum == gSaveBlock1Ptr->location.mapNum;
+}
+
+static bool8 InView(u8 i)
+{
+    return TraderHere(i) && BrField_InObjectView(gBrEvents.trader[i].x, gBrEvents.trader[i].y);
+}
+
+u8 BrEvent_Wanted(void)
+{
+    u8 i, n = 0;
+
+    for (i = 0; i < BR_EVENT_MAX; i++)
+        if (InView(i))
+            n++;
+    return n;
+}
+
+// Still ours? A map load wipes the object table under us, and the local id is the proof,
+// the rule the loot and the ghosts live by.
+static struct ObjectEvent *TraderObject(u8 i)
+{
+    struct ObjectEvent *obj;
+
+    if (gBrEvents.objId[i] == BR_NO_OBJ)
+        return NULL;
+    obj = &gObjectEvents[gBrEvents.objId[i]];
+    if (!obj->active || obj->localId != BR_EVENT_LOCAL_ID_BASE + i)
+    {
+        gBrEvents.objId[i] = BR_NO_OBJ;
+        return NULL;
+    }
+    return obj;
+}
+
+static void Spawn(u8 i)
+{
+    const struct BrEventTrader *t = &gBrEvents.trader[i];
+    u8 id = SpawnSpecialObjectEventParameterized(OBJ_EVENT_GFX_GENTLEMAN, MOVEMENT_TYPE_FACE_DOWN,
+                                                 BR_EVENT_LOCAL_ID_BASE + i, t->x, t->y,
+                                                 MapGridGetElevationAt(t->x, t->y));
+
+    if (id < OBJECT_EVENTS_COUNT)
+        gBrEvents.objId[i] = id;
+}
+
+// The trader we face, or BR_EVENT_MAX.
+static u8 TraderFaced(void)
+{
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    s16 x = self->currentCoords.x + (s16)gDirectionToVectors[self->facingDirection].x;
+    s16 y = self->currentCoords.y + (s16)gDirectionToVectors[self->facingDirection].y;
+    u8 i;
+
+    for (i = 0; i < BR_EVENT_MAX; i++)
+    {
+        if (TraderObject(i) != NULL && gBrEvents.trader[i].x == x && gBrEvents.trader[i].y == y)
+            return i;
+    }
+    return BR_EVENT_MAX;
+}
+
+// A on him, the way a ball's A is the loot's (br_loot.c TryTake): he has no template, so
+// no script the field could find, and the press is his alone.
+static void TryTalk(void)
+{
+    struct ObjectEvent *self;
+    u8 i;
+
+    if (!JOY_NEW(A_BUTTON) || ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked())
+        return;
+    i = TraderFaced();
+    if (i == BR_EVENT_MAX)
+        return;
+    gMain.newKeys &= ~A_BUTTON;
+    gMain.newAndRepeatedKeys &= ~A_BUTTON;
+    if (gBrEvents.traded & (1 << i))
+    {
+        BrHud_Box(sText_TradedAlready);
+        return;
+    }
+    self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    ObjectEventTurn(&gObjectEvents[gBrEvents.objId[i]], GetOppositeDirection(self->facingDirection));
+    StringCopy(gStringVar1, gSpeciesNames[gBrEvents.trader[i].species]);
+    gBrEvents.trading = i;
+    ScriptContext_SetupScript(BR_EventScript_Trader);
+}
+
+void BrEvent_Trade(void)
+{
+    u8 line[BR_HUD_LINE_MAX + 2];
+    const u8 *last = line + ARRAY_COUNT(line) - 1;
+    struct Pokemon mon;
+    u16 slot = gSpecialVar_0x8004;
+    u16 species;
+    u8 i = gBrEvents.trading;
+    u8 *p;
+
+    if (slot >= PARTY_SIZE || i >= BR_EVENT_MAX || !TraderHere(i) || (gBrEvents.traded & (1 << i))
+        || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
+        return;
+    CreateMon(&mon, gBrEvents.trader[i].species, BrLevels_WildLevel(), USE_RANDOM_IVS, FALSE, 0,
+              OT_ID_PLAYER_ID, 0);
+    BrLevels_Settle(&mon);
+    gPlayerParty[slot] = mon;
+    gBrEvents.traded |= 1 << i;
+    species = GetMonData(&mon, MON_DATA_SPECIES, NULL);
+    p = BrHud_Append(line, last, sText_Traded);
+    p = BrHud_Append(p, last, gSpeciesNames[species]);
+    BrHud_Append(p, last, sText_Bang);
+    PlaySE(SE_PIN);
+    BrHud_Box(line);
+    BrSpectate_SendParty();
+}
+
+void BrEvent_Tick(void)
+{
+    u8 i;
+
+    if (!BrField_OverworldRunning())
+        return;
+    for (i = 0; i < BR_EVENT_MAX; i++)
+    {
+        if (!InView(i))
+            Despawn(i);
+        else if (TraderObject(i) == NULL)
+            Spawn(i);
+    }
+    TryTalk();
+}
+
 void BrEvent_Init(void)
 {
-    CpuFill32(0, &gBrEvents, sizeof(gBrEvents));
+    Clear();
     BrNet_On(BR_MSG_EVENT, HandleEvent);
 }

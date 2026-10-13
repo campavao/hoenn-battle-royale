@@ -11,11 +11,12 @@
 // The one new message is `event`: where it is, for the mark on everybody's MAP
 // (src/br/br_event.c).
 //
-// Not here yet: the placed NPCs. They are a follow-up, and so is the mark for somebody
-// who joins after an event has dropped.
+// The placed NPC is a trader, on the `event` too, so every ROM stands him on the same
+// cell: any one of yours for his rare at your rung, once a match each (br_event.c). He
+// offers a rare the event did not drop.
 import { rungForPhase } from '../bots/party';
 import { MAP_OFFSET } from '../net/cells';
-import { EVENT_MAX, type EventMsg, type MapRef, type Msg, type SpillBag, type SpillMon, type SpillMsg } from '../net/wire';
+import { EVENT_MAX, type EventMsg, type EventTrader, type MapRef, type Msg, type SpillBag, type SpillMon, type SpillMsg } from '../net/wire';
 import { pickIndex } from './clock';
 
 /** BR_EVENT_KEY_BASE in include/br/br_event.h: `0xB000 | n << 4 | i`, past every
@@ -98,6 +99,8 @@ export const SUPPLIES: readonly { id: number; n: number }[] = [
 /** The legendary, the rares, the gold balls and the bag: seven, under the eight the ROM
  *  keeps on a map, so one fallen trainer's bag can still lie beside them. */
 export const EVENT_PIECES = 1 + EVENT_RARES + EVENT_GOLD + 1;
+/** The pieces and the trader: the cells an event wants. */
+export const EVENT_CELLS = EVENT_PIECES + 1;
 
 /** Some of `pool`, `n` of them, none twice. */
 function draw<T>(rng: () => number, pool: readonly T[], n: number): T[] {
@@ -117,7 +120,8 @@ export interface EventDrop {
   place?: string;
   map: MapRef;
   /** Where the pieces lie, best first, in the page's space (landing.json's): the first is
-   *  the legendary's. Fewer than EVENT_PIECES drops fewer, the supplies first to go. */
+   *  the legendary's, and the one past the pieces (EVENT_CELLS) the trader's. Fewer drops
+   *  fewer, the trader first to go and then the supplies. */
   cells: { x: number; y: number }[];
 }
 
@@ -128,7 +132,8 @@ export interface EventDrop {
 export function eventDrop(rng: () => number, e: EventDrop): Msg[] {
   const level = rungForPhase(e.phase);
   const legends = LEGENDS[Math.min(e.n, LEGENDS.length - 1)];
-  const species = [legends[pickIndex(rng, legends.length)], ...draw(rng, RARES, EVENT_RARES)];
+  const rares = draw(rng, RARES, EVENT_RARES);
+  const species = [legends[pickIndex(rng, legends.length)], ...rares];
   const bags: { items: { id: number; n: number }[] }[] = [
     ...draw(rng, GOLD, EVENT_GOLD).map((id) => ({ items: [{ id, n: 1 }] })),
     { items: SUPPLIES.map((s) => ({ ...s })) },
@@ -145,6 +150,11 @@ export function eventDrop(rng: () => number, e: EventDrop): Msg[] {
   const out: Msg[] = [];
   const event: EventMsg = { t: 'event', seat: e.seat, n: e.n, mapsec: e.mapsec, key: eventKey(e.n, 0) };
   if (e.place !== undefined) event.place = e.place;
+  const offers = RARES.filter((r) => !rares.includes(r));
+  if (e.cells.length > EVENT_PIECES && offers.length > 0) {
+    const trader: EventTrader = { map: e.map, ...at(EVENT_PIECES), species: offers[pickIndex(rng, offers.length)] };
+    event.trader = trader;
+  }
   out.push(event);
   const spills: SpillMsg[] = [];
   for (const b of bags) {
