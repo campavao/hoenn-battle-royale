@@ -20,6 +20,11 @@ bool8 BrHm_Free(void);
 // you onto it and its current pushes you back down.
 bool8 BrHm_WalkInto(u8 direction, u8 collision);
 
+// The same on a bike, where every move asks GetBikeCollision first: COLLISION_STOP_SURFING
+// when the field move started (each bike path takes that one as handled elsewhere and
+// neither bonks nor moves), else `collision` as it was.
+u8 BrHm_BikeInto(u8 direction, u8 collision);
+
 // Pressing A at the water in a match: the script that runs, or NULL.
 const u8 *BrHm_WaterScript(u8 metatileBehavior);
 

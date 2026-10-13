@@ -44,7 +44,8 @@ bool8 BrHm_WalkInto(u8 direction, u8 collision)
          && MetatileBehavior_IsSurfableFishableWater(behavior))
             script = BR_EventScript_Surf;
     }
-    else if (direction == DIR_NORTH && MetatileBehavior_IsWaterfall(behavior))
+    else if (direction == DIR_NORTH && collision == COLLISION_NONE
+          && MetatileBehavior_IsWaterfall(behavior))
     {
         script = BR_EventScript_Waterfall;
     }
@@ -56,6 +57,13 @@ bool8 BrHm_WalkInto(u8 direction, u8 collision)
     HideMapNamePopUpWindow();
     ScriptContext_SetupScript(script);
     return TRUE;
+}
+
+u8 BrHm_BikeInto(u8 direction, u8 collision)
+{
+    if (BrHm_WalkInto(direction, collision))
+        return COLLISION_STOP_SURFING;
+    return collision;
 }
 
 const u8 *BrHm_WaterScript(u8 metatileBehavior)

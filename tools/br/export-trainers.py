@@ -49,6 +49,8 @@ LEADERS = {
 }
 
 
+# The ROM keeps a leader by src/br/br_gym.c's sBosses (map and local id); this is the
+# same set read from graphics. Keep the two in step.
 def kept(m, o):
     return o.get('graphics_id') in LEADERS and '_GYM' in m['id']
 

@@ -191,7 +191,7 @@ out, and one that comes in waits as it would in a menu.
   or Strength boulders. What stays: the eight leaders on their gyms, the CENTER nurse, the
   MART clerk, MR. BRINEY and the ferry attendants, item balls, berry trees, Pokemon and
   props. A ROM with no match running is pret's Hoenn.
-- **No HMs** (`br_hm.h`): walk into water and you are surfing, walk up a waterfall and you
+- **No HMs** (`br_hm.h`): walk or ride into water and you are surfing, surf up a waterfall and you
   climb it, A on a dive spot and you go down. No Pokemon has to know the move, nothing
   asks first, and no field move plays its cut-in. The starting bag has no HMs, and the
   bots surf and cut as freely (`brain.ts` `canSurf`, `canCut`).

@@ -49,8 +49,9 @@ expectne u8 gObjectEvents+0x1B8 30
 expectne u8 gObjectEvents+0x1DC 30
 expectne u8 gObjectEvents+0x200 30
 expectne u8 gObjectEvents+0x224 30
-# No HMs in the bag: the TM/HM pocket (gBagPockets[3]) starts empty.
-expect u16 *gBagPockets+0x18 0
+# No HMs in the bag: the TM/HM pocket (SaveBlock1's bagPocket_TMHM, +0x690) starts
+# empty.
+expect u16 *gSaveBlock1Ptr+0x690 0
 # East through where the tree stood, to the item ball's cell's neighbour. With the tree
 # the run stops at x 34.
 hold RIGHT 60
