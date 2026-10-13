@@ -107,10 +107,13 @@ export function fightOf(c: ChallengeMsg): number {
 }
 
 /** How long a link battle may go with no block from an opponent still in the room before
- *  the page ends it (POK-331 #3): three minutes of our own frames. A lockstep fight waits
- *  on the other side for one shot clock (br_battle.h's 30 s) and a turn's animations at
- *  most; six of those with nothing is a block lost for good or a ROM stuck over there. */
-export const STALL_FRAMES = 3 * 60 * 60;
+ *  the page ends it (POK-331 #3): seventy-five seconds of our own frames. A lockstep fight
+ *  waits on the other side for one shot clock (br_battle.h's 30 s) and a turn's animations
+ *  at most; two and a half of those with nothing is a block lost for good or a ROM stuck
+ *  over there -- a tab gone to the background mid-fight, whose host role went with it
+ *  (2026-10-13 play-test: "I'm in a last battle here and I think we froze?"). It was three
+ *  minutes, which on the other side of the fight reads as the game hung. */
+export const STALL_FRAMES = 75 * 60;
 /** ...and once the opponent's own RESULT says its ROM has left the fight. Ours plays its
  *  own ending out within seconds of theirs, and nothing more is coming. */
 export const STALL_AFTER_RESULT_FRAMES = 30 * 60;

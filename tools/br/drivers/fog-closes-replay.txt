@@ -1,0 +1,41 @@
+# fog-closes-replay: a replay plays the fog's turns as the fighter's engine did
+# (fog-closes-mid-duel.txt). Whether a turn ends in the fog is asked at the end of every
+# turn now, and a watcher's ROM cannot ask its own map -- it may be standing anywhere --
+# so the fighter writes its answer into battler 0's record where its engine reached the
+# turn's end, and the replay reads it back from there (br_ring.c, TurnFog). Until it has
+# arrived the replay waits on it, as its controllers wait on a choice.
+#
+# spectate-watch.txt's fight: a BSTART with no fog in it, then one turn.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+expect u8 gBrSpectate+5 1
+# Turn one, both FIGHT at each other -- and not yet the fighter's answer for its end.
+pokebytes gDecompressionBuffer 00 01 00 03 00 00 01 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+wait 1200
+expect u8 gBattleOutcome 0
+expect u8 gBattleMons+0x24 34
+# Waiting at the turn's end: no fog dealt, none decided, still in the fight.
+expect u16 gBrRing+10 0
+expect u8 gBrRing+31 0
+wait 200
+expect u16 gBrRing+10 0
+expect u8 gBrSpectate+5 1
+# The answer lands: the fog had closed on the fighters by then (battler 0, one byte, 1).
+pokebytes gDecompressionBuffer 00 01 00 01 01
+mailsend gBrMailbox 19 gDecompressionBuffer 5
+wait 400
+shot fog-turn
+# The replay played it: both mons on the field hurt, nobody finished.
+expect u8 gBrRing+31 1
+expectge u16 gBrRing+10 2
+expect u8 gBattleOutcome 0
+expect u8 gBrSpectate+5 1
+say fog closes replay ok
