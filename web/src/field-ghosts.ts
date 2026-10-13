@@ -418,7 +418,7 @@ function pace(w: Walker): number {
   const behind = w.queue.length;
   if (behind >= PACE_FASTER_AT) w.pace = 2;
   else if (behind >= PACE_FAST_AT && w.pace < 2) w.pace++;
-  else if (behind === 0 && w.pace !== 0 && w.idle * 2 >= PACE_FRAMES[w.pace]) w.pace--;
+  else if (behind === 0 && w.pace !== 0 && w.idle >= PACE_FRAMES[w.pace]) w.pace--;
   w.idle = 0;
   return PACE_FRAMES[w.pace];
 }

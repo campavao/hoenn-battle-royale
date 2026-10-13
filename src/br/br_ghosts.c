@@ -575,7 +575,7 @@ void BrGhosts_Out(u8 seat)
 // still finds two waiting -- one pace that only matches the trainer's would never work
 // the backlog off, and the ghost would trail them two tiles with two slots to spare
 // before a snap. Four waiting is straight to the top. And a ghost that stood idle for
-// half a walk of its own between two steps is outrunning its trainer, so it slows down a
+// a whole walk of its own between two steps is outrunning its trainer, so it slows down a
 // pace. Running, walking and biking each settle on their own pace, and a bunched-up burst
 // is walked off at speed instead of piling up. The Mach Bike flat out is the one pace
 // with none above it: a long stall there can still overflow the queue.
@@ -600,7 +600,7 @@ static u8 PaceWalk(u8 seat, u8 dir)
         pace = BR_PACE_FASTER;
     else if (behind >= BR_PACE_FAST_AT && pace < BR_PACE_FASTER)
         pace++;
-    else if (behind == 0 && pace != BR_PACE_NORMAL && idle * 2 >= sFrames[pace])
+    else if (behind == 0 && pace != BR_PACE_NORMAL && idle >= sFrames[pace])
         pace--;
     sPace[seat] = pace;
     if (pace == BR_PACE_FASTER)

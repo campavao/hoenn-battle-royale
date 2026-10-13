@@ -304,7 +304,8 @@ static u16 UnpackParty(const u8 *d, u16 avail, struct Pokemon *party)
 // back first; skipping that is what made the spectate crash the sound driver on agbcc).
 static void EnterSpectate(void)
 {
-    // One run at a time, the record's own [battler, count, bytes] shape. Not sTurnBuf:
+    // One run at a time, the record's own [battler, count, bytes] shape, in 62-byte
+    // pieces to keep this off the stack (FeedSpectate would take 255). Not sTurnBuf:
     // that is the TURN assembler's, and a turn can be half read in it right now.
     u8 run[2 + 62];
     struct BrEarlyTurns *early;
