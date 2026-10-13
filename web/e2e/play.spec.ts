@@ -206,6 +206,35 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
       shown: true, lcd: 'hidden', x: expect.closeTo(p.lcd.x, 0), y: expect.closeTo(p.lcd.y, 0), width: expect.closeTo(p.lcd.width, 0), height: expect.closeTo(p.lcd.height, 0),
     });
     expect(await keyBlue(page, p.lcd), 'the battle backdrop is see-through, not key blue').toBeLessThan(0.02);
+    // Under it, over the field, the dim (Cam, 2026-10-12: "a small overlay underneath,
+    // maybe 50% opacity"), on the LCD.
+    const dim = await page.evaluate(() => {
+      const d = document.querySelector('#key-dim') as HTMLElement;
+      const r = d.getBoundingClientRect();
+      return { shown: !d.hidden, x: r.x, y: r.y, width: r.width, height: r.height };
+    });
+    expect(dim, 'the dim under the battle, on the LCD').toEqual({
+      shown: true, x: expect.closeTo(p.lcd.x, 0), y: expect.closeTo(p.lcd.y, 0), width: expect.closeTo(p.lcd.width, 0), height: expect.closeTo(p.lcd.height, 0),
+    });
+    // From here every frame the page shows unkeyed is looked at for the key: the end of
+    // every battle flashed four frames of it, and a fade a blue band (2026-10-12 video).
+    await page.evaluate(() => {
+      const w = window as unknown as { __hbr: { emu: { onFrame(f: () => void): () => void; lcdPixels(o: Uint8ClampedArray): boolean } }; __flash?: number[]; __flashOff?: () => void };
+      const buf = new Uint8ClampedArray(240 * 160 * 4);
+      const layer = document.querySelector('#key-layer') as HTMLCanvasElement;
+      const lcd = document.querySelector('#canvas') as HTMLElement;
+      let frame = 0;
+      w.__flash = [];
+      w.__flashOff = w.__hbr.emu.onFrame(() => {
+        frame++;
+        // keyed, by the copy or the filter: what shows is not the raw picture
+        if (!layer.hidden || lcd.style.filter !== '') return;
+        if (!w.__hbr.emu.lcdPixels(buf)) return;
+        let n = 0;
+        for (let i = 0; i < buf.length; i += 4) if (buf[i] < 8 && buf[i + 1] < 8 && buf[i + 2] > 230) n++;
+        if (n > 240 * 160 * 0.05) w.__flash!.push(frame);
+      });
+    });
     await expectClean(page, 'into a wild battle');
     await proxyClean();
   });
@@ -228,6 +257,12 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     expect(after.balls, 'a ball was thrown').toBeLessThan(before.balls);
     await page.waitForTimeout(1_000);
     await shot('back-on-the-field');
+    const flash = await page.evaluate(() => {
+      const w = window as unknown as { __flash?: number[]; __flashOff?: () => void };
+      w.__flashOff?.();
+      return w.__flash ?? [];
+    });
+    expect(flash, 'no frame of the battle shown as solid key blue, unkeyed').toEqual([]);
     await expectLayout(page, { onField: true }, 'after the catch', sym);
     await expectClean(page, 'the throw');
     await proxyClean();
