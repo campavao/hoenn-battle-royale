@@ -1,0 +1,40 @@
+# spoils-link-lost: the other side of spoils-link.txt. Beaten in a link fight, our team is
+# the winner's to put down round their feet, so the spill we send going out is our bag
+# alone. Before, both ROMs would have dropped the team -- ours where we stood and the
+# winner's round them -- and whichever ball was taken first came back from the other.
+# The same loopback session, with OUR TREECKO left 1 HP.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+pokebytes gDecompressionBuffer 00 01 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 600
+expect u8 gBrNetlink 1
+tap A
+wait 90
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+# battler 0's HP (gBattleMons row 0, +0x28)
+poke u16 gBattleMons+0x28 1
+# FIGHT, POUND
+tap A
+wait 30
+tap A
+# a link battle's text runs itself
+wait 900
+wait 900
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+11 2
+# out, and the spill that went with it: no team, the bag
+expect u8 gBrMatch 3
+expectmsg 11 u8 0 0
+expectmsg 11 u8 3 0
+expectmsg 11 u8 4 1
+expectmsg 11 u16 5 0x00FF
+expect u8 gBrLoot+0xA0 1
+shot lost
+say spoils link lost ok

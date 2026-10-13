@@ -57,8 +57,10 @@ expect u16 gEnemyParty+0x56 5
 # mon, which the record says as BR_ITEM_PEER | the slot (0x40, their one mon) and the
 # move. The replay plays it on its copy of their mon, as the challenger's ROM did on its
 # own (POK-331 #7) -- the AI's branch would have read 0x40 as an item type.
-pokebytes gDecompressionBuffer+400 00 01 00 05 01 0D 00 01 00 01 05 01 0D 00 40 00
-mailsend gBrMailbox 19 gDecompressionBuffer+400 16
+# Battler 0's run opens with the 00 the challenger's engine wrote at the end of turn one:
+# no fog that turn (BrRing_FogEndTurn), which the replay reads before it goes on.
+pokebytes gDecompressionBuffer+400 00 01 00 06 00 01 0D 00 01 00 01 05 01 0D 00 40 00
+mailsend gBrMailbox 19 gDecompressionBuffer+400 17
 wait 250
 # ...and the peer's is theirs, CAN's, where the AI's branch would have said nothing.
 # "CAN used", a new line, "POTION!"
@@ -76,8 +78,8 @@ expect u8 gBrSpectate+5 1
 # POK-331 leftover h): a bag's, which the replay plays as the bag did, straight onto
 # battler 0's ATK, and names -- "CAM used", a new line, "X ATTACK!"
 expect u8 gBattleMons+0x19 6
-pokebytes gDecompressionBuffer+400 00 01 00 05 01 4B 00 00 00 01 03 00 00 00
-mailsend gBrMailbox 19 gDecompressionBuffer+400 14
+pokebytes gDecompressionBuffer+400 00 01 00 06 00 01 4B 00 00 00 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer+400 15
 wait 100
 expect u32 gDisplayedStringBattle 0x00C7BBBD
 expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
@@ -88,8 +90,8 @@ expect u8 gBattleMons+0x19 7
 wait 400
 expect u8 gBrSpectate+5 1
 # Turn four: the challenger RUNs with a POKe DOLL (RUN, BR_RUN_DOLL); the peer FIGHTs.
-pokebytes gDecompressionBuffer+400 00 01 00 02 03 01 01 03 00 00 00
-mailsend gBrMailbox 19 gDecompressionBuffer+400 11
+pokebytes gDecompressionBuffer+400 00 01 00 03 00 03 01 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer+400 12
 wait 600
 # The replay honoured the doll: one run, one getaway (this ROM's own counters, which the
 # replay's HandleAction_Run reaches like a fighter's).

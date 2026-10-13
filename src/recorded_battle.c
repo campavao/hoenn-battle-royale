@@ -791,6 +791,21 @@ bool8 RecordedBattle_HasBattlerAction(u8 battler, u8 count)
     return TRUE;
 }
 
+// The next byte of a battler's record that is not a controller's: the fog's answer for
+// a turn (BrRing_FogEndTurn), written by the fighter where its engine reached the end of
+// that turn. FALSE while the turn has not reached us, and the engine waits on it as a
+// controller does. A closed stream has nothing more coming: 0, and on with the replay.
+bool8 RecordedBattle_TakeSpectateByte(u8 battler, u8 *out)
+{
+    *out = 0;
+    if (battler >= MAX_BATTLERS_COUNT || sBattlerRecordSizes[battler] >= BATTLER_RECORD_SIZE)
+        return TRUE;
+    if (sBattleRecords[battler][sBattlerRecordSizes[battler]] == 0xFF)
+        return sSpectateEnded;
+    *out = sBattleRecords[battler][sBattlerRecordSizes[battler]++];
+    return TRUE;
+}
+
 void RecordedBattle_EndSpectate(void)
 {
     sSpectateEnded = TRUE;

@@ -1,0 +1,38 @@
+# fog-closes-mid-duel: the ring closing on a fight between contestants that is already
+# running (2026-10-13 play-test: "you take damage in a battle if it's a wild pokemon, but
+# against bots and players it doesn't trigger when it should"). Whether a contest was in
+# the fog used to be decided once, at its start, so a fight that began inside the ring
+# stayed safe however long it ran with the fog all round it. The engine asks again at the
+# end of every turn now (br_ring.c, BrRing_FogEndTurn), and the answer goes into the
+# fight's record so a replay plays the same turns (fog-closes-replay.txt).
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# a challenge with no ring yet: the fight starts out of the fog
+poke u8 gBrNetlink+8 1
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 900
+expectge u8 gBattlersCount 2
+expect u8 gBrRing+31 0
+# now the fog closes somewhere else: RING phase 1, centre (25,12), r 1
+pokebytes gBrMailbox+0x1058 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 60
+# the ring is up (phase 1)
+expect u8 gBrRing+1 1
+poke u16 gBrRing+10 0
+# one turn: FIGHT, the first move
+tap A
+wait 30
+tap A
+wait 1500
+shot fog-turn
+# it reached in, and ended nobody
+expectge u16 gBrRing+10 1
+expect u8 gBrRing+31 1
+expect u8 gBattleOutcome 0
+expectge u8 gBattlersCount 2
+say fog closes mid duel ok

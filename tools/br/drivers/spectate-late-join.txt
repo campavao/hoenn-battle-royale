@@ -17,20 +17,21 @@ copy gDecompressionBuffer+130 gPlayerParty 100
 mailsend gBrMailbox 18 gDecompressionBuffer 230
 wait 4
 expect u8 gBrSpectate+5 1
-# battle 0x0100; battler 0 picks FIGHT, move 1, at 1; battler 1 the same at 0
-pokebytes gDecompressionBuffer 00 01 00 03 00 01 01 01 03 00 01 00
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
-mailsend gBrMailbox 19 gDecompressionBuffer 12
+# battle 0x0100; battler 0 picks FIGHT, move 1, at 1, then the 00 its engine wrote at the
+# turn's end (no fog, BrRing_FogEndTurn); battler 1 the same at 0
+pokebytes gDecompressionBuffer 00 01 00 04 00 01 01 00 01 03 00 01 00
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+mailsend gBrMailbox 19 gDecompressionBuffer 13
 wait 10
 expectge u16 gBrSpectate 12
 # twelve turns at 1x (the page runs them at 8x): both mons used the move twelve times,
@@ -43,8 +44,8 @@ expect u8 gBattleMons+0x7D 18
 shot twelve
 # ...which, when it comes, is the thirteenth: the held turns left the record in step.
 # (The battle has used gDecompressionBuffer since, so the turn is written out again.)
-pokebytes gDecompressionBuffer 00 01 00 03 00 01 01 01 03 00 01 00
-mailsend gBrMailbox 19 gDecompressionBuffer 12
+pokebytes gDecompressionBuffer 00 01 00 04 00 01 01 00 01 03 00 01 00
+mailsend gBrMailbox 19 gDecompressionBuffer 13
 wait 2500
 expect u8 gBattleMons+0x25 17
 expect u8 gBattleMons+0x7D 17

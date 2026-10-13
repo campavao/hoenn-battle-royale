@@ -115,10 +115,16 @@ describe('the match-wide loot table', () => {
     expect(back[1].bag).toMatchObject({ key: 0x03ff, items: [{ id: 110, n: 1 }] });
   });
 
-  it('never hands the ROM more mons than a spill can carry', () => {
+  it('never hands the ROM more mons than a spill can carry, and drops none for it', () => {
     const loot = new Loot();
+    // A winner's spoils go down under the winner's seat (br_loot.c), so two fights on one
+    // map are twelve balls under one seat -- and the second team came back from nowhere.
     loot.note(spill(1, LITTLEROOT, [1, 2, 3, 4, 5, 6, 7, 8]));
-    expect(loot.forMap(LITTLEROOT)[0]?.mons).toHaveLength(6);
+    loot.note(spill(1, LITTLEROOT, [], 0x01ff));
+    const back = loot.forMap(LITTLEROOT);
+    expect(back.map((m) => m.mons.length)).toEqual([6, 2]);
+    expect(back.flatMap((m) => m.mons.map((mon) => mon.key))).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(back.filter((m) => m.bag).map((m) => m.bag?.key)).toEqual([0x01ff]);
   });
 
   // POK-280: Kanto's rule is items AND money, the whole bag in one press. The ROM never

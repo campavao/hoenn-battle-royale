@@ -34,6 +34,9 @@ void RecordedBattle_EndSpectate(void);
 // what is still waiting on the record.
 void RecordedBattle_AbortSpectate(void);
 bool8 RecordedBattle_IsSpectateLive(void);
+// The next byte of a battler's record the engine wrote itself (the fog's turn, br_ring.c):
+// FALSE while it has not arrived, TRUE and 0 once the stream is closed.
+bool8 RecordedBattle_TakeSpectateByte(u8 battler, u8 *out);
 // Action bytes arrived and not yet played, for the battler furthest behind: a watcher
 // who came in mid-fight has every turn so far to get through (br_spectate.c's catchUp).
 u16 RecordedBattle_SpectateBacklog(void);

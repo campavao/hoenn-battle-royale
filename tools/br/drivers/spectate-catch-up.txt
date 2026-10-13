@@ -16,9 +16,10 @@ mailsend gBrMailbox 18 gDecompressionBuffer 230
 wait 10
 expect u8 gBrSpectate+5 1
 expect u8 gBrSpectate+15 0
-# battle 0x0100; battler 0 picks FIGHT, move 0, at 1 five times; battler 1 the same at 0
-pokebytes gDecompressionBuffer 00 01 00 0F 00 00 01 00 00 01 00 00 01 00 00 01 00 00 01 01 0F 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-mailsend gBrMailbox 19 gDecompressionBuffer 36
+# battle 0x0100; battler 0 picks FIGHT, move 0, at 1 five times, each turn followed by the
+# 00 its engine wrote at the turn's end (no fog, BrRing_FogEndTurn); battler 1 FIGHTs at 0
+pokebytes gDecompressionBuffer 00 01 00 14 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 00 00 00 01 00 01 0F 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 41
 # fifteen bytes a battler unplayed, once the replay is live (it fades in first): behind,
 # hurry. It stays up about 1370 frames here, at 1x; the page runs them at 8x.
 wait 100

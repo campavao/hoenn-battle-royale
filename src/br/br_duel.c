@@ -16,6 +16,7 @@
 #include "constants/battle.h"
 #include "constants/songs.h"
 #include "malloc.h"
+#include "br/br_ring.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -304,6 +305,9 @@ static void EnterDuel(void)
     gTrainerBattleOpponent_B = 0;
     gBrDuel.running = TRUE;
     gBrDuel.starting = FALSE;
+    // No fog where two bots fight -- they stand nowhere -- but the turn's answer is
+    // still written for whoever replays it (BrRing_FogEndTurn).
+    BrRing_SetBattleFog(FALSE);
     gMain.savedCallback = CB2_BrReturnFromDuel;
     SetMainCallback2(CB2_InitBattle);
 }

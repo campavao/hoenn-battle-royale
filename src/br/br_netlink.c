@@ -35,6 +35,7 @@
 #include "br/br_netlink.h"
 #include "br/br_ring.h"
 #include "br/br_field.h"
+#include "br/br_loot.h"
 
 EWRAM_DATA struct BrNetlink gBrNetlink = {0};
 // BT payload: seat, seq u16, len u16, then up to BLOCK_BUFFER_SIZE bytes.
@@ -388,6 +389,9 @@ static void Close(void)
     gLinkCallback = NULL;
 }
 
+// TickPeerOut ended the fight for a peer who went out somewhere else.
+static EWRAM_DATA bool8 sWonByDefault = FALSE;
+
 // Where the cable club came back to: no LoadPlayerParty (the damage stays), RESULT
 // out, a lost fight is an elimination, then the field.
 static void CB2_BrReturnFromBattle(void)
@@ -403,8 +407,17 @@ static void CB2_BrReturnFromBattle(void)
     BrEngage_OnBattleEnd(gBrNetlink.peerSeat, gBattleOutcome);
     BrMatch_SendResult(gBrMySeat, gBattleOutcome);
     Close();
+    // A fight the engine decided puts the loser's team down round the winner, and the
+    // winner chooses from it (br_loot.c's spoils): the loser drops only the bag. One won
+    // by default -- the peer went out somewhere else, and spilled there -- puts nothing.
+    if (gBattleOutcome == B_OUTCOME_WON && !sWonByDefault)
+        BrLoot_WonFrom(gBrNetlink.peerSeat);
+    if (gBattleOutcome == B_OUTCOME_LOST)
+        BrLoot_TeamTaken(TRUE);
     if (gBattleOutcome == B_OUTCOME_LOST || gBattleOutcome == B_OUTCOME_DREW)
         BrMatch_WhiteOut();
+    BrLoot_TeamTaken(FALSE);
+    sWonByDefault = FALSE;
     gFieldCallback = NULL;
     SetMainCallback2(CB2_ReturnToField);
 }
@@ -564,6 +577,7 @@ static void TickPeerOut(void)
     if (gBattleOutcome != 0)
         return;
     gBattleOutcome = B_OUTCOME_WON;
+    sWonByDefault = TRUE;
     Abandon();
 }
 

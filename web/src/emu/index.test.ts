@@ -327,6 +327,29 @@ describe('Emulator', () => {
       expect(heard).toEqual([false, true, true]);
     });
 
+    it("takes SDL's handler off the old speaker before a boot or a stop closes it", async () => {
+      // SDL frees the device and leaves the node's onaudioprocess on it: an event already
+      // queued ran into the freed device once the next one was open -- "integer divide
+      // by zero" in the 2026-10-13 play-test's console.
+      const { emu, m } = await make();
+      await emu.start(new Uint8Array([1]));
+      const seen: (string | null)[] = [];
+      const handler = () => {};
+      const speaker = { onaudioprocess: handler as ((e: AudioProcessingEvent) => void) | null };
+      m.SDL2 = { audio: { scriptProcessorNode: speaker as unknown as ScriptProcessorNode } };
+      const load = m.loadGame;
+      m.loadGame = (p, o) => (seen.push(speaker.onaudioprocess === null ? 'load: muted' : 'load: live'), load(p, o));
+      const quit = m.quitGame;
+      m.quitGame = () => (seen.push(speaker.onaudioprocess === null ? 'quit: muted' : 'quit: live'), quit());
+      await emu.reboot();
+      speaker.onaudioprocess = handler;
+      emu.stop();
+      expect(seen).toEqual(['load: muted', 'quit: muted']);
+      // No audio open at all is nothing to do.
+      m.SDL2 = undefined;
+      await emu.reboot();
+    });
+
     it('turns rewind and the auto-save state off before the core loads anything', async () => {
       // Rewind was a full savestate every frame, diffed on a thread of its own, and the
       // auto-save a SAVESTATE_ALL on the main thread every 30 s synced to IndexedDB --

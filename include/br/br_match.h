@@ -89,6 +89,9 @@ void BrMatch_SendResult(u8 seat, u8 outcome);
 // Called from CB2_WhiteOut in place of the heal-and-Centre DoWhiteOut: sends OUT and
 // marks the phase; overworld.c then re-enters the same map where they fell.
 void BrMatch_WhiteOut(void);
+// The page has said we won and the parade waits for the field to come free: a box
+// that holds the field (br_loot.c's spoils) lets go.
+bool8 BrMatch_WinPending(void);
 // Out of the match, whatever did it -- a whiteout, the buzzer with nothing caught, or
 // the fog. One door, so the team always hits the ground on the way through it.
 void BrMatch_Out(void);

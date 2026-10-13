@@ -1,0 +1,50 @@
+# spoils-link: a link fight the engine decides puts the loser's team down round the
+# WINNER, who picks one from a box (2026-10-13 play-test) -- or, as here, leaves them
+# all with B (spoils-bot.txt takes one). out-peer.txt's loopback
+# session -- we challenge seat 1 -- with seat 1's TREECKO left 1 HP, so our POUND ends it.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+pokebytes gDecompressionBuffer 00 01 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 600
+expect u8 gBrNetlink 1
+tap A
+wait 90
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+# battler 1's HP (gBattleMons row 1, +0x28)
+poke u16 gBattleMons+0x80 1
+# FIGHT, POUND
+tap A
+wait 30
+tap A
+# a link battle's text runs itself
+wait 900
+expect u8 gBrNetlink 0
+expect u8 gBrNetlink+11 1
+# seat 1's team, round our feet, under seat 1's keys; no bag -- that is theirs to drop
+expect u8 gBrLoot+0xA0 1
+expectmsg 11 u8 0 0
+expectmsg 11 u8 3 1
+expectmsg 11 u16 4 0x0100
+expectmsg 11 u16 10 0x115
+expectmsg 11 u8 13 0
+expect u8 gPlayerPartyCount 1
+shot spoils-menu
+# B: nothing taken, the ball stays for anybody, and the trainer is ours again -- the box
+# locked the field, and a step proves it let go.
+tap B
+wait 30
+expect u8 gPlayerPartyCount 1
+expect u8 gBrLoot+0xA0 1
+expect u16 gBrOwnPos+4 16
+hold DOWN 30
+wait 20
+expectge u16 gBrOwnPos+4 17
+shot spoils-left
+say spoils link ok

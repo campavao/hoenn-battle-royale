@@ -273,7 +273,41 @@ static const u8 sScript_FogHurts[] =
     B_SCR_OP_END2,
 };
 
+// A frame's wait, for a replay whose fighter has not got this far yet (TurnFog).
+static const u8 sScript_FogWait[] =
+{
+    B_SCR_OP_PAUSE, 1, 0,
+    B_SCR_OP_END2,
+};
+
 #define FOG_HIT_MARKERS (HITMARKER_IGNORE_SUBSTITUTE | HITMARKER_PASSIVE_HP_UPDATE | HITMARKER_IGNORE_BIDE)
+
+// Is this turn fought in the fog? Asked at the end of every turn, not only at the start
+// (2026-10-13 play-test: "against bots and players it doesn't trigger when it should"):
+// a fight that began inside the ring stayed out of the fog however long it ran with the
+// fog all round it. Once in, always in; the ring never grows.
+//
+// The fighter asks the map and writes the answer into its own record (battler 0's, the
+// side every replay has), where the engine reached the end of the turn; a replay reads
+// it back from there at the same point, so it plays the fog's turns as the fighter's
+// engine did, whatever the ring looks like from where the watcher stands. FALSE while a
+// replay's answer has not arrived.
+static bool8 TurnFog(void)
+{
+    u8 fog;
+
+    if (RecordedBattle_IsSpectateLive())
+    {
+        if (!RecordedBattle_TakeSpectateByte(0, &fog))
+            return FALSE;
+        gBrRing.battleFog = fog ? TRUE : FALSE;
+        return TRUE;
+    }
+    if (gBrRing.active && !BrRing_SectionInside(gMapHeader.regionMapSectionId))
+        gBrRing.battleFog = TRUE;
+    RecordedBattle_SetBattlerAction(0, gBrRing.battleFog);
+    return TRUE;
+}
 
 // A tenth of each fighter's max HP at the end of every turn, on whoever is on the field,
 // down to 1. The bench is the field's to bleed afterwards: the other trainer's bench on
@@ -283,14 +317,34 @@ bool8 BrRing_FogEndTurn(void)
     u8 turn = gBattleResults.battleTurnCounter;
     u8 b;
 
-    if (!ContestBattle() || !gBrRing.battleFog || gBattleOutcome != 0)
+    // A duel (the host's hidden instance, two bots) has no fog, but it is published, and
+    // a replay of it is a contest's replay: it reads a fog answer off every turn. Without
+    // this one, battler 0's next choice was read as the answer and the replay ran one
+    // byte out of step for the rest of the fight.
+    if (gMain.inBattle && gBrDuel.running && gBattleOutcome == 0)
+    {
+        if (sFogTurn != turn)
+        {
+            RecordedBattle_SetBattlerAction(0, FALSE);
+            sFogTurn = turn;
+        }
+        return FALSE;
+    }
+    if (!ContestBattle() || gBattleOutcome != 0)
         return FALSE;
     // The slave of a link battle runs no engine; this is never reached there.
     if (sFogTurn != turn)
     {
+        if (!TurnFog())
+        {
+            BattleScriptExecute(sScript_FogWait);
+            return TRUE;
+        }
         sFogTurn = turn;
         sFogNext = 0;
     }
+    if (!gBrRing.battleFog)
+        return FALSE;
     gHitMarker &= ~FOG_HIT_MARKERS;
     for (b = sFogNext; b < gBattlersCount; b++)
     {
