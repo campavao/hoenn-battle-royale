@@ -73,8 +73,8 @@ export const EVENT_RARES = 2;
 // include/constants/items.h
 const ITEM_MASTER_BALL = 1;
 const ITEM_FULL_RESTORE = 19;
+const ITEM_MAX_POTION = 20;
 const ITEM_MAX_REVIVE = 25;
-const ITEM_RARE_CANDY = 68;
 const ITEM_CHOICE_BAND = 186;
 const ITEM_LEFTOVERS = 200;
 
@@ -87,11 +87,12 @@ export const GOLD: readonly number[] = [
 ];
 export const EVENT_GOLD = 3;
 
-/** The one bag of supplies beside them. */
+/** The one bag of supplies beside them: healing only (Cam, 2026-10-13: no RARE CANDY,
+ *  which would lift a mon past the ring's rung). */
 export const SUPPLIES: readonly { id: number; n: number }[] = [
   { id: ITEM_FULL_RESTORE, n: 2 },
   { id: ITEM_MAX_REVIVE, n: 2 },
-  { id: ITEM_RARE_CANDY, n: 3 },
+  { id: ITEM_MAX_POTION, n: 3 },
 ];
 
 /** The legendary, the rares, the gold balls and the bag: seven, under the eight the ROM
