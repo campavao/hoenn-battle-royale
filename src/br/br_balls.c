@@ -21,7 +21,8 @@
 // One ball in four (Cam: "about 1 blue for every 3 red").
 #define BR_BALLS_TM_IN 4
 // And one red ball in twelve a LINK CABLE (br_items.h), one map ball in sixteen: enough
-// that the KADABRA you caught on Route 116 meets one on your way.
+// that the KADABRA you caught on Route 116 meets one on your way. Any red ball can be
+// one, a RARE CANDY or MASTER BALL too, as any can be a TM.
 #define BR_BALLS_CABLE_IN 12
 
 // The machines worth a house: gold, and never dealt into a map's ball.

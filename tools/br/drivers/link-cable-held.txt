@@ -1,0 +1,92 @@
+# link-cable-held: the LINK CABLE on a trade evolution that wants a held item
+# (EVO_TRADE_ITEM): an ONIX with nothing held gets NO USE and the cable is kept; given a
+# METAL COAT it becomes a STEELIX, and the coat is spent with the cable, as the trade
+# would spend it (br_items.c, BrItems_CableTarget).
+#
+# Our own ONIX (95) is put on our tile as a ball keyed to our seat (no trade on the way
+# in), then a LINK CABLE (52) and a METAL COAT (199) by GIVE. LITTLEROOT (map 0:9).
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrLoot 01 00 0C 00 10 00 5F 00 00 09 1E 01 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 60
+expect u8 gPlayerPartyCount 1
+pokebytes gDecompressionBuffer 02 34 00 01 C7 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 7
+wait 60
+expect u16 *gSaveBlock1Ptr+0x560 52
+expect u16 *gSaveBlock1Ptr+0x564 199
+# BAG > LINK CABLE > USE > ONIX: holding nothing, so NO USE, and the cable stays.
+tap START
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 120
+tap A
+wait 30
+tap A
+wait 60
+shot no-use
+tap A
+wait 60
+shot no-effect
+hold A 4
+wait 60
+expect u16 *gSaveBlock1Ptr+0x560 52
+expect u8 gPlayerParty+8 0xC9
+# back in the BAG: down to the METAL COAT, GIVE it to the ONIX
+tap DOWN
+wait 20
+tap A
+wait 30
+shot coat-menu
+# USE GIVE / TOSS CANCEL: GIVE is to the right
+tap RIGHT
+wait 10
+tap A
+wait 90
+shot give-pick
+tap A
+wait 60
+shot given
+hold A 4
+wait 90
+shot after-give
+expect u16 *gSaveBlock1Ptr+0x564 0
+# the coat is gone from the list, so the cursor is on CLOSE BAG: up to the LINK CABLE,
+# USE, the ONIX -- now holding the coat
+tap UP
+wait 20
+tap A
+wait 30
+tap A
+wait 60
+shot able
+tap A
+wait 120
+shot evolving
+wait 900
+shot evolved
+hold A 4
+wait 120
+hold A 4
+wait 120
+hold A 4
+wait 120
+shot back
+# STEELIX: S T E E L I X
+expect u8 gPlayerParty+8 0xCD
+expect u8 gPlayerParty+9 0xCE
+expect u8 gPlayerParty+10 0xBF
+expect u8 gPlayerParty+11 0xBF
+expect u8 gPlayerParty+12 0xC6
+expect u8 gPlayerParty+13 0xC3
+expect u8 gPlayerParty+14 0xD2
+# the cable is spent, and the coat did not come back to the bag
+expect u16 *gSaveBlock1Ptr+0x560 0
+expect u16 *gSaveBlock1Ptr+0x564 0
+say link cable held ok
