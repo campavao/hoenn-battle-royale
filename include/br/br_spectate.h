@@ -26,6 +26,11 @@ struct BrSpectate
 // gBrSpectate.follow when nobody is being followed. Matches the wire's stop byte.
 #define BR_NO_SEAT 0xFF
 
+// A battler's record in a replay, in action bytes: recorded_battle.c's
+// BATTLER_RECORD_SIZE, which asserts the two agree. Turns that land before the replay
+// exists are held up to this much (br_spectate.c's BrEarlyTurns).
+#define BR_SPECTATE_RECORD_SIZE 664
+
 extern struct BrSpectate gBrSpectate;
 
 // Registers the BSTART/TURN handlers. A spectator only ever receives what the page

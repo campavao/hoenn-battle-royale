@@ -268,7 +268,8 @@ describe('the ghosts walk on (POK-323)', () => {
     full.update([row(2)]);
     full.update([row(2, { x: 27 + MAP_OFFSET, dir: 4 })]); // five: one walking, four held
     full.update([row(2, { x: 28 + MAP_OFFSET, dir: 4 })]); // the fifth held
-    expect(at(full)!.x, 'still walking the first').toBe(146);
+    // Four waiting behind it: PaceWalk's top pace, four pixels a frame (br_ghosts.c).
+    expect(at(full)!.x, 'still walking the first').toBe(152);
     full.update([row(2, { x: 29 + MAP_OFFSET, dir: 4 })]); // no room: DriveGhost snaps to the roster
     expect(at(full)).toMatchObject({ x: 144 + 7 * 16, frame: 2, hFlip: true });
 
@@ -276,6 +277,32 @@ describe('the ghosts walk on (POK-323)', () => {
     six.update([row(2)]);
     six.update([row(2, { y: 26 + MAP_OFFSET })]);
     expect(at(six), 'six at once').toMatchObject({ x: 144, y: 56 + 6 * 16, frame: 0 });
+  });
+
+  it("a runner's ghost keeps up: a tile every eight frames, never a snap, the backlog walked off at speed", () => {
+    // PaceWalk (br_ghosts.c, 2026-10-13 play-test "players are teleporting"): at walking
+    // pace a runner's ghost fell a tile behind every sixteen frames and was snapped to the
+    // roster past BR_STEP_QUEUE, several tiles at a jump.
+    const w = new GhostWalkers();
+    w.update([row(2)]);
+    let x = 22 + MAP_OFFSET;
+    let last = at(w)!.x;
+    for (let tile = 0; tile < 40; tile++) {
+      x += tile % 14 < 7 ? 1 : -1;
+      const frames = run(w, [row(2, { x, dir: tile % 14 < 7 ? 4 : 3 })], 8);
+      for (const f of frames) {
+        expect(Math.abs(f.x - last), `tile ${tile}: no jump`).toBeLessThanOrEqual(4);
+        last = f.x;
+      }
+      expect(Math.abs(last - (144 + (x - 22 - MAP_OFFSET) * 16)), `tile ${tile}: within two tiles`).toBeLessThanOrEqual(32);
+    }
+    // ...and a walker's ghost walks: sixteen frames a tile, a pixel each, once it has slowed.
+    const walker = new GhostWalkers();
+    walker.update([row(2)]);
+    for (let tile = 1; tile <= 3; tile++) {
+      const one = run(walker, [row(2, { y: 20 + tile + MAP_OFFSET })], 16);
+      expect(one.map((f) => f.y)).toEqual(Array.from({ length: 16 }, (_, i) => 56 + (tile - 1) * 16 + i + 1));
+    }
   });
 
   it('a turn waits for the walking to stop, and starts the feet over', () => {

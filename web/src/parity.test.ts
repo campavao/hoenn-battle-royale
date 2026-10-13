@@ -553,9 +553,23 @@ describe("the BR structs the page reads at an offset", () => {
 
   it("a ghost the page walks walks as DriveGhost walks its object: the queue, the pace, the stride (field-ghosts.ts, POK-323)", () => {
     expect(ghosts.STEP_QUEUE).toBe(define(ghostsH, 'BR_STEP_QUEUE'));
-    // A queued step is a walk-normal...
-    expect(ghostsC).toMatch(/ObjectEventSetHeldMovement\(obj, GetWalkNormalMovementAction\(dir\)\);/);
+    // A queued step is walked at PaceWalk's pace...
+    expect(ghostsC).toMatch(/ObjectEventSetHeldMovement\(obj, PaceWalk\(seat, dir\)\);/);
+    expect(table(ghostsC, 'sFrames')).toEqual([...ghosts.PACE_FRAMES]);
+    expect(ghosts.PACE_FAST_AT).toBe(define(ghostsC, 'BR_PACE_FAST_AT'));
+    expect(ghosts.PACE_FASTER_AT).toBe(define(ghostsC, 'BR_PACE_FASTER_AT'));
+    expect(ghosts.PACE_IDLE_MAX).toBe(define(ghostsC, 'BR_PACE_IDLE_MAX'));
+    expect(ghostsC).toMatch(/if \(pace == BR_PACE_FASTER\)\s*return GetWalkFasterMovementAction\(dir\);\s*if \(pace == BR_PACE_FAST\)\s*return GetWalkFastMovementAction\(dir\);\s*return GetWalkNormalMovementAction\(dir\);/);
     const moves = objectEventsC.replace(/\r\n/g, '\n');
+    // ...two and four pixels a frame at the faster two, for as many frames as their tables have
+    for (const d of ['Down', 'Up', 'Left', 'Right']) {
+      expect(moves, `WalkFast${d}`).toMatch(new RegExp(`MovementAction_WalkFast${d}_Step0\\([^)]*\\)\\s*\\{\\s*InitMovementNormal\\(objectEvent, sprite, DIR_\\w+, MOVE_SPEED_FAST_1\\);`));
+      expect(moves, `WalkFaster${d}`).toMatch(new RegExp(`MovementAction_WalkFaster${d}_Step0\\([^)]*\\)\\s*\\{\\s*InitMovementNormal\\(objectEvent, sprite, DIR_\\w+, MOVE_SPEED_FASTER\\);`));
+    }
+    expect(moves).toMatch(/\[MOVE_SPEED_FAST_1\] = ARRAY_COUNT\(sStep2Funcs\),/);
+    expect(moves).toMatch(/\[MOVE_SPEED_FASTER\] = ARRAY_COUNT\(sStep4Funcs\),/);
+    expect(/\bsStep2Funcs\[\]\s*=\s*\{([^}]*)\}/.exec(moves)![1].match(/\bStep2\b/g)!.length).toBe(ghosts.PACE_FRAMES[1]);
+    expect(/\bsStep4Funcs\[\]\s*=\s*\{([^}]*)\}/.exec(moves)![1].match(/\bStep4\b/g)!.length).toBe(ghosts.PACE_FRAMES[2]);
     for (const d of ['Down', 'Up', 'Left', 'Right']) {
       expect(moves, `WalkNormal${d}`).toMatch(new RegExp(`MovementAction_WalkNormal${d}_Step0\\([^)]*\\)\\s*\\{\\s*InitMovementNormal\\(objectEvent, sprite, DIR_\\w+, MOVE_SPEED_NORMAL\\);`));
     }
@@ -583,6 +597,12 @@ describe("the BR structs the page reads at an offset", () => {
       const go = frames(`sAnim_Go${name}`);
       expect(go.map((f) => f.frame), `sAnim_Go${name}`).toEqual(ghosts.GO_FRAMES[dir]);
       expect(go.every((f) => f.ticks === ghosts.GO_FRAME_TICKS && f.hFlip === east), `sAnim_Go${name}'s ticks and mirror`).toBe(true);
+      // The faster go anims are the same stride at the pace's share of the ticks.
+      for (const [fast, i] of [['Fast', 1], ['Faster', 2]] as const) {
+        const f = frames(`sAnim_Go${fast}${name}`);
+        expect(f.map((c) => c.frame), `sAnim_Go${fast}${name}`).toEqual(ghosts.GO_FRAMES[dir]);
+        expect(f.every((c) => c.ticks * 2 === ghosts.PACE_FRAMES[i] && c.hFlip === east), `sAnim_Go${fast}${name}'s ticks`).toBe(true);
+      }
       const face = frames(`sAnim_Face${name}`)[0];
       expect([face.frame, face.hFlip], `sAnim_Face${name}`).toEqual([ghosts.FACE_FRAMES[dir], east]);
     }

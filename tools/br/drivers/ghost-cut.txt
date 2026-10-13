@@ -1,0 +1,51 @@
+# ghost-cut: a ghost walking into a cuttable tree cuts it down first (2026-10-12 match
+# video: a bot walked straight through one). The page lets any seat cross a tree, as
+# everybody carries the HMs (bots/brain.ts canCut); the ROM shows the cut.
+#
+# Petalburg Woods' tree at (19,11) (FLAG_TEMP_12, which removeobject sets). We boot
+# three tiles south of it and put seat 1 one tile south of it, facing north.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 18 0B 13 00 0E 00 BD BB C7 FF
+wait 400
+expectbits u8 *gSaveBlock1Ptr+0x1272 0x04 0x00
+# PLACE seat 1 at map (19,12), outer (26,19) -- PLACE and STEP carry outer coords, map
+# + MAP_OFFSET (ghost-walkthrough.txt) -- facing north (2), skin 1
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 18 0B 1A 00 13 00 02 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 20
+expect u8 gBrSeats+16 1
+expectne u8 gBrSeats+25 0xFF
+shot placed
+# STEP north into the tree, outer (26,18)
+pokebytes gBrMailbox+0x1058 03 0B 08 00 00 01 02 1A 00 12 00 18 0B
+poke u16 gBrMailbox+0x0C 2
+wait 12
+# the tree is being cut: the step waits on it, and the tree is still there
+expect u8 gBrSeats+26 1
+expectbits u8 *gSaveBlock1Ptr+0x1272 0x04 0x00
+shot cutting
+wait 80
+# cut and removed, and the ghost walked on into its tile
+expect u8 gBrSeats+26 0
+expectbits u8 *gSaveBlock1Ptr+0x1272 0x04 0x04
+shot cut
+# The second tree, (19,10) (FLAG_TEMP_11), and a ghost that will not wait for it: six
+# more STEPs north behind the one into the tree overflow the queue, and the ghost snaps
+# to where the roster has it, past the tree. The cut it started still finishes: no
+# invisible tree left standing.
+pokebytes gBrMailbox+0x1098 03 0B 08 00 00 01 02 1A 00 11 00 18 0B
+poke u16 gBrMailbox+0x0C 3
+wait 4
+expectbits u8 *gSaveBlock1Ptr+0x1272 0x02 0x00
+pokebytes gBrMailbox+0x10D8 03 0B 08 00 00 01 02 1A 00 10 00 18 0B
+pokebytes gBrMailbox+0x1118 03 0B 08 00 00 01 02 1A 00 0F 00 18 0B
+pokebytes gBrMailbox+0x1158 03 0B 08 00 00 01 02 1A 00 0E 00 18 0B
+pokebytes gBrMailbox+0x1198 03 0B 08 00 00 01 02 1A 00 0D 00 18 0B
+pokebytes gBrMailbox+0x11D8 03 0B 08 00 00 01 02 1A 00 0C 00 18 0B
+pokebytes gBrMailbox+0x1218 03 0B 08 00 00 01 02 1A 00 0B 00 18 0B
+poke u16 gBrMailbox+0x0C 9
+wait 4
+expect u8 gBrSeats+26 0
+wait 80
+expectbits u8 *gSaveBlock1Ptr+0x1272 0x02 0x02
+shot snapped-past

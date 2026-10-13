@@ -21,9 +21,13 @@
 #include "constants/rgb.h"
 #if BR
 #include "br/br_battle.h"
+#include "br/br_spectate.h"
 #endif
 
 #define BATTLER_RECORD_SIZE 664
+#if BR
+STATIC_ASSERT(BATTLER_RECORD_SIZE == BR_SPECTATE_RECORD_SIZE, BrSpectateHoldsAWholeRecord)
+#endif
 
 struct PlayerInfo
 {

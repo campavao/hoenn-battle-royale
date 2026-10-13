@@ -1,0 +1,137 @@
+# ghost-walk-pace: the other two paces PaceWalk has to get right (ghost-run-pace.txt is the
+# running one). A trainer who walks -- B held, or a bot, a step every 267 ms -- is walked at
+# walking pace, a step in sixteen frames and never more than one behind, rather than
+# rushed a tile and left standing. And a burst the network bunched up, five steps in one
+# frame, is walked off at speed instead of overflowing the queue into a snap.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 04 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 4
+expect u8 gBrSeats+25 2
+expect u16 gObjectEvents+0x58 14
+# walking, east
+pokebytes gDecompressionBuffer 01 04 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 14
+expectle u16 gObjectEvents+0x58 16
+wait 8
+pokebytes gDecompressionBuffer 01 04 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 15
+expectle u16 gObjectEvents+0x58 17
+wait 8
+pokebytes gDecompressionBuffer 01 04 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 16
+expectle u16 gObjectEvents+0x58 18
+wait 8
+pokebytes gDecompressionBuffer 01 04 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 17
+expectle u16 gObjectEvents+0x58 19
+wait 8
+pokebytes gDecompressionBuffer 01 04 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 18
+expectle u16 gObjectEvents+0x58 20
+wait 8
+pokebytes gDecompressionBuffer 01 04 14 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 19
+expectle u16 gObjectEvents+0x58 21
+wait 8
+pokebytes gDecompressionBuffer 01 04 15 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 20
+expectle u16 gObjectEvents+0x58 22
+wait 8
+# walking, west
+pokebytes gDecompressionBuffer 01 03 14 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 19
+expectle u16 gObjectEvents+0x58 21
+wait 8
+pokebytes gDecompressionBuffer 01 03 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 18
+expectle u16 gObjectEvents+0x58 20
+wait 8
+pokebytes gDecompressionBuffer 01 03 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 17
+expectle u16 gObjectEvents+0x58 19
+wait 8
+pokebytes gDecompressionBuffer 01 03 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 16
+expectle u16 gObjectEvents+0x58 18
+wait 8
+pokebytes gDecompressionBuffer 01 03 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 15
+expectle u16 gObjectEvents+0x58 17
+wait 8
+pokebytes gDecompressionBuffer 01 03 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 14
+expectle u16 gObjectEvents+0x58 16
+wait 8
+pokebytes gDecompressionBuffer 01 03 0E 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expect u8 gBrSeats+26 0
+expectge u16 gObjectEvents+0x58 13
+expectle u16 gObjectEvents+0x58 15
+wait 8
+shot walked
+wait 30
+expect u16 gObjectEvents+0x58 14
+# a burst: five steps east in one frame
+pokebytes gDecompressionBuffer 01 04 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 04 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 04 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 04 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 04 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 2
+expect u16 gBrSeats+20 19
+expectle u8 gBrSeats+26 5
+# five tiles, the first at walking pace and the rest faster: under fifty frames, where
+# five walks are eighty -- and no snap, so every frame of it is a walk
+wait 50
+expect u8 gBrSeats+26 0
+expect u16 gObjectEvents+0x58 19
+shot burst
+say ghost walk pace ok
