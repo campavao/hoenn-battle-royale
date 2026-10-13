@@ -6,11 +6,11 @@
 // no spec ever looked at the screen through a battle.
 //
 // So this one plays solo from the boot, at the keyboard: into the grass, a wild battle and
-// a Safari ball thrown, the drop map and a pick, a route trainer talked to and beaten, the
-// fog's bleed, the results. A screenshot at every step, the layout checked at every step,
-// and a recorder in the page (play.ts) holding the picture to its invariants frame by
-// frame through the whole match. It runs in Chromium and in Firefox (the play-firefox
-// project), where the video was.
+// a Safari ball thrown, the drop map and a pick, a route trainer's tile walked onto (a
+// match strips route trainers, 2026-10-13), the fog's bleed, the results. A screenshot
+// at every step, the layout checked at every step, and a recorder in the page (play.ts)
+// holding the picture to its invariants frame by frame through the whole match. It runs
+// in Chromium and in Firefox (the play-firefox project), where the video was.
 //
 // The match is pinned so every run is the same one:
 //   - `#seed` deals the opening's cell and everything after it. SEED puts seat 0 on cell

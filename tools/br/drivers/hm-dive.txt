@@ -1,0 +1,25 @@
+# hm-dive: A on deep water dives with no HM and no prompt (2026-10-13, "get rid of the
+# need for HMs"). br_hm.c's BrHm_DiveScript.
+#
+# ROUTE 126 (map 0:41) is all sea, deep water around (40,10). A boot onto water lands
+# surfing (overworld.c's GetAdjustedInitialTransitionFlags), so no shore is needed.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 00 00 29 28 00 09 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 41
+shot booted
+expect u16 *gSaveBlock1Ptr+0 40
+expect u16 *gSaveBlock1Ptr+2 9
+expectbits u8 gPlayerAvatar 0x08 0x08
+# A on the deep water: no "use DIVE?", straight down.
+tap A
+wait 400
+shot dived
+# Underwater on UNDERWATER ROUTE 126 (map 0:51), same cell, back on the field.
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 51
+expect u16 *gSaveBlock1Ptr+0 40
+expect u16 *gSaveBlock1Ptr+2 9
+expectbits u8 gPlayerAvatar 0x10 0x10
+expect u32 gMain+4 CB2_Overworld+1

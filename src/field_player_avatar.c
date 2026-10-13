@@ -612,12 +612,12 @@ static void PlayerNotOnBikeMoving(u8 direction, u16 heldKeys)
 {
     u8 collision = CheckForPlayerAvatarCollision(direction);
 
+#if BR
+    if (BrHm_WalkInto(direction, collision))
+        return;
+#endif
     if (collision)
     {
-#if BR
-        if (BrHm_WalkInto(direction, collision))
-            return;
-#endif
         if (collision == COLLISION_LEDGE_JUMP)
         {
             PlayerJumpLedge(direction);

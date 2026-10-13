@@ -12,9 +12,10 @@
 // and Strength boulders all as object events, and every way one appears -- scrolling into
 // view, a map load, a script's `addobject` -- goes through TrySpawnObjectEventTemplate.
 // What a match keeps: the eight leaders on their gyms (br_gym.c's table), the CENTER
-// nurse and the MART clerk (the only people who do something for you), MR. BRINEY and the
-// ferry attendants (the boats still run, br_boot.c), item balls and berry trees, and the
-// Pokemon and props. BR's own objects (loot, ghosts) are never the map's.
+// nurse and the MART clerk (the only people who do something for you), MR. BRINEY and
+// the ferry attendants (the boats still run, br_boot.c), item balls and berry trees, and
+// the Pokemon and props. What code spawns (a cutscene's camera, loot, ghosts) is never
+// the map's.
 // tools/br/export-trainers.py applies the same rule for the page's trainer table.
 
 // TRUE: this template never becomes an object on this map. Only in a match.
