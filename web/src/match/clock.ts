@@ -43,7 +43,7 @@ export function isFinalRingPhase(ringIndex: number): boolean {
 }
 
 /** The ring in the strip: its radius and where it closes on. The last ring's -1 is
- *  "everywhere" (match/clock.ts RING_RADII), which read as "RING -1" for the whole
+ *  "everywhere" (RING_RADII), which read as "RING -1" for the whole
  *  endgame (2026-10-12 match video). */
 export function ringLabel(r: number | undefined, place: string | undefined): string {
   return r !== undefined && r < 0 ? 'FINAL FOG' : `RING ${r ?? '?'} (${place ?? '?'})`;

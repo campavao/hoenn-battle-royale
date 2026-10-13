@@ -219,13 +219,13 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     // From here every frame the page shows unkeyed is looked at for the key: the end of
     // every battle flashed four frames of it, and a fade a blue band (2026-10-12 video).
     await page.evaluate(() => {
-      const w = window as unknown as { __hbr: { emu: { onFrame(f: () => void): () => void; lcdPixels(o: Uint8ClampedArray): boolean } }; __flash?: number[] };
+      const w = window as unknown as { __hbr: { emu: { onFrame(f: () => void): () => void; lcdPixels(o: Uint8ClampedArray): boolean } }; __flash?: number[]; __flashOff?: () => void };
       const buf = new Uint8ClampedArray(240 * 160 * 4);
       const layer = document.querySelector('#key-layer') as HTMLCanvasElement;
       const lcd = document.querySelector('#canvas') as HTMLElement;
       let frame = 0;
       w.__flash = [];
-      w.__hbr.emu.onFrame(() => {
+      w.__flashOff = w.__hbr.emu.onFrame(() => {
         frame++;
         // keyed, by the copy or the filter: what shows is not the raw picture
         if (!layer.hidden || lcd.style.filter !== '') return;
@@ -257,7 +257,11 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     expect(after.balls, 'a ball was thrown').toBeLessThan(before.balls);
     await page.waitForTimeout(1_000);
     await shot('back-on-the-field');
-    const flash = await page.evaluate(() => (window as unknown as { __flash?: number[] }).__flash ?? []);
+    const flash = await page.evaluate(() => {
+      const w = window as unknown as { __flash?: number[]; __flashOff?: () => void };
+      w.__flashOff?.();
+      return w.__flash ?? [];
+    });
     expect(flash, 'no frame of the battle shown as solid key blue, unkeyed').toEqual([]);
     await expectLayout(page, { onField: true }, 'after the catch', sym);
     await expectClean(page, 'the throw');

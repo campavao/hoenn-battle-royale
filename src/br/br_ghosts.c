@@ -559,10 +559,37 @@ void BrGhosts_Out(u8 seat)
     BrGhosts_Remove(seat);
 }
 
+// Whether this is a tree or rock a ghost may take down: one on our own map whose flag is
+// a temp flag, which the map clears on its next load -- every one but Rusturf Tunnel's
+// two rocks, whose story flags would stay set in our save for good.
+static bool8 Cuttable(const struct ObjectEvent *o)
+{
+    u8 i;
+
+    if (o->graphicsId != OBJ_EVENT_GFX_CUTTABLE_TREE && o->graphicsId != OBJ_EVENT_GFX_BREAKABLE_ROCK)
+        return FALSE;
+    if (o->mapNum != gSaveBlock1Ptr->location.mapNum || o->mapGroup != gSaveBlock1Ptr->location.mapGroup)
+        return FALSE;
+    for (i = 0; i < OBJECT_EVENT_TEMPLATES_COUNT; i++)
+    {
+        if (gSaveBlock1Ptr->objectEventTemplates[i].localId == o->localId)
+            return gSaveBlock1Ptr->objectEventTemplates[i].flagId <= TEMP_FLAGS_END;
+    }
+    return FALSE;
+}
+
+// Whether the object is playing, or has played, a cut or a smash.
+static bool8 Cutting(const struct ObjectEvent *o)
+{
+    return o->heldMovementActive
+        && (o->movementActionId == MOVEMENT_ACTION_CUT_TREE || o->movementActionId == MOVEMENT_ACTION_ROCK_SMASH_BREAK);
+}
+
 // A ghost's next step into a cuttable tree or a breakable rock takes it down first:
 // it walked straight through one (2026-10-12 match video). The page lets a seat cross
 // one as everybody carries the HMs (bots/brain.ts canCut); this is the picture of it.
 // TRUE once the way is clear. The tree comes back with the map, as the player's does.
+// One that is not ours to take (Cuttable) is walked through, as before.
 static bool8 ClearTheWay(struct ObjectEvent *ghost, u8 dir)
 {
     struct ObjectEvent *o;
@@ -576,27 +603,27 @@ static bool8 ClearTheWay(struct ObjectEvent *ghost, u8 dir)
     if (id >= OBJECT_EVENTS_COUNT)
         return TRUE;
     o = &gObjectEvents[id];
-    if (o->graphicsId != OBJ_EVENT_GFX_CUTTABLE_TREE && o->graphicsId != OBJ_EVENT_GFX_BREAKABLE_ROCK)
+    if (!Cuttable(o))
         return TRUE;
     bit = 1 << id;
-    if (!(sCutting & bit))
-    {
-        // Somebody else's movement on it (the player cutting it too): theirs to finish.
-        if (ObjectEventIsMovementOverridden(o))
-            return FALSE;
-        ObjectEventSetHeldMovement(ghost, GetFaceDirectionMovementAction(dir));
-        ObjectEventSetHeldMovement(o, o->graphicsId == OBJ_EVENT_GFX_CUTTABLE_TREE
-            ? MOVEMENT_ACTION_CUT_TREE : MOVEMENT_ACTION_ROCK_SMASH_BREAK);
-        sCutting |= bit;
+    if (sCutting & bit)
+        return FALSE; // started: SweepCutting takes it away once the cut has played
+    // Somebody else's movement on it (the player cutting it too): theirs to finish.
+    if (ObjectEventIsMovementOverridden(o))
         return FALSE;
-    }
-    // Started: SweepCutting takes it away once the cut has played.
+    ObjectEventSetHeldMovement(ghost, GetFaceDirectionMovementAction(dir));
+    ObjectEventSetHeldMovement(o, o->graphicsId == OBJ_EVENT_GFX_CUTTABLE_TREE
+        ? MOVEMENT_ACTION_CUT_TREE : MOVEMENT_ACTION_ROCK_SMASH_BREAK);
+    sCutting |= bit;
     return FALSE;
 }
 
 // Every cut a ghost started, taken off the map once it has played -- whatever became of
 // the ghost meanwhile. Finished from the ghost's own walk it was left half done when the
 // ghost snapped past it (a full queue) or was despawned: an invisible tree, still solid.
+// The bits live through a battle, which keeps the objects and replays the cut on the way
+// back (SpawnObjectEventOnReturnToField). A slot that no longer holds a cut -- freed out
+// of view, or another object in it -- only loses its bit.
 static void SweepCutting(void)
 {
     struct ObjectEvent *o;
@@ -607,12 +634,12 @@ static void SweepCutting(void)
         if (!(sCutting & (1 << id)))
             continue;
         o = &gObjectEvents[id];
-        if (!o->active || (o->graphicsId != OBJ_EVENT_GFX_CUTTABLE_TREE && o->graphicsId != OBJ_EVENT_GFX_BREAKABLE_ROCK))
+        if (!o->active || !Cutting(o))
         {
-            sCutting &= ~(1 << id); // somebody else took it away
+            sCutting &= ~(1 << id);
             continue;
         }
-        if (ObjectEventCheckHeldMovementStatus(o) == 0)
+        if (!o->heldMovementFinished)
             continue; // still playing
         ObjectEventClearHeldMovementIfActive(o);
         sCutting &= ~(1 << id);
@@ -869,7 +896,6 @@ void BrGhosts_Tick(void)
     if (!BrField_OverworldRunning())
     {
         sOwnValid = FALSE; // the next overworld frame re-places us (map load, battle end)
-        sCutting = 0;      // and a map load spawns its trees afresh
         return;
     }
     BrField_ShareObjects(&limit, &loot);
