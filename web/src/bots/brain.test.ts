@@ -275,6 +275,20 @@ describe('bots walking', () => {
     expect(bots.partyOf(trader)[slot]).toMatchObject({ species: grownUp(131, rungForPhase(4)), level: rungForPhase(4) });
   });
 
+  it("keeps FLY on the slot it trades away, at the trade and up the rungs", () => {
+    const standing = [{ key: 0xb00f, species: 131, mapId: 'FIELD', ...pageCell(0, 1) }];
+    const { bots, sent, dealt } = eventBots({
+      traders: () => standing,
+      deal: (bot, phase) => dealParty(5, bot.seat, phase, undefined).map((m) => ({ ...m, moves: [{ id: 33, pp: 25, ppUps: 0 }, { id: 19, pp: 15, ppUps: 0 }] })),
+    });
+    for (let t = STEP_MS; t <= 5_000; t += STEP_MS) bots.tick(t);
+    expect(sent.some((m) => m.t === 'pickup' && m.key === 0xb00f)).toBe(true);
+    const seat = dealt[0].seat;
+    expect(bots.partyOf(seat).every((m) => m.moves.some((mv) => mv.id === 19))).toBe(true);
+    bots.ringMoved(4);
+    expect(bots.partyOf(seat).every((m) => m.moves.some((mv) => mv.id === 19))).toBe(true);
+  });
+
   it('forgets a bot that goes out', () => {
     const { bots, dealt } = run(3, 1);
     bots.remove(dealt[0].seat);

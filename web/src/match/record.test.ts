@@ -90,6 +90,13 @@ describe('the record card', () => {
     expect(rec.forSeat(1).took).toBe(1);
   });
 
+  it("does not count a trade with an event's trader as something taken, but does his event's pieces", () => {
+    const rec = new MatchRecord();
+    rec.start();
+    feed(rec, [pickup(1, 0xb00f), pickup(1, 0xb001), pickup(1, 0xb01f)]);
+    expect(rec.forSeat(1).took).toBe(1);
+  });
+
   it('gives a seat that did nothing a record of doing nothing', () => {
     const rec = new MatchRecord();
     rec.start();

@@ -88,4 +88,38 @@ expect u8 gBrEvents+16 2
 expect u8 gBrEvents+18 0
 expect u8 gBrEvents+52 0xFF
 expect u16 gBrEvents+24 0
+# The race (PR #23 review): this match's EVENT 2 stands a trader on the cell again, we
+# ask him and open the party menu (our personality kept in the empty sixth slot), and somebody else's trade lands while we pick. Ours
+# is refused -- "HE HAS ALREADY TRADED" -- and the TREECKO's slot is untouched.
+pokebytes gDecompressionBuffer 00 02 10 20 B0 00 09 0C 00 11 00 83 00
+mailsend gBrMailbox 32 gDecompressionBuffer 13
+wait 30
+expect u8 gBrEvents+18 0
+expectne u8 gBrEvents+54 0xFF
+copy gPlayerParty+500 gPlayerParty 4
+tap A
+wait 90
+tap A
+wait 30
+tap A
+wait 90
+shot race-picker
+pokebytes gDecompressionBuffer 03 2F B0 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 10
+expect u8 gBrEvents+18 4
+tap A
+wait 120
+shot race-refused
+expectsame u32 gPlayerParty gPlayerParty+500
+expect u8 gPlayerPartyCount 1
+expect u8 gBrEvents+54 0xFF
+# ...and the field is ours again once the box is closed: a step north is a step
+tap A
+wait 60
+expect u16 *gSaveBlock1Ptr+2 9
+hold UP 24
+wait 30
+expect u16 *gSaveBlock1Ptr+2 8
+expect u8 gBrEvents+18 4
 say event trader ok

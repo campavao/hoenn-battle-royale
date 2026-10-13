@@ -12,7 +12,7 @@
 import { findPath, findPathToAny, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
-import { MOVE_FLY, tradedMon } from './party';
+import { MOVE_CUT, MOVE_FLY, MOVE_SURF, tradedMon } from './party';
 import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
 import { sameSpot, spotKey, type SeamDir, type Spot, type World } from './world';
@@ -364,6 +364,14 @@ export function health(party: PackedMon[]): number {
  *  mon (party.ts's grownUp), so a WURMPLE that was hurt is a hurt SILCOON, not a fresh
  *  one. It used to be a fresh one, and every fainted mon came back on 1 HP, so bots
  *  outlived the fog and the fights meant to thin them out. */
+/** A traded mon in a slot keeps the field moves the slot had (PR #23 review): FLY is a
+ *  bot's way out of the fog, and the trader's TACKLE-only mon would take it away -- and
+ *  keep it away, since every rung re-deals that slot as the traded species. */
+function keepFieldMoves(traded: PackedMon, from: PackedMon): PackedMon {
+  const field = from.moves.filter((mv) => mv.id === MOVE_FLY || mv.id === MOVE_SURF || mv.id === MOVE_CUT);
+  return { ...traded, moves: [...traded.moves, ...field].slice(0, 4) };
+}
+
 function climb(held: PackedMon[], fresh: PackedMon[]): PackedMon[] {
   return fresh.map((next, i) => {
     const mine = held[i];
@@ -550,7 +558,7 @@ export class Bots {
       if (fresh) walker.party = climb(walker.party, fresh);
       for (const [slot, species] of walker.traded ?? []) {
         const held = walker.party[slot];
-        if (held) walker.party[slot] = { ...tradedMon(species, phase), hp: held.hp, maxHp: held.maxHp, status: held.status };
+        if (held) walker.party[slot] = { ...keepFieldMoves(tradedMon(species, phase), held), hp: held.hp, maxHp: held.maxHp, status: held.status };
       }
       // No restock: it was a free potion a ring, called a Mart visit, and no Mart was
       // ever visited (POK-322). What a bot has spent stays spent.
@@ -1233,8 +1241,8 @@ export class Bots {
   }
 
   /** At an event's trader, or a step from him: hand him the most hurt mon still standing
-   *  for his fresh one, the way a player at him would (br_event.c's BrEvent_Trade refuses a fainted
-   *  one). The PICKUP of his key uses him up for the whole room. */
+   *  for his fresh one, the way a player at him would (br_event.c's BrEvent_Trade refuses
+   *  a fainted one). The PICKUP of his key uses him up for the whole room. */
   private tryTrade(walker: Walker): boolean {
     const t = this.openTraders().find(
       (o) => o.mapId === walker.at.map && Math.abs(o.x - walker.at.x) + Math.abs(o.y - walker.at.y) <= 1,
@@ -1246,7 +1254,7 @@ export class Bots {
     });
     if (slot < 0) return false;
     this.tradedKeys.add(t.key);
-    walker.party[slot] = tradedMon(t.species, this.phase);
+    walker.party[slot] = keepFieldMoves(tradedMon(t.species, this.phase), walker.party[slot]);
     (walker.traded ??= new Map()).set(slot, t.species);
     this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: t.key });
     this.note(walker, 'trade', `key ${t.key} species ${t.species}`);
