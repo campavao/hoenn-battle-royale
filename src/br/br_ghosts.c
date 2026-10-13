@@ -36,6 +36,9 @@ static EWRAM_DATA u32 sOutSeats = 0;
 // How fast each ghost walks, and how long it has stood waiting for its next step: the
 // pace in the low two bits, the idle frames above them (PaceWalk).
 static EWRAM_DATA u8 sPace[BR_MAX_SEATS] = {0};
+// The trees and rocks a ghost has started cutting or smashing, a bit per object slot.
+STATIC_ASSERT(OBJECT_EVENTS_COUNT <= 16, BrCuttingFitsAHalfword)
+static EWRAM_DATA u16 sCutting = 0;
 
 // Skin -> object event graphics. Index 0 is the default; the shell's career picks.
 // The wardrobe (POK-282). Cam: "I should be able to pick kind of like any sprites -- the
@@ -438,6 +441,7 @@ void BrGhosts_Init(void)
     gBrOwnEvents = 0;
     sOwnValid = FALSE;
     sOutSeats = 0;
+    sCutting = 0;
 }
 
 // A walker's first step onto the next map is a PLACE (a ROM's own WatchOwn says so on any
@@ -610,6 +614,94 @@ static u8 PaceWalk(u8 seat, u8 dir)
     return GetWalkNormalMovementAction(dir);
 }
 
+// Whether this is a tree or rock a ghost may take down: one on our own map whose flag is
+// a temp flag, which the map clears on its next load -- every one but Rusturf Tunnel's
+// two rocks, whose story flags would stay set in our save for good.
+static bool8 Cuttable(const struct ObjectEvent *o)
+{
+    u8 i;
+
+    if (o->graphicsId != OBJ_EVENT_GFX_CUTTABLE_TREE && o->graphicsId != OBJ_EVENT_GFX_BREAKABLE_ROCK)
+        return FALSE;
+    if (o->mapNum != gSaveBlock1Ptr->location.mapNum || o->mapGroup != gSaveBlock1Ptr->location.mapGroup)
+        return FALSE;
+    for (i = 0; i < OBJECT_EVENT_TEMPLATES_COUNT; i++)
+    {
+        if (gSaveBlock1Ptr->objectEventTemplates[i].localId == o->localId)
+            return gSaveBlock1Ptr->objectEventTemplates[i].flagId <= TEMP_FLAGS_END;
+    }
+    return FALSE;
+}
+
+// Whether the object is playing, or has played, a cut or a smash.
+static bool8 Cutting(const struct ObjectEvent *o)
+{
+    return o->heldMovementActive
+        && (o->movementActionId == MOVEMENT_ACTION_CUT_TREE || o->movementActionId == MOVEMENT_ACTION_ROCK_SMASH_BREAK);
+}
+
+// A ghost's next step into a cuttable tree or a breakable rock takes it down first:
+// it walked straight through one (2026-10-12 match video). The page lets a seat cross
+// one as everybody carries the HMs (bots/brain.ts canCut); this is the picture of it.
+// TRUE once the way is clear. The tree comes back with the map, as the player's does.
+// One that is not ours to take (Cuttable) is walked through, as before.
+static bool8 ClearTheWay(struct ObjectEvent *ghost, u8 dir)
+{
+    struct ObjectEvent *o;
+    s16 x = ghost->currentCoords.x;
+    s16 y = ghost->currentCoords.y;
+    u8 id;
+    u16 bit;
+
+    MoveCoords(dir, &x, &y);
+    id = GetObjectEventIdByXY(x, y);
+    if (id >= OBJECT_EVENTS_COUNT)
+        return TRUE;
+    o = &gObjectEvents[id];
+    if (!Cuttable(o))
+        return TRUE;
+    bit = 1 << id;
+    if (sCutting & bit)
+        return FALSE; // started: SweepCutting takes it away once the cut has played
+    // Somebody else's movement on it (the player cutting it too): theirs to finish.
+    if (ObjectEventIsMovementOverridden(o))
+        return FALSE;
+    ObjectEventSetHeldMovement(ghost, GetFaceDirectionMovementAction(dir));
+    ObjectEventSetHeldMovement(o, o->graphicsId == OBJ_EVENT_GFX_CUTTABLE_TREE
+        ? MOVEMENT_ACTION_CUT_TREE : MOVEMENT_ACTION_ROCK_SMASH_BREAK);
+    sCutting |= bit;
+    return FALSE;
+}
+
+// Every cut a ghost started, taken off the map once it has played -- whatever became of
+// the ghost meanwhile. Finished from the ghost's own walk it was left half done when the
+// ghost snapped past it (a full queue) or was despawned: an invisible tree, still solid.
+// The bits live through a battle, which keeps the objects and replays the cut on the way
+// back (SpawnObjectEventOnReturnToField). A slot that no longer holds a cut -- freed out
+// of view, or another object in it -- only loses its bit.
+static void SweepCutting(void)
+{
+    struct ObjectEvent *o;
+    u8 id;
+
+    for (id = 0; id < OBJECT_EVENTS_COUNT && sCutting != 0; id++)
+    {
+        if (!(sCutting & (1 << id)))
+            continue;
+        o = &gObjectEvents[id];
+        if (!o->active || !Cutting(o))
+        {
+            sCutting &= ~(1 << id);
+            continue;
+        }
+        if (!o->heldMovementFinished)
+            continue; // still playing
+        ObjectEventClearHeldMovementIfActive(o);
+        sCutting &= ~(1 << id);
+        RemoveObjectEventByLocalIdAndMap(o->localId, o->mapNum, o->mapGroup);
+    }
+}
+
 // Feed one queued walk to the object, or snap it when it fell too far behind.
 static void DriveGhost(u8 seat)
 {
@@ -642,6 +734,10 @@ static void DriveGhost(u8 seat)
     if (s->queued > 0)
     {
         u8 dir = s->queue[0];
+        // Steps that arrive while a cut plays wait behind it, and PaceWalk walks the
+        // backlog off faster once the way is clear.
+        if (!ClearTheWay(obj, dir))
+            return;
         for (i = 1; i < s->queued; i++)
             s->queue[i - 1] = s->queue[i];
         s->queued--;
@@ -878,6 +974,7 @@ void BrGhosts_Tick(void)
             Spawn(seat);
         DriveGhost(seat);
     }
+    SweepCutting();
     EmoteBusyGhosts();
     WatchOwn();
     EmitOwn();

@@ -35,9 +35,15 @@
 #include "br/br_battle.h"
 #include "br/br_bot.h"
 #include "br/br_spectate.h"
+#include "br/br_field.h"
 
 EWRAM_DATA struct BrBattle gBrBattle = {0};
 EWRAM_DATA u8 gBrSeeThrough[2] = {0};
+// How long BrBattle_TickSeeThrough has held the count past a battle. At most
+// SEE_THROUGH_HOLD_MAX: a screen after a battle that never loads palette 0 of its own
+// (an evolution) would otherwise be keyed for as long as it is up. The flash was 8 frames.
+#define SEE_THROUGH_HOLD_MAX 30
+static EWRAM_DATA u8 sSeeThroughHeld = 0;
 
 // The opponent's three lines, for the one seat they are about (BrBattle_SetVoice).
 struct BrVoice
@@ -177,11 +183,31 @@ static const u8 sSeeThroughStripes[] = {
     BG_PLTT_ID(2) + 14, BG_PLTT_ID(2) + 15, BG_PLTT_ID(3) + 1, BG_PLTT_ID(3) + 15,
 };
 
+// The faded buffer too, mid-fade as well: a fade moves the key towards its colour, and a
+// dark blue is no key -- the page showed it as a blue band (2026-10-12 match video, 5:05).
+// The page fades the field under the hole itself (field.ts, mapFade).
 static void SeeThroughKey(u16 i)
 {
     gPlttBufferUnfaded[i] = BR_SEE_THROUGH_KEY;
-    if (!gPaletteFade.active)
-        gPlttBufferFaded[i] = BR_SEE_THROUGH_KEY;
+    gPlttBufferFaded[i] = BR_SEE_THROUGH_KEY;
+}
+
+// Whether the key is still in the palette: the hardware's, or the buffer the next VBlank
+// sends it. After a battle's last VBlank the screen that follows draws black with the
+// key where the battle left it until it loads palettes of its own.
+static bool8 SeeThroughKeyUp(void)
+{
+    u8 i;
+
+    if (((u16 *)PLTT)[0] == BR_SEE_THROUGH_KEY || gPlttBufferFaded[0] == BR_SEE_THROUGH_KEY)
+        return TRUE;
+    for (i = 0; i < ARRAY_COUNT(sSeeThroughStripes); i++)
+    {
+        if (((u16 *)PLTT)[sSeeThroughStripes[i]] == BR_SEE_THROUGH_KEY
+         || gPlttBufferFaded[sSeeThroughStripes[i]] == BR_SEE_THROUGH_KEY)
+            return TRUE;
+    }
+    return FALSE;
 }
 
 void BrBattle_SeeThrough(void)
@@ -194,12 +220,24 @@ void BrBattle_SeeThrough(void)
     for (i = 0; i < ARRAY_COUNT(sSeeThroughStripes); i++)
         SeeThroughKey(sSeeThroughStripes[i]);
     gBrSeeThrough[1] = 2;
+    sSeeThroughHeld = 0;
 }
 
+// The count holds at 1 off the field while the key is still up: the frames between a
+// battle's last VBlank and the next screen's palettes flashed solid blue, four frames
+// at the end of every battle (2026-10-12 match video). On the field it runs out, so a
+// map that happens to use the colour is never keyed.
 void BrBattle_TickSeeThrough(void)
 {
-    if (gBrSeeThrough[1] != 0)
-        gBrSeeThrough[1]--;
+    if (gBrSeeThrough[1] == 0)
+        return;
+    if (gBrSeeThrough[1] == 1 && gBrSeeThrough[0] && !BrField_OverworldRunning() && SeeThroughKeyUp()
+     && sSeeThroughHeld < SEE_THROUGH_HOLD_MAX)
+    {
+        sSeeThroughHeld++;
+        return;
+    }
+    gBrSeeThrough[1]--;
 }
 
 u8 BrBattle_LinkTextSpeed(void)
