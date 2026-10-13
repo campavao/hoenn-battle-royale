@@ -1,0 +1,52 @@
+# spectate-late-join: a watcher handed a fight joined late gets every turn of it while
+# its field is still fading out, and the replay plays every one (2026-10-13 play-test:
+# "battles don't finish"). Those turns were held in 64 bytes, about six turns' worth;
+# the rest were dropped mid-run, and the replay played six turns and then waited, for
+# good, on bytes that had gone. Now they are held per battler on the heap.
+#
+# spectate-watch.txt's fight, and the page's cache of it: twelve TURNs, one message a
+# turn as the fighter sent them, all arriving the frames after the BSTART. Both pick
+# move slot 1 (30 PP), which knocks nobody out, so the fight outlasts the twelve.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 4
+expect u8 gBrSpectate+5 1
+# battle 0x0100; battler 0 picks FIGHT, move 1, at 1; battler 1 the same at 0
+pokebytes gDecompressionBuffer 00 01 00 03 00 01 01 01 03 00 01 00
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+wait 10
+expectge u16 gBrSpectate 12
+# twelve turns at 1x (the page runs them at 8x): both mons used the move twelve times,
+# and the replay is still in the fight, a turn behind, waiting on the thirteenth
+wait 13000
+expect u8 gBrSpectate+5 1
+expect u8 gBattleOutcome 0
+expect u8 gBattleMons+0x25 18
+expect u8 gBattleMons+0x7D 18
+shot twelve
+# ...which, when it comes, is the thirteenth: the held turns left the record in step.
+# (The battle has used gDecompressionBuffer since, so the turn is written out again.)
+pokebytes gDecompressionBuffer 00 01 00 03 00 01 01 01 03 00 01 00
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+wait 2500
+expect u8 gBattleMons+0x25 17
+expect u8 gBattleMons+0x7D 17
+shot thirteen
+say spectate late join ok

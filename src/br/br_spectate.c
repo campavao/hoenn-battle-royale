@@ -253,10 +253,23 @@ static EWRAM_DATA bool8 sPendFog = FALSE;
 // Turns that arrive while the field is still fading out. The fighters do not wait for
 // a spectator to be ready, so the opening turn of a fight can land before the replay
 // exists; held here, they are flushed into the record the moment it does.
-static EWRAM_DATA u8 sEarlyTurns[64] = {0};
-static EWRAM_DATA u8 sEarlyLen = 0;
+//
+// Held per battler on the heap behind the parties, as much as the record itself holds.
+// It was 64 bytes in EWRAM, about six turns, and a watcher who joins late is handed every
+// turn so far in exactly this window: the rest were dropped, mid-run, and the replay
+// played six turns and then waited on bytes that were never coming -- the fight never
+// finished for them until its RESULT pulled the plug (2026-10-13 play-test).
+struct BrEarlyTurns
+{
+    u16 len[MAX_BATTLERS_COUNT];
+    u8 bytes[MAX_BATTLERS_COUNT][BR_SPECTATE_RECORD_SIZE];
+};
+#define PEND_EARLY ((struct BrEarlyTurns *)(sPendParties + 2 * PARTY_SIZE))
 // ...and a RESULT that lands in the same window: the replay's own start would clear it.
 static EWRAM_DATA bool8 sEndEarly = FALSE;
+// ...and NEXT in the same window: the replay starts and stops at once, without playing
+// the turns held for it -- a fight joined late is all of them, at catch-up speed.
+static EWRAM_DATA bool8 sAbortEarly = FALSE;
 
 static void CB2_BrReturnFromSpectate(void)
 {
@@ -291,21 +304,37 @@ static u16 UnpackParty(const u8 *d, u16 avail, struct Pokemon *party)
 // back first; skipping that is what made the spectate crash the sound driver on agbcc).
 static void EnterSpectate(void)
 {
+    // One run at a time, the record's own [battler, count, bytes] shape, in 62-byte
+    // pieces to keep this off the stack (FeedSpectate would take 255). Not sTurnBuf:
+    // that is the TURN assembler's, and a turn can be half read in it right now.
+    u8 run[2 + 62];
+    struct BrEarlyTurns *early;
+    u16 at, k;
+    u8 battler;
+
     BrRing_SetBattleFog(sPendFog);
     RecordedBattle_StartSpectate(sPendSeed, sPendFlags, sPendParties,
         sPendParties + PARTY_SIZE, sPendNames, sPendGenders, CB2_BrReturnFromSpectate);
+    early = PEND_EARLY;
+    for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
+    {
+        for (at = 0; at < early->len[battler]; at += k)
+        {
+            run[0] = battler;
+            for (k = 0; k < sizeof(run) - 2 && at + k < early->len[battler]; k++)
+                run[2 + k] = early->bytes[battler][at + k];
+            run[1] = k;
+            RecordedBattle_FeedSpectate(run, 2 + k);
+        }
+    }
     Free(sPendParties);
     sPendParties = NULL;
-    if (sEarlyLen != 0)
-    {
-        RecordedBattle_FeedSpectate(sEarlyTurns, sEarlyLen);
-        sEarlyLen = 0;
-    }
-    if (sEndEarly)
-    {
+    if (sAbortEarly)
+        RecordedBattle_AbortSpectate();
+    else if (sEndEarly)
         RecordedBattle_EndSpectate();
-        sEndEarly = FALSE;
-    }
+    sEndEarly = FALSE;
+    sAbortEarly = FALSE;
 }
 
 // A fight worth watching landed: build the recorded battle and run it. The page decides
@@ -328,7 +357,7 @@ static void ParseBstart(const u8 *d, u16 n)
     seed = d[2] | (d[3] << 8) | (d[4] << 16) | ((u32)d[5] << 24);
     flags = d[6] | (d[7] << 8) | (d[8] << 16) | ((u32)d[9] << 24);
 
-    parties = AllocZeroed(2 * PARTY_SIZE * sizeof(struct Pokemon));
+    parties = AllocZeroed(2 * PARTY_SIZE * sizeof(struct Pokemon) + sizeof(struct BrEarlyTurns));
     if (parties == NULL)
         return;
     off = BR_BSTART_PARTIES;
@@ -353,8 +382,8 @@ static void ParseBstart(const u8 *d, u16 n)
     sPendSeed = seed;
     sPendFlags = flags;
     sPendParties = parties;
-    sEarlyLen = 0;
     sEndEarly = FALSE;
+    sAbortEarly = FALSE;
     // sTurnBuf is the reassembly buffer from here on; a fighter's unsent TURN in it is
     // one no spectator is waiting for any more.
     sTurnLen = 0;
@@ -367,7 +396,9 @@ static void ParseBstart(const u8 *d, u16 n)
 // replay's record, which the battle reads a turn behind.
 static void ParseTurn(const u8 *d, u16 n)
 {
-    u8 i, len;
+    struct BrEarlyTurns *early;
+    u16 i;
+    u8 len, battler, count;
 
     if (!gBrSpectate.watching || n < 3)
         return;
@@ -376,10 +407,18 @@ static void ParseTurn(const u8 *d, u16 n)
     len = (n - 2 > 0xFF) ? 0xFF : (u8)(n - 2);
     if (sPendParties != NULL)
     {
-        // Still fading into the battle: hold it. Runs concatenate, so the held bytes
-        // feed as one delta once the record exists.
-        for (i = 0; i < len && sEarlyLen < (u8)sizeof(sEarlyTurns); i++)
-            sEarlyTurns[sEarlyLen++] = d[2 + i];
+        // Still fading into the battle: hold it, run by run, on the battler it is for.
+        early = PEND_EARLY;
+        for (i = 2; i + 1 < n;)
+        {
+            battler = d[i++];
+            count = d[i++];
+            for (; count != 0 && i < n; count--, i++)
+            {
+                if (battler < MAX_BATTLERS_COUNT && early->len[battler] < BR_SPECTATE_RECORD_SIZE)
+                    early->bytes[battler][early->len[battler]++] = d[i];
+            }
+        }
     }
     else
     {
@@ -933,7 +972,7 @@ void BrSpectate_Follow(u8 seat)
         if (gBrSpectate.watching)
         {
             if (sPendParties != NULL)
-                sEndEarly = TRUE;
+                sAbortEarly = TRUE;
             else
                 RecordedBattle_AbortSpectate();
         }
