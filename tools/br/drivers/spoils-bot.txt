@@ -44,8 +44,15 @@ wait 150
 tap A
 wait 150
 tap A
+# One more A, mashed on: it lands about as the box opens (the field is back 130 frames
+# after the prize, the box with it), and a box that took it would take TREECKO unread.
+wait 140
+tap A
+shot early-a
+wait 30
+expect u8 gPlayerPartyCount 1
 # back on the field: the team is down round us, under the bot's own keys...
-wait 300
+wait 130
 expect u8 gBrBotFight+2 0
 expect u8 gBrLoot+0xA0 2
 expectmsg 11 u8 0 0

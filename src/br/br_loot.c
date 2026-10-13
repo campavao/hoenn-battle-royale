@@ -479,10 +479,10 @@ struct BrLootItem *BrLoot_At(s16 x, s16 y)
 // skipping a cell whose collision bit is set and one this spill has already used.
 // Only the collision bit, as the eyeline (br_engage.c): water and ledges are open
 // ground, so a trainer who goes out at sea still leaves their team behind, and the
-// page's match/loot.ts deals a bot's spill by the same rule (POK-330 #67). A cell that
-// already has a piece on it is skipped too: BrLoot_At answers with the first row on a
-// cell, so a ball dropped on another was a ball nobody could see or take until the one
-// on top was gone. Kanto scatters within two tiles. The cells go out in the message,
+// page's match/loot.ts deals a bot's spill by the collision rule too (POK-330 #67). A
+// cell that already has a piece on it is skipped here, and only here -- the page's
+// spillCells does not look: BrLoot_At answers with the first row on a cell, so a ball
+// dropped on another was a ball nobody could see or take until the one on top was gone. Kanto scatters within two tiles. The cells go out in the message,
 // so nobody reading it has to walk the ring again.
 static const s8 sSpillDx[] = { 0, 1, -1, 0,  0, 1, -1,  1, -1, 2, -2,  0,  0 };
 static const s8 sSpillDy[] = { 0, 0,  0, 1, -1, 1,  1, -1, -1, 0,  0,  2, -2 };
@@ -1150,6 +1150,8 @@ void BrLoot_Released(struct Pokemon *mon)
 // Long enough to read six names; short enough that a menu nobody answers is not a place
 // to stand still in a shrinking ring.
 #define BR_SPOILS_FRAMES (15 * 60)
+// Presses the box ignores once it is up (Task_Spoils).
+#define BR_SPOILS_DEAF_FRAMES 20
 
 static EWRAM_DATA u8 sSpoilsState = BR_SPOILS_NONE;
 static EWRAM_DATA u8 sSpoilsSeat = 0;
@@ -1239,8 +1241,14 @@ static void CloseSpoils(u8 taskId)
 {
     s16 *data = gTasks[taskId].data;
 
-    if (BrField_OverworldRunning())
-        ClearStdWindowAndFrameToTransparent(tWin, TRUE);
+    // Gone with the field: its teardown freed the window, and the id may be the next
+    // screen's by now -- removing it would take that one's window (and BG0's map).
+    if (!BrField_OverworldRunning())
+    {
+        DestroyTask(taskId);
+        return;
+    }
+    ClearStdWindowAndFrameToTransparent(tWin, TRUE);
     RemoveWindow(tWin);
     DestroyTask(taskId);
     // A script or a warp that started under the box took the same lock, and lets go of
@@ -1265,6 +1273,11 @@ static void Task_Spoils(u8 taskId)
         CloseSpoils(taskId);
         return;
     }
+    // The box opens the moment the field is back, under thumbs still mashing A (or B)
+    // through "defeated" and the prize: a press that was meant for the text would take
+    // the first ball, or leave them all, unread. A third of a second to see it first.
+    if (tTimer < BR_SPOILS_DEAF_FRAMES)
+        return;
     pick = Menu_ProcessInputNoWrap();
     if (pick == MENU_NOTHING_CHOSEN)
         return;
