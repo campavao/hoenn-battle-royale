@@ -1,0 +1,67 @@
+# link-cable: the LINK CABLE evolves a trade evolution from the BAG, the way a stone
+# evolves its own (Cam, 2026-10-13: "a Link Cable item so that folks could evolve pokemon
+# that can today only evolve via trade"). br_items.h, BrItems_CableTarget.
+#
+# Boots with no party (mode 1). Our own KADABRA (species 64) is put on our tile as a
+# ball keyed to our seat, so taking it back does not finish a trade on the way in
+# (loot-trade-evo is that half); then a LINK CABLE (52) by GIVE, and BAG > LINK CABLE >
+# USE > KADABRA. LITTLEROOT (map 0:9), the boot at (5,8): our tile is (12,16).
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 0
+# key 1 (seat 0, ours), (12,16), KADABRA, map 0:9, level 30, kind 1 (BR_LOOT_MON)
+pokebytes gBrLoot 01 00 0C 00 10 00 40 00 00 09 1E 01 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 60
+expect u8 gPlayerPartyCount 1
+# still KADABRA: "KADABRA" in the nickname, which is not encrypted
+expect u8 gPlayerParty+8 0xC5
+expect u8 gPlayerParty+9 0xBB
+expect u8 gPlayerParty+10 0xBE
+# one LINK CABLE, into the ITEMS pocket (SaveBlock1 +0x560, the id in the clear)
+pokebytes gDecompressionBuffer 01 34 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 4
+wait 60
+expect u16 *gSaveBlock1Ptr+0x560 52
+# START, down to BAG, in; the LINK CABLE is first, USE is first, the KADABRA is first.
+tap START
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 120
+shot bag
+tap A
+wait 30
+shot submenu
+tap A
+wait 60
+shot party-able
+tap A
+wait 120
+shot evolving
+# the evolution scene, then "Congratulations!" and "evolved into ALAKAZAM!"
+wait 900
+shot evolved
+hold A 4
+wait 120
+hold A 4
+wait 120
+hold A 4
+wait 120
+shot back
+# ALAKAZAM: A L A K A Z A M
+expect u8 gPlayerParty+8 0xBB
+expect u8 gPlayerParty+9 0xC6
+expect u8 gPlayerParty+10 0xBB
+expect u8 gPlayerParty+11 0xC5
+expect u8 gPlayerParty+12 0xBB
+expect u8 gPlayerParty+13 0xD4
+expect u8 gPlayerParty+14 0xBB
+expect u8 gPlayerParty+15 0xC7
+# and the cable is used up
+expect u16 *gSaveBlock1Ptr+0x560 0
+say link cable ok

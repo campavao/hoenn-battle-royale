@@ -15,6 +15,7 @@
 #include "battle.h"
 #include "constants/battle_move_effects.h"
 #include "constants/moves.h"
+#include "br/br_items.h"
 #include "br/br_match.h"
 #include "br/br_levels.h"
 
@@ -58,7 +59,8 @@ static const u16 *const sMarts[] = { sMart0, sMart1, sMart2, sMart3, sMart4, sMa
 static const u16 sDeptStore[] = { ITEM_MASTER_BALL, ITEM_ULTRA_BALL, ITEM_MAX_POTION, ITEM_FULL_RESTORE, ITEM_REVIVE, ITEM_MAX_REVIVE,
                                   ITEM_X_ATTACK, ITEM_X_DEFEND, ITEM_X_SPEED, ITEM_X_SPECIAL, ITEM_X_ACCURACY,
                                   ITEM_GUARD_SPEC, ITEM_DIRE_HIT, ITEM_POKE_DOLL, ITEM_FIRE_STONE, ITEM_WATER_STONE,
-                                  ITEM_THUNDER_STONE, ITEM_LEAF_STONE, ITEM_SUN_STONE, ITEM_MOON_STONE, ITEM_NONE };
+                                  ITEM_THUNDER_STONE, ITEM_LEAF_STONE, ITEM_SUN_STONE, ITEM_MOON_STONE,
+                                  BR_ITEM_LINK_CABLE, ITEM_NONE };
 
 // The ring's one ticker line, in Kanto's words (main.lua, "ONE box per shrink"): that
 // the fog moved and everything got stronger is the news, and the level number and the

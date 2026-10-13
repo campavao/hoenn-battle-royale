@@ -437,6 +437,9 @@ const u8 *const gItemEffectTable[] =
     [ITEM_THUNDER_STONE - ITEM_POTION] = gItemEffect_ThunderStone,
     [ITEM_WATER_STONE - ITEM_POTION]   = gItemEffect_WaterStone,
     [ITEM_LEAF_STONE - ITEM_POTION]    = gItemEffect_LeafStone,
+#if BR
+    [BR_ITEM_LINK_CABLE - ITEM_POTION] = gItemEffect_SunStone, // ITEM4_EVO_STONE: pret's stone flow (br_items.h)
+#endif
     [ITEM_CHERI_BERRY - ITEM_POTION]   = gItemEffect_CheriBerry,
     [ITEM_CHESTO_BERRY - ITEM_POTION]  = gItemEffect_ChestoBerry,
     [ITEM_PECHA_BERRY - ITEM_POTION]   = gItemEffect_PechaBerry,

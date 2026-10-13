@@ -1,6 +1,8 @@
 #ifndef GUARD_BR_ITEMS_H
 #define GUARD_BR_ITEMS_H
 
+#include "constants/items.h"
+
 // The item rework (2026-10-13, the speed-up redesign). In a match:
 //   - a vitamin is used on the spot, on the whole party: that stat's EVs go to the top
 //     (MAX_PER_STAT_EVS, past the 510 total) and never reach the bag;
@@ -35,5 +37,25 @@ void BrItems_FindHidden(void);
 // ItemUseOutOfBattle_Medicine: TRUE when the match took the use over and healed the
 // whole party (or said it would do nothing).
 bool8 BrItems_HealParty(u8 taskId);
+
+// The LINK CABLE (Cam, 2026-10-13: "so folks could evolve pokemon that can today only
+// evolve via trade"). One of pret's unused item ids, made a stone: same pocket, same
+// party menu with its ABLE / NOT ABLE, same evolution scene, used up the same way. What
+// it evolves into is the trade's own target (BrItems_CableTarget). Red ball loot in the
+// maps' item balls (br_balls.c) and on the LILYCOVE DEPARTMENT STORE's shelf with the
+// stones (br_levels.c).
+#define BR_ITEM_LINK_CABLE ITEM_034
+
+extern const u8 gBrText_LinkCableDesc[];
+extern const u32 gBrItemIcon_LinkCable[];
+extern const u32 gBrItemIconPalette_LinkCable[];
+
+struct Pokemon;
+
+// GetEvolutionTargetSpecies for the cable, in EVO_MODE_ITEM_USE or EVO_MODE_ITEM_CHECK:
+// what a trade would make of this mon, the held item counting (an ONIX holding a METAL
+// COAT is a STEELIX). On a use the held item is spent, as the trade would spend it; a
+// check changes nothing.
+u16 BrItems_CableTarget(struct Pokemon *mon, u8 mode);
 
 #endif // GUARD_BR_ITEMS_H

@@ -347,7 +347,8 @@ rung you fight at. Always SET style. No nickname prompt. 30 s shot clock in ever
 RUN is hard and escalating. A full party means releasing one, never a PC. Game speed
 pinned. LINK/SAVE/OPTION gone from START. The Centre closes when fog arrives, and the
 nurse asks one question. A menu is not a hiding place. Every PC is out of order. Loot
-balls are gifts. A ball that changes hands is a trade and triggers trade evolutions.
+balls are gifts. A ball that changes hands is a trade and triggers trade evolutions; a
+LINK CABLE from the bag does the same for a mon you kept.
 Beaten sprites vanish, balls remain. Gyms are one-shot bosses, first-to-beat closes them.
 Bots use their own bag. Two bots fighting is a real battle. Quick play has no host. Solo
 play opens no socket. Backfill is wrong for a battle royale. One ticker line when the ring

@@ -1,0 +1,38 @@
+# link-cable-no-use: the LINK CABLE on a mon with no trade evolution does nothing and is
+# kept (br_items.h). The party menu's check (EVO_MODE_ITEM_CHECK) says NO USE, and the
+# use itself says it won't have any effect, as a stone would.
+#
+# The boot deals one TREECKO (mode 81). LITTLEROOT (map 0:9).
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+pokebytes gDecompressionBuffer 01 34 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 4
+wait 60
+expect u16 *gSaveBlock1Ptr+0x560 52
+tap START
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 120
+tap A
+wait 30
+tap A
+wait 60
+shot party-no-use
+tap A
+wait 60
+shot no-effect
+hold A 4
+wait 60
+tap B
+wait 60
+shot back
+# still TREECKO, and the cable still in the bag
+expect u8 gPlayerParty+8 0xCE
+expect u8 gPlayerParty+9 0xCC
+expect u16 *gSaveBlock1Ptr+0x560 52
+say link cable no use ok
