@@ -40,6 +40,9 @@ void BrMoves_Spend(u16 move);
 // on the ground"): a move this mon could only have had from a TM lands beside the player
 // as that TM, for anybody. A move it learns on its own by now does not -- a TM for that
 // would be one made out of nothing -- and neither does an HM's, which never left the bag.
+// A trainer's mon can come with a TM's move (a gym party's, spilled as loot when it is
+// beaten): its TM drops as well, the trainer's machine come with the mon. From the MOVES
+// list, a TM used from the bag, and a move learnt on evolving.
 void BrMoves_Forgetting(struct Pokemon *mon, u8 slot);
 
 #endif // GUARD_BR_MOVES_H

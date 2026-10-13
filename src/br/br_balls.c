@@ -2,12 +2,14 @@
 #include "global.h"
 #include "event_object_movement.h"
 #include "event_data.h"
+#include "field_weather.h"
 #include "fieldmap.h"
 #include "palette.h"
 #include "constants/rgb.h"
 #include "sprite.h"
 #include "constants/event_objects.h"
 #include "constants/map_groups.h"
+#include "constants/region_map_sections.h"
 #include "constants/metatile_behaviors.h"
 #include "constants/items.h"
 #include "constants/vars.h"
@@ -83,8 +85,9 @@ u16 BrBalls_Deal(u8 mapGroup, u8 mapNum, u8 localId, u16 item)
 {
     u32 r;
 
-    // A machine stays a machine; an HM or a key item is the story's, not the match's.
-    if (gBrMatch.seed == 0 || item == ITEM_NONE || item >= ITEM_TM01)
+    // A machine stays a machine; an HM or a key item is the story's, not the match's. Key
+    // items run from the MACH BIKE to just under TM01, the machines from there on.
+    if (gBrMatch.seed == 0 || item == ITEM_NONE || item >= ITEM_MACH_BIKE)
         return item;
     r = Mix(gBrMatch.seed ^ 0xBA11 ^ ((u32)mapGroup << 16) ^ ((u32)mapNum << 8) ^ localId);
     if (r % BR_BALLS_TM_IN != 0)
@@ -105,35 +108,48 @@ static u16 ScriptItem(const u8 *script)
     return script[3] | (script[4] << 8);
 }
 
-// Red is the picture's own. Blue and gold swap its three reds -- palette indices 11..13
-// of NPC_3, the slot every item ball draws from -- and keep the rest: the white, the band,
-// the outline. One tag each, loaded once into the field's spare slots.
-#define BR_BALLS_PAL_TAG 0x5B00
-
-// A tier's three, light to dark: BR_BALL_BLUE's first, then BR_BALL_GOLD's.
+// The field keeps four sprite palettes past the twelve its people use: the weather's two
+// and two for grass, ripples, dust and the like, which load and free as they come. A ball
+// taking one of those two starves the next of them, which then draws in a ball's colours.
+// The weather's second, though, is only ever the clouds' or the sandstorm's
+// (LoadCustomWeatherSpritePalette), and only Route 111 and Route 120 have either: on every
+// other map it sits idle, and the balls borrow it.
+//
+// One palette for both tiers: NPC_3's, the one every item ball draws from, with its three
+// reds (11..13) blue and three the ball never uses (8..10, NPC_3's greens) gold. A blue ball
+// is the cartridge's picture under it; a gold one is the same picture with its reds moved
+// to 8..10 (br_item_ball_gold.png).
 static const u16 sShades[][3] =
 {
     { RGB(9, 15, 29), RGB(5, 9, 21), RGB(2, 4, 12) },
     { RGB(31, 25, 6), RGB(25, 18, 3), RGB(14, 10, 0) },
 };
 
-static u8 PaletteFor(u8 tier, u8 from)
+static const u32 sGoldPic[] = INCGFX_U32("graphics/object_events/pics/misc/br_item_ball_gold.png", ".4bpp");
+static const struct SpriteFrameImage sGoldImages[] = { obj_frame_tiles(sGoldPic) };
+
+static u8 PaletteFor(u8 from)
 {
-    struct SpritePalette pal;
     u16 colours[16];
-    u8 slot = IndexOfSpritePaletteTag(BR_BALLS_PAL_TAG + tier);
+    u8 slot = gWeatherPtr->weatherPicSpritePalIndex;
     u8 i;
 
-    if (slot != 0xFF)
-        return slot;
+    if (slot >= 16 || GetSpritePaletteTagByPaletteNum(slot) != PALTAG_WEATHER_2)
+        return 0xFF;
+    if (gMapHeader.regionMapSectionId == MAPSEC_ROUTE_111 || gMapHeader.regionMapSectionId == MAPSEC_ROUTE_120)
+        return 0xFF;
     for (i = 0; i < 16; i++)
         colours[i] = gPlttBufferUnfaded[OBJ_PLTT_ID(from) + i];
-    colours[11] = sShades[tier - BR_BALL_BLUE][0];
-    colours[12] = sShades[tier - BR_BALL_BLUE][1];
-    colours[13] = sShades[tier - BR_BALL_BLUE][2];
-    pal.data = colours;
-    pal.tag = BR_BALLS_PAL_TAG + tier;
-    return LoadSpritePalette(&pal);
+    for (i = 0; i < 3; i++)
+    {
+        colours[11 + i] = sShades[0][i];
+        colours[8 + i] = sShades[1][i];
+    }
+    LoadPalette(colours, OBJ_PLTT_ID(slot), PLTT_SIZE_4BPP);
+    // The weather's colours over it, as pret does for any palette loaded on the field
+    // (field_effect.c's LoadFadedPalette): rain and fog dim it like everything else.
+    UpdateSpritePaletteWithWeather(slot);
+    return slot;
 }
 
 // The script of this map's own object with this local id, or NULL. Only the map we are on
@@ -165,11 +181,14 @@ void BrBalls_Tint(struct ObjectEvent *obj, struct Sprite *sprite)
     tier = BrBalls_Tier(item);
     if (tier == BR_BALL_RED)
         return;
-    // Four slots spare on the field, and the weather and the field effects want them too:
-    // with none left the ball stays red, which is a ball and not a hole in the map.
-    slot = PaletteFor(tier, sprite->oam.paletteNum);
-    if (slot != 0xFF)
-        sprite->oam.paletteNum = slot;
+    // Route 111 and 120 keep their balls red: a ball and not a hole in the map.
+    slot = PaletteFor(sprite->oam.paletteNum);
+    if (slot == 0xFF)
+        return;
+    sprite->oam.paletteNum = slot;
+    // Before the sprite's first frame copies its picture, which happens as it animates.
+    if (tier == BR_BALL_GOLD)
+        sprite->images = sGoldImages;
 }
 
 // ---- house caches ---------------------------------------------------------------

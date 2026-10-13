@@ -1472,9 +1472,6 @@ static u8 TrySetupObjectEventSprite(const struct ObjectEventTemplate *objectEven
     sprite->x += 8;
     sprite->y += 16 + sprite->centerToCornerVecY;
     sprite->oam.paletteNum = paletteSlot;
-#if BR
-    BrBalls_Tint(objectEvent, sprite);
-#endif
     sprite->coordOffsetEnabled = TRUE;
     sprite->sObjEventId = objectEventId;
     objectEvent->spriteId = spriteId;
@@ -1508,6 +1505,9 @@ static u8 TrySpawnObjectEventTemplate(const struct ObjectEventTemplate *objectEv
         return OBJECT_EVENTS_COUNT;
 
     gSprites[gObjectEvents[objectEventId].spriteId].images = graphicsInfo->images;
+#if BR
+    BrBalls_Tint(&gObjectEvents[objectEventId], &gSprites[gObjectEvents[objectEventId].spriteId]);
+#endif
     if (subspriteTables)
         SetSubspriteTables(&gSprites[gObjectEvents[objectEventId].spriteId], subspriteTables);
 

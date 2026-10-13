@@ -93,8 +93,8 @@ static u16 MachineOf(u16 move)
 }
 
 // Would it know this by now without anybody's help: in its learnset at or under its
-// level. Every mon in a match is taught that way and no other (BrLevels_Settle), so what
-// is left over came from a TM.
+// level. Every wild mon in a match is taught that way and no other (BrLevels_Settle), so
+// what is left over came from a TM -- ours, or a trainer's (br_moves.h).
 static bool8 LearnsByNow(struct Pokemon *mon, u16 move)
 {
     const u16 *learnset = gLevelUpLearnsets[GetMonData(mon, MON_DATA_SPECIES, NULL)];

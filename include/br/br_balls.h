@@ -8,9 +8,11 @@
 // none, so a quarter of the maps' own item balls hold a TM this match instead of what the
 // cartridge put in them, dealt from the match seed so every ROM sees the same ones.
 //
-// The colour is the ball's palette, nothing else: the same picture under a blue or a gold
-// copy of the palette it already draws from. Gold is the strongest machines and the few
-// items worth a detour; the maps' balls never deal it -- it is for house caches.
+// The colour is a palette borrowed from the weather (br_balls.c, PaletteFor): the same
+// picture under it for blue, the picture with its reds moved for gold. Route 111 and 120
+// need that palette for their sandstorm and clouds, so their balls stay red. Gold is the
+// strongest machines and the few items worth a detour; the maps' balls never deal it --
+// it is for house caches.
 
 #define BR_BALL_RED 0
 #define BR_BALL_BLUE 1

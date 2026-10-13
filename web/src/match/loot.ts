@@ -11,6 +11,10 @@
 // goes into the in-ring as a fresh `spill`. The ROM cannot tell the difference between
 // that and the original, which is the point.
 import { speciesName } from '../bots/party';
+
+// include/constants/items.h
+const TM01 = 289;
+const HM01 = 339;
 import { romCell, type RomCell } from '../bots/space';
 import type { World } from '../bots/world';
 import type { MapRef, Msg, SpillBag, SpillMon, SpillMsg } from '../net/wire';
@@ -164,7 +168,15 @@ export class Loot {
       const name = speciesName(piece.mon.species);
       return /^\d+$/.test(name) ? 'A POKéMON' : `A ${name}`;
     }
-    if (piece.bag) return 'A BAG';
+    if (piece.bag) {
+      // A TM dropped back on the ground travels as a bag of one (br_loot.c's DropItem), and
+      // the ROM draws it as a ball.
+      const { items, money } = piece.bag;
+      if (money === 0 && items.length === 1 && items[0].n === 1) {
+        return items[0].id >= TM01 && items[0].id < HM01 ? 'A TM' : 'AN ITEM';
+      }
+      return 'A BAG';
+    }
     return 'SOMETHING';
   }
 

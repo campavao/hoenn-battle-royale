@@ -166,6 +166,17 @@ function room(): World {
   return new World([{ id: 'ROOM', group: 9, num: 9, w: 5, h: 5, section: 0, outdoor: true, grid, seams: [], warps: [] } as never]);
 }
 
+describe('what a ticker line calls a piece', () => {
+  it('names a TM dropped back on the ground as a TM, not a bag', () => {
+    const loot = new Loot();
+    loot.note({ t: 'spill', seat: 1, map: LITTLEROOT, mons: [],
+      bag: { key: 0x4100, x: 9, y: 12, items: [{ id: 294, n: 1 }], money: 0 } });
+    loot.note(spill(2, ROUTE101, [], 0x4200));
+    expect(loot.describe(0x4100)).toBe('A TM');
+    expect(loot.describe(0x4200)).toBe('A BAG');
+  });
+});
+
 describe('where the pieces of a spill land', () => {
   // The bug this exists for: a bot's spill wrote every ball to the dropper's own cell,
   // so one ball was visible and the rest of the team -- and the bag under them -- could
