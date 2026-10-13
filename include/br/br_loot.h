@@ -68,6 +68,14 @@
 #define BR_LOOT_KEY_ZONE_ITEM(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x0F00 | (i)))
 #define BR_LOOT_KEY_CHEST ((u16)(BR_LOOT_KEY_NOBODY | 0x0E00))
 #define BR_LOOT_KEY_CACHE(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x0D00 | (i)))
+// A gift-giver (Cam, 2026-10-13: "we can add some gift giving NPCs"): the host deals one
+// to every town and city at the buzzer, a bag of one item standing as a person rather than
+// lying as a ball (match/gifts.ts). Past every trainer's key and the events' (0xB000).
+// Taken like any piece, so the first trainer to talk to one has the gift and he is gone
+// for everybody.
+#define BR_LOOT_KEY_GIFT_BASE 0xC000
+#define BR_LOOT_KEY_GIFT(i) ((u16)(BR_LOOT_KEY_GIFT_BASE | (i)))
+#define BR_LOOT_IS_GIFT(key) (((key) & 0xF000) == BR_LOOT_KEY_GIFT_BASE)
 
 struct BrLootItem
 {

@@ -113,12 +113,28 @@ static bool8 OneThing(const struct BrLootItem *it)
     return it->kind == BR_LOOT_BAG && it->species != ITEM_NONE;
 }
 
+// Who stands for a gift, by its key's low two bits (field-ghosts.ts draws the same).
+static const u8 sGiftGfx[] = {
+    OBJ_EVENT_GFX_OLD_MAN,
+    OBJ_EVENT_GFX_OLD_WOMAN,
+    OBJ_EVENT_GFX_EXPERT_M,
+    OBJ_EVENT_GFX_POKEFAN_F,
+};
+
 static void Spawn(struct BrLootItem *it)
 {
     // Birch's bag is the one bag-shaped object event Emerald has; a team is balls.
     u8 gfx = it->kind == BR_LOOT_BAG && !OneThing(it) ? OBJ_EVENT_GFX_BIRCHS_BAG : OBJ_EVENT_GFX_ITEM_BALL;
-    u8 id = SpawnSpecialObjectEventParameterized(gfx, MOVEMENT_TYPE_NONE, LocalId(it),
-                                                 it->x, it->y, MapGridGetElevationAt(it->x, it->y));
+    u8 movement = MOVEMENT_TYPE_NONE;
+    u8 id;
+
+    if (BR_LOOT_IS_GIFT(it->key))
+    {
+        gfx = sGiftGfx[it->key % ARRAY_COUNT(sGiftGfx)];
+        movement = MOVEMENT_TYPE_FACE_DOWN;
+    }
+    id = SpawnSpecialObjectEventParameterized(gfx, movement, LocalId(it),
+                                              it->x, it->y, MapGridGetElevationAt(it->x, it->y));
 
     if (id >= OBJECT_EVENTS_COUNT)
         return;
@@ -640,6 +656,7 @@ void BrLoot_SpillOwn(void)
 
 static const u8 sText_Took[] = _("TOOK ");
 static const u8 sText_Found[] = _("FOUND ");
+static const u8 sText_Gift[] = _("A GIFT: ");
 static const u8 sText_Bang[] = _("!");
 
 // Tell the room it is gone, and take it off our own ground: nobody hears their own
@@ -749,7 +766,7 @@ static void Take(struct BrLootItem *it)
         if (OneThing(it))
         {
             // What it is, not what it was worth: it arrives with the GIVE.
-            p = BrHud_Append(line, last, sText_Found);
+            p = BrHud_Append(line, last, BR_LOOT_IS_GIFT(it->key) ? sText_Gift : sText_Found);
             p = BrHud_Append(p, last, GetItemName(it->species));
             BrHud_Append(p, last, sText_Bang);
             BrHud_Box(line);

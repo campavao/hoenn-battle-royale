@@ -13,8 +13,9 @@
 // An EVENT says which section, and which key is the legendary, and the mark goes gray
 // once somebody's PICKUP names that key. It also says where the event's trader stands and
 // what he offers: A on him asks, the party menu picks one of ours, and he swaps it for
-// his at our rung (not a fainted one; what it held stays ours). Once a match with each
-// trader for each of us, and he keeps what he is given.
+// his at our rung (not a fainted one; what it held stays ours). He trades once, with
+// whoever gets to him first (Cam, 2026-10-13): our PICKUP of his key tells the room, and
+// he leaves every map. He keeps what he is given.
 
 // Phases 2, 4, 6 and 8: four.
 #define BR_EVENT_MAX 4
@@ -23,6 +24,8 @@
 // ends at 0xAB56 for slot 5), in nobody's space, so it is never read as a seat's own.
 #define BR_EVENT_KEY_BASE 0xB000
 #define BR_EVENT_KEY(n, i) ((u16)(BR_EVENT_KEY_BASE | ((n) << 4) | (i)))
+// The trader's: the last of the event's sixteen, past every piece (events.ts asserts it).
+#define BR_EVENT_TRADER_KEY(n) BR_EVENT_KEY(n, 15)
 
 // The traders' object local ids, 0xBC..0xBF: just below loot's 0xC0, so the run the match
 // puts on a map (none of it solid, br_ghosts.c) starts here.
@@ -52,7 +55,7 @@ struct BrEvents
     /* 12 */ u8 mapsec[BR_EVENT_MAX];
     /* 16 */ u8 live;                // a bit an event that has dropped
     /* 17 */ u8 taken;               // a bit an event whose legendary somebody has
-    /* 18 */ u8 traded;              // a bit a trader we have traded with this match
+    /* 18 */ u8 used;                // a bit a trader somebody has traded with
     /* 19 */ u8 trading;             // the trader the open trade script is with
     /* 20 */ struct BrEventTrader trader[BR_EVENT_MAX];
     /* 52 */ u8 objId[BR_EVENT_MAX]; // the trader's object while spawned, else BR_NO_OBJ
@@ -62,7 +65,7 @@ BR_OFFSET(BrEvents, key, 4)
 BR_OFFSET(BrEvents, mapsec, 12)
 BR_OFFSET(BrEvents, live, 16)
 BR_OFFSET(BrEvents, taken, 17)
-BR_OFFSET(BrEvents, traded, 18)
+BR_OFFSET(BrEvents, used, 18)
 BR_OFFSET(BrEvents, trader, 20)
 BR_OFFSET(BrEvents, objId, 52)
 BR_SIZE(BrEvents, 56)
@@ -70,7 +73,8 @@ BR_SIZE(BrEvents, 56)
 extern struct BrEvents gBrEvents;
 
 void BrEvent_Init(void);
-// Somebody's PICKUP, ours included: an event's legendary under that key is gone.
+// Somebody's PICKUP, ours included: an event's legendary under that key is gone, or its
+// trader has traded.
 void BrEvent_NoteTaken(u16 key);
 // The marks on the MAP, over the region map at (left, top) in cells.
 void BrEvent_DrawOnMap(s16 left, s16 top);

@@ -223,6 +223,105 @@ describe('bots walking', () => {
     expect(sent.some((m) => m.t === 'pickup' && m.key === 0x0100)).toBe(true);
   });
 
+  // Speed-up 6: a bot goes for an event the way a player does.
+  const eventBots = (over: Partial<BotsOptions>, count = 1) => {
+    const sent: Msg[] = [];
+    const decisions: Decision[] = [];
+    const bots = new Bots({
+      world: new World([FIELD, PATH]),
+      targets: targets().filter((t) => t.mapId === 'FIELD'),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(3),
+      deal: (bot, phase, mapId) => dealParty(5, bot.seat, phase, mapId),
+      onDecision: (d) => void decisions.push(d),
+      ...over,
+    });
+    const dealt = dealBots(8, count, [], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]);
+    bots.start(dealt, 0);
+    return { bots, sent, decisions, dealt };
+  };
+
+  it("crosses a map for an event's piece it cannot see from here", () => {
+    const ground = new Map<number, { mapId: string; x: number; y: number }>([[0xb001, { mapId: 'PATH', x: 3, y: 5 }]]);
+    const { bots, sent, decisions } = eventBots({
+      loot: {
+        all: () => [...ground].map(([key, at]) => ({ key, mapId: at.mapId, ...pageCell(at.x, at.y) })),
+        at: (mapId, { x, y }) => [...ground].find(([, c]) => c.mapId === mapId && c.x === x && c.y === y)?.[0],
+      },
+    });
+    for (let t = STEP_MS; t <= 30_000; t += STEP_MS) {
+      bots.tick(t);
+      for (const msg of sent) if (msg.t === 'pickup') ground.delete(msg.key);
+    }
+    expect(decisions.some((d) => d.rule === 'wander' && d.detail === '-> PATH (for PATH)')).toBe(true);
+    expect(sent.some((m) => m.t === 'pickup' && m.key === 0xb001)).toBe(true);
+  });
+
+  it("trades with an event's trader once, for the whole room, and keeps his mon up the rungs", () => {
+    let standing = [{ key: 0xb00f, species: 131, mapId: 'PATH', ...pageCell(2, 3) }];
+    const { bots, sent, dealt } = eventBots({ traders: () => standing }, 2);
+    bots.ringMoved(2);
+    for (let t = STEP_MS; t <= 40_000; t += STEP_MS) bots.tick(t);
+    const trades = sent.filter((m) => m.t === 'pickup' && m.key === 0xb00f);
+    expect(trades).toHaveLength(1); // the second bot finds him used up
+    const trader = (trades[0] as { seat: number }).seat;
+    const lapras = grownUp(131, rungForPhase(2));
+    expect(bots.partyOf(trader).map((m) => m.species)).toContain(lapras);
+    expect(bots.partyOf(dealt.find((b) => b.seat !== trader)!.seat).map((m) => m.species)).not.toContain(lapras);
+    standing = []; // the room heard
+    const slot = bots.partyOf(trader).findIndex((m) => m.species === lapras);
+    bots.ringMoved(4);
+    expect(bots.partyOf(trader)[slot]).toMatchObject({ species: grownUp(131, rungForPhase(4)), level: rungForPhase(4) });
+  });
+
+  it("keeps FLY on the slot it trades away, at the trade and up the rungs", () => {
+    const standing = [{ key: 0xb00f, species: 131, mapId: 'FIELD', ...pageCell(0, 1) }];
+    const { bots, sent, dealt } = eventBots({
+      traders: () => standing,
+      deal: (bot, phase) => dealParty(5, bot.seat, phase, undefined).map((m) => ({ ...m, moves: [{ id: 33, pp: 25, ppUps: 0 }, { id: 19, pp: 15, ppUps: 0 }] })),
+    });
+    for (let t = STEP_MS; t <= 5_000; t += STEP_MS) bots.tick(t);
+    expect(sent.some((m) => m.t === 'pickup' && m.key === 0xb00f)).toBe(true);
+    const seat = dealt[0].seat;
+    expect(bots.partyOf(seat).every((m) => m.moves.some((mv) => mv.id === 19))).toBe(true);
+    bots.ringMoved(4);
+    expect(bots.partyOf(seat).every((m) => m.moves.some((mv) => mv.id === 19))).toBe(true);
+  });
+
+  it("takes a bag's last item with a bare pickup, so every ROM lets go of it (a gift-giver)", () => {
+    const bags = new Map<number, { id: number; n: number }[]>([[0xc001, [{ id: 200, n: 1 }]], [0x05ff, [{ id: 13, n: 2 }]]]);
+    const cells = new Map([[0xc001, pageCell(0, 1)], [0x05ff, pageCell(1, 0)]]);
+    const { bots, sent, dealt } = eventBots({
+      targets: [{ mapId: 'FIELD', x: 0, y: 0 }],
+      loot: {
+        all: () => [...bags.keys()].map((key) => ({ key, mapId: 'FIELD', ...cells.get(key)! })),
+        at: (mapId, { x, y }) => [...cells].find(([k, c]) => bags.has(k) && mapId === 'FIELD' && c.x === x && c.y === y)?.[0],
+        bagAt: (key) => bags.get(key)?.[0]?.id,
+        bagLeft: (key) => (bags.get(key) ?? []).reduce((n, st) => n + st.n, 0),
+      },
+    });
+    const log: Msg[] = [];
+    for (let t = STEP_MS; t <= 20_000; t += STEP_MS) {
+      bots.tick(t);
+      // The page's Loot table, as notePickup plays it.
+      for (const m of sent.splice(0)) {
+        if (m.t !== 'pickup') continue;
+        log.push(m);
+        const bag = bags.get(m.key);
+        if (!bag) continue;
+        if (m.item === undefined) bags.delete(m.key);
+        else if (--bag[0].n <= 0) bag.shift();
+      }
+    }
+    expect(log.filter((m) => m.t === 'pickup' && m.key === 0xc001)).toEqual([{ t: 'pickup', seat: dealt[0].seat, key: 0xc001 }]);
+    expect(log.filter((m) => m.t === 'pickup' && m.key === 0x05ff)).toEqual([
+      { t: 'pickup', seat: dealt[0].seat, key: 0x05ff, item: 13 },
+      { t: 'pickup', seat: dealt[0].seat, key: 0x05ff },
+    ]);
+    expect(bots.bagOf(dealt[0].seat)).toEqual(expect.arrayContaining([{ id: 200, n: 1 }, { id: 13, n: 2 }]));
+  });
+
   it('forgets a bot that goes out', () => {
     const { bots, dealt } = run(3, 1);
     bots.remove(dealt[0].seat);

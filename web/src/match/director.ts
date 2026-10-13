@@ -26,6 +26,7 @@
 //    page's HUD mirror should look just as live.
 import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
 import { clusterCells, EVENT_CELLS, eventDrop, eventForRing } from './events';
+import { giftDrop, isGiftSection } from './gifts';
 import { sectionInside } from './ring';
 import type { MapRef, Msg, Pace } from '../net/wire';
 
@@ -503,8 +504,27 @@ export class Director {
       place: this.ringCentre.place,
       elapsed: elapsedSecs,
     });
+    if (this.ringIndex === 0) this.dropGifts();
     const n = eventForRing(this.ringIndex);
     if (n !== undefined) this.dropEvent(n);
+  }
+
+  /** The towns' gift-givers, at the buzzer (match/gifts.ts): one each, on a cell of the
+   *  town nobody has been dealt -- or, for a town the flood left no cell in (POK-307),
+   *  in front of its first door. */
+  private dropGifts(): void {
+    const spots = Object.entries(this.opts.world.sections)
+      .filter(([id]) => isGiftSection(id))
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .flatMap(([id, section]) => {
+        const cells = this.sections.find((s) => s.id === id)?.cells ?? [];
+        const doors = section.num === undefined ? [] : this.doorsteps.get(section.num) ?? [];
+        const cell = this.freeCell(cells, false) ?? this.freeCell(doors, true);
+        if (!cell) return [];
+        this.dealtCells.add(cellKey(cell));
+        return [cell];
+      });
+    for (const msg of giftDrop(this.rng, this.hostSeat, spots)) this.opts.send(msg);
   }
 
   // ---- events (speed-up phase 6) -------------------------------------------------------

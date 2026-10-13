@@ -51,7 +51,7 @@ STATIC_ASSERT(((BR_EVENT_MAX - 1) << 4 | 15) < 0x100, BrEventKeysStayUnder0xB100
 
 static const u8 sText_Traded[] = _("TRADED FOR ");
 static const u8 sText_Bang[] = _("!");
-static const u8 sText_TradedAlready[] = _("WE ALREADY TRADED");
+static const u8 sText_TradedAlready[] = _("HE HAS ALREADY TRADED");
 static const u8 sText_Fainted[] = _("NOT A FAINTED ONE");
 
 static void Despawn(u8 i)
@@ -127,8 +127,12 @@ void BrEvent_NoteTaken(u16 key)
         return;
     for (i = 0; i < BR_EVENT_MAX; i++)
     {
-        if ((gBrEvents.live & (1 << i)) && gBrEvents.key[i] == key)
+        if (!(gBrEvents.live & (1 << i)))
+            continue;
+        if (gBrEvents.key[i] == key)
             gBrEvents.taken |= 1 << i;
+        if (key == BR_EVENT_TRADER_KEY(i))
+            gBrEvents.used |= 1 << i; // BrEvent_Tick lets go of him
     }
 }
 
@@ -167,7 +171,8 @@ static bool8 TraderHere(u8 i)
 {
     const struct BrEventTrader *t = &gBrEvents.trader[i];
 
-    return gBrEvents.seed == gBrMatch.seed && (gBrEvents.live & (1 << i)) && t->species != SPECIES_NONE
+    return gBrEvents.seed == gBrMatch.seed && (gBrEvents.live & (1 << i)) && !(gBrEvents.used & (1 << i))
+        && t->species != SPECIES_NONE
         && t->mapGroup == gSaveBlock1Ptr->location.mapGroup && t->mapNum == gSaveBlock1Ptr->location.mapNum;
 }
 
@@ -255,11 +260,6 @@ static void TryTalk(void)
         return;
     gMain.newKeys &= ~A_BUTTON;
     gMain.newAndRepeatedKeys &= ~A_BUTTON;
-    if (gBrEvents.traded & (1 << i))
-    {
-        BrHud_Box(sText_TradedAlready);
-        return;
-    }
     self = &gObjectEvents[gPlayerAvatar.objectEventId];
     ObjectEventTurn(&gObjectEvents[gBrEvents.objId[i]], GetOppositeDirection(self->facingDirection));
     StringCopy(gStringVar1, gSpeciesNames[Offered(i, &mon)]);
@@ -277,9 +277,16 @@ void BrEvent_Trade(void)
     u8 i = gBrEvents.trading;
     u8 *p;
 
-    if (slot >= PARTY_SIZE || i >= BR_EVENT_MAX || !TraderHere(i) || (gBrEvents.traded & (1 << i))
+    if (slot >= PARTY_SIZE || i >= BR_EVENT_MAX
         || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
         return;
+    // Somebody else got to him while we were choosing.
+    if (!TraderHere(i))
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_TradedAlready);
+        return;
+    }
     // A fainted one for a healthy one would be a MAX REVIVE thrown in.
     if (GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0)
     {
@@ -296,7 +303,9 @@ void BrEvent_Trade(void)
     // again for one press, and the trade a free mon.
     species = Offered(i, &mon);
     gPlayerParty[slot] = mon;
-    gBrEvents.traded |= 1 << i;
+    // Once, for the whole room: the PICKUP of his key takes him off every map.
+    gBrEvents.used |= 1 << i;
+    BrLoot_SendTaken(BR_EVENT_TRADER_KEY(i));
     p = BrHud_Append(line, last, sText_Traded);
     p = BrHud_Append(p, last, gSpeciesNames[species]);
     BrHud_Append(p, last, sText_Bang);

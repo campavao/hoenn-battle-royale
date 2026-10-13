@@ -80,7 +80,8 @@ import appTs from './app.ts?raw';
 import brainTs from './bots/brain.ts?raw';
 import lootTs from './match/loot.ts?raw';
 import { PATCH_KEY_BASE } from './match/loot';
-import { EVENT_KEY_BASE, EVENT_MAX, GOLD, LEGENDS, RARES } from './match/events';
+import { EVENT_KEY_BASE, EVENT_MAX, EVENT_PIECES, GOLD, LEGENDS, RARES, traderKey } from './match/events';
+import { GIFT_KEY_BASE, GIFTS } from './match/gifts';
 import uiData from './data/ui.json';
 import { BR_CONT_FLAG, BR_MSG } from './net/slots';
 import { MAILBOX } from './net/mailbox';
@@ -531,6 +532,10 @@ describe("the BR structs the page reads at an offset", () => {
     const spawn = /it->kind == BR_LOOT_BAG && !OneThing\(it\) \? (OBJ_EVENT_GFX_\w+) : (OBJ_EVENT_GFX_\w+);/.exec(lootC);
     expect(spawn, "br_loot.c's Spawn picks the bag or the ball").not.toBeNull();
     expect([ghosts.GFX_BIRCHS_BAG, ghosts.GFX_ITEM_BALL]).toEqual([define(eventObjectsH, spawn![1]), define(eventObjectsH, spawn![2])]);
+    // ...and a gift-giver as sGiftGfx says, by his key (br_loot.h's BR_LOOT_KEY_GIFT_BASE).
+    expect(ghosts.GIFT_KEY_BASE).toBe(define(lootH, 'BR_LOOT_KEY_GIFT_BASE'));
+    expect(ghosts.GIFT_GFX).toEqual(names(lootC, 'sGiftGfx', 'OBJ_EVENT_GFX_').map((n) => define(eventObjectsH, n)));
+    expect(ghosts.LOOT_KEY).toBe(item.at.key);
   });
 
   it("the box the ROM keeps objects in: BrField_InObjectView, and Emerald's own spawn and cull", () => {
@@ -943,6 +948,36 @@ describe('the rules a bot plays by the ROM\'s way', () => {
     expect(EVENT_MAX).toBe(define(eventH, 'BR_EVENT_MAX'));
     // Past every trainer's key: 0x8000 | slot << 11 | id, slots 0..5, ids under 0x400.
     expect(EVENT_KEY_BASE).toBeGreaterThan(0x8000 | (5 << 11) | 0x3ff);
+  });
+
+  it("gBrEvents: the traders past the object box (field-ghosts.ts)", () => {
+    const eventH = brAll.find((src) => /#define\s+BR_EVENT_KEY_BASE\s/.test(src))!;
+    const events = layout(eventH, 'BrEvents');
+    expect([ghosts.EVENTS_SEED, ghosts.EVENTS_LIVE, ghosts.EVENTS_USED, ghosts.EVENTS_TRADER, ghosts.EVENTS_SIZE]).toEqual([
+      events.at.seed, events.at.live, events.at.used, events.at.trader, events.size,
+    ]);
+    const t = layout(eventH, 'BrEventTrader');
+    expect([ghosts.TRADER_X, ghosts.TRADER_Y, ghosts.TRADER_SPECIES, ghosts.TRADER_MAP_GROUP, ghosts.TRADER_MAP_NUM, ghosts.TRADER_SIZE]).toEqual([
+      t.at.x, t.at.y, t.at.species, t.at.mapGroup, t.at.mapNum, t.size,
+    ]);
+    expect([ghosts.EVENT_MAX, ghosts.EVENT_LOCAL_ID_BASE]).toEqual([define(eventH, 'BR_EVENT_MAX'), define(eventH, 'BR_EVENT_LOCAL_ID_BASE')]);
+    expect(ghosts.MATCH_SEED).toBe(layout(matchH, 'BrMatch').at.seed);
+    const eventC = brAll.find((src) => /SpawnSpecialObjectEventParameterized\((OBJ_EVENT_GFX_\w+),[\s\S]*?BR_EVENT_LOCAL_ID_BASE/.test(src))!;
+    const gfx = /SpawnSpecialObjectEventParameterized\((OBJ_EVENT_GFX_\w+),[\s\S]*?BR_EVENT_LOCAL_ID_BASE/.exec(eventC)![1];
+    expect(ghosts.GFX_TRADER).toBe(define(eventObjectsH, gfx));
+    // The trader's key is the one past every piece's.
+    expect(EVENT_PIECES).toBeLessThan(15);
+    expect(traderKey(2)).toBe(define(eventH, 'BR_EVENT_KEY_BASE') | (2 << 4) | 15);
+  });
+
+  it("a gift-giver's key is br_loot.h's, past every event's, and his gifts are items.h's", () => {
+    expect(GIFT_KEY_BASE).toBe(define(lootH, 'BR_LOOT_KEY_GIFT_BASE'));
+    expect(GIFT_KEY_BASE).toBeGreaterThan(EVENT_KEY_BASE | ((EVENT_MAX - 1) << 4) | 15);
+    const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
+    const ids = list.split(',').map((s) => s.trim()).filter(Boolean);
+    expect(GIFTS).toEqual(
+      ['BRIGHT_POWDER', 'WHITE_HERB', 'QUICK_CLAW', 'CHOICE_BAND', 'KINGS_ROCK', 'FOCUS_BAND', 'SCOPE_LENS', 'LEFTOVERS', 'SHELL_BELL'].map((n) => ids.indexOf(`ITEM_${n}`)),
+    );
   });
 
   it("an event's gold balls are sGold in br_balls.c, and its Pokemon are species.h's", () => {

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DESPAWN_LOCAL_ID, DESPAWN_MAP_NUM, DESPAWN_SIZE, GFX_BIRCHS_BAG, GFX_ITEM_BALL, HIDDEN_MOVEMENT_TYPES, type Known, LOOT_KIND, LOOT_MAP_NUM, LOOT_SIZE, LOOT_X, LOOT_Y,
+  DESPAWN_LOCAL_ID, DESPAWN_MAP_NUM, DESPAWN_SIZE, GFX_BIRCHS_BAG, GFX_ITEM_BALL, GIFT_GFX, HIDDEN_MOVEMENT_TYPES, type Known, LOOT_KIND, LOOT_MAP_NUM, LOOT_SIZE, LOOT_X, LOOT_Y,
   MAP_OFFSET, SEAT_DIR, SEAT_MAP_NUM, SEAT_PRESENT, SEAT_SIZE, SEAT_SKIN, SEAT_X, SEAT_Y, TEMPLATE_SIZE, TPL_FLAG_ID, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X,
-  TPL_Y, LOOT_SPECIES, type Template, GhostWalkers, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, inObjectView, objectKey, placePeople, standingFrame,
+  TPL_Y, LOOT_SPECIES, type Template, GhostWalkers, EVENTS_LIVE, EVENTS_SIZE, EVENTS_TRADER, EVENTS_USED, GFX_TRADER, TRADER_MAP_NUM, TRADER_SIZE, TRADER_SPECIES, TRADER_X, TRADER_Y,
+  decodeTraders, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, inObjectView, objectKey, placePeople, standingFrame,
 } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 import { lcdOrigin } from './field';
@@ -90,6 +91,8 @@ describe("the people past the ROM's box (POK-318)", () => {
     expect(droppedPeople(known({ loot: [ball(0)] }))[0]).toMatchObject({ x: 12, y: 10 });
     expect(droppedPeople(known({ loot: [ball(0, { kind: 0 }), ball(1, { num: 15 })] })), 'an empty row, another map').toEqual([]);
     expect(droppedPeople(known({ loot: [ball(4)], live: new Set([objectKey(0xc0 + 4, MAP.num, MAP.group)]) })), 'its own object').toEqual([]);
+    // a gift-giver stands as the person his key says (br_loot.c's sGiftGfx)
+    expect(droppedPeople(known({ loot: [ball(0, { kind: 2, species: 200, key: 0xc000 }), ball(1, { kind: 2, species: 200, key: 0xc005 })] })).map((p) => p.gfx)).toEqual([GIFT_GFX[0], GIFT_GFX[1]]);
   });
 
   // Cam's trainer, 2026-09-18: "If I'm down far enough he's gone, up high enough he's
@@ -107,6 +110,30 @@ describe("the people past the ROM's box (POK-318)", () => {
 });
 
 describe('reading the tables', () => {
+  it("an event's trader past the box is drawn until somebody trades with him (speed-up 6b)", () => {
+    const trader = (i: number, over = {}) => ({ i, group: MAP.group, num: MAP.num, x: 12 + MAP_OFFSET, y: 10 + MAP_OFFSET, ...over });
+    expect(droppedPeople(known({ traders: [trader(0)] }))).toEqual([{ gfx: GFX_TRADER, dir: 1, x: 12, y: 10 }]);
+    expect(droppedPeople(known({ traders: [trader(0, { num: 15 })] })), 'another map').toEqual([]);
+    expect(droppedPeople(known({ traders: [trader(0, { x: 20 + MAP_OFFSET, y: 25 + MAP_OFFSET })] })), 'in the box').toEqual([]);
+    expect(droppedPeople(known({ traders: [trader(1)], live: new Set([objectKey(0xbc + 1, MAP.num, MAP.group)]) })), 'his own object').toEqual([]);
+  });
+
+  it("gBrEvents' traders: this match's, live, not traded with, with somebody to offer", () => {
+    const b = new Uint8Array(EVENTS_SIZE);
+    b.set([0x78, 0x56, 0, 0], 0);
+    b[EVENTS_LIVE] = 0b0111;
+    b[EVENTS_USED] = 0b0010;
+    for (const i of [0, 1, 2]) {
+      const o = EVENTS_TRADER + i * TRADER_SIZE;
+      b.set([0x10 + i, 0], o + TRADER_X);
+      b.set([0x11, 0], o + TRADER_Y);
+      b[o + TRADER_MAP_NUM] = 7;
+      if (i !== 2) b.set([0x83, 0], o + TRADER_SPECIES);
+    }
+    expect(decodeTraders(b, 0x5678)).toEqual([{ i: 0, group: 0, num: 7, x: 16, y: 17 }]);
+    expect(decodeTraders(b, 0x1234), 'a past match').toEqual([]);
+  });
+
   it('templates, seats, loot and the beaten, at their rows, the ones in use', () => {
     const tpl = new Uint8Array(2 * TEMPLATE_SIZE);
     const o = TEMPLATE_SIZE;
@@ -133,7 +160,7 @@ describe('reading the tables', () => {
     loot[LOOT_SIZE + LOOT_MAP_NUM] = 7;
     loot.set([0x10, 0x00], LOOT_SIZE + LOOT_X);
     loot.set([0x11, 0x00], LOOT_SIZE + LOOT_Y);
-    expect(decodeLoot(loot)).toEqual([{ slot: 1, kind: 2, species: 0, group: 0, num: 7, x: 16, y: 17 }]);
+    expect(decodeLoot(loot)).toEqual([{ slot: 1, key: 0, kind: 2, species: 0, group: 0, num: 7, x: 16, y: 17 }]);
     // a bag of one thing carries it where a ball's species goes
     loot.set([0x26, 0x01], LOOT_SIZE + LOOT_SPECIES);
     expect(decodeLoot(loot)[0].species).toBe(294);

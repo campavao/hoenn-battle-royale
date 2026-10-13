@@ -20,6 +20,7 @@ import { DEFAULT_FOG_SECS } from './director';
 import type { EndGrace } from './grace';
 import { botRows, freshMatch, noteMatch, type MatchSnapshot } from './lifecycle';
 import { MatchLog, saveMatch } from './log';
+import { noteEvent } from './events';
 import { Loot } from './loot';
 import { MatchRecord } from './record';
 import { Results } from './results';
@@ -238,7 +239,7 @@ export class MatchSession {
       this.beatenList.push(msg);
       if (this.beatenList.length > BEATEN_KEPT) this.beatenList.shift();
     }
-    if (msg.t === 'event') this.eventList.set(msg.n, msg);
+    noteEvent(this.eventList, msg);
     if (via === 'rom') giveBag(this.lootTable, msg, (m) => this.deps.toRom(m));
     this.lootTable.note(msg); // a bot taking a ball takes it off this page's table too
     // The match, as anybody in the room can see it.

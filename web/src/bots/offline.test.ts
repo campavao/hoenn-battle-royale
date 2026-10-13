@@ -35,7 +35,8 @@ function play(seed = SEED, until = Number.POSITIVE_INFINITY) {
     bots: BOTS,
     safariSecs: SAFARI,
     fogSecs: FOG,
-    onMsg: (msg, at) => heard.push({ msg, at }),
+    // A copy: the loot table takes items out of the bag a spill handed it, and the record is of what was said.
+    onMsg: (msg, at) => heard.push({ msg: structuredClone(msg), at }),
     onDecision: (d) => decisions.push(d),
   });
   // Long enough for the last ring to take everybody: a draw is an answer too.

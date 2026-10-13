@@ -17,10 +17,11 @@ import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, Director, type DirectorWorld } f
 import { botRows } from '../match/lifecycle';
 import { DOORSTEPS, HAND, LANDING, worldReady } from '../match/landing';
 import { Loot } from '../match/loot';
+import { noteEvent } from '../match/events';
 import { sectionInside, type RingCircle } from '../match/ring';
 import { Roster } from '../match/roster';
 import { toRomCells } from '../net/cells';
-import type { Msg } from '../net/wire';
+import type { EventMsg, Msg } from '../net/wire';
 import regionmapData from '../data/regionmap.json';
 
 /** One beat of the loop: the host's own pump. */
@@ -83,6 +84,7 @@ export function offlineMatch(opts: OfflineOptions): OfflineMatch {
   if (ground.spawns.length === 0) throw new Error(`no landing cells on ${opts.onMap}`);
   const roster = new Roster();
   const loot = new Loot();
+  const events = new Map<number, EventMsg>(); // MatchSession.events
   let hearOut: ((seat: number) => void) | null = null;
   let winner: number | null | undefined;
   const host = createHostBots({
@@ -92,6 +94,7 @@ export function offlineMatch(opts: OfflineOptions): OfflineMatch {
       const wire = toRomCells(msg);
       roster.applyMsg(wire);
       loot.note(wire);
+      noteEvent(events, wire);
       onMsg?.(wire, now);
       if (wire.t === 'out') hearOut?.(wire.seat);
     },
@@ -100,6 +103,7 @@ export function offlineMatch(opts: OfflineOptions): OfflineMatch {
     seed,
     fill: opts.bots,
     loot,
+    events: () => [...events.values()],
     players: () => roster.all(),
     busy: () => false,
     sections: WORLD.sections,
@@ -122,6 +126,7 @@ export function offlineMatch(opts: OfflineOptions): OfflineMatch {
       // HostRole.directorSends puts an event's spills on the session's table, already in the
       // ROM's space (match/events.ts): the bots walk to them like any other.
       loot.note(msg);
+      noteEvent(events, msg);
       // HostRole.directorSends: the first ring is the buzzer, and every one is the bots' fog.
       if (msg.t === 'ring') {
         host.drop();

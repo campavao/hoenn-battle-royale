@@ -12,8 +12,8 @@
 // (src/br/br_event.c).
 //
 // The placed NPC is a trader, on the `event` too, so every ROM stands him on the same
-// cell: any one of yours for his rare at your rung, once a match each (br_event.c). He
-// offers a rare the event did not drop.
+// cell: any one of yours for his rare at your rung (br_event.c). He trades once, with
+// whoever gets to him first, and offers a rare the event did not drop.
 import { rungForPhase } from '../bots/party';
 import { MAP_OFFSET } from '../net/cells';
 import { EVENT_MAX, type EventMsg, type EventTrader, type MapRef, type Msg, type SpillBag, type SpillMon, type SpillMsg } from '../net/wire';
@@ -27,6 +27,25 @@ export const EVENT_KEY_BASE = 0xb000;
 export { EVENT_MAX };
 export const eventKey = (n: number, i: number): number => EVENT_KEY_BASE | (n << 4) | i;
 export const isEventKey = (key: number): boolean => (key & 0xf000) === EVENT_KEY_BASE;
+/** BR_EVENT_TRADER_KEY: the last of the event's sixteen keys, past every piece. A `pickup`
+ *  of it is the trader having traded, with whoever got to him first (Cam, 2026-10-13):
+ *  he leaves every map, and a catch-up leaves him out. */
+export const traderKey = (n: number): number => eventKey(n, 15);
+export const traderOf = (key: number): number | undefined =>
+  isEventKey(key) && (key & 0xf) === 15 ? (key >> 4) & 0xf : undefined;
+
+/** The events so far, by n, as a late joiner is handed them: an EVENT is booked, and a
+ *  trader who has traded is gone for good, so a PICKUP of his key takes him off his. */
+export function noteEvent(events: Map<number, EventMsg>, msg: Msg): void {
+  if (msg.t === 'event') events.set(msg.n, msg);
+  const traded = msg.t === 'pickup' ? traderOf(msg.key) : undefined;
+  const withTrader = traded === undefined ? undefined : events.get(traded);
+  if (withTrader?.trader) {
+    const rest: EventMsg = { ...withTrader };
+    delete rest.trader;
+    events.set(withTrader.n, rest);
+  }
+}
 
 /** The event a ring phase drops, by the director's 0-based ring index, or undefined:
  *  every other ring from the first shrink, which is index 1. */
