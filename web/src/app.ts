@@ -45,6 +45,7 @@ import {
 import { Stage, type DrawnScreen } from './ui/stage';
 import { ParadeHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
 import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
+import { KeyLegend } from './ui/keys';
 import { stageKey } from './ui/roomkeys';
 import { TEXT_RED } from './ui/emerald';
 import {
@@ -255,6 +256,8 @@ function setStrip(text: string | null): void {
 function setInMatch(on: boolean): void {
   document.body.classList.toggle('in-match', on);
   if (on) hideRoomHook?.();
+  // The legend is drawn only in a match, and the class resizes nothing on a desktop.
+  if (on) placeKeys?.();
   if (!on && sheetOpen) {
     sheetOpen = false;
     ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', 'false');
@@ -3391,9 +3394,16 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
 /** The field past the picture: the match's roster is handed to it once there is one, so
  *  the other seats walk on past the box and off the field (POK-323). */
 let fieldView: FieldView | null = null;
+/** Places the desktop key legend; set by wirePlayScreen. */
+let placeKeys: (() => void) | null = null;
 
 function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined, rom: Uint8Array | null = null): void {
   wireKeyboard(emu);
+  // Shown only on a desktop in a match (index.html's #keys), and only past the picture.
+  const legend = new KeyLegend($('#keys') as HTMLElement, emu, KEYBOARD_MAP);
+  const wrap = $('#screen-wrap') as HTMLElement;
+  placeKeys = () => legend.place(measureLayout(wrap, $('#pad') as HTMLElement), wrap.clientWidth, wrap.clientHeight);
+  new ResizeObserver(placeKeys).observe(wrap);
   wireGamepad(emu);
   wireRemap();
   for (const el of document.querySelectorAll<HTMLElement>('#pad .btn[data-key]')) {

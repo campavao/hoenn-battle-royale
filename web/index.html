@@ -225,6 +225,52 @@
            takes the window, match or not; field.ts fits the picture and fills the rest. */
         #screen-wrap { flex: 1 1 0; min-height: 0; width: 100%; max-width: none; aspect-ratio: auto; }
       }
+      /* The keyboard's GBA (ui/keys.ts): small and half see-through, on the field past the
+         picture and never on it -- keys.ts places it from field.ts's layout (left, top),
+         as the GBA's shape (data-mode=pad) or one row (row), or hides it where there is no
+         room. A phone has the pad instead, so this is a desktop match's only. */
+      #keys { display: none; }
+      @media (hover: hover) and (pointer: fine) {
+        body.in-match #keys {
+          display: grid;
+          position: absolute; left: 0; top: 0;
+          grid-template-columns: repeat(7, 26px);
+          grid-template-rows: 24px 26px 26px 26px 24px;
+          grid-template-areas:
+            "l     l     .     .     .     r     r"
+            ".     up    .     .     .     .     a"
+            "left  .     right .     b     .     ."
+            ".     down  .     .     .     .     ."
+            ".     .     sel   sel   start start .";
+          gap: 3px;
+          opacity: 0.5;
+          pointer-events: none;
+          font: 9px/1 ui-monospace, monospace;
+          color: #e8f1f6;
+        }
+        #keys .k {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          background: rgba(20, 28, 34, 0.85); border: 1px solid #5d7383; border-radius: 5px;
+          white-space: nowrap;
+        }
+        #keys .k b { font-weight: 700; font-size: 11px; }
+        #keys .k i { font-style: normal; font-size: 8px; color: #9fb3c0; margin-top: 1px; }
+        #keys .k.on { background: #e8f1f6; color: #111; border-color: #fff; }
+        #keys .k.on i { color: #333; }
+        #keys .k-a, #keys .k-b { border-radius: 50%; }
+        #keys .k-l { grid-area: l; } #keys .k-r { grid-area: r; }
+        #keys .k-up { grid-area: up; } #keys .k-down { grid-area: down; }
+        #keys .k-left { grid-area: left; } #keys .k-right { grid-area: right; }
+        #keys .k-a { grid-area: a; } #keys .k-b { grid-area: b; }
+        #keys .k-select { grid-area: sel; } #keys .k-start { grid-area: start; }
+        body.in-match #keys[hidden] { display: none; }
+        body.in-match #keys[data-mode='row'] {
+          grid-template: none / none; grid-template-areas: none;
+          grid-auto-flow: column; grid-auto-columns: auto; grid-auto-rows: 24px;
+        }
+        #keys[data-mode='row'] .k { grid-area: auto; flex-direction: row; gap: 4px; padding: 0 6px; }
+        #keys[data-mode='row'] .k i { margin-top: 0; }
+      }
       /* The phone's menu button (POK-320): in a match, the sheet -- the room, LEAVE, the
          settings -- is drawn over the game behind it. A desktop has the sheet beside the
          game instead, and no pad to put a button in. */
@@ -268,6 +314,8 @@
           <!-- The people the ROM hides past its band (POK-319), drawn over the picture. -->
           <canvas id="overlay" width="240" height="160" aria-hidden="true"></canvas>
           <div id="fps" class="fps" hidden></div>
+          <!-- The keyboard's GBA (ui/keys.ts): a desktop match only. -->
+          <div id="keys" aria-hidden="true"></div>
         </div>
         <div id="pad">
           <div id="dpad-surface" class="dpad-surface" aria-label="D-pad"></div>
