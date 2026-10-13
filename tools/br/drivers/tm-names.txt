@@ -1,6 +1,6 @@
-# tm-names: in a match a TM is called what it teaches (POK-264). The boot hands over
-# every HM (POK-256), so the TMs&HMs pocket is full of them before anybody picks
-# anything up -- HM01 first, which is CUT.
+# tm-names: in a match a TM is called what it teaches (POK-264). The boot deals no HMs
+# any more (2026-10-13), so a TM06 arrives in a GIVE, the way loot does, and the
+# TMs&HMs pocket's first row should read TOXIC.
 #
 # The pocket's contents are the memory assert; the name itself is the screenshot, since
 # a rendered item row lives in a window buffer and nowhere a driver can read. TMs&HMs
@@ -11,8 +11,11 @@ pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 # the match is under way -- outside one, a TM is a TM again
 poke u8 gBrMatch 2
-# HM01 (339 = 0x153) is sitting in the first TMs&HMs slot
-expect u16 *gBagPockets+0x130 0x153
+# GIVE [count 1] (TM06 0x0126 x1): sitting in the first TMs&HMs slot
+pokebytes gDecompressionBuffer 01 26 01 01
+mailsend gBrMailbox 30 gDecompressionBuffer 4
+wait 10
+expect u16 *gBagPockets+0x130 0x126
 tap START
 wait 40
 tap DOWN

@@ -32,6 +32,7 @@
 #if BR
 #include "br/br_ghosts.h"
 #include "br/br_field.h"
+#include "br/br_strip.h"
 #endif
 
 #define SPECIAL_LOCALIDS_START (min(LOCALID_CAMERA, \
@@ -1490,6 +1491,10 @@ static u8 TrySpawnObjectEventTemplate(const struct ObjectEventTemplate *objectEv
     const struct ObjectEventGraphicsInfo *graphicsInfo;
     const struct SubspriteTable *subspriteTables = NULL;
 
+#if BR
+    if (BrStrip_Stripped(objectEventTemplate, mapNum, mapGroup))
+        return OBJECT_EVENTS_COUNT;
+#endif
     graphicsInfo = GetObjectEventGraphicsInfo(objectEventTemplate->graphicsId);
     MakeSpriteTemplateFromObjectEventTemplate(objectEventTemplate, &spriteTemplate, &subspriteTables);
     spriteFrameImage.size = graphicsInfo->size;

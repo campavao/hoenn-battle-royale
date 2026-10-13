@@ -29,6 +29,9 @@
 #include "constants/moves.h"
 #include "constants/songs.h"
 #include "constants/trainer_types.h"
+#if BR
+#include "br/br_hm.h"
+#endif
 
 #define NUM_FORCED_MOVEMENTS 18
 #define NUM_ACRO_BIKE_COLLISIONS 5
@@ -611,6 +614,10 @@ static void PlayerNotOnBikeMoving(u8 direction, u16 heldKeys)
 
     if (collision)
     {
+#if BR
+        if (BrHm_WalkInto(direction, collision))
+            return;
+#endif
         if (collision == COLLISION_LEDGE_JUMP)
         {
             PlayerJumpLedge(direction);

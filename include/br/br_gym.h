@@ -21,6 +21,10 @@
 // Is this one of the eight? Rematch ids are not: nothing in a match can reach one.
 bool8 BrGym_IsBoss(u16 trainerId);
 
+// Is this object one of the eight, on their own gym? The one rule br_strip.c keeps a
+// person by.
+bool8 BrGym_IsLeader(u8 mapGroup, u8 mapNum, u8 localId);
+
 // The first page of a boss's intro, cut at its first page break into gStringVar4; any
 // other trainer's text comes back untouched. The one hook in ShowTrainerIntroSpeech.
 const u8 *BrGym_Intro(u16 trainerId, const u8 *speech);

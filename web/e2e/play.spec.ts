@@ -19,25 +19,16 @@
 //     phase, so the bleed comes early, and its bots meet in the last rings, so the proxy's
 //     second core boots while the recorder is watching (the squish's cause).
 //   - `#land` puts the drop three tiles right of YOUNGSTER CALVIN's column on Route 102
-//     (data/maps/Route102/map.json: (33,14), facing down, one POOCHYENA). A match's
-//     trainers fight only when talked to (trainer_see.c, POK-259), so the walk ends under
-//     him and A starts it.
+//     (data/maps/Route102/map.json: (33,14)). A match clears the map's people off
+//     (br_strip.c, 2026-10-13), so the walk goes on to stand on the tile he stood on.
+//     It used to end under him, with A starting the fight (POK-259, POK-328).
 //   - `#safari=60` leaves time to walk into the grass and throw before the buzzer, and
-//     `#fog=20` has CALVIN beaten well before the fourth phase. Once in about twenty
-//     runs (Firefox, where the walk is slower) the fight with him never ended, with the
-//     fog's sweep having taken two of Route 102's trainers during it (gBrLoot.gone 2).
-//     br_loot.c Despawn_Trainer removed the object mid-battle, and RemoveObjectEvent
-//     destroyed gSprites[its old overworld id] -- a battle sprite by then: the foe's
-//     healthbox at Route 102's action menu. The ROM now holds an object asked off the
-//     map until the field is back (BrField_RemoveObject; npcout-in-battle.txt), which is
-//     POK-328's lead; the drivers that swept a fight never hung, so a fight that never
-//     ends here still fails with its state.
+//     `#fog=20` brings the fourth phase, and the bleed, soon after the landing.
 //   - `#testmon`: a TREECKO at the boot, so an opening that catches nothing still has a
 //     party at the buzzer (an empty one is an elimination).
 // Every fight is rigged once it is under way (play.ts's `rig`), so it ends the same way
-// every run: the Safari foe at 1 HP; CALVIN at 1 HP, poisoned and harmless, with our own
-// mon kept full, and beaten with the first move; any other -- a bot that walks up to us,
-// a wild one in Route 102's grass -- called for us, as the drivers call theirs.
+// every run: the Safari foe at 1 HP; any other -- a bot that walks up to us, a wild one
+// in Route 102's grass -- called for us, as the drivers call theirs.
 // Change the cell table, the ring or the bots and re-derive the seed.
 import { test, expect, type Page } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
@@ -62,8 +53,8 @@ const SEED = 5376;
 const SAFARI_SE = '26:13';
 const ROUTE_102 = '0:17';
 const LAND = { x: 36, y: 16 };
-/** The tile under CALVIN, facing him. */
-const UNDER_CALVIN = { x: 33, y: 15 };
+/** The tile CALVIN stood on, before the map's people were cleared off. */
+const CALVIN = { x: 33, y: 14 };
 const BR_PHASE_SAFARI = 1;
 
 test.describe.configure({ retries: 1 });
@@ -255,40 +246,20 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     await proxyClean();
   });
 
-  await test.step('trainer: walk up to CALVIN, talk, and beat him', async () => {
+  await test.step("route: CALVIN's tile is empty, and walked onto", async () => {
     for (let i = 0; i < 40; i++) {
       const r = await ram(page, sym);
       if (r.inBattle) await fight(page, sym, shot, { rig: 'called', label: 'fight' });
-      if (r.x === UNDER_CALVIN.x && r.y === UNDER_CALVIN.y) break;
-      const key = r.x > UNDER_CALVIN.x ? 'ArrowLeft' : r.x < UNDER_CALVIN.x ? 'ArrowRight' : r.y > UNDER_CALVIN.y ? 'ArrowUp' : 'ArrowDown';
+      if (r.x === CALVIN.x && r.y === CALVIN.y) break;
+      const key = r.x > CALVIN.x ? 'ArrowLeft' : r.x < CALVIN.x ? 'ArrowRight' : r.y > CALVIN.y ? 'ArrowUp' : 'ArrowDown';
       await tap(page, key, 120);
       await page.waitForTimeout(250);
     }
-    const under = await ram(page, sym);
-    expect({ x: under.x, y: under.y }, 'under CALVIN').toEqual(UNDER_CALVIN);
-    await tap(page, 'ArrowUp');
-    await shot('face-to-face');
-    const gone = under.gone;
-    for (let i = 0; i < 12 && !(await ram(page, sym)).inBattle; i++) {
-      await tap(page, 'z');
-      await page.waitForTimeout(400);
-    }
-    await until(page, sym, 'the trainer battle', (x) => x.inBattle, 10_000);
-    // The whole battle, back to the field: a trainer battle that never hands the field
-    // back is POK-328's class of bug.
-    const took = await fight(page, sym, shot, { rig: 'won', label: 'trainer', every: 4, maxMs: 60_000 });
-    expect(took, 'back on the field within a minute').toBeLessThan(60_000);
-    // Out through the defeat speech on B: A on the tile in front is a pickup.
-    for (let i = 0; i < 6; i++) {
-      await tap(page, 'x');
-      await page.waitForTimeout(300);
-    }
-    await page.waitForTimeout(1_000);
-    const after = await ram(page, sym);
-    expect(after.gone, 'CALVIN is gone from the map').toBeGreaterThan(gone);
-    await shot('trainer-beaten');
-    await expectLayout(page, { onField: true }, 'after the trainer', sym);
-    await expectClean(page, 'the trainer');
+    const on = await ram(page, sym);
+    expect({ x: on.x, y: on.y }, "on CALVIN's tile").toEqual(CALVIN);
+    await shot('on-his-tile');
+    await expectLayout(page, { onField: true }, 'on his tile', sym);
+    await expectClean(page, 'the route');
     await proxyClean();
   });
 

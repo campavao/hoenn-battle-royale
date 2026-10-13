@@ -74,6 +74,20 @@ bool8 BrGym_IsBoss(u16 trainerId)
     return Find(trainerId) != NULL;
 }
 
+bool8 BrGym_IsLeader(u8 mapGroup, u8 mapNum, u8 localId)
+{
+    u16 map = (mapGroup << 8) | mapNum;
+    u8 i;
+
+    for (i = 0; i < ARRAY_COUNT(sBosses); i++)
+    {
+        if (sBosses[i].map == map
+         && (sBosses[i].localIds[0] == localId || sBosses[i].localIds[1] == localId))
+            return TRUE;
+    }
+    return FALSE;
+}
+
 const u8 *BrGym_Intro(u16 trainerId, const u8 *speech)
 {
     u16 i;
