@@ -649,6 +649,9 @@ export interface FieldDeps {
    *  in the picture's place while one draws. Without one, or on a core that cannot hand
    *  the picture over, the picture itself takes the filter (not on Safari). */
   keyLayer?: HTMLCanvasElement | null;
+  /** Over the field and under the picture, on the LCD: dims the map a see-through battle
+   *  shows through its keyed backdrop, shown while the picture is keyed. */
+  keyDim?: HTMLElement | null;
 }
 
 /** The filter that makes a see-through battle's backdrop transparent: the ROM's
@@ -854,13 +857,13 @@ export class FieldView {
     lcd.style.top = `${pic.top * lay.scale}px`;
     lcd.style.width = `${pic.width * lay.scale}px`;
     lcd.style.height = `${pic.height * lay.scale}px`;
-    const keyLayer = this.deps.keyLayer;
-    if (keyLayer) {
-      const at = lcdRect({ left: pic.left * lay.scale, top: pic.top * lay.scale, width: pic.width * lay.scale, height: pic.height * lay.scale }, this.band);
-      keyLayer.style.left = `${at.left}px`;
-      keyLayer.style.top = `${at.top}px`;
-      keyLayer.style.width = `${at.width}px`;
-      keyLayer.style.height = `${at.height}px`;
+    const at = lcdRect({ left: pic.left * lay.scale, top: pic.top * lay.scale, width: pic.width * lay.scale, height: pic.height * lay.scale }, this.band);
+    for (const el of [this.deps.keyLayer, this.deps.keyDim]) {
+      if (!el) continue;
+      el.style.left = `${at.left}px`;
+      el.style.top = `${at.top}px`;
+      el.style.width = `${at.width}px`;
+      el.style.height = `${at.height}px`;
     }
     this.clipped = null;
     if (field.width !== lay.cols) field.width = lay.cols;
@@ -955,6 +958,7 @@ export class FieldView {
     this.layered = layer;
     const keyLayer = this.deps.keyLayer;
     if (keyLayer) keyLayer.hidden = !layer;
+    if (this.deps.keyDim) this.deps.keyDim.hidden = !keyed;
     lcd.style.visibility = layer ? 'hidden' : '';
     if (keyed && !layer) ensureSeeThroughFilter(lcd.ownerDocument);
     lcd.style.filter = keyed && !layer ? `url(#${SEE_THROUGH_FILTER})` : '';

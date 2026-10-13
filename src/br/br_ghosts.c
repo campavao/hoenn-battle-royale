@@ -33,6 +33,9 @@ static EWRAM_DATA u8 sOwnValid = 0;
 STATIC_ASSERT(BR_MAX_SEATS <= 32, BrOutSeatsFitAWord)
 static EWRAM_DATA u32 sOutSeats = 0;
 #define SEAT_IS_OUT(seat) (sOutSeats & ((u32)1 << (seat)))
+// The trees and rocks a ghost has started cutting or smashing, a bit per object slot.
+STATIC_ASSERT(OBJECT_EVENTS_COUNT <= 16, BrCuttingFitsAHalfword)
+static EWRAM_DATA u16 sCutting = 0;
 
 // Skin -> object event graphics. Index 0 is the default; the shell's career picks.
 // The wardrobe (POK-282). Cam: "I should be able to pick kind of like any sprites -- the
@@ -432,6 +435,7 @@ void BrGhosts_Init(void)
     gBrOwnEvents = 0;
     sOwnValid = FALSE;
     sOutSeats = 0;
+    sCutting = 0;
 }
 
 // A walker's first step onto the next map is a PLACE (a ROM's own WatchOwn says so on any
@@ -555,6 +559,44 @@ void BrGhosts_Out(u8 seat)
     BrGhosts_Remove(seat);
 }
 
+// A ghost's next step into a cuttable tree or a breakable rock takes it down first:
+// it walked straight through one (2026-10-12 match video). The page lets a seat cross
+// one as everybody carries the HMs (bots/brain.ts canCut); this is the picture of it.
+// TRUE once the way is clear. The tree comes back with the map, as the player's does.
+static bool8 ClearTheWay(struct ObjectEvent *ghost, u8 dir)
+{
+    struct ObjectEvent *o;
+    s16 x = ghost->currentCoords.x;
+    s16 y = ghost->currentCoords.y;
+    u8 id;
+    u16 bit;
+
+    MoveCoords(dir, &x, &y);
+    id = GetObjectEventIdByXY(x, y);
+    if (id >= OBJECT_EVENTS_COUNT)
+        return TRUE;
+    o = &gObjectEvents[id];
+    if (o->graphicsId != OBJ_EVENT_GFX_CUTTABLE_TREE && o->graphicsId != OBJ_EVENT_GFX_BREAKABLE_ROCK)
+        return TRUE;
+    bit = 1 << id;
+    if (!(sCutting & bit))
+    {
+        // Somebody else's movement on it (the player cutting it too): theirs to finish.
+        if (ObjectEventIsMovementOverridden(o))
+            return FALSE;
+        ObjectEventSetHeldMovement(ghost, GetFaceDirectionMovementAction(dir));
+        ObjectEventSetHeldMovement(o, o->graphicsId == OBJ_EVENT_GFX_CUTTABLE_TREE
+            ? MOVEMENT_ACTION_CUT_TREE : MOVEMENT_ACTION_ROCK_SMASH_BREAK);
+        sCutting |= bit;
+        return FALSE;
+    }
+    if (!ObjectEventClearHeldMovementIfFinished(o))
+        return FALSE;
+    sCutting &= ~bit;
+    RemoveObjectEventByLocalIdAndMap(o->localId, o->mapNum, o->mapGroup);
+    return TRUE;
+}
+
 // Feed one queued walk to the object, or snap it when it fell too far behind.
 static void DriveGhost(u8 seat)
 {
@@ -586,6 +628,8 @@ static void DriveGhost(u8 seat)
     if (s->queued > 0)
     {
         u8 dir = s->queue[0];
+        if (!ClearTheWay(obj, dir))
+            return;
         for (i = 1; i < s->queued; i++)
             s->queue[i - 1] = s->queue[i];
         s->queued--;
@@ -802,6 +846,7 @@ void BrGhosts_Tick(void)
     if (!BrField_OverworldRunning())
     {
         sOwnValid = FALSE; // the next overworld frame re-places us (map load, battle end)
+        sCutting = 0;      // and a map load spawns its trees afresh
         return;
     }
     BrField_ShareObjects(&limit, &loot);
