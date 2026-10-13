@@ -289,6 +289,39 @@ describe('bots walking', () => {
     expect(bots.partyOf(seat).every((m) => m.moves.some((mv) => mv.id === 19))).toBe(true);
   });
 
+  it("takes a bag's last item with a bare pickup, so every ROM lets go of it (a gift-giver)", () => {
+    const bags = new Map<number, { id: number; n: number }[]>([[0xc001, [{ id: 200, n: 1 }]], [0x05ff, [{ id: 13, n: 2 }]]]);
+    const cells = new Map([[0xc001, pageCell(0, 1)], [0x05ff, pageCell(1, 0)]]);
+    const { bots, sent, dealt } = eventBots({
+      targets: [{ mapId: 'FIELD', x: 0, y: 0 }],
+      loot: {
+        all: () => [...bags.keys()].map((key) => ({ key, mapId: 'FIELD', ...cells.get(key)! })),
+        at: (mapId, { x, y }) => [...cells].find(([k, c]) => bags.has(k) && mapId === 'FIELD' && c.x === x && c.y === y)?.[0],
+        bagAt: (key) => bags.get(key)?.[0]?.id,
+        bagLeft: (key) => (bags.get(key) ?? []).reduce((n, st) => n + st.n, 0),
+      },
+    });
+    const log: Msg[] = [];
+    for (let t = STEP_MS; t <= 20_000; t += STEP_MS) {
+      bots.tick(t);
+      // The page's Loot table, as notePickup plays it.
+      for (const m of sent.splice(0)) {
+        if (m.t !== 'pickup') continue;
+        log.push(m);
+        const bag = bags.get(m.key);
+        if (!bag) continue;
+        if (m.item === undefined) bags.delete(m.key);
+        else if (--bag[0].n <= 0) bag.shift();
+      }
+    }
+    expect(log.filter((m) => m.t === 'pickup' && m.key === 0xc001)).toEqual([{ t: 'pickup', seat: dealt[0].seat, key: 0xc001 }]);
+    expect(log.filter((m) => m.t === 'pickup' && m.key === 0x05ff)).toEqual([
+      { t: 'pickup', seat: dealt[0].seat, key: 0x05ff, item: 13 },
+      { t: 'pickup', seat: dealt[0].seat, key: 0x05ff },
+    ]);
+    expect(bots.bagOf(dealt[0].seat)).toEqual(expect.arrayContaining([{ id: 200, n: 1 }, { id: 13, n: 2 }]));
+  });
+
   it('forgets a bot that goes out', () => {
     const { bots, dealt } = run(3, 1);
     bots.remove(dealt[0].seat);

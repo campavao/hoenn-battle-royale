@@ -25,4 +25,15 @@ wait 60
 shot given
 expectmsg 10 u16 1 0xC001
 expect u8 gBrLoot+11 0
+# Somebody else talks to another one first: their bare PICKUP takes him off our map too
+pokebytes gDecompressionBuffer 00 00 12 00 01 02 C0 11 00 10 00 01 C8 00 01 00 00 00 00
+mailsend gBrMailbox 11 gDecompressionBuffer 19
+wait 30
+expect u16 gBrLoot+0 0xC002
+expectne u8 gBrLoot+12 0xFF
+pokebytes gDecompressionBuffer 05 02 C0 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 10
+expect u8 gBrLoot+11 0
+expect u8 gBrLoot+12 0xFF
 say gift giver ok

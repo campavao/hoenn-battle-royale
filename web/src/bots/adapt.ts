@@ -34,6 +34,7 @@ export function lootView(
       return ref ? loot.at(ref, toRom(cell)) : undefined;
     },
     bagAt: (key) => loot.bagAt(key),
+    bagLeft: (key) => (loot.bagItems(key) ?? []).reduce((n, st) => n + st.n, 0),
   };
 }
 

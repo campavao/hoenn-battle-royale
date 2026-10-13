@@ -247,6 +247,10 @@ export interface BotsOptions {
      *  than a mon (POK-237). A bot takes one the way a player does -- one press, one
      *  item -- and the rest stays on the ground for whoever is next. */
     bagAt?: (key: number) => number | undefined;
+    /** How many items are still in it. The last one goes as a bare pickup (PR #23
+     *  review): the ROM lets go of a bag only on a bare one, and a gift-giver a bot
+     *  emptied with an item-named pickup stood on every map with nothing in his hands. */
+    bagLeft?: (key: number) => number;
   };
   /** world.json id -> the wire's group/num. */
   mapRef: (mapId: string) => MapRef | undefined;
@@ -357,13 +361,6 @@ export function health(party: PackedMon[]): number {
   return max > 0 ? hp / max : 1;
 }
 
-/** The team at the new rung. A mon that is already there keeps its place and the
- *  share of its health it had -- a bot does not get healed by the fog closing, and one
- *  that has fainted stays fainted -- and the rest of the roster is whatever the deal
- *  added at this phase. Matched by slot, not by species: the rung is what evolves a
- *  mon (party.ts's grownUp), so a WURMPLE that was hurt is a hurt SILCOON, not a fresh
- *  one. It used to be a fresh one, and every fainted mon came back on 1 HP, so bots
- *  outlived the fog and the fights meant to thin them out. */
 /** A traded mon in a slot keeps the field moves the slot had (PR #23 review): FLY is a
  *  bot's way out of the fog, and the trader's TACKLE-only mon would take it away -- and
  *  keep it away, since every rung re-deals that slot as the traded species. */
@@ -372,6 +369,13 @@ function keepFieldMoves(traded: PackedMon, from: PackedMon): PackedMon {
   return { ...traded, moves: [...traded.moves, ...field].slice(0, 4) };
 }
 
+/** The team at the new rung. A mon that is already there keeps its place and the
+ *  share of its health it had -- a bot does not get healed by the fog closing, and one
+ *  that has fainted stays fainted -- and the rest of the roster is whatever the deal
+ *  added at this phase. Matched by slot, not by species: the rung is what evolves a
+ *  mon (party.ts's grownUp), so a WURMPLE that was hurt is a hurt SILCOON, not a fresh
+ *  one. It used to be a fresh one, and every fainted mon came back on 1 HP, so bots
+ *  outlived the fog and the fights meant to thin them out. */
 function climb(held: PackedMon[], fresh: PackedMon[]): PackedMon[] {
   return fresh.map((next, i) => {
     const mine = held[i];
@@ -786,12 +790,14 @@ export class Bots {
       // A bag on the ground gives up one item per press -- the ROM's own rule -- so
       // the pickup names what was taken and the rest stays there (POK-237).
       const item = this.opts.loot?.bagAt?.(here);
-      if (item !== undefined) {
+      const last = item !== undefined && (this.opts.loot?.bagLeft?.(here) ?? 2) <= 1;
+      if (item !== undefined && !last) {
         this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: here, item });
         mergeBag(walker.bag, [{ id: item, n: 1 }]);
         this.note(walker, 'pickup', `item ${item}`);
       } else {
         this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: here });
+        if (item !== undefined) mergeBag(walker.bag, [{ id: item, n: 1 }]);
         this.note(walker, 'pickup', `key ${here}`);
       }
       walker.path = null;
