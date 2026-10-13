@@ -1,0 +1,20 @@
+# patch-water: a patch on water is a shadow under the surface, not a ripple (review of
+# #19: a ripple in the palette's darker blues was all but lost on Hoenn's sea).
+#
+# ROUTE 107 (map 0:22, wild header 0x1C, water only) under match seed 4 deals eight
+# patches; from (20,10) patch 7, at (23,13) -- (0x1E,0x14) with the +7 -- is in view and
+# drawn. The shot is checked by eye; the byte says it is drawn at all.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 16 14 00 0A 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 120
+expect u16 gBrPatch 0x0016
+expect u16 gBrPatch+2 0x1C
+expect u8 gBrPatch+4 8
+expect u16 gBrPatch+30 0x1E
+expect u16 gBrPatch+46 0x14
+expectne u8 gBrPatch+12 64
+shot water
+say patch water ok

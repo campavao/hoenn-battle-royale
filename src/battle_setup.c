@@ -428,6 +428,9 @@ static void DoStandardWildBattle(void)
 
 void BattleSetup_StartRoamerBattle(void)
 {
+#if BR
+    BrPatch_Take();
+#endif
     LockPlayerFieldControls();
     FreezeObjectEvents();
     StopPlayerAvatar();

@@ -172,10 +172,10 @@ void BrLoot_Released(struct Pokemon *mon);
 // forgot (BrMoves_Forgetting). It goes out as a bag holding just that, under a key from
 // the released space.
 void BrLoot_DropItem(u16 item);
-// The item a loot ball on this map holds, by its object's local id, or ITEM_NONE for a
-// Pokemon, a bag, or a local id that is not loot's. What colours the ball (br_balls.h).
 // A PICKUP for something that is not one of our rows (br_patch.c).
 void BrLoot_SendTaken(u16 key);
+// The item a loot ball on this map holds, by its object's local id, or ITEM_NONE for a
+// Pokemon, a bag, or a local id that is not loot's. What colours the ball (br_balls.h).
 u16 BrLoot_ItemFor(u8 localId);
 // Puts one dealt item ball on the ground (POK-261). Every ROM deals the same ones from
 // the match seed, so nothing is sent: they simply agree. The key's top bit is set, the

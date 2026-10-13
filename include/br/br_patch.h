@@ -8,7 +8,8 @@
 // cells on each map rustle instead -- the grass's own rustle, a ripple on water, a puff
 // of dust on a cave floor -- and stepping on one starts a battle from that map's own
 // table. The first trainer there has it: the cell is gone for everybody, the way a ball
-// on the ground is.
+// on the ground is. Two who step on it in the same frame both get their battle; the
+// PICKUPs cross, and each takes it off the other's map.
 //
 // Nothing goes over the wire to place them. The cells are dealt from the match seed and
 // the map's own tiles, so every ROM in the room finds the same ones; only taking one is

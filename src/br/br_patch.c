@@ -22,10 +22,10 @@ extern const struct SpritePalette gSpritePalette_GeneralFieldEffect1;
 EWRAM_DATA struct BrPatch gBrPatch = {0};
 // Taken, by key: a bit for every patch the match could deal (124 maps, 8 each), a map's
 // eight in its header's byte. A driver clears a byte to grow a map's back.
+EWRAM_DATA u8 gBrPatchTaken[(BR_PATCH_KEY(0x7F, 7) - BR_PATCH_KEY_BASE + 8) / 8] = {0};
 // The seed the map was dealt under: START puts the match's in after the warp that may
 // already have dealt this map under none.
 static EWRAM_DATA u32 sDealtFor = 0;
-EWRAM_DATA u8 gBrPatchTaken[(BR_PATCH_KEY(0x7F, 7) - BR_PATCH_KEY_BASE + 8) / 8] = {0};
 STATIC_ASSERT(BR_PATCH_MAX == 8, BrPatchKeysHoldEight)
 
 #define NO_HEADER 0xFFFF
@@ -76,15 +76,21 @@ static bool8 IsTaken(u16 key)
 // A cell a battle could start on, by the same test wild_encounter.c makes: grass, a cave
 // floor or sand under a land table, water under a water one. Not a wall, and not where
 // one of the map's people stood.
+//
+// Read off the layout as the ROM ships it, not the live grid: a map's ON_LOAD scripts set
+// metatiles from flags that differ between players, and one cell more or less on one ROM
+// would shift every pick after it -- the same key naming different cells in one room.
 static bool8 Eligible(const struct WildPokemonHeader *header, s16 x, s16 y)
 {
     const struct MapEvents *events = gMapHeader.events;
+    const struct MapLayout *layout = gMapHeader.mapLayout;
+    u16 block = layout->map[(x - MAP_OFFSET) + (y - MAP_OFFSET) * layout->width];
     u8 behavior;
     u8 i;
 
-    if (MapGridGetCollisionAt(x, y) != 0)
+    if (UNPACK_COLLISION(block) != 0)
         return FALSE;
-    behavior = MapGridGetMetatileBehaviorAt(x, y);
+    behavior = GetMetatileAttributesById(UNPACK_METATILE(block)) & METATILE_ATTR_BEHAVIOR_MASK;
     if (!(header->landMonsInfo != NULL && MetatileBehavior_IsLandWildEncounter(behavior))
      && !(header->waterMonsInfo != NULL && MetatileBehavior_IsWaterWildEncounter(behavior)))
         return FALSE;
@@ -130,7 +136,6 @@ static void Deal(u16 map)
         Undraw(i);
     gBrPatch.map = map;
     gBrPatch.count = 0;
-    sDealtFor = gBrMatch.seed;
     gBrPatch.header = HeaderOf(map);
     sPass = 0;
     // Seven bits of header in a key (br_patch.h); Emerald has 124 rows.
@@ -217,13 +222,13 @@ static void DealSome(void)
     }
 }
 
-// Darkened (Cam: "darkened indicators you can see"): the field's own rustle, ripple and
-// puff, redrawn in the darker colours of the palette each already uses, so a patch reads
-// apart from the grass a step disturbs and costs no palette slot of its own.
+// Darkened (Cam: "darkened indicators you can see"). In grass, the field's own rustle,
+// redrawn in the darker greens of the palette it already uses, so it reads apart from the
+// grass a step disturbs. Anywhere else -- water, a cave floor, sand, ash -- something's
+// shadow, drifting: a ripple or a puff of dust in a darker colour still vanished into the
+// sea and the sand (review of #19). Neither costs a palette slot of its own.
 static const u32 sTallGrassPic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_tall_grass.png", ".4bpp", "-mwidth 2 -mheight 2");
 static const u32 sLongGrassPic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_long_grass.png", ".4bpp", "-mwidth 2 -mheight 2");
-static const u32 sRipplePic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_ripple.png", ".4bpp", "-mwidth 2 -mheight 2");
-static const u32 sDustPic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_ground_impact_dust.png", ".4bpp", "-mwidth 2 -mheight 1");
 
 static const struct SpriteFrameImage sTallGrassImages[] = {
     overworld_frame(sTallGrassPic, 2, 2, 0),
@@ -238,18 +243,6 @@ static const struct SpriteFrameImage sLongGrassImages[] = {
     overworld_frame(sLongGrassPic, 2, 2, 2),
     overworld_frame(sLongGrassPic, 2, 2, 3),
 };
-static const struct SpriteFrameImage sRippleImages[] = {
-    overworld_frame(sRipplePic, 2, 2, 0),
-    overworld_frame(sRipplePic, 2, 2, 1),
-    overworld_frame(sRipplePic, 2, 2, 2),
-    overworld_frame(sRipplePic, 2, 2, 3),
-    overworld_frame(sRipplePic, 2, 2, 4),
-};
-static const struct SpriteFrameImage sDustImages[] = {
-    overworld_frame(sDustPic, 2, 1, 0),
-    overworld_frame(sDustPic, 2, 1, 1),
-    overworld_frame(sDustPic, 2, 1, 2),
-};
 
 static void SpriteCB_Patch(struct Sprite *sprite)
 {
@@ -261,15 +254,23 @@ static void SpriteCB_Patch(struct Sprite *sprite)
     StartSpriteAnim(sprite, 0);
 }
 
-// The field's own effect for what the cell is, darkened: the rustle grass gives a step, a
-// ripple on water, the dust a landing kicks up anywhere else.
+// A pixel or two either way and back, every eight frames a step.
+static const s8 sDrift[] = { 0, 1, 2, 1, 0, -1, -2, -1 };
+
+static void SpriteCB_Shadow(struct Sprite *sprite)
+{
+    sprite->sPause++;
+    sprite->x2 = sDrift[(sprite->sPause >> 3) & 7];
+}
+
+// The field's own sprite for what the cell is: see above.
 static void Draw(u8 i)
 {
     u8 behavior = MapGridGetMetatileBehaviorAt(gBrPatch.x[i], gBrPatch.y[i]);
     const struct SpritePalette *palette = &gSpritePalette_GeneralFieldEffect1;
-    const struct SpriteFrameImage *images;
+    const struct SpriteFrameImage *images = NULL;
     struct SpriteTemplate template;
-    u8 object, id;
+    u8 object, id, slot;
     s16 x = gBrPatch.x[i], y = gBrPatch.y[i];
     struct Sprite *sprite;
 
@@ -283,35 +284,33 @@ static void Draw(u8 i)
         object = FLDEFFOBJ_LONG_GRASS;
         images = sLongGrassImages;
     }
-    else if (MetatileBehavior_IsSurfableWaterOrUnderwater(behavior))
-    {
-        object = FLDEFFOBJ_RIPPLE;
-        images = sRippleImages;
-    }
     else
     {
-        object = FLDEFFOBJ_GROUND_IMPACT_DUST;
-        images = sDustImages;
+        // 16x8, in colour 15 of whatever palette it is given: general 0's is black.
+        object = FLDEFFOBJ_SHADOW_M;
         palette = &gSpritePalette_GeneralFieldEffect0;
     }
-    if (LoadSpritePalette(palette) == 0xFF)
+    slot = LoadSpritePalette(palette);
+    if (slot == 0xFF)
         return; // no room this frame; the next one tries again
-    UpdateSpritePaletteWithWeather(IndexOfSpritePaletteTag(palette->tag));
+    UpdateSpritePaletteWithWeather(slot);
     SetSpritePosToOffsetMapCoords(&x, &y, 8, 8);
-    if (object == FLDEFFOBJ_GROUND_IMPACT_DUST)
-        y += 4; // a 16x8 puff, at the cell's feet
     template = *gFieldEffectObjectTemplatePointers[object];
-    template.images = images;
+    if (images != NULL)
+        template.images = images;
+    else
+        y += 4; // at the cell's feet
     id = CreateSpriteAtEnd(&template, x, y, 0);
     if (id == MAX_SPRITES)
         return;
     sprite = &gSprites[id];
     sprite->coordOffsetEnabled = TRUE;
     sprite->oam.priority = 2;
-    sprite->callback = SpriteCB_Patch;
+    sprite->oam.paletteNum = slot;
+    sprite->callback = images != NULL ? SpriteCB_Patch : SpriteCB_Shadow;
     sprite->sMagic = BR_PATCH_MAGIC;
     sprite->sSlot = i;
-    sprite->sPause = BR_PATCH_PAUSE;
+    sprite->sPause = images != NULL ? BR_PATCH_PAUSE : 0;
     gBrPatch.spriteIds[i] = id;
 }
 
@@ -351,19 +350,20 @@ void BrPatch_Tick(void)
 {
     u8 i;
 
-    if (!BrField_OverworldRunning())
-        return;
     if (sDealtFor != gBrMatch.seed)
     {
-        // A new match: every patch is back.
+        // A new match: every patch is back, the moment the seed is in -- a PICKUP that
+        // lands before the field is running again is this match's, and must stay.
         for (i = 0; i < ARRAY_COUNT(gBrPatchTaken); i++)
             gBrPatchTaken[i] = 0;
-        Deal(CurrentMap());
+        sDealtFor = gBrMatch.seed;
+        gBrPatch.map = 0xFFFF;
+        gBrPatch.count = 0;
     }
-    else if (gBrPatch.map != CurrentMap())
-    {
+    if (!BrField_OverworldRunning())
+        return;
+    if (gBrPatch.map != CurrentMap())
         Deal(CurrentMap());
-    }
     if (sPass != 0)
         DealSome();
     for (i = 0; i < gBrPatch.count; i++)

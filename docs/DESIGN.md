@@ -200,6 +200,13 @@ out, and one that comes in waits as it would in a menu.
   STARDUST, a shard) is its sell price; a status heal is a FULL RESTORE, and no shelf sells
   one; a ball off the ground is six (the MASTER BALL stays one); and a medicine used from
   the BAG treats the whole party, with no one to pick.
+- **Visible encounters** (`br_patch.h`, 2026-10-13): a step in grass, a cave or water
+  meets nothing. Each map with a wild table has a few darkened patches instead (one per
+  16 cells a battle could start on, one to eight), dealt from the match seed off the
+  map's shipped layout so every ROM finds the same cells. Stepping on one is a battle
+  from that map's table, and its `pickup` (keys `0x2000..0x3FFF`) takes it off every
+  map. Repels are money; Keen Eye and a repel's level skip nothing. A FISHING ROD and
+  SWEET SCENT still find a mon anywhere: they never went through the step check.
 - **Rules**: one clock (`br_levels.h`: the ring phase is the level rung, no EXP), the
   catch with a full party (`br_catch.h`), the MOVES row (`br_moves.h`), gym leaders as
   one-shot bosses (`br_gym.h`), the shot clock and RUN (`br_battle.h`).
