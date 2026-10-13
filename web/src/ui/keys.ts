@@ -8,8 +8,9 @@
 // It goes past the picture, never on it: the picture's bottom-right is the battle's
 // FIGHT/BAG/POKeMON/RUN and the text box's end. placeLegend finds the field's room beside
 // or under the picture (field.ts's layout), as the GBA's shape where that fits and as one
-// row where only a strip does, and hides it where there is none: the docked sheet beside
-// the game lists the same keys (app.ts KEY_LINES).
+// row where only a strip does, and hides it where there is none. The docked sheet beside
+// the game lists the same keys there (app.ts KEY_LINES), unless a gamepad is connected,
+// when it shows the pad's buttons instead.
 
 import { KEY_BIT, type GbaKey } from '../emu';
 import type { FieldLayout } from '../field';
@@ -127,6 +128,8 @@ export class KeyLegend {
     root.style.left = '0px';
     root.style.top = '0px';
     const sizes = { pad: measure('pad'), row: measure('row') };
+    // Out of a match the legend isn't drawn and measures 0: placing it then would stick.
+    if (!sizes.pad.w) return;
     const at = placeLegend(lay, boxW, boxH, sizes);
     if (!at) {
       root.hidden = true;

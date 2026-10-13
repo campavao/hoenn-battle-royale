@@ -19,6 +19,11 @@ class FakeEl {
     },
     contains: (name: string) => this.classes.has(name),
   };
+  hidden = false;
+  style: Record<string, string> = {};
+  /** What layout would measure: 0 while the CSS draws nothing (out of a match). */
+  offsetWidth = 0;
+  offsetHeight = 0;
   constructor(readonly tag: string) {}
   append(...els: FakeEl[]) {
     this.children.push(...els);
@@ -135,5 +140,16 @@ describe('the desktop key legend', () => {
       expect(apart, `${w}x${h}`).toBe(true);
       expect(p.x >= 0 && p.y >= 0 && p.x + s.w <= w && p.y + s.h <= h, `${w}x${h} inside`).toBe(true);
     }
+  });
+
+  it('keeps its place when it measures nothing, out of a match', () => {
+    // Placed before body.in-match draws it, it would be pinned to the corner for good.
+    const { root, legend } = build();
+    legend.place(layoutField(2080, 1080), 2080, 1080);
+    expect(root.style.left).toBe('0px'); // not 2070px, the corner a 0x0 legend fits
+    root.offsetWidth = 200;
+    root.offsetHeight = 138;
+    legend.place(layoutField(2080, 1080), 2080, 1080);
+    expect(root.style.left).toBe('1870px');
   });
 });
