@@ -33,6 +33,9 @@ static EWRAM_DATA u8 sOwnValid = 0;
 STATIC_ASSERT(BR_MAX_SEATS <= 32, BrOutSeatsFitAWord)
 static EWRAM_DATA u32 sOutSeats = 0;
 #define SEAT_IS_OUT(seat) (sOutSeats & ((u32)1 << (seat)))
+// How fast each ghost walks, and how long it has stood waiting for its next step: the
+// pace in the low two bits, the idle frames above them (PaceWalk).
+static EWRAM_DATA u8 sPace[BR_MAX_SEATS] = {0};
 
 // Skin -> object event graphics. Index 0 is the default; the shell's career picks.
 // The wardrobe (POK-282). Cam: "I should be able to pick kind of like any sprites -- the
@@ -249,6 +252,7 @@ static void Despawn(u8 seat)
         BrField_RemoveObject(obj->localId, obj->mapNum, obj->mapGroup);
     gBrSeats[seat].objId = BR_NO_OBJ;
     gBrSeats[seat].queued = 0;
+    sPace[seat] = 0;
 }
 
 // BRENDAN and MAY draw from the player's own palette slot, 0, and a ghost of the other
@@ -285,6 +289,7 @@ static void Spawn(u8 seat)
         return;
     s->objId = id;
     s->queued = 0;
+    sPace[seat] = 0;
     ObjectEventTurn(&gObjectEvents[id], s->dir);
 }
 
@@ -428,6 +433,7 @@ void BrGhosts_Init(void)
         gBrSeats[i].objId = BR_NO_OBJ;
         gBrSeats[i].queued = 0;
         gBrSeatBusy[i] = BR_BUSY_MAP;
+        sPace[i] = 0;
     }
     gBrOwnEvents = 0;
     sOwnValid = FALSE;
@@ -555,6 +561,55 @@ void BrGhosts_Out(u8 seat)
     BrGhosts_Remove(seat);
 }
 
+// A ghost walks at the pace its trainer does (2026-10-13 play-test: "players are
+// teleporting while watching"). Running is the default in a match (field_player_avatar.c),
+// a step every eight frames, and every ghost walked at sixteen: it fell a tile behind
+// every sixteen frames, overflowed BR_STEP_QUEUE after about a second and a half, and
+// DriveGhost snapped it -- two to four tiles at a jump, over and over, and the camera of
+// whoever was watching jumped with it. A bot steps every 267 ms, exactly the walking pace,
+// so its backlog never drained either: any burst the network bunched up stayed until the
+// queue overflowed.
+//
+// The wire does not say how fast anybody is going, so the backlog does: two steps waiting
+// is a trainer outrunning their ghost, and it goes up a pace, again on every step that
+// still finds two waiting -- one pace that only matches the trainer's would never work
+// the backlog off, and the ghost would trail them two tiles with two slots to spare
+// before a snap. Four waiting is straight to the top. And a ghost that stood idle for
+// a whole walk of its own between two steps is outrunning its trainer, so it slows down a
+// pace. Running, walking and biking each settle on their own pace, and a bunched-up burst
+// is walked off at speed instead of piling up. The Mach Bike flat out is the one pace
+// with none above it: a long stall there can still overflow the queue.
+#define BR_PACE_NORMAL 0
+#define BR_PACE_FAST 1
+#define BR_PACE_FASTER 2
+#define BR_PACE_MASK 3
+#define BR_PACE_IDLE_MAX 63
+#define BR_PACE_FAST_AT 2
+#define BR_PACE_FASTER_AT 4
+
+static u8 PaceWalk(u8 seat, u8 dir)
+{
+    // A walk's frames at each pace: walk_normal, walk_fast (running), walk_faster (the
+    // Mach Bike flat out).
+    static const u8 sFrames[] = {16, 8, 4};
+    u8 pace = sPace[seat] & BR_PACE_MASK;
+    u8 idle = sPace[seat] >> 2;
+    u8 behind = gBrSeats[seat].queued;
+
+    if (behind >= BR_PACE_FASTER_AT)
+        pace = BR_PACE_FASTER;
+    else if (behind >= BR_PACE_FAST_AT && pace < BR_PACE_FASTER)
+        pace++;
+    else if (behind == 0 && pace != BR_PACE_NORMAL && idle >= sFrames[pace])
+        pace--;
+    sPace[seat] = pace;
+    if (pace == BR_PACE_FASTER)
+        return GetWalkFasterMovementAction(dir);
+    if (pace == BR_PACE_FAST)
+        return GetWalkFastMovementAction(dir);
+    return GetWalkNormalMovementAction(dir);
+}
+
 // Feed one queued walk to the object, or snap it when it fell too far behind.
 static void DriveGhost(u8 seat)
 {
@@ -576,6 +631,7 @@ static void DriveGhost(u8 seat)
         MoveObjectEventToMapCoords(obj, x, y);
         ObjectEventTurn(obj, s->dir);
         s->queued = 0;
+        sPace[seat] = 0;
         return;
     }
     if (ObjectEventIsMovementOverridden(obj))
@@ -589,12 +645,13 @@ static void DriveGhost(u8 seat)
         for (i = 1; i < s->queued; i++)
             s->queue[i - 1] = s->queue[i];
         s->queued--;
-        ObjectEventSetHeldMovement(obj, GetWalkNormalMovementAction(dir));
+        ObjectEventSetHeldMovement(obj, PaceWalk(seat, dir));
+        return;
     }
-    else if (obj->facingDirection != s->dir)
-    {
+    if ((sPace[seat] >> 2) < BR_PACE_IDLE_MAX)
+        sPace[seat] += 1 << 2;
+    if (obj->facingDirection != s->dir)
         ObjectEventSetHeldMovement(obj, GetFaceDirectionMovementAction(s->dir));
-    }
 }
 
 static void WatchOwn(void)

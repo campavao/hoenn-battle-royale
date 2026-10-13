@@ -1,0 +1,378 @@
+# ghost-run-pace: a ghost keeps up with a trainer who runs (2026-10-13 play-test: "players
+# are teleporting while watching"). Running is the match's default, a step every eight
+# frames, and a ghost walked every step at sixteen: it fell behind a tile every sixteen
+# frames, overflowed BR_STEP_QUEUE and was snapped two to four tiles at a time. Now its
+# pace follows the backlog (br_ghosts.c, PaceWalk).
+#
+# Seat 1 runs six legs of seven steps back and forth in front of us, a STEP every eight
+# frames. After every step its object is within two tiles of where the wire says it is,
+# and once it has found the pace, no more than one step waits behind the one it is
+# walking: a ghost that only matched the runner trailed two behind for good. Then two
+# legs on a bad link, the same steps arriving four and twelve frames apart, and once a
+# twenty-frame stall and a pair: still never a snap (an overflow), still within reach.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# seat 1 placed two tiles east of us facing east (ghost-walk.txt's PLACE)
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 04 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 4
+# its object is gObjectEvents[2]: currentCoords.x at 2 * 0x24 + 0x10
+expect u8 gBrSeats+25 2
+expect u16 gObjectEvents+0x58 14
+# leg 1, east
+pokebytes gDecompressionBuffer 01 04 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 3
+expectge u16 gObjectEvents+0x58 13
+expectle u16 gObjectEvents+0x58 17
+pokebytes gDecompressionBuffer 01 04 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 3
+expectge u16 gObjectEvents+0x58 14
+expectle u16 gObjectEvents+0x58 18
+pokebytes gDecompressionBuffer 01 04 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 3
+expectge u16 gObjectEvents+0x58 15
+expectle u16 gObjectEvents+0x58 19
+pokebytes gDecompressionBuffer 01 04 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 3
+expectge u16 gObjectEvents+0x58 16
+expectle u16 gObjectEvents+0x58 20
+pokebytes gDecompressionBuffer 01 04 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 3
+expectge u16 gObjectEvents+0x58 17
+expectle u16 gObjectEvents+0x58 21
+pokebytes gDecompressionBuffer 01 04 14 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 3
+expectge u16 gObjectEvents+0x58 18
+expectle u16 gObjectEvents+0x58 22
+pokebytes gDecompressionBuffer 01 04 15 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 19
+expectle u16 gObjectEvents+0x58 23
+shot leg1
+# leg 2, west
+pokebytes gDecompressionBuffer 01 03 14 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 18
+expectle u16 gObjectEvents+0x58 22
+pokebytes gDecompressionBuffer 01 03 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 17
+expectle u16 gObjectEvents+0x58 21
+pokebytes gDecompressionBuffer 01 03 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 16
+expectle u16 gObjectEvents+0x58 20
+pokebytes gDecompressionBuffer 01 03 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 15
+expectle u16 gObjectEvents+0x58 19
+pokebytes gDecompressionBuffer 01 03 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 14
+expectle u16 gObjectEvents+0x58 18
+pokebytes gDecompressionBuffer 01 03 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 13
+expectle u16 gObjectEvents+0x58 17
+pokebytes gDecompressionBuffer 01 03 0E 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 12
+expectle u16 gObjectEvents+0x58 16
+shot leg2
+# leg 3, east
+pokebytes gDecompressionBuffer 01 04 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 13
+expectle u16 gObjectEvents+0x58 17
+pokebytes gDecompressionBuffer 01 04 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 14
+expectle u16 gObjectEvents+0x58 18
+pokebytes gDecompressionBuffer 01 04 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 15
+expectle u16 gObjectEvents+0x58 19
+pokebytes gDecompressionBuffer 01 04 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 16
+expectle u16 gObjectEvents+0x58 20
+pokebytes gDecompressionBuffer 01 04 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 17
+expectle u16 gObjectEvents+0x58 21
+pokebytes gDecompressionBuffer 01 04 14 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 18
+expectle u16 gObjectEvents+0x58 22
+pokebytes gDecompressionBuffer 01 04 15 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 19
+expectle u16 gObjectEvents+0x58 23
+shot leg3
+# leg 4, west
+pokebytes gDecompressionBuffer 01 03 14 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 18
+expectle u16 gObjectEvents+0x58 22
+pokebytes gDecompressionBuffer 01 03 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 17
+expectle u16 gObjectEvents+0x58 21
+pokebytes gDecompressionBuffer 01 03 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 16
+expectle u16 gObjectEvents+0x58 20
+pokebytes gDecompressionBuffer 01 03 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 15
+expectle u16 gObjectEvents+0x58 19
+pokebytes gDecompressionBuffer 01 03 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 14
+expectle u16 gObjectEvents+0x58 18
+pokebytes gDecompressionBuffer 01 03 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 13
+expectle u16 gObjectEvents+0x58 17
+pokebytes gDecompressionBuffer 01 03 0E 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 12
+expectle u16 gObjectEvents+0x58 16
+shot leg4
+# leg 5, east
+pokebytes gDecompressionBuffer 01 04 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 13
+expectle u16 gObjectEvents+0x58 17
+pokebytes gDecompressionBuffer 01 04 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 14
+expectle u16 gObjectEvents+0x58 18
+pokebytes gDecompressionBuffer 01 04 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 15
+expectle u16 gObjectEvents+0x58 19
+pokebytes gDecompressionBuffer 01 04 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 16
+expectle u16 gObjectEvents+0x58 20
+pokebytes gDecompressionBuffer 01 04 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 17
+expectle u16 gObjectEvents+0x58 21
+pokebytes gDecompressionBuffer 01 04 14 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 18
+expectle u16 gObjectEvents+0x58 22
+pokebytes gDecompressionBuffer 01 04 15 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 19
+expectle u16 gObjectEvents+0x58 23
+shot leg5
+# leg 6, west
+pokebytes gDecompressionBuffer 01 03 14 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 18
+expectle u16 gObjectEvents+0x58 22
+pokebytes gDecompressionBuffer 01 03 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 17
+expectle u16 gObjectEvents+0x58 21
+pokebytes gDecompressionBuffer 01 03 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 16
+expectle u16 gObjectEvents+0x58 20
+pokebytes gDecompressionBuffer 01 03 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 15
+expectle u16 gObjectEvents+0x58 19
+pokebytes gDecompressionBuffer 01 03 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 14
+expectle u16 gObjectEvents+0x58 18
+pokebytes gDecompressionBuffer 01 03 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 13
+expectle u16 gObjectEvents+0x58 17
+pokebytes gDecompressionBuffer 01 03 0E 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 8
+expectle u8 gBrSeats+26 1
+expectge u16 gObjectEvents+0x58 12
+expectle u16 gObjectEvents+0x58 16
+shot leg6
+# leg 7, east, a bad link
+pokebytes gDecompressionBuffer 01 04 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 4
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 13
+expectle u16 gObjectEvents+0x58 17
+pokebytes gDecompressionBuffer 01 04 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 12
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 14
+expectle u16 gObjectEvents+0x58 18
+pokebytes gDecompressionBuffer 01 04 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 4
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 15
+expectle u16 gObjectEvents+0x58 19
+pokebytes gDecompressionBuffer 01 04 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 20
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 16
+expectle u16 gObjectEvents+0x58 20
+pokebytes gDecompressionBuffer 01 04 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 17
+expectle u16 gObjectEvents+0x58 21
+pokebytes gDecompressionBuffer 01 04 14 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 12
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 18
+expectle u16 gObjectEvents+0x58 22
+pokebytes gDecompressionBuffer 01 04 15 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 4
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 19
+expectle u16 gObjectEvents+0x58 23
+shot leg7
+# leg 8, west, a bad link
+pokebytes gDecompressionBuffer 01 03 14 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 4
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 18
+expectle u16 gObjectEvents+0x58 22
+pokebytes gDecompressionBuffer 01 03 13 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 12
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 17
+expectle u16 gObjectEvents+0x58 21
+pokebytes gDecompressionBuffer 01 03 12 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 4
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 16
+expectle u16 gObjectEvents+0x58 20
+pokebytes gDecompressionBuffer 01 03 11 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 12
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 15
+expectle u16 gObjectEvents+0x58 19
+pokebytes gDecompressionBuffer 01 03 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 4
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 14
+expectle u16 gObjectEvents+0x58 18
+pokebytes gDecompressionBuffer 01 03 0F 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 12
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 13
+expectle u16 gObjectEvents+0x58 17
+pokebytes gDecompressionBuffer 01 03 0E 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 4
+expectle u8 gBrSeats+26 4
+expectge u16 gObjectEvents+0x58 12
+expectle u16 gObjectEvents+0x58 16
+shot leg8
+# and it settles on the last cell once the steps stop
+wait 60
+expect u8 gBrSeats+26 0
+expect u16 gObjectEvents+0x58 14
+say ghost run pace ok

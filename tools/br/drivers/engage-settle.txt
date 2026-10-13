@@ -25,8 +25,10 @@ hold LEFT 40
 expect u16 gBrOwnPos+2 12
 expect u16 gBrOwnPos+4 16
 expect u8 gBrNetlink 0
-# The steps they took before our challenge reached them, landing late: five EAST, to
-# (20,16). Eighty frames of walking for the ghost, past the end of our wait.
+# The steps they took before our challenge reached them, landing late, just before our
+# wait runs out: five EAST, to (20,16). A ghost walks a backlog like that off at speed
+# (br_ghosts.c's PaceWalk), so it is still at it when the wait ends, not eighty frames on.
+wait 25
 pokebytes gDecompressionBuffer 01 04 10 00 10 00 00 09
 mailsend gBrMailbox 3 gDecompressionBuffer 8
 pokebytes gDecompressionBuffer 01 04 11 00 10 00 00 09
@@ -37,7 +39,7 @@ pokebytes gDecompressionBuffer 01 04 13 00 10 00 00 09
 mailsend gBrMailbox 3 gDecompressionBuffer 8
 pokebytes gDecompressionBuffer 01 04 14 00 10 00 00 09
 mailsend gBrMailbox 3 gDecompressionBuffer 8
-wait 60
+wait 10
 # The wait is over and the ghost is still walking: settling with seat 1, no link yet.
 expect u8 gBrEngage+7 0xFF
 expect u8 gBrEngage+11 1
