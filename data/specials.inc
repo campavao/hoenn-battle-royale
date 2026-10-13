@@ -544,4 +544,5 @@ gSpecials::
 @ Battle royale's own come after pret's, so every special of pret's keeps its number.
 	def_special BrCatch_Apply
 	def_special BrRing_Outside
+	def_special BrEvent_Trade
 .endif

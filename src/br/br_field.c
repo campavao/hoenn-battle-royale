@@ -10,6 +10,7 @@
 #include "fieldmap.h"
 #include "field_camera.h"
 #include "field_weather.h"
+#include "br/br_event.h"
 #include "br/br_field.h"
 #include "br/br_ghosts.h"
 #include "br/br_loot.h"
@@ -530,6 +531,10 @@ void BrField_ShareObjects(u8 *ghosts, u8 *loot)
             room++;
     }
     room = room > BR_NPC_HEADROOM ? room - BR_NPC_HEADROOM : 0;
+    // An event's traders first: at most one or two on a map, and a person who blinks out
+    // when a crowd walks by is not one you can trade with.
+    owed = BrEvent_Wanted();
+    room = room > owed ? room - owed : 0;
     // The loot's share is what the ghosts close enough to engage leave of it. One of
     // those with no object is neither drawn nor challenged by us, though it is the lower
     // seat that challenges; a ball, even at our feet, can wait for a slot.

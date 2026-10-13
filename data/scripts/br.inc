@@ -72,9 +72,25 @@ BR_EventScript_FoundHiddenUsed::
 	releaseall
 	end
 
+@ An event's trader (src/br/br_event.c): any one of ours for his, at our rung. gStringVar1
+@ is his. Once a match: the C says so without asking after that.
+BR_EventScript_Trader::
+	lockall
+	msgbox BR_Text_TraderOffer, MSGBOX_YESNO
+	goto_if_eq VAR_RESULT, NO, BR_EventScript_TraderNo
+	special ChoosePartyMon
+	special BrEvent_Trade
+BR_EventScript_TraderNo:
+	releaseall
+	end
+
 BR_Text_PartyFull:
 	.string "Your party is full.\n"
 	.string "Release one for the new catch?$"
+
+BR_Text_TraderOffer:
+	.string "My {STR_VAR_1} for any one of\n"
+	.string "yours. Trade?$"
 
 BR_Text_HealParty:
 	.string "HEAL your party?$"

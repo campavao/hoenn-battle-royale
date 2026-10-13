@@ -1,0 +1,77 @@
+# event-trader: an event's placed NPC (speed-up 6b). The EVENT says where its trader
+# stands and what he offers; every ROM puts him there, A on him asks, the party menu picks
+# one of ours and he swaps it for his at our rung -- once a match with each trader.
+# Cancelling the menu trades nothing, and a fainted one is refused.
+#
+# catch-release's boot: one TREECKO, standing on (12,16) facing south.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+expect u8 gBrEvents+16 0
+# EVENT 0: legendary 0xB000, its trader on this map at (12,17), the cell we face, with a
+# LAPRAS (131)
+pokebytes gDecompressionBuffer 00 00 10 00 B0 00 09 0C 00 11 00 83 00
+mailsend gBrMailbox 32 gDecompressionBuffer 13
+wait 30
+expect u8 gBrEvents+16 1
+expect u16 gBrEvents+20 12
+expect u16 gBrEvents+22 17
+expect u16 gBrEvents+24 131
+expect u8 gBrEvents+27 9
+expectne u8 gBrEvents+52 0xFF
+shot trader
+# A asks; YES; then B out of the party menu: nothing traded
+tap A
+wait 90
+shot offer
+tap A
+wait 30
+tap A
+wait 90
+shot picker
+tap B
+wait 120
+expect u8 gBrEvents+18 0
+# a fainted one is refused: HP is the unencrypted u16 at 86 in struct Pokemon
+poke u16 gPlayerParty+86 0
+tap A
+wait 90
+tap A
+wait 30
+tap A
+wait 90
+tap A
+wait 120
+shot fainted
+expect u8 gBrEvents+18 0
+poke u16 gPlayerParty+86 20
+# again, and pick the TREECKO this time
+tap A
+wait 90
+tap A
+wait 30
+tap A
+wait 90
+tap A
+wait 120
+shot traded
+expect u8 gBrEvents+18 1
+expect u8 gPlayerPartyCount 1
+expectmsg 7 u16 2 131
+# he is back on his cell once the field is
+expectne u8 gBrEvents+52 0xFF
+# once a match: a third A says so and opens nothing
+tap A
+wait 30
+expect u8 gBrEvents+18 1
+shot again
+# a new match's first EVENT takes him off the map
+poke u32 gBrMatch+8 0x5678
+pokebytes gDecompressionBuffer 00 01 10 10 B0
+mailsend gBrMailbox 32 gDecompressionBuffer 5
+wait 10
+expect u8 gBrEvents+16 2
+expect u8 gBrEvents+52 0xFF
+expect u16 gBrEvents+24 0
+say event trader ok

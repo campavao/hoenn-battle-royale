@@ -417,6 +417,11 @@ describe('events (speed-up phase 6)', () => {
     const cells = pieces.map((p) => `${p.map.group}:${p.map.num}:${p.x}:${p.y}`);
     expect(new Set(cells).size).toBe(cells.length);
     expect(cells.some((c) => spawned.has(c))).toBe(false);
+    // ...and a trader, where there was room, on a cell of his own.
+    const traders = (h.sent.filter((m) => m.t === 'event') as EventMsg[]).flatMap((e) => (e.trader ? [e.trader] : []));
+    expect(traders.length).toBeGreaterThan(0);
+    const traderCells = traders.map((t) => `${t.map.group}:${t.map.num}:${t.x}:${t.y}`);
+    expect(traderCells.some((c) => cells.includes(c) || spawned.has(c))).toBe(false);
     for (const e of h.sent.filter((m) => m.t === 'event') as EventMsg[]) {
       const legend = spills.flatMap((s) => s.mons).find((m) => m.key === e.key);
       expect(legend, `event ${e.n}`).toBeDefined();

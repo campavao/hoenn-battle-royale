@@ -435,6 +435,16 @@ export interface EventMsg {
   mapsec: number; // the region-map section it dropped in, a MAPSEC_* value
   key: number; // the legendary's loot key
   place?: string; // the section's name, for the page's line; not sent to the ROM
+  trader?: EventTrader; // the event's placed NPC (br_event.c), if it has one
+}
+
+/** Where an event's trader stands, in ROM space (MAP_OFFSET included) like a spill's
+ *  cells, and the mon he swaps for any one of yours, at your rung. */
+export interface EventTrader {
+  map: MapRef;
+  x: number;
+  y: number;
+  species: number;
 }
 
 /** The host's word on where the fog is now; `place` is the section's name so every
@@ -1129,6 +1139,11 @@ const decoders: Record<string, Decoder> = {
     };
     const place = optShortString(m, 'place');
     if (place !== undefined) out.place = place;
+    if (m.trader !== undefined) {
+      const t = m.trader;
+      if (!isPlainObject(t)) fail('bad event trader');
+      out.trader = { map: reqMapRef(t), x: reqCell(t, 'x'), y: reqCell(t, 'y'), species: reqSpecies(t) };
+    }
     return out;
   },
 

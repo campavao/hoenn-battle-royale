@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mulberry32 } from './clock';
 import {
   clusterCells,
+  EVENT_CELLS,
   EVENT_GOLD,
   EVENT_PIECES,
   EVENT_RARES,
@@ -16,6 +17,7 @@ import {
 } from './events';
 import { rungForPhase } from '../bots/party';
 import { Loot } from './loot';
+import { MAP_OFFSET } from '../net/cells';
 import type { EventMsg, SpillMsg } from '../net/wire';
 
 const MAP = { group: 0, num: 16 };
@@ -52,6 +54,23 @@ describe('eventDrop', () => {
       expect(GOLD).toContain(b.items[0].id);
     }
     expect(bags[EVENT_GOLD].items).toEqual(SUPPLIES);
+  });
+
+  it('stands a trader on the cell past the pieces, offering a rare the event did not drop', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const msgs = eventDrop(mulberry32(seed), { n: 0, phase: 2, seat: 0, mapsec: 31, map: MAP, cells: cells(EVENT_CELLS) });
+      const event = msgs[0] as EventMsg;
+      const dropped = (msgs.slice(1) as SpillMsg[]).flatMap((s) => s.mons).map((m) => m.species);
+      expect(event.trader).toBeDefined();
+      expect(event.trader!.map).toBe(MAP);
+      expect({ x: event.trader!.x, y: event.trader!.y }).toEqual({ x: 10 + EVENT_PIECES + MAP_OFFSET, y: 20 + MAP_OFFSET });
+      expect(RARES).toContain(event.trader!.species);
+      expect(dropped).not.toContain(event.trader!.species);
+    }
+  });
+
+  it('has no trader when the pieces take every cell', () => {
+    expect((drop(0, EVENT_PIECES)[0] as EventMsg).trader).toBeUndefined();
   });
 
   it('keys every piece in the event space, and puts it on its cell in the ROM space', () => {

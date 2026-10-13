@@ -25,7 +25,7 @@
 //    locally between wire ticks (br_match.h's `clockLeft`/`clockFrames`), and the
 //    page's HUD mirror should look just as live.
 import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
-import { clusterCells, EVENT_PIECES, eventDrop, eventForRing } from './events';
+import { clusterCells, EVENT_CELLS, eventDrop, eventForRing } from './events';
 import { sectionInside } from './ring';
 import type { MapRef, Msg, Pace } from '../net/wire';
 
@@ -524,7 +524,7 @@ export class Director {
     const section = pool.length > 0 ? pool[pickIndex(this.rng, pool.length)] : this.ringSection;
     if (!section || section.section.num === undefined) return;
     const anchor = this.freeCell(section.cells, false) ?? section.cells[pickIndex(this.rng, section.cells.length)];
-    const cells = clusterCells(section.cells, anchor, EVENT_PIECES, (c) => this.dealtCells.has(cellKey(c)));
+    const cells = clusterCells(section.cells, anchor, EVENT_CELLS, (c) => this.dealtCells.has(cellKey(c)));
     for (const c of cells) this.dealtCells.add(cellKey({ map: anchor.map, x: c.x, y: c.y }));
     for (const msg of eventDrop(this.rng, {
       n,
