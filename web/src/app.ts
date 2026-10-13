@@ -1698,6 +1698,8 @@ function autoStarts(): boolean {
   return !import.meta.env.DEV || !new URLSearchParams(location.hash.slice(1)).has('noauto');
 }
 const DIRECTOR_TICK_MS = 1000; // coarser than the 5s clock/fogSecs cadence director.ts needs
+/** How often a director on a hidden tab asks the relay to hand the match on. */
+const STAND_DOWN_EVERY_MS = 5000;
 
 /** The same strip, for a client that is not running the match (POK-268). The host's is
  *  drawn by the director's own loop, so until now RING / N LEFT / the clock appeared on
@@ -2302,6 +2304,15 @@ function wireRoom(
     lock: (locked, botSeats) => relay.lockRoom(locked, botSeats),
     linesFor: (seat) => bridge!.linesFor(seat),
   };
+  /** A host in a background tab hands the match on (below, at visibilitychange). A tab
+   *  already hidden when its director starts -- promoted, back after a drop, or dealt by
+   *  a quick room's countdown -- never sees that event: it ran the match on throttled
+   *  timers, frozen for everybody, until its player came back. So every director asks
+   *  as it starts, and again while it runs (startDirector). With nobody willing to take
+   *  it the relay leaves the room here, which is no worse than before. */
+  const standDownIfHidden = (): void => {
+    if (document.hidden && host && !amWatching) relay.canHost(false);
+  };
   /** `members` comes straight off the relay's roster event when there is one, and the
    *  relay's last roster otherwise: who is in the room is the relay's to say. Never
    *  `bridge.roster`, which also holds whoever this page has merely heard from -- last
@@ -2337,7 +2348,17 @@ function wireRoom(
       settle: proxyDuels ? (a, b) => (proxyDuels as ProxyDuels).fight(a, b) : undefined,
       // The room hears the match narrated, our own seat in the voice its profile picked.
       narration: { mine: careerVoiceLines },
-      startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director),
+      // ...and asks again every few seconds while the tab is hidden: a stand-down with
+      // nobody willing leaves the room here, and the relay hands it over only on our own
+      // `can_host false`, so whoever comes back to their tab has to be asked about.
+      startLoop: (director) => {
+        const stop = startDirectorLoop(emu, symbols?.get('gBrHud'), director);
+        const asking = setInterval(standDownIfHidden, STAND_DOWN_EVERY_MS);
+        return () => {
+          stop();
+          clearInterval(asking);
+        };
+      },
     });
     if (import.meta.env.DEV) {
       // The whole-match e2e needs to see the director's own verdict: a winner is a
@@ -2350,6 +2371,7 @@ function wireRoom(
     }
     host.begin();
     warmProxy(host.botCount());
+    standDownIfHidden();
   };
   /** What match/room.ts's decideStart is asked from: this page, as it stands. The mode is
    *  the door we came in by, not a re-read of the hash, which match_in_progress rewrites. */
@@ -3058,7 +3080,7 @@ function wireRoom(
   document.addEventListener('visibilitychange', () => {
     if (amWatching) return;
     if (document.hidden) {
-      if (host) relay.canHost(false);
+      standDownIfHidden();
       return;
     }
     const me = bridge ? bridge.roster.get(bridge.seat) : undefined;
