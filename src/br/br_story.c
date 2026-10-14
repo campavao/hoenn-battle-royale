@@ -5,6 +5,7 @@
 #include "event_object_movement.h"
 #include "field_camera.h"
 #include "field_player_avatar.h"
+#include "field_weather.h"
 #include "fieldmap.h"
 #include "item.h"
 #include "main.h"
@@ -22,6 +23,7 @@
 #include "constants/opponents.h"
 #include "constants/region_map_sections.h"
 #include "constants/songs.h"
+#include "constants/weather.h"
 #include "br/br_event.h"
 #include "br/br_field.h"
 #include "br/br_hud.h"
@@ -174,6 +176,21 @@ u8 BrStory_Dock(u8 mapsec)
     return mapsec;
 }
 
+// An event that dropped on this section is live and its legendary not yet taken.
+static bool8 LiveAt(u8 mapsec)
+{
+    u8 n;
+
+    if (gBrEvents.seed != gBrMatch.seed)
+        return FALSE;
+    for (n = 0; n < BR_EVENT_MAX; n++)
+    {
+        if ((gBrEvents.live & (1 << n)) && !(gBrEvents.taken & (1 << n)) && gBrEvents.mapsec[n] == mapsec)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 // The ferry sails to an island while an event that dropped there still has its
 // legendary, and not before or after. Only Lilycove's harbour asks (its attendant's
 // menu); the sailors home ask nothing. Set there and nowhere else, so the rest of the
@@ -181,29 +198,59 @@ u8 BrStory_Dock(u8 mapsec)
 // that leans on the VBlank's RNG, as national-dex does).
 static void Ferry(void)
 {
-    u8 i, n;
-    bool8 on;
+    u8 i;
 
     if (gSaveBlock1Ptr->location.mapGroup != MAP_GROUP(MAP_LILYCOVE_CITY_HARBOR)
      || gSaveBlock1Ptr->location.mapNum != MAP_NUM(MAP_LILYCOVE_CITY_HARBOR))
         return;
     for (i = 0; i < ARRAY_COUNT(sIslands); i++)
     {
-        on = FALSE;
-        if (gBrEvents.seed == gBrMatch.seed)
-        {
-            for (n = 0; n < BR_EVENT_MAX; n++)
-            {
-                if ((gBrEvents.live & (1 << n)) && !(gBrEvents.taken & (1 << n))
-                 && gBrEvents.mapsec[n] == sIslands[i].mapsec)
-                    on = TRUE;
-            }
-        }
-        if (on)
+        if (LiveAt(sIslands[i].mapsec))
             FlagSet(sIslands[i].flag);
         else
             FlagClear(sIslands[i].flag);
     }
+}
+
+// ---- the clash -----------------------------------------------------------------------
+
+// SOOTOPOLIS while its story is live: the weather KYOGRE and GROUDON made there, so a
+// fight in the city starts in it (battle_util.c's switch-in weather reads the field's).
+// Not Emerald's WEATHER_ABNORMAL: that turns rain and drought on a task of each ROM's
+// own, counted from when it walked in, and a link battle reads the weather on both GBAs
+// -- one side in rain and the other in sun is two different battles (PR #38 review).
+// So one of the two for the whole match, by its seed, which every seat shares: the rain
+// or the drought, the same for all. The ring owns the weather (br_ring.c, ApplyWeather
+// asks here for the map's own), and this only tells it when the answer changes.
+u8 BrStory_Weather(void)
+{
+    if (gSaveBlock1Ptr->location.mapGroup != MAP_GROUP(MAP_SOOTOPOLIS_CITY)
+     || gSaveBlock1Ptr->location.mapNum != MAP_NUM(MAP_SOOTOPOLIS_CITY)
+     || !LiveAt(MAPSEC_SOOTOPOLIS_CITY))
+        return WEATHER_NONE;
+    return (gBrMatch.seed & 1) ? WEATHER_DROUGHT : WEATHER_DOWNPOUR;
+}
+
+static EWRAM_DATA u8 sClash = WEATHER_NONE;
+
+static void Clash(void)
+{
+    u8 weather = BrStory_Weather();
+
+    if (weather == sClash)
+        return;
+    sClash = weather;
+    if (gBrRing.active)
+    {
+        gBrRing.applied = FALSE;
+        return;
+    }
+    // No ring yet (the opening, before the first RING): nobody else sets the weather.
+    if (weather != WEATHER_NONE)
+        SetSavedWeather(weather);
+    else
+        SetSavedWeatherFromCurrMapHeader();
+    DoCurrentWeather();
 }
 
 void BrStory_Tick(void)
@@ -214,6 +261,7 @@ void BrStory_Tick(void)
     if (gBrMatch.seed == 0 || !BrField_OverworldRunning())
         return;
     Ferry();
+    Clash();
     door = DoorHere();
     if (door == NULL || FlagGet(door->flag))
         return;

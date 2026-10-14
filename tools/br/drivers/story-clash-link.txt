@@ -1,0 +1,41 @@
+# story-clash-link: a link battle in SOOTOPOLIS while its story is live starts in the
+# clash's weather, which every ROM works out the same way: from the match seed (odd here,
+# GROUDON's DROUGHT, 12), not from a task of its own (PR #38 review: WEATHER_ABNORMAL's
+# local turn would have put the two GBAs of one link battle in rain and sun). With the
+# ring on, which is who applies it (br_ring.c, ApplyWeather). The battle is netlink-loop's
+# loopback: our own blocks come back as the peer's.
+#
+# In SOOTOPOLIS CITY (0:7) at (31,35). SaveBlock1's weather is +0x2E.
+drain gBrMailbox
+wait 30
+poke u32 gBrMatch+8 9
+pokebytes gBrMailbox+0x2018 81 00 00 07 1F 00 23 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 7
+# RING phase 1 round the whole map (r 30): the city is inside
+pokebytes gDecompressionBuffer 00 01 00 00 1E 00 00
+mailsend gBrMailbox 12 gDecompressionBuffer 7
+wait 10
+expect u8 gBrRing 1
+expect u8 *gSaveBlock1Ptr+0x2E 2
+# EVENT 0 at SOOTOPOLIS CITY (0x0E), legendary 0xB000
+pokebytes gDecompressionBuffer 00 00 0E 00 B0
+mailsend gBrMailbox 32 gDecompressionBuffer 5
+wait 10
+expect u8 gBrEvents+16 1
+expect u8 *gSaveBlock1Ptr+0x2E 12
+wait 300
+shot drought
+poke u8 gBrNetlink+8 1
+# CHALLENGE: type 5, framed len 7 = hdr(04 00 00) + challenger 00, opponent 01, nonce 00 00
+pokebytes gBrMailbox+0x1018 05 07 04 00 00 00 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 6
+expect u8 gBrNetlink 1
+wait 900
+shot battle
+expect u8 gWirelessCommType 5
+expectbits u16 gBattleWeather 0x60 0x60
+say story clash link ok

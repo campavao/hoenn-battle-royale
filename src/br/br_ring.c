@@ -171,8 +171,12 @@ static void HandleRing(const u8 *payload, u8 len)
 
 static void ApplyWeather(bool8 outside)
 {
+    u8 story = BrStory_Weather();
+
     if (outside)
         SetSavedWeather(WEATHER_FOG_HORIZONTAL);
+    else if (story != WEATHER_NONE)
+        SetSavedWeather(story);
     else
         SetSavedWeatherFromCurrMapHeader();
     DoCurrentWeather();

@@ -89,6 +89,19 @@ METATILE_ATTR_BEHAVIOR_MASK = 0x00FF
 # include/fieldmap.h
 NUM_METATILES_IN_PRIMARY = 512
 
+# Maps whose OnTransition swaps the layout for the one a match plays: SKY PILLAR is the
+# clean pillar while VAR_SKY_PILLAR_STATE < 2, which BR leaves at 0 (SkyPillar_*/
+# scripts.inc, setmaplayoutindex). The cracked one has holes the clean one has not, and
+# its top lets you walk where the clean one is wall (PR #38 review).
+LAYOUT_AS_PLAYED = {
+    "MAP_SKY_PILLAR_1F": "LAYOUT_SKY_PILLAR_1F_CLEAN",
+    "MAP_SKY_PILLAR_2F": "LAYOUT_SKY_PILLAR_2F_CLEAN",
+    "MAP_SKY_PILLAR_3F": "LAYOUT_SKY_PILLAR_3F_CLEAN",
+    "MAP_SKY_PILLAR_4F": "LAYOUT_SKY_PILLAR_4F_CLEAN",
+    "MAP_SKY_PILLAR_5F": "LAYOUT_SKY_PILLAR_5F_CLEAN",
+    "MAP_SKY_PILLAR_TOP": "LAYOUT_SKY_PILLAR_TOP_CLEAN",
+}
+
 WATER_BEHAVIORS = {
     "MB_POND_WATER", "MB_INTERIOR_DEEP_WATER", "MB_DEEP_WATER", "MB_WATERFALL",
     "MB_SOOTOPOLIS_DEEP_WATER", "MB_OCEAN_WATER", "MB_UNUSED_SOOTOPOLIS_DEEP_WATER",
@@ -219,6 +232,21 @@ def load_region_map_sections():
     return {s["id"]: dict(s, num=i) for i, s in enumerate(rm["map_sections"])}
 
 
+CRACKED_BEHAVIORS = {"MB_CRACKED_FLOOR", "MB_CRACKED_FLOOR_HOLE"}
+# The floors a bot falls through rather than rides over (export below).
+FALL_THROUGH = {"MAP_SKY_PILLAR_4F"}
+
+
+def hole_warp(folder):
+    """The map a hole on this one drops you to: its scripts' setholewarp, or None."""
+    try:
+        text = open(rp("data", "maps", folder, "scripts.inc")).read()
+    except OSError:
+        return None
+    m = re.search(r"setholewarp\s+(MAP_\w+)", text)
+    return m.group(1) if m else None
+
+
 def base_building_name(folder):
     """Strip a trailing floor suffix (_1F, _2F, _B1F, _3F, ...) for 'same
     building, different floor' warp-kind detection."""
@@ -283,7 +311,7 @@ def export():
         if section == "MAPSEC_NONE" and not is_centermartgym(folder):
             continue  # per ticket: grids only for sectioned maps + Center/Mart/Gym interiors
 
-        layout = layouts.get(mj["layout"])
+        layout = layouts.get(LAYOUT_AS_PLAYED.get(map_id, mj["layout"]))
         if not layout:
             warn.append(f"{map_id}: missing layout {mj['layout']!r}")
             continue
@@ -303,6 +331,7 @@ def export():
 
         classes = [0] * (w * h)
         heights = [0] * (w * h)
+        cracks = []
         for i in range(min(cell_count, w * h)):
             val = cells_raw[i]
             heights[i] = val >> MAPGRID_ELEVATION_SHIFT
@@ -323,6 +352,8 @@ def export():
             else:
                 cls = 0
             classes[i] = cls
+            if cls == 0 and behavior in CRACKED_BEHAVIORS:
+                cracks.append((i % w, i // w))
 
         # overlay: cuttable trees / smashable rocks aren't metatile behaviors in
         # Emerald (they're object events) -> approximate as class 9 at their cell.
@@ -372,6 +403,16 @@ def export():
                 "x": wx, "y": wy, "to": dest_map,
                 "toX": to_x, "toY": to_y, "kind": kind,
             })
+
+        # Every player has a MACH BIKE (br_boot.c), which rides over a cracked floor, so
+        # one is ground -- but SKY PILLAR 4F's west stairs are only reached by falling
+        # through it: walk onto one slowly and you drop to the floor below, onto the same
+        # cell (setholewarp, field_tasks.c). A bot does not ride, so there each is a
+        # one-way warp down (PR #38).
+        fall = hole_warp(folder) if map_id in FALL_THROUGH else None
+        for cx, cy in cracks if fall in maps_meta else []:
+            classes[cy * w + cx] = 8
+            warps.append({"x": cx, "y": cy, "to": fall, "toX": cx, "toY": cy, "kind": "hole"})
 
         # Heights (POK-331 #2): Emerald keeps you off a cliff top one step away by the
         # grid's elevation, not its collision bit -- a step between two heights is refused

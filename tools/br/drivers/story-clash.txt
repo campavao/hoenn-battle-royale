@@ -1,0 +1,38 @@
+# story-clash: SOOTOPOLIS's story turns its weather to the clash while it is live, and
+# back to the map's own sun (2) once its legendary is taken. Which of the two is the
+# match seed's: even is KYOGRE's DOWNPOUR (13), odd GROUDON's DROUGHT (12), the same on
+# every ROM (br_story.c, BrStory_Weather; the ring applies it, br_ring.c ApplyWeather).
+# story-clash-link checks a link battle there starts in it.
+#
+# In SOOTOPOLIS CITY (0:7) at (31,35), on the land in front of the CAVE OF ORIGIN.
+# SaveBlock1's weather is +0x2E.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 81 00 00 07 1F 00 23 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 7
+expect u8 *gSaveBlock1Ptr+0x2E 2
+shot sun
+# EVENT 0 at SOOTOPOLIS CITY (0x0E), legendary 0xB000
+pokebytes gDecompressionBuffer 00 00 0E 00 B0
+mailsend gBrMailbox 32 gDecompressionBuffer 5
+wait 10
+expect u8 gBrEvents+16 1
+expect u8 *gSaveBlock1Ptr+0x2E 13
+wait 60
+shot clash1
+wait 600
+shot clash
+# ...and it holds: no task of this ROM's own turns it (PR #38 review)
+expect u8 *gSaveBlock1Ptr+0x2E 13
+# Seat 3 takes the legendary: the clash is over
+pokebytes gDecompressionBuffer 03 00 B0 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 10
+expect u8 gBrEvents+17 1
+expect u8 *gSaveBlock1Ptr+0x2E 2
+wait 600
+shot after
+say story clash ok

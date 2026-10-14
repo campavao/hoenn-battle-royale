@@ -267,7 +267,16 @@ out, and one that comes in waits as it would in a menu.
   (`br_story.c`, Ferry, which sets the ENABLE_SHIP flag the menu asks). Their section on
   the page is Lilycove's, the dock, and the ring and the MAP mark measure them there too
   (`BrStory_Dock`), so an island comes up when the ring reaches Lilycove. The native
-  legendaries are gone for the match. Bots never take the ferry.
+  legendaries are gone for the match. Bots never take the ferry. The final rings are
+  SKY PILLAR (RAYQUAZA where it sleeps; the door is open and its own RAYQUAZA gone) and
+  SOOTOPOLIS (KYOGRE or GROUDON at the CAVE OF ORIGIN, and the city in rain or drought
+  while it is live, the match seed's pick, so a fight there starts in it, a link battle on
+  both GBAs alike). A match in four (`FINAL_CHANCE`) centres its ring on one and holds
+  that story for the last event; their final rings take in Route 131 and Route 126, sea
+  a bot can fight in.
+  A final story in reach on an earlier event is the one told. Bots climb SKY PILLAR (the
+  world has the clean floors the match plays, and 4F's cracks drop to 3F, the only way to
+  its west stairs) and leave SOOTOPOLIS alone: its way in is a dive.
 - **Gift-givers** (Cam, 2026-10-13): at the buzzer the host stands one person in every
   town and city (`match/gifts.ts`), holding one held item (LEFTOVERS, CHOICE BAND, QUICK
   CLAW and the like). On the wire he is a `spill` of a one-item bag under key `0xC000 | i`,
