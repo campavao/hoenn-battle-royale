@@ -134,6 +134,17 @@ test('a lobby in a hidden tab lets go of its socket, and browses again on return
   await setHidden(false);
   await expect.poll(() => sockets[1]?.asked ?? 0, { timeout: 10_000 }).toBeGreaterThan(0);
   await expect(page.locator('#lobby-rows button', { hasText: 'LOBBIES' })).toBeVisible();
+
+  // A quick look away and back, inside the old socket's close: one socket left, asking.
+  await setHidden(true);
+  await setHidden(false);
+  await expect.poll(() => sockets.filter((s) => !s.closed).length, { timeout: 10_000 }).toBe(1);
+  const live = sockets.find((s) => !s.closed)!;
+  const asked = live.asked;
+  await expect.poll(() => live.asked, { timeout: 15_000 }).toBeGreaterThan(asked);
+  await page.waitForTimeout(3_000);
+  expect(sockets.filter((s) => !s.closed)).toHaveLength(1);
+  await expect(page.locator('#lobby-note')).toHaveCount(0); // never "Not connected"
 });
 
 test('SOLO VS BOTS opens no socket', async ({ page }) => {

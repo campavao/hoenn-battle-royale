@@ -3408,6 +3408,9 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
     stage.show(main);
 
     relay.on('closed', () => {
+      // Hidden, the lobby let go of the socket itself (below): what it last saw stays up
+      // for the moment the tab is looked at again, until the new socket says otherwise.
+      if (document.hidden) return;
       online = false;
       rooms = [];
       redraw();
@@ -3416,10 +3419,10 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       rooms = ev.rooms;
       redraw();
     });
-    // There is no 'open' event to hang this on, so the refresh tick is also what
-    // notices the socket came up. A short first beat so the list is not blank for
-    // three seconds on a connection that was ready immediately.
+    // The refresh tick, and the socket coming up: the list is asked for the moment it
+    // can be, not on the next tick.
     const beat = () => {
+      if (document.hidden) return;
       const up = relay.isOpen();
       if (up !== online) {
         online = up;
@@ -3438,8 +3441,8 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         return;
       }
       relay.connect((import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL);
-      setTimeout(beat, 200);
     };
+    relay.on('open', beat);
     document.addEventListener('visibilitychange', browseWhileSeen);
     browseWhileSeen();
     timer = setInterval(beat, LOBBY_REFRESH_MS);
