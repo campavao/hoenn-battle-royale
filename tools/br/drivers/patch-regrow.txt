@@ -3,7 +3,9 @@
 #
 # patch-battle.txt's ROUTE 102 under seed 4: patch 1 at (18,9) is drawn from the boot
 # cell. Seat 1's PICKUP of its key, 0x2009, takes it off and it stays off for the rest
-# of phase 1. The RING for phase 2 brings it back, drawn, and a step onto it is a battle.
+# of phase 1. The RING for phase 2 brings it back, drawn. A PICKUP read in the same
+# frame as phase 3's RING takes it for phase 3 (Settle before the mark). Phase 4 brings
+# it back again, and a step onto it is a battle that sends its PICKUP.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
 wait 400
@@ -31,6 +33,19 @@ wait 10
 expect u8 gBrRing+1 2
 expectne u8 gBrPatch+6 64
 shot regrown
+# RING phase 3 and seat 1's PICKUP in one frame: grown back, then taken, in that order
+pokebytes gBrMailbox+0x10D8 0C 0A 07 00 00 00 03 19 0C 1E 00 00
+pokebytes gBrMailbox+0x1118 0A 0B 08 00 00 01 09 20 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 5
+wait 10
+expect u8 gBrRing+1 3
+expect u8 gBrPatch+6 64
+# RING phase 4: back again
+pokebytes gBrMailbox+0x1158 0C 0A 07 00 00 00 04 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 6
+wait 10
+expect u8 gBrRing+1 4
+expectne u8 gBrPatch+6 64
 # west twice, as patch-battle.txt: plain grass, then the patch
 drain gBrMailbox
 tap LEFT

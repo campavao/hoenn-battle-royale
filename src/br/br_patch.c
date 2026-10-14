@@ -27,9 +27,9 @@ EWRAM_DATA u8 gBrPatchTaken[(BR_PATCH_KEY(0x7F, 7) - BR_PATCH_KEY_BASE + 8) / 8]
 // The seed the map was dealt under: START puts the match's in after the warp that may
 // already have dealt this map under none.
 static EWRAM_DATA u32 sDealtFor = 0;
-// The ring phase the taken patches grew back for. Cam (2026-10-14): "Patches can regrow
-// over time". The ring is the one clock every ROM in the room hears the same way, so on
-// each new phase every patch taken in the last one is back, everywhere at once.
+// The ring phase the taken patches grew back for (br_patch.h). The ring is the one clock
+// every ROM in the room hears the same way, so on each new phase every patch taken in the
+// last one is back, everywhere at once.
 static EWRAM_DATA u8 sGrownFor = 0;
 STATIC_ASSERT(BR_PATCH_MAX == 8, BrPatchKeysHoldEight)
 
