@@ -20,6 +20,7 @@ import encounterData from '../data/encounters.json';
 const EXPORTED = encounterData as unknown as {
   maps: Record<string, number[]>;
   evolve: Record<string, [number, number]>;
+  names: Record<string, string>;
 };
 const ENCOUNTERS = EXPORTED.maps;
 
@@ -93,10 +94,12 @@ function hp(level: number): number {
 }
 
 /** The names the wire carries are the page's; the ROM builds the real mon from the
- *  species id and nicknames it itself. A species we have no name for is shown by its
- *  number, which is honest rather than wrong. */
+ *  species id and nicknames it itself. The ROM's own spelling of every species
+ *  (species_names.h, exported with the encounters), so a Treecko grown into a Grovyle
+ *  or a mon a player dropped is named and not numbered. An id with no name (an unused
+ *  slot) is shown by its number, which is honest rather than wrong. */
 export function speciesName(species: number): string {
-  return POOL.find((p) => p.species === species)?.name ?? String(species);
+  return EXPORTED.names[String(species)] ?? String(species);
 }
 
 /** What a trainer standing here would have caught. Empty for a map with no land table,

@@ -82,7 +82,7 @@ from `web/`, which has vite-node):
 | 3 | `python tools/br/render-maps.py` | `web/public/field-maps/<MAP>.png`, `.border.png` | `world.json` from 1, layouts, tilesets |
 | 4 | `python tools/br/export-sprites.py` | `web/public/field-sprites/<gfx>.png`, `web/src/data/sprites.json` | object-event graphics tables and pics |
 | 5 | `python tools/br/export-ui.py` | `web/public/ui/*.png`, `web/src/data/ui.json` | the font, text window, message box, and the skin ladder: `sSkinGraphics` in `src/br/br_ghosts.c`, so **rerun it when that table changes**. The skins are drawn from 4's sheets |
-| 6 | `python tools/br/export-encounters.py` | `web/src/data/encounters.json` | `src/data/wild_encounters.json`, `evolution.h`, `species.h` |
+| 6 | `python tools/br/export-encounters.py` | `web/src/data/encounters.json` | `src/data/wild_encounters.json`, `evolution.h`, `species.h`, `species_names.h` |
 | 7 | `python tools/br/export-trainers.py > web/src/data/trainers.json` | the trainers on each map | each map's `scripts.inc` |
 | 8 | `python tools/br/mine-lines.py > web/src/data/lines.json` | MY VOICE's word list | NPC text |
 

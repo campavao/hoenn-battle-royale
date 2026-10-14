@@ -119,3 +119,23 @@ describe('the fallback pool', () => {
     for (const row of POOL) expect(speciesName(row.species)).toBe(row.name);
   });
 });
+
+describe('species names', () => {
+  it('names a mon the pool does not deal, as the ROM spells it', () => {
+    expect(speciesName(305)).toBe('SWELLOW'); // TAILLOW grown up
+    expect(speciesName(278)).toBe('GROVYLE');
+    expect(speciesName(29)).toBe('NIDORAN\u2640');
+  });
+
+  it('numbers only an id with no name', () => {
+    expect(speciesName(252)).toBe('252'); // the unused slots between CELEBI and TREECKO
+  });
+
+  it('never deals a bot a numbered mon, up every rung', () => {
+    for (let phase = 0; phase <= LADDER.length; phase++) {
+      for (let seat = 0; seat < 16; seat++) {
+        for (const mon of dealParty(1234, seat, phase)) expect(mon.nickname, `phase ${phase} seat ${seat}`).not.toMatch(/^\d+$/);
+      }
+    }
+  });
+});

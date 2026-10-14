@@ -15,7 +15,12 @@ something a trainer chose to do, and a bot has neither the stone nor the friend.
 
 Writes web/src/data/encounters.json:
   { "maps": { "MAP_ROUTE101": [277, 288, 290], ... },   species ids, commonest first
-    "evolve": { "277": [16, 278], ... } }               species -> [level, into]
+    "evolve": { "277": [16, 278], ... },                species -> [level, into]
+    "names": { "277": "TREECKO", ... } }                species -> the ROM's name
+
+The names are every species with one (src/data/text/species_names.h), not just the
+ones a bot is dealt: a bot's mon grows into its evolution, and a mon a player drops
+can be anything, and the page names both on the results screen and the ticker.
 
 Species names come from include/constants/species.h, so a rename upstream is a build
 error here rather than a silently empty table.
@@ -64,6 +69,18 @@ def load_level_evolutions(ids):
         out.setdefault(ids[name.group(1)], [int(evo.group(1)), ids[evo.group(2)]])
     return out
 
+def load_species_names(ids):
+    """species id -> its name as the ROM spells it. The "?" rows are the unused slots
+    between Celebi and Treecko and the Unown forms' placeholders: not names."""
+    by_name = {}
+    name_re = re.compile(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*_\("([^"]*)"\)')
+    for line in open(rp("src", "data", "text", "species_names.h"), encoding="utf-8"):
+        m = name_re.search(line)
+        if m and m.group(1) in ids and m.group(1) != "SPECIES_NONE" and m.group(2).strip("?"):
+            by_name[ids[m.group(1)]] = m.group(2)
+    return by_name
+
+
 def main():
     ids = load_species_ids()
     with open(rp("src", "data", "wild_encounters.json"), encoding="utf-8") as f:
@@ -101,16 +118,19 @@ def main():
     }
 
     evolve = load_level_evolutions(ids)
+    names = load_species_names(ids)
 
     path = rp("web", "src", "data", "encounters.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({"maps": flat, "evolve": {str(k): v for k, v in sorted(evolve.items())}},
+        json.dump({"maps": flat, "evolve": {str(k): v for k, v in sorted(evolve.items())},
+                   "names": {str(k): v for k, v in sorted(names.items())}},
                   f, separators=(",", ":"))
 
     print(json.dumps({
         "maps": len(flat),
         "species": len({s for row in flat.values() for s in row}),
         "evolutions": len(evolve),
+        "names": len(names),
         "bytes": os.path.getsize(path),
         "unknownSpecies": sorted(unknown),
     }, indent=2))
