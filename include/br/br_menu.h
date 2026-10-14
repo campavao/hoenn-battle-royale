@@ -3,7 +3,7 @@
 
 #include "br/br_config.h"
 
-// The start menu, as the page's PARTY and MAP buttons drive it (web/src/ui/hud.ts). The
+// The start menu, as the page's PARTY and MAP buttons drive it (web/src/ui/phonehud.ts). The
 // page presses START, walks the cursor to the row it wants with UP and DOWN, and presses
 // A -- the keys a thumb would press, through HandleStartMenuInput. What it needs to read
 // is static in start_menu.c, so these point at it: which rows the menu has (MENU_ACTION_*

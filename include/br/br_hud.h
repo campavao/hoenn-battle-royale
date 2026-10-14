@@ -165,7 +165,8 @@ struct BrHud
     /* 0x14C */ struct BrHudLine box;                 // 44 bytes, the bottom box
     /* 0x178 */ u8 boxFrames;   // frames the box has left, 0 = none
     /* 0x179 */ u8 winBox;      // window id, WINDOW_NONE while absent
-    /* 0x17A */ u8 boxPad[2];
+    /* 0x17A */ u8 noCorner;    // PAGE WRITES: 1 while the page draws the corner's lines itself (a phone)
+    /* 0x17B */ u8 boxPad[1];
     /* 0x17C */
 };
 
@@ -186,6 +187,7 @@ BR_OFFSET(BrHud, heldLine, 0x18)
 BR_OFFSET(BrHud, queue, 0x44)
 BR_OFFSET(BrHud, box, 0x14C)
 BR_OFFSET(BrHud, boxFrames, 0x178)
+BR_OFFSET(BrHud, noCorner, 0x17A)
 BR_SIZE(BrHud, 0x17C)
 
 extern struct BrHud gBrHud;
@@ -213,6 +215,9 @@ void BrHud_Say(const u8 *text);
 // it (the Kanto rule: a held line outranks the feed).
 void BrHud_Hold(const u8 *text);
 void BrHud_Release(void);
+// The page draws the corner's lines and the map's sign itself (gBrHud.noCorner, a phone):
+// map_name_popup.c then shows no popup of its own.
+bool8 BrHud_PageSigns(void);
 // The bottom box: a two-line message over the field for 90 frames, above the ticker
 // and out of the way of both it and the corner. CHAR_NEWLINE splits the two lines.
 void BrHud_Box(const u8 *text);

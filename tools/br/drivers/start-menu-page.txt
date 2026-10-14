@@ -1,6 +1,6 @@
 # start-menu-page: gBrStartMenu points the page at the start menu's own statics
 # (br_menu.h), so PARTY and MAP can press START, walk the cursor and press A the way a
-# thumb does (web/src/ui/hud.ts). Rows, cursor, and the handler gMenuCallback is while
+# thumb does (web/src/ui/phonehud.ts). Rows, cursor, and the handler gMenuCallback is while
 # the menu takes keys.
 wait 30
 # BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9

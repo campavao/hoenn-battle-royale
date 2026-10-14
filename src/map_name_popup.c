@@ -16,6 +16,9 @@
 #include "constants/layouts.h"
 #include "constants/region_map_sections.h"
 #include "constants/weather.h"
+#if BR
+#include "br/br_hud.h"
+#endif
 
 // enums
 enum MapPopUp_Themes
@@ -230,6 +233,9 @@ enum {
 
 void ShowMapNamePopup(void)
 {
+#if BR
+    if (BrHud_PageSigns()) return; // a phone's page keeps the map's sign up itself
+#endif
     if (FlagGet(FLAG_HIDE_MAP_NAME_POPUP) != TRUE)
     {
         if (!FuncIsActiveTask(Task_MapNamePopUpWindow))

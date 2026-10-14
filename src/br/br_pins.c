@@ -103,3 +103,9 @@ BR_SIZE(AnimFrameCmd, 4)
 // move menu is sent (CHOOSE_MOVE_MOVES is the controller command's four bytes before it).
 STATIC_ASSERT(sizeof(gBattleBufferA[0]) == 0x200, BrPin_gBattleBufferA_row)
 BR_OFFSET(ChooseMoveStruct, moves, 0)
+
+// The phone's dock (web/src/touch.ts useOnField, ui/phonehud.ts): the item SELECT uses on
+// the field, and whether we ride or surf.
+BR_OFFSET(SaveBlock1, registeredItem, 0x496)
+BR_OFFSET(PlayerAvatar, flags, 0x00)
+BR_OFFSET(PlayerAvatar, transitionFlags, 0x01)

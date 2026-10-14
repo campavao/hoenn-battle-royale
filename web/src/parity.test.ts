@@ -39,6 +39,10 @@ import ghostsH from '../../include/br/br_ghosts.h?raw';
 import matchH from '../../include/br/br_match.h?raw';
 import engageH from '../../include/br/br_engage.h?raw';
 import lootH from '../../include/br/br_loot.h?raw';
+import menuH from '../../include/br/br_menu.h?raw';
+import levelsH from '../../include/br/br_levels.h?raw';
+import startMenuC from '../../src/start_menu.c?raw';
+import popupC from '../../src/map_name_popup.c?raw';
 import levelsC from '../../src/br/br_levels.c?raw';
 import matchC from '../../src/br/br_match.c?raw';
 import engageC from '../../src/br/br_engage.c?raw';
@@ -98,6 +102,7 @@ import { KEY_BIT } from './emu';
 import * as field from './field';
 import * as ghosts from './field-ghosts';
 import * as touch from './touch';
+import * as phone from './ui/phonehud';
 
 // ---- reading C -----------------------------------------------------------------------
 
@@ -495,6 +500,37 @@ describe("the BR structs the page reads at an offset", () => {
     // app.ts reads the phase at the struct's base.
     expect(layout(matchH, 'BrMatch').at.phase).toBe(0);
     expect(tsConst(appTs, 'BR_PHASE_DONE')).toBe(define(matchH, 'BR_PHASE_DONE'));
+  });
+
+  it("the phone's HUD and dock: the start menu's rows, SELECT's item, and what the windows read (ui/phonehud.ts)", () => {
+    const menu = layout(menuH, 'BrStartMenu').at;
+    expect([touch.START_MENU_CURSOR, touch.START_MENU_COUNT, touch.START_MENU_ACTIONS]).toEqual([menu.cursor, menu.count, menu.actions]);
+    // A function pointer layout() does not read; its comment, which BR_OFFSET holds the compiler to.
+    expect(Number(/\/\*\s*(0x[0-9A-F]+)\s*\*\/\s*bool8 \(\*input\)/.exec(menuH)?.[1])).toBe(touch.START_MENU_INPUT);
+    const actions = /enum\s*\{\s*MENU_ACTION_POKEDEX,([\s\S]*?)\};/.exec(startMenuC)![1].replace(/#else[\s\S]*?#endif/, '').replace(/\/\/.*$/gm, '');
+    const rows = ['MENU_ACTION_POKEDEX', ...(actions.match(/MENU_ACTION_\w+/g) ?? [])];
+    expect([touch.START_POKEMON, touch.START_BR_MAP]).toEqual([rows.indexOf('MENU_ACTION_POKEMON'), rows.indexOf('MENU_ACTION_BR_MAP')]);
+    expect(touch.SAVE1_REGISTERED_ITEM).toBe(watch('SaveBlock1', layout(globalH, 'SaveBlock1')).at.registeredItem);
+    expect(phone.AVATAR_FLAGS).toBe(watch('PlayerAvatar', layout(fieldmapH, 'PlayerAvatar')).at.flags);
+    const bit = (n: string) => 1 << Number(new RegExp(`#define\\s+${n}\\s+\\(1 << (\\d+)\\)`).exec(fieldmapH)![1]);
+    expect([phone.AVATAR_MACH_BIKE, phone.AVATAR_ACRO_BIKE, phone.AVATAR_SURFING]).toEqual(
+      ['PLAYER_AVATAR_FLAG_MACH_BIKE', 'PLAYER_AVATAR_FLAG_ACRO_BIKE', 'PLAYER_AVATAR_FLAG_SURFING'].map(bit),
+    );
+    const ring = layout(ringH, 'BrRing').at;
+    expect([phone.RING_ACTIVE, phone.RING_R]).toEqual([ring.active, ring.r]);
+    expect(Number(/\/\*\s*(\d+)\s*\*\/\s*u8 place\[BR_RING_PLACE_MAX \+ 1\]/.exec(ringH)?.[1])).toBe(phone.RING_PLACE);
+    expect(phone.RING_PLACE_MAX).toBe(define(ringH, 'BR_RING_PLACE_MAX'));
+    expect(phone.LEVELS_ROD).toBe(layout(levelsH, 'BrLevels').at.rod);
+    expect(phone.HUD_FOG_FRAMES).toBe(layout(hudH, 'BrHud').at.fogFrames);
+    const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
+    const ids = list.split(',').map((x) => x.trim()).filter(Boolean);
+    expect([phone.ITEM_MACH_BIKE, phone.ITEM_ACRO_BIKE, phone.ITEM_POKE_BALL, phone.ITEM_TOWN_MAP]).toEqual(
+      ['ITEM_MACH_BIKE', 'ITEM_ACRO_BIKE', 'ITEM_POKE_BALL', 'ITEM_TOWN_MAP'].map((n) => ids.indexOf(n)),
+    );
+    // The signs: every section map_name_popup.c gives one, with its theme.
+    const themes = /sMapSectionToThemeId\[[^\]]*\]\s*=\s*\{([\s\S]*?)\};/.exec(popupC)![1];
+    const want = Object.fromEntries([...themes.matchAll(/\[(MAPSEC_\w+)[^\]]*\]\s*=\s*MAPPOPUP_THEME_(\w+)/g)].map((m) => [m[1], m[2].toLowerCase()]));
+    expect(uiData.popupThemes).toEqual(want);
   });
 
   it('gBrOwnPos and gBrBattle (touch.ts)', () => {

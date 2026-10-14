@@ -162,6 +162,39 @@ function tintFont(mask: HTMLImageElement, color: TextColor): HTMLCanvasElement {
   return c;
 }
 
+let maskLoad: Promise<HTMLImageElement> | null = null;
+const loose = new Map<TextColor, HTMLCanvasElement>();
+
+/** One line of text as its own little canvas, `measure(text)` x 14 GBA pixels, for a
+ *  page control that is a DOM element rather than part of one big canvas (the phone's
+ *  HUD, ui/phonehud.ts). Drawn when the font lands, so the first one may be blank for a
+ *  frame. `scale` sizes it in CSS pixels. */
+export function textImage(text: string, color: TextColor = TEXT_DARK, scale = 1): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  const w = Math.max(1, measure(text));
+  c.width = w;
+  c.height = 14;
+  c.style.width = `${w * scale}px`;
+  c.style.height = `${14 * scale}px`;
+  c.style.imageRendering = 'pixelated';
+  maskLoad ??= loadImage('/ui/font-normal.png');
+  void maskLoad.then((mask) => {
+    let font = loose.get(color);
+    if (!font) {
+      font = tintFont(mask, color);
+      loose.set(color, font);
+    }
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    let cx = 0;
+    for (const id of glyphIds(text)) {
+      ctx.drawImage(font, (id % FONT.cols) * CELL, Math.floor(id / FONT.cols) * CELL, CELL, 14, cx, 0, CELL, 14);
+      cx += FONT.widths[id] ?? 6;
+    }
+  });
+  return c;
+}
+
 /** A canvas that draws in GBA pixels and scales up whole, like the picture. */
 export class EmeraldCanvas {
   private ctx: CanvasRenderingContext2D;
@@ -285,6 +318,13 @@ export class EmeraldCanvas {
     this.ctx.drawImage(img, Math.min(frame, info.frames - 1) * info.w, 0, info.w, info.h, x + this.origin, y, info.w, info.h);
     this.ctx.globalAlpha = 1;
     return true;
+  }
+
+  /** Part of a picture (the sign, an item icon) at (x, y), in GBA pixels. Nothing while
+   *  it is still loading; the caller draws again on its load. */
+  drawPicture(img: HTMLImageElement | null, sx: number, sy: number, w: number, h: number, x: number, y: number): void {
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+    this.ctx.drawImage(img, sx, sy, w, h, x + this.origin, y, w, h);
   }
 
   /** The cursor Emerald's menus use: a small right-pointing triangle. */
