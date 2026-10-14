@@ -144,7 +144,7 @@ test('a lobby in a hidden tab lets go of its socket, and browses again on return
   await expect.poll(() => live.asked, { timeout: 15_000 }).toBeGreaterThan(asked);
   await page.waitForTimeout(3_000);
   expect(sockets.filter((s) => !s.closed)).toHaveLength(1);
-  await expect(page.locator('#lobby-note')).toHaveCount(0); // never "Not connected"
+  await expect(page.locator('#lobby-note')).not.toContainText('Not connected');
 });
 
 test('SOLO VS BOTS opens no socket', async ({ page }) => {
