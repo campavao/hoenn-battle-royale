@@ -1,7 +1,37 @@
 {
- "readAt": "2026-10-14T00:25:37.531Z",
+ "readAt": "2026-10-14T05:07:34.432Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "9C2QQV",
+   "at": "2026-10-14T01:35:15.380Z",
+   "end": "2026-10-14T01:46:26.464Z",
+   "secs": 671,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 1,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-10-14T01:45:24.672Z",
+     "how": "spectate"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-14T01:35:18.201Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "FNJ58R",
    "at": "2026-10-13T23:36:43.354Z",
