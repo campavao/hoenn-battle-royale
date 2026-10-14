@@ -28,7 +28,8 @@ import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
 import { clusterCells, EVENT_CELLS, eventDrop, eventForRing } from './events';
 import { giftDrop, isGiftSection } from './gifts';
 import { sectionInside } from './ring';
-import type { MapRef, Msg, Pace } from '../net/wire';
+import { STORIES, STORY_CHANCE, storyDrop, storyOf } from './story';
+import type { EventMsg, MapRef, Msg, Pace } from '../net/wire';
 
 export const DEFAULT_SAFARI_SECS = 120;
 export const DEFAULT_FOG_SECS = 120;
@@ -230,6 +231,8 @@ export class Director {
   private ringCentre?: { sx: number; sy: number; place?: string };
   /** The section the ring closes on, which the last event drops in. */
   private ringSection?: SectionCells;
+  /** The story events this match has had (story.ts), none twice. */
+  private readonly told = new Set<string>();
   private readonly aliveSeats: Set<number>;
   private readonly placements: number[] = [];
   private winner: number | undefined;
@@ -291,9 +294,16 @@ export class Director {
      *  space, no MAP_OFFSET), so a `pick` answered from here does not put a second
      *  trainer on one. The old host's own list went with its tab. */
     dealt?: { map: MapRef; x: number; y: number }[];
+    /** The events the old host dropped (MatchSession.events): a story told once is not
+     *  told again under a new n, on the cells its first telling still lies on. */
+    events?: readonly EventMsg[];
   }): void {
     for (const seat of state.out ?? []) this.aliveSeats.delete(seat);
     for (const cell of state.dealt ?? []) this.dealtCells.add(cellKey(cell));
+    for (const e of state.events ?? []) {
+      const story = storyOf(e, this.opts.world.sections, (id) => this.mapRefOf(id));
+      if (story) this.markTold(story);
+    }
     this.unsubOut = this.opts.onOut((seat) => this.handleOut(seat));
 
     if (state.ringPhase <= 0 || !state.centre) {
@@ -538,6 +548,17 @@ export class Director {
     if (!this.ringCentre) return;
     const { sx, sy } = this.ringCentre;
     const next = RING_RADII[Math.min(this.ringIndex + 1, RING_RADII.length - 1)];
+    // A story inside the next ring, as the cluster is, so it is still clear of the fog
+    // when the ring closes again; one only this ring reaches when the next holds none
+    // (PR #26 review: one outside the next ring was in the fog a phase later every time).
+    // The last event is the final ring's, so a story takes it only in the ring's own
+    // section.
+    const reaches = (r: number) => (s: DirectorWorld['sections'][string]) => sectionInside(s, { sx, sy, r });
+    const where =
+      next <= 0
+        ? [(s: DirectorWorld['sections'][string]) => s.num !== undefined && s.num === this.ringSection?.section.num]
+        : [reaches(next), reaches(RING_RADII[this.ringIndex])];
+    if (this.dropStory(n, where)) return;
     const within = (r: number) => this.sections.filter((s) => sectionInside(s.section, { sx, sy, r }));
     const inside = next > 0 ? within(next) : [];
     const pool = inside.length > 0 ? inside : next > 0 ? within(RING_RADII[this.ringIndex]) : [];
@@ -556,6 +577,49 @@ export class Director {
       cells,
     }))
       this.opts.send(msg);
+  }
+
+  /** A story event the match has not had, in a section the first of `where` that has
+   *  one takes, as event `n`; false when there is none to tell, or the roll says the
+   *  cluster this time. Half and half: a story has no legendary of its own unless its
+   *  row gives one, and the phase-2 event was a story in every match without it (PR #26
+   *  review), which took a legendary out of every one. */
+  private dropStory(n: number, where: ((section: DirectorWorld['sections'][string]) => boolean)[]): boolean {
+    let open: (typeof STORIES)[number][] = [];
+    for (const w of where) {
+      open = STORIES.filter((s) => {
+        const section = this.opts.world.sections[s.section];
+        return !this.told.has(s.id) && this.mapRefOf(s.map) !== undefined && section?.num !== undefined && w(section);
+      });
+      if (open.length > 0) break;
+    }
+    if (open.length === 0 || this.rng() >= STORY_CHANCE) return false;
+    const story = open[pickIndex(this.rng, open.length)];
+    const map = this.markTold(story);
+    for (const msg of storyDrop(this.rng, story, {
+      n,
+      phase: this.ringIndex + 1,
+      seat: this.hostSeat,
+      mapsec: this.opts.world.sections[story.section].num!,
+      place: story.name,
+      map,
+      cells: [...story.cells],
+    }))
+      this.opts.send(msg);
+    return true;
+  }
+
+  /** The story is told: never again, and its cells are nobody else's. */
+  private markTold(story: (typeof STORIES)[number]): MapRef {
+    const map = this.mapRefOf(story.map)!;
+    this.told.add(story.id);
+    for (const c of story.cells) this.dealtCells.add(cellKey({ map, x: c.x, y: c.y }));
+    return map;
+  }
+
+  private mapRefOf(id: string): MapRef | undefined {
+    const m = this.opts.world.maps.find((x) => x.id === id);
+    return m ? { group: m.group, num: m.num } : undefined;
   }
 
   private currentRingState(): DirectorRingState | undefined {

@@ -1,0 +1,27 @@
+# story-tide: SHOAL CAVE is at low tide all match (br_story.h BrStory_Tide). pret asks each
+# player's own clock, so two ROMs could stand in two different caves, and the FOCUS BAND's
+# story event is in a low-tide room. The high-tide flag is forced on before we go in; the
+# cave clears it and loads the low-tide layout whatever the hour.
+#
+# FLAG_SYS_SHOAL_TIDE (0x89A) is gSaveBlock1Ptr+0x1383 bit 2. Route 125's cave door is
+# (22,19); we boot one cell below it.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 01 00 00 28 16 00 14 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+5 40
+expect u16 gBrOwnPos+4 0x1B
+# The rest of this byte is landmarks and two unused flags: setting it whole is safe.
+poke u8 *gSaveBlock1Ptr+0x1383 0x04
+expectbits u8 *gSaveBlock1Ptr+0x1383 0x04 0x04
+hold UP 12
+wait 150
+shot low-tide
+# SHOAL CAVE LOW TIDE ENTRANCE ROOM is 24:46, and the layout the map loaded (mapLayoutId,
+# +0x32) the low tide's, 164 -- the high tide's is 168
+expect u8 *gSaveBlock1Ptr+4 24
+expect u8 *gSaveBlock1Ptr+5 46
+expectbits u8 *gSaveBlock1Ptr+0x1383 0x04 0x00
+expect u16 *gSaveBlock1Ptr+0x32 164
+say story tide ok

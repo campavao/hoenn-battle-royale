@@ -259,6 +259,7 @@ export class HostRole {
             e.map && e.x !== undefined && e.y !== undefined ? [{ map: e.map, x: e.x - MAP_OFFSET, y: e.y - MAP_OFFSET }] : [],
           ),
         ],
+        events: this.session.events,
       });
       // And the room is told about the ones who walked out, so every roster agrees
       // with the count this page is now keeping.
