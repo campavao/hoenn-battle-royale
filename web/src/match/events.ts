@@ -122,7 +122,7 @@ export const EVENT_PIECES = 1 + EVENT_RARES + EVENT_GOLD + 1;
 export const EVENT_CELLS = EVENT_PIECES + 1;
 
 /** Some of `pool`, `n` of them, none twice. */
-function draw<T>(rng: () => number, pool: readonly T[], n: number): T[] {
+export function draw<T>(rng: () => number, pool: readonly T[], n: number): T[] {
   const left = [...pool];
   const out: T[] = [];
   while (out.length < n && left.length > 0) out.push(left.splice(pickIndex(rng, left.length), 1)[0]);

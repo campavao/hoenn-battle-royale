@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Director, type DirectorWorld } from './director';
-import { eventKey, SUPPLIES } from './events';
+import { EVENT_MAX, eventKey, SUPPLIES } from './events';
 import { STORIES, storyDrop } from './story';
 import { mulberry32 } from './clock';
 import { HOENN } from '../bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './landing';
 import { MAP_OFFSET } from '../net/cells';
-import type { EventMsg, Msg, SpillMsg } from '../net/wire';
+import type { EventMsg, Msg, RingMsg, SpillMsg } from '../net/wire';
 import { Bots, STEP_MS } from '../bots/brain';
 import { dealBots } from '../bots/roster';
 import { dealParty } from '../bots/party';
@@ -103,10 +103,47 @@ describe('story events', () => {
         expect(e.mapsec).toBe(SECTIONS[story.section].num);
       }
     }
-    // Over three hundred matches every story comes up somewhere. The east's hardly do:
-    // every ring centre is west of Lilycove (landing.json), so only the first event's
-    // ring reaches as far as Mossdeep.
-    expect([...told.keys()].sort()).toEqual(STORIES.map((s) => s.name).sort());
+    // Over three hundred matches every story the rings reach comes up somewhere. The
+    // east's do not yet: every ring centre is west of Lilycove (landing.json), and a story
+    // goes inside the next ring, which never reaches Mossdeep or Route 125.
+    const east = new Set(["STEVEN'S HOUSE", 'SHOAL CAVE']);
+    expect([...told.keys()].sort()).toEqual(STORIES.map((s) => s.name).filter((n) => !east.has(n)).sort());
+  });
+
+  it("leaves the last event to the final ring's own section", () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const sent = run(seed);
+      const ring = sent.find((m) => m.t === 'ring') as RingMsg;
+      const last = (sent.filter((m) => m.t === 'event') as EventMsg[]).find((e) => e.n === EVENT_MAX - 1);
+      if (!last) continue;
+      expect(last.mapsec, `seed ${seed}`).toBe(Object.values(SECTIONS).find((s) => s.name === ring.place)?.num);
+    }
+  });
+
+  it('a host that takes the match over does not tell a story the old one told', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      let t = 0;
+      const sent: Msg[] = [];
+      const mk = () => new Director({ seats: [0, 1], seed, world: WORLD, options: { safariSecs: 5, fogSecs: 10 }, send: (m) => sent.push(m), now: () => t, onOut: () => () => {} });
+      const a = mk();
+      a.start();
+      t += 5000;
+      a.tick();
+      for (let i = 0; i < 2; i++) {
+        t += 10000;
+        a.tick();
+      }
+      const before = sent.filter((m) => m.t === 'event') as EventMsg[];
+      const ring = sent.filter((m) => m.t === 'ring').pop() as RingMsg;
+      const b = mk();
+      b.resume({ ringPhase: ring.phase, centre: { sx: ring.sx, sy: ring.sy, place: ring.place }, secsLeftInPhase: 1, events: before });
+      for (let i = 0; i < 8; i++) {
+        t += 10000;
+        b.tick();
+      }
+      const places = (sent.filter((m) => m.t === 'event') as EventMsg[]).map((e) => e.place).filter((p) => STORIES.some((s) => s.name === p));
+      expect(new Set(places).size, `seed ${seed}`).toBe(places.length);
+    }
   });
 
   // Bots go for events like players (Cam, 2026-10-13): from the door outside, to the

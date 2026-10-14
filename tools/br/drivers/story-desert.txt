@@ -6,6 +6,10 @@
 #
 # Flags are at gSaveBlock1Ptr+0x1270: 0x9D is +0x1283 bit 5, 0x14E is +0x1299 bit 6, and
 # the fossils' 0x3C3/0x3C4 are +0x12E8 bits 3 and 4.
+#
+# No control boot without the goggles: the harness cannot take a key item out of the bag,
+# and pret's own check is the one line that decides it (Route111 scripts.inc, `checkitem
+# ITEM_GO_GOGGLES` in the sandstorm trigger), so a walk past (11..14,61) is the proof.
 wait 30
 poke u32 gBrMatch+8 8
 pokebytes gBrMailbox+0x2018 01 00 00 1A 0C 00 3C 00 BD BB C7 FF

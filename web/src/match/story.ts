@@ -11,10 +11,13 @@
 // its row says so (Cam: "Maybe too much gold").
 //
 // The director drops one when a ring phase drops an event and a story the match has not
-// had yet is inside the next ring, and today's cluster when none is.
+// had yet is inside the next ring (or, when none is, this one), half the time, and today's
+// cluster otherwise. The last event is the final ring's: a story takes it only in the
+// ring's own section.
 import { pickIndex } from './clock';
-import { RARES, layEvent, type EventDrop } from './events';
-import type { Msg } from '../net/wire';
+import { MAP_OFFSET } from '../net/cells';
+import { RARES, draw, layEvent, type EventDrop } from './events';
+import type { EventMsg, MapRef, Msg } from '../net/wire';
 
 // include/constants/species.h
 const LILEEP = 388;
@@ -25,6 +28,10 @@ const BELDUM = 398;
 const ITEM_FOCUS_BAND = 196;
 const ITEM_SHELL_BELL = 219;
 const ITEM_TM24 = 312; // THUNDERBOLT
+
+/** How often an event that has a story in reach tells it rather than dropping the
+ *  cluster, with its legendary (director.ts). */
+export const STORY_CHANCE = 0.5;
 
 export interface Story {
   id: string;
@@ -41,7 +48,7 @@ export interface Story {
   /** Rares from events.ts's pool beside its own reward. */
   rares?: number;
   /** Where the pieces lie, map coords: the mons, the rares, the items, then the supplies
-   *  and the trader. world.test.ts walks to every one. */
+   *  and the trader. story.test.ts walks to every one. */
   cells: readonly { x: number; y: number }[];
 }
 
@@ -85,12 +92,21 @@ export const STORIES: readonly Story[] = [
   },
 ];
 
-/** Some of `pool`, `n` of them, none twice. */
-function draw(rng: () => number, pool: readonly number[], n: number): number[] {
-  const left = [...pool];
-  const out: number[] = [];
-  while (out.length < n && left.length > 0) out.push(left.splice(pickIndex(rng, left.length), 1)[0]);
-  return out;
+/** The story an `event` told, or undefined for a cluster: its place and section, and its
+ *  trader on its own cell. A host that takes over learns from these what was told. A
+ *  cluster in a section whose name is a story's would need its trader on that cell too. */
+export function storyOf(
+  e: EventMsg,
+  sections: Record<string, { num?: number }>,
+  refOf: (mapId: string) => MapRef | undefined,
+): Story | undefined {
+  return STORIES.find((s) => {
+    if (s.name !== e.place || sections[s.section]?.num !== e.mapsec) return false;
+    if (!e.trader) return true;
+    const at = s.cells[s.cells.length - 1];
+    const map = refOf(s.map);
+    return !!map && e.trader.map.group === map.group && e.trader.map.num === map.num && e.trader.x - MAP_OFFSET === at.x && e.trader.y - MAP_OFFSET === at.y;
+  });
 }
 
 /** The story, as the messages that put it down: `e.cells` are the story's own. */

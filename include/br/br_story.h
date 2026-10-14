@@ -10,8 +10,8 @@
 
 // SHOAL CAVE is at low tide all match: the tide is the hour on each player's own clock,
 // so two ROMs in the cave could stand in two different caves, and the FOCUS BAND's room is
-// only there at low tide. TRUE: the flag is set for the match and pret's hour is not
-// asked. The one hook in UpdateShoalTideFlag.
+// only there at low tide. TRUE: the flag is cleared (clear is low tide) for the match and
+// pret's hour is not asked. The one hook in UpdateShoalTideFlag.
 bool8 BrStory_Tide(void);
 
 #endif // GUARD_BR_STORY_H
