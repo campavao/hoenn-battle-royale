@@ -121,6 +121,18 @@ static void GiveTheRunOfHoenn(void)
     // desert's edge, and MIRAGE TOWER and the DESERT RUINS are story events
     // (web/src/match/story.ts). The bots walk the desert as it is.
     AddBagItem(ITEM_GO_GOGGLES, 1);
+    // ...and the four tickets: the islands are story events, and Lilycove's ferry offers
+    // one only while a ticket for it is in the bag and its ENABLE_SHIP flag is set, which
+    // br_story.c sets while a live event is on it. Each already shown, so the attendant
+    // goes straight to the menu and not to a sailor's first-voyage scene.
+    AddBagItem(ITEM_EON_TICKET, 1);
+    AddBagItem(ITEM_AURORA_TICKET, 1);
+    AddBagItem(ITEM_OLD_SEA_MAP, 1);
+    AddBagItem(ITEM_MYSTIC_TICKET, 1);
+    FlagSet(FLAG_SHOWN_EON_TICKET);
+    FlagSet(FLAG_SHOWN_AURORA_TICKET);
+    FlagSet(FLAG_SHOWN_OLD_SEA_MAP);
+    FlagSet(FLAG_SHOWN_MYSTIC_TICKET);
     FlagSet(FLAG_RECEIVED_RUNNING_SHOES);
     FlagSet(FLAG_SYS_B_DASH);
 
@@ -244,6 +256,15 @@ static void ClearTheLateStory(void)
     FlagSet(FLAG_DEFEATED_REGIROCK);
     FlagSet(FLAG_DEFEATED_REGICE);
     FlagSet(FLAG_DEFEATED_REGISTEEL);
+    // And the islands' own: each map shows its legendary unless this says it is gone
+    // (SouthernIsland_Interior, BirthIsland_Exterior, FarawayIsland_Interior, NavelRock_Top
+    // and _Bottom). The one there is a story event's ball.
+    FlagSet(FLAG_DEFEATED_LATIAS_OR_LATIOS);
+    FlagSet(FLAG_DEFEATED_DEOXYS);
+    FlagSet(FLAG_BATTLED_DEOXYS);
+    FlagSet(FLAG_DEFEATED_MEW);
+    FlagSet(FLAG_DEFEATED_HO_OH);
+    FlagSet(FLAG_DEFEATED_LUGIA);
     // MIRAGE TOWER stands every time you come onto Route 111, not on a coin flip each
     // visit that every ROM throws for itself: it is a story event's place, and its two
     // fossils are the event's (web/src/match/story.ts). Its own two stay hidden above:

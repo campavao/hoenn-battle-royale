@@ -601,7 +601,7 @@ export class Director {
       n,
       phase: this.ringIndex + 1,
       seat: this.hostSeat,
-      mapsec: this.opts.world.sections[story.section].num!,
+      mapsec: story.mapsec ?? this.opts.world.sections[story.section].num!,
       place: story.name,
       map,
       cells: storyCells(story, (id) => this.mapRefOf(id)!),

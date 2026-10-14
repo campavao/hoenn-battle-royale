@@ -31,6 +31,12 @@ bool8 BrStory_Tide(void);
 // that opens a door is that door's.
 void BrStory_Tick(void);
 
+// The islands (SOUTHERN, BIRTH, FARAWAY, NAVEL ROCK) have no place of their own on the
+// region map, or one out at sea, so the ring and the MAP mark measure an event or a player
+// there by the dock the ferry sails from: Lilycove, which is the story's section on the
+// page. Any other mapsec is its own.
+u8 BrStory_Dock(u8 mapsec);
+
 // A story's person: the gfx a piece at his cell stands as (STEVEN in GRANITE CAVE with
 // his TM, CAPTAIN STERN in SLATEPORT's harbour, a gate's boss), or 0 for a ball. The FLAG_HIDE_* sweep
 // at boot has already stood their own objects down. Taking one is "A GIFT: ...", as a gift-giver's is.

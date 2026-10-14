@@ -16,6 +16,7 @@
 #include "br/br_hud.h"
 #include "br/br_match.h"
 #include "br/br_ring.h"
+#include "br/br_story.h"
 #include "battle.h"
 #include "br/br_netlink.h"
 #include "br/br_bot.h"
@@ -86,7 +87,7 @@ bool8 BrRing_SectionInside(u8 mapsec)
         return FALSE;
     if (mapsec >= MAPSEC_NONE)
         return FALSE;
-    loc = &gRegionMapEntries[mapsec];
+    loc = &gRegionMapEntries[BrStory_Dock(mapsec)];
     nx = gBrRing.cx;
     if (nx < loc->x) nx = loc->x;
     if (nx > loc->x + loc->width - 1) nx = loc->x + loc->width - 1;

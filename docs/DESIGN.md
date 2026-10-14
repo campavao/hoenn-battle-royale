@@ -260,7 +260,14 @@ out, and one that comes in waits as it would in a menu.
   CENTER he holds the stone and the two rares open when he falls. A bot that steps up to
   him fights him through `duel()` with his own team at the rung: a loss puts it out, as it
   does a player, and a win leaves it hurt. A story with no legendary in it is "A RARE
-  FIND AT" on the ticker, not "A LEGENDARY".
+  FIND AT" on the ticker, not "A LEGENDARY". The islands are a boat ride: SOUTHERN ISLAND
+  (LATIAS or LATIOS), BIRTH ISLAND (DEOXYS), FARAWAY ISLAND (MEW) and NAVEL ROCK (HO-OH at
+  the peak, LUGIA at the foot). The bag has all four tickets, already shown, and Lilycove's
+  ferry offers an island only while a live event there still has its legendary
+  (`br_story.c`, Ferry, which sets the ENABLE_SHIP flag the menu asks). Their section on
+  the page is Lilycove's, the dock, and the ring and the MAP mark measure them there too
+  (`BrStory_Dock`), so an island comes up when the ring reaches Lilycove. The native
+  legendaries are gone for the match. Bots never take the ferry.
 - **Gift-givers** (Cam, 2026-10-13): at the buzzer the host stands one person in every
   town and city (`match/gifts.ts`), holding one held item (LEFTOVERS, CHOICE BAND, QUICK
   CLAW and the like). On the wire he is a `spill` of a one-item bag under key `0xC000 | i`,
