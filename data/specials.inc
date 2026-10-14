@@ -545,4 +545,5 @@ gSpecials::
 	def_special BrCatch_Apply
 	def_special BrRing_Outside
 	def_special BrEvent_Trade
+	def_special BrStory_GateBeaten
 .endif

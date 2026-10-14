@@ -32,12 +32,21 @@ bool8 BrStory_Tide(void);
 void BrStory_Tick(void);
 
 // A story's person: the gfx a piece at his cell stands as (STEVEN in GRANITE CAVE with
-// his TM, CAPTAIN STERN in SLATEPORT's harbour), or 0 for a ball. The FLAG_HIDE_* sweep
+// his TM, CAPTAIN STERN in SLATEPORT's harbour, a gate's boss), or 0 for a ball. The FLAG_HIDE_* sweep
 // at boot has already stood their own objects down. Taking one is "A GIFT: ...", as a gift-giver's is.
 u8 BrStory_Person(const struct BrLootItem *it);
 
 // FALSE: the person wants something first, and has said so (STERN, the SCANNER from the
-// ABANDONED SHIP). TRUE: hand it over, which takes what he wanted out of the bag.
+// ABANDONED SHIP), or wants a fight first and it has started (a gate: MAXIE holding
+// GROUDON in his hideout), or the piece is one a gate's boss is still guarding. TRUE:
+// hand it over, which takes what he wanted out of the bag.
 bool8 BrStory_Hands(const struct BrLootItem *it);
+
+// A gate's boss: his win drops no team and sends no NPCOUT (br_loot.c), because the
+// object he stands as is the story's piece, and what he gives is its reward.
+bool8 BrStory_IsGate(u16 trainerId);
+
+// The special the gate's post-battle script calls: the win hands over what he held.
+void BrStory_GateBeaten(void);
 
 #endif // GUARD_BR_STORY_H

@@ -94,9 +94,11 @@ export function felled(seat: number, name: string, boss: string): TickerMsg | nu
 
 /** An event dropped (match/events.ts). The ROM marks it on the MAP; this is how anybody
  *  not looking at the MAP hears there is something to run for. `A LEGENDARY AT `, a
- *  sixteen-letter section and the `!` is 32. */
-export function event(seat: number, place: string | undefined): TickerMsg | null {
-  return line(seat, place ? `A LEGENDARY AT ${place.toUpperCase()}!` : 'A LEGENDARY HAS APPEARED!');
+ *  sixteen-letter section and the `!` is 32. A story with no legendary in it (story.ts)
+ *  is `A RARE FIND AT `, the same length. */
+export function event(seat: number, place: string | undefined, legend = true): TickerMsg | null {
+  const what = legend ? 'A LEGENDARY' : 'A RARE FIND';
+  return line(seat, place ? `${what} AT ${place.toUpperCase()}!` : `${what} HAS APPEARED!`);
 }
 
 /** Somebody is out, however it happened, and how many are left after it. */

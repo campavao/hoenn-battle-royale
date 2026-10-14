@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Director, type DirectorWorld } from './director';
 import { EVENT_MAX, eventKey, SUPPLIES } from './events';
-import { STORIES, storyCells, storyDrop, storySealed } from './story';
+import { STORIES, storyCells, storyDrop, storyLegend, storySealed } from './story';
 import { mulberry32 } from './clock';
 import { HOENN } from '../bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './landing';
@@ -18,9 +18,20 @@ await worldReady();
 const SECTIONS = regionmapData.sections as DirectorWorld['sections'];
 const WORLD: DirectorWorld = { maps: HOENN.maps, landing: LANDING, doorsteps: DOORSTEPS, hand: HAND, sections: SECTIONS };
 
-/** Where a trainer comes in: every warp on another map that lands on this one. */
+/** Where a trainer comes in: every warp on another map that lands on this one, and for a
+ *  route the sea joins to its neighbours (ROUTE 128), every cell of its edges they cross. */
 function entries(map: string) {
-  return HOENN.maps.flatMap((m) => (m.warps ?? []).filter((w) => w.to === map && m.id !== map).map((w) => ({ map, x: w.toX, y: w.toY })));
+  const doors = HOENN.maps.flatMap((m) => (m.warps ?? []).filter((w) => w.to === map && m.id !== map).map((w) => ({ map, x: w.toX, y: w.toY })));
+  const m = HOENN.byId.get(map)!;
+  const edges: { map: string; x: number; y: number }[] = [];
+  for (const seam of (m as { seams?: { dir: string }[] }).seams ?? []) {
+    const cells =
+      seam.dir === 'north' || seam.dir === 'south'
+        ? Array.from({ length: m.w }, (_, x) => ({ x, y: seam.dir === 'north' ? 0 : m.h - 1 }))
+        : Array.from({ length: m.h }, (_, y) => ({ x: seam.dir === 'west' ? 0 : m.w - 1, y }));
+    edges.push(...cells.filter((c) => HOENN.world.standable(map, c.x, c.y, true, true)).map((c) => ({ map, ...c })));
+  }
+  return [...doors, ...edges.filter((_, i) => i % 8 === 0)];
 }
 
 function run(seed: number): Msg[] {
@@ -109,8 +120,8 @@ describe('story events', () => {
     }
     // Over three hundred matches every story the rings reach comes up somewhere. The
     // east's do not yet: every ring centre is west of Lilycove (landing.json), and a story
-    // goes inside the next ring, which never reaches Mossdeep or Route 125.
-    const east = new Set(["STEVEN'S HOUSE", 'SHOAL CAVE']);
+    // goes inside the next ring, which never reaches Lilycove's sea, Mossdeep or past it.
+    const east = new Set(["STEVEN'S HOUSE", 'SHOAL CAVE', 'ROUTE 128', 'AQUA HIDEOUT', 'SPACE CENTER']);
     expect([...told.keys()].sort()).toEqual(STORIES.map((s) => s.name).filter((n) => !east.has(n)).sort());
   });
 
@@ -163,6 +174,12 @@ describe('story events', () => {
     'granite-cave': { mapId: 'MAP_GRANITE_CAVE_1F', x: 5, y: 11 },
     'lavaridge-egg': { mapId: 'MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F', x: 7, y: 7 },
     'abandoned-ship': { mapId: 'MAP_SLATEPORT_CITY', x: 28, y: 13 },
+    'magma-hideout': { mapId: 'MAP_MAGMA_HIDEOUT_3F_3R', x: 16, y: 22 },
+    'route128-kyogre': { mapId: 'MAP_ROUTE127', x: 37, y: 38 },
+    'weather-institute': { mapId: 'MAP_ROUTE119_WEATHER_INSTITUTE_1F', x: 17, y: 2 },
+    'aqua-hideout': { mapId: 'MAP_AQUA_HIDEOUT_B1F', x: 12, y: 2 },
+    'mt-chimney': { mapId: 'MAP_MT_CHIMNEY_CABLE_CAR_STATION', x: 6, y: 10 },
+    'space-center': { mapId: 'MAP_MOSSDEEP_CITY_SPACE_CENTER_1F', x: 13, y: 2 },
   };
   it('a bot outside walks in and takes it', () => {
     for (const story of STORIES) {
@@ -197,7 +214,7 @@ describe('story events', () => {
       const s = STORIES.find((x) => x.id === id)!;
       return { mapId: s.cells[i].map ?? s.map, x: s.cells[i].x, y: s.cells[i].y };
     };
-    const bot = { flies: false, has: () => false, phase: 4 };
+    const bot = { flies: false, has: () => false, phase: 4, onGround: () => false };
     // Event 1 drops on phase 4.
     const key = eventKey(1, 0);
     expect(storySealed({ key, ...at('desert-ruins') }, bot)).toBe(false);
@@ -212,5 +229,21 @@ describe('story events', () => {
     expect(storySealed({ key: eventKey(1, 1), ...at('abandoned-ship', 1) }, bot)).toBe(false);
     // A fallen trainer's ball on the same cell is not the story's.
     expect(storySealed({ key: 0x1234, ...at('ancient-tomb') }, bot)).toBe(false);
+  });
+
+  it('calls a story with a legendary in it one, and the rest a rare find', () => {
+    const legend = (id: string) => storyLegend(STORIES.find((s) => s.id === id)!);
+    expect(['desert-ruins', 'magma-hideout', 'route128-kyogre'].map(legend)).toEqual([true, true, true]);
+    expect(['new-mauville', 'mirage-tower', 'aqua-hideout'].map(legend)).toEqual([false, false, false]);
+  });
+
+  it("holds a gate's other pieces for a bot until its boss's is gone", () => {
+    const s = STORIES.find((x) => x.id === 'mt-chimney')!;
+    const at = (i: number) => ({ mapId: s.map, x: s.cells[i].x, y: s.cells[i].y });
+    const bot = { flies: false, has: () => false, phase: 4 };
+    const standing = { ...bot, onGround: (k: number) => k === eventKey(1, 2) };
+    expect(storySealed({ key: eventKey(1, 0), ...at(0) }, standing)).toBe(true);
+    expect(storySealed({ key: eventKey(1, 2), ...at(2) }, standing)).toBe(false);
+    expect(storySealed({ key: eventKey(1, 0), ...at(0) }, { ...bot, onGround: () => false })).toBe(false);
   });
 });

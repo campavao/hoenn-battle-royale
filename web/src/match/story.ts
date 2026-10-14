@@ -16,7 +16,7 @@
 // ring's own section.
 import { pickIndex } from './clock';
 import { MAP_OFFSET } from '../net/cells';
-import { RARES, draw, isEventKey, layEvent, type EventDrop } from './events';
+import { LEGENDS, RARES, draw, isEventKey, layEvent, type EventDrop } from './events';
 import type { EventMsg, MapRef, Msg } from '../net/wire';
 
 // include/constants/species.h
@@ -27,6 +27,9 @@ const WYNAUT = 360;
 const REGIROCK = 401;
 const REGICE = 402;
 const REGISTEEL = 403;
+const KYOGRE = 404;
+const GROUDON = 405;
+const CASTFORM = 385;
 
 // include/constants/items.h
 const ITEM_FOCUS_BAND = 196;
@@ -36,6 +39,9 @@ const ITEM_TM47 = 335; // STEEL WING
 const ITEM_DEEP_SEA_TOOTH = 192;
 const ITEM_DEEP_SEA_SCALE = 193;
 const ITEM_SCANNER = 278;
+const ITEM_MASTER_BALL = 1;
+const ITEM_METEORITE = 280;
+const ITEM_SUN_STONE = 93;
 
 /** How a REGI's chamber opens (br_story.c, sDoors): A at the wall, as Rock Smash would;
  *  A at the wall with a Flying-type in the party; or by itself once the ring has moved on
@@ -75,8 +81,10 @@ export interface Story {
   /** The REGI chamber's door, which every cell behind it waits on. */
   door?: StoryDoor;
   /** The pieces a person hands over rather than a ball (br_story.c, sPeople): the cell's
-   *  index, the object the ROM draws there, and what he wants for it first. */
-  people?: readonly { at: number; gfx: string; wants?: number }[];
+   *  index, the object the ROM draws there, and what he wants for it first: an item, or
+   *  a fight (a gate: `trainer` is his opponents.h id). A gate's boss guards the rest of
+   *  his story too, which waits until his piece is gone. */
+  people?: readonly { at: number; gfx: string; wants?: number; trainer?: string }[];
 }
 
 export const STORIES: readonly Story[] = [
@@ -177,6 +185,72 @@ export const STORIES: readonly Story[] = [
     cells: [{ x: 6, y: 13, map: 'MAP_SLATEPORT_CITY_HARBOR' }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }],
     people: [{ at: 0, gfx: 'OBJ_EVENT_GFX_SCIENTIST_1', wants: ITEM_SCANNER }],
   },
+  // The gates: the team's boss where Emerald stood him, holding what the team was after,
+  // and handing it over when he falls (one fight, his own, on each ROM; whoever wins
+  // first takes it from the room).
+  {
+    id: 'magma-hideout',
+    name: 'MAGMA HIDEOUT',
+    section: 'MAPSEC_MAGMA_HIDEOUT',
+    map: 'MAP_MAGMA_HIDEOUT_4F',
+    // GROUDON awake, and the MASTER BALL MAXIE would have caught it with.
+    mons: [[GROUDON]],
+    items: [[ITEM_MASTER_BALL]],
+    cells: [{ x: 16, y: 21 }, { x: 15, y: 22 }, { x: 14, y: 22 }, { x: 13, y: 22 }],
+    people: [{ at: 0, gfx: 'OBJ_EVENT_GFX_MAXIE', trainer: 'TRAINER_MAXIE_MAGMA_HIDEOUT' }],
+  },
+  {
+    id: 'route128-kyogre',
+    name: 'ROUTE 128',
+    section: 'MAPSEC_ROUTE_128',
+    map: 'MAP_ROUTE128',
+    // KYOGRE, risen, with ARCHIE on the shoal where he watched it.
+    mons: [[KYOGRE]],
+    cells: [{ x: 37, y: 22 }, { x: 38, y: 22 }, { x: 36, y: 22 }],
+    people: [{ at: 0, gfx: 'OBJ_EVENT_GFX_ARCHIE', trainer: 'TRAINER_ARCHIE' }],
+  },
+  {
+    id: 'weather-institute',
+    name: 'WEATHER INSTITUTE',
+    section: 'MAPSEC_ROUTE_119',
+    map: 'MAP_ROUTE119_WEATHER_INSTITUTE_2F',
+    // The CASTFORM the scientists give for clearing TEAM AQUA out, in SHELLY's hands.
+    mons: [[CASTFORM]],
+    cells: [{ x: 4, y: 6 }, { x: 5, y: 6 }, { x: 3, y: 6 }],
+    people: [{ at: 0, gfx: 'OBJ_EVENT_GFX_AQUA_MEMBER_F', trainer: 'TRAINER_SHELLY_WEATHER_INSTITUTE' }],
+  },
+  {
+    id: 'aqua-hideout',
+    name: 'AQUA HIDEOUT',
+    section: 'MAPSEC_AQUA_HIDEOUT',
+    map: 'MAP_AQUA_HIDEOUT_B2F',
+    // The MASTER BALL from the hideout's last room, with MATT at the submarine's dock.
+    items: [[ITEM_MASTER_BALL]],
+    cells: [{ x: 23, y: 19 }, { x: 22, y: 19 }, { x: 24, y: 19 }],
+    people: [{ at: 0, gfx: 'OBJ_EVENT_GFX_AQUA_MEMBER_M', trainer: 'TRAINER_MATT' }],
+  },
+  {
+    id: 'mt-chimney',
+    name: 'MT. CHIMNEY',
+    section: 'MAPSEC_MT_CHIMNEY',
+    map: 'MAP_MT_CHIMNEY',
+    // The METEORITE at the machine, plus two rares (the doc's row), MAXIE beside it.
+    rares: 2,
+    items: [[ITEM_METEORITE]],
+    cells: [{ x: 12, y: 6 }, { x: 11, y: 6 }, { x: 13, y: 6 }, { x: 13, y: 7 }, { x: 12, y: 7 }],
+    people: [{ at: 2, gfx: 'OBJ_EVENT_GFX_MAXIE', trainer: 'TRAINER_MAXIE_MT_CHIMNEY' }],
+  },
+  {
+    id: 'space-center',
+    name: 'SPACE CENTER',
+    section: 'MAPSEC_MOSSDEEP_CITY',
+    map: 'MAP_MOSSDEEP_CITY_SPACE_CENTER_2F',
+    // The SUN STONE the center gives, plus two rares (the doc's row), MAXIE at the stairs.
+    rares: 2,
+    items: [[ITEM_SUN_STONE]],
+    cells: [{ x: 2, y: 9 }, { x: 3, y: 9 }, { x: 1, y: 9 }, { x: 1, y: 8 }, { x: 0, y: 8 }],
+    people: [{ at: 2, gfx: 'OBJ_EVENT_GFX_MAXIE', trainer: 'TRAINER_MAXIE_MOSSDEEP' }],
+  },
 ];
 
 /** The story an `event` told, or undefined for a cluster: its place and section, and its
@@ -201,11 +275,11 @@ const phaseOf = (key: number) => ((key >> 4) & 0xf) * 2 + 2;
 
 /** Is this piece out of a bot's reach for now? A story's cells are walkable in the
  *  bots' grid, which knows nothing of a door or a person's terms, so the gate is asked
- *  here: behind a REGI's wall until the bot could open it, and a person's until it has
- *  what he wants. `phase` is the ring's (the wire's, 1-based). */
+ *  here: behind a REGI's wall until the bot could open it, a person's until it has what
+ *  he wants, and a gate's until its boss's piece is gone. `phase` is the ring's (the wire's, 1-based). */
 export function storySealed(
   piece: { key: number; mapId: string; x: number; y: number },
-  bot: { flies: boolean; has: (item: number) => boolean; phase: number },
+  bot: { flies: boolean; has: (item: number) => boolean; phase: number; onGround: (key: number) => boolean },
 ): boolean {
   if (!isEventKey(piece.key)) return false;
   for (const story of STORIES) {
@@ -214,6 +288,10 @@ export function storySealed(
     if (i < 0) continue;
     const wants = story.people?.find((p) => p.at === i)?.wants;
     if (wants !== undefined && !bot.has(wants)) return true;
+    // A bot takes a gate's boss's piece as though it beat him: it has no ROM to fight him
+    // in. The rest of his story waits on his piece, as it does in the ROM (GuardOf).
+    const boss = story.people?.find((p) => p.trainer !== undefined);
+    if (boss && boss.at !== i && bot.onGround((piece.key & 0xfff0) | boss.at)) return true;
     if (story.door && piece.y < DOOR_Y) {
       if (story.door === 'fly' && !bot.flies) return true;
       if (story.door === 'wait' && bot.phase <= phaseOf(piece.key)) return true;
@@ -221,6 +299,12 @@ export function storySealed(
     return false;
   }
   return false;
+}
+
+/** Does the story give a legendary? What the ticker calls it. */
+export function storyLegend(story: Story): boolean {
+  const legends = new Set(LEGENDS.flat());
+  return (story.mons ?? []).some((pick) => pick.some((sp) => legends.has(sp)));
 }
 
 /** The story's cells as an event's: a cell's own map named by its ref. */

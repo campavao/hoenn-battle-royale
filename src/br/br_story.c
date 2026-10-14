@@ -1,5 +1,6 @@
 // Story events' places. See include/br/br_story.h.
 #include "global.h"
+#include "battle_setup.h"
 #include "event_data.h"
 #include "event_object_movement.h"
 #include "field_camera.h"
@@ -18,6 +19,7 @@
 #include "constants/map_groups.h"
 #include "constants/metatile_labels.h"
 #include "constants/moves.h"
+#include "constants/opponents.h"
 #include "constants/songs.h"
 #include "br/br_event.h"
 #include "br/br_field.h"
@@ -167,6 +169,18 @@ void BrStory_Tick(void)
 
 // ---- the people ----------------------------------------------------------------------
 
+extern const u8 BR_EventScript_GateMaxieHideout[];
+extern const u8 BR_EventScript_GateArchie[];
+extern const u8 BR_EventScript_GateShelly[];
+extern const u8 BR_EventScript_GateMatt[];
+extern const u8 BR_EventScript_GateMaxieChimney[];
+extern const u8 BR_EventScript_GateMaxieSpace[];
+
+static const u8 sName_Maxie[] = _("MAXIE");
+static const u8 sName_Archie[] = _("ARCHIE");
+static const u8 sName_Shelly[] = _("SHELLY");
+static const u8 sName_Matt[] = _("MATT");
+
 struct BrStoryPerson
 {
     u8 mapGroup;
@@ -174,14 +188,33 @@ struct BrStoryPerson
     u8 x; // map coords, no MAP_OFFSET, as story.ts writes them
     u8 y;
     u8 gfx;                 // an object gfx id, u8 as pret's graphicsId is
-    u16 wants; // ITEM_NONE: he just gives it
+    u16 wants;   // ITEM_NONE: he just gives it
+    u16 trainer; // TRAINER_NONE: no fight first. Else a gate: he gives it when he falls
+    const u8 *script; // the gate's trainerbattle (data/scripts/br.inc)
+    const u8 *name;   // what the story's other pieces say is guarding them
 };
 
 static const struct BrStoryPerson sPeople[] =
 {
-    {MAP_GROUP(MAP_GRANITE_CAVE_STEVENS_ROOM), MAP_NUM(MAP_GRANITE_CAVE_STEVENS_ROOM), 7, 8, OBJ_EVENT_GFX_STEVEN,      ITEM_NONE},
-    {MAP_GROUP(MAP_SLATEPORT_CITY_HARBOR),     MAP_NUM(MAP_SLATEPORT_CITY_HARBOR),     6, 13, OBJ_EVENT_GFX_SCIENTIST_1, ITEM_SCANNER},
+    {MAP_GROUP(MAP_GRANITE_CAVE_STEVENS_ROOM), MAP_NUM(MAP_GRANITE_CAVE_STEVENS_ROOM), 7, 8, OBJ_EVENT_GFX_STEVEN, ITEM_NONE, TRAINER_NONE, NULL, NULL},
+    {MAP_GROUP(MAP_SLATEPORT_CITY_HARBOR), MAP_NUM(MAP_SLATEPORT_CITY_HARBOR), 6, 13, OBJ_EVENT_GFX_SCIENTIST_1, ITEM_SCANNER, TRAINER_NONE, NULL, NULL},
+    {MAP_GROUP(MAP_MAGMA_HIDEOUT_4F), MAP_NUM(MAP_MAGMA_HIDEOUT_4F), 16, 21, OBJ_EVENT_GFX_MAXIE, ITEM_NONE, TRAINER_MAXIE_MAGMA_HIDEOUT, BR_EventScript_GateMaxieHideout, sName_Maxie},
+    {MAP_GROUP(MAP_ROUTE128), MAP_NUM(MAP_ROUTE128), 37, 22, OBJ_EVENT_GFX_ARCHIE, ITEM_NONE, TRAINER_ARCHIE, BR_EventScript_GateArchie, sName_Archie},
+    {MAP_GROUP(MAP_ROUTE119_WEATHER_INSTITUTE_2F), MAP_NUM(MAP_ROUTE119_WEATHER_INSTITUTE_2F), 4, 6, OBJ_EVENT_GFX_AQUA_MEMBER_F, ITEM_NONE, TRAINER_SHELLY_WEATHER_INSTITUTE, BR_EventScript_GateShelly, sName_Shelly},
+    {MAP_GROUP(MAP_AQUA_HIDEOUT_B2F), MAP_NUM(MAP_AQUA_HIDEOUT_B2F), 23, 19, OBJ_EVENT_GFX_AQUA_MEMBER_M, ITEM_NONE, TRAINER_MATT, BR_EventScript_GateMatt, sName_Matt},
+    {MAP_GROUP(MAP_MT_CHIMNEY), MAP_NUM(MAP_MT_CHIMNEY), 13, 6, OBJ_EVENT_GFX_MAXIE, ITEM_NONE, TRAINER_MAXIE_MT_CHIMNEY, BR_EventScript_GateMaxieChimney, sName_Maxie},
+    {MAP_GROUP(MAP_MOSSDEEP_CITY_SPACE_CENTER_2F), MAP_NUM(MAP_MOSSDEEP_CITY_SPACE_CENTER_2F), 1, 9, OBJ_EVENT_GFX_MAXIE, ITEM_NONE, TRAINER_MAXIE_MOSSDEEP, BR_EventScript_GateMaxieSpace, sName_Maxie},
 };
+
+// The gate fight under way, by the piece its boss holds; and the one we have won, which
+// the next Take of that piece hands over without asking for the fight again.
+static EWRAM_DATA u16 sGateKey = 0;
+static EWRAM_DATA u16 sGateWon = 0;
+
+static bool8 OnMap(const struct BrStoryPerson *person, u8 mapGroup, u8 mapNum)
+{
+    return person->mapGroup == mapGroup && person->mapNum == mapNum;
+}
 
 static const struct BrStoryPerson *PersonAt(const struct BrLootItem *it)
 {
@@ -191,9 +224,33 @@ static const struct BrStoryPerson *PersonAt(const struct BrLootItem *it)
         return NULL;
     for (i = 0; i < ARRAY_COUNT(sPeople); i++)
     {
-        if (sPeople[i].mapGroup == it->mapGroup && sPeople[i].mapNum == it->mapNum
+        if (OnMap(&sPeople[i], it->mapGroup, it->mapNum)
          && sPeople[i].x + MAP_OFFSET == it->x && sPeople[i].y + MAP_OFFSET == it->y)
             return &sPeople[i];
+    }
+    return NULL;
+}
+
+// The boss on this piece's map still holding his: the rest of his story waits on him.
+static const struct BrStoryPerson *GuardOf(const struct BrLootItem *it)
+{
+    const struct BrLootItem *row;
+    u8 i, j;
+
+    if ((it->key & 0xF000) != BR_EVENT_KEY_BASE)
+        return NULL;
+    for (i = 0; i < ARRAY_COUNT(sPeople); i++)
+    {
+        if (sPeople[i].trainer == TRAINER_NONE || !OnMap(&sPeople[i], it->mapGroup, it->mapNum))
+            continue;
+        for (j = 0; j < BR_MAX_LOOT; j++)
+        {
+            row = &gBrLoot.items[j];
+            if (row != it && row->kind != BR_LOOT_NONE && (row->key & 0xFFF0) == (it->key & 0xFFF0)
+             && OnMap(&sPeople[i], row->mapGroup, row->mapNum)
+             && sPeople[i].x + MAP_OFFSET == row->x && sPeople[i].y + MAP_OFFSET == row->y)
+                return &sPeople[i];
+        }
     }
     return NULL;
 }
@@ -205,16 +262,55 @@ u8 BrStory_Person(const struct BrLootItem *it)
     return person != NULL ? person->gfx : 0;
 }
 
+bool8 BrStory_IsGate(u16 trainerId)
+{
+    u8 i;
+
+    for (i = 0; i < ARRAY_COUNT(sPeople); i++)
+        if (sPeople[i].trainer != TRAINER_NONE && sPeople[i].trainer == trainerId)
+            return TRUE;
+    return FALSE;
+}
+
 static const u8 sText_Wants[] = _("HE WANTS THE ");
+static const u8 sText_Guards[] = _(" GUARDS IT");
 
 bool8 BrStory_Hands(const struct BrLootItem *it)
 {
     const struct BrStoryPerson *person = PersonAt(it);
+    const struct BrStoryPerson *guard;
     u8 line[BR_HUD_LINE_MAX + 2];
     const u8 *last = line + ARRAY_COUNT(line) - 1;
     u8 *p;
 
-    if (person == NULL || person->wants == ITEM_NONE)
+    if (person == NULL)
+    {
+        guard = GuardOf(it);
+        if (guard == NULL)
+            return TRUE;
+        p = BrHud_Append(line, last, guard->name);
+        BrHud_Append(p, last, sText_Guards);
+        PlaySE(SE_FAILURE);
+        BrHud_Box(line);
+        return FALSE;
+    }
+    if (person->trainer != TRAINER_NONE)
+    {
+        if (sGateWon == it->key)
+        {
+            sGateWon = 0;
+            return TRUE;
+        }
+        // The fight first, his own: one shot, and a loss is a loss like any trainer's.
+        // Each ROM fights him for itself; whoever wins first takes it from the room.
+        ClearTrainerFlag(person->trainer);
+        sGateKey = it->key;
+        gSelectedObjectEvent = it->objId;
+        gSpecialVar_LastTalked = gObjectEvents[it->objId].localId;
+        ScriptContext_SetupScript(person->script);
+        return FALSE;
+    }
+    if (person->wants == ITEM_NONE)
         return TRUE;
     if (RemoveBagItem(person->wants, 1))
         return TRUE;
@@ -223,4 +319,13 @@ bool8 BrStory_Hands(const struct BrLootItem *it)
     PlaySE(SE_FAILURE);
     BrHud_Box(line);
     return FALSE;
+}
+
+// The gate's boss fell (BR_EventScript_GateBeaten): what he held is ours, if nobody
+// else beat him to it while we fought.
+void BrStory_GateBeaten(void)
+{
+    sGateWon = sGateKey;
+    sGateKey = 0;
+    BrLoot_TakeKey(sGateWon);
 }

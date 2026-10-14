@@ -96,6 +96,71 @@ BR_EventScript_TraderNo:
 	releaseall
 	end
 
+@ A story's gate (src/br/br_story.c, sPeople): the boss stands holding the reward and
+@ hands it over when he falls. One page of speech, as a gym leader's, and the win's
+@ script is the hand-over.
+BR_EventScript_GateMaxieHideout::
+	trainerbattle_single TRAINER_MAXIE_MAGMA_HIDEOUT, BR_Text_GateMaxieHideout, BR_Text_GateDefeat, BR_EventScript_GateBeaten, NO_MUSIC
+	release
+	end
+
+BR_EventScript_GateArchie::
+	trainerbattle_single TRAINER_ARCHIE, BR_Text_GateArchie, BR_Text_GateDefeat, BR_EventScript_GateBeaten, NO_MUSIC
+	release
+	end
+
+BR_EventScript_GateShelly::
+	trainerbattle_single TRAINER_SHELLY_WEATHER_INSTITUTE, BR_Text_GateShelly, BR_Text_GateDefeat, BR_EventScript_GateBeaten, NO_MUSIC
+	release
+	end
+
+BR_EventScript_GateMatt::
+	trainerbattle_single TRAINER_MATT, BR_Text_GateMatt, BR_Text_GateDefeat, BR_EventScript_GateBeaten, NO_MUSIC
+	release
+	end
+
+BR_EventScript_GateMaxieChimney::
+	trainerbattle_single TRAINER_MAXIE_MT_CHIMNEY, BR_Text_GateMaxieChimney, BR_Text_GateDefeat, BR_EventScript_GateBeaten, NO_MUSIC
+	release
+	end
+
+BR_EventScript_GateMaxieSpace::
+	trainerbattle_single TRAINER_MAXIE_MOSSDEEP, BR_Text_GateMaxieSpace, BR_Text_GateDefeat, BR_EventScript_GateBeaten, NO_MUSIC
+	release
+	end
+
+BR_EventScript_GateBeaten::
+	special BrStory_GateBeaten
+	releaseall
+	end
+
+BR_Text_GateMaxieHideout:
+	.string "MAXIE: GROUDON belongs to\n"
+	.string "TEAM MAGMA. Turn back!$"
+
+BR_Text_GateArchie:
+	.string "ARCHIE: KYOGRE answers to\n"
+	.string "TEAM AQUA alone!$"
+
+BR_Text_GateShelly:
+	.string "SHELLY: The weather's ours,\n"
+	.string "and so is this CASTFORM!$"
+
+BR_Text_GateMatt:
+	.string "MATT: The boss's MASTER BALL?\n"
+	.string "Come and take it, then!$"
+
+BR_Text_GateMaxieChimney:
+	.string "MAXIE: The METEORITE fuels\n"
+	.string "our plan. Stand aside!$"
+
+BR_Text_GateMaxieSpace:
+	.string "MAXIE: This SUN STONE is\n"
+	.string "TEAM MAGMA's now!$"
+
+BR_Text_GateDefeat:
+	.string "Hmph... Take it.$"
+
 BR_Text_PartyFull:
 	.string "Your party is full.\n"
 	.string "Release one for the new catch?$"

@@ -451,8 +451,9 @@ describe('the page that runs the match (POK-330 #42)', () => {
     expect(room.toRom.filter((m) => m.t === 'event')).toEqual([event]);
     const spills = room.frames().filter((f) => f.m?.t === 'spill').map((f) => f.m as SpillMsg);
     expect(spills.length).toBeGreaterThan(0);
-    expect(spills.flatMap((s) => s.mons).map((m) => m.key)).toContain(event.key);
-    expect(tickers(room.frames())).toEqual([`A LEGENDARY AT ${event.place}!`]);
+    expect(spills.flatMap((s) => [...s.mons, ...(s.bag ? [s.bag] : [])]).map((m) => m.key)).toContain(event.key);
+    expect(tickers(room.frames())).toHaveLength(1);
+    expect(tickers(room.frames())[0]).toMatch(new RegExp(`^A (LEGENDARY|RARE FIND) AT ${event.place!.replace(/[.()]/g, '\\$&')}!$`));
     host.dispose();
   });
 

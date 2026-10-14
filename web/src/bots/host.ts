@@ -177,7 +177,12 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
     loot: lootView(loot, (mapId) => refById.get(mapId), idOf),
     // A story's doors and people (match/story.ts), at the ring's phase now.
     sealed: (piece, bot) =>
-      storySealed(piece, { flies: bot.party.some((mon) => FLYING.has(mon.species)), has: (id) => bot.bag.some((st) => st.id === id && st.n > 0), phase }),
+      storySealed(piece, {
+        flies: bot.party.some((mon) => FLYING.has(mon.species)),
+        has: (id) => bot.bag.some((st) => st.id === id && st.n > 0),
+        phase,
+        onGround: (key) => loot.has(key),
+      }),
     // ...and so is a trader's cell: a session's event is the wire's, MAP_OFFSET in it.
     traders: () =>
       (opts.events?.() ?? []).flatMap((e) => {

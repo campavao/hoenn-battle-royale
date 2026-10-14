@@ -1009,12 +1009,20 @@ describe('the rules a bot plays by the ROM\'s way', () => {
     const storyC = brSources['../../src/br/br_story.c'];
     const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
     const ids = list.split(',').map((s) => s.trim()).filter(Boolean);
-    const people = [...storyC.matchAll(/\{MAP_GROUP\((MAP_\w+)\),\s*MAP_NUM\(\1\),\s*(\d+),\s*(\d+),\s*(OBJ_EVENT_GFX_\w+),\s*(ITEM_\w+)\}/g)].map(
-      (m) => ({ map: m[1], x: Number(m[2]), y: Number(m[3]), gfx: m[4], wants: m[5] === 'ITEM_NONE' ? undefined : ids.indexOf(m[5]) }),
-    );
+    const people = [
+      ...storyC.matchAll(/\{MAP_GROUP\((MAP_\w+)\),\s*MAP_NUM\(\1\),\s*(\d+),\s*(\d+),\s*(OBJ_EVENT_GFX_\w+),\s*(ITEM_\w+),\s*(TRAINER_\w+),/g),
+    ].map((m) => ({
+      map: m[1],
+      x: Number(m[2]),
+      y: Number(m[3]),
+      gfx: m[4],
+      wants: m[5] === 'ITEM_NONE' ? undefined : ids.indexOf(m[5]),
+      trainer: m[6] === 'TRAINER_NONE' ? undefined : m[6],
+    }));
     const pages = STORIES.flatMap((s) =>
-      (s.people ?? []).map((p) => ({ map: s.cells[p.at].map ?? s.map, x: s.cells[p.at].x, y: s.cells[p.at].y, gfx: p.gfx, wants: p.wants })),
+      (s.people ?? []).map((p) => ({ map: s.cells[p.at].map ?? s.map, x: s.cells[p.at].x, y: s.cells[p.at].y, gfx: p.gfx, wants: p.wants, trainer: p.trainer })),
     );
+    expect(people.length).toBeGreaterThan(0);
     expect(people).toEqual(pages);
     const rule = { BR_DOOR_SMASH: 'smash', BR_DOOR_FLY: 'fly', BR_DOOR_WAIT: 'wait' } as Record<string, string>;
     const doors = [...storyC.matchAll(/\{FLAG_\w+,\s*MAP_GROUP\((MAP_\w+)\),\s*MAP_NUM\(\1\),\s*(BR_DOOR_\w+)\}/g)].map((m) => ({ map: m[1], door: rule[m[2]] }));
