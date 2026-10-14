@@ -62,6 +62,12 @@ BR_EventScript_FoundUsed::
 	release
 	return
 
+@ A TM nobody in the party can learn (BrItems_FindItem): it stays on the ground.
+BR_EventScript_FoundLeft::
+	msgbox gStringVar4, MSGBOX_DEFAULT
+	release
+	return
+
 @ A hidden item that was used, sold or bagged as a pile (BrItems_FindHidden): the same
 @ line, and pret's own flag, so it is not there to find twice.
 BR_EventScript_FoundHiddenUsed::
@@ -69,6 +75,12 @@ BR_EventScript_FoundHiddenUsed::
 	msgbox gStringVar4, MSGBOX_DEFAULT
 	waitfanfare
 	special SetHiddenItemFlag
+	releaseall
+	end
+
+@ ...and a hidden one, which stays hidden: no flag.
+BR_EventScript_FoundHiddenLeft::
+	msgbox gStringVar4, MSGBOX_DEFAULT
 	releaseall
 	end
 

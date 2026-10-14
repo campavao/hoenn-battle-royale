@@ -21,6 +21,7 @@ import {
   skinSheet,
   wrapText,
 } from './emerald';
+import type { GbaKey } from '../emu';
 import type { Container, DrawnScreen, Painted, Widget } from './stage';
 
 export const ROW_H = 16;
@@ -387,6 +388,15 @@ export function cycleWatch(alive: readonly number[], on: number | null, dir: 1 |
   const at = on === null ? -1 : alive.indexOf(on);
   if (at < 0) return dir > 0 ? alive[0] : alive[alive.length - 1];
   return alive[(at + dir + alive.length) % alive.length];
+}
+
+/** The D-pad while we watch (Cam's 2026-10-14 phone play-test): left and right are PREV
+ *  and NEXT. Only while out and following somebody -- following locks our own trainer, so
+ *  the keys did nothing there -- and on the overworld: the start menu's party and summary
+ *  screens use left and right themselves. */
+export function watchStepKey(key: GbaKey, out: boolean, on: number | null, onField: boolean): 1 | -1 | null {
+  if (!out || on === null || !onField) return null;
+  return key === 'right' ? 1 : key === 'left' ? -1 : null;
 }
 
 /** How tall everything under the seats is, so the seats take what is left. */

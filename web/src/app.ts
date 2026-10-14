@@ -50,6 +50,7 @@ import { stageKey } from './ui/roomkeys';
 import { TEXT_RED } from './ui/emerald';
 import {
   cycleWatch,
+  watchStepKey,
   menuScreen,
   noticeScreen,
   type ButtonSpec,
@@ -83,7 +84,7 @@ import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
 import { TouchLayer } from './touch';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, stickKeys, type AxisSense, type StickMap } from './pad';
-import { FieldView, askBand, measureLayout, romBand, type FieldLayout, type FieldPicture } from './field';
+import { FieldView, MAIN_CALLBACK2, askBand, measureLayout, romBand, type FieldLayout, type FieldPicture } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
 import {
@@ -2410,6 +2411,19 @@ function wireRoom(
   };
 
   const spectate = new Spectate();
+  // Left and right on the D-pad flip who we watch, as PREV and NEXT do.
+  // emu.divertPress, not bindKeyboard's divert: gamepad and touch go through press() too.
+  const mainBase = symbols?.get('gMain');
+  const overworld = symbols?.get('CB2_Overworld');
+  const onField = (): boolean =>
+    mainBase !== undefined && overworld !== undefined && (emu.read(mainBase + MAIN_CALLBACK2, 32) & ~1) === overworld;
+  emu.divertPress = (key) => {
+    const me = bridge?.roster.get(bridge.seat);
+    const dir = watchStepKey(key, me !== undefined && !me.alive, spectate.watchingSeat(), onField());
+    if (dir === null || !bridge) return false;
+    stepWatch(bridge, spectate, dir);
+    return true;
+  };
   let stopSpectateLoop: (() => void) | null = null;
   let stopGuestStrip: (() => void) | null = null;
   /** How long the result stays on screen before the match lets go of you. Kanto's

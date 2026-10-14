@@ -1,7 +1,7 @@
 // The in-match sheet (POK-320): what the page's HTML drawer was, drawn. Over the game on
 // a phone, beside it on a desktop, and with the drawer's ids in its mirror.
 import { describe, expect, it, vi } from 'vitest';
-import { cycleWatch, sheetScreen, sheetSeats, type RoomSeat, type SheetModel } from './screens';
+import { cycleWatch, watchStepKey, sheetScreen, sheetSeats, type RoomSeat, type SheetModel } from './screens';
 import { fakeCanvas } from './fakecanvas';
 
 const seat = (n: number, over: Partial<RoomSeat> = {}): RoomSeat => ({
@@ -69,6 +69,18 @@ describe('WATCH, once you are out', () => {
     expect(cycleWatch([4, 7, 9], 4, -1)).toBe(9);
     expect(cycleWatch([4, 7, 9], 5, 1), 'the one watched has gone out').toBe(4);
     expect(cycleWatch([], 4, 1)).toBeNull();
+  });
+});
+
+describe('watchStepKey', () => {
+  it('turns left and right into PREV and NEXT while out and following somebody', () => {
+    expect(watchStepKey('right', true, 4, true)).toBe(1);
+    expect(watchStepKey('left', true, 4, true)).toBe(-1);
+    expect(watchStepKey('up', true, 4, true), 'up and down stay the game\'s').toBeNull();
+    expect(watchStepKey('a', true, 4, true)).toBeNull();
+    expect(watchStepKey('right', false, 4, true), 'still in the match: we walk').toBeNull();
+    expect(watchStepKey('right', true, null, true), 'out, following nobody: we walk').toBeNull();
+    expect(watchStepKey('right', true, 4, false), 'a menu or the summary screen keeps its D-pad').toBeNull();
   });
 });
 

@@ -140,6 +140,11 @@ export async function loadCoreFactory(url = '/emu/mgba.js'): Promise<CoreFactory
 
 export class Emulator {
   private held = 0;
+  /** Keys a `divertPress` took, held down: the game never hears them, nor their repeats. */
+  private diverted = 0;
+  /** Takes a key away from the game when it says so -- every way in (keyboard, pad,
+   *  touch) comes through press(). The key's repeats and its release go with it. */
+  divertPress: ((key: GbaKey) => boolean) | null = null;
   private frameListeners = new Set<() => void>();
   /** Listeners that have thrown, so each is reported once and not sixty times a second. */
   private failedListeners = new WeakSet<() => void>();
@@ -534,13 +539,18 @@ export class Emulator {
 
   press(key: GbaKey): void {
     const bit = 1 << KEY_BIT[key];
-    if (this.held & bit) return;
+    if (this.held & bit || this.diverted & bit) return;
+    if (this.divertPress?.(key)) {
+      this.diverted |= bit;
+      return;
+    }
     this.held |= bit;
     this.m.buttonPress(key);
   }
 
   release(key: GbaKey): void {
     const bit = 1 << KEY_BIT[key];
+    this.diverted &= ~bit;
     if (!(this.held & bit)) return;
     this.held &= ~bit;
     this.m.buttonUnpress(key);

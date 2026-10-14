@@ -10,6 +10,7 @@
 #include "string_util.h"
 #include "strings.h"
 #include "text.h"
+#include "data.h"
 #include "constants/items.h"
 #include "constants/pokemon.h"
 #include "constants/songs.h"
@@ -17,6 +18,7 @@
 #include "br/br_balls.h"
 #include "br/br_items.h"
 #include "br/br_match.h"
+#include "br/br_moves.h"
 
 // Vitamin -> the EV it fills. The MON_DATA_*_EV ids are not in the vitamins' order, so a table.
 static const u16 sVitamins[][2] =
@@ -77,6 +79,7 @@ static const u8 sText_PartyHealed[] = _("The whole party was treated.{PAUSE_UNTI
 static const u8 sText_FoundVitamin[] = _("{PLAYER} found {STR_VAR_2}!\nThe whole party's {STR_VAR_1}\lwent to the top.");
 static const u8 sText_FoundSome[] = _("{PLAYER} found {STR_VAR_1} {STR_VAR_2}!");
 static const u8 sText_FoundSell[] = _("{PLAYER} found {STR_VAR_2}!\nIt fetched ¥{STR_VAR_1}.");
+static const u8 sText_FoundTmLeft[] = _("No one in the party can learn\n{STR_VAR_1}. The TM stays put.");
 
 static bool8 InList(const u16 *list, u8 n, u16 item)
 {
@@ -189,12 +192,31 @@ bool8 BrItems_Arrive(u16 *item, u16 count)
     return TRUE;
 }
 
-// A map's item, seen or hidden: TRUE when it was used, or a pile bagged, here, and
-// gStringVar4 says so; else *item and *count are what goes on to pret's script.
-static bool8 Found(u16 *item, u16 *count)
+// What Found makes of a map's item, for the scripts' VAR_RESULT.
+#define FOUND_TO_SCRIPT 0 // pret's script goes on with *item, *count
+#define FOUND_USED      1 // used, sold or bagged as a pile here
+#define FOUND_LEFT      2 // a TM nobody here can learn: left where it lies
+
+// A map's item, seen or hidden: FOUND_USED when it was used, or a pile bagged, here, and
+// FOUND_LEFT for a TM nobody in the party can learn, gStringVar4 saying which; else *item
+// and *count are what goes on to pret's script. A TM it lets go on is taught as soon as
+// the script is done (BrMoves_TeachSoon).
+static u8 Found(u16 *item, u16 *count)
 {
     u16 was = *item;
     s8 row = Vitamin(was);
+
+    if (gBrMatch.phase != BR_PHASE_NONE && BrMoves_IsTm(was))
+    {
+        if (!BrMoves_Teachable(was))
+        {
+            StringCopy(gStringVar1, gMoveNames[ItemIdToBattleMoveId(was)]);
+            StringExpandPlaceholders(gStringVar4, sText_FoundTmLeft);
+            return FOUND_LEFT;
+        }
+        BrMoves_TeachSoon(was);
+        return FOUND_TO_SCRIPT;
+    }
 
     if (BrItems_Pickup(item, count, NULL) == BR_ITEMS_TO_BAG)
     {
@@ -205,9 +227,9 @@ static bool8 Found(u16 *item, u16 *count)
             ConvertIntToDecimalStringN(gStringVar1, *count, STR_CONV_MODE_LEFT_ALIGN, 2);
             CopyItemNameHandlePlural(*item, gStringVar2, *count);
             StringExpandPlaceholders(gStringVar4, sText_FoundSome);
-            return TRUE;
+            return FOUND_USED;
         }
-        return FALSE;
+        return FOUND_TO_SCRIPT;
     }
     CopyItemName(was, gStringVar2);
     if (row >= 0)
@@ -220,7 +242,7 @@ static bool8 Found(u16 *item, u16 *count)
         ConvertIntToDecimalStringN(gStringVar1, SellPrice(was, *count), STR_CONV_MODE_LEFT_ALIGN, 7);
         StringExpandPlaceholders(gStringVar4, sText_FoundSell);
     }
-    return TRUE;
+    return FOUND_USED;
 }
 
 void BrItems_FindItem(void)
