@@ -38,12 +38,17 @@ const ITEM_DEEP_SEA_SCALE = 193;
 const ITEM_SCANNER = 278;
 
 /** How a REGI's chamber opens (br_story.c, sDoors): A at the wall, as Rock Smash would;
- *  A at the wall with a mon that knows FLY; or by itself once the ring has moved on a
- *  phase from the one its event dropped on. */
+ *  A at the wall with a Flying-type in the party; or by itself once the ring has moved on
+ *  a phase from the one its event dropped on. Not "knows FLY": the HMs are out of the
+ *  match, so FLY is a move almost no player has (PR #30 review). */
 export type StoryDoor = 'smash' | 'fly' | 'wait';
 /** The three chambers are one layout, and its wall is on this row: a cell above it is
  *  behind the door. */
 export const DOOR_Y = 20;
+
+/** Every species with Flying as one of its types (gSpeciesInfo, ROM ids): who opens
+ *  ANCIENT TOMB (br_story.c, HasFlier). parity.test.ts pins it to species_info.h. */
+export const FLYING: ReadonlySet<number> = new Set([6, 12, 16, 17, 18, 21, 22, 41, 42, 83, 84, 85, 123, 130, 142, 144, 145, 146, 149, 163, 164, 165, 166, 169, 176, 177, 178, 187, 188, 189, 193, 198, 207, 225, 226, 227, 249, 250, 292, 302, 304, 305, 309, 310, 312, 358, 359, 369, 397, 406]);
 
 /** How often an event that has a story in reach tells it rather than dropping the
  *  cluster, with its legendary (director.ts). */

@@ -23,8 +23,10 @@ bool8 BrStory_Tide(void);
 
 // The three REGI chambers' sealed doors, each opened its own way with no HM to teach
 // (br_hm.h): DESERT RUINS's on A at its wall, as Rock Smash would; ANCIENT TOMB's on A at
-// its wall with a mon that knows FLY in the party; ISLAND CAVE's by itself once the ring
-// has moved on a phase from the one its event dropped on. Opened for this ROM only, as
+// its wall with a Flying-type in the party (FLY itself cannot be taught: no HMs); ISLAND
+// CAVE's by itself once the ring has moved on a phase from the one its event dropped on,
+// or sooner by Emerald's own way in, the braille's lap of the room, which a player who
+// knows it may still walk (a bot waits). Opened for this ROM only, as
 // Emerald opens it for you and not for anybody else. Each frame, before the loot's: the A
 // that opens a door is that door's.
 void BrStory_Tick(void);

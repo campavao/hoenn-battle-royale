@@ -40,7 +40,7 @@ bool8 BrStory_Tide(void)
 enum
 {
     BR_DOOR_SMASH, // A at the wall
-    BR_DOOR_FLY,   // A at the wall, FLY in the party
+    BR_DOOR_FLY,   // A at the wall, a Flying-type in the party
     BR_DOOR_WAIT,  // the ring has moved on a phase since the event dropped
 };
 
@@ -91,13 +91,21 @@ static void Open(const struct BrStoryDoor *door)
     FlagSet(door->flag);
 }
 
-static bool8 KnowsFly(void)
+// A Flying-type in the party, not a mon that knows FLY: the HMs are out of the match
+// (br_balls.c and br_moves.c stop at ITEM_HM01) and FLY is level-up for nobody a match
+// deals early, so "knows FLY" was a door almost nobody could open. web/src/match/story.ts's
+// FLYING is the same rule for the bots, pinned to gSpeciesInfo by parity.test.ts.
+static bool8 HasFlier(void)
 {
+    u16 species;
     u8 slot;
 
     for (slot = 0; slot < gPlayerPartyCount && slot < PARTY_SIZE; slot++)
     {
-        if (!GetMonData(&gPlayerParty[slot], MON_DATA_IS_EGG) && MonKnowsMove(&gPlayerParty[slot], MOVE_FLY))
+        if (GetMonData(&gPlayerParty[slot], MON_DATA_IS_EGG))
+            continue;
+        species = GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES);
+        if (gSpeciesInfo[species].types[0] == TYPE_FLYING || gSpeciesInfo[species].types[1] == TYPE_FLYING)
             return TRUE;
     }
     return FALSE;
@@ -150,7 +158,7 @@ void BrStory_Tick(void)
             Open(door);
         return;
     }
-    if (!PressedAtWall() || (door->rule == BR_DOOR_FLY && !KnowsFly()))
+    if (!PressedAtWall() || (door->rule == BR_DOOR_FLY && !HasFlier()))
         return; // the braille says what it says
     gMain.newKeys &= ~A_BUTTON;
     gMain.newAndRepeatedKeys &= ~A_BUTTON;
@@ -165,7 +173,7 @@ struct BrStoryPerson
     u8 mapNum;
     u8 x; // map coords, no MAP_OFFSET, as story.ts writes them
     u8 y;
-    u16 gfx;
+    u8 gfx;                 // an object gfx id, u8 as pret's graphicsId is
     u16 wants; // ITEM_NONE: he just gives it
 };
 

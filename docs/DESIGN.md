@@ -240,8 +240,10 @@ out, and one that comes in waits as it would in a menu.
   is west of Lilycove (landing.json), so the east's stories come up mostly on the first
   event, whose ring is the widest. The three REGIs sit in their chambers, each door opened
   its own way with no HM to teach: DESERT RUINS on A at the wall, ANCIENT TOMB on A with a
-  FLY mon in the party, ISLAND CAVE by itself a phase after its event dropped (the native
-  REGIs are gone). Some rewards are people (`br_story.c`, sPeople): STEVEN in GRANITE
+  Flying-type in the party (not "knows FLY": with no HMs almost nobody could), ISLAND CAVE
+  by itself a phase after its event dropped, or sooner by Emerald's own braille lap of the
+  room, which a player who knows it may walk and a bot does not (the native REGIs are
+  gone). Some rewards are people (`br_story.c`, sPeople): STEVEN in GRANITE
   CAVE with TM47, and CAPTAIN STERN at Slateport's harbour, who gives a DEEP SEA TOOTH or
   SCALE only for the SCANNER from the ABANDONED SHIP's office. The LAVARIDGE egg woman has
   no flag to stand her down, so her WYNAUT is a ball at her feet. Bots walk a grid that

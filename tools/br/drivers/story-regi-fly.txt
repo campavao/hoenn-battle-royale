@@ -1,5 +1,5 @@
-# story-regi-fly: ANCIENT TOMB's sealed chamber opens on A at its wall with a mon that
-# knows FLY in the party (br_story.c, BrStory_Tick), as its braille asks.
+# story-regi-fly: ANCIENT TOMB's sealed chamber opens on A at its wall with a Flying-type
+# in the party (br_story.c, HasFlier), as its braille asks for FLY.
 #
 # FLAG_SYS_REGISTEEL_PUZZLE_COMPLETED (0x8B2) is gSaveBlock1Ptr+0x1386 bit 2. Booted
 # with the test SWELLOW (BR_BOOT_FLAG_TESTFLY) under the wall at (8,21) on ANCIENT TOMB

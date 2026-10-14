@@ -127,6 +127,7 @@ static void Spawn(struct BrLootItem *it)
     // Birch's bag is the one bag-shaped object event Emerald has; a team is balls.
     u8 gfx = it->kind == BR_LOOT_BAG && !OneThing(it) ? OBJ_EVENT_GFX_BIRCHS_BAG : OBJ_EVENT_GFX_ITEM_BALL;
     u8 movement = MOVEMENT_TYPE_NONE;
+    u8 person = BrStory_Person(it);
     u8 id;
 
     if (BR_LOOT_IS_GIFT(it->key))
@@ -134,9 +135,9 @@ static void Spawn(struct BrLootItem *it)
         gfx = sGiftGfx[it->key % ARRAY_COUNT(sGiftGfx)];
         movement = MOVEMENT_TYPE_FACE_DOWN;
     }
-    else if (BrStory_Person(it) != 0)
+    else if (person != 0)
     {
-        gfx = BrStory_Person(it);
+        gfx = person;
         movement = MOVEMENT_TYPE_FACE_DOWN;
     }
     id = SpawnSpecialObjectEventParameterized(gfx, movement, LocalId(it),

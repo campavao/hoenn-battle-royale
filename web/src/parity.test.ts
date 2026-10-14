@@ -50,6 +50,7 @@ import mapGroups from '../../data/maps/map_groups.json';
 import eventObjectsH from '../../include/constants/event_objects.h?raw';
 import itemsH from '../../include/constants/items.h?raw';
 import speciesH from '../../include/constants/species.h?raw';
+import speciesInfoH from '../../src/data/pokemon/species_info.h?raw';
 import varsH from '../../include/constants/vars.h?raw';
 import weatherH from '../../include/constants/weather.h?raw';
 import constantsGlobalH from '../../include/constants/global.h?raw';
@@ -82,7 +83,7 @@ import lootTs from './match/loot.ts?raw';
 import { PATCH_KEY_BASE } from './match/loot';
 import { EVENT_KEY_BASE, EVENT_MAX, EVENT_PIECES, GOLD, LEGENDS, RARES, traderKey } from './match/events';
 import { GIFT_KEY_BASE, GIFTS } from './match/gifts';
-import { DOOR_Y, STORIES } from './match/story';
+import { DOOR_Y, FLYING, STORIES } from './match/story';
 import uiData from './data/ui.json';
 import { BR_CONT_FLAG, BR_MSG } from './net/slots';
 import { MAILBOX } from './net/mailbox';
@@ -997,6 +998,14 @@ describe('the rules a bot plays by the ROM\'s way', () => {
     const byMap = (a: { map: string }, b: { map: string }) => a.map.localeCompare(b.map);
     expect(doors.sort(byMap)).toEqual(STORIES.filter((s) => s.door).map((s) => ({ map: s.map, door: s.door })).sort(byMap));
     expect(define(storyC, 'BR_DOOR_Y')).toBe(DOOR_Y);
+  });
+
+  it("ANCIENT TOMB's fliers are species_info.h's Flying-types", () => {
+    const flying = [...speciesInfoH.matchAll(/\[(SPECIES_\w+)\]\s*=\s*\{[\s\S]*?\.types\s*=\s*\{([^}]*)\}/g)]
+      .filter((m) => m[2].includes('TYPE_FLYING'))
+      .map((m) => define(speciesH, m[1]));
+    expect(flying.length).toBeGreaterThan(40);
+    expect([...FLYING].sort((a, b) => a - b)).toEqual([...new Set(flying)].sort((a, b) => a - b));
   });
 
   it("an event's gold balls are sGold in br_balls.c, and its Pokemon are species.h's", () => {
