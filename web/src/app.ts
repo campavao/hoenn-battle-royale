@@ -3174,8 +3174,10 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
 
   return new Promise<RoomHash>((resolve) => {
     let timer: ReturnType<typeof setInterval> | null = null;
+    let browseWhileSeen = (): void => {};
     const done = (hash: RoomHash) => {
       if (timer) clearInterval(timer);
+      document.removeEventListener('visibilitychange', browseWhileSeen);
       relay.close();
       stage.hide();
       resolve(hash);
@@ -3421,6 +3423,9 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
     stage.show(main);
 
     relay.on('closed', () => {
+      // Hidden, the lobby let go of the socket itself (below): what it last saw stays up
+      // for the moment the tab is looked at again, until the new socket says otherwise.
+      if (document.hidden) return;
       online = false;
       rooms = [];
       redraw();
@@ -3429,11 +3434,10 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       rooms = ev.rooms;
       redraw();
     });
-    relay.connect((import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL);
-    // There is no 'open' event to hang this on, so the refresh tick is also what
-    // notices the socket came up. A short first beat so the list is not blank for
-    // three seconds on a connection that was ready immediately.
+    // The refresh tick, and the socket coming up: the list is asked for the moment it
+    // can be, not on the next tick.
     const beat = () => {
+      if (document.hidden) return;
       const up = relay.isOpen();
       if (up !== online) {
         online = up;
@@ -3441,7 +3445,21 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       }
       if (up) relay.listRooms(version);
     };
-    setTimeout(beat, 200);
+    // The list is browsed only while it is looked at. A hidden tab's timers are held to
+    // one a minute, so its socket used to ask once, go quiet past the relay's unbound
+    // sweep, be cut, reconnect and ask once again, every minute for as long as the tab
+    // stayed open (the play log, 2026-10-13: hours of it). Hidden, the socket closes;
+    // seen again, it opens and asks at once.
+    browseWhileSeen = () => {
+      if (document.hidden) {
+        relay.close();
+        return;
+      }
+      relay.connect((import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL);
+    };
+    relay.on('open', beat);
+    document.addEventListener('visibilitychange', browseWhileSeen);
+    browseWhileSeen();
     timer = setInterval(beat, LOBBY_REFRESH_MS);
   });
 }

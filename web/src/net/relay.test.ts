@@ -294,6 +294,35 @@ describe('RelayClient', () => {
     expect(sockets).toHaveLength(1);
   });
 
+  it('a socket let go of and heard from late cannot take down the next one', () => {
+    // A real WebSocket's close lands after close() returns. A lobby hidden and shown
+    // again inside that gap reconnects before the old socket has said it closed.
+    const { factory, sockets } = makeFactory();
+    const relay = new RelayClient(factory);
+    const closed = vi.fn();
+    const rooms = vi.fn();
+    relay.on('closed', closed);
+    relay.on('rooms', rooms);
+    relay.connect('ws://relay.test');
+    sockets[0].open();
+    const late = sockets[0].onclose;
+    const lateMessage = sockets[0].onmessage;
+    sockets[0].onclose = null; // the close is in flight, not landed
+    relay.close();
+    relay.connect('ws://relay.test');
+    sockets[1].open();
+
+    lateMessage?.({ data: JSON.stringify({ type: 'rooms', rooms: [] }) });
+    late?.({ code: 1005 });
+    expect(relay.isOpen()).toBe(true);
+    expect(closed).not.toHaveBeenCalled();
+    expect(rooms).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(5_000); // past any reconnect backoff, short of a ping
+    expect(sockets).toHaveLength(2);
+    relay.listRooms();
+    expect(sockets[1].sent.at(-1)).toMatchObject({ type: 'list_rooms' });
+  });
+
   it('refuses a seat past MAX_SEAT: gives it back and says the room is full (POK-330 #6)', () => {
     const { factory, sockets } = makeFactory();
     const relay = new RelayClient(factory);

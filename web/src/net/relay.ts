@@ -310,7 +310,13 @@ export class RelayClient {
     if (!this.url) return;
     const ws = this.factory(this.url);
     this.ws = ws;
+    // A socket close() let go of can still be heard from after connect() opened the next
+    // one: a real WebSocket's close lands later. A lobby hidden and shown again inside
+    // that gap (lobby, app.ts) had the old socket's onclose take down the new one and
+    // schedule a third. Only the current socket speaks; a let-go one with nothing after
+    // it still reports its close, as it always has.
     ws.onopen = () => {
+      if (this.ws !== ws) return;
       this.backoff = BACKOFF_START_MS;
       // host()/join() are typically called right after connect(), before a real
       // WebSocket has finished its handshake -- anything queued by send() while we
@@ -323,13 +329,18 @@ export class RelayClient {
       this.everOpened = true;
       this.emit('open', { reconnected: again });
     };
-    ws.onmessage = (ev) => this.handleMessage(ev.data);
+    ws.onmessage = (ev) => {
+      if (this.ws === ws) this.handleMessage(ev.data);
+    };
     ws.onerror = () => {
       /* onclose follows every onerror on a real WebSocket; nothing to do here */
     };
     // 1012 is the relay restarting for a deploy (its SIGTERM, POK-330 #47): worth
     // telling apart from this page's own network going
-    ws.onclose = (ev) => this.handleClose((ev as { code?: number } | null)?.code === 1012 ? 'restart' : 'closed');
+    ws.onclose = (ev) => {
+      if (this.ws !== null && this.ws !== ws) return;
+      this.handleClose((ev as { code?: number } | null)?.code === 1012 ? 'restart' : 'closed');
+    };
   }
 
   private handleMessage(data: string): void {
