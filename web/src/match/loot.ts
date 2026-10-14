@@ -194,9 +194,9 @@ export class Loot {
 
     if (!piece) return null;
     if (piece.mon) {
-      // speciesName only knows the species the bots deal from (party.ts's POOL) and
-      // answers with the number for anything else. A number in a ticker line is noise
-      // to a player, so an unknown one is just a Pokemon.
+      // speciesName answers with the number for an id the ROM has no name for. A
+      // number in a ticker line is noise to a player, so an unknown one is just a
+      // Pokemon.
       const name = speciesName(piece.mon.species);
       return /^\d+$/.test(name) ? 'A POKéMON' : `A ${name}`;
     }

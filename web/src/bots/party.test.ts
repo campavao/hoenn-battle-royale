@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dealParty, evolutionOf, grownUp, LADDER, POOL, rungForPhase, speciesAt, speciesName } from './party';
 import speciesH from '../../../include/constants/species.h?raw';
+import { packGen3String } from '../text/gen3';
 import { packSlot, unpackSlot, reassembleSlots } from '../net/slots';
 import type { PartyMsg } from '../net/wire';
 
@@ -117,5 +118,33 @@ describe('the fallback pool', () => {
 
   it('names a dealt mon by its species', () => {
     for (const row of POOL) expect(speciesName(row.species)).toBe(row.name);
+  });
+});
+
+describe('species names', () => {
+  it('names a mon the pool does not deal, as the ROM spells it', () => {
+    expect(speciesName(305)).toBe('SWELLOW'); // TAILLOW grown up
+    expect(speciesName(278)).toBe('GROVYLE');
+    expect(speciesName(29)).toBe('NIDORAN\u2640');
+  });
+
+  it('spells every name in bytes the wire can carry', () => {
+    // A bot's nickname goes out through encodeMon; NIDORAN♀, NIDORAN♂ and FARFETCH'D
+    // are the three with a character past the letters.
+    for (let species = 1; species <= 411; species++) {
+      expect(() => packGen3String(speciesName(species), 10), speciesName(species)).not.toThrow();
+    }
+  });
+
+  it('numbers only an id with no name', () => {
+    expect(speciesName(252)).toBe('252'); // the unused slots between CELEBI and TREECKO
+  });
+
+  it('never deals a bot a numbered mon, up every rung', () => {
+    for (let phase = 0; phase <= LADDER.length; phase++) {
+      for (let seat = 0; seat < 16; seat++) {
+        for (const mon of dealParty(1234, seat, phase)) expect(mon.nickname, `phase ${phase} seat ${seat}`).not.toMatch(/^\d+$/);
+      }
+    }
   });
 });
