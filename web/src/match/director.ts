@@ -595,7 +595,12 @@ export class Director {
       if (open.length > 0) break;
     }
     if (open.length === 0 || this.rng() >= STORY_CHANCE) return false;
-    const story = open[pickIndex(this.rng, open.length)];
+    // The islands are one pick between them (PR #36 review): five boat rows in Lilycove's
+    // section would weight it five to one against any other place, and bots never sail.
+    const land = open.filter((s) => !s.boat);
+    const boats = open.filter((s) => s.boat);
+    const i = pickIndex(this.rng, land.length + (boats.length > 0 ? 1 : 0));
+    const story = i < land.length ? land[i] : boats[pickIndex(this.rng, boats.length)];
     const map = this.markTold(story);
     for (const msg of storyDrop(this.rng, story, {
       n,

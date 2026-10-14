@@ -45,11 +45,35 @@ wait 500
 shot island
 expect u8 *gSaveBlock1Ptr+4 26
 expect u8 *gSaveBlock1Ptr+5 9
-# Seat 3 takes the legendary: the ferry stops offering the island (its sailor still
-# sails you home; SouthernIsland_Exterior asks no flag).
+# Seat 3 takes the legendary: the ferry stops offering the island. Its sailor still
+# sails you home, since SouthernIsland_Exterior asks no flag (below).
 pokebytes gDecompressionBuffer 03 00 B0 00 00 00 00 00
 mailsend gBrMailbox 10 gDecompressionBuffer 8
 wait 10
 expect u8 gBrEvents+17 1
+# ...and he stands (br_strip.c, sFerrymen): A at him, YES, and we are back at Lilycove's
+# harbour (PR #36 review: the strip took him, and BIRTH, FARAWAY and NAVEL ROCK let
+# neither FLY nor an ESCAPE ROPE out).
+expect u16 *gSaveBlock1Ptr+0 13
+expect u16 *gSaveBlock1Ptr+2 22
+# He is on (13,23), below us.
+tap DOWN
+wait 20
+shot sailor
+tap A
+wait 60
+tap A
+wait 30
+shot yes
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 500
+shot home
+expect u8 *gSaveBlock1Ptr+4 13
+expect u8 *gSaveBlock1Ptr+5 10
+# Back at Lilycove the ferry has dropped the island (br_story.c, Ferry, runs only here).
 expect u8 *gSaveBlock1Ptr+0x1386 0
 say story ferry ok

@@ -175,12 +175,18 @@ u8 BrStory_Dock(u8 mapsec)
 }
 
 // The ferry sails to an island while an event that dropped there still has its
-// legendary, and not before or after.
+// legendary, and not before or after. Only Lilycove's harbour asks (its attendant's
+// menu); the sailors home ask nothing. Set there and nowhere else, so the rest of the
+// map pays nothing a frame for it (PR #36 review: a frame's work moves every driver
+// that leans on the VBlank's RNG, as national-dex does).
 static void Ferry(void)
 {
     u8 i, n;
     bool8 on;
 
+    if (gSaveBlock1Ptr->location.mapGroup != MAP_GROUP(MAP_LILYCOVE_CITY_HARBOR)
+     || gSaveBlock1Ptr->location.mapNum != MAP_NUM(MAP_LILYCOVE_CITY_HARBOR))
+        return;
     for (i = 0; i < ARRAY_COUNT(sIslands); i++)
     {
         on = FALSE;
