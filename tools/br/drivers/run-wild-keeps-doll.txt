@@ -1,0 +1,44 @@
+# run-wild-keeps-doll: RUN from a wild POKeMON is pret's own roll, so it leaves the POKe
+# DOLL in the bag. It used to be spent at selection in every battle (BrBattle_ChooseRun)
+# while BrBattle_HandleRun only counts it against a trainer: a wild RUN cost a doll and
+# bought nothing. The phone's battle menu says GET AWAY there (ui/battlemenu.ts).
+#
+# The wild battle is patch-battle.txt's: ROUTE 102 under match seed 4, two steps west.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 30
+tap LEFT
+wait 4
+tap LEFT
+wait 250
+tap LEFT
+wait 250
+expect u16 gBattleTypeFlags 4
+# through the intro to the action menu
+wait 300
+tap B
+wait 300
+tap B
+wait 300
+shot menu
+expect u8 gBrBattle+8 1
+# a POKe DOLL in the bag: zero the save encryption key, then POKe DOLL (item 0x50) x1 in slot 0
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x560 0x50
+poke u16 *gSaveBlock1Ptr+0x562 1
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+shot run
+tap A
+wait 120
+shot ran
+# the doll is still there, and the RUN was not counted as a trainer's
+expect u16 *gSaveBlock1Ptr+0x560 0x50
+expect u16 *gSaveBlock1Ptr+0x562 1
+expect u16 gBrBattle+4 0
+say run wild keeps doll ok

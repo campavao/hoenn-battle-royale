@@ -16,6 +16,7 @@
 //   expect u8|u16|u32 <addr> <value>     assert; <addr> is 0xHEX or sym or sym+0xOFF
 //   expectge u8|u16|u32 <addr> <value>   assert got >= value
 //   <addr> may also be *sym+off: dereference the u32 at sym, then add off
+//   or *(sym+off)+off2: dereference the u32 at sym+off, then add off2
 //   dump <addr> <len>           hex dump
 //   copy <dst> <src> <len>      copy bytes within RAM
 //   poke u8|u16|u32 <addr> <value>
@@ -88,6 +89,19 @@ static void loadSymbols(const char* path) {
 
 static int parseAddr(const char* s, uint32_t* out) {
     // `*sym+off` reads the u32 pointer at sym first (gSaveBlock1Ptr etc. are pointers).
+    // `*(sym+off)+off2` reads the pointer at sym+off: a field of a struct of pointers
+    // (gBrStartMenu's).
+    if (s[0] == '*' && s[1] == '(') {
+        uint32_t p;
+        const char* close = strchr(s, ')');
+        char inner[64];
+        size_t n = close ? (size_t)(close - s - 2) : 0;
+        if (!close || n >= sizeof inner) return 0;
+        memcpy(inner, s + 2, n); inner[n] = 0;
+        if (!parseAddr(inner, &p)) return 0;
+        *out = core->busRead32(core, p) + (close[1] == '+' ? (uint32_t)strtoul(close + 2, NULL, 0) : 0);
+        return 1;
+    }
     if (s[0] == '*') {
         uint32_t p;
         const char* plus = strchr(s, '+');

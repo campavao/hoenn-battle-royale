@@ -1,0 +1,24 @@
+# hud-no-corner: gBrHud.noCorner (PAGE WRITES) takes the corner box off the map while a
+# phone's page draws the clock, the count and the place itself (web/src/ui/phonehud.ts),
+# and putting it back to 0 brings the corner back whole.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrHud 7
+poke u16 gBrHud+0x2 95
+wait 30
+shot corner
+# the corner is a window, and on the map
+expect u8 gBrHud+0x9 1
+poke u8 gBrHud+0x17A 1
+wait 10
+shot gone
+# no window, nothing put
+expect u8 gBrHud+0x6 255
+expect u8 gBrHud+0x9 0
+poke u8 gBrHud+0x17A 0
+wait 10
+shot back
+expect u8 gBrHud+0x9 1

@@ -10,6 +10,7 @@ export const HUD = {
   OFF_FLASH_FOG: 0x01, // u8: write 1, the ROM clears it after a 60-frame flash
   OFF_CLOCK_SECS: 0x02, // u16: seconds; the ROM counts it down once per 60 frames
   OFF_EYES: 0x0f, // u8: how many spectators are watching this trainer
+  OFF_NO_CORNER: 0x17a, // u8: 1 while the page draws the corner's lines itself (a phone)
 } as const;
 
 /** `gBrHud.left` -- alive count, clamped to a byte (BR_MAX_SEATS is well under 256). */
@@ -27,6 +28,12 @@ export function writeHudClockSecs(ram: RamAccess, hudBase: number, secs: number)
  *  so the page's own watcher tally is the only place this number exists. */
 export function writeHudEyes(ram: RamAccess, hudBase: number, watchers: number): void {
   ram.write(hudBase + HUD.OFF_EYES, Math.max(0, Math.min(255, watchers)), 8);
+}
+
+/** `gBrHud.noCorner` -- 1 takes the ROM's corner box off the map, while a phone's page
+ *  draws the clock, the count and the place over the field itself (ui/phonehud.ts). */
+export function writeHudNoCorner(ram: RamAccess, hudBase: number, off: boolean): void {
+  ram.write(hudBase + HUD.OFF_NO_CORNER, off ? 1 : 0, 8);
 }
 
 // There is deliberately no flashHudFog() here any more (POK-224). The FOG! flash is

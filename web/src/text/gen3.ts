@@ -127,6 +127,37 @@ export function encodeGen3(text: string, maxLen = 255): Uint8Array {
 /** Decodes Gen 3 charmap bytes back to a string. Throws on a byte outside the wire's
  *  subset -- a stray 0x00 padding byte included -- so a caller trims to the declared
  *  length before calling this rather than relying on decode to stop early. */
+/** What the ROM's own text has past the wire's subset: the é of POKéMON, its quotes and
+ *  ×. For drawing and reading the ROM's strings (ui/emerald.ts, battle/movebook.ts)
+ *  only; a name on the wire stays the subset above. */
+const GEN3_DISPLAY: ReadonlyMap<string, number> = new Map<string, number>([
+  ['é', 0x1b],
+  ['“', 0xb1],
+  ['”', 0xb2],
+  ['‘', 0xb3],
+  ['’', 0xb4],
+  ["'", 0xb4],
+  ['×', 0xb9],
+]);
+const GEN3_DISPLAY_REVERSE: ReadonlyMap<number, string> = new Map(Array.from(GEN3_DISPLAY.entries(), ([ch, byte]) => [byte, ch] as const));
+
+/** A character's byte for the ROM's font, the wire's subset or the display's; undefined
+ *  for one the font has no glyph for here. */
+export function displayByte(ch: string): number | undefined {
+  return GEN3_CHARMAP.get(ch) ?? GEN3_DISPLAY.get(ch);
+}
+
+/** The ROM's own text, as decodeGen3 but with the display's characters too. */
+export function decodeGen3Display(bytes: Uint8Array): string {
+  let out = '';
+  for (const byte of bytes) {
+    const ch = GEN3_REVERSE.get(byte) ?? GEN3_DISPLAY_REVERSE.get(byte);
+    if (ch === undefined) throw new Gen3TextError(`byte 0x${byte.toString(16).padStart(2, '0')} is not in the Gen 3 charmap`);
+    out += ch;
+  }
+  return out;
+}
+
 export function decodeGen3(bytes: Uint8Array): string {
   let out = '';
   for (const byte of bytes) {

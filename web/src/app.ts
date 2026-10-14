@@ -14,7 +14,10 @@ import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
 import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
-import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeMySeat, writeMySkin } from './net/hud';
+import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
+import { PhoneHud, readHudView, type HudWorld } from './ui/phonehud';
+import { BattleMenu, readBattleView } from './ui/battlemenu';
+import { PadPrefsControl } from './ui/padprefs';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { nameBstart, romReplaying, Spectate } from './match/spectate';
 import type { Results } from './match/results';
@@ -84,9 +87,9 @@ import {
 } from './match/room';
 import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
-import { TouchLayer } from './touch';
+import { START_BR_MAP, START_POKEMON, TouchLayer } from './touch';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, stickKeys, type AxisSense, type StickMap } from './pad';
-import { FieldView, MAIN_CALLBACK2, askBand, measureLayout, romBand, type FieldLayout, type FieldPicture } from './field';
+import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, type FieldLayout, type FieldPicture } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
 import {
@@ -103,7 +106,7 @@ import {
   SKINS,
 } from './match/career';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
-import { HOENN } from './bots/hoenn';
+import { HOENN, loadHoenn } from './bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './match/landing';
 import { cardFor } from './match/card';
 import { type MatchRecord, recordLines } from './match/record';
@@ -244,7 +247,8 @@ function showGame(): void {
 /** The menu button: the sheet over the game, or back to the game. */
 function openSheet(open: boolean): void {
   sheetOpen = open;
-  ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', String(open));
+  // The pad's, and the dock's on an upright phone (ui/phonehud.ts).
+  for (const b of document.querySelectorAll('#menu-btn, #hud-menu')) b.setAttribute('aria-expanded', String(open));
   showGame();
 }
 
@@ -263,9 +267,12 @@ function setInMatch(on: boolean): void {
   if (on) placeKeys?.();
   if (!on && sheetOpen) {
     sheetOpen = false;
-    ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', 'false');
+    for (const b of document.querySelectorAll('#menu-btn, #hud-menu')) b.setAttribute('aria-expanded', 'false');
   }
 }
+
+/** A phone's movable, fadable, hideable stick and A/B (wirePhoneHud). */
+let padPrefs: PadPrefsControl | null = null;
 
 /** What the sheet's settings say and do: wireSettings, wireRemap and wireGamepad each
  *  fill in their own. */
@@ -336,6 +343,20 @@ function makeSheet(part: () => SheetPart): DrawnScreen {
     onRemap: () => settings.remap(),
     onResetPad: () => settings.resetPad(),
     onForget: () => settings.forget(),
+    pad:
+      padPrefs && !desktop()
+        ? {
+            hidden: padPrefs.hidden,
+            onMove: () => {
+              openSheet(false);
+              padPrefs?.edit();
+            },
+            onToggle: () => {
+              padPrefs?.toggleHidden();
+              redrawSheet();
+            },
+          }
+        : undefined,
   }));
 }
 
@@ -1084,12 +1105,19 @@ function wireDpad(el: HTMLElement, emu: Emulator): void {
     }
     active = next;
     el.classList.toggle('active', next.size > 0);
+    // The phone's round stick shows its nub under the thumb, a little way out at most.
+    const m = Math.hypot(dx, dy);
+    const k = m > 0.6 ? 0.6 / m : 1;
+    el.style.setProperty('--nub-x', `${(dx * k * rect.width) / 2}px`);
+    el.style.setProperty('--nub-y', `${(dy * k * rect.height) / 2}px`);
   };
 
   const clear = () => {
     for (const key of active) emu.release(key);
     active = new Set();
     el.classList.remove('active');
+    el.style.removeProperty('--nub-x');
+    el.style.removeProperty('--nub-y');
   };
 
   el.addEventListener('pointerdown', (e) => {
@@ -3535,13 +3563,92 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
   // Tapping the map (touch.ts). Needs the symbol table: without it there is no reading
   // where we stand or which menu is up, and a tap does nothing.
   if (symbols) {
-    new TouchLayer({
+    const touch = new TouchLayer({
       emu,
       canvas: $('#canvas') as HTMLCanvasElement,
       surface: $('#screen-wrap') as HTMLElement,
       symbols,
-    }).attach();
+      rom,
+    });
+    touch.attach();
+    wirePhoneHud(emu, symbols, touch, rom);
   }
+}
+
+/** The phone's HUD and dock (ui/phonehud.ts), its battle menu (ui/battlemenu.ts) and its
+ *  movable pad (ui/padprefs.ts). The HUD reads the ROM every frame while it is on the
+ *  glass, and while it is the ROM's corner box stays off (gBrHud.noCorner): the two
+ *  would say the same thing twice. */
+function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchLayer, rom: Uint8Array | null): void {
+  const top = $('#hud') as HTMLElement;
+  const pad = $('#pad') as HTMLElement;
+  const root = $('#screen-playing') as HTMLElement;
+  const hud = new PhoneHud({
+    top,
+    dock: $('#dock') as HTMLElement,
+    onParty: () => touch.openStartRow(START_POKEMON),
+    onMap: () => touch.openStartRow(START_BR_MAP),
+    onStart: () => {
+      touch.cancel();
+      emu.press('start');
+      setTimeout(() => emu.release('start'), 80);
+    },
+    onUse: (item) => touch.useOnField(item),
+  });
+  ($('#hud-menu') as HTMLButtonElement).addEventListener('click', () => openSheet(!sheetOpen));
+  const menuRoot = $('#battle-menu') as HTMLElement;
+  const tables = rom ? { bytes: rom, sym: (n: string) => symbols.get(n) } : null;
+  const battle = new BattleMenu({
+    root: menuRoot,
+    rom: tables,
+    choose: (which, slot, move) => touch.chooseBattle(which, slot, move),
+    back: () => touch.tapKey('b'),
+    onShown: (on) => document.body.classList.toggle('battle-menu', on),
+  });
+  const wrap = $('#screen-wrap') as HTMLElement;
+  const scale = () => {
+    const cs = getComputedStyle(pad);
+    const w = pad.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0');
+    return w > 0 ? Math.min(3, w / 240) : 1.5;
+  };
+  const resize = () => {
+    const s = scale();
+    root.style.setProperty('--s', String(s));
+    hud.setScale(s);
+    battle.setScale(s);
+    // Right under the picture, where field.ts put it.
+    const lay = measureLayout(wrap, pad);
+    menuRoot.style.top = `${Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s)}px`;
+  };
+  new ResizeObserver(resize).observe(pad);
+  new ResizeObserver(resize).observe(wrap);
+  resize();
+  padPrefs = new PadPrefsControl({
+    root,
+    body: document.body,
+    stick: $('#dpad-surface') as HTMLElement,
+    ab: document.querySelector('#pad .ab') as HTMLElement,
+    bar: $('#pad-edit') as HTMLElement,
+    scale,
+  });
+  const hudBase = symbols.get('gBrHud');
+  let world: HudWorld | null = null;
+  void loadHoenn().then((w) => {
+    world = { map: (g, n) => w.byRef.get(`${g}:${n}`), cell: (id, x, y) => w.world.cell(id, x, y) };
+  });
+  // index.html's own tests for #hud: upright, and not a computer. Off those, no read of
+  // the layout at all; on them, the box itself says (a match, the game on stage).
+  const upright = typeof matchMedia === 'function' ? matchMedia('not all and (orientation: landscape) and (max-height: 520px)') : null;
+  const computer = typeof matchMedia === 'function' ? matchMedia(DESKTOP) : null;
+  emu.onFrame(() => {
+    // On the glass: a match, upright, on a touch screen (index.html shows #hud then).
+    const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
+    if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown);
+    battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables) : null);
+    if (!shown) return;
+    const view = readHudView(emu, (n) => symbols.get(n), world);
+    if (view) hud.update(view);
+  });
 }
 
 function wireDrawer(): void {

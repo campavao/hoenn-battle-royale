@@ -370,6 +370,24 @@ export interface SheetModel {
   onRemap(): void;
   onResetPad(): void;
   onForget(): void;
+  /** A phone's see-through stick and A/B (ui/padprefs.ts): MOVE PAD to drag and fade
+   *  them, HIDE PAD to walk by tapping alone. Absent where there is no touch pad. */
+  pad?: { hidden: boolean; onMove(): void; onToggle(): void };
+}
+
+/** The sheet's settings, MOVE PAD and HIDE PAD among them on a phone. */
+function settingsOf(m: SheetModel): { label: string; id: string; onPress: () => void }[] {
+  const rows = [
+    { label: m.muted ? 'UNMUTE' : 'MUTE', id: 'mute', onPress: m.onMute },
+    { label: m.remapping ? 'CANCEL REMAP' : 'REMAP PAD', id: 'remap', onPress: m.onRemap },
+    { label: 'RESET PAD', id: 'remap-reset', onPress: m.onResetPad },
+    { label: 'FORGET ROM', id: 'forget-rom', onPress: m.onForget },
+  ];
+  if (m.pad) {
+    rows.push({ label: 'MOVE PAD', id: 'pad-move', onPress: m.pad.onMove });
+    rows.push({ label: m.pad.hidden ? 'SHOW PAD' : 'HIDE PAD', id: 'pad-hide', onPress: m.pad.onToggle });
+  }
+  return rows;
 }
 
 /** The seats the sheet has room for, you first and then whoever is still in: all of them
@@ -405,7 +423,7 @@ function sheetBelow(m: SheetModel): number {
     (m.note ? ROW_H + 2 : 0) +
     (m.watch ? ROW_H + 28 : 0) +
     (sheetActions(m).length > 0 ? 28 : 0) +
-    2 * 20 + 16 + 4 + // the settings
+    Math.ceil(settingsOf(m).length / 2) * 20 + 16 + 4 + // the settings
     (m.remapLine ? ROW_H : 0) +
     m.help.length * ROW_H +
     versionLines(m.version).length * ROW_H
@@ -516,17 +534,7 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
         y += 28;
       }
 
-      const settings = paintOptions(
-        c,
-        y,
-        [
-          { label: m.muted ? 'UNMUTE' : 'MUTE', id: 'mute', onPress: m.onMute },
-          { label: m.remapping ? 'CANCEL REMAP' : 'REMAP PAD', id: 'remap', onPress: m.onRemap },
-          { label: 'RESET PAD', id: 'remap-reset', onPress: m.onResetPad },
-          { label: 'FORGET ROM', id: 'forget-rom', onPress: m.onForget },
-        ],
-        'settings',
-      );
+      const settings = paintOptions(c, y, settingsOf(m), 'settings');
       widgets.push(...settings.widgets);
       y = settings.bottom + 4;
 

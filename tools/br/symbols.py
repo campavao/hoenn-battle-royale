@@ -29,6 +29,9 @@ ENGINE_SYMBOLS = [
     "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleBufferB", "gBattleMons",
     "gBattlerByTurnOrder", "gCurrentTurnActionNumber", "gBagPockets",
     "gActionSelectionCursor", "gMoveSelectionCursor",
+    # Which battler is the local player: 1 on the challenged side of a link battle
+    # (web/src/touch.ts localBattler).
+    "gBattlerPositions",
     "gAnimScriptActive", "gAnimVisualTaskCount", "gAnimSoundTaskCount", "gAnimScriptCallback", "gBattleSpritesDataPtr", "gBattleAnimAttacker", "gBattleAnimTarget", "gBattleScripting", "gBattlescriptCurrInstr", "gCurrentMove",
     # Scratch a driver can build a wire message in before mailsend pushes it.
     "gDecompressionBuffer", "gBrZone",
@@ -50,6 +53,13 @@ ENGINE_SYMBOLS = [
     "gRfuLinkStatus",
     # The battle's message box, as the last line was expanded into it (pvp-items.txt).
     "gDisplayedStringBattle",
+    # The start menu's input handler is gMenuCallback while the menu takes keys: the
+    # page's PARTY and MAP buttons wait for it before they walk the cursor (br_menu.h).
+    "gMenuCallback",
+    # The phone's battle menu reads what a move is out of the ROM's own tables
+    # (web/src/battle/movebook.ts): its stats, name, description, type name, and how
+    # well each type lands on each.
+    "gBattleMoves", "gMoveNames", "gMoveDescriptionPointers", "gTypeNames", "gTypeEffectiveness",
     # The fog map's prompt, "FOG: <place>", is built here (br_map.c, ring-map.txt).
     "gStringVar4",
     # What a bot's AI was handed out of its bag, and what it chose to do with its turn

@@ -886,6 +886,11 @@ void BrHud_Hold(const u8 *text)
     gBrHud.dirty |= BR_HUD_DIRTY_TICKER;
 }
 
+bool8 BrHud_PageSigns(void)
+{
+    return gBrHud.noCorner != 0;
+}
+
 void BrHud_Release(void)
 {
     if (!gBrHud.held)
@@ -943,7 +948,18 @@ void BrHud_Tick(void)
     BrHud_Yield();
 
     live = 0;
-    h->winCorner = Ensure(h->winCorner, &sCornerTemplate);
+    // A phone's page draws the clock, the count and the place itself (web/src/ui/phonehud.ts),
+    // and the corner would only say them again over the map. Off, its cells come off too.
+    if (h->noCorner)
+    {
+        if (h->winCorner != WINDOW_NONE)
+            Present(h->winCorner, &sCornerTemplate, BR_HUD_SHOWN_CORNER, FALSE, FALSE);
+        Drop(&h->winCorner, &sCornerTemplate);
+    }
+    else
+    {
+        h->winCorner = Ensure(h->winCorner, &sCornerTemplate);
+    }
     h->winTicker = Ensure(h->winTicker, &sTickerTemplate);
     if (h->winCorner != WINDOW_NONE)
         live++;

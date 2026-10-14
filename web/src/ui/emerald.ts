@@ -9,7 +9,7 @@
 // plain functions so ui.test.ts can pin them without a canvas.
 import uiData from '../data/ui.json';
 import spritesData from '../data/sprites.json';
-import { encodeGen3 } from '../text/gen3';
+import { displayByte } from '../text/gen3';
 
 export const CELL = 16;
 export const TILE = 8;
@@ -45,13 +45,7 @@ export const STAGE_FILL = '#101418';
 /** A charmap byte for each character; an unknown character is a space. */
 export function glyphIds(text: string): number[] {
   const out: number[] = [];
-  for (const ch of text) {
-    try {
-      out.push(encodeGen3(ch)[0] ?? 0);
-    } catch {
-      out.push(0);
-    }
-  }
+  for (const ch of text) out.push(displayByte(ch) ?? 0);
   return out;
 }
 
@@ -159,6 +153,39 @@ function tintFont(mask: HTMLImageElement, color: TextColor): HTMLCanvasElement {
     d[i + 2] = col[2];
   }
   ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+let maskLoad: Promise<HTMLImageElement> | null = null;
+const loose = new Map<TextColor, HTMLCanvasElement>();
+
+/** One line of text as its own little canvas, `measure(text)` x 14 GBA pixels, for a
+ *  page control that is a DOM element rather than part of one big canvas (the phone's
+ *  HUD, ui/phonehud.ts). Drawn when the font lands, so the first one may be blank for a
+ *  frame. `scale` sizes it in CSS pixels. */
+export function textImage(text: string, color: TextColor = TEXT_DARK, scale = 1): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  const w = Math.max(1, measure(text));
+  c.width = w;
+  c.height = 14;
+  c.style.width = `${w * scale}px`;
+  c.style.height = `${14 * scale}px`;
+  c.style.imageRendering = 'pixelated';
+  maskLoad ??= loadImage('/ui/font-normal.png');
+  void maskLoad.then((mask) => {
+    let font = loose.get(color);
+    if (!font) {
+      font = tintFont(mask, color);
+      loose.set(color, font);
+    }
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    let cx = 0;
+    for (const id of glyphIds(text)) {
+      ctx.drawImage(font, (id % FONT.cols) * CELL, Math.floor(id / FONT.cols) * CELL, CELL, 14, cx, 0, CELL, 14);
+      cx += FONT.widths[id] ?? 6;
+    }
+  });
   return c;
 }
 
@@ -285,6 +312,13 @@ export class EmeraldCanvas {
     this.ctx.drawImage(img, Math.min(frame, info.frames - 1) * info.w, 0, info.w, info.h, x + this.origin, y, info.w, info.h);
     this.ctx.globalAlpha = 1;
     return true;
+  }
+
+  /** Part of a picture (the sign, an item icon) at (x, y), in GBA pixels. Nothing while
+   *  it is still loading; the caller draws again on its load. */
+  drawPicture(img: HTMLImageElement | null, sx: number, sy: number, w: number, h: number, x: number, y: number): void {
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+    this.ctx.drawImage(img, sx, sy, w, h, x + this.origin, y, w, h);
   }
 
   /** The cursor Emerald's menus use: a small right-pointing triangle. */

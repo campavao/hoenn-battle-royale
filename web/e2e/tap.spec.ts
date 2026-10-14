@@ -106,12 +106,15 @@ test('a tap on a tile walks the trainer to it', async ({ browser }, testInfo) =>
     expect({ x: after.x, y: after.y }).toEqual(want);
 
     // Meanwhile the chrome: in a match, the header and the room are off the glass and
-    // the menu button is on it; it opens the sheet, drawn over the game (POK-320), which
-    // has the settings in it and puts itself away again.
+    // the menu button is on it -- upright, the dock's (ui/phonehud.ts), as the pad's row
+    // is off; it opens the sheet, drawn over the game (POK-320), which has the settings
+    // in it and puts itself away again.
     await expect(page.locator('header')).toBeHidden();
     await expect(page.locator('#drawer')).toBeHidden();
-    await expect(page.locator('#menu-btn')).toBeVisible();
-    await page.locator('#menu-btn').tap();
+    await expect(page.locator('#menu-btn')).toBeHidden();
+    await expect(page.locator('#hud-menu')).toBeVisible();
+    await page.locator('#hud-menu').tap();
+    await expect(page.locator('#hud-menu')).toHaveAttribute('aria-expanded', 'true');
     await expect(page.locator('#drawer')).toBeVisible();
     await expect(page.locator('#mute')).toBeVisible();
     await expect(page.locator('#match-leave'), 'solo always has its way out').toBeVisible();

@@ -49,6 +49,7 @@
 #if BR
 #include "br/br_map.h"
 #include "br/br_match.h"
+#include "br/br_menu.h"
 #endif
 
 // Menu actions
@@ -123,6 +124,9 @@ static bool8 BattlePyramidRetireStartCallback(void);
 static bool8 BattlePyramidRetireReturnCallback(void);
 static bool8 BattlePyramidRetireCallback(void);
 static bool8 HandleStartMenuInput(void);
+#if BR
+const struct BrStartMenu gBrStartMenu = { &sStartMenuCursorPos, &sNumStartMenuActions, sCurrentStartMenuActions, HandleStartMenuInput };
+#endif
 
 // Save dialog callbacks
 static u8 SaveConfirmSaveCallback(void);

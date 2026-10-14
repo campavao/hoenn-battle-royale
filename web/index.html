@@ -181,6 +181,117 @@
       .sys { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: center; }
       .sys .btn { width: 96px; height: 36px; font-size: 12px; }
 
+      /* A phone's HUD and dock (ui/phonehud.ts, mockup v2): Emerald windows drawn at the
+         field's scale, --s CSS pixels to a GBA pixel, set by phonehud from the pad's
+         width. In a match on the page's upright layout, which a tablet keeps on its side too: a
+         phone on its side (the short landscape below) and a computer keep the old row.
+         The stick and A/B go see-through, and can be moved, faded and hidden (--stick-*, --ab-*, --pad-alpha, body.pad-hidden). */
+      #hud, .dock { display: none; }
+      .pad-edit[hidden] { display: none; }
+      #hud canvas, .dock canvas, .pad-edit canvas { display: block; image-rendering: pixelated; }
+      @media not all and (orientation: landscape) and (max-height: 520px) {
+        body.in-match #hud { display: block; position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+        body.in-match #hud.off-field > * { visibility: hidden; }
+        .hud-sign { position: absolute; left: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 4px + env(safe-area-inset-top)); }
+        .hud-fog { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 4px + env(safe-area-inset-top)); }
+        body.in-match #pad { padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); row-gap: 0; }
+        body.in-match #pad .sys { display: none; }
+        body.in-match .dock {
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: auto auto auto;
+          grid-template-rows: auto auto;
+          justify-content: center;
+          gap: calc(var(--s, 1.5) * 4px);
+          padding: calc(var(--s, 1.5) * 4px) 0;
+          pointer-events: auto;
+        }
+        .hud-btn { padding: 0; margin: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        .hud-btn:active:not([aria-disabled="true"]) { filter: brightness(0.86); }
+        .hud-btn[aria-disabled="true"] { cursor: not-allowed; }
+        #hud-party { grid-area: 1 / 1; }
+        #hud-map { grid-area: 2 / 1; }
+        #hud-start { grid-area: 1 / 3; }
+        #hud-ctx { grid-area: 2 / 3; }
+        .hud-menu {
+          grid-area: 1 / 2 / 3 / 3;
+          align-self: center;
+          width: calc(var(--s, 1.5) * 32px);
+          height: calc(var(--s, 1.5) * 32px);
+          border-radius: 50%;
+          border: calc(var(--s, 1.5) * 2px) solid rgba(255, 255, 255, 0.55);
+          background: rgba(74, 74, 106, 0.75);
+          color: #fff;
+          font: calc(var(--s, 1.5) * 14px) / 1 system-ui, sans-serif;
+          cursor: pointer;
+        }
+        body.in-match #pad .dpad-surface {
+          margin: 0 0 12px 16px;
+          border-radius: 50%;
+          border: 2px solid rgba(255, 255, 255, 0.55);
+          background: rgba(74, 74, 106, 0.35);
+          transform: translate(var(--stick-dx, 0px), var(--stick-dy, 0px));
+          opacity: var(--pad-alpha, 0.6);
+        }
+        body.in-match #pad .dpad-surface::after { display: none; }
+        body.in-match #pad .dpad-surface::before {
+          left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px;
+          border-radius: 50%; background: rgba(255, 255, 255, 0.45); border: 2px solid rgba(255, 255, 255, 0.7);
+          transform: translate(var(--nub-x, 0px), var(--nub-y, 0px)); transition: transform 60ms;
+        }
+        body.in-match #pad .dpad-surface.active::before { background: rgba(255, 255, 255, 0.75); }
+        body.in-match #pad .ab {
+          margin: 0 16px 12px 0;
+          transform: translate(var(--ab-dx, 0px), var(--ab-dy, 0px));
+          opacity: var(--pad-alpha, 0.6);
+        }
+        body.in-match #pad .ab .btn.round { border: 2px solid rgba(255, 255, 255, 0.55); color: #fff; }
+        body.in-match #pad .ab .btn.round:not(.down):not(:active) { background: rgba(74, 74, 106, 0.35); }
+        body.pad-hidden.in-match #pad .dpad-surface, body.pad-hidden.in-match #pad .ab { visibility: hidden; }
+        body.pad-editing #pad .dpad-surface, body.pad-editing #pad .ab { outline: 2px dashed #f8d070; outline-offset: 4px; cursor: grab; visibility: visible; }
+        .pad-edit {
+          position: fixed;
+          left: 50%;
+          top: calc(var(--s, 1.5) * 52px + env(safe-area-inset-top));
+          transform: translateX(-50%);
+          z-index: 5;
+          pointer-events: auto;
+          border-style: solid;
+          border-width: calc(var(--s, 1.5) * 8px);
+          border-image: url(/ui/frame-1.png) 8 / calc(var(--s, 1.5) * 8px) round;
+          background: #fff;
+          background-clip: padding-box;
+          image-rendering: pixelated;
+        }
+        .pad-edit-row { display: flex; align-items: center; gap: calc(var(--s, 1.5) * 6px); }
+        /* The battle menu: under the picture, in place of the stick, A/B and the dock,
+           which keep their room (visibility, not display) so the picture stays put. */
+        body.in-match .battle-menu:not([hidden]) {
+          position: absolute; left: 0; right: 0; z-index: 3;
+          display: grid; grid-template-columns: auto auto; justify-content: center;
+          gap: calc(var(--s, 1.5) * 8px); align-content: start;
+        }
+        body.battle-menu.in-match #pad .dpad-surface, body.battle-menu.in-match #pad .ab, body.battle-menu.in-match .dock { visibility: hidden; }
+        .bm-btn { position: relative; padding: 0; margin: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; }
+        .bm-btn canvas { display: block; }
+        .bm-btn:active:not([aria-disabled="true"]) { filter: brightness(0.9); }
+        .bm-btn[aria-disabled="true"] { cursor: not-allowed; }
+        .bm-btn[hidden], .bm-hint[hidden], .bm-info[hidden] { display: none; }
+        /* Held: the window fills pale blue from the left, under its words (multiply). */
+        .bm-hold {
+          position: absolute; inset: calc(var(--s, 1.5) * 3px); background: #b8d8f8; mix-blend-mode: multiply;
+          transform-origin: left; transform: scaleX(0); pointer-events: none;
+        }
+        .bm-back, .bm-hint, .bm-info { grid-column: 1 / -1; }
+        .bm-hint { display: flex; justify-content: center; pointer-events: none; }
+        .bm-info { display: grid; gap: calc(var(--s, 1.5) * 8px); }
+        .bm-info-row { display: flex; gap: calc(var(--s, 1.5) * 8px); }
+        .bm-info-row > .bm-btn { flex: none; }
+        /* Off the field (a battle, the bag, the party) the dock's windows do nothing: they
+           go, the room menu stays. */
+        body.in-match .dock.off-field > .hud-btn { visibility: hidden; }
+      }
+
       /* Landscape on a phone (POK-245): the screen is the scarce thing, so it takes
          the middle and the controls go either side of it rather than under it. The
          @media hook is orientation plus a short viewport -- a landscape laptop is not
@@ -219,6 +330,7 @@
          a tablet with a stylus keeps the pad, a laptop does not. */
       @media (hover: hover) and (pointer: fine) {
         #pad { display: none; }
+        body.in-match #hud { display: none; }
         #screen-playing { padding: 0; }
         /* basis 0, not auto: on `auto` the picture sizes the box and the box then
            overflows the window instead of the picture shrinking to fit it. The game
@@ -316,6 +428,10 @@
           <div id="fps" class="fps" hidden></div>
           <!-- The keyboard's GBA (ui/keys.ts): a desktop match only. -->
           <div id="keys" aria-hidden="true"></div>
+          <!-- A phone's HUD over the field (ui/phonehud.ts): the route sign, the fog window. -->
+          <div id="hud" aria-hidden="true"></div>
+          <!-- A phone's battle menu (ui/battlemenu.ts): under the picture, over the pad. -->
+          <div id="battle-menu" class="battle-menu" hidden></div>
         </div>
         <div id="pad">
           <div id="dpad-surface" class="dpad-surface" aria-label="D-pad"></div>
@@ -331,6 +447,14 @@
             <button id="menu-btn" class="menu-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="stage">&#9776;</button>
             <div class="btn" data-key="start">START</div>
           </div>
+          <!-- A phone's dock (ui/phonehud.ts): PARTY and MAP, START and SELECT as what it
+               does here, and the room menu between them. Upright only; on its side and on
+               a computer the row above stays. -->
+          <div id="dock" class="dock">
+            <button id="hud-menu" class="hud-menu" type="button" aria-label="Menu" aria-expanded="false" aria-controls="stage">&#9776;</button>
+          </div>
+          <!-- Moving the stick and A/B (the sheet's MOVE PAD): drag them, fade them, DONE. -->
+          <div id="pad-edit" class="pad-edit" hidden></div>
         </div>
       </section>
     </div>

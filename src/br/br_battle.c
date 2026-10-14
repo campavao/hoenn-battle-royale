@@ -355,6 +355,10 @@ static bool8 TakeRun(bool8 doll)
 // BR_RUN_ROLL is "asked to leave, had nothing to leave with". Every Mart sells them.
 u8 BrBattle_ChooseRun(void)
 {
+    // A wild POKeMON is pret's own roll (BrBattle_HandleRun leaves it be), so a doll
+    // spent there bought nothing: only a fight with somebody takes one.
+    if (!(gBattleTypeFlags & (BATTLE_TYPE_TRAINER | BATTLE_TYPE_LINK)))
+        return BR_RUN_ROLL;
     if (CheckBagHasItem(ITEM_POKE_DOLL, 1))
     {
         RemoveBagItem(ITEM_POKE_DOLL, 1);

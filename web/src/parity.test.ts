@@ -39,6 +39,10 @@ import ghostsH from '../../include/br/br_ghosts.h?raw';
 import matchH from '../../include/br/br_match.h?raw';
 import engageH from '../../include/br/br_engage.h?raw';
 import lootH from '../../include/br/br_loot.h?raw';
+import menuH from '../../include/br/br_menu.h?raw';
+import levelsH from '../../include/br/br_levels.h?raw';
+import startMenuC from '../../src/start_menu.c?raw';
+import popupC from '../../src/map_name_popup.c?raw';
 import levelsC from '../../src/br/br_levels.c?raw';
 import matchC from '../../src/br/br_match.c?raw';
 import engageC from '../../src/br/br_engage.c?raw';
@@ -59,6 +63,9 @@ import constantsGlobalH from '../../include/constants/global.h?raw';
 import globalH from '../../include/global.h?raw';
 import fieldmapH from '../../include/global.fieldmap.h?raw';
 import mainH from '../../include/main.h?raw';
+import pokemonH from '../../include/pokemon.h?raw';
+import constantsPokemonH from '../../include/constants/pokemon.h?raw';
+import battleMainH from '../../include/battle_main.h?raw';
 import spriteH from '../../include/sprite.h?raw';
 import gbaTypesH from '../../include/gba/types.h?raw';
 import fieldCameraH from '../../include/field_camera.h?raw';
@@ -102,6 +109,12 @@ import { KEY_BIT } from './emu';
 import * as field from './field';
 import * as ghosts from './field-ghosts';
 import * as touch from './touch';
+import * as phone from './ui/phonehud';
+import * as movebook from './battle/movebook';
+import * as bmenu from './ui/battlemenu';
+import battleConstH from '../../include/constants/battle.h?raw';
+import itemH from '../../include/item.h?raw';
+import itemConstH from '../../include/constants/item.h?raw';
 
 // ---- reading C -----------------------------------------------------------------------
 
@@ -501,6 +514,37 @@ describe("the BR structs the page reads at an offset", () => {
     expect(tsConst(appTs, 'BR_PHASE_DONE')).toBe(define(matchH, 'BR_PHASE_DONE'));
   });
 
+  it("the phone's HUD and dock: the start menu's rows, SELECT's item, and what the windows read (ui/phonehud.ts)", () => {
+    const menu = layout(menuH, 'BrStartMenu').at;
+    expect([touch.START_MENU_CURSOR, touch.START_MENU_COUNT, touch.START_MENU_ACTIONS]).toEqual([menu.cursor, menu.count, menu.actions]);
+    // A function pointer layout() does not read; its comment, which BR_OFFSET holds the compiler to.
+    expect(Number(/\/\*\s*(0x[0-9A-F]+)\s*\*\/\s*bool8 \(\*input\)/.exec(menuH)?.[1])).toBe(touch.START_MENU_INPUT);
+    const actions = /enum\s*\{\s*MENU_ACTION_POKEDEX,([\s\S]*?)\};/.exec(startMenuC)![1].replace(/#else[\s\S]*?#endif/, '').replace(/\/\/.*$/gm, '');
+    const rows = ['MENU_ACTION_POKEDEX', ...(actions.match(/MENU_ACTION_\w+/g) ?? [])];
+    expect([touch.START_POKEMON, touch.START_BR_MAP]).toEqual([rows.indexOf('MENU_ACTION_POKEMON'), rows.indexOf('MENU_ACTION_BR_MAP')]);
+    expect(touch.SAVE1_REGISTERED_ITEM).toBe(watch('SaveBlock1', layout(globalH, 'SaveBlock1')).at.registeredItem);
+    expect(phone.AVATAR_FLAGS).toBe(watch('PlayerAvatar', layout(fieldmapH, 'PlayerAvatar')).at.flags);
+    const bit = (n: string) => 1 << Number(new RegExp(`#define\\s+${n}\\s+\\(1 << (\\d+)\\)`).exec(fieldmapH)![1]);
+    expect([phone.AVATAR_MACH_BIKE, phone.AVATAR_ACRO_BIKE, phone.AVATAR_SURFING]).toEqual(
+      ['PLAYER_AVATAR_FLAG_MACH_BIKE', 'PLAYER_AVATAR_FLAG_ACRO_BIKE', 'PLAYER_AVATAR_FLAG_SURFING'].map(bit),
+    );
+    const ring = layout(ringH, 'BrRing').at;
+    expect([phone.RING_ACTIVE, phone.RING_R]).toEqual([ring.active, ring.r]);
+    expect(Number(/\/\*\s*(\d+)\s*\*\/\s*u8 place\[BR_RING_PLACE_MAX \+ 1\]/.exec(ringH)?.[1])).toBe(phone.RING_PLACE);
+    expect(phone.RING_PLACE_MAX).toBe(define(ringH, 'BR_RING_PLACE_MAX'));
+    expect(phone.LEVELS_ROD).toBe(layout(levelsH, 'BrLevels').at.rod);
+    expect(phone.HUD_FOG_FRAMES).toBe(layout(hudH, 'BrHud').at.fogFrames);
+    const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
+    const ids = list.split(',').map((x) => x.trim()).filter(Boolean);
+    expect([phone.ITEM_MACH_BIKE, phone.ITEM_ACRO_BIKE, phone.ITEM_POKE_BALL, phone.ITEM_TOWN_MAP]).toEqual(
+      ['ITEM_MACH_BIKE', 'ITEM_ACRO_BIKE', 'ITEM_POKE_BALL', 'ITEM_TOWN_MAP'].map((n) => ids.indexOf(n)),
+    );
+    // The signs: every section map_name_popup.c gives one, with its theme.
+    const themes = /sMapSectionToThemeId\[[^\]]*\]\s*=\s*\{([\s\S]*?)\};/.exec(popupC)![1];
+    const want = Object.fromEntries([...themes.matchAll(/\[(MAPSEC_\w+)[^\]]*\]\s*=\s*MAPPOPUP_THEME_(\w+)/g)].map((m) => [m[1], m[2].toLowerCase()]));
+    expect(uiData.popupThemes).toEqual(want);
+  });
+
   it('gBrOwnPos and gBrBattle (touch.ts)', () => {
     const own = natural(ghostsH, 'BrOwnPos').at;
     expect([touch.OWN_GROUP, touch.OWN_NUM, touch.OWN_X, touch.OWN_Y, touch.OWN_DIR]).toEqual([own.mapGroup, own.mapNum, own.x, own.y, own.dir]);
@@ -832,6 +876,52 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     const wrote = /sBattleBuffersTransferData\[(\d+) \+ i\] = \*\(\(u8 \*\)\(movePPData\) \+ i\)/.exec(controllersC);
     expect([Number(read?.[1]), Number(wrote?.[1])]).toEqual([touch.CHOOSE_MOVE_MOVES, touch.CHOOSE_MOVE_MOVES]);
     expect(watch('ChooseMoveStruct', natural(controllersH, 'ChooseMoveStruct', [constantsGlobalH])).at.moves).toBe(0);
+  });
+
+  it("what a move is, read out of the ROM's tables (battle/movebook.ts)", () => {
+    const move = watch('BattleMove', natural(pokemonH, 'BattleMove'));
+    expect([movebook.MOVE_POWER, movebook.MOVE_TYPE, movebook.MOVE_ACCURACY, movebook.MOVE_PP]).toEqual([move.at.power, move.at.type, move.at.accuracy, move.at.pp]);
+    // agbcc (and modern, with -mstructure-size-boundary=32) rounds a struct up to a word:
+    // nine bytes of fields, twelve to an entry.
+    expect(movebook.MOVE_SIZE).toBe(Math.ceil(natural(pokemonH, 'BattleMove').size / 4) * 4);
+    expect(pinned('sizeof gBattleMoves[0]'), 'src/br/br_pins.c').toBe(movebook.MOVE_SIZE);
+    expect(movebook.MOVE_NAME_SIZE).toBe(define(constantsGlobalH, 'MOVE_NAME_LENGTH') + 1);
+    expect(movebook.TYPE_NAME_SIZE).toBe(define(constantsGlobalH, 'TYPE_NAME_LENGTH') + 1);
+    expect(movebook.TYPE_MYSTERY).toBe(define(constantsPokemonH, 'TYPE_MYSTERY'));
+    expect([movebook.TYPE_FORESIGHT, movebook.TYPE_ENDTABLE, movebook.TYPE_MUL_NORMAL]).toEqual(
+      ['TYPE_FORESIGHT', 'TYPE_ENDTABLE', 'TYPE_MUL_NORMAL'].map((n) => define(battleMainH, n)),
+    );
+  });
+
+  it("the phone's battle menu: our moves and PP, the foe, the flags and the bag (ui/battlemenu.ts)", () => {
+    const mon = watch('BattlePokemon', natural(pokemonH, 'BattlePokemon', [constantsGlobalH, constantsPokemonH]));
+    expect([bmenu.MON_MOVES, bmenu.MON_TYPES, bmenu.MON_PP, bmenu.MON_NICKNAME, bmenu.MON_PP_BONUSES]).toEqual([
+      mon.at.moves,
+      mon.at.types,
+      mon.at.pp,
+      mon.at.nickname,
+      mon.at.ppBonuses,
+    ]);
+    expect(bmenu.MON_SIZE).toBe(mon.size);
+    expect(pinned('sizeof gBattleMons[0]'), 'src/br/br_pins.c').toBe(bmenu.MON_SIZE);
+    expect(bmenu.NICKNAME_SIZE).toBe(define(constantsGlobalH, 'POKEMON_NAME_LENGTH') + 1);
+    const bit = (n: string) => 1 << Number(new RegExp(`#define\\s+${n}\\s+\\(1 << (\\d+)\\)`).exec(battleConstH)![1]);
+    expect([bmenu.BATTLE_TYPE_LINK, bmenu.BATTLE_TYPE_TRAINER, bmenu.BATTLE_TYPE_SAFARI]).toEqual(
+      ['BATTLE_TYPE_LINK', 'BATTLE_TYPE_TRAINER', 'BATTLE_TYPE_SAFARI'].map(bit),
+    );
+    const pocket = watch('BagPocket', natural(itemH, 'BagPocket'));
+    expect([0, phone.POCKET_CAPACITY]).toEqual([pocket.at.itemSlots, pocket.at.capacity]);
+    expect(pinned('sizeof gBagPockets[0]'), 'src/br/br_pins.c').toBe(phone.POCKET_SIZE);
+    const slot = watch('ItemSlot', natural(globalH, 'ItemSlot'));
+    expect([slot.at.itemId, slot.size]).toEqual([0, phone.SLOT_SIZE]);
+    expect([phone.ITEMS_POCKET, phone.KEYITEMS_POCKET]).toEqual([define(itemConstH, 'ITEMS_POCKET'), define(itemConstH, 'KEYITEMS_POCKET')]);
+    const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
+    expect(bmenu.ITEM_POKE_DOLL).toBe(list.split(',').map((x) => x.trim()).filter(Boolean).indexOf('ITEM_POKE_DOLL'));
+    // Who is local: the battler at PLAYER_LEFT (touch.ts localBattler).
+    const positions = /enum BattlerPosition\s*\{([\s\S]*?)\};/.exec(battleConstH)![1].split(',').map((x) => x.trim()).filter(Boolean);
+    expect(touch.POSITION_PLAYER_LEFT).toBe(positions.indexOf('B_POSITION_PLAYER_LEFT'));
+    // The type icons: one per type, in the summary screen's palettes.
+    expect(uiData.typeIcons).toEqual({ w: 32, h: 16 });
   });
 
   it("the keys are KEYINPUT's bits", () => {

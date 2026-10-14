@@ -21,7 +21,9 @@
 //    handlers a thumb drives, so a slot the game refuses (an empty move) is refused
 //    here too, and nothing is chosen that was not under the cursor.
 //
-// Nothing here writes to the ROM. It presses keys, and it gives up the moment the
+// Nothing here writes to the ROM but the dock's SELECT: the item it uses is registered
+// for the press and the player's own put back after (useOnField). The rest presses
+// keys, and gives up the moment the
 // player presses one themselves: `Emulator.keys()` shows bits this file did not set,
 // and that is the thumb taking over. In a battle the walker stops; a menu open in the
 // field (START, a dialog) shows up as a walk that goes nowhere, and a stall is a stop.
@@ -60,12 +62,48 @@ export const MENU_ACTION = 1;
 export const MENU_MOVE = 2;
 export const MENU_SAFARI = 3;
 /** `struct ChooseMoveStruct` sits at gBattleBufferA[battler][4]; its first field is the
- *  four move ids (include/battle.h). Battler 0 is always the local player on their own
- *  machine, link battles included. */
+ *  four move ids (include/battle.h). The battler is the local player's: 0 on its own
+ *  machine, but 1 on the challenged side of a link battle (battle_controllers.c), so it
+ *  is read off gBattlerPositions (localBattler). */
 export const BUFFER_A_ROW = 0x200;
 export const CHOOSE_MOVE_MOVES = 4;
+/** B_POSITION_PLAYER_LEFT (include/constants/battle.h): where the local player stands. */
+export const POSITION_PLAYER_LEFT = 0;
+const MAX_BATTLERS = 4;
+
+/** The local player's battler: the one gBattlerPositions puts at PLAYER_LEFT. 0 without
+ *  the symbol (a patch from before it was exported) or before the battle sets them. */
+export function localBattler(emu: { read(addr: number, bits: 8 | 16 | 32): number }, at: number | undefined): number {
+  if (at === undefined) return 0;
+  for (let i = 0; i < MAX_BATTLERS; i++) if (emu.read(at + i, 8) === POSITION_PLAYER_LEFT) return i;
+  return 0;
+}
 /** `struct ObjectEvent.currentElevation`, the low nibble of this byte (include/global.fieldmap.h). */
 export const OBJ_ELEVATION_BYTE = 0x0b;
+
+/** start_menu.c's MENU_ACTION_* rows the page's buttons ask for (parity.test.ts holds them). */
+export const START_POKEMON = 1;
+export const START_BR_MAP = 13;
+/** `struct BrStartMenu` (include/br/br_menu.h): pointers at start_menu.c's statics. */
+export const START_MENU_CURSOR = 0x0;
+export const START_MENU_COUNT = 0x4;
+export const START_MENU_ACTIONS = 0x8;
+export const START_MENU_INPUT = 0xc;
+/** `gSaveBlock1Ptr->registeredItem` (include/global.h): what SELECT uses on the field. */
+export const SAVE1_REGISTERED_ITEM = 0x496;
+const ROM_BASE = 0x08000000;
+
+/** Where start_menu.c keeps the rows, the cursor and its input handler, out of the ROM's
+ *  `gBrStartMenu`. Null for a ROM without one (a patch from before br_menu.h). */
+export function startMenuTable(rom: Uint8Array | null | undefined, at: number | undefined):
+  { cursor: number; count: number; actions: number; input: number } | null {
+  if (!rom || at === undefined) return null;
+  const o = at - ROM_BASE;
+  if (o < 0 || o + 16 > rom.length) return null;
+  const view = new DataView(rom.buffer, rom.byteOffset, rom.byteLength);
+  const u32 = (off: number) => view.getUint32(o + off, true);
+  return { cursor: u32(START_MENU_CURSOR), count: u32(START_MENU_COUNT), actions: u32(START_MENU_ACTIONS), input: u32(START_MENU_INPUT) };
+}
 
 /** Emerald's facing directions (include/constants/global.h). */
 export const DIR_OF: Record<SeamDir, number> = { south: 1, north: 2, west: 3, east: 4 };
@@ -75,6 +113,17 @@ const KEY_OF: Record<SeamDir, GbaKey> = { south: 'down', north: 'up', west: 'lef
 const STALL_FRAMES = 60;
 /** A menu tap that cannot land its cursor in this long is abandoned. */
 const MENU_FRAMES = 40;
+/** ...and the move menu, after FIGHT, this long to open. */
+const OPEN_FRAMES = 90;
+/** START with the menu's input handler already in gMenuCallback (it stays there after
+ *  the menu shuts): StartMenuTask is still drawing for about this long, and drops keys. */
+const START_SETTLE_FRAMES = 12;
+/** How long a dock press waits for the stick to be let go before it is dropped. */
+const DOCK_WAIT_FRAMES = 120;
+/** SELECT's item goes back to the player's own this long after the press. */
+const RESTORE_FRAMES = 20;
+/** The start menu takes this long to open and take keys (its task, then its text). */
+const START_FRAMES = 90;
 /** A press is held this long, and the next one waits as long: JOY_NEW wants an edge. */
 const TAP_FRAMES = 3;
 /** A turn in place is a short movement action; A during it is dropped. */
@@ -88,6 +137,8 @@ export interface TouchDeps {
    *  picture (field.ts): a tap on the map out there walks there too. */
   surface?: HTMLElement;
   symbols: Map<string, number>;
+  /** The ROM's bytes: `gBrStartMenu` is a const table in it, not in RAM. */
+  rom?: Uint8Array | null;
 }
 
 interface Own {
@@ -102,6 +153,9 @@ interface Press {
   key: GbaKey;
   hold: number;
   gapAfter: number;
+  /** A dock press: it waits out the player's own keys (the field only reads START and
+   *  SELECT between steps) instead of being dropped by them. */
+  dock?: { waited: number; item?: number };
 }
 
 /** A GBA pixel from a tap, measured from the LCD's box -- 240x160 at one scale, since
@@ -152,7 +206,14 @@ export class TouchLayer {
   private gapFor = 0;
   private queue: Press[] = [];
   private walk: { steps: { dir: SeamDir; to: Spot }[]; at: number; stall: number; from: Spot } | null = null;
-  private menu: { which: number; target: number; frames: number } | null = null;
+  /** A battle menu choice being walked to. `then` is a second one to make once the menu
+   *  it opens is up: FIGHT, then a move. `waiting` is the gap before that menu shows. */
+  private menu: { which: number; target: number; frames: number; then?: number; waiting?: boolean } | null = null;
+  /** A start-menu row asked for by a button (PARTY, MAP): START is down, the cursor walks. */
+  private startRow: { action: number; frames: number; other: boolean } | null = null;
+  /** The player's own registered item, put back after a dock press used SELECT. */
+  private restore: { addr: number; item: number; frames: number } | null = null;
+  private startTable: ReturnType<typeof startMenuTable> | undefined;
   /** After a walk stalls, the tile it was pushing toward: a second tap there is "A". */
   private stalledToward: Spot | null = null;
   /** The camera the picture on screen was drawn from -- the ROM's one frame back
@@ -188,6 +249,61 @@ export class TouchLayer {
     this.off?.();
     this.off = null;
     this.cancel();
+  }
+
+  /** A button for a start-menu row: press START, walk the cursor to `action` (a
+   *  MENU_ACTION_*) and press A, through HandleStartMenuInput as a thumb would. A row
+   *  the menu does not have tonight (MAP before the fog) closes the menu again. */
+  openStartRow(action: number): void {
+    if (this.inBattle()) return;
+    this.cancel();
+    this.queue = [{ key: 'start', hold: TAP_FRAMES, gapAfter: TAP_FRAMES, dock: { waited: 0 } }];
+    this.startRow = { action, frames: 0, other: false };
+  }
+
+  /** SELECT with `item` registered: the bike, a rod. The page registers it the way the
+   *  bag's REGISTER would, then presses SELECT; the ROM decides whether it works here. */
+  useOnField(item: number): void {
+    if (this.sym('gSaveBlock1Ptr') === undefined || this.inBattle()) return;
+    this.cancel();
+    this.queue = [{ key: 'select', hold: TAP_FRAMES, gapAfter: TAP_FRAMES, dock: { waited: 0, item } }];
+  }
+
+  /** Register `item` for the SELECT about to go down. UseRegisteredKeyItemOnField reads
+   *  it on the press; after that it is the player's again. A second dock press inside
+   *  that window keeps the player's item, not the dock's. */
+  private register(item: number): void {
+    const { emu } = this.deps;
+    const addr = emu.read(this.sym('gSaveBlock1Ptr')!, 32) + SAVE1_REGISTERED_ITEM;
+    const own = this.restore?.addr === addr ? this.restore.item : emu.read(addr, 16);
+    this.restore = { addr, item: own, frames: 0 };
+    emu.write(addr, item, 16);
+  }
+
+  /** A choice off the page's own battle menu (ui/battlemenu.ts): `slot` of the menu
+   *  `which` (FIGHT 0, BAG 1, POKeMON 2, RUN 3; a move 0..3), walked to and confirmed
+   *  as a tap on the picture is. With `move`, `which` is the action menu and the slot is
+   *  FIGHT: once the move menu is up, `move` is chosen there too. */
+  chooseBattle(which: number, slot: number, move?: number): void {
+    if (which === 0 || !this.inBattle()) return;
+    // A move asked for while FIGHT is still on its way in: it rides along, after it.
+    const m = this.menu;
+    if (which === MENU_MOVE && m && m.which === MENU_ACTION && m.target === 0 && m.then === undefined) {
+      m.then = slot;
+      return;
+    }
+    const now = this.battleMenu();
+    // Another menu up, or none (FIGHT pressed, or BACK, and the next not up yet): it
+    // waits for this one. A B still going down is kept: it is what brings it up.
+    this.walk = null;
+    this.startRow = null;
+    this.menu = { which, target: slot, frames: 0, then: move, waiting: now !== which };
+  }
+
+  /** One press of a key, as a tap: B out of the move menu. */
+  tapKey(key: GbaKey): void {
+    this.cancel();
+    this.queue = [{ key, hold: TAP_FRAMES, gapAfter: TAP_FRAMES }];
   }
 
   // ---- reading the ROM ----------------------------------------------------------------
@@ -242,17 +358,21 @@ export class TouchLayer {
     return this.deps.emu.read(base + BATTLE_MENU, 8);
   }
 
+  private local(): number {
+    return localBattler(this.deps.emu, this.sym('gBattlerPositions'));
+  }
+
   private cursor(which: number): number {
     const name = which === MENU_MOVE ? 'gMoveSelectionCursor' : 'gActionSelectionCursor';
     const base = this.sym(name);
-    return base === undefined ? 0 : this.deps.emu.read(base, 8) & 3;
+    return base === undefined ? 0 : this.deps.emu.read(base + this.local(), 8) & 3;
   }
 
   /** The move in a slot of the move menu, 0 for none. */
   private moveInSlot(slot: number): number {
     const base = this.sym('gBattleBufferA');
     if (base === undefined) return 0;
-    return this.deps.emu.read(base + 0 * BUFFER_A_ROW + CHOOSE_MOVE_MOVES + slot * 2, 16);
+    return this.deps.emu.read(base + this.local() * BUFFER_A_ROW + CHOOSE_MOVE_MOVES + slot * 2, 16);
   }
 
   // ---- a tap ----------------------------------------------------------------------------
@@ -340,8 +460,19 @@ export class TouchLayer {
     this.shownCamera = this.lastCamera;
     this.lastCamera = readCameraPos(emu, (name) => this.sym(name));
     // Whatever is down that this file did not press is the player, and the player wins.
+    if (this.restore && ++this.restore.frames >= RESTORE_FRAMES) {
+      emu.write(this.restore.addr, this.restore.item, 16);
+      this.restore = null;
+    }
     const mine = this.held ? 1 << KEY_BIT[this.held] : 0;
     if (emu.keys() & ~mine) {
+      // A dock press not yet down waits for the player's keys to come up, a while.
+      const next = this.queue[0];
+      if (!this.held && next?.dock && ++next.dock.waited <= DOCK_WAIT_FRAMES) {
+        this.walk = null;
+        this.menu = null;
+        return;
+      }
       this.cancel();
       return;
     }
@@ -359,10 +490,12 @@ export class TouchLayer {
     }
     if (this.queue.length) {
       const next = this.queue.shift()!;
+      if (next.dock?.item !== undefined) this.register(next.dock.item);
       this.press(next.key, next.hold, next.gapAfter);
       return;
     }
     if (this.menu) this.frameMenu();
+    else if (this.startRow) this.frameStartRow();
   }
 
   private frameWalk(): void {
@@ -401,19 +534,72 @@ export class TouchLayer {
 
   private frameMenu(): void {
     const m = this.menu!;
+    if (m.waiting) {
+      // FIGHT was pressed: the move menu takes a few frames to come up.
+      if (!this.inBattle() || ++m.frames > OPEN_FRAMES) {
+        this.menu = null;
+        return;
+      }
+      if (this.battleMenu() !== m.which) return;
+      m.waiting = false;
+      m.frames = 0;
+    }
     if (!this.inBattle() || this.battleMenu() !== m.which || ++m.frames > MENU_FRAMES) {
       this.menu = null;
       return;
     }
     const cur = this.cursor(m.which);
     if (cur === m.target) {
-      this.menu = null;
+      this.menu = m.then === undefined ? null : { which: MENU_MOVE, target: m.then, frames: 0, waiting: true };
       this.press('a', TAP_FRAMES, TAP_FRAMES);
       return;
     }
-    // One axis at a time, the way the handlers move it.
-    if ((cur ^ m.target) & 1) this.press(m.target & 1 ? 'right' : 'left', TAP_FRAMES, TAP_FRAMES);
+    // One axis at a time, the way the handlers move it -- and never through a slot the
+    // move menu refuses (one past gNumberOfMovesToChoose): from 2 to 1 with three moves,
+    // RIGHT would be 3, so it goes up first.
+    const count = m.which === MENU_MOVE ? [0, 1, 2, 3].filter((i) => this.moveInSlot(i) !== 0).length : 4;
+    const across = (cur ^ m.target) & 1;
+    const down = (cur ^ m.target) & 2;
+    if (across && ((cur ^ 1) < count || !down)) this.press(m.target & 1 ? 'right' : 'left', TAP_FRAMES, TAP_FRAMES);
     else this.press(m.target & 2 ? 'down' : 'up', TAP_FRAMES, TAP_FRAMES);
+  }
+
+  private frameStartRow(): void {
+    const r = this.startRow!;
+    this.startTable ??= startMenuTable(this.deps.rom, this.sym('gBrStartMenu'));
+    const t = this.startTable;
+    const callback = this.sym('gMenuCallback');
+    if (!t || callback === undefined || this.inBattle() || ++r.frames > START_FRAMES) {
+      this.startRow = null;
+      return;
+    }
+    const { emu } = this.deps;
+    // Not taking keys yet: its task is still drawing it. Its handler can be left over
+    // from the last time the menu was up, so until something else is seen there it
+    // gets the time the task takes too.
+    if (emu.read(callback, 32) !== t.input) {
+      r.other = true;
+      return;
+    }
+    if (!r.other && r.frames < START_SETTLE_FRAMES) return;
+    const count = emu.read(t.count, 8);
+    const rows: number[] = [];
+    for (let i = 0; i < count; i++) rows.push(emu.read(t.actions + i, 8));
+    const target = rows.indexOf(r.action);
+    const cur = emu.read(t.cursor, 8);
+    if (target < 0) {
+      this.startRow = null;
+      this.press('b', TAP_FRAMES, TAP_FRAMES);
+      return;
+    }
+    if (cur === target) {
+      this.startRow = null;
+      this.press('a', TAP_FRAMES, TAP_FRAMES);
+      return;
+    }
+    // The menu wraps, so the short way round.
+    const down = (target - cur + count) % count;
+    this.press(down <= count - down ? 'down' : 'up', TAP_FRAMES, TAP_FRAMES);
   }
 
   private press(key: GbaKey, hold: number, gapAfter: number): void {
@@ -435,6 +621,7 @@ export class TouchLayer {
   cancel(): void {
     this.walk = null;
     this.menu = null;
+    this.startRow = null;
     this.queue = [];
     this.release();
   }

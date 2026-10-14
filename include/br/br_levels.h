@@ -1,6 +1,8 @@
 #ifndef GUARD_BR_LEVELS_H
 #define GUARD_BR_LEVELS_H
 
+#include "br/br_config.h"
+
 // One clock, not two (POK-225): the ring phase is the level rung. Wild Pokemon spawn
 // at the rung, the party is lifted to the rung when it rises (outside battle: the
 // rung you start a fight at is the rung you fight at), and nothing ever earns EXP.
@@ -14,6 +16,9 @@ struct BrLevels
     /* 4 */ u16 rod;        // the rod item in the bag right now
     /* 6 */ u16 pad2;
 };
+// web/src/ui/phonehud.ts reads the rod (LEVELS_ROD): what the dock's FISH casts.
+BR_OFFSET(BrLevels, rod, 4)
+BR_SIZE(BrLevels, 8)
 
 extern struct BrLevels gBrLevels;
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   canEncodeGen3,
+  decodeGen3Display,
+  displayByte,
   decodeGen3,
   encodeGen3,
   Gen3TextError,
@@ -75,5 +77,16 @@ describe('gen3 text', () => {
     // packGen3String clamps maxLen to 255 rather than overflow the u8 length prefix
     const packed = packGen3String('A'.repeat(300));
     expect(packed[0]).toBe(255);
+  });
+});
+
+describe("the ROM's own text, past the wire's subset", () => {
+  it('draws and reads POKéMON, its quotes and ×, but the wire still takes none of them', () => {
+    expect(displayByte('é')).toBe(0x1b);
+    expect(displayByte('×')).toBe(0xb9);
+    expect(displayByte('A')).toBe(0xbb);
+    expect(displayByte('❤')).toBeUndefined();
+    expect(decodeGen3Display(Uint8Array.of(0xca, 0xc9, 0xc5, 0x1b, 0xc7, 0xc9, 0xc8, 0xb4, 0xe7))).toBe("POKéMON's");
+    expect(canEncodeGen3('é')).toBe(false);
   });
 });
