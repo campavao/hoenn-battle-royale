@@ -1,0 +1,31 @@
+# tm-have: a second copy of a TM already in the bag stays on the ground for somebody else
+# (the coordinator's default, 2026-10-14, on the reviewer's point that one player could
+# otherwise hoard every copy; Cam can overrule). br_loot.c's Take says "ALREADY HAVE".
+#
+# TREECKO at 5, TM06 TOXIC (294) under our feet as in tm-teach: taken, B on the teach
+# screen keeps it in the bag; a second TOXIC put down in the same place stays there.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerParty+0x54 5
+pokebytes gBrLoot 01 00 0C 00 10 00 26 01 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 150
+expectne u32 gMain+4 CB2_Overworld+1
+tap B
+wait 120
+expect u32 gMain+4 CB2_Overworld+1
+expect u16 *gSaveBlock1Ptr+0x690 294
+pokebytes gBrLoot 02 00 0C 00 10 00 26 01 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 30
+shot have
+wait 60
+# still on the ground, still one in the bag, no teach screen
+expect u8 gBrLoot+11 3
+expect u16 *gSaveBlock1Ptr+0x690 294
+expect u32 gMain+4 CB2_Overworld+1
+say tm have ok

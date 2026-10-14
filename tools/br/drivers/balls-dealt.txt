@@ -24,4 +24,16 @@ tap A
 wait 60
 shot found
 expect u16 *gSaveBlock1Ptr+0x690 289
+# ...and once the lines are done, the teach screen comes up on its own (tm-teach.txt);
+# B keeps it in the bag
+tap A
+wait 60
+tap A
+wait 120
+expectne u32 gMain+4 CB2_Overworld+1
+shot teach
+tap B
+wait 120
+expect u32 gMain+4 CB2_Overworld+1
+expect u16 *gSaveBlock1Ptr+0x690 289
 say balls dealt ok

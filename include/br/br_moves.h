@@ -2,6 +2,7 @@
 #define GUARD_BR_MOVES_H
 
 #include "global.h"
+#include "main.h"
 
 // The MOVES row on the party screen (POK-279), and what it opens.
 //
@@ -44,5 +45,23 @@ void BrMoves_Spend(u16 move);
 // beaten): its TM drops as well, the trainer's machine come with the mon. From the MOVES
 // list, a TM used from the bag, and a move learnt on evolving.
 void BrMoves_Forgetting(struct Pokemon *mon, u8 slot);
+
+// A TM off the ground (Cam, 2026-10-14: "moves that are picked up should immediately go
+// into the teach screen and if not teachable stay on the ground"). Every way a TM comes
+// up -- a map's item ball, a dealt ball or a house cache, a TM somebody forgot -- asks
+// BrMoves_Teachable first and leaves the ball where it lies on FALSE. On TRUE it is taken
+// as before and BrMoves_TeachSoon opens the party screen to teach it, the bag's own TM
+// screen, once it is in the bag and the field is ours again. B there keeps it in the bag.
+// TMs only: an HM is a field tool the player carries anyway, so it goes to the bag as
+// before.
+bool8 BrMoves_IsTm(u16 item);
+// Some mon in the party could learn it and does not know it already.
+bool8 BrMoves_Teachable(u16 item);
+// Call before the TM goes in the bag: the screen waits for the bag to gain one.
+void BrMoves_TeachSoon(u16 item);
+void BrMoves_Tick(void);
+// CB2_ShowPartyMenuForItemUse's way back: to the field for a TM off the ground, else
+// `callback` (the bag).
+MainCallback BrMoves_TeachExit(MainCallback callback);
 
 #endif // GUARD_BR_MOVES_H

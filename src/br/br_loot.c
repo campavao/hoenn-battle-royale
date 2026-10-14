@@ -32,6 +32,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_levels.h"
 #include "item.h"
+#include "party_menu.h"
 #include "br/br_balls.h"
 #include "br/br_patch.h"
 #include "br/br_event.h"
@@ -41,6 +42,7 @@
 #include "br/br_gym.h"
 #include "br/br_field.h"
 #include "br/br_match.h"
+#include "br/br_moves.h"
 #include "br/br_netlink.h"
 #include "br/br_duel.h"
 #include "task.h"
@@ -665,6 +667,8 @@ static const u8 sText_Took[] = _("TOOK ");
 static const u8 sText_Found[] = _("FOUND ");
 static const u8 sText_Gift[] = _("A GIFT: ");
 static const u8 sText_Bang[] = _("!");
+static const u8 sText_NobodyLearns[] = _("NO ONE CAN USE ");
+static const u8 sText_HaveTm[] = _("ALREADY HAVE ");
 
 // Tell the room it is gone, and take it off our own ground: nobody hears their own
 // message come back. A full ring holds the PICKUP until there is room (Take() asks
@@ -767,6 +771,20 @@ static void Take(struct BrLootItem *it)
         return;
     if (!BrStory_Hands(it))
         return; // STERN wants his SCANNER first, and has said so
+    // A TM nobody here can use, or a second copy, stays where it lies for somebody who can
+    // (one each: the coordinator's default, 2026-10-14, Cam can overrule); one we take
+    // goes straight to the teach screen (br_moves.h), below.
+    if ((it->kind == BR_LOOT_ITEM || OneThing(it)) && BrMoves_IsTm(it->species))
+    {
+        if (CheckBagHasItem(it->species, 1) || !BrMoves_Teachable(it->species))
+        {
+            p = BrHud_Append(line, last, CheckBagHasItem(it->species, 1) ? sText_HaveTm : sText_NobodyLearns);
+            BrHud_Append(p, last, gMoveNames[ItemIdToBattleMoveId(it->species)]);
+            PlaySE(SE_FAILURE);
+            BrHud_Box(line);
+            return;
+        }
+    }
     DropHeldLine(); // it is about to say what was taken; the held name has done its job
     if (it->kind == BR_LOOT_BAG)
     {
@@ -786,6 +804,8 @@ static void Take(struct BrLootItem *it)
         }
         PlaySE(SE_PIN);
         sGivenBag = *it; // where its GIVE puts back what does not fit
+        if (OneThing(it) && BrMoves_IsTm(it->species))
+            BrMoves_TeachSoon(it->species); // once its GIVE has bagged it; a bounced GIVE times out
         SendPickup(it);
         return;
     }
@@ -812,6 +832,8 @@ static void Take(struct BrLootItem *it)
             BrHud_Box(sText_NoRoom);
             return;
         }
+        if (BrMoves_IsTm(item))
+            BrMoves_TeachSoon(item);
         AddBagItem(item, count);
         p = BrHud_Append(line, last, sText_Found);
         if (count > 1)

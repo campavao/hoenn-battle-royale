@@ -1,0 +1,23 @@
+# tm-left: a TM nobody in the party can learn stays on the ground (Cam, 2026-10-14: "if
+# not teachable stay on the ground"), for somebody who can. br_loot.c's Take says so on
+# the ticker and sends no PICKUP; the cancelled teach screen keeps a taken one in the bag.
+#
+# TREECKO at 5 cannot learn TM24 THUNDERBOLT (312). Under our feet, as moves-spend puts it.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerParty+0x54 5
+expect u16 *gSaveBlock1Ptr+0x690 0
+pokebytes gBrLoot 01 00 0C 00 10 00 38 01 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 30
+shot left
+wait 60
+# "NO ONE CAN USE THUNDERBOLT": still on the ground, nothing taken, nothing in the bag
+expect u8 gBrLoot+11 3
+expect u8 gBrLoot+0xA2 0
+expect u16 *gSaveBlock1Ptr+0x690 0
+expect u32 gMain+4 CB2_Overworld+1
+say tm left ok

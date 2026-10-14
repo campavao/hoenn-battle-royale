@@ -4302,6 +4302,9 @@ void CB2_ShowPartyMenuForItemUse(void)
         task = Task_HandleChooseMonInput;
     }
 
+#if BR
+    callback = BrMoves_TeachExit(callback); // a TM off the ground goes back to the field
+#endif
     InitPartyMenu(menuType, partyLayout, PARTY_ACTION_USE_ITEM, TRUE, msgId, task, callback);
 }
 

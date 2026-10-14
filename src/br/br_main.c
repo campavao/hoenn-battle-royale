@@ -13,6 +13,7 @@
 #include "br/br_match.h"
 #include "br/br_levels.h"
 #include "br/br_catch.h"
+#include "br/br_moves.h"
 #include "br/br_netlink.h"
 #include "br/br_engage.h"
 #include "br/br_battle.h"
@@ -91,6 +92,7 @@ void BrFrame(void)
     BrMatch_Tick();
     BrLevels_Tick();
     BrCatch_Tick();
+    BrMoves_Tick();
     BrNetlink_Tick();
     BrBattle_TickStall();
     BrBattle_TickSeeThrough();

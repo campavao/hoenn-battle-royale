@@ -21,14 +21,23 @@ pokebytes gBrLoot+20 02 00 0C 00 10 00 2A 01 00 09 00 03 FF 00 00 00 00 00 00 00
 pokebytes gBrLoot+40 03 00 0C 00 10 00 31 01 00 09 00 03 FF 00 00 00 00 00 00 00
 pokebytes gBrLoot+60 04 00 0C 00 10 00 40 01 00 09 00 03 FF 00 00 00 00 00 00 00
 wait 60
+# each pickup brings up the teach screen by itself (tm-teach.txt): B keeps the TM
 tap A
-wait 90
+wait 150
+tap B
+wait 120
 tap A
-wait 90
+wait 150
+tap B
+wait 120
 tap A
-wait 90
+wait 150
+tap B
+wait 120
 tap A
-wait 90
+wait 150
+tap B
+wait 120
 expect u8 gBrLoot+0xA2 4
 expect u16 *gSaveBlock1Ptr+0x690 294
 expect u16 *gSaveBlock1Ptr+0x694 298
