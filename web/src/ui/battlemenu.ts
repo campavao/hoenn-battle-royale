@@ -445,7 +445,8 @@ export class BattleMenu {
       this.sheetWin.show(`${this.info}|${v?.moves[this.info]?.id}|${v?.moves[this.info]?.pp}|${v?.foe.name}`);
       this.useWin.show(String(v?.moves[this.info]?.id));
     }
-    this.deps.root.dataset.mode = this.mode;
+    // Only on a change: a write each frame dirties style for app.ts's read of the HUD.
+    if (this.deps.root.dataset.mode !== this.mode) this.deps.root.dataset.mode = this.mode;
   }
 
   private paintCell(c: EmeraldCanvas, i: number, redo: () => void): void {

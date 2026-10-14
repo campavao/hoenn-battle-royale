@@ -183,7 +183,8 @@
 
       /* A phone's HUD and dock (ui/phonehud.ts, mockup v2): Emerald windows drawn at the
          field's scale, --s CSS pixels to a GBA pixel, set by phonehud from the pad's
-         width. Upright in a match only: on its side and on a computer the old row stays.
+         width. In a match on the page's upright layout, which a tablet keeps on its side too: a
+         phone on its side (the short landscape below) and a computer keep the old row.
          The stick and A/B go see-through, and can be moved, faded and hidden (--stick-*, --ab-*, --pad-alpha, body.pad-hidden). */
       #hud, .dock { display: none; }
       .pad-edit[hidden] { display: none; }

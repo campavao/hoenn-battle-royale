@@ -3636,9 +3636,13 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
   void loadHoenn().then((w) => {
     world = { map: (g, n) => w.byRef.get(`${g}:${n}`), cell: (id, x, y) => w.world.cell(id, x, y) };
   });
+  // index.html's own tests for #hud: upright, and not a computer. Off those, no read of
+  // the layout at all; on them, the box itself says (a match, the game on stage).
+  const upright = typeof matchMedia === 'function' ? matchMedia('not all and (orientation: landscape) and (max-height: 520px)') : null;
+  const computer = typeof matchMedia === 'function' ? matchMedia(DESKTOP) : null;
   emu.onFrame(() => {
     // On the glass: a match, upright, on a touch screen (index.html shows #hud then).
-    const shown = top.offsetParent !== null;
+    const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
     if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown);
     battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables) : null);
     if (!shown) return;

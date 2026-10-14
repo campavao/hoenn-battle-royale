@@ -211,13 +211,31 @@ describe('a tap on a battle menu walks the cursor there and presses A', () => {
     expect(emu.chosen).toBe(3);
   });
 
-  it('a choice for a menu that is not up does nothing; B is one tap', () => {
+  it('FIGHT tapped straight after BACK: the B goes down, then FIGHT once the action menu is up', () => {
+    const emu = new FakeEmu();
+    emu.menu = MENU_MOVE;
+    const { t } = layer(emu);
+    t.tapKey('b');
+    t.chooseBattle(MENU_ACTION, 0, 1);
+    let pressedB = false;
+    for (let i = 0; i < 60 && emu.chosen === null; i++) {
+      emu.frame();
+      if (emu.held & (1 << KEY_BIT.b)) pressedB = true;
+      // the ROM's byte goes back to the action menu a few frames after the B
+      if (pressedB && emu.menu === MENU_MOVE && i > 6) emu.menu = MENU_ACTION;
+    }
+    expect(pressedB).toBe(true);
+    expect(emu.chosen, 'FIGHT').toBe(0);
+  });
+
+  it("a choice for a menu that never comes up is let go; B is one tap", () => {
     const emu = new FakeEmu();
     emu.menu = MENU_MOVE;
     const { t } = layer(emu);
     t.chooseBattle(MENU_ACTION, 3);
-    for (let i = 0; i < 20; i++) emu.frame();
+    for (let i = 0; i < 120; i++) emu.frame();
     expect(emu.chosen).toBeNull();
+    expect(emu.held).toBe(0);
     const seen: number[] = [];
     t.tapKey('b');
     for (let i = 0; i < 8; i++) {
@@ -390,6 +408,8 @@ class StartEmu {
   closed = false;
   /** The handler left in gMenuCallback from the last time the menu was up. */
   stale = false;
+  /** The player's own registered item. */
+  registered = 0;
   written = new Map<number, number>();
   private listeners: (() => void)[] = [];
   private wasDown = 0;
@@ -404,6 +424,7 @@ class StartEmu {
       case 0x6000: return this.cursor;
       case 0x6001: return this.rows.length;
       case 0x7000: return 0x9000; // gSaveBlock1Ptr
+      case 0x9000 + 0x496: return this.written.get(addr) ?? this.registered; // registeredItem
     }
     if (addr >= 0x6010 && addr < 0x6010 + this.rows.length) return this.rows[addr - 0x6010];
     return 0;
@@ -483,13 +504,66 @@ describe('PARTY and MAP press START and walk the start menu', () => {
     const emu = new StartEmu();
     const t = startLayer(emu);
     t.useOnField(259);
+    emu.frame();
+    expect(emu.held & (1 << KEY_BIT.select)).not.toBe(0);
     expect(emu.written.get(0x9000 + 0x496)).toBe(259);
-    let selected = false;
-    for (let i = 0; i < 10; i++) { emu.frame(); if (emu.held & (1 << KEY_BIT.select)) selected = true; }
-    expect(selected).toBe(true);
     // ...and after it, the player's own registered item is theirs again
     for (let i = 0; i < 30; i++) emu.frame();
     expect(emu.written.get(0x9000 + 0x496)).toBe(0);
+  });
+
+  it("two dock presses close together: the player's item still comes back", () => {
+    const emu = new StartEmu();
+    emu.registered = 7;
+    const t = startLayer(emu);
+    t.useOnField(259);
+    for (let i = 0; i < 8; i++) emu.frame();
+    t.useOnField(259);
+    for (let i = 0; i < 60; i++) emu.frame();
+    expect(emu.written.get(0x9000 + 0x496)).toBe(7);
+  });
+
+  it('BIKE with the stick held: SELECT waits for the stick, and the item still comes back', () => {
+    const emu = new StartEmu();
+    emu.registered = 7;
+    const t = startLayer(emu);
+    emu.press('left'); // the player's thumb
+    t.useOnField(259);
+    for (let i = 0; i < 30; i++) emu.frame();
+    expect(emu.held & (1 << KEY_BIT.select)).toBe(0);
+    expect(emu.written.get(0x9000 + 0x496)).toBeUndefined();
+    emu.release('left');
+    let selected = false;
+    for (let i = 0; i < 5; i++) { emu.frame(); if (emu.held & (1 << KEY_BIT.select)) selected = true; }
+    expect(selected).toBe(true);
+    // the player walks on straight away: the item comes back regardless
+    emu.press('left');
+    for (let i = 0; i < 30; i++) emu.frame();
+    expect(emu.written.get(0x9000 + 0x496)).toBe(7);
+  });
+
+  it('PARTY with the stick held too long: dropped, nothing pressed', () => {
+    const emu = new StartEmu();
+    const t = startLayer(emu);
+    emu.press('up');
+    t.openStartRow(START_BR_MAP);
+    for (let i = 0; i < 150; i++) emu.frame();
+    emu.release('up');
+    for (let i = 0; i < 60; i++) emu.frame();
+    expect(emu.open).toBe(false);
+    expect(emu.chosen).toBeNull();
+  });
+
+  it('PARTY with the stick held a moment: START once it is let go', () => {
+    const emu = new StartEmu();
+    emu.cursor = 2;
+    const t = startLayer(emu);
+    emu.press('up');
+    t.openStartRow(START_BR_MAP);
+    for (let i = 0; i < 20; i++) emu.frame();
+    emu.release('up');
+    for (let i = 0; i < 90 && emu.chosen === null; i++) emu.frame();
+    expect(emu.chosen).toBe(START_BR_MAP);
   });
 
   it("a handler left over from the last menu: it waits out the menu's drawing", () => {

@@ -118,6 +118,8 @@ const OPEN_FRAMES = 90;
 /** START with the menu's input handler already in gMenuCallback (it stays there after
  *  the menu shuts): StartMenuTask is still drawing for about this long, and drops keys. */
 const START_SETTLE_FRAMES = 12;
+/** How long a dock press waits for the stick to be let go before it is dropped. */
+const DOCK_WAIT_FRAMES = 120;
 /** SELECT's item goes back to the player's own this long after the press. */
 const RESTORE_FRAMES = 20;
 /** The start menu takes this long to open and take keys (its task, then its text). */
@@ -151,6 +153,9 @@ interface Press {
   key: GbaKey;
   hold: number;
   gapAfter: number;
+  /** A dock press: it waits out the player's own keys (the field only reads START and
+   *  SELECT between steps) instead of being dropped by them. */
+  dock?: { waited: number; item?: number };
 }
 
 /** A GBA pixel from a tap, measured from the LCD's box -- 240x160 at one scale, since
@@ -252,22 +257,27 @@ export class TouchLayer {
   openStartRow(action: number): void {
     if (this.inBattle()) return;
     this.cancel();
-    this.queue = [{ key: 'start', hold: TAP_FRAMES, gapAfter: TAP_FRAMES }];
+    this.queue = [{ key: 'start', hold: TAP_FRAMES, gapAfter: TAP_FRAMES, dock: { waited: 0 } }];
     this.startRow = { action, frames: 0, other: false };
   }
 
   /** SELECT with `item` registered: the bike, a rod. The page registers it the way the
    *  bag's REGISTER would, then presses SELECT; the ROM decides whether it works here. */
   useOnField(item: number): void {
-    const save = this.sym('gSaveBlock1Ptr');
-    if (save === undefined || this.inBattle()) return;
+    if (this.sym('gSaveBlock1Ptr') === undefined || this.inBattle()) return;
     this.cancel();
+    this.queue = [{ key: 'select', hold: TAP_FRAMES, gapAfter: TAP_FRAMES, dock: { waited: 0, item } }];
+  }
+
+  /** Register `item` for the SELECT about to go down. UseRegisteredKeyItemOnField reads
+   *  it on the press; after that it is the player's again. A second dock press inside
+   *  that window keeps the player's item, not the dock's. */
+  private register(item: number): void {
     const { emu } = this.deps;
-    const addr = emu.read(save, 32) + SAVE1_REGISTERED_ITEM;
-    // UseRegisteredKeyItemOnField reads it on the press; after that it is the player's.
-    this.restore = { addr, item: emu.read(addr, 16), frames: 0 };
+    const addr = emu.read(this.sym('gSaveBlock1Ptr')!, 32) + SAVE1_REGISTERED_ITEM;
+    const own = this.restore?.addr === addr ? this.restore.item : emu.read(addr, 16);
+    this.restore = { addr, item: own, frames: 0 };
     emu.write(addr, item, 16);
-    this.queue = [{ key: 'select', hold: TAP_FRAMES, gapAfter: TAP_FRAMES }];
   }
 
   /** A choice off the page's own battle menu (ui/battlemenu.ts): `slot` of the menu
@@ -277,9 +287,10 @@ export class TouchLayer {
   chooseBattle(which: number, slot: number, move?: number): void {
     if (which === 0 || !this.inBattle()) return;
     const now = this.battleMenu();
-    // Between two menus (FIGHT pressed, the move menu not up yet) it waits for it.
-    if (now !== which && now !== 0) return;
-    this.cancel();
+    // Another menu up, or none (FIGHT pressed, or BACK, and the next not up yet): it
+    // waits for this one. A B still going down is kept: it is what brings it up.
+    this.walk = null;
+    this.startRow = null;
     this.menu = { which, target: slot, frames: 0, then: move, waiting: now !== which };
   }
 
@@ -443,8 +454,19 @@ export class TouchLayer {
     this.shownCamera = this.lastCamera;
     this.lastCamera = readCameraPos(emu, (name) => this.sym(name));
     // Whatever is down that this file did not press is the player, and the player wins.
+    if (this.restore && ++this.restore.frames >= RESTORE_FRAMES) {
+      emu.write(this.restore.addr, this.restore.item, 16);
+      this.restore = null;
+    }
     const mine = this.held ? 1 << KEY_BIT[this.held] : 0;
     if (emu.keys() & ~mine) {
+      // A dock press not yet down waits for the player's keys to come up, a while.
+      const next = this.queue[0];
+      if (!this.held && next?.dock && ++next.dock.waited <= DOCK_WAIT_FRAMES) {
+        this.walk = null;
+        this.menu = null;
+        return;
+      }
       this.cancel();
       return;
     }
@@ -462,12 +484,9 @@ export class TouchLayer {
     }
     if (this.queue.length) {
       const next = this.queue.shift()!;
+      if (next.dock?.item !== undefined) this.register(next.dock.item);
       this.press(next.key, next.hold, next.gapAfter);
       return;
-    }
-    if (this.restore && ++this.restore.frames >= RESTORE_FRAMES) {
-      emu.write(this.restore.addr, this.restore.item, 16);
-      this.restore = null;
     }
     if (this.menu) this.frameMenu();
     else if (this.startRow) this.frameStartRow();
