@@ -67,6 +67,30 @@ export const CHOOSE_MOVE_MOVES = 4;
 /** `struct ObjectEvent.currentElevation`, the low nibble of this byte (include/global.fieldmap.h). */
 export const OBJ_ELEVATION_BYTE = 0x0b;
 
+/** start_menu.c's MENU_ACTION_* rows the page's buttons ask for (parity.test.ts holds them). */
+export const START_POKEMON = 1;
+export const START_BR_MAP = 13;
+/** `struct BrStartMenu` (include/br/br_menu.h): pointers at start_menu.c's statics. */
+export const START_MENU_CURSOR = 0x0;
+export const START_MENU_COUNT = 0x4;
+export const START_MENU_ACTIONS = 0x8;
+export const START_MENU_INPUT = 0xc;
+/** `gSaveBlock1Ptr->registeredItem` (include/global.h): what SELECT uses on the field. */
+export const SAVE1_REGISTERED_ITEM = 0x496;
+const ROM_BASE = 0x08000000;
+
+/** Where start_menu.c keeps the rows, the cursor and its input handler, out of the ROM's
+ *  `gBrStartMenu`. Null for a ROM without one (a patch from before br_menu.h). */
+export function startMenuTable(rom: Uint8Array | null | undefined, at: number | undefined):
+  { cursor: number; count: number; actions: number; input: number } | null {
+  if (!rom || at === undefined) return null;
+  const o = at - ROM_BASE;
+  if (o < 0 || o + 16 > rom.length) return null;
+  const view = new DataView(rom.buffer, rom.byteOffset, rom.byteLength);
+  const u32 = (off: number) => view.getUint32(o + off, true);
+  return { cursor: u32(START_MENU_CURSOR), count: u32(START_MENU_COUNT), actions: u32(START_MENU_ACTIONS), input: u32(START_MENU_INPUT) };
+}
+
 /** Emerald's facing directions (include/constants/global.h). */
 export const DIR_OF: Record<SeamDir, number> = { south: 1, north: 2, west: 3, east: 4 };
 const KEY_OF: Record<SeamDir, GbaKey> = { south: 'down', north: 'up', west: 'left', east: 'right' };
@@ -75,6 +99,8 @@ const KEY_OF: Record<SeamDir, GbaKey> = { south: 'down', north: 'up', west: 'lef
 const STALL_FRAMES = 60;
 /** A menu tap that cannot land its cursor in this long is abandoned. */
 const MENU_FRAMES = 40;
+/** The start menu takes this long to open and take keys (its task, then its text). */
+const START_FRAMES = 90;
 /** A press is held this long, and the next one waits as long: JOY_NEW wants an edge. */
 const TAP_FRAMES = 3;
 /** A turn in place is a short movement action; A during it is dropped. */
@@ -88,6 +114,8 @@ export interface TouchDeps {
    *  picture (field.ts): a tap on the map out there walks there too. */
   surface?: HTMLElement;
   symbols: Map<string, number>;
+  /** The ROM's bytes: `gBrStartMenu` is a const table in it, not in RAM. */
+  rom?: Uint8Array | null;
 }
 
 interface Own {
@@ -153,6 +181,9 @@ export class TouchLayer {
   private queue: Press[] = [];
   private walk: { steps: { dir: SeamDir; to: Spot }[]; at: number; stall: number; from: Spot } | null = null;
   private menu: { which: number; target: number; frames: number } | null = null;
+  /** A start-menu row asked for by a button (PARTY, MAP): START is down, the cursor walks. */
+  private startRow: { action: number; frames: number } | null = null;
+  private startTable: ReturnType<typeof startMenuTable> | undefined;
   /** After a walk stalls, the tile it was pushing toward: a second tap there is "A". */
   private stalledToward: Spot | null = null;
   /** The camera the picture on screen was drawn from -- the ROM's one frame back
@@ -188,6 +219,27 @@ export class TouchLayer {
     this.off?.();
     this.off = null;
     this.cancel();
+  }
+
+  /** A button for a start-menu row: press START, walk the cursor to `action` (a
+   *  MENU_ACTION_*) and press A, through HandleStartMenuInput as a thumb would. A row
+   *  the menu does not have tonight (MAP before the fog) closes the menu again. */
+  openStartRow(action: number): void {
+    if (this.inBattle()) return;
+    this.cancel();
+    this.queue = [{ key: 'start', hold: TAP_FRAMES, gapAfter: TAP_FRAMES }];
+    this.startRow = { action, frames: 0 };
+  }
+
+  /** SELECT with `item` registered: the bike, a rod. The page registers it the way the
+   *  bag's REGISTER would, then presses SELECT; the ROM decides whether it works here. */
+  useOnField(item: number): void {
+    const save = this.sym('gSaveBlock1Ptr');
+    if (save === undefined || this.inBattle()) return;
+    this.cancel();
+    const { emu } = this.deps;
+    emu.write(emu.read(save, 32) + SAVE1_REGISTERED_ITEM, item, 16);
+    this.queue = [{ key: 'select', hold: TAP_FRAMES, gapAfter: TAP_FRAMES }];
   }
 
   // ---- reading the ROM ----------------------------------------------------------------
@@ -363,6 +415,7 @@ export class TouchLayer {
       return;
     }
     if (this.menu) this.frameMenu();
+    else if (this.startRow) this.frameStartRow();
   }
 
   private frameWalk(): void {
@@ -416,6 +469,38 @@ export class TouchLayer {
     else this.press(m.target & 2 ? 'down' : 'up', TAP_FRAMES, TAP_FRAMES);
   }
 
+  private frameStartRow(): void {
+    const r = this.startRow!;
+    this.startTable ??= startMenuTable(this.deps.rom, this.sym('gBrStartMenu'));
+    const t = this.startTable;
+    const callback = this.sym('gMenuCallback');
+    if (!t || callback === undefined || this.inBattle() || ++r.frames > START_FRAMES) {
+      this.startRow = null;
+      return;
+    }
+    const { emu } = this.deps;
+    // Not taking keys yet: its task is still drawing it.
+    if (emu.read(callback, 32) !== t.input) return;
+    const count = emu.read(t.count, 8);
+    const rows: number[] = [];
+    for (let i = 0; i < count; i++) rows.push(emu.read(t.actions + i, 8));
+    const target = rows.indexOf(r.action);
+    const cur = emu.read(t.cursor, 8);
+    if (target < 0) {
+      this.startRow = null;
+      this.press('b', TAP_FRAMES, TAP_FRAMES);
+      return;
+    }
+    if (cur === target) {
+      this.startRow = null;
+      this.press('a', TAP_FRAMES, TAP_FRAMES);
+      return;
+    }
+    // The menu wraps, so the short way round.
+    const down = (target - cur + count) % count;
+    this.press(down <= count - down ? 'down' : 'up', TAP_FRAMES, TAP_FRAMES);
+  }
+
   private press(key: GbaKey, hold: number, gapAfter: number): void {
     this.release();
     this.deps.emu.press(key);
@@ -435,6 +520,7 @@ export class TouchLayer {
   cancel(): void {
     this.walk = null;
     this.menu = null;
+    this.startRow = null;
     this.queue = [];
     this.release();
   }

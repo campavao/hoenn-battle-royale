@@ -1,0 +1,50 @@
+# start-menu-page: gBrStartMenu points the page at the start menu's own statics
+# (br_menu.h), so PARTY and MAP can press START, walk the cursor and press A the way a
+# thumb does (web/src/ui/hud.ts). Rows, cursor, and the handler gMenuCallback is while
+# the menu takes keys.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+tap START
+wait 30
+shot open
+# the handler is up: the page waits for this before it walks
+expectsame u32 gMenuCallback gBrStartMenu+0xC
+# POKeMON, BAG, MAP (a match in play), the trainer card, EXIT (start_menu.c's enum)
+expect u8 *(gBrStartMenu+0x4) 5
+expect u8 *(gBrStartMenu+0x8) 1
+expect u8 *(gBrStartMenu+0x8)+1 2
+expect u8 *(gBrStartMenu+0x8)+2 13
+expect u8 *(gBrStartMenu+0x8)+3 4
+expect u8 *(gBrStartMenu+0x8)+4 7
+expect u8 *gBrStartMenu 0
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+expect u8 *gBrStartMenu 2
+# MAP: the menu goes and the fog map's task takes the field
+tap A
+wait 240
+shot map
+expect u8 gBrMap 1
+tap B
+wait 200
+expect u8 gBrMap 0
+# the cursor is remembered, so the next START opens on MAP: the page reads it, it does
+# not assume the top
+tap START
+wait 30
+shot again
+expectsame u32 gMenuCallback gBrStartMenu+0xC
+expect u8 *gBrStartMenu 2
+tap UP
+wait 6
+tap UP
+wait 6
+expect u8 *gBrStartMenu 0
+tap A
+wait 90
+shot party

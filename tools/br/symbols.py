@@ -50,6 +50,9 @@ ENGINE_SYMBOLS = [
     "gRfuLinkStatus",
     # The battle's message box, as the last line was expanded into it (pvp-items.txt).
     "gDisplayedStringBattle",
+    # The start menu's input handler is gMenuCallback while the menu takes keys: the
+    # page's PARTY and MAP buttons wait for it before they walk the cursor (br_menu.h).
+    "gMenuCallback",
     # The fog map's prompt, "FOG: <place>", is built here (br_map.c, ring-map.txt).
     "gStringVar4",
     # What a bot's AI was handed out of its bag, and what it chose to do with its turn

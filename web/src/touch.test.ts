@@ -69,7 +69,7 @@ describe('a tap in a battle picks a quadrant', () => {
 // axis at a time, an edge per press, A only once the cursor is where the tap was.
 
 import { KEY_BIT, type GbaKey } from './emu';
-import { TouchLayer } from './touch';
+import { START_BR_MAP, START_POKEMON, TouchLayer, startMenuTable } from './touch';
 
 class FakeEmu {
   held = 0;
@@ -292,5 +292,119 @@ describe('a tap on a bridge walks at the level we stand at (POK-331 #2 review)',
 
   it('on the path, straight there', () => {
     expect(tapWest(3)).toEqual(['left']);
+  });
+});
+
+// ---- a button for a start-menu row, against a fake ROM -------------------------------
+//
+// The rows the ROM built (POKeMON, BAG, MAP, the card, EXIT), a cursor that remembers
+// where it was last left and wraps, and a handler that takes keys only once its task has
+// drawn the menu. gBrStartMenu is a const table in the ROM, so the page reads it there.
+
+class StartEmu {
+  held = 0;
+  open = false;
+  ready = 0;
+  cursor = 3;
+  rows = [1, 2, 13, 4, 7];
+  chosen: number | null = null;
+  closed = false;
+  written = new Map<number, number>();
+  private listeners: (() => void)[] = [];
+  private wasDown = 0;
+  press(k: GbaKey) { this.held |= 1 << KEY_BIT[k]; }
+  release(k: GbaKey) { this.held &= ~(1 << KEY_BIT[k]); }
+  keys() { return this.held; }
+  onFrame(l: () => void) { this.listeners.push(l); return () => {}; }
+  write(addr: number, v: number) { this.written.set(addr, v); }
+  read(addr: number): number {
+    switch (addr) {
+      case 0x5000: return this.open && this.ready <= 0 ? 0x08001001 : 0x08002001; // gMenuCallback
+      case 0x6000: return this.cursor;
+      case 0x6001: return this.rows.length;
+      case 0x7000: return 0x9000; // gSaveBlock1Ptr
+    }
+    if (addr >= 0x6010 && addr < 0x6010 + this.rows.length) return this.rows[addr - 0x6010];
+    return 0;
+  }
+  frame() {
+    for (const l of this.listeners) l();
+    const fresh = this.held & ~this.wasDown;
+    this.wasDown = this.held;
+    if (!this.open) {
+      if (fresh & (1 << KEY_BIT.start)) { this.open = true; this.ready = 8; }
+      return;
+    }
+    if (this.ready-- > 0) return;
+    const n = this.rows.length;
+    if (fresh & (1 << KEY_BIT.down)) this.cursor = (this.cursor + 1) % n;
+    if (fresh & (1 << KEY_BIT.up)) this.cursor = (this.cursor + n - 1) % n;
+    if (fresh & (1 << KEY_BIT.a)) { this.chosen = this.rows[this.cursor]; this.open = false; }
+    if (fresh & (1 << KEY_BIT.b)) { this.closed = true; this.open = false; }
+  }
+}
+
+function startLayer(emu: StartEmu) {
+  const canvas = { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 240, height: 160 }) } as unknown as HTMLCanvasElement;
+  // gBrStartMenu at 0x08000010: cursor, count, rows, the handler.
+  const rom = new Uint8Array(0x20);
+  const view = new DataView(rom.buffer);
+  [0x6000, 0x6001, 0x6010, 0x08001001].forEach((v, i) => view.setUint32(0x10 + i * 4, v, true));
+  const symbols = new Map([['gMain', 0x100], ['gBrStartMenu', 0x08000010], ['gMenuCallback', 0x5000], ['gSaveBlock1Ptr', 0x7000]]);
+  const t = new TouchLayer({ emu: emu as never, canvas, symbols, rom });
+  t.attach();
+  return t;
+}
+
+describe('PARTY and MAP press START and walk the start menu', () => {
+  it('reads where the ROM laid the table out', () => {
+    const rom = new Uint8Array(0x20);
+    new DataView(rom.buffer).setUint32(0x10, 0x0203760e, true);
+    expect(startMenuTable(rom, 0x08000010)?.cursor).toBe(0x0203760e);
+    expect(startMenuTable(rom, undefined), 'a ROM from before br_menu.h').toBeNull();
+    expect(startMenuTable(null, 0x08000010)).toBeNull();
+  });
+
+  it('MAP from a cursor left on the card: up one, then A', () => {
+    const emu = new StartEmu();
+    const t = startLayer(emu);
+    t.openStartRow(START_BR_MAP);
+    for (let i = 0; i < 90 && emu.chosen === null; i++) emu.frame();
+    expect(emu.chosen).toBe(START_BR_MAP);
+  });
+
+  it('POKeMON the short way round: from EXIT, down wraps to the top', () => {
+    const emu = new StartEmu();
+    emu.cursor = 4;
+    const t = startLayer(emu);
+    t.openStartRow(START_POKEMON);
+    let downs = 0;
+    for (let i = 0; i < 90 && emu.chosen === null; i++) {
+      const before = emu.cursor;
+      emu.frame();
+      if (emu.cursor === (before + 1) % emu.rows.length && emu.cursor !== before) downs++;
+    }
+    expect(emu.chosen).toBe(START_POKEMON);
+    expect(downs).toBe(1);
+  });
+
+  it('no MAP before the fog: the menu is closed again, nothing chosen', () => {
+    const emu = new StartEmu();
+    emu.rows = [1, 2, 4, 7];
+    const t = startLayer(emu);
+    t.openStartRow(START_BR_MAP);
+    for (let i = 0; i < 90; i++) emu.frame();
+    expect(emu.chosen).toBeNull();
+    expect(emu.closed).toBe(true);
+  });
+
+  it('SELECT with the item registered first', () => {
+    const emu = new StartEmu();
+    const t = startLayer(emu);
+    t.useOnField(259);
+    expect(emu.written.get(0x9000 + 0x496)).toBe(259);
+    let selected = false;
+    for (let i = 0; i < 10; i++) { emu.frame(); if (emu.held & (1 << KEY_BIT.select)) selected = true; }
+    expect(selected).toBe(true);
   });
 });
