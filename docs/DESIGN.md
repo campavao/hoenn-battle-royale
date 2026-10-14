@@ -238,7 +238,15 @@ out, and one that comes in waits as it would in a menu.
   MIRAGE TOWER stands every visit and its own fossils are hidden (taking one brings the
   tower down), and SHOAL CAVE is at low tide all match (`br_story.h`). Every ring centre
   is west of Lilycove (landing.json), so the east's stories come up mostly on the first
-  event, whose ring is the widest.
+  event, whose ring is the widest. The three REGIs sit in their chambers, each door opened
+  its own way with no HM to teach: DESERT RUINS on A at the wall, ANCIENT TOMB on A with a
+  FLY mon in the party, ISLAND CAVE by itself a phase after its event dropped (the native
+  REGIs are gone). Some rewards are people (`br_story.c`, sPeople): STEVEN in GRANITE
+  CAVE with TM47, and CAPTAIN STERN at Slateport's harbour, who gives a DEEP SEA TOOTH or
+  SCALE only for the SCANNER from the ABANDONED SHIP's office. The LAVARIDGE egg woman has
+  no flag to stand her down, so her WYNAUT is a ball at her feet. Bots walk a grid that
+  knows no door or terms, so `storySealed` keeps a chamber from a bot that could not open
+  it and STERN's thanks from one without the SCANNER.
 - **Gift-givers** (Cam, 2026-10-13): at the buzzer the host stands one person in every
   town and city (`match/gifts.ts`), holding one held item (LEFTOVERS, CHOICE BAND, QUICK
   CLAW and the like). On the wire he is a `spill` of a one-item bag under key `0xC000 | i`,

@@ -28,7 +28,7 @@ import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
 import { clusterCells, EVENT_CELLS, eventDrop, eventForRing } from './events';
 import { giftDrop, isGiftSection } from './gifts';
 import { sectionInside } from './ring';
-import { STORIES, STORY_CHANCE, storyDrop, storyOf } from './story';
+import { STORIES, STORY_CHANCE, storyCells, storyDrop, storyOf } from './story';
 import type { EventMsg, MapRef, Msg, Pace } from '../net/wire';
 
 export const DEFAULT_SAFARI_SECS = 120;
@@ -589,7 +589,8 @@ export class Director {
     for (const w of where) {
       open = STORIES.filter((s) => {
         const section = this.opts.world.sections[s.section];
-        return !this.told.has(s.id) && this.mapRefOf(s.map) !== undefined && section?.num !== undefined && w(section);
+        const maps = [s.map, ...s.cells.flatMap((c) => (c.map ? [c.map] : []))];
+        return !this.told.has(s.id) && maps.every((id) => this.mapRefOf(id) !== undefined) && section?.num !== undefined && w(section);
       });
       if (open.length > 0) break;
     }
@@ -603,7 +604,7 @@ export class Director {
       mapsec: this.opts.world.sections[story.section].num!,
       place: story.name,
       map,
-      cells: [...story.cells],
+      cells: storyCells(story, (id) => this.mapRefOf(id)!),
     }))
       this.opts.send(msg);
     return true;
@@ -613,7 +614,7 @@ export class Director {
   private markTold(story: (typeof STORIES)[number]): MapRef {
     const map = this.mapRefOf(story.map)!;
     this.told.add(story.id);
-    for (const c of story.cells) this.dealtCells.add(cellKey({ map, x: c.x, y: c.y }));
+    for (const c of storyCells(story, (id) => this.mapRefOf(id)!)) this.dealtCells.add(cellKey({ map: c.map ?? map, x: c.x, y: c.y }));
     return map;
   }
 

@@ -1,0 +1,30 @@
+# story-regi-smash: DESERT RUINS's sealed chamber opens on A at its wall, as Rock Smash
+# would (br_story.c, BrStory_Tick). No HM is asked for: there are none to teach.
+#
+# FLAG_SYS_REGIROCK_PUZZLE_COMPLETED (0x8B0) is gSaveBlock1Ptr+0x1386 bit 0. The wall is
+# (7..9,19..20) and its middle bottom the warp up into the chamber; we boot under it at
+# (8,21) on DESERT RUINS (24:6).
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 01 00 18 06 08 00 15 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 24
+expect u8 *gSaveBlock1Ptr+5 6
+expectbits u8 *gSaveBlock1Ptr+0x1386 0x01 0x00
+# Shut: walking at it goes nowhere.
+hold UP 20
+wait 30
+expect u16 *gSaveBlock1Ptr+2 21
+shot sealed
+tap A
+wait 30
+expectbits u8 *gSaveBlock1Ptr+0x1386 0x01 0x01
+shot opened
+hold UP 12
+wait 150
+# Through the warp, in the chamber at (8,11).
+expect u8 *gSaveBlock1Ptr+5 6
+expect u16 *gSaveBlock1Ptr+2 11
+shot chamber
+say story regi smash ok

@@ -141,7 +141,7 @@ export interface EventDrop {
   /** Where the pieces lie, best first, in the page's space (landing.json's): the first is
    *  the legendary's, and the one past the pieces (EVENT_CELLS) the trader's. Fewer drops
    *  fewer, the trader first to go and then the supplies. */
-  cells: { x: number; y: number }[];
+  cells: { x: number; y: number; map?: MapRef }[];
 }
 
 /** An event, as the messages that put it on the ground: the `event` first, then the
@@ -167,32 +167,43 @@ export function layEvent(
 ): Msg[] {
   const level = rungForPhase(e.phase);
   const at = (i: number) => ({ x: e.cells[i].x + MAP_OFFSET, y: e.cells[i].y + MAP_OFFSET });
+  // A story can lie on more than one map (STERN's harbour and the ship); a cell with no
+  // map of its own is on the event's.
+  const mapOf = (i: number) => e.cells[i].map ?? e.map;
+  const same = (a: MapRef, b: MapRef) => a.group === b.group && a.num === b.num;
   const all = [...bags, SUPPLIES.map((s) => ({ ...s }))];
   const pieces = species.length + all.length;
 
   let i = 0;
-  const mons: SpillMon[] = [];
+  const mons: { map: MapRef; mon: SpillMon }[] = [];
   for (const s of species) {
     if (i >= e.cells.length) break;
-    mons.push({ key: eventKey(e.n, i), ...at(i), species: s, level });
+    mons.push({ map: mapOf(i), mon: { key: eventKey(e.n, i), ...at(i), species: s, level } });
     i++;
   }
   const event: EventMsg = { t: 'event', seat: e.seat, n: e.n, mapsec: e.mapsec, key: eventKey(e.n, 0) };
   if (e.place !== undefined) event.place = e.place;
   const offers = RARES.filter((r) => !species.includes(r));
   if (e.cells.length > pieces && offers.length > 0) {
-    const trader: EventTrader = { map: e.map, ...at(pieces), species: offers[pickIndex(rng, offers.length)] };
+    const trader: EventTrader = { map: mapOf(pieces), ...at(pieces), species: offers[pickIndex(rng, offers.length)] };
     event.trader = trader;
   }
   const spills: SpillMsg[] = [];
   for (const items of all) {
     if (i >= e.cells.length) break;
     const bag: SpillBag = { key: eventKey(e.n, i), ...at(i), items, money: 0 };
-    spills.push({ t: 'spill', seat: e.seat, map: e.map, mons: [], bag });
+    spills.push({ t: 'spill', seat: e.seat, map: mapOf(i), mons: [], bag });
     i++;
   }
-  if (spills.length > 0) spills[0].mons = mons;
-  else if (mons.length > 0) spills.push({ t: 'spill', seat: e.seat, map: e.map, mons });
+  // The mons ride the first bag's spill on their map, or one of their own.
+  for (const { map, mon } of mons) {
+    let spill = spills.find((s) => same(s.map, map));
+    if (!spill) {
+      spill = { t: 'spill', seat: e.seat, map, mons: [] };
+      spills.push(spill);
+    }
+    spill.mons.push(mon);
+  }
   return [event, ...spills];
 }
 

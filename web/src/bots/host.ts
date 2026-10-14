@@ -3,7 +3,7 @@
 // and a test can drive them: nothing here touches the page or keeps module state -- the
 // World they walk is bots/hoenn.ts's, built once for the tab -- and the clock and the
 // pump are the caller's to hand in.
-import { Bots, type BotsOptions } from './brain';
+import { Bots, canFly, type BotsOptions } from './brain';
 import { lootView, resumeAt } from './adapt';
 import { pageCell, type RomCell } from './space';
 import { dealBots, type Bot } from './roster';
@@ -21,6 +21,7 @@ import { SAFARI_CELLS } from '../match/safari';
 import { MAP_OFFSET } from '../net/cells';
 import { PARTY_BAG_MAX, type EventMsg, type MapRef, type Msg } from '../net/wire';
 import { traderKey } from '../match/events';
+import { storySealed } from '../match/story';
 import TRAINERS from '../data/trainers.json';
 
 /** The bots' own pump. Faster than one step, so the pace comes out of `Bots.tick`
@@ -174,6 +175,9 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
     // The table holds what the wire said, which is the ROM's space; the brain asks
     // about the grid it walks (bots/space.ts).
     loot: lootView(loot, (mapId) => refById.get(mapId), idOf),
+    // A story's doors and people (match/story.ts), at the ring's phase now.
+    sealed: (piece, bot) =>
+      storySealed(piece, { flies: canFly(bot.party), has: (id) => bot.bag.some((st) => st.id === id && st.n > 0), phase }),
     // ...and so is a trader's cell: a session's event is the wire's, MAP_OFFSET in it.
     traders: () =>
       (opts.events?.() ?? []).flatMap((e) => {
