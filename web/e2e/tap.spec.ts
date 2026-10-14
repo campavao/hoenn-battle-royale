@@ -7,7 +7,6 @@ import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
 import { World, type WorldMap } from '../src/bots/world';
-import { findPath } from '../src/bots/path';
 import worldData from '../src/data/world.json' with { type: 'json' };
 
 const __dirname = import.meta.dirname;
@@ -23,6 +22,18 @@ const LCD_LEFT = 112;
 const LCD_TOP = 72;
 /** The object-event offset. */
 const MAP_OFFSET = 7;
+/** play.spec's seed: its Safari cell is SOUTHEAST 15,14 (BrMatch_SafariCell), with no
+ *  patch dealt within reach. A random spawn made this test flaky: one run in #28's CI
+ *  never reached its tile, and whatever stopped it (a patch, a person, a loot ball in
+ *  the way) a fixed cell and a fixed goal take out of the picture. */
+const SEED = 5376;
+const SAFARI_SE = { group: 26, num: 13, id: 'MAP_SAFARI_ZONE_SOUTHEAST' };
+const SPAWN = { x: 15, y: 14 };
+/** Three tiles north: 15,13 is grass (which meets nothing since #19), 15,12 and 15,11
+ *  open ground, nobody's object on any of them. */
+const STEP = { dx: 0, dy: -3 };
+/** gBrPatch.count: no patch at all, whatever the seed dealt. */
+const PATCH_COUNT = 4;
 
 type EmuWindow = { __hbr: { emu: { read(addr: number, width: 8 | 16 | 32): number } } };
 
@@ -31,13 +42,13 @@ test.beforeAll(() => {
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
 });
 
-test('a tap on a tile walks the trainer to it', async ({ browser }) => {
+test('a tap on a tile walks the trainer to it', async ({ browser }, testInfo) => {
   test.setTimeout(150_000);
   const symbols = loadSymbols();
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&fast&rom=${romHashParam()}`);
+    await page.goto(`/#solo&fast&seed=${SEED}&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
 
     // In the Zone, with the boot's warp done: the position holds still for a moment.
@@ -60,41 +71,27 @@ test('a tap on a tile walks the trainer to it', async ({ browser }) => {
     }
     expect(before.group, 'standing somewhere real').toBeGreaterThan(0);
 
-    // Somewhere on screen, a few steps away, that the world says is reachable over plain
-    // ground (class 0) only: a step into tall grass can start a wild battle, a door or
-    // warp takes the trainer off the map, and a ledge jumps past the tile. Any of them
-    // stops the walk short of the goal; this test is about the tap, not the route.
-    const maps = (worldData as { maps: WorldMap[] }).maps;
-    const world = new World(maps);
-    const id = maps.find((m) => m.group === before.group && m.num === before.num)!.id;
-    const plain = (x: number, y: number) => world.cell(id, x, y) === 0;
-    const from = { map: id, x: before.x - MAP_OFFSET, y: before.y - MAP_OFFSET };
-    let goal: { x: number; y: number; dx: number; dy: number } | null = null;
-    outer: for (const d of [3, 2, 4, 1]) {
-      for (const [dx, dy] of [[d, 0], [-d, 0], [0, d], [0, -d], [d, 1], [-d, -1], [1, d], [-1, -d]] as [number, number][]) {
-        const to = { map: id, x: from.x + dx, y: from.y + dy };
-        if (!plain(to.x, to.y)) continue;
-        const p = findPath(world, from, to);
-        if (p.found && p.steps.length > 0 && p.steps.length <= 8
-          && p.steps.every((s) => s.to.map === id && plain(s.to.x, s.to.y))) {
-          goal = { x: to.x, y: to.y, dx, dy };
-          break outer;
-        }
-      }
+    expect({ group: before.group, num: before.num, x: before.x - MAP_OFFSET, y: before.y - MAP_OFFSET }, 'the seed\'s cell')
+      .toEqual({ group: SAFARI_SE.group, num: SAFARI_SE.num, ...SPAWN });
+    const world = new World((worldData as { maps: WorldMap[] }).maps);
+    const goal = { x: SPAWN.x + STEP.dx, y: SPAWN.y + STEP.dy, dx: STEP.dx, dy: STEP.dy };
+    for (let k = 1; k <= Math.abs(STEP.dy); k++) {
+      expect(world.standable(SAFARI_SE.id, SPAWN.x, SPAWN.y - k), `${SPAWN.x},${SPAWN.y - k} can be walked`).toBe(true);
     }
-    expect(goal, 'a reachable tile on screen').not.toBeNull();
+    expect(symbols.gBrPatch, 'gBrPatch is in the symbol table').toBeDefined();
+    await page.evaluate(([a, off]) => (window as unknown as { __hbr: { emu: { write(addr: number, v: number, w: 8): void } } }).__hbr.emu.write(a + off, 0, 8), [symbols.gBrPatch, PATCH_COUNT]);
 
     // The tap: the tile's centre, in the picture's pixels, through the canvas's box --
     // the LCD inside it, since the core's canvas carries a band past the LCD (POK-319).
     const box = (await page.locator('#canvas').boundingBox())!;
     const band = await page.evaluate(() => (window as unknown as { __hbr: { emu: { viewport: { left: number; top: number; right: number; bottom: number } | null } } }).__hbr.emu.viewport);
     const scale = box.width / (240 + (band?.left ?? 0) + (band?.right ?? 0));
-    const px = box.x + ((band?.left ?? 0) + LCD_LEFT + goal!.dx * 16 + 8) * scale;
-    const py = box.y + ((band?.top ?? 0) + LCD_TOP + goal!.dy * 16 + 8) * scale;
-    await page.screenshot({ path: path.join(OUT_DIR, 'tap-before.png') });
+    const px = box.x + ((band?.left ?? 0) + LCD_LEFT + goal.dx * 16 + 8) * scale;
+    const py = box.y + ((band?.top ?? 0) + LCD_TOP + goal.dy * 16 + 8) * scale;
+    await page.screenshot({ path: path.join(OUT_DIR, `tap-before-${testInfo.retry}.png`) });
     await page.touchscreen.tap(px, py);
 
-    const want = { x: goal!.x + MAP_OFFSET, y: goal!.y + MAP_OFFSET };
+    const want = { x: goal.x + MAP_OFFSET, y: goal.y + MAP_OFFSET };
     await page.waitForFunction(
       ([base, x, y]) => {
         const emu = (window as unknown as EmuWindow).__hbr.emu;
@@ -104,7 +101,7 @@ test('a tap on a tile walks the trainer to it', async ({ browser }) => {
       [symbols.gBrOwnPos, want.x, want.y],
       { timeout: 15_000 },
     );
-    await page.screenshot({ path: path.join(OUT_DIR, 'tap-after.png') });
+    await page.screenshot({ path: path.join(OUT_DIR, `tap-after-${testInfo.retry}.png`) });
     const after = await own();
     expect({ x: after.x, y: after.y }).toEqual(want);
 
