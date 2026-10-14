@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, DeadEnd, decideStart, doorLabel, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, refusalLine, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState } from './room';
+import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, DeadEnd, decideStart, doorLabel, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, refusalLine, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState, waitsOnHost } from './room';
 import { freshMatch, noteMatch, ringClockLeft } from './lifecycle';
 import { EndGrace } from './grace';
 import { Director, type DirectorWorld } from './director';
@@ -129,6 +129,18 @@ describe('when a match starts (POK-330 #42)', () => {
     expect(decideStart({ t: 'attached' }, page({ match: inFlight }))).toEqual({ do: 'nothing' });
     expect(decideStart({ t: 'attached' }, page({ roomStarted: true, match: { ...inFlight, ended: true } }))).toEqual({ do: 'nothing' });
     expect(decideStart({ t: 'attached' }, page({ countingDown: true }))).toEqual({ do: 'nothing' });
+  });
+
+  it('names the rooms that wait on their host to start (away.ts takes them off the list)', () => {
+    expect(waitsOnHost(page({ mode: 'host' }))).toBe(true);
+    expect(waitsOnHost(page({ mode: 'host', match: { ...inFlight, ended: true } }))).toBe(true);
+    expect(waitsOnHost(page({ mode: 'quick', played: true }))).toBe(true);
+    expect(waitsOnHost(page({ mode: 'host', isHost: false }))).toBe(false);
+    expect(waitsOnHost(page({ mode: 'host', match: inFlight }))).toBe(false);
+    expect(waitsOnHost(page({ mode: 'host', countingDown: true }))).toBe(false);
+    // the buzzer starts a quick room's first match; the daily is nobody's
+    expect(waitsOnHost(page({ mode: 'quick' }))).toBe(false);
+    expect(waitsOnHost(page({ mode: 'daily', played: true }))).toBe(false);
   });
 
   it('neither the buzzer nor a count that ran out deals over a match that is on', () => {

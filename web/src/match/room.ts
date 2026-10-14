@@ -256,6 +256,15 @@ function readiesUp(s: Pick<StartState, 'mode' | 'autoStarts' | 'played' | 'count
   return s.played && startsItself(s.mode) && s.autoStarts && !s.countingDown;
 }
 
+/** This page hosts a room that is waiting on it: no match on (or the last one decided),
+ *  no count running, and nothing but our START to start the next. A room that starts
+ *  itself waits on nobody before its first match, and the daily is nobody's. */
+export function waitsOnHost(s: StartState): boolean {
+  if (!s.isHost || s.countingDown || s.mode === 'daily') return false;
+  if (s.match.active && !s.match.ended) return false;
+  return !(startsItself(s.mode) && s.autoStarts && !s.played);
+}
+
 /** What START says: READY UP when a press arms the count rather than dealing. */
 export function startLabel(s: Pick<StartState, 'mode' | 'autoStarts' | 'played' | 'countingDown'>): string {
   return readiesUp(s) ? 'READY UP' : 'START';
