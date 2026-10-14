@@ -69,19 +69,21 @@ const CUT_RUNG = 20;
  *  flight across Hoenn is a way out of the fog, and that is worth waiting for. */
 const FLY_RUNG = 25;
 
-const POOL: { species: number; name: string; moves: number[]; water?: true; flier?: true }[] = [
+/** Species ids are the ROM's (include/constants/species.h, Gen 3 internal order, not the
+ *  National Dex): party.test.ts holds every row's id to its name there. */
+export const POOL: { species: number; name: string; moves: number[]; water?: true; flier?: true }[] = [
   { species: 277, name: 'TREECKO', moves: [1, 43] }, // POUND, LEER
   { species: 280, name: 'TORCHIC', moves: [10, 45] }, // SCRATCH, GROWL
   { species: 283, name: 'MUDKIP', moves: [33, 45], water: true }, // TACKLE, GROWL
   { species: 286, name: 'POOCHYENA', moves: [33, 43] },
   { species: 288, name: 'ZIGZAGOON', moves: [33, 39] }, // TACKLE, TAIL WHIP
   { species: 290, name: 'WURMPLE', moves: [33, 81] },
-  { species: 296, name: 'TAILLOW', moves: [33, 45], flier: true },
-  { species: 300, name: 'WINGULL', moves: [55, 39], water: true, flier: true }, // WATER GUN
-  { species: 304, name: 'RALTS', moves: [93, 45] }, // CONFUSION
-  { species: 309, name: 'ARON', moves: [33, 106] },
-  { species: 313, name: 'ELECTRIKE', moves: [33, 84] }, // THUNDER SHOCK
-  { species: 325, name: 'MAKUHITA', moves: [4, 43] },
+  { species: 304, name: 'TAILLOW', moves: [33, 45], flier: true },
+  { species: 309, name: 'WINGULL', moves: [55, 39], water: true, flier: true }, // WATER GUN
+  { species: 392, name: 'RALTS', moves: [93, 45] }, // CONFUSION
+  { species: 382, name: 'ARON', moves: [33, 106] },
+  { species: 337, name: 'ELECTRIKE', moves: [33, 84] }, // THUNDER SHOCK
+  { species: 335, name: 'MAKUHITA', moves: [4, 43] },
 ];
 
 function hp(level: number): number {

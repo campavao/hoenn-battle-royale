@@ -31,7 +31,7 @@ function run(party: PackedMon[]) {
 }
 
 const withFly: PackedMon[] = [
-  { species: 296, level: 30, hp: 40, maxHp: 40, status: 0, moves: [{ id: MOVE_FLY, pp: 15, ppUps: 0 }], heldItem: 0, otId: 0, personality: 1, exp: 0, nickname: 'TAILLOW', ot: 'BR' },
+  { species: 304, level: 30, hp: 40, maxHp: 40, status: 0, moves: [{ id: MOVE_FLY, pp: 15, ppUps: 0 }], heldItem: 0, otId: 0, personality: 1, exp: 0, nickname: 'TAILLOW', ot: 'BR' },
 ];
 const withoutFly: PackedMon[] = [{ ...withFly[0], moves: [{ id: 33, pp: 35, ppUps: 0 }] }];
 
