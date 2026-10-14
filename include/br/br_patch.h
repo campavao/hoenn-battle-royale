@@ -8,7 +8,8 @@
 // cells on each map stir instead -- the grass's own rustle, darkened, and on water, a
 // cave floor or sand a drifting dark shadow -- and stepping on one starts a battle from
 // that map's own table. The first trainer there has it: the cell is gone for everybody,
-// the way a ball on the ground is. Two who step on it in the same frame both get their
+// the way a ball on the ground is, until the ring moves on a phase and every taken patch
+// grows back (Cam, 2026-10-14). Two who step on it in the same frame both get their
 // battle; the PICKUPs cross, and each takes it off the other's map.
 //
 // Nothing goes over the wire to place them. The cells are dealt from the match seed and
@@ -47,8 +48,8 @@ extern struct BrPatch gBrPatch;
 extern u8 gBrPatchTaken[];
 
 void BrPatch_Init(void);
-// Deals this map's patches when we have walked onto a new one, and draws the ones in
-// view. Every frame.
+// Deals this map's patches when we have walked onto a new one, grows the taken ones back
+// on a new ring phase, and draws the ones in view. Every frame.
 void BrPatch_Tick(void);
 // Is the player standing on a patch nobody has taken: the whole of the wild encounter
 // check now (wild_encounter.c's WildEncounterCheck).

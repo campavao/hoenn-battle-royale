@@ -1,0 +1,47 @@
+# patch-regrow: a taken patch grows back when the ring moves on a phase (Cam, 2026-10-14:
+# "Patches can regrow over time"; br_patch.c, Regrow on a new gBrRing.phase).
+#
+# patch-battle.txt's ROUTE 102 under seed 4: patch 1 at (18,9) is drawn from the boot
+# cell. Seat 1's PICKUP of its key, 0x2009, takes it off and it stays off for the rest
+# of phase 1. The RING for phase 2 brings it back, drawn, and a step onto it is a battle.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+# RING phase 1, centre 25,12, r 30 (inside everywhere)
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrRing+1 1
+expectne u8 gBrPatch+6 64
+# PICKUP [seat 1, key 0x2009, the whole piece]
+pokebytes gBrMailbox+0x1058 0A 0B 08 00 00 01 09 20 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u8 gBrPatch+6 64
+# ...and still gone a while into the same phase
+wait 120
+expect u8 gBrPatch+6 64
+shot taken
+# RING phase 2: everything taken in phase 1 grows back
+pokebytes gBrMailbox+0x1098 0C 0A 07 00 00 00 02 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 3
+wait 10
+expect u8 gBrRing+1 2
+expectne u8 gBrPatch+6 64
+shot regrown
+# west twice, as patch-battle.txt: plain grass, then the patch
+drain gBrMailbox
+tap LEFT
+wait 4
+tap LEFT
+wait 250
+expect u16 gBattleTypeFlags 0
+expect u16 gObjectEvents+0x10 26
+tap LEFT
+wait 250
+expect u16 gBattleTypeFlags 4
+expectmsg 10 u16 1 0x2009
+shot wild
+say patch regrow ok
