@@ -177,23 +177,30 @@ void BrMoves_TeachSoon(u16 item)
     sTeachAge = 0;
 }
 
+// data[0]: the TM, kept here rather than read back from gSpecialVar_ItemId, which a
+// script that took the field during the fade may have written.
 static void Task_OpenTeach(u8 taskId)
 {
+    u16 item = gTasks[taskId].data[0];
+
     if (gPaletteFade.active)
         return;
     DestroyTask(taskId);
     if (gMain.callback2 != CB2_Overworld || ScriptContext_IsEnabled())
     {
-        // Something took the field during the fade: try again once it is ours. A new
-        // screen owns the fade and the controls; a script locked them itself and its end
-        // unlocks them.
-        sTeach = gSpecialVar_ItemId;
-        sTeachHad = CountTotalItemQuantityInBag(sTeach) - 1;
+        // Something took the field during the fade: try again once it is ours. Our lock
+        // goes (a running script re-locks every frame it runs, and a new screen hands
+        // the field back through its own field callback); a new screen owns the fade.
+        sTeach = item;
+        sTeachHad = CountTotalItemQuantityInBag(item) - 1;
         sTeachAge = 0;
+        UnlockPlayerFieldControls();
         if (gMain.callback2 == CB2_Overworld)
             FadeScreen(FADE_FROM_BLACK, 0);
         return;
     }
+    gSpecialVar_ItemId = item;
+    gItemUseCB = ItemUseCB_TMHM;
     sTeaching = TRUE;
     CleanupOverworldWindowsAndTilemaps();
     SetMainCallback2(CB2_ShowPartyMenuForItemUse);
@@ -216,14 +223,12 @@ void BrMoves_Tick(void)
         return;
     if (ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked() || !IsPlayerStandingStill())
         return;
-    gSpecialVar_ItemId = sTeach;
-    sTeach = ITEM_NONE;
-    gItemUseCB = ItemUseCB_TMHM;
     PlayRainStoppingSoundEffect();
     HideMapNamePopUpWindow();
     LockPlayerFieldControls();
     FadeScreen(FADE_TO_BLACK, 0);
-    CreateTask(Task_OpenTeach, 10);
+    gTasks[CreateTask(Task_OpenTeach, 10)].data[0] = sTeach;
+    sTeach = ITEM_NONE;
 }
 
 static void CB2_TeachDone(void)

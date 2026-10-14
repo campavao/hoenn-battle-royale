@@ -660,7 +660,8 @@ static const u8 sText_Took[] = _("TOOK ");
 static const u8 sText_Found[] = _("FOUND ");
 static const u8 sText_Gift[] = _("A GIFT: ");
 static const u8 sText_Bang[] = _("!");
-static const u8 sText_NobodyLearns[] = _("NO ONE CAN LEARN ");
+static const u8 sText_NobodyLearns[] = _("NO ONE CAN USE ");
+static const u8 sText_HaveTm[] = _("ALREADY HAVE ");
 
 // Tell the room it is gone, and take it off our own ground: nobody hears their own
 // message come back. A full ring holds the PICKUP until there is room (Take() asks
@@ -761,13 +762,14 @@ static void Take(struct BrLootItem *it)
     // hold full too, the press does nothing and the piece is there for the next one.
     if (!BrWire_CanHold(BR_PICKUP_LEN))
         return;
-    // A TM nobody here can learn stays where it lies, for somebody who can; one we take
+    // A TM nobody here can use, or a second copy, stays where it lies for somebody who can
+    // (one each: the coordinator's default, 2026-10-14, Cam can overrule); one we take
     // goes straight to the teach screen (br_moves.h), below.
     if ((it->kind == BR_LOOT_ITEM || OneThing(it)) && BrMoves_IsTm(it->species))
     {
-        if (!BrMoves_Teachable(it->species))
+        if (CheckBagHasItem(it->species, 1) || !BrMoves_Teachable(it->species))
         {
-            p = BrHud_Append(line, last, sText_NobodyLearns);
+            p = BrHud_Append(line, last, CheckBagHasItem(it->species, 1) ? sText_HaveTm : sText_NobodyLearns);
             BrHud_Append(p, last, gMoveNames[ItemIdToBattleMoveId(it->species)]);
             PlaySE(SE_FAILURE);
             BrHud_Box(line);
@@ -794,7 +796,7 @@ static void Take(struct BrLootItem *it)
         PlaySE(SE_PIN);
         sGivenBag = *it; // where its GIVE puts back what does not fit
         if (OneThing(it) && BrMoves_IsTm(it->species))
-            BrMoves_TeachSoon(it->species); // once its GIVE has put it in the bag
+            BrMoves_TeachSoon(it->species); // once its GIVE has bagged it; a bounced GIVE times out
         SendPickup(it);
         return;
     }

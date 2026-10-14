@@ -1617,7 +1617,8 @@ function stepWatch(bridge: Bridge, spectate: Spectate, dir: 1 | -1): void {
     .filter((e) => e.alive && e.seat !== bridge.seat)
     .map((e) => e.seat);
   const next = cycleWatch(alive, spectate.watchingSeat(), dir);
-  if (next === null) return;
+  // The only one left: following them again would replay their fight from its start.
+  if (next === null || next === spectate.watchingSeat()) return;
   for (const m of spectate.follow(next)) bridge.pushToRom(m);
   renderSpectate(bridge, spectate);
 }

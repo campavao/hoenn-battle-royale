@@ -15,7 +15,7 @@ tap A
 wait 30
 shot left
 wait 60
-# "NO ONE CAN LEARN THUNDERBOLT": still on the ground, nothing taken, nothing in the bag
+# "NO ONE CAN USE THUNDERBOLT": still on the ground, nothing taken, nothing in the bag
 expect u8 gBrLoot+11 3
 expect u8 gBrLoot+0xA2 0
 expect u16 *gSaveBlock1Ptr+0x690 0
