@@ -113,19 +113,21 @@ describe('the desktop key legend', () => {
   const SIZES = { pad: { w: 200, h: 138 }, row: { w: 440, h: 24 } };
   const at = (w: number, h: number) => placeLegend(layoutField(w, h), w, h, SIZES);
 
-  it('sits in the room right of the picture when there is room for the GBA shape', () => {
-    // 2560x1080 less the sheet: the picture is 1620 wide in 2080, 230 either side.
+  it('sits in the room right of the picture', () => {
+    // 2560x1080 less the sheet, at a phone's zoom (2): the picture is 480 wide in 2080.
     expect(at(2080, 1080)).toEqual({ mode: 'pad', x: 2080 - 210, y: 1080 - 148 });
+    // 1280x720 less the sheet: 480x320 in 800x720, 160 either side and 200 under it.
+    expect(at(800, 720)).toEqual({ mode: 'pad', x: 800 - 210, y: 720 - 148 });
   });
 
   it('is one row under the picture where only a strip is free', () => {
-    // 1280x720 less the sheet: 800x533 in 800x720, 93 under it.
-    expect(at(800, 720)).toEqual({ mode: 'row', x: 180, y: 720 - 34 });
+    // 700x400 at 1.667: the picture is 400x267 at (150, 67), 67 under it.
+    expect(at(700, 400)).toEqual({ mode: 'row', x: 130, y: 400 - 34 });
   });
 
   it('is nowhere when the picture fills the box', () => {
-    // 1920x960 less the sheet is 1440x960: exactly 3:2, no field past the picture.
-    expect(at(1440, 960)).toBeNull();
+    // A box exactly the picture at its zoom has no field past it.
+    expect(placeLegend(layoutField(360, 240), 360, 240, SIZES)).toBeNull();
   });
 
   it('never overlaps the picture, whatever the box', () => {
