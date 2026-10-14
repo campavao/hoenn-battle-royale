@@ -100,6 +100,7 @@ Std_FindItem::
 @ A vitamin or a sell item is used up here; a ball is six, a status heal a FULL RESTORE.
 	callnative BrItems_FindItem
 	goto_if_eq VAR_RESULT, TRUE, BR_EventScript_FoundUsed
+	goto_if_eq VAR_RESULT, 2, BR_EventScript_FoundLeft
 .endif
 	copyvar VAR_0x8004, ITEMID
 	copyvar VAR_0x8005, AMOUNT
@@ -153,6 +154,7 @@ EventScript_HiddenItemScript::
 .if BR
 	callnative BrItems_FindHidden
 	goto_if_eq VAR_RESULT, TRUE, BR_EventScript_FoundHiddenUsed
+	goto_if_eq VAR_RESULT, 2, BR_EventScript_FoundHiddenLeft
 .endif
 	additem VAR_0x8005
 	copyvar VAR_0x8007, VAR_RESULT

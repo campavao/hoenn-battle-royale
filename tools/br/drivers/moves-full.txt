@@ -15,8 +15,11 @@ pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 pokebytes gBrLoot 01 00 0C 00 10 00 26 01 00 09 00 03 FF 00 00 00 00 00 00 00
 wait 60
+# each pickup brings up the teach screen by itself (tm-teach.txt): B keeps the TM
 tap A
-wait 90
+wait 150
+tap B
+wait 120
 expect u16 *gSaveBlock1Ptr+0x690 294
 pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
 poke u16 gBrMailbox+0x0C 1

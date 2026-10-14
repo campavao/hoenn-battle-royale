@@ -1,0 +1,31 @@
+# balls-tm-left: a map's item ball dealt a TM nobody in the party can learn stays where it
+# is (Cam, 2026-10-14: "if not teachable stay on the ground"). Std_FindItem asks
+# BrItems_FindItem first, which says so and leaves the object and its flag alone.
+#
+# ROUTE 104's PP UP ball at (39,15), local id 21, as balls-dealt.txt: under seed 203 it is
+# dealt TM03 WATER PULSE (291), which TREECKO cannot learn.
+wait 30
+poke u32 gBrMatch+8 203
+pokebytes gBrMailbox+0x2018 81 00 00 13 27 00 0E 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u16 *gSaveBlock1Ptr+0x690 0
+tap A
+wait 60
+shot left
+tap A
+wait 60
+tap A
+wait 60
+expect u32 gMain+4 CB2_Overworld+1
+expect u16 *gSaveBlock1Ptr+0x690 0
+# the ball is still there: the same press finds it again
+tap A
+wait 60
+shot again
+tap A
+wait 60
+tap A
+wait 60
+expect u16 *gSaveBlock1Ptr+0x690 0
+say balls tm left ok

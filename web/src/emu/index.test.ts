@@ -90,6 +90,26 @@ describe('Emulator', () => {
     expect(ALL_KEYS).toHaveLength(10);
   });
 
+  it('a key divertPress takes never reaches the core: not its repeats, not its release', async () => {
+    const { emu, calls } = await make();
+    const took: string[] = [];
+    emu.divertPress = (key) => {
+      if (key !== 'right') return false;
+      took.push(key);
+      return true;
+    };
+    emu.press('right');
+    emu.press('right'); // a keyboard's repeat
+    emu.release('right');
+    emu.press('right');
+    emu.press('up');
+    emu.release('right');
+    emu.release('up');
+    expect(took).toEqual(['right', 'right']);
+    expect(calls).toEqual(['press up', 'release up']);
+    expect(emu.keys()).toBe(0);
+  });
+
   it('reads and writes EWRAM and IWRAM through the heap views', async () => {
     const { emu, heap } = await make();
     heap[0x1000 + 0x10] = 0x78;

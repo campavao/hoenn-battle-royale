@@ -1,0 +1,36 @@
+# tm-teach: a TM off the ground goes straight to the teach screen (Cam, 2026-10-14:
+# "moves that are picked up should immediately go into the teach screen"). br_loot.c's
+# Take queues it and BrMoves_Tick opens the bag's own TM party screen once it is in the
+# bag and the field is ours; teaching spends it and the screen goes back to the field.
+#
+# TREECKO at 5 knows POUND and LEER. A TM06 TOXIC (294) under our feet, as moves-spend
+# puts it (see there for the loot and TM-pocket conventions).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerParty+0x54 5
+expect u16 *gSaveBlock1Ptr+0x690 0
+pokebytes gBrLoot 01 00 0C 00 10 00 26 01 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 150
+shot teach
+# taken, in the bag, and the party screen is up on its own
+expect u8 gBrLoot+0xA2 1
+expect u16 *gSaveBlock1Ptr+0x690 294
+expectne u32 gMain+4 CB2_Overworld+1
+# TREECKO: "TREECKO learned TOXIC!", and A past it
+tap A
+wait 120
+shot learned
+tap A
+wait 120
+# spent, and back on the field with the controls ours
+expect u16 *gSaveBlock1Ptr+0x690 0
+expect u32 gMain+4 CB2_Overworld+1
+shot field
+hold RIGHT 20
+wait 30
+expectne u16 gBrOwnPos+2 12
+say tm teach ok
