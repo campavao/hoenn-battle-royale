@@ -248,7 +248,19 @@ out, and one that comes in waits as it would in a menu.
   SCALE only for the SCANNER from the ABANDONED SHIP's office. The LAVARIDGE egg woman has
   no flag to stand her down, so her WYNAUT is a ball at her feet. Bots walk a grid that
   knows no door or terms, so `storySealed` keeps a chamber from a bot that could not open
-  it and STERN's thanks from one without the SCANNER.
+  it and STERN's thanks from one without the SCANNER. The gates are the teams' bosses
+  where Emerald stood them, each holding what his team was after: MAXIE with GROUDON
+  and a MASTER BALL in his hideout, ARCHIE with KYOGRE on Route 128, SHELLY with the
+  WEATHER INSTITUTE's CASTFORM, MATT with the AQUA HIDEOUT's MASTER BALL, MAXIE with the
+  METEORITE on MT. CHIMNEY and the SPACE CENTER's SUN STONE (those two with two rares).
+  A at him is his own trainer fight, one page of speech; the win hands over what he
+  held, and the rest of his story waits until then ("MAXIE GUARDS IT"). Each ROM fights
+  him for itself and whoever wins first takes it from the room; his win drops no team, and
+  a win that comes too late says SOMEBODY GOT THERE FIRST. At MT. CHIMNEY and the SPACE
+  CENTER he holds the stone and the two rares open when he falls. A bot that steps up to
+  him fights him through `duel()` with his own team at the rung: a loss puts it out, as it
+  does a player, and a win leaves it hurt. A story with no legendary in it is "A RARE
+  FIND AT" on the ticker, not "A LEGENDARY".
 - **Gift-givers** (Cam, 2026-10-13): at the buzzer the host stands one person in every
   town and city (`match/gifts.ts`), holding one held item (LEFTOVERS, CHOICE BAND, QUICK
   CLAW and the like). On the wire he is a `spill` of a one-item bag under key `0xC000 | i`,

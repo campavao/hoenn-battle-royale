@@ -7,7 +7,7 @@ import { Bots, type BotsOptions } from './brain';
 import { lootView, resumeAt } from './adapt';
 import { pageCell, type RomCell } from './space';
 import { dealBots, type Bot } from './roster';
-import { dealParty } from './party';
+import { dealParty, tradedMon } from './party';
 import type { World } from './world';
 import { HOENN, type WorldIndex } from './hoenn';
 import type { DirectorWorld } from '../match/director';
@@ -21,7 +21,7 @@ import { SAFARI_CELLS } from '../match/safari';
 import { MAP_OFFSET } from '../net/cells';
 import { PARTY_BAG_MAX, type EventMsg, type MapRef, type Msg } from '../net/wire';
 import { traderKey } from '../match/events';
-import { FLYING, storySealed } from '../match/story';
+import { FLYING, storyGuard, storySealed } from '../match/story';
 import TRAINERS from '../data/trainers.json';
 
 /** The bots' own pump. Faster than one step, so the pace comes out of `Bots.tick`
@@ -177,7 +177,14 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
     loot: lootView(loot, (mapId) => refById.get(mapId), idOf),
     // A story's doors and people (match/story.ts), at the ring's phase now.
     sealed: (piece, bot) =>
-      storySealed(piece, { flies: bot.party.some((mon) => FLYING.has(mon.species)), has: (id) => bot.bag.some((st) => st.id === id && st.n > 0), phase }),
+      storySealed(piece, {
+        flies: bot.party.some((mon) => FLYING.has(mon.species)),
+        has: (id) => bot.bag.some((st) => st.id === id && st.n > 0),
+        phase,
+        onGround: (key) => loot.has(key),
+      }),
+    // A gate's boss fights at the rung, full health, as BrLevels_LiftTrainer lifts him.
+    guard: (piece) => storyGuard(piece)?.map((species) => tradedMon(species, phase)),
     // ...and so is a trader's cell: a session's event is the wire's, MAP_OFFSET in it.
     traders: () =>
       (opts.events?.() ?? []).flatMap((e) => {

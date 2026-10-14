@@ -8,6 +8,7 @@
 //
 // No page here: the room and our own ROM are a HostLink handed in, and the HUD loop is the
 // caller's, so vitest drives it over a fake relay.
+import { storyLegend, storyOf } from './story';
 import { createHostBots, type BotResume, type HostBots } from '../bots/host';
 import type { BotsOptions } from '../bots/brain';
 import { voiceFor, type BotVoice } from '../bots/lines';
@@ -99,6 +100,7 @@ export class HostRole {
   private readonly narration: { mine(): BotVoice };
   private readonly startLoop: (director: Director) => () => void;
   private readonly now: () => number;
+  private readonly world: HostOptions['world'];
   private readonly ownLand: HostOptions['land'];
   private readonly seen = new Set<number>(); // seats already announced out, so a repeat is quiet
   /** The ticker, to the room and our own ROM, never the same line twice running (POK-324). */
@@ -147,6 +149,7 @@ export class HostRole {
     this.narration = opts.narration;
     this.startLoop = opts.startLoop;
     this.now = opts.now ?? (() => performance.now());
+    this.world = opts.world;
     this.ownLand = opts.land;
     const seed = this.seed;
     // Everybody in the room now was dealt in, or on a takeover has been hearing the match
@@ -483,7 +486,12 @@ export class HostRole {
     if (msg.t === 'start') {
       this.say(Ticker.opening(this.hostSeat, msg.safari ?? 0));
     } else if (msg.t === 'event') {
-      this.say(Ticker.event(this.hostSeat, msg.place));
+      // A story says what it is: only one with a legendary in it is "A LEGENDARY".
+      const story = storyOf(msg, this.world.sections, (id) => {
+        const m = this.world.maps.find((x) => x.id === id);
+        return m ? { group: m.group, num: m.num } : undefined;
+      });
+      this.say(Ticker.event(this.hostSeat, msg.place, !story || storyLegend(story)));
     } else if (msg.t === 'win' && msg.seat !== undefined && msg.seat !== null) {
       this.say(Ticker.won(msg.seat, this.nameOf(msg.seat)));
     }

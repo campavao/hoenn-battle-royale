@@ -971,6 +971,21 @@ static void TryTake(void)
     Take(it);
 }
 
+bool8 BrLoot_TakeKey(u16 key)
+{
+    u8 i;
+
+    for (i = 0; i < BR_MAX_LOOT; i++)
+    {
+        if (gBrLoot.items[i].kind != BR_LOOT_NONE && gBrLoot.items[i].key == key && OnCurrentMap(&gBrLoot.items[i]))
+        {
+            Take(&gBrLoot.items[i]);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 // ---- Hoenn's own trainers -------------------------------------------------------
 
 // Take the sprite off the map now, and keep taking it off every time the map comes
@@ -1133,6 +1148,8 @@ void BrLoot_TrainerBeaten(u16 trainerId, u8 localId)
     // A gym leader pays out before anything else is asked (POK-295): the purse does not
     // depend on there being a sprite to take off the map.
     BrGym_Beaten(trainerId);
+    if (BrStory_IsGate(trainerId))
+        return; // the object is the story's piece, and the story's reward is his drop
     if (localId == 0 || id >= OBJECT_EVENTS_COUNT)
         return;
     if (size == 0)

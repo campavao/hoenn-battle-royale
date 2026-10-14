@@ -50,6 +50,8 @@ const ENGAGE_COOLDOWN_MS = 2000;
  *  full room spent itself in the first minute -- half of thirty bots gone by 97s,
  *  while the fog, which is supposed to decide the match, took four all game. */
 const DUEL_COOLDOWN_MS = 12_000;
+/** The seat a gate's boss fights from in duel(): past every real one (seats are a byte). */
+const GATE_SEAT = 0x100;
 /** Long on purpose: a flight is an event, not a way of moving. */
 const FLY_COOLDOWN_MS = 45_000;
 /** One drink every ten seconds (POK-237). Without it a hurt bot empties its bag in
@@ -209,6 +211,8 @@ export interface Decision {
     | 'stuck'
     | 'fog'
     | 'duel'
+    /** Fought a gate's boss for his piece (match/story.ts, storyGuard). */
+    | 'gate'
     /** Waiting its turn to think: the tick's search budget went to somebody else. */
     | 'wait'
     // The flight out of the fog (POK-267).
@@ -256,6 +260,9 @@ export interface BotsOptions {
    *  a REGI's wall it could not open, or a person's who wants something it has not got.
    *  The grid walks through both, so without this a bot took what no player could. */
   sealed?: (piece: { key: number; mapId: string; x: number; y: number }, bot: { party: PackedMon[]; bag: Stack[] }) => boolean;
+  /** A gate's boss standing as this piece (match/story.ts, storyGuard): his team, which
+   *  the bot has to beat before it takes the piece. A loss puts it out, as it does a player. */
+  guard?: (piece: { key: number; mapId: string; x: number; y: number }) => PackedMon[] | undefined;
   /** world.json id -> the wire's group/num. */
   mapRef: (mapId: string) => MapRef | undefined;
   /** The events' traders nobody has traded with yet (speed-up 6b), in the page's space,
@@ -791,6 +798,7 @@ export class Bots {
     // that is the turn spent.
     const here = this.opts.loot?.at(walker.at.map, pageCell(walker.at.x, walker.at.y));
     if (here !== undefined && !this.opts.sealed?.({ key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y }, walker)) {
+      if (this.fightGuard(walker, here)) return;
       // A bag on the ground gives up one item per press -- the ROM's own rule -- so
       // the pickup names what was taken and the rest stays there (POK-237).
       const item = this.opts.loot?.bagAt?.(here);
@@ -1243,6 +1251,23 @@ export class Bots {
     // until the backoff is up.
     walker.retryAfter = now + RETRY_MS;
     this.wanderOneStep(walker);
+  }
+
+  /** A gate's boss on this piece: fight him first, the seeded resolver's way (duel.ts).
+   *  TRUE when the bot lost and is out; a win leaves it hurt and the piece still to take. */
+  private fightGuard(walker: Walker, key: number): boolean {
+    const boss = this.opts.guard?.({ key, mapId: walker.at.map, x: walker.at.x, y: walker.at.y });
+    if (!boss || this.opts.seed === undefined) return false;
+    this.nonce = (this.nonce + 1) & 0xffff;
+    const result = duel(this.opts.seed, { seat: walker.bot.seat, party: walker.party }, { seat: GATE_SEAT, party: boss }, this.nonce);
+    if (result.winner !== walker.bot.seat) {
+      this.note(walker, 'gate', `lost at key ${key}`);
+      this.eliminate(walker);
+      return true;
+    }
+    walker.party = result.winnerParty;
+    this.note(walker, 'gate', `won at key ${key}`);
+    return false;
   }
 
   /** The traders still standing: the room's word, less the ones a bot here has just

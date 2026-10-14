@@ -200,4 +200,8 @@ void BrLoot_AddMon(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u
 // balls once the opening is over (BrZone_ItemsGone).
 void BrLoot_DropKey(u16 key);
 
+// Take the piece under `key` on this map, as A at it would: a gate's boss handing over
+// what he held once he fell (br_story.c). FALSE: it is gone already, and nothing happens.
+bool8 BrLoot_TakeKey(u16 key);
+
 #endif // GUARD_BR_LOOT_H
