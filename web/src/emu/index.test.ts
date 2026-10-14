@@ -493,6 +493,15 @@ describe('Emulator', () => {
       expect(emu.spriteBand).toEqual(WINDOW);
     });
 
+    it("hands the core the ROM's OAM side table as an offset into EWRAM, and says when it cannot", async () => {
+      const { emu, m, calls } = await banded({ spriteBand: true });
+      expect(emu.setOamTable(0x0203d120), 'a core without the export').toBe(false);
+      m._brSetOamTable = (offset) => void calls.push(`oam ${offset}`);
+      expect(emu.setOamTable(0x0203d120)).toBe(true);
+      expect(emu.setOamTable(null)).toBe(false);
+      expect(calls.filter((c) => c.startsWith('oam'))).toEqual([`oam ${0x3d120}`, 'oam -1']);
+    });
+
     it('a core without the window is asked for no more band than the window', async () => {
       // Its band rows 256 apart are alike: past the window it would show the ring, the
       // HUD and every sprite a second time.

@@ -5,7 +5,9 @@
 #include "malloc.h"
 #include "overworld.h"
 #include "palette.h"
+#include "sprite.h"
 #include "task.h"
+#include "event_data.h"
 #include "event_object_movement.h"
 #include "fieldmap.h"
 #include "field_camera.h"
@@ -216,16 +218,163 @@ const struct BrFieldView gBrFieldView =
     BR_SPRITE_BOTTOM,
 };
 
-// Sideways the view's own columns (16 more for a sprite's width); up and down the sprite
-// window, where a top has one reading -- past it the core would draw the sprite at the
-// other end, however tall the view is.
-bool8 BrField_OffScreen(s16 x, s16 x2, s16 y)
+EWRAM_DATA struct BrFieldShown gBrFieldShown = {0};
+EWRAM_DATA u8 gBrOamHi[BR_OAM_HI_SIZE] = {0};
+// Built with the OAM buffer. In IWRAM, which C-STYLE keeps for the engine, because EWRAM
+// has no room for both copies: 64 bytes of the stack's headroom (tools/br/ram-headroom.py).
+static u8 sOamHiNext[BR_OAM_HI_SIZE];
+static bool8 sOamMarking;
+// BrField_InObjectView's room, and the frame it was counted on.
+static u32 sRoomFrame;
+static bool8 sRoomGrows;
+
+// The rows past the LCD a sprite's top may be in and still be drawn: the rows the page
+// shows, when its core reads the side table; the sprite window otherwise, where a top
+// has one reading -- past it the core would draw the sprite at the other end.
+static s16 ShownTop(void)
+{
+    return gBrFieldShown.top > BR_SPRITE_TOP ? min(gBrFieldShown.top, BR_VIEW_TOP) : BR_SPRITE_TOP;
+}
+
+static s16 ShownBottom(void)
+{
+    return gBrFieldShown.bottom > BR_SPRITE_BOTTOM ? min(gBrFieldShown.bottom, BR_VIEW_BOTTOM) : BR_SPRITE_BOTTOM;
+}
+
+// Sideways the view's own columns (16 more for a sprite's width); up and down the rows
+// shown (ShownTop). Inside the sprite window a top has one reading, so it is the top that
+// must stay in it; past the window the core reads every top from the side table, and a
+// sprite is drawn while its bottom (y2) is still in the shown rows, as pret's own test.
+bool8 BrField_OffScreen(s16 x, s16 x2, s16 y, s16 y2)
 {
     if (x >= DISPLAY_WIDTH + BR_VIEW_RIGHT + 16 || x2 < -BR_VIEW_LEFT - 16)
         return TRUE;
-    if (y >= DISPLAY_HEIGHT + BR_SPRITE_BOTTOM || y < -BR_SPRITE_TOP)
+    if (y >= DISPLAY_HEIGHT + ShownBottom())
         return TRUE;
-    return FALSE;
+    if (ShownTop() > BR_SPRITE_TOP)
+        return y2 < -ShownTop();
+    return y < -BR_SPRITE_TOP;
+}
+
+// Only the field's sprites are marked: a battle, a menu or a screen that writes the OAM
+// itself keeps the hardware's reading of every top, and the sprite window's rule.
+void BrField_OamClear(void)
+{
+    sOamMarking = BrField_OverworldRunning();
+    CpuFill16(0, sOamHiNext, sizeof(sOamHiNext));
+}
+
+// A top outside -256..511 has no reading in two bits; -2 puts it 257 rows or more above
+// the LCD, past any band.
+void BrField_OamEntry(u8 index, const struct Sprite *sprite, s16 dx, s16 dy)
+{
+    s16 y = sprite->y + sprite->y2 + sprite->centerToCornerVecY + dy;
+    s16 page;
+
+    if (!sOamMarking)
+        return;
+    if (sprite->coordOffsetEnabled)
+        y += gSpriteCoordOffsetY;
+    page = y >> 8;
+    if (page < -1 || page > 1)
+        page = -2;
+    sOamHiNext[index / 2] |= (BR_OAM_HI_MARK | (page & 3)) << (4 * (index & 1));
+}
+
+// Off the field the table goes out empty, whether or not the screen built its OAM with
+// BuildOamBuffer (save_failed_screen.c writes gMain.oamBuffer itself): the last field
+// frame's marks never land on another screen's sprites.
+void BrField_OamLatch(void)
+{
+    if (!BrField_OverworldRunning())
+    {
+        CpuFill16(0, gBrOamHi, sizeof(gBrOamHi));
+    }
+    else if (!gMain.oamLoadDisabled)
+    {
+        CpuCopy16(sOamHiNext, gBrOamHi, sizeof(gBrOamHi));
+    }
+}
+
+// The slots BR could hold: every free one and every one it holds already. The same count
+// shares the table out (BrField_ShareObjects) and sets the box BR's own are wanted in
+// (BrField_InObjectView), so BR's ghosts and loot never shrink the box that let them in.
+static u8 ObjectRoom(void)
+{
+    u8 i, n = 0;
+
+    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+    {
+        if (!gObjectEvents[i].active || BrGhosts_Insubstantial(gObjectEvents[i].localId))
+            n++;
+    }
+    return n;
+}
+
+// What is left of that once BR has what it wants in view: the room the map's people in
+// the grown rows may have. A player beside you comes before a berry tree 15 rows off.
+static u8 SpareRoom(void)
+{
+    u8 room = ObjectRoom();
+    u8 want = BrEvent_Wanted() + min(BrGhosts_Wanted(), BR_MAX_GHOSTS) + min(BrLoot_Wanted(), BR_LOOT_SHARE);
+
+    return room > want ? room - want : 0;
+}
+
+// pret's box runs 2 tiles past the sprite window's 40 rows above the LCD and its 56
+// below (the player's rows -7..+9); each 16 rows shown past those is a row more.
+static void Grow(s16 *top, s16 *bottom)
+{
+    *top -= (ShownTop() - BR_SPRITE_TOP + 15) / 16;
+    *bottom += (ShownBottom() - BR_SPRITE_BOTTOM + 15) / 16;
+}
+
+// The page shows rows past the sprite window: there is a grown box at all. Without it
+// (a desktop, a phone on its side, an old core) none of the counting below is done.
+static bool8 Grows(void)
+{
+    return ShownTop() > BR_SPRITE_TOP || ShownBottom() > BR_SPRITE_BOTTOM;
+}
+
+// The grown rows are spare room. pret spawns its own box first, in template order, so
+// the people at your feet have their slots before anyone farther off is asked about;
+// then each person in the grown rows spawns only while BR_GROW_SPARE slots are spare past
+// the headroom and what BR wants (SpareRoom), counted afresh for each. They are let go
+// once the headroom itself is eaten into, and the gap between the two keeps a person on
+// the edge from blinking out and back on every step.
+void BrField_SpawnGrown(u8 count, s16 cameraX, s16 cameraY, BrSpawnTemplateFunc spawn)
+{
+    s16 left = gSaveBlock1Ptr->pos.x - 2;
+    s16 right = gSaveBlock1Ptr->pos.x + MAP_OFFSET_W + 2;
+    s16 top = gSaveBlock1Ptr->pos.y;
+    s16 bottom = gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2;
+    s16 x, y;
+    u8 i;
+
+    if (gMapHeader.events == NULL || !Grows())
+        return;
+    Grow(&top, &bottom);
+    for (i = 0; i < count; i++)
+    {
+        struct ObjectEventTemplate *template = &gSaveBlock1Ptr->objectEventTemplates[i];
+
+        x = template->x + MAP_OFFSET;
+        y = template->y + MAP_OFFSET;
+        if (y >= gSaveBlock1Ptr->pos.y && y <= gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2)
+            continue; // pret's own rows: spawned already, or not to be
+        if (y < top || y > bottom || x < left || x > right || FlagGet(template->flagId))
+            continue;
+        if (SpareRoom() < BR_NPC_HEADROOM + BR_GROW_SPARE)
+            return;
+        spawn(template, gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup, cameraX, cameraY);
+    }
+}
+
+// The engine's cull, on a camera step: a ghost come into view since is room taken.
+void BrField_GrowObjectBox(s16 *top, s16 *bottom)
+{
+    if (Grows() && SpareRoom() >= BR_NPC_HEADROOM)
+        Grow(top, bottom);
 }
 
 // ---- leaving the field -----------------------------------------------------------
@@ -397,8 +546,21 @@ void BrField_CancelLeave(void (*enter)(void))
 
 bool8 BrField_InObjectView(s16 x, s16 y)
 {
+    s16 top = gSaveBlock1Ptr->pos.y;
+    s16 bottom = gSaveBlock1Ptr->pos.y + 16;
+
+    // Asked for every seat, piece of loot and trader, many times a frame: the room is
+    // counted once a frame, and BR's wants are not taken from it (they are what this
+    // decides). The engine's own cull counts what is spare afresh (GrowObjectBox).
+    if (sRoomFrame != gMain.vblankCounter1)
+    {
+        sRoomFrame = gMain.vblankCounter1;
+        sRoomGrows = Grows() && ObjectRoom() >= BR_NPC_HEADROOM;
+    }
+    if (sRoomGrows)
+        Grow(&top, &bottom);
     return x >= gSaveBlock1Ptr->pos.x - 2 && x <= gSaveBlock1Ptr->pos.x + 17
-        && y >= gSaveBlock1Ptr->pos.y && y <= gSaveBlock1Ptr->pos.y + 16;
+        && y >= top && y <= bottom;
 }
 
 // The homes of the wanderers BrField_KeepWhereLeft has moved, by map and local id (0 is
@@ -522,14 +684,8 @@ void BrField_ShareObjects(u8 *ghosts, u8 *loot)
     u8 wantGhosts = BrGhosts_Wanted();
     u8 nearGhosts = BrGhosts_WantedNear();
     u8 wantLoot = BrLoot_Wanted();
-    u8 i, room = 0, owed;
+    u8 room = ObjectRoom(), owed;
 
-    // What BR could hold: every free slot and every slot it already holds.
-    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
-    {
-        if (!gObjectEvents[i].active || BrGhosts_Insubstantial(gObjectEvents[i].localId))
-            room++;
-    }
     room = room > BR_NPC_HEADROOM ? room - BR_NPC_HEADROOM : 0;
     // An event's traders first: at most one or two on a map, and a person who blinks out
     // when a crowd walks by is not one you can trade with.

@@ -1,0 +1,20 @@
+# world-shown: the ROM's world is as big as the picture the page shows (gBrFieldShown,
+# include/br/br_field.h). Littleroot (8,9), the player's rows -7..+9 being pret's box.
+# Seat 16's row is put ten rows below us, past that box: with nothing shown past the
+# sprite window the ROM gives it no object; once the page says it shows 104 rows above
+# the LCD and 232 below -- a portrait phone's -- the box reaches 20 rows down and the
+# seat gets one. Then the page says nothing again, the seat still there, and the box
+# lets it go.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 08 00 09 00 BD BB C7 FF
+wait 400
+pokebytes gBrSeats+0x100 01 0F 00 09 0F 00 1A 00 01 FF
+wait 30
+expect u8 gBrSeats+0x109 255
+pokebytes gBrFieldShown 68 00 E8 00
+wait 30
+expectne u8 gBrSeats+0x109 255
+pokebytes gBrFieldShown 00 00 00 00
+wait 30
+expect u8 gBrSeats+0x100 1
+expect u8 gBrSeats+0x109 255

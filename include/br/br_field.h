@@ -3,6 +3,8 @@
 
 #include "br/br_config.h"
 
+struct Sprite;
+
 // The picture past the LCD (POK-319). In the browser the emulator draws the field's BG
 // and OBJ state onto a picture bigger than 240x160, from the same registers, so the map
 // keeps going past the GBA's window. The ROM's part is small, because Emerald already
@@ -78,9 +80,9 @@
 // step needs: its top is the ring's top at rest (BR_RING_ABOVE rows above pos.y, which
 // the LCD's top sits 40 below), and its bottom leaves the ring's last row spare, so
 // 160 + 104 + 232 = 496 rows, 31 of the ring's 32 -- at rest the player's rows -11 to +19.
-// Past the sprite window the core draws only BG1..3 (512 rows) and the weather; the
-// people out there are the page's (web/src/field.ts's overlay), since the ROM hides every
-// sprite whose top leaves the window.
+// Past the sprite window a core without the OAM side table (THE VIEW THE PAGE SHOWS,
+// below) draws only BG1..3 (512 rows) and the weather, and the ROM hides every sprite
+// whose top leaves the window; with it, the sprites are the core's too.
 //
 // Why 104 above and 232 below, not the same each way: a portrait phone puts the LCD high,
 // above the pad, so it has much more field below the picture than above it. 390x844 with
@@ -165,6 +167,56 @@ BR_SIZE(BrFieldView, 12)
 
 extern const struct BrFieldView gBrFieldView;
 
+// ---- THE VIEW THE PAGE SHOWS ------------------------------------------------------
+//
+// Emerald's world is its window. An object exists only in a box about the LCD, a sprite
+// is hidden 16 pixels past it, and the hardware's OAM y has 8 bits, so past the 256-row
+// sprite window the core used to draw no sprite at all and the page drew imitations
+// (web/src/field.ts's overlay, field-ghosts.ts). With the OAM side table the core draws
+// every sprite at its true rows, so the ROM can keep its world as big as the picture the
+// page shows: the page writes the rows it shows past the LCD into gBrFieldShown before
+// the first frame (only when its core reads the table), and the ROM hides a sprite, and
+// keeps an object, by those rows instead of the sprite window. 0, 0 is the old world.
+struct BrFieldShown
+{
+    /* 0 */ u16 top;
+    /* 2 */ u16 bottom;
+};
+BR_OFFSET(BrFieldShown, top, 0)
+BR_OFFSET(BrFieldShown, bottom, 2)
+BR_SIZE(BrFieldShown, 4)
+
+extern struct BrFieldShown gBrFieldShown;
+
+// The OAM side table the patched core reads (hbr-exports.patch, brSetOamTable): a nibble
+// an OAM entry, entry i in byte i / 2 (the low nibble for an even i). Bit 2 marks an entry
+// the hooks below wrote; bits 0-1 are the 256s its true top is past its 8-bit y, signed
+// (-2..1): the view runs 104 rows above the LCD to 232 below, so a top there is -1, 0 or 1
+// 256s out. The core draws a marked entry once at its true rows, the LCD's included, and
+// an unmarked one -- an OAM entry some screen writes for itself -- as it always did.
+// Latched when the OAM is, so the band, drawn at VBlank before the next copy, reads what
+// the hardware has.
+#define BR_OAM_HI_SIZE 64
+#define BR_OAM_HI_MARK 4
+extern u8 gBrOamHi[BR_OAM_HI_SIZE];
+// sprite.c, BuildOamBuffer, once the OAM's own copy is held off: every entry unmarked.
+void BrField_OamClear(void);
+// sprite.c, as each OAM entry is written: the entry's true top-left is the sprite's own
+// (as UpdateOamCoords puts it) moved by (dx, dy) -- a subsprite's offset, or 0, 0.
+void BrField_OamEntry(u8 index, const struct Sprite *sprite, s16 dx, s16 dy);
+// sprite.c, LoadOam: the table goes out with the OAM it describes.
+void BrField_OamLatch(void);
+// event_object_movement.c: pret's object box, rows top..bottom, grown by the rows the
+// page shows past the sprite window. TrySpawnObjectEvents spawns pret's box and then
+// BrField_SpawnGrown the grown rows, each person while BR_GROW_SPARE slots are spare past
+// the headroom; RemoveObjectEventIfOutsideView and BrField_InObjectView keep the grown box
+// while the headroom is. spawn is event_object_movement.c's TrySpawnObjectEventTemplate.
+#define BR_GROW_SPARE 4
+struct ObjectEventTemplate;
+typedef u8 (*BrSpawnTemplateFunc)(const struct ObjectEventTemplate *, u8, u8, s16, s16);
+void BrField_SpawnGrown(u8 count, s16 cameraX, s16 cameraY, BrSpawnTemplateFunc spawn);
+void BrField_GrowObjectBox(s16 *top, s16 *bottom);
+
 // Every frame from CameraUpdate: the far row or column once its step has completed, and
 // then stale rows (see THE RING above).
 void BrField_Tick(void);
@@ -175,7 +227,7 @@ void BrField_Tick(void);
 // map, not the rows the last map left there -- its border, past MAP_OFFSET.
 extern u32 gBrRingStale;
 // TRUE when a sprite whose top-left is (x, y) and right edge x2 is past the picture.
-bool8 BrField_OffScreen(s16 x, s16 x2, s16 y);
+bool8 BrField_OffScreen(s16 x, s16 x2, s16 y, s16 y2);
 
 // ---- leaving the field -----------------------------------------------------------
 
@@ -225,8 +277,9 @@ void BrField_CancelLeave(void (*enter)(void));
 bool8 BrField_InObjectView(s16 x, s16 y);
 // event_object_movement.c, RemoveObjectEventIfOutsideView: a wanderer let go of stays on
 // the tile it was let go on (2026-10-07 play-test: "npcs flashing on the screen when
-// moving around ... when they'd be off screen"). The box ends 40 rows above the LCD and
-// 72 below, inside a phone's field, and the page draws whoever the ROM lets go of from
+// moving around ... when they'd be off screen"). pret's box ends 40 rows above the LCD and
+// 72 below, inside a phone's field (grown to the rows shown, while slots allow: THE VIEW
+// THE PAGE SHOWS), and the page draws whoever the ROM lets go of from
 // their template (web/src/field-ghosts.ts): a wanderer a tile from home jumped there as
 // it went. Its template now says where it was, for the page and for the ROM's own
 // respawn alike; BrField_KeepHome keeps his range round the home he had. Not covered: walkers on a fixed

@@ -1687,6 +1687,9 @@ void TrySpawnObjectEvents(s16 cameraX, s16 cameraY)
                 && !FlagGet(template->flagId))
                 TrySpawnObjectEventTemplate(template, gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup, cameraX, cameraY);
         }
+#if BR
+        BrField_SpawnGrown(objectCount, cameraX, cameraY, TrySpawnObjectEventTemplate);
+#endif
     }
 }
 
@@ -1719,6 +1722,9 @@ static void RemoveObjectEventIfOutsideView(struct ObjectEvent *objectEvent)
     s16 top =    gSaveBlock1Ptr->pos.y;
     s16 bottom = gSaveBlock1Ptr->pos.y + 16;
 
+#if BR
+    BrField_GrowObjectBox(&top, &bottom);
+#endif
     if (objectEvent->currentCoords.x >= left && objectEvent->currentCoords.x <= right
      && objectEvent->currentCoords.y >= top && objectEvent->currentCoords.y <= bottom)
         return;
@@ -7410,7 +7416,7 @@ static void UpdateObjectEventOffscreen(struct ObjectEvent *objectEvent, struct S
     y2 += graphicsInfo->height;
 
 #if BR
-    if (BrField_OffScreen(x, x2, y))
+    if (BrField_OffScreen(x, x2, y, y2))
         objectEvent->offScreen = TRUE;
 #else
     if ((s16)x >= DISPLAY_WIDTH + 16 || (s16)x2 < -16)
@@ -8621,7 +8627,7 @@ void UpdateObjectEventSpriteInvisibility(struct Sprite *sprite, bool8 invisible)
     y2 = y - (sprite->centerToCornerVecY >> 1);
 
 #if BR
-    if (BrField_OffScreen(x, x2, y))
+    if (BrField_OffScreen(x, x2, y, y - 2 * sprite->centerToCornerVecY))
         sprite->invisible = TRUE;
 #else
     if ((s16)x >= DISPLAY_WIDTH + 16 || x2 < -16)

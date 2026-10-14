@@ -1,15 +1,15 @@
-// POK-318: the people past the ROM's object box. Emerald keeps an object only from 7 rows
-// above the player to 9 below (and 9 left to 10 right), and a phone's field runs a dozen
-// rows past that -- where Cam's trainer "cuts in and out depending on where I'm located".
-// Past the box the page draws who the ROM still knows of, from its own tables, on the
-// overlay (web/src/field-ghosts.ts).
+// POK-318, then the world as big as the picture. Emerald keeps an object only from 7 rows
+// above the player to 9 below, and a phone's field runs a dozen rows past that -- where
+// Cam's trainer "cuts in and out depending on where I'm located", and where the page
+// used to draw who the ROM knew of from its own tables. Now the page tells the ROM the
+// rows it shows (gBrFieldShown) and the core reads the ROM's OAM side table, so the ROM
+// grows its box to those rows and the core draws what is in it, at its true rows.
 //
-// This puts an unused seat's row into the ROM's gBrSeats twelve rows below us -- a ghost
-// the ROM gives no object, being past its box -- and looks for its sprite on the overlay
-// where the ROM would stand it, then takes the row away again and sees it go.
-//
-// Since POK-329 the core's own picture reaches that row (the ROM's band runs 232 rows
-// below the LCD), so the ghost must be drawn once: on the overlay, and not by the core.
+// This puts an unused seat's row into the ROM's gBrSeats fourteen rows below us -- past
+// pret's box, inside a portrait phone's 232 rows below the LCD, and 256 rows below the
+// LCD's top, so its OAM y is one of the LCD's own rows -- and looks for the ROM's own
+// object there, drawn by the core once and not by the overlay; then takes the row away
+// and sees it go.
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -35,8 +35,12 @@ const DIR_SOUTH = 1;
 const SKIN = 15;
 const W = 16;
 const H = 32;
-/** Rows below us to try, past the box's 9: the first with nobody already on it. */
-const ROWS_DOWN = [12, 13, 11];
+/** Rows below us to try, past the box's 9: the first with nobody already on it. From 13
+ *  down a person's top is 256 rows or more below the LCD's, an OAM y inside the LCD's own
+ *  rows, so a core that read only the 8 bits would draw them there too. */
+const ROWS_DOWN = [14, 13, 15];
+/** The LCD's top rows, where a 32-row person 248..280 rows down would show again. */
+const LCD_TOP_ROWS = 48;
 
 type Pic = { width: number; height: number; left: number; top: number; data: Uint8Array };
 type Emu = {
@@ -110,7 +114,7 @@ function corePixels(page: Page, rect: { x: number; y: number; w: number; h: numb
   }), [rect, frames, seen] as const);
 }
 
-test('a ghost past the box is drawn on the overlay where the ROM would stand it, and goes with its row', async ({ browser }) => {
+test('a seat past pret\'s box but in the rows a phone shows is the ROM\'s own: an object, drawn by the core, once', async ({ browser }) => {
   test.setTimeout(150_000);
   const symbols = loadSymbols();
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
@@ -155,8 +159,11 @@ test('a ghost past the box is drawn on the overlay where the ROM would stand it,
     }
     expect(down, 'a clear row past the box').toBeGreaterThan(0);
 
-    // What the core draws there without anybody: the map, its animation included.
+    // What the core draws there without anybody: the map, its animation included -- and
+    // in the LCD's top rows over the same columns.
     const bare = await corePixels(page, rect, 90, null);
+    const lcdTop = { x: rect.x, y: 0, w: rect.w, h: LCD_TOP_ROWS };
+    const bareTop = await corePixels(page, lcdTop, 90, null);
 
     // Seat 16 there: present, a skin, our map, the cell (MAP_OFFSET included, as the ROM
     // keeps it), facing south, no object.
@@ -166,16 +173,28 @@ test('a ghost past the box is drawn on the overlay where the ROM would stand it,
       const emu = (window as unknown as EmuWindow).__hbr.emu;
       (b as number[]).forEach((v, i) => emu.write((base as number) + i, v, 8));
     }, [seat, bytes] as const);
+    const shown = await page.evaluate((at) => {
+      const emu = (window as unknown as EmuWindow).__hbr.emu;
+      return { top: emu.read(at, 16), bottom: emu.read(at + 2, 16) };
+    }, symbols.gBrFieldShown);
+    expect(shown, 'the page told the ROM the rows a portrait phone shows').toEqual({ top: 104, bottom: 232 });
+
     await poke(row);
-    await expect.poll(() => opaqueAt(page, rect), { timeout: 10_000, message: 'the ghost is drawn twelve rows down' }).toBeGreaterThan(40);
-    expect(await page.evaluate((base) => (window as unknown as EmuWindow).__hbr.emu.read(base + 9, 8), seat), 'and the ROM gave it no object').toBe(BR_NO_OBJ);
-    // ...so the core, whose picture reaches the row, draws nothing of it: drawn once.
-    expect((await corePixels(page, rect, 30, bare.seen)).strange, "the core's picture there is the bare map (-1: the band does not reach the row)").toBe(0);
+    await expect.poll(() => page.evaluate((base) => (window as unknown as EmuWindow).__hbr.emu.read(base + 9, 8), seat), {
+      timeout: 10_000, message: 'the ROM gives the seat past pret\'s box an object',
+    }).not.toBe(BR_NO_OBJ);
+    await expect.poll(async () => (await corePixels(page, rect, 10, bare.seen)).strange, {
+      timeout: 10_000, message: "the core's own picture draws it there",
+    }).toBeGreaterThan(40);
+    expect(await opaqueAt(page, rect), 'and the overlay does not draw it again').toBe(0);
+    expect((await corePixels(page, lcdTop, 30, bareTop.seen)).strange, 'nor the core, 256 rows up, in the LCD').toBe(0);
     await page.screenshot({ path: path.join(OUT_DIR, 'people-past-box.png') });
 
     // Out of the match (present 0): gone.
     await poke([0]);
-    await expect.poll(() => opaqueAt(page, rect), { timeout: 10_000, message: 'the ghost goes with its row' }).toBe(0);
+    await expect.poll(async () => (await corePixels(page, rect, 10, bare.seen)).strange, {
+      timeout: 10_000, message: 'the ghost goes with its row',
+    }).toBe(0);
   } finally {
     await ctx.close();
   }

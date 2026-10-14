@@ -1519,6 +1519,30 @@ function askForBand(emu: Emulator): void {
   emu.setSpriteBand(romPicture.sprites);
   askedBand = devBand(romPicture.band) ?? asked;
   emu.setViewport(askedBand);
+  // gBrFieldShown must name the band the core actually draws, and the core takes a new
+  // band only at loadGame: both callers reboot straight after this. A resize handler that
+  // calls it without a reboot would tell the ROM about rows the core does not show.
+  const sideTable = emu.setOamTable(oamTableAt ?? null);
+  fieldShown = sideTable && fieldShownAt !== undefined
+    ? { top: askedBand.top, bottom: askedBand.bottom }
+    : null;
+}
+
+/** Where the ROM keeps its OAM side table and the rows the page shows past the LCD
+ *  (include/br/br_field.h): read off the symbols of the image booted. */
+let oamTableAt: number | undefined;
+let fieldShownAt: number | undefined;
+/** The rows past the LCD the ROM's world reaches (gBrFieldShown): the band asked for,
+ *  once the core reads the side table and so draws a sprite anywhere in it; null keeps
+ *  the ROM's sprites, and its objects, in the sprite window. */
+let fieldShown: { top: number; bottom: number } | null = null;
+
+/** gBrFieldShown, every frame: EWRAM is the ROM's to clear, and a boot or PLAY AGAIN
+ *  may change the band, so it is said again rather than once. */
+function writeFieldShown(emu: Emulator): void {
+  if (fieldShownAt === undefined) return;
+  emu.write(fieldShownAt, fieldShown?.top ?? 0, 16);
+  emu.write(fieldShownAt + 2, fieldShown?.bottom ?? 0, 16);
 }
 
 function botFill(): number {
@@ -3640,11 +3664,14 @@ async function main(): Promise<void> {
   // deploys never disagree; a ROM that does not say gets the legacy band. How much of it
   // is asked for is the layout's (askForBand), measured once the playing screen is up.
   romPicture = romBand(bytes, symbols);
+  oamTableAt = symbols?.get('gBrOamHi');
+  fieldShownAt = symbols?.get('gBrFieldShown');
 
   showScreen('playing');
   askForBand(emu);
   if (usingPatched) await emu.startBytes(bytes);
   else await emu.start();
+  emu.onFrame(() => writeFieldShown(emu));
 
   // Dev only, for the e2e harness (POK-220): solo play never builds a Bridge, so this
   // is the only way in to read the emulator's memory from outside the page.

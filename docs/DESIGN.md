@@ -325,9 +325,19 @@ step needs, the player's rows -11..+19, which covers a portrait phone above and 
 the pad (the page reads it out of the patched image and asks the core for the part of it
 the match's layout shows, measured before each boot -- all of it on a portrait phone, the
 sprite window alone on a desktop or a phone on its side, whose picture fills the height;
-a ROM without it gets the legacy band). Past the 256 rows around the LCD where each 8-bit
-OAM y has one reading (the sprite window, 40 above and 56 below) the core draws only the
-512-row BGs and the weather; the people out there are the overlay's. The ROM's part
+a ROM without it gets the legacy band). The OAM's 8-bit y has one reading only in the
+256 rows around the LCD (the sprite window, 40 above and 56 below), so the ROM keeps a
+side table of each OAM entry's high bits (`gBrOamHi`, latched in `LoadOam` with the OAM
+it describes) and the core reads it (`brSetOamTable`) to draw every sprite once, at its
+true rows, anywhere in the band. With that the page tells the ROM the rows it shows
+(`gBrFieldShown`) and the ROM's world grows to them: a sprite is hidden only past those
+rows, and the object box (spawn, cull, ghosts, loot) gains a row for every 16 shown past
+the window -- on a portrait phone the player's rows -11..+20, the people and the grass out
+there the ROM's own. The grown rows are spare room: pret's own box spawns first, BR's
+ghosts, loot and traders come next, and a person in the grown rows gets a slot only while
+four are left past the headroom (`BrField_SpawnGrown`). Only field sprites are marked;
+battles and menus keep the hardware's reading. A core without the table, or a layout that shows no more than the
+window, leaves gBrFieldShown at 0 and the world at pret's. The ROM's part
 (`src/br/br_field.c`): draw the part of the ring pret's slice redraws leave stale after a
 step, with a row or column that would land in a slot still on screen drawn when the step
 completes (THE RING in `include/br/br_field.h`), say which rows are still to draw
