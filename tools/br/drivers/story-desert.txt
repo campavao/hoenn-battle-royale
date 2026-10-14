@@ -1,0 +1,26 @@
+# story-desert: two story events (web/src/match/story.ts) are in Route 111's desert, so a
+# match lets you in. The bag has the GO-GOGGLES, so the sandstorm's trigger at the desert's
+# north edge (11..14,61) lets you through rather than pushing you back up. MIRAGE TOWER
+# stands every visit (FLAG_FORCE_MIRAGE_TOWER_VISIBLE, so FLAG_MIRAGE_TOWER_VISIBLE after
+# the transition), and its own two fossils are hidden: the event's are the ones there.
+#
+# Flags are at gSaveBlock1Ptr+0x1270: 0x9D is +0x1283 bit 5, 0x14E is +0x1299 bit 6, and
+# the fossils' 0x3C3/0x3C4 are +0x12E8 bits 3 and 4.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 01 00 00 1A 0C 00 3C 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 26
+expectbits u8 *gSaveBlock1Ptr+0x1283 0x20 0x20
+expectbits u8 *gSaveBlock1Ptr+0x1299 0x40 0x40
+expectbits u8 *gSaveBlock1Ptr+0x12E8 0x18 0x18
+expect u16 gBrOwnPos+4 0x43
+shot north-edge
+# Two cells south, onto the trigger row and past it.
+hold DOWN 16
+wait 60
+shot in-the-desert
+expect u16 gBrOwnPos+4 0x45
+say story desert ok

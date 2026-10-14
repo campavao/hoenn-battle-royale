@@ -77,8 +77,6 @@ static const u16 sKeepVisibleLate[] =
     FLAG_HIDE_ROUTE_111_SECRET_POWER_MAN,
     FLAG_HIDE_SLATEPORT_MUSEUM_POPULATION,
     FLAG_HIDE_LILYCOVE_DEPARTMENT_STORE_ROOFTOP_SALE_WOMAN,
-    FLAG_HIDE_MIRAGE_TOWER_ROOT_FOSSIL,
-    FLAG_HIDE_MIRAGE_TOWER_CLAW_FOSSIL,
     FLAG_HIDE_NEW_MAUVILLE_VOLTORB_1,
     FLAG_HIDE_NEW_MAUVILLE_VOLTORB_2,
     FLAG_HIDE_NEW_MAUVILLE_VOLTORB_3,
@@ -119,6 +117,10 @@ static void GiveTheRunOfHoenn(void)
     // lot of Hoenn, and the fog does not wait.
     AddBagItem(ITEM_MACH_BIKE, 1);
     AddBagItem(ITEM_ACRO_BIKE, 1);
+    // ...and the GO-GOGGLES: without them Route 111's sandstorm turns you back at the
+    // desert's edge, and MIRAGE TOWER and the DESERT RUINS are story events
+    // (web/src/match/story.ts). The bots walk the desert as it is.
+    AddBagItem(ITEM_GO_GOGGLES, 1);
     FlagSet(FLAG_RECEIVED_RUNNING_SHOES);
     FlagSet(FLAG_SYS_B_DASH);
 
@@ -235,6 +237,11 @@ static void ClearTheLateStory(void)
         if (!keep)
             FlagSet(flag);
     }
+    // MIRAGE TOWER stands every time you come onto Route 111, not on a coin flip each
+    // visit that every ROM throws for itself: it is a story event's place, and its two
+    // fossils are the event's (web/src/match/story.ts). Its own two stay hidden above:
+    // taking one runs the scene that brings the tower down.
+    FlagSet(FLAG_FORCE_MIRAGE_TOWER_VISIBLE);
     // The DEVON SCOPE is had, so Route 120's bridge is drawn clear (its OnTransition asks
     // this flag and nothing else), and the Kecleon fled Fortree.
     FlagSet(FLAG_RECEIVED_DEVON_SCOPE);

@@ -226,6 +226,19 @@ out, and one that comes in waits as it would in a menu.
   are loot, an event on another map is headed for, and a bot at the trader hands him its
   most hurt mon. Two trades at the same moment can both land; the room keeps one trader
   gone either way.
+- **Story events** (`web/src/match/story.ts`, Cam, 2026-10-13: "They should all result in
+  a legendary Pokemon I think, or at least a rare item"): an event set where Emerald set
+  that beat. When a ring phase drops an event, the host tells a story this match has not
+  had whose section this ring reaches, and drops today's cluster only when none is. A story
+  gives its own reward (the fossils at the top of MIRAGE TOWER, Steven's BELDUM, the TM24
+  in NEW MAUVILLE, SHOAL CAVE's FOCUS BAND and SHELL BELL) with the supplies bag and the
+  trader beside it, and no rares or gold balls unless its row says so. It is event loot on
+  the story's own map, so the MAP mark, the catch-up and the bots work as they do for any
+  event. The places are made reachable: the bag has the GO-GOGGLES for Route 111's desert,
+  MIRAGE TOWER stands every visit and its own fossils are hidden (taking one brings the
+  tower down), and SHOAL CAVE is at low tide all match (`br_story.h`). Every ring centre
+  is west of Lilycove (landing.json), so the east's stories come up mostly on the first
+  event, whose ring is the widest.
 - **Gift-givers** (Cam, 2026-10-13): at the buzzer the host stands one person in every
   town and city (`match/gifts.ts`), holding one held item (LEFTOVERS, CHOICE BAND, QUICK
   CLAW and the like). On the wire he is a `spill` of a one-item bag under key `0xC000 | i`,

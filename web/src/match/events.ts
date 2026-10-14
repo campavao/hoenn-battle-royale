@@ -149,15 +149,26 @@ export interface EventDrop {
  *  bag, take one each. A bag of one item is drawn as a ball (br_loot.c), gold by its
  *  item (br_balls.c). */
 export function eventDrop(rng: () => number, e: EventDrop): Msg[] {
-  const level = rungForPhase(e.phase);
   const legends = LEGENDS[Math.min(e.n, LEGENDS.length - 1)];
   const rares = draw(rng, RARES, EVENT_RARES);
   const species = [legends[pickIndex(rng, legends.length)], ...rares];
-  const bags: { items: { id: number; n: number }[] }[] = [
-    ...draw(rng, GOLD, EVENT_GOLD).map((id) => ({ items: [{ id, n: 1 }] })),
-    { items: SUPPLIES.map((s) => ({ ...s })) },
-  ];
+  const bags = draw(rng, GOLD, EVENT_GOLD).map((id) => [{ id, n: 1 }]);
+  return layEvent(rng, e, species, bags);
+}
+
+/** What an event puts down, in `e.cells` order: the mons, then the bags, then the
+ *  supplies, then the trader with a rare none of the mons is. The first piece's key is
+ *  the one the MAP mark goes gray on. */
+export function layEvent(
+  rng: () => number,
+  e: EventDrop,
+  species: readonly number[],
+  bags: readonly { id: number; n: number }[][],
+): Msg[] {
+  const level = rungForPhase(e.phase);
   const at = (i: number) => ({ x: e.cells[i].x + MAP_OFFSET, y: e.cells[i].y + MAP_OFFSET });
+  const all = [...bags, SUPPLIES.map((s) => ({ ...s }))];
+  const pieces = species.length + all.length;
 
   let i = 0;
   const mons: SpillMon[] = [];
@@ -166,25 +177,23 @@ export function eventDrop(rng: () => number, e: EventDrop): Msg[] {
     mons.push({ key: eventKey(e.n, i), ...at(i), species: s, level });
     i++;
   }
-  const out: Msg[] = [];
   const event: EventMsg = { t: 'event', seat: e.seat, n: e.n, mapsec: e.mapsec, key: eventKey(e.n, 0) };
   if (e.place !== undefined) event.place = e.place;
-  const offers = RARES.filter((r) => !rares.includes(r));
-  if (e.cells.length > EVENT_PIECES && offers.length > 0) {
-    const trader: EventTrader = { map: e.map, ...at(EVENT_PIECES), species: offers[pickIndex(rng, offers.length)] };
+  const offers = RARES.filter((r) => !species.includes(r));
+  if (e.cells.length > pieces && offers.length > 0) {
+    const trader: EventTrader = { map: e.map, ...at(pieces), species: offers[pickIndex(rng, offers.length)] };
     event.trader = trader;
   }
-  out.push(event);
   const spills: SpillMsg[] = [];
-  for (const b of bags) {
+  for (const items of all) {
     if (i >= e.cells.length) break;
-    const bag: SpillBag = { key: eventKey(e.n, i), ...at(i), items: b.items, money: 0 };
+    const bag: SpillBag = { key: eventKey(e.n, i), ...at(i), items, money: 0 };
     spills.push({ t: 'spill', seat: e.seat, map: e.map, mons: [], bag });
     i++;
   }
   if (spills.length > 0) spills[0].mons = mons;
   else if (mons.length > 0) spills.push({ t: 'spill', seat: e.seat, map: e.map, mons });
-  return [...out, ...spills];
+  return [event, ...spills];
 }
 
 /** The cells of `pool` on `from`'s map nearest it, `n` of them, none `taken`, `from`

@@ -8,6 +8,9 @@
 #include "rtc.h"
 #include "script.h"
 #include "task.h"
+#if BR
+#include "br/br_story.h"
+#endif
 
 static u32 GetMirageRnd(void)
 {
@@ -81,6 +84,10 @@ void UpdateShoalTideFlag(void)
         1, // 23
     };
 
+#if BR
+    if (BrStory_Tide())
+        return;
+#endif
     if (IsMapTypeOutdoors(GetLastUsedWarpMapType()))
     {
         RtcCalcLocalTime();

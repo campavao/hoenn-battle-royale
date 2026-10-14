@@ -28,6 +28,7 @@ import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
 import { clusterCells, EVENT_CELLS, eventDrop, eventForRing } from './events';
 import { giftDrop, isGiftSection } from './gifts';
 import { sectionInside } from './ring';
+import { STORIES, storyDrop, type Story } from './story';
 import type { MapRef, Msg, Pace } from '../net/wire';
 
 export const DEFAULT_SAFARI_SECS = 120;
@@ -230,6 +231,8 @@ export class Director {
   private ringCentre?: { sx: number; sy: number; place?: string };
   /** The section the ring closes on, which the last event drops in. */
   private ringSection?: SectionCells;
+  /** The story events this match has had (story.ts), none twice. */
+  private readonly told = new Set<string>();
   private readonly aliveSeats: Set<number>;
   private readonly placements: number[] = [];
   private winner: number | undefined;
@@ -538,6 +541,11 @@ export class Director {
     if (!this.ringCentre) return;
     const { sx, sy } = this.ringCentre;
     const next = RING_RADII[Math.min(this.ringIndex + 1, RING_RADII.length - 1)];
+    // A story anywhere this ring reaches, not only inside the next one as the cluster
+    // is: the landing pool is all west of Lilycove, and so is every ring centre, so a
+    // story had to be in the next ring and the east's would never come up. One the next
+    // ring leaves out is in the fog a phase later, and the race is to get it first.
+    if (this.dropStory(n, { sx, sy, r: RING_RADII[this.ringIndex] })) return;
     const within = (r: number) => this.sections.filter((s) => sectionInside(s.section, { sx, sy, r }));
     const inside = next > 0 ? within(next) : [];
     const pool = inside.length > 0 ? inside : next > 0 ? within(RING_RADII[this.ringIndex]) : [];
@@ -556,6 +564,33 @@ export class Director {
       cells,
     }))
       this.opts.send(msg);
+  }
+
+  /** A story event the match has not had, set inside `ring`, as event `n`; false when
+   *  there is none to tell. */
+  private dropStory(n: number, ring: { sx: number; sy: number; r: number }): boolean {
+    const maps = new Map(this.opts.world.maps.map((m) => [m.id, m]));
+    const open = STORIES.filter((s: Story) => {
+      const section = this.opts.world.sections[s.section];
+      return !this.told.has(s.id) && maps.has(s.map) && section?.num !== undefined && sectionInside(section, ring);
+    });
+    if (open.length === 0) return false;
+    const story = open[pickIndex(this.rng, open.length)];
+    const section = this.opts.world.sections[story.section];
+    const m = maps.get(story.map)!;
+    this.told.add(story.id);
+    for (const c of story.cells) this.dealtCells.add(cellKey({ map: { group: m.group, num: m.num }, x: c.x, y: c.y }));
+    for (const msg of storyDrop(this.rng, story, {
+      n,
+      phase: this.ringIndex + 1,
+      seat: this.hostSeat,
+      mapsec: section.num!,
+      place: story.name,
+      map: { group: m.group, num: m.num },
+      cells: [...story.cells],
+    }))
+      this.opts.send(msg);
+    return true;
   }
 
   private currentRingState(): DirectorRingState | undefined {
