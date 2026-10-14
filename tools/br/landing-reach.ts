@@ -7,9 +7,9 @@
 // they cannot walk to, and they bleed out in a corner having never met anybody.
 //
 // So: flood the real world graph -- the very World the bots walk, bots/hoenn.ts's (no
-// second implementation of seams, warps, ledges and surf to drift out of step) -- find
-// the components, and mark every landing cell outside the biggest one `off`. The
-// Director and the bots skip those; nothing else changes.
+// second implementation of seams, warps, ledges and surf to drift out of step) from
+// Littleroot, keep the cells you can reach and come back from, and mark every landing
+// cell outside that set `off`. The Director and the bots skip those; nothing else changes.
 //
 //   npx vite-node tools/br/landing-reach.ts
 //
@@ -45,7 +45,11 @@ const key = (s: Spot) => (s.z === undefined ? `${s.map}:${s.x},${s.y}` : `${s.ma
 // The cells you can get to from Littleroot AND get back from: a ledge or a one-way warp
 // is a way in that is not a way out, so the reach is the strongly connected set around
 // the start, not whatever a flood from the first landing cell happened to touch. Forward
-// from Littleroot, keeping every edge backwards, then back along them.
+// from Littleroot, keeping every edge backwards, then back along them. That is stricter
+// than a drop needs on purpose: a cell you can leave but never reach again (LAVARIDGE,
+// down its ledges) is a fair drop but a bad ring centre, and one set serves both. Routes
+// 131-134's currents run one way in the ROM and both ways here, so out there the set is a
+// little generous.
 const START = landing.find((c) => c.map === 'MAP_LITTLEROOT_TOWN')!;
 const forward = new Set<string>();
 const back = new Map<string, Spot[]>();

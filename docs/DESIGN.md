@@ -238,8 +238,8 @@ out, and one that comes in waits as it would in a menu.
   MIRAGE TOWER stands every visit and its own fossils are hidden (taking one brings the
   tower down), and SHOAL CAVE is at low tide all match (`br_story.h`). The ring centres
   anywhere the drop can (landing.json, whose flood surfs since the HMs went), so the
-  east's stories come up as the west's do. The three REGIs sit in their chambers, each door opened
-  its own way with no HM to teach: DESERT RUINS on A at the wall, ANCIENT TOMB on A with a
+  east's stories come up as the west's do. The three REGIs sit in their chambers, each door
+  opened its own way with no HM to teach: DESERT RUINS on A at the wall, ANCIENT TOMB on A with a
   Flying-type in the party (not "knows FLY": with no HMs almost nobody could), ISLAND CAVE
   by itself a phase after its event dropped, or sooner by Emerald's own braille lap of the
   room, which a player who knows it may walk and a bot does not (the native REGIs are
