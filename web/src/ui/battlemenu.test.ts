@@ -10,15 +10,13 @@ import {
   MON_PP_BONUSES,
   MON_SIZE,
   MON_TYPES,
-  POCKET_CAPACITY,
-  SLOT_SIZE,
   actionLabels,
   ppWithBonus,
   readBattleView,
   type BattleView,
 } from './battlemenu';
+import { POCKET_CAPACITY, SLOT_SIZE } from './phonehud';
 import { BATTLE_MENU, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_SAFARI } from '../touch';
-import { TEXT_RED } from './emerald';
 import { encodeGen3 } from '../text/gen3';
 
 const SYM: Record<string, number> = {
@@ -28,6 +26,7 @@ const SYM: Record<string, number> = {
   gBattleTypeFlags: 0x4000,
   gBagPockets: 0x5000,
   gNumSafariBalls: 0x6000,
+  gBattlerPositions: 0x6100,
 };
 const SLOTS = 0x7000;
 const POUND = 1;
@@ -87,6 +86,20 @@ describe("the battle, as the phone's menu reads it", () => {
     expect(readBattleView(emu, () => undefined, null)).toBeNull();
   });
 
+  it('on the challenged side of a link battle we are battler 1, and the foe is 0', () => {
+    const { emu, put } = fakeEmu();
+    put(SYM.gMain + MAIN_IN_BATTLE_BYTE, 0x02, 1);
+    put(SYM.gBattlerPositions, 1, 1); // battler 0: OPPONENT_LEFT
+    put(SYM.gBattlerPositions + 1, 0, 1); // battler 1: PLAYER_LEFT
+    put(SYM.gBattleMons + MON_MOVES, 33, 2); // theirs
+    put(SYM.gBattleMons + MON_TYPES, WATER, 1);
+    put(SYM.gBattleMons + MON_TYPES + 1, GROUND, 1);
+    put(SYM.gBattleMons + MON_SIZE + MON_MOVES, POUND, 2); // ours
+    const v = readBattleView(emu, (n) => SYM[n], null)!;
+    expect(v.moves[0].id).toBe(POUND);
+    expect(v.foe.types).toEqual([WATER, GROUND]);
+  });
+
   it('a link battle is a fight with somebody; the Safari is not', () => {
     const { emu, put } = fakeEmu();
     put(SYM.gMain + MAIN_IN_BATTLE_BYTE, 0x02, 1);
@@ -114,19 +127,13 @@ describe('the action windows', () => {
     ...over,
   });
 
-  it('RUN: away from a wild one; a doll from a trainer; greyed, in red, without one', () => {
-    expect(actionLabels(view())[3]).toMatchObject({ label: 'RUN', sub: 'GET AWAY', enabled: true });
-    expect(actionLabels(view({ trainer: true, dolls: true }))[3]).toMatchObject({ sub: 'USES A POKé DOLL', enabled: true });
-    expect(actionLabels(view({ trainer: true }))[3]).toEqual({ label: 'RUN', sub: 'NO POKé DOLL', color: TEXT_RED, enabled: false });
-    expect(actionLabels(view())[0].sub).toBe('2 MOVES');
+  it('a word each; RUN grey only in a fight with somebody and no POKé DOLL', () => {
+    expect(actionLabels(view())).toEqual(['FIGHT', 'BAG', 'POKéMON', 'RUN'].map((label) => ({ label, enabled: true })));
+    expect(actionLabels(view({ trainer: true, dolls: true }))[3].enabled).toBe(true);
+    expect(actionLabels(view({ trainer: true }))[3]).toEqual({ label: 'RUN', enabled: false });
   });
 
-  it("the Safari's four, with the balls left", () => {
-    expect(actionLabels(view({ menu: MENU_SAFARI, safariBalls: 12 })).map((l) => [l.label, l.sub])).toEqual([
-      ['BALL', '×12 LEFT'],
-      ['POKéBLOCK', 'THROW ONE'],
-      ['GO NEAR', 'STEP CLOSER'],
-      ['RUN', 'GET AWAY'],
-    ]);
+  it("the Safari's four", () => {
+    expect(actionLabels(view({ menu: MENU_SAFARI, safariBalls: 12 })).map((l) => l.label)).toEqual(['BALL', 'POKéBLOCK', 'GO NEAR', 'RUN']);
   });
 });

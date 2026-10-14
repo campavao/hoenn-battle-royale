@@ -58,6 +58,31 @@ export const ITEM_MACH_BIKE = 259;
 export const ITEM_ACRO_BIKE = 272;
 export const ITEM_POKE_BALL = 4;
 export const ITEM_TOWN_MAP = 361;
+/** `struct BagPocket` (include/item.h) and `struct ItemSlot` (include/global.h): the
+ *  slots' pointer then the capacity; an item's id then its (encrypted) count. */
+export const POCKET_SIZE = 8;
+export const POCKET_CAPACITY = 4;
+export const SLOT_SIZE = 4;
+/** include/constants/item.h: gBagPockets' rows. */
+export const ITEMS_POCKET = 0;
+export const KEYITEMS_POCKET = 4;
+
+/** Which of `items` the bag's `pocket` holds, by gBagPockets. An empty slot is id 0; the
+ *  bag keeps no slot for a count of nothing (CheckBagHasItem reads it the same way). */
+export function bagHolds(emu: HudRead, sym: (name: string) => number | undefined, pocket: number, items: number[]): Set<number> {
+  const out = new Set<number>();
+  const pockets = sym('gBagPockets');
+  if (pockets === undefined) return out;
+  const p = pockets + pocket * POCKET_SIZE;
+  const slots = emu.read(p, 32);
+  const cap = emu.read(p + POCKET_CAPACITY, 8);
+  for (let i = 0; i < cap; i++) {
+    const id = emu.read(slots + i * SLOT_SIZE, 16);
+    if (items.includes(id)) out.add(id);
+  }
+  return out;
+}
+
 /** The world's water class (tools/br/export-world.py, bots/world.ts). */
 const CLASS_WATER = 2;
 
@@ -89,14 +114,14 @@ export interface HudView {
 }
 
 /** The context button for a trainer with `flags`, facing a cell of class `facing`, on a
- *  map that is `outdoor`, with `rod` in the bag (0 for none). Riding, it gets off;
- *  facing water with a rod, it fishes (surfing too); on foot outdoors, it rides the
- *  MACH BIKE; anywhere else it is BIKE, greyed out. */
-export function contextFor(flags: number, facing: number, outdoor: boolean, rod: number): Ctx {
+ *  map that is `outdoor`, with `rod` and `bike` in the bag (0 for none). Riding, it gets
+ *  off; facing water with a rod, it fishes (surfing too); on foot outdoors with a bike,
+ *  it rides it; anywhere else it is BIKE, greyed out. */
+export function contextFor(flags: number, facing: number, outdoor: boolean, rod: number, bike = ITEM_MACH_BIKE): Ctx {
   if (flags & AVATAR_ACRO_BIKE) return { label: 'WALK', item: ITEM_ACRO_BIKE, enabled: true };
   if (flags & AVATAR_MACH_BIKE) return { label: 'WALK', item: ITEM_MACH_BIKE, enabled: true };
   if (facing === CLASS_WATER && rod !== 0) return { label: 'FISH', item: rod, enabled: true };
-  return { label: 'BIKE', item: ITEM_MACH_BIKE, enabled: outdoor && !(flags & AVATAR_SURFING) };
+  return { label: 'BIKE', item: bike || ITEM_MACH_BIKE, enabled: bike !== 0 && outdoor && !(flags & AVATAR_SURFING) };
 }
 
 /** The FOG! flash's beat, as br_hud.c's FogPhase has it. */
@@ -120,6 +145,14 @@ export interface HudRead {
 export interface HudWorld {
   map(group: number, num: number): Pick<WorldMap, 'id' | 'section' | 'outdoor'> | undefined;
   cell(id: string, x: number, y: number): number;
+}
+
+/** The bike in the bag: the MACH BIKE if it is there, the ACRO BIKE if that is; 0 for
+ *  none. Without gBagPockets (an older patch) the MACH BIKE, as before. */
+function bikeIn(emu: HudRead, sym: (name: string) => number | undefined): number {
+  if (sym('gBagPockets') === undefined) return ITEM_MACH_BIKE;
+  const has = bagHolds(emu, sym, KEYITEMS_POCKET, [ITEM_MACH_BIKE, ITEM_ACRO_BIKE]);
+  return has.has(ITEM_MACH_BIKE) ? ITEM_MACH_BIKE : has.has(ITEM_ACRO_BIKE) ? ITEM_ACRO_BIKE : 0;
 }
 
 /** The HUD's view, read off the ROM; null without the symbols it needs. */
@@ -170,7 +203,7 @@ export function readHudView(emu: HudRead, sym: (name: string) => number | undefi
     flash: fogPhase(emu.read(hud + HUD_FOG_FRAMES, 8)),
     ring: ringPlace,
     fogEverywhere: everywhere,
-    ctx: contextFor(flags, facing, !!map?.outdoor, rod),
+    ctx: contextFor(flags, facing, !!map?.outdoor, rod, bikeIn(emu, sym)),
     party: partyCount === undefined ? 0 : emu.read(partyCount, 8),
   };
 }

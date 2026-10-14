@@ -77,6 +77,10 @@ class FakeEmu {
   cursor = 0;
   chosen: number | null = null;
   moves = [1, 2, 0, 0];
+  /** The slot a step may not land on (gNumberOfMovesToChoose), none by default. */
+  refuse = 4;
+  /** The local battler: gBattlerPositions says who is PLAYER_LEFT. */
+  local = 0;
   private listeners: (() => void)[] = [];
   private wasDown = 0;
   press(k: GbaKey) { this.held |= 1 << KEY_BIT[k]; }
@@ -86,8 +90,10 @@ class FakeEmu {
   read(addr: number, width: 8 | 16 | 32): number {
     if (addr === 0x439) return 0x02; // gMain.inBattle
     if (addr === 1000 + 8) return this.menu; // gBrBattle.menu
-    if (addr === 2000 || addr === 3000) return this.cursor;
-    if (addr >= 4004 && addr < 4012 && width === 16) return this.moves[(addr - 4004) / 2];
+    if (addr >= 5000 && addr < 5004) return addr - 5000 === this.local ? 0 : 1; // gBattlerPositions
+    if (addr === 2000 + this.local || addr === 3000 + this.local) return this.cursor;
+    const row = 4004 + this.local * 0x200;
+    if (addr >= row && addr < row + 8 && width === 16) return this.moves[(addr - row) / 2];
     return 0;
   }
   /** One frame: the page's listener runs, then the "ROM" reads JOY_NEW. */
@@ -96,9 +102,9 @@ class FakeEmu {
     const fresh = this.held & ~this.wasDown;
     this.wasDown = this.held;
     if (!this.menu) return;
-    if (fresh & (1 << KEY_BIT.right)) this.cursor |= 1;
+    if (fresh & (1 << KEY_BIT.right) && (this.cursor | 1) < this.refuse) this.cursor |= 1;
     if (fresh & (1 << KEY_BIT.left)) this.cursor &= ~1;
-    if (fresh & (1 << KEY_BIT.down)) this.cursor |= 2;
+    if (fresh & (1 << KEY_BIT.down) && (this.cursor | 2) < this.refuse) this.cursor |= 2;
     if (fresh & (1 << KEY_BIT.up)) this.cursor &= ~2;
     if (fresh & (1 << KEY_BIT.a)) { this.chosen = this.cursor; this.menu = 0; }
   }
@@ -107,7 +113,7 @@ class FakeEmu {
 function layer(emu: FakeEmu) {
   // No DOM here: the layer only listens on it, and these tests call `tap` directly.
   const canvas = { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 240, height: 160 }) } as unknown as HTMLCanvasElement;
-  const symbols = new Map([['gMain', 0], ['gBrBattle', 1000], ['gActionSelectionCursor', 2000], ['gMoveSelectionCursor', 3000], ['gBattleBufferA', 4000]]);
+  const symbols = new Map([['gMain', 0], ['gBrBattle', 1000], ['gActionSelectionCursor', 2000], ['gMoveSelectionCursor', 3000], ['gBattleBufferA', 4000], ['gBattlerPositions', 5000]]);
   const t = new TouchLayer({ emu: emu as never, canvas, symbols });
   t.attach();
   return { t, tap: (x: number, y: number) => (t as unknown as { tap(x: number, y: number): void }).tap(x, y) };
@@ -163,6 +169,46 @@ describe('a tap on a battle menu walks the cursor there and presses A', () => {
     emu.menu = MENU_MOVE;
     for (let i = 0; i < 40 && emu.chosen === null; i++) emu.frame();
     expect(emu.chosen, 'the second move').toBe(1);
+  });
+
+  it('three moves: from the third to the second goes up first (RIGHT there is refused)', () => {
+    const emu = new FakeEmu();
+    emu.menu = MENU_MOVE;
+    emu.moves = [1, 2, 3, 0];
+    emu.cursor = 2;
+    emu.refuse = 3;
+    const { t } = layer(emu);
+    t.chooseBattle(MENU_MOVE, 1);
+    for (let i = 0; i < 40 && emu.chosen === null; i++) emu.frame();
+    expect(emu.chosen).toBe(1);
+  });
+
+  it('a move asked for while the move menu is still coming waits for it', () => {
+    const emu = new FakeEmu();
+    emu.menu = 0;
+    const { t } = layer(emu);
+    t.chooseBattle(MENU_MOVE, 1);
+    for (let i = 0; i < 10; i++) emu.frame();
+    expect(emu.chosen).toBeNull();
+    emu.menu = MENU_MOVE;
+    for (let i = 0; i < 40 && emu.chosen === null; i++) emu.frame();
+    expect(emu.chosen).toBe(1);
+    // and no menu at all is never a choice
+    emu.chosen = null;
+    emu.menu = 0;
+    t.chooseBattle(0, 1);
+    for (let i = 0; i < 20; i++) emu.frame();
+    expect(emu.held).toBe(0);
+  });
+
+  it("on the challenged side of a link battle the cursor is battler 1's", () => {
+    const emu = new FakeEmu();
+    emu.menu = MENU_ACTION;
+    emu.local = 1;
+    const { t } = layer(emu);
+    t.chooseBattle(MENU_ACTION, 3);
+    for (let i = 0; i < 40 && emu.chosen === null; i++) emu.frame();
+    expect(emu.chosen).toBe(3);
   });
 
   it('a choice for a menu that is not up does nothing; B is one tap', () => {
@@ -342,6 +388,8 @@ class StartEmu {
   rows = [1, 2, 13, 4, 7];
   chosen: number | null = null;
   closed = false;
+  /** The handler left in gMenuCallback from the last time the menu was up. */
+  stale = false;
   written = new Map<number, number>();
   private listeners: (() => void)[] = [];
   private wasDown = 0;
@@ -352,7 +400,7 @@ class StartEmu {
   write(addr: number, v: number) { this.written.set(addr, v); }
   read(addr: number): number {
     switch (addr) {
-      case 0x5000: return this.open && this.ready <= 0 ? 0x08001001 : 0x08002001; // gMenuCallback
+      case 0x5000: return (this.open && this.ready <= 0) || this.stale ? 0x08001001 : 0x08002001; // gMenuCallback
       case 0x6000: return this.cursor;
       case 0x6001: return this.rows.length;
       case 0x7000: return 0x9000; // gSaveBlock1Ptr
@@ -439,5 +487,18 @@ describe('PARTY and MAP press START and walk the start menu', () => {
     let selected = false;
     for (let i = 0; i < 10; i++) { emu.frame(); if (emu.held & (1 << KEY_BIT.select)) selected = true; }
     expect(selected).toBe(true);
+    // ...and after it, the player's own registered item is theirs again
+    for (let i = 0; i < 30; i++) emu.frame();
+    expect(emu.written.get(0x9000 + 0x496)).toBe(0);
+  });
+
+  it("a handler left over from the last menu: it waits out the menu's drawing", () => {
+    const emu = new StartEmu();
+    emu.stale = true;
+    emu.cursor = 2; // already on MAP: the first thing pressed is A
+    const t = startLayer(emu);
+    t.openStartRow(START_BR_MAP);
+    for (let i = 0; i < 90 && emu.chosen === null; i++) emu.frame();
+    expect(emu.chosen).toBe(START_BR_MAP);
   });
 });

@@ -43,6 +43,11 @@ describe("the dock's context button: what SELECT does where we stand", () => {
     expect(contextFor(AVATAR_SURFING, GRASS, true, SUPER_ROD).enabled).toBe(false);
     expect(contextFor(0, WATER, true, 0)).toEqual({ label: 'BIKE', item: ITEM_MACH_BIKE, enabled: true });
   });
+
+  it('BIKE is the bike in the bag: the ACRO BIKE when that is the one, grey with none', () => {
+    expect(contextFor(0, GRASS, true, 0, ITEM_ACRO_BIKE)).toEqual({ label: 'BIKE', item: ITEM_ACRO_BIKE, enabled: true });
+    expect(contextFor(0, GRASS, true, 0, 0).enabled).toBe(false);
+  });
 });
 
 describe('the sign and the fog window', () => {

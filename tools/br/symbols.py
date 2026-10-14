@@ -29,6 +29,9 @@ ENGINE_SYMBOLS = [
     "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleBufferB", "gBattleMons",
     "gBattlerByTurnOrder", "gCurrentTurnActionNumber", "gBagPockets",
     "gActionSelectionCursor", "gMoveSelectionCursor",
+    # Which battler is the local player: 1 on the challenged side of a link battle
+    # (web/src/touch.ts localBattler).
+    "gBattlerPositions",
     "gAnimScriptActive", "gAnimVisualTaskCount", "gAnimSoundTaskCount", "gAnimScriptCallback", "gBattleSpritesDataPtr", "gBattleAnimAttacker", "gBattleAnimTarget", "gBattleScripting", "gBattlescriptCurrInstr", "gCurrentMove",
     # Scratch a driver can build a wire message in before mailsend pushes it.
     "gDecompressionBuffer", "gBrZone",

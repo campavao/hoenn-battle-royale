@@ -124,7 +124,8 @@ test("a phone's battle menu: under the picture, the moves, a hold for details, a
     await write(page, sym.gBattleTypeFlags, flags, 32);
     await expect(page.locator('.bm-cell[data-slot="3"]')).toHaveAttribute('aria-disabled', 'false');
 
-    // FIGHT: the moves, on the page; the ROM is still on its action menu.
+    // FIGHT: the moves, and the ROM's own move menu opened behind them (its shot clock
+    // picks a move then, not RUN).
     await page.locator('.bm-cell[data-slot="0"]').tap();
     await expect(page.locator('#battle-menu')).toHaveAttribute('data-mode', 'moves');
     await expect(page.locator('.bm-cell[data-slot="0"]')).toHaveAttribute('aria-label', /^POUND, NORMAL, PP \d+\/35$/);

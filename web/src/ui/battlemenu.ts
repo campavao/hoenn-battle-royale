@@ -15,13 +15,14 @@
 import uiData from '../data/ui.json';
 import { decodeGen3Display } from '../text/gen3';
 import { effectWords, effectiveness, moveInfo, type MoveInfo, type Rom } from '../battle/movebook';
-import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_MOVE, MENU_SAFARI } from '../touch';
+import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_MOVE, MENU_SAFARI, localBattler } from '../touch';
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
-import { Win, picture } from './phonehud';
+import { ITEMS_POCKET, Win, bagHolds, picture } from './phonehud';
 
 // ---- what the ROM says ---------------------------------------------------------------
 
-/** `struct BattlePokemon` (include/pokemon.h). Battler 0 is ours, 1 the foe, in a
+/** `struct BattlePokemon` (include/pokemon.h). Ours is the local battler's (touch.ts
+ *  localBattler: 1 on the challenged side of a link battle) and the foe the other, in a
  *  single battle -- which is every BR battle. */
 export const MON_SIZE = 0x58;
 export const MON_MOVES = 0x0c;
@@ -34,12 +35,6 @@ export const NICKNAME_SIZE = 11;
 export const BATTLE_TYPE_LINK = 1 << 1;
 export const BATTLE_TYPE_TRAINER = 1 << 3;
 export const BATTLE_TYPE_SAFARI = 1 << 7;
-/** `struct BagPocket` (include/item.h): the slots' pointer, then the capacity. */
-export const POCKET_SIZE = 8;
-export const POCKET_CAPACITY = 4;
-export const ITEMS_POCKET = 0;
-/** `struct ItemSlot` (include/global.h): the id, then the (encrypted) count. */
-export const SLOT_SIZE = 4;
 export const ITEM_POKE_DOLL = 80;
 const MAX_MON_MOVES = 4;
 
@@ -70,6 +65,16 @@ export function ppWithBonus(base: number, ppBonuses: number, slot: number): numb
   return base + Math.floor((base * 20 * ups) / 100);
 }
 
+const basePps = new WeakMap<Uint8Array, Map<number, number>>();
+/** A move's PP before PP Ups, read once a ROM: this runs every frame. */
+function basePp(rom: Rom, id: number): number {
+  let m = basePps.get(rom.bytes);
+  if (!m) basePps.set(rom.bytes, (m = new Map()));
+  let pp = m.get(id);
+  if (pp === undefined) m.set(id, (pp = moveInfo(rom, id)?.pp ?? 0));
+  return pp;
+}
+
 /** The battle as the menu needs it; null outside one or without the symbols. */
 export function readBattleView(emu: BattleRead, sym: (name: string) => number | undefined, rom: Rom | null): BattleView | null {
   const main = sym('gMain');
@@ -79,29 +84,22 @@ export function readBattleView(emu: BattleRead, sym: (name: string) => number | 
   if (!(emu.read(main + MAIN_IN_BATTLE_BYTE, 8) & MAIN_IN_BATTLE_BIT)) return null;
   const flagsAt = sym('gBattleTypeFlags');
   const flags = flagsAt === undefined ? 0 : emu.read(flagsAt, 32);
-  const bonuses = emu.read(mons + MON_PP_BONUSES, 8);
+  const local = localBattler(emu, sym('gBattlerPositions'));
+  const ours = mons + local * MON_SIZE;
+  const bonuses = emu.read(ours + MON_PP_BONUSES, 8);
   const moves: MoveSlot[] = [];
   for (let i = 0; i < MAX_MON_MOVES; i++) {
-    const id = emu.read(mons + MON_MOVES + i * 2, 16);
-    const base = id && rom ? (moveInfo(rom, id)?.pp ?? 0) : 0;
-    moves.push({ id, pp: emu.read(mons + MON_PP + i, 8), maxPp: ppWithBonus(base, bonuses, i) });
+    const id = emu.read(ours + MON_MOVES + i * 2, 16);
+    moves.push({ id, pp: emu.read(ours + MON_PP + i, 8), maxPp: ppWithBonus(id && rom ? basePp(rom, id) : 0, bonuses, i) });
   }
-  const foe = mons + MON_SIZE;
+  const foe = mons + (local ^ 1) * MON_SIZE;
   const name: number[] = [];
   for (let i = 0; i < NICKNAME_SIZE; i++) {
     const b = emu.read(foe + MON_NICKNAME + i, 8);
     if (b === 0xff) break;
     name.push(b);
   }
-  let dolls = false;
-  const pockets = sym('gBagPockets');
-  if (pockets !== undefined) {
-    const p = pockets + ITEMS_POCKET * POCKET_SIZE;
-    const slots = emu.read(p, 32);
-    const cap = emu.read(p + POCKET_CAPACITY, 8);
-    // An empty slot is id 0; the bag keeps no slot for a count of nothing.
-    for (let i = 0; i < cap && !dolls; i++) dolls = emu.read(slots + i * SLOT_SIZE, 16) === ITEM_POKE_DOLL;
-  }
+  const dolls = bagHolds(emu, sym, ITEMS_POCKET, [ITEM_POKE_DOLL]).size > 0;
   const balls = sym('gNumSafariBalls');
   let foeName = '';
   try {
@@ -124,27 +122,15 @@ export function readBattleView(emu: BattleRead, sym: (name: string) => number | 
 export type Tone = 'super' | 'weak' | 'none' | 'normal' | 'status';
 const TONE: Record<Tone, TextColor> = { super: TEXT_GREEN, weak: TEXT_RED, none: TEXT_GRAY, normal: TEXT_GRAY, status: TEXT_GRAY };
 
-/** The action windows' words: a label, and under it what it does here. */
-export function actionLabels(v: BattleView): { label: string; sub: string; color: TextColor; enabled: boolean }[] {
-  if (v.menu === MENU_SAFARI) {
-    return [
-      { label: 'BALL', sub: `×${v.safariBalls} LEFT`, color: TEXT_GRAY, enabled: true },
-      { label: 'POKéBLOCK', sub: 'THROW ONE', color: TEXT_GRAY, enabled: true },
-      { label: 'GO NEAR', sub: 'STEP CLOSER', color: TEXT_GRAY, enabled: true },
-      { label: 'RUN', sub: 'GET AWAY', color: TEXT_GRAY, enabled: true },
-    ];
-  }
-  const known = v.moves.filter((m) => m.id !== 0).length;
-  const run = !v.trainer
-    ? { sub: 'GET AWAY', color: TEXT_GRAY, enabled: true }
-    : v.dolls
-      ? { sub: 'USES A POKé DOLL', color: TEXT_GRAY, enabled: true }
-      : { sub: 'NO POKé DOLL', color: TEXT_RED, enabled: false };
+/** The action windows: a word each (Cam, 2026-10-14: nothing under it). RUN is grey
+ *  where it cannot work: a fight with somebody and no POKe DOLL (br_battle.c). */
+export function actionLabels(v: BattleView): { label: string; enabled: boolean }[] {
+  if (v.menu === MENU_SAFARI) return ['BALL', 'POKéBLOCK', 'GO NEAR', 'RUN'].map((label) => ({ label, enabled: true }));
   return [
-    { label: 'FIGHT', sub: known === 1 ? '1 MOVE' : `${known} MOVES`, color: TEXT_GRAY, enabled: true },
-    { label: 'BAG', sub: 'ITEMS', color: TEXT_GRAY, enabled: true },
-    { label: 'POKéMON', sub: 'SWITCH', color: TEXT_GRAY, enabled: true },
-    { label: 'RUN', ...run },
+    { label: 'FIGHT', enabled: true },
+    { label: 'BAG', enabled: true },
+    { label: 'POKéMON', enabled: true },
+    { label: 'RUN', enabled: !v.trainer || v.dolls },
   ];
 }
 
@@ -170,13 +156,16 @@ export const INFO_W = MENU_W;
 export const HOLD_MS = 450;
 /** Frames the menu stays up across the ROM's gap between two of its menus. */
 const GRACE_FRAMES = 20;
+/** Frames FIGHT, pressed, may take to bring the ROM's move menu up. */
+const OPEN_FRAMES = 90;
 /** Frames a choice the ROM did not take (no PP left) may keep the menu down. */
 const REFUSED_FRAMES = 150;
 const TYPES = uiData.typeIcons as { w: number; h: number };
 const RULE = '#d0d0c8';
 
-/** The page's view of the menu: the ROM's action menu can show the moves before FIGHT
- *  is pressed, and a move's details over them. */
+/** The page's view of the menu: the actions, the moves, or a move's details over them.
+ *  FIGHT is pressed in the ROM too, so its shot clock picks a move, as a thumb's would,
+ *  rather than RUN (a forfeit, in a link battle). */
 type Mode = 'action' | 'moves' | 'info';
 
 export interface BattleMenuDeps {
@@ -208,6 +197,12 @@ export class BattleMenu {
   /** ...and it was FIGHT then a move: the move menu that opens on the way is not a new
    *  choice to show. */
   private chained = false;
+  /** FIGHT was pressed: frames left for the ROM's move menu to come up. */
+  private opening = 0;
+  /** BACK before it did: B, the moment it does. */
+  private backOnOpen = false;
+  /** The last menu the ROM had up. */
+  private lastShown = 0;
   private readonly infoCache = new Map<number, MoveInfo | null>();
   private readonly cells: { b: HTMLButtonElement; w: Win; hold: HTMLElement }[] = [];
   private readonly backBtn: HTMLButtonElement;
@@ -316,35 +311,52 @@ export class BattleMenu {
 
   private act(slot: number): void {
     const v = this.view;
-    if (!v) return;
-    if (v.menu === MENU_ACTION && slot === 0) {
+    // The windows say which menu this is, not the ROM's byte: just after BACK it still
+    // reads the move menu, and between two menus nothing. A choice made then waits for
+    // the action menu to come (touch.ts chooseBattle).
+    if (!v || this.lastShown === 0) return;
+    const which = v.menu === MENU_SAFARI || this.lastShown === MENU_SAFARI ? MENU_SAFARI : MENU_ACTION;
+    if (which === MENU_ACTION && slot === 0) {
+      this.deps.choose(MENU_ACTION, 0);
+      this.opening = OPEN_FRAMES;
       this.setMode('moves');
       return;
     }
-    this.send(() => this.deps.choose(v.menu, slot));
+    this.send(() => this.deps.choose(which, slot));
   }
 
   private attack(slot: number): void {
     const v = this.view;
     if (!v || !v.moves[slot]?.id) return;
-    // From the page's own move list the ROM is still on its action menu: FIGHT first.
+    // A choice the ROM refuses (no PP) brings the move list back, not the details.
+    this.mode = 'moves';
     if (v.menu === MENU_MOVE) this.send(() => this.deps.choose(MENU_MOVE, slot));
-    else {
-      this.send(() => this.deps.choose(MENU_ACTION, 0, slot));
-      this.chained = true;
-    }
+    else if (v.menu === MENU_ACTION) this.sendChained(() => this.deps.choose(MENU_ACTION, 0, slot));
+    // FIGHT went in and the move menu is on its way: the choice waits for it.
+    else if (this.opening > 0) this.sendChained(() => this.deps.choose(MENU_MOVE, slot));
   }
 
   private goBack(): void {
-    if (this.view?.menu === MENU_MOVE) this.deps.back();
+    if (this.view?.menu === MENU_MOVE) {
+      this.deps.back();
+      // ...and the action menu is the one coming back.
+      this.lastShown = MENU_ACTION;
+    } else if (this.opening > 0) this.backOnOpen = true;
     this.setMode('action');
   }
 
   private send(go: () => void): void {
     go();
     this.chained = false;
+    this.opening = 0;
     this.sent = REFUSED_FRAMES;
     this.setShown(false);
+  }
+
+  /** A move whose move menu is still to come: that menu opening is not a new choice. */
+  private sendChained(go: () => void): void {
+    this.send(go);
+    this.chained = true;
   }
 
   private setMode(mode: Mode): void {
@@ -378,6 +390,9 @@ export class BattleMenu {
     if (!v) {
       this.sent = 0;
       this.chained = false;
+      this.opening = 0;
+      this.backOnOpen = false;
+      this.lastShown = 0;
       this.mode = 'action';
       this.lastMenu = 0;
       this.setShown(false);
@@ -385,15 +400,24 @@ export class BattleMenu {
     }
     // A new menu opening (a new turn, or FIGHT pressed by a thumb): the page follows it.
     if (menu !== this.lastMenu && menu !== 0) {
-      if (menu === MENU_MOVE && this.chained) this.chained = false;
-      else this.sent = 0;
-      if (menu === MENU_MOVE) this.mode = this.mode === 'info' ? 'info' : 'moves';
-      else if (this.lastMenu === 0 || this.lastMenu === MENU_MOVE) this.mode = 'action';
+      if (menu === MENU_MOVE) this.opening = 0;
+      if (menu === MENU_MOVE && this.backOnOpen) {
+        this.backOnOpen = false;
+        this.deps.back();
+      } else if (menu === MENU_MOVE && this.chained) this.chained = false;
+      else {
+        this.sent = 0;
+        if (menu === MENU_MOVE) this.mode = this.mode === 'info' ? 'info' : 'moves';
+        // A new turn's actions; but not over the moves FIGHT was just tapped for.
+        else if ((this.lastMenu === 0 || this.lastMenu === MENU_MOVE) && this.opening === 0) this.mode = 'action';
+      }
     }
     this.lastMenu = menu;
+    if (menu) this.lastShown = menu;
     this.idle = menu ? 0 : this.idle + 1;
     if (this.sent > 0) this.sent--;
-    const shown = this.sent === 0 && (menu !== 0 || (this.shown && this.idle < GRACE_FRAMES));
+    if (this.opening > 0) this.opening--;
+    const shown = this.sent === 0 && (menu !== 0 || (this.shown && (this.idle < GRACE_FRAMES || this.opening > 0)));
     this.setShown(shown);
     if (shown) this.layout();
   }
@@ -431,8 +455,7 @@ export class BattleMenu {
     if (this.mode === 'action') {
       const l = actionLabels(v)[i];
       if (!l) return;
-      c.drawTextCentred(l.label, CELL_W / 2, 15, l.enabled ? TEXT_DARK : TEXT_GRAY);
-      c.drawTextCentred(fitText(l.sub, CELL_W - 16), CELL_W / 2, 33, l.color);
+      c.drawTextCentred(l.label, CELL_W / 2, 24, l.enabled ? TEXT_DARK : TEXT_GRAY);
       return;
     }
     const slot = v.moves[i];

@@ -247,7 +247,8 @@ function showGame(): void {
 /** The menu button: the sheet over the game, or back to the game. */
 function openSheet(open: boolean): void {
   sheetOpen = open;
-  ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', String(open));
+  // The pad's, and the dock's on an upright phone (ui/phonehud.ts).
+  for (const b of document.querySelectorAll('#menu-btn, #hud-menu')) b.setAttribute('aria-expanded', String(open));
   showGame();
 }
 
@@ -266,7 +267,7 @@ function setInMatch(on: boolean): void {
   if (on) placeKeys?.();
   if (!on && sheetOpen) {
     sheetOpen = false;
-    ($('#menu-btn') as HTMLButtonElement).setAttribute('aria-expanded', 'false');
+    for (const b of document.querySelectorAll('#menu-btn, #hud-menu')) b.setAttribute('aria-expanded', 'false');
   }
 }
 

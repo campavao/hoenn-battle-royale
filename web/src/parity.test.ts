@@ -906,13 +906,16 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
       ['BATTLE_TYPE_LINK', 'BATTLE_TYPE_TRAINER', 'BATTLE_TYPE_SAFARI'].map(bit),
     );
     const pocket = watch('BagPocket', natural(itemH, 'BagPocket'));
-    expect([0, bmenu.POCKET_CAPACITY]).toEqual([pocket.at.itemSlots, pocket.at.capacity]);
-    expect(pinned('sizeof gBagPockets[0]'), 'src/br/br_pins.c').toBe(bmenu.POCKET_SIZE);
+    expect([0, phone.POCKET_CAPACITY]).toEqual([pocket.at.itemSlots, pocket.at.capacity]);
+    expect(pinned('sizeof gBagPockets[0]'), 'src/br/br_pins.c').toBe(phone.POCKET_SIZE);
     const slot = watch('ItemSlot', natural(globalH, 'ItemSlot'));
-    expect([slot.at.itemId, slot.size]).toEqual([0, bmenu.SLOT_SIZE]);
-    expect(bmenu.ITEMS_POCKET).toBe(define(itemConstH, 'ITEMS_POCKET'));
+    expect([slot.at.itemId, slot.size]).toEqual([0, phone.SLOT_SIZE]);
+    expect([phone.ITEMS_POCKET, phone.KEYITEMS_POCKET]).toEqual([define(itemConstH, 'ITEMS_POCKET'), define(itemConstH, 'KEYITEMS_POCKET')]);
     const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
     expect(bmenu.ITEM_POKE_DOLL).toBe(list.split(',').map((x) => x.trim()).filter(Boolean).indexOf('ITEM_POKE_DOLL'));
+    // Who is local: the battler at PLAYER_LEFT (touch.ts localBattler).
+    const positions = /enum BattlerPosition\s*\{([\s\S]*?)\};/.exec(battleConstH)![1].split(',').map((x) => x.trim()).filter(Boolean);
+    expect(touch.POSITION_PLAYER_LEFT).toBe(positions.indexOf('B_POSITION_PLAYER_LEFT'));
     // The type icons: one per type, in the summary screen's palettes.
     expect(uiData.typeIcons).toEqual({ w: 32, h: 16 });
   });
