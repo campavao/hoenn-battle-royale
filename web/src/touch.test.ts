@@ -228,6 +228,28 @@ describe('a tap on a battle menu walks the cursor there and presses A', () => {
     expect(emu.chosen, 'FIGHT').toBe(0);
   });
 
+  it('BACK, FIGHT and a move, all before the ROM catches up: B, FIGHT, then the move', () => {
+    const emu = new FakeEmu();
+    emu.menu = MENU_MOVE;
+    const { t } = layer(emu);
+    t.tapKey('b');
+    t.chooseBattle(MENU_ACTION, 0);
+    t.chooseBattle(MENU_MOVE, 1); // the move menu is the one it left, still on the byte
+    let b = -1;
+    const picks: number[] = [];
+    for (let i = 0; i < 120 && picks.length < 2; i++) {
+      emu.frame();
+      if (b < 0 && emu.held & (1 << KEY_BIT.b)) b = i;
+      if (b >= 0 && i === b + 8) { emu.menu = MENU_ACTION; emu.cursor = 0; }
+      if (emu.chosen !== null) {
+        picks.push(emu.chosen);
+        emu.chosen = null;
+      }
+      if (picks.length === 1 && emu.menu === 0) { emu.menu = MENU_MOVE; emu.cursor = 0; }
+    }
+    expect(picks).toEqual([0, 1]);
+  });
+
   it("a choice for a menu that never comes up is let go; B is one tap", () => {
     const emu = new FakeEmu();
     emu.menu = MENU_MOVE;

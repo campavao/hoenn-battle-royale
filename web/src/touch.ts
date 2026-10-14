@@ -286,6 +286,12 @@ export class TouchLayer {
    *  FIGHT: once the move menu is up, `move` is chosen there too. */
   chooseBattle(which: number, slot: number, move?: number): void {
     if (which === 0 || !this.inBattle()) return;
+    // A move asked for while FIGHT is still on its way in: it rides along, after it.
+    const m = this.menu;
+    if (which === MENU_MOVE && m && m.which === MENU_ACTION && m.target === 0 && m.then === undefined) {
+      m.then = slot;
+      return;
+    }
     const now = this.battleMenu();
     // Another menu up, or none (FIGHT pressed, or BACK, and the next not up yet): it
     // waits for this one. A B still going down is kept: it is what brings it up.

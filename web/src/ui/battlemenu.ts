@@ -330,10 +330,11 @@ export class BattleMenu {
     if (!v || !v.moves[slot]?.id) return;
     // A choice the ROM refuses (no PP) brings the move list back, not the details.
     this.mode = 'moves';
-    if (v.menu === MENU_MOVE) this.send(() => this.deps.choose(MENU_MOVE, slot));
+    // FIGHT went in and the move menu is on its way: the choice waits for it. First,
+    // since just after BACK the ROM's byte can still read the move menu it left.
+    if (this.opening > 0) this.sendChained(() => this.deps.choose(MENU_MOVE, slot));
+    else if (v.menu === MENU_MOVE) this.send(() => this.deps.choose(MENU_MOVE, slot));
     else if (v.menu === MENU_ACTION) this.sendChained(() => this.deps.choose(MENU_ACTION, 0, slot));
-    // FIGHT went in and the move menu is on its way: the choice waits for it.
-    else if (this.opening > 0) this.sendChained(() => this.deps.choose(MENU_MOVE, slot));
   }
 
   private goBack(): void {
