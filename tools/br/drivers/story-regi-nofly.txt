@@ -1,0 +1,19 @@
+# story-regi-nofly: story-regi-fly's wall with no Flying-type in the party, only the
+# boot's test TREECKO (story-regi-flier's party before it takes the TAILLOW). A at it
+# does nothing, and the chamber stays shut.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 81 00 18 44 08 00 15 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+5 68
+expect u8 gPlayerPartyCount 1
+hold UP 20
+wait 30
+tap A
+wait 30
+expectbits u8 *gSaveBlock1Ptr+0x1386 0x04 0x00
+hold UP 12
+wait 60
+expect u16 *gSaveBlock1Ptr+2 21
+say story regi nofly ok

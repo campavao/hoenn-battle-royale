@@ -36,6 +36,7 @@
 #include "br/br_balls.h"
 #include "br/br_patch.h"
 #include "br/br_event.h"
+#include "br/br_story.h"
 #include "br/br_items.h"
 #include "br/br_loot.h"
 #include "br/br_gym.h"
@@ -128,11 +129,17 @@ static void Spawn(struct BrLootItem *it)
     // Birch's bag is the one bag-shaped object event Emerald has; a team is balls.
     u8 gfx = it->kind == BR_LOOT_BAG && !OneThing(it) ? OBJ_EVENT_GFX_BIRCHS_BAG : OBJ_EVENT_GFX_ITEM_BALL;
     u8 movement = MOVEMENT_TYPE_NONE;
+    u8 person = BrStory_Person(it);
     u8 id;
 
     if (BR_LOOT_IS_GIFT(it->key))
     {
         gfx = sGiftGfx[it->key % ARRAY_COUNT(sGiftGfx)];
+        movement = MOVEMENT_TYPE_FACE_DOWN;
+    }
+    else if (person != 0)
+    {
+        gfx = person;
         movement = MOVEMENT_TYPE_FACE_DOWN;
     }
     id = SpawnSpecialObjectEventParameterized(gfx, movement, LocalId(it),
@@ -762,6 +769,8 @@ static void Take(struct BrLootItem *it)
     // hold full too, the press does nothing and the piece is there for the next one.
     if (!BrWire_CanHold(BR_PICKUP_LEN))
         return;
+    if (!BrStory_Hands(it))
+        return; // STERN wants his SCANNER first, and has said so
     // A TM nobody here can use, or a second copy, stays where it lies for somebody who can
     // (one each: the coordinator's default, 2026-10-14, Cam can overrule); one we take
     // goes straight to the teach screen (br_moves.h), below.
@@ -784,7 +793,7 @@ static void Take(struct BrLootItem *it)
         if (OneThing(it))
         {
             // What it is, not what it was worth: it arrives with the GIVE.
-            p = BrHud_Append(line, last, BR_LOOT_IS_GIFT(it->key) ? sText_Gift : sText_Found);
+            p = BrHud_Append(line, last, BR_LOOT_IS_GIFT(it->key) || BrStory_Person(it) ? sText_Gift : sText_Found);
             p = BrHud_Append(p, last, GetItemName(it->species));
             BrHud_Append(p, last, sText_Bang);
             BrHud_Box(line);
@@ -853,7 +862,7 @@ static void Take(struct BrLootItem *it)
               USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
     BrLevels_Settle(&mon); // a ZUBAT taken at 50 is a CROBAT, and says so
     species = GetMonData(&mon, MON_DATA_SPECIES, NULL);
-    p = BrHud_Append(line, last, sText_Took);
+    p = BrHud_Append(line, last, BrStory_Person(it) ? sText_Gift : sText_Took);
     p = BrHud_Append(p, last, gSpeciesNames[species]);
     BrHud_Append(p, last, sText_Bang);
     PlaySE(SE_PIN);

@@ -252,6 +252,10 @@ export interface BotsOptions {
      *  emptied with an item-named pickup stood on every map with nothing in his hands. */
     bagLeft?: (key: number) => number;
   };
+  /** A piece on the ground this bot cannot have yet (match/story.ts, storySealed): behind
+   *  a REGI's wall it could not open, or a person's who wants something it has not got.
+   *  The grid walks through both, so without this a bot took what no player could. */
+  sealed?: (piece: { key: number; mapId: string; x: number; y: number }, bot: { party: PackedMon[]; bag: Stack[] }) => boolean;
   /** world.json id -> the wire's group/num. */
   mapRef: (mapId: string) => MapRef | undefined;
   /** The events' traders nobody has traded with yet (speed-up 6b), in the page's space,
@@ -786,7 +790,7 @@ export class Bots {
     // Loot at your feet, before anything else: a bot standing on a ball takes it, and
     // that is the turn spent.
     const here = this.opts.loot?.at(walker.at.map, pageCell(walker.at.x, walker.at.y));
-    if (here !== undefined) {
+    if (here !== undefined && !this.opts.sealed?.({ key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y }, walker)) {
       // A bag on the ground gives up one item per press -- the ROM's own rule -- so
       // the pickup names what was taken and the rest stays there (POK-237).
       const item = this.opts.loot?.bagAt?.(here);
@@ -1123,7 +1127,8 @@ export class Bots {
     // Loot in the ring beats wandering: a bot goes and gets it. Nearest first only
     // among the pieces on its own map -- distances across a seam are not comparable,
     // and a bot that crosses one will see that map's loot when it gets there.
-    const loot = (this.opts.loot?.all() ?? [])
+    const pieces = (this.opts.loot?.all() ?? []).filter((l) => !this.opts.sealed?.(l, walker));
+    const loot = pieces
       .filter((l) => (!inside || inside(l.mapId)) && l.mapId === walker.at.map && reach.cell(l.x, l.y))
       .sort(
         (a, b) =>
@@ -1153,7 +1158,7 @@ export class Bots {
       }
     }
     const events = [
-      ...(this.opts.loot?.all() ?? []).filter((l) => isEventKey(l.key) && (!inside || inside(l.mapId))),
+      ...pieces.filter((l) => isEventKey(l.key) && (!inside || inside(l.mapId))),
       ...traders,
     ].filter((e) => e.mapId !== walker.at.map);
     if (events.length > 0 && this.aimAcrossMaps(walker, events, now)) return;

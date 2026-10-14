@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Director, type DirectorWorld } from './director';
 import { EVENT_MAX, eventKey, SUPPLIES } from './events';
-import { STORIES, storyDrop } from './story';
+import { STORIES, storyCells, storyDrop, storySealed } from './story';
 import { mulberry32 } from './clock';
 import { HOENN } from '../bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './landing';
@@ -44,17 +44,20 @@ describe('story events', () => {
       expect(HOENN.byId.has(s.map), s.id).toBe(true);
       const pieces = (s.mons?.length ?? 0) + (s.rares ?? 0) + (s.items?.length ?? 0);
       expect(s.cells, s.id).toHaveLength(pieces + 2);
-      expect(new Set(s.cells.map((c) => `${c.x},${c.y}`)).size, s.id).toBe(s.cells.length);
+      expect(new Set(s.cells.map((c) => `${c.map ?? s.map},${c.x},${c.y}`)).size, s.id).toBe(s.cells.length);
+      for (const c of s.cells) if (c.map) expect(HOENN.byId.has(c.map), s.id).toBe(true);
+      for (const p of s.people ?? []) expect(s.cells[p.at], s.id).toBeDefined();
     }
     expect(new Set(STORIES.map((s) => s.id)).size).toBe(STORIES.length);
   });
 
   it('lies where a trainer can walk to, from a door into its map, surfing', () => {
     for (const s of STORIES) {
-      const ways = entries(s.map);
-      expect(ways.length, s.id).toBeGreaterThan(0);
-      expect(HOENN.world.hops('MAP_LITTLEROOT_TOWN', s.map, true, true), s.id).toBeDefined();
       for (const c of s.cells) {
+        const map = c.map ?? s.map;
+        const ways = entries(map);
+        expect(ways.length, s.id).toBeGreaterThan(0);
+        expect(HOENN.world.hops('MAP_LITTLEROOT_TOWN', map, true, true), s.id).toBeDefined();
         const ok = ways.some((w) => HOENN.world.reachOnMap(w, true, true).cell(c.x, c.y));
         expect(ok, `${s.id} ${c.x},${c.y}`).toBe(true);
       }
@@ -64,7 +67,7 @@ describe('story events', () => {
   it("drops the story's own reward, the supplies and a trader, on its cells and its map", () => {
     const story = STORIES.find((s) => s.id === 'mirage-tower')!;
     const map = HOENN.refOf(story.map)!;
-    const msgs = storyDrop(mulberry32(5), story, { n: 1, phase: 4, seat: 0, mapsec: 199, place: story.name, map, cells: [...story.cells] });
+    const msgs = storyDrop(mulberry32(5), story, { n: 1, phase: 4, seat: 0, mapsec: 199, place: story.name, map, cells: storyCells(story, (id) => HOENN.refOf(id)!) });
     const event = msgs[0] as EventMsg;
     expect(event).toMatchObject({ t: 'event', n: 1, mapsec: 199, place: 'MIRAGE TOWER', key: eventKey(1, 0) });
     expect(event.trader).toMatchObject({ map, x: 6 + MAP_OFFSET, y: 5 + MAP_OFFSET });
@@ -81,7 +84,7 @@ describe('story events', () => {
   it('gives an item story its items as balls of one, before the supplies', () => {
     const story = STORIES.find((s) => s.id === 'shoal-cave')!;
     const map = HOENN.refOf(story.map)!;
-    const msgs = storyDrop(mulberry32(5), story, { n: 0, phase: 2, seat: 0, mapsec: 67, map, cells: [...story.cells] });
+    const msgs = storyDrop(mulberry32(5), story, { n: 0, phase: 2, seat: 0, mapsec: 67, map, cells: storyCells(story, (id) => HOENN.refOf(id)!) });
     const bags = (msgs.slice(1) as SpillMsg[]).map((s) => s.bag!.items);
     expect(bags).toEqual([[{ id: 196, n: 1 }], [{ id: 219, n: 1 }], SUPPLIES]);
     expect((msgs.slice(1) as SpillMsg[]).flatMap((s) => s.mons)).toEqual([]);
@@ -98,8 +101,9 @@ describe('story events', () => {
       for (const e of sent.filter((m) => m.t === 'event') as EventMsg[]) {
         const story = STORIES.find((s) => s.name === e.place);
         if (!story) continue;
-        const spills = (sent.filter((m) => m.t === 'spill') as SpillMsg[]).filter((s) => [...s.mons, ...(s.bag ? [s.bag] : [])].some((p) => p.key === e.key));
-        expect(spills.map((s) => HOENN.idOf(s.map)), `seed ${seed}`).toEqual([story.map]);
+        const spills = (sent.filter((m) => m.t === 'spill') as SpillMsg[]).filter((s) => [...s.mons, ...(s.bag ? [s.bag] : [])].some((p) => (p.key & 0xfff0) === (e.key & 0xfff0)));
+        const maps = new Set(story.cells.map((c) => c.map ?? story.map));
+        expect(new Set(spills.map((s) => HOENN.idOf(s.map))), `seed ${seed}`).toEqual(maps);
         expect(e.mapsec).toBe(SECTIONS[story.section].num);
       }
     }
@@ -153,13 +157,19 @@ describe('story events', () => {
     'stevens-house': { mapId: 'MAP_MOSSDEEP_CITY', x: 19, y: 11 },
     'new-mauville': { mapId: 'MAP_ROUTE110', x: 35, y: 25 },
     'shoal-cave': { mapId: 'MAP_ROUTE125', x: 22, y: 20 },
+    'desert-ruins': { mapId: 'MAP_ROUTE111', x: 29, y: 88 },
+    'island-cave': { mapId: 'MAP_ROUTE105', x: 9, y: 21 },
+    'ancient-tomb': { mapId: 'MAP_ROUTE120', x: 7, y: 56 },
+    'granite-cave': { mapId: 'MAP_GRANITE_CAVE_1F', x: 5, y: 11 },
+    'lavaridge-egg': { mapId: 'MAP_LAVARIDGE_TOWN_POKEMON_CENTER_1F', x: 7, y: 7 },
+    'abandoned-ship': { mapId: 'MAP_SLATEPORT_CITY', x: 28, y: 13 },
   };
   it('a bot outside walks in and takes it', () => {
     for (const story of STORIES) {
       const from = OUTSIDE[story.id];
       expect(from, story.id).toBeDefined();
       const key = eventKey(0, 0);
-      const ground = new Map([[key, { mapId: story.map, ...story.cells[0] }]]);
+      const ground = new Map([[key, { mapId: story.cells[0].map ?? story.map, x: story.cells[0].x, y: story.cells[0].y }]]);
       const sent: Msg[] = [];
       const bots = new Bots({
         world: HOENN.world,
@@ -180,5 +190,27 @@ describe('story events', () => {
       }
       expect(ground.size, story.id).toBe(0);
     }
+  });
+
+  it("keeps a REGI behind its wall, and STERN's thanks, from a bot that could not get them", () => {
+    const at = (id: string, i = 0) => {
+      const s = STORIES.find((x) => x.id === id)!;
+      return { mapId: s.cells[i].map ?? s.map, x: s.cells[i].x, y: s.cells[i].y };
+    };
+    const bot = { flies: false, has: () => false, phase: 4 };
+    // Event 1 drops on phase 4.
+    const key = eventKey(1, 0);
+    expect(storySealed({ key, ...at('desert-ruins') }, bot)).toBe(false);
+    expect(storySealed({ key, ...at('ancient-tomb') }, bot)).toBe(true);
+    expect(storySealed({ key, ...at('ancient-tomb') }, { ...bot, flies: true })).toBe(false);
+    expect(storySealed({ key, ...at('island-cave') }, bot)).toBe(true);
+    expect(storySealed({ key, ...at('island-cave') }, { ...bot, phase: 5 })).toBe(false);
+    // Outside the wall is anybody's.
+    expect(storySealed({ key: eventKey(1, 1), ...at('ancient-tomb', 1) }, bot)).toBe(false);
+    expect(storySealed({ key, ...at('abandoned-ship') }, bot)).toBe(true);
+    expect(storySealed({ key, ...at('abandoned-ship') }, { ...bot, has: (id) => id === 278 })).toBe(false);
+    expect(storySealed({ key: eventKey(1, 1), ...at('abandoned-ship', 1) }, bot)).toBe(false);
+    // A fallen trainer's ball on the same cell is not the story's.
+    expect(storySealed({ key: 0x1234, ...at('ancient-tomb') }, bot)).toBe(false);
   });
 });

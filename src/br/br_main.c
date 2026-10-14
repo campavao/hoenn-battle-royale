@@ -27,6 +27,7 @@
 #include "br/br_balls.h"
 #include "br/br_patch.h"
 #include "br/br_event.h"
+#include "br/br_story.h"
 #include "br/br_field.h"
 
 // Readable from the ROM image itself, so a tool can tell which patch it holds without
@@ -80,6 +81,7 @@ void BrFrame(void)
     BrField_RemoveHeld();
     BrBoot_Tick();
     BrGhosts_Tick();
+    BrStory_Tick(); // a REGI door we face takes the A first
     BrEvent_Tick(); // a trader we face takes the A before a ball we stand on
     BrLoot_Tick();
     BrPatch_Tick();

@@ -50,6 +50,7 @@ import mapGroups from '../../data/maps/map_groups.json';
 import eventObjectsH from '../../include/constants/event_objects.h?raw';
 import itemsH from '../../include/constants/items.h?raw';
 import speciesH from '../../include/constants/species.h?raw';
+import speciesInfoH from '../../src/data/pokemon/species_info.h?raw';
 import varsH from '../../include/constants/vars.h?raw';
 import weatherH from '../../include/constants/weather.h?raw';
 import constantsGlobalH from '../../include/constants/global.h?raw';
@@ -82,6 +83,7 @@ import lootTs from './match/loot.ts?raw';
 import { PATCH_KEY_BASE } from './match/loot';
 import { EVENT_KEY_BASE, EVENT_MAX, EVENT_PIECES, GOLD, LEGENDS, RARES, traderKey } from './match/events';
 import { GIFT_KEY_BASE, GIFTS } from './match/gifts';
+import { DOOR_Y, FLYING, STORIES } from './match/story';
 import uiData from './data/ui.json';
 import { BR_CONT_FLAG, BR_MSG } from './net/slots';
 import { MAILBOX } from './net/mailbox';
@@ -1001,6 +1003,32 @@ describe('the rules a bot plays by the ROM\'s way', () => {
     expect(GIFTS).toEqual(
       ['BRIGHT_POWDER', 'WHITE_HERB', 'QUICK_CLAW', 'CHOICE_BAND', 'KINGS_ROCK', 'FOCUS_BAND', 'SCOPE_LENS', 'LEFTOVERS', 'SHELL_BELL'].map((n) => ids.indexOf(`ITEM_${n}`)),
     );
+  });
+
+  it("a story's people and doors are br_story.c's sPeople and sDoors", () => {
+    const storyC = brSources['../../src/br/br_story.c'];
+    const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
+    const ids = list.split(',').map((s) => s.trim()).filter(Boolean);
+    const people = [...storyC.matchAll(/\{MAP_GROUP\((MAP_\w+)\),\s*MAP_NUM\(\1\),\s*(\d+),\s*(\d+),\s*(OBJ_EVENT_GFX_\w+),\s*(ITEM_\w+)\}/g)].map(
+      (m) => ({ map: m[1], x: Number(m[2]), y: Number(m[3]), gfx: m[4], wants: m[5] === 'ITEM_NONE' ? undefined : ids.indexOf(m[5]) }),
+    );
+    const pages = STORIES.flatMap((s) =>
+      (s.people ?? []).map((p) => ({ map: s.cells[p.at].map ?? s.map, x: s.cells[p.at].x, y: s.cells[p.at].y, gfx: p.gfx, wants: p.wants })),
+    );
+    expect(people).toEqual(pages);
+    const rule = { BR_DOOR_SMASH: 'smash', BR_DOOR_FLY: 'fly', BR_DOOR_WAIT: 'wait' } as Record<string, string>;
+    const doors = [...storyC.matchAll(/\{FLAG_\w+,\s*MAP_GROUP\((MAP_\w+)\),\s*MAP_NUM\(\1\),\s*(BR_DOOR_\w+)\}/g)].map((m) => ({ map: m[1], door: rule[m[2]] }));
+    const byMap = (a: { map: string }, b: { map: string }) => a.map.localeCompare(b.map);
+    expect(doors.sort(byMap)).toEqual(STORIES.filter((s) => s.door).map((s) => ({ map: s.map, door: s.door })).sort(byMap));
+    expect(define(storyC, 'BR_DOOR_Y')).toBe(DOOR_Y);
+  });
+
+  it("ANCIENT TOMB's fliers are species_info.h's Flying-types", () => {
+    const flying = [...speciesInfoH.matchAll(/\[(SPECIES_\w+)\]\s*=\s*\{[\s\S]*?\.types\s*=\s*\{([^}]*)\}/g)]
+      .filter((m) => m[2].includes('TYPE_FLYING'))
+      .map((m) => define(speciesH, m[1]));
+    expect(flying.length).toBeGreaterThan(40);
+    expect([...FLYING].sort((a, b) => a - b)).toEqual([...new Set(flying)].sort((a, b) => a - b));
   });
 
   it("an event's gold balls are sGold in br_balls.c, and its Pokemon are species.h's", () => {

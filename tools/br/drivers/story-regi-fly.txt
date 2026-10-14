@@ -1,0 +1,25 @@
+# story-regi-fly: ANCIENT TOMB's sealed chamber opens on A at its wall with a Flying-type
+# in the party (br_story.c, HasFlier), as its braille asks for FLY.
+#
+# FLAG_SYS_REGISTEEL_PUZZLE_COMPLETED (0x8B2) is gSaveBlock1Ptr+0x1386 bit 2. Booted
+# with the test SWELLOW (BR_BOOT_FLAG_TESTFLY) under the wall at (8,21) on ANCIENT TOMB
+# (24:68). story-regi-nofly is the same wall with no flier.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 41 00 18 44 08 00 15 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 24
+expect u8 *gSaveBlock1Ptr+5 68
+expectbits u8 *gSaveBlock1Ptr+0x1386 0x04 0x00
+hold UP 20
+wait 30
+expect u16 *gSaveBlock1Ptr+2 21
+tap A
+wait 30
+expectbits u8 *gSaveBlock1Ptr+0x1386 0x04 0x04
+hold UP 12
+wait 150
+expect u16 *gSaveBlock1Ptr+2 11
+shot chamber
+say story regi fly ok

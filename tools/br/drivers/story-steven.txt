@@ -1,0 +1,29 @@
+# story-steven: GRANITE CAVE's story event is STEVEN with his TM47, stood where Emerald
+# stands him (br_story.c, sPeople): a person, not a ball, and "A GIFT" when he gives it.
+# His own object is down at boot with the rest of the story's people (FLAG_HIDE_* sweep).
+# The TESTFLY boot (0x41): its SWELLOW learns TM47, and a TM nobody in the party learns
+# stays where it lies (br_loot.c, Take).
+#
+# On GRANITE CAVE STEVENS ROOM (24:10) at (7,9), facing north onto (7,8): event 0's TM47
+# (key 0xB000, one item, 335) on (14,15) with MAP_OFFSET.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 41 00 18 0A 07 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 24
+expect u8 *gSaveBlock1Ptr+5 10
+# SPILL: seat 0 on 24:10, no mons, the bag (key 0xB000 at (14,15): 1 TM47, no money)
+pokebytes gDecompressionBuffer 00 18 0A 00 01 00 B0 0E 00 0F 00 01 4F 01 01 00 00 00 00
+mailsend gBrMailbox 11 gDecompressionBuffer 19
+wait 30
+expect u8 gBrLoot+0xA1 1
+tap UP
+wait 20
+shot steven
+tap A
+wait 20
+shot gift
+expectmsg 10 u16 1 0xB000
+expect u8 gBrLoot+0xA1 0
+say story steven ok

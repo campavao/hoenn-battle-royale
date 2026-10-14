@@ -1,0 +1,27 @@
+# story-regi-wait: ISLAND CAVE's sealed chamber opens by itself once the ring has moved
+# on a phase from the one its event dropped on (br_story.c, BrStory_Tick): its braille
+# asks you to wait, and a match is the waiting.
+#
+# FLAG_SYS_BRAILLE_REGICE_COMPLETED (0x8B1) is gSaveBlock1Ptr+0x1386 bit 1. On ISLAND
+# CAVE (24:67) at (8,21), event 1's REGICE lands in the chamber (key 0xB010 at (8,7),
+# (15,14) with MAP_OFFSET). Event 1 drops on phase 4; the door waits for phase 5.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 01 00 18 43 08 00 15 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+5 67
+poke u8 gBrRing+1 4
+# SPILL: seat 0 on 24:67, one mon (key 0xB010, (15,14), REGICE 402, level 30), no bag
+pokebytes gDecompressionBuffer 00 18 43 01 10 B0 0F 00 0E 00 92 01 1E 00
+mailsend gBrMailbox 11 gDecompressionBuffer 14
+wait 30
+expectbits u8 *gSaveBlock1Ptr+0x1386 0x02 0x00
+poke u8 gBrRing+1 5
+wait 10
+expectbits u8 *gSaveBlock1Ptr+0x1386 0x02 0x02
+shot opened
+hold UP 12
+wait 150
+expect u16 *gSaveBlock1Ptr+2 11
+say story regi wait ok

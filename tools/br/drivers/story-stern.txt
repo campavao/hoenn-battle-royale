@@ -1,0 +1,52 @@
+# story-stern: CAPTAIN STERN in SLATEPORT's harbour hands over the ABANDONED SHIP story's
+# reward only for the SCANNER (br_story.c, BrStory_Hands), and takes it when he does.
+#
+# On the harbour (9:9) at (6,14), facing north onto STERN at (6,13): event 0's DEEP SEA
+# TOOTH (key 0xB000, one item, so a person rather than a ball) on (13,20), and for this
+# driver the SCANNER (key 0xB001) behind us at (6,15), (13,22) with MAP_OFFSET. He hands
+# it over only when RemoveBagItem took the SCANNER, so his PICKUP is the proof of both.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 81 00 09 09 06 00 0E 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 9
+expect u8 *gSaveBlock1Ptr+5 9
+# SPILL: seat 0 on 9:9, no mons, the bag (key 0xB000 at (13,20): 1 DEEP SEA TOOTH, no money)
+pokebytes gDecompressionBuffer 00 09 09 00 01 00 B0 0D 00 14 00 01 C0 00 01 00 00 00 00
+mailsend gBrMailbox 11 gDecompressionBuffer 19
+# ...and the SCANNER's (key 0xB001 at (13,22): 1 SCANNER 278)
+pokebytes gDecompressionBuffer 00 09 09 00 01 01 B0 0D 00 16 00 01 16 01 01 00 00 00 00
+mailsend gBrMailbox 11 gDecompressionBuffer 19
+wait 30
+expect u8 gBrLoot+0xA1 2
+tap UP
+wait 20
+shot stern
+tap A
+wait 60
+shot wants
+# He wants the SCANNER: nothing changes hands.
+expect u8 gBrLoot+0xA1 2
+tap B
+wait 30
+tap DOWN
+wait 20
+tap A
+wait 90
+expectmsg 10 u16 1 0xB001
+expect u8 gBrLoot+0xA1 1
+# The page gives a bag's contents over when it sees us take it: GIVE, one SCANNER.
+pokebytes gDecompressionBuffer 01 16 01 01
+mailsend gBrMailbox 30 gDecompressionBuffer 4
+wait 30
+tap B
+wait 60
+tap UP
+wait 20
+tap A
+wait 90
+shot thanks
+expectmsg 10 u16 1 0xB000
+expect u8 gBrLoot+0xA1 0
+say story stern ok

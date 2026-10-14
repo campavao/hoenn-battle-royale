@@ -237,6 +237,13 @@ static void ClearTheLateStory(void)
         if (!keep)
             FlagSet(flag);
     }
+    // The three REGI caves' outer doors are open (Routes 105, 111 and 120 seal them
+    // while this is clear), and their own REGIs are gone: a REGI is a story event's ball
+    // in the chamber, whose door br_story.c opens its own way.
+    FlagSet(FLAG_REGI_DOORS_OPENED);
+    FlagSet(FLAG_DEFEATED_REGIROCK);
+    FlagSet(FLAG_DEFEATED_REGICE);
+    FlagSet(FLAG_DEFEATED_REGISTEEL);
     // MIRAGE TOWER stands every time you come onto Route 111, not on a coin flip each
     // visit that every ROM throws for itself: it is a story event's place, and its two
     // fossils are the event's (web/src/match/story.ts). Its own two stay hidden above:
