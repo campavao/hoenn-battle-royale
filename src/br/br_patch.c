@@ -361,28 +361,36 @@ void BrPatch_Init(void)
     Regrow();
 }
 
-void BrPatch_Tick(void)
+// Brings the taken bits up to the match and the ring before anything reads or sets one.
+// Both callers ask: the tick, and a PICKUP -- which BrNet_Tick hands over before the tick
+// runs, so a PICKUP in the same frame as a new phase's RING would otherwise be marked and
+// then grown straight back.
+static void Settle(void)
 {
-    u8 i;
-
     if (sDealtFor != gBrMatch.seed)
     {
         // A new match: every patch is back, the moment the seed is in -- a PICKUP that
         // lands before the field is running again is this match's, and must stay.
-        for (i = 0; i < ARRAY_COUNT(gBrPatchTaken); i++)
-            gBrPatchTaken[i] = 0;
+        Regrow();
         sDealtFor = gBrMatch.seed;
         gBrPatch.map = 0xFFFF;
         gBrPatch.count = 0;
     }
     if (sGrownFor != gBrRing.phase)
     {
-        // A new ring: what was taken grows back, drawn by the loop below when in view.
-        // A PICKUP sent in the old phase that lands after the RING takes its patch for
-        // this one too, on our ROM alone -- a whole phase of one patch, at worst.
+        // A new ring: what was taken grows back, drawn by the tick when in view. A PICKUP
+        // sent in the old phase that lands after the RING takes its patch for this one
+        // too, on our ROM alone -- a whole phase of one patch, at worst.
         Regrow();
         sGrownFor = gBrRing.phase;
     }
+}
+
+void BrPatch_Tick(void)
+{
+    u8 i;
+
+    Settle();
     if (!BrField_OverworldRunning())
         return;
     if (gBrPatch.map != CurrentMap())
@@ -447,6 +455,7 @@ void BrPatch_NoteTaken(u16 key)
 
     if (!BR_PATCH_IS_KEY(key))
         return;
+    Settle();
     n = key - BR_PATCH_KEY_BASE;
     if (n / 8 < ARRAY_COUNT(gBrPatchTaken))
         gBrPatchTaken[n / 8] |= 1 << (n % 8);
