@@ -10,15 +10,17 @@
 # change that moved a lag frame (2026-10-06: the spectator camera, which runs nothing
 # here) met a different mon or none. So the generator is set at the start of the walk
 # that meets it: a walk right, out of the encounter immunity a map load gives, then
-# gRngValue 38 and back left. It was 3 until the OAM side table (2026-10-14) put a little
-# more work in every frame's sprite build and 3 met a POOCHYENA.
+# gRngValue 10 and back left. It was 3 until the OAM side table (2026-10-14) put a little
+# more work in every frame's sprite build and moved the step the walk meets it on. A seed
+# that meets a different mon after a timing change is that, not a dex bug: find one that
+# meets the WURMPLE slot again (any seed whose battle reads 14 below).
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
 poke u32 gBrMatch+8 4
 hold RIGHT 60
-poke u32 gRngValue 38
+poke u32 gRngValue 10
 hold LEFT 60
 wait 200
 expect u16 gBattleTypeFlags 4

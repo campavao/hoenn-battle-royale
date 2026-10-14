@@ -1,0 +1,64 @@
+# world-shown-crowd: on a crowded route the grown box (gBrFieldShown) never costs a near
+# person their slot, and never blinks. Route 123 (8,13): 3 of the map's people in pret's
+# rows and 12 berry trees in the rows a portrait phone shows above them: 15 and the player
+# is the whole table, so the grown rows must stop short and leave the headroom. Seats 1-4
+# stand beside us, and come before any berry tree: the grown rows get what is left of the
+# table once the headroom and BR's own have theirs (SpareRoom, src/br/br_field.c).
+# checked-by: tools/br/world-shown-crowd.py
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 26 08 00 0D 00 BD BB C7 FF
+wait 400
+pokebytes gBrSeats+0x10 01 0F 00 26 0D 00 14 00 01 FF
+pokebytes gBrSeats+0x20 01 0F 00 26 11 00 14 00 01 FF
+pokebytes gBrSeats+0x30 01 0F 00 26 0D 00 16 00 01 FF
+pokebytes gBrSeats+0x40 01 0F 00 26 11 00 16 00 01 FF
+wait 30
+hold LEFT 12
+hold RIGHT 12
+wait 30
+say base
+dump gObjectEvents 576
+dump *gSaveBlock1Ptr 4
+shot base
+pokebytes gBrFieldShown 68 00 E8 00
+hold LEFT 12
+hold RIGHT 12
+wait 30
+say grown
+dump gObjectEvents 576
+dump *gSaveBlock1Ptr 4
+dump gMain+0x38 512
+shot grown
+hold LEFT 12
+hold RIGHT 12
+wait 30
+say again
+dump gObjectEvents 576
+dump *gSaveBlock1Ptr 4
+dump gMain+0x38 512
+expectne u8 gBrSeats+0x19 255
+expectne u8 gBrSeats+0x29 255
+expectne u8 gBrSeats+0x39 255
+expectne u8 gBrSeats+0x49 255
+# Busy: twelve seats in view and the ring's fog (20 sprites, rain's 24 is the most any
+# weather has) on the grown field. Every OAM entry used must fit gOamLimit's 64, or
+# whatever sorts last -- the HUD, the player -- is silently not drawn.
+pokebytes gBrSeats+0x50 01 0F 00 26 09 00 0C 00 01 FF
+pokebytes gBrSeats+0x60 01 0F 00 26 0B 00 0E 00 01 FF
+pokebytes gBrSeats+0x70 01 0F 00 26 13 00 0C 00 01 FF
+pokebytes gBrSeats+0x80 01 0F 00 26 15 00 0E 00 01 FF
+pokebytes gBrSeats+0x90 01 0F 00 26 09 00 1A 00 01 FF
+pokebytes gBrSeats+0xa0 01 0F 00 26 0B 00 1C 00 01 FF
+pokebytes gBrSeats+0xb0 01 0F 00 26 13 00 1A 00 01 FF
+pokebytes gBrSeats+0xc0 01 0F 00 26 15 00 1C 00 01 FF
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+hold LEFT 12
+hold RIGHT 12
+wait 240
+expect u8 gBrRing+5 1
+say busy
+dump gObjectEvents 576
+dump gMain+0x38 512
+shot busy

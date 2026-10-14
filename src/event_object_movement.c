@@ -1669,9 +1669,6 @@ void TrySpawnObjectEvents(s16 cameraX, s16 cameraY)
         s16 right = gSaveBlock1Ptr->pos.x + MAP_OFFSET_W + 2;
         s16 top = gSaveBlock1Ptr->pos.y;
         s16 bottom = gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2;
-#if BR
-        BrField_GrowSpawnBox(&top, &bottom);
-#endif
 
         if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE)
             objectCount = GetNumBattlePyramidObjectEvents();
@@ -1690,6 +1687,9 @@ void TrySpawnObjectEvents(s16 cameraX, s16 cameraY)
                 && !FlagGet(template->flagId))
                 TrySpawnObjectEventTemplate(template, gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup, cameraX, cameraY);
         }
+#if BR
+        BrField_SpawnGrown(objectCount, cameraX, cameraY, TrySpawnObjectEventTemplate);
+#endif
     }
 }
 
@@ -7416,7 +7416,7 @@ static void UpdateObjectEventOffscreen(struct ObjectEvent *objectEvent, struct S
     y2 += graphicsInfo->height;
 
 #if BR
-    if (BrField_OffScreen(x, x2, y))
+    if (BrField_OffScreen(x, x2, y, y2))
         objectEvent->offScreen = TRUE;
 #else
     if ((s16)x >= DISPLAY_WIDTH + 16 || (s16)x2 < -16)
@@ -8627,7 +8627,7 @@ void UpdateObjectEventSpriteInvisibility(struct Sprite *sprite, bool8 invisible)
     y2 = y - (sprite->centerToCornerVecY >> 1);
 
 #if BR
-    if (BrField_OffScreen(x, x2, y))
+    if (BrField_OffScreen(x, x2, y, y2))
         sprite->invisible = TRUE;
 #else
     if ((s16)x >= DISPLAY_WIDTH + 16 || x2 < -16)

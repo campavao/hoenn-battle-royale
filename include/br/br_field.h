@@ -207,11 +207,14 @@ void BrField_OamEntry(u8 index, const struct Sprite *sprite, s16 dx, s16 dy);
 // sprite.c, LoadOam: the table goes out with the OAM it describes.
 void BrField_OamLatch(void);
 // event_object_movement.c: pret's object box, rows top..bottom, grown by the rows the
-// page shows past the sprite window -- the box people spawn in (TrySpawnObjectEvents)
-// while BR_GROW_SPARE slots are free past the headroom, and the one they are kept in
-// (RemoveObjectEventIfOutsideView, BrField_InObjectView) while the headroom is.
+// page shows past the sprite window. TrySpawnObjectEvents spawns pret's box and then
+// BrField_SpawnGrown the grown rows, each person while BR_GROW_SPARE slots are spare past
+// the headroom; RemoveObjectEventIfOutsideView and BrField_InObjectView keep the grown box
+// while the headroom is. spawn is event_object_movement.c's TrySpawnObjectEventTemplate.
 #define BR_GROW_SPARE 4
-void BrField_GrowSpawnBox(s16 *top, s16 *bottom);
+struct ObjectEventTemplate;
+typedef u8 (*BrSpawnTemplateFunc)(const struct ObjectEventTemplate *, u8, u8, s16, s16);
+void BrField_SpawnGrown(u8 count, s16 cameraX, s16 cameraY, BrSpawnTemplateFunc spawn);
 void BrField_GrowObjectBox(s16 *top, s16 *bottom);
 
 // Every frame from CameraUpdate: the far row or column once its step has completed, and
@@ -224,7 +227,7 @@ void BrField_Tick(void);
 // map, not the rows the last map left there -- its border, past MAP_OFFSET.
 extern u32 gBrRingStale;
 // TRUE when a sprite whose top-left is (x, y) and right edge x2 is past the picture.
-bool8 BrField_OffScreen(s16 x, s16 x2, s16 y);
+bool8 BrField_OffScreen(s16 x, s16 x2, s16 y, s16 y2);
 
 // ---- leaving the field -----------------------------------------------------------
 

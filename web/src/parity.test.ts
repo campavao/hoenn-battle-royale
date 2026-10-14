@@ -544,7 +544,7 @@ describe("the BR structs the page reads at an offset", () => {
 
   it("the box the ROM keeps objects in: BrField_InObjectView, and Emerald's own spawn and cull", () => {
     const brField = brSources['../../src/br/br_field.c'];
-    const view = /BrField_InObjectView\(s16 x, s16 y\)\s*\{\s*s16 top = gSaveBlock1Ptr->pos\.y;\s*s16 bottom = gSaveBlock1Ptr->pos\.y \+ (\d+);\s*BrField_GrowObjectBox\(&top, &bottom\);\s*return x >= gSaveBlock1Ptr->pos\.x - (\d+) && x <= gSaveBlock1Ptr->pos\.x \+ (\d+)\s*&& y >= top && y <= bottom;/.exec(brField);
+    const view = /BrField_InObjectView\(s16 x, s16 y\)\s*\{\s*s16 top = gSaveBlock1Ptr->pos\.y;\s*s16 bottom = gSaveBlock1Ptr->pos\.y \+ (\d+);[\s\S]*?if \(sRoomGrows\)\s*Grow\(&top, &bottom\);\s*return x >= gSaveBlock1Ptr->pos\.x - (\d+) && x <= gSaveBlock1Ptr->pos\.x \+ (\d+)\s*&& y >= top && y <= bottom;/.exec(brField);
     expect(view, 'BrField_InObjectView reads as four bounds on pos, grown').not.toBeNull();
     expect(ghosts.VIEW).toEqual({ left: -Number(view![2]), right: Number(view![3]), top: 0, bottom: Number(view![1]) });
     // The map's own people: spawned in one box and culled outside another, and both are it.
@@ -560,10 +560,12 @@ describe("the BR structs the page reads at an offset", () => {
     };
     expect(box('void TrySpawnObjectEvents')).toEqual(ghosts.VIEW);
     expect(box('static void RemoveObjectEventIfOutsideView')).toEqual(ghosts.VIEW);
-    for (const [fn, hook] of [['void TrySpawnObjectEvents', 'BrField_GrowSpawnBox'], ['static void RemoveObjectEventIfOutsideView', 'BrField_GrowObjectBox']]) {
-      const body = new RegExp(`${fn}\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`).exec(objectEventsC.replace(/\r\n/g, '\n'))![1];
-      expect(body, `${fn} grows its box`).toMatch(new RegExp(`#if BR\\s*${hook}\\(&top, &bottom\\);\\s*#endif`));
-    }
+    const body = (fn: string): string => new RegExp(`${fn}\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`).exec(objectEventsC.replace(/\r\n/g, '\n'))![1];
+    // pret's box spawns first, then the grown rows (so the people at your feet are never
+    // short of a slot), and the cull keeps the grown box.
+    expect(body('void TrySpawnObjectEvents'), 'TrySpawnObjectEvents spawns the grown rows after its own box').toMatch(
+      /TrySpawnObjectEventTemplate\(template, [^;]+;\s*\}\s*#if BR\s*BrField_SpawnGrown\(objectCount, cameraX, cameraY, TrySpawnObjectEventTemplate\);\s*#endif\s*\}$/);
+    expect(body('static void RemoveObjectEventIfOutsideView'), 'the cull grows its box').toMatch(/#if BR\s*BrField_GrowObjectBox\(&top, &bottom\);\s*#endif/);
     expect(ghosts.MAP_OFFSET).toBe(define(fieldmapFnH, 'MAP_OFFSET'));
   });
 

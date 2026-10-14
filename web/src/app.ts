@@ -1516,7 +1516,13 @@ function askForBand(emu: Emulator): void {
   emu.setSpriteBand(romPicture.sprites);
   askedBand = devBand(romPicture.band) ?? asked;
   emu.setViewport(askedBand);
-  fieldShown = emu.setOamTable(oamTableAt ?? null) && fieldShownAt !== undefined ? { top: askedBand.top, bottom: askedBand.bottom } : null;
+  // gBrFieldShown must name the band the core actually draws, and the core takes a new
+  // band only at loadGame: both callers reboot straight after this. A resize handler that
+  // calls it without a reboot would tell the ROM about rows the core does not show.
+  const sideTable = emu.setOamTable(oamTableAt ?? null);
+  fieldShown = sideTable && fieldShownAt !== undefined
+    ? { top: askedBand.top, bottom: askedBand.bottom }
+    : null;
 }
 
 /** Where the ROM keeps its OAM side table and the rows the page shows past the LCD

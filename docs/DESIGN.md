@@ -320,7 +320,10 @@ true rows, anywhere in the band. With that the page tells the ROM the rows it sh
 (`gBrFieldShown`) and the ROM's world grows to them: a sprite is hidden only past those
 rows, and the object box (spawn, cull, ghosts, loot) gains a row for every 16 shown past
 the window -- on a portrait phone the player's rows -11..+20, the people and the grass out
-there the ROM's own. A core without the table, or a layout that shows no more than the
+there the ROM's own. The grown rows are spare room: pret's own box spawns first, BR's
+ghosts, loot and traders come next, and a person in the grown rows gets a slot only while
+four are left past the headroom (`BrField_SpawnGrown`). Only field sprites are marked;
+battles and menus keep the hardware's reading. A core without the table, or a layout that shows no more than the
 window, leaves gBrFieldShown at 0 and the world at pret's. The ROM's part
 (`src/br/br_field.c`): draw the part of the ring pret's slice redraws leave stale after a
 step, with a row or column that would land in a slot still on screen drawn when the step
