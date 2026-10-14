@@ -219,7 +219,8 @@ const struct BrFieldView gBrFieldView =
 
 EWRAM_DATA struct BrFieldShown gBrFieldShown = {0};
 EWRAM_DATA u8 gBrOamHi[BR_OAM_HI_SIZE] = {0};
-// Built with the OAM buffer, in IWRAM: EWRAM has no room for both copies.
+// Built with the OAM buffer. In IWRAM, which C-STYLE keeps for the engine, because EWRAM
+// has no room for both copies: 64 bytes of the stack's headroom (tools/br/ram-headroom.py).
 static u8 sOamHiNext[BR_OAM_HI_SIZE];
 
 // The rows past the LCD a sprite's top may be in and still be drawn: the rows the page
@@ -236,12 +237,17 @@ static s16 ShownBottom(void)
 }
 
 // Sideways the view's own columns (16 more for a sprite's width); up and down the rows
-// shown (ShownTop), 16 more below for a sprite whose top is above its feet.
+// shown (ShownTop). Once those run past the sprite window the core reads every top from
+// the side table, so a top 16 rows above the shown rows is kept too: its feet are in them.
 bool8 BrField_OffScreen(s16 x, s16 x2, s16 y)
 {
+    s16 above = ShownTop();
+
+    if (above > BR_SPRITE_TOP)
+        above += 16;
     if (x >= DISPLAY_WIDTH + BR_VIEW_RIGHT + 16 || x2 < -BR_VIEW_LEFT - 16)
         return TRUE;
-    if (y >= DISPLAY_HEIGHT + ShownBottom() || y < -ShownTop())
+    if (y >= DISPLAY_HEIGHT + ShownBottom() || y < -above)
         return TRUE;
     return FALSE;
 }
@@ -251,19 +257,19 @@ void BrField_OamClear(void)
     CpuFill16(0, sOamHiNext, sizeof(sOamHiNext));
 }
 
+// A top outside -256..511 has no reading in two bits; -2 puts it 257 rows or more above
+// the LCD, past any band.
 void BrField_OamEntry(u8 index, const struct Sprite *sprite, s16 dx, s16 dy)
 {
-    s16 x = sprite->x + sprite->x2 + sprite->centerToCornerVecX + dx;
     s16 y = sprite->y + sprite->y2 + sprite->centerToCornerVecY + dy;
-    u8 nibble;
+    s16 page;
 
     if (sprite->coordOffsetEnabled)
-    {
-        x += gSpriteCoordOffsetX;
         y += gSpriteCoordOffsetY;
-    }
-    nibble = ((y >> 8) & 3) | (((x >> 9) & 3) << 2);
-    sOamHiNext[index / 2] |= nibble << (4 * (index & 1));
+    page = y >> 8;
+    if (page < -1 || page > 1)
+        page = -2;
+    sOamHiNext[index / 2] |= (BR_OAM_HI_MARK | (page & 3)) << (4 * (index & 1));
 }
 
 void BrField_OamLatch(void)
@@ -272,12 +278,41 @@ void BrField_OamLatch(void)
         CpuCopy16(sOamHiNext, gBrOamHi, sizeof(gBrOamHi));
 }
 
+static u8 FreeObjectSlots(void)
+{
+    u8 i, n = 0;
+
+    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+    {
+        if (!gObjectEvents[i].active)
+            n++;
+    }
+    return n;
+}
+
 // pret's box runs 2 tiles past the sprite window's 40 rows above the LCD and its 56
 // below (the player's rows -7..+9); each 16 rows shown past those is a row more.
-void BrField_GrowObjectBox(s16 *top, s16 *bottom)
+static void Grow(s16 *top, s16 *bottom)
 {
     *top -= (ShownTop() - BR_SPRITE_TOP + 15) / 16;
     *bottom += (ShownBottom() - BR_SPRITE_BOTTOM + 15) / 16;
+}
+
+// The grown rows are spare room: pret spawns a map's people in template order, not
+// nearest first, so a full table of people 20 rows off would leave none for the one at
+// your feet. They spawn only while BR_GROW_SPARE slots are free past BR's headroom, and
+// are let go once the headroom itself is eaten into -- the gap between the two keeps a
+// person on the edge from blinking out and back on every step.
+void BrField_GrowSpawnBox(s16 *top, s16 *bottom)
+{
+    if (FreeObjectSlots() >= BR_NPC_HEADROOM + BR_GROW_SPARE)
+        Grow(top, bottom);
+}
+
+void BrField_GrowObjectBox(s16 *top, s16 *bottom)
+{
+    if (FreeObjectSlots() >= BR_NPC_HEADROOM)
+        Grow(top, bottom);
 }
 
 // ---- leaving the field -----------------------------------------------------------

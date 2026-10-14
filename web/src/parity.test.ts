@@ -353,6 +353,7 @@ const brSources = {
 const brAll = Object.values(brSources);
 
 /** The wasm core's patch (tools/br/mgba-wasm), for what the core reads of the ROM's RAM. */
+const coreJs = Object.values(import.meta.glob<string>('../public/emu/mgba.js', { query: '?raw', import: 'default', eager: true }))[0] ?? '';
 const corePatch = (Object.values(import.meta.glob<string>('../../tools/br/mgba-wasm/hbr-exports.patch', { query: '?raw', import: 'default', eager: true }))[0] ?? '').replace(/\r\n/g, '\n');
 
 /** The BR source that declares `struct name`, if one does. A struct none does is pret's. */
@@ -559,9 +560,9 @@ describe("the BR structs the page reads at an offset", () => {
     };
     expect(box('void TrySpawnObjectEvents')).toEqual(ghosts.VIEW);
     expect(box('static void RemoveObjectEventIfOutsideView')).toEqual(ghosts.VIEW);
-    for (const fn of ['void TrySpawnObjectEvents', 'static void RemoveObjectEventIfOutsideView']) {
+    for (const [fn, hook] of [['void TrySpawnObjectEvents', 'BrField_GrowSpawnBox'], ['static void RemoveObjectEventIfOutsideView', 'BrField_GrowObjectBox']]) {
       const body = new RegExp(`${fn}\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`).exec(objectEventsC.replace(/\r\n/g, '\n'))![1];
-      expect(body, `${fn} grows its box as BrField_InObjectView does`).toMatch(/#if BR\s*BrField_GrowObjectBox\(&top, &bottom\);\s*#endif/);
+      expect(body, `${fn} grows its box`).toMatch(new RegExp(`#if BR\\s*${hook}\\(&top, &bottom\\);\\s*#endif`));
     }
     expect(ghosts.MAP_OFFSET).toBe(define(fieldmapFnH, 'MAP_OFFSET'));
   });
@@ -569,11 +570,14 @@ describe("the BR structs the page reads at an offset", () => {
   it("the OAM side table is one layout on both sides: the ROM packs what the core's patch unpacks", () => {
     const brField = brSources['../../src/br/br_field.c'];
     const fieldH = brSources['../../include/br/br_field.h'];
-    // A nibble an entry, entry i in byte i / 2: two signed bits of y's 256s, two of x's 512s.
-    expect(brField).toMatch(/nibble = \(\(y >> 8\) & 3\) \| \(\(\(x >> 9\) & 3\) << 2\);\s*sOamHiNext\[index \/ 2\] \|= nibble << \(4 \* \(index & 1\)\);/);
-    expect(corePatch).toMatch(/int nibble = renderer->brOamHi\[sprite->index >> 1\] >> \(4 \* \(sprite->index & 1\)\);\s*\+\s*top \+= 256 \* \(\(\(nibble & 3\) \^ 2\) - 2\);/);
+    // A nibble an entry, entry i in byte i / 2: a mark, and two signed bits of y's 256s.
+    expect(define(fieldH, 'BR_OAM_HI_MARK')).toBe(4);
+    expect(brField).toMatch(/sOamHiNext\[index \/ 2\] \|= \(BR_OAM_HI_MARK \| \(page & 3\)\) << \(4 \* \(index & 1\)\);/);
+    expect(corePatch).toMatch(/int nibble = renderer->brOamHi\[sprite->index >> 1\] >> \(4 \* \(sprite->index & 1\)\);\s*\+\s*if \(nibble & 4\) \{\s*\+\s*top \+= 256 \* \(\(\(nibble & 3\) \^ 2\) - 2\);/);
     expect(define(fieldH, 'BR_OAM_HI_SIZE')).toBe(64);
     expect(corePatch).toMatch(/brOamTable = offset >= 0 && offset \+ 64 <= GBA_SIZE_EWRAM/);
+    // ...and the shipped core has the export the page calls.
+    expect(coreJs).toContain('_brSetOamTable');
   });
 
   it("a ghost the page walks walks as DriveGhost walks its object: the queue, the pace, the stride (field-ghosts.ts, POK-323)", () => {

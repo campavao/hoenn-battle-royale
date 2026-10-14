@@ -12,7 +12,7 @@ index ed16917..f0ae805 100644
  CXX_GUARD_END
  
 diff --git a/include/mgba/internal/gba/renderers/video-software.h b/include/mgba/internal/gba/renderers/video-software.h
-index ce91877..04c044e 100644
+index ce91877..9616263 100644
 --- a/include/mgba/internal/gba/renderers/video-software.h
 +++ b/include/mgba/internal/gba/renderers/video-software.h
 @@ -75,10 +75,18 @@ struct WindowControl {
@@ -46,7 +46,7 @@ index ce91877..04c044e 100644
  	int32_t spriteCyclesRemaining;
  
  	// BLDCNT
-@@ -151,6 +159,27 @@ struct GBAVideoSoftwareRenderer {
+@@ -151,6 +159,26 @@ struct GBAVideoSoftwareRenderer {
  	int end;
  
  	uint8_t lastHighlightAmount;
@@ -66,10 +66,9 @@ index ce91877..04c044e 100644
 +	int brSpriteBottom;
 +	/* Hoenn Battle Royale: the ROM's OAM side table in the GBA's work RAM, or NULL. A
 +	 * nibble an OAM entry, entry i in byte i / 2 (low nibble for even i), latched with
-+	 * the OAM itself: its low two bits, signed, are how many 256s the entry's true top is
-+	 * past its 8-bit y; its high two how many 512s its true left is past its 9-bit x.
-+	 * With it a band row draws every sprite once, at its true rows, however far from
-+	 * the LCD; without it, the sprite window above. */
++	 * the OAM itself: bit 2 says the ROM wrote it, bits 0-1 (signed) how many 256s the
++	 * entry's true top is past its 8-bit y. A marked sprite is drawn once, at its true
++	 * rows, however far from the LCD; an unmarked one by the sprite window above. */
 +	const uint8_t* brOamHi;
  };
  
@@ -180,7 +179,7 @@ index 4f7e9f8..6d31d51 100644
  	int mosaicWait = 0;                                                                                               \
  	int32_t localX;                                                                                                   \
 diff --git a/src/gba/renderers/video-software.c b/src/gba/renderers/video-software.c
-index c5bc37b..6311b4c 100644
+index c5bc37b..2f07d98 100644
 --- a/src/gba/renderers/video-software.c
 +++ b/src/gba/renderers/video-software.c
 @@ -27,6 +27,7 @@ static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer,
@@ -467,30 +466,36 @@ index c5bc37b..6311b4c 100644
  	softwareRenderer->nWindows = 1;
  	if (GBARegisterDISPCNTIsWin0Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsWin1Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsObjwinEnable(softwareRenderer->dispcnt)) {
  		softwareRenderer->windows[0].control = softwareRenderer->winout;
-@@ -1016,12 +1117,39 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
+@@ -1016,12 +1117,45 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
  	}
  }
  
-+/* Hoenn BR (POK-329): does `sprite` cover picture row `y`? On the LCD's rows, the
-+ * hardware's answer: the OAM's y is 8 bits, so a sprite covers every row within its
-+ * height of it mod 256. A band row reads the y against the sprite window instead -- a
-+ * y at or past 160 + brSpriteBottom is that far above the LCD -- and draws the sprite
-+ * once, at its true rows: the hardware's answer would draw it again 256 rows away, a
-+ * person's legs at the top of a band that holds both. The weather's semi-transparent
-+ * sprites -- the fog, the ash, the sandstorm: grids of 64x64s a 256-row screen tall
-+ * that scroll by wrapping -- do repeat every 256 rows, so they cover the whole band.
-+ * With no window every sprite repeats, as on the hardware. */
++/* Hoenn BR (POK-329): does `sprite` cover picture row `y`? The hardware's answer is that
++ * the OAM's y is 8 bits, so a sprite covers every row within its height of it mod 256 --
++ * on the LCD's rows, and on every band row when there is no window. A sprite the ROM's
++ * OAM side table marks (brOamHi, a nibble an entry: bit 2 set by the ROM's hook, bits 0-1
++ * the signed 256s its true top is past its y) is drawn once, at its true rows, on every
++ * row the LCD's included: a person 248 rows below the LCD would otherwise have its legs
++ * at the LCD's top. An unmarked one on a band row reads its y against the sprite window
++ * -- a y at or past 160 + brSpriteBottom is that far above the LCD -- and is drawn once.
++ * The weather's semi-transparent sprites -- the fog, the ash, the sandstorm: grids of
++ * 64x64s a 256-row screen tall that scroll by wrapping -- do repeat every 256 rows, so
++ * they cover the whole band. */
 +static bool _brSpriteOnRow(const struct GBAVideoSoftwareRenderer* renderer, const struct GBAVideoRendererSprite* sprite, int y) {
 +	int height = sprite->endY - sprite->y;
-+	int top;
-+	if ((y >= 0 && y < GBA_VIDEO_VERTICAL_PIXELS) || (renderer->brSpriteBottom < 0 && !renderer->brOamHi) || GBAObjAttributesAGetMode(sprite->obj.a) == OBJ_MODE_SEMITRANSPARENT) {
++	int top = GBAObjAttributesAGetY(sprite->obj.a) + renderer->objOffsetY;
++	if (GBAObjAttributesAGetMode(sprite->obj.a) == OBJ_MODE_SEMITRANSPARENT) {
 +		return ((y - sprite->y) & 0xFF) < height;
 +	}
-+	top = GBAObjAttributesAGetY(sprite->obj.a) + renderer->objOffsetY;
 +	if (renderer->brOamHi) {
 +		int nibble = renderer->brOamHi[sprite->index >> 1] >> (4 * (sprite->index & 1));
-+		top += 256 * (((nibble & 3) ^ 2) - 2);
-+		return y >= top && y < top + height;
++		if (nibble & 4) {
++			top += 256 * (((nibble & 3) ^ 2) - 2);
++			return y >= top && y < top + height;
++		}
++	}
++	if ((y >= 0 && y < GBA_VIDEO_VERTICAL_PIXELS) || renderer->brSpriteBottom < 0) {
++		return ((y - sprite->y) & 0xFF) < height;
 +	}
 +	if (top >= GBA_VIDEO_VERTICAL_PIXELS + renderer->brSpriteBottom) {
 +		top -= 256;
@@ -508,7 +513,7 @@ index c5bc37b..6311b4c 100644
  			renderer->oamDirty = false;
  		}
  		int mosaicV = GBAMosaicControlGetObjV(renderer->mosaic) + 1;
-@@ -1037,7 +1165,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1037,7 +1171,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  			if (renderer->spriteCyclesRemaining <= 0) {
  				break;
  			}
@@ -531,7 +536,7 @@ index 751e8b1..59daede 100644
  	-s ENVIRONMENT='web,worker' \
  	-s PTHREAD_POOL_SIZE=5 \
 diff --git a/src/platform/wasm/main.c b/src/platform/wasm/main.c
-index 14d9a8a..118a9e1 100644
+index 14d9a8a..caae99a 100644
 --- a/src/platform/wasm/main.c
 +++ b/src/platform/wasm/main.c
 @@ -12,6 +12,10 @@
@@ -758,12 +763,12 @@ index 14d9a8a..118a9e1 100644
 +}
 +
 +// Hoenn BR: the ROM's OAM side table, at byte `offset` into work RAM (its EWRAM address
-+// less 0x02000000), or -1 for none. 64 bytes, a nibble an OAM entry: the 256s its true
-+// top is past its 8-bit y, and the 512s its true left past its 9-bit x, two signed bits
-+// each (include/br/br_field.h in the ROM). The ROM writes it when it copies its OAM
-+// buffer in, so the band, drawn at VBlank before the next copy, reads the two together;
-+// with it every sprite is drawn once at its true rows anywhere in the band. Takes effect
-+// at once, and at every loadGame after.
++// less 0x02000000), or -1 for none. 64 bytes, a nibble an OAM entry: bit 2 set when the
++// ROM wrote it, bits 0-1 the signed 256s its true top is past its 8-bit y (the ROM's
++// include/br/br_field.h). The ROM latches it when it copies its OAM buffer in, so the
++// band, drawn at VBlank before the next copy, reads the two together; with it every
++// marked sprite is drawn once at its true rows. Takes effect at once, and at every
++// loadGame after.
 +EMSCRIPTEN_KEEPALIVE void brSetOamTable(int offset) {
 +	struct GBAVideoSoftwareRenderer* sr;
 +	brOamTable = offset >= 0 && offset + 64 <= GBA_SIZE_EWRAM ? offset : -1;
@@ -897,10 +902,10 @@ index 14d9a8a..118a9e1 100644
  	// exclude specific key events
  	SDL_SetEventFilter(excludeKeys, NULL);
 diff --git a/src/platform/wasm/mgba.d.ts b/src/platform/wasm/mgba.d.ts
-index edad1b1..e1a76aa 100644
+index edad1b1..5937316 100644
 --- a/src/platform/wasm/mgba.d.ts
 +++ b/src/platform/wasm/mgba.d.ts
-@@ -296,6 +296,44 @@ declare namespace mGBA {
+@@ -296,6 +296,45 @@ declare namespace mGBA {
       * @returns Current volume multiplier.
       */
      getVolume(): number;
@@ -917,6 +922,7 @@ index edad1b1..e1a76aa 100644
 +     *  the window when it is 256 rows, and there is none otherwise. Takes effect at
 +     *  once and at every loadGame after. */
 +    _brSetSpriteBand(top: number, bottom: number): void;
++    /** The ROM's OAM side table at a byte offset into EWRAM, -1 for none (POK-329 band). */
 +    _brSetOamTable(offset: number): void;
 +    /** Hoenn BR (POK-329): the sprite window the loaded core draws with, as
 +     *  `top << 16 | bottom`, or -1 for none (or no game loaded). */

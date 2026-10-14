@@ -189,14 +189,17 @@ BR_SIZE(BrFieldShown, 4)
 extern struct BrFieldShown gBrFieldShown;
 
 // The OAM side table the patched core reads (hbr-exports.patch, brSetOamTable): a nibble
-// an OAM entry, entry i in byte i / 2 (the low nibble for an even i). Its low two bits are
-// the 256s the entry's true top is past its 8-bit y, its high two the 512s its true left
-// is past its 9-bit x, each signed (-2..1): the view runs 104 rows above the LCD to 232
-// below, so a top is -1, 0 or 1 256s out. Latched when the OAM is, so the band, drawn at
-// VBlank before the next copy, reads what the hardware has. EWRAM has 64 bytes for it.
+// an OAM entry, entry i in byte i / 2 (the low nibble for an even i). Bit 2 marks an entry
+// the hooks below wrote; bits 0-1 are the 256s its true top is past its 8-bit y, signed
+// (-2..1): the view runs 104 rows above the LCD to 232 below, so a top there is -1, 0 or 1
+// 256s out. The core draws a marked entry once at its true rows, the LCD's included, and
+// an unmarked one -- an OAM entry some screen writes for itself -- as it always did.
+// Latched when the OAM is, so the band, drawn at VBlank before the next copy, reads what
+// the hardware has.
 #define BR_OAM_HI_SIZE 64
+#define BR_OAM_HI_MARK 4
 extern u8 gBrOamHi[BR_OAM_HI_SIZE];
-// sprite.c, BuildOamBuffer: every entry back to the hardware's own reading.
+// sprite.c, BuildOamBuffer, once the OAM's own copy is held off: every entry unmarked.
 void BrField_OamClear(void);
 // sprite.c, as each OAM entry is written: the entry's true top-left is the sprite's own
 // (as UpdateOamCoords puts it) moved by (dx, dy) -- a subsprite's offset, or 0, 0.
@@ -204,7 +207,11 @@ void BrField_OamEntry(u8 index, const struct Sprite *sprite, s16 dx, s16 dy);
 // sprite.c, LoadOam: the table goes out with the OAM it describes.
 void BrField_OamLatch(void);
 // event_object_movement.c: pret's object box, rows top..bottom, grown by the rows the
-// page shows past the sprite window.
+// page shows past the sprite window -- the box people spawn in (TrySpawnObjectEvents)
+// while BR_GROW_SPARE slots are free past the headroom, and the one they are kept in
+// (RemoveObjectEventIfOutsideView, BrField_InObjectView) while the headroom is.
+#define BR_GROW_SPARE 4
+void BrField_GrowSpawnBox(s16 *top, s16 *bottom);
 void BrField_GrowObjectBox(s16 *top, s16 *bottom);
 
 // Every frame from CameraUpdate: the far row or column once its step has completed, and
@@ -267,8 +274,9 @@ void BrField_CancelLeave(void (*enter)(void));
 bool8 BrField_InObjectView(s16 x, s16 y);
 // event_object_movement.c, RemoveObjectEventIfOutsideView: a wanderer let go of stays on
 // the tile it was let go on (2026-10-07 play-test: "npcs flashing on the screen when
-// moving around ... when they'd be off screen"). The box ends 40 rows above the LCD and
-// 72 below, inside a phone's field, and the page draws whoever the ROM lets go of from
+// moving around ... when they'd be off screen"). pret's box ends 40 rows above the LCD and
+// 72 below, inside a phone's field (grown to the rows shown, while slots allow: THE VIEW
+// THE PAGE SHOWS), and the page draws whoever the ROM lets go of from
 // their template (web/src/field-ghosts.ts): a wanderer a tile from home jumped there as
 // it went. Its template now says where it was, for the page and for the ROM's own
 // respawn alike; BrField_KeepHome keeps his range round the home he had. Not covered: walkers on a fixed

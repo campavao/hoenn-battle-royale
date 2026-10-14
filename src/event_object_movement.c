@@ -1670,7 +1670,7 @@ void TrySpawnObjectEvents(s16 cameraX, s16 cameraY)
         s16 top = gSaveBlock1Ptr->pos.y;
         s16 bottom = gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2;
 #if BR
-        BrField_GrowObjectBox(&top, &bottom);
+        BrField_GrowSpawnBox(&top, &bottom);
 #endif
 
         if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE)

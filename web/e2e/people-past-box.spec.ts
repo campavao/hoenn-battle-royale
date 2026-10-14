@@ -5,9 +5,10 @@
 // rows it shows (gBrFieldShown) and the core reads the ROM's OAM side table, so the ROM
 // grows its box to those rows and the core draws what is in it, at its true rows.
 //
-// This puts an unused seat's row into the ROM's gBrSeats twelve rows below us -- past
-// pret's box, inside a portrait phone's 232 rows below the LCD -- and looks for the ROM's
-// own object there, drawn by the core and not by the overlay; then takes the row away
+// This puts an unused seat's row into the ROM's gBrSeats fourteen rows below us -- past
+// pret's box, inside a portrait phone's 232 rows below the LCD, and 256 rows below the
+// LCD's top, so its OAM y is one of the LCD's own rows -- and looks for the ROM's own
+// object there, drawn by the core once and not by the overlay; then takes the row away
 // and sees it go.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,8 +35,12 @@ const DIR_SOUTH = 1;
 const SKIN = 15;
 const W = 16;
 const H = 32;
-/** Rows below us to try, past the box's 9: the first with nobody already on it. */
-const ROWS_DOWN = [12, 13, 11];
+/** Rows below us to try, past the box's 9: the first with nobody already on it. From 13
+ *  down a person's top is 256 rows or more below the LCD's, an OAM y inside the LCD's own
+ *  rows, so a core that read only the 8 bits would draw them there too. */
+const ROWS_DOWN = [14, 13, 15];
+/** The LCD's top rows, where a 32-row person 248..280 rows down would show again. */
+const LCD_TOP_ROWS = 48;
 
 type Pic = { width: number; height: number; left: number; top: number; data: Uint8Array };
 type Emu = {
@@ -154,8 +159,11 @@ test('a seat past pret\'s box but in the rows a phone shows is the ROM\'s own: a
     }
     expect(down, 'a clear row past the box').toBeGreaterThan(0);
 
-    // What the core draws there without anybody: the map, its animation included.
+    // What the core draws there without anybody: the map, its animation included -- and
+    // in the LCD's top rows over the same columns.
     const bare = await corePixels(page, rect, 90, null);
+    const lcdTop = { x: rect.x, y: 0, w: rect.w, h: LCD_TOP_ROWS };
+    const bareTop = await corePixels(page, lcdTop, 90, null);
 
     // Seat 16 there: present, a skin, our map, the cell (MAP_OFFSET included, as the ROM
     // keeps it), facing south, no object.
@@ -173,12 +181,13 @@ test('a seat past pret\'s box but in the rows a phone shows is the ROM\'s own: a
 
     await poke(row);
     await expect.poll(() => page.evaluate((base) => (window as unknown as EmuWindow).__hbr.emu.read(base + 9, 8), seat), {
-      timeout: 10_000, message: 'the ROM gives the seat twelve rows down an object',
+      timeout: 10_000, message: 'the ROM gives the seat past pret\'s box an object',
     }).not.toBe(BR_NO_OBJ);
     await expect.poll(async () => (await corePixels(page, rect, 10, bare.seen)).strange, {
       timeout: 10_000, message: "the core's own picture draws it there",
     }).toBeGreaterThan(40);
     expect(await opaqueAt(page, rect), 'and the overlay does not draw it again').toBe(0);
+    expect((await corePixels(page, lcdTop, 30, bareTop.seen)).strange, 'nor the core, 256 rows up, in the LCD').toBe(0);
     await page.screenshot({ path: path.join(OUT_DIR, 'people-past-box.png') });
 
     // Out of the match (present 0): gone.

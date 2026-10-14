@@ -328,14 +328,14 @@ void AnimateSprites(void)
 void BuildOamBuffer(void)
 {
     u8 temp;
-#if BR
-    BrField_OamClear();
-#endif
     UpdateOamCoords();
     BuildSpritePriorities();
     SortSprites();
     temp = gMain.oamLoadDisabled;
     gMain.oamLoadDisabled = TRUE;
+#if BR
+    BrField_OamClear();
+#endif
     AddSpritesToOamBuffer();
     CopyMatricesToOamBuffer();
     gMain.oamLoadDisabled = temp;
