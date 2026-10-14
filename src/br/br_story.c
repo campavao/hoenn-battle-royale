@@ -20,6 +20,7 @@
 #include "constants/metatile_labels.h"
 #include "constants/moves.h"
 #include "constants/opponents.h"
+#include "constants/region_map_sections.h"
 #include "constants/songs.h"
 #include "br/br_event.h"
 #include "br/br_field.h"
@@ -143,6 +144,68 @@ static bool8 PressedAtWall(void)
         && self->currentCoords.x == BR_DOOR_X + MAP_OFFSET && self->currentCoords.y == BR_DOOR_Y + 1 + MAP_OFFSET;
 }
 
+// ---- the ferry -----------------------------------------------------------------------
+
+struct BrStoryIsland
+{
+    u8 mapsec;
+    u16 flag;
+};
+
+// Each island the ferry can sail to, and the flag its menu row asks (script_menu.c's
+// CreateLilycoveSSTidalMultichoice, beside the ticket the boot gave).
+static const struct BrStoryIsland sIslands[] =
+{
+    { MAPSEC_SOUTHERN_ISLAND, FLAG_ENABLE_SHIP_SOUTHERN_ISLAND },
+    { MAPSEC_BIRTH_ISLAND, FLAG_ENABLE_SHIP_BIRTH_ISLAND },
+    { MAPSEC_FARAWAY_ISLAND, FLAG_ENABLE_SHIP_FARAWAY_ISLAND },
+    { MAPSEC_NAVEL_ROCK, FLAG_ENABLE_SHIP_NAVEL_ROCK },
+};
+
+u8 BrStory_Dock(u8 mapsec)
+{
+    u8 i;
+
+    for (i = 0; i < ARRAY_COUNT(sIslands); i++)
+    {
+        if (sIslands[i].mapsec == mapsec)
+            return MAPSEC_LILYCOVE_CITY;
+    }
+    return mapsec;
+}
+
+// The ferry sails to an island while an event that dropped there still has its
+// legendary, and not before or after. Only Lilycove's harbour asks (its attendant's
+// menu); the sailors home ask nothing. Set there and nowhere else, so the rest of the
+// map pays nothing a frame for it (PR #36 review: a frame's work moves every driver
+// that leans on the VBlank's RNG, as national-dex does).
+static void Ferry(void)
+{
+    u8 i, n;
+    bool8 on;
+
+    if (gSaveBlock1Ptr->location.mapGroup != MAP_GROUP(MAP_LILYCOVE_CITY_HARBOR)
+     || gSaveBlock1Ptr->location.mapNum != MAP_NUM(MAP_LILYCOVE_CITY_HARBOR))
+        return;
+    for (i = 0; i < ARRAY_COUNT(sIslands); i++)
+    {
+        on = FALSE;
+        if (gBrEvents.seed == gBrMatch.seed)
+        {
+            for (n = 0; n < BR_EVENT_MAX; n++)
+            {
+                if ((gBrEvents.live & (1 << n)) && !(gBrEvents.taken & (1 << n))
+                 && gBrEvents.mapsec[n] == sIslands[i].mapsec)
+                    on = TRUE;
+            }
+        }
+        if (on)
+            FlagSet(sIslands[i].flag);
+        else
+            FlagClear(sIslands[i].flag);
+    }
+}
+
 void BrStory_Tick(void)
 {
     const struct BrStoryDoor *door;
@@ -150,6 +213,7 @@ void BrStory_Tick(void)
 
     if (gBrMatch.seed == 0 || !BrField_OverworldRunning())
         return;
+    Ferry();
     door = DoorHere();
     if (door == NULL || FlagGet(door->flag))
         return;

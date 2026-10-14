@@ -21,6 +21,7 @@
 #include "constants/songs.h"
 #include "constants/species.h"
 #include "br/br_event.h"
+#include "br/br_story.h"
 #include "br/br_field.h"
 #include "br/br_ghosts.h"
 #include "br/br_gym.h"
@@ -152,7 +153,7 @@ void BrEvent_DrawOnMap(s16 left, s16 top)
     {
         if (!(gBrEvents.live & (1 << i)))
             continue;
-        loc = &gRegionMapEntries[gBrEvents.mapsec[i]];
+        loc = &gRegionMapEntries[BrStory_Dock(gBrEvents.mapsec[i])];
         x = (loc->x + left) * 8 + loc->width * 4;
         y = (loc->y + top) * 8 + loc->height * 4 + 4;
         spriteId = CreateObjectGraphicsSprite(OBJ_EVENT_GFX_ITEM_BALL, SpriteCallbackDummy, x, y, 0);

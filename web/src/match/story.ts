@@ -38,6 +38,23 @@ const SHARPEDO = 331;
 const CAMERUPT = 340;
 const GROUDON = 405;
 const CASTFORM = 385;
+const LATIAS = 407;
+const LATIOS = 408;
+const DEOXYS = 410;
+const MEW = 151;
+const LUGIA = 249;
+const HO_OH = 250;
+/** The legendaries no cluster drops and a story can (Cam: "all legendaries and pokemon in
+ *  the game are valid"): the ticker calls them legendaries too. */
+const OTHER_LEGENDS: readonly number[] = [DEOXYS, MEW, LUGIA, HO_OH];
+
+/** The islands the Lilycove ferry sails to (br_story.c, sIslands): include/constants/
+ *  region_map_sections.h's numbers. Three are not on Hoenn's MAP, so the event carries
+ *  the island's and the ROM marks it, and rings it, as the dock. */
+const MAPSEC_SOUTHERN_ISLAND = 73;
+const MAPSEC_BIRTH_ISLAND = 200;
+const MAPSEC_FARAWAY_ISLAND = 201;
+const MAPSEC_NAVEL_ROCK = 211;
 
 // include/constants/items.h
 const ITEM_FOCUS_BAND = 196;
@@ -72,8 +89,14 @@ export interface Story {
   id: string;
   /** What the ticker and the record say it is. */
   name: string;
-  /** Its regionmap.json section: the ring has to reach it, and the MAP marks it. */
+  /** Its regionmap.json section: the ring has to reach it, and the MAP marks it. An
+   *  island's is the dock, Lilycove, and `mapsec` is the island's own. */
   section: string;
+  /** The EVENT's mapsec when it is not `section`'s: an island's, which is where the ferry
+   *  sails (br_story.c). */
+  mapsec?: number;
+  /** Reached by the Lilycove ferry, which a bot never takes. */
+  boat?: boolean;
   /** Its world.json map: where every piece lies. */
   map: string;
   /** The mons it gives, one ball each: one species out of each list. */
@@ -261,6 +284,63 @@ export const STORIES: readonly Story[] = [
     cells: [{ x: 2, y: 9 }, { x: 3, y: 9 }, { x: 1, y: 9 }, { x: 1, y: 8 }, { x: 0, y: 8 }],
     people: [{ at: 2, gfx: 'OBJ_EVENT_GFX_MAXIE', trainer: 'TRAINER_MAXIE_MOSSDEEP', party: [MIGHTYENA, CROBAT, CAMERUPT] }],
   },
+  // The islands. Lilycove's ferry sails to the one a live story is on (br_story.c), and
+  // its own legendary is gone for the match: this is the only one there.
+  {
+    id: 'southern-island',
+    name: 'SOUTHERN ISLAND',
+    section: 'MAPSEC_LILYCOVE_CITY',
+    mapsec: MAPSEC_SOUTHERN_ISLAND,
+    map: 'MAP_SOUTHERN_ISLAND_INTERIOR',
+    // The EON pair, one of them, before the stone.
+    mons: [[LATIAS, LATIOS]],
+    cells: [{ x: 13, y: 10 }, { x: 12, y: 10 }, { x: 14, y: 10 }],
+    boat: true,
+  },
+  {
+    id: 'birth-island',
+    name: 'BIRTH ISLAND',
+    section: 'MAPSEC_LILYCOVE_CITY',
+    mapsec: MAPSEC_BIRTH_ISLAND,
+    map: 'MAP_BIRTH_ISLAND_EXTERIOR',
+    // DEOXYS where the triangle's last step would have put it.
+    mons: [[DEOXYS]],
+    cells: [{ x: 15, y: 10 }, { x: 14, y: 11 }, { x: 16, y: 11 }],
+    boat: true,
+  },
+  {
+    id: 'faraway-island',
+    name: 'FARAWAY ISLAND',
+    section: 'MAPSEC_LILYCOVE_CITY',
+    mapsec: MAPSEC_FARAWAY_ISLAND,
+    map: 'MAP_FARAWAY_ISLAND_INTERIOR',
+    // MEW in the island's long grass.
+    mons: [[MEW]],
+    cells: [{ x: 13, y: 12 }, { x: 12, y: 13 }, { x: 14, y: 13 }],
+    boat: true,
+  },
+  {
+    id: 'navel-rock-top',
+    name: 'NAVEL ROCK PEAK',
+    section: 'MAPSEC_LILYCOVE_CITY',
+    mapsec: MAPSEC_NAVEL_ROCK,
+    map: 'MAP_NAVEL_ROCK_TOP',
+    // HO-OH at the summit, at the top of the last climb.
+    mons: [[HO_OH]],
+    cells: [{ x: 12, y: 9 }, { x: 11, y: 16 }, { x: 13, y: 16 }],
+    boat: true,
+  },
+  {
+    id: 'navel-rock-bottom',
+    name: 'NAVEL ROCK',
+    section: 'MAPSEC_LILYCOVE_CITY',
+    mapsec: MAPSEC_NAVEL_ROCK,
+    map: 'MAP_NAVEL_ROCK_BOTTOM',
+    // LUGIA in the hollow at the foot of the rock.
+    mons: [[LUGIA]],
+    cells: [{ x: 11, y: 13 }, { x: 10, y: 12 }, { x: 12, y: 12 }],
+    boat: true,
+  },
 ];
 
 /** The story an `event` told, or undefined for a cluster: its place and section, and its
@@ -272,7 +352,7 @@ export function storyOf(
   refOf: (mapId: string) => MapRef | undefined,
 ): Story | undefined {
   return STORIES.find((s) => {
-    if (s.name !== e.place || sections[s.section]?.num !== e.mapsec) return false;
+    if (s.name !== e.place || (s.mapsec ?? sections[s.section]?.num) !== e.mapsec) return false;
     if (!e.trader) return true;
     const at = s.cells[s.cells.length - 1];
     const map = refOf(at.map ?? s.map);
@@ -296,6 +376,7 @@ export function storySealed(
     const cells = story.cells.map((c) => ({ ...c, map: c.map ?? story.map }));
     const i = cells.findIndex((c) => c.map === piece.mapId && c.x === piece.x && c.y === piece.y);
     if (i < 0) continue;
+    if (story.boat) return true; // a bot never takes the ferry
     const wants = story.people?.find((p) => p.at === i)?.wants;
     if (wants !== undefined && !bot.has(wants)) return true;
     // A gate's boss's own piece is open: the bot fights him for it (storyGuard). The rest
@@ -327,7 +408,7 @@ export function storyGuard(piece: { key: number; mapId: string; x: number; y: nu
 
 /** Does the story give a legendary? What the ticker calls it. */
 export function storyLegend(story: Story): boolean {
-  const legends = new Set(LEGENDS.flat());
+  const legends = new Set([...LEGENDS.flat(), ...OTHER_LEGENDS]);
   return (story.mons ?? []).some((pick) => pick.some((sp) => legends.has(sp)));
 }
 

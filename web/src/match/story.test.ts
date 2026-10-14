@@ -12,9 +12,11 @@ import { dealBots } from '../bots/roster';
 import { dealParty } from '../bots/party';
 import { pageCell } from '../bots/space';
 import regionmapData from '../data/regionmap.json';
+import mapsecJson from '../../../src/data/region_map/region_map_sections.json';
 
 await worldReady();
 
+const MAPSECS = (mapsecJson as { map_sections: { id: string; name?: string }[] }).map_sections;
 const SECTIONS = regionmapData.sections as DirectorWorld['sections'];
 const WORLD: DirectorWorld = { maps: HOENN.maps, landing: LANDING, doorsteps: DOORSTEPS, hand: HAND, sections: SECTIONS };
 
@@ -62,10 +64,22 @@ describe('story events', () => {
     expect(new Set(STORIES.map((s) => s.id)).size).toBe(STORIES.length);
   });
 
+  it("sails to an island by the island's own mapsec, from Lilycove's dock", () => {
+    const boats = STORIES.filter((s) => s.boat);
+    expect(boats.length).toBe(5);
+    for (const s of boats) {
+      expect(s.section, s.id).toBe('MAPSEC_LILYCOVE_CITY');
+      // The enum is the json's order (tools/jsonproc's region_map_sections.constants).
+      expect(MAPSECS[s.mapsec!]?.name && s.name.startsWith(MAPSECS[s.mapsec!].name!), s.id).toBe(true);
+    }
+  });
+
   it('lies where a trainer can walk to, from a door into its map, surfing', () => {
     for (const s of STORIES) {
       for (const c of s.cells) {
         const map = c.map ?? s.map;
+        // An island is a ferry ride, not a walk: br_story.c's ferry and story-ferry.txt.
+        if (s.boat) continue;
         const ways = entries(map);
         expect(ways.length, s.id).toBeGreaterThan(0);
         expect(HOENN.world.hops('MAP_LITTLEROOT_TOWN', map, true, true), s.id).toBeDefined();
@@ -115,14 +129,16 @@ describe('story events', () => {
         const spills = (sent.filter((m) => m.t === 'spill') as SpillMsg[]).filter((s) => [...s.mons, ...(s.bag ? [s.bag] : [])].some((p) => (p.key & 0xfff0) === (e.key & 0xfff0)));
         const maps = new Set(story.cells.map((c) => c.map ?? story.map));
         expect(new Set(spills.map((s) => HOENN.idOf(s.map))), `seed ${seed}`).toEqual(maps);
-        expect(e.mapsec).toBe(SECTIONS[story.section].num);
+        expect(e.mapsec).toBe(story.mapsec ?? SECTIONS[story.section].num);
       }
     }
-    // Over three hundred matches every story the rings reach comes up somewhere. The
-    // east's do not yet: every ring centre is west of Lilycove (landing.json), and a story
-    // goes inside the next ring, which never reaches Lilycove's sea, Mossdeep or past it.
-    const east = new Set(["STEVEN'S HOUSE", 'SHOAL CAVE', 'ROUTE 128', 'AQUA HIDEOUT', 'SPACE CENTER']);
-    expect([...told.keys()].sort()).toEqual(STORIES.map((s) => s.name).filter((n) => !east.has(n)).sort());
+    // Over three hundred matches every story the rings reach comes up somewhere. Lilycove
+    // and east of it need not: every ring centre is west of Lilycove (landing.json), and a
+    // story goes inside the next ring, which only now and then reaches Lilycove's dock (the
+    // islands sail from it) and never Mossdeep or past it.
+    const east = new Set(['MAPSEC_LILYCOVE_CITY', 'MAPSEC_AQUA_HIDEOUT', 'MAPSEC_MOSSDEEP_CITY', 'MAPSEC_SHOAL_CAVE', 'MAPSEC_ROUTE_128']);
+    const west = STORIES.filter((s) => !east.has(s.section)).map((s) => s.name);
+    expect(west.filter((n) => !told.has(n))).toEqual([]);
   });
 
   it("leaves the last event to the final ring's own section", () => {
@@ -131,7 +147,10 @@ describe('story events', () => {
       const ring = sent.find((m) => m.t === 'ring') as RingMsg;
       const last = (sent.filter((m) => m.t === 'event') as EventMsg[]).find((e) => e.n === EVENT_MAX - 1);
       if (!last) continue;
-      expect(last.mapsec, `seed ${seed}`).toBe(Object.values(SECTIONS).find((s) => s.name === ring.place)?.num);
+      // An island's event is at the island and its section is the dock's (story.ts).
+      const dock = STORIES.find((s) => s.boat && s.mapsec === last.mapsec);
+      const section = dock ? SECTIONS[dock.section].num : last.mapsec;
+      expect(section, `seed ${seed}`).toBe(Object.values(SECTIONS).find((s) => s.name === ring.place)?.num);
     }
   });
 
@@ -182,7 +201,7 @@ describe('story events', () => {
     'space-center': { mapId: 'MAP_MOSSDEEP_CITY_SPACE_CENTER_1F', x: 13, y: 2 },
   };
   it('a bot outside walks in and takes it', () => {
-    for (const story of STORIES) {
+    for (const story of STORIES.filter((s) => !s.boat)) {
       const from = OUTSIDE[story.id];
       expect(from, story.id).toBeDefined();
       const key = eventKey(0, 0);

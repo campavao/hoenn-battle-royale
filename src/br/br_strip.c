@@ -8,10 +8,24 @@
 #include "br/br_strip.h"
 
 extern const u8 SlateportCity_Harbor_EventScript_FerryAttendant[];
+extern const u8 SouthernIsland_Exterior_EventScript_Sailor[];
+extern const u8 BirthIsland_Harbor_EventScript_Sailor[];
+extern const u8 FarawayIsland_Entrance_EventScript_Sailor[];
+extern const u8 NavelRock_Harbor_EventScript_Sailor[];
 
 // The people who take you somewhere: MR. BRINEY at each of his stops (br_boot.c's
 // BrBoot_PlaceBriney) and Lilycove's ferry attendant, by the flag that hides each.
-// Slateport's attendant shares hers with the harbour's crowd, so she goes by script.
+// Slateport's attendant shares hers with the harbour's crowd, so she goes by script, and
+// so do the sailors who take you back from the islands (br_story.c, Ferry), who have none.
+static const u8 *const sFerrymen[] =
+{
+    SlateportCity_Harbor_EventScript_FerryAttendant,
+    SouthernIsland_Exterior_EventScript_Sailor,
+    BirthIsland_Harbor_EventScript_Sailor,
+    FarawayIsland_Entrance_EventScript_Sailor,
+    NavelRock_Harbor_EventScript_Sailor,
+};
+
 static const u16 sCarriers[] =
 {
     FLAG_HIDE_BRINEYS_HOUSE_MR_BRINEY,
@@ -77,8 +91,11 @@ bool8 BrStrip_Stripped(const struct ObjectEventTemplate *template, u8 mapNum, u8
         return FALSE;
     if (BrGym_IsLeader(mapGroup, mapNum, template->localId))
         return FALSE;
-    if (template->script == SlateportCity_Harbor_EventScript_FerryAttendant)
-        return FALSE;
+    for (i = 0; i < ARRAY_COUNT(sFerrymen); i++)
+    {
+        if (template->script == sFerrymen[i])
+            return FALSE;
+    }
     for (i = 0; i < ARRAY_COUNT(sCarriers); i++)
     {
         if (template->flagId == sCarriers[i])

@@ -1,0 +1,79 @@
+# story-ferry: Lilycove's ferry sails to an island while a live event is on it, and only
+# then (br_story.c, Ferry): the boot gave every ticket, already shown, and the island's
+# ENABLE_SHIP flag follows the event.
+#
+# In LILYCOVE HARBOR (13:10) at (8,11), south of the attendant at (8,10).
+# FLAG_ENABLE_SHIP_SOUTHERN_ISLAND is 0x8B3: flags byte 0x116, bit 3, at
+# *gSaveBlock1Ptr+0x1386.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 81 00 0D 0A 08 00 0B 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 13
+expect u8 *gSaveBlock1Ptr+5 10
+expect u8 *gSaveBlock1Ptr+0x1386 0
+# EVENT 0 at SOUTHERN ISLAND (0x49), legendary 0xB000
+pokebytes gDecompressionBuffer 00 00 49 00 B0
+mailsend gBrMailbox 32 gDecompressionBuffer 5
+wait 10
+expect u8 gBrEvents+16 1
+expect u8 *gSaveBlock1Ptr+0x1386 8
+tap UP
+wait 10
+tap A
+wait 60
+shot ticket
+hold A 4
+wait 60
+tap A
+wait 40
+shot perfect
+tap A
+wait 40
+shot menu
+# The menu opens on EXIT (script_menu.c sets the cursor to the last row): one up is the
+# island, which is on it only because the event is.
+tap UP
+wait 10
+shot southern
+tap A
+wait 60
+shot board
+hold A 4
+wait 500
+shot island
+expect u8 *gSaveBlock1Ptr+4 26
+expect u8 *gSaveBlock1Ptr+5 9
+# Seat 3 takes the legendary: the ferry stops offering the island. Its sailor still
+# sails you home, since SouthernIsland_Exterior asks no flag (below).
+pokebytes gDecompressionBuffer 03 00 B0 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 10
+expect u8 gBrEvents+17 1
+# ...and he stands (br_strip.c, sFerrymen): A at him, YES, and we are back at Lilycove's
+# harbour (PR #36 review: the strip took him, and BIRTH, FARAWAY and NAVEL ROCK let
+# neither FLY nor an ESCAPE ROPE out).
+expect u16 *gSaveBlock1Ptr+0 13
+expect u16 *gSaveBlock1Ptr+2 22
+# He is on (13,23), below us.
+tap DOWN
+wait 20
+shot sailor
+tap A
+wait 60
+tap A
+wait 30
+shot yes
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 500
+shot home
+expect u8 *gSaveBlock1Ptr+4 13
+expect u8 *gSaveBlock1Ptr+5 10
+# Back at Lilycove the ferry has dropped the island (br_story.c, Ferry, runs only here).
+expect u8 *gSaveBlock1Ptr+0x1386 0
+say story ferry ok
