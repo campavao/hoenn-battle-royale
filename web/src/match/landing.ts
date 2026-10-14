@@ -25,10 +25,10 @@ export let LANDING: LandingCell[] = notYet('LANDING');
  *  Cam, after a drop that put him on the wrong map entirely: "if a location cannot be
  *  found, drop them in front of a Poke Center, a Poke Mart, or a Building." He is owed
  *  one either way, and half the towns the picker offers have nothing else to give him --
- *  the flood above runs on foot, and on foot most of eastern Hoenn is across water, so
- *  Fortree, Lilycove, Mossdeep, Dewford, Pacifidlog, Sootopolis and Ever Grande come out
- *  of it with every ordinary cell marked off, and so does Lavaridge, behind the cable car:
- *  eight of the sixteen.
+ *  the flood above ran on foot, and on foot most of eastern Hoenn is across water, so
+ *  Fortree, Lilycove, Mossdeep, Dewford, Pacifidlog, Sootopolis and Ever Grande came out
+ *  of it with every ordinary cell marked off, and so did Lavaridge, behind the cable car:
+ *  eight of the sixteen. It surfs now, and Sootopolis and Lavaridge are the two left.
  *
  *  Already ranked by `landing-reach.ts`, nicest first: a CENTRE, then a MART, then a
  *  gym, then any other door. A fallback only -- never mixed into the ordinary pool, or

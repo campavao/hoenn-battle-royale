@@ -214,11 +214,12 @@ describe('the search on cell numbers', () => {
       if (!from) continue;
       for (const hop of new Set((m.warps ?? []).map((w) => w.to))) {
         if (m.seams.some((s) => s.to === hop) || !world.map(hop)) continue;
-        const exits = world.exitCells(m.id, hop, false, true);
+        // Surfing, as every contestant does since the HMs went (brain.ts canSurf).
+        const exits = world.exitCells(m.id, hop, true, true);
         if (exits.length === 0) continue;
         doorOnly++;
-        expect(findPathToAny(world, from, exits, 3000, false, true).found, `${m.id} -> ${hop} by its doors`).toBe(false);
-        const path = findPathToAny(world, from, world.entryCells(m.id, hop, false, true), 3000, false, true);
+        expect(findPathToAny(world, from, exits, 3000, true, true).found, `${m.id} -> ${hop} by its doors`).toBe(false);
+        const path = findPathToAny(world, from, world.entryCells(m.id, hop, true, true), 3000, true, true);
         if (!path.found) continue;
         through++;
         // Across this map, then one step onto the next.

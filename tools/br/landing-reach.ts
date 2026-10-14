@@ -29,49 +29,57 @@ const landing = (JSON.parse(fs.readFileSync(path.join(DATA, 'landing.json'), 'ut
 // the page fetches it.
 const { maps, world } = await loadHoenn();
 
-// On foot. Surfing needs a water mon that knows SURF, which a trainer may never be
-// dealt and a bot does not have until rung 30 -- so a drop that requires it is a drop
-// that strands somebody. Route 108, the Abandoned Ship's island, is the case that
-// made the point: reachable by surf, and two bots sat on it for a whole match.
-const SURF = false;
-// But CUT is free. Every contestant boots with all eight HMs (POK-256) and the free
-// MOVES relearner is one menu away (POK-225), so a tree is a fence anybody in a match
-// can open -- and treating it as a wall is what dropped the usable pool from 945 cells
-// to 134 the moment trees stopped being walked straight through (POK-267).
+// Surfing too, since the HMs went (2026-10-13, br_hm.h): walk into the water and you are
+// surfing, with no Pokemon that knows the move, and the bots cross it the same way
+// (bots/brain.ts, canSurf). On foot alone, everything east of Route 118 was across water
+// and off, so the ring could never close on Lilycove, Mossdeep or Sootopolis.
+const SURF = true;
+// And CUT is free: there are no trees left to cut (br_strip.h).
 const CUT = true;
 
-const seen = new Map<string, number>();
-const components: { id: number; cells: number }[] = [];
 // A bridge's level is a place of its own (POK-331 #2): the Route 110 cycling road and the
 // path under it share three cells, and reaching them from below first must not close
 // them to the road.
 const key = (s: Spot) => (s.z === undefined ? `${s.map}:${s.x},${s.y}` : `${s.map}:${s.x},${s.y}@${s.z}`);
 
-function flood(from: Spot, id: number): number {
-  if (seen.has(key(from))) return 0;
-  let n = 0;
+// The cells you can get to from Littleroot AND get back from: a ledge or a one-way warp
+// is a way in that is not a way out, so the reach is the strongly connected set around
+// the start, not whatever a flood from the first landing cell happened to touch. Forward
+// from Littleroot, keeping every edge backwards, then back along them.
+const START = landing.find((c) => c.map === 'MAP_LITTLEROOT_TOWN')!;
+const forward = new Set<string>();
+const back = new Map<string, Spot[]>();
+{
+  const from: Spot = { map: START.map, x: START.x, y: START.y };
   const queue: Spot[] = [from];
-  seen.set(key(from), id);
+  forward.add(key(from));
   while (queue.length > 0) {
     const at = queue.pop()!;
-    n++;
     for (const { to } of world.neighbours(at, SURF, CUT)) {
-      if (seen.has(key(to))) continue;
-      seen.set(key(to), id);
+      const k = key(to);
+      let into = back.get(k);
+      if (!into) back.set(k, (into = []));
+      into.push(at);
+      if (forward.has(k)) continue;
+      forward.add(k);
       queue.push(to);
     }
   }
-  return n;
+}
+const reach = new Set<string>([key({ map: START.map, x: START.x, y: START.y })]);
+{
+  const queue = [...reach];
+  while (queue.length > 0) {
+    const k = queue.pop()!;
+    for (const prev of back.get(k) ?? []) {
+      const pk = key(prev);
+      if (reach.has(pk)) continue;
+      reach.add(pk);
+      queue.push(pk);
+    }
+  }
 }
 
-for (const cell of landing) {
-  const spot = { map: cell.map, x: cell.x, y: cell.y };
-  const id = components.length;
-  const cells = flood(spot, id);
-  if (cells > 0) components.push({ id, cells });
-}
-
-const biggest = components.reduce((a, b) => (b.cells > a.cells ? b : a), { id: -1, cells: 0 });
 let off = 0;
 const byMap = new Map<string, number>();
 for (const cell of landing) {
@@ -80,7 +88,7 @@ for (const cell of landing) {
   // bridge and little more. It is in if either level is: it can walk off at that one.
   const at = { map: cell.map, x: cell.x, y: cell.y };
   const inside = [at, ...world.levels(cell.map, cell.x, cell.y).map((z) => ({ ...at, z }))];
-  if (inside.some((s) => seen.get(key(s)) === biggest.id)) {
+  if (inside.some((s) => reach.has(key(s)))) {
     delete cell.off;
   } else {
     cell.off = 1;
@@ -95,9 +103,11 @@ for (const cell of landing) {
 // found, drop them in front of a Poke Center, a Poke Mart, or a Building."
 //
 // He is owed one either way, and half the towns the picker offers have nothing to give
-// him: the flood above runs on foot, and on foot most of eastern Hoenn is across water,
-// so Fortree, Lilycove, Mossdeep, Dewford, Pacifidlog, Sootopolis and Ever Grande come
+// him: the flood above ran on foot, and on foot most of eastern Hoenn was across water,
+// so Fortree, Lilycove, Mossdeep, Dewford, Pacifidlog, Sootopolis and Ever Grande came
 // out of it with every cell marked off. Picking one used to deal a cell from ANYWHERE.
+// Surfing, Sootopolis (in its crater: the way in is a dive the world does not model)
+// and Lavaridge (behind the cable car and Jagged Pass's ledges) are the two left.
 //
 // A door's warp cell is the tile you step ONTO to go in; the tile you are put back on
 // coming out is the one below it, which is where FieldCB_DefaultWarpExit lands you, so
@@ -129,7 +139,7 @@ landing.push(...steps);
 
 fs.writeFileSync(path.join(DATA, 'landing.json'), JSON.stringify(landing));
 console.log(`${steps.length} doorsteps, for the sections the flood left with nothing`);
-console.log(`${components.length} components; the biggest holds ${biggest.cells} cells`);
+console.log(`${reach.size} cells there and back from Littleroot`);
 console.log(`${off} of ${landing.length} landing cells marked off (${Math.round((off / landing.length) * 100)}%)`);
 console.log(
   [...byMap]

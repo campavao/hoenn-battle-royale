@@ -236,9 +236,9 @@ out, and one that comes in waits as it would in a menu.
   the story's own map, so the MAP mark, the catch-up and the bots work as they do for any
   event. The places are made reachable: the bag has the GO-GOGGLES for Route 111's desert,
   MIRAGE TOWER stands every visit and its own fossils are hidden (taking one brings the
-  tower down), and SHOAL CAVE is at low tide all match (`br_story.h`). Every ring centre
-  is west of Lilycove (landing.json), so the east's stories come up mostly on the first
-  event, whose ring is the widest. The three REGIs sit in their chambers, each door opened
+  tower down), and SHOAL CAVE is at low tide all match (`br_story.h`). The ring centres
+  anywhere the drop can (landing.json, whose flood surfs since the HMs went), so the
+  east's stories come up as the west's do. The three REGIs sit in their chambers, each door opened
   its own way with no HM to teach: DESERT RUINS on A at the wall, ANCIENT TOMB on A with a
   Flying-type in the party (not "knows FLY": with no HMs almost nobody could), ISLAND CAVE
   by itself a phase after its event dropped, or sooner by Emerald's own braille lap of the

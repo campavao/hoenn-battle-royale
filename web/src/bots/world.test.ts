@@ -710,7 +710,7 @@ describe('what a trainer can walk to without leaving the map', () => {
       const lost: string[] = [];
       for (const from of firsts.values()) {
         for (const goal of firsts.keys()) {
-          if (goal !== from.map && !hoenn.firstCrossing(from, goal, false, true)) lost.push(`${from.map} -> ${goal}`);
+          if (goal !== from.map && !hoenn.firstCrossing(from, goal, true, true)) lost.push(`${from.map} -> ${goal}`);
         }
       }
       expect(firsts.size).toBeGreaterThan(20);
