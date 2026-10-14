@@ -263,6 +263,32 @@
           image-rendering: pixelated;
         }
         .pad-edit-row { display: flex; align-items: center; gap: calc(var(--s, 1.5) * 6px); }
+        /* The battle menu: under the picture, in place of the stick, A/B and the dock,
+           which keep their room (visibility, not display) so the picture stays put. */
+        body.in-match .battle-menu:not([hidden]) {
+          position: absolute; left: 0; right: 0; z-index: 3;
+          display: grid; grid-template-columns: auto auto; justify-content: center;
+          gap: calc(var(--s, 1.5) * 8px); align-content: start;
+        }
+        body.battle-menu.in-match #pad .dpad-surface, body.battle-menu.in-match #pad .ab, body.battle-menu.in-match .dock { visibility: hidden; }
+        .bm-btn { position: relative; padding: 0; margin: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; }
+        .bm-btn canvas { display: block; }
+        .bm-btn:active:not([aria-disabled="true"]) { filter: brightness(0.9); }
+        .bm-btn[aria-disabled="true"] { cursor: not-allowed; }
+        .bm-btn[hidden], .bm-hint[hidden], .bm-info[hidden] { display: none; }
+        /* Held: the window fills pale blue from the left, under its words (multiply). */
+        .bm-hold {
+          position: absolute; inset: calc(var(--s, 1.5) * 3px); background: #b8d8f8; mix-blend-mode: multiply;
+          transform-origin: left; transform: scaleX(0); pointer-events: none;
+        }
+        .bm-back, .bm-hint, .bm-info { grid-column: 1 / -1; }
+        .bm-hint { display: flex; justify-content: center; pointer-events: none; }
+        .bm-info { display: grid; gap: calc(var(--s, 1.5) * 8px); }
+        .bm-info-row { display: flex; gap: calc(var(--s, 1.5) * 8px); }
+        .bm-info-row > .bm-btn { flex: none; }
+        /* Off the field (a battle, the bag, the party) the dock's windows do nothing: they
+           go, the room menu stays. */
+        body.in-match .dock.off-field > .hud-btn { visibility: hidden; }
       }
 
       /* Landscape on a phone (POK-245): the screen is the scarce thing, so it takes
@@ -403,6 +429,8 @@
           <div id="keys" aria-hidden="true"></div>
           <!-- A phone's HUD over the field (ui/phonehud.ts): the route sign, the fog window. -->
           <div id="hud" aria-hidden="true"></div>
+          <!-- A phone's battle menu (ui/battlemenu.ts): under the picture, over the pad. -->
+          <div id="battle-menu" class="battle-menu" hidden></div>
         </div>
         <div id="pad">
           <div id="dpad-surface" class="dpad-surface" aria-label="D-pad"></div>

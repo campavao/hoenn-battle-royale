@@ -23,6 +23,7 @@
 #include "battle.h"
 #include "battle_controllers.h"
 #include "pokemon.h"
+#include "item.h"
 #include "br/br_config.h"
 
 // gMain: callback2 (MAIN_CALLBACK2); inBattle is in the u8 run straight after state
@@ -118,3 +119,18 @@ BR_OFFSET(BattleMove, type, 2)
 BR_OFFSET(BattleMove, accuracy, 3)
 BR_OFFSET(BattleMove, pp, 4)
 STATIC_ASSERT(sizeof(gBattleMoves[0]) == 12, BrPin_gBattleMoves_entry)
+
+// The phone's battle menu (web/src/ui/battlemenu.ts): our moves, PP and PP Ups, the
+// foe's types and name out of gBattleMons, and whether the ITEMS pocket holds a doll.
+BR_OFFSET(BattlePokemon, moves, 0x0C)
+BR_OFFSET(BattlePokemon, types, 0x21)
+BR_OFFSET(BattlePokemon, pp, 0x24)
+BR_OFFSET(BattlePokemon, nickname, 0x30)
+BR_OFFSET(BattlePokemon, ppBonuses, 0x3B)
+BR_SIZE(BattlePokemon, 0x58)
+STATIC_ASSERT(sizeof(gBattleMons[0]) == 0x58, BrPin_gBattleMons_entry)
+BR_OFFSET(BagPocket, itemSlots, 0)
+BR_OFFSET(BagPocket, capacity, 4)
+STATIC_ASSERT(sizeof(gBagPockets[0]) == 8, BrPin_gBagPockets_entry)
+BR_OFFSET(ItemSlot, itemId, 0)
+BR_SIZE(ItemSlot, 4)

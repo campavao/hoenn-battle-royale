@@ -99,6 +99,8 @@ const KEY_OF: Record<SeamDir, GbaKey> = { south: 'down', north: 'up', west: 'lef
 const STALL_FRAMES = 60;
 /** A menu tap that cannot land its cursor in this long is abandoned. */
 const MENU_FRAMES = 40;
+/** ...and the move menu, after FIGHT, this long to open. */
+const OPEN_FRAMES = 90;
 /** The start menu takes this long to open and take keys (its task, then its text). */
 const START_FRAMES = 90;
 /** A press is held this long, and the next one waits as long: JOY_NEW wants an edge. */
@@ -180,7 +182,9 @@ export class TouchLayer {
   private gapFor = 0;
   private queue: Press[] = [];
   private walk: { steps: { dir: SeamDir; to: Spot }[]; at: number; stall: number; from: Spot } | null = null;
-  private menu: { which: number; target: number; frames: number } | null = null;
+  /** A battle menu choice being walked to. `then` is a second one to make once the menu
+   *  it opens is up: FIGHT, then a move. `waiting` is the gap before that menu shows. */
+  private menu: { which: number; target: number; frames: number; then?: number; waiting?: boolean } | null = null;
   /** A start-menu row asked for by a button (PARTY, MAP): START is down, the cursor walks. */
   private startRow: { action: number; frames: number } | null = null;
   private startTable: ReturnType<typeof startMenuTable> | undefined;
@@ -240,6 +244,22 @@ export class TouchLayer {
     const { emu } = this.deps;
     emu.write(emu.read(save, 32) + SAVE1_REGISTERED_ITEM, item, 16);
     this.queue = [{ key: 'select', hold: TAP_FRAMES, gapAfter: TAP_FRAMES }];
+  }
+
+  /** A choice off the page's own battle menu (ui/battlemenu.ts): `slot` of the menu
+   *  `which` (FIGHT 0, BAG 1, POKeMON 2, RUN 3; a move 0..3), walked to and confirmed
+   *  as a tap on the picture is. With `move`, `which` is the action menu and the slot is
+   *  FIGHT: once the move menu is up, `move` is chosen there too. */
+  chooseBattle(which: number, slot: number, move?: number): void {
+    if (!this.inBattle() || this.battleMenu() !== which) return;
+    this.cancel();
+    this.menu = { which, target: slot, frames: 0, then: move };
+  }
+
+  /** One press of a key, as a tap: B out of the move menu. */
+  tapKey(key: GbaKey): void {
+    this.cancel();
+    this.queue = [{ key, hold: TAP_FRAMES, gapAfter: TAP_FRAMES }];
   }
 
   // ---- reading the ROM ----------------------------------------------------------------
@@ -454,13 +474,23 @@ export class TouchLayer {
 
   private frameMenu(): void {
     const m = this.menu!;
+    if (m.waiting) {
+      // FIGHT was pressed: the move menu takes a few frames to come up.
+      if (!this.inBattle() || ++m.frames > OPEN_FRAMES) {
+        this.menu = null;
+        return;
+      }
+      if (this.battleMenu() !== m.which) return;
+      m.waiting = false;
+      m.frames = 0;
+    }
     if (!this.inBattle() || this.battleMenu() !== m.which || ++m.frames > MENU_FRAMES) {
       this.menu = null;
       return;
     }
     const cur = this.cursor(m.which);
     if (cur === m.target) {
-      this.menu = null;
+      this.menu = m.then === undefined ? null : { which: MENU_MOVE, target: m.then, frames: 0, waiting: true };
       this.press('a', TAP_FRAMES, TAP_FRAMES);
       return;
     }

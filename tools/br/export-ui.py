@@ -12,6 +12,9 @@ for the UI outside the game (POK-320).
                                                                        each of its six themes
                                       web/public/ui/items.png          every item icon, 24x24,
                                                                        16 to a row by item id
+                                      web/public/ui/types.png          the summary screen's type
+                                                                       icons, 32x16, one per row
+                                                                       by type id
                                       web/src/data/ui.json             glyph widths, the text
                                                                        palettes, the skin ladder,
                                                                        the sign each section wears
@@ -28,7 +31,9 @@ LoadMapNamePopUpWindowBg loads; `sMapSectionToThemeId` there says which section 
 which. The item icons are `gItemIconTable` (src/data/item_icon_table.h), each in its own
 palette (src/data/graphics/items.h). The skins are `sSkinGraphics` in src/br/br_ghosts.c, resolved to gfx ids through
 include/constants/event_objects.h, whose sheets export-sprites.py already wrote to
-web/public/field-sprites/<gfx>.png.
+web/public/field-sprites/<gfx>.png. The type icons are graphics/types/<type>.png, each in
+the palette src/pokemon_summary_screen.c's sMoveTypeToOamPaletteNum gives it (OBJ
+palettes 13..15 are move_types_1..3.pal, loaded together from gMoveTypes_Pal).
 """
 import json
 import re
@@ -189,6 +194,25 @@ def item_icons() -> Image.Image:
     return sheet
 
 
+TYPE_W, TYPE_H = 32, 16
+
+
+def type_icons() -> Image.Image:
+    consts = (ROOT / "include/constants/pokemon.h").read_text(encoding="utf-8")
+    ids = {n: int(v) for n, v in re.findall(r"#define TYPE_(\w+)\s+(\d+)\b", consts) if n not in ("NONE",)}
+    src = (ROOT / "src/pokemon_summary_screen.c").read_text(encoding="utf-8")
+    body = re.search(r"sMoveTypeToOamPaletteNum\[[^\]]*\]\s*=\s*\{([^}]*)\}", src).group(1)
+    pals = {n: int(v) for n, v in re.findall(r"\[TYPE_(\w+)\]\s*=\s*(\d+)", body)}
+    d = ROOT / "graphics/types"
+    # The art's file names: FIGHTING is fight.png, the rest their own names.
+    file = {"FIGHTING": "fight"}
+    sheet = Image.new("RGBA", (TYPE_W, len(pals) * TYPE_H), (0, 0, 0, 0))
+    for name, pal in pals.items():
+        img = recolor(d / f"{file.get(name, name.lower())}.png", jasc_pal(d / f"move_types_{pal - 12}.pal"))
+        sheet.paste(img, (0, ids[name] * TYPE_H))
+    return sheet
+
+
 def main():
     font_mask(ROOT / "graphics/fonts/latin_normal.png").save(OUT / "font-normal.png")
     indexed_to_rgba(ROOT / "graphics/text_window/1.png").save(OUT / "frame-1.png")
@@ -196,6 +220,7 @@ def main():
     for theme in POPUP_THEMES:
         popup(theme).save(OUT / f"popup-{theme}.png")
     item_icons().save(OUT / "items.png")
+    type_icons().save(OUT / "types.png")
     data = {
         "font": {"cell": 16, "cols": 16, "widths": widths()},
         # Emerald's text palettes: [background, foreground, shadow] and on.
@@ -203,6 +228,7 @@ def main():
         "skins": skins(),
         "popupThemes": popup_themes(),
         "itemIcons": {"cell": ICON_CELL, "cols": ICON_COLS},
+        "typeIcons": {"w": TYPE_W, "h": TYPE_H},
     }
     (ROOT / "web/src/data/ui.json").write_text(json.dumps(data, separators=(",", ":")) + "\n", encoding="utf-8")
     print(f"font {len(data['font']['widths'])} widths, skins {data['skins']}")

@@ -8,7 +8,8 @@ describe("Emerald's font on the page (POK-320)", () => {
     expect(glyphIds('A')).toEqual([0xbb]);
     expect(glyphIds('0')).toEqual([0xa1]);
     expect(glyphIds(' ')).toEqual([0x00]);
-    expect(glyphIds('é')).toEqual([0x00]);
+    expect(glyphIds('POKéMON')[3], 'the é the ROM draws').toBe(0x1b);
+    expect(glyphIds('❤')).toEqual([0x00]);
   });
 
   it("measures with the ROM's own widths", () => {

@@ -16,6 +16,7 @@ import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import { PhoneHud, readHudView, type HudWorld } from './ui/phonehud';
+import { BattleMenu, readBattleView } from './ui/battlemenu';
 import { PadPrefsControl } from './ui/padprefs';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { nameBstart, romReplaying, Spectate } from './match/spectate';
@@ -88,7 +89,7 @@ import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
 import { START_BR_MAP, START_POKEMON, TouchLayer } from './touch';
 import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, stickKeys, type AxisSense, type StickMap } from './pad';
-import { FieldView, MAIN_CALLBACK2, askBand, measureLayout, romBand, type FieldLayout, type FieldPicture } from './field';
+import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, type FieldLayout, type FieldPicture } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
 import {
@@ -3569,14 +3570,15 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
       rom,
     });
     touch.attach();
-    wirePhoneHud(emu, symbols, touch);
+    wirePhoneHud(emu, symbols, touch, rom);
   }
 }
 
-/** The phone's HUD and dock (ui/phonehud.ts) and its movable pad (ui/padprefs.ts). The
- *  HUD reads the ROM every frame while it is on the glass, and while it is the ROM's
- *  corner box stays off (gBrHud.noCorner): the two would say the same thing twice. */
-function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchLayer): void {
+/** The phone's HUD and dock (ui/phonehud.ts), its battle menu (ui/battlemenu.ts) and its
+ *  movable pad (ui/padprefs.ts). The HUD reads the ROM every frame while it is on the
+ *  glass, and while it is the ROM's corner box stays off (gBrHud.noCorner): the two
+ *  would say the same thing twice. */
+function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchLayer, rom: Uint8Array | null): void {
   const top = $('#hud') as HTMLElement;
   const pad = $('#pad') as HTMLElement;
   const root = $('#screen-playing') as HTMLElement;
@@ -3593,6 +3595,16 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     onUse: (item) => touch.useOnField(item),
   });
   ($('#hud-menu') as HTMLButtonElement).addEventListener('click', () => openSheet(!sheetOpen));
+  const menuRoot = $('#battle-menu') as HTMLElement;
+  const tables = rom ? { bytes: rom, sym: (n: string) => symbols.get(n) } : null;
+  const battle = new BattleMenu({
+    root: menuRoot,
+    rom: tables,
+    choose: (which, slot, move) => touch.chooseBattle(which, slot, move),
+    back: () => touch.tapKey('b'),
+    onShown: (on) => document.body.classList.toggle('battle-menu', on),
+  });
+  const wrap = $('#screen-wrap') as HTMLElement;
   const scale = () => {
     const cs = getComputedStyle(pad);
     const w = pad.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0');
@@ -3602,8 +3614,13 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     const s = scale();
     root.style.setProperty('--s', String(s));
     hud.setScale(s);
+    battle.setScale(s);
+    // Right under the picture, where field.ts put it.
+    const lay = measureLayout(wrap, pad);
+    menuRoot.style.top = `${Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s)}px`;
   };
   new ResizeObserver(resize).observe(pad);
+  new ResizeObserver(resize).observe(wrap);
   resize();
   padPrefs = new PadPrefsControl({
     root,
@@ -3622,6 +3639,7 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     // On the glass: a match, upright, on a touch screen (index.html shows #hud then).
     const shown = top.offsetParent !== null;
     if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown);
+    battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables) : null);
     if (!shown) return;
     const view = readHudView(emu, (n) => symbols.get(n), world);
     if (view) hud.update(view);

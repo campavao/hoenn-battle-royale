@@ -222,7 +222,7 @@ export function fogHeight(n: number): number {
 // ---- drawing ---------------------------------------------------------------------------
 
 const pictures = new Map<string, HTMLImageElement>();
-function picture(src: string, onLoad: () => void): HTMLImageElement {
+export function picture(src: string, onLoad: () => void): HTMLImageElement {
   let img = pictures.get(src);
   if (!img) {
     img = new Image();
@@ -237,7 +237,7 @@ function picture(src: string, onLoad: () => void): HTMLImageElement {
 const ICONS = uiData.itemIcons as { cell: number; cols: number };
 
 /** One window of the HUD: a canvas of `w` x `h` GBA pixels shown at the HUD's scale. */
-class Win {
+export class Win {
   readonly canvas: HTMLCanvasElement;
   readonly c: EmeraldCanvas;
   private key = '';
@@ -386,6 +386,7 @@ export class PhoneHud {
   update(v: HudView): void {
     this.view = v;
     this.deps.top.classList.toggle('off-field', !v.onField);
+    this.deps.dock.classList.toggle('off-field', !v.onField);
     this.sign.show(`${v.theme}|${v.place}`);
     const lines = fogLines(v);
     const h = fogHeight(lines.length);

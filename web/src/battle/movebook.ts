@@ -3,7 +3,7 @@
 // these on each move's window (ui/battlemenu.ts). Read from the ROM's own tables
 // (gBattleMoves, gMoveNames, gMoveDescriptionPointers, gTypeNames, gTypeEffectiveness)
 // rather than an exported copy, so a move the match changes is shown as it plays.
-import { decodeGen3 } from '../text/gen3';
+import { decodeGen3Display } from '../text/gen3';
 
 const ROM_BASE = 0x08000000;
 /** charmap.txt: ' ' and '-'. */
@@ -72,7 +72,7 @@ function text(rom: Rom, addr: number, max: number): string {
     out.push(c);
   }
   try {
-    return decodeGen3(Uint8Array.from(out));
+    return decodeGen3Display(Uint8Array.from(out));
   } catch {
     return '';
   }

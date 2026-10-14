@@ -149,6 +149,39 @@ describe('a tap on a battle menu walks the cursor there and presses A', () => {
     expect(emu.held & ~(1 << KEY_BIT.b), 'the page let go of its own key').toBe(0);
   });
 
+  it("the page's menu: FIGHT, then the move once the move menu is up", () => {
+    const emu = new FakeEmu();
+    emu.menu = MENU_ACTION;
+    const { t } = layer(emu);
+    t.chooseBattle(MENU_ACTION, 0, 1);
+    for (let i = 0; i < 40 && emu.chosen === null; i++) emu.frame();
+    expect(emu.chosen, 'FIGHT').toBe(0);
+    // The move menu comes up a while later, its cursor where it was left.
+    for (let i = 0; i < 12; i++) emu.frame();
+    emu.chosen = null;
+    emu.cursor = 0;
+    emu.menu = MENU_MOVE;
+    for (let i = 0; i < 40 && emu.chosen === null; i++) emu.frame();
+    expect(emu.chosen, 'the second move').toBe(1);
+  });
+
+  it('a choice for a menu that is not up does nothing; B is one tap', () => {
+    const emu = new FakeEmu();
+    emu.menu = MENU_MOVE;
+    const { t } = layer(emu);
+    t.chooseBattle(MENU_ACTION, 3);
+    for (let i = 0; i < 20; i++) emu.frame();
+    expect(emu.chosen).toBeNull();
+    const seen: number[] = [];
+    t.tapKey('b');
+    for (let i = 0; i < 8; i++) {
+      emu.frame();
+      seen.push(emu.held);
+    }
+    expect(seen.filter((h) => h === 1 << KEY_BIT.b).length).toBeGreaterThan(0);
+    expect(emu.held).toBe(0);
+  });
+
   it('a menu that closes under the tap is left alone', () => {
     const emu = new FakeEmu();
     emu.menu = MENU_ACTION;

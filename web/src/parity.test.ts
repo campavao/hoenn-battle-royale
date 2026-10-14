@@ -107,6 +107,10 @@ import * as ghosts from './field-ghosts';
 import * as touch from './touch';
 import * as phone from './ui/phonehud';
 import * as movebook from './battle/movebook';
+import * as bmenu from './ui/battlemenu';
+import battleConstH from '../../include/constants/battle.h?raw';
+import itemH from '../../include/item.h?raw';
+import itemConstH from '../../include/constants/item.h?raw';
 
 // ---- reading C -----------------------------------------------------------------------
 
@@ -883,6 +887,34 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect([movebook.TYPE_FORESIGHT, movebook.TYPE_ENDTABLE, movebook.TYPE_MUL_NORMAL]).toEqual(
       ['TYPE_FORESIGHT', 'TYPE_ENDTABLE', 'TYPE_MUL_NORMAL'].map((n) => define(battleMainH, n)),
     );
+  });
+
+  it("the phone's battle menu: our moves and PP, the foe, the flags and the bag (ui/battlemenu.ts)", () => {
+    const mon = watch('BattlePokemon', natural(pokemonH, 'BattlePokemon', [constantsGlobalH, constantsPokemonH]));
+    expect([bmenu.MON_MOVES, bmenu.MON_TYPES, bmenu.MON_PP, bmenu.MON_NICKNAME, bmenu.MON_PP_BONUSES]).toEqual([
+      mon.at.moves,
+      mon.at.types,
+      mon.at.pp,
+      mon.at.nickname,
+      mon.at.ppBonuses,
+    ]);
+    expect(bmenu.MON_SIZE).toBe(mon.size);
+    expect(pinned('sizeof gBattleMons[0]'), 'src/br/br_pins.c').toBe(bmenu.MON_SIZE);
+    expect(bmenu.NICKNAME_SIZE).toBe(define(constantsGlobalH, 'POKEMON_NAME_LENGTH') + 1);
+    const bit = (n: string) => 1 << Number(new RegExp(`#define\\s+${n}\\s+\\(1 << (\\d+)\\)`).exec(battleConstH)![1]);
+    expect([bmenu.BATTLE_TYPE_LINK, bmenu.BATTLE_TYPE_TRAINER, bmenu.BATTLE_TYPE_SAFARI]).toEqual(
+      ['BATTLE_TYPE_LINK', 'BATTLE_TYPE_TRAINER', 'BATTLE_TYPE_SAFARI'].map(bit),
+    );
+    const pocket = watch('BagPocket', natural(itemH, 'BagPocket'));
+    expect([0, bmenu.POCKET_CAPACITY]).toEqual([pocket.at.itemSlots, pocket.at.capacity]);
+    expect(pinned('sizeof gBagPockets[0]'), 'src/br/br_pins.c').toBe(bmenu.POCKET_SIZE);
+    const slot = watch('ItemSlot', natural(globalH, 'ItemSlot'));
+    expect([slot.at.itemId, slot.size]).toEqual([0, bmenu.SLOT_SIZE]);
+    expect(bmenu.ITEMS_POCKET).toBe(define(itemConstH, 'ITEMS_POCKET'));
+    const list = /enum\s*\{([\s\S]*?)\};/.exec(itemsH)![1].replace(/\/\/.*$/gm, '');
+    expect(bmenu.ITEM_POKE_DOLL).toBe(list.split(',').map((x) => x.trim()).filter(Boolean).indexOf('ITEM_POKE_DOLL'));
+    // The type icons: one per type, in the summary screen's palettes.
+    expect(uiData.typeIcons).toEqual({ w: 32, h: 16 });
   });
 
   it("the keys are KEYINPUT's bits", () => {

@@ -9,7 +9,7 @@
 // plain functions so ui.test.ts can pin them without a canvas.
 import uiData from '../data/ui.json';
 import spritesData from '../data/sprites.json';
-import { encodeGen3 } from '../text/gen3';
+import { displayByte } from '../text/gen3';
 
 export const CELL = 16;
 export const TILE = 8;
@@ -45,13 +45,7 @@ export const STAGE_FILL = '#101418';
 /** A charmap byte for each character; an unknown character is a space. */
 export function glyphIds(text: string): number[] {
   const out: number[] = [];
-  for (const ch of text) {
-    try {
-      out.push(encodeGen3(ch)[0] ?? 0);
-    } catch {
-      out.push(0);
-    }
-  }
+  for (const ch of text) out.push(displayByte(ch) ?? 0);
   return out;
 }
 
