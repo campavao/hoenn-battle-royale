@@ -8627,7 +8627,7 @@ void UpdateObjectEventSpriteInvisibility(struct Sprite *sprite, bool8 invisible)
     y2 = y - (sprite->centerToCornerVecY >> 1);
 
 #if BR
-    if (BrField_OffScreen(x, x2, y, y2))
+    if (BrField_OffScreen(x, x2, y, y - 2 * sprite->centerToCornerVecY))
         sprite->invisible = TRUE;
 #else
     if ((s16)x >= DISPLAY_WIDTH + 16 || x2 < -16)
