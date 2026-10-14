@@ -38,6 +38,9 @@ const GEN3_CHARMAP: ReadonlyMap<string, number> = new Map<string, number>([
   ['.', 0xad],
   ['-', 0xae],
   ['…', 0xb0],
+  ["'", 0xb4], // FARFETCH'D
+  ['♂', 0xb5], // NIDORAN♂
+  ['♀', 0xb6], // NIDORAN♀
   [',', 0xb8],
   ['/', 0xba],
   ['A', 0xbb],

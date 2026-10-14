@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dealParty, evolutionOf, grownUp, LADDER, POOL, rungForPhase, speciesAt, speciesName } from './party';
 import speciesH from '../../../include/constants/species.h?raw';
+import { packGen3String } from '../text/gen3';
 import { packSlot, unpackSlot, reassembleSlots } from '../net/slots';
 import type { PartyMsg } from '../net/wire';
 
@@ -125,6 +126,14 @@ describe('species names', () => {
     expect(speciesName(305)).toBe('SWELLOW'); // TAILLOW grown up
     expect(speciesName(278)).toBe('GROVYLE');
     expect(speciesName(29)).toBe('NIDORAN\u2640');
+  });
+
+  it('spells every name in bytes the wire can carry', () => {
+    // A bot's nickname goes out through encodeMon; NIDORAN♀, NIDORAN♂ and FARFETCH'D
+    // are the three with a character past the letters.
+    for (let species = 1; species <= 411; species++) {
+      expect(() => packGen3String(speciesName(species), 10), speciesName(species)).not.toThrow();
+    }
   });
 
   it('numbers only an id with no name', () => {
