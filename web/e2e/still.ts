@@ -30,6 +30,9 @@ export interface StillSymbols {
   gFieldCamera: number;
   gMain: number;
   CB2_Overworld: number;
+  /** The OAM side table (include/br/br_field.h), where the core reads a sprite's true
+   *  rows from; absent on a ROM without it. */
+  gBrOamHi?: number;
 }
 
 export interface StillSetup {
@@ -141,8 +144,13 @@ export async function installStill(s: StillSetup): Promise<void> {
   // above the LCD, as the core reads it; semi-transparent sprites (the weather) and
   // hidden ones are not people.
   const SIZES = [[[8, 8], [16, 16], [32, 32], [64, 64]], [[16, 8], [32, 8], [32, 16], [64, 32]], [[8, 16], [8, 32], [16, 32], [32, 64]]];
+  // The side table puts a marked entry at its true rows, which can be up to 104 above
+  // the LCD (an item ball north of the player), past where an 8-bit y reaches: a nibble
+  // an entry, bit 2 the mark, bits 0-1 the 256s past its y, signed.
+  const HI = [0, 1, -2, -1];
   const sprites = (): Box[] => {
     const oam = emu.bytes(s.sym.gMain + 0x38, 128 * 8);
+    const hi = s.sym.gBrOamHi === undefined ? null : emu.bytes(s.sym.gBrOamHi, 64);
     const out: Box[] = [];
     for (let i = 0; i < 128; i++) {
       const a0 = oam[8 * i] | (oam[8 * i + 1] << 8);
@@ -159,7 +167,8 @@ export async function installStill(s: StillSetup): Promise<void> {
       }
       const y = a0 & 0xff;
       const x = a1 & 0x1ff;
-      const top = y >= 216 ? y - 256 : y;
+      const nib = hi ? (hi[i >> 1] >> ((i & 1) * 4)) & 0xf : 0;
+      const top = nib & 4 ? y + 256 * HI[nib & 3] : y >= 216 ? y - 256 : y;
       const left = x >= 256 ? x - 512 : x;
       out.push([left - 1, top - 1, left + w + 1, top + h + 1]);
     }

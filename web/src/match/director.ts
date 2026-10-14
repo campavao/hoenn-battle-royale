@@ -369,9 +369,10 @@ export class Director {
    *  It used to fall back to ANYWHERE IN HOENN when the chosen section had nothing
    *  standable, which is how Cam picked Fortree City and landed on Route 117 -- a
    *  different map, forty maps away, behind the Day Care's fence (POK-307). And it was
-   *  not a rare corner: the reachability flood runs on foot, most of eastern Hoenn is
+   *  not a rare corner: the reachability flood ran on foot, most of eastern Hoenn is
    *  across water, and that left eight of the sixteen towns the picker offers (Lavaridge
-   *  too, behind the cable car) with every cell marked off.
+   *  too, behind the cable car) with every cell marked off. It surfs now (no HMs, so
+   *  everybody can), and two are left: Sootopolis in its crater and Lavaridge.
    *
    *  So the fallback stays inside the section the trainer actually chose: a doorstep,
    *  Cam's own rule -- "if a location cannot be found, drop them in front of a Poke

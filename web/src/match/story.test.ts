@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Director, type DirectorWorld } from './director';
 import { EVENT_MAX, eventKey, SUPPLIES } from './events';
-import { STORIES, storyCells, storyDrop, storyLegend, storySealed } from './story';
+import { STORIES, storyCells, storyDrop, storyLegend, storyOf, storySealed } from './story';
 import { mulberry32 } from './clock';
 import { HOENN } from '../bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './landing';
@@ -64,6 +64,14 @@ describe('story events', () => {
     expect(new Set(STORIES.map((s) => s.id)).size).toBe(STORIES.length);
   });
 
+  it('is never named the same as a section a cluster drops in', () => {
+    // An event with no trader is known by its place and section alone (storyOf), so a
+    // story named for a section the clusters use reads as told when a cluster dropped there.
+    const byId = new Map(HOENN.maps.map((m) => [m.id, m]));
+    const clusters = new Set(LANDING.flatMap((c) => { const m = byId.get(c.map); return m?.outdoor ? [SECTIONS[m.section]?.name] : []; }));
+    expect(STORIES.filter((s) => clusters.has(s.name)).map((s) => s.id)).toEqual([]);
+  });
+
   it("sails to an island by the island's own mapsec, from Lilycove's dock", () => {
     const boats = STORIES.filter((s) => s.boat);
     expect(boats.length).toBe(5);
@@ -119,12 +127,13 @@ describe('story events', () => {
     const told = new Map<string, number>();
     for (let seed = 1; seed <= 300; seed++) {
       const sent = run(seed);
-      const names = (sent.filter((m) => m.t === 'event') as EventMsg[]).map((e) => e.place);
-      const stories = names.filter((p) => STORIES.some((s) => s.name === p));
+      // By storyOf, which knows a story from a cluster in a section of the same name.
+      const of = (e: EventMsg) => storyOf(e, SECTIONS, (id) => HOENN.refOf(id));
+      const stories = (sent.filter((m) => m.t === 'event') as EventMsg[]).flatMap((e) => of(e)?.name ?? []);
       expect(new Set(stories).size, `seed ${seed}`).toBe(stories.length);
-      for (const p of stories) told.set(p!, (told.get(p!) ?? 0) + 1);
+      for (const p of stories) told.set(p, (told.get(p) ?? 0) + 1);
       for (const e of sent.filter((m) => m.t === 'event') as EventMsg[]) {
-        const story = STORIES.find((s) => s.name === e.place);
+        const story = of(e);
         if (!story) continue;
         const spills = (sent.filter((m) => m.t === 'spill') as SpillMsg[]).filter((s) => [...s.mons, ...(s.bag ? [s.bag] : [])].some((p) => (p.key & 0xfff0) === (e.key & 0xfff0)));
         const maps = new Set(story.cells.map((c) => c.map ?? story.map));
@@ -132,13 +141,9 @@ describe('story events', () => {
         expect(e.mapsec).toBe(story.mapsec ?? SECTIONS[story.section].num);
       }
     }
-    // Over three hundred matches every story the rings reach comes up somewhere. Lilycove
-    // and east of it need not: every ring centre is west of Lilycove (landing.json), and a
-    // story goes inside the next ring, which only now and then reaches Lilycove's dock (the
-    // islands sail from it) and never Mossdeep or past it.
-    const east = new Set(['MAPSEC_LILYCOVE_CITY', 'MAPSEC_AQUA_HIDEOUT', 'MAPSEC_MOSSDEEP_CITY', 'MAPSEC_SHOAL_CAVE', 'MAPSEC_ROUTE_128']);
-    const west = STORIES.filter((s) => !east.has(s.section)).map((s) => s.name);
-    expect(west.filter((n) => !told.has(n))).toEqual([]);
+    // Over three hundred matches every story comes up somewhere: the ring can centre
+    // anywhere the drop can (landing.json, which surfs), east of Lilycove too.
+    expect(STORIES.map((s) => s.name).filter((n) => !told.has(n))).toEqual([]);
   });
 
   it("leaves the last event to the final ring's own section", () => {
@@ -175,7 +180,7 @@ describe('story events', () => {
         t += 10000;
         b.tick();
       }
-      const places = (sent.filter((m) => m.t === 'event') as EventMsg[]).map((e) => e.place).filter((p) => STORIES.some((s) => s.name === p));
+      const places = (sent.filter((m) => m.t === 'event') as EventMsg[]).flatMap((e) => storyOf(e, SECTIONS, (id) => HOENN.refOf(id))?.id ?? []);
       expect(new Set(places).size, `seed ${seed}`).toBe(places.length);
     }
   });

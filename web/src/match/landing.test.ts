@@ -45,12 +45,15 @@ describe('the hand-painted drop cells', () => {
   });
 
   // The painter only lets Cam pick where walksTo says, so it had better say yes to a town:
-  // each of the eight towns the flood left with doorsteps alone has a street to paint.
+  // each of the towns the flood leaves with doorsteps alone has a street to paint. Since
+  // the flood surfs (landing-reach.ts) that is SOOTOPOLIS, in its crater, and LAVARIDGE,
+  // behind the cable car; the other six have ordinary cells of their own.
   it('leave every doorstep-only town a street to paint', () => {
     const towns = ['FORTREE_CITY', 'LILYCOVE_CITY', 'MOSSDEEP_CITY', 'DEWFORD_TOWN', 'PACIFIDLOG_TOWN', 'SOOTOPOLIS_CITY', 'EVER_GRANDE_CITY', 'LAVARIDGE_TOWN'];
-    for (const town of towns.map((t) => `MAP_${t}`)) {
+    const doorstepOnly = towns.map((t) => `MAP_${t}`).filter((town) => LANDING.every((c) => c.map !== town));
+    expect(doorstepOnly).toEqual(['MAP_SOOTOPOLIS_CITY', 'MAP_LAVARIDGE_TOWN']);
+    for (const town of doorstepOnly) {
       const m = HOENN.byId.get(town)!;
-      expect(LANDING.filter((c) => c.map === town), `${town} has ordinary cells now`).toEqual([]);
       const flags = walksTo(HOENN.world, m, DOORSTEPS.filter((c) => c.map === town));
       expect(flags.reduce((n, f) => n + f, 0), town).toBeGreaterThan(100);
     }

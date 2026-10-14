@@ -14,30 +14,45 @@ const world = new World(maps);
 const cells = LANDING_ALL;
 const live = LANDING;
 
-/** Everything reachable from one cell ON FOOT -- the same walk `landing-reach.ts`
- *  does. Surfing is deliberately not allowed: SURF needs a water mon that a trainer
- *  may never be dealt, so a drop cell that requires it is a drop cell that strands
- *  somebody (Route 108, the Abandoned Ship's island, was the case that proved it). */
 /** A place: a cell, or one level of a bridge (POK-331 #2), which is somewhere of its own. */
 const key = (s: Spot) => (s.z === undefined ? `${s.map}:${s.x},${s.y}` : `${s.map}:${s.x},${s.y}@${s.z}`);
 
+/** Everywhere you can get to from `from` and get back from -- the same walk
+ *  `landing-reach.ts` does, from the same Littleroot cell. Surfing, since the HMs went
+ *  (br_hm.h): walk into water and you are surfing, and the bots cross it the same way
+ *  (brain.ts canSurf). A ledge is a way in that is not a way out, so the flood forward
+ *  keeps every edge backwards and walks them back. */
 function component(from: Spot): Set<string> {
-  const seen = new Set([key(from)]);
+  const forward = new Set([key(from)]);
+  const back = new Map<string, Spot[]>();
   const queue = [from];
   while (queue.length > 0) {
     const at = queue.pop()!;
-    // On foot, but able to cut: every contestant boots with the HMs (POK-256), which
-    // is the same assumption tools/br/landing-reach.ts floods the world with.
-    for (const { to } of world.neighbours(at, false, true)) {
-      if (seen.has(key(to))) continue;
-      seen.add(key(to));
+    for (const { to } of world.neighbours(at, true, true)) {
+      const k = key(to);
+      let into = back.get(k);
+      if (!into) back.set(k, (into = []));
+      into.push(at);
+      if (forward.has(k)) continue;
+      forward.add(k);
       queue.push(to);
     }
   }
-  return seen;
+  const both = new Set([key(from)]);
+  const again = [key(from)];
+  while (again.length > 0) {
+    for (const prev of back.get(again.pop()!) ?? []) {
+      const pk = key(prev);
+      if (both.has(pk)) continue;
+      both.add(pk);
+      again.push(pk);
+    }
+  }
+  return both;
 }
 
-const reach = component({ map: live[0].map, x: live[0].x, y: live[0].y });
+const start = cells.find((c) => c.map === 'MAP_LITTLEROOT_TOWN')!;
+const reach = component({ map: start.map, x: start.x, y: start.y });
 
 /** Is a drop here in the rest of the pool? On a bridge, a trainer is dropped at no level
  *  (pret spawns them at height 0, off at either), which is a place nothing else walks

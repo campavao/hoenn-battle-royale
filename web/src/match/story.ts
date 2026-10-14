@@ -232,7 +232,7 @@ export const STORIES: readonly Story[] = [
   },
   {
     id: 'route128-kyogre',
-    name: 'ROUTE 128',
+    name: 'ROUTE 128 SHOAL',
     section: 'MAPSEC_ROUTE_128',
     map: 'MAP_ROUTE128',
     // KYOGRE, risen, with ARCHIE on the shoal where he watched it.

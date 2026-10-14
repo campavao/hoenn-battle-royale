@@ -94,6 +94,11 @@ WATER_BEHAVIORS = {
     "MB_SOOTOPOLIS_DEEP_WATER", "MB_OCEAN_WATER", "MB_UNUSED_SOOTOPOLIS_DEEP_WATER",
     "MB_NO_SURFACING", "MB_UNUSED_SOOTOPOLIS_DEEP_WATER_2", "MB_SEAWEED",
     "MB_SEAWEED_NO_SURFACING",
+    # Routes 131-134's currents are sea: you ride them surfing, never stand on them. The
+    # ROM pushes you one way along them; the world graph treats them as two-way water,
+    # so the reachable set over-counts a little out there (PR #37 review).
+    "MB_EASTWARD_CURRENT", "MB_WESTWARD_CURRENT", "MB_NORTHWARD_CURRENT",
+    "MB_SOUTHWARD_CURRENT",
 }
 # MB_SHALLOW_WATER / MB_PUDDLE are walkable without Surf -> left as class 0.
 
