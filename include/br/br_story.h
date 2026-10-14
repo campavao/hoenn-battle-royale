@@ -36,6 +36,9 @@ void BrStory_Tick(void);
 // there by the dock the ferry sails from: Lilycove, which is the story's section on the
 // page. Any other mapsec is its own.
 u8 BrStory_Dock(u8 mapsec);
+// The weather a live story makes of the map the player stands on (SOOTOPOLIS's clash),
+// or WEATHER_NONE for the map's own. br_ring.c applies it inside the ring.
+u8 BrStory_Weather(void);
 
 // A story's person: the gfx a piece at his cell stands as (STEVEN in GRANITE CAVE with
 // his TM, CAPTAIN STERN in SLATEPORT's harbour, a gate's boss), or 0 for a ball. The FLAG_HIDE_* sweep

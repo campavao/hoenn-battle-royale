@@ -23,7 +23,7 @@ import sys
 ENGINE_SYMBOLS = [
     "gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPlayerParty", "gPlayerPartyCount", "gEnemyParty",
     "gMain", "gObjectEvents", "gPlayerAvatar", "gSprites", "gTasks",
-    "gBattleTypeFlags", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
+    "gBattleTypeFlags", "gBattleWeather", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
     "gLinkPlayers", "gBlockRecvBuffer", "gBlockSendBuffer", "gWirelessCommType",
     "gRngValue", "gSaveBlock1", "gSaveBlock2", "gNumSafariBalls",
     "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleBufferB", "gBattleMons",

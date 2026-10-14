@@ -214,28 +214,43 @@ static void Ferry(void)
 
 // ---- the clash -----------------------------------------------------------------------
 
-// SOOTOPOLIS while its story is live: the weather KYOGRE and GROUDON made there, rain
-// and drought by turns (WEATHER_ABNORMAL, field_weather_effect.c), so a fight in the city
-// starts in one or the other (battle_util.c's switch-in weather reads it). The map's own
-// sun again once the legendary is taken.
+// SOOTOPOLIS while its story is live: the weather KYOGRE and GROUDON made there, so a
+// fight in the city starts in it (battle_util.c's switch-in weather reads the field's).
+// Not Emerald's WEATHER_ABNORMAL: that turns rain and drought on a task of each ROM's
+// own, counted from when it walked in, and a link battle reads the weather on both GBAs
+// -- one side in rain and the other in sun is two different battles (PR #38 review).
+// So one of the two for the whole match, by its seed, which every seat shares: the rain
+// or the drought, the same for all. The ring owns the weather (br_ring.c, ApplyWeather
+// asks here for the map's own), and this only tells it when the answer changes.
+u8 BrStory_Weather(void)
+{
+    if (gSaveBlock1Ptr->location.mapGroup != MAP_GROUP(MAP_SOOTOPOLIS_CITY)
+     || gSaveBlock1Ptr->location.mapNum != MAP_NUM(MAP_SOOTOPOLIS_CITY)
+     || !LiveAt(MAPSEC_SOOTOPOLIS_CITY))
+        return WEATHER_NONE;
+    return (gBrMatch.seed & 1) ? WEATHER_DROUGHT : WEATHER_DOWNPOUR;
+}
+
+static EWRAM_DATA u8 sClash = WEATHER_NONE;
+
 static void Clash(void)
 {
-    bool8 on;
+    u8 weather = BrStory_Weather();
 
-    if (gSaveBlock1Ptr->location.mapGroup != MAP_GROUP(MAP_SOOTOPOLIS_CITY)
-     || gSaveBlock1Ptr->location.mapNum != MAP_NUM(MAP_SOOTOPOLIS_CITY))
+    if (weather == sClash)
         return;
-    on = LiveAt(MAPSEC_SOOTOPOLIS_CITY);
-    if (on && GetSavedWeather() != WEATHER_ABNORMAL)
+    sClash = weather;
+    if (gBrRing.active)
     {
-        SetSavedWeather(WEATHER_ABNORMAL);
-        DoCurrentWeather();
+        gBrRing.applied = FALSE;
+        return;
     }
-    else if (!on && GetSavedWeather() == WEATHER_ABNORMAL)
-    {
+    // No ring yet (the opening, before the first RING): nobody else sets the weather.
+    if (weather != WEATHER_NONE)
+        SetSavedWeather(weather);
+    else
         SetSavedWeatherFromCurrMapHeader();
-        DoCurrentWeather();
-    }
+    DoCurrentWeather();
 }
 
 void BrStory_Tick(void)

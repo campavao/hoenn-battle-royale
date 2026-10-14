@@ -511,7 +511,9 @@ export class Director {
   /** The ring on a final story (Cam: "final ring: centres on the last event"): on its
    *  section's centre, and the section a cluster falls back to is the outdoor one there
    *  with cells (SKY PILLAR's Route 131, SOOTOPOLIS's Route 126), since neither has a cell
-   *  of its own to drop on. The story waits for the last event. */
+   *  of its own to drop on. Which one is the sections' order: SOOTOPOLIS's centre is in
+   *  ROUTE 126 and UNDERWATER 126 both. It only matters for a cluster, and the final
+   *  story itself waits for the last event. */
   private centreOnFinal(story: Story): void {
     const section = this.opts.world.sections[story.section];
     const { sx, sy } = sectionCentre(section);

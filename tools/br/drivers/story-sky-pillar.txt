@@ -1,7 +1,7 @@
 # story-sky-pillar: SKY PILLAR is open and its own RAYQUAZA gone for the match, so the
 # story's is the only one at the top (br_boot.c): its door is shut until Wallace has gone
 # up (SkyPillar_Outside's OnLoad asks FLAG_WALLACE_GOES_TO_SKY_PILLAR), and the sleeping
-# RAYQUAZA is outside the hide block the sweep covers.
+# RAYQUAZA's flag (FLAG_HIDE_SKY_PILLAR_TOP_RAYQUAZA) is in the hide block the sweep sets.
 #
 # On SKY PILLAR OUTSIDE (24:78) at (14,6), under the door at (14,5): one step north is
 # SKY PILLAR 1F (24:79).

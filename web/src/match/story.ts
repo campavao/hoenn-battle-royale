@@ -354,9 +354,10 @@ export const STORIES: readonly Story[] = [
     boat: true,
   },
   // The final rings. RAYQUAZA at the top of SKY PILLAR, where it sleeps, its own gone for
-  // the match and the door already open (br_boot.c); SOOTOPOLIS's clash, KYOGRE or
-  // GROUDON at the CAVE OF ORIGIN's mouth, and the city's weather turning between rain and
-  // sun while it is there (br_story.c), so a fight in it starts in one or the other.
+  // the match and the door already open (br_boot.c), and the clean pillar the match plays
+  // is the one the bots' world has, so they climb it; SOOTOPOLIS's clash, KYOGRE or
+  // GROUDON at the CAVE OF ORIGIN's mouth, and the city in KYOGRE's rain or GROUDON's
+  // drought while it is there, the seed's pick (br_story.c), so a fight in it starts in it.
   {
     id: 'sky-pillar',
     name: 'SKY PILLAR',
@@ -365,7 +366,6 @@ export const STORIES: readonly Story[] = [
     mons: [[RAYQUAZA]],
     cells: [{ x: 14, y: 5 }, { x: 13, y: 6 }, { x: 15, y: 6 }],
     final: true,
-    noBots: true,
   },
   {
     id: 'sootopolis',

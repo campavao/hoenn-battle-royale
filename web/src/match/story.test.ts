@@ -90,8 +90,8 @@ describe('story events', () => {
         if (s.boat) continue;
         const ways = entries(map);
         expect(ways.length, s.id).toBeGreaterThan(0);
-        // SOOTOPOLIS's way in is a dive and SKY PILLAR's top a floor the world has no way
-        // up to: on their own maps they are a walk all the same.
+        // SOOTOPOLIS's way in is a dive: on its own map it is a walk all the same. SKY
+        // PILLAR's top is a climb from Littleroot, on the clean floors (export-world.py).
         if (!s.noBots) expect(HOENN.world.hops('MAP_LITTLEROOT_TOWN', map, true, true), s.id).toBeDefined();
         const ok = ways.some((w) => HOENN.world.reachOnMap(w, true, true).cell(c.x, c.y));
         expect(ok, `${s.id} ${c.x},${c.y}`).toBe(true);
@@ -252,6 +252,8 @@ describe('story events', () => {
     'aqua-hideout': { mapId: 'MAP_AQUA_HIDEOUT_B1F', x: 12, y: 2 },
     'mt-chimney': { mapId: 'MAP_MT_CHIMNEY_CABLE_CAR_STATION', x: 6, y: 10 },
     'space-center': { mapId: 'MAP_MOSSDEEP_CITY_SPACE_CENTER_1F', x: 13, y: 2 },
+    // Under the door, and up all six clean floors (story-sky-pillar.txt walks the door).
+    'sky-pillar': { mapId: 'MAP_SKY_PILLAR_OUTSIDE', x: 14, y: 6 },
   };
   it('a bot outside walks in and takes it', () => {
     for (const story of STORIES.filter((s) => !s.boat && !s.noBots)) {
