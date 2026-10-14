@@ -37,6 +37,7 @@ const CARVANHA = 330;
 const SHARPEDO = 331;
 const CAMERUPT = 340;
 const GROUDON = 405;
+const RAYQUAZA = 406;
 const CASTFORM = 385;
 const LATIAS = 407;
 const LATIOS = 408;
@@ -85,6 +86,11 @@ export const FLYING: ReadonlySet<number> = new Set([6, 12, 16, 17, 18, 21, 22, 4
  *  cluster, with its legendary (director.ts). */
 export const STORY_CHANCE = 0.5;
 
+/** How often a match centres its ring on a final story's section, which then holds that
+ *  story for the last event (director.ts). SKY PILLAR's final ring takes in Route 131 and
+ *  SOOTOPOLIS's Route 126, sea a bot can reach to fight in; the story itself it cannot. */
+export const FINAL_CHANCE = 0.25;
+
 export interface Story {
   id: string;
   /** What the ticker and the record say it is. */
@@ -97,6 +103,12 @@ export interface Story {
   mapsec?: number;
   /** Reached by the Lilycove ferry, which a bot never takes. */
   boat?: boolean;
+  /** A final ring's story (the director's FINAL_CHANCE): a match may centre its ring on
+   *  this story's section and hold it for the last event. */
+  final?: boolean;
+  /** Somewhere the bots' world does not go (a dive, a floor it has no way up to): a bot
+   *  leaves it alone, as it does an island. */
+  noBots?: boolean;
   /** Its world.json map: where every piece lies. */
   map: string;
   /** The mons it gives, one ball each: one species out of each list. */
@@ -341,6 +353,30 @@ export const STORIES: readonly Story[] = [
     cells: [{ x: 11, y: 13 }, { x: 10, y: 12 }, { x: 12, y: 12 }],
     boat: true,
   },
+  // The final rings. RAYQUAZA at the top of SKY PILLAR, where it sleeps, its own gone for
+  // the match and the door already open (br_boot.c); SOOTOPOLIS's clash, KYOGRE or
+  // GROUDON at the CAVE OF ORIGIN's mouth, and the city's weather turning between rain and
+  // sun while it is there (br_story.c), so a fight in it starts in one or the other.
+  {
+    id: 'sky-pillar',
+    name: 'SKY PILLAR',
+    section: 'MAPSEC_SKY_PILLAR',
+    map: 'MAP_SKY_PILLAR_TOP',
+    mons: [[RAYQUAZA]],
+    cells: [{ x: 14, y: 5 }, { x: 13, y: 6 }, { x: 15, y: 6 }],
+    final: true,
+    noBots: true,
+  },
+  {
+    id: 'sootopolis',
+    name: 'SOOTOPOLIS CITY',
+    section: 'MAPSEC_SOOTOPOLIS_CITY',
+    map: 'MAP_SOOTOPOLIS_CITY',
+    mons: [[KYOGRE, GROUDON]],
+    cells: [{ x: 31, y: 34 }, { x: 30, y: 35 }, { x: 32, y: 35 }],
+    final: true,
+    noBots: true,
+  },
 ];
 
 /** The story an `event` told, or undefined for a cluster: its place and section, and its
@@ -376,7 +412,7 @@ export function storySealed(
     const cells = story.cells.map((c) => ({ ...c, map: c.map ?? story.map }));
     const i = cells.findIndex((c) => c.map === piece.mapId && c.x === piece.x && c.y === piece.y);
     if (i < 0) continue;
-    if (story.boat) return true; // a bot never takes the ferry
+    if (story.boat || story.noBots) return true; // a bot never takes the ferry, or dives
     const wants = story.people?.find((p) => p.at === i)?.wants;
     if (wants !== undefined && !bot.has(wants)) return true;
     // A gate's boss's own piece is open: the bot fights him for it (storyGuard). The rest

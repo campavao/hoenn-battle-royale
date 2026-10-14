@@ -265,6 +265,12 @@ static void ClearTheLateStory(void)
     FlagSet(FLAG_DEFEATED_MEW);
     FlagSet(FLAG_DEFEATED_HO_OH);
     FlagSet(FLAG_DEFEATED_LUGIA);
+    // SKY PILLAR is open (its door is shut until Wallace has gone up, SkyPillar_Outside's
+    // OnLoad) and its RAYQUAZA is gone: the sleeping one is not in the hide block, and the
+    // story's is a ball where it slept.
+    FlagSet(FLAG_WALLACE_GOES_TO_SKY_PILLAR);
+    FlagSet(FLAG_HIDE_SKY_PILLAR_TOP_RAYQUAZA_STILL);
+    FlagSet(FLAG_DEFEATED_RAYQUAZA);
     // MIRAGE TOWER stands every time you come onto Route 111, not on a coin flip each
     // visit that every ROM throws for itself: it is a story event's place, and its two
     // fossils are the event's (web/src/match/story.ts). Its own two stay hidden above:

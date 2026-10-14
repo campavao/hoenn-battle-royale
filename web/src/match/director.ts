@@ -28,7 +28,7 @@ import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
 import { clusterCells, EVENT_CELLS, eventDrop, eventForRing } from './events';
 import { giftDrop, isGiftSection } from './gifts';
 import { sectionInside } from './ring';
-import { STORIES, STORY_CHANCE, storyCells, storyDrop, storyOf } from './story';
+import { FINAL_CHANCE, STORIES, STORY_CHANCE, storyCells, storyDrop, storyOf, type Story } from './story';
 import type { EventMsg, MapRef, Msg, Pace } from '../net/wire';
 
 export const DEFAULT_SAFARI_SECS = 120;
@@ -233,6 +233,8 @@ export class Director {
   private ringSection?: SectionCells;
   /** The story events this match has had (story.ts), none twice. */
   private readonly told = new Set<string>();
+  /** The final story the ring is centred on, held for the last event (FINAL_CHANCE). */
+  private finalStory?: Story;
   private readonly aliveSeats: Set<number>;
   private readonly placements: number[] = [];
   private winner: number | undefined;
@@ -327,6 +329,14 @@ export class Director {
       const c = sectionCentre(s.section);
       return c.sx === state.centre!.sx && c.sy === state.centre!.sy;
     });
+    // ...or a final story's, which is known by its name as well: the ring's place.
+    const final = STORIES.find((s) => {
+      const section = this.opts.world.sections[s.section];
+      if (!s.final || !section || section.name !== state.centre!.place) return false;
+      const c = sectionCentre(section);
+      return c.sx === state.centre!.sx && c.sy === state.centre!.sy;
+    });
+    if (final) this.centreOnFinal(final);
     // tickRing measures from the start of the WHOLE ring, not of this phase, so the
     // back-date is every phase before this one plus the part of this one that has gone.
     const goneThisPhase = Math.max(0, this.fogSecs - state.secsLeftInPhase);
@@ -486,11 +496,28 @@ export class Director {
     this.phase = 'ring';
     this.ringStartedAt = this.opts.now();
     this.ringIndex = 0;
-    const section = this.sections[pickIndex(this.rng, this.sections.length)];
-    const { sx, sy } = sectionCentre(section.section);
-    this.ringCentre = { sx, sy, place: section.section.name };
-    this.ringSection = section;
+    const finals = STORIES.filter((s) => s.final && this.storyOnMaps(s) && this.opts.world.sections[s.section]?.num !== undefined);
+    if (finals.length > 0 && this.rng() < FINAL_CHANCE) {
+      this.centreOnFinal(finals[pickIndex(this.rng, finals.length)]);
+    } else {
+      const section = this.sections[pickIndex(this.rng, this.sections.length)];
+      const { sx, sy } = sectionCentre(section.section);
+      this.ringCentre = { sx, sy, place: section.section.name };
+      this.ringSection = section;
+    }
     this.emitRing();
+  }
+
+  /** The ring on a final story (Cam: "final ring: centres on the last event"): on its
+   *  section's centre, and the section a cluster falls back to is the outdoor one there
+   *  with cells (SKY PILLAR's Route 131, SOOTOPOLIS's Route 126), since neither has a cell
+   *  of its own to drop on. The story waits for the last event. */
+  private centreOnFinal(story: Story): void {
+    const section = this.opts.world.sections[story.section];
+    const { sx, sy } = sectionCentre(section);
+    this.ringCentre = { sx, sy, place: section.name };
+    this.ringSection = this.sections.find((s) => sectionInside(s.section, { sx, sy, r: 0 }));
+    this.finalStory = story;
   }
 
   private tickRing(): void {
@@ -555,6 +582,10 @@ export class Director {
     // The last event is the final ring's, so a story takes it only in the ring's own
     // section.
     const reaches = (r: number) => (s: DirectorWorld['sections'][string]) => sectionInside(s, { sx, sy, r });
+    if (next <= 0 && this.finalStory && !this.told.has(this.finalStory.id)) {
+      this.tellStory(n, this.finalStory);
+      return;
+    }
     const where =
       next <= 0
         ? [(s: DirectorWorld['sections'][string]) => s.num !== undefined && s.num === this.ringSection?.section.num]
@@ -590,18 +621,30 @@ export class Director {
     for (const w of where) {
       open = STORIES.filter((s) => {
         const section = this.opts.world.sections[s.section];
-        const maps = [s.map, ...s.cells.flatMap((c) => (c.map ? [c.map] : []))];
-        return !this.told.has(s.id) && maps.every((id) => this.mapRefOf(id) !== undefined) && section?.num !== undefined && w(section);
+        return !this.told.has(s.id) && s !== this.finalStory && this.storyOnMaps(s) && section?.num !== undefined && w(section);
       });
       if (open.length > 0) break;
     }
     if (open.length === 0 || this.rng() >= STORY_CHANCE) return false;
+    // A final story in reach is the one told (story-events plan: "Sootopolis and Sky
+    // Pillar are preferred").
+    const finals = open.filter((s) => s.final);
+    if (finals.length > 0) open = finals;
     // The islands are one pick between them (PR #36 review): five boat rows in Lilycove's
     // section would weight it five to one against any other place, and bots never sail.
     const land = open.filter((s) => !s.boat);
     const boats = open.filter((s) => s.boat);
     const i = pickIndex(this.rng, land.length + (boats.length > 0 ? 1 : 0));
-    const story = i < land.length ? land[i] : boats[pickIndex(this.rng, boats.length)];
+    this.tellStory(n, i < land.length ? land[i] : boats[pickIndex(this.rng, boats.length)]);
+    return true;
+  }
+
+  /** Every map the story lies on is one this world has. */
+  private storyOnMaps(s: Story): boolean {
+    return [s.map, ...s.cells.flatMap((c) => (c.map ? [c.map] : []))].every((id) => this.mapRefOf(id) !== undefined);
+  }
+
+  private tellStory(n: number, story: Story): void {
     const map = this.markTold(story);
     for (const msg of storyDrop(this.rng, story, {
       n,
@@ -613,7 +656,6 @@ export class Director {
       cells: storyCells(story, (id) => this.mapRefOf(id)!),
     }))
       this.opts.send(msg);
-    return true;
   }
 
   /** The story is told: never again, and its cells are nobody else's. */

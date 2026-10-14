@@ -90,7 +90,9 @@ describe('story events', () => {
         if (s.boat) continue;
         const ways = entries(map);
         expect(ways.length, s.id).toBeGreaterThan(0);
-        expect(HOENN.world.hops('MAP_LITTLEROOT_TOWN', map, true, true), s.id).toBeDefined();
+        // SOOTOPOLIS's way in is a dive and SKY PILLAR's top a floor the world has no way
+        // up to: on their own maps they are a walk all the same.
+        if (!s.noBots) expect(HOENN.world.hops('MAP_LITTLEROOT_TOWN', map, true, true), s.id).toBeDefined();
         const ok = ways.some((w) => HOENN.world.reachOnMap(w, true, true).cell(c.x, c.y));
         expect(ok, `${s.id} ${c.x},${c.y}`).toBe(true);
       }
@@ -125,7 +127,7 @@ describe('story events', () => {
 
   it('the director tells a story this ring reaches when the match has one, never the same one twice', () => {
     const told = new Map<string, number>();
-    for (let seed = 1; seed <= 300; seed++) {
+    for (let seed = 1; seed <= 800; seed++) {
       const sent = run(seed);
       // By storyOf, which knows a story from a cluster in a section of the same name.
       const of = (e: EventMsg) => storyOf(e, SECTIONS, (id) => HOENN.refOf(id));
@@ -141,8 +143,9 @@ describe('story events', () => {
         expect(e.mapsec).toBe(story.mapsec ?? SECTIONS[story.section].num);
       }
     }
-    // Over three hundred matches every story comes up somewhere: the ring can centre
-    // anywhere the drop can (landing.json, which surfs), east of Lilycove too.
+    // Over eight hundred matches every story comes up somewhere: the ring can centre
+    // anywhere the drop can (landing.json, which surfs), east of Lilycove too, and the
+    // islands, one pick between the five of them, each turn up.
     expect(STORIES.map((s) => s.name).filter((n) => !told.has(n))).toEqual([]);
   });
 
@@ -157,6 +160,51 @@ describe('story events', () => {
       const section = dock ? SECTIONS[dock.section].num : last.mapsec;
       expect(section, `seed ${seed}`).toBe(Object.values(SECTIONS).find((s) => s.name === ring.place)?.num);
     }
+  });
+
+  it('centres a match in four on a final story and tells it last, never before', () => {
+    const finals = STORIES.filter((s) => s.final);
+    const byName = new Map(finals.map((s) => [SECTIONS[s.section].name, s]));
+    let centred = 0;
+    for (let seed = 1; seed <= 300; seed++) {
+      const sent = run(seed);
+      const ring = sent.find((m) => m.t === 'ring') as RingMsg;
+      const story = byName.get(ring.place ?? '');
+      if (!story) continue;
+      centred++;
+      const events = sent.filter((m) => m.t === 'event') as EventMsg[];
+      const told = events.filter((e) => storyOf(e, SECTIONS, (id) => HOENN.refOf(id))?.id === story.id);
+      expect(told.map((e) => e.n), `seed ${seed}`).toEqual([EVENT_MAX - 1]);
+      expect(told[0].mapsec).toBe(SECTIONS[story.section].num);
+    }
+    expect(centred).toBeGreaterThan(50);
+    expect(centred).toBeLessThan(110);
+  });
+
+  it('keeps a final ring when another host takes it over', () => {
+    let taken = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      let t = 0;
+      const sent: Msg[] = [];
+      const mk = () => new Director({ seats: [0, 1], seed, world: WORLD, options: { safariSecs: 5, fogSecs: 10 }, send: (m) => sent.push(m), now: () => t, onOut: () => () => {} });
+      const a = mk();
+      a.start();
+      t += 5000;
+      a.tick();
+      const ring = sent.find((m) => m.t === 'ring') as RingMsg;
+      const story = STORIES.find((s) => s.final && SECTIONS[s.section].name === ring.place);
+      if (!story) continue;
+      const b = mk();
+      b.resume({ ringPhase: ring.phase, centre: { sx: ring.sx, sy: ring.sy, place: ring.place }, secsLeftInPhase: 1, events: [] });
+      for (let i = 0; i < 9; i++) {
+        t += 10000;
+        b.tick();
+      }
+      const last = (sent.filter((m) => m.t === 'event') as EventMsg[]).find((e) => e.n === EVENT_MAX - 1)!;
+      expect(last.place, `seed ${seed}`).toBe(story.name);
+      taken++;
+    }
+    expect(taken).toBeGreaterThan(5);
   });
 
   it('a host that takes the match over does not tell a story the old one told', () => {
@@ -206,7 +254,7 @@ describe('story events', () => {
     'space-center': { mapId: 'MAP_MOSSDEEP_CITY_SPACE_CENTER_1F', x: 13, y: 2 },
   };
   it('a bot outside walks in and takes it', () => {
-    for (const story of STORIES.filter((s) => !s.boat)) {
+    for (const story of STORIES.filter((s) => !s.boat && !s.noBots)) {
       const from = OUTSIDE[story.id];
       expect(from, story.id).toBeDefined();
       const key = eventKey(0, 0);
