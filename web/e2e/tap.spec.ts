@@ -60,18 +60,23 @@ test('a tap on a tile walks the trainer to it', async ({ browser }) => {
     }
     expect(before.group, 'standing somewhere real').toBeGreaterThan(0);
 
-    // Somewhere on screen, a few steps away, that the world says is reachable.
+    // Somewhere on screen, a few steps away, that the world says is reachable over plain
+    // ground (class 0) only: a step into tall grass can start a wild battle, a door or
+    // warp takes the trainer off the map, and a ledge jumps past the tile. Any of them
+    // stops the walk short of the goal; this test is about the tap, not the route.
     const maps = (worldData as { maps: WorldMap[] }).maps;
     const world = new World(maps);
     const id = maps.find((m) => m.group === before.group && m.num === before.num)!.id;
+    const plain = (x: number, y: number) => world.cell(id, x, y) === 0;
     const from = { map: id, x: before.x - MAP_OFFSET, y: before.y - MAP_OFFSET };
     let goal: { x: number; y: number; dx: number; dy: number } | null = null;
-    outer: for (const d of [3, 2, 4]) {
+    outer: for (const d of [3, 2, 4, 1]) {
       for (const [dx, dy] of [[d, 0], [-d, 0], [0, d], [0, -d], [d, 1], [-d, -1], [1, d], [-1, -d]] as [number, number][]) {
         const to = { map: id, x: from.x + dx, y: from.y + dy };
-        if (!world.standable(id, to.x, to.y)) continue;
+        if (!plain(to.x, to.y)) continue;
         const p = findPath(world, from, to);
-        if (p.found && p.steps.length > 0 && p.steps.length <= 8 && p.steps.every((s) => s.to.map === id)) {
+        if (p.found && p.steps.length > 0 && p.steps.length <= 8
+          && p.steps.every((s) => s.to.map === id && plain(s.to.x, s.to.y))) {
           goal = { x: to.x, y: to.y, dx, dy };
           break outer;
         }
