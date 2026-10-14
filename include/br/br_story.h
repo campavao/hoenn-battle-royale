@@ -46,7 +46,8 @@ bool8 BrStory_Hands(const struct BrLootItem *it);
 // object he stands as is the story's piece, and what he gives is its reward.
 bool8 BrStory_IsGate(u16 trainerId);
 
-// The special the gate's post-battle script calls: the win hands over what he held.
+// The special the gate's post-battle script calls: the win hands over what he held, or
+// says SOMEBODY GOT THERE FIRST; he is beaten for this match either way.
 void BrStory_GateBeaten(void);
 
 #endif // GUARD_BR_STORY_H

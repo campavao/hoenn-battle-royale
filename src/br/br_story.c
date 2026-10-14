@@ -206,10 +206,21 @@ static const struct BrStoryPerson sPeople[] =
     {MAP_GROUP(MAP_MOSSDEEP_CITY_SPACE_CENTER_2F), MAP_NUM(MAP_MOSSDEEP_CITY_SPACE_CENTER_2F), 1, 9, OBJ_EVENT_GFX_MAXIE, ITEM_NONE, TRAINER_MAXIE_MOSSDEEP, BR_EventScript_GateMaxieSpace, sName_Maxie},
 };
 
-// The gate fight under way, by the piece its boss holds; and the one we have won, which
-// the next Take of that piece hands over without asking for the fight again.
+// The gate fight under way, by the piece its boss holds; and the bosses we have beaten
+// this match, a bit per event (key 0xB000 | n << 4 | i), whose piece any later Take hands
+// over without the fight again: a full party parks the mon, and a cancelled release
+// screen leaves it on the ground for the next A (story-gate-full). The match is the
+// seed's low half, so a new match's same key is a new boss.
+static const u8 sText_TakenFirst[] = _("SOMEBODY GOT THERE FIRST");
+
 static EWRAM_DATA u16 sGateKey = 0;
-static EWRAM_DATA u16 sGateWon = 0;
+static EWRAM_DATA u16 sGateSeed = 0;
+static EWRAM_DATA u8 sGatesWon = 0;
+
+static bool8 GateWon(u16 key)
+{
+    return sGateSeed == (u16)gBrMatch.seed && (sGatesWon >> ((key >> 4) & 7)) & 1;
+}
 
 static bool8 OnMap(const struct BrStoryPerson *person, u8 mapGroup, u8 mapNum)
 {
@@ -296,11 +307,8 @@ bool8 BrStory_Hands(const struct BrLootItem *it)
     }
     if (person->trainer != TRAINER_NONE)
     {
-        if (sGateWon == it->key)
-        {
-            sGateWon = 0;
+        if (GateWon(it->key))
             return TRUE;
-        }
         // The fight first, his own: one shot, and a loss is a loss like any trainer's.
         // Each ROM fights him for itself; whoever wins first takes it from the room.
         ClearTrainerFlag(person->trainer);
@@ -322,10 +330,21 @@ bool8 BrStory_Hands(const struct BrLootItem *it)
 }
 
 // The gate's boss fell (BR_EventScript_GateBeaten): what he held is ours, if nobody
-// else beat him to it while we fought.
+// else beat him to it while we fought; if somebody did, say so.
 void BrStory_GateBeaten(void)
 {
-    sGateWon = sGateKey;
+    u16 key = sGateKey;
+
     sGateKey = 0;
-    BrLoot_TakeKey(sGateWon);
+    if (sGateSeed != (u16)gBrMatch.seed)
+    {
+        sGateSeed = gBrMatch.seed;
+        sGatesWon = 0;
+    }
+    sGatesWon |= 1 << ((key >> 4) & 7);
+    if (!BrLoot_TakeKey(key))
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_TakenFirst);
+    }
 }

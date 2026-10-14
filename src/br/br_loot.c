@@ -971,7 +971,7 @@ static void TryTake(void)
     Take(it);
 }
 
-void BrLoot_TakeKey(u16 key)
+bool8 BrLoot_TakeKey(u16 key)
 {
     u8 i;
 
@@ -980,9 +980,10 @@ void BrLoot_TakeKey(u16 key)
         if (gBrLoot.items[i].kind != BR_LOOT_NONE && gBrLoot.items[i].key == key && OnCurrentMap(&gBrLoot.items[i]))
         {
             Take(&gBrLoot.items[i]);
-            return;
+            return TRUE;
         }
     }
+    return FALSE;
 }
 
 // ---- Hoenn's own trainers -------------------------------------------------------

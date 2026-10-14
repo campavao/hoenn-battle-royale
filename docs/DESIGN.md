@@ -255,8 +255,11 @@ out, and one that comes in waits as it would in a menu.
   METEORITE on MT. CHIMNEY and the SPACE CENTER's SUN STONE (those two with two rares).
   A at him is his own trainer fight, one page of speech; the win hands over what he
   held, and the rest of his story waits until then ("MAXIE GUARDS IT"). Each ROM fights
-  him for itself and whoever wins first takes it from the room; his win drops no team. A
-  bot takes his piece as though it beat him. A story with no legendary in it is "A RARE
+  him for itself and whoever wins first takes it from the room; his win drops no team, and
+  a win that comes too late says SOMEBODY GOT THERE FIRST. At MT. CHIMNEY and the SPACE
+  CENTER he holds the stone and the two rares open when he falls. A bot that steps up to
+  him fights him through `duel()` with his own team at the rung: a loss puts it out, as it
+  does a player, and a win leaves it hurt. A story with no legendary in it is "A RARE
   FIND AT" on the ticker, not "A LEGENDARY".
 - **Gift-givers** (Cam, 2026-10-13): at the buzzer the host stands one person in every
   town and city (`match/gifts.ts`), holding one held item (LEFTOVERS, CHOICE BAND, QUICK

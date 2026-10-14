@@ -258,6 +258,44 @@ describe('bots walking', () => {
     expect(sent.some((m) => m.t === 'pickup' && m.key === 0xb001)).toBe(true);
   });
 
+  // PR #33 review: a gate's boss is fought for, not walked past. A loss puts the bot out,
+  // as it does a player (src/overworld.c); a win leaves it hurt, and the piece is its.
+  it("fights a gate's boss before it takes his piece, and goes out if it loses", () => {
+    const boss = (level: number): PackedMon[] =>
+      [287, 169, 340].map((species) => ({
+        species, level, hp: 300, maxHp: 300, status: 0, moves: [{ id: 33, pp: 25, ppUps: 0 }],
+        heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: 'BOSS', ot: 'BR',
+      }));
+    const fight = (level: number) => {
+      const ground = new Map<number, { mapId: string; x: number; y: number }>([[0xb000, { mapId: 'FIELD', x: 3, y: 3 }]]);
+      const ran = eventBots({
+        seed: 11,
+        loot: {
+          all: () => [...ground].map(([key, at]) => ({ key, mapId: at.mapId, ...pageCell(at.x, at.y) })),
+          at: (mapId, { x, y }) => [...ground].find(([, c]) => c.mapId === mapId && c.x === x && c.y === y)?.[0],
+        },
+        guard: (piece) => (piece.key === 0xb000 ? boss(level) : undefined),
+      });
+      const before = ran.bots.partyOf(ran.dealt[0].seat).map((mon) => mon.hp);
+      for (let t = STEP_MS; t <= 30_000 && ran.bots.count() > 0; t += STEP_MS) {
+        ran.bots.tick(t);
+        for (const msg of ran.sent) if (msg.t === 'pickup') ground.delete(msg.key);
+      }
+      return { ...ran, before };
+    };
+
+    const lost = fight(100);
+    expect(lost.decisions.some((d) => d.rule === 'gate' && d.detail === 'lost at key 45056')).toBe(true);
+    expect(lost.sent.some((m) => m.t === 'out' && m.seat === lost.dealt[0].seat)).toBe(true);
+    expect(lost.sent.some((m) => m.t === 'pickup' && m.key === 0xb000)).toBe(false);
+
+    const won = fight(1);
+    expect(won.decisions.some((d) => d.rule === 'gate' && d.detail === 'won at key 45056')).toBe(true);
+    expect(won.sent.some((m) => m.t === 'pickup' && m.key === 0xb000)).toBe(true);
+    const after = won.bots.partyOf(won.dealt[0].seat).map((mon) => mon.hp);
+    expect(after.some((hp, i) => hp < won.before[i])).toBe(true);
+  });
+
   it("trades with an event's trader once, for the whole room, and keeps his mon up the rungs", () => {
     let standing = [{ key: 0xb00f, species: 131, mapId: 'PATH', ...pageCell(2, 3) }];
     const { bots, sent, dealt } = eventBots({ traders: () => standing }, 2);
