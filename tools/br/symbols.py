@@ -53,6 +53,10 @@ ENGINE_SYMBOLS = [
     # The start menu's input handler is gMenuCallback while the menu takes keys: the
     # page's PARTY and MAP buttons wait for it before they walk the cursor (br_menu.h).
     "gMenuCallback",
+    # The phone's battle menu reads what a move is out of the ROM's own tables
+    # (web/src/battle/movebook.ts): its stats, name, description, type name, and how
+    # well each type lands on each.
+    "gBattleMoves", "gMoveNames", "gMoveDescriptionPointers", "gTypeNames", "gTypeEffectiveness",
     # The fog map's prompt, "FOG: <place>", is built here (br_map.c, ring-map.txt).
     "gStringVar4",
     # What a bot's AI was handed out of its bag, and what it chose to do with its turn

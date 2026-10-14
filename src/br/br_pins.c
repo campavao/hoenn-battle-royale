@@ -22,6 +22,7 @@
 #include "field_weather.h"
 #include "battle.h"
 #include "battle_controllers.h"
+#include "pokemon.h"
 #include "br/br_config.h"
 
 // gMain: callback2 (MAIN_CALLBACK2); inBattle is in the u8 run straight after state
@@ -109,3 +110,11 @@ BR_OFFSET(ChooseMoveStruct, moves, 0)
 BR_OFFSET(SaveBlock1, registeredItem, 0x496)
 BR_OFFSET(PlayerAvatar, flags, 0x00)
 BR_OFFSET(PlayerAvatar, transitionFlags, 0x01)
+
+// gBattleMoves (web/src/battle/movebook.ts): power, type, accuracy and pp, in an entry
+// rounded up to a word.
+BR_OFFSET(BattleMove, power, 1)
+BR_OFFSET(BattleMove, type, 2)
+BR_OFFSET(BattleMove, accuracy, 3)
+BR_OFFSET(BattleMove, pp, 4)
+STATIC_ASSERT(sizeof(gBattleMoves[0]) == 12, BrPin_gBattleMoves_entry)

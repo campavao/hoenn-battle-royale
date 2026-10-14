@@ -60,6 +60,9 @@ import constantsGlobalH from '../../include/constants/global.h?raw';
 import globalH from '../../include/global.h?raw';
 import fieldmapH from '../../include/global.fieldmap.h?raw';
 import mainH from '../../include/main.h?raw';
+import pokemonH from '../../include/pokemon.h?raw';
+import constantsPokemonH from '../../include/constants/pokemon.h?raw';
+import battleMainH from '../../include/battle_main.h?raw';
 import spriteH from '../../include/sprite.h?raw';
 import gbaTypesH from '../../include/gba/types.h?raw';
 import fieldCameraH from '../../include/field_camera.h?raw';
@@ -103,6 +106,7 @@ import * as field from './field';
 import * as ghosts from './field-ghosts';
 import * as touch from './touch';
 import * as phone from './ui/phonehud';
+import * as movebook from './battle/movebook';
 
 // ---- reading C -----------------------------------------------------------------------
 
@@ -864,6 +868,21 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     const wrote = /sBattleBuffersTransferData\[(\d+) \+ i\] = \*\(\(u8 \*\)\(movePPData\) \+ i\)/.exec(controllersC);
     expect([Number(read?.[1]), Number(wrote?.[1])]).toEqual([touch.CHOOSE_MOVE_MOVES, touch.CHOOSE_MOVE_MOVES]);
     expect(watch('ChooseMoveStruct', natural(controllersH, 'ChooseMoveStruct', [constantsGlobalH])).at.moves).toBe(0);
+  });
+
+  it("what a move is, read out of the ROM's tables (battle/movebook.ts)", () => {
+    const move = watch('BattleMove', natural(pokemonH, 'BattleMove'));
+    expect([movebook.MOVE_POWER, movebook.MOVE_TYPE, movebook.MOVE_ACCURACY, movebook.MOVE_PP]).toEqual([move.at.power, move.at.type, move.at.accuracy, move.at.pp]);
+    // agbcc (and modern, with -mstructure-size-boundary=32) rounds a struct up to a word:
+    // nine bytes of fields, twelve to an entry.
+    expect(movebook.MOVE_SIZE).toBe(Math.ceil(natural(pokemonH, 'BattleMove').size / 4) * 4);
+    expect(pinned('sizeof gBattleMoves[0]'), 'src/br/br_pins.c').toBe(movebook.MOVE_SIZE);
+    expect(movebook.MOVE_NAME_SIZE).toBe(define(constantsGlobalH, 'MOVE_NAME_LENGTH') + 1);
+    expect(movebook.TYPE_NAME_SIZE).toBe(define(constantsGlobalH, 'TYPE_NAME_LENGTH') + 1);
+    expect(movebook.TYPE_MYSTERY).toBe(define(constantsPokemonH, 'TYPE_MYSTERY'));
+    expect([movebook.TYPE_FORESIGHT, movebook.TYPE_ENDTABLE, movebook.TYPE_MUL_NORMAL]).toEqual(
+      ['TYPE_FORESIGHT', 'TYPE_ENDTABLE', 'TYPE_MUL_NORMAL'].map((n) => define(battleMainH, n)),
+    );
   });
 
   it("the keys are KEYINPUT's bits", () => {
