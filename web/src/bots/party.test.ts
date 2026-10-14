@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { dealParty, evolutionOf, grownUp, LADDER, rungForPhase, speciesAt } from './party';
+import { dealParty, evolutionOf, grownUp, LADDER, POOL, rungForPhase, speciesAt, speciesName } from './party';
+import speciesH from '../../../include/constants/species.h?raw';
 import { packSlot, unpackSlot, reassembleSlots } from '../net/slots';
 import type { PartyMsg } from '../net/wire';
 
@@ -100,5 +101,21 @@ describe('growing up', () => {
   it('leaves alone something that does not grow up on levels', () => {
     expect(evolutionOf(317)).toBeUndefined(); // KECLEON
     expect(grownUp(317, 100)).toBe(317);
+  });
+});
+
+describe('the fallback pool', () => {
+  // The ids were once written in National Dex order shifted by hand, so a row named
+  // TAILLOW dealt a LOMBRE and six of twelve rows were somebody else.
+  const ids = new Map<string, number>();
+  for (const m of speciesH.matchAll(/^#define SPECIES_(\w+) (\d+)$/gm)) ids.set(m[1], Number(m[2]));
+
+  it('deals each row the species its name says, by the ROM\'s own ids', () => {
+    expect(ids.get('TAILLOW')).toBe(304);
+    for (const row of POOL) expect(row.species, row.name).toBe(ids.get(row.name));
+  });
+
+  it('names a dealt mon by its species', () => {
+    for (const row of POOL) expect(speciesName(row.species)).toBe(row.name);
   });
 });
