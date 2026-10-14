@@ -3159,8 +3159,10 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
 
   return new Promise<RoomHash>((resolve) => {
     let timer: ReturnType<typeof setInterval> | null = null;
+    let browseWhileSeen = (): void => {};
     const done = (hash: RoomHash) => {
       if (timer) clearInterval(timer);
+      document.removeEventListener('visibilitychange', browseWhileSeen);
       relay.close();
       stage.hide();
       resolve(hash);
@@ -3414,7 +3416,6 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       rooms = ev.rooms;
       redraw();
     });
-    relay.connect((import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL);
     // There is no 'open' event to hang this on, so the refresh tick is also what
     // notices the socket came up. A short first beat so the list is not blank for
     // three seconds on a connection that was ready immediately.
@@ -3426,7 +3427,21 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       }
       if (up) relay.listRooms(version);
     };
-    setTimeout(beat, 200);
+    // The list is browsed only while it is looked at. A hidden tab's timers are held to
+    // one a minute, so its socket used to ask once, go quiet past the relay's unbound
+    // sweep, be cut, reconnect and ask once again, every minute for as long as the tab
+    // stayed open (the play log, 2026-10-13: hours of it). Hidden, the socket closes;
+    // seen again, it opens and asks at once.
+    browseWhileSeen = () => {
+      if (document.hidden) {
+        relay.close();
+        return;
+      }
+      relay.connect((import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL);
+      setTimeout(beat, 200);
+    };
+    document.addEventListener('visibilitychange', browseWhileSeen);
+    browseWhileSeen();
     timer = setInterval(beat, LOBBY_REFRESH_MS);
   });
 }

@@ -102,6 +102,40 @@ test("a host away from its tab takes the room off LOBBIES, and puts it back on r
   }
 });
 
+test('a lobby in a hidden tab lets go of its socket, and browses again on return', async ({ page }) => {
+  // The play log (2026-10-13): a hidden lobby tab, its timers held to one a minute,
+  // was cut by the relay's unbound sweep and reconnected every minute for hours.
+  test.setTimeout(90_000);
+  const sockets: { closed: boolean; asked: number }[] = [];
+  page.on('websocket', (ws) => {
+    // The relay's (playwright.config's RELAY_PORT), not the dev server's hot-reload one.
+    if (!ws.url().includes(':7791')) return;
+    const s = { closed: false, asked: 0 };
+    sockets.push(s);
+    ws.on('close', () => { s.closed = true; });
+    ws.on('framesent', (f) => { if (String(f.payload).includes('"list_rooms"')) s.asked++; });
+  });
+  await page.goto(`/#rom=${romHashParam()}`);
+  await expect(page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({ timeout: 60_000 });
+  await expect.poll(() => sockets[0]?.asked ?? 0, { timeout: 20_000 }).toBeGreaterThan(0);
+
+  const setHidden = (hidden: boolean) =>
+    page.evaluate((h) => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, hidden);
+
+  await setHidden(true);
+  await expect.poll(() => sockets.every((s) => s.closed), { timeout: 10_000 }).toBe(true);
+  // Hidden, nothing reconnects: past two refresh beats and the client's first backoff.
+  await page.waitForTimeout(12_000);
+  expect(sockets).toHaveLength(1);
+
+  await setHidden(false);
+  await expect.poll(() => sockets[1]?.asked ?? 0, { timeout: 10_000 }).toBeGreaterThan(0);
+  await expect(page.locator('#lobby-rows button', { hasText: 'LOBBIES' })).toBeVisible();
+});
+
 test('SOLO VS BOTS opens no socket', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(`/#rom=${romHashParam()}`);
