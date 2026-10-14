@@ -352,6 +352,9 @@ const brSources = {
 
 const brAll = Object.values(brSources);
 
+/** The wasm core's patch (tools/br/mgba-wasm), for what the core reads of the ROM's RAM. */
+const corePatch = (Object.values(import.meta.glob<string>('../../tools/br/mgba-wasm/hbr-exports.patch', { query: '?raw', import: 'default', eager: true }))[0] ?? '').replace(/\r\n/g, '\n');
+
 /** The BR source that declares `struct name`, if one does. A struct none does is pret's. */
 const brStructSource = (name: string) => brAll.find((s) => new RegExp(`^struct ${name}\\s*\\{`, 'm').test(s));
 
@@ -540,9 +543,9 @@ describe("the BR structs the page reads at an offset", () => {
 
   it("the box the ROM keeps objects in: BrField_InObjectView, and Emerald's own spawn and cull", () => {
     const brField = brSources['../../src/br/br_field.c'];
-    const view = /BrField_InObjectView\(s16 x, s16 y\)\s*\{\s*return x >= gSaveBlock1Ptr->pos\.x - (\d+) && x <= gSaveBlock1Ptr->pos\.x \+ (\d+)\s*&& y >= gSaveBlock1Ptr->pos\.y && y <= gSaveBlock1Ptr->pos\.y \+ (\d+);/.exec(brField);
-    expect(view, 'BrField_InObjectView reads as four bounds on pos').not.toBeNull();
-    expect(ghosts.VIEW).toEqual({ left: -Number(view![1]), right: Number(view![2]), top: 0, bottom: Number(view![3]) });
+    const view = /BrField_InObjectView\(s16 x, s16 y\)\s*\{\s*s16 top = gSaveBlock1Ptr->pos\.y;\s*s16 bottom = gSaveBlock1Ptr->pos\.y \+ (\d+);\s*BrField_GrowObjectBox\(&top, &bottom\);\s*return x >= gSaveBlock1Ptr->pos\.x - (\d+) && x <= gSaveBlock1Ptr->pos\.x \+ (\d+)\s*&& y >= top && y <= bottom;/.exec(brField);
+    expect(view, 'BrField_InObjectView reads as four bounds on pos, grown').not.toBeNull();
+    expect(ghosts.VIEW).toEqual({ left: -Number(view![2]), right: Number(view![3]), top: 0, bottom: Number(view![1]) });
     // The map's own people: spawned in one box and culled outside another, and both are it.
     const box = (fn: string): Record<string, number> => {
       const m = new RegExp(`${fn}\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`).exec(objectEventsC.replace(/\r\n/g, '\n'));
@@ -556,7 +559,21 @@ describe("the BR structs the page reads at an offset", () => {
     };
     expect(box('void TrySpawnObjectEvents')).toEqual(ghosts.VIEW);
     expect(box('static void RemoveObjectEventIfOutsideView')).toEqual(ghosts.VIEW);
+    for (const fn of ['void TrySpawnObjectEvents', 'static void RemoveObjectEventIfOutsideView']) {
+      const body = new RegExp(`${fn}\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`).exec(objectEventsC.replace(/\r\n/g, '\n'))![1];
+      expect(body, `${fn} grows its box as BrField_InObjectView does`).toMatch(/#if BR\s*BrField_GrowObjectBox\(&top, &bottom\);\s*#endif/);
+    }
     expect(ghosts.MAP_OFFSET).toBe(define(fieldmapFnH, 'MAP_OFFSET'));
+  });
+
+  it("the OAM side table is one layout on both sides: the ROM packs what the core's patch unpacks", () => {
+    const brField = brSources['../../src/br/br_field.c'];
+    const fieldH = brSources['../../include/br/br_field.h'];
+    // A nibble an entry, entry i in byte i / 2: two signed bits of y's 256s, two of x's 512s.
+    expect(brField).toMatch(/nibble = \(\(y >> 8\) & 3\) \| \(\(\(x >> 9\) & 3\) << 2\);\s*sOamHiNext\[index \/ 2\] \|= nibble << \(4 \* \(index & 1\)\);/);
+    expect(corePatch).toMatch(/int nibble = renderer->brOamHi\[sprite->index >> 1\] >> \(4 \* \(sprite->index & 1\)\);\s*\+\s*top \+= 256 \* \(\(\(nibble & 3\) \^ 2\) - 2\);/);
+    expect(define(fieldH, 'BR_OAM_HI_SIZE')).toBe(64);
+    expect(corePatch).toMatch(/brOamTable = offset >= 0 && offset \+ 64 <= GBA_SIZE_EWRAM/);
   });
 
   it("a ghost the page walks walks as DriveGhost walks its object: the queue, the pace, the stride (field-ghosts.ts, POK-323)", () => {

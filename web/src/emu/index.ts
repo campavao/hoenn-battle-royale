@@ -61,6 +61,10 @@ export interface CoreModule {
    *  512-row BGs and the weather. (0, 0) clears it. Older cores lack it, and repeat
    *  everything every 256 rows. */
   _brSetSpriteBand?(top: number, bottom: number): void;
+  /** The ROM's OAM side table (include/br/br_field.h gBrOamHi), at a byte offset into
+   *  EWRAM, -1 for none: with it the band draws every sprite at its true rows, however far
+   *  from the LCD. Older cores lack it. */
+  _brSetOamTable?(offset: number): void;
   /** The window the loaded core draws with, `top << 16 | bottom`, or -1 for none. */
   _brSpriteWindow?(): number;
   /** The picture's ABGR8888 pixels in the heap -- the texture's top-left, the LCD at
@@ -245,6 +249,15 @@ export class Emulator {
   setViewport(band: Band | null): Band | null {
     this.askedBand = band ? { ...band } : null;
     return this.nextBand();
+  }
+
+  /** Hand the core the ROM's OAM side table (gBrOamHi, an EWRAM address), or none.
+   *  Takes effect at once and at every boot after. False on a core that cannot read
+   *  one: then the ROM must keep its sprites in the sprite window (gBrFieldShown 0). */
+  setOamTable(addr: number | null): boolean {
+    if (!this.m._brSetOamTable) return false;
+    this.m._brSetOamTable(addr === null ? -1 : addr - EWRAM_BASE);
+    return addr !== null;
   }
 
   /** The sprite window the band is drawn with, on every boot from now on (POK-329): the

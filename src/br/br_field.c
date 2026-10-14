@@ -5,6 +5,7 @@
 #include "malloc.h"
 #include "overworld.h"
 #include "palette.h"
+#include "sprite.h"
 #include "task.h"
 #include "event_object_movement.h"
 #include "fieldmap.h"
@@ -216,16 +217,67 @@ const struct BrFieldView gBrFieldView =
     BR_SPRITE_BOTTOM,
 };
 
-// Sideways the view's own columns (16 more for a sprite's width); up and down the sprite
-// window, where a top has one reading -- past it the core would draw the sprite at the
-// other end, however tall the view is.
+EWRAM_DATA struct BrFieldShown gBrFieldShown = {0};
+EWRAM_DATA u8 gBrOamHi[BR_OAM_HI_SIZE] = {0};
+// Built with the OAM buffer, in IWRAM: EWRAM has no room for both copies.
+static u8 sOamHiNext[BR_OAM_HI_SIZE];
+
+// The rows past the LCD a sprite's top may be in and still be drawn: the rows the page
+// shows, when its core reads the side table; the sprite window otherwise, where a top
+// has one reading -- past it the core would draw the sprite at the other end.
+static s16 ShownTop(void)
+{
+    return gBrFieldShown.top > BR_SPRITE_TOP ? min(gBrFieldShown.top, BR_VIEW_TOP) : BR_SPRITE_TOP;
+}
+
+static s16 ShownBottom(void)
+{
+    return gBrFieldShown.bottom > BR_SPRITE_BOTTOM ? min(gBrFieldShown.bottom, BR_VIEW_BOTTOM) : BR_SPRITE_BOTTOM;
+}
+
+// Sideways the view's own columns (16 more for a sprite's width); up and down the rows
+// shown (ShownTop), 16 more below for a sprite whose top is above its feet.
 bool8 BrField_OffScreen(s16 x, s16 x2, s16 y)
 {
     if (x >= DISPLAY_WIDTH + BR_VIEW_RIGHT + 16 || x2 < -BR_VIEW_LEFT - 16)
         return TRUE;
-    if (y >= DISPLAY_HEIGHT + BR_SPRITE_BOTTOM || y < -BR_SPRITE_TOP)
+    if (y >= DISPLAY_HEIGHT + ShownBottom() || y < -ShownTop())
         return TRUE;
     return FALSE;
+}
+
+void BrField_OamClear(void)
+{
+    CpuFill16(0, sOamHiNext, sizeof(sOamHiNext));
+}
+
+void BrField_OamEntry(u8 index, const struct Sprite *sprite, s16 dx, s16 dy)
+{
+    s16 x = sprite->x + sprite->x2 + sprite->centerToCornerVecX + dx;
+    s16 y = sprite->y + sprite->y2 + sprite->centerToCornerVecY + dy;
+    u8 nibble;
+
+    if (sprite->coordOffsetEnabled)
+    {
+        x += gSpriteCoordOffsetX;
+        y += gSpriteCoordOffsetY;
+    }
+    nibble = ((y >> 8) & 3) | (((x >> 9) & 3) << 2);
+    sOamHiNext[index / 2] |= nibble << (4 * (index & 1));
+}
+
+void BrField_OamLatch(void)
+{
+    if (!gMain.oamLoadDisabled)
+        CpuCopy16(sOamHiNext, gBrOamHi, sizeof(gBrOamHi));
+}
+
+// pret's box runs 2 tiles past the sprite window's 40 rows above the LCD and its 56
+// below (the player's rows -7..+9); each 16 rows shown past those is a row more.
+void BrField_GrowObjectBox(s16 *top, s16 *bottom)
+{
+    *top -= (ShownTop() - BR_SPRITE_TOP + 15) / 16;
+    *bottom += (ShownBottom() - BR_SPRITE_BOTTOM + 15) / 16;
 }
 
 // ---- leaving the field -----------------------------------------------------------
@@ -397,8 +449,12 @@ void BrField_CancelLeave(void (*enter)(void))
 
 bool8 BrField_InObjectView(s16 x, s16 y)
 {
+    s16 top = gSaveBlock1Ptr->pos.y;
+    s16 bottom = gSaveBlock1Ptr->pos.y + 16;
+
+    BrField_GrowObjectBox(&top, &bottom);
     return x >= gSaveBlock1Ptr->pos.x - 2 && x <= gSaveBlock1Ptr->pos.x + 17
-        && y >= gSaveBlock1Ptr->pos.y && y <= gSaveBlock1Ptr->pos.y + 16;
+        && y >= top && y <= bottom;
 }
 
 // The homes of the wanderers BrField_KeepWhereLeft has moved, by map and local id (0 is

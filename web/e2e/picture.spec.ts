@@ -96,6 +96,7 @@ type Emu = {
   onFrame(fn: () => void): () => void;
   picture(): Pic | null;
   setSpriteBand(w: { top: number; bottom: number } | null): { top: number; bottom: number } | null;
+  setOamTable(addr: number | null): boolean;
   pause(): void;
   resume(): void;
   saveState(slot: number): boolean;
@@ -396,8 +397,11 @@ test("a 256-row band: a person crossing its bottom is drawn once, and the window
       await page.evaluate(() => (window as unknown as PicWindow).__hbr.emu.pause());
       return px;
     });
+    // The window is how a core with no OAM side table reads a y; this one has the table,
+    // which reads every sprite at its true rows whatever the window, so it is put away.
     await page.evaluate(() => {
       const emu = (window as unknown as PicWindow).__hbr.emu;
+      emu.setOamTable(null);
       emu.pause();
       if (!emu.saveState(7)) throw new Error('saveState');
     });

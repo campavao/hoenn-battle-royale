@@ -2,6 +2,9 @@
 #include "sprite.h"
 #include "main.h"
 #include "palette.h"
+#if BR
+#include "br/br_field.h"
+#endif
 
 #define MAX_SPRITE_COPY_REQUESTS 64
 
@@ -325,6 +328,9 @@ void AnimateSprites(void)
 void BuildOamBuffer(void)
 {
     u8 temp;
+#if BR
+    BrField_OamClear();
+#endif
     UpdateOamCoords();
     BuildSpritePriorities();
     SortSprites();
@@ -641,6 +647,9 @@ void LoadOam(void)
 {
     if (!gMain.oamLoadDisabled)
         CpuCopy32(gMain.oamBuffer, (void *)OAM, sizeof(gMain.oamBuffer));
+#if BR
+    BrField_OamLatch();
+#endif
 }
 
 void ClearSpriteCopyRequests(void)
@@ -1667,6 +1676,9 @@ bool8 AddSpriteToOamBuffer(struct Sprite *sprite, u8 *oamIndex)
     if (!sprite->subspriteTables || sprite->subspriteMode == SUBSPRITES_OFF)
     {
         gMain.oamBuffer[*oamIndex] = sprite->oam;
+#if BR
+        BrField_OamEntry(*oamIndex, sprite, 0, 0);
+#endif
         (*oamIndex)++;
         return FALSE;
     }
@@ -1690,6 +1702,9 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
     if (!subspriteTable || !subspriteTable->subsprites)
     {
         *destOam = *oam;
+#if BR
+        BrField_OamEntry(*oamIndex, sprite, 0, 0);
+#endif
         (*oamIndex)++;
         return FALSE;
     }
@@ -1745,6 +1760,9 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
             destOam[i].x = (s16)baseX + (s16)x;
             destOam[i].y = baseY + y;
             destOam[i].tileNum = tileNum + subspriteTable->subsprites[i].tileOffset;
+#if BR
+            BrField_OamEntry(*oamIndex, sprite, (s16)x - sprite->centerToCornerVecX, (s16)y - sprite->centerToCornerVecY);
+#endif
 
             if (sprite->subspriteMode != SUBSPRITES_IGNORE_PRIORITY)
                 destOam[i].priority = subspriteTable->subsprites[i].priority;

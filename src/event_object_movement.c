@@ -1669,6 +1669,9 @@ void TrySpawnObjectEvents(s16 cameraX, s16 cameraY)
         s16 right = gSaveBlock1Ptr->pos.x + MAP_OFFSET_W + 2;
         s16 top = gSaveBlock1Ptr->pos.y;
         s16 bottom = gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2;
+#if BR
+        BrField_GrowObjectBox(&top, &bottom);
+#endif
 
         if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE)
             objectCount = GetNumBattlePyramidObjectEvents();
@@ -1719,6 +1722,9 @@ static void RemoveObjectEventIfOutsideView(struct ObjectEvent *objectEvent)
     s16 top =    gSaveBlock1Ptr->pos.y;
     s16 bottom = gSaveBlock1Ptr->pos.y + 16;
 
+#if BR
+    BrField_GrowObjectBox(&top, &bottom);
+#endif
     if (objectEvent->currentCoords.x >= left && objectEvent->currentCoords.x <= right
      && objectEvent->currentCoords.y >= top && objectEvent->currentCoords.y <= bottom)
         return;

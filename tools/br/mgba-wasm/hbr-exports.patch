@@ -12,7 +12,7 @@ index ed16917..f0ae805 100644
  CXX_GUARD_END
  
 diff --git a/include/mgba/internal/gba/renderers/video-software.h b/include/mgba/internal/gba/renderers/video-software.h
-index ce91877..f0013c4 100644
+index ce91877..04c044e 100644
 --- a/include/mgba/internal/gba/renderers/video-software.h
 +++ b/include/mgba/internal/gba/renderers/video-software.h
 @@ -75,10 +75,18 @@ struct WindowControl {
@@ -46,7 +46,7 @@ index ce91877..f0013c4 100644
  	int32_t spriteCyclesRemaining;
  
  	// BLDCNT
-@@ -151,6 +159,20 @@ struct GBAVideoSoftwareRenderer {
+@@ -151,6 +159,27 @@ struct GBAVideoSoftwareRenderer {
  	int end;
  
  	uint8_t lastHighlightAmount;
@@ -64,6 +64,13 @@ index ce91877..f0013c4 100644
 +	 * hardware, and every layer is drawn in every band row. */
 +	int brSpriteTop;
 +	int brSpriteBottom;
++	/* Hoenn Battle Royale: the ROM's OAM side table in the GBA's work RAM, or NULL. A
++	 * nibble an OAM entry, entry i in byte i / 2 (low nibble for even i), latched with
++	 * the OAM itself: its low two bits, signed, are how many 256s the entry's true top is
++	 * past its 8-bit y; its high two how many 512s its true left is past its 9-bit x.
++	 * With it a band row draws every sprite once, at its true rows, however far from
++	 * the LCD; without it, the sprite window above. */
++	const uint8_t* brOamHi;
  };
  
  void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer);
@@ -173,7 +180,7 @@ index 4f7e9f8..6d31d51 100644
  	int mosaicWait = 0;                                                                                               \
  	int32_t localX;                                                                                                   \
 diff --git a/src/gba/renderers/video-software.c b/src/gba/renderers/video-software.c
-index c5bc37b..720275a 100644
+index c5bc37b..6311b4c 100644
 --- a/src/gba/renderers/video-software.c
 +++ b/src/gba/renderers/video-software.c
 @@ -27,6 +27,7 @@ static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer,
@@ -460,7 +467,7 @@ index c5bc37b..720275a 100644
  	softwareRenderer->nWindows = 1;
  	if (GBARegisterDISPCNTIsWin0Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsWin1Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsObjwinEnable(softwareRenderer->dispcnt)) {
  		softwareRenderer->windows[0].control = softwareRenderer->winout;
-@@ -1016,12 +1117,34 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
+@@ -1016,12 +1117,39 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
  	}
  }
  
@@ -476,10 +483,15 @@ index c5bc37b..720275a 100644
 +static bool _brSpriteOnRow(const struct GBAVideoSoftwareRenderer* renderer, const struct GBAVideoRendererSprite* sprite, int y) {
 +	int height = sprite->endY - sprite->y;
 +	int top;
-+	if ((y >= 0 && y < GBA_VIDEO_VERTICAL_PIXELS) || renderer->brSpriteBottom < 0 || GBAObjAttributesAGetMode(sprite->obj.a) == OBJ_MODE_SEMITRANSPARENT) {
++	if ((y >= 0 && y < GBA_VIDEO_VERTICAL_PIXELS) || (renderer->brSpriteBottom < 0 && !renderer->brOamHi) || GBAObjAttributesAGetMode(sprite->obj.a) == OBJ_MODE_SEMITRANSPARENT) {
 +		return ((y - sprite->y) & 0xFF) < height;
 +	}
 +	top = GBAObjAttributesAGetY(sprite->obj.a) + renderer->objOffsetY;
++	if (renderer->brOamHi) {
++		int nibble = renderer->brOamHi[sprite->index >> 1] >> (4 * (sprite->index & 1));
++		top += 256 * (((nibble & 3) ^ 2) - 2);
++		return y >= top && y < top + height;
++	}
 +	if (top >= GBA_VIDEO_VERTICAL_PIXELS + renderer->brSpriteBottom) {
 +		top -= 256;
 +	}
@@ -496,7 +508,7 @@ index c5bc37b..720275a 100644
  			renderer->oamDirty = false;
  		}
  		int mosaicV = GBAMosaicControlGetObjV(renderer->mosaic) + 1;
-@@ -1037,7 +1160,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1037,7 +1165,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  			if (renderer->spriteCyclesRemaining <= 0) {
  				break;
  			}
@@ -519,7 +531,7 @@ index 751e8b1..59daede 100644
  	-s ENVIRONMENT='web,worker' \
  	-s PTHREAD_POOL_SIZE=5 \
 diff --git a/src/platform/wasm/main.c b/src/platform/wasm/main.c
-index 14d9a8a..9aba6af 100644
+index 14d9a8a..118a9e1 100644
 --- a/src/platform/wasm/main.c
 +++ b/src/platform/wasm/main.c
 @@ -12,6 +12,10 @@
@@ -533,7 +545,7 @@ index 14d9a8a..9aba6af 100644
  
  #include "platform/sdl/sdl-audio.h"
  #include "platform/sdl/sdl-events.h"
-@@ -146,6 +150,231 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
+@@ -146,6 +150,256 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
  		return 0.0;
  }
  
@@ -563,6 +575,8 @@ index 14d9a8a..9aba6af 100644
 +// Hoenn BR (POK-329): the sprite window the page declared with brSetSpriteBand, -1 for
 +// none. Without one the band is the window when it is 256 rows (160 + 96), and there is
 +// no window otherwise (see _brApplyViewport).
++// Hoenn BR: where the ROM's OAM side table sits in work RAM (brSetOamTable), -1 for none.
++static int brOamTable = -1;
 +static int brSpriteTop = -1;
 +static int brSpriteBottom = -1;
 +
@@ -695,6 +709,12 @@ index 14d9a8a..9aba6af 100644
 +	}
 +}
 +
++// The OAM side table into the renderer: a pointer into the loaded core's work RAM.
++static void _brApplyOamTable(struct GBAVideoSoftwareRenderer* sr) {
++	struct GBA* gba = (struct GBA*) renderer->core->board;
++	sr->brOamHi = brOamTable >= 0 ? (const uint8_t*) gba->memory.wram + brOamTable : NULL;
++}
++
 +// Tell the software renderer about the band, once the core has installed it. Only at
 +// loadGame: the band is the texture's size, which is made there.
 +static void _brApplyViewport(void) {
@@ -707,6 +727,7 @@ index 14d9a8a..9aba6af 100644
 +	sr->brRight = brBandRight;
 +	sr->brBottom = brBandBottom;
 +	_brApplySpriteWindow(sr);
++	_brApplyOamTable(sr);
 +}
 +
 +// Hoenn BR (POK-329): the sprite window -- the 256 rows around the LCD where the ROM
@@ -733,6 +754,22 @@ index 14d9a8a..9aba6af 100644
 +	sr = _brSoftwareRenderer();
 +	if (sr) {
 +		_brApplySpriteWindow(sr);
++	}
++}
++
++// Hoenn BR: the ROM's OAM side table, at byte `offset` into work RAM (its EWRAM address
++// less 0x02000000), or -1 for none. 64 bytes, a nibble an OAM entry: the 256s its true
++// top is past its 8-bit y, and the 512s its true left past its 9-bit x, two signed bits
++// each (include/br/br_field.h in the ROM). The ROM writes it when it copies its OAM
++// buffer in, so the band, drawn at VBlank before the next copy, reads the two together;
++// with it every sprite is drawn once at its true rows anywhere in the band. Takes effect
++// at once, and at every loadGame after.
++EMSCRIPTEN_KEEPALIVE void brSetOamTable(int offset) {
++	struct GBAVideoSoftwareRenderer* sr;
++	brOamTable = offset >= 0 && offset + 64 <= GBA_SIZE_EWRAM ? offset : -1;
++	sr = _brSoftwareRenderer();
++	if (sr) {
++		_brApplyOamTable(sr);
 +	}
 +}
 +
@@ -765,7 +802,7 @@ index 14d9a8a..9aba6af 100644
  EMSCRIPTEN_KEEPALIVE int getMainLoopTimingMode() {
  	int mode = -1;
  	int value = -1;
-@@ -427,28 +656,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
+@@ -427,28 +681,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
  	mSDLInitBindingsGBA(&renderer->core->inputMap);
  
  	unsigned w, h;
@@ -813,7 +850,7 @@ index 14d9a8a..9aba6af 100644
  
  	emscripten_resume_main_loop();
  	return true;
-@@ -744,19 +975,11 @@ void runLoop() {
+@@ -744,19 +1000,11 @@ void runLoop() {
  				};
  			}
  			if (mCoreSyncWaitFrameStart(&renderer->thread->impl->sync)) {
@@ -838,7 +875,7 @@ index 14d9a8a..9aba6af 100644
  			}
  			mCoreSyncWaitFrameEnd(&renderer->thread->impl->sync);
  		}
-@@ -860,11 +1083,16 @@ int main() {
+@@ -860,11 +1108,16 @@ int main() {
  
  	mLogSetDefaultLogger(&logCtx);
  
@@ -860,10 +897,10 @@ index 14d9a8a..9aba6af 100644
  	// exclude specific key events
  	SDL_SetEventFilter(excludeKeys, NULL);
 diff --git a/src/platform/wasm/mgba.d.ts b/src/platform/wasm/mgba.d.ts
-index edad1b1..3a0dad4 100644
+index edad1b1..e1a76aa 100644
 --- a/src/platform/wasm/mgba.d.ts
 +++ b/src/platform/wasm/mgba.d.ts
-@@ -296,6 +296,43 @@ declare namespace mGBA {
+@@ -296,6 +296,44 @@ declare namespace mGBA {
       * @returns Current volume multiplier.
       */
      getVolume(): number;
@@ -880,6 +917,7 @@ index edad1b1..3a0dad4 100644
 +     *  the window when it is 256 rows, and there is none otherwise. Takes effect at
 +     *  once and at every loadGame after. */
 +    _brSetSpriteBand(top: number, bottom: number): void;
++    _brSetOamTable(offset: number): void;
 +    /** Hoenn BR (POK-329): the sprite window the loaded core draws with, as
 +     *  `top << 16 | bottom`, or -1 for none (or no game loaded). */
 +    _brSpriteWindow(): number;
