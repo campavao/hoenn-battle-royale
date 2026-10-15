@@ -1,7 +1,7 @@
-# fog-out-idle: fog-out.txt with nobody reading. The message waits for A, but a player
-# who has put the phone down would hold the whole match open behind it -- the match
-# e2e's two idle trainers never went out, and it never ended -- so it closes by itself
-# (br_ring.c's BR_FOG_OUT_READ) and the OUT goes.
+# fog-out-idle: fog-out.txt with nobody reading. The OUT goes at once -- the room's
+# order of elimination is the order OUTs arrive -- and the watch it starts waits for the
+# line to be read (BrRing_Telling). Nobody reads it, so it closes by itself after
+# BR_FOG_OUT_READ frames, and only then does the camera go to the trainer we follow.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -21,16 +21,26 @@ wait 30
 shot hp-after-bleed
 waitfor u16 gPlayerParty+0x56 0 300
 wait 30
-# told, and not out yet: "TREE..." on the field, the team's status cleared
+# out at once, and told: "TREE..." on the field, the team's status cleared
 expect u8 gBrRing+7 1
-expect u8 gBrMatch 2
+expect u8 gBrMatch 3
 expect u32 gStringVar4 0xBFBFCCCE
 expect u32 gPlayerParty+0x50 0
+# the page's autoWatch: seat 1 two east of us (spectate-follow.txt), and FOLLOW it
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 01
+poke u16 gBrMailbox+0x0C 2
+wait 10
+pokebytes gBrMailbox+0x1098 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 3
 wait 60
 shot told
-wait 250
-# nobody pressed anything: still told, not out
-expect u8 gBrMatch 2
+# the line is up and nobody is pressing: the camera stays ours
+expect u8 gBrSpectate+8 1
+expect u8 gBrSpectate+9 0
+wait 200
+expect u8 gBrSpectate+9 0
+# ...until it closes itself
 wait 400
-expect u8 gBrMatch 3
+expectge u8 gBrSpectate+9 1
+shot watching
 say fog out idle ok

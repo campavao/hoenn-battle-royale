@@ -177,9 +177,9 @@ wait 10
 poke u16 gPlayerParty+0x56 1
 poke u16 gPlayerParty+0xBA 1
 wait 300
-# told first (POK-358), then out once it is read
+# out at once, and told on the field (POK-358)
 expect u8 gBrRing+7 1
-expect u8 gBrMatch 2
+expect u8 gBrMatch 3
 tap A
 wait 60
 tap A

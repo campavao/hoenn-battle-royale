@@ -2,8 +2,9 @@
 # 2026-10-14 play-test, POK-358: "BARBOACH..." and the screen was already somebody
 # else's, with nothing on it about HP the whole walk). In the fog the corner shows the
 # lead's HP in SAFE's place, a bleed plays the poison step's mosaic, and the last one
-# down is "<MON> fainted in the fog..." then out of usable POKeMON; the OUT, which hands
-# the camera to another seat, waits for the player to read it. ring-outside.txt's ring.
+# down is "<MON> fainted in the fog..." then out of usable POKeMON. The OUT goes at once;
+# the camera, which it hands to another seat, waits for the line (fog-out-idle).
+# ring-outside.txt's ring.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -23,9 +24,9 @@ wait 30
 shot hp-after-bleed
 waitfor u16 gPlayerParty+0x56 0 300
 wait 30
-# told, and not out yet: "TREE..." on the field, the team's status cleared
+# out at once, and told: "TREE..." on the field, the team's status cleared
 expect u8 gBrRing+7 1
-expect u8 gBrMatch 2
+expect u8 gBrMatch 3
 expect u32 gStringVar4 0xBFBFCCCE
 expect u32 gPlayerParty+0x50 0
 wait 60

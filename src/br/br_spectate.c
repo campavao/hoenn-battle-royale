@@ -363,8 +363,8 @@ static void ParseBstart(const u8 *d, u16 n)
     // that is not already on its way somewhere else.
     if (gMain.inBattle || gBrNetlink.active || gBrSpectate.watching || BrField_Leaving())
         return;
-    if (gMain.callback2 != CB2_Overworld)
-        return;
+    if (gMain.callback2 != CB2_Overworld || BrRing_Telling())
+        return; // the next peek asks for it again
     id = BrWire_ReadU16(d);
     seed = d[2] | (d[3] << 8) | (d[4] << 16) | ((u32)d[5] << 24);
     flags = d[6] | (d[7] << 8) | (d[8] << 16) | ((u32)d[9] << 24);
@@ -486,6 +486,7 @@ static void HandleTurnCont(const u8 *payload, u8 len)
 // web/src/net/wire.ts's PARTY_BAG_MAX.
 #define BR_PEEK_BAG_MAX 20
 STATIC_ASSERT(BR_CAP_PARTY >= 2 + PARTY_SIZE * BR_PEEK_ROW + 5 + 3 * BR_PEEK_BAG_MAX, BrPartyCapHoldsARowsAndBag)
+#define BR_PEEK_OFF_ITEM 24
 #define BR_PEEK_OFF_NICKLEN 36
 #define BR_PEEK_OFF_NICK 37
 
@@ -586,7 +587,7 @@ static void PackOwnMon(struct Pokemon *mon, u8 *row)
         BrWire_WriteU16(row + 8 + i * 4, GetMonData(mon, MON_DATA_MOVE1 + i, NULL));
         row[10 + i * 4] = GetMonData(mon, MON_DATA_PP1 + i, NULL);
     }
-    BrWire_WriteU16(row + 24, GetMonData(mon, MON_DATA_HELD_ITEM, NULL));
+    BrWire_WriteU16(row + BR_PEEK_OFF_ITEM, GetMonData(mon, MON_DATA_HELD_ITEM, NULL));
     // These moves are this ROM's own: a bot card built back from this row keeps them
     // (POK-330 #50). The page's own cards never say so.
     row[BR_MON_OFF_FLAGS] = BR_MON_ROM_MOVES;
@@ -980,7 +981,9 @@ static bool8 BuildWatchedMon(const u8 *row, struct Pokemon *mon)
         return FALSE;
     if (level == 0 || level > MAX_LEVEL)
         level = 5;
-    CreateMon(mon, species, level, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    // A fixed personality and OT ID: the row carries neither, and a mon that changed
+    // nature, gender or shine between two looks at it would be worse than a plain one.
+    CreateMon(mon, species, level, 15, TRUE, 0xFE, OT_ID_PRESET, 0xFFFF0000); // never shiny
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
         u8 pp = row[BR_PEEK_OFF_MOVES + i * 4 + 2];
@@ -1000,7 +1003,7 @@ static bool8 BuildWatchedMon(const u8 *row, struct Pokemon *mon)
     SetMonData(mon, MON_DATA_HP, &v);
     status = StatusOf(row[BR_PEEK_OFF_STATUS]);
     SetMonData(mon, MON_DATA_STATUS, &status);
-    v = BrWire_ReadU16(row + 24);
+    v = BrWire_ReadU16(row + BR_PEEK_OFF_ITEM);
     if (v >= ITEMS_COUNT)
         v = ITEM_NONE;
     SetMonData(mon, MON_DATA_HELD_ITEM, &v);
@@ -1230,6 +1233,10 @@ static void FollowTick(void)
     if (!BrField_OverworldRunning())
         gBrSpectate.warpWait = 0;
     if (!BrField_OverworldRunning() || ScriptContext_IsEnabled())
+        return;
+    // The fog's line is being read on our own field first (BrRing_Telling): the watch
+    // the OUT started takes the camera once it is closed.
+    if (BrRing_Telling())
         return;
     // Out is out (2026-10-05 play-test: "I'm dead, but still playing, since I died by
     // the fog"): a trainer the match is done with is not on the field to walk it, whoever

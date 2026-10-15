@@ -192,21 +192,24 @@ static void ApplyWeather(bool8 outside)
     gBrRing.appliedMapNum = gSaveBlock1Ptr->location.mapNum;
 }
 
-// The fog finished the team in the overworld: say so, the way a poison step does, and
-// only then go out (Cam's 2026-10-14 play-test, POK-358: "BARBOACH..." and the screen
-// was already somebody else's). The OUT is what hands the camera to a seat still
-// standing, so it waits for the message. A field that is busy -- a script, a message
-// of its own -- is waited out, up to BR_FOG_OUT_WAIT frames, and then we go anyway.
-// The message itself waits for A or B, but never for a player who has put the phone
-// down: a team nobody is reading for would hold the whole match open, so after
-// BR_FOG_OUT_READ frames with no press it closes by itself.
+// The fog finished the team in the overworld: say so, the way a poison step does,
+// before the camera goes (Cam's 2026-10-14 play-test, POK-358: "BARBOACH..." and the
+// screen was already somebody else's). The OUT itself goes at once -- the room's order
+// of elimination is the order OUTs arrive, and a team that went first must not outlast
+// one that went later by sitting on a message (review of #43) -- and while the player is
+// told, the watch that the OUT starts holds off (BrRing_Telling: FollowTick, a replay).
+// A field that is busy -- a script, a message of its own -- is waited out, up to
+// BR_FOG_OUT_WAIT frames. The message waits for A or B, but never for a player who has
+// put the phone down: after BR_FOG_OUT_READ frames with no press it closes by itself.
 #define BR_FOG_OUT_WAIT (60 * 10)
 #define BR_FOG_OUT_READ (60 * 8)
 static const u8 sText_FogOut[] = _("{STR_VAR_1} fainted in the fog…\p{PLAYER} is out of usable POKéMON!\pYou're out of the match!");
 
 // Which mon fainted last: its name goes into gStringVar1 only as the line is shown, since
 // that is every script's and every message's, and the field can be busy with one first.
+// The high bit: the player has not been told yet.
 static EWRAM_DATA u8 sFogMon = 0;
+#define FOG_UNTOLD 0x80
 
 #define tState data[0]
 #define tWait data[1]
@@ -235,7 +238,7 @@ static void Task_FogOut(u8 taskId)
          || ArePlayerFieldControlsLocked())
             return;
         LockPlayerFieldControls();
-        GetMonData(&gPlayerParty[sFogMon], MON_DATA_NICKNAME, gStringVar1);
+        GetMonData(&gPlayerParty[sFogMon & ~FOG_UNTOLD], MON_DATA_NICKNAME, gStringVar1);
         StringGet_Nickname(gStringVar1);
         ShowFieldMessage(sText_FogOut);
         tWait = 0;
@@ -262,29 +265,35 @@ static void Task_FogOut(u8 taskId)
         CloseFogOut();
         break;
     }
+    sFogMon &= ~FOG_UNTOLD;
     DestroyTask(taskId);
-    BrMatch_Out();
 }
 
 #undef tState
 #undef tWait
 
-static void StartFogOut(u8 partyIdx)
+bool8 BrRing_Telling(void)
 {
-    sFogMon = partyIdx;
-    // A script already running (a gym leader mid-line, a trainer's walk) may be on its
-    // way to a battle, and this team has nobody to send out: out now, untold, as before.
-    if (ScriptContext_IsEnabled() || CreateTask(Task_FogOut, 80) == TASK_NONE)
-        BrMatch_Out();
+    return (sFogMon & FOG_UNTOLD) != 0;
 }
 
-// The OUT the fog owes is never lost with its task: a BAG or POKeMON opened from the
-// menu that was up when the team went (or a battle) resets every task on its way in.
-// Back on the field, the task starts again and the player is told then.
+static void StartFogOut(u8 partyIdx)
+{
+    BrMatch_Out();
+    // A script already running (a gym leader mid-line, a trainer's walk) has the field:
+    // out, untold, as before.
+    if (ScriptContext_IsEnabled())
+        return;
+    sFogMon = partyIdx | FOG_UNTOLD;
+    CreateTask(Task_FogOut, 80);
+}
+
+// The telling is never lost with its task: a BAG or POKeMON opened from the menu that
+// was up when the team went resets every task on its way in. Back on the field, the
+// task starts again and the player is told then.
 static void OweFogOut(void)
 {
-    if (gBrRing.out && gBrMatch.phase == BR_PHASE_PLAY && !FuncIsActiveTask(Task_FogOut)
-     && BrField_OverworldRunning())
+    if (BrRing_Telling() && !FuncIsActiveTask(Task_FogOut) && BrField_OverworldRunning())
         CreateTask(Task_FogOut, 80);
 }
 
@@ -508,6 +517,7 @@ u16 BrRing_Outside(void)
 void BrRing_Init(void)
 {
     CpuFill32(0, &gBrRing, sizeof(gBrRing));
+    sFogMon = 0;
     gBrRing.damageTimer = BR_FOG_TICK_FRAMES;
     BrNet_On(BR_MSG_RING, HandleRing);
 }

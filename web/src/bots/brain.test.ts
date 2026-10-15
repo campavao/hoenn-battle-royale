@@ -1285,6 +1285,24 @@ describe('pacing (POK-361) and closing in (POK-362)', () => {
     for (let t = STEP_MS; t <= 10_000 && !sent.some((m) => m.t === 'challenge'); t += STEP_MS) bots.tick(t);
     expect(sent.find((m) => m.t === 'challenge')).toMatchObject({ opponent: 0 });
   });
+  it('walks in out of the fog before it walks up to anybody (review of #43)', () => {
+    const decisions: Decision[] = [];
+    const player: PlayerView = { seat: 0, mapId: 'FIELD', x: 2, y: 2, dir: 1 };
+    const bots = new Bots({
+      world: new World([FIELD, PATH]),
+      targets: [{ mapId: 'PATH', x: 3, y: 5 }],
+      mapRef: (id) => REFS[id],
+      send: () => undefined,
+      rng: mulberry32(7),
+      engage: { players: () => [player] },
+      deal: () => [MON],
+      inside: (id) => id === 'PATH', // FIELD is in the fog, the player with it
+      onDecision: (d) => void decisions.push(d),
+    });
+    bots.start(dealBots(99, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]), 0);
+    for (let t = STEP_MS; t <= 3_000; t += STEP_MS) bots.tick(t);
+    expect(decisions.some((d) => d.rule === 'hunt')).toBe(false);
+  });
 });
 
 describe('encounter patches (POK-363)', () => {

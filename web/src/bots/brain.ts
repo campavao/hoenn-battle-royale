@@ -980,6 +980,9 @@ export class Bots {
   private approach(walker: Walker, now: number): boolean {
     if (this.opts.fights && !this.opts.fights()) return false;
     if (now < walker.engageAfter || walker.party.length === 0) return false;
+    // In the fog a bot walks in first (chooseTarget's "Fog first"): a foe beside it is
+    // on the same map, in the fog too, and chasing one through it is how a bot bleeds out.
+    if (this.opts.inside && !this.opts.inside(walker.at.map)) return false;
     const near = (p: { mapId: string; x: number; y: number }) =>
       p.mapId === walker.at.map && Math.abs(p.x - walker.at.x) + Math.abs(p.y - walker.at.y) <= NEAR_TILES;
     const foes: { seat: number; spot: Spot }[] = [];
