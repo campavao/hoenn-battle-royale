@@ -361,12 +361,12 @@ tiles on 256×512 BGs, pos.y-4..pos.y+27, and the ROM declares the picture it fe
 `gBrFieldView`: 256×496, the LCD at row 104 -- the whole ring but the one spare row a
 step needs, the player's rows -11..+19, which covers a portrait phone above and below
 the pad (the page reads it out of the patched image and asks the core for the part of it
-the match's layout shows, measured before each boot -- all of it on a portrait phone,
-the rows its layout shows elsewhere; a ROM without it gets the legacy band). The zoom is
+the match's layout shows, measured before each boot: all of it on a portrait phone, and
+elsewhere the rows the layout shows; a ROM without it gets the legacy band). The zoom is
 a phone's on every screen (Cam, 2026-10-14, `fieldScale`): 240 game pixels across a
-portrait phone's glass, the same on its side, and the widest phone's (430 / 240, snapped
-to whole device pixels) on anything bigger, which shows more map, not a bigger picture. The OAM's 8-bit y has one reading only in the
-256 rows around the LCD (the sprite window, 40 above and 56 below), so the ROM keeps a
+portrait phone's glass, the same on its side, and the widest phone's (430 / 240, rounded
+up to whole device pixels) on anything bigger, which shows more map, not a bigger
+picture. The OAM's 8-bit y has one reading only in the 256 rows around the LCD (the sprite window, 40 above and 56 below), so the ROM keeps a
 side table of each OAM entry's high bits (`gBrOamHi`, latched in `LoadOam` with the OAM
 it describes) and the core reads it (`brSetOamTable`) to draw every sprite once, at its
 true rows, anywhere in the band. With that the page tells the ROM the rows it shows

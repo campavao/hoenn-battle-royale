@@ -121,8 +121,11 @@ describe('the desktop key legend', () => {
   });
 
   it('is one row under the picture where only a strip is free', () => {
-    // 700x400 at 1.667: the picture is 400x267 at (150, 67), 67 under it.
+    // 700x400 at 1.667 (a phone-sized glass): the picture is 400x267 at (150, 67), 67 under it.
     expect(at(700, 400)).toEqual({ mode: 'row', x: 130, y: 400 - 34 });
+    // A desktop's narrow window, 700x480 on a 1080-tall screen: 480x320 at (110, 80),
+    // too little room beside it for the pad and 80 under it, room for the row.
+    expect(placeLegend(layoutField(700, 480, 0, 1, 1080), 700, 480, SIZES)).toEqual({ mode: 'row', x: 130, y: 480 - 34 });
   });
 
   it('is nowhere when the picture fills the box', () => {

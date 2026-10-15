@@ -1534,9 +1534,9 @@ function matchLayout(): FieldLayout {
 
 /** Ask the core for the picture past the LCD its next boot draws (POK-319, POK-329): the
  *  sprite window the ROM declares, then as much of the ROM's band as the match's layout
- *  shows (askBand) -- on a desktop or a phone on its side the picture takes the box's
- *  height and the band is the window alone; a portrait phone gets the ROM's 104 rows
- *  above and 232 below. The window first: a core that knows it draws no sprite twice,
+ *  shows (askBand) -- a phone on its side gets the window alone, a desktop at a phone's
+ *  zoom the rows it shows past the LCD, about 120 each way, and a portrait phone the
+ *  ROM's 104 rows above and 232 below. The window first: a core that knows it draws no sprite twice,
  *  and one that does not is asked for no more band than the window. A core without the
  *  band draws the LCD alone. Asked before the first boot and again before PLAY AGAIN's:
  *  the band is sized when a game loads, so a phone turned after its boot keeps the band

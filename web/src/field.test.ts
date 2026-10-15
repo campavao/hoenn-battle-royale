@@ -551,13 +551,21 @@ describe('the picture in the box', () => {
   });
 
   it("a wide window: a phone's zoom, the widest phone's snapped to whole pixels, and the map all round", () => {
-    // 430 / 240 is 1.79 CSS pixels, snapped to whole device pixels: 2 on a 1x screen.
+    // 430 / 240 is 1.79 CSS pixels, rounded up to whole device pixels: 2 on a 1x screen.
     const lay = layoutField(1440, 800, 0);
     expect(lay.scale).toBe(2);
     expect(lay).toMatchObject({ cols: 720, rows: 400, lcdCol: 240, lcdRow: 120 });
-    expect(layoutField(1440, 800, 0, 2).scale, '3.58 device pixels round to 4').toBe(2);
-    expect(layoutField(1440, 800, 0, 1.5).scale, '2.69 device pixels round to 3').toBe(2);
-    expect(layoutField(1440, 800, 0, 1.25).scale, '2.24 round to 2').toBe(1.6);
+    expect(layoutField(1440, 800, 0, 2).scale, '3.58 device pixels up to 4').toBe(2);
+    expect(layoutField(1440, 800, 0, 1.5).scale, '2.69 device pixels up to 3').toBe(2);
+    expect(layoutField(1440, 800, 0, 3).scale, '5.38 device pixels up to 6').toBe(2);
+    // Windows' default 125%: 2.24 device pixels up to 3, 2.4 CSS -- never under a phone's.
+    expect(layoutField(1440, 800, 0, 1.25).scale).toBe(2.4);
+    for (const dpr of [1, 1.25, 1.5, 2, 2.625, 3]) {
+      expect(layoutField(1440, 800, 0, dpr).scale, `dpr ${dpr}`).toBeGreaterThanOrEqual(430 / 240);
+    }
+    // ...and no drop past the widest phone: glass 430 is 1.79, glass 431 no less.
+    expect(layoutField(1440, 800, 0, 1.25, 430).scale).toBeCloseTo(430 / 240);
+    expect(layoutField(1440, 800, 0, 1.25, 431).scale).toBeGreaterThanOrEqual(430 / 240);
   });
 
   it('a phone on its side keeps the zoom it has upright: its short side is the same', () => {
