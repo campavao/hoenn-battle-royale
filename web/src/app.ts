@@ -29,7 +29,7 @@ import { type BotVoice, LINES, lineAt } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { ringLabel } from './match/clock';
-import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow } from './match/lobby';
+import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import {
   AUTO_START_MS,
   BOT_FILL,
@@ -373,8 +373,9 @@ function seatsOf(roster: Roster, watching: (seat: number) => boolean = () => fal
 }
 
 /** The card of `seat` as it is now, or none when it has gone: a card about nobody.
- *  `watchable` is whether this page could follow somebody (it is out of the match). */
-function cardOf(roster: Roster, seat: number | null, canKick: boolean, watchable = false): SheetModel['card'] {
+ *  `watchable` is whether this page could follow somebody (it is out of the match), and
+ *  `watching` the seat it follows now, whose card has no SPECTATE to press. */
+function cardOf(roster: Roster, seat: number | null, canKick: boolean, watchable = false, watching: number | null = null): SheetModel['card'] {
   const e = seat === null ? undefined : roster.get(seat);
   if (!e) return null;
   return {
@@ -382,7 +383,7 @@ function cardOf(roster: Roster, seat: number | null, canKick: boolean, watchable
     skin: Number(e.skin ?? 0) || 0,
     lines: cardFor(e),
     canKick: canKick && !e.isMe,
-    canWatch: watchable && e.alive && !e.isMe,
+    canWatch: watchable && e.alive && !e.isMe && e.seat !== watching,
   };
 }
 
@@ -2329,7 +2330,7 @@ function wireRoom(
     status: room.status,
     seats: bridge ? seatsOf(bridge.roster, watchingSeat) : [],
     // The host's one power over another seat, on the card (POK-241).
-    card: bridge ? cardOf(bridge.roster, sheetCard, roomKick !== null, watchOf(bridge, spectate) !== null) : null,
+    card: bridge ? cardOf(bridge.roster, sheetCard, roomKick !== null, watchOf(bridge, spectate) !== null, spectate.watchingSeat()) : null,
     watch: bridge ? watchOf(bridge, spectate) : null,
     // Everybody's, the host's too (2026-10-07 play-test: "there doesn't seem to be a way to
     // leave the match"): a host leaving mid-fight is a host closing the tab, which hands
@@ -2870,7 +2871,10 @@ function wireRoom(
   /** The next match's `start`, heard before this page was out of the last one (POK-331
    *  #18), for the ROM that returnToRoom boots. */
   let nextStart: { msg: StartMsg; from: number } | null = null;
-  const holdsStart = (m: Msg): boolean => m.t === 'start' && (returning || session.grace.armed);
+  // With the results up the match is over whatever the grace did: a winner's grace ends
+  // on the parade, before the results come down, and the room's next START went into the
+  // finished ROM (#41's review). Held, and the exit taken now.
+  const holdsStart = (m: Msg): boolean => m.t === 'start' && (returning || session.grace.armed || resultsShowing());
   /** Forgets the last match (POK-330 #22): what the room heard of it, its loot, who was
    *  busy in it, who had been caught up on it, and its bots on the roster. PLAY AGAIN
    *  used to keep all of that, and each piece went wrong in the next match its own way:
@@ -3235,6 +3239,8 @@ function wireRoom(
  *  is also what tells the relay somebody is browsing (its `browsedAt`, which its own
  *  stats read). */
 const LOBBY_REFRESH_MS = 5000;
+/** How long QUICK PLAY says "connecting" before it gives up on the relay and plays bots. */
+const LOBBY_CONNECT_MS = 6000;
 
 /** Kanto's one screen: every way into a match is a row on it. Resolves with the choice,
  *  having closed the browsing socket first -- SOLO VS BOTS must reach the ROM with no
@@ -3244,6 +3250,12 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
   showScreen('lobby');
   const stage = theStage();
   const relay = new RelayClient();
+  /** Where the socket is (POK-341's review): QUICK PLAY waits while it is still opening,
+   *  rather than a cold load quietly starting a game against bots. */
+  let link: Link = 'connecting';
+  /** What the rows offer: a tab that may not play online (a stale release, a wire it does
+   *  not speak) is down whatever the socket says, or QUICK PLAY would only be refused. */
+  const shownLink = (): Link => (roomsRefused ? 'down' : link);
   let online = false;
   let rooms: RoomListing[] = [];
   /** The line under the main menu: a rejected code, or nothing. */
@@ -3253,10 +3265,12 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
 
   return new Promise<RoomHash>((resolve) => {
     let timer: ReturnType<typeof setInterval> | null = null;
+    let giveUp: ReturnType<typeof setTimeout> | null = null;
     let browseWhileSeen = (): void => {};
     let onStorage = (_ev: StorageEvent): void => {};
     const done = (hash: RoomHash) => {
       if (timer) clearInterval(timer);
+      if (giveUp) clearTimeout(giveUp);
       document.removeEventListener('visibilitychange', browseWhileSeen);
       window.removeEventListener('storage', onStorage);
       relay.close();
@@ -3420,7 +3434,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
 
     const main = menuScreen(() => ({
       title: 'HOENN BATTLE ROYALE',
-      rows: playRows(online, rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)).map(row),
+      rows: playRows(shownLink(), rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)).map(row),
       rowsId: 'lobby-rows',
       note: note || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',
@@ -3516,6 +3530,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       // for the moment the tab is looked at again, until the new socket says otherwise.
       if (document.hidden) return;
       online = false;
+      link = 'down';
       rooms = [];
       redraw();
     });
@@ -3528,8 +3543,9 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
     const beat = () => {
       if (document.hidden) return;
       const up = relay.isOpen();
-      if (up !== online) {
+      if (up !== online || (up && link !== 'up')) {
         online = up;
+        if (up) link = 'up';
         redraw();
       }
       if (up) relay.listRooms(version);
@@ -3550,6 +3566,13 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
     document.addEventListener('visibilitychange', browseWhileSeen);
     browseWhileSeen();
     timer = setInterval(beat, LOBBY_REFRESH_MS);
+    // A socket that neither opens nor closes (a captive portal, a relay waking up) is down
+    // for QUICK PLAY's purposes once this long has gone by; opening later still lifts it.
+    giveUp = setTimeout(() => {
+      if (link !== 'connecting') return;
+      link = 'down';
+      redraw();
+    }, LOBBY_CONNECT_MS);
   });
 }
 

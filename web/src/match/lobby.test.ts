@@ -25,6 +25,16 @@ describe('the fixed rows', () => {
     expect(new Set(on.map((r) => r.id)).size).toBe(on.length);
   });
 
+  it('hold QUICK PLAY while the socket is still opening, rather than start a bot game (#41 review)', () => {
+    const rows = fixedRows('connecting');
+    const quick = rows.find((r) => r.label === 'QUICK PLAY')!;
+    expect(quick.disabled).toBe(true);
+    expect(quick.detail).toBe('connecting');
+    expect(quick.action.kind).toBe('quick');
+    expect(fixedRows('down').find((r) => r.label === 'QUICK PLAY')!.action.kind).toBe('solo');
+    expect(fixedRows('up').find((r) => r.label === 'QUICK PLAY')!.action.kind).toBe('quick');
+  });
+
   it('open up once the relay is there', () => {
     for (const r of fixedRows(true)) expect(r.disabled).toBeFalsy();
   });

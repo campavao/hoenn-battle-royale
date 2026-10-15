@@ -16,7 +16,7 @@
 // checks it stays up, presses PLAY AGAIN, and asserts the client comes out of the match
 // into the same room, with its code, its roster and its socket, on a ROM that really did
 // power-cycle and land in Littleroot rather than on Emerald's moving van.
-import { test, expect } from '@playwright/test';
+import { test, expect, type Browser } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -197,6 +197,17 @@ test("a guest reads its result for the whole grace, whatever the host's `again` 
 // the last match still on screen tears it down, and plays. Here the guest's grace is held
 // open for good, the way a long parade holds it, so only the START can move it.
 test("a guest still in its grace when the host deals again goes into the new match", async ({ browser }) => {
+  await dealAgainWhileReading(browser, 'grace');
+});
+
+// The same START for a guest whose grace is over but whose results are still up -- a
+// winner's: its grace ends on the parade, and PLAY AGAIN is its exit (POK-371). Held
+// by nothing but the results, the START went into the finished ROM (#41's review).
+test('a guest reading its results with the grace over goes into the new match', async ({ browser }) => {
+  await dealAgainWhileReading(browser, 'results');
+});
+
+async function dealAgainWhileReading(browser: Browser, hold: 'grace' | 'results'): Promise<void> {
   test.setTimeout(420_000);
   const rom = romHashParam();
   const hostCtx = await browser.newContext();
@@ -217,8 +228,13 @@ test("a guest still in its grace when the host deals again goes into the new mat
     await startWith(host, 2);
 
     await expect(guest.locator('#results-panel')).toBeVisible({ timeout: 240_000 });
-    // The grace's own exit becomes nothing: the guest stays in it until something else moves it.
-    await guest.evaluate(() => (window as unknown as BrWindow).__br.grace.arm(() => {}));
+    if (hold === 'grace') {
+      // The grace's own exit becomes nothing: the guest stays in it until something else moves it.
+      await guest.evaluate(() => (window as unknown as BrWindow).__br.grace.arm(() => {}));
+    } else {
+      // The grace done, as a champion's ends on the parade: only the results are up.
+      await guest.evaluate(() => (window as unknown as BrWindow).__br.grace.cancel());
+    }
 
     // The host reads its own result, comes back to the room, and deals again.
     await expect(host.locator('#results-panel')).toBeVisible({ timeout: 120_000 });
@@ -256,4 +272,4 @@ test("a guest still in its grace when the host deals again goes into the new mat
     await guestCtx.close();
     await hostCtx.close().catch(() => {});
   }
-});
+}

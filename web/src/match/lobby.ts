@@ -66,13 +66,17 @@ export function countdown(secs: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-/** The fixed rows, always in this order. `online` is false before the socket is up --
- *  QUICK PLAY is then a game against bots, which never opens one (the Kanto rule). */
+/** The relay as the lobby knows it: still opening its first socket, up, or down (it
+ *  closed, never opened in time, or this tab may not play online at all). */
+export type Link = 'connecting' | 'up' | 'down';
+
+/** The fixed rows, always in this order. Down, QUICK PLAY is a game against bots, which
+ *  never opens a socket (the Kanto rule). */
 export function fixedRows(
-  online: boolean,
+  link: Link | boolean,
   profile?: Profile,
 ): LobbyRow[] {
-  return [...(profile ? profileRows(profile) : []), ...playRows(online)];
+  return [...(profile ? profileRows(profile) : []), ...playRows(link)];
 }
 
 export interface Profile {
@@ -118,14 +122,22 @@ export function profileRows(profile: Profile): LobbyRow[] {
 
 /** The ways into a match. `openRooms` is how many the relay lists, for the LOBBIES
  *  row's detail; the daily gets a row of its own when the relay is offering one. */
-export function playRows(online: boolean, openRooms = 0, daily?: RoomListing): LobbyRow[] {
+export function playRows(link: Link | boolean, openRooms = 0, daily?: RoomListing): LobbyRow[] {
+  const state: Link = link === true ? 'up' : link === false ? 'down' : link;
+  const online = state === 'up';
+  const quick: LobbyRow =
+    state === 'up'
+      ? { label: 'QUICK PLAY', detail: 'a game right now', action: { kind: 'quick' } }
+      : state === 'down'
+        ? { label: 'QUICK PLAY', detail: 'offline: vs bots', action: { kind: 'solo' } }
+        // Not yet either: a press on a cold load is not a quiet game against bots (#41's
+        // review). It waits for the socket to open, close, or run out of time.
+        : { label: 'QUICK PLAY', detail: 'connecting', action: { kind: 'quick' }, disabled: true };
   const rows: LobbyRow[] = [
     // SOLO VS BOTS is not a row any more (Cam, 2026-10-14, POK-341: "quick play to me
     // feels actually more like a natural flow"). Offline, QUICK PLAY is that game: the
     // bots, and no socket.
-    online
-      ? { label: 'QUICK PLAY', detail: 'a game right now', action: { kind: 'quick' } }
-      : { label: 'QUICK PLAY', detail: 'offline: vs bots', action: { kind: 'solo' } },
+    quick,
     { label: 'HOST A ROOM', action: { kind: 'host' }, disabled: !online },
     {
       label: 'LOBBIES',

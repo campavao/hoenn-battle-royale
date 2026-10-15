@@ -373,10 +373,11 @@ export function paintCard(
   return widgets;
 }
 
-/** The card is modal: what is under it can still be tapped through the mirror, but the
- *  cursor stays on the card (it drew over the card from the seat behind it). */
+/** The card is modal: what is under it is neither the cursor's (it drew over the card
+ *  from the seat behind it) nor a tap's -- a seat tapped under the dim swapped the card
+ *  (#41's review). CLOSE is the way back to them. */
 function underCard(widgets: Widget[]): Widget[] {
-  return widgets.map((w) => ({ ...w, cursor: null }));
+  return widgets.map((w) => ({ ...w, cursor: null, disabled: w.onPress ? true : w.disabled }));
 }
 
 // ---- the in-match sheet -----------------------------------------------------------------
