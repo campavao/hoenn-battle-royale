@@ -196,7 +196,11 @@ static void ApplyWeather(bool8 outside)
 // was already somebody else's). The OUT is what hands the camera to a seat still
 // standing, so it waits for the message. A field that is busy -- a script, a message
 // of its own -- is waited out, up to BR_FOG_OUT_WAIT frames, and then we go anyway.
+// The message itself waits for A or B, but never for a player who has put the phone
+// down: a team nobody is reading for would hold the whole match open, so after
+// BR_FOG_OUT_READ frames it closes by itself.
 #define BR_FOG_OUT_WAIT (60 * 10)
+#define BR_FOG_OUT_READ (60 * 12)
 static const u8 sText_FogOut[] = _("{STR_VAR_1} fainted in the fog…\p{PLAYER} is out of usable POKéMON!\pYou're out of the match!");
 
 #define tState data[0]
@@ -216,11 +220,20 @@ static void Task_FogOut(u8 taskId)
             return;
         LockPlayerFieldControls();
         ShowFieldMessage(sText_FogOut);
+        tWait = 0;
         tState++;
         return;
     case 1:
-        if (!IsFieldMessageBoxHidden())
+        // Printing: each page waits for A. The last one is still on screen when the
+        // printer is done, so it is read once more below.
+        if (++tWait <= BR_FOG_OUT_READ && !IsFieldMessageBoxHidden())
             return;
+        tState++;
+        return;
+    case 2:
+        if (++tWait <= BR_FOG_OUT_READ && !JOY_NEW(A_BUTTON | B_BUTTON))
+            return;
+        HideFieldMessageBox();
         UnlockPlayerFieldControls();
         break;
     }

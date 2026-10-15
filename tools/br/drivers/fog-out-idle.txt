@@ -1,0 +1,36 @@
+# fog-out-idle: fog-out.txt with nobody reading. The message waits for A, but a player
+# who has put the phone down would hold the whole match open behind it -- the match
+# e2e's two idle trainers never went out, and it never ended -- so it closes by itself
+# (br_ring.c's BR_FOG_OUT_READ) and the OUT goes.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerPartyCount 1
+# TREECKO on 4 of 20: one bleed leaves 2, the next one finishes it
+poke u16 gPlayerParty+0x56 4
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 60
+expect u8 gBrRing+5 1
+shot hp-in-corner
+waitfor u16 gPlayerParty+0x56 2 300
+wait 2
+shot bleed
+wait 30
+shot hp-after-bleed
+waitfor u16 gPlayerParty+0x56 0 300
+wait 30
+# told, and not out yet: "TREE..." on the field, the team's status cleared
+expect u8 gBrRing+7 1
+expect u8 gBrMatch 2
+expect u32 gStringVar4 0xBFBFCCCE
+expect u32 gPlayerParty+0x50 0
+wait 60
+shot told
+wait 400
+# nobody pressed anything: still told, not out
+expect u8 gBrMatch 2
+wait 1200
+expect u8 gBrMatch 3
+say fog out idle ok
