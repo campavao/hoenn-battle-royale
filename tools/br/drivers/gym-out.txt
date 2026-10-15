@@ -82,6 +82,18 @@ poke u8 gBrRing+4 1
 poke u16 gBrRing+8 30
 wait 60
 shot out-1
+# Told first, on the field (POK-358): the fog's flag is up, and the OUT waits for the
+# "fainted in the fog" lines to be read.
+expect u8 gBrRing+7 1
+expect u8 gBrMatch 2
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
 # OUT, inside the gym: the match phase (BR_PHASE_OUT), the fog's own flag, and the map
 # has not moved.
 expect u8 gBrMatch 3
