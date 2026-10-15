@@ -521,9 +521,14 @@ export class GhostWalkers {
   /** The roster as it is this frame: a tile moved is a step queued, a new facing a turn,
    *  a new map or more than the queue holds a snap. Our own seat, a seat that is out and
    *  one with nowhere to stand (the lobby) are nobody's to draw. */
-  update(rows: readonly RosterEntry[]): void {
+  update(rows: readonly RosterEntry[], held?: ReadonlySet<number>): void {
     const here = new Set<number>();
     for (const r of rows) {
+      // Held (FieldView.setHeld): stood where it is, out or not, until it is let go.
+      if (held?.has(r.seat) && this.walkers.has(r.seat)) {
+        here.add(r.seat);
+        continue;
+      }
       if (r.isMe || !r.alive || !r.map || r.x === undefined || r.y === undefined) continue;
       here.add(r.seat);
       // Spawn's clamp: a skin past the table is the first; BrGhosts_Place's, a facing

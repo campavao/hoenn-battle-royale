@@ -25,7 +25,9 @@ expect u8 gBrSpectate+5 1
 # (AI_ITEM_X_STAT), flags 1 (X ATTACK).
 pokebytes gDecompressionBuffer+400 00 01 00 05 01 0D 00 01 00 01 05 01 4B 00 04 01
 mailsend gBrMailbox 19 gDecompressionBuffer+400 16
-wait 670
+# The replay's pace is a watcher's (POK-366: MID text, animations on), so the lines are
+# waited for rather than counted to.
+waitfor u32 gDisplayedStringBattle 0x00C7BBBD 2400
 # The replay says whose potion it was, as the fighters' screens did (POK-331 #7): the
 # challenger is link player 0, CAM. "CAM used", a new line, "POTION!"
 expect u32 gDisplayedStringBattle 0x00C7BBBD
@@ -33,7 +35,9 @@ expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
 expect u32 gDisplayedStringBattle+8 0xCEC9CAFE
 expect u32 gDisplayedStringBattle+12 0xABC8C9C3
 expect u8 gDisplayedStringBattle+16 0xFF
-wait 130
+# ...with its animations on, whatever the room's ANIM OFF (POK-366): no NO_ANIMATIONS.
+expectbits u32 gHitMarker 0x80 0
+waitfor u32 gDisplayedStringBattle 0x00C8BBBD 1200
 # The peer's X ATTACK is the AI's script, whose line is its trainer's -- and a replay's
 # trainer is TRAINER_LINK_OPPONENT, past the end of gTrainers: garbage on agbcc, and on
 # modern a line with no end that the replay waited on for good. It names the peer, link
@@ -44,7 +48,8 @@ expect u32 gDisplayedStringBattle+8 0xBB00D2FE
 expect u32 gDisplayedStringBattle+12 0xBDBBCECE
 expect u16 gDisplayedStringBattle+16 0xABC5
 expect u8 gDisplayedStringBattle+18 0xFF
-wait 700
+waitfor u8 gBattleMons+0x71 7 1200
+waitforge u16 gPlayerParty+186 19 1200
 shot items
 # The benched mon took the potion: 5 HP and 20 more is all of it (19 or 20, by IVs).
 expectge u16 gPlayerParty+186 19
@@ -61,14 +66,17 @@ expect u16 gEnemyParty+0x56 5
 # no fog that turn (BrRing_FogEndTurn), which the replay reads before it goes on.
 pokebytes gDecompressionBuffer+400 00 01 00 06 00 01 0D 00 01 00 01 05 01 0D 00 40 00
 mailsend gBrMailbox 19 gDecompressionBuffer+400 17
-wait 250
+# CAM's POTION first ("CAM used", "POTION!"), then CAN's.
+waitfor u32 gDisplayedStringBattle+8 0xCEC9CAFE 2400
+waitfor u32 gDisplayedStringBattle 0x00C8BBBD 2400
 # ...and the peer's is theirs, CAN's, where the AI's branch would have said nothing.
 # "CAN used", a new line, "POTION!"
 expect u32 gDisplayedStringBattle 0x00C8BBBD
 expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
 expect u32 gDisplayedStringBattle+8 0xCEC9CAFE
 expect u32 gDisplayedStringBattle+12 0xABC8C9C3
-wait 650
+waitforge u16 gEnemyParty+0x56 19 2400
+wait 200
 shot peer-potion
 expectge u16 gEnemyParty+0x56 19
 expectge u16 gBattleMons+0x80 19
@@ -80,24 +88,24 @@ expect u8 gBrSpectate+5 1
 expect u8 gBattleMons+0x19 6
 pokebytes gDecompressionBuffer+400 00 01 00 06 00 01 4B 00 00 00 01 03 00 00 00
 mailsend gBrMailbox 19 gDecompressionBuffer+400 15
-wait 100
+waitfor u32 gDisplayedStringBattle 0x00C7BBBD 2400
 expect u32 gDisplayedStringBattle 0x00C7BBBD
 expect u32 gDisplayedStringBattle+4 0xD8D9E7E9
 expect u32 gDisplayedStringBattle+8 0xBB00D2FE
 expect u32 gDisplayedStringBattle+12 0xBDBBCECE
 expect u16 gDisplayedStringBattle+16 0xABC5
-expect u8 gBattleMons+0x19 7
+waitfor u8 gBattleMons+0x19 7 1200
 wait 400
 expect u8 gBrSpectate+5 1
 # Turn four: the challenger RUNs with a POKe DOLL (RUN, BR_RUN_DOLL); the peer FIGHTs.
 pokebytes gDecompressionBuffer+400 00 01 00 03 00 03 01 01 03 00 00 00
 mailsend gBrMailbox 19 gDecompressionBuffer+400 12
-wait 600
+waitfor u16 gBrBattle+6 1 2400
 # The replay honoured the doll: one run, one getaway (this ROM's own counters, which the
 # replay's HandleAction_Run reaches like a fighter's).
 expect u16 gBrBattle+4 1
 expect u16 gBrBattle+6 1
-wait 600
+waitfor u8 gBrSpectate+5 0 2400
 # ...and it ended, as the fight did, with the viewer back on the field.
 expect u8 gBrSpectate+5 0
 say spectate items ok

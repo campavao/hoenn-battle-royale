@@ -832,6 +832,7 @@ export class FieldView {
   /** The other seats, walked by the page (POK-323), and where the roster comes from. */
   private readonly walkers = new GhostWalkers();
   private roster: (() => readonly RosterEntry[]) | null;
+  private held: (() => ReadonlySet<number>) | null = null;
   private still: Still | null = null;
   /** The last read's ghosts, for peek(). */
   private ghosts: { rom: FieldSprite[]; drawn: FieldSprite[] } = { rom: [], drawn: [] };
@@ -843,6 +844,14 @@ export class FieldView {
   /** The match's roster, once there is one: solo's, or the room's Bridge's. */
   setPeople(people: (() => readonly RosterEntry[]) | null): void {
     this.roster = people;
+  }
+
+  /** The seats of the fight our ROM is showing, held where they stood while it does:
+   *  the page walks them off the roster, and a spectator's replay runs behind the real
+   *  fight, so the field round a see-through battle showed its trainer walking away
+   *  from it (Cam's 2026-10-14 play-test, POK-367). */
+  setHeld(held: (() => ReadonlySet<number>) | null): void {
+    this.held = held;
   }
 
   attach(): void {
@@ -965,7 +974,7 @@ export class FieldView {
       this.layout();
     }
     // Every frame, on the field too, so they are in step when a battle takes it.
-    this.walkers.update(this.roster?.() ?? []);
+    this.walkers.update(this.roster?.() ?? [], this.prev && !this.prev.onField ? this.held?.() : undefined);
     // A main loop still mid-iteration at this VBlank (a map loading as a seam is crossed)
     // has the struct half-written: the last whole frame stands (gBrMidFrame, br_main.h).
     const mid = this.sym('gBrMidFrame');

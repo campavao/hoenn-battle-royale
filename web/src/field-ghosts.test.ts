@@ -255,6 +255,19 @@ describe('the ghosts walk on (POK-323)', () => {
       return { x: s.x, y: s.y, frame: s.frame, hFlip: s.hFlip };
     });
 
+  it('a held seat stands where it was, out or not, until it is let go (POK-367)', () => {
+    const w = new GhostWalkers();
+    w.update([row(2)]);
+    const held = new Set([2]);
+    for (let i = 0; i < 20; i++) w.update([row(2, { y: 21 + MAP_OFFSET })], held);
+    expect(at(w)).toMatchObject({ x: 144, y: 56 });
+    w.update([row(2, { alive: false })], held);
+    expect(at(w), 'out, and still standing in the fight').toBeDefined();
+    w.update([row(2, { y: 21 + MAP_OFFSET })]);
+    for (let i = 0; i < 16; i++) w.update([row(2, { y: 21 + MAP_OFFSET })]);
+    expect(at(w)).toMatchObject({ x: 144, y: 72 });
+  });
+
   it('at rest two tiles east of our tile a ghost stands where the ROM would put it, in its skin', () => {
     const w = new GhostWalkers();
     w.update([row(2)]);

@@ -19,7 +19,7 @@ import { PhoneHud, readHudView, type HudWorld } from './ui/phonehud';
 import { BattleMenu, readBattleView } from './ui/battlemenu';
 import { PadPrefsControl } from './ui/padprefs';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
-import { nameBstart, romReplaying, Spectate } from './match/spectate';
+import { battleSeats, nameBstart, romReplaying, Spectate } from './match/spectate';
 import type { Results } from './match/results';
 import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
@@ -2543,6 +2543,10 @@ function wireRoom(
   };
 
   const spectate = new Spectate();
+  fieldView?.setHeld(() => {
+    const battle = spectate.watchingBattle();
+    return battle === null ? new Set<number>() : new Set(battleSeats(battle));
+  });
   // Left and right on the D-pad flip who we watch, as PREV and NEXT do.
   // emu.divertPress, not bindKeyboard's divert: gamepad and touch go through press() too.
   const mainBase = symbols?.get('gMain');

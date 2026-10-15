@@ -170,8 +170,19 @@ void BrBattle_Init(void)
     sVoice.seat = BR_NO_SEAT;
 }
 
+// A spectator's replay plays at a pace a person can follow: animations on and MID text,
+// whatever the room set (Cam's 2026-10-14 play-test, POK-366: "this is happening so quick
+// oh my gosh" -- a page a second with TEXT FAST and ANIM OFF). Only the watcher's ROM
+// replays, so nobody waits on it.
+static bool8 Spectating(void)
+{
+    return (gBattleTypeFlags & BATTLE_TYPE_RECORDED) != 0;
+}
+
 bool8 BrBattle_AnimationsOff(void)
 {
+    if (Spectating())
+        return FALSE;
     return gSaveBlock2Ptr->optionsBattleSceneOff == TRUE;
 }
 
@@ -242,6 +253,8 @@ void BrBattle_TickSeeThrough(void)
 
 u8 BrBattle_LinkTextSpeed(void)
 {
+    if (Spectating())
+        return 4; // GetPlayerTextSpeedDelay's MID
     return GetPlayerTextSpeedDelay();
 }
 
@@ -251,6 +264,8 @@ u8 BrBattle_LinkTextSpeed(void)
 u8 BrBattle_AutoScrollFrames(void)
 {
     if (!gMain.inBattle)
+        return 49;
+    if (Spectating())
         return 49;
     switch (gSaveBlock2Ptr->optionsTextSpeed)
     {

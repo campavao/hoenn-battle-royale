@@ -720,10 +720,11 @@ void RecordedBattle_StartSpectate(u32 seed, u32 flags, struct Pokemon *pParty,
         save->battleFlags = flags;
         save->opponentA = 0;
     }
-    save->battleScene = TRUE;
-    // A link replay prints at the room's TEXT (BrBattle_LinkTextSpeed); a wild one takes
-    // pret's recorded speed from here, which zeroed was the slowest there is.
-    save->textSpeed = gSaveBlock2Ptr->optionsTextSpeed;
+    // A replay plays at a pace a watcher can follow, animations on and MID text, whatever
+    // the room set (POK-366): a link one through BrBattle_AnimationsOff and
+    // BrBattle_LinkTextSpeed, a wild one from these two.
+    save->battleScene = FALSE;
+    save->textSpeed = OPTIONS_TEXT_SPEED_MID;
 
     RecordedBattle_SaveParties();
     SetVariablesForRecordedBattle(save);
