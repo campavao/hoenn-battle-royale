@@ -27,6 +27,7 @@
 import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
 import { clusterCells, EVENT_CELLS, eventDrop, eventForRing } from './events';
 import { giftDrop, isGiftSection } from './gifts';
+import { SCATTER_PER_SECTION, scatterDrop, type ScatterSpot } from './scatter';
 import { sectionInside } from './ring';
 import { FINAL_CHANCE, STORIES, STORY_CHANCE, storyCells, storyDrop, storyOf, type Story } from './story';
 import type { EventMsg, MapRef, Msg, Pace } from '../net/wire';
@@ -544,7 +545,10 @@ export class Director {
       place: this.ringCentre.place,
       elapsed: elapsedSecs,
     });
-    if (this.ringIndex === 0) this.dropGifts();
+    if (this.ringIndex === 0) {
+      this.dropGifts();
+      this.dropScatter();
+    }
     const n = eventForRing(this.ringIndex);
     if (n !== undefined) this.dropEvent(n);
   }
@@ -565,6 +569,24 @@ export class Director {
         return [cell];
       });
     for (const msg of giftDrop(this.rng, this.hostSeat, spots)) this.opts.send(msg);
+  }
+
+  /** Items lying about, at the buzzer (match/scatter.ts, POK-354): a few on every outdoor
+   *  section, each on a cell nobody has been dealt. Off a draw of its own, so the deals
+   *  that come after it -- the events, every `pick` -- are the ones they always were. */
+  private dropScatter(): void {
+    const rng = mulberry32((this.opts.seed ^ 0x5ca77e12) >>> 0);
+    const spots: ScatterSpot[] = [];
+    for (const section of this.sections) {
+      for (let i = 0; i < SCATTER_PER_SECTION; i++) {
+        const free = section.cells.filter((c) => !this.dealtCells.has(cellKey(c)));
+        if (free.length === 0) break;
+        const cell = free[pickIndex(rng, free.length)];
+        this.dealtCells.add(cellKey(cell));
+        spots.push(cell);
+      }
+    }
+    for (const msg of scatterDrop(rng, this.hostSeat, spots)) this.opts.send(msg);
   }
 
   // ---- events (speed-up phase 6) -------------------------------------------------------
