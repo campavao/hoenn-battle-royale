@@ -9,6 +9,7 @@
 // This slice walks. Where it walks is one rule ("somewhere else on foot") and the
 // decision list -- fog, loot, the Centre, hunting -- goes on top of it, replacing only
 // `chooseTarget`.
+import { PATCH_KEY_BASE, type Patch } from './patches';
 import { findPath, findPathToAny, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
@@ -66,6 +67,9 @@ const DOOR_MS = 1_200;
 /** Close enough to walk up to: another trainer this near is a fight a person would go
  *  and have (POK-362: "three bots all walked past each other"). Manhattan, same map. */
 const NEAR_TILES = 4;
+/** A wild battle on a patch, as long as a short one in the ROM: the bot stands still with
+ *  the battle mark on, and comes out of it hurt (POK-363). */
+const WILD_MS = 4_000;
 
 /** A stateless 32-bit roll from two numbers (mulberry32's finaliser): the rests' own,
  *  off the match's rng, so pausing changes nothing else a seed decides. */
@@ -198,6 +202,8 @@ interface Walker {
   /** Nothing to drink before this: one gulp at a time, not the whole bag in four
    *  steps. */
   quaffAfter: number;
+  /** In a wild battle on a patch until this (POK-363); 0 when not. */
+  wildUntil?: number;
   /** Walking up to somebody (approach): no rests on the way. Cleared with the path. */
   chasing?: boolean;
   /** Steps left before it stops to look around (LEG_MIN). */
@@ -239,6 +245,8 @@ export interface Decision {
     | 'event'
     | 'trade'
     | 'wander'
+    /** Stepped onto an encounter patch and had its wild battle (POK-363). */
+    | 'wild'
     | 'stuck'
     | 'fog'
     | 'duel'
@@ -360,6 +368,11 @@ export interface BotsOptions {
   sendTo?: (seat: number, msg: Msg) => void;
   /** 0..1, the same shape as `Math.random`; seeded by the caller so a match replays. */
   rng: () => number;
+  /** The encounter patches on a map, in the page's cells (bots/patches.ts), and the ring
+   *  phase they grow back on: a bot steps onto one and has the wild battle a player
+   *  would (POK-363). */
+  patches?: (mapId: string) => Patch[];
+  ringPhase?: () => number;
 }
 
 /** Can this team cross water? Everybody can, since the HMs went (2026-10-13): a player
@@ -452,6 +465,10 @@ export class Bots {
   private phase = 0;
   /** The director has said who won (decide()): nobody goes out after that. */
   private decided = false;
+
+  /** Patches taken this ring phase, by key (notePatch). */
+  private readonly patchTaken = new Set<number>();
+  private patchPhase = -1;
 
   constructor(private readonly opts: BotsOptions) {}
 
@@ -821,6 +838,11 @@ export class Bots {
   private stepOne(walker: Walker, now: number): void {
     this.now = now;
     if (this.fighting.has(walker.bot.seat)) return;
+    if (walker.wildUntil) {
+      if (now < walker.wildUntil) return;
+      walker.wildUntil = 0;
+      this.opts.send({ t: 'busy', seat: walker.bot.seat });
+    }
     // At the counter: the nurse is the turn spent, and the bot walks back out whole.
     if (this.healHere(walker)) return;
     // The eyeline outranks everything: a bot that can see a player fights them, the
@@ -890,6 +912,50 @@ export class Bots {
       x: walker.at.x,
       y: walker.at.y,
     });
+    this.wildHere(walker, now);
+  }
+
+  /** Somebody's ROM took a patch (or this brain did): it is gone for everybody until the
+   *  ring's next phase, as gBrPatchTaken is. */
+  notePatch(key: number): void {
+    if ((key & 0xe000) !== PATCH_KEY_BASE) return;
+    this.regrow();
+    this.patchTaken.add(key);
+  }
+
+  /** On each new ring phase every taken patch is back (br_patch.c Regrow). */
+  private regrow(): void {
+    const phase = this.opts.ringPhase?.() ?? 0;
+    if (phase === this.patchPhase) return;
+    this.patchPhase = phase;
+    this.patchTaken.clear();
+  }
+
+  /** A patch under the bot's feet: a wild battle, the way stepping onto one starts one for
+   *  a player (POK-363). The patch goes for everybody (its PICKUP, which every ROM marks
+   *  taken and undraws), the bot stands with the battle mark on for WILD_MS, and its lead
+   *  comes out of it a little hurt -- never fainted: a wild battle is not how a trainer
+   *  goes out. Not in the Zone, where nobody fights. */
+  private wildHere(walker: Walker, now: number): void {
+    if (!this.opts.patches || (this.opts.fights && !this.opts.fights())) return;
+    this.regrow();
+    const patch = this.opts.patches(walker.at.map).find(
+      (p) => p.x === walker.at.x && p.y === walker.at.y && !this.patchTaken.has(p.key),
+    );
+    if (!patch) return;
+    this.patchTaken.add(patch.key);
+    this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: patch.key });
+    this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
+    walker.wildUntil = now + WILD_MS;
+    walker.nextStepAt = Math.max(walker.nextStepAt, walker.wildUntil);
+    walker.engageAfter = Math.max(walker.engageAfter, walker.wildUntil);
+    walker.path = null;
+    const lead = walker.party.find((m) => m.hp > 0);
+    if (lead) {
+      const share = 10 + (mix(walker.bot.seat, patch.key) % 26);
+      lead.hp = Math.max(1, lead.hp - Math.floor((lead.maxHp * share) / 100));
+    }
+    this.note(walker, 'wild', `key ${patch.key}`);
   }
 
   /** The end of a leg, when nothing is pressing: the turn is spent standing, and the
