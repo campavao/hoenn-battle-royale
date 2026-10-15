@@ -1,0 +1,53 @@
+# walkup-answer: the side that was seen waits for the walk-up, then turns to meet it
+# (POK-373). Seat 2 comes round the corner into our row four tiles east and challenges;
+# the link opens once its ghost has stopped (engage-settle-answer.txt), and the "!" goes
+# up over it. Then the walk-up lands, three steps west, and only once it is next to us do
+# we turn to face it and go into the fight. Until then nothing fades.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# we stand at (12,16) facing south; seat 2 at (16,13) facing south, out of our eyeline
+pokebytes gDecompressionBuffer 02 01 00 09 10 00 0D 00 01 01 02
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 20
+expect u8 gBrSeats+32 1
+expect u8 gBrOwnPos+6 1
+# three steps SOUTH to (16,16), and the CHALLENGE 2 -> 0 behind them
+pokebytes gDecompressionBuffer 02 01 10 00 0E 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 02 01 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 02 01 10 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 02 00 01 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+# the settle plays the three steps, then the link opens as id 1 and the "!" goes up
+wait 90
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+1 1
+shot bubble
+# well past the "!": still on the field, still facing south, waiting for the walk
+wait 80
+expect u8 gBrNetlink 1
+expect u8 gBrOwnPos+6 1
+expect u32 gMain+4 CB2_Overworld+1
+shot waiting
+# the walk-up: three steps WEST to (13,16), facing west
+pokebytes gDecompressionBuffer 02 03 0F 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 02 03 0E 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 02 03 0D 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+# queued ghost steps play at catch-up speed, so it is beside us within 16 frames
+wait 16
+expect u16 gBrSeats+36 13
+# next to us now, and we turn to meet it (DIR_EAST, 4)
+expect u8 gBrOwnPos+6 4
+shot met
+wait 664
+shot vs
+say walkup answer ok

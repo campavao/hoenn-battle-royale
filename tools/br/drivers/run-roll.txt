@@ -16,7 +16,8 @@ poke u8 gBrMatch 2
 poke u8 gBrNetlink+8 1
 pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
 poke u16 gBrMailbox+0x0C 1
-wait 900
+# the walk-up (POK-373) puts the fight a step later
+wait 1000
 expect u16 gBrBattle+4 0
 tap DOWN
 wait 10

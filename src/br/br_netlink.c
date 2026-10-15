@@ -18,6 +18,8 @@
 #include "event_object_lock.h"
 #include "field_effect.h"
 #include "field_player_avatar.h"
+#include "fieldmap.h"
+#include "metatile_behavior.h"
 #include "event_object_movement.h"
 #include "constants/field_effects.h"
 #include "constants/battle.h"
@@ -437,6 +439,89 @@ static void StartExclamation(void)
     FieldEffectStart(FLDEFF_EXCLAMATION_MARK_ICON);
 }
 
+// The walk-up before a fight between two people (POK-373, Cam's 2026-10-14 play-test:
+// "the person who looks at the other player moves towards them and once they're right
+// up next to them then it starts the battle"). Emerald's own trainer approach
+// (trainer_see.c): the "!", then the challenger walks the eyeline to the cell next to
+// the other, who turns to meet them. The challenger's ROM walks its own trainer, and the
+// walk reaches the other screen the way every step does, as its ghost's steps.
+//
+// Each side gives it the eyeline's length in walks and the wire's lag, then goes in
+// regardless: a fight never waits on a walk that cannot finish.
+#define BR_APPROACH_FRAMES ((BR_SIGHT_RANGE + 1) * 16 + 90)
+
+// The peer's ghost in a straight line from us, and which way. FALSE when it is not
+// drawn on this map or not on our row or column (the eyeline always is; a snap is not).
+static bool8 PeerInLine(s16 *dist, u8 *dir)
+{
+    struct ObjectEvent *me = &gObjectEvents[gPlayerAvatar.objectEventId];
+    struct ObjectEvent *them;
+    s16 dx, dy;
+
+    if (gBrSeats[gBrNetlink.peerSeat].objId == BR_NO_OBJ)
+        return FALSE;
+    them = &gObjectEvents[gBrSeats[gBrNetlink.peerSeat].objId];
+    dx = them->currentCoords.x - me->currentCoords.x;
+    dy = them->currentCoords.y - me->currentCoords.y;
+    if ((dx != 0) == (dy != 0))
+        return FALSE;
+    if (dx > 0) { *dir = DIR_EAST; *dist = dx; }
+    else if (dx < 0) { *dir = DIR_WEST; *dist = -dx; }
+    else if (dy > 0) { *dir = DIR_SOUTH; *dist = dy; }
+    else { *dir = DIR_NORTH; *dist = -dy; }
+    return TRUE;
+}
+
+// A walk from (x, y) one cell on is an ordinary step: nothing in the way, no ledge, and
+// on water as it was on water. The eyeline sees across a pond and over a ledge; a walk
+// does neither, so that is where the walk-up stops and the fight starts.
+static bool8 CanStep(s16 x, s16 y, u8 dir, bool8 surfing)
+{
+    struct ObjectEvent *me = &gObjectEvents[gPlayerAvatar.objectEventId];
+
+    MoveCoords(dir, &x, &y);
+    if (GetCollisionAtCoords(me, x, y, dir) != COLLISION_NONE || GetLedgeJumpDirection(x, y, dir) != DIR_NONE)
+        return FALSE;
+    return MetatileBehavior_IsSurfableWaterOrUnderwater(MapGridGetMetatileBehaviorAt(x, y)) == surfing;
+}
+
+// One frame of the walk-up. TRUE once it is over, however it ended.
+static bool8 Approach(struct Task *task)
+{
+    struct ObjectEvent *me = &gObjectEvents[gPlayerAvatar.objectEventId];
+    s16 dist;
+    u8 dir;
+
+    if (gMain.callback2 != CB2_Overworld || ++task->tTimer > BR_APPROACH_FRAMES)
+        return TRUE;
+    if (ObjectEventIsMovementOverridden(me) && !ObjectEventClearHeldMovementIfFinished(me))
+        return FALSE; // a walk or a turn is still playing
+    if (!PeerInLine(&dist, &dir))
+        return TRUE;
+    if (gBrNetlink.myId == 1)
+    {
+        struct ObjectEvent *them = &gObjectEvents[gBrSeats[gBrNetlink.peerSeat].objId];
+
+        // The one who was seen waits for the walk to land -- or for it to stop where
+        // their side stops it -- then turns to meet it.
+        if (!BrGhosts_Idle(gBrNetlink.peerSeat))
+            return FALSE;
+        if (dist > 1 && CanStep(them->currentCoords.x, them->currentCoords.y, GetOppositeDirection(dir),
+                                MetatileBehavior_IsSurfableWaterOrUnderwater(MapGridGetMetatileBehaviorAt(them->currentCoords.x, them->currentCoords.y))))
+            return FALSE;
+        if (me->facingDirection == dir)
+            return TRUE;
+        ObjectEventSetHeldMovement(me, GetFaceDirectionMovementAction(dir));
+        return FALSE;
+    }
+    if (dist <= 1)
+        return TRUE;
+    if (!CanStep(me->currentCoords.x, me->currentCoords.y, dir, TestPlayerAvatarFlags(PLAYER_AVATAR_FLAG_SURFING) != 0))
+        return TRUE; // fight from here
+    ObjectEventSetHeldMovement(me, GetWalkNormalMovementAction(dir));
+    return FALSE;
+}
+
 static void EnterLinkBattle(void)
 {
     PlayMapChosenOrBattleBGM(MUS_VS_TRAINER);
@@ -471,6 +556,10 @@ static void Task_BrStartLinkBattle(u8 taskId)
         }
         break;
     case 2:
+        if (Approach(task))
+            task->tState++;
+        break;
+    case 3:
         if (BrField_Leave(20, EnterLinkBattle))
             DestroyTask(taskId);
         break;
