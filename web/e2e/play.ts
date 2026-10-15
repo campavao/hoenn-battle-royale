@@ -99,7 +99,7 @@ const SIZES: Record<string, [number, number, number, number, number, number]> = 
 type Band = { left: number; top: number; right: number; bottom: number };
 /** The camera, as field.ts reads it: the pos tile, its map, the sub-tile offsets, and the
  *  ring rows the ROM has still to draw (gBrRingStale). */
-export type Cam = { map: string; x: number; y: number; subX: number; subY: number; stale?: number };
+export type Cam = { map: string; x: number; y: number; subX: number; subY: number; stale?: number; wide?: boolean | null };
 
 /** The ROM's ring (field.ts RING_ABOVE, RING_ROWS): bit (dy + 4) of gBrRingStale is grid
  *  row pos.y + dy, map row pos.y + dy - 7; pret's rows 0..14 are never stale. */
@@ -117,12 +117,21 @@ export function edgeCut(cam: Cam, band: Band): Band {
   const sub = (v: number) => (v > 0 ? v - 16 : v < 0 ? v + 16 : 0);
   const left = cam.x * 16 - LCD_LEFT + sub(cam.subX);
   const top = cam.y * 16 - LCD_TOP + sub(cam.subY);
-  const ringLeft = cam.x * 16 - LCD_LEFT - (cam.subX > 0 ? 16 : 0);
+  // The wide ring (a band left of the LCD): 32 columns from pos.x - 8, every row live,
+  // its stale bits columns. The tall one: 16 columns, its stale bits rows.
+  const wide = band.left > 0;
+  let ringLeft = (cam.x - (wide ? 8 : 0)) * 16 - LCD_LEFT - (cam.subX > 0 ? 16 : 0);
+  let ringRight = ringLeft + (wide ? 512 : 256);
   const stale = cam.stale ?? 0;
   let staleTop = -Infinity;
   let staleBottom = Infinity;
-  for (let dy = -1; dy >= -RING_ABOVE; dy--) if ((stale >>> (dy + RING_ABOVE)) & 1) { staleTop = (cam.y + dy + 1 - 7) * 16; break; }
-  for (let dy = 15; dy < RING_ROWS - RING_ABOVE; dy++) if ((stale >>> (dy + RING_ABOVE)) & 1) { staleBottom = (cam.y + dy - 7) * 16; break; }
+  if (wide) {
+    for (let dx = -1; dx >= -8; dx--) if ((stale >>> (dx + 8)) & 1) { ringLeft = Math.max(ringLeft, (cam.x + dx + 1 - 7) * 16); break; }
+    for (let dx = 15; dx < 24; dx++) if ((stale >>> (dx + 8)) & 1) { ringRight = Math.min(ringRight, (cam.x + dx - 7) * 16); break; }
+  } else {
+    for (let dy = -1; dy >= -RING_ABOVE; dy--) if ((stale >>> (dy + RING_ABOVE)) & 1) { staleTop = (cam.y + dy + 1 - 7) * 16; break; }
+    for (let dy = 15; dy < RING_ROWS - RING_ABOVE; dy++) if ((stale >>> (dy + RING_ABOVE)) & 1) { staleBottom = (cam.y + dy - 7) * 16; break; }
+  }
   const w = size ? size[0] * 16 : Infinity;
   const h = size ? size[1] * 16 : Infinity;
   const [north, south, west, east] = size ? size.slice(2) : [Infinity, Infinity, Infinity, Infinity];
@@ -131,7 +140,7 @@ export function edgeCut(cam: Cam, band: Band): Band {
   return {
     left: cut(Math.max(band.left - left - west, ringLeft - (left - band.left)), band.left),
     top: cut(Math.max(size ? band.top - top - Math.max(HEAD_ROOM, north) : 0, staleTop - (top - band.top)), band.top),
-    right: cut(Math.max(left + GBA_W + band.right - w - east, left + GBA_W + band.right - (ringLeft + 256)), band.right),
+    right: cut(Math.max(left + GBA_W + band.right - w - east, left + GBA_W + band.right - ringRight), band.right),
     bottom: cut(Math.max(bottom - h - south, bottom - staleBottom), band.bottom),
   };
 }
@@ -218,6 +227,7 @@ export function clipAndCamera(page: Page, sym: Record<string, number>): Promise<
         subX: emu.read(s.gFieldCamera + k.CAMERA_X, 32) | 0,
         subY: emu.read(s.gFieldCamera + k.CAMERA_Y, 32) | 0,
         stale: s.gBrRingStale === undefined ? 0 : emu.read(s.gBrRingStale, 32) >>> 0,
+        wide: s.gBrFieldWide === undefined ? null : emu.read(s.gBrFieldWide, 8) !== 0,
       };
     };
     let cam: ReturnType<typeof read> | null = null;
@@ -297,6 +307,9 @@ export async function expectLayout(page: Page, want: { onField?: boolean }, what
     const { cam, clip, scale } = await clipAndCamera(page, sym);
     const inset = insetOf(clip);
     expect(inset, `${what}: a clip-path the page could have set ("${clip}")`).not.toBeNull();
+    // The ring the ROM latched is the one the band asked for (field.ts reads the latch;
+    // edgeCut takes it from the band).
+    if (cam.wide !== null && cam.wide !== undefined) expect(cam.wide, `${what}: the ROM latched the ring the band asked for`).toBe(band.left > 0);
     const cut = edgeCut(cam, band);
     const [top, right, bottom, left] = inset!.map((v) => v / scale);
     expect({ top, right, bottom, left }, `${what}: the band shows on the field, less what is past the edge of ${cam.map} at ${JSON.stringify(cam)} (clip-path "${clip}")`)
@@ -400,11 +413,18 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         const size = (sizes as Record<string, [number, number, number, number, number, number]>)[c.map];
         const left = c.x * 16 - k.LCD_LEFT + sub(c.subX);
         const top = c.y * 16 - k.LCD_TOP + sub(c.subY);
-        const ringLeft = c.x * 16 - k.LCD_LEFT - (c.subX > 0 ? 16 : 0);
+        const wide = band.left > 0;
+        let ringLeft = (c.x - (wide ? 8 : 0)) * 16 - k.LCD_LEFT - (c.subX > 0 ? 16 : 0);
+        let ringRight = ringLeft + (wide ? 512 : 256);
         let staleTop = -Infinity;
         let staleBottom = Infinity;
-        for (let dy = -1; dy >= -4; dy--) if ((c.stale >>> (dy + 4)) & 1) { staleTop = (c.y + dy + 1 - 7) * 16; break; }
-        for (let dy = 15; dy < 28; dy++) if ((c.stale >>> (dy + 4)) & 1) { staleBottom = (c.y + dy - 7) * 16; break; }
+        if (wide) {
+          for (let dx = -1; dx >= -8; dx--) if ((c.stale >>> (dx + 8)) & 1) { ringLeft = Math.max(ringLeft, (c.x + dx + 1 - 7) * 16); break; }
+          for (let dx = 15; dx < 24; dx++) if ((c.stale >>> (dx + 8)) & 1) { ringRight = Math.min(ringRight, (c.x + dx - 7) * 16); break; }
+        } else {
+          for (let dy = -1; dy >= -4; dy--) if ((c.stale >>> (dy + 4)) & 1) { staleTop = (c.y + dy + 1 - 7) * 16; break; }
+          for (let dy = 15; dy < 28; dy++) if ((c.stale >>> (dy + 4)) & 1) { staleBottom = (c.y + dy - 7) * 16; break; }
+        }
         const w = size ? size[0] * 16 : Infinity;
         const h = size ? size[1] * 16 : Infinity;
         const [north, south, west, east] = size ? size.slice(2) : [Infinity, Infinity, Infinity, Infinity];
@@ -413,7 +433,7 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         return {
           left: cut(Math.max(band.left - left - west, ringLeft - (left - band.left)), band.left),
           top: cut(Math.max(size ? band.top - top - Math.max(k.HEAD_ROOM, north) : 0, staleTop - (top - band.top)), band.top),
-          right: cut(Math.max(left + k.GBA_W + band.right - w - east, left + k.GBA_W + band.right - (ringLeft + 256)), band.right),
+          right: cut(Math.max(left + k.GBA_W + band.right - w - east, left + k.GBA_W + band.right - ringRight), band.right),
           bottom: cut(Math.max(bottom - h - south, bottom - staleBottom), band.bottom),
         };
       };

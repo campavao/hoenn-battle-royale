@@ -12,4 +12,13 @@ expect u16 gBrFieldView+4 16
 expect u16 gBrFieldView+6 232
 expect u16 gBrFieldView+8 40
 expect u16 gBrFieldView+10 56
+# ...and the wide ring's (THE WIDE RING), for a screen it covers more of: 512x256 BGs,
+# the LCD's 240 columns and 128 each side, 31 of the ring's 32, and pret's 16 rows less
+# the spare one, 40 each side. The sprite window is the same.
+expect u16 gBrFieldViewWide+0 128
+expect u16 gBrFieldViewWide+2 40
+expect u16 gBrFieldViewWide+4 128
+expect u16 gBrFieldViewWide+6 40
+expect u16 gBrFieldViewWide+8 40
+expect u16 gBrFieldViewWide+10 56
 say ok

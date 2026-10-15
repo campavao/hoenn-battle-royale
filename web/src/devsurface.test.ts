@@ -114,8 +114,8 @@ describe("play.ts's edgeCut is field.ts's bandClip", () => {
       edgeCut(cam: { map: string; x: number; y: number; subX: number; subY: number; stale?: number }, band: Band): Band;
     };
     const route = HOENN.byId.get('MAP_ROUTE103')!;
-    const bands = [field.LEGACY_BAND, { left: 0, top: 104, right: 16, bottom: 232 }];
-    const stales = [0, 0x0ffff000 | 0xf, 0x0fff8007, 1 << 31, 1 << 3];
+    const bands = [field.LEGACY_BAND, { left: 0, top: 104, right: 16, bottom: 232 }, { left: 128, top: 40, right: 128, bottom: 40 }];
+    const stales = [0, 0x0ffff000 | 0xf, 0x0fff8007, 1 << 31, 1 << 3, 0x00ff00ff, (1 << 23) | 1];
     let n = 0;
     for (const band of bands) {
       for (const [x, y] of [[9, 13], [9, 21], [0, 0], [79, 5], [40, 11]]) {
@@ -129,6 +129,6 @@ describe("play.ts's edgeCut is field.ts's bandClip", () => {
         }
       }
     }
-    expect(n).toBe(2 * 5 * 8 * 5);
+    expect(n).toBe(3 * 5 * 8 * 7);
   });
 });

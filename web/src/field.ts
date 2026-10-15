@@ -59,10 +59,14 @@ export const LEGACY_BAND: Band = { left: 0, top: 40, right: 16, bottom: 56 };
  *  band's own rows. */
 export const LEGACY_SPRITE_BAND: SpriteBand = { top: LEGACY_BAND.top, bottom: LEGACY_BAND.bottom };
 
-/** The picture a ROM declares, and the window its sprites are read against. */
+/** The picture a ROM declares, and the window its sprites are read against. `wide` is
+ *  its wide ring's picture (gBrFieldViewWide, include/br/br_field.h THE WIDE RING), when
+ *  it has one: 128 columns each side of the LCD and 40 rows, for a screen that shows
+ *  more beside the LCD than above and below it. */
 export interface FieldPicture {
   band: Band;
   sprites: SpriteBand;
+  wide?: Band;
 }
 
 /** `struct BrFieldView` (include/br/br_field.h), in ROM: six u16s. */
@@ -75,14 +79,24 @@ export const FIELD_VIEW_SIZE = 12;
  *  256, not a multiple of 8, a window that is not 96 rows), gets the legacy band. */
 export function romBand(rom: Uint8Array | null | undefined, symbols: ReadonlyMap<string, number> | null | undefined): FieldPicture {
   const legacy: FieldPicture = { band: { ...LEGACY_BAND }, sprites: { ...LEGACY_SPRITE_BAND } };
-  const at = symbols?.get('gBrFieldView');
-  if (!rom || at === undefined) return legacy;
-  const o = at - ROM_BASE;
-  if (o < 0 || o + FIELD_VIEW_SIZE > rom.length) return legacy;
-  const u16 = (i: number) => rom[o + 2 * i] | (rom[o + 2 * i + 1] << 8);
-  const v = [0, 1, 2, 3, 4, 5].map(u16);
-  if (v.some((n) => n % 8 !== 0 || n > 256) || v[4] + v[5] !== 256 - GBA_H) return legacy;
-  return { band: { left: v[0], top: v[1], right: v[2], bottom: v[3] }, sprites: { top: v[4], bottom: v[5] } };
+  const read = (name: string): number[] | null => {
+    const at = symbols?.get(name);
+    if (!rom || at === undefined) return null;
+    const o = at - ROM_BASE;
+    if (o < 0 || o + FIELD_VIEW_SIZE > rom.length) return null;
+    const v = [0, 1, 2, 3, 4, 5].map((i) => rom[o + 2 * i] | (rom[o + 2 * i + 1] << 8));
+    return v.some((n) => n % 8 !== 0 || n > 256) || v[4] + v[5] !== 256 - GBA_H ? null : v;
+  };
+  const v = read('gBrFieldView');
+  if (!v) return legacy;
+  const out: FieldPicture = { band: { left: v[0], top: v[1], right: v[2], bottom: v[3] }, sprites: { top: v[4], bottom: v[5] } };
+  // The wide ring's: its sides are the core's 128 at most, its left is what asks the ROM
+  // for it, and its sprite window is the same 256 rows.
+  const w = read('gBrFieldViewWide');
+  if (w && w[0] > 0 && w[0] <= 128 && w[2] <= 128 && w[4] === v[4] && w[5] === v[5]) {
+    out.wide = { left: w[0], top: w[1], right: w[2], bottom: w[3] };
+  }
+  return out;
 }
 /** `struct Main` (include/main.h): callback1 at 0, callback2 at 4. The picture past the
  *  LCD shows only while callback2 is CB2_Overworld; a function pointer carries the
@@ -312,6 +326,9 @@ export interface Camera extends CameraPos {
   ringTimer: number;
   /** gBrRingStale: the ring's rows the ROM has still to (re)draw (bandClip). */
   stale: number;
+  /** gBrFieldWide: the ROM latched the wide ring, so `stale` is its columns; null for a
+   *  ROM without the symbol. */
+  wide: boolean | null;
   /** The overworld is what the ROM is running (gMain.callback2 == CB2_Overworld). */
   onField: boolean;
 }
@@ -477,17 +494,43 @@ export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefi
  *  never more than the ROM declares. The sides are the ROM's: 16 columns at most, and a
  *  portrait phone's picture is the glass's width. A box with no size (a hidden screen)
  *  says nothing, and gets the ROM's whole band. */
-export function askBand(lay: FieldLayout, rom: FieldPicture): Band {
+export function askBand(lay: FieldLayout, rom: FieldPicture, wideOk = false): Band {
   const { band, sprites } = rom;
   if (!(lay.scale > 0)) return { ...band };
   const eights = (n: number) => Math.ceil(Math.max(0, n) / 8) * 8;
   const rows = (need: number, window: number, most: number) => Math.min(most, Math.max(window, eights(need)));
-  return {
+  const tall: Band = {
     left: band.left,
     top: rows(lay.lcdRow, sprites.top, band.top),
     right: band.right,
     bottom: rows(lay.rows - lay.lcdRow - GBA_H, sprites.bottom, band.bottom),
   };
+  const w = rom.wide;
+  if (!wideOk || !w) return tall;
+  // The wide ring (include/br/br_field.h, THE WIDE RING): the columns the layout shows
+  // each side, in eights, up to its 128, and its 40 rows, when that is more of the
+  // layout's map than the tall ring's picture. Its left is never 0: a left is what asks
+  // the ROM for the wide ring.
+  const wide: Band = {
+    left: Math.min(w.left, Math.max(8, eights(lay.lcdCol))),
+    top: w.top,
+    right: Math.min(w.right, eights(lay.cols - lay.lcdCol - GBA_W)),
+    bottom: w.bottom,
+  };
+  return shownArea(lay, wide) > shownArea(lay, tall) ? wide : tall;
+}
+
+/** How much of a layout's map a band's picture covers, in GBA pixels. */
+export function shownArea(lay: FieldLayout, b: Band): number {
+  const across = Math.min(b.left, lay.lcdCol) + GBA_W + Math.min(b.right, Math.max(0, lay.cols - lay.lcdCol - GBA_W));
+  const down = Math.min(b.top, lay.lcdRow) + GBA_H + Math.min(b.bottom, Math.max(0, lay.rows - lay.lcdRow - GBA_H));
+  return across * down;
+}
+
+/** The ROM draws the wide ring for a band that reaches left of the LCD
+ *  (BrField_InitRingBgs: gBrFieldShown.left != 0), and the tall one otherwise. */
+export function wideRing(band: Band): boolean {
+  return band.left > 0;
 }
 
 /** Where the core's whole picture -- the LCD plus its band -- sits on the field canvas,
@@ -526,9 +569,37 @@ export const HEAD_ROOM = TILE;
  *  the columns are pos.x-1..pos.x+14 until the step lands (include/br/br_field.h, THE
  *  RING). Up and down the ring is 32 rows and the ROM's view 31, so it always holds the
  *  picture. */
-export function ringColumns(cam: { x: number; subX: number }): { left: number; right: number } {
-  const left = cam.x * TILE - LCD_LEFT - (cam.subX > 0 ? TILE : 0);
-  return { left, right: left + 16 * TILE };
+export function ringColumns(cam: { x: number; subX: number }, wide = false): { left: number; right: number } {
+  const left = (cam.x - (wide ? WIDE_LEFT : 0)) * TILE - LCD_LEFT - (cam.subX > 0 ? TILE : 0);
+  return { left, right: left + (wide ? WIDE_COLUMNS : 16) * TILE };
+}
+
+/** The wide ring (include/br/br_field.h, THE WIDE RING): 32 metatile columns, WIDE_LEFT
+ *  of them left of pos.x, by pret's 16 rows -- its view's 40 rows each side always in
+ *  them. Bit (dx + WIDE_LEFT) of gBrRingStale is grid column pos.x + dx. */
+export const WIDE_LEFT = 8;
+export const WIDE_COLUMNS = 32;
+/** pret's own columns, pos.x..pos.x+14: drawn as each comes in, never stale. */
+const PRET_COLUMNS = 15;
+
+/** The map columns the wide band may show, for the stale columns the ROM reported with
+ *  the camera: ringRows on its side. In map pixels, [left, right). */
+export function ringStaleColumns(cam: { x: number }, stale: number): { left: number; right: number } {
+  let left = -Infinity;
+  let right = Infinity;
+  for (let dx = -1; dx >= -WIDE_LEFT; dx--) {
+    if ((stale >>> (dx + WIDE_LEFT)) & 1) {
+      left = (cam.x + dx + 1 - MAP_OFFSET) * TILE;
+      break;
+    }
+  }
+  for (let dx = PRET_COLUMNS; dx < WIDE_COLUMNS - WIDE_LEFT; dx++) {
+    if ((stale >>> (dx + WIDE_LEFT)) & 1) {
+      right = (cam.x + dx - MAP_OFFSET) * TILE;
+      break;
+    }
+  }
+  return { left, right };
 }
 
 /** The ROM's ring up and down (include/br/br_field.h, THE RING): 32 metatile rows,
@@ -594,10 +665,16 @@ export function bandClip(
   map: { w: number; h: number; seams?: readonly { dir: SeamDir; same?: boolean }[] } | null,
   band: Band,
   stale = 0,
+  wide = wideRing(band),
 ): Band {
   const o = lcdOrigin(cam);
-  const ring = ringColumns(cam);
-  const rows = ringRows(cam, stale);
+  const ring = ringColumns(cam, wide);
+  const rows = wide ? { top: -Infinity, bottom: Infinity } : ringRows(cam, stale);
+  if (wide) {
+    const cols = ringStaleColumns(cam, stale);
+    ring.left = Math.max(ring.left, cols.left);
+    ring.right = Math.min(ring.right, cols.right);
+  }
   const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
   const reach = (dir: SeamDir) => (map ? edgeReach(map, dir) : Infinity);
   const w = map ? map.w * TILE : Infinity;
@@ -911,11 +988,14 @@ export class FieldView {
    *  from `cam`, the state the picture was drawn from); anywhere else the picture is the
    *  LCD alone. The composite shows through wherever the band is cut. One clip-path,
    *  set only when it changes. */
-  private clip(onField: boolean, cam: (CameraPos & { stale?: number }) | null): void {
+  private clip(onField: boolean, cam: (CameraPos & { stale?: number; wide?: boolean | null }) | null): void {
     const b = this.band;
     let cut: Band | null = null;
     if (b && !onField) cut = b;
-    else if (b && cam) cut = bandClip(cam, HOENN.byRef.get(`${cam.group}:${cam.num}`) ?? null, b, cam.stale ?? 0);
+    // The ring is the one the ROM latched, not the one the band asked for: a ROM that set
+    // its BGs up before it was told the band is the tall ring, and the band's columns past
+    // pret's are cut.
+    else if (b && cam) cut = bandClip(cam, HOENN.byRef.get(`${cam.group}:${cam.num}`) ?? null, b, cam.stale ?? 0, wideRing(b) && cam.wide !== false);
     const s = this.lay.scale;
     const want = cut && (cut.left || cut.top || cut.right || cut.bottom)
       ? `inset(${cut.top * s}px ${cut.right * s}px ${cut.bottom * s}px ${cut.left * s}px)`
@@ -1054,6 +1134,7 @@ export class FieldView {
       outside: ring !== undefined && emu.read(ring + RING_OUTSIDE, 8) !== 0,
       ringTimer: ring === undefined ? 0 : emu.read(ring + RING_TIMER, 16),
       stale: this.readStale(),
+      wide: this.readWide(),
       onField: main !== undefined && cb2 !== undefined && (emu.read(main + MAIN_CALLBACK2, 32) & ~1) === cb2
         && !(pick !== undefined && emu.read(pick + PICK_ACTIVE, 8) !== 0),
     };
@@ -1124,6 +1205,12 @@ export class FieldView {
   private readStale(): number {
     const at = this.sym('gBrRingStale');
     return at === undefined ? 0 : this.deps.emu.read(at, 32) >>> 0;
+  }
+
+  /** gBrFieldWide: the ring the ROM latched as the field's BGs were set up. */
+  private readWide(): boolean | null {
+    const at = this.sym('gBrFieldWide');
+    return at === undefined ? null : this.deps.emu.read(at, 8) !== 0;
   }
 
   private readFog(): Fog | null {

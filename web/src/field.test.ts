@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, HEAD_ROOM, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach } from './field';
+import { FIELD_VIEW_SIZE, HEAD_ROOM, ringStaleColumns, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach } from './field';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -57,6 +57,24 @@ describe('the picture past the LCD (POK-319)', () => {
     expect(init.split(',').map((t) => t.trim()).filter(Boolean)).toEqual(['BR_VIEW_LEFT', 'BR_VIEW_TOP', 'BR_VIEW_RIGHT', 'BR_VIEW_BOTTOM', 'BR_SPRITE_TOP', 'BR_SPRITE_BOTTOM']);
   });
 
+  it("the wide view (THE WIDE RING): 128 columns each side and 40 rows, the 512x256 ring less its spare column and row, and br_field.c fills gBrFieldViewWide from the header", () => {
+    const wide = { left: define('BR_WIDE_VIEW_LEFT'), top: define('BR_WIDE_VIEW_TOP'), right: define('BR_WIDE_VIEW_RIGHT'), bottom: define('BR_WIDE_VIEW_BOTTOM') };
+    expect(wide).toEqual({ left: 128, top: 40, right: 128, bottom: 40 });
+    expect(define('BR_WIDE_LEFT')).toBe(WIDE_LEFT);
+    expect(define('BR_WIDE_COLUMNS')).toBe(WIDE_COLUMNS);
+    expect(240 + wide.left + wide.right, 'every ring column but the spare one').toBe(16 * WIDE_COLUMNS - 16);
+    expect(wide.left, "the ring's left: WIDE_LEFT columns left of the LCD's").toBe(16 * WIDE_LEFT);
+    expect(160 + wide.top + wide.bottom, "pret's 16 rows but the spare one").toBe(16 * 16 - 16);
+    const init = fieldSource.match(/const struct BrFieldView gBrFieldViewWide\s*=\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(init.split(',').map((t) => t.trim()).filter(Boolean)).toEqual(['BR_WIDE_VIEW_LEFT', 'BR_WIDE_VIEW_TOP', 'BR_WIDE_VIEW_RIGHT', 'BR_WIDE_VIEW_BOTTOM', 'BR_SPRITE_TOP', 'BR_SPRITE_BOTTOM']);
+    // gBrFieldShown's sides follow its rows, and the ROM latches the wide ring on a left.
+    const shown = fieldHeader.match(/struct BrFieldShown\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect([...shown.matchAll(/u16 (\w+);/g)].map((m) => m[1])).toEqual(['top', 'bottom', 'left', 'right']);
+    expect(fieldSource).toMatch(/gBrFieldWide = gBrFieldShown\.left != 0;/);
+    expect(wideRing({ left: 8, top: 40, right: 0, bottom: 40 })).toBe(true);
+    expect(wideRing(LEGACY_BAND)).toBe(false);
+  });
+
   it('the legacy band is one ring: 256 rows of the 8-bit sprite y, 256 columns of the tilemap, and its window is its own rows', () => {
     expect(LEGACY_BAND).toEqual({ left: 0, top: 40, right: 16, bottom: 56 });
     expect(160 + LEGACY_BAND.top + LEGACY_BAND.bottom).toBe(256);
@@ -79,6 +97,58 @@ describe('the picture past the LCD (POK-319)', () => {
     it('reads the six u16s at gBrFieldView out of the patched image', () => {
       expect(romBand(image([0, 104, 16, 232, 40, 56]), syms)).toEqual({ band: { left: 0, top: 104, right: 16, bottom: 232 }, sprites: { top: 40, bottom: 56 } });
       expect(romBand(image([8, 40, 24, 56, 16, 80]), syms)).toEqual({ band: { left: 8, top: 40, right: 24, bottom: 56 }, sprites: { top: 16, bottom: 80 } });
+    });
+
+    it("reads the wide ring's six u16s at gBrFieldViewWide beside them, when they are a picture the core can draw with the same window", () => {
+      const WIDE_AT = AT + 0x20;
+      const both = (wide: number[]) => {
+        const rom = image([0, 104, 16, 232, 40, 56]);
+        wide.forEach((v, i) => {
+          rom[WIDE_AT - 0x08000000 + 2 * i] = v & 0xff;
+          rom[WIDE_AT - 0x08000000 + 2 * i + 1] = v >> 8;
+        });
+        return romBand(rom, new Map([['gBrFieldView', AT], ['gBrFieldViewWide', WIDE_AT]]));
+      };
+      expect(both([128, 40, 128, 40, 40, 56])).toEqual({
+        band: { left: 0, top: 104, right: 16, bottom: 232 },
+        sprites: { top: 40, bottom: 56 },
+        wide: { left: 128, top: 40, right: 128, bottom: 40 },
+      });
+      expect(both([0, 40, 128, 40, 40, 56]).wide, 'no left: nothing asks the ROM for it').toBeUndefined();
+      expect(both([136, 40, 128, 40, 40, 56]).wide, "past the core's 128").toBeUndefined();
+      expect(both([128, 40, 128, 40, 32, 64]).wide, 'another window').toBeUndefined();
+      expect(romBand(image([0, 104, 16, 232, 40, 56]), syms).wide, 'a ROM without one').toBeUndefined();
+    });
+
+    // Cam, 2026-10-14: one zoom everywhere, so a wide screen shows far more map beside the
+    // LCD than above and below it. The page asks for whichever ring covers more of it.
+    describe('the wide ring on a screen it covers more of (askBand)', () => {
+      const rom = { band: { left: 0, top: 104, right: 16, bottom: 232 }, sprites: { top: 40, bottom: 56 }, wide: { left: 128, top: 40, right: 128, bottom: 40 } };
+      it('a desktop, 1440x800: 496 x 240 live, not the tall ring 256 x 384', () => {
+        const lay = layoutField(1440, 800, 0, 1, 800);
+        expect(askBand(lay, rom, true)).toEqual({ left: 128, top: 40, right: 128, bottom: 40 });
+        expect(shownArea(lay, rom.wide)).toBe(496 * 240);
+        expect(shownArea(lay, askBand(lay, rom, false))).toBe(256 * 384);
+      });
+      it('a phone on its side, 844x390: the 140 columns each side it shows, in eights, up to 128', () => {
+        const lay = layoutField(844, 390, 0, 3, 390);
+        expect(lay).toMatchObject({ cols: 520, rows: 240, lcdCol: 140, lcdRow: 40 });
+        expect(askBand(lay, rom, true)).toEqual({ left: 128, top: 40, right: 128, bottom: 40 });
+      });
+      it('a narrow window asks only the columns it shows, and never a left of 0', () => {
+        const lay = { scale: 2, cols: 360, rows: 200, lcdCol: 60, lcdRow: 20 };
+        expect(askBand(lay, rom, true)).toEqual({ left: 64, top: 40, right: 64, bottom: 40 });
+      });
+      it('a portrait phone keeps the tall ring', () => {
+        const lay = layoutField(390, 844, 300, 3, 390);
+        expect(askBand(lay, rom, true).left).toBe(0);
+        expect(askBand(lay, rom, true)).toEqual(askBand(lay, rom, false));
+      });
+      it('without the side table, or a ROM without it, the tall ring', () => {
+        const lay = layoutField(1440, 800, 0, 1, 800);
+        expect(askBand(lay, rom, false).left).toBe(0);
+        expect(askBand(lay, { band: rom.band, sprites: rom.sprites }, true).left).toBe(0);
+      });
     });
 
     it('a ROM that does not say -- or says what no core can draw -- gets the legacy band', () => {
@@ -111,7 +181,7 @@ describe('the picture past the LCD (POK-319)', () => {
       expect(main.slice(0, patched), 'nothing asked before the ROM is known').not.toMatch(/setViewport|setSpriteBand|askForBand/);
       // askForBand: the layout's band inside the ROM's, then the window, then the band.
       const fn = appSource.slice(appSource.indexOf('function askForBand('), appSource.indexOf('async function main()'));
-      const band = fn.indexOf('askBand(matchLayout(), romPicture)');
+      const band = fn.indexOf('askBand(matchLayout(), romPicture, shownOk)');
       const sprites = fn.indexOf('emu.setSpriteBand(romPicture.sprites)');
       const viewport = fn.indexOf('emu.setViewport(askedBand)');
       expect(band).toBeGreaterThan(0);
@@ -224,11 +294,45 @@ describe('the picture past the LCD (POK-319)', () => {
       expect(bandClip(at(10, 0), map, LEGACY_BAND).top).toBe(LEGACY_BAND.top);
     });
 
-    it("a band left of the LCD is past the ring's columns, which start at the LCD's left: cut on any map", () => {
-      const wide: Band = { left: 16, top: 40, right: 16, bottom: 56 };
-      expect(bandClip(at(7, 10), map, wide).left, 'past the map edge too').toBe(16);
-      expect(bandClip(at(8, 10), map, wide).left, "past the ring's first column").toBe(16);
-      expect(bandClip(at(8, 10), map, wide).right, "and the right edge is the ring's last column").toBe(0);
+    it("a band left of the LCD is the wide ring's, which starts WIDE_LEFT columns left of pos.x: cut only at the map's edge", () => {
+      const wide: Band = { left: 16, top: 40, right: 16, bottom: 40 };
+      expect(bandClip(at(7, 10), map, wide).left, 'past the map edge').toBe(16);
+      expect(bandClip(at(8, 10), map, wide).left, 'on it').toBe(0);
+      expect(bandClip(at(8, 10), map, wide).right).toBe(0);
+    });
+
+    // THE WIDE RING (include/br/br_field.h): 32 columns, pos.x-8..pos.x+23, the view
+    // 31 of them; gBrRingStale's bits are its columns, bit (dx + 8).
+    describe('the wide ring: its columns, and the ones it has still to draw (ringStaleColumns)', () => {
+      const wide: Band = { left: 128, top: 40, right: 128, bottom: 40 };
+      const mid = { w: 60, h: 60 };
+      const bit = (dx: number) => 2 ** (dx + WIDE_LEFT);
+      const cols = (...dxs: number[]) => dxs.reduce((m, dx) => m + bit(dx), 0);
+      const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+      it('at rest it holds the band, and one column spare', () => {
+        expect(ringColumns(at(20, 20), true)).toEqual({ left: 12 * 16 - 112, right: 44 * 16 - 112 });
+        expect(bandClip(at(20, 20), mid, wide)).toEqual(none);
+      });
+      it("a step right: the far column waits in the slot the band's left edge shows, so the ring is pos.x-9..pos.x+22 and nothing is cut", () => {
+        expect(ringColumns(at(20, 20, 4, 0), true)).toEqual({ left: 11 * 16 - 112, right: 43 * 16 - 112 });
+        expect([2, 4, 8, 14].map((sub) => bandClip(at(20, 20, sub, 0), mid, wide, cols(23)))).toEqual(Array(4).fill(none));
+      });
+      it('a step left: the new column is in from the first frame', () => {
+        expect([-2, -4, -8, -14].map((sub) => bandClip(at(20, 20, sub, 0), mid, wide))).toEqual(Array(4).fill(none));
+      });
+      it("after a whole-map draw, the band is pret's 16 columns: none left of the LCD, its 16 right", () => {
+        const wholeMap = cols(...range(-8, -1), ...range(16, 23));
+        expect(ringStaleColumns(at(20, 20), wholeMap)).toEqual({ left: (20 - 7) * 16, right: (20 + 16 - 7) * 16 });
+        expect(bandClip(at(20, 20), mid, wide, wholeMap)).toEqual({ ...none, left: 128, right: 112 });
+        expect(bandClip(at(20, 20), mid, wide, cols(-8, 23)), 'the last two').toEqual({ ...none, left: 16 });
+      });
+      it('the rows are never cut for staleness: the wide ring has no rows past pret\'s', () => {
+        expect(bandClip(at(20, 20, 0, 8), mid, wide, 0)).toEqual(none);
+      });
+      it("a ROM that latched the tall ring (gBrFieldWide 0) under a wide band: cut to the tall ring's 16 columns", () => {
+        expect(bandClip(at(20, 20), mid, wide, 0, false)).toEqual({ ...none, left: 128, right: 112 });
+        expect(bandClip(at(20, 20), mid, wide, cols(-8), false), 'its bits are rows then, and these none the band shows').toEqual({ ...none, left: 128, right: 112 });
+      });
     });
 
     // The ring is 16 metatile columns, 256 pixels, and the band 256 wide: mid-step the
@@ -392,7 +496,7 @@ describe('the fade', () => {
 
   it('holds black across a map load until the fade-in starts', () => {
     const cam = (fade: number, fadeActive: boolean): Camera =>
-      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, onField: true });
+      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField: true });
     expect(heldFade(cam(16, false), cam(0, false), false), 'the reset').toBe(true);
     expect(heldFade(cam(0, false), cam(0, false), true), 'still loading').toBe(true);
     expect(heldFade(cam(0, false), cam(16, true), true), 'the fade-in begins').toBe(false);
@@ -439,7 +543,7 @@ describe('the fade', () => {
       [1121, 0, 0, 0, 0, 0x0040],
     ];
     const cam = (fade: { y: number; color: number; active: boolean }): Camera =>
-      ({ group: 0, num: 17, x: 33, y: 15, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, onField: true });
+      ({ group: 0, num: 17, x: 33, y: 15, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField: true });
     let bg = true; // the move's flash reached BG palettes 1..3 (mask 0xe)
     let prev: Camera | null = null;
     let hold = { on: false, frames: 0 };
@@ -488,7 +592,7 @@ describe('the fade', () => {
       [1300, 16, 0, 1, 0xffffffff, 0x0003],
     ];
     const cam = (fade: { y: number; color: number; active: boolean }): Camera =>
-      ({ group: 26, num: 13, x: 20, y: 20, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, onField: false });
+      ({ group: 26, num: 13, x: 20, y: 20, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField: false });
     let bg = true;
     let prev: Camera | null = null;
     let hold = { on: false, frames: 0 };
