@@ -71,6 +71,8 @@ static const u8 sEmotion_HeartGfx[] = INCGFX_U8("graphics/field_effects/pics/emo
 // bubble. It rides the exclamation/question sprite as a third frame rather than a
 // sprite of its own -- same size, same palette, same bobbing callback.
 static const u8 sEmotion_BrBootGfx[] = INCGFX_U8("graphics/field_effects/pics/emotion_boot.png", ".4bpp");
+// A trainer in a fight with another trainer (POK-372): crossed swords, a fourth frame.
+static const u8 sEmotion_BrVsGfx[] = INCGFX_U8("graphics/field_effects/pics/emotion_vs.png", ".4bpp");
 #endif
 
 static u8 (*const sDirectionalApproachDistanceFuncs[])(struct ObjectEvent *trainerObj, s16 range, s16 x, s16 y) =
@@ -152,6 +154,10 @@ static const struct SpriteFrameImage sSpriteImageTable_ExclamationQuestionMark[]
         .data = sEmotion_BrBootGfx,
         .size = sizeof(sEmotion_BrBootGfx)
     },
+    {
+        .data = sEmotion_BrVsGfx,
+        .size = sizeof(sEmotion_BrVsGfx)
+    },
 #else
     }
 #endif
@@ -184,6 +190,12 @@ static const union AnimCmd sSpriteAnim_Icons3[] =
     ANIMCMD_END
 };
 
+static const union AnimCmd sSpriteAnim_Icons4[] =
+{
+    ANIMCMD_FRAME(3, 60),
+    ANIMCMD_END
+};
+
 #endif
 static const union AnimCmd *const sSpriteAnimTable_Icons[] =
 {
@@ -191,6 +203,7 @@ static const union AnimCmd *const sSpriteAnimTable_Icons[] =
 #if BR
     sSpriteAnim_Icons2,
     sSpriteAnim_Icons3,
+    sSpriteAnim_Icons4,
 #else
     sSpriteAnim_Icons2
 #endif
@@ -762,6 +775,18 @@ u8 FldEff_BrBootIcon(void)
 
     if (spriteId != MAX_SPRITES)
         SetIconSpriteData(&gSprites[spriteId], FLDEFF_BR_BOOT_ICON, 2);
+
+    return 0;
+}
+
+// Over a trainer in a fight with another trainer (POK-372), held for as long as the
+// fight (br_ghosts.c's busy marks). The "!" stays the spotter's, as Emerald's is.
+u8 FldEff_BrVsIcon(void)
+{
+    u8 spriteId = CreateSpriteAtEnd(&sSpriteTemplate_ExclamationQuestionMark, 0, 0, 0x52);
+
+    if (spriteId != MAX_SPRITES)
+        SetIconSpriteData(&gSprites[spriteId], FLDEFF_BR_VS_ICON, 3);
 
     return 0;
 }

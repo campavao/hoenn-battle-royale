@@ -794,7 +794,8 @@ EWRAM_DATA u8 gBrGhostMark[BR_MAX_SEATS] = {0}; // named for the drivers (emote-
 // already refuses a trainer who is in a menu or a battle -- that is POK-230's rule --
 // and nothing showed it, so a trainer standing still in a fight looked exactly like one
 // standing still waiting to take yours. Emerald's own trainer-sight icons do the job:
-// "!" for a battle, "?" for a menu.
+// "?" for a menu, and crossed swords for a fight with another trainer (POK-372: the "!" is
+// the spotter's alone, as Emerald's is).
 //
 // trainer_see.c's icon sprite keeps the field effect's id in data[7] and the object's
 // local id in data[0]; data[6] is free, and says a mark is being held past its end.
@@ -805,7 +806,7 @@ EWRAM_DATA u8 gBrGhostMark[BR_MAX_SEATS] = {0}; // named for the drivers (emote-
 static u8 MarkFor(u8 busy)
 {
     if (busy == BR_BUSY_BATTLE)
-        return FLDEFF_EXCLAMATION_MARK_ICON;
+        return FLDEFF_BR_VS_ICON;
     if (busy == BR_BUSY_MENU)
         return FLDEFF_QUESTION_MARK_ICON;
     return 0xFF;
@@ -832,7 +833,7 @@ bool8 BrGhosts_DropMark(struct Sprite *sprite, bool8 objectGone)
 
     // Anybody else's mark, and the runner's boot, are pret's: up, bob, gone.
     if (localId < BR_GHOST_LOCAL_ID_BASE || localId >= BR_GHOST_LOCAL_ID_BASE + BR_MAX_SEATS
-     || (MARK_EFFECT(sprite) != FLDEFF_EXCLAMATION_MARK_ICON && MARK_EFFECT(sprite) != FLDEFF_QUESTION_MARK_ICON))
+     || (MARK_EFFECT(sprite) != FLDEFF_BR_VS_ICON && MARK_EFFECT(sprite) != FLDEFF_QUESTION_MARK_ICON))
         return objectGone || sprite->animEnded;
     seat = localId - BR_GHOST_LOCAL_ID_BASE;
     if (objectGone || MARK_EFFECT(sprite) != MarkFor(gBrSeatBusy[seat]))
