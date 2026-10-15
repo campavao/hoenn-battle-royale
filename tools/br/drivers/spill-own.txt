@@ -13,7 +13,9 @@ wait 30
 expect u8 gBrRing+5 1
 # a level 5 Treecko bleeds out in about twenty ticks of 240 frames
 wait 5200
-# the fog took us: OUT went out, and so did the spill
+# the fog took us, and said so first (POK-358): OUT goes out once it is read -- or,
+# with nobody reading it, a few seconds later on its own (fog-out-idle) -- and so does
+# the spill
 expect u8 gBrRing+7 1
 expect u8 gBrMatch 3
 # one ball for the one mon, plus the bag, both standing on this map

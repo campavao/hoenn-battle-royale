@@ -62,6 +62,7 @@
          the match, the match to its results. Four steps, as the game's palette fades go. */
       #stage-fade { position: fixed; inset: 0; z-index: 10; background: #000; opacity: 0; pointer-events: none; }
       #stage-fade.go { animation: stage-fade 320ms steps(4, end); }
+      #stage-fade.hold { opacity: 1; animation: none; }
       @keyframes stage-fade { from { opacity: 1; } to { opacity: 0; } }
       @media (prefers-reduced-motion: reduce) { #stage-fade.go { animation: none; } }
       #ui { display: block; image-rendering: pixelated; }
@@ -101,8 +102,9 @@
       #key-layer { position: absolute; left: 0; top: 0; pointer-events: none; }
       #key-layer[hidden] { display: none; }
       /* Under the see-through battle, over the field: dims the map the battle draws on
-         (Cam, 2026-10-12: "a small overlay underneath, maybe 50% opacity"). */
-      #key-dim { position: absolute; left: 0; top: 0; pointer-events: none; background: rgba(0, 0, 0, 0.5); }
+         (Cam, 2026-10-12: "a small overlay underneath, maybe 50% opacity"), grey and the
+         whole field (2026-10-14, POK-348: "make it gray instead of black"). */
+      #key-dim { position: absolute; left: 0; top: 0; pointer-events: none; background: rgba(40, 40, 40, 0.5); }
       #key-dim[hidden] { display: none; }
       /* No object-fit: field.ts sizes the canvas to its buffer's own aspect, and Firefox
          composes object-fit with the clip-path that hides the band into a picture

@@ -5,6 +5,8 @@
 #include "global.h"
 #include "event_object_movement.h"
 #include "fieldmap.h"
+#include "metatile_behavior.h"
+#include "sprite.h"
 #include "field_player_avatar.h"
 #include "main.h"
 #include "overworld.h"
@@ -241,6 +243,8 @@ static u32 Keep(u8 limit)
 // A PLACE, an OUT or a GONE is heard in a battle as often as on the field -- somebody is
 // always changing maps -- and off the field the ghost's object is held rather than
 // removed under a battle sprite's feet (BrField_RemoveObject, POK-328).
+static void DropBlob(u8 seat);
+
 static void Despawn(u8 seat)
 {
     struct ObjectEvent *obj = GhostObject(seat);
@@ -249,6 +253,8 @@ static void Despawn(u8 seat)
     // jump to (0,0) is a jump the camera makes too.
     if (obj != NULL && seat == gBrSpectate.follow)
         BrSpectate_LetGo();
+    // The blob reads its rider every frame: gone first, or it reads a freed object.
+    DropBlob(seat);
     if (obj != NULL)
         BrField_RemoveObject(obj->localId, obj->mapNum, obj->mapGroup);
     gBrSeats[seat].objId = BR_NO_OBJ;
@@ -273,6 +279,87 @@ static u8 SkinGraphic(u8 skin)
     if (male == (gSaveBlock2Ptr->playerGender == MALE))
         return male ? OBJ_EVENT_GFX_BRENDAN_NORMAL : OBJ_EVENT_GFX_MAY_NORMAL;
     return male ? OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL : OBJ_EVENT_GFX_RIVAL_MAY_NORMAL;
+}
+
+// ---- SURF for ghosts (Cam's 2026-10-14 play-test, POK-360: "for bots their surf you can
+// see it's not quite showing correctly") -----------------------------------------------
+// A ghost on the water rides pret's own SURF blob, the one the player gets (FldEff_SurfBlob
+// takes any object), and BRENDAN or MAY sit down on it as the player does. Everybody else
+// has no seated picture and rides it as they stand.
+
+static u8 SurfGraphic(u8 gfx)
+{
+    switch (gfx)
+    {
+    case OBJ_EVENT_GFX_BRENDAN_NORMAL:       return OBJ_EVENT_GFX_BRENDAN_SURFING;
+    case OBJ_EVENT_GFX_MAY_NORMAL:           return OBJ_EVENT_GFX_MAY_SURFING;
+    case OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL: return OBJ_EVENT_GFX_RIVAL_BRENDAN_SURFING;
+    case OBJ_EVENT_GFX_RIVAL_MAY_NORMAL:     return OBJ_EVENT_GFX_RIVAL_MAY_SURFING;
+    }
+    return gfx;
+}
+
+// A ghost's SURF blob, found rather than kept: the blob's own sprite says whose it is
+// (data[2], the object it carries), and EWRAM has no room for a table of them.
+static struct Sprite *SurfBlob(u8 objId)
+{
+    u8 i;
+
+    for (i = 0; i < MAX_SPRITES; i++)
+    {
+        struct Sprite *sprite = &gSprites[i];
+
+        if (sprite->inUse && sprite->callback == UpdateSurfBlobFieldEffect && sprite->data[2] == objId)
+            return sprite;
+    }
+    return NULL;
+}
+
+static void DropBlob(u8 seat)
+{
+    struct ObjectEvent *obj = GhostObject(seat);
+    struct Sprite *blob;
+
+    if (obj == NULL)
+        return;
+    blob = SurfBlob(gBrSeats[seat].objId);
+    if (blob != NULL)
+        DestroySprite(blob);
+    gSprites[obj->spriteId].y2 = 0;
+}
+
+static void SurfGhost(u8 seat)
+{
+    struct BrSeat *s = &gBrSeats[seat];
+    struct ObjectEvent *obj = GhostObject(seat);
+    u8 walk, gfx, id;
+    bool8 wet, changed;
+
+    if (obj == NULL)
+        return;
+    wet = MetatileBehavior_IsSurfableWaterOrUnderwater(
+        MapGridGetMetatileBehaviorAt(obj->currentCoords.x, obj->currentCoords.y));
+    walk = SkinGraphic(s->skin);
+    gfx = wet ? SurfGraphic(walk) : walk;
+    changed = obj->graphicsId != gfx;
+    if (changed)
+        ObjectEventSetGraphicsId(obj, gfx);
+    if (!wet)
+    {
+        // Only a ghost that just came ashore can have one to drop: the search is not
+        // for every dry ghost every frame.
+        if (changed)
+            DropBlob(seat);
+        return;
+    }
+    if (SurfBlob(s->objId) != NULL)
+        return;
+    gFieldEffectArguments[0] = obj->currentCoords.x;
+    gFieldEffectArguments[1] = obj->currentCoords.y;
+    gFieldEffectArguments[2] = s->objId;
+    id = FieldEffectStart(FLDEFF_SURF_BLOB);
+    if (id < MAX_SPRITES)
+        SetSurfBlob_BobState(id, BOB_PLAYER_AND_MON);
 }
 
 static void Spawn(u8 seat)
@@ -879,6 +966,7 @@ void BrGhosts_Tick(void)
         if (GhostObject(seat) == NULL)
             Spawn(seat);
         DriveGhost(seat);
+        SurfGhost(seat);
     }
     EmoteBusyGhosts();
     WatchOwn();

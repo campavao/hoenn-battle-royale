@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { encodeGen3 } from '../text/gen3';
-import { battleId, battleSeats, CACHE_MAX_BYTES, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, romReplaying, Spectate } from './spectate';
+import { battleId, battleSeats, CACHE_MAX_BYTES, cutTo, EYE_WINDOW_MS, nameBstart, PEEK_INTERVAL_MS, NO_SEAT, romReplaying, Spectate } from './spectate';
 import type { Msg } from '../net/wire';
 
 const bstart = (battle: number): Msg => ({ t: 'bstart', battle, data: [1, 2, 3] });
@@ -138,14 +138,23 @@ describe('the eye', () => {
 });
 
 describe("a proxy duel's bstart (POK-300)", () => {
-  it('is named after the two bots, low seat first, seven characters and an EOS', () => {
+  it('is named after the two bots, side A first, seven characters and an EOS', () => {
     const data = new Array(40).fill(0);
-    const msg = nameBstart({ t: 'bstart', battle: 3 | (9 << 8), data }, (s) => (s === 3 ? 'courtney' : 'Max'));
+    const msg = nameBstart({ t: 'bstart', battle: 3 | (9 << 8), data }, (s) => (s === 3 ? 'courtney' : 'Max'), [3, 9]);
     expect(msg.data.slice(0, 8)).toEqual(data.slice(0, 8)); // the seed and flags are untouched
     expect(msg.data.slice(8, 16)).toEqual([...encodeGen3('COURTNE'), 0xff]);
     expect(msg.data.slice(16, 24)).toEqual([...encodeGen3('MAX'), 0xff, 0xff, 0xff, 0xff, 0xff]);
     expect(msg.data.slice(24)).toEqual(data.slice(24));
     expect(data[8]).toBe(0); // and the original was not written on
+  });
+
+  // POK-368: TATE (seat 9) on side A beat LIZA (seat 3), and the replay read "Player
+  // defeated TATE!" -- the low seat's name had gone over TATE's party.
+  it('names side A first when side A is the high seat', () => {
+    const data = new Array(40).fill(0);
+    const msg = nameBstart({ t: 'bstart', battle: 3 | (9 << 8), data }, (s) => (s === 3 ? 'liza' : 'tate'), [9, 3]);
+    expect(msg.data.slice(8, 16)).toEqual([...encodeGen3('TATE'), 0xff, 0xff, 0xff, 0xff]);
+    expect(msg.data.slice(16, 24)).toEqual([...encodeGen3('LIZA'), 0xff, 0xff, 0xff, 0xff]);
   });
 });
 
@@ -377,5 +386,24 @@ describe('a wild fight (2026-10-05 play-test)', () => {
     s.wantsFromRelay(bstart(battleId(4, 9)));
     s.noteBusy(4);
     expect(s.watchingBattle()).toBe(battleId(4, 9));
+  });
+});
+
+// POK-365: two bots fought beside the trainer being watched, and the watcher saw nothing.
+describe('a fight in front of the camera (POK-365)', () => {
+  const at = (seat: number, x: number, y: number, num = 16) => ({ seat, group: 0, num, x, y });
+  const seats = [at(1, 10, 10), at(29, 14, 12), at(31, 15, 12), at(5, 30, 10), at(6, 10, 10, 17)];
+
+  it('cuts to a fighter standing within a screen of the trainer we watch', () => {
+    expect(cutTo(battleId(29, 31), 1, seats)).toBe(29);
+  });
+
+  it('leaves it be when we watch one of them, or nobody fighting is on our screen', () => {
+    expect(cutTo(battleId(1, 31), 1, seats)).toBeNull(); // ours: already handed over
+    expect(cutTo(battleId(5, 31), 5, seats)).toBeNull();
+    expect(cutTo(battleId(5, 6), 1, seats)).toBeNull(); // eight tiles over, and another map
+    expect(cutTo(battleId(29, NO_SEAT), 9, seats)).toBeNull(); // we stand nowhere
+    expect(cutTo(battleId(5, NO_SEAT), 1, seats)).toBeNull();
+    expect(cutTo(battleId(29, NO_SEAT), 1, seats)).toBeNull(); // a wild one beside us
   });
 });

@@ -336,6 +336,14 @@ describe('who may say what (POK-330 #24)', () => {
     expect(bridge.stats.refused).toBe(3);
   });
 
+  it('names the seat it hands its own ROM to follow (POK-369)', () => {
+    const { frame, romDrainIn, bridge } = joined();
+    bridge.pushToRom({ t: 'follow', seat: 7 });
+    bridge.pushToRom({ t: 'follow', seat: null });
+    frame();
+    expect(drainMsgs(romDrainIn)).toEqual([{ t: 'follow', seat: 7, name: 'MAY' }, { t: 'follow', seat: null }]);
+  });
+
   it("takes the room's word only from the room's host", () => {
     const { socket, frame, romDrainIn, bridge, heard } = joined();
     socket.receive({ type: 'recv', from: 7, m: { t: 'again', seat: 7 } });

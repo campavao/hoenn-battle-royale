@@ -387,7 +387,7 @@ export interface SheetModel {
   look: 'dock' | 'overlay';
   /** The room's line (Room ABCDEF, Reconnecting…), or SOLO VS BOTS. */
   status: string;
-  /** SAFARI / RING 3 (PLACE) · 8 left · 1:23, while a match is on. */
+  /** SAFARI / SAFE: PLACE · 8 left · 1:23, while a match is on. */
   strip: string | null;
   note: string;
   seats: RoomSeat[];

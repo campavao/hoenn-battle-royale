@@ -15,6 +15,7 @@
 #include "constants/characters.h"
 #include "br/br_hud.h"
 #include "br/br_match.h"
+#include "fldeff_misc.h"
 #include "br/br_ring.h"
 #include "br/br_story.h"
 #include "battle.h"
@@ -29,6 +30,12 @@
 #include "constants/battle_script_commands.h"
 #include "constants/battle_string_ids.h"
 #include "util.h"
+#include "task.h"
+#include "text.h"
+#include "script.h"
+#include "palette.h"
+#include "field_message_box.h"
+#include "field_player_avatar.h"
 
 EWRAM_DATA struct BrRing gBrRing = {0};
 
@@ -185,10 +192,117 @@ static void ApplyWeather(bool8 outside)
     gBrRing.appliedMapNum = gSaveBlock1Ptr->location.mapNum;
 }
 
+// The fog finished the team in the overworld: say so, the way a poison step does,
+// before the camera goes (Cam's 2026-10-14 play-test, POK-358: "BARBOACH..." and the
+// screen was already somebody else's). The OUT itself goes at once -- the room's order
+// of elimination is the order OUTs arrive, and a team that went first must not outlast
+// one that went later by sitting on a message (review of #43) -- and while the player is
+// told, the watch that the OUT starts holds off (BrRing_Telling: FollowTick, a replay).
+// A field that is busy -- a script, a message of its own -- is waited out, up to
+// BR_FOG_OUT_WAIT frames. The message waits for A or B, but never for a player who has
+// put the phone down: after BR_FOG_OUT_READ frames with no press it closes by itself.
+#define BR_FOG_OUT_WAIT (60 * 10)
+#define BR_FOG_OUT_READ (60 * 8)
+static const u8 sText_FogOut[] = _("{STR_VAR_1} fainted in the fog…\p{PLAYER} is out of usable POKéMON!\pYou're out of the match!");
+
+// Which mon fainted last: its name goes into gStringVar1 only as the line is shown, since
+// that is every script's and every message's, and the field can be busy with one first.
+// The high bit: the player has not been told yet.
+static EWRAM_DATA u8 sFogMon = 0;
+#define FOG_UNTOLD 0x80
+
+#define tState data[0]
+#define tWait data[1]
+
+static void CloseFogOut(void)
+{
+    DeactivateAllTextPrinters(); // a page still waiting for A prints nothing more
+    HideFieldMessageBox();
+    UnlockPlayerFieldControls();
+}
+
+static void Task_FogOut(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    switch (tState)
+    {
+    case 0:
+        // Off the field (the BAG, a fight) it waits for the field: that is where it is
+        // said, and the time it waits for a quiet one is the field's.
+        if (!BrField_OverworldRunning())
+            return;
+        if (++tWait > BR_FOG_OUT_WAIT)
+            break;
+        if (ScriptContext_IsEnabled() || !IsFieldMessageBoxHidden() || gPaletteFade.active
+         || ArePlayerFieldControlsLocked())
+            return;
+        LockPlayerFieldControls();
+        GetMonData(&gPlayerParty[sFogMon & ~FOG_UNTOLD], MON_DATA_NICKNAME, gStringVar1);
+        StringGet_Nickname(gStringVar1);
+        ShowFieldMessage(sText_FogOut);
+        tWait = 0;
+        tState++;
+        return;
+    case 1:
+        // Printing: each page waits for A. The last one is still on screen when the
+        // printer is done, so it is read once more below, on a clock of its own.
+        if (IsFieldMessageBoxHidden())
+        {
+            tWait = 0;
+            tState++;
+            return;
+        }
+        if (JOY_NEW(A_BUTTON | B_BUTTON))
+            tWait = 0; // a page turned: somebody is reading
+        if (++tWait <= BR_FOG_OUT_READ)
+            return;
+        CloseFogOut();
+        break;
+    case 2:
+        if (++tWait <= BR_FOG_OUT_READ && !JOY_NEW(A_BUTTON | B_BUTTON))
+            return;
+        CloseFogOut();
+        break;
+    }
+    sFogMon &= ~FOG_UNTOLD;
+    DestroyTask(taskId);
+}
+
+#undef tState
+#undef tWait
+
+bool8 BrRing_Telling(void)
+{
+    return (sFogMon & FOG_UNTOLD) != 0;
+}
+
+static void StartFogOut(u8 partyIdx)
+{
+    BrMatch_Out();
+    // A script already running (a gym leader mid-line, a trainer's walk) has the field:
+    // out, untold, as before.
+    if (ScriptContext_IsEnabled())
+        return;
+    sFogMon = partyIdx | FOG_UNTOLD;
+    CreateTask(Task_FogOut, 80);
+}
+
+// The telling is never lost with its task: a BAG or POKeMON opened from the menu that
+// was up when the team went resets every task on its way in. Back on the field, the
+// task starts again and the player is told then.
+static void OweFogOut(void)
+{
+    if (BrRing_Telling() && !FuncIsActiveTask(Task_FogOut) && BrField_OverworldRunning())
+        CreateTask(Task_FogOut, 80);
+}
+
 static void Bleed(void)
 {
     u8 i, count = CalculatePlayerPartyCount();
     u8 alive = 0;
+    bool8 dealt = FALSE;
+    u8 last = PARTY_SIZE;
     // In a battle the fog hurts but never finishes anybody. A team that fainted to the
     // weather mid-turn would take the elimination -- and the spill, and the OUT -- out
     // of the battle engine's hands while it was still running a turn, so it waits at
@@ -219,6 +333,16 @@ static void Bleed(void)
         if (dmg == 0)
             continue;
         hp -= dmg;
+        dealt = TRUE;
+        if (hp == 0)
+        {
+            // A fainted POKeMON has no status, and a PSN one left on would faint again on
+            // the next poison step, with its own line (field_poison.c) over ours.
+            u32 none = STATUS1_NONE;
+
+            SetMonData(mon, MON_DATA_STATUS, &none);
+            last = i;
+        }
         gBrRing.damageDealt += dmg;
         SetMonData(mon, MON_DATA_HP, &hp);
         // The battle is looking at its own copy, so the bar only moves if that moves
@@ -228,12 +352,21 @@ static void Bleed(void)
         if (hp > 0)
             alive++;
     }
+    // Felt on the field the way a poison step is (POK-358): its mosaic and its sound.
+    if (dealt && BrField_OverworldRunning() && !FldEffPoison_IsActive())
+        FldEffPoison_Start();
+    if (dealt)
+        gBrHud.dirty |= BR_HUD_DIRTY_CORNER; // its HP line (br_hud.c's LeadHp)
     if (count > 0 && alive == 0 && !gBrRing.out)
     {
         // Through br_match's one door, so the fog drops a team on the ground like any
-        // other way out (POK-232) instead of quietly sending its own OUT.
+        // other way out (POK-232) instead of quietly sending its own OUT -- once the
+        // player has been told, on the field (FogOut).
         gBrRing.out = TRUE;
-        BrMatch_Out();
+        if (BrField_OverworldRunning() && last < PARTY_SIZE)
+            StartFogOut(last);
+        else
+            BrMatch_Out();
     }
 }
 
@@ -384,6 +517,7 @@ u16 BrRing_Outside(void)
 void BrRing_Init(void)
 {
     CpuFill32(0, &gBrRing, sizeof(gBrRing));
+    sFogMon = 0;
     gBrRing.damageTimer = BR_FOG_TICK_FRAMES;
     BrNet_On(BR_MSG_RING, HandleRing);
 }
@@ -397,6 +531,7 @@ void BrRing_Tick(void)
     // so a battle it reaches takes the damage and nothing else.
     if (!gBrRing.active)
         return;
+    OweFogOut();
     if (!BrField_OverworldRunning())
     {
         if (!FogReachesThisBattle())

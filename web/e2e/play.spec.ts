@@ -213,14 +213,15 @@ test('a solo match, played at the keyboard, looks right the whole way through', 
     });
     expect(await keyBlue(page, p.lcd), 'the battle backdrop is see-through, not key blue').toBeLessThan(0.02);
     // Under it, over the field, the dim (Cam, 2026-10-12: "a small overlay underneath,
-    // maybe 50% opacity"), on the LCD.
+    // maybe 50% opacity"): grey, over the whole field and not just the LCD (POK-348).
     const dim = await page.evaluate(() => {
       const d = document.querySelector('#key-dim') as HTMLElement;
+      const f = (document.querySelector('#field') as HTMLElement).getBoundingClientRect();
       const r = d.getBoundingClientRect();
-      return { shown: !d.hidden, x: r.x, y: r.y, width: r.width, height: r.height };
+      return { shown: !d.hidden, x: r.x - f.x, y: r.y - f.y, width: r.width - f.width, height: r.height - f.height, bg: getComputedStyle(d).backgroundColor };
     });
-    expect(dim, 'the dim under the battle, on the LCD').toEqual({
-      shown: true, x: expect.closeTo(p.lcd.x, 0), y: expect.closeTo(p.lcd.y, 0), width: expect.closeTo(p.lcd.width, 0), height: expect.closeTo(p.lcd.height, 0),
+    expect(dim, 'the dim under the battle, the whole field').toEqual({
+      shown: true, x: expect.closeTo(0, 0), y: expect.closeTo(0, 0), width: expect.closeTo(0, 0), height: expect.closeTo(0, 0), bg: 'rgba(40, 40, 40, 0.5)',
     });
     // From here every frame the page shows unkeyed is looked at for the key: the end of
     // every battle flashed four frames of it, and a fade a blue band (2026-10-12 video).

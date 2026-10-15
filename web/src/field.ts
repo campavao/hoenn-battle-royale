@@ -42,6 +42,7 @@ import {
   DESPAWN_COUNT, DESPAWN_SIZE, EVENTS_SIZE, GHOST_LOCAL_ID_BASE, GhostWalkers, LOOT_COUNT, LOOT_SIZE, MATCH_SEED, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
   TEMPLATE_COUNT, TEMPLATE_SIZE, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, decodeTraders, droppedPeople, inObjectView, initialFacing, objectKey, placePeople, standingFrame,
 } from './field-ghosts';
+import type { Seat } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 
 export const GBA_W = 240;
@@ -167,6 +168,12 @@ export const OBJ_OFFSCREEN_BIT = 0x40;
 export const OBJ_PLAYER_BYTE = 2; // bit 0
 export const OBJ_SPRITE_ID = 4;
 export const OBJ_GFX = 5;
+/** `fieldEffectSpriteId`: the player's SURF blob, while they surf. */
+export const OBJ_FIELD_EFFECT_SPRITE_ID = 0x1a;
+/** gPlayerAvatar.flags' PLAYER_AVATAR_FLAG_SURFING. */
+export const AVATAR_SURFING = 0x08;
+/** The SURF blob's sheet (tools/br/export-sprites.py): past every object gfx id. */
+export const SURF_BLOB_GFX = 1000;
 /** Graphics ids from OBJ_EVENT_GFX_VARS up name a VAR_OBJ_GFX_ID_n (include/constants). */
 export const GFX_VARS = 240;
 export const VAR_OBJ_GFX_ID_0 = 0x4010;
@@ -191,6 +198,8 @@ export const SPR_FLAGS = 0x3e;
 export const SPR_IN_USE = 0x1;
 export const SPR_ON_CAMERA = 0x2;
 export const SPR_INVISIBLE = 0x4;
+/** MAX_SPRITES: a sprite id at or past it is nobody's. */
+export const SPRITE_COUNT = 64;
 /** The sprite's OAM, the first thing in `struct Sprite` (include/gba/types.h OamData):
  *  affineMode in the low bits of byte 1, and the u16 at 2 is x:9, matrixNum:5, size:2 --
  *  matrixNum's bit 3 (ST_OAM_HFLIP) at bit 12. */
@@ -264,6 +273,9 @@ export interface FieldSprite {
   hidden: boolean;
   /** Another seat's ghost, whoever draws it: not one the field freezes in a battle. */
   seat?: number;
+  /** Drawn under everybody, whatever its y: the SURF blob, which hangs lower than the
+   *  rider on it. */
+  under?: boolean;
 }
 
 /** The image index the sprite is showing: `anims[animNum][animCmdIndex].frame.imageValue`,
@@ -752,8 +764,8 @@ export interface FieldDeps {
    *  in the picture's place while one draws. Without one, or on a core that cannot hand
    *  the picture over, the picture itself takes the filter (not on Safari). */
   keyLayer?: HTMLCanvasElement | null;
-  /** Over the field and under the picture, on the LCD: dims the map a see-through battle
-   *  shows through its keyed backdrop, shown while the picture is keyed. */
+  /** Over the field and under the picture, the whole field: dims the map a see-through
+   *  battle shows through its keyed backdrop, shown while the picture is keyed. */
   keyDim?: HTMLElement | null;
 }
 
@@ -898,6 +910,7 @@ export class FieldView {
   /** The other seats, walked by the page (POK-323), and where the roster comes from. */
   private readonly walkers = new GhostWalkers();
   private roster: (() => readonly RosterEntry[]) | null;
+  private held: (() => ReadonlySet<number>) | null = null;
   private still: Still | null = null;
   /** The last read's ghosts, for peek(). */
   private ghosts: { rom: FieldSprite[]; drawn: FieldSprite[] } = { rom: [], drawn: [] };
@@ -909,6 +922,21 @@ export class FieldView {
   /** The match's roster, once there is one: solo's, or the room's Bridge's. */
   setPeople(people: (() => readonly RosterEntry[]) | null): void {
     this.roster = people;
+  }
+
+  /** The seats of the fight our ROM is showing, held where they stood while it does:
+   *  the page walks them off the roster, and a spectator's replay runs behind the real
+   *  fight, so the field round a see-through battle showed its trainer walking away
+   *  from it (Cam's 2026-10-14 play-test, POK-367). */
+  setHeld(held: (() => ReadonlySet<number>) | null): void {
+    this.held = held;
+  }
+
+  /** Where this ROM has every other seat standing (gBrSeats), for a watcher deciding
+   *  whether a fight that just started is on its screen (match/spectate.ts's cutTo). */
+  seatsNow(): Seat[] {
+    const at = this.sym('gBrSeats');
+    return at === undefined ? [] : decodeSeats(this.deps.emu.bytes(at, SEAT_COUNT * SEAT_SIZE));
   }
 
   attach(): void {
@@ -961,12 +989,22 @@ export class FieldView {
     lcd.style.width = `${pic.width * lay.scale}px`;
     lcd.style.height = `${pic.height * lay.scale}px`;
     const at = lcdRect({ left: pic.left * lay.scale, top: pic.top * lay.scale, width: pic.width * lay.scale, height: pic.height * lay.scale }, this.band);
-    for (const el of [this.deps.keyLayer, this.deps.keyDim]) {
-      if (!el) continue;
-      el.style.left = `${at.left}px`;
-      el.style.top = `${at.top}px`;
-      el.style.width = `${at.width}px`;
-      el.style.height = `${at.height}px`;
+    const keyLayer = this.deps.keyLayer;
+    if (keyLayer) {
+      keyLayer.style.left = `${at.left}px`;
+      keyLayer.style.top = `${at.top}px`;
+      keyLayer.style.width = `${at.width}px`;
+      keyLayer.style.height = `${at.height}px`;
+    }
+    // The dim is the whole field's, not the LCD's: on the LCD alone it left the band
+    // around it bright, hard edges at the top, under the text box and down the right
+    // (Cam's 2026-10-14 play-test, POK-348: "make it reach the whole screen").
+    const keyDim = this.deps.keyDim;
+    if (keyDim) {
+      keyDim.style.left = '0px';
+      keyDim.style.top = '0px';
+      keyDim.style.width = `${lay.cols * lay.scale}px`;
+      keyDim.style.height = `${lay.rows * lay.scale}px`;
     }
     this.clipped = null;
     if (field.width !== lay.cols) field.width = lay.cols;
@@ -1024,7 +1062,7 @@ export class FieldView {
       this.layout();
     }
     // Every frame, on the field too, so they are in step when a battle takes it.
-    this.walkers.update(this.roster?.() ?? []);
+    this.walkers.update(this.roster?.() ?? [], this.prev && !this.prev.onField ? this.held?.() : undefined);
     // A main loop still mid-iteration at this VBlank (a map loading as a seam is crossed)
     // has the struct half-written: the last whole frame stands (gBrMidFrame, br_main.h).
     const mid = this.sym('gBrMidFrame');
@@ -1160,13 +1198,13 @@ export class FieldView {
       return [...stood, ...drawn];
     }
     const live = this.liveObjects();
-    const { people: objects, player } = this.readSprites(sb1);
+    const { people: objects, player, blob } = this.readSprites(sb1);
     const dropped = this.readDropped(sb1, c, live);
     const rom = [...objects, ...dropped];
     // The player too: the picture draws them on the field, but a see-through battle shows
     // the field under it with them gone (2026-10-07 play-test: "my character sprite is gone").
     const stood = rom.filter((s) => s.seat === undefined);
-    this.still = { group: c.group, num: c.num, origin, sprites: player ? [...stood, player] : stood };
+    this.still = { group: c.group, num: c.num, origin, sprites: player ? [...stood, ...(blob ? [blob] : []), player] : stood };
     // Inside the box the ROM walks them; and one it still holds an object for is its,
     // wherever the roster has already put it.
     const pos = { x: c.x, y: c.y };
@@ -1229,19 +1267,20 @@ export class FieldView {
   /** Every object the ROM has on the map, where its sprite is: the people the page draws,
    *  and the player apart, whom the picture draws on the field and the still keeps for
    *  under a battle. */
-  private readSprites(sb1: number): { people: FieldSprite[]; player: FieldSprite | null } {
+  private readSprites(sb1: number): { people: FieldSprite[]; player: FieldSprite | null; blob: FieldSprite | null } {
     const objs = this.sym('gObjectEvents');
     const sprs = this.sym('gSprites');
     const offX = this.sym('gSpriteCoordOffsetX');
     const offY = this.sym('gSpriteCoordOffsetY');
     const { emu, rom } = this.deps;
-    if (objs === undefined || sprs === undefined || offX === undefined || offY === undefined || !rom) return { people: [], player: null };
+    if (objs === undefined || sprs === undefined || offX === undefined || offY === undefined || !rom) return { people: [], player: null, blob: null };
     const s16 = (v: number) => (v << 16) >> 16;
     const s8 = (v: number) => (v << 24) >> 24;
     const coX = s16(emu.read(offX, 16));
     const coY = s16(emu.read(offY, 16));
     const out: FieldSprite[] = [];
     let player: FieldSprite | null = null;
+    let blob: FieldSprite | null = null;
     for (let i = 0; i < OBJ_COUNT; i++) {
       const o = objs + i * OBJ_SIZE;
       if (!(emu.read(o + OBJ_ACTIVE_BYTE, 8) & 1)) continue;
@@ -1264,13 +1303,35 @@ export class FieldView {
       const sprite: FieldSprite = { gfx, frame, hFlip, x, y, hidden: offScreen };
       if (emu.read(o + OBJ_PLAYER_BYTE, 8) & 1) {
         player = sprite;
+        blob = this.readBlob(emu.read(o + OBJ_FIELD_EFFECT_SPRITE_ID, 8), coX, coY);
         continue;
       }
       const seat = emu.read(o + OBJ_LOCAL_ID, 8) - GHOST_LOCAL_ID_BASE;
       if (seat >= 0 && seat < SEAT_COUNT) sprite.seat = seat;
       out.push(sprite);
     }
-    return { people: out, player };
+    return { people: out, player, blob };
+  }
+
+  /** The SURF blob under the player, while they surf: a field effect's sprite, not an
+   *  object, so it was never in the still, and a see-through battle on the water showed
+   *  them standing on the sea (Cam's 2026-10-14 play-test, POK-349). */
+  private readBlob(spriteId: number, coX: number, coY: number): FieldSprite | null {
+    const avatar = this.sym('gPlayerAvatar');
+    const sprs = this.sym('gSprites');
+    const { emu, rom } = this.deps;
+    if (avatar === undefined || sprs === undefined || !rom || !(emu.read(avatar, 8) & AVATAR_SURFING) || spriteId >= SPRITE_COUNT) return null;
+    const s = sprs + spriteId * SPR_SIZE;
+    const flags = emu.read(s + SPR_FLAGS, 16);
+    if (!(flags & SPR_IN_USE) || (flags & SPR_INVISIBLE)) return null;
+    const s16 = (v: number) => (v << 16) >> 16;
+    const s8 = (v: number) => (v << 24) >> 24;
+    const onCamera = (flags & SPR_ON_CAMERA) !== 0;
+    const x = s16(emu.read(s + SPR_X, 16)) + s16(emu.read(s + SPR_X2, 16)) + s8(emu.read(s + SPR_CTC_X, 8)) + (onCamera ? coX : 0);
+    const y = s16(emu.read(s + SPR_Y, 16)) + s16(emu.read(s + SPR_Y2, 16)) + s8(emu.read(s + SPR_CTC_Y, 8)) + (onCamera ? coY : 0);
+    const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
+    const hFlip = oamFlipped(emu.read(s + SPR_OAM_MODE, 8), emu.read(s + SPR_OAM_ATTR1, 16));
+    return { gfx: SURF_BLOB_GFX, frame, hFlip, x, y, hidden: false, under: true };
   }
 
   /** A graphics id past the table names a var holding the real one. */
@@ -1343,7 +1404,7 @@ export class FieldView {
   private drawSprites(ctx: CanvasRenderingContext2D, sprites: FieldSprite[]): boolean {
     let complete = true;
     const lay = this.lay;
-    const order = sprites.slice().sort((a, b) => (a.y + (SHEETS[String(a.gfx)]?.h ?? 0)) - (b.y + (SHEETS[String(b.gfx)]?.h ?? 0)));
+    const order = sprites.slice().sort((a, b) => Number(!!b.under) - Number(!!a.under) || (a.y + (SHEETS[String(a.gfx)]?.h ?? 0)) - (b.y + (SHEETS[String(b.gfx)]?.h ?? 0)));
     for (const s of order) {
       const info = SHEETS[String(s.gfx)];
       const sheet = this.image(String(s.gfx), 'field-sprites');

@@ -1,0 +1,35 @@
+# tm-cancel: backing out of the teach screen keeps the TM in the bag, and says so (Cam's
+# 2026-10-14 play-test, POK-353: "If you cancel... does it go back in the bag?" -- "you
+# can keep the TM"). BrMoves_TeachExit sees the bag still holds it and puts
+# "TOXIC went in the BAG." on the ticker.
+#
+# tm-teach's setup: TREECKO at 5, a TM06 TOXIC (294) under our feet.
+# queue[0] is at gBrHud+0x44: kind, len (+0x45), text (+0x46).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerParty+0x54 5
+expect u16 *gSaveBlock1Ptr+0x690 0
+pokebytes gBrLoot 01 00 0C 00 10 00 26 01 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 150
+expect u16 *gSaveBlock1Ptr+0x690 294
+expectne u32 gMain+4 CB2_Overworld+1
+# the found line is done with: the next one pushed is queue[0]
+poke u8 gBrHud+0x0A 0
+tap B
+wait 120
+shot cancelled
+# still in the bag, back on the field, and the ticker says it: 22 characters, T first,
+# the B of BAG at +18
+expect u16 *gSaveBlock1Ptr+0x690 294
+expect u32 gMain+4 CB2_Overworld+1
+expectge u8 gBrHud+0x0A 1
+expect u8 gBrHud+0x45 0x16
+expect u8 gBrHud+0x46 0xCE
+expect u8 gBrHud+0x58 0xBC
+hold RIGHT 20
+wait 30
+expectne u16 gBrOwnPos+2 12

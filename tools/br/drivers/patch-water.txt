@@ -1,5 +1,6 @@
-# patch-water: a patch on water is a shadow under the surface, not a ripple (review of
-# #19: a ripple in the palette's darker blues was all but lost on Hoenn's sea).
+# patch-water: a patch on water is a dark blue shadow under the surface that ripples now and
+# then, as the grass ones rustle (POK-356, POK-357). A ripple alone, in the palette's darker
+# blues, was all but lost on Hoenn's sea (review of #19); the shadow carries it.
 #
 # ROUTE 107 (map 0:22, wild header 0x1C, water only) under match seed 4 deals eight
 # patches; from (20,10) patch 7, at (23,13) -- (0x1E,0x14) with the +7 -- is in view and

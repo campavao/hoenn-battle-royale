@@ -18,7 +18,7 @@ function model(over: Partial<SheetModel> = {}): SheetModel {
   return {
     look: 'overlay',
     status: 'Room ABCDEF',
-    strip: 'RING 2 (PETALBURG) · 5 left · 0:42',
+    strip: 'SAFE: PETALBURG · 5 left · 0:42',
     note: '',
     seats: [seat(1, { isMe: true }), seat(2), seat(3, { alive: false })],
     card: null,
@@ -90,7 +90,7 @@ describe('the sheet', () => {
     const containers = (painted.containers ?? []).map((c) => c.id);
     expect(containers).toEqual(expect.arrayContaining(['drawer', 'match-roster', 'match-card', 'room-note', 'spectate-strip', 'settings']));
     expect(byId('room-code')?.text).toBe('Room ABCDEF');
-    expect(byId('match-strip')?.text).toMatch(/RING 2/);
+    expect(byId('match-strip')?.text).toMatch(/SAFE: PETALBURG/);
     for (const id of ['match-leave', 'drawer-close', 'mute', 'remap', 'remap-reset', 'forget-rom']) expect(byId(id), id).toBeDefined();
     const seats = painted.widgets.filter((w) => w.parent === 'match-roster');
     expect(seats.map((w) => w.text)).toEqual(['P1 (you)', 'P2', 'P3 -- OUT']);

@@ -177,8 +177,18 @@ wait 10
 poke u16 gPlayerParty+0x56 1
 poke u16 gPlayerParty+0xBA 1
 wait 300
-expect u8 gBrMatch 3
+# out at once, and told on the field (POK-358)
 expect u8 gBrRing+7 1
+expect u8 gBrMatch 3
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+expect u8 gBrMatch 3
 # OUT, type 9, from seat 0
 expectmsg 9 u8 0 0
 shot out

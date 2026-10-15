@@ -3,6 +3,7 @@
 // and a test can drive them: nothing here touches the page or keeps module state -- the
 // World they walk is bots/hoenn.ts's, built once for the tab -- and the clock and the
 // pump are the caller's to hand in.
+import { dealPatches, loadPatches, type PatchTable } from './patches';
 import { Bots, type BotsOptions } from './brain';
 import { lootView, resumeAt } from './adapt';
 import { pageCell, type RomCell } from './space';
@@ -109,6 +110,8 @@ export interface HostBotsOptions {
   players: () => RosterEntry[];
   /** In a battle or a menu, so not somebody a bot challenges (POK-230). */
   busy: (seat: number) => boolean;
+  /** patches.json, when the caller has it already (tests); else it is fetched. */
+  patchTable?: PatchTable;
   /** regionmap.json's sections: which maps the ring holds. */
   sections: DirectorWorld['sections'];
   /** The hidden instance's real fight, when there is one (POK-238). */
@@ -160,6 +163,9 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
   const opening = safariSecs > 0 && safariTargets.length > 0 && resume === undefined;
   const safariSpawns = safariTargets.map((t) => ({ ...t, map: refById.get(t.mapId)! }));
   let inOpening = opening;
+  // The patches' cells (POK-363), fetched once; until they land a bot meets none.
+  let patchTable: PatchTable | null = opts.patchTable ?? null;
+  if (!patchTable) void loadPatches().then((t) => (patchTable = t), () => {});
   let ring: { sx: number; sy: number; r: number } | undefined;
   const bots = new Bots({
     world,
@@ -230,6 +236,13 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
     // Bots are on this roster too -- the host applies its own bots' `place` to it --
     // so this is the whole field, which is what the hunt rule wants.
     alive: () => players().filter((e) => e.alive).length,
+    // The patches every ROM deals off the seed, so a bot has the battle a player would
+    // on one (POK-363), and the ring phase they grow back on.
+    patches: (mapId) => {
+      const map = refById.get(mapId);
+      return patchTable && map ? dealPatches(patchTable, mapId, map, seed >>> 0) : [];
+    },
+    ringPhase: () => phase,
   });
   // Re-deal the whole field so the names line up, drop whoever is out of the match,
   // and stand the rest where the room last saw them rather than back on their drop.

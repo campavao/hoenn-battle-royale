@@ -15,6 +15,7 @@
 #include "event_object_lock.h"
 #include "script.h"
 #include "string_util.h"
+#include "event_data.h"
 #include "sound.h"
 #include "script_pokemon_util.h"
 #include "constants/songs.h"
@@ -670,6 +671,26 @@ static const u8 sText_Bang[] = _("!");
 static const u8 sText_NobodyLearns[] = _("NO ONE CAN USE ");
 static const u8 sText_HaveTm[] = _("ALREADY HAVE ");
 
+// A town's gift-giver says a line before he hands it over (Cam's 2026-10-14 play-test,
+// POK-355: "I would like them to talk a little bit before they give you the gift"). One
+// of these by the gift's key, then BR_EventScript_Gift's "received" with the fanfare.
+static const u8 sText_GiftLine0[] = _("You look like you could use this.\nGo on, it's yours!");
+static const u8 sText_GiftLine1[] = _("I won't be needing this anymore.\nPlease, take it!");
+static const u8 sText_GiftLine2[] = _("That fog is coming, you know.\nHere, this might help.");
+static const u8 sText_GiftLine3[] = _("A TRAINER should never go without\nsomething handy. Take this!");
+static const u8 *const sGiftLines[] = {
+    sText_GiftLine0,
+    sText_GiftLine1,
+    sText_GiftLine2,
+    sText_GiftLine3,
+};
+
+extern const u8 BR_EventScript_Gift[];
+
+// The gift BR_EventScript_Gift is talking about, 0 for none: its hand-over is Take() again,
+// from BrLoot_GiftTake, and this tells that Take() the line has been said.
+static EWRAM_DATA u16 sGiftKey = 0;
+
 // Tell the room it is gone, and take it off our own ground: nobody hears their own
 // message come back. A full ring holds the PICKUP until there is room (Take() asks
 // first): dropped, the room kept a piece on its ground that was in our bag.
@@ -771,6 +792,21 @@ static void Take(struct BrLootItem *it)
         return;
     if (!BrStory_Hands(it))
         return; // STERN wants his SCANNER first, and has said so
+    // A gift's key is only ever this press's while its script runs (BrLoot_GiftTake): one
+    // a map load or a battle cut off mid-line would make the next press on that giver a
+    // silent one, taken with no talk and no box.
+    if (sGiftKey != 0 && !ScriptContext_IsEnabled())
+        sGiftKey = 0;
+    if (BR_LOOT_IS_GIFT(it->key) && OneThing(it) && sGiftKey != it->key && it->objId != BR_NO_OBJ)
+    {
+        // Talk first: he turns to us, says his line, and the script hands it over.
+        sGiftKey = it->key;
+        StringCopy(gStringVar4, sGiftLines[it->key % ARRAY_COUNT(sGiftLines)]);
+        gSelectedObjectEvent = it->objId;
+        gSpecialVar_LastTalked = gObjectEvents[it->objId].localId;
+        ScriptContext_SetupScript(BR_EventScript_Gift);
+        return;
+    }
     // A TM nobody here can use, or a second copy, stays where it lies for somebody who can
     // (one each: the coordinator's default, 2026-10-14, Cam can overrule); one we take
     // goes straight to the teach screen (br_moves.h), below.
@@ -790,7 +826,12 @@ static void Take(struct BrLootItem *it)
     {
         if (it->money != 0)
             AddMoney(&gSaveBlock1Ptr->money, it->money);
-        if (OneThing(it))
+        if (OneThing(it) && sGiftKey == it->key)
+        {
+            // The script says it, "received" with the fanfare: no box over the message.
+            StringCopy(gStringVar2, GetItemName(it->species));
+        }
+        else if (OneThing(it))
         {
             // What it is, not what it was worth: it arrives with the GIVE.
             p = BrHud_Append(line, last, BR_LOOT_IS_GIFT(it->key) || BrStory_Person(it) ? sText_Gift : sText_Found);
@@ -802,7 +843,8 @@ static void Take(struct BrLootItem *it)
         {
             SayBag(it->money, FALSE);
         }
-        PlaySE(SE_PIN);
+        if (sGiftKey != it->key)
+            PlaySE(SE_PIN);
         sGivenBag = *it; // where its GIVE puts back what does not fit
         if (OneThing(it) && BrMoves_IsTm(it->species))
             BrMoves_TeachSoon(it->species); // once its GIVE has bagged it; a bounced GIVE times out
@@ -984,6 +1026,18 @@ bool8 BrLoot_TakeKey(u16 key)
         }
     }
     return FALSE;
+}
+
+// BR_EventScript_Gift, his line said: hand it over. VAR_RESULT FALSE when it is gone
+// already (somebody else's A got there while he talked), and the script says nothing more.
+void BrLoot_GiftTake(void)
+{
+    u16 key = sGiftKey;
+
+    gSpecialVar_Result = key != 0 && BrWire_CanHold(BR_PICKUP_LEN) && BrLoot_TakeKey(key);
+    sGiftKey = 0;
+    if (!gSpecialVar_Result)
+        PlaySE(SE_FAILURE);
 }
 
 // ---- Hoenn's own trainers -------------------------------------------------------

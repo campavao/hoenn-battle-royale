@@ -97,8 +97,10 @@ export interface ProxyOptions {
   onNote?: (what: string) => void;
   /** The fight as it happens (POK-300): the instance publishes its duel the way a
    *  player's ROM publishes a link battle -- a `bstart`, then `turn`s -- under the two
-   *  bots' seats. Handed over as they land so the room can watch either bot into it. */
-  onStream?: (msg: BstartMsg | TurnMsg) => void;
+   *  bots' seats. Handed over as they land so the room can watch either bot into it,
+   *  with the duel's two seats side A first: the ROM's player side, whose name goes
+   *  first in the bstart (POK-368). */
+  onStream?: (msg: BstartMsg | TurnMsg, sides: [number, number]) => void;
 }
 
 /** A battle has message boxes that wait for a press (POK-269's rule) -- the intro's
@@ -246,7 +248,7 @@ export class ProxyDuels {
 
     const from = this.counts.frames;
     emu.resume();
-    const result = await this.awaitResult(emu, mailbox, this.opts.deadlineFrames ?? DEADLINE_FRAMES, this.opts.deadlineMs ?? DEADLINE_MS);
+    const result = await this.awaitResult(emu, mailbox, [a.seat, b.seat], this.opts.deadlineFrames ?? DEADLINE_FRAMES, this.opts.deadlineMs ?? DEADLINE_MS);
     // Idle until the next meeting. Here, after the await, and not in the frame listener
     // that finished the duel: a pause from in there would wait on its own caller.
     if (this.emu === emu) emu.pause();
@@ -281,7 +283,7 @@ export class ProxyDuels {
   /** Runs the instance until a `dresult` comes back or the deadline passes -- its own
    *  frames, or the wall clock for an instance that stopped -- tapping A through the
    *  boxes the whole time. */
-  private awaitResult(emu: ProxyEmulator, mailbox: Mailbox, deadlineFrames: number, deadlineMs: number): Promise<DresultMsg | null> {
+  private awaitResult(emu: ProxyEmulator, mailbox: Mailbox, sides: [number, number], deadlineFrames: number, deadlineMs: number): Promise<DresultMsg | null> {
     return new Promise((resolve) => {
       let frames = 0;
       // Slots of a message that spans several, held until the last one lands -- one
@@ -316,7 +318,7 @@ export class ProxyDuels {
             try {
               const { type, payload } = reassembleSlots(run);
               streamParts.delete(base);
-              this.opts.onStream?.(unpackSlot(type, payload) as BstartMsg | TurnMsg);
+              this.opts.onStream?.(unpackSlot(type, payload) as BstartMsg | TurnMsg, sides);
             } catch {
               /* more slots to come */
             }

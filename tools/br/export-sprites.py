@@ -34,6 +34,10 @@ DATA = os.path.join(ROOT, 'web', 'src', 'data', 'sprites.json')
 SRC = os.path.join(ROOT, 'src', 'data', 'object_events')
 
 
+# The SURF blob's key among the sheets: past every object gfx id (a u8).
+SURF_BLOB_GFX = 1000
+
+
 def read(path):
     return open(path, encoding='utf-8').read()
 
@@ -130,6 +134,22 @@ def main():
                     sheet.putpixel((i * w + x, y), (r, g, b, 255))
         sheet.save(os.path.join(OUT, f'{gfx_id}.png'), optimize=True)
         out[str(gfx_id)] = {'name': name[len('gObjectEventGraphicsInfo_'):], 'w': w, 'h': h, 'frames': len(table)}
+
+    # The SURF blob (gFieldEffectObjectTemplate_SurfBlob): a field effect, not an object,
+    # so it has no gfx id of its own; the page keys it SURF_BLOB_GFX (field.ts). Three 32x32
+    # frames, south, north, west (east is west flipped), in the player's palette, which is
+    # the one its TAG_NONE template draws in -- Brendan's and May's agree on its colours.
+    blob = Image.open(os.path.join(ROOT, 'graphics', 'field_effects', 'pics', 'surf_blob.png')).convert('P')
+    blob_pal = load_palette(os.path.join(ROOT, pal_path[pal_of_tag['OBJ_EVENT_PAL_TAG_BRENDAN']]))
+    blob_out = Image.new('RGBA', blob.size, (0, 0, 0, 0))
+    bpx = blob.load()
+    for y in range(blob.size[1]):
+        for x in range(blob.size[0]):
+            c = bpx[x, y]
+            if c:
+                blob_out.putpixel((x, y), blob_pal[c] + (255,))
+    blob_out.save(os.path.join(OUT, f'{SURF_BLOB_GFX}.png'), optimize=True)
+    out[str(SURF_BLOB_GFX)] = {'name': 'SurfBlob', 'w': 32, 'h': 32, 'frames': blob.size[0] // 32}
 
     # The fog (WEATHER_FOG_HORIZONTAL): one 64x64 tile the ROM repeats over the screen,
     # with graphics/weather/br_fog.pal -- purple, Cam's ask -- so the page's fog past the

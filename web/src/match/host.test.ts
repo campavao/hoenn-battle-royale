@@ -3,6 +3,7 @@
 // and a link that reads whichever Bridge the page has now. What the room hears is the
 // socket's frames; what our own ROM is handed is what went through the link.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isScatterKey } from './scatter';
 import { traderKey } from './events';
 import { HostRole, soloLink, soloRoster, type HostLink, type HostOptions } from './host';
 import type { DirectorWorld } from './director';
@@ -315,12 +316,14 @@ describe('the page that runs the match (POK-330 #42)', () => {
 
     room.frames().length = 0;
     room.recv(3, place(3));
-    const paid = room.frames();
+    // ...beside the items lying about on Route 101 since the buzzer (POK-354)
+    const paid = room.frames().filter((f) => !isScatterKey((f.m as SpillMsg).bag?.key ?? 0));
     expect(paid.map(said)).toEqual(['to:spill']);
     expect(paid[0].id).toBe(3);
     expect((paid[0].m as SpillMsg).bag?.key).toBe(spill(1).bag!.key);
+    const sent = room.frames().length;
     room.recv(3, place(3));
-    expect(room.frames()).toHaveLength(1);
+    expect(room.frames()).toHaveLength(sent);
     host.dispose();
   });
 

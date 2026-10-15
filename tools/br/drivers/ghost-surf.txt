@@ -1,0 +1,27 @@
+# ghost-surf: a ghost on the water rides a SURF blob, and BRENDAN sits down on it as the
+# player does (Cam's 2026-10-14 play-test, POK-360: bots surfed as people standing on the sea).
+#
+# ROUTE 107 (map 0:22), surfing from (20,10) as patch-water.txt. Seat 2 (BRENDAN) two
+# tiles east and seat 3 (HIKER, no seated picture) two tiles south, both on the sea.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 16 14 00 0A 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrMatch+1 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 3C 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+# PLACE seat 2 on 0:22 at (29,17), facing west, alive, skin 0
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 02 01 00 16 1D 00 11 00 03 01 00
+poke u16 gBrMailbox+0x0C 2
+wait 2
+# PLACE seat 3 on 0:22 at (27,19), facing north, alive, skin 4 (HIKER)
+pokebytes gBrMailbox+0x1098 02 0E 0B 00 00 03 01 00 16 1B 00 13 00 02 01 04
+poke u16 gBrMailbox+0x0C 3
+wait 90
+shot surf
+# Slot 3 is seat 2 (local id 0xCA), now BRENDAN_SURFING (2); slot 4 is seat 3, still HIKER (55).
+expect u8 gObjectEvents+0x74 0xCA
+expect u8 gObjectEvents+0x71 2
+expect u8 gObjectEvents+0x98 0xCB
+expect u8 gObjectEvents+0x95 55

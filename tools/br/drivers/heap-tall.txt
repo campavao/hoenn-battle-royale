@@ -6,8 +6,10 @@
 # that have a buffer).
 #
 # Littleroot with the whole HUD up -- the corner (window 1), the ticker (2) and the
-# ring's box (3), as hud-vram.txt -- then START over them (window 4) and, after it,
-# Brendan's house sign in the message box (window 0). gWindows is 12 bytes a window,
+# ring's box (3), as hud-vram.txt; the ticker is off screen while the box is up (POK-358)
+# but keeps its window -- then START over them (window 4) and, after it, Brendan's house
+# sign in the message box (window 0), with the box run out so the ticker is the one under
+# it. gWindows is 12 bytes a window,
 # tileData at +8.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
@@ -28,7 +30,7 @@ wait 2
 poke u16 gBrMailbox+0x0C 2
 wait 10
 say hud-up
-expect u8 gBrHud+0x09 7
+expect u8 gBrHud+0x09 5
 expectne u32 gWindows+8 0
 expectne u32 gWindows+20 0
 expectne u32 gWindows+32 0
@@ -64,17 +66,19 @@ tap UP
 wait 10
 expect u16 *gSaveBlock1Ptr 7
 expect u16 *gSaveBlock1Ptr+2 9
-poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x178 0
 poke u8 gBrHud+0x0B 0
+wait 4
+expect u8 gBrHud+0x09 3
 tap A
 wait 40
 say sign-up
-# the message box is up on the ticker's and the box's tiles, window 0 with its buffer
+# the message box is up on the ticker's tiles, window 0 with its buffer; the box's window
+# is gone with its frames
 expectbits u16 0x0600FBC4 0x3FF 0x194
 expectne u32 gWindows+8 0
 expectne u32 gWindows+20 0
 expectne u32 gWindows+32 0
-expectne u32 gWindows+44 0
 expectne u32 gOverworldTilemapBuffer_Bg1 0
 expectne u32 gOverworldTilemapBuffer_Bg2 0
 expectne u32 gOverworldTilemapBuffer_Bg3 0

@@ -50,6 +50,7 @@
 #include "br/br_map.h"
 #include "br/br_match.h"
 #include "br/br_menu.h"
+#include "br/br_spectate.h"
 #endif
 
 // Menu actions
@@ -70,6 +71,7 @@ enum
 #if BR
     MENU_ACTION_PYRAMID_BAG,
     MENU_ACTION_BR_MAP, // the ring, mid-match (POK-263)
+    MENU_ACTION_BR_CARD, // the watched trainer's card, under their name (POK-369)
 #else
     MENU_ACTION_PYRAMID_BAG
 #endif
@@ -202,6 +204,7 @@ static const struct MenuAction sStartMenuItems[] =
     [MENU_ACTION_BAG]             = {gText_MenuBag,     {.u8_void = StartMenuBagCallback}},
 #if BR
     [MENU_ACTION_BR_MAP]          = {gBrText_MenuMap,   {.u8_void = StartMenuBrMapCallback}},
+    [MENU_ACTION_BR_CARD]         = {gBrFollowName,     {.u8_void = StartMenuPlayerNameCallback}},
 #endif
     [MENU_ACTION_POKENAV]         = {gText_MenuPokenav, {.u8_void = StartMenuPokeNavCallback}},
     [MENU_ACTION_PLAYER]          = {gText_MenuPlayer,  {.u8_void = StartMenuPlayerNameCallback}},
@@ -340,6 +343,15 @@ static void BuildNormalStartMenu(void)
     }
 #endif
 #if BR
+    // A watcher's menu is the watched trainer's (POK-369): their POKeMON, BAG and card.
+    if (BrSpectate_Watching())
+    {
+        AddStartMenuAction(MENU_ACTION_POKEMON);
+        AddStartMenuAction(MENU_ACTION_BAG);
+        AddStartMenuAction(gBrFollowName[0] != EOS ? MENU_ACTION_BR_CARD : MENU_ACTION_PLAYER);
+        AddStartMenuAction(MENU_ACTION_EXIT);
+        return;
+    }
     // A match has no flags to earn: the party row is there once there is a party, and
     // POKENAV / SAVE / OPTION are doors out of a live match (POK-221).
     if (CalculatePlayerPartyCount() > 0)
@@ -704,6 +716,10 @@ static bool8 StartMenuPokedexCallback(void)
 
 static bool8 StartMenuPokemonCallback(void)
 {
+#if BR
+    if (BrSpectate_Watching())
+        return BrSpectate_MenuParty(); // the watched trainer's (POK-369)
+#endif
     if (!gPaletteFade.active)
     {
         PlayRainStoppingSoundEffect();
@@ -732,6 +748,10 @@ static bool8 StartMenuBrMapCallback(void)
 #endif
 static bool8 StartMenuBagCallback(void)
 {
+#if BR
+    if (BrSpectate_Watching())
+        return BrSpectate_MenuBag(); // the watched trainer's (POK-369)
+#endif
     if (!gPaletteFade.active)
     {
         PlayRainStoppingSoundEffect();
@@ -762,6 +782,10 @@ static bool8 StartMenuPokeNavCallback(void)
 
 static bool8 StartMenuPlayerNameCallback(void)
 {
+#if BR
+    if (BrSpectate_Watching())
+        return BrSpectate_MenuCard(); // the watched trainer's (POK-369)
+#endif
     if (!gPaletteFade.active)
     {
         PlayRainStoppingSoundEffect();

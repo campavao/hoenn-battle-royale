@@ -18,6 +18,7 @@
 #include "constants/weather.h"
 #if BR
 #include "br/br_hud.h"
+#include "br/br_spectate.h"
 #endif
 
 // enums
@@ -271,6 +272,9 @@ static void Task_MapNamePopUpWindow(u8 taskId)
     switch (task->tState)
     {
     case STATE_PRINT:
+#if BR
+        if (BrSpectate_HoldsSign()) break; // the peek box is where the sign goes
+#endif
         // Wait, then create and print the pop up window
         if (++task->tPrintTimer > 30)
         {

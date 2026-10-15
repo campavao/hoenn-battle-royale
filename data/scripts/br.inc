@@ -84,6 +84,24 @@ BR_EventScript_FoundHiddenLeft::
 	releaseall
 	end
 
+@ A town's gift-giver (src/br/br_loot.c): he turns to us and says his line (gStringVar4),
+@ then hands it over. gStringVar2 is what it was; the item arrives with the bag's GIVE.
+BR_EventScript_Gift::
+	lock
+	faceplayer
+	msgbox gStringVar4, MSGBOX_DEFAULT
+	special BrLoot_GiftTake
+	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_GiftGone
+	playfanfare MUS_OBTAIN_ITEM
+	message BR_Text_GiftReceived
+	waitmessage
+	waitfanfare
+	waitbuttonpress
+BR_EventScript_GiftGone:
+	closemessage
+	release
+	end
+
 @ An event's trader (src/br/br_event.c): any one of ours for his, at our rung. gStringVar1
 @ is his. Once a match: the C says so without asking after that.
 BR_EventScript_Trader::
@@ -164,6 +182,10 @@ BR_Text_GateDefeat:
 BR_Text_PartyFull:
 	.string "Your party is full.\n"
 	.string "Release one for the new catch?$"
+
+BR_Text_GiftReceived:
+	.string "{PLAYER} received\n"
+	.string "the {STR_VAR_2}!$"
 
 BR_Text_TraderOffer:
 	.string "My {STR_VAR_1} for any one of\n"

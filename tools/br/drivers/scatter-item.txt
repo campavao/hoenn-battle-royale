@@ -1,0 +1,28 @@
+# scatter-item: an item lying about (POK-354, match/scatter.ts) is a one-item bag under a
+# scatter key, 0xD000 | i: nobody's, and not a gift-giver's (0xC000), so it lies as an
+# item ball, and A on it takes it with the PICKUP of its key for everybody.
+#
+# gift-giver.txt's view: Route 103 from (9,8), so we stand at (16,15) facing south.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 12 09 00 08 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr 9
+# scatter 0, a SUPER POTION (22), on (16,16), the cell we face
+pokebytes gDecompressionBuffer 00 00 12 00 01 00 D0 10 00 10 00 01 16 00 01 00 00 00 00
+mailsend gBrMailbox 11 gDecompressionBuffer 19
+wait 30
+expect u16 gBrLoot+0 0xD000
+expectne u8 gBrLoot+12 0xFF
+# slot 1: an item ball, not a person
+expect u8 gObjectEvents+0x29 59
+shot ball
+tap A
+wait 30
+shot taken
+expectmsg 10 u16 1 0xD000
+wait 120
+tap A
+wait 30
+expect u8 gBrLoot+11 0
+expect u8 gBrLoot+12 0xFF
+say scatter item ok

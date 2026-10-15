@@ -1,6 +1,7 @@
 // The machines on the MOVES list (POK-279). See include/br/br_moves.h.
 #include "global.h"
 #include "main.h"
+#include "data.h"
 #include "event_data.h"
 #include "field_screen_effect.h"
 #include "field_weather.h"
@@ -17,6 +18,7 @@
 #include "constants/items.h"
 #include "constants/pokemon.h"
 #include "br/br_field.h"
+#include "br/br_hud.h"
 #include "br/br_loot.h"
 #include "br/br_moves.h"
 
@@ -144,6 +146,8 @@ static EWRAM_DATA u16 sTeach = ITEM_NONE;
 static EWRAM_DATA u16 sTeachHad = 0;
 static EWRAM_DATA u16 sTeachAge = 0;
 static EWRAM_DATA bool8 sTeaching = FALSE;
+static EWRAM_DATA u16 sTeachItem = ITEM_NONE; // the TM the screen up now is for
+static EWRAM_DATA u16 sTeachCount = 0;        // and how many the bag held as it opened
 
 #define TEACH_WAIT_FRAMES (60 * 15) // a GIVE's round trip, and the found-item jingle
 
@@ -202,6 +206,8 @@ static void Task_OpenTeach(u8 taskId)
     gSpecialVar_ItemId = item;
     gItemUseCB = ItemUseCB_TMHM;
     sTeaching = TRUE;
+    sTeachItem = item;
+    sTeachCount = CountTotalItemQuantityInBag(item);
     CleanupOverworldWindowsAndTilemaps();
     SetMainCallback2(CB2_ShowPartyMenuForItemUse);
 }
@@ -231,8 +237,28 @@ void BrMoves_Tick(void)
     sTeach = ITEM_NONE;
 }
 
+
+static const u8 sText_WentInBag[] = _(" went in the BAG.");
+
+// Cancelled with nobody taught: the TM stays in the bag to teach later (Cam's 2026-10-14
+// play-test, POK-353), and the ticker says so rather than it vanishing without a word.
+static void SayKept(u16 item)
+{
+    u8 line[BR_HUD_LINE_MAX + 2];
+    u8 *last = line + BR_HUD_LINE_MAX;
+    u8 *p;
+
+    p = BrHud_Append(line, last, gMoveNames[ItemIdToBattleMoveId(item)]);
+    BrHud_Append(p, last, sText_WentInBag);
+    BrHud_Say(line);
+}
+
+// The party screen's exit, taught or not.
 static void CB2_TeachDone(void)
 {
+    if (sTeachItem != ITEM_NONE && CountTotalItemQuantityInBag(sTeachItem) >= sTeachCount)
+        SayKept(sTeachItem);
+    sTeachItem = ITEM_NONE;
     gFieldCallback = FieldCB_ReturnToFieldNoScript;
     SetMainCallback2(CB2_ReturnToField);
 }

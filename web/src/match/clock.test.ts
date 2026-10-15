@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { RING_RADII, ringLabel } from './clock';
 
 describe('ringLabel', () => {
-  it('names the ring by its radius and where it closes on', () => {
-    expect(ringLabel(28, 'ROUTE 101')).toBe('RING 28 (ROUTE 101)');
-    expect(ringLabel(0, 'OLDALE TOWN')).toBe('RING 0 (OLDALE TOWN)');
+  it('names where the ring closes on as the safe place (POK-359)', () => {
+    expect(ringLabel(28, 'ROUTE 101')).toBe('SAFE: ROUTE 101');
+    expect(ringLabel(0, 'OLDALE TOWN')).toBe('SAFE: OLDALE TOWN');
   });
 
   it('calls the last ring, -1 "everywhere", the final fog rather than RING -1', () => {
@@ -12,6 +12,6 @@ describe('ringLabel', () => {
   });
 
   it('says what it does not know', () => {
-    expect(ringLabel(undefined, undefined)).toBe('RING ? (?)');
+    expect(ringLabel(undefined, undefined)).toBe('SAFE: ?');
   });
 });

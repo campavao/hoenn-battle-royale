@@ -1,0 +1,46 @@
+# fog-out-idle: fog-out.txt with nobody reading. The OUT goes at once -- the room's
+# order of elimination is the order OUTs arrive -- and the watch it starts waits for the
+# line to be read (BrRing_Telling). Nobody reads it, so it closes by itself after
+# BR_FOG_OUT_READ frames, and only then does the camera go to the trainer we follow.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerPartyCount 1
+# TREECKO on 4 of 20: one bleed leaves 2, the next one finishes it
+poke u16 gPlayerParty+0x56 4
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 60
+expect u8 gBrRing+5 1
+shot hp-in-corner
+waitfor u16 gPlayerParty+0x56 2 300
+wait 2
+shot bleed
+wait 30
+shot hp-after-bleed
+waitfor u16 gPlayerParty+0x56 0 300
+wait 30
+# out at once, and told: "TREE..." on the field, the team's status cleared
+expect u8 gBrRing+7 1
+expect u8 gBrMatch 3
+expect u32 gStringVar4 0xBFBFCCCE
+expect u32 gPlayerParty+0x50 0
+# the page's autoWatch: seat 1 two east of us (spectate-follow.txt), and FOLLOW it
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 01
+poke u16 gBrMailbox+0x0C 2
+wait 10
+pokebytes gBrMailbox+0x1098 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 3
+wait 60
+shot told
+# the line is up and nobody is pressing: the camera stays ours
+expect u8 gBrSpectate+8 1
+expect u8 gBrSpectate+9 0
+wait 200
+expect u8 gBrSpectate+9 0
+# ...until it closes itself
+wait 400
+expectge u8 gBrSpectate+9 1
+shot watching
+say fog out idle ok

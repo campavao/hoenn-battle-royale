@@ -64,6 +64,9 @@ void BrRing_SetBattleFog(bool8 fog);
 // a script, which comes back here when it ends.
 bool8 BrRing_FogEndTurn(void);
 void BrRing_Tick(void);
+// The fog's "fainted in the fog" line is still owed or up: what the OUT starts (the
+// watch's warp, a replay) waits for it.
+bool8 BrRing_Telling(void);
 // Geometry, exposed for the page's tests and other systems: is the section inside?
 bool8 BrRing_SectionInside(u8 mapsec);
 // ...and one cell of the region-map grid: the same test, the rectangle a point.

@@ -52,19 +52,19 @@ poke u16 gBrMailbox+0x0C 2
 wait 10
 unwatch
 say box-up
-# all three up: shown = CORNER|TICKER|BOX, each first cell its own base tile. BG0's
-# tilemap is 0x0600F800, 32 cells a row, palette 15: (20,1) the corner, (1,11) the box,
-# (1,17) the ticker
-expect u8 gBrHud+0x09 7
+# corner and box up, the ticker off screen while the box is (POK-358): shown = CORNER|BOX,
+# each first cell its own base tile, the ticker's clear. BG0's tilemap is 0x0600F800, 32
+# cells a row, palette 15: (20,1) the corner, (1,11) the box, (1,17) the ticker
+expect u8 gBrHud+0x09 5
 expect u16 0x0600F868 0xF139
 expect u16 0x0600FAC2 0xF154
-expect u16 0x0600FC42 0xF1C8
+expect u16 0x0600FC42 0
 shot hud-up
 #
 # START over the box. The menu is five rows, 0x139..0x18C, cols 22..28 and rows 1..12,
 # its frame from (21,0) to (29,13): it covers the corner's tiles and the box's first
-# fifty-seven. The box and the ticker stay up while it opens (boxFrames 255, the
-# ticker's line started over).
+# fifty-seven. The box stays up while it opens (boxFrames 255); the ticker's tiles are
+# the sign's pass below.
 poke u8 gBrHud+0x178 255
 poke u8 gBrHud+0x0B 0
 say start-menu-open
@@ -122,15 +122,17 @@ tap B
 wait 10
 unwatch
 say start-menu-closed
-expect u8 gBrHud+0x09 7
+expect u8 gBrHud+0x09 5
 expect u16 0x0600F868 0xF139
 expect u16 0x0600FAC2 0xF154
-expect u16 0x0600FC42 0xF1C8
+expect u16 0x0600FC42 0
 shot menu-closed
 #
 # Brendan's house sign, (7,8): two east of the door and face north (the first hold only
 # turns us). Its message box is window 0, 0x194..0x1FF: the box's last forty-eight and
-# the whole ticker.
+# the whole ticker. The box is run out first (boxFrames 0) and the ticker's line started
+# over, so it is the ticker that is up under the message box; the box has its passes in
+# the START menu, the peek box and the popup.
 hold RIGHT 8
 wait 10
 hold RIGHT 8
@@ -142,8 +144,11 @@ wait 10
 say sign-pos
 expect u16 *gSaveBlock1Ptr 7
 expect u16 *gSaveBlock1Ptr+2 9
-poke u8 gBrHud+0x178 255
+poke u8 gBrHud+0x178 0
 poke u8 gBrHud+0x0B 0
+wait 4
+expect u8 gBrHud+0x09 3
+expect u16 0x0600FC42 0xF1C8
 say sign-open
 watch gMain+4 4
 watch gBrHud 16
@@ -192,13 +197,13 @@ wait 12
 unwatch
 say sign-closed
 wait 10
-expect u8 gBrHud+0x09 7
-expect u16 0x0600FAC2 0xF154
+expect u8 gBrHud+0x09 3
+expect u16 0x0600FAC2 0
 expect u16 0x0600FC42 0xF1C8
 shot sign-closed
 #
 # The peek box. Seat 1 stands two east of us (PLACE, as spectate-follow.txt: map 0:9,
-# (16,16) with MAP_OFFSET) and we FOLLOW it; START then opens the box of what it
+# (16,16) with MAP_OFFSET) and we FOLLOW it; SELECT then opens the box of what it
 # carries, (1,2) 17x10 from tile 0x008, in the standard frame (0x214, palette 13: the
 # HUD's own copy). It shares no tile with the HUD but its last rows and its frame are
 # where the bottom box's top is, so the box yields to it.
@@ -212,7 +217,7 @@ expect u8 gBrSpectate+8 1
 poke u8 gBrHud+0x178 255
 poke u8 gBrHud+0x0B 0
 wait 4
-expect u8 gBrHud+0x09 7
+expect u8 gBrHud+0x09 5
 say peek-open
 watch gMain+4 4
 watch gBrHud 16
@@ -230,7 +235,7 @@ watch *gOverworldTilemapBuffer_Bg1 4096
 watch *gOverworldTilemapBuffer_Bg2 4096
 watch *gOverworldTilemapBuffer_Bg3 4096
 wait 2
-tap START
+tap SELECT
 wait 12
 unwatch
 say peek-up
@@ -262,7 +267,7 @@ wait 12
 unwatch
 say peek-closed
 expect u8 gBrSpectate+10 0
-expect u8 gBrHud+0x09 7
+expect u8 gBrHud+0x09 5
 expect u16 0x0600FAC2 0xF154
 shot peek-closed
 #

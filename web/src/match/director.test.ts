@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Director, type DirectorWorld } from './director';
+import { isScatterKey } from './scatter';
 import { cellKey, withoutVetoes } from './hand';
 import type { ClockMsg, EventMsg, Msg, RingMsg, SpillMsg, StartMsg, WinMsg } from '../net/wire';
 import { EVENT_PIECES, LEGENDS } from './events';
@@ -171,8 +172,9 @@ describe('Director in solo (one seat)', () => {
     for (let i = 0; i < 4; i++) h.advance(5000);
 
     expect(h.sent[0].t).toBe('start');
-    // ...and the first shrink's event, which solo drops like a room does
-    expect(h.sent.slice(1).map((m) => m.t)).toEqual(['clock', 'clock', 'ring', 'ring', 'event', 'spill', 'spill', 'spill', 'spill']);
+    // ...the items lying about at the buzzer, two to each of this world's two sections
+    // (POK-354), and the first shrink's event, which solo drops like a room does
+    expect(h.sent.slice(1).map((m) => m.t)).toEqual(['clock', 'clock', 'ring', 'spill', 'spill', 'spill', 'spill', 'ring', 'event', 'spill', 'spill', 'spill', 'spill']);
     expect(h.sent.some((m) => m.t === 'win')).toBe(false);
   });
 });
@@ -407,7 +409,7 @@ describe('events (speed-up phase 6)', () => {
     const h = runRing(7);
     const start = h.sent.find((m) => m.t === 'start') as StartMsg;
     const spawned = new Set(start.spawns.map((s) => `${s.map.group}:${s.map.num}:${s.x + 7}:${s.y + 7}`));
-    const spills = h.sent.filter((m) => m.t === 'spill') as SpillMsg[];
+    const spills = h.sent.filter((m) => m.t === 'spill' && !isScatterKey(m.bag?.key ?? 0)) as SpillMsg[];
     const pieces = spills.flatMap((s) => [...s.mons, ...(s.bag ? [s.bag] : [])].map((p) => ({ ...p, map: s.map })));
     // Seven an event; this world's sections are one row of forty, so a crowded one drops fewer.
     expect(pieces.length).toBeLessThanOrEqual(4 * 7);

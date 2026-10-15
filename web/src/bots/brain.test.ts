@@ -1230,3 +1230,154 @@ describe('two bots meeting', () => {
     expect(alive[0].hp).toBeLessThan(MON.hp);
   });
 });
+
+describe('pacing (POK-361) and closing in (POK-362)', () => {
+  const MON: PackedMon = {
+    species: 277, level: 5, hp: 19, maxHp: 19, status: 0,
+    moves: [{ id: 1, pp: 35, ppUps: 0 }],
+    heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: 'TREECKO', ot: 'BR',
+  };
+
+  it('walks in legs of a few steps and stands a moment between them', () => {
+    const world = new World([FIELD, PATH]);
+    let now = 0;
+    const stepsAt: number[] = [];
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => {
+        if (m.t === 'step' || (m.t === 'place' && now > 0)) stepsAt.push(now);
+      },
+      rng: mulberry32(7),
+    });
+    bots.start(dealBots(99, 1, [0, 1], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]), 0);
+    for (now = 100; now <= 60_000; now += 100) bots.tick(now);
+    const gaps = stepsAt.slice(1).map((t, i) => t - stepsAt[i]);
+    // Some rests, each well past a step's own beat...
+    expect(gaps.filter((g) => g >= 300 + STEP_MS - 100).length).toBeGreaterThan(5);
+    // ...and never more than six steps on end without one.
+    let run = 0;
+    let longest = 0;
+    for (const g of gaps) {
+      run = g < 300 + STEP_MS - 100 ? run + 1 : 0;
+      longest = Math.max(longest, run);
+    }
+    expect(longest).toBeLessThanOrEqual(6);
+  });
+
+  it('walks up to a player a few tiles off it cannot see yet, and challenges them', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    // Facing south from (0,0); the player is at (2,2), four tiles off and on no straight
+    // line from it, facing south too, so neither can see the other.
+    const player: PlayerView = { seat: 0, mapId: 'FIELD', x: 2, y: 2, dir: 1 };
+    const bots = new Bots({
+      world,
+      targets: [{ mapId: 'PATH', x: 3, y: 5 }],
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      engage: { players: () => [player] },
+      deal: () => [MON],
+    });
+    bots.start(dealBots(99, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]), 0);
+    for (let t = STEP_MS; t <= 10_000 && !sent.some((m) => m.t === 'challenge'); t += STEP_MS) bots.tick(t);
+    expect(sent.find((m) => m.t === 'challenge')).toMatchObject({ opponent: 0 });
+  });
+  it('walks in out of the fog before it walks up to anybody (review of #43)', () => {
+    const decisions: Decision[] = [];
+    const player: PlayerView = { seat: 0, mapId: 'FIELD', x: 2, y: 2, dir: 1 };
+    const bots = new Bots({
+      world: new World([FIELD, PATH]),
+      targets: [{ mapId: 'PATH', x: 3, y: 5 }],
+      mapRef: (id) => REFS[id],
+      send: () => undefined,
+      rng: mulberry32(7),
+      engage: { players: () => [player] },
+      deal: () => [MON],
+      inside: (id) => id === 'PATH', // FIELD is in the fog, the player with it
+      onDecision: (d) => void decisions.push(d),
+    });
+    bots.start(dealBots(99, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]), 0);
+    for (let t = STEP_MS; t <= 3_000; t += STEP_MS) bots.tick(t);
+    expect(decisions.some((d) => d.rule === 'hunt')).toBe(false);
+  });
+  it('still closes in when the last phase has closed on everything', () => {
+    const sent: Msg[] = [];
+    const player: PlayerView = { seat: 0, mapId: 'FIELD', x: 2, y: 2, dir: 1 };
+    const bots = new Bots({
+      world: new World([FIELD, PATH]),
+      targets: [{ mapId: 'PATH', x: 3, y: 5 }],
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      engage: { players: () => [player] },
+      deal: () => [MON],
+      inside: () => false, // the ring is gone: no map is inside
+    });
+    bots.start(dealBots(99, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]), 0);
+    for (let t = STEP_MS; t <= 10_000 && !sent.some((m) => m.t === 'challenge'); t += STEP_MS) bots.tick(t);
+    expect(sent.find((m) => m.t === 'challenge')).toMatchObject({ opponent: 0 });
+  });
+});
+
+describe('encounter patches (POK-363)', () => {
+  const MON: PackedMon = {
+    species: 277, level: 5, hp: 19, maxHp: 19, status: 0,
+    moves: [{ id: 1, pp: 35, ppUps: 0 }],
+    heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: 'TREECKO', ot: 'BR',
+  };
+
+  function onPatch(phase: { n: number }) {
+    const sent: Msg[] = [];
+    const decisions: Decision[] = [];
+    // A patch on every cell of the field's top row: wherever the bot walks first, it is on one.
+    const patches = [0, 1, 2, 3, 4, 5].map((x) => ({ key: 0x2000 | (3 << 3) | x, x, y: 0 }));
+    const bots = new Bots({
+      world: new World([FIELD, PATH]),
+      targets: [{ mapId: 'FIELD', x: 5, y: 0 }],
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }],
+      patches: (mapId) => (mapId === 'FIELD' ? patches : []),
+      ringPhase: () => phase.n,
+      onDecision: (d) => void decisions.push(d),
+    });
+    const dealt = dealBots(99, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 1 }]);
+    bots.start(dealt, 0);
+    return { sent, decisions, bots, seat: dealt[0].seat };
+  }
+
+  it('has the battle a player would: the patch goes, the mark goes up, and the lead is hurt', () => {
+    const { sent, decisions, bots, seat } = onPatch({ n: 0 });
+    let t = STEP_MS;
+    for (; t <= 5_000 && !decisions.some((d) => d.rule === 'wild'); t += 100) bots.tick(t);
+    const wild = decisions.find((d) => d.rule === 'wild')!;
+    expect(wild.spot.y).toBe(0);
+    const took = sent.findIndex((m) => m.t === 'pickup' && (m.key & 0xe000) === 0x2000);
+    expect(took).toBeGreaterThanOrEqual(0);
+    expect(sent[took + 1]).toEqual({ t: 'busy', seat, kind: 'battle' });
+    const hp = bots.partyOf(seat)[0].hp;
+    expect(hp).toBeLessThan(19);
+    expect(hp).toBeGreaterThan(0);
+    // It stands there for the battle, then lets the mark go.
+    const at = bots.spotOf(seat);
+    for (const stop = t + 3_000; t <= stop; t += 100) bots.tick(t);
+    expect(bots.spotOf(seat)).toEqual(at);
+    for (const stop = t + 2_000; t <= stop; t += 100) bots.tick(t);
+    expect(sent.some((m) => m.t === 'busy' && m.seat === seat && m.kind === undefined)).toBe(true);
+  });
+
+  it('meets a taken patch only once it has grown back with the ring', () => {
+    const phase = { n: 0 };
+    const { decisions, bots } = onPatch(phase);
+    for (let k = 0; k < 6; k++) bots.notePatch(0x2000 | (3 << 3) | k);
+    for (let t = STEP_MS; t <= 20_000; t += 100) bots.tick(t);
+    expect(decisions.some((d) => d.rule === 'wild')).toBe(false);
+    phase.n = 1;
+    for (let t = 20_000; t <= 40_000 && !decisions.some((d) => d.rule === 'wild'); t += 100) bots.tick(t);
+    expect(decisions.some((d) => d.rule === 'wild')).toBe(true);
+  });
+});

@@ -1,0 +1,19 @@
+# hm-select-bike: SELECT with nothing registered rides the bike in the bag (POK-347, Cam's
+# 2026-10-14 play-test: "your select button should automatically select a bike").
+# BrHm_SelectBike registers the MACH BIKE ahead of UseRegisteredKeyItemOnField's test.
+#
+# hm-bike-surf's spot: ROUTE 104 (map 0:19) at (33,22), the bike already in the match bag.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 00 00 13 21 00 16 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 19
+poke u16 *gSaveBlock1Ptr+0x496 0
+tap SELECT
+wait 60
+shot select-bike
+# On the MACH BIKE, and it is the registered item now. Without the hook SELECT says
+# "An item in the BAG can be registered to SELECT" and nothing rides.
+expectbits u8 gPlayerAvatar 0x02 0x02
+expect u16 *gSaveBlock1Ptr+0x496 259
+expect u32 gMain+4 CB2_Overworld+1

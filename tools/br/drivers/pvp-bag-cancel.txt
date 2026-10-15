@@ -63,7 +63,9 @@ wait 20
 tap A
 wait 60
 tap A
-wait 400
+# long enough for a turn with a critical hit's extra line in it: who swings first and
+# whether it crits is the RNG's, and a frame's shift anywhere on the way in rolls it
+wait 700
 expectle u16 gBattleMons+0x28 18
 expect u8 gBattleCommunication 2
 shot next-turn

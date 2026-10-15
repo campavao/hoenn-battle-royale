@@ -52,25 +52,33 @@ pokebytes gDecompressionBuffer+602 D2 04 00 00 02 0D 00 03 13 00 01
 mailsend gBrMailbox 7 gDecompressionBuffer 613
 wait 10
 expect u8 gBrSpectate+11 6
-# START opens the box, B closes it -- field controls are locked, so the start menu
-# never sees either press
+# START is their menu now (spectate-menu.txt), and its BAG opens the box at their bag,
+# page 7 -- one page of team and one per mon before it. Field controls are locked, so
+# pret's own START never sees the press.
 tap START
-wait 20
+wait 30
+tap DOWN
+wait 10
+tap A
+wait 40
 expect u8 gBrSpectate+10 1
-shot peek
+expect u8 gBrSpectate+13 7
+shot peek-bag
+# A turns the page, round to the team...
+tap A
+wait 20
 expect u8 gBrSpectate+13 0
-# A turns the page: the first mon's moves...
+shot peek
 tap A
 wait 20
 expect u8 gBrSpectate+13 1
 shot peek-moves
-# ...LEFT goes back round the other way, past the team, to the last page: the bag.
+# ...and LEFT goes back round the other way, past the team, to the bag.
 tap LEFT
 wait 20
 tap LEFT
 wait 20
 expect u8 gBrSpectate+13 7
-shot peek-bag
 tap B
 wait 20
 expect u8 gBrSpectate+10 0

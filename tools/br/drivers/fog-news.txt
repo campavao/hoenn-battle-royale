@@ -36,7 +36,15 @@ expect u8 gBrHud+0x4E 0xCD
 expect u8 gBrHud+0x68 0xAB
 expect u8 gBrHud+0x69 0xFF
 expect u8 gBrHud+0x163 0xCC
+# ...one at a time (POK-358): the box is up and the line waits under it, unread and
+# off the screen, then comes up once the box has gone.
+expectbits u8 gBrHud+0x09 0x06 0x04
+expect u8 gBrHud+0x0B 0
 shot phase-two
+wait 100
+expect u8 gBrHud+0x178 0
+expectbits u8 gBrHud+0x09 0x06 0x02
+shot phase-two-line
 # A line identical to the last one queued is dropped. Inside the ring, where the fog's
 # bite does not stop the overworld's clock: the page's kill line twice, in two slots
 # (hud.txt's MAY GOT BRENDAN) -- the second is one line behind the fog's, not two.
@@ -48,8 +56,8 @@ expect u8 gBrHud+0x0A 2
 expect u8 gBrHud+0x71 0x0F
 # The fog's line comes down after its 180 frames and MAY GOT BRENDAN is on screen with
 # nothing behind it: the same again is still a repeat, and a line one letter shorter is
-# not.
-wait 180
+# not. (The line waited out the box's ninety frames before its own began.)
+wait 170
 expect u8 gBrHud+0x0A 1
 expect u8 gBrHud+0x46 0xC7
 pokebytes gBrMailbox+0x1118 0F 15 12 00 00 01 00 0F C7 BB D3 00 C1 C9 CE 00 BC CC BF C8 BE BB C8

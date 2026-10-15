@@ -36,7 +36,7 @@ f - 1 was watched too:
     A window's cells showing another window's pixels -- the corner inside the start
     menu, a menu or the message box drawn over by the HUD -- fails here;
   * the corner, and the ticker when it has a line and nothing pauses it (a script, the
-    start menu), are back -- first cell and every tile -- within two frames of the last
+    start menu, the HUD's own box window being up: the ticker waits out the box), are back -- first cell and every tile -- within two frames of the last
     window over them going: BrHud_Tick draws them the frame after.
 
 Exits 1 on any failure, and 2 when no window ever covered a HUD window or no frame's
@@ -307,6 +307,7 @@ def main():
             want = hw is not None and name not in covered
             if name == "ticker":
                 want = want and hud is not None and hud[HUD_SCRIPT] == 0 and not menu_up and not box_up \
+                    and "box" not in huds \
                     and (hud[HUD_QUEUE] > 0 or hud[HUD_HELD])
             if want and not wanted.get(name, True):
                 due[name] = f["n"] + BACK_WITHIN

@@ -553,6 +553,9 @@ export class Bridge {
   pushToRom(msg: Msg): void {
     if (msg.t === 'land' && msg.seat === this.seat) this.pick = null; // the host's own drop
     if (!crossesToRom(msg.t)) return;
+    // The ROM has nobody's name but its own, and the START menu it shows while
+    // following names them (POK-369).
+    if (msg.t === 'follow' && msg.seat !== null && msg.name === undefined) msg = { ...msg, name: this.roster.nameOf(msg.seat) };
     if (!this.rom.push(msg)) this.dropCount++;
   }
 

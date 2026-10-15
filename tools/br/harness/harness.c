@@ -32,6 +32,10 @@
 //                               <left> <top> <width> <height> <palette> <baseBlock>`,
 //                               then a dump of its pixel buffer (needs gWindows)
 //   unwatch                     stop watching
+//   waitfor u8|u16|u32 <addr> <value> <max>     run frames until it reads <value>, at
+//   waitforge u8|u16|u32 <addr> <value> <max>   most <max> of them (a failed expect past
+//                               that): for a step whose length is the ROM's to decide, a
+//                               replay's pace or a fade, rather than a guessed wait
 #include <mgba/core/core.h>
 #include <mgba/core/config.h>
 #include <mgba/core/log.h>
@@ -330,6 +334,24 @@ static int runLine(char* line) {
         core->setKeys(core, 0);
         runN(1);
         return 0;
+    }
+    if ((strcmp(a, "waitfor") == 0 || strcmp(a, "waitforge") == 0) && n >= 5) {
+        int ge = a[7] == 'g';
+        int w = widthOf(b), i, max = atoi(e); uint32_t addr, want, got = 0;
+        char* rest;
+        if (!w || !parseAddr(c, &addr)) return 4;
+        want = (uint32_t)strtoul(d, &rest, 0);
+        if (*rest != 0 && !parseAddr(d, &want)) return 4;
+        for (i = 0; i <= max; i++) {
+            got = readW(w, addr);
+            if (ge ? got >= want : got == want) {
+                printf("waitfor ok %s 0x%08X = 0x%X after %d frames\n", b, addr, got, i);
+                return 0;
+            }
+            runN(1);
+        }
+        printf("line %d: EXPECT FAILED %s at 0x%08X: got 0x%X, want %s0x%X within %d frames\n", lineNo, b, addr, got, ge ? ">= " : "", want, max);
+        return 1;
     }
     if ((strcmp(a, "expect") == 0 || strcmp(a, "expectge") == 0 || strcmp(a, "expectle") == 0 || strcmp(a, "expectne") == 0) && n >= 4) {
         int ge = a[6] == 'g', le = a[6] == 'l', ne = a[6] == 'n';

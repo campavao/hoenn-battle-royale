@@ -1,0 +1,52 @@
+# peek-sign: the map-name sign and the spectator's peek box never draw over each other
+# (Cam's 2026-10-14 play-test, POK-370: "you can see an artifact if both of them are
+# open at the same time" -- the ROUTE 118 sign cut into the box's corner, and its erase
+# took the box's cells with it). OpenPeek takes a sign that is up down first, and a sign
+# due while the box is up waits in Task_MapNamePopUpWindow's print wait until it closes.
+#
+# hud-popup's follow: seat 1 on ROUTE 101, and we warp there to watch. The box's cell
+# (2,3), inside both the sign's cells and the box's, is read off BG0's tilemap.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrHud+0x00 7
+poke u16 gBrHud+0x02 125
+wait 30
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 10 11 00 11 00 01 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+pokebytes gBrMailbox+0x1058 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 2
+# On ROUTE 101 with its sign still to come: open the box before it prints
+wait 100
+expect u8 *gSaveBlock1Ptr+5 0x10
+tap SELECT
+wait 2
+expect u8 gBrSpectate+0x0A 1
+# the box's own tile there (0xF01A: palette 15, tile 0x01A -- its interior), when the
+# sign would have printed, while it would have shown, and after it would have gone
+expect u16 0x0600F8C4 0xF01A
+wait 40
+expect u16 0x0600F8C4 0xF01A
+wait 100
+expect u16 0x0600F8C4 0xF01A
+wait 60
+shot box-kept
+expect u16 0x0600F8C4 0xF01A
+expect u8 gBrSpectate+0x0A 1
+# closed: the sign it held comes now
+tap SELECT
+wait 60
+shot sign-after
+expect u8 gBrSpectate+0x0A 0
+expect u16 0x0600F8C4 0xE11C
+# ...and with that sign up, the box opened over it takes it down first: the sign's
+# erase two seconds on would otherwise clear the box's cells
+tap SELECT
+wait 2
+expect u8 gBrSpectate+0x0A 1
+expect u16 0x0600F8C4 0xF01A
+wait 200
+shot box-over-sign
+expect u16 0x0600F8C4 0xF01A
