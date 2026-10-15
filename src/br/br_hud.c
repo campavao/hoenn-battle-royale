@@ -12,6 +12,8 @@
 #include "script.h"
 #include "string_util.h"
 #include "field_message_box.h"
+#include "pokemon.h"
+#include "constants/species.h"
 #include "constants/characters.h"
 #include "br/br_hud.h"
 #include "br/br_mailbox.h"
@@ -95,6 +97,7 @@ static const u8 sText_Eye[] = _("{EMOJI_LEFT_EYE}");
 // Beside the ring's place on the corner's second line: it is where the fog is not, and
 // bare it read as where we are (Cam's 2026-10-14 play-test, POK-359).
 static const u8 sText_Safe[] = _("SAFE");
+static const u8 sText_Hp[] = _("HP ");
 // ---- windows ------------------------------------------------------------------
 
 // The slot holds our template: the same BG, base tile and place. The base alone is not
@@ -537,11 +540,35 @@ static u8 AltTurn(void)
     return gBrHud.altFrames < BR_HUD_ALT_FRAMES ? 1 : 2;
 }
 
+// "HP 26/40" for the first of the party still standing, into `buf` (12 bytes).
+static bool8 LeadHp(u8 *buf)
+{
+    u8 i;
+    u8 *p;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        struct Pokemon *mon = &gPlayerParty[i];
+        u16 hp;
+
+        if (GetMonData(mon, MON_DATA_SPECIES) == SPECIES_NONE || GetMonData(mon, MON_DATA_IS_EGG))
+            continue;
+        hp = GetMonData(mon, MON_DATA_HP);
+        if (hp == 0)
+            continue;
+        p = ConvertIntToDecimalStringN(StringCopy(buf, sText_Hp), hp, STR_CONV_MODE_LEFT_ALIGN, 3);
+        *p++ = CHAR_SLASH;
+        ConvertIntToDecimalStringN(p, GetMonData(mon, MON_DATA_MAX_HP), STR_CONV_MODE_LEFT_ALIGN, 3);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static void DrawCorner(void)
 {
     struct BrHud *h = &gBrHud;
     u8 buf[16];
-    u8 eye[8];
+    u8 eye[12];
     u8 *p;
     u8 fog = FogPhase();
     const u8 *place = CornerPlace();
@@ -574,12 +601,18 @@ static void DrawCorner(void)
     // (F9 D8), so the count goes where StringCopy left the terminator. A route fits
     // beside either; VERDANTURF TOWN and FOG EVERYWHERE do not, and those take turns with
     // it, two seconds each. FOG EVERYWHERE has no SAFE: there is nowhere left.
-    if (h->eyes != 0)
-        ConvertIntToDecimalStringN(StringCopy(eye, sText_Eye), h->eyes, STR_CONV_MODE_LEFT_ALIGN, 2);
-    else if (place != NULL && gBrRing.r >= 0)
-        StringCopy(eye, sText_Safe);
-    else
-        eye[0] = EOS;
+    // In the fog, the lead's HP instead (Cam's 2026-10-14 play-test, POK-358: a BARBOACH
+    // went from 26/40 to fainted in twenty seconds of walking with nothing on screen to
+    // say so). Redrawn with the clock, every second.
+    if (!gBrRing.outside || !LeadHp(eye))
+    {
+        if (h->eyes != 0)
+            ConvertIntToDecimalStringN(StringCopy(eye, sText_Eye), h->eyes, STR_CONV_MODE_LEFT_ALIGN, 2);
+        else if (place != NULL && gBrRing.r >= 0)
+            StringCopy(eye, sText_Safe);
+        else
+            eye[0] = EOS;
+    }
     if (eye[0] != EOS && place != NULL
      && GetStringWidth(FONT_SMALL, eye, 0) + 4 + GetStringWidth(FONT_SMALL, place, 0) > BR_HUD_CORNER_PX)
         alt = AltTurn();
@@ -699,7 +732,8 @@ static void AdvanceTicker(void)
 {
     struct BrHud *h = &gBrHud;
 
-    if (h->held || h->queueLen == 0)
+    // A line waits out the box above it (POK-358): it is not read while the box is.
+    if (h->held || h->queueLen == 0 || h->boxFrames > 0)
         return;
     h->lineFrames++;
     if (h->lineFrames >= BR_HUD_LINE_FRAMES)
@@ -735,6 +769,15 @@ static void TickTicker(bool8 paused, bool8 covered)
     const struct BrHudLine *line = CurrentLine();
     bool8 pixels = FALSE;
 
+    // The box is up: one announcement at a time, not two boxes stacked (Cam's 2026-10-14
+    // play-test, POK-358: THE FOG CLOSES IN ON DEWFORD TOWN! over A LEGENDARY AT
+    // SLATEPORT CITY!, both at once). The line comes off and is drawn again after it.
+    if (h->boxFrames > 0 && !covered)
+    {
+        Present(h->winTicker, &sTickerTemplate, BR_HUD_SHOWN_TICKER, FALSE, FALSE);
+        h->dirty |= BR_HUD_DIRTY_TICKER;
+        return;
+    }
     if (covered)
     {
         // The message box: BrHud_Yield handed it the tiles. Drawn again once it goes.

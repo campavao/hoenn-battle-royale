@@ -2,7 +2,7 @@
 # model and the five-row menu out in Hoenn; the Zone's is four rows (safari-menu.txt),
 # 0x139..0x17E, with the balls window beside it from tile 0x008. It covers the corner's
 # tiles and the box's first forty-three. Every frame through its opening and closing is
-# watched, the box up the whole time, and tools/br/hud-vram.py checks every cell naming
+# watched, the box up the whole time (the ticker's off screen under it, POK-358), and tools/br/hud-vram.py checks every cell naming
 # a shared tile, and that BG1..3 show the field's own tilemaps throughout.
 # checked-by: tools/br/hud-vram.py
 wait 30
@@ -19,7 +19,7 @@ poke u8 gBrHud+0x178 255
 poke u8 gBrHud+0x0D 4
 wait 4
 poke u8 gBrHud+0x0B 0
-expect u8 gBrHud+0x09 7
+expect u8 gBrHud+0x09 5
 shot hud-up
 say safari-menu-open
 watch gMain+4 4
@@ -69,8 +69,9 @@ tap B
 wait 10
 unwatch
 say safari-menu-closed
-expect u8 gBrHud+0x09 7
+expect u8 gBrHud+0x09 5
 expect u16 0x0600F868 0xF139
 expect u16 0x0600FAC2 0xF154
+expect u16 0x0600FC42 0
 shot hud-back
 say hud vram safari ok

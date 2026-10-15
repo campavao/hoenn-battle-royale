@@ -15,6 +15,7 @@
 #include "constants/characters.h"
 #include "br/br_hud.h"
 #include "br/br_match.h"
+#include "fldeff_misc.h"
 #include "br/br_ring.h"
 #include "br/br_story.h"
 #include "battle.h"
@@ -29,6 +30,11 @@
 #include "constants/battle_script_commands.h"
 #include "constants/battle_string_ids.h"
 #include "util.h"
+#include "task.h"
+#include "script.h"
+#include "palette.h"
+#include "field_message_box.h"
+#include "field_player_avatar.h"
 
 EWRAM_DATA struct BrRing gBrRing = {0};
 
@@ -185,10 +191,60 @@ static void ApplyWeather(bool8 outside)
     gBrRing.appliedMapNum = gSaveBlock1Ptr->location.mapNum;
 }
 
+// The fog finished the team in the overworld: say so, the way a poison step does, and
+// only then go out (Cam's 2026-10-14 play-test, POK-358: "BARBOACH..." and the screen
+// was already somebody else's). The OUT is what hands the camera to a seat still
+// standing, so it waits for the message. A field that is busy -- a script, a message
+// of its own -- is waited out, up to BR_FOG_OUT_WAIT frames, and then we go anyway.
+#define BR_FOG_OUT_WAIT (60 * 10)
+static const u8 sText_FogOut[] = _("{STR_VAR_1} fainted in the fog…\p{PLAYER} is out of usable POKéMON!\pYou're out of the match!");
+
+#define tState data[0]
+#define tWait data[1]
+
+static void Task_FogOut(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    switch (tState)
+    {
+    case 0:
+        if (++tWait > BR_FOG_OUT_WAIT || !BrField_OverworldRunning())
+            break;
+        if (ScriptContext_IsEnabled() || !IsFieldMessageBoxHidden() || gPaletteFade.active
+         || ArePlayerFieldControlsLocked())
+            return;
+        LockPlayerFieldControls();
+        ShowFieldMessage(sText_FogOut);
+        tState++;
+        return;
+    case 1:
+        if (!IsFieldMessageBoxHidden())
+            return;
+        UnlockPlayerFieldControls();
+        break;
+    }
+    DestroyTask(taskId);
+    BrMatch_Out();
+}
+
+#undef tState
+#undef tWait
+
+static void StartFogOut(u8 partyIdx)
+{
+    GetMonData(&gPlayerParty[partyIdx], MON_DATA_NICKNAME, gStringVar1);
+    StringGet_Nickname(gStringVar1);
+    if (CreateTask(Task_FogOut, 80) == TASK_NONE)
+        BrMatch_Out();
+}
+
 static void Bleed(void)
 {
     u8 i, count = CalculatePlayerPartyCount();
     u8 alive = 0;
+    bool8 dealt = FALSE;
+    u8 last = PARTY_SIZE;
     // In a battle the fog hurts but never finishes anybody. A team that fainted to the
     // weather mid-turn would take the elimination -- and the spill, and the OUT -- out
     // of the battle engine's hands while it was still running a turn, so it waits at
@@ -219,6 +275,16 @@ static void Bleed(void)
         if (dmg == 0)
             continue;
         hp -= dmg;
+        dealt = TRUE;
+        if (hp == 0)
+        {
+            // A fainted POKeMON has no status, and a PSN one left on would faint again on
+            // the next poison step, with its own line (field_poison.c) over ours.
+            u32 none = STATUS1_NONE;
+
+            SetMonData(mon, MON_DATA_STATUS, &none);
+            last = i;
+        }
         gBrRing.damageDealt += dmg;
         SetMonData(mon, MON_DATA_HP, &hp);
         // The battle is looking at its own copy, so the bar only moves if that moves
@@ -228,12 +294,21 @@ static void Bleed(void)
         if (hp > 0)
             alive++;
     }
+    // Felt on the field the way a poison step is (POK-358): its mosaic and its sound.
+    if (dealt && BrField_OverworldRunning() && !FldEffPoison_IsActive())
+        FldEffPoison_Start();
+    if (dealt)
+        gBrHud.dirty |= BR_HUD_DIRTY_CORNER; // its HP line (br_hud.c's LeadHp)
     if (count > 0 && alive == 0 && !gBrRing.out)
     {
         // Through br_match's one door, so the fog drops a team on the ground like any
-        // other way out (POK-232) instead of quietly sending its own OUT.
+        // other way out (POK-232) instead of quietly sending its own OUT -- once the
+        // player has been told, on the field (FogOut).
         gBrRing.out = TRUE;
-        BrMatch_Out();
+        if (BrField_OverworldRunning() && last < PARTY_SIZE)
+            StartFogOut(last);
+        else
+            BrMatch_Out();
     }
 }
 

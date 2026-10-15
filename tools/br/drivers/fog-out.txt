@@ -1,0 +1,43 @@
+# fog-out: the fog finishing a team on the field says so before it goes out (Cam's
+# 2026-10-14 play-test, POK-358: "BARBOACH..." and the screen was already somebody
+# else's, with nothing on it about HP the whole walk). In the fog the corner shows the
+# lead's HP in SAFE's place, a bleed plays the poison step's mosaic, and the last one
+# down is "<MON> fainted in the fog..." then out of usable POKeMON; the OUT, which hands
+# the camera to another seat, waits for the player to read it. ring-outside.txt's ring.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerPartyCount 1
+# TREECKO on 4 of 20: one bleed leaves 2, the next one finishes it
+poke u16 gPlayerParty+0x56 4
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 60
+expect u8 gBrRing+5 1
+shot hp-in-corner
+waitfor u16 gPlayerParty+0x56 2 300
+wait 2
+shot bleed
+wait 30
+shot hp-after-bleed
+waitfor u16 gPlayerParty+0x56 0 300
+wait 30
+# told, and not out yet: "TREE..." on the field, the team's status cleared
+expect u8 gBrRing+7 1
+expect u8 gBrMatch 2
+expect u32 gStringVar4 0xBFBFCCCE
+expect u32 gPlayerParty+0x50 0
+wait 60
+shot told
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+# read, and out
+expect u8 gBrMatch 3
+say fog out ok
