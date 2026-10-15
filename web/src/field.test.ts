@@ -550,17 +550,36 @@ describe('the picture in the box', () => {
     expect(lifted.rows, 'the map still runs under the pad').toBe(flat.rows);
   });
 
-  it('a wide window: the picture takes the height, the map either side', () => {
+  it("a wide window: a phone's zoom, the widest phone's snapped to whole pixels, and the map all round", () => {
+    // 430 / 240 is 1.79 CSS pixels, rounded up to whole device pixels: 2 on a 1x screen.
     const lay = layoutField(1440, 800, 0);
-    expect(lay.scale).toBe(5);
-    expect(lay.rows).toBe(160);
-    expect(lay.lcdRow).toBe(0);
-    expect(lay.cols).toBe(288);
-    expect(lay.lcdCol).toBe(24);
+    expect(lay.scale).toBe(2);
+    expect(lay).toMatchObject({ cols: 720, rows: 400, lcdCol: 240, lcdRow: 120 });
+    expect(layoutField(1440, 800, 0, 2).scale, '3.58 device pixels up to 4').toBe(2);
+    expect(layoutField(1440, 800, 0, 1.5).scale, '2.69 device pixels up to 3').toBe(2);
+    expect(layoutField(1440, 800, 0, 3).scale, '5.38 device pixels up to 6').toBe(2);
+    // Windows' default 125%: 2.24 device pixels up to 3, 2.4 CSS -- never under a phone's.
+    expect(layoutField(1440, 800, 0, 1.25).scale).toBe(2.4);
+    for (const dpr of [1, 1.25, 1.5, 2, 2.625, 3]) {
+      expect(layoutField(1440, 800, 0, dpr).scale, `dpr ${dpr}`).toBeGreaterThanOrEqual(430 / 240);
+    }
+    // ...and no drop past the widest phone: glass 430 is 1.79, glass 431 no less.
+    expect(layoutField(1440, 800, 0, 1.25, 430).scale).toBeCloseTo(430 / 240);
+    expect(layoutField(1440, 800, 0, 1.25, 431).scale).toBeGreaterThanOrEqual(430 / 240);
   });
 
-  it('a 3:2 box is the picture and nothing else', () => {
-    expect(layoutField(480, 320)).toEqual({ scale: 2, cols: 240, rows: 160, lcdCol: 0, lcdRow: 0 });
+  it('a phone on its side keeps the zoom it has upright: its short side is the same', () => {
+    expect(layoutField(844, 390).scale).toBe(layoutField(390, 844).scale);
+    // ...though its box is the glass less the thumbs either side and the bar under it.
+    expect(layoutField(516, 350, 0, 3, 390).scale).toBe(1.625);
+    // 480x320: a small phone sideways shows the map round a 320x213 picture.
+    expect(layoutField(480, 320)).toMatchObject({ scale: 320 / 240, cols: 360, rows: 240, lcdCol: 60, lcdRow: 40 });
+  });
+
+  it('a box too small for the zoom still fits the whole picture', () => {
+    // 443x768 (a half-screen window beside its sheet): the widest phone's zoom snaps up to 2,
+    // and 443 / 240 is all that fits across.
+    expect(layoutField(443, 768).scale).toBe(443 / 240);
   });
 
   it('a pad taller than the box leaves cannot push the picture off the top', () => {
@@ -603,11 +622,12 @@ describe('the picture in the box', () => {
   describe('the page asks for the rows its layout shows, inside what the ROM declares (askBand)', () => {
     const ROM = { band: { left: 0, top: 104, right: 16, bottom: 232 }, sprites: { top: 40, bottom: 56 } };
     const rows = (b: Band) => ({ top: b.top, bottom: b.bottom });
-    it('a desktop: the picture takes the height, so the band is the sprite window', () => {
-      expect(askBand(layoutField(1280, 720, 0), ROM)).toEqual({ left: 0, top: 40, right: 16, bottom: 56 });
-      // ...and beside the docked sheet (1280 less its 480), 28 rows each way, still inside it.
-      expect(rows(askBand(layoutField(800, 720, 0), ROM))).toEqual({ top: 40, bottom: 56 });
-      expect(rows(askBand(layoutField(1440, 800, 0), ROM))).toEqual({ top: 40, bottom: 56 });
+    it("a desktop: a phone's zoom shows map above and below, so it asks for those rows too", () => {
+      // 1280x720 at 2: 360 rows, the LCD at 100 and 100 under it.
+      expect(askBand(layoutField(1280, 720, 0), ROM)).toEqual({ left: 0, top: 104, right: 16, bottom: 104 });
+      // ...beside the docked sheet (1280 less its 480) the same rows; 1440x800 has 120 each way.
+      expect(rows(askBand(layoutField(800, 720, 0), ROM))).toEqual({ top: 104, bottom: 104 });
+      expect(rows(askBand(layoutField(1440, 800, 0), ROM))).toEqual({ top: 104, bottom: 120 });
     });
     it("a portrait phone with the pad over the bottom: all the ROM has, and Safari's shorter glass less", () => {
       expect(askBand(layoutField(390, 844, 200), ROM), 'short 14 and 10: capped at the ROM').toEqual(ROM.band);

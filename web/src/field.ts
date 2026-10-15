@@ -419,12 +419,30 @@ export interface FieldLayout {
   lcdRow: number;
 }
 
-/** Where the picture goes in a box, and how big the canvas around it is. One scale: the
- *  largest at which the picture fits the box, so a wide window has the map either side
- *  and a phone has it above and below. The picture centres in the box less a bottom
- *  inset -- the floating pad, on a phone -- and never leaves the box. */
-export function layoutField(boxW: number, boxH: number, bottomInset = 0): FieldLayout {
-  const scale = Math.min(boxW / GBA_W, boxH / GBA_H);
+/** The widest phone's portrait glass, in CSS pixels. */
+export const PHONE_WIDTH = 430;
+
+/** CSS pixels per GBA pixel: a phone's, on every screen (Cam, 2026-10-14: "same pixel
+ *  size as portrait phone everywhere"). A portrait phone's picture spans its glass, 240
+ *  pixels across its short side, and the same phone on its side keeps that zoom: `glass`
+ *  is the screen's short side, not the box's, which loses the thumbs and the bar to the
+ *  sides and the bottom, nor the window's, which Safari on its side cuts by its chrome.
+ *  A bigger screen gets the widest phone's (430 / 240) rounded up to whole device pixels,
+ *  so its pixels are all one size and never smaller than a phone's, and shows more map
+ *  instead of a bigger picture. Never more than fits the picture in the box. */
+export function fieldScale(boxW: number, boxH: number, dpr = 1, glass = Math.min(boxW, boxH)): number {
+  const fit = Math.min(boxW / GBA_W, boxH / GBA_H);
+  let scale = Math.min(glass, PHONE_WIDTH) / GBA_W;
+  if (glass > PHONE_WIDTH && dpr > 0) scale = Math.ceil(scale * dpr) / dpr;
+  return Math.min(fit, scale);
+}
+
+/** Where the picture goes in a box, and how big the canvas around it is. One scale, a
+ *  phone's (fieldScale), so a wide window has the map all round and a phone has it above
+ *  and below. The picture centres in the box less a bottom inset -- the floating pad, on
+ *  a phone -- and never leaves the box. */
+export function layoutField(boxW: number, boxH: number, bottomInset = 0, dpr = 1, glass = Math.min(boxW, boxH)): FieldLayout {
+  const scale = fieldScale(boxW, boxH, dpr, glass);
   if (!(scale > 0)) return { scale: 0, cols: 0, rows: 0, lcdCol: 0, lcdRow: 0 };
   const cols = Math.ceil(boxW / scale);
   const rows = Math.ceil(boxH / scale);
@@ -439,13 +457,21 @@ export function layoutField(boxW: number, boxH: number, bottomInset = 0): FieldL
 export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefined): FieldLayout {
   let inset = 0;
   if (pad && getComputedStyle(pad).position === 'absolute') inset = pad.getBoundingClientRect().height;
-  return layoutField(box.clientWidth, box.clientHeight, inset);
+  const view = box.ownerDocument?.defaultView;
+  const dpr = view?.devicePixelRatio || 1;
+  // The glass: the screen's short side, which turning the phone does not change (iOS
+  // reports it upright either way); a window with no screen, its own.
+  const screen = view?.screen;
+  const glass = screen && screen.width > 0 && screen.height > 0
+    ? Math.min(screen.width, screen.height)
+    : view ? Math.min(view.innerWidth, view.innerHeight) : undefined;
+  return layoutField(box.clientWidth, box.clientHeight, inset, dpr, glass);
 }
 
 /** The band to ask the core for (POK-329): the rows above and below the LCD this layout
  *  shows, and no more -- each row past the LCD is 256 more pixels the core draws every
- *  frame and the page uploads, and on a desktop, or a phone on its side, the picture
- *  fills the box's height and shows none of the ROM's 336. So: the layout's rows, in
+ *  frame and the page uploads, and a phone on its side shows only the sprite window's
+ *  of the ROM's 336, a desktop at a phone's zoom about 120 each way. So: the layout's rows, in
  *  eights (what the core takes); never fewer than the sprite window, which is the ring
  *  every ROM before POK-329 fed and the rows the ROM keeps its people to one reading in;
  *  never more than the ROM declares. The sides are the ROM's: 16 columns at most, and a
