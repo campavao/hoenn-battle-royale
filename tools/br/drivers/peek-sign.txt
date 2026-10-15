@@ -21,7 +21,7 @@ poke u16 gBrMailbox+0x0C 2
 # On ROUTE 101 with its sign still to come: open the box before it prints
 wait 100
 expect u8 *gSaveBlock1Ptr+5 0x10
-tap START
+tap SELECT
 wait 2
 expect u8 gBrSpectate+0x0A 1
 # the box's own tile there (0xF01A: palette 15, tile 0x01A -- its interior), when the
@@ -36,14 +36,14 @@ shot box-kept
 expect u16 0x0600F8C4 0xF01A
 expect u8 gBrSpectate+0x0A 1
 # closed: the sign it held comes now
-tap START
+tap SELECT
 wait 60
 shot sign-after
 expect u8 gBrSpectate+0x0A 0
 expect u16 0x0600F8C4 0xE11C
 # ...and with that sign up, the box opened over it takes it down first: the sign's
 # erase two seconds on would otherwise clear the box's cells
-tap START
+tap SELECT
 wait 2
 expect u8 gBrSpectate+0x0A 1
 expect u16 0x0600F8C4 0xF01A

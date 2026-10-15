@@ -1286,11 +1286,17 @@ static void FollowTick(void)
     // 2026-10-14 play-test, POK-369: "open the menu like on the right hand side as if we
     // were playing"): their POKeMON, their BAG, their card. Field controls are locked
     // while following, so pret's own START never sees the press; and the press that
-    // closed the menu is not one that opens it again.
+    // closed the menu is not one that opens it again. SELECT opens the box on its own.
     menuUp = GetStartMenuWindowId() != WINDOW_NONE || gPaletteFade.active;
-    if (gBrSpectate.peeking && JOY_NEW(START_BUTTON | B_BUTTON))
+    if (gBrSpectate.peeking && JOY_NEW(START_BUTTON | B_BUTTON | SELECT_BUTTON))
     {
         ClosePeek();
+    }
+    // SELECT is the box straight away, the menu's BAG without the menu: what it was
+    // on START before.
+    else if (JOY_NEW(SELECT_BUTTON) && !menuUp && !sMenuWas && !ScriptContext_IsEnabled())
+    {
+        OpenPeek();
     }
     else if (JOY_NEW(START_BUTTON) && !menuUp && !sMenuWas && !ScriptContext_IsEnabled())
     {

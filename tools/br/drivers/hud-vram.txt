@@ -203,7 +203,7 @@ expect u16 0x0600FC42 0xF1C8
 shot sign-closed
 #
 # The peek box. Seat 1 stands two east of us (PLACE, as spectate-follow.txt: map 0:9,
-# (16,16) with MAP_OFFSET) and we FOLLOW it; START then opens the box of what it
+# (16,16) with MAP_OFFSET) and we FOLLOW it; SELECT then opens the box of what it
 # carries, (1,2) 17x10 from tile 0x008, in the standard frame (0x214, palette 13: the
 # HUD's own copy). It shares no tile with the HUD but its last rows and its frame are
 # where the bottom box's top is, so the box yields to it.
@@ -235,7 +235,7 @@ watch *gOverworldTilemapBuffer_Bg1 4096
 watch *gOverworldTilemapBuffer_Bg2 4096
 watch *gOverworldTilemapBuffer_Bg3 4096
 wait 2
-tap START
+tap SELECT
 wait 12
 unwatch
 say peek-up
