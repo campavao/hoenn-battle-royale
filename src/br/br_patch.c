@@ -1,5 +1,7 @@
 // Visible encounters. See include/br/br_patch.h.
 #include "global.h"
+#include "palette.h"
+#include "constants/rgb.h"
 #include "event_object_movement.h"
 #include "field_effect.h"
 #include "field_player_avatar.h"
@@ -43,6 +45,8 @@ STATIC_ASSERT(BR_PATCH_MAX == 8, BrPatchKeysHoldEight)
 // The rustle, then a breath, then the rustle again.
 #define sPause data[5]
 #define BR_PATCH_PAUSE 24
+// The water's drift, its own count: sPause times the ripple.
+#define sTick  data[4]
 
 // br_zone.c's mulberry32 step, stateless.
 static u32 Mix(u32 t)
@@ -250,6 +254,15 @@ static const struct SpriteFrameImage sTallGrassImages[] = {
     overworld_frame(sTallGrassPic, 2, 2, 3),
     overworld_frame(sTallGrassPic, 2, 2, 4),
 };
+static const u32 sWaterPic[] = INCGFX_U32("graphics/field_effects/pics/br_patch_water.png", ".4bpp", "-mwidth 2 -mheight 2");
+
+static const struct SpriteFrameImage sWaterImages[] = {
+    overworld_frame(sWaterPic, 2, 2, 0),
+    overworld_frame(sWaterPic, 2, 2, 1),
+    overworld_frame(sWaterPic, 2, 2, 2),
+    overworld_frame(sWaterPic, 2, 2, 3),
+    overworld_frame(sWaterPic, 2, 2, 4),
+};
 static const struct SpriteFrameImage sLongGrassImages[] = {
     overworld_frame(sLongGrassPic, 2, 2, 0),
     overworld_frame(sLongGrassPic, 2, 2, 1),
@@ -276,6 +289,25 @@ static void SpriteCB_Shadow(struct Sprite *sprite)
     sprite->x2 = sDrift[(sprite->sPause >> 3) & 7];
 }
 
+// On water the patch is the sea's own dark blue, not a hole in it, and it ripples the way
+// the grass ones rustle (Cam's 2026-10-14 play-test, POK-356: "on water they should be
+// ideally at the very minimum just like dark blue"; POK-357: "we don't have the same for
+// like a water texture"). Colour 1 the shadow, 2 and 3 the ripple, in the sea's own
+// highlights; only a map with a patch on water spends a slot on it.
+#define BR_PATCH_WATER_TAG 0x5A10
+static const u16 sWaterColors[16] = {
+    0, RGB(4, 8, 15), RGB(22, 25, 30), RGB(17, 20, 27), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+};
+static const struct SpritePalette sWaterPalette = { sWaterColors, BR_PATCH_WATER_TAG };
+
+// The ripple, and the shadow under it drifting as the dry-land ones do.
+static void SpriteCB_Water(struct Sprite *sprite)
+{
+    sprite->sTick++;
+    sprite->x2 = sDrift[(sprite->sTick >> 3) & 7];
+    SpriteCB_Patch(sprite);
+}
+
 // The field's own sprite for what the cell is: see above. Read off the live grid, not the
 // shipped layout the deal reads: a cell the deal picked is a cell a battle starts on
 // either way, and only the picture can tell a metatile the map has since swapped.
@@ -299,6 +331,13 @@ static void Draw(u8 i)
         object = FLDEFFOBJ_LONG_GRASS;
         images = sLongGrassImages;
     }
+    else if (MetatileBehavior_IsSurfableWaterOrUnderwater(behavior))
+    {
+        // The tall grass's five frames, ten apiece, over the cell as the grass is.
+        object = FLDEFFOBJ_TALL_GRASS;
+        images = sWaterImages;
+        palette = &sWaterPalette;
+    }
     else
     {
         // 16x8, in colour 15 of whatever palette it is given: general 0's is black.
@@ -321,8 +360,14 @@ static void Draw(u8 i)
     sprite = &gSprites[id];
     sprite->coordOffsetEnabled = TRUE;
     sprite->oam.priority = 2;
+    // Under everybody standing on the field, as the shadows under them are: at the end of
+    // the list with subpriority 0 it drew over a head mounting SURF beside it (POK-356).
+    sprite->subpriority = 0xFF;
     sprite->oam.paletteNum = slot;
-    sprite->callback = images != NULL ? SpriteCB_Patch : SpriteCB_Shadow;
+    if (images == sWaterImages)
+        sprite->callback = SpriteCB_Water;
+    else
+        sprite->callback = images != NULL ? SpriteCB_Patch : SpriteCB_Shadow;
     sprite->sMagic = BR_PATCH_MAGIC;
     sprite->sSlot = i;
     sprite->sPause = images != NULL ? BR_PATCH_PAUSE : 0;
