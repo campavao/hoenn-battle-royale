@@ -33,6 +33,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_netlink.h"
 #include "br/br_battle.h"
+#include "br/br_hud.h"
 #include "br/br_bot.h"
 #include "br/br_spectate.h"
 #include "br/br_field.h"
@@ -98,6 +99,49 @@ void BrBattle_HideClock(void)
     sClockSecs = 0xFF;
 }
 
+// Cam, 2026-10-15, on a phone: the game's own little FIGHT/BAG box, under the page's big
+// windows, is the same menu twice. The action menu is bg0 scrolled down a screen (the
+// move menu two), where the menu's boxes and cursor are; scrolled back to the top, bg0 is
+// the message box, and the prompt goes there instead. The menus still take their input,
+// which is how the page's windows choose (web/src/touch.ts chooseBattle). The clock rides
+// the scroll and comes along (BrBattle_DrawClockSecs).
+void BrBattle_MenuBoxOff(bool8 prompt)
+{
+    if (!gBrHud.noBattleBox)
+        return;
+    gBattle_BG0_Y = 0;
+    if (prompt)
+        BattlePutTextOnWindow(gDisplayedStringBattle, B_WIN_MSG);
+}
+
+void BrBattle_MenuBoxFollow(u16 menuY, const u8 *prompt)
+{
+    if (!gBrHud.noBattleBox)
+        gBattle_BG0_Y = menuY;
+    else if (gBattle_BG0_Y != 0)
+    {
+        // The page came mid-menu: the message box still says the last battle line.
+        gBattle_BG0_Y = 0;
+        BattleStringExpandPlaceholdersToDisplayedString(prompt);
+        BattlePutTextOnWindow(gDisplayedStringBattle, B_WIN_MSG);
+    }
+}
+
+// A wild or a trainer battle's "\p" waits for A (its next page, "X defeated Y!", the
+// prize money) unless autoScroll is on, which pret sets only over a link. The page has
+// no A to press there any more, so on a phone it is on: a page holds for the room's TEXT
+// (BrBattle_AutoScrollFrames), then turns.
+void BrBattle_PhoneAutoScroll(void)
+{
+    if (gBrHud.noBattleBox)
+        gTextFlags.autoScroll = TRUE;
+}
+
+bool8 BrBattle_PhoneTextPace(void)
+{
+    return gBrHud.noBattleBox && gMain.inBattle && !(gBattleTypeFlags & BATTLE_TYPE_LINK);
+}
+
 void BrBattle_DrawClock(void)
 {
     u16 remain = BR_SHOT_CLOCK_FRAMES - gBrBattle.shotFrames;
@@ -110,6 +154,7 @@ void BrBattle_DrawClockSecs(u8 secs)
     u8 top = gBattle_BG0_Y / 8;                // screen row 0 in bg0-tile space
     struct TextPrinterTemplate tp;
     u8 buf[4];
+    u8 colors[3];
 
     if (!ClockLive() || sClockTop != top)
     {
@@ -155,7 +200,12 @@ void BrBattle_DrawClockSecs(u8 secs)
     tp.fgColor = 13;
     tp.bgColor = TEXT_COLOR_TRANSPARENT;
     tp.shadowColor = 15;
+    // AddTextPrinter colours the font's one shared table for these three, and a printer
+    // still running draws its next glyph with whatever is in it: the prompt in the
+    // message box on a phone (BrBattle_MenuBoxOff) came out red on teal after its first.
+    SaveTextColors(&colors[0], &colors[1], &colors[2]);
     AddTextPrinter(&tp, TEXT_SKIP_DRAW, NULL);
+    RestoreTextColors(&colors[0], &colors[1], &colors[2]);
     PutWindowTilemap(sClockWin);
     CopyWindowToVram(sClockWin, COPYWIN_FULL);
     sClockSecs = secs;

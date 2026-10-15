@@ -1,0 +1,45 @@
+# phone-trainer-no-a: a trainer fight on a phone, start to finish, with no A but the two
+# the page's windows press (FIGHT, then the move). With gBrHud.noBattleBox the page hides
+# the stick and A/B while the battle runs (web/src/ui/battlemenu.ts), so every page of
+# text after the hit -- "<PLAYER> defeated PKMN TRAINER BOT!", its lose line, the prize
+# -- has to turn by itself (BrBattle_PhoneAutoScroll), and the field has to come back.
+# The fight is bot-voice-beaten.txt's: the bot's TREECKO on 1 HP, one POUND.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrHud+0x17B 1
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 01 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+# the three lines: seat 1F, kind, length, text
+pokebytes gDecompressionBuffer 1F 03 0A C0 C9 CF C8 BE 00 D3 C9 CF AD
+mailsend gBrMailbox 15 gDecompressionBuffer 13
+pokebytes gDecompressionBuffer 1F 04 09 CE C9 C6 BE 00 D3 C9 CF AD
+mailsend gBrMailbox 15 gDecompressionBuffer 12
+pokebytes gDecompressionBuffer 1F 05 0B C1 C9 C9 BE 00 C0 C3 C1 C2 CE AD
+mailsend gBrMailbox 15 gDecompressionBuffer 14
+wait 4
+# none of them is a ticker line
+expect u8 gBrHud+0x0A 0
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 0F
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+# the intro turned its own pages: the action menu, off the screen
+wait 300
+expect u8 gBrBattle+8 1
+expect u16 gBattle_BG0_Y 0
+shot menu
+# the page's FIGHT and POUND
+tap A
+wait 30
+expect u8 gBrBattle+8 2
+tap A
+# no more keys: the hit, the faint, the lose line and the prize money run on, and the
+# battle ends
+wait 1500
+shot after
+expectbits u8 gMain+0x439 0x02 0
+say phone trainer no a ok

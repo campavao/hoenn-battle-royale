@@ -14,6 +14,7 @@
 // ITEMS pocket; what a move is comes out of the ROM's tables (battle/movebook.ts).
 import uiData from '../data/ui.json';
 import { decodeGen3Display } from '../text/gen3';
+import { MAIN_CALLBACK2 } from '../field';
 import { effectWords, effectiveness, moveInfo, type MoveInfo, type Rom } from '../battle/movebook';
 import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_MOVE, MENU_SAFARI, localBattler } from '../touch';
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
@@ -35,6 +36,8 @@ export const NICKNAME_SIZE = 11;
 export const BATTLE_TYPE_LINK = 1 << 1;
 export const BATTLE_TYPE_TRAINER = 1 << 3;
 export const BATTLE_TYPE_SAFARI = 1 << 7;
+/** A replay: a spectator's, whose stick still flips who they watch (app.ts watchStepKey). */
+export const BATTLE_TYPE_RECORDED = 1 << 24;
 export const ITEM_POKE_DOLL = 80;
 const MAX_MON_MOVES = 4;
 
@@ -117,10 +120,64 @@ export function readBattleView(emu: BattleRead, sym: (name: string) => number | 
   };
 }
 
+// ---- the stick and A/B -------------------------------------------------------------------
+
+const ROM_BASE = 0x08000000;
+/** The battle script commands that wait on a press the windows do not offer
+ *  (include/constants/battle_script_commands.h): a YES/NO (USE NEXT POKeMON? in a wild
+ *  battle) and a caught mon's POKeDEX page. The stick and A/B come back for these. */
+export const ASKS_PAD: ReadonlySet<number> = new Set([
+  0x5a, // B_SCR_OP_YESNOBOXLEARNMOVE
+  0x5b, // B_SCR_OP_YESNOBOXSTOPLEARNINGMOVE
+  0x67, // B_SCR_OP_YESNOBOX
+  0xf2, // B_SCR_OP_DISPLAYDEXINFO
+  0xf3, // B_SCR_OP_TRYGIVECAUGHTMONNICK
+]);
+
+/** The battle itself is on screen and wants nothing the stick or A/B give (Cam,
+ *  2026-10-15: "we shouldn't need them after all our UI changes"): the choices are the
+ *  windows, and the text runs on by itself (br_battle.c BrBattle_AutoScrollFrames). The
+ *  BAG and the party, which are screens of their own (callback2 is not BattleMainCB2),
+ *  a battle script waiting on a press (ASKS_PAD), and a spectator's replay, where LEFT
+ *  and RIGHT pick who to watch, keep them. */
+export function battleWantsNoPad(emu: BattleRead, sym: (name: string) => number | undefined, rom: Rom | null): boolean {
+  const main = sym('gMain');
+  const scene = sym('BattleMainCB2');
+  const instr = sym('gBattlescriptCurrInstr');
+  if (main === undefined || scene === undefined || instr === undefined || !rom) return false;
+  if (!(emu.read(main + MAIN_IN_BATTLE_BYTE, 8) & MAIN_IN_BATTLE_BIT)) return false;
+  if ((emu.read(main + MAIN_CALLBACK2, 32) & ~1) !== (scene & ~1)) return false;
+  const flags = sym('gBattleTypeFlags');
+  if (flags === undefined || emu.read(flags, 32) & BATTLE_TYPE_RECORDED) return false;
+  const at = emu.read(instr, 32) - ROM_BASE;
+  return !(at >= 0 && at < rom.bytes.length && ASKS_PAD.has(rom.bytes[at]));
+}
+
 // ---- what the windows say --------------------------------------------------------------
 
-export type Tone = 'super' | 'weak' | 'none' | 'normal' | 'status';
-const TONE: Record<Tone, TextColor> = { super: TEXT_GREEN, weak: TEXT_RED, none: TEXT_GRAY, normal: TEXT_GRAY, status: TEXT_GRAY };
+export type Tone = 'extreme' | 'super' | 'weak' | 'none' | 'normal' | 'status';
+const TONE: Record<Tone, TextColor> = { extreme: TEXT_GREEN, super: TEXT_GREEN, weak: TEXT_RED, none: TEXT_GRAY, normal: TEXT_GRAY, status: TEXT_GRAY };
+
+/** Cam's reference (2026-10-15): how a move lands, as a band under its name with a mark
+ *  ahead of the words -- a star for x4, a double circle for x2, a triangle for less, a
+ *  cross for nothing. The band is the tone's colour, the words and mark white on it.
+ *  Plain EFFECTIVE, and a move that does no damage, get words alone. */
+export const BAND: Partial<Record<Tone, string>> = { extreme: '#d08800', super: '#209c08', weak: '#c83030', none: '#626262' };
+const MARK_ROWS: Partial<Record<Tone, string[]>> = {
+  extreme: ['....#....', '....#....', '...###...', '#########', '.#######.', '..#####..', '..##.##..', '.##...##.', '.#.....#.'],
+  super: ['...###...', '.##...##.', '.#.....#.', '#..###..#', '#..#.#..#', '#..###..#', '.#.....#.', '.##...##.', '...###...'],
+  weak: ['....#....', '....#....', '...#.#...', '...#.#...', '..#...#..', '..#...#..', '.#.....#.', '.#.....#.', '#########'],
+  none: ['#.......#', '.#.....#.', '..#...#..', '...#.#...', '....#....', '...#.#...', '..#...#..', '.#.....#.', '#.......#'],
+};
+export const MARK = 9;
+
+/** The tone's mark, MARK pixels square, its top-left at (x, y). No shadow: at this
+ *  size a shadow fills the double circle in. */
+function drawMark(c: EmeraldCanvas, tone: Tone, x: number, y: number, color: string): void {
+  MARK_ROWS[tone]?.forEach((row, j) => {
+    for (let i = 0; i < row.length; i++) if (row[i] === '#') c.fillRect({ x: x + i, y: y + j, w: 1, h: 1 }, color);
+  });
+}
 
 /** The action windows: a word each (Cam, 2026-10-14: nothing under it). RUN is grey
  *  where it cannot work: a fight with somebody and no POKe DOLL (br_battle.c). */
@@ -183,6 +240,24 @@ export interface BattleMenuDeps {
 function drawType(c: EmeraldCanvas, type: number, x: number, y: number, redo: () => void): void {
   c.drawPicture(picture('/ui/types.png', redo), 0, type * TYPES.h, TYPES.w, TYPES.h, x, y);
 }
+
+/** How a move lands, `w` wide from (x, y): its band and mark (BAND), or its words alone.
+ *  `tail` follows the words (the details' "VS foe"). */
+function drawEffect(c: EmeraldCanvas, e: { text: string; tone: Tone; color: TextColor }, tail: string, x: number, y: number, w: number): void {
+  const band = BAND[e.tone];
+  if (!e.text) return;
+  if (!band) {
+    c.drawText(fitText(e.text + tail, w - 4), x + 2, y + 1, e.color);
+    return;
+  }
+  // A band of BAND_H with its corners clipped a pixel, the way a pill reads at this size.
+  c.fillRect({ x: x + 1, y, w: w - 2, h: BAND_H }, band);
+  c.fillRect({ x, y: y + 1, w, h: BAND_H - 2 }, band);
+  drawMark(c, e.tone, x + 2, y + 3, TEXT_WHITE.fg);
+  c.drawText(fitText(e.text + tail, w - MARK - 7), x + MARK + 5, y + 1, TEXT_WHITE);
+}
+
+const BAND_H = 15;
 
 export class BattleMenu {
   private view: BattleView | null = null;
@@ -466,11 +541,13 @@ export class BattleMenu {
       c.drawTextCentred('-', CELL_W / 2, 24, TEXT_GRAY);
       return;
     }
-    c.drawText(fitText(m.name, CELL_W - 16), 8, 7, TEXT_DARK);
-    drawType(c, m.type, 8, 23, redo);
-    c.drawText(`PP ${slot.pp}/${slot.maxPp}`, 44, 24, slot.pp === 0 ? TEXT_RED : TEXT_DARK);
-    const e = moveEffect(this.deps.rom, m, v.foe.types);
-    c.drawText(fitText(e.text, CELL_W - 16), 8, 41, e.color);
+    // The reference's row: the type, and the PP over on the right; the name; and how it
+    // lands, on its band.
+    drawType(c, m.type, 8, 6, redo);
+    const pp = `PP ${slot.pp}/${slot.maxPp}`;
+    c.drawText(pp, CELL_W - 8 - measure(pp), 7, slot.pp === 0 ? TEXT_RED : TEXT_DARK);
+    c.drawText(fitText(m.name, CELL_W - 16), 8, 23, TEXT_DARK);
+    drawEffect(c, moveEffect(this.deps.rom, m, v.foe.types), '', 6, 40, CELL_W - 12);
   }
 
   private descLines(): string[] {
@@ -491,8 +568,7 @@ export class BattleMenu {
     const w = c.drawText(m.name, 8, 7, TEXT_DARK);
     drawType(c, m.type, 8 + w + 6, 7, redo);
     const e = moveEffect(this.deps.rom, m, v.foe.types);
-    const vs = m.power === 0 ? e.text : `${e.text} VS ${v.foe.name}`;
-    c.drawText(fitText(vs, INFO_W - 16), 8, 23, e.color);
+    drawEffect(c, e, m.power === 0 ? '' : ` VS ${v.foe.name}`, 6, 22, INFO_W - 12);
     const pair = (k: string, val: string, x: number, y: number) => {
       c.drawText(k, x, y, TEXT_BLUE);
       c.drawText(val, x + measure(k) + 6, y, TEXT_DARK);

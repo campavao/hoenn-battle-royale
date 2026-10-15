@@ -279,6 +279,7 @@ static void HandleInputChooseAction(void)
         return;
     }
     gBrBattle.menu = BR_MENU_ACTION;
+    BrBattle_MenuBoxFollow(DISPLAY_HEIGHT, gText_WhatWillPkmnDo);
     BrBattle_DrawClock();
 
 #endif
@@ -541,6 +542,7 @@ static void HandleInputChooseMove(void)
         return;
     }
     gBrBattle.menu = BR_MENU_MOVE;
+    BrBattle_MenuBoxFollow(DISPLAY_HEIGHT * 2, gText_WhatWillPkmnDo);
     BrBattle_DrawClock();
 
 #endif
@@ -2643,6 +2645,9 @@ static void HandleChooseActionAfterDma3(void)
     {
         gBattle_BG0_X = 0;
         gBattle_BG0_Y = DISPLAY_HEIGHT;
+#if BR
+        BrBattle_MenuBoxOff(TRUE);
+#endif
         gBattlerControllerFuncs[gActiveBattler] = HandleInputChooseAction;
     }
 }
@@ -2688,6 +2693,9 @@ static void HandleChooseMoveAfterDma3(void)
     {
         gBattle_BG0_X = 0;
         gBattle_BG0_Y = DISPLAY_HEIGHT * 2;
+#if BR
+        BrBattle_MenuBoxOff(FALSE);
+#endif
         gBattlerControllerFuncs[gActiveBattler] = HandleInputChooseMove;
     }
 }

@@ -58,6 +58,7 @@ import speciesInfoH from '../../src/data/pokemon/species_info.h?raw';
 import trainersH from '../../src/data/trainers.h?raw';
 import trainerPartiesH from '../../src/data/trainer_parties.h?raw';
 import varsH from '../../include/constants/vars.h?raw';
+import scriptCmdsH from '../../include/constants/battle_script_commands.h?raw';
 import weatherH from '../../include/constants/weather.h?raw';
 import constantsGlobalH from '../../include/constants/global.h?raw';
 import globalH from '../../include/global.h?raw';
@@ -502,7 +503,7 @@ describe("the BR structs the page reads at an offset", () => {
     expect(writes.length).toBeGreaterThan(0);
     const page = Object.fromEntries(writes.map((f) => [`OFF_${snake(f)}`, hud.at[f]]));
     expect(page).toEqual({ ...HUD });
-    expect(hud.size, 'the comments add up').toBe(hud.at.boxPad + hud.count.boxPad);
+    expect(hud.size, 'the comments add up').toBe(hud.at.noBattleBox + 1);
   });
 
   it('gBrRing, gBrPick and gBrMatch (field.ts, app.ts)', () => {
@@ -755,6 +756,17 @@ function watch<T extends Layout | Natural>(struct: string, l: T): T {
   });
 }
 
+describe("the battle script commands the phone's stick and A/B wait on (ui/battlemenu.ts)", () => {
+  it('ASKS_PAD: the opcodes, as enum BattleScriptOpcode counts them', () => {
+    const body = scriptCmdsH.slice(scriptCmdsH.indexOf('enum BattleScriptOpcode'));
+    const names = body.slice(body.indexOf('{') + 1, body.indexOf('}')).replace(/\/\/.*$/gm, '').split(',').map((n) => n.trim()).filter(Boolean);
+    const op = (n: string) => names.indexOf(`B_SCR_OP_${n}`);
+    const want = ['YESNOBOXLEARNMOVE', 'YESNOBOXSTOPLEARNINGMOVE', 'YESNOBOX', 'DISPLAYDEXINFO', 'TRYGIVECAUGHTMONNICK'].map(op);
+    expect(want.every((n) => n > 0)).toBe(true);
+    expect([...bmenu.ASKS_PAD].sort((a, b) => a - b)).toEqual(want.sort((a, b) => a - b));
+  });
+});
+
 describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () => {
   // These move only on a pret merge, and their headers carry the offsets in comments.
   it('gMain: callback2, and inBattle in its bitfield', () => {
@@ -916,8 +928,8 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(pinned('sizeof gBattleMons[0]'), 'src/br/br_pins.c').toBe(bmenu.MON_SIZE);
     expect(bmenu.NICKNAME_SIZE).toBe(define(constantsGlobalH, 'POKEMON_NAME_LENGTH') + 1);
     const bit = (n: string) => 1 << Number(new RegExp(`#define\\s+${n}\\s+\\(1 << (\\d+)\\)`).exec(battleConstH)![1]);
-    expect([bmenu.BATTLE_TYPE_LINK, bmenu.BATTLE_TYPE_TRAINER, bmenu.BATTLE_TYPE_SAFARI]).toEqual(
-      ['BATTLE_TYPE_LINK', 'BATTLE_TYPE_TRAINER', 'BATTLE_TYPE_SAFARI'].map(bit),
+    expect([bmenu.BATTLE_TYPE_LINK, bmenu.BATTLE_TYPE_TRAINER, bmenu.BATTLE_TYPE_SAFARI, bmenu.BATTLE_TYPE_RECORDED]).toEqual(
+      ['BATTLE_TYPE_LINK', 'BATTLE_TYPE_TRAINER', 'BATTLE_TYPE_SAFARI', 'BATTLE_TYPE_RECORDED'].map(bit),
     );
     const pocket = watch('BagPocket', natural(itemH, 'BagPocket'));
     expect([0, phone.POCKET_CAPACITY]).toEqual([pocket.at.itemSlots, pocket.at.capacity]);

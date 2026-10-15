@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BATTLE_TYPE_LINK,
+  BATTLE_TYPE_RECORDED,
   BATTLE_TYPE_SAFARI,
   BATTLE_TYPE_TRAINER,
   ITEM_POKE_DOLL,
@@ -11,6 +12,7 @@ import {
   MON_SIZE,
   MON_TYPES,
   actionLabels,
+  battleWantsNoPad,
   ppWithBonus,
   readBattleView,
   type BattleView,
@@ -135,5 +137,37 @@ describe('the action windows', () => {
 
   it("the Safari's four", () => {
     expect(actionLabels(view({ menu: MENU_SAFARI, safariBalls: 12 })).map((l) => l.label)).toEqual(['BALL', 'POKéBLOCK', 'GO NEAR', 'RUN']);
+  });
+});
+
+describe('the stick and A/B in a battle', () => {
+  const at: Record<string, number> = { gMain: 0x1000, BattleMainCB2: 0x08000201, gBattlescriptCurrInstr: 0x2000, gBattleTypeFlags: 0x3000 };
+  const YESNOBOX = 0x67;
+  const ATTACKCANCELER = 0x00;
+  function setup(o: { inBattle?: boolean; cb2?: number; op?: number; flags?: number } = {}) {
+    const { emu, put } = fakeEmu();
+    const rom = { bytes: new Uint8Array(0x400), sym: () => undefined };
+    rom.bytes[0x300] = o.op ?? ATTACKCANCELER;
+    put(at.gMain + MAIN_IN_BATTLE_BYTE, o.inBattle === false ? 0 : 0x02, 1);
+    put(at.gMain + 4, o.cb2 ?? at.BattleMainCB2, 4);
+    put(at.gBattlescriptCurrInstr, 0x08000300, 4);
+    put(at.gBattleTypeFlags, o.flags ?? 0, 4);
+    return { emu, rom };
+  }
+
+  it('go while the battle itself runs, between choices too', () => {
+    const { emu, rom } = setup();
+    expect(battleWantsNoPad(emu, (n) => at[n], rom)).toBe(true);
+  });
+
+  it("stay for a YES/NO, the BAG and the party, a spectator's replay, and out of a battle", () => {
+    const cases = [setup({ op: YESNOBOX }), setup({ cb2: 0x08000401 }), setup({ flags: BATTLE_TYPE_RECORDED }), setup({ inBattle: false })];
+    for (const { emu, rom } of cases) expect(battleWantsNoPad(emu, (n) => at[n], rom)).toBe(false);
+  });
+
+  it('stay where the page cannot tell: an older table without the symbols, no ROM', () => {
+    const { emu, rom } = setup();
+    expect(battleWantsNoPad(emu, (n) => (n === 'BattleMainCB2' ? undefined : at[n]), rom)).toBe(false);
+    expect(battleWantsNoPad(emu, (n) => at[n], null)).toBe(false);
   });
 });

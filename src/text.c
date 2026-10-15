@@ -962,7 +962,11 @@ static u16 RenderText(struct TextPrinter *textPrinter)
             return RENDER_UPDATE;
         }
 
+#if BR
+        if (!(gBattleTypeFlags & BATTLE_TYPE_RECORDED) && gTextFlags.autoScroll && !BrBattle_PhoneTextPace())
+#else
         if (!(gBattleTypeFlags & BATTLE_TYPE_RECORDED) && gTextFlags.autoScroll)
+#endif
             textPrinter->delayCounter = 3;
         else
             textPrinter->delayCounter = textPrinter->textSpeed;

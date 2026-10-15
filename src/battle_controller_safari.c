@@ -184,6 +184,7 @@ static void HandleInputChooseAction(void)
         return;
     }
     gBrBattle.menu = BR_MENU_SAFARI; // the page's tap-to-choose
+    BrBattle_MenuBoxFollow(DISPLAY_HEIGHT, gText_WhatWillPkmnDo2);
 #endif
     if (JOY_NEW(A_BUTTON))
     {
@@ -489,6 +490,9 @@ static void HandleChooseActionAfterDma3(void)
     {
         gBattle_BG0_X = 0;
         gBattle_BG0_Y = DISPLAY_HEIGHT;
+#if BR
+        BrBattle_MenuBoxOff(TRUE);
+#endif
         gBattlerControllerFuncs[gActiveBattler] = HandleInputChooseAction;
     }
 }

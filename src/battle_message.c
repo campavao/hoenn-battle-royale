@@ -3025,6 +3025,9 @@ void BattlePutTextOnWindow(const u8 *text, u8 windowId)
         gTextFlags.autoScroll = TRUE;
     else
         gTextFlags.autoScroll = FALSE;
+#if BR
+    BrBattle_PhoneAutoScroll();
+#endif
 
     if (windowId == B_WIN_MSG || windowId == ARENA_WIN_JUDGMENT_TEXT)
     {

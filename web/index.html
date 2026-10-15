@@ -267,13 +267,17 @@
         }
         .pad-edit-row { display: flex; align-items: center; gap: calc(var(--s, 1.5) * 6px); }
         /* The battle menu: under the picture, in place of the stick, A/B and the dock,
-           which keep their room (visibility, not display) so the picture stays put. */
+           which keep their room (visibility, not display) so the picture stays put.
+           The stick and A/B stay down between choices too, while the battle runs by
+           itself (battle-no-pad, ui/battlemenu.ts battleWantsNoPad); the room menu,
+           in the dock, comes back then. */
         body.in-match .battle-menu:not([hidden]) {
           position: absolute; left: 0; right: 0; z-index: 3;
           display: grid; grid-template-columns: auto auto; justify-content: center;
           gap: calc(var(--s, 1.5) * 8px); align-content: start;
         }
-        body.battle-menu.in-match #pad .dpad-surface, body.battle-menu.in-match #pad .ab, body.battle-menu.in-match .dock { visibility: hidden; }
+        body.battle-menu.in-match #pad .dpad-surface, body.battle-menu.in-match #pad .ab, body.battle-menu.in-match .dock,
+        body.battle-no-pad.in-match #pad .dpad-surface, body.battle-no-pad.in-match #pad .ab { visibility: hidden; }
         .bm-btn { position: relative; padding: 0; margin: 0; border: 0; background: none; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; }
         .bm-btn canvas { display: block; }
         .bm-btn:active:not([aria-disabled="true"]) { filter: brightness(0.9); }

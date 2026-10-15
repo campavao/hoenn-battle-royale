@@ -128,12 +128,16 @@ export function effectiveness(rom: Rom, type: number, defTypes: [number, number]
   return mul;
 }
 
-/** The words for a multiplier, the way the battle says them after a hit. */
-export function effectWords(mul: number | null, power: number): { text: string; tone: 'super' | 'weak' | 'none' | 'normal' | 'status' } {
-  if (power === 0) return { text: 'NO DAMAGE', tone: 'status' };
+/** The words for a multiplier, the way Cam's reference (2026-10-15, a newer game's move
+ *  list) says them: in the battle's own sentence case, ×4 and ×0.25 graded too, cut to
+ *  fit a window's band. */
+export function effectWords(mul: number | null, power: number): { text: string; tone: 'extreme' | 'super' | 'weak' | 'none' | 'normal' | 'status' } {
+  if (power === 0) return { text: 'No damage', tone: 'status' };
   if (mul === null) return { text: '', tone: 'normal' };
-  if (mul === 0) return { text: 'NO EFFECT', tone: 'none' };
-  if (mul > 1) return { text: mul >= 4 ? 'SUPER EFF. ×4' : 'SUPER EFFECTIVE', tone: 'super' };
-  if (mul < 1) return { text: 'NOT VERY EFF.', tone: 'weak' };
-  return { text: 'EFFECTIVE', tone: 'normal' };
+  if (mul === 0) return { text: 'Has no effect', tone: 'none' };
+  if (mul >= 4) return { text: 'Extremely eff.', tone: 'extreme' };
+  if (mul > 1) return { text: 'Super effective', tone: 'super' };
+  if (mul <= 0.25) return { text: 'Mostly ineff.', tone: 'weak' };
+  if (mul < 1) return { text: 'Not very eff.', tone: 'weak' };
+  return { text: 'Effective', tone: 'normal' };
 }

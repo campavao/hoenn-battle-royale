@@ -166,7 +166,7 @@ struct BrHud
     /* 0x178 */ u8 boxFrames;   // frames the box has left, 0 = none
     /* 0x179 */ u8 winBox;      // window id, WINDOW_NONE while absent
     /* 0x17A */ u8 noCorner;    // PAGE WRITES: 1 while the page draws the corner's lines itself (a phone)
-    /* 0x17B */ u8 boxPad[1];
+    /* 0x17B */ u8 noBattleBox; // PAGE WRITES: 1 while the page draws the battle's menus itself (a phone)
     /* 0x17C */
 };
 
@@ -188,6 +188,7 @@ BR_OFFSET(BrHud, queue, 0x44)
 BR_OFFSET(BrHud, box, 0x14C)
 BR_OFFSET(BrHud, boxFrames, 0x178)
 BR_OFFSET(BrHud, noCorner, 0x17A)
+BR_OFFSET(BrHud, noBattleBox, 0x17B)
 BR_SIZE(BrHud, 0x17C)
 
 extern struct BrHud gBrHud;
