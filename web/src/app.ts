@@ -1696,6 +1696,10 @@ function renderResults(
  *  only time the player has to read it. */
 const SOLO_END_GRACE_MS = 8_000;
 
+/** How long a watcher's results wait for a replay that has not come on yet (POK-365):
+ *  the ROM reads a `bstart` off the ring a second or so after the page hands it over. */
+const REPLAY_START_MS = 2_000;
+
 /** `gBrMatch.phase` once the winner's Hall of Fame has finished and the ROM is back on
  *  the map (include/br/br_match.h). The one byte the page reads out of the match struct:
  *  everything else it needs comes through the mailbox. */
@@ -1945,6 +1949,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const replay = new ReplayHold({
     replaying: () => romWatching(emu, spectateBase) != null,
     maxMs: SOLO_WIN_GRACE_MAX_MS,
+    startMs: REPLAY_START_MS,
     pollMs: SOLO_PARADE_POLL_MS,
     onOver: () => drawResults(),
   });
@@ -2604,6 +2609,7 @@ function wireRoom(
   const replay = new ReplayHold({
     replaying: () => romWatching(emu, gBrSpectate) != null,
     maxMs: WIN_GRACE_MAX_MS,
+    startMs: REPLAY_START_MS,
     pollMs: PARADE_POLL_MS,
     onOver: () => drawResults(),
   });
@@ -3017,6 +3023,8 @@ function wireRoom(
       // Last match's champion is not this match's (POK-243). PLAY AGAIN used to reload
       // the page, which cleared this for free.
       session.forgetResult();
+      // ...and its results' wait on a replay: a redraw during the reboot read no replay.
+      replay.reset();
       // Whoever we were watching is not in a match any more.
       for (const m of spectate.follow(null)) bridge?.pushToRom(m);
       setInMatch(false);

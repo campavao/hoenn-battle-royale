@@ -145,11 +145,13 @@ export class ParadeHold {
 }
 
 /** Holds a watcher's results while their ROM is still replaying a fight (POK-365), up to
- *  `maxMs` from the first ask, and draws them (`onOver`) the moment it stops. Once let go
- *  it stays let go until `reset`: a replay the watcher steps into after the results are
- *  up does not take them down again. */
+ *  `maxMs` from the first ask, and draws them (`onOver`) the moment it stops. A replay
+ *  not on yet gets `startMs` to come on: the `win` can beat the `bstart` to the ROM. Once
+ *  let go it stays let go until `reset`: a replay the watcher steps into after the
+ *  results are up does not take them down again. */
 export class ReplayHold {
   private since: number | null = null;
+  private seen = false;
   private released = false;
   private poll: ReturnType<typeof setInterval> | null = null;
 
@@ -158,6 +160,8 @@ export class ReplayHold {
       /** Our ROM is playing a fight back (gBrSpectate.watching). */
       replaying(): boolean;
       maxMs: number;
+      /** How long a replay that has not started is waited for. */
+      startMs: number;
       pollMs: number;
       onOver(): void;
       now?(): number;
@@ -174,7 +178,10 @@ export class ReplayHold {
     if (this.released) return false;
     const now = this.opts.now ? this.opts.now() : performance.now();
     this.since ??= now;
-    if (!this.opts.replaying() || now - this.since >= this.opts.maxMs) {
+    const on = this.opts.replaying();
+    if (on) this.seen = true;
+    const gone = !on && (this.seen || now - this.since >= this.opts.startMs);
+    if (gone || now - this.since >= this.opts.maxMs) {
       this.release();
       return false;
     }
@@ -189,6 +196,7 @@ export class ReplayHold {
   reset(): void {
     this.release();
     this.released = false;
+    this.seen = false;
     this.since = null;
   }
 

@@ -557,7 +557,12 @@ static void Task_BrStartLinkBattle(u8 taskId)
         break;
     case 2:
         if (Approach(task))
+        {
+            // The walk-up ran on a clock of its own each side; the hello watchdog starts
+            // from here, so a long wait for the walk does not eat the peer's ten seconds.
+            gBrNetlink.silent = 0;
             task->tState++;
+        }
         break;
     case 3:
         if (BrField_Leave(20, EnterLinkBattle))

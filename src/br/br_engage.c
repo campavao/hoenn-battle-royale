@@ -60,8 +60,9 @@ static void ReportBusy(void)
     if (gMain.inBattle)
         kind = BR_BUSY_BATTLE;
     else if (gMain.callback2 != CB2_Overworld
-          || (ArePlayerFieldControlsLocked() && gBrEngage.waitSeat == 0xFF && gBrEngage.settleSeat == 0xFF))
-        kind = BR_BUSY_MENU; // an engage's freeze is not a menu: a "?" over us would say we walked off
+          || (ArePlayerFieldControlsLocked() && gBrEngage.waitSeat == 0xFF && gBrEngage.settleSeat == 0xFF
+              && gBrNetlink.startState == 0))
+        kind = BR_BUSY_MENU; // an engage's freeze, or the walk-up to a fight, is not a menu: a "?" over us would say we walked off
     else
         kind = BR_BUSY_MAP;
     if (kind != sBusyKind)
