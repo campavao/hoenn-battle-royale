@@ -49,6 +49,7 @@ describe('slots round trip (single slot)', () => {
     { t: 'event', seat: 0, n: 1, mapsec: 11, key: 0xb010, trader: { map: { group: 0, num: 16 }, x: 19, y: 27, species: 131 } },
     { t: 'turn', battle: 0x0301, data: [0, 2, 1, 0, 1, 1, 0] },
     { t: 'follow', seat: 7 },
+    { t: 'follow', seat: 7, name: 'MAY' },
     { t: 'peek', seat: 2, target: 5 },
     { t: 'shot', seat: 2, secs: 17 },
     { t: 'follow', seat: null },

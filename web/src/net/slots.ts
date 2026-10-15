@@ -23,7 +23,7 @@
 // bare.
 import { MAILBOX } from './mailbox';
 import { BR_CAP, BR_MSG } from './wire-ids';
-import { packGen3String, unpackGen3String } from '../text/gen3';
+import { canEncodeGen3, packGen3String, unpackGen3String } from '../text/gen3';
 import { PARTY_BAG_MAX, PROTOCOL } from './wire';
 import type {
   BlockMsg,
@@ -310,12 +310,18 @@ function decodePeek(bytes: Uint8Array): PeekMsg {
   return { t: 'peek', seat: r.u8(), target: r.u8() };
 }
 // seat 0xFF is "stop following" -- the ROM's BR_NO_SEAT.
+// A name after it is theirs, for the watcher's START menu (POK-369).
 function encodeFollow(m: FollowMsg): Uint8Array {
-  return new Writer().u8(m.seat === null ? 0xff : m.seat).toBytes();
+  const w = new Writer().u8(m.seat === null ? 0xff : m.seat);
+  const name = Array.from((m.name ?? '').toUpperCase()).filter(canEncodeGen3).join('');
+  if (m.seat !== null && name) writeGen3(w, name, 7);
+  return w.toBytes();
 }
 function decodeFollow(bytes: Uint8Array): FollowMsg {
-  const seat = new Reader(bytes).u8();
-  return { t: 'follow', seat: seat === 0xff ? null : seat };
+  const r = new Reader(bytes);
+  const seat = r.u8();
+  if (seat === 0xff) return { t: 'follow', seat: null };
+  return r.remaining > 0 ? { t: 'follow', seat, name: r.gen3String() } : { t: 'follow', seat };
 }
 function encodeTurn(m: TurnMsg): Uint8Array {
   return new Writer().u16(m.battle).raw(m.data).toBytes();

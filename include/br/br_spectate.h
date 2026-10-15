@@ -73,5 +73,12 @@ bool8 BrSpectate_Publishing(void);
 // (Cam's 2026-10-14 play-test, POK-370: the ROUTE 118 sign drew into the box's corner,
 // and its erase took the box's cells with it). Task_MapNamePopUpWindow's print wait.
 bool8 BrSpectate_HoldsSign(void);
+// The watcher's START menu (POK-369): pret's menu, its rows the watched trainer's.
+// Watching: a seat is being followed. The three are the rows' callbacks.
+extern u8 gBrFollowName[];
+bool8 BrSpectate_Watching(void);
+bool8 BrSpectate_MenuParty(void);
+bool8 BrSpectate_MenuBag(void);
+bool8 BrSpectate_MenuCard(void);
 
 #endif // GUARD_BR_SPECTATE_H

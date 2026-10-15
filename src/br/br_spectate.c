@@ -47,6 +47,13 @@
 #include "battle_setup.h"
 #include "strings.h"
 #include "constants/trainers.h"
+#include "start_menu.h"
+#include "pokemon_summary_screen.h"
+#include "trainer_card.h"
+#include "sound.h"
+#include "constants/songs.h"
+#include "br/br_menu.h"
+#include "constants/easy_chat.h"
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
 // FollowTick took the field off us for being out (2026-10-05 play-test).
@@ -892,7 +899,14 @@ bool8 BrSpectate_HoldsSign(void)
     return gBrSpectate.peeking;
 }
 
+static void OpenPeekAt(u8 page);
+
 static void OpenPeek(void)
+{
+    OpenPeekAt(0);
+}
+
+static void OpenPeekAt(u8 page)
 {
     // A sign up now goes first: the box is drawn over its cells, and its erase later
     // would clear them out of the box. One still waiting to print waits for the box.
@@ -901,12 +915,184 @@ static void OpenPeek(void)
     sPeekWin = (u8)AddWindow(&sPeekTemplate);
     if (sPeekWin == WINDOW_NONE)
         return;
-    gBrSpectate.peekPage = 0;
+    gBrSpectate.peekPage = page;
     LoadUserWindowBorderGfxOnBg(0, BR_PEEK_FRAME, BG_PLTT_ID(BR_PEEK_FRAME_PALETTE));
     DrawStdFrameWithCustomTileAndPalette(sPeekWin, FALSE, BR_PEEK_FRAME, BR_PEEK_FRAME_PALETTE);
     DrawPeek();
     CopyWindowToVram(sPeekWin, COPYWIN_FULL);
     gBrSpectate.peeking = TRUE;
+}
+
+// ---- the watcher's START menu (POK-369) ----------------------------------------
+
+// The followed trainer's name, as the page's FOLLOW gave it (seat, then [len][name]):
+// the ROM has no roster to read it from, and their TRAINER CARD wants it (POK-369). The
+// start menu's row for the card is this, as the player's own row is their name.
+EWRAM_DATA u8 gBrFollowName[PLAYER_NAME_LENGTH + 1] = {0};
+
+// The menu was up last frame: START that closed it must not open it again.
+static EWRAM_DATA bool8 sMenuWas = FALSE;
+// The watched party as real POKeMON, for the summary screen: built from the PARTY rows
+// when it opens and freed when it closes. The heap, as the rows themselves are.
+static EWRAM_DATA struct Pokemon *sWatchParty = NULL;
+
+bool8 BrSpectate_Watching(void)
+{
+    return gBrSpectate.follow != BR_NO_SEAT;
+}
+
+static bool8 HaveRows(void)
+{
+    return gBrSpectate.peekMons > 0 && sPartyAsm.buf != NULL && sPeekSeat == gBrSpectate.follow;
+}
+
+// br_spectate.c's StatusCode, the other way.
+static u32 StatusOf(u8 code)
+{
+    switch (code)
+    {
+    case 1: return STATUS1_SLEEP_TURN(3);
+    case 2: return STATUS1_POISON;
+    case 3: return STATUS1_BURN;
+    case 4: return STATUS1_FREEZE;
+    case 5: return STATUS1_PARALYSIS;
+    case 6: return STATUS1_TOXIC_POISON;
+    }
+    return STATUS1_NONE;
+}
+
+// One row as the summary screen shows it: species, level, nickname, the four moves and
+// their PP, HP, status and held item as the row has them. The rows carry no stats, so
+// the rest is the species at that level with middling IVs.
+static bool8 BuildWatchedMon(const u8 *row, struct Pokemon *mon)
+{
+    u16 species = BrWire_Species(BrWire_ReadU16(row + BR_PEEK_OFF_SPECIES));
+    u8 level = row[BR_PEEK_OFF_LEVEL];
+    u8 name[POKEMON_NAME_LENGTH + 1];
+    u16 v;
+    u32 status;
+    u8 i, len;
+
+    if (species == SPECIES_NONE)
+        return FALSE;
+    if (level == 0 || level > MAX_LEVEL)
+        level = 5;
+    CreateMon(mon, species, level, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    for (i = 0; i < MAX_MON_MOVES; i++)
+    {
+        u8 pp = row[BR_PEEK_OFF_MOVES + i * 4 + 2];
+
+        v = BrWire_ReadU16(row + BR_PEEK_OFF_MOVES + i * 4);
+        if (v >= MOVES_COUNT)
+            v = MOVE_NONE;
+        SetMonData(mon, MON_DATA_MOVE1 + i, &v);
+        SetMonData(mon, MON_DATA_PP1 + i, &pp);
+    }
+    v = BrWire_ReadU16(row + BR_PEEK_OFF_MAXHP);
+    if (v > 0)
+        SetMonData(mon, MON_DATA_MAX_HP, &v);
+    v = BrWire_ReadU16(row + BR_PEEK_OFF_HP);
+    if (v > GetMonData(mon, MON_DATA_MAX_HP))
+        v = GetMonData(mon, MON_DATA_MAX_HP);
+    SetMonData(mon, MON_DATA_HP, &v);
+    status = StatusOf(row[BR_PEEK_OFF_STATUS]);
+    SetMonData(mon, MON_DATA_STATUS, &status);
+    v = BrWire_ReadU16(row + 24);
+    if (v >= ITEMS_COUNT)
+        v = ITEM_NONE;
+    SetMonData(mon, MON_DATA_HELD_ITEM, &v);
+    len = row[BR_PEEK_OFF_NICKLEN];
+    if (len > 0 && len <= POKEMON_NAME_LENGTH)
+    {
+        for (i = 0; i < len; i++)
+            name[i] = row[BR_PEEK_OFF_NICK + i];
+        name[len] = EOS;
+        SetMonData(mon, MON_DATA_NICKNAME, name);
+    }
+    if (gBrFollowName[0] != EOS)
+        SetMonData(mon, MON_DATA_OT_NAME, gBrFollowName);
+    return TRUE;
+}
+
+static void CB2_BrReturnFromWatchMenu(void)
+{
+    TRY_FREE_AND_SET_NULL(sWatchParty);
+    SetMainCallback2(CB2_ReturnToFieldWithOpenMenu);
+}
+
+// POKeMON: the summary screen, theirs. Read-only in all but name: what moves around on
+// it is this copy, which goes when it closes.
+bool8 BrSpectate_MenuParty(void)
+{
+    u8 i, count = 0;
+
+    if (gPaletteFade.active)
+        return FALSE;
+    TRY_FREE_AND_SET_NULL(sWatchParty);
+    if (HaveRows())
+        sWatchParty = AllocZeroed(PARTY_SIZE * sizeof(struct Pokemon));
+    if (sWatchParty != NULL)
+    {
+        for (i = 0; i < gBrSpectate.peekMons && count < PARTY_SIZE; i++)
+        {
+            if (BuildWatchedMon(sPartyAsm.buf + 2 + i * BR_PEEK_ROW, &sWatchParty[count]))
+                count++;
+        }
+    }
+    if (count == 0)
+    {
+        // No rows yet: a heap reset (the summary screen's own way back to the field)
+        // forgets them, and the next PEEK's answer is a moment away. The row stays, so
+        // the menu does not change shape under the cursor; this press just says no.
+        TRY_FREE_AND_SET_NULL(sWatchParty);
+        PlaySE(SE_FAILURE);
+        FadeScreen(FADE_FROM_BLACK, 0);
+        gMenuCallback = gBrStartMenu.input;
+        return FALSE;
+    }
+    CleanupOverworldWindowsAndTilemaps();
+    ShowPokemonSummaryScreen(SUMMARY_MODE_NORMAL, sWatchParty, 0, count - 1, CB2_BrReturnFromWatchMenu);
+    return TRUE;
+}
+
+// BAG: the box's bag pages, on the field the menu came from.
+bool8 BrSpectate_MenuBag(void)
+{
+    if (gPaletteFade.active)
+        return FALSE;
+    HideStartMenu();
+    FadeScreen(FADE_FROM_BLACK, 0);
+    OpenPeekAt(gBrSpectate.peekMons > 0 && sPeekSeat == gBrSpectate.follow ? 1 + gBrSpectate.peekMons : 0);
+    return TRUE;
+}
+
+// Their TRAINER CARD: a link partner's, the way the cable club shows one, filled from what
+// the watch knows -- the name the page gave, the ghost's look, the money and the team.
+bool8 BrSpectate_MenuCard(void)
+{
+    struct TrainerCard *card = &gTrainerCards[0];
+    const u8 *bag;
+    u8 i;
+
+    if (gPaletteFade.active)
+        return FALSE;
+    memset(card, 0, sizeof(*card));
+    card->version = VERSION_EMERALD;
+    if (gBrSpectate.follow < BR_MAX_SEATS)
+        card->gender = gBrSeats[gBrSpectate.follow].skin & 1;
+    for (i = 0; i < PLAYER_NAME_LENGTH && gBrFollowName[i] != EOS; i++)
+        card->playerName[i] = gBrFollowName[i];
+    card->playerName[i] = EOS;
+    for (i = 0; i < TRAINER_CARD_PROFILE_LENGTH; i++)
+        card->easyChatProfile[i] = EC_EMPTY_WORD; // no words, not four "???"
+    card->caughtMonsCount = HaveRows() ? gBrSpectate.peekMons : 0;
+    bag = HaveRows() ? PeekBag() : NULL;
+    if (bag != NULL)
+        card->money = bag[0] | (bag[1] << 8) | (bag[2] << 16) | ((u32)bag[3] << 24);
+    gLinkPlayers[0].language = GAME_LANGUAGE;
+    CleanupOverworldWindowsAndTilemaps();
+    ShowTrainerCardInLink(0, CB2_ReturnToFieldWithOpenMenu);
+    return TRUE;
 }
 
 // ---- follow: watching a seat walk ---------------------------------------------
@@ -997,9 +1183,15 @@ static void HandleFollow(const u8 *payload, u8 len)
 {
     const u8 *d;
     u8 n = BrWire_Unframe(payload, len, &d);
+    u8 i, nameLen = 0;
 
     if (n < 1)
         return;
+    if (n >= 2 && d[1] <= PLAYER_NAME_LENGTH && 2 + d[1] <= n)
+        nameLen = d[1];
+    for (i = 0; i < nameLen; i++)
+        gBrFollowName[i] = d[2 + i];
+    gBrFollowName[nameLen] = EOS;
     BrSpectate_Follow(d[0]);
 }
 
@@ -1015,6 +1207,7 @@ static void FollowTick(void)
     struct BrSeat *them;
     struct ObjectEvent *ghost;
     s16 x, y;
+    bool8 menuUp;
 
     // Off the field -- a warp's map load among the rest -- the warp we asked for has
     // happened, or something bigger overtook it.
@@ -1089,14 +1282,21 @@ static void FollowTick(void)
         return;
     }
     gBrSpectate.warpWait = 0;
-    // START opens what they are carrying, and closes it again. Field controls are
-    // locked while following, so the start menu never sees the press.
-    if (JOY_NEW(START_BUTTON) || (gBrSpectate.peeking && JOY_NEW(B_BUTTON)))
+    // START opens the start menu, as it would for the trainer being watched (Cam's
+    // 2026-10-14 play-test, POK-369: "open the menu like on the right hand side as if we
+    // were playing"): their POKeMON, their BAG, their card. Field controls are locked
+    // while following, so pret's own START never sees the press; and the press that
+    // closed the menu is not one that opens it again.
+    menuUp = GetStartMenuWindowId() != WINDOW_NONE || gPaletteFade.active;
+    if (gBrSpectate.peeking && JOY_NEW(START_BUTTON | B_BUTTON))
     {
-        if (gBrSpectate.peeking)
-            ClosePeek();
-        else
-            OpenPeek();
+        ClosePeek();
+    }
+    else if (JOY_NEW(START_BUTTON) && !menuUp && !sMenuWas && !ScriptContext_IsEnabled())
+    {
+        PlaySE(SE_WIN_OPEN);
+        ShowStartMenu();
+        menuUp = TRUE;
     }
     else if (gBrSpectate.peeking && (JOY_NEW(A_BUTTON) || JOY_NEW(DPAD_RIGHT)))
     {
@@ -1106,6 +1306,7 @@ static void FollowTick(void)
     {
         TurnPeekPage(-1);
     }
+    sMenuWas = menuUp;
     if (them->objId == BR_NO_OBJ)
         return; // their ghost has not spawned on this map yet
     ghost = &gObjectEvents[them->objId];

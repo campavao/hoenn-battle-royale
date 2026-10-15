@@ -1,0 +1,96 @@
+# spectate-menu: a watcher's START is the watched trainer's menu (Cam's 2026-10-14
+# play-test, POK-369: "open the menu like on the right hand side as if we were
+# playing"). Following seat 1, named MAY by the page's FOLLOW, with their PARTY in:
+# START opens POKeMON / BAG / MAY / EXIT, POKeMON is their summary screen, back is the
+# menu again, and MAY is their card. spectate-follow.txt's setup.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# seat 1 placed two tiles east of us, facing west (same slot shape as ghost-walk)
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrSeats+16 1
+# FOLLOW seat 1 with a name: len 8 = hdr(05 00 00) + seat + [3] M A Y
+pokebytes gBrMailbox+0x1058 14 08 05 00 00 01 03 C7 BB D3
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u8 gBrSpectate+8 1
+# peek: the page answers with seat 1's party -- six of the same mon, TREKO Lv12 34/56.
+# payload = seat 01, count 01, then a 100-byte PackedMon (species 0x0115, level 0x0C,
+# hp 0x0022, maxHp 0x0038, nickname length at +36 and the name at +37)
+pokebytes gDecompressionBuffer 01 06 15 01 0C 22 00 38 00 02 01 00 23 00 47 00 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+copy gDecompressionBuffer+102 gDecompressionBuffer+2 100
+copy gDecompressionBuffer+202 gDecompressionBuffer+2 100
+copy gDecompressionBuffer+302 gDecompressionBuffer+2 100
+copy gDecompressionBuffer+402 gDecompressionBuffer+2 100
+copy gDecompressionBuffer+502 gDecompressionBuffer+2 100
+# ...and behind the six rows, what seat 1 is carrying (POK-297): 1234 in cash, three
+# POTIONs (13) and a FULL RESTORE (19). Each row now says PSN (status 2) and knows POUND
+# (1, 35 PP) and ABSORB (71, 20 PP).
+pokebytes gDecompressionBuffer+602 D2 04 00 00 02 0D 00 03 13 00 01
+mailsend gBrMailbox 7 gDecompressionBuffer 613
+wait 10
+# the field's own callback2, to come back to
+copy gBrMailbox+0x1E00 gMain+4 4
+tap START
+wait 30
+expect u8 gBrSpectate+10 0
+expectne u32 gMenuCallback 0
+copy gBrMailbox+0x1E04 gMenuCallback 4
+shot menu
+# POKeMON is the top row: their summary screen, a callback of its own
+tap A
+wait 90
+expect u8 gBrSpectate+8 1
+shot summary
+tap B
+wait 120
+# back on the field with the menu up, still watching them
+expectsame u32 gMain+4 gBrMailbox+0x1E00
+expect u8 gBrSpectate+8 1
+shot menu-again
+# The way back reset the heap, and the rows with it, until the next PEEK's answer: the
+# row is still there, and a press on it says no and leaves the menu up.
+expect u8 gBrSpectate+11 0
+tap A
+wait 60
+expectsame u32 gMain+4 gBrMailbox+0x1E00
+expectsame u32 gMenuCallback gBrMailbox+0x1E04
+shot menu-no-rows
+# MAY is two rows down: their card
+tap DOWN
+wait 10
+tap DOWN
+wait 10
+tap A
+wait 90
+expectne u32 gMain+4 0
+shot card
+tap B
+wait 120
+expectsame u32 gMain+4 gBrMailbox+0x1E00
+# the next PEEK's answer (the screens used the buffer, so it is built again), and BAG:
+# the peek box at their bag page (1 + six mons = 7)
+pokebytes gDecompressionBuffer 01 06 15 01 0C 22 00 38 00 02 01 00 23 00 47 00 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+copy gDecompressionBuffer+102 gDecompressionBuffer+2 100
+copy gDecompressionBuffer+202 gDecompressionBuffer+2 100
+copy gDecompressionBuffer+302 gDecompressionBuffer+2 100
+copy gDecompressionBuffer+402 gDecompressionBuffer+2 100
+copy gDecompressionBuffer+502 gDecompressionBuffer+2 100
+pokebytes gDecompressionBuffer+602 D2 04 00 00 02 0D 00 03 13 00 01
+mailsend gBrMailbox 7 gDecompressionBuffer 613
+wait 10
+expect u8 gBrSpectate+11 6
+tap UP
+wait 10
+tap A
+wait 40
+expect u8 gBrSpectate+10 1
+expect u8 gBrSpectate+13 7
+shot bag
+tap B
+wait 20
+expect u8 gBrSpectate+10 0
+expect u8 gBrSpectate+8 1
+say spectate menu ok

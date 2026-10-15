@@ -354,6 +354,8 @@ export interface OutMsg {
 export interface FollowMsg {
   t: 'follow';
   seat: number | null;
+  /** Their name, for the ROM's START menu while it watches them (POK-369). */
+  name?: string;
 }
 
 /** That ground item is mine, or part of a bag is (Kanto's `took`, renamed to match
@@ -983,7 +985,7 @@ const decoders: Record<string, Decoder> = {
 
   // Page -> its own ROM only (docs/WIRE.md); decodable so the type round-trips, but
   // match/spectate.ts refuses one that arrives from anybody else.
-  follow: (m) => ({ t: 'follow', seat: m.seat === null ? null : reqSeat(m) }),
+  follow: (m) => ({ t: 'follow', seat: m.seat === null ? null : reqSeat(m), ...(typeof m.name === 'string' ? { name: m.name } : {}) }),
 
   party: (m) => {
     const mons = m.mons;
