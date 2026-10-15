@@ -200,7 +200,7 @@ index 4f7e9f8..6d31d51 100644
  	int mosaicWait = 0;                                                                                               \
  	int32_t localX;                                                                                                   \
 diff --git a/src/gba/renderers/video-software.c b/src/gba/renderers/video-software.c
-index c5bc37b..3fd466b 100644
+index c5bc37b..d851162 100644
 --- a/src/gba/renderers/video-software.c
 +++ b/src/gba/renderers/video-software.c
 @@ -27,6 +27,7 @@ static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer,
@@ -514,10 +514,16 @@ index c5bc37b..3fd466b 100644
  	softwareRenderer->nWindows = 1;
  	if (GBARegisterDISPCNTIsWin0Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsWin1Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsObjwinEnable(softwareRenderer->dispcnt)) {
  		softwareRenderer->windows[0].control = softwareRenderer->winout;
-@@ -1016,12 +1140,63 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
+@@ -1016,12 +1140,69 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
  	}
  }
  
++/* Hoenn BR: an entry the ROM's side table marks: a field sprite on the camera's offset,
++ * whose true place the table gives. */
++static bool _brMarked(const struct GBAVideoSoftwareRenderer* renderer, int index) {
++	return renderer->brOamHi && ((renderer->brOamHi[index >> 1] >> (4 * (index & 1))) & 4);
++}
++
 +/* Hoenn BR (POK-329): does `sprite` cover picture row `y`? The hardware's answer is that
 + * the OAM's y is 8 bits, so a sprite covers every row within its height of it mod 256 --
 + * on the LCD's rows, and on every band row when there is no window. A sprite the ROM's
@@ -526,21 +532,20 @@ index c5bc37b..3fd466b 100644
 + * row the LCD's included: a person 248 rows below the LCD would otherwise have its legs
 + * at the LCD's top. An unmarked one on a band row reads its y against the sprite window
 + * -- a y at or past 160 + brSpriteBottom is that far above the LCD -- and is drawn once.
-+ * The weather's semi-transparent sprites -- the fog, the ash, the sandstorm: grids of
-+ * 64x64s a 256-row screen tall that scroll by wrapping -- do repeat every 256 rows, so
-+ * they cover the whole band. */
++ * The weather's semi-transparent sprites, unmarked -- the fog, the ash, the sandstorm:
++ * grids of 64x64s a 256-row screen tall that scroll by wrapping -- do repeat every 256
++ * rows, so they cover the whole band. (The clouds blend too, but sit on the map: marked,
++ * drawn once.) */
 +static bool _brSpriteOnRow(const struct GBAVideoSoftwareRenderer* renderer, const struct GBAVideoRendererSprite* sprite, int y) {
 +	int height = sprite->endY - sprite->y;
 +	int top = GBAObjAttributesAGetY(sprite->obj.a) + renderer->objOffsetY;
++	if (_brMarked(renderer, sprite->index)) {
++		int nibble = renderer->brOamHi[sprite->index >> 1] >> (4 * (sprite->index & 1));
++		top += 256 * (((nibble & 3) ^ 2) - 2);
++		return y >= top && y < top + height;
++	}
 +	if (GBAObjAttributesAGetMode(sprite->obj.a) == OBJ_MODE_SEMITRANSPARENT) {
 +		return ((y - sprite->y) & 0xFF) < height;
-+	}
-+	if (renderer->brOamHi) {
-+		int nibble = renderer->brOamHi[sprite->index >> 1] >> (4 * (sprite->index & 1));
-+		if (nibble & 4) {
-+			top += 256 * (((nibble & 3) ^ 2) - 2);
-+			return y >= top && y < top + height;
-+		}
 +	}
 +	if ((y >= 0 && y < GBA_VIDEO_VERTICAL_PIXELS) || renderer->brSpriteBottom < 0) {
 +		return ((y - sprite->y) & 0xFF) < height;
@@ -552,14 +557,15 @@ index c5bc37b..3fd466b 100644
 +}
 +
 +/* Hoenn BR: a sprite drawn once, as the hardware does -- but with a band left of the
-+ * LCD (the wide ring), a semi-transparent one (the weather's fog, ash and sandstorm: a
-+ * grid of identical 64x64s, five columns that scroll by wrapping every 320 columns) is
-+ * drawn 320 columns either side of itself too, as _brSpriteOnRow repeats it every 256
-+ * rows: its grid covers the LCD and 40 columns beside it, and the copies the rest of the
-+ * band. The copies never reach the LCD: a column's left is within -80..239. */
++ * LCD (the wide ring), an unmarked semi-transparent one (the weather's fog, ash and
++ * sandstorm: a grid of identical 64x64s, five columns that scroll by wrapping every 320
++ * columns, which the ROM places on the screen itself) is drawn 320 columns either side
++ * of itself too, as _brSpriteOnRow repeats it every 256 rows: its grid covers the LCD
++ * and 40 columns beside it, and the copies the rest of the band. The copies never reach
++ * the LCD: a column's left is within -80..239. */
 +static int _brDrawSprite(struct GBAVideoSoftwareRenderer* renderer, const struct GBAVideoRendererSprite* sprite, int y) {
 +	int drawn = GBAVideoSoftwareRendererPreprocessSprite(renderer, (struct GBAObj*) &sprite->obj, sprite->index, y);
-+	if (renderer->brLeft && GBAObjAttributesAGetMode(sprite->obj.a) == OBJ_MODE_SEMITRANSPARENT) {
++	if (renderer->brLeft && GBAObjAttributesAGetMode(sprite->obj.a) == OBJ_MODE_SEMITRANSPARENT && !_brMarked(renderer, sprite->index)) {
 +		renderer->brShiftX = -320;
 +		drawn |= GBAVideoSoftwareRendererPreprocessSprite(renderer, (struct GBAObj*) &sprite->obj, sprite->index, y);
 +		renderer->brShiftX = 320;
@@ -579,7 +585,7 @@ index c5bc37b..3fd466b 100644
  			renderer->oamDirty = false;
  		}
  		int mosaicV = GBAMosaicControlGetObjV(renderer->mosaic) + 1;
-@@ -1037,7 +1212,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1037,7 +1218,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  			if (renderer->spriteCyclesRemaining <= 0) {
  				break;
  			}
@@ -588,7 +594,7 @@ index c5bc37b..3fd466b 100644
  				continue;
  			}
  			if (GBAObjAttributesAIsMosaic(sprite->obj.a) && mosaicV > 1) {
-@@ -1058,7 +1233,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1058,7 +1239,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  					continue;
  				}
  

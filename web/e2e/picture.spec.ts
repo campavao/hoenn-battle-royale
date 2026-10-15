@@ -408,6 +408,107 @@ test("on a desktop the fog covers the ROM's wide band, every column of it, as it
   }
 });
 
+const ROUTE_120 = { id: 'MAP_ROUTE120', ref: '0:35' };
+const WEATHER_SUNNY_CLOUDS = 1;
+
+// The clouds blend too, but they sit on the map (Route 120's three, field_weather_effect.c
+// sCloudSpriteMapCoords): on the camera's offset, marked, so the core draws each once
+// where it is -- not 320 columns either side as it does a weather grid, nor 256 rows up
+// and down. Every pixel the clouds change is under a cloud the OAM has.
+test("on a desktop Route 120's clouds are drawn once each, where the OAM puts them", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const sym = loadSymbols();
+  const ctx = await browser.newContext({ viewport: DESKTOP });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_120.id},6,70&rom=${romHashParam()}`);
+    await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
+    await page.waitForSelector('body.in-match', { timeout: 60_000 });
+    await expect
+      .poll(async () => {
+        const r = await ram(page, sym);
+        if (r.pick) await tap(page, 'z');
+        return !r.pick && r.onOverworld && r.map === ROUTE_120.ref;
+      }, { timeout: 90_000, intervals: [1_000], message: 'landed on Route 120' })
+      .toBe(true);
+    await page.waitForTimeout(3_000);
+    const pic = await grab(page);
+    expect({ width: pic.width, height: pic.height }, "the core draws the ROM's wide band").toEqual({ width: 240 + 2 * WIDE.side, height: 160 + 2 * WIDE.rows });
+    // Every value each pixel takes without the clouds, the map's own animation included.
+    const all: Rect = { x: -pic.left, y: -pic.top, w: pic.width, h: pic.height };
+    await learn(page, 'clear', all, 120);
+    await page.evaluate(([at, w]) => (window as unknown as PicWindow).__hbr.emu.write(at, w, 8), [sym.gWeather + WEATHER_NEXT, WEATHER_SUNNY_CLOUDS] as const);
+    await expect.poll(() => page.evaluate((at) => (window as unknown as PicWindow).__hbr.emu.read(at, 8), sym.gWeather + WEATHER_CURR), { timeout: 10_000 }).toBe(WEATHER_SUNNY_CLOUDS);
+    await page.waitForTimeout(3_000);
+    // Over 30 frames: the pixels no clear frame had, and the semi-transparent OAM entries'
+    // boxes where the core draws them (the side table's true place for a marked one).
+    const seen = await page.evaluate(([k, g, hiAt, n]) => new Promise<{ strange: number; outside: string[]; boxes: number }>((resolve) => {
+      const w = window as unknown as PicWindow & { __seen: Record<string, Set<number>[]> };
+      const emu = w.__hbr.emu as unknown as { bytes(a: number, n: number): Uint8Array; picture(): Pic | null; onFrame(f: () => void): () => void };
+      const learnt = w.__seen[k];
+      const SIZES = [[[8, 8], [16, 16], [32, 32], [64, 64]], [[16, 8], [32, 8], [32, 16], [64, 32]], [[8, 16], [8, 32], [16, 32], [32, 64]]];
+      const HI = [0, 1, -2, -1];
+      // The ring's box at the LCD's top right, its clock ticking.
+      const HUD = [140, 0, 240, 40];
+      let boxes: number[][] = [];
+      // Everybody else's boxes (a trainer turning), this frame's and last, are excused.
+      let people: number[][] = [];
+      let peopleNow: number[][] = [];
+      let strange = 0;
+      const outside = new Set<string>();
+      let got = 0;
+      const off = emu.onFrame(() => {
+        const p = emu.picture();
+        if (!p) return;
+        const px = new Uint32Array(p.data.buffer);
+        // The boxes read last frame are the ones this frame's picture was drawn from.
+        if (got > 0) {
+          for (let i = 0; i < px.length; i++) {
+            if (learnt[i].has(px[i] >>> 0)) continue;
+            strange++;
+            const x = (i % p.width) - p.left;
+            const y = Math.floor(i / p.width) - p.top;
+            const inBox = (bs: number[][]) => bs.some(([l, t, r, b]) => x >= l && x < r && y >= t && y < b);
+            if (!inBox(boxes) && !inBox(people) && !inBox([HUD])) outside.add(`${x},${y}`);
+          }
+        }
+        const oam = emu.bytes(g + 0x38, 128 * 8);
+        const hi = emu.bytes(hiAt, 64);
+        boxes = [];
+        people = peopleNow;
+        peopleNow = [];
+        for (let i = 0; i < 128; i++) {
+          const a0 = oam[8 * i] | (oam[8 * i + 1] << 8);
+          const a1 = oam[8 * i + 2] | (oam[8 * i + 3] << 8);
+          if (((a0 >> 8) & 3) === 2) continue;
+          const blend = ((a0 >> 10) & 3) === 1;
+          let [bw, bh] = SIZES[(a0 >> 14) & 3][(a1 >> 14) & 3];
+          if (((a0 >> 8) & 3) === 3) { bw *= 2; bh *= 2; }
+          const nib = (hi[i >> 1] >> ((i & 1) * 4)) & 0xf;
+          const y8 = a0 & 0xff;
+          const x9 = a1 & 0x1ff;
+          const top = nib & 4 ? y8 + 256 * HI[nib & 3] : y8 >= 216 ? y8 - 256 : y8;
+          const left = nib & 4 ? x9 - (nib & 8 ? 512 : 0) : x9 >= 256 ? x9 - 512 : x9;
+          (blend ? boxes : peopleNow).push([left - 1, top - 1, left + bw + 1, top + bh + 1]);
+        }
+        people = [...people, ...peopleNow];
+        if (++got > n) {
+          off();
+          resolve({ strange, outside: [...outside].slice(0, 20), boxes: boxes.length });
+        }
+      });
+    }), ['clear', sym.gMain, sym.gBrOamHi, 30] as const);
+    await grab(page);
+    await save(page, 'wide-clouds');
+    console.log(`picture: clouds, ${seen.boxes} semi-transparent entries, ${seen.strange} changed pixel-frames, ${seen.outside.length} outside every box`);
+    expect(seen.boxes, 'the clouds are in the OAM').toBeGreaterThan(0);
+    expect(seen.strange, 'and drawn on the picture').toBeGreaterThan(0);
+    expect(seen.outside, 'nothing of a cloud where no cloud is').toEqual([]);
+  } finally {
+    await ctx.close();
+  }
+});
+
 // A 256-row band (#band=40,56: the legacy one, a ROM without gBrFieldView's) is the
 // sprite window's own rows, so the window the page asks for must draw what no window does.
 test("a 256-row band: a person crossing its bottom is drawn once, and the window the page asks for is the core's own", async ({ browser }) => {

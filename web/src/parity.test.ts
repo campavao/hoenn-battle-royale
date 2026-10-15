@@ -624,12 +624,15 @@ describe("the BR structs the page reads at an offset", () => {
     // a bit for an x left of the LCD (its 9 bits less 512).
     expect(define(fieldH, 'BR_OAM_HI_MARK')).toBe(4);
     expect(define(fieldH, 'BR_OAM_HI_LEFT')).toBe(8);
-    expect(brField).toMatch(/nibble = BR_OAM_HI_MARK \| \(page & 3\);[^]*?if \(x < 0 \|\| \(!sprite->coordOffsetEnabled && x >= DISPLAY_WIDTH \+ ShownRight\(\) \+ 16\)\)\s*nibble \|= BR_OAM_HI_LEFT;\s*sOamHiNext\[index \/ 2\] \|= nibble << \(4 \* \(index & 1\)\);/);
-    // A weather grid's column (off the camera's offset) is read as the hardware reads
-    // it, and the core draws the semi-transparent grids 320 columns either side too.
-    expect(corePatch).toMatch(/renderer->brShiftX = -320;[^]*?renderer->brShiftX = 320;/);
+    expect(brField).toMatch(/nibble = BR_OAM_HI_MARK \| \(page & 3\);\s*if \(x < 0\)\s*nibble \|= BR_OAM_HI_LEFT;\s*sOamHiNext\[index \/ 2\] \|= nibble << \(4 \* \(index & 1\)\);/);
+    // Only sprites on the camera's offset are marked; a weather grid (off it) is read as
+    // the hardware reads it, and the core draws an unmarked semi-transparent one 320
+    // columns either side too.
+    expect(brField).toMatch(/if \(!sOamMarking \|\| !sprite->coordOffsetEnabled\)\s*return;/);
+    expect(corePatch).toMatch(/OBJ_MODE_SEMITRANSPARENT && !_brMarked\(renderer, sprite->index\)\) \{\s*\+\s*renderer->brShiftX = -320;[^]*?renderer->brShiftX = 320;/);
     expect(corePatch).toMatch(/x \+= renderer->objOffsetX \+ renderer->brLeft \+ renderer->brShiftX;/);
-    expect(corePatch).toMatch(/int nibble = renderer->brOamHi\[sprite->index >> 1\] >> \(4 \* \(sprite->index & 1\)\);\s*\+\s*if \(nibble & 4\) \{\s*\+\s*top \+= 256 \* \(\(\(nibble & 3\) \^ 2\) - 2\);/);
+    expect(corePatch).toMatch(/return renderer->brOamHi && \(\(renderer->brOamHi\[index >> 1\] >> \(4 \* \(index & 1\)\)\) & 4\);/);
+    expect(corePatch).toMatch(/if \(_brMarked\(renderer, sprite->index\)\) \{\s*\+\s*int nibble = renderer->brOamHi\[sprite->index >> 1\] >> \(4 \* \(sprite->index & 1\)\);\s*\+\s*top \+= 256 \* \(\(\(nibble & 3\) \^ 2\) - 2\);/);
     expect(corePatch).toMatch(/int nibble = renderer->brOamHi\[index >> 1\] >> \(4 \* \(index & 1\)\);\s*\+\s*if \(nibble & 4\) \{\s*\+\s*x = GBAObjAttributesBGetX\(sprite->b\) - \(\(nibble & 8\) \? 512 : 0\);/);
     expect(define(fieldH, 'BR_OAM_HI_SIZE')).toBe(64);
     expect(corePatch).toMatch(/brOamTable = offset >= 0 && offset \+ 64 <= GBA_SIZE_EWRAM/);

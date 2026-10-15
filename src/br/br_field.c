@@ -468,21 +468,18 @@ void BrField_OamEntry(u8 index, const struct Sprite *sprite, s16 dx, s16 dy)
     s16 page;
     u8 nibble;
 
-    if (!sOamMarking)
+    // A sprite the ROM places on the screen itself, off the camera's offset (the weather's
+    // grids: a column scrolled off the left kept as x & 0x1FF), is left unmarked: the core
+    // reads its 9 bits as the hardware does, and repeats a grid's to cover the band.
+    if (!sOamMarking || !sprite->coordOffsetEnabled)
         return;
-    if (sprite->coordOffsetEnabled)
-    {
-        x += gSpriteCoordOffsetX;
-        y += gSpriteCoordOffsetY;
-    }
+    x += gSpriteCoordOffsetX;
+    y += gSpriteCoordOffsetY;
     page = y >> 8;
     if (page < -1 || page > 1)
         page = -2;
     nibble = BR_OAM_HI_MARK | (page & 3);
-    // A sprite on the camera's offset is where x says. One the ROM places on the screen
-    // itself (the weather's grids) stores a column scrolled off the left as x & 0x1FF, as
-    // the hardware reads it: past the right of the picture, it is that less 512.
-    if (x < 0 || (!sprite->coordOffsetEnabled && x >= DISPLAY_WIDTH + ShownRight() + 16))
+    if (x < 0)
         nibble |= BR_OAM_HI_LEFT;
     sOamHiNext[index / 2] |= nibble << (4 * (index & 1));
 }

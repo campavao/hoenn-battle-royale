@@ -250,9 +250,9 @@ extern struct BrFieldShown gBrFieldShown;
 // the hardware has.
 // Bit 3 of a marked entry: its true left is its 9-bit x less 512 (left of the LCD), not
 // the x itself -- the wide view runs 128 columns left of the LCD to 368 right of its left
-// edge, which the hardware's reading (x past 255 is negative) cannot tell apart. A sprite
-// off the camera's offset (the weather's) is read as the hardware does: an x past the
-// picture's right is left of the LCD.
+// edge, which the hardware's reading (x past 255 is negative) cannot tell apart. Only
+// sprites on the camera's offset are marked: one the ROM places on the screen itself (the
+// weather's grids) is read as the hardware reads it.
 #define BR_OAM_HI_SIZE 64
 #define BR_OAM_HI_MARK 4
 #define BR_OAM_HI_LEFT 8
