@@ -355,6 +355,59 @@ test("the ROM's band, 496 rows, shows nothing twice: past the sprite window, the
   }
 });
 
+/** Of __pic's columns [from, to) (LCD columns), all rows, the share of pixels that differ
+ *  from __pic0's. */
+function changedColumns(page: Page, from: number, to: number): Promise<number> {
+  return page.evaluate(([a, b]) => {
+    const w = window as unknown as PicWindow & { __pic0?: Pic };
+    const p = w.__pic!;
+    const now = new Uint32Array(p.data.buffer);
+    const then = new Uint32Array(w.__pic0!.data.buffer);
+    let diff = 0;
+    let all = 0;
+    for (let y = 0; y < p.height; y++) {
+      for (let x = Math.max(0, p.left + a); x < Math.min(p.width, p.left + b); x++, all++) diff += now[y * p.width + x] !== then[y * p.width + x] ? 1 : 0;
+    }
+    return all ? diff / all : 0;
+  }, [from, to] as const);
+}
+
+// The weather's grids on the wide ring: five 64-wide columns that scroll by wrapping, a
+// column off the left kept as its x & 0x1FF. Read as the hardware reads it (br_field.c
+// BrField_OamEntry), and drawn 320 columns either side too (the core's _brDrawSprite),
+// the fog is over every column of the band and the LCD's own left edge, at every point of
+// its scroll -- not missing at the band's sides, nor drawn 512 columns off the LCD's left.
+test("on a desktop the fog covers the ROM's wide band, every column of it, as it scrolls", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const sym = loadSymbols();
+  const ctx = await browser.newContext({ viewport: DESKTOP });
+  try {
+    const page = await ctx.newPage();
+    await boot(page, sym, '');
+    const pic = await grab(page);
+    expect({ width: pic.width, height: pic.height, left: pic.left, top: pic.top }, "the core draws the ROM's wide band").toEqual({ width: 240 + 2 * WIDE.side, height: 160 + 2 * WIDE.rows, left: WIDE.side, top: WIDE.rows });
+    await keep(page);
+    await page.evaluate(([at, fog]) => (window as unknown as PicWindow).__hbr.emu.write(at, fog, 8), [sym.gWeather + WEATHER_NEXT, WEATHER_FOG_HORIZONTAL] as const);
+    await expect.poll(() => page.evaluate((at) => (window as unknown as PicWindow).__hbr.emu.read(at, 8), sym.gWeather + WEATHER_CURR), { timeout: 10_000 }).toBe(WEATHER_FOG_HORIZONTAL);
+    await page.waitForTimeout(3_000);
+    // The grid moves a column a few frames: 16 looks 16 frames apart see a whole 64.
+    const least = new Map<number, number>();
+    for (let look = 0; look < 16; look++) {
+      await grab(page, 16);
+      if (look === 0) await save(page, 'wide-fog');
+      for (let x = -WIDE.side; x < 240 + WIDE.side; x += 16) {
+        const share = await changedColumns(page, x, x + 16);
+        least.set(x, Math.min(least.get(x) ?? 1, share));
+      }
+    }
+    const bare = [...least].filter(([, share]) => share <= 0.5);
+    console.log(`picture: fog over the wide band, least share changed ${Math.min(...least.values()).toFixed(2)}`);
+    expect(bare.map(([x, share]) => `${x}..${x + 15}: ${share.toFixed(2)}`), 'every 16 columns fogged at every look').toEqual([]);
+  } finally {
+    await ctx.close();
+  }
+});
+
 // A 256-row band (#band=40,56: the legacy one, a ROM without gBrFieldView's) is the
 // sprite window's own rows, so the window the page asks for must draw what no window does.
 test("a 256-row band: a person crossing its bottom is drawn once, and the window the page asks for is the core's own", async ({ browser }) => {

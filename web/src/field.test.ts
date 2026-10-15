@@ -70,7 +70,7 @@ describe('the picture past the LCD (POK-319)', () => {
     // gBrFieldShown's sides follow its rows, and the ROM latches the wide ring on a left.
     const shown = fieldHeader.match(/struct BrFieldShown\s*\{([^}]*)\}/)?.[1] ?? '';
     expect([...shown.matchAll(/u16 (\w+);/g)].map((m) => m[1])).toEqual(['top', 'bottom', 'left', 'right']);
-    expect(fieldSource).toMatch(/sWide = gBrFieldShown\.left != 0;/);
+    expect(fieldSource).toMatch(/gBrFieldWide = gBrFieldShown\.left != 0;/);
     expect(wideRing({ left: 8, top: 40, right: 0, bottom: 40 })).toBe(true);
     expect(wideRing(LEGACY_BAND)).toBe(false);
   });
@@ -329,6 +329,10 @@ describe('the picture past the LCD (POK-319)', () => {
       it('the rows are never cut for staleness: the wide ring has no rows past pret\'s', () => {
         expect(bandClip(at(20, 20, 0, 8), mid, wide, 0)).toEqual(none);
       });
+      it("a ROM that latched the tall ring (gBrFieldWide 0) under a wide band: cut to the tall ring's 16 columns", () => {
+        expect(bandClip(at(20, 20), mid, wide, 0, false)).toEqual({ ...none, left: 128, right: 112 });
+        expect(bandClip(at(20, 20), mid, wide, cols(-8), false), 'its bits are rows then, and these none the band shows').toEqual({ ...none, left: 128, right: 112 });
+      });
     });
 
     // The ring is 16 metatile columns, 256 pixels, and the band 256 wide: mid-step the
@@ -492,7 +496,7 @@ describe('the fade', () => {
 
   it('holds black across a map load until the fade-in starts', () => {
     const cam = (fade: number, fadeActive: boolean): Camera =>
-      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, onField: true });
+      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField: true });
     expect(heldFade(cam(16, false), cam(0, false), false), 'the reset').toBe(true);
     expect(heldFade(cam(0, false), cam(0, false), true), 'still loading').toBe(true);
     expect(heldFade(cam(0, false), cam(16, true), true), 'the fade-in begins').toBe(false);
@@ -539,7 +543,7 @@ describe('the fade', () => {
       [1121, 0, 0, 0, 0, 0x0040],
     ];
     const cam = (fade: { y: number; color: number; active: boolean }): Camera =>
-      ({ group: 0, num: 17, x: 33, y: 15, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, onField: true });
+      ({ group: 0, num: 17, x: 33, y: 15, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField: true });
     let bg = true; // the move's flash reached BG palettes 1..3 (mask 0xe)
     let prev: Camera | null = null;
     let hold = { on: false, frames: 0 };
@@ -588,7 +592,7 @@ describe('the fade', () => {
       [1300, 16, 0, 1, 0xffffffff, 0x0003],
     ];
     const cam = (fade: { y: number; color: number; active: boolean }): Camera =>
-      ({ group: 26, num: 13, x: 20, y: 20, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, onField: false });
+      ({ group: 26, num: 13, x: 20, y: 20, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField: false });
     let bg = true;
     let prev: Camera | null = null;
     let hold = { on: false, frames: 0 };

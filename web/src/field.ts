@@ -326,6 +326,9 @@ export interface Camera extends CameraPos {
   ringTimer: number;
   /** gBrRingStale: the ring's rows the ROM has still to (re)draw (bandClip). */
   stale: number;
+  /** gBrFieldWide: the ROM latched the wide ring, so `stale` is its columns; null for a
+   *  ROM without the symbol. */
+  wide: boolean | null;
   /** The overworld is what the ROM is running (gMain.callback2 == CB2_Overworld). */
   onField: boolean;
 }
@@ -662,9 +665,9 @@ export function bandClip(
   map: { w: number; h: number; seams?: readonly { dir: SeamDir; same?: boolean }[] } | null,
   band: Band,
   stale = 0,
+  wide = wideRing(band),
 ): Band {
   const o = lcdOrigin(cam);
-  const wide = wideRing(band);
   const ring = ringColumns(cam, wide);
   const rows = wide ? { top: -Infinity, bottom: Infinity } : ringRows(cam, stale);
   if (wide) {
@@ -985,11 +988,14 @@ export class FieldView {
    *  from `cam`, the state the picture was drawn from); anywhere else the picture is the
    *  LCD alone. The composite shows through wherever the band is cut. One clip-path,
    *  set only when it changes. */
-  private clip(onField: boolean, cam: (CameraPos & { stale?: number }) | null): void {
+  private clip(onField: boolean, cam: (CameraPos & { stale?: number; wide?: boolean | null }) | null): void {
     const b = this.band;
     let cut: Band | null = null;
     if (b && !onField) cut = b;
-    else if (b && cam) cut = bandClip(cam, HOENN.byRef.get(`${cam.group}:${cam.num}`) ?? null, b, cam.stale ?? 0);
+    // The ring is the one the ROM latched, not the one the band asked for: a ROM that set
+    // its BGs up before it was told the band is the tall ring, and the band's columns past
+    // pret's are cut.
+    else if (b && cam) cut = bandClip(cam, HOENN.byRef.get(`${cam.group}:${cam.num}`) ?? null, b, cam.stale ?? 0, wideRing(b) && cam.wide !== false);
     const s = this.lay.scale;
     const want = cut && (cut.left || cut.top || cut.right || cut.bottom)
       ? `inset(${cut.top * s}px ${cut.right * s}px ${cut.bottom * s}px ${cut.left * s}px)`
@@ -1128,6 +1134,7 @@ export class FieldView {
       outside: ring !== undefined && emu.read(ring + RING_OUTSIDE, 8) !== 0,
       ringTimer: ring === undefined ? 0 : emu.read(ring + RING_TIMER, 16),
       stale: this.readStale(),
+      wide: this.readWide(),
       onField: main !== undefined && cb2 !== undefined && (emu.read(main + MAIN_CALLBACK2, 32) & ~1) === cb2
         && !(pick !== undefined && emu.read(pick + PICK_ACTIVE, 8) !== 0),
     };
@@ -1198,6 +1205,12 @@ export class FieldView {
   private readStale(): number {
     const at = this.sym('gBrRingStale');
     return at === undefined ? 0 : this.deps.emu.read(at, 32) >>> 0;
+  }
+
+  /** gBrFieldWide: the ring the ROM latched as the field's BGs were set up. */
+  private readWide(): boolean | null {
+    const at = this.sym('gBrFieldWide');
+    return at === undefined ? null : this.deps.emu.read(at, 8) !== 0;
   }
 
   private readFog(): Fog | null {

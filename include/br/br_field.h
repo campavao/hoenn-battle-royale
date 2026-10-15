@@ -250,7 +250,9 @@ extern struct BrFieldShown gBrFieldShown;
 // the hardware has.
 // Bit 3 of a marked entry: its true left is its 9-bit x less 512 (left of the LCD), not
 // the x itself -- the wide view runs 128 columns left of the LCD to 368 right of its left
-// edge, which the hardware's reading (x past 255 is negative) cannot tell apart.
+// edge, which the hardware's reading (x past 255 is negative) cannot tell apart. A sprite
+// off the camera's offset (the weather's) is read as the hardware does: an x past the
+// picture's right is left of the LCD.
 #define BR_OAM_HI_SIZE 64
 #define BR_OAM_HI_MARK 4
 #define BR_OAM_HI_LEFT 8
@@ -284,6 +286,9 @@ void BrField_Tick(void);
 // wide ring the bits are its columns, bit (dx + BR_WIDE_LEFT), the top one the far
 // column mid-step right, and the page cuts columns.
 extern u32 gBrRingStale;
+// TRUE when the field's BGs are the wide ring (latched by BrField_InitRingBgs from
+// gBrFieldShown.left): which ring gBrRingStale's bits are, for the page.
+extern bool8 gBrFieldWide;
 // TRUE when a sprite whose top-left is (x, y) and right edge x2 is past the picture.
 bool8 BrField_OffScreen(s16 x, s16 x2, s16 y, s16 y2);
 

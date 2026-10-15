@@ -374,11 +374,16 @@ its layout (`askBand`), and writing a left into `gBrFieldShown` is what asks the
 the wide one (latched as the field's BGs are set up, so once a boot). The side table's
 bit 3 says a sprite's 9-bit x reads 512 left, so the core draws a person in the left band
 where they are, and the core draws a 256-column BG (BG0, the HUD) only in its own 256
-columns. Past that picture the composite carries on. The OAM's 8-bit y has one reading
-only in the 256 rows around the LCD (the sprite window, 40 above and 56 below), so the
-ROM keeps a side table of each OAM entry's high bits (`gBrOamHi`, latched in `LoadOam`
-with the OAM it describes) and the core reads it (`brSetOamTable`) to draw every sprite once, at its
-true rows, anywhere in the band. With that the page tells the ROM the rows it shows
+columns. The weather's fog, ash and sandstorm are grids of five 64-wide columns that
+wrap every 320, which the core draws 320 columns either side too, so they cover the
+whole band; rain, bubbles and clouds stay over the LCD. The ring has no spare column on
+the left, so a camera pan left (a cutscene's) shows the far column at the band's left
+edge for the pan's width. The page clips by the ring the ROM latched (`gBrFieldWide`),
+not the one it asked for. Past that picture the composite carries on. The OAM's 8-bit y
+has one reading only in the 256 rows around the LCD (the sprite window, 40 above and 56
+below), so the ROM keeps a side table of each OAM entry's high bits (`gBrOamHi`,
+latched in `LoadOam` with the OAM it describes) and the core reads it (`brSetOamTable`)
+to draw every sprite once, at its true rows, anywhere in the band. With that the page tells the ROM the rows it shows
 (`gBrFieldShown`) and the ROM's world grows to them: a sprite is hidden only past those
 rows, and the object box (spawn, cull, ghosts, loot) gains a row for every 16 shown past
 the window -- on a portrait phone the player's rows -11..+20, the people and the grass out

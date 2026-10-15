@@ -12,7 +12,7 @@ index ed16917..f0ae805 100644
  CXX_GUARD_END
  
 diff --git a/include/mgba/internal/gba/renderers/video-software.h b/include/mgba/internal/gba/renderers/video-software.h
-index ce91877..9616263 100644
+index ce91877..7c44dd0 100644
 --- a/include/mgba/internal/gba/renderers/video-software.h
 +++ b/include/mgba/internal/gba/renderers/video-software.h
 @@ -75,10 +75,18 @@ struct WindowControl {
@@ -46,7 +46,7 @@ index ce91877..9616263 100644
  	int32_t spriteCyclesRemaining;
  
  	// BLDCNT
-@@ -151,6 +159,26 @@ struct GBAVideoSoftwareRenderer {
+@@ -151,6 +159,28 @@ struct GBAVideoSoftwareRenderer {
  	int end;
  
  	uint8_t lastHighlightAmount;
@@ -55,6 +55,8 @@ index ce91877..9616263 100644
 +	 * same register state. The output buffer pointer stays the LCD's top-left; the band
 +	 * is at negative offsets from it, so the buffer must have room for it. */
 +	int brLeft;
++	/* Added to a sprite's x as it is drawn: a weather grid's copies (_brDrawSprite). */
++	int brShiftX;
 +	int brTop;
 +	int brRight;
 +	int brBottom;
@@ -138,7 +140,7 @@ index 4aada17..da68315 100644
  	if (background->mosaic) {
  		int mosaicV = GBAMosaicControlGetBgV(renderer->mosaic) + 1;
 diff --git a/src/gba/renderers/software-obj.c b/src/gba/renderers/software-obj.c
-index 186db38..0ebe8d8 100644
+index 186db38..2d54e6b 100644
 --- a/src/gba/renderers/software-obj.c
 +++ b/src/gba/renderers/software-obj.c
 @@ -163,7 +163,17 @@ int GBAVideoSoftwareRendererPreprocessSprite(struct GBAVideoSoftwareRenderer* re
@@ -156,7 +158,7 @@ index 186db38..0ebe8d8 100644
 +			x = GBAObjAttributesBGetX(sprite->b) - ((nibble & 8) ? 512 : 0);
 +		}
 +	}
-+	x += renderer->objOffsetX + renderer->brLeft;
++	x += renderer->objOffsetX + renderer->brLeft + renderer->brShiftX;
  	uint16_t* vramBase = &renderer->d.vram[BASE_TILE >> 1];
  	unsigned align = GBAObjAttributesAIs256Color(sprite->a) && !GBARegisterDISPCNTIsObjCharacterMapping(renderer->dispcnt);
  	unsigned charBase = (GBAObjAttributesCGetTile(sprite->c) & ~align) * 0x20;
@@ -198,7 +200,7 @@ index 4f7e9f8..6d31d51 100644
  	int mosaicWait = 0;                                                                                               \
  	int32_t localX;                                                                                                   \
 diff --git a/src/gba/renderers/video-software.c b/src/gba/renderers/video-software.c
-index c5bc37b..d9f5a05 100644
+index c5bc37b..3fd466b 100644
 --- a/src/gba/renderers/video-software.c
 +++ b/src/gba/renderers/video-software.c
 @@ -27,6 +27,7 @@ static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer,
@@ -512,7 +514,7 @@ index c5bc37b..d9f5a05 100644
  	softwareRenderer->nWindows = 1;
  	if (GBARegisterDISPCNTIsWin0Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsWin1Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsObjwinEnable(softwareRenderer->dispcnt)) {
  		softwareRenderer->windows[0].control = softwareRenderer->winout;
-@@ -1016,12 +1140,45 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
+@@ -1016,12 +1140,63 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
  	}
  }
  
@@ -549,6 +551,24 @@ index c5bc37b..d9f5a05 100644
 +	return y >= top && y < top + height;
 +}
 +
++/* Hoenn BR: a sprite drawn once, as the hardware does -- but with a band left of the
++ * LCD (the wide ring), a semi-transparent one (the weather's fog, ash and sandstorm: a
++ * grid of identical 64x64s, five columns that scroll by wrapping every 320 columns) is
++ * drawn 320 columns either side of itself too, as _brSpriteOnRow repeats it every 256
++ * rows: its grid covers the LCD and 40 columns beside it, and the copies the rest of the
++ * band. The copies never reach the LCD: a column's left is within -80..239. */
++static int _brDrawSprite(struct GBAVideoSoftwareRenderer* renderer, const struct GBAVideoRendererSprite* sprite, int y) {
++	int drawn = GBAVideoSoftwareRendererPreprocessSprite(renderer, (struct GBAObj*) &sprite->obj, sprite->index, y);
++	if (renderer->brLeft && GBAObjAttributesAGetMode(sprite->obj.a) == OBJ_MODE_SEMITRANSPARENT) {
++		renderer->brShiftX = -320;
++		drawn |= GBAVideoSoftwareRendererPreprocessSprite(renderer, (struct GBAObj*) &sprite->obj, sprite->index, y);
++		renderer->brShiftX = 320;
++		drawn |= GBAVideoSoftwareRendererPreprocessSprite(renderer, (struct GBAObj*) &sprite->obj, sprite->index, y);
++		renderer->brShiftX = 0;
++	}
++	return drawn;
++}
++
  int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRenderer* renderer, int y) {
  	int w;
  	int spriteLayers = 0;
@@ -559,7 +579,7 @@ index c5bc37b..d9f5a05 100644
  			renderer->oamDirty = false;
  		}
  		int mosaicV = GBAMosaicControlGetObjV(renderer->mosaic) + 1;
-@@ -1037,7 +1194,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1037,7 +1212,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  			if (renderer->spriteCyclesRemaining <= 0) {
  				break;
  			}
@@ -568,6 +588,15 @@ index c5bc37b..d9f5a05 100644
  				continue;
  			}
  			if (GBAObjAttributesAIsMosaic(sprite->obj.a) && mosaicV > 1) {
+@@ -1058,7 +1233,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+ 					continue;
+ 				}
+ 
+-				int drawn = GBAVideoSoftwareRendererPreprocessSprite(renderer, &sprite->obj, sprite->index, localY);
++				int drawn = _brDrawSprite(renderer, sprite, localY);
+ 				spriteLayers |= drawn << GBAObjAttributesCGetPriority(sprite->obj.c);
+ 			}
+ 			renderer->spriteCyclesRemaining -= sprite->cycles;
 diff --git a/src/platform/wasm/CMakeLists.txt b/src/platform/wasm/CMakeLists.txt
 index 751e8b1..59daede 100644
 --- a/src/platform/wasm/CMakeLists.txt

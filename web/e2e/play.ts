@@ -99,7 +99,7 @@ const SIZES: Record<string, [number, number, number, number, number, number]> = 
 type Band = { left: number; top: number; right: number; bottom: number };
 /** The camera, as field.ts reads it: the pos tile, its map, the sub-tile offsets, and the
  *  ring rows the ROM has still to draw (gBrRingStale). */
-export type Cam = { map: string; x: number; y: number; subX: number; subY: number; stale?: number };
+export type Cam = { map: string; x: number; y: number; subX: number; subY: number; stale?: number; wide?: boolean | null };
 
 /** The ROM's ring (field.ts RING_ABOVE, RING_ROWS): bit (dy + 4) of gBrRingStale is grid
  *  row pos.y + dy, map row pos.y + dy - 7; pret's rows 0..14 are never stale. */
@@ -227,6 +227,7 @@ export function clipAndCamera(page: Page, sym: Record<string, number>): Promise<
         subX: emu.read(s.gFieldCamera + k.CAMERA_X, 32) | 0,
         subY: emu.read(s.gFieldCamera + k.CAMERA_Y, 32) | 0,
         stale: s.gBrRingStale === undefined ? 0 : emu.read(s.gBrRingStale, 32) >>> 0,
+        wide: s.gBrFieldWide === undefined ? null : emu.read(s.gBrFieldWide, 8) !== 0,
       };
     };
     let cam: ReturnType<typeof read> | null = null;
@@ -306,6 +307,9 @@ export async function expectLayout(page: Page, want: { onField?: boolean }, what
     const { cam, clip, scale } = await clipAndCamera(page, sym);
     const inset = insetOf(clip);
     expect(inset, `${what}: a clip-path the page could have set ("${clip}")`).not.toBeNull();
+    // The ring the ROM latched is the one the band asked for (field.ts reads the latch;
+    // edgeCut takes it from the band).
+    if (cam.wide !== null && cam.wide !== undefined) expect(cam.wide, `${what}: the ROM latched the ring the band asked for`).toBe(band.left > 0);
     const cut = edgeCut(cam, band);
     const [top, right, bottom, left] = inset!.map((v) => v / scale);
     expect({ top, right, bottom, left }, `${what}: the band shows on the field, less what is past the edge of ${cam.map} at ${JSON.stringify(cam)} (clip-path "${clip}")`)

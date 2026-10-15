@@ -30,8 +30,9 @@ static u8 sSliced;
 // THE WIDE RING (br_field.h): the BGs are 512x256, latched by BrField_InitRingBgs. Its
 // far row, pos.y+15, waits for a step down to complete the way the tall ring's far
 // column does; its far column is gBrRingStale's top bit.
-static EWRAM_DATA bool8 sWide = FALSE;
-static EWRAM_DATA bool8 sFarRowPending = FALSE;
+// The page reads the latch (gBrFieldWide) to know which ring its band clip reads.
+EWRAM_DATA bool8 gBrFieldWide = FALSE;
+static u8 sFarRowPending;
 
 #define ROW_BIT(dy) (1u << ((dy) + BR_RING_ABOVE))
 #define FAR_ROW (BR_RING_ROWS - 1 - BR_RING_ABOVE)
@@ -226,7 +227,7 @@ static s16 NearestStaleRow(u32 rows)
 
 s32 BrField_RingOffset(u8 xTileOffset, u8 yTileOffset, s32 x, s32 y)
 {
-    if (sWide)
+    if (gBrFieldWide)
         return WideRingOffset(xTileOffset, yTileOffset, x, y);
     x -= gSaveBlock1Ptr->pos.x;
     y -= gSaveBlock1Ptr->pos.y;
@@ -241,7 +242,7 @@ void BrField_DrawWholeRing(void)
 {
     int i, j;
 
-    if (sWide)
+    if (gBrFieldWide)
     {
         DrawWholeWideRing();
         return;
@@ -261,7 +262,7 @@ void BrField_RedrawSlices(int x, int y)
     int i;
     u32 fresh = 0;
 
-    if (sWide)
+    if (gBrFieldWide)
     {
         RedrawWideSlices(x, y);
         return;
@@ -314,7 +315,7 @@ void BrField_Tick(void)
     u8 budget = ROWS_A_FRAME;
     u32 rows;
 
-    if (sWide)
+    if (gBrFieldWide)
     {
         WideTick();
         return;
@@ -359,10 +360,10 @@ void BrField_InitRingBgs(void)
 {
     u8 size;
 
-    sWide = gBrFieldShown.left != 0;
+    gBrFieldWide = gBrFieldShown.left != 0;
     sFarRowPending = FALSE;
     sFarColumnPending = FALSE;
-    size = sWide ? BR_WIDE_SCREEN_SIZE : BR_RING_SCREEN_SIZE;
+    size = gBrFieldWide ? BR_WIDE_SCREEN_SIZE : BR_RING_SCREEN_SIZE;
     gOverworldTilemapBuffer_Bg1 = AllocZeroed(BR_RING_MAP_SIZE);
     gOverworldTilemapBuffer_Bg2 = AllocZeroed(BR_RING_MAP_SIZE);
     gOverworldTilemapBuffer_Bg3 = AllocZeroed(BR_RING_MAP_SIZE);
@@ -478,7 +479,10 @@ void BrField_OamEntry(u8 index, const struct Sprite *sprite, s16 dx, s16 dy)
     if (page < -1 || page > 1)
         page = -2;
     nibble = BR_OAM_HI_MARK | (page & 3);
-    if (x < 0)
+    // A sprite on the camera's offset is where x says. One the ROM places on the screen
+    // itself (the weather's grids) stores a column scrolled off the left as x & 0x1FF, as
+    // the hardware reads it: past the right of the picture, it is that less 512.
+    if (x < 0 || (!sprite->coordOffsetEnabled && x >= DISPLAY_WIDTH + ShownRight() + 16))
         nibble |= BR_OAM_HI_LEFT;
     sOamHiNext[index / 2] |= nibble << (4 * (index & 1));
 }
