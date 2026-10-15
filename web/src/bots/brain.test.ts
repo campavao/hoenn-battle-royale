@@ -1230,3 +1230,59 @@ describe('two bots meeting', () => {
     expect(alive[0].hp).toBeLessThan(MON.hp);
   });
 });
+
+describe('pacing (POK-361) and closing in (POK-362)', () => {
+  const MON: PackedMon = {
+    species: 277, level: 5, hp: 19, maxHp: 19, status: 0,
+    moves: [{ id: 1, pp: 35, ppUps: 0 }],
+    heldItem: 0, otId: 0, personality: 0, exp: 0, nickname: 'TREECKO', ot: 'BR',
+  };
+
+  it('walks in legs of a few steps and stands a moment between them', () => {
+    const world = new World([FIELD, PATH]);
+    let now = 0;
+    const stepsAt: number[] = [];
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => {
+        if (m.t === 'step' || (m.t === 'place' && now > 0)) stepsAt.push(now);
+      },
+      rng: mulberry32(7),
+    });
+    bots.start(dealBots(99, 1, [0, 1], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]), 0);
+    for (now = 100; now <= 60_000; now += 100) bots.tick(now);
+    const gaps = stepsAt.slice(1).map((t, i) => t - stepsAt[i]);
+    // Some rests, each well past a step's own beat...
+    expect(gaps.filter((g) => g >= 300 + STEP_MS - 100).length).toBeGreaterThan(5);
+    // ...and never more than six steps on end without one.
+    let run = 0;
+    let longest = 0;
+    for (const g of gaps) {
+      run = g < 300 + STEP_MS - 100 ? run + 1 : 0;
+      longest = Math.max(longest, run);
+    }
+    expect(longest).toBeLessThanOrEqual(6);
+  });
+
+  it('walks up to a player a few tiles off it cannot see yet, and challenges them', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: Msg[] = [];
+    // Facing south from (0,0); the player is at (2,2), four tiles off and on no straight
+    // line from it, facing south too, so neither can see the other.
+    const player: PlayerView = { seat: 0, mapId: 'FIELD', x: 2, y: 2, dir: 1 };
+    const bots = new Bots({
+      world,
+      targets: [{ mapId: 'PATH', x: 3, y: 5 }],
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      engage: { players: () => [player] },
+      deal: () => [MON],
+    });
+    bots.start(dealBots(99, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]), 0);
+    for (let t = STEP_MS; t <= 10_000 && !sent.some((m) => m.t === 'challenge'); t += STEP_MS) bots.tick(t);
+    expect(sent.find((m) => m.t === 'challenge')).toMatchObject({ opponent: 0 });
+  });
+});

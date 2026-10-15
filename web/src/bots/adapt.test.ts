@@ -150,7 +150,8 @@ describe('the loot and the roster, off the wire (POK-330 #14)', () => {
     const dealt = dealBots(1, 1, [], [{ mapId: 'BIG', map: BIG_REF, x: 0, y: 0 }]);
     bots.start(dealt, 0);
     let took: Spot | undefined;
-    for (let t = STEP_MS; t <= 15_000 && !took; t += STEP_MS) {
+    // Thirty steps, and the rests between its legs (POK-361): about twelve seconds.
+    for (let t = STEP_MS; t <= 25_000 && !took; t += STEP_MS) {
       bots.tick(t);
       if (sent.some((m) => m.t === 'pickup' && m.key === 0x0100)) took = bots.spotOf(dealt[0].seat);
     }

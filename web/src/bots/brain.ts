@@ -50,6 +50,31 @@ const ENGAGE_COOLDOWN_MS = 2000;
  *  full room spent itself in the first minute -- half of thirty bots gone by 97s,
  *  while the fog, which is supposed to decide the match, took four all game. */
 const DUEL_COOLDOWN_MS = 12_000;
+/** A bot walks a few steps and stops to look around, rather than marching tile after
+ *  tile all match (Cam's 2026-10-14 play-test, POK-361: "every second it pauses, thinks
+ *  about its next five moves and then does those"). A leg of LEG_MIN..LEG_MIN+LEG_SPAN-1
+ *  steps, then a rest of REST_MIN..REST_MIN+REST_SPAN ms -- only when nothing is pressing:
+ *  out in the fog, hurt, or closing on somebody, it keeps walking. */
+const LEG_MIN = 3;
+const LEG_SPAN = 4;
+const REST_MIN = 300;
+const REST_SPAN = 900;
+/** Through a door, a breath on the far side: a watcher's ROM is still fading through the
+ *  warp, and steps sent meanwhile piled up and snapped the ghost tiles from the door
+ *  (POK-364: "oh she just teleport"). */
+const DOOR_MS = 1_200;
+/** Close enough to walk up to: another trainer this near is a fight a person would go
+ *  and have (POK-362: "three bots all walked past each other"). Manhattan, same map. */
+const NEAR_TILES = 4;
+
+/** A stateless 32-bit roll from two numbers (mulberry32's finaliser): the rests' own,
+ *  off the match's rng, so pausing changes nothing else a seed decides. */
+function mix(a: number, b: number): number {
+  let t = (Math.imul(a, 0x9e3779b1) ^ Math.imul(b + 0x6d2b79f5, 0x85ebca6b)) >>> 0;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return (t ^ (t >>> 14)) >>> 0;
+}
 /** The seat a gate's boss fights from in duel(): past every real one (seats are a byte). */
 const GATE_SEAT = 0x100;
 /** Long on purpose: a flight is an event, not a way of moving. */
@@ -173,6 +198,12 @@ interface Walker {
   /** Nothing to drink before this: one gulp at a time, not the whole bag in four
    *  steps. */
   quaffAfter: number;
+  /** Walking up to somebody (approach): no rests on the way. Cleared with the path. */
+  chasing?: boolean;
+  /** Steps left before it stops to look around (LEG_MIN). */
+  legLeft: number;
+  /** How many rests it has taken: the roll for the next one, so a replay rests alike. */
+  rests: number;
   /** Its own bag (POK-237): what it drinks between fights, what it spends in one, and
    *  what a player finds on it when it falls. */
   bag: Stack[];
@@ -452,6 +483,8 @@ export class Bots {
         party: this.opts.deal?.(bot, 0, bot.mapId) ?? [],
         bag: this.opts.bagFor?.(bot, 0) ?? [],
         quaffAfter: 0,
+        legLeft: LEG_MIN,
+        rests: 0,
       };
       this.walkers.push(walker);
       this.place(walker);
@@ -821,6 +854,7 @@ export class Bots {
       // that set none (a ring with no landing cell left in it), and the old one read
       // past its last step every tick after.
       walker.path = null as Walker['path']; // widened: chooseTarget sets it
+      walker.chasing = false;
       this.chooseTarget(walker, now);
       if (!walker.path || walker.path.steps.length === 0) return;
     }
@@ -832,6 +866,7 @@ export class Bots {
       walker.path = null;
       return;
     }
+    if (this.restHere(walker, now)) return;
     walker.stepIndex++;
     const wasMap = walker.at.map;
     walker.at = step.to;
@@ -840,6 +875,9 @@ export class Bots {
       // A new map is a `place`, not a `step`: the receiving ROM has to move the ghost
       // wholesale rather than animate it across a seam it cannot see.
       this.place(walker);
+      if (this.opts.world.map(wasMap)?.outdoor === false || this.opts.world.map(step.to.map)?.outdoor === false) {
+        walker.nextStepAt = Math.max(walker.nextStepAt, now + DOOR_MS);
+      }
       return;
     }
     const map = this.opts.mapRef(walker.at.map);
@@ -852,6 +890,53 @@ export class Bots {
       x: walker.at.x,
       y: walker.at.y,
     });
+  }
+
+  /** The end of a leg, when nothing is pressing: the turn is spent standing, and the
+   *  next one comes after a rest. TRUE when it rested. */
+  private restHere(walker: Walker, now: number): boolean {
+    if (walker.legLeft > 0) {
+      walker.legLeft--;
+      return false;
+    }
+    const inside = this.opts.inside;
+    const pressed = (inside !== undefined && !inside(walker.at.map)) || health(walker.party) < 0.5 || walker.chasing === true;
+    if (pressed) return false;
+    const roll = mix(walker.bot.seat, walker.rests++);
+    walker.legLeft = LEG_MIN + (roll % LEG_SPAN);
+    walker.nextStepAt = now + REST_MIN + ((roll >>> 8) % (REST_SPAN + 1));
+    return true;
+  }
+
+  /** Somebody to fight close by (NEAR_TILES): walk up to them, so the eyeline meets.
+   *  Another bot only while a duel could start (the room's one-at-a-time rule); a
+   *  player whenever this bot may challenge at all. TRUE when it set a path. */
+  private approach(walker: Walker, now: number): boolean {
+    if (this.opts.fights && !this.opts.fights()) return false;
+    if (now < walker.engageAfter || walker.party.length === 0) return false;
+    const near = (p: { mapId: string; x: number; y: number }) =>
+      p.mapId === walker.at.map && Math.abs(p.x - walker.at.x) + Math.abs(p.y - walker.at.y) <= NEAR_TILES;
+    const foes: { seat: number; spot: Spot }[] = [];
+    for (const player of this.opts.engage?.players() ?? []) {
+      if (!player.busy && near(player)) foes.push({ seat: player.seat, spot: { map: player.mapId, x: player.x, y: player.y } });
+    }
+    if (this.opts.seed !== undefined && now >= this.duelAfter) {
+      for (const other of this.walkers) {
+        if (other === walker || now < other.engageAfter || this.fighting.has(other.bot.seat) || other.party.length === 0) continue;
+        if (near({ mapId: other.at.map, x: other.at.x, y: other.at.y })) foes.push({ seat: other.bot.seat, spot: other.at });
+      }
+    }
+    for (const foe of foes) {
+      const path = this.route(walker, foe.spot, WANDER_BUDGET);
+      if (!path.found || path.steps.length < 2) continue;
+      // Up to them, not onto them: the last step is their cell.
+      walker.path = { ...path, steps: path.steps.slice(0, -1) };
+      walker.stepIndex = 0;
+      walker.chasing = true;
+      this.note(walker, 'hunt', `near seat ${foe.seat}`);
+      return true;
+    }
+    return false;
   }
 
   /** Is anybody in this bot's eyeline? If so, stage its party and challenge them --
@@ -1124,6 +1209,7 @@ export class Bots {
     // she is free and heals everything, and the potions keep for the road. It is not
     // the errand itself: the bot drinks and then goes wherever it was going.
     this.tryQuaff(walker, now);
+    if (this.approach(walker, now)) return;
     // What it can walk to without leaving this map (POK-331 #27). A lake or a wood cuts
     // Route 104 and Route 103 in two, and a piece or a cell on the far side was a search
     // that settled all of this side before it gave up -- every time the bot stopped to
