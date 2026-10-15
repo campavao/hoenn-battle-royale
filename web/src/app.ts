@@ -1591,16 +1591,20 @@ function matchLayout(): FieldLayout {
  *  it booted with, and the composite fills past it. */
 function askForBand(emu: Emulator): void {
   if (!romPicture) return;
-  const asked = askBand(matchLayout(), romPicture);
+  // The wide ring needs the ROM told it is shown (gBrFieldShown.left) and the core to
+  // read each sprite's left from the side table: without both, the tall ring.
+  const sideTable = emu.setOamTable(oamTableAt ?? null);
+  const shownOk = sideTable && fieldShownAt !== undefined;
+  const asked = askBand(matchLayout(), romPicture, shownOk);
   emu.setSpriteBand(romPicture.sprites);
   askedBand = devBand(romPicture.band) ?? asked;
   emu.setViewport(askedBand);
   // gBrFieldShown must name the band the core actually draws, and the core takes a new
   // band only at loadGame: both callers reboot straight after this. A resize handler that
-  // calls it without a reboot would tell the ROM about rows the core does not show.
-  const sideTable = emu.setOamTable(oamTableAt ?? null);
-  fieldShown = sideTable && fieldShownAt !== undefined
-    ? { top: askedBand.top, bottom: askedBand.bottom }
+  // calls it without a reboot would tell the ROM about rows the core does not show --
+  // or, with the sides, switch its ring under a core drawing the other.
+  fieldShown = shownOk
+    ? { top: askedBand.top, bottom: askedBand.bottom, left: askedBand.left, right: askedBand.right }
     : null;
 }
 
@@ -1611,14 +1615,19 @@ let fieldShownAt: number | undefined;
 /** The rows past the LCD the ROM's world reaches (gBrFieldShown): the band asked for,
  *  once the core reads the side table and so draws a sprite anywhere in it; null keeps
  *  the ROM's sprites, and its objects, in the sprite window. */
-let fieldShown: { top: number; bottom: number } | null = null;
+let fieldShown: Band | null = null;
 
 /** gBrFieldShown, every frame: EWRAM is the ROM's to clear, and a boot or PLAY AGAIN
- *  may change the band, so it is said again rather than once. */
+ *  may change the band, so it is said again rather than once. The sides only to a ROM
+ *  with the wide ring: before it the struct was two u16s, and the next four bytes are
+ *  somebody else's. */
 function writeFieldShown(emu: Emulator): void {
   if (fieldShownAt === undefined) return;
   emu.write(fieldShownAt, fieldShown?.top ?? 0, 16);
   emu.write(fieldShownAt + 2, fieldShown?.bottom ?? 0, 16);
+  if (!romPicture?.wide) return;
+  emu.write(fieldShownAt + 4, fieldShown?.left ?? 0, 16);
+  emu.write(fieldShownAt + 6, fieldShown?.right ?? 0, 16);
 }
 
 function botFill(): number {

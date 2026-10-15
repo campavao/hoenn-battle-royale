@@ -1723,7 +1723,7 @@ static void RemoveObjectEventIfOutsideView(struct ObjectEvent *objectEvent)
     s16 bottom = gSaveBlock1Ptr->pos.y + 16;
 
 #if BR
-    BrField_GrowObjectBox(&top, &bottom);
+    BrField_GrowObjectBox(&left, &right, &top, &bottom);
 #endif
     if (objectEvent->currentCoords.x >= left && objectEvent->currentCoords.x <= right
      && objectEvent->currentCoords.y >= top && objectEvent->currentCoords.y <= bottom)

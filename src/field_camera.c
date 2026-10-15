@@ -19,10 +19,11 @@ EWRAM_DATA bool8 gUnusedBikeCameraAheadPanback = FALSE;
 
 struct FieldCameraOffset
 {
-    u8 xPixelOffset;
 #if BR
+    u16 xPixelOffset;
     u16 yPixelOffset;
 #else
+    u8 xPixelOffset;
     u8 yPixelOffset;
 #endif
     u8 xTileOffset;
@@ -62,7 +63,11 @@ static void ResetCameraOffset(struct FieldCameraOffset *cameraOffset)
 static void AddCameraTileOffset(struct FieldCameraOffset *cameraOffset, u32 xOffset, u32 yOffset)
 {
     cameraOffset->xTileOffset += xOffset;
+#if BR
+    cameraOffset->xTileOffset %= 2 * BR_WIDE_COLUMNS;
+#else
     cameraOffset->xTileOffset %= 32;
+#endif
     cameraOffset->yTileOffset += yOffset;
 #if BR
     cameraOffset->yTileOffset %= BR_RING_TILE_ROWS;
