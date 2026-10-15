@@ -92,6 +92,9 @@ static const u8 sText_Left[] = _(" LEFT");
 static const u8 sText_Fog[] = _("FOG!");
 // How many are watching. Kanto's corner eye, on the small font's own symbol page.
 static const u8 sText_Eye[] = _("{EMOJI_LEFT_EYE}");
+// Beside the ring's place on the corner's second line: it is where the fog is not, and
+// bare it read as where we are (Cam's 2026-10-14 play-test, POK-359).
+static const u8 sText_Safe[] = _("SAFE");
 // ---- windows ------------------------------------------------------------------
 
 // The slot holds our template: the same BG, base tile and place. The base alone is not
@@ -566,18 +569,23 @@ static void DrawCorner(void)
         ConvertIntToDecimalStringN(p, h->clockSecs % 60, STR_CONV_MODE_LEADING_ZEROS, 2);
         PrintRight(h->winCorner, buf, clockY, sColorsText);
     }
-    // Line two: the place on the right, the eye and its count on the left. The eye is a
-    // two-byte escape (F9 D8), so the count goes where StringCopy left the terminator.
-    // A route fits beside the eye; VERDANTURF TOWN and FOG EVERYWHERE do not, and those
-    // take turns with it, two seconds each.
+    // Line two: the place on the right, and on the left the eye and its count -- or, with
+    // nobody watching, SAFE, saying what the place is. The eye is a two-byte escape
+    // (F9 D8), so the count goes where StringCopy left the terminator. A route fits
+    // beside either; VERDANTURF TOWN and FOG EVERYWHERE do not, and those take turns with
+    // it, two seconds each. FOG EVERYWHERE has no SAFE: there is nowhere left.
     if (h->eyes != 0)
         ConvertIntToDecimalStringN(StringCopy(eye, sText_Eye), h->eyes, STR_CONV_MODE_LEFT_ALIGN, 2);
-    if (h->eyes != 0 && place != NULL
+    else if (place != NULL && gBrRing.r >= 0)
+        StringCopy(eye, sText_Safe);
+    else
+        eye[0] = EOS;
+    if (eye[0] != EOS && place != NULL
      && GetStringWidth(FONT_SMALL, eye, 0) + 4 + GetStringWidth(FONT_SMALL, place, 0) > BR_HUD_CORNER_PX)
         alt = AltTurn();
     if (place != NULL && alt != 2)
         PrintRight(h->winCorner, place, 12, gBrRing.r < 0 ? sColorsFog : sColorsText);
-    if (h->eyes != 0 && alt != 1)
+    if (eye[0] != EOS && alt != 1)
         AddTextPrinterParameterized3(h->winCorner, FONT_SMALL, 0, 12, sColorsText,
             (s8)TEXT_SKIP_DRAW, eye);
     h->drawnClock = h->clockSecs;
@@ -937,6 +945,13 @@ void BrHud_Tick(void)
     if (h->boxFrames > 0 && !gPaletteFade.active)
         h->boxFrames--;
     AdvanceTicker();
+
+    // Back on a field that is still fading in from black (a warp, the drop into the
+    // Safari): nothing of ours comes up until the map has. The corner and the ticker drew
+    // grey over a black map a frame into the fade (Cam's 2026-10-14 play-test, POK-346).
+    // Windows already up fade out with the map, as Emerald's own do.
+    if (gPaletteFade.active && h->shown == 0)
+        return;
 
     // The field's own message box (window 0) is the sign that InitWindows has run for
     // this map; before that there is no BG0 tilemap buffer to draw into.

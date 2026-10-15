@@ -1,5 +1,6 @@
 // The spectator stream, emit side (POK-233). See include/br/br_spectate.h.
 #include "global.h"
+#include "map_name_popup.h"
 #include "main.h"
 #include "battle.h"
 #include "malloc.h"
@@ -886,8 +887,17 @@ static void ClosePeek(void)
     gBrSpectate.peeking = FALSE;
 }
 
+bool8 BrSpectate_HoldsSign(void)
+{
+    return gBrSpectate.peeking;
+}
+
 static void OpenPeek(void)
 {
+    // A sign up now goes first: the box is drawn over its cells, and its erase later
+    // would clear them out of the box. One still waiting to print waits for the box.
+    if (GetMapNamePopUpWindowId() != WINDOW_NONE)
+        HideMapNamePopUpWindow();
     sPeekWin = (u8)AddWindow(&sPeekTemplate);
     if (sPeekWin == WINDOW_NONE)
         return;

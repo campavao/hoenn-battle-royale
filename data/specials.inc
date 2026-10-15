@@ -546,4 +546,5 @@ gSpecials::
 	def_special BrRing_Outside
 	def_special BrEvent_Trade
 	def_special BrStory_GateBeaten
+	def_special BrLoot_GiftTake
 .endif

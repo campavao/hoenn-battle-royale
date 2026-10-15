@@ -62,6 +62,7 @@
          the match, the match to its results. Four steps, as the game's palette fades go. */
       #stage-fade { position: fixed; inset: 0; z-index: 10; background: #000; opacity: 0; pointer-events: none; }
       #stage-fade.go { animation: stage-fade 320ms steps(4, end); }
+      #stage-fade.hold { opacity: 1; animation: none; }
       @keyframes stage-fade { from { opacity: 1; } to { opacity: 0; } }
       @media (prefers-reduced-motion: reduce) { #stage-fade.go { animation: none; } }
       #ui { display: block; image-rendering: pixelated; }

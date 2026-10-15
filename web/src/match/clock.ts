@@ -42,9 +42,11 @@ export function isFinalRingPhase(ringIndex: number): boolean {
   return ringIndex >= RING_RADII.length - 1;
 }
 
-/** The ring in the strip: its radius and where it closes on. The last ring's -1 is
- *  "everywhere" (RING_RADII), which read as "RING -1" for the whole
+/** The ring in the strip: the place it closes on, which is the one place the fog never
+ *  reaches. "RING 15 (DEWFORD TOWN)" read as the zone that had already closed, or as
+ *  where we were (Cam's 2026-10-14 play-test, POK-359), so it says SAFE. The last
+ *  ring's -1 is "everywhere" (RING_RADII), which read as "RING -1" for the whole
  *  endgame (2026-10-12 match video). */
 export function ringLabel(r: number | undefined, place: string | undefined): string {
-  return r !== undefined && r < 0 ? 'FINAL FOG' : `RING ${r ?? '?'} (${place ?? '?'})`;
+  return r !== undefined && r < 0 ? 'FINAL FOG' : `SAFE: ${place ?? '?'}`;
 }

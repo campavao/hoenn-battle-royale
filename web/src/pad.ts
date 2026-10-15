@@ -41,6 +41,35 @@ export function learnAxis(axes: readonly number[], rest: readonly number[]): Axi
   return best;
 }
 
+/** Where the wizard is in learning the stick: which push it waits for, the UP it has,
+ *  and whether it has seen the stick back at rest since the last push. */
+export interface StickLearn {
+  phase: 'up' | 'right' | 'done';
+  up: AxisSense | null;
+  atRest: boolean;
+  result?: StickMap | null;
+}
+
+export function startStickLearn(): StickLearn {
+  return { phase: 'up', up: null, atRest: false };
+}
+
+/** One poll of the wizard's stick step: the axis the stick is pushed along (null at rest),
+ *  or `skip` for a button. A push counts only after the stick has been seen at rest: the
+ *  UP that was just learned is still held when RIGHT is asked for, and taking it as the
+ *  answer -- the same axis twice -- ended the wizard with no stick learned at all, leaving
+ *  the pad on the guess that had it wrong (Cam's 2026-10-14 play-test, POK-350: "I've
+ *  tried the remapping, it just doesn't work"). */
+export function stickLearnStep(state: StickLearn, input: AxisSense | null | 'skip'): StickLearn {
+  if (state.phase === 'done') return state;
+  if (input === 'skip') return { ...state, phase: 'done', result: null };
+  if (input === null) return state.atRest ? state : { ...state, atRest: true };
+  if (!state.atRest) return state;
+  if (state.phase === 'up') return { phase: 'right', up: input, atRest: false };
+  if (state.up && input.axis === state.up.axis) return state;
+  return { ...state, phase: 'done', result: state.up ? { up: state.up, right: input } : null };
+}
+
 /** The directions a learned stick is held in. Only its two axes count; the pad's other
  *  axes (triggers, a second stick) do nothing. */
 export function stickKeys(axes: readonly number[], rest: readonly number[], stick: StickMap): GbaKey[] {

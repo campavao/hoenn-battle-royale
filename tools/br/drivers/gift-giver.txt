@@ -1,7 +1,7 @@
 # gift-giver: a town's gift-giver (match/gifts.ts) is a one-item bag under a gift key
 # (0xC000 | i, br_loot.h), standing as a person rather than lying as a ball. A on him
-# takes it like any bag of one thing -- "A GIFT: LEFTOVERS!" -- and the PICKUP of his key
-# takes him off every map.
+# turns him to us and he says a line first (POK-355), then "received the LEFTOVERS!" with
+# the fanfare, and the PICKUP of his key takes him off every map.
 #
 # object-slots-near.txt's view: Route 103 from (9,8), so we stand at (16,15) facing south.
 wait 30
@@ -22,8 +22,17 @@ expect u8 gObjectEvents+0x2C 0xC0
 shot gift
 tap A
 wait 60
+shot talks
+# his line is up and he still has it: nothing taken until it is said
+expect u8 gBrLoot+11 2
+tap A
+wait 30
 shot given
 expectmsg 10 u16 1 0xC001
+wait 240
+tap A
+wait 30
+expect u32 gMain+4 CB2_Overworld+1
 expect u8 gBrLoot+11 0
 # Somebody else talks to another one first: their bare PICKUP takes him off our map too
 pokebytes gDecompressionBuffer 00 00 12 00 01 02 C0 11 00 10 00 01 C8 00 01 00 00 00 00

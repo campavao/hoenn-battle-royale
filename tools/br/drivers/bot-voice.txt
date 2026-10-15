@@ -37,33 +37,15 @@ tap A
 wait 40
 shot intro-line
 # Through the fight on A: TREECKO against TREECKO, and ours goes down first. The bot
-# slides back in with its win line before the white-out.
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
-tap A
-wait 50
+# slides back in with its win line before the white-out. The fight is pinned, not left
+# to the RNG (a shift of a few frames anywhere before it made it a turn longer): ours is
+# at 1 HP and slowest, and the bot's TREECKO knows only POUND, so its first hit ends it.
+poke u16 gBattleMons+0x28 1
+poke u16 gBattleMons+0x06 1
+poke u16 gBattleMons+0x64 1
+poke u16 gBattleMons+0x66 1
+poke u16 gBattleMons+0x68 1
+poke u16 gBattleMons+0x6A 1
 tap A
 wait 50
 tap A

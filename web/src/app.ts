@@ -29,6 +29,7 @@ import { type BotVoice, LINES, lineAt } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { ringLabel } from './match/clock';
+import { Curtain } from './match/curtain';
 import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import {
   AUTO_START_MS,
@@ -52,7 +53,7 @@ import { ParadeHold, fameOf, resultsScreen, resultsView, type ResultsModel } fro
 import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
 import { KeyLegend } from './ui/keys';
 import { stageKey } from './ui/roomkeys';
-import { TEXT_RED } from './ui/emerald';
+import { TEXT_RED, wrapText } from './ui/emerald';
 import {
   cycleWatch,
   watchStepKey,
@@ -67,6 +68,7 @@ import {
   type RoomSeat,
   type RowSpec,
   type SheetModel,
+  W,
 } from './ui/screens';
 import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from './ui/entry';
 import {
@@ -88,7 +90,19 @@ import {
 import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
 import { START_BR_MAP, START_POKEMON, TouchLayer } from './touch';
-import { STICK_KEY, guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, stickKeys, type AxisSense, type StickMap } from './pad';
+import {
+  STICK_KEY,
+  guessedStickKeys,
+  learnAxis,
+  loadStickMap,
+  onWindows,
+  pollPads,
+  startStickLearn,
+  stickKeys,
+  stickLearnStep,
+  type AxisSense,
+  type StickMap,
+} from './pad';
 import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, type FieldLayout, type FieldPicture } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
@@ -223,7 +237,7 @@ function desktop(): boolean {
 let sheet: DrawnScreen | null = null;
 /** The phone's sheet is open over the game. */
 let sheetOpen = false;
-/** The line under the room's: SAFARI / RING 3 (PLACE) · 8 left · 1:23, while a match is on. */
+/** The line under the room's: SAFARI / SAFE: PLACE · 8 left · 1:23, while a match is on. */
 let matchStrip: string | null = null;
 /** Whose card the sheet has open. */
 let sheetCard: number | null = null;
@@ -256,6 +270,33 @@ function setStrip(text: string | null): void {
   if (matchStrip === text) return;
   matchStrip = text;
   redrawSheet();
+}
+
+/** Black over the game until the ROM is on the drop map (match/curtain.ts, POK-346).
+ *  One at a time: a second hold while one is up just keeps the first. */
+let curtainOff: (() => void) | null = null;
+function holdCurtain(emu: Emulator, symbols: Map<string, number> | undefined): void {
+  const el = document.getElementById('stage-fade');
+  const main = symbols?.get('gMain');
+  const overworld = symbols?.get('CB2_Overworld');
+  const match = symbols?.get('gBrMatch');
+  if (!el || curtainOff) return;
+  const curtain = new Curtain(performance.now());
+  el.classList.add('hold');
+  const off = emu.onFrame(() => {
+    const held = curtain.step({
+      onField: main !== undefined && overworld !== undefined && (emu.read(main + 4, 32) | 1) === (overworld | 1),
+      inMatch: match !== undefined && emu.read(match, 8) !== 0,
+      now: performance.now(),
+    });
+    if (!held) lift();
+  });
+  const lift = (): void => {
+    off();
+    el.classList.remove('hold');
+    curtainOff = null;
+  };
+  curtainOff = lift;
 }
 
 /** The phone's chrome (Cam, 2026-09-18): in a match, only game controls are on the
@@ -336,7 +377,9 @@ function makeSheet(part: () => SheetPart): DrawnScreen {
     muted: settings.muted,
     remapping: settings.remapping,
     remapLine: settings.remapLine,
-    help: desktop() ? (settings.pad ? [settings.pad] : KEY_LINES) : TAP_LINES,
+    // The pad's line wrapped, not cut: it ends on the axes that moved, which is the part
+    // a report needs and the part a cut lost (POK-350).
+    help: desktop() ? (settings.pad ? wrapText(settings.pad, W - 8).slice(0, 3) : KEY_LINES) : TAP_LINES,
     version: versionLine,
     onClose: () => openSheet(false),
     onMute: () => settings.mute(),
@@ -803,7 +846,7 @@ let gamepadMap = loadPadMap();
 let padCapture: ((index: number) => void) | null = null;
 /** Set while the wizard is waiting for the stick to be pushed a given way (POK-321);
  *  any button press skips the step, for a pad with no stick. */
-let axisCapture: ((sense: AxisSense | null) => void) | null = null;
+let axisCapture: ((sense: AxisSense | null | 'skip') => void) | null = null;
 /** The stick, once the wizard has been shown it; null means the parity guess. */
 let stickMap: StickMap | null = loadStickMap();
 
@@ -866,11 +909,10 @@ function wireGamepad(emu: Emulator): () => void {
         const pressed = pad.buttons.findIndex((button) => button.pressed);
         if (pressed >= 0 && !wasPressed.has(pressed)) {
           wasPressed.add(pressed);
-          take(null); // no stick to teach: skip
+          take('skip'); // no stick to teach
         } else {
           if (pressed < 0) wasPressed.clear();
-          const sense = learnAxis(pad.axes, base);
-          if (sense) take(sense);
+          take(learnAxis(pad.axes, base));
         }
         continue;
       }
@@ -888,12 +930,14 @@ function wireGamepad(emu: Emulator): () => void {
       // ...unless the wizard has been shown the stick (POK-321, Cam's pad, whose
       // vertical is an even axis): then only its two learned axes count.
       moved.length = 0;
+      const guess = guessedStickKeys(pad.axes, base);
+      // The axes that moved go on the readout either way: with a learned stick that does
+      // nothing, which axis the stick really is on is the one fact a report needs.
+      moved.push(...guess.moved);
       if (stickMap) {
         for (const key of stickKeys(pad.axes, base, stickMap)) now.add(key);
       } else {
-        const guess = guessedStickKeys(pad.axes, base);
         for (const key of guess.keys) now.add(key);
-        moved.push(...guess.moved);
       }
       // The tenth axis is where a DirectInput pad puts its D-pad. Only there, and
       // only on a pad that has one: a resting stick reads 0, which decodes to "down".
@@ -962,20 +1006,21 @@ function wireRemap(): void {
   const run = () => {
     const taken: Record<number, GbaKey> = {};
     let i = 0;
-    // After the buttons, the stick: pushed UP, then RIGHT, each learned from whichever
-    // axis moves (any button skips, for a pad without one).
-    let up: AxisSense | null = null;
-    const askStick = (which: 'up' | 'right') => {
-      say(`Push the stick ${which.toUpperCase()}. Any button skips.`);
-      axisCapture = (sense) => {
-        axisCapture = null;
-        if (which === 'up') {
-          up = sense;
-          if (!sense) { finish(null); return; }
-          askStick('right');
-          return;
+    // After the buttons, the stick: pushed UP, let go, then RIGHT, each learned from
+    // whichever axis moves (any button skips, for a pad without one). pad.ts
+    // stickLearnStep is the rule.
+    const askStick = () => {
+      let learn = startStickLearn();
+      say('Push the LEFT STICK UP, then let go. Any button skips.');
+      axisCapture = (input) => {
+        const was = learn.phase;
+        learn = stickLearnStep(learn, input);
+        if (learn.phase === 'done') {
+          axisCapture = null;
+          finish(learn.result ?? null);
+        } else if (learn.phase !== was) {
+          say('Now push the LEFT STICK RIGHT.');
         }
-        finish(sense && up && sense.axis !== up.axis ? { up, right: sense } : null);
       };
     };
     const finish = (stick: StickMap | null) => {
@@ -992,7 +1037,7 @@ function wireRemap(): void {
     };
     const ask = () => {
       if (i >= REMAP_ORDER.length) {
-        askStick('up');
+        askStick();
         return;
       }
       say(`Press the button for ${REMAP_ORDER[i].toUpperCase()}. Esc cancels.`);
@@ -2319,6 +2364,8 @@ function wireRoom(
     countdown.cancel();
     if (room.started) return;
     room.started = true;
+    // The town the ROM stands in fades out under black, not in view (POK-346).
+    holdCurtain(emu, symbols);
     // ...and the passcode entry over it, should a count run out on a host still typing.
     // The game, with the sheet beside it on a desktop.
     if (stage.current === roomScreenView || (doorEntry !== null && stage.current === doorEntry)) showGame();
@@ -3933,6 +3980,8 @@ async function main(): Promise<void> {
     emu.resume();
   }
 
+  // Solo boots straight into its match: the copyright screen goes by under black too.
+  if (mailboxBase !== undefined && roomHash.mode === 'solo') holdCurtain(emu, symbols);
   showScreen('playing');
   if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols, soloSeed);
   else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch);

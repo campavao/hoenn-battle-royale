@@ -37,4 +37,10 @@ const u8 *BrHm_DiveScript(const u8 *script);
 // half of a match each time. FldEff_FieldMoveShowMonInit.
 bool8 BrHm_SkipCutIn(void);
 
+// SELECT with nothing registered: a bike in the bag is registered first, so SELECT rides
+// it (Cam's 2026-10-14 play-test, POK-347: "your select button should automatically select
+// a bike"). The MACH BIKE when there are both. A registered item still comes first.
+// UseRegisteredKeyItemOnField, ahead of its registered-item test.
+void BrHm_SelectBike(void);
+
 #endif // GUARD_BR_HM_H

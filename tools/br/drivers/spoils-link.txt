@@ -23,8 +23,8 @@ poke u16 gBattleMons+0x80 1
 tap A
 wait 30
 tap A
-# a link battle's text runs itself
-wait 900
+# a link battle's text runs itself; long enough for the peer to swing first, and crit
+wait 1300
 expect u8 gBrNetlink 0
 expect u8 gBrNetlink+11 1
 # seat 1's team, round our feet, under seat 1's keys; no bag -- that is theirs to drop

@@ -56,7 +56,7 @@ test('a watcher walks in on a running match, and the match is not theirs', async
     await watcher.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
 
     // The late start: the fog's position arrives at once rather than at the next ring.
-    await expect(watcher.locator('#match-strip')).toContainText(/RING \d/, { timeout: 60_000 });
+    await expect(watcher.locator('#match-strip')).toContainText(/SAFE: /, { timeout: 60_000 });
 
     // POK-331 #13 review: a page that never heard the match dealt has no seed to pick it
     // up from. It offered to run it anyway, and made host it could only stand aside --

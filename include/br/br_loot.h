@@ -204,4 +204,7 @@ void BrLoot_DropKey(u16 key);
 // what he held once he fell (br_story.c). FALSE: it is gone already, and nothing happens.
 bool8 BrLoot_TakeKey(u16 key);
 
+// BR_EventScript_Gift's hand-over, once a gift-giver has said his line (POK-355).
+void BrLoot_GiftTake(void);
+
 #endif // GUARD_BR_LOOT_H

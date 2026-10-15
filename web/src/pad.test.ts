@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, stickKeys, type StickMap } from './pad';
+import { guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, startStickLearn, stickKeys, stickLearnStep, type StickMap } from './pad';
 
 describe('a learned stick (POK-321)', () => {
   // Cam's pad: the stick's vertical is axis 0 and its horizontal axis 1, the reverse of
@@ -126,5 +126,28 @@ describe('the pad is polled only while one is there, except on Windows (POK-247)
     expect(onWindows({ userAgent: firefoxWin })).toBe(true);
     expect(onWindows({ userAgent: android, userAgentData: { platform: 'Android' } })).toBe(false);
     expect(onWindows({ userAgent: iphone })).toBe(false);
+  });
+});
+
+describe('learning the stick (POK-350)', () => {
+  const up = { axis: 1, sign: -1 as const };
+  const right = { axis: 0, sign: 1 as const };
+  const feed = (inputs: Parameters<typeof stickLearnStep>[1][]) => inputs.reduce(stickLearnStep, startStickLearn());
+
+  it('waits for the stick at rest between UP and RIGHT, so a held UP is not the answer twice', () => {
+    // The UP still held when RIGHT is asked for: the old wizard ended there with no stick.
+    const held = feed([null, up, up, up]);
+    expect(held.phase).toBe('right');
+    expect(feed([null, up, up, null, right])).toMatchObject({ phase: 'done', result: { up, right } });
+  });
+
+  it('takes no push before it has seen the stick at rest', () => {
+    expect(feed([up]).phase).toBe('up');
+    expect(feed([up, null, up]).phase).toBe('right');
+  });
+
+  it('ignores RIGHT on the same axis as UP, and a button skips', () => {
+    expect(feed([null, up, null, { axis: 1, sign: 1 }]).phase).toBe('right');
+    expect(feed([null, up, 'skip'])).toMatchObject({ phase: 'done', result: null });
   });
 });

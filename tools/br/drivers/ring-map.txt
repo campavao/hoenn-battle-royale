@@ -51,16 +51,17 @@ expect u16 0x0500015E 0x586D
 # ...and the blend: BG1 over BG2 and the backdrop, 10/16 fog over 6/16 map
 expect u16 0x04000050 0x2442
 expect u16 0x04000052 0x060A
-# the prompt under it names the place (POK-325): "FOG: LITTLEROOT", built in gStringVar4
-# -- F O G : space, then the name, then EOS
-expect u8 gStringVar4 0xC0
-expect u8 gStringVar4+1 0xC9
-expect u8 gStringVar4+2 0xC1
-expect u8 gStringVar4+3 0xF0
-expect u8 gStringVar4+4 0x00
-expect u8 gStringVar4+5 0xC6
-expect u8 gStringVar4+14 0xCE
-expect u8 gStringVar4+15 0xFF
+# the prompt under it names the place (POK-325) as the safe one (POK-359): "SAFE:
+# LITTLEROOT", built in gStringVar4 -- S A F E : space, then the name, then EOS
+expect u8 gStringVar4 0xCD
+expect u8 gStringVar4+1 0xBB
+expect u8 gStringVar4+2 0xC0
+expect u8 gStringVar4+3 0xBF
+expect u8 gStringVar4+4 0xF0
+expect u8 gStringVar4+5 0x00
+expect u8 gStringVar4+6 0xC6
+expect u8 gStringVar4+15 0xCE
+expect u8 gStringVar4+16 0xFF
 # the map is up and it is a look, not a pick: the drop is not running
 expect u8 gBrMap 1
 expect u8 gBrPick 0

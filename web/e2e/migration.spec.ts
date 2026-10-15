@@ -37,7 +37,7 @@ test('the host leaves mid-match and the guest picks up the clock', async ({ brow
 
     // A guest draws its own strip now (POK-268), from the same messages a promoted
     // host would resume from -- so this is both the wait and an assertion.
-    await expect(guest.locator('#match-strip')).toContainText(/RING \d/, { timeout: 120_000 });
+    await expect(guest.locator('#match-strip')).toContainText(/SAFE: /, { timeout: 120_000 });
     // And the ROM has it too: gBrRing.phase is the host's own ring number, off the wire.
     const ring = loadSymbols().gBrRing;
     await guest.waitForFunction(
@@ -114,7 +114,7 @@ test('the host tabs out and hands the match over without leaving', async ({ brow
     const guest = await guestCtx.newPage();
     await guest.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
     await startWith(host, 2);
-    await expect(guest.locator('#match-strip')).toContainText(/RING \d/, { timeout: 120_000 });
+    await expect(guest.locator('#match-strip')).toContainText(/SAFE: /, { timeout: 120_000 });
     expect(await guest.evaluate(() => (window as unknown as BrWindow).__br.director)).toBeUndefined();
 
     // The tab goes to the background. Nothing closes; the page just stops being one
@@ -197,8 +197,8 @@ test('a guest promoted while its tab is hidden hands the match on', async ({ bro
     const awake = await awakeCtx.newPage();
     await awake.goto(`/#join=${code}&fast&testmon&rom=${rom}`);
     await startWith(host, 3);
-    await expect(sleepy.locator('#match-strip')).toContainText(/RING \d/, { timeout: 120_000 });
-    await expect(awake.locator('#match-strip')).toContainText(/RING \d/, { timeout: 120_000 });
+    await expect(sleepy.locator('#match-strip')).toContainText(/SAFE: /, { timeout: 120_000 });
+    await expect(awake.locator('#match-strip')).toContainText(/SAFE: /, { timeout: 120_000 });
 
     // A guest's tab going hidden sends nothing: it is not running anything to hand on.
     await sleepy.evaluate(() => {

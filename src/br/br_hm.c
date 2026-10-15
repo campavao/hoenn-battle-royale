@@ -1,5 +1,6 @@
 // Field moves without the HMs. See include/br/br_hm.h.
 #include "global.h"
+#include "item.h"
 #include "event_object_movement.h"
 #include "field_effect.h"
 #include "field_player_avatar.h"
@@ -10,6 +11,7 @@
 #include "event_scripts.h"
 #include "constants/event_object_movement.h"
 #include "constants/field_effects.h"
+#include "constants/items.h"
 #include "br/br_hm.h"
 #include "br/br_match.h"
 
@@ -89,4 +91,18 @@ bool8 BrHm_SkipCutIn(void)
     // FieldEffectStart put the init on the active list, and nothing else takes it off.
     FieldEffectActiveListRemove(FLDEFF_FIELD_MOVE_SHOW_MON_INIT);
     return TRUE;
+}
+
+void BrHm_SelectBike(void)
+{
+    u16 item = gSaveBlock1Ptr->registeredItem;
+
+    if (!BrHm_Free())
+        return;
+    if (item != ITEM_NONE && CheckBagHasItem(item, 1))
+        return;
+    if (CheckBagHasItem(ITEM_MACH_BIKE, 1))
+        gSaveBlock1Ptr->registeredItem = ITEM_MACH_BIKE;
+    else if (CheckBagHasItem(ITEM_ACRO_BIKE, 1))
+        gSaveBlock1Ptr->registeredItem = ITEM_ACRO_BIKE;
 }
