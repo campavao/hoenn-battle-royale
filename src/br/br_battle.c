@@ -114,9 +114,17 @@ void BrBattle_MenuBoxOff(bool8 prompt)
         BattlePutTextOnWindow(gDisplayedStringBattle, B_WIN_MSG);
 }
 
-void BrBattle_MenuBoxFollow(u16 menuY)
+void BrBattle_MenuBoxFollow(u16 menuY, const u8 *prompt)
 {
-    gBattle_BG0_Y = gBrHud.noBattleBox ? 0 : menuY;
+    if (!gBrHud.noBattleBox)
+        gBattle_BG0_Y = menuY;
+    else if (gBattle_BG0_Y != 0)
+    {
+        // The page came mid-menu: the message box still says the last battle line.
+        gBattle_BG0_Y = 0;
+        BattleStringExpandPlaceholdersToDisplayedString(prompt);
+        BattlePutTextOnWindow(gDisplayedStringBattle, B_WIN_MSG);
+    }
 }
 
 // A wild or a trainer battle's "\p" waits for A (its next page, "X defeated Y!", the
@@ -127,6 +135,11 @@ void BrBattle_PhoneAutoScroll(void)
 {
     if (gBrHud.noBattleBox)
         gTextFlags.autoScroll = TRUE;
+}
+
+bool8 BrBattle_PhoneTextPace(void)
+{
+    return gBrHud.noBattleBox && gMain.inBattle && !(gBattleTypeFlags & BATTLE_TYPE_LINK);
 }
 
 void BrBattle_DrawClock(void)

@@ -184,7 +184,7 @@ static void HandleInputChooseAction(void)
         return;
     }
     gBrBattle.menu = BR_MENU_SAFARI; // the page's tap-to-choose
-    BrBattle_MenuBoxFollow(DISPLAY_HEIGHT);
+    BrBattle_MenuBoxFollow(DISPLAY_HEIGHT, gText_WhatWillPkmnDo2);
 #endif
     if (JOY_NEW(A_BUTTON))
     {
