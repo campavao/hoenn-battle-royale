@@ -48,6 +48,7 @@
 #include "strings.h"
 #include "constants/trainers.h"
 #include "start_menu.h"
+#include "event_object_lock.h"
 #include "pokemon_summary_screen.h"
 #include "trainer_card.h"
 #include "sound.h"
@@ -71,6 +72,7 @@ static EWRAM_DATA u8 sTurnBuf[BR_CAP_TURN] = {0};
 // moved past it (POK-330 #12).
 static EWRAM_DATA u8 sTurnLen = 0;
 static EWRAM_DATA struct BrAssembler sBstartAsm = {0};
+static void CloseWatchMenu(void);
 static EWRAM_DATA struct BrAssembler sTurnAsm = {0};
 
 // The battle's id on the wire: the seat pair, low seat then high. The challenger is
@@ -399,6 +401,7 @@ static void ParseBstart(const u8 *d, u16 n)
     sTurnLen = 0;
     gBrSpectate.watching = TRUE;
     gBrSpectate.watchId = id;
+    CloseWatchMenu();
     BrField_Leave(0, EnterSpectate);
 }
 
@@ -1095,6 +1098,19 @@ bool8 BrSpectate_MenuCard(void)
     return TRUE;
 }
 
+// The watcher's menu goes before the field does: a warp to the watched trainer's map or
+// their fight's replay takes the screen, and a menu still up -- or its POKeMON already
+// fading in -- would write CB2 in the same frame as they do (br_netlink.c's challenge).
+static void CloseWatchMenu(void)
+{
+    if (!FuncIsActiveTask(Task_ShowStartMenu))
+        return;
+    DestroyTask(FindTaskIdByFunc(Task_ShowStartMenu));
+    HideStartMenu();
+    ScriptUnfreezeObjectEvents();
+    UnlockPlayerFieldControls();
+}
+
 // ---- follow: watching a seat walk ---------------------------------------------
 
 static void ShowOwnTrainer(bool8 shown)
@@ -1277,6 +1293,7 @@ static void FollowTick(void)
         gBrSpectate.followed = 0;
         SetWarpDestination(them->mapGroup, them->mapNum, WARP_ID_NONE,
             them->x - MAP_OFFSET, them->y - MAP_OFFSET);
+        CloseWatchMenu();
         DoWarp();
         gBrSpectate.warpWait = BR_FOLLOW_WARP_FRAMES;
         return;
@@ -1302,6 +1319,9 @@ static void FollowTick(void)
     {
         PlaySE(SE_WIN_OPEN);
         ShowStartMenu();
+        // The world goes on while a watcher reads: their trainer still walking, the
+        // field still moving, where pret's menu stops everybody where they stand.
+        UnfreezeObjectEvents();
         menuUp = TRUE;
     }
     else if (gBrSpectate.peeking && (JOY_NEW(A_BUTTON) || JOY_NEW(DPAD_RIGHT)))
@@ -1351,6 +1371,7 @@ void BrSpectate_HeapReset(void)
     sPartyAsm.buf = NULL;
     sPartyAsm.cap = 0;
     sPartyAsm.type = 0;
+    sWatchParty = NULL;
     gBrSpectate.peekMons = 0;
     if (sPendParties != NULL)
     {

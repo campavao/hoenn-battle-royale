@@ -28,9 +28,9 @@ expect u32 gStringVar4 0xBFBFCCCE
 expect u32 gPlayerParty+0x50 0
 wait 60
 shot told
-wait 400
+wait 250
 # nobody pressed anything: still told, not out
 expect u8 gBrMatch 2
-wait 1200
+wait 400
 expect u8 gBrMatch 3
 say fog out idle ok

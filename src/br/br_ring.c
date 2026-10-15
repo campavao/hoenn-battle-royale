@@ -31,6 +31,7 @@
 #include "constants/battle_string_ids.h"
 #include "util.h"
 #include "task.h"
+#include "text.h"
 #include "script.h"
 #include "palette.h"
 #include "field_message_box.h"
@@ -198,13 +199,24 @@ static void ApplyWeather(bool8 outside)
 // of its own -- is waited out, up to BR_FOG_OUT_WAIT frames, and then we go anyway.
 // The message itself waits for A or B, but never for a player who has put the phone
 // down: a team nobody is reading for would hold the whole match open, so after
-// BR_FOG_OUT_READ frames it closes by itself.
+// BR_FOG_OUT_READ frames with no press it closes by itself.
 #define BR_FOG_OUT_WAIT (60 * 10)
-#define BR_FOG_OUT_READ (60 * 12)
+#define BR_FOG_OUT_READ (60 * 8)
 static const u8 sText_FogOut[] = _("{STR_VAR_1} fainted in the fog…\p{PLAYER} is out of usable POKéMON!\pYou're out of the match!");
+
+// The fainted mon's name, kept here: gStringVar1 is every script's and every message's,
+// and the field can be busy with one for a while before this is shown.
+static EWRAM_DATA u8 sFogName[POKEMON_NAME_LENGTH + 1] = {0};
 
 #define tState data[0]
 #define tWait data[1]
+
+static void CloseFogOut(void)
+{
+    DeactivateAllTextPrinters(); // a page still waiting for A prints nothing more
+    HideFieldMessageBox();
+    UnlockPlayerFieldControls();
+}
 
 static void Task_FogOut(u8 taskId)
 {
@@ -213,28 +225,40 @@ static void Task_FogOut(u8 taskId)
     switch (tState)
     {
     case 0:
-        if (++tWait > BR_FOG_OUT_WAIT || !BrField_OverworldRunning())
+        // Off the field (the BAG, a fight) it waits for the field: that is where it is
+        // said, and the time it waits for a quiet one is the field's.
+        if (!BrField_OverworldRunning())
+            return;
+        if (++tWait > BR_FOG_OUT_WAIT)
             break;
         if (ScriptContext_IsEnabled() || !IsFieldMessageBoxHidden() || gPaletteFade.active
          || ArePlayerFieldControlsLocked())
             return;
         LockPlayerFieldControls();
+        StringCopy(gStringVar1, sFogName);
         ShowFieldMessage(sText_FogOut);
         tWait = 0;
         tState++;
         return;
     case 1:
         // Printing: each page waits for A. The last one is still on screen when the
-        // printer is done, so it is read once more below.
-        if (++tWait <= BR_FOG_OUT_READ && !IsFieldMessageBoxHidden())
+        // printer is done, so it is read once more below, on a clock of its own.
+        if (IsFieldMessageBoxHidden())
+        {
+            tWait = 0;
+            tState++;
             return;
-        tState++;
-        return;
+        }
+        if (JOY_NEW(A_BUTTON | B_BUTTON))
+            tWait = 0; // a page turned: somebody is reading
+        if (++tWait <= BR_FOG_OUT_READ)
+            return;
+        CloseFogOut();
+        break;
     case 2:
         if (++tWait <= BR_FOG_OUT_READ && !JOY_NEW(A_BUTTON | B_BUTTON))
             return;
-        HideFieldMessageBox();
-        UnlockPlayerFieldControls();
+        CloseFogOut();
         break;
     }
     DestroyTask(taskId);
@@ -246,10 +270,22 @@ static void Task_FogOut(u8 taskId)
 
 static void StartFogOut(u8 partyIdx)
 {
-    GetMonData(&gPlayerParty[partyIdx], MON_DATA_NICKNAME, gStringVar1);
-    StringGet_Nickname(gStringVar1);
-    if (CreateTask(Task_FogOut, 80) == TASK_NONE)
+    GetMonData(&gPlayerParty[partyIdx], MON_DATA_NICKNAME, sFogName);
+    StringGet_Nickname(sFogName);
+    // A script already running (a gym leader mid-line, a trainer's walk) may be on its
+    // way to a battle, and this team has nobody to send out: out now, untold, as before.
+    if (ScriptContext_IsEnabled() || CreateTask(Task_FogOut, 80) == TASK_NONE)
         BrMatch_Out();
+}
+
+// The OUT the fog owes is never lost with its task: a BAG or POKeMON opened from the
+// menu that was up when the team went (or a battle) resets every task on its way in.
+// Back on the field, the task starts again and the player is told then.
+static void OweFogOut(void)
+{
+    if (gBrRing.out && gBrMatch.phase == BR_PHASE_PLAY && !FuncIsActiveTask(Task_FogOut)
+     && BrField_OverworldRunning())
+        CreateTask(Task_FogOut, 80);
 }
 
 static void Bleed(void)
@@ -485,6 +521,7 @@ void BrRing_Tick(void)
     // so a battle it reaches takes the damage and nothing else.
     if (!gBrRing.active)
         return;
+    OweFogOut();
     if (!BrField_OverworldRunning())
     {
         if (!FogReachesThisBattle())

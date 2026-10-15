@@ -1,0 +1,46 @@
+# fog-out-menu: the fog finishes the team while the START menu is up, and the player
+# opens POKeMON from it. The party screen resets every task on its way in, the fog's
+# OUT task with them -- and with nothing else to send it, the player was never out and
+# the match never ended (review of the 10-14 batch). Back on the field the task starts
+# again: told, then out. fog-out.txt's setup.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gPlayerPartyCount 1
+# TREECKO on 4 of 20: one bleed leaves 2, the next one finishes it
+poke u16 gPlayerParty+0x56 4
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 60
+expect u8 gBrRing+5 1
+shot hp-in-corner
+waitfor u16 gPlayerParty+0x56 2 300
+# the menu is up when the last bleed lands
+tap START
+wait 30
+waitfor u16 gPlayerParty+0x56 0 300
+wait 30
+expect u8 gBrRing+7 1
+expect u8 gBrMatch 2
+# POKeMON, the top row: its screen resets the tasks
+tap A
+wait 120
+tap B
+wait 120
+# back on the field with the menu: close it, and the fog says its piece
+tap B
+wait 90
+expect u8 gBrMatch 2
+expect u32 gStringVar4 0xBFBFCCCE
+shot told
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+expect u8 gBrMatch 3
+say fog out menu ok

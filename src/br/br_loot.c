@@ -792,6 +792,11 @@ static void Take(struct BrLootItem *it)
         return;
     if (!BrStory_Hands(it))
         return; // STERN wants his SCANNER first, and has said so
+    // A gift's key is only ever this press's while its script runs (BrLoot_GiftTake): one
+    // a map load or a battle cut off mid-line would make the next press on that giver a
+    // silent one, taken with no talk and no box.
+    if (sGiftKey != 0 && !ScriptContext_IsEnabled())
+        sGiftKey = 0;
     if (BR_LOOT_IS_GIFT(it->key) && OneThing(it) && sGiftKey != it->key && it->objId != BR_NO_OBJ)
     {
         // Talk first: he turns to us, says his line, and the script hands it over.
