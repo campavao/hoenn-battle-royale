@@ -1,5 +1,6 @@
 # patch-taken: a patch somebody else's battle started on goes off our map too, and does
-# not come back (br_patch.c, BrPatch_NoteTaken on every PICKUP).
+# not come back while the ring holds its phase (br_patch.c, BrPatch_NoteTaken on every
+# PICKUP; patch-regrow.txt is the next phase).
 #
 # patch-battle.txt's ROUTE 102 under seed 4: patch 1 at (18,9) is drawn from the boot
 # cell. Seat 1's PICKUP of its key, 0x2009, lets the sprite go; stepping onto the cell

@@ -15,6 +15,7 @@
 #include "br/br_loot.h"
 #include "br/br_match.h"
 #include "br/br_patch.h"
+#include "br/br_ring.h"
 
 extern const struct SpritePalette gSpritePalette_GeneralFieldEffect0;
 extern const struct SpritePalette gSpritePalette_GeneralFieldEffect1;
@@ -26,6 +27,10 @@ EWRAM_DATA u8 gBrPatchTaken[(BR_PATCH_KEY(0x7F, 7) - BR_PATCH_KEY_BASE + 8) / 8]
 // The seed the map was dealt under: START puts the match's in after the warp that may
 // already have dealt this map under none.
 static EWRAM_DATA u32 sDealtFor = 0;
+// The ring phase the taken patches grew back for (br_patch.h). The ring is the one clock
+// every ROM in the room hears the same way, so on each new phase every patch taken in the
+// last one is back, everywhere at once.
+static EWRAM_DATA u8 sGrownFor = 0;
 STATIC_ASSERT(BR_PATCH_MAX == 8, BrPatchKeysHoldEight)
 
 #define NO_HEADER 0xFFFF
@@ -64,6 +69,14 @@ static u16 HeaderOf(u16 map)
             return i;
     }
     return NO_HEADER;
+}
+
+static void Regrow(void)
+{
+    u8 i;
+
+    for (i = 0; i < ARRAY_COUNT(gBrPatchTaken); i++)
+        gBrPatchTaken[i] = 0;
 }
 
 static bool8 IsTaken(u16 key)
@@ -341,27 +354,43 @@ void BrPatch_Init(void)
     gBrPatch.map = 0xFFFF;
     gBrPatch.count = 0;
     sDealtFor = 0;
+    sGrownFor = 0;
     sPass = 0;
     for (i = 0; i < BR_PATCH_MAX; i++)
         gBrPatch.spriteIds[i] = MAX_SPRITES;
-    for (i = 0; i < ARRAY_COUNT(gBrPatchTaken); i++)
-        gBrPatchTaken[i] = 0;
+    Regrow();
+}
+
+// Brings the taken bits up to the match and the ring before anything reads or sets one.
+// Both callers ask: the tick, and a PICKUP -- which BrNet_Tick hands over before the tick
+// runs, so a PICKUP in the same frame as a new phase's RING would otherwise be marked and
+// then grown straight back.
+static void Settle(void)
+{
+    if (sDealtFor != gBrMatch.seed)
+    {
+        // A new match: every patch is back, the moment the seed is in -- a PICKUP that
+        // lands before the field is running again is this match's, and must stay.
+        Regrow();
+        sDealtFor = gBrMatch.seed;
+        gBrPatch.map = 0xFFFF;
+        gBrPatch.count = 0;
+    }
+    if (sGrownFor != gBrRing.phase)
+    {
+        // A new ring: what was taken grows back, drawn by the tick when in view. A PICKUP
+        // sent in the old phase that lands after the RING takes its patch for this one
+        // too, on our ROM alone -- a whole phase of one patch, at worst.
+        Regrow();
+        sGrownFor = gBrRing.phase;
+    }
 }
 
 void BrPatch_Tick(void)
 {
     u8 i;
 
-    if (sDealtFor != gBrMatch.seed)
-    {
-        // A new match: every patch is back, the moment the seed is in -- a PICKUP that
-        // lands before the field is running again is this match's, and must stay.
-        for (i = 0; i < ARRAY_COUNT(gBrPatchTaken); i++)
-            gBrPatchTaken[i] = 0;
-        sDealtFor = gBrMatch.seed;
-        gBrPatch.map = 0xFFFF;
-        gBrPatch.count = 0;
-    }
+    Settle();
     if (!BrField_OverworldRunning())
         return;
     if (gBrPatch.map != CurrentMap())
@@ -426,6 +455,7 @@ void BrPatch_NoteTaken(u16 key)
 
     if (!BR_PATCH_IS_KEY(key))
         return;
+    Settle();
     n = key - BR_PATCH_KEY_BASE;
     if (n / 8 < ARRAY_COUNT(gBrPatchTaken))
         gBrPatchTaken[n / 8] |= 1 << (n % 8);
