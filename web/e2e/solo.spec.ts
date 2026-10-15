@@ -3,7 +3,8 @@
 // is where a match once ended in complete silence -- no results, no way out but the URL.
 //
 // This plays a whole solo match at the dev pace, pressing nothing, and asserts the page
-// draws the result and then takes the player back to the lobby by itself. With no `#seed`
+// draws the result and keeps it up until MAIN MENU is pressed (POK-371), which takes the
+// player back to the lobby. With no `#seed`
 // solo deals a fresh one every match, so the seed is only checked for being there
 // (play.spec.ts pins one, POK-327).
 import { test, expect } from '@playwright/test';
@@ -13,7 +14,7 @@ test.beforeAll(() => {
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
 });
 
-test('a solo match ends on its results, then goes back to the lobby by itself', async ({ page }) => {
+test('a solo match ends on its results, and MAIN MENU goes back to the lobby', async ({ page }) => {
   test.setTimeout(360_000);
 
   await page.goto(`/#solo&fast&rom=${romHashParam()}`);
@@ -36,7 +37,10 @@ test('a solo match ends on its results, then goes back to the lobby by itself', 
   // Solo never opens a socket, and never gets the room's dev surface.
   expect(await page.evaluate(() => (window as unknown as { __br?: unknown }).__br !== undefined)).toBe(false);
 
-  // Nothing is pressed from here. The grace is what has to move us.
-  await expect(page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({ timeout: 90_000 });
+  // Well past solo's eight-second grace, the results are still there to read.
+  await page.waitForTimeout(12_000);
+  await expect(page.locator('#results-panel'), 'the results wait for a press').toBeVisible();
+  await page.locator('#results-lobby').click();
+  await expect(page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 90_000 });
   expect(new URL(page.url()).hash).not.toContain('solo');
 });

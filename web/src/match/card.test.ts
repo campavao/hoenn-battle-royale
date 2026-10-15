@@ -5,31 +5,16 @@ import type { RosterEntry } from './roster';
 const base: RosterEntry = { seat: 3, name: 'MAY', skin: 'may', alive: true, dir: 1, isMe: false };
 
 describe("a trainer's card (POK-268)", () => {
-  it('says who they are and how they look', () => {
-    const lines = cardFor(base);
-    expect(lines[0]).toEqual({ label: 'TRAINER', value: 'MAY' });
-    expect(lines.some((l) => l.value === 'MAY')).toBe(true);
-    expect(lines.find((l) => l.label === 'STATUS')?.value).toBe('IN THE MATCH');
+  it('says who they are, and nothing the room cannot vouch for (POK-343)', () => {
+    expect(cardFor(base)).toEqual([{ label: 'TRAINER', value: 'MAY' }]);
+    expect(cardFor({ ...base, alive: false, map: { group: 0, num: 16 } })).toEqual([{ label: 'TRAINER', value: 'MAY' }]);
   });
 
   it('names a seat that never said its name', () => {
     expect(cardFor({ ...base, name: '' })[0].value).toBe('P3');
   });
 
-  it('says where they were last seen, but only while they are in it', () => {
-    expect(cardFor(base, 'MAP_ROUTE_104').find((l) => l.label === 'LAST SEEN')?.value).toBe('ROUTE 104');
-    expect(cardFor({ ...base, alive: false }, 'MAP_ROUTE_104').find((l) => l.label === 'LAST SEEN')).toBeUndefined();
-    expect(cardFor({ ...base, alive: false }).find((l) => l.label === 'STATUS')?.value).toBe('OUT');
-  });
-
   it('marks your own', () => {
     expect(cardFor({ ...base, isMe: true }).some((l) => l.value === 'THIS IS YOU')).toBe(true);
-  });
-});
-
-describe('a skin on the card', () => {
-  it('names the trainer class, not the index the wire carries', () => {
-    expect(cardFor({ ...base, skin: '15' })).toContainEqual({ label: 'LOOKS LIKE', value: 'LASS' });
-    expect(cardFor({ ...base, skin: 'may' })).toContainEqual({ label: 'LOOKS LIKE', value: 'MAY' });
   });
 });

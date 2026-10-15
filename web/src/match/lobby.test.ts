@@ -7,11 +7,22 @@ const room = (over: Partial<RoomListing> = {}): RoomListing => ({
 });
 
 describe('the fixed rows', () => {
-  it('always offer solo, socket or no socket', () => {
+  it('make QUICK PLAY the game against bots with no socket, and offer no SOLO row (POK-341)', () => {
     const offline = fixedRows(false);
-    const solo = offline.find((r) => r.action.kind === 'solo')!;
-    expect(solo.disabled).toBeFalsy();
-    for (const r of offline.filter((x) => x.action.kind !== 'solo')) expect(r.disabled).toBe(true);
+    const quick = offline.find((r) => r.label === 'QUICK PLAY')!;
+    expect(quick.action.kind).toBe('solo');
+    expect(quick.disabled).toBeFalsy();
+    for (const r of offline.filter((x) => x !== quick)) expect(r.disabled).toBe(true);
+    expect(fixedRows(true).find((r) => r.label === 'QUICK PLAY')!.action.kind).toBe('quick');
+    expect(fixedRows(true).some((r) => r.label.includes('SOLO'))).toBe(false);
+  });
+
+  it('keep an id that a toggle saying something new does not change (POK-333)', () => {
+    const on = fixedRows(true, { name: 'WALLY', skin: 'MAY' });
+    const off = fixedRows(true, { name: 'WALLY', skin: 'MAY', statsOn: false });
+    expect(on[5].id).toBe('trainer-stats');
+    expect(off[5].id).toBe(on[5].id);
+    expect(new Set(on.map((r) => r.id)).size).toBe(on.length);
   });
 
   it('open up once the relay is there', () => {
@@ -66,7 +77,7 @@ describe('the room rows', () => {
 describe('the empty list', () => {
   it('says what to do about it either way', () => {
     expect(emptyNote(true)).toContain('QUICK PLAY');
-    expect(emptyNote(false)).toContain('SOLO');
+    expect(emptyNote(false)).toContain('QUICK PLAY');
   });
 });
 
@@ -108,12 +119,12 @@ describe('the profile rows', () => {
     expect(rows[1].label).toBe('MAY');
     // name, sprite, three voice rows (POK-283), stats, the battle's background (an
     // experiment, 2026-10-05), career -- then the ways in.
-    expect(rows[6].label).toBe('BATTLE BG');
-    expect(rows[6].detail).toBe('shown');
-    expect(fixedRows(true, { name: 'WALLY', skin: 'MAY', seeThrough: true })[6].detail).toBe('off: over the map');
+    expect(rows[6].label).toBe('BATTLE BACKDROP');
+    expect(rows[6].detail).toBe('CLASSIC');
+    expect(fixedRows(true, { name: 'WALLY', skin: 'MAY', seeThrough: true })[6].detail).toBe('OVER MAP');
     expect(rows[7].label).toBe('MY CAREER');
     expect(rows[8].label).toBe('QUICK PLAY');
-    expect(rows[rows.length - 1].label).toBe('SOLO VS BOTS');
+    expect(rows[rows.length - 1].label).toBe('JOIN BY CODE');
   });
 
   it('shows the sprite note when there is one, otherwise the plain default', () => {
@@ -139,9 +150,9 @@ describe('the profile rows', () => {
 
   it('reads as shared unless stats were explicitly turned off', () => {
     const shared = fixedRows(true, { name: 'WALLY', skin: 'MAY' });
-    expect(shared[5].label).toBe('PLAY STATS');
-    expect(shared[5].detail).toBe('shared');
+    expect(shared[5].label).toBe('SEND PLAY COUNT');
+    expect(shared[5].detail).toBe('ON');
     const off = fixedRows(true, { name: 'WALLY', skin: 'MAY', statsOn: false });
-    expect(off[5].detail).toBe('not shared');
+    expect(off[5].detail).toBe('OFF');
   });
 });

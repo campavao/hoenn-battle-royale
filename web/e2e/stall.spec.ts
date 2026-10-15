@@ -51,8 +51,8 @@ async function soloOnField(page: Page): Promise<void> {
 test('the lobby holds the ROM still for as long as it likes, and that is no stop', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto(`/#rom=${romHashParam()}`);
-  const solo = page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' });
-  await expect(solo).toBeVisible({ timeout: 60_000 });
+  const quick = page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' });
+  await expect(quick).toBeVisible({ timeout: 60_000 });
   // The boot block's hold: the core paused from the mailbox answering until a way in
   // is chosen. Six seconds of it is twice what a stuck core gets.
   expect(await page.evaluate(() => (window as unknown as HbrWindow).__hbr.emu.isPaused())).toBe(true);
@@ -60,7 +60,7 @@ test('the lobby holds the ROM still for as long as it likes, and that is no stop
   await expect(page.locator('#stall')).toBeHidden();
 
   // ...and nor is the resume, however long the hold before it was.
-  await solo.click();
+  await quick.click();
   await expect(page.locator('#match-strip')).toContainText('SAFARI', { timeout: 60_000 });
   await page.waitForTimeout(5_000);
   await expect(page.locator('#stall')).toBeHidden();
@@ -135,6 +135,6 @@ test('a core that stops making frames is named, and LEAVE takes the player to th
   await expect(page.locator('#stall-line')).toHaveText(/^core · .*cb2 CB2_Overworld/);
 
   await page.locator('#stall-leave').click();
-  await expect(page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 60_000 });
   expect(new URL(page.url()).hash).not.toContain('solo');
 });

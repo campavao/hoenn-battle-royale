@@ -54,6 +54,10 @@ export interface LobbyRow {
   action: LobbyAction;
   /** A row that is shown but cannot be pressed (a full room, a locked one). */
   disabled?: boolean;
+  /** What the cursor knows the row by. The label and detail can change under it (a
+   *  toggle saying its new value), and a cursor kept by what the row said went back to
+   *  the top on every press (POK-333). */
+  id?: string;
 }
 
 /** mm:ss for a countdown, as the daily row shows it. */
@@ -63,7 +67,7 @@ export function countdown(secs: number): string {
 }
 
 /** The fixed rows, always in this order. `online` is false before the socket is up --
- *  SOLO VS BOTS still works, because solo never opens one (the Kanto rule). */
+ *  QUICK PLAY is then a game against bots, which never opens one (the Kanto rule). */
 export function fixedRows(
   online: boolean,
   profile?: Profile,
@@ -90,33 +94,38 @@ export interface Profile {
 
 /** Who you are (POK-243): the trainer's own rows, on their own screen since POK-320. */
 export function profileRows(profile: Profile): LobbyRow[] {
-  return [
+  const rows: LobbyRow[] = [
     { label: profile.name, detail: profile.record ?? 'your name', action: { kind: 'name' as const } },
     { label: profile.skin, detail: profile.skinNote ?? 'your sprite', action: { kind: 'skin' as const } },
     { label: profile.lines?.intro ?? 'MY VOICE', detail: 'walking up', action: { kind: 'intro' as const } },
     { label: profile.lines?.win ?? 'MY VOICE', detail: 'when you win', action: { kind: 'win' as const } },
     { label: profile.lines?.lose ?? 'MY VOICE', detail: 'when you lose', action: { kind: 'lose' as const } },
+    // Named for what they do (Cam's 2026-10-14 play-test, POK-334: "this is like debug
+    // info", "Battle BG... doesn't make any sense"). The first is the anonymous play
+    // count stats.ts hands the relay; the second, where a battle is drawn.
+    { label: 'SEND PLAY COUNT', detail: profile.statsOn === false ? 'OFF' : 'ON', action: { kind: 'stats' as const } },
     {
-      label: 'PLAY STATS',
-      detail: profile.statsOn === false ? 'not shared' : 'shared',
-      action: { kind: 'stats' as const },
-    },
-    {
-      label: 'BATTLE BG',
-      detail: profile.seeThrough ? 'off: over the map' : 'shown',
+      label: 'BATTLE BACKDROP',
+      detail: profile.seeThrough ? 'OVER MAP' : 'CLASSIC',
       action: { kind: 'seethrough' as const },
     },
     // Kanto's career is a file on disk somebody can copy to another machine;
     // localStorage cannot be copied at all, so it needs a door (POK-243).
     { label: 'MY CAREER', detail: 'save or load a file', action: { kind: 'career' as const } },
   ];
+  return rows.map((r) => ({ ...r, id: `trainer-${r.action.kind}` }));
 }
 
 /** The ways into a match. `openRooms` is how many the relay lists, for the LOBBIES
  *  row's detail; the daily gets a row of its own when the relay is offering one. */
 export function playRows(online: boolean, openRooms = 0, daily?: RoomListing): LobbyRow[] {
-  return [
-    { label: 'QUICK PLAY', detail: online ? 'a game right now' : 'offline', action: { kind: 'quick' }, disabled: !online },
+  const rows: LobbyRow[] = [
+    // SOLO VS BOTS is not a row any more (Cam, 2026-10-14, POK-341: "quick play to me
+    // feels actually more like a natural flow"). Offline, QUICK PLAY is that game: the
+    // bots, and no socket.
+    online
+      ? { label: 'QUICK PLAY', detail: 'a game right now', action: { kind: 'quick' } }
+      : { label: 'QUICK PLAY', detail: 'offline: vs bots', action: { kind: 'solo' } },
     { label: 'HOST A ROOM', action: { kind: 'host' }, disabled: !online },
     {
       label: 'LOBBIES',
@@ -128,8 +137,8 @@ export function playRows(online: boolean, openRooms = 0, daily?: RoomListing): L
     ...(daily
       ? [{ label: 'DAILY GAME', detail: `in ${countdown(daily.secs ?? 0)}`, action: { kind: 'daily' as const } }]
       : []),
-    { label: 'SOLO VS BOTS', detail: 'no socket, ever', action: { kind: 'solo' } },
   ];
+  return rows.map((r) => ({ ...r, id: `lobby-${r.label.toLowerCase().replace(/ /g, '-')}` }));
 }
 
 /** One row per open room, plus the daily's own at the top when the relay offers it.
@@ -171,5 +180,5 @@ export function roomRows(rooms: RoomListing[]): LobbyRow[] {
 export function emptyNote(online: boolean): string {
   return online
     ? 'No open rooms. QUICK PLAY hosts one and fills it with bots.'
-    : 'Not connected. SOLO VS BOTS works without a socket.';
+    : 'Not connected. QUICK PLAY is a game against bots.';
 }

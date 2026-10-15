@@ -5,7 +5,7 @@
 // Each screen is a function of a model the page keeps: paint reads the model, draws,
 // and hands the stage what it drew. The layouts (where a seat is, where a row is) are
 // plain functions so ui.test.ts can pin them without a canvas.
-import { SKINS, SKIN_UNLOCK_WINS, skinUnlocked } from '../match/career';
+import { SKINS, SKIN_UNLOCK_WINS, WARDROBE, skinUnlocked } from '../match/career';
 import { botSeats, botSkin } from '../bots/roster';
 import {
   type EmeraldCanvas,
@@ -69,7 +69,9 @@ export function paintRows(c: EmeraldCanvas, y: number, rows: RowSpec[], parent?:
       const room = r.w - 8 - labelW - 8;
       if (room > 12) {
         const detail = fitText(row.detail, room);
-        c.drawText(detail, r.x + r.w - measure(detail), r.y, TEXT_GRAY);
+        // Dark, as the label is: the light gray is a shadow colour, and on the window's
+        // white it could not be read at all (POK-332). A disabled row stays faint.
+        c.drawText(detail, r.x + r.w - measure(detail), r.y, row.disabled ? TEXT_GRAY : TEXT_DARK);
       }
     }
     widgets.push({
@@ -179,6 +181,17 @@ export interface CardLine {
   value: string;
 }
 
+/** A trainer's card: their sprite, their lines, and what the viewer may do about them --
+ *  KICK for the host (POK-241), SPECTATE for somebody out who could follow them
+ *  (POK-342). */
+export interface TrainerCard {
+  seat: number;
+  skin: number;
+  lines: CardLine[];
+  canKick: boolean;
+  canWatch?: boolean;
+}
+
 export interface RoomModel {
   /** The line at the top: `Room ABCDEF`, or what is happening instead. */
   status: string;
@@ -197,7 +210,7 @@ export interface RoomModel {
   countdown: number | null;
   /** The host's controls, in the order they are shown; null for a guest. */
   options: { label: string; id: string; onPress: () => void }[] | null;
-  card: { seat: number; lines: CardLine[]; canKick: boolean } | null;
+  card: TrainerCard | null;
   onStart(): void;
   onLeave(): void;
   onSeat(seat: number): void;
@@ -280,7 +293,12 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
         widgets.push(...paintButtons(c, Math.min(y, h - 28), buttons));
       }
 
-      if (m.card) widgets.push(...paintCard(c, h, lay.frame.y + 8, m.card, 'trainer-card', m.onKick, m.onCloseCard));
+      if (m.card) {
+        return {
+          widgets: [...paintCard(c, h, lay.frame.y + 8, m.card, 'trainer-card', { onKick: m.onKick, onClose: m.onCloseCard }), ...underCard(widgets)],
+          containers,
+        };
+      }
       return { widgets, containers };
     },
   };
@@ -307,34 +325,58 @@ export function paintOptions(
   return { widgets, bottom: frame.y + frame.h };
 }
 
-/** A trainer's card over the seats, the screen dimmed under it: its lines, KICK for the
- *  host (POK-241), CLOSE. `parent` is its container: #trainer-card in the room,
- *  #match-card in a match. */
+/** How big the card draws its trainer: the overworld sheet at twice its size, the
+ *  closest thing to a portrait the room has (Cam's 2026-10-14 play-test, POK-343: "can
+ *  we just show the hiker here"). */
+const CARD_SPRITE_SCALE = 2;
+
+/** A trainer's card over the seats, the screen dimmed under it: their sprite beside their
+ *  lines, then SPECTATE for somebody out who could follow them, KICK for the host
+ *  (POK-241), CLOSE. `parent` is its container: #trainer-card in the room, #match-card
+ *  in a match. */
 export function paintCard(
   c: EmeraldCanvas,
   h: number,
   y: number,
-  card: { seat: number; lines: CardLine[]; canKick: boolean },
+  card: TrainerCard,
   parent: string,
-  onKick: (seat: number) => void,
-  onClose: () => void,
+  on: { onKick: (seat: number) => void; onWatch?: (seat: number) => void; onClose: () => void },
 ): Widget[] {
   const widgets: Widget[] = [];
   const lines = card.lines;
-  const box = { x: 16, y, w: W - 32, h: lines.length * ROW_H + 16 + 28 };
+  const sheet = skinSheet(card.skin);
+  const art = sheet ? { w: sheet.w * CARD_SPRITE_SCALE, h: sheet.h * CARD_SPRITE_SCALE } : { w: 0, h: 0 };
+  const body = Math.max(art.h, lines.length * ROW_H);
+  const box = { x: 16, y, w: W - 32, h: body + 16 + 28 };
   c.fillRect({ x: 0, y: 0, w: W, h }, '#000', 0.35);
   c.drawFrame(box);
+  if (sheet) c.drawSprite(sheet.gfx, box.x + 8, box.y + 8, 1, 0, CARD_SPRITE_SCALE);
+  const textX = box.x + 8 + (art.w ? art.w + 8 : 0);
+  const textY = box.y + 8 + Math.floor((body - lines.length * ROW_H) / 2);
   lines.forEach((line, i) => {
     const text = line.label ? `${line.label}: ${line.value}` : line.value;
-    const r = { x: box.x + 8, y: box.y + 8 + i * ROW_H, w: box.w - 16, h: ROW_H };
+    const r = { x: textX, y: textY + i * ROW_H, w: box.x + box.w - 8 - textX, h: ROW_H };
     c.drawText(fitText(text, r.w), r.x, r.y, line.label ? TEXT_DARK : TEXT_BLUE);
     widgets.push({ rect: r, text, cls: 'card-line', parent, cursor: null });
   });
   const buttons: ButtonSpec[] = [];
-  if (card.canKick) buttons.push({ label: 'KICK', cls: 'card-kick', parent, onPress: () => onKick(card.seat) });
-  buttons.push({ label: 'CLOSE', cls: 'card-close', parent, onPress: onClose });
-  widgets.push(...paintButtons(c, box.y + box.h - 28, buttons));
+  if (card.canWatch && on.onWatch) {
+    const watch = on.onWatch;
+    buttons.push({ label: 'SPECTATE', cls: 'card-watch', parent, onPress: () => watch(card.seat) });
+  }
+  if (card.canKick) buttons.push({ label: 'KICK', cls: 'card-kick', parent, onPress: () => on.onKick(card.seat) });
+  buttons.push({ label: 'CLOSE', cls: 'card-close', parent, onPress: on.onClose });
+  // CLOSE first, so it is where the cursor lands: an A pressed out of habit closes the
+  // card rather than kicking somebody.
+  const pressable = paintButtons(c, box.y + box.h - 28, buttons);
+  widgets.push(pressable[pressable.length - 1], ...pressable.slice(0, -1));
   return widgets;
+}
+
+/** The card is modal: what is under it can still be tapped through the mirror, but the
+ *  cursor stays on the card (it drew over the card from the seat behind it). */
+function underCard(widgets: Widget[]): Widget[] {
+  return widgets.map((w) => ({ ...w, cursor: null }));
 }
 
 // ---- the in-match sheet -----------------------------------------------------------------
@@ -348,7 +390,7 @@ export interface SheetModel {
   strip: string | null;
   note: string;
   seats: RoomSeat[];
-  card: { seat: number; lines: CardLine[]; canKick: boolean } | null;
+  card: TrainerCard | null;
   /** Who you are watching, once you are out; null while you are in the match. */
   watch: { name: string | null } | null;
   canLeave: boolean;
@@ -363,6 +405,8 @@ export interface SheetModel {
   onKick(seat: number): void;
   onCloseCard(): void;
   onWatch(dir: 1 | -1): void;
+  /** SPECTATE on a card: follow that seat. */
+  onWatchSeat?(seat: number): void;
   onStopWatch(): void;
   onLeave(): void;
   onClose(): void;
@@ -556,7 +600,10 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
       version.forEach((line, i) => c.drawTextCentred(line, W / 2, vy + i * ROW_H, TEXT_GRAY));
       widgets.push({ rect: { x: 0, y: vy, w: W, h: version.length * ROW_H }, text: m.version, cls: 'version', cursor: null });
 
-      if (m.card) widgets.push(...paintCard(c, h, lay.frame.y + 8, m.card, 'match-card', m.onKick, m.onCloseCard));
+      if (m.card) {
+        const card = paintCard(c, h, lay.frame.y + 8, m.card, 'match-card', { onKick: m.onKick, onWatch: m.onWatchSeat, onClose: m.onCloseCard });
+        return { widgets: [...card, ...underCard(widgets)], containers };
+      }
       return { widgets, containers };
     },
   };
@@ -749,9 +796,10 @@ export function wardrobeScreen(model: () => WardrobeModel): DrawnScreen {
       let y = 4;
       paintTitle(c, 'WARDROBE', y);
       y += 20;
-      const lay = layoutWardrobe(y, SKINS.length);
+      const lay = layoutWardrobe(y, WARDROBE.length);
       c.drawFrame(lay.frame);
-      lay.cells.forEach((cell, i) => {
+      lay.cells.forEach((cell, at) => {
+        const i = WARDROBE[at];
         const open = skinUnlocked(i, m.wins);
         const sheet = skinSheet(i);
         if (sheet) c.drawSprite(sheet.gfx, cell.x + Math.floor((cell.w - sheet.w) / 2), cell.y + 4, open ? 1 : 0.3);

@@ -323,7 +323,7 @@ const TAP_LINES = ['Tap the map to walk there,', 'or tap a move to use it.'];
 
 type SheetPart = Pick<
   SheetModel,
-  'status' | 'seats' | 'card' | 'watch' | 'canLeave' | 'onSeat' | 'onKick' | 'onCloseCard' | 'onWatch' | 'onStopWatch' | 'onLeave'
+  'status' | 'seats' | 'card' | 'watch' | 'canLeave' | 'onSeat' | 'onKick' | 'onCloseCard' | 'onWatch' | 'onWatchSeat' | 'onStopWatch' | 'onLeave'
 >;
 
 /** A sheet, from what the room (or solo) knows and what the page does. */
@@ -372,11 +372,18 @@ function seatsOf(roster: Roster, watching: (seat: number) => boolean = () => fal
   }));
 }
 
-/** The card of `seat` as it is now, or none when it has gone: a card about nobody. */
-function cardOf(roster: Roster, seat: number | null, canKick: boolean): SheetModel['card'] {
+/** The card of `seat` as it is now, or none when it has gone: a card about nobody.
+ *  `watchable` is whether this page could follow somebody (it is out of the match). */
+function cardOf(roster: Roster, seat: number | null, canKick: boolean, watchable = false): SheetModel['card'] {
   const e = seat === null ? undefined : roster.get(seat);
   if (!e) return null;
-  return { seat: e.seat, lines: cardFor(e, e.map ? mapIdOf(e.map) : undefined), canKick: canKick && !e.isMe };
+  return {
+    seat: e.seat,
+    skin: Number(e.skin ?? 0) || 0,
+    lines: cardFor(e),
+    canKick: canKick && !e.isMe,
+    canWatch: watchable && e.alive && !e.isMe,
+  };
 }
 
 function versionText(info: ReleaseInfo): string {
@@ -408,7 +415,7 @@ function refuseRoom(why: string): void {
   sayPatch(
     'Online play is off in this tab.',
     `It could not get the current release (${why}), and everybody in a room has to run`
-      + ' the same build. Reload to try again -- SOLO VS BOTS still works.',
+      + ' the same build. Reload to try again -- offline, QUICK PLAY is a game against bots.',
     [{ label: 'RELOAD', id: 'patch-reload', onPress: () => backToLobby() }],
   );
 }
@@ -1428,11 +1435,6 @@ function renderRoom(bridge: Bridge): void {
   if (last?.stage !== stageAt) stage?.redraw();
 }
 
-/** world.json's id for a wire MapRef, for the places a card names. */
-function mapIdOf(map: MapRef): string | undefined {
-  return HOENN.idOf(map);
-}
-
 // ---- the room screen (POK-241) ------------------------------------------------------
 
 /** What the host has set, between roster events. The relay owns MAX, OPEN and the
@@ -1582,6 +1584,14 @@ function botFill(): number {
 /** The results screen up now, and what it shows (POK-320). One at a time: the room's
  *  exit or solo's reload takes it down, and a late `party` redraws it in place. */
 let resultsUp: { screen: DrawnScreen; model: ResultsModel } | null = null;
+
+/** Whether the results are what the stage shows now. A match's grace ends on them rather
+ *  than past them (Cam's 2026-10-14 play-test, POK-371: "I would stay on whatever that
+ *  screen was until I hit the like done button"): the grace only moves a page that has
+ *  no results to read -- one whose socket missed the `win`, a watcher who walked in. */
+function resultsShowing(): boolean {
+  return resultsUp !== null && theStage().current === resultsUp.screen;
+}
 
 /** Where we came, how long we lasted, and what that does to the career record, drawn on
  *  the stage when the match ends: `recordMatch` folds the placement in and the career
@@ -1907,8 +1917,12 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       grace: soloGrace,
       // Solo has no room to go back to, so the exit is the lobby -- which is what
       // backToLobby does, and there is no socket here for it to scatter. Won, it waits
-      // for the Hall of Fame rather than a timer, the same as the room's champion.
-      exit: leaveSolo,
+      // for the Hall of Fame rather than a timer, the same as the room's champion. With
+      // the results up, MAIN MENU is the exit and the grace leaves them be (POK-371).
+      exit: () => {
+        drawResults();
+        if (!resultsShowing()) leaveSolo();
+      },
     },
     {
       decided: (line) => {
@@ -2270,7 +2284,8 @@ function wireRoom(
       card: cardEntry
         ? {
             seat: cardEntry.seat,
-            lines: cardFor(cardEntry, cardEntry.map ? mapIdOf(cardEntry.map) : undefined),
+            skin: Number(cardEntry.skin ?? 0) || 0,
+            lines: cardFor(cardEntry),
             canKick: (view?.isHost ?? false) && !cardEntry.isMe,
           }
         : null,
@@ -2314,7 +2329,7 @@ function wireRoom(
     status: room.status,
     seats: bridge ? seatsOf(bridge.roster, watchingSeat) : [],
     // The host's one power over another seat, on the card (POK-241).
-    card: bridge ? cardOf(bridge.roster, sheetCard, roomKick !== null) : null,
+    card: bridge ? cardOf(bridge.roster, sheetCard, roomKick !== null, watchOf(bridge, spectate) !== null) : null,
     watch: bridge ? watchOf(bridge, spectate) : null,
     // Everybody's, the host's too (2026-10-07 play-test: "there doesn't seem to be a way to
     // leave the match"): a host leaving mid-fight is a host closing the tab, which hands
@@ -2335,6 +2350,14 @@ function wireRoom(
     },
     onWatch: (dir) => {
       if (bridge) stepWatch(bridge, spectate, dir);
+    },
+    onWatchSeat: (seat) => {
+      sheetCard = null;
+      if (bridge && seat !== spectate.watchingSeat()) {
+        for (const m of spectate.follow(seat)) bridge.pushToRom(m);
+        renderSpectate(bridge, spectate);
+      }
+      redrawSheet();
     },
     onStopWatch: () => {
       if (!bridge) return;
@@ -2553,8 +2576,12 @@ function wireRoom(
       }),
       // Back to the room, not out of it (MAIN MENU is the way out): keeping the room
       // makes the next match a press of START rather than eight people finding each
-      // other again.
-      exit: () => void returnToRoom(),
+      // other again. With the results up, PLAY AGAIN is the exit and the grace leaves
+      // them be (POK-371); the room's next START still takes this page into it.
+      exit: () => {
+        drawResults();
+        if (!resultsShowing()) void returnToRoom();
+      },
     },
     {
       started: hideRoomScreen,
@@ -3227,9 +3254,11 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
   return new Promise<RoomHash>((resolve) => {
     let timer: ReturnType<typeof setInterval> | null = null;
     let browseWhileSeen = (): void => {};
+    let onStorage = (_ev: StorageEvent): void => {};
     const done = (hash: RoomHash) => {
       if (timer) clearInterval(timer);
       document.removeEventListener('visibilitychange', browseWhileSeen);
+      window.removeEventListener('storage', onStorage);
       relay.close();
       stage.hide();
       resolve(hash);
@@ -3381,6 +3410,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       // The padlock is not in Emerald's font.
       detail: r.detail?.replace('🔒', 'PASS'),
       disabled: r.disabled,
+      id: r.id,
       onPress: () => press(r.action),
     });
     const record = () => {
@@ -3392,7 +3422,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       title: 'HOENN BATTLE ROYALE',
       rows: playRows(online, rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)).map(row),
       rowsId: 'lobby-rows',
-      note: note || (online ? '' : 'Not connected. SOLO VS BOTS works without a socket.'),
+      note: note || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',
       trainer: { name: careerName(), skin: careerSkin(), record: record(), onPress: () => stage.push(trainer) },
     }));
@@ -3473,6 +3503,13 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       },
     }));
     stage.show(main);
+    // One career, every screen (POK-340): the page draws what localStorage holds, so a
+    // career changed in another tab -- the wardrobe in one, the menu in the next -- is
+    // drawn here the moment it lands, rather than on whatever this tab painted last.
+    onStorage = (ev: StorageEvent) => {
+      if (ev.key === null || ev.key.startsWith('hbr:')) redraw();
+    };
+    window.addEventListener('storage', onStorage);
 
     relay.on('closed', () => {
       // Hidden, the lobby let go of the socket itself (below): what it last saw stays up

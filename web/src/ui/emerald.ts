@@ -92,18 +92,21 @@ export function inRect(r: Rect, x: number, y: number): boolean {
   return x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
 }
 
-/** Where a frame's tiles go for a box of `w` x `h` pixels (multiples of 8): the
- *  corners once, the edges repeated, the inside filled. Returned as (tile column,
- *  tile row) of the 3x3 frame for each 8-px cell, row-major. */
+/** Where a frame's tiles go for a box of `w` x `h` pixels: the corners once, the edges
+ *  repeated, the inside filled. Returned as (tile column, tile row) of the 3x3 frame for
+ *  each 8-px cell, row-major. A size off the 8-px grid keeps its far edge on the box's
+ *  own edge, the last edge tile overlapping the one before: rounding the grid instead
+ *  left a strip of the box that neither the border nor the fill covered (POK-344, the
+ *  see-through bar under a card's CLOSE). */
 export function frameTiles(w: number, h: number): { dx: number; dy: number; tx: number; ty: number }[] {
-  const cols = Math.max(2, Math.round(w / TILE));
-  const rows = Math.max(2, Math.round(h / TILE));
+  const cols = Math.max(2, Math.ceil(w / TILE));
+  const rows = Math.max(2, Math.ceil(h / TILE));
   const out: { dx: number; dy: number; tx: number; ty: number }[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const tx = c === 0 ? 0 : c === cols - 1 ? 2 : 1;
       const ty = r === 0 ? 0 : r === rows - 1 ? 2 : 1;
-      out.push({ dx: c * TILE, dy: r * TILE, tx, ty });
+      out.push({ dx: c === cols - 1 ? w - TILE : c * TILE, dy: r === rows - 1 ? h - TILE : r * TILE, tx, ty });
     }
   }
   return out;
@@ -295,7 +298,7 @@ export class EmeraldCanvas {
 
   /** A person from their sheet: the standing frame, top-left at (x, y). Faded for a
    *  seat nobody has taken yet. Returns false while the sheet is still loading. */
-  drawSprite(gfx: number, x: number, y: number, alpha = 1, frame = 0): boolean {
+  drawSprite(gfx: number, x: number, y: number, alpha = 1, frame = 0, scale = 1): boolean {
     const info = SHEETS[String(gfx)];
     if (!info) return true;
     let img = this.sheets.get(gfx);
@@ -309,7 +312,7 @@ export class EmeraldCanvas {
     }
     if (!img.complete || img.naturalWidth === 0) return false;
     this.ctx.globalAlpha = alpha;
-    this.ctx.drawImage(img, Math.min(frame, info.frames - 1) * info.w, 0, info.w, info.h, x + this.origin, y, info.w, info.h);
+    this.ctx.drawImage(img, Math.min(frame, info.frames - 1) * info.w, 0, info.w, info.h, x + this.origin, y, info.w * scale, info.h * scale);
     this.ctx.globalAlpha = 1;
     return true;
   }

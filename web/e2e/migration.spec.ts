@@ -62,7 +62,7 @@ test('the host leaves mid-match and the guest picks up the clock', async ({ brow
     // seem to be a way to leave the match"), back to the menu. To the relay that is the
     // host's socket closing, the same as a closed laptop.
     await host.locator('#match-leave').click();
-    await expect(host.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({ timeout: 60_000 });
+    await expect(host.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 60_000 });
     expect(new URL(host.url()).hash, 'out of the room').not.toMatch(/host|join=/);
 
     // The relay moves `host` on the roster and says nothing else about it, so the
@@ -207,7 +207,7 @@ test('a guest promoted while its tab is hidden hands the match on', async ({ bro
     });
 
     await host.locator('#match-leave').click();
-    await expect(host.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({ timeout: 60_000 });
+    await expect(host.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 60_000 });
 
     // The relay hands the room to the hidden guest, which hands it straight on.
     await awake.waitForFunction(() => (window as unknown as BrWindow).__br.director !== undefined, undefined, {
