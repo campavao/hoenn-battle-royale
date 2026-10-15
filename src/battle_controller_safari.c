@@ -489,6 +489,9 @@ static void HandleChooseActionAfterDma3(void)
     {
         gBattle_BG0_X = 0;
         gBattle_BG0_Y = DISPLAY_HEIGHT;
+#if BR
+        BrBattle_MenuBoxOff(TRUE);
+#endif
         gBattlerControllerFuncs[gActiveBattler] = HandleInputChooseAction;
     }
 }

@@ -49,6 +49,12 @@ ENGINE_SYMBOLS = [
     # The overworld's main callback: the page shows the picture past the LCD only while
     # gMain.callback2 is this (POK-319, web/src/field.ts).
     "CB2_Overworld",
+    # ...and the battle's: the phone's stick and A/B stand down while it runs and no
+    # battle script waits on a press (web/src/ui/battlemenu.ts battleWantsNoPad).
+    "BattleMainCB2",
+    # Where the battle's bg0 is scrolled: a screen down for the action menu, two for the
+    # moves, the top (the message box) with gBrHud.noBattleBox (battle-box-off.txt).
+    "gBattle_BG0_Y",
     # What every netlink VBlank's RfuVSync reads (include/br/br_netlink.h, netlink-loop.txt).
     "gRfuLinkStatus",
     # The battle's message box, as the last line was expanded into it (pvp-items.txt).

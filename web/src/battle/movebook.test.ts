@@ -62,10 +62,12 @@ describe("a move, out of the ROM's tables", () => {
   });
 
   it('says it the way the battle does', () => {
-    expect(effectWords(4, 20).text).toBe('SUPER EFF. ×4');
-    expect(effectWords(2, 20).tone).toBe('super');
-    expect(effectWords(0.5, 40).tone).toBe('weak');
-    expect(effectWords(0, 40).text).toBe('NO EFFECT');
-    expect(effectWords(1, 0).text).toBe('NO DAMAGE');
+    expect(effectWords(4, 20)).toEqual({ text: 'Extremely eff.', tone: 'extreme' });
+    expect(effectWords(2, 20)).toEqual({ text: 'Super effective', tone: 'super' });
+    expect(effectWords(0.5, 40)).toEqual({ text: 'Not very eff.', tone: 'weak' });
+    expect(effectWords(0.25, 40)).toEqual({ text: 'Mostly ineff.', tone: 'weak' });
+    expect(effectWords(1, 40)).toEqual({ text: 'Effective', tone: 'normal' });
+    expect(effectWords(0, 40).text).toBe('Has no effect');
+    expect(effectWords(1, 0).text).toBe('No damage');
   });
 });

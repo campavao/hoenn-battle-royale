@@ -1,7 +1,9 @@
 // The phone's battle menu (ui/battlemenu.ts): under the picture, four Emerald windows in
 // place of the stick, A/B and the dock. FIGHT shows the moves with their type, PP and how
 // they land; a hold opens a move's details; a tap attacks, through the ROM's own menus
-// (FIGHT, then the move). RUN greys out in a trainer fight without a POKe DOLL.
+// (FIGHT, then the move). RUN greys out in a trainer fight without a POKe DOLL. The
+// game's own little menu stays off the picture (gBrHud.noBattleBox), and the stick, A/B
+// and the dock stay down while the battle plays out between choices.
 //
 // Solo on a phone: a short Safari opening, the drop onto Route 102, and a wild battle off
 // a patch put a tile west (as play.spec.ts does), with `#testmon`'s TREECKO.
@@ -28,6 +30,17 @@ const MAP_OFFSET = 7;
 const BR_MENU_ACTION = 1;
 const BATTLE_TYPE_TRAINER = 1 << 3;
 const MOVE_POUND = 1;
+// One of each band (Cam's reference, 2026-10-15) against a ROCK/GROUND foe.
+const MOVE_ABSORB = 71; // GRASS x4
+const MOVE_POWDER_SNOW = 181; // ICE x2
+const MOVE_THUNDER_SHOCK = 84; // ELECTRIC x0
+const TYPE_GROUND = 4;
+const TYPE_ROCK = 5;
+// struct BattlePokemon (include/pokemon.h), as ui/battlemenu.ts reads it.
+const MON_SIZE = 0x58;
+const MON_MOVES = 0x0c;
+const MON_TYPES = 0x21;
+const MON_PP = 0x24;
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -110,9 +123,14 @@ test("a phone's battle menu: under the picture, the moves, a hold for details, a
       }
     }
     // The stick, A/B and the dock make way.
-    for (const sel of ['#dpad-surface', '#pad .ab', '#dock']) {
-      expect(await page.locator(sel).evaluate((el) => getComputedStyle(el).visibility), sel).toBe('hidden');
-    }
+    const padDown = async (dock = true) => {
+      for (const sel of dock ? ['#dpad-surface', '#pad .ab', '#dock'] : ['#dpad-surface', '#pad .ab']) {
+        expect(await page.locator(sel).evaluate((el) => getComputedStyle(el).visibility), sel).toBe('hidden');
+      }
+    };
+    await padDown();
+    // ...and the game's own FIGHT/BAG box is off the picture: bg0 on the message box.
+    expect(await read(page, sym.gBattle_BG0_Y, 16), 'the battle box off').toBe(0);
     await expect(page.locator('.bm-cell[data-slot="0"]')).toHaveAttribute('aria-label', 'FIGHT');
     await expect(page.locator('.bm-cell[data-slot="3"]'), 'a wild one: RUN works').toHaveAttribute('aria-disabled', 'false');
 
@@ -154,6 +172,27 @@ test("a phone's battle menu: under the picture, the moves, a hold for details, a
     expect(use.x + use.width).toBeCloseTo(sheet.x + sheet.width, 0);
     await page.locator('.bm-close').tap();
     await expect(page.locator('#battle-menu')).toHaveAttribute('data-mode', 'moves');
+    expect(await read(page, sym.gBattle_BG0_Y, 16), "the move box off").toBe(0);
+
+    // How each lands: a band and a mark per grade. Four moves and a foe's types, for a
+    // look; put back before anything is chosen.
+    const ours = sym.gBattleMons + MON_MOVES;
+    const foeTypes = sym.gBattleMons + MON_SIZE + MON_TYPES;
+    const kept = await Promise.all([0, 1, 2, 3].map((i) => read(page, ours + 2 * i, 16)));
+    const keptTypes = await read(page, foeTypes, 16);
+    const pps = sym.gBattleMons + MON_PP;
+    const keptPp = await read(page, pps, 32);
+    await write(page, pps, 0x0a141405, 32);
+    const show = [MOVE_ABSORB, MOVE_POWDER_SNOW, MOVE_POUND, MOVE_THUNDER_SHOCK];
+    for (const [i, m] of show.entries()) await write(page, ours + 2 * i, m, 16);
+    await write(page, foeTypes, TYPE_ROCK | (TYPE_GROUND << 8), 16);
+    await expect(page.locator('.bm-cell[data-slot="3"]')).toHaveAttribute('aria-label', /^THUNDERSHOCK, /);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(OUT_DIR, 'battle-menu-effects.png') });
+    for (const [i, m] of kept.entries()) await write(page, ours + 2 * i, m, 16);
+    await write(page, foeTypes, keptTypes, 16);
+    await write(page, pps, keptPp, 32);
+    await expect(page.locator('.bm-cell[data-slot="0"]')).toHaveAttribute('aria-label', /^POUND, NORMAL/);
 
     // BACK, and FIGHT again.
     await page.locator('.bm-back').tap();
@@ -165,8 +204,9 @@ test("a phone's battle menu: under the picture, the moves, a hold for details, a
     await page.locator('.bm-cell[data-slot="0"]').tap();
     await expect(menu).toBeHidden();
     await expect.poll(() => read(page, sym.gCurrentMove, 16), { timeout: 10_000 }).toBe(MOVE_POUND);
-    await expect(page.locator('#dpad-surface')).toBeVisible();
-    // In a battle the dock's windows go; the room menu stays.
+    // While it plays out, nothing for the stick or A/B to do: they stay down (Cam,
+    // 2026-10-15). In a battle the dock's windows go; the room menu stays.
+    await padDown(false);
     expect(await page.locator('#hud-party').evaluate((el) => getComputedStyle(el).visibility)).toBe('hidden');
     await expect(page.locator('#hud-menu')).toBeVisible();
     await page.screenshot({ path: path.join(OUT_DIR, 'battle-menu-attack.png') });

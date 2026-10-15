@@ -16,7 +16,7 @@ import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import { PhoneHud, readHudView, type HudWorld } from './ui/phonehud';
-import { BattleMenu, readBattleView } from './ui/battlemenu';
+import { BattleMenu, battleWantsNoPad, readBattleView } from './ui/battlemenu';
 import { PadPrefsControl } from './ui/padprefs';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { battleSeats, cutTo, nameBstart, romReplaying, Spectate } from './match/spectate';
@@ -3747,7 +3747,8 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
 /** The phone's HUD and dock (ui/phonehud.ts), its battle menu (ui/battlemenu.ts) and its
  *  movable pad (ui/padprefs.ts). The HUD reads the ROM every frame while it is on the
  *  glass, and while it is the ROM's corner box stays off (gBrHud.noCorner): the two
- *  would say the same thing twice. */
+ *  would say the same thing twice. So does the battle's own FIGHT/BAG box, under the
+ *  menu's windows (noBattleBox, br_battle.c BrBattle_MenuBoxOff). */
 function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchLayer, rom: Uint8Array | null): void {
   const top = $('#hud') as HTMLElement;
   const pad = $('#pad') as HTMLElement;
@@ -3809,11 +3810,14 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
   // the layout at all; on them, the box itself says (a match, the game on stage).
   const upright = typeof matchMedia === 'function' ? matchMedia('not all and (orientation: landscape) and (max-height: 520px)') : null;
   const computer = typeof matchMedia === 'function' ? matchMedia(DESKTOP) : null;
+  let padOff = false;
   emu.onFrame(() => {
     // On the glass: a match, upright, on a touch screen (index.html shows #hud then).
     const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
     if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown);
     battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables) : null);
+    const noPad = shown && battleWantsNoPad(emu, (n) => symbols.get(n), tables);
+    if (noPad !== padOff) document.body.classList.toggle('battle-no-pad', (padOff = noPad));
     if (!shown) return;
     const view = readHudView(emu, (n) => symbols.get(n), world);
     if (view) hud.update(view);

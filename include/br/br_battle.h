@@ -73,6 +73,10 @@ void BrBattle_DrawClock(void);
 // has no choice menu of its own to count down (POK-231's `clock` for spectators).
 void BrBattle_DrawClockSecs(u8 secs);
 void BrBattle_HideClock(void);
+// The player's controller, the frame a choice menu scrolls onto the screen: on a phone
+// the page draws the menu under the picture (gBrHud.noBattleBox), so the screen keeps the
+// plain message box -- with the prompt in it, when `prompt` (the action menu's).
+void BrBattle_MenuBoxOff(bool8 prompt);
 // battle_main.c: tear a battle down that the engine cannot end on its own, and hand
 // the trainer back to gMain.savedCallback. Only br_netlink.c calls it: a peer that
 // never answered, or one that went out mid-fight.

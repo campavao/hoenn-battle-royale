@@ -1,0 +1,53 @@
+# battle-box-off: gBrHud.noBattleBox (PAGE WRITES, a phone's page sets it with noCorner)
+# keeps the battle's own FIGHT/BAG box and move box off the screen, under the page's big
+# windows (Cam, 2026-10-15): bg0 stays on the message box, with "What will X do?" in it,
+# while the menus still take their keys -- the page's windows choose through them
+# (web/src/touch.ts chooseBattle). Back to 0, the boxes are back.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9 -- the middle grass patch
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrHud+0x17B 1
+# a patch one step west, as menu-byte.txt has it
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 600
+expectge u8 gBattlersCount 2
+tap A
+wait 90
+tap A
+wait 90
+# the action menu takes keys, and the screen shows the message box, not the menu's
+shot action-off
+expect u8 gBrBattle+8 1
+expect u16 gBattle_BG0_Y 0
+tap RIGHT
+wait 6
+expect u8 gActionSelectionCursor 1
+tap LEFT
+wait 6
+expect u8 gActionSelectionCursor 0
+# FIGHT: the move menu, off the screen too
+tap A
+wait 30
+shot moves-off
+expect u8 gBrBattle+8 2
+expect u16 gBattle_BG0_Y 0
+# the page lets go: B, and the action menu that comes back is the ROM's own again
+poke u8 gBrHud+0x17B 0
+tap B
+wait 30
+shot action-on
+expect u8 gBrBattle+8 1
+expect u16 gBattle_BG0_Y 160
+tap A
+wait 30
+shot moves-on
+expect u8 gBrBattle+8 2
+expect u16 gBattle_BG0_Y 320
+say battle box off ok

@@ -11,6 +11,7 @@ export const HUD = {
   OFF_CLOCK_SECS: 0x02, // u16: seconds; the ROM counts it down once per 60 frames
   OFF_EYES: 0x0f, // u8: how many spectators are watching this trainer
   OFF_NO_CORNER: 0x17a, // u8: 1 while the page draws the corner's lines itself (a phone)
+  OFF_NO_BATTLE_BOX: 0x17b, // u8: 1 while the page draws the battle's menus itself (a phone)
 } as const;
 
 /** `gBrHud.left` -- alive count, clamped to a byte (BR_MAX_SEATS is well under 256). */
@@ -31,9 +32,12 @@ export function writeHudEyes(ram: RamAccess, hudBase: number, watchers: number):
 }
 
 /** `gBrHud.noCorner` -- 1 takes the ROM's corner box off the map, while a phone's page
- *  draws the clock, the count and the place over the field itself (ui/phonehud.ts). */
+ *  draws the clock, the count and the place over the field itself (ui/phonehud.ts).
+ *  `noBattleBox` goes with it: the same page draws the battle's menus under the
+ *  picture (ui/battlemenu.ts), so the ROM's FIGHT/BAG and move boxes stay off it. */
 export function writeHudNoCorner(ram: RamAccess, hudBase: number, off: boolean): void {
   ram.write(hudBase + HUD.OFF_NO_CORNER, off ? 1 : 0, 8);
+  ram.write(hudBase + HUD.OFF_NO_BATTLE_BOX, off ? 1 : 0, 8);
 }
 
 // There is deliberately no flashHudFog() here any more (POK-224). The FOG! flash is
