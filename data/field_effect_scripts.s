@@ -74,6 +74,7 @@ gFieldEffectScriptPointers::
 	.4byte gFieldEffectScript_MoveDeoxysRock            @ FLDEFF_MOVE_DEOXYS_ROCK
 .if BR
 	.4byte gFieldEffectScript_BrBootIcon                @ FLDEFF_BR_BOOT_ICON
+	.4byte gFieldEffectScript_BrVsIcon                  @ FLDEFF_BR_VS_ICON
 .endif
 
 gFieldEffectScript_ExclamationMarkIcon1::
@@ -351,5 +352,10 @@ gFieldEffectScript_MoveDeoxysRock::
 @ POK-266: the runner's mark, drawn like the exclamation and the question mark.
 gFieldEffectScript_BrBootIcon::
 	field_eff_callnative FldEff_BrBootIcon
+	field_eff_end
+
+@ POK-372: crossed swords over a trainer in a fight with another trainer.
+gFieldEffectScript_BrVsIcon::
+	field_eff_callnative FldEff_BrVsIcon
 	field_eff_end
 .endif

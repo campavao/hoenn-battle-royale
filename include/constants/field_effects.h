@@ -73,6 +73,9 @@
 // exclamation, a question mark and a heart and nothing that says "gone"; this shares
 // the exclamation's sprite and adds a third frame to it.
 #define FLDEFF_BR_BOOT_ICON              67
+// Crossed swords over a trainer in a fight with another trainer (POK-372): the "!" is
+// the spotter's alone, as it is when a trainer spots the player.
+#define FLDEFF_BR_VS_ICON                68
 #endif
 
 #define FLDEFFOBJ_SHADOW_S              0

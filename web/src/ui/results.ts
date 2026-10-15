@@ -7,6 +7,10 @@
 // it", and the old panel opened the moment the `win` landed, covering the parade on a
 // phone. ParadeHold is that wait.
 //
+// A watcher's come after the fight on their screen (POK-365): the last fight of a match
+// is settled before its replay has played, and the results used to cut it off with
+// "WINNER BRENDAN" before the watcher saw who won. ReplayHold is that wait.
+//
 // The words and the wait are plain functions and a class on a clock, so results.test.ts
 // can pin them without a page.
 import { ordinal } from '../match/career';
@@ -137,6 +141,78 @@ export class ParadeHold {
   reset(): void {
     this.seenAt = null;
     this.waitingSince = null;
+  }
+}
+
+/** Holds a watcher's results while their ROM is still replaying a fight (POK-365), up to
+ *  `maxMs` from the first ask, and draws them (`onOver`) the moment it stops. A watcher
+ *  whose replay is not on yet gives it `startMs` to come on: the `win` can beat the
+ *  `bstart` to the ROM. Nobody else waits at all. Once let go it stays let go until
+ *  `reset`: a replay the watcher steps into after the results are up does not take them
+ *  down again. */
+export class ReplayHold {
+  private since: number | null = null;
+  private seen = false;
+  /** Whether the first ask found this page watching somebody: only a watcher gets the start window. */
+  private watcher = false;
+  private released = false;
+  private poll: ReturnType<typeof setInterval> | null = null;
+
+  constructor(
+    private readonly opts: {
+      /** Our ROM is playing a fight back (gBrSpectate.watching). */
+      replaying(): boolean;
+      /** This page is out and following a trainer, so a replay may still come on. */
+      watching(): boolean;
+      maxMs: number;
+      /** How long a replay that has not started is waited for. */
+      startMs: number;
+      pollMs: number;
+      onOver(): void;
+      now?(): number;
+    },
+  ) {}
+
+  /** Still waiting on a replay: the grace's exit must not take the page away under it. */
+  get waiting(): boolean {
+    return this.poll !== null;
+  }
+
+  /** Whether the results wait. The first `true` starts the poll that ends the wait. */
+  holds(): boolean {
+    if (this.released) return false;
+    const now = this.opts.now ? this.opts.now() : performance.now();
+    if (this.since === null) {
+      this.since = now;
+      this.watcher = this.opts.watching();
+    }
+    const on = this.opts.replaying();
+    if (on) this.seen = true;
+    const gone = !on && (this.seen || !this.watcher || now - this.since >= this.opts.startMs);
+    if (gone || now - this.since >= this.opts.maxMs) {
+      this.release();
+      return false;
+    }
+    this.poll ??= setInterval(() => {
+      if (this.holds()) return;
+      this.opts.onOver();
+    }, this.opts.pollMs);
+    return true;
+  }
+
+  /** The next match's results wait for the next replay. */
+  reset(): void {
+    this.release();
+    this.released = false;
+    this.seen = false;
+    this.watcher = false;
+    this.since = null;
+  }
+
+  private release(): void {
+    this.released = true;
+    if (this.poll !== null) clearInterval(this.poll);
+    this.poll = null;
   }
 }
 

@@ -49,7 +49,7 @@ import {
 } from './match/room';
 import { AwayDoor } from './match/away';
 import { Stage, type DrawnScreen } from './ui/stage';
-import { ParadeHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
+import { ParadeHold, ReplayHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
 import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
 import { KeyLegend } from './ui/keys';
 import { stageKey } from './ui/roomkeys';
@@ -1696,6 +1696,10 @@ function renderResults(
  *  only time the player has to read it. */
 const SOLO_END_GRACE_MS = 8_000;
 
+/** How long a watcher's results wait for a replay that has not come on yet (POK-365):
+ *  the ROM reads a `bstart` off the ring a second or so after the page hands it over. */
+const REPLAY_START_MS = 2_000;
+
 /** `gBrMatch.phase` once the winner's Hall of Fame has finished and the ROM is back on
  *  the map (include/br/br_match.h). The one byte the page reads out of the match struct:
  *  everything else it needs comes through the mailbox. */
@@ -1940,6 +1944,17 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     pollMs: SOLO_PARADE_POLL_MS,
     paradeDone: matchBase !== undefined ? paraded.finished : undefined,
   });
+  /** Out and watching a bot's fight, the results wait for it to finish (POK-365). */
+  const spectateBase = symbols?.get('gBrSpectate');
+  const replay = new ReplayHold({
+    replaying: () => romWatching(emu, spectateBase) != null,
+    // Solo's watching is the ROM's own (no page-side follow), so only a replay already on holds.
+    watching: () => false,
+    maxMs: SOLO_WIN_GRACE_MAX_MS,
+    startMs: REPLAY_START_MS,
+    pollMs: SOLO_PARADE_POLL_MS,
+    onOver: () => drawResults(),
+  });
   /** The career line the match produced, for the results. */
   let career = '';
   let host: HostRole | null = null;
@@ -1976,7 +1991,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       // the results up, MAIN MENU is the exit and the grace leaves them be (POK-371).
       exit: () => {
         drawResults();
-        if (!resultsShowing()) leaveSolo();
+        if (!resultsShowing() && !replay.waiting) leaveSolo();
       },
     },
     {
@@ -1990,7 +2005,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     },
   );
   stallLog = session.log;
-  const drawResults = (): void =>
+  const drawResults = (): void => {
+    const mine = session.results.forSeat(0, performance.now());
     renderResults(
       0,
       roster,
@@ -2003,11 +2019,12 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       },
       {
         career,
-        held: paraded.holds(session.results.forSeat(0, performance.now()).winner, 0),
+        held: paraded.holds(mine.winner, 0) || (mine.ended && replay.holds()),
         // No room to go back to: the lobby, now or when the grace is up.
         again: { label: 'MAIN MENU', id: 'results-lobby', onPress: leaveSolo },
       },
     );
+  };
   // The seed main() wrote into the ROM before its boot, so the opening's cell is dealt off
   // it too (POK-327).
   const plan = dealPlan(session.match, [0], 0, false, () => seed);
@@ -2589,6 +2606,16 @@ function wireRoom(
     giveUpMs: WIN_GRACE_MAX_MS - END_GRACE_MS - 2 * PARADE_POLL_MS,
     onParaded: () => drawResults(),
   });
+  /** Out and watching, the results wait for the fight on screen (POK-365). */
+  const gBrSpectate = symbols?.get('gBrSpectate');
+  const replay = new ReplayHold({
+    replaying: () => romWatching(emu, gBrSpectate) != null,
+    watching: () => spectate.watchingSeat() !== null,
+    maxMs: WIN_GRACE_MAX_MS,
+    startMs: REPLAY_START_MS,
+    pollMs: PARADE_POLL_MS,
+    onOver: () => drawResults(),
+  });
   /** The career line the match produced, for the results. */
   let career = '';
   /** The results, drawn from the match's books over the room's roster. */
@@ -2596,6 +2623,7 @@ function wireRoom(
     // A dead end's notice is the last screen for this room: nothing is drawn over it.
     if (!bridge || dead.reached) return;
     const seat = bridge.seat;
+    const mine = session.results.forSeat(seat, performance.now());
     renderResults(
       seat,
       bridge.roster,
@@ -2608,7 +2636,7 @@ function wireRoom(
       },
       {
         career,
-        held: paraded.holds(session.results.forSeat(seat, performance.now()).winner, seat),
+        held: paraded.holds(mine.winner, seat) || (mine.ended && replay.holds()),
         again: { label: 'PLAY AGAIN', id: 'play-again', disabled: returning, onPress: () => void returnToRoom() },
         menu: () => backToLobby(),
       },
@@ -2641,7 +2669,7 @@ function wireRoom(
       // them be (POK-371); the room's next START still takes this page into it.
       exit: () => {
         drawResults();
-        if (!resultsShowing()) void returnToRoom();
+        if (!resultsShowing() && !replay.waiting) void returnToRoom();
       },
     },
     {
@@ -2962,6 +2990,7 @@ function wireRoom(
     session.endMatch();
     countdown.cancel();
     paraded.reset();
+    replay.reset();
     if (bridge) {
       bridge.endMatch(); // its roster, and what it owed the room of this match
       if (controls.roster) bridge.roster.applyRoster(controls.roster);
@@ -2997,6 +3026,8 @@ function wireRoom(
       // Last match's champion is not this match's (POK-243). PLAY AGAIN used to reload
       // the page, which cleared this for free.
       session.forgetResult();
+      // ...and its results' wait on a replay: a redraw during the reboot read no replay.
+      replay.reset();
       // Whoever we were watching is not in a match any more.
       for (const m of spectate.follow(null)) bridge?.pushToRom(m);
       setInMatch(false);

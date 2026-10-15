@@ -24,6 +24,7 @@ u8 FldEff_ExclamationMarkIcon(void);
 u8 FldEff_QuestionMarkIcon(void);
 #if BR
 u8 FldEff_BrBootIcon(void);
+u8 FldEff_BrVsIcon(void);
 #endif
 u8 FldEff_HeartIcon(void);
 u8 GetCurrentApproachingTrainerObjectEventId(void);

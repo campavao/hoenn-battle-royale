@@ -10,9 +10,13 @@ wait 400
 # the eyeline only fires in a started match (gBrMatch.phase = BR_PHASE_PLAY)
 poke u8 gBrMatch 2
 poke u8 gBrNetlink+8 1
+# we face them, so ours is the walk-up (POK-373) and it starts at once
+hold RIGHT 1
+wait 20
 pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
 poke u16 gBrMailbox+0x0C 1
-wait 900
+# the walk-up (POK-373) puts the fight a step later
+wait 1000
 expect u16 gBrBattle+4 0
 # a POKe DOLL in the bag: zero the save encryption key, then POKe DOLL (item 0x50) x1 in slot 0
 poke u32 *gSaveBlock2Ptr+0xAC 0

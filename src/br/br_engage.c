@@ -57,11 +57,15 @@ static void ReportBusy(void)
 {
     u8 kind, buf[2];
 
+    // An engage's freeze, or the walk-up to a fight (POK-373), is not a menu: a "?" over
+    // us would say we walked off. Nor is the walk-up the fight yet: the pair's own
+    // TickWait and settle read BR_BUSY_BATTLE as "taken by somebody else".
     if (gMain.inBattle)
         kind = BR_BUSY_BATTLE;
     else if (gMain.callback2 != CB2_Overworld
-          || (ArePlayerFieldControlsLocked() && gBrEngage.waitSeat == 0xFF && gBrEngage.settleSeat == 0xFF))
-        kind = BR_BUSY_MENU; // an engage's freeze is not a menu: a "?" over us would say we walked off
+          || (ArePlayerFieldControlsLocked() && gBrEngage.waitSeat == 0xFF && gBrEngage.settleSeat == 0xFF
+              && gBrNetlink.startState == 0))
+        kind = BR_BUSY_MENU;
     else
         kind = BR_BUSY_MAP;
     if (kind != sBusyKind)
