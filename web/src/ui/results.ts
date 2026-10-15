@@ -145,13 +145,16 @@ export class ParadeHold {
 }
 
 /** Holds a watcher's results while their ROM is still replaying a fight (POK-365), up to
- *  `maxMs` from the first ask, and draws them (`onOver`) the moment it stops. A replay
- *  not on yet gets `startMs` to come on: the `win` can beat the `bstart` to the ROM. Once
- *  let go it stays let go until `reset`: a replay the watcher steps into after the
- *  results are up does not take them down again. */
+ *  `maxMs` from the first ask, and draws them (`onOver`) the moment it stops. A watcher
+ *  whose replay is not on yet gives it `startMs` to come on: the `win` can beat the
+ *  `bstart` to the ROM. Nobody else waits at all. Once let go it stays let go until
+ *  `reset`: a replay the watcher steps into after the results are up does not take them
+ *  down again. */
 export class ReplayHold {
   private since: number | null = null;
   private seen = false;
+  /** Whether the first ask found this page watching somebody: only a watcher gets the start window. */
+  private watcher = false;
   private released = false;
   private poll: ReturnType<typeof setInterval> | null = null;
 
@@ -159,6 +162,8 @@ export class ReplayHold {
     private readonly opts: {
       /** Our ROM is playing a fight back (gBrSpectate.watching). */
       replaying(): boolean;
+      /** This page is out and following a trainer, so a replay may still come on. */
+      watching(): boolean;
       maxMs: number;
       /** How long a replay that has not started is waited for. */
       startMs: number;
@@ -177,10 +182,13 @@ export class ReplayHold {
   holds(): boolean {
     if (this.released) return false;
     const now = this.opts.now ? this.opts.now() : performance.now();
-    this.since ??= now;
+    if (this.since === null) {
+      this.since = now;
+      this.watcher = this.opts.watching();
+    }
     const on = this.opts.replaying();
     if (on) this.seen = true;
-    const gone = !on && (this.seen || now - this.since >= this.opts.startMs);
+    const gone = !on && (this.seen || !this.watcher || now - this.since >= this.opts.startMs);
     if (gone || now - this.since >= this.opts.maxMs) {
       this.release();
       return false;
@@ -197,6 +205,7 @@ export class ReplayHold {
     this.release();
     this.released = false;
     this.seen = false;
+    this.watcher = false;
     this.since = null;
   }
 

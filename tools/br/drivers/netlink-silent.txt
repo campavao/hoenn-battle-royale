@@ -13,6 +13,9 @@ pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
 # No `poke u8 gBrNetlink+8 1` here: no loopback, no peer.
+# we face them, so ours is the walk-up (POK-373) and it starts at once
+hold RIGHT 1
+wait 20
 pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
 poke u16 gBrMailbox+0x0C 1
 wait 30

@@ -1948,6 +1948,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   const spectateBase = symbols?.get('gBrSpectate');
   const replay = new ReplayHold({
     replaying: () => romWatching(emu, spectateBase) != null,
+    // Solo's watching is the ROM's own (no page-side follow), so only a replay already on holds.
+    watching: () => false,
     maxMs: SOLO_WIN_GRACE_MAX_MS,
     startMs: REPLAY_START_MS,
     pollMs: SOLO_PARADE_POLL_MS,
@@ -2608,6 +2610,7 @@ function wireRoom(
   const gBrSpectate = symbols?.get('gBrSpectate');
   const replay = new ReplayHold({
     replaying: () => romWatching(emu, gBrSpectate) != null,
+    watching: () => spectate.watchingSeat() !== null,
     maxMs: WIN_GRACE_MAX_MS,
     startMs: REPLAY_START_MS,
     pollMs: PARADE_POLL_MS,

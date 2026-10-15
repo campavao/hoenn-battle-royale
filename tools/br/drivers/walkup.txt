@@ -1,16 +1,20 @@
 # walkup: the challenger walks up before a fight between two people (POK-373). Cam's
 # 2026-10-14 play-test: "the person who looks at the other player moves towards them and
 # once they're right up next to them then it starts the battle". The engage.txt setup:
-# seat 1 three tiles east of us, facing us. The "!" goes up over us, then we walk the
-# eyeline to the cell next to them, and only then does the fight take the screen.
+# seat 1 three tiles east of us, but here we are the one looking: we face east at them,
+# they face south. The "!" goes up over us, then we walk the eyeline to the cell next to
+# them, and only then does the fight take the screen. walkup-looked.txt is the other way.
 drain gBrMailbox
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
 poke u8 gBrNetlink+8 1
-# seat 1 at (15,16) facing WEST on Littleroot; we stand at (12,16)
-pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+# we turn EAST where we stand at (12,16); seat 1 at (15,16) facing SOUTH on Littleroot
+hold RIGHT 1
+wait 20
+expect u8 gBrOwnPos+6 4
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 01 01 01
 poke u16 gBrMailbox+0x0C 1
 wait 20
 expect u16 gBrOwnPos+2 12

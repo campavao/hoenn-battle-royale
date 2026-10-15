@@ -1,0 +1,40 @@
+# walkup-looked: the walker is the one who looked, not the lower seat (POK-373 review).
+# Seat 1 three tiles east of us faces us; we face south, away. We are the lower seat,
+# so ours is the challenge, but theirs was the look: the "!" goes over their ghost and
+# they walk, while we wait for them to arrive and turn to meet them.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# seat 1 at (15,16) facing WEST on Littleroot; we stand at (12,16) facing south
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 03 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 20
+expect u16 gBrOwnPos+2 12
+expect u8 gBrOwnPos+6 1
+# BR_ENGAGE_WAIT, then the link opens with us as id 0: but we stay where we are
+wait 120
+expect u8 gBrNetlink 1
+expect u8 gBrNetlink+1 0
+shot bubble
+wait 100
+expect u16 gBrOwnPos+2 12
+expect u8 gBrOwnPos+6 1
+expect u32 gMain+4 CB2_Overworld+1
+shot waiting
+# their walk: two steps WEST to (13,16)
+pokebytes gDecompressionBuffer 01 03 0E 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+pokebytes gDecompressionBuffer 01 03 0D 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 40
+expect u16 gBrSeats+20 13
+# beside us now, and we turn to meet them (DIR_EAST, 4) from where we stood
+expect u16 gBrOwnPos+2 12
+expect u8 gBrOwnPos+6 4
+shot met
+wait 640
+shot vs
+say walkup looked ok
