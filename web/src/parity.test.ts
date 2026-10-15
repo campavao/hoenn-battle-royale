@@ -928,8 +928,8 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(pinned('sizeof gBattleMons[0]'), 'src/br/br_pins.c').toBe(bmenu.MON_SIZE);
     expect(bmenu.NICKNAME_SIZE).toBe(define(constantsGlobalH, 'POKEMON_NAME_LENGTH') + 1);
     const bit = (n: string) => 1 << Number(new RegExp(`#define\\s+${n}\\s+\\(1 << (\\d+)\\)`).exec(battleConstH)![1]);
-    expect([bmenu.BATTLE_TYPE_LINK, bmenu.BATTLE_TYPE_TRAINER, bmenu.BATTLE_TYPE_SAFARI]).toEqual(
-      ['BATTLE_TYPE_LINK', 'BATTLE_TYPE_TRAINER', 'BATTLE_TYPE_SAFARI'].map(bit),
+    expect([bmenu.BATTLE_TYPE_LINK, bmenu.BATTLE_TYPE_TRAINER, bmenu.BATTLE_TYPE_SAFARI, bmenu.BATTLE_TYPE_RECORDED]).toEqual(
+      ['BATTLE_TYPE_LINK', 'BATTLE_TYPE_TRAINER', 'BATTLE_TYPE_SAFARI', 'BATTLE_TYPE_RECORDED'].map(bit),
     );
     const pocket = watch('BagPocket', natural(itemH, 'BagPocket'));
     expect([0, phone.POCKET_CAPACITY]).toEqual([pocket.at.itemSlots, pocket.at.capacity]);

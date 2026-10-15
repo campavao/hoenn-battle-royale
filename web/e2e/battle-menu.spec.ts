@@ -95,11 +95,9 @@ test("a phone's battle menu: under the picture, the moves, a hold for details, a
     const r = await until(page, sym, 'a wild battle', (x) => x.inBattle, 10_000);
     expect(r.battleType & BATTLE_TYPE_TRAINER, 'a wild one').toBe(0);
 
-    // Through the intro to the action menu: the windows come up.
-    for (let i = 0; i < 40 && (await read(page, sym.gBrBattle + 8, 8)) !== BR_MENU_ACTION; i++) {
-      await tap(page, 'x');
-      await page.waitForTimeout(300);
-    }
+    // Through the intro to the action menu, with no A: on a phone the battle's text turns
+    // its own pages (BrBattle_PhoneAutoScroll). The windows come up.
+    await expect.poll(() => read(page, sym.gBrBattle + 8, 8), { timeout: 30_000 }).toBe(BR_MENU_ACTION);
     const menu = page.locator('#battle-menu');
     await expect(menu).toBeVisible();
     await page.waitForTimeout(500);

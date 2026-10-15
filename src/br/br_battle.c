@@ -114,6 +114,21 @@ void BrBattle_MenuBoxOff(bool8 prompt)
         BattlePutTextOnWindow(gDisplayedStringBattle, B_WIN_MSG);
 }
 
+void BrBattle_MenuBoxFollow(u16 menuY)
+{
+    gBattle_BG0_Y = gBrHud.noBattleBox ? 0 : menuY;
+}
+
+// A wild or a trainer battle's "\p" waits for A (its next page, "X defeated Y!", the
+// prize money) unless autoScroll is on, which pret sets only over a link. The page has
+// no A to press there any more, so on a phone it is on: a page holds for the room's TEXT
+// (BrBattle_AutoScrollFrames), then turns.
+void BrBattle_PhoneAutoScroll(void)
+{
+    if (gBrHud.noBattleBox)
+        gTextFlags.autoScroll = TRUE;
+}
+
 void BrBattle_DrawClock(void)
 {
     u16 remain = BR_SHOT_CLOCK_FRAMES - gBrBattle.shotFrames;

@@ -36,6 +36,8 @@ export const NICKNAME_SIZE = 11;
 export const BATTLE_TYPE_LINK = 1 << 1;
 export const BATTLE_TYPE_TRAINER = 1 << 3;
 export const BATTLE_TYPE_SAFARI = 1 << 7;
+/** A replay: a spectator's, whose stick still flips who they watch (app.ts watchStepKey). */
+export const BATTLE_TYPE_RECORDED = 1 << 24;
 export const ITEM_POKE_DOLL = 80;
 const MAX_MON_MOVES = 4;
 
@@ -136,7 +138,8 @@ export const ASKS_PAD: ReadonlySet<number> = new Set([
  *  2026-10-15: "we shouldn't need them after all our UI changes"): the choices are the
  *  windows, and the text runs on by itself (br_battle.c BrBattle_AutoScrollFrames). The
  *  BAG and the party, which are screens of their own (callback2 is not BattleMainCB2),
- *  and a battle script waiting on a press (ASKS_PAD) keep them. */
+ *  a battle script waiting on a press (ASKS_PAD), and a spectator's replay, where LEFT
+ *  and RIGHT pick who to watch, keep them. */
 export function battleWantsNoPad(emu: BattleRead, sym: (name: string) => number | undefined, rom: Rom | null): boolean {
   const main = sym('gMain');
   const scene = sym('BattleMainCB2');
@@ -144,6 +147,8 @@ export function battleWantsNoPad(emu: BattleRead, sym: (name: string) => number 
   if (main === undefined || scene === undefined || instr === undefined || !rom) return false;
   if (!(emu.read(main + MAIN_IN_BATTLE_BYTE, 8) & MAIN_IN_BATTLE_BIT)) return false;
   if ((emu.read(main + MAIN_CALLBACK2, 32) & ~1) !== (scene & ~1)) return false;
+  const flags = sym('gBattleTypeFlags');
+  if (flags === undefined || emu.read(flags, 32) & BATTLE_TYPE_RECORDED) return false;
   const at = emu.read(instr, 32) - ROM_BASE;
   return !(at >= 0 && at < rom.bytes.length && ASKS_PAD.has(rom.bytes[at]));
 }

@@ -77,6 +77,13 @@ void BrBattle_HideClock(void);
 // the page draws the menu under the picture (gBrHud.noBattleBox), so the screen keeps the
 // plain message box -- with the prompt in it, when `prompt` (the action menu's).
 void BrBattle_MenuBoxOff(bool8 prompt);
+// ...and every frame the menu is up, so a page that comes or goes mid-menu (the phone
+// turned on its side) takes the box off or puts it back: bg0 at `menuY`, or at the top.
+void BrBattle_MenuBoxFollow(u16 menuY);
+// BattlePutTextOnWindow, after pret's own choice: on a phone (gBrHud.noBattleBox) the
+// battle's text runs on by itself in every battle, as a link battle's does -- the page
+// takes the stick and A/B away while the battle plays (web/src/ui/battlemenu.ts).
+void BrBattle_PhoneAutoScroll(void);
 // battle_main.c: tear a battle down that the engine cannot end on its own, and hand
 // the trainer back to gMain.savedCallback. Only br_netlink.c calls it: a peer that
 // never answered, or one that went out mid-fight.

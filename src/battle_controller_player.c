@@ -279,6 +279,7 @@ static void HandleInputChooseAction(void)
         return;
     }
     gBrBattle.menu = BR_MENU_ACTION;
+    BrBattle_MenuBoxFollow(DISPLAY_HEIGHT);
     BrBattle_DrawClock();
 
 #endif
@@ -541,6 +542,7 @@ static void HandleInputChooseMove(void)
         return;
     }
     gBrBattle.menu = BR_MENU_MOVE;
+    BrBattle_MenuBoxFollow(DISPLAY_HEIGHT * 2);
     BrBattle_DrawClock();
 
 #endif
