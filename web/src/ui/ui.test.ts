@@ -31,6 +31,14 @@ describe('the window frame', () => {
     expect(tiles[11]).toEqual({ dx: 24, dy: 16, tx: 2, ty: 2 });
   });
 
+  it('keeps the far edges on a box that is off the 8-px grid, with no gap before them', () => {
+    const tiles = frameTiles(32, 124);
+    const bottom = tiles.filter((t) => t.ty === 2);
+    expect(bottom.every((t) => t.dy === 116)).toBe(true);
+    const lastMiddle = Math.max(...tiles.filter((t) => t.ty === 1).map((t) => t.dy));
+    expect(lastMiddle + 8).toBeGreaterThanOrEqual(116);
+  });
+
   it('a box is at least two tiles each way', () => {
     expect(frameTiles(8, 8)).toHaveLength(4);
   });
@@ -106,9 +114,9 @@ describe('the drawn screens (POK-320)', () => {
     const { wardrobeNote } = await import('./screens');
     expect(wardrobeNote(0, 0, 0)).toBe('your sprite');
     expect(wardrobeNote(1, 0, 0)).toBe('press WEAR');
-    expect(wardrobeNote(2, 0, 0)).toBe('LOCKED -- 1 win');
-    expect(wardrobeNote(4, 2, 0)).toBe('LOCKED -- 3 wins');
-    expect(wardrobeNote(4, 5, 0)).toBe('press WEAR');
+    expect(wardrobeNote(4, 0, 0)).toBe('LOCKED -- 1 win');
+    expect(wardrobeNote(6, 2, 0)).toBe('LOCKED -- 4 wins');
+    expect(wardrobeNote(6, 4, 0)).toBe('press WEAR');
   });
 
   it('shows the stage at whole pixels once it can afford two, and at the phone’s own fit below', async () => {

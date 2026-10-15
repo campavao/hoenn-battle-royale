@@ -14,8 +14,10 @@ import {
   peekSkin,
   recordMatch,
   saveProfile,
+  RETIRED_SKINS,
   SKIN_UNLOCK_WINS,
   SKINS,
+  WARDROBE,
   skinNote,
   skinUnlocked,
 } from './career';
@@ -42,10 +44,10 @@ describe('the profile', () => {
   it('is kept beside the record, so one read is the lot', () => {
     const s = store();
     recordMatch(1, s);
-    saveProfile({ name: 'wally', skin: 2 }, s);
+    saveProfile({ name: 'wally', skin: 4 }, s);
     const career = loadCareer(s);
     expect(career.name).toBe('WALLY');
-    expect(career.skin).toBe(2);
+    expect(career.skin).toBe(4);
     expect(career.wins).toBe(1); // the record survived the profile write
   });
 
@@ -59,6 +61,7 @@ describe('the profile', () => {
   it('cycles the skins and wraps', () => {
     expect(nextSkin(0)).toBe(1);
     expect(nextSkin(SKINS.length - 1)).toBe(0);
+    expect(nextSkin(1)).toBe(4); // past the retired rivals
   });
 
   it('survives a store holding nonsense', () => {
@@ -79,15 +82,25 @@ describe('the wardrobe', () => {
     expect(skinUnlocked(3, 0)).toBe(false);
   });
 
-  it('unlocks each rival at its own win threshold, not before', () => {
-    const rivalBrendan = SKIN_UNLOCK_WINS[2];
-    expect(skinUnlocked(2, rivalBrendan - 1)).toBe(false);
-    expect(skinUnlocked(2, rivalBrendan)).toBe(true);
+  it('never unlocks the retired rivals, however many wins (POK-336)', () => {
+    expect(skinUnlocked(2, 1000)).toBe(false);
+    expect(skinUnlocked(3, 1000)).toBe(false);
+    expect(WARDROBE).not.toContain(2);
+    expect(WARDROBE).not.toContain(3);
   });
 
   it('names the next locked skin and how many wins it takes, or nothing once full', () => {
-    expect(nextLockedSkin(0)?.skin).toBe(2);
-    expect(nextLockedSkin(SKIN_UNLOCK_WINS[SKINS.length - 1])).toBeNull();
+    expect(nextLockedSkin(0)).toEqual({ skin: 4, wins: 1 });
+    expect(nextLockedSkin(1)).toEqual({ skin: 5, wins: 2 });
+    expect(nextLockedSkin(25)).toBeNull();
+  });
+
+  it('dresses a career that wore a rival in the base sprite it copies', () => {
+    const s = store();
+    s.setItem('hbr:career', JSON.stringify({ matches: 4, wins: 3, skin: 3 }));
+    expect(loadCareer(s).skin).toBe(1);
+    s.setItem('hbr:career', JSON.stringify({ matches: 4, wins: 3, skin: 2 }));
+    expect(loadCareer(s).skin).toBeUndefined(); // BRENDAN, the default
   });
 
   it('cycles past a locked skin rather than landing on it', () => {
@@ -98,13 +111,14 @@ describe('the wardrobe', () => {
 
   it('refuses to save a skin the win count has not earned', () => {
     const s = store();
-    saveProfile({ skin: 3 }, s); // 0 wins: RIVAL MAY is locked
+    saveProfile({ skin: 5 }, s); // 0 wins: BEAUTY is locked
     expect(loadCareer(s).skin).toBeUndefined();
     recordMatch(1, s);
-    recordMatch(1, s);
-    recordMatch(1, s); // 3 wins: RIVAL MAY unlocks
-    saveProfile({ skin: 3 }, s);
-    expect(loadCareer(s).skin).toBe(3);
+    saveProfile({ skin: 5 }, s); // 1 win: HIKER, not BEAUTY yet
+    expect(loadCareer(s).skin).toBeUndefined();
+    recordMatch(1, s); // 2 wins: BEAUTY unlocks
+    saveProfile({ skin: 5 }, s);
+    expect(loadCareer(s).skin).toBe(5);
   });
 });
 
@@ -188,7 +202,8 @@ describe('the career as a file', () => {
     expect(SKINS[locked]).toBeDefined();
   });
 });
-
+
+
 
 // POK-282. Cam: "I should be able to pick kind of like any sprites -- the way Kanto
 // Battle Royale has it, the amount of wins you get means you get more sprites. But in
@@ -212,27 +227,28 @@ describe('the wardrobe (POK-282)', () => {
     expect(SKIN_UNLOCK_WINS.length).toBe(SKINS.length);
   });
 
-  it('unlocks a male and a female together', () => {
+  it('keeps sprites in pairs, a man then a woman', () => {
     // A skin index IS the gender on the wire -- br_netlink.c reads the peer's as
-    // `skin & 1` -- so an odd number of sprites, or a rung that opens one of a pair,
-    // hands somebody a wardrobe that cannot dress them.
+    // `skin & 1` -- so the list stays even, appended in pairs.
     expect(SKINS.length % 2).toBe(0);
-    for (let i = 0; i < SKINS.length; i += 2) {
-      expect(SKIN_UNLOCK_WINS[i]).toBe(SKIN_UNLOCK_WINS[i + 1]);
-    }
   });
 
-  it('never gets cheaper further down the list', () => {
-    for (let i = 1; i < SKIN_UNLOCK_WINS.length; i++) {
-      expect(SKIN_UNLOCK_WINS[i]).toBeGreaterThanOrEqual(SKIN_UNLOCK_WINS[i - 1]);
+  it('staggers each pair, the man a rung before the woman (POK-338)', () => {
+    const prices = WARDROBE.map((i) => SKIN_UNLOCK_WINS[i]);
+    expect(prices).toEqual([0, 0, 1, 2, 4, 5, 9, 10, 13, 15, 18, 20, 23, 25]);
+  });
+
+  it('never gets cheaper further down the wardrobe', () => {
+    for (let i = 1; i < WARDROBE.length; i++) {
+      expect(SKIN_UNLOCK_WINS[WARDROBE[i]]).toBeGreaterThanOrEqual(SKIN_UNLOCK_WINS[WARDROBE[i - 1]]);
     }
   });
 
   it('keeps the first four where they were, because a career file stores the index', () => {
-    // The NAMES and their positions are what a saved career depends on. The price is not:
-    // RIVAL MAY came down from 3 wins to 1 so the pair opens together, and a price that
-    // only ever falls cannot take a sprite off somebody already wearing it.
+    // The NAMES and their positions are what a saved career depends on, the retired
+    // rivals' included: they keep their index and are only out of the wardrobe.
     expect(SKINS.slice(0, 4)).toEqual(['BRENDAN', 'MAY', 'RIVAL BRENDAN', 'RIVAL MAY']);
+    expect([...RETIRED_SKINS]).toEqual([2, 3]);
     expect(SKIN_UNLOCK_WINS.slice(0, 2)).toEqual([0, 0]);
   });
 
@@ -246,19 +262,19 @@ describe('the wardrobe (POK-282)', () => {
   it('browses every sprite, locked or not, and comes back round', () => {
     const seen = new Set<number>();
     let at = 0;
-    for (let i = 0; i < SKINS.length; i++) {
+    for (let i = 0; i < WARDROBE.length; i++) {
       at = peekSkin(at);
       seen.add(at);
     }
-    expect(seen.size).toBe(SKINS.length);
+    expect(seen.size).toBe(WARDROBE.length);
     expect(at).toBe(0);
   });
 
   it('says what a locked one costs, and says nothing about one you own', () => {
     expect(skinNote(0, 0)).toBe('your sprite');
-    expect(skinNote(2, 0)).toBe('LOCKED -- 1 win');
-    expect(skinNote(4, 0)).toBe('LOCKED -- 3 wins');
-    expect(skinNote(3, 1)).toBe('your sprite');
+    expect(skinNote(4, 0)).toBe('LOCKED -- 1 win');
+    expect(skinNote(5, 0)).toBe('LOCKED -- 2 wins');
+    expect(skinNote(4, 1)).toBe('your sprite');
   });
 
   it('still refuses to WEAR one that has not been earned', () => {
@@ -268,7 +284,8 @@ describe('the wardrobe (POK-282)', () => {
     expect(loadCareer(s).skin).toBeUndefined();
   });
 });
-
+
+
 
 // POK-283. Cam: "it should have three voices: your intro text, your win text -- what you
 // say when you win -- and your lose text. And these should be a big list of essentially

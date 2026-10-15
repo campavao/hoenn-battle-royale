@@ -7,14 +7,16 @@
 //
 // What the play-test found next is that nothing took you out of the match at all: the
 // results panel was drawn over a ROM that went on walking Hoenn, and pressing PLAY AGAIN
-// was the only thing that ended it. So the exit is now a grace timer on every client and
-// PLAY AGAIN is a press of the same funnel.
+// was the only thing that ended it. So the exit became a grace timer on every client and
+// PLAY AGAIN a press of the same funnel -- and then the 2026-10-14 play-test found the
+// timer took the results away before they were read (POK-371). The grace now ends ON the
+// results: they stay until PLAY AGAIN or MAIN MENU is pressed.
 //
-// This runs a whole match at `#fast` with one human and bots, waits for the result, and
-// asserts -- WITHOUT clicking anything -- that the client comes out of the match by
-// itself, into the same room, with its code, its roster and its socket, on a ROM that
-// really did power-cycle and land in Littleroot rather than on Emerald's moving van.
-import { test, expect } from '@playwright/test';
+// This runs a whole match at `#fast` with one human and bots, waits for the result,
+// checks it stays up, presses PLAY AGAIN, and asserts the client comes out of the match
+// into the same room, with its code, its roster and its socket, on a ROM that really did
+// power-cycle and land in Littleroot rather than on Emerald's moving van.
+import { test, expect, type Browser } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,7 +68,11 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
   expect(round.seats, 'bots filled the room').toBeGreaterThan(1);
   expect(outs.size, 'every bot that went out is in the host\'s own log').toBeGreaterThanOrEqual(round.seats - 1);
 
-  // Nothing is pressed from here. The grace is what has to move us.
+  // Well past the grace (four seconds; a champion's parade is over already), the results
+  // are still up: nothing has been pressed (POK-371).
+  await page.waitForTimeout(8_000);
+  await expect(page.locator('#results-panel'), 'the results wait for a press').toBeVisible();
+  await page.locator('#play-again').click();
   await expect(page.locator('#results-panel')).toBeHidden({ timeout: 60_000 });
 
   // Back in the room, not on the lobby: same code, same socket, START armed again.
@@ -158,9 +164,12 @@ test("a guest reads its result for the whole grace, whatever the host's `again` 
     await guest.waitForTimeout(2_500);
     await expect(panel, 'still reading the result, `again` or no `again`').toBeVisible();
 
-    // And the grace still ends on its own, back in the room.
+    // ...and past the grace, still up: only a press takes the results away (POK-371).
+    await guest.waitForTimeout(4_000);
+    await expect(panel, 'the results wait for a press').toBeVisible();
+    expect(Date.now() - shownAt).toBeGreaterThanOrEqual(6_000);
+    await guest.locator('#play-again').click();
     await expect(panel).toBeHidden({ timeout: 90_000 });
-    expect(Date.now() - shownAt, 'the result stayed up for the grace').toBeGreaterThanOrEqual(3_500);
     await expect(guest.locator('#room-code')).toHaveText(`Room ${code}`, { timeout: 30_000 });
 
     // POK-331 #13 review: back in the room, whoever went out is on the heir list again. A
@@ -188,6 +197,17 @@ test("a guest reads its result for the whole grace, whatever the host's `again` 
 // the last match still on screen tears it down, and plays. Here the guest's grace is held
 // open for good, the way a long parade holds it, so only the START can move it.
 test("a guest still in its grace when the host deals again goes into the new match", async ({ browser }) => {
+  await dealAgainWhileReading(browser, 'grace');
+});
+
+// The same START for a guest whose grace is over but whose results are still up -- a
+// winner's: its grace ends on the parade, and PLAY AGAIN is its exit (POK-371). Held
+// by nothing but the results, the START went into the finished ROM (#41's review).
+test('a guest reading its results with the grace over goes into the new match', async ({ browser }) => {
+  await dealAgainWhileReading(browser, 'results');
+});
+
+async function dealAgainWhileReading(browser: Browser, hold: 'grace' | 'results'): Promise<void> {
   test.setTimeout(420_000);
   const rom = romHashParam();
   const hostCtx = await browser.newContext();
@@ -208,10 +228,17 @@ test("a guest still in its grace when the host deals again goes into the new mat
     await startWith(host, 2);
 
     await expect(guest.locator('#results-panel')).toBeVisible({ timeout: 240_000 });
-    // The grace's own exit becomes nothing: the guest stays in it until something else moves it.
-    await guest.evaluate(() => (window as unknown as BrWindow).__br.grace.arm(() => {}));
+    if (hold === 'grace') {
+      // The grace's own exit becomes nothing: the guest stays in it until something else moves it.
+      await guest.evaluate(() => (window as unknown as BrWindow).__br.grace.arm(() => {}));
+    } else {
+      // The grace done, as a champion's ends on the parade: only the results are up.
+      await guest.evaluate(() => (window as unknown as BrWindow).__br.grace.cancel());
+    }
 
     // The host reads its own result, comes back to the room, and deals again.
+    await expect(host.locator('#results-panel')).toBeVisible({ timeout: 120_000 });
+    await host.locator('#play-again').click();
     await expect(host.locator('#room-start')).toBeVisible({ timeout: 120_000 });
     await host.locator('#room-start').click();
     await host.waitForFunction(() => (window as unknown as BrWindow).__br?.director?.state?.phase === 'safari', undefined, {
@@ -245,4 +272,4 @@ test("a guest still in its grace when the host deals again goes into the new mat
     await guestCtx.close();
     await hostCtx.close().catch(() => {});
   }
-});
+}

@@ -61,14 +61,26 @@ export const SKINS = [
   'LASS',
 ];
 
+/** RIVAL BRENDAN and RIVAL MAY stay in SKINS, because a skin is its index on the wire and
+ *  in the ROM's table, but they are not in the wardrobe: they draw exactly like BRENDAN and
+ *  MAY (Cam's 2026-10-14 play-test, POK-336). A career still wearing one wears the base
+ *  sprite it copies, the rival's index minus two. */
+export const RETIRED_SKINS: ReadonlySet<number> = new Set([2, 3]);
+
+/** What the wardrobe offers, in its order: every skin but the retired ones. */
+export const WARDROBE: readonly number[] = SKINS.map((_, i) => i).filter((i) => !RETIRED_SKINS.has(i));
+
 /** Wins needed to unlock each entry in SKINS, index for index -- Kanto's wardrobe ladder
- *  (lib/skins.lua unlocks nine trainer classes on a curve from 1 win).
- *
- *  A PAIR AT A TIME, so every rung offers both genders: unlocking one of a pair and not
- *  the other would hand somebody a wardrobe that cannot dress them. Your own two starting
- *  trainers are free; everything after is won: the first at 1 win, then 3, 5, 10 and every
- *  5 after that (Cam, 2026-10-05). */
-export const SKIN_UNLOCK_WINS = [0, 0, 1, 1, 3, 3, 5, 5, 10, 10, 15, 15, 20, 20, 25, 25];
+ *  (lib/skins.lua unlocks nine trainer classes on a curve from 1 win). Your own two
+ *  starting trainers are free; each pair after them is staggered, the man a win or two
+ *  before the woman, so the next unlock is never far off (Cam, 2026-10-14, POK-338: "boy
+ *  four and then the girl five... nine, ten... thirteen"). The retired rivals can never
+ *  be worn. */
+export const SKIN_UNLOCK_WINS = [
+  0, 0,
+  Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY,
+  1, 2, 4, 5, 9, 10, 13, 15, 18, 20, 23, 25,
+];
 
 export function skinUnlocked(skin: number, wins: number): boolean {
   return wins >= (SKIN_UNLOCK_WINS[skin] ?? 0);
@@ -77,10 +89,12 @@ export function skinUnlocked(skin: number, wins: number): boolean {
 /** The next skin still locked, and how many more wins it takes -- null once the
  *  wardrobe is full. What the lobby's sprite row hints at. */
 export function nextLockedSkin(wins: number): { skin: number; wins: number } | null {
-  for (let i = 0; i < SKINS.length; i++) {
-    if (!skinUnlocked(i, wins)) return { skin: i, wins: SKIN_UNLOCK_WINS[i] };
+  let next: { skin: number; wins: number } | null = null;
+  for (const i of WARDROBE) {
+    if (skinUnlocked(i, wins)) continue;
+    if (next === null || SKIN_UNLOCK_WINS[i] < next.wins) next = { skin: i, wins: SKIN_UNLOCK_WINS[i] };
   }
-  return null;
+  return next;
 }
 
 /** Emerald's own PLAYER_NAME_LENGTH. A longer one is not truncated somewhere clever;
@@ -96,12 +110,14 @@ export function cleanName(raw: string): string {
     .slice(0, NAME_MAX);
 }
 
-/** The next skin after this one, skipping anything `wins` has not unlocked yet.
- *  `wins` defaults to unlimited so callers that do not care about the wardrobe (most
- *  of the existing tests, `voiceFor`-style pure use) still get a plain cycle. */
+/** The next skin after this one in the wardrobe, skipping anything `wins` has not
+ *  unlocked yet. `wins` defaults to unlimited so callers that do not care about the
+ *  wardrobe (most of the existing tests, `voiceFor`-style pure use) still get a plain
+ *  cycle. */
 export function nextSkin(skin: number, wins = Number.POSITIVE_INFINITY): number {
-  for (let i = 1; i <= SKINS.length; i++) {
-    const candidate = (skin + i) % SKINS.length;
+  const at = WARDROBE.indexOf(skin);
+  for (let i = 1; i <= WARDROBE.length; i++) {
+    const candidate = WARDROBE[(at + i + WARDROBE.length) % WARDROBE.length];
     if (skinUnlocked(candidate, wins)) return candidate;
   }
   return skin; // nothing else is unlocked -- stay put rather than loop forever
@@ -113,7 +129,8 @@ export function nextSkin(skin: number, wins = Number.POSITIVE_INFINITY): number 
  *  all the wins yet." A wardrobe you cannot look at is not a ladder -- there is nothing to
  *  climb towards. `nextSkin` above is what SAVES; this is what BROWSES. */
 export function peekSkin(skin: number): number {
-  return (skin + 1) % SKINS.length;
+  const at = WARDROBE.indexOf(skin);
+  return WARDROBE[(at + 1) % WARDROBE.length];
 }
 
 /** What to say under a skin while it is being browsed: its price, or that it is yours. */
@@ -135,7 +152,8 @@ function sane(value: unknown): Career {
   const name = typeof raw.name === 'string' ? cleanName(raw.name) : '';
   if (name) career.name = name;
   const skin = num(raw.skin);
-  if (skin > 0 && skin < SKINS.length) career.skin = skin;
+  const worn = RETIRED_SKINS.has(skin) ? skin - 2 : skin;
+  if (worn > 0 && worn < SKINS.length) career.skin = worn;
   const voice = num(raw.voice);
   if (voice > 0 && voice < VOICE_COUNT) career.voice = voice;
   const line = (key: 'intro' | 'win' | 'lose') => {

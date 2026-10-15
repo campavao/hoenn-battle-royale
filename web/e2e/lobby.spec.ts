@@ -34,7 +34,7 @@ test('the lobby lists a room somebody else is hosting, and joining it seats you'
     const guest = await guestCtx.newPage();
     await guest.goto(`/#rom=${rom}`);
     // The profile rows come first now (POK-243), so ask for the row by its name.
-    await expect(guest.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({
+    await expect(guest.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({
       timeout: 60_000,
     });
 
@@ -116,7 +116,7 @@ test('a lobby in a hidden tab lets go of its socket, and browses again on return
     ws.on('framesent', (f) => { if (String(f.payload).includes('"list_rooms"')) s.asked++; });
   });
   await page.goto(`/#rom=${romHashParam()}`);
-  await expect(page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 60_000 });
   await expect.poll(() => sockets[0]?.asked ?? 0, { timeout: 20_000 }).toBeGreaterThan(0);
 
   const setHidden = (hidden: boolean) =>
@@ -147,15 +147,20 @@ test('a lobby in a hidden tab lets go of its socket, and browses again on return
   await expect(page.locator('#lobby-note')).not.toContainText('Not connected');
 });
 
-test('SOLO VS BOTS opens no socket', async ({ page }) => {
+// SOLO VS BOTS is not a row any more (POK-341): with no relay, QUICK PLAY is that game.
+test('offline, QUICK PLAY is a game against bots that opens no socket', async ({ page }) => {
   test.setTimeout(90_000);
+  // Every socket refused: the relay is down, as far as this page can tell.
+  await page.routeWebSocket(/.*/, (ws) => ws.close());
   await page.goto(`/#rom=${romHashParam()}`);
-  const solo = page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' });
-  await expect(solo).toBeVisible({ timeout: 60_000 });
-  await solo.click();
+  const quick = page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' });
+  await expect(quick).toBeVisible({ timeout: 60_000 });
+  await expect(quick).toContainText('offline: vs bots', { timeout: 30_000 });
+  await expect(quick).toBeEnabled();
+  await expect(page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toHaveCount(0);
+  await quick.click();
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 30_000 });
-  // The lobby's own browsing socket is closed on the way out, and the room one is
-  // never opened: `__br` is the Bridge, and solo never builds one.
+  // The room one is never opened: `__br` is the Bridge, and solo never builds one.
   expect(await page.evaluate(() => (window as unknown as { __br?: unknown }).__br !== undefined)).toBe(false);
   expect(new URL(page.url()).hash).toContain('solo');
   // `__hbr` is set before runSolo, so it proves nothing about runSolo itself: the
@@ -411,7 +416,7 @@ test('the lobby offers a voice and a stats toggle, and the wardrobe starts locke
   await skin.click();
   await expect(page.locator('#wardrobe button', { hasText: 'HIKER' })).toContainText('LOCKED');
   await page.locator('#wardrobe button', { hasText: 'HIKER' }).click();
-  await expect(page.locator('#wardrobe-note')).toContainText('LOCKED -- 3 wins');
+  await expect(page.locator('#wardrobe-note')).toContainText('LOCKED -- 1 win');
   await expect(page.locator('#wardrobe-wear')).toBeDisabled();
   await page.locator('#wardrobe-back').click();
 
@@ -432,13 +437,19 @@ test('the lobby offers a voice and a stats toggle, and the wardrobe starts locke
   await expect(voice).not.toHaveText(before ?? '');
   await expect(voice).toContainText(chosen.trim());
 
-  // PLAY STATS starts shared, and pressing it toggles the opt-out and back.
-  const stats = rows.nth(5);
-  await expect(stats).not.toContainText('not shared');
+  // SEND PLAY COUNT starts on, and pressing it toggles the opt-out and back -- with the
+  // cursor staying on the row it pressed, not jumping back to the top (POK-333).
+  const stats = page.locator('#trainer-stats');
+  await expect(stats).toContainText('SEND PLAY COUNT ON');
   await stats.click();
-  await expect(stats).toContainText('not shared');
+  await expect(stats).toContainText('SEND PLAY COUNT OFF');
   await stats.click();
-  await expect(stats).not.toContainText('not shared');
+  await expect(stats).toContainText('SEND PLAY COUNT ON');
+  await stats.focus();
+  await page.keyboard.press('z');
+  await expect(stats).toContainText('SEND PLAY COUNT OFF');
+  await page.keyboard.press('z');
+  await expect(stats, 'A again presses the same row: the cursor stayed on it').toContainText('SEND PLAY COUNT ON');
 });
 
 test('QUICK PLAY hosts a game when there is nothing to join', async ({ page }) => {
@@ -472,7 +483,7 @@ test('JOIN BY CODE cannot type a code the relay could never have issued (POK-240
   await expect(page.locator('#entry-ok'), 'a code is all six of its letters').toBeDisabled();
   // BACK is the lobby again, not a dead join.
   await page.locator('#entry-back').click();
-  await expect(page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible();
+  await expect(page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible();
 });
 
 test('a room that will not let you in offers the way back', async ({ browser }) => {
@@ -511,7 +522,7 @@ test('a room that will not let you in offers the way back', async ({ browser }) 
 
     // And it works: the lobby, with the room gone from the URL.
     await back.click();
-    await expect(guest.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toBeVisible({
+    await expect(guest.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({
       timeout: 60_000,
     });
     expect(new URL(guest.url()).hash).not.toContain('join=');

@@ -133,7 +133,7 @@ describe('the sheet', () => {
   });
 
   it("opens a trainer's card on a tap, with KICK for the host", () => {
-    const m = model({ card: { seat: 2, lines: [{ label: 'TRAINER', value: 'P2' }], canKick: true } });
+    const m = model({ card: { seat: 2, skin: 4, lines: [{ label: 'TRAINER', value: 'P2' }], canKick: true } });
     const { painted } = paint(m);
     painted.widgets.find((w) => w.text === 'P2')!.onPress!();
     expect(m.onSeat).toHaveBeenCalledWith(2);
@@ -145,6 +145,16 @@ describe('the sheet', () => {
     sheetScreen(() => m).back!();
     expect(m.onCloseCard).toHaveBeenCalled();
     expect(m.onClose).not.toHaveBeenCalled();
+  });
+
+  it('offers SPECTATE on the card of somebody you could follow, and not otherwise (POK-342)', () => {
+    const onWatchSeat = vi.fn();
+    const card = { seat: 5, skin: 4, lines: [{ label: 'TRAINER', value: 'MAY' }], canKick: false };
+    const watch = paint(model({ card: { ...card, canWatch: true }, onWatchSeat })).painted.widgets.find((w) => w.cls === 'card-watch');
+    expect(watch?.text).toBe('SPECTATE');
+    watch!.onPress!();
+    expect(onWatchSeat).toHaveBeenCalledWith(5);
+    expect(paint(model({ card, onWatchSeat })).painted.widgets.find((w) => w.cls === 'card-watch')).toBeUndefined();
   });
 
   it('once you are out, says who you watch, with PREV, NEXT and STOP', () => {
