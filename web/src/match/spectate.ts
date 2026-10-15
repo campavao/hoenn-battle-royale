@@ -59,6 +59,33 @@ export const EYE_WINDOW_MS = 8000;
  *  POKeMON's, a gym's -- which its fighter publishes as (their seat, NO_SEAT). */
 export const NO_SEAT = 0xff;
 
+/** How far from the trainer we watch a fight is still on our screen: the GBA's view is
+ *  15 by 10 tiles round the camera, so seven across and five down either way. */
+export const CUT_DX = 7;
+export const CUT_DY = 5;
+
+/** A fight that starts in front of the camera, between two trainers we are not watching
+ *  (Cam's 2026-10-14 play-test, POK-365: BIRCH went OUT a few seconds after standing next
+ *  to TATE, and no battle was shown) -- the fighter to cut to, or null. Two trainers, the
+ *  one we watch in neither seat, and a fighter on their map within a screen of them.
+ *  `seats` is where this ROM has every seat standing (gBrSeats). */
+export function cutTo(
+  battle: number,
+  watched: number,
+  seats: readonly { seat: number; group: number; num: number; x: number; y: number }[],
+): number | null {
+  const fighters = battleSeats(battle);
+  // Two trainers only: somebody's wild POKeMON beside us is not worth the camera.
+  if (fighters.includes(NO_SEAT) || fighters.includes(watched)) return null;
+  const at = seats.find((s) => s.seat === watched);
+  if (!at) return null;
+  for (const seat of fighters) {
+    const s = seats.find((r) => r.seat === seat);
+    if (s && s.group === at.group && s.num === at.num && Math.abs(s.x - at.x) <= CUT_DX && Math.abs(s.y - at.y) <= CUT_DY) return seat;
+  }
+  return null;
+}
+
 /** A battle id as BR_MSG_BSTART carries it: the seat pair, low seat then high. */
 export function battleId(a: number, b: number): number {
   const lo = Math.min(a, b);

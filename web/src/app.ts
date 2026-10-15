@@ -19,7 +19,7 @@ import { PhoneHud, readHudView, type HudWorld } from './ui/phonehud';
 import { BattleMenu, readBattleView } from './ui/battlemenu';
 import { PadPrefsControl } from './ui/padprefs';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
-import { battleSeats, nameBstart, romReplaying, Spectate } from './match/spectate';
+import { battleSeats, cutTo, nameBstart, romReplaying, Spectate } from './match/spectate';
 import type { Results } from './match/results';
 import { EndGrace } from './match/grace';
 import { MatchSession } from './match/session';
@@ -2733,7 +2733,12 @@ function wireRoom(
     relay.canHost(isHost || offersToHost(match, seat));
     // The gate on relay -> ROM: a bstart starts a replay, and it is a broadcast. And the
     // next match's start is for the ROM that will play it, not this one (POK-331 #18).
-    bridge.setRomFilter((msg) => !holdsStart(msg) && spectate.wantsFromRelay(msg));
+    bridge.setRomFilter((msg) => {
+      if (holdsStart(msg)) return false;
+      if (spectate.wantsFromRelay(msg)) return true;
+      cutToFight(msg);
+      return false;
+    });
     // Two bots fighting can be watched (POK-300): the proxy instance publishes its duel
     // the way a player's ROM publishes a link battle, and this page is its relay -- to
     // the room, and through the same gate to our own ROM if we are following either bot.
@@ -2745,6 +2750,19 @@ function wireRoom(
 
       bridge!.relay.all(msg);
       if (spectate.wantsFromRelay(msg)) bridge!.pushToRom(msg);
+      else cutToFight(msg);
+    };
+    // A fight between two trainers we are not watching, starting on our screen: the camera
+    // goes to it (Cam's 2026-10-14 play-test, POK-365: "BIRCH went OUT" beside TATE and
+    // nothing was shown). The follow hands our ROM the fight from its bstart (Spectate's
+    // follow), which wantsFromRelay has just put by.
+    const cutToFight = (msg: Msg): void => {
+      const watched = spectate.watchingSeat();
+      if (msg.t !== 'bstart' || watched === null || spectate.watchingBattle() !== null || !bridge) return;
+      const to = cutTo(msg.battle, watched, fieldView?.seatsNow() ?? []);
+      if (to === null) return;
+      for (const m of spectate.follow(to)) bridge.pushToRom(m);
+      renderSpectate(bridge, spectate);
     };
     // A watcher is furniture: its ROM is walking around Littleroot and nobody in the
     // match should see a ghost of it, or hear it claim a seat (POK-260).

@@ -42,6 +42,7 @@ import {
   DESPAWN_COUNT, DESPAWN_SIZE, EVENTS_SIZE, GHOST_LOCAL_ID_BASE, GhostWalkers, LOOT_COUNT, LOOT_SIZE, MATCH_SEED, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
   TEMPLATE_COUNT, TEMPLATE_SIZE, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, decodeTraders, droppedPeople, inObjectView, initialFacing, objectKey, placePeople, standingFrame,
 } from './field-ghosts';
+import type { Seat } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 
 export const GBA_W = 240;
@@ -852,6 +853,13 @@ export class FieldView {
    *  from it (Cam's 2026-10-14 play-test, POK-367). */
   setHeld(held: (() => ReadonlySet<number>) | null): void {
     this.held = held;
+  }
+
+  /** Where this ROM has every other seat standing (gBrSeats), for a watcher deciding
+   *  whether a fight that just started is on its screen (match/spectate.ts's cutTo). */
+  seatsNow(): Seat[] {
+    const at = this.sym('gBrSeats');
+    return at === undefined ? [] : decodeSeats(this.deps.emu.bytes(at, SEAT_COUNT * SEAT_SIZE));
   }
 
   attach(): void {
