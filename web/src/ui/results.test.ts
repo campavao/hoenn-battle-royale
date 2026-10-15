@@ -1,7 +1,7 @@
 // The results, drawn (POK-320): what they say, and when the champion gets to see them.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EndGrace } from '../match/grace';
-import { ParadeHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './results';
+import { ParadeHold, ReplayHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './results';
 import { fakeCanvas } from './fakecanvas';
 
 const nameOf = (seat: number) => (seat === 2 ? 'MAY' : `P${seat}`);
@@ -164,5 +164,55 @@ describe("the champion's Hall of Fame comes first (POK-320)", () => {
     // No gBrMatch: the ROM cannot say when its parade is over, and nothing waits on it.
     const blind = new ParadeHold({ graceMs: 1_000, giveUpMs: 55_000, onParaded: () => {} });
     expect(blind.holds(1, 1)).toBe(false);
+  });
+});
+
+// POK-365: the last fight was settled before its replay had played, and the results cut
+// to "WINNER BRENDAN" over it.
+describe("a watcher's results wait for the fight on screen (POK-365)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('holds while the replay plays, and draws the moment it ends', () => {
+    let replaying = true;
+    const drawn = vi.fn();
+    const hold = new ReplayHold({ replaying: () => replaying, maxMs: 60_000, pollMs: 500, onOver: drawn, now: () => Date.now() });
+    expect(hold.holds()).toBe(true);
+    expect(hold.waiting, 'the grace leaves the page be').toBe(true);
+    vi.advanceTimersByTime(5_000);
+    expect(drawn).not.toHaveBeenCalled();
+    replaying = false;
+    vi.advanceTimersByTime(500);
+    expect(drawn).toHaveBeenCalledTimes(1);
+    expect(hold.waiting).toBe(false);
+    replaying = true;
+    expect(hold.holds(), 'a replay after the results are up does not take them down').toBe(false);
+    vi.advanceTimersByTime(5_000);
+    expect(drawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds nothing when no replay is on', () => {
+    const hold = new ReplayHold({ replaying: () => false, maxMs: 60_000, pollMs: 500, onOver: () => {} });
+    expect(hold.holds()).toBe(false);
+    expect(hold.waiting).toBe(false);
+  });
+
+  it('gives up on a replay that never ends', () => {
+    const drawn = vi.fn();
+    const hold = new ReplayHold({ replaying: () => true, maxMs: 60_000, pollMs: 500, onOver: drawn, now: () => Date.now() });
+    expect(hold.holds()).toBe(true);
+    vi.advanceTimersByTime(60_000);
+    expect(drawn).toHaveBeenCalledTimes(1);
+    expect(hold.holds()).toBe(false);
+  });
+
+  it('waits again for the next match once reset', () => {
+    let replaying = false;
+    const hold = new ReplayHold({ replaying: () => replaying, maxMs: 60_000, pollMs: 500, onOver: () => {} });
+    expect(hold.holds()).toBe(false);
+    hold.reset();
+    replaying = true;
+    expect(hold.holds()).toBe(true);
+    hold.reset();
   });
 });
