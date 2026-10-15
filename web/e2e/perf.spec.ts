@@ -20,8 +20,8 @@
 //
 // Twice: in a desktop's window, and on a portrait phone's glass (POK-329). The phone is
 // the one that pays for the picture past the LCD -- the core draws 256x496 there, the
-// ROM's whole band, against a desktop's 256x368 (field.ts askBand: the rows the layout
-// shows) -- so it is the phone the floor has to hold on. perf-phone.json is its lot.
+// ROM's whole band, against a desktop's 400x240 (field.ts askBand: the wide ring's
+// columns and rows the layout shows) -- so it is the phone the floor has to hold on. perf-phone.json is its lot.
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Browser, type BrowserContextOptions } from '@playwright/test';
@@ -43,11 +43,12 @@ type Band = { left: number; top: number; right: number; bottom: number };
 type BandWindow = { __hbr: { emu: { viewport: Band | null } } };
 
 /** Where each run is: its window, the files it leaves, and the band its layout asks for
- *  -- on a desktop the rows its 1280x720 window shows at a phone's zoom (2x: 100 each
- *  way, 104 in eights, all the ROM has above), all of the ROM's band on the phone (it
- *  shows 118 above and 242 below, and the ROM has 104 and 232). */
+ *  -- on a desktop the wide ring, as much of it as its 1280x720 window shows beside the
+ *  docked sheet at a phone's zoom (2x: 80 columns each side, and all 40 of its rows), all
+ *  of the ROM's band on the phone (it shows 118 above and 242 below, and the ROM has 104
+ *  and 232). */
 const RUNS: { name: string; file: string; context: BrowserContextOptions; band: (rom: ReturnType<typeof romView>) => Band }[] = [
-  { name: 'desktop', file: 'perf', context: {}, band: (rom) => ({ ...rom.viewport, top: Math.min(104, rom.viewport.top), bottom: Math.min(104, rom.viewport.bottom) }) },
+  { name: 'desktop', file: 'perf', context: {}, band: () => ({ left: 80, top: 40, right: 80, bottom: 40 }) },
   { name: 'phone', file: 'perf-phone', context: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, band: (rom) => rom.viewport },
 ];
 
@@ -175,7 +176,7 @@ async function hostsAMatch(browser: Browser, run: (typeof RUNS)[number]): Promis
       expect(audio.state, 'the AudioContext is running').toBe('running');
       expect(audio.callbacks, 'the speaker asked the core for sound').toBeGreaterThan(0);
       // ...and it was the picture this layout shows that was paid for (POK-329): a desktop
-      // the rows its window shows, a phone the ROM's whole band.
+      // the part of the wide ring its window shows, a phone the ROM's whole band.
       expect(band, `the band a ${run.name} asks for`).toEqual(run.band(romView()));
     } finally {
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
