@@ -39,10 +39,6 @@ static EWRAM_DATA u32 sOutSeats = 0;
 // How fast each ghost walks, and how long it has stood waiting for its next step: the
 // pace in the low two bits, the idle frames above them (PaceWalk).
 static EWRAM_DATA u8 sPace[BR_MAX_SEATS] = {0};
-// Each ghost's SURF blob while it is on the water, as a sprite id; MAX_SPRITES for none.
-// Not zero-initialised on purpose: Despawn and BrGhosts_Init set it, and a stale id is
-// checked against the sprite before it is trusted (SurfBlob).
-static EWRAM_DATA u8 sBlob[BR_MAX_SEATS] = {0};
 
 // Skin -> object event graphics. Index 0 is the default; the shell's career picks.
 // The wardrobe (POK-282). Cam: "I should be able to pick kind of like any sprites -- the
@@ -303,21 +299,20 @@ static u8 SurfGraphic(u8 gfx)
     return gfx;
 }
 
-// The seat's blob, if the sprite under that id is still it: a map load frees every
-// sprite, and the id may be somebody else's by now.
-static struct Sprite *SurfBlob(u8 seat, u8 objId)
+// A ghost's SURF blob, found rather than kept: the blob's own sprite says whose it is
+// (data[2], the object it carries), and EWRAM has no room for a table of them.
+static struct Sprite *SurfBlob(u8 objId)
 {
-    struct Sprite *sprite;
+    u8 i;
 
-    if (sBlob[seat] >= MAX_SPRITES)
-        return NULL;
-    sprite = &gSprites[sBlob[seat]];
-    if (!sprite->inUse || sprite->callback != UpdateSurfBlobFieldEffect || sprite->data[2] != objId)
+    for (i = 0; i < MAX_SPRITES; i++)
     {
-        sBlob[seat] = MAX_SPRITES;
-        return NULL;
+        struct Sprite *sprite = &gSprites[i];
+
+        if (sprite->inUse && sprite->callback == UpdateSurfBlobFieldEffect && sprite->data[2] == objId)
+            return sprite;
     }
-    return sprite;
+    return NULL;
 }
 
 static void DropBlob(u8 seat)
@@ -326,14 +321,10 @@ static void DropBlob(u8 seat)
     struct Sprite *blob;
 
     if (obj == NULL)
-    {
-        sBlob[seat] = MAX_SPRITES;
         return;
-    }
-    blob = SurfBlob(seat, gBrSeats[seat].objId);
+    blob = SurfBlob(gBrSeats[seat].objId);
     if (blob != NULL)
         DestroySprite(blob);
-    sBlob[seat] = MAX_SPRITES;
     gSprites[obj->spriteId].y2 = 0;
 }
 
@@ -341,8 +332,8 @@ static void SurfGhost(u8 seat)
 {
     struct BrSeat *s = &gBrSeats[seat];
     struct ObjectEvent *obj = GhostObject(seat);
-    u8 walk, gfx;
-    bool8 wet;
+    u8 walk, gfx, id;
+    bool8 wet, changed;
 
     if (obj == NULL)
         return;
@@ -350,22 +341,25 @@ static void SurfGhost(u8 seat)
         MapGridGetMetatileBehaviorAt(obj->currentCoords.x, obj->currentCoords.y));
     walk = SkinGraphic(s->skin);
     gfx = wet ? SurfGraphic(walk) : walk;
-    if (obj->graphicsId != gfx)
+    changed = obj->graphicsId != gfx;
+    if (changed)
         ObjectEventSetGraphicsId(obj, gfx);
     if (!wet)
     {
-        if (sBlob[seat] < MAX_SPRITES)
+        // Only a ghost that just came ashore can have one to drop: the search is not
+        // for every dry ghost every frame.
+        if (changed)
             DropBlob(seat);
         return;
     }
-    if (SurfBlob(seat, s->objId) != NULL)
+    if (SurfBlob(s->objId) != NULL)
         return;
     gFieldEffectArguments[0] = obj->currentCoords.x;
     gFieldEffectArguments[1] = obj->currentCoords.y;
     gFieldEffectArguments[2] = s->objId;
-    sBlob[seat] = FieldEffectStart(FLDEFF_SURF_BLOB);
-    if (sBlob[seat] < MAX_SPRITES)
-        SetSurfBlob_BobState(sBlob[seat], BOB_PLAYER_AND_MON);
+    id = FieldEffectStart(FLDEFF_SURF_BLOB);
+    if (id < MAX_SPRITES)
+        SetSurfBlob_BobState(id, BOB_PLAYER_AND_MON);
 }
 
 static void Spawn(u8 seat)
@@ -528,7 +522,6 @@ void BrGhosts_Init(void)
         gBrSeats[i].queued = 0;
         gBrSeatBusy[i] = BR_BUSY_MAP;
         sPace[i] = 0;
-        sBlob[i] = MAX_SPRITES;
     }
     gBrOwnEvents = 0;
     sOwnValid = FALSE;

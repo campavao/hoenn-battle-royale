@@ -204,9 +204,9 @@ static void ApplyWeather(bool8 outside)
 #define BR_FOG_OUT_READ (60 * 8)
 static const u8 sText_FogOut[] = _("{STR_VAR_1} fainted in the fog…\p{PLAYER} is out of usable POKéMON!\pYou're out of the match!");
 
-// The fainted mon's name, kept here: gStringVar1 is every script's and every message's,
-// and the field can be busy with one for a while before this is shown.
-static EWRAM_DATA u8 sFogName[POKEMON_NAME_LENGTH + 1] = {0};
+// Which mon fainted last: its name goes into gStringVar1 only as the line is shown, since
+// that is every script's and every message's, and the field can be busy with one first.
+static EWRAM_DATA u8 sFogMon = 0;
 
 #define tState data[0]
 #define tWait data[1]
@@ -235,7 +235,8 @@ static void Task_FogOut(u8 taskId)
          || ArePlayerFieldControlsLocked())
             return;
         LockPlayerFieldControls();
-        StringCopy(gStringVar1, sFogName);
+        GetMonData(&gPlayerParty[sFogMon], MON_DATA_NICKNAME, gStringVar1);
+        StringGet_Nickname(gStringVar1);
         ShowFieldMessage(sText_FogOut);
         tWait = 0;
         tState++;
@@ -270,8 +271,7 @@ static void Task_FogOut(u8 taskId)
 
 static void StartFogOut(u8 partyIdx)
 {
-    GetMonData(&gPlayerParty[partyIdx], MON_DATA_NICKNAME, sFogName);
-    StringGet_Nickname(sFogName);
+    sFogMon = partyIdx;
     // A script already running (a gym leader mid-line, a trainer's walk) may be on its
     // way to a battle, and this team has nobody to send out: out now, untold, as before.
     if (ScriptContext_IsEnabled() || CreateTask(Task_FogOut, 80) == TASK_NONE)
