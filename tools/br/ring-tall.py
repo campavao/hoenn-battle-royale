@@ -2,6 +2,7 @@
 """Check the field's 32x64-tile ring, cell by cell, against the map (POK-329).
 
     bash tools/br/drive.sh ring-tall | python3 tools/br/ring-tall.py
+    bash tools/br/drive.sh ring-wide | python3 tools/br/ring-tall.py --wide
 
 BG1..3 are 256x512 text BGs, and their tilemaps hold 32 metatile rows around the camera:
 grid rows pos.y - BR_RING_ABOVE .. pos.y + 31 - BR_RING_ABOVE, each in tile rows
@@ -33,6 +34,12 @@ tiles and its layer type, read out of the pret sources -- on all three layers:
   * after a map connection, at rest, the rows past pret's own that were drawn from the
     last map: this one's, not its border.
 
+With --wide it is THE WIDE RING instead: BG1..3 are 512x256 (size 1) and the ring is
+32 metatile columns, pos.x - BR_WIDE_LEFT .. pos.x + 31 - BR_WIDE_LEFT, in tile columns
+(xTileOffset + 2*dx) & 63 (the high 32 in the second screen block), by pret's 16 rows in
+tile rows (yTileOffset + 2*dy) & 31; mid-step down the far row pos.y+15 holds the row
+above pos.y, and mid-step right the far column the column left of the ring.
+
 Exits 1 on any wrong cell, 2 when the run did not exercise all of that.
 """
 import json
@@ -52,9 +59,20 @@ def define(name):
     return int(m.group(1))
 
 
-ABOVE = define("BR_RING_ABOVE")
-TILE_ROWS = define("BR_RING_TILE_ROWS")
-ROWS = TILE_ROWS // 2
+WIDE = "--wide" in sys.argv[1:]
+if WIDE:
+    LEFT = define("BR_WIDE_LEFT")
+    COLS = define("BR_WIDE_COLUMNS")
+    ABOVE, ROWS, SIZE = 0, 16, 1
+else:
+    LEFT, COLS = 0, 16
+    ABOVE = define("BR_RING_ABOVE")
+    ROWS = define("BR_RING_TILE_ROWS") // 2
+    SIZE = 2
+# The tile offsets' period: 64 both ways (field_camera.c, AddCameraTileOffset), of which
+# a ring uses its own 64 or 32.
+TILE_ROWS = 64
+RING_TILE_COLS, RING_TILE_ROWS = 2 * max(COLS, 16), 2 * ROWS
 MAP_OFFSET = 7
 PAN = 32 + 8  # the standing vertical pan and FieldUpdateBgTilemapScroll's 8
 LAYER_NORMAL, LAYER_COVERED, LAYER_SPLIT = 0, 1, 2
@@ -186,8 +204,8 @@ def main():
         where = "record %d (%s) at (%d,%d) cam (%d,%d)" % (n, label, px, py, camx, camy)
         for bg in (1, 2, 3):
             cnt = regs[2 * bg] | regs[2 * bg + 1] << 8
-            if cnt >> 14 != 2:
-                fail("%s: BG%dCNT 0x%04X is not a 256x512 text BG (size %d)" % (where, bg, cnt, cnt >> 14))
+            if cnt >> 14 != SIZE:
+                fail("%s: BG%dCNT 0x%04X is not a %s text BG (size %d)" % (where, bg, cnt, "512x256" if WIDE else "256x512", cnt >> 14))
         if key not in known:
             fail("%s: map %s is not in map_groups.h" % (where, key))
             continue
@@ -211,11 +229,12 @@ def main():
                 elif abs(dx) + abs(dy) > 1:
                     fail("%s: more than a step from the last rest (%d,%d)" % (where, ox, oy))
                     continue
-                xt, yt = (oxt + 2 * dx) & 31, (oyt + 2 * dy) & (TILE_ROWS - 1)
-            # The camera's pixels, at rest a whole number of tiles.
-            xpix = -s16(sox) & 0xFF
-            ypix = -(s16(soy) + PAN) & 0x1FF
-            if (xpix >> 3, ypix >> 3) != (xt, yt & (TILE_ROWS - 1)) or xpix & 7 or ypix & 7:
+                xt, yt = (oxt + 2 * dx) & 63, (oyt + 2 * dy) & (TILE_ROWS - 1)
+            # The camera's pixels, at rest a whole number of tiles: the scroll registers
+            # take 9 bits, and the BG wraps at its own size.
+            xpix = -s16(sox) & (8 * RING_TILE_COLS - 1)
+            ypix = -(s16(soy) + PAN) & (8 * RING_TILE_ROWS - 1)
+            if (xpix >> 3, ypix >> 3) != (xt % RING_TILE_COLS, yt % RING_TILE_ROWS) or xpix & 7 or ypix & 7:
                 fail("%s: the camera is at pixels (%d,%d), and the steps say tile offsets (%d,%d)"
                      % (where, xpix, ypix, xt, yt))
             crossed = prev_rest is not None and prev_rest[1] != key
@@ -231,28 +250,29 @@ def main():
             if abs(dx) + abs(dy) != 1:
                 fail("%s: not one step from the last rest (%d,%d)" % (where, ox, oy))
                 continue
-            xt, yt = (oxt + 2 * dx) & 31, (oyt + 2 * dy) & (TILE_ROWS - 1)
+            xt, yt = (oxt + 2 * dx) & 63, (oyt + 2 * dy) & (TILE_ROWS - 1)
             crossed = False
         down = not rest and camy > 0
         right = not rest and camx > 0
         wrong = 0
         checked = 0
         for ry in range(-ABOVE, ROWS - ABOVE):
-            for rx in range(16):
+            for rx in range(-LEFT, COLS - LEFT):
                 # What should be in this slot: grid cell (pos.x + rx, pos.y + ry) -- or,
                 # mid-step, the row or column the step left in the far slot.
                 gx, gy = px + rx, py + ry
                 if down and ry == ROWS - 1 - ABOVE:
                     gy = py - ABOVE - 1
-                if right and rx == 15:
-                    gx = px - 1
+                if right and rx == COLS - 1 - LEFT:
+                    gx = px - LEFT - 1
                 mx, my = gx - MAP_OFFSET, gy - MAP_OFFSET
                 if not lay.inside(mx, my):
                     continue
                 want = lay.cell(mx, my)
                 if want is None:
                     continue
-                t = ((yt + 2 * ry) & (TILE_ROWS - 1)) * 32 + ((xt + 2 * rx) & 31)
+                tx = (xt + 2 * rx) % RING_TILE_COLS
+                t = ((tx & 32) << 5) + ((yt + 2 * ry) % RING_TILE_ROWS) * 32 + (tx & 31)
                 got = []
                 for buf in (bg1, bg2, bg3):
                     got.append([buf[2 * o] | buf[2 * o + 1] << 8 for o in (t, t + 1, t + 32, t + 33)])
@@ -267,7 +287,7 @@ def main():
             fail("%s: %d wrong cells in all" % (where, wrong))
         stats["cells"] += checked
         if rest:
-            stats["rest"] += checked == 16 * ROWS
+            stats["rest"] += checked == COLS * ROWS
             if crossed and checked:
                 stats["cross"] += 1
             prev_rest = ((px, py), key, xt, yt)

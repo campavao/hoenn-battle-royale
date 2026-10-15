@@ -1,0 +1,2142 @@
+# ring-wide: on a wide screen the field's ring is 64x32 tiles on 512x256 BGs, and every
+# cell of it holds the map (include/br/br_field.h, THE WIDE RING). The page asks for it
+# by writing the columns it shows left of the LCD into gBrFieldShown before the field's
+# BGs are set up, as here before the warp. tools/br/ring-wide.py (ring-tall.py --wide)
+# rebuilds each cell from the layout and compares all 32 x 16 metatiles of all three
+# layers.
+#
+# The walk is ring-tall's Rustboro City with the sideways legs long enough to wrap the
+# 64-column ring: landed at (21,25), 4 steps down, a turn and 17 up to row 11, a turn and
+# 16 right along it to (38,11), a turn and 16 left back to (21,11), then up and over the
+# connection into Route 115, to (21,77). A step left must have its new column in its
+# slot from the first frame, a step up its new top row's 32 columns; a step right leaves
+# the far column's slot holding the column behind it until the step is done, and a step
+# down the far row's. Past the connection the ring's columns beyond pret's were drawn from
+# Rustboro's grid: at rest on Route 115 they must be Route 115's.
+# checked-by: tools/br/ring-wide.py
+wait 30
+pokebytes gBrFieldShown 28 00 28 00 80 00 80 00
+pokebytes gBrMailbox+0x2018 01 00 00 03 15 00 19 00 BD BB C7 FF
+wait 400
+expect u32 gMain+4 CB2_Overworld+1
+expect u16 *gSaveBlock1Ptr 21
+expect u16 *gSaveBlock1Ptr+2 25
+# ...and every ring column is drawn: gBrRingStale is the columns the page cuts off the
+# band until they are (web/src/field.ts).
+expect u32 gBrRingStale 0
+say rest landed
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step DOWN
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold DOWN 1
+unwatch
+wait 2
+say step DOWN mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after DOWN
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step DOWN
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold DOWN 1
+unwatch
+wait 2
+say step DOWN mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after DOWN
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step DOWN
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold DOWN 1
+unwatch
+wait 2
+say step DOWN mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after DOWN
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step DOWN
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold DOWN 1
+unwatch
+wait 2
+say step DOWN mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after DOWN
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say turn UP
+hold UP 9
+wait 20
+say rest after turn UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say turn RIGHT
+hold RIGHT 9
+wait 20
+say rest after turn RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step RIGHT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold RIGHT 1
+unwatch
+wait 2
+say step RIGHT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after RIGHT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say turn LEFT
+hold LEFT 9
+wait 20
+say rest after turn LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step LEFT
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold LEFT 1
+unwatch
+wait 2
+say step LEFT mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after LEFT
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say turn UP
+hold UP 9
+wait 20
+say rest after turn UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+say step UP
+watch *gSaveBlock1Ptr 8
+watch gFieldCamera 24
+watch 0x04000008 8
+watch gSpriteCoordOffsetX 2
+watch gSpriteCoordOffsetY 2
+watch *gOverworldTilemapBuffer_Bg1 4096
+watch *gOverworldTilemapBuffer_Bg2 4096
+watch *gOverworldTilemapBuffer_Bg3 4096
+hold UP 1
+unwatch
+wait 2
+say step UP mid
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 8
+say rest after UP
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+wait 30
+say rest end
+dump *gSaveBlock1Ptr 8
+dump gFieldCamera 24
+dump 0x04000008 8
+dump gSpriteCoordOffsetX 2
+dump gSpriteCoordOffsetY 2
+dump *gOverworldTilemapBuffer_Bg1 4096
+dump *gOverworldTilemapBuffer_Bg2 4096
+dump *gOverworldTilemapBuffer_Bg3 4096
+expect u16 *gSaveBlock1Ptr+2 77
+expect u32 gBrRingStale 0
+say ok

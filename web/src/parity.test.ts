@@ -592,9 +592,9 @@ describe("the BR structs the page reads at an offset", () => {
 
   it("the box the ROM keeps objects in: BrField_InObjectView, and Emerald's own spawn and cull", () => {
     const brField = brSources['../../src/br/br_field.c'];
-    const view = /BrField_InObjectView\(s16 x, s16 y\)\s*\{\s*s16 top = gSaveBlock1Ptr->pos\.y;\s*s16 bottom = gSaveBlock1Ptr->pos\.y \+ (\d+);[\s\S]*?if \(sRoomGrows\)\s*Grow\(&top, &bottom\);\s*return x >= gSaveBlock1Ptr->pos\.x - (\d+) && x <= gSaveBlock1Ptr->pos\.x \+ (\d+)\s*&& y >= top && y <= bottom;/.exec(brField);
+    const view = /BrField_InObjectView\(s16 x, s16 y\)\s*\{\s*s16 left = gSaveBlock1Ptr->pos\.x - (\d+);\s*s16 right = gSaveBlock1Ptr->pos\.x \+ (\d+);\s*s16 top = gSaveBlock1Ptr->pos\.y;\s*s16 bottom = gSaveBlock1Ptr->pos\.y \+ (\d+);[\s\S]*?if \(sRoomGrows\)\s*Grow\(&left, &right, &top, &bottom\);\s*return x >= left && x <= right && y >= top && y <= bottom;/.exec(brField);
     expect(view, 'BrField_InObjectView reads as four bounds on pos, grown').not.toBeNull();
-    expect(ghosts.VIEW).toEqual({ left: -Number(view![2]), right: Number(view![3]), top: 0, bottom: Number(view![1]) });
+    expect(ghosts.VIEW).toEqual({ left: -Number(view![1]), right: Number(view![2]), top: 0, bottom: Number(view![3]) });
     // The map's own people: spawned in one box and culled outside another, and both are it.
     const box = (fn: string): Record<string, number> => {
       const m = new RegExp(`${fn}\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`).exec(objectEventsC.replace(/\r\n/g, '\n'));
@@ -613,17 +613,20 @@ describe("the BR structs the page reads at an offset", () => {
     // short of a slot), and the cull keeps the grown box.
     expect(body('void TrySpawnObjectEvents'), 'TrySpawnObjectEvents spawns the grown rows after its own box').toMatch(
       /TrySpawnObjectEventTemplate\(template, [^;]+;\s*\}\s*#if BR\s*BrField_SpawnGrown\(objectCount, cameraX, cameraY, TrySpawnObjectEventTemplate\);\s*#endif\s*\}$/);
-    expect(body('static void RemoveObjectEventIfOutsideView'), 'the cull grows its box').toMatch(/#if BR\s*BrField_GrowObjectBox\(&top, &bottom\);\s*#endif/);
+    expect(body('static void RemoveObjectEventIfOutsideView'), 'the cull grows its box').toMatch(/#if BR\s*BrField_GrowObjectBox\(&left, &right, &top, &bottom\);\s*#endif/);
     expect(ghosts.MAP_OFFSET).toBe(define(fieldmapFnH, 'MAP_OFFSET'));
   });
 
   it("the OAM side table is one layout on both sides: the ROM packs what the core's patch unpacks", () => {
     const brField = brSources['../../src/br/br_field.c'];
     const fieldH = brSources['../../include/br/br_field.h'];
-    // A nibble an entry, entry i in byte i / 2: a mark, and two signed bits of y's 256s.
+    // A nibble an entry, entry i in byte i / 2: a mark, two signed bits of y's 256s, and
+    // a bit for an x left of the LCD (its 9 bits less 512).
     expect(define(fieldH, 'BR_OAM_HI_MARK')).toBe(4);
-    expect(brField).toMatch(/sOamHiNext\[index \/ 2\] \|= \(BR_OAM_HI_MARK \| \(page & 3\)\) << \(4 \* \(index & 1\)\);/);
+    expect(define(fieldH, 'BR_OAM_HI_LEFT')).toBe(8);
+    expect(brField).toMatch(/nibble = BR_OAM_HI_MARK \| \(page & 3\);\s*if \(x < 0\)\s*nibble \|= BR_OAM_HI_LEFT;\s*sOamHiNext\[index \/ 2\] \|= nibble << \(4 \* \(index & 1\)\);/);
     expect(corePatch).toMatch(/int nibble = renderer->brOamHi\[sprite->index >> 1\] >> \(4 \* \(sprite->index & 1\)\);\s*\+\s*if \(nibble & 4\) \{\s*\+\s*top \+= 256 \* \(\(\(nibble & 3\) \^ 2\) - 2\);/);
+    expect(corePatch).toMatch(/int nibble = renderer->brOamHi\[index >> 1\] >> \(4 \* \(index & 1\)\);\s*\+\s*if \(nibble & 4\) \{\s*\+\s*x = GBAObjAttributesBGetX\(sprite->b\) - \(\(nibble & 8\) \? 512 : 0\);/);
     expect(define(fieldH, 'BR_OAM_HI_SIZE')).toBe(64);
     expect(corePatch).toMatch(/brOamTable = offset >= 0 && offset \+ 64 <= GBA_SIZE_EWRAM/);
     // ...and the shipped core has the export the page calls.

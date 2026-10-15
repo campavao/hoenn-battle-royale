@@ -51,6 +51,11 @@ export interface StillSetup {
   /** Pictures of the first samples with a miss in a cell no kept picture has, for a
    *  person to look at (`missPngs()`). */
   keep?: number;
+  /** Leave out the still's sea, every metatile with water in it: its waves, the shore's
+   *  foam and a rock's ripples are tile animation, and the still is one frame of it (a
+   *  cell of open water is that frame under half the time). The tall band
+   *  never reaches the sea on the walks here; the wide one does. */
+  skipWater?: boolean;
 }
 
 /** One 16x16 cell of one sample that was not the still. */
@@ -138,6 +143,8 @@ export async function installStill(s: StillSetup): Promise<void> {
     stills[ref] = { w: img.width, h: img.height, px: g.getImageData(0, 0, img.width, img.height).data };
   }
   const s16 = (v: number) => (v << 16) >> 16;
+  // skipWater's metatiles, by still and cell.
+  const seaCellsOf: Record<string, Map<number, boolean>> = {};
   // Every sprite the ROM put in OAM, where the core draws it: gMain.oamBuffer (at 0x38,
   // 128 entries of 8 bytes) is what the VBlank copies to OAM, so the picture of the next
   // frame is drawn from this frame's. A y of 216 (160 + the sprite window's 56) or more is
@@ -169,7 +176,8 @@ export async function installStill(s: StillSetup): Promise<void> {
       const x = a1 & 0x1ff;
       const nib = hi ? (hi[i >> 1] >> ((i & 1) * 4)) & 0xf : 0;
       const top = nib & 4 ? y + 256 * HI[nib & 3] : y >= 216 ? y - 256 : y;
-      const left = x >= 256 ? x - 512 : x;
+      // A marked entry says which way its 9-bit x reads (bit 3: 512 left of it).
+      const left = nib & 4 ? x - (nib & 8 ? 512 : 0) : x >= 256 ? x - 512 : x;
       out.push([left - 1, top - 1, left + w + 1, top + h + 1]);
     }
     return out;
@@ -250,6 +258,28 @@ export async function installStill(s: StillSetup): Promise<void> {
     }
     const px = pic.data;
     const tol = s.tolerance;
+    const seaCells = (seaCellsOf[c.map] ??= new Map());
+    // The sea's metatiles, as the stills draw them (Rustboro's corner, west of Route
+    // 115): any with a pixel of its blues -- blue well clear of green and red, which no
+    // grass, roof or path is -- the shore's foam and a rock's ripples animating with it.
+    const water = (sx: number, sy: number) => {
+      const key = (sx >> 4) * 4096 + (sy >> 4);
+      let v = seaCells.get(key);
+      if (v === undefined) {
+        v = false;
+        for (let y = sy & ~15; y < Math.min(still.h, (sy & ~15) + 16) && !v; y++) {
+          for (let x = sx & ~15; x < Math.min(still.w, (sx & ~15) + 16); x++) {
+            const j = (y * still.w + x) * 4;
+            if (still.px[j + 2] >= 150 && still.px[j + 2] - still.px[j + 1] >= 50 && still.px[j + 2] - still.px[j] >= 80) {
+              v = true;
+              break;
+            }
+          }
+        }
+        seaCells.set(key, v);
+      }
+      return v;
+    };
     const same = (i: number, sx: number, sy: number) => {
       if (sx < 0 || sy < 0 || sx >= still.w || sy >= still.h) return false;
       const j = (sy * still.w + sx) * 4;
@@ -287,6 +317,7 @@ export async function installStill(s: StillSetup): Promise<void> {
             const mx = o.left + x;
             if (mx < 0 || mx >= still.w) continue;
             if (mask[py * pic.width + qx]) continue;
+            if (s.skipWater && water(mx, my)) continue;
             const i = (py * pic.width + qx) * 4;
             compared++;
             if (same(i, mx, my)) matched++;

@@ -1,0 +1,27 @@
+# world-shown-wide: the ROM's world is as wide as the picture the page shows (gBrFieldShown
+# left and right, include/br/br_field.h). Rustboro City (21,11), pret's box being the
+# columns 2 past the LCD's left and 2 past the view's right (21-2 .. 21+17, object
+# coords). Seats 15 and 16 are put on our row 10 columns left of the box's left and 2
+# right of its right: with nothing shown past the view the ROM gives them no object; once
+# the page says it shows the wide view's 128 columns each side the box reaches 8 columns
+# further left and 7 further right, and both seats get one. Then the page says nothing
+# again, the seats still there, and the box lets them go.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 03 15 00 0B 00 BD BB C7 FF
+wait 400
+pokebytes gBrSeats+0xF0 01 0F 00 03 0B 00 12 00 01 FF
+pokebytes gBrSeats+0x100 01 0F 00 03 28 00 12 00 01 FF
+wait 30
+expect u8 gBrSeats+0xF9 255
+expect u8 gBrSeats+0x109 255
+pokebytes gBrFieldShown 28 00 28 00 80 00 80 00
+wait 30
+expectne u8 gBrSeats+0xF9 255
+expectne u8 gBrSeats+0x109 255
+pokebytes gBrFieldShown 00 00 00 00 00 00 00 00
+wait 30
+expect u8 gBrSeats+0xF0 1
+expect u8 gBrSeats+0x100 1
+expect u8 gBrSeats+0xF9 255
+expect u8 gBrSeats+0x109 255
+say ok

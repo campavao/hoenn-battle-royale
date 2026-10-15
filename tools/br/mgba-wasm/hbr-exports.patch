@@ -74,7 +74,7 @@ index ce91877..9616263 100644
  
  void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer);
 diff --git a/src/gba/renderers/common.c b/src/gba/renderers/common.c
-index e801892..4ad4fb0 100644
+index e801892..d842f56 100644
 --- a/src/gba/renderers/common.c
 +++ b/src/gba/renderers/common.c
 @@ -7,7 +7,7 @@
@@ -86,19 +86,28 @@ index e801892..4ad4fb0 100644
  	int i;
  	int oamMax = 0;
  	for (i = 0; i < 128; ++i) {
-@@ -37,10 +37,13 @@ int GBAVideoRendererCleanOAM(struct GBAObj* oam, struct GBAVideoRendererSprite*
+@@ -31,16 +31,21 @@ int GBAVideoRendererCleanOAM(struct GBAObj* oam, struct GBAVideoRendererSprite*
+ 			} else {
+ 				cycles = width - 2;
+ 				if (x < 0) {
+-					if (x + width < 0) {
++					if (x + width < 0 && visibleWidth < 512) {
+ 						continue;
+ 					}
  					cycles += x >> 1;
  				}
  			}
 -			if (GBAObjAttributesAGetY(obj.a) >= GBA_VIDEO_VERTICAL_PIXELS && GBAObjAttributesAGetY(obj.a) + height < VIDEO_VERTICAL_TOTAL_PIXELS) {
 +			/* Hoenn BR: with a band below the LCD the VBlank rows are drawn, so only cull
 +			 * a sprite that sits entirely in rows the band does not reach; a 256-row band
-+			 * reaches every row. Likewise the columns past 240 up to the band's edge. */
++			 * reaches every row. Likewise the columns past 240 up to the band's edge; a
++			 * band left of the LCD (visibleWidth 512) may show any x, and the renderer
++			 * clips each sprite to the row. */
 +			if (visibleHeight < 256 && GBAObjAttributesAGetY(obj.a) >= visibleHeight && GBAObjAttributesAGetY(obj.a) + height < VIDEO_VERTICAL_TOTAL_PIXELS) {
  				continue;
  			}
 -			if (GBAObjAttributesBGetX(obj.b) >= GBA_VIDEO_HORIZONTAL_PIXELS && GBAObjAttributesBGetX(obj.b) + width < 512) {
-+			if (GBAObjAttributesBGetX(obj.b) >= visibleWidth && GBAObjAttributesBGetX(obj.b) + width < 512) {
++			if (visibleWidth < 512 && GBAObjAttributesBGetX(obj.b) >= visibleWidth && GBAObjAttributesBGetX(obj.b) + width < 512) {
  				continue;
  			}
  			int y = GBAObjAttributesAGetY(obj.a) + offsetY;
@@ -129,19 +138,29 @@ index 4aada17..da68315 100644
  	if (background->mosaic) {
  		int mosaicV = GBAMosaicControlGetBgV(renderer->mosaic) + 1;
 diff --git a/src/gba/renderers/software-obj.c b/src/gba/renderers/software-obj.c
-index 186db38..8fcd012 100644
+index 186db38..0ebe8d8 100644
 --- a/src/gba/renderers/software-obj.c
 +++ b/src/gba/renderers/software-obj.c
-@@ -163,7 +163,7 @@ int GBAVideoSoftwareRendererPreprocessSprite(struct GBAVideoSoftwareRenderer* re
+@@ -163,7 +163,17 @@ int GBAVideoSoftwareRendererPreprocessSprite(struct GBAVideoSoftwareRenderer* re
  	}
  	int32_t x = (uint32_t) GBAObjAttributesBGetX(sprite->b) << 23;
  	x >>= 23;
 -	x += renderer->objOffsetX;
++	/* Hoenn BR: an entry the ROM's OAM side table marks says which way its 9-bit x
++	 * reads (bit 3: 512 left of it), so a sprite out in the wide view's 128 columns
++	 * either side is drawn where it is -- the hardware would read x past 255 as
++	 * negative, putting a sprite 300 columns right of the LCD's left 212 left of it. */
++	if (renderer->brOamHi) {
++		int nibble = renderer->brOamHi[index >> 1] >> (4 * (index & 1));
++		if (nibble & 4) {
++			x = GBAObjAttributesBGetX(sprite->b) - ((nibble & 8) ? 512 : 0);
++		}
++	}
 +	x += renderer->objOffsetX + renderer->brLeft;
  	uint16_t* vramBase = &renderer->d.vram[BASE_TILE >> 1];
  	unsigned align = GBAObjAttributesAIs256Color(sprite->a) && !GBARegisterDISPCNTIsObjCharacterMapping(renderer->dispcnt);
  	unsigned charBase = (GBAObjAttributesCGetTile(sprite->c) & ~align) * 0x20;
-@@ -221,9 +221,7 @@ int GBAVideoSoftwareRendererPreprocessSprite(struct GBAVideoSoftwareRenderer* re
+@@ -221,9 +231,7 @@ int GBAVideoSoftwareRendererPreprocessSprite(struct GBAVideoSoftwareRenderer* re
  		LOAD_16(mat.c, 0, &renderer->d.oam->mat[GBAObjAttributesBGetMatIndex(sprite->b)].c);
  		LOAD_16(mat.d, 0, &renderer->d.oam->mat[GBAObjAttributesBGetMatIndex(sprite->b)].d);
  
@@ -152,7 +171,7 @@ index 186db38..8fcd012 100644
  		int outX = x >= start ? x : start;
  		int condition = x + totalWidth;
  		int inX = outX - x;
-@@ -324,9 +322,7 @@ int GBAVideoSoftwareRendererPreprocessSprite(struct GBAVideoSoftwareRenderer* re
+@@ -324,9 +332,7 @@ int GBAVideoSoftwareRendererPreprocessSprite(struct GBAVideoSoftwareRenderer* re
  				condition += mosaicH - (condition % mosaicH);
  			}
  		}
@@ -179,7 +198,7 @@ index 4f7e9f8..6d31d51 100644
  	int mosaicWait = 0;                                                                                               \
  	int32_t localX;                                                                                                   \
 diff --git a/src/gba/renderers/video-software.c b/src/gba/renderers/video-software.c
-index c5bc37b..2f07d98 100644
+index c5bc37b..d9f5a05 100644
 --- a/src/gba/renderers/video-software.c
 +++ b/src/gba/renderers/video-software.c
 @@ -27,6 +27,7 @@ static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer,
@@ -261,7 +280,7 @@ index c5bc37b..2f07d98 100644
  						if (VIDEO_CHECKS && activeWindow >= MAX_WINDOW) {
  							mLOG(GBA_VIDEO, FATAL, "Out of bounds window write will occur");
  							return;
-@@ -610,10 +617,33 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -610,10 +617,56 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	CLEAN_SCANLINE(softwareRenderer, y);
  
@@ -282,6 +301,29 @@ index c5bc37b..2f07d98 100644
 + * is the backdrop, and the weather's sprites over it. */
 +#define BR_TEXT_BG_SHOWN(X) (!outer || (softwareRenderer->bg[X].size & 2))
 +
++/* Hoenn BR: text BG `bg` on this row's current window. Sideways a 256-column BG has
++ * nothing of its own past its 256 columns from the LCD's left -- left of the LCD it would
++ * show its right edge again: the HUD's corner, beside the map -- so only a BG whose BGCNT
++ * makes it 512 columns wide (size bit 0) is drawn there; the rest is the backdrop. With a
++ * band of 16 columns or fewer right of the LCD and none left, nothing is held back. */
++static void _brDrawText(struct GBAVideoSoftwareRenderer* renderer, struct GBAVideoSoftwareBackground* bg, int y) {
++	int start = renderer->start;
++	int end = renderer->end;
++	if (!(bg->size & 1)) {
++		if (renderer->start < renderer->brLeft) {
++			renderer->start = renderer->brLeft;
++		}
++		if (renderer->end > renderer->brLeft + 256) {
++			renderer->end = renderer->brLeft + 256;
++		}
++	}
++	if (renderer->start < renderer->end) {
++		GBAVideoSoftwareRendererDrawBackgroundMode0(renderer, bg, y);
++	}
++	renderer->start = start;
++	renderer->end = end;
++}
++
 +/* Hoenn BR (POK-319): one row of the wide picture -- the LCD's 240 pixels plus the band
 + * either side -- into the output buffer at row `y`, which may be negative or past 159
 + * for a band row. A band row is drawn from the frame's final register state, never
@@ -297,25 +339,28 @@ index c5bc37b..2f07d98 100644
  			row[x] = M_COLOR_WHITE;
  		}
  		return;
-@@ -635,28 +665,43 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -635,28 +688,43 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  			if (spriteLayers & (1 << priority)) {
  				GBAVideoSoftwareRendererPostprocessSprite(softwareRenderer, priority);
  			}
 -			if (TEST_LAYER_ENABLED(0) && GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) < 2) {
+-				GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[0], y);
 +			if (TEST_LAYER_ENABLED(0) && GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) < 2 && BR_TEXT_BG_SHOWN(0)) {
- 				GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[0], y);
++				_brDrawText(softwareRenderer, &softwareRenderer->bg[0], y);
  			}
 -			if (TEST_LAYER_ENABLED(1) && GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) < 2) {
+-				GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[1], y);
 +			if (TEST_LAYER_ENABLED(1) && GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) < 2 && BR_TEXT_BG_SHOWN(1)) {
- 				GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[1], y);
++				_brDrawText(softwareRenderer, &softwareRenderer->bg[1], y);
  			}
  			if (TEST_LAYER_ENABLED(2)) {
  				switch (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt)) {
  				case 0:
+-					GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[2], y);
 +					if (!BR_TEXT_BG_SHOWN(2)) {
 +						break;
 +					}
- 					GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[2], y);
++					_brDrawText(softwareRenderer, &softwareRenderer->bg[2], y);
  					break;
  				case 1:
  				case 2:
@@ -343,14 +388,15 @@ index c5bc37b..2f07d98 100644
  					GBAVideoSoftwareRendererDrawBackgroundMode5(softwareRenderer, &softwareRenderer->bg[2], y);
  					break;
  				}
-@@ -664,9 +709,15 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -664,9 +732,15 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  			if (TEST_LAYER_ENABLED(3)) {
  				switch (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt)) {
  				case 0:
+-					GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[3], y);
 +					if (!BR_TEXT_BG_SHOWN(3)) {
 +						break;
 +					}
- 					GBAVideoSoftwareRendererDrawBackgroundMode0(softwareRenderer, &softwareRenderer->bg[3], y);
++					_brDrawText(softwareRenderer, &softwareRenderer->bg[3], y);
  					break;
  				case 2:
 +					if (band) {
@@ -359,7 +405,7 @@ index c5bc37b..2f07d98 100644
  					GBAVideoSoftwareRendererDrawBackgroundMode2(softwareRenderer, &softwareRenderer->bg[3], y);
  					break;
  				}
-@@ -676,6 +727,11 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -676,6 +750,11 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	GBAVideoSoftwareRendererPostprocessBuffer(softwareRenderer);
  
@@ -371,7 +417,7 @@ index c5bc37b..2f07d98 100644
  	if (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) != 0) {
  		if (softwareRenderer->bg[2].enabled == ENABLED_MAX) {
  			softwareRenderer->bg[2].sx += softwareRenderer->bg[2].dmx;
-@@ -706,7 +762,7 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -706,7 +785,7 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	int x;
  	if (softwareRenderer->stereo) {
@@ -380,7 +426,7 @@ index c5bc37b..2f07d98 100644
  			row[x] = softwareRenderer->row[x] & (M_COLOR_RED | M_COLOR_BLUE);
  			row[x] |= softwareRenderer->row[x + 1] & M_COLOR_GREEN;
  			row[x + 1] = softwareRenderer->row[x + 1] & (M_COLOR_RED | M_COLOR_BLUE);
-@@ -719,21 +775,65 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -719,21 +798,65 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  		}
  	} else {
  #ifdef COLOR_16_BIT
@@ -448,7 +494,7 @@ index c5bc37b..2f07d98 100644
  	softwareRenderer->nextY = 0;
  	if (softwareRenderer->temporaryBuffer) {
  		mappedMemoryFree(softwareRenderer->temporaryBuffer, GBA_VIDEO_HORIZONTAL_PIXELS * GBA_VIDEO_VERTICAL_PIXELS * 4);
-@@ -893,14 +993,15 @@ void GBAVideoSoftwareRendererStepWindow(struct GBAVideoSoftwareRenderer* softwar
+@@ -893,14 +1016,15 @@ void GBAVideoSoftwareRendererStepWindow(struct GBAVideoSoftwareRenderer* softwar
  
  void GBAVideoSoftwareRendererPreprocessBuffer(struct GBAVideoSoftwareRenderer* softwareRenderer) {
  	int x;
@@ -466,7 +512,7 @@ index c5bc37b..2f07d98 100644
  	softwareRenderer->nWindows = 1;
  	if (GBARegisterDISPCNTIsWin0Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsWin1Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsObjwinEnable(softwareRenderer->dispcnt)) {
  		softwareRenderer->windows[0].control = softwareRenderer->winout;
-@@ -1016,12 +1117,45 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
+@@ -1016,12 +1140,45 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
  	}
  }
  
@@ -509,11 +555,11 @@ index c5bc37b..2f07d98 100644
  	if (GBARegisterDISPCNTIsObjEnable(renderer->dispcnt) && !renderer->d.disableOBJ) {
  		if (renderer->oamDirty) {
 -			renderer->oamMax = GBAVideoRendererCleanOAM(renderer->d.oam->obj, renderer->sprites, renderer->objOffsetY);
-+			renderer->oamMax = GBAVideoRendererCleanOAM(renderer->d.oam->obj, renderer->sprites, renderer->objOffsetY, GBA_VIDEO_HORIZONTAL_PIXELS + renderer->brRight, GBA_VIDEO_VERTICAL_PIXELS + renderer->brTop + renderer->brBottom);
++			renderer->oamMax = GBAVideoRendererCleanOAM(renderer->d.oam->obj, renderer->sprites, renderer->objOffsetY, renderer->brLeft ? 512 : GBA_VIDEO_HORIZONTAL_PIXELS + renderer->brRight, GBA_VIDEO_VERTICAL_PIXELS + renderer->brTop + renderer->brBottom);
  			renderer->oamDirty = false;
  		}
  		int mosaicV = GBAMosaicControlGetObjV(renderer->mosaic) + 1;
-@@ -1037,7 +1171,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1037,7 +1194,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  			if (renderer->spriteCyclesRemaining <= 0) {
  				break;
  			}

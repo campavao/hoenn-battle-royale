@@ -25,7 +25,7 @@
 // but what the core chose to draw there.
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
 import { clipAndCamera, edgeCut, insetOf, ram, tap } from './play';
 import { installStill, type StillReport } from './still';
@@ -33,6 +33,10 @@ import { installStill, type StillReport } from './still';
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out', 'picture');
 const PORTRAIT = { width: 390, height: 844 };
+/** A desktop, which shows more beside the LCD than above and below it at a phone's zoom. */
+const DESKTOP = { width: 1600, height: 900 };
+/** The ROM's wide band (gBrFieldViewWide): 128 columns each side, 40 rows. */
+const WIDE = { side: 128, rows: 40 };
 
 const SEED = 5376;
 const SAFARI_SE = '26:13';
@@ -77,6 +81,10 @@ const RUSTBORO_LAND = { x: 21, y: 25 };
 /** Rustboro's top edge is Route 115's bottom (40x80, no offset), and column 21 runs on up
  *  it to row 77 at least (ring-tall.txt walks it too). */
 const ROUTE_115 = { id: 'MAP_ROUTE115', ref: '0:30', w: 40, h: 80 };
+/** Rustboro's right edge is Route 116's left (100x20, no offset): row 11 runs on into it,
+ *  clear to its column 5. */
+const ROUTE_116 = { id: 'MAP_ROUTE116', ref: '0:31', w: 100, h: 20 };
+const ROUTE_116_EAST_TO = 4;
 /** still.ts's thresholds: a 16x16 cell of the picture is the still when half the pixels it
  *  compares are, within mGBA's colour rounding -- a flower's frames change up to 40% of
  *  its cell, another metatile's cell matches under 20%, and a column past the ring's
@@ -511,10 +519,13 @@ function misses(r: StillReport): string {
 }
 const NL = String.fromCharCode(10);
 
-test("inside the map the ROM's band is the map, every row of it past the LCD: standing, walking every way, under the START menu and over a connection", async ({ browser }) => {
-  test.setTimeout(300_000);
+/** Rustboro's band against the still, standing, walking every way, under START and over
+ *  the connection into Route 115: the tall ring on a portrait phone, the wide one on a
+ *  desktop (`wide`), whose band is `picture` and whose sideways legs are long enough to
+ *  wrap its 64-column ring. */
+async function rustboroIsTheMap(browser: Browser, how: { name: string; context: BrowserContextOptions; picture: { width: number; height: number; left: number; top: number }; across: number; skipWater?: boolean; east?: boolean }): Promise<void> {
   const sym = loadSymbols();
-  const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
+  const ctx = await browser.newContext(how.context);
   try {
     const page = await ctx.newPage();
     await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${RUSTBORO_LAND.x},${RUSTBORO_LAND.y}&rom=${romHashParam()}`);
@@ -531,15 +542,16 @@ test("inside the map the ROM's band is the map, every row of it past the LCD: st
     await page.waitForTimeout(3_000);
 
     const pic = await grab(page);
-    expect({ width: pic.width, height: pic.height, left: pic.left, top: pic.top }, "the core draws the ROM's band: 256x496, the LCD at its row 104").toEqual({ width: 256, height: 160 + TALL.top + TALL.bottom, left: 0, top: TALL.top });
-    await save(page, 'rustboro');
+    expect({ width: pic.width, height: pic.height, left: pic.left, top: pic.top }, "the core draws the ROM's band").toEqual(how.picture);
+    await save(page, how.name);
 
     await page.evaluate(installStill, {
       sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi },
-      stills: { [RUSTBORO.ref]: `/field-maps/${RUSTBORO.id}.png`, [ROUTE_115.ref]: `/field-maps/${ROUTE_115.id}.png` },
+      stills: { [RUSTBORO.ref]: `/field-maps/${RUSTBORO.id}.png`, [ROUTE_115.ref]: `/field-maps/${ROUTE_115.id}.png`, [ROUTE_116.ref]: `/field-maps/${ROUTE_116.id}.png` },
       every: 0,
       keep: 12,
       ...STILL,
+      skipWater: how.skipWater,
     });
     const start = () => page.evaluate(() => (window as unknown as { __still: { start(): void } }).__still.start());
     const stop = () => page.evaluate(() => (window as unknown as { __still: { stop(): StillReport } }).__still.stop());
@@ -548,13 +560,13 @@ test("inside the map the ROM's band is the map, every row of it past the LCD: st
       console.log(`picture: ${what}: ${report.samples} frames (${report.moving} mid-step, ${report.lagged} lagged, ${report.popup} with the popup), ${report.cells} cells, ${report.missed} missed, worst frame ${(100 * report.worstFrame).toFixed(1)}% (control at best ${(100 * report.controlFrame).toFixed(1)}%), worst cell ${(100 * report.worst).toFixed(1)}%${w ? ` (cell ${w.x},${w.y} at ${w.cam.x},${w.cam.y} sub ${w.cam.subX},${w.cam.subY})` : ''}, gaps ${report.gaps}`);
       const png = await page.evaluate(() => (window as unknown as { __still: { worstPng(): string | null } }).__still.worstPng());
       const slug = what.replace(/\W+/g, '-').toLowerCase();
-      fs.writeFileSync(path.join(OUT_DIR, `rustboro-${slug}-trace.txt`), report.trace.join(NL));
-      fs.writeFileSync(path.join(OUT_DIR, `rustboro-${slug}-misses.json`), JSON.stringify(report.misses));
-      if (png) fs.writeFileSync(path.join(OUT_DIR, `rustboro-${slug}-worst.png`), Buffer.from(png.split(',')[1], 'base64'));
+      fs.writeFileSync(path.join(OUT_DIR, `${how.name}-${slug}-trace.txt`), report.trace.join(NL));
+      fs.writeFileSync(path.join(OUT_DIR, `${how.name}-${slug}-misses.json`), JSON.stringify(report.misses));
+      if (png) fs.writeFileSync(path.join(OUT_DIR, `${how.name}-${slug}-worst.png`), Buffer.from(png.split(',')[1], 'base64'));
       const kept = await page.evaluate(() => (window as unknown as { __still: { missPngs(): string[] } }).__still.missPngs());
-      kept.forEach((k, i) => fs.writeFileSync(path.join(OUT_DIR, `rustboro-${slug}-miss-${i}.png`), Buffer.from(k.split(',')[1], 'base64')));
+      kept.forEach((k, i) => fs.writeFileSync(path.join(OUT_DIR, `${how.name}-${slug}-miss-${i}.png`), Buffer.from(k.split(',')[1], 'base64')));
       expect(report.samples, `${what}: frames compared`).toBeGreaterThan(10);
-      expect(report.picture, `${what}: the ROM's band`).toEqual({ width: 256, height: 160 + TALL.top + TALL.bottom, left: 0, top: TALL.top });
+      expect(report.picture, `${what}: the ROM's band`).toEqual(how.picture);
       expect(report.missed, `${what}: every cell of every frame is the still\n${misses(report)}`).toBe(0);
       expect(report.worstFrame, `${what}: every frame is the still`).toBeGreaterThanOrEqual(FRAME_PASS);
       // The check has teeth: no picture is the still one metatile down.
@@ -571,17 +583,34 @@ test("inside the map the ROM's band is the map, every row of it past the LCD: st
     await hold('standing', await stop());
     expect(await stale(), 'at rest the ring is whole').toBe(0);
 
-    // Walking, every frame of every step: down six, up twenty (to row 11), right six, left six.
+    // Walking, every frame of every step: down six, up twenty (to row 11), right and left
+    // `across` (six; row 11 is clear to column 39).
     await start();
     await walk(page, 'ArrowDown', async () => (await here()).y >= RUSTBORO_LAND.y + 6, 5_000);
     await walk(page, 'ArrowUp', async () => (await here()).y <= 11, 12_000);
     expect(await here(), 'up column 21 to row 11').toEqual({ x: RUSTBORO_LAND.x, y: 11, map: RUSTBORO.ref });
-    await walk(page, 'ArrowRight', async () => (await here()).x >= RUSTBORO_LAND.x + 6, 5_000);
-    await walk(page, 'ArrowLeft', async () => (await here()).x <= RUSTBORO_LAND.x, 5_000);
+    await walk(page, 'ArrowRight', async () => (await here()).x >= RUSTBORO_LAND.x + how.across, 10_000);
+    await walk(page, 'ArrowLeft', async () => (await here()).x <= RUSTBORO_LAND.x, 10_000);
     const walked = await stop();
     await hold('walking', walked);
+
+    if (how.east) {
+      // East over the connection into Route 116 and back: the wide ring's columns past
+      // pret's were drawn from the last map's grid, where the ones more than MAP_OFFSET
+      // past its edge are its border, until the ROM draws them again (gBrRingStale's
+      // columns, which the page cuts).
+      await start();
+      await walk(page, 'ArrowRight', async () => { const h = await here(); return h.map === ROUTE_116.ref && h.x >= ROUTE_116_EAST_TO; }, 10_000);
+      expect(await here(), 'along row 11 over the connection').toEqual({ x: ROUTE_116_EAST_TO, y: 11, map: ROUTE_116.ref });
+      await page.waitForTimeout(500);
+      expect(await stale(), "at rest on Route 116 the ring is Route 116's").toBe(0);
+      await walk(page, 'ArrowLeft', async () => { const h = await here(); return h.map === RUSTBORO.ref && h.x <= RUSTBORO_LAND.x; }, 15_000);
+      await hold('east over the connection and back', await stop());
+      expect(await here(), 'back along row 11').toEqual({ x: RUSTBORO_LAND.x, y: 11, map: RUSTBORO.ref });
+    }
     // At a run a step is 8 frames (the page's player has the running shoes).
-    expect(walked.moving, 'every frame of 38 steps, near enough').toBeGreaterThan(38 * 6);
+    const steps = 26 + 2 * how.across;
+    expect(walked.moving, `every frame of ${steps} steps, near enough`).toBeGreaterThan(steps * 6);
 
     // START: the menu is BG0's, in the LCD, and nothing of it -- nor of the corner -- is
     // drawn past the window, where the band's rows must still be the map.
@@ -591,7 +620,7 @@ test("inside the map the ROM's band is the map, every row of it past the LCD: st
     await page.waitForTimeout(1_000);
     const menu = await stop();
     await grab(page);
-    await save(page, 'rustboro-start');
+    await save(page, `${how.name}-start`);
     await hold('START up', menu);
     await tap(page, 'x');
     await page.waitForTimeout(1_000);
@@ -609,4 +638,34 @@ test("inside the map the ROM's band is the map, every row of it past the LCD: st
   } finally {
     await ctx.close();
   }
+}
+
+test("inside the map the ROM's band is the map, every row of it past the LCD: standing, walking every way, under the START menu and over a connection", async ({ browser }) => {
+  test.setTimeout(300_000);
+  await rustboroIsTheMap(browser, {
+    name: 'rustboro',
+    context: { viewport: PORTRAIT, isMobile: true, hasTouch: true },
+    picture: { width: 256, height: 160 + TALL.top + TALL.bottom, left: 0, top: TALL.top },
+    across: 6,
+  });
+});
+
+// THE WIDE RING (include/br/br_field.h): a desktop shows far more map beside the LCD than
+// above and below it, so the page asks for the ROM's wide ring, 512x256 BGs, and the core
+// draws its 128 columns each side and 40 rows. Every cell of it past the LCD is the map,
+// walking every way -- 18 steps each way along row 11 turn the 64-column ring more than
+// once -- and over the connection, where the columns past pret's are Route 115's.
+test("on a desktop the ROM's wide band is the map, every column of it past the LCD: standing, walking every way, under the START menu and over a connection", async ({ browser }) => {
+  test.setTimeout(300_000);
+  await rustboroIsTheMap(browser, {
+    name: 'rustboro-wide',
+    context: { viewport: DESKTOP },
+    picture: { width: 240 + 2 * WIDE.side, height: 160 + 2 * WIDE.rows, left: WIDE.side, top: WIDE.rows },
+    across: 17,
+    // The wide band shows the sea in Rustboro's corner and west of Route 115, which the
+    // tall band never reaches: its waves are tile animation, a cell of open water the
+    // still's frame 21-49% of the time, so the still's sea is left out (still.ts).
+    skipWater: true,
+    east: true,
+  });
 });

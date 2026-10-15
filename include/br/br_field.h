@@ -132,8 +132,51 @@ STATIC_ASSERT(BR_FIELD_MAP_BASE_BG1 == BR_FIELD_MAP_BASE_BG2 + 2 && BR_FIELD_MAP
 STATIC_ASSERT(BR_RING_MAP_SIZE <= 2 * BG_SCREEN_SIZE, BrRingMapFitsItsBlocks)
 STATIC_ASSERT(BR_RING_MAP_SIZE == BR_RING_TILE_ROWS * 32 * 2, BrRingMapIsTheRing)
 
+// THE WIDE RING (Cam, 2026-10-14: one phone's zoom on every screen). A screen wider than
+// it is tall -- a desktop, a phone on its side -- shows far more map beside the LCD than
+// above and below it, so there the same two blocks a layer are a 512x256 BG (BGxCNT size
+// 1) and the ring is 64x32 tiles: 32 metatile columns, pos.x - BR_WIDE_LEFT ..
+// pos.x + 31 - BR_WIDE_LEFT, and pret's 16 rows, pos.y .. pos.y+15. Grid cell
+// (pos.x + dx, pos.y + dy) lives in tile column (xTileOffset + 2*dx) & 63, of which the
+// low 32 are the first block and the high 32 the second, and tile row
+// (yTileOffset + 2*dy) & 31. It is THE RING above turned on its side:
+//
+//   * pret's draws stay exactly as they were, in the 16 columns pos.x..pos.x+15.
+//   * A step left draws the new left column's 16 rows at once, into the slot the old
+//     right column leaves (off every picture: the wide view keeps one metatile column of
+//     the ring spare right of it), and a step up the rest of its new top row. A step
+//     right marks the far column pos.x + 31 - BR_WIDE_LEFT, and a step down the far row
+//     pos.y+15 (all 32 columns): each goes into the slot the band's left columns, or its
+//     top rows, show until the step completes, so BrField_Tick draws it on that frame.
+//   * The ring's columns past pret's 15 are stale after a whole-map draw and a map
+//     connection, and BrField_Tick redraws them, the nearest first, two columns a frame.
+//     gBrRingStale's bits are columns then: bit (dx + BR_WIDE_LEFT).
+//
+// The page asks for the wide ring by writing the columns it shows left of the LCD into
+// gBrFieldShown before the field's BGs are set up (BrField_InitRingBgs latches it, on
+// every way into the field); a page that writes none gets THE RING.
+#define BR_WIDE_LEFT 8
+#define BR_WIDE_COLUMNS 32
+#define BR_WIDE_SCREEN_SIZE 1
+// The wide view: 128 columns each side, the ring less its one spare column (31 x 16 =
+// 240 + 128 + 128), and 40 rows each side, pret's 16 rows less the one spare row a step
+// needs (15 x 16 = 160 + 40 + 40). The LCD's left is pos.x's left, and its top 40 rows
+// below pos.y's top, as in pret.
+#define BR_WIDE_VIEW_LEFT   128
+#define BR_WIDE_VIEW_TOP    40
+#define BR_WIDE_VIEW_RIGHT  128
+#define BR_WIDE_VIEW_BOTTOM 40
+
+STATIC_ASSERT(BR_WIDE_COLUMNS == 32, BrWideColumnsAreOneWord)
+STATIC_ASSERT(BR_WIDE_VIEW_LEFT == 16 * BR_WIDE_LEFT, BrWideViewLeftIsTheRingsLeft)
+STATIC_ASSERT(DISPLAY_WIDTH + BR_WIDE_VIEW_LEFT + BR_WIDE_VIEW_RIGHT == 16 * BR_WIDE_COLUMNS - 16, BrWideViewIsTheRingLessOneColumn)
+STATIC_ASSERT(BR_WIDE_VIEW_TOP == BR_SPRITE_TOP && DISPLAY_HEIGHT + BR_WIDE_VIEW_TOP + BR_WIDE_VIEW_BOTTOM == 16 * 16 - 16, BrWideViewIsPretsRowsLessOne)
+STATIC_ASSERT(BR_WIDE_VIEW_LEFT <= 128 && BR_WIDE_VIEW_RIGHT <= 128, BrWideViewTheCoreDraws)
+STATIC_ASSERT(BR_WIDE_VIEW_LEFT % 8 == 0 && BR_WIDE_VIEW_RIGHT % 8 == 0 && BR_WIDE_VIEW_BOTTOM % 8 == 0, BrWideViewInEights)
+
 // InitOverworldBgs's tilemap buffers and where they go (src/overworld.c, `#if BR`): the
-// three BR_RING_MAP_SIZE buffers, BG1..3's map bases above, and their 256x512 size.
+// three BR_RING_MAP_SIZE buffers, BG1..3's map bases above, and their size: 256x512, or
+// 512x256 when the page shows columns left of the LCD (THE WIDE RING).
 void BrField_InitRingBgs(void);
 
 // field_camera.c's ring, under `#if BR` (see THE RING above):
@@ -166,6 +209,9 @@ BR_OFFSET(BrFieldView, spriteBottom, 10)
 BR_SIZE(BrFieldView, 12)
 
 extern const struct BrFieldView gBrFieldView;
+// ...and the wide ring's (THE WIDE RING), which the page asks for instead on a screen it
+// covers more of.
+extern const struct BrFieldView gBrFieldViewWide;
 
 // ---- THE VIEW THE PAGE SHOWS ------------------------------------------------------
 //
@@ -177,14 +223,20 @@ extern const struct BrFieldView gBrFieldView;
 // page shows: the page writes the rows it shows past the LCD into gBrFieldShown before
 // the first frame (only when its core reads the table), and the ROM hides a sprite, and
 // keeps an object, by those rows instead of the sprite window. 0, 0 is the old world.
+// left and right are the columns it shows beside the LCD the same way: past the view's
+// own 0 and 16 only with the wide ring, and left > 0 is what asks for that ring.
 struct BrFieldShown
 {
     /* 0 */ u16 top;
     /* 2 */ u16 bottom;
+    /* 4 */ u16 left;
+    /* 6 */ u16 right;
 };
 BR_OFFSET(BrFieldShown, top, 0)
 BR_OFFSET(BrFieldShown, bottom, 2)
-BR_SIZE(BrFieldShown, 4)
+BR_OFFSET(BrFieldShown, left, 4)
+BR_OFFSET(BrFieldShown, right, 6)
+BR_SIZE(BrFieldShown, 8)
 
 extern struct BrFieldShown gBrFieldShown;
 
@@ -196,8 +248,12 @@ extern struct BrFieldShown gBrFieldShown;
 // an unmarked one -- an OAM entry some screen writes for itself -- as it always did.
 // Latched when the OAM is, so the band, drawn at VBlank before the next copy, reads what
 // the hardware has.
+// Bit 3 of a marked entry: its true left is its 9-bit x less 512 (left of the LCD), not
+// the x itself -- the wide view runs 128 columns left of the LCD to 368 right of its left
+// edge, which the hardware's reading (x past 255 is negative) cannot tell apart.
 #define BR_OAM_HI_SIZE 64
 #define BR_OAM_HI_MARK 4
+#define BR_OAM_HI_LEFT 8
 extern u8 gBrOamHi[BR_OAM_HI_SIZE];
 // sprite.c, BuildOamBuffer, once the OAM's own copy is held off: every entry unmarked.
 void BrField_OamClear(void);
@@ -206,16 +262,16 @@ void BrField_OamClear(void);
 void BrField_OamEntry(u8 index, const struct Sprite *sprite, s16 dx, s16 dy);
 // sprite.c, LoadOam: the table goes out with the OAM it describes.
 void BrField_OamLatch(void);
-// event_object_movement.c: pret's object box, rows top..bottom, grown by the rows the
-// page shows past the sprite window. TrySpawnObjectEvents spawns pret's box and then
-// BrField_SpawnGrown the grown rows, each person while BR_GROW_SPARE slots are spare past
+// event_object_movement.c: pret's object box, grown by the rows the page shows past the
+// sprite window and the columns it shows past the view's own. TrySpawnObjectEvents spawns
+// pret's box and then BrField_SpawnGrown the grown cells, each person while BR_GROW_SPARE slots are spare past
 // the headroom; RemoveObjectEventIfOutsideView and BrField_InObjectView keep the grown box
 // while the headroom is. spawn is event_object_movement.c's TrySpawnObjectEventTemplate.
 #define BR_GROW_SPARE 4
 struct ObjectEventTemplate;
 typedef u8 (*BrSpawnTemplateFunc)(const struct ObjectEventTemplate *, u8, u8, s16, s16);
 void BrField_SpawnGrown(u8 count, s16 cameraX, s16 cameraY, BrSpawnTemplateFunc spawn);
-void BrField_GrowObjectBox(s16 *top, s16 *bottom);
+void BrField_GrowObjectBox(s16 *left, s16 *right, s16 *top, s16 *bottom);
 
 // Every frame from CameraUpdate: the far row or column once its step has completed, and
 // then stale rows (see THE RING above).
@@ -224,7 +280,9 @@ void BrField_Tick(void);
 // the top bit, mid-step down, the far row that waits for the landing. The page cuts the
 // band's rows that fall in one off the picture (web/src/field.ts bandClip), so the few
 // frames a whole-map draw or a map connection takes to redraw them show the composite's
-// map, not the rows the last map left there -- its border, past MAP_OFFSET.
+// map, not the rows the last map left there -- its border, past MAP_OFFSET. With the
+// wide ring the bits are its columns, bit (dx + BR_WIDE_LEFT), the top one the far
+// column mid-step right, and the page cuts columns.
 extern u32 gBrRingStale;
 // TRUE when a sprite whose top-left is (x, y) and right edge x2 is past the picture.
 bool8 BrField_OffScreen(s16 x, s16 x2, s16 y, s16 y2);

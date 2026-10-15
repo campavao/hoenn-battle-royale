@@ -366,9 +366,18 @@ elsewhere the rows the layout shows; a ROM without it gets the legacy band). The
 a phone's on every screen (Cam, 2026-10-14, `fieldScale`): 240 game pixels across a
 portrait phone's glass, the same on its side, and the widest phone's (430 / 240, rounded
 up to whole device pixels) on anything bigger, which shows more map, not a bigger
-picture. The OAM's 8-bit y has one reading only in the 256 rows around the LCD (the sprite window, 40 above and 56 below), so the ROM keeps a
-side table of each OAM entry's high bits (`gBrOamHi`, latched in `LoadOam` with the OAM
-it describes) and the core reads it (`brSetOamTable`) to draw every sprite once, at its
+picture. So a desktop or a phone on its side shows far more beside the LCD than above
+and below it, and there the same VRAM is **the wide ring** (`gBrFieldViewWide`): 512×256
+BGs, 64×32 tiles, pos.x-8..pos.x+23 by pret's 16 rows, and a 496×240 picture, 128
+columns each side and 40 rows. The page asks for whichever ring's picture covers more of
+its layout (`askBand`), and writing a left into `gBrFieldShown` is what asks the ROM for
+the wide one (latched as the field's BGs are set up, so once a boot). The side table's
+bit 3 says a sprite's 9-bit x reads 512 left, so the core draws a person in the left band
+where they are, and the core draws a 256-column BG (BG0, the HUD) only in its own 256
+columns. Past that picture the composite carries on. The OAM's 8-bit y has one reading
+only in the 256 rows around the LCD (the sprite window, 40 above and 56 below), so the
+ROM keeps a side table of each OAM entry's high bits (`gBrOamHi`, latched in `LoadOam`
+with the OAM it describes) and the core reads it (`brSetOamTable`) to draw every sprite once, at its
 true rows, anywhere in the band. With that the page tells the ROM the rows it shows
 (`gBrFieldShown`) and the ROM's world grows to them: a sprite is hidden only past those
 rows, and the object box (spawn, cull, ghosts, loot) gains a row for every 16 shown past

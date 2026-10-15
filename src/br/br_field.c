@@ -27,6 +27,11 @@ EWRAM_DATA u32 gBrRingStale = 0;
 static u8 sFarColumnPending;
 // This frame's step drew its slices: stale rows wait for a frame with less to do.
 static u8 sSliced;
+// THE WIDE RING (br_field.h): the BGs are 512x256, latched by BrField_InitRingBgs. Its
+// far row, pos.y+15, waits for a step down to complete the way the tall ring's far
+// column does; its far column is gBrRingStale's top bit.
+static EWRAM_DATA bool8 sWide = FALSE;
+static EWRAM_DATA bool8 sFarRowPending = FALSE;
 
 #define ROW_BIT(dy) (1u << ((dy) + BR_RING_ABOVE))
 #define FAR_ROW (BR_RING_ROWS - 1 - BR_RING_ABOVE)
@@ -38,6 +43,150 @@ static u8 sSliced;
 // Stale rows BrField_Tick draws a frame: 16 metatiles each, the cost of one of pret's
 // slices.
 #define ROWS_A_FRAME 2
+
+// ---- THE WIDE RING ----
+
+#define COLUMN_BIT(dx) (1u << ((dx) + BR_WIDE_LEFT))
+#define FAR_WIDE_COLUMN (BR_WIDE_COLUMNS - 1 - BR_WIDE_LEFT)
+#define FAR_WIDE_ROW 15
+// Columns pos.x..pos.x+14: pret draws each one as it comes in.
+#define PRET_COLUMNS (COLUMN_BIT(15) - COLUMN_BIT(0))
+
+// Ring columns x0..x1-1 of ring rows y0..y1-1.
+static void DrawCells(s16 x0, s16 x1, s16 y0, s16 y1)
+{
+    s16 x, y;
+
+    for (y = y0; y < y1; y++)
+    {
+        for (x = x0; x < x1; x++)
+            CurrentMapDrawMetatileAt(gSaveBlock1Ptr->pos.x + x, gSaveBlock1Ptr->pos.y + y);
+    }
+}
+
+// The ring's columns past the far column while it waits: its slot is still the band's
+// left edge.
+static s16 WideRight(void)
+{
+    return (gBrRingStale & COLUMN_BIT(FAR_WIDE_COLUMN)) ? FAR_WIDE_COLUMN : FAR_WIDE_COLUMN + 1;
+}
+
+// The wide ring's column dx, and it is no longer stale. The far row's cell waits with it.
+static void DrawWideColumn(s16 dx)
+{
+    DrawCells(dx, dx + 1, 0, sFarRowPending ? FAR_WIDE_ROW : 16);
+    gBrRingStale &= ~COLUMN_BIT(dx);
+}
+
+// The stale column nearest the LCD, among `columns`: pos.x+15 and pos.x-1 first, then
+// outwards. 0 when there is none (column 0 is pret's, never stale).
+static s16 NearestStaleColumn(u32 columns)
+{
+    s16 k;
+
+    for (k = 0; 15 + k <= FAR_WIDE_COLUMN || k < BR_WIDE_LEFT; k++)
+    {
+        if (15 + k <= FAR_WIDE_COLUMN && (columns & COLUMN_BIT(15 + k)))
+            return 15 + k;
+        if (k < BR_WIDE_LEFT && (columns & COLUMN_BIT(-1 - k)))
+            return -1 - k;
+    }
+    return 0;
+}
+
+static s32 WideRingOffset(u8 xTileOffset, u8 yTileOffset, s32 x, s32 y)
+{
+    s32 tx;
+
+    x -= gSaveBlock1Ptr->pos.x;
+    y -= gSaveBlock1Ptr->pos.y;
+    if (x < -BR_WIDE_LEFT || x > FAR_WIDE_COLUMN || y < 0 || y >= 16)
+        return -1;
+    tx = (xTileOffset + 2 * x) & 63;
+    return ((tx & 32) << 5) + ((yTileOffset + 2 * y) & 31) * 32 + (tx & 31);
+}
+
+static void DrawWholeWideRing(void)
+{
+    DrawCells(0, 16, 0, 16);
+    gBrRingStale = ALL_ROWS & ~(COLUMN_BIT(16) - COLUMN_BIT(0));
+}
+
+// pret's slices, then the wide ring's part of the step (br_field.h, THE WIDE RING).
+static void RedrawWideSlices(int x, int y)
+{
+    u32 fresh = 0;
+
+    if (x > 0)
+    {
+        DrawCells(14, 15, 0, 16);
+        // Every column moves left one; the new far column waits for the step to complete.
+        gBrRingStale = (gBrRingStale >> 1) | COLUMN_BIT(FAR_WIDE_COLUMN);
+    }
+    if (x < 0)
+    {
+        DrawCells(0, 1, 0, 16);
+        // Every column moves right one, the far one out of the ring, and the new left
+        // column goes into its slot now: nothing shows that slot.
+        gBrRingStale <<= 1;
+        DrawWideColumn(-BR_WIDE_LEFT);
+        fresh = COLUMN_BIT(-BR_WIDE_LEFT);
+    }
+    if (y > 0)
+    {
+        DrawCells(0, 16, 14, 15);
+        sFarRowPending = TRUE;
+    }
+    if (y < 0)
+    {
+        DrawCells(0, 16, 0, 1);
+        // The rest of the new top row, now: its slot is the one spare row, below the band.
+        DrawCells(-BR_WIDE_LEFT, 0, 0, 1);
+        DrawCells(16, WideRight(), 0, 1);
+    }
+    gBrRingStale &= ~PRET_COLUMNS;
+    if (gCamera.active)
+        gBrRingStale |= ALL_ROWS & ~PRET_COLUMNS & ~fresh;
+    sSliced = TRUE;
+}
+
+static void WideTick(void)
+{
+    s16 dx;
+    u8 budget = ROWS_A_FRAME;
+    u32 columns;
+
+    if (sFarRowPending && gFieldCamera.y == 0)
+    {
+        sFarRowPending = FALSE;
+        DrawCells(-BR_WIDE_LEFT, WideRight(), FAR_WIDE_ROW, FAR_WIDE_ROW + 1);
+        budget = 0;
+    }
+    if ((gBrRingStale & COLUMN_BIT(FAR_WIDE_COLUMN)) && gFieldCamera.x == 0)
+    {
+        DrawWideColumn(FAR_WIDE_COLUMN);
+        if (budget != 0)
+            budget--;
+    }
+    if (sSliced)
+    {
+        sSliced = FALSE;
+        return;
+    }
+    columns = gBrRingStale;
+    if (gFieldCamera.x != 0)
+        columns &= ~COLUMN_BIT(FAR_WIDE_COLUMN);
+    for (; budget != 0; budget--)
+    {
+        dx = NearestStaleColumn(columns);
+        if (dx == 0)
+            break;
+        DrawWideColumn(dx);
+        columns &= ~COLUMN_BIT(dx);
+    }
+}
+
+// ---- THE RING ----
 
 // The ring's row dy, and it is no longer stale. The far column's cell waits with it.
 static void DrawRingRow(s16 dy)
@@ -77,6 +226,8 @@ static s16 NearestStaleRow(u32 rows)
 
 s32 BrField_RingOffset(u8 xTileOffset, u8 yTileOffset, s32 x, s32 y)
 {
+    if (sWide)
+        return WideRingOffset(xTileOffset, yTileOffset, x, y);
     x -= gSaveBlock1Ptr->pos.x;
     y -= gSaveBlock1Ptr->pos.y;
     if (x < 0 || x >= 16 || y < -BR_RING_ABOVE || y >= BR_RING_ROWS - BR_RING_ABOVE)
@@ -90,6 +241,11 @@ void BrField_DrawWholeRing(void)
 {
     int i, j;
 
+    if (sWide)
+    {
+        DrawWholeWideRing();
+        return;
+    }
     for (i = 0; i < 16; i++)
     {
         for (j = 0; j < 16; j++)
@@ -105,6 +261,11 @@ void BrField_RedrawSlices(int x, int y)
     int i;
     u32 fresh = 0;
 
+    if (sWide)
+    {
+        RedrawWideSlices(x, y);
+        return;
+    }
     if (x > 0)
     {
         for (i = 0; i < 16; i++)
@@ -153,6 +314,11 @@ void BrField_Tick(void)
     u8 budget = ROWS_A_FRAME;
     u32 rows;
 
+    if (sWide)
+    {
+        WideTick();
+        return;
+    }
     if (sFarColumnPending && gFieldCamera.x == 0)
     {
         sFarColumnPending = FALSE;
@@ -191,6 +357,12 @@ void BrField_Tick(void)
 // is the whole 4 KB -- and its ShowBg writes them to BGxCNT.
 void BrField_InitRingBgs(void)
 {
+    u8 size;
+
+    sWide = gBrFieldShown.left != 0;
+    sFarRowPending = FALSE;
+    sFarColumnPending = FALSE;
+    size = sWide ? BR_WIDE_SCREEN_SIZE : BR_RING_SCREEN_SIZE;
     gOverworldTilemapBuffer_Bg1 = AllocZeroed(BR_RING_MAP_SIZE);
     gOverworldTilemapBuffer_Bg2 = AllocZeroed(BR_RING_MAP_SIZE);
     gOverworldTilemapBuffer_Bg3 = AllocZeroed(BR_RING_MAP_SIZE);
@@ -200,9 +372,9 @@ void BrField_InitRingBgs(void)
     SetBgAttribute(1, BG_ATTR_MAPBASEINDEX, BR_FIELD_MAP_BASE_BG1);
     SetBgAttribute(2, BG_ATTR_MAPBASEINDEX, BR_FIELD_MAP_BASE_BG2);
     SetBgAttribute(3, BG_ATTR_MAPBASEINDEX, BR_FIELD_MAP_BASE_BG3);
-    SetBgAttribute(1, BG_ATTR_SCREENSIZE, BR_RING_SCREEN_SIZE);
-    SetBgAttribute(2, BG_ATTR_SCREENSIZE, BR_RING_SCREEN_SIZE);
-    SetBgAttribute(3, BG_ATTR_SCREENSIZE, BR_RING_SCREEN_SIZE);
+    SetBgAttribute(1, BG_ATTR_SCREENSIZE, size);
+    SetBgAttribute(2, BG_ATTR_SCREENSIZE, size);
+    SetBgAttribute(3, BG_ATTR_SCREENSIZE, size);
 }
 
 // The picture the core is asked to draw, and the sprite window it reads OAM y against
@@ -214,6 +386,16 @@ const struct BrFieldView gBrFieldView =
     BR_VIEW_TOP,
     BR_VIEW_RIGHT,
     BR_VIEW_BOTTOM,
+    BR_SPRITE_TOP,
+    BR_SPRITE_BOTTOM,
+};
+
+const struct BrFieldView gBrFieldViewWide =
+{
+    BR_WIDE_VIEW_LEFT,
+    BR_WIDE_VIEW_TOP,
+    BR_WIDE_VIEW_RIGHT,
+    BR_WIDE_VIEW_BOTTOM,
     BR_SPRITE_TOP,
     BR_SPRITE_BOTTOM,
 };
@@ -241,13 +423,25 @@ static s16 ShownBottom(void)
     return gBrFieldShown.bottom > BR_SPRITE_BOTTOM ? min(gBrFieldShown.bottom, BR_VIEW_BOTTOM) : BR_SPRITE_BOTTOM;
 }
 
-// Sideways the view's own columns (16 more for a sprite's width); up and down the rows
-// shown (ShownTop). Inside the sprite window a top has one reading, so it is the top that
-// must stay in it; past the window the core reads every top from the side table, and a
-// sprite is drawn while its bottom (y2) is still in the shown rows, as pret's own test.
+// The columns beside the LCD likewise: the view's own 0 and 16, or the wide view's that
+// the page shows (the core reads every marked sprite's left from the side table).
+static s16 ShownLeft(void)
+{
+    return gBrFieldShown.left > BR_VIEW_LEFT ? min(gBrFieldShown.left, BR_WIDE_VIEW_LEFT) : BR_VIEW_LEFT;
+}
+
+static s16 ShownRight(void)
+{
+    return gBrFieldShown.right > BR_VIEW_RIGHT ? min(gBrFieldShown.right, BR_WIDE_VIEW_RIGHT) : BR_VIEW_RIGHT;
+}
+
+// Sideways the columns shown (16 more for a sprite's width); up and down the rows shown
+// (ShownTop). Inside the sprite window a top has one reading, so it is the top that must
+// stay in it; past the window the core reads every top from the side table, and a sprite
+// is drawn while its bottom (y2) is still in the shown rows, as pret's own test.
 bool8 BrField_OffScreen(s16 x, s16 x2, s16 y, s16 y2)
 {
-    if (x >= DISPLAY_WIDTH + BR_VIEW_RIGHT + 16 || x2 < -BR_VIEW_LEFT - 16)
+    if (x >= DISPLAY_WIDTH + ShownRight() + 16 || x2 < -ShownLeft() - 16)
         return TRUE;
     if (y >= DISPLAY_HEIGHT + ShownBottom())
         return TRUE;
@@ -268,17 +462,25 @@ void BrField_OamClear(void)
 // the LCD, past any band.
 void BrField_OamEntry(u8 index, const struct Sprite *sprite, s16 dx, s16 dy)
 {
+    s16 x = sprite->x + sprite->x2 + sprite->centerToCornerVecX + dx;
     s16 y = sprite->y + sprite->y2 + sprite->centerToCornerVecY + dy;
     s16 page;
+    u8 nibble;
 
     if (!sOamMarking)
         return;
     if (sprite->coordOffsetEnabled)
+    {
+        x += gSpriteCoordOffsetX;
         y += gSpriteCoordOffsetY;
+    }
     page = y >> 8;
     if (page < -1 || page > 1)
         page = -2;
-    sOamHiNext[index / 2] |= (BR_OAM_HI_MARK | (page & 3)) << (4 * (index & 1));
+    nibble = BR_OAM_HI_MARK | (page & 3);
+    if (x < 0)
+        nibble |= BR_OAM_HI_LEFT;
+    sOamHiNext[index / 2] |= nibble << (4 * (index & 1));
 }
 
 // Off the field the table goes out empty, whether or not the screen built its OAM with
@@ -322,18 +524,22 @@ static u8 SpareRoom(void)
 }
 
 // pret's box runs 2 tiles past the sprite window's 40 rows above the LCD and its 56
-// below (the player's rows -7..+9); each 16 rows shown past those is a row more.
-static void Grow(s16 *top, s16 *bottom)
+// below (the player's rows -7..+9), and 2 columns past the view's 0 left of the LCD and
+// its 16 right; each 16 rows or columns shown past those is one more.
+static void Grow(s16 *left, s16 *right, s16 *top, s16 *bottom)
 {
+    *left -= (ShownLeft() - BR_VIEW_LEFT + 15) / 16;
+    *right += (ShownRight() - BR_VIEW_RIGHT + 15) / 16;
     *top -= (ShownTop() - BR_SPRITE_TOP + 15) / 16;
     *bottom += (ShownBottom() - BR_SPRITE_BOTTOM + 15) / 16;
 }
 
-// The page shows rows past the sprite window: there is a grown box at all. Without it
-// (a desktop, a phone on its side, an old core) none of the counting below is done.
+// The page shows rows past the sprite window, or columns past the view: there is a
+// grown box at all. Without it (an old core) none of the counting below is done.
 static bool8 Grows(void)
 {
-    return ShownTop() > BR_SPRITE_TOP || ShownBottom() > BR_SPRITE_BOTTOM;
+    return ShownTop() > BR_SPRITE_TOP || ShownBottom() > BR_SPRITE_BOTTOM
+        || ShownLeft() > BR_VIEW_LEFT || ShownRight() > BR_VIEW_RIGHT;
 }
 
 // The grown rows are spare room. pret spawns its own box first, in template order, so
@@ -344,24 +550,25 @@ static bool8 Grows(void)
 // the edge from blinking out and back on every step.
 void BrField_SpawnGrown(u8 count, s16 cameraX, s16 cameraY, BrSpawnTemplateFunc spawn)
 {
-    s16 left = gSaveBlock1Ptr->pos.x - 2;
-    s16 right = gSaveBlock1Ptr->pos.x + MAP_OFFSET_W + 2;
-    s16 top = gSaveBlock1Ptr->pos.y;
-    s16 bottom = gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2;
+    s16 pretLeft = gSaveBlock1Ptr->pos.x - 2;
+    s16 pretRight = gSaveBlock1Ptr->pos.x + MAP_OFFSET_W + 2;
+    s16 pretTop = gSaveBlock1Ptr->pos.y;
+    s16 pretBottom = gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2;
+    s16 left = pretLeft, right = pretRight, top = pretTop, bottom = pretBottom;
     s16 x, y;
     u8 i;
 
     if (gMapHeader.events == NULL || !Grows())
         return;
-    Grow(&top, &bottom);
+    Grow(&left, &right, &top, &bottom);
     for (i = 0; i < count; i++)
     {
         struct ObjectEventTemplate *template = &gSaveBlock1Ptr->objectEventTemplates[i];
 
         x = template->x + MAP_OFFSET;
         y = template->y + MAP_OFFSET;
-        if (y >= gSaveBlock1Ptr->pos.y && y <= gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2)
-            continue; // pret's own rows: spawned already, or not to be
+        if (y >= pretTop && y <= pretBottom && x >= pretLeft && x <= pretRight)
+            continue; // pret's own box: spawned already, or not to be
         if (y < top || y > bottom || x < left || x > right || FlagGet(template->flagId))
             continue;
         if (SpareRoom() < BR_NPC_HEADROOM + BR_GROW_SPARE)
@@ -371,10 +578,10 @@ void BrField_SpawnGrown(u8 count, s16 cameraX, s16 cameraY, BrSpawnTemplateFunc 
 }
 
 // The engine's cull, on a camera step: a ghost come into view since is room taken.
-void BrField_GrowObjectBox(s16 *top, s16 *bottom)
+void BrField_GrowObjectBox(s16 *left, s16 *right, s16 *top, s16 *bottom)
 {
     if (Grows() && SpareRoom() >= BR_NPC_HEADROOM)
-        Grow(top, bottom);
+        Grow(left, right, top, bottom);
 }
 
 // ---- leaving the field -----------------------------------------------------------
@@ -546,6 +753,8 @@ void BrField_CancelLeave(void (*enter)(void))
 
 bool8 BrField_InObjectView(s16 x, s16 y)
 {
+    s16 left = gSaveBlock1Ptr->pos.x - 2;
+    s16 right = gSaveBlock1Ptr->pos.x + 17;
     s16 top = gSaveBlock1Ptr->pos.y;
     s16 bottom = gSaveBlock1Ptr->pos.y + 16;
 
@@ -558,9 +767,8 @@ bool8 BrField_InObjectView(s16 x, s16 y)
         sRoomGrows = Grows() && ObjectRoom() >= BR_NPC_HEADROOM;
     }
     if (sRoomGrows)
-        Grow(&top, &bottom);
-    return x >= gSaveBlock1Ptr->pos.x - 2 && x <= gSaveBlock1Ptr->pos.x + 17
-        && y >= top && y <= bottom;
+        Grow(&left, &right, &top, &bottom);
+    return x >= left && x <= right && y >= top && y <= bottom;
 }
 
 // The homes of the wanderers BrField_KeepWhereLeft has moved, by map and local id (0 is
