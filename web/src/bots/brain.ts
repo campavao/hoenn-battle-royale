@@ -982,7 +982,9 @@ export class Bots {
     if (now < walker.engageAfter || walker.party.length === 0) return false;
     // In the fog a bot walks in first (chooseTarget's "Fog first"): a foe beside it is
     // on the same map, in the fog too, and chasing one through it is how a bot bleeds out.
-    if (this.opts.inside && !this.opts.inside(walker.at.map)) return false;
+    // The last phase closes on everything, and then there is no in to walk to: fight.
+    const inside = this.opts.inside;
+    if (inside && !inside(walker.at.map) && this.opts.targets.some((t) => inside(t.mapId))) return false;
     const near = (p: { mapId: string; x: number; y: number }) =>
       p.mapId === walker.at.map && Math.abs(p.x - walker.at.x) + Math.abs(p.y - walker.at.y) <= NEAR_TILES;
     const foes: { seat: number; spot: Spot }[] = [];
