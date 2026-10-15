@@ -1,0 +1,24 @@
+# spectate-end-names: a replay's last line names both trainers (Cam's 2026-10-14
+# play-test, POK-368: "player defeated Tate... is that correct? No, because this is
+# Tate"). pret's link line is "Player defeated <foe>!", the cable's word for whoever
+# holds the GBA; a watcher holds neither side, so it reads "CAM defeated CAN!".
+# spectate-watch.txt's fight, with the peer's mon on 1 HP: one turn ends it.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+pokebytes gDecompressionBuffer+216 01 00
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+expect u8 gBrSpectate+5 1
+pokebytes gDecompressionBuffer+300 00 01 00 03 00 00 01 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer+300 12
+# "CAM defeated\nCAN!": the challenger's name, then "defe", not "Player d"
+waitfor u32 gDisplayedStringBattle+4 0xD9DAD9D8 3000
+expect u32 gDisplayedStringBattle 0x00C7BBBD
+wait 90
+shot end
+say spectate end names ok

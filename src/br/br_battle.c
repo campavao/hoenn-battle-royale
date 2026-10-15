@@ -641,6 +641,11 @@ extern const u8 *const gBattlescriptsForUsingItem[];
 static const u8 sText_UsedItem[] = _("{B_LINK_SCR_TRAINER_NAME} used\n{B_LAST_ITEM}!");
 static const u8 sText_FogHurt[] = _("{B_ATK_NAME_WITH_PREFIX} is hurt\nby the fog!");
 static const u8 sText_NewPage[] = _("\p");
+// A replay's last line names both trainers (POK-368): pret's says "Player defeated", the
+// cable's own word for the one holding the GBA, and a watcher is neither of them.
+static const u8 sText_ReplayWon[] = _("{B_LINK_PLAYER_NAME} defeated\n{B_LINK_OPPONENT1_NAME}!");
+static const u8 sText_ReplayLost[] = _("{B_LINK_OPPONENT1_NAME} defeated\n{B_LINK_PLAYER_NAME}!");
+static const u8 sText_ReplayDrew[] = _("{B_LINK_PLAYER_NAME} and {B_LINK_OPPONENT1_NAME}\nbattled to a draw!");
 // A bot whose lines never arrived still says something when it slides back in: pret's
 // own speech for TRAINER_NONE is whatever the last trainerbattle script left behind.
 static const u8 sText_BotLost[] = _("Huh? Did I just lose?");
@@ -735,6 +740,24 @@ bool8 BrBattle_BufferString(u16 stringId)
             line = stringId == STRINGID_TRAINER1WINTEXT ? sText_BotWon : sText_BotLost;
         // ...and holds it for A: the money line comes straight after.
         StringAppend(StringCopy(gDisplayedStringBattle, line), sText_NewPage);
+        return TRUE;
+    }
+    if (stringId == STRINGID_BATTLEEND && Spectating() && (gBattleTypeFlags & BATTLE_TYPE_RECORDED_LINK)
+        && !(gBattleTypeFlags & BATTLE_TYPE_MULTI) && !(gBattleTextBuff1[0] & B_OUTCOME_LINK_BATTLE_RAN))
+    {
+        u8 outcome = gBattleTextBuff1[0];
+        const u8 *text;
+
+        // The outcome turned to the player's side, as pret's own STRINGID_BATTLEEND does.
+        if (GetBattlerSide(gActiveBattler) == B_SIDE_OPPONENT && outcome != B_OUTCOME_DREW)
+            outcome ^= (B_OUTCOME_LOST | B_OUTCOME_WON);
+        if (outcome == B_OUTCOME_WON)
+            text = sText_ReplayWon;
+        else if (outcome == B_OUTCOME_LOST)
+            text = sText_ReplayLost;
+        else
+            text = sText_ReplayDrew;
+        BattleStringExpandPlaceholdersToDisplayedString(text);
         return TRUE;
     }
     if (stringId != BR_STRINGID_USED_ITEM)

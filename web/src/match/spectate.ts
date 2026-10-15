@@ -39,13 +39,14 @@ export const PEEK_INTERVAL_MS = 3000;
 
 /** A bstart names its two trainers in bytes 8..23 of its data, straight out of
  *  gLinkPlayers -- which the proxy duel instance never fills (POK-300). The bots' names
- *  are the page's, so they go in here: seven Gen 3 characters and an EOS, the low seat
- *  first, the way the ROM lays them out for a link battle. */
-export function nameBstart(msg: BstartMsg, nameOf: (seat: number) => string): BstartMsg {
+ *  are the page's, so they go in here: seven Gen 3 characters and an EOS, side A first,
+ *  the way the ROM lays them out: the player side's name, then the opponent's. Side A is
+ *  not the low seat (POK-368: "Player defeated TATE!" for a fight TATE won, LIZA's
+ *  name over TATE's party), so the duel says which it was. */
+export function nameBstart(msg: BstartMsg, nameOf: (seat: number) => string, sides: [number, number]): BstartMsg {
   const data = msg.data.slice();
-  const seats = [msg.battle & 0xff, (msg.battle >> 8) & 0xff];
   for (let i = 0; i < 2; i++) {
-    const name = encodeGen3(nameOf(seats[i]).toUpperCase(), 7);
+    const name = encodeGen3(nameOf(sides[i]).toUpperCase(), 7);
     for (let j = 0; j < 8; j++) data[8 + 8 * i + j] = j < name.length ? name[j] : 0xff;
   }
   return { ...msg, data };

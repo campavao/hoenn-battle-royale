@@ -1372,7 +1372,7 @@ function careerName(): string {
 let proxyDuels: ProxyDuels | null = null;
 /** Where the proxy's fight goes as it happens (POK-300). The instance is made before
  *  there is a room to tell; the room path sets this when it has one. */
-let proxyStream: ((msg: BstartMsg | TurnMsg) => void) | null = null;
+let proxyStream: ((msg: BstartMsg | TurnMsg, sides: [number, number]) => void) | null = null;
 
 /** How far into the opening the proxy boots: clear of the warp into the Zone, and long
  *  before the first bot-vs-bot meeting, which cannot come until the drop. */
@@ -2738,9 +2738,9 @@ function wireRoom(
     // the way a player's ROM publishes a link battle, and this page is its relay -- to
     // the room, and through the same gate to our own ROM if we are following either bot.
     // The bots' names go in on the way past; the instance has no roster to read them from.
-    proxyStream = (raw) => {
+    proxyStream = (raw, sides) => {
       const msg = raw.t === 'bstart'
-        ? nameBstart(raw, (s) => bridge!.roster.nameOf(s))
+        ? nameBstart(raw, (s) => bridge!.roster.nameOf(s), sides)
         : raw;
 
       bridge!.relay.all(msg);
@@ -3922,7 +3922,7 @@ async function main(): Promise<void> {
       },
       writeBoot: (e, base) => writeBootBlock(e as Emulator, base, PROXY_NAME),
       onNote: (what) => console.info('[proxy]', what),
-      onStream: (msg) => proxyStream?.(msg),
+      onStream: (msg, sides) => proxyStream?.(msg, sides),
     });
   }
 
