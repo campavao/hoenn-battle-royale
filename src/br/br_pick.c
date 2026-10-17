@@ -10,7 +10,9 @@
 #include "region_map.h"
 #include "sprite.h"
 #include "text.h"
+#include "sound.h"
 #include "constants/field_weather.h"
+#include "constants/songs.h"
 #include "constants/region_map_sections.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
@@ -78,36 +80,10 @@ bool8 BrPick_TimedOut(void)
     return TRUE;
 }
 
-u16 BrPick_Section(u16 mapSec, const u8 *layout, u16 width, u16 height, u16 x, u16 y, u16 prev)
+void BrPick_Refused(u8 mapSecType)
 {
-    const u8 *row;
-    u32 cx, cy, d, bestD;
-    s32 dx, dy;
-    u16 best;
-
-    if (!gBrPick.active || mapSec != MAPSEC_NONE)
-        return mapSec;
-    best = MAPSEC_NONE;
-    bestD = 0xFFFFFFFF;
-    for (cy = 0, row = layout; cy < height; cy++, row += width)
-    {
-        for (cx = 0; cx < width; cx++)
-        {
-            // The Frontier has nowhere to land (POK-251), so it pulls no sea to it: its
-            // own cell is still a choice, and the host deals that one elsewhere.
-            if (row[cx] == MAPSEC_NONE || row[cx] == MAPSEC_BATTLE_FRONTIER)
-                continue;
-            dx = (s32)cx - x;
-            dy = (s32)cy - y;
-            d = dx * dx + dy * dy;
-            if (d < bestD || (d == bestD && row[cx] == prev))
-            {
-                bestD = d;
-                best = row[cx];
-            }
-        }
-    }
-    return best;
+    if (gBrPick.active && mapSecType == MAPSECTYPE_NONE)
+        PlaySE(SE_FAILURE);
 }
 
 u16 BrPick_Within(u16 pos)
@@ -121,6 +97,10 @@ void BrPick_Chose(u16 mapSec)
 
     gBrPick.asked = mapSec;
     gBrPick.waited = 0;
+    // Only the clock gets here with no section: A on one is refused. Nothing to ask the
+    // host for, so BrPick_Tick drops us on the START's cell once the map has closed.
+    if (mapSec == MAPSEC_NONE)
+        return;
     buf[0] = gBrMySeat;
     BrWire_WriteU16(buf + 1, mapSec);
     BrWire_Send(BR_MSG_PICK, buf, 3);
@@ -188,6 +168,11 @@ void BrPick_Tick(void)
     {
         if (!gBrPick.active || gMain.callback2 != CB2_BrPickWait)
             return;
+        if (gBrPick.asked == MAPSEC_NONE)
+        {
+            DropWithoutTheHost();
+            return;
+        }
         gBrPick.waited++;
         if (gBrPick.waited == BR_PICK_ASK_AGAIN)
         {

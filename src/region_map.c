@@ -717,9 +717,6 @@ static u8 MoveRegionMapCursor_Full(void)
     }
 
     mapSecId = GetMapSecIdAt(sRegionMap->cursorPosX, sRegionMap->cursorPosY);
-#if BR
-    mapSecId = BrPick_Section(mapSecId, (const u8 *)sRegionMap_MapSectionLayout, MAP_WIDTH, MAP_HEIGHT, sRegionMap->cursorPosX - MAPCURSOR_X_MIN, sRegionMap->cursorPosY - MAPCURSOR_Y_MIN, sRegionMap->mapSecId);
-#endif
     sRegionMap->mapSecType = GetMapsecType(mapSecId);
     if (mapSecId != sRegionMap->mapSecId)
     {
@@ -2033,6 +2030,9 @@ static void CB_HandleFlyMapInput(void)
 #endif
                 SetFlyMapCallback(CB_ExitFlyMap);
             }
+#if BR
+            BrPick_Refused(sFlyMap->regionMap.mapSecType);
+#endif
             break;
         case MAP_INPUT_B_BUTTON:
 #if BR

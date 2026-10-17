@@ -47,22 +47,21 @@ void BrPick_Tick(void);
 // The opening is over: put the map in front of them. TRUE when it took the drop, so
 // br_match leaves the warp alone.
 bool8 BrPick_Start(void);
-// region_map.c, on the A press: this is our choice. Sends `pick`.
+// region_map.c, on the A press: this is our choice. Sends `pick`. The clock can run out
+// with the cursor on no section at all, and that sends nothing: the drop is the cell the
+// START dealt, the same one DropWithoutTheHost falls back to.
 void BrPick_Chose(u16 mapSec);
 // region_map.c: is the fly map being used as the drop picker right now? In pick mode
 // every section is selectable and choosing one does not warp.
 bool8 BrPick_Picking(void);
-// region_map.c, as the cursor stops on a cell: during the drop, a cell no section covers
-// (sea, or land between routes) is the nearest section, so the name box never goes
-// blank (POK-352) and A or the clock always chooses somewhere. `prev` wins a tie, so a
-// name holds until another is strictly closer; a tie without it goes to the first in
-// row order. BATTLE FRONTIER, with nowhere to land, draws none. Out of the drop, or on a
-// section's own cell, `mapSec` as it was.
-u16 BrPick_Section(u16 mapSec, const u8 *layout, u16 width, u16 height, u16 x, u16 y, u16 prev);
+// region_map.c, on an A press the map did not take: during the drop, a cell no section
+// covers (sea, or land between routes) is not a choice, so A there is a buzz and nothing
+// more. The drop lands exactly on the place the cursor names, never the nearest one
+// (Cam, 2026-10-17, undoing POK-352's snap).
+void BrPick_Refused(u8 mapSecType);
 // region_map.c, after it counts where in its section the cursor is: always the first
 // place during the drop. Emerald uses it for EVER GRANDE's second name, which means
-// nothing when the host deals the cell, and off a snapped cell it counts past the end
-// of that name list.
+// nothing when the host deals the cell.
 u16 BrPick_Within(u16 pos);
 // region_map.c, once the map has closed: hold a black screen until `land` arrives.
 void BrPick_Wait(void);
