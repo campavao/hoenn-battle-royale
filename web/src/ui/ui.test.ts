@@ -307,13 +307,13 @@ describe('MY LOOK (POK-337)', () => {
     expect(at(1, 0).flip).toBe(false);
   });
 
-  it('turns the strip round the wardrobe, the one you are on second from the left', async () => {
+  it('turns the strip round the wardrobe, the one you are on in the middle', async () => {
     const { lookStrip, stepSkin } = await import('./screens');
     expect(stepSkin(0, 1)).toBe(1);
     expect(stepSkin(1, 1), 'past the retired rivals').toBe(4);
     expect(stepSkin(0, -1)).toBe(WARDROBE[WARDROBE.length - 1]);
     expect(stepSkin(WARDROBE[WARDROBE.length - 1], 1)).toBe(0);
-    expect(lookStrip(0)).toEqual([WARDROBE[WARDROBE.length - 1], 0, 1, 4]);
+    expect(lookStrip(0)).toEqual([WARDROBE[WARDROBE.length - 2], WARDROBE[WARDROBE.length - 1], 0, 1, 4]);
   });
 
   it("says a skin's price, or that it is yours", async () => {
@@ -326,18 +326,24 @@ describe('MY LOOK (POK-337)', () => {
   it('draws the big picture, the strip and three dialogue boxes, and fits BACK on a 320 screen', async () => {
     const { lookScreen } = await import('./screens');
     const { fakeCanvas } = await import('./fakecanvas');
-    const { canvas, texts, pictures, boxes, sprites } = fakeCanvas();
+    const { canvas, texts, pictures, boxes, sprites, arrows } = fakeCanvas();
     const painted = lookScreen(() => model({ browsing: 4, worn: 1 })).paint(canvas, 320);
     expect(pictures.find((p) => p.name === 'trainer-pics.png'), 'the browsed skin, large').toMatchObject({ sx: 4 * 64, x: 16, y: 10 });
     expect(boxes).toEqual([0, 1, 2].map((i) => ({ x: 0, y: 142 + i * 48, w: 240, h: 48 })));
     expect(texts.filter((t) => t.y > 142 && t.y < 286).map((t) => t.text)).toEqual(['WALKING UP', 'FOUND YOU.', 'WHEN YOU WIN', 'STILL STANDING.', 'WHEN YOU LOSE', 'AGAIN?']);
     expect(texts.find((t) => t.text === 'LOCKED -- 1 win')).toBeDefined();
-    // Four sprites: MAY, HIKER (lit, and faded: locked), and the two after it.
-    expect(sprites).toHaveLength(4);
-    expect(sprites[1].alpha).toBe(0.3);
-    expect(sprites[0].alpha).toBe(1);
+    // Each box shows it turns both ways: an arrow at each edge, on the line's row.
+    for (const i of [0, 1, 2]) {
+      expect(arrows).toContainEqual({ x: 9, y: 142 + i * 48 + 25, left: true });
+      expect(arrows).toContainEqual({ x: 226, y: 142 + i * 48 + 25, left: false });
+    }
+    // Five sprites: BRENDAN, MAY, HIKER (lit, and faded: locked), and the two after it.
+    expect(sprites).toHaveLength(5);
+    expect(sprites[2].alpha).toBe(0.3);
+    expect(sprites[1].alpha).toBe(1);
+    expect(texts.find((t) => t.text === 'wearing MAY'), 'what you still wear').toBeDefined();
     const strip = painted.widgets.filter((w) => w.parent === 'look-sprites');
-    expect(strip.map((w) => w.text)).toEqual(['MAY (worn)', 'HIKER LOCKED', `${SKINS[5]} LOCKED`, `${SKINS[6]} LOCKED`]);
+    expect(strip.map((w) => w.text)).toEqual(['BRENDAN', 'MAY (worn)', 'HIKER LOCKED', `${SKINS[5]} LOCKED`, `${SKINS[6]} LOCKED`]);
     expect(strip.filter((w) => w.cursor !== null).map((w) => w.id)).toEqual(['look-sprite']);
     const back = painted.widgets.find((w) => w.id === 'look-back')!;
     expect(back.rect.y).toBeGreaterThanOrEqual(142 + 3 * 48);

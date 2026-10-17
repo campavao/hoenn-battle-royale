@@ -882,9 +882,12 @@ export function noticeScreen(model: () => NoticeModel): DrawnScreen {
  *  discover them". */
 export const LOOK_PIC_FRAME: Rect = { x: 8, y: 2, w: 80, h: 80 };
 export const LOOK_STRIP: Rect = { x: 0, y: 84, w: W, h: 56 };
-/** How many sprites the strip shows: the one you are on, one before it, two after. */
-export const LOOK_CELLS = 4;
-export const LOOK_CELL = { w: 48, h: 40 };
+/** How many sprites the strip shows: the one you are on in the middle, two each side. */
+export const LOOK_CELLS = 5;
+export const LOOK_CELL = { w: 38, h: 40 };
+/** Where the strip's first cell starts: the cells centred between its two arrows. */
+const LOOK_CELLS_X = Math.floor((W - LOOK_CELLS * LOOK_CELL.w) / 2);
+const LOOK_LIT = Math.floor(LOOK_CELLS / 2);
 /** A dialogue box: Emerald's own two lines, the width of the screen. */
 export const LOOK_BOX_H = 48;
 export const LOOK_BOXES_Y = LOOK_STRIP.y + LOOK_STRIP.h + 2;
@@ -900,10 +903,10 @@ export function stepSkin(skin: number, by: number): number {
   return WARDROBE[(((at + by) % n) + n) % n];
 }
 
-/** The strip's sprites, left to right: the one before `skin`, `skin`, and the ones after. */
+/** The strip's sprites, left to right, `skin` in the middle. */
 export function lookStrip(skin: number): number[] {
   const out: number[] = [];
-  for (let i = 0; i < LOOK_CELLS; i++) out.push(stepSkin(skin, i - 1));
+  for (let i = 0; i < LOOK_CELLS; i++) out.push(stepSkin(skin, i - LOOK_LIT));
   return out;
 }
 
@@ -974,8 +977,12 @@ export function lookScreen(model: () => LookModel): DrawnScreen {
       const note = lookNote(m.browsing, m.wins, m.worn);
       if (note) c.drawTextCentred(note, mid, 50, open ? TEXT_GRAY : TEXT_RED);
       widgets.push({ rect: { x: right, y: 50, w: W - right, h: ROW_H }, text: note, id: 'look-note', cursor: null });
+      // A locked one is only looked at: say what you still wear (#50's review).
+      const wearing = m.browsing === m.worn ? '' : `wearing ${SKINS[m.worn] ?? ''}`;
+      if (wearing) c.drawTextCentred(wearing, mid, 66, TEXT_GRAY);
+      widgets.push({ rect: { x: right, y: 66, w: W - right, h: ROW_H }, text: wearing, id: 'look-wearing', cursor: null });
 
-      // The strip: the one you are on second from the left, lit; a locked one faded.
+      // The strip: the one you are on in the middle, lit; a locked one faded.
       c.drawFrame(LOOK_STRIP);
       const cy = LOOK_STRIP.y + 8;
       const arrowY = cy + Math.floor(LOOK_CELL.h / 2) - 5;
@@ -986,20 +993,20 @@ export function lookScreen(model: () => LookModel): DrawnScreen {
         { rect: { x: W - 24, y: cy, w: 24, h: LOOK_CELL.h }, text: 'next sprite', id: 'look-next', onPress: () => browse(1), cursor: null },
       );
       lookStrip(m.browsing).forEach((skin, slot) => {
-        const cell = { x: 24 + slot * LOOK_CELL.w, y: cy, w: LOOK_CELL.w, h: LOOK_CELL.h };
+        const cell = { x: LOOK_CELLS_X + slot * LOOK_CELL.w, y: cy, w: LOOK_CELL.w, h: LOOK_CELL.h };
         const mine = skinUnlocked(skin, m.wins);
-        if (slot === 1) c.fillRect({ x: cell.x + 4, y: cell.y, w: cell.w - 8, h: cell.h }, TEXT_BLUE.shadow);
+        if (slot === LOOK_LIT) c.fillRect({ x: cell.x + 2, y: cell.y, w: cell.w - 4, h: cell.h }, TEXT_BLUE.shadow);
         const sheet = skinSheet(skin);
         if (sheet) c.drawSprite(sheet.gfx, cell.x + Math.floor((cell.w - sheet.w) / 2), cell.y + Math.floor((cell.h - sheet.h) / 2), mine ? 1 : 0.3);
         widgets.push({
           rect: cell,
           text: `${SKINS[skin]}${mine ? '' : ' LOCKED'}${skin === m.worn ? ' (worn)' : ''}`,
-          id: slot === 1 ? 'look-sprite' : undefined,
+          id: slot === LOOK_LIT ? 'look-sprite' : undefined,
           cls: 'skin',
           parent: 'look-sprites',
           onPress: () => m.onBrowse(skin),
           // Only the lit one takes the cursor: left and right move the strip under it.
-          cursor: slot === 1 ? { x: cell.x + 6, y: cell.y + 14 } : null,
+          cursor: slot === LOOK_LIT ? { x: cell.x + 3, y: cell.y + 14 } : null,
         });
       });
 
@@ -1010,6 +1017,8 @@ export function lookScreen(model: () => LookModel): DrawnScreen {
         const line = m.lines[m.picked[slot]] ?? '';
         c.drawText(SLOT_TITLES[slot], 16, y + 9, TEXT_BLUE);
         c.drawText(line, 16, y + 25, TEXT_DARK);
+        // Both ways round, the strip's arrows: a tap on either edge turns the line.
+        c.drawCursor(9, y + 25, TEXT_GRAY, true);
         c.drawCursor(W - 14, y + 25, TEXT_GRAY);
         widgets.push(
           { rect: { x: 0, y, w: 24, h: LOOK_BOX_H }, text: `${SLOT_TITLES[slot]} back`, id: `look-${slot}-prev`, onPress: () => turn(slot, -1), cursor: null },
