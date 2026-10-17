@@ -11,6 +11,7 @@
 #include "sprite.h"
 #include "text.h"
 #include "constants/field_weather.h"
+#include "constants/region_map_sections.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -75,6 +76,43 @@ bool8 BrPick_TimedOut(void)
     if (gBrPick.timer > 0 && --gBrPick.timer > 0)
         return FALSE;
     return TRUE;
+}
+
+u16 BrPick_Section(u16 mapSec, const u8 *layout, u16 width, u16 height, u16 x, u16 y, u16 prev)
+{
+    const u8 *row;
+    u32 cx, cy, d, bestD;
+    s32 dx, dy;
+    u16 best;
+
+    if (!gBrPick.active || mapSec != MAPSEC_NONE)
+        return mapSec;
+    best = MAPSEC_NONE;
+    bestD = 0xFFFFFFFF;
+    for (cy = 0, row = layout; cy < height; cy++, row += width)
+    {
+        for (cx = 0; cx < width; cx++)
+        {
+            // The Frontier has nowhere to land (POK-251), so it pulls no sea to it: its
+            // own cell is still a choice, and the host deals that one elsewhere.
+            if (row[cx] == MAPSEC_NONE || row[cx] == MAPSEC_BATTLE_FRONTIER)
+                continue;
+            dx = (s32)cx - x;
+            dy = (s32)cy - y;
+            d = dx * dx + dy * dy;
+            if (d < bestD || (d == bestD && row[cx] == prev))
+            {
+                bestD = d;
+                best = row[cx];
+            }
+        }
+    }
+    return best;
+}
+
+u16 BrPick_Within(u16 pos)
+{
+    return gBrPick.active ? 0 : pos;
 }
 
 void BrPick_Chose(u16 mapSec)

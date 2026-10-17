@@ -717,6 +717,9 @@ static u8 MoveRegionMapCursor_Full(void)
     }
 
     mapSecId = GetMapSecIdAt(sRegionMap->cursorPosX, sRegionMap->cursorPosY);
+#if BR
+    mapSecId = BrPick_Section(mapSecId, (const u8 *)sRegionMap_MapSectionLayout, MAP_WIDTH, MAP_HEIGHT, sRegionMap->cursorPosX - MAPCURSOR_X_MIN, sRegionMap->cursorPosY - MAPCURSOR_Y_MIN, sRegionMap->mapSecId);
+#endif
     sRegionMap->mapSecType = GetMapsecType(mapSecId);
     if (mapSecId != sRegionMap->mapSecId)
     {
@@ -724,6 +727,9 @@ static u8 MoveRegionMapCursor_Full(void)
         GetMapName(sRegionMap->mapSecName, sRegionMap->mapSecId, MAP_NAME_LENGTH);
     }
     GetPositionOfCursorWithinMapSec();
+#if BR
+    sRegionMap->posWithinMapSec = BrPick_Within(sRegionMap->posWithinMapSec);
+#endif
     sRegionMap->inputCallback = ProcessRegionMapInput_Full;
     return MAP_INPUT_MOVE_END;
 }
