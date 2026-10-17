@@ -54,9 +54,9 @@ void BrPick_Chose(u16 mapSec);
 // region_map.c: is the fly map being used as the drop picker right now? In pick mode
 // every section is selectable and choosing one does not warp.
 bool8 BrPick_Picking(void);
-// region_map.c, on an A press the map did not take: during the drop, a cell no section
-// covers (sea, or land between routes) is not a choice, so A there is a buzz and nothing
-// more. The drop lands exactly on the place the cursor names, never the nearest one
+// region_map.c, on every A press on the fly map that is not a look: during the drop, a
+// cell no section covers (sea, or land between routes) is not a choice, so A there is a
+// buzz and nothing more. The drop lands exactly on the place the cursor names, never the nearest one
 // (Cam, 2026-10-17, undoing POK-352's snap).
 void BrPick_Refused(u8 mapSecType);
 // region_map.c, after it counts where in its section the cursor is: always the first
