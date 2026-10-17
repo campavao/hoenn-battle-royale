@@ -471,25 +471,29 @@ export const PAD_GAP = 4;
 
 /** Where the picture goes in a box, and how big the canvas around it is. One scale, a
  *  phone's (fieldScale), so a wide window has the map all round and a phone has it above
- *  and below. The picture centres in the box; over a floating pad (a bottom inset, on a
- *  phone) it sits just above it instead, so the ticker along its bottom is by the thumbs
- *  and the HUD's windows over the top cover map, not the picture (Cam, 2026-10-17). It
- *  never leaves the box. */
-export function layoutField(boxW: number, boxH: number, bottomInset = 0, dpr = 1, glass = Math.min(boxW, boxH)): FieldLayout {
+ *  and below. The picture centres in the box. Over a floating pad (a bottom inset, on a
+ *  phone) it comes down towards it, so the ticker along its bottom is by the thumbs and
+ *  the HUD's windows over the top cover map, not the picture (Cam, 2026-10-17) -- but no
+ *  further than `liveAbove`, the rows the ROM draws above the LCD (its band's top), so
+ *  what shows above the picture stays the core's own; on a glass too tall for that it
+ *  stays centred. It never leaves the box. */
+export function layoutField(boxW: number, boxH: number, bottomInset = 0, dpr = 1, glass = Math.min(boxW, boxH), liveAbove = Infinity): FieldLayout {
   const scale = fieldScale(boxW, boxH, dpr, glass);
   if (!(scale > 0)) return { scale: 0, cols: 0, rows: 0, lcdCol: 0, lcdRow: 0 };
   const cols = Math.ceil(boxW / scale);
   const rows = Math.ceil(boxH / scale);
   const lcdCol = Math.max(0, Math.min(Math.round((boxW / scale - GBA_W) / 2), cols - GBA_W));
   const free = Math.max(GBA_H * scale, boxH - bottomInset) / scale - GBA_H;
-  const row = bottomInset > 0 ? Math.floor(free) - PAD_GAP : Math.round(free / 2);
+  const centred = Math.round(free / 2);
+  const row = bottomInset > 0 ? Math.max(centred, Math.min(Math.floor(free) - PAD_GAP, liveAbove)) : centred;
   const lcdRow = Math.max(0, Math.min(row, rows - GBA_H));
   return { scale, cols, rows, lcdCol, lcdRow };
 }
 
 /** The layout a box gives the picture: the box's size, less the pad when it floats over
- *  the box's bottom (a phone in a match), as FieldView lays out with. */
-export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefined): FieldLayout {
+ *  the box's bottom (a phone in a match), as FieldView lays out with. `liveAbove`: the
+ *  ROM's band's top, as layoutField takes it. */
+export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefined, liveAbove?: number): FieldLayout {
   let inset = 0;
   if (pad && getComputedStyle(pad).position === 'absolute') inset = pad.getBoundingClientRect().height;
   const view = box.ownerDocument?.defaultView;
@@ -500,7 +504,7 @@ export function measureLayout(box: HTMLElement, pad: HTMLElement | null | undefi
   const glass = screen && screen.width > 0 && screen.height > 0
     ? Math.min(screen.width, screen.height)
     : view ? Math.min(view.innerWidth, view.innerHeight) : undefined;
-  return layoutField(box.clientWidth, box.clientHeight, inset, dpr, glass);
+  return layoutField(box.clientWidth, box.clientHeight, inset, dpr, glass, liveAbove);
 }
 
 /** The band to ask the core for (POK-329): the rows above and below the LCD this layout
@@ -758,6 +762,8 @@ export interface FieldDeps {
   overlay?: HTMLCanvasElement | null;
   /** The pad, when it floats over the bottom of the box (position: absolute). */
   pad?: HTMLElement | null;
+  /** The rows the ROM draws above the LCD (its declared band's top), for layoutField. */
+  liveAbove?: () => number | undefined;
   /** The ROM the emulator is running, for the sprites' animation tables. */
   rom?: Uint8Array | null;
   /** Where every seat is, as the page knows it (the match's roster): the ghosts the page
@@ -974,7 +980,7 @@ export class FieldView {
   /** The picture placed in the box, the field canvas sized to the box, both at one scale. */
   layout(): void {
     const { box, lcd, field, pad } = this.deps;
-    const lay = measureLayout(box, pad);
+    const lay = measureLayout(box, pad, this.deps.liveAbove?.());
     if (!lay.scale) return;
     const band = bandOf(this.deps.emu.viewport, lcd, this.askedBand());
     const sameBand = (band === null) === (this.band === null)

@@ -1555,6 +1555,9 @@ let askedBand: Band | null = null;
 /** The picture the ROM declares (gBrFieldView, field.ts romBand), read off the image
  *  booted: every ask is inside it. */
 let romPicture: FieldPicture | null = null;
+/** The rows the ROM draws above the LCD: how far a phone's picture may come down to its
+ *  pad (field.ts layoutField). */
+const liveAbove = (): number | undefined => romPicture?.band.top;
 
 /** The layout the match gives the picture, measured now, whatever screen is up: the
  *  field only opens past the picture in a match (body.in-match), with the sheet docked
@@ -1566,7 +1569,7 @@ function matchLayout(): FieldLayout {
   body.classList.add('in-match');
   body.classList.toggle('docked', desktop());
   try {
-    return measureLayout($('#screen-wrap') as HTMLElement, $('#pad') as HTMLElement);
+    return measureLayout($('#screen-wrap') as HTMLElement, $('#pad') as HTMLElement, liveAbove());
   } finally {
     body.classList.toggle('in-match', was.inMatch);
     body.classList.toggle('docked', was.docked);
@@ -3691,7 +3694,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
   // Shown only on a desktop in a match (index.html's #keys), and only past the picture.
   const legend = new KeyLegend($('#keys') as HTMLElement, emu, KEYBOARD_MAP);
   const wrap = $('#screen-wrap') as HTMLElement;
-  placeKeys = () => legend.place(measureLayout(wrap, $('#pad') as HTMLElement), wrap.clientWidth, wrap.clientHeight);
+  placeKeys = () => legend.place(measureLayout(wrap, $('#pad') as HTMLElement, liveAbove()), wrap.clientWidth, wrap.clientHeight);
   new ResizeObserver(placeKeys).observe(wrap);
   wireGamepad(emu);
   wireRemap();
@@ -3714,6 +3717,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     field: $('#field') as HTMLCanvasElement,
     overlay: $('#overlay') as HTMLCanvasElement,
     pad: $('#pad') as HTMLElement,
+    liveAbove,
     rom,
     seeThrough,
     keyLayer: $('#key-layer') as HTMLCanvasElement,
@@ -3780,7 +3784,7 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     hud.setScale(s);
     battle.setScale(s);
     // Right under the picture, where field.ts put it.
-    const lay = measureLayout(wrap, pad);
+    const lay = measureLayout(wrap, pad, liveAbove());
     menuRoot.style.top = `${Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s)}px`;
   };
   new ResizeObserver(resize).observe(pad);
