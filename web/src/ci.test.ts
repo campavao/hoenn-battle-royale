@@ -1,4 +1,5 @@
-// The BR workflows' actions, one version each (audit leftover g).
+// The BR workflows' actions, one version each (audit leftover g), the local build-rom
+// action's among them.
 //
 // A bump that misses a job goes unseen until that job runs, and the tag-only jobs run
 // once a release: `pret` was still on checkout@v4 and cache@v4 -- Node 20 actions --
@@ -7,11 +8,12 @@
 import { describe, expect, it } from 'vitest';
 import ci from '../../.github/workflows/ci.yml?raw';
 import playLog from '../../.github/workflows/play-log.yml?raw';
+import buildRom from '../../.github/actions/build-rom/action.yml?raw';
 
 describe('the BR workflows', () => {
   it('use one version of each action, in every job', () => {
     const versions = new Map<string, Set<string>>();
-    for (const source of [ci, playLog]) {
+    for (const source of [ci, playLog, buildRom]) {
       for (const m of source.matchAll(/^\s*(?:-\s+)?uses:\s*([\w./-]+)@(\S+)/gm)) {
         const seen = versions.get(m[1]) ?? new Set<string>();
         seen.add(m[2]);

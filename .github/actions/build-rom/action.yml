@@ -1,0 +1,93 @@
+name: Build the fork ROM
+description: >-
+  The pret baseline (cached, checked against rom.sha1) and this fork's ROM, both with
+  agbcc, at the workspace root: baseline/pokeemerald.gba, pokeemerald.gba and its .map.
+  The rom job and every e2e shard build their own: the ROM never leaves the runner that
+  built it (CLAUDE.md), and the fork's build took about a minute on CI's runners
+  (2026-10-15) once agbcc and the baseline are cached.
+
+outputs:
+  baseline-sha:
+    description: tools/br/BASELINE_COMMIT
+    value: ${{ steps.baseline.outputs.sha }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install build deps
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          build-essential libpng-dev gcc-arm-none-eabi binutils-arm-none-eabi \
+          cmake zlib1g-dev
+      # cmake + zlib1g-dev are only for the rom job's drivers (libmgba, static,
+      # headless) - see its drive step.
+
+    - name: Read baseline commit
+      id: baseline
+      shell: bash
+      run: echo "sha=$(cat tools/br/BASELINE_COMMIT)" >> "$GITHUB_OUTPUT"
+
+    - name: Checkout agbcc
+      uses: actions/checkout@v7
+      with:
+        repository: pret/agbcc
+        path: agbcc
+
+    - name: agbcc HEAD sha
+      id: agbcc-sha
+      shell: bash
+      run: echo "sha=$(git -C agbcc rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache agbcc build
+      id: agbcc-cache
+      uses: actions/cache@v6
+      with:
+        path: agbcc
+        key: agbcc-${{ steps.agbcc-sha.outputs.sha }}
+
+    - name: Build agbcc
+      if: steps.agbcc-cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: agbcc
+      run: ./build.sh
+
+    - name: Checkout baseline pokeemerald
+      uses: actions/checkout@v7
+      with:
+        repository: pret/pokeemerald
+        ref: ${{ steps.baseline.outputs.sha }}
+        path: baseline
+
+    - name: Cache baseline ROM
+      id: baseline-cache
+      uses: actions/cache@v6
+      with:
+        path: baseline/pokeemerald.gba
+        # The baseline never changes without BASELINE_COMMIT changing, so once this
+        # is cached, every push and PR skips a ~9 minute clean pret build entirely.
+        key: baseline-rom-${{ steps.baseline.outputs.sha }}
+
+    - name: Build baseline ROM
+      if: steps.baseline-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        ( cd agbcc && ./install.sh ../baseline )
+        make -C baseline -j"$(nproc)"
+
+    - name: Verify baseline ROM sha1
+      # The whole point of pinning BASELINE_COMMIT is that this ROM is a known
+      # quantity; a mismatch here means the pin or the agbcc build drifted, and every
+      # downstream step (the patch, the symbols) would be diffing against the wrong
+      # thing without this catching it first.
+      shell: bash
+      run: tools/br/check-rom.sh baseline/pokeemerald.gba
+
+    - name: Install agbcc into fork
+      shell: bash
+      run: ( cd agbcc && ./install.sh .. )
+
+    - name: Build fork ROM
+      shell: bash
+      run: make -j"$(nproc)"
