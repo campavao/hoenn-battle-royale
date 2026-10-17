@@ -37,13 +37,14 @@ bool8 BrMoves_HasAny(struct Pokemon *mon);
 void BrMoves_Spend(u16 move);
 
 // A slot is about to be written over, from the MOVES list or a TM used from the bag.
-// TMs go round (Cam, 2026-10-13: "when that move is later overwritten, the TM drops back
-// on the ground"): a move this mon could only have had from a TM lands beside the player
-// as that TM, for anybody. A move it learns on its own by now does not -- a TM for that
+// TMs go round: a move this mon could only have had from a TM goes back in the bag as
+// that TM (Cam, 2026-10-17: "make swapping moves among pokemon also easy"), so MOVES on a
+// teammate offers it next. It used to drop on the ground (2026-10-13); it still does when
+// the TM pocket has no room. A move it learns on its own by now does not -- a TM for that
 // would be one made out of nothing -- and neither does an HM's, which never left the bag.
 // A trainer's mon can come with a TM's move (a gym party's, spilled as loot when it is
-// beaten): its TM drops as well, the trainer's machine come with the mon. From the MOVES
-// list, a TM used from the bag, and a move learnt on evolving.
+// beaten): its TM comes back as well, the trainer's machine come with the mon. From the
+// MOVES list, a TM used from the bag, and a move learnt on evolving.
 void BrMoves_Forgetting(struct Pokemon *mon, u8 slot);
 
 // A TM off the ground (Cam, 2026-10-14: "moves that are picked up should immediately go

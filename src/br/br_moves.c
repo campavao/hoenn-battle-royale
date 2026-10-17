@@ -22,6 +22,8 @@
 #include "br/br_loot.h"
 #include "br/br_moves.h"
 
+static void SayKept(u16 item);
+
 static bool8 Listed(const u16 *moves, u8 count, u16 move)
 {
     u8 i;
@@ -133,7 +135,12 @@ void BrMoves_Forgetting(struct Pokemon *mon, u8 slot)
     item = MachineOf(move);
     if (item == ITEM_NONE || LearnsByNow(mon, move))
         return;
-    BrLoot_DropItem(item);
+    // Back in the bag, where MOVES on any teammate offers it (Cam, 2026-10-17: "make
+    // swapping moves among pokemon also easy"). The ground only when the pocket is full.
+    if (AddBagItem(item, 1))
+        SayKept(item);
+    else
+        BrLoot_DropItem(item);
 }
 
 // The TM waiting for the teach screen (ITEM_NONE: none), how many the bag held when it
