@@ -188,6 +188,16 @@ describe('the trainer card (POK-335)', () => {
     expect(fresh.filter((p) => p.name === 'card-badges.png')).toHaveLength(0);
   });
 
+  it('still draws its words, and still opens your name and the wardrobe, when its art never comes', async () => {
+    const { trainerScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const { canvas, texts, frames } = fakeCanvas(new Set(['trainer-card.png']));
+    const painted = trainerScreen(() => model()).paint(canvas, 320);
+    expect(frames[0], 'a plain window where the card would be').toEqual({ x: 0, y: 0, w: 240, h: 160 });
+    expect(texts.some((d) => d.text === 'NAME: CAM')).toBe(true);
+    expect(painted.widgets.filter((w) => w.onPress && w.parent === 'trainer-rows').slice(0, 2).map((w) => w.id)).toEqual(['trainer-name', 'trainer-skin']);
+  });
+
   it('opens your name and the wardrobe from the card, first in the rows, and fits BACK on a 320 screen', async () => {
     const { trainerScreen } = await import('./screens');
     const { fakeCanvas } = await import('./fakecanvas');

@@ -17,7 +17,8 @@ export interface DrawnPicture {
   y: number;
 }
 
-export function fakeCanvas(): {
+/** `missing`: pictures that failed to load, as a 404 would leave them. */
+export function fakeCanvas(missing: ReadonlySet<string> = new Set()): {
   canvas: EmeraldCanvas;
   texts: Drawn[];
   frames: Rect[];
@@ -53,7 +54,7 @@ export function fakeCanvas(): {
     },
     drawUiPicture(name: string, sx: number, sy: number, _w: number, _h: number, x: number, y: number) {
       pictures.push({ name, sx, sy, x, y });
-      return true;
+      return missing.has(name) ? 'missing' : 'drawn';
     },
     drawCursor() {},
   };

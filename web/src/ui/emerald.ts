@@ -192,12 +192,16 @@ export function textImage(text: string, color: TextColor = TEXT_DARK, scale = 1)
   return c;
 }
 
+/** Where one of the page's pictures is: on the canvas, still coming, or not coming. */
+export type PictureState = 'drawn' | 'loading' | 'missing';
+
 /** A canvas that draws in GBA pixels and scales up whole, like the picture. */
 export class EmeraldCanvas {
   private ctx: CanvasRenderingContext2D;
   private fonts = new Map<TextColor, HTMLCanvasElement>();
   private sheets = new Map<number, HTMLImageElement>();
   private pictures = new Map<string, HTMLImageElement>();
+  private missing = new Set<string>();
   private ready: Promise<void>;
   private mask: HTMLImageElement | null = null;
   private frame: HTMLImageElement | null = null;
@@ -327,20 +331,26 @@ export class EmeraldCanvas {
 
   /** Part of one of the page's own pictures (`/ui/<name>`: the trainer card, its badges,
    *  the portraits) at (x, y). Loaded on first use; whoever drew without it is asked to
-   *  draw again when it lands, as a sheet is. Returns false while it is loading. */
-  drawUiPicture(name: string, sx: number, sy: number, w: number, h: number, x: number, y: number): boolean {
+   *  draw again when it lands -- or fails to, so a screen waiting on it can stop waiting
+   *  and draw without it. */
+  drawUiPicture(name: string, sx: number, sy: number, w: number, h: number, x: number, y: number): PictureState {
     let img = this.pictures.get(name);
     if (!img) {
       const el = new Image();
       el.decoding = 'async';
       el.onload = () => this.onLoad?.();
+      el.onerror = () => {
+        this.missing.add(name);
+        this.onLoad?.();
+      };
       el.src = `/ui/${name}`;
       this.pictures.set(name, el);
       img = el;
     }
-    if (!img.complete || img.naturalWidth === 0) return false;
+    if (this.missing.has(name)) return 'missing';
+    if (!img.complete || img.naturalWidth === 0) return 'loading';
     this.ctx.drawImage(img, sx, sy, w, h, x + this.origin, y, w, h);
-    return true;
+    return 'drawn';
   }
 
   /** The cursor Emerald's menus use: a small right-pointing triangle. */

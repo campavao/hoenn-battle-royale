@@ -712,24 +712,29 @@ export function paintTrainerCard(
   on: { onName: () => void; onSkin: () => void },
 ): Widget[] {
   // Nothing on the card before the card: text over the bare page, and the art popping in
-  // under it, read as broken. The canvas paints again when it lands.
-  if (!c.drawUiPicture('trainer-card.png', 0, cardRow(face) * CARD_H, CARD_W, CARD_H, 0, y)) return [];
-  // DrawStarsAndBadgesOnCard: the stars from tile (15, 7), the badges from (4, 15) three
-  // tiles apart. card-badges.png is the eight badges and then the star.
-  const stars = cardStars(face.wins);
-  for (let i = 0; i < stars; i++) c.drawUiPicture('card-badges.png', 128, 0, 8, 8, 120 + i * 8, y + 56);
-  const badges = cardBadges(face.wins);
-  for (let i = 0; i < badges; i++) c.drawUiPicture('card-badges.png', i * 16, 0, 16, 16, 32 + i * 24, y + 120);
-  c.drawUiPicture('trainer-pics.png', face.skin * CARD_PIC.w, 0, CARD_PIC.w, CARD_PIC.h, CARD_PIC.x, y + CARD_PIC.y);
-
-  const id = `IDNo.${cardId(face.name)}`;
-  c.drawText(id, 128 + Math.floor((96 - measure(id)) / 2), y + 17, TEXT_DARK);
-  c.drawText(`NAME: ${face.name}`, 24, y + 41, TEXT_DARK);
+  // under it, read as broken. The canvas paints again when it lands. If it never does, a
+  // plain window takes its place: NAME and the portrait are the only ways to your name
+  // and the wardrobe from here, so they are pressable either way (#48's review).
+  const art = c.drawUiPicture('trainer-card.png', 0, cardRow(face) * CARD_H, CARD_W, CARD_H, 0, y);
+  if (art === 'missing') c.drawFrame({ x: 0, y, w: CARD_W, h: CARD_H });
   const fields = cardFields(face);
-  fields.forEach((f, i) => {
-    c.drawText(f.label, 24, y + CARD_FIELDS_Y[i], TEXT_DARK);
-    c.drawText(f.value, CARD_VALUE_RIGHT - measure(f.value), y + CARD_FIELDS_Y[i], TEXT_DARK);
-  });
+  const badges = cardBadges(face.wins);
+  if (art !== 'loading') {
+    // DrawStarsAndBadgesOnCard: the stars from tile (15, 7), the badges from (4, 15) three
+    // tiles apart. card-badges.png is the eight badges and then the star.
+    const stars = cardStars(face.wins);
+    for (let i = 0; i < stars; i++) c.drawUiPicture('card-badges.png', 128, 0, 8, 8, 120 + i * 8, y + 56);
+    for (let i = 0; i < badges; i++) c.drawUiPicture('card-badges.png', i * 16, 0, 16, 16, 32 + i * 24, y + 120);
+    c.drawUiPicture('trainer-pics.png', face.skin * CARD_PIC.w, 0, CARD_PIC.w, CARD_PIC.h, CARD_PIC.x, y + CARD_PIC.y);
+
+    const id = `IDNo.${cardId(face.name)}`;
+    c.drawText(id, 128 + Math.floor((96 - measure(id)) / 2), y + 17, TEXT_DARK);
+    c.drawText(`NAME: ${face.name}`, 24, y + 41, TEXT_DARK);
+    fields.forEach((f, i) => {
+      c.drawText(f.label, 24, y + CARD_FIELDS_Y[i], TEXT_DARK);
+      c.drawText(f.value, CARD_VALUE_RIGHT - measure(f.value), y + CARD_FIELDS_Y[i], TEXT_DARK);
+    });
+  }
 
   const stats = `${fields.map((f) => `${f.label} ${f.value}`).join(' ')} BADGES ${badges}/${CARD_BADGES}`;
   return [
@@ -750,7 +755,7 @@ export function paintTrainerCard(
       onPress: on.onSkin,
       cursor: { x: CARD_PIC.x - 8, y: y + CARD_PIC.y + 28 },
     },
-    { rect: { x: 16, y: y + 64, w: 120, h: 3 * ROW_H }, text: stats, id: 'trainer-stats-card', cursor: null },
+    { rect: { x: 16, y: y + 64, w: 120, h: 3 * ROW_H }, text: stats, id: 'trainer-record', cursor: null },
   ];
 }
 
