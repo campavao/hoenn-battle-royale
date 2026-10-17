@@ -357,6 +357,38 @@ test('the host can set the opening length, and show somebody the door (POK-241)'
   }
 });
 
+// POK-339 (Cam, 2026-10-17: "save on device, and share when in the game itself"): the
+// career stays in each browser, and a trainer's card in the room has their record.
+test("another trainer's card has the record their browser keeps", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const hostCtx = await browser.newContext();
+  const guestCtx = await browser.newContext();
+  try {
+    const host = await hostCtx.newPage();
+    await host.goto(`/#host&noauto&nobots&rom=${romHashParam()}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    const code = ((await host.locator('#room-code').textContent()) ?? '').match(/Room ([A-Z0-9]{6})/)?.[1];
+    if (!code) throw new Error('could not parse a room code');
+
+    const guest = await guestCtx.newPage();
+    await guest.addInitScript(() => {
+      localStorage.setItem('hbr:career', JSON.stringify({ matches: 12, wins: 3, best: 1, name: 'MAY', skin: 1 }));
+    });
+    await guest.goto(`/#join=${code}&noauto&rom=${romHashParam()}`);
+    await expect(host.locator('#room-roster li')).toHaveCount(2, { timeout: 60_000 });
+
+    await host.locator('#room-roster .roster-name').nth(1).click();
+    const card = host.locator('#trainer-card');
+    await expect(card).toContainText('WINS: 3', { timeout: 15_000 });
+    await expect(card).toContainText('PLAYED: 12');
+    await expect(card).toContainText('BEST: 1st');
+    await host.screenshot({ path: path.join(OUT_DIR, 'room-card-record.png') });
+  } finally {
+    await guestCtx.close().catch(() => {});
+    await hostCtx.close().catch(() => {});
+  }
+});
+
 test('the lobby is where you say who you are', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(`/#rom=${romHashParam()}`);

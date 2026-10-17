@@ -16,6 +16,7 @@ import {
   TEXT_RED,
   TEXT_WHITE,
   type TextColor,
+  WINDOW_FILL,
   fitText,
   measure,
   skinSheet,
@@ -209,7 +210,7 @@ export interface RoomModel {
   /** Seconds until the room starts itself (quick play, the daily), or null. */
   countdown: number | null;
   /** The host's controls, in the order they are shown; null for a guest. */
-  options: { label: string; id: string; onPress: () => void }[] | null;
+  options: OptionSpec[] | null;
   card: TrainerCard | null;
   onStart(): void;
   onLeave(): void;
@@ -304,22 +305,137 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
   };
 }
 
+/** What a control looks like beside its words (Cam's 2026-10-14 play-test, POK-345:
+ *  "we can also make it more visual"). The words stay, since they are what the control
+ *  says when pressed; the picture is the reading at a glance.
+ *  - `seats`: MAX's seats, the humans in blue, the bots FILL would deal in gray.
+ *  - `toggle`: a switch, on or off.
+ *  - `level`: rising bars, `at` of `of` lit: TEXT's pace, or a timer's length, with a
+ *    clock in front of a timer's words. */
+export type OptionVisual =
+  | { kind: 'seats'; humans: number; bots: number; max: number }
+  | { kind: 'toggle'; on: boolean }
+  | { kind: 'level'; at: number; of: number; clock?: boolean };
+
+export interface OptionSpec {
+  label: string;
+  id: string;
+  onPress: () => void;
+  visual?: OptionVisual;
+}
+
+const SEATS_W = 40;
+const TOGGLE_W = 15;
+const LEVEL_STEP = 4;
+const CLOCK_W = 7;
+
+/** How wide a control's picture is, in the font's pixels. */
+export function visualWidth(v: OptionVisual): number {
+  if (v.kind === 'seats') return SEATS_W;
+  if (v.kind === 'toggle') return TOGGLE_W;
+  return v.of * LEVEL_STEP - 1;
+}
+
+/** Where a control's pieces go in a text run `w` wide from `x`: the clock, the words,
+ *  and the picture against the right edge. The words get what is left, cut to fit. */
+export function optionLayout(
+  label: string,
+  visual: OptionVisual | undefined,
+  x: number,
+  w: number,
+): { clockX: number | null; textX: number; text: string; visualX: number | null } {
+  const clock = visual?.kind === 'level' && visual.clock === true;
+  const textX = clock ? x + CLOCK_W + 3 : x;
+  if (!visual) return { clockX: null, textX, text: fitText(label, w), visualX: null };
+  const vw = visualWidth(visual);
+  const visualX = x + w - vw;
+  return { clockX: clock ? x : null, textX, text: fitText(label, visualX - 4 - textX), visualX };
+}
+
+/** The seat bar: one block a seat when there is room for them, a split bar when not
+ *  (MAX reaches 30). Empty seats are a line along the bottom. */
+function paintSeats(c: EmeraldCanvas, x: number, y: number, v: Extract<OptionVisual, { kind: 'seats' }>): void {
+  const max = Math.max(1, v.max);
+  const humans = Math.min(v.humans, max);
+  const bots = Math.min(v.bots, max - humans);
+  const top = y + 3;
+  const h = 8;
+  const seg = Math.floor((SEATS_W + 1) / max);
+  if (seg >= 3) {
+    // Whole blocks, flush with the cell's right edge like every other picture.
+    const left = x + SEATS_W - (max * seg - 1);
+    c.fillRect({ x: left, y: top + h - 1, w: max * seg - 1, h: 1 }, TEXT_GRAY.fg);
+    for (let i = 0; i < humans + bots; i++) {
+      c.fillRect({ x: left + i * seg, y: top, w: seg - 1, h }, i < humans ? TEXT_BLUE.fg : TEXT_GRAY.fg);
+    }
+    return;
+  }
+  c.fillRect({ x, y: top + h - 1, w: SEATS_W, h: 1 }, TEXT_GRAY.fg);
+  // A human is never thinner than two pixels: one of thirty is still somebody.
+  const hw = humans > 0 ? Math.max(2, Math.round((SEATS_W * humans) / max)) : 0;
+  const bw = Math.max(0, Math.round((SEATS_W * (humans + bots)) / max) - hw);
+  c.fillRect({ x, y: top, w: hw, h }, TEXT_BLUE.fg);
+  c.fillRect({ x: x + hw, y: top, w: bw, h }, TEXT_GRAY.fg);
+}
+
+/** A switch: the knob right on blue for on, left on gray for off. */
+function paintToggle(c: EmeraldCanvas, x: number, y: number, on: boolean): void {
+  const top = y + 4;
+  c.fillRect({ x, y: top, w: TOGGLE_W, h: 7 }, on ? TEXT_BLUE.fg : TEXT_GRAY.fg);
+  c.fillRect({ x: x + (on ? TOGGLE_W - 6 : 1), y: top + 1, w: 5, h: 5 }, WINDOW_FILL);
+}
+
+/** Bars rising left to right, the first `at` lit. */
+function paintLevel(c: EmeraldCanvas, x: number, y: number, at: number, of: number): void {
+  const base = y + 11;
+  for (let i = 0; i < of; i++) {
+    const h = 3 + Math.round((i * 5) / Math.max(1, of - 1));
+    c.fillRect({ x: x + i * LEVEL_STEP, y: base - h, w: LEVEL_STEP - 1, h }, i < at ? TEXT_BLUE.fg : TEXT_GRAY.fg);
+  }
+}
+
+/** A 7x7 clock face at three o'clock, a pixel at a time. */
+const CLOCK = ['..###..', '.#...#.', '#..#..#', '#..##.#', '#.....#', '.#...#.', '..###..'];
+
+function paintClock(c: EmeraldCanvas, x: number, y: number): void {
+  CLOCK.forEach((row, dy) => {
+    for (let dx = 0; dx < row.length; dx++) {
+      if (row[dx] === '#') c.fillRect({ x: x + dx, y: y + 4 + dy, w: 1, h: 1 }, TEXT_DARK.fg);
+    }
+  });
+}
+
+const OPTION_COLS = 2;
+
+/** Where control `i` of a box at `y` goes: two columns, the cursor at its left edge and
+ *  its words 8 in from that. */
+export function optionRect(y: number, i: number): Rect {
+  const cw = Math.floor((W - 16) / OPTION_COLS);
+  return { x: 8 + (i % OPTION_COLS) * cw + 8, y: y + 8 + Math.floor(i / OPTION_COLS) * 20 + 2, w: cw - 8, h: ROW_H };
+}
+
 /** Two columns of small framed controls at `y` -- the host's options, the sheet's
  *  settings -- each in the container `parent`. */
 export function paintOptions(
   c: EmeraldCanvas,
   y: number,
-  options: { label: string; id: string; onPress: () => void }[],
+  options: OptionSpec[],
   parent: string,
 ): { widgets: Widget[]; bottom: number } {
-  const cols = 2;
-  const cw = Math.floor((W - 16) / cols);
-  const rows = Math.ceil(options.length / cols);
+  const rows = Math.ceil(options.length / OPTION_COLS);
   const frame = { x: 0, y, w: W, h: rows * 20 + 16 };
   c.drawFrame(frame);
   const widgets = options.map((o, i): Widget => {
-    const r = { x: 8 + (i % cols) * cw + 8, y: y + 8 + Math.floor(i / cols) * 20 + 2, w: cw - 8, h: ROW_H };
-    c.drawText(fitText(o.label, r.w - 10), r.x + 8, r.y, TEXT_DARK);
+    const r = optionRect(y, i);
+    const lay = optionLayout(o.label, o.visual, r.x + 8, r.w - 10);
+    if (lay.clockX !== null) paintClock(c, lay.clockX, r.y);
+    c.drawText(lay.text, lay.textX, r.y, TEXT_DARK);
+    if (o.visual && lay.visualX !== null) {
+      const v = o.visual;
+      if (v.kind === 'seats') paintSeats(c, lay.visualX, r.y, v);
+      else if (v.kind === 'toggle') paintToggle(c, lay.visualX, r.y, v.on);
+      else paintLevel(c, lay.visualX, r.y, v.at, v.of);
+    }
     return { rect: r, text: o.label, id: o.id, parent, onPress: o.onPress, cursor: { x: r.x, y: r.y + 2 } };
   });
   return { widgets, bottom: frame.y + frame.h };
@@ -421,7 +537,7 @@ export interface SheetModel {
 }
 
 /** The sheet's settings, MOVE PAD and HIDE PAD among them on a phone. */
-function settingsOf(m: SheetModel): { label: string; id: string; onPress: () => void }[] {
+function settingsOf(m: SheetModel): OptionSpec[] {
   const rows = [
     { label: m.muted ? 'UNMUTE' : 'MUTE', id: 'mute', onPress: m.onMute },
     { label: m.remapping ? 'CANCEL REMAP' : 'REMAP PAD', id: 'remap', onPress: m.onRemap },
