@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SKIN_GFX, frameTiles, glyphIds, inRect, measure, skinSheet } from './emerald';
-import { SKINS } from '../match/career';
+import { SKIN_GFX, frameTiles, glyphIds, inRect, measure, messageBoxTiles, skinSheet } from './emerald';
+import { SKINS, WARDROBE } from '../match/career';
 import ghostsSource from '../../../src/br/br_ghosts.c?raw';
 
 describe("Emerald's font on the page (POK-320)", () => {
@@ -98,25 +98,6 @@ describe('the drawn screens (POK-320)', () => {
     expect(wear.y).toBe(100);
     expect(back.x).toBe(wear.x + wear.w + 8);
     expect(wear.x).toBe(240 - (back.x + back.w));
-  });
-
-  it('pages MY VOICE to the screen, and opens on the page your line is on', async () => {
-    const { linePageSize, linePageOf } = await import('./screens');
-    // 320 is the shortest screen anybody draws for: fourteen lines and the buttons.
-    expect(linePageSize(320)).toBe(14);
-    expect(linePageSize(100)).toBe(4);
-    expect(linePageOf(0, 14)).toBe(0);
-    expect(linePageOf(13, 14)).toBe(0);
-    expect(linePageOf(14, 14)).toBe(1);
-  });
-
-  it("says what the wardrobe's line says: yours, wearable, or the price", async () => {
-    const { wardrobeNote } = await import('./screens');
-    expect(wardrobeNote(0, 0, 0)).toBe('your sprite');
-    expect(wardrobeNote(1, 0, 0)).toBe('press WEAR');
-    expect(wardrobeNote(4, 0, 0)).toBe('LOCKED -- 1 win');
-    expect(wardrobeNote(6, 2, 0)).toBe('LOCKED -- 4 wins');
-    expect(wardrobeNote(6, 4, 0)).toBe('press WEAR');
   });
 
   it('shows the stage at whole pixels once it can afford two, and at the phone’s own fit below', async () => {
@@ -299,5 +280,103 @@ describe("Emerald's fade over a cut (POK-320)", () => {
     expect(fadesBetween('overlay', null), 'the sheet closing').toBe(false);
     expect(fadesBetween('full', 'full'), 'one screen to the next').toBe(false);
     expect(fadesBetween(null, 'dock')).toBe(false);
+  });
+});
+
+describe('MY LOOK (POK-337)', () => {
+  const LINES = ['FOUND YOU.', 'STILL STANDING.', 'GOOD FIGHT.', 'AGAIN?'];
+  const model = (over: Record<string, unknown> = {}) => ({
+    wins: 0,
+    worn: 0,
+    browsing: 0,
+    lines: LINES,
+    picked: { intro: 0, win: 1, lose: 3 },
+    onBrowse: () => {},
+    onLine: () => {},
+    onBack: () => {},
+    ...over,
+  });
+
+  it("is Emerald's dialogue box tile for tile: two corners each end of the top, one-tile sides, the bottom flipped", () => {
+    const tiles = messageBoxTiles(30, 6);
+    expect(tiles).toHaveLength(180);
+    const at = (c: number, r: number) => tiles.find((t) => t.c === c && t.r === r)!;
+    expect([0, 1, 2, 28, 29].map((c) => at(c, 0).t)).toEqual([1, 3, 4, 5, 6]);
+    expect([0, 1, 28, 29].map((c) => at(c, 2).t)).toEqual([7, 9, 9, 10]);
+    expect(at(1, 5)).toEqual({ c: 1, r: 5, t: 3, flip: true });
+    expect(at(1, 0).flip).toBe(false);
+  });
+
+  it('turns the strip round the wardrobe, the one you are on in the middle', async () => {
+    const { lookStrip, stepSkin } = await import('./screens');
+    expect(stepSkin(0, 1)).toBe(1);
+    expect(stepSkin(1, 1), 'past the retired rivals').toBe(4);
+    expect(stepSkin(0, -1)).toBe(WARDROBE[WARDROBE.length - 1]);
+    expect(stepSkin(WARDROBE[WARDROBE.length - 1], 1)).toBe(0);
+    expect(lookStrip(0)).toEqual([WARDROBE[WARDROBE.length - 2], WARDROBE[WARDROBE.length - 1], 0, 1, 4]);
+  });
+
+  it("says a skin's price, or that it is yours", async () => {
+    const { lookNote } = await import('./screens');
+    expect(lookNote(0, 0, 0)).toBe('your sprite');
+    expect(lookNote(4, 0, 0)).toBe('LOCKED -- 1 win');
+    expect(lookNote(6, 2, 0)).toBe('LOCKED -- 4 wins');
+  });
+
+  it('draws the big picture, the strip and three dialogue boxes, and fits BACK on a 320 screen', async () => {
+    const { lookScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const { canvas, texts, pictures, boxes, sprites, arrows } = fakeCanvas();
+    const painted = lookScreen(() => model({ browsing: 4, worn: 1 })).paint(canvas, 320);
+    expect(pictures.find((p) => p.name === 'trainer-pics.png'), 'the browsed skin, large').toMatchObject({ sx: 4 * 64, x: 16, y: 10 });
+    expect(boxes).toEqual([0, 1, 2].map((i) => ({ x: 0, y: 142 + i * 48, w: 240, h: 48 })));
+    expect(texts.filter((t) => t.y > 142 && t.y < 286).map((t) => t.text)).toEqual(['WALKING UP', 'FOUND YOU.', 'WHEN YOU WIN', 'STILL STANDING.', 'WHEN YOU LOSE', 'AGAIN?']);
+    expect(texts.find((t) => t.text === 'LOCKED -- 1 win')).toBeDefined();
+    // Each box shows it turns both ways: an arrow at each edge, on the line's row.
+    for (const i of [0, 1, 2]) {
+      expect(arrows).toContainEqual({ x: 9, y: 142 + i * 48 + 25, left: true });
+      expect(arrows).toContainEqual({ x: 226, y: 142 + i * 48 + 25, left: false });
+    }
+    // Five sprites: BRENDAN, MAY, HIKER (lit, and faded: locked), and the two after it.
+    expect(sprites).toHaveLength(5);
+    expect(sprites[2].alpha).toBe(0.3);
+    expect(sprites[1].alpha).toBe(1);
+    expect(texts.find((t) => t.text === 'wearing MAY'), 'what you still wear').toBeDefined();
+    const strip = painted.widgets.filter((w) => w.parent === 'look-sprites');
+    expect(strip.map((w) => w.text)).toEqual(['BRENDAN', 'MAY (worn)', 'HIKER LOCKED', `${SKINS[5]} LOCKED`, `${SKINS[6]} LOCKED`]);
+    expect(strip.filter((w) => w.cursor !== null).map((w) => w.id)).toEqual(['look-sprite']);
+    const back = painted.widgets.find((w) => w.id === 'look-back')!;
+    expect(back.rect.y).toBeGreaterThanOrEqual(142 + 3 * 48);
+    expect(back.rect.y + back.rect.h).toBeLessThanOrEqual(320);
+  });
+
+  it('turns a line with a press, its arrows, or left and right on its row, round the pool', async () => {
+    const { lookScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const said: string[] = [];
+    const screen = lookScreen(() => model({ onLine: (slot: string, i: number) => said.push(`${slot}${i}`) }));
+    const w = screen.paint(fakeCanvas().canvas, 320).widgets;
+    const by = (id: string) => w.find((x) => x.id === id)!;
+    by('look-intro').onPress!();
+    by('look-intro-prev').onPress!();
+    by('look-lose-next').onPress!();
+    expect(screen.key!('right', by('look-win'))).toBe(true);
+    expect(screen.key!('left', by('look-win'))).toBe(true);
+    expect(screen.key!('down', by('look-win')), 'up and down are the cursor’s').toBe(false);
+    expect(screen.key!('left', by('look-back')), 'nothing to turn on BACK').toBe(false);
+    expect(said).toEqual(['intro1', 'intro3', 'lose0', 'win2', 'win0']);
+  });
+
+  it('turns the strip with its arrows, a press on a sprite, or left and right on it', async () => {
+    const { lookScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const went: number[] = [];
+    const screen = lookScreen(() => model({ onBrowse: (s: number) => went.push(s) }));
+    const w = screen.paint(fakeCanvas().canvas, 320).widgets;
+    w.find((x) => x.id === 'look-next')!.onPress!();
+    w.find((x) => x.id === 'look-prev')!.onPress!();
+    w.find((x) => x.text === 'HIKER LOCKED')!.onPress!();
+    screen.key!('right', w.find((x) => x.id === 'look-sprite')!);
+    expect(went).toEqual([1, WARDROBE[WARDROBE.length - 1], 4, 1]);
   });
 });

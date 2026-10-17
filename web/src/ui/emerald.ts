@@ -112,6 +112,22 @@ export function frameTiles(w: number, h: number): { dx: number; dy: number; tx: 
   return out;
 }
 
+/** Emerald's dialogue box, tile by tile (WindowFunc_DrawDialogueFrame in src/menu.c),
+ *  `cols` x `rows` tiles: message-box.png's tile `t` at tile (`c`, `r`), upside down on
+ *  the bottom row. The top is two corner tiles each side of a run of edge; the sides are
+ *  one tile, the left one a tile out from the text the way the ROM's is. */
+export function messageBoxTiles(cols: number, rows: number): { c: number; r: number; t: number; flip: boolean }[] {
+  const out: { c: number; r: number; t: number; flip: boolean }[] = [];
+  const edge = (c: number) => (c === 0 ? 1 : c === 1 ? 3 : c === cols - 2 ? 5 : c === cols - 1 ? 6 : 4);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (r === 0 || r === rows - 1) out.push({ c, r, t: edge(c), flip: r === rows - 1 });
+      else out.push({ c, r, t: c === 0 ? 7 : c === cols - 1 ? 10 : 9, flip: false });
+    }
+  }
+  return out;
+}
+
 /** The sheet a skin wears, and its standing frame (the ROM's first: facing south). */
 export function skinSheet(skin: number): { gfx: number; w: number; h: number } | null {
   const gfx = SKIN_GFX[skin] ?? SKIN_GFX[0];
@@ -279,6 +295,28 @@ export class EmeraldCanvas {
     }
   }
 
+  /** Emerald's dialogue box over `r`, whole tiles: what a trainer says things in. */
+  drawMessageBox(r: Rect): void {
+    const { ctx, box } = this;
+    if (!box) return;
+    const x0 = r.x + this.origin;
+    for (const t of messageBoxTiles(Math.floor(r.w / TILE), Math.floor(r.h / TILE))) {
+      const sx = (t.t % 7) * TILE;
+      const sy = Math.floor(t.t / 7) * TILE;
+      const dx = x0 + t.c * TILE;
+      const dy = r.y + t.r * TILE;
+      if (!t.flip) {
+        ctx.drawImage(box, sx, sy, TILE, TILE, dx, dy, TILE, TILE);
+        continue;
+      }
+      ctx.save();
+      ctx.translate(dx, dy + TILE);
+      ctx.scale(1, -1);
+      ctx.drawImage(box, sx, sy, TILE, TILE, 0, 0, TILE, TILE);
+      ctx.restore();
+    }
+  }
+
   /** Text at (x, y), the glyphs' top-left, in one colour. Returns the width drawn. */
   drawText(text: string, x: number, y: number, color: TextColor = TEXT_DARK): number {
     if (!this.mask) return measure(text);
@@ -353,9 +391,10 @@ export class EmeraldCanvas {
     return 'drawn';
   }
 
-  /** The cursor Emerald's menus use: a small right-pointing triangle. */
-  drawCursor(x: number, y: number, color = TEXT_DARK): void {
+  /** The cursor Emerald's menus use: a small right-pointing triangle, or pointing left
+   *  for the way back through something that cycles. */
+  drawCursor(x: number, y: number, color = TEXT_DARK, left = false): void {
     this.ctx.fillStyle = color.fg;
-    for (let i = 0; i < 4; i++) this.ctx.fillRect(x + this.origin + i, y + 2 + i, 1, 7 - 2 * i);
+    for (let i = 0; i < 4; i++) this.ctx.fillRect(x + this.origin + (left ? 3 - i : i), y + 2 + i, 1, 7 - 2 * i);
   }
 }
