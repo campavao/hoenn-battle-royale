@@ -405,10 +405,13 @@ static bool8 InLearnset(const u16 *learnset, u16 move, u8 to)
 // one level at a time. Teach only ever swaps for a better four, so offering it a move it
 // already passed over costs nothing and is how a wild GROVYLE finds LEAF BLADE.
 //
-// `keepTaught`: a move it could not have learnt by `to` on its own is a TM somebody
-// taught it, and the walk leaves that slot alone. The player's team only; nobody chose
-// anything in a wild or a trainer's mon.
-static void LearnThrough(struct Pokemon *mon, u8 to, bool8 keepTaught)
+// `from` is 0 for a mon nobody has chosen anything for: a wild one, a trainer's, a bot's.
+// The player's lift passes the level it was at (Cam, 2026-10-17: "add back in the auto
+// learn moves upon level up, it's too brutal without it"), and then only the levels just
+// climbed teach -- the moves it passed over before were the player's to pass over, and
+// MOVES still has them -- and a slot whose move it could not have learnt by `to` on its
+// own is a TM somebody taught it, which the walk leaves alone.
+static void LearnThrough(struct Pokemon *mon, u8 from, u8 to)
 {
     u16 species = GetMonData(mon, MON_DATA_SPECIES, NULL);
     const u16 *learnset = gLevelUpLearnsets[species];
@@ -425,14 +428,14 @@ static void LearnThrough(struct Pokemon *mon, u8 to, bool8 keepTaught)
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
         had[i] = moves[i] = GetMonData(mon, MON_DATA_MOVE1 + i, NULL);
-        if (keepTaught && had[i] != MOVE_NONE && !InLearnset(learnset, had[i], to))
+        if (from != 0 && had[i] != MOVE_NONE && !InLearnset(learnset, had[i], to))
             kept |= 1 << i;
     }
     for (i = 0; learnset[i] != LEVEL_UP_END; i++)
     {
         u8 level = (learnset[i] & LEVEL_UP_MOVE_LV) >> 9;
 
-        if (level <= to)
+        if (level > from && level <= to)
             Teach(&who, moves, kept, learnset[i] & LEVEL_UP_MOVE_ID);
     }
     // Only the slots that ended up different are written, so a move that survived the
@@ -454,7 +457,7 @@ static void LearnThrough(struct Pokemon *mon, u8 to, bool8 keepTaught)
 void BrLevels_Settle(struct Pokemon *mon)
 {
     GrowUp(mon);
-    LearnThrough(mon, GetMonData(mon, MON_DATA_LEVEL, NULL), FALSE);
+    LearnThrough(mon, 0, GetMonData(mon, MON_DATA_LEVEL, NULL));
 }
 
 // A bot's mon, built from a card, knows what a player's or a gym leader's would at this
@@ -462,7 +465,7 @@ void BrLevels_Settle(struct Pokemon *mon)
 // CreateMon's last-four-written is the accident POK-311 took off everybody else.
 void BrLevels_TeachUpTo(struct Pokemon *mon, u8 level)
 {
-    LearnThrough(mon, level, FALSE);
+    LearnThrough(mon, 0, level);
 }
 
 static void LiftParty(u8 level)
@@ -475,20 +478,21 @@ static void LiftParty(u8 level)
         u16 species = GetMonData(mon, MON_DATA_SPECIES);
         u32 exp;
         u16 hp, maxBefore, maxAfter;
+        u8 was;
 
         if (species == SPECIES_NONE || GetMonData(mon, MON_DATA_LEVEL) >= level)
             continue;
+        was = GetMonData(mon, MON_DATA_LEVEL);
         exp = gExperienceTables[gSpeciesInfo[species].growthRate][level];
         hp = GetMonData(mon, MON_DATA_HP);
         maxBefore = GetMonData(mon, MON_DATA_MAX_HP);
         SetMonData(mon, MON_DATA_EXP, &exp);
         CalculateMonStats(mon);
         // Evolve before the moves are worked out, so the learnset walked is the one it
-        // will be standing in when the fighting starts. Then it learns what the levels
-        // teach (Cam, 2026-10-17: "add back in the auto learn moves upon level up, it's
-        // too brutal without it"; 2026-10-13 had stopped it), around the TMs it was taught.
+        // will be standing in when the fighting starts. Then it learns what the levels it
+        // climbed teach, around the TMs it was taught (2026-10-13 had stopped this).
         GrowUp(mon);
-        LearnThrough(mon, level, TRUE);
+        LearnThrough(mon, was, level);
         // Keep the wound: the new max grows, the missing HP stays missing.
         maxAfter = GetMonData(mon, MON_DATA_MAX_HP);
         if (hp > 0)
@@ -526,7 +530,7 @@ void BrLevels_LiftTrainer(struct Pokemon *party, u8 count)
         if (level > was)
         {
             GrowUp(mon);
-            LearnThrough(mon, level, FALSE);
+            LearnThrough(mon, 0, level);
         }
         // A trainer's mon walks in whole, unlike the player's, which keeps its wound.
         {
