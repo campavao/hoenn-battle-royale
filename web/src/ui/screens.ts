@@ -220,7 +220,8 @@ export interface RoomModel {
 }
 
 /** What the room screen puts under its seats: the note, the host's options, and the
- *  START/LEAVE row. */
+ *  START/LEAVE row. Mirrors paintNote, paintOptions and paintButtons' heights; the
+ *  POK-375 test in ui.test.ts paints the room and fails if they drift apart. */
 function roomBelow(m: RoomModel): number {
   const options = m.options && !m.started ? Math.ceil(m.options.length / OPTION_COLS) * 20 + 16 + 4 : 0;
   return 2 + ROW_H + 2 + options + (m.started ? 0 : 28);
@@ -234,9 +235,22 @@ export function roomSeatRows(m: RoomModel, h: number, y: number): number {
   return Math.max(1, Math.min(4, wanted, room));
 }
 
+/** The people on one page of the room's seats: all of them when they fit, otherwise
+ *  `cells - 1` at a time in the room's own order, the last cell a +N that turns to the
+ *  next page (wrapping round), so the host can still reach anybody's card and KICK. */
+export function roomPage(seats: readonly RoomSeat[], cells: number, page: number): { shown: readonly RoomSeat[]; more: number } {
+  if (seats.length <= cells) return { shown: seats, more: 0 };
+  const per = Math.max(1, cells - 1);
+  const start = (page % Math.ceil(seats.length / per)) * per;
+  const shown = seats.slice(start, start + per);
+  return { shown, more: seats.length - shown.length };
+}
+
 /** The room, Kanto's lobby: code on top, the seats, the note, the host's options,
  *  START (the host's) and LEAVE. A trainer's card opens over the seats. */
 export function roomScreen(model: () => RoomModel): DrawnScreen {
+  /** Which page of the seats is showing, when the room has more people than cells. */
+  let page = 0;
   return {
     back() {
       const m = model();
@@ -264,8 +278,7 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       // bots the rest are, and a room with more people than cells says +N.
       const lay = layoutSeats(y, roomSeatRows(m, h, y) * SEAT_COLS);
       c.drawFrame(lay.frame);
-      const { shown, more } = sheetSeats(m.seats, lay.cells.length);
-      const seated = more > 0 ? shown : m.seats;
+      const { shown: seated, more } = roomPage(m.seats, lay.cells.length, page);
       const taken = seated.length;
       // The bots to come, in the clothes they will be dealt (bots/roster.ts botSkin).
       const botsToCome = botSeats(m.fill, m.seats.map((who) => who.seat));
@@ -273,7 +286,7 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
         const who = seated[i];
         if (more > 0 && i === taken) {
           c.drawTextCentred(`+${more}`, cell.x + cell.w / 2, cell.y + 16, TEXT_GRAY);
-          widgets.push({ rect: cell, text: `${more} more`, cursor: null });
+          widgets.push({ rect: cell, text: `${more} more`, cls: 'room-more', onPress: () => void page++, cursor: { x: cell.x + 2, y: cell.y + 10 } });
         } else if (who) {
           const alpha = who.spectating ? 0.5 : 1;
           const name = who.alive ? who.name : 'OUT';

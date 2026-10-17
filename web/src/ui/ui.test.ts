@@ -152,6 +152,22 @@ describe('the drawn screens (POK-320)', () => {
     // A tall screen still seats sixteen in four rows: nobody is folded away for nothing.
     const tall = roomScreen(() => model(30, 16)).paint(fakeCanvas().canvas, 480);
     expect(tall.widgets.filter((w) => w.cls === 'roster-name')).toHaveLength(16);
+
+    // A short one pages them: +N turns to the next page, round to the first, so the host
+    // can open anybody's card (and KICK) in the room's own order.
+    const short = roomScreen(() => model(30, 16));
+    const names = () => short.paint(fakeCanvas().canvas, 320).widgets.filter((w) => w.cls === 'roster-name').map((w) => w.text);
+    const turn = () => short.paint(fakeCanvas().canvas, 320).widgets.find((w) => w.cls === 'room-more')!.onPress!();
+    const firstPage = names();
+    expect(firstPage[0]).toBe('P0 (you)');
+    const seen = [...firstPage];
+    let pages = 1;
+    for (turn(); names()[0] !== firstPage[0]; turn()) {
+      seen.push(...names());
+      pages++;
+    }
+    expect(pages).toBe(Math.ceil(16 / firstPage.length));
+    expect(seen).toEqual(model(30, 16).seats.map((s) => (s.isMe ? `${s.name} (you)` : s.name)));
   });
 
   it('draws no more seats than MAX, whatever it is told (POK-345)', async () => {
