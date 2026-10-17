@@ -299,7 +299,7 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
             onPress: () => m.onSeat(who.seat),
             cursor: { x: cell.x + 2, y: cell.y + 10 },
           });
-        } else if (i - taken < m.fill && !m.started) {
+        } else if (more === 0 && i - taken < m.fill && !m.started) {
           paintPerson(c, cell, botSkin(botsToCome[i - taken] ?? 0), 'BOT', 0.45);
         } else {
           paintPerson(c, cell, i % 2, '- - -', 0.25);
