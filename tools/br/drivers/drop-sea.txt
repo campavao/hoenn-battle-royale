@@ -1,5 +1,5 @@
 # drop-sea: the drop map's name box never goes blank (POK-352). The play-test moved the
-# cursor from SAFARI ZONE toward RUSTBORO and the box sat empty for 2-3 seconds over the
+# cursor west from SAFARI ZONE and the box sat empty for 2-3 seconds over the
 # cells between them. On the drop, a cell no section covers is the nearest section, its
 # name stays up, and A there chooses it.
 wait 30
@@ -13,15 +13,15 @@ poke u16 gBrMailbox+0x0C 2
 wait 200
 expect u8 gBrPick 1
 # The drop opens on SAFARI ZONE, layout (16,2), the play-test's own start. West along
-# row 2 crosses nine cells no section covers, each shot and none blank. A tie keeps the
-# name already up: (15,2) is one from SAFARI ZONE and one from ROUTE 121.
+# row 2 crosses nine cells no section covers, each shot and none blank. drop-sea-tie
+# checks which name a tie keeps.
 shot safari-zone
 tap LEFT
 wait 30
 shot 15-safari-zone-tie
 tap LEFT
 wait 30
-shot 14-route-120-near
+shot 14-route-120-tie
 tap LEFT
 wait 30
 tap LEFT
@@ -49,7 +49,7 @@ wait 30
 shot 04-lavaridge-near
 tap LEFT
 wait 30
-shot 03-fallarbor-near
+shot 03-fallarbor-tie
 tap LEFT
 wait 30
 shot 02-route-114-near

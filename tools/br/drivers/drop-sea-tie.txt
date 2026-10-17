@@ -1,0 +1,29 @@
+# drop-sea-tie: on the drop, a cell between two equally near sections keeps the name
+# already in the box (POK-352), so it does not flip back and forth as the cursor
+# passes. West from SAFARI ZONE (16,2), (12,2) is one from ROUTE 119 (11,2) and one from
+# ROUTE 120 (13,2); the cursor comes from ROUTE 120, and row order alone would say 119.
+wait 30
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 4
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 200
+expect u8 gBrPick 1
+tap LEFT
+wait 30
+tap LEFT
+wait 30
+tap LEFT
+wait 30
+tap LEFT
+wait 30
+shot route-120-held
+tap A
+wait 60
+# MAPSEC_ROUTE_120
+expect u16 gBrPick+12 35
+expect u8 gBrPick 1
+say drop sea tie ok
