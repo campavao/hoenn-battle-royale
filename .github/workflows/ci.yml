@@ -60,16 +60,13 @@ jobs:
   # compiler, because the release patch must be a diff of our changes only, never a
   # modern-GCC recompile of the whole game riding along. Ends with the one artifact
   # players' browsers actually load (never a .gba) and, since it already has a built
-  # ROM sitting right there, the harness smoke test too (see the comment on that step
-  # for why it isn't job of its own).
+  # ROM sitting right there, the drivers too (see the comment on that step for why
+  # they aren't a job of their own). The Playwright suite is the e2e job's.
   rom:
-    # No `needs`: the e2e steps at the end boot the tracked core in web/public/emu --
-    # the one Vercel ships -- not one the wasm job builds (see that job).
     runs-on: ubuntu-latest
-    # Two clean agbcc builds (~9 min each uncached), 110 drivers, then 17 Playwright
-    # files with retries. Without a ceiling a hung ROM or browser holds a runner for the
-    # platform's six hours.
-    timeout-minutes: 90
+    # Two clean agbcc builds (~9 min each uncached), then 110 drivers. Without a ceiling
+    # a hung ROM holds a runner for the platform's six hours.
+    timeout-minutes: 45
     outputs:
       rom-sha1: ${{ steps.fork-rom.outputs.sha1 }}
       patch-size: ${{ steps.patch.outputs.size }}
@@ -98,75 +95,10 @@ jobs:
             echo "::error::$VERSION already exists, at $at"; exit 1
           fi
 
-      - name: Install build deps
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            build-essential libpng-dev gcc-arm-none-eabi binutils-arm-none-eabi \
-            cmake zlib1g-dev
-        # cmake + zlib1g-dev are only for the drive.sh smoke step at the end of this
-        # job (libmgba, static, headless) - see that step.
-
-      - name: Read baseline commit
-        id: baseline
-        run: echo "sha=$(cat tools/br/BASELINE_COMMIT)" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout agbcc
-        uses: actions/checkout@v7
-        with:
-          repository: pret/agbcc
-          path: agbcc
-
-      - name: agbcc HEAD sha
-        id: agbcc-sha
-        run: echo "sha=$(git -C agbcc rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache agbcc build
-        id: agbcc-cache
-        uses: actions/cache@v6
-        with:
-          path: agbcc
-          key: agbcc-${{ steps.agbcc-sha.outputs.sha }}
-
-      - name: Build agbcc
-        if: steps.agbcc-cache.outputs.cache-hit != 'true'
-        working-directory: agbcc
-        run: ./build.sh
-
-      - name: Checkout baseline pokeemerald
-        uses: actions/checkout@v7
-        with:
-          repository: pret/pokeemerald
-          ref: ${{ steps.baseline.outputs.sha }}
-          path: baseline
-
-      - name: Cache baseline ROM
-        id: baseline-cache
-        uses: actions/cache@v6
-        with:
-          path: baseline/pokeemerald.gba
-          # The baseline never changes without BASELINE_COMMIT changing, so once this
-          # is cached, every push and PR skips a ~9 minute clean pret build entirely.
-          key: baseline-rom-${{ steps.baseline.outputs.sha }}
-
-      - name: Build baseline ROM
-        if: steps.baseline-cache.outputs.cache-hit != 'true'
-        run: |
-          ( cd agbcc && ./install.sh ../baseline )
-          make -C baseline -j"$(nproc)"
-
-      - name: Verify baseline ROM sha1
-        # The whole point of pinning BASELINE_COMMIT is that this ROM is a known
-        # quantity; a mismatch here means the pin or the agbcc build drifted, and every
-        # downstream step (the patch, the symbols) would be diffing against the wrong
-        # thing without this catching it first.
-        run: tools/br/check-rom.sh baseline/pokeemerald.gba
-
-      - name: Install agbcc into fork
-        run: ( cd agbcc && ./install.sh .. )
-
-      - name: Build fork ROM
-        run: make -j"$(nproc)"
+      # Baseline and fork, both agbcc; the e2e shards run the same action.
+      - name: Build the ROMs
+        id: build
+        uses: ./.github/actions/build-rom
 
       - name: RAM headroom
         # EWRAM was down to 80 bytes before POK-330 #21 took the handler table back, and
@@ -180,8 +112,7 @@ jobs:
         run: echo "sha1=$(sha1sum pokeemerald.gba | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       # Before the patch: make-patch.sh checks what flips wrote with the page's own BPS
-      # decoder (tools/br/make-bps.ts, under vite-node), and the e2e steps at the end of
-      # this job need the same install.
+      # decoder (tools/br/make-bps.ts, under vite-node).
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -214,7 +145,7 @@ jobs:
             echo "### hoenn-br patch"
             echo "- patch size: ${{ steps.patch.outputs.size }} bytes"
             echo "- fork ROM sha1: ${{ steps.fork-rom.outputs.sha1 }}"
-            echo "- baseline commit: ${{ steps.baseline.outputs.sha }}"
+            echo "- baseline commit: ${{ steps.build.outputs.baseline-sha }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v7
@@ -250,12 +181,46 @@ jobs:
         # (objects-band -> objects-band.py) or an explicit `# capture-only:`.
         run: tools/br/drive-all.sh pokeemerald.gba
 
+  # The Playwright suite, in four shards side by side. One at a time it was 44 of the
+  # rom job's 52 minutes (2026-10-15): the tests run serially by design (one ROM file,
+  # fixed ports; playwright.config.ts), so the only way to go faster is more runners.
+  # web/scripts/e2e-shard.mjs deals the tests out by their measured time. No `needs`:
+  # each shard builds its own ROM (the ROM is never an artifact) and boots the tracked
+  # core in web/public/emu -- the one Vercel ships -- not one the wasm job builds.
+  e2e:
+    runs-on: ubuntu-latest
+    # A shard is about eleven minutes of tests after a minute's build. On a cold cache
+    # every shard builds agbcc and the baseline too (~9 min each), so the ceiling leaves
+    # room for that, and still holds a hung browser well short of six hours.
+    timeout-minutes: 50
+    strategy:
+      # Every shard finishes: one red shard is not a reason to hide the other three.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the ROMs
+        uses: ./.github/actions/build-rom
+
+      # dev-patch.sh's BPS goes through make-patch.sh, which checks it with the page's
+      # own decoder under vite-node.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - working-directory: web
+        run: npm ci
+
       - name: Sidecars for the web shell's local-build path (POK-220)
         # web/e2e drives the shell the same way `npm run dev` does: a pre-patched ROM
         # plus the two sidecars (see tools/br/dev-patch.sh and app.ts's isPrePatched()
-        # branch). Same pokeemerald.gba/.map this job just built. With the baseline it
-        # also writes the BPS, so patch.spec.ts can patch a stock ROM in the tab the way
-        # a player does, instead of skipping.
+        # branch). Same pokeemerald.gba/.map the build step just made. With the baseline
+        # it also writes the BPS, so patch.spec.ts can patch a stock ROM in the tab the
+        # way a player does, instead of skipping.
         run: tools/br/dev-patch.sh pokeemerald.map baseline/pokeemerald.gba
 
       - working-directory: web
@@ -265,24 +230,29 @@ jobs:
       - working-directory: relay
         run: npm ci --ignore-scripts
 
-      # Every spec in Chromium, play.spec.ts's whole match among them (POK-327: a shot a
-      # step under e2e/out/play/chromium). Its Firefox project is the play-firefox job's.
-      - working-directory: web
+      # Every spec in Chromium across the four shards, play.spec.ts's whole match among
+      # them (POK-327: a shot a step under e2e/out/play/chromium). Its Firefox project is
+      # the play-firefox job's.
+      - name: e2e, shard ${{ matrix.shard }} of ${{ strategy.job-total }}
+        working-directory: web
         env:
           HBR_ROM: ${{ github.workspace }}/pokeemerald.gba
           # The pret baseline, which check-rom.sh proved is retail byte for byte.
           HBR_BASE_ROM: ${{ github.workspace }}/baseline/pokeemerald.gba
-        run: npm run e2e
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+        run: |
+          filters="$(node scripts/e2e-shard.mjs "$SHARD")"
+          npm run e2e -- $filters
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: e2e-shots
-          # Screenshots only, never the ROM (see the artifact-upload comment above).
+          name: e2e-shots-${{ matrix.shard }}
+          # Screenshots only, never the ROM (see the rom job's artifact upload).
           path: web/e2e/out
           if-no-files-found: warn
 
-  # A release only (a tag or a dispatch): the match played in Firefox (POK-327). The rom job plays it in Chromium
+  # A release only (a tag or a dispatch): the match played in Firefox (POK-327). The e2e job plays it in Chromium
   # on every push; Firefox is where Cam's 2026-09-18 video had the picture squashed, and
   # a second browser on every push is five more minutes, so it waits for a release. The
   # ROM never leaves the rom job, so this one starts where a player does: the retail
@@ -322,7 +292,7 @@ jobs:
           npm ci
           npx playwright install --with-deps firefox
 
-      # Playwright's first webServer is the relay (see the rom job).
+      # Playwright's first webServer is the relay (see the e2e job).
       - working-directory: relay
         run: npm ci --ignore-scripts
 
@@ -539,7 +509,7 @@ jobs:
   # dispatched run (see `on:`) makes its tag here, first, so the rest reads the same.
   release:
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
-    needs: [rom, web, relay, pret]
+    needs: [rom, e2e, web, relay, pret]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
