@@ -179,6 +179,10 @@ describe('the trainer card (POK-335)', () => {
     expect(may.filter((p) => p.name === 'card-badges.png' && p.sx < 128)).toHaveLength(8);
     expect(may.filter((p) => p.name === 'card-badges.png' && p.sx === 128)).toHaveLength(2);
     expect(may.find((p) => p.name === 'trainer-pics.png')).toMatchObject({ sx: 64, x: 160, y: 40 });
+    expect(paint({ skin: 13, wins: 30 }).find((p) => p.name === 'trainer-card.png')?.sy, 'POKEFAN LADY, gold').toBe((4 * 2 + 1) * CARD_H);
+    expect(may.filter((p) => p.name === 'card-badges.png' && p.sx < 128).map((p) => [p.x, p.y]), 'in the slots, three tiles apart').toEqual(
+      Array.from({ length: 8 }, (_, i) => [32 + i * 24, 120]),
+    );
     const fresh = paint({ wins: 0 });
     expect(fresh.find((p) => p.name === 'trainer-card.png')?.sy, 'green, no stars').toBe(0);
     expect(fresh.filter((p) => p.name === 'card-badges.png')).toHaveLength(0);
@@ -189,8 +193,12 @@ describe('the trainer card (POK-335)', () => {
     const { fakeCanvas } = await import('./fakecanvas');
     const pressed: string[] = [];
     const m = { ...model(), onName: () => pressed.push('name'), onSkin: () => pressed.push('skin') };
-    const six = Array.from({ length: 6 }, (_, i) => ({ label: `ROW ${i}`, id: `r${i}`, onPress: () => {} }));
-    const painted = trainerScreen(() => ({ ...m, rows: six, note: 'Saved to a file.' })).paint(fakeCanvas().canvas, 320);
+    // The rows app.ts puts under the card, so a row added to the profile fails this.
+    const { profileRows } = await import('../match/lobby');
+    const rows = profileRows({ name: 'CAM', skin: 'BRENDAN' })
+      .filter((r) => r.action.kind !== 'name' && r.action.kind !== 'skin')
+      .map((r) => ({ label: r.label, detail: r.detail, id: r.id, onPress: () => {} }));
+    const painted = trainerScreen(() => ({ ...m, rows, note: 'Saved to a file.' })).paint(fakeCanvas().canvas, 320);
     const inRows = painted.widgets.filter((w) => w.parent === 'trainer-rows');
     expect(inRows.slice(0, 2).map((w) => w.id)).toEqual(['trainer-name', 'trainer-skin']);
     expect(inRows[0].text).toContain('your name');

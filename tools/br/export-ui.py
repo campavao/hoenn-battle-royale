@@ -228,6 +228,7 @@ def type_icons() -> Image.Image:
 
 
 CARD_W, CARD_H = 240, 160
+CARD_STAR_TILE = 143  # DrawStarsAndBadgesOnCard
 CARD_TIERS = ["green", "bronze", "copper", "silver", "gold"]
 # The portrait each skin's sheet goes with (sSkinGraphics' order): the rivals are the
 # same two people.
@@ -280,7 +281,8 @@ def card_badges() -> Image.Image:
     sheet = Image.open(d / "tiles.png")
     src = sheet.load()
     op = out.load()
-    sx, sy = (143 % 16) * 8, (143 // 16) * 8
+    cols = sheet.size[0] // 8
+    sx, sy = (CARD_STAR_TILE % cols) * 8, (CARD_STAR_TILE // cols) * 8
     for y in range(8):
         for x in range(8):
             i = src[sx + x, sy + y] & 15

@@ -682,7 +682,7 @@ export interface CardFace {
   skin: number;
   wins: number;
   played: number;
-  /** 1 = a win; undefined until a match has been finished. */
+  /** The best placing, 1 = first; undefined until a match has been finished. */
   best?: number;
 }
 
@@ -711,7 +711,9 @@ export function paintTrainerCard(
   parent: string,
   on: { onName: () => void; onSkin: () => void },
 ): Widget[] {
-  c.drawUiPicture('trainer-card.png', 0, cardRow(face) * CARD_H, CARD_W, CARD_H, 0, y);
+  // Nothing on the card before the card: text over the bare page, and the art popping in
+  // under it, read as broken. The canvas paints again when it lands.
+  if (!c.drawUiPicture('trainer-card.png', 0, cardRow(face) * CARD_H, CARD_W, CARD_H, 0, y)) return [];
   // DrawStarsAndBadgesOnCard: the stars from tile (15, 7), the badges from (4, 15) three
   // tiles apart. card-badges.png is the eight badges and then the star.
   const stars = cardStars(face.wins);

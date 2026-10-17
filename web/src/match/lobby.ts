@@ -93,13 +93,12 @@ export interface Profile {
     statsOn?: boolean;
     /** The battle over the map (an experiment, 2026-10-05 play-test). */
     seeThrough?: boolean;
-    record?: string;
 }
 
 /** Who you are (POK-243): the trainer's own rows, on their own screen since POK-320. */
 export function profileRows(profile: Profile): LobbyRow[] {
   const rows: LobbyRow[] = [
-    { label: profile.name, detail: profile.record ?? 'your name', action: { kind: 'name' as const } },
+    { label: profile.name, detail: 'your name', action: { kind: 'name' as const } },
     { label: profile.skin, detail: profile.skinNote ?? 'your sprite', action: { kind: 'skin' as const } },
     { label: profile.lines?.intro ?? 'MY VOICE', detail: 'walking up', action: { kind: 'intro' as const } },
     { label: profile.lines?.win ?? 'MY VOICE', detail: 'when you win', action: { kind: 'win' as const } },
