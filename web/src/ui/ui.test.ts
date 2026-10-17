@@ -122,6 +122,38 @@ describe('the drawn screens (POK-320)', () => {
     }
   });
 
+  it('keeps START and LEAVE off the host options at any MAX, on any height (POK-375)', async () => {
+    const { roomScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const options = ['max', 'fill', 'door', 'text', 'anim', 'fog', 'safari'].map((id) => ({ id: `room-${id}`, label: id.toUpperCase(), onPress: () => undefined }));
+    const seat = (i: number) => ({ seat: i, name: `P${i}`, skin: 0, isMe: i === 0, spectating: false, alive: true });
+    const model = (max: number, people: number) => ({
+      status: 'Room ABCDEF', note: 'START: 30 trainers', seats: Array.from({ length: people }, (_, i) => seat(i)), max, fill: max - people,
+      isHost: true, started: false, canStart: true, startLabel: 'START', countdown: null, options, card: null,
+      onStart: () => undefined, onLeave: () => undefined, onSeat: () => undefined, onKick: () => undefined, onCloseCard: () => undefined,
+    });
+    for (const h of [320, 360, 400, 480]) {
+      for (const max of [2, 8, 12, 16, 20, 30]) {
+        for (const people of [1, Math.min(max, 16)]) {
+          const painted = roomScreen(() => model(max, people)).paint(fakeCanvas().canvas, h);
+          const start = painted.widgets.find((w) => w.id === 'room-start')!;
+          const lastOption = painted.widgets.filter((w) => w.id?.startsWith('room-') && w.id !== 'room-start' && w.id !== 'room-leave' && w.id !== 'room-code').at(-1)!;
+          const at = `h ${h}, MAX ${max}, ${people} in the room`;
+          expect(lastOption.id, at).toBe('room-safari');
+          expect(start.rect.y, at).toBeGreaterThanOrEqual(lastOption.rect.y + lastOption.rect.h);
+          expect(start.rect.y + start.rect.h, at).toBeLessThanOrEqual(h);
+          // Everybody in the room is a cell, or counted in the +N one.
+          const cells = painted.widgets.filter((w) => w.cls === 'roster-name').length;
+          const more = painted.widgets.find((w) => / more$/.test(w.text));
+          expect(cells + (more ? Number(more.text.split(' ')[0]) : 0), at).toBe(people);
+        }
+      }
+    }
+    // A tall screen still seats sixteen in four rows: nobody is folded away for nothing.
+    const tall = roomScreen(() => model(30, 16)).paint(fakeCanvas().canvas, 480);
+    expect(tall.widgets.filter((w) => w.cls === 'roster-name')).toHaveLength(16);
+  });
+
   it('draws no more seats than MAX, whatever it is told (POK-345)', async () => {
     const { paintOptions } = await import('./screens');
     const fills: { x: number; w: number; color: string }[] = [];
