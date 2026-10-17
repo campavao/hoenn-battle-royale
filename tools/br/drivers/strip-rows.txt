@@ -1,0 +1,25 @@
+# strip-rows: the rows of the map's people a match strips, marked for the page
+# (gBrStripped, br_strip.h). Cam's 2026-10-17 play-test on a phone in Mossdeep: a BLACK
+# BELT on the water and a BOY by the CENTER were drawn past the ROM's box from the map's
+# templates and gone the moment they came inside it, where the match had stripped them.
+#
+# Booted on MOSSDEEP CITY (map 0:6) at (27,21), on the path west of the CENTER, with
+# the match running before the map loads, as a drop's landing is. Its 17 rows
+# (data/maps/MossdeepCity/map.json, from 0): every one a person -- the SAILOR, the BOY,
+# the BLACK BELTs at rows 14 and 16, MAXIE and his grunts, SCOTT -- but row 5, an item
+# ball, which a match keeps. So bits 0-16 less bit 5, and nothing past row 16.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 00 00 06 1B 00 15 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 6
+expect u8 gBrMatch 2
+expect u32 gBrStripped 0x0001FFDF
+expect u32 gBrStripped+4 0
+# Row 14 is the BLACK BELT Cam saw on the water, at (19,25): OBJ_EVENT_GFX_BLACK_BELT
+# (44) at its row (save block +0xC70, 0x18 a row) byte 1, x and y at 4 and 6.
+expect u8 *gSaveBlock1Ptr+0xDC1 44
+expect u16 *gSaveBlock1Ptr+0xDC4 19
+expect u16 *gSaveBlock1Ptr+0xDC6 25
+shot mossdeep

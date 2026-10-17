@@ -1,0 +1,19 @@
+# strip-rows-pret: strip-rows.txt with no match running. gBrStripped marks the rows a match
+# WOULD strip whatever the phase (br_strip.h), so a match that starts on the map we stand
+# on finds them marked already; the page asks gBrMatch.phase itself. Same boot, same map,
+# same bits -- and pret's Hoenn spawns everybody, as ambush-control.txt holds.
+wait 30
+# (no match: gBrMatch stays BR_PHASE_NONE)
+pokebytes gBrMailbox+0x2018 01 00 00 06 1B 00 15 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 6
+expect u8 gBrMatch 0
+expect u32 gBrStripped 0x0001FFDF
+expect u32 gBrStripped+4 0
+# Row 14 is the BLACK BELT Cam saw on the water, at (19,25): OBJ_EVENT_GFX_BLACK_BELT
+# (44) at its row (save block +0xC70, 0x18 a row) byte 1, x and y at 4 and 6.
+expect u8 *gSaveBlock1Ptr+0xDC1 44
+expect u16 *gSaveBlock1Ptr+0xDC4 19
+expect u16 *gSaveBlock1Ptr+0xDC6 25
+shot mossdeep-pret

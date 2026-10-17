@@ -41,6 +41,16 @@ const H = 32;
 const ROWS_DOWN = [14, 13, 15];
 /** The LCD's top rows, where a 32-row person 248..280 rows down would show again. */
 const LCD_TOP_ROWS = 48;
+/** The map's templates in the save block (field-ghosts.ts, held to the C by parity.test.ts),
+ *  and a row's own. */
+const SB1_TEMPLATES = 0xc70;
+const TEMPLATE_COUNT = 64;
+const TEMPLATE_SIZE = 0x18;
+const MAP_OFFSET = 7;
+/** A local id no Zone map uses, under LOCALID_CAMERA (127): a map's own. */
+const STRIP_LOCAL_ID = 60;
+const GFX_BLACK_BELT = 44;
+const MOVEMENT_TYPE_FACE_DOWN = 8;
 
 type Pic = { width: number; height: number; left: number; top: number; data: Uint8Array };
 type Emu = {
@@ -195,6 +205,86 @@ test('a seat past pret\'s box but in the rows a phone shows is the ROM\'s own: a
     await expect.poll(async () => (await corePixels(page, rect, 10, bare.seen)).strange, {
       timeout: 10_000, message: 'the ghost goes with its row',
     }).toBe(0);
+  } finally {
+    await ctx.close();
+  }
+});
+
+// Cam's 2026-10-17 play-test, on a phone in Mossdeep: a BLACK BELT on the water and a BOY
+// by the CENTER were drawn past the box -- the page's copy, from the map's templates --
+// and gone the moment they came inside it, where the match had stripped them. The ROM
+// marks the rows it strips in gBrStripped as a map's rows are copied in (strip-rows.txt
+// holds Mossdeep's); this holds the page to them. A BLACK BELT goes into an empty row of
+// the Zone's templates on a clear row below us, past pret's box: unmarked, the page draws
+// him there; marked, nobody does. (The two halves meet in no one test: a phone in
+// Mossdeep itself needs a savestate the e2e does not have.)
+test('a person the match strips is not drawn past the box either', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const symbols = loadSymbols();
+  const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(`/#solo&nobots&rom=${romHashParam()}`);
+    await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
+    await page.waitForSelector('body.in-match', { timeout: 30_000 });
+    await page.waitForFunction(
+      ([addr, phase]) => (window as unknown as EmuWindow).__hbr.emu.read(addr, 8) === phase,
+      [symbols.gBrMatch, BR_PHASE_SAFARI],
+      { timeout: 60_000 },
+    );
+    const read = (addr: number, width: 8 | 16 | 32) => page.evaluate(([a, w]) => (window as unknown as EmuWindow).__hbr.emu.read(a, w as 8 | 16 | 32), [addr, width] as const);
+    const own = async () => page.evaluate((base) => {
+      const emu = (window as unknown as EmuWindow).__hbr.emu;
+      const s16 = (v: number) => (v << 16) >> 16;
+      return { x: s16(emu.read(base + 2, 16)), y: s16(emu.read(base + 4, 16)) };
+    }, symbols.gBrOwnPos);
+    let here = await own();
+    for (let i = 0; i < 20; i++) {
+      await page.waitForTimeout(500);
+      const now = await own();
+      if (now.x === here.x && now.y === here.y) break;
+      here = now;
+    }
+
+    // The first empty row of the Zone's templates (gSaveBlock1Ptr->objectEventTemplates).
+    const sb1 = await read(symbols.gSaveBlock1Ptr, 32);
+    const templates = sb1 + SB1_TEMPLATES;
+    let row = -1;
+    for (let i = 0; i < TEMPLATE_COUNT && row < 0; i++) if ((await read(templates + i * TEMPLATE_SIZE, 8)) === 0) row = i;
+    expect(row, 'an empty template row').toBeGreaterThanOrEqual(0);
+    let down = 0;
+    let rect = { x: 0, y: 0, w: W, h: H };
+    for (const d of ROWS_DOWN) {
+      const r = { x: LCD_LEFT + 8 - W / 2, y: LCD_TOP + d * 16 + 16 - H, w: W, h: H };
+      if ((await opaqueAt(page, r)) === 0) {
+        down = d;
+        rect = r;
+        break;
+      }
+    }
+    expect(down, 'a clear row past the box').toBeGreaterThan(0);
+    const x = here.x - MAP_OFFSET;
+    const y = here.y - MAP_OFFSET + down;
+    // localId, graphicsId, kind, pad, x, y, elevation, movementType (FACE_DOWN), ranges, ...
+    const tpl = [STRIP_LOCAL_ID, GFX_BLACK_BELT, 0, 0, x & 0xff, (x >> 8) & 0xff, y & 0xff, (y >> 8) & 0xff, 3, MOVEMENT_TYPE_FACE_DOWN];
+    const poke = (addr: number, bytes: number[]) => page.evaluate(([base, b]) => {
+      const emu = (window as unknown as EmuWindow).__hbr.emu;
+      (b as number[]).forEach((v, i) => emu.write((base as number) + i, v, 8));
+    }, [addr, bytes] as const);
+    const bit = symbols.gBrStripped + (row >> 3);
+    const before = await read(bit, 8);
+    try {
+      await poke(templates + row * TEMPLATE_SIZE, tpl);
+      await expect.poll(() => opaqueAt(page, rect), { timeout: 10_000, message: 'a row the match keeps: the page draws him past the box' }).toBeGreaterThan(40);
+      await page.screenshot({ path: path.join(OUT_DIR, 'people-past-box-kept.png') });
+      await poke(bit, [before | (1 << (row & 7))]);
+      await expect.poll(() => opaqueAt(page, rect), { timeout: 10_000, message: 'a row the match strips: nobody draws him' }).toBe(0);
+      await page.screenshot({ path: path.join(OUT_DIR, 'people-past-box-stripped.png') });
+    } finally {
+      // Put the Zone back; a page that crashed has nothing to put back, and its error is the one to see.
+      await poke(bit, [before]).catch(() => {});
+      await poke(templates + row * TEMPLATE_SIZE, [0]).catch(() => {});
+    }
   } finally {
     await ctx.close();
   }

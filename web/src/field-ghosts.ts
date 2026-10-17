@@ -7,10 +7,11 @@
 // what the ROM still KNOWS of out there, from its own tables:
 //
 //   - Hoenn's people: the map's object templates in the save block, minus a set hide
-//     flag, a trainer somebody beat (gBrDespawned) and the movement types that are never
-//     a plain standing sprite. A wanderer stands where the ROM let it go: the ROM moves
-//     its template there as it despawns (br_field.c BrField_KeepWhereLeft), so the
-//     handover to and from the page is in place, not a jump back to its home tile.
+//     flag, a trainer somebody beat (gBrDespawned), a person a match strips (gBrStripped,
+//     br_strip.h) and the movement types that are never a plain standing sprite. A
+//     wanderer stands where the ROM let it go: the ROM moves its template there as it
+//     despawns (br_field.c BrField_KeepWhereLeft), so the handover to and from the page
+//     is in place, not a jump back to its home tile.
 //   - other players' ghosts: gBrSeats, the ROM's own copy of where every seat is.
 //   - the loot on the ground: gBrLoot.
 //
@@ -67,6 +68,12 @@ export const OBJ_MAP_GROUP = 0x0a;
  *  Kecleon) as nothing. */
 export const HIDDEN_MOVEMENT_TYPES = [0x0c, 0x39, 0x3a, 0x3f, 0x4c];
 export const NUM_MOVEMENT_TYPES = 0x51;
+/** `gBrStripped` (include/br/br_strip.h): a bit a template row, set when a match never
+ *  makes that row an object -- whatever the phase, so it counts only while gBrMatch's is
+ *  not BR_PHASE_NONE. */
+export const STRIPPED_WORDS = 2;
+export const MATCH_PHASE = 0;
+export const PHASE_NONE = 0;
 
 /** `struct BrSeat` (include/br/br_ghosts.h). */
 export const SEAT_COUNT = 32;
@@ -142,6 +149,8 @@ const u16 = (b: Uint8Array, o: number) => b[o] | (b[o + 1] << 8);
 const s16 = (b: Uint8Array, o: number) => (u16(b, o) << 16) >> 16;
 
 export interface Template {
+  /** Its row in the save block's table, which is its bit in gBrStripped. */
+  row: number;
   localId: number;
   gfx: number;
   x: number;
@@ -185,9 +194,10 @@ export interface Despawned {
 
 export function decodeTemplates(b: Uint8Array): Template[] {
   const out: Template[] = [];
-  for (let o = 0; o + TEMPLATE_SIZE <= b.length; o += TEMPLATE_SIZE) {
+  for (let o = 0, row = 0; o + TEMPLATE_SIZE <= b.length; o += TEMPLATE_SIZE, row++) {
     if (b[o + TPL_LOCAL_ID] === 0) continue;
     out.push({
+      row,
       localId: b[o + TPL_LOCAL_ID],
       gfx: b[o + TPL_GFX],
       x: s16(b, o + TPL_X),
@@ -250,6 +260,13 @@ export function decodeTraders(b: Uint8Array, matchSeed: number): Trader[] {
   return out;
 }
 
+/** gBrStripped, while a match is on: the template rows the ROM never spawns. Out of one
+ *  (pret's Hoenn) nobody is stripped. */
+export function decodeStripped(b: Uint8Array, inMatch: boolean): (row: number) => boolean {
+  if (!inMatch) return () => false;
+  return (row) => row >> 3 < b.length && ((b[row >> 3] >> (row & 7)) & 1) !== 0;
+}
+
 export function decodeDespawned(b: Uint8Array): Despawned[] {
   const out: Despawned[] = [];
   for (let o = 0; o + DESPAWN_SIZE <= b.length; o += DESPAWN_SIZE) {
@@ -271,6 +288,8 @@ export interface Known {
   templates: Template[];
   /** FlagGet, for the flags the page can read. */
   flag: (id: number) => boolean;
+  /** A template row the match strips (decodeStripped). */
+  stripped?: (row: number) => boolean;
   /** gInitialMovementTypeFacingDirections: the way a template's object starts out facing. */
   facing: (movementType: number) => number;
   despawned: Despawned[];
@@ -306,7 +325,7 @@ export function droppedPeople(k: Known): Person[] {
   const beaten = new Set(k.despawned.filter((d) => d.localId !== 0 && here(d.group, d.num)).map((d) => d.localId));
 
   for (const t of k.templates) {
-    if (t.localId === 0 || live(t.localId) || beaten.has(t.localId)) continue;
+    if (t.localId === 0 || live(t.localId) || beaten.has(t.localId) || k.stripped?.(t.row)) continue;
     if (inObjectView(k.pos, t.x + MAP_OFFSET, t.y + MAP_OFFSET)) continue;
     if (HIDDEN_MOVEMENT_TYPES.includes(t.movementType)) continue;
     if (t.flagId !== 0 && (t.flagId >= SPECIAL_FLAGS_START || k.flag(t.flagId))) continue;

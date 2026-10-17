@@ -70,6 +70,7 @@
 #include "br/br_field.h"
 #include "br/br_hud.h"
 #include "br/br_match.h"
+#include "br/br_strip.h"
 #endif
 
 struct CableClubPlayer
@@ -480,6 +481,9 @@ void LoadObjEventTemplatesFromHeader(void)
     CpuCopy32(gMapHeader.events->objectEvents,
               gSaveBlock1Ptr->objectEventTemplates,
               gMapHeader.events->objectEventCount * sizeof(struct ObjectEventTemplate));
+#if BR
+    BrStrip_MarkTemplates();
+#endif
 }
 
 void LoadSaveblockObjEventScripts(void)

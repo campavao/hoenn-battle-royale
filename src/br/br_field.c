@@ -784,7 +784,11 @@ struct BrWanderHome
     struct Coords16 home;
 };
 
-#define BR_WANDER_HOMES 16
+// A match strips every wandering person (br_strip.c): the wanderers it leaves are eight in
+// the whole game (Route 119's house of six WINGULL, the Battle Palace corridor's AZURILL
+// and WINGULL), so eight homes never let a live one go. It was 16, and gBrStripped took
+// the EWRAM (2026-10-17).
+#define BR_WANDER_HOMES 8
 static EWRAM_DATA struct BrWanderHome sWanderHome[BR_WANDER_HOMES] = {0};
 static EWRAM_DATA u8 sWanderNext = 0;
 

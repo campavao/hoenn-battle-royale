@@ -82,6 +82,7 @@ import fieldmapFnH from '../../include/fieldmap.h?raw';
 import flagsH from '../../include/constants/flags.h?raw';
 import movementH from '../../include/constants/event_object_movement.h?raw';
 import objectEventsC from '../../src/event_object_movement.c?raw';
+import overworldC from '../../src/overworld.c?raw';
 import graphicsInfoPointersH from '../../src/data/object_events/object_event_graphics_info_pointers.h?raw';
 import objectEventGraphicsInfoH from '../../src/data/object_events/object_event_graphics_info.h?raw';
 import objectEventAnimsH from '../../src/data/object_events/object_event_anims.h?raw';
@@ -976,6 +977,15 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(pinned('sizeof ObjectEventTemplate'), 'src/br/br_pins.c').toBe(ghosts.TEMPLATE_SIZE);
     const obj = watch('ObjectEvent', layout(fieldmapH, 'ObjectEvent'));
     expect([ghosts.OBJ_LOCAL_ID, ghosts.OBJ_MAP_NUM, ghosts.OBJ_MAP_GROUP]).toEqual([obj.at.localId, obj.at.mapNum, obj.at.mapGroup]);
+    // ...less the rows a match strips: gBrStripped, a bit a row, marked as the rows are
+    // copied in, and read only while gBrMatch's phase is not BR_PHASE_NONE.
+    const stripH = brSources['../../include/br/br_strip.h'];
+    expect(stripH).toMatch(/^#define BR_STRIPPED_WORDS \(OBJECT_EVENT_TEMPLATES_COUNT \/ 32\)$/m);
+    expect(ghosts.STRIPPED_WORDS * 32, 'a bit for every row').toBe(ghosts.TEMPLATE_COUNT);
+    expect(stripH).toMatch(/^extern u32 gBrStripped\[BR_STRIPPED_WORDS\];$/m);
+    expect([ghosts.MATCH_PHASE, ghosts.PHASE_NONE]).toEqual([layout(matchH, 'BrMatch').at.phase, define(matchH, 'BR_PHASE_NONE')]);
+    expect(overworldC.replace(/\r\n/g, '\n'), 'LoadObjEventTemplatesFromHeader marks the rows it copies').toMatch(
+      /void LoadObjEventTemplatesFromHeader\(void\)\s*\{[^}]*CpuCopy32\([^;]*;\s*#if BR\s*BrStrip_MarkTemplates\(\);\s*#endif\s*\}/);
   });
 
   it("a person's standing frame and the way they face, off the ROM's own tables", () => {

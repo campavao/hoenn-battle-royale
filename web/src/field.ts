@@ -40,7 +40,7 @@ import spritesData from './data/sprites.json';
 import type { Band, Emulator, SpriteBand } from './emu';
 import {
   DESPAWN_COUNT, DESPAWN_SIZE, EVENTS_SIZE, GHOST_LOCAL_ID_BASE, GhostWalkers, LOOT_COUNT, LOOT_SIZE, MATCH_SEED, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
-  TEMPLATE_COUNT, TEMPLATE_SIZE, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, decodeTraders, droppedPeople, inObjectView, initialFacing, objectKey, placePeople, standingFrame,
+  TEMPLATE_COUNT, TEMPLATE_SIZE, MATCH_PHASE, PHASE_NONE, STRIPPED_WORDS, decodeDespawned, decodeStripped, decodeLoot, decodeSeats, decodeTemplates, decodeTraders, droppedPeople, inObjectView, initialFacing, objectKey, placePeople, standingFrame,
 } from './field-ghosts';
 import type { Seat } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -1374,6 +1374,7 @@ export class FieldView {
       pos: { x: cam.x, y: cam.y },
       templates: decodeTemplates(emu.bytes(sb1 + SB1_TEMPLATES, TEMPLATE_COUNT * TEMPLATE_SIZE)).map((t) => ({ ...t, gfx: this.gfxOf(sb1, t.gfx) })),
       flag: (id) => ((emu.read(sb1 + SB1_FLAGS + (id >> 3), 8) >> (id & 7)) & 1) !== 0,
+      stripped: decodeStripped(table('gBrStripped', STRIPPED_WORDS * 4), match !== undefined && emu.read(match + MATCH_PHASE, 8) !== PHASE_NONE),
       facing: (movementType) => initialFacing(rom, facings, movementType),
       despawned: decodeDespawned(table('gBrDespawned', DESPAWN_COUNT * DESPAWN_SIZE)),
       seats: decodeSeats(table('gBrSeats', SEAT_COUNT * SEAT_SIZE)).filter((s) => !this.walkers.has(s.seat)),
