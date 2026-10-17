@@ -3,7 +3,7 @@ import {
   DESPAWN_LOCAL_ID, DESPAWN_MAP_NUM, DESPAWN_SIZE, GFX_BIRCHS_BAG, GFX_ITEM_BALL, GIFT_GFX, HIDDEN_MOVEMENT_TYPES, type Known, LOOT_KIND, LOOT_MAP_NUM, LOOT_SIZE, LOOT_X, LOOT_Y,
   MAP_OFFSET, SEAT_DIR, SEAT_MAP_NUM, SEAT_PRESENT, SEAT_SIZE, SEAT_SKIN, SEAT_X, SEAT_Y, TEMPLATE_SIZE, TPL_FLAG_ID, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X,
   TPL_Y, LOOT_SPECIES, type Template, GhostWalkers, EVENTS_LIVE, EVENTS_SIZE, EVENTS_TRADER, EVENTS_USED, GFX_TRADER, TRADER_MAP_NUM, TRADER_SIZE, TRADER_SPECIES, TRADER_X, TRADER_Y,
-  decodeTraders, decodeDespawned, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, inObjectView, objectKey, placePeople, standingFrame,
+  decodeTraders, decodeDespawned, decodeStripped, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, inObjectView, objectKey, placePeople, standingFrame,
 } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 import { lcdOrigin } from './field';
@@ -26,7 +26,7 @@ const known = (over: Partial<Known> = {}): Known => ({
   live: new Set(),
   ...over,
 });
-const npc = (over: Partial<Template> = {}): Template => ({ localId: 3, gfx: 7, x: 20, y: 30, movementType: 1, flagId: 0, ...over });
+const npc = (over: Partial<Template> = {}): Template => ({ row: 2, localId: 3, gfx: 7, x: 20, y: 30, movementType: 1, flagId: 0, ...over });
 const seat = (n: number, over: Partial<Known['seats'][number]> = {}) =>
   ({ seat: n, present: true, skin: 5, group: MAP.group, num: MAP.num, x: 20 + MAP_OFFSET, y: 31 + MAP_OFFSET, dir: 4, ...over });
 const ball = (slot: number, over: Partial<Known['loot'][number]> = {}) =>
@@ -73,6 +73,21 @@ describe("the people past the ROM's box (POK-318)", () => {
     expect(droppedPeople(known({ templates: [npc()], despawned: [{ group: 0, num: 15, localId: 3 }] })), 'beaten on another map').toHaveLength(1);
     for (const mt of HIDDEN_MOVEMENT_TYPES) expect(droppedPeople(known({ templates: [npc({ movementType: mt })] })), `movement type ${mt}`).toEqual([]);
     expect(droppedPeople(known({ templates: [npc({ localId: 0 })] })), 'an empty row').toEqual([]);
+  });
+
+  // Cam's 2026-10-17 play-test, on a phone in Mossdeep: a BLACK BELT on the water and a BOY
+  // by the CENTER drawn past the box and gone the moment they came inside it. A match
+  // never spawns either (br_strip.c), so the page past the box draws neither.
+  it('nobody a match strips: their rows, by gBrStripped, while a match is on', () => {
+    const mask = new Uint8Array(8);
+    mask[0] = 1 << 2; // row 2
+    mask[5] = 1 << 1; // row 41: Route 111 has 46 people
+    const stripped = decodeStripped(mask, true);
+    expect(droppedPeople(known({ templates: [npc({ row: 2 })], stripped }))).toEqual([]);
+    expect(droppedPeople(known({ templates: [npc({ row: 41 })], stripped }))).toEqual([]);
+    expect(droppedPeople(known({ templates: [npc({ row: 3 })], stripped })), 'a row the match keeps').toHaveLength(1);
+    expect(droppedPeople(known({ templates: [npc({ row: 2 })], stripped: decodeStripped(mask, false) })), 'out of a match, pret\'s Hoenn').toHaveLength(1);
+    expect(droppedPeople(known({ templates: [npc({ row: 2 })], stripped: decodeStripped(new Uint8Array(0), true) })), 'a ROM without the table').toHaveLength(1);
   });
 
   it("a ghost past the box stands at its roster cell in its skin, and only another seat's, present, on this map", () => {
@@ -143,7 +158,7 @@ describe('reading the tables', () => {
     tpl.set([0x2c, 0x01], o + TPL_Y);
     tpl[o + TPL_MOVEMENT_TYPE] = 0x4c;
     tpl.set([0x34, 0x12], o + TPL_FLAG_ID);
-    expect(decodeTemplates(tpl)).toEqual([{ localId: 5, gfx: 0xf0, x: -3, y: 300, movementType: 0x4c, flagId: 0x1234 }]);
+    expect(decodeTemplates(tpl)).toEqual([{ row: 1, localId: 5, gfx: 0xf0, x: -3, y: 300, movementType: 0x4c, flagId: 0x1234 }]);
 
     const seats = new Uint8Array(3 * SEAT_SIZE);
     const s = 2 * SEAT_SIZE;

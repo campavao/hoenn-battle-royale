@@ -79,15 +79,16 @@ static bool8 PersonOrObstacle(u8 gfx)
     return FALSE;
 }
 
-bool8 BrStrip_Stripped(const struct ObjectEventTemplate *template, u8 mapNum, u8 mapGroup)
+EWRAM_DATA u32 gBrStripped[BR_STRIPPED_WORDS] = {0};
+
+// The rule, match or not. A map's own ids are small; from LOCALID_CAMERA up they are
+// spawned by code -- a cutscene's camera (a BOY_1 the script then hides and follows),
+// BR's loot and ghosts -- and every one is wanted.
+static bool8 StrippedInAMatch(const struct ObjectEventTemplate *template, u8 mapNum, u8 mapGroup)
 {
     u8 i;
 
-    // No match, no rules: a ROM booted without one is pret's Hoenn, which is what the
-    // drivers' controls (ambush-control.txt) stand on. A map's own ids are small; from
-    // LOCALID_CAMERA up they are spawned by code -- a cutscene's camera (a BOY_1 the
-    // script then hides and follows), BR's loot and ghosts -- and every one is wanted.
-    if (gBrMatch.phase == BR_PHASE_NONE || template->localId >= LOCALID_CAMERA)
+    if (template->localId >= LOCALID_CAMERA)
         return FALSE;
     if (BrGym_IsLeader(mapGroup, mapNum, template->localId))
         return FALSE;
@@ -105,4 +106,29 @@ bool8 BrStrip_Stripped(const struct ObjectEventTemplate *template, u8 mapNum, u8
     if (template->trainerType != TRAINER_TYPE_NONE)
         return TRUE;
     return PersonOrObstacle(template->graphicsId);
+}
+
+bool8 BrStrip_Stripped(const struct ObjectEventTemplate *template, u8 mapNum, u8 mapGroup)
+{
+    // No match, no rules: a ROM booted without one is pret's Hoenn, which is what the
+    // drivers' controls (ambush-control.txt) stand on.
+    if (gBrMatch.phase == BR_PHASE_NONE)
+        return FALSE;
+    return StrippedInAMatch(template, mapNum, mapGroup);
+}
+
+void BrStrip_MarkTemplates(void)
+{
+    const struct ObjectEventTemplate *templates = gSaveBlock1Ptr->objectEventTemplates;
+    u8 mapNum = gSaveBlock1Ptr->location.mapNum;
+    u8 mapGroup = gSaveBlock1Ptr->location.mapGroup;
+    u8 i;
+
+    CpuFill32(0, gBrStripped, sizeof(gBrStripped));
+    for (i = 0; i < OBJECT_EVENT_TEMPLATES_COUNT; i++)
+    {
+        // A localId of 0 is an empty row.
+        if (templates[i].localId != 0 && StrippedInAMatch(&templates[i], mapNum, mapGroup))
+            gBrStripped[i / 32] |= 1u << (i % 32);
+    }
 }
