@@ -39,6 +39,9 @@ const RESULTS_AFTER_MS = 10_000;
 /** ReplayHold gives up on a replay, and ParadeHold on a champion's Hall of Fame, at
  *  WIN_GRACE_MAX_MS (app.ts, 60s): no results wait longer than that past the win. */
 const RESULTS_HELD_MAX_MS = 65_000;
+/** A watcher's replay that ends this close to the cap never ended on its own: ReplayHold
+ *  let go of it. The longest final fight measured played out 35s past the win. */
+const REPLAY_CAP_MS = 57_000;
 
 /** Waits out a whole match from START to `watcher`'s results, `director` being the page
  *  that runs it (the same page when the host is the one watching). Two things are held
@@ -114,6 +117,8 @@ async function watchUntilResults(watcher: Page, director: Page = watcher): Promi
   // the fight on its screen, and once that is over the results are next. (They can go up
   // over a replay still on, too: ReplayHold lets go at its cap, or of a replay it never saw.)
   if (winner !== me) {
+    const held = (replayEndAt ?? shown) - winAt!;
+    expect(held, `the fight on screen held the results ${Math.round(held / 1000)}s: ReplayHold's cap, not its end`).toBeLessThan(REPLAY_CAP_MS);
     const from = Math.max(winAt!, replayEndAt ?? 0);
     expect(shown - from, `the results ${Math.round((shown - from) / 1000)}s after the win and the fight on screen`).toBeLessThan(RESULTS_AFTER_MS);
   }
