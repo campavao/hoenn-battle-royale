@@ -93,7 +93,9 @@ u16 BrPick_Section(u16 mapSec, const u8 *layout, u16 width, u16 height, u16 x, u
     {
         for (cx = 0; cx < width; cx++)
         {
-            if (row[cx] == MAPSEC_NONE)
+            // The Frontier has nowhere to land (POK-251), so it pulls no sea to it: its
+            // own cell is still a choice, and the host deals that one elsewhere.
+            if (row[cx] == MAPSEC_NONE || row[cx] == MAPSEC_BATTLE_FRONTIER)
                 continue;
             dx = (s32)cx - x;
             dy = (s32)cy - y;
@@ -106,6 +108,11 @@ u16 BrPick_Section(u16 mapSec, const u8 *layout, u16 width, u16 height, u16 x, u
         }
     }
     return best;
+}
+
+u16 BrPick_Within(u16 pos)
+{
+    return gBrPick.active ? 0 : pos;
 }
 
 void BrPick_Chose(u16 mapSec)

@@ -56,8 +56,14 @@ bool8 BrPick_Picking(void);
 // (sea, or land between routes) is the nearest section, so the name box never goes
 // blank (POK-352) and A or the clock always chooses somewhere. `prev` wins a tie, so a
 // name holds until another is strictly closer; a tie without it goes to the first in
-// row order. Out of the drop, or on a section's own cell, `mapSec` as it was.
+// row order. BATTLE FRONTIER, with nowhere to land, draws none. Out of the drop, or on a
+// section's own cell, `mapSec` as it was.
 u16 BrPick_Section(u16 mapSec, const u8 *layout, u16 width, u16 height, u16 x, u16 y, u16 prev);
+// region_map.c, after it counts where in its section the cursor is: always the first
+// place during the drop. Emerald uses it for EVER GRANDE's second name, which means
+// nothing when the host deals the cell, and off a snapped cell it counts past the end
+// of that name list.
+u16 BrPick_Within(u16 pos);
 // region_map.c, once the map has closed: hold a black screen until `land` arrives.
 void BrPick_Wait(void);
 // region_map.c, every frame the map is up: has the clock run out? A trainer who does

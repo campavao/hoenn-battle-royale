@@ -1,0 +1,55 @@
+# drop-sea-frontier: BATTLE FRONTIER has nowhere to land (POK-251), so on the drop the
+# sea round it reads as a section that does (POK-352). From SAFARI ZONE (16,2) to (22,13),
+# the cell under the Frontier's (22,12): with the Frontier counted it would win at one
+# step; without it, ROUTE 130 at (22,10) is nearest.
+wait 30
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 4
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 200
+expect u8 gBrPick 1
+tap RIGHT
+wait 30
+tap RIGHT
+wait 30
+tap RIGHT
+wait 30
+tap RIGHT
+wait 30
+tap RIGHT
+wait 30
+tap RIGHT
+wait 30
+tap DOWN
+wait 30
+tap DOWN
+wait 30
+tap DOWN
+wait 30
+tap DOWN
+wait 30
+tap DOWN
+wait 30
+tap DOWN
+wait 30
+tap DOWN
+wait 30
+tap DOWN
+wait 30
+tap DOWN
+wait 30
+tap DOWN
+wait 30
+tap DOWN
+wait 30
+shot route-130-not-frontier
+tap A
+wait 60
+# MAPSEC_ROUTE_130
+expect u16 gBrPick+12 45
+expect u8 gBrPick 1
+say drop sea frontier ok

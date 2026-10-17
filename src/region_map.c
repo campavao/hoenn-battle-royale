@@ -727,6 +727,9 @@ static u8 MoveRegionMapCursor_Full(void)
         GetMapName(sRegionMap->mapSecName, sRegionMap->mapSecId, MAP_NAME_LENGTH);
     }
     GetPositionOfCursorWithinMapSec();
+#if BR
+    sRegionMap->posWithinMapSec = BrPick_Within(sRegionMap->posWithinMapSec);
+#endif
     sRegionMap->inputCallback = ProcessRegionMapInput_Full;
     return MAP_INPUT_MOVE_END;
 }
