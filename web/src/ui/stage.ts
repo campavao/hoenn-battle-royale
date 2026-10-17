@@ -52,8 +52,9 @@ export interface DrawnScreen {
   /** B, or the browser's back: what leaving this screen means, if anything. */
   back?(): void;
   /** A GBA key, before the stage's own cursor sees it: true when the screen took it.
-   *  The code entry scrubs its letters with the D-pad this way, as Kanto's does. */
-  key?(k: GbaKey): boolean;
+   *  The code entry scrubs its letters with the D-pad this way, as Kanto's does; MY LOOK
+   *  cycles whatever row `on`, the cursor's widget, is. */
+  key?(k: GbaKey, on?: Widget | null): boolean;
   /** A key off a real keyboard, by its KeyboardEvent.key ('a', 'Backspace', 'Enter'):
    *  true when the screen took it, and then nothing else hears it -- the entry types a
    *  Z rather than pressing A. */
@@ -374,7 +375,7 @@ export class Stage {
    *  while one is showing: the game underneath must not hear it). */
   key(k: GbaKey): boolean {
     if (!this.active) return false;
-    if (this.screen?.key?.(k)) {
+    if (this.screen?.key?.(k, this.selected())) {
       this.paintNow();
       return true;
     }

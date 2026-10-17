@@ -1,5 +1,5 @@
 // The screens outside the game, drawn Emerald's way (POK-320): the main menu, the
-// lobbies list, the trainer's own rows, the wardrobe, and the room with its 2x4 of
+// lobbies list, the trainer's own rows, MY LOOK, and the room with its 2x4 of
 // seats -- Kanto's lobby.lua, in Emerald's font and frames.
 //
 // Each screen is a function of a model the page keeps: paint reads the model, draws,
@@ -703,7 +703,7 @@ export function cardRow(face: CardFace): number {
 
 /** The card itself at `y`: the art, the stars and badges the wins have earned, the
  *  portrait, the name and the three fields. NAME and the portrait are pressable -- your
- *  name, and the wardrobe -- in `parent`, before anything else in it. */
+ *  name, and MY LOOK -- in `parent`, before anything else in it. */
 export function paintTrainerCard(
   c: EmeraldCanvas,
   y: number,
@@ -714,7 +714,7 @@ export function paintTrainerCard(
   // Nothing on the card before the card: text over the bare page, and the art popping in
   // under it, read as broken. The canvas paints again when it lands. If it never does, a
   // plain window takes its place: NAME and the portrait are the only ways to your name
-  // and the wardrobe from here, so they are pressable either way (#48's review).
+  // and MY LOOK from here, so they are pressable either way (#48's review).
   const art = c.drawUiPicture('trainer-card.png', 0, cardRow(face) * CARD_H, CARD_W, CARD_H, 0, y);
   if (art === 'missing') c.drawFrame({ x: 0, y, w: CARD_W, h: CARD_H });
   const fields = cardFields(face);
@@ -873,176 +873,160 @@ export function noticeScreen(model: () => NoticeModel): DrawnScreen {
   };
 }
 
-// ---- the wardrobe -----------------------------------------------------------------------
+// ---- MY LOOK: your sprite and your lines ------------------------------------------------
 
-export const WARDROBE_COLS = 4;
+/** One screen for how you come across (Cam's 2026-10-14 play-test, POK-337): your battle
+ *  picture large, the sprites in a strip you turn left and right, and your three lines,
+ *  each in Emerald's own dialogue box, turned one at a time. Where the wardrobe was a
+ *  grid and the lines a list, you meet them one by one: "I would rather people kind of
+ *  discover them". */
+export const LOOK_PIC_FRAME: Rect = { x: 8, y: 2, w: 80, h: 80 };
+export const LOOK_STRIP: Rect = { x: 0, y: 84, w: W, h: 56 };
+/** How many sprites the strip shows: the one you are on, one before it, two after. */
+export const LOOK_CELLS = 4;
+export const LOOK_CELL = { w: 48, h: 40 };
+/** A dialogue box: Emerald's own two lines, the width of the screen. */
+export const LOOK_BOX_H = 48;
+export const LOOK_BOXES_Y = LOOK_STRIP.y + LOOK_STRIP.h + 2;
 
-export function layoutWardrobe(y: number, count: number): { frame: Rect; cells: Rect[] } {
-  const rows = Math.ceil(count / WARDROBE_COLS);
-  const frame = { x: 0, y, w: W, h: rows * SEAT_H + 16 };
-  const cells: Rect[] = [];
-  for (let i = 0; i < count; i++) {
-    cells.push({
-      x: 8 + (i % WARDROBE_COLS) * SEAT_W,
-      y: y + 8 + Math.floor(i / WARDROBE_COLS) * SEAT_H,
-      w: SEAT_W,
-      h: SEAT_H,
-    });
-  }
-  return { frame, cells };
+export type LineSlot = 'intro' | 'win' | 'lose';
+export const LINE_SLOTS: readonly LineSlot[] = ['intro', 'win', 'lose'];
+export const SLOT_TITLES: Record<LineSlot, string> = { intro: 'WALKING UP', win: 'WHEN YOU WIN', lose: 'WHEN YOU LOSE' };
+
+/** The skin `by` places along the wardrobe from `skin`, round the ends. */
+export function stepSkin(skin: number, by: number): number {
+  const n = WARDROBE.length;
+  const at = Math.max(0, WARDROBE.indexOf(skin));
+  return WARDROBE[(((at + by) % n) + n) % n];
 }
 
-export interface WardrobeModel {
-  wins: number;
-  /** What you wear. */
-  worn: number;
-  /** What the cursor is on. */
-  browsing: number;
-  onBrowse(skin: number): void;
-  onWear(skin: number): void;
-  onBack(): void;
+/** The strip's sprites, left to right: the one before `skin`, `skin`, and the ones after. */
+export function lookStrip(skin: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < LOOK_CELLS; i++) out.push(stepSkin(skin, i - 1));
+  return out;
 }
 
-/** What the line under the wardrobe says about a skin: yours, wearable, or its price. */
-export function wardrobeNote(skin: number, wins: number, worn: number): string {
+/** What the line beside the picture says about a skin: yours, or its price. */
+export function lookNote(skin: number, wins: number, worn: number): string {
   if (!skinUnlocked(skin, wins)) {
     const need = SKIN_UNLOCK_WINS[skin] ?? 0;
     return `LOCKED -- ${need} ${need === 1 ? 'win' : 'wins'}`;
   }
-  return skin === worn ? 'your sprite' : 'press WEAR';
+  return skin === worn ? 'your sprite' : '';
 }
 
-export function wardrobeScreen(model: () => WardrobeModel): DrawnScreen {
-  return {
-    back() {
-      model().onBack();
-    },
-    paint(c, h): Painted {
-      const m = model();
-      const widgets: Widget[] = [];
-      let y = 4;
-      paintTitle(c, 'WARDROBE', y);
-      y += 20;
-      const lay = layoutWardrobe(y, WARDROBE.length);
-      c.drawFrame(lay.frame);
-      lay.cells.forEach((cell, at) => {
-        const i = WARDROBE[at];
-        const open = skinUnlocked(i, m.wins);
-        const sheet = skinSheet(i);
-        if (sheet) c.drawSprite(sheet.gfx, cell.x + Math.floor((cell.w - sheet.w) / 2), cell.y + 4, open ? 1 : 0.3);
-        if (i === m.worn) c.drawText('worn', cell.x + Math.floor((cell.w - measure('worn')) / 2), cell.y + 33, TEXT_BLUE);
-        else if (!open) c.drawText(`${SKIN_UNLOCK_WINS[i]}W`, cell.x + Math.floor((cell.w - measure(`${SKIN_UNLOCK_WINS[i]}W`)) / 2), cell.y + 33, TEXT_RED);
-        widgets.push({
-          rect: cell,
-          text: `${SKINS[i]}${open ? '' : ' LOCKED'}${i === m.worn ? ' (worn)' : ''}`,
-          cls: 'skin',
-          parent: 'wardrobe',
-          onPress: () => m.onBrowse(i),
-          cursor: { x: cell.x + 2, y: cell.y + 10 },
-        });
-      });
-      y = lay.frame.y + lay.frame.h + 2;
-      c.drawTextCentred(SKINS[m.browsing] ?? '', W / 2, y, TEXT_WHITE);
-      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: SKINS[m.browsing] ?? '', id: 'wardrobe-name', cursor: null });
-      y += ROW_H;
-      const note = wardrobeNote(m.browsing, m.wins, m.worn);
-      paintNote(c, note, y, skinUnlocked(m.browsing, m.wins) ? TEXT_GRAY : TEXT_RED);
-      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: note, id: 'wardrobe-note', cursor: null });
-      y += ROW_H + 4;
-      widgets.push(
-        ...paintButtons(c, Math.min(y, h - 28), [
-          {
-            label: 'WEAR',
-            id: 'wardrobe-wear',
-            disabled: !skinUnlocked(m.browsing, m.wins) || m.browsing === m.worn,
-            onPress: () => m.onWear(m.browsing),
-          },
-          { label: 'BACK', id: 'wardrobe-back', onPress: m.onBack },
-        ]),
-      );
-      return { widgets, containers: [{ id: 'wardrobe', tag: 'ul', cls: 'wardrobe' }] };
-    },
-  };
-}
-
-// ---- MY VOICE: a line, picked from the list ------------------------------------------
-
-/** How many lines a page of the picker holds on a screen `h` tall: the title, the frame,
- *  the note under it and the buttons take the rest. Never fewer than four. */
-export function linePageSize(h: number): number {
-  return Math.max(4, Math.floor((h - 24 - 16 - (ROW_H + 2) - 32) / ROW_H));
-}
-
-/** The page a line is on, `size` to a page. */
-export function linePageOf(index: number, size: number): number {
-  return Math.max(0, Math.floor(index / size));
-}
-
-export interface LinePickerModel {
-  /** What the line is for: WALKING UP, WHEN YOU WIN, WHEN YOU LOSE. */
-  title: string;
+export interface LookModel {
+  wins: number;
+  /** What you wear. */
+  worn: number;
+  /** What the strip is on: what you wear, or a locked one you are looking at. */
+  browsing: number;
   lines: readonly string[];
-  /** The one you say now. */
-  picked: number;
-  /** The page on screen, or null for the one `picked` is on. */
-  page: number | null;
-  onPage(page: number): void;
-  onPick(index: number): void;
+  /** Each slot's line, an index into `lines`. */
+  picked: Record<LineSlot, number>;
+  /** The strip moved to `skin`: wear it if it is yours to. */
+  onBrowse(skin: number): void;
+  onLine(slot: LineSlot, index: number): void;
   onBack(): void;
 }
 
-/** MY VOICE's three rows each open this (2026-10-05 play-test: "battle text needs a
- *  better selection UI"): the whole pool a page at a time, where a row used to step
- *  through it one line per press. A press picks a line and goes back; L and R, or PREV
- *  and NEXT, turn the page. */
-export function linePickerScreen(model: () => LinePickerModel): DrawnScreen {
-  let size = 8;
-  const pages = (m: LinePickerModel) => Math.max(1, Math.ceil(m.lines.length / size));
-  const pageOf = (m: LinePickerModel) => Math.min(pages(m) - 1, m.page ?? linePageOf(m.picked, size));
-  const turn = (by: number) => {
+export function lookScreen(model: () => LookModel): DrawnScreen {
+  const browse = (by: number) => {
     const m = model();
-    const n = pages(m);
-    m.onPage((pageOf(m) + by + n) % n);
+    m.onBrowse(stepSkin(m.browsing, by));
+  };
+  const turn = (slot: LineSlot, by: number) => {
+    const m = model();
+    const n = m.lines.length;
+    m.onLine(slot, (((m.picked[slot] + by) % n) + n) % n);
   };
   return {
     back() {
       model().onBack();
     },
-    key(k) {
-      if (k === 'l') turn(-1);
-      else if (k === 'r') turn(1);
-      else return false;
+    key(k, on) {
+      // Left and right turn the row the cursor is on; up and down go between the rows.
+      if (k !== 'left' && k !== 'right') return false;
+      const by = k === 'left' ? -1 : 1;
+      if (on?.id === 'look-sprite') browse(by);
+      else {
+        const slot = LINE_SLOTS.find((s) => on?.id === `look-${s}`);
+        if (!slot) return false;
+        turn(slot, by);
+      }
       return true;
     },
     paint(c, h): Painted {
       const m = model();
-      size = linePageSize(h);
-      const page = pageOf(m);
-      const first = page * size;
-      let y = 4;
-      paintTitle(c, m.title, y);
-      y += 20;
-      const rows: RowSpec[] = m.lines.slice(first, first + size).map((text, i) => ({
-        label: text,
-        color: first + i === m.picked ? TEXT_BLUE : undefined,
-        cls: 'line',
-        onPress: () => m.onPick(first + i),
-      }));
-      const list = paintRows(c, y, rows, 'voice-lines');
-      const widgets = [...list.widgets];
-      y = list.bottom + 2;
-      const note = `PAGE ${page + 1}/${pages(m)}  L/R TURNS`;
-      paintNote(c, note, y);
-      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: note, id: 'voice-page', cursor: null });
-      y += ROW_H + 4;
+      const widgets: Widget[] = [];
+      const open = skinUnlocked(m.browsing, m.wins);
+
+      // The battle picture, in a window, the way the card frames it. Looking only.
+      c.drawFrame(LOOK_PIC_FRAME);
+      c.drawUiPicture('trainer-pics.png', m.browsing * CARD_PIC.w, 0, CARD_PIC.w, CARD_PIC.h, LOOK_PIC_FRAME.x + 8, LOOK_PIC_FRAME.y + 8);
+      const right = LOOK_PIC_FRAME.x + LOOK_PIC_FRAME.w;
+      const mid = Math.round((right + W) / 2);
+      c.drawTextCentred('MY LOOK', mid, 10, TEXT_WHITE);
+      const name = SKINS[m.browsing] ?? '';
+      c.drawTextCentred(name, mid, 34, TEXT_WHITE);
+      widgets.push({ rect: { x: right, y: 34, w: W - right, h: ROW_H }, text: name, id: 'look-name', cursor: null });
+      const note = lookNote(m.browsing, m.wins, m.worn);
+      if (note) c.drawTextCentred(note, mid, 50, open ? TEXT_GRAY : TEXT_RED);
+      widgets.push({ rect: { x: right, y: 50, w: W - right, h: ROW_H }, text: note, id: 'look-note', cursor: null });
+
+      // The strip: the one you are on second from the left, lit; a locked one faded.
+      c.drawFrame(LOOK_STRIP);
+      const cy = LOOK_STRIP.y + 8;
+      const arrowY = cy + Math.floor(LOOK_CELL.h / 2) - 5;
+      c.drawCursor(LOOK_STRIP.x + 10, arrowY, TEXT_DARK, true);
+      c.drawCursor(LOOK_STRIP.x + LOOK_STRIP.w - 14, arrowY);
       widgets.push(
-        ...paintButtons(c, Math.min(y, h - 28), [
-          { label: 'PREV', id: 'voice-prev', onPress: () => turn(-1) },
-          { label: 'NEXT', id: 'voice-next', onPress: () => turn(1) },
-          { label: 'BACK', id: 'voice-back', onPress: m.onBack },
-        ]),
+        { rect: { x: 0, y: cy, w: 24, h: LOOK_CELL.h }, text: 'previous sprite', id: 'look-prev', onPress: () => browse(-1), cursor: null },
+        { rect: { x: W - 24, y: cy, w: 24, h: LOOK_CELL.h }, text: 'next sprite', id: 'look-next', onPress: () => browse(1), cursor: null },
       );
-      return { widgets, containers: [{ id: 'voice-lines', tag: 'ul', cls: 'voice-lines' }] };
+      lookStrip(m.browsing).forEach((skin, slot) => {
+        const cell = { x: 24 + slot * LOOK_CELL.w, y: cy, w: LOOK_CELL.w, h: LOOK_CELL.h };
+        const mine = skinUnlocked(skin, m.wins);
+        if (slot === 1) c.fillRect({ x: cell.x + 4, y: cell.y, w: cell.w - 8, h: cell.h }, TEXT_BLUE.shadow);
+        const sheet = skinSheet(skin);
+        if (sheet) c.drawSprite(sheet.gfx, cell.x + Math.floor((cell.w - sheet.w) / 2), cell.y + Math.floor((cell.h - sheet.h) / 2), mine ? 1 : 0.3);
+        widgets.push({
+          rect: cell,
+          text: `${SKINS[skin]}${mine ? '' : ' LOCKED'}${skin === m.worn ? ' (worn)' : ''}`,
+          id: slot === 1 ? 'look-sprite' : undefined,
+          cls: 'skin',
+          parent: 'look-sprites',
+          onPress: () => m.onBrowse(skin),
+          // Only the lit one takes the cursor: left and right move the strip under it.
+          cursor: slot === 1 ? { x: cell.x + 6, y: cell.y + 14 } : null,
+        });
+      });
+
+      // The three lines, each said in a dialogue box: what it is for, then the line.
+      LINE_SLOTS.forEach((slot, i) => {
+        const y = LOOK_BOXES_Y + i * LOOK_BOX_H;
+        c.drawMessageBox({ x: 0, y, w: W, h: LOOK_BOX_H });
+        const line = m.lines[m.picked[slot]] ?? '';
+        c.drawText(SLOT_TITLES[slot], 16, y + 9, TEXT_BLUE);
+        c.drawText(line, 16, y + 25, TEXT_DARK);
+        c.drawCursor(W - 14, y + 25, TEXT_GRAY);
+        widgets.push(
+          { rect: { x: 0, y, w: 24, h: LOOK_BOX_H }, text: `${SLOT_TITLES[slot]} back`, id: `look-${slot}-prev`, onPress: () => turn(slot, -1), cursor: null },
+          {
+            rect: { x: 24, y, w: W - 48, h: LOOK_BOX_H },
+            text: `${SLOT_TITLES[slot]}: ${line}`,
+            id: `look-${slot}`,
+            onPress: () => turn(slot, 1),
+            cursor: { x: 8, y: y + 9 },
+          },
+          { rect: { x: W - 24, y, w: 24, h: LOOK_BOX_H }, text: `${SLOT_TITLES[slot]} next`, id: `look-${slot}-next`, onPress: () => turn(slot, 1), cursor: null },
+        );
+      });
+
+      const y = LOOK_BOXES_Y + LINE_SLOTS.length * LOOK_BOX_H + 2;
+      widgets.push(...paintButtons(c, Math.min(y, h - 28), [{ label: 'BACK', id: 'look-back', onPress: m.onBack }]));
+      return { widgets, containers: [{ id: 'look-sprites', tag: 'ul', cls: 'look-sprites' }] };
     },
   };
 }

@@ -63,8 +63,7 @@ import {
   roomScreen,
   sheetScreen,
   trainerScreen,
-  wardrobeScreen,
-  linePickerScreen,
+  lookScreen,
   type RoomModel,
   type RoomSeat,
   type RowSpec,
@@ -354,9 +353,6 @@ function setSeeThrough(on: boolean): void {
     // A browser that keeps nothing keeps the default.
   }
 }
-
-/** The picker's title for each of MY VOICE's rows. */
-const VOICE_TITLES = { intro: 'WALKING UP', win: 'WHEN YOU WIN', lose: 'WHEN YOU LOSE' } as const;
 
 /** The keys on a desktop, in the sheet's two lines. */
 const KEY_LINES = ['Arrows move  Z: A  X: B  A: L  S: R', 'Enter: START  Shift: SELECT  pads too'];
@@ -1393,7 +1389,7 @@ function careerSkin(): number {
   return loadCareer().skin ?? 0;
 }
 
-/** The sprite the lobby's row is SHOWING, which is not always the one you are wearing
+/** The sprite MY LOOK is SHOWING, which is not always the one you are wearing
  *  (POK-282). Cam: "in Kanto you're able to preview all the different skins even if you
  *  don't have all the wins yet" -- a wardrobe you cannot look at is not a ladder, because
  *  there is nothing to climb towards. Browsing walks every entry; only an unlocked one is
@@ -3410,38 +3406,12 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
           return;
         }
         case 'skin':
-          // The wardrobe (POK-320): every sprite on the ladder, Kanto's Picker.
+        case 'look':
+          // MY LOOK (POK-337): the sprite strip and the three lines on one screen, where
+          // the wardrobe and the line picker were two.
           browsedSkin = careerSkin();
-          stage.push(wardrobe);
+          stage.push(look);
           return;
-        case 'intro':
-        case 'win':
-        case 'lose': {
-          // Three rows, three independent picks (POK-283). One index for all three meant
-          // choosing a win line you did not want to get the intro you did. Each opens the
-          // whole pool a page at a time (2026-10-05 play-test: "a better selection UI");
-          // a row used to step through it one line per press.
-          const which = action.kind;
-          let page: number | null = null;
-          stage.push(
-            linePickerScreen(() => ({
-              title: VOICE_TITLES[which],
-              lines: LINES,
-              picked: loadCareer()[which] ?? 0,
-              page,
-              onPage: (p) => {
-                page = p;
-                redraw();
-              },
-              onPick: (i) => {
-                saveProfile({ [which]: i });
-                stage.pop();
-              },
-              onBack: () => stage.pop(),
-            })),
-          );
-          return;
-        }
         case 'stats':
           setStatsOff(!loadStats().off);
           redraw();
@@ -3559,7 +3529,6 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         rows: profileRows({
           name: careerName(),
           skin: SKINS[careerSkin()],
-          lines: careerVoiceLines(),
           statsOn: !loadStats().off,
           seeThrough: seeThrough(),
         })
@@ -3610,27 +3579,32 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       buttons: [{ label: 'BACK', id: 'lobbies-back', onPress: () => stage.pop() }],
       onBack: () => stage.pop(),
     }));
-    const wardrobe = wardrobeScreen(() => ({
-      wins: loadCareer().wins,
-      worn: careerSkin(),
-      browsing: browsedSkin ?? careerSkin(),
-      onBrowse: (skin) => {
-        // Only what you have earned is worn. saveProfile refuses a locked skin anyway
-        // -- that is the backstop against a poked store -- but asking it to is what
-        // would make the screen lie about which sprite is yours.
-        if (browsedSkin === skin && skinUnlocked(skin, loadCareer().wins)) saveProfile({ skin });
-        browsedSkin = skin;
-        redraw();
-      },
-      onWear: (skin) => {
-        if (skinUnlocked(skin, loadCareer().wins)) saveProfile({ skin });
-        redraw();
-      },
-      onBack: () => {
-        browsedSkin = null;
-        stage.pop();
-      },
-    }));
+    const look = lookScreen(() => {
+      const career = loadCareer();
+      return {
+        wins: career.wins,
+        worn: careerSkin(),
+        browsing: browsedSkin ?? careerSkin(),
+        lines: LINES,
+        picked: { intro: career.intro ?? 0, win: career.win ?? 0, lose: career.lose ?? 0 },
+        onBrowse: (skin) => {
+          // Only what you have earned is worn: a locked one is looked at, and what you
+          // wear stays. saveProfile refuses a locked skin anyway -- that is the backstop
+          // against a poked store -- but asking it to is what would make the screen lie.
+          if (skinUnlocked(skin, loadCareer().wins)) saveProfile({ skin });
+          browsedSkin = skin;
+          redraw();
+        },
+        onLine: (slot, index) => {
+          saveProfile({ [slot]: index });
+          redraw();
+        },
+        onBack: () => {
+          browsedSkin = null;
+          stage.pop();
+        },
+      };
+    });
     stage.show(main);
     // One career, every screen (POK-340): the page draws what localStorage holds, so a
     // career changed in another tab -- the wardrobe in one, the menu in the next -- is

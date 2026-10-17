@@ -373,15 +373,14 @@ test('the lobby is where you say who you are', async ({ page }) => {
   await expect(name).toContainText('your name');
   await expect(skin).toContainText('BRENDAN');
 
-  // The sprite row opens the wardrobe: every sprite on the ladder, and the two you
-  // start with are wearable. MAY is the second.
+  // The sprite opens MY LOOK (POK-337): the sprites in a strip, and the two you start
+  // with are wearable -- a press on one wears it. MAY is the one after BRENDAN.
   await skin.click();
-  const may = page.locator('#wardrobe button', { hasText: 'MAY' }).first();
+  const may = page.locator('#look-sprites button', { hasText: 'MAY' }).first();
   await may.click();
-  await expect(page.locator('#wardrobe-name')).toHaveText('MAY');
-  await page.locator('#wardrobe-wear').click();
-  await expect(may).toContainText('worn');
-  await page.locator('#wardrobe-back').click();
+  await expect(page.locator('#look-name')).toHaveText('MAY');
+  await expect(page.locator('#look-sprite')).toContainText('MAY (worn)');
+  await page.locator('#look-back').click();
   await expect(skin).toContainText('MAY');
 
   // And the name is yours to set -- seven characters, Emerald's own limit -- on the drawn
@@ -401,7 +400,7 @@ test('the lobby is where you say who you are', async ({ page }) => {
   await expect(page.locator('#lobby-trainer')).toContainText('WALLYFR', { timeout: 60_000 });
 });
 
-test('the lobby offers a voice and a stats toggle, and the wardrobe starts locked (POK-243)', async ({ page }) => {
+test('the lobby offers lines and a stats toggle, and the sprites start locked (POK-243)', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto(`/#rom=${romHashParam()}`);
   const strip = page.locator('#lobby-trainer');
@@ -409,33 +408,35 @@ test('the lobby offers a voice and a stats toggle, and the wardrobe starts locke
   await strip.click();
   const rows = page.locator('#trainer-rows button');
 
-  // A fresh profile is on the first sprite, which is everybody's: the row says so. The
-  // wardrobe's prices show in the wardrobe (POK-282, POK-320), not on the row at rest.
+  // A fresh profile is on the first sprite, which is everybody's: the card says so. The
+  // prices show in MY LOOK (POK-282, POK-337): a locked one is looked at, not worn.
   const skin = rows.nth(1);
   await expect(skin).toContainText('your sprite');
   await skin.click();
-  await expect(page.locator('#wardrobe button', { hasText: 'HIKER' })).toContainText('LOCKED');
-  await page.locator('#wardrobe button', { hasText: 'HIKER' }).click();
-  await expect(page.locator('#wardrobe-note')).toContainText('LOCKED -- 1 win');
-  await expect(page.locator('#wardrobe-wear')).toBeDisabled();
-  await page.locator('#wardrobe-back').click();
+  const hiker = page.locator('#look-sprites button', { hasText: 'HIKER' });
+  await expect(hiker).toContainText('LOCKED');
+  await hiker.click();
+  await expect(page.locator('#look-note')).toContainText('LOCKED -- 1 win');
+  await expect(page.locator('#look-sprite')).toContainText('HIKER LOCKED');
+  await page.locator('#look-back').click();
+  await expect(skin).toContainText('BRENDAN');
 
-  // MY VOICE is three rows since POK-283 -- walking up, when you win, when you lose --
-  // each showing its line. A row opens the whole pool a page at a time (2026-10-05
-  // play-test); NEXT turns the page, and a line pressed is the row's line.
-  const voice = rows.nth(2);
-  const before = await voice.textContent();
-  await voice.click();
-  const lines = page.locator('#voice-lines button');
-  await expect(lines.first()).toBeVisible();
-  await expect(page.locator('#voice-page')).toContainText('PAGE 1/');
-  await page.screenshot({ path: path.join(OUT_DIR, 'voice-picker.png') });
-  await page.locator('#voice-next').click();
-  await expect(page.locator('#voice-page')).toContainText('PAGE 2/');
-  const chosen = (await lines.nth(1).textContent()) ?? '';
-  await lines.nth(1).click();
-  await expect(voice).not.toHaveText(before ?? '');
-  await expect(voice).toContainText(chosen.trim());
+  // The three lines are dialogue boxes on the same screen, turned one at a time (POK-337):
+  // a press on a box is the next line, its left edge the one before, and it is kept.
+  await page.locator('#trainer-look').click();
+  const intro = page.locator('#look-intro');
+  await expect(intro).toContainText('WALKING UP: ');
+  const before = (await intro.textContent()) ?? '';
+  await page.screenshot({ path: path.join(OUT_DIR, 'my-look.png') });
+  await intro.click();
+  await expect(intro).not.toHaveText(before);
+  const turned = (await intro.textContent()) ?? '';
+  await page.locator('#look-back').click();
+  await page.locator('#trainer-look').click();
+  await expect(intro).toHaveText(turned);
+  await page.locator('#look-intro-prev').click();
+  await expect(intro).toHaveText(before);
+  await page.locator('#look-back').click();
 
   // SEND PLAY COUNT starts on, and pressing it toggles the opt-out and back -- with the
   // cursor staying on the row it pressed, not jumping back to the top (POK-333).

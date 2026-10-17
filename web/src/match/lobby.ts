@@ -35,11 +35,8 @@ export type LobbyAction =
   | { kind: 'lobbies' }
   | { kind: 'name' }
   | { kind: 'skin' }
-  // MY VOICE is three rows now (POK-283): one line each for walking up, winning and
-  // losing, picked independently out of the same pool.
-  | { kind: 'intro' }
-  | { kind: 'win' }
-  | { kind: 'lose' }
+  // Your sprite and your three lines (POK-337): three picks out of one pool (POK-283).
+  | { kind: 'look' }
   | { kind: 'stats' }
   | { kind: 'seethrough' }
   | { kind: 'career' }
@@ -85,9 +82,6 @@ export interface Profile {
     /** What the sprite row says under it -- 'your sprite', or how many wins the next
      *  one takes once the wardrobe is not already full (POK-243). */
     skinNote?: string;
-    /** MY VOICE: the three lines themselves (POK-283), each on its own row, so cycling
-     *  one is picking that line rather than picking a number that moves all three. */
-    lines?: { intro: string; win: string; lose: string };
     /** Whether play is being shared with the relay's own count -- undefined reads as
      *  "shared", the same default `stats.ts`'s `off` field defaults to. */
     statsOn?: boolean;
@@ -100,9 +94,9 @@ export function profileRows(profile: Profile): LobbyRow[] {
   const rows: LobbyRow[] = [
     { label: profile.name, detail: 'your name', action: { kind: 'name' as const } },
     { label: profile.skin, detail: profile.skinNote ?? 'your sprite', action: { kind: 'skin' as const } },
-    { label: profile.lines?.intro ?? 'MY VOICE', detail: 'walking up', action: { kind: 'intro' as const } },
-    { label: profile.lines?.win ?? 'MY VOICE', detail: 'when you win', action: { kind: 'win' as const } },
-    { label: profile.lines?.lose ?? 'MY VOICE', detail: 'when you lose', action: { kind: 'lose' as const } },
+    // Your sprite and your three lines on one screen (Cam's 2026-10-14 play-test, POK-337:
+    // "combine it with the sprite screen... show them as the dialogue boxes themselves").
+    { label: 'MY LOOK', detail: 'sprite and lines', action: { kind: 'look' as const } },
     // Named for what they do (Cam's 2026-10-14 play-test, POK-334: "this is like debug
     // info", "Battle BG... doesn't make any sense"). The first is the anonymous play
     // count stats.ts hands the relay; the second, where a battle is drawn.
