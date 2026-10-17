@@ -21,7 +21,7 @@ import { Mailbox, type RamAccess } from './mailbox';
 import { closeAsSilent, readNetlink, type LinkState } from './netlink';
 import { RomPort } from './romport';
 import { crossesToRom } from './slots';
-import { decode, type BlockMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg, type NpcOutMsg, type PickMsg } from './wire';
+import { decode, type BlockMsg, type CardMsg, type ChallengeMsg, type Lines, CARD_MAX, MAX_PLAYERS, PROTOCOL, type Msg, type NpcOutMsg, type PickMsg } from './wire';
 import { Roster } from '../match/roster';
 import { voice } from '../match/ticker';
 import { RelayClient, type RecvEvent, type RosterEvent } from './relay';
@@ -170,6 +170,8 @@ export class Bridge {
   private fighting = false;
   /** Who the relay lists in the room, from its last roster (net/trust.ts). */
   private members = new Set<number>();
+  /** Our record as we last said it (sayCard), or null before the page has. */
+  private card: CardMsg | null = null;
   /** Our opponent dropped off the relay's roster mid-fight: the blocks we sent while it
    *  was gone went nowhere, and are said again when it is back. */
   private opponentAway = false;
@@ -517,7 +519,10 @@ export class Bridge {
    *  opponent coming back from a gap -- when what we said meanwhile is said again. */
   private onRoster(ev: RosterEvent): void {
     this.roster.applyRoster(ev);
+    const before = this.members;
     this.members = new Set(ev.members.map((m) => m.id));
+    // Somebody new -- or a room new to us -- has never heard our record (POK-339).
+    if (this.card && ev.members.some((m) => !before.has(m.id))) this.relay.all(this.card);
     this.repick(ev.host);
     if (this.opponentSeat === null) return;
     const here = this.members.has(this.opponentSeat);
@@ -533,6 +538,18 @@ export class Bridge {
     if (this.pickHost !== null && !this.members.has(this.pickHost)) this.pickHostAway = true;
     if (host === this.seat || !this.members.has(host)) return;
     if (host !== this.pickHost || this.pickHostAway) this.resendPick();
+  }
+
+  /** Our career, for everybody else's trainer card (POK-339): said now, and again to
+   *  each roster with somebody in it who has not heard it. The page calls it again when
+   *  a match changes the record. */
+  sayCard(record: { wins: number; matches: number; best?: number }): void {
+    // Inside the decoder's bounds: an imported career can hold any count, and one out of
+    // range is a card every other page drops whole.
+    const count = (n: number) => Math.min(Math.max(Math.floor(n) || 0, 0), CARD_MAX);
+    const best = record.best !== undefined && record.best >= 1 && record.best <= MAX_PLAYERS ? record.best : undefined;
+    this.card = { t: 'card', seat: this.seat, wins: count(record.wins), matches: count(record.matches), best };
+    this.relay.all(this.card);
   }
 
   setRomFilter(fn: ((msg: Msg) => boolean) | null): void {

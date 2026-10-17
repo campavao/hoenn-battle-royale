@@ -142,6 +142,62 @@ describe('Bridge', () => {
 });
 
 
+// POK-339 (Cam: "save on device, and share when in the game"): the career stays in each
+// browser and is said to the room, for everybody else's trainer card.
+describe('our record, said to the room (POK-339)', () => {
+  const roster = (ids: number[]) => ({
+    type: 'roster', code: 'ABC123', host: 2, open: true, max: 8, pass: false,
+    members: ids.map((id) => ({ id, name: `P${id}` })),
+  });
+  const cards = (sent: Record<string, unknown>[]) => sent.filter((s) => s.type === 'all' && (s.m as Msg).t === 'card');
+
+  it('goes out when said, and again to a roster with somebody new in it', () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, romInit } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    bridge.sayCard({ wins: 4, matches: 9, best: 1 });
+    expect(cards(socket.sent)).toEqual([{ type: 'all', m: { t: 'card', seat: 2, wins: 4, matches: 9, best: 1 } }]);
+
+    socket.receive(roster([2, 5])); // the room, new to us
+    expect(cards(socket.sent)).toHaveLength(2);
+    socket.receive(roster([2, 5])); // nobody new
+    expect(cards(socket.sent)).toHaveLength(2);
+    socket.receive(roster([2, 5, 7])); // seat 7 walked in
+    expect(cards(socket.sent)).toHaveLength(3);
+    socket.receive(roster([2, 5])); // and out again: nobody to tell
+    expect(cards(socket.sent)).toHaveLength(3);
+  });
+
+  it("lands on the sender's row, and never on anybody else's", () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, romInit } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    socket.receive({ ...roster([2, 5, 7]), host: 7 });
+
+    socket.receive({ type: 'recv', from: 5, m: { t: 'card', seat: 5, wins: 2, matches: 3 } });
+    expect(bridge.roster.get(5)?.record).toEqual({ wins: 2, matches: 3, best: undefined });
+    // The host speaking for somebody else is refused: a record is only ever its own
+    // trainer's ('own', where a `self` message lets the host speak for a bot)...
+    socket.receive({ type: 'recv', from: 7, m: { t: 'card', seat: 5, wins: 99, matches: 99 } });
+    expect(bridge.roster.get(5)?.record?.wins).toBe(2);
+    // ...and so is a guest.
+    socket.receive({ type: 'recv', from: 5, m: { t: 'card', seat: 7, wins: 99, matches: 99 } });
+    expect(bridge.roster.get(5)?.record?.wins).toBe(2);
+    expect(bridge.roster.get(7)?.record).toBeUndefined();
+  });
+
+  it('says an imported career inside the bounds every page decodes', () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, romInit } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    bridge.sayCard({ wins: 5_000_000, matches: -3, best: 40 });
+    expect(cards(socket.sent)).toEqual([{ type: 'all', m: { t: 'card', seat: 2, wins: 999_999, matches: 0 } }]);
+  });
+});
+
 // POK-274. Kanto sends a player's own battle text with the challenge itself, so "each
 // side holds the other's before the locks". Ours picked three lines nobody else could
 // see: the `lines` field was in the wire schema, had a decoder, and was put on a

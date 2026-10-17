@@ -2332,6 +2332,12 @@ function wireRoom(
       },
     ];
   };
+  /** Our career to the room, for everybody else's trainer card (POK-339). It stays in
+   *  this browser; this is it said to the people we are playing. */
+  const sayCard = () => {
+    const c = loadCareer();
+    bridge?.sayCard({ wins: c.wins, matches: c.matches, best: c.best });
+  };
   const roomModel = (): RoomModel => {
     const view = controls.roster && bridge ? roomView(controls.roster, bridge.seat, controls.fill) : null;
     const seats: RoomSeat[] = (controls.roster?.members ?? []).map((m) => {
@@ -2685,6 +2691,8 @@ function wireRoom(
       decided: (line) => {
         career = line;
         drawResults();
+        // The match just changed our record: the room's cards of us follow (POK-339).
+        sayCard();
       },
       partyLate: drawResults,
     },
@@ -2734,6 +2742,7 @@ function wireRoom(
     // `symbols` for gBrNetlink: which fight the ROM is really in (POK-331 #5), and the way
     // out of one gone quiet (#3).
     bridge = new Bridge({ emu, mailboxBase, relay, seat, protocol, carry, rom, symbols });
+    sayCard();
     // Whose room it is, as the relay says: ours when we opened it, whoever it names when
     // we joined. The hash said `host` on a rejoin too, after the relay had already handed
     // the room to an heir when our socket went (POK-330 #13).
@@ -2867,6 +2876,9 @@ function wireRoom(
       if (m.t === 'again' && onAgain({ running: host !== null, match, graceArmed: session.grace.armed }) === 'grace') {
         session.grace.arm(() => void returnToRoom());
       }
+      // A record lands a moment after the roster that seated its trainer (POK-339): a
+      // card already open shows it now, not on the next click.
+      if (m.t === 'card') stage.redraw();
       if (m.t === 'pickup' && bridge && spectate.watchingSeat() === m.seat) {
         const what = session.loot.describe(m.key);
         const line = what ? Ticker.took(m.seat, bridge.roster.nameOf(m.seat), what) : null;
