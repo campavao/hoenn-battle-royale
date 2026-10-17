@@ -60,6 +60,7 @@ import {
   menuScreen,
   noticeScreen,
   type ButtonSpec,
+  type OptionSpec,
   roomScreen,
   sheetScreen,
   trainerScreen,
@@ -86,6 +87,9 @@ import {
   textSpeedLabel,
   nextSafari,
   safariLabel,
+  FOG_STEPS,
+  SAFARI_STEPS,
+  TEXT_SPEEDS,
 } from './match/room';
 import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
@@ -2240,13 +2244,19 @@ function wireRoom(
   // Kanto's lobby: the code, a 2x4 of seats with everybody's sprite, what START would
   // make, the host's options, START (the host's) and LEAVE. It covers the game until the match is
   // on: nobody walks Littleroot while the host is still choosing the fog.
-  const hostOptions = (view: RoomView) => {
+  const hostOptions = (view: RoomView): OptionSpec[] => {
     const redraw = () => stage.redraw();
     return [
-      { id: 'room-max', label: `MAX ${view.max}`, onPress: () => relay.setMax(nextMax(view.max)) },
+      {
+        id: 'room-max',
+        label: `MAX ${view.max}`,
+        visual: { kind: 'seats', humans: view.players, bots: view.fill, max: view.max },
+        onPress: () => relay.setMax(nextMax(view.max)),
+      },
       {
         id: 'room-fill',
         label: fillLabel(view),
+        visual: { kind: 'toggle', on: view.fillOn },
         onPress: () => {
           controls.fill = !controls.fill;
           redraw();
@@ -2284,6 +2294,7 @@ function wireRoom(
       {
         id: 'room-text',
         label: `TEXT ${textSpeedLabel(controls.textSpeed)}`,
+        visual: { kind: 'level', at: TEXT_SPEEDS.findIndex((t) => t.value === controls.textSpeed) + 1, of: TEXT_SPEEDS.length },
         onPress: () => {
           controls.textSpeed = nextTextSpeed(controls.textSpeed);
           redraw();
@@ -2292,6 +2303,7 @@ function wireRoom(
       {
         id: 'room-anim',
         label: controls.animations ? 'ANIM ON' : 'ANIM OFF',
+        visual: { kind: 'toggle', on: controls.animations },
         onPress: () => {
           controls.animations = !controls.animations;
           redraw();
@@ -2300,6 +2312,7 @@ function wireRoom(
       {
         id: 'room-fog',
         label: `FOG ${controls.fogSecs}s`,
+        visual: { kind: 'level', at: FOG_STEPS.indexOf(controls.fogSecs) + 1, of: FOG_STEPS.length, clock: true },
         onPress: () => {
           controls.fogSecs = nextFog(controls.fogSecs);
           redraw();
@@ -2310,6 +2323,8 @@ function wireRoom(
       {
         id: 'room-safari',
         label: safariLabel(controls.safariSecs),
+        // The first step is none at all, so it lights no bar.
+        visual: { kind: 'level', at: SAFARI_STEPS.indexOf(controls.safariSecs), of: SAFARI_STEPS.length - 1, clock: true },
         onPress: () => {
           controls.safariSecs = nextSafari(controls.safariSecs);
           redraw();

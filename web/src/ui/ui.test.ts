@@ -91,6 +91,59 @@ describe('the drawn screens (POK-320)', () => {
     expect(4 * SEAT_W + 16).toBe(240);
   });
 
+  it("puts each room control's picture beside its words, and every word still fits (POK-345)", async () => {
+    const { optionLayout, optionRect, visualWidth } = await import('./screens');
+    // paintOptions' text run, in either column.
+    for (const col of [0, 1]) {
+      const cell = optionRect(0, col);
+      const x = cell.x + 8;
+      const w = cell.w - 10;
+      const room: [string, Parameters<typeof optionLayout>[1]][] = [
+        ['MAX 30', { kind: 'seats', humans: 16, bots: 14, max: 30 }],
+        ['FILL 14', { kind: 'toggle', on: true }],
+        ['TEXT FAST', { kind: 'level', at: 3, of: 3 }],
+        ['ANIM OFF', { kind: 'toggle', on: false }],
+        ['FOG 180s', { kind: 'level', at: 5, of: 5, clock: true }],
+        ['SAFARI 180s', { kind: 'level', at: 3, of: 3, clock: true }],
+        ['NO SAFARI', { kind: 'level', at: 0, of: 3, clock: true }],
+      ];
+      for (const [label, visual] of room) {
+        const lay = optionLayout(label, visual, x, w);
+        expect(lay.text, `${label} is not cut`).toBe(label);
+        expect(lay.textX + measure(label), `${label} stops short of its picture`).toBeLessThanOrEqual((lay.visualX ?? 0) - 4);
+        expect((lay.visualX ?? 0) + visualWidth(visual!), `${label}'s picture stays in its cell`).toBe(x + w);
+      }
+      // A timer's clock goes in front of its words.
+      expect(optionLayout('FOG 120s', { kind: 'level', at: 4, of: 5, clock: true }, x, w).clockX).toBe(x);
+      // And a control without one is drawn as it always was.
+      expect(optionLayout('LISTED', undefined, x, w)).toEqual({ clockX: null, textX: x, text: 'LISTED', visualX: null });
+    }
+  });
+
+  it('draws no more seats than MAX, whatever it is told (POK-345)', async () => {
+    const { paintOptions } = await import('./screens');
+    const fills: { x: number; w: number; color: string }[] = [];
+    const canvas = {
+      drawFrame: () => undefined,
+      drawText: () => 0,
+      fillRect: (r: { x: number; w: number }, color: string) => fills.push({ x: r.x, w: r.w, color }),
+    } as unknown as Parameters<typeof paintOptions>[0];
+    const seats = (humans: number, bots: number, max: number) => {
+      fills.length = 0;
+      paintOptions(canvas, 0, [{ label: 'MAX', id: 'm', onPress: () => undefined, visual: { kind: 'seats', humans, bots, max } }], 'p');
+      return fills.slice(1); // the baseline first
+    };
+    // One block a seat while they fit; more humans than seats is all of them, no bots.
+    expect(seats(10, 5, 8)).toHaveLength(8);
+    expect(seats(1, 7, 8)).toHaveLength(8);
+    expect(seats(1, 0, 1)).toHaveLength(1);
+    // A split bar past that, which never runs past its 40 pixels.
+    const big = seats(1, 29, 30);
+    expect(big[0].w, 'one of thirty is still somebody').toBeGreaterThanOrEqual(2);
+    expect(big[0].w + big[1].w).toBe(40);
+    expect(seats(0, 0, 0).reduce((n, f) => n + f.w, 0)).toBe(0);
+  });
+
   it('centres a row of buttons a tile apart, each a whole number of tiles wide', async () => {
     const { layoutButtons, buttonWidth } = await import('./screens');
     expect(buttonWidth('START') % 8).toBe(0);
