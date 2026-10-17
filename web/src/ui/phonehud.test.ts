@@ -13,6 +13,7 @@ import {
   contextFor,
   fogHeight,
   fogLines,
+  SignCue,
   fogPhase,
   readHudView,
   signFor,
@@ -175,5 +176,16 @@ describe('the HUD read off the ROM', () => {
     const v = readHudView(emu, (n) => SYM[n], null)!;
     expect(v.place).toBe('');
     expect(v.ctx.enabled).toBe(false);
+  });
+});
+
+describe('the sign comes up on a new section', () => {
+  it('once per section, and again after the HUD was off (the next match, same place)', () => {
+    const cue = new SignCue();
+    expect(cue.next('wood|MAUVILLE CITY')).toBe(true);
+    expect(cue.next('wood|MAUVILLE CITY')).toBe(false);
+    expect(cue.next('wood|ROUTE 110')).toBe(true);
+    cue.reset();
+    expect(cue.next('wood|ROUTE 110')).toBe(true);
   });
 });

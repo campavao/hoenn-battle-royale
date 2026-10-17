@@ -325,10 +325,26 @@ export interface PhoneHudDeps {
   onUse(item: number): void;
 }
 
+/** When the sign comes up: on a section it was not last showing. Forgotten when the HUD
+ *  goes off the glass, so the next match brings it up even in the section the last one
+ *  ended in. */
+export class SignCue {
+  private key = '';
+  /** True when `key` is a new section to show. */
+  next(key: string): boolean {
+    if (key === this.key) return false;
+    this.key = key;
+    return true;
+  }
+  reset(): void {
+    this.key = '';
+  }
+}
+
 export class PhoneHud {
   private view: HudView | null = null;
   private scale = 1;
-  private signKey = '';
+  private readonly signCue = new SignCue();
   private signTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly sign: Win;
   private readonly fog: Win;
@@ -418,13 +434,19 @@ export class PhoneHud {
     w.redraw();
   }
 
+  /** Off the glass (a match over, the phone turned): the next update shows the sign. */
+  hide(): void {
+    this.signCue.reset();
+    clearTimeout(this.signTimer);
+    this.sign.el.classList.add('gone');
+  }
+
   update(v: HudView): void {
     this.view = v;
     this.deps.top.classList.toggle('off-field', !v.onField);
     this.deps.dock.classList.toggle('off-field', !v.onField);
     const signKey = `${v.theme}|${v.place}`;
-    if (signKey !== this.signKey) {
-      this.signKey = signKey;
+    if (this.signCue.next(signKey)) {
       this.sign.show(signKey);
       // A section with no name (the map not known yet) has no sign to show.
       this.sign.el.classList.toggle('gone', !v.place);

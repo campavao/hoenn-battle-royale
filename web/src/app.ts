@@ -3804,6 +3804,11 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
   const upright = typeof matchMedia === 'function' ? matchMedia('not all and (orientation: landscape) and (max-height: 520px)') : null;
   const computer = typeof matchMedia === 'function' ? matchMedia(DESKTOP) : null;
   let padOff = false;
+  let hudOn = false;
+  const hudOff = () => {
+    if (hudOn) hud.hide();
+    hudOn = false;
+  };
   emu.onFrame(() => {
     // On the glass: a match, upright, on a touch screen (index.html shows #hud then).
     const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
@@ -3811,9 +3816,15 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables) : null);
     const noPad = shown && battleWantsNoPad(emu, (n) => symbols.get(n), tables);
     if (noPad !== padOff) document.body.classList.toggle('battle-no-pad', (padOff = noPad));
-    if (!shown) return;
+    if (!shown) {
+      hudOff();
+      return;
+    }
     const view = readHudView(emu, (n) => symbols.get(n), world);
-    if (view) hud.update(view);
+    if (view) {
+      hudOn = true;
+      hud.update(view);
+    } else hudOff();
   });
 }
 
