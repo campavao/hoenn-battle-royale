@@ -8,9 +8,11 @@
 # It can't hang off a level-up, because nothing in a match levels up: no battle awards
 # EXP and the rung writes the level straight on. So it happens in the lift.
 #
-# The lift teaches nothing (Cam, 2026-10-13: "the rung no longer teaches moves"): moves
-# come off the ground as TMs, and MOVES offers the rest. So the SCEPTILE at the end still
-# knows the POUND and LEER the TREECKO had.
+# The lift teaches what the levels would (Cam, 2026-10-17: "add back in the auto learn
+# moves upon level up, it's too brutal without it"), the best four (POK-311), around any
+# TM it was taught: TREECKO is taught TM45 ATTRACT (213) off the ground first, a move the best-four rule
+# would throw out at once, as tm-teach
+# does it, and the SCEPTILE at the end still knows it, in the slot it went into.
 #
 # Ring phase 5 is the top of sLadder: rung 75, seventy levels in one step, which is two
 # evolutions for a TREECKO (16 GROVYLE, 36 SCEPTILE).
@@ -24,6 +26,16 @@ poke u8 gBrMatch 2
 expect u8 gPlayerParty+8 0xCE
 expect u8 gPlayerParty+9 0xCC
 expect u8 gPlayerParty+0x54 5
+pokebytes gBrLoot 01 00 0C 00 10 00 4D 01 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 150
+tap A
+wait 120
+tap A
+wait 120
+expect u16 *gSaveBlock1Ptr+0x690 0
+expect u32 gMain+4 CB2_Overworld+1
 poke u8 gBrRing+1 5
 poke u8 gBrRing 1
 wait 120
@@ -57,9 +69,10 @@ tap A
 wait 200
 shot fight
 expect u16 gBattleMons 279
-# POUND (1) and LEER (43), and nothing else: the rung taught it nothing on the way up.
-expect u16 gBattleMons+0x0C 1
-expect u16 gBattleMons+0x0E 43
-expect u16 gBattleMons+0x10 0
-expect u16 gBattleMons+0x12 0
+# AGILITY (97), SLAM (21), ATTRACT where it was taught, and LEAF BLADE (348): POUND and
+# LEER swapped for better, the TM's slot left alone.
+expect u16 gBattleMons+0x0C 97
+expect u16 gBattleMons+0x0E 21
+expect u16 gBattleMons+0x10 213
+expect u16 gBattleMons+0x12 348
 say grows up ok

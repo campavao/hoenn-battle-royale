@@ -41,8 +41,8 @@ tap DOWN
 wait 10
 tap A
 wait 240
-# The rung teaches nothing (2026-10-13), so the GROVYLE still knows only POUND and LEER:
-# the first row, twice, fills the other two from the level-up moves it has by 30.
+# The first row, twice: whatever the rung taught the GROVYLE on the way to 30, all four
+# slots are full after it.
 tap A
 wait 150
 tap A

@@ -6268,6 +6268,9 @@ u32 CanMonLearnTMHM(struct Pokemon *mon, u8 tm)
     {
         return 0;
     }
+#if BR
+    return TRUE; // any mon learns any machine, HMs too (Cam, 2026-10-17)
+#endif
 
     // Fewer than 64 moves, use GF's method (for matching).
     if (sizeof(struct TMHMLearnset) <= 8)
@@ -6297,6 +6300,9 @@ u32 CanSpeciesLearnTMHM(u16 species, u8 tm)
     {
         return 0;
     }
+#if BR
+    return TRUE; // any mon learns any machine, HMs too (Cam, 2026-10-17)
+#endif
     // Fewer than 64 moves, use GF's method (for matching).
     if (sizeof(struct TMHMLearnset) <= 8)
     {

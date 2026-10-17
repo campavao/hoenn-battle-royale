@@ -3,13 +3,28 @@
 # BrItems_FindItem first, which says so and leaves the object and its flag alone.
 #
 # ROUTE 104's PP UP ball at (39,15), local id 21, as balls-dealt.txt: under seed 203 it is
-# dealt TM03 WATER PULSE (291), which TREECKO cannot learn.
+# dealt TM03 WATER PULSE (291). Every mon learns every machine now (Cam, 2026-10-17), so
+# TREECKO is taught a TM03 off the ground under our feet first (tm-teach.txt) and the
+# ball's is then one nobody in the party can use.
 wait 30
 poke u32 gBrMatch+8 203
 pokebytes gBrMailbox+0x2018 81 00 00 13 27 00 0E 00 BD BB C7 FF
 wait 400
 poke u8 gBrMatch 2
 expect u16 *gSaveBlock1Ptr+0x690 0
+# key 1, (39,14) plus MAP_OFFSET, item 291, map 0:19, kind 3
+pokebytes gBrLoot 01 00 2E 00 15 00 23 01 00 13 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 150
+expect u16 *gSaveBlock1Ptr+0x690 291
+expectne u32 gMain+4 CB2_Overworld+1
+tap A
+wait 120
+tap A
+wait 120
+expect u16 *gSaveBlock1Ptr+0x690 0
+expect u32 gMain+4 CB2_Overworld+1
 tap A
 wait 60
 shot left

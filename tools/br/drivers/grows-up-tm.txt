@@ -1,0 +1,64 @@
+# grows-up-tm: a TM-taught move the evolved line learns on its way up is still the TM's
+# slot (review of #49). Kept is judged at the level it was taught at, not the rung it
+# lands on: a slot the lift writes never gives its TM back (BrMoves_Forgetting).
+#
+# A Lv5 MUDKIP (283) is spilled and taken, as moves-worth-having does it, and taught TM17
+# PROTECT (182) into its third slot. SWAMPERT learns PROTECT at 46, under the rung of 75
+# it is lifted to, and the best-four rule would trade it away if the slot were open.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 01 00 09 01 01 00 0C 00 10 00 1B 01 05 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+tap A
+wait 60
+expect u8 gPlayerPartyCount 2
+expect u8 gPlayerParty+0xB8 5
+# TM17 under our feet; the teach screen opens on the party, and MUDKIP is the second
+pokebytes gBrLoot 01 00 0C 00 10 00 31 01 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 150
+shot teach
+tap DOWN
+wait 10
+tap A
+wait 120
+shot taught
+tap A
+wait 120
+tap A
+wait 120
+expect u16 *gSaveBlock1Ptr+0x690 0
+expect u32 gMain+4 CB2_Overworld+1
+poke u8 gBrRing+1 5
+poke u8 gBrRing 1
+wait 120
+expect u8 gPlayerParty+0xB8 75
+# The lead faints on paper, so the fight opens on the SWAMPERT
+poke u16 gPlayerParty+0x56 0
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 400
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 200
+shot fight
+expect u16 gBattleMons 285
+# EARTHQUAKE (89), MUDDY WATER (330), PROTECT where it was taught, TAKE DOWN (36). With
+# the slot open, MUDDY WATER went in over PROTECT and the TM was gone for good.
+expect u16 gBattleMons+0x0C 89
+expect u16 gBattleMons+0x0E 330
+expect u16 gBattleMons+0x10 182
+expect u16 gBattleMons+0x12 36
+say grows up tm ok
