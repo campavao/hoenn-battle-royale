@@ -756,7 +756,7 @@ function watch<T extends Layout | Natural>(struct: string, l: T): T {
   });
 }
 
-describe("the battle script commands the phone's stick and A/B wait on (ui/battlemenu.ts)", () => {
+describe("the battle script commands the phone's D-pad and A/B wait on (ui/battlemenu.ts)", () => {
   it('ASKS_PAD: the opcodes, as enum BattleScriptOpcode counts them', () => {
     const body = scriptCmdsH.slice(scriptCmdsH.indexOf('enum BattleScriptOpcode'));
     const names = body.slice(body.indexOf('{') + 1, body.indexOf('}')).replace(/\/\/.*$/gm, '').split(',').map((n) => n.trim()).filter(Boolean);

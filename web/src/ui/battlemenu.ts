@@ -1,5 +1,5 @@
 // The phone's battle menu (Cam's mockup v3, approved 2026-10-14): under the battle
-// screen, where the stick and the dock were, four big Emerald windows in place of the
+// screen, where the D-pad and the dock were, four big Emerald windows in place of the
 // ROM's little 2x2 -- FIGHT, BAG, POKeMON and RUN, or the moves, each with its type, PP
 // and how well it lands on the foe. Tap a move to attack; hold one and its window fills
 // from the left, then its details open in the same place.
@@ -7,7 +7,7 @@
 // Nothing here is new game logic. A tap is the choice a thumb would make, walked to and
 // confirmed through the ROM's own handlers (touch.ts chooseBattle): a move the game
 // refuses (no PP, DISABLE) is refused here too. BAG and POKeMON open the ROM's own
-// screens, which the stick and A/B drive as before. RUN greys out where it cannot work:
+// screens, which the D-pad and A/B drive as before. RUN greys out where it cannot work:
 // against a trainer, BR's rule is a POKe DOLL or no way out (src/br/br_battle.c).
 // What the windows say is read every frame: gBrBattle.menu (which menu is up),
 // gBattleMons (our moves and PP, the foe's types and name), gBattleTypeFlags and the
@@ -36,7 +36,7 @@ export const NICKNAME_SIZE = 11;
 export const BATTLE_TYPE_LINK = 1 << 1;
 export const BATTLE_TYPE_TRAINER = 1 << 3;
 export const BATTLE_TYPE_SAFARI = 1 << 7;
-/** A replay: a spectator's, whose stick still flips who they watch (app.ts watchStepKey). */
+/** A replay: a spectator's, whose D-pad still flips who they watch (app.ts watchStepKey). */
 export const BATTLE_TYPE_RECORDED = 1 << 24;
 export const ITEM_POKE_DOLL = 80;
 const MAX_MON_MOVES = 4;
@@ -120,12 +120,12 @@ export function readBattleView(emu: BattleRead, sym: (name: string) => number | 
   };
 }
 
-// ---- the stick and A/B -------------------------------------------------------------------
+// ---- the D-pad and A/B -------------------------------------------------------------------
 
 const ROM_BASE = 0x08000000;
 /** The battle script commands that wait on a press the windows do not offer
  *  (include/constants/battle_script_commands.h): a YES/NO (USE NEXT POKeMON? in a wild
- *  battle) and a caught mon's POKeDEX page. The stick and A/B come back for these. */
+ *  battle) and a caught mon's POKeDEX page. The D-pad and A/B come back for these. */
 export const ASKS_PAD: ReadonlySet<number> = new Set([
   0x5a, // B_SCR_OP_YESNOBOXLEARNMOVE
   0x5b, // B_SCR_OP_YESNOBOXSTOPLEARNINGMOVE
@@ -134,7 +134,7 @@ export const ASKS_PAD: ReadonlySet<number> = new Set([
   0xf3, // B_SCR_OP_TRYGIVECAUGHTMONNICK
 ]);
 
-/** The battle itself is on screen and wants nothing the stick or A/B give (Cam,
+/** The battle itself is on screen and wants nothing the D-pad or A/B give (Cam,
  *  2026-10-15: "we shouldn't need them after all our UI changes"): the choices are the
  *  windows, and the text runs on by itself (br_battle.c BrBattle_AutoScrollFrames). The
  *  BAG and the party, which are screens of their own (callback2 is not BattleMainCB2),
@@ -233,7 +233,7 @@ export interface BattleMenuDeps {
   choose(which: number, slot: number, move?: number): void;
   /** B: out of the ROM's move menu. */
   back(): void;
-  /** Up, or down: the stick and the dock make way. */
+  /** Up, or down: the D-pad and the dock make way. */
   onShown(shown: boolean): void;
 }
 

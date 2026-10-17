@@ -118,7 +118,7 @@ const OPEN_FRAMES = 90;
 /** START with the menu's input handler already in gMenuCallback (it stays there after
  *  the menu shuts): StartMenuTask is still drawing for about this long, and drops keys. */
 const START_SETTLE_FRAMES = 12;
-/** How long a dock press waits for the stick to be let go before it is dropped. */
+/** How long a dock press waits for the D-pad to be let go before it is dropped. */
 const DOCK_WAIT_FRAMES = 120;
 /** SELECT's item goes back to the player's own this long after the press. */
 const RESTORE_FRAMES = 20;

@@ -312,7 +312,7 @@ function setInMatch(on: boolean): void {
   }
 }
 
-/** A phone's movable, fadable, hideable stick and A/B (wirePhoneHud). */
+/** A phone's movable, fadable, hideable D-pad and A/B (wirePhoneHud). */
 let padPrefs: PadPrefsControl | null = null;
 
 /** What the sheet's settings say and do: wireSettings, wireRemap and wireGamepad each
@@ -1158,19 +1158,12 @@ function wireDpad(el: HTMLElement, emu: Emulator): void {
     }
     active = next;
     el.classList.toggle('active', next.size > 0);
-    // The phone's round stick shows its nub under the thumb, a little way out at most.
-    const m = Math.hypot(dx, dy);
-    const k = m > 0.6 ? 0.6 / m : 1;
-    el.style.setProperty('--nub-x', `${(dx * k * rect.width) / 2}px`);
-    el.style.setProperty('--nub-y', `${(dy * k * rect.height) / 2}px`);
   };
 
   const clear = () => {
     for (const key of active) emu.release(key);
     active = new Set();
     el.classList.remove('active');
-    el.style.removeProperty('--nub-x');
-    el.style.removeProperty('--nub-y');
   };
 
   el.addEventListener('pointerdown', (e) => {
@@ -3796,7 +3789,7 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
   padPrefs = new PadPrefsControl({
     root,
     body: document.body,
-    stick: $('#dpad-surface') as HTMLElement,
+    dpad: $('#dpad-surface') as HTMLElement,
     ab: document.querySelector('#pad .ab') as HTMLElement,
     bar: $('#pad-edit') as HTMLElement,
     scale,

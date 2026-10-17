@@ -1,7 +1,7 @@
 // The phone's HUD and dock (ui/phonehud.ts): the route sign and the fog window over the
-// field, PARTY / MAP / START / SELECT under the stick, all in Emerald's own windows. The
+// field, PARTY / MAP / START / SELECT under the D-pad, all in Emerald's own windows. The
 // ROM's corner box comes off while they are up (gBrHud.noCorner), PARTY and MAP open
-// their screens through the start menu, and the stick and A/B can be faded and hidden.
+// their screens through the start menu, and the D-pad and A/B can be faded and hidden.
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -65,7 +65,7 @@ test("a phone's HUD: the sign, the fog window, the dock, and the corner box off"
       }
     }
     const dpad = await box('#dpad-surface');
-    expect(dpad.y + dpad.height, 'the stick is above the dock').toBeLessThanOrEqual(rects[0].y + 1);
+    expect(dpad.y + dpad.height, 'the D-pad is above the dock').toBeLessThanOrEqual(rects[0].y + 1);
     // The corner box is off: no window, nothing put (br_hud.c).
     await expect.poll(() => read(page, sym.gBrHud + 0x17a, 8)).toBe(1);
     await expect.poll(() => read(page, sym.gBrHud + 0x6, 8)).toBe(0xff);

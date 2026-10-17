@@ -1,5 +1,5 @@
 // The phone's HUD (Cam's sketch, 2026-10-14, mockup v2 approved in broad strokes): the
-// route sign top left, the fog window top right, and under the stick a dock of four
+// route sign top left, the fog window top right, and under the D-pad a dock of four
 // Emerald windows -- PARTY and MAP, START and the context button -- with the room menu
 // between them. All of it is drawn in Emerald's own font, frames, sign and item icons
 // (tools/br/export-ui.py), at the field's scale, so it reads as the game's.
