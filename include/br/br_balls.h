@@ -4,8 +4,8 @@
 #include "global.h"
 
 // What a ball on the ground holds, and its colour (Cam, 2026-10-13: "colour-coded: red =
-// items, blue = TMs, gold = rare"). Moves come off the ground now that the rung teaches
-// none, so a quarter of the maps' own item balls hold a TM this match instead of what the
+// items, blue = TMs, gold = rare"). Moves come off the ground as well as the rung, so a
+// quarter of the maps' own item balls hold a TM this match instead of what the
 // cartridge put in them, dealt from the match seed so every ROM sees the same ones.
 //
 // The colour is a palette borrowed from the weather (br_balls.c, PaletteFor): the same

@@ -40,7 +40,7 @@ void BrMoves_Spend(u16 move);
 // TMs go round: a move this mon could only have had from a TM goes back in the bag as
 // that TM (Cam, 2026-10-17: "make swapping moves among pokemon also easy"), so MOVES on a
 // teammate offers it next. It used to drop on the ground (2026-10-13); it still does when
-// the TM pocket has no room. A move it learns on its own by now does not -- a TM for that
+// the bag already holds that TM (one copy each) or the TM pocket has no room. A move it learns on its own by now does not -- a TM for that
 // would be one made out of nothing -- and neither does an HM's, which never left the bag.
 // A trainer's mon can come with a TM's move (a gym party's, spilled as loot when it is
 // beaten): its TM comes back as well, the trainer's machine come with the mon. From the

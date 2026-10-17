@@ -136,8 +136,9 @@ void BrMoves_Forgetting(struct Pokemon *mon, u8 slot)
     if (item == ITEM_NONE || LearnsByNow(mon, move))
         return;
     // Back in the bag, where MOVES on any teammate offers it (Cam, 2026-10-17: "make
-    // swapping moves among pokemon also easy"). The ground only when the pocket is full.
-    if (AddBagItem(item, 1))
+    // swapping moves among pokemon also easy"). One copy each, as off the ground: a second
+    // goes down for somebody else, and so does one the pocket has no room for.
+    if (!CheckBagHasItem(item, 1) && AddBagItem(item, 1))
         SayKept(item);
     else
         BrLoot_DropItem(item);

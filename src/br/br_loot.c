@@ -668,7 +668,7 @@ static const u8 sText_Took[] = _("TOOK ");
 static const u8 sText_Found[] = _("FOUND ");
 static const u8 sText_Gift[] = _("A GIFT: ");
 static const u8 sText_Bang[] = _("!");
-static const u8 sText_NobodyLearns[] = _("NO ONE CAN USE ");
+static const u8 sText_NobodyLearns[] = _("ALL KNOW ");
 static const u8 sText_HaveTm[] = _("ALREADY HAVE ");
 
 // A town's gift-giver says a line before he hands it over (Cam's 2026-10-14 play-test,

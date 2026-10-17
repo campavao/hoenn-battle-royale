@@ -32,8 +32,9 @@ tap A
 wait 30
 shot left
 wait 60
-# "NO ONE CAN USE THUNDERBOLT": still on the ground, nothing taken, nothing in the bag
+# "ALL KNOW THUNDERBOLT": still on the ground, nothing more taken, nothing in the bag
 expect u8 gBrLoot+11 3
+expect u8 gBrLoot+0xA2 1
 expect u16 *gSaveBlock1Ptr+0x690 0
 expect u32 gMain+4 CB2_Overworld+1
 say tm left ok

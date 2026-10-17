@@ -100,4 +100,5 @@ tap B
 wait 200
 expect u16 *gSaveBlock1Ptr+0x690 294
 expect u32 gMain+4 CB2_Overworld+1
+shot field
 say moves drop ok

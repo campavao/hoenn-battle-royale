@@ -79,7 +79,7 @@ static const u8 sText_PartyHealed[] = _("The whole party was treated.{PAUSE_UNTI
 static const u8 sText_FoundVitamin[] = _("{PLAYER} found {STR_VAR_2}!\nThe whole party's {STR_VAR_1}\lwent to the top.");
 static const u8 sText_FoundSome[] = _("{PLAYER} found {STR_VAR_1} {STR_VAR_2}!");
 static const u8 sText_FoundSell[] = _("{PLAYER} found {STR_VAR_2}!\nIt fetched ¥{STR_VAR_1}.");
-static const u8 sText_FoundTmLeft[] = _("No one in the party can use\n{STR_VAR_1}. The TM stays put.");
+static const u8 sText_FoundTmLeft[] = _("The whole party knows\n{STR_VAR_1}. The TM stays put.");
 static const u8 sText_FoundTmHave[] = _("You already have\n{STR_VAR_1}. The TM stays put.");
 
 static bool8 InList(const u16 *list, u8 n, u16 item)
@@ -199,7 +199,7 @@ bool8 BrItems_Arrive(u16 *item, u16 count)
 #define FOUND_LEFT      2 // a TM nobody here can learn: left where it lies
 
 // A map's item, seen or hidden: FOUND_USED when it was used, or a pile bagged, here, and
-// FOUND_LEFT for a TM nobody in the party can use, or one already in the bag, gStringVar4 saying which; else *item
+// FOUND_LEFT for a TM the whole party already knows, or one already in the bag, gStringVar4 saying which; else *item
 // and *count are what goes on to pret's script. A TM it lets go on is taught as soon as
 // the script is done (BrMoves_TeachSoon).
 static u8 Found(u16 *item, u16 *count)

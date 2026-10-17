@@ -409,8 +409,10 @@ static bool8 InLearnset(const u16 *learnset, u16 move, u8 to)
 // The player's lift passes the level it was at (Cam, 2026-10-17: "add back in the auto
 // learn moves upon level up, it's too brutal without it"), and then only the levels just
 // climbed teach -- the moves it passed over before were the player's to pass over, and
-// MOVES still has them -- and a slot whose move it could not have learnt by `to` on its
-// own is a TM somebody taught it, which the walk leaves alone.
+// MOVES still has them -- and a slot whose move it could not have learnt by `from` on its
+// own is a TM somebody taught it, which the walk leaves alone. By `from`, not `to`: a
+// MUDKIP taught PROTECT at 5 is still holding a TM when SWAMPERT's learnset reaches it at
+// 46, and a slot written here never gives its TM back (BrMoves_Forgetting).
 static void LearnThrough(struct Pokemon *mon, u8 from, u8 to)
 {
     u16 species = GetMonData(mon, MON_DATA_SPECIES, NULL);
@@ -428,7 +430,7 @@ static void LearnThrough(struct Pokemon *mon, u8 from, u8 to)
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
         had[i] = moves[i] = GetMonData(mon, MON_DATA_MOVE1 + i, NULL);
-        if (from != 0 && had[i] != MOVE_NONE && !InLearnset(learnset, had[i], to))
+        if (from != 0 && had[i] != MOVE_NONE && !InLearnset(learnset, had[i], from))
             kept |= 1 << i;
     }
     for (i = 0; learnset[i] != LEVEL_UP_END; i++)
