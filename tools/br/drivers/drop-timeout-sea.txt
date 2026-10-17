@@ -1,0 +1,28 @@
+# drop-timeout-sea: the clock runs out with the cursor on a cell no section covers
+# (15,2), one west of SAFARI ZONE. There is no section to ask the host for, so no
+# `pick` goes out and the drop is the cell the START dealt -- straight away, not after
+# the fifteen seconds DropWithoutTheHost waits for a `land` that is not coming.
+wait 30
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 4
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 200
+expect u8 gBrPick 1
+tap LEFT
+wait 30
+shot 15-blank
+wait 1260
+expect u8 gBrPick 0
+expect u16 gBrPick+12 213
+wait 200
+shot landed
+# the START's row for seat 0: map (0,25), (10,40)
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 25
+expect u16 *gSaveBlock1Ptr+0 10
+expect u16 *gSaveBlock1Ptr+2 40
+say drop timeout sea ok

@@ -1,7 +1,7 @@
-# drop-sea: the drop map's name box never goes blank (POK-352). The play-test moved the
-# cursor west from SAFARI ZONE and the box sat empty for 2-3 seconds over the
-# cells between them. On the drop, a cell no section covers is the nearest section, its
-# name stays up, and A there chooses it.
+# drop-sea: the drop lands on the place the cursor names, never the nearest one (Cam,
+# 2026-10-17, undoing POK-352's snap). The drop opens on SAFARI ZONE, layout (16,2); one
+# step west is (15,2), a cell no section covers. The name box is blank there and A is a
+# buzz: the map stays up and nothing is asked. Back on SAFARI ZONE, A chooses it.
 wait 30
 pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
 wait 400
@@ -12,50 +12,22 @@ pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
 poke u16 gBrMailbox+0x0C 2
 wait 200
 expect u8 gBrPick 1
-# The drop opens on SAFARI ZONE, layout (16,2), the play-test's own start. West along
-# row 2 crosses nine cells no section covers, each shot and none blank. drop-sea-tie
-# checks which name a tie keeps.
 shot safari-zone
 tap LEFT
 wait 30
-shot 15-safari-zone-tie
-tap LEFT
-wait 30
-shot 14-route-120-tie
-tap LEFT
-wait 30
-tap LEFT
-wait 30
-shot 12-route-120-tie
-tap LEFT
-wait 30
-tap LEFT
-wait 30
-shot 10-route-119-near
-tap LEFT
-wait 30
-shot 09-route-111-near
-tap LEFT
-wait 30
-tap LEFT
-wait 30
-tap LEFT
-wait 30
-tap LEFT
-wait 30
-shot 05-mt-chimney-tie
-tap LEFT
-wait 30
-shot 04-lavaridge-near
-tap LEFT
-wait 30
-shot 03-fallarbor-tie
-tap LEFT
-wait 30
-shot 02-route-114-near
-# (2,2) is one of them, one from ROUTE 114: A chooses it, the name in the box (MAPSEC 29).
+shot 15-blank
 tap A
 wait 60
-expect u16 gBrPick+12 29
+shot 15-refused
+# still picking (these hold on the black wait screen too; the SAFARI ZONE below is the proof)
+expect u8 gBrPick 1
+expectle u16 gBrPick+8 1100
+expectge u16 gBrPick+8 900
+tap RIGHT
+wait 30
+tap A
+wait 60
+# MAPSEC_SAFARI_ZONE: had the A on the sea chosen, the map would be gone and this NONE
+expect u16 gBrPick+12 57
 expect u8 gBrPick 1
 say drop sea ok
