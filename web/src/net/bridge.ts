@@ -21,7 +21,7 @@ import { Mailbox, type RamAccess } from './mailbox';
 import { closeAsSilent, readNetlink, type LinkState } from './netlink';
 import { RomPort } from './romport';
 import { crossesToRom } from './slots';
-import { decode, type BlockMsg, type CardMsg, type ChallengeMsg, type Lines, PROTOCOL, type Msg, type NpcOutMsg, type PickMsg } from './wire';
+import { decode, type BlockMsg, type CardMsg, type ChallengeMsg, type Lines, CARD_MAX, MAX_PLAYERS, PROTOCOL, type Msg, type NpcOutMsg, type PickMsg } from './wire';
 import { Roster } from '../match/roster';
 import { voice } from '../match/ticker';
 import { RelayClient, type RecvEvent, type RosterEvent } from './relay';
@@ -544,7 +544,11 @@ export class Bridge {
    *  each roster with somebody in it who has not heard it. The page calls it again when
    *  a match changes the record. */
   sayCard(record: { wins: number; matches: number; best?: number }): void {
-    this.card = { t: 'card', seat: this.seat, ...record };
+    // Inside the decoder's bounds: an imported career can hold any count, and one out of
+    // range is a card every other page drops whole.
+    const count = (n: number) => Math.min(Math.max(Math.floor(n) || 0, 0), CARD_MAX);
+    const best = record.best !== undefined && record.best >= 1 && record.best <= MAX_PLAYERS ? record.best : undefined;
+    this.card = { t: 'card', seat: this.seat, wins: count(record.wins), matches: count(record.matches), best };
     this.relay.all(this.card);
   }
 

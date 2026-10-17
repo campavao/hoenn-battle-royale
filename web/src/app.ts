@@ -2876,6 +2876,9 @@ function wireRoom(
       if (m.t === 'again' && onAgain({ running: host !== null, match, graceArmed: session.grace.armed }) === 'grace') {
         session.grace.arm(() => void returnToRoom());
       }
+      // A record lands a moment after the roster that seated its trainer (POK-339): a
+      // card already open shows it now, not on the next click.
+      if (m.t === 'card') stage.redraw();
       if (m.t === 'pickup' && bridge && spectate.watchingSeat() === m.seat) {
         const what = session.loot.describe(m.key);
         const line = what ? Ticker.took(m.seat, bridge.roster.nameOf(m.seat), what) : null;

@@ -174,13 +174,27 @@ describe('our record, said to the room (POK-339)', () => {
     const { emu, romInit } = fakeEmulator(BASE);
     romInit();
     const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
-    socket.receive(roster([2, 5, 7]));
+    socket.receive({ ...roster([2, 5, 7]), host: 7 });
 
     socket.receive({ type: 'recv', from: 5, m: { t: 'card', seat: 5, wins: 2, matches: 3 } });
     expect(bridge.roster.get(5)?.record).toEqual({ wins: 2, matches: 3, best: undefined });
-    // A guest speaking for somebody else is refused by trust.ts, like any `self` message.
+    // The host speaking for somebody else is refused: a record is only ever its own
+    // trainer's ('own', where a `self` message lets the host speak for a bot)...
     socket.receive({ type: 'recv', from: 7, m: { t: 'card', seat: 5, wins: 99, matches: 99 } });
     expect(bridge.roster.get(5)?.record?.wins).toBe(2);
+    // ...and so is a guest.
+    socket.receive({ type: 'recv', from: 5, m: { t: 'card', seat: 7, wins: 99, matches: 99 } });
+    expect(bridge.roster.get(5)?.record?.wins).toBe(2);
+    expect(bridge.roster.get(7)?.record).toBeUndefined();
+  });
+
+  it('says an imported career inside the bounds every page decodes', () => {
+    const { relay, socket } = fakeRelay();
+    const { emu, romInit } = fakeEmulator(BASE);
+    romInit();
+    const bridge = new Bridge({ emu, mailboxBase: BASE, relay, seat: 2 });
+    bridge.sayCard({ wins: 5_000_000, matches: -3, best: 40 });
+    expect(cards(socket.sent)).toEqual([{ type: 'all', m: { t: 'card', seat: 2, wins: 999_999, matches: 0 } }]);
   });
 });
 

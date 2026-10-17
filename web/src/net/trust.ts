@@ -14,6 +14,8 @@
 //          which moves on a roster event before an heir can send anything.
 //   self   about the sender itself: its `seat` must be `from`. The host is the exception,
 //          because the host speaks for the bots it walks and for a seat that has gone.
+//   own    about the sender itself, with no exception for the host: a career record
+//          (POK-339), which no bot has and no gone seat needs said for it.
 //   battle a fight's stream, which names a seat pair rather than a seat: from either
 //          fighter, or the host, whose proxy instance fights two bots.
 //   bot    a report on a fight with a bot, which only the ROM that ran it saw, so it
@@ -27,7 +29,7 @@
 import { battleSeats } from '../match/spectate';
 import type { Msg } from './wire';
 
-export type Trust = 'never' | 'host' | 'self' | 'battle' | 'bot';
+export type Trust = 'never' | 'host' | 'self' | 'own' | 'battle' | 'bot';
 
 /** Every type the wire decodes, and who may send it. A `Record` over the whole union, so
  *  a new message type does not compile until somebody has said who may send it. */
@@ -68,7 +70,7 @@ export const TRUST: Record<Msg['t'], Trust> = {
   shot: 'self',
   peek: 'self',
   ready: 'self',
-  card: 'self',
+  card: 'own',
   ping: 'self',
   pong: 'self',
 
@@ -101,6 +103,8 @@ export function admits(msg: Msg, from: number, ctx: TrustContext): boolean {
       return host;
     case 'self':
       return host || seatOf(msg) === from;
+    case 'own':
+      return seatOf(msg) === from;
     case 'battle': {
       if (msg.t !== 'bstart' && msg.t !== 'turn') return false;
       return host || battleSeats(msg.battle).includes(from);

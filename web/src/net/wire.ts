@@ -28,6 +28,8 @@ export const MAX_VER = 16; // "0.0.0-dev" plus room for a suffix (Wire.cleanVers
 export const MAX_CELL = 1000; // overworld tile coordinate bound
 export const MAX_TEXT = 96; // a ticker/battle line
 export const MAX_PLAYERS = 32;
+/** The most wins or matches a `card` may say (POK-339). */
+export const CARD_MAX = 999_999;
 
 /** Emerald's own facing constants (include/constants/global.h): 0 has no
  *  DIR_NONE case on this wire -- every place/step/face names a real facing. */
@@ -1230,8 +1232,8 @@ const decoders: Record<string, Decoder> = {
   card: (m) => ({
     t: 'card',
     seat: reqSeat(m),
-    wins: optInt(m, 'wins', 0, 999_999) ?? fail('bad wins'),
-    matches: optInt(m, 'matches', 0, 999_999) ?? fail('bad matches'),
+    wins: optInt(m, 'wins', 0, CARD_MAX) ?? fail('bad wins'),
+    matches: optInt(m, 'matches', 0, CARD_MAX) ?? fail('bad matches'),
     best: optInt(m, 'best', 1, MAX_PLAYERS),
   }),
 

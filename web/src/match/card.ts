@@ -7,11 +7,11 @@
 // localStorage, and each page says its record to the room in a `card` (POK-339, Cam:
 // "save on device, and share when in the game"), so another trainer's card has their
 // WINS and PLAYED as Kanto's does, and their BEST once they have finished one. A bot has
-// no career, and a page older than the message says none. What they look like is drawn beside the lines, not spelled out (POK-343),
-// and STATUS and LAST SEEN are gone with it: a card opened in the room before a match
-// said IN THE MATCH and a town nobody had been to, and the seats already say who is out
-// (Cam's 2026-10-14 play-test: "I don't think we need status... I don't need a last
-// seen here").
+// no career, and a page older than the message says none. What they look like is drawn
+// beside the lines, not spelled out (POK-343), and STATUS and LAST SEEN are gone with it:
+// a card opened in the room before a match said IN THE MATCH and a town nobody had been
+// to, and the seats already say who is out (Cam's 2026-10-14 play-test: "I don't think
+// we need status... I don't need a last seen here").
 import { ordinal } from './career';
 import type { RosterEntry } from './roster';
 
