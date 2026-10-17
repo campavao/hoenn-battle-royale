@@ -1,7 +1,7 @@
-// Where a phone's stick and A/B sit, how see-through they are, and whether they are
+// Where a phone's D-pad and A/B sit, how see-through they are, and whether they are
 // there at all (mockup v2: "you can drag them, fade them, or hide them and just tap the
 // map to walk"). This browser's own, in localStorage; index.html reads them as
-// --stick-dx/dy, --ab-dx/dy and --pad-alpha on #screen-playing, and body.pad-hidden.
+// --dpad-dx/dy, --ab-dx/dy and --pad-alpha on #screen-playing, and body.pad-hidden.
 //
 // MOVE PAD in the sheet starts the editor: the two controls get a dashed outline and
 // follow a drag instead of pressing keys, and a small Emerald window says DRAG, FADE
@@ -9,7 +9,7 @@
 import { TEXT_BLUE, TEXT_DARK, TEXT_RED, textImage } from './emerald';
 
 export interface PadPrefs {
-  stick: { dx: number; dy: number };
+  dpad: { dx: number; dy: number };
   ab: { dx: number; dy: number };
   /** 0.2 .. 1 */
   alpha: number;
@@ -17,16 +17,16 @@ export interface PadPrefs {
 }
 
 export const PAD_KEY = 'hbr-pad';
-export const PAD_DEFAULT: PadPrefs = { stick: { dx: 0, dy: 0 }, ab: { dx: 0, dy: 0 }, alpha: 0.6, hidden: false };
+export const PAD_DEFAULT: PadPrefs = { dpad: { dx: 0, dy: 0 }, ab: { dx: 0, dy: 0 }, alpha: 0.6, hidden: false };
 
 const num = (v: unknown, lo: number, hi: number, d: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d;
 
 /** What was stored, each field checked; the default for anything missing or wrong. */
 export function parsePadPrefs(raw: string | null): PadPrefs {
-  let o: Partial<PadPrefs> = {};
+  let o: Partial<PadPrefs> & { stick?: unknown } = {};
   try {
-    o = raw ? (JSON.parse(raw) as Partial<PadPrefs>) : {};
+    o = raw ? (JSON.parse(raw) as typeof o) : {};
   } catch {
     o = {};
   }
@@ -35,7 +35,8 @@ export function parsePadPrefs(raw: string | null): PadPrefs {
     return { dx: num(q.dx, -2000, 2000, 0), dy: num(q.dy, -2000, 2000, 0) };
   };
   return {
-    stick: off(o.stick),
+    // `stick` is where the D-pad's place was kept while it was a round stick.
+    dpad: off(o.dpad ?? o.stick),
     ab: off(o.ab),
     alpha: num(o.alpha, 0.2, 1, PAD_DEFAULT.alpha),
     hidden: o.hidden === true,
@@ -60,8 +61,8 @@ export function savePadPrefs(p: PadPrefs): void {
 
 /** The prefs on the page: the offsets and the fade as CSS variables, hidden as a class. */
 export function applyPadPrefs(root: HTMLElement, body: HTMLElement, p: PadPrefs): void {
-  root.style.setProperty('--stick-dx', `${p.stick.dx}px`);
-  root.style.setProperty('--stick-dy', `${p.stick.dy}px`);
+  root.style.setProperty('--dpad-dx', `${p.dpad.dx}px`);
+  root.style.setProperty('--dpad-dy', `${p.dpad.dy}px`);
   root.style.setProperty('--ab-dx', `${p.ab.dx}px`);
   root.style.setProperty('--ab-dy', `${p.ab.dy}px`);
   root.style.setProperty('--pad-alpha', String(p.alpha));
@@ -76,7 +77,7 @@ export function fadeStep(alpha: number, dir: 1 | -1): number {
 export interface PadEditorDeps {
   root: HTMLElement;
   body: HTMLElement;
-  stick: HTMLElement;
+  dpad: HTMLElement;
   ab: HTMLElement;
   bar: HTMLElement;
   /** CSS pixels per GBA pixel, for the bar's text. */
@@ -106,7 +107,7 @@ export class PadPrefsControl {
     if (this.editing) return;
     this.editing = true;
     this.deps.body.classList.add('pad-editing');
-    this.drag(this.deps.stick, 'stick');
+    this.drag(this.deps.dpad, 'dpad');
     this.drag(this.deps.ab, 'ab');
     this.drawBar();
     this.deps.bar.hidden = false;
@@ -131,7 +132,7 @@ export class PadPrefsControl {
 
   /** A drag moves the control rather than pressing it: captured before wireDpad and
    *  wireButton see the pointer. */
-  private drag(el: HTMLElement, which: 'stick' | 'ab'): void {
+  private drag(el: HTMLElement, which: 'dpad' | 'ab'): void {
     let start: { x: number; y: number; dx: number; dy: number; id: number } | null = null;
     const down = (ev: PointerEvent) => {
       ev.stopImmediatePropagation();

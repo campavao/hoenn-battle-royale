@@ -415,7 +415,7 @@ export interface SheetModel {
   onRemap(): void;
   onResetPad(): void;
   onForget(): void;
-  /** A phone's see-through stick and A/B (ui/padprefs.ts): MOVE PAD to drag and fade
+  /** A phone's see-through D-pad and A/B (ui/padprefs.ts): MOVE PAD to drag and fade
    *  them, HIDE PAD to walk by tapping alone. Absent where there is no touch pad. */
   pad?: { hidden: boolean; onMove(): void; onToggle(): void };
 }

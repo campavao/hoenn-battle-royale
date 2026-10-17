@@ -187,15 +187,19 @@
          field's scale, --s CSS pixels to a GBA pixel, set by phonehud from the pad's
          width. In a match on the page's upright layout, which a tablet keeps on its side too: a
          phone on its side (the short landscape below) and a computer keep the old row.
-         The stick and A/B go see-through, and can be moved, faded and hidden (--stick-*, --ab-*, --pad-alpha, body.pad-hidden). */
+         The D-pad and A/B go see-through, and can be moved, faded and hidden (--dpad-*, --ab-*, --pad-alpha, body.pad-hidden). */
       #hud, .dock { display: none; }
       .pad-edit[hidden] { display: none; }
       #hud canvas, .dock canvas, .pad-edit canvas { display: block; image-rendering: pixelated; }
       @media not all and (orientation: landscape) and (max-height: 520px) {
         body.in-match #hud { display: block; position: absolute; inset: 0; pointer-events: none; z-index: 1; }
         body.in-match #hud.off-field > * { visibility: hidden; }
-        .hud-sign { position: absolute; left: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 4px + env(safe-area-inset-top)); }
-        .hud-fog { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 4px + env(safe-area-inset-top)); }
+        /* At the top of the glass: the body's padding already clears the status bar
+           (Cam, 2026-10-17: the inset was counted twice). The sign goes a few seconds
+           after a new section, as Emerald's map popup does (ui/phonehud.ts SIGN_MS). */
+        .hud-sign { position: absolute; left: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 4px); transition: opacity 300ms, visibility 300ms; }
+        .hud-sign.gone { opacity: 0; visibility: hidden; }
+        .hud-fog { position: absolute; right: calc(var(--s, 1.5) * 4px); top: calc(var(--s, 1.5) * 4px); }
         body.in-match #pad { padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); row-gap: 0; }
         body.in-match #pad .sys { display: none; }
         body.in-match .dock {
@@ -227,21 +231,17 @@
           font: calc(var(--s, 1.5) * 14px) / 1 system-ui, sans-serif;
           cursor: pointer;
         }
+        /* The D-pad stays a cross (Cam, 2026-10-17: "back to the dpad, analog stick
+           doesn't work"), see-through like A/B. One outlined cross drawn as a picture,
+           not the two bars: see-through bars darken where they overlap. */
         body.in-match #pad .dpad-surface {
           margin: 0 0 12px 16px;
-          border-radius: 50%;
-          border: 2px solid rgba(255, 255, 255, 0.55);
-          background: rgba(74, 74, 106, 0.35);
-          transform: translate(var(--stick-dx, 0px), var(--stick-dy, 0px));
+          transform: translate(var(--dpad-dx, 0px), var(--dpad-dy, 0px));
           opacity: var(--pad-alpha, 0.6);
+          background: center / 100% 100% no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 132 132'%3E%3Cpath d='M45 1H87a8 8 0 0 1 8 8V37H123a8 8 0 0 1 8 8V87a8 8 0 0 1 -8 8H95V123a8 8 0 0 1 -8 8H45a8 8 0 0 1 -8 -8V95H9a8 8 0 0 1 -8 -8V45a8 8 0 0 1 8 -8H37V9a8 8 0 0 1 8 -8z' fill='rgba(74,74,106,0.35)' stroke='rgba(255,255,255,0.55)' stroke-width='2'/%3E%3C/svg%3E");
         }
-        body.in-match #pad .dpad-surface::after { display: none; }
-        body.in-match #pad .dpad-surface::before {
-          left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px;
-          border-radius: 50%; background: rgba(255, 255, 255, 0.45); border: 2px solid rgba(255, 255, 255, 0.7);
-          transform: translate(var(--nub-x, 0px), var(--nub-y, 0px)); transition: transform 60ms;
-        }
-        body.in-match #pad .dpad-surface.active::before { background: rgba(255, 255, 255, 0.75); }
+        body.in-match #pad .dpad-surface::before, body.in-match #pad .dpad-surface::after { display: none; }
+        body.in-match #pad .dpad-surface.active { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 132 132'%3E%3Cpath d='M45 1H87a8 8 0 0 1 8 8V37H123a8 8 0 0 1 8 8V87a8 8 0 0 1 -8 8H95V123a8 8 0 0 1 -8 8H45a8 8 0 0 1 -8 -8V95H9a8 8 0 0 1 -8 -8V45a8 8 0 0 1 8 -8H37V9a8 8 0 0 1 8 -8z' fill='rgba(255,255,255,0.6)' stroke='rgba(255,255,255,0.55)' stroke-width='2'/%3E%3C/svg%3E"); }
         body.in-match #pad .ab {
           margin: 0 16px 12px 0;
           transform: translate(var(--ab-dx, 0px), var(--ab-dy, 0px));
@@ -266,9 +266,9 @@
           image-rendering: pixelated;
         }
         .pad-edit-row { display: flex; align-items: center; gap: calc(var(--s, 1.5) * 6px); }
-        /* The battle menu: under the picture, in place of the stick, A/B and the dock,
+        /* The battle menu: under the picture, in place of the D-pad, A/B and the dock,
            which keep their room (visibility, not display) so the picture stays put.
-           The stick and A/B stay down between choices too, while the battle runs by
+           The D-pad and A/B stay down between choices too, while the battle runs by
            itself (battle-no-pad, ui/battlemenu.ts battleWantsNoPad); the room menu,
            in the dock, comes back then. */
         body.in-match .battle-menu:not([hidden]) {
@@ -459,7 +459,7 @@
           <div id="dock" class="dock">
             <button id="hud-menu" class="hud-menu" type="button" aria-label="Menu" aria-expanded="false" aria-controls="stage">&#9776;</button>
           </div>
-          <!-- Moving the stick and A/B (the sheet's MOVE PAD): drag them, fade them, DONE. -->
+          <!-- Moving the D-pad and A/B (the sheet's MOVE PAD): drag them, fade them, DONE. -->
           <div id="pad-edit" class="pad-edit" hidden></div>
         </div>
       </section>

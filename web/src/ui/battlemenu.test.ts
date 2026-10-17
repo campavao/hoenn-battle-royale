@@ -140,7 +140,7 @@ describe('the action windows', () => {
   });
 });
 
-describe('the stick and A/B in a battle', () => {
+describe('the D-pad and A/B in a battle', () => {
   const at: Record<string, number> = { gMain: 0x1000, BattleMainCB2: 0x08000201, gBattlescriptCurrInstr: 0x2000, gBattleTypeFlags: 0x3000 };
   const YESNOBOX = 0x67;
   const ATTACKCANCELER = 0x00;

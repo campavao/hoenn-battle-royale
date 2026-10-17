@@ -313,7 +313,7 @@ function setInMatch(on: boolean): void {
   }
 }
 
-/** A phone's movable, fadable, hideable stick and A/B (wirePhoneHud). */
+/** A phone's movable, fadable, hideable D-pad and A/B (wirePhoneHud). */
 let padPrefs: PadPrefsControl | null = null;
 
 /** What the sheet's settings say and do: wireSettings, wireRemap and wireGamepad each
@@ -1159,19 +1159,12 @@ function wireDpad(el: HTMLElement, emu: Emulator): void {
     }
     active = next;
     el.classList.toggle('active', next.size > 0);
-    // The phone's round stick shows its nub under the thumb, a little way out at most.
-    const m = Math.hypot(dx, dy);
-    const k = m > 0.6 ? 0.6 / m : 1;
-    el.style.setProperty('--nub-x', `${(dx * k * rect.width) / 2}px`);
-    el.style.setProperty('--nub-y', `${(dy * k * rect.height) / 2}px`);
   };
 
   const clear = () => {
     for (const key of active) emu.release(key);
     active = new Set();
     el.classList.remove('active');
-    el.style.removeProperty('--nub-x');
-    el.style.removeProperty('--nub-y');
   };
 
   el.addEventListener('pointerdown', (e) => {
@@ -1563,6 +1556,9 @@ let askedBand: Band | null = null;
 /** The picture the ROM declares (gBrFieldView, field.ts romBand), read off the image
  *  booted: every ask is inside it. */
 let romPicture: FieldPicture | null = null;
+/** The rows the ROM draws above the LCD: how far a phone's picture may come down to its
+ *  pad (field.ts layoutField). */
+const liveAbove = (): number | undefined => romPicture?.band.top;
 
 /** The layout the match gives the picture, measured now, whatever screen is up: the
  *  field only opens past the picture in a match (body.in-match), with the sheet docked
@@ -1574,7 +1570,7 @@ function matchLayout(): FieldLayout {
   body.classList.add('in-match');
   body.classList.toggle('docked', desktop());
   try {
-    return measureLayout($('#screen-wrap') as HTMLElement, $('#pad') as HTMLElement);
+    return measureLayout($('#screen-wrap') as HTMLElement, $('#pad') as HTMLElement, liveAbove());
   } finally {
     body.classList.toggle('in-match', was.inMatch);
     body.classList.toggle('docked', was.docked);
@@ -3704,7 +3700,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
   // Shown only on a desktop in a match (index.html's #keys), and only past the picture.
   const legend = new KeyLegend($('#keys') as HTMLElement, emu, KEYBOARD_MAP);
   const wrap = $('#screen-wrap') as HTMLElement;
-  placeKeys = () => legend.place(measureLayout(wrap, $('#pad') as HTMLElement), wrap.clientWidth, wrap.clientHeight);
+  placeKeys = () => legend.place(measureLayout(wrap, $('#pad') as HTMLElement, liveAbove()), wrap.clientWidth, wrap.clientHeight);
   new ResizeObserver(placeKeys).observe(wrap);
   wireGamepad(emu);
   wireRemap();
@@ -3727,6 +3723,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     field: $('#field') as HTMLCanvasElement,
     overlay: $('#overlay') as HTMLCanvasElement,
     pad: $('#pad') as HTMLElement,
+    liveAbove,
     rom,
     seeThrough,
     keyLayer: $('#key-layer') as HTMLCanvasElement,
@@ -3793,7 +3790,7 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     hud.setScale(s);
     battle.setScale(s);
     // Right under the picture, where field.ts put it.
-    const lay = measureLayout(wrap, pad);
+    const lay = measureLayout(wrap, pad, liveAbove());
     menuRoot.style.top = `${Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s)}px`;
   };
   new ResizeObserver(resize).observe(pad);
@@ -3802,7 +3799,7 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
   padPrefs = new PadPrefsControl({
     root,
     body: document.body,
-    stick: $('#dpad-surface') as HTMLElement,
+    dpad: $('#dpad-surface') as HTMLElement,
     ab: document.querySelector('#pad .ab') as HTMLElement,
     bar: $('#pad-edit') as HTMLElement,
     scale,
@@ -3817,6 +3814,11 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
   const upright = typeof matchMedia === 'function' ? matchMedia('not all and (orientation: landscape) and (max-height: 520px)') : null;
   const computer = typeof matchMedia === 'function' ? matchMedia(DESKTOP) : null;
   let padOff = false;
+  let hudOn = false;
+  const hudOff = () => {
+    if (hudOn) hud.hide();
+    hudOn = false;
+  };
   emu.onFrame(() => {
     // On the glass: a match, upright, on a touch screen (index.html shows #hud then).
     const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
@@ -3824,9 +3826,15 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables) : null);
     const noPad = shown && battleWantsNoPad(emu, (n) => symbols.get(n), tables);
     if (noPad !== padOff) document.body.classList.toggle('battle-no-pad', (padOff = noPad));
-    if (!shown) return;
+    if (!shown) {
+      hudOff();
+      return;
+    }
     const view = readHudView(emu, (n) => symbols.get(n), world);
-    if (view) hud.update(view);
+    if (view) {
+      hudOn = true;
+      hud.update(view);
+    } else hudOff();
   });
 }
 

@@ -1,8 +1,8 @@
 // The phone's battle menu (ui/battlemenu.ts): under the picture, four Emerald windows in
-// place of the stick, A/B and the dock. FIGHT shows the moves with their type, PP and how
+// place of the D-pad, A/B and the dock. FIGHT shows the moves with their type, PP and how
 // they land; a hold opens a move's details; a tap attacks, through the ROM's own menus
 // (FIGHT, then the move). RUN greys out in a trainer fight without a POKe DOLL. The
-// game's own little menu stays off the picture (gBrHud.noBattleBox), and the stick, A/B
+// game's own little menu stays off the picture (gBrHud.noBattleBox), and the D-pad, A/B
 // and the dock stay down while the battle plays out between choices.
 //
 // Solo on a phone: a short Safari opening, the drop onto Route 102, and a wild battle off
@@ -120,7 +120,7 @@ test("a phone's battle menu: under the picture, the moves, a hold for details, a
         expect(overlap, `cells ${i} and ${j}`).toBe(false);
       }
     }
-    // The stick, A/B and the dock make way.
+    // The D-pad, A/B and the dock make way.
     const padDown = async (dock = true) => {
       for (const sel of dock ? ['#dpad-surface', '#pad .ab', '#dock'] : ['#dpad-surface', '#pad .ab']) {
         expect(await page.locator(sel).evaluate((el) => getComputedStyle(el).visibility), sel).toBe('hidden');
@@ -202,7 +202,7 @@ test("a phone's battle menu: under the picture, the moves, a hold for details, a
     await page.locator('.bm-cell[data-slot="0"]').tap();
     await expect(menu).toBeHidden();
     await expect.poll(() => read(page, sym.gCurrentMove, 16), { timeout: 10_000 }).toBe(MOVE_POUND);
-    // While it plays out, nothing for the stick or A/B to do: they stay down (Cam,
+    // While it plays out, nothing for the D-pad or A/B to do: they stay down (Cam,
     // 2026-10-15). In a battle the dock's windows go; the room menu stays.
     await padDown(false);
     expect(await page.locator('#hud-party').evaluate((el) => getComputedStyle(el).visibility)).toBe('hidden');

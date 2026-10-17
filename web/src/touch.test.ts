@@ -545,7 +545,7 @@ describe('PARTY and MAP press START and walk the start menu', () => {
     expect(emu.written.get(0x9000 + 0x496)).toBe(7);
   });
 
-  it('BIKE with the stick held: SELECT waits for the stick, and the item still comes back', () => {
+  it('BIKE with the D-pad held: SELECT waits for the D-pad, and the item still comes back', () => {
     const emu = new StartEmu();
     emu.registered = 7;
     const t = startLayer(emu);
@@ -564,7 +564,7 @@ describe('PARTY and MAP press START and walk the start menu', () => {
     expect(emu.written.get(0x9000 + 0x496)).toBe(7);
   });
 
-  it('PARTY with the stick held too long: dropped, nothing pressed', () => {
+  it('PARTY with the D-pad held too long: dropped, nothing pressed', () => {
     const emu = new StartEmu();
     const t = startLayer(emu);
     emu.press('up');
@@ -576,7 +576,7 @@ describe('PARTY and MAP press START and walk the start menu', () => {
     expect(emu.chosen).toBeNull();
   });
 
-  it('PARTY with the stick held a moment: START once it is let go', () => {
+  it('PARTY with the D-pad held a moment: START once it is let go', () => {
     const emu = new StartEmu();
     emu.cursor = 2;
     const t = startLayer(emu);

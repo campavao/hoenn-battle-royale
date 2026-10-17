@@ -9,8 +9,13 @@ describe("a phone's pad: where it sits, how see-through, whether it is there", (
   });
 
   it('keeps what was stored, each field checked on its own', () => {
-    const p = parsePadPrefs(JSON.stringify({ stick: { dx: 12, dy: -40 }, ab: { dx: 'x' }, alpha: 5, hidden: true }));
-    expect(p).toEqual({ stick: { dx: 12, dy: -40 }, ab: { dx: 0, dy: 0 }, alpha: 1, hidden: true });
+    const p = parsePadPrefs(JSON.stringify({ dpad: { dx: 12, dy: -40 }, ab: { dx: 'x' }, alpha: 5, hidden: true }));
+    expect(p).toEqual({ dpad: { dx: 12, dy: -40 }, ab: { dx: 0, dy: 0 }, alpha: 1, hidden: true });
+  });
+
+  it("keeps where the round stick was put for the D-pad that replaced it", () => {
+    expect(parsePadPrefs(JSON.stringify({ stick: { dx: 30, dy: -8 } })).dpad).toEqual({ dx: 30, dy: -8 });
+    expect(parsePadPrefs(JSON.stringify({ dpad: { dx: 1, dy: 2 }, stick: { dx: 30, dy: -8 } })).dpad).toEqual({ dx: 1, dy: 2 });
   });
 
   it('fades in fifths, never past see-through to gone', () => {

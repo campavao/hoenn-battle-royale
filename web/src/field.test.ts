@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, HEAD_ROOM, ringStaleColumns, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach } from './field';
+import { FIELD_VIEW_SIZE, HEAD_ROOM, ringStaleColumns, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach } from './field';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -645,12 +645,18 @@ describe('the picture in the box', () => {
     expect(lay.lcdRow, 'centred').toBe(Math.round((844 / 1.625 - 160) / 2));
   });
 
-  it('a floating pad lifts the picture into the space above it', () => {
+  it('a floating pad: the picture sits just above it, the map over the top', () => {
     const flat = layoutField(390, 844, 0);
-    const lifted = layoutField(390, 844, 220);
+    const lifted = layoutField(390, 844, 300);
     expect(lifted.scale).toBe(flat.scale);
-    expect(lifted.lcdRow).toBeLessThan(flat.lcdRow);
-    expect(lifted.lcdRow).toBe(Math.round(((844 - 220) / 1.625 - 160) / 2));
+    expect(lifted.lcdRow).toBe(Math.floor((844 - 300) / 1.625 - 160) - PAD_GAP);
+    const bottom = (lifted.lcdRow + 160) * lifted.scale;
+    expect(bottom, 'clear of the pad').toBeLessThanOrEqual(844 - 300);
+    expect(bottom, 'and close to it').toBeGreaterThan(844 - 300 - 8 * lifted.scale);
+    // ...but no higher above it than the ROM draws: 170 rows wanted, 104 live, so 104.
+    expect(layoutField(390, 844, 300, 1, 390, 104).lcdRow).toBe(104);
+    // ...and a glass whose centre is already past that keeps the centre.
+    expect(layoutField(390, 844, 200, 1, 390, 104).lcdRow).toBe(Math.round(((844 - 200) / 1.625 - 160) / 2));
     expect(lifted.rows, 'the map still runs under the pad').toBe(flat.rows);
   });
 
@@ -698,10 +704,11 @@ describe('the picture in the box', () => {
 
   // Why the ROM's view is 104 above and 232 below (include/br/br_field.h): what a portrait
   // phone shows past the picture with the pad floating over the bottom (~200 CSS px).
+  // The picture comes down to the pad only as far as those 104 rows above reach.
   describe("the ROM's view covers a portrait phone (POK-329)", () => {
     const VIEW = { top: 104, bottom: 232 };
     const needs = (w: number, h: number, pad: number) => {
-      const lay = layoutField(w, h, pad);
+      const lay = layoutField(w, h, pad, 1, w, VIEW.top);
       return { top: lay.lcdRow, bottom: lay.rows - lay.lcdRow - 160, lay };
     };
     it("the installed app (390x763) and Safari (390x664): every row past the picture is the core's", () => {
@@ -710,8 +717,9 @@ describe('the picture in the box', () => {
         expect(n.top, `${w}x${h} above`).toBeLessThanOrEqual(VIEW.top);
         expect(n.bottom, `${w}x${h} below`).toBeLessThanOrEqual(VIEW.bottom);
       }
-      expect(needs(390, 763, 200)).toMatchObject({ top: 93, bottom: 217 });
-      expect(needs(390, 664, 200)).toMatchObject({ top: 63, bottom: 186 });
+      // Down from centred (93 and 63) towards the pad, to the 104 the ROM draws above.
+      expect(needs(390, 763, 200)).toMatchObject({ top: 104, bottom: 206 });
+      expect(needs(390, 664, 200)).toMatchObject({ top: 104, bottom: 145 });
     });
     it("Playwright's 390x844: the LCD at canvas row 118, 14 rows short above and 10 below, under the status bar and the home bar", () => {
       const n = needs(390, 844, 200);
@@ -734,9 +742,9 @@ describe('the picture in the box', () => {
       expect(rows(askBand(layoutField(1440, 800, 0), ROM))).toEqual({ top: 104, bottom: 120 });
     });
     it("a portrait phone with the pad over the bottom: all the ROM has, and Safari's shorter glass less", () => {
-      expect(askBand(layoutField(390, 844, 200), ROM), 'short 14 and 10: capped at the ROM').toEqual(ROM.band);
-      expect(rows(askBand(layoutField(390, 763, 200), ROM)), 'the installed app, 93 and 217, in eights').toEqual({ top: 96, bottom: 224 });
-      expect(rows(askBand(layoutField(390, 664, 200), ROM)), 'Safari, 63 and 186').toEqual({ top: 64, bottom: 192 });
+      expect(askBand(layoutField(390, 844, 200, 1, 390, ROM.band.top), ROM), 'short 14 and 10: capped at the ROM').toEqual(ROM.band);
+      expect(rows(askBand(layoutField(390, 763, 200, 1, 390, ROM.band.top), ROM)), 'the installed app, 104 and 206, in eights').toEqual({ top: 104, bottom: 208 });
+      expect(rows(askBand(layoutField(390, 664, 200, 1, 390, ROM.band.top), ROM)), 'Safari, 104 and 145').toEqual({ top: 104, bottom: 152 });
     });
     it('a half-screen desktop window beside its sheet: what it shows, in eights', () => {
       // 683x768 less the 240 dock: 443x768 at 1.846, 417 rows, the LCD at 128 and 129 under it.

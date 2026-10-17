@@ -85,7 +85,10 @@ test('a phone gets the screen and both thumbs, either way up', async ({ browser 
     expect(bandScale, 'at the scale the width gives').toBeCloseTo(390 / 240, 3);
     expect(canvas.height, 'drawn 496 rows tall').toBeCloseTo(496 * bandScale, 0);
     const pad = await box('#pad');
-    const lcdRow = Math.round(((screen.height - pad.height) / bandScale - 160) / 2);
+    // Centred over the pad, or down towards it (field.ts PAD_GAP, 4 rows) as far as the
+    // rows the ROM draws above the LCD reach.
+    const free = (screen.height - pad.height) / bandScale - 160;
+    const lcdRow = Math.max(Math.round(free / 2), Math.min(Math.floor(free) - 4, romView().viewport.top));
     expect((picture.y - screen.y) / bandScale, `the LCD at the layout's row ${lcdRow}`).toBeCloseTo(lcdRow, 0);
     expect((canvas.y - screen.y) / bandScale, "the picture's top 104 rows above it").toBeCloseTo(lcdRow - 104, 0);
     expect(field.width).toBeGreaterThanOrEqual(screen.width - 2);
