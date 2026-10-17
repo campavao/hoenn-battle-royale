@@ -219,9 +219,38 @@ export interface RoomModel {
   onCloseCard(): void;
 }
 
+/** What the room screen puts under its seats: the note, the host's options, and the
+ *  START/LEAVE row. Mirrors paintNote, paintOptions and paintButtons' heights; the
+ *  POK-375 test in ui.test.ts paints the room and fails if they drift apart. */
+function roomBelow(m: RoomModel): number {
+  const options = m.options && !m.started ? Math.ceil(m.options.length / OPTION_COLS) * 20 + 16 + 4 : 0;
+  return 2 + ROW_H + 2 + options + (m.started ? 0 : 28);
+}
+
+/** Rows of seats for the room: one per four seats MAX (or the people in it) asks for,
+ *  four at most, and no more than leaves the rest whole on an `h` tall screen. */
+export function roomSeatRows(m: RoomModel, h: number, y: number): number {
+  const wanted = Math.ceil(Math.max(Math.min(m.max, 4 * SEAT_COLS), m.seats.length) / SEAT_COLS);
+  const room = Math.floor((h - y - 16 - roomBelow(m)) / SEAT_H);
+  return Math.max(1, Math.min(4, wanted, room));
+}
+
+/** The people on one page of the room's seats: all of them when they fit, otherwise
+ *  `cells - 1` at a time in the room's own order, the last cell a +N that turns to the
+ *  next page (wrapping round), so the host can still reach anybody's card and KICK. */
+export function roomPage(seats: readonly RoomSeat[], cells: number, page: number): { shown: readonly RoomSeat[]; more: number } {
+  if (seats.length <= cells) return { shown: seats, more: 0 };
+  const per = Math.max(1, cells - 1);
+  const start = (page % Math.ceil(seats.length / per)) * per;
+  const shown = seats.slice(start, start + per);
+  return { shown, more: seats.length - shown.length };
+}
+
 /** The room, Kanto's lobby: code on top, the seats, the note, the host's options,
  *  START (the host's) and LEAVE. A trainer's card opens over the seats. */
 export function roomScreen(model: () => RoomModel): DrawnScreen {
+  /** Which page of the seats is showing, when the room has more people than cells. */
+  let page = 0;
   return {
     back() {
       const m = model();
@@ -243,17 +272,22 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.status, id: 'room-code', cls: 'room-status', cursor: null });
       y += 20;
 
-      // Four rows at most: MAX reaches 30 now (POK-330 #29), and eight rows of seats
-      // push START over the options on a phone. Every human still gets a cell -- the
-      // relay seats sixteen -- and the note says how many bots the rest are.
-      const lay = layoutSeats(y, Math.max(Math.min(m.max, 4 * SEAT_COLS), m.seats.length));
+      // As many rows of seats as MAX wants and the screen has room for under them: MAX
+      // reaches 30 (POK-330 #29), and a fourth row put START on the SAFARI row of a
+      // 720 px phone (POK-375). Empty and bot cells go first; the note says how many
+      // bots the rest are, and a room with more people than cells says +N.
+      const lay = layoutSeats(y, roomSeatRows(m, h, y) * SEAT_COLS);
       c.drawFrame(lay.frame);
-      const taken = m.seats.length;
+      const { shown: seated, more } = roomPage(m.seats, lay.cells.length, page);
+      const taken = seated.length;
       // The bots to come, in the clothes they will be dealt (bots/roster.ts botSkin).
       const botsToCome = botSeats(m.fill, m.seats.map((who) => who.seat));
       lay.cells.forEach((cell, i) => {
-        const who = m.seats[i];
-        if (who) {
+        const who = seated[i];
+        if (more > 0 && i === taken) {
+          c.drawTextCentred(`+${more}`, cell.x + cell.w / 2, cell.y + 16, TEXT_GRAY);
+          widgets.push({ rect: cell, text: `${more} more`, cls: 'room-more', onPress: () => void page++, cursor: { x: cell.x + 2, y: cell.y + 10 } });
+        } else if (who) {
           const alpha = who.spectating ? 0.5 : 1;
           const name = who.alive ? who.name : 'OUT';
           paintPerson(c, cell, who.skin, name, alpha, who.isMe ? TEXT_BLUE : TEXT_DARK);
@@ -265,7 +299,7 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
             onPress: () => m.onSeat(who.seat),
             cursor: { x: cell.x + 2, y: cell.y + 10 },
           });
-        } else if (i - taken < m.fill && !m.started) {
+        } else if (more === 0 && i - taken < m.fill && !m.started) {
           paintPerson(c, cell, botSkin(botsToCome[i - taken] ?? 0), 'BOT', 0.45);
         } else {
           paintPerson(c, cell, i % 2, '- - -', 0.25);

@@ -227,6 +227,34 @@ test('the host gets the room controls and START, and the guest does not', async 
   }
 });
 
+// POK-375. MAX 13 and up drew a fourth row of seats, and on a 720 px phone START and
+// LEAVE sat on the SAFARI row: the room now seats as many rows as leave its controls whole.
+test('START and LEAVE stay off the host options at MAX 30', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const rom = romHashParam();
+  const ctx = await browser.newContext({ viewport: { width: 800, height: 720 } });
+  try {
+    const host = await ctx.newPage();
+    await host.goto(`/#host&noauto&fast&testmon&rom=${rom}`);
+    await expect(host.locator('#room-code')).toHaveText(/Room [A-Z0-9]{6}/, { timeout: 60_000 });
+    await expect(host.locator('#room-controls')).toBeVisible({ timeout: 30_000 });
+    for (let i = 0; i < 10 && !/MAX 30/.test((await host.locator('#room-max').textContent()) ?? ''); i++) {
+      const was = await host.locator('#room-max').textContent();
+      await host.locator('#room-max').click();
+      await expect(host.locator('#room-max')).not.toHaveText(was ?? '', { timeout: 15_000 });
+    }
+    await expect(host.locator('#room-max')).toContainText('MAX 30');
+    const safari = (await host.locator('#room-safari').boundingBox())!;
+    for (const id of ['#room-start', '#room-leave']) {
+      const button = (await host.locator(id).boundingBox())!;
+      expect(button.y, `${id} below SAFARI`).toBeGreaterThanOrEqual(safari.y + safari.height);
+    }
+    await host.screenshot({ path: path.join(OUT_DIR, 'room-max30.png') });
+  } finally {
+    await ctx.close();
+  }
+});
+
 // POK-331 #8. The room said FILL OFF, drew no bot seats and promised two trainers, and
 // START dealt the bots anyway: the deal read MAX and never the control.
 test('FILL OFF deals a match of the people in the room and no bots', async ({ browser }) => {
