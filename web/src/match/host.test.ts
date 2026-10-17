@@ -741,6 +741,17 @@ describe('solo link', () => {
     solo.host.dispose();
   });
 
+  it("says its own bots' outs to the page's spectate books, which never hear them back", () => {
+    const solo = alone(2);
+    const noteOut = vi.fn();
+    solo.link.noteOut = noteOut;
+    solo.host.begin();
+    const [bot] = solo.host.bots.seats;
+    solo.beat(bot);
+    expect(noteOut.mock.calls).toEqual([[bot]]);
+    solo.host.dispose();
+  });
+
   it('gives the last seat standing the win, and the books decide it once', () => {
     const solo = alone(1);
     solo.host.begin();

@@ -300,7 +300,8 @@ export class Spectate {
    *  played to its last turn and then waited on the next for good (2026-10-05 play-test).
    *  Only that hand-over is dropped: a watch already on the fight keeps it, because the
    *  loser's OUT and the winner's last TURN come from two sockets in either order, and
-   *  clearing the watch here dropped the turns still in flight. */
+   *  clearing the watch here dropped the turns still in flight. Every `out` comes here,
+   *  the host's own included: it never hears those over the relay (HostLink.noteOut). */
   noteOut(seat: number): void {
     for (const battle of [...this.live.keys()]) {
       const [lo, hi] = battleSeats(battle);
