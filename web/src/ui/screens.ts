@@ -5,7 +5,7 @@
 // Each screen is a function of a model the page keeps: paint reads the model, draws,
 // and hands the stage what it drew. The layouts (where a seat is, where a row is) are
 // plain functions so ui.test.ts can pin them without a canvas.
-import { SKINS, SKIN_UNLOCK_WINS, WARDROBE, skinUnlocked } from '../match/career';
+import { CARD_BADGES, SKINS, SKIN_UNLOCK_WINS, WARDROBE, cardBadges, cardId, cardStars, ordinal, skinUnlocked } from '../match/career';
 import { botSeats, botSkin } from '../bots/roster';
 import {
   type EmeraldCanvas,
@@ -663,6 +663,132 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
       }
       if (m.buttons?.length) widgets.push(...paintButtons(c, Math.min(y, h - 28), m.buttons));
       return { widgets, containers };
+    },
+  };
+}
+
+// ---- the trainer card ---------------------------------------------------------------------
+
+/** Emerald's TRAINER CARD, as src/trainer_card.c draws its front: 240x160, with every
+ *  place below in its pixels (the text window's own x/y plus its one-tile margin). */
+export const CARD_W = 240;
+export const CARD_H = 160;
+const CARD_VALUE_RIGHT = 136; // the MONEY / POKéDEX / TIME values' right edge
+const CARD_FIELDS_Y = [65, 81, 97];
+const CARD_PIC = { x: 160, y: 40, w: 64, h: 64 };
+
+export interface CardFace {
+  name: string;
+  skin: number;
+  wins: number;
+  played: number;
+  /** The best placing, 1 = first; undefined until a match has been finished. */
+  best?: number;
+}
+
+/** The card's three fields where Emerald's MONEY, POKéDEX and TIME go. */
+export function cardFields(face: CardFace): CardLine[] {
+  return [
+    { label: 'WINS', value: String(face.wins) },
+    { label: 'PLAYED', value: String(face.played) },
+    { label: 'BEST', value: face.best === undefined ? '---' : ordinal(face.best) },
+  ];
+}
+
+/** Which of trainer-card.png's rows a card wears: its star count's colour, a girl's
+ *  background for an odd skin (career.ts: even is male, odd is female). */
+export function cardRow(face: CardFace): number {
+  return cardStars(face.wins) * 2 + (face.skin % 2);
+}
+
+/** The card itself at `y`: the art, the stars and badges the wins have earned, the
+ *  portrait, the name and the three fields. NAME and the portrait are pressable -- your
+ *  name, and the wardrobe -- in `parent`, before anything else in it. */
+export function paintTrainerCard(
+  c: EmeraldCanvas,
+  y: number,
+  face: CardFace,
+  parent: string,
+  on: { onName: () => void; onSkin: () => void },
+): Widget[] {
+  // Nothing on the card before the card: text over the bare page, and the art popping in
+  // under it, read as broken. The canvas paints again when it lands. If it never does, a
+  // plain window takes its place: NAME and the portrait are the only ways to your name
+  // and the wardrobe from here, so they are pressable either way (#48's review).
+  const art = c.drawUiPicture('trainer-card.png', 0, cardRow(face) * CARD_H, CARD_W, CARD_H, 0, y);
+  if (art === 'missing') c.drawFrame({ x: 0, y, w: CARD_W, h: CARD_H });
+  const fields = cardFields(face);
+  const badges = cardBadges(face.wins);
+  if (art !== 'loading') {
+    // DrawStarsAndBadgesOnCard: the stars from tile (15, 7), the badges from (4, 15) three
+    // tiles apart. card-badges.png is the eight badges and then the star.
+    const stars = cardStars(face.wins);
+    for (let i = 0; i < stars; i++) c.drawUiPicture('card-badges.png', 128, 0, 8, 8, 120 + i * 8, y + 56);
+    for (let i = 0; i < badges; i++) c.drawUiPicture('card-badges.png', i * 16, 0, 16, 16, 32 + i * 24, y + 120);
+    c.drawUiPicture('trainer-pics.png', face.skin * CARD_PIC.w, 0, CARD_PIC.w, CARD_PIC.h, CARD_PIC.x, y + CARD_PIC.y);
+
+    const id = `IDNo.${cardId(face.name)}`;
+    c.drawText(id, 128 + Math.floor((96 - measure(id)) / 2), y + 17, TEXT_DARK);
+    c.drawText(`NAME: ${face.name}`, 24, y + 41, TEXT_DARK);
+    fields.forEach((f, i) => {
+      c.drawText(f.label, 24, y + CARD_FIELDS_Y[i], TEXT_DARK);
+      c.drawText(f.value, CARD_VALUE_RIGHT - measure(f.value), y + CARD_FIELDS_Y[i], TEXT_DARK);
+    });
+  }
+
+  const stats = `${fields.map((f) => `${f.label} ${f.value}`).join(' ')} BADGES ${badges}/${CARD_BADGES}`;
+  return [
+    {
+      rect: { x: 16, y: y + 40, w: 120, h: ROW_H },
+      text: `${face.name} your name`,
+      id: 'trainer-name',
+      parent,
+      onPress: on.onName,
+      // Left of the card's own row marker, which the cursor drawn over it turned into a box.
+      cursor: { x: 12, y: y + 43 },
+    },
+    {
+      rect: { x: CARD_PIC.x - 8, y: y + CARD_PIC.y, w: CARD_PIC.w + 16, h: CARD_PIC.h },
+      text: `${SKINS[face.skin] ?? ''} your sprite`,
+      id: 'trainer-skin',
+      parent,
+      onPress: on.onSkin,
+      cursor: { x: CARD_PIC.x - 8, y: y + CARD_PIC.y + 28 },
+    },
+    { rect: { x: 16, y: y + 64, w: 120, h: 3 * ROW_H }, text: stats, id: 'trainer-record', cursor: null },
+  ];
+}
+
+export interface TrainerModel {
+  face: CardFace;
+  /** The rows under the card: your lines and the settings. */
+  rows: RowSpec[];
+  note: string;
+  onName(): void;
+  onSkin(): void;
+  onBack(): void;
+}
+
+/** TRAINER (POK-335): the card on top where the title would be -- it says TRAINER CARD
+ *  itself -- the rows under it, the note, BACK. The card and the rows share
+ *  #trainer-rows, the card's two first. */
+export function trainerScreen(model: () => TrainerModel): DrawnScreen {
+  return {
+    back() {
+      model().onBack();
+    },
+    paint(c, h): Painted {
+      const m = model();
+      const widgets = paintTrainerCard(c, 0, m.face, 'trainer-rows', { onName: m.onName, onSkin: m.onSkin });
+      let y = CARD_H + 2;
+      const list = paintRows(c, y, m.rows, 'trainer-rows');
+      widgets.push(...list.widgets);
+      y = list.bottom;
+      const noteRect = paintNote(c, m.note, y);
+      widgets.push({ rect: noteRect, text: m.note, id: 'trainer-note', cursor: null });
+      y += ROW_H;
+      widgets.push(...paintButtons(c, Math.min(y, h - 28), [{ label: 'BACK', id: 'trainer-back', onPress: m.onBack }]));
+      return { widgets, containers: [{ id: 'trainer-rows', tag: 'ul', cls: 'lobby-rows' }] };
     },
   };
 }

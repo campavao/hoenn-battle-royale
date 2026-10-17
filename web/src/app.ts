@@ -62,6 +62,7 @@ import {
   type ButtonSpec,
   roomScreen,
   sheetScreen,
+  trainerScreen,
   wardrobeScreen,
   linePickerScreen,
   type RoomModel,
@@ -3549,22 +3550,27 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       noteId: 'lobby-note',
       trainer: { name: careerName(), skin: careerSkin(), record: record(), onPress: () => stage.push(trainer) },
     }));
-    const trainer = menuScreen(() => ({
-      title: 'TRAINER',
-      rows: profileRows({
-        name: careerName(),
-        skin: SKINS[careerSkin()],
-        lines: careerVoiceLines(),
-        statsOn: !loadStats().off,
-        seeThrough: seeThrough(),
-        record: record(),
-      }).map(row),
-      rowsId: 'trainer-rows',
-      note: trainerNote,
-      noteId: 'trainer-note',
-      buttons: [{ label: 'BACK', id: 'trainer-back', onPress: () => stage.pop() }],
-      onBack: () => stage.pop(),
-    }));
+    // The TRAINER CARD (POK-335): name, portrait and record on Emerald's own card, your
+    // lines and the settings in the rows under it.
+    const trainer = trainerScreen(() => {
+      const career = loadCareer();
+      return {
+        face: { name: careerName(), skin: careerSkin(), wins: career.wins, played: career.matches, best: career.best },
+        rows: profileRows({
+          name: careerName(),
+          skin: SKINS[careerSkin()],
+          lines: careerVoiceLines(),
+          statsOn: !loadStats().off,
+          seeThrough: seeThrough(),
+        })
+          .filter((r) => r.action.kind !== 'name' && r.action.kind !== 'skin')
+          .map(row),
+        note: trainerNote,
+        onName: () => press({ kind: 'name' }),
+        onSkin: () => press({ kind: 'skin' }),
+        onBack: () => stage.pop(),
+      };
+    });
     /** MY CAREER: out to a file, or back in from one -- a question in the frame, where
      *  the page used to ask with confirm() (POK-320). */
     const careerAsk = noticeScreen(() => ({

@@ -9,8 +9,24 @@ export interface Drawn {
   color?: TextColor;
 }
 
-export function fakeCanvas(): { canvas: EmeraldCanvas; texts: Drawn[]; frames: Rect[]; fills: { r: Rect; color: string; alpha: number }[] } {
+export interface DrawnPicture {
+  name: string;
+  sx: number;
+  sy: number;
+  x: number;
+  y: number;
+}
+
+/** `missing`: pictures that failed to load, as a 404 would leave them. */
+export function fakeCanvas(missing: ReadonlySet<string> = new Set()): {
+  canvas: EmeraldCanvas;
+  texts: Drawn[];
+  frames: Rect[];
+  fills: { r: Rect; color: string; alpha: number }[];
+  pictures: DrawnPicture[];
+} {
   const texts: Drawn[] = [];
+  const pictures: DrawnPicture[] = [];
   const frames: Rect[] = [];
   const fills: { r: Rect; color: string; alpha: number }[] = [];
   const canvas = {
@@ -36,7 +52,11 @@ export function fakeCanvas(): { canvas: EmeraldCanvas; texts: Drawn[]; frames: R
     drawSprite() {
       return true;
     },
+    drawUiPicture(name: string, sx: number, sy: number, _w: number, _h: number, x: number, y: number) {
+      pictures.push({ name, sx, sy, x, y });
+      return missing.has(name) ? 'missing' : 'drawn';
+    },
     drawCursor() {},
   };
-  return { canvas: canvas as unknown as EmeraldCanvas, texts, frames, fills };
+  return { canvas: canvas as unknown as EmeraldCanvas, texts, frames, fills, pictures };
 }

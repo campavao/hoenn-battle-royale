@@ -248,6 +248,32 @@ export function careerLine(career: Career): string {
   return parts.join(' · ');
 }
 
+/** The TRAINER CARD's eight badge slots (POK-335), filled one per win: the first badge
+ *  for the first win, the second for the second (Kanto's player-card idea, its
+ *  Instructions.md: "the badges correspond to wins"). */
+export const CARD_BADGES = 8;
+
+export function cardBadges(wins: number): number {
+  return Math.max(0, Math.min(CARD_BADGES, Math.floor(wins)));
+}
+
+/** Wins for each of the card's four stars. Emerald's card turns bronze, copper, silver
+ *  and gold as its stars come in (sHoennTrainerCardPals); here the first win turns it
+ *  bronze, a full case of badges copper, 15 silver, and the wardrobe's last price gold. */
+export const STAR_WINS = [1, 8, 15, 25];
+
+export function cardStars(wins: number): number {
+  return STAR_WINS.filter((w) => wins >= w).length;
+}
+
+/** The card's IDNo.: five digits, the same for the same name, the way Emerald's is the
+ *  same for the same save. Nothing reads it; a card without one looked unfinished. */
+export function cardId(name: string): string {
+  let h = 0;
+  for (const ch of name) h = (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0;
+  return String(h % 100000).padStart(5, '0');
+}
+
 export function ordinal(n: number): string {
   const rem100 = n % 100;
   if (rem100 >= 11 && rem100 <= 13) return `${n}th`;

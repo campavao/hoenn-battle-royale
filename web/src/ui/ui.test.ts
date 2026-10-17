@@ -137,6 +137,92 @@ describe('the drawn screens (POK-320)', () => {
   });
 });
 
+describe('the trainer card (POK-335)', () => {
+  const model = (over: Partial<import('./screens').CardFace> = {}) => ({
+    face: { name: 'CAM', skin: 0, wins: 3, played: 7, best: 1, ...over },
+    rows: [{ label: 'SEND PLAY COUNT', detail: 'ON', id: 'trainer-stats', onPress: () => {} }],
+    note: '',
+    onName: () => {},
+    onSkin: () => {},
+    onBack: () => {},
+  });
+
+  it("draws Emerald's card with its fields where MONEY, POKéDEX and TIME go", async () => {
+    const { trainerScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const { measure } = await import('./emerald');
+    const { canvas, texts } = fakeCanvas();
+    trainerScreen(() => model()).paint(canvas, 320);
+    const at = (t: string) => texts.find((d) => d.text === t);
+    expect(at('NAME: CAM')).toMatchObject({ x: 24, y: 41 });
+    for (const [label, value, y] of [['WINS', '3', 65], ['PLAYED', '7', 81], ['BEST', '1st', 97]] as const) {
+      expect(at(label)).toMatchObject({ x: 24, y });
+      expect(at(value), `${value} right-aligned to the card's value column`).toMatchObject({ x: 136 - measure(value), y });
+    }
+    expect(texts.find((d) => d.text.startsWith('IDNo.'))?.y).toBe(17);
+    const best = model({ best: undefined });
+    const fresh = fakeCanvas();
+    trainerScreen(() => best).paint(fresh.canvas, 320);
+    expect(fresh.texts.some((d) => d.text === '---'), 'no BEST until a match is finished').toBe(true);
+  });
+
+  it('wears its stars’ colour and a girl’s background, a badge per win, and the skin’s portrait', async () => {
+    const { trainerScreen, CARD_H } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const paint = (face: Partial<import('./screens').CardFace>) => {
+      const { canvas, pictures } = fakeCanvas();
+      trainerScreen(() => model(face)).paint(canvas, 320);
+      return pictures;
+    };
+    const may = paint({ skin: 1, wins: 8 });
+    expect(may.find((p) => p.name === 'trainer-card.png')?.sy, 'two stars, the girl’s row').toBe((2 * 2 + 1) * CARD_H);
+    expect(may.filter((p) => p.name === 'card-badges.png' && p.sx < 128)).toHaveLength(8);
+    expect(may.filter((p) => p.name === 'card-badges.png' && p.sx === 128)).toHaveLength(2);
+    expect(may.find((p) => p.name === 'trainer-pics.png')).toMatchObject({ sx: 64, x: 160, y: 40 });
+    expect(paint({ skin: 13, wins: 30 }).find((p) => p.name === 'trainer-card.png')?.sy, 'POKEFAN LADY, gold').toBe((4 * 2 + 1) * CARD_H);
+    expect(may.filter((p) => p.name === 'card-badges.png' && p.sx < 128).map((p) => [p.x, p.y]), 'in the slots, three tiles apart').toEqual(
+      Array.from({ length: 8 }, (_, i) => [32 + i * 24, 120]),
+    );
+    const fresh = paint({ wins: 0 });
+    expect(fresh.find((p) => p.name === 'trainer-card.png')?.sy, 'green, no stars').toBe(0);
+    expect(fresh.filter((p) => p.name === 'card-badges.png')).toHaveLength(0);
+  });
+
+  it('still draws its words, and still opens your name and the wardrobe, when its art never comes', async () => {
+    const { trainerScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const { canvas, texts, frames } = fakeCanvas(new Set(['trainer-card.png']));
+    const painted = trainerScreen(() => model()).paint(canvas, 320);
+    expect(frames[0], 'a plain window where the card would be').toEqual({ x: 0, y: 0, w: 240, h: 160 });
+    expect(texts.some((d) => d.text === 'NAME: CAM')).toBe(true);
+    expect(painted.widgets.filter((w) => w.onPress && w.parent === 'trainer-rows').slice(0, 2).map((w) => w.id)).toEqual(['trainer-name', 'trainer-skin']);
+  });
+
+  it('opens your name and the wardrobe from the card, first in the rows, and fits BACK on a 320 screen', async () => {
+    const { trainerScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const pressed: string[] = [];
+    const m = { ...model(), onName: () => pressed.push('name'), onSkin: () => pressed.push('skin') };
+    // The rows app.ts puts under the card, so a row added to the profile fails this.
+    const { profileRows } = await import('../match/lobby');
+    const rows = profileRows({ name: 'CAM', skin: 'BRENDAN' })
+      .filter((r) => r.action.kind !== 'name' && r.action.kind !== 'skin')
+      .map((r) => ({ label: r.label, detail: r.detail, id: r.id, onPress: () => {} }));
+    const painted = trainerScreen(() => ({ ...m, rows, note: 'Saved to a file.' })).paint(fakeCanvas().canvas, 320);
+    const inRows = painted.widgets.filter((w) => w.parent === 'trainer-rows');
+    expect(inRows.slice(0, 2).map((w) => w.id)).toEqual(['trainer-name', 'trainer-skin']);
+    expect(inRows[0].text).toContain('your name');
+    expect(inRows[1].text).toBe('BRENDAN your sprite');
+    inRows[0].onPress!();
+    inRows[1].onPress!();
+    expect(pressed).toEqual(['name', 'skin']);
+    const note = painted.widgets.find((w) => w.id === 'trainer-note')!;
+    const back = painted.widgets.find((w) => w.id === 'trainer-back')!;
+    expect(back.rect.y, 'BACK under the note, not over it').toBeGreaterThanOrEqual(note.rect.y + note.rect.h);
+    expect(back.rect.y + back.rect.h).toBeLessThanOrEqual(320);
+  });
+});
+
 describe('the page asks nothing with the browser (POK-320)', () => {
   // Every question outside the game is drawn now: the name, the code and the passcode on
   // the entry, the career's SAVE or LOAD on a notice. A prompt() or an alert() is a grey

@@ -123,9 +123,9 @@ describe('the profile rows', () => {
   });
 
   it('put who you are at the top, above the ways in', () => {
-    const rows = fixedRows(true, { name: 'WALLY', skin: 'MAY', record: '3 played' });
+    const rows = fixedRows(true, { name: 'WALLY', skin: 'MAY' });
     expect(rows[0].label).toBe('WALLY');
-    expect(rows[0].detail).toBe('3 played');
+    expect(rows[0].detail).toBe('your name');
     expect(rows[1].label).toBe('MAY');
     // name, sprite, three voice rows (POK-283), stats, the battle's background (an
     // experiment, 2026-10-05), career -- then the ways in.

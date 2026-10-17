@@ -6,6 +6,9 @@ import {
   cleanName,
   exportCareer,
   FILE_TAG,
+  cardBadges,
+  cardId,
+  cardStars,
   importCareer,
   loadCareer,
   NAME_MAX,
@@ -17,6 +20,7 @@ import {
   RETIRED_SKINS,
   SKIN_UNLOCK_WINS,
   SKINS,
+  STAR_WINS,
   WARDROBE,
   skinNote,
   skinUnlocked,
@@ -327,5 +331,22 @@ describe('MY VOICE (POK-283)', () => {
     expect(lineAt(career.intro ?? 0)).toBe(voiceOf(3).intro);
     expect(lineAt(career.win ?? 0)).toBe(voiceOf(3).win);
     expect(lineAt(career.lose ?? 0)).toBe(voiceOf(3).lose);
+  });
+});
+
+describe('the trainer card (POK-335)', () => {
+  it('fills a badge slot per win, eight at most', () => {
+    expect([0, 1, 3, 8, 9, 40].map(cardBadges)).toEqual([0, 1, 3, 8, 8, 8]);
+  });
+
+  it('earns its stars, and so its colour, up to gold on the last wardrobe price', () => {
+    expect([0, 1, 7, 8, 14, 15, 24, 25, 99].map(cardStars)).toEqual([0, 1, 1, 2, 2, 3, 3, 4, 4]);
+    expect(STAR_WINS[STAR_WINS.length - 1]).toBe(Math.max(...SKIN_UNLOCK_WINS.filter(Number.isFinite)));
+  });
+
+  it('gives the same name the same five-digit IDNo.', () => {
+    expect(cardId('CAM')).toMatch(/^\d{5}$/);
+    expect(cardId('CAM')).toBe(cardId('CAM'));
+    expect(cardId('CAM')).not.toBe(cardId('MAY'));
   });
 });

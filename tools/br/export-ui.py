@@ -15,6 +15,14 @@ for the UI outside the game (POK-320).
                                       web/public/ui/types.png          the summary screen's type
                                                                        icons, 32x16, one per row
                                                                        by type id
+                                      web/public/ui/trainer-card.png   the TRAINER CARD's front with
+                                                                       no text on it, 240x160, one
+                                                                       per row: each star count
+                                                                       (0..4) as a boy's then a girl's
+                                      web/public/ui/card-badges.png    the eight badges, 16x16, then
+                                                                       the card's star, 8x8
+                                      web/public/ui/trainer-pics.png   each skin's trainer portrait,
+                                                                       64x64, in skin order
                                       web/src/data/ui.json             glyph widths, the text
                                                                        palettes, the skin ladder,
                                                                        the sign each section wears
@@ -33,7 +41,13 @@ palette (src/data/graphics/items.h). The skins are `sSkinGraphics` in src/br/br_
 include/constants/event_objects.h, whose sheets export-sprites.py already wrote to
 web/public/field-sprites/<gfx>.png. The type icons are graphics/types/<type>.png, each in
 the palette src/pokemon_summary_screen.c's sMoveTypeToOamPaletteNum gives it (OBJ
-palettes 13..15 are move_types_1..3.pal, loaded together from gMoveTypes_Pal).
+palettes 13..15 are move_types_1..3.pal, loaded together from gMoveTypes_Pal). The card
+is src/trainer_card.c's front: `bg.bin` (BG2) under `front.bin` (BG0), both in
+`tiles.png`, in the palette sHoennTrainerCardPals gives its star count, with
+female_bg.pal over palette 1 for a girl. Its star is tile 143 of the same sheet in
+star.pal; the badges are `badges.png` in its own palette. The portraits are
+graphics/trainers/front_pics, each in its own palette, the class that dresses like the
+skin's sheet.
 """
 import json
 import re
@@ -213,6 +227,81 @@ def type_icons() -> Image.Image:
     return sheet
 
 
+CARD_W, CARD_H = 240, 160
+CARD_STAR_TILE = 143  # DrawStarsAndBadgesOnCard
+CARD_TIERS = ["green", "bronze", "copper", "silver", "gold"]
+# The portrait each skin's sheet goes with (sSkinGraphics' order): the rivals are the
+# same two people.
+SKIN_PICS = {
+    "BRENDAN_NORMAL": "brendan", "MAY_NORMAL": "may",
+    "RIVAL_BRENDAN_NORMAL": "brendan", "RIVAL_MAY_NORMAL": "may",
+    "HIKER": "hiker", "BEAUTY": "beauty", "CAMPER": "camper", "PICNICKER": "picnicker",
+    "SWIMMER_M": "swimmer_m", "SWIMMER_F": "swimmer_f", "EXPERT_M": "expert_m",
+    "EXPERT_F": "expert_f", "POKEFAN_M": "pokefan_m", "POKEFAN_F": "pokefan_f",
+    "YOUNGSTER": "youngster", "LASS": "lass",
+}
+
+
+def card_front(tier: str, female: bool) -> Image.Image:
+    """The card as DrawCardScreenBackground and DrawCardFrontOrBack lay it: 30x20 tiles
+    of each map, entries the GBA's (tile, h flip, v flip, palette), BG0 over BG2 over
+    the backdrop (palette 0's colour 0)."""
+    d = ROOT / "graphics/trainer_card"
+    pal = jasc_pal(d / f"{tier}.pal")
+    if female:
+        pal[16:32] = jasc_pal(d / "female_bg.pal")
+    sheet = Image.open(d / "tiles.png")
+    src = sheet.load()
+    cols = sheet.size[0] // 8
+    out = Image.new("RGBA", (CARD_W, CARD_H), tuple(pal[0]) + (255,))
+    op = out.load()
+    for name in ("bg.bin", "front.bin"):
+        raw = (d / name).read_bytes()
+        for ty in range(20):
+            for tx in range(30):
+                e = raw[(ty * 30 + tx) * 2] | raw[(ty * 30 + tx) * 2 + 1] << 8
+                t, hf, vf, pn = e & 0x3FF, e >> 10 & 1, e >> 11 & 1, e >> 12
+                sx, sy = (t % cols) * 8, (t // cols) * 8
+                for y in range(8):
+                    for x in range(8):
+                        # The sheet's indices carry a bank above the low four bits; the
+                        # tile is 4bpp and the map's palette is the bank.
+                        i = src[sx + (7 - x if hf else x), sy + (7 - y if vf else y)] & 15
+                        if i:
+                            c = pal[pn * 16 + i]
+                            op[tx * 8 + x, ty * 8 + y] = (c[0], c[1], c[2], 255)
+    return out
+
+
+def card_badges() -> Image.Image:
+    d = ROOT / "graphics/trainer_card"
+    out = Image.new("RGBA", (128 + 8, 16), (0, 0, 0, 0))
+    out.paste(indexed_to_rgba(d / "badges.png"), (0, 0))
+    star_pal = jasc_pal(d / "star.pal")
+    sheet = Image.open(d / "tiles.png")
+    src = sheet.load()
+    op = out.load()
+    cols = sheet.size[0] // 8
+    sx, sy = (CARD_STAR_TILE % cols) * 8, (CARD_STAR_TILE // cols) * 8
+    for y in range(8):
+        for x in range(8):
+            i = src[sx + x, sy + y] & 15
+            if i:
+                c = star_pal[i]
+                op[128 + x, y] = (c[0], c[1], c[2], 255)
+    return out
+
+
+def trainer_pics() -> Image.Image:
+    src = (ROOT / "src/br/br_ghosts.c").read_text(encoding="utf-8")
+    body = re.search(r"sSkinGraphics\[\]\s*=\s*\{([^}]*)\}", src).group(1)
+    names = re.findall(r"OBJ_EVENT_GFX_(\w+)", body)
+    out = Image.new("RGBA", (64 * len(names), 64), (0, 0, 0, 0))
+    for i, n in enumerate(names):
+        out.paste(indexed_to_rgba(ROOT / f"graphics/trainers/front_pics/{SKIN_PICS[n]}.png"), (i * 64, 0))
+    return out
+
+
 def main():
     font_mask(ROOT / "graphics/fonts/latin_normal.png").save(OUT / "font-normal.png")
     indexed_to_rgba(ROOT / "graphics/text_window/1.png").save(OUT / "frame-1.png")
@@ -221,6 +310,13 @@ def main():
         popup(theme).save(OUT / f"popup-{theme}.png")
     item_icons().save(OUT / "items.png")
     type_icons().save(OUT / "types.png")
+    cards = Image.new("RGBA", (CARD_W, CARD_H * 2 * len(CARD_TIERS)), (0, 0, 0, 0))
+    for stars, tier in enumerate(CARD_TIERS):
+        for female in (0, 1):
+            cards.paste(card_front(tier, bool(female)), (0, (stars * 2 + female) * CARD_H))
+    cards.save(OUT / "trainer-card.png")
+    card_badges().save(OUT / "card-badges.png")
+    trainer_pics().save(OUT / "trainer-pics.png")
     data = {
         "font": {"cell": 16, "cols": 16, "widths": widths()},
         # Emerald's text palettes: [background, foreground, shadow] and on.
