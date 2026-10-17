@@ -2476,6 +2476,7 @@ function wireRoom(
     pushToRom: (msg) => bridge!.pushToRom(msg),
     lock: (locked, botSeats) => relay.lockRoom(locked, botSeats),
     linesFor: (seat) => bridge!.linesFor(seat),
+    noteOut: (seat) => spectate.noteOut(seat),
   };
   /** A host in a background tab hands the match on (below, at visibilitychange). A tab
    *  already hidden when its director starts -- promoted, back after a drop, or dealt by
@@ -2839,6 +2840,9 @@ function wireRoom(
       // ROM straight from here, since nothing comes back to us over the relay.
       host?.hear(msg, 'rom');
       if (msg.t === 'out') {
+        // Our own `out` never comes back over the relay either, and whatever fight we were
+        // in ends with it: its stream is nobody's to be handed now.
+        spectate.noteOut(msg.seat);
         // And we withdraw from the succession: a trainer who is out should not be the
         // one still running the match everybody else is in (POK-252).
         if (msg.seat === bridge?.seat && !host) relay.canHost(false);
