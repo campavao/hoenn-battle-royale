@@ -575,6 +575,18 @@ export interface ReadyMsg {
   ready: boolean;
 }
 
+/** A trainer's career, said to the room (POK-339): the record their own browser keeps,
+ *  for everybody else's trainer card. The career never leaves the device any other way;
+ *  this is it shared while they are in a room with you. JSON only. */
+export interface CardMsg {
+  t: 'card';
+  seat: number;
+  wins: number;
+  matches: number;
+  /** Their best finish, 1 = a win; absent before a match has been finished. */
+  best?: number;
+}
+
 /** ROM -> page: a link/trainer battle this seat was in just concluded. Distinct from
  *  `win` (the room's overall winner) and from `out` (elimination) -- a lost PvP fight
  *  does not by itself eliminate anyone. Crosses into the ROM (result), since the ROM
@@ -651,6 +663,7 @@ export type Msg =
   | BotRecMsg
   | TickerMsg
   | ReadyMsg
+  | CardMsg
   | ResultMsg
   | GiveMsg
   | PingMsg
@@ -1213,6 +1226,14 @@ const decoders: Record<string, Decoder> = {
     if (typeof m.ready !== 'boolean') fail('bad ready flag');
     return { t: 'ready', seat: reqSeat(m), ready: m.ready };
   },
+
+  card: (m) => ({
+    t: 'card',
+    seat: reqSeat(m),
+    wins: optInt(m, 'wins', 0, 999_999) ?? fail('bad wins'),
+    matches: optInt(m, 'matches', 0, 999_999) ?? fail('bad matches'),
+    best: optInt(m, 'best', 1, MAX_PLAYERS),
+  }),
 
   result: (m) => {
     const outcome = m.outcome;
