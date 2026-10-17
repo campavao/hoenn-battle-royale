@@ -39,6 +39,7 @@ export const FILE_SECONDS = {
   'play.spec.ts': 264,
   'pvp-items.spec.ts': 72,
   'pwa.spec.ts': 4,
+  'refresh-rate.spec.ts': 45, // estimated: three 6 s windows plus boots
   'solo.spec.ts': 204,
   'spectate-dpad.spec.ts': 13,
   'spectate.spec.ts': 72,
