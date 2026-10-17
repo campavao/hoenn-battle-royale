@@ -459,6 +459,15 @@ export function safariLabel(secs: number): string {
   return secs === 0 ? 'NO SAFARI' : `SAFARI ${secs}s`;
 }
 
+/** How many of a control's level bars are lit for `value` among `steps`: its place in
+ *  the ladder, counting from 1, or from 0 for a ladder whose first step is none at all
+ *  (SAFARI's 0). A value not on the ladder lights nothing. */
+export function levelOf(steps: readonly number[], value: number, firstIsNone = false): { at: number; of: number } {
+  const i = steps.indexOf(value);
+  if (firstIsNone) return { at: Math.max(0, i), of: steps.length - 1 };
+  return { at: i + 1, of: steps.length };
+}
+
 export function nextFog(secs: number): number {
   const i = FOG_STEPS.indexOf(secs);
   return i < 0 ? FOG_STEPS[0] : FOG_STEPS[(i + 1) % FOG_STEPS.length];

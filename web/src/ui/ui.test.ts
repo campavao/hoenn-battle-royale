@@ -93,19 +93,21 @@ describe('the drawn screens (POK-320)', () => {
 
   it("puts each room control's picture beside its words, and every word still fits (POK-345)", async () => {
     const { optionLayout, optionRect, visualWidth } = await import('./screens');
+    const { FOG_STEPS, MAX_STEPS, SAFARI_STEPS, TEXT_SPEEDS, fillLabel, levelOf, safariLabel, textSpeedLabel } = await import('../match/room');
     // paintOptions' text run, in either column.
     for (const col of [0, 1]) {
       const cell = optionRect(0, col);
       const x = cell.x + 8;
       const w = cell.w - 10;
+      // Every label a host control can show, at its widest, from the room's own ladders.
       const room: [string, Parameters<typeof optionLayout>[1]][] = [
-        ['MAX 30', { kind: 'seats', humans: 16, bots: 14, max: 30 }],
-        ['FILL 14', { kind: 'toggle', on: true }],
-        ['TEXT FAST', { kind: 'level', at: 3, of: 3 }],
+        ...MAX_STEPS.map((max): [string, Parameters<typeof optionLayout>[1]] => [`MAX ${max}`, { kind: 'seats', humans: 1, bots: max - 1, max }]),
+        ...MAX_STEPS.map((max): [string, Parameters<typeof optionLayout>[1]] => [fillLabel({ fillOn: true, fill: max - 1 }), { kind: 'toggle', on: true }]),
+        [fillLabel({ fillOn: false, fill: 0 }), { kind: 'toggle', on: false }],
+        ...TEXT_SPEEDS.map((t): [string, Parameters<typeof optionLayout>[1]] => [`TEXT ${textSpeedLabel(t.value)}`, { kind: 'level', ...levelOf(TEXT_SPEEDS.map((s) => s.value), t.value) }]),
         ['ANIM OFF', { kind: 'toggle', on: false }],
-        ['FOG 180s', { kind: 'level', at: 5, of: 5, clock: true }],
-        ['SAFARI 180s', { kind: 'level', at: 3, of: 3, clock: true }],
-        ['NO SAFARI', { kind: 'level', at: 0, of: 3, clock: true }],
+        ...FOG_STEPS.map((secs): [string, Parameters<typeof optionLayout>[1]] => [`FOG ${secs}s`, { kind: 'level', ...levelOf(FOG_STEPS, secs), clock: true }]),
+        ...SAFARI_STEPS.map((secs): [string, Parameters<typeof optionLayout>[1]] => [safariLabel(secs), { kind: 'level', ...levelOf(SAFARI_STEPS, secs, true), clock: true }]),
       ];
       for (const [label, visual] of room) {
         const lay = optionLayout(label, visual, x, w);
@@ -137,6 +139,13 @@ describe('the drawn screens (POK-320)', () => {
     expect(seats(10, 5, 8)).toHaveLength(8);
     expect(seats(1, 7, 8)).toHaveLength(8);
     expect(seats(1, 0, 1)).toHaveLength(1);
+    // ...flush with the cell's right edge, like the other pictures, whatever MAX is.
+    const { optionRect } = await import('./screens');
+    const edge = optionRect(0, 0).x + optionRect(0, 0).w - 2;
+    for (const max of [2, 6, 8, 12]) {
+      const last = seats(1, max - 1, max).at(-1)!;
+      expect(last.x + last.w, `MAX ${max}`).toBe(edge);
+    }
     // A split bar past that, which never runs past its 40 pixels.
     const big = seats(1, 29, 30);
     expect(big[0].w, 'one of thirty is still somebody').toBeGreaterThanOrEqual(2);

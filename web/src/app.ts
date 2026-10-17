@@ -90,6 +90,7 @@ import {
   FOG_STEPS,
   SAFARI_STEPS,
   TEXT_SPEEDS,
+  levelOf,
 } from './match/room';
 import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
@@ -2294,7 +2295,7 @@ function wireRoom(
       {
         id: 'room-text',
         label: `TEXT ${textSpeedLabel(controls.textSpeed)}`,
-        visual: { kind: 'level', at: TEXT_SPEEDS.findIndex((t) => t.value === controls.textSpeed) + 1, of: TEXT_SPEEDS.length },
+        visual: { kind: 'level', ...levelOf(TEXT_SPEEDS.map((t) => t.value), controls.textSpeed) },
         onPress: () => {
           controls.textSpeed = nextTextSpeed(controls.textSpeed);
           redraw();
@@ -2312,7 +2313,7 @@ function wireRoom(
       {
         id: 'room-fog',
         label: `FOG ${controls.fogSecs}s`,
-        visual: { kind: 'level', at: FOG_STEPS.indexOf(controls.fogSecs) + 1, of: FOG_STEPS.length, clock: true },
+        visual: { kind: 'level', ...levelOf(FOG_STEPS, controls.fogSecs), clock: true },
         onPress: () => {
           controls.fogSecs = nextFog(controls.fogSecs);
           redraw();
@@ -2323,8 +2324,7 @@ function wireRoom(
       {
         id: 'room-safari',
         label: safariLabel(controls.safariSecs),
-        // The first step is none at all, so it lights no bar.
-        visual: { kind: 'level', at: SAFARI_STEPS.indexOf(controls.safariSecs), of: SAFARI_STEPS.length - 1, clock: true },
+        visual: { kind: 'level', ...levelOf(SAFARI_STEPS, controls.safariSecs, true), clock: true },
         onPress: () => {
           controls.safariSecs = nextSafari(controls.safariSecs);
           redraw();

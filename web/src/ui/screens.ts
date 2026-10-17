@@ -360,14 +360,17 @@ function paintSeats(c: EmeraldCanvas, x: number, y: number, v: Extract<OptionVis
   const bots = Math.min(v.bots, max - humans);
   const top = y + 3;
   const h = 8;
-  c.fillRect({ x, y: top + h - 1, w: SEATS_W, h: 1 }, TEXT_GRAY.fg);
   const seg = Math.floor((SEATS_W + 1) / max);
   if (seg >= 3) {
+    // Whole blocks, flush with the cell's right edge like every other picture.
+    const left = x + SEATS_W - (max * seg - 1);
+    c.fillRect({ x: left, y: top + h - 1, w: max * seg - 1, h: 1 }, TEXT_GRAY.fg);
     for (let i = 0; i < humans + bots; i++) {
-      c.fillRect({ x: x + i * seg, y: top, w: seg - 1, h }, i < humans ? TEXT_BLUE.fg : TEXT_GRAY.fg);
+      c.fillRect({ x: left + i * seg, y: top, w: seg - 1, h }, i < humans ? TEXT_BLUE.fg : TEXT_GRAY.fg);
     }
     return;
   }
+  c.fillRect({ x, y: top + h - 1, w: SEATS_W, h: 1 }, TEXT_GRAY.fg);
   // A human is never thinner than two pixels: one of thirty is still somebody.
   const hw = humans > 0 ? Math.max(2, Math.round((SEATS_W * humans) / max)) : 0;
   const bw = Math.max(0, Math.round((SEATS_W * (humans + bots)) / max) - hw);
@@ -534,7 +537,7 @@ export interface SheetModel {
 }
 
 /** The sheet's settings, MOVE PAD and HIDE PAD among them on a phone. */
-function settingsOf(m: SheetModel): { label: string; id: string; onPress: () => void }[] {
+function settingsOf(m: SheetModel): OptionSpec[] {
   const rows = [
     { label: m.muted ? 'UNMUTE' : 'MUTE', id: 'mute', onPress: m.onMute },
     { label: m.remapping ? 'CANCEL REMAP' : 'REMAP PAD', id: 'remap', onPress: m.onRemap },
