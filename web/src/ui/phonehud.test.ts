@@ -80,12 +80,12 @@ describe('the sign and the fog window', () => {
   });
   const text = (v: HudView) => fogLines(v).map((l) => [l.left?.text ?? '', l.right?.text ?? '']);
 
-  it('three lines in the ring: FOG and the clock, where it closes to, how many are left', () => {
+  it('two lines in the ring: FOG and the clock, how many are left -- not where it closes to', () => {
     expect(text(view())).toEqual([
       ['FOG', '1:35'],
-      ['TO OLDALE TOWN', ''],
       ['7 LEFT', ''],
     ]);
+    expect(fogHeight(2)).toBe(48);
     expect(fogHeight(3)).toBe(64);
   });
 
@@ -97,15 +97,19 @@ describe('the sign and the fog window', () => {
     expect(fogLines(view({ clock: 30 }))[0].right?.color).toBe(TEXT_RED);
     expect(text(view({ flash: 2 }))[0]).toEqual(['FOG', 'FOG!']);
     expect(text(view({ flash: 1 }))[0]).toEqual(['FOG', '']);
-    expect(text(view({ eyes: 3 }))[2]).toEqual(['7 LEFT', '3 WATCH']);
-    expect(text(view({ ring: 'FOG EVERYWHERE', fogEverywhere: true }))[1]).toEqual(['FOG EVERYWHERE', '']);
+    expect(text(view({ eyes: 3 }))[1]).toEqual(['7 LEFT', '3 WATCH']);
+    expect(text(view({ ring: 'FOG EVERYWHERE', fogEverywhere: true }))).toEqual([
+      ['FOG', '1:35'],
+      ['FOG EVERYWHERE', ''],
+      ['7 LEFT', ''],
+    ]);
   });
 
-  it('every place fits the window, with TO where there is room for it', () => {
-    for (const place of ['EVER GRANDE CITY', 'SOOTOPOLIS CITY', 'VERDANTURF TOWN', 'PETALBURG WOODS', 'FOG EVERYWHERE']) {
-      for (const line of fogLines(view({ ring: place }))) {
+  it('every line fits the window', () => {
+    for (const over of [{}, { ring: 'FOG EVERYWHERE', fogEverywhere: true }, { eyes: 12, left: 32 }]) {
+      for (const line of fogLines(view(over))) {
         const w = measure(line.left?.text ?? '') + (line.right ? measure(line.right.text) + 4 : 0);
-        expect(w, place).toBeLessThanOrEqual(FOG_W - 16);
+        expect(w, line.left?.text).toBeLessThanOrEqual(FOG_W - 16);
       }
     }
   });

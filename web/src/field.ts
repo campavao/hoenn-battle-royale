@@ -466,18 +466,24 @@ export function fieldScale(boxW: number, boxH: number, dpr = 1, glass = Math.min
   return Math.min(fit, scale);
 }
 
+/** GBA pixels between the picture's bottom and a floating pad's top. */
+export const PAD_GAP = 4;
+
 /** Where the picture goes in a box, and how big the canvas around it is. One scale, a
  *  phone's (fieldScale), so a wide window has the map all round and a phone has it above
- *  and below. The picture centres in the box less a bottom inset -- the floating pad, on
- *  a phone -- and never leaves the box. */
+ *  and below. The picture centres in the box; over a floating pad (a bottom inset, on a
+ *  phone) it sits just above it instead, so the ticker along its bottom is by the thumbs
+ *  and the HUD's windows over the top cover map, not the picture (Cam, 2026-10-17). It
+ *  never leaves the box. */
 export function layoutField(boxW: number, boxH: number, bottomInset = 0, dpr = 1, glass = Math.min(boxW, boxH)): FieldLayout {
   const scale = fieldScale(boxW, boxH, dpr, glass);
   if (!(scale > 0)) return { scale: 0, cols: 0, rows: 0, lcdCol: 0, lcdRow: 0 };
   const cols = Math.ceil(boxW / scale);
   const rows = Math.ceil(boxH / scale);
   const lcdCol = Math.max(0, Math.min(Math.round((boxW / scale - GBA_W) / 2), cols - GBA_W));
-  const free = Math.max(GBA_H * scale, boxH - bottomInset);
-  const lcdRow = Math.max(0, Math.min(Math.round((free / scale - GBA_H) / 2), rows - GBA_H));
+  const free = Math.max(GBA_H * scale, boxH - bottomInset) / scale - GBA_H;
+  const row = bottomInset > 0 ? Math.floor(free) - PAD_GAP : Math.round(free / 2);
+  const lcdRow = Math.max(0, Math.min(row, rows - GBA_H));
   return { scale, cols, rows, lcdCol, lcdRow };
 }
 

@@ -210,10 +210,13 @@ export function readHudView(emu: HudRead, sym: (name: string) => number | undefi
 
 // ---- what the windows say --------------------------------------------------------------
 
-/** The fog window's width, GBA pixels: room inside for "TO" and the longest place. */
+/** The fog window's width, GBA pixels: room inside for FOG EVERYWHERE. */
 export const FOG_W = 120;
 export const SIGN_W = 96;
 export const SIGN_H = 40;
+/** How long the sign stays up on a new section before it goes, as Emerald's map popup
+ *  does (Cam, 2026-10-17). */
+export const SIGN_MS = 3000;
 export const DOCK_W = 96;
 export const DOCK_H = 40;
 const LINE = 14;
@@ -228,18 +231,15 @@ export function clockText(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }
 
-/** The fog window's lines: FOG and the clock (FOG! in its flash), where it closes to,
- *  and how many are left, with the eyes on this trainer when anybody watches. */
+/** The fog window's lines: FOG and the clock (FOG! in its flash), FOG EVERYWHERE once
+ *  it is, and how many are left, with the eyes on this trainer when anybody watches.
+ *  Not where the ring closes to (Cam, 2026-10-17): MAP shows that. */
 export function fogLines(v: HudView): Line[] {
   const inner = FOG_W - 16;
   const clock: Line['right'] =
     v.flash === 2 ? { text: 'FOG!', color: TEXT_RED } : v.flash === 1 ? undefined : { text: clockText(v.clock), color: v.clock <= 30 ? TEXT_RED : TEXT_DARK };
   const lines: Line[] = [{ left: { text: v.ring === null ? 'SAFARI' : 'FOG', color: TEXT_BLUE }, right: clock }];
-  if (v.ring !== null) {
-    const to = v.fogEverywhere ? v.ring : `TO ${v.ring}`;
-    const text = measure(to) <= inner ? to : fitText(v.ring, inner);
-    lines.push({ left: { text, color: v.fogEverywhere ? TEXT_RED : TEXT_DARK } });
-  }
+  if (v.fogEverywhere && v.ring !== null) lines.push({ left: { text: fitText(v.ring, inner), color: TEXT_RED } });
   lines.push({
     left: { text: `${v.left} LEFT`, color: TEXT_BLUE },
     right: v.eyes > 0 ? { text: `${v.eyes} WATCH`, color: TEXT_GRAY } : undefined,
@@ -328,6 +328,8 @@ export interface PhoneHudDeps {
 export class PhoneHud {
   private view: HudView | null = null;
   private scale = 1;
+  private signKey = '';
+  private signTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly sign: Win;
   private readonly fog: Win;
   private readonly party: Win;
@@ -420,7 +422,15 @@ export class PhoneHud {
     this.view = v;
     this.deps.top.classList.toggle('off-field', !v.onField);
     this.deps.dock.classList.toggle('off-field', !v.onField);
-    this.sign.show(`${v.theme}|${v.place}`);
+    const signKey = `${v.theme}|${v.place}`;
+    if (signKey !== this.signKey) {
+      this.signKey = signKey;
+      this.sign.show(signKey);
+      // A section with no name (the map not known yet) has no sign to show.
+      this.sign.el.classList.toggle('gone', !v.place);
+      clearTimeout(this.signTimer);
+      if (v.place) this.signTimer = setTimeout(() => this.sign.el.classList.add('gone'), SIGN_MS);
+    }
     const lines = fogLines(v);
     const h = fogHeight(lines.length);
     if (this.fog.c.height !== h) this.fog.size(FOG_W, h, this.scale);
