@@ -1,0 +1,61 @@
+# drop-sea: the drop map's name box never goes blank (POK-352). The play-test moved the
+# cursor from SAFARI ZONE toward RUSTBORO and the box sat empty for 2-3 seconds over the
+# cells between them. On the drop, a cell no section covers is the nearest section, its
+# name stays up, and A there chooses it.
+wait 30
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 4
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 200
+expect u8 gBrPick 1
+# The drop opens on SAFARI ZONE, layout (16,2), the play-test's own start. West along
+# row 2 crosses nine cells no section covers, each shot and none blank. A tie keeps the
+# name already up: (15,2) is one from SAFARI ZONE and one from ROUTE 121.
+shot safari-zone
+tap LEFT
+wait 30
+shot 15-safari-zone-tie
+tap LEFT
+wait 30
+shot 14-route-120-near
+tap LEFT
+wait 30
+tap LEFT
+wait 30
+shot 12-route-120-tie
+tap LEFT
+wait 30
+tap LEFT
+wait 30
+shot 10-route-119-near
+tap LEFT
+wait 30
+shot 09-route-111-near
+tap LEFT
+wait 30
+tap LEFT
+wait 30
+tap LEFT
+wait 30
+tap LEFT
+wait 30
+shot 05-mt-chimney-tie
+tap LEFT
+wait 30
+shot 04-lavaridge-near
+tap LEFT
+wait 30
+shot 03-fallarbor-near
+tap LEFT
+wait 30
+shot 02-route-114-near
+# (2,2) is one of them, one from ROUTE 114: A chooses it, the name in the box (MAPSEC 29).
+tap A
+wait 60
+expect u16 gBrPick+12 29
+expect u8 gBrPick 1
+say drop sea ok

@@ -717,6 +717,9 @@ static u8 MoveRegionMapCursor_Full(void)
     }
 
     mapSecId = GetMapSecIdAt(sRegionMap->cursorPosX, sRegionMap->cursorPosY);
+#if BR
+    mapSecId = BrPick_Section(mapSecId, sRegionMap_MapSectionLayout[0], MAP_WIDTH, MAP_HEIGHT, sRegionMap->cursorPosX - MAPCURSOR_X_MIN, sRegionMap->cursorPosY - MAPCURSOR_Y_MIN, sRegionMap->mapSecId);
+#endif
     sRegionMap->mapSecType = GetMapsecType(mapSecId);
     if (mapSecId != sRegionMap->mapSecId)
     {

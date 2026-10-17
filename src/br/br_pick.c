@@ -11,6 +11,7 @@
 #include "sprite.h"
 #include "text.h"
 #include "constants/field_weather.h"
+#include "constants/region_map_sections.h"
 #include "br/br_mailbox.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
@@ -75,6 +76,37 @@ bool8 BrPick_TimedOut(void)
     if (gBrPick.timer > 0 && --gBrPick.timer > 0)
         return FALSE;
     return TRUE;
+}
+
+u16 BrPick_Section(u16 mapSec, const u8 *layout, u16 width, u16 height, u16 x, u16 y, u16 prev)
+{
+    u16 cx, cy, best;
+    u32 d, bestD;
+    s32 dx, dy;
+
+    if (!gBrPick.active || mapSec != MAPSEC_NONE)
+        return mapSec;
+    best = MAPSEC_NONE;
+    bestD = 0xFFFFFFFF;
+    for (cy = 0; cy < height; cy++)
+    {
+        for (cx = 0; cx < width; cx++)
+        {
+            u16 here = layout[cy * width + cx];
+
+            if (here == MAPSEC_NONE)
+                continue;
+            dx = (s32)cx - x;
+            dy = (s32)cy - y;
+            d = dx * dx + dy * dy;
+            if (d < bestD || (d == bestD && here == prev))
+            {
+                bestD = d;
+                best = here;
+            }
+        }
+    }
+    return best;
 }
 
 void BrPick_Chose(u16 mapSec)

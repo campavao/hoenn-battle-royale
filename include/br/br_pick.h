@@ -52,6 +52,12 @@ void BrPick_Chose(u16 mapSec);
 // region_map.c: is the fly map being used as the drop picker right now? In pick mode
 // every section is selectable and choosing one does not warp.
 bool8 BrPick_Picking(void);
+// region_map.c, as the cursor stops on a cell: during the drop, a cell no section covers
+// (sea, or land between routes) is the nearest section, so the name box never goes
+// blank (POK-352) and A or the clock always chooses somewhere. `prev` wins a tie, so a
+// name holds until another is strictly closer. Out of the drop, or on a section's own
+// cell, `mapSec` as it was.
+u16 BrPick_Section(u16 mapSec, const u8 *layout, u16 width, u16 height, u16 x, u16 y, u16 prev);
 // region_map.c, once the map has closed: hold a black screen until `land` arrives.
 void BrPick_Wait(void);
 // region_map.c, every frame the map is up: has the clock run out? A trainer who does
