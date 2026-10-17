@@ -41,6 +41,12 @@ export interface HostLink {
   lock?(locked: boolean, botSeats?: number[]): void;
   /** What a seat said it says in a fight, when it told us (POK-274). */
   linesFor?(seat: number): Lines | undefined;
+  /** An `out` we said, for the page's spectate books (spectate.ts noteOut). A bot's duel
+   *  ends at its loser's `out` and nowhere else, and a guest retires its stream when that
+   *  arrives; ours never arrive, so the host kept every duel of the match, and a host who
+   *  went out and followed a bot was handed its first one, long over. The replay waited on
+   *  a turn that never came, and the results waited a minute on the replay. */
+  noteOut?(seat: number): void;
 }
 
 /** Solo's link: nobody at the other end, so the room hears nothing and there is no door
@@ -442,6 +448,7 @@ export class HostRole {
     this.link.toRoom(msg);
     this.link.toRom(msg);
     this.link.roster.applyMsg(msg);
+    if (msg.t === 'out') this.link.noteOut?.(msg.seat);
     this.session.note(msg, 'page'); // before the director hears an `out`, so its `win` comes after it
   }
 

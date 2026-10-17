@@ -16,7 +16,7 @@
 // checks it stays up, presses PLAY AGAIN, and asserts the client comes out of the match
 // into the same room, with its code, its roster and its socket, on a ROM that really did
 // power-cycle and land in Littleroot rather than on Emerald's moving van.
-import { test, expect, type Browser } from '@playwright/test';
+import { test, expect, type Browser, type Page } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,12 +25,67 @@ type HbrWindow = { __hbr: { emu: { read(a: number, w: 8 | 16 | 32): number } } }
 
 const OFF_BOOT = 0x2018; // net/mailbox.ts's MAILBOX.OFF_BOOT
 
+// START to the results, for a whole match at `#fast` with bots: a 25s opening, eight 15s
+// ring phases to the final fog, its bleed (a tenth of each mon every four seconds), and
+// the duels on the way, which hold both bots out of the fog while they last -- up to the
+// proxy's deadline, 90s at worst (bots/proxy.ts). Ten matches of this seed on one machine
+// were won 185 to 255 seconds in; 240 was the whole budget, results and all. It would
+// still cover a watcher's results held the full minute (ReplayHold) behind a 255s win:
+// watchUntilResults is what catches that, not this.
+const WHOLE_MATCH_MS = 330_000;
+
+/** Waits out a whole match from START to the results, the page out early and watching a
+ *  bot. Every fight its ROM is handed must be one that is still on: the host never heard
+ *  its own bots' `out`s into spectate's books, so following a bot handed the ROM that
+ *  bot's FIRST duel, two minutes over, and a replay waiting on a turn that never came held
+ *  the results for WIN_GRACE_MAX_MS (60s) -- over the budget, four runs in five. A fight
+ *  can start and finish inside one look (a duel runs at 8x), so "over" is a trainer in it
+ *  out for longer than STALE_MS before the watch began. */
+async function watchUntilResults(page: Page): Promise<void> {
+  const STALE_MS = 15_000;
+  const spectate = loadSymbols().gBrSpectate;
+  const outAt = new Map<number, number>();
+  const deadline = Date.now() + WHOLE_MATCH_MS;
+  let watched = -1;
+  let handed = 0;
+  while (!(await page.locator('#results-panel').isVisible())) {
+    expect(Date.now(), 'the results came up within a whole match').toBeLessThan(deadline);
+    const now = Date.now();
+    const seen = await page.evaluate((base) => {
+      const emu = (window as unknown as HbrWindow).__hbr.emu;
+      const director = (window as unknown as BrWindow).__br.director;
+      return {
+        directing: director !== undefined,
+        out: (director?.state?.placements ?? []) as number[],
+        watching: emu.read(base + 5, 8) !== 0,
+        lo: emu.read(base + 6, 8),
+        hi: emu.read(base + 7, 8),
+      };
+    }, spectate);
+    expect(seen.directing, 'this page runs the match').toBe(true);
+    for (const seat of seen.out) if (!outAt.has(seat)) outAt.set(seat, now);
+    const id = seen.watching ? seen.lo | (seen.hi << 8) : -1;
+    if (id !== -1 && id !== watched) {
+      handed++;
+      for (const seat of [seen.lo, seen.hi]) {
+        const age = now - (outAt.get(seat) ?? now);
+        expect(age, `handed a fight of seat ${seat}'s, out ${Math.round(age / 1000)}s`).toBeLessThan(STALE_MS);
+      }
+    }
+    watched = id;
+    await page.waitForTimeout(500);
+  }
+  // This seed puts us out in the ring and a bot's fight on our screen after: without one
+  // the check above checked nothing.
+  expect(handed, 'our ROM was handed a fight to watch').toBeGreaterThan(0);
+}
+
 test.beforeAll(() => {
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
 });
 
 test('a finished match lets go, and the room keeps its code, roster and socket', async ({ page }) => {
-  test.setTimeout(360_000);
+  test.setTimeout(WHOLE_MATCH_MS + 120_000);
 
   await page.goto(`/#host&fast&seed=20260916&testmon&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
@@ -39,8 +94,9 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
   const code = await codeEl.textContent();
   await startWith(page, 1);
 
-  // A whole match at the dev pace: 25s opening, 15s ring phases, bots filling the room.
-  await expect(page.locator('#results-panel')).toBeVisible({ timeout: 240_000 });
+  // A whole match at the dev pace, bots filling the room -- and this page goes out early
+  // and watches one of them, which is where it used to stall (watchUntilResults).
+  await watchUntilResults(page);
 
   // POK-320: a champion's results come after their ROM's own Hall of Fame, never over it.
   // Only when this page won, which a bot usually does: nothing here can crown the host
@@ -137,7 +193,7 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
 // never heard the `win`; a page that did keeps its own grace. The single-page test above
 // cannot see this -- nobody hears their own `again` -- so this one needs a guest.
 test("a guest reads its result for the whole grace, whatever the host's `again` says", async ({ browser }) => {
-  test.setTimeout(360_000);
+  test.setTimeout(WHOLE_MATCH_MS + 120_000);
   const rom = romHashParam();
   const hostCtx = await browser.newContext();
   const guestCtx = await browser.newContext();
@@ -156,7 +212,7 @@ test("a guest reads its result for the whole grace, whatever the host's `again` 
 
     // A whole match at the dev pace, bots filling the room, until the guest is told.
     const panel = guest.locator('#results-panel');
-    await expect(panel).toBeVisible({ timeout: 240_000 });
+    await expect(panel).toBeVisible({ timeout: WHOLE_MATCH_MS });
     const shownAt = Date.now();
 
     // END_GRACE_MS is four seconds (a champion waits longer, for the parade). Two and a
@@ -208,7 +264,7 @@ test('a guest reading its results with the grace over goes into the new match', 
 });
 
 async function dealAgainWhileReading(browser: Browser, hold: 'grace' | 'results'): Promise<void> {
-  test.setTimeout(420_000);
+  test.setTimeout(WHOLE_MATCH_MS + 180_000);
   const rom = romHashParam();
   const hostCtx = await browser.newContext();
   const guestCtx = await browser.newContext();
@@ -227,7 +283,7 @@ async function dealAgainWhileReading(browser: Browser, hold: 'grace' | 'results'
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
     await startWith(host, 2);
 
-    await expect(guest.locator('#results-panel')).toBeVisible({ timeout: 240_000 });
+    await expect(guest.locator('#results-panel')).toBeVisible({ timeout: WHOLE_MATCH_MS });
     if (hold === 'grace') {
       // The grace's own exit becomes nothing: the guest stays in it until something else moves it.
       await guest.evaluate(() => (window as unknown as BrWindow).__br.grace.arm(() => {}));
