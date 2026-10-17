@@ -137,6 +137,74 @@ describe('the drawn screens (POK-320)', () => {
   });
 });
 
+describe('the trainer card (POK-335)', () => {
+  const model = (over: Partial<import('./screens').CardFace> = {}) => ({
+    face: { name: 'CAM', skin: 0, wins: 3, played: 7, best: 1, ...over },
+    rows: [{ label: 'SEND PLAY COUNT', detail: 'ON', id: 'trainer-stats', onPress: () => {} }],
+    note: '',
+    onName: () => {},
+    onSkin: () => {},
+    onBack: () => {},
+  });
+
+  it("draws Emerald's card with its fields where MONEY, POKéDEX and TIME go", async () => {
+    const { trainerScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const { measure } = await import('./emerald');
+    const { canvas, texts } = fakeCanvas();
+    trainerScreen(() => model()).paint(canvas, 320);
+    const at = (t: string) => texts.find((d) => d.text === t);
+    expect(at('NAME: CAM')).toMatchObject({ x: 24, y: 41 });
+    for (const [label, value, y] of [['WINS', '3', 65], ['PLAYED', '7', 81], ['BEST', '1st', 97]] as const) {
+      expect(at(label)).toMatchObject({ x: 24, y });
+      expect(at(value), `${value} right-aligned to the card's value column`).toMatchObject({ x: 136 - measure(value), y });
+    }
+    expect(texts.find((d) => d.text.startsWith('IDNo.'))?.y).toBe(17);
+    const best = model({ best: undefined });
+    const fresh = fakeCanvas();
+    trainerScreen(() => best).paint(fresh.canvas, 320);
+    expect(fresh.texts.some((d) => d.text === '---'), 'no BEST until a match is finished').toBe(true);
+  });
+
+  it('wears its stars’ colour and a girl’s background, a badge per win, and the skin’s portrait', async () => {
+    const { trainerScreen, CARD_H } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const paint = (face: Partial<import('./screens').CardFace>) => {
+      const { canvas, pictures } = fakeCanvas();
+      trainerScreen(() => model(face)).paint(canvas, 320);
+      return pictures;
+    };
+    const may = paint({ skin: 1, wins: 8 });
+    expect(may.find((p) => p.name === 'trainer-card.png')?.sy, 'two stars, the girl’s row').toBe((2 * 2 + 1) * CARD_H);
+    expect(may.filter((p) => p.name === 'card-badges.png' && p.sx < 128)).toHaveLength(8);
+    expect(may.filter((p) => p.name === 'card-badges.png' && p.sx === 128)).toHaveLength(2);
+    expect(may.find((p) => p.name === 'trainer-pics.png')).toMatchObject({ sx: 64, x: 160, y: 40 });
+    const fresh = paint({ wins: 0 });
+    expect(fresh.find((p) => p.name === 'trainer-card.png')?.sy, 'green, no stars').toBe(0);
+    expect(fresh.filter((p) => p.name === 'card-badges.png')).toHaveLength(0);
+  });
+
+  it('opens your name and the wardrobe from the card, first in the rows, and fits BACK on a 320 screen', async () => {
+    const { trainerScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const pressed: string[] = [];
+    const m = { ...model(), onName: () => pressed.push('name'), onSkin: () => pressed.push('skin') };
+    const six = Array.from({ length: 6 }, (_, i) => ({ label: `ROW ${i}`, id: `r${i}`, onPress: () => {} }));
+    const painted = trainerScreen(() => ({ ...m, rows: six, note: 'Saved to a file.' })).paint(fakeCanvas().canvas, 320);
+    const inRows = painted.widgets.filter((w) => w.parent === 'trainer-rows');
+    expect(inRows.slice(0, 2).map((w) => w.id)).toEqual(['trainer-name', 'trainer-skin']);
+    expect(inRows[0].text).toContain('your name');
+    expect(inRows[1].text).toBe('BRENDAN your sprite');
+    inRows[0].onPress!();
+    inRows[1].onPress!();
+    expect(pressed).toEqual(['name', 'skin']);
+    const note = painted.widgets.find((w) => w.id === 'trainer-note')!;
+    const back = painted.widgets.find((w) => w.id === 'trainer-back')!;
+    expect(back.rect.y, 'BACK under the note, not over it').toBeGreaterThanOrEqual(note.rect.y + note.rect.h);
+    expect(back.rect.y + back.rect.h).toBeLessThanOrEqual(320);
+  });
+});
+
 describe('the page asks nothing with the browser (POK-320)', () => {
   // Every question outside the game is drawn now: the name, the code and the passcode on
   // the entry, the career's SAVE or LOAD on a notice. A prompt() or an alert() is a grey

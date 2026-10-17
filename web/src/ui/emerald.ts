@@ -197,6 +197,7 @@ export class EmeraldCanvas {
   private ctx: CanvasRenderingContext2D;
   private fonts = new Map<TextColor, HTMLCanvasElement>();
   private sheets = new Map<number, HTMLImageElement>();
+  private pictures = new Map<string, HTMLImageElement>();
   private ready: Promise<void>;
   private mask: HTMLImageElement | null = null;
   private frame: HTMLImageElement | null = null;
@@ -322,6 +323,24 @@ export class EmeraldCanvas {
   drawPicture(img: HTMLImageElement | null, sx: number, sy: number, w: number, h: number, x: number, y: number): void {
     if (!img || !img.complete || img.naturalWidth === 0) return;
     this.ctx.drawImage(img, sx, sy, w, h, x + this.origin, y, w, h);
+  }
+
+  /** Part of one of the page's own pictures (`/ui/<name>`: the trainer card, its badges,
+   *  the portraits) at (x, y). Loaded on first use; whoever drew without it is asked to
+   *  draw again when it lands, as a sheet is. Returns false while it is loading. */
+  drawUiPicture(name: string, sx: number, sy: number, w: number, h: number, x: number, y: number): boolean {
+    let img = this.pictures.get(name);
+    if (!img) {
+      const el = new Image();
+      el.decoding = 'async';
+      el.onload = () => this.onLoad?.();
+      el.src = `/ui/${name}`;
+      this.pictures.set(name, el);
+      img = el;
+    }
+    if (!img.complete || img.naturalWidth === 0) return false;
+    this.ctx.drawImage(img, sx, sy, w, h, x + this.origin, y, w, h);
+    return true;
   }
 
   /** The cursor Emerald's menus use: a small right-pointing triangle. */
