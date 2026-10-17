@@ -3,9 +3,9 @@
 # Cam, 2026-09-17: "I noticed in Kanto Battle Royale there's an instance where Electrode
 # gets Self-Destruct and Explosion, which is just kind of ridiculous." Walked in order, an
 # ELECTRODE's learnset ends on SWIFT, EXPLOSION, MIRROR COAT and whatever was fourth; a mon
-# that joins the party now keeps whichever four are worth the most together. The rung
-# teaches nothing any more (2026-10-13), so the mon arrives at 75: a ball taken at a level
-# is settled there (BrLevels_Settle), evolved and taught as the rung once did.
+# that joins the party now keeps whichever four are worth the most together. The mon
+# arrives at 75: a ball taken at a level is settled there (BrLevels_Settle), evolved and
+# taught as the rung does.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
