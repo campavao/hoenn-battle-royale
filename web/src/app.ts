@@ -2840,7 +2840,8 @@ function wireRoom(
       // ROM straight from here, since nothing comes back to us over the relay.
       host?.hear(msg, 'rom');
       if (msg.t === 'out') {
-        // Whoever our ROM says is out has finished their fight, as when the relay says so.
+        // Our own `out` never comes back over the relay either, and whatever fight we were
+        // in ends with it: its stream is nobody's to be handed now.
         spectate.noteOut(msg.seat);
         // And we withdraw from the succession: a trainer who is out should not be the
         // one still running the match everybody else is in (POK-252).

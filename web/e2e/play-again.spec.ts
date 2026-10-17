@@ -25,64 +25,98 @@ type HbrWindow = { __hbr: { emu: { read(a: number, w: 8 | 16 | 32): number } } }
 
 const OFF_BOOT = 0x2018; // net/mailbox.ts's MAILBOX.OFF_BOOT
 
-// START to the results, for a whole match at `#fast` with bots: a 25s opening, eight 15s
-// ring phases to the final fog, its bleed (a tenth of each mon every four seconds), and
-// the duels on the way, which hold both bots out of the fog while they last -- up to the
-// proxy's deadline, 90s at worst (bots/proxy.ts). Ten matches of this seed on one machine
-// were won 185 to 255 seconds in; 240 was the whole budget, results and all. A champion's
-// results wait on its Hall of Fame too, up to most of a minute (ParadeHold). It would also
-// cover a watcher's results held the full minute (ReplayHold) behind a 255s win:
-// watchUntilResults is what catches that, not this.
+// START to the win, for a whole match at `#fast` with bots: a 25s opening, eight 15s ring
+// phases to the final fog, its bleed, and the duels on the way, which keep both bots out
+// of the fog while they last (up to 90s, bots/proxy.ts). Measured: won 185-255s in. The
+// results after the win have their own limit (watchUntilResults).
 const WHOLE_MATCH_MS = 360_000;
+/** The win, or the end of the fight a watcher is replaying (whichever is later), to the
+ *  results. A watcher's results wait for the fight on its screen to play out (POK-365,
+ *  ReplayHold): the last `out` ends the stream and the replay plays what it has at its
+ *  own pace, measured up to 35s past the win. Past the replay, only ReplayHold's poll
+ *  and a relay hop are left. */
+const RESULTS_AFTER_MS = 10_000;
+/** ReplayHold gives up on a replay, and ParadeHold on a champion's Hall of Fame, at
+ *  WIN_GRACE_MAX_MS (app.ts, 60s): no results wait longer than that past the win. */
+const RESULTS_HELD_MAX_MS = 65_000;
 
-/** Waits out a whole match from START to the results, the page out early and watching a
- *  bot. Every fight its ROM is handed must be one that is still on: the host never heard
- *  its own bots' `out`s into spectate's books, so following a bot handed the ROM that
- *  bot's FIRST duel, two minutes over, and a replay waiting on a turn that never came held
- *  the results for WIN_GRACE_MAX_MS (60s) -- over the budget, four runs in five. A fight
- *  can start and finish inside one look (a duel runs at 8x), so "over" is a trainer in it
- *  out for longer than STALE_MS before the watch began. */
-async function watchUntilResults(page: Page): Promise<void> {
-  const STALE_MS = 15_000;
+/** Waits out a whole match from START to `watcher`'s results, `director` being the page
+ *  that runs it (the same page when the host is the one watching). Two things are held
+ *  to account on the way, both of which once stalled the results for a minute:
+ *  - every fight `watcher`'s ROM is handed is still on. The host never heard its own
+ *    bots' `out`s into spectate's books, so following a bot handed its ROM that bot's
+ *    FIRST duel, long over, and a replay waiting on a turn that never came. A duel runs
+ *    at 8x and can start and finish between two looks, so "over" is a trainer in it out
+ *    for longer than STALE_MS.
+ *  - the results come soon after the win, or after the fight on screen plays out. */
+async function watchUntilResults(watcher: Page, director: Page = watcher): Promise<void> {
+  const STALE_MS = 5_000;
   const spectate = loadSymbols().gBrSpectate;
   const outAt = new Map<number, number>();
   const deadline = Date.now() + WHOLE_MATCH_MS;
+  const me = await watcher.evaluate(() => (window as unknown as BrWindow).__br.bridge.seat as number);
   let watched = -1;
   let handed = 0;
-  let wentOut = false;
-  while (!(await page.locator('#results-panel').isVisible())) {
-    expect(Date.now(), 'the results came up within a whole match').toBeLessThan(deadline);
+  let winAt: number | undefined;
+  let winner: number | undefined;
+  let replayEndAt: number | undefined;
+  let watchedAtWin = -1;
+  while (!(await watcher.locator('#results-panel').isVisible())) {
+    expect(Date.now(), 'the match was won within a whole match').toBeLessThan(deadline);
     const now = Date.now();
-    const seen = await page.evaluate((base) => {
+    const match = await director.evaluate(() => {
+      const state = (window as unknown as BrWindow).__br.director?.state;
+      return state && { out: state.placements as number[], ended: state.phase === 'ended', winner: state.winner as number | undefined };
+    });
+    expect(match, 'the director page runs the match').toBeTruthy();
+    if (match!.ended && winAt === undefined) {
+      winAt = now;
+      winner = match!.winner;
+      watchedAtWin = watched;
+    }
+    for (const seat of match!.out) if (!outAt.has(seat)) outAt.set(seat, now);
+    const rom = await watcher.evaluate((base) => {
       const emu = (window as unknown as HbrWindow).__hbr.emu;
-      const br = (window as unknown as BrWindow).__br;
-      const director = br.director;
-      return {
-        directing: director !== undefined,
-        me: br.bridge.seat as number,
-        out: (director?.state?.placements ?? []) as number[],
-        watching: emu.read(base + 5, 8) !== 0,
-        lo: emu.read(base + 6, 8),
-        hi: emu.read(base + 7, 8),
-      };
+      return { watching: emu.read(base + 5, 8) !== 0, lo: emu.read(base + 6, 8), hi: emu.read(base + 7, 8) };
     }, spectate);
-    expect(seen.directing, 'this page runs the match').toBe(true);
-    for (const seat of seen.out) if (!outAt.has(seat)) outAt.set(seat, now);
-    wentOut = outAt.has(seen.me);
-    const id = seen.watching ? seen.lo | (seen.hi << 8) : -1;
+    const id = rom.watching ? rom.lo | (rom.hi << 8) : -1;
     if (id !== -1 && id !== watched) {
       handed++;
-      for (const seat of [seen.lo, seen.hi]) {
+      for (const seat of [rom.lo, rom.hi]) {
         const age = now - (outAt.get(seat) ?? now);
         expect(age, `handed a fight of seat ${seat}'s, out ${Math.round(age / 1000)}s`).toBeLessThan(STALE_MS);
       }
     }
+    if (winAt !== undefined && watched !== -1 && id === -1) replayEndAt = now;
     watched = id;
-    await page.waitForTimeout(500);
+    await watcher.waitForTimeout(500);
   }
+  // A win and its results can both land between two looks.
+  if (winAt === undefined) {
+    const last = await director.evaluate(() => {
+      const state = (window as unknown as BrWindow).__br.director?.state;
+      return { ended: state?.phase === 'ended', winner: state?.winner as number | undefined };
+    });
+    if (last.ended) [winAt, winner] = [Date.now(), last.winner];
+  }
+  expect(winAt, 'the results came after the win').toBeDefined();
+  const shown = Date.now();
+  const after = shown - winAt!;
   // Not an assertion: the bot we follow may fight nobody after we go out, and a page that
   // won was never out to watch. Written down, so a run that checked nothing says so.
-  test.info().annotations.push({ type: 'watched', description: `${wentOut ? 'out' : 'never out'}, ${handed} fights handed` });
+  const out = outAt.has(me) ? 'out' : 'never out';
+  const replay = replayEndAt === undefined ? 'none' : `${replayEndAt - winAt!}ms`;
+  const note = `${out}, ${handed} fights handed, watching ${watchedAtWin} at the win, its replay over ${replay} after, results ${after}ms after`;
+  test.info().annotations.push({ type: 'watched', description: note });
+  console.log(`play-again: ${note}`);
+  expect(after, `the results ${Math.round(after / 1000)}s after the win`).toBeLessThan(RESULTS_HELD_MAX_MS);
+  // The champion's wait is its Hall of Fame, which nothing here measures; a watcher's is
+  // the fight on its screen, and once that is over the results are next. (They can go up
+  // over a replay still on, too: ReplayHold lets go at its cap, or of a replay it never saw.)
+  if (winner !== me) {
+    const from = Math.max(winAt!, replayEndAt ?? 0);
+    expect(shown - from, `the results ${Math.round((shown - from) / 1000)}s after the win and the fight on screen`).toBeLessThan(RESULTS_AFTER_MS);
+  }
 }
 
 test.beforeAll(() => {
@@ -217,7 +251,7 @@ test("a guest reads its result for the whole grace, whatever the host's `again` 
 
     // A whole match at the dev pace, bots filling the room, until the guest is told.
     const panel = guest.locator('#results-panel');
-    await expect(panel).toBeVisible({ timeout: WHOLE_MATCH_MS });
+    await watchUntilResults(guest, host);
     const shownAt = Date.now();
 
     // END_GRACE_MS is four seconds (a champion waits longer, for the parade). Two and a
@@ -288,7 +322,7 @@ async function dealAgainWhileReading(browser: Browser, hold: 'grace' | 'results'
     await guest.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
     await startWith(host, 2);
 
-    await expect(guest.locator('#results-panel')).toBeVisible({ timeout: WHOLE_MATCH_MS });
+    await watchUntilResults(guest, host);
     if (hold === 'grace') {
       // The grace's own exit becomes nothing: the guest stays in it until something else moves it.
       await guest.evaluate(() => (window as unknown as BrWindow).__br.grace.arm(() => {}));
