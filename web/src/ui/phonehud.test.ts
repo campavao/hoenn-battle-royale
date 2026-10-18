@@ -83,7 +83,7 @@ describe('the sign and the fog window', () => {
 
   it('two lines in the ring: FOG and the clock, how many are left -- not where it closes to', () => {
     expect(text(view())).toEqual([
-      ['FOG', '1:35'],
+      ['Fog', '1:35'],
       ['7 left', ''],
     ]);
     expect(fogHeight(2)).toBe(48);
@@ -92,15 +92,15 @@ describe('the sign and the fog window', () => {
 
   it('two in the Safari, red under thirty seconds, FOG! in its flash, the eyes when anybody watches', () => {
     expect(text(view({ ring: null }))).toEqual([
-      ['SAFARI', '1:35'],
+      ['Safari', '1:35'],
       ['7 left', ''],
     ]);
     expect(fogLines(view({ clock: 30 }))[0].right?.color).toBe(TEXT_RED);
-    expect(text(view({ flash: 2 }))[0]).toEqual(['FOG', 'Fog!']);
-    expect(text(view({ flash: 1 }))[0]).toEqual(['FOG', '']);
+    expect(text(view({ flash: 2 }))[0]).toEqual(['Fog', 'Fog!']);
+    expect(text(view({ flash: 1 }))[0]).toEqual(['Fog', '']);
     expect(text(view({ eyes: 3 }))[1]).toEqual(['7 left', '3 watch']);
     expect(text(view({ ring: 'Fog everywhere', fogEverywhere: true }))).toEqual([
-      ['FOG', '1:35'],
+      ['Fog', '1:35'],
       ['Fog everywhere', ''],
       ['7 left', ''],
     ]);

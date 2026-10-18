@@ -35,6 +35,16 @@ u8 BrSkin_MyAnim(struct ObjectEvent *objectEvent, u8 anim, u8 standard);
 // the twenty loops. The field-move pose before SURF, CUT or STRENGTH waited for ever.
 bool8 BrSkin_MyAnimEndless(struct ObjectEvent *objectEvent);
 
+// The ACRO BIKE's wheelies and the rod's casts, for our own object wearing an NPC look:
+// event_object_movement.c's getters for them hand back `standard` (facing, or walking
+// for the wheelie's pedal), so the look rides and fishes in its standing sprite.
+u8 BrSkin_PlayerAnim(u8 anim, u8 standard);
+// field_player_avatar.c: putting the rod away waits for its animation to end, which a
+// standing one never does...
+bool8 BrSkin_PlayerAnimEndless(void);
+// ...and the cast's sway, read off the frame number, is not for a standing sprite.
+void BrSkin_FishingOffsets(struct Sprite *sprite);
+
 // ---- the MAP -----------------------------------------------------------------
 // region_map.c: the head that marks us on the MAP and the fly map is BRENDAN's or MAY's.
 // An NPC look has no head icon, so the middle of its walking sprite's first frame

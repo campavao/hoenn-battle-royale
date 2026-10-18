@@ -238,7 +238,7 @@ export function fogLines(v: HudView): Line[] {
   const inner = FOG_W - 16;
   const clock: Line['right'] =
     v.flash === 2 ? { text: 'Fog!', color: TEXT_RED } : v.flash === 1 ? undefined : { text: clockText(v.clock), color: v.clock <= 30 ? TEXT_RED : TEXT_DARK };
-  const lines: Line[] = [{ left: { text: v.ring === null ? 'SAFARI' : 'FOG', color: TEXT_BLUE }, right: clock }];
+  const lines: Line[] = [{ left: { text: v.ring === null ? 'Safari' : 'Fog', color: TEXT_BLUE }, right: clock }];
   if (v.fogEverywhere && v.ring !== null) lines.push({ left: { text: fitText(v.ring, inner), color: TEXT_RED } });
   lines.push({
     left: { text: `${v.left} left`, color: TEXT_BLUE },

@@ -4561,42 +4561,74 @@ u8 GetJumpSpecialDirectionAnimNum(u8 direction)
 
 u8 GetAcroWheelieDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sAcroWheelieDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sAcroWheelieDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetAcroUnusedDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sAcroUnusedDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sAcroUnusedDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetAcroEndWheelieDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sAcroEndWheelieDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sAcroEndWheelieDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetAcroUnusedActionDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sAcroUnusedActionDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sAcroUnusedActionDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetAcroWheeliePedalDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sAcroWheeliePedalDirectionAnimNums[direction], GetMoveDirectionAnimNum(direction));
+#else
     return sAcroWheeliePedalDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetFishingDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sFishingDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sFishingDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetFishingNoCatchDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sFishingNoCatchDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sFishingNoCatchDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetFishingBiteDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sFishingBiteDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sFishingBiteDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetRunningDirectionAnimNum(u8 direction)

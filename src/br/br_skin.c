@@ -105,6 +105,10 @@ u8 BrSkin_MyAvatar(u8 gfx)
         return gfx;
     switch (gfx)
     {
+    case OBJ_EVENT_GFX_BRENDAN_ACRO_BIKE:
+    case OBJ_EVENT_GFX_MAY_ACRO_BIKE:
+    case OBJ_EVENT_GFX_BRENDAN_FISHING:
+    case OBJ_EVENT_GFX_MAY_FISHING:
     case OBJ_EVENT_GFX_BRENDAN_NORMAL:
     case OBJ_EVENT_GFX_MAY_NORMAL:
     case OBJ_EVENT_GFX_BRENDAN_MACH_BIKE:
@@ -115,8 +119,7 @@ u8 BrSkin_MyAvatar(u8 gfx)
     case OBJ_EVENT_GFX_MAY_FIELD_MOVE:
         return BrGhosts_WalkGraphic(gBrMySkin);
     }
-    // The ACRO BIKE's wheelies, the rod and the watering can are animations an NPC has
-    // no frames for, and dive is a different sprite altogether.
+    // The watering can is not in a match, and dive is a different sprite altogether.
     return gfx;
 }
 
@@ -132,6 +135,34 @@ u8 BrSkin_MyAnim(struct ObjectEvent *objectEvent, u8 anim, u8 standard)
     if (objectEvent->isPlayer && objectEvent->graphicsId == BrGhosts_WalkGraphic(gBrMySkin) && BrSkin_MyLookIsNpc())
         return standard;
     return anim;
+}
+
+static bool8 PlayerIsNpc(void)
+{
+    struct ObjectEvent *player = &gObjectEvents[gPlayerAvatar.objectEventId];
+
+    return player->graphicsId == BrGhosts_WalkGraphic(gBrMySkin) && BrSkin_MyLookIsNpc();
+}
+
+u8 BrSkin_PlayerAnim(u8 anim, u8 standard)
+{
+    return PlayerIsNpc() ? standard : anim;
+}
+
+bool8 BrSkin_PlayerAnimEndless(void)
+{
+    return PlayerIsNpc();
+}
+
+void BrSkin_FishingOffsets(struct Sprite *sprite)
+{
+    // AlignFishingAnimationFrames reads the rod's arc off the frame number, and an NPC's
+    // facing frames are 0..2: west and east would swing the trainer 8 pixels sideways.
+    if (PlayerIsNpc())
+    {
+        sprite->x2 = 0;
+        sprite->y2 = 0;
+    }
 }
 
 static bool8 LoadPic(u8 battler, u8 skin)

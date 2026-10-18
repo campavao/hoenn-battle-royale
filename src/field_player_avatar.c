@@ -2039,7 +2039,11 @@ static bool8 Fishing_NoMon(struct Task *task)
 static bool8 Fishing_PutRodAway(struct Task *task)
 {
     AlignFishingAnimationFrames();
+#if BR
+    if (gSprites[gPlayerAvatar.spriteId].animEnded || BrSkin_PlayerAnimEndless())
+#else
     if (gSprites[gPlayerAvatar.spriteId].animEnded)
+#endif
     {
         struct ObjectEvent *playerObjEvent = &gObjectEvents[gPlayerAvatar.objectEventId];
 
@@ -2104,6 +2108,9 @@ static void AlignFishingAnimationFrames(void)
         playerSprite->y2 = -8;
     if (animType == 10 || animType == 11)
         playerSprite->y2 = 8;
+#if BR
+    BrSkin_FishingOffsets(playerSprite);
+#endif
     if (gPlayerAvatar.flags & PLAYER_AVATAR_FLAG_SURFING)
         SetSurfBlob_PlayerOffset(gObjectEvents[gPlayerAvatar.objectEventId].fieldEffectSpriteId, TRUE, playerSprite->y2);
 }
