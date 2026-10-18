@@ -38,9 +38,9 @@ EWRAM_DATA struct BrHud gBrHud = {0};
 // to screen block 25 for the 512-row ring and took everything from 0x240.
 static const struct WindowTemplate sCornerTemplate = { 0, BR_HUD_CORNER_LEFT, 1,
     BR_HUD_CORNER_WIDTH, BR_HUD_CORNER_HEIGHT, 15, BR_HUD_TILE_CORNER };
-static const struct WindowTemplate sTickerTemplate = { 0, 1, 17,
+static const struct WindowTemplate sTickerTemplate = { 0, 2, 17,
     BR_HUD_TICKER_WIDTH, BR_HUD_TICKER_HEIGHT, 15, BR_HUD_TILE_TICKER };
-static const struct WindowTemplate sBoxTemplate = { 0, 1, 11,
+static const struct WindowTemplate sBoxTemplate = { 0, 2, 11,
     BR_HUD_BOX_WIDTH, BR_HUD_BOX_HEIGHT, 15, BR_HUD_TILE_BOX };
 
 #define BR_HUD_CORNER_END (BR_HUD_TILE_CORNER + BR_HUD_CORNER_WIDTH * BR_HUD_CORNER_HEIGHT)
@@ -56,11 +56,12 @@ static const struct WindowTemplate sBoxTemplate = { 0, 1, 11,
 #define BR_HUD_MESSAGE_BOX_END (BR_HUD_MESSAGE_BOX + 27 * 4)
 #define BR_HUD_YES_NO_END (0x125 + 5 * 4)
 
-// Every start menu, one item or pret's nine, covers the whole corner: on screen the
-// menu sits over it, so the corner is never up with its tiles in the menu.
-STATIC_ASSERT(BR_HUD_TILE_CORNER >= BR_HUD_START_MENU && BR_HUD_CORNER_END <= BR_HUD_START_MENU_END(1), BrHudCornerUnderEveryStartMenu)
+// Every start menu a match draws, three items (BAG, the card, EXIT) up to pret's nine,
+// covers the whole corner: on screen the menu sits over it, so the corner is never up
+// with its tiles in the menu.
+STATIC_ASSERT(BR_HUD_TILE_CORNER >= BR_HUD_START_MENU && BR_HUD_CORNER_END <= BR_HUD_START_MENU_END(3), BrHudCornerUnderEveryStartMenu)
 // The box shares the start menu's tail and the message box's head, after the corner.
-STATIC_ASSERT(BR_HUD_TILE_BOX >= BR_HUD_CORNER_END && BR_HUD_BOX_END <= 0x1C4, BrHudBoxAfterTheCorner)
+STATIC_ASSERT(BR_HUD_TILE_BOX >= BR_HUD_CORNER_END && BR_HUD_BOX_END <= BR_HUD_TILE_TICKER, BrHudBoxAfterTheCorner)
 // The ticker shares the message box's tail and nothing else: past the longest start
 // menu pret can draw (nine items, to 0x1C4) and past the box, short of the frames.
 STATIC_ASSERT(BR_HUD_TILE_TICKER >= BR_HUD_START_MENU_END(9) && BR_HUD_TILE_TICKER >= BR_HUD_BOX_END, BrHudTickerPastEveryStartMenu)
@@ -83,12 +84,23 @@ STATIC_ASSERT(BR_HUD_CORNER_LEFT + BR_HUD_CORNER_WIDTH <= 29, BrHudCornerFrameOn
 // The message box's own background, which is what makes it look like one.
 #define BR_HUD_BOX PIXEL_FILL(1)
 
-// bg, fg, shadow -- the standard trio on a light box, and the line kinds keep their
-// colours so a kill and the fog still read differently at a glance.
-static const u8 sColorsText[] = { 1, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY };
-static const u8 sColorsFog[] = { 1, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
-static const u8 sColorsKill[] = { 1, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
-static const u8 sColorsSay[] = { 1, TEXT_COLOR_BLUE, TEXT_COLOR_LIGHT_BLUE };
+// The field's dialogue font, the one every message box talks in (Cam, 2026-10-18: the
+// small font "looks out of place"). Its capitals are ten rows tall, the shadow's included,
+// from the fourth row of a sixteen-row cell. The corner's 24 rows hold two lines only
+// that close: the second starts eleven rows down, where the first one's cell still has
+// five to go, and the whole is then scrolled up a row, so the margins are two rows over,
+// one between and one under.
+#define BR_HUD_FONT FONT_NORMAL
+#define BR_HUD_CORNER_LINE_2 11
+
+// bg, fg, shadow -- the standard pair on a light box, and the line kinds keep their
+// colours so a kill and the fog still read differently at a glance. The background is
+// the box's own fill, so a cell's blank rows draw nothing: the corner's second line would
+// wipe the foot of the first.
+static const u8 sColorsText[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY };
+static const u8 sColorsFog[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
+static const u8 sColorsKill[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
+static const u8 sColorsSay[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_BLUE, TEXT_COLOR_LIGHT_BLUE };
 
 static const u8 sText_Left[] = _(" LEFT");
 static const u8 sText_Fog[] = _("FOG!");
@@ -203,6 +215,13 @@ static void Extent(const struct WindowTemplate *t, u8 left, u8 other, struct BrH
     e->bottom = t->tilemapTop + t->height - 1 + other;
 }
 
+// Where a HUD window draws: the corner's standard frame is one cell all round, the
+// dialogue frame round the ticker and the box two to the left (PutFrame).
+static void HudExtent(const struct WindowTemplate *t, struct BrHudExtent *e)
+{
+    Extent(t, t == &sCornerTemplate ? 1 : 2, 1, e);
+}
+
 // Where an occupying window draws: its cells, and its frame -- window 0's dialogue frame
 // two cells to the left and one on every other side, anybody else's standard frame one
 // all round, when it has one. It has one when the cell beside its first row is a frame
@@ -267,7 +286,7 @@ static u8 CoveredBits(u8 *sharers)
         if (Live(HudId(k), sHudTemplates[k]))
         {
             live |= sHudBits[k];
-            Extent(sHudTemplates[k], 1, 1, &ours[k]);
+            HudExtent(sHudTemplates[k], &ours[k]);
         }
     }
     for (i = 0; live != 0 && i < WINDOWS_MAX; i++)
@@ -321,7 +340,7 @@ static bool8 TakeOff(const struct WindowTemplate *t)
          && (i == 0 || Names(map, w->tilemapLeft, w->tilemapTop, w->baseBlock)))
             OccupantExtent(i, map, &keep[n++]);
     }
-    Extent(t, 1, 1, &ours);
+    HudExtent(t, &ours);
     for (y = ours.top; y <= ours.bottom; y++)
     {
         for (x = ours.left; x <= ours.right; x++)
@@ -438,7 +457,7 @@ void BrHud_WindowAdded(u8 windowId)
 // (2026-10-05 play-test). The HUD keeps its own copy of the frame's colours in 13, which
 // nothing on the field uses -- the map's own tilesets stop at 12.
 #define BR_HUD_STD_FRAME_PALETTE 13
-static void PutFrame(const struct WindowTemplate *t)
+static void PutStdFrame(const struct WindowTemplate *t)
 {
     u8 l = t->tilemapLeft, top = t->tilemapTop, w = t->width, ht = t->height;
 
@@ -450,6 +469,46 @@ static void PutFrame(const struct WindowTemplate *t)
     FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 6, l - 1, top + ht, 1, 1, BR_HUD_STD_FRAME_PALETTE);
     FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 7, l, top + ht, w, 1, BR_HUD_STD_FRAME_PALETTE);
     FillBgTilemapBufferRect(0, BR_HUD_STD_FRAME + 8, l + w, top + ht, 1, 1, BR_HUD_STD_FRAME_PALETTE);
+}
+
+// The message box's own frame round the ticker and the box: menu.c's
+// WindowFunc_DrawDialogueFrame (static there), whose sides are five rows tall whatever
+// the window's height -- the message box's four and its foot, which the foot then
+// covers. The ticker is two, so its sides here are its own height. LoadMessageBoxGfx
+// keeps the frame at 0x200 in palette 15, the text's own, which the map-name popup's
+// sign leaves alone.
+#define BR_HUD_DLG_FRAME 0x200
+#define BR_HUD_DLG_FRAME_PALETTE 15
+static void PutDialogueFrame(const struct WindowTemplate *t)
+{
+    u8 l = t->tilemapLeft, top = t->tilemapTop, w = t->width, ht = t->height;
+    u8 row;
+    u16 flip;
+
+    for (row = 0; row < 2; row++)
+    {
+        u8 y = row == 0 ? top - 1 : top + ht;
+
+        flip = row == 0 ? 0 : BG_TILE_V_FLIP(0);
+        FillBgTilemapBufferRect(0, flip + BR_HUD_DLG_FRAME + 1, l - 2, y, 1, 1, BR_HUD_DLG_FRAME_PALETTE);
+        FillBgTilemapBufferRect(0, flip + BR_HUD_DLG_FRAME + 3, l - 1, y, 1, 1, BR_HUD_DLG_FRAME_PALETTE);
+        FillBgTilemapBufferRect(0, flip + BR_HUD_DLG_FRAME + 4, l, y, w - 1, 1, BR_HUD_DLG_FRAME_PALETTE);
+        FillBgTilemapBufferRect(0, flip + BR_HUD_DLG_FRAME + 5, l + w - 1, y, 1, 1, BR_HUD_DLG_FRAME_PALETTE);
+        FillBgTilemapBufferRect(0, flip + BR_HUD_DLG_FRAME + 6, l + w, y, 1, 1, BR_HUD_DLG_FRAME_PALETTE);
+    }
+    FillBgTilemapBufferRect(0, BR_HUD_DLG_FRAME + 7, l - 2, top, 1, ht, BR_HUD_DLG_FRAME_PALETTE);
+    FillBgTilemapBufferRect(0, BR_HUD_DLG_FRAME + 9, l - 1, top, 1, ht, BR_HUD_DLG_FRAME_PALETTE);
+    FillBgTilemapBufferRect(0, BR_HUD_DLG_FRAME + 10, l + w, top, 1, ht, BR_HUD_DLG_FRAME_PALETTE);
+}
+
+// The corner beside the start menu wears its standard frame; the ticker and the box,
+// which talk, the message box's.
+static void PutFrame(const struct WindowTemplate *t)
+{
+    if (t == &sCornerTemplate)
+        PutStdFrame(t);
+    else
+        PutDialogueFrame(t);
 }
 
 // Puts or takes off a window's tilemap cells, but only across a change, and only when
@@ -513,12 +572,12 @@ static u8 FogPhase(void)
 
 static void PrintRight(u8 id, const u8 *str, u8 y, const u8 *colors)
 {
-    s32 w = GetStringWidth(FONT_SMALL, str, 0);
+    s32 w = GetStringWidth(BR_HUD_FONT, str, 0);
     s32 x = BR_HUD_CORNER_PX - 1 - w;
 
     if (x < 0)
         x = 0;
-    AddTextPrinterParameterized3(id, FONT_SMALL, (u8)x, y, colors, (s8)TEXT_SKIP_DRAW, str);
+    AddTextPrinterParameterized3(id, BR_HUD_FONT, (u8)x, y, colors, (s8)TEXT_SKIP_DRAW, str);
 }
 
 // The corner's second line: where the ring is closing, all ring phase long (POK-325).
@@ -580,10 +639,10 @@ static void DrawCorner(void)
     // clock's place. With no place to name (the Safari, before the ring) the clock keeps
     // the second line to itself, as the corner always had it, rather than leave that
     // line an empty strip -- the wound bar's "empty looking box" (2026-09-16).
-    clockY = place != NULL ? 0 : 12;
+    clockY = place != NULL ? 0 : BR_HUD_CORNER_LINE_2;
     p = ConvertIntToDecimalStringN(buf, h->left, STR_CONV_MODE_LEFT_ALIGN, 2);
     StringCopy(p, sText_Left);
-    AddTextPrinterParameterized3(h->winCorner, FONT_SMALL, 0, 0, sColorsText,
+    AddTextPrinterParameterized3(h->winCorner, BR_HUD_FONT, 0, 0, sColorsText,
         (s8)TEXT_SKIP_DRAW, buf);
     if (fog == 2)
     {
@@ -614,13 +673,14 @@ static void DrawCorner(void)
             eye[0] = EOS;
     }
     if (eye[0] != EOS && place != NULL
-     && GetStringWidth(FONT_SMALL, eye, 0) + 4 + GetStringWidth(FONT_SMALL, place, 0) > BR_HUD_CORNER_PX)
+     && GetStringWidth(BR_HUD_FONT, eye, 0) + 4 + GetStringWidth(BR_HUD_FONT, place, 0) > BR_HUD_CORNER_PX)
         alt = AltTurn();
     if (place != NULL && alt != 2)
-        PrintRight(h->winCorner, place, 12, gBrRing.r < 0 ? sColorsFog : sColorsText);
+        PrintRight(h->winCorner, place, BR_HUD_CORNER_LINE_2, gBrRing.r < 0 ? sColorsFog : sColorsText);
     if (eye[0] != EOS && alt != 1)
-        AddTextPrinterParameterized3(h->winCorner, FONT_SMALL, 0, 12, sColorsText,
+        AddTextPrinterParameterized3(h->winCorner, BR_HUD_FONT, 0, BR_HUD_CORNER_LINE_2, sColorsText,
             (s8)TEXT_SKIP_DRAW, eye);
+    ScrollWindow(h->winCorner, 0, 1, BR_HUD_BOX);
     h->drawnClock = h->clockSecs;
     h->drawnLeft = h->left;
     h->drawnFog = fog;
@@ -760,7 +820,7 @@ static void DrawTicker(const struct BrHudLine *line)
     else if (line->kind == BR_HUD_KIND_SAY)
         colors = sColorsSay;
     FillWindowPixelBuffer(gBrHud.winTicker, BR_HUD_BOX);
-    AddTextPrinterParameterized3(gBrHud.winTicker, FONT_SMALL, 2, 1, colors, (s8)TEXT_SKIP_DRAW, line->text);
+    AddTextPrinterParameterized3(gBrHud.winTicker, BR_HUD_FONT, 0, 1, colors, (s8)TEXT_SKIP_DRAW, line->text);
 }
 
 static void TickTicker(bool8 paused, bool8 covered)
@@ -868,7 +928,7 @@ static void DrawBox(void)
 
     FillWindowPixelBuffer(h->winBox, BR_HUD_BOX);
     // CHAR_NEWLINE in the text gives the second line; the printer handles the rest.
-    AddTextPrinterParameterized3(h->winBox, FONT_SMALL, 2, 2, sColorsText,
+    AddTextPrinterParameterized3(h->winBox, BR_HUD_FONT, 0, 1, sColorsText,
         (s8)TEXT_SKIP_DRAW, h->box.text);
 }
 

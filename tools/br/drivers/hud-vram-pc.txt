@@ -42,9 +42,9 @@ poke u8 gBrHud+0x178 0
 poke u8 gBrHud+0x0B 0
 wait 4
 expect u8 gBrHud+0x09 3
-expect u16 0x0600F868 0xF139
-expect u16 0x0600FAC2 0
-expect u16 0x0600FC42 0xF1C8
+expect u16 0x0600F862 0xF139
+expect u16 0x0600FAC4 0
+expect u16 0x0600FC44 0xF1C9
 shot hud-up
 say pc-boot
 watch gMain+4 4
@@ -211,8 +211,8 @@ unwatch
 say pc-gone
 expect u32 gMain+4 CB2_Overworld+1
 expect u8 gBrHud+0x09 5
-expect u16 0x0600F868 0xF139
-expect u16 0x0600FAC2 0xF154
-expectbits u16 0x0600FC42 0x3FF 0
+expect u16 0x0600F862 0xF139
+expect u16 0x0600FAC4 0xF15D
+expectbits u16 0x0600FC44 0x3FF 0
 shot hud-back
 say hud vram pc ok

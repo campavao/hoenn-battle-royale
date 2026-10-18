@@ -61,7 +61,7 @@ BGCNT_ADDR = 0x0400000A
 LOAD_LAG = 30
 RING = {1: "gOverworldTilemapBuffer_Bg1", 2: "gOverworldTilemapBuffer_Bg2", 3: "gOverworldTilemapBuffer_Bg3"}
 # The HUD's windows (br_hud.c's templates): (left, top, base) -> name.
-HUD = {(20, 1, 0x139): "corner", (1, 11, 0x154): "box", (1, 17, 0x1C8): "ticker"}
+HUD = {(17, 1, 0x139): "corner", (2, 11, 0x15D): "box", (2, 17, 0x1C9): "ticker"}
 START_MENU = (22, 1, 0x139)
 MESSAGE_BOX = (2, 15, 0x194)
 BACK_WITHIN = 2
@@ -94,7 +94,10 @@ class Win:
         return self.base < other.base + other.w * other.h and other.base < self.base + self.w * self.h
 
     def extent(self):
-        return (self.left - 1, self.top - 1, self.left + self.w, self.top + self.h)
+        # The message box's frame, round the HUD's ticker and box too, is two cells wide
+        # on the left (br_hud.c's PutDialogueFrame); the standard frame is one all round.
+        left = 2 if self.hud in ("box", "ticker") or (self.left, self.top, self.base) == MESSAGE_BOX else 1
+        return (self.left - left, self.top - 1, self.left + self.w, self.top + self.h)
 
 
 def meet(a, b):
