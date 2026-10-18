@@ -1,0 +1,22 @@
+# tm-found-once: picking up a TM in a match names its move once (Cam, 2026-10-18). A TM
+# wears its move's name in a match (POK-264), so pret's "found one TM22\nSOLARBEAM" line
+# read "CAM found one SOLARBEAM\nSOLARBEAM!". BufferTMHMMoveName now says FALSE in a
+# match and the pickup takes the plain item line: "CAM found one WATER PULSE!".
+#
+# Seed 203 and this boot spot put a WATER PULSE TM in the ball the player faces; the
+# message itself is in gStringVar4.
+wait 30
+poke u32 gBrMatch+8 203
+pokebytes gBrMailbox+0x2018 81 00 00 13 27 00 0E 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+tap A
+wait 150
+shot msg
+dump gStringVar4 32
+# "WATER PULSE" starts at 14 (after "CAM found one "), then "!" and the terminator --
+# before the fix byte 25 was the newline that started the move's name a second time.
+expect u8 gStringVar4+14 0xD1
+expect u8 gStringVar4+25 0xAB
+expect u8 gStringVar4+26 0xFF
+say tm found once ok

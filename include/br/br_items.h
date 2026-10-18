@@ -24,6 +24,11 @@ u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text);
 // goes in the bag; *item may change.
 bool8 BrItems_Arrive(u16 *item, u16 count);
 
+// A TM wears its move's name for the length of a match (POK-264, GetItemName), so
+// pret's "found one TM22\nSOLARBEAM" line would say the move twice: BufferTMHMMoveName
+// says FALSE and the script takes the plain "found one SOLARBEAM" instead.
+bool8 BrItems_TmNamedForMove(void);
+
 // Std_FindItem, by callnative: VAR_RESULT TRUE when the ball was used up here and
 // gStringVar4 says how (BR_EventScript_FoundUsed; a pile of balls is bagged here too),
 // else the script carries on with VAR_0x8000 and VAR_0x8001 as BrItems_Pickup left them.

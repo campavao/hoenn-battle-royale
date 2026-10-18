@@ -892,7 +892,7 @@ const u8 *GetItemName(u16 itemId)
     //
     // gMoveNames is a table of static strings, so this returns the same kind of pointer
     // the item table would have: safe to hold, safe to StringCopy.
-    if (gBrMatch.phase != BR_PHASE_NONE && itemId >= ITEM_TM01 && itemId <= ITEM_HM08)
+    if (BrItems_TmNamedForMove() && itemId >= ITEM_TM01 && itemId <= ITEM_HM08)
     {
         u16 move = ItemIdToBattleMoveId(itemId);
 

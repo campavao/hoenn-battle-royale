@@ -46,6 +46,9 @@
 #include "wallclock.h"
 #include "window.h"
 #include "constants/battle_frontier.h"
+#if BR
+#include "br/br_items.h"
+#endif
 #include "constants/battle_pyramid.h"
 #include "constants/battle_tower.h"
 #include "constants/decorations.h"
@@ -1637,6 +1640,10 @@ u16 GetMysteryGiftCardStat(void)
 
 bool8 BufferTMHMMoveName(void)
 {
+#if BR
+    if (BrItems_TmNamedForMove()) // the TM's name is its move already: said once
+        return FALSE;
+#endif
     if (gSpecialVar_0x8004 >= ITEM_TM01 && gSpecialVar_0x8004 <= ITEM_HM08)
     {
         StringCopy(gStringVar2, gMoveNames[ItemIdToBattleMoveId(gSpecialVar_0x8004)]);

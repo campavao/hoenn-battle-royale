@@ -247,6 +247,11 @@ static u8 Found(u16 *item, u16 *count)
     return FOUND_USED;
 }
 
+bool8 BrItems_TmNamedForMove(void)
+{
+    return gBrMatch.phase != BR_PHASE_NONE;
+}
+
 void BrItems_FindItem(void)
 {
     // What this ball holds this match: a quarter of them a TM (br_balls.h).
