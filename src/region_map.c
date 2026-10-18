@@ -1742,6 +1742,7 @@ void CB2_OpenFlyMap(void)
         // (InitRegionMap above runs the whole load in one go) and nothing is shown until
         // case 10, so this is the moment. The frame is BG1, loaded in cases 5 and 6.
         BrMap_ShadeFog((u16 *)BG_SCREEN_ADDR(30), (u8 *)BG_CHAR_ADDR(3), MAPCURSOR_X_MIN, MAPCURSOR_Y_MIN, MAP_WIDTH, MAP_HEIGHT);
+        BrMap_DrawNextRing(GetBgTilemapBuffer(0), (u8 *)BG_CHAR_ADDR(0), 0x65 + 9, MAPCURSOR_X_MIN, MAPCURSOR_Y_MIN, MAP_WIDTH, MAP_HEIGHT);
         BrMap_DrawGyms(MAPCURSOR_X_MIN, MAPCURSOR_Y_MIN);
 #endif
         gMain.state++;
@@ -1769,6 +1770,9 @@ void CB2_OpenFlyMap(void)
 
 static void VBlankCB_FlyMap(void)
 {
+#if BR
+    BrMap_BlinkFog((u8 *)BG_CHAR_ADDR(3));
+#endif
     LoadOam();
     ProcessSpriteCopyRequests();
     TransferPlttBuffer();

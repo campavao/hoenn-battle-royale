@@ -42,6 +42,13 @@ export function isFinalRingPhase(ringIndex: number): boolean {
   return ringIndex >= RING_RADII.length - 1;
 }
 
+/** The radius the ring shrinks to after phase `ringIndex`, for the MAP's preview of it
+ *  (Cam, 2026-10-18: what the fog takes next blinks, a white circle where it stops);
+ *  none on the last phase, which has nowhere further to go. */
+export function nextRingRadius(ringIndex: number): number | undefined {
+  return isFinalRingPhase(ringIndex) ? undefined : RING_RADII[ringIndex + 1];
+}
+
 /** The ring in the strip: the place it closes on, which is the one place the fog never
  *  reaches. "RING 15 (DEWFORD TOWN)" read as the zone that had already closed, or as
  *  where we were (Cam's 2026-10-14 play-test, POK-359), so it says SAFE. The last

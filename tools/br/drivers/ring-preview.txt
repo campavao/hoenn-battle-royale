@@ -1,0 +1,82 @@
+# ring-preview: the MAP shows the next ring (Cam, 2026-10-18): "if an area is going to be
+# covered in fog, for the round prior it will have it slowly blinking purple... and there
+# should be a white circle around where the fog is actually going to close in on".
+#
+# The host's RING carries the next radius after the elapsed seconds (hasNext, next). On
+# the map the cells this ring keeps and the next does not get a tile of their own after
+# the fog's, which the fly map's VBlank fades in and out (BrMap_BlinkFog), and BG0 gets
+# a white circle round the cells the next ring keeps (BrMap_DrawNextRing).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# RING phase 3, centre (12,7), r 9, next 7, naming LITTLEROOT: payload seat 00 phase 03
+# sx 0C sy 07 r 09 placeLen 0A + the name + hasElapsed 00, elapsed 00 00, hasNext 01,
+# next 07 = 21 bytes; with the frame (15 00 00), 0x18
+pokebytes gBrMailbox+0x1018 0C 18 15 00 00 00 03 0C 07 09 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00 00 00 01 07
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrRing+4 9
+expect u8 gBrRing+32 7
+# START, MAP (two below the top in a match)
+poke u8 gBrMatch 2
+tap START
+wait 40
+tap DOWN
+wait 20
+tap DOWN
+wait 20
+tap A
+wait 240
+expect u8 gBrMap 1
+# BG1's tilemap is 0x0600F000, the grid from its cell (1,2). Along the centre's row: the
+# centre (12,7) and (19,7), seven out, are the frame's own; (20,7) and (21,7), which this
+# ring keeps and the next does not, are the blink tile 0x06 in the fog's palette 10;
+# (22,7), ten out, is the fog's 0x05.
+expect u16 0x0600F25A 0x1000
+expect u16 0x0600F268 0x1000
+expect u16 0x0600F26A 0xA006
+expect u16 0x0600F26C 0xA006
+expect u16 0x0600F26E 0xA005
+expect u16 gBrMap+2 6
+# the circle: BG0's tilemap is 0x0600F800. Seven cells and four pixels right of the
+# centre's middle (108 + 60 = 168) is screen column 21, on the centre's row 9 -- one of
+# BG0's own tiles from 0x6E up, in palette 11, white at colour 1 and dark at 2.
+expectbits u16 0x0600FA6A 0xF000 0xB000
+expectge u16 0x0600FA6A 0xB06E
+expect u16 0x05000162 0x7FFF
+expect u16 0x05000164 0x2084
+# ...and the centre's own BG0 cell has nothing on it
+expect u16 0x0600FA5A 0
+shot preview-a
+# the blink breathes: two shots a quarter of a breath apart differ in the blink tile's
+# pixels (BG1's tile 6 at 0x0600C0C0)
+wait 32
+shot preview-b
+wait 32
+shot preview-c
+wait 32
+shot preview-d
+# the last but one: r 0, next -1 -- everything the ring keeps blinks, and no circle
+tap B
+wait 200
+expect u8 gBrMap 0
+pokebytes gBrMailbox+0x1058 0C 18 15 00 00 00 08 0C 07 00 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00 00 00 01 FF
+poke u16 gBrMailbox+0x0C 2
+wait 30
+expect u8 gBrRing+32 0xFF
+# the phase's box has its ninety frames first
+wait 120
+# the start menu kept its cursor on MAP
+tap START
+wait 40
+tap A
+wait 240
+expect u8 gBrMap 1
+expect u16 0x0600F25A 0xA006
+expect u16 0x0600F268 0xA005
+expect u16 0x0600FA6A 0
+shot preview-last
+tap B
+wait 200
+expect u8 gBrMap 0
+say ring preview ok

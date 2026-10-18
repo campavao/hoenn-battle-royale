@@ -156,7 +156,7 @@
 // BR_MSG_RING
 // Host -> page/ROM: where the fog is now. `sx`/`sy` are region-map SECTION
 // coordinates (gRegionMapEntries), Hoenn's analogue of Kanto's town-map cell.
-// Payload (up to 25 bytes):
+// Payload (up to 27 bytes):
 //   0:  seat      u8   the host
 //   1:  phase     u8   1..64
 //   2:  sx        s8   -64..64
@@ -166,6 +166,8 @@
 //   6..: place    Gen 3 charmap bytes, placeLen of them
 //   next: hasElapsed u8
 //   next..+1: elapsed u16 LE   seconds since the match began
+//   next: hasNext u8
+//   next: nextR    s8   the radius after this phase, for the MAP's preview
 
 // BR_MSG_CLOCK
 // Host -> page/ROM: a countdown the room is watching (the Safari opening's clock
