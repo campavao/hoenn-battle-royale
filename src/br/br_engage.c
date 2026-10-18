@@ -61,8 +61,9 @@ static void ReportBusy(void)
 
     // An engage's freeze, or the walk-up to a fight (POK-373, POK-409), is not a menu: a
     // "?" over us would say we walked off. Nor is the walk-up the fight yet: the pair's
-    // own TickWait and settle read BR_BUSY_BATTLE as "taken by somebody else".
-    if (gMain.inBattle)
+    // own TickWait and settle read BR_BUSY_BATTLE as "taken by somebody else". A bot's
+    // walk-up is: a bot has no ROM to read it, and anybody else is turned away (POK-409).
+    if (gMain.inBattle || BrEngage_WalkupSeat() != 0xFF)
         kind = BR_BUSY_BATTLE;
     else if (gMain.callback2 != CB2_Overworld
           || (ArePlayerFieldControlsLocked() && gBrEngage.waitSeat == 0xFF && gBrEngage.settleSeat == 0xFF
@@ -323,6 +324,7 @@ bool8 BrEngage_YieldWait(void)
 // no engage goes out, and BrEngage_Settle turns down any challenge that lands.
 #define tSeat data[0]
 #define tWalked data[1]
+#define tPresent data[2]
 
 static void Task_BrBotWalkup(u8 taskId)
 {
@@ -330,7 +332,7 @@ static void Task_BrBotWalkup(u8 taskId)
     u8 seat = task->tSeat;
 
     // The settle's own reasons to call it off, if they come up on the way.
-    if (gBrMatch.phase != BR_PHASE_PLAY || !BrBot_IsStaged(seat))
+    if (gBrMatch.phase != BR_PHASE_PLAY || !BrBot_IsStaged(seat) || (task->tPresent && !gBrSeats[seat].present))
     {
         DestroyTask(taskId);
         Unfreeze();
@@ -345,6 +347,7 @@ static void Task_BrBotWalkup(u8 taskId)
 
 #undef tSeat
 #undef tWalked
+#undef tPresent
 
 u8 BrEngage_WalkupSeat(void)
 {
@@ -359,6 +362,7 @@ u8 BrEngage_WalkupSeat(void)
 static void TickSettle(void)
 {
     u8 seat = gBrEngage.settleSeat;
+    u8 taskId;
 
     if (seat == 0xFF)
         return;
@@ -400,7 +404,16 @@ static void TickSettle(void)
     switch (sSettleHow)
     {
     case BR_SETTLE_BOT:
-        gTasks[CreateTask(Task_BrBotWalkup, 10)].data[0] = seat;
+        taskId = CreateTask(Task_BrBotWalkup, 10);
+        if (taskId == TASK_NONE)
+        {
+            // No room for the walk-up: the fight without it, as it was.
+            if (!BrBot_StartFight(seat))
+                return;
+            break;
+        }
+        gTasks[taskId].data[0] = seat;
+        gTasks[taskId].data[2] = sSettlePresent;
         break;
     case BR_SETTLE_LINK_ANSWER:
         BrNetlink_StartBattle(1, seat);

@@ -17,8 +17,8 @@ expect u8 gBrBotFight+3 2
 pokebytes gDecompressionBuffer 1F 01 00 09 07 00 08 00 01 01 00
 mailsend gBrMailbox 2 gDecompressionBuffer 11
 pokebytes gDecompressionBuffer 1F 00 00 00
-# the walk-up first (POK-409): the "!", and the walk when there is one
 mailsend gBrMailbox 5 gDecompressionBuffer 4
+# the walk-up first (POK-409): the "!", and the walk when there is one
 wait 400
 expect u8 gBrBotFight+2 1
 # A through the intro, FIGHT, POUND -- one turn, the second mon having fainted already

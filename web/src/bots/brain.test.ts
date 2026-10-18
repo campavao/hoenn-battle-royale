@@ -567,6 +567,32 @@ describe('a bot meeting a player', () => {
     expect(steps[1].at - steps[0].at).toBeGreaterThanOrEqual(STEP_MS);
   });
 
+  it('walks to where the player is now, not where they were at the challenge', () => {
+    // Their ROM can land one more step before it freezes. Toward the bot: it stops next
+    // to them, never on them. Away: it still ends next to them, not two cells short.
+    for (const [moveTo, endY] of [[3, 2], [5, 4]] as const) {
+      const player: PlayerView = { seat: 0, mapId: 'FIELD', x: 1, y: 4, dir: 2 };
+      const world = new World([FIELD, PATH]);
+      const sent: Msg[] = [];
+      const bots = new Bots({
+        world,
+        targets: targets(),
+        mapRef: (id) => REFS[id],
+        send: (m) => void sent.push(m),
+        rng: mulberry32(7),
+        engage: { players: () => [player] },
+        deal: () => [MON],
+      });
+      const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+      bots.start(dealt, 0);
+      bots.tick(STEP_MS);
+      expect(sent.some((m) => m.t === 'challenge')).toBe(true);
+      player.y = moveTo;
+      for (let t = 2 * STEP_MS; t <= 6000; t += STEP_MS) bots.tick(t);
+      expect(bots.spotOf(dealt[0].seat)).toEqual({ map: 'FIELD', x: 1, y: endY });
+    }
+  });
+
   it('stays put when the player is the one who looked: their ROM walks them up', () => {
     // On its row, looking west at it, while the bot faces south: their look, their walk.
     const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 4, y: 1, dir: 3 });

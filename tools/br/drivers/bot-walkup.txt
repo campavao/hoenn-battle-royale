@@ -20,8 +20,8 @@ expect u8 gBrOwnPos+6 4
 pokebytes gDecompressionBuffer 01 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
 mailsend gBrMailbox 23 gDecompressionBuffer 106
 wait 4
-pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 01 01 01
-poke u16 gBrMailbox+0x0C 1
+pokebytes gDecompressionBuffer 01 01 00 09 0F 00 10 00 01 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
 wait 20
 # our challenge went out, to a staged bot: the walk-up, and the "!" over us where we
 # saw it from
