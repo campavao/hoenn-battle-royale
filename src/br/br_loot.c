@@ -1116,11 +1116,18 @@ void BrLoot_HomeTrade(void)
     sGiftKey = 0;
     if (slot >= PARTY_SIZE || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
         return; // nobody chosen
-    // Somebody else got to him while we were choosing, or the ring has no room to say so.
-    if (it == NULL || !OnCurrentMap(it) || !BrWire_CanHold(BR_PICKUP_LEN))
+    // Somebody else got to him while we were choosing.
+    if (it == NULL || !OnCurrentMap(it))
     {
         PlaySE(SE_FAILURE);
         BrHud_Box(sText_TradedAlready);
+        return;
+    }
+    // The ring has no room to tell the room he traded: nothing happens, as a full ring's
+    // press on a ball does (Take).
+    if (!BrWire_CanHold(BR_PICKUP_LEN))
+    {
+        PlaySE(SE_FAILURE);
         return;
     }
     // A trade, so one that evolves on the way over does (TradedInto).

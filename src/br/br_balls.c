@@ -339,9 +339,8 @@ static bool8 CacheCell(s16 *outX, s16 *outY, u8 skip)
 // they have is what Hoenn's own people give and trade: a starter, Kanto's or Hoenn's, a
 // CASTFORM or a SNORLAX, or one that evolves on the way over (br_loot.c, TradedInto).
 #define BR_HOME_IN 8
+// ...and so do the keys, 0x8C00 | house, in their byte below the caches' (br_loot.h).
 STATIC_ASSERT((ARRAY_COUNT(sHouses) + BR_HOME_IN - 1) / BR_HOME_IN <= 8, BrHomeBitsFitAByte)
-// The key space's nobody half, below the caches (br_loot.h).
-STATIC_ASSERT(ARRAY_COUNT(sHouses) <= 0x100, BrHomeKeysFitTheirByte)
 
 static const u16 sHomeMons[] =
 {
