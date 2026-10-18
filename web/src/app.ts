@@ -50,7 +50,8 @@ import {
 } from './match/room';
 import { AwayDoor } from './match/away';
 import { Stage, type DrawnScreen } from './ui/stage';
-import { ParadeHold, ReplayHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
+import { ParadeHold, ReplayHold } from './ui/results-hold';
+import type { ResultsModel } from './ui/results';
 import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
 import { KeyLegend } from './ui/keys';
 import { stageKey } from './ui/roomkeys';
@@ -1660,6 +1661,32 @@ function resultsShowing(): boolean {
  *  parade runs on the winner's screen, and this is the only place the room sees what
  *  took the match) and what you did in there (POK-303: RINGS is an answer even at zero).
  *  `held` is the champion's own, before their Hall of Fame is over: nothing covers it. */
+let resultsUi: typeof import('./ui/results') | undefined;
+let resultsUiReady: Promise<void> | undefined;
+/** The latest results asked for while the screen's chunk was on its way: drawn once. */
+let resultsPending: (() => void) | undefined;
+
+/** The results screen's chunk (POK-407). Fetched soon after boot, not at the buzzer: a
+ *  release deployed mid-match takes the old hashed chunk off the site, and a phone's
+ *  connection is at its worst when everybody is fighting. A failed fetch is forgotten,
+ *  so the next results asked for try again. */
+function loadResultsUi(): Promise<void> {
+  resultsUiReady ??= import('./ui/results').then(
+    (m) => {
+      resultsUi = m;
+      const draw = resultsPending;
+      resultsPending = undefined;
+      draw?.();
+    },
+    (err: unknown) => {
+      resultsUiReady = undefined;
+      console.warn('results screen did not load', err);
+    },
+  );
+  return resultsUiReady;
+}
+setTimeout(() => void loadResultsUi(), 0);
+
 function renderResults(
   seat: number,
   roster: Roster,
@@ -1675,6 +1702,14 @@ function renderResults(
 ): void {
   const mine = books.results.forSeat(seat, performance.now());
   if (!mine.ended || shown.held) return;
+  // The screen is a chunk of its own (POK-407, loadResultsUi): one not in yet draws once
+  // it lands, from the books as they are then.
+  if (resultsUi === undefined) {
+    resultsPending = () => renderResults(seat, roster, books, shown);
+    void loadResultsUi();
+    return;
+  }
+  const { fameOf, resultsScreen, resultsView } = resultsUi;
   const nameOf = (s: number) => roster.nameOf(s);
   const model: ResultsModel = {
     view: resultsView(mine, books.fieldSize, seat, nameOf, books.seed),

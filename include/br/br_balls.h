@@ -34,5 +34,9 @@ void BrBalls_Tint(struct ObjectEvent *obj, struct Sprite *sprite);
 void BrBalls_Init(void);
 void BrBalls_Tick(void);
 void BrBalls_NoteTaken(u16 key);
+// One house in eight has somebody home this match, beside the cache, with a Pokemon he
+// gives the first trainer to talk to him, or trades for one of theirs (POK-379). Put down
+// and taken the cache's way, under BR_LOOT_KEY_HOME. TRUE for one of them who trades.
+bool8 BrBalls_Trades(u16 key);
 
 #endif // GUARD_BR_BALLS_H

@@ -63,7 +63,6 @@ static const u8 sText_TradedAlready[] = _("He has already traded");
 // task's data, since gBrEvents has no byte to spare. A host that never answers (a driver
 // with no page behind it) leaves us to trade the old way after BR_CLAIM_FRAMES, ten
 // seconds: long enough for a slow phone's round trip, since every ask gets an answer.
-#define BR_CLAIM_FRAMES 600
 enum { CLAIM_WAITING, CLAIM_GRANTED, CLAIM_DENIED };
 #define tTrader  data[0]
 #define tSlot    data[1]
@@ -291,16 +290,20 @@ static void TryTalk(void)
     ScriptContext_SetupScript(BR_EventScript_Trader);
 }
 
-// The swap itself: his mon for ours at `slot`. `say` is the PICKUP of his key that uses
-// him up for the whole room, ours to send only when no host answered for us.
-static void Swap(u8 i, u8 slot, bool8 say)
+bool8 BrEvent_Swap(u8 slot, struct Pokemon *mon)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
     const u8 *last = line + ARRAY_COUNT(line) - 1;
-    struct Pokemon mon;
-    u16 species, held;
+    u16 held;
     u8 *p;
 
+    // A fainted one for a healthy one would be a MAX REVIVE thrown in.
+    if (GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0)
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_Fainted);
+        return FALSE;
+    }
     // What it held stays ours: back in the bag, or at our feet when that pocket is full.
     held = GetMonData(&gPlayerParty[slot], MON_DATA_HELD_ITEM, NULL);
     if (held != ITEM_NONE && !AddBagItem(held, 1))
@@ -308,17 +311,28 @@ static void Swap(u8 i, u8 slot, bool8 say)
     // He keeps the one he is given. POK-294's "nothing ever leaves the match" is about a
     // mon let go to make room, and is not this: dropped at our feet, it would be ours
     // again for one press, and the trade a free mon.
-    species = Offered(i, &mon);
-    gPlayerParty[slot] = mon;
-    gBrEvents.used |= 1 << i;
-    if (say)
-        BrLoot_SendTaken(BR_EVENT_TRADER_KEY(i));
+    gPlayerParty[slot] = *mon;
     p = BrHud_Append(line, last, sText_Traded);
-    p = BrHud_Append(p, last, gSpeciesNames[species]);
+    p = BrHud_Append(p, last, gSpeciesNames[GetMonData(mon, MON_DATA_SPECIES, NULL)]);
     BrHud_Append(p, last, sText_Bang);
     PlaySE(SE_PIN);
     BrHud_Box(line);
     BrSpectate_SendParty();
+    return TRUE;
+}
+
+// His mon for ours at `slot`. `say` is the PICKUP of his key that uses him up for the
+// whole room, ours to send only when no host answered for us.
+static void Swap(u8 i, u8 slot, bool8 say)
+{
+    struct Pokemon mon;
+
+    Offered(i, &mon);
+    if (!BrEvent_Swap(slot, &mon))
+        return;
+    gBrEvents.used |= 1 << i;
+    if (say)
+        BrLoot_SendTaken(BR_EVENT_TRADER_KEY(i));
 }
 
 static void Task_TradeClaim(u8 taskId)
@@ -360,7 +374,7 @@ void BrEvent_Trade(void)
         BrHud_Box(sText_TradedAlready);
         return;
     }
-    // A fainted one for a healthy one would be a MAX REVIVE thrown in.
+    // A fainted one is refused before the host is asked, so asking never wastes him.
     if (GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0)
     {
         PlaySE(SE_FAILURE);
