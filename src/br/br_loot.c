@@ -534,9 +534,9 @@ struct BrLootItem *BrLoot_At(s16 x, s16 y)
 // Only the collision bit, as the eyeline (br_engage.c): water and ledges are open
 // ground, so a trainer who goes out at sea still leaves their team behind, and the
 // page's match/loot.ts deals a bot's spill by the collision rule too (POK-330 #67). A
-// cell that already has a piece on it is skipped here, and only here -- the page's
-// spillCells does not look: BrLoot_At answers with the first row on a cell, so a ball
-// dropped on another was a ball nobody could see or take until the one on top was gone. Kanto scatters within two tiles. The cells go out in the message,
+// cell that already has a piece on it is skipped, here and in the page's spillCells
+// (POK-388): BrLoot_At answers with the first row on a cell, so a ball dropped on another
+// was a ball nobody could see or take until the one on top was gone. Kanto scatters within two tiles. The cells go out in the message,
 // so nobody reading it has to walk the ring again.
 static const s8 sSpillDx[] = { 0, 1, -1, 0,  0, 1, -1,  1, -1, 2, -2,  0,  0 };
 static const s8 sSpillDy[] = { 0, 0,  0, 1, -1, 1,  1, -1, -1, 0,  0,  2, -2 };

@@ -47,14 +47,25 @@ const SPILL_DY = [0, 0, 0, 1, -1, 1, 1, -1, -1, 0, 0, 2, -2];
  *  And on the same cells the ROM would pick. This used to skip anything nobody could
  *  stand on, which is water too: a player beaten at sea drops their team on the waves,
  *  and a bot beaten at sea dropped nothing at all (POK-330 #67). Should nothing in the
- *  ring be clear, the dropper's own cell takes the first piece: nothing leaves a match. */
-export function spillCells(world: World, mapId: string, x: number, y: number, n: number): { x: number; y: number }[] {
+ *  ring be clear, the dropper's own cell takes the first piece: nothing leaves a match.
+ *
+ *  `taken` is a cell that already has a piece on it, which CellFree skips too: BrLoot_At
+ *  answers with the first row on a cell, so a bot's ball dropped on a winner's spoils
+ *  hid them until somebody took the one on top (POK-388). */
+export function spillCells(
+  world: World,
+  mapId: string,
+  x: number,
+  y: number,
+  n: number,
+  taken: (x: number, y: number) => boolean = () => false,
+): { x: number; y: number }[] {
   const out: { x: number; y: number }[] = [];
 
   for (let i = 0; i < SPILL_DX.length && out.length < n; i++) {
     const cx = x + SPILL_DX[i];
     const cy = y + SPILL_DY[i];
-    if (!world.clear(mapId, cx, cy)) continue;
+    if (!world.clear(mapId, cx, cy) || taken(cx, cy)) continue;
     if (out.some((c) => c.x === cx && c.y === cy)) continue;
     out.push({ x: cx, y: cy });
   }
