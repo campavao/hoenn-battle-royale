@@ -145,12 +145,16 @@ describe('a trade asks the host first (POK-392)', () => {
 
   it("a trade nobody asked for is the one a later ask hears of; a new match forgets them all", () => {
     const claims = new TraderClaims(() => false);
-    expect(claims.answer({ t: 'pickup', seat: 5, key: claimKey(0) }), 'gone, and nobody known to have him').toBeNull();
+    expect(claims.answer({ t: 'pickup', seat: 5, key: claimKey(0) }), 'gone, and nobody known to have him: still a no').toEqual({
+      reply: { t: 'pickup', seat: 0, key: traderKey(0) },
+      granted: false,
+    });
+    expect(claims.answer({ t: 'pickup', seat: 0, key: claimKey(0) })?.reply.seat, "never the asker's own seat").toBe(1);
     claims.note({ t: 'pickup', seat: 7, key: traderKey(0) });
     claims.note({ t: 'pickup', seat: 8, key: traderKey(0) });
     expect(claims.answer({ t: 'pickup', seat: 5, key: claimKey(0) })?.reply.seat, 'the first trade is the one').toBe(7);
     claims.note({ t: 'start', seed: 1, spawns: [] });
-    expect(claims.answer({ t: 'pickup', seat: 5, key: claimKey(0) })).toBeNull();
+    expect(claims.answer({ t: 'pickup', seat: 5, key: claimKey(0) })?.reply.seat).toBe(0);
   });
 });
 

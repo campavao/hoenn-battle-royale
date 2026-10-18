@@ -61,7 +61,7 @@ expectmsg 10 u16 1 0xB00E
 expect u8 gBrEvents+18 0
 # Nobody answers here -- no page behind the harness -- so after BR_CLAIM_FRAMES it goes
 # ahead the old way
-wait 300
+wait 700
 shot traded
 expect u8 gBrEvents+18 1
 expect u8 gPlayerPartyCount 1
@@ -176,7 +176,7 @@ expect u8 gBrEvents+18 1
 expectsame u32 gPlayerParty gPlayerParty+500
 expect u8 gBrEvents+52 0xFF
 # ...and well past BR_CLAIM_FRAMES nothing more happens: no trade of our own after all
-wait 200
+wait 700
 expectsame u32 gPlayerParty gPlayerParty+500
 expectmsg 10 u16 1 0xB00E
 # ...and the field is ours again once the box is closed: a step north is a step

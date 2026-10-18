@@ -114,6 +114,10 @@ function spillsOf(map: MapRef, pieces: Piece[]): SpillMsg[] {
   });
 }
 
+/** BR_LOOT_KEY_OWN (br_loot.h): a seat in the high byte, a party slot in the low. Not a
+ *  bag (0xFF), a released ball (0x4000) or anything past the seats (a patch's 0x2000). */
+const isOwnTeamKey = (key: number): boolean => key >> 8 < 32 && (key & 0xff) < 6;
+
 export class Loot {
   /** key -> the piece standing under it. The ROM's keys are a u16 with the dropper's
    *  seat in the high byte, so they do not collide between trainers. */
@@ -121,8 +125,19 @@ export class Loot {
 
   /** Everything a `spill` put down. Re-reading a spill we already hold is harmless:
    *  the keys are the same, so it replaces rather than duplicates. */
+  /** A trainer's mons somebody has already taken whole (POK-387 review): a team goes down
+   *  once a match, so the same key down again is the same mon twice -- a winner whose tab
+   *  came back and put down the team the loser's page had already dropped for it. */
+  private readonly spent = new Set<number>();
+
+  /** Every mon in this spill has been taken already, and it carries no bag: a second
+   *  drop of a team, for no ROM to stand up again. */
+  stale(msg: SpillMsg): boolean {
+    return !msg.bag && msg.mons.length > 0 && msg.mons.every((m) => this.spent.has(m.key));
+  }
+
   noteSpill(msg: SpillMsg): void {
-    for (const mon of msg.mons) this.pieces.set(mon.key, { seat: msg.seat, map: msg.map, mon });
+    for (const mon of msg.mons) if (!this.spent.has(mon.key)) this.pieces.set(mon.key, { seat: msg.seat, map: msg.map, mon });
     if (msg.bag) this.pieces.set(msg.bag.key, { seat: msg.seat, map: msg.map, bag: msg.bag });
   }
 
@@ -140,6 +155,7 @@ export class Loot {
         if (piece.bag.items.length > 0) return;
       }
     }
+    if (isOwnTeamKey(key) && this.pieces.get(key)?.mon) this.spent.add(key);
     this.pieces.delete(key);
   }
 

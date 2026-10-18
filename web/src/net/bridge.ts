@@ -467,8 +467,6 @@ export class Bridge {
       this.sentBlocks = [];
       this.opponentDone = true;
     }
-    // Our drop answered -- or a match begun or ended, and a pick of the last one is
-    // nothing to ask the next one's host.
     if (msg.t === 'away') {
       if (msg.away) this.tabbedOut.add(msg.seat);
       else this.tabbedOut.delete(msg.seat);
@@ -476,10 +474,16 @@ export class Bridge {
       // fight at the shorter limit before their first block had time to come.
       if (msg.seat === this.opponentSeat) this.quietFrames = 0;
     }
+    // A block is a ROM running: back, whether or not its `away: false` got through (one
+    // said while the socket was down never did).
+    if (msg.t === 'bt') this.tabbedOut.delete(ev.from);
+    // Our drop answered -- or a match begun or ended, and a pick of the last one is
+    // nothing to ask the next one's host.
     if ((msg.t === 'land' && msg.seat === this.seat) || msg.t === 'start' || msg.t === 'win') this.pick = null;
     if (msg.t === 'start' || msg.t === 'win') {
       this.unheard = [];
       this.unconfirmed = [];
+      this.tabbedOut.clear();
     }
 
     this.noteChallenge(msg);

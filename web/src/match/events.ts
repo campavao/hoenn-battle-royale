@@ -58,15 +58,18 @@ export class TraderClaims {
   }
 
   /** The answer to an ask, and whether it is the trade itself (for the whole room) or a
-   *  no (for the asker alone). Null for anything else, or a trader with nobody known to
-   *  have got him -- the asker then trades on its own, as before this existed. */
+   *  no (for the asker alone). Null for anything but an ask. Every ask is answered: one
+   *  left to time out would trade on its own, which is the double trade again. A trader
+   *  gone with nobody known to have got him (a host that took over after) is a no naming
+   *  some other seat, which is all the asker's ROM reads. */
   answer(msg: Msg): { reply: PickupMsg; granted: boolean } | null {
     const n = msg.t === 'pickup' && msg.item === undefined ? claimOf(msg.key) : undefined;
     if (n === undefined || msg.t !== 'pickup') return null;
     let winner = this.won.get(n);
     const granted = winner === undefined && this.standing(n);
     if (granted) this.won.set(n, (winner = msg.seat));
-    return winner === undefined ? null : { reply: { t: 'pickup', seat: winner, key: traderKey(n) }, granted };
+    winner ??= msg.seat === 0 ? 1 : 0;
+    return { reply: { t: 'pickup', seat: winner, key: traderKey(n) }, granted };
   }
 }
 

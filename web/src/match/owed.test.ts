@@ -69,7 +69,7 @@ describe('a beaten team its winner never put down (POK-387)', () => {
 });
 
 // gPlayerParty[0] dumped from the ROM by the harness (event-trader's boot): a TREECKO at
-// 5, then the LAPRAS the trader swapped in for it, at 13.
+// 5, then the LAPRAS the trader swapped in for it, at the same 5 (the harness has no rung).
 const hex = (s: string) => Uint8Array.from(s.trim().split(/\s+/).map((b) => parseInt(b, 16)));
 const TREECKO = hex(`
   7c b1 00 0b 00 00 f9 b2 ce cc bf bf bd c5 c9 ff d0 63 02 02 bd bb c7 ff 00 00 00 00 2d c7 00 00

@@ -925,6 +925,17 @@ describe('a link battle gone quiet (POK-331 #3)', () => {
     expect(f.closing()).toBe(true);
   });
 
+  it("takes a block from them as back, though their own word of it was lost (POK-389 review)", () => {
+    const f = fight();
+    f.socket.receive({ type: 'recv', from: 7, m: { t: 'away', seat: 7, away: true } });
+    f.run(600);
+    f.socket.receive({ type: 'recv', from: 7, m: block(7, 2, F(7, 1)) });
+    f.run(STALL_FRAMES - 1);
+    expect(f.closing()).toBe(false);
+    f.run(1);
+    expect(f.closing()).toBe(true);
+  });
+
   it("takes nobody's word but the seat's own that it is away", () => {
     const f = fight();
     f.socket.receive({ type: 'recv', from: 9, m: { t: 'away', seat: 7, away: true } });

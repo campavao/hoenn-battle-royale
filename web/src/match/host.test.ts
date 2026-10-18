@@ -500,9 +500,10 @@ describe('the page that runs the match (POK-330 #42)', () => {
     host.hear({ t: 'pickup', seat: 0, key: claimKey(0) }, 'rom');
     expect(room.pushed).toEqual([traded]);
     expect(room.frames()).toEqual([]);
-    // An ask for a trader there never was is nobody's to answer.
+    // An ask for a trader the books do not have standing is a no too: left unanswered, the
+    // asker's ROM would trade on its own.
     host.hear({ t: 'pickup', seat: 0, key: claimKey(3) }, 'rom');
-    expect(room.pushed).toHaveLength(1);
+    expect(room.pushed[1]).toEqual({ t: 'pickup', seat: 1, key: traderKey(3) });
     host.dispose();
   });
 

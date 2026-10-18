@@ -61,8 +61,9 @@ static const u8 sText_TradedAlready[] = _("HE HAS ALREADY TRADED");
 // naming the asker -- which takes him off every map -- and a later one with that PICKUP
 // naming whoever got him. The trade waits on the answer with the script locked, in a
 // task's data, since gBrEvents has no byte to spare. A host that never answers (a driver
-// with no page behind it) leaves us to trade the old way, after BR_CLAIM_FRAMES.
-#define BR_CLAIM_FRAMES 180
+// with no page behind it) leaves us to trade the old way after BR_CLAIM_FRAMES, ten
+// seconds: long enough for a slow phone's round trip, since every ask gets an answer.
+#define BR_CLAIM_FRAMES 600
 enum { CLAIM_WAITING, CLAIM_GRANTED, CLAIM_DENIED };
 #define tTrader  data[0]
 #define tSlot    data[1]

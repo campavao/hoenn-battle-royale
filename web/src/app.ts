@@ -2692,7 +2692,8 @@ function wireRoom(
       owed: {
         opponent: () => bridge?.opponent() ?? null,
         inRoom: (seat) => (controls.roster?.members ?? []).some((m) => m.id === seat),
-        dropTeam: () => dropOwedTeam(),
+        // After the `out` that made it due is booked, not from inside its booking.
+        dropTeam: () => queueMicrotask(dropOwedTeam),
       },
       defaultFog: () => controls.fogSecs,
       store: localStorage,
@@ -2839,6 +2840,9 @@ function wireRoom(
     // next match's start is for the ROM that will play it, not this one (POK-331 #18).
     bridge.setRomFilter((msg) => {
       if (holdsStart(msg)) return false;
+      // A team put down twice -- a winner back from the background after the loser's page
+      // dropped it for them (POK-387) -- is the same mons twice: not stood up again.
+      if (msg.t === 'spill' && session.loot.stale(msg)) return false;
       if (spectate.wantsFromRelay(msg)) return true;
       cutToFight(msg);
       return false;
@@ -3128,7 +3132,12 @@ function wireRoom(
   }
 
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code, ev.id));
-  relay.on('room_joined', (ev) => attach(ev.id, ev.code, ev.host));
+  relay.on('room_joined', (ev) => {
+    attach(ev.id, ev.code, ev.host);
+    // Back in the room: what we said about our tab while the socket was down never went
+    // (POK-389), so it is said again.
+    bridge?.sayAway(document.hidden);
+  });
 
   /** Everything that makes this page the one running the match, undone at once
    *  (POK-330 #13). Standing down, a dropped socket and the way back to the room each

@@ -218,3 +218,36 @@ describe('where the pieces of a spill land', () => {
     expect(spillCells(tiny, 'CELL', 0, 0, 6)).toHaveLength(1);
   });
 });
+
+describe('a team put down twice (POK-387 review)', () => {
+  const spill = (keys: number[], bag = false): SpillMsg => ({
+    t: 'spill', seat: 4, map: { group: 0, num: 16 },
+    mons: keys.map((key, i) => ({ key, x: 10 + i, y: 10, species: 277, level: 5 })),
+    ...(bag ? { bag: { key: (2 << 8) | 0xff, x: 9, y: 10, items: [], money: 0 } } : {}),
+  });
+
+  it('is stale once every mon in it has been taken, and does not stand them up again', () => {
+    const loot = new Loot();
+    loot.note(spill([0x200, 0x201]));
+    expect(loot.stale(spill([0x200, 0x201]))).toBe(false);
+    loot.note({ t: 'pickup', seat: 5, key: 0x200 });
+    expect(loot.stale(spill([0x200, 0x201])), 'one still down').toBe(false);
+    loot.note({ t: 'pickup', seat: 5, key: 0x201 });
+    expect(loot.stale(spill([0x200, 0x201]))).toBe(true);
+    loot.note(spill([0x200, 0x201]));
+    expect(loot.size()).toBe(0);
+  });
+
+  it("never for a bag, a released ball or a key the page never saw as a mon", () => {
+    const loot = new Loot();
+    loot.note({ t: 'pickup', seat: 5, key: 0x300 }); // never seen down
+    expect(loot.stale(spill([0x300]))).toBe(false);
+    loot.note(spill([0x4201]));
+    loot.note({ t: 'pickup', seat: 5, key: 0x4201 });
+    expect(loot.stale(spill([0x4201])), 'a released ball comes back down').toBe(false);
+    loot.note(spill([0x202]));
+    loot.note({ t: 'pickup', seat: 5, key: 0x202 });
+    expect(loot.stale(spill([0x202], true)), 'a spill with a bag in it').toBe(false);
+  });
+});
+

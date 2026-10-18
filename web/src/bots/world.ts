@@ -571,7 +571,7 @@ export class World {
     const nx = spot.x + move.dx;
     const ny = spot.y + move.dy;
     if (nx >= 0 && ny >= 0 && nx < m.w && ny < m.h) {
-      if (sideways && this.falls[this.key({ map: spot.map, x: nx, y: ny })]) return null;
+      if (sideways && this.falls[this.cellOf(this.key({ map: spot.map, x: nx, y: ny }))]) return null;
       const cls = this.cell(spot.map, nx, ny);
       if (cls >= LEDGE_MIN && cls <= LEDGE_MAX && LEDGE_DIR[cls] === dir) {
         // A ledge taken the way it faces: the jump lands two cells on.
@@ -647,7 +647,7 @@ export class World {
     }
     // Off the neighbour's own axis: this offset's seam is not the one this cell uses.
     if (x < 0 || y < 0 || x >= to.w || y >= to.h) return null;
-    if ((dir === 'west' || dir === 'east') && this.falls[this.key({ map: seam.to, x, y })]) return null;
+    if ((dir === 'west' || dir === 'east') && this.falls[this.cellOf(this.key({ map: seam.to, x, y }))]) return null;
     return this.standable(seam.to, x, y, surf, cut) ? this.climbOnto({ map: seam.to, x, y }, from, surf) : null;
   }
 
