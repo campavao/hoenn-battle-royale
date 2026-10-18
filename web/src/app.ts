@@ -1777,9 +1777,17 @@ function startSpectateLoop(
     emu.setSpeed(on ? CATCH_UP_SPEED : 1);
     emu.setVolume(on || settings.muted ? 0 : UNMUTED_VOLUME);
   };
+  // Catching up is for a fight joined late, whose turns so far all arrive at once. A
+  // duel between two bots is not one: the proxy runs it at 8x (POK-300) and streams its
+  // turns as fast, so its replay fell behind, caught up at 8x and kept the proxy's pace
+  // to the end -- Cam saw a whole fight in three silent seconds (2026-10-18). That one
+  // plays at 1x however far behind, and the results wait for it (ReplayHold).
+  const botDuel = (watch: number | null | undefined): boolean =>
+    watch != null && bridge.roster.isBot(watch & 0xff) && bridge.roster.isBot(watch >> 8);
   const id = setInterval(() => {
     const now = performance.now();
-    if (romCatchingUp(emu, spectateBase) !== catching) hurry(!catching);
+    const want = romCatchingUp(emu, spectateBase) && !botDuel(romWatching(emu, spectateBase));
+    if (want !== catching) hurry(want);
     const ask = spectate.duePeek(bridge.seat, now, romReplaying(bridge.rom, () => romWatching(emu, spectateBase)));
     if (ask) {
       bridge.relay.all(ask);

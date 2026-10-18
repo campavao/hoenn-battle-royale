@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Bots, canFly } from './brain';
+import { Bots, canFly, type PlayerView } from './brain';
 import { World, type WorldMap } from './world';
 import { dealParty, MOVE_FLY } from './party';
 import { mulberry32 } from '../match/clock';
@@ -13,7 +13,7 @@ const maps: WorldMap[] = [
   { id: 'SAFE', group: 0, num: 2, w: 5, h: 5, section: 'B', outdoor: true, grid: '25x0', seams: [], warps: [], centre: null },
 ] as unknown as WorldMap[];
 
-function run(party: PackedMon[]) {
+function run(party: PackedMon[], extra: { alive?: () => number; players?: PlayerView[] } = {}) {
   const sent: Msg[] = [];
   const bots = new Bots({
     world: new World(maps),
@@ -24,6 +24,8 @@ function run(party: PackedMon[]) {
     inside: (id) => id === 'SAFE',
     deal: () => party,
     seed: 7,
+    alive: extra.alive,
+    engage: extra.players ? { players: () => extra.players! } : undefined,
   });
   bots.start([{ seat: 31, grade: 1, name: 'BIRD', skin: 0, map: { group: 0, num: 1 }, mapId: 'FOGGED', x: 1, y: 1 }], 0);
   bots.tick(1000);
@@ -48,6 +50,18 @@ describe('a bird in the fog flies out of it (POK-267)', () => {
 
   it('leaves a bot that cannot fly where it is', () => {
     const { bots } = run(withoutFly);
+    expect(bots.spotOf(31)?.map).toBe('FOGGED');
+  });
+
+  // Cam, 2026-10-18: spectating the last two, one snapped into the other's screen and
+  // the match was over in three seconds. The end is walked, not flown.
+  it('does not fly with three or fewer left', () => {
+    const { bots } = run(withFly, { alive: () => 3 });
+    expect(bots.spotOf(31)?.map).toBe('FOGGED');
+  });
+
+  it('does not land in anybody\'s screen', () => {
+    const { bots } = run(withFly, { alive: () => 10, players: [{ seat: 0, mapId: 'SAFE', x: 4, y: 4, dir: 1 }] });
     expect(bots.spotOf(31)?.map).toBe('FOGGED');
   });
 
