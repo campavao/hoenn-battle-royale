@@ -65,9 +65,9 @@ STATIC_ASSERT(BR_CAP_SPILL >= 4 + PARTY_SIZE * 9 + 1 + 6 + 1 + 8 * 3 + 4 + 1 + P
 static EWRAM_DATA u8 sSpillBuf[BR_CAP_SPILL] = {0};
 static EWRAM_DATA struct BrAssembler sSpillAsm = {0};
 // A trainer's key keeps its party index above an 11-bit id, and the Zone's balls, the
-// chest and the house caches sit at 0x8F00, 0x8E00 and 0x8D00 in the same space: party
-// index 1, ids 0x700, 0x600 and 0x500.
-STATIC_ASSERT(TRAINERS_COUNT <= 0x500, BrTrainerLootKeysClearOfTheZoneChestAndCaches)
+// chest, the house caches and whoever is home sit at 0x8F00, 0x8E00, 0x8D00 and 0x8C00 in
+// the same space: party index 1, ids 0x700, 0x600, 0x500 and 0x400.
+STATIC_ASSERT(TRAINERS_COUNT <= 0x400, BrTrainerLootKeysClearOfTheZoneChestAndHouses)
 STATIC_ASSERT((PARTY_SIZE - 1) << 11 < BR_LOOT_KEY_NOBODY, BrTrainerLootKeysFitSixteenBits)
 
 static bool8 OnCurrentMap(const struct BrLootItem *it)
@@ -133,7 +133,7 @@ static void Spawn(struct BrLootItem *it)
     u8 person = BrStory_Person(it);
     u8 id;
 
-    if (BR_LOOT_IS_GIFT(it->key))
+    if (BR_LOOT_IS_GIFT(it->key) || BR_LOOT_IS_HOME(it->key))
     {
         gfx = sGiftGfx[it->key % ARRAY_COUNT(sGiftGfx)];
         movement = MOVEMENT_TYPE_FACE_DOWN;
@@ -233,13 +233,13 @@ static void Drop(struct BrLootItem *it)
 // map, the piece farthest from the view, as long as it is farther than the new one --
 // what lands by you is what you came for.
 //
-// Never the DAY CARE chest, a Zone ball or a house's cache: every ROM deals those from the
-// seed and the page never sends them, so a row of theirs let go is gone until somebody
-// walks back in -- forever, for the first two.
+// Never the DAY CARE chest, a Zone ball or a house's cache or person: every ROM deals
+// those from the seed and the page never sends them, so a row of theirs let go is gone
+// until somebody walks back in -- forever, for the first two.
 static bool8 Resent(u16 key)
 {
     return key != BR_LOOT_KEY_CHEST && (key & 0xFF00) != BR_LOOT_KEY_ZONE_ITEM(0)
-        && (key & 0xFF00) != BR_LOOT_KEY_CACHE(0);
+        && (key & 0xFF00) != BR_LOOT_KEY_CACHE(0) && !BR_LOOT_IS_HOME(key);
 }
 
 static struct BrLootItem *Evict(u8 mapGroup, u8 mapNum, s16 x, s16 y)
@@ -505,13 +505,15 @@ static void HandleSpillCont(const u8 *payload, u8 len)
 
 // PICKUP: somebody took it (or part of a bag). A bare key -- no item named -- is the
 // whole piece leaving the ground; with an item, the rest is still there.
+static bool8 HomeClaimAnswered(u16 key, u8 seat);
+
 static void HandlePickup(const u8 *payload, u8 len)
 {
     const u8 *d;
     u8 n = BrWire_Unframe(payload, len, &d);
     struct BrLootItem *it;
 
-    if (n < 8)
+    if (n < 8 || HomeClaimAnswered(BrWire_ReadU16(d + 1), d[0]))
         return;
     // A house's cache is gone for us too, though we are nowhere near it.
     BrBalls_NoteTaken(BrWire_ReadU16(d + 1));
@@ -720,6 +722,7 @@ static const u8 sText_Gift[] = _("A GIFT: ");
 static const u8 sText_Bang[] = _("!");
 static const u8 sText_NobodyLearns[] = _("ALL KNOW ");
 static const u8 sText_HaveTm[] = _("ALREADY HAVE ");
+static const u8 sText_TradedAlready[] = _("HE HAS ALREADY TRADED");
 
 // A town's gift-giver says a line before he hands it over (Cam's 2026-10-14 play-test,
 // POK-355: "I would like them to talk a little bit before they give you the gift"). One
@@ -734,11 +737,20 @@ static const u8 *const sGiftLines[] = {
     sText_GiftLine2,
     sText_GiftLine3,
 };
+// ...and somebody at home giving a Pokemon (POK-379).
+static const u8 sText_HomeLine0[] = _("This one wants to see the world.\nWould you take it with you?");
+static const u8 sText_HomeLine1[] = _("I'm too old for battles now.\nPlease, raise this one for me!");
+static const u8 *const sHomeLines[] = {
+    sText_HomeLine0,
+    sText_HomeLine1,
+};
 
 extern const u8 BR_EventScript_Gift[];
+extern const u8 BR_EventScript_HomeTrader[];
 
 // The gift BR_EventScript_Gift is talking about, 0 for none: its hand-over is Take() again,
-// from BrLoot_GiftTake, and this tells that Take() the line has been said.
+// from BrLoot_GiftTake, and this tells that Take() the line has been said. The trader
+// BR_EventScript_HomeTrader is with, too, for BrLoot_HomeTrade.
 static EWRAM_DATA u16 sGiftKey = 0;
 
 // Tell the room it is gone, and take it off our own ground: nobody hears their own
@@ -807,6 +819,8 @@ static bool8 WasOurs(u16 key)
 // Defined below, with the rest of the held line; Take() is above it because it is the
 // pickup's own business and this is only the label coming off.
 static void DropHeldLine(void);
+// Below too, beside BrLoot_HomeTrade.
+static void TalkTrade(struct BrLootItem *it);
 
 // "FOUND 1200!" when a bag is taken, and the same again with NO ROOM FOR THE REST under
 // it once its GIVE has found a pocket full (HandleGive).
@@ -847,11 +861,25 @@ static void Take(struct BrLootItem *it)
     // silent one, taken with no talk and no box.
     if (sGiftKey != 0 && !ScriptContext_IsEnabled())
         sGiftKey = 0;
-    if (BR_LOOT_IS_GIFT(it->key) && OneThing(it) && sGiftKey != it->key && it->objId != BR_NO_OBJ)
+    // A trader at home is never just taken: he asks first, and the swap is BrLoot_HomeTrade.
+    if (BrBalls_Trades(it->key))
+    {
+        if (it->objId != BR_NO_OBJ)
+        {
+            DropHeldLine();
+            TalkTrade(it);
+        }
+        return;
+    }
+    if (((BR_LOOT_IS_GIFT(it->key) && OneThing(it)) || BR_LOOT_IS_HOME(it->key))
+        && sGiftKey != it->key && it->objId != BR_NO_OBJ)
     {
         // Talk first: he turns to us, says his line, and the script hands it over.
         sGiftKey = it->key;
-        StringCopy(gStringVar4, sGiftLines[it->key % ARRAY_COUNT(sGiftLines)]);
+        if (BR_LOOT_IS_HOME(it->key))
+            StringCopy(gStringVar4, sHomeLines[it->key % ARRAY_COUNT(sHomeLines)]);
+        else
+            StringCopy(gStringVar4, sGiftLines[it->key % ARRAY_COUNT(sGiftLines)]);
         gSelectedObjectEvent = it->objId;
         gSpecialVar_LastTalked = gObjectEvents[it->objId].localId;
         ScriptContext_SetupScript(BR_EventScript_Gift);
@@ -954,11 +982,19 @@ static void Take(struct BrLootItem *it)
               USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
     BrLevels_Settle(&mon); // a ZUBAT taken at 50 is a CROBAT, and says so
     species = GetMonData(&mon, MON_DATA_SPECIES, NULL);
-    p = BrHud_Append(line, last, BrStory_Person(it) ? sText_Gift : sText_Took);
-    p = BrHud_Append(p, last, gSpeciesNames[species]);
-    BrHud_Append(p, last, sText_Bang);
-    PlaySE(SE_PIN);
-    BrHud_Box(line);
+    if (sGiftKey == it->key)
+    {
+        // Somebody at home's, and the script says it with the fanfare.
+        StringCopy(gStringVar2, gSpeciesNames[species]);
+    }
+    else
+    {
+        p = BrHud_Append(line, last, BrStory_Person(it) ? sText_Gift : sText_Took);
+        p = BrHud_Append(p, last, gSpeciesNames[species]);
+        BrHud_Append(p, last, sText_Bang);
+        PlaySE(SE_PIN);
+        BrHud_Box(line);
+    }
     // The ball stays on the ground until the mon inside is really kept. Parking it and
     // taking it in the same breath meant cancelling the release screen destroyed both --
     // and nothing ever leaves the match (POK-294). BrCatch_Apply claims the key when a
@@ -967,6 +1003,10 @@ static void Take(struct BrLootItem *it)
     {
         GiveMonToPlayer(&mon);
         SendPickup(it);
+    }
+    else if (sGiftKey == it->key)
+    {
+        sGiftKey = BR_HELD_NONE; // not ours yet: the release screen asks first (GiftTake)
     }
     BrSpectate_SendParty();
 }
@@ -1119,12 +1159,135 @@ bool8 BrLoot_TakeKey(u16 key)
 void BrLoot_GiftTake(void)
 {
     u16 key = sGiftKey;
+    bool8 mon = key != 0 && BR_LOOT_IS_HOME(key);
 
     gSpecialVar_Result = key != 0 && BrWire_CanHold(BR_PICKUP_LEN) && BrLoot_TakeKey(key);
-    sGiftKey = 0;
-    if (!gSpecialVar_Result)
+    // A full party parks it, and the release screen comes once the script is done: no
+    // "received" for one that a cancel there leaves with him.
+    if (gSpecialVar_Result && sGiftKey == BR_HELD_NONE)
+        gSpecialVar_Result = 3;
+    else if (!gSpecialVar_Result)
         PlaySE(SE_FAILURE);
+    else if (mon)
+        gSpecialVar_Result = 2;
+    sGiftKey = 0;
 }
+
+// His Pokemon as it would come to us now: the rung settles it, so a TREECKO offered at 40
+// is the SCEPTILE we would get, and he says so.
+static void HomeOffered(struct Pokemon *mon, u16 species)
+{
+    CreateMon(mon, species, BrLevels_WildLevel(), USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    BrLevels_Settle(mon);
+}
+
+// A on somebody at home who trades: he turns to us and names what he has. The event
+// trader's question (br_event.c), and BrLoot_HomeTrade is the answer.
+static void TalkTrade(struct BrLootItem *it)
+{
+    struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
+    struct Pokemon mon;
+
+    sGiftKey = it->key;
+    ObjectEventTurn(&gObjectEvents[it->objId], GetOppositeDirection(self->facingDirection));
+    HomeOffered(&mon, it->species);
+    StringCopy(gStringVar1, gSpeciesNames[GetMonData(&mon, MON_DATA_SPECIES, NULL)]);
+    ScriptContext_SetupScript(BR_EventScript_HomeTrader);
+}
+
+void BrLoot_HomeTrade(void)
+{
+    struct BrLootItem *it = sGiftKey != 0 ? Find(sGiftKey) : NULL;
+    u16 slot = gSpecialVar_0x8004;
+    struct Pokemon mon;
+
+    sGiftKey = 0;
+    if (slot >= PARTY_SIZE || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
+        return; // nobody chosen
+    // Somebody else got to him while we were choosing.
+    if (it == NULL || !OnCurrentMap(it))
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_TradedAlready);
+        return;
+    }
+    // The ring has no room to tell the room he traded: nothing happens, as a full ring's
+    // press on a ball does (Take).
+    if (!BrWire_CanHold(BR_PICKUP_LEN))
+    {
+        PlaySE(SE_FAILURE);
+        return;
+    }
+    // A trade, so one that evolves on the way over does (TradedInto).
+    HomeOffered(&mon, TradedInto(it->species));
+    if (BrEvent_Swap(slot, &mon))
+        SendPickup(it);
+}
+
+// One Pokemon a house (POK-379, the event trader's POK-392). Two trainers at him at once
+// both found him standing and were both given his Pokemon, so we ask first: our PICKUP of
+// his claim key goes to the host, whose page answers the first ask with the PICKUP of his
+// own key naming the asker, and a later one with that PICKUP naming whoever got him. That
+// one takes his row (HandlePickup), and the script's GiftTake or HomeTrade says he has
+// gone; ours lets the script go on to them with his row still standing, and they send his
+// key as ever. The wait is a task's, its data his key; no host in BR_CLAIM_FRAMES (a
+// driver with no page behind it) goes ahead the old way.
+#define tKey     data[0]
+#define tTimer   data[1]
+#define tGranted data[2]
+
+static void Task_HomeClaim(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    if (!tGranted && Find(tKey) != NULL && ++tTimer < BR_CLAIM_FRAMES)
+        return;
+    DestroyTask(taskId);
+    ScriptContext_Enable();
+}
+
+void BrLoot_HomeClaim(void)
+{
+    struct BrLootItem *it = sGiftKey != 0 && BR_LOOT_IS_HOME(sGiftKey) ? Find(sGiftKey) : NULL;
+    u16 slot = gSpecialVar_0x8004;
+    u8 taskId;
+    s16 *data;
+
+    gSpecialVar_Result = FALSE;
+    if (it == NULL || !OnCurrentMap(it) || !BrWire_CanHold(BR_PICKUP_LEN))
+        return;
+    // Asked only for a trade HomeTrade will make: a cancel or a fainted one never uses him up.
+    if (BrBalls_Trades(it->key)
+        && (slot >= PARTY_SIZE || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE
+            || GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0))
+        return;
+    taskId = CreateTask(Task_HomeClaim, 80);
+    if (taskId == TASK_NONE)
+        return;
+    data = gTasks[taskId].data;
+    tKey = it->key;
+    tTimer = 0;
+    tGranted = FALSE;
+    BrLoot_SendTaken(BR_LOOT_KEY_HOME_CLAIM(it->key - BR_LOOT_KEY_HOME(0)));
+    gSpecialVar_Result = TRUE;
+}
+
+// The host's PICKUP of his key naming us, while we wait on him: ours. His row stays for
+// GiftTake or HomeTrade, and he is not taken for the house either (a full party's cancel
+// leaves him to us, and the host answers our next ask the same way).
+static bool8 HomeClaimAnswered(u16 key, u8 seat)
+{
+    u8 taskId = FindTaskIdByFunc(Task_HomeClaim);
+
+    if (taskId == TASK_NONE || seat != gBrMySeat || (u16)gTasks[taskId].tKey != key)
+        return FALSE;
+    gTasks[taskId].tGranted = TRUE;
+    return TRUE;
+}
+
+#undef tKey
+#undef tTimer
+#undef tGranted
 
 // ---- Hoenn's own trainers -------------------------------------------------------
 
