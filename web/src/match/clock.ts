@@ -43,7 +43,7 @@ export function isFinalRingPhase(ringIndex: number): boolean {
 }
 
 /** The radius the ring shrinks to after phase `ringIndex`, for the MAP's preview of it
- *  (Cam, 2026-10-18: what the fog takes next blinks, a white circle where it stops);
+ *  (Cam, 2026-10-18: what the fog takes next blinks on the MAP);
  *  none on the last phase, which has nowhere further to go. */
 export function nextRingRadius(ringIndex: number): number | undefined {
   return isFinalRingPhase(ringIndex) ? undefined : RING_RADII[ringIndex + 1];

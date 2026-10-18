@@ -575,8 +575,8 @@ static void PrintRight(u8 id, const u8 *str, u8 y, const u8 *colors)
     AddTextPrinterParameterized3(id, BR_HUD_FONT, (u8)x, y, colors, (s8)TEXT_SKIP_DRAW, str);
 }
 
-// Whose turn it is on the corner's one line when there is something besides the count
-// and the clock to say: theirs, then the HP's or the eye's.
+// Whose turn it is on the left of the corner when there is something besides the count
+// to say: the count's, then the HP's or the eye's. The clock keeps its place.
 static u8 AltTurn(void)
 {
     return gBrHud.altFrames < BR_HUD_ALT_FRAMES ? 1 : 2;
@@ -616,49 +616,42 @@ static void DrawCorner(void)
     const u8 *colors = sColorsText;
 
     FillWindowPixelBuffer(h->winCorner, BR_HUD_BOX);
-    // One line: how many are left, and the clock at the right edge -- or the FOG! flash in
-    // its place. It had a second, the ring's centre and SAFE beside it (POK-325, POK-359),
-    // until Cam's 2026-10-18 "remove the SAFE message... so the whole thing takes up less
-    // space": the MAP shows where the ring closes, and the next ring with it.
+    // One line: the clock at the right edge, always -- or the FOG! flash in its place --
+    // and on the left how many are left. It had a second, the ring's centre and SAFE
+    // beside it (POK-325, POK-359), until Cam's 2026-10-18 "remove the SAFE message... so
+    // the whole thing takes up less space": the MAP shows where the ring closes, and the
+    // next ring with it.
     //
     // What the second line also said takes turns with the count, two seconds each: in the
     // fog the lead's HP (Cam's 2026-10-14 play-test, POK-358: a BARBOACH went from 26/40 to
     // fainted in twenty seconds of walking with nothing on screen to say so), or else the
-    // eye and how many are watching (POK-233). Not while FOG! flashes: that is the news.
-    // The eye is a two-byte escape (F9 D8), so the count goes where StringCopy left the
-    // terminator.
-    if (fog == 0)
-    {
-        if (gBrRing.outside && LeadHp(buf))
-            colors = sColorsFog;
-        else if (h->eyes != 0)
-            ConvertIntToDecimalStringN(StringCopy(buf, sText_Eye), h->eyes, STR_CONV_MODE_LEFT_ALIGN, 2);
-        else
-            buf[0] = EOS;
-        if (buf[0] != EOS)
-            alt = AltTurn();
-    }
-    if (alt == 2)
-    {
-        AddTextPrinterParameterized3(h->winCorner, BR_HUD_FONT, 0, 0, colors, (s8)TEXT_SKIP_DRAW, buf);
-    }
+    // eye and how many are watching (POK-233). The eye is a two-byte escape (F9 D8), so
+    // the count goes where StringCopy left the terminator.
+    if (gBrRing.outside && LeadHp(buf))
+        colors = sColorsFog;
+    else if (h->eyes != 0)
+        ConvertIntToDecimalStringN(StringCopy(buf, sText_Eye), h->eyes, STR_CONV_MODE_LEFT_ALIGN, 2);
     else
+        buf[0] = EOS;
+    if (buf[0] != EOS)
+        alt = AltTurn();
+    if (alt != 2)
     {
         p = ConvertIntToDecimalStringN(buf, h->left, STR_CONV_MODE_LEFT_ALIGN, 2);
         StringCopy(p, sText_Left);
-        AddTextPrinterParameterized3(h->winCorner, BR_HUD_FONT, 0, 0, sColorsText,
-            (s8)TEXT_SKIP_DRAW, buf);
-        if (fog == 2)
-        {
-            PrintRight(h->winCorner, sText_Fog, 0, sColorsFog);
-        }
-        else if (fog == 0)
-        {
-            p = ConvertIntToDecimalStringN(buf, h->clockSecs / 60, STR_CONV_MODE_LEFT_ALIGN, 2);
-            *p++ = CHAR_COLON;
-            ConvertIntToDecimalStringN(p, h->clockSecs % 60, STR_CONV_MODE_LEADING_ZEROS, 2);
-            PrintRight(h->winCorner, buf, 0, sColorsText);
-        }
+        colors = sColorsText;
+    }
+    AddTextPrinterParameterized3(h->winCorner, BR_HUD_FONT, 0, 0, colors, (s8)TEXT_SKIP_DRAW, buf);
+    if (fog == 2)
+    {
+        PrintRight(h->winCorner, sText_Fog, 0, sColorsFog);
+    }
+    else if (fog == 0)
+    {
+        p = ConvertIntToDecimalStringN(buf, h->clockSecs / 60, STR_CONV_MODE_LEFT_ALIGN, 2);
+        *p++ = CHAR_COLON;
+        ConvertIntToDecimalStringN(p, h->clockSecs % 60, STR_CONV_MODE_LEADING_ZEROS, 2);
+        PrintRight(h->winCorner, buf, 0, sColorsText);
     }
     h->drawnClock = h->clockSecs;
     h->drawnLeft = h->left;
@@ -675,7 +668,7 @@ static void TickCorner(bool8 covered)
     if (covered)
     {
         // The start menu, most often. BrHud_Yield took the corner off where the menu does
-        // not draw -- its five left columns, frame and all -- and it is drawn whole again
+        // not draw -- its four left columns, frame and all -- and it is drawn whole again
         // when the menu goes: the menu's pixels are in its tiles by then.
         h->shown &= ~BR_HUD_SHOWN_CORNER;
         h->dirty |= BR_HUD_DIRTY_CORNER;

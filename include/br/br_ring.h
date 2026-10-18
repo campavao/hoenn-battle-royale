@@ -31,9 +31,10 @@ struct BrRing
     /* 14 */ u8 place[BR_RING_PLACE_MAX + 1]; // what the last RING named, EOS-ended (POK-325)
     /* 31 */ u8 battleFog;  // this fight between contestants is fought in the fog: the
                             // engine hurts the mons on the field at each turn's end
-    /* 32 */ s8 next;       // the radius after this phase, what the MAP previews; r when
-                            // the host named none (the last phase)
-    /* 33 */ u8 unused[3];  // agbcc rounds the struct to four bytes anyway: said, so the
+    /* 32 */ s8 next;       // the radius after this phase, what the MAP previews
+    /* 33 */ bool8 hasNext; // the host named one: not on the last phase, nor from a
+                            // zeroed or hand-poked struct
+    /* 34 */ u8 unused[2];  // agbcc rounds the struct to four bytes anyway: said, so the
                             // modern build lays it out the same
 };                          // 36 bytes
 // web/src/field.ts reads `outside` and `damageTimer` (RING_OUTSIDE, RING_TIMER).
@@ -52,6 +53,7 @@ BR_OFFSET(BrRing, appliedMapNum, 13)
 BR_OFFSET(BrRing, place, 14)
 BR_OFFSET(BrRing, battleFog, 31)
 BR_OFFSET(BrRing, next, 32)
+BR_OFFSET(BrRing, hasNext, 33)
 BR_SIZE(BrRing, 36)
 
 #define BR_FOG_TICK_FRAMES 240

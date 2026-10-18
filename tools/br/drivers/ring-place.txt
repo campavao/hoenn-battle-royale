@@ -1,8 +1,8 @@
 # ring-place: the ring's centre is kept for the MAP's prompt and the box (POK-325), and the
 # HUD corner is one line (Cam, 2026-10-18: "remove the SAFE message... bring the # left
-# and timer closer together so the whole thing takes up less space"). The corner is 9x2
-# (cols 20..28, rows 1..2, frame 19..29 and 0..3): "N LEFT" and the clock, taking turns
-# with the eye while anyone watches, and with the lead's HP in the fog.
+# and timer closer together so the whole thing takes up less space"). The corner is 11x2
+# (cols 18..28, rows 1..2, frame 17..29 and 0..3): the clock always, and beside it "N
+# LEFT", taking turns with the eye while anyone watches and with the lead's HP in the fog.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -31,23 +31,23 @@ expect u8 gBrRing+23 0xCE
 expect u8 gBrRing+24 0xFF
 # the phase's box is up too (a new phase with a place), and the ticker has nothing: the
 # first ring's rung is the one the match had (POK-324), so shown = CORNER|BOX. BG0's
-# tilemap is 0x0600F800, 32 cells a row, palette 15. The corner's first cell (20,1) is
-# 0x139 and its last (28,2) 0x14A; the box's first (2,11) is still 0x15D -- the HUD
+# tilemap is 0x0600F800, 32 cells a row, palette 15. The corner's first cell (18,1) is
+# 0x139 and its last (28,2) 0x14E; the box's first (2,11) is still 0x15D -- the HUD
 # shares the start menu's and the message box's tiles (POK-329, br_hud.h).
 expect u8 gBrHud+0x08 2
 expect u8 gBrHud+0x09 5
 expect u8 gBrHud+0x0A 0
-expect u16 0x0600F868 0xF139
-expect u16 0x0600F8B8 0xF14A
+expect u16 0x0600F864 0xF139
+expect u16 0x0600F8B8 0xF14E
 expect u16 0x0600FAC4 0xF15D
-# the corner's standard frame, 0x214 in the HUD's palette 13: its top-left at (19,0) and
+# the corner's standard frame, 0x214 in the HUD's palette 13: its top-left at (17,0) and
 # its foot along row 3. Row 4, where the second line's cells were, is the map's again.
-expect u16 0x0600F826 0xD214
-expect u16 0x0600F8E8 0xD21B
+expect u16 0x0600F822 0xD214
+expect u16 0x0600F8E4 0xD21B
 expect u16 0x0600F8FA 0xD21C
-expect u16 0x0600F928 0
-expect u16 0x0600F866 0xD217
-expect u16 0x0600F864 0
+expect u16 0x0600F924 0
+expect u16 0x0600F862 0xD217
+expect u16 0x0600F860 0
 # the box talks in the message box's own frame: its top-left cell (0,10) is the dialogue
 # frame's corner, tile 0x201 in palette 15
 expect u16 0x0600FA80 0xF201
@@ -57,19 +57,19 @@ shot corner-place
 # the box goes after its ninety frames; the corner stays
 wait 90
 expect u8 gBrHud+0x09 1
-expect u16 0x0600F868 0xF139
+expect u16 0x0600F864 0xF139
 shot corner-place-quiet
-# START: the menu covers cols 21..29 and the corner's two columns left of it, frame and
-# all, are cleared rather than left as half a box beside it -- (19..20, 0..3) are 0
+# START: the menu covers cols 21..29 and the corner's four columns left of it, frame and
+# all, are cleared rather than left as half a box beside it -- (17..20, 0..3) are 0
 tap START
 wait 20
 expect u8 gBrHud+0x09 0
-expect u16 0x0600F826 0
+expect u16 0x0600F822 0
 expect u16 0x0600F828 0
-expect u16 0x0600F866 0
-expect u16 0x0600F868 0
-expect u16 0x0600F8A8 0
-expect u16 0x0600F8E6 0
+expect u16 0x0600F862 0
+expect u16 0x0600F864 0
+expect u16 0x0600F8A4 0
+expect u16 0x0600F8E2 0
 expect u16 0x0600F8E8 0
 # ...and the menu's own frame is there at (21,0)
 expectne u16 0x0600F82A 0
@@ -78,11 +78,11 @@ shot corner-menu
 tap B
 wait 20
 expectge u8 gBrHud+0x09 1
-expect u16 0x0600F868 0xF139
-expect u16 0x0600F8B8 0xF14A
-expect u16 0x0600F826 0xD214
+expect u16 0x0600F864 0xF139
+expect u16 0x0600F8B8 0xF14E
+expect u16 0x0600F822 0xD214
 shot corner-back
-# three spectators come: the eye takes turns with the count, 120 frames each, counted in
+# three spectators come: the eye takes turns with the count beside the clock, 120 frames each, counted in
 # gBrHud.altFrames (+0x16): drawnAlt (+0x17) 1 is the count's turn, 2 the eye's
 poke u8 gBrHud+0x0F 3
 poke u8 gBrHud+0x16 0

@@ -177,7 +177,8 @@ static void HandleRing(const u8 *payload, u8 len)
     // The next radius rides after the elapsed seconds: hasElapsed u8, elapsed u16, then
     // hasNext u8 and the radius. Without it there is nothing to preview.
     tail = n >= 6 ? 6 + d[5] : n;
-    gBrRing.next = (tail + 5 <= n && d[tail + 3] != 0) ? (s8)d[tail + 4] : gBrRing.r;
+    gBrRing.hasNext = tail + 5 <= n && d[tail + 3] != 0;
+    gBrRing.next = gBrRing.hasNext ? (s8)d[tail + 4] : gBrRing.r;
     gBrRing.applied = FALSE; // re-evaluate on the next frame
 }
 

@@ -54,14 +54,10 @@ void BrMap_TakeFlight(void);
 // has cleared BLDCNT for itself. Both do nothing unless this is a look with a ring.
 void BrMap_ShadeFog(u16 *frame, u8 *tiles, u8 left, u8 top, u8 width, u8 height);
 void BrMap_BlendFog(void);
-// The next ring on a look (Cam, 2026-10-18): what it will fog blinks purple, slowly,
-// and a white circle is drawn where it stops. ShadeFog lays the blinking cells down on
-// BG1 with a tile of their own, and BlinkFog, from the fly map's VBlank, fades that one
-// tile in and out. DrawNextRing draws the circle on BG0, whose tilemap buffer and tiles
-// from `firstTile` up the fly map hands over (its windows and their frame end there),
-// on the same width x height grid of cells from left, top.
+// The next ring on a look (Cam, 2026-10-18): what it will fog blinks purple, slowly.
+// ShadeFog lays those cells down on BG1 with a tile of their own, and BlinkFog, from the
+// fly map's VBlank, turns that one tile on and off.
 void BrMap_BlinkFog(u8 *tiles);
-void BrMap_DrawNextRing(u16 *map, u8 *tiles, u16 firstTile, u8 left, u8 top, u8 width, u8 height);
 // The prompt under a look (region_map.c): "FOG: <the ring's centre>", or FOG EVERYWHERE on
 // the last phase, or "The FOG." with no place named. Built in gStringVar4.
 const u8 *BrMap_Prompt(void);

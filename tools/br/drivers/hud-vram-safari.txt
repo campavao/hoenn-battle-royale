@@ -70,7 +70,7 @@ wait 10
 unwatch
 say safari-menu-closed
 expect u8 gBrHud+0x09 5
-expect u16 0x0600F868 0xF139
+expect u16 0x0600F864 0xF139
 expect u16 0x0600FAC4 0xF15D
 expect u16 0x0600FC44 0
 shot hud-back

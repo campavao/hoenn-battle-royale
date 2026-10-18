@@ -61,7 +61,7 @@ BGCNT_ADDR = 0x0400000A
 LOAD_LAG = 30
 RING = {1: "gOverworldTilemapBuffer_Bg1", 2: "gOverworldTilemapBuffer_Bg2", 3: "gOverworldTilemapBuffer_Bg3"}
 # The HUD's windows (br_hud.c's templates): (left, top, base) -> name.
-HUD = {(20, 1, 0x139): "corner", (2, 11, 0x15D): "box", (2, 17, 0x1C9): "ticker"}
+HUD = {(18, 1, 0x139): "corner", (2, 11, 0x15D): "box", (2, 17, 0x1C9): "ticker"}
 START_MENU = (22, 1, 0x139)
 MESSAGE_BOX = (2, 15, 0x194)
 BACK_WITHIN = 2

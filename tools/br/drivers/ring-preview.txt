@@ -4,8 +4,9 @@
 #
 # The host's RING carries the next radius after the elapsed seconds (hasNext, next). On
 # the map the cells this ring keeps and the next does not get a tile of their own after
-# the fog's, which the fly map's VBlank fades in and out (BrMap_BlinkFog), and BG0 gets
-# a white circle round the cells the next ring keeps (BrMap_DrawNextRing).
+# the fog's, which the fly map's VBlank turns on and off (BrMap_BlinkFog): whole, with no
+# dithered steps between, and no circle (Cam, 2026-10-18: "just hide the dots and big
+# white circle").
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -38,25 +39,23 @@ expect u16 0x0600F26A 0xA006
 expect u16 0x0600F26C 0xA006
 expect u16 0x0600F26E 0xA005
 expect u16 gBrMap+2 6
-# the circle: BG0's tilemap is 0x0600F800. Seven cells and four pixels right of the
-# centre's middle (108 + 60 = 168) is screen column 21, on the centre's row 9 -- one of
-# BG0's own tiles from 0x6E up, in palette 11, white at colour 1 and dark at 2.
-expectbits u16 0x0600FA6A 0xF000 0xB000
-expectge u16 0x0600FA6A 0xB06E
-expect u16 0x05000162 0x7FFF
-expect u16 0x05000164 0x2084
-# ...and the centre's own BG0 cell has nothing on it
+# the blink, BG1's tile 6 at 0x0600C0C0, counted off gMain.vblankCounter1 (+0x20): all
+# fog for the first 48 frames of each 96, clear for the rest -- every pixel colour 1 or
+# none, never a dot pattern
+poke u32 gMain+0x20 0
+wait 2
+expect u32 0x0600C0C0 0x11111111
+expect u32 0x0600C0DC 0x11111111
+shot preview-on
+poke u32 gMain+0x20 50
+wait 2
+expect u32 0x0600C0C0 0
+expect u32 0x0600C0DC 0
+shot preview-off
+# no circle: BG0 over the grid is the fly map's own, nothing on the centre's row
+expect u16 0x0600FA6A 0
 expect u16 0x0600FA5A 0
-shot preview-a
-# the blink breathes: two shots a quarter of a breath apart differ in the blink tile's
-# pixels (BG1's tile 6 at 0x0600C0C0)
-wait 32
-shot preview-b
-wait 32
-shot preview-c
-wait 32
-shot preview-d
-# the last but one: r 0, next -1 -- everything the ring keeps blinks, and no circle
+# the last but one: r 0, next -1 -- everything the ring keeps blinks
 tap B
 wait 200
 expect u8 gBrMap 0
