@@ -17,7 +17,7 @@ expect u8 *gSaveBlock1Ptr+5 10
 pokebytes gDecompressionBuffer 00 18 0A 00 01 00 B0 0E 00 0F 00 01 4F 01 01 00 00 00 00
 mailsend gBrMailbox 11 gDecompressionBuffer 19
 wait 30
-expect u8 gBrLoot+0xA1 1
+expect u8 gBrLoot+0xA1 2
 tap UP
 wait 20
 shot steven
@@ -25,5 +25,5 @@ tap A
 wait 20
 shot gift
 expectmsg 10 u16 1 0xB000
-expect u8 gBrLoot+0xA1 0
+expect u8 gBrLoot+0xA1 1
 say story steven ok
