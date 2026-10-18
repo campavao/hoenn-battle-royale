@@ -70,6 +70,11 @@ const NEAR_TILES = 4;
 /** A wild battle on a patch, as long as a short one in the ROM: the bot stands still with
  *  the battle mark on, and comes out of it hurt (POK-363). */
 const WILD_MS = 4_000;
+/** The walk-up's wait for the "!" (POK-409): the ROM settles the pair, then shows the
+ *  bubble over the bot for about a second (br_walkup.c), and only then does it look for
+ *  the bot's steps -- for BR_APPROACH_FRAMES, three seconds, so a walk that starts a
+ *  little late still lands. */
+export const WALKUP_DELAY_MS = 1_300;
 
 /** A stateless 32-bit roll from two numbers (mulberry32's finaliser): the rests' own,
  *  off the match's rng, so pausing changes nothing else a seed decides. */
@@ -173,6 +178,9 @@ interface Fight {
   /** Set on a duel in the hidden instance, which no ROM reports on: what the backstop
    *  does when the instance never answers -- the seeded resolver. */
   proxy?: () => void;
+  /** The bot's walk-up to the player before the fight (walkUp): the cells left to walk,
+   *  and when the next one is due. */
+  walk?: { steps: Spot[]; dir: SeamDir; next: number };
 }
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
@@ -662,7 +670,9 @@ export class Bots {
     else this.opts.send(card);
     this.note(walker, 'engage', `seat ${playerSeat} (theirs)`);
     this.opts.onEngage?.(botSeat, playerSeat);
-    this.hold(walker, playerSeat, now);
+    const fight = this.hold(walker, playerSeat, now);
+    const player = this.opts.engage?.players().find((p) => p.seat === playerSeat);
+    if (player) this.walkUp(walker, player, fight, now);
     walker.engageAfter = now + cooldownFor(walker.bot);
     return true;
   }
@@ -701,6 +711,48 @@ export class Bots {
     walker.path = null;
     this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
     return fight;
+  }
+
+  /** The walk-up before a fight with a player (POK-409), the way a map trainer that
+   *  spotted you walks up after its "!". Only when the bot faces the player down the
+   *  line: otherwise the player looked, and their ROM walks them up instead. The ROM
+   *  reads the same facing (BR_WALKUP_BOT, br_walkup.c) and waits for these steps. Each
+   *  is an ordinary step, as the ROM's CanStep has it -- no ledge, no door, no seam, no
+   *  trainer in the way, water to water -- and the walk stops at the first that is not. */
+  private walkUp(walker: Walker, player: PlayerView, fight: Fight, now: number): void {
+    if (player.mapId !== walker.at.map) return;
+    const dx = player.x - walker.at.x;
+    const dy = player.y - walker.at.y;
+    if ((dx !== 0) === (dy !== 0)) return;
+    const dir: SeamDir = dx > 0 ? 'east' : dx < 0 ? 'west' : dy > 0 ? 'south' : 'north';
+    if (DIR_WIRE[dir] !== walker.facing) return;
+    const world = this.opts.world;
+    const onWater = (at: Spot): boolean =>
+      !world.standable(at.map, at.x, at.y) && world.standable(at.map, at.x, at.y, true);
+    const steps: Spot[] = [];
+    let at = walker.at;
+    for (let left = Math.abs(dx + dy) - 1; left > 0; left--) {
+      const to = world.step(at, dir, true);
+      if (!to || to.map !== at.map || Math.abs(to.x - at.x) + Math.abs(to.y - at.y) !== 1) break;
+      if (onWater(to) !== onWater(at) || this.taken(to, walker)) break;
+      steps.push(to);
+      at = to;
+    }
+    if (steps.length > 0) fight.walk = { steps, dir, next: now + WALKUP_DELAY_MS };
+  }
+
+  /** One step of the walk-up, when it is due. */
+  private walkUpStep(walker: Walker, fight: Fight, now: number): void {
+    const walk = fight.walk;
+    if (!walk || now < walk.next) return;
+    const to = walk.steps.shift();
+    if (!to) return;
+    walk.next = now + STEP_MS;
+    const map = this.opts.mapRef(to.map);
+    if (!map) return;
+    walker.at = to;
+    walker.facing = DIR_WIRE[walk.dir];
+    this.opts.send({ t: 'step', seat: walker.bot.seat, d: walker.facing, map, x: to.x, y: to.y, p: 0 });
   }
 
   /** Lets a fight go, however it ended: the bot is back on the map, after the grace
@@ -855,7 +907,11 @@ export class Bots {
 
   private stepOne(walker: Walker, now: number): void {
     this.now = now;
-    if (this.fighting.has(walker.bot.seat)) return;
+    const fight = this.fighting.get(walker.bot.seat);
+    if (fight) {
+      this.walkUpStep(walker, fight, now);
+      return;
+    }
     if (walker.wildUntil) {
       if (now < walker.wildUntil) return;
       walker.wildUntil = 0;
@@ -1065,7 +1121,7 @@ export class Bots {
         nonce: this.nonce,
       });
       this.note(walker, 'engage', `seat ${player.seat}`);
-      this.hold(walker, player.seat, now);
+      this.walkUp(walker, player, this.hold(walker, player.seat, now), now);
       walker.engageAfter = now + cooldownFor(walker.bot);
       return true;
     }
