@@ -321,3 +321,60 @@ test("a phone's bag: pockets, a swipe, the description, and USE throws the ball"
     await ctx.close();
   }
 });
+
+// POK-415 (Cam, 2026-10-18): on a 375-wide phone with Safari's bars the bag ran past the
+// bottom of the glass, so USE was never on screen and a tap on an item only moved the
+// cursor. The list gives up room instead, and a second tap on the cursor's row uses it.
+const SHORT_PHONE = { width: 375, height: 667 };
+
+test("a short phone's bag: USE stays on the glass, and a second tap on a row uses it", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const sym = loadSymbols();
+  const ctx = await browser.newContext({ viewport: SHORT_PHONE, isMobile: true, hasTouch: true });
+  try {
+    const page = await ctx.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await intoWildBattle(page, sym);
+    await expect.poll(() => read(page, sym.gBrBattle + 8, 8), { timeout: 30_000 }).toBe(BR_MENU_ACTION);
+    const save1 = await read(page, sym.gSaveBlock1Ptr, 32);
+    const save2 = await read(page, sym.gSaveBlock2Ptr, 32);
+    await write(page, save2 + SAVE2_KEY, 0, 32);
+    for (const [i, [item, n]] of ([[ITEM.POKE_BALL, 5], [ITEM.GREAT_BALL, 6]] as const).entries()) {
+      await write(page, save1 + SAVE1_BALLS + 4 * i, item, 16);
+      await write(page, save1 + SAVE1_BALLS + 4 * i + 2, n, 16);
+    }
+
+    await page.locator('.bm-cell[data-slot="1"]').tap();
+    await expect(page.locator('#battle-menu')).toHaveAttribute('data-mode', 'bag');
+    await page.locator('.bm-bag-next').tap();
+    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use POKé BALL');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(OUT_DIR, 'bag-short-phone.png') });
+    // A tap on the row the bag opened on only reads it.
+    const list = (await page.locator('.bm-bag-list').boundingBox())!;
+    const rowY = (row: number) => list.y + (8 + 24 * row + 12) * (list.width / 232);
+    await page.touchscreen.tap(list.x + list.width / 2, rowY(0));
+    await page.waitForTimeout(300);
+    expect(await read(page, save1 + SAVE1_BALLS + 2, 16), 'a first tap throws nothing').toBe(5);
+    await expect(page.locator('#battle-menu')).toHaveAttribute('data-mode', 'bag');
+    // Every window of the bag, BACK and USE too, wholly on the glass.
+    for (const sel of ['.bm-bag-head', '.bm-bag-list', '.bm-bag-back', '.bm-bag-use']) {
+      const b = (await page.locator(sel).boundingBox())!;
+      expect(b.y + b.height, sel).toBeLessThanOrEqual(SHORT_PHONE.height + 0.5);
+    }
+
+    // The first tap on GREAT BALL picks it; the second throws it.
+    await page.touchscreen.tap(list.x + list.width / 2, rowY(1));
+    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use GREAT BALL');
+    expect(await read(page, save1 + SAVE1_BALLS + 6, 16), 'one tap throws nothing').toBe(6);
+    await page.touchscreen.tap(list.x + list.width / 2, rowY(1));
+    await expect(page.locator('#battle-menu')).toBeHidden();
+    await expect.poll(() => read(page, save1 + SAVE1_BALLS + 6, 16), { timeout: 20_000 }).toBe(5);
+    expect(await read(page, save1 + SAVE1_BALLS + 2, 16), 'the POKé BALLs kept').toBe(5);
+    await page.screenshot({ path: path.join(OUT_DIR, 'bag-short-phone-thrown.png') });
+    expect(errors, 'nothing thrown on the page').toEqual([]);
+  } finally {
+    await ctx.close();
+  }
+});

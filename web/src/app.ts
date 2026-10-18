@@ -3935,7 +3935,12 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     battle.setScale(s);
     // Right under the picture, where field.ts put it.
     const lay = measureLayout(wrap, pad, liveAbove());
-    menuRoot.style.top = `${Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s)}px`;
+    const top = Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s);
+    menuRoot.style.top = `${top}px`;
+    // ...and what the box (which clips it) has left under that, past the home bar: the
+    // bag fits itself to it (POK-415).
+    const homeBar = parseFloat(getComputedStyle(pad).paddingBottom || '0');
+    battle.setRoom((wrap.clientHeight - top - homeBar) / s);
   };
   new ResizeObserver(resize).observe(pad);
   new ResizeObserver(resize).observe(wrap);

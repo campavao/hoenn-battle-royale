@@ -256,10 +256,12 @@ export interface BattleMenuDeps {
 
 /** The bag's windows, GBA pixels: the mockup's pocket bar, list, description, and BACK
  *  and USE under them, pressed to fit under the picture on a phone -- 236 in all with
- *  the gaps, where a 390 x 844 screen has about 250. */
+ *  the gaps, where a 390 x 844 screen has about 250. A shorter screen gives the list
+ *  less (setRoom), down to BAG_LIST_MIN: USE stays on the glass (POK-415). */
 export const BAG_HEAD_H = 32;
 export const BAG_ARROW_W = 56;
 export const BAG_LIST_H = 104;
+export const BAG_LIST_MIN = 40;
 export const BAG_ROW_H = 24;
 export const BAG_DESC_H = 44;
 export const BAG_BACK_W = 72;
@@ -324,6 +326,11 @@ export class BattleMenu {
   /** Which of BAG_POCKETS the bag is open on, and the item its cursor is on. */
   private pocketAt = 0;
   private picked = 0;
+  /** The row a tap last picked: a tap on it again uses it. Not the row the bag opens
+   *  on, so a first tap there only reads it. */
+  private tapped = 0;
+  /** GBA pixels from the menu's top to the bottom of the glass; Infinity until told. */
+  private room = Infinity;
   private readonly bagHead: HTMLElement;
   private readonly bagHeadWin: Win;
   private readonly bagList: HTMLElement;
@@ -446,7 +453,7 @@ export class BattleMenu {
   private stepPocket(dir: 1 | -1): void {
     const n = BAG_POCKETS.length;
     this.pocketAt = (this.pocketAt + dir + n) % n;
-    this.picked = 0;
+    this.picked = this.tapped = 0;
     this.bagList.scrollTop = 0;
     this.layout();
   }
@@ -475,7 +482,12 @@ export class BattleMenu {
       const row = Math.floor((at.y - 8) / BAG_ROW_H);
       const stack = this.stacks()[row];
       if (!stack || at.y < 8) return;
-      this.picked = stack.item;
+      // The row a tap already picked: a second tap uses it, as A would (POK-415).
+      if (stack.item === this.tapped && stack.item === this.pickedStack()?.item) {
+        this.useItem();
+        return;
+      }
+      this.picked = this.tapped = stack.item;
       this.layout();
     });
   }
@@ -486,6 +498,13 @@ export class BattleMenu {
     const pocket = BAG_POCKETS[this.pocketAt].pocket;
     this.mode = 'action';
     this.send(() => this.deps.useItem!(pocket, stack.item));
+  }
+
+  /** The list's box, GBA pixels: what the room leaves past the pocket bar, the
+   *  description and BACK/USE, never more than BAG_LIST_H. The list scrolls inside it. */
+  private bagListBox(): number {
+    const rest = BAG_HEAD_H + BAG_DESC_H + BACK_H + 3 * GAP;
+    return Math.max(BAG_LIST_MIN, Math.min(BAG_LIST_H, Math.floor(this.room - rest)));
   }
 
   private bagListHeight(): number {
@@ -603,7 +622,7 @@ export class BattleMenu {
     // BAG is the page's own (ui/bag.ts), until USE: then it is the ROM's that uses it.
     if (which === MENU_ACTION && slot === 1 && this.deps.useItem) {
       this.pocketAt = 0;
-      this.picked = 0;
+      this.picked = this.tapped = 0;
       this.bagList.scrollTop = 0;
       if (this.deps.readBag) this.view = { ...v, bag: this.deps.readBag() };
       this.setMode('bag');
@@ -679,6 +698,14 @@ export class BattleMenu {
     this.bagDescWin.size(MENU_W, BAG_DESC_H, scale);
     this.bagBackWin.size(BAG_BACK_W, BACK_H, scale);
     this.bagUseWin.size(MENU_W - BAG_BACK_W - GAP, BACK_H, scale);
+    if (this.mode === 'bag') this.layout();
+  }
+
+  /** The glass under the menu's top, GBA pixels: the bag fits itself to it. */
+  setRoom(gbaPx: number): void {
+    if (!(gbaPx > 0) || gbaPx === this.room) return;
+    this.room = gbaPx;
+    if (this.mode === 'bag') this.layout();
   }
 
   /** Each frame, from the ROM. */
@@ -743,6 +770,8 @@ export class BattleMenu {
       const stack = this.pickedStack();
       const h = this.bagListHeight();
       if (this.bagListWin.c.height !== h) this.bagListWin.size(MENU_W, h, this.scale);
+      const box = `${this.bagListBox() * this.scale}px`;
+      if (this.bagList.style.height !== box) this.bagList.style.height = box;
       const key = `${this.pocketAt}|${stack?.item}|${this.view?.trainer}|${JSON.stringify(this.stacks())}`;
       this.bagHeadWin.show(String(this.pocketAt));
       this.bagListWin.show(key);
