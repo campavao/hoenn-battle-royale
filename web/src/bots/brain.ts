@@ -70,6 +70,8 @@ const NEAR_TILES = 4;
 /** A wild battle on a patch, as long as a short one in the ROM: the bot stands still with
  *  the battle mark on, and comes out of it hurt (POK-363). */
 const WILD_MS = 4_000;
+/** A legendary's battle (POK-410): a long one, as a player's against it is. */
+const LEGEND_MS = 12_000;
 
 /** A stateless 32-bit roll from two numbers (mulberry32's finaliser): the rests' own,
  *  off the match's rng, so pausing changes nothing else a seed decides. */
@@ -251,6 +253,8 @@ export interface Decision {
     | 'wander'
     /** Stepped onto an encounter patch and had its wild battle (POK-363). */
     | 'wild'
+    /** Fought a legendary the match put down (POK-410). */
+    | 'legend'
     | 'stuck'
     | 'fog'
     | 'duel'
@@ -298,6 +302,8 @@ export interface BotsOptions {
      *  review): the ROM lets go of a bag only on a bare one, and a gift-giver a bot
      *  emptied with an item-named pickup stood on every map with nothing in his hands. */
     bagLeft?: (key: number) => number;
+    /** A legendary the match put down (match/legends.ts): fought, not picked up (POK-410). */
+    legend?: (key: number) => boolean;
   };
   /** A piece on the ground this bot cannot have yet (match/story.ts, storySealed): behind
    *  a REGI's wall it could not open, or a person's who wants something it has not got.
@@ -872,6 +878,10 @@ export class Bots {
     const here = this.opts.loot?.at(walker.at.map, pageCell(walker.at.x, walker.at.y));
     if (here !== undefined && !this.opts.sealed?.({ key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y }, walker)) {
       if (this.fightGuard(walker, here)) return;
+      if (this.opts.loot?.legend?.(here)) {
+        this.fightLegend(walker, here, now);
+        return;
+      }
       // A bag on the ground gives up one item per press -- the ROM's own rule -- so
       // the pickup names what was taken and the rest stays there (POK-237).
       const item = this.opts.loot?.bagAt?.(here);
@@ -975,6 +985,26 @@ export class Bots {
       lead.hp = Math.max(1, lead.hp - Math.floor((lead.maxHp * share) / 100));
     }
     this.note(walker, 'wild', `key ${patch.key}`);
+  }
+
+  /** A legendary under the bot's feet (POK-410): a player has to beat it in a battle and
+   *  catch it, so a bot does not walk off with one in a step either. Its PICKUP takes it
+   *  off the ground for the room as the battle starts, the way a player's ROM claims it;
+   *  the bot stands with the battle mark on for LEGEND_MS, and every mon still standing
+   *  comes out of it hurt -- never fainted, as a patch's wild battle leaves the lead. */
+  private fightLegend(walker: Walker, key: number, now: number): void {
+    this.opts.send({ t: 'pickup', seat: walker.bot.seat, key });
+    this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
+    walker.wildUntil = now + LEGEND_MS;
+    walker.nextStepAt = Math.max(walker.nextStepAt, walker.wildUntil);
+    walker.engageAfter = Math.max(walker.engageAfter, walker.wildUntil);
+    walker.path = null;
+    walker.party.forEach((mon, i) => {
+      if (mon.hp <= 0) return;
+      const share = 25 + (mix(walker.bot.seat, key + i) % 36);
+      mon.hp = Math.max(1, mon.hp - Math.floor((mon.maxHp * share) / 100));
+    });
+    this.note(walker, 'legend', `key ${key}`);
   }
 
   /** The end of a leg, when nothing is pressing: the turn is spent standing, and the

@@ -7,6 +7,7 @@
 // walks it only ever hears how they went -- written once, and called from every road a
 // ROM's words arrive by: the room's relay, the host's own ROM, and solo's, which has no
 // relay at all and for a long time heard none of it.
+import { legendGfx } from '../match/legends';
 import type { Loot } from '../match/loot';
 import type { MapRef, Msg } from '../net/wire';
 import type { Bots, BotsOptions } from './brain';
@@ -35,6 +36,10 @@ export function lootView(
     },
     bagAt: (key) => loot.bagAt(key),
     bagLeft: (key) => (loot.bagItems(key) ?? []).reduce((n, st) => n + st.n, 0),
+    legend: (key) => {
+      const species = loot.species(key);
+      return species !== undefined && legendGfx(key, species) !== undefined;
+    },
   };
 }
 

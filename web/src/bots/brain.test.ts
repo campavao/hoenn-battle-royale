@@ -1401,6 +1401,55 @@ describe('encounter patches (POK-363)', () => {
     expect(sent.some((m) => m.t === 'busy' && m.seat === seat && m.kind === undefined)).toBe(true);
   });
 
+  // POK-410: a legendary the match put down is a battle, for a bot as for a player.
+  it('fights a legendary on the ground instead of picking it up: it goes, the mark goes up, the team is hurt', () => {
+    const sent: Msg[] = [];
+    const decisions: Decision[] = [];
+    const ground = new Map<number, { x: number; y: number }>([[0xb000, { x: 3, y: 1 }]]);
+    const bots = new Bots({
+      world: new World([FIELD, PATH]),
+      targets: [{ mapId: 'FIELD', x: 3, y: 1 }],
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...MON }, { ...MON }],
+      inside: (id) => id === 'FIELD',
+      onDecision: (d) => void decisions.push(d),
+      loot: {
+        all: () => [...ground].map(([key, at]) => ({ key, mapId: 'FIELD', ...pageCell(at.x, at.y) })),
+        at: (mapId, { x, y }) => {
+          for (const [key, cell] of ground) if (mapId === 'FIELD' && pageCell(cell.x, cell.y).x === x && pageCell(cell.x, cell.y).y === y) return key;
+          return undefined;
+        },
+        legend: (key) => key === 0xb000,
+      },
+    });
+    const dealt = dealBots(99, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 1 }]);
+    bots.start(dealt, 0);
+    const seat = dealt[0].seat;
+    let t = STEP_MS;
+    for (; t <= 20_000 && !decisions.some((d) => d.rule === 'legend'); t += 100) {
+      bots.tick(t);
+      for (const m of sent) if (m.t === 'pickup') ground.delete(m.key);
+    }
+    expect(decisions.some((d) => d.rule === 'legend')).toBe(true);
+    expect(decisions.some((d) => d.rule === 'pickup')).toBe(false);
+    const took = sent.findIndex((m) => m.t === 'pickup' && m.key === 0xb000);
+    expect(took).toBeGreaterThanOrEqual(0);
+    expect(sent[took + 1]).toEqual({ t: 'busy', seat, kind: 'battle' });
+    for (const mon of bots.partyOf(seat)) {
+      expect(mon.hp).toBeLessThan(MON.hp);
+      expect(mon.hp).toBeGreaterThan(0);
+    }
+    // It stands there through a long battle, three wild ones' worth.
+    const at = bots.spotOf(seat);
+    for (const stop = t + 11_000; t <= stop; t += 100) bots.tick(t);
+    expect(bots.spotOf(seat)).toEqual(at);
+    expect(sent.some((m) => m.t === 'busy' && m.seat === seat && m.kind === undefined)).toBe(false);
+    for (const stop = t + 2_000; t <= stop; t += 100) bots.tick(t);
+    expect(sent.some((m) => m.t === 'busy' && m.seat === seat && m.kind === undefined)).toBe(true);
+  });
+
   it('meets a taken patch only once it has grown back with the ring', () => {
     const phase = { n: 0 };
     const { decisions, bots } = onPatch(phase);

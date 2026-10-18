@@ -213,6 +213,11 @@ export class Loot {
     return [...byMap.values()].flatMap((pieces) => spillsOf(pieces[0].map, pieces));
   }
 
+  /** The species in this piece when it is a mon, else undefined. */
+  species(key: number): number | undefined {
+    return this.pieces.get(key)?.mon?.species;
+  }
+
   /** Is this key still on the ground somewhere? */
   has(key: number): boolean {
     return this.pieces.has(key);
