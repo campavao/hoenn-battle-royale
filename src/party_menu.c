@@ -2797,8 +2797,8 @@ static void Task_HandleSelectionMenuInput(u8 taskId)
 // others that come through it: the summary screen's way back keeps it.
 static void CB2_BrAskLearnDone(void)
 {
-    gFieldCallback = FieldCB_ReturnToFieldNoScript;
-    SetMainCallback2(CB2_ReturnToField);
+    // Back to START, as the party screen it stood in for would have gone.
+    CB2_ReturnToFieldWithOpenMenu();
 }
 
 static bool8 BrAskNextLearn(u8 taskId)

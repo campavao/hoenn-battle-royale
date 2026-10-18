@@ -338,7 +338,8 @@ bool8 BrMoves_AskWaiting(void)
     return AskPending() && FindAsk(&slot, &move, TRUE);
 }
 
-static const u8 sText_WantsMove[] = _(" can learn a move: open POKéMON.");
+// A ten-letter name and this make 37 of the ticker's 40.
+static const u8 sText_WantsMove[] = _(" can learn a move (POKéMON)");
 
 static void SayAsk(u8 slot)
 {

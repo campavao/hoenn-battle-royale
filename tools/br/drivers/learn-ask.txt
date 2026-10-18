@@ -106,11 +106,10 @@ tap A
 wait 90
 tap A
 wait 120
-tap A
-wait 60
-tap A
-wait 60
-shot back-on-field
+# back to START, as the party screen would have gone
+shot back-on-start
+tap B
+wait 30
 shot back-on-field
 # the field is ours again: the party screen let go, and a step west takes
 expect u16 *gSaveBlock1Ptr+0 5

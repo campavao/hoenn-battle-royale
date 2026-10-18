@@ -92,10 +92,10 @@ tap A
 wait 90
 tap A
 wait 120
-tap A
-wait 60
-tap A
-wait 60
+# back to START, as the party screen would have gone
+shot back-on-start
+tap B
+wait 30
 shot back-on-field
 expect u16 *gSaveBlock1Ptr+0 5
 hold LEFT 20
