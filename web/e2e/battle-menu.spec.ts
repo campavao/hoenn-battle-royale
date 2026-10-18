@@ -286,7 +286,7 @@ test("a phone's bag: pockets, a swipe, the description, and USE throws the ball"
 
     // The right arrow: POKe BALLS. A swipe left from there: BERRIES. The left arrow back.
     await page.locator('.bm-bag-next').tap();
-    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use ROYALE BALL');
+    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use ROYALé BALL');
     await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(OUT_DIR, 'bag-balls.png') });
     const y = list.y + list.height / 2;

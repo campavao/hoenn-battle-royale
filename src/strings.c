@@ -1817,7 +1817,7 @@ const u8 gText_Ok2[] = _("OK");
 const u8 gText_Quiz[] = _("QUIZ");
 const u8 gText_Answer[] = _("ANSWER");
 #if BR
-const u8 gText_PokeBalls[] = _("ROYALE BALLS");
+const u8 gText_PokeBalls[] = _("ROYALé BALLS");
 #else
 const u8 gText_PokeBalls[] = _("POKé BALLS");
 #endif

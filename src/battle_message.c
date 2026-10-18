@@ -381,7 +381,7 @@ static const u8 sText_PkmnEnthralledByX[] = _("{B_OPPONENT_MON1_NAME} is enthral
 static const u8 sText_PkmnIgnoredX[] = _("{B_OPPONENT_MON1_NAME} completely ignored\nthe {B_BUFF1}!");
 static const u8 sText_ThrewPokeblockAtPkmn[] = _("{B_PLAYER_NAME} threw a {POKEBLOCK}\nat the {B_OPPONENT_MON1_NAME}!");
 #if BR
-static const u8 sText_OutOfSafariBalls[] = _("{PLAY_SE SE_DING_DONG}ANNOUNCER: You're out of\nROYALE BALLS! Game over!\p");
+static const u8 sText_OutOfSafariBalls[] = _("{PLAY_SE SE_DING_DONG}ANNOUNCER: You're out of\nROYALé BALLS! Game over!\p");
 #else
 static const u8 sText_OutOfSafariBalls[] = _("{PLAY_SE SE_DING_DONG}ANNOUNCER: You're out of\nSAFARI BALLS! Game over!\p");
 #endif
@@ -1308,7 +1308,7 @@ static const u8 *const sStatNamesTable2[] =
 };
 
 #if BR
-const u8 gText_SafariBalls[] = _("{HIGHLIGHT DARK_GRAY}ROYALE BALLS");
+const u8 gText_SafariBalls[] = _("{HIGHLIGHT DARK_GRAY}ROYALé BALLS");
 #else
 const u8 gText_SafariBalls[] = _("{HIGHLIGHT DARK_GRAY}SAFARI BALLS");
 #endif

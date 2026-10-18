@@ -55,7 +55,7 @@ const struct Item gItems[] =
 #if BR
     [ITEM_POKE_BALL] =
     {
-        .name = _("ROYALE BALL"),
+        .name = _("ROYALé BALL"),
         .itemId = ITEM_POKE_BALL,
         .price = 600,
         .description = gBrText_RoyaleBallDesc,
@@ -83,7 +83,7 @@ const struct Item gItems[] =
 #if BR
     [ITEM_SAFARI_BALL] =
     {
-        .name = _("ROYALE BALL"),
+        .name = _("ROYALé BALL"),
         .itemId = ITEM_SAFARI_BALL,
         .price = 0,
         .description = gBrText_RoyaleBallDesc,
