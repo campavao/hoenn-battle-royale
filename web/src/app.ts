@@ -3937,8 +3937,8 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     const lay = measureLayout(wrap, pad, liveAbove());
     const top = Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s);
     menuRoot.style.top = `${top}px`;
-    // ...and what the box (which clips it) has left under that, past the home bar: the
-    // bag fits itself to it (POK-415).
+    // ...and what the box (which clips it) has left under that, past the home bar (the
+    // pad's env(safe-area-inset-bottom), index.html): the bag's list fits it (POK-415).
     const homeBar = parseFloat(getComputedStyle(pad).paddingBottom || '0');
     battle.setRoom((wrap.clientHeight - top - homeBar) / s);
   };

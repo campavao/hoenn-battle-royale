@@ -219,16 +219,72 @@ test("a phone's battle menu: under the picture, the moves, a hold for details, a
   }
 });
 
-// The bag (Cam's mockup v3): BAG opens the page's own -- three pockets behind big arrows
-// and a swipe, each row with the game's icon and count, the description under them, and
-// only what a battle can use. USE is the ROM's BAG doing it (src/br/br_bag.c).
+// The bag (Cam's mockup v3, the item page POK-415): BAG opens the page's own -- three
+// pockets behind big arrows and a swipe, each row with the game's icon and count, and only
+// what a battle can use. A row tapped opens that item's page: its description, BACK and
+// USE. USE is the ROM's BAG doing it (src/br/br_bag.c).
 const SAVE1_ITEMS = 0x560;
 const SAVE1_BALLS = 0x650;
 const SAVE1_BERRIES = 0x790;
 const SAVE2_KEY = 0xac;
 const ITEM = { POTION: 13, SUPER_POTION: 22, X_ATTACK: 75, ESCAPE_ROPE: 85, POKE_BALL: 4, GREAT_BALL: 3, ORAN_BERRY: 139, SITRUS_BERRY: 142 };
+// struct Pokemon's hp (include/pokemon.h) and BattlePokemon's (play.ts BMON_HP).
+const PARTY_HP = 0x56;
+const BMON_HP = 0x28;
 
-test("a phone's bag: pockets, a swipe, the description, and USE throws the ball", async ({ browser }) => {
+const bagKey = async (page: Page, sym: Record<string, number>) => read(page, (await read(page, sym.gSaveBlock2Ptr, 32)) + SAVE2_KEY, 16);
+
+/** The battle's bag stocked, each count under the bag's key. (Not the key zeroed: the
+ *  empty slots' counts are under it too, and a berry pocket sorted on them hides all.) */
+async function stockBag(page: Page, sym: Record<string, number>, pockets: [number, [number, number][]][]): Promise<void> {
+  const save1 = await read(page, sym.gSaveBlock1Ptr, 32);
+  const key = await bagKey(page, sym);
+  for (const [at, stacks] of pockets) {
+    for (const [i, [item, n]] of stacks.entries()) {
+      await write(page, save1 + at + 4 * i, item, 16);
+      await write(page, save1 + at + 4 * i + 2, n ^ key, 16);
+    }
+  }
+}
+
+/** How many of `item` the bag holds, read as the page's bag reads it (ui/bag.ts): through
+ *  gBagPockets (the save blocks move), under the key of the moment. */
+async function bagCount(page: Page, sym: Record<string, number>, pocket: number, item: number): Promise<number> {
+  const key = await bagKey(page, sym);
+  const slots = await read(page, sym.gBagPockets + 8 * pocket, 32);
+  const cap = await read(page, sym.gBagPockets + 8 * pocket + 4, 8);
+  for (let i = 0; i < cap; i++) {
+    if ((await read(page, slots + 4 * i, 16)) === item) return ((await read(page, slots + 4 * i + 2, 16)) ^ key) & 0xffff;
+  }
+  return 0;
+}
+
+/** `sels` all wholly inside `glass`, and none on top of another. */
+async function laidOut(page: Page, sels: string[], glass: { width: number; height: number }): Promise<void> {
+  const boxes = await Promise.all(sels.map(async (sel) => (await page.locator(sel).boundingBox())!));
+  for (const [i, c] of boxes.entries()) {
+    expect(c.x, sels[i]).toBeGreaterThanOrEqual(0);
+    expect(c.x + c.width, sels[i]).toBeLessThanOrEqual(glass.width + 0.5);
+    expect(c.y + c.height, sels[i]).toBeLessThanOrEqual(glass.height + 0.5);
+    for (const [j, d] of boxes.entries()) {
+      if (j <= i) continue;
+      const overlap = c.x < d.x + d.width - 0.5 && d.x < c.x + c.width - 0.5 && c.y < d.y + d.height - 0.5 && d.y < c.y + c.height - 0.5;
+      expect(overlap, `${sels[i]} and ${sels[j]}`).toBe(false);
+    }
+  }
+}
+
+/** A row of the open pocket tapped: its item's page. */
+async function openRow(page: Page, row: number): Promise<void> {
+  const list = (await page.locator('.bm-bag-list').boundingBox())!;
+  await page.touchscreen.tap(list.x + list.width / 2, list.y + (8 + 24 * row + 12) * (list.width / 232));
+  await expect(page.locator('#battle-menu')).toHaveAttribute('data-mode', 'item');
+}
+
+const LIST_SELS = ['.bm-bag-head', '.bm-bag-list', '.bm-back'];
+const ITEM_SELS = ['.bm-bag-item', '.bm-bag-back', '.bm-bag-use'];
+
+test("a phone's bag: pockets, a swipe, an item's page, and USE throws the ball", async ({ browser }) => {
   test.setTimeout(300_000);
   const sym = loadSymbols();
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
@@ -239,68 +295,56 @@ test("a phone's bag: pockets, a swipe, the description, and USE throws the ball"
     await intoWildBattle(page, sym);
     await expect.poll(() => read(page, sym.gBrBattle + 8, 8), { timeout: 30_000 }).toBe(BR_MENU_ACTION);
 
-    // A bag to look at: the key zeroed so a count is a count, and an ESCAPE ROPE among
-    // the potions, which a battle cannot use and so is not listed.
-    const save1 = await read(page, sym.gSaveBlock1Ptr, 32);
-    const save2 = await read(page, sym.gSaveBlock2Ptr, 32);
-    await write(page, save2 + SAVE2_KEY, 0, 32);
-    const stock = async (at: number, stacks: [number, number][]) => {
-      for (const [i, [item, n]] of stacks.entries()) {
-        await write(page, save1 + at + 4 * i, item, 16);
-        await write(page, save1 + at + 4 * i + 2, n, 16);
-      }
-    };
-    await stock(SAVE1_ITEMS, [[ITEM.POTION, 3], [ITEM.ESCAPE_ROPE, 1], [ITEM.SUPER_POTION, 2], [ITEM.X_ATTACK, 1]]);
-    await stock(SAVE1_BALLS, [[ITEM.POKE_BALL, 5], [ITEM.GREAT_BALL, 2]]);
-    await stock(SAVE1_BERRIES, [[ITEM.ORAN_BERRY, 4], [ITEM.SITRUS_BERRY, 1]]);
+    // An ESCAPE ROPE among the potions, which a battle cannot use and so is not listed.
+    await stockBag(page, sym, [
+      [SAVE1_ITEMS, [[ITEM.POTION, 3], [ITEM.ESCAPE_ROPE, 1], [ITEM.SUPER_POTION, 2], [ITEM.X_ATTACK, 1]]],
+      [SAVE1_BALLS, [[ITEM.POKE_BALL, 5], [ITEM.GREAT_BALL, 2]]],
+      [SAVE1_BERRIES, [[ITEM.ORAN_BERRY, 4], [ITEM.SITRUS_BERRY, 1]]],
+    ]);
 
     const menu = page.locator('#battle-menu');
+    const head = page.locator('.bm-bag-head');
     await page.locator('.bm-cell[data-slot="1"]').tap();
     await expect(menu).toHaveAttribute('data-mode', 'bag');
     await expect(page.locator('.bm-bag-list')).toBeVisible();
     // Still the ROM's action menu behind it: nothing was pressed in the game.
     expect(await read(page, sym.gBrBattle + 8, 8)).toBe(BR_MENU_ACTION);
-    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use POTION');
+    await expect(head).toHaveAttribute('aria-label', 'ITEMS');
     await page.waitForTimeout(300);
     await page.screenshot({ path: path.join(OUT_DIR, 'bag-items.png') });
+    await laidOut(page, LIST_SELS, PORTRAIT);
 
-    // Inside the glass, and nothing on top of anything.
-    const boxes = await Promise.all(['.bm-bag-head', '.bm-bag-list', '.bm-bag:not(.bm-bag-head):not(.bm-bag-list):not(.bm-info-row)', '.bm-bag-back', '.bm-bag-use'].map(async (sel) => (await page.locator(sel).boundingBox())!));
-    for (const [i, c] of boxes.entries()) {
-      expect(c.x, `box ${i}`).toBeGreaterThanOrEqual(0);
-      expect(c.x + c.width, `box ${i}`).toBeLessThanOrEqual(PORTRAIT.width + 0.5);
-      expect(c.y + c.height, `box ${i}`).toBeLessThanOrEqual(PORTRAIT.height + 0.5);
-      for (const [j, d] of boxes.entries()) {
-        if (j <= i) continue;
-        const overlap = c.x < d.x + d.width - 0.5 && d.x < c.x + c.width - 0.5 && c.y < d.y + d.height - 0.5 && d.y < c.y + c.height - 0.5;
-        expect(overlap, `boxes ${i} and ${j}`).toBe(false);
-      }
-    }
-
-    // A row tapped: the cursor and the description follow it.
-    const list = (await page.locator('.bm-bag-list').boundingBox())!;
-    const scale = list.width / 232;
-    await page.mouse.click(list.x + list.width / 2, list.y + (8 + 24 * 1 + 12) * scale);
+    // A row tapped: its page, with its description, BACK and USE. BACK: the list again.
+    await openRow(page, 1);
     await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use SUPER POTION');
+    await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(OUT_DIR, 'bag-items-picked.png') });
+    await laidOut(page, ITEM_SELS, PORTRAIT);
+    await page.locator('.bm-bag-back').tap();
+    await expect(menu).toHaveAttribute('data-mode', 'bag');
 
     // The right arrow: POKe BALLS. A swipe left from there: BERRIES. The left arrow back.
     await page.locator('.bm-bag-next').tap();
-    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use POKé BALL');
+    await expect(head).toHaveAttribute('aria-label', 'POKé BALLS');
     await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(OUT_DIR, 'bag-balls.png') });
+    const list = (await page.locator('.bm-bag-list').boundingBox())!;
     const y = list.y + list.height / 2;
     await page.mouse.move(list.x + list.width * 0.8, y);
     await page.mouse.down();
     await page.mouse.move(list.x + list.width * 0.2, y, { steps: 5 });
     await page.mouse.up();
-    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use ORAN BERRY');
+    await expect(head).toHaveAttribute('aria-label', 'BERRIES');
+    await expect(menu).toHaveAttribute('data-mode', 'bag');
     await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(OUT_DIR, 'bag-berries.png') });
     await page.locator('.bm-bag-prev').tap();
+    await expect(head).toHaveAttribute('aria-label', 'POKé BALLS');
 
-    // A trainer's POKeMON: the ball says why not, and USE will not go. (The flag, for a
-    // frame or two.)
+    // A trainer's POKeMON: the ball's page says why not, and USE will not go. (The flag,
+    // for a frame or two.)
+    await openRow(page, 0);
+    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use POKé BALL');
     const flags = await read(page, sym.gBattleTypeFlags, 32);
     await write(page, sym.gBattleTypeFlags, flags | BATTLE_TYPE_TRAINER, 32);
     await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-disabled', 'true');
@@ -312,8 +356,8 @@ test("a phone's bag: pockets, a swipe, the description, and USE throws the ball"
     // USE: the ROM's own BAG opens on POKe BALLS, takes the row and USE, and throws.
     await page.locator('.bm-bag-use').tap();
     await expect(menu).toBeHidden();
-    await expect.poll(() => read(page, save1 + SAVE1_BALLS + 2, 16), { timeout: 20_000 }).toBe(4);
-    expect(await read(page, save1 + SAVE1_BALLS + 6, 16), 'the GREAT BALLs kept').toBe(2);
+    await expect.poll(() => bagCount(page, sym, 1, ITEM.POKE_BALL), { timeout: 20_000 }).toBe(4);
+    expect(await bagCount(page, sym, 1, ITEM.GREAT_BALL), 'the GREAT BALLs kept').toBe(2);
     expect(await read(page, sym.gBrBag, 16), 'the pick spent').toBe(0);
     await page.screenshot({ path: path.join(OUT_DIR, 'bag-thrown.png') });
     expect(errors, 'nothing thrown on the page').toEqual([]);
@@ -324,10 +368,12 @@ test("a phone's bag: pockets, a swipe, the description, and USE throws the ball"
 
 // POK-415 (Cam, 2026-10-18): on a 375-wide phone with Safari's bars the bag ran past the
 // bottom of the glass, so USE was never on screen and a tap on an item only moved the
-// cursor. The list gives up room instead, and a second tap on the cursor's row uses it.
+// cursor. Now the list fits in whole rows over BACK, and a tap opens the item's page.
+// Every pocket: a POTION and an ORAN BERRY go through the ROM's party screen, a GREAT
+// BALL is thrown.
 const SHORT_PHONE = { width: 375, height: 667 };
 
-test("a short phone's bag: USE stays on the glass, and a second tap on a row uses it", async ({ browser }) => {
+test("a short phone's bag: everything on the glass, and a tap on each pocket's item uses it", async ({ browser }) => {
   test.setTimeout(300_000);
   const sym = loadSymbols();
   const ctx = await browser.newContext({ viewport: SHORT_PHONE, isMobile: true, hasTouch: true });
@@ -336,42 +382,82 @@ test("a short phone's bag: USE stays on the glass, and a second tap on a row use
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await intoWildBattle(page, sym);
-    await expect.poll(() => read(page, sym.gBrBattle + 8, 8), { timeout: 30_000 }).toBe(BR_MENU_ACTION);
-    const save1 = await read(page, sym.gSaveBlock1Ptr, 32);
-    const save2 = await read(page, sym.gSaveBlock2Ptr, 32);
-    await write(page, save2 + SAVE2_KEY, 0, 32);
-    for (const [i, [item, n]] of ([[ITEM.POKE_BALL, 5], [ITEM.GREAT_BALL, 6]] as const).entries()) {
-      await write(page, save1 + SAVE1_BALLS + 4 * i, item, 16);
-      await write(page, save1 + SAVE1_BALLS + 4 * i + 2, n, 16);
-    }
+    const action = () => expect.poll(() => read(page, sym.gBrBattle + 8, 8), { timeout: 60_000 }).toBe(BR_MENU_ACTION);
+    await action();
+    await stockBag(page, sym, [
+      [SAVE1_ITEMS, [[ITEM.POTION, 3]]],
+      [SAVE1_BALLS, [[ITEM.POKE_BALL, 5], [ITEM.GREAT_BALL, 6]]],
+      [SAVE1_BERRIES, [[ITEM.ORAN_BERRY, 4]]],
+    ]);
+    // Hurt, so a POTION and a berry have something to do; the foe is kept from finishing us.
+    const hurt = async () => {
+      await write(page, sym.gPlayerParty + PARTY_HP, 5, 16);
+      await write(page, sym.gBattleMons + BMON_HP, 5, 16);
+    };
+    const count = (pocket: number, item: number) => bagCount(page, sym, pocket, item);
+    const menu = page.locator('#battle-menu');
+    const head = page.locator('.bm-bag-head');
+    // The ROM's party screen, "Use on which POKeMON?", once the bag has handed over to it:
+    // A on the first until `count` moves.
+    const onFirstMon = async (count: () => Promise<number>) => {
+      await expect(menu).toBeHidden();
+      await page.waitForTimeout(3_000);
+      const was = await count();
+      for (let i = 0; i < 10 && (await count()) === was; i++) {
+        await tap(page, 'z');
+        await page.waitForTimeout(1_000);
+      }
+      // "...HP was restored" waits for a press, and the foe's turn after it: B, which
+      // the action menu ignores, until that menu is back.
+      for (let i = 0; i < 30 && (await read(page, sym.gBrBattle + 8, 8)) !== BR_MENU_ACTION; i++) {
+        await tap(page, 'x');
+        await page.waitForTimeout(1_000);
+      }
+    };
 
+    // ITEMS: the list and BACK on the glass; POTION's page; USE; the party screen.
+    await hurt();
     await page.locator('.bm-cell[data-slot="1"]').tap();
-    await expect(page.locator('#battle-menu')).toHaveAttribute('data-mode', 'bag');
-    await page.locator('.bm-bag-next').tap();
-    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use POKé BALL');
+    await expect(menu).toHaveAttribute('data-mode', 'bag');
+    await expect(head).toHaveAttribute('aria-label', 'ITEMS');
     await page.waitForTimeout(300);
     await page.screenshot({ path: path.join(OUT_DIR, 'bag-short-phone.png') });
-    // A tap on the row the bag opened on only reads it.
-    const list = (await page.locator('.bm-bag-list').boundingBox())!;
-    const rowY = (row: number) => list.y + (8 + 24 * row + 12) * (list.width / 232);
-    await page.touchscreen.tap(list.x + list.width / 2, rowY(0));
+    await laidOut(page, LIST_SELS, SHORT_PHONE);
+    await openRow(page, 0);
+    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use POTION');
     await page.waitForTimeout(300);
-    expect(await read(page, save1 + SAVE1_BALLS + 2, 16), 'a first tap throws nothing').toBe(5);
-    await expect(page.locator('#battle-menu')).toHaveAttribute('data-mode', 'bag');
-    // Every window of the bag, BACK and USE too, wholly on the glass.
-    for (const sel of ['.bm-bag-head', '.bm-bag-list', '.bm-bag-back', '.bm-bag-use']) {
-      const b = (await page.locator(sel).boundingBox())!;
-      expect(b.y + b.height, sel).toBeLessThanOrEqual(SHORT_PHONE.height + 0.5);
-    }
+    await page.screenshot({ path: path.join(OUT_DIR, 'bag-short-phone-item.png') });
+    await laidOut(page, ITEM_SELS, SHORT_PHONE);
+    await page.locator('.bm-bag-use').tap();
+    await onFirstMon(() => count(0, ITEM.POTION));
+    await expect.poll(() => count(0, ITEM.POTION), { timeout: 20_000 }).toBe(2);
+    expect(await read(page, sym.gPlayerParty + PARTY_HP, 16), 'healed').toBeGreaterThan(5);
 
-    // The first tap on GREAT BALL picks it; the second throws it.
-    await page.touchscreen.tap(list.x + list.width / 2, rowY(1));
+    // BERRIES: the next turn, an ORAN BERRY the same way.
+    await action();
+    await hurt();
+    await page.locator('.bm-cell[data-slot="1"]').tap();
+    await page.locator('.bm-bag-prev').tap();
+    await expect(head).toHaveAttribute('aria-label', 'BERRIES');
+    await openRow(page, 0);
+    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use ORAN BERRY');
+    await page.locator('.bm-bag-use').tap();
+    await onFirstMon(() => count(3, ITEM.ORAN_BERRY));
+    await expect.poll(() => count(3, ITEM.ORAN_BERRY), { timeout: 20_000 }).toBe(3);
+    expect(await read(page, sym.gPlayerParty + PARTY_HP, 16), 'healed').toBeGreaterThan(5);
+
+    // POKe BALLS: the next turn, the GREAT BALL's page, and USE throws it.
+    await action();
+    await page.locator('.bm-cell[data-slot="1"]').tap();
+    await page.locator('.bm-bag-next').tap();
+    await expect(head).toHaveAttribute('aria-label', 'POKé BALLS');
+    await openRow(page, 1);
     await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use GREAT BALL');
-    expect(await read(page, save1 + SAVE1_BALLS + 6, 16), 'one tap throws nothing').toBe(6);
-    await page.touchscreen.tap(list.x + list.width / 2, rowY(1));
-    await expect(page.locator('#battle-menu')).toBeHidden();
-    await expect.poll(() => read(page, save1 + SAVE1_BALLS + 6, 16), { timeout: 20_000 }).toBe(5);
-    expect(await read(page, save1 + SAVE1_BALLS + 2, 16), 'the POKé BALLs kept').toBe(5);
+    await page.screenshot({ path: path.join(OUT_DIR, 'bag-short-phone-ball.png') });
+    await page.locator('.bm-bag-use').tap();
+    await expect(menu).toBeHidden();
+    await expect.poll(() => count(1, ITEM.GREAT_BALL), { timeout: 20_000 }).toBe(5);
+    expect(await count(1, ITEM.POKE_BALL), 'the POKé BALLs kept').toBe(5);
     await page.screenshot({ path: path.join(OUT_DIR, 'bag-short-phone-thrown.png') });
     expect(errors, 'nothing thrown on the page').toEqual([]);
   } finally {

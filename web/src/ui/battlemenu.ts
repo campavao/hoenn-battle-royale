@@ -235,7 +235,7 @@ const RULE = '#d0d0c8';
 /** The page's view of the menu: the actions, the moves, or a move's details over them.
  *  FIGHT is pressed in the ROM too, so its shot clock picks a move, as a thumb's would,
  *  rather than RUN (a forfeit, in a link battle). */
-type Mode = 'action' | 'moves' | 'info' | 'bag';
+type Mode = 'action' | 'moves' | 'info' | 'bag' | 'item';
 
 export interface BattleMenuDeps {
   /** Where the windows go: under the picture, over the pad. */
@@ -254,14 +254,15 @@ export interface BattleMenuDeps {
   readBag?(): Map<number, Stack[]>;
 }
 
-/** The bag's windows, GBA pixels: the mockup's pocket bar, list, description, and BACK
- *  and USE under them, pressed to fit under the picture on a phone -- 236 in all with
- *  the gaps, where a 390 x 844 screen has about 250. A shorter screen gives the list
- *  less (setRoom), down to BAG_LIST_MIN: USE stays on the glass (POK-415). */
+/** The bag's windows, GBA pixels: the pocket bar, the list and BACK under it. A tap on
+ *  a row opens that item's page -- its name, the description, BACK and USE (Cam,
+ *  2026-10-18, POK-415: on a short phone USE had run off the glass under the list).
+ *  The list takes what the glass has left (setRoom), in whole rows, from one up to
+ *  BAG_LIST_ROWS; past that it scrolls. */
 export const BAG_HEAD_H = 32;
 export const BAG_ARROW_W = 56;
 export const BAG_LIST_H = 104;
-export const BAG_LIST_MIN = 40;
+export const BAG_LIST_ROWS = 5;
 export const BAG_ROW_H = 24;
 export const BAG_DESC_H = 44;
 export const BAG_BACK_W = 72;
@@ -326,9 +327,6 @@ export class BattleMenu {
   /** Which of BAG_POCKETS the bag is open on, and the item its cursor is on. */
   private pocketAt = 0;
   private picked = 0;
-  /** The row a tap last picked: a tap on it again uses it. Not the row the bag opens
-   *  on, so a first tap there only reads it. */
-  private tapped = 0;
   /** GBA pixels from the menu's top to the bottom of the glass; Infinity until told. */
   private room = Infinity;
   private readonly bagHead: HTMLElement;
@@ -400,7 +398,8 @@ export class BattleMenu {
     // and right of it are the arrows (Cam, 2026-10-14: the bag's own were too small).
     this.bagHead = doc.createElement('div');
     this.bagHead.className = 'bm-bag bm-bag-head';
-    deps.root.appendChild(this.bagHead);
+    // Over the moves' BACK, which is the list's too: goBack is the action menu from here.
+    deps.root.insertBefore(this.bagHead, this.backBtn);
     this.bagHeadWin = new Win(this.bagHead, MENU_W, BAG_HEAD_H, (c) => this.paintBagHead(c));
     for (const dir of [-1, 1] as const) {
       const b = button(dir < 0 ? 'bm-bag-prev' : 'bm-bag-next', this.bagHead);
@@ -409,13 +408,15 @@ export class BattleMenu {
     }
     this.bagList = doc.createElement('div');
     this.bagList.className = 'bm-bag bm-bag-list';
-    deps.root.appendChild(this.bagList);
+    deps.root.insertBefore(this.bagList, this.backBtn);
     this.bagListWin = new Win(this.bagList, MENU_W, BAG_LIST_H, (c, redo) => this.paintBagList(c, redo));
     this.wireBagList();
+    // An item's page: what it is and does, then BACK to the list and USE.
     this.bagDesc = doc.createElement('div');
-    this.bagDesc.className = 'bm-bag';
+    this.bagDesc.className = 'bm-bag bm-bag-item';
+    this.bagDesc.setAttribute('role', 'dialog');
     deps.root.appendChild(this.bagDesc);
-    this.bagDescWin = new Win(this.bagDesc, MENU_W, BAG_DESC_H, (c) => this.paintBagDesc(c));
+    this.bagDescWin = new Win(this.bagDesc, MENU_W, BAG_DESC_H, (c, redo) => this.paintBagDesc(c, redo));
     this.bagRow = doc.createElement('div');
     this.bagRow.className = 'bm-bag bm-info-row';
     deps.root.appendChild(this.bagRow);
@@ -425,7 +426,7 @@ export class BattleMenu {
       c.drawFrame({ x: 0, y: 0, w: BAG_BACK_W, h: BACK_H });
       c.drawTextCentred('BACK', BAG_BACK_W / 2, 9, TEXT_DARK);
     });
-    bagBack.addEventListener('click', () => this.setMode('action'));
+    bagBack.addEventListener('click', () => this.setMode('bag'));
     this.bagUseBtn = button('bm-bag-use', this.bagRow);
     this.bagUseWin = new Win(this.bagUseBtn, MENU_W - BAG_BACK_W - GAP, BACK_H, (c) => this.paintBagUse(c));
     this.bagUseBtn.addEventListener('click', () => this.useItem());
@@ -453,7 +454,7 @@ export class BattleMenu {
   private stepPocket(dir: 1 | -1): void {
     const n = BAG_POCKETS.length;
     this.pocketAt = (this.pocketAt + dir + n) % n;
-    this.picked = this.tapped = 0;
+    this.picked = 0;
     this.bagList.scrollTop = 0;
     this.layout();
   }
@@ -482,13 +483,8 @@ export class BattleMenu {
       const row = Math.floor((at.y - 8) / BAG_ROW_H);
       const stack = this.stacks()[row];
       if (!stack || at.y < 8) return;
-      // The row a tap already picked: a second tap uses it, as A would (POK-415).
-      if (stack.item === this.tapped && stack.item === this.pickedStack()?.item) {
-        this.useItem();
-        return;
-      }
-      this.picked = this.tapped = stack.item;
-      this.layout();
+      this.picked = stack.item;
+      this.setMode('item');
     });
   }
 
@@ -500,15 +496,30 @@ export class BattleMenu {
     this.send(() => this.deps.useItem!(pocket, stack.item));
   }
 
-  /** The list's box, GBA pixels: what the room leaves past the pocket bar, the
-   *  description and BACK/USE, never more than BAG_LIST_H. The list scrolls inside it. */
+  /** The list's box, GBA pixels: the whole rows the room leaves past the pocket bar
+   *  and BACK, one to BAG_LIST_ROWS. The list scrolls inside it. */
   private bagListBox(): number {
-    const rest = BAG_HEAD_H + BAG_DESC_H + BACK_H + 3 * GAP;
-    return Math.max(BAG_LIST_MIN, Math.min(BAG_LIST_H, Math.floor(this.room - rest)));
+    const rest = BAG_HEAD_H + BACK_H + 2 * GAP;
+    const rows = Math.floor((this.room - rest - 16) / BAG_ROW_H);
+    return 16 + Math.max(1, Math.min(BAG_LIST_ROWS, rows)) * BAG_ROW_H;
   }
 
   private bagListHeight(): number {
-    return Math.max(BAG_LIST_H, 16 + Math.max(1, this.stacks().length) * BAG_ROW_H);
+    return Math.max(this.bagListBox(), 16 + Math.max(1, this.stacks().length) * BAG_ROW_H);
+  }
+
+  /** The item page's lines: the description, and why not under it when it can't go. */
+  private itemLines(): { desc: string[]; no: string | null } {
+    const stack = this.pickedStack();
+    if (!stack) return { desc: [], no: null };
+    const desc = wrapText((this.deps.rom && itemInfo(this.deps.rom, stack.item)?.desc) || '', MENU_W - 16);
+    return { desc, no: this.refusal(stack) };
+  }
+
+  private itemHeight(): number {
+    const { desc, no } = this.itemLines();
+    // the name row, a rule, the lines, the frame's edges
+    return Math.ceil((40 + (desc.length + (no ? 1 : 0)) * 14 + 8) / 8) * 8;
   }
 
   private paintBagHead(c: EmeraldCanvas): void {
@@ -538,26 +549,31 @@ export class BattleMenu {
     const on = this.pickedStack()?.item;
     list.forEach((s, i) => {
       const y = 8 + i * BAG_ROW_H;
-      const info = this.deps.rom ? itemInfo(this.deps.rom, s.item) : null;
       if (s.item === on) c.drawCursor(8, y + 6);
-      drawIcon(c, s.item, 16, y, redo);
-      const count = `×${s.n}`;
-      const right = MENU_W - 10;
-      c.drawText(count, right - measure(count), y + 5, TEXT_DARK);
-      c.drawText(fitText(info?.name ?? '', right - measure(count) - 50), 44, y + 5, TEXT_DARK);
+      this.paintRow(c, s, y, redo);
     });
   }
 
-  private paintBagDesc(c: EmeraldCanvas): void {
-    c.drawFrame({ x: 0, y: 0, w: MENU_W, h: BAG_DESC_H });
+  /** A stack's row: its icon, name and count, from `y`. The list's, and its page's head. */
+  private paintRow(c: EmeraldCanvas, s: Stack, y: number, redo: () => void): void {
+    const info = this.deps.rom ? itemInfo(this.deps.rom, s.item) : null;
+    drawIcon(c, s.item, 16, y, redo);
+    const count = `×${s.n}`;
+    const right = MENU_W - 10;
+    c.drawText(count, right - measure(count), y + 5, TEXT_DARK);
+    c.drawText(fitText(info?.name ?? '', right - measure(count) - 50), 44, y + 5, TEXT_DARK);
+  }
+
+  private paintBagDesc(c: EmeraldCanvas, redo: () => void): void {
+    c.drawFrame({ x: 0, y: 0, w: MENU_W, h: c.height });
     const stack = this.pickedStack();
     if (!stack) return;
-    const no = this.refusal(stack);
-    const lines = no ? [no] : wrapText((this.deps.rom && itemInfo(this.deps.rom, stack.item)?.desc) || '', MENU_W - 16).slice(0, 3);
-    // Two lines as a message box spaces them; a third closes them up to fit.
-    const step = lines.length > 2 ? 10 : 13;
-    const top = Math.round((BAG_DESC_H - (lines.length - 1) * step - 14) / 2);
-    lines.forEach((line, i) => c.drawText(line, 8, top + i * step, no ? TEXT_RED : TEXT_DARK));
+    // Its row from the list, a rule, then the words.
+    this.paintRow(c, stack, 6, redo);
+    c.fillRect({ x: 8, y: 33, w: MENU_W - 16, h: 1 }, DOT_OFF);
+    const { desc, no } = this.itemLines();
+    desc.forEach((line, i) => c.drawText(line, 8, 40 + i * 14, TEXT_DARK));
+    if (no) c.drawText(fitText(no, MENU_W - 16), 8, 40 + desc.length * 14, TEXT_RED);
   }
 
   private paintBagUse(c: EmeraldCanvas): void {
@@ -622,7 +638,7 @@ export class BattleMenu {
     // BAG is the page's own (ui/bag.ts), until USE: then it is the ROM's that uses it.
     if (which === MENU_ACTION && slot === 1 && this.deps.useItem) {
       this.pocketAt = 0;
-      this.picked = this.tapped = 0;
+      this.picked = 0;
       this.bagList.scrollTop = 0;
       if (this.deps.readBag) this.view = { ...v, bag: this.deps.readBag() };
       this.setMode('bag');
@@ -668,7 +684,7 @@ export class BattleMenu {
 
   /** Whether the page's bag is open, so the frame's read wants the pockets. */
   get wantsBag(): boolean {
-    return this.mode === 'bag';
+    return this.mode === 'bag' || this.mode === 'item';
   }
 
   private setMode(mode: Mode): void {
@@ -695,17 +711,17 @@ export class BattleMenu {
     this.useWin.size(MENU_W - CLOSE_W - GAP, BACK_H, scale);
     this.bagHeadWin.size(MENU_W, BAG_HEAD_H, scale);
     this.bagListWin.size(MENU_W, this.bagListHeight(), scale);
-    this.bagDescWin.size(MENU_W, BAG_DESC_H, scale);
+    this.bagDescWin.size(MENU_W, this.itemHeight(), scale);
     this.bagBackWin.size(BAG_BACK_W, BACK_H, scale);
     this.bagUseWin.size(MENU_W - BAG_BACK_W - GAP, BACK_H, scale);
-    if (this.mode === 'bag') this.layout();
+    if (this.mode === 'bag' || this.mode === 'item') this.layout();
   }
 
   /** The glass under the menu's top, GBA pixels: the bag fits itself to it. */
   setRoom(gbaPx: number): void {
     if (!(gbaPx > 0) || gbaPx === this.room) return;
     this.room = gbaPx;
-    if (this.mode === 'bag') this.layout();
+    if (this.mode === 'bag' || this.mode === 'item') this.layout();
   }
 
   /** Each frame, from the ROM. */
@@ -748,13 +764,16 @@ export class BattleMenu {
   }
 
   private layout(): void {
+    // An item page whose stack went (used up, the bag changed under it): the list.
+    if (this.mode === 'item' && !this.stacks().some((s) => s.item === this.picked)) this.mode = 'bag';
     const bag = this.mode === 'bag';
+    const item = this.mode === 'item';
     const moves = this.mode === 'moves' || this.mode === 'info';
     const info = this.mode === 'info';
     const v = this.view;
     const labels = v ? actionLabels(v) : [];
     this.cells.forEach(({ b, w }, i) => {
-      b.hidden = info || bag;
+      b.hidden = info || bag || item;
       const slot = v?.moves[i];
       const enabled = moves ? !!slot?.id : (labels[i]?.enabled ?? false);
       b.setAttribute('aria-disabled', String(!enabled));
@@ -762,19 +781,25 @@ export class BattleMenu {
       b.setAttribute('aria-label', moves ? (m ? `${m.name}, ${m.typeName}, PP ${slot!.pp}/${slot!.maxPp}` : 'No move') : (labels[i]?.label ?? ''));
       w.show(moves ? `m|${slot?.id}|${slot?.pp}|${slot?.maxPp}|${v?.foe.types}` : `a|${JSON.stringify(labels[i] ?? null)}`);
     });
-    this.backBtn.hidden = !moves || info;
+    this.backBtn.hidden = (!moves || info) && !bag;
     (this.hint.el as HTMLElement).hidden = !moves || info;
     this.sheet.hidden = !info;
-    for (const el of [this.bagHead, this.bagList, this.bagDesc, this.bagRow]) el.hidden = !bag;
+    for (const el of [this.bagHead, this.bagList]) el.hidden = !bag;
+    for (const el of [this.bagDesc, this.bagRow]) el.hidden = !item;
     if (bag) {
-      const stack = this.pickedStack();
       const h = this.bagListHeight();
       if (this.bagListWin.c.height !== h) this.bagListWin.size(MENU_W, h, this.scale);
       const box = `${this.bagListBox() * this.scale}px`;
       if (this.bagList.style.height !== box) this.bagList.style.height = box;
-      const key = `${this.pocketAt}|${stack?.item}|${this.view?.trainer}|${JSON.stringify(this.stacks())}`;
       this.bagHeadWin.show(String(this.pocketAt));
-      this.bagListWin.show(key);
+      this.bagHead.setAttribute('aria-label', BAG_POCKETS[this.pocketAt].label);
+      this.bagListWin.show(`${this.pocketAt}|${this.picked}|${JSON.stringify(this.stacks())}`);
+    }
+    if (item) {
+      const stack = this.pickedStack();
+      const key = `${this.pocketAt}|${stack?.item}|${stack?.n}|${this.view?.trainer}`;
+      const h = this.itemHeight();
+      if (this.bagDescWin.c.height !== h) this.bagDescWin.size(MENU_W, h, this.scale);
       this.bagDescWin.show(key);
       this.bagUseWin.show(key);
       this.bagUseBtn.setAttribute('aria-disabled', String(!stack || !!this.refusal(stack)));
