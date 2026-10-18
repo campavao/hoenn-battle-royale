@@ -547,4 +547,6 @@ gSpecials::
 	def_special BrEvent_Trade
 	def_special BrStory_GateBeaten
 	def_special BrLoot_GiftTake
+	def_special BrLoot_HomeTrade
+	def_special BrLoot_HomeClaim
 .endif
