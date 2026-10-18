@@ -243,48 +243,181 @@ static const u16 sHouses[] =
     MAP_VERDANTURF_TOWN_HOUSE, MAP_VERDANTURF_TOWN_WANDAS_HOUSE,
 };
 
-#define BR_CACHE_BYTES ((ARRAY_COUNT(sHouses) + 7) / 8)
-// The key space's nobody half, beside the Zone's balls and the chest (br_loot.h).
-STATIC_ASSERT(ARRAY_COUNT(sHouses) <= 0x100, BrCacheKeysFitTheirByte)
+// Every other floor of a town's buildings, and of the wild, with nothing on it: no item
+// ball of its own and no house cache (Cam, 2026-10-18: "an item, trader, or both on every
+// floor of a place in a town or in the wild"). One cache each, gold one time in eight, as
+// there are more of these than of houses. Written by tools/br/floors.py, which CI runs
+// with --check, so a floor nobody listed is never left empty.
+static const u16 sFloors[] =
+{
+    MAP_ABANDONED_SHIP_CORRIDORS_1F, MAP_ABANDONED_SHIP_CORRIDORS_B1F,
+    MAP_ABANDONED_SHIP_DECK, MAP_ALTERING_CAVE,
+    MAP_ANCIENT_TOMB, MAP_AQUA_HIDEOUT_1F,
+    MAP_CAVE_OF_ORIGIN_1F, MAP_CAVE_OF_ORIGIN_B1F,
+    MAP_CAVE_OF_ORIGIN_ENTRANCE, MAP_DESERT_RUINS,
+    MAP_DESERT_UNDERPASS, MAP_DEWFORD_TOWN_HALL,
+    MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F, MAP_FORTREE_CITY_DECORATION_SHOP,
+    MAP_GRANITE_CAVE_STEVENS_ROOM, MAP_ISLAND_CAVE,
+    MAP_LAVARIDGE_TOWN_HERB_SHOP, MAP_LILYCOVE_CITY_CONTEST_HALL,
+    MAP_LILYCOVE_CITY_CONTEST_LOBBY, MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_1F,
+    MAP_LILYCOVE_CITY_COVE_LILY_MOTEL_2F, MAP_LILYCOVE_CITY_DEPARTMENT_STORE_1F,
+    MAP_LILYCOVE_CITY_DEPARTMENT_STORE_2F, MAP_LILYCOVE_CITY_DEPARTMENT_STORE_3F,
+    MAP_LILYCOVE_CITY_DEPARTMENT_STORE_4F, MAP_LILYCOVE_CITY_DEPARTMENT_STORE_5F,
+    MAP_LILYCOVE_CITY_DEPARTMENT_STORE_ROOFTOP, MAP_LILYCOVE_CITY_HARBOR,
+    MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F, MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F,
+    MAP_LILYCOVE_CITY_POKEMON_TRAINER_FAN_CLUB, MAP_MAGMA_HIDEOUT_2F_1R,
+    MAP_MAGMA_HIDEOUT_2F_3R, MAP_MAUVILLE_CITY_BIKE_SHOP,
+    MAP_MAUVILLE_CITY_GAME_CORNER, MAP_METEOR_FALLS_1F_2R,
+    MAP_METEOR_FALLS_B1F_1R, MAP_METEOR_FALLS_STEVENS_CAVE,
+    MAP_MIRAGE_TOWER_1F, MAP_MIRAGE_TOWER_2F,
+    MAP_MIRAGE_TOWER_3F, MAP_MIRAGE_TOWER_4F,
+    MAP_MOSSDEEP_CITY_GAME_CORNER_1F, MAP_MOSSDEEP_CITY_GAME_CORNER_B1F,
+    MAP_MOSSDEEP_CITY_SPACE_CENTER_1F, MAP_MOSSDEEP_CITY_SPACE_CENTER_2F,
+    MAP_MT_CHIMNEY, MAP_MT_CHIMNEY_CABLE_CAR_STATION,
+    MAP_MT_PYRE_1F, MAP_MT_PYRE_SUMMIT,
+    MAP_NEW_MAUVILLE_ENTRANCE, MAP_ROUTE104_PRETTY_PETAL_FLOWER_SHOP,
+    MAP_ROUTE110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE, MAP_ROUTE110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE,
+    MAP_ROUTE111_OLD_LADYS_REST_STOP, MAP_ROUTE112_CABLE_CAR_STATION,
+    MAP_ROUTE113_GLASS_WORKSHOP, MAP_ROUTE114_FOSSIL_MANIACS_TUNNEL,
+    MAP_ROUTE117_POKEMON_DAY_CARE, MAP_ROUTE119_WEATHER_INSTITUTE_1F,
+    MAP_ROUTE119_WEATHER_INSTITUTE_2F, MAP_RUSTBORO_CITY_DEVON_CORP_1F,
+    MAP_RUSTBORO_CITY_DEVON_CORP_2F, MAP_RUSTBORO_CITY_DEVON_CORP_3F,
+    MAP_RUSTBORO_CITY_FLAT1_1F, MAP_RUSTBORO_CITY_FLAT1_2F,
+    MAP_RUSTBORO_CITY_FLAT2_1F, MAP_RUSTBORO_CITY_FLAT2_2F,
+    MAP_RUSTBORO_CITY_FLAT2_3F, MAP_RUSTBORO_CITY_POKEMON_SCHOOL,
+    MAP_SHOAL_CAVE_LOW_TIDE_LOWER_ROOM, MAP_SKY_PILLAR_1F,
+    MAP_SKY_PILLAR_2F, MAP_SKY_PILLAR_3F,
+    MAP_SKY_PILLAR_4F, MAP_SKY_PILLAR_5F,
+    MAP_SKY_PILLAR_ENTRANCE, MAP_SKY_PILLAR_OUTSIDE,
+    MAP_SKY_PILLAR_TOP, MAP_SLATEPORT_CITY_HARBOR,
+    MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_1F, MAP_SLATEPORT_CITY_OCEANIC_MUSEUM_2F,
+    MAP_SLATEPORT_CITY_POKEMON_FAN_CLUB, MAP_SLATEPORT_CITY_STERNS_SHIPYARD_1F,
+    MAP_SLATEPORT_CITY_STERNS_SHIPYARD_2F, MAP_TERRA_CAVE_END,
+    MAP_TERRA_CAVE_ENTRANCE, MAP_TRAINER_HILL_ENTRANCE,
+};
 
-static EWRAM_DATA u8 sCacheTaken[BR_CACHE_BYTES] = {0};
+// ...and the big ones, BIG_FLOOR walkable cells or more in floors.py, have somebody
+// standing there who trades a Pokemon for one of yours, beside the cache if there is one.
+// Keys 0x8C80 | i, the home keys' upper half (br_loot.h).
+static const u16 sTraderFloors[] =
+{
+    MAP_ABANDONED_SHIP_ROOMS_1F, MAP_ALTERING_CAVE,
+    MAP_ANCIENT_TOMB, MAP_AQUA_HIDEOUT_1F,
+    MAP_AQUA_HIDEOUT_B1F, MAP_AQUA_HIDEOUT_B2F,
+    MAP_DESERT_RUINS, MAP_DESERT_UNDERPASS,
+    MAP_EVER_GRANDE_CITY_POKEMON_LEAGUE_1F, MAP_FIERY_PATH,
+    MAP_GRANITE_CAVE_1F, MAP_GRANITE_CAVE_B1F,
+    MAP_GRANITE_CAVE_B2F, MAP_ISLAND_CAVE,
+    MAP_JAGGED_PASS, MAP_LILYCOVE_CITY_CONTEST_HALL,
+    MAP_LILYCOVE_CITY_CONTEST_LOBBY, MAP_LILYCOVE_CITY_HARBOR,
+    MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_1F, MAP_LILYCOVE_CITY_LILYCOVE_MUSEUM_2F,
+    MAP_MAGMA_HIDEOUT_1F, MAP_MAGMA_HIDEOUT_2F_1R,
+    MAP_MAGMA_HIDEOUT_2F_2R, MAP_MAGMA_HIDEOUT_3F_1R,
+    MAP_MAGMA_HIDEOUT_4F, MAP_MAUVILLE_CITY_GAME_CORNER,
+    MAP_METEOR_FALLS_1F_1R, MAP_METEOR_FALLS_1F_2R,
+    MAP_METEOR_FALLS_B1F_1R, MAP_METEOR_FALLS_STEVENS_CAVE,
+    MAP_MIRAGE_TOWER_1F, MAP_MIRAGE_TOWER_3F,
+    MAP_MT_CHIMNEY, MAP_MT_PYRE_EXTERIOR,
+    MAP_MT_PYRE_SUMMIT, MAP_NEW_MAUVILLE_INSIDE,
+    MAP_PETALBURG_WOODS, MAP_ROUTE119_WEATHER_INSTITUTE_1F,
+    MAP_RUSTURF_TUNNEL, MAP_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM,
+    MAP_SHOAL_CAVE_LOW_TIDE_ICE_ROOM, MAP_SHOAL_CAVE_LOW_TIDE_INNER_ROOM,
+    MAP_SKY_PILLAR_OUTSIDE, MAP_SKY_PILLAR_TOP,
+    MAP_SLATEPORT_CITY_HARBOR, MAP_SLATEPORT_CITY_STERNS_SHIPYARD_1F,
+    MAP_TERRA_CAVE_END, MAP_VICTORY_ROAD_1F,
+    MAP_VICTORY_ROAD_B1F, MAP_VICTORY_ROAD_B2F,
+};
+
+#define BR_CACHES (ARRAY_COUNT(sHouses) + ARRAY_COUNT(sFloors))
+// The key space's nobody half, beside the Zone's balls and the chest (br_loot.h).
+STATIC_ASSERT(BR_CACHES <= 0x100, BrCacheKeysFitTheirByte)
+STATIC_ASSERT(ARRAY_COUNT(sTraderFloors) <= BR_LOOT_FLOOR_TRADERS, BrFloorTraderKeysFit)
+
+// Plain statics, in IWRAM like br_spectate.c's: EWRAM is within a few dozen bytes of its
+// floor, and these are a few bits a room, read when we walk in.
+static u8 sCacheTaken[(BR_CACHES + 7) / 8];
+static u8 sTraderTaken[(ARRAY_COUNT(sTraderFloors) + 7) / 8];
 // The map the last cache went down for, so a cache leaves the table when we leave its
 // house: rows outlive their maps (br_loot.c's Evict), and this one is put back from here,
 // not from the page, every time we walk in.
 static EWRAM_DATA u16 sCacheMap = 0;
+// The two cells this map keeps for a cache and a person, whether or not either is there
+// now, so no patch is dealt under them (br_patch.c, Eligible): the same on every ROM.
+static s16 sSpotX[2], sSpotY[2];
 
-static s16 HouseIndex(u16 map)
+static s16 FindMap(const u16 *maps, u16 count, u16 map)
 {
-    u8 i;
+    u16 i;
 
-    for (i = 0; i < ARRAY_COUNT(sHouses); i++)
+    for (i = 0; i < count; i++)
     {
-        if (sHouses[i] == map)
+        if (maps[i] == map)
             return i;
     }
     return -1;
 }
 
-static u16 CacheItem(u8 house)
+// A house's cache is its index in sHouses; a floor's comes after every house's.
+static s16 CacheIndex(u16 map)
 {
-    u32 r = Mix(gBrMatch.seed ^ 0xCA5E ^ house);
+    s16 i = FindMap(sHouses, ARRAY_COUNT(sHouses), map);
 
-    if (r % 3 == 0)
+    if (i >= 0)
+        return i;
+    i = FindMap(sFloors, ARRAY_COUNT(sFloors), map);
+    return i >= 0 ? (s16)(ARRAY_COUNT(sHouses) + i) : -1;
+}
+
+static u16 CacheItem(u8 cache)
+{
+    u32 r = Mix(gBrMatch.seed ^ 0xCA5E ^ cache);
+
+    if (r % (cache < ARRAY_COUNT(sHouses) ? 3 : 8) == 0)
         return sGold[Mix(r) % ARRAY_COUNT(sGold)];
     return BlueTm(Mix(r));
 }
 
-// Floor you can stand on, two steps clear of every door, and not where one of the house's
-// own people stood. Read off the map, so every ROM finds the same cell.
+// A tile laid BR_FLOOR_REPEAT times or more on the map is its floor; a sofa or
+// a desk's top is a tile or two of its own, open to walk on in places and no place for a ball.
+#define BR_FLOOR_REPEAT 3
+
+static bool8 FloorTile(const struct MapLayout *layout, u16 metatile)
+{
+    u16 i, n = 0, cells = layout->width * layout->height;
+
+    for (i = 0; i < cells && n < BR_FLOOR_REPEAT; i++)
+    {
+        if (UNPACK_METATILE(layout->map[i]) == metatile)
+            n++;
+    }
+    return n >= BR_FLOOR_REPEAT;
+}
+
+// Floor tile you can stand on, open to the south, two steps clear of every door, and not
+// where one of the house's own people stood. Read off the layout as the ROM ships it, as br_patch.c's Eligible
+// does, so every ROM finds the same cell whatever a map's ON_LOAD script set. A cave's
+// floor, the ABANDONED SHIP's and MT. CHIMNEY's top are floor too: nothing is met by
+// walking on them now.
 static bool8 CacheCellOk(s16 x, s16 y)
 {
     const struct MapEvents *events = gMapHeader.events;
+    const struct MapLayout *layout = gMapHeader.mapLayout;
+    u16 block;
+    u8 behavior;
     u8 i;
 
-    if (x < MAP_OFFSET || y < MAP_OFFSET
-     || x >= gMapHeader.mapLayout->width + MAP_OFFSET || y >= gMapHeader.mapLayout->height + MAP_OFFSET)
+    if (x < MAP_OFFSET || y < MAP_OFFSET || x >= layout->width + MAP_OFFSET || y >= layout->height + MAP_OFFSET)
         return FALSE;
-    if (MapGridGetCollisionAt(x, y) != 0 || MapGridGetMetatileBehaviorAt(x, y) != MB_NORMAL)
+    block = layout->map[(x - MAP_OFFSET) + (y - MAP_OFFSET) * layout->width];
+    behavior = GetMetatileAttributesById(UNPACK_METATILE(block)) & METATILE_ATTR_BEHAVIOR_MASK;
+    if (UNPACK_COLLISION(block) != 0
+     || (behavior != MB_NORMAL && behavior != MB_CAVE && behavior != MB_INDOOR_ENCOUNTER
+         && behavior != MB_MOUNTAIN_TOP))
+        return FALSE;
+    // ...with floor in front of it too: a ball in the row behind a table or a counter is
+    // drawn on its top, and reads as one left on the furniture.
+    if (y + 1 >= layout->height + MAP_OFFSET
+     || UNPACK_COLLISION(layout->map[(x - MAP_OFFSET) + (y + 1 - MAP_OFFSET) * layout->width]) != 0)
         return FALSE;
     for (i = 0; i < events->warpCount; i++)
     {
@@ -299,7 +432,7 @@ static bool8 CacheCellOk(s16 x, s16 y)
         if (events->objectEvents[i].x + MAP_OFFSET == x && events->objectEvents[i].y + MAP_OFFSET == y)
             return FALSE;
     }
-    return TRUE;
+    return FloorTile(layout, UNPACK_METATILE(block));
 }
 
 // From the middle of the room outward, a ring at a time, each ring row by row, past the
@@ -367,12 +500,22 @@ bool8 BrBalls_Trades(u16 key)
 {
     u16 i = key - BR_LOOT_KEY_HOME(0);
 
-    return BR_LOOT_IS_HOME(key) && i < ARRAY_COUNT(sHouses) && (Mix(HomeDraw(i)) & 1);
+    if (!BR_LOOT_IS_HOME(key))
+        return FALSE;
+    if (i >= BR_LOOT_KEY_FLOOR_TRADER(0) - BR_LOOT_KEY_HOME(0))
+        return TRUE;
+    return i < ARRAY_COUNT(sHouses) && (Mix(HomeDraw(i)) & 1);
+}
+
+static bool8 Flag(const u8 *bits, u16 i)
+{
+    return (bits[i / 8] >> (i % 8)) & 1;
 }
 
 void BrBalls_Init(void)
 {
-    CpuFill32(0, sCacheTaken, sizeof(sCacheTaken));
+    memset(sCacheTaken, 0, sizeof(sCacheTaken));
+    memset(sTraderTaken, 0, sizeof(sTraderTaken));
     sHomeTaken = 0;
     sCacheMap = 0xFFFF; // no map is (0xFF, 0xFF)
 }
@@ -381,35 +524,58 @@ void BrBalls_NoteTaken(u16 key)
 {
     u16 i = key - BR_LOOT_KEY_CACHE(0);
 
-    if ((key & 0xFF00) == BR_LOOT_KEY_CACHE(0) && i < ARRAY_COUNT(sHouses))
+    if ((key & 0xFF00) == BR_LOOT_KEY_CACHE(0) && i < BR_CACHES)
         sCacheTaken[i / 8] |= 1 << (i % 8);
     i = key - BR_LOOT_KEY_HOME(0);
     if (BR_LOOT_IS_HOME(key) && i < ARRAY_COUNT(sHouses))
         sHomeTaken |= 1 << (i / BR_HOME_IN);
+    i = key - BR_LOOT_KEY_FLOOR_TRADER(0);
+    if (BR_LOOT_IS_HOME(key) && i < ARRAY_COUNT(sTraderFloors))
+        sTraderTaken[i / 8] |= 1 << (i % 8);
+}
+
+bool8 BrBalls_Spot(s16 x, s16 y)
+{
+    u16 here = (gSaveBlock1Ptr->location.mapGroup << 8) | gSaveBlock1Ptr->location.mapNum;
+
+    return here == sCacheMap && ((x == sSpotX[0] && y == sSpotY[0]) || (x == sSpotX[1] && y == sSpotY[1]));
 }
 
 void BrBalls_Tick(void)
 {
     u8 group = gSaveBlock1Ptr->location.mapGroup, num = gSaveBlock1Ptr->location.mapNum;
     u16 here = (group << 8) | num;
-    s16 house, x, y;
+    s16 cache, trader;
 
     if (gBrMatch.seed == 0 || here == sCacheMap)
         return;
-    house = HouseIndex(sCacheMap);
-    if (house >= 0)
+    cache = CacheIndex(sCacheMap);
+    if (cache >= 0)
     {
-        BrLoot_DropKey(BR_LOOT_KEY_CACHE(house));
-        BrLoot_DropKey(BR_LOOT_KEY_HOME(house));
+        BrLoot_DropKey(BR_LOOT_KEY_CACHE(cache));
+        BrLoot_DropKey(BR_LOOT_KEY_HOME(cache));
     }
+    trader = FindMap(sTraderFloors, ARRAY_COUNT(sTraderFloors), sCacheMap);
+    if (trader >= 0)
+        BrLoot_DropKey(BR_LOOT_KEY_FLOOR_TRADER(trader));
     sCacheMap = here;
-    house = HouseIndex(here);
-    if (house < 0)
+    sSpotX[0] = sSpotX[1] = -1;
+    cache = CacheIndex(here);
+    trader = FindMap(sTraderFloors, ARRAY_COUNT(sTraderFloors), here);
+    if (cache < 0 && trader < 0)
         return;
-    if (!(sCacheTaken[house / 8] & (1 << (house % 8))) && CacheCell(&x, &y, 0))
-        BrLoot_AddItem(BR_LOOT_KEY_CACHE(house), group, num, x, y, CacheItem(house));
-    // The next cell out from the cache's, taken or not, so he stands where he stood.
-    if (Home(house) && !(sHomeTaken & (1 << (house / BR_HOME_IN))) && CacheCell(&x, &y, 1))
-        BrLoot_AddMon(BR_LOOT_KEY_HOME(house), group, num, x, y,
-                      sHomeMons[HomeDraw(house) % ARRAY_COUNT(sHomeMons)], 0);
+    // The first cell for the cache and the next one out for a person, taken or not, so
+    // each stands where it stood.
+    CacheCell(&sSpotX[0], &sSpotY[0], 0);
+    CacheCell(&sSpotX[1], &sSpotY[1], 1);
+    if (cache >= 0 && !Flag(sCacheTaken, cache) && sSpotX[0] >= 0)
+        BrLoot_AddItem(BR_LOOT_KEY_CACHE(cache), group, num, sSpotX[0], sSpotY[0], CacheItem(cache));
+    if (sSpotX[1] < 0)
+        return;
+    if (cache >= 0 && cache < (s16)ARRAY_COUNT(sHouses) && Home(cache) && !(sHomeTaken & (1 << (cache / BR_HOME_IN))))
+        BrLoot_AddMon(BR_LOOT_KEY_HOME(cache), group, num, sSpotX[1], sSpotY[1],
+                      sHomeMons[HomeDraw(cache) % ARRAY_COUNT(sHomeMons)], 0);
+    if (trader >= 0 && !Flag(sTraderTaken, trader))
+        BrLoot_AddMon(BR_LOOT_KEY_FLOOR_TRADER(trader), group, num, sSpotX[1], sSpotY[1],
+                      sHomeMons[Mix(gBrMatch.seed ^ 0xF100 ^ trader) % ARRAY_COUNT(sHomeMons)], 0);
 }

@@ -13,6 +13,7 @@
 #include "constants/field_effects.h"
 #include "constants/map_groups.h"
 #include "constants/metatile_behaviors.h"
+#include "br/br_balls.h"
 #include "br/br_field.h"
 #include "br/br_loot.h"
 #include "br/br_match.h"
@@ -116,7 +117,8 @@ static bool8 Eligible(const struct WildPokemonHeader *header, s16 x, s16 y)
         if (events->objectEvents[i].x + MAP_OFFSET == x && events->objectEvents[i].y + MAP_OFFSET == y)
             return FALSE;
     }
-    return TRUE;
+    // Nor under a cache or the person beside it, who are put down first (BrLoot_Tick).
+    return !BrBalls_Spot(x, y);
 }
 
 static void Undraw(u8 i)

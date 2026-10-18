@@ -47,6 +47,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Upstream edits are guarded
         run: python3 tools/br/check-guards.py
+      # POK-413: every floor of a town's buildings and of the wild has a cache or a trader,
+      # and each has a cell to stand on. The tables in br_balls.c are this script's output.
+      - name: Every floor has something
+        run: python3 tools/br/floors.py --check
       # The lint sees names; this sees lines. With the guards taken out, every pret file
       # must be pret's at the commit we fork from -- no reformatted line, no trailing
       # comma, no blank line beside a hook. The shallow checkout lacks that commit, so it
