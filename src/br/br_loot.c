@@ -590,10 +590,11 @@ static bool8 NextCell(s16 ox, s16 oy, u8 *cell, const s16 *usedX, const s16 *use
     return FALSE;
 }
 
-// Round somebody still standing (a winner's spoils, a mon released, a TM forgotten): the
-// diagonals before the cells beside them, so a piece is solid without boxing them in. Six
-// spoils fill the four corners and two sides, and leave the other two open. sSpillDx's
-// index for each, in the order they are tried.
+// A winner's spoils, round the winner: the diagonals before the cells beside them, so the
+// balls are solid without boxing them in. Six fill the four corners and two sides, and
+// leave the other two open. (One mon released or one TM forgotten goes beside you as it
+// always has: one piece cannot box you in, and a full party walks over a ball anyway.)
+// sSpillDx's index for each, in the order they are tried.
 static const u8 sAround[] = { 5, 6, 7, 8, 1, 2, 3, 4, 9, 10, 11, 12 };
 
 static bool8 NextCellAround(s16 ox, s16 oy, u8 *i, const s16 *usedX, const s16 *usedY, u8 used,
@@ -1377,7 +1378,8 @@ void BrLoot_Released(struct Pokemon *mon)
     // that is still full, which asks you to release again. Starting one cell out keeps
     // the trace without the loop. If nothing within reach is free the mon stays in its
     // ball rather than falling into a wall.
-    if (!NextCellAround(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
+    cell = 1;
+    if (!NextCell(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
         return;
 
     buf[len++] = gBrMySeat;
@@ -1409,12 +1411,12 @@ void BrLoot_DropItem(u16 item)
     u8 buf[4 + 1 + 6 + 1 + 3 + 4 + 1];
     struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
     s16 usedX[BR_SPILL_CELLS], usedY[BR_SPILL_CELLS];
-    u8 len = 0, cell = 0;
+    u8 len = 0, cell = 1;
     s16 x, y;
 
     if (item == ITEM_NONE)
         return;
-    if (!NextCellAround(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
+    if (!NextCell(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
     {
         x = self->currentCoords.x;
         y = self->currentCoords.y;
