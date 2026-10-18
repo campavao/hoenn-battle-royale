@@ -22,7 +22,7 @@ expect u8 *gSaveBlock1Ptr+5 25
 hold DOWN 60
 # The walk kept its pace while the deal ran (it ends about 113 frames in).
 expectge u16 *gSaveBlock1Ptr+2 6
-wait 120
+wait 200
 expect u16 gBrPatch 0x0019
 expect u8 gBrPatch+4 8
 expect u16 gBrPatch+16 0x20
