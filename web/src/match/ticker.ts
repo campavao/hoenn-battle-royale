@@ -14,8 +14,10 @@
 // trainer you are watching picked up, the opening and the win. Tallies go to the log,
 // a bot's intro goes to the player it walked up to, and two bots fighting is one line.
 //
-// Every line is at most BR_HUD_LINE_MAX (40) Gen 3 characters, because that is what the
-// window draws; a longer one is not truncated somewhere clever, it is not written.
+// Every line is at most BR_HUD_LINE_MAX (40) Gen 3 characters, the ROM's buffer; a longer
+// one is not truncated somewhere clever, it is not written. The window itself is 216 px
+// of the dialogue font, about 36 capitals: the widest lines written today ("A AND B ARE
+// OUT - 32 LEFT", a bot's chat) are under 205.
 import type { TickerMsg } from '../net/wire';
 
 /** BR_HUD_LINE_MAX in include/br/br_hud.h. */

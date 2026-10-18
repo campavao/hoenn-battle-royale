@@ -692,9 +692,10 @@ static EWRAM_DATA u8 sPeekWin = WINDOW_NONE;
 // are locked. It used to share the HUD box's 0x294, which ran to 0x347: past the end of
 // BG0's tiles at 0x300 and clean through BG2's tilemap. See br_hud.h's tile map.
 // The standard frame round it, as every other box on the field has (2026-10-06
-// play-test: "a weird gray box"): cols 0 and 18, clear of the HUD corner's frame at 19.
+// play-test: "a weird gray box"): cols 0 and 18. The HUD corner, twelve wide since it
+// took the dialogue font (2026-10-18), has its frame from col 16, so it comes off while
+// the peek box is up and is drawn again when it goes (BrHud_Yield, as under any window).
 static const struct WindowTemplate sPeekTemplate = { 0, 1, 2, 17, 10, 15, 0x008 };
-STATIC_ASSERT(1 + 17 <= BR_HUD_CORNER_LEFT - 2, BrPeekFrameClearOfTheHudCornerFrame)
 STATIC_ASSERT(0x008 + 17 * 10 <= 0x107, BrPeekFitsBelowTheMapNamePopup)
 // The frame's tiles and colours: the HUD's own copy (br_hud.c's BR_HUD_STD_FRAME), in the
 // palette nothing on the field loads over.
