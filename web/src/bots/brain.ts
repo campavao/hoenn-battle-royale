@@ -667,10 +667,10 @@ export class Bots {
     return true;
   }
 
-  /** A fight has ended -- the `result` the ROM that ran it sends. The Bridge stamps a
-   *  ROM's messages with its own seat, so the result the ROM wrote under the bot's
-   *  seat arrives under the player's: either one names the fight. `from` is the seat
-   *  whose ROM said so, and only the bot's opponent can end its fight this way. */
+  /** A fight has ended -- the `result`s the ROM that ran it sends: the player's own,
+   *  and, when the bot lost, one under the bot's seat (the Bridge keeps that seat,
+   *  bridge.ts keepsItsSeat). Either one names the fight. `from` is the seat whose ROM
+   *  said so, and only the bot's opponent can end its fight this way. */
   noteResult(seat: number, from?: number, outcome?: Outcome): void {
     // The ROM that beat a bot says so under the bot's seat (br_bot.c), held until the
     // ring has room. The `party` before it is not held -- a full ring drops it -- and a
@@ -678,7 +678,7 @@ export class Bots {
     // who had just beaten it (Cam, 2026-10-18: "beat Lanette, then straight into Lanette
     // again"). This is the report that always arrives, so it is the bot's end too.
     const beaten = outcome === 'lose' ? this.walkers.find((w) => w.bot.seat === seat) : undefined;
-    if (beaten && beaten.foe !== undefined && (from === undefined || from === beaten.foe)) {
+    if (beaten && this.heardFrom(beaten, from)) {
       this.fighting.delete(seat);
       this.eliminate(beaten, true);
       return;

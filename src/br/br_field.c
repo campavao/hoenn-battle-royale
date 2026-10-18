@@ -683,6 +683,10 @@ static void Task_BrLeaveField(u8 taskId)
 {
     struct Task *task = &gTasks[taskId];
 
+    // ...and locked again every frame until it goes: what it waits out (a dismount, a
+    // fishing line) hands the controls back when it is done.
+    if (task->tState < 3)
+        LockPlayerFieldControls();
     switch (task->tState)
     {
     case 0:
@@ -691,7 +695,8 @@ static void Task_BrLeaveField(u8 taskId)
         // from its sprite -- still the surfing one -- on a land tile: Cam surfing on land
         // (2026-10-18). The controls are locked from the leave on, so this is only ever
         // a step already under way, and it is given a second at most.
-        if ((gPlayerAvatar.preventStep || gObjectEvents[gPlayerAvatar.objectEventId].singleMovementActive)
+        if ((gPlayerAvatar.preventStep || (ObjectEventIsMovementOverridden(&gObjectEvents[gPlayerAvatar.objectEventId])
+                                            && !gObjectEvents[gPlayerAvatar.objectEventId].heldMovementFinished))
          && ++task->tSettle < 60)
             break;
         FadeScreen(FADE_TO_BLACK, 0);
