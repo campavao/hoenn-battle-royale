@@ -88,8 +88,8 @@
 
 // The corner's window, in tiles (see the tile map above). Eleven wide is the widest line
 // in the dialogue font, the HP's "HP 120/134" (57 px) beside the clock's "10:00" (27); the
-// start menu (cols 21..29) covers all but its three left columns, which BrHud_Yield takes
-// off while the menu is up. The ticker and the box are the message box's own 27 columns from col 2: its frame
+// start menu (cols 21..29) covers all but its four left columns (18..20 and the frame at
+// 17), which BrHud_Yield takes off while the menu is up. The ticker and the box are the message box's own 27 columns from col 2: its frame
 // is two cells wide on the left.
 #define BR_HUD_CORNER_LEFT 18
 #define BR_HUD_CORNER_WIDTH 11
