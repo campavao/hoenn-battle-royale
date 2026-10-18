@@ -16,7 +16,7 @@ import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import { PhoneHud, readHudView, type HudWorld } from './ui/phonehud';
-import { BattleMenu, battleWantsNoPad, readBattleView } from './ui/battlemenu';
+import { BattleMenu, battleWantsNoPad, inBattle, readBattleView } from './ui/battlemenu';
 import { BAG_POSITION_POCKET, readBattleBag } from './ui/bag';
 import { PadPrefsControl } from './ui/padprefs';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
@@ -1571,8 +1571,14 @@ let askedBand: Band | null = null;
  *  booted: every ask is inside it. */
 let romPicture: FieldPicture | null = null;
 /** The rows the ROM draws above the LCD: how far a phone's picture may come down to its
- *  pad (field.ts layoutField). */
-const liveAbove = (): number | undefined => romPicture?.band.top;
+ *  pad (field.ts layoutField). In a battle, no further than the 104 rows it came
+ *  down before POK-378: the battle menu goes under the LCD, and its bag needs the room. */
+const BATTLE_ABOVE = 104;
+let battleScene = false;
+const liveAbove = (): number | undefined => {
+  const top = romPicture?.band.top;
+  return top !== undefined && battleScene ? Math.min(top, BATTLE_ABOVE) : top;
+};
 
 /** The layout the match gives the picture, measured now, whatever screen is up: the
  *  field only opens past the picture in a match (body.in-match), with the sheet docked
@@ -3977,6 +3983,13 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
     if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown);
     battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables, battle.wantsBag) : null);
+    const scene = shown && inBattle(emu, (n) => symbols.get(n));
+    if (scene !== battleScene) {
+      battleScene = scene;
+      fieldView?.layout();
+      placeKeys?.();
+      resize();
+    }
     const noPad = shown && battleWantsNoPad(emu, (n) => symbols.get(n), tables);
     if (noPad !== padOff) document.body.classList.toggle('battle-no-pad', (padOff = noPad));
     if (!shown) {
