@@ -4,8 +4,8 @@ every floor of a place in a town or in the wild". This finds the floors, picks w
 each the things stand, and writes br_balls.c's sRooms from them, so a map nobody thought
 of is not left empty and nothing is put where nobody can reach it.
 
-A floor is a map you can walk into from a town or route (warps and connections, never
-through a closed door, br_match.c) that is not a town or route itself, is not a Centre,
+A floor is a map you can walk into from a town or route (warps, connections and where a
+dive comes up, never through a closed door, br_match.c) that is not a town or route itself, is not a Centre,
 a Mart, a Gym, a link room, an elevator, the Trainer Hill's challenge or the MYSTERY
 EVENTS house, and has a region-map section (the rest are the Frontier's and the like,
 out of the match). A room is a floor that gets something:
@@ -14,6 +14,11 @@ out of the match). A room is a floor that gets something:
   of them somebody at home (POK-379)
   every other floor with none of its own item balls: a cache
   every floor of BIG_FLOOR cells or more you can walk to: somebody who trades
+
+The ferry's islands (SOUTHERN, BIRTH, FARAWAY, NAVEL ROCK) are left out on purpose: the
+ferry is a script, and they hold the events' legendaries (br_story.c, Ferry). SHOAL CAVE
+is placed on its low-tide layouts, the maps' own, which hold because BrStory_Tide keeps
+the tide out: the high-tide layouts its scripts swap in put some of these cells in water.
 
 Both stand where floor.py's Pick says: on a floor tile you can walk to from a door, from
 the middle of the room outward.
@@ -131,19 +136,30 @@ NOT_A_FLOOR = re.compile(
 STEPS = ((0, -1), (0, 1), (-1, 0), (1, 0))
 
 
+DIVE = re.compile(r"^\s*setdivewarp (MAP_\w+), (\d+), (\d+)", re.M)
+# Where a dive comes up, by map: the field warps there by script (setdivewarp in the map
+# it is dived from), not by a warp event, so the walk and the flood start there too.
+SURFACED = {}
+
+
 def walk_maps():
     order = ew.load_map_order()
     mg = ew.load_json("data", "maps", "map_groups.json")
     maps = {}
     for group, num, folder in order:
         mj = ew.load_json("data", "maps", folder, "map.json")
-        maps[mj["id"]] = (mg["group_order"][group], mj)
-    start = [i for i, (g, _) in maps.items() if g == "gMapGroup_TownsAndRoutes"]
+        maps[mj["id"]] = (mg["group_order"][group], mj, folder)
+    start = [i for i, (g, _, _) in maps.items() if g == "gMapGroup_TownsAndRoutes"]
     seen, todo = set(start), list(start)
     while todo:
         mj = maps[todo.pop()][1]
         nexts = [w["dest_map"] for w in mj.get("warp_events", [])]
         nexts += [c["map"] for c in mj.get("connections") or []]
+        script = ew.rp("data", "maps", maps[mj["id"]][2], "scripts.inc")
+        if os.path.exists(script):
+            for d, x, y in DIVE.findall(open(script, encoding="utf-8").read()):
+                SURFACED.setdefault(d, set()).add((int(x), int(y)))
+                nexts.append(d)
         for d in nexts:
             if d in maps and d not in seen and d not in CLOSED:
                 seen.add(d)
@@ -164,7 +180,7 @@ class Floor:
         raw = open(ew.rp(layout["blockdata_filepath"]), "rb").read()
         self.cells = struct.unpack("<%dH" % (self.w * self.h), raw)
         self.behavior = [ew.metatile_behavior_name(prim, sec, v & ew.MAPGRID_METATILE_ID_MASK) for v in self.cells]
-        self.warps = [(e["x"], e["y"]) for e in mj.get("warp_events", [])]
+        self.warps = [(e["x"], e["y"]) for e in mj.get("warp_events", [])] + sorted(SURFACED.get(mj["id"], ()))
         self.people = {(e["x"], e["y"]) for e in mj.get("object_events", [])}
         self.laid = {}
         for v in self.cells:
@@ -252,7 +268,7 @@ def census():
     layouts = ew.load_layouts()
     floors = {}
     for map_id in sorted(seen):
-        group, mj = maps[map_id]
+        group, mj, _ = maps[map_id]
         if group == "gMapGroup_TownsAndRoutes" or NOT_A_FLOOR.search(map_id):
             continue
         if mj.get("region_map_section", "MAPSEC_NONE") == "MAPSEC_NONE":
@@ -294,7 +310,9 @@ def problems(table):
 
 
 def c_table(table):
-    lines = ["#define BR_HOUSES %d" % len(HOUSES), "static const struct BrRoom sRooms[] =", "{"]
+    lines = ["#define BR_HOUSES %d" % len(HOUSES),
+             "#define BR_ROOM_TRADERS %d" % sum(1 for r in table if r[2]),
+             "static const struct BrRoom sRooms[] =", "{"]
     traders = 0
     for map_id, cache, trader, cells in table:
         cx, cy = cells[0] if cells else (0, 0)
@@ -310,7 +328,7 @@ def c_table(table):
     return "\n".join(lines)
 
 
-TABLE = re.compile(r"#define BR_HOUSES \d+\nstatic const struct BrRoom sRooms\[\] =\n\{.*?\n\};", re.S)
+TABLE = re.compile(r"#define BR_HOUSES \d+\n(?:#define BR_ROOM_TRADERS \d+\n)?static const struct BrRoom sRooms\[\] =\n\{.*?\n\};", re.S)
 
 
 def main():

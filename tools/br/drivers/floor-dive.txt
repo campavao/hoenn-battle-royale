@@ -1,0 +1,23 @@
+# floor-dive: the floors you only reach by diving have something too (POK-413 review).
+#
+# floors.py walked warps and connections, and the way up out of the sea is a script
+# (setdivewarp), so SEAFLOOR CAVERN, the SEALED CHAMBER and the ABANDONED SHIP's hidden
+# corridors were never reached and stayed bare. DIVE is free in a match, so they are
+# live. SEAFLOOR CAVERN ROOM1 (24:28) has no ball of its own: it is sRooms[153], cache
+# key 0x8D99, at (12,8) -- (19,15) MAP_OFFSET in.
+#
+# The match goes on before the boot, so the room is laid out as a match's at its first load.
+wait 30
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1072
+pokebytes gBrMailbox+0x2018 81 00 18 1C 0C 00 0A 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 24
+expect u8 *gSaveBlock1Ptr+5 28
+shot room
+# Row 0 is the DAY CARE chest (0x8E00), held all match; the cache is the next.
+expect u16 gBrLoot+20 0x8D99
+expect u16 gBrLoot+22 19
+expect u16 gBrLoot+24 15
+expect u8 gBrLoot+31 3
+say floor dive ok

@@ -40,7 +40,8 @@ void BrBalls_NoteTaken(u16 key);
 bool8 BrBalls_Trades(u16 key);
 // Every floor of a town's buildings and of the wild has something (Cam, 2026-10-18): a
 // cache where it had no ball of its own, and on the big ones somebody who trades. TRUE for
-// a cell of this map's kept for either, there or taken, so nothing else is dealt on it.
+// a cell of this map's kept for either, there or taken, so no wild patch is dealt on it
+// (br_patch.c).
 bool8 BrBalls_Spot(s16 x, s16 y);
 
 #endif // GUARD_BR_BALLS_H
