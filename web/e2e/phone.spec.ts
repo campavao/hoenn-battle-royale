@@ -171,3 +171,35 @@ test('a desktop keeps most of the window for the game, beside the docked sheet',
     await ctx.close();
   }
 });
+
+// POK-351 (Cam's 10-14 narrated play-test, item 20): a desktop window narrowed under
+// 600px squeezed the game into a 160px sliver beside the 240px docked sheet. There it is
+// laid out as a phone: the game the whole width, the sheet behind the menu button, the pad
+// and the phone's dock -- and the keyboard still named in the sheet's help.
+test('a desktop window under 600px wide is laid out as a phone', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const NARROW = { width: 400, height: 800 };
+  const ctx = await browser.newContext({ viewport: NARROW });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(`/#solo&rom=${romHashParam()}`);
+    await page.waitForSelector('body.in-match', { timeout: 90_000 });
+    const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
+    expect(await page.evaluate(() => document.body.classList.contains('docked')), 'no sheet docked beside the game').toBe(false);
+    const game = await box('#screen-wrap');
+    expect(game.width, 'the game the whole width').toBeGreaterThanOrEqual(NARROW.width - 2);
+    await expect(page.locator('#dpad-surface'), 'the pad').toBeVisible();
+    await expect(page.locator('#hud-menu'), "and the dock's menu button").toBeVisible();
+    await page.screenshot({ path: path.join(OUT_DIR, 'desktop-narrow.png') });
+    // ...which opens the sheet over the game.
+    await page.locator('#hud-menu').click();
+    await expect(page.locator('#hud-menu')).toHaveAttribute('aria-expanded', 'true');
+
+    // Wide again: the sheet docks beside the game, and the pad goes.
+    await page.setViewportSize({ width: 683, height: 800 });
+    await expect.poll(() => page.evaluate(() => document.body.classList.contains('docked'))).toBe(true);
+    await expect(page.locator('#dpad-surface')).toBeHidden();
+  } finally {
+    await ctx.close();
+  }
+});

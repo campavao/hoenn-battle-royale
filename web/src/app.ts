@@ -232,12 +232,21 @@ function setVersionLine(text: string): void {
 
 // ---- the sheet: everything in a match that is not the game (POK-320) -----------------
 
-/** A computer, with a mouse and a keyboard (POK-253's test): the sheet sits beside the
- *  game there, always in view, as the room panel always was. A phone keeps it behind
- *  the menu button, over the game. */
-const DESKTOP = '(hover: hover) and (pointer: fine)';
+/** A mouse and a keyboard (POK-253's test). */
+const POINTER = '(hover: hover) and (pointer: fine)';
+/** A computer, and a window wide enough for the sheet beside the game: the sheet sits
+ *  beside it there, always in view, as the room panel always was. A phone, or a window
+ *  narrower than PHONE_BELOW, keeps it behind the menu button over the game, with the pad
+ *  and the phone's HUD (POK-351: a 400px window was a 160px sliver of game beside a
+ *  240px sheet). Keep in step with index.html's two `min-width: 600px` queries. */
+const PHONE_BELOW = 600;
+const DESKTOP = `${POINTER} and (min-width: ${PHONE_BELOW}px)`;
 function desktop(): boolean {
   return typeof matchMedia === 'function' && matchMedia(DESKTOP).matches;
+}
+/** A keyboard to name in the sheet's help, docked or not. */
+function keyboard(): boolean {
+  return typeof matchMedia === 'function' && matchMedia(POINTER).matches;
 }
 
 /** This page's in-match sheet, the room's or solo's: set by whichever runs. */
@@ -383,7 +392,7 @@ function makeSheet(part: () => SheetPart): DrawnScreen {
     remapLine: settings.remapLine,
     // The pad's line wrapped, not cut: it ends on the axes that moved, which is the part
     // a report needs and the part a cut lost (POK-350).
-    help: desktop() ? (settings.pad ? wrapText(settings.pad, W - 8).slice(0, 3) : KEY_LINES) : TAP_LINES,
+    help: keyboard() ? (settings.pad ? wrapText(settings.pad, W - 8).slice(0, 3) : KEY_LINES) : TAP_LINES,
     version: versionLine,
     onClose: () => openSheet(false),
     onMute: () => settings.mute(),
