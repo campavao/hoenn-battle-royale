@@ -3871,8 +3871,41 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
       rom,
     });
     touch.attach();
-    void wirePhoneHud(emu, symbols, touch, rom).catch((err: unknown) => console.warn('phone HUD did not load', err));
+    void loadPhoneUi().then((ui) => wirePhoneHud(ui, emu, symbols, touch, rom));
   }
+}
+
+/** ui/phone-ui.ts, fetched once per boot. A failed fetch tries again, after a wait that
+ *  grows and whenever the phone comes back online or to the front: the fetch is at boot,
+ *  on a cell link, and losing it would cost the HUD, the bag and the battle menu for
+ *  the whole session. Settles only once the chunk is in. */
+function loadPhoneUi(): Promise<typeof import('./ui/phone-ui')> {
+  return new Promise((resolve) => {
+    let tries = 0;
+    let busy = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const again = (): void => {
+      if (busy) return;
+      busy = true;
+      clearTimeout(timer);
+      import('./ui/phone-ui').then(
+        (m) => {
+          window.removeEventListener('online', again);
+          document.removeEventListener('visibilitychange', again);
+          resolve(m);
+        },
+        (err: unknown) => {
+          busy = false;
+          tries++;
+          console.warn(`phone HUD did not load (try ${tries})`, err);
+          timer = setTimeout(again, Math.min(60_000, 2_000 * 2 ** (tries - 1)));
+        },
+      );
+    };
+    window.addEventListener('online', again);
+    document.addEventListener('visibilitychange', again);
+    again();
+  });
 }
 
 /** The phone's HUD and dock (ui/phonehud.ts), its battle menu (ui/battlemenu.ts) and its
@@ -3880,11 +3913,16 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
  *  glass, and while it is the ROM's corner box stays off (gBrHud.noCorner): the two
  *  would say the same thing twice. So does the battle's own FIGHT/BAG box, under the
  *  menu's windows (noBattleBox, br_battle.c BrBattle_MenuBoxOff). All four are a chunk
- *  of their own (ui/phone-ui.ts, POK-407), fetched as the game comes up: none of them is
+ *  of their own (ui/phone-ui.ts, POK-407, loadPhoneUi), fetched as the game comes up: none is
  *  on the glass before a match. */
-async function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchLayer, rom: Uint8Array | null): Promise<void> {
-  const { BAG_POSITION_POCKET, BattleMenu, PadPrefsControl, PhoneHud, battleWantsNoPad, readBattleBag, readBattleView, readHudView } =
-    await import('./ui/phone-ui');
+function wirePhoneHud(
+  ui: typeof import('./ui/phone-ui'),
+  emu: Emulator,
+  symbols: Map<string, number>,
+  touch: TouchLayer,
+  rom: Uint8Array | null,
+): void {
+  const { BAG_POSITION_POCKET, BattleMenu, PadPrefsControl, PhoneHud, battleWantsNoPad, readBattleBag, readBattleView, readHudView } = ui;
   const top = $('#hud') as HTMLElement;
   const pad = $('#pad') as HTMLElement;
   const root = $('#screen-playing') as HTMLElement;
