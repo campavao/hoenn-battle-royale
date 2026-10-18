@@ -102,6 +102,20 @@ BR_EventScript_GiftGone:
 	release
 	end
 
+@ A legendary standing on the ground (src/br/br_legend.c): its cry, then its battle.
+@ VAR_0x8004 is its species. VAR_RESULT FALSE: somebody else's battle took it meanwhile.
+BR_EventScript_Legend::
+	lockall
+	playmoncry VAR_0x8004, CRY_MODE_ENCOUNTER
+	delay 40
+	waitmoncry
+	special BrLegend_Battle
+	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_LegendGone
+	waitstate
+BR_EventScript_LegendGone:
+	releaseall
+	end
+
 @ An event's trader (src/br/br_event.c): any one of ours for his, at our rung. gStringVar1
 @ is his. Once a match: the C says so without asking after that.
 BR_EventScript_Trader::

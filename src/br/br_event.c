@@ -160,6 +160,19 @@ void BrEvent_NoteTaken(u16 key, u8 seat)
         gTasks[taskId].tVerdict = seat == gBrMySeat ? CLAIM_GRANTED : CLAIM_DENIED;
 }
 
+void BrEvent_NoteBack(u16 key)
+{
+    u8 i;
+
+    if ((key & 0xF000) != BR_EVENT_KEY_BASE || gBrEvents.seed != gBrMatch.seed)
+        return;
+    for (i = 0; i < BR_EVENT_MAX; i++)
+    {
+        if ((gBrEvents.live & (1 << i)) && gBrEvents.key[i] == key)
+            gBrEvents.taken &= ~(1 << i);
+    }
+}
+
 // An item ball in the middle of the section, the thing that is lying there. Half a cell
 // below the middle, so a town's leader head (br_gym.c, a cell above it) and its fly
 // marker stay readable over it.

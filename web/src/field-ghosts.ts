@@ -28,6 +28,7 @@
 // the page from its own roster, off the field and past the box.
 import spritesData from './data/sprites.json';
 import { SKIN_GFX } from './ui/emerald';
+import { legendGfx } from './match/legends';
 import { skinIndex } from './net/slots';
 import { romCell, toPage } from './bots/space';
 import type { FieldSprite } from './field';
@@ -98,6 +99,7 @@ export const LOOT_MAP_GROUP = 8;
 export const LOOT_MAP_NUM = 9;
 export const LOOT_KIND = 11;
 export const LOOT_NONE = 0;
+export const LOOT_MON = 1;
 export const LOOT_BAG = 2;
 export const LOOT_LOCAL_ID_BASE = 0xc0;
 /** What br_loot.c's Spawn draws: Birch's bag for a bag, a ball for the rest -- and for a bag
@@ -376,7 +378,10 @@ export function droppedPeople(k: Known): Person[] {
     if (l.kind === LOOT_NONE || !here(l.group, l.num) || live(LOOT_LOCAL_ID_BASE + l.slot)) continue;
     if (inObjectView(k.pos, l.x, l.y)) continue;
     const gift = l.key !== undefined && (l.key & 0xf000) === GIFT_KEY_BASE;
-    const gfx = gift ? GIFT_GFX[l.key! % GIFT_GFX.length] : l.kind === LOOT_BAG && l.species === 0 ? GFX_BIRCHS_BAG : GFX_ITEM_BALL;
+    const legend = l.kind === LOOT_MON && l.key !== undefined ? legendGfx(l.key, l.species) : undefined;
+    const gfx = gift
+      ? GIFT_GFX[l.key! % GIFT_GFX.length]
+      : legend ?? (l.kind === LOOT_BAG && l.species === 0 ? GFX_BIRCHS_BAG : GFX_ITEM_BALL);
     out.push({ gfx, dir: DIR_SOUTH, x: l.x - MAP_OFFSET, y: l.y - MAP_OFFSET });
   }
   for (const t of k.traders ?? []) {

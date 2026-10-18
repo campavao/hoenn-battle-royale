@@ -18,6 +18,7 @@
 #include "br/br_catch.h"
 #include "br/br_levels.h"
 #include "br/br_loot.h"
+#include "br/br_legend.h"
 #include "br/br_moves.h"
 
 EWRAM_DATA struct BrCatch gBrCatch = {0};
@@ -77,6 +78,10 @@ void BrCatch_Apply(void)
         // meant cancelling this screen destroyed it -- the same thing POK-294 is about,
         // on the other side of the same decision.
         BrLoot_ClaimKey(gBrCatch.fromKey);
+    }
+    else
+    {
+        BrLegend_CatchCancelled(); // a legendary's battle took it off the ground already
     }
     gBrCatch.fromKey = BR_HELD_NONE;
     gBrCatch.pending = FALSE;

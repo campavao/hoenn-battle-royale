@@ -1,0 +1,95 @@
+# legend-battle: a legendary the match put down stands as its own overworld sprite and is
+# fought, not picked up (POK-410, br_legend.c). Cam, 2026-10-18: "getting legendaries is a
+# bit too easy ... you have to initiate a battle with them".
+#
+# Event 0 drops REGIROCK (401) under its legendary key 0xB000 one cell below the boot
+# cell, which we face. It stands as OBJ_EVENT_GFX_REGIROCK (200), not an item ball (59).
+# A is its cry and a REGI battle; the battle takes it off the ground for the room (the
+# PICKUP) and grays the event's mark. Running puts it back where it stood, for everybody
+# (a SPILL under the same key), and the mark is live again.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1234
+# EVENT 0 at ROUTE 116, legendary 0xB000; then its SPILL: seat 1, map 0:9, one mon, key
+# 0xB000 at (12,17), the cell we face (the boot leaves us on (12,16) facing down), species 0x0191 at 20, no bag
+pokebytes gBrMailbox+0x1018 20 08 05 00 00 00 00 1F 00 B0
+pokebytes gBrMailbox+0x1058 0B 11 0E 00 00 01 00 09 01 00 B0 0C 00 11 00 91 01 14 00
+poke u16 gBrMailbox+0x0C 2
+wait 20
+# two rows: it, and the DAY CARE's chest on its own map (0x8E00, daycare-chest.txt)
+expect u8 gBrLoot+0xA0 2
+expect u8 gBrLoot+0xA1 1
+expect u8 gBrEvents+17 0
+# slot 2 (slot 1 is the map's own person): local id 0xC0, graphics 200, facing down
+expect u8 gObjectEvents+0x50 0xC0
+expect u8 gObjectEvents+0x4D 200
+shot standing
+drain gBrMailbox
+tap A
+wait 30
+# still on the field for its cry: nothing has left the ground yet
+expect u8 gBrLoot+0xA0 2
+waitfor u32 gMain+4 BattleMainCB2+1 600
+# a REGI battle (BATTLE_TYPE_LEGENDARY | BATTLE_TYPE_REGI) against REGIROCK
+expectbits u32 gBattleTypeFlags 0x6000 0x6000
+# (row 0's kind: BR_LOOT_NONE; the count is only kept on the field)
+expect u8 gBrLoot+0x0B 0
+expectmsg 10 u16 1 0xB000
+expect u8 gBrEvents+17 1
+wait 300
+expect u16 gBattleMons+0x58 401
+shot battle
+# out as a run would be (B_OUTCOME_RAN), the way ghost-loot-in-battle.txt ends a fight,
+# on B: back on the field, A would be a second challenge of the one put back in front of us
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+poke u8 gBattleOutcome 4
+tap A
+wait 70
+poke u8 gBattleOutcome 4
+tap A
+wait 70
+poke u8 gBattleOutcome 4
+tap B
+wait 70
+poke u8 gBattleOutcome 4
+tap B
+wait 70
+poke u8 gBattleOutcome 4
+tap B
+wait 70
+poke u8 gBattleOutcome 4
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+tap B
+wait 70
+waitfor u32 gMain+4 CB2_Overworld+1 600
+wait 60
+# back where it stood, for everybody: our SPILL of key 0xB000 at (12,17), REGIROCK
+expectmsg 11 u16 4 0xB000
+expectmsg 11 u16 6 0x0C
+expectmsg 11 u16 8 0x11
+expectmsg 11 u16 10 401
+expect u8 gBrLoot+0xA0 2
+expect u8 gBrLoot+0xA1 1
+expect u8 gObjectEvents+0x4D 200
+expect u8 gBrEvents+17 0
+expect u8 gPlayerPartyCount 1
+shot back
+say legend battle ok

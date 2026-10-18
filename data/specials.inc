@@ -547,4 +547,5 @@ gSpecials::
 	def_special BrEvent_Trade
 	def_special BrStory_GateBeaten
 	def_special BrLoot_GiftTake
+	def_special BrLegend_Battle
 .endif

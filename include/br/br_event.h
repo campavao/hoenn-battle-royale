@@ -79,6 +79,9 @@ void BrEvent_Init(void);
 // Somebody's PICKUP, ours included: an event's legendary under that key is gone, or its
 // trader has traded -- with `seat`, which answers a trade of ours waiting on him.
 void BrEvent_NoteTaken(u16 key, u8 seat);
+// A SPILL put an event's legendary back down (br_legend.c: a battle with it that did not
+// end in a catch): its mark is not gray any more.
+void BrEvent_NoteBack(u16 key);
 // The marks on the MAP, over the region map at (left, top) in cells.
 void BrEvent_DrawOnMap(s16 left, s16 top);
 // Traders on this map in the view box: how many want an object. BrField_ShareObjects
