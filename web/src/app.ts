@@ -1658,6 +1658,29 @@ function resultsShowing(): boolean {
  *  `held` is the champion's own, before their Hall of Fame is over: nothing covers it. */
 let resultsUi: typeof import('./ui/results') | undefined;
 let resultsUiReady: Promise<void> | undefined;
+/** The latest results asked for while the screen's chunk was on its way: drawn once. */
+let resultsPending: (() => void) | undefined;
+
+/** The results screen's chunk (POK-407). Fetched soon after boot, not at the buzzer: a
+ *  release deployed mid-match takes the old hashed chunk off the site, and a phone's
+ *  connection is at its worst when everybody is fighting. A failed fetch is forgotten,
+ *  so the next results asked for try again. */
+function loadResultsUi(): Promise<void> {
+  resultsUiReady ??= import('./ui/results').then(
+    (m) => {
+      resultsUi = m;
+      const draw = resultsPending;
+      resultsPending = undefined;
+      draw?.();
+    },
+    (err: unknown) => {
+      resultsUiReady = undefined;
+      console.warn('results screen did not load', err);
+    },
+  );
+  return resultsUiReady;
+}
+setTimeout(() => void loadResultsUi(), 0);
 
 function renderResults(
   seat: number,
@@ -1674,13 +1697,11 @@ function renderResults(
 ): void {
   const mine = books.results.forSeat(seat, performance.now());
   if (!mine.ended || shown.held) return;
-  // The screen is a chunk of its own (POK-407), fetched the first time it is wanted: it
-  // draws once that lands, from the books as they are then.
+  // The screen is a chunk of its own (POK-407, loadResultsUi): one not in yet draws once
+  // it lands, from the books as they are then.
   if (resultsUi === undefined) {
-    resultsUiReady ??= import('./ui/results').then((m) => {
-      resultsUi = m;
-    });
-    void resultsUiReady.then(() => renderResults(seat, roster, books, shown));
+    resultsPending = () => renderResults(seat, roster, books, shown);
+    void loadResultsUi();
     return;
   }
   const { fameOf, resultsScreen, resultsView } = resultsUi;
