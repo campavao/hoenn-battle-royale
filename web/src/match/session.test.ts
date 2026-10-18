@@ -190,7 +190,7 @@ describe("one match's books (POK-330 #42)", () => {
     session.note({ t: 'result', seat: 30, outcome: 'lose' }, { from: 7 });
     session.note({ t: 'spent', seat: 30, items: [13] }, { from: 7 });
     expect(spy.challenged.mock.calls).toEqual([[31, 2], [30, 7]]);
-    expect(spy.noteResult.mock.calls).toEqual([[31, 2], [30, 7]]);
+    expect(spy.noteResult.mock.calls).toEqual([[31, 2, 'lose'], [30, 7, 'lose']]);
     expect(spy.noteSpent.mock.calls).toEqual([[30, [13], 7]]);
   });
 

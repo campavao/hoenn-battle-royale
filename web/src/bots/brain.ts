@@ -18,7 +18,7 @@ import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from 
 import { duel, type DuelResult } from './duel';
 import { sameSpot, spotKey, type SeamDir, type Spot, type World } from './world';
 import { pageCell, type PageCell } from './space';
-import { PROTOCOL, type MapRef, type Msg, type PackedMon, type SpillMsg } from '../net/wire';
+import { PROTOCOL, type MapRef, type Msg, type Outcome, type PackedMon, type SpillMsg } from '../net/wire';
 import { spillCells } from '../match/loot';
 import { isEventKey } from '../match/events';
 
@@ -107,6 +107,10 @@ const CENTRE_BUDGET = 3000;
  *  hunt. Under this many still standing, a bot aims at somebody rather than at a
  *  cell -- otherwise the last three wander a shrinking ring waiting for each other. */
 const HUNT_AT = 3;
+/** A flight lands out of everybody's screen: the GBA shows 15 x 10 tiles round the
+ *  player, so seven either side and five above and below. */
+const FLY_CLEAR_X = 7;
+const FLY_CLEAR_Y = 5;
 /** After a search that found nowhere to go, how long before trying another. A bot
  *  stranded outside a tight ring would otherwise run four full A* sweeps every step
  *  for the rest of the match -- on the host's tab, beside an emulator. It walks
@@ -667,7 +671,18 @@ export class Bots {
    *  ROM's messages with its own seat, so the result the ROM wrote under the bot's
    *  seat arrives under the player's: either one names the fight. `from` is the seat
    *  whose ROM said so, and only the bot's opponent can end its fight this way. */
-  noteResult(seat: number, from?: number): void {
+  noteResult(seat: number, from?: number, outcome?: Outcome): void {
+    // The ROM that beat a bot says so under the bot's seat (br_bot.c), held until the
+    // ring has room. The `party` before it is not held -- a full ring drops it -- and a
+    // bot whose report was lost walked off with its old team and challenged the player
+    // who had just beaten it (Cam, 2026-10-18: "beat Lanette, then straight into Lanette
+    // again"). This is the report that always arrives, so it is the bot's end too.
+    const beaten = outcome === 'lose' ? this.walkers.find((w) => w.bot.seat === seat) : undefined;
+    if (beaten && beaten.foe !== undefined && (from === undefined || from === beaten.foe)) {
+      this.fighting.delete(seat);
+      this.eliminate(beaten, true);
+      return;
+    }
     for (const [bot, fight] of [...this.fighting]) {
       if (fight.proxy) continue; // no ROM runs a proxy duel, so no ROM reports on one
       if (bot !== seat && fight.opponent !== seat) continue;
@@ -1239,7 +1254,19 @@ export class Bots {
 
     if (!inside || inside(walker.at.map)) return false; // not in the fog: nothing to flee
     if (now < walker.flyAfter || !canFly(walker.party)) return false;
-    const home = this.opts.targets.filter((t) => inside(t.mapId));
+    // Not at the end. Two or three left share a ring of one section, and a bird that
+    // lands in it lands beside whoever is left: Cam watched the last bot snap into
+    // frame and the match end three seconds later (2026-10-18). It walks in and bleeds
+    // instead, which a watcher can follow.
+    if ((this.opts.alive?.() ?? 99) <= HUNT_AT) return false;
+    // ...and never into anybody's screen, for the same reason earlier on.
+    const others = [
+      ...this.walkers.filter((w) => w !== walker).map((w) => ({ mapId: w.at.map, x: w.at.x, y: w.at.y })),
+      ...(this.opts.engage?.players() ?? []),
+    ];
+    const seen = (t: { mapId: string; x: number; y: number }): boolean =>
+      others.some((o) => o.mapId === t.mapId && Math.abs(o.x - t.x) <= FLY_CLEAR_X && Math.abs(o.y - t.y) <= FLY_CLEAR_Y);
+    const home = this.opts.targets.filter((t) => inside(t.mapId) && !seen(t));
     if (home.length === 0) return false;
     const to = home[Math.floor(this.opts.rng() * home.length)];
 
