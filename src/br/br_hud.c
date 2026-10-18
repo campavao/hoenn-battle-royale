@@ -57,8 +57,9 @@ static const struct WindowTemplate sBoxTemplate = { 0, 2, 11,
 #define BR_HUD_MESSAGE_BOX_END (BR_HUD_MESSAGE_BOX + 27 * 4)
 #define BR_HUD_YES_NO_END (0x125 + 5 * 4)
 
-// Every start menu a match draws, three items (BAG, the card, EXIT) up to pret's nine,
-// covers the whole corner: on screen the menu sits over it, so the corner is never up
+// Every start menu a match draws, three items (BAG, the card, EXIT: start_menu.c's
+// BuildNormalStartMenu and BuildSafariZoneStartMenu under BR, and the watcher's four)
+// up to pret's nine, covers the whole corner: on screen the menu sits over it, so the corner is never up
 // with its tiles in the menu.
 STATIC_ASSERT(BR_HUD_TILE_CORNER >= BR_HUD_START_MENU && BR_HUD_CORNER_END <= BR_HUD_START_MENU_END(3), BrHudCornerUnderEveryStartMenu)
 // The box shares the start menu's tail and the message box's head, after the corner.
