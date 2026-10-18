@@ -29,7 +29,7 @@ poke u8 gBrHud+0x178 0
 poke u8 gBrHud+0x0B 0
 wait 4
 expect u8 gBrHud+0x09 3
-expect u16 0x0600FC42 0xF1C8
+expect u16 0x0600FC44 0xF1C9
 shot hud-up
 say mart-greet
 watch gMain+4 4
@@ -134,7 +134,7 @@ wait 40
 unwatch
 say mart-after
 expect u8 gBrHud+0x09 5
-expect u16 0x0600FAC2 0xF154
-expectbits u16 0x0600FC42 0x3FF 0
+expect u16 0x0600FAC4 0xF15D
+expectbits u16 0x0600FC44 0x3FF 0
 shot hud-back
 say hud vram mart ok
