@@ -6,7 +6,7 @@ const u32 *const gItemIconTable[ITEMS_COUNT + 1][2] =
     [ITEM_ULTRA_BALL] = {gItemIcon_UltraBall, gItemIconPalette_UltraBall},
     [ITEM_GREAT_BALL] = {gItemIcon_GreatBall, gItemIconPalette_GreatBall},
 #if BR
-    [ITEM_POKE_BALL] = {gItemIcon_UltraBall, gBrItemIconPalette_RoyaleBall},
+    [ITEM_POKE_BALL] = {gItemIcon_SafariBall, gItemIconPalette_SafariBall},
 #else
     [ITEM_POKE_BALL] = {gItemIcon_PokeBall, gItemIconPalette_PokeBall},
 #endif

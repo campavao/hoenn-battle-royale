@@ -35,7 +35,7 @@ static const u8 sText_NoMoves[] = _("NO NEW MOVES AT THIS LEVEL");
 
 u8 BrCatch_BallMultiplier(u16 ball, u8 pret)
 {
-    if (ball != BR_ITEM_ROYALE_BALL)
+    if (ball != BR_ITEM_ROYALE_BALL && ball != ITEM_SAFARI_BALL)
         return pret;
     return gBattleResults.battleTurnCounter == 0 ? 40 : 20;
 }
