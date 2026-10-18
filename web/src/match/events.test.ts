@@ -14,7 +14,12 @@ import {
   LEGENDS,
   RARES,
   SUPPLIES,
+  TraderClaims,
+  claimKey,
+  claimOf,
+  traderKey,
 } from './events';
+import { STORIES } from './story';
 import { rungForPhase } from '../bots/party';
 import { Loot } from './loot';
 import { MAP_OFFSET } from '../net/cells';
@@ -119,3 +124,33 @@ describe('clusterCells', () => {
     expect(clusterCells([at(0, 0), at(8, 0), at(9, 0)], at(0, 0), 7, () => false)).toEqual([{ x: 0, y: 0 }, { x: 8, y: 0 }]);
   });
 });
+
+describe('a trade asks the host first (POK-392)', () => {
+  it("his claim key is past every piece's, and below his own", () => {
+    // A piece's index is its cell's: the event's own and every story's stay under 14.
+    expect(Math.max(EVENT_CELLS, ...STORIES.map((st) => st.cells.length))).toBeLessThanOrEqual(14);
+    expect([claimKey(2), traderKey(2)]).toEqual([0xb02e, 0xb02f]);
+    expect([claimOf(0xb02e), claimOf(0xb02f), claimOf(0xb020), claimOf(0xc00e)]).toEqual([2, undefined, undefined, undefined]);
+  });
+
+  it('the first ask for a trader still standing is the trade; every later one hears who got him', () => {
+    let standing = true;
+    const claims = new TraderClaims(() => standing);
+    expect(claims.answer({ t: 'pickup', seat: 3, key: claimKey(1) })).toEqual({ reply: { t: 'pickup', seat: 3, key: traderKey(1) }, granted: true });
+    standing = false; // the books heard the trade
+    expect(claims.answer({ t: 'pickup', seat: 5, key: claimKey(1) })).toEqual({ reply: { t: 'pickup', seat: 3, key: traderKey(1) }, granted: false });
+    expect(claims.answer({ t: 'pickup', seat: 3, key: traderKey(1) }), 'only an ask is answered').toBeNull();
+    expect(claims.answer({ t: 'pickup', seat: 3, key: claimKey(1), item: 4 }), 'an item out of a bag is not an ask').toBeNull();
+  });
+
+  it("a trade nobody asked for is the one a later ask hears of; a new match forgets them all", () => {
+    const claims = new TraderClaims(() => false);
+    expect(claims.answer({ t: 'pickup', seat: 5, key: claimKey(0) }), 'gone, and nobody known to have him').toBeNull();
+    claims.note({ t: 'pickup', seat: 7, key: traderKey(0) });
+    claims.note({ t: 'pickup', seat: 8, key: traderKey(0) });
+    expect(claims.answer({ t: 'pickup', seat: 5, key: claimKey(0) })?.reply.seat, 'the first trade is the one').toBe(7);
+    claims.note({ t: 'start', seed: 1, spawns: [] });
+    expect(claims.answer({ t: 'pickup', seat: 5, key: claimKey(0) })).toBeNull();
+  });
+});
+

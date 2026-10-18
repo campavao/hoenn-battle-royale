@@ -14,6 +14,7 @@
 #include "sound.h"
 #include "sprite.h"
 #include "string_util.h"
+#include "task.h"
 #include "constants/event_object_movement.h"
 #include "constants/event_objects.h"
 #include "constants/items.h"
@@ -53,6 +54,20 @@ STATIC_ASSERT(((BR_EVENT_MAX - 1) << 4 | 15) < 0x100, BrEventKeysStayUnder0xB100
 static const u8 sText_Traded[] = _("TRADED FOR ");
 static const u8 sText_Bang[] = _("!");
 static const u8 sText_TradedAlready[] = _("HE HAS ALREADY TRADED");
+
+// One trade a trader (POK-392). Two players at him at once both found him standing, both
+// traded, and both walked off with his rare: a trade asks first. Our PICKUP of his claim
+// key goes to the host, whose page answers the first ask with the PICKUP of his own key
+// naming the asker -- which takes him off every map -- and a later one with that PICKUP
+// naming whoever got him. The trade waits on the answer with the script locked, in a
+// task's data, since gBrEvents has no byte to spare. A host that never answers (a driver
+// with no page behind it) leaves us to trade the old way, after BR_CLAIM_FRAMES.
+#define BR_CLAIM_FRAMES 180
+enum { CLAIM_WAITING, CLAIM_GRANTED, CLAIM_DENIED };
+#define tTrader  data[0]
+#define tSlot    data[1]
+#define tTimer   data[2]
+#define tVerdict data[3]
 static const u8 sText_Fainted[] = _("NOT A FAINTED ONE");
 
 static void Despawn(u8 i)
@@ -120,9 +135,11 @@ static void HandleEvent(const u8 *payload, u8 len)
         t->species = SPECIES_NONE;
 }
 
-void BrEvent_NoteTaken(u16 key)
+static void Task_TradeClaim(u8 taskId);
+
+void BrEvent_NoteTaken(u16 key, u8 seat)
 {
-    u8 i;
+    u8 i, taskId;
 
     if ((key & 0xF000) != BR_EVENT_KEY_BASE || gBrEvents.seed != gBrMatch.seed)
         return;
@@ -135,6 +152,11 @@ void BrEvent_NoteTaken(u16 key)
         if (key == BR_EVENT_TRADER_KEY(i))
             gBrEvents.used |= 1 << i; // BrEvent_Tick lets go of him
     }
+    // The host's answer to a trade of ours waiting on him: ours, or somebody else's.
+    taskId = FindTaskIdByFunc(Task_TradeClaim);
+    if (taskId != TASK_NONE && key == BR_EVENT_TRADER_KEY(gTasks[taskId].tTrader)
+        && gTasks[taskId].tVerdict == CLAIM_WAITING)
+        gTasks[taskId].tVerdict = seat == gBrMySeat ? CLAIM_GRANTED : CLAIM_DENIED;
 }
 
 // An item ball in the middle of the section, the thing that is lying there. Half a cell
@@ -268,16 +290,65 @@ static void TryTalk(void)
     ScriptContext_SetupScript(BR_EventScript_Trader);
 }
 
-void BrEvent_Trade(void)
+// The swap itself: his mon for ours at `slot`. `say` is the PICKUP of his key that uses
+// him up for the whole room, ours to send only when no host answered for us.
+static void Swap(u8 i, u8 slot, bool8 say)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
     const u8 *last = line + ARRAY_COUNT(line) - 1;
     struct Pokemon mon;
-    u16 slot = gSpecialVar_0x8004;
     u16 species, held;
-    u8 i = gBrEvents.trading;
     u8 *p;
 
+    // What it held stays ours: back in the bag, or at our feet when that pocket is full.
+    held = GetMonData(&gPlayerParty[slot], MON_DATA_HELD_ITEM, NULL);
+    if (held != ITEM_NONE && !AddBagItem(held, 1))
+        BrLoot_DropItem(held);
+    // He keeps the one he is given. POK-294's "nothing ever leaves the match" is about a
+    // mon let go to make room, and is not this: dropped at our feet, it would be ours
+    // again for one press, and the trade a free mon.
+    species = Offered(i, &mon);
+    gPlayerParty[slot] = mon;
+    gBrEvents.used |= 1 << i;
+    if (say)
+        BrLoot_SendTaken(BR_EVENT_TRADER_KEY(i));
+    p = BrHud_Append(line, last, sText_Traded);
+    p = BrHud_Append(p, last, gSpeciesNames[species]);
+    BrHud_Append(p, last, sText_Bang);
+    PlaySE(SE_PIN);
+    BrHud_Box(line);
+    BrSpectate_SendParty();
+}
+
+static void Task_TradeClaim(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    if (tVerdict == CLAIM_WAITING && ++tTimer < BR_CLAIM_FRAMES)
+        return;
+    if (tVerdict == CLAIM_DENIED)
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_TradedAlready);
+    }
+    else
+    {
+        Swap(tTrader, tSlot, tVerdict == CLAIM_WAITING);
+    }
+    DestroyTask(taskId);
+    ScriptContext_Enable();
+}
+
+// The party menu's pick (gSpecialVar_0x8004). VAR_RESULT says whether the script waits on
+// the host's answer: FALSE for nothing chosen, or a trade refused here and now.
+void BrEvent_Trade(void)
+{
+    u16 slot = gSpecialVar_0x8004;
+    u8 i = gBrEvents.trading;
+    u8 taskId;
+    s16 *data;
+
+    gSpecialVar_Result = FALSE;
     if (slot >= PARTY_SIZE || i >= BR_EVENT_MAX
         || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
         return;
@@ -295,24 +366,19 @@ void BrEvent_Trade(void)
         BrHud_Box(sText_Fainted);
         return;
     }
-    // What it held stays ours: back in the bag, or at our feet when that pocket is full.
-    held = GetMonData(&gPlayerParty[slot], MON_DATA_HELD_ITEM, NULL);
-    if (held != ITEM_NONE && !AddBagItem(held, 1))
-        BrLoot_DropItem(held);
-    // He keeps the one he is given. POK-294's "nothing ever leaves the match" is about a
-    // mon let go to make room, and is not this: dropped at our feet, it would be ours
-    // again for one press, and the trade a free mon.
-    species = Offered(i, &mon);
-    gPlayerParty[slot] = mon;
-    // Once, for the whole room: the PICKUP of his key takes him off every map.
-    gBrEvents.used |= 1 << i;
-    BrLoot_SendTaken(BR_EVENT_TRADER_KEY(i));
-    p = BrHud_Append(line, last, sText_Traded);
-    p = BrHud_Append(p, last, gSpeciesNames[species]);
-    BrHud_Append(p, last, sText_Bang);
-    PlaySE(SE_PIN);
-    BrHud_Box(line);
-    BrSpectate_SendParty();
+    taskId = CreateTask(Task_TradeClaim, 80);
+    if (taskId == TASK_NONE)
+    {
+        Swap(i, slot, TRUE);
+        return;
+    }
+    data = gTasks[taskId].data;
+    tTrader = i;
+    tSlot = slot;
+    tTimer = 0;
+    tVerdict = CLAIM_WAITING;
+    BrLoot_SendTaken(BR_EVENT_CLAIM_KEY(i));
+    gSpecialVar_Result = TRUE;
 }
 
 void BrEvent_Tick(void)

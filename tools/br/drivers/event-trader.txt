@@ -47,7 +47,8 @@ wait 120
 shot fainted
 expect u8 gBrEvents+18 0
 poke u16 gPlayerParty+86 20
-# again, and pick the TREECKO this time
+# again, and pick the TREECKO this time. The trade asks the host first (POK-392): our
+# PICKUP of his claim key (0xB00E) goes out and the trade waits, the script locked.
 tap A
 wait 90
 tap A
@@ -55,7 +56,12 @@ wait 30
 tap A
 wait 90
 tap A
-wait 120
+wait 60
+expectmsg 10 u16 1 0xB00E
+expect u8 gBrEvents+18 0
+# Nobody answers here -- no page behind the harness -- so after BR_CLAIM_FRAMES it goes
+# ahead the old way
+wait 300
 shot traded
 expect u8 gBrEvents+18 1
 expect u8 gPlayerPartyCount 1
@@ -114,6 +120,65 @@ shot race-refused
 expectsame u32 gPlayerParty gPlayerParty+500
 expect u8 gPlayerPartyCount 1
 expect u8 gBrEvents+54 0xFF
+tap A
+wait 60
+# EVENT 3's trader, and the host says yes (POK-392): its PICKUP of his key naming us
+# (seat 0) is the trade. We never send that key ourselves; the newest PICKUP we sent is
+# still the claim.
+expect u8 gBrMySeat 0
+pokebytes gDecompressionBuffer 00 03 10 30 B0 00 09 0C 00 11 00 83 00
+mailsend gBrMailbox 32 gDecompressionBuffer 13
+wait 30
+expectne u8 gBrEvents+55 0xFF
+tap A
+wait 90
+tap A
+wait 30
+tap A
+wait 90
+tap A
+wait 60
+expectmsg 10 u16 1 0xB03E
+expect u8 gBrEvents+18 4
+pokebytes gDecompressionBuffer 00 3F B0 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 30
+shot granted
+expect u8 gBrEvents+18 12
+expect u8 gBrEvents+55 0xFF
+expectmsg 10 u16 1 0xB03E
+expectmsg 7 u16 2 131
+tap A
+wait 60
+# A new match, EVENT 0's trader again, and this time the host says no: its PICKUP names
+# seat 3, who asked first. "HE HAS ALREADY TRADED", and our mon stays ours.
+poke u32 gBrMatch+8 0x9ABC
+pokebytes gDecompressionBuffer 00 00 10 00 B0 00 09 0C 00 11 00 83 00
+mailsend gBrMailbox 32 gDecompressionBuffer 13
+wait 30
+expect u8 gBrEvents+18 0
+expectne u8 gBrEvents+52 0xFF
+copy gPlayerParty+500 gPlayerParty 4
+tap A
+wait 90
+tap A
+wait 30
+tap A
+wait 90
+tap A
+wait 60
+expectmsg 10 u16 1 0xB00E
+pokebytes gDecompressionBuffer 03 0F B0 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 30
+shot denied
+expect u8 gBrEvents+18 1
+expectsame u32 gPlayerParty gPlayerParty+500
+expect u8 gBrEvents+52 0xFF
+# ...and well past BR_CLAIM_FRAMES nothing more happens: no trade of our own after all
+wait 200
+expectsame u32 gPlayerParty gPlayerParty+500
+expectmsg 10 u16 1 0xB00E
 # ...and the field is ours again once the box is closed: a step north is a step
 tap A
 wait 60
@@ -121,5 +186,5 @@ expect u16 *gSaveBlock1Ptr+2 9
 hold UP 24
 wait 30
 expect u16 *gSaveBlock1Ptr+2 8
-expect u8 gBrEvents+18 4
+expect u8 gBrEvents+18 1
 say event trader ok

@@ -506,7 +506,7 @@ static void HandlePickup(const u8 *payload, u8 len)
     // A house's cache is gone for us too, though we are nowhere near it.
     BrBalls_NoteTaken(BrWire_ReadU16(d + 1));
     BrPatch_NoteTaken(BrWire_ReadU16(d + 1)); // ...and a patch somebody's battle started on
-    BrEvent_NoteTaken(BrWire_ReadU16(d + 1)); // ...and an event's legendary, for its mark
+    BrEvent_NoteTaken(BrWire_ReadU16(d + 1), d[0]); // ...and an event's legendary, for its mark
     it = Find(BrWire_ReadU16(d + 1));
     if (it == NULL)
         return;
@@ -708,7 +708,7 @@ static void SendPickup(struct BrLootItem *it)
     buf[7] = it->kind == BR_LOOT_BAG ? 1 : 0;
     BrWire_SendOrHold(BR_MSG_PICKUP, buf, BR_PICKUP_LEN);
     BrBalls_NoteTaken(it->key);
-    BrEvent_NoteTaken(it->key);
+    BrEvent_NoteTaken(it->key, gBrMySeat);
     gBrLoot.taken++;
     Drop(it);
 }
