@@ -41,6 +41,9 @@ expect u8 gBrLoot+11 2
 expect u16 gBrLoot+2 12
 expect u16 gBrLoot+4 16
 expect u32 gBrLoot+16 0
+# Ours to walk over now (POK-414): A here would only say NO ROOM again, and a bag that
+# stood solid in a one-wide passage would wall it off.
+expect u8 gBrLoot+13 1
 # The room is told the same: a SPILL under our seat, no mons, the bag with one stack.
 expectmsg 11 u8 0 0
 expectmsg 11 u8 3 0

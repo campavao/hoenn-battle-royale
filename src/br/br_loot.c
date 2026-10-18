@@ -297,6 +297,7 @@ static void Add(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 species, u8 l
     it->kind = kind;
     it->money = money;
     it->objId = BR_NO_OBJ;
+    it->noRoom = FALSE;
 }
 
 void BrLoot_AddItem(u16 key, u8 mapGroup, u8 mapNum, s16 x, s16 y, u16 item)
@@ -393,9 +394,18 @@ static EWRAM_DATA u8 sGiveBackLen = 0;
 // is full: the held give-back stays held.
 static bool8 SendGiveBack(void)
 {
+    u8 i;
+
     if (!BrWire_SendLarge(BR_MSG_SPILL, sGiveBack, sGiveBackLen))
         return FALSE;
     ParseSpill(sGiveBack, sGiveBackLen);
+    // Only what our pockets could not hold is in it, so A here would only say NO ROOM
+    // again: we walk over it (BrLoot_Solid). Anybody else's ROM finds it solid, and theirs.
+    for (i = 0; i < BR_MAX_LOOT; i++)
+    {
+        if (gBrLoot.items[i].kind == BR_LOOT_BAG && gBrLoot.items[i].key == BrWire_ReadU16(sGiveBack + 5))
+            gBrLoot.items[i].noRoom = TRUE;
+    }
     sGiveBackLen = 0;
     return TRUE;
 }
@@ -1057,9 +1067,10 @@ static void TryTake(void)
 // walking thru things I can pick up or people I can talk to"). A person always is: he
 // talks, whatever he then says. A ball or a bag is solid while it is yours for a press,
 // so you face it and take it, and the press is what clears the way. One A cannot take --
-// a TM you have or nobody here learns, a pocket with no room, a piece a gate's boss still
-// guards, a ball for a full party -- is walked over as before: the drop deals balls onto any open cell, a cave's
-// one-wide passage included, and a ball nobody can lift there would wall it off for good.
+// a TM you have or nobody here learns, a pocket with no room, a piece a gate's boss
+// still guards, a ball for a full party -- is walked over as before: the drop deals
+// balls onto any open cell, a cave's one-wide passage included, and a ball nobody can
+// lift there would wall it off for good.
 bool8 BrLoot_Solid(u8 localId)
 {
     const struct BrLootItem *it;
@@ -1075,8 +1086,12 @@ bool8 BrLoot_Solid(u8 localId)
         return FALSE;
     if ((it->kind == BR_LOOT_ITEM || OneThing(it)) && BrMoves_IsTm(it->species))
         return !CheckBagHasItem(it->species, 1) && BrMoves_Teachable(it->species);
-    if (it->kind == BR_LOOT_ITEM)
+    if (it->kind == BR_LOOT_ITEM || OneThing(it))
         return BrItems_Fits(it->species);
+    // A bag's contents are the page's, so the ROM learns a full pocket only from the GIVE:
+    // what came back is ours to walk over (SendGiveBack).
+    if (it->noRoom)
+        return FALSE;
     // A full party takes a ball only by giving one up, and the one given up lands beside
     // you too: walls round a winner who said B to the spoils.
     if (it->kind == BR_LOOT_MON)

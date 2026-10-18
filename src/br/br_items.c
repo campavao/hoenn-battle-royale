@@ -131,8 +131,9 @@ static u32 SellPrice(u16 item, u16 count)
 
 // The rule itself, for every way an item arrives: a vitamin or a sell item is used up
 // (BR_ITEMS_USED, and `text`, when not NULL, says how in one line), a status heal turns
-// into a FULL RESTORE. The ball rule is the ground's alone (BrItems_Pickup).
-static u8 Apply(u16 *item, u16 count, u8 *text)
+// into a FULL RESTORE. The ball rule is the ground's alone (BrItems_Pickup). `dry` says
+// what would happen and does none of it (BrItems_Fits).
+static u8 Apply(u16 *item, u16 count, u8 *text, bool8 dry)
 {
     s8 row;
     u32 money;
@@ -143,6 +144,8 @@ static u8 Apply(u16 *item, u16 count, u8 *text)
     row = Vitamin(*item);
     if (row >= 0)
     {
+        if (dry)
+            return BR_ITEMS_USED;
         MaxPartyEv(row);
         if (text != NULL)
         {
@@ -156,6 +159,8 @@ static u8 Apply(u16 *item, u16 count, u8 *text)
     }
     if (InList(sSellItems, ARRAY_COUNT(sSellItems), *item))
     {
+        if (dry)
+            return BR_ITEMS_USED;
         money = SellPrice(*item, count);
         AddMoney(&gSaveBlock1Ptr->money, money);
         if (text != NULL)
@@ -171,9 +176,9 @@ static u8 Apply(u16 *item, u16 count, u8 *text)
     return BR_ITEMS_TO_BAG;
 }
 
-u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text)
+static u8 Pickup(u16 *item, u16 *count, u8 *text, bool8 dry)
 {
-    if (Apply(item, *count, text) == BR_ITEMS_USED)
+    if (Apply(item, *count, text, dry) == BR_ITEMS_USED)
         return BR_ITEMS_USED;
     if (gBrMatch.phase != BR_PHASE_NONE
      && GetItemPocket(*item) == POCKET_POKE_BALLS && *item != ITEM_MASTER_BALL)
@@ -181,19 +186,17 @@ u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text)
     return BR_ITEMS_TO_BAG;
 }
 
+u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text)
+{
+    return Pickup(item, count, text, FALSE);
+}
+
 bool8 BrItems_Fits(u16 item)
 {
     u16 count = 1;
 
-    if (gBrMatch.phase != BR_PHASE_NONE)
-    {
-        if (Vitamin(item) >= 0 || InList(sSellItems, ARRAY_COUNT(sSellItems), item))
-            return TRUE; // used where it lies: nothing goes in the bag
-        if (InList(sStatusHeals, ARRAY_COUNT(sStatusHeals), item))
-            item = ITEM_FULL_RESTORE;
-        else if (GetItemPocket(item) == POCKET_POKE_BALLS && item != ITEM_MASTER_BALL)
-            count = BR_ITEMS_BALLS;
-    }
+    if (Pickup(&item, &count, NULL, TRUE) == BR_ITEMS_USED)
+        return TRUE; // used where it lies: nothing goes in the bag
     return CheckBagHasSpace(item, count);
 }
 
@@ -203,7 +206,7 @@ bool8 BrItems_Arrive(u16 *item, u16 count)
 
     // Nothing the player is shown said so (a mon's held item TAKEn, a spilled bag's
     // GIVE): the ticker does.
-    if (Apply(item, count, line) != BR_ITEMS_USED)
+    if (Apply(item, count, line, FALSE) != BR_ITEMS_USED)
         return FALSE;
     BrHud_Say(line);
     return TRUE;
