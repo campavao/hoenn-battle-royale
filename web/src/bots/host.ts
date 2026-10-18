@@ -22,7 +22,8 @@ import { SAFARI_CELLS } from '../match/safari';
 import { MAP_OFFSET } from '../net/cells';
 import { PARTY_BAG_MAX, type EventMsg, type MapRef, type Msg } from '../net/wire';
 import { traderKey } from '../match/events';
-import { FLYING, storyGuard, storySealed } from '../match/story';
+import { FLYING, storyGuard, storyPerson, storySealed } from '../match/story';
+import { isGiftKey } from '../match/gifts';
 import TRAINERS from '../data/trainers.json';
 
 /** The bots' own pump. Faster than one step, so the pace comes out of `Bots.tick`
@@ -191,6 +192,7 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
       }),
     // A gate's boss fights at the rung, full health, as BrLevels_LiftTrainer lifts him.
     guard: (piece) => storyGuard(piece)?.map((species) => tradedMon(species, phase)),
+    person: (piece) => isGiftKey(piece.key) || storyPerson(piece),
     // ...and so is a trader's cell: a session's event is the wire's, MAP_OFFSET in it.
     traders: () =>
       (opts.events?.() ?? []).flatMap((e) => {

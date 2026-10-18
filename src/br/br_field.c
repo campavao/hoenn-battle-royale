@@ -509,7 +509,7 @@ static u8 ObjectRoom(void)
 
     for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
     {
-        if (!gObjectEvents[i].active || BrGhosts_Insubstantial(gObjectEvents[i].localId))
+        if (!gObjectEvents[i].active || BrGhosts_Ours(gObjectEvents[i].localId))
             n++;
     }
     return n;

@@ -309,9 +309,9 @@ static const u8 *GetInteractedObjectEventScript(struct MapPosition *position, u8
     // below read one through a NULL template, out of the BIOS's open bus, and ran it --
     // loot-full-pocket.txt's A on a ball warped into a house. A ball's press is
     // br_loot.c's own (TryTake), which spends it, so the field never sees it
-    // (loot-press-alone.txt). A ghost is a drawing, not solid: A goes past it to
-    // whatever is there -- a sign, the water -- as a step does.
-    if (BrGhosts_Insubstantial(gObjectEvents[objectEventId].localId))
+    // (loot-press-alone.txt). A ghost is a drawing: A goes past it to whatever is
+    // there -- a sign, the water -- as a step does.
+    if (BrGhosts_Ours(gObjectEvents[objectEventId].localId))
         return NULL;
 #endif
 

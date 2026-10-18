@@ -1,0 +1,101 @@
+# loot-solid: a piece A would take stops a step; one it would not is walked over.
+#
+# Cam, 2026-10-18: "let's make all items collidable. I hate walking thru things I can pick
+# up or people I can talk to." Everything the match put on a map used to be a drawing a
+# step went through (POK-310). Now BrGhosts_Passable asks BrLoot_Solid for loot: a ball
+# or a person is in the way while A would take it, and the press clears it. A ball A
+# would not take (a NUGGET into a full ITEMS pocket, a Pokemon for a full party) is still
+# walked over, so a ball dealt into a one-wide cave passage can never wall it off.
+#
+# Route 104 at (7,7), open grass to the east. Every piece goes on (15,14) in the
+# engine's coordinates (the map's (8,7), plus 7), the cell in front of us.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 104 (group 0, num 19), x=7, y=7
+pokebytes gBrMailbox+0x2018 81 00 00 13 07 00 07 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 19
+expect u16 *gSaveBlock1Ptr 7
+expect u16 *gSaveBlock1Ptr+2 7
+expect u8 gPlayerPartyCount 1
+# a turn to face east
+hold RIGHT 3
+wait 20
+expect u16 *gSaveBlock1Ptr 7
+# 1. A ball: seat 1's PIKACHU (25) at 5, key 0x0101, row 0. Walking into it bonks.
+pokebytes gBrLoot 01 01 0F 00 0E 00 19 00 00 13 05 01 FF 00 00 00 00 00 00 00
+wait 30
+expect u8 gBrLoot+0xA1 1
+hold RIGHT 24
+wait 30
+shot ball-stops-us
+expect u16 *gSaveBlock1Ptr 7
+# ...and A takes it from here, which clears the way
+tap A
+wait 60
+expect u8 gBrLoot+0xA2 1
+expect u8 gBrLoot+0x0B 0
+expect u8 gPlayerPartyCount 2
+wait 60
+hold RIGHT 4
+wait 30
+shot ball-taken-way-clear
+expect u16 *gSaveBlock1Ptr 8
+hold LEFT 10
+wait 30
+expect u16 *gSaveBlock1Ptr 7
+hold RIGHT 3
+wait 20
+# 2. A NUGGET (110) ball into a full ITEMS pocket: A would say NO ROOM FOR IT, so it is
+# walked over (no match running, so the NUGGET is an item rather than its price).
+pokebytes *gSaveBlock1Ptr+0x560 0D 00 01 00 0E 00 01 00 0F 00 01 00 10 00 01 00 11 00 01 00 12 00 01 00 13 00 01 00 14 00 01 00 15 00 01 00 16 00 01 00 17 00 01 00 18 00 01 00 19 00 01 00 1A 00 01 00 1B 00 01 00 1C 00 01 00 1D 00 01 00 1E 00 01 00 1F 00 01 00 20 00 01 00 21 00 01 00 22 00 01 00 23 00 01 00 24 00 01 00 25 00 01 00 26 00 01 00 27 00 01 00 28 00 01 00 29 00 01 00 2A 00 01 00
+pokebytes gBrLoot 00 8F 0F 00 0E 00 6E 00 00 13 00 03 FF 00 00 00 00 00 00 00
+wait 30
+expect u8 gBrLoot+0xA1 1
+hold RIGHT 4
+wait 30
+shot full-pocket-walked-over
+expect u16 *gSaveBlock1Ptr 8
+hold LEFT 10
+wait 30
+expect u16 *gSaveBlock1Ptr 7
+# room for it in the last slot: now A would take it, and it stops us
+poke u16 *gSaveBlock1Ptr+0x5D4 0
+hold RIGHT 24
+wait 30
+shot room-now-it-stops-us
+expect u16 *gSaveBlock1Ptr 7
+tap A
+wait 60
+expect u8 gBrLoot+0x0B 0
+expect u16 *gSaveBlock1Ptr+0x5D4 110
+wait 60
+# 3. A gift-giver (key 0xC000, a bag of one POTION): a person, so solid whatever is in
+# the bag -- he talks before anything is taken.
+pokebytes gBrLoot 00 C0 0F 00 0E 00 0D 00 00 13 00 02 FF 00 00 00 00 00 00 00
+wait 30
+expect u8 gBrLoot+0xA1 1
+hold RIGHT 24
+wait 30
+shot gift-giver-stops-us
+expect u16 *gSaveBlock1Ptr 7
+expect u32 gMain+4 CB2_Overworld+1
+# 4. A ball for a full party: A takes it only by giving a mon up, which lands beside us
+# too, so it is walked over. Six in the party.
+copy gPlayerParty+200 gPlayerParty 100
+copy gPlayerParty+300 gPlayerParty 100
+copy gPlayerParty+400 gPlayerParty 100
+copy gPlayerParty+500 gPlayerParty 100
+poke u8 gPlayerPartyCount 6
+wait 30
+# row 1, on the cell to our west (13,14): the gift-giver still stands to the east
+pokebytes gBrLoot+0x14 02 01 0D 00 0E 00 19 00 00 13 05 01 FF 00 00 00 00 00 00 00
+wait 30
+expectne u8 gBrLoot+0x20 0xFF
+hold LEFT 3
+wait 20
+hold LEFT 4
+wait 30
+shot full-party-walked-over
+expect u16 *gSaveBlock1Ptr 6
+say loot solid ok

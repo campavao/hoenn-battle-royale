@@ -223,6 +223,75 @@ describe('bots walking', () => {
     expect(sent.some((m) => m.t === 'pickup' && m.key === 0x0100)).toBe(true);
   });
 
+  // Cam, 2026-10-18: "let's make all items collidable". A piece stops a step in the ROM
+  // (BrGhosts_Passable), so a bot takes one from the cell beside it, turned to it.
+  it('takes a piece from beside it, turned to it, and never steps onto it', () => {
+    const ground = new Map<number, { mapId: string; x: number; y: number }>([[0x0100, { mapId: 'FIELD', x: 5, y: 5 }]]);
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world: new World([FIELD, PATH]),
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(3),
+      inside: (id) => id === 'FIELD',
+      loot: {
+        all: () => [...ground].map(([key, at]) => ({ key, mapId: at.mapId, ...pageCell(at.x, at.y) })),
+        at: (mapId, { x, y }) => [...ground].find(([, c]) => c.mapId === mapId && c.x === x && c.y === y)?.[0],
+      },
+    });
+    const dealt = dealBots(8, 1, [], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 0 }]);
+    bots.start(dealt, 0);
+    let at: Spot | undefined;
+    for (let t = STEP_MS; t <= 30_000 && !at; t += STEP_MS) {
+      bots.tick(t);
+      if (sent.some((m) => m.t === 'pickup')) at = bots.spotOf(dealt[0].seat);
+    }
+    expect(sent.some((m) => m.t === 'step' && m.x === 5 && m.y === 5)).toBe(false);
+    const took = sent.findIndex((m) => m.t === 'pickup' && m.key === 0x0100);
+    expect(took).toBeGreaterThan(0);
+    const face = sent[took - 1];
+    expect(face.t).toBe('face');
+    const toward: Record<number, [number, number]> = { 1: [0, 1], 2: [0, -1], 3: [-1, 0], 4: [1, 0] };
+    const [dx, dy] = toward[(face as { f: number }).f];
+    expect({ x: at!.x + dx, y: at!.y + dy }).toEqual({ x: 5, y: 5 });
+  });
+
+  it('goes round a person it cannot deal with, and walks over a ball it cannot have', () => {
+    const LANE: WorldMap = {
+      id: 'LANE', group: 0, num: 3, w: 5, h: 3, section: 'S', outdoor: true,
+      grid: grid(['00000', '00000', '00000']), seams: [],
+    };
+    const run = (person: boolean) => {
+      const ground = new Map<number, { mapId: string; x: number; y: number }>([[0xb000, { mapId: 'LANE', x: 2, y: 1 }]]);
+      const sent: Msg[] = [];
+      const bots = new Bots({
+        world: new World([LANE]),
+        targets: [{ mapId: 'LANE', x: 4, y: 1 }],
+        mapRef: () => ({ group: 0, num: 3 }),
+        send: (m) => void sent.push(m),
+        rng: mulberry32(5),
+        loot: {
+          all: () => [...ground].map(([key, at]) => ({ key, mapId: at.mapId, ...pageCell(at.x, at.y) })),
+          at: (mapId, { x, y }) => [...ground].find(([, c]) => c.mapId === mapId && c.x === x && c.y === y)?.[0],
+        },
+        sealed: () => true,
+        person: () => person,
+      });
+      const dealt = dealBots(8, 1, [], [{ mapId: 'LANE', map: { group: 0, num: 3 }, x: 0, y: 1 }]);
+      bots.start(dealt, 0);
+      for (let t = STEP_MS; t <= 20_000; t += STEP_MS) bots.tick(t);
+      return { sent, end: bots.spotOf(dealt[0].seat) };
+    };
+    const round = run(true);
+    expect(round.sent.some((m) => m.t === 'step' && m.x === 2 && m.y === 1)).toBe(false);
+    expect(round.sent.some((m) => m.t === 'step' && m.x === 4)).toBe(true);
+    const over = run(false);
+    expect(over.sent.some((m) => m.t === 'pickup')).toBe(false);
+    expect(over.sent.some((m) => m.t === 'step' && m.x === 2 && m.y === 1)).toBe(true);
+    expect(over.sent.some((m) => m.t === 'step' && m.x === 4)).toBe(true);
+  });
+
   // Speed-up 6: a bot goes for an event the way a player does.
   const eventBots = (over: Partial<BotsOptions>, count = 1) => {
     const sent: Msg[] = [];

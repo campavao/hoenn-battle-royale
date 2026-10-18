@@ -128,7 +128,7 @@ describe('the loot and the roster, off the wire (POK-330 #14)', () => {
   const BIG_REF = { group: 0, num: 2 };
   const idOf = (map: { group: number; num: number }) => (map.num === 2 ? 'BIG' : undefined);
 
-  it('walks a bot onto a piece the wire put down, not seven tiles past it', () => {
+  it('walks a bot up to a piece the wire put down, not seven tiles past it', () => {
     const loot = new Loot();
     // A player's whiteout, exactly as their ROM sends it: the ROM's space, seven out.
     const piece = pageCell(15, 15);
@@ -155,7 +155,9 @@ describe('the loot and the roster, off the wire (POK-330 #14)', () => {
       bots.tick(t);
       if (sent.some((m) => m.t === 'pickup' && m.key === 0x0100)) took = bots.spotOf(dealt[0].seat);
     }
-    expect(took).toEqual({ map: 'BIG', x: piece.x, y: piece.y });
+    // From the cell beside it: a piece is solid, and taken the way A takes one.
+    expect(took?.map).toBe('BIG');
+    expect(Math.abs(took!.x - piece.x) + Math.abs(took!.y - piece.y)).toBe(1);
     expect(loot.size()).toBe(0);
   });
 

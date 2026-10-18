@@ -980,8 +980,6 @@ static void EmoteBusyGhosts(void)
     }
 }
 
-// Nothing the match puts on a map is solid (POK-310). See the header for why.
-//
 // The ranges are BR's own: an event's traders at 0xBC, loot at 0xC0 and ghosts at 0xC8,
 // one run from 0xBC to the last seat's 0xE7 (br_event.c asserts the traders' end). No
 // map's own people come near 0xBC. LOCALID_PLAYER is 255 and above it all, so the player
@@ -989,9 +987,20 @@ static void EmoteBusyGhosts(void)
 // the player included, whenever anything else tries to move. It ran to 254, which took
 // in the berry blender's 236..240 as well (POK-330 #28).
 STATIC_ASSERT(BR_LOOT_LOCAL_ID_BASE + BR_MAX_LOOT == BR_GHOST_LOCAL_ID_BASE, BrLootAndGhostLocalIdsAreOneRun)
-bool8 BrGhosts_Insubstantial(u8 localId)
+bool8 BrGhosts_Ours(u8 localId)
 {
     return localId >= BR_EVENT_LOCAL_ID_BASE && localId < BR_GHOST_LOCAL_ID_BASE + BR_MAX_SEATS;
+}
+
+// A ghost never stops a step, loot does while A would take it, a trader always does. See
+// the header for why.
+bool8 BrGhosts_Passable(u8 localId)
+{
+    if (localId >= BR_GHOST_LOCAL_ID_BASE && localId < BR_GHOST_LOCAL_ID_BASE + BR_MAX_SEATS)
+        return TRUE;
+    if (localId >= BR_LOOT_LOCAL_ID_BASE && localId < BR_GHOST_LOCAL_ID_BASE)
+        return !BrLoot_Solid(localId);
+    return FALSE;
 }
 
 void BrGhosts_Tick(void)

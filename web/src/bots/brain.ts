@@ -306,6 +306,9 @@ export interface BotsOptions {
   /** A gate's boss standing as this piece (match/story.ts, storyGuard): his team, which
    *  the bot has to beat before it takes the piece. A loss puts it out, as it does a player. */
   guard?: (piece: { key: number; mapId: string; x: number; y: number }) => PackedMon[] | undefined;
+  /** A piece that stands as a person: a gift-giver, or a story's (match/story.ts,
+   *  storyPerson). He is solid whatever the bot may have of him, as he is in the ROM. */
+  person?: (piece: { key: number; mapId: string; x: number; y: number }) => boolean;
   /** world.json id -> the wire's group/num. */
   mapRef: (mapId: string) => MapRef | undefined;
   /** The events' traders nobody has traded with yet (speed-up 6b), in the page's space,
@@ -460,6 +463,9 @@ export class Bots {
   private readonly tradedKeys = new Set<number>();
   /** A* nodes left to settle in this tick (NODES_PER_TICK). */
   private budget = 0;
+  /** solid()'s answer for each bot, for this tick: the ground changes between ticks, not
+   *  between one bot's routes. */
+  private solidThisTick = new Map<number, Set<number>>();
   /** Nothing starts another bot-vs-bot fight before this (POK-273). Room-wide, not
    *  per bot: what needed slowing down was the rate the field eliminated itself at,
    *  and that is a property of the room. */
@@ -739,6 +745,7 @@ export class Bots {
   tick(now: number): void {
     this.now = now;
     this.budget = NODES_PER_TICK;
+    this.solidThisTick.clear();
     this.expireFights(now);
     // Both loops walk a snapshot: the fog and a lost duel both take a bot out of the
     // list mid-pass, and splicing the array being iterated skips whoever came next.
@@ -868,24 +875,11 @@ export class Bots {
     // where the bot is standing, because that is the position the room was told.
     if (this.tryEngage(walker, now)) return;
     // Loot at your feet, before anything else: a bot standing on a ball takes it, and
-    // that is the turn spent.
+    // that is the turn spent. A piece is solid, so a bot only stands on one that was
+    // dropped where it stood.
     const here = this.opts.loot?.at(walker.at.map, pageCell(walker.at.x, walker.at.y));
     if (here !== undefined && !this.opts.sealed?.({ key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y }, walker)) {
-      if (this.fightGuard(walker, here)) return;
-      // A bag on the ground gives up one item per press -- the ROM's own rule -- so
-      // the pickup names what was taken and the rest stays there (POK-237).
-      const item = this.opts.loot?.bagAt?.(here);
-      const last = item !== undefined && (this.opts.loot?.bagLeft?.(here) ?? 2) <= 1;
-      if (item !== undefined && !last) {
-        this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: here, item });
-        mergeBag(walker.bag, [{ id: item, n: 1 }]);
-        this.note(walker, 'pickup', `item ${item}`);
-      } else {
-        this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: here });
-        if (item !== undefined) mergeBag(walker.bag, [{ id: item, n: 1 }]);
-        this.note(walker, 'pickup', `key ${here}`);
-      }
-      walker.path = null;
+      this.takePiece(walker, { key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y });
       return;
     }
     if (this.tryTrade(walker)) return;
@@ -899,6 +893,7 @@ export class Bots {
       if (!walker.path || walker.path.steps.length === 0) return;
     }
     const step = walker.path.steps[walker.stepIndex];
+    if (this.solidAhead(walker, step)) return;
     // Somebody is already standing there. Two trainers never share a tile, and a pair
     // that swap through each other read as walking through a wall to anyone watching.
     // Drop the route and re-aim next step rather than shove.
@@ -932,6 +927,69 @@ export class Bots {
       p: 0, // a bot only ever walks, a tile per STEP_MS
     });
     this.wildHere(walker, now);
+  }
+
+  /** A piece taken the way a player's A takes one: a gate's boss fought first, then one
+   *  pickup -- the turn spent either way. */
+  private takePiece(walker: Walker, piece: { key: number; mapId: string; x: number; y: number }): void {
+    walker.path = null;
+    if (this.fightGuard(walker, piece)) return;
+    // A bag on the ground gives up one item per press -- the ROM's own rule -- so
+    // the pickup names what was taken and the rest stays there (POK-237).
+    const item = this.opts.loot?.bagAt?.(piece.key);
+    const last = item !== undefined && (this.opts.loot?.bagLeft?.(piece.key) ?? 2) <= 1;
+    if (item !== undefined && !last) {
+      this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: piece.key, item });
+      mergeBag(walker.bag, [{ id: item, n: 1 }]);
+      this.note(walker, 'pickup', `item ${item}`);
+    } else {
+      this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: piece.key });
+      if (item !== undefined) mergeBag(walker.bag, [{ id: item, n: 1 }]);
+      this.note(walker, 'pickup', `key ${piece.key}`);
+    }
+  }
+
+  /** The next step runs into something solid, as it would in a player's ROM
+   *  (BrGhosts_Passable): a piece this bot can have, which it turns to and takes from
+   *  where it stands, or a person or a trader it cannot deal with, and the route goes.
+   *  A piece it cannot have (storySealed) is walked over, as a player walks over a ball
+   *  A cannot lift. TRUE when the step is not taken. */
+  private solidAhead(walker: Walker, step: { dir: SeamDir; to: Spot }): boolean {
+    if (step.to.map !== walker.at.map) return false; // a door's landing is the far side's
+    const key = this.opts.loot?.at(step.to.map, pageCell(step.to.x, step.to.y));
+    const piece = key === undefined ? undefined : { key, mapId: step.to.map, x: step.to.x, y: step.to.y };
+    if (piece && !this.opts.sealed?.(piece, walker)) {
+      walker.facing = DIR_WIRE[step.dir];
+      const map = this.opts.mapRef(walker.at.map);
+      if (map) this.opts.send({ t: 'face', seat: walker.bot.seat, f: walker.facing, map });
+      this.takePiece(walker, piece);
+      return true;
+    }
+    if ((piece && this.opts.person?.(piece)) || (this.opts.traders?.() ?? []).some((t) => t.mapId === step.to.map && t.x === step.to.x && t.y === step.to.y)) {
+      walker.path = null;
+      return true;
+    }
+    return false;
+  }
+
+  /** The cells a route goes round, as path.ts's cell numbers: everything solidAhead
+   *  stops at. A route still ends ON its goal, which the step before it takes. */
+  private solid(walker: Walker): Set<number> {
+    const cached = this.solidThisTick.get(walker.bot.seat);
+    if (cached) return cached;
+    const world = this.opts.world;
+    const out = new Set<number>();
+    this.solidThisTick.set(walker.bot.seat, out);
+    const add = (mapId: string, x: number, y: number): void => {
+      const k = world.key({ map: mapId, x, y });
+      if (k >= 0) out.add(world.cellOf(k));
+    };
+    for (const l of this.opts.loot?.all() ?? []) {
+      if (this.opts.person?.(l) || !this.opts.sealed?.(l, walker)) add(l.mapId, l.x, l.y);
+    }
+    // Every trader standing, as in the ROM, not only the ones this bot could still use.
+    for (const t of this.opts.traders?.() ?? []) add(t.mapId, t.x, t.y);
+    return out;
   }
 
   /** Somebody's ROM took a patch (or this brain did): it is gone for everybody until the
@@ -1443,8 +1501,9 @@ export class Bots {
 
   /** A gate's boss on this piece: fight him first, the seeded resolver's way (duel.ts).
    *  TRUE when the bot lost and is out; a win leaves it hurt and the piece still to take. */
-  private fightGuard(walker: Walker, key: number): boolean {
-    const boss = this.opts.guard?.({ key, mapId: walker.at.map, x: walker.at.x, y: walker.at.y });
+  private fightGuard(walker: Walker, piece: { key: number; mapId: string; x: number; y: number }): boolean {
+    const key = piece.key;
+    const boss = this.opts.guard?.(piece);
     if (!boss || this.opts.seed === undefined) return false;
     this.nonce = (this.nonce + 1) & 0xffff;
     const result = duel(this.opts.seed, { seat: walker.bot.seat, party: walker.party }, { seat: GATE_SEAT, party: boss }, this.nonce);
@@ -1488,7 +1547,7 @@ export class Bots {
 
   /** findPath from where the bot stands, paid for out of the tick's budget. */
   private route(walker: Walker, to: Spot, cap: number): Path {
-    const path = findPath(this.opts.world, walker.at, to, cap, canSurf(walker.party), canCut(walker.party));
+    const path = findPath(this.opts.world, walker.at, to, cap, canSurf(walker.party), canCut(walker.party), this.solid(walker));
     this.budget -= path.visited;
     return path;
   }
@@ -1501,6 +1560,7 @@ export class Bots {
     const world = this.opts.world;
     const surf = canSurf(walker.party);
     const cut = canCut(walker.party);
+    const solid = this.solid(walker);
     // The most-wanted map that is not this one, and that we can actually get to.
     const wanted = new Map<string, number>();
     for (const t of targets) {
@@ -1538,7 +1598,7 @@ export class Bots {
       const asked = spotKey(over[0]);
       if (tried.has(asked)) continue;
       tried.add(asked);
-      const path = findPathToAny(world, walker.at, over, HOP_BUDGET, surf, cut);
+      const path = findPathToAny(world, walker.at, over, HOP_BUDGET, surf, cut, solid);
       this.budget -= path.visited;
       if (!path.found || path.steps.length === 0) continue;
       walker.path = path;

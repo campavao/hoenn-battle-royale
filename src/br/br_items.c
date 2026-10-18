@@ -181,6 +181,22 @@ u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text)
     return BR_ITEMS_TO_BAG;
 }
 
+bool8 BrItems_Fits(u16 item)
+{
+    u16 count = 1;
+
+    if (gBrMatch.phase != BR_PHASE_NONE)
+    {
+        if (Vitamin(item) >= 0 || InList(sSellItems, ARRAY_COUNT(sSellItems), item))
+            return TRUE; // used where it lies: nothing goes in the bag
+        if (InList(sStatusHeals, ARRAY_COUNT(sStatusHeals), item))
+            item = ITEM_FULL_RESTORE;
+        else if (GetItemPocket(item) == POCKET_POKE_BALLS && item != ITEM_MASTER_BALL)
+            count = BR_ITEMS_BALLS;
+    }
+    return CheckBagHasSpace(item, count);
+}
+
 bool8 BrItems_Arrive(u16 *item, u16 count)
 {
     u8 line[BR_HUD_LINE_MAX + 2];

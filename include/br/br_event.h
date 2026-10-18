@@ -31,7 +31,7 @@
 #define BR_EVENT_CLAIM_KEY(n) BR_EVENT_KEY(n, 14)
 
 // The traders' object local ids, 0xBC..0xBF: just below loot's 0xC0, so the run the match
-// puts on a map (none of it solid, br_ghosts.c) starts here.
+// puts on a map (BrGhosts_Ours) starts here.
 #define BR_EVENT_LOCAL_ID_BASE 0xBC
 
 // Where an event's trader stands, grid coords with MAP_OFFSET as a ghost's, and what he

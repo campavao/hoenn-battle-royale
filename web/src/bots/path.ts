@@ -136,7 +136,7 @@ interface Goal {
   stayOn: number;
 }
 
-function search(world: World, start: number, goal: Goal, maxVisited: number, surf: boolean, cut: boolean): Path {
+function search(world: World, start: number, goal: Goal, maxVisited: number, surf: boolean, cut: boolean, solid: ReadonlySet<number> | undefined): Path {
   const s = scratchFor(world);
   const { state, cost, from, heap } = s;
   const open = s.gen * 2;
@@ -173,6 +173,9 @@ function search(world: World, start: number, goal: Goal, maxVisited: number, sur
       // where this map's exits come out, and wandering onto the neighbour mid-search is
       // how a "route to the next map" becomes a route across Hoenn.
       if (goal.stayOn >= 0 && world.mapOf(to) !== goal.stayOn && !goal.any?.has(world.cellOf(to))) continue;
+      // Something standing there that a step stops at (brain.ts, solid): gone round,
+      // unless it is what the route is for.
+      if (solid !== undefined && solid.has(world.cellOf(to)) && world.cellOf(to) !== goal.cell && !goal.any?.has(world.cellOf(to))) continue;
       const was = state[to];
       if (was === settled) continue;
       if (was === open && cost[to] <= next) continue;
@@ -191,7 +194,15 @@ function nowhere(maxVisited: number): Path {
   return { steps: [], found: false, visited: maxVisited > 0 ? 1 : 0 };
 }
 
-export function findPath(world: World, from: Spot, to: Spot, maxVisited = DEFAULT_BUDGET, surf = false, cut = false): Path {
+export function findPath(
+  world: World,
+  from: Spot,
+  to: Spot,
+  maxVisited = DEFAULT_BUDGET,
+  surf = false,
+  cut = false,
+  solid?: ReadonlySet<number>,
+): Path {
   if (sameSpot(from, to)) return { steps: [], found: true, visited: 0 };
   const start = world.key(from);
   if (start < 0) return nowhere(maxVisited);
@@ -204,6 +215,7 @@ export function findPath(world: World, from: Spot, to: Spot, maxVisited = DEFAUL
     maxVisited,
     surf,
     cut,
+    solid,
   );
 }
 
@@ -221,7 +233,15 @@ export function findPath(world: World, from: Spot, to: Spot, maxVisited = DEFAUL
  *  cheap. That bound is the point: the searches this replaces were unbounded across
  *  Hoenn and cost about 8,800 nodes against a budget of 1,500.
  */
-export function findPathToAny(world: World, from: Spot, goals: readonly Spot[], maxVisited = DEFAULT_BUDGET, surf = false, cut = false): Path {
+export function findPathToAny(
+  world: World,
+  from: Spot,
+  goals: readonly Spot[],
+  maxVisited = DEFAULT_BUDGET,
+  surf = false,
+  cut = false,
+  solid?: ReadonlySet<number>,
+): Path {
   if (goals.length === 0) return { steps: [], found: false, visited: 0 };
   const wanted = new Set<number>();
   for (const g of goals) {
@@ -231,5 +251,5 @@ export function findPathToAny(world: World, from: Spot, goals: readonly Spot[], 
   const start = world.key(from);
   if (start >= 0 ? wanted.has(world.cellOf(start)) : goals.some((g) => sameSpot(g, from))) return { steps: [], found: true, visited: 0 };
   if (start < 0) return nowhere(maxVisited);
-  return search(world, start, { cell: -1, any: wanted, map: -1, x: 0, y: 0, stayOn: world.mapOf(start) }, maxVisited, surf, cut);
+  return search(world, start, { cell: -1, any: wanted, map: -1, x: 0, y: 0, stayOn: world.mapOf(start) }, maxVisited, surf, cut, solid);
 }

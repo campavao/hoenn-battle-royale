@@ -203,6 +203,8 @@ void BrLoot_DropKey(u16 key);
 // Take the piece under `key` on this map, as A at it would: a gate's boss handing over
 // what he held once he fell (br_story.c). FALSE: it is gone already, and nothing happens.
 bool8 BrLoot_TakeKey(u16 key);
+// Does the loot object with this local id stop a step? See br_loot.c.
+bool8 BrLoot_Solid(u8 localId);
 
 // BR_EventScript_Gift's hand-over, once a gift-giver has said his line (POK-355).
 void BrLoot_GiftTake(void);

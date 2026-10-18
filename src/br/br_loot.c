@@ -542,11 +542,25 @@ static const s8 sSpillDx[] = { 0, 1, -1, 0,  0, 1, -1,  1, -1, 2, -2,  0,  0 };
 static const s8 sSpillDy[] = { 0, 0,  0, 1, -1, 1,  1, -1, -1, 0,  0,  2, -2 };
 #define BR_SPILL_CELLS (sizeof(sSpillDx) / sizeof(sSpillDx[0]))
 
+// A warp's own cell: a piece is solid now (BrLoot_Solid), and one on a doorstep or a
+// cave mouth would stand in the way in. The page's spillCells skips them too.
+static bool8 OnWarp(s16 x, s16 y)
+{
+    u8 i;
+
+    for (i = 0; i < gMapHeader.events->warpCount; i++)
+    {
+        if (gMapHeader.events->warps[i].x + MAP_OFFSET == x && gMapHeader.events->warps[i].y + MAP_OFFSET == y)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 static bool8 CellFree(s16 x, s16 y, const s16 *usedX, const s16 *usedY, u8 used)
 {
     u8 i;
 
-    if (MapGridGetCollisionAt(x, y) != 0 || BrLoot_At(x, y) != NULL)
+    if (MapGridGetCollisionAt(x, y) != 0 || BrLoot_At(x, y) != NULL || OnWarp(x, y))
         return FALSE;
     for (i = 0; i < used; i++)
     {
@@ -566,6 +580,31 @@ static bool8 NextCell(s16 ox, s16 oy, u8 *cell, const s16 *usedX, const s16 *use
         s16 y = oy + sSpillDy[*cell];
 
         (*cell)++;
+        if (CellFree(x, y, usedX, usedY, used))
+        {
+            *outX = x;
+            *outY = y;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+// Round somebody still standing (a winner's spoils, a mon released, a TM forgotten): the
+// diagonals before the cells beside them, so a piece is solid without boxing them in. Six
+// spoils fill the four corners and two sides, and leave the other two open. sSpillDx's
+// index for each, in the order they are tried.
+static const u8 sAround[] = { 5, 6, 7, 8, 1, 2, 3, 4, 9, 10, 11, 12 };
+
+static bool8 NextCellAround(s16 ox, s16 oy, u8 *i, const s16 *usedX, const s16 *usedY, u8 used,
+                            s16 *outX, s16 *outY)
+{
+    while (*i < ARRAY_COUNT(sAround))
+    {
+        s16 x = ox + sSpillDx[sAround[*i]];
+        s16 y = oy + sSpillDy[sAround[*i]];
+
+        (*i)++;
         if (CellFree(x, y, usedX, usedY, used))
         {
             *outX = x;
@@ -1013,6 +1052,37 @@ static void TryTake(void)
     Take(it);
 }
 
+// Solid when A would take it (Cam, 2026-10-18: "let's make all items collidable. I hate
+// walking thru things I can pick up or people I can talk to"). A person always is: he
+// talks, whatever he then says. A ball or a bag is solid while it is yours for a press,
+// so you face it and take it, and the press is what clears the way. One A cannot take --
+// a TM you have or nobody here learns, a pocket with no room, a piece a gate's boss still
+// guards, a ball for a full party -- is walked over as before: the drop deals balls onto any open cell, a cave's
+// one-wide passage included, and a ball nobody can lift there would wall it off for good.
+bool8 BrLoot_Solid(u8 localId)
+{
+    const struct BrLootItem *it;
+
+    if (localId < BR_LOOT_LOCAL_ID_BASE || localId >= BR_LOOT_LOCAL_ID_BASE + BR_MAX_LOOT)
+        return FALSE;
+    it = &gBrLoot.items[localId - BR_LOOT_LOCAL_ID_BASE];
+    if (it->kind == BR_LOOT_NONE)
+        return FALSE;
+    if (BR_LOOT_IS_GIFT(it->key) || BrStory_Person(it))
+        return TRUE;
+    if (BrStory_Guarded(it))
+        return FALSE;
+    if ((it->kind == BR_LOOT_ITEM || OneThing(it)) && BrMoves_IsTm(it->species))
+        return !CheckBagHasItem(it->species, 1) && BrMoves_Teachable(it->species);
+    if (it->kind == BR_LOOT_ITEM)
+        return BrItems_Fits(it->species);
+    // A full party takes a ball only by giving one up, and the one given up lands beside
+    // you too: walls round a winner who said B to the spoils.
+    if (it->kind == BR_LOOT_MON)
+        return CalculatePlayerPartyCount() < PARTY_SIZE;
+    return TRUE;
+}
+
 bool8 BrLoot_TakeKey(u16 key)
 {
     u8 i;
@@ -1307,8 +1377,7 @@ void BrLoot_Released(struct Pokemon *mon)
     // that is still full, which asks you to release again. Starting one cell out keeps
     // the trace without the loop. If nothing within reach is free the mon stays in its
     // ball rather than falling into a wall.
-    cell = 1;
-    if (!NextCell(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
+    if (!NextCellAround(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
         return;
 
     buf[len++] = gBrMySeat;
@@ -1340,12 +1409,12 @@ void BrLoot_DropItem(u16 item)
     u8 buf[4 + 1 + 6 + 1 + 3 + 4 + 1];
     struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
     s16 usedX[BR_SPILL_CELLS], usedY[BR_SPILL_CELLS];
-    u8 len = 0, cell = 1;
+    u8 len = 0, cell = 0;
     s16 x, y;
 
     if (item == ITEM_NONE)
         return;
-    if (!NextCell(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
+    if (!NextCellAround(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, 0, &x, &y))
     {
         x = self->currentCoords.x;
         y = self->currentCoords.y;
@@ -1449,7 +1518,7 @@ static void DropSpoils(void)
     struct ObjectEvent *self = &gObjectEvents[gPlayerAvatar.objectEventId];
     const struct BrSeat *loser = &gBrSeats[sSpoilsSeat];
     u16 len = 0;
-    u8 count = 0, used = 0, cell = 1, i;
+    u8 count = 0, used = 0, cell = 0, i;
     s16 x, y;
 
     if (loser->mapGroup == gSaveBlock1Ptr->location.mapGroup
@@ -1465,7 +1534,7 @@ static void DropSpoils(void)
     len++; // count, below
     for (i = 0; i < sSpoilsCount; i++)
     {
-        if (!NextCell(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, used, &x, &y))
+        if (!NextCellAround(self->currentCoords.x, self->currentCoords.y, &cell, usedX, usedY, used, &x, &y))
             break; // boxed in: the rest stay in their balls, as a spill of our own would
         usedX[used] = x;
         usedY[used] = y;
