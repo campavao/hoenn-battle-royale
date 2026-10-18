@@ -17,8 +17,9 @@
 // key, which also un-grays its event's mark).
 //
 // A legendary in a fallen trainer's team, or one released, stays a ball: somebody caught
-// it already. One with no overworld sprite stays a ball too; every one the match deals
-// today has one (web/src/match/legends.ts holds the same table for the page).
+// it already. One a story's person stands as (MAXIE with GROUDON) is his to hand over.
+// One with no overworld sprite would stay a ball too; every one the match deals today has
+// one (web/src/match/legends.ts holds the same table for the page).
 
 void BrLegend_Init(void);
 // Each frame: a put-back the ring had no room for goes out.
@@ -29,6 +30,8 @@ u8 BrLegend_Gfx(const struct BrLootItem *it);
 void BrLegend_Challenge(const struct BrLootItem *it);
 // The script's special, after the cry: VAR_RESULT FALSE when somebody took it meanwhile.
 void BrLegend_Battle(void);
+// Somebody's PICKUP: a lower seat that claimed the one we are fighting puts it back, not us.
+void BrLegend_NoteTaken(u16 key, u8 seat);
 // The release screen a full party's catch asked was cancelled (br_catch.c): back it goes.
 void BrLegend_CatchCancelled(void);
 

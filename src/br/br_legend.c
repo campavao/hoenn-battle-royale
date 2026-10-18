@@ -16,6 +16,7 @@
 #include "br/br_legend.h"
 #include "br/br_levels.h"
 #include "br/br_loot.h"
+#include "br/br_story.h"
 #include "br/br_wire.h"
 #include "br/br_wire_c.h"
 
@@ -30,7 +31,8 @@ struct BrLegend
     /* 10 */ u8 level;     // the piece's own, 0 for "the rung"
     /* 11 */ u8 state;     // BR_LEGEND_*
     /* 12 */ MainCallback end; // what the battle would have returned through
-};                            // 16 bytes
+    /* 16 */ bool8 yield;  // a lower seat claimed it too: putting it back is theirs
+};                            // 20 bytes
 
 #define BR_LEGEND_NONE 0
 #define BR_LEGEND_FIGHTING 1 // claimed, its battle on
@@ -72,8 +74,9 @@ u8 BrLegend_Gfx(const struct BrLootItem *it)
 {
     u8 i;
 
-    // The match's own, not a ball out of somebody's team.
-    if (it->kind != BR_LOOT_MON || !(it->key & BR_LOOT_KEY_NOBODY))
+    // The match's own, not a ball out of somebody's team; and not one a story's person
+    // stands as and hands over (br_story.c: MAXIE holding GROUDON is a fight already).
+    if (it->kind != BR_LOOT_MON || !(it->key & BR_LOOT_KEY_NOBODY) || BrStory_Person(it) != 0)
         return 0;
     for (i = 0; i < ARRAY_COUNT(sLegends); i++)
     {
@@ -95,8 +98,6 @@ void BrLegend_Challenge(const struct BrLootItem *it)
     sLegend.mapNum = it->mapNum;
     sLegend.level = it->level;
     gSpecialVar_0x8004 = it->species;
-    if (it->objId != BR_NO_OBJ)
-        gSpecialVar_LastTalked = gObjectEvents[it->objId].localId;
     ScriptContext_SetupScript(BR_EventScript_Legend);
 }
 
@@ -129,7 +130,9 @@ static bool8 PutBack(void)
 // comes back to the script.
 static void CB2_EndLegendBattle(void)
 {
-    if (gBattleOutcome != B_OUTCOME_CAUGHT)
+    if (sLegend.yield)
+        sLegend.state = BR_LEGEND_NONE;
+    else if (gBattleOutcome != B_OUTCOME_CAUGHT)
         sLegend.state = BR_LEGEND_PUT_BACK;
     else if (gBrCatch.pending)
         sLegend.state = BR_LEGEND_PARKED; // BrCatch_Apply says which way it went
@@ -140,14 +143,30 @@ static void CB2_EndLegendBattle(void)
     sLegend.end();
 }
 
+// Still on the ground here, by its key: another piece can have landed on its cell.
+static bool8 StillHere(void)
+{
+    u8 i;
+
+    for (i = 0; i < BR_MAX_LOOT; i++)
+    {
+        const struct BrLootItem *it = &gBrLoot.items[i];
+
+        if (it->kind == BR_LOOT_MON && it->key == sLegend.key
+         && it->mapGroup == gSaveBlock1Ptr->location.mapGroup && it->mapNum == gSaveBlock1Ptr->location.mapNum)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 void BrLegend_Battle(void)
 {
-    struct BrLootItem *it = BrLoot_At(sLegend.x, sLegend.y);
     u8 level = BrLevels_WildLevel();
 
-    // Somebody else's battle took it while it cried, or a full ring has no room for the
-    // PICKUP that says it is ours: nothing starts.
-    gSpecialVar_Result = it != NULL && it->key == sLegend.key && BrWire_CanHold(8);
+    // Somebody else's battle took it while it cried, or the ring cannot take the PICKUP
+    // that says it is ours straight away: nothing starts. Straight away, not held, so the
+    // SPILL that may put it back can never reach the room ahead of the claim.
+    gSpecialVar_Result = StillHere() && BrWire_Clear();
     if (!gSpecialVar_Result)
         return;
     // As strong as the ring is now, or as it was when it fell if that is more.
@@ -155,6 +174,7 @@ void BrLegend_Battle(void)
         level = sLegend.level;
     BrLoot_ClaimKey(sLegend.key);
     sLegend.state = BR_LEGEND_FIGHTING;
+    sLegend.yield = FALSE;
     CreateScriptedWildMon(sLegend.species, level, ITEM_NONE);
     switch (sLegend.species)
     {
@@ -177,10 +197,22 @@ void BrLegend_Battle(void)
 
 void BrLegend_CatchCancelled(void)
 {
-    if (sLegend.state != BR_LEGEND_PARKED)
+    if (sLegend.state != BR_LEGEND_PARKED || sLegend.yield)
         return;
     sLegend.state = BR_LEGEND_PUT_BACK;
     PutBack();
+}
+
+// Two trainers who pressed A on it within one round trip both claimed it and are both
+// fighting it, and both putting it back would stand two on the ground. Every ROM settles
+// it the same way, by seat: the lower one's put-back stands, the higher one lets go.
+void BrLegend_NoteTaken(u16 key, u8 seat)
+{
+    if (sLegend.state == BR_LEGEND_NONE || key != sLegend.key || seat >= gBrMySeat)
+        return;
+    sLegend.yield = TRUE;
+    if (sLegend.state == BR_LEGEND_PUT_BACK)
+        sLegend.state = BR_LEGEND_NONE;
 }
 
 void BrLegend_Tick(void)

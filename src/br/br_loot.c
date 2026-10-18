@@ -515,6 +515,7 @@ static void HandlePickup(const u8 *payload, u8 len)
     BrBalls_NoteTaken(BrWire_ReadU16(d + 1));
     BrPatch_NoteTaken(BrWire_ReadU16(d + 1)); // ...and a patch somebody's battle started on
     BrEvent_NoteTaken(BrWire_ReadU16(d + 1), d[0]); // ...and an event's legendary, for its mark
+    BrLegend_NoteTaken(BrWire_ReadU16(d + 1), d[0]); // ...and one we are fighting too
     it = Find(BrWire_ReadU16(d + 1));
     if (it == NULL)
         return;

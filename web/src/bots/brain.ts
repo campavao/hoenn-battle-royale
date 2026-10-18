@@ -878,7 +878,9 @@ export class Bots {
     const here = this.opts.loot?.at(walker.at.map, pageCell(walker.at.x, walker.at.y));
     if (here !== undefined && !this.opts.sealed?.({ key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y }, walker)) {
       if (this.fightGuard(walker, here)) return;
-      if (this.opts.loot?.legend?.(here)) {
+      // A gate's boss hands his over once beaten (br_legend.c leaves a person's piece be).
+      const held = this.opts.guard?.({ key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y });
+      if (!held && this.opts.loot?.legend?.(here)) {
         this.fightLegend(walker, here, now);
         return;
       }

@@ -65,6 +65,11 @@ bool8 BrWire_CanHold(u8 len)
     return (sHeldLen == 0 && RingHasRoom()) || sHeldLen + 2 + len <= BR_HELD_BYTES;
 }
 
+bool8 BrWire_Clear(void)
+{
+    return sHeldLen == 0 && RingHasRoom();
+}
+
 bool8 BrWire_SendOrHold(u8 type, const u8 *data, u8 len)
 {
     u8 i;
