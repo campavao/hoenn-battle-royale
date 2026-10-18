@@ -44,6 +44,8 @@ export const claimOf = (key: number): number | undefined =>
 export const homeKey = (i: number): number => 0x8c00 | i;
 export const homeClaimOf = (key: number): number | undefined => ((key & 0xffc0) === 0x8c40 ? key & 0x3f : undefined);
 const isHomeKey = (key: number): boolean => (key & 0xffc0) === 0x8c00;
+/** Either of his: the house's own key or an ask for it. */
+export const isHomeOrClaim = (key: number): boolean => (key & 0xff80) === 0x8c00;
 
 /** One trade a trader (POK-392), and one Pokemon a house (POK-379). Two players at him at
  *  once both found him standing and both traded, so a ROM asks first, with a PICKUP of

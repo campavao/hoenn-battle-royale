@@ -50,7 +50,8 @@ import {
 } from './match/room';
 import { AwayDoor } from './match/away';
 import { Stage, type DrawnScreen } from './ui/stage';
-import { ParadeHold, ReplayHold, fameOf, resultsScreen, resultsView, type ResultsModel } from './ui/results';
+import { ParadeHold, ReplayHold } from './ui/results-hold';
+import type { ResultsModel } from './ui/results';
 import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
 import { KeyLegend } from './ui/keys';
 import { stageKey } from './ui/roomkeys';
@@ -1655,6 +1656,9 @@ function resultsShowing(): boolean {
  *  parade runs on the winner's screen, and this is the only place the room sees what
  *  took the match) and what you did in there (POK-303: RINGS is an answer even at zero).
  *  `held` is the champion's own, before their Hall of Fame is over: nothing covers it. */
+let resultsUi: typeof import('./ui/results') | undefined;
+let resultsUiReady: Promise<void> | undefined;
+
 function renderResults(
   seat: number,
   roster: Roster,
@@ -1670,6 +1674,16 @@ function renderResults(
 ): void {
   const mine = books.results.forSeat(seat, performance.now());
   if (!mine.ended || shown.held) return;
+  // The screen is a chunk of its own (POK-407), fetched the first time it is wanted: it
+  // draws once that lands, from the books as they are then.
+  if (resultsUi === undefined) {
+    resultsUiReady ??= import('./ui/results').then((m) => {
+      resultsUi = m;
+    });
+    void resultsUiReady.then(() => renderResults(seat, roster, books, shown));
+    return;
+  }
+  const { fameOf, resultsScreen, resultsView } = resultsUi;
   const nameOf = (s: number) => roster.nameOf(s);
   const model: ResultsModel = {
     view: resultsView(mine, books.fieldSize, seat, nameOf, books.seed),
