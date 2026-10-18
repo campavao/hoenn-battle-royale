@@ -24,7 +24,11 @@ hold RIGHT 16
 wait 20
 hold RIGHT 16
 wait 20
+hold RIGHT 16
+wait 20
 hold UP 48
+wait 20
+hold LEFT 16
 wait 20
 hold LEFT 1
 wait 20

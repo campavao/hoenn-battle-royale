@@ -43,7 +43,7 @@ export const claimOf = (key: number): number | undefined =>
  *  The page never deals them -- the ROMs do, from the seed -- and only answers the ask. */
 export const homeKey = (i: number): number => 0x8c00 | i;
 export const homeClaimOf = (key: number): number | undefined => ((key & 0xffc0) === 0x8c40 ? key & 0x3f : undefined);
-const isHomeKey = (key: number): boolean => (key & 0xffc0) === 0x8c00;
+export const isHomeKey = (key: number): boolean => (key & 0xffc0) === 0x8c00;
 /** Either of his: the house's own key or an ask for it. */
 export const isHomeOrClaim = (key: number): boolean => (key & 0xff80) === 0x8c00;
 

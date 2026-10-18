@@ -1120,7 +1120,7 @@ bool8 BrLoot_Solid(u8 localId)
     it = &gBrLoot.items[localId - BR_LOOT_LOCAL_ID_BASE];
     if (it->kind == BR_LOOT_NONE)
         return FALSE;
-    if (BR_LOOT_IS_GIFT(it->key) || BrStory_Person(it))
+    if (BR_LOOT_IS_GIFT(it->key) || BR_LOOT_IS_HOME(it->key) || BrStory_Person(it))
         return TRUE;
     if (BrStory_Guarded(it))
         return FALSE;
