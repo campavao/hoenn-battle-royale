@@ -97,6 +97,13 @@ describe('the record card', () => {
     expect(rec.forSeat(1).took).toBe(1);
   });
 
+  it("does not count somebody at home's Pokemon, nor the ask for him, as something taken (POK-379)", () => {
+    const rec = new MatchRecord();
+    rec.start();
+    feed(rec, [pickup(1, 0x8c61), pickup(1, 0x8c21), pickup(1, 0x8c21), pickup(1, 0x8d21)]);
+    expect(rec.forSeat(1).took, 'the house cache still counts').toBe(1);
+  });
+
   it('gives a seat that did nothing a record of doing nothing', () => {
     const rec = new MatchRecord();
     rec.start();

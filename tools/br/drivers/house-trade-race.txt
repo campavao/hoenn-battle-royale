@@ -1,0 +1,55 @@
+# house-trade-race: somebody else trades with him while we are in the party menu. Their
+# PICKUP of his key takes him off our map, ours is refused -- "HE HAS ALREADY TRADED" --
+# and our TREECKO stays ours.
+#
+# house-trade's walk and seed.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 08 02 03 00 06 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1072
+wait 30
+hold DOWN 90
+wait 200
+hold UP 40
+wait 200
+expect u8 gPlayerPartyCount 1
+expect u16 gBrLoot+20 0x8C21
+expect u16 gBrLoot+26 64
+expect u8 gBrLoot+31 1
+hold UP 34
+wait 20
+hold RIGHT 16
+wait 20
+hold RIGHT 16
+wait 20
+hold UP 48
+wait 20
+hold LEFT 1
+wait 20
+shot trader
+copy gPlayerParty+500 gPlayerParty 4
+tap A
+wait 90
+tap A
+wait 30
+tap A
+wait 90
+shot race-picker
+pokebytes gDecompressionBuffer 01 21 8C 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 10
+expect u8 gBrLoot+31 0
+tap A
+wait 120
+shot race-refused
+expectsame u32 gPlayerParty gPlayerParty+500
+expect u8 gPlayerPartyCount 1
+# ...and the field is ours once the box is closed: a step down is a step
+tap A
+wait 60
+expect u16 *gSaveBlock1Ptr+2 3
+hold DOWN 24
+wait 30
+expect u16 *gSaveBlock1Ptr+2 4
+say house trade race ok

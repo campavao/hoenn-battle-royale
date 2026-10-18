@@ -12,6 +12,7 @@
 #include "constants/region_map_sections.h"
 #include "constants/metatile_behaviors.h"
 #include "constants/items.h"
+#include "constants/species.h"
 #include "constants/vars.h"
 #include "br/br_balls.h"
 #include "br/br_items.h"
@@ -301,8 +302,9 @@ static bool8 CacheCellOk(s16 x, s16 y)
     return TRUE;
 }
 
-// From the middle of the room outward, a ring at a time, each ring row by row.
-static bool8 CacheCell(s16 *outX, s16 *outY)
+// From the middle of the room outward, a ring at a time, each ring row by row, past the
+// first `skip` cells that would do.
+static bool8 CacheCell(s16 *outX, s16 *outY, u8 skip)
 {
     s16 w = gMapHeader.mapLayout->width, h = gMapHeader.mapLayout->height;
     s16 cx = w / 2 + MAP_OFFSET, cy = h / 2 + MAP_OFFSET;
@@ -316,7 +318,7 @@ static bool8 CacheCell(s16 *outX, s16 *outY)
             {
                 if (dx != -r && dx != r && dy != -r && dy != r)
                     continue;
-                if (CacheCellOk(cx + dx, cy + dy))
+                if (CacheCellOk(cx + dx, cy + dy) && skip-- == 0)
                 {
                     *outX = cx + dx;
                     *outY = cy + dy;
@@ -328,9 +330,50 @@ static bool8 CacheCell(s16 *outX, s16 *outY)
     return FALSE;
 }
 
+// ---- somebody at home --------------------------------------------------------------
+//
+// Cam, 2026-10-13, again 2026-10-18 (POK-379): people in houses trade or give Pokemon.
+// One house in eight has somebody home, the same eighth for every ROM, and he stands
+// beside the cache with a Pokemon: half of them give it to the first trainer who talks to
+// them, half trade it for one of theirs. Once, for everybody, by the cache's rule. What
+// they have is what Hoenn's own people give and trade: a starter, Kanto's or Hoenn's, a
+// CASTFORM or a SNORLAX, or one that evolves on the way over (br_loot.c, TradedInto).
+#define BR_HOME_IN 8
+// ...and so do the keys, 0x8C00 | house, in their byte below the caches' (br_loot.h).
+STATIC_ASSERT((ARRAY_COUNT(sHouses) + BR_HOME_IN - 1) / BR_HOME_IN <= 8, BrHomeBitsFitAByte)
+
+static const u16 sHomeMons[] =
+{
+    SPECIES_TREECKO, SPECIES_TORCHIC, SPECIES_MUDKIP,
+    SPECIES_BULBASAUR, SPECIES_CHARMANDER, SPECIES_SQUIRTLE,
+    SPECIES_KADABRA, SPECIES_MACHOKE, SPECIES_GRAVELER, SPECIES_HAUNTER,
+    SPECIES_CASTFORM, SPECIES_SNORLAX,
+};
+
+// A bit for each house that has somebody home, by house / BR_HOME_IN.
+static EWRAM_DATA u8 sHomeTaken = 0;
+
+static bool8 Home(u8 house)
+{
+    return house % BR_HOME_IN == Mix(gBrMatch.seed ^ 0x40E) % BR_HOME_IN;
+}
+
+static u32 HomeDraw(u8 house)
+{
+    return Mix(gBrMatch.seed ^ 0x40E5 ^ house);
+}
+
+bool8 BrBalls_Trades(u16 key)
+{
+    u16 i = key - BR_LOOT_KEY_HOME(0);
+
+    return BR_LOOT_IS_HOME(key) && i < ARRAY_COUNT(sHouses) && (Mix(HomeDraw(i)) & 1);
+}
+
 void BrBalls_Init(void)
 {
     CpuFill32(0, sCacheTaken, sizeof(sCacheTaken));
+    sHomeTaken = 0;
     sCacheMap = 0xFFFF; // no map is (0xFF, 0xFF)
 }
 
@@ -340,6 +383,9 @@ void BrBalls_NoteTaken(u16 key)
 
     if ((key & 0xFF00) == BR_LOOT_KEY_CACHE(0) && i < ARRAY_COUNT(sHouses))
         sCacheTaken[i / 8] |= 1 << (i % 8);
+    i = key - BR_LOOT_KEY_HOME(0);
+    if (BR_LOOT_IS_HOME(key) && i < ARRAY_COUNT(sHouses))
+        sHomeTaken |= 1 << (i / BR_HOME_IN);
 }
 
 void BrBalls_Tick(void)
@@ -352,11 +398,18 @@ void BrBalls_Tick(void)
         return;
     house = HouseIndex(sCacheMap);
     if (house >= 0)
+    {
         BrLoot_DropKey(BR_LOOT_KEY_CACHE(house));
+        BrLoot_DropKey(BR_LOOT_KEY_HOME(house));
+    }
     sCacheMap = here;
     house = HouseIndex(here);
-    if (house < 0 || (sCacheTaken[house / 8] & (1 << (house % 8))))
+    if (house < 0)
         return;
-    if (CacheCell(&x, &y))
+    if (!(sCacheTaken[house / 8] & (1 << (house % 8))) && CacheCell(&x, &y, 0))
         BrLoot_AddItem(BR_LOOT_KEY_CACHE(house), group, num, x, y, CacheItem(house));
+    // The next cell out from the cache's, taken or not, so he stands where he stood.
+    if (Home(house) && !(sHomeTaken & (1 << (house / BR_HOME_IN))) && CacheCell(&x, &y, 1))
+        BrLoot_AddMon(BR_LOOT_KEY_HOME(house), group, num, x, y,
+                      sHomeMons[HomeDraw(house) % ARRAY_COUNT(sHomeMons)], 0);
 }
