@@ -41,8 +41,21 @@ static EWRAM_DATA u32 sOutSeats = 0;
 static EWRAM_DATA u8 sPace[BR_MAX_SEATS] = {0};
 // The pace each seat says it is going at, off its last STEP (POK-376): BR_PACE_* or
 // BR_GAIT_UNKNOWN for a sender that did not say. PaceWalk never walks a ghost slower.
-static EWRAM_DATA u8 sGait[BR_MAX_SEATS] = {0};
-#define BR_GAIT_UNKNOWN 0xFF
+// Two bits a seat, four seats a byte: EWRAM is down to its last hundred bytes.
+static EWRAM_DATA u8 sGait[BR_MAX_SEATS / 4] = {0};
+#define BR_GAIT_UNKNOWN 3
+
+static u8 GaitOf(u8 seat)
+{
+    return (sGait[seat >> 2] >> ((seat & 3) * 2)) & 3;
+}
+
+static void SetGait(u8 seat, u8 gait)
+{
+    u8 shift = (seat & 3) * 2;
+
+    sGait[seat >> 2] = (sGait[seat >> 2] & ~(3 << shift)) | (gait << shift);
+}
 
 // Skin -> object event graphics. Index 0 is the default; the shell's career picks.
 // The wardrobe (POK-282). Cam: "I should be able to pick kind of like any sprites -- the
@@ -440,7 +453,7 @@ static void HandleStep(const u8 *payload, u8 len)
 
     if (n < 8 || d[0] >= BR_MAX_SEATS)
         return;
-    sGait[d[0]] = (n >= 9 && d[8] <= BR_PACE_FASTER) ? d[8] : BR_GAIT_UNKNOWN;
+    SetGait(d[0], (n >= 9 && d[8] <= BR_PACE_FASTER) ? d[8] : BR_GAIT_UNKNOWN);
     s = &gBrSeats[d[0]];
     x = (s16)BrWire_ReadU16(d + 2);
     y = (s16)BrWire_ReadU16(d + 4);
@@ -531,7 +544,7 @@ void BrGhosts_Init(void)
         gBrSeats[i].queued = 0;
         gBrSeatBusy[i] = BR_BUSY_MAP;
         sPace[i] = 0;
-        sGait[i] = BR_GAIT_UNKNOWN;
+        SetGait(i, BR_GAIT_UNKNOWN);
     }
     gBrOwnEvents = 0;
     sOwnValid = FALSE;
@@ -697,7 +710,7 @@ static u8 PaceWalk(u8 seat, u8 dir)
     u8 pace = sPace[seat] & BR_PACE_MASK;
     u8 idle = sPace[seat] >> 2;
     u8 behind = gBrSeats[seat].queued;
-    u8 gait = sGait[seat];
+    u8 gait = GaitOf(seat);
 
     if (behind >= BR_PACE_FASTER_AT)
         pace = BR_PACE_FASTER;

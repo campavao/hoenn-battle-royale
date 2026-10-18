@@ -72,8 +72,6 @@ static EWRAM_DATA u8 sTurnBuf[BR_CAP_TURN] = {0};
 // goes out before anything newer, or it would be gone -- the delta's cursor had already
 // moved past it (POK-330 #12).
 static EWRAM_DATA u8 sTurnLen = 0;
-// The action bytes in that TURN, which gBrSpectate.bytes counts: not its turn check.
-static EWRAM_DATA u8 sTurnActions = 0;
 static EWRAM_DATA struct BrAssembler sBstartAsm = {0};
 static void CloseWatchMenu(void);
 static EWRAM_DATA struct BrAssembler sTurnAsm = {0};
@@ -81,9 +79,11 @@ static EWRAM_DATA struct BrAssembler sTurnAsm = {0};
 // The turn checks (POK-376, BR_SPECTATE_CHECK). The fighter's sum for each turn arrives
 // before the replay gets there, as a rule -- the replay runs a turn behind -- but a replay
 // with its animations on can be overtaken by a fighter with them off, so each side's sums
-// are held by turn and compared once both are in. Eight turns is far more than a replay
-// trails by; a late watcher's catch-up compares as it goes.
-#define BR_CHECK_SLOTS 8
+// are held by turn and compared once both are in. Four turns is more than a replay trails
+// by; a late watcher's catch-up compares the ones it can and skips the rest. The replay's
+// own is one: the fighter's sum for a turn rides in the TURN that carries the next one's
+// actions, so the replay cannot end another turn before it has the sum for this one.
+#define BR_CHECK_SLOTS 4
 struct BrTurnCheck
 {
     u8 turn;
@@ -91,24 +91,23 @@ struct BrTurnCheck
     u16 sum;
 };
 static EWRAM_DATA struct BrTurnCheck sTheirs[BR_CHECK_SLOTS] = {0};
-static EWRAM_DATA struct BrTurnCheck sOurs[BR_CHECK_SLOTS] = {0};
+// Our own sum: a replay's for the turn it just played, a fighter's for the turn that just
+// ended, until a TURN carries it out. Nobody is both at once.
+static EWRAM_DATA struct BrTurnCheck sMine = {0};
 // The battle's turn counter as last summed: by a fighter, the last turn it sent the sum
 // of; by a replay, the last turn it summed its own.
 static EWRAM_DATA u8 sCheckTurn = 0;
-// The counter has been seen at 0 in this battle. Until BattleStartClearSetData zeroes it,
-// some frames into the battle, it is the last battle's count, and summing that "turn"
-// would hold a sum of nothing against the fighter's real one.
-static EWRAM_DATA bool8 sCheckArmed = FALSE;
-// A fighter's sum the ring had no room for: taken as the turn ended, and sent as it was.
-static EWRAM_DATA struct BrTurnCheck sSendCheck = {0};
-// Frames the replay has sat on a choice that has not come (BR_JANK_STALL_SECS), and the
-// frames towards the next second watched.
+// BR_CHECK_ARMED: the counter has been seen at 0 in this battle. Until
+// BattleStartClearSetData zeroes it, some frames into the battle, it is the last battle's
+// count, and summing that "turn" would hold a sum of nothing against the fighter's real one.
+// BR_CLOCK_SEEN: the watched fighter has published a shot clock in this watch. Only a link
+// fight has one; a fight against a bot or a wild mon has no limit on choosing, and a
+// trainer who thinks for a minute is not a replay that stalled.
+static EWRAM_DATA u8 sCheckFlags = 0;
+#define BR_CHECK_ARMED (1 << 0)
+#define BR_CLOCK_SEEN  (1 << 1)
+// Frames the replay has sat on a choice that has not come (BR_JANK_STALL_SECS).
 static EWRAM_DATA u16 sStarvedFrames = 0;
-// The watched fighter has published a shot clock in this watch. Only a link fight has
-// one; a fight against a bot or a wild mon has no limit on choosing, and a trainer who
-// thinks for a minute is not a replay that stalled.
-static EWRAM_DATA bool8 sClockSeen = FALSE;
-static EWRAM_DATA u8 sWatchFrames = 0;
 
 // Every battler's species and HP as a turn ends, summed so the order the battlers are in
 // does not matter: the replay sits on the fighter's side of the field whichever seat it
@@ -123,10 +122,8 @@ static u16 TurnSum(void)
     return sum;
 }
 
-static void HoldCheck(struct BrTurnCheck *slots, u8 turn, u16 sum)
+static void HoldCheck(struct BrTurnCheck *slot, u8 turn, u16 sum)
 {
-    struct BrTurnCheck *slot = &slots[turn % BR_CHECK_SLOTS];
-
     slot->turn = turn;
     slot->sum = sum;
     slot->have = TRUE;
@@ -137,12 +134,10 @@ static void ClearChecks(void)
     u8 i;
 
     for (i = 0; i < BR_CHECK_SLOTS; i++)
-    {
         sTheirs[i].have = FALSE;
-        sOurs[i].have = FALSE;
-    }
+    sMine.have = FALSE;
     sCheckTurn = 0;
-    sCheckArmed = FALSE;
+    sCheckFlags &= ~BR_CHECK_ARMED;
 }
 
 // TRUE the frame a turn ends, its number in sCheckTurn: the battle's counter moved, once
@@ -151,11 +146,11 @@ static bool8 TurnEnded(void)
 {
     u8 turn = gBattleResults.battleTurnCounter;
 
-    if (!sCheckArmed)
+    if (!(sCheckFlags & BR_CHECK_ARMED))
     {
         if (turn == 0)
         {
-            sCheckArmed = TRUE;
+            sCheckFlags |= BR_CHECK_ARMED;
             sCheckTurn = 0;
         }
         return FALSE;
@@ -166,22 +161,20 @@ static bool8 TurnEnded(void)
     return TRUE;
 }
 
-// Compares every turn both sides have summed. FALSE when one disagreed.
+// Compares the turn the replay summed with the fighter's, once both are in. FALSE when
+// they disagree.
 static bool8 MatchChecks(void)
 {
-    u8 i;
+    struct BrTurnCheck *theirs = &sTheirs[sMine.turn % BR_CHECK_SLOTS];
 
-    for (i = 0; i < BR_CHECK_SLOTS; i++)
+    if (!sMine.have || !theirs->have || theirs->turn != sMine.turn)
+        return TRUE;
+    theirs->have = sMine.have = FALSE;
+    gBrJank.checks++;
+    if (theirs->sum != sMine.sum)
     {
-        if (!sTheirs[i].have || !sOurs[i].have || sTheirs[i].turn != sOurs[i].turn)
-            continue;
-        sTheirs[i].have = sOurs[i].have = FALSE;
-        gBrJank.checks++;
-        if (sTheirs[i].sum != sOurs[i].sum)
-        {
-            gBrJank.drifts++;
-            return FALSE;
-        }
+        gBrJank.drifts++;
+        return FALSE;
     }
     return TRUE;
 }
@@ -204,14 +197,14 @@ static void EndWait(void)
 // the replay anyway. Returns the bytes added.
 static u8 PutCheck(u8 *dst)
 {
-    if (!sSendCheck.have)
+    if (!sMine.have)
         return 0;
-    sSendCheck.have = FALSE;
+    sMine.have = FALSE;
     dst[0] = BR_SPECTATE_CHECK;
     dst[1] = BR_SPECTATE_CHECK_LEN;
-    dst[2] = sSendCheck.turn;
-    dst[3] = sSendCheck.sum & 0xFF;
-    dst[4] = sSendCheck.sum >> 8;
+    dst[2] = sMine.turn;
+    dst[3] = sMine.sum & 0xFF;
+    dst[4] = sMine.sum >> 8;
     return 2 + BR_SPECTATE_CHECK_LEN;
 }
 
@@ -538,7 +531,7 @@ static void ParseBstart(const u8 *d, u16 n)
     sAbortEarly = FALSE;
     ClearChecks();
     sStarvedFrames = 0;
-    sClockSeen = FALSE;
+    sCheckFlags &= ~BR_CLOCK_SEEN;
     // sTurnBuf is the reassembly buffer from here on; a fighter's unsent TURN in it is
     // one no spectator is waiting for any more.
     sTurnLen = 0;
@@ -564,7 +557,7 @@ static void ParseTurn(const u8 *d, u16 n)
     for (i = 2; i + 1 < n; i += 2 + d[i + 1])
     {
         if (d[i] == BR_SPECTATE_CHECK && d[i + 1] == BR_SPECTATE_CHECK_LEN && i + 2 + BR_SPECTATE_CHECK_LEN <= n)
-            HoldCheck(sTheirs, d[i + 2], d[i + 3] | (d[i + 4] << 8));
+            HoldCheck(&sTheirs[d[i + 2] % BR_CHECK_SLOTS], d[i + 2], d[i + 3] | (d[i + 4] << 8));
     }
     len = (n - 2 > 0xFF) ? 0xFF : (u8)(n - 2);
     if (sPendParties != NULL)
@@ -795,7 +788,7 @@ static void HandleShot(const u8 *payload, u8 len)
         return;
     gBrSpectate.shotSecs = d[1];
     if (d[1] != 0)
-        sClockSeen = TRUE;
+        sCheckFlags |= BR_CLOCK_SEEN;
 }
 
 static void HandlePeek(const u8 *payload, u8 len)
@@ -1599,7 +1592,6 @@ static bool8 SendTurn(u8 len)
     if (sent)
     {
         gBrSpectate.turns++;
-        gBrSpectate.bytes += sTurnActions;
     }
     return sent;
 }
@@ -1619,11 +1611,8 @@ void BrSpectate_Tick(void)
     FollowTick();
     if (gBrSpectate.watching || gBrSpectate.follow != BR_NO_SEAT)
     {
-        if (++sWatchFrames >= 60)
-        {
-            sWatchFrames = 0;
+        if (gMain.vblankCounter1 % 60 == 0)
             gBrJank.watchSecs++;
-        }
     }
     // Spectating: the replay owns the screen until it ends, and nothing is published.
     if (gBrSpectate.watching)
@@ -1652,12 +1641,12 @@ void BrSpectate_Tick(void)
         if (gMain.inBattle && sPendParties == NULL && RecordedBattle_IsSpectateLive())
         {
             if (TurnEnded())
-                HoldCheck(sOurs, sCheckTurn, TurnSum());
+                HoldCheck(&sMine, sCheckTurn, TurnSum());
             // Played on, a replay that has drifted ends on a winner the fight did not
             // have. It ends here instead, and the watcher is back on the trainer's walk.
             if (!MatchChecks())
                 RecordedBattle_AbortSpectate();
-            if (RecordedBattle_TakeSpectateStarved() && gBrSpectate.shotSecs == 0 && sClockSeen)
+            if (RecordedBattle_TakeSpectateStarved() && gBrSpectate.shotSecs == 0 && (sCheckFlags & BR_CLOCK_SEEN))
             {
                 if (sStarvedFrames < 0xFFFF)
                     sStarvedFrames++;
@@ -1682,9 +1671,7 @@ void BrSpectate_Tick(void)
     // turn's moves part done. It goes out with the next TURN.
     if (gMain.inBattle && TurnEnded())
     {
-        sSendCheck.turn = sCheckTurn;
-        sSendCheck.sum = TurnSum();
-        sSendCheck.have = TRUE;
+        HoldCheck(&sMine, sCheckTurn, TurnSum());
     }
     // A turn the ring refused is retried before anything newer is taken: dropped, the
     // replay read the next turn's bytes as this one's, or waited on it for good.
@@ -1702,8 +1689,8 @@ void BrSpectate_Tick(void)
         gBrSpectate.started = FALSE; // ready for the next battle
         sFogDecided = FALSE;
         sCheckTurn = 0;
-        sCheckArmed = FALSE;
-        sSendCheck.have = FALSE;
+        sCheckFlags &= ~BR_CHECK_ARMED;
+        sMine.have = FALSE;
         return;
     }
     if (!BrSpectate_Publishing())
@@ -1740,7 +1727,7 @@ void BrSpectate_Tick(void)
     n = RecordedBattle_BufferSpectateDelta(sTurnBuf + 2, sizeof(sTurnBuf) - 4 - BR_SPECTATE_CHECK_LEN);
     if (n == 0)
         return;
-    sTurnActions = n;
+    gBrSpectate.bytes += n; // the actions, not the check: counted once, sent now or retried
     n += PutCheck(sTurnBuf + 2 + n);
     if (!SendTurn(2 + n))
         sTurnLen = 2 + n;
