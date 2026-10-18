@@ -1,0 +1,24 @@
+# spectate-stall-noclock: a fight with no shot clock -- against a bot or a wild mon, where
+# a trainer may take as long as they like -- is a trainer thinking, not a replay stalled
+# (POK-376 review). spectate-stall.txt's minute-long wait, the clock never shown.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+wait 10
+wait 2500
+expect u8 gBattleResults+0x13 1
+wait 3600
+expect u16 gBrJank+6 0
+pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+wait 60
+expect u16 gBrJank+6 0
+say spectate stall noclock ok

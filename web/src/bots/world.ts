@@ -35,6 +35,10 @@ export interface WorldMap {
   warps?: Warp[];
   /** Where the nurse's counter is, on the sixteen maps that have one. */
   centre?: { counterX: number; counterY: number };
+  /** The cells (y * w + x) that are a waterfall: water, but only crossed going north or
+   *  south. Surfing north into one climbs it (br_hm.c), and anywhere on one the current
+   *  carries you south, so a trainer never comes onto or off one sideways (POK-390). */
+  falls?: number[];
 }
 
 export interface Warp {
@@ -173,6 +177,17 @@ export function decodeGrid(grid: string, cells: number): Uint8Array {
   return out;
 }
 
+const waterGrids = new WeakMap<WorldMap, Uint8Array>();
+
+/** Is a map's cell water (POK-391: a ghost on it surfs)? Its grid decoded once and kept,
+ *  without building a World: the picture asks this, and a spectator never walks. */
+export function isWater(map: WorldMap, x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= map.w || y >= map.h) return false;
+  let grid = waterGrids.get(map);
+  if (!grid) waterGrids.set(map, (grid = decodeGrid(map.grid, map.w * map.h)));
+  return grid[y * map.w + x] === CLASS_WATER;
+}
+
 export class World {
   private readonly maps = new Map<string, WorldMap>();
   private readonly grids = new Map<string, Uint8Array>();
@@ -210,6 +225,8 @@ export class World {
   private readonly levelZ: Uint8Array;
   /** Per cell: where a door on it lands, as a cell number -- or NO_WARP / DEAD_WARP. */
   private readonly warpTo: Int32Array;
+  /** Per cell: 1 on a waterfall (WorldMap.falls). */
+  private readonly falls: Uint8Array;
   /** Per map number and direction (m * 4 + d): the seams off that edge, in world.json's
    *  order, with the far map by number. A seam to a map the world lacks is left out,
    *  which is what `landAcross` does with it. */
@@ -236,9 +253,11 @@ export class World {
     this.elev = new Uint8Array(total);
     this.cellMap = new Uint16Array(total);
     this.warpTo = new Int32Array(total).fill(NO_WARP);
+    this.falls = new Uint8Array(total);
     maps.forEach((m, n) => {
       const base = this.bases[n];
       const cells = m.w * m.h;
+      for (const i of m.falls ?? []) if (i < cells) this.falls[base + i] = 1;
       this.classes.set(decodeGrid(m.grid, cells), base);
       this.elev.set(decodeGrid(m.elev ?? '', cells), base);
       this.grids.set(m.id, this.classes.subarray(base, base + cells));
@@ -384,9 +403,12 @@ export class World {
     const x = local - y * w;
     const nx = x + DX[d];
     const ny = y + DY[d];
+    const sideways = d >= 2;
+    if (sideways && this.falls[cell]) return -1;
     if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
       const next = base + ny * w + nx;
       const cls = this.classes[next];
+      if (sideways && this.falls[next]) return -1;
       if (LEDGE_DIRN[cls] === d) {
         const jx = nx + DX[d];
         const jy = ny + DY[d];
@@ -421,7 +443,7 @@ export class World {
       if (lx < 0 || ly < 0 || lx >= tw || ly >= th) continue;
       const landing = this.bases[to] + ly * tw + lx;
       const cls = this.classes[landing];
-      if (!canStand(cls, surf, cut)) continue;
+      if (!canStand(cls, surf, cut) || (sideways && this.falls[landing])) continue;
       const onto = this.climb(from, landing, cls, surf);
       if (onto >= 0) return onto;
     }
@@ -544,9 +566,12 @@ export class World {
     if (!move) return null;
     const here = this.key(spot);
     const from = here < 0 ? H_TRANSITION : this.carried(here);
+    const sideways = move.dx !== 0;
+    if (sideways && here >= 0 && this.falls[this.cellOf(here)]) return null;
     const nx = spot.x + move.dx;
     const ny = spot.y + move.dy;
     if (nx >= 0 && ny >= 0 && nx < m.w && ny < m.h) {
+      if (sideways && this.falls[this.cellOf(this.key({ map: spot.map, x: nx, y: ny }))]) return null;
       const cls = this.cell(spot.map, nx, ny);
       if (cls >= LEDGE_MIN && cls <= LEDGE_MAX && LEDGE_DIR[cls] === dir) {
         // A ledge taken the way it faces: the jump lands two cells on.
@@ -622,6 +647,7 @@ export class World {
     }
     // Off the neighbour's own axis: this offset's seam is not the one this cell uses.
     if (x < 0 || y < 0 || x >= to.w || y >= to.h) return null;
+    if ((dir === 'west' || dir === 'east') && this.falls[this.cellOf(this.key({ map: seam.to, x, y }))]) return null;
     return this.standable(seam.to, x, y, surf, cut) ? this.climbOnto({ map: seam.to, x, y }, from, surf) : null;
   }
 

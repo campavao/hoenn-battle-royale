@@ -86,6 +86,8 @@ export interface StepMsg {
   x: number;
   y: number;
   map: MapRef;
+  /** The walker's gait: 0 walk, 1 run/bike, 2 fast bike. Absent when unknown (a bot, an old ROM). */
+  p?: 0 | 1 | 2;
 }
 
 /** A turn in place. Crosses into the ROM (face). */
@@ -590,6 +592,15 @@ export interface CardMsg {
   best?: number;
 }
 
+/** This trainer's tab went to the background, or came back (POK-389). A hidden tab runs
+ *  no frames, so its ROM stops mid-fight; the opponent's page waits longer for its blocks
+ *  rather than closing the fight as unanswered. JSON only. */
+export interface AwayMsg {
+  t: 'away';
+  seat: number;
+  away: boolean;
+}
+
 /** ROM -> page: a link/trainer battle this seat was in just concluded. Distinct from
  *  `win` (the room's overall winner) and from `out` (elimination) -- a lost PvP fight
  *  does not by itself eliminate anyone. Crosses into the ROM (result), since the ROM
@@ -667,6 +678,7 @@ export type Msg =
   | TickerMsg
   | ReadyMsg
   | CardMsg
+  | AwayMsg
   | ResultMsg
   | GiveMsg
   | PingMsg
@@ -926,6 +938,7 @@ const decoders: Record<string, Decoder> = {
     x: reqCell(m, 'x'),
     y: reqCell(m, 'y'),
     map: reqMapRef(m),
+    p: optInt(m, 'p', 0, 2) as StepMsg['p'],
   }),
 
   face: (m) => ({
@@ -1238,6 +1251,11 @@ const decoders: Record<string, Decoder> = {
     matches: optInt(m, 'matches', 0, CARD_MAX) ?? fail('bad matches'),
     best: optInt(m, 'best', 1, MAX_PLAYERS),
   }),
+
+  away: (m) => {
+    if (typeof m.away !== 'boolean') fail('bad away flag');
+    return { t: 'away', seat: reqSeat(m), away: m.away };
+  },
 
   result: (m) => {
     const outcome = m.outcome;

@@ -1053,6 +1053,37 @@ describe('a bot caught in the fog', () => {
     expect(spill?.bag?.key).toBe((bot.seat << 8) | 0xff);
   });
 
+  // POK-388: a winner's spoils were lying where the bot fell, and its spill went on top
+  // of them -- BrLoot_At answers with the first row on a cell, so the spoils vanished
+  // under it. The cells already holding a piece are skipped, as the ROM's CellFree does.
+  it('keeps its spill off cells that already hold a ball', () => {
+    const SEA: WorldMap = { id: 'SEA', group: 0, num: 7, w: 5, h: 5, section: 'S', outdoor: true, grid: '25x2', seams: [] };
+    const sent: Msg[] = [];
+    const surfer: PackedMon = { ...MON, moves: [{ id: 57, pp: 15, ppUps: 0 }] }; // SURF
+    const balls = new Set(['2,2', '3,2']); // its own cell and the first one out
+    const bots = new Bots({
+      world: new World([SEA]),
+      targets: [{ mapId: 'SEA', x: 2, y: 2 }],
+      mapRef: () => ({ group: 0, num: 7 }),
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => [{ ...surfer }],
+      bagFor: () => [{ id: 13, n: 1 }],
+      inside: () => false,
+      loot: {
+        all: () => [],
+        at: (_mapId, cell) => (balls.has(`${cell.x},${cell.y}`) ? 1 : undefined),
+      },
+    });
+    const [bot] = dealBots(1, 1, [], [{ mapId: 'SEA', map: { group: 0, num: 7 }, x: 2, y: 2 }]);
+    bots.start([bot], 0);
+    for (let t = STEP_MS; t <= 60_000 && !sent.some((m) => m.t === 'spill'); t += STEP_MS) bots.tick(t);
+    const spill = sent.find((m) => m.t === 'spill') as { mons: { x: number; y: number }[]; bag?: { x: number; y: number } };
+    const where = [...spill.mons, spill.bag!].map((c) => `${c.x},${c.y}`);
+    expect(where).toHaveLength(2);
+    for (const cell of where) expect(balls.has(cell), `${cell} already had a ball`).toBe(false);
+  });
+
   // FogReachesThisBattle in br_ring.c: a fight between contestants is theirs to lose,
   // and a bot is a contestant (POK-262, POK-330 #15).
   it('leaves a bot alone while a player is fighting it', () => {

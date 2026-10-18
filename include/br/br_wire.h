@@ -40,13 +40,14 @@
 
 // BR_MSG_STEP
 // ROM <-> page: a step just committed.
-// Payload (8 bytes):
+// Payload (9 bytes; a sender that leaves out the last says nothing of its pace):
 //   0:    seat  u8
 //   1:    d     u8   DIR_SOUTH..DIR_EAST, as BR_MSG_PLACE
 //   2..3: x     s16 LE
 //   4..5: y     s16 LE
 //   6:    mapGroup u8
 //   7:    mapNum   u8
+//   8:    pace  u8   BR_PACE_NORMAL/FAST/FASTER the step was taken at; 0xFF unknown
 
 // BR_MSG_FACE
 // ROM <-> page: a turn in place.

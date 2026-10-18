@@ -29,6 +29,7 @@ describe('slots round trip (single slot)', () => {
     { t: 'place', v: PROTOCOL, seat: 3, map: { group: 0, num: 1 }, x: 10, y: -5, f: 1, st: 'alive' },
     { t: 'place', v: PROTOCOL, seat: 0, f: 2, st: 'lobby' },
     { t: 'step', seat: 1, d: 4, x: 20, y: -21, map: { group: 0, num: 1 } },
+    { t: 'step', seat: 1, d: 4, x: 20, y: -21, map: { group: 0, num: 1 }, p: 2 },
     { t: 'face', seat: 1, f: 3, map: { group: 0, num: 1 } },
     { t: 'challenge', seat: 2, opponent: 5, nonce: 7 },
     { t: 'faint', seat: 2, index: 3 },
@@ -193,7 +194,7 @@ describe('unpackSlot', () => {
 // the other fails here first.
 const FIXED_LAYOUT_SIZES: Record<string, number> = {
   place: 11, // seat, hasMap, group, num, x:s16, y:s16, facing, status, spriteId
-  step: 8, // seat, d, x:s16, y:s16, group, num
+  step: 9, // seat, d, x:s16, y:s16, group, num, pace (0xFF unknown)
   face: 4, // seat, f, group, num
   challenge: 4, // seat, opponent, nonce:u16
   faint: 2, // seat, index
@@ -376,5 +377,22 @@ describe("the fog's npcout (POK-299)", () => {
     expect(slots[0].payload[3]).toBe(0xff); // framed: total u16, seq, then the seat
     const beaten = packSlot({ t: 'npcout', seat: 3, map: { group: 0, num: 9 }, localId: 1 });
     expect(beaten[0].payload[3]).toBe(3);
+  });
+});
+
+describe("a step's pace byte (POK-376)", () => {
+  it('is 0xFF when the sender did not say, and comes back as no pace at all', () => {
+    const { payload } = reassembleSlots(packSlot({ t: 'step', seat: 1, d: 4, x: 0, y: 0, map: { group: 0, num: 1 } }));
+    expect(payload[8]).toBe(0xff);
+    expect('p' in unpackSlot(BR_MSG.STEP, payload)).toBe(false);
+  });
+
+  it("an older ROM's eight-byte step still reads, without a pace", () => {
+    const old = Uint8Array.of(3, 1, 5, 0, 6, 0, 0, 9);
+    expect(unpackSlot(BR_MSG.STEP, old)).toEqual({ t: 'step', seat: 3, d: 1, x: 5, y: 6, map: { group: 0, num: 9 } });
+  });
+
+  it('a pace past the last one is unknown, not a fourth gait', () => {
+    expect('p' in unpackSlot(BR_MSG.STEP, Uint8Array.of(3, 1, 5, 0, 6, 0, 0, 9, 3))).toBe(false);
   });
 });

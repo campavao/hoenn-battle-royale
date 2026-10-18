@@ -1,0 +1,48 @@
+# ghost-step-pace: a ghost walks at the pace its STEP says (POK-376). Inferred from the
+# backlog alone, a runner's ghost walked its first two steps and a cyclist's took four to
+# find the bike's pace -- a lurch at the start of every run, and the camera of whoever
+# watched lurched with it. Byte 8 of a STEP is the pace its sender took it at (br_wire.h).
+#
+# Seat 1 (ghost-walk.txt's PLACE) steps east once at each pace, each step alone after a
+# rest: the very first walk is the one asked for. Then an older sender's 8-byte STEP,
+# which says nothing, is walked at the backlog's pace as before.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 04 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 4
+# its object is gObjectEvents[2]: currentCoords.x at 2 * 0x24 + 0x10, movementActionId at + 0x1C
+expect u8 gBrSeats+25 2
+expect u16 gObjectEvents+0x58 14
+# running: walk_fast, MOVEMENT_ACTION_WALK_FAST_RIGHT
+pokebytes gDecompressionBuffer 01 04 0F 00 0F 00 00 09 01
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+wait 3
+expect u8 gObjectEvents+0x64 0x18
+expect u16 gObjectEvents+0x58 15
+wait 60
+# the Mach Bike flat out: walk_faster, MOVEMENT_ACTION_WALK_FASTER_RIGHT
+pokebytes gDecompressionBuffer 01 04 10 00 0F 00 00 09 02
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+wait 3
+expect u8 gObjectEvents+0x64 0x30
+expect u16 gObjectEvents+0x58 16
+wait 60
+# off the bike and walking: straight back to walk_normal, MOVEMENT_ACTION_WALK_NORMAL_RIGHT
+pokebytes gDecompressionBuffer 01 04 11 00 0F 00 00 09 00
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+wait 3
+expect u8 gObjectEvents+0x64 0x0B
+expect u16 gObjectEvents+0x58 17
+wait 60
+# an 8-byte STEP: no word on its pace, and a lone step after a rest is a walk
+pokebytes gDecompressionBuffer 01 03 10 00 0F 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 3
+expect u8 gObjectEvents+0x64 0x0A
+expect u16 gObjectEvents+0x58 16
+wait 60
+shot rest
+expect u8 gBrSeats+26 0
+say ghost step pace ok

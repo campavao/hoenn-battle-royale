@@ -287,6 +287,30 @@ describe('the cell graph', () => {
   });
 });
 
+// POK-390. Route 119's falls are x 17-19, y 25-28 (hm-waterfall's driver climbs them):
+// surfing north into one climbs it and the current carries you down it, so a fall is
+// crossed going north or south and never come onto or off sideways. A bot used to cut
+// across the face of one.
+describe('a waterfall', () => {
+  const world = HOENN.world;
+  const at = (x: number, y: number): Spot => ({ map: 'MAP_ROUTE119', x, y });
+
+  it('is climbed and come down, with SURF', () => {
+    expect(world.step(at(17, 29), 'north', true)).toEqual(at(17, 28));
+    expect(world.step(at(17, 25), 'north', true)).toEqual(at(17, 24));
+    expect(world.step(at(17, 24), 'south', true)).toEqual(at(17, 25));
+    expect(world.step(at(18, 28), 'south', true)).toEqual(at(18, 29));
+  });
+
+  it('is never crossed sideways, onto it or off it', () => {
+    expect(world.step(at(17, 26), 'east', true)).toBeNull();
+    expect(world.step(at(18, 26), 'west', true)).toBeNull();
+    expect(world.step(at(19, 27), 'east', true)).toBeNull();
+    expect(world.step(at(17, 29), 'north', true)).not.toBeNull(); // the pool below is open water
+    expect(world.step(at(18, 29), 'west', true)).toEqual(at(17, 29));
+  });
+});
+
 describe('water and doors', () => {
   // A 5x1 strip with water in the middle: the only way across is SURF.
   const LAKE: WorldMap = {

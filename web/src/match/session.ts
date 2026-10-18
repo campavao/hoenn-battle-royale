@@ -22,6 +22,7 @@ import { botRows, freshMatch, noteMatch, type MatchSnapshot } from './lifecycle'
 import { MatchLog, saveMatch } from './log';
 import { noteEvent } from './events';
 import { Loot } from './loot';
+import { OwedTeam } from './owed';
 import { MatchRecord } from './record';
 import { Results } from './results';
 import type { Roster } from './roster';
@@ -49,6 +50,14 @@ export interface SessionDeps {
   bots(): Bots | null;
   /** Into our own ROM, and nowhere else. */
   toRom(msg: Msg): void;
+  /** A link fight's winner went out of the match, gone from the room, without putting our
+   *  beaten team down (POK-387): drop it ourselves. Absent where there are no link fights
+   *  (solo), along with the two it is worked out from. */
+  owed?: {
+    opponent(): number | null;
+    inRoom(seat: number): boolean;
+    dropTeam(winner: number): void;
+  };
   /** The fog for a `start` that names none. Left out, the director's own: solo's, so
    *  its books and its director cannot start from two different fogs. */
   defaultFog?(): number;
@@ -166,6 +175,7 @@ export class MatchSession {
   private field = 0;
   private booked = false;
   private readonly now: () => number;
+  private readonly owedTeam: OwedTeam | null;
 
   constructor(
     private readonly deps: SessionDeps,
@@ -174,6 +184,8 @@ export class MatchSession {
     this.grace = deps.grace;
     this.fogSecs = this.defaultFog();
     this.now = () => (deps.now ? deps.now() : performance.now());
+    const owed = deps.owed;
+    this.owedTeam = owed ? new OwedTeam({ mySeat: () => deps.mySeat(), opponent: () => owed.opponent(), inRoom: (seat) => owed.inRoom(seat) }) : null;
   }
 
   private defaultFog(): number {
@@ -226,6 +238,7 @@ export class MatchSession {
    *   6. the results, the record and the round's log (POK-248);
    *   7. the first `win` we hear: the round saved, the career counted, the results drawn,
    *      the ROM told who won, and the grace armed;
+   *  7b. a beaten team its winner left the match without putting down (POK-387);
    *   8. anything the page did not make itself: who is busy;
    *   9. ...and a fight with one of our bots, to the brain, with whose ROM said it;
    *  10. our own ROM arriving on a map: what is lying there, back into it (POK-232);
@@ -275,6 +288,9 @@ export class MatchSession {
     this.log.note(msg, now, (seat) => this.deps.nameOf(seat));
     const me = this.deps.mySeat();
     if (msg.t === 'win' && me !== null && !this.booked) this.decide(msg.seat, me, now);
+    // The host's word that a seat which left is out comes as 'page' on the host itself.
+    const owedBy = this.owedTeam?.note(msg, via === 'rom') ?? null;
+    if (owedBy !== null) this.deps.owed?.dropTeam(owedBy);
     if (via === 'page') return;
     noteBusy(this.busy, msg);
     // A bot's fight runs in whoever fought it, and what that ROM reports goes to the

@@ -17,6 +17,7 @@ import { MAP_OFFSET, toRomCells } from '../net/cells';
 import type { Lines, MapRef, Msg, TickerMsg } from '../net/wire';
 import { Director, type DirectorOptions, type DirectorWorld } from './director';
 import { catchUp, departedSeats, lootOwed, type DealPlan } from './lifecycle';
+import { TraderClaims } from './events';
 import { clockLeftAt } from './room';
 import { Roster } from './roster';
 import type { MatchSession } from './session';
@@ -109,6 +110,8 @@ export class HostRole {
   private readonly world: HostOptions['world'];
   private readonly ownLand: HostOptions['land'];
   private readonly seen = new Set<number>(); // seats already announced out, so a repeat is quiet
+  /** Who gets each event's trader (POK-392): every ask is answered here. */
+  private readonly claims: TraderClaims;
   /** The ticker, to the room and our own ROM, never the same line twice running (POK-324). */
   private readonly say = Ticker.once((msg) => {
     this.link.toRoom(msg);
@@ -157,6 +160,7 @@ export class HostRole {
     this.now = opts.now ?? (() => performance.now());
     this.world = opts.world;
     this.ownLand = opts.land;
+    this.claims = new TraderClaims((n) => session.events.some((e) => e.n === n && e.trader !== undefined));
     const seed = this.seed;
     // Everybody in the room now was dealt in, or on a takeover has been hearing the match
     // all along: only somebody who arrives, or comes back, needs catching up.
@@ -283,6 +287,13 @@ export class HostRole {
   /** What the page heard, after the books have: our own ROM's messages, or the room's
    *  from the seat that said them. */
   hear(msg: Msg, via: 'rom' | { from: number }): void {
+    // An ask to trade with an event's trader, ours or the room's: the first for him is the
+    // trade, said to everybody; a later one is told who got him, and nobody else is.
+    this.claims.note(msg);
+    const claim = this.claims.answer(msg);
+    if (claim?.granted) this.hostSays(claim.reply);
+    else if (claim && via === 'rom') this.link.pushToRom(claim.reply);
+    else if (claim && via !== 'rom') this.link.toSeat(via.from, claim.reply);
     if (via === 'rom') {
       // Our own ROM's pick never comes back over the relay either.
       if (msg.t === 'pick') this.link.pushToRom({ t: 'land', ...this.landFor(msg.seat, msg.section) });
@@ -445,6 +456,7 @@ export class HostRole {
    *  saw its own bots go out, and its placement was counted against a field that, as
    *  far as they knew, never thinned (POK-330 #16). */
   private hostSays(msg: Msg): void {
+    this.claims.note(msg); // a bot's trade, which nobody asked the host for
     this.link.toRoom(msg);
     this.link.toRom(msg);
     this.link.roster.applyMsg(msg);

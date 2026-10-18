@@ -224,8 +224,13 @@ function decodePlace(bytes: Uint8Array): PlaceMsg {
   };
 }
 
+/** Byte 8 of a STEP: the gait, or 0xFF when unknown (br_wire.h). An 8-byte STEP is an older ROM. */
+const STEP_PACE_UNKNOWN = 0xff;
 function encodeStep(m: StepMsg): Uint8Array {
-  return new Writer().u8(m.seat).u8(m.d).s16(m.x).s16(m.y).u8(m.map.group).u8(m.map.num).toBytes();
+  return new Writer()
+    .u8(m.seat).u8(m.d).s16(m.x).s16(m.y).u8(m.map.group).u8(m.map.num)
+    .u8(m.p ?? STEP_PACE_UNKNOWN)
+    .toBytes();
 }
 function decodeStep(bytes: Uint8Array): StepMsg {
   const r = new Reader(bytes);
@@ -234,7 +239,10 @@ function decodeStep(bytes: Uint8Array): StepMsg {
   const x = r.s16();
   const y = r.s16();
   const map = { group: r.u8(), num: r.u8() };
-  return { t: 'step', seat, d, x, y, map };
+  const p = bytes.length > 8 ? bytes[8] : STEP_PACE_UNKNOWN;
+  const step: StepMsg = { t: 'step', seat, d, x, y, map };
+  if (p <= 2) step.p = p as 0 | 1 | 2;
+  return step;
 }
 
 function encodeFace(m: FaceMsg): Uint8Array {
