@@ -126,6 +126,7 @@ describe('the action windows', () => {
     safariBalls: 0,
     moves: [{ id: 1, pp: 1, maxPp: 1 }, { id: 2, pp: 1, maxPp: 1 }, { id: 0, pp: 0, maxPp: 0 }, { id: 0, pp: 0, maxPp: 0 }],
     foe: { name: 'WOOPER', types: [WATER, GROUND] },
+    bag: new Map(),
     ...over,
   });
 

@@ -208,7 +208,7 @@ export class TouchLayer {
   private walk: { steps: { dir: SeamDir; to: Spot }[]; at: number; stall: number; from: Spot } | null = null;
   /** A battle menu choice being walked to. `then` is a second one to make once the menu
    *  it opens is up: FIGHT, then a move. `waiting` is the gap before that menu shows. */
-  private menu: { which: number; target: number; frames: number; then?: number; waiting?: boolean } | null = null;
+  private menu: { which: number; target: number; frames: number; then?: number; waiting?: boolean; onPress?: () => void } | null = null;
   /** A start-menu row asked for by a button (PARTY, MAP): START is down, the cursor walks. */
   private startRow: { action: number; frames: number; other: boolean } | null = null;
   /** The player's own registered item, put back after a dock press used SELECT. */
@@ -283,8 +283,9 @@ export class TouchLayer {
   /** A choice off the page's own battle menu (ui/battlemenu.ts): `slot` of the menu
    *  `which` (FIGHT 0, BAG 1, POKeMON 2, RUN 3; a move 0..3), walked to and confirmed
    *  as a tap on the picture is. With `move`, `which` is the action menu and the slot is
-   *  FIGHT: once the move menu is up, `move` is chosen there too. */
-  chooseBattle(which: number, slot: number, move?: number): void {
+   *  FIGHT: once the move menu is up, `move` is chosen there too. `onPress` runs as the A
+   *  goes down on `slot`, and not at all if the menu never gets there. */
+  chooseBattle(which: number, slot: number, move?: number, onPress?: () => void): void {
     if (which === 0 || !this.inBattle()) return;
     // A move asked for while FIGHT is still on its way in: it rides along, after it.
     const m = this.menu;
@@ -297,7 +298,7 @@ export class TouchLayer {
     // waits for this one. A B still going down is kept: it is what brings it up.
     this.walk = null;
     this.startRow = null;
-    this.menu = { which, target: slot, frames: 0, then: move, waiting: now !== which };
+    this.menu = { which, target: slot, frames: 0, then: move, waiting: now !== which, onPress };
   }
 
   /** One press of a key, as a tap: B out of the move menu. */
@@ -551,6 +552,7 @@ export class TouchLayer {
     const cur = this.cursor(m.which);
     if (cur === m.target) {
       this.menu = m.then === undefined ? null : { which: MENU_MOVE, target: m.then, frames: 0, waiting: true };
+      m.onPress?.();
       this.press('a', TAP_FRAMES, TAP_FRAMES);
       return;
     }
