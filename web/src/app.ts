@@ -3346,6 +3346,8 @@ function wireRoom(
   // for the next time the room needs an heir -- and does not take the match back.
   document.addEventListener('visibilitychange', () => {
     if (amWatching) return;
+    // Whoever we are fighting waits longer for a ROM that has stopped for this (POK-389).
+    bridge?.sayAway(document.hidden);
     if (document.hidden) {
       standDownIfHidden();
       awayDoor.hidden();

@@ -62,6 +62,8 @@ const SAMPLES: Msg[] = [
   { t: 'ready', seat: 1, ready: true },
   { t: 'card', seat: 1, wins: 3, matches: 12, best: 1 },
   { t: 'card', seat: 1, wins: 0, matches: 0 },
+  { t: 'away', seat: 1, away: true },
+  { t: 'away', seat: 1, away: false },
   { t: 'result', seat: 1, outcome: 'win' },
   { t: 'give', items: [{ id: 13, n: 2 }] },
   { t: 'ping', seat: 1, at: 1000 },

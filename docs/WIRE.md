@@ -102,6 +102,7 @@ trainer's `spill` and a duel's `dresult` do not yet.
 | `ticker` | `BR_MSG_TICKER` 15 | page/host-&gt;page&lt;-&gt;ROM | yes | kill feed, system lines, and chat (`say`), all one pipe; `intro`/`win`/`lose` are the opponent's battle text, kept by the ROM for the fight with that seat and never drawn. `text` may be 96 characters on the wire, a ROM reads one slot's worth (56) and the HUD draws `BR_HUD_LINE_MAX` (40), which is what the page's ticker builder cuts every line to |
 | `ready` | -- | page-&gt;page | no | a seat in the HTML lobby, toggling ready |
 | `card` | -- | page-&gt;page | no | a trainer's career record (wins, played, best) for everybody else's trainer card, said on joining and to each newcomer; the career itself stays in the browser (POK-339) |
+| `away` | -- | page-&gt;page | no | this trainer's tab went to the background (`away: true`) or came back. A hidden tab runs no frames, so its ROM stops mid-fight; the opponent's page then waits three minutes for its next block instead of seventy-five seconds before closing the fight as unanswered (POK-389). Only the seat's own word counts |
 | `result` | `BR_MSG_RESULT` 16 | ROM-&gt;page&lt;-&gt;page-&gt;ROM | yes | ROM, when a link/trainer battle this seat was in concludes. A page also turns the host's `win` into a `result` `win` for its own ROM: the winner's ROM runs the parade, and a replay of the winner's fight lets go |
 | `ping`/`pong` | -- | page&lt;-&gt;page | no | either side, timing the other (distinct from the relay's own connection heartbeat) |
 
