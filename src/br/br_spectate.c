@@ -108,6 +108,10 @@ static EWRAM_DATA u8 sCheckFlags = 0;
 #define BR_CLOCK_SEEN  (1 << 1)
 // Frames the replay has sat on a choice that has not come (BR_JANK_STALL_SECS).
 static EWRAM_DATA u16 sStarvedFrames = 0;
+// ...and the frames since it was last starved: a wait ends only after BR_JANK_FED_FRAMES of
+// them in a row, so a frame the replay spends off the choice does not cut one stall in two.
+static EWRAM_DATA u8 sFedFrames = 0;
+#define BR_JANK_FED_FRAMES 30
 
 // Every battler's species and HP as a turn ends, summed so the order the battlers are in
 // does not matter: the replay sits on the fighter's side of the field whichever seat it
@@ -189,6 +193,7 @@ static void EndWait(void)
     if (secs >= BR_JANK_STALL_SECS)
         gBrJank.stalls++;
     sStarvedFrames = 0;
+    sFedFrames = 0;
 }
 
 // The fighter's sum for the turn that just ended, after the next turn's actions in its
@@ -531,6 +536,7 @@ static void ParseBstart(const u8 *d, u16 n)
     sAbortEarly = FALSE;
     ClearChecks();
     sStarvedFrames = 0;
+    sFedFrames = 0;
     sCheckFlags &= ~BR_CLOCK_SEEN;
     // sTurnBuf is the reassembly buffer from here on; a fighter's unsent TURN in it is
     // one no spectator is waiting for any more.
@@ -1650,8 +1656,9 @@ void BrSpectate_Tick(void)
             {
                 if (sStarvedFrames < 0xFFFF)
                     sStarvedFrames++;
+                sFedFrames = 0;
             }
-            else if (sStarvedFrames != 0)
+            else if (sStarvedFrames != 0 && ++sFedFrames >= BR_JANK_FED_FRAMES)
             {
                 EndWait();
             }

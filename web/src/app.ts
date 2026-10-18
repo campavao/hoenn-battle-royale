@@ -2660,6 +2660,9 @@ function wireRoom(
     jankStart = null;
     if (msg) relay.send({ ...msg });
   };
+  // Every other way out of the match (LEAVE, the results' MENU, a closed tab) unloads the
+  // page; the socket is still open as it goes.
+  window.addEventListener('pagehide', sendJank);
   /** The career line the match produced, for the results. */
   let career = '';
   /** The results, drawn from the match's books over the room's roster. */

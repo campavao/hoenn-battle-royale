@@ -1,0 +1,37 @@
+# spectate-stall-split: one frame off the wait does not cut a stall in two (POK-376 review).
+# spectate-stall.txt's minute-long wait, with the trainer's clock up for a single frame half
+# way through: the wait goes on, so it is one stall, counted when the turn comes, not one
+# counted at that frame while the replay is still waiting and a second short one after it.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+# the trainer we follow (seat 1) is in a link fight: it publishes a shot clock
+poke u8 gBrSpectate+8 1
+pokebytes gDecompressionBuffer 01 1E
+mailsend gBrMailbox 22 gDecompressionBuffer 2
+wait 10
+pokebytes gDecompressionBuffer 01 00
+mailsend gBrMailbox 22 gDecompressionBuffer 2
+wait 2500
+expect u8 gBattleResults+0x13 1
+wait 1800
+poke u8 gBrSpectate+12 1
+wait 1
+poke u8 gBrSpectate+12 0
+wait 1800
+expect u16 gBrJank+6 0
+pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+wait 60
+expect u16 gBrJank+6 1
+expectge u16 gBrJank+8 60
+expectle u16 gBrJank+8 90
+say spectate stall split ok
