@@ -40,6 +40,9 @@ bool8 RecordedBattle_TakeSpectateByte(u8 battler, u8 *out);
 // Action bytes arrived and not yet played, for the battler furthest behind: a watcher
 // who came in mid-fight has every turn so far to get through (br_spectate.c's catchUp).
 u16 RecordedBattle_SpectateBacklog(void);
+// Whether the replay waited on the stream for something it had to have since this was last
+// asked, and clears it: a frame the engine sat on a choice that had not come (POK-376).
+bool8 RecordedBattle_TakeSpectateStarved(void);
 // A live replay's controllers, waiting on the stream (POK-330 #12): TRUE once the choice
 // has arrived and gone to the engine, and the controller may complete.
 bool8 RecordedBattle_BrEmitAction(u8 battler);

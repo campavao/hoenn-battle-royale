@@ -4,7 +4,7 @@
 // socket's frames; what our own ROM is handed is what went through the link.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isScatterKey } from './scatter';
-import { traderKey } from './events';
+import { claimKey, traderKey } from './events';
 import { HostRole, soloLink, soloRoster, type HostLink, type HostOptions } from './host';
 import type { DirectorWorld } from './director';
 import { EndGrace } from './grace';
@@ -473,6 +473,66 @@ describe('the page that runs the match (POK-330 #42)', () => {
     const rest: EventMsg = { ...event };
     delete rest.trader;
     expect(room.session.events).toEqual([rest]);
+    host.dispose();
+  });
+
+  it("gives an event's trader to the first who asks, and tells a later asker who got him (POK-392)", () => {
+    const room = hosting();
+    const host = room.deal();
+    host.begin();
+    const event: EventMsg = { t: 'event', seat: 0, n: 0, mapsec: 16, key: 0xb000, trader: { map: ROUTE_101, x: 12, y: 17, species: 131 } };
+    room.session.note(event, 'page');
+    room.frames().length = 0;
+    room.toRom.length = 0;
+    const traded = { t: 'pickup', seat: 1, key: traderKey(0) };
+    // Seats 1 and 2 at him at once: 1's ask lands first and is the trade, for everybody --
+    // the room, our own ROM, and the books, which take him out of the catch-up.
+    room.recv(1, { t: 'pickup', seat: 1, key: claimKey(0) });
+    room.recv(2, { t: 'pickup', seat: 2, key: claimKey(0) });
+    expect(room.frames().filter((f) => f.m?.t === 'pickup')).toEqual([
+      { type: 'all', m: traded },
+      { type: 'to', id: 2, m: traded },
+    ]);
+    expect(room.toRom).toEqual([traded]);
+    expect(room.session.events[0].trader).toBeUndefined();
+    // ...our own ROM asking after them hears the same no, and only it does.
+    room.frames().length = 0;
+    host.hear({ t: 'pickup', seat: 0, key: claimKey(0) }, 'rom');
+    expect(room.pushed).toEqual([traded]);
+    expect(room.frames()).toEqual([]);
+    // An ask for a trader the books do not have standing is a no too: left unanswered, the
+    // asker's ROM would trade on its own.
+    host.hear({ t: 'pickup', seat: 0, key: claimKey(3) }, 'rom');
+    expect(room.pushed[1]).toEqual({ t: 'pickup', seat: 1, key: traderKey(3) });
+    host.dispose();
+  });
+
+  it("tells an asker about a trade nobody asked the host for: a bot's, or a ROM that traded on its own (POK-392)", () => {
+    const room = hosting();
+    const host = room.deal();
+    host.begin();
+    room.session.note({ t: 'event', seat: 0, n: 1, mapsec: 16, key: 0xb010, trader: { map: ROUTE_101, x: 12, y: 17, species: 131 } }, 'page');
+    room.recv(2, { t: 'pickup', seat: 2, key: traderKey(1) });
+    room.frames().length = 0;
+    room.recv(1, { t: 'pickup', seat: 1, key: claimKey(1) });
+    expect(room.frames().filter((f) => f.m?.t === 'pickup')).toEqual([{ type: 'to', id: 1, m: { t: 'pickup', seat: 2, key: traderKey(1) } }]);
+    host.dispose();
+  });
+
+  it('gives somebody at home in a house to the first who asks, the same way (POK-379)', () => {
+    const room = hosting();
+    const host = room.deal();
+    host.begin();
+    room.frames().length = 0;
+    room.toRom.length = 0;
+    const given = { t: 'pickup', seat: 1, key: 0x8c21 };
+    room.recv(1, { t: 'pickup', seat: 1, key: 0x8c61 });
+    room.recv(2, { t: 'pickup', seat: 2, key: 0x8c61 });
+    expect(room.frames().filter((f) => f.m?.t === 'pickup')).toEqual([
+      { type: 'all', m: given },
+      { type: 'to', id: 2, m: given },
+    ]);
+    expect(room.toRom).toEqual([given]);
     host.dispose();
   });
 

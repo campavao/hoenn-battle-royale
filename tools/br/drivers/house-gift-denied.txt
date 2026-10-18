@@ -1,0 +1,64 @@
+# house-gift-denied: somebody at home who gives (POK-379), and two trainers at him at
+# once. We ask the host first; its PICKUP of his key naming another seat (3, who asked
+# first) is the no: he leaves our map, nothing is given, and the script says nothing more.
+# Nor does BR_CLAIM_FRAMES later give him anyway.
+#
+# house-gift's boot, seed and walk.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 08 02 03 00 06 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1086
+wait 30
+hold DOWN 90
+wait 200
+hold UP 40
+wait 200
+expect u8 gPlayerPartyCount 1
+# the cache where it always is, (12,11), and him on the next cell out, (11,10): key
+# 0x8C21, a BULBASAUR (1) at the rung (level 0), standing as a person
+expect u16 gBrLoot 0x8D21
+expect u16 gBrLoot+20 0x8C21
+expect u16 gBrLoot+22 11
+expect u16 gBrLoot+24 10
+expect u16 gBrLoot+26 1
+expect u8 gBrLoot+30 0
+expect u8 gBrLoot+31 1
+expectne u8 gBrLoot+32 0xFF
+# up the right of the chairs, over the cache, to (12,10), and face him
+hold UP 34
+wait 20
+hold RIGHT 16
+wait 20
+hold RIGHT 16
+wait 20
+hold UP 48
+wait 20
+expect u16 *gSaveBlock1Ptr 5
+expect u16 *gSaveBlock1Ptr+2 3
+hold LEFT 1
+wait 20
+shot home
+tap A
+wait 60
+shot talks
+tap A
+wait 40
+expectmsg 10 u16 1 0x8C61
+expect u8 gPlayerPartyCount 1
+pokebytes gDecompressionBuffer 03 21 8C 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 40
+shot denied
+expect u8 gPlayerPartyCount 1
+expect u8 gBrLoot+31 0
+expectmsg 10 u16 1 0x8C61
+wait 700
+expect u8 gPlayerPartyCount 1
+expectmsg 10 u16 1 0x8C61
+expect u32 gMain+4 CB2_Overworld+1
+# ...and the field is ours: a step down is a step
+hold DOWN 24
+wait 30
+expect u16 *gSaveBlock1Ptr+2 4
+say house gift denied ok

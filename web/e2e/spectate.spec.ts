@@ -181,6 +181,16 @@ test('an eliminated player watches a live fight on the real battle screen', asyn
       await watcher.waitForTimeout(250);
     }
 
+    // Flawless, by the ROM's own count (POK-376): every turn the fighter summed, the
+    // replay summed the same, and it never sat waiting on a turn past the shot clock.
+    // gBrJank (br_spectate.h): stalls +6, checks +10, drifts +12.
+    const jank = await watcher.evaluate((addr) => {
+      const ram = (window as unknown as RamWindow).__br.mailbox.ram;
+      return { stalls: ram.read(addr + 6, 16), checks: ram.read(addr + 10, 16), drifts: ram.read(addr + 12, 16) };
+    }, symbols.gBrJank);
+    expect(jank.checks, 'the replay checked its turns against the fight').toBeGreaterThan(0);
+    expect(jank, 'and none drifted or stalled').toEqual({ stalls: 0, checks: jank.checks, drifts: 0 });
+
     await watcher.screenshot({ path: path.join(OUT_DIR, 'spectator.png') });
     await host.screenshot({ path: path.join(OUT_DIR, 'fighter.png') });
   } finally {

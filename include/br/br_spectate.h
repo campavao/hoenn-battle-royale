@@ -1,6 +1,8 @@
 #ifndef GUARD_BR_SPECTATE_H
 #define GUARD_BR_SPECTATE_H
 
+#include "br/br_config.h"
+
 // The spectator stream (POK-233): a fighter (the challenger, which sees both sides'
 // actions) publishes its link battle so an eliminated player can replay it on the real
 // battle screen as a BATTLE_TYPE_RECORDED, running a turn behind. This half is the
@@ -32,6 +34,46 @@ struct BrSpectate
 #define BR_SPECTATE_RECORD_SIZE 664
 
 extern struct BrSpectate gBrSpectate;
+
+// How janky watching was, as numbers (POK-376): the page reads these when a match is
+// decided and sends them to the relay's log, so a teleport or a stuck replay in a real
+// match shows up in the play log instead of only in somebody's memory of it. Counted
+// from boot; the page sends what changed over the match.
+struct BrJank
+{
+    /* 0 */ u16 snaps;     // a ghost on our map snapped to its roster cell (its queue overflowed)
+    /* 2 */ u16 camSnaps;  // ...and it was the one the camera rides
+    /* 4 */ u16 lost;      // a step whose cell was not where the ghost's walk had it
+    /* 6 */ u16 stalls;    // a live replay waited BR_JANK_STALL_SECS or more on the stream
+    /* 8 */ u16 longest;   // the longest such wait, in seconds
+    /* 10 */ u16 checks;   // replayed turns checked against the fighter's (BR_SPECTATE_CHECK)
+    /* 12 */ u16 drifts;   // ...that disagreed: the replay was showing a different fight
+    /* 14 */ u16 watchSecs; // seconds spent following somebody or replaying their fight
+};
+BR_OFFSET(BrJank, snaps, 0)
+BR_OFFSET(BrJank, camSnaps, 2)
+BR_OFFSET(BrJank, lost, 4)
+BR_OFFSET(BrJank, stalls, 6)
+BR_OFFSET(BrJank, longest, 8)
+BR_OFFSET(BrJank, checks, 10)
+BR_OFFSET(BrJank, drifts, 12)
+BR_OFFSET(BrJank, watchSecs, 14)
+BR_SIZE(BrJank, 16)
+extern struct BrJank gBrJank;
+
+// A replay that sat this long on a choice that had not come, while the trainer we follow
+// was not choosing (their shot clock off), is a stall: the other side's choice can take
+// the whole shot clock (br_battle.h), and nothing takes longer than that.
+#define BR_JANK_STALL_SECS (BR_SHOT_CLOCK_FRAMES / 60 + 5)
+
+// The fighter's word on each turn (POK-376): a TURN can carry, after the battlers' action
+// runs, one run under this battler number -- which no battler has, so a replay that does
+// not know it skips it (RecordedBattle_FeedSpectate) -- holding the number of the turn
+// before and a checksum of every battler's species and HP as that turn ended. The replay works out the
+// same sum when its own turn ends; a sum that differs is a replay showing a fight that
+// did not happen, and it is ended rather than played on to the wrong winner.
+#define BR_SPECTATE_CHECK 0xC0
+#define BR_SPECTATE_CHECK_LEN 3
 
 // Registers the BSTART/TURN handlers. A spectator only ever receives what the page
 // chooses to deliver: the page is the "watch this fight" gate, the ROM just plays what

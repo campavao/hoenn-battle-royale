@@ -28,6 +28,8 @@ export interface RosterEntry {
   x?: number;
   y?: number;
   dir: Dir;
+  /** The gait its last step said (StepMsg.p), absent when that step did not say. */
+  pace?: 0 | 1 | 2;
   isMe: boolean;
   /** Their career as they said it (a `card`, POK-339); absent for a bot, and for a
    *  page older than the message. */
@@ -156,6 +158,7 @@ export class Roster {
         e.x = msg.x;
         e.y = msg.y;
         e.dir = msg.d;
+        e.pace = msg.p;
         return;
       }
       case 'face': {

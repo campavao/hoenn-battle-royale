@@ -62,6 +62,8 @@ const SAMPLES: Msg[] = [
   { t: 'ready', seat: 1, ready: true },
   { t: 'card', seat: 1, wins: 3, matches: 12, best: 1 },
   { t: 'card', seat: 1, wins: 0, matches: 0 },
+  { t: 'away', seat: 1, away: true },
+  { t: 'away', seat: 1, away: false },
   { t: 'result', seat: 1, outcome: 'win' },
   { t: 'give', items: [{ id: 13, n: 2 }] },
   { t: 'ping', seat: 1, at: 1000 },
@@ -103,6 +105,13 @@ describe('wire.decode rejects', () => {
     expect(() =>
       decode(JSON.stringify({ t: 'step', seat: 0, d: 1, x: 100000, y: 0, map: { group: 0, num: 0 } })),
     ).toThrow(WireError);
+  });
+
+  it('a pace that is not a gait (POK-376)', () => {
+    expect(() =>
+      decode(JSON.stringify({ t: 'step', seat: 0, d: 1, x: 0, y: 0, map: { group: 0, num: 0 }, p: 3 })),
+    ).toThrow(WireError);
+    expect(decode(JSON.stringify({ t: 'step', seat: 0, d: 1, x: 0, y: 0, map: { group: 0, num: 0 }, p: 1 }))).toMatchObject({ p: 1 });
   });
 
   it('a non-integer coordinate', () => {

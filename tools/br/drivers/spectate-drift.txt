@@ -1,0 +1,30 @@
+# spectate-drift: a replay that disagrees with its fighter about a turn is ended (POK-376).
+# spectate-check.txt's fight, but the fighter's sum for turn 1 is one off the replay's: the
+# replay is showing a fight that did not happen. Played on, it would end on a winner the
+# fight did not have; it ends now, and the watcher is back on the field, still watching
+# (the page's next peek can hand it the fight again).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+wait 2500
+expect u8 gBattleResults+0x13 1
+# turn 2, with a sum for turn 1 that is not the replay's 0x4336
+pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00 C0 03 01 37 43
+mailsend gBrMailbox 19 gDecompressionBuffer 18
+wait 60
+expect u16 gBrJank+10 1
+expect u16 gBrJank+12 1
+wait 600
+# out of the replay, before turn 2 was played
+expect u8 gBrSpectate+5 0
+expect u8 gBattleResults+0x13 1
+shot field
+say spectate drift ok

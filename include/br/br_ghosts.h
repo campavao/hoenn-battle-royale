@@ -46,6 +46,12 @@ BR_SIZE(BrSeat, 16)
 #define BR_BUSY_BATTLE 2
 extern u8 gBrSeatBusy[BR_MAX_SEATS];
 #define BR_STEP_QUEUE 5
+// A walk's pace, as PaceWalk walks a ghost and as BR_MSG_STEP's byte 8 says its sender
+// took the step: walk_normal (16 frames a tile), walk_fast (8: running, surfing) and
+// walk_faster (4: the Mach Bike flat out).
+#define BR_PACE_NORMAL 0
+#define BR_PACE_FAST 1
+#define BR_PACE_FASTER 2
 // OBJECT_EVENTS_COUNT is 16; the player, loot and map NPCs need the rest, and
 // BrField_ShareObjects decides how many of these there is room for this frame.
 #define BR_MAX_GHOSTS 12

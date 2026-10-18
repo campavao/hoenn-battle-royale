@@ -1,0 +1,85 @@
+# house-gift: somebody at home (POK-379, br_balls.c). One house in eight has a person in
+# it beside the cache, the same ones for every ROM, with a Pokemon. This one gives it:
+# he turns to us, says his line, then "received BULBASAUR!" with the fanfare, and the
+# PICKUP of his key takes him off every map.
+#
+# house-cache's boot: PETALBURG CITY's HOUSE1 (map 8:2), sHouses[33]. Seed 0x1086 has
+# somebody home there (33 % 8 is the seed's eighth) giving a BULBASAUR. The house's own
+# people only go at a map load once the match is on, so out of the door and back in.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 08 02 03 00 06 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1086
+wait 30
+hold DOWN 90
+wait 200
+hold UP 40
+wait 200
+expect u8 gPlayerPartyCount 1
+# the cache where it always is, (12,11), and him on the next cell out, (11,10): key
+# 0x8C21, a BULBASAUR (1) at the rung (level 0), standing as a person
+expect u16 gBrLoot 0x8D21
+expect u16 gBrLoot+20 0x8C21
+expect u16 gBrLoot+22 11
+expect u16 gBrLoot+24 10
+expect u16 gBrLoot+26 1
+expect u8 gBrLoot+30 0
+expect u8 gBrLoot+31 1
+expectne u8 gBrLoot+32 0xFF
+# up the right of the chairs, over the cache, to (12,10), and face him
+hold UP 34
+wait 20
+hold RIGHT 16
+wait 20
+hold RIGHT 16
+wait 20
+hold UP 48
+wait 20
+expect u16 *gSaveBlock1Ptr 5
+expect u16 *gSaveBlock1Ptr+2 3
+hold LEFT 1
+wait 20
+shot home
+tap A
+wait 60
+shot talks
+# his line is up and he still has it
+expect u8 gBrLoot+31 1
+expect u8 gPlayerPartyCount 1
+tap A
+wait 40
+# He waits on the host first (POK-379, as the event trader does): our PICKUP of his
+# claim key, 0x8C40 above his, and nothing given yet
+expect u8 gPlayerPartyCount 1
+expectmsg 10 u16 1 0x8C61
+expect u8 gBrLoot+31 1
+# ...and the host's PICKUP of his key naming us (seat 0) is the yes: he is still standing
+# for GiftTake, which gives him and sends his key as ever
+expect u8 gBrMySeat 0
+pokebytes gDecompressionBuffer 00 21 8C 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 40
+shot given
+expect u8 gPlayerPartyCount 2
+expectmsg 10 u16 1 0x8C21
+wait 200
+tap A
+wait 30
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 gBrLoot+31 0
+# ...and for good: out and back in, and the cache is back but he is not
+hold DOWN 48
+wait 20
+hold LEFT 32
+wait 20
+hold DOWN 90
+wait 200
+expectne u8 *gSaveBlock1Ptr+5 2
+hold UP 40
+wait 200
+expect u8 *gSaveBlock1Ptr+5 2
+expect u16 gBrLoot 0x8D21
+expect u8 gBrLoot+31 0
+shot gone
+say house gift ok

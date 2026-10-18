@@ -145,6 +145,41 @@ export const ANIM_HFLIP_BIT = 22;
 
 const SHEETS = spritesData as Record<string, { w: number; h: number; frames: number }>;
 
+// ---- SURF (POK-391) ---------------------------------------------------------------------
+//
+// A ghost on the water rides SURF's blob (br_ghosts.c's SurfGhost): BRENDAN and MAY sit
+// down on it, everybody else rides it as they stand. The ROM does that for the ghosts it
+// holds objects for; the page draws the rest, and drew them standing on the sea.
+
+/** The SURF blob's sheet (tools/br/export-sprites.py): past every object gfx id. */
+export const SURF_BLOB_GFX = 1000;
+/** br_ghosts.c's SurfGraphic: OBJ_EVENT_GFX_{BRENDAN,MAY,RIVAL_BRENDAN,RIVAL_MAY}_NORMAL to
+ *  their _SURFING. */
+export const SURF_GFX: Readonly<Record<number, number>> = { 0: 2, 89: 92, 100: 103, 105: 108 };
+/** sAnimTable_SurfBlob by DIR_*: south, north, west, and east as west mirrored. */
+const BLOB_FRAMES: Readonly<Record<number, readonly [number, boolean]>> = { 1: [0, false], 2: [1, false], 3: [2, false], 4: [2, true] };
+
+/** UpdateBobbingEffect's y2 for rider and blob alike, `tick` frames in: a pixel every
+ *  four frames, turning every sixteen, so 0 down to -4 and back in 32. */
+export function surfBob(tick: number): number {
+  const k = (tick >> 2) & 7;
+  return 0 - Math.min(k, 8 - k); // never -0
+}
+
+/** A rider and the blob under it, both lifted `bob`: the blob's centre is the rider's
+ *  plus 8 (UpdateBobbingEffect: `sprite->y = playerSprite->y + 8`), facing as the rider
+ *  moves (SynchronizeSurfAnim). The rider comes first, so a search by seat finds it. */
+export function withBlob(rider: FieldSprite, dir: number, bob: number): FieldSprite[] {
+  const info = SHEETS[String(rider.gfx)];
+  const blob = SHEETS[String(SURF_BLOB_GFX)];
+  if (!info || !blob) return [rider];
+  const [frame, hFlip] = BLOB_FRAMES[dir] ?? BLOB_FRAMES[DIR_SOUTH];
+  const up = { ...rider, y: rider.y + bob };
+  const under: FieldSprite = { gfx: SURF_BLOB_GFX, frame, hFlip, x: up.x + (info.w >> 1) - (blob.w >> 1), y: up.y + (info.h >> 1) + 8 - (blob.h >> 1), hidden: rider.hidden, under: true };
+  if (rider.seat !== undefined) under.seat = rider.seat;
+  return [up, under];
+}
+
 const u16 = (b: Uint8Array, o: number) => b[o] | (b[o + 1] << 8);
 const s16 = (b: Uint8Array, o: number) => (u16(b, o) << 16) >> 16;
 
@@ -389,15 +424,21 @@ export function placePeople(
   people: Person[],
   origin: { left: number; top: number },
   face: (gfx: number, dir: number) => { frame: number; hFlip: boolean },
+  wet: (x: number, y: number) => boolean = () => false,
+  bob = 0,
 ): FieldSprite[] {
   const out: FieldSprite[] = [];
   for (const p of people) {
-    const info = SHEETS[String(p.gfx)];
+    // A seat on the water surfs (SurfGhost); Hoenn's people and the loot never are.
+    const surfing = p.seat !== undefined && wet(p.x, p.y);
+    const gfx = surfing ? SURF_GFX[p.gfx] ?? p.gfx : p.gfx;
+    const info = SHEETS[String(gfx)];
     if (!info) continue;
-    const { frame, hFlip } = face(p.gfx, p.dir);
-    const sprite: FieldSprite = { gfx: p.gfx, frame, hFlip, ...onPicture(info, p.x * TILE, p.y * TILE, origin), hidden: true };
+    const { frame, hFlip } = face(gfx, p.dir);
+    const sprite: FieldSprite = { gfx, frame, hFlip, ...onPicture(info, p.x * TILE, p.y * TILE, origin), hidden: true };
     if (p.seat !== undefined) sprite.seat = p.seat;
-    out.push(sprite);
+    if (surfing) out.push(...withBlob(sprite, p.dir, bob));
+    else out.push(sprite);
   }
   return out;
 }
@@ -477,6 +518,8 @@ interface Walker {
   pace: number;
   frames: number;
   idle: number;
+  /** The gait its trainer last said (RosterEntry.pace): PaceWalk never walks it slower. */
+  gait?: number;
   /** The roster's cell as last seen: what is queued walks from the tile to here. */
   seenX: number;
   seenY: number;
@@ -500,7 +543,9 @@ function pace(w: Walker): number {
   const behind = w.queue.length;
   if (behind >= PACE_FASTER_AT) w.pace = 2;
   else if (behind >= PACE_FAST_AT && w.pace < 2) w.pace++;
+  else if (behind === 0 && w.gait !== undefined) w.pace = w.gait;
   else if (behind === 0 && w.pace !== 0 && w.idle >= PACE_FRAMES[w.pace]) w.pace--;
+  if (w.gait !== undefined && w.pace < w.gait) w.pace = w.gait;
   w.idle = 0;
   return PACE_FRAMES[w.pace];
 }
@@ -536,6 +581,8 @@ function walk(w: Walker): void {
 /** The other seats, walked on the page. Fed the roster once an emulator frame. */
 export class GhostWalkers {
   private walkers = new Map<number, Walker>();
+  /** Emulator frames walked: the SURF bob's clock. */
+  private tick = 0;
 
   /** The roster as it is this frame: a tile moved is a step queued, a new facing a turn,
    *  a new map or more than the queue holds a snap. Our own seat, a seat that is out and
@@ -558,11 +605,13 @@ export class GhostWalkers {
       if (!w || w.group !== r.map.group || w.num !== r.map.num) {
         w = { seat: r.seat, gfx, group: r.map.group, num: r.map.num, x: 0, y: 0, facing: dir, dir, step: 0, left: 0, cmd: 0, queue: [], pace: 0, frames: WALK_FRAMES, idle: 0, seenX: 0, seenY: 0 };
         stand(w, r.x, r.y);
+        w.gait = r.pace;
         this.walkers.set(r.seat, w);
         continue;
       }
       w.gfx = gfx;
       w.dir = dir;
+      w.gait = r.pace;
       const dx = r.x - w.seenX;
       const dy = r.y - w.seenY;
       const n = Math.abs(dx) + Math.abs(dy);
@@ -580,6 +629,12 @@ export class GhostWalkers {
     }
     for (const seat of Array.from(this.walkers.keys())) if (!here.has(seat)) this.walkers.delete(seat);
     for (const w of this.walkers.values()) walk(w);
+    this.tick = (this.tick + 1) & 0xffff;
+  }
+
+  /** The SURF bob this frame, for everybody the page draws on the water. */
+  bob(): number {
+    return surfBob(this.tick);
   }
 
   /** A seat the page is walking: gBrSeats' standing copy of it is not drawn as well. */
@@ -594,24 +649,30 @@ export class GhostWalkers {
 
   /** The walkers on a map as sprites on the picture, `origin` the map pixel at its
    *  top-left (field.ts's lcdOrigin). `keep` is asked of each by its seat and its tile;
-   *  `hidden` puts them on the overlay. */
+   *  `hidden` puts them on the overlay. `wet` is asked of the tile each stands on, or is
+   *  stepping onto (SurfGhost asks of currentCoords, which moves as a step begins). */
   sprites(
     map: { group: number; num: number },
     origin: { left: number; top: number },
     keep: (seat: number, x: number, y: number) => boolean,
     hidden: boolean,
+    wet: (x: number, y: number) => boolean = () => false,
   ): FieldSprite[] {
     const out: FieldSprite[] = [];
     for (const w of this.walkers.values()) {
       if (w.group !== map.group || w.num !== map.num || !keep(w.seat, w.x, w.y)) continue;
-      const info = SHEETS[String(w.gfx)];
-      if (!info) continue;
       const tile = toPage(romCell(w.x, w.y));
+      const surfing = wet(tile.x, tile.y);
+      const gfx = surfing ? SURF_GFX[w.gfx] ?? w.gfx : w.gfx;
+      const info = SHEETS[String(gfx)];
+      if (!info) continue;
       const [dx, dy] = STEP[w.step] ?? [0, 0];
       const px = (w.left * TILE) / w.frames;
       const at = onPicture(info, tile.x * TILE - dx * px, tile.y * TILE - dy * px, origin);
       const frame = w.step === 0 ? FACE_FRAMES[w.facing] : GO_FRAMES[w.step][w.cmd + (w.frames - w.left > w.frames / 2 ? 1 : 0)];
-      out.push({ gfx: w.gfx, frame, hFlip: w.facing === DIR_EAST, ...at, hidden, seat: w.seat });
+      const sprite: FieldSprite = { gfx, frame, hFlip: w.facing === DIR_EAST, ...at, hidden, seat: w.seat };
+      if (surfing) out.push(...withBlob(sprite, w.facing, this.bob()));
+      else out.push(sprite);
     }
     return out;
   }

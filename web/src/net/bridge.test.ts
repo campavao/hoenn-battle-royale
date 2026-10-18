@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BLOCKS_KEPT, Bridge, fightOf, STALL_AFTER_RESULT_FRAMES, STALL_FRAMES, type BridgeOptions } from './bridge';
+import { BLOCKS_KEPT, Bridge, fightOf, STALL_AFTER_RESULT_FRAMES, STALL_AWAY_FRAMES, STALL_FRAMES, type BridgeOptions } from './bridge';
 import { MAILBOX, Mailbox, type RamAccess } from './mailbox';
 import { NETLINK } from './netlink';
 import { POSITIONAL_CAP, RomPort } from './romport';
@@ -902,6 +902,56 @@ describe('a link battle gone quiet (POK-331 #3)', () => {
     expect(f.closing()).toBe(false);
     f.run(1);
     expect(f.closing()).toBe(true);
+  });
+
+  // POK-389: a phone that switched apps mid-fight came back to a fight closed under it.
+  it('waits three minutes for an opponent whose tab said it went to the background', () => {
+    const f = fight();
+    f.socket.receive({ type: 'recv', from: 7, m: { t: 'away', seat: 7, away: true } });
+    f.run(STALL_AWAY_FRAMES - 1);
+    expect(f.closing()).toBe(false);
+    f.run(1);
+    expect(f.closing()).toBe(true);
+  });
+
+  it('counts the usual seventy-five seconds again from the moment they are back', () => {
+    const f = fight();
+    f.socket.receive({ type: 'recv', from: 7, m: { t: 'away', seat: 7, away: true } });
+    f.run(STALL_FRAMES + 600);
+    f.socket.receive({ type: 'recv', from: 7, m: { t: 'away', seat: 7, away: false } });
+    f.run(STALL_FRAMES - 1);
+    expect(f.closing()).toBe(false);
+    f.run(1);
+    expect(f.closing()).toBe(true);
+  });
+
+  it("takes a block from them as back, though their own word of it was lost (POK-389 review)", () => {
+    const f = fight();
+    f.socket.receive({ type: 'recv', from: 7, m: { t: 'away', seat: 7, away: true } });
+    f.run(600);
+    f.socket.receive({ type: 'recv', from: 7, m: block(7, 2, F(7, 1)) });
+    f.run(STALL_FRAMES - 1);
+    expect(f.closing()).toBe(false);
+    f.run(1);
+    expect(f.closing()).toBe(true);
+  });
+
+  it("takes nobody's word but the seat's own that it is away", () => {
+    const f = fight();
+    f.socket.receive({ type: 'recv', from: 9, m: { t: 'away', seat: 7, away: true } });
+    f.run(STALL_FRAMES);
+    expect(f.closing()).toBe(true);
+  });
+
+  it('tells the room when our own tab goes and comes back', () => {
+    const { socket, bridge } = joined();
+    socket.sent.length = 0;
+    bridge.sayAway(true);
+    bridge.sayAway(false);
+    expect(socket.sent).toEqual([
+      { type: 'all', m: { t: 'away', seat: 2, away: true } },
+      { type: 'all', m: { t: 'away', seat: 2, away: false } },
+    ]);
   });
 
   it('takes a block after that RESULT as the fight going on, so a RESULT that crossed our challenge cuts nothing short', () => {
