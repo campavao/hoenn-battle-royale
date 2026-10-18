@@ -33,7 +33,9 @@ s32 BrBag_PickRow(s32 listPosition)
             sUsing = TRUE;
             return row;
         }
-        // The list skips an empty slot, so its rows are the stacks before this one.
+        // The list skips an empty slot, so its rows are the stacks before this one. (The
+        // bag compacts a pocket as it opens, so the row is also the slot that
+        // BagGetItemIdByPocketPosition reads.)
         if (pocket->itemSlots[i].itemId != ITEM_NONE)
             row++;
     }
@@ -46,4 +48,10 @@ s8 BrBag_PickUse(s8 selection)
         return selection;
     sUsing = FALSE;
     return 0;
+}
+
+void BrBag_Forget(void)
+{
+    gBrBag.pick = ITEM_NONE;
+    sUsing = FALSE;
 }

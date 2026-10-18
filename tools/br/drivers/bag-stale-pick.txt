@@ -1,0 +1,45 @@
+# bag-stale-pick: a pick whose bag never opened is let go at the next action menu
+# (BrBag_Forget, from BrBattle_ShotReset). The page writes gBrBag as BAG goes down; if
+# that bag never opens (the shot clock on the same frame, the battle over), a ball must
+# not throw itself in the next bag the player opens by hand.
+#
+# The wild battle is run-wild-keeps-doll.txt's: ROUTE 102 under match seed 4.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 30
+tap LEFT
+wait 4
+tap LEFT
+wait 250
+tap LEFT
+wait 250
+expect u16 gBattleTypeFlags 4
+wait 300
+tap B
+wait 300
+tap B
+wait 300
+expect u8 gBrBattle+8 1
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x650 4
+poke u16 *gSaveBlock1Ptr+0x652 3
+# a pick left waiting, then FIGHT and the first move instead of BAG
+poke u8 gBagPosition+5 1
+poke u16 gBrBag 4
+tap A
+wait 30
+tap A
+wait 900
+expect u8 gBrBattle+8 1
+expect u16 gBrBag 0
+# BAG by hand: the bag stays open on the list, nothing thrown
+tap RIGHT
+wait 10
+tap A
+wait 200
+shot by-hand
+expect u16 *gSaveBlock1Ptr+0x652 3
+say bag stale pick ok

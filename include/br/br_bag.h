@@ -24,4 +24,9 @@ s32 BrBag_PickRow(s32 listPosition);
 // else `selection` as it was.
 s8 BrBag_PickUse(s8 selection);
 
+// A new action menu: whatever the last one's BAG press left waiting is let go. The page
+// writes its pick as that press goes down; a bag that then never opened (the shot clock
+// on the same frame, the battle over) must not USE it in the next one the player opens.
+void BrBag_Forget(void);
+
 #endif // GUARD_BR_BAG_H

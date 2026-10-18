@@ -81,8 +81,16 @@ function basePp(rom: Rom, id: number): number {
   return pp;
 }
 
-/** The battle as the menu needs it; null outside one or without the symbols. */
-export function readBattleView(emu: BattleRead, sym: (name: string) => number | undefined, rom: Rom | null): BattleView | null {
+const NO_BAG: Map<number, Stack[]> = new Map();
+
+/** The battle as the menu needs it; null outside one or without the symbols. The bag's
+ *  pockets only `withBag` (while the page's bag is open): a hundred slots a frame else. */
+export function readBattleView(
+  emu: BattleRead,
+  sym: (name: string) => number | undefined,
+  rom: Rom | null,
+  withBag = false,
+): BattleView | null {
   const main = sym('gMain');
   const br = sym('gBrBattle');
   const mons = sym('gBattleMons');
@@ -120,7 +128,7 @@ export function readBattleView(emu: BattleRead, sym: (name: string) => number | 
     safariBalls: balls === undefined ? 0 : emu.read(balls, 8),
     moves,
     foe: { name: foeName, types: [emu.read(foe + MON_TYPES, 8), emu.read(foe + MON_TYPES + 1, 8)] },
-    bag: readBattleBag(emu, sym, rom),
+    bag: withBag ? readBattleBag(emu, sym, rom) : NO_BAG,
   };
 }
 
@@ -242,6 +250,8 @@ export interface BattleMenuDeps {
   /** USE in the page's bag: `item` out of `pocket`, through the ROM's BAG (ui/bag.ts).
    *  Without it BAG opens the ROM's own screen, as it used to. */
   useItem?(pocket: number, item: number): void;
+  /** The bag's pockets now, for the frame BAG is tapped (readBattleView reads them after). */
+  readBag?(): Map<number, Stack[]>;
 }
 
 /** The bag's windows, GBA pixels: the mockup's pocket bar, list, description, and BACK
@@ -595,6 +605,7 @@ export class BattleMenu {
       this.pocketAt = 0;
       this.picked = 0;
       this.bagList.scrollTop = 0;
+      if (this.deps.readBag) this.view = { ...v, bag: this.deps.readBag() };
       this.setMode('bag');
       return;
     }
@@ -634,6 +645,11 @@ export class BattleMenu {
   private sendChained(go: () => void): void {
     this.send(go);
     this.chained = true;
+  }
+
+  /** Whether the page's bag is open, so the frame's read wants the pockets. */
+  get wantsBag(): boolean {
+    return this.mode === 'bag';
   }
 
   private setMode(mode: Mode): void {
@@ -733,7 +749,7 @@ export class BattleMenu {
       this.bagDescWin.show(key);
       this.bagUseWin.show(key);
       this.bagUseBtn.setAttribute('aria-disabled', String(!stack || !!this.refusal(stack)));
-      this.bagUseBtn.setAttribute('aria-label', stack ? `Use ${itemInfo(this.deps.rom!, stack.item)?.name ?? ''}` : 'Nothing to use');
+      this.bagUseBtn.setAttribute('aria-label', stack ? `Use ${(this.deps.rom && itemInfo(this.deps.rom, stack.item)?.name) ?? ''}` : 'Nothing to use');
     }
     if (info) {
       const h = this.infoHeight();
