@@ -273,8 +273,8 @@ export function catchUp(
 ): Msg[] {
   const out: Msg[] = [];
   if (state.ring) {
-    const { phase, sx, sy, r, place } = state.ring;
-    out.push({ t: 'ring', seat: hostSeat, phase, sx, sy, r, place });
+    const { phase, sx, sy, r, next, place } = state.ring;
+    out.push({ t: 'ring', seat: hostSeat, phase, sx, sy, r, next, place });
     out.push({ t: 'clock', seat: hostSeat, left: state.clockLeft });
   }
   for (const seat of state.placements) out.push({ t: 'out', seat });

@@ -10,7 +10,7 @@ expect u8 gBrHud+0x09 1
 # the page writes 7 left and 2:05 on the clock
 poke u8 gBrHud+0x00 7
 poke u16 gBrHud+0x02 125
-# three spectators are on us: the eye and the count share the clock line (POK-233)
+# three spectators are on us: the eye takes turns with the count beside the clock (POK-233)
 poke u8 gBrHud+0x0F 3
 wait 4
 expect u8 gBrHud+0x14 3
