@@ -332,6 +332,10 @@ def export():
         classes = [0] * (w * h)
         heights = [0] * (w * h)
         cracks = []
+        # Waterfalls are water, but not open water: surfing north into one climbs it and
+        # anywhere on one the current carries you south (br_hm.c, ForcedMovement for
+        # MB_WATERFALL). The walker lets you onto or off a fall only going north or south.
+        falls = []
         for i in range(min(cell_count, w * h)):
             val = cells_raw[i]
             heights[i] = val >> MAPGRID_ELEVATION_SHIFT
@@ -352,6 +356,8 @@ def export():
             else:
                 cls = 0
             classes[i] = cls
+            if cls == 2 and behavior == "MB_WATERFALL":
+                falls.append(i)
             if cls == 0 and behavior in CRACKED_BEHAVIORS:
                 cracks.append((i % w, i // w))
 
@@ -451,6 +457,7 @@ def export():
             "grid": rle_encode(classes), "elev": rle_encode(heights),
             "seams": seams, "warps": warps,
             "centre": centre,
+            **({"falls": falls} if falls else {}),
             "_folder": folder,  # internal use only, stripped before writing
         })
         included += 1

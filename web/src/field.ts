@@ -34,13 +34,14 @@
 // the picture lags the struct by exactly one frame -- the scroll registers are written at
 // the VBlank that ends a frame's logic and drawn during the next -- so what is drawn here
 // is the state read the frame BEFORE.
-import type { SeamDir, WorldMap } from './bots/world';
+import { isWater, type SeamDir, type WorldMap } from './bots/world';
 import { HOENN } from './bots/hoenn';
 import spritesData from './data/sprites.json';
 import type { Band, Emulator, SpriteBand } from './emu';
 import {
   DESPAWN_COUNT, DESPAWN_SIZE, EVENTS_SIZE, GHOST_LOCAL_ID_BASE, GhostWalkers, LOOT_COUNT, LOOT_SIZE, MATCH_SEED, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_FLAGS, SB1_TEMPLATES, SEAT_COUNT, SEAT_SIZE,
   TEMPLATE_COUNT, TEMPLATE_SIZE, MATCH_PHASE, PHASE_NONE, STRIPPED_WORDS, decodeDespawned, decodeStripped, decodeLoot, decodeSeats, decodeTemplates, decodeTraders, droppedPeople, inObjectView, initialFacing, objectKey, placePeople, standingFrame,
+  SURF_BLOB_GFX, withBlob,
 } from './field-ghosts';
 import type { Seat } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -168,12 +169,15 @@ export const OBJ_OFFSCREEN_BIT = 0x40;
 export const OBJ_PLAYER_BYTE = 2; // bit 0
 export const OBJ_SPRITE_ID = 4;
 export const OBJ_GFX = 5;
+/** `currentCoords` (MAP_OFFSET included), and the byte whose high nibble is
+ *  `movementDirection`: where a ghost is, and which way its SURF blob faces. */
+export const OBJ_CURRENT_X = 0x10;
+export const OBJ_CURRENT_Y = 0x12;
+export const OBJ_DIRECTION_BYTE = 0x18;
 /** `fieldEffectSpriteId`: the player's SURF blob, while they surf. */
 export const OBJ_FIELD_EFFECT_SPRITE_ID = 0x1a;
 /** gPlayerAvatar.flags' PLAYER_AVATAR_FLAG_SURFING. */
 export const AVATAR_SURFING = 0x08;
-/** The SURF blob's sheet (tools/br/export-sprites.py): past every object gfx id. */
-export const SURF_BLOB_GFX = 1000;
 /** Graphics ids from OBJ_EVENT_GFX_VARS up name a VAR_OBJ_GFX_ID_n (include/constants). */
 export const GFX_VARS = 240;
 export const VAR_OBJ_GFX_ID_0 = 0x4010;
@@ -1205,12 +1209,13 @@ export class FieldView {
       const stood = still === null ? [] : still.sprites.map((s) => ({
         ...s, x: s.x + still.origin.left - origin.left, y: s.y + still.origin.top - origin.top, hidden: false,
       }));
-      const drawn = outdoors ? this.walkers.sprites(c, origin, () => true, false) : [];
+      const drawn = outdoors ? this.walkers.sprites(c, origin, () => true, false, this.wetOn(c)) : [];
       this.ghosts = { rom: [], drawn };
       return [...stood, ...drawn];
     }
     const live = this.liveObjects();
-    const { people: objects, player, blob } = this.readSprites(sb1);
+    const wet = this.wetOn(c);
+    const { people: objects, player, blob } = this.readSprites(sb1, wet);
     const dropped = this.readDropped(sb1, c, live);
     const rom = [...objects, ...dropped];
     // The player too: the picture draws them on the field, but a see-through battle shows
@@ -1221,7 +1226,7 @@ export class FieldView {
     // wherever the roster has already put it.
     const pos = { x: c.x, y: c.y };
     const drawn = outdoors
-      ? this.walkers.sprites(c, origin, (seat, x, y) => !inObjectView(pos, x, y) && !live.has(objectKey(GHOST_LOCAL_ID_BASE + seat, c.num, c.group)), true)
+      ? this.walkers.sprites(c, origin, (seat, x, y) => !inObjectView(pos, x, y) && !live.has(objectKey(GHOST_LOCAL_ID_BASE + seat, c.num, c.group)), true, wet)
       : [];
     // gBrSeats' standing copy past the box is the page's drawing, not an object of the ROM's.
     this.ghosts = { rom: objects.filter((s) => s.seat !== undefined), drawn: [...dropped.filter((s) => s.seat !== undefined), ...drawn] };
@@ -1248,7 +1253,7 @@ export class FieldView {
   peek(): { onField: boolean; rom: FieldSprite[]; walkers: FieldSprite[]; drawn: FieldSprite[]; seats: number[] } | null {
     const c = this.prev;
     if (!c) return null;
-    return { onField: c.onField, rom: this.ghosts.rom, walkers: this.walkers.sprites(c, lcdOrigin(c), () => true, false), drawn: this.ghosts.drawn, seats: this.walkers.seats() };
+    return { onField: c.onField, rom: this.ghosts.rom, walkers: this.walkers.sprites(c, lcdOrigin(c), () => true, false, this.wetOn(c)), drawn: this.ghosts.drawn, seats: this.walkers.seats() };
   }
 
   /** gBrRingStale, read with the camera: its bits are relative to the pos read with it. */
@@ -1279,7 +1284,7 @@ export class FieldView {
   /** Every object the ROM has on the map, where its sprite is: the people the page draws,
    *  and the player apart, whom the picture draws on the field and the still keeps for
    *  under a battle. */
-  private readSprites(sb1: number): { people: FieldSprite[]; player: FieldSprite | null; blob: FieldSprite | null } {
+  private readSprites(sb1: number, wet: (x: number, y: number) => boolean): { people: FieldSprite[]; player: FieldSprite | null; blob: FieldSprite | null } {
     const objs = this.sym('gObjectEvents');
     const sprs = this.sym('gSprites');
     const offX = this.sym('gSpriteCoordOffsetX');
@@ -1320,6 +1325,13 @@ export class FieldView {
       }
       const seat = emu.read(o + OBJ_LOCAL_ID, 8) - GHOST_LOCAL_ID_BASE;
       if (seat >= 0 && seat < SEAT_COUNT) sprite.seat = seat;
+      // A ghost the ROM surfs rides a blob of the ROM's, but a field effect is not an
+      // object: past the picture it was a rider on bare water (POK-391). Its own bob is
+      // in the sprite's y already.
+      if (sprite.seat !== undefined && wet(s16(emu.read(o + OBJ_CURRENT_X, 16)) - MAP_OFFSET, s16(emu.read(o + OBJ_CURRENT_Y, 16)) - MAP_OFFSET)) {
+        out.push(...withBlob(sprite, emu.read(o + OBJ_DIRECTION_BYTE, 8) >> 4, 0));
+        continue;
+      }
       out.push(sprite);
     }
     return { people: out, player, blob };
@@ -1344,6 +1356,12 @@ export class FieldView {
     const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
     const hFlip = oamFlipped(emu.read(s + SPR_OAM_MODE, 8), emu.read(s + SPR_OAM_ATTR1, 16));
     return { gfx: SURF_BLOB_GFX, frame, hFlip, x, y, hidden: false, under: true };
+  }
+
+  /** Water on the map we are on, in its own coords (POK-391): where a ghost surfs. */
+  private wetOn(at: { group: number; num: number }): (x: number, y: number) => boolean {
+    const map = HOENN.byRef.get(`${at.group}:${at.num}`);
+    return map ? (x, y) => isWater(map, x, y) : () => false;
   }
 
   /** A graphics id past the table names a var holding the real one. */
@@ -1383,7 +1401,7 @@ export class FieldView {
       traders: decodeTraders(table('gBrEvents', EVENTS_SIZE), match === undefined ? 0 : emu.read(match + MATCH_SEED, 32) >>> 0),
       live,
     });
-    return placePeople(people, lcdOrigin(cam), (gfx, dir) => standingFrame(rom, infos, gfx, dir));
+    return placePeople(people, lcdOrigin(cam), (gfx, dir) => standingFrame(rom, infos, gfx, dir), this.wetOn(cam), this.walkers.bob());
   }
 
   private image(id: string, dir = 'field-maps'): HTMLImageElement | null {

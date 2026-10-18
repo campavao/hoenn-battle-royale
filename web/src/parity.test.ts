@@ -92,7 +92,7 @@ import appTs from './app.ts?raw';
 import brainTs from './bots/brain.ts?raw';
 import lootTs from './match/loot.ts?raw';
 import { PATCH_KEY_BASE } from './match/loot';
-import { EVENT_KEY_BASE, EVENT_MAX, EVENT_PIECES, GOLD, LEGENDS, RARES, traderKey } from './match/events';
+import { EVENT_KEY_BASE, EVENT_MAX, EVENT_PIECES, GOLD, LEGENDS, RARES, claimKey, traderKey } from './match/events';
 import { GIFT_KEY_BASE, GIFTS } from './match/gifts';
 import { DOOR_Y, FLYING, STORIES } from './match/story';
 import uiData from './data/ui.json';
@@ -824,6 +824,8 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(1 << obj.bits.offScreen.bit).toBe(field.OBJ_OFFSCREEN_BIT);
     expect(obj.bits.isPlayer).toEqual({ byte: field.OBJ_PLAYER_BYTE, bit: 0 });
     expect([field.OBJ_SPRITE_ID, field.OBJ_GFX]).toEqual([obj.at.spriteId, obj.at.graphicsId]);
+    expect([field.OBJ_CURRENT_X, field.OBJ_CURRENT_Y]).toEqual([obj.at.currentCoords, obj.at.currentCoords + 2]);
+    expect(obj.bits.movementDirection, "the SURF blob's facing, the high nibble").toEqual({ byte: field.OBJ_DIRECTION_BYTE, bit: 4 });
     expect(obj.bits.currentElevation, "touch.ts's, the low nibble").toEqual({ byte: touch.OBJ_ELEVATION_BYTE, bit: 0 });
   });
 
@@ -1097,6 +1099,10 @@ describe('the rules a bot plays by the ROM\'s way', () => {
     expect(EVENT_MAX).toBe(define(eventH, 'BR_EVENT_MAX'));
     // Past every trainer's key: 0x8000 | slot << 11 | id, slots 0..5, ids under 0x400.
     expect(EVENT_KEY_BASE).toBeGreaterThan(0x8000 | (5 << 11) | 0x3ff);
+    // His key and the ask for him (POK-392): events.ts's traderKey and claimKey.
+    expect(eventH).toMatch(/^#define BR_EVENT_TRADER_KEY\(n\) BR_EVENT_KEY\(n, 15\)$/m);
+    expect(eventH).toMatch(/^#define BR_EVENT_CLAIM_KEY\(n\) BR_EVENT_KEY\(n, 14\)$/m);
+    expect([traderKey(0), claimKey(0)]).toEqual([EVENT_KEY_BASE | 15, EVENT_KEY_BASE | 14]);
   });
 
   it("gBrEvents: the traders past the object box (field-ghosts.ts)", () => {

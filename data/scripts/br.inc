@@ -110,6 +110,8 @@ BR_EventScript_Trader::
 	goto_if_eq VAR_RESULT, NO, BR_EventScript_TraderNo
 	special ChoosePartyMon
 	special BrEvent_Trade
+	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_TraderNo
+	waitstate
 BR_EventScript_TraderNo:
 	releaseall
 	end

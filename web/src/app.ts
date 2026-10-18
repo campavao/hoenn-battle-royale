@@ -128,6 +128,7 @@ import {
 import { JANK_LONGEST, jankMessage, readJank, type JankCounts } from './match/jank';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import { HOENN, loadHoenn } from './bots/hoenn';
+import { MON_SIZE, readTeam, teamSpill } from './match/owed';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './match/landing';
 import { cardFor } from './match/card';
 import { type MatchRecord, recordLines } from './match/record';
@@ -2712,6 +2713,12 @@ function wireRoom(
       dealing: () => host !== null,
       bots: () => host?.bots.bots ?? null,
       toRom: (m) => bridge?.pushToRom(m),
+      owed: {
+        opponent: () => bridge?.opponent() ?? null,
+        inRoom: (seat) => (controls.roster?.members ?? []).some((m) => m.id === seat),
+        // After the `out` that made it due is booked, not from inside its booking.
+        dropTeam: () => queueMicrotask(dropOwedTeam),
+      },
       defaultFog: () => controls.fogSecs,
       store: localStorage,
       grace: new EndGrace({
@@ -2747,6 +2754,31 @@ function wireRoom(
     },
   );
   stallLog = session.log;
+  /** Our team and where we stood when our ROM lost its last link fight (POK-387): read
+   *  then, since a replay we watch afterwards plays its fight in the same gPlayerParty. */
+  let lostWith: { team: { species: number; level: number }[]; at: { map: MapRef; x: number; y: number } } | null = null;
+  const noteLoss = (msg: Msg): void => {
+    if (!bridge || msg.t !== 'result' || msg.seat !== bridge.seat || msg.outcome !== 'lose') return;
+    const party = symbols?.get('gPlayerParty');
+    const count = symbols?.get('gPlayerPartyCount');
+    const me = bridge.roster.get(bridge.seat);
+    lostWith =
+      party === undefined || count === undefined || !me?.map || me.x === undefined || me.y === undefined
+        ? null
+        : { team: readTeam(emu.bytes(party, 6 * MON_SIZE), emu.read(count, 8)), at: { map: me.map, x: me.x, y: me.y } };
+  };
+  /** ...and the winner left the match without putting that team down: we do, round where
+   *  we stood, under our own keys -- what their ROM would have sent. */
+  const dropOwedTeam = (): void => {
+    if (!bridge || !lostWith) return;
+    const spill = teamSpill(bridge.seat, lostWith.team, lostWith.at, HOENN.world, HOENN.idOf(lostWith.at.map), session.loot);
+    lostWith = null;
+    if (!spill) return;
+    console.info(`[loot] seat ${bridge.seat}'s winner left the match: dropping the team ourselves`);
+    bridge.relay.all(spill);
+    bridge.pushToRom(spill);
+    session.note(spill, 'page');
+  };
   /** Everything a promoted client needs to pick the match up (POK-252), and reset by
    *  returnToRoom for the next one (match/lifecycle.ts): the session's, one object for
    *  the page's life. */
@@ -2838,6 +2870,16 @@ function wireRoom(
     // next match's start is for the ROM that will play it, not this one (POK-331 #18).
     bridge.setRomFilter((msg) => {
       if (holdsStart(msg)) return false;
+      // A team put down twice -- a winner back from the background after the loser's page
+      // dropped it for them (POK-387) -- is the same pieces twice: what has been taken is
+      // not stood up again, and the rest goes in as it is.
+      if (msg.t === 'spill') {
+        const left = session.loot.trim(msg);
+        if (left !== msg) {
+          if (left) bridge!.pushToRom(left);
+          return false;
+        }
+      }
       if (spectate.wantsFromRelay(msg)) return true;
       cutToFight(msg);
       return false;
@@ -2875,6 +2917,7 @@ function wireRoom(
     bridge.setOutFilter(() => !amWatching);
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);
+      noteLoss(msg);
       // Our own wild fight is over when our ROM says it is back on the map: nobody else
       // will say so, and a later watcher must not be handed it (spectate.ts noteBusy).
       if (msg.t === 'busy') spectate.noteBusy(bridge!.seat, msg.kind);
@@ -3127,7 +3170,12 @@ function wireRoom(
   }
 
   relay.on('room_hosted', (ev) => attach(ev.id, ev.code, ev.id));
-  relay.on('room_joined', (ev) => attach(ev.id, ev.code, ev.host));
+  relay.on('room_joined', (ev) => {
+    attach(ev.id, ev.code, ev.host);
+    // Back in the room: what we said about our tab while the socket was down never went
+    // (POK-389), so it is said again.
+    bridge?.sayAway(document.hidden);
+  });
 
   /** Everything that makes this page the one running the match, undone at once
    *  (POK-330 #13). Standing down, a dropped socket and the way back to the room each
@@ -3377,6 +3425,8 @@ function wireRoom(
   // for the next time the room needs an heir -- and does not take the match back.
   document.addEventListener('visibilitychange', () => {
     if (amWatching) return;
+    // Whoever we are fighting waits longer for a ROM that has stopped for this (POK-389).
+    bridge?.sayAway(document.hidden);
     if (document.hidden) {
       standDownIfHidden();
       awayDoor.hidden();
