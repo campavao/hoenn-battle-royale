@@ -565,6 +565,11 @@ export class Bridge {
     this.relay.all(this.card);
   }
 
+  /** Who our ROM's link fight is, or was last, with. */
+  opponent(): number | null {
+    return this.opponentSeat;
+  }
+
   /** Our tab went to the background or came back (POK-389). The ROM runs no frames while
    *  hidden, so whoever we are fighting hears from it no more until we are back. */
   sayAway(away: boolean): void {

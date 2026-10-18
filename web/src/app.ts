@@ -127,6 +127,7 @@ import {
 } from './match/career';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import { HOENN, loadHoenn } from './bots/hoenn';
+import { MON_SIZE, readTeam, teamSpill } from './match/owed';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './match/landing';
 import { cardFor } from './match/card';
 import { type MatchRecord, recordLines } from './match/record';
@@ -2688,6 +2689,11 @@ function wireRoom(
       dealing: () => host !== null,
       bots: () => host?.bots.bots ?? null,
       toRom: (m) => bridge?.pushToRom(m),
+      owed: {
+        opponent: () => bridge?.opponent() ?? null,
+        inRoom: (seat) => (controls.roster?.members ?? []).some((m) => m.id === seat),
+        dropTeam: () => dropOwedTeam(),
+      },
       defaultFog: () => controls.fogSecs,
       store: localStorage,
       grace: new EndGrace({
@@ -2717,6 +2723,31 @@ function wireRoom(
     },
   );
   stallLog = session.log;
+  /** Our team and where we stood when our ROM lost its last link fight (POK-387): read
+   *  then, since a replay we watch afterwards plays its fight in the same gPlayerParty. */
+  let lostWith: { team: { species: number; level: number }[]; at: { map: MapRef; x: number; y: number } } | null = null;
+  const noteLoss = (msg: Msg): void => {
+    if (!bridge || msg.t !== 'result' || msg.seat !== bridge.seat || msg.outcome !== 'lose') return;
+    const party = symbols?.get('gPlayerParty');
+    const count = symbols?.get('gPlayerPartyCount');
+    const me = bridge.roster.get(bridge.seat);
+    lostWith =
+      party === undefined || count === undefined || !me?.map || me.x === undefined || me.y === undefined
+        ? null
+        : { team: readTeam(emu.bytes(party, 6 * MON_SIZE), emu.read(count, 8)), at: { map: me.map, x: me.x, y: me.y } };
+  };
+  /** ...and the winner left the match without putting that team down: we do, round where
+   *  we stood, under our own keys -- what their ROM would have sent. */
+  const dropOwedTeam = (): void => {
+    if (!bridge || !lostWith) return;
+    const spill = teamSpill(bridge.seat, lostWith.team, lostWith.at, HOENN.world, HOENN.idOf(lostWith.at.map), session.loot);
+    lostWith = null;
+    if (!spill) return;
+    console.info(`[loot] seat ${bridge.seat}'s winner left the match: dropping the team ourselves`);
+    bridge.relay.all(spill);
+    bridge.pushToRom(spill);
+    session.note(spill, 'page');
+  };
   /** Everything a promoted client needs to pick the match up (POK-252), and reset by
    *  returnToRoom for the next one (match/lifecycle.ts): the session's, one object for
    *  the page's life. */
@@ -2845,6 +2876,7 @@ function wireRoom(
     bridge.setOutFilter(() => !amWatching);
     bridge.setOutObserver((msg) => {
       spectate.noteOutgoing(msg);
+      noteLoss(msg);
       // Our own wild fight is over when our ROM says it is back on the map: nobody else
       // will say so, and a later watcher must not be handed it (spectate.ts noteBusy).
       if (msg.t === 'busy') spectate.noteBusy(bridge!.seat, msg.kind);
