@@ -519,6 +519,23 @@ describe('the page that runs the match (POK-330 #42)', () => {
     host.dispose();
   });
 
+  it('gives somebody at home in a house to the first who asks, the same way (POK-379)', () => {
+    const room = hosting();
+    const host = room.deal();
+    host.begin();
+    room.frames().length = 0;
+    room.toRom.length = 0;
+    const given = { t: 'pickup', seat: 1, key: 0x8c21 };
+    room.recv(1, { t: 'pickup', seat: 1, key: 0x8c61 });
+    room.recv(2, { t: 'pickup', seat: 2, key: 0x8c61 });
+    expect(room.frames().filter((f) => f.m?.t === 'pickup')).toEqual([
+      { type: 'all', m: given },
+      { type: 'to', id: 2, m: given },
+    ]);
+    expect(room.toRom).toEqual([given]);
+    host.dispose();
+  });
+
   it("puts a bot's lines in front of the player it walked up to, for the fight, and nobody else (POK-324)", () => {
     const room = hosting();
     const host = room.deal({ fill: 2 });
