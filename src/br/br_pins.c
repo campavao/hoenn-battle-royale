@@ -52,13 +52,17 @@ BR_SIZE(PaletteFadeControl, 12)
 
 // gObjectEvents: the stride (OBJ_SIZE), the flags run that fills the first word
 // (OBJ_ACTIVE_BYTE, OBJ_INVISIBLE_BYTE, OBJ_PLAYER_BYTE), the sprite and graphics ids
-// (OBJ_SPRITE_ID, OBJ_GFX), and the elevation nibbles' byte between the map and the
-// coords.
+// (OBJ_SPRITE_ID, OBJ_GFX), the elevation nibbles' byte between the map and the
+// coords, where a ghost stands (OBJ_CURRENT_X/Y) and the direction nibbles' byte after
+// previousCoords (OBJ_DIRECTION_BYTE): a page-drawn SURF blob's (POK-391).
 BR_SIZE(ObjectEvent, 0x24)
 BR_OFFSET(ObjectEvent, spriteId, 0x04)
 BR_OFFSET(ObjectEvent, graphicsId, 0x05)
 BR_OFFSET(ObjectEvent, mapGroup, 0x0A)
 BR_OFFSET(ObjectEvent, initialCoords, 0x0C)
+BR_OFFSET(ObjectEvent, currentCoords, 0x10)
+BR_OFFSET(ObjectEvent, previousCoords, 0x14)
+BR_OFFSET(ObjectEvent, fieldEffectSpriteId, 0x1A)
 
 // gSprites: the stride (SPR_SIZE) and every field field.ts draws a ghost from; the flags
 // (SPR_FLAGS) are the u16 run between data and sheetTileStart.

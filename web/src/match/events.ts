@@ -16,7 +16,7 @@
 // whoever gets to him first, and offers a rare the event did not drop.
 import { rungForPhase } from '../bots/party';
 import { MAP_OFFSET } from '../net/cells';
-import { EVENT_MAX, type EventMsg, type EventTrader, type MapRef, type Msg, type SpillBag, type SpillMon, type SpillMsg } from '../net/wire';
+import { EVENT_MAX, type EventMsg, type EventTrader, type MapRef, type Msg, type PickupMsg, type SpillBag, type SpillMon, type SpillMsg } from '../net/wire';
 import { pickIndex } from './clock';
 
 /** BR_EVENT_KEY_BASE in include/br/br_event.h: `0xB000 | n << 4 | i`, past every
@@ -33,6 +33,45 @@ export const isEventKey = (key: number): boolean => (key & 0xf000) === EVENT_KEY
 export const traderKey = (n: number): number => eventKey(n, 15);
 export const traderOf = (key: number): number | undefined =>
   isEventKey(key) && (key & 0xf) === 15 ? (key >> 4) & 0xf : undefined;
+/** BR_EVENT_CLAIM_KEY: a seat asking to trade with him (POK-392), the key below his. */
+export const claimKey = (n: number): number => eventKey(n, 14);
+export const claimOf = (key: number): number | undefined =>
+  isEventKey(key) && (key & 0xf) === 14 ? (key >> 4) & 0xf : undefined;
+
+/** One trade a trader (POK-392). Two players at him at once both found him standing and
+ *  both traded, so a ROM asks first, with a PICKUP of his claim key, and the host
+ *  answers: the first ask for a trader still standing with his own PICKUP naming the
+ *  asker -- the trade, for the whole room -- and any later one with that PICKUP naming
+ *  whoever got him, which the asker's ROM takes as no (br_event.c's Task_TradeClaim).
+ *  Everything the host hears goes through `note` first, so a trade nobody asked for (a
+ *  bot's, or a ROM that heard no answer in time) is the one a later ask is told about. */
+export class TraderClaims {
+  private readonly won = new Map<number, number>();
+
+  /** `standing(n)`: the room's books still have event n's trader. */
+  constructor(private readonly standing: (n: number) => boolean) {}
+
+  note(msg: Msg): void {
+    if (msg.t === 'start') this.won.clear();
+    const n = msg.t === 'pickup' ? traderOf(msg.key) : undefined;
+    if (n !== undefined && msg.t === 'pickup' && !this.won.has(n)) this.won.set(n, msg.seat);
+  }
+
+  /** The answer to an ask, and whether it is the trade itself (for the whole room) or a
+   *  no (for the asker alone). Null for anything but an ask. Every ask is answered: one
+   *  left to time out would trade on its own, which is the double trade again. A trader
+   *  gone with nobody known to have got him (a host that took over after) is a no naming
+   *  some other seat, which is all the asker's ROM reads. */
+  answer(msg: Msg): { reply: PickupMsg; granted: boolean } | null {
+    const n = msg.t === 'pickup' && msg.item === undefined ? claimOf(msg.key) : undefined;
+    if (n === undefined || msg.t !== 'pickup') return null;
+    let winner = this.won.get(n);
+    const granted = winner === undefined && this.standing(n);
+    if (granted) this.won.set(n, (winner = msg.seat));
+    winner ??= msg.seat === 0 ? 1 : 0;
+    return { reply: { t: 'pickup', seat: winner, key: traderKey(n) }, granted };
+  }
+}
 
 /** The events so far, by n, as a late joiner is handed them: an EVENT is booked, and a
  *  trader who has traded is gone for good, so a PICKUP of his key takes him off his. */
