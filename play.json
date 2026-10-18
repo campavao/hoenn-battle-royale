@@ -1,7 +1,32 @@
 {
- "readAt": "2026-10-17T20:46:38.000Z",
+ "readAt": "2026-10-18T16:13:05.786Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "73SFM9",
+   "at": "2026-10-18T14:37:54.314Z",
+   "end": "2026-10-18T14:55:25.672Z",
+   "secs": 1051,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-18T14:38:04.384Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": 971
+    }
+   ],
+   "exact": true
+  },
   {
    "code": "3SQZJR",
    "at": "2026-10-17T20:03:43.026Z",
@@ -2223,13 +2248,13 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-10-17T20:03:42.954Z",
+   "last": "2026-10-18T14:37:54.242Z",
    "since": "2026-10-15",
    "versions": [
     "2"
    ],
    "solo": 1,
-   "checkins": 3,
+   "checkins": 4,
    "v": "2"
   }
  ],
