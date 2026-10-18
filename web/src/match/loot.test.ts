@@ -218,3 +218,39 @@ describe('where the pieces of a spill land', () => {
     expect(spillCells(tiny, 'CELL', 0, 0, 6)).toHaveLength(1);
   });
 });
+
+describe('a team put down twice (POK-387 review)', () => {
+  const spill = (keys: number[], bag = false): SpillMsg => ({
+    t: 'spill', seat: 4, map: { group: 0, num: 16 },
+    mons: keys.map((key, i) => ({ key, x: 10 + i, y: 10, species: 277, level: 5 })),
+    ...(bag ? { bag: { key: (2 << 8) | 0xff, x: 9, y: 10, items: [], money: 0 } } : {}),
+  });
+
+  it('stands up only the mons left, and nothing once every one has been taken', () => {
+    const loot = new Loot();
+    const team = spill([0x200, 0x201, 0x202], true);
+    loot.note(team);
+    expect(loot.trim(team), 'nothing taken: the same spill').toBe(team);
+    loot.note({ t: 'pickup', seat: 5, key: 0x200 });
+    loot.note({ t: 'pickup', seat: 5, key: 0x202 });
+    const left = loot.trim(spill([0x200, 0x201, 0x202], true));
+    expect(left?.mons.map((m) => m.key), 'the two taken stay taken').toEqual([0x201]);
+    expect(left?.bag?.key, 'a bag goes in as it is').toBe((2 << 8) | 0xff);
+    loot.note({ t: 'pickup', seat: 5, key: 0x201 });
+    expect(loot.trim(spill([0x200, 0x201, 0x202])), 'every mon taken, no bag').toBeNull();
+    loot.note(spill([0x200, 0x201, 0x202]));
+    expect(loot.size(), "only the bag, never taken").toBe(1);
+  });
+
+  it('never for a released ball or a key the page never saw down', () => {
+    const loot = new Loot();
+    loot.note({ t: 'pickup', seat: 5, key: 0x300 }); // never seen down
+    const unseen = spill([0x300]);
+    expect(loot.trim(unseen)).toBe(unseen);
+    loot.note(spill([0x4201]));
+    loot.note({ t: 'pickup', seat: 5, key: 0x4201 });
+    const released = spill([0x4201]);
+    expect(loot.trim(released), 'a released ball comes back down').toBe(released);
+  });
+});
+

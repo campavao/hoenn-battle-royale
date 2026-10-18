@@ -809,7 +809,10 @@ export class Bots {
       // round the winner. Then the bag goes down alone, on the bot's own cell -- the cell
       // that ROM keeps its spoils off.
       const party = teamTaken ? [] : walker.party.slice(0, 6);
-      const cells = spillCells(this.opts.world, walker.at.map, walker.at.x, walker.at.y, party.length + 1);
+      // Off any cell a piece already lies on: a winner's spoils beside the bot, or another
+      // trainer's spill (POK-388).
+      const taken = (x: number, y: number): boolean => this.opts.loot?.at(walker.at.map, pageCell(x, y)) !== undefined;
+      const cells = spillCells(this.opts.world, walker.at.map, walker.at.x, walker.at.y, party.length + 1, taken);
       const spill: SpillMsg = {
         t: 'spill',
         seat: walker.bot.seat,

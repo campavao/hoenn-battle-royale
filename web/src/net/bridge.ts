@@ -117,6 +117,10 @@ export const STALL_FRAMES = 75 * 60;
 /** ...and once the opponent's own RESULT says its ROM has left the fight. Ours plays its
  *  own ending out within seconds of theirs, and nothing more is coming. */
 export const STALL_AFTER_RESULT_FRAMES = 30 * 60;
+/** ...and while the opponent has said its tab is in the background (POK-389): a player who
+ *  switched apps for a minute comes back to the fight, where seventy-five seconds closed it
+ *  under them. Three minutes, the old ceiling, for a tab that never comes back. */
+export const STALL_AWAY_FRAMES = 180 * 60;
 
 function msgSeat(msg: Msg): number | undefined {
   return 'seat' in msg ? (msg as { seat?: number }).seat : undefined;
@@ -175,6 +179,8 @@ export class Bridge {
   /** Our opponent dropped off the relay's roster mid-fight: the blocks we sent while it
    *  was gone went nowhere, and are said again when it is back. */
   private opponentAway = false;
+  /** The seats whose last `away` said their tab is in the background (POK-389). */
+  private readonly tabbedOut = new Set<number>();
   /** Our ROM's `pick` that no `land` has answered (POK-331 #4). The drop waits on a black
    *  screen for the host's cell, and a pick our socket was down for never reached it --
    *  POK-255's black screen. br_pick.c asks once more after five seconds and gives up at
@@ -461,12 +467,23 @@ export class Bridge {
       this.sentBlocks = [];
       this.opponentDone = true;
     }
+    if (msg.t === 'away') {
+      if (msg.away) this.tabbedOut.add(msg.seat);
+      else this.tabbedOut.delete(msg.seat);
+      // Back: the wait starts over, or what counted while they were away would close the
+      // fight at the shorter limit before their first block had time to come.
+      if (msg.seat === this.opponentSeat) this.quietFrames = 0;
+    }
+    // A block is a ROM running: back, whether or not its `away: false` got through (one
+    // said while the socket was down never did).
+    if (msg.t === 'bt') this.tabbedOut.delete(ev.from);
     // Our drop answered -- or a match begun or ended, and a pick of the last one is
     // nothing to ask the next one's host.
     if ((msg.t === 'land' && msg.seat === this.seat) || msg.t === 'start' || msg.t === 'win') this.pick = null;
     if (msg.t === 'start' || msg.t === 'win') {
       this.unheard = [];
       this.unconfirmed = [];
+      this.tabbedOut.clear();
     }
 
     this.noteChallenge(msg);
@@ -550,6 +567,17 @@ export class Bridge {
     const best = record.best !== undefined && record.best >= 1 && record.best <= MAX_PLAYERS ? record.best : undefined;
     this.card = { t: 'card', seat: this.seat, wins: count(record.wins), matches: count(record.matches), best };
     this.relay.all(this.card);
+  }
+
+  /** Who our ROM's link fight is, or was last, with. */
+  opponent(): number | null {
+    return this.opponentSeat;
+  }
+
+  /** Our tab went to the background or came back (POK-389). The ROM runs no frames while
+   *  hidden, so whoever we are fighting hears from it no more until we are back. */
+  sayAway(away: boolean): void {
+    this.relay.all({ t: 'away', seat: this.seat, away });
   }
 
   setRomFilter(fn: ((msg: Msg) => boolean) | null): void {
@@ -672,7 +700,11 @@ export class Bridge {
       this.quietFrames = 0;
       return;
     }
-    const limit = this.opponentDone ? STALL_AFTER_RESULT_FRAMES : STALL_FRAMES;
+    const limit = this.opponentDone
+      ? STALL_AFTER_RESULT_FRAMES
+      : this.tabbedOut.has(link.peerSeat)
+        ? STALL_AWAY_FRAMES
+        : STALL_FRAMES;
     if (++this.quietFrames < limit) return;
     this.quietFrames = 0;
     console.warn(`[link] no block from seat ${link.peerSeat} in ${limit} frames: closing the fight as unanswered`);
