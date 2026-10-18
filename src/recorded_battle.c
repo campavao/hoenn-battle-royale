@@ -82,6 +82,7 @@ EWRAM_DATA static u16 sBattlerSavedRecordSizes[MAX_BATTLERS_COUNT] = {0};
 EWRAM_DATA static u16 sSpectatePrevSizes[MAX_BATTLERS_COUNT] = {0}; // POK-233 stream cursor
 EWRAM_DATA static bool8 sSpectateLive = FALSE; // POK-233 live spectate: block, don't quit
 EWRAM_DATA static bool8 sSpectateEnded = FALSE; // the stream is closed: stop waiting
+EWRAM_DATA static bool8 sSpectateStarved = FALSE; // a read found nothing yet (POK-376)
 #endif
 EWRAM_DATA static u8 sRecordMode = 0;
 EWRAM_DATA static u8 sLvlMode = 0;
@@ -236,7 +237,10 @@ u8 RecordedBattle_GetBattlerAction(u8 battler)
         // stream has not delivered this battler's next action yet, wait rather than end
         // the battle -- the turn arrives over the next frames and the read succeeds then.
         if (sSpectateLive && !sSpectateEnded)
+        {
+            sSpectateStarved = TRUE;
             return B_ACTION_NONE;
+        }
 #endif
         gSpecialVar_Result = gBattleOutcome = B_OUTCOME_PLAYER_TELEPORTED; // hah
         ResetPaletteFadeControl();
@@ -787,7 +791,10 @@ bool8 RecordedBattle_HasBattlerAction(u8 battler, u8 count)
         if (sBattlerRecordSizes[battler] + i >= BATTLER_RECORD_SIZE)
             return TRUE; // out of room: let GetBattlerAction end the battle
         if (sBattleRecords[battler][sBattlerRecordSizes[battler] + i] == 0xFF)
+        {
+            sSpectateStarved = TRUE;
             return FALSE;
+        }
     }
     return TRUE;
 }
@@ -802,7 +809,10 @@ bool8 RecordedBattle_TakeSpectateByte(u8 battler, u8 *out)
     if (battler >= MAX_BATTLERS_COUNT || sBattlerRecordSizes[battler] >= BATTLER_RECORD_SIZE)
         return TRUE;
     if (sBattleRecords[battler][sBattlerRecordSizes[battler]] == 0xFF)
+    {
+        sSpectateStarved = !sSpectateEnded;
         return sSpectateEnded;
+    }
     *out = sBattleRecords[battler][sBattlerRecordSizes[battler]++];
     return TRUE;
 }
@@ -825,6 +835,14 @@ void RecordedBattle_AbortSpectate(void)
         sBattlerSavedRecordSizes[i] = BATTLER_RECORD_SIZE; // and nothing more is fed
     }
     sSpectateEnded = TRUE;
+}
+
+bool8 RecordedBattle_TakeSpectateStarved(void)
+{
+    bool8 starved = sSpectateStarved;
+
+    sSpectateStarved = FALSE;
+    return starved;
 }
 
 bool8 RecordedBattle_IsSpectateLive(void)

@@ -62,6 +62,13 @@
 //                                      Never a trainer name. Logged, counted, not
 //                                      answered -- the client sends it on a
 //                                      connection it already had (POK-124).
+//   {type:"jank", v, watched, snaps,    how smooth a match looked from this
+//         cam, lost, stalls, longest,   page (POK-376): the ROM's gBrJank for
+//         checks, drifts}              the match -- ghost snaps (cam: of the
+//                                      seat followed), steps lost, replay
+//                                      waits past the shot clock, turn checks
+//                                      and drifts. Counts only; logged as one
+//                                      `jank` line, not answered.
 //   {type:"lock_room", locked, bots?}  host only: refuse new joiners (a match
 //                                      in progress).  Logged as one `match`
 //                                      line at the lock and one at the
@@ -858,6 +865,19 @@ export function createRelay(options = {}) {
         traffic.statSeen += 1;
         traffic.statSolo += solo;
         log(`stat ${id} v${version} | solo +${solo} | since ${since}`);
+        return;
+      }
+
+      case "jank": {
+        // One page's account of a match's smoothness (POK-376). Counts only,
+        // each clamped, so the line is the client's numbers and nothing else.
+        const n = (v) => Number.isFinite(v) ? Math.max(0, Math.min(65535, Math.floor(v))) : 0;
+        const version = typeof msg.v === "string" && /^[\w.+-]{1,16}$/.test(msg.v) ? msg.v : "?";
+        const code = conn.room ? conn.room.code : "-";
+        log(`jank ${code} v${version} | watched ${n(msg.watched)}s`
+          + ` | snaps ${n(msg.snaps)} cam ${n(msg.cam)} lost ${n(msg.lost)}`
+          + ` | stalls ${n(msg.stalls)} longest ${n(msg.longest)}s`
+          + ` | checks ${n(msg.checks)} drifts ${n(msg.drifts)}`);
         return;
       }
       default:

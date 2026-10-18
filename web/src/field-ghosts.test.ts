@@ -365,6 +365,23 @@ describe('the ghosts walk on (POK-323)', () => {
     }
   });
 
+  it('a ghost whose trainer says it is running walks at their pace from the first step, not up to it (POK-376)', () => {
+    // Without the pace on the wire a runner's ghost started each run at sixteen frames and
+    // only sped up once it was two tiles behind: it lagged, then caught up in a rush.
+    const w = new GhostWalkers();
+    w.update([row(2, { pace: 1 })]);
+    const one = run(w, [row(2, { y: 21 + MAP_OFFSET, pace: 1 })], 8);
+    expect(one.map((f) => f.y)).toEqual(Array.from({ length: 8 }, (_, i) => 56 + 2 * (i + 1)));
+    // ...and stays at it with nothing queued, where the old decay would slow it a step.
+    for (let i = 0; i < 20; i++) w.update([row(2, { y: 21 + MAP_OFFSET, pace: 1 })]);
+    const two = run(w, [row(2, { y: 22 + MAP_OFFSET, pace: 1 })], 8);
+    expect(two[7].y).toBe(56 + 32);
+    // A walker's word is a walk.
+    const walker = new GhostWalkers();
+    walker.update([row(2, { pace: 0 })]);
+    expect(run(walker, [row(2, { y: 21 + MAP_OFFSET, pace: 0 })], 16)[15].y).toBe(72);
+  });
+
   it('a turn waits for the walking to stop, and starts the feet over', () => {
     const w = new GhostWalkers();
     w.update([row(2)]);

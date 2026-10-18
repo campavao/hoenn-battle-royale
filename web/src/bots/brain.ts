@@ -911,6 +911,7 @@ export class Bots {
       map,
       x: walker.at.x,
       y: walker.at.y,
+      p: 0, // a bot only ever walks, a tile per STEP_MS
     });
     this.wildHere(walker, now);
   }

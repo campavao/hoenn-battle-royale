@@ -28,6 +28,8 @@ ENGINE_SYMBOLS = [
     "gRngValue", "gSaveBlock1", "gSaveBlock2", "gNumSafariBalls",
     "gBattleCommunication", "gBattleControllerExecFlags", "gBattlersCount", "gBattleBufferA", "gBattleBufferB", "gBattleMons",
     "gBattlerByTurnOrder", "gCurrentTurnActionNumber", "gBagPockets",
+    # The turn counter at +0x13 (battleTurnCounter): the turn checks (POK-376).
+    "gBattleResults",
     "gActionSelectionCursor", "gMoveSelectionCursor",
     # Which battler is the local player: 1 on the challenged side of a link battle
     # (web/src/touch.ts localBattler).

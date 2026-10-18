@@ -477,6 +477,8 @@ interface Walker {
   pace: number;
   frames: number;
   idle: number;
+  /** The gait its trainer last said (RosterEntry.pace): PaceWalk never walks it slower. */
+  gait?: number;
   /** The roster's cell as last seen: what is queued walks from the tile to here. */
   seenX: number;
   seenY: number;
@@ -500,7 +502,9 @@ function pace(w: Walker): number {
   const behind = w.queue.length;
   if (behind >= PACE_FASTER_AT) w.pace = 2;
   else if (behind >= PACE_FAST_AT && w.pace < 2) w.pace++;
+  else if (behind === 0 && w.gait !== undefined) w.pace = w.gait;
   else if (behind === 0 && w.pace !== 0 && w.idle >= PACE_FRAMES[w.pace]) w.pace--;
+  if (w.gait !== undefined && w.pace < w.gait) w.pace = w.gait;
   w.idle = 0;
   return PACE_FRAMES[w.pace];
 }
@@ -558,11 +562,13 @@ export class GhostWalkers {
       if (!w || w.group !== r.map.group || w.num !== r.map.num) {
         w = { seat: r.seat, gfx, group: r.map.group, num: r.map.num, x: 0, y: 0, facing: dir, dir, step: 0, left: 0, cmd: 0, queue: [], pace: 0, frames: WALK_FRAMES, idle: 0, seenX: 0, seenY: 0 };
         stand(w, r.x, r.y);
+        w.gait = r.pace;
         this.walkers.set(r.seat, w);
         continue;
       }
       w.gfx = gfx;
       w.dir = dir;
+      w.gait = r.pace;
       const dx = r.x - w.seenX;
       const dy = r.y - w.seenY;
       const n = Math.abs(dx) + Math.abs(dy);

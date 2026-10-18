@@ -39,6 +39,10 @@ static EWRAM_DATA u32 sOutSeats = 0;
 // How fast each ghost walks, and how long it has stood waiting for its next step: the
 // pace in the low two bits, the idle frames above them (PaceWalk).
 static EWRAM_DATA u8 sPace[BR_MAX_SEATS] = {0};
+// The pace each seat says it is going at, off its last STEP (POK-376): BR_PACE_* or
+// BR_GAIT_UNKNOWN for a sender that did not say. PaceWalk never walks a ghost slower.
+static EWRAM_DATA u8 sGait[BR_MAX_SEATS] = {0};
+#define BR_GAIT_UNKNOWN 0xFF
 
 // Skin -> object event graphics. Index 0 is the default; the shell's career picks.
 // The wardrobe (POK-282). Cam: "I should be able to pick kind of like any sprites -- the
@@ -381,7 +385,7 @@ static void Spawn(u8 seat)
     ObjectEventTurn(&gObjectEvents[id], s->dir);
 }
 
-// ---- wire glue: br_wire.h layouts for PLACE (11), STEP (8), FACE (4) -----------
+// ---- wire glue: br_wire.h layouts for PLACE (11), STEP (9), FACE (4) -----------
 
 static void HandleBusy(const u8 *payload, u8 len)
 {
@@ -436,6 +440,7 @@ static void HandleStep(const u8 *payload, u8 len)
 
     if (n < 8 || d[0] >= BR_MAX_SEATS)
         return;
+    sGait[d[0]] = (n >= 9 && d[8] <= BR_PACE_FASTER) ? d[8] : BR_GAIT_UNKNOWN;
     s = &gBrSeats[d[0]];
     x = (s16)BrWire_ReadU16(d + 2);
     y = (s16)BrWire_ReadU16(d + 4);
@@ -449,6 +454,7 @@ static void HandleStep(const u8 *payload, u8 len)
     if (s->x != x || s->y != y)
     {
         // Lost a step somewhere; the sender's coordinates win, snap on the next tick.
+        gBrJank.lost++;
         s->x = x;
         s->y = y;
         s->queued = BR_STEP_QUEUE + 1;
@@ -464,6 +470,8 @@ static void HandleFace(const u8 *payload, u8 len)
         return;
     BrGhosts_Face(d[0], d[1]);
 }
+
+static u8 OwnPace(void);
 
 // Own place/step/face for the page to forward. The seat byte is what the page
 // overwrites with the real seat, so it only has to be plausible here.
@@ -492,7 +500,8 @@ static void EmitOwn(void)
         BrWire_WriteU16(buf + 4, (u16)gBrOwnPos.y);
         buf[6] = gBrOwnPos.mapGroup;
         buf[7] = gBrOwnPos.mapNum;
-        BrWire_Send(BR_MSG_STEP, buf, 8);
+        buf[8] = OwnPace();
+        BrWire_Send(BR_MSG_STEP, buf, 9);
     }
     else if (gBrOwnEvents & BR_OWN_FACED)
     {
@@ -522,6 +531,7 @@ void BrGhosts_Init(void)
         gBrSeats[i].queued = 0;
         gBrSeatBusy[i] = BR_BUSY_MAP;
         sPace[i] = 0;
+        sGait[i] = BR_GAIT_UNKNOWN;
     }
     gBrOwnEvents = 0;
     sOwnValid = FALSE;
@@ -658,8 +668,8 @@ void BrGhosts_Out(u8 seat)
 // so its backlog never drained either: any burst the network bunched up stayed until the
 // queue overflowed.
 //
-// The wire does not say how fast anybody is going, so the backlog does: two steps waiting
-// is a trainer outrunning their ghost, and it goes up a pace, again on every step that
+// The backlog says how far behind a ghost is: two steps waiting is a trainer outrunning
+// their ghost, and it goes up a pace, again on every step that
 // still finds two waiting -- one pace that only matches the trainer's would never work
 // the backlog off, and the ghost would trail them two tiles with two slots to spare
 // before a snap. Four waiting is straight to the top. And a ghost that stood idle for
@@ -667,9 +677,13 @@ void BrGhosts_Out(u8 seat)
 // pace. Running, walking and biking each settle on their own pace, and a bunched-up burst
 // is walked off at speed instead of piling up. The Mach Bike flat out is the one pace
 // with none above it: a long stall there can still overflow the queue.
-#define BR_PACE_NORMAL 0
-#define BR_PACE_FAST 1
-#define BR_PACE_FASTER 2
+//
+// A STEP also says how fast its sender took it (POK-376, OwnPace): a ghost never walks
+// slower than that, and once it has caught up it walks at exactly that. Inferred alone, a runner's ghost walked its first two steps at a walk
+// and spent the next ones catching up, and a cyclist's took four to find the bike's
+// pace: a lurch at the start of every run that a watcher's camera lurched with. The
+// backlog still raises the pace above the sender's to work a bunched-up burst off; a
+// bot's page and an older ROM say nothing, and for them the backlog is all there is.
 #define BR_PACE_MASK 3
 #define BR_PACE_IDLE_MAX 63
 #define BR_PACE_FAST_AT 2
@@ -683,13 +697,18 @@ static u8 PaceWalk(u8 seat, u8 dir)
     u8 pace = sPace[seat] & BR_PACE_MASK;
     u8 idle = sPace[seat] >> 2;
     u8 behind = gBrSeats[seat].queued;
+    u8 gait = sGait[seat];
 
     if (behind >= BR_PACE_FASTER_AT)
         pace = BR_PACE_FASTER;
     else if (behind >= BR_PACE_FAST_AT && pace < BR_PACE_FASTER)
         pace++;
+    else if (behind == 0 && gait != BR_GAIT_UNKNOWN)
+        pace = gait; // caught up: the pace its trainer says, not a step at a time down to it
     else if (behind == 0 && pace != BR_PACE_NORMAL && idle >= sFrames[pace])
         pace--;
+    if (gait != BR_GAIT_UNKNOWN && pace < gait)
+        pace = gait;
     sPace[seat] = pace;
     if (pace == BR_PACE_FASTER)
         return GetWalkFasterMovementAction(dir);
@@ -712,8 +731,12 @@ static void DriveGhost(u8 seat)
     {
         // Overflowed: teleport to the roster position and start clean -- with the camera
         // let go of first, if it rides this one (FollowTick takes it back, centred).
+        gBrJank.snaps++;
         if (seat == gBrSpectate.follow)
+        {
+            gBrJank.camSnaps++;
             BrSpectate_LetGo();
+        }
         LocalPos(seat, &x, &y);
         ObjectEventClearHeldMovementIfActive(obj);
         MoveObjectEventToMapCoords(obj, x, y);
@@ -740,6 +763,23 @@ static void DriveGhost(u8 seat)
         sPace[seat] += 1 << 2;
     if (obj->facingDirection != s->dir)
         ObjectEventSetHeldMovement(obj, GetFaceDirectionMovementAction(s->dir));
+}
+
+// How fast our own step is going, for the STEP that says so: the walk the player's
+// object was just handed (field_player_avatar.c). Running and surfing are walk_fast's
+// eight frames a tile and a water current's too; the Mach Bike flat out is walk_faster's
+// four, and it gets there through the other two (bike.c's sMachBikeSpeedCallbacks).
+static u8 OwnPace(void)
+{
+    u8 action = gObjectEvents[gPlayerAvatar.objectEventId].movementActionId;
+
+    if (action >= MOVEMENT_ACTION_WALK_FASTER_DOWN && action <= MOVEMENT_ACTION_WALK_FASTER_RIGHT)
+        return BR_PACE_FASTER;
+    if ((action >= MOVEMENT_ACTION_WALK_FAST_DOWN && action <= MOVEMENT_ACTION_WALK_FAST_RIGHT)
+     || (action >= MOVEMENT_ACTION_RIDE_WATER_CURRENT_DOWN && action <= MOVEMENT_ACTION_RIDE_WATER_CURRENT_RIGHT)
+     || (action >= MOVEMENT_ACTION_PLAYER_RUN_DOWN && action <= MOVEMENT_ACTION_PLAYER_RUN_RIGHT))
+        return BR_PACE_FAST;
+    return BR_PACE_NORMAL;
 }
 
 static void WatchOwn(void)
