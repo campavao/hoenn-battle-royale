@@ -24,13 +24,16 @@ export interface JankMsg extends JankCounts {
   v: string;
 }
 
-/** The match's share of the counters. `longest` is the ROM's longest wait ever, not a
- *  count, so it is reported as it stands once the match had a longer one, else 0. A
- *  match with nothing watched and nothing snapped says nothing. */
+/** gBrJank.longest: the longest wait, not a count. The page zeroes it as a match starts
+ *  (JANK_LONGEST), so the match's own is the value at its end. */
+export const JANK_LONGEST = 8;
+
+/** The match's share of the counters, `longest` as it stands at the end. A match with
+ *  nothing watched and nothing snapped says nothing. */
 export function jankMessage(v: string, start: JankCounts, end: JankCounts): JankMsg | null {
   const d = {} as JankCounts;
   for (const f of JANK_FIELDS) d[f] = (end[f] - start[f] + 0x10000) & 0xffff;
-  d.longest = end.longest > start.longest ? end.longest : 0;
+  d.longest = end.longest;
   if (JANK_FIELDS.every((f) => d[f] === 0)) return null;
   return { type: 'jank', v, ...d };
 }

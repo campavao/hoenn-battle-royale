@@ -95,11 +95,19 @@ static EWRAM_DATA struct BrTurnCheck sOurs[BR_CHECK_SLOTS] = {0};
 // The battle's turn counter as last summed: by a fighter, the last turn it sent the sum
 // of; by a replay, the last turn it summed its own.
 static EWRAM_DATA u8 sCheckTurn = 0;
+// The counter has been seen at 0 in this battle. Until BattleStartClearSetData zeroes it,
+// some frames into the battle, it is the last battle's count, and summing that "turn"
+// would hold a sum of nothing against the fighter's real one.
+static EWRAM_DATA bool8 sCheckArmed = FALSE;
 // A fighter's sum the ring had no room for: taken as the turn ended, and sent as it was.
 static EWRAM_DATA struct BrTurnCheck sSendCheck = {0};
 // Frames the replay has sat on a choice that has not come (BR_JANK_STALL_SECS), and the
 // frames towards the next second watched.
 static EWRAM_DATA u16 sStarvedFrames = 0;
+// The watched fighter has published a shot clock in this watch. Only a link fight has
+// one; a fight against a bot or a wild mon has no limit on choosing, and a trainer who
+// thinks for a minute is not a replay that stalled.
+static EWRAM_DATA bool8 sClockSeen = FALSE;
 static EWRAM_DATA u8 sWatchFrames = 0;
 
 // Every battler's species and HP as a turn ends, summed so the order the battlers are in
@@ -134,6 +142,28 @@ static void ClearChecks(void)
         sOurs[i].have = FALSE;
     }
     sCheckTurn = 0;
+    sCheckArmed = FALSE;
+}
+
+// TRUE the frame a turn ends, its number in sCheckTurn: the battle's counter moved, once
+// it has been seen at 0 in this battle.
+static bool8 TurnEnded(void)
+{
+    u8 turn = gBattleResults.battleTurnCounter;
+
+    if (!sCheckArmed)
+    {
+        if (turn == 0)
+        {
+            sCheckArmed = TRUE;
+            sCheckTurn = 0;
+        }
+        return FALSE;
+    }
+    if (turn == sCheckTurn)
+        return FALSE;
+    sCheckTurn = turn;
+    return TRUE;
 }
 
 // Compares every turn both sides have summed. FALSE when one disagreed.
@@ -508,6 +538,7 @@ static void ParseBstart(const u8 *d, u16 n)
     sAbortEarly = FALSE;
     ClearChecks();
     sStarvedFrames = 0;
+    sClockSeen = FALSE;
     // sTurnBuf is the reassembly buffer from here on; a fighter's unsent TURN in it is
     // one no spectator is waiting for any more.
     sTurnLen = 0;
@@ -763,6 +794,8 @@ static void HandleShot(const u8 *payload, u8 len)
     if (n < 2 || d[0] != gBrSpectate.follow)
         return;
     gBrSpectate.shotSecs = d[1];
+    if (d[1] != 0)
+        sClockSeen = TRUE;
 }
 
 static void HandlePeek(const u8 *payload, u8 len)
@@ -1618,16 +1651,13 @@ void BrSpectate_Tick(void)
             gBrSpectate.catchUp = FALSE;
         if (gMain.inBattle && sPendParties == NULL && RecordedBattle_IsSpectateLive())
         {
-            if (gBattleResults.battleTurnCounter != sCheckTurn)
-            {
-                sCheckTurn = gBattleResults.battleTurnCounter;
+            if (TurnEnded())
                 HoldCheck(sOurs, sCheckTurn, TurnSum());
-            }
             // Played on, a replay that has drifted ends on a winner the fight did not
             // have. It ends here instead, and the watcher is back on the trainer's walk.
             if (!MatchChecks())
                 RecordedBattle_AbortSpectate();
-            if (RecordedBattle_TakeSpectateStarved() && gBrSpectate.shotSecs == 0)
+            if (RecordedBattle_TakeSpectateStarved() && gBrSpectate.shotSecs == 0 && sClockSeen)
             {
                 if (sStarvedFrames < 0xFFFF)
                     sStarvedFrames++;
@@ -1647,6 +1677,15 @@ void BrSpectate_Tick(void)
         return;
     }
     gBrSpectate.catchUp = FALSE;
+    // The sum of the turn that just ended, taken the frame it ended -- ahead of every
+    // return below: a TURN or BSTART waiting on the ring, taken later, would sum the next
+    // turn's moves part done. It goes out with the next TURN.
+    if (gMain.inBattle && TurnEnded())
+    {
+        sSendCheck.turn = sCheckTurn;
+        sSendCheck.sum = TurnSum();
+        sSendCheck.have = TRUE;
+    }
     // A turn the ring refused is retried before anything newer is taken: dropped, the
     // replay read the next turn's bytes as this one's, or waited on it for good.
     if (sTurnLen != 0)
@@ -1663,6 +1702,7 @@ void BrSpectate_Tick(void)
         gBrSpectate.started = FALSE; // ready for the next battle
         sFogDecided = FALSE;
         sCheckTurn = 0;
+        sCheckArmed = FALSE;
         sSendCheck.have = FALSE;
         return;
     }
@@ -1686,15 +1726,6 @@ void BrSpectate_Tick(void)
         gBrSpectate.started = TRUE;
     }
     id = BattleId();
-    // The sum of the turn that just ended, taken the frame it ended: the next turn's
-    // moves are under way by the time it goes out.
-    if (gBrSpectate.started && gBattleResults.battleTurnCounter != sCheckTurn)
-    {
-        sCheckTurn = gBattleResults.battleTurnCounter;
-        sSendCheck.turn = sCheckTurn;
-        sSendCheck.sum = TurnSum();
-        sSendCheck.have = TRUE;
-    }
 
     // Not while the battlers are still choosing (POK-330 #12): a FIGHT backed out of is
     // taken back off the record, and a byte that is already on the wire cannot be -- the

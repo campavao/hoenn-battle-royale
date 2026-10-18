@@ -124,7 +124,7 @@ import {
   saveProfile,
   SKINS,
 } from './match/career';
-import { jankMessage, readJank, type JankCounts } from './match/jank';
+import { JANK_LONGEST, jankMessage, readJank, type JankCounts } from './match/jank';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import { HOENN, loadHoenn } from './bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './match/landing';
@@ -2719,7 +2719,10 @@ function wireRoom(
     {
       started: () => {
         hideRoomScreen();
-        if (gBrJank !== undefined) jankStart = readJank((a, bits) => emu.read(a, bits), gBrJank);
+        if (gBrJank !== undefined) {
+          emu.write(gBrJank + JANK_LONGEST, 0, 16);
+          jankStart = readJank((a, bits) => emu.read(a, bits), gBrJank);
+        }
       },
       decided: (line) => {
         career = line;

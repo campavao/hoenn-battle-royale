@@ -11,11 +11,10 @@ describe('jank (POK-376)', () => {
     expect(readJank(read, 0x100)).toEqual({ snaps: 3, cam: 1, lost: 2, stalls: 4, longest: 31, checks: 9, drifts: 0, watched: 120 });
   });
 
-  it("sends the match's share, longest only when this match set it", () => {
-    const start = { ...zero(), snaps: 5, longest: 40, checks: 2, watched: 60 };
-    const end = { ...start, snaps: 7, checks: 10, watched: 180 };
-    expect(jankMessage('0.3.9', start, end)).toEqual({ type: 'jank', v: '0.3.9', ...zero(), snaps: 2, checks: 8, watched: 120 });
-    expect(jankMessage('0.3.9', start, { ...end, longest: 45 })?.longest).toBe(45);
+  it("sends the match's share, and the longest wait as it stands (zeroed at the start)", () => {
+    const start = { ...zero(), snaps: 5, checks: 2, watched: 60 };
+    const end = { ...start, snaps: 7, checks: 10, watched: 180, longest: 12 };
+    expect(jankMessage('0.3.9', start, end)).toEqual({ type: 'jank', v: '0.3.9', ...zero(), snaps: 2, checks: 8, watched: 120, longest: 12 });
   });
 
   it('wraps a u16 that rolled over, and says nothing for a quiet match', () => {

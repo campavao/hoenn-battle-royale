@@ -24,9 +24,9 @@ import type { BstartMsg, Msg, PeekMsg } from '../net/wire';
 import { encodeGen3 } from '../text/gen3';
 
 /** How much of one fight's stream to hold for a late watcher. A turn is a handful of
- *  bytes, so this is a long fight; past it, that fight is no longer joinable rather
- *  than growing without bound. */
-export const CACHE_MAX_BYTES = 8192;
+ *  bytes and its check five more (POK-376), so this is a long fight; past it, that
+ *  fight is no longer joinable rather than growing without bound. */
+export const CACHE_MAX_BYTES = 12288;
 
 interface LiveFight {
   bstart: Msg;

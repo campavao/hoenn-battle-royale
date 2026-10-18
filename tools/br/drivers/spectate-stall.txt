@@ -2,7 +2,8 @@
 # (+6) counts a wait of BR_JANK_STALL_SECS (the 30 s shot clock and 5 more) on a choice
 # that had not come while the trainer we follow was not choosing, and .longest (+8) keeps
 # the longest wait in seconds -- the page sends both to the relay's log when the match is
-# decided. spectate-check.txt's fight, with turn 2 held back a minute.
+# decided. Only once the trainer has shown a shot clock: a fight with none (a bot, a wild
+# mon) has no limit on choosing. spectate-check.txt's fight, with turn 2 held back a minute.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
@@ -14,6 +15,13 @@ mailsend gBrMailbox 18 gDecompressionBuffer 230
 wait 10
 pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00
 mailsend gBrMailbox 19 gDecompressionBuffer 13
+# the trainer we follow (seat 1) is in a link fight: it publishes a shot clock
+poke u8 gBrSpectate+8 1
+pokebytes gDecompressionBuffer 01 1E
+mailsend gBrMailbox 22 gDecompressionBuffer 2
+wait 10
+pokebytes gDecompressionBuffer 01 00
+mailsend gBrMailbox 22 gDecompressionBuffer 2
 wait 2500
 expect u8 gBattleResults+0x13 1
 wait 3600
