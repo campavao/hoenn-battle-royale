@@ -48,6 +48,7 @@ const SAMPLES: Msg[] = [
   { t: 'event', seat: 0, n: 1, mapsec: 11, key: 0xb010, place: 'FORTREE CITY' },
   { t: 'event', seat: 0, n: 2, mapsec: 11, key: 0xb020, trader: { map: { group: 0, num: 16 }, x: 19, y: 27, species: 131 } },
   { t: 'ring', seat: 0, phase: 1, sx: 0, sy: 0, r: 10, place: 'Littleroot', elapsed: 0 },
+  { t: 'ring', seat: 0, phase: 3, sx: 0, sy: 0, r: 9, next: 7, place: 'Littleroot', elapsed: 120 },
   { t: 'clock', seat: 0, left: 120 },
   { t: 'win', seat: 4 },
   { t: 'win' },
