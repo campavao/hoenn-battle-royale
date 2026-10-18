@@ -28,10 +28,11 @@ EWRAM_DATA struct BrHud gBrHud = {0};
 // bg, left, top, width, height, palette, baseBlock. Palette 15 is the message-box
 // palette the field loads on every map: 1 white, 2 dark gray, 3 light gray, 5 light red.
 //
-// Every one of these is inset by a tile from the edge it wants to sit on, because an
-// Emerald frame is drawn OUTSIDE the window it belongs to -- one tile on each side, in
-// palette 14, from the border set in OPTIONS (POK-256). A window flush against the top
-// of the screen has nowhere to put its lid.
+// Every one of these is inset from the edge it wants to sit on, because an Emerald frame
+// is drawn OUTSIDE the window it belongs to (POK-256): the corner's standard frame one
+// tile on each side (the border set in OPTIONS, in the HUD's palette 13), the dialogue
+// frame round the ticker and the box two to the left and one elsewhere, in palette 15. A
+// window flush against the top of the screen has nowhere to put its lid.
 //
 // The tiles are shared with the start menu and the message box (br_hud.h's tile map,
 // POK-329). They were 0x23D..0x2FF, a run of their own, until BG2's tilemap came down
@@ -95,8 +96,8 @@ STATIC_ASSERT(BR_HUD_CORNER_LEFT + BR_HUD_CORNER_WIDTH <= 29, BrHudCornerFrameOn
 
 // bg, fg, shadow -- the standard pair on a light box, and the line kinds keep their
 // colours so a kill and the fog still read differently at a glance. The background is
-// the box's own fill, so a cell's blank rows draw nothing: the corner's second line would
-// wipe the foot of the first.
+// transparent, over the box's own fill, so a cell's blank rows draw nothing: otherwise
+// the corner's second line would wipe the foot of the first.
 static const u8 sColorsText[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY };
 static const u8 sColorsFog[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
 static const u8 sColorsKill[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
@@ -104,7 +105,7 @@ static const u8 sColorsSay[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_BLUE, TEXT_C
 
 static const u8 sText_Left[] = _(" LEFT");
 static const u8 sText_Fog[] = _("FOG!");
-// How many are watching. Kanto's corner eye, on the small font's own symbol page.
+// How many are watching. Kanto's corner eye, on the dialogue font's symbol page.
 static const u8 sText_Eye[] = _("{EMOJI_LEFT_EYE}");
 // Beside the ring's place on the corner's second line: it is where the fog is not, and
 // bare it read as where we are (Cam's 2026-10-14 play-test, POK-359).
@@ -696,7 +697,7 @@ static void TickCorner(bool8 covered)
     if (covered)
     {
         // The start menu, most often. BrHud_Yield took the corner off where the menu does
-        // not draw -- its two left columns, frame and all -- and it is drawn whole again
+        // not draw -- its five left columns, frame and all -- and it is drawn whole again
         // when the menu goes: the menu's pixels are in its tiles by then.
         h->shown &= ~BR_HUD_SHOWN_CORNER;
         h->dirty |= BR_HUD_DIRTY_CORNER;

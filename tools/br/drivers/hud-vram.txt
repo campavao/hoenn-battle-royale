@@ -205,8 +205,9 @@ shot sign-closed
 # The peek box. Seat 1 stands two east of us (PLACE, as spectate-follow.txt: map 0:9,
 # (16,16) with MAP_OFFSET) and we FOLLOW it; SELECT then opens the box of what it
 # carries, (1,2) 17x10 from tile 0x008, in the standard frame (0x214, palette 13: the
-# HUD's own copy). It shares no tile with the HUD but its last rows and its frame are
-# where the bottom box's top is, so the box yields to it.
+# HUD's own copy). It shares no tile with the HUD, but its last rows and its frame are
+# where the bottom box's top is, and its frame's right side (col 18) is inside the
+# corner's (cols 16..29, since the corner took the dialogue font): both yield to it.
 pokebytes gBrMailbox+0x1098 02 0E 0B 00 00 01 01 00 09 10 00 10 00 03 01 01
 poke u16 gBrMailbox+0x0C 3
 wait 10
@@ -241,8 +242,9 @@ unwatch
 say peek-up
 expect u8 gBrSpectate+10 1
 # the box is down and the peek box's last row is its own: (2,11), the box's first cell,
-# is its tile 0x0A2, 0x008 + 9 rows of 17 + 1
+# is its tile 0x0A2, 0x008 + 9 rows of 17 + 1; and the corner is off too
 expectbits u8 gBrHud+0x09 4 0
+expectbits u8 gBrHud+0x09 1 0
 expectbits u16 0x0600FAC4 0x3FF 0x0A2
 shot peek
 say peek-close

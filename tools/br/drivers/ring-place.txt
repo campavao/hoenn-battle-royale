@@ -1,6 +1,6 @@
 # ring-place: the HUD corner names where the ring is closing, all ring phase long
 # (POK-325). The play-test missed the ninety-frame "THE FOG CLOSES IN ON" box and had
-# nothing else to go on. The corner is 9x3 now (cols 20..28, frame 19..29): "N LEFT" and
+# nothing else to go on. The corner is 12x3 now (cols 17..28, frame 16..29): "N LEFT" and
 # the clock on its first line, the place -- or FOG EVERYWHERE on the last phase -- right
 # on its second, the eye left of it or taking turns with it. Shots are for the eye.
 wait 30
@@ -79,7 +79,7 @@ expect u16 0x0600F8F8 0xF15C
 expectne u16 0x0600F820 0
 expectne u16 0x0600F920 0
 shot corner-back
-# phase 2 names a route, and three spectators come: ROUTE 104 is 42 px and the eye fits
+# phase 2 names a route, and three spectators come: ROUTE 104 is 51 px and the eye fits
 # beside it, so nothing takes turns (gBrHud.drawnAlt 0)
 # ROUTE 104 = CC C9 CF CE BF 00 A2 A1 A5; len 0x13 = frame (10 00 00) + 16
 pokebytes gBrMailbox+0x1058 0C 13 10 00 00 00 02 19 0C 1C 09 CC C9 CF CE BF 00 A2 A1 A5 00
@@ -91,7 +91,7 @@ expect u8 gBrRing+23 0xFF
 expect u8 gBrHud+0x14 3
 expect u8 gBrHud+0x17 0
 shot corner-route-eye
-# phase 3 names the widest centre there is, PETALBURG WOODS at 72 px: it fills the line,
+# phase 3 names a wide centre, PETALBURG WOODS at 87 px: it fills most of the line,
 # so with the eye it takes turns (drawnAlt not 0)
 # CA BF CE BB C6 BC CF CC C1 00 D1 C9 C9 BE CD; len 0x19 = frame (16 00 00) + 22
 pokebytes gBrMailbox+0x1098 0C 19 16 00 00 00 03 19 0C 1C 0F CA BF CE BB C6 BC CF CC C1 00 D1 C9 C9 BE CD 00
@@ -107,7 +107,7 @@ wait 4
 expectne u8 gBrHud+0x17 0
 shot corner-widest
 poke u8 gBrHud+0x0F 3
-# the last phase, r = -1: FOG EVERYWHERE, 67 px, and the eye does not fit beside it --
+# the last phase, r = -1: FOG EVERYWHERE, 81 px, and the eye does not fit beside it --
 # they take turns, 120 frames each, counted in gBrHud.altFrames (+0x16). Phase 3's box
 # is still up; it is given forty frames left (gBrHud.boxFrames, +0x178), so a box of
 # the last phase's own -- ninety frames from the top -- would show.
