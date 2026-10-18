@@ -17,8 +17,9 @@ poke u32 gBrMatch+8 5376
 # boot mode 0x82: the Safari Zone, with a test TREECKO
 pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
 wait 260
-# a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
-poke u8 gBrAsk+7 1
+# the test TREECKO's lifts pick their own four: nobody in the e2e answers a fifth-move
+# prompt (POK-400; the prompt itself is learn-ask.txt's), so the boot turns it off
+expect u8 gBrAsk+7 1
 say boot
 expect u8 gBrMatch 1
 expect u8 *gSaveBlock1Ptr+4 26

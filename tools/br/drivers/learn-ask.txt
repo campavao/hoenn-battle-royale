@@ -9,6 +9,8 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
+# the test TREECKO's boot turns the ask off for the e2e (br_boot.c); a player's is on
+poke u8 gBrAsk+7 0
 pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
 poke u16 gBrMailbox+0x0C 1
 wait 200
