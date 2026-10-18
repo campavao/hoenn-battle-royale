@@ -548,4 +548,6 @@ gSpecials::
 	def_special BrStory_GateBeaten
 	def_special BrLoot_GiftTake
 	def_special BrLegend_Battle
+	def_special BrLoot_HomeTrade
+	def_special BrLoot_HomeClaim
 .endif

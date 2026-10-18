@@ -90,10 +90,17 @@ BR_EventScript_Gift::
 	lock
 	faceplayer
 	msgbox gStringVar4, MSGBOX_DEFAULT
+	special BrLoot_HomeClaim
+	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_GiftAsked
+	waitstate
+BR_EventScript_GiftAsked:
 	special BrLoot_GiftTake
 	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_GiftGone
+	goto_if_eq VAR_RESULT, 3, BR_EventScript_GiftGone
 	playfanfare MUS_OBTAIN_ITEM
+	goto_if_eq VAR_RESULT, 2, BR_EventScript_GiftMon
 	message BR_Text_GiftReceived
+BR_EventScript_GiftSaid:
 	waitmessage
 	waitfanfare
 	waitbuttonpress
@@ -113,6 +120,27 @@ BR_EventScript_Legend::
 	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_LegendGone
 	waitstate
 BR_EventScript_LegendGone:
+	releaseall
+	end
+
+@ ...and somebody at home's Pokemon (src/br/br_balls.c): no "the" in front of it.
+BR_EventScript_GiftMon:
+	message BR_Text_MonReceived
+	goto BR_EventScript_GiftSaid
+
+@ Somebody at home who trades (src/br/br_balls.c): the event trader's question, and
+@ BrLoot_HomeTrade's swap. gStringVar1 is his.
+BR_EventScript_HomeTrader::
+	lockall
+	msgbox BR_Text_TraderOffer, MSGBOX_YESNO
+	goto_if_eq VAR_RESULT, NO, BR_EventScript_HomeTraderNo
+	special ChoosePartyMon
+	special BrLoot_HomeClaim
+	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_HomeTraderAsked
+	waitstate
+BR_EventScript_HomeTraderAsked:
+	special BrLoot_HomeTrade
+BR_EventScript_HomeTraderNo:
 	releaseall
 	end
 
@@ -202,6 +230,10 @@ BR_Text_PartyFull:
 BR_Text_GiftReceived:
 	.string "{PLAYER} received\n"
 	.string "the {STR_VAR_2}!$"
+
+BR_Text_MonReceived:
+	.string "{PLAYER} received\n"
+	.string "{STR_VAR_2}!$"
 
 BR_Text_TraderOffer:
 	.string "My {STR_VAR_1} for any one of\n"
