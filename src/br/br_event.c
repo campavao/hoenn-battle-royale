@@ -268,15 +268,42 @@ static void TryTalk(void)
     ScriptContext_SetupScript(BR_EventScript_Trader);
 }
 
-void BrEvent_Trade(void)
+bool8 BrEvent_Swap(u8 slot, struct Pokemon *mon)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
     const u8 *last = line + ARRAY_COUNT(line) - 1;
+    u16 held;
+    u8 *p;
+
+    // A fainted one for a healthy one would be a MAX REVIVE thrown in.
+    if (GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0)
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_Fainted);
+        return FALSE;
+    }
+    // What it held stays ours: back in the bag, or at our feet when that pocket is full.
+    held = GetMonData(&gPlayerParty[slot], MON_DATA_HELD_ITEM, NULL);
+    if (held != ITEM_NONE && !AddBagItem(held, 1))
+        BrLoot_DropItem(held);
+    // He keeps the one he is given. POK-294's "nothing ever leaves the match" is about a
+    // mon let go to make room, and is not this: dropped at our feet, it would be ours
+    // again for one press, and the trade a free mon.
+    gPlayerParty[slot] = *mon;
+    p = BrHud_Append(line, last, sText_Traded);
+    p = BrHud_Append(p, last, gSpeciesNames[GetMonData(mon, MON_DATA_SPECIES, NULL)]);
+    BrHud_Append(p, last, sText_Bang);
+    PlaySE(SE_PIN);
+    BrHud_Box(line);
+    BrSpectate_SendParty();
+    return TRUE;
+}
+
+void BrEvent_Trade(void)
+{
     struct Pokemon mon;
     u16 slot = gSpecialVar_0x8004;
-    u16 species, held;
     u8 i = gBrEvents.trading;
-    u8 *p;
 
     if (slot >= PARTY_SIZE || i >= BR_EVENT_MAX
         || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
@@ -288,31 +315,12 @@ void BrEvent_Trade(void)
         BrHud_Box(sText_TradedAlready);
         return;
     }
-    // A fainted one for a healthy one would be a MAX REVIVE thrown in.
-    if (GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0)
-    {
-        PlaySE(SE_FAILURE);
-        BrHud_Box(sText_Fainted);
+    Offered(i, &mon);
+    if (!BrEvent_Swap(slot, &mon))
         return;
-    }
-    // What it held stays ours: back in the bag, or at our feet when that pocket is full.
-    held = GetMonData(&gPlayerParty[slot], MON_DATA_HELD_ITEM, NULL);
-    if (held != ITEM_NONE && !AddBagItem(held, 1))
-        BrLoot_DropItem(held);
-    // He keeps the one he is given. POK-294's "nothing ever leaves the match" is about a
-    // mon let go to make room, and is not this: dropped at our feet, it would be ours
-    // again for one press, and the trade a free mon.
-    species = Offered(i, &mon);
-    gPlayerParty[slot] = mon;
     // Once, for the whole room: the PICKUP of his key takes him off every map.
     gBrEvents.used |= 1 << i;
     BrLoot_SendTaken(BR_EVENT_TRADER_KEY(i));
-    p = BrHud_Append(line, last, sText_Traded);
-    p = BrHud_Append(p, last, gSpeciesNames[species]);
-    BrHud_Append(p, last, sText_Bang);
-    PlaySE(SE_PIN);
-    BrHud_Box(line);
-    BrSpectate_SendParty();
 }
 
 void BrEvent_Tick(void)

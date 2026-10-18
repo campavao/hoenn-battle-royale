@@ -1,0 +1,69 @@
+# house-gift-full: somebody at home's gift with a full party (the review of POK-379).
+# He says his line, but no "received": the release screen asks who gives way, and
+# saying nobody leaves him standing there with it, as a ball's would (catch-cancel).
+#
+# house-gift's boot, seed and walk, with catch-cancel's six TREECKO.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 08 02 03 00 06 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1086
+wait 30
+hold DOWN 90
+wait 200
+hold UP 40
+wait 200
+expect u8 gPlayerPartyCount 1
+copy gPlayerParty+100 gPlayerParty 100
+copy gPlayerParty+200 gPlayerParty 100
+copy gPlayerParty+300 gPlayerParty 100
+copy gPlayerParty+400 gPlayerParty 100
+copy gPlayerParty+500 gPlayerParty 100
+# the cache where it always is, (12,11), and him on the next cell out, (11,10): key
+# 0x8C21, a BULBASAUR (1) at the rung (level 0), standing as a person
+expect u16 gBrLoot 0x8D21
+expect u16 gBrLoot+20 0x8C21
+expect u16 gBrLoot+22 11
+expect u16 gBrLoot+24 10
+expect u16 gBrLoot+26 1
+expect u8 gBrLoot+30 0
+expect u8 gBrLoot+31 1
+expectne u8 gBrLoot+32 0xFF
+# up the right of the chairs, over the cache, to (12,10), and face him
+hold UP 34
+wait 20
+hold RIGHT 16
+wait 20
+hold RIGHT 16
+wait 20
+hold UP 48
+wait 20
+expect u16 *gSaveBlock1Ptr 5
+expect u16 *gSaveBlock1Ptr+2 3
+hold LEFT 1
+wait 20
+tap A
+wait 60
+shot talks
+tap A
+wait 60
+shot no-received
+# parked, not taken: no PICKUP, and he is still there
+expect u8 gBrLoot+31 1
+expect u16 gBrLoot+20 0x8C21
+expect u8 gBrLoot+0xA2 0
+waitfor u8 gBrCatch 1 120
+wait 60
+shot asked
+tap A
+wait 90
+tap B
+wait 120
+tap B
+wait 120
+shot cancelled
+expect u8 gBrCatch 0
+expect u8 gBrLoot+31 1
+expect u16 gBrLoot+20 0x8C21
+expect u8 gBrLoot+0xA2 0
+say house gift full ok

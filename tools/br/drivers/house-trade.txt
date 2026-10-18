@@ -1,0 +1,63 @@
+# house-trade: somebody at home who trades (POK-379, br_balls.c). The event trader's
+# question -- his for any one of ours -- and the party menu picks; B out of it trades
+# nothing. It is a trade, so his KADABRA comes over an ALAKAZAM (br_loot.c, TradedInto),
+# he keeps ours, and the PICKUP of his key takes him off every map.
+#
+# house-gift's walk, under seed 0x1072: PETALBURG CITY's HOUSE1 has a KADABRA trader.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 08 02 03 00 06 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1072
+wait 30
+hold DOWN 90
+wait 200
+hold UP 40
+wait 200
+expect u8 gPlayerPartyCount 1
+expect u16 gBrLoot+20 0x8C21
+expect u16 gBrLoot+26 64
+expect u8 gBrLoot+31 1
+hold UP 34
+wait 20
+hold RIGHT 16
+wait 20
+hold RIGHT 16
+wait 20
+hold UP 48
+wait 20
+hold LEFT 1
+wait 20
+shot trader
+# A asks; YES; then B out of the party menu: nothing traded, and he is still there
+tap A
+wait 90
+shot offer
+tap A
+wait 30
+tap A
+wait 90
+shot picker
+tap B
+wait 120
+expect u8 gBrLoot+31 1
+expect u16 gBrLoot+20 0x8C21
+# again, and pick ours this time
+tap A
+wait 90
+tap A
+wait 30
+tap A
+wait 90
+tap A
+wait 120
+shot traded
+expect u8 gPlayerPartyCount 1
+expectmsg 7 u16 2 65
+expectmsg 10 u16 1 0x8C21
+expect u8 gBrLoot+31 0
+# ...and A where he stood is nothing now
+tap A
+wait 60
+expect u32 gMain+4 CB2_Overworld+1
+say house trade ok

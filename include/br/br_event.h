@@ -86,5 +86,10 @@ u8 BrEvent_Wanted(void);
 void BrEvent_Tick(void);
 // The trade script's special: gSpecialVar_0x8004 is the slot the party menu chose.
 void BrEvent_Trade(void);
+// Ours in `slot` for `mon`, the way a trader swaps: never a fainted one, and what it held
+// stays ours. Says "TRADED FOR" whom; FALSE, and says why, for a fainted one. Somebody at
+// home trades this way too (br_loot.c).
+struct Pokemon;
+bool8 BrEvent_Swap(u8 slot, struct Pokemon *mon);
 
 #endif // GUARD_BR_EVENT_H
