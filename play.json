@@ -1,7 +1,33 @@
 {
- "readAt": "2026-10-18T21:10:48.449Z",
+ "readAt": "2026-10-18T23:07:49.141Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "XMHP72",
+   "at": "2026-10-18T23:02:28.338Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-18T23:02:38.409Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
   {
    "code": "M382RJ",
    "at": "2026-10-18T20:12:54.472Z",
@@ -2291,13 +2317,13 @@
   {
    "id": "a6f8be76",
    "first": "2026-10-14T22:34:17.163Z",
-   "last": "2026-10-18T19:15:57.462Z",
+   "last": "2026-10-18T23:02:28.272Z",
    "since": "2026-10-14",
    "versions": [
     "2"
    ],
    "solo": 1,
-   "checkins": 3,
+   "checkins": 4,
    "v": "2"
   },
   {
