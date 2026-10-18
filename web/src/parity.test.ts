@@ -824,6 +824,8 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(1 << obj.bits.offScreen.bit).toBe(field.OBJ_OFFSCREEN_BIT);
     expect(obj.bits.isPlayer).toEqual({ byte: field.OBJ_PLAYER_BYTE, bit: 0 });
     expect([field.OBJ_SPRITE_ID, field.OBJ_GFX]).toEqual([obj.at.spriteId, obj.at.graphicsId]);
+    expect([field.OBJ_CURRENT_X, field.OBJ_CURRENT_Y]).toEqual([obj.at.currentCoords, obj.at.currentCoords + 2]);
+    expect(obj.bits.movementDirection, "the SURF blob's facing, the high nibble").toEqual({ byte: field.OBJ_DIRECTION_BYTE, bit: 4 });
     expect(obj.bits.currentElevation, "touch.ts's, the low nibble").toEqual({ byte: touch.OBJ_ELEVATION_BYTE, bit: 0 });
   });
 

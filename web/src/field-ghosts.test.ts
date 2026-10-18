@@ -4,6 +4,7 @@ import {
   MAP_OFFSET, SEAT_DIR, SEAT_MAP_NUM, SEAT_PRESENT, SEAT_SIZE, SEAT_SKIN, SEAT_X, SEAT_Y, TEMPLATE_SIZE, TPL_FLAG_ID, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X,
   TPL_Y, LOOT_SPECIES, type Template, GhostWalkers, EVENTS_LIVE, EVENTS_SIZE, EVENTS_TRADER, EVENTS_USED, GFX_TRADER, TRADER_MAP_NUM, TRADER_SIZE, TRADER_SPECIES, TRADER_X, TRADER_Y,
   decodeTraders, decodeDespawned, decodeStripped, decodeLoot, decodeSeats, decodeTemplates, droppedPeople, initialFacing, inObjectView, objectKey, placePeople, standingFrame,
+  SURF_BLOB_GFX, surfBob, withBlob,
 } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
 import { lcdOrigin } from './field';
@@ -419,5 +420,56 @@ describe('the ghosts walk on (POK-323)', () => {
     w.update([row(2), row(3, { y: 32 + MAP_OFFSET })]);
     const far = w.sprites(MAP, origin, (_seat, x, y) => !inObjectView(POS, x, y), true);
     expect(far.map((s) => [s.seat, s.hidden])).toEqual([[3, true]]);
+  });
+});
+
+describe('a ghost on the water rides SURF (POK-391)', () => {
+  // We stand at (20, 20) on MAP; everything from x 22 east is sea.
+  const origin = lcdOrigin({ x: 20, y: 20, subX: 0, subY: 0 });
+  const wet = (x: number) => x >= 22;
+  const row = (seat: number, over: Partial<RosterEntry> = {}): RosterEntry =>
+    ({ seat, name: '', alive: true, isMe: false, map: MAP, x: 22 + MAP_OFFSET, y: 20 + MAP_OFFSET, dir: 1, skin: '0', ...over });
+  const still = () => ({ frame: 0, hFlip: false });
+
+  it('BRENDAN sits down on a blob centred 8 below him, facing his way', () => {
+    const w = new GhostWalkers();
+    w.update([row(2)]);
+    const [rider, blob, ...rest] = w.sprites(MAP, origin, () => true, true, wet);
+    expect(rest).toEqual([]);
+    // OBJ_EVENT_GFX_BRENDAN_SURFING, 32 wide: centred on the tile a standing BRENDAN is.
+    expect(rider).toEqual({ gfx: 2, frame: 0, hFlip: false, x: 136, y: 56, hidden: true, seat: 2 });
+    expect(blob).toEqual({ gfx: SURF_BLOB_GFX, frame: 0, hFlip: false, x: 136, y: 64, hidden: true, under: true, seat: 2 });
+  });
+
+  it('on dry land nobody rides anything, and somebody with no seated picture rides as they stand', () => {
+    const w = new GhostWalkers();
+    w.update([row(2, { x: 21 + MAP_OFFSET }), row(3, { skin: '5', y: 22 + MAP_OFFSET })]);
+    const [dry, rider, blob] = w.sprites(MAP, origin, () => true, false, wet);
+    expect(dry).toMatchObject({ gfx: SKIN_GFX[0], seat: 2 });
+    expect(rider).toMatchObject({ gfx: SKIN_GFX[5], seat: 3 });
+    expect(blob).toMatchObject({ gfx: SURF_BLOB_GFX, seat: 3, under: true });
+  });
+
+  it('rider and blob bob together, 0 down to -4 and back in 32 frames', () => {
+    expect(Array.from({ length: 33 }, (_, t) => surfBob(t))).toEqual([
+      0, 0, 0, 0, -1, -1, -1, -1, -2, -2, -2, -2, -3, -3, -3, -3, -4, -4, -4, -4, -3, -3, -3, -3, -2, -2, -2, -2, -1, -1, -1, -1, 0,
+    ]);
+    const w = new GhostWalkers();
+    for (let i = 0; i < 16; i++) w.update([row(2)]);
+    const [rider, blob] = w.sprites(MAP, origin, () => true, false, wet);
+    expect([rider.y, blob.y]).toEqual([56 - 4, 64 - 4]);
+  });
+
+  it('the blob faces the way the rider goes: east is west mirrored', () => {
+    const rider = { gfx: 2, frame: 0, hFlip: false, x: 0, y: 0, hidden: false };
+    expect(withBlob(rider, 2, 0)[1]).toMatchObject({ frame: 1, hFlip: false });
+    expect(withBlob(rider, 3, 0)[1]).toMatchObject({ frame: 2, hFlip: false });
+    expect(withBlob(rider, 4, 0)[1]).toMatchObject({ frame: 2, hFlip: true });
+  });
+
+  it("gBrSeats' standing copy past the box surfs too; Hoenn's people and the loot never do", () => {
+    const people = [{ gfx: 0, dir: 1, x: 22, y: 20, seat: 4 }, { gfx: 7, dir: 1, x: 23, y: 20 }];
+    const out = placePeople(people, origin, still, wet, -2);
+    expect(out.map((s) => [s.gfx, s.seat, !!s.under, s.y])).toEqual([[2, 4, false, 54], [SURF_BLOB_GFX, 4, true, 62], [7, undefined, false, 56]]);
   });
 });

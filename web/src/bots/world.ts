@@ -177,6 +177,17 @@ export function decodeGrid(grid: string, cells: number): Uint8Array {
   return out;
 }
 
+const waterGrids = new WeakMap<WorldMap, Uint8Array>();
+
+/** Is a map's cell water (POK-391: a ghost on it surfs)? Its grid decoded once and kept,
+ *  without building a World: the picture asks this, and a spectator never walks. */
+export function isWater(map: WorldMap, x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= map.w || y >= map.h) return false;
+  let grid = waterGrids.get(map);
+  if (!grid) waterGrids.set(map, (grid = decodeGrid(map.grid, map.w * map.h)));
+  return grid[y * map.w + x] === CLASS_WATER;
+}
+
 export class World {
   private readonly maps = new Map<string, WorldMap>();
   private readonly grids = new Map<string, Uint8Array>();
