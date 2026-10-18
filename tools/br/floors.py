@@ -5,10 +5,10 @@ each the things stand, and writes br_balls.c's sRooms from them, so a map nobody
 of is not left empty and nothing is put where nobody can reach it.
 
 A floor is a map you can walk into from a town or route (warps, connections and where a
-dive comes up, never through a closed door, br_match.c) that is not a town or route itself, is not a Centre,
-a Mart, a Gym, a link room, an elevator, the Trainer Hill's challenge or the MYSTERY
-EVENTS house, and has a region-map section (the rest are the Frontier's and the like,
-out of the match). A room is a floor that gets something:
+dive comes up, never through a closed door, br_match.c) that is not a town or route
+itself, is not a Centre, a Mart, a Gym, a link room, an elevator, the Trainer Hill's
+challenge or the MYSTERY EVENTS house, and has a region-map section (the rest are the
+Frontier's and the like, out of the match). A room is a floor that gets something:
 
   every house (HOUSES, in the order its keys were dealt in): a cache, and one in eight
   of them somebody at home (POK-379)
