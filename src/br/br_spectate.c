@@ -58,10 +58,12 @@
 
 EWRAM_DATA struct BrSpectate gBrSpectate = {0};
 EWRAM_DATA struct BrJank gBrJank = {0};
+// The flags and counters are plain statics, in IWRAM like br_field.c's: EWRAM is within a
+// few bytes of tools/br/ram-headroom.py's floor, and these are a byte or two each.
 // FollowTick took the field off us for being out (2026-10-05 play-test).
-static EWRAM_DATA bool8 sOutHeld = FALSE;
+static bool8 sOutHeld;
 // This battle's fog asked (BrRing_DecideSoloFog), for a fight published alone.
-static EWRAM_DATA bool8 sFogDecided = FALSE;
+static bool8 sFogDecided;
 // The per-frame turn scratch, kept in EWRAM on purpose: a plain function-local static
 // lands in the battle-tight IWRAM, and the stream is never on a hot path. It doubles as
 // the receive side's reassembly buffer -- the two never overlap, because a ROM that is
@@ -71,7 +73,7 @@ static EWRAM_DATA u8 sTurnBuf[BR_CAP_TURN] = {0};
 // A TURN the out ring had no room for, still in sTurnBuf: its length, 0 for none. It
 // goes out before anything newer, or it would be gone -- the delta's cursor had already
 // moved past it (POK-330 #12).
-static EWRAM_DATA u8 sTurnLen = 0;
+static u8 sTurnLen;
 static EWRAM_DATA struct BrAssembler sBstartAsm = {0};
 static void CloseWatchMenu(void);
 static EWRAM_DATA struct BrAssembler sTurnAsm = {0};
@@ -96,21 +98,21 @@ static EWRAM_DATA struct BrTurnCheck sTheirs[BR_CHECK_SLOTS] = {0};
 static EWRAM_DATA struct BrTurnCheck sMine = {0};
 // The battle's turn counter as last summed: by a fighter, the last turn it sent the sum
 // of; by a replay, the last turn it summed its own.
-static EWRAM_DATA u8 sCheckTurn = 0;
+static u8 sCheckTurn;
 // BR_CHECK_ARMED: the counter has been seen at 0 in this battle. Until
 // BattleStartClearSetData zeroes it, some frames into the battle, it is the last battle's
 // count, and summing that "turn" would hold a sum of nothing against the fighter's real one.
 // BR_CLOCK_SEEN: the watched fighter has published a shot clock in this watch. Only a link
 // fight has one; a fight against a bot or a wild mon has no limit on choosing, and a
 // trainer who thinks for a minute is not a replay that stalled.
-static EWRAM_DATA u8 sCheckFlags = 0;
+static u8 sCheckFlags;
 #define BR_CHECK_ARMED (1 << 0)
 #define BR_CLOCK_SEEN  (1 << 1)
 // Frames the replay has sat on a choice that has not come (BR_JANK_STALL_SECS).
-static EWRAM_DATA u16 sStarvedFrames = 0;
+static u16 sStarvedFrames;
 // ...and the frames since it was last starved: a wait ends only after BR_JANK_FED_FRAMES of
 // them in a row, so a frame the replay spends off the choice does not cut one stall in two.
-static EWRAM_DATA u8 sFedFrames = 0;
+static u8 sFedFrames;
 #define BR_JANK_FED_FRAMES 30
 
 // Every battler's species and HP as a turn ends, summed so the order the battlers are in
@@ -399,7 +401,7 @@ static EWRAM_DATA u32 sPendSeed = 0;
 static EWRAM_DATA u32 sPendFlags = 0;
 static EWRAM_DATA u8 sPendNames[2 * (PLAYER_NAME_LENGTH + 1)] = {0};
 static EWRAM_DATA u8 sPendGenders[2] = {0};
-static EWRAM_DATA bool8 sPendFog = FALSE;
+static bool8 sPendFog;
 // Turns that arrive while the field is still fading out. The fighters do not wait for
 // a spectator to be ready, so the opening turn of a fight can land before the replay
 // exists; held here, they are flushed into the record the moment it does.
@@ -416,10 +418,10 @@ struct BrEarlyTurns
 };
 #define PEND_EARLY ((struct BrEarlyTurns *)(sPendParties + 2 * PARTY_SIZE))
 // ...and a RESULT that lands in the same window: the replay's own start would clear it.
-static EWRAM_DATA bool8 sEndEarly = FALSE;
+static bool8 sEndEarly;
 // ...and NEXT in the same window: the replay starts and stops at once, without playing
 // the turns held for it -- a fight joined late is all of them, at catch-up speed.
-static EWRAM_DATA bool8 sAbortEarly = FALSE;
+static bool8 sAbortEarly;
 
 static void CB2_BrReturnFromSpectate(void)
 {
@@ -1085,7 +1087,7 @@ static void OpenPeekAt(u8 page)
 EWRAM_DATA u8 gBrFollowName[PLAYER_NAME_LENGTH + 1] = {0};
 
 // The menu was up last frame: START that closed it must not open it again.
-static EWRAM_DATA bool8 sMenuWas = FALSE;
+static bool8 sMenuWas;
 // The watched party as real POKeMON, for the summary screen: built from the PARTY rows
 // when it opens and freed when it closes. The heap, as the rows themselves are.
 static EWRAM_DATA struct Pokemon *sWatchParty = NULL;
