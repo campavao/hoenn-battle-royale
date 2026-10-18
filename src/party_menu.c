@@ -5167,13 +5167,11 @@ static void Task_TryLearnNewMoves(u8 taskId)
 
 static void Task_TryLearningNextMove(u8 taskId)
 {
-    u16 result;
-
 #if BR
-    if (BrAskNextLearn(taskId)) // a lift's questions, not a RARE CANDY's level
-        return;
+    u16 result = BrAskNextLearn(taskId) ? MON_ALREADY_KNOWS_MOVE : MonTryLearningNewMove(&gPlayerParty[gPartyMenu.slotId], FALSE); // a lift's questions, not a RARE CANDY's level: the ask has its own task, so return
+#else
+    u16 result = MonTryLearningNewMove(&gPlayerParty[gPartyMenu.slotId], FALSE);
 #endif
-    result = MonTryLearningNewMove(&gPlayerParty[gPartyMenu.slotId], FALSE);
 
     switch (result)
     {
