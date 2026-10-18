@@ -693,8 +693,10 @@ static void Task_BrLeaveField(u8 taskId)
         // Not out from under a step. A step off the water during MAP's fade started the
         // dismount jump, the field went mid-jump, and the way back rebuilt the avatar
         // from its sprite -- still the surfing one -- on a land tile: Cam surfing on land
-        // (2026-10-18). The controls are locked from the leave on, so this is only ever
-        // a step already under way, and it is given a second at most.
+        // (2026-10-18). The controls are locked from the leave on, so this is a step
+        // already under way -- or one a dismount let start on the frame it handed the
+        // controls back, before the re-lock above -- and a fishing line, which holds
+        // preventStep until it is reeled in. A second at most either way.
         if ((gPlayerAvatar.preventStep || (ObjectEventIsMovementOverridden(&gObjectEvents[gPlayerAvatar.objectEventId])
                                             && !gObjectEvents[gPlayerAvatar.objectEventId].heldMovementFinished))
          && ++task->tSettle < 60)
@@ -727,7 +729,7 @@ bool8 BrField_Leave(u8 frames, void (*enter)(void))
     if (BrField_Leaving())
         return FALSE;
     // Every road off the field is a fade with the player still on it, and a start menu
-    // entry has just given them the controls back (HideStartMenu): nothing walks now.
+    // entry has just given them the controls back (HideStartMenu): nothing starts a step now.
     LockPlayerFieldControls();
     taskId = CreateTask(Task_BrLeaveField, 80);
     gTasks[taskId].tFrames = frames;

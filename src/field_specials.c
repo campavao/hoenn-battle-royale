@@ -1640,13 +1640,12 @@ u16 GetMysteryGiftCardStat(void)
 
 bool8 BufferTMHMMoveName(void)
 {
-#if BR
-    if (BrItems_TmNamedForMove()) // the TM's name is its move already: said once
-        return FALSE;
-#endif
     if (gSpecialVar_0x8004 >= ITEM_TM01 && gSpecialVar_0x8004 <= ITEM_HM08)
     {
         StringCopy(gStringVar2, gMoveNames[ItemIdToBattleMoveId(gSpecialVar_0x8004)]);
+#if BR
+        return !BrItems_TmNamedForMove(); // the TM's name is its move already: said once
+#endif
         return TRUE;
     }
 

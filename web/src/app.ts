@@ -1697,6 +1697,10 @@ const SOLO_END_GRACE_MS = 8_000;
 /** How long a watcher's results wait for a replay that has not come on yet (POK-365):
  *  the ROM reads a `bstart` off the ring a second or so after the page hands it over. */
 const REPLAY_START_MS = 2_000;
+/** The longest the results wait on a replay that is still playing. A bot duel can run
+ *  10,800 of its frames (proxy.ts), three minutes at 1x and half that at BOT_DUEL_SPEED;
+ *  a minute cut the deciding fight off part way. */
+const REPLAY_MAX_MS = 150_000;
 
 /** `gBrMatch.phase` once the winner's Hall of Fame has finished and the ROM is back on
  *  the map (include/br/br_match.h). The one byte the page reads out of the match struct:
@@ -1759,6 +1763,8 @@ function romCatchingUp(emu: Emulator, base: number | undefined): boolean {
   return base !== undefined && emu.read(base + 15, 8) !== 0;
 }
 const CATCH_UP_SPEED = 8;
+/** A bot duel's replay, behind the proxy that runs it at 8x: quick, and still a fight. */
+const BOT_DUEL_SPEED = 2;
 
 /** The spectator's own pump: re-ask the trainer we watch what they carry (the ask is
  *  also what tells them they are being watched), mirror how many are watching US into
@@ -1771,23 +1777,26 @@ function startSpectateLoop(
   spectateBase?: number,
   answerOwn?: (ask: Msg) => void,
 ): () => void {
-  let catching = false;
-  const hurry = (on: boolean) => {
-    catching = on;
-    emu.setSpeed(on ? CATCH_UP_SPEED : 1);
-    emu.setVolume(on || settings.muted ? 0 : UNMUTED_VOLUME);
+  // 1 at the fight's own pace, CATCH_UP_SPEED silent, or BOT_DUEL_SPEED with sound.
+  let speed = 1;
+  const pace = (to: number) => {
+    speed = to;
+    emu.setSpeed(to);
+    emu.setVolume(to === CATCH_UP_SPEED || settings.muted ? 0 : UNMUTED_VOLUME);
   };
   // Catching up is for a fight joined late, whose turns so far all arrive at once. A
   // duel between two bots is not one: the proxy runs it at 8x (POK-300) and streams its
   // turns as fast, so its replay fell behind, caught up at 8x and kept the proxy's pace
-  // to the end -- Cam saw a whole fight in three silent seconds (2026-10-18). That one
-  // plays at 1x however far behind, and the results wait for it (ReplayHold).
+  // to the end -- Cam saw a whole fight in three silent seconds (2026-10-18). Behind on
+  // one of those, the replay runs at BOT_DUEL_SPEED with its sound on: watchable, and
+  // done inside the results' wait (REPLAY_MAX_MS) where 1x could run minutes.
   const botDuel = (watch: number | null | undefined): boolean =>
     watch != null && bridge.roster.isBot(watch & 0xff) && bridge.roster.isBot(watch >> 8);
   const id = setInterval(() => {
     const now = performance.now();
-    const want = romCatchingUp(emu, spectateBase) && !botDuel(romWatching(emu, spectateBase));
-    if (want !== catching) hurry(want);
+    const behind = romCatchingUp(emu, spectateBase);
+    const want = !behind ? 1 : botDuel(romWatching(emu, spectateBase)) ? BOT_DUEL_SPEED : CATCH_UP_SPEED;
+    if (want !== speed) pace(want);
     const ask = spectate.duePeek(bridge.seat, now, romReplaying(bridge.rom, () => romWatching(emu, spectateBase)));
     if (ask) {
       bridge.relay.all(ask);
@@ -1806,7 +1815,7 @@ function startSpectateLoop(
   }, SPECTATE_TICK_MS);
   return () => {
     clearInterval(id);
-    if (catching) hurry(false);
+    if (speed !== 1) pace(1);
   };
 }
 
@@ -1956,7 +1965,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     replaying: () => romWatching(emu, spectateBase) != null,
     // Solo's watching is the ROM's own (no page-side follow), so only a replay already on holds.
     watching: () => false,
-    maxMs: SOLO_WIN_GRACE_MAX_MS,
+    maxMs: REPLAY_MAX_MS,
     startMs: REPLAY_START_MS,
     pollMs: SOLO_PARADE_POLL_MS,
     onOver: () => drawResults(),
@@ -2634,7 +2643,7 @@ function wireRoom(
   const replay = new ReplayHold({
     replaying: () => romWatching(emu, gBrSpectate) != null,
     watching: () => spectate.watchingSeat() !== null,
-    maxMs: WIN_GRACE_MAX_MS,
+    maxMs: REPLAY_MAX_MS,
     startMs: REPLAY_START_MS,
     pollMs: PARADE_POLL_MS,
     onOver: () => drawResults(),
