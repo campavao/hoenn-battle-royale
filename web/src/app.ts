@@ -125,6 +125,7 @@ import {
   saveProfile,
   SKINS,
 } from './match/career';
+import { JANK_LONGEST, jankMessage, readJank, type JankCounts } from './match/jank';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import { HOENN, loadHoenn } from './bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './match/landing';
@@ -2649,6 +2650,20 @@ function wireRoom(
     pollMs: PARADE_POLL_MS,
     onOver: () => drawResults(),
   });
+  /** How smooth the match looked from here (POK-376): gBrJank at its start, and the
+   *  difference sent to the relay as the page leaves it -- after any replay it waited on,
+   *  so a spectator's stalls are counted to the fight's end. */
+  const gBrJank = symbols?.get('gBrJank');
+  let jankStart: JankCounts | null = null;
+  const sendJank = (): void => {
+    if (gBrJank === undefined || !jankStart) return;
+    const msg = jankMessage(patch ?? String(protocol ?? '?'), jankStart, readJank((a, bits) => emu.read(a, bits), gBrJank));
+    jankStart = null;
+    if (msg) relay.send({ ...msg });
+  };
+  // Every other way out of the match (LEAVE, the results' MENU, a closed tab) unloads the
+  // page; the socket is still open as it goes.
+  window.addEventListener('pagehide', sendJank);
   /** The career line the match produced, for the results. */
   let career = '';
   /** The results, drawn from the match's books over the room's roster. */
@@ -2706,7 +2721,13 @@ function wireRoom(
       },
     },
     {
-      started: hideRoomScreen,
+      started: () => {
+        hideRoomScreen();
+        if (gBrJank !== undefined) {
+          emu.write(gBrJank + JANK_LONGEST, 0, 16);
+          jankStart = readJank((a, bits) => emu.read(a, bits), gBrJank);
+        }
+      },
       decided: (line) => {
         career = line;
         drawResults();
@@ -3042,6 +3063,7 @@ function wireRoom(
     // No room to go back to after a dead end (DeadEnd): its notice stays up.
     if (returning || dead.reached) return;
     returning = true;
+    sendJank();
     // PLAY AGAIN greys out while it is on its way -- on the results, when they are up.
     if (resultsUp && stage.current === resultsUp.screen) drawResults();
     try {

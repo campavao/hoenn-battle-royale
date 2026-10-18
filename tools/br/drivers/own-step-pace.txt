@@ -1,0 +1,20 @@
+# own-step-pace: our own STEP says the pace we took it at (POK-376), byte 8: running is
+# the match's default (field_player_avatar.c), B held walks. The ghost of us on every
+# other screen walks at that pace from its first step (ghost-step-pace.txt).
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# running east: PLAYER_RUN, walk_fast's eight frames a tile
+shot start
+hold RIGHT 14
+expectmsg 3 u8 1 4
+expectmsg 3 u8 8 1
+wait 30
+# B held: a walk
+hold B+LEFT 24
+expectmsg 3 u8 1 3
+expectmsg 3 u8 8 0
+wait 30
+shot walked
+say own step pace ok

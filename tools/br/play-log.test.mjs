@@ -234,3 +234,15 @@ test("the heartbeat is a snapshot, read whole", () => {
   assert.equal(bare.matches, undefined);
   assert.equal(bare.lines, 0);
 });
+
+test("a jank report is read whole, room or not (POK-376)", () => {
+  const line = "2026-09-18T15:09:01.000Z jank HANDOV v0.3.9 | watched 120s | snaps 2 cam 1 lost 0 | stalls 1 longest 31s | checks 9 drifts 0";
+  const ev = parseLine(line, "x");
+  assert.deepEqual(ev, { t: "2026-09-18T15:09:01.000Z", kind: "jank", code: "HANDOV", v: "0.3.9",
+                         watched: 120, snaps: 2, cam: 1, lost: 0, stalls: 1, longest: 31, checks: 9, drifts: 0 });
+  assert.equal(parseLine(line.replace("HANDOV", "-"), "x").code, null);
+  const out = derive([ev]);
+  assert.equal(out.jank.length, 1);
+  assert.equal(out.jank[0].drifts, 0);
+  assert.equal(out.jank[0].kind, undefined);
+});

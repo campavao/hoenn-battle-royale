@@ -1,0 +1,38 @@
+# spectate-check: a replay checks every turn against the fighter's (POK-376). The TURN
+# after a turn ends carries, after its actions, a BR_SPECTATE_CHECK run: C0 03, the ended
+# turn's number and a sum of every battler's species and HP as it ended. The replay sums
+# its own when its turn ends, and they agree: gBrJank.checks (+10) counts one, drifts
+# (+12) none, and the fight plays on.
+#
+# spectate-watch.txt's fight. After turn 1 both mons are species 0x115 at 16 HP:
+# 2 * (0x115 * 31 + 16) = 0x4336.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+# turn 1: battler 0 FIGHTs at 1 (and its engine's end-of-turn 00), battler 1 at 0
+pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+wait 2500
+expect u8 gBattleResults+0x13 1
+expect u16 gBrJank+10 0
+# turn 2, and the fighter's sum for turn 1
+pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00 C0 03 01 36 43
+mailsend gBrMailbox 19 gDecompressionBuffer 18
+wait 60
+expect u16 gBrJank+10 1
+expect u16 gBrJank+12 0
+wait 1500
+# turn 2 played: the check's run went nowhere near either battler's record
+expect u8 gBattleResults+0x13 2
+expect u8 gBrSpectate+5 1
+expect u8 gBattleMons+0x24 33
+# a wait of a few seconds for the next turn is no stall (gBrJank.stalls, +6)
+expect u16 gBrJank+6 0
+shot played-on
+say spectate check ok
