@@ -15,10 +15,8 @@ import { RomPort } from './net/romport';
 import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
-import { PhoneHud, readHudView, type HudWorld } from './ui/phonehud';
-import { BattleMenu, battleWantsNoPad, readBattleView } from './ui/battlemenu';
-import { BAG_POSITION_POCKET, readBattleBag } from './ui/bag';
-import { PadPrefsControl } from './ui/padprefs';
+import type { HudWorld } from './ui/phonehud';
+import type { PadPrefsControl } from './ui/padprefs';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { battleSeats, cutTo, nameBstart, romReplaying, Spectate } from './match/spectate';
 import type { Results } from './match/results';
@@ -3873,7 +3871,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
       rom,
     });
     touch.attach();
-    wirePhoneHud(emu, symbols, touch, rom);
+    void wirePhoneHud(emu, symbols, touch, rom).catch((err: unknown) => console.warn('phone HUD did not load', err));
   }
 }
 
@@ -3881,8 +3879,12 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
  *  movable pad (ui/padprefs.ts). The HUD reads the ROM every frame while it is on the
  *  glass, and while it is the ROM's corner box stays off (gBrHud.noCorner): the two
  *  would say the same thing twice. So does the battle's own FIGHT/BAG box, under the
- *  menu's windows (noBattleBox, br_battle.c BrBattle_MenuBoxOff). */
-function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchLayer, rom: Uint8Array | null): void {
+ *  menu's windows (noBattleBox, br_battle.c BrBattle_MenuBoxOff). All four are a chunk
+ *  of their own (ui/phone-ui.ts, POK-407), fetched as the game comes up: none of them is
+ *  on the glass before a match. */
+async function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchLayer, rom: Uint8Array | null): Promise<void> {
+  const { BAG_POSITION_POCKET, BattleMenu, PadPrefsControl, PhoneHud, battleWantsNoPad, readBattleBag, readBattleView, readHudView } =
+    await import('./ui/phone-ui');
   const top = $('#hud') as HTMLElement;
   const pad = $('#pad') as HTMLElement;
   const root = $('#screen-playing') as HTMLElement;
