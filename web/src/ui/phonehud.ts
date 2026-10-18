@@ -214,9 +214,6 @@ export function readHudView(emu: HudRead, sym: (name: string) => number | undefi
 export const FOG_W = 120;
 export const SIGN_W = 96;
 export const SIGN_H = 40;
-/** How long the sign stays up on a new section before it goes, as Emerald's map popup
- *  does (Cam, 2026-10-17). */
-export const SIGN_MS = 3000;
 export const DOCK_W = 96;
 export const DOCK_H = 40;
 const LINE = 14;
@@ -345,7 +342,6 @@ export class PhoneHud {
   private view: HudView | null = null;
   private scale = 1;
   private readonly signCue = new SignCue();
-  private signTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly sign: Win;
   private readonly fog: Win;
   private readonly party: Win;
@@ -437,7 +433,6 @@ export class PhoneHud {
   /** Off the glass (a match over, the phone turned): the next update shows the sign. */
   hide(): void {
     this.signCue.reset();
-    clearTimeout(this.signTimer);
     this.sign.el.classList.add('gone');
   }
 
@@ -448,10 +443,10 @@ export class PhoneHud {
     const signKey = `${v.theme}|${v.place}`;
     if (this.signCue.next(signKey)) {
       this.sign.show(signKey);
-      // A section with no name (the map not known yet) has no sign to show.
+      // A section with no name (the map not known yet) has no sign to show. One with a
+      // name keeps it up: where you are is worth a glance at any time (Cam, 2026-10-18,
+      // asked whether it should fade after three seconds: "keep it on screen").
       this.sign.el.classList.toggle('gone', !v.place);
-      clearTimeout(this.signTimer);
-      if (v.place) this.signTimer = setTimeout(() => this.sign.el.classList.add('gone'), SIGN_MS);
     }
     const lines = fogLines(v);
     const h = fogHeight(lines.length);

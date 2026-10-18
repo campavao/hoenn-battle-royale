@@ -556,6 +556,9 @@ void BrLevels_GiveStartingBag(void)
     gBrLevels.rod = ITEM_NONE;
     SwapRod(sRods[0]);
     AddBagItem(ITEM_POKE_BALL, 5);
+    // Hoenn's hidden items are still under the ground in a match, and the ITEMFINDER is
+    // how you find them (Cam, 2026-10-18: "Itemfinder in the starting bag? Yes").
+    AddBagItem(ITEM_ITEMFINDER, 1);
 }
 
 // Which floor of the Department Store you are standing on does not matter: the fog is
