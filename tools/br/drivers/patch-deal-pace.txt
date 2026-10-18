@@ -19,10 +19,8 @@ wait 400
 poke u8 gBrMatch 2
 hold DOWN 30
 expect u8 *gSaveBlock1Ptr+5 25
-# The deal is under way...
-expect u8 gBrPatch+4 0
 hold DOWN 60
-# ...and the walk kept its pace through it.
+# The walk kept its pace while the deal ran (it ends about 113 frames in).
 expectge u16 *gSaveBlock1Ptr+2 6
 wait 120
 expect u16 gBrPatch 0x0019

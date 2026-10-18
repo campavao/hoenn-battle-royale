@@ -90,14 +90,8 @@ static bool8 IsTaken(u16 key)
     return (gBrPatchTaken[n / 8] >> (n % 8)) & 1;
 }
 
-// A cell a battle could start on, by the same test wild_encounter.c makes: grass, a cave
-// floor or sand under a land table, water under a water one. Not a wall, and not where
-// one of the map's people stood.
-//
-// Read off the layout as the ROM ships it, not the live grid: a map's ON_LOAD scripts set
-// metatiles from flags that differ between players, and one cell more or less on one ROM
-// would shift every pick after it -- the same key naming different cells in one room.
-// DealSome makes the test; this is its metatile half.
+// Whether a metatile is one a battle could start on, by the same test wild_encounter.c
+// makes: grass, a cave floor or sand under a land table, water under a water one.
 static bool8 EncounterMetatile(const struct WildPokemonHeader *header, u16 metatile)
 {
     u8 behavior = GetMetatileAttributesById(metatile) & METATILE_ATTR_BEHAVIOR_MASK;
@@ -139,7 +133,8 @@ static void Undraw(u8 i)
 // five frames on the first (safari-opening.txt) -- so it goes a little a frame, and the
 // map has no patches until the second pass is done.
 //
-// A little is BR_PATCH_LINES of the LCD's lines, not a count of cells. BrFrame runs
+// A little is about BR_PATCH_LINES of the LCD's lines, not a count of cells (the clock is
+// read every 16 cells, so a frame can run a few lines over). BrFrame runs
 // before the game's own work, so whatever the deal takes, the walk and the sprites still
 // have to fit after it: 256 cells a frame was half the frame and more, and with a step
 // on top the game ran at half speed for more than a second after every map change, the
@@ -147,6 +142,7 @@ static void Undraw(u8 i)
 // transitioning from one area to another"). The cells themselves are cheaper too: a
 // row's people are found once a row, and a run of one metatile is looked up once.
 #define BR_PATCH_LINES 32
+// REG_VCOUNT runs 0..227: 160 drawn lines, then 68 of VBlank.
 #define LINES_A_FRAME 228
 
 static EWRAM_DATA u8 sPass = 0;          // 0 dealt, 1 counting, 2 placing
@@ -247,6 +243,11 @@ static void DealSome(void)
             row = &layout->map[(sY - MAP_OFFSET) * layout->width];
             peopleCount = PeopleOnRow(sY, people);
         }
+        // A cell a battle could start on: not a wall, an encounter metatile, and not where
+        // one of the map's people stood. Read off the layout as the ROM ships it, not the
+        // live grid: a map's ON_LOAD scripts set metatiles from flags that differ between
+        // players, and one cell more or less on one ROM would shift every pick after it --
+        // the same key naming different cells in one room.
         block = row[sX - MAP_OFFSET];
         eligible = FALSE;
         if (UNPACK_COLLISION(block) == 0)
