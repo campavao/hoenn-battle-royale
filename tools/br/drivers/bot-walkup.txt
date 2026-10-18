@@ -1,0 +1,44 @@
+# bot-walkup: the walk-up before a fight against a bot (POK-409), the one a fight between
+# two people has had since POK-373. Cam's 2026-10-18 play-test: "players still don't walk
+# to each other when initiating a battle like in the game normally" -- a bot fight went
+# straight to the fade. Here we are the one looking: we face east at the bot, three tiles
+# off, while it faces south. The "!" goes up over us, we walk the eyeline to the cell next
+# to it, and only then does the trainer battle take the screen. bot-walkup-looked.txt is
+# the bot looking at us.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# we turn EAST where we stand at (12,16)
+hold RIGHT 1
+wait 20
+expect u8 gBrOwnPos+6 4
+# the bot's card (bot-spotted.txt's: seat 1, "BOT", TREECKO 5), then its ghost at (15,16)
+# facing SOUTH on Littleroot
+pokebytes gDecompressionBuffer 01 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 4
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 01 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 20
+# our challenge went out, to a staged bot: the walk-up, and the "!" over us where we
+# saw it from
+expect u16 gBrEngage+4 1
+expect u16 gBrOwnPos+2 12
+expect u8 gBrBotFight+2 0
+shot bubble
+# the "!" is a second; two walks of 16 frames after it, and we are next to it, still
+# on the field
+wait 80
+expect u16 gBrOwnPos+2 14
+expect u16 gBrOwnPos+4 16
+expect u8 gBrOwnPos+6 4
+expect u8 gBrBotFight+2 0
+shot next-to
+wait 220
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+shot vs
+say bot walkup ok
