@@ -2841,8 +2841,15 @@ function wireRoom(
     bridge.setRomFilter((msg) => {
       if (holdsStart(msg)) return false;
       // A team put down twice -- a winner back from the background after the loser's page
-      // dropped it for them (POK-387) -- is the same mons twice: not stood up again.
-      if (msg.t === 'spill' && session.loot.stale(msg)) return false;
+      // dropped it for them (POK-387) -- is the same pieces twice: what has been taken is
+      // not stood up again, and the rest goes in as it is.
+      if (msg.t === 'spill') {
+        const left = session.loot.trim(msg);
+        if (left !== msg) {
+          if (left) bridge!.pushToRom(left);
+          return false;
+        }
+      }
       if (spectate.wantsFromRelay(msg)) return true;
       cutToFight(msg);
       return false;

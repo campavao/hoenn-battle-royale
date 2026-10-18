@@ -115,7 +115,8 @@ function spillsOf(map: MapRef, pieces: Piece[]): SpillMsg[] {
 }
 
 /** BR_LOOT_KEY_OWN (br_loot.h): a seat in the high byte, a party slot in the low. Not a
- *  bag (0xFF), a released ball (0x4000) or anything past the seats (a patch's 0x2000). */
+ *  bag (0xFF: a taker's leftovers go back down under the same key), a released ball
+ *  (0x4000) or anything past the seats (a patch's 0x2000). */
 const isOwnTeamKey = (key: number): boolean => key >> 8 < 32 && (key & 0xff) < 6;
 
 export class Loot {
@@ -125,15 +126,19 @@ export class Loot {
 
   /** Everything a `spill` put down. Re-reading a spill we already hold is harmless:
    *  the keys are the same, so it replaces rather than duplicates. */
-  /** A trainer's mons somebody has already taken whole (POK-387 review): a team goes down
-   *  once a match, so the same key down again is the same mon twice -- a winner whose tab
-   *  came back and put down the team the loser's page had already dropped for it. */
+  /** A trainer's mons somebody has already taken (POK-387 review): a team goes down once a
+   *  match, so the same key down again is the same mon twice -- a winner whose tab came
+   *  back and put down the team the loser's page had already dropped for it. */
   private readonly spent = new Set<number>();
 
-  /** Every mon in this spill has been taken already, and it carries no bag: a second
-   *  drop of a team, for no ROM to stand up again. */
-  stale(msg: SpillMsg): boolean {
-    return !msg.bag && msg.mons.length > 0 && msg.mons.every((m) => this.spent.has(m.key));
+  /** This spill without what has been taken from it already, for a ROM to stand up:
+   *  the same spill when nothing has, null when nothing is left. Per mon, not the whole
+   *  spill -- a ROM dedupes by key, and a taken key is in no ROM to dedupe against. */
+  trim(msg: SpillMsg): SpillMsg | null {
+    const mons = msg.mons.filter((m) => !this.spent.has(m.key));
+    if (mons.length === msg.mons.length) return msg;
+    if (mons.length === 0 && !msg.bag) return null;
+    return { ...msg, mons };
   }
 
   noteSpill(msg: SpillMsg): void {
