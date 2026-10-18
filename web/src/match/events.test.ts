@@ -15,6 +15,8 @@ import {
   RARES,
   SUPPLIES,
   TraderClaims,
+  homeClaimOf,
+  homeKey,
   claimKey,
   claimOf,
   traderKey,
@@ -158,3 +160,22 @@ describe('a trade asks the host first (POK-392)', () => {
   });
 });
 
+describe('somebody at home asks the host first too (POK-379)', () => {
+  it("his claim key is the 64 above his own, clear of the caches' and the trainers'", () => {
+    expect(homeKey(0x3d)).toBe(0x8c3d);
+    expect([homeClaimOf(0x8c7d), homeClaimOf(0x8c40), homeClaimOf(0x8c3d), homeClaimOf(0x8d40), homeClaimOf(0x8b40)]).toEqual([0x3d, 0, undefined, undefined, undefined]);
+  });
+
+  it('the first ask is his; a later one, or one after a give nobody asked for, hears who got him', () => {
+    const claims = new TraderClaims(() => false);
+    expect(claims.answer({ t: 'pickup', seat: 4, key: 0x8c61 })).toEqual({ reply: { t: 'pickup', seat: 4, key: 0x8c21 }, granted: true });
+    expect(claims.answer({ t: 'pickup', seat: 2, key: 0x8c61 })).toEqual({ reply: { t: 'pickup', seat: 4, key: 0x8c21 }, granted: false });
+    expect(claims.answer({ t: 'pickup', seat: 4, key: 0x8c61 }), 'the winner asking again (a full party said no) is his still').toEqual({
+      reply: { t: 'pickup', seat: 4, key: 0x8c21 },
+      granted: false,
+    });
+    claims.note({ t: 'pickup', seat: 6, key: 0x8c05 });
+    expect(claims.answer({ t: 'pickup', seat: 2, key: 0x8c45 })?.reply.seat).toBe(6);
+    expect(claims.answer({ t: 'pickup', seat: 2, key: 0x8c21 }), 'only an ask is answered').toBeNull();
+  });
+});

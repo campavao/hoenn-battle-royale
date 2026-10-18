@@ -6,15 +6,20 @@
 // The overworld HUD (POK-226): text windows on BG0 that live only while the
 // overworld runs, redrawn from gBrHud every frame something changed.
 //
-//   corner  cols 20..28, rows 1..3   "N LEFT" and the clock "M:SS" (or a FOG! flash) on
-//           (frame 19..29, 0..4)     one line; under them, all ring phase long, where
+//   corner  cols 17..28, rows 1..3   "N LEFT" and the clock "M:SS" (or a FOG! flash) on
+//           (frame 16..29, 0..4)     one line; under them, all ring phase long, where
 //                                    the ring is closing -- "VERDANTURF TOWN", or FOG
 //                                    EVERYWHERE on the last phase (POK-325) -- and an eye
 //                                    and a count while anyone is spectating this trainer
 //                                    (POK-233), beside the name or taking turns with it
-//   ticker  cols  1..28, rows 17..18 one line of news, 180 frames each, kill feed etc.
-//   box     cols  1..28, rows 11..14 the bottom box: a transient two-line message
+//   ticker  cols  2..28, rows 17..18 one line of news, 180 frames each, kill feed etc.
+//   box     cols  2..28, rows 11..14 the bottom box: a transient two-line message
 //                                    (the fog closing in), 90 frames, above the ticker
+//
+// All three print in the field's own dialogue font (FONT_NORMAL), and the ticker and the
+// box sit in the message box's own frame, so HUD news reads like the game talking (Cam,
+// 2026-10-18: the small font "looks out of place"). The corner keeps the standard frame
+// the start menu has, beside which it sits.
 //
 // There was a wound bar under the corner too -- a glyph per party mon, full / hurt /
 // fainted -- from POK-226 until the 2026-09-16 play-test: "under the seven left and
@@ -36,15 +41,17 @@
 // HUD SHARES tiles, and only with the two windows that cover it on screen whenever they
 // are up:
 //
-//   corner  0x139..0x153 (27)  the start menu's head: a start menu of any length covers
+//   corner  0x139..0x15C (36)  the start menu's head: every start menu a match draws
+//                              (three items at the fewest: BAG, the card, EXIT) covers
 //                              all of them, and sits over the corner on screen
-//   box     0x154..0x1C3 (112) the start menu's tail (a 5-item menu runs to 0x18C) and
+//   box     0x15D..0x1C8 (108) the start menu's tail (a 5-item menu runs to 0x18C) and
 //                              the message box's head (0x194..)
-//   ticker  0x1C8..0x1FF (56)  the message box's tail only: pret's longest start menu,
+//   ticker  0x1C9..0x1FE (54)  the message box's tail only: pret's longest start menu,
 //                              nine items, ends at 0x1C4
 //
-// Seven are spare, 0x1C4..0x1C7 and 0x23D..0x23F. Nothing here loads graphics: the boxes
-// are a PIXEL_FILL of the message-box palette (15) and the text is FONT_SMALL, so every
+// Four are spare, 0x1FF and 0x23D..0x23F. Nothing here loads graphics: the boxes are a
+// PIXEL_FILL of the message-box palette (15), the text is FONT_NORMAL and the frames
+// are the field's own two (0x200 and 0x214), so every
 // map load that re-inits the field's text box (InitTextBoxGfxAndPrinters) also re-arms
 // the HUD.
 //
@@ -80,19 +87,21 @@
 // The page writes `left`, `clockSecs` and `flashFog` straight into EWRAM (offsets
 // below, mirrored in web/src/net/hud.ts); everything else is the ROM's.
 
-// The corner's window, in tiles (see the tile map above). Nine wide is the widest place
-// name, 72 px; the start menu (cols 21..29) covers all but its two left columns, which
-// BrHud_Yield takes off while the menu is up.
-#define BR_HUD_CORNER_LEFT 20
-#define BR_HUD_CORNER_WIDTH 9
+// The corner's window, in tiles (see the tile map above). Twelve wide is the widest place
+// name in the dialogue font, EVER GRANDE CITY at 90 px; the start menu (cols 21..29)
+// covers all but its five left columns, which BrHud_Yield takes off while the menu is
+// up. The ticker and the box are the message box's own 27 columns from col 2: its frame
+// is two cells wide on the left.
+#define BR_HUD_CORNER_LEFT 17
+#define BR_HUD_CORNER_WIDTH 12
 #define BR_HUD_CORNER_HEIGHT 3
-#define BR_HUD_TICKER_WIDTH 28
+#define BR_HUD_TICKER_WIDTH 27
 #define BR_HUD_TICKER_HEIGHT 2
-#define BR_HUD_BOX_WIDTH 28
+#define BR_HUD_BOX_WIDTH 27
 #define BR_HUD_BOX_HEIGHT 4
 #define BR_HUD_TILE_CORNER 0x139
-#define BR_HUD_TILE_BOX 0x154
-#define BR_HUD_TILE_TICKER 0x1C8
+#define BR_HUD_TILE_BOX 0x15D
+#define BR_HUD_TILE_TICKER 0x1C9
 // BG2's tilemap at screen block 25 is where BG0's tiles end (POK-329).
 #define BR_HUD_TILE_CEILING 0x240
 // A name and an eye too wide to share the corner's second line take turns on it.
