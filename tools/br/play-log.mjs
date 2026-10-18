@@ -8,7 +8,8 @@
 // and keeps what it parsed for good. The page at /play.html draws the result.
 //
 //   <dir>/events.json   every parsed line, deduplicated, append-only
-//   <dir>/play.json     what the page draws: sessions, installs, solo reports, bounces
+//   <dir>/play.json     what the page draws: sessions, installs, solo reports, bounces,
+//                       jank reports
 //   <dir>/stats.json    the newest heartbeat: who is on right now, peaks since deploy
 //
 // <dir> is PLAY_LOG_DIR (default `play-log`). The workflow checks the `play-log`
@@ -26,6 +27,8 @@
 //   room CODE closed (reason, no heir)
 //   drop NAME#ID [room CODE] (reason) after Ns | in quick_joinx1 host_roomx1 ... | headroom
 //   stat ID vVER | solo +N | since DATE
+//   jank CODE|- vVER | watched Ns | snaps S cam C lost L | stalls X longest Ys
+//         | checks K drifts D                          one page's smoothness (POK-376)
 //   match CODE started (quick|host|daily) | N trainers [M watching] | max K
 //   match CODE ended after Ns
 //   rooms R/RC conns C/CC | sent B in L lines | peak PR rooms PC conns [| matches M]
@@ -211,6 +214,12 @@ export function parseLine(message, fallbackAt) {
   if ((m = body.match(/^stat ([0-9a-f]{1,32}) v(\S+) \| solo \+(\d+) \| since (\S+)$/)))
     return { t, kind: "stat", install: hashId(m[1]), v: m[2], solo: Number(m[3]), since: m[4] };
 
+  if ((m = body.match(/^jank ([A-Z0-9]+|-) v(\S+) \| watched (\d+)s \| snaps (\d+) cam (\d+) lost (\d+) \| stalls (\d+) longest (\d+)s \| checks (\d+) drifts (\d+)$/))) {
+    const [snaps, cam, lost, stalls, longest, checks, drifts] = m.slice(4, 11).map(Number);
+    return { t, kind: "jank", code: m[1] === "-" ? null : m[1], v: m[2], watched: Number(m[3]),
+             snaps, cam, lost, stalls, longest, checks, drifts };
+  }
+
   if ((m = body.match(/^match ([A-Z0-9]+) started \((quick|host|daily)\) \| (\d+) trainers?(?: (\d+) watching)? \| max (\d+)$/)))
     return { t, kind: "match", code: m[1], mode: m[2], trainers: Number(m[3]),
              watching: Number(m[4] || 0), max: Number(m[5]) };
@@ -294,6 +303,7 @@ export function derive(events) {
   const installs = new Map();       // hash -> record
   const solo = [];
   const bounces = [];
+  const jank = [];
   let lastSeat = null;              // the host/join just before a stat line
 
   const seat = (code, who) => { byWho.set(who, code); };
@@ -438,6 +448,11 @@ export function derive(events) {
         }
         break;
       }
+      case "jank": {
+        const { t, kind, ...rest } = ev;
+        jank.push({ t, ...rest });
+        break;
+      }
       default: break;
     }
   }
@@ -456,7 +471,8 @@ export function derive(events) {
     sessions,
     installs: [...installs.values()].sort((a, b) => a.first < b.first ? -1 : 1),
     solo: solo.sort((a, b) => a.t < b.t ? 1 : -1),
-    bounces: bounces.sort((a, b) => a.t < b.t ? 1 : -1)
+    bounces: bounces.sort((a, b) => a.t < b.t ? 1 : -1),
+    jank: jank.sort((a, b) => a.t < b.t ? 1 : -1)
   };
 }
 

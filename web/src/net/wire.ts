@@ -86,6 +86,8 @@ export interface StepMsg {
   x: number;
   y: number;
   map: MapRef;
+  /** The walker's gait: 0 walk, 1 run/bike, 2 fast bike. Absent when unknown (a bot, an old ROM). */
+  p?: 0 | 1 | 2;
 }
 
 /** A turn in place. Crosses into the ROM (face). */
@@ -934,6 +936,7 @@ const decoders: Record<string, Decoder> = {
     x: reqCell(m, 'x'),
     y: reqCell(m, 'y'),
     map: reqMapRef(m),
+    p: optInt(m, 'p', 0, 2) as StepMsg['p'],
   }),
 
   face: (m) => ({

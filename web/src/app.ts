@@ -125,6 +125,7 @@ import {
   saveProfile,
   SKINS,
 } from './match/career';
+import { JANK_LONGEST, jankMessage, readJank, type JankCounts } from './match/jank';
 import { loadStats, recordSolo, setStatsOff, statFlushed, statMessage } from './match/stats';
 import { HOENN, loadHoenn } from './bots/hoenn';
 import { MON_SIZE, readTeam, teamSpill } from './match/owed';
@@ -2650,6 +2651,20 @@ function wireRoom(
     pollMs: PARADE_POLL_MS,
     onOver: () => drawResults(),
   });
+  /** How smooth the match looked from here (POK-376): gBrJank at its start, and the
+   *  difference sent to the relay as the page leaves it -- after any replay it waited on,
+   *  so a spectator's stalls are counted to the fight's end. */
+  const gBrJank = symbols?.get('gBrJank');
+  let jankStart: JankCounts | null = null;
+  const sendJank = (): void => {
+    if (gBrJank === undefined || !jankStart) return;
+    const msg = jankMessage(patch ?? String(protocol ?? '?'), jankStart, readJank((a, bits) => emu.read(a, bits), gBrJank));
+    jankStart = null;
+    if (msg) relay.send({ ...msg });
+  };
+  // Every other way out of the match (LEAVE, the results' MENU, a closed tab) unloads the
+  // page; the socket is still open as it goes.
+  window.addEventListener('pagehide', sendJank);
   /** The career line the match produced, for the results. */
   let career = '';
   /** The results, drawn from the match's books over the room's roster. */
@@ -2713,7 +2728,13 @@ function wireRoom(
       },
     },
     {
-      started: hideRoomScreen,
+      started: () => {
+        hideRoomScreen();
+        if (gBrJank !== undefined) {
+          emu.write(gBrJank + JANK_LONGEST, 0, 16);
+          jankStart = readJank((a, bits) => emu.read(a, bits), gBrJank);
+        }
+      },
       decided: (line) => {
         career = line;
         drawResults();
@@ -2841,8 +2862,15 @@ function wireRoom(
     bridge.setRomFilter((msg) => {
       if (holdsStart(msg)) return false;
       // A team put down twice -- a winner back from the background after the loser's page
-      // dropped it for them (POK-387) -- is the same mons twice: not stood up again.
-      if (msg.t === 'spill' && session.loot.stale(msg)) return false;
+      // dropped it for them (POK-387) -- is the same pieces twice: what has been taken is
+      // not stood up again, and the rest goes in as it is.
+      if (msg.t === 'spill') {
+        const left = session.loot.trim(msg);
+        if (left !== msg) {
+          if (left) bridge!.pushToRom(left);
+          return false;
+        }
+      }
       if (spectate.wantsFromRelay(msg)) return true;
       cutToFight(msg);
       return false;
@@ -3078,6 +3106,7 @@ function wireRoom(
     // No room to go back to after a dead end (DeadEnd): its notice stays up.
     if (returning || dead.reached) return;
     returning = true;
+    sendJank();
     // PLAY AGAIN greys out while it is on its way -- on the results, when they are up.
     if (resultsUp && stage.current === resultsUp.screen) drawResults();
     try {

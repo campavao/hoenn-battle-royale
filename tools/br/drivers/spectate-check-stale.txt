@@ -1,0 +1,32 @@
+# spectate-check-stale: a replay does not sum a turn the battle has not had (POK-376
+# review). gBattleResults.battleTurnCounter holds the LAST battle's count for some frames
+# into the next, until BattleStartClearSetData zeroes it; a replay that summed that
+# "turn" held a sum of nothing against the fighter's real one for it, and a fight joined
+# late -- its turns and their checks all handed over at once -- was cut off as drifted.
+# spectate-check.txt's fight, the counter left at 1 by the last battle, turn 2 and the
+# check for turn 1 arriving straight after turn 1.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 00 01 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+poke u8 gBattleResults+0x13 1
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 13
+wait 10
+pokebytes gDecompressionBuffer 00 01 00 04 00 00 01 00 01 03 00 00 00 C0 03 01 36 43
+mailsend gBrMailbox 19 gDecompressionBuffer 18
+wait 2500
+expect u16 gBrJank+10 1
+expect u16 gBrJank+12 0
+wait 1500
+expect u8 gBattleResults+0x13 2
+expect u8 gBrSpectate+5 1
+expect u8 gBattleMons+0x24 33
+expect u16 gBrJank+6 0
+shot stale-played-on
+say spectate check stale ok

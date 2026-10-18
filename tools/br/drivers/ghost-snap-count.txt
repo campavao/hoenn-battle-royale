@@ -1,0 +1,43 @@
+# ghost-snap-count: the ghost snaps the page reports (POK-376). gBrJank.snaps (+0) counts a
+# ghost on our map snapped to its roster cell, and .lost (+4) a STEP whose cell was not
+# where the ghost's walk had it -- the two kinds of teleport a watcher sees. Seat 1
+# (ghost-walk.txt's PLACE) takes six steps in one frame, one more than BR_STEP_QUEUE
+# holds; then a STEP that skips a tile.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 04 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 4
+expect u8 gBrSeats+25 2
+expect u16 gBrJank 0
+expect u16 gBrJank+4 0
+pokebytes gDecompressionBuffer 01 04 0F 00 0F 00 00 09 01
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+pokebytes gDecompressionBuffer 01 04 10 00 0F 00 00 09 01
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+pokebytes gDecompressionBuffer 01 04 11 00 0F 00 00 09 01
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+pokebytes gDecompressionBuffer 01 04 12 00 0F 00 00 09 01
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+pokebytes gDecompressionBuffer 01 04 13 00 0F 00 00 09 01
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+pokebytes gDecompressionBuffer 01 04 14 00 0F 00 00 09 01
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+pokebytes gDecompressionBuffer 01 04 15 00 0F 00 00 09 01
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+wait 10
+expect u16 gBrJank 1
+expect u16 gBrJank+4 0
+expect u16 gObjectEvents+0x58 21
+wait 60
+# a step west from 21 that lands on 19: one was lost on the way
+pokebytes gDecompressionBuffer 01 03 13 00 0F 00 00 09 01
+mailsend gBrMailbox 3 gDecompressionBuffer 9
+wait 10
+expect u16 gBrJank+4 1
+expect u16 gBrJank 2
+expect u16 gObjectEvents+0x58 19
+# nobody was being watched: no camera snap (+2)
+expect u16 gBrJank+2 0
+say ghost snap count ok

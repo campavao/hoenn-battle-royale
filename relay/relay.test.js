@@ -2458,3 +2458,24 @@ test("the census names exactly the types handle() answers (POK-331 #19)", async 
   assert.ok(cases.length > 0, "handle()'s cases found");
   assert.deepEqual([...HANDLED].sort(), [...new Set(cases)].sort());
 });
+
+// ------- POK-376: a page's account of how smooth the match looked
+
+test("a jank report is one clamped log line and never answered", async () => {
+  await withLoggedRelay(async (port, lines) => {
+    const a = await connect(port);
+    a.send({ type: "jank", v: "0.3.9", watched: 120, snaps: 2, cam: 1, lost: 0,
+             stalls: 1, longest: 31, checks: 9, drifts: 0 });
+    // every field is the client's own choosing, so junk is clamped, never written
+    a.send({ type: "jank", v: "../../x y", watched: -4, snaps: 1e9, cam: "7",
+             lost: NaN, stalls: 2.9, longest: null, checks: 3 });
+    a.send({ type: "ping" });
+    assert.equal((await a.next()).type, "pong");
+    const jank = lines.filter((l) => l.startsWith("jank "));
+    assert.deepEqual(jank, [
+      "jank - v0.3.9 | watched 120s | snaps 2 cam 1 lost 0 | stalls 1 longest 31s | checks 9 drifts 0",
+      "jank - v? | watched 0s | snaps 65535 cam 0 lost 0 | stalls 2 longest 0s | checks 3 drifts 0",
+    ]);
+    a.end();
+  });
+});

@@ -107,6 +107,13 @@ describe('wire.decode rejects', () => {
     ).toThrow(WireError);
   });
 
+  it('a pace that is not a gait (POK-376)', () => {
+    expect(() =>
+      decode(JSON.stringify({ t: 'step', seat: 0, d: 1, x: 0, y: 0, map: { group: 0, num: 0 }, p: 3 })),
+    ).toThrow(WireError);
+    expect(decode(JSON.stringify({ t: 'step', seat: 0, d: 1, x: 0, y: 0, map: { group: 0, num: 0 }, p: 1 }))).toMatchObject({ p: 1 });
+  });
+
   it('a non-integer coordinate', () => {
     expect(() =>
       decode(JSON.stringify({ t: 'step', seat: 0, d: 1, x: 1.5, y: 0, map: { group: 0, num: 0 } })),
