@@ -10,6 +10,7 @@
 #include "event_data.h"
 #include "event_object_movement.h"
 #include "fieldmap.h"
+#include "script.h"
 #include "field_camera.h"
 #include "field_weather.h"
 #include "br/br_event.h"
@@ -669,6 +670,7 @@ void BrField_RemoveHeld(void)
 #define tState  data[0]
 #define tTimer  data[1]
 #define tFrames data[2]
+#define tSettle data[5]
 // enter() is a word in data[3] and data[4].
 #define ENTER_ARG 3
 
@@ -684,6 +686,14 @@ static void Task_BrLeaveField(u8 taskId)
     switch (task->tState)
     {
     case 0:
+        // Not out from under a step. A step off the water during MAP's fade started the
+        // dismount jump, the field went mid-jump, and the way back rebuilt the avatar
+        // from its sprite -- still the surfing one -- on a land tile: Cam surfing on land
+        // (2026-10-18). The controls are locked from the leave on, so this is only ever
+        // a step already under way, and it is given a second at most.
+        if ((gPlayerAvatar.preventStep || gObjectEvents[gPlayerAvatar.objectEventId].singleMovementActive)
+         && ++task->tSettle < 60)
+            break;
         FadeScreen(FADE_TO_BLACK, 0);
         task->tState++;
         break;
@@ -711,6 +721,9 @@ bool8 BrField_Leave(u8 frames, void (*enter)(void))
 
     if (BrField_Leaving())
         return FALSE;
+    // Every road off the field is a fade with the player still on it, and a start menu
+    // entry has just given them the controls back (HideStartMenu): nothing walks now.
+    LockPlayerFieldControls();
     taskId = CreateTask(Task_BrLeaveField, 80);
     gTasks[taskId].tFrames = frames;
     SetWordTaskArg(taskId, ENTER_ARG, (u32)enter);
@@ -748,6 +761,7 @@ void BrField_CancelLeave(void (*enter)(void))
 #undef tState
 #undef tTimer
 #undef tFrames
+#undef tSettle
 #undef ENTER_ARG
 
 // ---- object slots ------------------------------------------------------------------
