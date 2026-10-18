@@ -166,6 +166,8 @@ EWRAM_DATA struct BrAsk gBrAsk = {0};
 // only means anything beside a from[] the same code just set.
 #define BR_ASK_LEVEL_DONE 0xFF
 static u8 sAskAt[PARTY_SIZE];
+// The ticker has said a question waits, once per lift (Cam, 2026-10-18: "it can wait").
+static bool8 sAskSaid;
 
 bool8 BrMoves_IsTm(u16 item)
 {
@@ -246,6 +248,7 @@ void BrMoves_AskFrom(u8 slot, u8 from, u8 count)
         gBrAsk.from[slot] = from;
         sAskAt[slot] = BR_ASK_LEVEL_DONE;
     }
+    sAskSaid = FALSE;
 }
 
 static void ClearAsks(void)
@@ -327,22 +330,27 @@ static bool8 AskPending(void)
     return FALSE;
 }
 
-static void Task_OpenAsk(u8 taskId)
+bool8 BrMoves_AskWaiting(void)
 {
-    if (gPaletteFade.active)
-        return;
-    DestroyTask(taskId);
-    if (gMain.callback2 != CB2_Overworld || ScriptContext_IsEnabled())
-    {
-        // Something took the field during the fade: BrMoves_Tick asks again once it is
-        // ours, the questions still waiting.
-        UnlockPlayerFieldControls();
-        if (gMain.callback2 == CB2_Overworld)
-            FadeScreen(FADE_FROM_BLACK, 0);
-        return;
-    }
-    CleanupOverworldWindowsAndTilemaps();
-    SetMainCallback2(CB2_BrAskLearn);
+    u8 slot;
+    u16 move;
+
+    return AskPending() && FindAsk(&slot, &move, TRUE);
+}
+
+static const u8 sText_WantsMove[] = _(" can learn a move: open POKéMON.");
+
+static void SayAsk(u8 slot)
+{
+    u8 line[BR_HUD_LINE_MAX + 2];
+    u8 *last = line + BR_HUD_LINE_MAX;
+    u8 name[POKEMON_NAME_LENGTH + 1];
+    u8 *p;
+
+    GetMonNickname(&gPlayerParty[slot], name);
+    p = BrHud_Append(line, last, name);
+    BrHud_Append(p, last, sText_WantsMove);
+    BrHud_Say(line);
 }
 
 // When the field is ours: no script, nobody holding the controls, standing still. A TM
@@ -350,7 +358,7 @@ static void Task_OpenAsk(u8 taskId)
 // for the bag to have it too.
 void BrMoves_Tick(void)
 {
-    // The questions a lift left, before a TM's: the TM waits in the bag either way.
+    // The questions a lift left are only said here; the party screen asks them.
     if (sTeach == ITEM_NONE && AskPending())
     {
         u8 slot;
@@ -361,15 +369,14 @@ void BrMoves_Tick(void)
         if (ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked() || !IsPlayerStandingStill())
             return;
         // A lift whose new moves all found a free slot (or the party changed) has nothing
-        // to ask: no fade into a party screen that closes at once.
-        if (!FindAsk(&slot, &move, TRUE))
-            return;
-        PlayRainStoppingSoundEffect();
-        HideMapNamePopUpWindow();
-        LockPlayerFieldControls();
-        FadeScreen(FADE_TO_BLACK, 0);
-        CreateTask(Task_OpenAsk, 10);
-        return;
+        // to ask, and says nothing.
+        if (!sAskSaid && FindAsk(&slot, &move, TRUE))
+        {
+            // The ticker says so once, and the questions wait for the party screen
+            // (CB2_PartyMenuFromStartMenu): no fade into it mid-match on its own.
+            sAskSaid = TRUE;
+            SayAsk(slot);
+        }
     }
     if (sTeach == ITEM_NONE)
         return;

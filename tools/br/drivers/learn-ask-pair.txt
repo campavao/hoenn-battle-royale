@@ -16,6 +16,20 @@ expect u8 gPlayerParty+84 14
 pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
 poke u16 gBrMailbox+0x0C 1
 wait 200
+# the question waits (Cam, 2026-10-18: "it can wait"): the ticker says so, the field
+# stays ours -- a step west and back -- and START's POKeMON asks it
+shot ticker-says
+expect u16 *gSaveBlock1Ptr+0 5
+hold LEFT 20
+wait 20
+expect u16 *gSaveBlock1Ptr+0 3
+hold RIGHT 20
+wait 20
+expect u16 *gSaveBlock1Ptr+0 5
+tap START
+wait 30
+tap A
+wait 200
 tap A
 wait 60
 tap A
