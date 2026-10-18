@@ -34,6 +34,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_field.h"
 #include "br/br_strip.h"
+#include "br/br_skin.h"
 #endif
 
 #define SPECIAL_LOCALIDS_START (min(LOCALID_CAMERA, \
@@ -5153,7 +5154,11 @@ static void InitMovementNormal(struct ObjectEvent *objectEvent, struct Sprite *s
 static void StartRunningAnim(struct ObjectEvent *objectEvent, struct Sprite *sprite, u8 direction)
 {
     InitNpcForMovement(objectEvent, sprite, direction, MOVE_SPEED_FAST_1);
+#if BR
+    SetStepAnimHandleAlternation(objectEvent, sprite, BrSkin_MyAnim(objectEvent, GetRunningDirectionAnimNum(objectEvent->facingDirection), GetMoveDirectionFastAnimNum(objectEvent->facingDirection)));
+#else
     SetStepAnimHandleAlternation(objectEvent, sprite, GetRunningDirectionAnimNum(objectEvent->facingDirection));
+#endif
 }
 
 static bool8 UpdateMovementNormal(struct ObjectEvent *objectEvent, struct Sprite *sprite)
@@ -6139,7 +6144,11 @@ bool8 MovementAction_StartAnimInDirection_Step0(struct ObjectEvent *objectEvent,
 
 bool8 MovementAction_WaitSpriteAnim(struct ObjectEvent *objectEvent, struct Sprite *sprite)
 {
+#if BR
+    if (SpriteAnimEnded(sprite) || BrSkin_MyAnimEndless(objectEvent))
+#else
     if (SpriteAnimEnded(sprite))
+#endif
     {
         sprite->sActionFuncId = 2;
         return TRUE;
@@ -6150,7 +6159,11 @@ bool8 MovementAction_WaitSpriteAnim(struct ObjectEvent *objectEvent, struct Spri
 static void InitJumpSpecial(struct ObjectEvent *objectEvent, struct Sprite *sprite, u8 direction)
 {
     InitJump(objectEvent, sprite, direction, JUMP_DISTANCE_NORMAL, JUMP_TYPE_HIGH);
+#if BR
+    StartSpriteAnim(sprite, BrSkin_MyAnim(objectEvent, GetJumpSpecialDirectionAnimNum(direction), GetFaceDirectionAnimNum(direction)));
+#else
     StartSpriteAnim(sprite, GetJumpSpecialDirectionAnimNum(direction));
+#endif
 }
 
 bool8 MovementAction_JumpSpecialDown_Step0(struct ObjectEvent *objectEvent, struct Sprite *sprite)

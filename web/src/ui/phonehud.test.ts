@@ -84,7 +84,7 @@ describe('the sign and the fog window', () => {
   it('two lines in the ring: FOG and the clock, how many are left -- not where it closes to', () => {
     expect(text(view())).toEqual([
       ['FOG', '1:35'],
-      ['7 LEFT', ''],
+      ['7 left', ''],
     ]);
     expect(fogHeight(2)).toBe(48);
     expect(fogHeight(3)).toBe(64);
@@ -93,21 +93,21 @@ describe('the sign and the fog window', () => {
   it('two in the Safari, red under thirty seconds, FOG! in its flash, the eyes when anybody watches', () => {
     expect(text(view({ ring: null }))).toEqual([
       ['SAFARI', '1:35'],
-      ['7 LEFT', ''],
+      ['7 left', ''],
     ]);
     expect(fogLines(view({ clock: 30 }))[0].right?.color).toBe(TEXT_RED);
-    expect(text(view({ flash: 2 }))[0]).toEqual(['FOG', 'FOG!']);
+    expect(text(view({ flash: 2 }))[0]).toEqual(['FOG', 'Fog!']);
     expect(text(view({ flash: 1 }))[0]).toEqual(['FOG', '']);
-    expect(text(view({ eyes: 3 }))[1]).toEqual(['7 LEFT', '3 WATCH']);
-    expect(text(view({ ring: 'FOG EVERYWHERE', fogEverywhere: true }))).toEqual([
+    expect(text(view({ eyes: 3 }))[1]).toEqual(['7 left', '3 watch']);
+    expect(text(view({ ring: 'Fog everywhere', fogEverywhere: true }))).toEqual([
       ['FOG', '1:35'],
-      ['FOG EVERYWHERE', ''],
-      ['7 LEFT', ''],
+      ['Fog everywhere', ''],
+      ['7 left', ''],
     ]);
   });
 
   it('every line fits the window', () => {
-    for (const over of [{}, { ring: 'FOG EVERYWHERE', fogEverywhere: true }, { eyes: 12, left: 32 }]) {
+    for (const over of [{}, { ring: 'Fog everywhere', fogEverywhere: true }, { eyes: 12, left: 32 }]) {
       for (const line of fogLines(view(over))) {
         const w = measure(line.left?.text ?? '') + (line.right ? measure(line.right.text) + 4 : 0);
         expect(w, line.left?.text).toBeLessThanOrEqual(FOG_W - 16);
@@ -168,7 +168,7 @@ describe('the HUD read off the ROM', () => {
     // the ring at -1 is fog everywhere; a battle is not the field
     put(SYM.gBrRing + RING_R, 0xff, 1);
     put(SYM.gMain + 4, 0x08009999, 4);
-    expect(readHudView(emu, (n) => SYM[n], world)).toMatchObject({ ring: 'FOG EVERYWHERE', fogEverywhere: true, onField: false });
+    expect(readHudView(emu, (n) => SYM[n], world)).toMatchObject({ ring: 'Fog everywhere', fogEverywhere: true, onField: false });
   });
 
   it('nothing without the symbols, and no world yet is no sign and a grey BIKE', () => {

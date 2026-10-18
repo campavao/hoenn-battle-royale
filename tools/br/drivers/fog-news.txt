@@ -16,14 +16,14 @@ expect u8 gBrHud+0x0A 0
 pokebytes gBrMailbox+0x1018 0C 14 11 00 00 00 01 19 0C 1C 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00
 poke u16 gBrMailbox+0x0C 1
 wait 10
-# the rung saw it and has nothing to say; the box says where: "THE FOG CLOSES IN ON",
-# its L at +9
+# the rung saw it and has nothing to say; the box says where: "The fog closes in on",
+# its l at +9
 expect u8 gBrLevels+1 1
 expect u8 gBrHud+0x0A 0
 expectge u8 gBrHud+0x178 1
-expect u8 gBrHud+0x157 0xC6
+expect u8 gBrHud+0x157 0xE0
 shot phase-one
-# phase 2 names ROUTE 104: THE FOG SPREADS! ALL GREW STRONGER! -- 35 characters, its S
+# phase 2 names ROUTE 104: The fog spreads! All grew stronger! -- 35 characters, its s
 # at +8 and its ! last -- and the box names the route (its R after the newline, +21)
 pokebytes gBrMailbox+0x1058 0C 13 10 00 00 00 02 19 0C 1C 09 CC C9 CF CE BF 00 A2 A1 A5 00
 poke u16 gBrMailbox+0x0C 2
@@ -32,7 +32,7 @@ expect u8 gBrLevels+1 2
 expect u8 gBrHud+0x0A 1
 expect u8 gBrHud+0x45 0x23
 expect u8 gBrHud+0x46 0xCE
-expect u8 gBrHud+0x4E 0xCD
+expect u8 gBrHud+0x4E 0xE7
 expect u8 gBrHud+0x68 0xAB
 expect u8 gBrHud+0x69 0xFF
 expect u8 gBrHud+0x163 0xCC
@@ -73,7 +73,7 @@ expect u8 gBrHud+0x71 0x0E
 wait 400
 expect u8 gBrHud+0x0A 0
 expect u8 gBrHud+0x178 0
-# the last phase, r = -1: THE FOG COVERS ALL OF HOENN!, 28 characters, its C at +8, and
+# the last phase, r = -1: The fog covers all of HOENN!, 28 characters, its c at +8, and
 # no box -- the old centre is fog too, and the ticker's line is the ring's one message
 pokebytes gBrMailbox+0x1198 0C 14 11 00 00 00 06 19 0C FF 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00
 poke u16 gBrMailbox+0x0C 7
@@ -81,7 +81,7 @@ wait 10
 expect u8 gBrLevels+1 6
 expect u8 gBrHud+0x0A 1
 expect u8 gBrHud+0x45 0x1C
-expect u8 gBrHud+0x4E 0xBD
+expect u8 gBrHud+0x4E 0xD7
 expect u8 gBrHud+0x61 0xAB
 expect u8 gBrHud+0x62 0xFF
 expect u8 gBrHud+0x178 0

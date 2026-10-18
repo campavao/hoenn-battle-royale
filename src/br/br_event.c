@@ -51,9 +51,9 @@ STATIC_ASSERT(((BR_EVENT_MAX - 1) << 4 | 15) < 0x100, BrEventKeysStayUnder0xB100
 #define BR_EVENT_LEN 5
 #define BR_EVENT_TRADER_LEN 13
 
-static const u8 sText_Traded[] = _("TRADED FOR ");
+static const u8 sText_Traded[] = _("Traded for ");
 static const u8 sText_Bang[] = _("!");
-static const u8 sText_TradedAlready[] = _("HE HAS ALREADY TRADED");
+static const u8 sText_TradedAlready[] = _("He has already traded");
 
 // One trade a trader (POK-392). Two players at him at once both found him standing, both
 // traded, and both walked off with his rare: a trade asks first. Our PICKUP of his claim
@@ -69,7 +69,7 @@ enum { CLAIM_WAITING, CLAIM_GRANTED, CLAIM_DENIED };
 #define tSlot    data[1]
 #define tTimer   data[2]
 #define tVerdict data[3]
-static const u8 sText_Fainted[] = _("NOT A FAINTED ONE");
+static const u8 sText_Fainted[] = _("Not a fainted one");
 
 static void Despawn(u8 i)
 {

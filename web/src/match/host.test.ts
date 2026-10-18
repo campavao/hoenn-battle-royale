@@ -200,7 +200,7 @@ describe('the page that runs the match (POK-330 #42)', () => {
     expect(room.session.match.seats).toEqual([0, 1, 2]);
     expect(room.view.started).toHaveBeenCalledTimes(1);
     // Not how many are loose: the corner says that (POK-324).
-    expect(tickers(room.frames())).toEqual(['CATCH WHAT YOU CAN! 0s']);
+    expect(tickers(room.frames())).toEqual(['Catch what you can! 0s']);
     host.begin(); // once
     expect(room.frames().filter((f) => f.m?.t === 'start')).toHaveLength(1);
     host.dispose();
@@ -212,10 +212,10 @@ describe('the page that runs the match (POK-330 #42)', () => {
     host.begin();
     room.frames().length = 0;
     room.recv(1, { t: 'out', seat: 1 });
-    expect(tickers(room.frames())).toEqual(['P1 IS OUT - 2 LEFT']);
+    expect(tickers(room.frames())).toEqual(['P1 is out - 2 left']);
     expect(host.director.state.alive).toBe(2);
     room.recv(1, { t: 'out', seat: 1 });
-    expect(tickers(room.frames())).toEqual(['P1 IS OUT - 2 LEFT']);
+    expect(tickers(room.frames())).toEqual(['P1 is out - 2 left']);
     expect(host.director.state.alive).toBe(2);
     host.dispose();
   });
@@ -229,7 +229,7 @@ describe('the page that runs the match (POK-330 #42)', () => {
     room.recv(2, { t: 'out', seat: 2 });
     expect(room.frames().map(said)).toEqual(['all:ticker', 'all:win', 'lock_room:false', 'all:again', 'all:ticker']);
     expect(room.frames()[3]).toEqual({ type: 'all', m: { t: 'again', seat: 0 } });
-    expect(tickers(room.frames())).toEqual(['P2 IS OUT - 1 LEFT', 'P0 WINS!']);
+    expect(tickers(room.frames())).toEqual(['P2 is out - 1 left', 'P0 wins!']);
     // ...and the host's own books decided it (#16): our ROM is told who won.
     expect(room.session.recorded).toBe(true);
     expect(room.view.decided).toHaveBeenCalledTimes(1);
@@ -266,7 +266,7 @@ describe('the page that runs the match (POK-330 #42)', () => {
     expect(gone.frames().filter((f) => f.m?.t === 'out')).toEqual([]);
     vi.advanceTimersByTime(1);
     expect(gone.frames().filter((f) => f.m?.t === 'out').map((f) => f.m)).toEqual([{ t: 'out', seat: 2 }]);
-    expect(tickers(gone.frames())).toEqual(['P2 IS OUT - 2 LEFT']);
+    expect(tickers(gone.frames())).toEqual(['P2 is out - 2 left']);
     expect(gone.session.match.out).toEqual(new Set([2]));
     host.dispose();
 
@@ -437,7 +437,7 @@ describe('the page that runs the match (POK-330 #42)', () => {
     vi.advanceTimersByTime(5_000); // the first clock, and with no opening the ring
     expect(room.frames().some((f) => f.m?.t === 'ring')).toBe(true);
     expect(tickers(room.frames())).toEqual([]);
-    expect(room.toRom.filter((m) => m.t === 'ticker').map((m) => (m as TickerMsg).text)).toEqual(['CATCH WHAT YOU CAN! 0s']);
+    expect(room.toRom.filter((m) => m.t === 'ticker').map((m) => (m as TickerMsg).text)).toEqual(['Catch what you can! 0s']);
     host.dispose();
   });
 
@@ -456,7 +456,7 @@ describe('the page that runs the match (POK-330 #42)', () => {
     expect(spills.length).toBeGreaterThan(0);
     expect(spills.flatMap((s) => [...s.mons, ...(s.bag ? [s.bag] : [])]).map((m) => m.key)).toContain(event.key);
     expect(tickers(room.frames())).toHaveLength(1);
-    expect(tickers(room.frames())[0]).toMatch(new RegExp(`^A (LEGENDARY|RARE FIND) AT ${event.place!.replace(/[.()]/g, '\\$&')}!$`));
+    expect(tickers(room.frames())[0]).toMatch(new RegExp(`^A (legendary|rare find) at ${event.place!.replace(/[.()]/g, '\\$&')}!$`));
     host.dispose();
   });
 
@@ -545,7 +545,7 @@ describe('the page that runs the match (POK-330 #42)', () => {
     expect(tickers(room.frames())).toEqual([]);
     expect(host.director.state.alive).toBe(5); // the director counted them at once
     vi.advanceTimersByTime(Ticker.OUT_BATCH_MS - 1_000);
-    expect(tickers(room.frames())).toEqual(['P1 AND P2 ARE OUT - 5 LEFT']);
+    expect(tickers(room.frames())).toEqual(['P1 and P2 are out - 5 left']);
     host.dispose();
   });
 
@@ -567,7 +567,7 @@ describe('the page that runs the match (POK-330 #42)', () => {
     vi.advanceTimersByTime(Ticker.OUT_BATCH_MS);
     const lines = room.frames().filter((f) => f.m?.t === 'ticker').map((f) => f.m as TickerMsg);
     expect(lines).toEqual([
-      { t: 'ticker', seat: loser, kind: 'kill', text: `${Ticker.short(room.nameOf(winner))} BEAT ${Ticker.short(room.nameOf(loser))} - 4 LEFT` },
+      { t: 'ticker', seat: loser, kind: 'kill', text: `${Ticker.short(room.nameOf(winner))} beat ${Ticker.short(room.nameOf(loser))} - 4 left` },
     ]);
     host.dispose();
   });
@@ -593,7 +593,7 @@ describe('the page that runs the match (POK-330 #42)', () => {
     const after = room.attach();
     room.recv(1, { t: 'out', seat: 1 });
     expect(before.sent).toEqual([]);
-    expect(tickers(after.sent as Frame[])).toEqual(['P1 IS OUT - 2 LEFT']);
+    expect(tickers(after.sent as Frame[])).toEqual(['P1 is out - 2 left']);
     host.dispose();
   });
 });
@@ -740,10 +740,10 @@ describe('solo link', () => {
     const botName = solo.link.roster.nameOf(bot); // seated by the start
     solo.beat(bot);
     const lines = [
-      'CATCH WHAT YOU CAN! 0s',
+      'Catch what you can! 0s',
       ...Ticker.voice(bot, voiceFor(SEED, bot)).map((m) => m.text), // it walked up to us: its lines for the fight
       Ticker.out(bot, botName, 1)!.text,
-      'MAY WINS!',
+      'MAY wins!',
     ];
     expect(solo.toRom.filter((m) => m.t === 'ticker').map((m) => (m as TickerMsg).text)).toEqual(lines);
     solo.frame();

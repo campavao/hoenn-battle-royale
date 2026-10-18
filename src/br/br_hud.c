@@ -90,13 +90,13 @@ static const u8 sColorsFog[] = { 1, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
 static const u8 sColorsKill[] = { 1, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
 static const u8 sColorsSay[] = { 1, TEXT_COLOR_BLUE, TEXT_COLOR_LIGHT_BLUE };
 
-static const u8 sText_Left[] = _(" LEFT");
-static const u8 sText_Fog[] = _("FOG!");
+static const u8 sText_Left[] = _(" left");
+static const u8 sText_Fog[] = _("Fog!");
 // How many are watching. Kanto's corner eye, on the small font's own symbol page.
 static const u8 sText_Eye[] = _("{EMOJI_LEFT_EYE}");
 // Beside the ring's place on the corner's second line: it is where the fog is not, and
 // bare it read as where we are (Cam's 2026-10-14 play-test, POK-359).
-static const u8 sText_Safe[] = _("SAFE");
+static const u8 sText_Safe[] = _("Safe");
 static const u8 sText_Hp[] = _("HP ");
 // ---- windows ------------------------------------------------------------------
 

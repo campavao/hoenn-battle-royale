@@ -129,7 +129,7 @@ static bool8 Sees(s16 x, s16 y, u8 dir, s16 tx, s16 ty)
 // bug from the inside: two contestants stand face to face and neither one's game
 // reacts. Now it says so, once in a while rather than every frame the pair are looking
 // at each other.
-static const u8 sText_NoBattlesHere[] = _("NO BATTLES IN THE\nSAFARI ZONE!");
+static const u8 sText_NoBattlesHere[] = _("No battles in the\nSAFARI ZONE!");
 #define BR_SAFARI_SAY_FRAMES (8 * 60)
 static EWRAM_DATA u16 sSafariSaid = 0;
 

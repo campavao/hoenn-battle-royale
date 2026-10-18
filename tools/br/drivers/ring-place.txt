@@ -115,15 +115,15 @@ wait 10
 expect u8 gBrRing+4 0xFF
 expect u8 gBrRing+5 1
 expect u8 gBrHud+0x17 1
-# ...and the ticker says so, as Kanto's does: THE FOG COVERS ALL OF HOENN! (28, its C at
-# +8) behind phase 2's THE FOG SPREADS!, which phase 3 said again and was dropped as a
+# ...and the ticker says so, as Kanto's does: The fog covers all of HOENN! (28, its c at
+# +8) behind phase 2's The fog spreads!, which phase 3 said again and was dropped as a
 # repeat (queue[1] at +0x70). That line is the ring's one message (POK-324): the last
 # phase raises no box -- it used to name LITTLEROOT, which is fog too -- so phase 3's
 # runs out its forty rather than starting ninety over. (fog-news.txt pins the last
 # phase with no box up at all.)
 expect u8 gBrHud+0x0A 2
 expect u8 gBrHud+0x71 0x1C
-expect u8 gBrHud+0x7A 0xBD
+expect u8 gBrHud+0x7A 0xD7
 expectle u8 gBrHud+0x178 40
 shot corner-everywhere-name
 poke u8 gBrHud+0x16 120

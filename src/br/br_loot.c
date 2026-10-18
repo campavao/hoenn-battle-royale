@@ -400,8 +400,8 @@ static bool8 SendGiveBack(void)
     return TRUE;
 }
 
-static const u8 sText_NoRoom[] = _("NO ROOM FOR IT");
-static const u8 sText_NoRoomRest[] = _("NO ROOM FOR THE REST");
+static const u8 sText_NoRoom[] = _("No room for it");
+static const u8 sText_NoRoomRest[] = _("No room for the rest");
 // Defined with Take(): the FOUND line, and under it the NO ROOM one.
 static void SayBag(u32 money, bool8 full);
 
@@ -664,12 +664,12 @@ void BrLoot_SpillOwn(void)
 
 // ---- taking it ----------------------------------------------------------------
 
-static const u8 sText_Took[] = _("TOOK ");
-static const u8 sText_Found[] = _("FOUND ");
-static const u8 sText_Gift[] = _("A GIFT: ");
+static const u8 sText_Took[] = _("Took ");
+static const u8 sText_Found[] = _("Found ");
+static const u8 sText_Gift[] = _("A gift: ");
 static const u8 sText_Bang[] = _("!");
-static const u8 sText_NobodyLearns[] = _("ALL KNOW ");
-static const u8 sText_HaveTm[] = _("ALREADY HAVE ");
+static const u8 sText_NobodyLearns[] = _("All know ");
+static const u8 sText_HaveTm[] = _("Already have ");
 
 // A town's gift-giver says a line before he hands it over (Cam's 2026-10-14 play-test,
 // POK-355: "I would like them to talk a little bit before they give you the gift"). One
@@ -1491,7 +1491,7 @@ static void DropSpoils(void)
 #define tTimer data[1]
 #define tKey(i) data[2 + (i)]
 
-static const u8 sText_TakeOne[] = _("TAKE ONE");
+static const u8 sText_TakeOne[] = _("Take one");
 
 static void CloseSpoils(u8 taskId)
 {

@@ -1,6 +1,7 @@
 #include "global.h"
 #if BR
 #include "br/br_match.h"
+#include "br/br_skin.h"
 #endif
 #include "hall_of_fame.h"
 #include "task.h"
@@ -701,7 +702,11 @@ static void Task_Hof_DisplayPlayer(u8 taskId)
     ShowBg(0);
     ShowBg(1);
     ShowBg(3);
+#if BR
+    gTasks[taskId].tPlayerSpriteID = CreateTrainerPicSprite(BrSkin_MyPic(PlayerGenderToFrontTrainerPicId_Debug(gSaveBlock2Ptr->playerGender, TRUE)), TRUE, 120, 72, 6, TAG_NONE);
+#else
     gTasks[taskId].tPlayerSpriteID = CreateTrainerPicSprite(PlayerGenderToFrontTrainerPicId_Debug(gSaveBlock2Ptr->playerGender, TRUE), TRUE, 120, 72, 6, TAG_NONE);
+#endif
     AddWindow(&sHof_WindowTemplate);
     LoadWindowGfx(1, gSaveBlock2Ptr->optionsWindowFrameType, 0x21D, BG_PLTT_ID(13));
     LoadPalette(GetTextWindowPalette(1), BG_PLTT_ID(14), PLTT_SIZE_4BPP);
