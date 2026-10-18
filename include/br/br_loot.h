@@ -72,7 +72,9 @@
 // Somebody at home in a house (POK-379, br_balls.c): a Pokemon standing as a person, who
 // gives it or trades it to the first trainer to talk to him.
 #define BR_LOOT_KEY_HOME(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x0C00 | (i)))
-#define BR_LOOT_IS_HOME(key) (((key) & 0xFF00) == BR_LOOT_KEY_HOME(0))
+#define BR_LOOT_IS_HOME(key) (((key) & 0xFFC0) == BR_LOOT_KEY_HOME(0))
+// Asking for him first (BrLoot_HomeClaim), the event trader's way: the 64 keys above his.
+#define BR_LOOT_KEY_HOME_CLAIM(i) ((u16)(BR_LOOT_KEY_HOME(i) | 0x40))
 // A gift-giver (Cam, 2026-10-13: "we can add some gift giving NPCs"): the host deals one
 // to every town and city at the buzzer, a bag of one item standing as a person rather than
 // lying as a ball (match/gifts.ts). Past every trainer's key and the events' (0xB000).
@@ -215,5 +217,9 @@ bool8 BrLoot_TakeKey(u16 key);
 void BrLoot_GiftTake(void);
 // BR_EventScript_HomeTrader's swap, the party member in VAR_0x8004 for his.
 void BrLoot_HomeTrade(void);
+// Before either: two trainers at him at once would both be given his Pokemon, so we ask the
+// host with a PICKUP of his claim key and the script waits (VAR_RESULT TRUE) on the answer.
+// FALSE goes straight on: not somebody at home, nobody chosen, or nothing to ask.
+void BrLoot_HomeClaim(void);
 
 #endif // GUARD_BR_LOOT_H

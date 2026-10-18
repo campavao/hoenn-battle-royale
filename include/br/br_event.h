@@ -29,6 +29,9 @@
 // Asking to trade with him (POK-392): the host answers the first ask with his PICKUP
 // naming whoever asked, and a later one with the PICKUP naming whoever got him.
 #define BR_EVENT_CLAIM_KEY(n) BR_EVENT_KEY(n, 14)
+// How long an ask waits on the host before going ahead the old way (br_event.c), and
+// somebody at home's too (br_loot.c).
+#define BR_CLAIM_FRAMES 600
 
 // The traders' object local ids, 0xBC..0xBF: just below loot's 0xC0, so the run the match
 // puts on a map (none of it solid, br_ghosts.c) starts here.

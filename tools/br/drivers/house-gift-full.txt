@@ -46,7 +46,12 @@ tap A
 wait 60
 shot talks
 tap A
-wait 60
+wait 30
+# the host's yes to our ask (house-gift.txt)
+expectmsg 10 u16 1 0x8C61
+pokebytes gDecompressionBuffer 00 21 8C 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 30
 shot no-received
 # parked, not taken: no PICKUP, and he is still there
 expect u8 gBrLoot+31 1
@@ -66,4 +71,18 @@ expect u8 gBrCatch 0
 expect u8 gBrLoot+31 1
 expect u16 gBrLoot+20 0x8C21
 expect u8 gBrLoot+0xA2 0
+# ...and still his for us: the yes did not take him for the house, so out and back in
+# and he is there again (house-gift.txt's walk)
+hold DOWN 48
+wait 20
+hold LEFT 32
+wait 20
+hold DOWN 90
+wait 200
+expectne u8 *gSaveBlock1Ptr+5 2
+hold UP 40
+wait 200
+expect u8 *gSaveBlock1Ptr+5 2
+expect u16 gBrLoot+20 0x8C21
+expect u8 gBrLoot+31 1
 say house gift full ok

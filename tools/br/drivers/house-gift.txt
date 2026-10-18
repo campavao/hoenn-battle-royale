@@ -49,6 +49,17 @@ expect u8 gBrLoot+31 1
 expect u8 gPlayerPartyCount 1
 tap A
 wait 40
+# He waits on the host first (POK-379, as the event trader does): our PICKUP of his
+# claim key, 0x8C40 above his, and nothing given yet
+expect u8 gPlayerPartyCount 1
+expectmsg 10 u16 1 0x8C61
+expect u8 gBrLoot+31 1
+# ...and the host's PICKUP of his key naming us (seat 0) is the yes: he is still standing
+# for GiftTake, which gives him and sends his key as ever
+expect u8 gBrMySeat 0
+pokebytes gDecompressionBuffer 00 21 8C 00 00 00 00 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 40
 shot given
 expect u8 gPlayerPartyCount 2
 expectmsg 10 u16 1 0x8C21

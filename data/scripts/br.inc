@@ -90,6 +90,10 @@ BR_EventScript_Gift::
 	lock
 	faceplayer
 	msgbox gStringVar4, MSGBOX_DEFAULT
+	special BrLoot_HomeClaim
+	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_GiftAsked
+	waitstate
+BR_EventScript_GiftAsked:
 	special BrLoot_GiftTake
 	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_GiftGone
 	goto_if_eq VAR_RESULT, 3, BR_EventScript_GiftGone
@@ -117,6 +121,10 @@ BR_EventScript_HomeTrader::
 	msgbox BR_Text_TraderOffer, MSGBOX_YESNO
 	goto_if_eq VAR_RESULT, NO, BR_EventScript_HomeTraderNo
 	special ChoosePartyMon
+	special BrLoot_HomeClaim
+	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_HomeTraderAsked
+	waitstate
+BR_EventScript_HomeTraderAsked:
 	special BrLoot_HomeTrade
 BR_EventScript_HomeTraderNo:
 	releaseall

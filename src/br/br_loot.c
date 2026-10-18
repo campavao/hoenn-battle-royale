@@ -495,13 +495,15 @@ static void HandleSpillCont(const u8 *payload, u8 len)
 
 // PICKUP: somebody took it (or part of a bag). A bare key -- no item named -- is the
 // whole piece leaving the ground; with an item, the rest is still there.
+static bool8 HomeClaimAnswered(u16 key, u8 seat);
+
 static void HandlePickup(const u8 *payload, u8 len)
 {
     const u8 *d;
     u8 n = BrWire_Unframe(payload, len, &d);
     struct BrLootItem *it;
 
-    if (n < 8)
+    if (n < 8 || HomeClaimAnswered(BrWire_ReadU16(d + 1), d[0]))
         return;
     // A house's cache is gone for us too, though we are nowhere near it.
     BrBalls_NoteTaken(BrWire_ReadU16(d + 1));
@@ -1135,6 +1137,71 @@ void BrLoot_HomeTrade(void)
     if (BrEvent_Swap(slot, &mon))
         SendPickup(it);
 }
+
+// One Pokemon a house (POK-379, the event trader's POK-392). Two trainers at him at once
+// both found him standing and were both given his Pokemon, so we ask first: our PICKUP of
+// his claim key goes to the host, whose page answers the first ask with the PICKUP of his
+// own key naming the asker, and a later one with that PICKUP naming whoever got him. That
+// one takes his row (HandlePickup), and the script's GiftTake or HomeTrade says he has
+// gone; ours lets the script go on to them with his row still standing, and they send his
+// key as ever. The wait is a task's, its data his key; no host in BR_CLAIM_FRAMES (a
+// driver with no page behind it) goes ahead the old way.
+#define tKey     data[0]
+#define tTimer   data[1]
+#define tGranted data[2]
+
+static void Task_HomeClaim(u8 taskId)
+{
+    s16 *data = gTasks[taskId].data;
+
+    if (!tGranted && Find(tKey) != NULL && ++tTimer < BR_CLAIM_FRAMES)
+        return;
+    DestroyTask(taskId);
+    ScriptContext_Enable();
+}
+
+void BrLoot_HomeClaim(void)
+{
+    struct BrLootItem *it = sGiftKey != 0 && BR_LOOT_IS_HOME(sGiftKey) ? Find(sGiftKey) : NULL;
+    u16 slot = gSpecialVar_0x8004;
+    u8 taskId;
+    s16 *data;
+
+    gSpecialVar_Result = FALSE;
+    if (it == NULL || !OnCurrentMap(it) || !BrWire_CanHold(BR_PICKUP_LEN))
+        return;
+    // Asked only for a trade HomeTrade will make: a cancel or a fainted one never uses him up.
+    if (BrBalls_Trades(it->key)
+        && (slot >= PARTY_SIZE || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE
+            || GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0))
+        return;
+    taskId = CreateTask(Task_HomeClaim, 80);
+    if (taskId == TASK_NONE)
+        return;
+    data = gTasks[taskId].data;
+    tKey = it->key;
+    tTimer = 0;
+    tGranted = FALSE;
+    BrLoot_SendTaken(BR_LOOT_KEY_HOME_CLAIM(it->key - BR_LOOT_KEY_HOME(0)));
+    gSpecialVar_Result = TRUE;
+}
+
+// The host's PICKUP of his key naming us, while we wait on him: ours. His row stays for
+// GiftTake or HomeTrade, and he is not taken for the house either (a full party's cancel
+// leaves him to us, and the host answers our next ask the same way).
+static bool8 HomeClaimAnswered(u16 key, u8 seat)
+{
+    u8 taskId = FindTaskIdByFunc(Task_HomeClaim);
+
+    if (taskId == TASK_NONE || seat != gBrMySeat || (u16)gTasks[taskId].tKey != key)
+        return FALSE;
+    gTasks[taskId].tGranted = TRUE;
+    return TRUE;
+}
+
+#undef tKey
+#undef tTimer
+#undef tGranted
 
 // ---- Hoenn's own trainers -------------------------------------------------------
 

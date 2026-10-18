@@ -38,14 +38,24 @@ export const claimKey = (n: number): number => eventKey(n, 14);
 export const claimOf = (key: number): number | undefined =>
   isEventKey(key) && (key & 0xf) === 14 ? (key >> 4) & 0xf : undefined;
 
-/** One trade a trader (POK-392). Two players at him at once both found him standing and
- *  both traded, so a ROM asks first, with a PICKUP of his claim key, and the host
- *  answers: the first ask for a trader still standing with his own PICKUP naming the
- *  asker -- the trade, for the whole room -- and any later one with that PICKUP naming
- *  whoever got him, which the asker's ROM takes as no (br_event.c's Task_TradeClaim).
- *  Everything the host hears goes through `note` first, so a trade nobody asked for (a
- *  bot's, or a ROM that heard no answer in time) is the one a later ask is told about. */
+/** BR_LOOT_KEY_HOME in include/br/br_loot.h: somebody at home in house i (POK-379), a
+ *  Pokemon he gives or trades, and BR_LOOT_KEY_HOME_CLAIM, a seat asking for him first.
+ *  The page never deals them -- the ROMs do, from the seed -- and only answers the ask. */
+export const homeKey = (i: number): number => 0x8c00 | i;
+export const homeClaimOf = (key: number): number | undefined => ((key & 0xffc0) === 0x8c40 ? key & 0x3f : undefined);
+const isHomeKey = (key: number): boolean => (key & 0xffc0) === 0x8c00;
+
+/** One trade a trader (POK-392), and one Pokemon a house (POK-379). Two players at him at
+ *  once both found him standing and both traded, so a ROM asks first, with a PICKUP of
+ *  his claim key, and the host answers: the first ask for one still standing with his own
+ *  PICKUP naming the asker -- the trade, for the whole room -- and any later one with
+ *  that PICKUP naming whoever got him, which the asker's ROM takes as no (br_event.c's
+ *  Task_TradeClaim, br_loot.c's Task_HomeClaim). Everything the host hears goes through
+ *  `note` first, so a trade nobody asked for (a bot's, or a ROM that heard no answer in
+ *  time) is the one a later ask is told about. Somebody at home is standing until a
+ *  PICKUP says otherwise: the page has no books on houses. */
 export class TraderClaims {
+  /** Who got each, by his own key. */
   private readonly won = new Map<number, number>();
 
   /** `standing(n)`: the room's books still have event n's trader. */
@@ -53,23 +63,29 @@ export class TraderClaims {
 
   note(msg: Msg): void {
     if (msg.t === 'start') this.won.clear();
-    const n = msg.t === 'pickup' ? traderOf(msg.key) : undefined;
-    if (n !== undefined && msg.t === 'pickup' && !this.won.has(n)) this.won.set(n, msg.seat);
+    if (msg.t !== 'pickup' || this.won.has(msg.key)) return;
+    if (traderOf(msg.key) !== undefined || isHomeKey(msg.key)) this.won.set(msg.key, msg.seat);
   }
 
   /** The answer to an ask, and whether it is the trade itself (for the whole room) or a
    *  no (for the asker alone). Null for anything but an ask. Every ask is answered: one
-   *  left to time out would trade on its own, which is the double trade again. A trader
-   *  gone with nobody known to have got him (a host that took over after) is a no naming
-   *  some other seat, which is all the asker's ROM reads. */
+   *  left to time out would trade on its own, which is the double trade again. One gone
+   *  with nobody known to have got him (a host that took over after) is a no naming some
+   *  other seat, which is all the asker's ROM reads. */
   answer(msg: Msg): { reply: PickupMsg; granted: boolean } | null {
-    const n = msg.t === 'pickup' && msg.item === undefined ? claimOf(msg.key) : undefined;
-    if (n === undefined || msg.t !== 'pickup') return null;
-    let winner = this.won.get(n);
-    const granted = winner === undefined && this.standing(n);
-    if (granted) this.won.set(n, (winner = msg.seat));
+    if (msg.t !== 'pickup' || msg.item !== undefined) return null;
+    const n = claimOf(msg.key);
+    const house = homeClaimOf(msg.key);
+    let key: number;
+    let standing: boolean;
+    if (n !== undefined) [key, standing] = [traderKey(n), this.standing(n)];
+    else if (house !== undefined) [key, standing] = [homeKey(house), true];
+    else return null;
+    let winner = this.won.get(key);
+    const granted = winner === undefined && standing;
+    if (granted) this.won.set(key, (winner = msg.seat));
     winner ??= msg.seat === 0 ? 1 : 0;
-    return { reply: { t: 'pickup', seat: winner, key: traderKey(n) }, granted };
+    return { reply: { t: 'pickup', seat: winner, key }, granted };
   }
 }
 

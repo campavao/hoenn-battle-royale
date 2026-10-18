@@ -50,7 +50,13 @@ wait 30
 tap A
 wait 90
 tap A
-wait 120
+wait 60
+# the ask (POK-379), and no host behind the harness: after BR_CLAIM_FRAMES the trade goes
+# ahead the old way
+expectmsg 10 u16 1 0x8C61
+expect u8 gPlayerPartyCount 1
+expect u8 gBrLoot+31 1
+wait 660
 shot traded
 expect u8 gPlayerPartyCount 1
 expectmsg 7 u16 2 65
