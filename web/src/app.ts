@@ -3871,7 +3871,9 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
       rom,
     });
     touch.attach();
-    void loadPhoneUi().then((ui) => wirePhoneHud(ui, emu, symbols, touch, rom));
+    void loadPhoneUi()
+      .then((ui) => wirePhoneHud(ui, emu, symbols, touch, rom))
+      .catch((err: unknown) => console.warn('phone HUD did not wire', err));
   }
 }
 
