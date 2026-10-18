@@ -270,6 +270,19 @@ describe('a fight with a bot, as its ROM reports it', () => {
       expect(bots.count()).toBe(0);
     });
 
+    it('puts out a bot we beat whose party report was lost (Cam, 2026-10-18)', () => {
+      const { bots, bot, sent, cards } = solo();
+      routeToBots(bots, { t: 'challenge', seat: HOST, opponent: bot, nonce: 1 }, HOST);
+      // No `party`: the ring was full when the ROM sent it. The held RESULTs still come.
+      routeToBots(bots, { t: 'result', seat: HOST, outcome: 'win' }, HOST);
+      routeToBots(bots, { t: 'result', seat: bot, outcome: 'lose' }, HOST);
+      expect(sent.some((m) => m.t === 'out' && m.seat === bot)).toBe(true);
+      expect(bots.count()).toBe(0);
+      // ...so the next look at it stages no card: no rematch with its old team.
+      routeToBots(bots, { t: 'challenge', seat: HOST, opponent: bot, nonce: 2 }, HOST);
+      expect(cards).toHaveLength(1);
+    });
+
     it('lets a bot that beat us walk on, a potion lighter', () => {
       const { bots, bot, sent } = solo();
       routeToBots(bots, { t: 'challenge', seat: HOST, opponent: bot, nonce: 1 }, HOST);
