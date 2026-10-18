@@ -101,9 +101,9 @@ type Band = { left: number; top: number; right: number; bottom: number };
  *  ring rows the ROM has still to draw (gBrRingStale). */
 export type Cam = { map: string; x: number; y: number; subX: number; subY: number; stale?: number; wide?: boolean | null };
 
-/** The ROM's ring (field.ts RING_ABOVE, RING_ROWS): bit (dy + 4) of gBrRingStale is grid
+/** The ROM's ring (field.ts RING_ABOVE, RING_ROWS): bit (dy + 9) of gBrRingStale is grid
  *  row pos.y + dy, map row pos.y + dy - 7; pret's rows 0..14 are never stale. */
-const RING_ABOVE = 4;
+const RING_ABOVE = 9;
 const RING_ROWS = 32;
 
 /** What field.ts cuts off the band on the field (bandClip, POK-329), worked out again

@@ -79,8 +79,8 @@ test('a phone gets the screen and both thumbs, either way up', async ({ browser 
     const buffer = await page.evaluate(() => { const c = document.querySelector('#canvas') as HTMLCanvasElement; return { w: c.width, h: c.height }; });
     expect(canvas.width / canvas.height, 'the picture is never squashed or stretched').toBeCloseTo(buffer.w / buffer.h, 2);
     // The ROM's band on a portrait phone (POK-329): the core draws 256x496 -- its 512-row
-    // ring less one row, 104 above the LCD and 232 below -- at the picture's own 1.625, and
-    // the LCD is where the layout put it, over the pad: canvas row 118 on this glass.
+    // ring less one row, 184 above the LCD and 152 below (POK-378) -- at the picture's own
+    // 1.625, and the LCD is where the layout put it: on the pad, 4 rows over it.
     expect(buffer, "the ROM's whole band").toEqual({ w: 256, h: 496 });
     expect(bandScale, 'at the scale the width gives').toBeCloseTo(390 / 240, 3);
     expect(canvas.height, 'drawn 496 rows tall').toBeCloseTo(496 * bandScale, 0);
@@ -90,7 +90,11 @@ test('a phone gets the screen and both thumbs, either way up', async ({ browser 
     const free = (screen.height - pad.height) / bandScale - 160;
     const lcdRow = Math.max(Math.round(free / 2), Math.min(Math.floor(free) - 4, romView().viewport.top));
     expect((picture.y - screen.y) / bandScale, `the LCD at the layout's row ${lcdRow}`).toBeCloseTo(lcdRow, 0);
-    expect((canvas.y - screen.y) / bandScale, "the picture's top 104 rows above it").toBeCloseTo(lcdRow - 104, 0);
+    expect((canvas.y - screen.y) / bandScale, "the picture's top 184 rows above it").toBeCloseTo(lcdRow - romView().viewport.top, 0);
+    // The ROM's rows above reach the pad on this glass (POK-378): the picture is not held
+    // short of it, with the page's still map over the gap.
+    expect(lcdRow, 'down on the pad').toBe(Math.floor(free) - 4);
+    expect(lcdRow, "and every row above it the ROM's").toBeLessThanOrEqual(romView().viewport.top);
     expect(field.width).toBeGreaterThanOrEqual(screen.width - 2);
     expect(field.height).toBeGreaterThanOrEqual(screen.height - 2);
     await page.screenshot({ path: path.join(OUT_DIR, 'phone-portrait.png') });
@@ -137,7 +141,7 @@ test('a desktop keeps most of the window for the game, beside the docked sheet',
     // The core draws the rows this layout shows past the picture and no more (POK-329,
     // field.ts askBand), measured before the boot as the match lays it out -- beside the
     // docked sheet -- in eights, never under the sprite window nor past the ROM's band:
-    // here 128 rows above the LCD and 129 below, so all 104 of the ROM's above, 136 below.
+    // here 128 rows above the LCD and 129 below, so 128 of the ROM's 184 above, 136 below.
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     const shows = await page.evaluate(() => {
       const box = document.querySelector('#screen-wrap') as HTMLElement;
@@ -154,7 +158,7 @@ test('a desktop keeps most of the window for the game, beside the docked sheet',
       top: eights(shows.top, rom.sprites.top, rom.viewport.top),
       bottom: eights(shows.bottom, rom.sprites.bottom, rom.viewport.bottom),
     });
-    expect((asked as { bottom: number }).bottom, "fewer than the ROM's 232 below").toBeLessThan(rom.viewport.bottom);
+    expect((asked as { top: number }).top, "fewer than the ROM's 184 above").toBeLessThan(rom.viewport.top);
 
     // A wide window has the room for the sheet at twice that, and the game still gets more.
     await page.setViewportSize(FULL);

@@ -6,7 +6,7 @@
 // grows its box to those rows and the core draws what is in it, at its true rows.
 //
 // This puts an unused seat's row into the ROM's gBrSeats fourteen rows below us -- past
-// pret's box, inside a portrait phone's 232 rows below the LCD, and 256 rows below the
+// pret's box, inside a portrait phone's 152 rows below the LCD, and 256 rows below the
 // LCD's top, so its OAM y is one of the LCD's own rows -- and looks for the ROM's own
 // object there, drawn by the core once and not by the overlay; then takes the row away
 // and sees it go.
@@ -187,7 +187,7 @@ test('a seat past pret\'s box but in the rows a phone shows is the ROM\'s own: a
       const emu = (window as unknown as EmuWindow).__hbr.emu;
       return { top: emu.read(at, 16), bottom: emu.read(at + 2, 16) };
     }, symbols.gBrFieldShown);
-    expect(shown, 'the page told the ROM the rows a portrait phone shows').toEqual({ top: 104, bottom: 232 });
+    expect(shown, 'the page told the ROM the rows a portrait phone shows').toEqual({ top: 184, bottom: 152 });
 
     await poke(row);
     await expect.poll(() => page.evaluate((base) => (window as unknown as EmuWindow).__hbr.emu.read(base + 9, 8), seat), {

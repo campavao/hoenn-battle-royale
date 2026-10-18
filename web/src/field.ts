@@ -627,7 +627,7 @@ export function ringStaleColumns(cam: { x: number }, stale: number): { left: num
 /** The ROM's ring up and down (include/br/br_field.h, THE RING): 32 metatile rows,
  *  RING_ABOVE of them above pos.y. Bit (dy + RING_ABOVE) of gBrRingStale is grid row
  *  pos.y + dy, which is map row pos.y + dy - MAP_OFFSET. */
-export const RING_ABOVE = 4;
+export const RING_ABOVE = 9;
 export const RING_ROWS = 32;
 const MAP_OFFSET = 7;
 /** pret's own rows, pos.y..pos.y+14: drawn as each comes in, never stale. */

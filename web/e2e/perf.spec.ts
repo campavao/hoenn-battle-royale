@@ -45,8 +45,8 @@ type BandWindow = { __hbr: { emu: { viewport: Band | null } } };
 /** Where each run is: its window, the files it leaves, and the band its layout asks for
  *  -- on a desktop the wide ring, as much of it as its 1280x720 window shows beside the
  *  docked sheet at a phone's zoom (2x: 80 columns each side, and all 40 of its rows), all
- *  of the ROM's band on the phone (it shows 118 above and 242 below, and the ROM has 104
- *  and 232). */
+ *  of the ROM's band on the phone (184 above and 152 below since POK-378: the LCD sits on
+ *  the pad, 174 rows down, and the dock runs past the 152). */
 const RUNS: { name: string; file: string; context: BrowserContextOptions; band: (rom: ReturnType<typeof romView>) => Band }[] = [
   { name: 'desktop', file: 'perf', context: {}, band: () => ({ left: 80, top: 40, right: 80, bottom: 40 }) },
   { name: 'phone', file: 'perf-phone', context: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, band: (rom) => rom.viewport },
