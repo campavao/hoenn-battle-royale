@@ -51,6 +51,7 @@
 #include "constants/rgb.h"
 #include "constants/songs.h"
 #if BR
+#include "br/br_bag.h"
 #include "br/br_hm.h"
 #endif
 
@@ -1245,6 +1246,9 @@ static void Task_BagMenu_HandleInput(u8 taskId)
         }
 
         listPosition = ListMenu_ProcessInput(tListTaskId);
+#if BR
+        listPosition = BrBag_PickRow(listPosition); // the phone's bag chose this row
+#endif
         ListMenuGetScrollAndRow(tListTaskId, scrollPos, cursorPos);
         switch (listPosition)
         {
@@ -1696,6 +1700,9 @@ static void Task_ItemContext_SingleRow(u8 taskId)
     if (MenuHelpers_ShouldWaitForLinkRecv() != TRUE)
     {
         s8 selection = Menu_ProcessInputNoWrap();
+#if BR
+        selection = BrBag_PickUse(selection); // ...and USE on it
+#endif
         switch (selection)
         {
         case MENU_NOTHING_CHOSEN:

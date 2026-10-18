@@ -293,6 +293,15 @@
         .bm-info { display: grid; gap: calc(var(--s, 1.5) * 8px); }
         .bm-info-row { display: flex; gap: calc(var(--s, 1.5) * 8px); }
         .bm-info-row > .bm-btn { flex: none; }
+        /* The bag (ui/bag.ts): the pocket bar with its arrows over its left and right
+           quarters, the list scrolling inside its own box, the description, BACK/USE. */
+        .bm-bag { grid-column: 1 / -1; position: relative; }
+        .bm-bag[hidden] { display: none; }
+        .bm-bag canvas { display: block; }
+        .bm-bag-prev, .bm-bag-next { position: absolute; top: 0; bottom: 0; width: calc(var(--s, 1.5) * 56px); }
+        .bm-bag-prev { left: 0; }
+        .bm-bag-next { right: 0; }
+        .bm-bag-list { height: calc(var(--s, 1.5) * 104px); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
         /* Off the field (a battle, the bag, the party) the dock's windows do nothing: they
            go, the room menu stays. */
         body.in-match .dock.off-field > .hud-btn { visibility: hidden; }
