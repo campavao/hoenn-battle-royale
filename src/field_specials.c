@@ -46,6 +46,9 @@
 #include "wallclock.h"
 #include "window.h"
 #include "constants/battle_frontier.h"
+#if BR
+#include "br/br_items.h"
+#endif
 #include "constants/battle_pyramid.h"
 #include "constants/battle_tower.h"
 #include "constants/decorations.h"
@@ -1640,6 +1643,9 @@ bool8 BufferTMHMMoveName(void)
     if (gSpecialVar_0x8004 >= ITEM_TM01 && gSpecialVar_0x8004 <= ITEM_HM08)
     {
         StringCopy(gStringVar2, gMoveNames[ItemIdToBattleMoveId(gSpecialVar_0x8004)]);
+#if BR
+        return !BrItems_TmNamedForMove(); // the TM's name is its move already: said once
+#endif
         return TRUE;
     }
 

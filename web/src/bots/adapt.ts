@@ -78,7 +78,7 @@ export function routeToBots(bots: Bots, msg: Msg, from: number): void {
       bots.noteSpent(msg.seat, msg.items, from);
       return;
     case 'result':
-      bots.noteResult(msg.seat, from);
+      bots.noteResult(msg.seat, from, msg.outcome);
       return;
     case 'pickup':
       // A patch a player's battle took (POK-363): gone for the bots too, until it grows back.

@@ -1,0 +1,41 @@
+# surf-map-fade: START > MAP while surfing, then DOWN toward the shore during the map's
+# fade (Cam, 2026-10-18: surfing on land). HideStartMenu hands the controls back, the
+# fade (BrField_Leave) ran with them, a step ashore started the dismount jump, the field
+# went mid-jump, and CB2_ReturnToField rebuilt the avatar from its sprite -- the surfing
+# one -- on a land tile, which it then walked on its blob. The leave locks the controls
+# and lets a step under way finish, so the player is still on the water when the map
+# opens and back on it, surfing, when it closes.
+# ROUTE 104 (0:19), boot at (33,22) land; (33,21) is sea.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 00 00 13 21 00 16 00 BD BB C7 FF
+wait 400
+hold UP 20
+wait 120
+# surfing at (33,21)
+expectbits u8 gPlayerAvatar 0x08 0x08
+expect u16 *gSaveBlock1Ptr+2 21
+tap START
+wait 40
+# no party: BAG, MAP, PLAYER, EXIT
+tap DOWN
+wait 20
+tap A
+wait 8
+hold DOWN 40
+wait 200
+expect u8 gBrMap 1
+tap B
+wait 200
+shot back-from-map
+# still on the water, still surfing: the DOWN never became a step
+expect u16 *gSaveBlock1Ptr+0 33
+expect u16 *gSaveBlock1Ptr+2 21
+expectbits u8 gPlayerAvatar 0x08 0x08
+# ...and the shore is still a proper dismount: ashore, on foot
+hold DOWN 20
+wait 120
+shot ashore
+expect u16 *gSaveBlock1Ptr+2 22
+expectbits u8 gPlayerAvatar 0x09 0x01
+say surf map fade ok
