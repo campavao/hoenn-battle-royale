@@ -38,6 +38,11 @@ export const claimKey = (n: number): number => eventKey(n, 14);
 export const claimOf = (key: number): number | undefined =>
   isEventKey(key) && (key & 0xf) === 14 ? (key >> 4) & 0xf : undefined;
 
+/** BR_LEGEND_CLAIM_KEY in include/br/br_legend.h: a seat asking for the legendary standing
+ *  under event key `key` before it fights it (POK-410). Past every event's sixteen keys. */
+export const legendClaimKey = (key: number): number => key | 0x0800;
+export const legendClaimOf = (key: number): number | undefined => ((key & 0xf800) === 0xb800 ? key & ~0x0800 : undefined);
+
 /** BR_LOOT_KEY_HOME in include/br/br_loot.h: somebody at home in house i (POK-379), a
  *  Pokemon he gives or trades, and BR_LOOT_KEY_HOME_CLAIM, a seat asking for him first.
  *  The page never deals them -- the ROMs do, from the seed -- and only answers the ask. */
@@ -60,8 +65,12 @@ export class TraderClaims {
   /** Who got each, by his own key. */
   private readonly won = new Map<number, number>();
 
-  /** `standing(n)`: the room's books still have event n's trader. */
-  constructor(private readonly standing: (n: number) => boolean) {}
+  /** `standing(n)`: the room's books still have event n's trader. `onGround(key)`: the
+   *  room's loot still has that piece. */
+  constructor(
+    private readonly standing: (n: number) => boolean,
+    private readonly onGround: (key: number) => boolean = () => false,
+  ) {}
 
   note(msg: Msg): void {
     if (msg.t === 'start') this.won.clear();
@@ -76,6 +85,14 @@ export class TraderClaims {
    *  other seat, which is all the asker's ROM reads. */
   answer(msg: Msg): { reply: PickupMsg; granted: boolean } | null {
     if (msg.t !== 'pickup' || msg.item !== undefined) return null;
+    // A legendary (POK-410) is the one a battle took off the ground, not the one somebody
+    // got for good: a lost fight puts it back, and the next ask for it is a yes again.
+    const legend = legendClaimOf(msg.key);
+    if (legend !== undefined) {
+      const granted = this.onGround(legend);
+      // A no names some other seat, which is all the asker's ROM reads.
+      return { reply: { t: 'pickup', seat: granted ? msg.seat : msg.seat === 0 ? 1 : 0, key: legend }, granted };
+    }
     const n = claimOf(msg.key);
     const house = homeClaimOf(msg.key);
     let key: number;

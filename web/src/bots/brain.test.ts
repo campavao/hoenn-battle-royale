@@ -3,7 +3,7 @@ import { Bots, health, STEP_MS, type BotsOptions, type Decision, type PlayerView
 import { dealBots, Grade, MAX_SEATS } from './roster';
 import { dealParty, grownUp, rungForPhase } from './party';
 import { World, type Spot, type WorldMap } from './world';
-import { pageCell } from './space';
+import { pageCell, toRom } from './space';
 import { mulberry32 } from '../match/clock';
 import type { MapRef, Msg, PackedMon } from '../net/wire';
 import type { Stack } from './bag';
@@ -1421,7 +1421,7 @@ describe('encounter patches (POK-363)', () => {
           for (const [key, cell] of ground) if (mapId === 'FIELD' && pageCell(cell.x, cell.y).x === x && pageCell(cell.x, cell.y).y === y) return key;
           return undefined;
         },
-        legend: (key) => key === 0xb000,
+        legend: (key) => (key === 0xb000 ? { species: 401, level: 20 } : undefined),
       },
     });
     const dealt = dealBots(99, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 1 }]);
@@ -1448,6 +1448,50 @@ describe('encounter patches (POK-363)', () => {
     expect(sent.some((m) => m.t === 'busy' && m.seat === seat && m.kind === undefined)).toBe(false);
     for (const stop = t + 2_000; t <= stop; t += 100) bots.tick(t);
     expect(sent.some((m) => m.t === 'busy' && m.seat === seat && m.kind === undefined)).toBe(true);
+    // Then it is the bot's, or back where it stood for everybody (the reviewer's "bots
+    // delete legendaries"): never neither.
+    const back = sent.find((m) => m.t === 'spill' && m.mons.some((mon) => mon.key === 0xb000));
+    const caught = bots.partyOf(seat).some((mon) => mon.species === 401);
+    expect(caught !== (back !== undefined)).toBe(true);
+    if (back?.t === 'spill') expect(back.mons).toEqual([{ key: 0xb000, ...toRom(pageCell(3, 1)), species: 401, level: 20 }]);
+  });
+
+  it('puts a legendary back where it stood when its party has no room for it', () => {
+    const sent: Msg[] = [];
+    const ground = new Map<number, { x: number; y: number }>([[0xb000, { x: 3, y: 1 }]]);
+    const bots = new Bots({
+      world: new World([FIELD, PATH]),
+      targets: [{ mapId: 'FIELD', x: 3, y: 1 }],
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      deal: () => Array.from({ length: 6 }, () => ({ ...MON })),
+      inside: (id) => id === 'FIELD',
+      loot: {
+        all: () => [...ground].map(([key, at]) => ({ key, mapId: 'FIELD', ...pageCell(at.x, at.y) })),
+        at: (mapId, { x, y }) => {
+          for (const [key, cell] of ground) if (mapId === 'FIELD' && pageCell(cell.x, cell.y).x === x && pageCell(cell.x, cell.y).y === y) return key;
+          return undefined;
+        },
+        legend: (key) => (key === 0xb000 ? { species: 401, level: 20 } : undefined),
+      },
+    });
+    const dealt = dealBots(99, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 0, y: 1 }]);
+    bots.start(dealt, 0);
+    for (let t = STEP_MS, seen = 0; t <= 40_000; t += 100) {
+      bots.tick(t);
+      for (; seen < sent.length; seen++) {
+        const m = sent[seen];
+        if (m.t === 'pickup') ground.delete(m.key);
+        if (m.t === 'spill') ground.set(0xb000, { x: 3, y: 1 });
+      }
+    }
+    expect(sent.some((m) => m.t === 'pickup' && m.key === 0xb000)).toBe(true);
+    const back = sent.find((m) => m.t === 'spill');
+    expect(back).toEqual({ t: 'spill', seat: dealt[0].seat, map: REFS.FIELD, mons: [{ key: 0xb000, ...toRom(pageCell(3, 1)), species: 401, level: 20 }] });
+    expect(bots.partyOf(dealt[0].seat)).toHaveLength(6);
+    // One try: it does not stand on the one it put back and fight it again.
+    expect(sent.filter((m) => m.t === 'pickup' && m.key === 0xb000)).toHaveLength(1);
   });
 
   it('meets a taken patch only once it has grown back with the ring', () => {

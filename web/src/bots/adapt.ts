@@ -37,8 +37,8 @@ export function lootView(
     bagAt: (key) => loot.bagAt(key),
     bagLeft: (key) => (loot.bagItems(key) ?? []).reduce((n, st) => n + st.n, 0),
     legend: (key) => {
-      const species = loot.species(key);
-      return species !== undefined && legendGfx(key, species) !== undefined;
+      const mon = loot.mon(key);
+      return mon && legendGfx(key, mon.species) !== undefined ? { species: mon.species, level: mon.level } : undefined;
     },
   };
 }

@@ -11,6 +11,7 @@ copy gPlayerParty+200 gPlayerParty 100
 copy gPlayerParty+300 gPlayerParty 100
 copy gPlayerParty+400 gPlayerParty 100
 copy gPlayerParty+500 gPlayerParty 100
+poke u8 gBrMySeat 0
 poke u8 gBrMatch 2
 poke u32 gBrMatch+8 0x1234
 pokebytes gBrMailbox+0x1018 20 08 05 00 00 00 00 1F 00 B0
@@ -22,6 +23,12 @@ expect u8 gBrLoot+0xA1 1
 expect u8 gObjectEvents+0x4D 187
 shot standing
 tap A
+wait 30
+# the ask, before its cry: a PICKUP of its claim key 0xB800
+expectmsg 10 u16 1 0xB800
+# the host's answer, seat 0's PICKUP of 0xB000 naming us: it is ours, off every ground
+pokebytes gBrMailbox+0x1098 0A 0B 08 00 00 00 00 B0 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 3
 waitfor u32 gMain+4 BattleMainCB2+1 600
 # BattleSetup_StartLatiBattle: BATTLE_TYPE_LEGENDARY, not a REGI's
 expectbits u32 gBattleTypeFlags 0x6000 0x2000

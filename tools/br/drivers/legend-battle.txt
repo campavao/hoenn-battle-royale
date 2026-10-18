@@ -10,6 +10,7 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
+poke u8 gBrMySeat 0
 poke u8 gBrMatch 2
 poke u32 gBrMatch+8 0x1234
 # EVENT 0 at ROUTE 116, legendary 0xB000; then its SPILL: seat 1, map 0:9, one mon, key
@@ -31,12 +32,16 @@ tap A
 wait 30
 # still on the field for its cry: nothing has left the ground yet
 expect u8 gBrLoot+0xA0 2
+# the ask, before its cry: a PICKUP of its claim key 0xB800
+expectmsg 10 u16 1 0xB800
+# the host's answer, seat 0's PICKUP of 0xB000 naming us: it is ours, off every ground
+pokebytes gBrMailbox+0x1098 0A 0B 08 00 00 00 00 B0 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 3
 waitfor u32 gMain+4 BattleMainCB2+1 600
 # a REGI battle (BATTLE_TYPE_LEGENDARY | BATTLE_TYPE_REGI) against REGIROCK
 expectbits u32 gBattleTypeFlags 0x6000 0x6000
 # (row 0's kind: BR_LOOT_NONE; the count is only kept on the field)
 expect u8 gBrLoot+0x0B 0
-expectmsg 10 u16 1 0xB000
 expect u8 gBrEvents+17 1
 wait 300
 expect u16 gBattleMons+0x58 401
