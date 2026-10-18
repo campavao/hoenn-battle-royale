@@ -52,6 +52,20 @@ const struct Item gItems[] =
         .secondaryId = ITEM_GREAT_BALL - FIRST_BALL,
     },
 
+#if BR
+    [ITEM_POKE_BALL] =
+    {
+        .name = _("ROYALE BALL"),
+        .itemId = ITEM_POKE_BALL,
+        .price = 600,
+        .description = gBrText_RoyaleBallDesc,
+        .pocket = POCKET_POKE_BALLS,
+        .type = ITEM_POKE_BALL - FIRST_BALL,
+        .battleUsage = ITEM_B_USE_OTHER,
+        .battleUseFunc = ItemUseInBattle_PokeBall,
+        .secondaryId = ITEM_POKE_BALL - FIRST_BALL,
+    },
+#else
     [ITEM_POKE_BALL] =
     {
         .name = _("POKé BALL"),
@@ -64,6 +78,7 @@ const struct Item gItems[] =
         .battleUseFunc = ItemUseInBattle_PokeBall,
         .secondaryId = ITEM_POKE_BALL - FIRST_BALL,
     },
+#endif
 
     [ITEM_SAFARI_BALL] =
     {

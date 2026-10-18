@@ -1,0 +1,26 @@
+# royale-ball-pickup: the one ball a match has (POK-408). Cam, 2026-10-18: "get rid of all
+# pokeballs and make royale balls which are like Ultra balls mixed with quick ball."
+#
+# An ULTRA BALL on the ground arrives as six ROYALE BALLs, the POKe BALL's id
+# (br_items.h): no ULTRA BALL in the bag. royale-ball-catch.txt throws one.
+#
+# LITTLEROOT (map 0:9), the boot at (5,8), as items-loot.txt.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u32 *gSaveBlock2Ptr+0xAC 0
+expect u16 *gSaveBlock1Ptr+0x650 4
+poke u16 *gSaveBlock1Ptr+0x652 0
+# an ULTRA BALL (2) piece one step RIGHT
+pokebytes gBrLoot 01 8F 0D 00 10 00 02 00 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 30
+tap RIGHT
+wait 20
+tap A
+wait 30
+shot found
+expect u16 *gSaveBlock1Ptr+0x650 4
+expect u16 *gSaveBlock1Ptr+0x652 6
+expect u16 *gSaveBlock1Ptr+0x654 0
+say royale ball pickup ok

@@ -1816,6 +1816,10 @@ const u8 gText_Cancel5[] = _("CANCEL");
 const u8 gText_Ok2[] = _("OK");
 const u8 gText_Quiz[] = _("QUIZ");
 const u8 gText_Answer[] = _("ANSWER");
+#if BR
+const u8 gText_PokeBalls[] = _("ROYALE BALLS");
+#else
 const u8 gText_PokeBalls[] = _("POKé BALLS");
+#endif
 const u8 gText_Berry[] = _("BERRY");
 const u8 gText_Berries[] = _("BERRIES");

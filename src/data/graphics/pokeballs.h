@@ -1,5 +1,11 @@
+#if BR
+// The ROYALE BALL (br_items.h): the ULTRA BALL's picture in its own colours.
+const u32 gBallGfx_Poke[] = INCGFX_U32("graphics/balls/ultra.png", ".4bpp.lz");
+const u32 gBallPal_Poke[] = INCGFX_U32("graphics/balls/br_royale.png", ".gbapal.lz");
+#else
 const u32 gBallGfx_Poke[] = INCGFX_U32("graphics/balls/poke.png", ".4bpp.lz");
 const u32 gBallPal_Poke[] = INCGFX_U32("graphics/balls/poke.png", ".gbapal.lz");
+#endif
 
 const u32 gBallGfx_Great[] = INCGFX_U32("graphics/balls/great.png", ".4bpp.lz");
 const u32 gBallPal_Great[] = INCGFX_U32("graphics/balls/great.png", ".gbapal.lz");

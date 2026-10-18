@@ -24,8 +24,8 @@ export const isScatterKey = (key: number): boolean => (key & 0xf000) === SCATTER
 export const SCATTER_PER_SECTION = 2;
 
 // include/constants/items.h
-const ITEM_ULTRA_BALL = 2;
-const ITEM_GREAT_BALL = 3;
+/** The ROYALE BALL, every ball a match has but the MASTER BALL (br_items.h, POK-408). */
+const ITEM_POKE_BALL = 4;
 const ITEM_HYPER_POTION = 21;
 const ITEM_SUPER_POTION = 22;
 const ITEM_FULL_HEAL = 23;
@@ -48,8 +48,7 @@ export const SCATTER_TABLE: readonly { id: number | 'tm'; w: number }[] = [
   { id: ITEM_HYPER_POTION, w: 4 },
   { id: ITEM_REVIVE, w: 3 },
   { id: ITEM_FULL_HEAL, w: 2 },
-  { id: ITEM_GREAT_BALL, w: 3 },
-  { id: ITEM_ULTRA_BALL, w: 2 },
+  { id: ITEM_POKE_BALL, w: 5 },
   { id: ITEM_ETHER, w: 2 },
   { id: ITEM_SITRUS_BERRY, w: 2 },
   { id: ITEM_LUM_BERRY, w: 1 },

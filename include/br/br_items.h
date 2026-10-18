@@ -8,7 +8,8 @@
 //     (MAX_PER_STAT_EVS, past the 510 total) and never reach the bag;
 //   - a sell item (NUGGET, PEARL, STARDUST, a shard...) is its sell price;
 //   - a status heal is a FULL RESTORE;
-//   - a ball off the ground is six of them (the MASTER BALL stays one);
+//   - every ball but the MASTER BALL is a ROYALE BALL (below), and one off the ground is
+//     six of them (the MASTER BALL stays one);
 //   - a medicine used from the bag works on the whole party (a revive still on one mon).
 // With no match running every item is pret's.
 
@@ -54,6 +55,19 @@ bool8 BrItems_HealParty(u8 taskId);
 extern const u8 gBrText_LinkCableDesc[];
 extern const u32 gBrItemIcon_LinkCable[];
 extern const u32 gBrItemIconPalette_LinkCable[];
+
+// The ROYALE BALL (POK-408). Cam, 2026-10-18: "get rid of all pokeballs and make royale
+// balls which are like Ultra balls mixed with quick ball. Catching pokemon outside of the
+// safari does not feel fun." The POKe BALL's id under another name, description, icon and
+// colours, so the four bits a mon keeps for its ball and every throw, send-out and summary
+// page that reads them still work; the ULTRA BALL's odds, twice those on a battle's first
+// turn (BrCatch_BallMultiplier). Any other ball arriving in a match becomes one (Apply);
+// the MASTER BALL stays itself, the prize it is in gold caches, events and the top shelf,
+// and the SAFARI BALL is the Safari's own and never reaches the bag.
+#define BR_ITEM_ROYALE_BALL ITEM_POKE_BALL
+
+extern const u8 gBrText_RoyaleBallDesc[];
+extern const u32 gBrItemIconPalette_RoyaleBall[];
 
 struct Pokemon;
 
