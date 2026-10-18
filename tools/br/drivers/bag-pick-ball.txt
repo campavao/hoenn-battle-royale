@@ -1,0 +1,47 @@
+# bag-pick-ball: the phone's bag throws a ball (Cam's mockup v3). The page writes the
+# pocket into gBagPosition and the item into gBrBag.pick, then presses BAG; the ROM's
+# bag opens on that pocket, takes the row and USE by itself (br_bag.c), and pret throws.
+#
+# The wild battle is run-wild-keeps-doll.txt's: ROUTE 102 under match seed 4.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 30
+tap LEFT
+wait 4
+tap LEFT
+wait 250
+tap LEFT
+wait 250
+expect u16 gBattleTypeFlags 4
+wait 300
+tap B
+wait 300
+tap B
+wait 300
+expect u8 gBrBattle+8 1
+# POTION x1 in ITEMS, then GREAT BALL x2 and POKe BALL x3 in POKe BALLS (SaveBlock1
+# +0x650), key zeroed: the pick is the second stack, so the row is not just the first.
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x560 0x0D
+poke u16 *gSaveBlock1Ptr+0x562 1
+poke u16 *gSaveBlock1Ptr+0x650 3
+poke u16 *gSaveBlock1Ptr+0x652 2
+poke u16 *gSaveBlock1Ptr+0x654 4
+poke u16 *gSaveBlock1Ptr+0x656 3
+# what the page does: BALLS_POCKET, POKe BALL, BAG
+poke u8 gBagPosition+5 1
+poke u16 gBrBag 4
+tap RIGHT
+wait 10
+tap A
+wait 200
+shot thrown
+# one POKe BALL gone, the GREAT BALLs and the POTION untouched, and the pick spent
+expect u16 *gSaveBlock1Ptr+0x656 2
+expect u16 *gSaveBlock1Ptr+0x652 2
+expect u16 *gSaveBlock1Ptr+0x562 1
+expect u16 gBrBag 0
+say bag pick ball ok

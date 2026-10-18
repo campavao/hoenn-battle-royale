@@ -17,6 +17,7 @@ import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import { PhoneHud, readHudView, type HudWorld } from './ui/phonehud';
 import { BattleMenu, battleWantsNoPad, readBattleView } from './ui/battlemenu';
+import { BAG_POSITION_POCKET, readBattleBag } from './ui/bag';
 import { PadPrefsControl } from './ui/padprefs';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { battleSeats, cutTo, nameBstart, romReplaying, Spectate } from './match/spectate';
@@ -94,7 +95,7 @@ import {
 } from './match/room';
 import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
-import { START_BR_MAP, START_POKEMON, TouchLayer } from './touch';
+import { MENU_ACTION, START_BR_MAP, START_POKEMON, TouchLayer } from './touch';
 import {
   STICK_KEY,
   guessedStickKeys,
@@ -3799,6 +3800,20 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     choose: (which, slot, move) => touch.chooseBattle(which, slot, move),
     back: () => touch.tapKey('b'),
     onShown: (on) => document.body.classList.toggle('battle-menu', on),
+    // USE in the page's bag: the ROM's BAG opens on that pocket and takes the item
+    // (src/br/br_bag.c). A ROM without gBrBag never gets the page's bag,
+    // and with no ROM bytes to name the items, the ROM's own bag is the one that works.
+    readBag: () => readBattleBag(emu, (n) => symbols.get(n), tables),
+    useItem:
+      tables && symbols.get('gBrBag') !== undefined && symbols.get('gBagPosition') !== undefined
+        ? (pocket, item) =>
+            // Written only as BAG goes down: a pick left behind would USE itself in the
+            // next bag the player opens.
+            touch.chooseBattle(MENU_ACTION, 1, undefined, () => {
+              emu.write(symbols.get('gBagPosition')! + BAG_POSITION_POCKET, pocket, 8);
+              emu.write(symbols.get('gBrBag')!, item, 16);
+            })
+        : undefined,
   });
   const wrap = $('#screen-wrap') as HTMLElement;
   const scale = () => {
@@ -3845,7 +3860,7 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
     // On the glass: a match, upright, on a touch screen (index.html shows #hud then).
     const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
     if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown);
-    battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables) : null);
+    battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables, battle.wantsBag) : null);
     const noPad = shown && battleWantsNoPad(emu, (n) => symbols.get(n), tables);
     if (noPad !== padOff) document.body.classList.toggle('battle-no-pad', (padOff = noPad));
     if (!shown) {

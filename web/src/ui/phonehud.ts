@@ -308,7 +308,7 @@ export class Win {
   }
 }
 
-function drawIcon(c: EmeraldCanvas, item: number, x: number, y: number, redo: () => void): void {
+export function drawIcon(c: EmeraldCanvas, item: number, x: number, y: number, redo: () => void): void {
   const img = picture('/ui/items.png', redo);
   const n = ICONS.cell;
   c.drawPicture(img, (item % ICONS.cols) * n, Math.floor(item / ICONS.cols) * n, n, n, x, y);

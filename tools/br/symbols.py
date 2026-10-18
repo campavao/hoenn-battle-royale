@@ -88,6 +88,9 @@ ENGINE_SYMBOLS = [
     # The per-line scroll a battle transition's HBlank writes into BG1..3VOFS, which is 9
     # bits on the ring's 512-row BGs (shuffle-vofs.txt, POK-329).
     "gScanlineEffectRegBuffers",
+    # The phone's bag (web/src/ui/bagsheet.ts): which pocket the ROM's BAG opens on, and
+    # what each item is -- its name, description, pocket and whether a battle can use it.
+    "gBagPosition", "gItems",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

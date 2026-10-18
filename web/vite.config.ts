@@ -53,8 +53,9 @@ function dropRoms(): Plugin {
 // draw its first screen. They are a chunk of their own now, fetched as the page starts
 // (match/landing.ts's worldReady()); this keeps them out, and keeps main from growing
 // back past the line with nobody noticing. The build fails -- CI's `npm run build` too --
-// rather than warns.
-export const MAIN_BUDGET = 350_000;
+// rather than warns. 360 KB since the phone's bag (2026-10-18), which took main from
+// about 348 KB to 354 KB: code, not data.
+export const MAIN_BUDGET = 360_000;
 const LAZY_DATA = /[\\/]src[\\/]data[\\/](world|landing)\.json$/;
 
 /** What is wrong with the entry chunk `main`, as the build names it; empty when nothing. */

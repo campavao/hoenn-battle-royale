@@ -171,6 +171,23 @@ describe('a tap on a battle menu walks the cursor there and presses A', () => {
     expect(emu.chosen, 'the second move').toBe(1);
   });
 
+  it("BAG's onPress runs as the A goes down, and never when the thumb took over", () => {
+    const emu = new FakeEmu();
+    emu.menu = MENU_ACTION;
+    const { t } = layer(emu);
+    let pressed = 0;
+    t.chooseBattle(MENU_ACTION, 1, undefined, () => pressed++);
+    for (let i = 0; i < 40 && emu.chosen === null; i++) emu.frame();
+    expect([emu.chosen, pressed]).toEqual([1, 1]);
+    emu.chosen = null;
+    emu.cursor = 0;
+    t.chooseBattle(MENU_ACTION, 3, undefined, () => pressed++);
+    emu.frame();
+    emu.press('b');
+    for (let i = 0; i < 40; i++) emu.frame();
+    expect(pressed).toBe(1);
+  });
+
   it('three moves: from the third to the second goes up first (RIGHT there is refused)', () => {
     const emu = new FakeEmu();
     emu.menu = MENU_MOVE;

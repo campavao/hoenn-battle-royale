@@ -33,6 +33,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_netlink.h"
 #include "br/br_battle.h"
+#include "br/br_bag.h"
 #include "br/br_hud.h"
 #include "br/br_bot.h"
 #include "br/br_spectate.h"
@@ -331,6 +332,7 @@ u8 BrBattle_AutoScrollFrames(void)
 void BrBattle_ShotReset(void)
 {
     gBrBattle.shotFrames = 0;
+    BrBag_Forget();
 }
 
 // THE BAG IS NOT A HIDING PLACE (POK-292).
