@@ -206,3 +206,16 @@ void BrSkin_MyThrowPalette(u8 paletteNum)
 {
     BrSkin_ThrowPalette(gBrMySkin, paletteNum);
 }
+
+void BrSkin_MapIcon(u16 tileTag, u16 paletteTag)
+{
+    const struct ObjectEventGraphicsInfo *info;
+
+    if (!BrSkin_MyLookIsNpc())
+        return;
+    info = GetObjectEventGraphicsInfo(BrGhosts_WalkGraphic(gBrMySkin));
+    // A 16x32 frame is four rows of two tiles, in 1D order, and its top eight pixels are
+    // mostly hat and air: the middle two rows are the face and shoulders.
+    CpuCopy16((const u8 *)info->images[0].data + 2 * TILE_SIZE_4BPP, (void *)(OBJ_VRAM0 + GetSpriteTileStartByTag(tileTag) * TILE_SIZE_4BPP), 4 * TILE_SIZE_4BPP);
+    PatchObjectPalette(info->paletteTag, IndexOfSpritePaletteTag(paletteTag));
+}

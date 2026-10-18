@@ -35,6 +35,12 @@ u8 BrSkin_MyAnim(struct ObjectEvent *objectEvent, u8 anim, u8 standard);
 // the twenty loops. The field-move pose before SURF, CUT or STRENGTH waited for ever.
 bool8 BrSkin_MyAnimEndless(struct ObjectEvent *objectEvent);
 
+// ---- the MAP -----------------------------------------------------------------
+// region_map.c: the head that marks us on the MAP and the fly map is BRENDAN's or MAY's.
+// An NPC look has no head icon, so the middle of its walking sprite's first frame
+// (face and shoulders, 16x16) goes over the one just loaded, in its own palette.
+void BrSkin_MapIcon(u16 tileTag, u16 paletteTag);
+
 // ---- the battle --------------------------------------------------------------
 // Our trainer on the player's side, as the front picture turned to face the foe, when
 // our look has no back picture. FALSE leaves pret to draw its back picture. The sprite

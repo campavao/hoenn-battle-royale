@@ -132,6 +132,7 @@ static const u8 sRegionMapPlayerIcon_MayGfx[] = INCGFX_U8("graphics/pokenav/regi
 #if BR
 #include "br/br_pick.h"
 #include "br/br_map.h"
+#include "br/br_skin.h"
 #endif
 
 static const mapsec_u16_t sRegionMap_SpecialPlaceLocations[][2] =
@@ -1477,6 +1478,9 @@ void CreateRegionMapPlayerIcon(u16 tileTag, u16 paletteTag)
     }
     LoadSpriteSheet(&sheet);
     LoadSpritePalette(&palette);
+#if BR
+    BrSkin_MapIcon(tileTag, paletteTag);
+#endif
     spriteId = CreateSprite(&template, 0, 0, 1);
     sRegionMap->playerIconSprite = &gSprites[spriteId];
     if (!sRegionMap->zoomed)
