@@ -378,6 +378,16 @@
 //   2:    mapsec   u8   the section it dropped in
 //   3:    key      u16  the legendary's loot key
 
+// BR_MSG_FAME
+// page -> its own ROM only: the match is over and somebody else took it (POK-417). Cam:
+// "Everyone who is still in the game should see the hall of fame screen." The ROM
+// parades the champion's team through Emerald's own Hall of Fame, from the PARTY rows
+// the page has just handed it for that seat, under the champion's name and sprite.
+// Payload (2 + nameLen bytes):
+//   0:    seat     u8   the champion
+//   1:    nameLen  u8   0..7
+//   2..:  name     Gen 3 bytes
+
 // How many types the ROM's dispatch table has room for (br_mailbox.c; a STATIC_ASSERT
 // there keeps BR_MSG_LAST, the highest in the table, below it). A new message moves
 // LAST; the table grows only when LAST reaches COUNT, and it costs 8 bytes of EWRAM a

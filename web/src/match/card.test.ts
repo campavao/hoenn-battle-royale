@@ -5,6 +5,15 @@ import type { RosterEntry } from './roster';
 const base: RosterEntry = { seat: 3, name: 'MAY', skin: 'may', alive: true, dir: 1, isMe: false };
 
 describe("a trainer's card (POK-268)", () => {
+  it('has their lifetime stats when they said them (POK-416), the favourite by name', () => {
+    const e = { seat: 3, name: 'MAY', isMe: false, alive: true, record: { wins: 1, matches: 4, battles: 22, caught: 5, fav: 277 } } as unknown as RosterEntry;
+    expect(cardFor(e, (id) => (id === 277 ? 'TREECKO' : '?')).slice(3)).toEqual([
+      { label: 'BATTLES', value: '22' },
+      { label: 'CAUGHT', value: '5' },
+      { label: 'FAVORITE', value: 'TREECKO' },
+    ]);
+  });
+
   it('says who they are, and nothing the room cannot vouch for (POK-343)', () => {
     expect(cardFor(base)).toEqual([{ label: 'TRAINER', value: 'MAY' }]);
     expect(cardFor({ ...base, alive: false, map: { group: 0, num: 16 } })).toEqual([{ label: 'TRAINER', value: 'MAY' }]);

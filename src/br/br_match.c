@@ -27,6 +27,7 @@
 #include "br/br_hud.h"
 #include "br/br_netlink.h"
 #include "br/br_field.h"
+#include "br/br_hof.h"
 
 EWRAM_DATA struct BrMatch gBrMatch = {0};
 // START can span slots once there are more than six spawn rows. The buffer is on the
@@ -431,6 +432,7 @@ void BrMatch_HallOfFameDone(void)
     // The page is watching this byte: it is the only way it can know the parade has
     // finished rather than guessing at a duration.
     gBrMatch.phase = BR_PHASE_DONE;
+    BrHof_Done();
     SetWarpDestination(gSaveBlock1Ptr->location.mapGroup, gSaveBlock1Ptr->location.mapNum, WARP_ID_NONE,
                        gSaveBlock1Ptr->pos.x, gSaveBlock1Ptr->pos.y);
     WarpIntoMap();

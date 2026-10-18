@@ -8,6 +8,7 @@
 #include "constants/items.h"
 #include "constants/maps.h"
 #include "constants/characters.h"
+#include "br/br_tally.h"
 #include "br/br_hud.h"
 #include "br/br_ring.h"
 #include "data.h"
@@ -80,7 +81,10 @@ static void SwapRod(u16 rod)
     if (gBrLevels.rod == rod)
         return;
     if (gBrLevels.rod != ITEM_NONE && CheckBagHasItem(gBrLevels.rod, 1))
+    {
+        BrTally_Discard(1); // an old rod swapped for a better one is not used (POK-416)
         RemoveBagItem(gBrLevels.rod, 1);
+    }
     AddBagItem(rod, 1);
     gBrLevels.rod = rod;
 }

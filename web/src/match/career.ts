@@ -33,7 +33,30 @@ export interface Career {
   intro?: number;
   win?: number;
   lose?: number;
+  /** Everything every match added up (POK-416): what the results say about one match,
+   *  kept for the profile. Absent until a match has counted something. */
+  totals?: CareerTotals;
 }
+
+/** A career's lifetime stats: the room's counts (record.ts) and the ROM's own (tally.ts),
+ *  summed, and how often each species and move was fought with, for the favourites. */
+export interface CareerTotals {
+  won: number;
+  caught: number;
+  steps: number;
+  items: number;
+  trainers: number;
+  duelsWon: number;
+  took: number;
+  mons: Record<number, number>;
+  moves: Record<number, number>;
+}
+
+/** Favourites kept per career: the most-used, and enough under them that a new one can
+ *  climb past the old. */
+export const FAVOURITES_KEPT = 24;
+
+const TOTAL_COUNTS = ['won', 'caught', 'steps', 'items', 'trainers', 'duelsWon', 'took'] as const;
 
 /** The wardrobe, index for index with `sSkinGraphics` in src/br/br_ghosts.c -- which is
  *  where the sprite actually comes from, so the ROM half has to ship first or a new entry
@@ -142,6 +165,45 @@ export function skinNote(skin: number, wins: number): string {
 
 const EMPTY: Career = { matches: 0, wins: 0 };
 
+function emptyTotals(): CareerTotals {
+  return { won: 0, caught: 0, steps: 0, items: 0, trainers: 0, duelsWon: 0, took: 0, mons: {}, moves: {} };
+}
+
+/** The `FAVOURITES_KEPT` highest counts, ids that are whole numbers in range only. */
+function keepTop(raw: unknown, limit: number): Record<number, number> {
+  if (typeof raw !== 'object' || raw === null) return {};
+  const rows = Object.entries(raw as Record<string, unknown>)
+    .map(([k, v]) => [Number(k), typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 0] as const)
+    .filter(([id, n]) => Number.isInteger(id) && id > 0 && id <= limit && n > 0)
+    .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+    .slice(0, FAVOURITES_KEPT);
+  return Object.fromEntries(rows);
+}
+
+function saneTotals(raw: unknown): CareerTotals | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const t = emptyTotals();
+  for (const k of TOTAL_COUNTS) t[k] = typeof r[k] === 'number' && Number.isFinite(r[k]) && (r[k] as number) > 0 ? Math.floor(r[k] as number) : 0;
+  t.mons = keepTop(r.mons, 0xffff);
+  t.moves = keepTop(r.moves, 0xffff);
+  return t;
+}
+
+/** One match's counts, added to a career's. */
+export function addTotals(
+  into: CareerTotals | undefined,
+  match: { won: number; caught: number; steps: number; items: number; trainers: number; duelsWon: number; took: number; mons: Record<number, number>; moves: Record<number, number> },
+): CareerTotals {
+  const t = into ? { ...into, mons: { ...into.mons }, moves: { ...into.moves } } : emptyTotals();
+  for (const k of TOTAL_COUNTS) t[k] += match[k];
+  for (const [id, n] of Object.entries(match.mons)) t.mons[Number(id)] = (t.mons[Number(id)] ?? 0) + n;
+  for (const [id, n] of Object.entries(match.moves)) t.moves[Number(id)] = (t.moves[Number(id)] ?? 0) + n;
+  t.mons = keepTop(t.mons, 0xffff);
+  t.moves = keepTop(t.moves, 0xffff);
+  return t;
+}
+
 function sane(value: unknown): Career {
   if (typeof value !== 'object' || value === null) return { ...EMPTY };
   const raw = value as Record<string, unknown>;
@@ -163,6 +225,8 @@ function sane(value: unknown): Career {
   line('intro');
   line('win');
   line('lose');
+  const totals = saneTotals(raw.totals);
+  if (totals) career.totals = totals;
   // An old career picked one number for all three (POK-243). Keep what it was saying
   // rather than resetting somebody to the top of the list: the three lines it resolved
   // to are all in the new pool, because the pool starts with the pools it came from.
@@ -190,14 +254,17 @@ export function loadCareer(store: Pick<Storage, 'getItem' | 'setItem'> = localSt
   }
 }
 
-/** Folds one finished match in and saves. A placement of 1 is a win. */
+/** Folds one finished match in and saves. A placement of 1 is a win. `counts` is what
+ *  the match added to the lifetime stats, when the page could read them. */
 export function recordMatch(
   placement: number | undefined,
   store: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
+  counts?: Parameters<typeof addTotals>[1],
 ): Career {
   const career = loadCareer(store);
   career.matches++;
   if (placement === 1) career.wins++;
+  if (counts) career.totals = addTotals(career.totals, counts);
   if (placement !== undefined && (career.best === undefined || placement < career.best)) {
     career.best = placement;
   }
@@ -264,14 +331,6 @@ export const STAR_WINS = [1, 8, 15, 25];
 
 export function cardStars(wins: number): number {
   return STAR_WINS.filter((w) => wins >= w).length;
-}
-
-/** The card's IDNo.: five digits, the same for the same name, the way Emerald's is the
- *  same for the same save. Nothing reads it; a card without one looked unfinished. */
-export function cardId(name: string): string {
-  let h = 0;
-  for (const ch of name) h = (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0;
-  return String(h % 100000).padStart(5, '0');
 }
 
 export function ordinal(n: number): string {

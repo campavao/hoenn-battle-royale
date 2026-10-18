@@ -1,5 +1,6 @@
 #include "global.h"
 #if BR
+#include "br/br_hof.h"
 #include "br/br_match.h"
 #endif
 #include "hall_of_fame.h"
@@ -437,6 +438,10 @@ void CB2_DoHallOfFameScreenDontSaveData(void)
     }
 }
 
+#if BR
+// The team is the champion's, which on anybody else's screen is not ours (POK-417).
+#define gPlayerParty BrHof_Party()
+#endif
 static void Task_Hof_InitMonData(u8 taskId)
 {
     u16 i, j;
@@ -482,6 +487,9 @@ static void Task_Hof_InitMonData(u8 taskId)
         gTasks[taskId].func = Task_Hof_InitTeamSaveData;
 }
 
+#if BR
+#undef gPlayerParty
+#endif
 static void Task_Hof_InitTeamSaveData(u8 taskId)
 {
     u16 i;
@@ -701,8 +709,13 @@ static void Task_Hof_DisplayPlayer(u8 taskId)
     ShowBg(0);
     ShowBg(1);
     ShowBg(3);
+#if BR
+    gTasks[taskId].tPlayerSpriteID = CreateTrainerPicSprite(BrHof_TrainerPic(PlayerGenderToFrontTrainerPicId_Debug(gSaveBlock2Ptr->playerGender, TRUE)), TRUE, 120, 72, 6, TAG_NONE);
+    AddWindow(BrHof_PlayerWindow()); // the name, and no IDNo. (POK-418)
+#else
     gTasks[taskId].tPlayerSpriteID = CreateTrainerPicSprite(PlayerGenderToFrontTrainerPicId_Debug(gSaveBlock2Ptr->playerGender, TRUE), TRUE, 120, 72, 6, TAG_NONE);
     AddWindow(&sHof_WindowTemplate);
+#endif
     LoadWindowGfx(1, gSaveBlock2Ptr->optionsWindowFrameType, 0x21D, BG_PLTT_ID(13));
     LoadPalette(GetTextWindowPalette(1), BG_PLTT_ID(14), PLTT_SIZE_4BPP);
     gTasks[taskId].tFrameCount = 120;
@@ -732,7 +745,11 @@ static void Task_Hof_WaitAndPrintPlayerInfo(u8 taskId)
 
 static void Task_Hof_ExitOnKeyPressed(u8 taskId)
 {
+#if BR
+    if (JOY_NEW(A_BUTTON) || BrHof_LetGo(gTasks[taskId].tFrameCount++))
+#else
     if (JOY_NEW(A_BUTTON))
+#endif
     {
         FadeOutBGM(4);
         gTasks[taskId].func = Task_Hof_HandlePaletteOnExit;
@@ -1192,9 +1209,11 @@ static void HallOfFame_PrintMonInfo(struct HallofFameMon *currMon, u8 unused1, u
         ConvertIntToDecimalStringN(stringPtr, currMon->lvl, STR_CONV_MODE_LEFT_ALIGN, 3);
         AddTextPrinterParameterized3(0, FONT_NORMAL, 0x24, 0x11, sMonInfoTextColors, TEXT_SKIP_DRAW, text);
 
+#if !BR
         stringPtr = StringCopy(text, gText_IDNumber);
         ConvertIntToDecimalStringN(stringPtr, (u16)(currMon->tid), STR_CONV_MODE_LEADING_ZEROS, 5);
         AddTextPrinterParameterized3(0, FONT_NORMAL, 0x68, 0x11, sMonInfoTextColors, TEXT_SKIP_DRAW, text);
+#endif
 
         CopyWindowToVram(0, COPYWIN_FULL);
     }
@@ -1206,6 +1225,10 @@ static void HallOfFame_PrintPlayerInfo(u8 unused1, u8 unused2)
     u32 width;
     u16 trainerId;
 
+#if BR
+    BrHof_PrintPlayer(1, sPlayerInfoTextColors); // the champion's name, no IDNo. or TIME (POK-418)
+    return;
+#endif
     FillWindowPixelBuffer(1, PIXEL_FILL(1));
     PutWindowTilemap(1);
     DrawStdFrameWithCustomTileAndPalette(1, FALSE, 0x21D, 0xD);

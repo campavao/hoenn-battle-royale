@@ -24,6 +24,7 @@
 #include "constants/region_map_sections.h"
 #include "constants/songs.h"
 #include "constants/weather.h"
+#include "br/br_tally.h"
 #include "br/br_event.h"
 #include "br/br_field.h"
 #include "br/br_hud.h"
@@ -432,8 +433,10 @@ bool8 BrStory_Hands(const struct BrLootItem *it)
     }
     if (person->wants == ITEM_NONE)
         return TRUE;
+    BrTally_Discard(1); // handed over, not used (POK-416)
     if (RemoveBagItem(person->wants, 1))
         return TRUE;
+    BrTally_Discard(0);
     p = BrHud_Append(line, last, sText_Wants);
     BrHud_Append(p, last, GetItemName(person->wants));
     PlaySE(SE_FAILURE);

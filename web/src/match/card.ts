@@ -20,12 +20,17 @@ export interface CardLine {
   value: string;
 }
 
-export function cardFor(entry: RosterEntry): CardLine[] {
+/** `speciesName` names their favourite, when they said one (POK-416). */
+export function cardFor(entry: RosterEntry, speciesName?: (species: number) => string): CardLine[] {
   const lines: CardLine[] = [{ label: 'TRAINER', value: entry.name || `P${entry.seat}` }];
   if (entry.isMe) lines.push({ label: '', value: 'THIS IS YOU' });
   else if (entry.record) {
     lines.push({ label: 'WINS', value: String(entry.record.wins) }, { label: 'PLAYED', value: String(entry.record.matches) });
     if (entry.record.best !== undefined) lines.push({ label: 'BEST', value: ordinal(entry.record.best) });
+    // Their lifetime stats (POK-416, Cam: "save that for global profile").
+    if (entry.record.battles !== undefined) lines.push({ label: 'BATTLES', value: String(entry.record.battles) });
+    if (entry.record.caught !== undefined) lines.push({ label: 'CAUGHT', value: String(entry.record.caught) });
+    if (entry.record.fav !== undefined && speciesName) lines.push({ label: 'FAVORITE', value: speciesName(entry.record.fav) });
   }
   return lines;
 }

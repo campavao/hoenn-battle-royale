@@ -170,6 +170,72 @@ describe("one match's books (POK-330 #42)", () => {
     expect(session.parties.get(7)).toHaveLength(2);
   });
 
+  // POK-417: "Everyone who is still in the game should see the hall of fame screen."
+  it("parades somebody else's win in our own ROM: the team that came after the win, and their name", () => {
+    const { session, toRom, roster } = books();
+    session.note(start([0, 7]), 'page');
+    // A team kept from a peek mid-match is the team they had then: not paraded.
+    session.note({ t: 'party', seat: 7, mons: [mon] }, { from: 7 });
+    session.note({ t: 'win', seat: 7 }, 'page');
+    expect(toRom.filter((m) => m.t === 'fame')).toEqual([]);
+    session.note({ t: 'party', seat: 7, mons: [mon, mon] }, { from: 7 });
+    expect(toRom.slice(1)).toEqual([
+      { t: 'party', seat: 7, mons: [mon, mon] },
+      { t: 'fame', seat: 7, name: roster.nameOf(7) },
+    ]);
+    // Once: their ROM's party coming again is not a second parade.
+    session.note({ t: 'party', seat: 7, mons: [mon, mon] }, { from: 7 });
+    expect(toRom.filter((m) => m.t === 'fame')).toHaveLength(1);
+  });
+
+  it('parades nothing extra for our own win, or for somebody who is not the champion', () => {
+    const { session, toRom } = books();
+    session.note(start([0, 7]), 'page');
+    session.note({ t: 'win', seat: 0 }, 'page');
+    session.note({ t: 'party', seat: 0, mons: [mon] }, 'rom');
+    session.note({ t: 'party', seat: 7, mons: [mon] }, { from: 7 });
+    expect(toRom.map((m) => m.t)).toEqual(['result']);
+  });
+
+  it("waits for anybody's parade before the exit, not only its champion's", () => {
+    const over = { done: false };
+    const exit = vi.fn();
+    const { session } = books({ exit, grace: new EndGrace({ graceMs: 4_000, winMaxMs: 60_000, pollMs: 500, paradeDone: () => over.done }) });
+    session.note(start([0, 7]), 'page');
+    session.note({ t: 'win', seat: 7 }, 'page');
+    vi.advanceTimersByTime(10_000);
+    expect(exit, 'a grace would have taken it at four seconds').not.toHaveBeenCalled();
+    over.done = true;
+    vi.advanceTimersByTime(500);
+    expect(exit).toHaveBeenCalledTimes(1);
+  });
+
+  // POK-416: what our own ROM counted goes in the results and the career.
+  it('zeroes the ROM\'s counts as a match starts, and reads them into the career once it is decided', () => {
+    const tally = { steps: 120, won: 3, caught: 1, items: 2, mons: { 277: 4 }, moves: { 1: 4 } };
+    const zero = vi.fn();
+    const read = vi.fn(() => tally);
+    const { session, store } = books({ tally: { zero, read } });
+    session.note(start([0, 7]), 'page');
+    expect(zero).toHaveBeenCalledTimes(1);
+    expect(session.tally).toBeNull();
+    session.note({ t: 'npcout', seat: 0, map: ROUTE_101, localId: 3 }, 'rom');
+    session.note({ t: 'win', seat: 0 }, 'page');
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(session.tally).toEqual(tally);
+    expect(loadCareer(store).totals).toMatchObject({ won: 3, caught: 1, steps: 120, items: 2, trainers: 1, mons: { 277: 4 }, moves: { 1: 4 } });
+    session.note(start([0, 7]), 'page');
+    expect(session.tally, 'a new match starts from nothing').toBeNull();
+  });
+
+  it("counts what the room saw into the career on a build with no tally", () => {
+    const { session, store } = books();
+    session.note(start([0, 7]), 'page');
+    session.note({ t: 'npcout', seat: 0, map: ROUTE_101, localId: 3 }, 'rom');
+    session.note({ t: 'win', seat: 7 }, 'page');
+    expect(loadCareer(store).totals).toMatchObject({ won: 0, trainers: 1 });
+  });
+
   it('what the page made itself is nobody busy and nothing for the bots', () => {
     const { spy, bots } = spyBots();
     const { session } = books({ bots: () => bots });

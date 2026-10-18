@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_tally.h"
+#endif
 #include "battle_setup.h"
 #include "bike.h"
 #include "coord_event_weather.h"
@@ -160,6 +163,9 @@ int ProcessPlayerFieldInput(struct FieldInput *input)
     if (input->tookStep)
     {
         IncrementGameStat(GAME_STAT_STEPS);
+#if BR
+        BrTally_Step(); // distance, for the match's stats (POK-416)
+#endif
         IncrementBirthIslandRockStepCount();
         if (TryStartStepBasedScript(&position, metatileBehavior, playerDirection) == TRUE)
             return TRUE;

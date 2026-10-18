@@ -2,14 +2,20 @@
 // parade, a watcher's for the fight on their screen. The page holds these from the start
 // of a match, and the screen itself stays out of main.js until it is wanted (POK-407).
 
-/** The champion's results wait for their Hall of Fame (BR_PHASE_DONE), then stay up for
- *  the grace everybody else gets. EndGrace polls `finished` as its paradeDone, so the one
+/** The results wait for the Hall of Fame (BR_PHASE_DONE), then stay up for the grace
+ *  everybody else gets. Everybody's, not only the champion's (POK-417): somebody else's
+ *  win is paraded in our ROM too, once their team has reached it. EndGrace polls `finished` as its paradeDone, so the one
  *  poll does both: the first time the parade is seen over, the results are drawn
  *  (`onParaded`); the exit comes `graceMs` after that. A parade that never ends is given
  *  up on after `giveUpMs`, and the results go up anyway. */
 export class ParadeHold {
   private seenAt: number | null = null;
   private waitingSince: number | null = null;
+  /** Somebody else's win: their parade may never come (no team ever reached us), so it
+   *  is waited for `startMs` to begin, a replay it waits behind not counted. */
+  private other = false;
+  private startWaited = 0;
+  private lastLook: number | null = null;
 
   constructor(
     private readonly opts: {
@@ -23,6 +29,13 @@ export class ParadeHold {
        *  regardless, and a stuck parade used to hold the results past it: its champion
        *  never saw them at all (POK-320 review). */
       giveUpMs: number;
+      /** The parade is on (BR_PHASE_WIN) or over. Undefined: never asked. */
+      started?(): boolean;
+      /** How long somebody else's parade is given to begin. */
+      startMs?: number;
+      /** Our ROM is playing a fight back (gBrSpectate.watching), which its parade waits
+       *  behind (br_hof.c). */
+      paused?(): boolean;
       onParaded(): void;
       now?(): number;
     },
@@ -37,10 +50,12 @@ export class ParadeHold {
     return this.seenAt !== null;
   }
 
-  /** Whether `seat`'s results wait: its own win, with the parade still to be seen over.
-   *  The room and solo each asked this themselves, and nothing pinned either. */
+  /** Whether `seat`'s results wait: anybody's win, with the parade still to be seen
+   *  over. The room and solo each asked this themselves, and nothing pinned either. */
   holds(winner: number | undefined, seat: number): boolean {
-    return this.opts.done !== undefined && winner === seat && !this.paraded;
+    if (this.opts.done === undefined || winner === undefined || this.paraded) return false;
+    this.other = winner !== seat;
+    return true;
   }
 
   /** For EndGrace: the parade over, and the results read for the grace since. */
@@ -48,17 +63,29 @@ export class ParadeHold {
     const now = this.now();
     if (this.seenAt === null) {
       this.waitingSince ??= now;
-      if (!this.opts.done?.() && now - this.waitingSince < this.opts.giveUpMs) return false;
+      if (!this.opts.done?.() && now - this.waitingSince < this.opts.giveUpMs && !this.noShow(now)) return false;
       this.seenAt = now;
       this.opts.onParaded();
     }
     return now - this.seenAt >= this.opts.graceMs;
   };
 
+  /** Somebody else's parade has had its `startMs` to begin and has not. */
+  private noShow(now: number): boolean {
+    const since = this.lastLook ?? now;
+    this.lastLook = now;
+    if (!this.other || this.opts.startMs === undefined || this.opts.started?.()) return false;
+    if (!this.opts.paused?.()) this.startWaited += now - since;
+    return this.startWaited >= this.opts.startMs;
+  }
+
   /** The next match's champion waits for the next parade. */
   reset(): void {
     this.seenAt = null;
     this.waitingSince = null;
+    this.other = false;
+    this.startWaited = 0;
+    this.lastLook = null;
   }
 }
 

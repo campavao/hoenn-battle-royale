@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_tally.h"
+#endif
 #include "item.h"
 #include "berry.h"
 #include "string_util.h"
@@ -385,6 +388,9 @@ bool8 RemoveBagItem(u16 itemId, u16 count)
 
         if (totalQuantity < count)
             return FALSE;   // We don't have enough of the item
+#if BR
+        BrTally_ItemOut(itemId, count); // items used, for the match's stats (POK-416)
+#endif
 
         if (CurMapIsSecretBase() == TRUE)
         {

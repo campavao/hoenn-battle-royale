@@ -54,6 +54,8 @@ describe('slots round trip (single slot)', () => {
     { t: 'peek', seat: 2, target: 5 },
     { t: 'shot', seat: 2, secs: 17 },
     { t: 'follow', seat: null },
+    { t: 'fame', seat: 3, name: 'STEVEN' },
+    { t: 'fame', seat: 30 },
     { t: 'ticker', seat: 1, kind: 'kill', text: 'ASH KO MISTY' },
     { t: 'ticker', seat: 1, text: 'the fog is closing in' },
     { t: 'ticker', seat: 30, kind: 'intro', text: 'What a high level you are!' },

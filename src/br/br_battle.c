@@ -870,6 +870,11 @@ static const u8 sSkinPics[] =
     TRAINER_PIC_LASS,
 };
 
+u16 BrBattle_SkinPic(u8 skin, u16 pic)
+{
+    return skin < ARRAY_COUNT(sSkinPics) ? sSkinPics[skin] : pic;
+}
+
 bool8 BrBattle_RecordedWildOpponent(void)
 {
     return RecordedBattle_IsSpectateLive();
@@ -878,14 +883,10 @@ bool8 BrBattle_RecordedWildOpponent(void)
 u32 BrBattle_OpponentPic(u32 pic)
 {
     u8 seat = OpponentSeat();
-    u8 skin;
 
     if (seat >= BR_MAX_SEATS || !gBrSeats[seat].present)
         return pic;
-    skin = gBrSeats[seat].skin;
-    if (skin >= ARRAY_COUNT(sSkinPics))
-        return pic;
-    return sSkinPics[skin];
+    return BrBattle_SkinPic(gBrSeats[seat].skin, pic);
 }
 
 u8 BrBattle_FoeOf(u8 battler, u8 target)

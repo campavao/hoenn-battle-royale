@@ -33,7 +33,7 @@ export interface RosterEntry {
   isMe: boolean;
   /** Their career as they said it (a `card`, POK-339); absent for a bot, and for a
    *  page older than the message. */
-  record?: { wins: number; matches: number; best?: number };
+  record?: { wins: number; matches: number; best?: number; battles?: number; caught?: number; fav?: number };
 }
 
 const DEFAULT_DIR: Dir = 1; // DIR_SOUTH
@@ -137,7 +137,7 @@ export class Roster {
         this.standAll();
         return;
       case 'card':
-        this.entry(msg.seat).record = { wins: msg.wins, matches: msg.matches, best: msg.best };
+        this.entry(msg.seat).record = { wins: msg.wins, matches: msg.matches, best: msg.best, battles: msg.battles, caught: msg.caught, fav: msg.fav };
         return;
       case 'place': {
         const e = this.entry(msg.seat);

@@ -1,0 +1,44 @@
+# hof-watcher: everybody still in the match sees the Hall of Fame (POK-417). Seat 1,
+# a HIKER, took the match; our page hands our ROM their PARTY and then a FAME naming
+# them, and our ROM parades their team under their name and sprite -- not ours -- and
+# comes back to the map with BR_PHASE_DONE for the page to read. No IDNo. anywhere on
+# it (POK-418): a mon's line is its name, species and level, and the box at the end
+# is the name alone. Nobody presses A: the parade lets the watcher go by itself.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# seat 1 placed two tiles east of us, wearing skin 4 (HIKER)
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 04
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrSeats+17 4
+# their party: two mons -- species 0x0115 Lv12 named TREKO, and the same at Lv14
+# named ZIGGY, a different personality each (+28) so the genders differ
+pokebytes gDecompressionBuffer 01 02 15 01 0C 22 00 38 00 00 01 00 23 00 47 00 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+copy gDecompressionBuffer+102 gDecompressionBuffer+2 100
+poke u8 gDecompressionBuffer+104 14
+pokebytes gDecompressionBuffer+130 01 00 00 00
+pokebytes gDecompressionBuffer+132 00 00 00 00
+pokebytes gDecompressionBuffer+139 D4 C3 C1 C1 D3
+mailsend gBrMailbox 7 gDecompressionBuffer 202
+wait 10
+# FAME: seat 1, named STEVEN
+pokebytes gDecompressionBuffer+0x400 01 06 CD CE BF D0 BF C8
+mailsend gBrMailbox 33 gDecompressionBuffer+0x400 8
+waitfor u8 gBrMatch 4 120
+wait 330
+shot mon-1
+wait 200
+shot mon-2
+wait 400
+shot team
+waitfor u8 gBrMatch 4 1
+wait 200
+shot champion
+# ...and no A: a watcher's last screen moves on by itself (BrHof_LetGo), four seconds in
+waitfor u8 gBrMatch 5 600
+wait 120
+shot after
+expect u8 gBrMatch 5
+# and it is let go of: a second FAME after the parade would parade again, not crash
+say hof watcher ok

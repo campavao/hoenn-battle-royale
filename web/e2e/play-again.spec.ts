@@ -42,6 +42,9 @@ const RESULTS_HELD_MAX_MS = 65_000;
 /** A watcher's replay that ends this close to the cap never ended on its own: ReplayHold
  *  let go of it. The longest final fight measured played out 35s past the win. */
 const REPLAY_CAP_MS = 57_000;
+/** How long a watcher's results wait for the champion's parade to begin in its own ROM
+ *  (app.ts's FAME_START_MS, POK-417), past the fight on screen. */
+const FAME_START_MS = 15_000;
 
 /** Waits out a whole match from START to `watcher`'s results, `director` being the page
  *  that runs it (the same page when the host is the one watching). Two things are held
@@ -55,6 +58,7 @@ const REPLAY_CAP_MS = 57_000;
 async function watchUntilResults(watcher: Page, director: Page = watcher): Promise<void> {
   const STALE_MS = 5_000;
   const spectate = loadSymbols().gBrSpectate;
+  const matchBase = loadSymbols().gBrMatch;
   const outAt = new Map<number, number>();
   const deadline = Date.now() + WHOLE_MATCH_MS;
   const me = await watcher.evaluate(() => (window as unknown as BrWindow).__br.bridge.seat as number);
@@ -64,6 +68,8 @@ async function watchUntilResults(watcher: Page, director: Page = watcher): Promi
   let winner: number | undefined;
   let replayEndAt: number | undefined;
   let watchedAtWin = -1;
+  /** When the watcher's ROM was seen back from the champion's Hall of Fame (POK-417). */
+  let paradeDoneAt: number | undefined;
   while (!(await watcher.locator('#results-panel').isVisible())) {
     expect(Date.now(), 'the match was won within a whole match').toBeLessThan(deadline);
     const now = Date.now();
@@ -78,10 +84,11 @@ async function watchUntilResults(watcher: Page, director: Page = watcher): Promi
       watchedAtWin = watched;
     }
     for (const seat of match!.out) if (!outAt.has(seat)) outAt.set(seat, now);
-    const rom = await watcher.evaluate((base) => {
+    const rom = await watcher.evaluate(([base, match]) => {
       const emu = (window as unknown as HbrWindow).__hbr.emu;
-      return { watching: emu.read(base + 5, 8) !== 0, lo: emu.read(base + 6, 8), hi: emu.read(base + 7, 8) };
-    }, spectate);
+      return { watching: emu.read(base + 5, 8) !== 0, lo: emu.read(base + 6, 8), hi: emu.read(base + 7, 8), phase: emu.read(match, 8) };
+    }, [spectate, matchBase] as const);
+    if (rom.phase === 5 && paradeDoneAt === undefined) paradeDoneAt = now;
     const id = rom.watching ? rom.lo | (rom.hi << 8) : -1;
     if (id !== -1 && id !== watched) {
       handed++;
@@ -109,18 +116,25 @@ async function watchUntilResults(watcher: Page, director: Page = watcher): Promi
   // won was never out to watch. Written down, so a run that checked nothing says so.
   const out = outAt.has(me) ? 'out' : 'never out';
   const replay = replayEndAt === undefined ? 'none' : `${replayEndAt - winAt!}ms`;
-  const note = `${out}, ${handed} fights handed, watching ${watchedAtWin} at the win, its replay over ${replay} after, results ${after}ms after`;
+  const parade = paradeDoneAt === undefined ? 'none' : `${paradeDoneAt - winAt!}ms`;
+  const note = `${out}, ${handed} fights handed, watching ${watchedAtWin} at the win, its replay over ${replay} after, the parade over ${parade} after, results ${after}ms after`;
   test.info().annotations.push({ type: 'watched', description: note });
   console.log(`play-again: ${note}`);
   expect(after, `the results ${Math.round(after / 1000)}s after the win`).toBeLessThan(RESULTS_HELD_MAX_MS);
   // The champion's wait is its Hall of Fame, which nothing here measures; a watcher's is
-  // the fight on its screen, and once that is over the results are next. (They can go up
-  // over a replay still on, too: ReplayHold lets go at its cap, or of a replay it never saw.)
+  // the fight on its screen, then the champion's Hall of Fame in its own ROM (POK-417),
+  // and once those are over the results are next. (They can go up over a replay still on,
+  // too: ReplayHold lets go at its cap, or of a replay it never saw.)
   if (winner !== me) {
     const held = (replayEndAt ?? shown) - winAt!;
     expect(held, `the fight on screen held the results ${Math.round(held / 1000)}s: ReplayHold's cap, not its end`).toBeLessThan(REPLAY_CAP_MS);
-    const from = Math.max(winAt!, replayEndAt ?? 0);
-    expect(shown - from, `the results ${Math.round((shown - from) / 1000)}s after the win and the fight on screen`).toBeLessThan(RESULTS_AFTER_MS);
+    if (paradeDoneAt !== undefined) {
+      expect(shown - paradeDoneAt, `the results ${Math.round((shown - paradeDoneAt) / 1000)}s after the parade`).toBeLessThan(RESULTS_AFTER_MS);
+    } else {
+      // No parade: no team reached us, and its window ran out.
+      const from = Math.max(winAt!, replayEndAt ?? 0);
+      expect(shown - from, `the results ${Math.round((shown - from) / 1000)}s after the win and the fight on screen`).toBeLessThan(FAME_START_MS + RESULTS_AFTER_MS);
+    }
   }
 }
 

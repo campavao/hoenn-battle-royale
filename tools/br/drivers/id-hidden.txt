@@ -1,0 +1,44 @@
+# id-hidden: no IDNo. anywhere (POK-418, Cam: "hide the player id since it's all 0s, for
+# all places"). The trainer card off the start menu, and a mon's summary, which said
+# IDNo.00000 under its OT. The Hall of Fame's are hof-watcher's and win-parade's.
+# capture-only: the IDNo. is drawn text; card and summary are compared by eye against pret
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+tap START
+wait 30
+# POKeMON, BAG, MAP, the trainer card, EXIT
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+tap DOWN
+wait 6
+expect u8 *gBrStartMenu 3
+tap A
+wait 240
+shot card
+tap B
+wait 400
+tap B
+wait 60
+tap START
+wait 60
+tap UP
+wait 6
+tap UP
+wait 6
+tap UP
+wait 6
+expect u8 *gBrStartMenu 0
+tap A
+wait 90
+tap A
+wait 30
+# SUMMARY, the first of the mon's options
+tap A
+wait 240
+shot summary
+say id hidden ok

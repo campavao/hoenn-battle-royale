@@ -229,7 +229,7 @@ describe('the drawn screens (POK-320)', () => {
 });
 
 describe('the trainer card (POK-335)', () => {
-  const model = (over: Partial<import('./screens').CardFace> = {}) => ({
+  const model = (over: Partial<import('./profile').CardFace> = {}) => ({
     face: { name: 'CAM', skin: 0, wins: 3, played: 7, best: 1, ...over },
     rows: [{ label: 'SEND PLAY COUNT', detail: 'ON', id: 'trainer-stats', onPress: () => {} }],
     note: '',
@@ -239,7 +239,7 @@ describe('the trainer card (POK-335)', () => {
   });
 
   it("draws Emerald's card with its fields where MONEY, POKéDEX and TIME go", async () => {
-    const { trainerScreen } = await import('./screens');
+    const { trainerScreen } = await import('./profile');
     const { fakeCanvas } = await import('./fakecanvas');
     const { measure } = await import('./emerald');
     const { canvas, texts } = fakeCanvas();
@@ -250,7 +250,8 @@ describe('the trainer card (POK-335)', () => {
       expect(at(label)).toMatchObject({ x: 24, y });
       expect(at(value), `${value} right-aligned to the card's value column`).toMatchObject({ x: 136 - measure(value), y });
     }
-    expect(texts.find((d) => d.text.startsWith('IDNo.'))?.y).toBe(17);
+    // No IDNo. (POK-418): every trainer's was 00000.
+    expect(texts.some((d) => d.text.startsWith('IDNo.'))).toBe(false);
     const best = model({ best: undefined });
     const fresh = fakeCanvas();
     trainerScreen(() => best).paint(fresh.canvas, 320);
@@ -258,9 +259,9 @@ describe('the trainer card (POK-335)', () => {
   });
 
   it('wears its stars’ colour and a girl’s background, a badge per win, and the skin’s portrait', async () => {
-    const { trainerScreen, CARD_H } = await import('./screens');
+    const { trainerScreen, CARD_H } = await import('./profile');
     const { fakeCanvas } = await import('./fakecanvas');
-    const paint = (face: Partial<import('./screens').CardFace>) => {
+    const paint = (face: Partial<import('./profile').CardFace>) => {
       const { canvas, pictures } = fakeCanvas();
       trainerScreen(() => model(face)).paint(canvas, 320);
       return pictures;
@@ -280,7 +281,7 @@ describe('the trainer card (POK-335)', () => {
   });
 
   it('still draws its words, and still opens your name and the wardrobe, when its art never comes', async () => {
-    const { trainerScreen } = await import('./screens');
+    const { trainerScreen } = await import('./profile');
     const { fakeCanvas } = await import('./fakecanvas');
     const { canvas, texts, frames } = fakeCanvas(new Set(['trainer-card.png']));
     const painted = trainerScreen(() => model()).paint(canvas, 320);
@@ -290,7 +291,7 @@ describe('the trainer card (POK-335)', () => {
   });
 
   it('opens your name and the wardrobe from the card, first in the rows, and fits BACK on a 320 screen', async () => {
-    const { trainerScreen } = await import('./screens');
+    const { trainerScreen } = await import('./profile');
     const { fakeCanvas } = await import('./fakecanvas');
     const pressed: string[] = [];
     const m = { ...model(), onName: () => pressed.push('name'), onSkin: () => pressed.push('skin') };
@@ -418,7 +419,7 @@ describe('MY LOOK (POK-337)', () => {
   });
 
   it('turns the strip round the wardrobe, the one you are on in the middle', async () => {
-    const { lookStrip, stepSkin } = await import('./screens');
+    const { lookStrip, stepSkin } = await import('./profile');
     expect(stepSkin(0, 1)).toBe(1);
     expect(stepSkin(1, 1), 'past the retired rivals').toBe(4);
     expect(stepSkin(0, -1)).toBe(WARDROBE[WARDROBE.length - 1]);
@@ -427,14 +428,14 @@ describe('MY LOOK (POK-337)', () => {
   });
 
   it("says a skin's price, or that it is yours", async () => {
-    const { lookNote } = await import('./screens');
+    const { lookNote } = await import('./profile');
     expect(lookNote(0, 0, 0)).toBe('your sprite');
     expect(lookNote(4, 0, 0)).toBe('LOCKED -- 1 win');
     expect(lookNote(6, 2, 0)).toBe('LOCKED -- 4 wins');
   });
 
   it('draws the big picture, the strip and three dialogue boxes, and fits BACK on a 320 screen', async () => {
-    const { lookScreen } = await import('./screens');
+    const { lookScreen } = await import('./profile');
     const { fakeCanvas } = await import('./fakecanvas');
     const { canvas, texts, pictures, boxes, sprites, arrows } = fakeCanvas();
     const painted = lookScreen(() => model({ browsing: 4, worn: 1 })).paint(canvas, 320);
@@ -461,7 +462,7 @@ describe('MY LOOK (POK-337)', () => {
   });
 
   it('turns a line with a press, its arrows, or left and right on its row, round the pool', async () => {
-    const { lookScreen } = await import('./screens');
+    const { lookScreen } = await import('./profile');
     const { fakeCanvas } = await import('./fakecanvas');
     const said: string[] = [];
     const screen = lookScreen(() => model({ onLine: (slot: string, i: number) => said.push(`${slot}${i}`) }));
@@ -478,7 +479,7 @@ describe('MY LOOK (POK-337)', () => {
   });
 
   it('turns the strip with its arrows, a press on a sprite, or left and right on it', async () => {
-    const { lookScreen } = await import('./screens');
+    const { lookScreen } = await import('./profile');
     const { fakeCanvas } = await import('./fakecanvas');
     const went: number[] = [];
     const screen = lookScreen(() => model({ onBrowse: (s: number) => went.push(s) }));

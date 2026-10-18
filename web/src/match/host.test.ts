@@ -812,6 +812,24 @@ describe('solo link', () => {
     solo.host.dispose();
   });
 
+  // POK-417: everybody still in the game sees the Hall of Fame -- a bot's too, whose team
+  // only the host that walks it knows.
+  it("hands a bot champion's team and name to the room and to our own ROM's Hall of Fame", () => {
+    const solo = alone(1);
+    solo.host.begin();
+    const [bot] = solo.host.bots.seats;
+    solo.romEmit({ t: 'out', seat: 0 });
+    solo.frame();
+    expect(solo.toRom.filter((m) => m.t === 'win')).toEqual([{ t: 'win', seat: bot }]);
+    const party = solo.toRoom.mock.calls.map(([m]) => m).find((m) => m.t === 'party');
+    expect(party, 'said to the room').toMatchObject({ t: 'party', seat: bot });
+    solo.frame();
+    const ours = solo.drained().filter((m) => m.t === 'party' || m.t === 'fame');
+    expect(ours.map((m) => m.t), 'and paraded here').toEqual(['party', 'fame']);
+    expect(ours[1]).toEqual({ t: 'fame', seat: bot, name: solo.link.roster.nameOf(bot).toUpperCase().slice(0, 7) });
+    solo.host.dispose();
+  });
+
   it('gives the last seat standing the win, and the books decide it once', () => {
     const solo = alone(1);
     solo.host.begin();

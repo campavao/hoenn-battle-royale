@@ -34,6 +34,8 @@ export interface SeatRecord {
 export interface RecordLine {
   label: string;
   value: string;
+  /** A row of its own: a name, which two to a row would cut short. */
+  wide?: boolean;
 }
 
 /** Everything but `rings`, which is not a tally -- it is read off the clock at the end. */

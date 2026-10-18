@@ -30,6 +30,7 @@ import type {
   BstartMsg,
   TurnMsg,
   FollowMsg,
+  FameMsg,
   PeekMsg,
   ShotMsg,
   ChallengeMsg,
@@ -330,6 +331,18 @@ function decodeFollow(bytes: Uint8Array): FollowMsg {
   const seat = r.u8();
   if (seat === 0xff) return { t: 'follow', seat: null };
   return r.remaining > 0 ? { t: 'follow', seat, name: r.gen3String() } : { t: 'follow', seat };
+}
+// The champion, and their name for the Hall of Fame's box (POK-417).
+function encodeFame(m: FameMsg): Uint8Array {
+  const w = new Writer().u8(m.seat);
+  writeGen3(w, Array.from((m.name ?? '').toUpperCase()).filter(canEncodeGen3).join(''), 7);
+  return w.toBytes();
+}
+function decodeFame(bytes: Uint8Array): FameMsg {
+  const r = new Reader(bytes);
+  const seat = r.u8();
+  const name = r.gen3String();
+  return name ? { t: 'fame', seat, name } : { t: 'fame', seat };
 }
 function encodeTurn(m: TurnMsg): Uint8Array {
   return new Writer().u16(m.battle).raw(m.data).toBytes();
@@ -821,6 +834,7 @@ const CODECS: Record<string, Codec> = {
   bstart: { type: BR_MSG.BSTART, encode: (m) => encodeBstart(m as BstartMsg), decode: decodeBstart },
   turn: { type: BR_MSG.TURN, encode: (m) => encodeTurn(m as TurnMsg), decode: decodeTurn },
   follow: { type: BR_MSG.FOLLOW, encode: (m) => encodeFollow(m as FollowMsg), decode: decodeFollow },
+  fame: { type: BR_MSG.FAME, encode: (m) => encodeFame(m as FameMsg), decode: decodeFame },
   peek: { type: BR_MSG.PEEK, encode: (m) => encodePeek(m as PeekMsg), decode: decodePeek },
   shot: { type: BR_MSG.SHOT, encode: (m) => encodeShot(m as ShotMsg), decode: decodeShot },
   party: { type: BR_MSG.PARTY, encode: (m) => encodeParty(m as PartyMsg), decode: decodeParty },
