@@ -65,4 +65,31 @@ void BrMoves_Tick(void);
 // `callback` (the bag).
 MainCallback BrMoves_TeachExit(MainCallback callback);
 
+// The cartridge's question when a level brings a fifth move (Cam, 2026-10-18, POK-400:
+// "show the normal learn/replace prompt"). A lift fills an empty slot as it always did;
+// a move that finds four already there is no longer swapped in by BrLevels' own pick but
+// asked about, party_menu.c's own "wants to learn ... should a move be deleted" and the
+// summary screen to choose the one to forget, once the field is ours again.
+//
+// The party's slot `slot` climbed from level `from`: every learnset move above `from`
+// and at or under its level that it does not know is asked about, in learnset order.
+// `count` is the party's size now; if it is not the same when the question comes, the
+// party has changed under it and nothing is asked (MOVES still has every one of them).
+void BrMoves_AskFrom(u8 slot, u8 from, u8 count);
+// The next move to ask about, for party_menu.c: TRUE with the slot and the move, and
+// FALSE when there is nothing left. A mon with a slot free by now just learns it.
+bool8 BrMoves_NextAsk(u8 *slot, u16 *move);
+
+// What is waiting to be asked. `off` is for drivers that lift a party for some other
+// reason (fog-news.txt, grows-up.txt...) and do not want a party screen in the middle of
+// it: a lift then picks the best four itself, as a match's opening climb does. The page
+// never sets it, and learn-ask.txt is the prompt's own.
+struct BrAsk
+{
+    /* 0 */ u8 from[PARTY_SIZE]; // the level each slot climbed from, 0 for nothing to ask
+    /* 6 */ u8 count;            // the party's size when it climbed
+    /* 7 */ u8 off;
+};
+extern struct BrAsk gBrAsk;
+
 #endif // GUARD_BR_MOVES_H

@@ -6,6 +6,8 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
+# a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
+poke u8 gBrAsk+7 1
 # the page writes 12 left and 12:34: the widest first line there is
 poke u8 gBrHud+0x00 12
 poke u16 gBrHud+0x02 754

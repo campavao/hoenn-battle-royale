@@ -3,6 +3,8 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
+# a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
+poke u8 gBrAsk+7 1
 # party count 1
 expect u8 gPlayerPartyCount 1
 # RING: type 12, framed len 10 = hdr(07 00 00) + seat 00, phase 01, sx 25, sy 12, r 1, placeLen 0, hasElapsed 0

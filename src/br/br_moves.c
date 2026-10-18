@@ -159,6 +159,8 @@ static EWRAM_DATA u16 sTeachCount = 0;        // and how many the bag held as it
 
 #define TEACH_WAIT_FRAMES (60 * 15) // a GIVE's round trip, and the found-item jingle
 
+EWRAM_DATA struct BrAsk gBrAsk = {0};
+
 bool8 BrMoves_IsTm(u16 item)
 {
     return item >= ITEM_TM01 && item < ITEM_HM01;
@@ -220,11 +222,136 @@ static void Task_OpenTeach(u8 taskId)
     SetMainCallback2(CB2_ShowPartyMenuForItemUse);
 }
 
+void BrMoves_AskFrom(u8 slot, u8 from, u8 count)
+{
+    if (slot >= PARTY_SIZE || gBrAsk.off)
+        return;
+    if (gBrAsk.count != count)
+    {
+        u8 i;
+
+        for (i = 0; i < PARTY_SIZE; i++)
+            gBrAsk.from[i] = 0;
+        gBrAsk.count = count;
+    }
+    // A second lift before the first was asked about asks about both.
+    if (gBrAsk.from[slot] == 0 || from < gBrAsk.from[slot])
+        gBrAsk.from[slot] = from;
+}
+
+static void ClearAsks(void)
+{
+    u8 i;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+        gBrAsk.from[i] = 0;
+}
+
+// `peek`: only whether there is a question, leaving it to be asked. A move a free slot
+// takes is learnt either way.
+static bool8 FindAsk(u8 *slot, u16 *move, bool8 peek)
+{
+    u8 i, count = CalculatePlayerPartyCount();
+
+    if (count != gBrAsk.count)
+    {
+        ClearAsks();
+        return FALSE;
+    }
+    for (i = 0; i < count; i++)
+    {
+        struct Pokemon *mon = &gPlayerParty[i];
+        const u16 *learnset = gLevelUpLearnsets[GetMonData(mon, MON_DATA_SPECIES)];
+        u8 level = GetMonData(mon, MON_DATA_LEVEL);
+        u16 j;
+
+        if (gBrAsk.from[i] == 0)
+            continue;
+        for (j = 0; learnset[j] != LEVEL_UP_END; j++)
+        {
+            u8 at = (learnset[j] & LEVEL_UP_MOVE_LV) >> 9;
+            u16 id = learnset[j] & LEVEL_UP_MOVE_ID;
+
+            if (at <= gBrAsk.from[i] || at > level || MonKnowsMove(mon, id))
+                continue;
+            if (GiveMoveToMon(mon, id) != MON_HAS_MAX_MOVES)
+            {
+                gBrAsk.from[i] = at;
+                continue; // a slot came free since the lift: it just learns it
+            }
+            // Asked once: the next question starts past this level, learnt or not.
+            if (!peek)
+                gBrAsk.from[i] = at;
+            *slot = i;
+            *move = id;
+            return TRUE;
+        }
+        gBrAsk.from[i] = 0;
+    }
+    return FALSE;
+}
+
+bool8 BrMoves_NextAsk(u8 *slot, u16 *move)
+{
+    return FindAsk(slot, move, FALSE);
+}
+
+static bool8 AskPending(void)
+{
+    u8 i;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (gBrAsk.from[i] != 0)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static void Task_OpenAsk(u8 taskId)
+{
+    if (gPaletteFade.active)
+        return;
+    DestroyTask(taskId);
+    if (gMain.callback2 != CB2_Overworld || ScriptContext_IsEnabled())
+    {
+        // Something took the field during the fade: BrMoves_Tick asks again once it is
+        // ours, the questions still waiting.
+        UnlockPlayerFieldControls();
+        if (gMain.callback2 == CB2_Overworld)
+            FadeScreen(FADE_FROM_BLACK, 0);
+        return;
+    }
+    CleanupOverworldWindowsAndTilemaps();
+    SetMainCallback2(CB2_BrAskLearn);
+}
+
 // When the field is ours: no script, nobody holding the controls, standing still. A TM
 // out of a bag arrives with the bag's GIVE, a frame or more after the press, so it waits
 // for the bag to have it too.
 void BrMoves_Tick(void)
 {
+    // The questions a lift left, before a TM's: the TM waits in the bag either way.
+    if (sTeach == ITEM_NONE && AskPending())
+    {
+        u8 slot;
+        u16 move;
+
+        if (!BrField_OverworldRunning() || gMain.inBattle)
+            return;
+        if (ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked() || !IsPlayerStandingStill())
+            return;
+        // A lift whose new moves all found a free slot (or the party changed) has nothing
+        // to ask: no fade into a party screen that closes at once.
+        if (!FindAsk(&slot, &move, TRUE))
+            return;
+        PlayRainStoppingSoundEffect();
+        HideMapNamePopUpWindow();
+        LockPlayerFieldControls();
+        FadeScreen(FADE_TO_BLACK, 0);
+        CreateTask(Task_OpenAsk, 10);
+        return;
+    }
     if (sTeach == ITEM_NONE)
         return;
     if (CountTotalItemQuantityInBag(sTeach) <= sTeachHad)
