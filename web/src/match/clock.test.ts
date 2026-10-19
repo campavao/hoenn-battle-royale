@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RING_RADII, ringLabel } from './clock';
+import { RING_RADII, nextRingRadius, ringLabel } from './clock';
 
 describe('ringLabel', () => {
   it('names where the ring closes on as the safe place (POK-359)', () => {
@@ -13,5 +13,11 @@ describe('ringLabel', () => {
 
   it('says what it does not know', () => {
     expect(ringLabel(undefined, undefined)).toBe('SAFE: ?');
+  });
+});
+
+describe('nextRingRadius', () => {
+  it('is the radius the ring shrinks to after each phase, and none after the last', () => {
+    expect(RING_RADII.map((_, i) => nextRingRadius(i))).toEqual([15, 9, 7, 5, 3, 2, 0, -1, undefined]);
   });
 });

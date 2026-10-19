@@ -1,14 +1,14 @@
-# ring-place: the HUD corner names where the ring is closing, all ring phase long
-# (POK-325). The play-test missed the ninety-frame "THE FOG CLOSES IN ON" box and had
-# nothing else to go on. The corner is 12x3 now (cols 17..28, frame 16..29): "N LEFT" and
-# the clock on its first line, the place -- or FOG EVERYWHERE on the last phase -- right
-# on its second, the eye left of it or taking turns with it. Shots are for the eye.
+# ring-place: the ring's centre is kept for the MAP's prompt and the box (POK-325), and the
+# HUD corner is one line (Cam, 2026-10-18: "remove the SAFE message... bring the # left
+# and timer closer together so the whole thing takes up less space"). The corner is 11x2
+# (cols 18..28, rows 1..2, frame 17..29 and 0..3): the clock always, and beside it "N
+# LEFT", taking turns with the eye while anyone watches and with the lead's HP in the fog.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
 # a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
 poke u8 gBrAsk+7 1
-# the page writes 12 left and 12:34: the widest first line there is
+# the page writes 12 left and 12:34
 poke u8 gBrHud+0x00 12
 poke u16 gBrHud+0x02 754
 # RING phase 1, centre (25,12), r 28 -- Littleroot is inside -- naming LITTLEROOT:
@@ -33,42 +33,46 @@ expect u8 gBrRing+23 0xCE
 expect u8 gBrRing+24 0xFF
 # the phase's box is up too (a new phase with a place), and the ticker has nothing: the
 # first ring's rung is the one the match had (POK-324), so shown = CORNER|BOX. BG0's
-# tilemap is 0x0600F800, 32 cells a row, palette 15. The corner's first cell (17,1) is
-# 0x139 and its last (28,3) 0x15C; the box's first (2,11) is 0x15D, right after it -- the
-# HUD shares the start menu's and the message box's tiles (POK-329, br_hud.h). Its frame
-# is on the screen at (16,0).
+# tilemap is 0x0600F800, 32 cells a row, palette 15. The corner's first cell (18,1) is
+# 0x139 and its last (28,2) 0x14E; the box's first (2,11) is still 0x15D -- the HUD
+# shares the start menu's and the message box's tiles (POK-329, br_hud.h).
 expect u8 gBrHud+0x08 2
 expect u8 gBrHud+0x09 5
 expect u8 gBrHud+0x0A 0
-expect u16 0x0600F862 0xF139
-expect u16 0x0600F8F8 0xF15C
+expect u16 0x0600F864 0xF139
+expect u16 0x0600F8B8 0xF14E
 expect u16 0x0600FAC4 0xF15D
-expectne u16 0x0600F820 0
-# the box talks in the message box's own frame (Cam, 2026-10-18): its top-left cell
-# (0,10) is the dialogue frame's corner, tile 0x201 in palette 15; the corner keeps the
-# standard frame, 0x214 in the HUD's palette 13
+# the corner's standard frame, 0x214 in the HUD's palette 13: its top-left at (17,0) and
+# its foot along row 3. Row 4, where the second line's cells were, is the map's again.
+expect u16 0x0600F822 0xD214
+expect u16 0x0600F8E4 0xD21B
+expect u16 0x0600F8FA 0xD21C
+expect u16 0x0600F924 0
+expect u16 0x0600F862 0xD217
+expect u16 0x0600F860 0
+# the box talks in the message box's own frame: its top-left cell (0,10) is the dialogue
+# frame's corner, tile 0x201 in palette 15
 expect u16 0x0600FA80 0xF201
-expect u16 0x0600F820 0xD214
+# nothing else to say: no turns
+expect u8 gBrHud+0x17 0
 shot corner-place
-# the box goes after its ninety frames; the corner keeps the name
+# the box goes after its ninety frames; the corner stays
 wait 90
 expect u8 gBrHud+0x09 1
-expect u16 0x0600F862 0xF139
+expect u16 0x0600F864 0xF139
 shot corner-place-quiet
-# START: the menu covers cols 21..29 and the corner's five columns left of it are
-# cleared rather than left as half a frame beside it -- (16..20, 0..4) are 0
+# START: the menu covers cols 21..29 and the corner's four columns left of it, frame and
+# all, are cleared rather than left as half a box beside it -- (17..20, 0..3) are 0
 tap START
 wait 20
 expect u8 gBrHud+0x09 0
-expect u16 0x0600F820 0
+expect u16 0x0600F822 0
 expect u16 0x0600F828 0
-expect u16 0x0600F860 0
 expect u16 0x0600F862 0
-expect u16 0x0600F868 0
+expect u16 0x0600F864 0
 expect u16 0x0600F8A4 0
-expect u16 0x0600F8E6 0
-expect u16 0x0600F920 0
-expect u16 0x0600F928 0
+expect u16 0x0600F8E2 0
+expect u16 0x0600F8E8 0
 # ...and the menu's own frame is there at (21,0)
 expectne u16 0x0600F82A 0
 shot corner-menu
@@ -76,74 +80,39 @@ shot corner-menu
 tap B
 wait 20
 expectge u8 gBrHud+0x09 1
-expect u16 0x0600F862 0xF139
-expect u16 0x0600F8F8 0xF15C
-expectne u16 0x0600F820 0
-expectne u16 0x0600F920 0
+expect u16 0x0600F864 0xF139
+expect u16 0x0600F8B8 0xF14E
+expect u16 0x0600F822 0xD214
 shot corner-back
-# phase 2 names a route, and three spectators come: ROUTE 104 is 51 px and the eye fits
-# beside it, so nothing takes turns (gBrHud.drawnAlt 0)
-# ROUTE 104 = CC C9 CF CE BF 00 A2 A1 A5; len 0x13 = frame (10 00 00) + 16
-pokebytes gBrMailbox+0x1058 0C 13 10 00 00 00 02 19 0C 1C 09 CC C9 CF CE BF 00 A2 A1 A5 00
-poke u16 gBrMailbox+0x0C 2
+# three spectators come: the eye takes turns with the count beside the clock, 120 frames each, counted in
+# gBrHud.altFrames (+0x16): drawnAlt (+0x17) 1 is the count's turn, 2 the eye's
 poke u8 gBrHud+0x0F 3
-wait 10
-expect u8 gBrRing+14 0xCC
-expect u8 gBrRing+23 0xFF
-expect u8 gBrHud+0x14 3
-expect u8 gBrHud+0x17 0
-shot corner-route-eye
-# phase 3 names a wide centre, PETALBURG WOODS at 87 px: it fills most of the line,
-# so with the eye it takes turns (drawnAlt not 0)
-# CA BF CE BB C6 BC CF CC C1 00 D1 C9 C9 BE CD; len 0x19 = frame (16 00 00) + 22
-pokebytes gBrMailbox+0x1098 0C 19 16 00 00 00 03 19 0C 1C 0F CA BF CE BB C6 BC CF CC C1 00 D1 C9 C9 BE CD 00
-poke u16 gBrMailbox+0x0C 3
-wait 10
-expect u8 gBrRing+28 0xCD
-expect u8 gBrRing+29 0xFF
-expectne u8 gBrHud+0x17 0
-poke u8 gBrHud+0x0F 0
-wait 4
-# ...and with nobody watching, SAFE takes the eye's place on the left (POK-359), and
-# PETALBURG WOODS does not fit beside that either: they take turns too
-expectne u8 gBrHud+0x17 0
-shot corner-widest
-poke u8 gBrHud+0x0F 3
-# the last phase, r = -1: FOG EVERYWHERE, 81 px, and the eye does not fit beside it --
-# they take turns, 120 frames each, counted in gBrHud.altFrames (+0x16). Phase 3's box
-# is still up; it is given forty frames left (gBrHud.boxFrames, +0x178), so a box of
-# the last phase's own -- ninety frames from the top -- would show.
-pokebytes gBrMailbox+0x10D8 0C 14 11 00 00 00 09 19 0C FF 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00
-poke u16 gBrMailbox+0x0C 4
 poke u8 gBrHud+0x16 0
-poke u8 gBrHud+0x178 40
-wait 10
-expect u8 gBrRing+4 0xFF
-expect u8 gBrRing+5 1
+wait 4
+expect u8 gBrHud+0x14 3
 expect u8 gBrHud+0x17 1
-# ...and the ticker says so, as Kanto's does: THE FOG COVERS ALL OF HOENN! (28, its C at
-# +8) behind phase 2's THE FOG SPREADS!, which phase 3 said again and was dropped as a
-# repeat (queue[1] at +0x70). That line is the ring's one message (POK-324): the last
-# phase raises no box -- it used to name LITTLEROOT, which is fog too -- so phase 3's
-# runs out its forty rather than starting ninety over. (fog-news.txt pins the last
-# phase with no box up at all.)
-expect u8 gBrHud+0x0A 2
-expect u8 gBrHud+0x71 0x1C
-expect u8 gBrHud+0x7A 0xBD
-expectle u8 gBrHud+0x178 40
-shot corner-everywhere-name
+shot corner-eye-count
 poke u8 gBrHud+0x16 120
 wait 4
 expect u8 gBrHud+0x17 2
-shot corner-everywhere-eye
-# nobody watching: in the fog the lead's HP still takes turns with the words (POK-358),
-# where SAFE never would
-poke u8 gBrHud+0x0F 0
-wait 4
-expectne u8 gBrHud+0x17 0
+shot corner-eye
+# the last phase, r = -1: everywhere is outside, and in the fog the lead's HP takes the
+# eye's turn (POK-358). Phase 1's box is gone; the last phase raises none (POK-324).
+pokebytes gBrMailbox+0x1058 0C 14 11 00 00 00 09 19 0C FF 0A C6 C3 CE CE C6 BF CC C9 C9 CE 00
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u8 gBrRing+4 0xFF
+expect u8 gBrRing+5 1
 wait 100
+poke u8 gBrHud+0x16 120
+wait 4
+expect u8 gBrHud+0x17 2
+shot corner-hp
+poke u8 gBrHud+0x16 0
+wait 4
+expect u8 gBrHud+0x17 1
 shot corner-everywhere
-# and the map says it too: START, MAP (two below the top in a match), FOG EVERYWHERE
+# and the map says it: START, MAP (two below the top in a match), FOG EVERYWHERE
 poke u8 gBrMatch 2
 tap START
 wait 40

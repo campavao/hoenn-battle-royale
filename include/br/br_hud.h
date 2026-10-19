@@ -6,12 +6,10 @@
 // The overworld HUD (POK-226): text windows on BG0 that live only while the
 // overworld runs, redrawn from gBrHud every frame something changed.
 //
-//   corner  cols 17..28, rows 1..3   "N LEFT" and the clock "M:SS" (or a FOG! flash) on
-//           (frame 16..29, 0..4)     one line; under them, all ring phase long, where
-//                                    the ring is closing -- "VERDANTURF TOWN", or FOG
-//                                    EVERYWHERE on the last phase (POK-325) -- and an eye
-//                                    and a count while anyone is spectating this trainer
-//                                    (POK-233), beside the name or taking turns with it
+//   corner  cols 18..28, rows 1..2   "N LEFT" and the clock "M:SS" (or a FOG! flash) on
+//           (frame 17..29, 0..3)     one line; the count takes turns with the lead's HP in
+//                                    the fog (POK-358) or else an eye and a count while
+//                                    anyone is spectating this trainer (POK-233)
 //   ticker  cols  2..28, rows 17..18 one line of news, 180 frames each, kill feed etc.
 //   box     cols  2..28, rows 11..14 the bottom box: a transient two-line message
 //                                    (the fog closing in), 90 frames, above the ticker
@@ -41,7 +39,7 @@
 // HUD SHARES tiles, and only with the two windows that cover it on screen whenever they
 // are up:
 //
-//   corner  0x139..0x15C (36)  the start menu's head: every start menu a match draws
+//   corner  0x139..0x14E (22)  the start menu's head: every start menu a match draws
 //                              (three items at the fewest: BAG, the card, EXIT) covers
 //                              all of them, and sits over the corner on screen
 //   box     0x15D..0x1C8 (108) the start menu's tail (a 5-item menu runs to 0x18C) and
@@ -49,7 +47,8 @@
 //   ticker  0x1C9..0x1FE (54)  the message box's tail only: pret's longest start menu,
 //                              nine items, ends at 0x1C4
 //
-// Four are spare, 0x1FF and 0x23D..0x23F. Nothing here loads graphics: the boxes are a
+// Eighteen are spare: 0x14F..0x15C, the corner's second line until 2026-10-18, 0x1FF
+// and 0x23D..0x23F. Nothing here loads graphics: the boxes are a
 // PIXEL_FILL of the message-box palette (15), the text is FONT_NORMAL and the frames
 // are the field's own two (0x200 and 0x214), so every
 // map load that re-inits the field's text box (InitTextBoxGfxAndPrinters) also re-arms
@@ -87,14 +86,14 @@
 // The page writes `left`, `clockSecs` and `flashFog` straight into EWRAM (offsets
 // below, mirrored in web/src/net/hud.ts); everything else is the ROM's.
 
-// The corner's window, in tiles (see the tile map above). Twelve wide is the widest place
-// name in the dialogue font, EVER GRANDE CITY at 90 px; the start menu (cols 21..29)
-// covers all but its five left columns, which BrHud_Yield takes off while the menu is
-// up. The ticker and the box are the message box's own 27 columns from col 2: its frame
+// The corner's window, in tiles (see the tile map above). Eleven wide is the widest line
+// in the dialogue font, the HP's "HP 120/134" (57 px) beside the clock's "10:00" (27); the
+// start menu (cols 21..29) covers all but its four left columns (18..20 and the frame at
+// 17), which BrHud_Yield takes off while the menu is up. The ticker and the box are the message box's own 27 columns from col 2: its frame
 // is two cells wide on the left.
-#define BR_HUD_CORNER_LEFT 17
-#define BR_HUD_CORNER_WIDTH 12
-#define BR_HUD_CORNER_HEIGHT 3
+#define BR_HUD_CORNER_LEFT 18
+#define BR_HUD_CORNER_WIDTH 11
+#define BR_HUD_CORNER_HEIGHT 2
 #define BR_HUD_TICKER_WIDTH 27
 #define BR_HUD_TICKER_HEIGHT 2
 #define BR_HUD_BOX_WIDTH 27
@@ -104,7 +103,7 @@
 #define BR_HUD_TILE_TICKER 0x1C9
 // BG2's tilemap at screen block 25 is where BG0's tiles end (POK-329).
 #define BR_HUD_TILE_CEILING 0x240
-// A name and an eye too wide to share the corner's second line take turns on it.
+// The count takes turns on the corner with the HP or the eye.
 #define BR_HUD_ALT_FRAMES 120
 
 // Six, not eight: eighteen seconds of backlog at 180 frames a line is already more
@@ -167,8 +166,8 @@ struct BrHud
     /* 0x13 */ u8 drawnFog;      // 0 clock, 1 flash-off, 2 flash-on
     /* 0x14 */ u8 drawnEyes;     // what the corner last drew
     /* 0x15 */ u8 popupWas;      // the map-name popup was up on the last tick
-    /* 0x16 */ u8 altFrames;     // 0..2*BR_HUD_ALT_FRAMES-1: the name's turn, then the eye's
-    /* 0x17 */ u8 drawnAlt;      // 0 both fit, 1 name drawn, 2 eye drawn
+    /* 0x16 */ u8 altFrames;     // 0..2*BR_HUD_ALT_FRAMES-1: the count's turn, then the HP's or eye's
+    /* 0x17 */ u8 drawnAlt;      // 0 nothing else to say, 1 count drawn, 2 HP or eye drawn
     /* 0x18 */ struct BrHudLine heldLine;             // 44 bytes
     /* 0x44 */ struct BrHudLine queue[BR_HUD_QUEUE];  // 264 bytes
     /* 0x14C */ struct BrHudLine box;                 // 44 bytes, the bottom box

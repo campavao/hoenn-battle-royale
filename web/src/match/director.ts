@@ -24,7 +24,7 @@
 //    last emitted `clock`/`ring` -- the ROM's own `BrMatch`/`BrHud` count seconds
 //    locally between wire ticks (br_match.h's `clockLeft`/`clockFrames`), and the
 //    page's HUD mirror should look just as live.
-import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase } from './clock';
+import { mulberry32, pickIndex, RING_RADII, isFinalRingPhase, nextRingRadius } from './clock';
 import { clusterCells, EVENT_CELLS, eventDrop, eventForRing } from './events';
 import { giftDrop, isGiftSection } from './gifts';
 import { SCATTER_PER_SECTION, scatterDrop, type ScatterSpot } from './scatter';
@@ -189,6 +189,8 @@ export interface DirectorRingState {
   sx: number;
   sy: number;
   r: number;
+  /** The radius after this phase (wire.ts RingMsg.next); none on the last. */
+  next?: number;
   place?: string;
 }
 
@@ -542,6 +544,7 @@ export class Director {
       sx: this.ringCentre.sx,
       sy: this.ringCentre.sy,
       r: RING_RADII[this.ringIndex],
+      next: nextRingRadius(this.ringIndex),
       place: this.ringCentre.place,
       elapsed: elapsedSecs,
     });
@@ -702,6 +705,7 @@ export class Director {
       sx: this.ringCentre.sx,
       sy: this.ringCentre.sy,
       r: RING_RADII[this.ringIndex],
+      next: nextRingRadius(this.ringIndex),
       place: this.ringCentre.place,
     };
   }

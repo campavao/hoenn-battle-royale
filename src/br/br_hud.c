@@ -88,17 +88,13 @@ STATIC_ASSERT(BR_HUD_CORNER_LEFT + BR_HUD_CORNER_WIDTH <= 29, BrHudCornerFrameOn
 
 // The field's dialogue font, the one every message box talks in (Cam, 2026-10-18: the
 // small font "looks out of place"). Its capitals are ten rows tall, the shadow's included,
-// from the fourth row of a sixteen-row cell. The corner's 24 rows hold two lines only
-// that close: the second starts eleven rows down, where the first one's cell still has
-// five to go, and the whole is then scrolled up a row, so the margins are two rows over,
-// one between and one under.
+// from the fourth row of a sixteen-row cell: the corner's one line, printed at the top of
+// its sixteen rows, has three over and three under.
 #define BR_HUD_FONT FONT_NORMAL
-#define BR_HUD_CORNER_LINE_2 11
 
 // bg, fg, shadow -- the standard pair on a light box, and the line kinds keep their
 // colours so a kill and the fog still read differently at a glance. The background is
-// transparent, over the box's own fill, so a cell's blank rows draw nothing: otherwise
-// the corner's second line would wipe the foot of the first.
+// transparent, over the box's own fill, so a cell's blank rows draw nothing.
 static const u8 sColorsText[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_LIGHT_GRAY };
 static const u8 sColorsFog[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
 static const u8 sColorsKill[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
@@ -108,9 +104,6 @@ static const u8 sText_Left[] = _(" LEFT");
 static const u8 sText_Fog[] = _("FOG!");
 // How many are watching. Kanto's corner eye, on the dialogue font's symbol page.
 static const u8 sText_Eye[] = _("{EMOJI_LEFT_EYE}");
-// Beside the ring's place on the corner's second line: it is where the fog is not, and
-// bare it read as where we are (Cam's 2026-10-14 play-test, POK-359).
-static const u8 sText_Safe[] = _("SAFE");
 static const u8 sText_Hp[] = _("HP ");
 // ---- windows ------------------------------------------------------------------
 
@@ -582,20 +575,8 @@ static void PrintRight(u8 id, const u8 *str, u8 y, const u8 *colors)
     AddTextPrinterParameterized3(id, BR_HUD_FONT, (u8)x, y, colors, (s8)TEXT_SKIP_DRAW, str);
 }
 
-// The corner's second line: where the ring is closing, all ring phase long (POK-325).
-// Nothing before the ring (the Safari) or when the host named no place.
-static const u8 *CornerPlace(void)
-{
-    if (!gBrRing.active)
-        return NULL;
-    if (gBrRing.r < 0)
-        return gBrText_FogEverywhere;
-    if (gBrRing.place[0] == EOS)
-        return NULL;
-    return gBrRing.place;
-}
-
-// Whose turn it is on the second line when the name and the eye do not both fit.
+// Whose turn it is on the left of the corner when there is something besides the count
+// to say: the count's, then the HP's or the eye's. The clock keeps its place.
 static u8 AltTurn(void)
 {
     return gBrHud.altFrames < BR_HUD_ALT_FRAMES ? 1 : 2;
@@ -629,60 +610,49 @@ static void DrawCorner(void)
 {
     struct BrHud *h = &gBrHud;
     u8 buf[16];
-    u8 eye[12];
     u8 *p;
     u8 fog = FogPhase();
-    const u8 *place = CornerPlace();
     u8 alt = 0;
-    u8 clockY;
+    const u8 *colors = sColorsText;
 
     FillWindowPixelBuffer(h->winCorner, BR_HUD_BOX);
-    // Line one: how many are left, and the clock on the right -- or the FOG! flash in the
-    // clock's place. With no place to name (the Safari, before the ring) the clock keeps
-    // the second line to itself, as the corner always had it, rather than leave that
-    // line an empty strip -- the wound bar's "empty looking box" (2026-09-16).
-    clockY = place != NULL ? 0 : BR_HUD_CORNER_LINE_2;
-    p = ConvertIntToDecimalStringN(buf, h->left, STR_CONV_MODE_LEFT_ALIGN, 2);
-    StringCopy(p, sText_Left);
-    AddTextPrinterParameterized3(h->winCorner, BR_HUD_FONT, 0, 0, sColorsText,
-        (s8)TEXT_SKIP_DRAW, buf);
+    // One line: the clock at the right edge, always -- or the FOG! flash in its place --
+    // and on the left how many are left. It had a second, the ring's centre and SAFE
+    // beside it (POK-325, POK-359), until Cam's 2026-10-18 "remove the SAFE message... so
+    // the whole thing takes up less space": the MAP shows where the ring closes, and the
+    // next ring with it.
+    //
+    // What the second line also said takes turns with the count, two seconds each: in the
+    // fog the lead's HP (Cam's 2026-10-14 play-test, POK-358: a BARBOACH went from 26/40 to
+    // fainted in twenty seconds of walking with nothing on screen to say so), or else the
+    // eye and how many are watching (POK-233). The eye is a two-byte escape (F9 D8), so
+    // the count goes where StringCopy left the terminator.
+    if (gBrRing.outside && LeadHp(buf))
+        colors = sColorsFog;
+    else if (h->eyes != 0)
+        ConvertIntToDecimalStringN(StringCopy(buf, sText_Eye), h->eyes, STR_CONV_MODE_LEFT_ALIGN, 2);
+    else
+        buf[0] = EOS;
+    if (buf[0] != EOS)
+        alt = AltTurn();
+    if (alt != 2)
+    {
+        p = ConvertIntToDecimalStringN(buf, h->left, STR_CONV_MODE_LEFT_ALIGN, 2);
+        StringCopy(p, sText_Left);
+        colors = sColorsText;
+    }
+    AddTextPrinterParameterized3(h->winCorner, BR_HUD_FONT, 0, 0, colors, (s8)TEXT_SKIP_DRAW, buf);
     if (fog == 2)
     {
-        PrintRight(h->winCorner, sText_Fog, clockY, sColorsFog);
+        PrintRight(h->winCorner, sText_Fog, 0, sColorsFog);
     }
     else if (fog == 0)
     {
         p = ConvertIntToDecimalStringN(buf, h->clockSecs / 60, STR_CONV_MODE_LEFT_ALIGN, 2);
         *p++ = CHAR_COLON;
         ConvertIntToDecimalStringN(p, h->clockSecs % 60, STR_CONV_MODE_LEADING_ZEROS, 2);
-        PrintRight(h->winCorner, buf, clockY, sColorsText);
+        PrintRight(h->winCorner, buf, 0, sColorsText);
     }
-    // Line two: the place on the right, and on the left the eye and its count -- or, with
-    // nobody watching, SAFE, saying what the place is. The eye is a two-byte escape
-    // (F9 D8), so the count goes where StringCopy left the terminator. A route fits
-    // beside either; VERDANTURF TOWN and FOG EVERYWHERE do not, and those take turns with
-    // it, two seconds each. FOG EVERYWHERE has no SAFE: there is nowhere left.
-    // In the fog, the lead's HP instead (Cam's 2026-10-14 play-test, POK-358: a BARBOACH
-    // went from 26/40 to fainted in twenty seconds of walking with nothing on screen to
-    // say so). Redrawn with the clock, every second.
-    if (!gBrRing.outside || !LeadHp(eye))
-    {
-        if (h->eyes != 0)
-            ConvertIntToDecimalStringN(StringCopy(eye, sText_Eye), h->eyes, STR_CONV_MODE_LEFT_ALIGN, 2);
-        else if (place != NULL && gBrRing.r >= 0)
-            StringCopy(eye, sText_Safe);
-        else
-            eye[0] = EOS;
-    }
-    if (eye[0] != EOS && place != NULL
-     && GetStringWidth(BR_HUD_FONT, eye, 0) + 4 + GetStringWidth(BR_HUD_FONT, place, 0) > BR_HUD_CORNER_PX)
-        alt = AltTurn();
-    if (place != NULL && alt != 2)
-        PrintRight(h->winCorner, place, BR_HUD_CORNER_LINE_2, gBrRing.r < 0 ? sColorsFog : sColorsText);
-    if (eye[0] != EOS && alt != 1)
-        AddTextPrinterParameterized3(h->winCorner, BR_HUD_FONT, 0, BR_HUD_CORNER_LINE_2, sColorsText,
-            (s8)TEXT_SKIP_DRAW, eye);
-    ScrollWindow(h->winCorner, 0, 1, BR_HUD_BOX);
     h->drawnClock = h->clockSecs;
     h->drawnLeft = h->left;
     h->drawnFog = fog;
@@ -698,7 +668,7 @@ static void TickCorner(bool8 covered)
     if (covered)
     {
         // The start menu, most often. BrHud_Yield took the corner off where the menu does
-        // not draw -- its five left columns, frame and all -- and it is drawn whole again
+        // not draw -- its four left columns, frame and all -- and it is drawn whole again
         // when the menu goes: the menu's pixels are in its tiles by then.
         h->shown &= ~BR_HUD_SHOWN_CORNER;
         h->dirty |= BR_HUD_DIRTY_CORNER;
