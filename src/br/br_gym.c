@@ -52,10 +52,10 @@ EWRAM_DATA u8 gBrGymsBeaten = 0;
 
 extern const u8 BR_EventScript_BossBeaten[];
 
-static const u8 sText_Took[] = _("TOOK ");
+static const u8 sText_Took[] = _("Took ");
 // 21 after the newline, so the longest prize name (a TM's move, up to 12) still leaves the
 // "!" inside the box's 40. "AND 1000 IN PRIZE MONEY!" lost it to WATER PULSE (POK-330 #55).
-static const u8 sText_AndPurse[] = _("\nAND 1000 PRIZE MONEY!");
+static const u8 sText_AndPurse[] = _("\nand 1000 prize money!");
 
 static const struct BrBoss *Find(u16 trainerId)
 {

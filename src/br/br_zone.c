@@ -93,7 +93,7 @@ static bool8 Taken(u8 upto, u16 species)
 // Master Ball below is the one that is, and it is dealt separately.
 static const u16 sBallItems[] =
 {
-    ITEM_ULTRA_BALL, ITEM_GREAT_BALL, ITEM_HYPER_POTION, ITEM_FULL_RESTORE, ITEM_REVIVE,
+    ITEM_POKE_BALL, ITEM_HYPER_POTION, ITEM_FULL_RESTORE, ITEM_REVIVE,
     ITEM_MAX_POTION, ITEM_FULL_HEAL, ITEM_X_ATTACK, ITEM_X_SPEED, ITEM_RARE_CANDY,
     ITEM_FIRE_STONE, ITEM_WATER_STONE, ITEM_THUNDER_STONE, ITEM_LEAF_STONE, ITEM_SUN_STONE,
     ITEM_MOON_STONE, ITEM_NUGGET, ITEM_PP_UP,
@@ -308,8 +308,8 @@ static u8 DealTheme(void)
 }
 
 static const u8 sText_ThemeA[] = _("A ");
-static const u8 sText_ThemeAn[] = _("AN ");
-static const u8 sText_ThemeMatch[] = _(" MATCH!");
+static const u8 sText_ThemeAn[] = _("An ");
+static const u8 sText_ThemeMatch[] = _(" match!");
 // gTypeNames is the summary screen's, and it abbreviates to six: PSYCHC, ELECTR.
 static const u8 sText_Psychic[] = _("PSYCHIC");
 static const u8 sText_Electric[] = _("ELECTRIC");

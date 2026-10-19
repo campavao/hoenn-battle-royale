@@ -687,6 +687,8 @@ function encodeRing(m: RingMsg): Uint8Array {
   writeGen3(w, m.place ?? '', 16);
   w.u8(m.elapsed !== undefined ? 1 : 0);
   w.u16(m.elapsed ?? 0);
+  w.u8(m.next !== undefined ? 1 : 0);
+  w.s8(m.next ?? 0);
   return w.toBytes();
 }
 function decodeRing(bytes: Uint8Array): RingMsg {
@@ -699,7 +701,19 @@ function decodeRing(bytes: Uint8Array): RingMsg {
   const place = r.gen3String();
   const hasElapsed = r.u8() === 1;
   const elapsed = r.u16();
-  return { t: 'ring', seat, phase, sx, sy, r: rad, place: place.length ? place : undefined, elapsed: hasElapsed ? elapsed : undefined };
+  const hasNext = r.u8() === 1;
+  const next = r.s8();
+  return {
+    t: 'ring',
+    seat,
+    phase,
+    sx,
+    sy,
+    r: rad,
+    next: hasNext ? next : undefined,
+    place: place.length ? place : undefined,
+    elapsed: hasElapsed ? elapsed : undefined,
+  };
 }
 
 function encodeClock(m: ClockMsg): Uint8Array {

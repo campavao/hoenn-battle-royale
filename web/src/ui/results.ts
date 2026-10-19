@@ -44,27 +44,27 @@ export function resultsView(mine: MatchResult, seats: number, seat: number, name
   if (mine.placement !== undefined) parts.push(`${ordinal(mine.placement)} of ${seats}`);
   if (mine.survived !== undefined) {
     parts.push(`survived ${clock(mine.survived)}`);
-    rows.push({ label: 'SURVIVED', value: clock(mine.survived) });
+    rows.push({ label: 'Survived', value: clock(mine.survived) });
   }
   if (mine.winner !== undefined) {
     parts.push(mine.winner === seat ? 'you won' : `${nameOf(mine.winner)} won`);
-    rows.push({ label: 'WINNER', value: mine.winner === seat ? 'YOU' : nameOf(mine.winner) });
+    rows.push({ label: 'Winner', value: mine.winner === seat ? 'You' : nameOf(mine.winner) });
   } else {
     parts.push('a draw');
-    rows.push({ label: 'WINNER', value: 'NOBODY' });
+    rows.push({ label: 'Winner', value: 'Nobody' });
   }
   if (seed !== undefined) {
     parts.push(`seed ${seed}`);
-    rows.push({ label: 'SEED', value: String(seed) });
+    rows.push({ label: 'Seed', value: String(seed) });
   }
   const headline =
     mine.winner !== undefined && mine.winner === seat
-      ? 'YOU WON!'
+      ? 'You won!'
       : mine.placement !== undefined
-        ? `${ordinal(mine.placement).toUpperCase()} OF ${seats}`
+        ? `${ordinal(mine.placement)} of ${seats}`
         : mine.winner === undefined
-          ? 'A DRAW'
-          : 'RESULTS';
+          ? 'A draw'
+          : 'Results';
   return { headline, line: parts.join(' · '), rows };
 }
 
@@ -85,7 +85,7 @@ export function fameOf(
   if (winner === undefined || !party) return null;
   const mons = party.filter((m) => m.species > 0).map((m) => `${m.nickname || speciesName(m.species)} Lv${m.level}`);
   if (mons.length === 0) return null;
-  return { title: winner === seat ? 'YOUR TEAM' : `THE CHAMPION: ${nameOf(winner)}`, mons };
+  return { title: winner === seat ? 'Your team' : `The champion: ${nameOf(winner)}`, mons };
 }
 
 /** The match's own lines, for the results under the Hall of Fame. Every count is said,

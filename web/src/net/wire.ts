@@ -476,6 +476,7 @@ export interface RingMsg {
   sx: number; // region-map section x, -64..64
   sy: number; // region-map section y, -64..64
   r: number; // radius in sections; < 0 = everywhere
+  next?: number; // the radius after this phase, for the MAP's preview; none on the last
   place?: string; // the section's name
   elapsed?: number; // seconds since the match began
 }
@@ -898,6 +899,7 @@ function validateRing(m: Record<string, unknown>): RingMsg {
     sx,
     sy,
     r,
+    next: optInt(m, 'next', -1, 64),
     place: optShortString(m, 'place'),
     elapsed: optInt(m, 'elapsed', 0, 9_999_999),
   };

@@ -1,0 +1,21 @@
+# skin-card: the TRAINER CARD's picture is our look, not BRENDAN or MAY (POK-411). The
+# START menu's name row is three below the top in a match (ring-map.txt); PICNICKER,
+# skin 7. `shot card` is the record.
+wait 30
+poke u8 gBrMySkin 7
+pokebytes gBrMailbox+0x2018 81 01 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gObjectEvents+5 32
+tap START
+wait 40
+tap DOWN
+wait 20
+tap DOWN
+wait 20
+tap DOWN
+wait 20
+tap A
+wait 240
+shot card
+say skin card ok

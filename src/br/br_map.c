@@ -28,7 +28,7 @@ EWRAM_DATA struct BrMap gBrMap = {0};
 // The START menu row, and the prompt over the map once it is open.
 const u8 gBrText_MenuMap[] = _("MAP");
 const u8 gBrText_TheFog[] = _("The FOG.");
-static const u8 sText_SafeAt[] = _("SAFE: ");
+static const u8 sText_SafeAt[] = _("Safe: ");
 
 // The prompt names the ring's centre (POK-325), the one place the fog never reaches:
 // "SAFE: LITTLEROOT TOWN". It said "FOG: ", which read as the place the fog had taken
@@ -145,6 +145,16 @@ bool8 BrMap_Open(void)
 #define BR_FOG_COLOUR RGB(13, 3, 22)   // the overworld's fog weather, in one colour
 #define BR_FOG_EVA 10                  // ...and how much of it: 10/16 fog over 6/16 map
 #define BR_FOG_EVB 6
+// The blink: the cells the next ring fogs flick between the fog and the map, slowly --
+// whole, not faded through a dither, whose half-lit steps read as dots (Cam, 2026-10-18).
+// Forty-eight frames on, forty-eight off: a blink every 1.6 seconds.
+#define BR_BLINK_FRAMES 96
+
+// Will the next phase still have the cell? Only when there is a next to ask about.
+static bool8 Previewing(void)
+{
+    return gBrRing.hasNext && gBrRing.next != gBrRing.r;
+}
 
 // `frame` is BG1's tilemap (text, one u16 per cell, 32 a row) and `tiles` its tiles
 // (4bpp, 32 bytes each).
@@ -155,6 +165,7 @@ void BrMap_ShadeFog(u16 *frame, u8 *tiles, u8 left, u8 top, u8 width, u8 height)
     u16 i;
     s16 x, y;
 
+    gBrMap.blinkTile = 0;
     if (!BrMap_Looking() || !gBrRing.active)
         return;
     // A tile of our own, after the last one the frame uses. The frame is 32x20 cells
@@ -167,10 +178,14 @@ void BrMap_ShadeFog(u16 *frame, u8 *tiles, u8 left, u8 top, u8 width, u8 height)
         if ((frame[i] & 0x3FF) > tile)
             tile = frame[i] & 0x3FF;
     }
-    if (++tile >= 512)
-        return; // no room: the map stays as it was rather than drawing rubbish
+    if (tile + 2 >= 256)
+        return; // no room before BG2's tilemap: the map stays as it was, not drawing rubbish
+    tile++;
     for (i = 0; i < 32; i++)
         tiles[tile * 32 + i] = 0x11; // every pixel colour 1 of whatever palette it is given
+    // ...and the one after it for the cells the next ring fogs, which BrMap_BlinkFog fills.
+    if (Previewing())
+        gBrMap.blinkTile = tile + 1;
     for (i = 0; i < 16; i++)
         pal[i] = BR_FOG_COLOUR;
     LoadPalette(pal, BG_PLTT_ID(BR_FOG_PLTT), sizeof(pal));
@@ -178,9 +193,10 @@ void BrMap_ShadeFog(u16 *frame, u8 *tiles, u8 left, u8 top, u8 width, u8 height)
     {
         for (x = 0; x < width; x++)
         {
-            if (BrRing_CellInside(x, y))
-                continue;
-            frame[(y + top) * 32 + (x + left)] = tile | (BR_FOG_PLTT << 12);
+            if (!BrRing_CellInside(x, y, gBrRing.r))
+                frame[(y + top) * 32 + (x + left)] = tile | (BR_FOG_PLTT << 12);
+            else if (gBrMap.blinkTile != 0 && !BrRing_CellInside(x, y, gBrRing.next))
+                frame[(y + top) * 32 + (x + left)] = gBrMap.blinkTile | (BR_FOG_PLTT << 12);
         }
     }
 }
@@ -200,4 +216,20 @@ void BrMap_BlendFog(void)
         return;
     SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_BG1 | BLDCNT_EFFECT_BLEND | BLDCNT_TGT2_BG2 | BLDCNT_TGT2_BD);
     SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(BR_FOG_EVA, BR_FOG_EVB));
+}
+
+// One step of the blink, from the fly map's VBlank: the blink tile all fog (colour 1) for
+// the first half of each blink, clear (0) for the second.
+void BrMap_BlinkFog(u8 *tiles)
+{
+    u32 *dst;
+    u32 row;
+    u8 y;
+
+    if (!BrMap_Looking() || gBrMap.blinkTile == 0)
+        return;
+    row = gMain.vblankCounter1 % BR_BLINK_FRAMES < BR_BLINK_FRAMES / 2 ? 0x11111111 : 0;
+    dst = (u32 *)(tiles + gBrMap.blinkTile * 32);
+    for (y = 0; y < 8; y++)
+        dst[y] = row;
 }

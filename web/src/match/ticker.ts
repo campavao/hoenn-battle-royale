@@ -14,8 +14,10 @@
 // trainer you are watching picked up, the opening and the win. Tallies go to the log,
 // a bot's intro goes to the player it walked up to, and two bots fighting is one line.
 //
-// Every line is at most BR_HUD_LINE_MAX (40) Gen 3 characters, because that is what the
-// window draws; a longer one is not truncated somewhere clever, it is not written.
+// Every line is at most BR_HUD_LINE_MAX (40) Gen 3 characters, the ROM's buffer; a longer
+// one is not truncated somewhere clever, it is not written. The window itself is 216 px
+// of the dialogue font, about 36 capitals: the widest lines written today ("A AND B ARE
+// OUT - 32 LEFT", a bot's chat) are under 205.
 import type { TickerMsg } from '../net/wire';
 
 /** BR_HUD_LINE_MAX in include/br/br_hud.h. */
@@ -35,7 +37,7 @@ function line(seat: number, text: string, kind?: TickerMsg['kind']): TickerMsg |
 
 /** The opening. Everybody is in the Zone with a few balls and a clock. */
 export function opening(seat: number, secs: number): TickerMsg | null {
-  return line(seat, `CATCH WHAT YOU CAN! ${secs}s`);
+  return line(seat, `Catch what you can! ${secs}s`);
 }
 
 /** A trainer's own words -- a bot's dealt line (POK-239), or a player's chat. The
@@ -68,7 +70,7 @@ export function voice(seat: number, lines: { intro?: string; win?: string; lose?
  *  Drawn by the watcher's own page, not sent: a `pickup` reaches everybody, and only
  *  the page following that seat has any business saying so. */
 export function took(seat: number, name: string, what: string): TickerMsg | null {
-  return line(seat, `${short(name)} TOOK ${what}`, 'say');
+  return line(seat, `${short(name)} took ${what}`, 'say');
 }
 
 /** BR_CHEST_KEY in src/br/br_zone.c: the one piece of loot a match starts with. */
@@ -81,7 +83,7 @@ export const CHEST_KEY = 0x8e00;
  *  does not name what was in there: the chest is dealt inside the ROM off the match seed
  *  and the page's loot table never sees it land. */
 export function chest(seat: number, name: string): TickerMsg | null {
-  return line(seat, `${short(name)} EMPTIED THE DAY CARE!`);
+  return line(seat, `${short(name)} emptied the DAY CARE!`);
 }
 
 /** A gym leader fell (POK-295). A gym is a contested landmark and the first to beat it
@@ -89,7 +91,7 @@ export function chest(seat: number, name: string): TickerMsg | null {
  *  draw this off the same `npcout` (match/bosses.ts). The boss's name is not cut -- it is
  *  ours, and TATE&LIZA is nine. */
 export function felled(seat: number, name: string, boss: string): TickerMsg | null {
-  return line(seat, `${short(name)} BEAT ${boss}!`, 'kill');
+  return line(seat, `${short(name)} beat ${boss}!`, 'kill');
 }
 
 /** An event dropped (match/events.ts). The ROM marks it on the MAP; this is how anybody
@@ -97,8 +99,8 @@ export function felled(seat: number, name: string, boss: string): TickerMsg | nu
  *  sixteen-letter section and the `!` is 32. A story with no legendary in it (story.ts)
  *  is `A RARE FIND AT `, the same length. */
 export function event(seat: number, place: string | undefined, legend = true): TickerMsg | null {
-  const what = legend ? 'A LEGENDARY' : 'A RARE FIND';
-  return line(seat, place ? `${what} AT ${place.toUpperCase()}!` : `${what} HAS APPEARED!`);
+  const what = legend ? 'A legendary' : 'A rare find';
+  return line(seat, place ? `${what} at ${place.toUpperCase()}!` : `${what} has appeared!`);
 }
 
 /** Somebody is out, however it happened, and how many are left after it. */
@@ -116,17 +118,17 @@ export function outs(seat: number, names: string[], left: number, by?: string): 
   const who =
     names.length === 1
       ? by !== undefined
-        ? `${short(by)} BEAT ${short(names[0])}`
-        : `${short(names[0])} IS OUT`
+        ? `${short(by)} beat ${short(names[0])}`
+        : `${short(names[0])} is out`
       : names.length === 2
-        ? `${short(names[0])} AND ${short(names[1])} ARE OUT`
-        : `${short(names[0])} AND ${names.length - 1} MORE ARE OUT`;
-  return line(seat, left > 0 ? `${who} - ${left} LEFT` : `${who}!`, 'kill');
+        ? `${short(names[0])} and ${short(names[1])} are out`
+        : `${short(names[0])} and ${names.length - 1} more are out`;
+  return line(seat, left > 0 ? `${who} - ${left} left` : `${who}!`, 'kill');
 }
 
 /** The winner. */
 export function won(seat: number, name: string): TickerMsg | null {
-  return line(seat, `${short(name)} WINS!`);
+  return line(seat, `${short(name)} wins!`);
 }
 
 /** How long outs gather before they go out as one line (POK-324). */

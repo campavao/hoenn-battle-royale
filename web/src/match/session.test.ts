@@ -342,9 +342,9 @@ describe("one match's books (POK-330 #42)", () => {
     roster.seatBots([{ seat: 7, name: 'WALLY', skin: 0 }]);
     const lines = () => toRom.filter((m) => m.t === 'ticker').map((m) => (m as TickerMsg).text);
     session.note({ t: 'npcout', seat: 7, map: RUSTBORO_GYM, localId: 1 }, { from: 7 });
-    expect(lines()).toEqual(['WALLY BEAT ROXANNE!']);
+    expect(lines()).toEqual(['WALLY beat ROXANNE!']);
     session.note({ t: 'npcout', seat: 0, map: RUSTBORO_GYM, localId: 1 }, 'rom');
-    expect(lines()).toEqual(['WALLY BEAT ROXANNE!', 'P0 BEAT ROXANNE!']);
+    expect(lines()).toEqual(['WALLY beat ROXANNE!', 'P0 beat ROXANNE!']);
     session.note({ t: 'npcout', seat: 7, map: RUSTBORO_GYM, localId: 1, fog: true }, { from: 7 });
     session.note({ t: 'npcout', seat: 7, map: RUSTBORO_GYM, localId: 2 }, { from: 7 }); // a gym trainer
     session.note({ t: 'npcout', seat: 7, map: RUSTBORO_GYM, localId: 1 }, 'page'); // the page's own word
@@ -551,7 +551,7 @@ describe('solo, on the same books', () => {
   it('says so on our ticker when we beat a gym leader', () => {
     const { session, toRom } = solo();
     session.note({ t: 'npcout', seat: 0, map: RUSTBORO_GYM, localId: 1 }, 'rom');
-    expect(toRom).toEqual([{ t: 'ticker', seat: 0, kind: 'kill', text: 'MAY BEAT ROXANNE!' }]);
+    expect(toRom).toEqual([{ t: 'ticker', seat: 0, kind: 'kill', text: 'MAY beat ROXANNE!' }]);
   });
 
   // POK-331 #26 (D2): solo never restocked, so a bot's spill that the ROM's eight-piece

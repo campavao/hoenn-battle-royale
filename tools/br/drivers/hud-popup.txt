@@ -11,9 +11,9 @@ poke u8 gBrMatch 2
 poke u8 gBrHud+0x00 7
 poke u16 gBrHud+0x02 125
 wait 30
-# the corner is up, its frame's top-left cell (19,0) on palette 13
+# the corner is up, its frame's top-left cell (17,0) on palette 13
 expectbits u8 gBrHud+0x09 1 1
-expect u16 0x0600F826 0xD214
+expect u16 0x0600F822 0xD214
 dump 0x050001A0 32
 # seat 1 on ROUTE 101; following them warps there and the popup says ROUTE 101
 pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 10 11 00 11 00 01 01 01
@@ -32,7 +32,7 @@ expect u16 0x050001A0 0x330C
 expect u16 0x050001BE 0x2909
 # the corner did not move and kept its colours: its frame is still palette 13, and the
 # frame's colours are what they were before the popup came
-expect u16 0x0600F826 0xD214
+expect u16 0x0600F822 0xD214
 expectbits u8 gBrHud+0x09 1 1
 wait 200
 shot popup-gone

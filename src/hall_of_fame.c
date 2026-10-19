@@ -2,6 +2,7 @@
 #if BR
 #include "br/br_hof.h"
 #include "br/br_match.h"
+#include "br/br_skin.h"
 #endif
 #include "hall_of_fame.h"
 #include "task.h"

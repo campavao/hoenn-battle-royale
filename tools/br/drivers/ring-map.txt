@@ -21,6 +21,8 @@ poke u8 gBrRing+1 1
 poke u8 gBrRing+2 4
 poke u8 gBrRing+3 5
 poke u8 gBrRing+4 4
+# no next ring to preview: the host names none (br_ring.h, gBrRing.next == r)
+poke u8 gBrRing+32 4
 pokebytes gBrRing+14 C6 C3 CE CE C6 BF CC C9 C9 CE FF
 # Below the frame's twenty rows BG1's block holds whatever was there before: the field's
 # BG3 tilemap until POK-329, and what any screen leaves. Tile 511 in row 20 (the fly map
@@ -51,12 +53,12 @@ expect u16 0x0500015E 0x586D
 # ...and the blend: BG1 over BG2 and the backdrop, 10/16 fog over 6/16 map
 expect u16 0x04000050 0x2442
 expect u16 0x04000052 0x060A
-# the prompt under it names the place (POK-325) as the safe one (POK-359): "SAFE:
-# LITTLEROOT", built in gStringVar4 -- S A F E : space, then the name, then EOS
+# the prompt under it names the place (POK-325) as the safe one (POK-359): "Safe:
+# LITTLEROOT", built in gStringVar4 -- S a f e : space, then the name, then EOS
 expect u8 gStringVar4 0xCD
-expect u8 gStringVar4+1 0xBB
-expect u8 gStringVar4+2 0xC0
-expect u8 gStringVar4+3 0xBF
+expect u8 gStringVar4+1 0xD5
+expect u8 gStringVar4+2 0xDA
+expect u8 gStringVar4+3 0xD9
 expect u8 gStringVar4+4 0xF0
 expect u8 gStringVar4+5 0x00
 expect u8 gStringVar4+6 0xC6

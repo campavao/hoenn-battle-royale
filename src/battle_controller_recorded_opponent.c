@@ -28,6 +28,10 @@
 #include "constants/battle_anim.h"
 #include "constants/songs.h"
 #include "constants/trainers.h"
+#if BR
+#include "br/br_skin.h"
+#include "br/br_spectate.h"
+#endif
 
 static void RecordedOpponentHandleGetMonData(void);
 static void RecordedOpponentHandleGetRawMonData(void);
@@ -1234,6 +1238,9 @@ static void RecordedOpponentHandleDrawTrainerPic(void)
             trainerPicId = PlayerGenderToFrontTrainerPicId(gLinkPlayers[gRecordedBattleMultiplayerId ^ BIT_SIDE].gender);
         }
     }
+#if BR
+    trainerPicId = BrSkin_Pic(BrSpectate_SideSkin(1), trainerPicId);
+#endif
 
     DecompressTrainerFrontPic(trainerPicId, gActiveBattler);
     SetMultiuseSpriteTemplateToTrainerBack(trainerPicId, GetBattlerPosition(gActiveBattler));

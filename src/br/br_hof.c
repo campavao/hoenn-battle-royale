@@ -13,7 +13,7 @@
 #include "hall_of_fame.h"
 #include "international_string_util.h"
 #include "constants/characters.h"
-#include "br/br_battle.h"
+#include "br/br_skin.h"
 #include "br/br_field.h"
 #include "br/br_ghosts.h"
 #include "br/br_hof.h"
@@ -99,9 +99,11 @@ const u8 *BrHof_Name(void)
 
 u16 BrHof_TrainerPic(u16 pic)
 {
-    if (sParty == NULL || !gBrSeats[sSeat].present)
+    if (sParty == NULL)
+        return BrSkin_MyPic(pic);
+    if (!gBrSeats[sSeat].present)
         return pic;
-    return BrBattle_SkinPic(gBrSeats[sSeat].skin, pic);
+    return BrSkin_Pic(gBrSeats[sSeat].skin, pic);
 }
 
 // Hall of Fame's own box, one row high: NAME and the name.

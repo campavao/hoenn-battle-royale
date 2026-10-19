@@ -15,12 +15,10 @@ import { RomPort } from './net/romport';
 import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
-import { PhoneHud, readHudView, type HudWorld } from './ui/phonehud';
-import { BattleMenu, battleWantsNoPad, readBattleView } from './ui/battlemenu';
+import type { HudWorld } from './ui/phonehud';
+import type { PadPrefsControl } from './ui/padprefs';
 import { moveInfo, type Rom } from './battle/movebook';
 import { favourite, readTally, zeroTally, type MatchTally } from './match/tally';
-import { BAG_POSITION_POCKET, readBattleBag } from './ui/bag';
-import { PadPrefsControl } from './ui/padprefs';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { battleSeats, cutTo, nameBstart, romReplaying, Spectate } from './match/spectate';
 import type { Results } from './match/results';
@@ -1322,13 +1320,13 @@ function waitForMailbox(emu: Emulator, mailboxBase: number, staleAfter?: number)
  *  mGBA's loadGame clears WRAM and decisive if it does not, so it costs nothing either
  *  way; the pause has to come AFTER the wait, because waitForMailbox counts emulated
  *  frames both to resolve and to time out. */
-async function rebootIntoBr(emu: Emulator, mailboxBase: number, bootMode: number): Promise<void> {
+async function rebootIntoBr(emu: Emulator, mailboxBase: number, bootMode: number, skinBase?: number): Promise<void> {
   const before = emu.read(mailboxBase + MAILBOX.OFF_FRAME, 32);
   emu.write(mailboxBase + MAILBOX.OFF_MAGIC, 0, 16);
   await emu.reboot();
   await waitForMailbox(emu, mailboxBase, before);
   emu.pause();
-  writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
+  writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin(), skinBase);
   emu.resume();
 }
 
@@ -1426,8 +1424,13 @@ function writeBootBlock(
   name: string,
   mode: number = BR_BOOT_MAP,
   skin = 0,
+  skinBase?: number,
 ): void {
   const boot = mailboxBase + MAILBOX.OFF_BOOT;
+  // Before the boot spawns the player (POK-411): an NPC look is our own field sprite and
+  // battle picture too, not only our ghost on everybody else's screen, and the room's
+  // write comes after the field is up.
+  if (skinBase !== undefined) writeMySkin(emu, skinBase, skin);
   emu.write(boot + BOOT_AT.mode, mode, 8);
   // The four sprites are BRENDAN, MAY, RIVAL BRENDAN, RIVAL MAY -- the odd ones are
   // the girls, and the player's own avatar should be what they picked for their ghost.
@@ -3244,7 +3247,7 @@ function wireRoom(
       // The window may have turned or been resized since the last boot: the band is the
       // match's layout's now (askForBand), and a boot is the one time the core takes it.
       askForBand(emu);
-      if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
+      if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'), symbols?.get('gBrMySkin'));
       else await emu.reboot();
       // Last match's champion is not this match's (POK-243). PLAY AGAIN used to reload
       // the page, which cleared this for free.
@@ -3914,6 +3917,8 @@ let fieldView: FieldView | null = null;
 let placeKeys: (() => void) | null = null;
 
 function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined, rom: Uint8Array | null = null): void {
+  // A move's name for the results and MY STATS (POK-416), off the ROM's own tables.
+  if (rom && symbols) romTables = { bytes: rom, sym: (n: string) => symbols.get(n) };
   wireKeyboard(emu);
   // Shown only on a desktop in a match (index.html's #keys), and only past the picture.
   const legend = new KeyLegend($('#keys') as HTMLElement, emu, KEYBOARD_MAP);
@@ -3961,16 +3966,60 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
       rom,
     });
     touch.attach();
-    wirePhoneHud(emu, symbols, touch, rom);
+    void loadPhoneUi()
+      .then((ui) => wirePhoneHud(ui, emu, symbols, touch, rom))
+      .catch((err: unknown) => console.warn('phone HUD did not wire', err));
   }
+}
+
+/** ui/phone-ui.ts, fetched once per boot. A failed fetch tries again, after a wait that
+ *  grows and whenever the phone comes back online or to the front: the fetch is at boot,
+ *  on a cell link, and losing it would cost the HUD, the bag and the battle menu for
+ *  the whole session. Settles only once the chunk is in. */
+function loadPhoneUi(): Promise<typeof import('./ui/phone-ui')> {
+  return new Promise((resolve) => {
+    let tries = 0;
+    let busy = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const again = (): void => {
+      if (busy) return;
+      busy = true;
+      clearTimeout(timer);
+      import('./ui/phone-ui').then(
+        (m) => {
+          window.removeEventListener('online', again);
+          document.removeEventListener('visibilitychange', again);
+          resolve(m);
+        },
+        (err: unknown) => {
+          busy = false;
+          tries++;
+          console.warn(`phone HUD did not load (try ${tries})`, err);
+          timer = setTimeout(again, Math.min(60_000, 2_000 * 2 ** (tries - 1)));
+        },
+      );
+    };
+    window.addEventListener('online', again);
+    document.addEventListener('visibilitychange', again);
+    again();
+  });
 }
 
 /** The phone's HUD and dock (ui/phonehud.ts), its battle menu (ui/battlemenu.ts) and its
  *  movable pad (ui/padprefs.ts). The HUD reads the ROM every frame while it is on the
  *  glass, and while it is the ROM's corner box stays off (gBrHud.noCorner): the two
  *  would say the same thing twice. So does the battle's own FIGHT/BAG box, under the
- *  menu's windows (noBattleBox, br_battle.c BrBattle_MenuBoxOff). */
-function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchLayer, rom: Uint8Array | null): void {
+ *  menu's windows (noBattleBox, br_battle.c BrBattle_MenuBoxOff). All four are a chunk
+ *  of their own (ui/phone-ui.ts, POK-407, loadPhoneUi), fetched as the game comes up: none is
+ *  on the glass before a match. */
+function wirePhoneHud(
+  ui: typeof import('./ui/phone-ui'),
+  emu: Emulator,
+  symbols: Map<string, number>,
+  touch: TouchLayer,
+  rom: Uint8Array | null,
+): void {
+  const { BAG_POSITION_POCKET, BattleMenu, PadPrefsControl, PhoneHud, battleWantsNoPad, readBattleBag, readBattleView, readHudView } = ui;
   const top = $('#hud') as HTMLElement;
   const pad = $('#pad') as HTMLElement;
   const root = $('#screen-playing') as HTMLElement;
@@ -3989,7 +4038,6 @@ function wirePhoneHud(emu: Emulator, symbols: Map<string, number>, touch: TouchL
   ($('#hud-menu') as HTMLButtonElement).addEventListener('click', () => openSheet(!sheetOpen));
   const menuRoot = $('#battle-menu') as HTMLElement;
   const tables = rom ? { bytes: rom, sym: (n: string) => symbols.get(n) } : null;
-  romTables = tables;
   const battle = new BattleMenu({
     root: menuRoot,
     rom: tables,
@@ -4289,7 +4337,7 @@ async function main(): Promise<void> {
   if (mailboxBase !== undefined) {
     const matchBase = symbols?.get('gBrMatch');
     if (roomHash.mode === 'solo' && matchBase !== undefined) emu.write(matchBase + MATCH_SEED, soloSeed, 32);
-    writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
+    writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin(), symbols?.get('gBrMySkin'));
     emu.resume();
   }
 

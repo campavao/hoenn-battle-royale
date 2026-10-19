@@ -324,7 +324,7 @@ static const struct BrStoryPerson sPeople[] =
 // over without the fight again: a full party parks the mon, and a cancelled release
 // screen leaves it on the ground for the next A (story-gate-full). The match is the
 // seed's low half, so a new match's same key is a new boss.
-static const u8 sText_TakenFirst[] = _("SOMEBODY GOT THERE FIRST");
+static const u8 sText_TakenFirst[] = _("Somebody got there first");
 
 static EWRAM_DATA u16 sGateKey = 0;
 static EWRAM_DATA u16 sGateSeed = 0;
@@ -396,8 +396,8 @@ bool8 BrStory_IsGate(u16 trainerId)
     return FALSE;
 }
 
-static const u8 sText_Wants[] = _("HE WANTS THE ");
-static const u8 sText_Guards[] = _(" GUARDS IT");
+static const u8 sText_Wants[] = _("He wants the ");
+static const u8 sText_Guards[] = _(" guards it");
 
 bool8 BrStory_Hands(const struct BrLootItem *it)
 {

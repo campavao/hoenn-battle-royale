@@ -1,0 +1,25 @@
+# skin-hof: the Hall of Fame shows the look picked in MY LOOK, not pret's BRENDAN or MAY
+# (POK-411; 2026-10-18 play-test: "I have a skin selected ... but in the hall of fame
+# it's May"). win-parade.txt's boot, female, wearing PICNICKER (skin 7).
+wait 30
+poke u8 gBrMySkin 7
+pokebytes gBrMailbox+0x2018 81 01 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+# the field sprite is the PICNICKER's too (skin-field.txt)
+expect u8 gObjectEvents+5 32
+pokebytes gBrMailbox+0x1018 10 05 02 00 00 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrMatch 4
+wait 900
+shot parade
+tap A
+wait 300
+tap A
+wait 300
+shot trainer
+tap A
+wait 300
+expect u8 gBrMatch 5
+say skin hof ok
