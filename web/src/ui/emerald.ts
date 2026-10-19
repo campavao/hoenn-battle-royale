@@ -368,10 +368,10 @@ export class EmeraldCanvas {
   }
 
   /** Part of one of the page's own pictures (`/ui/<name>`: the trainer card, its badges,
-   *  the portraits) at (x, y). Loaded on first use; whoever drew without it is asked to
-   *  draw again when it lands -- or fails to, so a screen waiting on it can stop waiting
-   *  and draw without it. */
-  drawUiPicture(name: string, sx: number, sy: number, w: number, h: number, x: number, y: number): PictureState {
+   *  the portraits; or a path from the root, `/field-sprites/fog.png`) at (x, y). Loaded
+   *  on first use; whoever drew without it is asked to draw again when it lands -- or
+   *  fails to, so a screen waiting on it can stop waiting and draw without it. */
+  drawUiPicture(name: string, sx: number, sy: number, w: number, h: number, x: number, y: number, alpha = 1): PictureState {
     let img = this.pictures.get(name);
     if (!img) {
       const el = new Image();
@@ -381,13 +381,15 @@ export class EmeraldCanvas {
         this.missing.add(name);
         this.onLoad?.();
       };
-      el.src = `/ui/${name}`;
+      el.src = name.startsWith('/') ? name : `/ui/${name}`;
       this.pictures.set(name, el);
       img = el;
     }
     if (this.missing.has(name)) return 'missing';
     if (!img.complete || img.naturalWidth === 0) return 'loading';
+    this.ctx.globalAlpha = alpha;
     this.ctx.drawImage(img, sx, sy, w, h, x + this.origin, y, w, h);
+    this.ctx.globalAlpha = 1;
     return 'drawn';
   }
 

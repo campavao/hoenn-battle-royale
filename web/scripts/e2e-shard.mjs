@@ -25,6 +25,7 @@ export const FILE_SECONDS = {
   'bots.spec.ts': 3,
   'curtain.spec.ts': 11,
   'feedback.spec.ts': 40, // estimated: a menu and one solo boot
+  'howto.spec.ts': 15, // estimated: an import, the panels, one reload
   'lobby.spec.ts': 103,
   'match.spec.ts': 198,
   'migration.spec.ts': 111,

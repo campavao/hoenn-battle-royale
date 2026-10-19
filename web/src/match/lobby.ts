@@ -44,6 +44,8 @@ export type LobbyAction =
   | { kind: 'career' }
   // A note to the developers (POK-428).
   | { kind: 'feedback' }
+  // A match in six panels (POK-429).
+  | { kind: 'howto' }
   | { kind: 'join'; code: string; pass: boolean }
   | { kind: 'watch'; code: string };
 
@@ -159,6 +161,14 @@ export const FEEDBACK_ROW: LobbyRow = {
   detail: 'bugs and ideas',
   action: { kind: 'feedback' },
   id: 'lobby-feedback',
+};
+
+/** Over SEND FEEDBACK: how a match goes, in a few panels (POK-429). */
+export const HOWTO_ROW: LobbyRow = {
+  label: 'HOW TO PLAY',
+  detail: 'a match in brief',
+  action: { kind: 'howto' },
+  id: 'lobby-howto',
 };
 
 /** One row per open room, plus the daily's own at the top when the relay offers it.

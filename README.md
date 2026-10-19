@@ -18,7 +18,7 @@ one Pokémon dropped as a ball when a trainer goes down.
 2. The drop: each trainer lands somewhere in Hoenn, alone, and levels rise on a clock
    for everybody at once. No EXP. Route trainers, gym leaders and Poké Marts are loot.
 3. The fog closes in phases over the region map. Outside it, you take damage.
-4. Meet another trainer in the open and the fight is forced. RUN gets harder every time;
+4. Meet another trainer in the open and the fight is forced. Only a POKé DOLL gets you away;
    30 seconds on the clock or you forfeit. Lose and your Pokémon are on the ground for
    whoever gets there first.
 5. Last one standing gets the Hall of Fame. Everyone else watches.
