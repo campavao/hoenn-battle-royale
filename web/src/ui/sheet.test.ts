@@ -128,6 +128,20 @@ describe('the sheet', () => {
     expect(painted.widgets.find((w) => w.text === '15 more'), 'the rest, counted in the last cell').toBeDefined();
   });
 
+  it('LEAVE asks first: STAY puts it back, LEAVE again goes (POK-382)', () => {
+    const first = model();
+    paint(first).byId('match-leave')!.onPress!();
+    expect(first.onLeave).toHaveBeenCalled();
+    const asking = model({ leaveAsk: true, onStay: vi.fn(), onLeaveSure: vi.fn() });
+    const { byId, painted } = paint(asking);
+    expect(byId('match-leave'), 'the first LEAVE gives way to the question').toBeUndefined();
+    expect(painted.widgets.find((w) => w.text === 'Leave the match?')).toBeDefined();
+    byId('match-stay')!.onPress!();
+    expect(asking.onStay).toHaveBeenCalled();
+    byId('match-leave-sure')!.onPress!();
+    expect(asking.onLeaveSure).toHaveBeenCalled();
+  });
+
   it('LEAVE goes when canLeave is false', () => {
     expect(paint(model({ canLeave: false })).byId('match-leave')).toBeUndefined();
   });

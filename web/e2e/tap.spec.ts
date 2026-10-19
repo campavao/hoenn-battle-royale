@@ -119,6 +119,14 @@ test('a tap on a tile walks the trainer to it', async ({ browser }, testInfo) =>
     await expect(page.locator('#mute')).toBeVisible();
     await expect(page.locator('#match-leave'), 'solo always has its way out').toBeVisible();
     await page.screenshot({ path: path.join(OUT_DIR, 'tap-drawer.png') });
+    // A stray LEAVE only asks (POK-382); STAY puts it back.
+    await page.locator('#match-leave').tap();
+    await expect(page.locator('#match-stay')).toBeVisible();
+    await expect(page.locator('#match-leave-sure')).toBeVisible();
+    await expect(page.locator('#match-leave')).toBeHidden();
+    await page.screenshot({ path: path.join(OUT_DIR, 'tap-leave-ask.png') });
+    await page.locator('#match-stay').tap();
+    await expect(page.locator('#match-leave')).toBeVisible();
     await page.locator('#drawer-close').tap();
     await expect(page.locator('#drawer')).toBeHidden();
   } finally {

@@ -258,6 +258,10 @@ let matchStrip: string | null = null;
 /** Whose card the sheet has open. */
 let sheetCard: number | null = null;
 
+/** LEAVE was tapped once and the sheet asks before it goes (POK-382): a stray tap
+ *  mid-match used to hand the room to an heir. Opening or closing the sheet forgets it. */
+let leaveAsk = false;
+
 function redrawSheet(): void {
   if (sheet && stage?.current === sheet) stage.redraw();
 }
@@ -277,6 +281,7 @@ function showGame(): void {
 /** The menu button: the sheet over the game, or back to the game. */
 function openSheet(open: boolean): void {
   sheetOpen = open;
+  leaveAsk = false;
   // The pad's, and the dock's on an upright phone (ui/phonehud.ts).
   for (const b of document.querySelectorAll('#menu-btn, #hud-menu')) b.setAttribute('aria-expanded', String(open));
   showGame();
@@ -384,6 +389,19 @@ type SheetPart = Pick<
 function makeSheet(part: () => SheetPart): DrawnScreen {
   return sheetScreen(() => ({
     ...part(),
+    leaveAsk,
+    onLeave: () => {
+      leaveAsk = true;
+      redrawSheet();
+    },
+    onStay: () => {
+      leaveAsk = false;
+      redrawSheet();
+    },
+    onLeaveSure: () => {
+      leaveAsk = false;
+      part().onLeave();
+    },
     look: desktop() ? 'dock' : 'overlay',
     strip: matchStrip,
     note: '',
