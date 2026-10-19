@@ -11,6 +11,8 @@
 //   <dir>/play.json     what the page draws: sessions, installs, solo reports, bounces,
 //                       jank reports
 //   <dir>/stats.json    the newest heartbeat: who is on right now, peaks since deploy
+//   <dir>/feedback.json which players' notes are already Linear issues (POK-428):
+//                       hashes and deployment ids only, never a note's words
 //
 // <dir> is PLAY_LOG_DIR (default `play-log`). The workflow checks the `play-log`
 // branch out there, so the every-fifteen-minutes commits never touch the code
@@ -31,6 +33,8 @@
 //         | checks K drifts D                          one page's smoothness (POK-376)
 //   match CODE started (quick|host|daily) | N trainers [M watching] | max K
 //   match CODE ended after Ns
+//   feedback CODE|- | {"v","where","name","text"}       a player's note (POK-428): never
+//                                                     an event, filed in Linear instead
 //   rooms R/RC conns C/CC | sent B in L lines | peak PR rooms PC conns [| matches M]
 //         [| stats S (solo SS)] [| refused X]
 //
@@ -63,6 +67,14 @@ const DIR = process.env.PLAY_LOG_DIR || "play-log";
 const EVENTS = join(DIR, "events.json");
 const PLAY = join(DIR, "play.json");
 const STATS = join(DIR, "stats.json");
+const FEEDBACK = join(DIR, "feedback.json");
+
+// Where a note becomes an issue: the POK team, the Hoenn Battle Royale project, and the
+// "Player feedback" label.
+const LINEAR_API = "https://api.linear.app/graphql";
+const LINEAR_TEAM = "479f88ee-ce66-4a88-88b3-6116ab3a3654";
+const LINEAR_PROJECT = "8269b410-3909-4322-bd65-46adc775ff76";
+const LINEAR_LABEL = "fb7234e9-e7c6-430a-bff4-1340596d1a14";
 
 // How far back a deployment's logs are worth asking for. Railway's retention is
 // longer than this in practice, and the incremental fetch covers the live process
@@ -237,6 +249,111 @@ export function parseLine(message, fallbackAt) {
     return flag({ t, kind: "left", code: m[1], who: who(m[2], m[3]), how: "kicked" }, m[2]);
 
   return null;
+}
+
+// --- feedback (POK-428) -----------------------------------------------------
+//
+// A player's note from the page's FEEDBACK screen. The repo is public, and so is this
+// workflow's log and the play-log branch, so a note's words go to exactly one place: a
+// Linear issue. What stays here is a hash of each note filed, so the next run (or a dead
+// deployment read in full) never files it twice. Without LINEAR_API_KEY nothing is read
+// for them at all, and they wait in Railway's log for the key to arrive.
+
+export function parseFeedback(message, fallbackAt) {
+  const stamp = message.match(/^(\d{4}-\d\d-\d\dT[\d:.]+Z) (.*)$/);
+  const t = stamp ? stamp[1] : fallbackAt;
+  const body = stamp ? stamp[2] : message;
+  const m = body.match(/^feedback ([A-Z0-9]+|-) \| (\{.*\})$/);
+  if (!m) return null;
+  let note;
+  try { note = JSON.parse(m[2]); } catch { return null; }
+  if (typeof note.text !== "string" || note.text === "") return null;
+  const id = createHash("sha256").update("hbr-feedback:" + t + "|" + note.text).digest("hex").slice(0, 16);
+  return { id, t, room: m[1] === "-" ? null : m[1], v: String(note.v ?? "?"),
+           where: String(note.where ?? "?"), name: String(note.name ?? "?"), text: note.text };
+}
+
+const WHERE = { menu: "the main menu", "match-solo": "a solo match", "match-quick": "a quick play match",
+                "match-host": "a hosted room", "match-daily": "the daily game", "match-join": "a room",
+                "match-watch": "watching a match" };
+
+/** The issue a note becomes. Its first words are the title. */
+export function issueFor(note) {
+  const words = Array.from(note.text);
+  const title = "Player feedback: " + (words.length > 60 ? words.slice(0, 60).join("").trimEnd() + "…" : note.text);
+  const where = (WHERE[note.where] || note.where) + (note.room ? ` (room ${note.room})` : "");
+  const description = [
+    "> " + note.text,
+    "",
+    `- From: ${note.name}, in ${where}`,
+    `- Build: ${note.v}`,
+    `- Sent: ${note.t}`,
+    "",
+    "Sent from the in-game FEEDBACK screen and filed by play-log.yml (POK-428).",
+  ].join("\n");
+  return { title, description };
+}
+
+async function createIssue(key, note) {
+  const { title, description } = issueFor(note);
+  const r = await fetch(LINEAR_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: key },
+    body: JSON.stringify({
+      query: `mutation($input: IssueCreateInput!) {
+                issueCreate(input: $input) { success issue { identifier } }
+              }`,
+      variables: { input: { teamId: LINEAR_TEAM, projectId: LINEAR_PROJECT, labelIds: [LINEAR_LABEL],
+                            title, description } }
+    })
+  });
+  const body = await r.json().catch(() => ({}));
+  // Linear's errors can quote the input, which is the note: only the status is printed.
+  if (!r.ok || body.errors || !body.data?.issueCreate?.success)
+    throw new Error(`Linear refused an issue (${r.status})`);
+  return body.data.issueCreate.issue.identifier;
+}
+
+// `notes` are the ones the run's own read saw; a deployment this has never read for
+// notes (every one, the first time there is a key) is read again in full.
+async function fileFeedback(deps, live, now, notes) {
+  const key = process.env.LINEAR_API_KEY;
+  if (!key) {
+    if (notes.length) console.log(`::notice::${notes.length} feedback notes and no LINEAR_API_KEY; they wait in the relay's log`);
+    return;
+  }
+  const before = readJson(FEEDBACK, { swept: {}, filed: [] });
+  const swept = { ...before.swept };
+  const filed = new Set(before.filed);
+  const cutoff = new Date(now.getTime() - SWEEP_DAYS * 86400e3);
+  const all = [...notes];
+  for (const d of deps) {
+    if (new Date(d.createdAt) < cutoff || swept[d.id]) continue;
+    for (const l of await lines(d.id, new Date(d.createdAt), now)) {
+      const note = parseFeedback(l.message, l.timestamp);
+      if (note) all.push(note);
+    }
+    swept[d.id] = true;
+  }
+  let made = 0;
+  let failed = false;
+  for (const note of all) {
+    if (filed.has(note.id)) continue;
+    try {
+      console.log(`feedback ${note.id} -> ${await createIssue(key, note)}`);
+      filed.add(note.id);
+      made += 1;
+    } catch (err) {
+      console.log(`::warning::feedback ${note.id} not filed: ${err.message}`);
+      failed = true;
+    }
+  }
+  // A note that did not make it is read again next run: every deployment in full, since
+  // the run's own read window will have moved past it. `filed` keeps the rest from
+  // being filed twice.
+  const after = { swept: failed ? {} : swept, filed: [...filed] };
+  if (JSON.stringify(after) !== JSON.stringify(before)) writeFileSync(FEEDBACK, JSON.stringify(after, null, 1) + "\n");
+  console.log(`${made} feedback notes filed in Linear`);
 }
 
 // The heartbeat, which is not an event: it is a snapshot, and only the newest one
@@ -485,6 +602,7 @@ async function main() {
   const seen = new Set(store.events.map(key));
   let added = 0;
   let heartbeat = null;   // the newest one in the live process
+  const notes = [];       // players' notes this read saw (POK-428), for Linear only
 
   const deps = await deployments();
   const cutoff = new Date(Date.now() - SWEEP_DAYS * 86400e3);
@@ -510,6 +628,8 @@ async function main() {
         const hb = parseHeartbeat(l.message);
         if (hb && (!heartbeat || hb.at > heartbeat.at)) heartbeat = hb;
       }
+      const note = parseFeedback(l.message, l.timestamp);
+      if (note) notes.push(note);
       const ev = parseLine(l.message, l.timestamp);
       if (!ev) continue;
       ev.deploy = d.id.slice(0, 8);
@@ -568,6 +688,8 @@ async function main() {
 
   console.log(`${added} new events; ${play.sessions.length} sessions, ` +
               `${play.installs.length} installs, ${play.solo.length} solo reports`);
+
+  await fileFeedback(deps, live, now, notes);
 }
 
 if (process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("play-log.mjs")) {

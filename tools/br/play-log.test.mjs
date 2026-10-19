@@ -246,3 +246,40 @@ test("a jank report is read whole, room or not (POK-376)", () => {
   assert.equal(out.jank[0].drifts, 0);
   assert.equal(out.jank[0].kind, undefined);
 });
+
+// ---- POK-428: a player's note, for Linear and nowhere else
+
+test("a feedback line is a note, never an event", async () => {
+  const { parseFeedback, issueFor } = await import("./play-log.mjs");
+  const line = '2026-10-19T15:00:00.000Z feedback ABCDEF | {"v":"patch 0.3.15 · rom 7562da8","where":"match-solo","name":"MAY","text":"the ferry | softlocked"}';
+  assert.equal(parseLine(line, "x"), null, "the words never reach events.json");
+  const note = parseFeedback(line, "x");
+  assert.deepEqual({ ...note, id: note.id.length }, {
+    id: 16, t: "2026-10-19T15:00:00.000Z", room: "ABCDEF", v: "patch 0.3.15 · rom 7562da8",
+    where: "match-solo", name: "MAY", text: "the ferry | softlocked"
+  });
+  assert.equal(parseFeedback(line, "y").id, note.id, "the same line is the same note");
+  assert.notEqual(parseFeedback(line.replace("15:00:00", "15:00:01"), "x").id, note.id);
+  assert.deepEqual(issueFor(note), {
+    title: "Player feedback: the ferry | softlocked",
+    description: [
+      "> the ferry | softlocked", "",
+      "- From: MAY, in a solo match (room ABCDEF)",
+      "- Build: patch 0.3.15 · rom 7562da8",
+      "- Sent: 2026-10-19T15:00:00.000Z", "",
+      "Sent from the in-game FEEDBACK screen and filed by play-log.yml (POK-428)."
+    ].join("\n")
+  });
+});
+
+test("a long note's title is its first sixty characters; junk is not a note", async () => {
+  const { parseFeedback, issueFor } = await import("./play-log.mjs");
+  const text = "a".repeat(80);
+  const note = parseFeedback(`2026-10-19T15:00:00.000Z feedback - | {"text":"${text}"}`, "x");
+  assert.equal(note.room, null);
+  assert.equal(issueFor(note).title, "Player feedback: " + "a".repeat(60) + "…");
+  assert.ok(issueFor(note).description.includes("- From: ?, in ?"));
+  assert.equal(parseFeedback("2026-10-19T15:00:00.000Z feedback - | {not json}", "x"), null);
+  assert.equal(parseFeedback('2026-10-19T15:00:00.000Z feedback - | {"text":""}', "x"), null);
+  assert.equal(parseFeedback("2026-10-19T15:00:00.000Z stat abc v1 | solo +0 | since 2026-10-19", "x"), null);
+});

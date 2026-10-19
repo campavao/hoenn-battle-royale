@@ -12,6 +12,11 @@ name: play log
 #
 # Needs one secret: RAILWAY_PROJECT_TOKEN (least privilege, one environment) or
 # RAILWAY_TOKEN. Kanto's relay_stats.yml is the parent of this file.
+#
+# Players' notes from the FEEDBACK screen (POK-428) are filed as Linear issues with a
+# second secret, LINEAR_API_KEY. Their words go to Linear only: this repo, its play-log
+# branch and this workflow's log are all public, so none of them ever print a note.
+# Without the key the notes wait in the relay's log.
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -54,6 +59,7 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           PLAY_LOG_DIR: play-log
         run: |
           if [ -z "$RAILWAY_TOKEN$RAILWAY_PROJECT_TOKEN" ]; then
