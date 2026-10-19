@@ -556,7 +556,10 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         const sb1 = emu.read(s.gSaveBlock1Ptr, 32);
         const map = sb1 ? `${emu.read(sb1 + k.SB1_MAP_GROUP, 8)}:${emu.read(sb1 + k.SB1_MAP_NUM, 8)}` : '';
         const before = camBefore;
-        camBefore = sb1
+        // A main loop still mid-iteration at this VBlank has the camera half-written, and
+        // field.ts keeps the last whole frame's (gBrMidFrame): so does this.
+        const mid = s.gBrMidFrame !== undefined && emu.read(s.gBrMidFrame, 8) !== 0 && camBefore;
+        if (!mid) camBefore = sb1
           ? {
             map,
             x: s16(emu.read(sb1, 16)),
