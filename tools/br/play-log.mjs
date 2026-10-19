@@ -709,8 +709,8 @@ async function main() {
   console.log(`${added} new events; ${play.sessions.length} sessions, ` +
               `${play.installs.length} installs, ${play.solo.length} solo reports`);
 
-  const key = process.env.LINEAR_API_KEY;
-  if (!key) {
+  const linearKey = process.env.LINEAR_API_KEY;
+  if (!linearKey) {
     if (notes.length) console.log(`::notice::${notes.length} feedback notes and no LINEAR_API_KEY; they wait in the relay's log`);
     return;
   }
@@ -718,7 +718,7 @@ async function main() {
   // pass got through), and a Linear outage is no reason to lose the play log's commit.
   try {
     const before = readJson(FEEDBACK, { swept: {} });
-    const after = await fileFeedback({ deps, live, now, notes, state: before, read: lines, filer: linearFiler(key) });
+    const after = await fileFeedback({ deps, live, now, notes, state: before, read: lines, filer: linearFiler(linearKey) });
     if (JSON.stringify(after) !== JSON.stringify(before)) writeFileSync(FEEDBACK, JSON.stringify(after, null, 1) + "\n");
   } catch (err) {
     if (err.key) {
