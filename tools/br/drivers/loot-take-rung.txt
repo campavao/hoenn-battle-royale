@@ -1,0 +1,24 @@
+# loot-take-rung: a ball off the ground joins the party at the rung, never under it
+# (10-19 play-test #28: "Why does it say my Pelipper was level 30?"). A beaten trainer's
+# team goes down at the levels the game shipped them with -- the battle lifted them,
+# the spill did not -- so a PELIPPER taken from a Lv30 route trainer at rung 75 stayed
+# 30 until the fog next moved, and the last phase never moves it: 77 max HP in the
+# party, a Lv30 on the results.
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 0
+# the rung the match is at: 75 (the ring is off, so the tick leaves it there)
+poke u8 gBrLevels 75
+# SPILL from seat 2: one PELIPPER (species 279) at level 30, on the cell we face
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 02 00 09 01 00 02 0C 00 10 00 17 01 1E 00
+poke u16 gBrMailbox+0x0C 1
+wait 20
+expect u8 gBrLoot+0xA0 1
+tap A
+wait 30
+expect u8 gPlayerPartyCount 1
+# struct Pokemon's level (0x54): the rung, not the 30 on the ball
+expect u8 gPlayerParty+0x54 75
+shot taken
+say loot take rung ok
