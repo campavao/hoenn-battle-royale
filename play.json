@@ -1,7 +1,111 @@
 {
- "readAt": "2026-10-19T04:53:51.429Z",
+ "readAt": "2026-10-19T22:46:32.632Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
+  {
+   "code": "HH7WGD",
+   "at": "2026-10-19T22:28:02.114Z",
+   "end": null,
+   "secs": null,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-19T22:28:12.178Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "live": true,
+   "exact": true
+  },
+  {
+   "code": "XDGUWY",
+   "at": "2026-10-19T22:17:18.318Z",
+   "end": "2026-10-19T22:28:43.552Z",
+   "secs": 685,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 1,
+   "matches": 1,
+   "joins": [
+    {
+     "t": "2026-10-19T22:27:43.576Z",
+     "how": "spectate"
+    }
+   ],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-19T22:17:28.379Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
+   "code": "GZJKAR",
+   "at": "2026-10-19T22:17:08.806Z",
+   "end": "2026-10-19T22:18:13.476Z",
+   "secs": 65,
+   "door": "open",
+   "mode": "host",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "W7Z76N",
+   "at": "2026-10-19T22:16:55.554Z",
+   "end": "2026-10-19T22:18:03.475Z",
+   "secs": 68,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
+  {
+   "code": "3YVBKR",
+   "at": "2026-10-19T22:16:30.246Z",
+   "end": "2026-10-19T22:17:33.476Z",
+   "secs": 63,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 0,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": []
+  },
   {
    "code": "K8DRSM",
    "at": "2026-10-19T00:02:20.619Z",
@@ -2341,14 +2445,15 @@
   {
    "id": "a6f8be76",
    "first": "2026-10-14T22:34:17.163Z",
-   "last": "2026-10-18T23:02:28.272Z",
+   "last": "2026-10-19T22:28:02.049Z",
    "since": "2026-10-14",
    "versions": [
-    "2"
+    "2",
+    "3"
    ],
    "solo": 1,
-   "checkins": 4,
-   "v": "2"
+   "checkins": 10,
+   "v": "3"
   },
   {
    "id": "6144a717",
