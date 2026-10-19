@@ -1320,13 +1320,13 @@ function waitForMailbox(emu: Emulator, mailboxBase: number, staleAfter?: number)
  *  mGBA's loadGame clears WRAM and decisive if it does not, so it costs nothing either
  *  way; the pause has to come AFTER the wait, because waitForMailbox counts emulated
  *  frames both to resolve and to time out. */
-async function rebootIntoBr(emu: Emulator, mailboxBase: number, bootMode: number): Promise<void> {
+async function rebootIntoBr(emu: Emulator, mailboxBase: number, bootMode: number, skinBase?: number): Promise<void> {
   const before = emu.read(mailboxBase + MAILBOX.OFF_FRAME, 32);
   emu.write(mailboxBase + MAILBOX.OFF_MAGIC, 0, 16);
   await emu.reboot();
   await waitForMailbox(emu, mailboxBase, before);
   emu.pause();
-  writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
+  writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin(), skinBase);
   emu.resume();
 }
 
@@ -1424,8 +1424,13 @@ function writeBootBlock(
   name: string,
   mode: number = BR_BOOT_MAP,
   skin = 0,
+  skinBase?: number,
 ): void {
   const boot = mailboxBase + MAILBOX.OFF_BOOT;
+  // Before the boot spawns the player (POK-411): an NPC look is our own field sprite and
+  // battle picture too, not only our ghost on everybody else's screen, and the room's
+  // write comes after the field is up.
+  if (skinBase !== undefined) writeMySkin(emu, skinBase, skin);
   emu.write(boot + BOOT_AT.mode, mode, 8);
   // The four sprites are BRENDAN, MAY, RIVAL BRENDAN, RIVAL MAY -- the odd ones are
   // the girls, and the player's own avatar should be what they picked for their ghost.
@@ -3161,7 +3166,7 @@ function wireRoom(
       // The window may have turned or been resized since the last boot: the band is the
       // match's layout's now (askForBand), and a boot is the one time the core takes it.
       askForBand(emu);
-      if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
+      if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'), symbols?.get('gBrMySkin'));
       else await emu.reboot();
       // Last match's champion is not this match's (POK-243). PLAY AGAIN used to reload
       // the page, which cleared this for free.
@@ -4242,7 +4247,7 @@ async function main(): Promise<void> {
   if (mailboxBase !== undefined) {
     const matchBase = symbols?.get('gBrMatch');
     if (roomHash.mode === 'solo' && matchBase !== undefined) emu.write(matchBase + MATCH_SEED, soloSeed, 32);
-    writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
+    writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin(), symbols?.get('gBrMySkin'));
     emu.resume();
   }
 

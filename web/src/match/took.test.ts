@@ -34,6 +34,6 @@ describe('what the trainer you are watching took', () => {
   });
 
   it('reads as a line', () => {
-    expect(took(3, 'BRENDAN', 'A POOCHYENA')?.text).toBe('BRENDAN TOOK A POOCHYENA');
+    expect(took(3, 'BRENDAN', 'A POOCHYENA')?.text).toBe('BRENDAN took A POOCHYENA');
   });
 });

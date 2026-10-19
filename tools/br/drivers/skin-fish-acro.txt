@@ -1,0 +1,51 @@
+# skin-fish-acro: an NPC look fishes and rides the ACRO BIKE in its own sprite (POK-411,
+# PR #72 review). Both used to swap it to pret's BRENDAN or MAY for the duration, and the
+# look has no rod or wheelie frames: the rod's casts and the wheelies stand, facing,
+# and putting the rod away no longer waits on an animation that loops (it hung).
+#
+# hm-bike-surf.txt's spot: ROUTE 104 at (36,22), the sea to the north. PICNICKER, skin 7.
+wait 30
+poke u8 gBrMySkin 7
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 01 00 13 24 00 16 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 19
+# face the water, then the OLD ROD (262) on SELECT
+tap UP
+wait 20
+poke u16 *gSaveBlock1Ptr+0x496 262
+tap SELECT
+wait 90
+shot cast
+expect u8 gObjectEvents+5 32
+wait 200
+shot waiting
+# no A on the bite: it gets away, and the rod goes away -- the wait that used to hang
+wait 120
+shot got-away
+# one A for "It got away..." -- another, facing the sea, would ask to SURF
+hold A 4
+wait 200
+shot after-fish
+expect u8 gObjectEvents+5 32
+expect u32 gMain+4 CB2_Overworld+1
+# the ACRO BIKE (272) on SELECT, facing away from the water (a bike into water surfs,
+# hm-bike-surf.txt), a step, then B held: the wheelie
+tap DOWN
+wait 20
+poke u16 *gSaveBlock1Ptr+0x496 272
+tap SELECT
+wait 60
+expectbits u8 gPlayerAvatar 0x04 0x04
+expect u8 gObjectEvents+5 32
+hold LEFT 16
+shot acro
+hold B 60
+shot wheelie
+expect u8 gObjectEvents+5 32
+hold LEFT 16
+wait 30
+shot after-acro
+expect u8 gObjectEvents+5 32
+expect u32 gMain+4 CB2_Overworld+1
+say skin fish acro ok

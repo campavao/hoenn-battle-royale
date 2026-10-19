@@ -308,8 +308,8 @@ static u8 DealTheme(void)
 }
 
 static const u8 sText_ThemeA[] = _("A ");
-static const u8 sText_ThemeAn[] = _("AN ");
-static const u8 sText_ThemeMatch[] = _(" MATCH!");
+static const u8 sText_ThemeAn[] = _("An ");
+static const u8 sText_ThemeMatch[] = _(" match!");
 // gTypeNames is the summary screen's, and it abbreviates to six: PSYCHC, ELECTR.
 static const u8 sText_Psychic[] = _("PSYCHIC");
 static const u8 sText_Electric[] = _("ELECTRIC");

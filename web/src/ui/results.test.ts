@@ -9,19 +9,19 @@ const nameOf = (seat: number) => (seat === 2 ? 'MAY' : `P${seat}`);
 describe('what the results say', () => {
   it('says where you came, how long you lasted, who won and the seed, in one line and in rows', () => {
     const v = resultsView({ ended: true, winner: 2, placement: 3, survived: 192 }, 8, 1, nameOf, 7);
-    expect(v.headline).toBe('3RD OF 8');
+    expect(v.headline).toBe('3rd of 8');
     expect(v.line).toBe('3rd of 8 · survived 3:12 · MAY won · seed 7');
     expect(v.rows).toEqual([
-      { label: 'SURVIVED', value: '3:12' },
-      { label: 'WINNER', value: 'MAY' },
-      { label: 'SEED', value: '7' },
+      { label: 'Survived', value: '3:12' },
+      { label: 'Winner', value: 'MAY' },
+      { label: 'Seed', value: '7' },
     ]);
   });
 
   it('crowns you, and calls a draw a draw', () => {
-    expect(resultsView({ ended: true, winner: 1, placement: 1, survived: 60 }, 8, 1, nameOf).headline).toBe('YOU WON!');
+    expect(resultsView({ ended: true, winner: 1, placement: 1, survived: 60 }, 8, 1, nameOf).headline).toBe('You won!');
     const draw = resultsView({ ended: true, survived: 60 }, 8, 1, nameOf);
-    expect(draw.headline).toBe('A DRAW');
+    expect(draw.headline).toBe('A draw');
     expect(draw.line).toBe('survived 1:00 · a draw');
   });
 
@@ -32,8 +32,8 @@ describe('what the results say', () => {
       { species: 261, nickname: '', level: 9 },
     ];
     const fame = fameOf(2, 1, party, nameOf, () => 'POOCHYENA');
-    expect(fame).toEqual({ title: 'THE CHAMPION: MAY', mons: ['MUDKIP Lv12', 'POOCHYENA Lv9'] });
-    expect(fameOf(1, 1, party, nameOf, () => '')?.title).toBe('YOUR TEAM');
+    expect(fame).toEqual({ title: 'The champion: MAY', mons: ['MUDKIP Lv12', 'POOCHYENA Lv9'] });
+    expect(fameOf(1, 1, party, nameOf, () => '')?.title).toBe('Your team');
     expect(fameOf(2, 1, undefined, nameOf, () => ''), "a bot's never does").toBeNull();
     expect(fameOf(undefined, 1, party, nameOf, () => '')).toBeNull();
   });
@@ -42,7 +42,7 @@ describe('what the results say', () => {
     const model: ResultsModel = {
       view: resultsView({ ended: true, winner: 2, placement: 2, survived: 30 }, 8, 1, nameOf, 7),
       career: '1 played · 0 won · best 2nd',
-      fame: { title: 'THE CHAMPION: MAY', mons: ['MUDKIP Lv12'] },
+      fame: { title: 'The champion: MAY', mons: ['MUDKIP Lv12'] },
       record: [{ label: 'RINGS', value: '2' }],
       again: { label: 'PLAY AGAIN', id: 'play-again', onPress: vi.fn() },
     };

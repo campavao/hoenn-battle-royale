@@ -72,8 +72,8 @@ static const u16 sRevives[] =
 #define BR_ITEMS_BALLS 6
 
 static const u8 sText_Bang[] = _("! ");
-static const u8 sText_Party[] = _("PARTY ");
-static const u8 sText_Maxed[] = _(" MAXED");
+static const u8 sText_Party[] = _("Party ");
+static const u8 sText_Maxed[] = _(" maxed");
 static const u8 sText_Plus[] = _("! +¥");
 static const u8 sText_PartyHealed[] = _("The whole party was treated.{PAUSE_UNTIL_PRESS}");
 static const u8 sText_FoundVitamin[] = _("{PLAYER} found {STR_VAR_2}!\nThe whole party's {STR_VAR_1}\lwent to the top.");
