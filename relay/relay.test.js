@@ -2479,3 +2479,54 @@ test("a jank report is one clamped log line and never answered", async () => {
     a.end();
   });
 });
+
+// ------- POK-428: a player's note from the FEEDBACK screen
+
+test("a feedback note is one log line with a JSON tail, and answered", async () => {
+  await withLoggedRelay(async (port, lines) => {
+    const a = await connect(port);
+    a.send({ type: "feedback", text: "  the ferry\nsoftlocked | again \u0007 ", v: "patch 0.3.15 · shell 1a2b3c4 · rom 7562da8",
+             where: "match-solo", name: "MAY", room: "ABCDEF" });
+    assert.deepEqual(await a.next(), { type: "feedback_ok" });
+    const said = lines.filter((l) => l.startsWith("feedback "));
+    assert.deepEqual(said, [
+      'feedback ABCDEF | {"v":"patch 0.3.15 · shell 1a2b3c4 · rom 7562da8","where":"match-solo","name":"MAY","text":"the ferry softlocked | again"}',
+    ]);
+    a.end();
+  });
+});
+
+test("a feedback note with no words is refused, and junk fields are not written", async () => {
+  await withLoggedRelay(async (port, lines) => {
+    const a = await connect(port);
+    a.send({ type: "feedback", text: " \n\t " });
+    assert.deepEqual(await a.next(), { type: "feedback_error", reason: "empty" });
+    a.send({ type: "feedback", text: 42 });
+    assert.deepEqual(await a.next(), { type: "feedback_error", reason: "empty" });
+    a.send({ type: "feedback", text: "x".repeat(5000), v: { evil: 1 }, where: "../../etc", name: 7, room: "abc" });
+    assert.deepEqual(await a.next(), { type: "feedback_ok" });
+    const said = lines.filter((l) => l.startsWith("feedback "));
+    assert.equal(said.length, 1);
+    const tail = JSON.parse(said[0].slice(said[0].indexOf("| ") + 2));
+    assert.deepEqual({ ...tail, text: tail.text.length }, { v: "?", where: "?", name: "PLAYER", text: 1000 });
+    assert.ok(said[0].startsWith("feedback - | "), "a code that is not one is not written");
+    a.end();
+  });
+});
+
+test("one address gets FEEDBACK_PER_HOUR notes, then busy", async () => {
+  const { FEEDBACK_PER_HOUR } = await import("./server.js");
+  await withLoggedRelay(async (port, lines) => {
+    const a = await connect(port);
+    for (let i = 0; i < FEEDBACK_PER_HOUR; i++) {
+      a.send({ type: "feedback", text: `note ${i}` });
+      assert.deepEqual(await a.next(), { type: "feedback_ok" });
+    }
+    // a new socket from the same address is the same address
+    const b = await connect(port);
+    b.send({ type: "feedback", text: "one more" });
+    assert.deepEqual(await b.next(), { type: "feedback_error", reason: "busy" });
+    assert.equal(lines.filter((l) => l.startsWith("feedback ")).length, FEEDBACK_PER_HOUR);
+    a.end(); b.end();
+  });
+});

@@ -69,6 +69,15 @@
 //                                      waits past the shot clock, turn checks
 //                                      and drifts. Counts only; logged as one
 //                                      `jank` line, not answered.
+//   {type:"feedback", text, v?,       -> feedback_ok, or feedback_error
+//         where?, name?, room?}           {reason: "empty"|"busy"}: a player's
+//                                      note from the FEEDBACK screen
+//                                      (POK-428), logged as one `feedback`
+//                                      line whose tail is JSON, for
+//                                      play-log.yml to file in Linear. Needs
+//                                      no room: the page opens a socket for
+//                                      it. At most FEEDBACK_PER_HOUR from
+//                                      one address
 //   {type:"lock_room", locked, bots?}  host only: refuse new joiners (a match
 //                                      in progress).  Logged as one `match`
 //                                      line at the lock and one at the
@@ -151,7 +160,8 @@
 import http from "node:http";
 import { randomInt } from "node:crypto";
 import { WebSocketServer } from "ws";
-import { cleanMotd, cleanName, cleanPass, cleanSkin, cleanVersion, clientAddress,
+import { cleanFeedback, cleanFeedbackVersion, cleanFeedbackWhere,
+         cleanMotd, cleanName, cleanPass, cleanSkin, cleanVersion, clientAddress,
          dailySecondsUntil, limitsFromEnv, originAllowed, parseDaily,
          parseOrigins } from "./clean.js";
 import { Conn } from "./conn.js";
@@ -161,6 +171,10 @@ import { MAX_SEAT, Room } from "./room.js";
 // server.js exported before the move, it still does.
 export { cleanMotd, cleanPass, clientAddress, dailySecondsUntil, limitsFromEnv,
          MAX_SEAT, originAllowed, parseDaily, parseOrigins };
+
+// Each note becomes a Linear issue somebody reads, so one address gets a few
+// an hour: plenty for a player, and a ceiling on a script.
+export const FEEDBACK_PER_HOUR = 6;
 
 export const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 export const CODE_LENGTH = 6;
@@ -286,6 +300,8 @@ export function createRelay(options = {}) {
   const rooms = new Map();
   const conns = new Set();
   const perIp = new Map();
+  // address -> when its notes in the last hour were logged (FEEDBACK_PER_HOUR)
+  const feedbackAt = new Map();
 
   // Who inherits a room whose host just went.  The longest-standing member
   // that said it could take it -- the earliest arrival, by the room's own
@@ -878,6 +894,35 @@ export function createRelay(options = {}) {
           + ` | snaps ${n(msg.snaps)} cam ${n(msg.cam)} lost ${n(msg.lost)}`
           + ` | stalls ${n(msg.stalls)} longest ${n(msg.longest)}s`
           + ` | checks ${n(msg.checks)} drifts ${n(msg.drifts)}`);
+        return;
+      }
+      case "feedback": {
+        // A player's note (POK-428). The one free-text message: cleaned to
+        // one printable line, and the line's tail is JSON so a note with a
+        // `|` in it still parses.
+        const text = cleanFeedback(msg.text);
+        if (!text) {
+          conn.send({ type: "feedback_error", reason: "empty" });
+          return;
+        }
+        const now = Date.now();
+        for (const [ip, times] of feedbackAt) {
+          const fresh = times.filter((t) => now - t < 3600e3);
+          if (fresh.length) feedbackAt.set(ip, fresh); else feedbackAt.delete(ip);
+        }
+        const mine = feedbackAt.get(conn.ip) || [];
+        if (mine.length >= FEEDBACK_PER_HOUR) {
+          conn.send({ type: "feedback_error", reason: "busy" });
+          return;
+        }
+        feedbackAt.set(conn.ip, [...mine, now]);
+        const said = typeof msg.room === "string" && msg.room.length === CODE_LENGTH
+          && [...msg.room].every((ch) => CODE_ALPHABET.includes(ch)) ? msg.room : null;
+        const code = conn.room ? conn.room.code : said || "-";
+        log(`feedback ${code} | ` + JSON.stringify({
+          v: cleanFeedbackVersion(msg.v), where: cleanFeedbackWhere(msg.where),
+          name: cleanName(msg.name), text }));
+        conn.send({ type: "feedback_ok" });
         return;
       }
       default:

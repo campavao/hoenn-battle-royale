@@ -10,7 +10,7 @@
 export const HANDLED = new Set([
   "ping", "info", "list_rooms", "daily_join", "host_room", "join_room",
   "quick_join", "set_open", "set_max", "set_pass", "set_skin", "lock_room",
-  "can_host", "kick", "leave_room", "to", "all", "stat", "jank",
+  "can_host", "kick", "leave_room", "to", "all", "stat", "jank", "feedback",
 ]);
 
 export class Conn {
