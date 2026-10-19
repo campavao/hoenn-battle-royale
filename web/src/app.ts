@@ -1698,6 +1698,23 @@ function resultsShowing(): boolean {
   return resultsUp !== null && theStage().current === resultsUp.screen;
 }
 
+/** Lazy chunks that keep failing (POK-419). Retrying cannot help when a release has taken
+ *  this page's hashed chunks off the site (every fetch a 404), or when Safari keeps the
+ *  failed fetch in its module map and rejects the next import() without asking again.
+ *  After a few failures the page offers a reload, which takes the new index and its
+ *  chunks; never on its own, since it would drop a match out from under the player. */
+const CHUNK_FAILS_BEFORE_RELOAD = 3;
+let chunkFails = 0;
+function chunkFailed(): void {
+  if (++chunkFails !== CHUNK_FAILS_BEFORE_RELOAD) return;
+  const b = document.createElement('button');
+  b.id = 'chunk-reload';
+  b.type = 'button';
+  b.textContent = "Part of the game didn't load. Tap to reload.";
+  b.addEventListener('click', () => location.reload());
+  document.body.append(b);
+}
+
 /** Where we came, how long we lasted, and what that does to the career record, drawn on
  *  the stage when the match ends: `recordMatch` folds the placement in and the career
  *  line is the record it produced. Under it the champion's team (POK-243: the ROM's own
@@ -1724,6 +1741,7 @@ function loadResultsUi(): Promise<void> {
     (err: unknown) => {
       resultsUiReady = undefined;
       console.warn('results screen did not load', err);
+      chunkFailed();
     },
   );
   return resultsUiReady;
@@ -1744,6 +1762,7 @@ function loadProfileUi(): Promise<void> {
     (err: unknown) => {
       profileUiReady = undefined;
       console.warn('profile screens did not load', err);
+      chunkFailed();
     },
   );
   return profileUiReady;
@@ -4043,6 +4062,7 @@ function loadPhoneUi(): Promise<typeof import('./ui/phone-ui')> {
           busy = false;
           tries++;
           console.warn(`phone HUD did not load (try ${tries})`, err);
+          chunkFailed();
           timer = setTimeout(again, Math.min(60_000, 2_000 * 2 ** (tries - 1)));
         },
       );
