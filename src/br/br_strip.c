@@ -13,12 +13,15 @@ extern const u8 BirthIsland_Harbor_EventScript_Sailor[];
 extern const u8 FarawayIsland_Entrance_EventScript_Sailor[];
 extern const u8 NavelRock_Harbor_EventScript_Sailor[];
 extern const u8 SSTidalCorridor_EventScript_ExitSailor[];
+extern const u8 Route112_CableCarStation_EventScript_Attendant[];
+extern const u8 MtChimney_CableCarStation_EventScript_Attendant[];
 
 // The people who take you somewhere: MR. BRINEY at each of his stops (br_boot.c's
 // BrBoot_PlaceBriney) and Lilycove's ferry attendant, by the flag that hides each.
 // Slateport's attendant shares hers with the harbour's crowd, so she goes by script, and
 // so do the sailors who take you back from the islands (br_story.c, Ferry), who have none,
 // and the one at the SS TIDAL's gangway, the only way off the boat once it has made land.
+// The cable car's attendants, at both stations, are the only ride up MT. CHIMNEY.
 static const u8 *const sFerrymen[] =
 {
     SlateportCity_Harbor_EventScript_FerryAttendant,
@@ -27,6 +30,8 @@ static const u8 *const sFerrymen[] =
     FarawayIsland_Entrance_EventScript_Sailor,
     NavelRock_Harbor_EventScript_Sailor,
     SSTidalCorridor_EventScript_ExitSailor,
+    Route112_CableCarStation_EventScript_Attendant,
+    MtChimney_CableCarStation_EventScript_Attendant,
 };
 
 static const u16 sCarriers[] =

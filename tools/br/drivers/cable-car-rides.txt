@@ -1,0 +1,50 @@
+# cable-car-rides: the cable car takes you up MT. CHIMNEY in a match (POK-425).
+#
+# The attendant at each station is a BEAUTY with no flag, so the match's strip
+# (br_strip.c) took her with the towns' people and the ride was gone. Jagged Pass only
+# goes down without an ACRO BIKE, so she is the way up.
+#
+# In ROUTE 112 CABLE CAR STATION (19:0) at (6,7), south of the attendant at (6,6). The
+# strip marks a map's people as it loads, so the match starts first and then we walk out
+# to ROUTE 112 and back in.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 81 00 13 00 06 00 07 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 19
+expect u8 *gSaveBlock1Ptr+5 0
+hold DOWN 80
+wait 200
+expect u8 *gSaveBlock1Ptr+4 0
+hold UP 20
+wait 200
+expect u8 *gSaveBlock1Ptr+4 19
+expect u8 *gSaveBlock1Ptr+5 0
+hold UP 90
+wait 20
+shot at-the-desk
+# "The cable car is ready to go up. Would you like to be on it?" YES.
+tap UP
+wait 10
+tap A
+wait 60
+shot ready-to-go
+tap A
+wait 60
+# "Please step this way."
+hold A 4
+wait 60
+shot step-this-way
+hold A 4
+wait 120
+shot boarding
+# The ride itself, then the walk out at the top.
+wait 400
+shot riding
+wait 1100
+shot arrived
+wait 600
+shot top
+expect u8 *gSaveBlock1Ptr+4 19
+expect u8 *gSaveBlock1Ptr+5 1
