@@ -165,6 +165,12 @@ function directorWorld(): DirectorWorld {
 
 const MUTE_STORAGE_KEY = 'hbr:muted';
 const UNMUTED_VOLUME = 100;
+/** A replay catching up runs silent at CATCH_UP_SPEED (startSpectateLoop), whatever MUTE
+ *  says: UNMUTE pressed meanwhile used to turn the 8x sound on (POK-394). */
+let catchUpSilent = false;
+function volume(): number {
+  return settings.muted || catchUpSilent ? 0 : UNMUTED_VOLUME;
+}
 const NAME_STORAGE_KEY = 'hbr:name';
 const DEFAULT_NAME = 'CAM';
 const DEFAULT_RELAY_URL = 'wss://hoenn-relay-production.up.railway.app';
@@ -1224,8 +1230,8 @@ function wireDpad(el: HTMLElement, emu: Emulator): void {
 
 function wireSettings(emu: Emulator): void {
   const applyMute = (muted: boolean) => {
-    emu.setVolume(muted ? 0 : UNMUTED_VOLUME);
     settings.muted = muted;
+    emu.setVolume(volume());
     redrawSheet();
   };
   applyMute(localStorage.getItem(MUTE_STORAGE_KEY) === '1');
@@ -1928,7 +1934,8 @@ function startSpectateLoop(
   const pace = (to: number) => {
     speed = to;
     emu.setSpeed(to);
-    emu.setVolume(to === CATCH_UP_SPEED || settings.muted ? 0 : UNMUTED_VOLUME);
+    catchUpSilent = to === CATCH_UP_SPEED;
+    emu.setVolume(volume());
   };
   // Catching up is for a fight joined late, whose turns so far all arrive at once. A
   // duel between two bots is not one: the proxy runs it at 8x (POK-300) and streams its
