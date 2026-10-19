@@ -558,10 +558,11 @@ describe("the BR structs the page reads at an offset", () => {
       east: define(constantsGlobalH, 'DIR_EAST'),
     });
     expect(touch.BATTLE_MENU).toBe(layout(battleH, 'BrBattle').at.menu);
-    expect([touch.MENU_ACTION, touch.MENU_MOVE, touch.MENU_SAFARI]).toEqual([
+    expect([touch.MENU_ACTION, touch.MENU_MOVE, touch.MENU_SAFARI, touch.MENU_TARGET]).toEqual([
       define(battleH, 'BR_MENU_ACTION'),
       define(battleH, 'BR_MENU_MOVE'),
       define(battleH, 'BR_MENU_SAFARI'),
+      define(battleH, 'BR_MENU_TARGET'),
     ]);
   });
 

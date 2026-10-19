@@ -16,7 +16,7 @@ import uiData from '../data/ui.json';
 import { decodeGen3Display } from '../text/gen3';
 import { MAIN_CALLBACK2 } from '../field';
 import { effectWords, effectiveness, moveInfo, type MoveInfo, type Rom } from '../battle/movebook';
-import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_MOVE, MENU_SAFARI, localBattler } from '../touch';
+import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_MOVE, MENU_SAFARI, MENU_TARGET, localBattler } from '../touch';
 import { EmeraldCanvas, TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_GREEN, TEXT_RED, TEXT_WHITE, fitText, measure, wrapText, type TextColor } from './emerald';
 import { ITEMS_POCKET, Win, bagHolds, drawIcon, picture } from './phonehud';
 import { BAG_POCKETS, POCKET_BALLS, itemInfo, readBattleBag, type Stack } from './bag';
@@ -49,7 +49,7 @@ export interface MoveSlot {
 }
 
 export interface BattleView {
-  /** gBrBattle.menu: 0 none, MENU_ACTION, MENU_MOVE, MENU_SAFARI. */
+  /** gBrBattle.menu: 0 none, MENU_ACTION, MENU_MOVE, MENU_SAFARI, MENU_TARGET. */
   menu: number;
   /** A fight with somebody (a trainer, a bot, another player): RUN needs a POKe DOLL. */
   trainer: boolean;
@@ -157,7 +157,8 @@ export function inBattle(emu: BattleRead, sym: (name: string) => number | undefi
  *  2026-10-15: "we shouldn't need them after all our UI changes"): the choices are the
  *  windows, and the text runs on by itself (br_battle.c BrBattle_AutoScrollFrames). The
  *  BAG and the party, which are screens of their own (callback2 is not BattleMainCB2),
- *  a battle script waiting on a press (ASKS_PAD), and a spectator's replay, where LEFT
+ *  a battle script waiting on a press (ASKS_PAD), a double battle's target, picked with
+ *  LEFT/RIGHT and backed out of with B (POK-383), and a spectator's replay, where LEFT
  *  and RIGHT pick who to watch, keep them. */
 export function battleWantsNoPad(emu: BattleRead, sym: (name: string) => number | undefined, rom: Rom | null): boolean {
   const main = sym('gMain');
@@ -168,6 +169,8 @@ export function battleWantsNoPad(emu: BattleRead, sym: (name: string) => number 
   if ((emu.read(main + MAIN_CALLBACK2, 32) & ~1) !== (scene & ~1)) return false;
   const flags = sym('gBattleTypeFlags');
   if (flags === undefined || emu.read(flags, 32) & BATTLE_TYPE_RECORDED) return false;
+  const br = sym('gBrBattle');
+  if (br !== undefined && emu.read(br + BATTLE_MENU, 8) === MENU_TARGET) return false;
   const at = emu.read(instr, 32) - ROM_BASE;
   return !(at >= 0 && at < rom.bytes.length && ASKS_PAD.has(rom.bytes[at]));
 }
@@ -743,6 +746,14 @@ export class BattleMenu {
       this.lastShown = 0;
       this.mode = 'action';
       this.lastMenu = 0;
+      this.setShown(false);
+      return;
+    }
+    // A double battle's target (POK-383): the pad picks it and B backs out, so the page
+    // steps aside with the moves kept. B lands back in the move menu, which follows below.
+    if (menu === MENU_TARGET) {
+      this.sent = 0;
+      this.lastMenu = menu;
       this.setShown(false);
       return;
     }

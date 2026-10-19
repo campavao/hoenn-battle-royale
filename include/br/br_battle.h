@@ -48,6 +48,7 @@ extern struct BrBattle gBrBattle;
 #define BR_MENU_ACTION 1 // FIGHT / BAG / POKeMON / RUN, bottom right, 2x2
 #define BR_MENU_MOVE   2 // the four moves, bottom left, 2x2
 #define BR_MENU_SAFARI 3 // BALL / POKeBLOCK / GO NEAR / RUN, bottom right, 2x2
+#define BR_MENU_TARGET 4 // a double battle's target: the bouncing healthbox, picked with the pad
 
 void BrBattle_Init(void);
 // The player controller: reset when a choice opens, tick each frame it is open.

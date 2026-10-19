@@ -18,7 +18,7 @@ import {
   type BattleView,
 } from './battlemenu';
 import { POCKET_CAPACITY, SLOT_SIZE } from './phonehud';
-import { BATTLE_MENU, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_SAFARI } from '../touch';
+import { BATTLE_MENU, MAIN_IN_BATTLE_BYTE, MENU_ACTION, MENU_SAFARI, MENU_TARGET } from '../touch';
 import { encodeGen3 } from '../text/gen3';
 
 const SYM: Record<string, number> = {
@@ -142,10 +142,10 @@ describe('the action windows', () => {
 });
 
 describe('the D-pad and A/B in a battle', () => {
-  const at: Record<string, number> = { gMain: 0x1000, BattleMainCB2: 0x08000201, gBattlescriptCurrInstr: 0x2000, gBattleTypeFlags: 0x3000 };
+  const at: Record<string, number> = { gMain: 0x1000, BattleMainCB2: 0x08000201, gBattlescriptCurrInstr: 0x2000, gBattleTypeFlags: 0x3000, gBrBattle: 0x4000 };
   const YESNOBOX = 0x67;
   const ATTACKCANCELER = 0x00;
-  function setup(o: { inBattle?: boolean; cb2?: number; op?: number; flags?: number } = {}) {
+  function setup(o: { inBattle?: boolean; cb2?: number; op?: number; flags?: number; menu?: number } = {}) {
     const { emu, put } = fakeEmu();
     const rom = { bytes: new Uint8Array(0x400), sym: () => undefined };
     rom.bytes[0x300] = o.op ?? ATTACKCANCELER;
@@ -153,6 +153,7 @@ describe('the D-pad and A/B in a battle', () => {
     put(at.gMain + 4, o.cb2 ?? at.BattleMainCB2, 4);
     put(at.gBattlescriptCurrInstr, 0x08000300, 4);
     put(at.gBattleTypeFlags, o.flags ?? 0, 4);
+    put(at.gBrBattle + BATTLE_MENU, o.menu ?? 0, 1);
     return { emu, rom };
   }
 
@@ -161,8 +162,8 @@ describe('the D-pad and A/B in a battle', () => {
     expect(battleWantsNoPad(emu, (n) => at[n], rom)).toBe(true);
   });
 
-  it("stay for a YES/NO, the BAG and the party, a spectator's replay, and out of a battle", () => {
-    const cases = [setup({ op: YESNOBOX }), setup({ cb2: 0x08000401 }), setup({ flags: BATTLE_TYPE_RECORDED }), setup({ inBattle: false })];
+  it("stay for a YES/NO, the BAG and the party, a double battle's target, a spectator's replay, and out of a battle", () => {
+    const cases = [setup({ op: YESNOBOX }), setup({ cb2: 0x08000401 }), setup({ menu: MENU_TARGET }), setup({ flags: BATTLE_TYPE_RECORDED }), setup({ inBattle: false })];
     for (const { emu, rom } of cases) expect(battleWantsNoPad(emu, (n) => at[n], rom)).toBe(false);
   });
 
