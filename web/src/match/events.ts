@@ -39,13 +39,14 @@ export const claimOf = (key: number): number | undefined =>
   isEventKey(key) && (key & 0xf) === 14 ? (key >> 4) & 0xf : undefined;
 
 /** BR_LOOT_KEY_HOME in include/br/br_loot.h: somebody at home in house i (POK-379), a
- *  Pokemon he gives or trades, and BR_LOOT_KEY_HOME_CLAIM, a seat asking for him first.
+ *  Pokemon he gives or trades, or on big floor i the trader standing there, `0x80 | i`
+ *  (POK-413); and BR_LOOT_KEY_HOME_CLAIM, a seat asking for him first, his key | 0x40.
  *  The page never deals them -- the ROMs do, from the seed -- and only answers the ask. */
 export const homeKey = (i: number): number => 0x8c00 | i;
-export const homeClaimOf = (key: number): number | undefined => ((key & 0xffc0) === 0x8c40 ? key & 0x3f : undefined);
-const isHomeKey = (key: number): boolean => (key & 0xffc0) === 0x8c00;
+export const homeClaimOf = (key: number): number | undefined => ((key & 0xff40) === 0x8c40 ? key & 0xbf : undefined);
+const isHomeKey = (key: number): boolean => (key & 0xff40) === 0x8c00;
 /** Either of his: the house's own key or an ask for it. */
-export const isHomeOrClaim = (key: number): boolean => (key & 0xff80) === 0x8c00;
+export const isHomeOrClaim = (key: number): boolean => (key & 0xff00) === 0x8c00;
 
 /** One trade a trader (POK-392), and one Pokemon a house (POK-379). Two players at him at
  *  once both found him standing and both traded, so a ROM asks first, with a PICKUP of

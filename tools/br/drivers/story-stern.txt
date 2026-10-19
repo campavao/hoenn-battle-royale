@@ -19,7 +19,7 @@ mailsend gBrMailbox 11 gDecompressionBuffer 19
 pokebytes gDecompressionBuffer 00 09 09 00 01 01 B0 0D 00 16 00 01 16 01 01 00 00 00 00
 mailsend gBrMailbox 11 gDecompressionBuffer 19
 wait 30
-expect u8 gBrLoot+0xA1 2
+expect u8 gBrLoot+0xA1 3
 tap UP
 wait 20
 shot stern
@@ -27,7 +27,7 @@ tap A
 wait 60
 shot wants
 # He wants the SCANNER: nothing changes hands.
-expect u8 gBrLoot+0xA1 2
+expect u8 gBrLoot+0xA1 3
 tap B
 wait 30
 tap DOWN
@@ -35,7 +35,7 @@ wait 20
 tap A
 wait 90
 expectmsg 10 u16 1 0xB001
-expect u8 gBrLoot+0xA1 1
+expect u8 gBrLoot+0xA1 2
 # The page gives a bag's contents over when it sees us take it: GIVE, one SCANNER.
 pokebytes gDecompressionBuffer 01 16 01 01
 mailsend gBrMailbox 30 gDecompressionBuffer 4
@@ -48,5 +48,5 @@ tap A
 wait 90
 shot thanks
 expectmsg 10 u16 1 0xB000
-expect u8 gBrLoot+0xA1 0
+expect u8 gBrLoot+0xA1 1
 say story stern ok

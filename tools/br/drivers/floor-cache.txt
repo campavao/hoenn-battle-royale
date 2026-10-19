@@ -1,0 +1,78 @@
+# floor-cache: every floor of a town's buildings and of the wild has something (Cam,
+# 2026-10-18; POK-413). A floor with no item ball of its own and no house cache gets a
+# cache, and a big one somebody who trades (br_balls.c, sFloors and sTraderFloors, written
+# by tools/br/floors.py).
+#
+# LILYCOVE's MUSEUM 1F (map 13:2) had nothing on it. It is sRooms[100], cache key 0x8D64,
+# with floor trader 18, key 0x8C92: the cache at (17,14) and him at (18,13),
+# MAP_OFFSET in, both where floors.py put them. Under seed 0x1072 the cache is TM45
+# ATTRACT (333), and he has a KADABRA (64). The museum's own people only go at a map
+# load once the match is on, so out of the door and back in.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 0D 02 09 00 0B 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1072
+wait 30
+hold DOWN 90
+wait 200
+hold UP 40
+wait 200
+expect u16 gBrLoot 0x8D64
+expect u16 gBrLoot+2 17
+expect u16 gBrLoot+4 14
+expect u16 gBrLoot+6 333
+expect u8 gBrLoot+11 3
+expect u16 gBrLoot+20 0x8C92
+expect u16 gBrLoot+22 18
+expect u16 gBrLoot+24 13
+expect u16 gBrLoot+26 64
+expect u8 gBrLoot+31 1
+shot inside
+# up the left of the wall to its end, round it, and face the ball: its TM's name shows
+hold UP 64
+wait 10
+hold RIGHT 16
+wait 10
+hold UP 16
+wait 20
+shot cache
+# A takes it: the teach screen, B to keep it in the bag, and the PICKUP to the room
+tap A
+wait 120
+shot teach
+tap B
+wait 60
+shot found
+tap A
+wait 60
+expectmsg 10 u16 1 0x8D64
+expect u8 gBrLoot+11 0
+# up past where it lay, and face him: his for any one of ours
+hold UP 32
+wait 20
+hold RIGHT 1
+wait 20
+shot trader
+tap A
+wait 90
+shot offer
+tap A
+wait 30
+tap A
+wait 90
+shot picker
+tap A
+wait 60
+# the ask, his key | 0x40 (POK-379's claim); no host behind the harness, so after
+# BR_CLAIM_FRAMES the trade goes ahead
+expectmsg 10 u16 1 0x8CD2
+wait 660
+shot traded
+expectmsg 10 u16 1 0x8C92
+expect u8 gBrLoot+31 0
+expect u8 gPlayerPartyCount 1
+tap A
+wait 60
+expect u32 gMain+4 CB2_Overworld+1
+say floor cache ok

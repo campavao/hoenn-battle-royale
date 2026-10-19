@@ -13,6 +13,7 @@
 #include "constants/field_effects.h"
 #include "constants/map_groups.h"
 #include "constants/metatile_behaviors.h"
+#include "br/br_balls.h"
 #include "br/br_field.h"
 #include "br/br_loot.h"
 #include "br/br_match.h"
@@ -257,7 +258,8 @@ static void DealSome(void)
                 metatile = UNPACK_METATILE(block);
                 encounter = EncounterMetatile(header, metatile);
             }
-            eligible = encounter;
+            // Nor under a room's cache or trader, who are put down first (BrLoot_Tick).
+            eligible = encounter && !BrBalls_Spot(sX, sY);
             for (i = 0; eligible && i < peopleCount; i++)
             {
                 if (people[i] == sX)

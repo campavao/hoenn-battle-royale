@@ -27,11 +27,11 @@ wait 120
 expect u8 *gSaveBlock1Ptr+4 22
 expect u8 *gSaveBlock1Ptr+5 0
 shot room
-# One ball on the floor -- and no DAY CARE lady: with the door open she is an offer to take
+# The chest and the room's cache (POK-413) on the floor -- and no DAY CARE lady: with the door open she is an offer to take
 # a Pokemon off you mid-match and hand it back after the last ring. She has no FLAG_HIDE_
 # of her own for the story sweep to set (POK-298), and the despawn sweep used to take her;
 # in a match she never spawns now (br_strip.c), so it has nobody to take.
-expect u8 gBrLoot+0xA1 1
+expect u8 gBrLoot+0xA1 2
 expect u8 gBrLoot+0xA3 0
 # Three tiles north and two east of the mat, facing the ball. gBrOwnPos is map coords + 7.
 hold UP 34
@@ -44,7 +44,7 @@ expect u16 gBrOwnPos+4 0x0C
 tap A
 wait 60
 expect u8 gBrLoot+0xA2 1
-expect u8 gBrLoot+0xA0 0
+expect u8 gBrLoot+0xA0 1
 expect u8 gPlayerPartyCount 1
 # ...and it arrives at the rung, not at the level it was dealt at. The row carries level 0
 # and means "whatever the match is at when somebody finally walks in": it has been lying
