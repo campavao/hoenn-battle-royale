@@ -16,3 +16,4 @@
 # protocol  hash
 1           0x777CC3AA
 2           0xA2A9EB99
+3           0x7A2D04DC

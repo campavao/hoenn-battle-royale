@@ -37,6 +37,7 @@ export const TRUST: Record<Msg['t'], Trust> = {
   duel: 'never',
   give: 'never',
   follow: 'never',
+  fame: 'never',
 
   start: 'host',
   late: 'host',

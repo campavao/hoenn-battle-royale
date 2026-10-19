@@ -7,7 +7,6 @@ import {
   exportCareer,
   FILE_TAG,
   cardBadges,
-  cardId,
   cardStars,
   importCareer,
   loadCareer,
@@ -139,6 +138,34 @@ describe('the chosen voice', () => {
     const s = store();
     s.setItem('hbr:career', JSON.stringify({ voice: VOICE_COUNT + 5 }));
     expect(loadCareer(s).voice).toBeUndefined();
+  });
+});
+
+describe('the lifetime stats (POK-416)', () => {
+  const match = { won: 2, caught: 1, steps: 300, items: 4, trainers: 3, duelsWon: 1, took: 5, mons: { 277: 6 }, moves: { 1: 4, 33: 2 } };
+
+  it('adds each match to the career, and keeps them across a reload', () => {
+    const s = store();
+    recordMatch(2, s, match);
+    recordMatch(1, s, { ...match, mons: { 277: 1, 280: 9 }, moves: {} });
+    const t = loadCareer(s).totals!;
+    expect(t).toMatchObject({ won: 4, caught: 2, steps: 600, items: 8, trainers: 6, duelsWon: 2, took: 10 });
+    expect(t.mons).toEqual({ 277: 7, 280: 9 });
+    expect(t.moves).toEqual({ 1: 4, 33: 2 });
+  });
+
+  it('counts nothing for a match the page could not read, and leaves an old career without any', () => {
+    const s = store();
+    recordMatch(3, s);
+    expect(loadCareer(s).totals).toBeUndefined();
+  });
+
+  it('throws out what a hand-edited store got wrong', () => {
+    const s = store();
+    s.setItem('hbr:career', JSON.stringify({ matches: 1, wins: 0, totals: { won: -4, caught: 'x', steps: 1.9, mons: { 0: 3, 277: 2, abc: 1, 70000: 5 } } }));
+    const t = loadCareer(s).totals!;
+    expect(t).toMatchObject({ won: 0, caught: 0, steps: 1 });
+    expect(t.mons).toEqual({ 277: 2 });
   });
 });
 
@@ -342,11 +369,5 @@ describe('the trainer card (POK-335)', () => {
   it('earns its stars, and so its colour, up to gold on the last wardrobe price', () => {
     expect([0, 1, 7, 8, 14, 15, 24, 25, 99].map(cardStars)).toEqual([0, 1, 1, 2, 2, 3, 3, 4, 4]);
     expect(STAR_WINS[STAR_WINS.length - 1]).toBe(Math.max(...SKIN_UNLOCK_WINS.filter(Number.isFinite)));
-  });
-
-  it('gives the same name the same five-digit IDNo.', () => {
-    expect(cardId('CAM')).toMatch(/^\d{5}$/);
-    expect(cardId('CAM')).toBe(cardId('CAM'));
-    expect(cardId('CAM')).not.toBe(cardId('MAY'));
   });
 });

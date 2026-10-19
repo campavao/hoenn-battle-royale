@@ -677,6 +677,8 @@ static void HandleTurnCont(const u8 *payload, u8 len)
 #define BR_PEEK_BAG_MAX 20
 STATIC_ASSERT(BR_CAP_PARTY >= 2 + PARTY_SIZE * BR_PEEK_ROW + 5 + 3 * BR_PEEK_BAG_MAX, BrPartyCapHoldsARowsAndBag)
 #define BR_PEEK_OFF_ITEM 24
+#define BR_PEEK_OFF_OTID 26
+#define BR_PEEK_OFF_PERSONALITY 28
 #define BR_PEEK_OFF_NICKLEN 36
 #define BR_PEEK_OFF_NICK 37
 
@@ -1091,6 +1093,11 @@ static void ClosePeek(void)
     gBrSpectate.peeking = FALSE;
 }
 
+void BrSpectate_ClosePeek(void)
+{
+    ClosePeek();
+}
+
 bool8 BrSpectate_HoldsSign(void)
 {
     return gBrSpectate.peeking;
@@ -1161,7 +1168,7 @@ static u32 StatusOf(u8 code)
 // One row as the summary screen shows it: species, level, nickname, the four moves and
 // their PP, HP, status and held item as the row has them. The rows carry no stats, so
 // the rest is the species at that level with middling IVs.
-static bool8 BuildWatchedMon(const u8 *row, struct Pokemon *mon)
+static bool8 BuildRowMon(const u8 *row, struct Pokemon *mon, u32 personality, u32 otId)
 {
     u16 species = BrWire_Species(BrWire_ReadU16(row + BR_PEEK_OFF_SPECIES));
     u8 level = row[BR_PEEK_OFF_LEVEL];
@@ -1174,9 +1181,7 @@ static bool8 BuildWatchedMon(const u8 *row, struct Pokemon *mon)
         return FALSE;
     if (level == 0 || level > MAX_LEVEL)
         level = 5;
-    // A fixed personality and OT ID: the row carries neither, and a mon that changed
-    // nature, gender or shine between two looks at it would be worse than a plain one.
-    CreateMon(mon, species, level, 15, TRUE, 0xFE, OT_ID_PRESET, 0xFFFF0000); // never shiny
+    CreateMon(mon, species, level, 15, TRUE, personality, OT_ID_PRESET, otId);
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
         u8 pp = row[BR_PEEK_OFF_MOVES + i * 4 + 2];
@@ -1211,6 +1216,32 @@ static bool8 BuildWatchedMon(const u8 *row, struct Pokemon *mon)
     if (gBrFollowName[0] != EOS)
         SetMonData(mon, MON_DATA_OT_NAME, gBrFollowName);
     return TRUE;
+}
+
+// A fixed personality and OT ID for the summary: a mon that changed nature, gender or
+// shine between two looks at it would be worse than a plain one.
+static bool8 BuildWatchedMon(const u8 *row, struct Pokemon *mon)
+{
+    return BuildRowMon(row, mon, 0xFE, 0xFFFF0000); // never shiny
+}
+
+u8 BrSpectate_PartyOf(u8 seat, struct Pokemon *party)
+{
+    const u8 *row, *p;
+    u8 i, count = 0;
+
+    if (gBrSpectate.peekMons == 0 || sPartyAsm.buf == NULL || sPeekSeat != seat)
+        return 0;
+    for (i = 0; i < gBrSpectate.peekMons && count < PARTY_SIZE; i++)
+    {
+        // The Hall of Fame says each one's gender, so this one is the row's own: its
+        // personality, and its OT ID's visible half (the hidden half is not on the wire).
+        row = sPartyAsm.buf + 2 + i * BR_PEEK_ROW;
+        p = row + BR_PEEK_OFF_PERSONALITY;
+        if (BuildRowMon(row, &party[count], p[0] | (p[1] << 8) | (p[2] << 16) | ((u32)p[3] << 24), BrWire_ReadU16(row + BR_PEEK_OFF_OTID)))
+            count++;
+    }
+    return count;
 }
 
 static void CB2_BrReturnFromWatchMenu(void)

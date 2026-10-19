@@ -331,9 +331,15 @@ ANYWAY ask in the frame, and the page calls no `prompt()`, `confirm()` or `alert
 BACK TO LOBBY -- and it is the room's last word: the end grace, a count to a start and a
 `start` held for the way back all stop there (`match/room.ts`, `DeadEnd`). The import and
 patch screens are drawn in the same frame and end on the version line; the page has no
-HTML header. The results come at the `win` for everybody but the champion, whose come
-after their own Hall of Fame (`web/src/ui/results.ts`, `ParadeHold`: BR_PHASE_DONE, or a
-grace before the parade's deadline if it never gets there). In a match, the room's line,
+HTML header. The results come after the champion's Hall of Fame, which everybody still
+in the match sees in their own ROM (POK-417: the champion's `party` and a `fame` to every
+other page's ROM, `src/br/br_hof.c`; a watcher's moves on by itself after LEAGUE
+CHAMPION!). `web/src/ui/results-hold.ts`, `ParadeHold`: BR_PHASE_DONE, a grace before the
+parade's deadline if it never gets there, and fifteen seconds for somebody else's parade to
+begin at all. Under the results go what the room saw (`match/record.ts`) and what our own
+ROM counted (`gBrTally`, `match/tally.ts`, POK-416: battles won, caught, steps, items used,
+the favourite mon and move), which the career adds up for MY STATS and the trainer card.
+No IDNo. anywhere (POK-418): every trainer's was 00000. In a match, the room's line,
 the strip, who is still in, WATCH, LEAVE and the settings are the in-match sheet
 (`sheetScreen`): over the running game behind the menu button on a phone, and docked
 beside the game on a desktop -- in view all match, taking no keys, 480 px wide where the

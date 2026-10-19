@@ -1,4 +1,7 @@
 #include "global.h"
+#if BR
+#include "br/br_tally.h"
+#endif
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_ai_script_commands.h"
@@ -5235,6 +5238,9 @@ static void HandleEndTurn_FinishBattle(void)
             TryPutBreakingNewsOnAir();
         }
 
+#if BR
+        BrTally_BattleEnd(); // won and caught, for the match's stats (POK-416)
+#endif
         RecordedBattle_SetPlaybackFinished();
         BeginFastPaletteFade(3);
         FadeOutMapMusic(5);

@@ -15,7 +15,7 @@ import type { Bots } from '../bots/brain';
 import type { RosterEvent } from '../net/relay';
 import type { EventMsg, Msg, NpcOutMsg, PackedMon, SpillMsg, TickerMsg } from '../net/wire';
 import { bossAt } from './bosses';
-import { careerLine, recordMatch } from './career';
+import { addCareerTotals, careerLine, recordMatch } from './career';
 import { DEFAULT_FOG_SECS } from './director';
 import type { EndGrace } from './grace';
 import { botRows, freshMatch, noteMatch, type MatchSnapshot } from './lifecycle';
@@ -26,6 +26,7 @@ import { OwedTeam } from './owed';
 import { MatchRecord } from './record';
 import { Results } from './results';
 import type { Roster } from './roster';
+import { tallyGain, type MatchTally } from './tally';
 import * as Ticker from './ticker';
 
 /** Where a message came from, which decides what else it does.
@@ -63,6 +64,13 @@ export interface SessionDeps {
   defaultFog?(): number;
   /** Where the career and the saved rounds go: localStorage on the page. */
   store: Pick<Storage, 'getItem' | 'setItem'>;
+  /** What our own ROM counted of the match (POK-416, gBrTally): zeroed as one starts and
+   *  read once it is decided, into the results and the career. Absent where the build
+   *  has no gBrTally, and the career then counts what the room saw. */
+  tally?: { zero(): void; read(): MatchTally };
+  /** Whether somebody else's Hall of Fame is still wanted in our ROM: not once the
+   *  results have given up on it and gone up (ParadeHold), or it plays under them. */
+  fameWanted?(): boolean;
   grace: EndGrace;
   /** Out of a decided match, once its grace is up. */
   exit(): void;
@@ -152,6 +160,12 @@ export class MatchSession {
    *  first `place` to say where that is. */
   readonly owedLoot = new Set<number>();
   readonly grace: EndGrace;
+  /** Our own ROM's counts of the match, read as it was decided (POK-416); null before. */
+  tally: MatchTally | null = null;
+  /** The champion's Hall of Fame has been handed to our ROM (POK-417): once a match. */
+  private famed = false;
+  /** Who took the match, once it is decided. */
+  private winner: number | undefined;
   /** Hoenn's own trainers beaten this match, newest last and at most BEATEN_KEPT (POK-331
    *  #4): every ROM despawns and remembers one on its `npcout`, and one whose socket was
    *  down for it still has the trainer standing. The host hands these to a seat back from
@@ -272,13 +286,19 @@ export class MatchSession {
       // The champion's own party arrives after the `win` that put the results on
       // screen -- their ROM sends it as the parade starts (POK-243) -- so the panel
       // is drawn again rather than waiting for a team that came too late.
-      if (this.booked) this.view.partyLate();
+      if (this.booked) {
+        this.fameToRom(msg.seat);
+        this.view.partyLate();
+      }
     }
     if (msg.t === 'start') {
       this.field = msg.spawns.length;
       this.results.start(this.field, now);
       this.record.start();
       this.booked = false;
+      this.famed = false;
+      this.tally = null;
+      this.deps.tally?.zero();
       this.forgetBeaten();
     }
     this.results.note(msg, now);
@@ -311,10 +331,12 @@ export class MatchSession {
 
   private decide(winner: number | undefined, me: number, now: number): void {
     this.booked = true;
+    this.winner = winner;
     const round = this.log.current(now);
     if (round) saveMatch(round, this.deps.store);
     const mine = this.results.forSeat(me, now);
-    this.view.decided(careerLine(recordMatch(mine.placement, this.deps.store)));
+    this.tally = this.deps.tally?.read() ?? null;
+    this.view.decided(careerLine(recordMatch(mine.placement, this.deps.store, this.careerCounts(me))));
     // And the ROM is told who won (POK-243's parade, POK-281). `win` is a page-side
     // verdict with no codec, so it has never crossed to any ROM: the Hall of Fame has
     // been reachable only by a driver poking the RESULT slot by hand, which is exactly
@@ -327,8 +349,62 @@ export class MatchSession {
     // anybody out of a finished match: the page drew the results panel over a ROM that
     // went on walking Hoenn. Kanto's shape (main.lua, END_GRACE_SECONDS): everybody reads
     // the result for a moment, then one funnel takes them all out. Won, it waits for the
-    // Hall of Fame rather than a timer.
-    this.deps.grace.arm(() => this.deps.exit(), winner === me);
+    // Hall of Fame rather than a timer -- anybody's (POK-417), not only our own: Cam,
+    // "everyone who is still in the game should see the hall of fame screen".
+    this.deps.grace.arm(() => this.deps.exit(), winner !== undefined);
+  }
+
+  /** What the match adds to the career's lifetime stats (POK-416): our ROM's counts and
+   *  the room's. Without a tally the room's alone, so a build with no gBrTally still
+   *  counts the trainers, duels and loot it saw. */
+  private careerCounts(me: number) {
+    const rec = this.record.forSeat(me);
+    const t = this.tally;
+    return {
+      won: t?.won ?? 0,
+      caught: t?.caught ?? 0,
+      steps: t?.steps ?? 0,
+      items: t?.items ?? 0,
+      trainers: rec.trainers,
+      duelsWon: rec.duelsWon,
+      took: rec.took,
+      mons: t?.mons ?? {},
+      moves: t?.moves ?? {},
+    };
+  }
+
+  /** Reads the tally again and adds what it gained since the verdict (POK-416). The
+   *  verdict can land before our own ROM has finished the battle that decided it -- the
+   *  loser's `out` races our end of turn -- so the champion's last win was missing. The
+   *  page settles before it draws the results and as the match ends. */
+  settleTally(): void {
+    if (!this.booked || !this.deps.tally) return;
+    const now = this.deps.tally.read();
+    const gain = tallyGain(now, this.tally);
+    this.tally = now;
+    const some =
+      gain.steps + gain.won + gain.caught + gain.items > 0 ||
+      Object.keys(gain.mons).length > 0 ||
+      Object.keys(gain.moves).length > 0;
+    if (some) addCareerTotals({ ...gain, trainers: 0, duelsWon: 0, took: 0 }, this.deps.store);
+  }
+
+  /** Somebody else's win, paraded in our own ROM's Hall of Fame (POK-417): their team
+   *  and their name. The team is the `party` that came after the win -- their ROM sends
+   *  it as its own parade starts, the host for a bot -- never one kept from a peek
+   *  mid-match, which is the team they had then. Our own win is the ROM's own parade off
+   *  the RESULT. Once a match; the ROM waits for a quiet field itself, and says done
+   *  (BR_PHASE_DONE) either way. */
+  private fameToRom(seat: number): void {
+    const me = this.deps.mySeat();
+    const winner = this.winner;
+    if (this.famed || me === null || winner === undefined || seat !== winner || winner === me) return;
+    if (this.deps.fameWanted?.() === false) return;
+    const party = this.parties.get(winner);
+    if (!party || party.length === 0) return;
+    this.famed = true;
+    this.deps.toRom({ t: 'party', seat: winner, mons: party });
+    this.deps.toRom({ t: 'fame', seat: winner, name: this.deps.nameOf(winner) });
   }
 
   /** The loot standing where our own trainer has just arrived, once per map (POK-232).
@@ -349,6 +425,9 @@ export class MatchSession {
    *  the record and the log stay up until the next `start`, and so does the verdict: a
    *  champion's party can still land while the ROM reboots. */
   endMatch(): void {
+    this.settleTally();
+    // A champion's team that lands while the ROM starts over is last match's: no parade.
+    this.famed = true;
     Object.assign(this.match, freshMatch());
     this.lootTable = new Loot();
     this.lootMap = null;
@@ -370,6 +449,7 @@ export class MatchSession {
    *  somebody else's. */
   forgetResult(): void {
     this.booked = false;
+    this.famed = false;
     this.parties.clear();
   }
 }

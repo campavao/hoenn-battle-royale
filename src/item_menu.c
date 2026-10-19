@@ -53,6 +53,7 @@
 #if BR
 #include "br/br_bag.h"
 #include "br/br_hm.h"
+#include "br/br_tally.h"
 #endif
 
 #define TAG_POCKET_SCROLL_ARROW 110
@@ -1900,6 +1901,9 @@ static void Task_RemoveItemFromBag(u8 taskId)
     if (JOY_NEW(A_BUTTON | B_BUTTON))
     {
         PlaySE(SE_SELECT);
+#if BR
+        BrTally_Discard(tItemCount); // tossed is not used (POK-416)
+#endif
         RemoveBagItem(gSpecialVar_ItemId, tItemCount);
         DestroyListMenuTask(tListTaskId, scrollPos, cursorPos);
         UpdatePocketItemList(gBagPosition.pocket);
@@ -2179,6 +2183,9 @@ static void SellItem(u8 taskId)
     u16 *cursorPos = &gBagPosition.cursorPosition[gBagPosition.pocket];
 
     PlaySE(SE_SHOP);
+#if BR
+    BrTally_Discard(tItemCount); // sold is not used (POK-416)
+#endif
     RemoveBagItem(gSpecialVar_ItemId, tItemCount);
     AddMoney(&gSaveBlock1Ptr->money, (GetItemPrice(gSpecialVar_ItemId) / 2) * tItemCount);
     DestroyListMenuTask(tListTaskId, scrollPos, cursorPos);

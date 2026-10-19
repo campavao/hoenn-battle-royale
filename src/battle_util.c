@@ -1,5 +1,6 @@
 #include "global.h"
 #if BR
+#include "br/br_tally.h"
 #include "br/br_battle.h"
 #include "br/br_ring.h"
 #endif
@@ -148,6 +149,9 @@ void HandleAction_UseMove(void)
         else
             gBattleResults.lastUsedMoveOpponent = gCurrentMove;
     }
+#if BR
+    BrTally_Move(gBattlerAttacker, gCurrentMove); // favourites, for the match's stats (POK-416)
+#endif
 
     // choose target
     side = BATTLE_OPPOSITE(GetBattlerSide(gBattlerAttacker));

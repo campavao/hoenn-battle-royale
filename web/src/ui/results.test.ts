@@ -147,13 +147,13 @@ describe("the champion's Hall of Fame comes first (POK-320)", () => {
     expect(drawn).toHaveBeenCalledTimes(1);
   });
 
-  it("holds only the champion's own results, only until the parade, and nothing on a build that cannot say", () => {
+  it('holds anybody\'s results until the parade, a draw not at all, and nothing on a build that cannot say', () => {
     let over = false;
     let now = 0;
     const hold = new ParadeHold({ done: () => over, graceMs: 1_000, giveUpMs: 55_000, onParaded: () => {}, now: () => now });
     expect(hold.holds(1, 1), 'our own win waits for our parade').toBe(true);
-    expect(hold.holds(2, 1), "somebody else's win is read at once").toBe(false);
-    expect(hold.holds(undefined, 1), 'so is a draw').toBe(false);
+    expect(hold.holds(2, 1), "somebody else's win waits for theirs, in our ROM (POK-417)").toBe(true);
+    expect(hold.holds(undefined, 1), 'a draw is read at once').toBe(false);
     over = true;
     now = 500;
     hold.finished();
@@ -164,6 +164,114 @@ describe("the champion's Hall of Fame comes first (POK-320)", () => {
     // No gBrMatch: the ROM cannot say when its parade is over, and nothing waits on it.
     const blind = new ParadeHold({ graceMs: 1_000, giveUpMs: 55_000, onParaded: () => {} });
     expect(blind.holds(1, 1)).toBe(false);
+  });
+});
+
+describe('the record, two counts to a row (POK-416)', () => {
+  it('pairs the counts and gives a name a row of its own', async () => {
+    const { recordRows } = await import('./results');
+    expect(
+      recordRows([
+        { label: 'RINGS', value: '2' },
+        { label: 'WON', value: '3' },
+        { label: 'CAUGHT', value: '1' },
+        { label: 'FAVORITE', value: 'TREECKO', wide: true },
+      ]),
+    ).toEqual([
+      { label: 'RINGS 2', detail: 'WON 3' },
+      { label: 'CAUGHT 1', detail: undefined },
+      { label: 'FAVORITE', detail: 'TREECKO' },
+    ]);
+  });
+});
+
+describe("everybody sees the champion's Hall of Fame (POK-417)", () => {
+  it("gives somebody else's parade its start window to begin, and no longer", () => {
+    let now = 0;
+    let phase = 2;
+    const drawn = vi.fn();
+    const hold = new ParadeHold({
+      done: () => phase === 5,
+      started: () => phase >= 4,
+      startMs: 15_000,
+      graceMs: 1_000,
+      giveUpMs: 55_000,
+      onParaded: drawn,
+      now: () => now,
+    });
+    expect(hold.holds(3, 1)).toBe(true);
+    expect(hold.finished()).toBe(false);
+    now = 14_000;
+    expect(hold.finished(), 'still inside the window').toBe(false);
+    now = 15_000;
+    expect(hold.finished(), 'no parade came: the results go up').toBe(false);
+    expect(drawn).toHaveBeenCalledTimes(1);
+    now = 16_000;
+    expect(hold.finished(), 'read for the grace, then out').toBe(true);
+  });
+
+  it('waits for a parade that has begun, past the window, until it is over', () => {
+    let now = 0;
+    let phase = 2;
+    const drawn = vi.fn();
+    const hold = new ParadeHold({ done: () => phase === 5, started: () => phase >= 4, startMs: 15_000, graceMs: 1_000, giveUpMs: 55_000, onParaded: drawn, now: () => now });
+    hold.holds(3, 1);
+    hold.finished();
+    now = 5_000;
+    phase = 4;
+    hold.finished();
+    now = 40_000;
+    expect(hold.finished()).toBe(false);
+    expect(drawn, 'the parade is on').not.toHaveBeenCalled();
+    phase = 5;
+    now = 41_000;
+    hold.finished();
+    expect(drawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not count a replay against the window: the ROM's parade waits behind it", () => {
+    let now = 0;
+    let replaying = true;
+    const drawn = vi.fn();
+    const hold = new ParadeHold({ done: () => false, started: () => false, startMs: 15_000, paused: () => replaying, graceMs: 1_000, giveUpMs: 55_000, onParaded: drawn, now: () => now });
+    hold.holds(3, 1);
+    hold.finished();
+    now = 30_000;
+    hold.finished();
+    expect(drawn, 'thirty seconds of replay is not the window').not.toHaveBeenCalled();
+    replaying = false;
+    now = 44_000;
+    hold.finished();
+    expect(drawn).not.toHaveBeenCalled();
+    now = 46_000;
+    hold.finished();
+    expect(drawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs no give-up while a replay plays, up to its cap, and holds the exit meanwhile', () => {
+    let now = 0;
+    let replaying = true;
+    const drawn = vi.fn();
+    const hold = new ParadeHold({ done: () => false, started: () => false, startMs: 15_000, paused: () => replaying, pauseMaxMs: 150_000, graceMs: 1_000, giveUpMs: 55_000, onParaded: drawn, now: () => now });
+    hold.holds(3, 1);
+    for (now = 0; now <= 100_000; now += 500) hold.finished();
+    expect(drawn, 'a hundred seconds of replay').not.toHaveBeenCalled();
+    expect(hold.holding).toBe(true);
+    replaying = false;
+    for (; now <= 116_000; now += 500) hold.finished();
+    expect(drawn, 'the window, after the replay').toHaveBeenCalledTimes(1);
+    expect(hold.holding).toBe(false);
+  });
+
+  it('never gives our own parade the window: it waits until it is over or the deadline', () => {
+    let now = 0;
+    const drawn = vi.fn();
+    const hold = new ParadeHold({ done: () => false, started: () => false, startMs: 15_000, graceMs: 1_000, giveUpMs: 55_000, onParaded: drawn, now: () => now });
+    hold.holds(1, 1);
+    hold.finished();
+    now = 30_000;
+    hold.finished();
+    expect(drawn).not.toHaveBeenCalled();
   });
 });
 

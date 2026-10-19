@@ -20,8 +20,8 @@ describe('the fixed rows', () => {
   it('keep an id that a toggle saying something new does not change (POK-333)', () => {
     const on = fixedRows(true, { name: 'WALLY', skin: 'MAY' });
     const off = fixedRows(true, { name: 'WALLY', skin: 'MAY', statsOn: false });
-    expect(on[3].id).toBe('trainer-stats');
-    expect(off[3].id).toBe(on[3].id);
+    expect(on[4].id).toBe('trainer-stats');
+    expect(off[4].id).toBe(on[4].id);
     expect(new Set(on.map((r) => r.id)).size).toBe(on.length);
   });
 
@@ -127,13 +127,14 @@ describe('the profile rows', () => {
     expect(rows[0].label).toBe('WALLY');
     expect(rows[0].detail).toBe('your name');
     expect(rows[1].label).toBe('MAY');
-    // name, sprite, MY LOOK (POK-337), stats, the battle's background (an experiment,
-    // 2026-10-05), career -- then the ways in.
-    expect(rows[4].label).toBe('BATTLE BACKDROP');
-    expect(rows[4].detail).toBe('CLASSIC');
-    expect(fixedRows(true, { name: 'WALLY', skin: 'MAY', seeThrough: true })[4].detail).toBe('OVER MAP');
-    expect(rows[5].label).toBe('MY CAREER');
-    expect(rows[6].label).toBe('QUICK PLAY');
+    // name, sprite, MY LOOK (POK-337), MY STATS (POK-416), play count, the battle's
+    // background (an experiment, 2026-10-05), career -- then the ways in.
+    expect(rows[3]).toMatchObject({ label: 'MY STATS', action: { kind: 'mystats' }, id: 'trainer-mystats' });
+    expect(rows[5].label).toBe('BATTLE BACKDROP');
+    expect(rows[5].detail).toBe('CLASSIC');
+    expect(fixedRows(true, { name: 'WALLY', skin: 'MAY', seeThrough: true })[5].detail).toBe('OVER MAP');
+    expect(rows[6].label).toBe('MY CAREER');
+    expect(rows[7].label).toBe('QUICK PLAY');
     expect(rows[rows.length - 1].label).toBe('JOIN BY CODE');
   });
 
@@ -151,9 +152,9 @@ describe('the profile rows', () => {
 
   it('reads as shared unless stats were explicitly turned off', () => {
     const shared = fixedRows(true, { name: 'WALLY', skin: 'MAY' });
-    expect(shared[3].label).toBe('SEND PLAY COUNT');
-    expect(shared[3].detail).toBe('ON');
+    expect(shared[4].label).toBe('SEND PLAY COUNT');
+    expect(shared[4].detail).toBe('ON');
     const off = fixedRows(true, { name: 'WALLY', skin: 'MAY', statsOn: false });
-    expect(off[3].detail).toBe('OFF');
+    expect(off[4].detail).toBe('OFF');
   });
 });

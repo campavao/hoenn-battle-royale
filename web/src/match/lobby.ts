@@ -37,6 +37,8 @@ export type LobbyAction =
   | { kind: 'skin' }
   // Your sprite and your three lines (POK-337): three picks out of one pool (POK-283).
   | { kind: 'look' }
+  // Your lifetime stats (POK-416).
+  | { kind: 'mystats' }
   | { kind: 'stats' }
   | { kind: 'seethrough' }
   | { kind: 'career' }
@@ -97,6 +99,8 @@ export function profileRows(profile: Profile): LobbyRow[] {
     // Your sprite and your three lines on one screen (Cam's 2026-10-14 play-test, POK-337:
     // "combine it with the sprite screen... show them as the dialogue boxes themselves").
     { label: 'MY LOOK', detail: 'sprite and lines', action: { kind: 'look' as const } },
+    // Cam: "record and show stats... and save that for global profile" (POK-416).
+    { label: 'MY STATS', detail: 'every match so far', action: { kind: 'mystats' as const } },
     // Named for what they do (Cam's 2026-10-14 play-test, POK-334: "this is like debug
     // info", "Battle BG... doesn't make any sense"). The first is the anonymous play
     // count stats.ts hands the relay; the second, where a battle is drawn.
