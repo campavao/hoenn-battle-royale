@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MENU_ACTION, MENU_MOVE, MENU_SAFARI, menuSlot, onPicture, toGbaPixel } from './touch';
+import { MENU_ACTION, MENU_MOVE, MENU_SAFARI, PARTY_CANCEL, PARTY_CONFIRM, menuSlot, onPicture, partySlotAt, toGbaPixel } from './touch';
 
 describe('a tap becomes a GBA pixel', () => {
   it('maps the picture one to one at scale', () => {
@@ -613,5 +613,31 @@ describe('PARTY and MAP press START and walk the start menu', () => {
     t.openStartRow(START_BR_MAP);
     for (let i = 0; i < 90 && emu.chosen === null; i++) emu.frame();
     expect(emu.chosen).toBe(START_BR_MAP);
+  });
+});
+
+describe('a tap on the party screen picks a POKeMON (POK-423)', () => {
+  it('the lead box, the rows down the right, and CANCEL', () => {
+    expect(partySlotAt(48, 52, 6)).toBe(0);
+    expect(partySlotAt(150, 20, 6)).toBe(1);
+    expect(partySlotAt(150, 44, 6)).toBe(2);
+    expect(partySlotAt(150, 120, 6)).toBe(5);
+    expect(partySlotAt(200, 150, 6)).toBe(PARTY_CANCEL);
+  });
+
+  it('an empty box and the gaps between boxes are nothing', () => {
+    expect(partySlotAt(150, 44, 2), 'third row, two POKeMON').toBe(-1);
+    expect(partySlotAt(150, 20, 1), 'second row, one POKeMON').toBe(-1);
+    expect(partySlotAt(92, 52, 6), 'between the lead and the rows').toBe(-1);
+    expect(partySlotAt(48, 120, 6), 'under the lead').toBe(-1);
+    expect(partySlotAt(150, 136, 6), 'under the last row, over CANCEL').toBe(-1);
+    expect(partySlotAt(200, 150, 1), 'CANCEL is always there').toBe(PARTY_CANCEL);
+  });
+
+  it('CONFIRM, over CANCEL, only when the screen has one (picking half the party)', () => {
+    expect(partySlotAt(200, 136, 6)).toBe(-1);
+    expect(partySlotAt(200, 136, 6, true)).toBe(PARTY_CONFIRM);
+    expect(partySlotAt(200, 120, 6, true), 'the last row stays the last row').toBe(5);
+    expect(partySlotAt(200, 150, 6, true)).toBe(PARTY_CANCEL);
   });
 });

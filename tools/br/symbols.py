@@ -93,6 +93,9 @@ ENGINE_SYMBOLS = [
     # The phone's bag (web/src/ui/bagsheet.ts): which pocket the ROM's BAG opens on, and
     # what each item is -- its name, description, pocket and whether a battle can use it.
     "gBagPosition", "gItems",
+    # The party screen: a tap on a POKeMON walks its cursor (gPartyMenu.slotId) there and
+    # presses A, while the choose-a-POKeMON task is the one running (web/src/touch.ts).
+    "gPartyMenu", "Task_HandleChooseMonInput",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

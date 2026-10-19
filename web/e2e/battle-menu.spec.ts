@@ -402,10 +402,13 @@ test("a short phone's bag: everything on the glass, and a tap on each pocket's i
     const onFirstMon = async (count: () => Promise<number>) => {
       await expect(menu).toBeHidden();
       await page.waitForTimeout(3_000);
+      // The party screen: a tap on the lead's box picks it (POK-423), no A.
       const was = await count();
       for (let i = 0; i < 10 && (await count()) === was; i++) {
-        await tap(page, 'z');
-        await page.waitForTimeout(1_000);
+        const { lcd } = await picture(page);
+        const s = lcd.width / 240;
+        await page.touchscreen.tap(lcd.x + 48 * s, lcd.y + 52 * s);
+        await page.waitForTimeout(2_500);
       }
       // "...HP was restored" waits for a press, and the foe's turn after it: B, which
       // the action menu ignores, until that menu is back.
