@@ -124,11 +124,16 @@ extern u8 gBrMySkin;
 // A skin's walking sprite, its OBJ_EVENT_GFX_* (skin 0's for one this ROM does not know).
 u8 BrGhosts_WalkGraphic(u8 skin);
 
-// Is this object event one the MATCH put on the map, rather than one of Hoenn's own?
+// Is this object event one the MATCH put on the map (a trader, loot, a ghost), rather
+// than one of Hoenn's own? Then it has no template and no script: the field's A and its
+// share of the object table leave it to us.
+bool8 BrGhosts_Ours(u8 localId);
+
+// Can a step go through this object event?
 //
-// Kanto's rule, and Kanto learned it the hard way: a ghost is a drawing of where
-// somebody is, not an obstacle (POK-310). A trainer standing on a Centre's mat or a
-// cave mouth would otherwise deny it to everybody else for as long as they felt like
+// A ghost, always. Kanto's rule, and Kanto learned it the hard way: a ghost is a drawing
+// of where somebody is, not an obstacle (POK-310). A trainer standing on a Centre's mat
+// or a cave mouth would otherwise deny it to everybody else for as long as they felt like
 // standing there, and there is nothing the blocked player can do about it -- you cannot
 // push, and challenging them takes the fight but not the tile.
 //
@@ -136,12 +141,14 @@ u8 BrGhosts_WalkGraphic(u8 skin);
 // behind where its owner actually is, so a solid ghost blocks a tile they have already
 // left, and two clients differ on whether a step was legal.
 //
-// Loot is in the same range and gets the same answer for a different reason: a ball is
-// something you stand on to take (BrLoot's own reach check is faces-first, then your own
-// cell), and a ball spilled into a doorway would otherwise close it.
+// Loot only when A could not take it, and never an event's trader (Cam, 2026-10-18:
+// "let's make all items collidable"). Unlike a trainer, a piece in the way is one press
+// from gone, which is the answer the ghosts never had; BrLoot_Solid has the rest. Two
+// ROMs can differ on one ball (it turns on your own bag and party), and that is fine:
+// each ROM only ever collides its own avatar, and a ghost moves by the wire.
 //
 // Called from DoesObjectCollideWithObjectAt, which is the one place both
 // GetCollisionAtCoords and GetCollisionFlagsAtCoords ask the question.
-bool8 BrGhosts_Insubstantial(u8 localId);
+bool8 BrGhosts_Passable(u8 localId);
 
 #endif // GUARD_BR_GHOSTS_H

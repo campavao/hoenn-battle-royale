@@ -21,6 +21,11 @@
 // `text`, when not NULL, gets one line for BR_ITEMS_USED (at least 41 bytes).
 u8 BrItems_Pickup(u16 *item, u16 *count, u8 *text);
 
+// Would A take a ball of `item` off the ground? BrItems_Pickup's rule without applying
+// it: used on the spot, or room in its pocket for what it turns into. A ball that would
+// say NO ROOM is one you can walk over (BrLoot_Solid).
+bool8 BrItems_Fits(u16 item);
+
 // AddBagItem's own check, for whatever else arrives (a held item TAKEn, a spilled bag's
 // GIVE, a prize): TRUE when the item was used or sold, the ticker saying so, and nothing
 // goes in the bag; *item may change.

@@ -442,6 +442,18 @@ export function storyGuard(piece: { key: number; mapId: string; x: number; y: nu
   return undefined;
 }
 
+/** Does this piece stand as one of a story's people (STEVEN, STERN, a gate's boss)? The
+ *  ROM's BrStory_Person: a person is solid, whatever he would say. */
+export function storyPerson(piece: { key: number; mapId: string; x: number; y: number }): boolean {
+  if (!isEventKey(piece.key)) return false;
+  return STORIES.some((story) =>
+    (story.people ?? []).some((p) => {
+      const cell = story.cells[p.at];
+      return (cell.map ?? story.map) === piece.mapId && cell.x === piece.x && cell.y === piece.y;
+    }),
+  );
+}
+
 /** Does the story give a legendary? What the ticker calls it. */
 export function storyLegend(story: Story): boolean {
   const legends = new Set([...LEGENDS.flat(), ...OTHER_LEGENDS]);

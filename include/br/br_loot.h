@@ -100,7 +100,8 @@ struct BrLootItem
     /* 10 */ u8 level;
     /* 11 */ u8 kind;     // BR_LOOT_*
     /* 12 */ u8 objId;    // object event id while spawned here, else BR_NO_OBJ
-    /* 13 */ u8 pad[3];
+    /* 13 */ u8 noRoom;   // our own bag put back NO ROOM: walked over (BrLoot_Solid)
+    /* 14 */ u8 pad[2];
     /* 16 */ u32 money;   // a bag's cash; 0 on a ball
 };                        // 20 bytes
 BR_OFFSET(BrLootItem, key, 0)
@@ -215,6 +216,8 @@ void BrLoot_DropKey(u16 key);
 // Take the piece under `key` on this map, as A at it would: a gate's boss handing over
 // what he held once he fell (br_story.c). FALSE: it is gone already, and nothing happens.
 bool8 BrLoot_TakeKey(u16 key);
+// Does the loot object with this local id stop a step? See br_loot.c.
+bool8 BrLoot_Solid(u8 localId);
 
 // BR_EventScript_Gift's hand-over, once a gift-giver has said his line (POK-355).
 // VAR_RESULT 2 when it was a Pokemon, someone at home's, and 3 when a full party parked

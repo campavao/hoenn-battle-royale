@@ -51,6 +51,10 @@ u8 BrStory_Person(const struct BrLootItem *it);
 // hand it over, which takes what he wanted out of the bag.
 bool8 BrStory_Hands(const struct BrLootItem *it);
 
+// The piece is one a gate's boss is still guarding: BrStory_Hands' "GUARDS IT", asked
+// without saying it.
+bool8 BrStory_Guarded(const struct BrLootItem *it);
+
 // A gate's boss: his win drops no team and sends no NPCOUT (br_loot.c), because the
 // object he stands as is the story's piece, and what he gives is its reward.
 bool8 BrStory_IsGate(u16 trainerId);

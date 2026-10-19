@@ -396,6 +396,11 @@ bool8 BrStory_IsGate(u16 trainerId)
     return FALSE;
 }
 
+bool8 BrStory_Guarded(const struct BrLootItem *it)
+{
+    return PersonAt(it) == NULL && GuardOf(it) != NULL;
+}
+
 static const u8 sText_Wants[] = _("He wants the ");
 static const u8 sText_Guards[] = _(" guards it");
 

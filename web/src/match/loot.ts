@@ -36,7 +36,8 @@ const SPILL_DX = [0, 1, -1, 0, 0, 1, -1, 1, -1, 2, -2, 0, 0];
 const SPILL_DY = [0, 0, 0, 1, -1, 1, 1, -1, -1, 0, 0, 2, -2];
 
 /** Cells for `n` pieces dropped at (x, y), skipping anything the ROM's `CellFree` would
- *  skip -- collision, and nothing else (World.clear) -- and never using one twice. Fewer
+ *  skip -- collision (World.clear) and a warp's own cell, where a solid piece would stand
+ *  in a doorway (POK-414) -- and never using one twice. Fewer
  *  than `n` when the ring runs out -- a trainer who falls in a doorway leaves what fits.
  *
  *  A bot's spill used to put every ball on the dropper's own cell. That is one visible
@@ -65,7 +66,7 @@ export function spillCells(
   for (let i = 0; i < SPILL_DX.length && out.length < n; i++) {
     const cx = x + SPILL_DX[i];
     const cy = y + SPILL_DY[i];
-    if (!world.clear(mapId, cx, cy) || taken(cx, cy)) continue;
+    if (!world.clear(mapId, cx, cy) || taken(cx, cy) || world.warpAt(mapId, cx, cy)) continue;
     if (out.some((c) => c.x === cx && c.y === cy)) continue;
     out.push({ x: cx, y: cy });
   }

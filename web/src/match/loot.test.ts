@@ -197,6 +197,16 @@ describe('where the pieces of a spill land', () => {
     expect(cells.some((c) => c.x === 4)).toBe(false);
   });
 
+  // A piece is solid now (POK-414), so one on a doorstep would stand in the way in.
+  it("skips a warp's own cell, as the ROM's CellFree does", () => {
+    const grid = Array.from({ length: 5 }, () => '4x0;1x1').join(';');
+    const warps = [{ x: 3, y: 2, to: 'ROOM', toX: 0, toY: 0, kind: 'door' }];
+    const world = new World([{ id: 'ROOM', group: 9, num: 9, w: 5, h: 5, section: 0, outdoor: true, grid, seams: [], warps } as never]);
+    const cells = spillCells(world, 'ROOM', 2, 2, 13);
+    expect(cells.some((c) => c.x === 3 && c.y === 2)).toBe(false);
+    expect(spillCells(room(), 'ROOM', 2, 2, 13).some((c) => c.x === 3 && c.y === 2)).toBe(true);
+  });
+
   // BrLoot's CellFree skips collision and nothing else, so a player beaten while
   // surfing drops their team on the water. A bot beaten there used to drop nothing at
   // all: the page skipped every cell nobody could stand on (POK-330 #67).

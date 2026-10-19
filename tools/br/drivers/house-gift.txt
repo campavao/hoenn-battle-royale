@@ -27,14 +27,19 @@ expect u16 gBrLoot+26 1
 expect u8 gBrLoot+30 0
 expect u8 gBrLoot+31 1
 expectne u8 gBrLoot+32 0xFF
-# up the right of the chairs, over the cache, to (12,10), and face him
+# up the right of the chairs and round the cache (solid now, POK-414) to (12,10), and
+# face him
 hold UP 34
 wait 20
 hold RIGHT 16
 wait 20
 hold RIGHT 16
 wait 20
+hold RIGHT 16
+wait 20
 hold UP 48
+wait 20
+hold LEFT 16
 wait 20
 expect u16 *gSaveBlock1Ptr 5
 expect u16 *gSaveBlock1Ptr+2 3
@@ -68,10 +73,13 @@ tap A
 wait 30
 expect u32 gMain+4 CB2_Overworld+1
 expect u8 gBrLoot+31 0
-# ...and for good: out and back in, and the cache is back but he is not
+# ...and for good: out (round the cache again) and back in, and the cache is back but he
+# is not
+hold RIGHT 16
+wait 20
 hold DOWN 48
 wait 20
-hold LEFT 32
+hold LEFT 48
 wait 20
 hold DOWN 90
 wait 200
