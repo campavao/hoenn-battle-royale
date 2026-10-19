@@ -2593,3 +2593,8 @@ test("two addresses in one IPv6 /64 share one hour of notes", async () => {
     await relay.close();
   }
 });
+
+test("cleanFeedback blanks bidi and zero-width marks, which could make a title read backwards", async () => {
+  const { cleanFeedback } = await import("./clean.js");
+  assert.equal(cleanFeedback("abc\u202edef\u200bghi\u2066x\ufeff"), "abc def ghi x");
+});

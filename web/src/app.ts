@@ -480,7 +480,7 @@ function feedbackFor(about: () => FeedbackAbout, look?: () => Look): DrawnScreen
       feedbackState = 'sending';
       const { where, room } = about();
       const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
-      void sendFeedback(relayUrl, { type: 'feedback', text, v: versionLine, where, name: careerName(), ...(room ? { room } : {}) }).then(
+      void sendFeedback(relayUrl, { type: 'feedback', text, v: (import.meta.env.DEV ? 'dev · ' : '') + versionLine, where, name: careerName(), ...(room ? { room } : {}) }).then(
         (result) => {
           feedbackState = result;
           if (result === 'sent' && cleanNote(feedbackDraft) === text) feedbackDraft = '';

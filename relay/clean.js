@@ -171,7 +171,7 @@ export const FEEDBACK_MAX = 1000;
 
 export function cleanFeedback(text) {
   if (typeof text !== "string") return null;
-  const flat = text.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ")
+  const flat = text.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g, " ")
     .replace(/\s+/g, " ").trim();
   if (flat === "") return null;
   return Array.from(flat).slice(0, FEEDBACK_MAX).join("").trim();
