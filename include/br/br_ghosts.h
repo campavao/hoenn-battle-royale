@@ -121,6 +121,8 @@ extern u8 gBrOwnEvents;
 // This ROM's seat and skin; the page sets them from the roster (0 until then).
 extern u8 gBrMySeat;
 extern u8 gBrMySkin;
+// A skin's walking sprite, its OBJ_EVENT_GFX_* (skin 0's for one this ROM does not know).
+u8 BrGhosts_WalkGraphic(u8 skin);
 
 // Is this object event one the MATCH put on the map (a trader, loot, a ghost), rather
 // than one of Hoenn's own? Then it has no template and no script: the field's A and its

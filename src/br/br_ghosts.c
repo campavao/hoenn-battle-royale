@@ -285,9 +285,14 @@ static void Despawn(u8 seat)
 // sometimes has her hat go black" (2026-10-05 play-test). The RIVAL graphics are the
 // same pictures from slot 10, so a ghost of the other gender wears those, and one of
 // ours the player's own, which slot 0 already holds.
+u8 BrGhosts_WalkGraphic(u8 skin)
+{
+    return sSkinGraphics[skin < BR_SKIN_COUNT ? skin : 0];
+}
+
 static u8 SkinGraphic(u8 skin)
 {
-    u8 gfx = sSkinGraphics[skin < BR_SKIN_COUNT ? skin : 0];
+    u8 gfx = BrGhosts_WalkGraphic(skin);
     bool8 male;
 
     if (skin >= 4)

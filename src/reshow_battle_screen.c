@@ -15,6 +15,9 @@
 #include "battle_interface.h"
 #include "battle_anim.h"
 #include "data.h"
+#if BR
+#include "br/br_skin.h"
+#endif
 
 // this file's functions
 static void CB2_ReshowBattleScreenAfterMenu(void);
@@ -192,7 +195,14 @@ static bool8 LoadBattlerSpriteGfx(u8 battler)
                 BattleLoadSubstituteOrMonSpriteGfx(battler, FALSE);
         }
         else if (gBattleTypeFlags & BATTLE_TYPE_SAFARI && battler == B_POSITION_PLAYER_LEFT) // Should be checking position, not battler.
+#if BR
+        {
+            if (!BrSkin_LoadMyPic(battler))
+#endif
             DecompressTrainerBackPic(gSaveBlock2Ptr->playerGender, battler);
+#if BR
+        }
+#endif
         else if (gBattleTypeFlags & BATTLE_TYPE_WALLY_TUTORIAL && battler == B_POSITION_PLAYER_LEFT) // Should be checking position, not battler.
             DecompressTrainerBackPic(TRAINER_BACK_PIC_WALLY, battler);
         else if (!gBattleSpritesDataPtr->battlerData[battler].behindSubstitute)
@@ -234,6 +244,10 @@ static void CreateBattlerSprite(u8 battler)
         }
         else if (gBattleTypeFlags & BATTLE_TYPE_SAFARI && battler == B_POSITION_PLAYER_LEFT)
         {
+#if BR
+            if (!BrSkin_CreateMyPic(battler, 0, 0))
+            {
+#endif
             SetMultiuseSpriteTemplateToTrainerBack(gSaveBlock2Ptr->playerGender, GetBattlerPosition(B_POSITION_PLAYER_LEFT));
             gBattlerSpriteIds[battler] = CreateSprite(&gMultiuseSpriteTemplate, 0x50,
                                                 (8 - gTrainerBackPicCoords[gSaveBlock2Ptr->playerGender].size) * 4 + 80,
@@ -241,6 +255,9 @@ static void CreateBattlerSprite(u8 battler)
             gSprites[gBattlerSpriteIds[battler]].oam.paletteNum = battler;
             gSprites[gBattlerSpriteIds[battler]].callback = SpriteCallbackDummy;
             gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
+#if BR
+            }
+#endif
         }
         else if (gBattleTypeFlags & BATTLE_TYPE_WALLY_TUTORIAL && battler == B_POSITION_PLAYER_LEFT)
         {

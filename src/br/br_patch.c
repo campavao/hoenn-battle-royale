@@ -90,33 +90,28 @@ static bool8 IsTaken(u16 key)
     return (gBrPatchTaken[n / 8] >> (n % 8)) & 1;
 }
 
-// A cell a battle could start on, by the same test wild_encounter.c makes: grass, a cave
-// floor or sand under a land table, water under a water one. Not a wall, and not where
-// one of the map's people stood.
-//
-// Read off the layout as the ROM ships it, not the live grid: a map's ON_LOAD scripts set
-// metatiles from flags that differ between players, and one cell more or less on one ROM
-// would shift every pick after it -- the same key naming different cells in one room.
-static bool8 Eligible(const struct WildPokemonHeader *header, s16 x, s16 y)
+// Whether a metatile is one a battle could start on, by the same test wild_encounter.c
+// makes: grass, a cave floor or sand under a land table, water under a water one.
+static bool8 EncounterMetatile(const struct WildPokemonHeader *header, u16 metatile)
+{
+    u8 behavior = GetMetatileAttributesById(metatile) & METATILE_ATTR_BEHAVIOR_MASK;
+
+    return (header->landMonsInfo != NULL && MetatileBehavior_IsLandWildEncounter(behavior))
+        || (header->waterMonsInfo != NULL && MetatileBehavior_IsWaterWildEncounter(behavior));
+}
+
+// The columns the map's people stand in on row y, once a row rather than once a cell.
+static u8 PeopleOnRow(s16 y, s16 *people)
 {
     const struct MapEvents *events = gMapHeader.events;
-    const struct MapLayout *layout = gMapHeader.mapLayout;
-    u16 block = layout->map[(x - MAP_OFFSET) + (y - MAP_OFFSET) * layout->width];
-    u8 behavior;
-    u8 i;
+    u8 i, count = 0;
 
-    if (UNPACK_COLLISION(block) != 0)
-        return FALSE;
-    behavior = GetMetatileAttributesById(UNPACK_METATILE(block)) & METATILE_ATTR_BEHAVIOR_MASK;
-    if (!(header->landMonsInfo != NULL && MetatileBehavior_IsLandWildEncounter(behavior))
-     && !(header->waterMonsInfo != NULL && MetatileBehavior_IsWaterWildEncounter(behavior)))
-        return FALSE;
     for (i = 0; i < events->objectEventCount; i++)
     {
-        if (events->objectEvents[i].x + MAP_OFFSET == x && events->objectEvents[i].y + MAP_OFFSET == y)
-            return FALSE;
+        if (events->objectEvents[i].y + MAP_OFFSET == y)
+            people[count++] = events->objectEvents[i].x + MAP_OFFSET;
     }
-    return TRUE;
+    return count;
 }
 
 static void Undraw(u8 i)
@@ -135,9 +130,20 @@ static void Undraw(u8 i)
 
 // Two passes over the map: count the cells, then find the ones the seed picked. A Safari
 // area is 1600 cells and Route 119 over 5000, and a pass at once held the field up for
-// five frames on the first (safari-opening.txt) -- so it goes a slice a frame, and the
+// five frames on the first (safari-opening.txt) -- so it goes a little a frame, and the
 // map has no patches until the second pass is done.
-#define BR_PATCH_SLICE 256
+//
+// A little is about BR_PATCH_LINES of the LCD's lines, not a count of cells (the clock is
+// read every 16 cells, so a frame can run a few lines over). BrFrame runs
+// before the game's own work, so whatever the deal takes, the walk and the sprites still
+// have to fit after it: 256 cells a frame was half the frame and more, and with a step
+// on top the game ran at half speed for more than a second after every map change, the
+// whole time the deal took (Cam's 2026-10-18 play-test: "laggier ... especially when
+// transitioning from one area to another"). The cells themselves are cheaper too: a
+// row's people are found once a row, and a run of one metatile is looked up once.
+#define BR_PATCH_LINES 32
+// REG_VCOUNT runs 0..227: 160 drawn lines, then 68 of VBlank.
+#define LINES_A_FRAME 228
 
 static EWRAM_DATA u8 sPass = 0;          // 0 dealt, 1 counting, 2 placing
 static EWRAM_DATA u8 sWant = 0;
@@ -189,17 +195,36 @@ static void Pick(void)
     }
 }
 
-// The next slice of whichever pass is running.
+// LCD lines since `start`, a REG_VCOUNT.
+static u16 LinesSince(u16 start)
+{
+    u16 now = REG_VCOUNT & 0xFF;
+
+    return now >= start ? now - start : now + LINES_A_FRAME - start;
+}
+
+// The next frame's worth of whichever pass is running.
 static void DealSome(void)
 {
     const struct WildPokemonHeader *header = &gWildMonHeaders[gBrPatch.header];
-    s16 w = gMapHeader.mapLayout->width + MAP_OFFSET;
-    s16 h = gMapHeader.mapLayout->height + MAP_OFFSET;
-    u16 n;
+    const struct MapLayout *layout = gMapHeader.mapLayout;
+    s16 w = layout->width + MAP_OFFSET;
+    s16 h = layout->height + MAP_OFFSET;
+    u16 start = REG_VCOUNT & 0xFF;
+    const u16 *row = NULL;
+    s16 people[OBJECT_EVENT_TEMPLATES_COUNT];
+    u8 peopleCount = 0;
+    u16 metatile = 0xFFFF;
+    bool8 encounter = FALSE;
+    bool8 eligible;
+    u16 block;
+    u8 n = 0;
     u8 i;
 
-    for (n = 0; n < BR_PATCH_SLICE; n++)
+    for (;;)
     {
+        if ((++n & 15) == 0 && LinesSince(start) >= BR_PATCH_LINES)
+            return;
         if (sY >= h)
         {
             if (sPass == 2 || sCells == 0)
@@ -211,8 +236,35 @@ static void DealSome(void)
             Pick();
             sPass = 2;
             sX = sY = MAP_OFFSET;
+            row = NULL;
         }
-        if (Eligible(header, sX, sY))
+        if (row == NULL || sX == MAP_OFFSET)
+        {
+            row = &layout->map[(sY - MAP_OFFSET) * layout->width];
+            peopleCount = PeopleOnRow(sY, people);
+        }
+        // A cell a battle could start on: not a wall, an encounter metatile, and not where
+        // one of the map's people stood. Read off the layout as the ROM ships it, not the
+        // live grid: a map's ON_LOAD scripts set metatiles from flags that differ between
+        // players, and one cell more or less on one ROM would shift every pick after it --
+        // the same key naming different cells in one room.
+        block = row[sX - MAP_OFFSET];
+        eligible = FALSE;
+        if (UNPACK_COLLISION(block) == 0)
+        {
+            if (UNPACK_METATILE(block) != metatile)
+            {
+                metatile = UNPACK_METATILE(block);
+                encounter = EncounterMetatile(header, metatile);
+            }
+            eligible = encounter;
+            for (i = 0; eligible && i < peopleCount; i++)
+            {
+                if (people[i] == sX)
+                    eligible = FALSE;
+            }
+        }
+        if (eligible)
         {
             if (sPass == 1)
             {

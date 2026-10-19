@@ -2,6 +2,7 @@
 #if BR
 #include "br/br_match.h"
 #include "br/br_battle.h"
+#include "br/br_skin.h"
 #endif
 #include "battle.h"
 #include "battle_anim.h"
@@ -400,6 +401,13 @@ static void SafariHandleReturnMonToBall(void)
 
 static void SafariHandleDrawTrainerPic(void)
 {
+#if BR
+    if (BrSkin_DrawMyPic(gActiveBattler, DISPLAY_WIDTH, -2))
+    {
+        gBattlerControllerFuncs[gActiveBattler] = CompleteOnBattlerSpriteCallbackDummy;
+        return;
+    }
+#endif
     DecompressTrainerBackPic(gSaveBlock2Ptr->playerGender, gActiveBattler);
     SetMultiuseSpriteTemplateToTrainerBack(gSaveBlock2Ptr->playerGender, GetBattlerPosition(gActiveBattler));
     gBattlerSpriteIds[gActiveBattler] = CreateSprite(

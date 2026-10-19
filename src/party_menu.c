@@ -79,6 +79,8 @@
 #include "br/br_catch.h"
 #include "br/br_moves.h"
 static void CursorCb_BrMoves(u8);
+static bool8 BrAskNextLearn(u8);
+static void DisplayLearnMoveMessage(const u8 *);
 static const u8 sText_BrMoves[] = _("MOVES");
 #endif
 
@@ -2788,6 +2790,56 @@ static void Task_HandleSelectionMenuInput(u8 taskId)
 }
 
 #if BR
+// A lift's fifth moves (POK-400), asked the way a TM or a RARE CANDY asks: the screen's
+// own "wants to learn", its YES/NO, the summary screen to pick the move to forget, and
+// "stop trying to teach". data[1] = 1 brings each answer back to Task_TryLearningNextMove,
+// which asks the next one here. The exit callback is how this flow is told from the
+// others that come through it: the summary screen's way back keeps it.
+static void CB2_BrAskLearnDone(void)
+{
+    // Back to START, as the party screen it stood in for would have gone.
+    CB2_ReturnToFieldWithOpenMenu();
+}
+
+static bool8 BrAskNextLearn(u8 taskId)
+{
+    u8 slot;
+    u16 move;
+
+    if (gPartyMenu.exitCallback != CB2_BrAskLearnDone)
+        return FALSE;
+    if (!BrMoves_NextAsk(&slot, &move))
+    {
+        Task_ClosePartyMenu(taskId);
+        return TRUE;
+    }
+    if (slot != gPartyMenu.slotId)
+    {
+        AnimatePartySlot(gPartyMenu.slotId, 0);
+        gPartyMenu.slotId = slot;
+        AnimatePartySlot(slot, 1);
+    }
+    gPartyMenu.data[0] = move;
+    gPartyMenu.data[1] = 1;
+    GetMonNickname(&gPlayerParty[slot], gStringVar1);
+    StringCopy(gStringVar2, gMoveNames[move]);
+    DisplayLearnMoveMessage(gText_PkmnNeedsToReplaceMove);
+    gTasks[taskId].func = Task_ReplaceMoveYesNo;
+    return TRUE;
+}
+
+static void Task_BrAskLearn(u8 taskId)
+{
+    if (!gPaletteFade.active)
+        BrAskNextLearn(taskId);
+}
+
+void CB2_BrAskLearn(void)
+{
+    gPartyMenu.slotId = 0;
+    InitPartyMenu(PARTY_MENU_TYPE_FIELD, PARTY_LAYOUT_SINGLE, PARTY_ACTION_CHOOSE_MON, TRUE, PARTY_MSG_NONE, Task_BrAskLearn, CB2_BrAskLearnDone);
+}
+
 // Close the party menu and let BrCatch_Tick open the move relearner for this slot once
 // the field is back; the relearner is free and lists every level-up move at the rung.
 static void CursorCb_BrMoves(u8 taskId)
@@ -5115,7 +5167,11 @@ static void Task_TryLearnNewMoves(u8 taskId)
 
 static void Task_TryLearningNextMove(u8 taskId)
 {
+#if BR
+    u16 result = BrAskNextLearn(taskId) ? MON_ALREADY_KNOWS_MOVE : MonTryLearningNewMove(&gPlayerParty[gPartyMenu.slotId], FALSE); // a lift's questions, not a RARE CANDY's level: the ask has its own task, so return
+#else
     u16 result = MonTryLearningNewMove(&gPlayerParty[gPartyMenu.slotId], FALSE);
+#endif
 
     switch (result)
     {
@@ -5392,6 +5448,9 @@ static void TryTutorSelectedMon(u8 taskId)
 
 void CB2_PartyMenuFromStartMenu(void)
 {
+#if BR
+    if (BrMoves_AskWaiting()) { CB2_BrAskLearn(); return; } // a lift's fifth moves wait for this screen (POK-400)
+#endif
     InitPartyMenu(PARTY_MENU_TYPE_FIELD, PARTY_LAYOUT_SINGLE, PARTY_ACTION_CHOOSE_MON, FALSE, PARTY_MSG_CHOOSE_MON, Task_HandleChooseMonInput, CB2_ReturnToFieldWithOpenMenu);
 }
 

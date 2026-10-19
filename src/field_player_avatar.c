@@ -31,6 +31,7 @@
 #include "constants/trainer_types.h"
 #if BR
 #include "br/br_hm.h"
+#include "br/br_skin.h"
 #endif
 
 #define NUM_FORCED_MOVEMENTS 18
@@ -1258,7 +1259,11 @@ u8 GetRivalAvatarGraphicsIdByStateIdAndGender(u8 state, u8 gender)
 
 u8 GetPlayerAvatarGraphicsIdByStateIdAndGender(u8 state, u8 gender)
 {
+#if BR
+    return BrSkin_MyAvatar(sPlayerAvatarGfxIds[state][gender]);
+#else
     return sPlayerAvatarGfxIds[state][gender];
+#endif
 }
 
 u8 GetFRLGAvatarGraphicsIdByGender(u8 gender)
@@ -1308,7 +1313,11 @@ u8 GetPlayerAvatarGenderByGraphicsId(u8 gfxId)
     case OBJ_EVENT_GFX_MAY_WATERING:
         return FEMALE;
     default:
+#if BR
+        return BrSkin_AvatarGender(gfxId);
+#else
         return MALE;
+#endif
     }
 }
 
@@ -1383,7 +1392,11 @@ u8 GetPlayerAvatarGraphicsIdByCurrentState(void)
     for (i = 0; i < ARRAY_COUNT(sPlayerAvatarGfxToStateFlag[0]); i++)
     {
         if (sPlayerAvatarGfxToStateFlag[gPlayerAvatar.gender][i].playerFlag & flags)
+#if BR
+            return BrSkin_MyAvatar(sPlayerAvatarGfxToStateFlag[gPlayerAvatar.gender][i].graphicsId);
+#else
             return sPlayerAvatarGfxToStateFlag[gPlayerAvatar.gender][i].graphicsId;
+#endif
     }
     return 0;
 }
@@ -2026,7 +2039,11 @@ static bool8 Fishing_NoMon(struct Task *task)
 static bool8 Fishing_PutRodAway(struct Task *task)
 {
     AlignFishingAnimationFrames();
+#if BR
+    if (gSprites[gPlayerAvatar.spriteId].animEnded || BrSkin_PlayerAnimEndless())
+#else
     if (gSprites[gPlayerAvatar.spriteId].animEnded)
+#endif
     {
         struct ObjectEvent *playerObjEvent = &gObjectEvents[gPlayerAvatar.objectEventId];
 
@@ -2091,6 +2108,9 @@ static void AlignFishingAnimationFrames(void)
         playerSprite->y2 = -8;
     if (animType == 10 || animType == 11)
         playerSprite->y2 = 8;
+#if BR
+    BrSkin_FishingOffsets(playerSprite);
+#endif
     if (gPlayerAvatar.flags & PLAYER_AVATAR_FLAG_SURFING)
         SetSurfBlob_PlayerOffset(gObjectEvents[gPlayerAvatar.objectEventId].fieldEffectSpriteId, TRUE, playerSprite->y2);
 }

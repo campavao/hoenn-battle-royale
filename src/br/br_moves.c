@@ -159,6 +159,16 @@ static EWRAM_DATA u16 sTeachCount = 0;        // and how many the bag held as it
 
 #define TEACH_WAIT_FRAMES (60 * 15) // a GIVE's round trip, and the found-item jingle
 
+EWRAM_DATA struct BrAsk gBrAsk = {0};
+// How many of the moves at level gBrAsk.from[i] are already behind us: a learnset can
+// teach two at one level (BULBASAUR's 15), and the level alone would skip the second.
+// BR_ASK_LEVEL_DONE: all of them, as the lift left it. IWRAM, for EWRAM's margin; it
+// only means anything beside a from[] the same code just set.
+#define BR_ASK_LEVEL_DONE 0xFF
+static u8 sAskAt[PARTY_SIZE];
+// The ticker has said a question waits, once per lift (Cam, 2026-10-18: "it can wait").
+static bool8 sAskSaid;
+
 bool8 BrMoves_IsTm(u16 item)
 {
     return item >= ITEM_TM01 && item < ITEM_HM01;
@@ -220,11 +230,155 @@ static void Task_OpenTeach(u8 taskId)
     SetMainCallback2(CB2_ShowPartyMenuForItemUse);
 }
 
+void BrMoves_AskFrom(u8 slot, u8 from, u8 count)
+{
+    if (slot >= PARTY_SIZE || gBrAsk.off)
+        return;
+    if (gBrAsk.count != count)
+    {
+        u8 i;
+
+        for (i = 0; i < PARTY_SIZE; i++)
+            gBrAsk.from[i] = 0;
+        gBrAsk.count = count;
+    }
+    // A second lift before the first was asked about asks about both.
+    if (gBrAsk.from[slot] == 0 || from < gBrAsk.from[slot])
+    {
+        gBrAsk.from[slot] = from;
+        sAskAt[slot] = BR_ASK_LEVEL_DONE;
+    }
+    sAskSaid = FALSE;
+}
+
+static void ClearAsks(void)
+{
+    u8 i;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+        gBrAsk.from[i] = 0;
+}
+
+// `learnOnly`: learn what free slots take, and say whether a question waits without
+// moving past it. Otherwise the question found is the one asked now.
+static bool8 FindAsk(u8 *slot, u16 *move, bool8 learnOnly)
+{
+    u8 i, count = CalculatePlayerPartyCount();
+
+    if (count != gBrAsk.count)
+    {
+        ClearAsks();
+        return FALSE;
+    }
+    for (i = 0; i < count; i++)
+    {
+        struct Pokemon *mon = &gPlayerParty[i];
+        const u16 *learnset = gLevelUpLearnsets[GetMonData(mon, MON_DATA_SPECIES)];
+        u8 level = GetMonData(mon, MON_DATA_LEVEL);
+        u8 last = 0, nth = 0;
+        u16 j;
+
+        if (gBrAsk.from[i] == 0)
+            continue;
+        for (j = 0; learnset[j] != LEVEL_UP_END; j++, nth++)
+        {
+            u8 at = (learnset[j] & LEVEL_UP_MOVE_LV) >> 9;
+            u16 id = learnset[j] & LEVEL_UP_MOVE_ID;
+
+            if (at != last)
+            {
+                last = at;
+                nth = 0;
+            }
+            if (at < gBrAsk.from[i] || (at == gBrAsk.from[i] && nth < sAskAt[i]) || at > level || MonKnowsMove(mon, id))
+                continue;
+            if (GiveMoveToMon(mon, id) != MON_HAS_MAX_MOVES)
+            {
+                gBrAsk.from[i] = at; // a slot came free since the lift: it just learns it
+                sAskAt[i] = nth + 1;
+                continue;
+            }
+            // Asked once: the next question starts past this move, learnt or not.
+            if (!learnOnly)
+            {
+                gBrAsk.from[i] = at;
+                sAskAt[i] = nth + 1;
+            }
+            *slot = i;
+            *move = id;
+            return TRUE;
+        }
+        gBrAsk.from[i] = 0;
+    }
+    return FALSE;
+}
+
+bool8 BrMoves_NextAsk(u8 *slot, u16 *move)
+{
+    return FindAsk(slot, move, FALSE);
+}
+
+static bool8 AskPending(void)
+{
+    u8 i;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (gBrAsk.from[i] != 0)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+bool8 BrMoves_AskWaiting(void)
+{
+    u8 slot;
+    u16 move;
+
+    return AskPending() && FindAsk(&slot, &move, TRUE);
+}
+
+// A ten-letter name and this make 37 of the ticker's 40.
+static const u8 sText_WantsMove[] = _(" can learn a move (POKéMON)");
+
+static void SayAsk(u8 slot)
+{
+    u8 line[BR_HUD_LINE_MAX + 2];
+    u8 *last = line + BR_HUD_LINE_MAX;
+    u8 name[POKEMON_NAME_LENGTH + 1];
+    u8 *p;
+
+    GetMonNickname(&gPlayerParty[slot], name);
+    p = BrHud_Append(line, last, name);
+    BrHud_Append(p, last, sText_WantsMove);
+    BrHud_Say(line);
+}
+
 // When the field is ours: no script, nobody holding the controls, standing still. A TM
 // out of a bag arrives with the bag's GIVE, a frame or more after the press, so it waits
 // for the bag to have it too.
 void BrMoves_Tick(void)
 {
+    // The questions a lift left are only said here; the party screen asks them.
+    if (sTeach == ITEM_NONE && AskPending())
+    {
+        u8 slot;
+        u16 move;
+
+        if (!BrField_OverworldRunning() || gMain.inBattle)
+            return;
+        if (ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked() || !IsPlayerStandingStill())
+            return;
+        // A lift whose new moves all found a free slot (or the party changed) has nothing
+        // to ask, and says nothing.
+        if (!sAskSaid && FindAsk(&slot, &move, TRUE))
+        {
+            // The ticker says so once, and the questions wait for the party screen
+            // (CB2_PartyMenuFromStartMenu): no fade into it mid-match on its own.
+            sAskSaid = TRUE;
+            SayAsk(slot);
+        }
+    }
     if (sTeach == ITEM_NONE)
         return;
     if (CountTotalItemQuantityInBag(sTeach) <= sTeachHad)

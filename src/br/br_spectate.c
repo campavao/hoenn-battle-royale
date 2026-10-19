@@ -254,6 +254,15 @@ bool8 BrSpectate_Publishing(void)
                                  | BATTLE_TYPE_WALLY_TUTORIAL | BATTLE_TYPE_DOUBLE));
 }
 
+// A gender is 0 or 1; the player's carries the fight's fog above it.
+#define BR_BSTART_FOG 0x80
+// ...and each says whose side it is between the two (POK-411): the seat + 1, 0 for a side
+// with no seat (a wild POKeMON, Hoenn's own trainers), so a spectator draws each fighter
+// in the look they walk around in.
+#define BR_BSTART_GENDER 0x01
+#define BR_BSTART_SEAT_SHIFT 1
+#define BR_BSTART_SEAT_MASK 0x7E
+
 // Who is on each side, for the replay's names and pictures. A link battle and a duel
 // have it in gLinkPlayers already; a fight this ROM runs alone has the player, and the
 // bot, the trainer or (a wild POKeMON) nobody.
@@ -261,24 +270,38 @@ static void PutTrainers(u8 *buf)
 {
     const u8 *names[2];
     u8 genders[2];
+    u8 seats[2];
     u8 i, j;
 
+    seats[0] = seats[1] = BR_NO_SEAT;
     if (gBrNetlink.active || gBrDuel.running)
     {
         names[0] = gLinkPlayers[0].name;
         names[1] = gLinkPlayers[1].name;
         genders[0] = gLinkPlayers[0].gender;
         genders[1] = gLinkPlayers[1].gender;
+        if (gBrDuel.running)
+        {
+            seats[0] = gBrDuel.seatA;
+            seats[1] = gBrDuel.seatB;
+        }
+        else
+        {
+            seats[gBrNetlink.myId] = gBrMySeat;
+            seats[gBrNetlink.myId ^ 1] = gBrNetlink.peerSeat;
+        }
     }
     else
     {
         names[0] = gSaveBlock2Ptr->playerName;
         genders[0] = gSaveBlock2Ptr->playerGender;
+        seats[0] = gBrMySeat;
         names[1] = gText_EmptyString2;
         genders[1] = MALE;
         if (gBrBotFight.fighting)
         {
             names[1] = gBrBotFight.name;
+            seats[1] = gBrBotFight.seat;
             if (gBrBotFight.seat < BR_MAX_SEATS)
                 genders[1] = gBrSeats[gBrBotFight.seat].skin & 1;
         }
@@ -297,8 +320,12 @@ static void PutTrainers(u8 *buf)
         for (; j < PLAYER_NAME_LENGTH + 1; j++)
             buf[i * (PLAYER_NAME_LENGTH + 1) + j] = EOS;
     }
-    buf[2 * (PLAYER_NAME_LENGTH + 1)] = genders[0];
-    buf[2 * (PLAYER_NAME_LENGTH + 1) + 1] = genders[1];
+    for (i = 0; i < 2; i++)
+    {
+        buf[2 * (PLAYER_NAME_LENGTH + 1) + i] = genders[i];
+        if (seats[i] < BR_MAX_SEATS)
+            buf[2 * (PLAYER_NAME_LENGTH + 1) + i] |= (seats[i] + 1) << BR_BSTART_SEAT_SHIFT;
+    }
 }
 
 // The seed and both parties are up: the recorded replay can be built. The seed is set
@@ -331,9 +358,6 @@ static u16 PackParty(struct Pokemon *party, u8 *dst)
     dst[0] = count;
     return idx;
 }
-
-// A gender is 0 or 1; the player's carries the fight's fog above it.
-#define BR_BSTART_FOG 0x80
 
 // Publish the battle so a spectator can build the BATTLE_TYPE_RECORDED: the seed, both
 // trainers' names and genders, and both real parties. Assembled on the heap -- ~1.2 KB
@@ -402,6 +426,18 @@ static EWRAM_DATA u32 sPendFlags = 0;
 static EWRAM_DATA u8 sPendNames[2 * (PLAYER_NAME_LENGTH + 1)] = {0};
 static EWRAM_DATA u8 sPendGenders[2] = {0};
 static bool8 sPendFog;
+
+u8 BrSpectate_SideSkin(u8 side)
+{
+    u8 seat;
+
+    if (!gBrSpectate.watching || side > 1)
+        return BR_NO_SEAT;
+    seat = (sPendGenders[side] & BR_BSTART_SEAT_MASK) >> BR_BSTART_SEAT_SHIFT;
+    if (seat == 0 || seat > BR_MAX_SEATS || !gBrSeats[seat - 1].present)
+        return BR_NO_SEAT;
+    return gBrSeats[seat - 1].skin;
+}
 // Turns that arrive while the field is still fading out. The fighters do not wait for
 // a spectator to be ready, so the opening turn of a fight can land before the replay
 // exists; held here, they are flushed into the record the moment it does.
@@ -460,13 +496,16 @@ static void EnterSpectate(void)
     // pieces to keep this off the stack (FeedSpectate would take 255). Not sTurnBuf:
     // that is the TURN assembler's, and a turn can be half read in it right now.
     u8 run[2 + 62];
+    u8 genders[2];
     struct BrEarlyTurns *early;
     u16 at, k;
     u8 battler;
 
+    genders[0] = sPendGenders[0] & BR_BSTART_GENDER;
+    genders[1] = sPendGenders[1] & BR_BSTART_GENDER;
     BrRing_SetBattleFog(sPendFog);
     RecordedBattle_StartSpectate(sPendSeed, sPendFlags, sPendParties,
-        sPendParties + PARTY_SIZE, sPendNames, sPendGenders, CB2_BrReturnFromSpectate);
+        sPendParties + PARTY_SIZE, sPendNames, genders, CB2_BrReturnFromSpectate);
     early = PEND_EARLY;
     for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
     {
@@ -528,6 +567,7 @@ static void ParseBstart(const u8 *d, u16 n)
 
     for (used = 0; used < (u16)sizeof(sPendNames); used++)
         sPendNames[used] = d[10 + used];
+    // Seats and all: EnterSpectate hands the replay the genders alone.
     sPendGenders[0] = d[26] & ~BR_BSTART_FOG;
     sPendFog = (d[26] & BR_BSTART_FOG) != 0;
     sPendGenders[1] = d[27];
@@ -859,7 +899,7 @@ static void HandlePartyCont(const u8 *payload, u8 len)
 
 static const u8 sText_PeekPP[] = _(" PP ");
 static const u8 sText_PeekTimes[] = _(" x");
-static const u8 sText_PeekMoney[] = _("MONEY ");
+static const u8 sText_PeekMoney[] = _("Money ");
 static const u8 sText_PeekNoBag[] = _("bag not seen yet");
 static const u8 sText_PeekEmpty[] = _("nothing in the bag");
 static const u8 sText_PeekStatus[][5] =

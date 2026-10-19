@@ -55,7 +55,8 @@ wait 3
 expect u8 gBrBotFight+2 0
 expect u8 gBrBotFight+1 0x1F
 expect u8 gBrBotFight+4 0xBC
-wait 295
+# the walk-up first (POK-409): the "!", and the walk when there is one
+wait 395
 expect u8 gBrBotFight+2 1
 expect u8 gBrBotFight+1 0x1F
 expect u8 gEnemyParty+8 0xCE

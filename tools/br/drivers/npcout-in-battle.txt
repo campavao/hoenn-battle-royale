@@ -18,6 +18,8 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 11 21 00 0F 00 BD BB C7 FF
 wait 400
+# a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
+poke u8 gBrAsk+7 1
 # A started match at rung 30, as trainer-drop.txt has it.
 poke u8 gBrMatch 2
 poke u8 gBrMatch+1 1

@@ -28,7 +28,7 @@ EWRAM_DATA struct BrMap gBrMap = {0};
 // The START menu row, and the prompt over the map once it is open.
 const u8 gBrText_MenuMap[] = _("MAP");
 const u8 gBrText_TheFog[] = _("The FOG.");
-static const u8 sText_SafeAt[] = _("SAFE: ");
+static const u8 sText_SafeAt[] = _("Safe: ");
 
 // The prompt names the ring's centre (POK-325), the one place the fog never reaches:
 // "SAFE: LITTLEROOT TOWN". It said "FOG: ", which read as the place the fog had taken
