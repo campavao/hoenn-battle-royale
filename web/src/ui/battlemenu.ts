@@ -146,6 +146,13 @@ export const ASKS_PAD: ReadonlySet<number> = new Set([
   0xf3, // B_SCR_OP_TRYGIVECAUGHTMONNICK
 ]);
 
+/** In a battle (gMain.inBattle): its scene, and the BAG and party screens it opens, from
+ *  CB2_InitBattleInternal until the battle hands back to the field. */
+export function inBattle(emu: BattleRead, sym: (name: string) => number | undefined): boolean {
+  const main = sym('gMain');
+  return main !== undefined && (emu.read(main + MAIN_IN_BATTLE_BYTE, 8) & MAIN_IN_BATTLE_BIT) !== 0;
+}
+
 /** The battle itself is on screen and wants nothing the D-pad or A/B give (Cam,
  *  2026-10-15: "we shouldn't need them after all our UI changes"): the choices are the
  *  windows, and the text runs on by itself (br_battle.c BrBattle_AutoScrollFrames). The
@@ -157,7 +164,7 @@ export function battleWantsNoPad(emu: BattleRead, sym: (name: string) => number 
   const scene = sym('BattleMainCB2');
   const instr = sym('gBattlescriptCurrInstr');
   if (main === undefined || scene === undefined || instr === undefined || !rom) return false;
-  if (!(emu.read(main + MAIN_IN_BATTLE_BYTE, 8) & MAIN_IN_BATTLE_BIT)) return false;
+  if (!inBattle(emu, sym)) return false;
   if ((emu.read(main + MAIN_CALLBACK2, 32) & ~1) !== (scene & ~1)) return false;
   const flags = sym('gBattleTypeFlags');
   if (flags === undefined || emu.read(flags, 32) & BATTLE_TYPE_RECORDED) return false;

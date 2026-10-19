@@ -1,38 +1,39 @@
 # ring-rows: the ring's far row after a step down (POK-319, POK-329), the row half of
-# ring-far-column.txt. The ring is 32 metatile rows, pos.y-4..pos.y+27, grid row pos.y+dy
-# in tile rows (yTileOffset + 2*dy) & 63 of 64 (include/br/br_field.h, THE RING). A step
-# down moves every row up one and leaves the new bottom row, pos.y+27, to be drawn into
-# the slot the old top row had -- which is the new pos.y-5, the row the band's top shows
-# until the step is done. So BrField_RedrawSlices only marks it and BrField_Tick draws it
-# on the frame the step completes, not before (Cam's 2026-09-18 phone: "jittering on the
-# top left, up, down, based on which way you're going").
+# ring-far-column.txt. The ring is 32 metatile rows, pos.y-9..pos.y+22 (BR_RING_ABOVE 9
+# since POK-378), grid row pos.y+dy in tile rows (yTileOffset + 2*dy) & 63 of 64
+# (include/br/br_field.h, THE RING). A step down moves every row up one and leaves the new
+# bottom row, pos.y+22, to be drawn into the slot the old top row had -- which is the new
+# pos.y-10, the row the band's top shows until the step is done. So BrField_RedrawSlices
+# only marks it and BrField_Tick draws it on the frame the step completes, not before
+# (Cam's 2026-09-18 phone: "jittering on the top left, up, down, based on which way you're
+# going").
 #
 # Rustboro City (21,25), landed, so the tile offsets are 0: the ring's top row, grid row
-# 21 (map row 14), is in tile rows 56..57 -- BG2's tilemap (0x0600C800, the middle layer,
-# 64 bytes a tile row) at 0x0600D600. One step down puts pos at (21,26) and the offset at
-# 2, and (2 + 2*27) & 63 is 56 again: the far row, grid row 53 (map row 46), goes into
-# that same slot. Tile columns 0..1 (u32 at +0) are the witness: 0xB33BB33B for the top
-# row, 0x82E082E1 for the far one -- what a whole-map draw booted straight at (21,26) has
-# at dy 27, tile rows 54..55 (0x0600D580), read off that boot. VRAM trails the buffers by
+# 16 (map row 9), is in tile rows 46..47 -- BG2's tilemap (0x0600C800, the middle layer,
+# 64 bytes a tile row) at 0x0600D380. One step down puts pos at (21,26) and the offset at
+# 2, and (2 + 2*22) & 63 is 46 again: the far row, grid row 48 (map row 41), goes into
+# that same slot. Tile columns 0..1 (u32 at +0) are the witness: 0xB351B351 for the top
+# row, 0x11161106 for the far one -- what a whole-map draw booted straight at (21,26) has
+# at dy 22, tile rows 44..45 (0x0600D300), read off that boot. VRAM trails the buffers by
 # a frame, so the mid-step read (the camera 12 pixels in) is the step's fifth frame.
-# The parent's 256-row ring has no tile rows past 31: 0x0600D600 is not BG2's map at all.
+# The parent's 256-row ring has no tile rows past 31: 0x0600D380 is not BG2's map at all.
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 03 15 00 19 00 BD BB C7 FF
 wait 400
 say rest
 expect u16 *gSaveBlock1Ptr+2 25
-expect u32 0x0600D600 0xB33BB33B
-expect u32 0x0600D640 0xB34BB34B
+expect u32 0x0600D380 0xB351B351
+expect u32 0x0600D3C0 0xB348B329
 # Already facing south, so the step starts on the first frame DOWN is held.
 hold DOWN 1
 wait 4
 say mid-step
 expect u16 *gSaveBlock1Ptr+2 26
 expect u32 gFieldCamera+20 12
-expect u32 0x0600D600 0xB33BB33B
+expect u32 0x0600D380 0xB351B351
 wait 40
 say after-a-step-down
 expect u16 *gSaveBlock1Ptr+2 26
-expect u32 0x0600D600 0x82E082E1
-expect u32 0x0600D640 0x82E082E2
+expect u32 0x0600D380 0x11161106
+expect u32 0x0600D3C0 0x02FA0EE8
 say ok

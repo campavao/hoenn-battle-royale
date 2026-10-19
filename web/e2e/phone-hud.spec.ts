@@ -43,8 +43,6 @@ test("a phone's HUD: the sign, the fog window, the dock, and the corner box off"
     await page.waitForTimeout(3000);
 
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
-    // The sign goes a few seconds after a new section (SIGN_MS), so it is measured where
-    // it sits rather than where it shows.
     const sign = await page.locator('.hud-sign canvas').evaluate((el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; });
     const fog = await box('.hud-fog canvas');
     const wrap = await box('#screen-wrap');
@@ -57,7 +55,9 @@ test("a phone's HUD: the sign, the fog window, the dock, and the corner box off"
     // At the top of the box, 4 GBA pixels down: the status bar is the body's padding, not theirs too.
     expect(sign.y - wrap.y, 'the sign at the top').toBeCloseTo(4 * scale, 0);
     expect(fog.y - wrap.y, 'the fog window at the top').toBeCloseTo(4 * scale, 0);
-    await expect(page.locator('.hud-sign'), 'and the sign goes after a while').toHaveClass(/gone/, { timeout: 10_000 });
+    // ...and it stays (Cam, 2026-10-18): still up well past the three seconds it used to fade at.
+    await page.waitForTimeout(4000);
+    await expect(page.locator('.hud-sign'), 'the sign stays on screen').not.toHaveClass(/gone/);
     // The dock: four windows and the menu, every one on the glass and none overlapping.
     const names = ['#hud-party', '#hud-map', '#hud-start', '#hud-ctx', '#hud-menu'];
     const rects = await Promise.all(names.map(box));

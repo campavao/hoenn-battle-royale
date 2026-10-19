@@ -29,6 +29,7 @@
 #include "br/br_boot.h"
 #include "br/br_match.h"
 #include "br/br_levels.h"
+#include "br/br_moves.h"
 
 static EWRAM_DATA u8 sBooted = 0;
 
@@ -450,7 +451,13 @@ void BrBoot_Tick(void)
         StartGameAt(b);
         BrLevels_GiveStartingBag();
         if (b->mode & BR_BOOT_FLAG_TESTMON)
+        {
+            // The e2e harness's mon. Nobody is there to answer a lift's fifth move
+            // (POK-400), and a party menu left open holds the buzzer off, so it picks
+            // its own four, as every lift did before the ask.
             ScriptGiveMon(SPECIES_TREECKO, 5, 0, 0, 0, 0);
+            gBrAsk.off = TRUE;
+        }
         if (b->mode & BR_BOOT_FLAG_TESTFLY)
         {
             // A bird that knows FLY, for the drivers that have to leave the ground.

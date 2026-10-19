@@ -1,0 +1,119 @@
+# learn-ask: a lift's fifth move is asked about, as the cartridge asks (Cam, 2026-10-18,
+# POK-400: "show the normal learn/replace prompt"). It used to swap in BrLevels' own
+# pick of the best four without a word. The TREECKO lifted 5 -> 30 (one-clock.txt's
+# ring) evolves to GROVYLE and fills its two empty slots with ABSORB and QUICK ATTACK
+# as before; FURY CUTTER, PURSUIT, SCREECH and LEAF BLADE find four moves there, so the
+# party screen asks about each in learnset order when START's POKeMON opens it:
+# FURY CUTTER taken over POUND, the other three declined, then back to the field.
+# gPartyMenu: data[0] (+14) the move asked about, data[1] (+16) 1 = ask the next after.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# the test TREECKO's boot turns the ask off for the e2e (br_boot.c); a player's is on
+poke u8 gBrAsk+7 0
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 200
+# the question waits (Cam, 2026-10-18: "it can wait"): the ticker says so, the field
+# stays ours -- a step west and back -- and START's POKeMON asks it
+shot ticker-says
+expect u16 *gSaveBlock1Ptr+0 5
+hold LEFT 20
+wait 20
+expect u16 *gSaveBlock1Ptr+0 3
+hold RIGHT 20
+wait 20
+expect u16 *gSaveBlock1Ptr+0 5
+tap START
+wait 30
+tap A
+wait 200
+tap A
+wait 60
+tap A
+wait 60
+shot replace-yes-no
+tap A
+wait 90
+tap A
+wait 120
+shot forget-which
+tap A
+wait 60
+tap A
+wait 120
+shot poof
+expect u16 gPartyMenu+14 210
+expect u16 gPartyMenu+16 1
+tap A
+wait 60
+tap A
+tap A
+wait 120
+expect u16 gPartyMenu+14 210
+tap A
+wait 60
+tap A
+wait 60
+shot learned-fury-cutter
+tap DOWN
+wait 10
+tap A
+wait 90
+tap A
+wait 60
+tap A
+wait 90
+expect u16 gPartyMenu+14 228
+tap DOWN
+wait 10
+tap A
+wait 90
+tap A
+wait 10
+tap A
+wait 90
+shot did-not-learn-pursuit
+tap A
+wait 120
+tap A
+wait 60
+tap A
+wait 60
+expect u16 gPartyMenu+14 103
+tap DOWN
+wait 10
+tap A
+wait 90
+tap A
+wait 10
+tap A
+wait 90
+tap A
+wait 120
+tap A
+wait 60
+tap A
+wait 60
+expect u16 gPartyMenu+14 348
+tap DOWN
+wait 10
+tap A
+wait 90
+tap A
+wait 10
+tap A
+wait 90
+tap A
+wait 120
+# back to START, as the party screen would have gone
+shot back-on-start
+tap B
+wait 30
+shot back-on-field
+# the field is ours again: the party screen let go, and a step west takes
+expect u16 *gSaveBlock1Ptr+0 5
+hold LEFT 20
+wait 20
+expect u16 *gSaveBlock1Ptr+0 3
+say learn ask ok
