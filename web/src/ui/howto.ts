@@ -36,7 +36,7 @@ export const PANELS: readonly Panel[] = [
   },
   {
     title: 'Loot',
-    text: 'Red balls hold items, blue hold TMs, gold hold rare finds (look in houses). Events, marked on your MAP, drop legendaries.',
+    text: 'Red balls hold items, blue hold TMs, gold hold rare finds (look in houses). Events on your MAP hold legendaries. Lose to one and you are out.',
     art: [{ item: ITEM_POTION }, { item: ITEM_TM01 }, { item: ITEM_MASTER_BALL }],
   },
   {
