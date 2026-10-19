@@ -61,6 +61,8 @@ export const OWN_DIR = 6;
 /** `gMain.inBattle`, a bitfield at 0x439 (include/main.h). */
 export const MAIN_IN_BATTLE_BYTE = 0x439;
 export const MAIN_IN_BATTLE_BIT = 0x02;
+/** gMain.callback2: which screen the ROM is running. */
+export const MAIN_CALLBACK2 = 4;
 /** `struct BrBattle.menu` (include/br/br_battle.h). */
 export const BATTLE_MENU = 8;
 export const MENU_ACTION = 1;
@@ -114,6 +116,26 @@ const PARTY_MENU_TYPE_CHOOSE_HALF = 4;
 /** PARTY_SIZE: the CONFIRM button's slotId; PARTY_SIZE + 1: CANCEL's. */
 export const PARTY_CONFIRM = 6;
 export const PARTY_CANCEL = 7;
+/** `struct Task`'s data[0]: the party submenu keeps its cursor there. */
+export const TASK_DATA0 = 8;
+/** `struct Window` (include/window.h): its template (bg, left, top, width, height), 12
+ *  bytes a window, WINDOWS_MAX of them; bg 0xFF is a free one. */
+export const WINDOW_SIZE = 12;
+export const WINDOWS_MAX = 32;
+/** The party screen's submenu (SUMMARY / SWITCH / ITEM / CANCEL, or a battle's SHIFT /
+ *  SUMMARY / CANCEL): DisplaySelectionWindow's SELECTWINDOW_ACTIONS, on BG2 at tiles
+ *  19..28, its bottom at row 19, a row of 16 pixels an action. */
+const SELECT_BG = 2;
+const SELECT_LEFT = 19;
+const SELECT_WIDTH = 10;
+const SELECT_BOTTOM = 19;
+
+/** Which row of the party submenu a GBA pixel is on, of `n` rows; -1 for none. */
+export function selectRowAt(px: number, py: number, n: number): number {
+  const top = (SELECT_BOTTOM - 2 * n) * 8;
+  if (px < SELECT_LEFT * 8 || px >= (SELECT_LEFT + SELECT_WIDTH) * 8 || py < top || py >= SELECT_BOTTOM * 8) return -1;
+  return Math.floor((py - top) / 16);
+}
 const ROM_BASE = 0x08000000;
 
 /** Where start_menu.c keeps the rows, the cursor and its input handler, out of the ROM's
@@ -248,6 +270,11 @@ export class TouchLayer {
   private menu: { which: number; target: number; frames: number; then?: number; waiting?: boolean; onPress?: () => void } | null = null;
   /** A POKeMON tapped on the party screen: its slot, walked to, and how long it has gone. */
   private party: { target: number; frames: number; moves: number } | null = null;
+  /** A row of the party submenu tapped: walked to, then A. */
+  private select: { row: number; frames: number; moves: number } | null = null;
+  /** The task the party screen runs in: the submenu takes it over (its data[0] is the
+   *  submenu's cursor). */
+  private partyTask = -1;
   /** A start-menu row asked for by a button (PARTY, MAP): START is down, the cursor walks. */
   private startRow: { action: number; frames: number; other: boolean } | null = null;
   /** The player's own registered item, put back after a dock press used SELECT. */
@@ -404,9 +431,45 @@ export class TouchLayer {
     if ((emu.read(pm + PARTY_MENU_LAYOUT_BYTE, 8) >> 4) & 3) return false;
     for (let i = 0; i < NUM_TASKS; i++) {
       const t = tasks + i * TASK_SIZE;
-      if (emu.read(t + TASK_ACTIVE, 8) && (emu.read(t, 32) | 1) === (fn | 1)) return true;
+      if (emu.read(t + TASK_ACTIVE, 8) && (emu.read(t, 32) | 1) === (fn | 1)) {
+        this.partyTask = i;
+        return true;
+      }
     }
     return false;
+  }
+
+  /** Whether the ROM runs neither the field nor a battle's own screen: the party screen,
+   *  the bag, a summary. A tap there is not a step or a battle menu. (A ROM without the
+   *  two callbacks in its table is let be, as before.) */
+  private elsewhere(): boolean {
+    const main = this.sym('gMain');
+    const field = this.sym('CB2_Overworld');
+    const battle = this.sym('BattleMainCB2');
+    if (main === undefined || field === undefined || battle === undefined) return false;
+    const cb2 = this.deps.emu.read(main + MAIN_CALLBACK2, 32) | 1;
+    return cb2 !== (field | 1) && cb2 !== (battle | 1);
+  }
+
+  /** The party screen's submenu, if that is what is up: its rows and its cursor. */
+  private selectMenu(): { n: number; cur: number } | null {
+    const tasks = this.sym('gTasks');
+    const windows = this.sym('gWindows');
+    if (tasks === undefined || windows === undefined || this.partyTask < 0 || !this.elsewhere()) return null;
+    const { emu } = this.deps;
+    const t = tasks + this.partyTask * TASK_SIZE;
+    if (!emu.read(t + TASK_ACTIVE, 8)) return null;
+    for (let i = 0; i < WINDOWS_MAX; i++) {
+      const w = windows + i * WINDOW_SIZE;
+      const h = emu.read(w + 4, 8);
+      if (emu.read(w, 8) !== SELECT_BG || emu.read(w + 1, 8) !== SELECT_LEFT || emu.read(w + 3, 8) !== SELECT_WIDTH) continue;
+      if (!h || h & 1 || emu.read(w + 2, 8) + h !== SELECT_BOTTOM) continue;
+      const n = h / 2;
+      // 0xFF until the submenu's first frame: its cursor starts on the top row.
+      const cur = (emu.read(t + TASK_DATA0, 16) << 16) >> 16;
+      return { n, cur: cur >= 0 && cur < n ? cur : 0 };
+    }
+    return null;
   }
 
   /** Where the party screen's cursor is (a SWITCH's second pick moves slotId2), and
@@ -457,6 +520,18 @@ export class TouchLayer {
       }
       return;
     }
+    const sel = this.selectMenu();
+    if (sel) {
+      const row = selectRowAt(px, py, sel.n);
+      if (row >= 0) {
+        this.cancel();
+        this.select = { row, frames: 0, moves: 0 };
+      }
+      return;
+    }
+    // Any other screen of its own (a message on the party screen, the bag, a summary):
+    // the field is not under the tap, and neither is a battle menu.
+    if (this.elsewhere()) return;
     if (this.inBattle()) {
       // The menus are on the picture; the field around it is scenery here.
       if (onPicture(px, py)) this.tapBattle(px, py);
@@ -576,6 +651,7 @@ export class TouchLayer {
     if (this.menu) this.frameMenu();
     else if (this.startRow) this.frameStartRow();
     else if (this.party) this.frameParty();
+    else if (this.select) this.frameSelect();
   }
 
   private frameParty(): void {
@@ -603,6 +679,28 @@ export class TouchLayer {
     }
     const down = (to - from + ring.length) % ring.length;
     this.press(down <= ring.length - down ? 'down' : 'up', TAP_FRAMES, TAP_FRAMES);
+  }
+
+  private frameSelect(): void {
+    const s = this.select!;
+    const menu = this.selectMenu();
+    if (!menu || ++s.frames > MENU_FRAMES || s.row >= menu.n) {
+      this.select = null;
+      return;
+    }
+    if (menu.cur === s.row) {
+      this.select = null;
+      this.press('a', TAP_FRAMES, TAP_FRAMES);
+      return;
+    }
+    if (++s.moves > menu.n) {
+      this.select = null;
+      return;
+    }
+    // Three rows or fewer stop at the ends (Menu_ProcessInputNoWrapAround_other); more
+    // wrap round (ProcessMenuInput_other): the short way.
+    const down = menu.n <= 3 ? (s.row > menu.cur ? 1 : menu.n) : (s.row - menu.cur + menu.n) % menu.n;
+    this.press(down <= menu.n - down ? 'down' : 'up', TAP_FRAMES, TAP_FRAMES);
   }
 
   private frameWalk(): void {
@@ -731,6 +829,7 @@ export class TouchLayer {
     this.menu = null;
     this.startRow = null;
     this.party = null;
+    this.select = null;
     this.queue = [];
     this.release();
   }
