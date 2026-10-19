@@ -130,12 +130,12 @@ describe('the lines it draws', () => {
   it('leaves out what did not happen, and counts one piece as a piece', () => {
     const lines = recordLines({ rings: 6, trainers: 3, duels: 0, duelsWon: 0, took: 1 });
     expect(lines.map((l) => l.label)).toEqual(['RINGS', 'TRAINERS', 'TOOK']);
-    expect(lines[2].value).toBe('1 piece');
+    expect(lines[2].value).toBe('1');
   });
 
   it('says a duel record as won-of-fought', () => {
     const lines = recordLines({ rings: 2, trainers: 0, duels: 4, duelsWon: 3, took: 2 });
     expect(lines.find((l) => l.label === 'DUELS')?.value).toBe('3 of 4');
-    expect(lines.find((l) => l.label === 'TOOK')?.value).toBe('2 pieces');
+    expect(lines.find((l) => l.label === 'TOOK')?.value).toBe('2');
   });
 });

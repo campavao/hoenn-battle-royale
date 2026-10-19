@@ -944,6 +944,10 @@ void ItemUseOutOfBattle_EvolutionStone(u8 taskId)
 
 void ItemUseInBattle_PokeBall(u8 taskId)
 {
+#if BR
+    if (BrItems_BallRefused(taskId)) // a trainer's POKeMON: the bag keeps the ball
+        return;
+#endif
     if (IsPlayerPartyAndPokemonStorageFull() == FALSE) // have room for mon?
     {
         RemoveBagItem(gSpecialVar_ItemId, 1);

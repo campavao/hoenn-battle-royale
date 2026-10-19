@@ -18,8 +18,8 @@ import { ordinal } from '../match/career';
 import type { RecordLine } from '../match/record';
 import { favourite, type MatchTally, type TallyNames } from '../match/tally';
 import type { MatchResult } from '../match/results';
-import { TEXT_BLUE, TEXT_DARK, fitText } from './emerald';
-import { ROW_H, W, paintButtons, paintRows, paintTitle, type ButtonSpec } from './screens';
+import { TEXT_BLUE, TEXT_DARK, type EmeraldCanvas, fitText, measure } from './emerald';
+import { ROW_H, W, layoutRows, paintButtons, paintRows, paintTitle, type ButtonSpec } from './screens';
 import type { DrawnScreen, Painted, Widget } from './stage';
 
 export { ParadeHold, ReplayHold } from './results-hold';
@@ -31,6 +31,9 @@ export interface ResultsView {
    *  seed is last: it is the question anybody asks about a round afterwards (POK-248). */
   line: string;
   rows: { label: string; value: string }[];
+  /** The seed, for the footer under the record (Cam's 10-19 play-test, #29): a number
+   *  you look up, not a stat of the match. */
+  seed?: string;
 }
 
 function clock(secs: number): string {
@@ -53,10 +56,7 @@ export function resultsView(mine: MatchResult, seats: number, seat: number, name
     parts.push('a draw');
     rows.push({ label: 'Winner', value: 'Nobody' });
   }
-  if (seed !== undefined) {
-    parts.push(`seed ${seed}`);
-    rows.push({ label: 'Seed', value: String(seed) });
-  }
+  if (seed !== undefined) parts.push(`seed ${seed}`);
   const headline =
     mine.winner !== undefined && mine.winner === seat
       ? 'You won!'
@@ -65,7 +65,7 @@ export function resultsView(mine: MatchResult, seats: number, seat: number, name
         : mine.winner === undefined
           ? 'A draw'
           : 'Results';
-  return { headline, line: parts.join(' · '), rows };
+  return { headline, line: parts.join(' · '), rows, seed: seed === undefined ? undefined : String(seed) };
 }
 
 export interface Fame {
@@ -95,7 +95,7 @@ export function tallyLines(t: MatchTally, names: TallyNames): RecordLine[] {
   const lines: RecordLine[] = [
     { label: 'WON', value: String(t.won) },
     { label: 'CAUGHT', value: String(t.caught) },
-    { label: 'WALKED', value: `${t.steps} ${t.steps === 1 ? 'step' : 'steps'}` },
+    { label: 'STEPS', value: String(t.steps) },
     { label: 'ITEMS', value: String(t.items) },
   ];
   const mon = favourite(t.mons);
@@ -106,13 +106,53 @@ export function tallyLines(t: MatchTally, names: TallyNames): RecordLine[] {
   return lines;
 }
 
-/** The record as rows: counts in pairs, left and right, and a name on a row of its own. */
-export function recordRows(lines: readonly RecordLine[]): { label: string; detail?: string }[] {
-  const rows: { label: string; detail?: string }[] = [];
-  const counts = lines.filter((l) => !l.wide).map((l) => `${l.label} ${l.value}`);
-  for (let i = 0; i < counts.length; i += 2) rows.push({ label: counts[i], detail: counts[i + 1] });
-  for (const l of lines) if (l.wide) rows.push({ label: l.label, detail: l.value });
+/** One row of the record's table: a count in each half, or a name across the whole row. */
+export interface RecordRow {
+  left: { label: string; value: string };
+  right?: { label: string; value: string };
+  wide?: boolean;
+}
+
+/** The record as a table (Cam's 10-19 play-test, #29: "it's gotta be an easier-to-read
+ *  table... sometimes it's talking across the aisle"). Two columns of counts, each count's
+ *  value at the right edge of its own column, then each name on a row of its own. */
+export function recordRows(lines: readonly RecordLine[]): RecordRow[] {
+  const rows: RecordRow[] = [];
+  const counts = lines.filter((l) => !l.wide);
+  const half = Math.ceil(counts.length / 2);
+  // Down the left column, then the right, the way a table reads.
+  for (let i = 0; i < half; i++) {
+    const l = counts[i];
+    const r = counts[i + half];
+    rows.push({ left: { label: l.label, value: l.value }, right: r && { label: r.label, value: r.value } });
+  }
+  for (const l of lines) if (l.wide) rows.push({ left: { label: l.label, value: l.value }, wide: true });
   return rows;
+}
+
+/** The gap between the table's two columns. */
+const COL_GAP = 16;
+
+function paintRecord(c: EmeraldCanvas, y: number, rows: readonly RecordRow[]): number {
+  const lay = layoutRows(y, rows.length);
+  c.drawFrame(lay.frame);
+  rows.forEach((row, i) => {
+    const r = lay.rows[i];
+    const x0 = r.x + 8;
+    const x1 = r.x + r.w;
+    const cells: [number, number, { label: string; value: string }][] = row.wide || !row.right
+      ? [[x0, row.wide ? x1 : Math.floor((x0 + x1 - COL_GAP) / 2), row.left]]
+      : [
+          [x0, Math.floor((x0 + x1 - COL_GAP) / 2), row.left],
+          [Math.floor((x0 + x1 + COL_GAP) / 2), x1, row.right],
+        ];
+    for (const [from, to, cell] of cells) {
+      const labelW = c.drawText(fitText(cell.label, to - from), from, r.y, TEXT_DARK);
+      const value = fitText(cell.value, Math.max(0, to - from - labelW - 6));
+      if (value) c.drawText(value, to - measure(value), r.y, TEXT_DARK);
+    }
+  });
+  return lay.frame.y + lay.frame.h;
 }
 
 export interface ResultsModel {
@@ -140,14 +180,11 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.view.headline, cls: 'results-head', cursor: null });
       y += 22;
 
-      // The match, and under it what it did to the career.
+      // The match. What it did to the career and its seed are the footer, under the record.
       const top = y;
-      const match = paintRows(c, y, [
-        ...m.view.rows.map((r) => ({ label: r.label, detail: r.value })),
-        { label: m.career || ' ', id: 'results-career', cls: 'results-career', color: TEXT_BLUE },
-      ]);
+      const match = paintRows(c, y, m.view.rows.map((r) => ({ label: r.label, detail: r.value })));
       widgets.push({ rect: { x: 0, y: top, w: W, h: match.bottom - top }, text: m.view.line, id: 'results-line', cls: 'results-line', cursor: null });
-      widgets.push(...match.widgets.map((w) => (w.id === 'results-career' ? { ...w, text: m.career } : w)));
+      widgets.push(...match.widgets);
       y = match.bottom + 4;
 
       if (m.fame) {
@@ -162,18 +199,26 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
 
       if (m.record.length > 0) {
         const recTop = y;
-        // Two counts to a row, so the room's and the ROM's both fit (POK-416); a name
+        // Two columns of counts, so the room's and the ROM's both fit (POK-416); a name
         // gets a row of its own.
-        const rec = paintRows(c, y, recordRows(m.record).map((r) => ({ ...r, color: TEXT_DARK })));
+        const bottom = paintRecord(c, y, recordRows(m.record));
         widgets.push({
-          rect: { x: 0, y: recTop, w: W, h: rec.bottom - recTop },
+          rect: { x: 0, y: recTop, w: W, h: bottom - recTop },
           text: m.record.map((l) => `${l.label} ${l.value}`).join(' · '),
           id: 'results-record',
           cls: 'results-record',
           cursor: null,
         });
-        y = rec.bottom + 4;
+        y = bottom + 4;
       }
+
+      // The footer: what the match did to the career, and its seed.
+      const foot = paintRows(c, y, [
+        { label: m.career || ' ', id: 'results-career', cls: 'results-career', color: TEXT_BLUE },
+        ...(m.view.seed === undefined ? [] : [{ label: 'Seed', detail: m.view.seed }]),
+      ]);
+      widgets.push(...foot.widgets.map((w) => (w.id === 'results-career' ? { ...w, text: m.career } : w)));
+      y = foot.bottom + 4;
 
       const buttons: ButtonSpec[] = [];
       if (m.again) buttons.push({ label: m.again.label, id: m.again.id, disabled: m.again.disabled, onPress: m.again.onPress });
