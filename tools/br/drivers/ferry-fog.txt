@@ -55,4 +55,17 @@ wait 600
 shot aboard
 expect u8 gBrRing+5 0
 expect u16 gBrRing+10 0
+# ...and past the ring the voyage is in it. VAR_CRUISE_STEP_COUNT (0x404A, at
+# *gSaveBlock1Ptr+0x1430) at 150 is ROUTE 132 (15,10), seven sections east of the centre.
+poke u16 *gSaveBlock1Ptr+0x1430 150
+wait 120
+expect u8 gBrRing+5 1
+# Made land in LILYCOVE (VAR_SS_TIDAL_STATE 4, at +0x1504): Lilycove, also outside.
+poke u16 *gSaveBlock1Ptr+0x1504 4
+wait 60
+expect u8 gBrRing+5 1
+# Boarding at Slateport again (1): inside.
+poke u16 *gSaveBlock1Ptr+0x1504 1
+wait 60
+expect u8 gBrRing+5 0
 say ferry fog ok
