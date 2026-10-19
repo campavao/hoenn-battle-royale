@@ -3892,7 +3892,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
 
     const main = menuScreen(() => ({
       title: 'HOENN BATTLE ROYALE',
-      rows: [...playRows(shownLink(), rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)), HOWTO_ROW, FEEDBACK_ROW].map(row),
+      rows: [...playRows(shownLink(), rooms.find((r) => r.daily)), HOWTO_ROW, FEEDBACK_ROW].map(row),
       rowsId: 'lobby-rows',
       note: note || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',
@@ -3987,7 +3987,14 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         },
       };
     }));
-    const howTo = howToScreen(() => ({ skin: careerSkin(), onDone: () => stage.pop() }));
+    const howTo = howToScreen(() => ({
+      skin: careerSkin(),
+      onDone: () => stage.pop(),
+      // Its fog, its evolution and its confetti move; nothing else is drawn for it.
+      redraw: () => {
+        if (stage.current === howTo) stage.redraw();
+      },
+    }));
     stage.show(main);
     // Somebody who imported their ROM by hand is new here: the panels come up over the
     // first menu they meet, once on this device (POK-429).
