@@ -25,6 +25,7 @@ struct BrMap
 {
     /* 0 */ u8 active; // the map is open as a look, not as a pick
     /* 1 */ u8 flier;  // party slot that knows FLY when it opened, 0xFF for nobody
+    /* 2 */ u16 blinkTile; // BG1's tile for what the next ring fogs, 0 for none (ShadeFog)
 };
 
 extern struct BrMap gBrMap;
@@ -53,6 +54,10 @@ void BrMap_TakeFlight(void);
 // has cleared BLDCNT for itself. Both do nothing unless this is a look with a ring.
 void BrMap_ShadeFog(u16 *frame, u8 *tiles, u8 left, u8 top, u8 width, u8 height);
 void BrMap_BlendFog(void);
+// The next ring on a look (Cam, 2026-10-18): what it will fog blinks purple, slowly.
+// ShadeFog lays those cells down on BG1 with a tile of their own, and BlinkFog, from the
+// fly map's VBlank, turns that one tile on and off.
+void BrMap_BlinkFog(u8 *tiles);
 // The prompt under a look (region_map.c): "FOG: <the ring's centre>", or FOG EVERYWHERE on
 // the last phase, or "The FOG." with no place named. Built in gStringVar4.
 const u8 *BrMap_Prompt(void);

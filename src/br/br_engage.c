@@ -4,6 +4,7 @@
 #include "overworld.h"
 #include "fieldmap.h"
 #include "script.h"
+#include "task.h"
 #include "field_screen_effect.h"
 #include "constants/battle.h"
 #include "br/br_mailbox.h"
@@ -16,6 +17,7 @@
 #include "br/br_hud.h"
 #include "br/br_field.h"
 #include "br/br_engage.h"
+#include "br/br_walkup.h"
 
 EWRAM_DATA struct BrEngage gBrEngage = {0};
 static EWRAM_DATA u8 sOwnBusy = 0xFF;  // last BR_MSG_BUSY kind sent, 0xFF nothing yet
@@ -57,14 +59,15 @@ static void ReportBusy(void)
 {
     u8 kind, buf[2];
 
-    // An engage's freeze, or the walk-up to a fight (POK-373), is not a menu: a "?" over
-    // us would say we walked off. Nor is the walk-up the fight yet: the pair's own
-    // TickWait and settle read BR_BUSY_BATTLE as "taken by somebody else".
-    if (gMain.inBattle)
+    // An engage's freeze, or the walk-up to a fight (POK-373, POK-409), is not a menu: a
+    // "?" over us would say we walked off. Nor is the walk-up the fight yet: the pair's
+    // own TickWait and settle read BR_BUSY_BATTLE as "taken by somebody else". A bot's
+    // walk-up is: a bot has no ROM to read it, and anybody else is turned away (POK-409).
+    if (gMain.inBattle || BrEngage_WalkupSeat() != 0xFF)
         kind = BR_BUSY_BATTLE;
     else if (gMain.callback2 != CB2_Overworld
           || (ArePlayerFieldControlsLocked() && gBrEngage.waitSeat == 0xFF && gBrEngage.settleSeat == 0xFF
-              && gBrNetlink.startState == 0))
+              && gBrNetlink.startState == 0 && BrEngage_WalkupSeat() == 0xFF))
         kind = BR_BUSY_MENU;
     else
         kind = BR_BUSY_MAP;
@@ -297,7 +300,8 @@ static void TickWait(void)
 
 bool8 BrEngage_Settle(u8 seat, u8 how)
 {
-    if (seat >= BR_MAX_SEATS || gBrEngage.settleSeat != 0xFF || gBrNetlink.active || gMain.inBattle)
+    if (seat >= BR_MAX_SEATS || gBrEngage.settleSeat != 0xFF || gBrNetlink.active || gMain.inBattle
+     || BrEngage_WalkupSeat() != 0xFF)
         return FALSE;
     gBrEngage.settleSeat = seat;
     sSettleHow = how;
@@ -315,12 +319,50 @@ bool8 BrEngage_YieldWait(void)
     return TRUE;
 }
 
+// A bot fight's walk-up (POK-409), the same one a link battle has: the "!", the walk,
+// then the trainer battle. Nothing else can start meanwhile: our trainer is locked, so
+// no engage goes out, and BrEngage_Settle turns down any challenge that lands.
+#define tSeat data[0]
+#define tWalked data[1]
+#define tPresent data[2]
+
+static void Task_BrBotWalkup(u8 taskId)
+{
+    struct Task *task = &gTasks[taskId];
+    u8 seat = task->tSeat;
+
+    // The settle's own reasons to call it off, if they come up on the way.
+    if (gBrMatch.phase != BR_PHASE_PLAY || !BrBot_IsStaged(seat) || (task->tPresent && !gBrSeats[seat].present))
+    {
+        DestroyTask(taskId);
+        Unfreeze();
+        return;
+    }
+    if (!task->tWalked)
+        task->tWalked = BrWalkup_Run(task, seat, BR_WALKUP_BOT);
+    // The field may not be ready for the fade yet; the next frame is.
+    if (task->tWalked && BrBot_StartFight(seat))
+        DestroyTask(taskId);
+}
+
+#undef tSeat
+#undef tWalked
+#undef tPresent
+
+u8 BrEngage_WalkupSeat(void)
+{
+    u8 taskId = FindTaskIdByFunc(Task_BrBotWalkup);
+
+    return taskId == TASK_NONE ? 0xFF : gTasks[taskId].data[0];
+}
+
 // Both screens the same before the fight: we have stopped, and their ghost has played
 // every step the wire gave it, so it stands on the cell they are frozen on. Each side
 // waits for the other's ghost on its own screen, and the two pictures meet.
 static void TickSettle(void)
 {
     u8 seat = gBrEngage.settleSeat;
+    u8 taskId;
 
     if (seat == 0xFF)
         return;
@@ -362,8 +404,16 @@ static void TickSettle(void)
     switch (sSettleHow)
     {
     case BR_SETTLE_BOT:
-        if (!BrBot_StartFight(seat))
-            return; // the field is not ready for the fade yet; the next frame is
+        taskId = CreateTask(Task_BrBotWalkup, 10);
+        if (taskId == TASK_NONE)
+        {
+            // No room for the walk-up: the fight without it, as it was.
+            if (!BrBot_StartFight(seat))
+                return;
+            break;
+        }
+        gTasks[taskId].data[0] = seat;
+        gTasks[taskId].data[2] = sSettlePresent;
         break;
     case BR_SETTLE_LINK_ANSWER:
         BrNetlink_StartBattle(1, seat);

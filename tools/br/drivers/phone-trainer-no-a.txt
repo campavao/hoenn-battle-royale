@@ -26,7 +26,8 @@ pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 0F
 mailsend gBrMailbox 2 gDecompressionBuffer 11
 pokebytes gDecompressionBuffer 1F 00 00 00
 mailsend gBrMailbox 5 gDecompressionBuffer 4
-wait 300
+# the walk-up first (POK-409): the "!", and the walk when there is one
+wait 400
 # the intro turned its own pages: the action menu, off the screen
 wait 300
 expect u8 gBrBattle+8 1

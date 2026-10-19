@@ -1,0 +1,31 @@
+# patch-deal-pace: dealing a map's encounter patches does not slow the walk onto it
+# (Cam's 2026-10-18 play-test: "a lot laggier now, especially when transitioning from
+# one area to another").
+#
+# The deal is two passes over every cell of the map (br_patch.c), and it went 256 cells
+# a frame -- half the frame and more, before the game's own work. With a step on top the
+# main loop missed every other VBlank until the deal was done: walking onto ROUTE 110
+# from MAUVILLE CITY, 60 frames of DOWN took the player 2 rows in, where a frame that
+# fits takes them 6, and the half-speed lasted the 85 frames the deal did. Now the deal
+# stops for the frame after BR_PATCH_LINES of the LCD's lines, and is cheaper a cell.
+#
+# The patches it lands on are the same as ever: under seed 8 ROUTE 110 (map 0:25) deals
+# eight, the first at (32,41) and the last in column 12 -- map coordinates, +7.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrFieldShown 28 00 28 00 50 00 50 00
+pokebytes gBrMailbox+0x2018 01 00 00 02 10 00 10 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+hold DOWN 30
+expect u8 *gSaveBlock1Ptr+5 25
+hold DOWN 60
+# The walk kept its pace while the deal ran (it ends about 113 frames in).
+expectge u16 *gSaveBlock1Ptr+2 6
+wait 200
+expect u16 gBrPatch 0x0019
+expect u8 gBrPatch+4 8
+expect u16 gBrPatch+16 0x20
+expect u16 gBrPatch+32 0x29
+expect u16 gBrPatch+30 0x0C
+say patch deal pace ok
