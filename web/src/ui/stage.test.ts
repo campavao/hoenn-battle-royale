@@ -11,6 +11,9 @@ class FakeNode {
   disabled = false;
   type = '';
   textContent = '';
+  value = '';
+  maxLength = -1;
+  attrs: Record<string, string> = {};
   style: Record<string, string> = {};
   parentNode: FakeNode | null = null;
   childNodes: FakeNode[] = [];
@@ -21,8 +24,12 @@ class FakeNode {
     this.tagName = tag.toUpperCase();
   }
 
-  addEventListener(_type: 'click', fn: (ev: { target: FakeNode }) => void): void {
+  addEventListener(_type: 'click' | 'input', fn: (ev: { target: FakeNode }) => void): void {
     this.listeners.push(fn);
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attrs[name] = value;
   }
 
   removeAttribute(name: string): void {
@@ -175,5 +182,29 @@ describe('the drawn screen\'s DOM copy (POK-330 #33)', () => {
     expect(hits.childNodes).toEqual([]);
     sync(p(false));
     expect(byId('room-fill'), 'after a clear, a new copy').not.toBe(fill);
+  });
+});
+
+describe('a field in the copy (POK-428)', () => {
+  it('is a textarea holding the value, which a repaint never writes under the typist', () => {
+    const { sync, byId } = mirror();
+    const typed: string[] = [];
+    const paint = (value: string): Painted => ({
+      widgets: [{ rect: at(40), text: 'Your feedback', id: 'feedback-text', field: { value, max: 1000, onInput: (t) => typed.push(t) } }],
+    });
+    sync(paint(''));
+    const box = byId('feedback-text') as unknown as { tagName: string; value: string; maxLength: number; attrs: Record<string, string> };
+    expect(box.tagName).toBe('TEXTAREA');
+    expect(box.maxLength).toBe(1000);
+    expect(box.attrs['aria-label']).toBe('Your feedback');
+    expect(box.value).toBe('');
+    // what was typed is the box's; a repaint with the same value leaves it be
+    box.value = 'the ferry';
+    sync(paint('the ferry'));
+    expect(byId('feedback-text')).toBe(box);
+    expect(box.value).toBe('the ferry');
+    // the screen emptying it after a send does
+    sync(paint(''));
+    expect(box.value).toBe('');
   });
 });

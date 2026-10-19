@@ -26,6 +26,17 @@ export interface Widget {
    *  rect, vertically centred. `null` keeps the cursor off it (text, or a thing a
    *  tap alone reaches). */
   cursor?: { x: number; y: number } | null;
+  /** A box to type into (the FEEDBACK screen, POK-428): the mirror makes a <textarea>
+   *  here, which a phone's own keyboard types into, and the screen draws what it holds.
+   *  `text` is its label. */
+  field?: TextField;
+}
+
+export interface TextField {
+  value: string;
+  /** In UTF-16 units, as a <textarea>'s maxLength counts. */
+  max: number;
+  onInput(text: string): void;
 }
 
 export interface Container {
@@ -110,11 +121,21 @@ export class Mirror {
   private items = new Map<HTMLElement, HTMLElement>();
   private boxes = new Map<string, HTMLElement>();
   private pressable = new Map<HTMLElement, Widget>();
+  private fields = new Map<HTMLElement, Widget>();
 
   constructor(
     private readonly hits: HTMLElement,
     press: (w: Widget) => void,
+    /** After a field's text changed, so the screen draws it. */
+    typed: () => void = () => {},
   ) {
+    hits.addEventListener('input', (ev) => {
+      const el = ev.target as HTMLTextAreaElement;
+      const w = this.fields.get(el);
+      if (!w?.field) return;
+      w.field.onInput(el.value);
+      typed();
+    });
     hits.addEventListener('click', (ev) => {
       for (let n = ev.target as HTMLElement | null; n && n !== hits; n = n.parentNode as HTMLElement | null) {
         const w = this.pressable.get(n);
@@ -148,6 +169,7 @@ export class Mirror {
     const els = new Map<string, HTMLElement>();
     const items = new Map<HTMLElement, HTMLElement>();
     const pressable = new Map<HTMLElement, Widget>();
+    const fields = new Map<HTMLElement, Widget>();
     const seen = new Map<string, number>();
     for (const w of p.widgets) {
       // Two widgets can say the same thing in the same place (two trainers both named
@@ -156,18 +178,27 @@ export class Mirror {
       const n = seen.get(base) ?? 0;
       seen.set(base, n + 1);
       const key = n === 0 ? base : `${base}#${n}`;
-      const tag = w.onPress ? 'BUTTON' : 'DIV';
+      const tag = w.field ? 'TEXTAREA' : w.onPress ? 'BUTTON' : 'DIV';
       let el = this.els.get(key);
       if (!el || el.tagName !== tag) {
         el = doc.createElement(tag.toLowerCase());
-        if (w.onPress) (el as HTMLButtonElement).type = 'button';
+        if (w.onPress && !w.field) (el as HTMLButtonElement).type = 'button';
       }
       els.set(key, el);
-      if (w.onPress) {
+      if (w.field) {
+        // The box's text is the typist's: it is only written when the screen changed it
+        // (emptied after a send), never under a caret mid-word.
+        const box = el as HTMLTextAreaElement;
+        if (box.value !== w.field.value) box.value = w.field.value;
+        box.maxLength = w.field.max;
+        box.disabled = w.disabled === true;
+        box.setAttribute('aria-label', w.text);
+        fields.set(el, w);
+      } else if (w.onPress) {
         (el as HTMLButtonElement).disabled = w.disabled === true;
         pressable.set(el, w);
       }
-      if (el.textContent !== w.text) el.textContent = w.text;
+      if (!w.field && el.textContent !== w.text) el.textContent = w.text;
       if (w.id) el.id = w.id;
       else el.removeAttribute('id');
       el.className = w.cls ?? '';
@@ -196,6 +227,7 @@ export class Mirror {
     this.items = items;
     this.boxes = boxes;
     this.pressable = pressable;
+    this.fields = fields;
   }
 
   clear(): void {
@@ -204,6 +236,7 @@ export class Mirror {
     this.items.clear();
     this.boxes.clear();
     this.pressable.clear();
+    this.fields.clear();
   }
 }
 
@@ -232,7 +265,7 @@ export class Stage {
       w.onPress?.();
       // What a tap changed is drawn: a key typed into an entry, a card opened.
       this.redraw();
-    });
+    }, () => this.redraw());
     this.canvas = new EmeraldCanvas(canvasEl);
     this.canvas.onLoad = () => this.redraw();
     if (typeof ResizeObserver !== 'undefined') {

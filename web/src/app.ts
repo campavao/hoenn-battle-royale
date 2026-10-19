@@ -31,7 +31,9 @@ import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { ringLabel } from './match/clock';
 import { Curtain } from './match/curtain';
-import { emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
+import { FEEDBACK_ROW, emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
+import { cleanNote, sendFeedback } from './net/feedback';
+import { feedbackScreen, type FeedbackState } from './ui/feedback';
 import {
   AUTO_START_MS,
   BOT_FILL,
@@ -402,8 +404,9 @@ type SheetPart = Pick<
   'status' | 'seats' | 'card' | 'watch' | 'canLeave' | 'onSeat' | 'onKick' | 'onCloseCard' | 'onWatch' | 'onWatchSeat' | 'onStopWatch' | 'onLeave'
 >;
 
-/** A sheet, from what the room (or solo) knows and what the page does. */
-function makeSheet(part: () => SheetPart): DrawnScreen {
+/** A sheet, from what the room (or solo) knows and what the page does. `about` is what
+ *  a note sent from its FEEDBACK says it was written in. */
+function makeSheet(part: () => SheetPart, about: () => FeedbackAbout): DrawnScreen {
   setLeaveAsk(false);
   return sheetScreen(() => ({
     ...part(),
@@ -429,6 +432,7 @@ function makeSheet(part: () => SheetPart): DrawnScreen {
     onRemap: () => settings.remap(),
     onResetPad: () => settings.resetPad(),
     onForget: () => settings.forget(),
+    onFeedback: () => theStage().push(feedbackFor(about)),
     pad:
       padPrefs && !desktop()
         ? {
@@ -443,6 +447,44 @@ function makeSheet(part: () => SheetPart): DrawnScreen {
             },
           }
         : undefined,
+  }));
+}
+
+/** What a note says about where it was written (relay/server.js `feedback`). */
+interface FeedbackAbout {
+  where: string;
+  room?: string;
+}
+
+/** What was typed into FEEDBACK and not sent yet: kept across a BACK, so a note started
+ *  in a match and left for the fight is still there afterwards. */
+let feedbackDraft = '';
+
+/** The FEEDBACK screen (POK-428), pushed over the menu or the sheet. */
+function feedbackFor(about: () => FeedbackAbout): DrawnScreen {
+  let state: FeedbackState = 'typing';
+  return feedbackScreen(() => ({
+    text: feedbackDraft,
+    state,
+    onInput: (text) => {
+      feedbackDraft = text;
+      if (state !== 'sending') state = 'typing';
+    },
+    onSend: () => {
+      const text = cleanNote(feedbackDraft);
+      if (!text || state === 'sending') return;
+      state = 'sending';
+      const { where, room } = about();
+      const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
+      void sendFeedback(relayUrl, { type: 'feedback', text, v: versionLine, where, name: careerName(), ...(room ? { room } : {}) }).then(
+        (result) => {
+          state = result;
+          if (result === 'sent' && cleanNote(feedbackDraft) === text) feedbackDraft = '';
+          stage?.redraw();
+        },
+      );
+    },
+    onBack: () => theStage().pop(),
   }));
 }
 
@@ -821,6 +863,13 @@ function wireKeyboard(emu: Emulator): () => void {
   // A screen that types (ui/entry.ts) has the keyboard's letters first, on the way down
   // (the capture phase), before the game's map turns a Z into the A button.
   const typed = (e: KeyboardEvent) => {
+    // FEEDBACK's box (POK-428) is a real <textarea>: every key is its own, none of them the
+    // game's (Z is A there) or the stage's cursor. Esc lets go of it.
+    if (e.target instanceof HTMLTextAreaElement) {
+      if (e.key === 'Escape') e.target.blur();
+      e.stopImmediatePropagation();
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey || !stage?.char(e.key)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -2326,7 +2375,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     onWatch: () => {},
     onStopWatch: () => {},
     onLeave: leaveSolo,
-  }));
+  }), () => ({ where: 'match-solo' }));
   showGame();
 }
 
@@ -2661,7 +2710,7 @@ function wireRoom(
       renderSpectate(bridge, spectate);
     },
     onLeave: () => backToLobby(),
-  }));
+  }), () => ({ where: `match-${hash.mode}`, room: attachedTo?.code ?? hash.code }));
   roomPanelHook = (onStart, started) => {
     room.onStart = onStart;
     if (started) hideRoomScreen();
@@ -3745,6 +3794,9 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         case 'lobbies':
           stage.push(lobbies);
           return;
+        case 'feedback':
+          stage.push(feedbackFor(() => ({ where: 'menu' })));
+          return;
         case 'solo':
           setRoomHash('solo');
           return done({ mode: 'solo' });
@@ -3830,7 +3882,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
 
     const main = menuScreen(() => ({
       title: 'HOENN BATTLE ROYALE',
-      rows: playRows(shownLink(), rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)).map(row),
+      rows: [...playRows(shownLink(), rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)), FEEDBACK_ROW].map(row),
       rowsId: 'lobby-rows',
       note: note || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',

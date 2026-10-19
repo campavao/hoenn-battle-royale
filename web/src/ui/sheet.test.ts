@@ -40,6 +40,7 @@ function model(over: Partial<SheetModel> = {}): SheetModel {
     onRemap: vi.fn(),
     onResetPad: vi.fn(),
     onForget: vi.fn(),
+    onFeedback: vi.fn(),
     ...over,
   };
 }

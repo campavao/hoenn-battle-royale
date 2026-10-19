@@ -82,6 +82,13 @@
         color: transparent; font-size: 8px; line-height: 1; overflow: hidden; white-space: nowrap;
         opacity: 0; user-select: none; -webkit-user-select: none;
       }
+      /* FEEDBACK's box (POK-428): a real <textarea>, invisible like the rest -- the canvas
+         draws what it holds -- and 16px so a phone does not zoom in to type in it. */
+      #ui-hits textarea {
+        position: absolute; margin: 0; padding: 0; border: 0; background: transparent;
+        color: transparent; caret-color: transparent; font-size: 16px; resize: none;
+        opacity: 0; pointer-events: auto;
+      }
       #ui-hits > div, #ui-hits > ul { inset: 0; pointer-events: none; }
       #ui-hits li { position: static; pointer-events: none; }
       #ui-hits button, #ui-hits li > *, #ui-hits > div > * { pointer-events: auto; }
