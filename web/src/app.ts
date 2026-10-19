@@ -29,7 +29,7 @@ import { HostRole, soloLink, soloRoster, type HostLink } from './match/host';
 import { type BotVoice, LINES, lineAt } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
-import { ringLabel } from './match/clock';
+import { ringLabel, winLabel } from './match/clock';
 import { Curtain } from './match/curtain';
 import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import { cleanNote, sendFeedback } from './net/feedback';
@@ -2123,7 +2123,13 @@ function renderGuestStrip(
   return { alive, clockLeft: left };
 }
 
-function renderMatchStrip(state: DirectorState): void {
+/** Who the strip is read by, for the line that crowns somebody. */
+interface StripWho {
+  me(): number | null;
+  nameOf(seat: number): string;
+}
+
+function renderMatchStrip(state: DirectorState, who: StripWho): void {
   setInMatch(true);
   const mm = Math.floor(state.clockLeft / 60);
   const ss = String(state.clockLeft % 60).padStart(2, '0');
@@ -2133,9 +2139,7 @@ function renderMatchStrip(state: DirectorState): void {
       : state.phase === 'ring'
         ? ringLabel(state.ring?.r, state.ring?.place)
         : state.phase === 'ended'
-          ? state.winner !== undefined
-            ? `P${state.winner} WINS`
-            : 'DRAW'
+          ? winLabel(state.winner, who.me(), (seat) => who.nameOf(seat))
           : 'WAITING';
   setStrip(`${phaseLabel} · ${state.alive} left · ${mm}:${ss}`);
 }
@@ -2143,7 +2147,7 @@ function renderMatchStrip(state: DirectorState): void {
 /** Starts the director's own 1Hz pump: `tick()` (fires the due clock/ring messages),
  *  then mirrors its `state` into `gBrHud`'s two page-writes fields and the HTML
  *  strip. Returns a disposer. */
-function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director: Director): () => void {
+function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director: Director, who: StripWho): () => void {
   const pump = () => {
     director.tick();
     const state = director.state;
@@ -2151,7 +2155,7 @@ function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director:
       writeHudLeft(emu, hudBase, state.alive);
       writeHudClockSecs(emu, hudBase, state.clockLeft);
     }
-    renderMatchStrip(state);
+    renderMatchStrip(state, who);
   };
   pump();
   const id = setInterval(pump, DIRECTOR_TICK_MS);
@@ -2308,7 +2312,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     // The match narrated, as a room's host narrates it (POK-331 #26): Kanto's solo is the
     // room with nobody in it, and its ticker says everything a room's does.
     narration: { mine: careerVoiceLines },
-    startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director),
+    startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director, { me: () => 0, nameOf: (seat) => roster.nameOf(seat) }),
     land: landOverride(),
   });
   // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):
@@ -2790,7 +2794,10 @@ function wireRoom(
       // nobody willing leaves the room here, and the relay hands it over only on our own
       // `can_host false`, so whoever comes back to their tab has to be asked about.
       startLoop: (director) => {
-        const stop = startDirectorLoop(emu, symbols?.get('gBrHud'), director);
+        const stop = startDirectorLoop(emu, symbols?.get('gBrHud'), director, {
+          me: () => bridge?.seat ?? null,
+          nameOf: (seat) => bridge?.roster.nameOf(seat) ?? `P${seat}`,
+        });
         const asking = setInterval(standDownIfHidden, STAND_DOWN_EVERY_MS);
         return () => {
           stop();

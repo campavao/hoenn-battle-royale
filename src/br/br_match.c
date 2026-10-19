@@ -459,6 +459,18 @@ bool8 BrMatch_BuzzerClosing(void)
     return gBrRing.active || (gBrMatch.started && gBrMatch.clockLeft == 0);
 }
 
+// The match is ours and we are still fighting (10-19 play-test #27): a bot the fog took
+// while it fought us goes out on the page, the page crowns us, and the fight went on
+// regardless -- its engine has no idea -- for as long as it took to finish, with "WINS"
+// already on the HUD. A link fight needs none of this: its peer's OUT ends it
+// (br_netlink.c's TickPeerOut). Anything else, a bot's, a wild one's or a trainer's, is
+// left at the next choice by a RUN that cannot fail (BR_RUN_OVER).
+bool8 BrMatch_FightOver(void)
+{
+    return sWinPending && gMain.inBattle
+        && !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK));
+}
+
 // No level numbers during a round (POK-266, Kanto v0.37.0). The rung is shared, so a
 // number that is the same for everybody is noise on every screen it is on -- and
 // reading an opponent by their team rather than by a number is the point. A screen that
