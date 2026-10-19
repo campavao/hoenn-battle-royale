@@ -1,6 +1,7 @@
-// HOW TO PLAY (POK-429): six panels, NEXT through them, BACK and SKIP, and every word fits.
+// HOW TO PLAY (POK-429, POK-430): Cam's seven panels, NEXT through them, BACK and SKIP,
+// every word fits, and the pictures that move do.
 import { describe, expect, it, vi } from 'vitest';
-import { HOWTO_KEY, PANELS, howToScreen, markHowToDue, takeHowToDue } from './howto';
+import { ART_H, EVOLVE_MS, FRAME_MS, HOWTO_KEY, PANELS, SHEET, confetti, evolveFrame, howToScreen, markHowToDue, takeHowToDue } from './howto';
 import { measure, wrapText } from './emerald';
 import { W } from './screens';
 import { fakeCanvas } from './fakecanvas';
@@ -18,44 +19,58 @@ function press(screen: DrawnScreen, id: string): void {
 }
 
 describe('the HOW TO PLAY screen', () => {
-  it('opens on the Safari Zone with NEXT and SKIP, NEXT first so A alone clicks through', () => {
-    const screen = howToScreen(() => ({ skin: 0, onDone: vi.fn() }));
-    const { painted, byId } = paint(screen);
-    expect(byId('howto-heading')!.text).toBe('The Safari Zone');
-    expect(byId('howto-page')!.text).toBe('1/6');
+  const screenAt = (t = 0, skin = 0, onDone = vi.fn(), redraw?: () => void) =>
+    howToScreen(() => ({ skin, onDone, redraw, now: () => t }));
+
+  it("is Cam's seven sections, in his order", () => {
+    expect(PANELS.map((p) => p.title)).toEqual([
+      'Start in Safari',
+      'Where we flying?',
+      'Weezing Fog',
+      'Leveling up',
+      'Battles',
+      'Special events',
+      'How to win',
+    ]);
+  });
+
+  it('opens on the Safari with NEXT and SKIP, NEXT first so A alone clicks through', () => {
+    const { painted, byId } = paint(screenAt());
+    expect(byId('howto-heading')!.text).toBe('Start in Safari');
+    expect(byId('howto-page')!.text).toBe('1/7');
     const buttons = painted.widgets.filter((w) => w.onPress).map((w) => w.id);
     expect(buttons).toEqual(['howto-next', 'howto-skip']);
   });
 
   it('pages forward and back, and ends on DONE', () => {
     const onDone = vi.fn();
-    const screen = howToScreen(() => ({ skin: 0, onDone }));
+    const screen = screenAt(0, 0, onDone);
     press(screen, 'howto-next');
-    expect(paint(screen).byId('howto-heading')!.text).toBe('The drop');
+    expect(paint(screen).byId('howto-heading')!.text).toBe('Where we flying?');
     press(screen, 'howto-back');
-    expect(paint(screen).byId('howto-heading')!.text).toBe('The Safari Zone');
-    for (let i = 0; i < 5; i++) press(screen, 'howto-next');
+    expect(paint(screen).byId('howto-heading')!.text).toBe('Start in Safari');
+    for (let i = 0; i < PANELS.length - 1; i++) press(screen, 'howto-next');
     const last = paint(screen);
-    expect(last.byId('howto-heading')!.text).toBe('Last one standing');
+    expect(last.byId('howto-heading')!.text).toBe('How to win');
     expect(last.painted.widgets.filter((w) => w.onPress).map((w) => w.id)).toEqual(['howto-done', 'howto-back']);
     press(screen, 'howto-done');
     expect(onDone).toHaveBeenCalledTimes(1);
-    expect(paint(screen).byId('howto-page')!.text, 'opened again, it starts at the top').toBe('1/6');
+    expect(paint(screen).byId('howto-page')!.text, 'opened again, it starts at the top').toBe('1/7');
   });
 
   it('leaves from any panel on SKIP or B', () => {
     const onDone = vi.fn();
-    const screen = howToScreen(() => ({ skin: 0, onDone }));
+    const screen = screenAt(0, 0, onDone);
     press(screen, 'howto-next');
     press(screen, 'howto-skip');
     press(screen, 'howto-next');
     screen.back!();
     expect(onDone).toHaveBeenCalledTimes(2);
-    expect(paint(screen).byId('howto-page')!.text, 'B starts it over too').toBe('1/6');
+    expect(paint(screen).byId('howto-page')!.text, 'B starts it over too').toBe('1/7');
   });
 
   it('keeps the buttons in one place from panel to panel', () => {
-    const screen = howToScreen(() => ({ skin: 0, onDone: vi.fn() }));
+    const screen = screenAt();
     const ys = new Set<number>();
     for (let i = 0; i < PANELS.length; i++) {
       ys.add(paint(screen).byId(i === PANELS.length - 1 ? 'howto-done' : 'howto-next')!.rect.y);
@@ -64,15 +79,19 @@ describe('the HOW TO PLAY screen', () => {
     expect(ys.size).toBe(1);
   });
 
-  it('fits every panel on the shortest screen, its words inside the frame', () => {
-    const screen = howToScreen(() => ({ skin: 0, onDone: vi.fn() }));
+  it('fits every panel on the shortest screen: picture, words inside the frame, buttons', () => {
+    const screen = screenAt();
     for (let i = 0; i < PANELS.length; i++) {
-      const { painted, frames, texts } = paint(screen, 320);
-      const buttons = painted.widgets.filter((w) => w.onPress);
+      const { painted, frames, texts, byId } = paint(screen, 320);
+      const art = byId('howto-art')!;
       const frame = frames[0];
-      for (const b of buttons) expect(b.rect.y, `${PANELS[i].title}: buttons below the frame`).toBeGreaterThan(frame.y + frame.h);
+      expect(art.rect, PANELS[i].title).toMatchObject({ x: 0, w: W, h: ART_H });
+      expect(art.rect.y).toBeLessThanOrEqual(2);
+      expect(frame.y, `${PANELS[i].title}: the words under the picture`).toBe(art.rect.y + ART_H);
+      const buttons = painted.widgets.filter((w) => w.onPress);
+      for (const b of buttons) expect(b.rect.y, `${PANELS[i].title}: buttons below the count`).toBeGreaterThan(byId('howto-page')!.rect.y);
       for (const b of buttons) expect(b.rect.y + b.rect.h).toBeLessThanOrEqual(320);
-      const text = painted.widgets.find((w) => w.id === 'howto-text')!;
+      const text = byId('howto-text')!;
       expect(text.rect.y + text.rect.h, `${PANELS[i].title}: words clear of the frame's foot`).toBeLessThanOrEqual(frame.y + frame.h - 8);
       for (const t of texts) expect(t.x + measure(t.text), `"${t.text}" runs off the right`).toBeLessThanOrEqual(W - 8);
       expect(wrapText(PANELS[i].text, W - 24).length, `${PANELS[i].title} is brief`).toBeLessThanOrEqual(5);
@@ -80,24 +99,77 @@ describe('the HOW TO PLAY screen', () => {
     }
   });
 
-  it('draws each panel its picture: a fog over the fog', () => {
-    const screen = howToScreen(() => ({ skin: 2, onDone: vi.fn() }));
-    const first = paint(screen);
-    expect(first.pictures.map((p) => p.name)).toEqual(['items.png', 'items.png']);
-    expect(first.sprites).toHaveLength(1);
-    for (let i = 0; i < 3; i++) press(screen, 'howto-next');
-    const fog = paint(screen);
-    expect(fog.byId('howto-heading')!.text).toBe('The fog');
-    const tiles = fog.pictures.filter((p) => p.name === '/field-sprites/fog.png');
-    expect(tiles.map((t) => t.x)).toEqual([6, 70, 134, 198]);
+  it('sits in the middle of a tall screen', () => {
+    const { byId } = paint(screenAt(), 520);
+    const top = byId('howto-art')!.rect.y;
+    const foot = byId('howto-next')!.rect;
+    expect(top).toBeGreaterThan(0);
+    expect(Math.abs(top - (520 - (foot.y + foot.h)))).toBeLessThanOrEqual(1);
   });
 
-  it('puts somebody else across from you in the battle', () => {
-    const screen = howToScreen(() => ({ skin: 4, onDone: vi.fn() }));
-    for (let i = 0; i < 4; i++) press(screen, 'howto-next');
-    const { sprites } = paint(screen);
-    expect(sprites).toHaveLength(2);
-    expect(sprites[0].gfx).not.toBe(sprites[1].gfx);
+  it('draws each picture off the sheet, and the fog over the whole screen', () => {
+    const screen = screenAt(0, 2);
+    const rows: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const { pictures, byId } = paint(screen);
+      const sheet = pictures.filter((p) => p.name === SHEET);
+      rows.push(sheet[0].sy);
+      if (byId('howto-heading')!.text === 'Weezing Fog') {
+        const fog = pictures.filter((p) => p.name === '/field-sprites/fog.png');
+        // Five tiles high down the 320 and four across the 240, then the picture's own.
+        expect(fog.filter((p) => p.y === 0).length).toBeGreaterThanOrEqual(4);
+        expect(Math.max(...fog.map((p) => p.y))).toBeGreaterThanOrEqual(256);
+      }
+      press(screen, 'howto-next');
+    }
+    expect(rows.slice(0, 3)).toEqual([0, ART_H, ART_H * 2]);
+    expect(rows[4], 'the battle').toBe(ART_H * 3);
+  });
+
+  it('evolves CHARMANDER to CHARMELEON to CHARIZARD, flashing white between', () => {
+    expect(evolveFrame(0)).toEqual({ mon: 0, white: false, flashing: false });
+    const flash = Array.from({ length: 34 }, (_, i) => evolveFrame(1500 + i * 50));
+    expect(flash.every((f) => f.white)).toBe(true);
+    expect(new Set(flash.map((f) => f.mon))).toEqual(new Set([0, 1]));
+    expect(evolveFrame(3300)).toEqual({ mon: 1, white: false, flashing: false });
+    expect(evolveFrame(4000 + 3300)).toEqual({ mon: 2, white: false, flashing: false });
+    expect(evolveFrame(EVOLVE_MS - 1).mon).toBe(2);
+    expect(evolveFrame(EVOLVE_MS)).toEqual(evolveFrame(0));
+  });
+
+  it('asks to be drawn again only while something on it moves', () => {
+    vi.useFakeTimers();
+    try {
+      const redraw = vi.fn();
+      const screen = screenAt(0, 0, vi.fn(), redraw);
+      paint(screen);
+      vi.advanceTimersByTime(FRAME_MS * 2);
+      expect(redraw, 'the Safari stands still').not.toHaveBeenCalled();
+      press(screen, 'howto-next');
+      press(screen, 'howto-next');
+      paint(screen);
+      paint(screen);
+      vi.advanceTimersByTime(FRAME_MS);
+      expect(redraw, 'the fog drifts, once a frame however often it is drawn').toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('throws confetti over the last panel, falling as time goes by', () => {
+    const screen = screenAt(0, 4);
+    for (let i = 0; i < PANELS.length - 1; i++) press(screen, 'howto-next');
+    const { fills, sprites, byId } = paint(screen);
+    expect(fills.length).toBeGreaterThan(40);
+    // None on the words, the count or the buttons.
+    const below = byId('howto-art')!.rect.y + ART_H;
+    const bits = fills.filter((f) => f.r.w <= 3 && f.r.h <= 3);
+    for (const f of bits) expect(f.r.y + f.r.h <= below || f.r.y >= 320 || f.r.x >= W || f.r.x + f.r.w <= 0, `${f.r.x},${f.r.y}`).toBe(true);
+    expect(sprites).toHaveLength(1);
+    const a = confetti(0, 0, W, 320);
+    const b = confetti(1000, 0, W, 320);
+    expect(a.map((p) => p.r.y)).not.toEqual(b.map((p) => p.r.y));
+    for (const p of [...a, ...b]) expect(p.r.y).toBeLessThan(320);
   });
 });
 
