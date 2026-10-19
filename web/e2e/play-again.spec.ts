@@ -30,6 +30,9 @@ const OFF_BOOT = 0x2018; // net/mailbox.ts's MAILBOX.OFF_BOOT
 // of the fog while they last (up to 90s, bots/proxy.ts). Measured: won 185-255s in. The
 // results after the win have their own limit (watchUntilResults).
 const WHOLE_MATCH_MS = 360_000;
+/** ...and the champion's Hall of Fame after it, which every page now sees in its own ROM
+ *  before its results (POK-417): measured 38-40s for a bot's team of five. */
+const PARADE_MS = 60_000;
 /** The win, or the end of the fight a watcher is replaying (whichever is later), to the
  *  results. A watcher's results wait for the fight on its screen to play out (POK-365,
  *  ReplayHold): the last `out` ends the stream and the replay plays what it has at its
@@ -60,7 +63,7 @@ async function watchUntilResults(watcher: Page, director: Page = watcher): Promi
   const spectate = loadSymbols().gBrSpectate;
   const matchBase = loadSymbols().gBrMatch;
   const outAt = new Map<number, number>();
-  const deadline = Date.now() + WHOLE_MATCH_MS;
+  const deadline = Date.now() + WHOLE_MATCH_MS + PARADE_MS;
   const me = await watcher.evaluate(() => (window as unknown as BrWindow).__br.bridge.seat as number);
   let watched = -1;
   let handed = 0;
@@ -143,7 +146,7 @@ test.beforeAll(() => {
 });
 
 test('a finished match lets go, and the room keeps its code, roster and socket', async ({ page }) => {
-  test.setTimeout(WHOLE_MATCH_MS + 120_000);
+  test.setTimeout(WHOLE_MATCH_MS + PARADE_MS + 120_000);
 
   await page.goto(`/#host&fast&seed=20260916&testmon&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __br?: unknown }).__br !== undefined, { timeout: 60_000 });
@@ -251,7 +254,7 @@ test('a finished match lets go, and the room keeps its code, roster and socket',
 // never heard the `win`; a page that did keeps its own grace. The single-page test above
 // cannot see this -- nobody hears their own `again` -- so this one needs a guest.
 test("a guest reads its result for the whole grace, whatever the host's `again` says", async ({ browser }) => {
-  test.setTimeout(WHOLE_MATCH_MS + 120_000);
+  test.setTimeout(WHOLE_MATCH_MS + PARADE_MS + 120_000);
   const rom = romHashParam();
   const hostCtx = await browser.newContext();
   const guestCtx = await browser.newContext();
@@ -322,7 +325,7 @@ test('a guest reading its results with the grace over goes into the new match', 
 });
 
 async function dealAgainWhileReading(browser: Browser, hold: 'grace' | 'results'): Promise<void> {
-  test.setTimeout(WHOLE_MATCH_MS + 180_000);
+  test.setTimeout(WHOLE_MATCH_MS + PARADE_MS + 180_000);
   const rom = romHashParam();
   const hostCtx = await browser.newContext();
   const guestCtx = await browser.newContext();
