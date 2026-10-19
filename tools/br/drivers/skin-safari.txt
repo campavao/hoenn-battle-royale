@@ -1,0 +1,73 @@
+# skin-safari: the Safari battle's trainer is the look too (POK-411), and throws from it.
+# play-match.txt's opening and wild battle, wearing CAMPER (skin 6). The Safari's throw
+# lets go of the ball on its anim's second command, so a picture with a one-frame throw
+# would never throw at all: the catch landing is the proof.
+wait 30
+poke u8 gBrMySkin 6
+poke u32 gBrMatch+8 5376
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+expect u8 gNumSafariBalls 30
+pokebytes gBrPatch+16 15 00
+pokebytes gBrPatch+32 15 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 600
+expectbits u32 gBattleTypeFlags 0x80 0x80
+shot wild
+tap B
+wait 40
+tap B
+wait 40
+tap B
+wait 40
+tap B
+wait 40
+tap B
+wait 40
+shot menu
+poke u16 gBattleMons+0x80 1
+tap A
+wait 30
+shot throw
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+wait 300
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 gNumSafariBalls 29
+expect u8 gPlayerPartyCount 2
+say skin safari ok

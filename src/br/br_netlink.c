@@ -18,8 +18,6 @@
 #include "event_object_lock.h"
 #include "field_effect.h"
 #include "field_player_avatar.h"
-#include "fieldmap.h"
-#include "metatile_behavior.h"
 #include "event_object_movement.h"
 #include "constants/field_effects.h"
 #include "constants/battle.h"
@@ -38,6 +36,7 @@
 #include "br/br_ring.h"
 #include "br/br_field.h"
 #include "br/br_loot.h"
+#include "br/br_walkup.h"
 
 EWRAM_DATA struct BrNetlink gBrNetlink = {0};
 // BT payload: seat, seq u16, len u16, then up to BLOCK_BUFFER_SIZE bytes.
@@ -425,129 +424,6 @@ static void CB2_BrReturnFromBattle(void)
 }
 
 #define tState data[0]
-#define tTimer data[1]
-#define tWalker data[2]
-
-// The ! bubble over the one who walks up: our own trainer, or their ghost (or ourselves
-// if their ghost is not on this map).
-static void StartExclamation(bool8 overMe)
-{
-    struct ObjectEvent *obj = &gObjectEvents[gPlayerAvatar.objectEventId];
-
-    if (!overMe && gBrSeats[gBrNetlink.peerSeat].objId != BR_NO_OBJ)
-        obj = &gObjectEvents[gBrSeats[gBrNetlink.peerSeat].objId];
-    ObjectEventGetLocalIdAndMap(obj, &gFieldEffectArguments[0], &gFieldEffectArguments[1], &gFieldEffectArguments[2]);
-    FieldEffectStart(FLDEFF_EXCLAMATION_MARK_ICON);
-}
-
-// The walk-up before a fight between two people (POK-373, Cam's 2026-10-14 play-test:
-// "the person who looks at the other player moves towards them and once they're right
-// up next to them then it starts the battle"). Emerald's own trainer approach
-// (trainer_see.c): the "!" over the one who looked, who then walks the eyeline to the
-// cell next to the other, who turns to meet them. The walker's ROM walks its own
-// trainer, and the walk reaches the other screen the way every step does, as its
-// ghost's steps.
-//
-// Each side gives it the eyeline's length in walks and the wire's lag, then goes in
-// regardless: a fight never waits on a walk that cannot finish.
-#define BR_APPROACH_FRAMES ((BR_SIGHT_RANGE + 1) * 16 + 90)
-// How long both sides wait for each other's last step or turn to land before deciding
-// who walks: the decision reads facings, and both must read the same two.
-#define BR_APPROACH_SETTLE 60
-
-// The peer's ghost in a straight line from us, and which way. FALSE when it is not
-// drawn on this map or not on our row or column (the eyeline always is; a snap is not).
-static bool8 PeerInLine(s16 *dist, u8 *dir)
-{
-    struct ObjectEvent *me = &gObjectEvents[gPlayerAvatar.objectEventId];
-    struct ObjectEvent *them;
-    s16 dx, dy;
-
-    if (gBrSeats[gBrNetlink.peerSeat].objId == BR_NO_OBJ)
-        return FALSE;
-    them = &gObjectEvents[gBrSeats[gBrNetlink.peerSeat].objId];
-    dx = them->currentCoords.x - me->currentCoords.x;
-    dy = them->currentCoords.y - me->currentCoords.y;
-    if ((dx != 0) == (dy != 0))
-        return FALSE;
-    if (dx > 0) { *dir = DIR_EAST; *dist = dx; }
-    else if (dx < 0) { *dir = DIR_WEST; *dist = -dx; }
-    else if (dy > 0) { *dir = DIR_SOUTH; *dist = dy; }
-    else { *dir = DIR_NORTH; *dist = -dy; }
-    return TRUE;
-}
-
-// A walk by `obj` one cell on is an ordinary step: nothing in the way, no ledge, and on
-// water as it was on water. The eyeline sees across a pond and over a ledge; a walk
-// does neither, so that is where the walk-up stops and the fight starts. The side that
-// waits asks it of the walker's ghost, so both sides judge the same walker's steps.
-static bool8 CanStep(struct ObjectEvent *obj, u8 dir)
-{
-    s16 x = obj->currentCoords.x, y = obj->currentCoords.y;
-    bool8 surfing = MetatileBehavior_IsSurfableWaterOrUnderwater(MapGridGetMetatileBehaviorAt(x, y));
-
-    MoveCoords(dir, &x, &y);
-    if (GetCollisionAtCoords(obj, x, y, dir) != COLLISION_NONE || GetLedgeJumpDirection(x, y, dir) != DIR_NONE)
-        return FALSE;
-    return MetatileBehavior_IsSurfableWaterOrUnderwater(MapGridGetMetatileBehaviorAt(x, y)) == surfing;
-}
-
-// Who walks: the one facing down the line at the other. Both, or neither (the eyeline
-// that saw was the lower seat's view of a ghost since turned), and the challenger does.
-// Each side reads the same two facings once both are still, so both pick the same one.
-static bool8 IWalk(void)
-{
-    struct ObjectEvent *me = &gObjectEvents[gPlayerAvatar.objectEventId];
-    struct ObjectEvent *them;
-    bool8 meLooks, themLooks;
-    s16 dist;
-    u8 dir;
-
-    if (!PeerInLine(&dist, &dir))
-        return gBrNetlink.myId == 0;
-    them = &gObjectEvents[gBrSeats[gBrNetlink.peerSeat].objId];
-    meLooks = me->facingDirection == dir;
-    themLooks = them->facingDirection == GetOppositeDirection(dir);
-    if (meLooks != themLooks)
-        return meLooks;
-    return gBrNetlink.myId == 0;
-}
-
-// One frame of the walk-up. TRUE once it is over, however it ended.
-static bool8 Approach(struct Task *task)
-{
-    struct ObjectEvent *me = &gObjectEvents[gPlayerAvatar.objectEventId];
-    s16 dist;
-    u8 dir;
-
-    if (gMain.callback2 != CB2_Overworld || ++task->tTimer > BR_APPROACH_FRAMES)
-        return TRUE;
-    if (ObjectEventIsMovementOverridden(me) && !ObjectEventClearHeldMovementIfFinished(me))
-        return FALSE; // a walk or a turn is still playing
-    if (!PeerInLine(&dist, &dir))
-        return TRUE;
-    if (!task->tWalker)
-    {
-        struct ObjectEvent *them = &gObjectEvents[gBrSeats[gBrNetlink.peerSeat].objId];
-
-        // The one who was seen waits for the walk to land -- or for it to stop where
-        // their side stops it -- then turns to meet it.
-        if (!BrGhosts_Idle(gBrNetlink.peerSeat))
-            return FALSE;
-        if (dist > 1 && CanStep(them, GetOppositeDirection(dir)))
-            return FALSE;
-        if (me->facingDirection == dir)
-            return TRUE;
-        ObjectEventSetHeldMovement(me, GetFaceDirectionMovementAction(dir));
-        return FALSE;
-    }
-    if (dist <= 1)
-        return TRUE;
-    if (!CanStep(me, dir))
-        return TRUE; // fight from here
-    ObjectEventSetHeldMovement(me, GetWalkNormalMovementAction(dir));
-    return FALSE;
-}
 
 static void EnterLinkBattle(void)
 {
@@ -560,45 +436,21 @@ static void EnterLinkBattle(void)
     gBrNetlink.startState = 0;
 }
 
-// The cable club's Task_StartWiredCableClubBattle, minus the cable, plus the bubble;
-// then the field's own way out (BrField_Leave), once nothing else is leaving it.
+// The cable club's Task_StartWiredCableClubBattle, minus the cable, plus the walk-up
+// (br_walkup.c); then the field's own way out (BrField_Leave), once nothing else is
+// leaving it.
 static void Task_BrStartLinkBattle(u8 taskId)
 {
     struct Task *task = &gTasks[taskId];
-    struct ObjectEvent *me = &gObjectEvents[gPlayerAvatar.objectEventId];
 
     switch (task->tState)
     {
     case 0:
         gLinkType = LINKTYPE_BATTLE;
-        task->tTimer = 0;
         task->tState++;
         break;
     case 1:
-        // Both trainers still, then who walks, and the "!" goes up over them.
-        if (gMain.callback2 != CB2_Overworld)
-        {
-            task->tState = 4;
-            break;
-        }
-        if (++task->tTimer <= BR_APPROACH_SETTLE
-         && ((ObjectEventIsMovementOverridden(me) && !ObjectEventClearHeldMovementIfFinished(me))
-          || !BrGhosts_Idle(gBrNetlink.peerSeat)))
-            break;
-        task->tWalker = IWalk();
-        StartExclamation(task->tWalker);
-        task->tTimer = 0;
-        task->tState++;
-        break;
-    case 2:
-        if (gMain.callback2 != CB2_Overworld || !FieldEffectActiveListContains(FLDEFF_EXCLAMATION_MARK_ICON) || ++task->tTimer > 90)
-        {
-            task->tTimer = 0;
-            task->tState++;
-        }
-        break;
-    case 3:
-        if (Approach(task))
+        if (BrWalkup_Run(task, gBrNetlink.peerSeat, gBrNetlink.myId == 0 ? BR_WALKUP_FIRST : BR_WALKUP_ANSWER))
         {
             // The walk-up ran on a clock of its own each side, so our hello watchdog
             // starts from here. The peer's may already be running if its side finished
@@ -607,7 +459,7 @@ static void Task_BrStartLinkBattle(u8 taskId)
             task->tState++;
         }
         break;
-    case 4:
+    case 2:
         if (BrField_Leave(20, EnterLinkBattle))
             DestroyTask(taskId);
         break;

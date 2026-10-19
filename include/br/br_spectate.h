@@ -118,6 +118,9 @@ bool8 BrSpectate_HoldsSign(void);
 // The watcher's START menu (POK-369): pret's menu, its rows the watched trainer's.
 // Watching: a seat is being followed. The three are the rows' callbacks.
 extern u8 gBrFollowName[];
+// The look a replay's side walks around in (POK-411): side 0 has its back to the camera,
+// side 1 faces it. BR_NO_SEAT for a side with no seat, or when no replay is on.
+u8 BrSpectate_SideSkin(u8 side);
 bool8 BrSpectate_Watching(void);
 bool8 BrSpectate_MenuParty(void);
 bool8 BrSpectate_MenuBag(void);

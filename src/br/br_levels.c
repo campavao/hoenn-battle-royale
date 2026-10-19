@@ -69,8 +69,8 @@ static const u16 sDeptStore[] = { ITEM_MASTER_BALL, ITEM_POKE_BALL, ITEM_MAX_POT
 // rod's name -- "LV 5 - OLD ROD - FOG 1", which the play-test ignored with the rest of
 // the ticker (POK-324) -- were the detail nobody was reading. Where it is closing is the
 // bottom box's and the corner's; on the last phase there is nowhere, and this says so.
-static const u8 sText_FogSpreads[] = _("THE FOG SPREADS! ALL GREW STRONGER!");
-static const u8 sText_FogCoversAll[] = _("THE FOG COVERS ALL OF HOENN!");
+static const u8 sText_FogSpreads[] = _("The fog spreads! All grew stronger!");
+static const u8 sText_FogCoversAll[] = _("The fog covers all of HOENN!");
 
 static void SayPhase(void)
 {

@@ -43,6 +43,9 @@ void BrEngage_NoAnswer(u8 peerSeat);
 #define BR_SETTLE_BOT 2         // a bot's staged trainer battle (POK-238)
 // FALSE when one is already settling or a fight is already on its way.
 bool8 BrEngage_Settle(u8 seat, u8 how);
+// The bot whose walk-up is running (POK-409): the settle is over, and its fight is on its
+// way. 0xFF when none.
+u8 BrEngage_WalkupSeat(void);
 // Somebody's challenge reached us while ours was still waiting to learn what kind of
 // fight it is: theirs is taken, ours is dropped, and our trainer stays frozen for the
 // settle theirs starts. FALSE when we were not waiting.

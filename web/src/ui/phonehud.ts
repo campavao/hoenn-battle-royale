@@ -174,7 +174,7 @@ export function readHudView(emu: HudRead, sym: (name: string) => number | undefi
   if (ring !== undefined && emu.read(ring + RING_ACTIVE, 8) !== 0) {
     if (((emu.read(ring + RING_R, 8) << 24) >> 24) < 0) {
       everywhere = true;
-      ringPlace = 'FOG EVERYWHERE';
+      ringPlace = 'Fog everywhere';
     } else {
       const bytes: number[] = [];
       for (let i = 0; i < RING_PLACE_MAX; i++) {
@@ -234,12 +234,12 @@ export function clockText(secs: number): string {
 export function fogLines(v: HudView): Line[] {
   const inner = FOG_W - 16;
   const clock: Line['right'] =
-    v.flash === 2 ? { text: 'FOG!', color: TEXT_RED } : v.flash === 1 ? undefined : { text: clockText(v.clock), color: v.clock <= 30 ? TEXT_RED : TEXT_DARK };
-  const lines: Line[] = [{ left: { text: v.ring === null ? 'SAFARI' : 'FOG', color: TEXT_BLUE }, right: clock }];
+    v.flash === 2 ? { text: 'Fog!', color: TEXT_RED } : v.flash === 1 ? undefined : { text: clockText(v.clock), color: v.clock <= 30 ? TEXT_RED : TEXT_DARK };
+  const lines: Line[] = [{ left: { text: v.ring === null ? 'Safari' : 'Fog', color: TEXT_BLUE }, right: clock }];
   if (v.fogEverywhere && v.ring !== null) lines.push({ left: { text: fitText(v.ring, inner), color: TEXT_RED } });
   lines.push({
-    left: { text: `${v.left} LEFT`, color: TEXT_BLUE },
-    right: v.eyes > 0 ? { text: `${v.eyes} WATCH`, color: TEXT_GRAY } : undefined,
+    left: { text: `${v.left} left`, color: TEXT_BLUE },
+    right: v.eyes > 0 ? { text: `${v.eyes} watch`, color: TEXT_GRAY } : undefined,
   });
   return lines;
 }
