@@ -2134,6 +2134,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   );
   stallLog = session.log;
   const drawResults = (): void => {
+    session.settleTally();
     const mine = session.results.forSeat(0, performance.now());
     renderResults(
       0,
@@ -2788,6 +2789,7 @@ function wireRoom(
     // A dead end's notice is the last screen for this room: nothing is drawn over it.
     if (!bridge || dead.reached) return;
     const seat = bridge.seat;
+    session.settleTally();
     const mine = session.results.forSeat(seat, performance.now());
     renderResults(
       seat,

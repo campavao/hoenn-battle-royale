@@ -64,6 +64,28 @@ export function favourite(counts: Record<number, number>): number | undefined {
   return best;
 }
 
+/** What `now` counted past `then`: the part of a match a second read adds. Counts only
+ *  grow within a match, so a shortfall is a ROM that started over, and adds nothing. */
+export function tallyGain(now: MatchTally, then: MatchTally | null): MatchTally {
+  const less = (a: number, b: number) => Math.max(0, a - b);
+  const map = (a: Record<number, number>, b: Record<number, number> | undefined) => {
+    const out: Record<number, number> = {};
+    for (const [id, n] of Object.entries(a)) {
+      const d = less(n, b?.[Number(id)] ?? 0);
+      if (d > 0) out[Number(id)] = d;
+    }
+    return out;
+  };
+  return {
+    steps: less(now.steps, then?.steps ?? 0),
+    won: less(now.won, then?.won ?? 0),
+    caught: less(now.caught, then?.caught ?? 0),
+    items: less(now.items, then?.items ?? 0),
+    mons: map(now.mons, then?.mons),
+    moves: map(now.moves, then?.moves),
+  };
+}
+
 export interface TallyNames {
   species(id: number): string;
   /** A move's name, or undefined when the page cannot read the ROM's table. */

@@ -15,7 +15,7 @@ import type { Bots } from '../bots/brain';
 import type { RosterEvent } from '../net/relay';
 import type { EventMsg, Msg, NpcOutMsg, PackedMon, SpillMsg, TickerMsg } from '../net/wire';
 import { bossAt } from './bosses';
-import { careerLine, recordMatch } from './career';
+import { addCareerTotals, careerLine, recordMatch } from './career';
 import { DEFAULT_FOG_SECS } from './director';
 import type { EndGrace } from './grace';
 import { botRows, freshMatch, noteMatch, type MatchSnapshot } from './lifecycle';
@@ -26,7 +26,7 @@ import { OwedTeam } from './owed';
 import { MatchRecord } from './record';
 import { Results } from './results';
 import type { Roster } from './roster';
-import { type MatchTally } from './tally';
+import { tallyGain, type MatchTally } from './tally';
 import * as Ticker from './ticker';
 
 /** Where a message came from, which decides what else it does.
@@ -373,6 +373,22 @@ export class MatchSession {
     };
   }
 
+  /** Reads the tally again and adds what it gained since the verdict (POK-416). The
+   *  verdict can land before our own ROM has finished the battle that decided it -- the
+   *  loser's `out` races our end of turn -- so the champion's last win was missing. The
+   *  page settles before it draws the results and as the match ends. */
+  settleTally(): void {
+    if (!this.booked || !this.deps.tally) return;
+    const now = this.deps.tally.read();
+    const gain = tallyGain(now, this.tally);
+    this.tally = now;
+    const some =
+      gain.steps + gain.won + gain.caught + gain.items > 0 ||
+      Object.keys(gain.mons).length > 0 ||
+      Object.keys(gain.moves).length > 0;
+    if (some) addCareerTotals({ ...gain, trainers: 0, duelsWon: 0, took: 0 }, this.deps.store);
+  }
+
   /** Somebody else's win, paraded in our own ROM's Hall of Fame (POK-417): their team
    *  and their name. The team is the `party` that came after the win -- their ROM sends
    *  it as its own parade starts, the host for a bot -- never one kept from a peek
@@ -409,6 +425,7 @@ export class MatchSession {
    *  the record and the log stay up until the next `start`, and so does the verdict: a
    *  champion's party can still land while the ROM reboots. */
   endMatch(): void {
+    this.settleTally();
     // A champion's team that lands while the ROM starts over is last match's: no parade.
     this.famed = true;
     Object.assign(this.match, freshMatch());

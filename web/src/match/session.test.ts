@@ -15,6 +15,7 @@ import { fakeEmulator, fakeRelay, memoryStore } from '../net/fakes.testutil';
 import type { RosterEvent } from '../net/relay';
 import { BR_CONT_FLAG, reassembleSlots, unpackSlot, type BinarySlot } from '../net/slots';
 import { PROTOCOL, type MapRef, type Msg, type NpcOutMsg, type PackedMon, type SpillMsg, type StartMsg, type TickerMsg } from '../net/wire';
+import type { MatchTally } from './tally';
 
 const BASE = 0x0203d178; // gBrMailbox, per br-symbols.json
 const ROUTE_101: MapRef = { group: 0, num: 16 };
@@ -243,6 +244,32 @@ describe("one match's books (POK-330 #42)", () => {
     expect(loadCareer(store).totals).toMatchObject({ won: 3, caught: 1, steps: 120, items: 2, trainers: 1, mons: { 277: 4 }, moves: { 1: 4 } });
     session.note(start([0, 7]), 'page');
     expect(session.tally, 'a new match starts from nothing').toBeNull();
+  });
+
+  // The review of #78: the loser's `out` decides the match before the champion's ROM has
+  // counted the battle that won it.
+  it('settles what the ROM counted after the verdict into the career once, before the results', () => {
+    let tally: MatchTally = { steps: 120, won: 2, caught: 1, items: 2, mons: { 277: 4 }, moves: { 1: 4 } };
+    const { session, store } = books({ tally: { zero: vi.fn(), read: () => tally } });
+    session.note(start([0, 7]), 'page');
+    session.note({ t: 'win', seat: 0 }, 'page');
+    expect(loadCareer(store).totals).toMatchObject({ won: 2 });
+    tally = { steps: 121, won: 3, caught: 1, items: 2, mons: { 277: 5, 280: 1 }, moves: { 1: 5 } };
+    session.settleTally();
+    session.settleTally();
+    expect(session.tally?.won).toBe(3);
+    expect(loadCareer(store).totals).toMatchObject({ won: 3, steps: 121, caught: 1, mons: { 277: 5, 280: 1 }, moves: { 1: 5 } });
+    session.endMatch();
+    expect(loadCareer(store).totals?.won, 'nothing new, nothing added').toBe(3);
+  });
+
+  it('settles nothing before a verdict', () => {
+    const read = vi.fn(() => ({ steps: 1, won: 1, caught: 0, items: 0, mons: {}, moves: {} }));
+    const { session, store } = books({ tally: { zero: vi.fn(), read } });
+    session.note(start([0, 7]), 'page');
+    session.settleTally();
+    expect(read).not.toHaveBeenCalled();
+    expect(loadCareer(store).totals).toBeUndefined();
   });
 
   it("counts what the room saw into the career on a build with no tally", () => {

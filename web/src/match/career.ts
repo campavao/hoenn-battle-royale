@@ -277,6 +277,22 @@ export function recordMatch(
   return career;
 }
 
+/** Adds to the lifetime stats of a match already recorded: what the ROM counted after
+ *  the verdict, like the battle that won it (POK-416). */
+export function addCareerTotals(
+  counts: Parameters<typeof addTotals>[1],
+  store: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
+): Career {
+  const career = loadCareer(store);
+  career.totals = addTotals(career.totals, counts);
+  try {
+    store.setItem(KEY, JSON.stringify(career));
+  } catch {
+    // As recordMatch: the match still happened.
+  }
+  return career;
+}
+
 /** "12 played · 3 won · best 2nd" -- the line the results panel shows. */
 /** Sets who you are. Kept beside the record rather than in a key of its own, so one
  *  read is your whole profile. */
