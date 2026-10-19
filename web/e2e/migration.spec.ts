@@ -60,8 +60,9 @@ test('the host leaves mid-match and the guest picks up the clock', async ({ brow
 
     // The host leaves mid-match by its own LEAVE (2026-10-07 play-test: "there doesn't
     // seem to be a way to leave the match"), back to the menu. To the relay that is the
-    // host's socket closing, the same as a closed laptop.
+    // host's socket closing, the same as a closed laptop. LEAVE asks first (POK-382).
     await host.locator('#match-leave').click();
+    await host.locator('#match-leave-sure').click();
     await expect(host.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 60_000 });
     expect(new URL(host.url()).hash, 'out of the room').not.toMatch(/host|join=/);
 
@@ -207,6 +208,7 @@ test('a guest promoted while its tab is hidden hands the match on', async ({ bro
     });
 
     await host.locator('#match-leave').click();
+    await host.locator('#match-leave-sure').click();
     await expect(host.locator('#lobby-rows button', { hasText: 'QUICK PLAY' })).toBeVisible({ timeout: 60_000 });
 
     // The relay hands the room to the hidden guest, which hands it straight on.

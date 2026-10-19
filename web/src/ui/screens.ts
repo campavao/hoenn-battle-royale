@@ -560,6 +560,10 @@ export interface SheetModel {
   onWatchSeat?(seat: number): void;
   onStopWatch(): void;
   onLeave(): void;
+  /** After LEAVE, the sheet asks "Leave the match?" with STAY and LEAVE (POK-382). */
+  leaveAsk?: boolean;
+  onStay?(): void;
+  onLeaveSure?(): void;
   onClose(): void;
   onMute(): void;
   onRemap(): void;
@@ -612,10 +616,15 @@ export function watchStepKey(key: GbaKey, out: boolean, on: number | null, onFie
   return key === 'right' ? 1 : key === 'left' ? -1 : null;
 }
 
+/** The note under the seats: the question while LEAVE asks, else the model's. */
+function sheetNote(m: SheetModel): string {
+  return m.canLeave && m.leaveAsk ? 'Leave the match?' : m.note;
+}
+
 /** How tall everything under the seats is, so the seats take what is left. */
 function sheetBelow(m: SheetModel): number {
   return (
-    (m.note ? ROW_H + 2 : 0) +
+    (sheetNote(m) ? ROW_H + 2 : 0) +
     (m.watch ? ROW_H + 28 : 0) +
     (sheetActions(m).length > 0 ? 28 : 0) +
     Math.ceil(settingsOf(m).length / 2) * 20 + 16 + 4 + // the settings
@@ -625,9 +634,15 @@ function sheetBelow(m: SheetModel): number {
   );
 }
 
-/** LEAVE for whoever may, and BACK TO GAME over the game. */
+/** LEAVE for whoever may, and BACK TO GAME over the game. A first LEAVE asks: STAY, or
+ *  LEAVE again to go. */
 function sheetActions(m: SheetModel): ButtonSpec[] {
   const actions: ButtonSpec[] = [];
+  if (m.canLeave && m.leaveAsk && m.onStay && m.onLeaveSure) {
+    actions.push({ label: 'STAY', id: 'match-stay', onPress: m.onStay });
+    actions.push({ label: 'LEAVE', id: 'match-leave-sure', cls: 'room-leave', onPress: m.onLeaveSure });
+    return actions;
+  }
   if (m.canLeave) actions.push({ label: 'LEAVE', id: 'match-leave', cls: 'room-leave', onPress: m.onLeave });
   if (m.look === 'overlay') actions.push({ label: 'BACK TO GAME', id: 'drawer-close', onPress: m.onClose });
   return actions;
@@ -703,9 +718,10 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
       }
       y = lay.frame.y + lay.frame.h + 2;
 
-      if (m.note) {
-        const r = paintNote(c, m.note, y);
-        widgets.push({ rect: r, text: m.note, parent: 'room-note', cursor: null });
+      const note = sheetNote(m);
+      if (note) {
+        const r = paintNote(c, note, y);
+        widgets.push({ rect: r, text: note, parent: 'room-note', cursor: null });
         y += ROW_H + 2;
       }
 
