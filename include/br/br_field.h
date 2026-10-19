@@ -66,7 +66,7 @@ struct Sprite;
 
 // Metatile rows of the ring above pos.y. The view's top may reach no further up than
 // the ring does, and its bottom must leave the ring one row spare.
-#define BR_RING_ABOVE 4
+#define BR_RING_ABOVE 9
 // Tile rows in the ring: 64, two screen blocks a layer.
 #define BR_RING_TILE_ROWS 64
 #define BR_RING_ROWS (BR_RING_TILE_ROWS / 2)
@@ -79,21 +79,24 @@ struct Sprite;
 // columns, as it always was. Up and down it is the whole ring less the one spare row a
 // step needs: its top is the ring's top at rest (BR_RING_ABOVE rows above pos.y, which
 // the LCD's top sits 40 below), and its bottom leaves the ring's last row spare, so
-// 160 + 104 + 232 = 496 rows, 31 of the ring's 32 -- at rest the player's rows -11 to +19.
+// 160 + 184 + 152 = 496 rows, 31 of the ring's 32 -- at rest the player's rows -16 to +14.
 // Past the sprite window a core without the OAM side table (THE VIEW THE PAGE SHOWS,
 // below) draws only BG1..3 (512 rows) and the weather, and the ROM hides every sprite
 // whose top leaves the window; with it, the sprites are the core's too.
 //
-// Why 104 above and 232 below, not the same each way: a portrait phone puts the LCD high,
-// above the pad, so it has much more field below the picture than above it. 390x844 with
-// the pad (layoutField: scale 1.625, LCD at canvas row 118) shows 118 rows above and 242
-// below; 390x763 (the installed app) 93 and 217; 390x664 (Safari) 63 and 186, and all
-// but the first fit. With one ring row fewer above (BR_RING_ABOVE 3) 390x844 would be 30
-// rows short at the top; with one more (5), 26 short at the bottom and 390x763 one.
+// Why 184 above and 152 below (POK-378): a portrait phone puts the LCD on the pad, so the
+// ticker along its bottom is by the thumbs (Cam, 2026-10-17), and layoutField brings it
+// down only as far as the band reaches above it. In a match the pad and dock are 282..309
+// CSS px, so the LCD wants 174 rows down on 390x844 (scale 1.625), 124 on 390x763 (the
+// installed app), 60 on 390x664 (Safari), 184 on 430x932 and 168 on 360x780: all of them
+// fit under 184, which is nine ring rows above. Below it they want 176 to 192 rows, and
+// the 152 left reach to the dock: the last 24 to 40 rows, the screen's bottom edge under
+// PARTY / MAP / START, are the page's still map. At 104/232 the picture stopped 70 rows
+// (114 CSS px) short of the pad on 390x844, and the 70 above it were the still map.
 #define BR_VIEW_LEFT   0
-#define BR_VIEW_TOP    104
+#define BR_VIEW_TOP    184
 #define BR_VIEW_RIGHT  16
-#define BR_VIEW_BOTTOM 232
+#define BR_VIEW_BOTTOM 152
 
 STATIC_ASSERT(BR_SPRITE_TOP + BR_SPRITE_BOTTOM == 256 - DISPLAY_HEIGHT, BrSpriteWindowIsOneOamPeriod)
 STATIC_ASSERT(BR_SPRITE_TOP % 8 == 0 && BR_SPRITE_BOTTOM % 8 == 0, BrSpriteWindowInEights)

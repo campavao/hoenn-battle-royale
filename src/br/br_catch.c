@@ -32,7 +32,7 @@ extern const u8 BR_EventScript_ReleaseOne[];
 // told there is nothing really has nothing. The line it replaced -- "TEACH FLY FROM THE
 // BAG" -- was a hint pointing at a screen the player then had to go and find; Cam's call
 // was that MOVES should be the screen (POK-279).
-static const u8 sText_NoMoves[] = _("NO NEW MOVES AT THIS LEVEL");
+static const u8 sText_NoMoves[] = _("No new moves at this level");
 
 u8 BrCatch_BallMultiplier(u16 ball, u8 pret)
 {

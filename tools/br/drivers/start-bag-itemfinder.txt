@@ -1,0 +1,10 @@
+# start-bag-itemfinder: the ITEMFINDER is in the starting bag (Cam, 2026-10-18), after
+# the key items the boot hands out and the OLD ROD. gSaveBlock1Ptr->bagPocket_KeyItems
+# (+0x5D8, four bytes a slot): the OLD ROD (262) in slot 7, the ITEMFINDER (261) in 8.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u16 gBrLevels+4 262
+expect u16 *gSaveBlock1Ptr+0x5F4 262
+expect u16 *gSaveBlock1Ptr+0x5F8 261
+say start bag itemfinder ok

@@ -1,0 +1,47 @@
+# skin-field: the look picked in MY LOOK is our own field sprite too, not only our ghost
+# on everybody else's screen (POK-411). Cam's 2026-10-18 play-test: "I have a skin
+# selected ... but in the hall of fame it's May". A PICNICKER walks, runs, rides and
+# surfs as a PICNICKER, as her ghost already did; BRENDAN and MAY keep pret's sprites.
+#
+# hm-bike-surf's spot: ROUTE 104 (map 0:19) at (33,22), the sea north of (36,22). The
+# page writes gBrMySkin before the boot spawns us (app.ts writeBootBlock).
+wait 30
+poke u8 gBrMatch 2
+poke u8 gBrMySkin 7
+# BR_BOOT_MAP, female (skin 7 is odd), ROUTE 104
+pokebytes gBrMailbox+0x2018 01 01 00 13 21 00 16 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 19
+# The player is object 0 (gPlayerAvatar.objectEventId), graphicsId at +5: PICNICKER (32)
+expect u8 gPlayerAvatar+5 0
+expect u8 gObjectEvents+5 32
+shot standing
+# MACH BIKE on SELECT, then into the sea: still a PICNICKER, now on the SURF blob.
+poke u16 *gSaveBlock1Ptr+0x496 259
+tap SELECT
+wait 60
+expectbits u8 gPlayerAvatar 0x02 0x02
+expect u8 gObjectEvents+5 32
+shot riding
+hold RIGHT 40
+wait 30
+hold UP 24
+wait 150
+shot surfing
+expect u16 *gSaveBlock1Ptr+2 21
+expectbits u8 gPlayerAvatar 0x0A 0x08
+expect u8 gObjectEvents+5 32
+# Back ashore: on foot, the same sprite
+hold DOWN 24
+wait 120
+shot ashore
+expectbits u8 gPlayerAvatar 0x08 0x00
+expect u8 gObjectEvents+5 32
+# Running is the default in a match: the run's own animations are past the twenty a
+# PICNICKER has, so she runs on her fast walk instead of reading off the end of her table.
+hold LEFT 12
+shot running
+wait 20
+expect u8 gObjectEvents+5 32
+expect u32 gMain+4 CB2_Overworld+1
+say skin field ok

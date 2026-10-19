@@ -19,6 +19,8 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
+# a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
+poke u8 gBrAsk+7 1
 poke u8 gBrMatch 2
 # The nickname is the one thing on a party mon that is NOT encrypted -- BoxPokemon keeps
 # it in the clear at +8 -- so it is how a driver reads a species without a battle open.

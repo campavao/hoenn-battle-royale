@@ -100,8 +100,8 @@ static const u8 sColorsFog[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_RED, TEXT_CO
 static const u8 sColorsKill[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_RED, TEXT_COLOR_LIGHT_RED };
 static const u8 sColorsSay[] = { TEXT_COLOR_TRANSPARENT, TEXT_COLOR_BLUE, TEXT_COLOR_LIGHT_BLUE };
 
-static const u8 sText_Left[] = _(" LEFT");
-static const u8 sText_Fog[] = _("FOG!");
+static const u8 sText_Left[] = _(" left");
+static const u8 sText_Fog[] = _("Fog!");
 // How many are watching. Kanto's corner eye, on the dialogue font's symbol page.
 static const u8 sText_Eye[] = _("{EMOJI_LEFT_EYE}");
 static const u8 sText_Hp[] = _("HP ");

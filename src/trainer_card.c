@@ -32,6 +32,9 @@
 #include "constants/rgb.h"
 #include "constants/trainers.h"
 #include "constants/union_room.h"
+#if BR
+#include "br/br_skin.h"
+#endif
 
 enum {
     WIN_MSG,
@@ -1892,7 +1895,11 @@ static void CreateTrainerCardTrainerPic(void)
     }
     else
     {
+#if BR
+        CreateTrainerCardTrainerPicSprite(BrSkin_CardPic(FacilityClassToPicIndex(sTrainerPicFacilityClass[sData->cardType][sData->trainerCard.gender])),
+#else
         CreateTrainerCardTrainerPicSprite(FacilityClassToPicIndex(sTrainerPicFacilityClass[sData->cardType][sData->trainerCard.gender]),
+#endif
                     TRUE,
                     sTrainerPicOffset[sData->isHoenn][sData->trainerCard.gender][0],
                     sTrainerPicOffset[sData->isHoenn][sData->trainerCard.gender][1],

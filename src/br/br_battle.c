@@ -38,6 +38,7 @@
 #include "br/br_bot.h"
 #include "br/br_spectate.h"
 #include "br/br_field.h"
+#include "br/br_skin.h"
 
 EWRAM_DATA struct BrBattle gBrBattle = {0};
 EWRAM_DATA u8 gBrSeeThrough[2] = {0};
@@ -848,28 +849,6 @@ void BrBattle_AfterString(u16 stringId)
         StringAppend(gDisplayedStringBattle, sText_NewPage);
 }
 
-// Index for index with br_ghosts.c's sSkinGraphics and the page's SKINS: the walking
-// sprite's own trainer class. The two rival skins are the same BRENDAN and MAY.
-static const u8 sSkinPics[] =
-{
-    TRAINER_PIC_BRENDAN,
-    TRAINER_PIC_MAY,
-    TRAINER_PIC_BRENDAN,
-    TRAINER_PIC_MAY,
-    TRAINER_PIC_HIKER,
-    TRAINER_PIC_BEAUTY,
-    TRAINER_PIC_CAMPER,
-    TRAINER_PIC_PICNICKER,
-    TRAINER_PIC_SWIMMER_M,
-    TRAINER_PIC_SWIMMER_F,
-    TRAINER_PIC_EXPERT_M,
-    TRAINER_PIC_EXPERT_F,
-    TRAINER_PIC_POKEFAN_M,
-    TRAINER_PIC_POKEFAN_F,
-    TRAINER_PIC_YOUNGSTER,
-    TRAINER_PIC_LASS,
-};
-
 bool8 BrBattle_RecordedWildOpponent(void)
 {
     return RecordedBattle_IsSpectateLive();
@@ -878,14 +857,10 @@ bool8 BrBattle_RecordedWildOpponent(void)
 u32 BrBattle_OpponentPic(u32 pic)
 {
     u8 seat = OpponentSeat();
-    u8 skin;
 
     if (seat >= BR_MAX_SEATS || !gBrSeats[seat].present)
         return pic;
-    skin = gBrSeats[seat].skin;
-    if (skin >= ARRAY_COUNT(sSkinPics))
-        return pic;
-    return sSkinPics[skin];
+    return BrSkin_Pic(gBrSeats[seat].skin, pic);
 }
 
 u8 BrBattle_FoeOf(u8 battler, u8 target)

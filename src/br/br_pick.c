@@ -25,7 +25,7 @@
 EWRAM_DATA struct BrPick gBrPick = {0};
 
 // The map is the same screen Emerald flies from, but this is not a flight.
-const u8 gBrText_DropWhere[] = _("DROP where?");
+const u8 gBrText_DropWhere[] = _("Drop where?");
 
 // LAND {seat, mapGroup, mapNum, x, y}: the cell the host dealt us inside the section we
 // asked for. Only ever addressed to one seat, but it is a broadcast like everything
