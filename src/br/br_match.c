@@ -230,6 +230,8 @@ struct BrClosedDoor
     const u8 *line;
 };
 
+extern const u8 BR_EventScript_DoorClosed[];
+
 static const u8 sText_LabClosed[] = _("PROF. BIRCH's LAB\nis closed.");
 // Cam, live: "block off the battle tent and the daycare center." Both take the party out
 // of the match -- a Tent challenge swaps it for a rental three and runs its own battles,
@@ -274,6 +276,10 @@ bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)
             // last one has faded, and never re-dirties the window mid-display.
             if (gBrHud.boxFrames == 0)
                 BrHud_Box(sClosedDoors[i].line);
+            // The field takes our TRUE as a script or a warp started, and locks the
+            // controls for it to let go of. Neither started, so nothing did: Cam leant
+            // on the lab once and never moved again (POK-432). This one lets go.
+            ScriptContext_SetupScript(BR_EventScript_DoorClosed);
             return TRUE;
         }
     }
