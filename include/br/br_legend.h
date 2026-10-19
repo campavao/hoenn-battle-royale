@@ -14,9 +14,11 @@
 // PICKUP of BR_LEGEND_CLAIM_KEY, as an event's trader is asked for): the host's PICKUP of
 // the piece naming us takes it off the ground for the whole room and starts the battle,
 // and one naming somebody else is "got there first". So two trainers never both fight it,
-// nor both catch it. Only a catch keeps it: running, knocking it out, losing or cancelling a
-// full party's release puts it back where it stood, for everybody (a SPILL under its own
-// key, which also un-grays its event's mark).
+// nor both catch it -- except when the host takes longer than BR_CLAIM_FRAMES to answer
+// and we claim it ourselves the old way, where the seat tie-break keeps the put-back to
+// one (BrLegend_NoteTaken). Only a catch keeps it: running, knocking it out, losing or
+// cancelling a full party's release puts it back where it stood, for everybody (a SPILL
+// under its own key, which also un-grays its event's mark).
 //
 // A legendary in a fallen trainer's team, or one released, stays a ball: somebody caught
 // it already. One a story's person stands as (MAXIE with GROUDON) is his to hand over.
