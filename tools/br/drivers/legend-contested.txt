@@ -1,0 +1,79 @@
+# legend-contested: nobody answers our ask for the legendary (no page, or no host), so
+# after BR_CLAIM_FRAMES we claim it ourselves the old way, and so did another trainer
+# (POK-410 review). Both putting it back would stand two on the ground; every ROM settles
+# it by seat, and the lower seat's put-back is the one that stands. We are seat 2 here
+# and seat 1's PICKUP of it arrives mid-battle: our run puts nothing back, and it stays
+# off our ground and gray on the MAP. (legend-denied.txt is the host saying no.)
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMySeat 2
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1234
+# EVENT 0 at ROUTE 116, legendary 0xB000; then its SPILL: seat 1, map 0:9, one mon, key
+# 0xB000 at (12,17), the cell we face (the boot leaves us on (12,16) facing down), species 0x0191 at 20, no bag
+pokebytes gBrMailbox+0x1018 20 08 05 00 00 00 00 1F 00 B0
+pokebytes gBrMailbox+0x1058 0B 11 0E 00 00 01 00 09 01 00 B0 0C 00 11 00 91 01 14 00
+poke u16 gBrMailbox+0x0C 2
+wait 20
+# two rows: it, and the DAY CARE's chest on its own map (0x8E00, daycare-chest.txt)
+expect u8 gBrLoot+0xA0 2
+expect u8 gBrLoot+0xA1 1
+expect u8 gBrEvents+17 0
+# slot 2 (slot 1 is the map's own person): local id 0xC0, graphics 200, facing down
+expect u8 gObjectEvents+0x50 0xC0
+expect u8 gObjectEvents+0x4D 200
+shot standing
+drain gBrMailbox
+tap A
+wait 30
+# still on the field for its cry: nothing has left the ground yet
+expect u8 gBrLoot+0xA0 2
+expectmsg 10 u16 1 0xB800
+# no answer: ten seconds, then our own PICKUP of it and the battle
+wait 560
+expect u8 gBrLoot+0xA0 2
+waitfor u32 gMain+4 BattleMainCB2+1 600
+# a REGI battle (BATTLE_TYPE_LEGENDARY | BATTLE_TYPE_REGI) against REGIROCK
+expectbits u32 gBattleTypeFlags 0x6000 0x6000
+# (row 0's kind: BR_LOOT_NONE; the count is only kept on the field)
+expect u8 gBrLoot+0x0B 0
+expectmsg 10 u16 1 0xB000
+expect u8 gBrEvents+17 1
+wait 300
+# seat 1's claim of the same key
+pokebytes gBrMailbox+0x1098 0A 0B 08 00 00 01 00 B0 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 3
+wait 10
+drain gBrMailbox
+tap A
+wait 70
+tap A
+wait 70
+tap A
+wait 70
+poke u8 gBattleOutcome 4
+tap A
+wait 70
+poke u8 gBattleOutcome 4
+tap A
+wait 70
+poke u8 gBattleOutcome 4
+tap B
+wait 70
+poke u8 gBattleOutcome 4
+tap B
+wait 70
+poke u8 gBattleOutcome 4
+tap B
+wait 70
+poke u8 gBattleOutcome 4
+tap B
+wait 70
+waitfor u32 gMain+4 CB2_Overworld+1 600
+wait 60
+expect u8 gBrLoot+0xA0 1
+expect u8 gBrLoot+0xA1 0
+expect u8 gBrEvents+17 1
+shot yielded
+say legend contested ok

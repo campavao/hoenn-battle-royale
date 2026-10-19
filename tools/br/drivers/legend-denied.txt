@@ -1,0 +1,42 @@
+# legend-denied: two trainers pressed A on the same legendary within one round trip
+# (POK-410 review: "two trainers can both catch it"). Each ROM asks the host first, and the
+# host answers the first ask with its PICKUP naming that trainer, the later one with the
+# same PICKUP. We are seat 2 and seat 1 asked first: the answer names seat 1, so no battle
+# starts, the box says somebody got there first, and it is off our ground with our party
+# as it was.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMySeat 2
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1234
+# EVENT 0 at ROUTE 116, legendary 0xB000; then its SPILL: REGIROCK at (12,17), the cell we face
+pokebytes gBrMailbox+0x1018 20 08 05 00 00 00 00 1F 00 B0
+pokebytes gBrMailbox+0x1058 0B 11 0E 00 00 01 00 09 01 00 B0 0C 00 11 00 91 01 14 00
+poke u16 gBrMailbox+0x0C 2
+wait 20
+expect u8 gBrLoot+0xA1 1
+expect u8 gObjectEvents+0x4D 200
+drain gBrMailbox
+tap A
+wait 30
+expectmsg 10 u16 1 0xB800
+# the host's answer: seat 1's PICKUP of 0xB000
+pokebytes gBrMailbox+0x1098 0A 0B 08 00 00 01 00 B0 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 3
+wait 90
+shot box
+wait 110
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 gBrLoot+0xA1 0
+expect u8 gBrEvents+17 1
+expect u8 gPlayerPartyCount 1
+shot denied
+tap A
+wait 30
+tap B
+wait 60
+# no battle came of it, and we never claimed it ourselves
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 gPlayerPartyCount 1
+say legend denied ok

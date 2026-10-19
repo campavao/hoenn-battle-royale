@@ -20,6 +20,8 @@ import {
   homeKey,
   claimKey,
   claimOf,
+  legendClaimKey,
+  legendClaimOf,
   traderKey,
 } from './events';
 import { STORIES } from './story';
@@ -144,6 +146,21 @@ describe('a trade asks the host first (POK-392)', () => {
     expect(claims.answer({ t: 'pickup', seat: 5, key: claimKey(1) })).toEqual({ reply: { t: 'pickup', seat: 3, key: traderKey(1) }, granted: false });
     expect(claims.answer({ t: 'pickup', seat: 3, key: traderKey(1) }), 'only an ask is answered').toBeNull();
     expect(claims.answer({ t: 'pickup', seat: 3, key: claimKey(1), item: 4 }), 'an item out of a bag is not an ask').toBeNull();
+  });
+
+  // POK-410: a legendary is asked for before its battle, and a lost battle puts it back.
+  it('a legendary goes to the first ask while it stands, and to the next one once it is back', () => {
+    const ground = new Set([eventKey(1, 0)]);
+    const claims = new TraderClaims(() => false, (key) => ground.has(key));
+    expect(legendClaimKey(eventKey(1, 0))).toBe(0xb810);
+    expect([legendClaimOf(0xb810), legendClaimOf(eventKey(1, 0)), legendClaimOf(claimKey(1))]).toEqual([eventKey(1, 0), undefined, undefined]);
+    const ask = (seat: number) => claims.answer({ t: 'pickup', seat, key: legendClaimKey(eventKey(1, 0)) });
+    expect(ask(4)).toEqual({ reply: { t: 'pickup', seat: 4, key: eventKey(1, 0) }, granted: true });
+    ground.delete(eventKey(1, 0)); // the books heard the yes
+    expect(ask(2), 'the second trainer at it: a no, naming somebody else').toEqual({ reply: { t: 'pickup', seat: 0, key: eventKey(1, 0) }, granted: false });
+    expect(ask(0)?.reply.seat, "never the asker's own seat").toBe(1);
+    ground.add(eventKey(1, 0)); // seat 4 ran: its SPILL put it back
+    expect(ask(2)?.granted).toBe(true);
   });
 
   it("a trade nobody asked for is the one a later ask hears of; a new match forgets them all", () => {
