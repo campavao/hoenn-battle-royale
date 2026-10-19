@@ -259,8 +259,19 @@ let matchStrip: string | null = null;
 let sheetCard: number | null = null;
 
 /** LEAVE was tapped once and the sheet asks before it goes (POK-382): a stray tap
- *  mid-match used to hand the room to an heir. Opening or closing the sheet forgets it. */
+ *  mid-match used to hand the room to an heir. It forgets the question after a few
+ *  seconds, as the desktop's dock never closes, and on opening or closing the sheet. */
 let leaveAsk = false;
+let leaveAskTimer: ReturnType<typeof setTimeout> | null = null;
+const LEAVE_ASK_MS = 5000;
+
+function setLeaveAsk(on: boolean): void {
+  if (leaveAskTimer !== null) clearTimeout(leaveAskTimer);
+  leaveAskTimer = on ? setTimeout(() => setLeaveAsk(false), LEAVE_ASK_MS) : null;
+  if (leaveAsk === on) return;
+  leaveAsk = on;
+  redrawSheet();
+}
 
 function redrawSheet(): void {
   if (sheet && stage?.current === sheet) stage.redraw();
@@ -281,7 +292,7 @@ function showGame(): void {
 /** The menu button: the sheet over the game, or back to the game. */
 function openSheet(open: boolean): void {
   sheetOpen = open;
-  leaveAsk = false;
+  setLeaveAsk(false);
   // The pad's, and the dock's on an upright phone (ui/phonehud.ts).
   for (const b of document.querySelectorAll('#menu-btn, #hud-menu')) b.setAttribute('aria-expanded', String(open));
   showGame();
@@ -387,19 +398,14 @@ type SheetPart = Pick<
 
 /** A sheet, from what the room (or solo) knows and what the page does. */
 function makeSheet(part: () => SheetPart): DrawnScreen {
+  setLeaveAsk(false);
   return sheetScreen(() => ({
     ...part(),
     leaveAsk,
-    onLeave: () => {
-      leaveAsk = true;
-      redrawSheet();
-    },
-    onStay: () => {
-      leaveAsk = false;
-      redrawSheet();
-    },
+    onLeave: () => setLeaveAsk(true),
+    onStay: () => setLeaveAsk(false),
     onLeaveSure: () => {
-      leaveAsk = false;
+      setLeaveAsk(false);
       part().onLeave();
     },
     look: desktop() ? 'dock' : 'overlay',
