@@ -306,6 +306,7 @@ async function linear(key, query, variables) {
   });
   const body = await r.json().catch(() => ({}));
   // Linear's errors can quote the input, which is the note: only the status is printed.
+  if (r.status === 401 || r.status === 403) throw Object.assign(new Error(`Linear refused the key (${r.status})`), { key: true });
   if (!r.ok || body.errors) throw new Error(`Linear answered ${r.status}`);
   return body.data;
 }
@@ -315,7 +316,7 @@ export function linearFiler(key) {
   return {
     async has(id) {
       const data = await linear(key,
-        `query($id: String!) { issues(first: 1, filter: { description: { contains: $id } }) { nodes { identifier } } }`,
+        `query($id: String!) { issues(first: 1, includeArchived: true, filter: { description: { contains: $id } }) { nodes { identifier } } }`,
         { id: `feedback-id: ${id}` });
       return (data?.issues?.nodes || []).length > 0;
     },
@@ -348,8 +349,8 @@ export async function fileFeedback({ deps, live, now, notes, state, read, filer,
   const cutoff = new Date(now.getTime() - SWEEP_DAYS * 86400e3);
   const all = [...notes];
   for (const d of deps) {
-    if (new Date(d.createdAt) < cutoff) continue;
     const isLive = live && d.id === live.id;
+    if (new Date(d.createdAt) < cutoff && !isLive && swept[d.id] !== "live") continue;
     if (swept[d.id] === true || (isLive && swept[d.id] === "live")) continue;
     for (const l of await read(d.id, new Date(d.createdAt), now)) {
       const note = parseFeedback(l.message, l.timestamp);
@@ -363,7 +364,8 @@ export async function fileFeedback({ deps, live, now, notes, state, read, filer,
     if (done.has(note.id)) continue;
     done.add(note.id);
     if (await filer.has(note.id)) continue;
-    log(`feedback ${note.id} -> ${await filer.create(note)}`);
+    // The issue's name only: the id is a hash of the words, and this log is public.
+    log(`feedback filed as ${await filer.create(note)}`);
     made += 1;
   }
   log(`${made} feedback notes filed in Linear`);
@@ -625,8 +627,9 @@ async function main() {
   const live = deps.find(d => d.status === "SUCCESS");
 
   for (const d of deps) {
-    if (new Date(d.createdAt) < cutoff) continue;
     const isLive = live && d.id === live.id;
+    // the live process is read however long it has been up
+    if (new Date(d.createdAt) < cutoff && !isLive) continue;
     // a dead process is read once, in full; the live one from just before the last
     // thing seen
     if (!isLive && store.swept[d.id]) continue;
@@ -714,6 +717,11 @@ async function main() {
     const after = await fileFeedback({ deps, live, now, notes, state: before, read: lines, filer: linearFiler(key) });
     if (JSON.stringify(after) !== JSON.stringify(before)) writeFileSync(FEEDBACK, JSON.stringify(after, null, 1) + "\n");
   } catch (err) {
+    if (err.key) {
+      // A dead key is Cam's to replace, and reading everything again changes nothing.
+      console.log(`::error::${err.message}: replace LINEAR_API_KEY (docs/DEPLOY.md); notes wait in the relay's log`);
+      return;
+    }
     // The note may have come from this run's own window, which the next run's has moved
     // past: the live deployment is read in full again.
     console.log(`::warning::feedback not filed this run: ${err.message}`);

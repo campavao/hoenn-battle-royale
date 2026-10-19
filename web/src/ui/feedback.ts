@@ -33,6 +33,8 @@ export function feedbackLine(text: string, state: FeedbackState): { text: string
       return { text: 'Sent. Thank you!', color: TEXT_BLUE };
     case 'busy':
       return { text: 'That is a lot of notes. Try later.', color: TEXT_RED };
+    case 'full':
+      return { text: 'Lots of notes right now. Try later.', color: TEXT_RED };
     case 'failed':
       return { text: "Couldn't reach the server. Try again.", color: TEXT_RED };
     default:
@@ -73,8 +75,8 @@ export function feedbackScreen(model: () => FeedbackModel): DrawnScreen {
 
       const frame = { x: 0, y, w: W, h: BOX_ROWS * ROW_H + 16 };
       c.drawFrame(frame);
-      const { rows, prompt } = boxRows(m.text, W - 24);
-      rows.forEach((row, i) => c.drawText(row, 12, y + 8 + i * ROW_H, prompt ? TEXT_GRAY : TEXT_DARK));
+      const { rows, prompt } = boxRows(m.text, W - 28);
+      rows.forEach((row, i) => c.drawText(row, 15, y + 8 + i * ROW_H, prompt ? TEXT_GRAY : TEXT_DARK));
       const sending = m.state === 'sending';
       widgets.push({
         rect: { x: 8, y: y + 4, w: W - 16, h: frame.h - 8 },
@@ -83,7 +85,7 @@ export function feedbackScreen(model: () => FeedbackModel): DrawnScreen {
         field: { value: m.text, max: FEEDBACK_MAX, readOnly: sending, onInput: m.onInput },
         // A pad or the keyboard's A puts the caret in it, as a tap does.
         onPress: () => globalThis.document?.getElementById(FEEDBACK_TEXT_ID)?.focus(),
-        cursor: { x: 4, y: y + 8 },
+        cursor: { x: 7, y: y + 8 },
       });
       y += frame.h + 2;
 

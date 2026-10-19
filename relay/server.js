@@ -70,8 +70,8 @@
 //                                      and drifts. Counts only; logged as one
 //                                      `jank` line, not answered.
 //   {type:"feedback", text, v?,       -> feedback_ok, or feedback_error
-//         where?, name?, room?}           {reason: "empty"|"busy"}: a player's
-//                                      note from the FEEDBACK screen
+//         where?, name?, room?}           {reason: "empty"|"busy"|"full"}: a
+//                                      player's note from the FEEDBACK screen
 //                                      (POK-428), logged as one `feedback`
 //                                      line whose tail is JSON, for
 //                                      play-log.yml to file in Linear. Needs
@@ -180,10 +180,17 @@ export const FEEDBACK_PER_HOUR = 6;
 export const FEEDBACK_PER_HOUR_ALL = 30;
 
 // The address a note is counted against: an IPv6 host has a /64 to itself,
-// so that is one address here.
+// so that is one address here, written out in full first -- `2001:db8::a` and
+// `2001:db8::b` are one /64.
 export function feedbackBucket(ip) {
-  return ip.includes(":") && !ip.startsWith("::ffff:")
-    ? ip.split(":").slice(0, 4).join(":") : ip;
+  const low = ip.toLowerCase();
+  if (!low.includes(":") || low.startsWith("::ffff:")) return low;
+  const [head, tail] = low.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const groups = tail === undefined ? left
+    : [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right];
+  return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":");
 }
 
 export const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -925,7 +932,8 @@ export function createRelay(options = {}) {
         let all = 0;
         for (const times of feedbackAt.values()) all += times.length;
         if (mine.length >= FEEDBACK_PER_HOUR || all >= FEEDBACK_PER_HOUR_ALL) {
-          conn.send({ type: "feedback_error", reason: "busy" });
+          // `full`: everybody's ceiling, which is no fault of this player's
+          conn.send({ type: "feedback_error", reason: mine.length >= FEEDBACK_PER_HOUR ? "busy" : "full" });
           return;
         }
         feedbackAt.set(bucket, [...mine, now]);

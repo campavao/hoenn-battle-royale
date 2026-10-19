@@ -57,6 +57,7 @@ describe('the FEEDBACK screen', () => {
     expect(feedbackLine('', 'sent')).toEqual({ text: 'Sent. Thank you!', color: TEXT_BLUE });
     expect(feedbackLine('x', 'failed')).toEqual({ text: "Couldn't reach the server. Try again.", color: TEXT_RED });
     expect(feedbackLine('x', 'busy').color).toBe(TEXT_RED);
+    expect(feedbackLine('x', 'full').text).toBe('Lots of notes right now. Try later.');
     // the box's own count (UTF-16, as maxLength stops it), not the cleaned note's
     expect(feedbackLine(' two  words ', 'typing').text).toBe(`12/${FEEDBACK_MAX}`);
     expect(feedbackLine('😀', 'typing').text).toBe(`2/${FEEDBACK_MAX}`);

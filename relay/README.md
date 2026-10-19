@@ -74,7 +74,7 @@ Server -> client:
 | `match_in_progress` | `code, members` | nothing joinable, but a match is running |
 | `pong` | `t?` | reply to `ping` |
 | `feedback_ok` | | your `feedback` was logged |
-| `feedback_error` | `reason` (`empty`, `busy`) | your `feedback` had no words, or one note too many this hour |
+| `feedback_error` | `reason` (`empty`, `busy`, `full`) | your `feedback` had no words, was one too many from your address this hour, or one too many from everybody |
 | `info` | `motd, rooms, conns, minProtocol, daily?` | reply to `info`, and pushed once, unasked, right after connect |
 
 Ids are seats: `1..31` (the page's wire and the ROM have 32; 0 is SOLO VS

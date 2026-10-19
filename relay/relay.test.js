@@ -2534,7 +2534,11 @@ test("one address gets FEEDBACK_PER_HOUR notes, then busy", async () => {
 test("an IPv6 /64 is one address for notes, and the whole relay has a ceiling too", async () => {
   const { FEEDBACK_PER_HOUR, FEEDBACK_PER_HOUR_ALL, feedbackBucket } = await import("./server.js");
   assert.equal(feedbackBucket("2001:db8:1:2:aaaa::1"), "2001:db8:1:2");
-  assert.equal(feedbackBucket("2001:db8:1:2:bbbb::9"), "2001:db8:1:2");
+  assert.equal(feedbackBucket("2001:DB8:1:2:bbbb::9"), "2001:db8:1:2");
+  assert.equal(feedbackBucket("2001:db8::a"), "2001:db8:0:0");
+  assert.equal(feedbackBucket("2001:0db8:0:0:1::b"), "2001:db8:0:0");
+  assert.equal(feedbackBucket("2001:db8:1::5"), "2001:db8:1:0");
+  assert.equal(feedbackBucket("2001:db8:1:0:1::5"), "2001:db8:1:0");
   assert.equal(feedbackBucket("203.0.113.7"), "203.0.113.7");
   assert.equal(feedbackBucket("::ffff:203.0.113.7"), "::ffff:203.0.113.7");
 
@@ -2552,7 +2556,7 @@ test("an IPv6 /64 is one address for notes, and the whole relay has a ceiling to
     }
     const fresh = await connect(addr.port, { "X-Real-IP": "198.51.100.200" });
     fresh.send({ type: "feedback", text: "a new address, but the relay is full up" });
-    assert.deepEqual(await fresh.next(), { type: "feedback_error", reason: "busy" });
+    assert.deepEqual(await fresh.next(), { type: "feedback_error", reason: "full" });
     fresh.end();
   } finally {
     await relay.close();
@@ -2569,4 +2573,23 @@ test("a note from a page in a room is filed under the room it is in, not the one
     assert.ok(lines.some((l) => l.startsWith(`feedback ${code} | `)), "the relay's own word for the room");
     host.end();
   });
+});
+
+test("two addresses in one IPv6 /64 share one hour of notes", async () => {
+  const { FEEDBACK_PER_HOUR } = await import("./server.js");
+  const relay = createRelay({ trustProxy: true });
+  const addr = await relay.listen(0, "127.0.0.1");
+  try {
+    const a = await connect(addr.port, { "X-Real-IP": "2001:db8:5:6::a" });
+    for (let i = 0; i < FEEDBACK_PER_HOUR; i++) {
+      a.send({ type: "feedback", text: `note ${i}` });
+      assert.deepEqual(await a.next(), { type: "feedback_ok" });
+    }
+    const b = await connect(addr.port, { "X-Real-IP": "2001:db8:5:6:ffff::b" });
+    b.send({ type: "feedback", text: "the same host, a new address" });
+    assert.deepEqual(await b.next(), { type: "feedback_error", reason: "busy" });
+    a.end(); b.end();
+  } finally {
+    await relay.close();
+  }
 });

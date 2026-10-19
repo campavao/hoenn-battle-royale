@@ -61,7 +61,7 @@ describe('sendFeedback', () => {
   });
 
   it('passes on what the relay refused it for', async () => {
-    for (const [reason, want] of [['busy', 'busy'], ['empty', 'empty'], ['other', 'failed']] as const) {
+    for (const [reason, want] of [['busy', 'busy'], ['full', 'full'], ['empty', 'empty'], ['other', 'failed']] as const) {
       const { socket, open } = opened();
       const done = sendFeedback('wss://relay.test', NOTE, open);
       socket.onopen?.({});

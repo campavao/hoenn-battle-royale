@@ -24,9 +24,9 @@ export interface FeedbackMsg {
   room?: string;
 }
 
-/** How a send ended: logged, refused for having no words, refused for one note too
- *  many from this address, or no answer at all. */
-export type FeedbackResult = 'sent' | 'empty' | 'busy' | 'failed';
+/** How a send ended: logged, refused for having no words, for one note too many from
+ *  this address, or for too many from everybody, or no answer at all. */
+export type FeedbackResult = 'sent' | 'empty' | 'busy' | 'full' | 'failed';
 
 /** What the box holds, as the relay will keep it: one line, whitespace runs as one
  *  space, at most FEEDBACK_MAX characters. Empty means there is nothing to send. */
@@ -73,7 +73,7 @@ export function sendFeedback(
       }
       // The relay pushes `info` the moment a socket opens; only the answer counts.
       if (m.type === 'feedback_ok') end('sent');
-      else if (m.type === 'feedback_error') end(m.reason === 'busy' ? 'busy' : m.reason === 'empty' ? 'empty' : 'failed');
+      else if (m.type === 'feedback_error') end(m.reason === 'busy' || m.reason === 'full' || m.reason === 'empty' ? m.reason : 'failed');
     };
     ws.onerror = () => end('failed');
     ws.onclose = () => end('failed');
