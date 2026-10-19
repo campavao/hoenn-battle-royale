@@ -110,14 +110,14 @@ bool8 BrRing_SectionInside(u8 mapsec)
 // these coordinates (BrRing_SectionInside above measures the same way against a
 // section's own rectangle), so this is that test with the rectangle shrunk to a point.
 // The fog over the region map asks it of every cell (br_map.c).
-bool8 BrRing_CellInside(s16 x, s16 y)
+bool8 BrRing_CellInside(s16 x, s16 y, s8 r)
 {
     s16 dx = x - gBrRing.cx;
     s16 dy = y - gBrRing.cy;
 
-    if (gBrRing.r < 0)
+    if (r < 0)
         return FALSE;
-    return dx * dx + dy * dy <= (s16)gBrRing.r * gBrRing.r;
+    return dx * dx + dy * dy <= (s16)r * r;
 }
 
 // The bottom box on a ring move: the place the fog is closing on, which the host
@@ -146,6 +146,7 @@ static void HandleRing(const u8 *payload, u8 len)
     const u8 *d;
     u8 n = BrWire_Unframe(payload, len, &d);
     u8 i, placeLen = 0;
+    u16 tail;
 
     if (n < 5)
         return;
@@ -173,6 +174,11 @@ static void HandleRing(const u8 *payload, u8 len)
     gBrRing.cx = (s8)d[2];
     gBrRing.cy = (s8)d[3];
     gBrRing.r = (s8)d[4];
+    // The next radius rides after the elapsed seconds: hasElapsed u8, elapsed u16, then
+    // hasNext u8 and the radius. Without it there is nothing to preview.
+    tail = n >= 6 ? 6 + d[5] : n;
+    gBrRing.hasNext = tail + 5 <= n && d[tail + 3] != 0;
+    gBrRing.next = gBrRing.hasNext ? (s8)d[tail + 4] : gBrRing.r;
     gBrRing.applied = FALSE; // re-evaluate on the next frame
 }
 

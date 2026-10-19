@@ -8,9 +8,11 @@
 //     (MAX_PER_STAT_EVS, past the 510 total) and never reach the bag;
 //   - a sell item (NUGGET, PEARL, STARDUST, a shard...) is its sell price;
 //   - a status heal is a FULL RESTORE;
-//   - a ball off the ground is six of them (the MASTER BALL stays one);
+//   - every ball but the MASTER BALL is a ROYALE BALL (below), and one off the ground is
+//     six of them (the MASTER BALL stays one);
 //   - a medicine used from the bag works on the whole party (a revive still on one mon).
-// With no match running every item is pret's.
+// With no match running every item is pret's, but for the ROYALE BALL's name, look and
+// odds, which are the cartridge's own now.
 
 #define BR_ITEMS_TO_BAG 0 // put *item, *count in the bag (they may have changed)
 #define BR_ITEMS_USED   1 // used or sold already; `text` says what happened
@@ -59,6 +61,22 @@ bool8 BrItems_HealParty(u8 taskId);
 extern const u8 gBrText_LinkCableDesc[];
 extern const u32 gBrItemIcon_LinkCable[];
 extern const u32 gBrItemIconPalette_LinkCable[];
+
+// The ROYALE BALL (POK-408). Cam, 2026-10-18: "get rid of all pokeballs and make royale
+// balls which are like Ultra balls mixed with quick ball. Catching pokemon outside of the
+// safari does not feel fun." The POKe BALL's id under another name and description, in
+// the SAFARI BALL's picture (Cam: "we can even re-use the safari ball as the royale ball
+// sprite"), so the four bits a mon keeps for its ball and every throw, send-out and
+// summary page that reads them still work; the ULTRA BALL's odds, twice those on a
+// battle's first turn (BrCatch_BallMultiplier). Any other ball arriving in a match
+// becomes one (Apply). The MASTER BALL stays itself, the prize it is in gold caches,
+// events and the top shelf (Cam: "let's keep master balls"). The SAFARI BALL is a ROYALE
+// BALL too ("change safari balls to be royale balls"): the Zone's thirty are still a
+// count of their own, not bag items, but they are called ROYALE BALLs and catch at its
+// odds on top of the Zone's bait and rocks.
+#define BR_ITEM_ROYALE_BALL ITEM_POKE_BALL
+
+extern const u8 gBrText_RoyaleBallDesc[];
 
 struct Pokemon;
 

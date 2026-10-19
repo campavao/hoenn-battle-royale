@@ -28,7 +28,7 @@ poke u8 gBrHud+0x178 0
 poke u8 gBrHud+0x0B 0
 wait 4
 expect u8 gBrHud+0x09 3
-expect u16 0x0600F862 0xF139
+expect u16 0x0600F864 0xF139
 expect u16 0x0600FAC4 0
 expect u16 0x0600FC44 0xF1C9
 shot hud-up

@@ -131,8 +131,9 @@ static u32 SellPrice(u16 item, u16 count)
 
 // The rule itself, for every way an item arrives: a vitamin or a sell item is used up
 // (BR_ITEMS_USED, and `text`, when not NULL, says how in one line), a status heal turns
-// into a FULL RESTORE. The ball rule is the ground's alone (BrItems_Pickup). `dry` says
-// what would happen and does none of it (BrItems_Fits).
+// into a FULL RESTORE, a ball other than the MASTER BALL into a ROYALE BALL. Six balls
+// for one is the ground's rule alone (BrItems_Pickup). `dry` says what would happen and
+// does none of it (BrItems_Fits).
 static u8 Apply(u16 *item, u16 count, u8 *text, bool8 dry)
 {
     s8 row;
@@ -173,6 +174,8 @@ static u8 Apply(u16 *item, u16 count, u8 *text, bool8 dry)
     }
     if (InList(sStatusHeals, ARRAY_COUNT(sStatusHeals), *item))
         *item = ITEM_FULL_RESTORE;
+    if (GetItemPocket(*item) == POCKET_POKE_BALLS && *item != ITEM_MASTER_BALL)
+        *item = BR_ITEM_ROYALE_BALL;
     return BR_ITEMS_TO_BAG;
 }
 
@@ -180,8 +183,7 @@ static u8 Pickup(u16 *item, u16 *count, u8 *text, bool8 dry)
 {
     if (Apply(item, *count, text, dry) == BR_ITEMS_USED)
         return BR_ITEMS_USED;
-    if (gBrMatch.phase != BR_PHASE_NONE
-     && GetItemPocket(*item) == POCKET_POKE_BALLS && *item != ITEM_MASTER_BALL)
+    if (gBrMatch.phase != BR_PHASE_NONE && *item == BR_ITEM_ROYALE_BALL)
         *count = BR_ITEMS_BALLS;
     return BR_ITEMS_TO_BAG;
 }
@@ -324,6 +326,11 @@ const u8 gBrText_LinkCableDesc[] = _(
     "Evolves a POKéMON\n"
     "that would evolve\n"
     "when traded.");
+
+const u8 gBrText_RoyaleBallDesc[] = _(
+    "ULTRA BALL odds,\n"
+    "doubled on a\n"
+    "battle's first turn.");
 
 const u32 gBrItemIcon_LinkCable[] = INCGFX_U32("graphics/items/icons/br_link_cable.png", ".4bpp.lz");
 const u32 gBrItemIconPalette_LinkCable[] = INCGFX_U32("graphics/items/icon_palettes/br_link_cable.pal", ".gbapal.lz");

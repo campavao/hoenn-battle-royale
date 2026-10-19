@@ -29,6 +29,8 @@ describe('items lying about (POK-354)', () => {
       } else expect(ids.has(item)).toBe(true);
     }
     expect(tms).toBeGreaterThan(100); // 3 in 31
+    // The one ball a match has is the ROYALE BALL, the POKe BALL's id (POK-408).
+    expect([...ids].filter((id) => id >= 1 && id <= 12)).toEqual([4]);
     expect(isScatterKey(0xc000)).toBe(false); // a gift-giver's
     expect(isScatterKey(0xb000)).toBe(false); // an event's
   });

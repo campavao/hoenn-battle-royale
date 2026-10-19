@@ -1,6 +1,7 @@
 #include "global.h"
 #if BR
 #include "br/br_levels.h"
+#include "br/br_match.h"
 #endif
 #include "bg.h"
 #include "data.h"
@@ -1153,7 +1154,12 @@ static void Task_ReturnToItemListAfterItemPurchase(u8 taskId)
         PlaySE(SE_SELECT);
 
         // Purchasing 10+ Poke Balls gets the player a Premier Ball
+#if BR
+        // ...but not in a match, where it would only be one more ROYALE BALL (br_items.h).
+        if (tItemId == ITEM_POKE_BALL && tItemCount >= 10 && !BrMatch_InRound() && AddBagItem(ITEM_PREMIER_BALL, 1) == TRUE)
+#else
         if (tItemId == ITEM_POKE_BALL && tItemCount >= 10 && AddBagItem(ITEM_PREMIER_BALL, 1) == TRUE)
+#endif
             BuyMenuDisplayMessage(taskId, gText_ThrowInPremierBall, BuyMenuReturnToItemList);
         else
             BuyMenuReturnToItemList(taskId);

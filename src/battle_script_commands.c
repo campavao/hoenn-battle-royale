@@ -9990,6 +9990,9 @@ static void Cmd_handleballthrow(void)
         else
         {
             ballMultiplier = sBallCatchBonuses[gLastUsedItem - ITEM_ULTRA_BALL];
+#if BR
+            ballMultiplier = BrCatch_BallMultiplier(gLastUsedItem, ballMultiplier);
+#endif
         }
 
         odds = (catchRate * ballMultiplier / 10)
