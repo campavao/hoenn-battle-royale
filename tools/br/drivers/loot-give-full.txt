@@ -17,10 +17,11 @@ pokebytes gBrLoot FF 03 0C 00 10 00 00 00 00 09 00 02 FF 00 00 00 B0 04 00 00
 wait 60
 tap A
 wait 20
-# "FOUND 1200!", and the bag's pickup is out: the row is gone from our ground.
+# Taken with the chime and no box (Cam's 2026-10-19 play-test: no "Found X"), and the
+# bag's pickup is out: the row is gone from our ground.
 expect u8 gBrLoot+0xA2 1
 expect u8 gBrLoot+11 0
-expect u8 gBrHud+0x14D 11
+expect u8 gBrHud+0x178 0
 # GIVE [count 3] (ORAN BERRY x2) (NUGGET x1) (TM06 x1): the berries and the TM have
 # pockets of their own with room, and the NUGGET needs a slot the ITEMS pocket does not
 # have.
@@ -55,26 +56,27 @@ expectmsg 11 u8 11 1
 expectmsg 11 u16 12 110
 expectmsg 11 u8 14 1
 expectmsg 11 u16 15 0
-# The box says both: "FOUND 1200!" then a newline and "NO ROOM FOR THE REST".
-expect u8 gBrHud+0x14D 32
-expect u8 gBrHud+0x159 0xFE
-expect u8 gBrHud+0x15A 0xC8
-# Room in the last slot, and the bag is taken again: "FOUND 0!", and this time its GIVE
-# (the NUGGET, from the page's copy of the bag) goes in and nothing comes back out.
+# The box says what is left behind: "No room for the rest".
+expectne u8 gBrHud+0x178 0
+expect u8 gBrHud+0x14D 20
+expect u8 gBrHud+0x14E 0xC8
+# Room in the last slot, and the bag is taken again, and this time its GIVE (the NUGGET,
+# from the page's copy of the bag) goes in and nothing comes back out.
 poke u16 *gSaveBlock1Ptr+0x5D4 0
 wait 100
+expect u8 gBrHud+0x178 0
 tap A
 wait 20
 expect u8 gBrLoot+0xA2 2
 expect u8 gBrLoot+11 0
 # A bag down to one stack of one and no money is that thing on the ground (br_loot.c's
-# OneThing): drawn as a ball and taken as "FOUND NUGGET!", not "FOUND 0!".
-expect u8 gBrHud+0x14D 13
+# OneThing): drawn as a ball, and taken without a box like any other find.
+expect u8 gBrHud+0x178 0
 pokebytes gDecompressionBuffer 01 6E 00 01
 mailsend gBrMailbox 30 gDecompressionBuffer 4
 wait 10
 expect u16 *gSaveBlock1Ptr+0x5D4 110
 expect u8 gBrLoot+11 0
-expect u8 gBrHud+0x14D 13
+expect u8 gBrHud+0x178 0
 shot kept
 say loot give full ok

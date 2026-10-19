@@ -1,0 +1,41 @@
+import { describe, expect, it } from 'vitest';
+import { LegendWatch } from './legends';
+import type { EventMsg } from '../net/wire';
+
+const ev = (n: number, key: number, place?: string): EventMsg => ({ t: 'event', seat: 0, n, mapsec: 0, key, place });
+const names = (seat: number) => ['ALICE', 'BOBBYBOBBY'][seat] ?? 'X';
+
+describe('LegendWatch (the sheet\'s legendary chip, #10)', () => {
+  it('says nothing before any legendary drops', () => {
+    expect(new LegendWatch().chip([], { mon: () => undefined }, names)).toBeNull();
+  });
+
+  it('names the place while the legendary is down', () => {
+    const w = new LegendWatch();
+    const ground = { mon: (k: number) => (k === 0x8100 ? { species: 401 } : undefined) };
+    expect(w.chip([ev(0, 0x8100, 'Route 111')], ground, names)).toBe('LEGENDARY: ROUTE 111');
+  });
+
+  it('gives no chip for a rare find', () => {
+    const w = new LegendWatch();
+    expect(w.chip([ev(0, 0x8100, 'Route 111')], { mon: () => ({ species: 25 }) }, names)).toBeNull();
+  });
+
+  it('says who has it once it is taken, and the newest event wins', () => {
+    const w = new LegendWatch();
+    let down = true;
+    const ground = { mon: (k: number) => (down && k === 0x8100 ? { species: 401 } : undefined) };
+    w.chip([ev(0, 0x8100, 'Route 111')], ground, names);
+    down = false;
+    w.note({ t: 'pickup', seat: 1, key: 0x8100 });
+    expect(w.chip([ev(0, 0x8100, 'Route 111')], ground, names)).toBe('LEGENDARY: BOBBYBO has it');
+  });
+
+  it('forgets everything at a new start', () => {
+    const w = new LegendWatch();
+    w.chip([ev(0, 0x8100)], { mon: () => ({ species: 401 }) }, names);
+    w.note({ t: 'pickup', seat: 0, key: 0x8100 });
+    w.note({ t: 'start', seed: 1, spawns: [] });
+    expect(w.chip([ev(0, 0x8100)], { mon: () => undefined }, names)).toBeNull();
+  });
+});

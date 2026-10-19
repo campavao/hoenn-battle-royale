@@ -14,7 +14,7 @@ import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
 import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
-import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
+import { HUD_PAGE, readFogHp, writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import type { HudWorld } from './ui/phonehud';
 import type { PadPrefsControl } from './ui/padprefs';
 import { moveInfo, type Rom } from './battle/movebook';
@@ -264,6 +264,11 @@ let sheet: DrawnScreen | null = null;
 let sheetOpen = false;
 /** The line under the room's: SAFARI / SAFE: PLACE · 8 left · 1:23, while a match is on. */
 let matchStrip: string | null = null;
+/** The sheet's chip (ui/screens.ts SheetModel.chips): the legendary's line, from the
+ *  match's books once there are some, and the lead's HP while the fog is on us, read off
+ *  the ROM while the sheet sits beside the game and the ROM's corner is off. */
+let legendOf: () => string | null = () => null;
+let fogHp: string | null = null;
 /** Whose card the sheet has open. */
 let sheetCard: number | null = null;
 
@@ -420,6 +425,7 @@ function makeSheet(part: () => SheetPart, about: () => FeedbackAbout): DrawnScre
     },
     look: desktop() ? 'dock' : 'overlay',
     strip: matchStrip,
+    chips: [legendOf(), fogHp].filter((chip): chip is string => chip !== null),
     note: '',
     muted: settings.muted,
     remapping: settings.remapping,
@@ -2264,6 +2270,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     },
   );
   stallLog = session.log;
+  legendOf = () => session.legend();
   const drawResults = (): void => {
     session.settleTally();
     const mine = session.results.forSeat(0, performance.now());
@@ -2514,7 +2521,6 @@ function wireRoom(
       {
         id: 'room-max',
         label: `MAX ${view.max}`,
-        visual: { kind: 'seats', humans: view.players, bots: view.fill, max: view.max },
         onPress: () => relay.setMax(nextMax(view.max)),
       },
       {
@@ -2654,6 +2660,7 @@ function wireRoom(
         room.card = null;
         stage.redraw();
       },
+      onTouched: () => countdown.bump(),
     };
   };
   const roomScreenView = roomScreen(roomModel);
@@ -2997,6 +3004,7 @@ function wireRoom(
     },
   );
   stallLog = session.log;
+  legendOf = () => session.legend();
   /** Our team and where we stood when our ROM lost its last link fight (POK-387): read
    *  then, since a replay we watch afterwards plays its fight in the same gPlayerParty. */
   let lostWith: { team: { species: number; level: number }[]; at: { map: MapRef; x: number; y: number } } | null = null;
@@ -4253,7 +4261,15 @@ function wirePhoneHud(
   emu.onFrame(() => {
     // On the glass: a match, upright, on a touch screen (index.html shows #hud then).
     const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
-    if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown);
+    // A desktop's sheet beside the game says the count and the clock, so the ROM's corner
+    // comes off there too (and the fog's HP, which only the corner said, goes on the sheet).
+    const docked = !shown && desktop() && sheet !== null && stage?.current === sheet;
+    if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown ? HUD_PAGE.SIGNS : docked ? HUD_PAGE.CORNER : HUD_PAGE.NONE);
+    const hp = docked ? readFogHp(emu, (n) => symbols.get(n)) : null;
+    if (hp !== fogHp) {
+      fogHp = hp;
+      redrawSheet();
+    }
     battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables, battle.wantsBag) : null);
     const scene = shown && inBattle(emu, (n) => symbols.get(n));
     if (scene !== battleScene) {

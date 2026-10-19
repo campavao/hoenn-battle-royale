@@ -421,7 +421,6 @@ static bool8 SendGiveBack(void)
 static const u8 sText_NoRoom[] = _("No room for it");
 static const u8 sText_NoRoomRest[] = _("No room for the rest");
 // Defined with Take(): the FOUND line, and under it the NO ROOM one.
-static void SayBag(u32 money, bool8 full);
 
 // GIVE: the page handing over what was in a bag we just took. The line and the money
 // are already said by Take(); this is the rest of it arriving a frame later, which is
@@ -468,10 +467,7 @@ static void HandleGive(const u8 *payload, u8 len)
         BrHud_Box(sText_NoRoom); // no bag of ours to put it back in: nothing to point at
         return;
     }
-    if (OneThing(&sGivenBag))
-        BrHud_Box(sText_NoRoom); // it goes back down as it was
-    else
-        SayBag(sGivenBag.money, TRUE);
+    BrHud_Box(OneThing(&sGivenBag) ? sText_NoRoom : sText_NoRoomRest); // it goes back down as it was
     buf[0] = gBrMySeat;
     buf[1] = sGivenBag.mapGroup;
     buf[2] = sGivenBag.mapNum;
@@ -726,7 +722,6 @@ void BrLoot_SpillOwn(void)
 // ---- taking it ----------------------------------------------------------------
 
 static const u8 sText_Took[] = _("Took ");
-static const u8 sText_Found[] = _("Found ");
 static const u8 sText_Gift[] = _("A gift: ");
 static const u8 sText_Bang[] = _("!");
 static const u8 sText_NobodyLearns[] = _("All know ");
@@ -831,24 +826,6 @@ static void DropHeldLine(void);
 // Below too, beside BrLoot_HomeTrade.
 static void TalkTrade(struct BrLootItem *it);
 
-// "FOUND 1200!" when a bag is taken, and the same again with NO ROOM FOR THE REST under
-// it once its GIVE has found a pocket full (HandleGive).
-static void SayBag(u32 money, bool8 full)
-{
-    u8 line[BR_HUD_LINE_MAX + 2];
-    u8 *p;
-
-    p = StringCopy(line, sText_Found);
-    p = ConvertIntToDecimalStringN(p, money, STR_CONV_MODE_LEFT_ALIGN, 7);
-    p = StringCopy(p, sText_Bang);
-    if (full)
-    {
-        *p++ = CHAR_NEWLINE;
-        StringCopy(p, sText_NoRoomRest);
-    }
-    BrHud_Box(line);
-}
-
 static void Take(struct BrLootItem *it)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
@@ -918,17 +895,16 @@ static void Take(struct BrLootItem *it)
             // The script says it, "received" with the fanfare: no box over the message.
             StringCopy(gStringVar2, GetItemName(it->species));
         }
-        else if (OneThing(it))
+        else if (OneThing(it) && (BR_LOOT_IS_GIFT(it->key) || BrStory_Person(it)))
         {
-            // What it is, not what it was worth: it arrives with the GIVE.
-            p = BrHud_Append(line, last, BR_LOOT_IS_GIFT(it->key) || BrStory_Person(it) ? sText_Gift : sText_Found);
+            // A gift is still said: somebody handed it over. What was only found is not
+            // (Cam's 2026-10-19 play-test: "we don't need that 'Found Sunny Day'... we're
+            // saying a little too much at the bottom"). The chime says it was taken, the
+            // held line said what it was, and the bag shows the rest.
+            p = BrHud_Append(line, last, sText_Gift);
             p = BrHud_Append(p, last, GetItemName(it->species));
             BrHud_Append(p, last, sText_Bang);
             BrHud_Box(line);
-        }
-        else
-        {
-            SayBag(it->money, FALSE);
         }
         if (sGiftKey != it->key)
             PlaySE(SE_PIN);
@@ -963,20 +939,8 @@ static void Take(struct BrLootItem *it)
         }
         if (BrMoves_IsTm(item))
             BrMoves_TeachSoon(item);
-        AddBagItem(item, count);
-        p = BrHud_Append(line, last, sText_Found);
-        if (count > 1)
-        {
-            p = ConvertIntToDecimalStringN(p, count, STR_CONV_MODE_LEFT_ALIGN, 2);
-            *p++ = CHAR_SPACE;
-            *p = EOS;
-        }
-        // "6 POKe BALLS", the way Std_FindItem's line says a pile.
-        CopyItemNameHandlePlural(item, gStringVar2, count);
-        p = BrHud_Append(p, last, gStringVar2);
-        BrHud_Append(p, last, sText_Bang);
+        AddBagItem(item, count); // and no "Found X!": the chime and the held line say it
         PlaySE(SE_PIN);
-        BrHud_Box(line);
         SendPickup(it);
         return;
     }
@@ -1042,7 +1006,8 @@ static struct BrLootItem *PieceInReach(void)
 
 static EWRAM_DATA u16 sHeldKey = BR_HELD_NONE;
 
-static const u8 sText_ABag[] = _("A BAG");
+static const u8 sText_Take[] = _("{A_BUTTON} Take ");
+static const u8 sText_TheBag[] = _("the BAG");
 
 // Stop naming a piece: nothing in reach, the piece was taken, or the overworld is gone.
 static void DropHeldLine(void)
@@ -1066,13 +1031,14 @@ static void DropHeldLine(void)
 // Only when the piece in reach CHANGES: BrHud_Hold re-dirties the ticker on every call,
 // and saying the same thing sixty times a second would redraw it sixty times a second.
 //
-// A bag says "A BAG" rather than whose it is. The name is on the wire and the page keeps
+// A bag says "the BAG" rather than whose it is. The name is on the wire and the page keeps
 // it (match/loot.ts); the ROM's loot row does not, and eight names is sixty-four bytes of
 // an EWRAM budget with about seventy left in it.
 static void HoldLineForReach(void)
 {
     struct BrLootItem *it = PieceInReach();
     u8 line[BR_HUD_LINE_MAX + 2];
+    u8 *p;
 
     if (it == NULL)
     {
@@ -1082,14 +1048,15 @@ static void HoldLineForReach(void)
     if (it->key == sHeldKey)
         return;
     sHeldKey = it->key;
-    if (OneThing(it))
-        StringCopy(line, GetItemName(it->species));
+    // A sentence, not a bare name (Cam's 2026-10-19 play-test: "WHISCASH" alone on the
+    // ticker read as a line with its verb missing).
+    p = StringCopy(line, sText_Take);
+    if (OneThing(it) || it->kind == BR_LOOT_ITEM)
+        StringCopy(p, GetItemName(it->species));
     else if (it->kind == BR_LOOT_BAG)
-        StringCopy(line, sText_ABag);
-    else if (it->kind == BR_LOOT_ITEM)
-        StringCopy(line, GetItemName(it->species));
+        StringCopy(p, sText_TheBag);
     else
-        StringCopy(line, gSpeciesNames[it->species]);
+        StringCopy(p, gSpeciesNames[it->species]);
     BrHud_Hold(line);
 }
 

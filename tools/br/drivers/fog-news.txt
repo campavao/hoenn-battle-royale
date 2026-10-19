@@ -22,6 +22,8 @@ expect u8 gBrLevels+1 1
 expect u8 gBrHud+0x0A 0
 expectge u8 gBrHud+0x178 1
 expect u8 gBrHud+0x157 0xE0
+# in the fog's red (BR_HUD_KIND_ALERT), apart from the rest (Cam's 2026-10-19 play-test)
+expect u8 gBrHud+0x14C 6
 shot phase-one
 # phase 2 names ROUTE 104: The fog spreads! All grew stronger! -- 35 characters, its s
 # at +8 and its ! last -- and the box names the route (its R after the newline, +21)
@@ -30,6 +32,7 @@ poke u16 gBrMailbox+0x0C 2
 wait 10
 expect u8 gBrLevels+1 2
 expect u8 gBrHud+0x0A 1
+expect u8 gBrHud+0x44 6
 expect u8 gBrHud+0x45 0x23
 expect u8 gBrHud+0x46 0xCE
 expect u8 gBrHud+0x4E 0xE7

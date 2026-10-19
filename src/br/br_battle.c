@@ -869,3 +869,92 @@ u8 BrBattle_FoeOf(u8 battler, u8 target)
         return target;
     return GetBattlerAtPosition(GetBattlerPosition(target) ^ BIT_SIDE);
 }
+
+// ---- how a move lands (the desktop's move menu) --------------------------------------
+
+// Palette 5 is the move menu's (graphics/battle_interface/text.pal), and leaves 5..10
+// black: two of them become the phone menu's green and red (web/src/ui/battlemenu.ts's
+// BAND), each with a light shadow as the menu's dark grey has.
+#define BR_EFF_GOOD 5
+#define BR_EFF_BAD 7
+static const u16 sEffColors[] = { RGB(4, 19, 1), RGB(20, 28, 18), RGB(25, 6, 6), RGB(31, 22, 22) };
+
+static const u8 sText_Times4[] = _("×4");
+static const u8 sText_Times2[] = _("×2");
+static const u8 sText_Times1[] = _("×1");
+static const u8 sText_TimesHalf[] = _("×0.5");
+static const u8 sText_TimesQuarter[] = _("×0.25");
+static const u8 sText_Times0[] = _("×0");
+
+// The move's multiplier on the foe's types, in sixteenths: the type chart's rows for the
+// move's type and either of the foe's, Foresight's past the marker too, as
+// web/src/battle/movebook.ts's effectiveness() reads it for the phone.
+static u8 Sixteenths(u8 type, u8 foe)
+{
+    u8 def1 = gBattleMons[foe].types[0];
+    u8 def2 = gBattleMons[foe].types[1];
+    u8 mul = 16;
+    u16 i;
+
+    for (i = 0; TYPE_EFFECT_ATK_TYPE(i) != TYPE_ENDTABLE; i += 3)
+    {
+        if (TYPE_EFFECT_ATK_TYPE(i) != type)
+            continue;
+        if (TYPE_EFFECT_DEF_TYPE(i) != def1 && (def2 == def1 || TYPE_EFFECT_DEF_TYPE(i) != def2))
+            continue;
+        if (TYPE_EFFECT_MULTIPLIER(i) == TYPE_MUL_NO_EFFECT)
+            mul = 0;
+        else if (TYPE_EFFECT_MULTIPLIER(i) == TYPE_MUL_NOT_EFFECTIVE)
+            mul /= 2;
+        else if (TYPE_EFFECT_MULTIPLIER(i) == TYPE_MUL_SUPER_EFFECTIVE)
+            mul *= 2;
+    }
+    return mul;
+}
+
+bool8 BrBattle_MoveTypeLine(u16 move)
+{
+    u8 type = gBattleMoves[move].type;
+    u8 *p;
+    const u8 *times;
+    u8 color = 0;
+    u8 mul;
+
+    if (gBattleMoves[move].power == 0 || (gBattleTypeFlags & BATTLE_TYPE_DOUBLE))
+        return FALSE;
+    mul = Sixteenths(type, gActiveBattler ^ BIT_SIDE);
+    if (mul >= 64)
+        times = sText_Times4;
+    else if (mul > 16)
+        times = sText_Times2;
+    else if (mul == 16)
+        times = sText_Times1;
+    else if (mul == 0)
+        times = sText_Times0;
+    else if (mul <= 4)
+        times = sText_TimesQuarter;
+    else
+        times = sText_TimesHalf;
+    if (mul > 16)
+        color = BR_EFF_GOOD;
+    else if (mul != 0 && mul < 16)
+        color = BR_EFF_BAD;
+
+    CpuCopy16(sEffColors, &gPlttBufferUnfaded[BG_PLTT_ID(5) + BR_EFF_GOOD], sizeof(sEffColors));
+    CpuCopy16(sEffColors, &gPlttBufferFaded[BG_PLTT_ID(5) + BR_EFF_GOOD], sizeof(sEffColors));
+    // The window's narrow font throughout: "ELECTRIC ×0.25" fits its 64 pixels, where
+    // pret's normal-font type name would not leave room for the multiplier.
+    p = StringCopy(gDisplayedStringBattle, gTypeNames[type]);
+    *p++ = CHAR_SPACE;
+    if (color != 0)
+    {
+        *p++ = EXT_CTRL_CODE_BEGIN;
+        *p++ = EXT_CTRL_CODE_COLOR_HIGHLIGHT_SHADOW;
+        *p++ = color;
+        *p++ = 14; // the window's white
+        *p++ = color + 1;
+    }
+    StringCopy(p, times);
+    BattlePutTextOnWindow(gDisplayedStringBattle, B_WIN_MOVE_TYPE);
+    return TRUE;
+}

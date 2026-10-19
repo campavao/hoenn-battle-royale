@@ -21,11 +21,13 @@ expect u8 gBrHud+0x0C 0
 pokebytes gBrLoot 01 00 0C 00 11 00 1B 01 00 09 05 01 FF 00 00 00 00 00 00 00
 wait 30
 shot named
-# the held line is up, and it is the species name: six letters starting with M (0xC7 in
-# the Gen 3 charmap, where A is 0xBB)
+# the held line is up, and it is a sentence (Cam's 2026-10-19 play-test): the A button's
+# glyph (F8 00), " Take ", then the species, six letters starting with M (0xC7 in the
+# Gen 3 charmap, where A is 0xBB) -- 14 bytes, the name from the 9th
 expect u8 gBrHud+0x0C 1
-expect u8 gBrHud+0x19 6
-expect u8 gBrHud+0x1A 0xC7
+expect u8 gBrHud+0x19 14
+expect u8 gBrHud+0x1A 0xF8
+expect u8 gBrHud+0x22 0xC7
 # take it, and the label comes off with the piece
 tap A
 wait 20

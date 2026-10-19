@@ -196,5 +196,10 @@ bool8 BrBattle_RecordedWildOpponent(void);
 // so its GROWL lowered its own ATTACK (2026-10-06 play-test, seen on the replay). The
 // mirror of `target` when it is on the chooser's own side; `target` otherwise.
 u8 BrBattle_FoeOf(u8 battler, u8 target);
+// The move menu's TYPE/ line, with how the move lands on the foe (Cam's 2026-10-19
+// play-test: the phone's move menu says it and the desktop's GBA box did not):
+// "GRASS ×2" in green, "FIRE ×0.5" in red. TRUE when it drew the line; FALSE leaves
+// pret's TYPE/ line to draw (a move that does no damage, a double battle).
+bool8 BrBattle_MoveTypeLine(u16 move);
 
 #endif // GUARD_BR_BATTLE_H
