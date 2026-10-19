@@ -137,7 +137,7 @@ describe("the host's `again`", () => {
 // POK-330 #25: a seat back from a blip is a late arrival. The relay held it, but nobody told
 // it what happened while it was gone -- its own elimination above all.
 describe('catching a seat up on the match', () => {
-  const ring = { phase: 2, sx: 3, sy: -1, r: 4, place: 'ROUTE 104' };
+  const ring = { phase: 2, sx: 3, sy: -1, r: 4, next: 3, place: 'ROUTE 104' };
 
   it('says where the fog is, how long it has, and who is out, in the order they went', () => {
     expect(catchUp(1, { ring, clockLeft: 42, placements: [30, 7, 31] })).toEqual([

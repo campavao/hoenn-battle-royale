@@ -21,6 +21,8 @@ poke u8 gBrRing+1 1
 poke u8 gBrRing+2 4
 poke u8 gBrRing+3 5
 poke u8 gBrRing+4 4
+# no next ring to preview: the host names none (br_ring.h, gBrRing.next == r)
+poke u8 gBrRing+32 4
 pokebytes gBrRing+14 C6 C3 CE CE C6 BF CC C9 C9 CE FF
 # Below the frame's twenty rows BG1's block holds whatever was there before: the field's
 # BG3 tilemap until POK-329, and what any screen leaves. Tile 511 in row 20 (the fly map

@@ -54,9 +54,9 @@ unwatch
 say box-up
 # corner and box up, the ticker off screen while the box is (POK-358): shown = CORNER|BOX,
 # each first cell its own base tile, the ticker's clear. BG0's tilemap is 0x0600F800, 32
-# cells a row, palette 15: (17,1) the corner, (2,11) the box, (2,17) the ticker
+# cells a row, palette 15: (18,1) the corner, (2,11) the box, (2,17) the ticker
 expect u8 gBrHud+0x09 5
-expect u16 0x0600F862 0xF139
+expect u16 0x0600F864 0xF139
 expect u16 0x0600FAC4 0xF15D
 expect u16 0x0600FC44 0
 shot hud-up
@@ -95,10 +95,10 @@ expect u8 gBrHud+0x09 0
 # rectangle off with ClearStdWindowAndFrame, rows 10..15 right across, menu and all.
 expectbits u16 0x0600FB2C 0x3FF 0x186
 expectbits u16 0x0600FB6C 0x3FF 0x21B
-# ...and the HUD's cells outside the menu are gone: the corner's five left columns and
+# ...and the HUD's cells outside the menu are gone: the corner's four left columns and
 # the box's first cell
-expect u16 0x0600F820 0
-expect u16 0x0600F862 0
+expect u16 0x0600F822 0
+expect u16 0x0600F864 0
 expect u16 0x0600FAC4 0
 shot menu-over-box
 say start-menu-close
@@ -123,7 +123,7 @@ wait 10
 unwatch
 say start-menu-closed
 expect u8 gBrHud+0x09 5
-expect u16 0x0600F862 0xF139
+expect u16 0x0600F864 0xF139
 expect u16 0x0600FAC4 0xF15D
 expect u16 0x0600FC44 0
 shot menu-closed
@@ -172,7 +172,7 @@ unwatch
 say sign-up
 # the corner stays (nothing covers it); the ticker and the box are the message box's
 expect u8 gBrHud+0x09 1
-expect u16 0x0600F862 0xF139
+expect u16 0x0600F864 0xF139
 expectbits u16 0x0600FBC4 0x3FF 0x194
 shot sign
 say sign-close
@@ -207,7 +207,7 @@ shot sign-closed
 # carries, (1,2) 17x10 from tile 0x008, in the standard frame (0x214, palette 13: the
 # HUD's own copy). It shares no tile with the HUD, but its last rows and its frame are
 # where the bottom box's top is, and its frame's right side (col 18) is inside the
-# corner's (cols 16..29, since the corner took the dialogue font): both yield to it.
+# corner's (cols 17..29): both yield to it.
 pokebytes gBrMailbox+0x1098 02 0E 0B 00 00 01 01 00 09 10 00 10 00 03 01 01
 poke u16 gBrMailbox+0x0C 3
 wait 10
@@ -302,6 +302,6 @@ unwatch
 say popup-gone
 expect u8 gBrSpectate+8 0xFF
 expectbits u8 gBrHud+0x09 1 1
-expect u16 0x0600F862 0xF139
+expect u16 0x0600F864 0xF139
 shot popup-gone
 say hud vram ok

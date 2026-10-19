@@ -1,0 +1,45 @@
+# bot-walkup-looked: the bot is the one looking (POK-409). It faces us down the eyeline
+# from three tiles east while we face south, away: a map trainer that spotted us. The "!"
+# goes over its ghost and it walks up -- the page walks it (bots/brain.ts walkUp), so
+# here its two steps come over the wire -- while we wait, and turn to meet it. Then the
+# trainer battle.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+pokebytes gDecompressionBuffer 01 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 4
+# its ghost at (15,16) facing WEST; we stand at (12,16) facing south
+pokebytes gDecompressionBuffer 01 01 00 09 0F 00 10 00 03 01 01
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+wait 20
+expect u16 gBrOwnPos+2 12
+expect u8 gBrOwnPos+6 1
+shot bubble
+# the "!" over it, and we stay where we are
+wait 80
+expect u16 gBrOwnPos+2 12
+expect u8 gBrOwnPos+6 1
+expect u8 gBrBotFight+2 0
+expect u32 gMain+4 CB2_Overworld+1
+shot waiting
+# its walk: two steps WEST to (13,16), a walk's 16 frames apart as the page paces them
+pokebytes gDecompressionBuffer 01 03 0E 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 16
+pokebytes gDecompressionBuffer 01 03 0D 00 10 00 00 09
+mailsend gBrMailbox 3 gDecompressionBuffer 8
+wait 44
+expect u16 gBrSeats+20 13
+# beside us now, and we turn to meet it (DIR_EAST, 4) from where we stood
+expect u16 gBrOwnPos+2 12
+expect u8 gBrOwnPos+6 4
+shot met
+wait 200
+expect u8 gBrBotFight+2 1
+expect u8 gBrNetlink 0
+shot vs
+say bot walkup looked ok

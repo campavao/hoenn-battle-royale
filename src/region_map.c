@@ -1769,6 +1769,9 @@ void CB2_OpenFlyMap(void)
 
 static void VBlankCB_FlyMap(void)
 {
+#if BR
+    BrMap_BlinkFog((u8 *)BG_CHAR_ADDR(3));
+#endif
     LoadOam();
     ProcessSpriteCopyRequests();
     TransferPlttBuffer();

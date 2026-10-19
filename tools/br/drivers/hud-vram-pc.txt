@@ -3,8 +3,8 @@
 # PCs are the ones a match leaves working -- every Centre's says OUT OF ORDER
 # (data/scripts/pc.inc) -- and the only way to ITEM STORAGE. WITHDRAW ITEM draws four windows of player_pc.c's
 # on the field's BG0 inside the HUD's tiles: the title (1,1) 13x2 from 0x139, the
-# corner's; the item's icon (1,8) 3x3 from 0x153, the corner's too; and, for a quantity
-# or a YES/NO, 0x15C (the corner's last) and 0x168 up to 0x17B, the box's -- with the list (16,1) and the message (1,13)
+# corner's (0x139..0x14E); the item's icon (1,8) 3x3 from 0x153, spare; and, for a
+# quantity or a YES/NO, 0x15C (spare) and 0x168 up to 0x17B, the box's -- with the list (16,1) and the message (1,13)
 # below 0x139. Before that the PC's line is the field's message box (the ticker's
 # tiles), and its two menus stand at the top left beside the corner.
 #
@@ -42,7 +42,7 @@ poke u8 gBrHud+0x178 0
 poke u8 gBrHud+0x0B 0
 wait 4
 expect u8 gBrHud+0x09 3
-expect u16 0x0600F862 0xF139
+expect u16 0x0600F864 0xF139
 expect u16 0x0600FAC4 0
 expect u16 0x0600FC44 0xF1C9
 shot hud-up
@@ -211,7 +211,7 @@ unwatch
 say pc-gone
 expect u32 gMain+4 CB2_Overworld+1
 expect u8 gBrHud+0x09 5
-expect u16 0x0600F862 0xF139
+expect u16 0x0600F864 0xF139
 expect u16 0x0600FAC4 0xF15D
 expectbits u16 0x0600FC44 0x3FF 0
 shot hud-back

@@ -31,7 +31,12 @@ struct BrRing
     /* 14 */ u8 place[BR_RING_PLACE_MAX + 1]; // what the last RING named, EOS-ended (POK-325)
     /* 31 */ u8 battleFog;  // this fight between contestants is fought in the fog: the
                             // engine hurts the mons on the field at each turn's end
-};                          // 32 bytes
+    /* 32 */ s8 next;       // the radius after this phase, what the MAP previews
+    /* 33 */ bool8 hasNext; // the host named one: not on the last phase, nor from a
+                            // zeroed or hand-poked struct
+    /* 34 */ u8 unused[2];  // agbcc rounds the struct to four bytes anyway: said, so the
+                            // modern build lays it out the same
+};                          // 36 bytes
 // web/src/field.ts reads `outside` and `damageTimer` (RING_OUTSIDE, RING_TIMER).
 BR_OFFSET(BrRing, active, 0)
 BR_OFFSET(BrRing, phase, 1)
@@ -47,7 +52,9 @@ BR_OFFSET(BrRing, appliedMapGroup, 12)
 BR_OFFSET(BrRing, appliedMapNum, 13)
 BR_OFFSET(BrRing, place, 14)
 BR_OFFSET(BrRing, battleFog, 31)
-BR_SIZE(BrRing, 32)
+BR_OFFSET(BrRing, next, 32)
+BR_OFFSET(BrRing, hasNext, 33)
+BR_SIZE(BrRing, 36)
 
 #define BR_FOG_TICK_FRAMES 240
 
@@ -69,8 +76,9 @@ void BrRing_Tick(void);
 bool8 BrRing_Telling(void);
 // Geometry, exposed for the page's tests and other systems: is the section inside?
 bool8 BrRing_SectionInside(u8 mapsec);
-// ...and one cell of the region-map grid: the same test, the rectangle a point.
-bool8 BrRing_CellInside(s16 x, s16 y);
+// ...and one cell of the region-map grid: the same test, the rectangle a point, against
+// a ring of radius `r` round the centre -- gBrRing.r for now, gBrRing.next for the next.
+bool8 BrRing_CellInside(s16 x, s16 y, s8 r);
 // Special for scripts: 1 when this map is outside the ring.
 u16 BrRing_Outside(void);
 // The last phase has no inside (r = -1): what the corner and the map say then.

@@ -344,7 +344,7 @@ test("a phone's bag: pockets, a swipe, an item's page, and USE throws the ball",
     // A trainer's POKeMON: the ball's page says why not, and USE will not go. (The flag,
     // for a frame or two.)
     await openRow(page, 0);
-    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use POKé BALL');
+    await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-label', 'Use ROYALé BALL');
     const flags = await read(page, sym.gBattleTypeFlags, 32);
     await write(page, sym.gBattleTypeFlags, flags | BATTLE_TYPE_TRAINER, 32);
     await expect(page.locator('.bm-bag-use')).toHaveAttribute('aria-disabled', 'true');
