@@ -1,12 +1,12 @@
 {
- "readAt": "2026-10-19T22:46:32.632Z",
+ "readAt": "2026-10-19T22:57:31.078Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "HH7WGD",
    "at": "2026-10-19T22:28:02.114Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-10-19T22:49:43.817Z",
+   "secs": 1302,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -22,10 +22,9 @@
      "mode": "quick",
      "trainers": 1,
      "watching": 0,
-     "secs": null
+     "secs": 1121
     }
    ],
-   "live": true,
    "exact": true
   },
   {
