@@ -21,7 +21,7 @@ shot found
 hold A 4
 wait 60
 expect u32 gMain+4 CB2_Overworld+1
-# Six, said as six ("CAM found 6 POKe BALLS!"), and the ball is gone.
+# Six, said as six ("CAM found 6 ROYALE BALLS!", POK-408), and the ball is gone.
 expect u16 *gSaveBlock1Ptr+0x650 4
 expect u16 *gSaveBlock1Ptr+0x652 6
 shot after

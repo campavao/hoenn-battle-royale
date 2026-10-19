@@ -40,6 +40,8 @@ describe('slots round trip (single slot)', () => {
     { t: 'pickup', seat: 2, key: 55 },
     { t: 'pickup', seat: 2, key: 55, item: 12, n: 3, cash: true },
     { t: 'ring', seat: 0, phase: 1, sx: -12, sy: 12, r: 10, place: 'Littleroot', elapsed: 0 },
+    { t: 'ring', seat: 0, phase: 8, sx: 3, sy: 4, r: 0, next: -1, place: 'Littleroot', elapsed: 900 },
+    { t: 'ring', seat: 0, phase: 2, sx: 3, sy: 4, r: 15, next: 9 },
     { t: 'ring', seat: 0, phase: 64, sx: 0, sy: 0, r: -1 },
     { t: 'clock', seat: 0, left: 120 },
     { t: 'result', seat: 1, outcome: 'forfeit' },

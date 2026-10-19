@@ -1,6 +1,6 @@
 # items-loot: our own ground loot takes the item rework too (br_loot.c Take, by way of
 # BrItems_Pickup): a dealt PROTEIN ball is used on the spot, on the whole party, and a
-# dealt POKe BALL is six of them, said as "6 POKe BALLS".
+# dealt POKe BALL is six of them, said as "6 ROYALE BALLS" (POK-408).
 #
 # LITTLEROOT (map 0:9), the boot at (5,8); the pieces at (13,16) in loot cells, one RIGHT.
 wait 30

@@ -1,0 +1,53 @@
+# royale-ball-catch: a ROYALE BALL (POK-408, br_items.h) thrown on a battle's first turn
+# is 4x the POKe BALL: a full-health ROUTE 102 mon (catch rate 200 or more) is caught on
+# the throw whatever the roll. The retail POKe BALL under the same seed (gRngValue 1, poked
+# mid-throw) breaks free.
+#
+# ROUTE 102 under match seed 4, as bag-pick-ball.txt; the boot's five balls.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 4
+wait 30
+tap LEFT
+wait 4
+tap LEFT
+wait 250
+tap LEFT
+wait 250
+expect u16 gBattleTypeFlags 4
+wait 300
+tap B
+wait 300
+tap B
+wait 300
+expect u8 gBrBattle+8 1
+# BAG, on the POKe BALLS pocket
+poke u8 gBagPosition+5 1
+tap RIGHT
+wait 10
+tap A
+wait 120
+shot bag
+tap A
+wait 30
+tap A
+wait 40
+poke u32 gRngValue 1
+wait 20
+shot thrown
+wait 330
+shot landed
+wait 270
+shot result
+# Through "Gotcha!" and back to the field: the catch is in the party. (A POKe BALL under
+# seed 1 breaks free on that throw.)
+hold A 4
+wait 200
+tap A
+wait 200
+tap A
+wait 300
+expect u8 gPlayerPartyCount 2
+say royale ball ok

@@ -1,6 +1,7 @@
 // A full party means choosing who goes (POK-227). See include/br/br_catch.h.
 #include "global.h"
 #include "main.h"
+#include "battle.h"
 #include "overworld.h"
 #include "pokemon.h"
 #include "script.h"
@@ -14,6 +15,7 @@
 #include "constants/item.h"
 #include "constants/items.h"
 #include "br/br_hud.h"
+#include "br/br_items.h"
 #include "br/br_spectate.h"
 #include "br/br_catch.h"
 #include "br/br_levels.h"
@@ -31,6 +33,13 @@ extern const u8 BR_EventScript_ReleaseOne[];
 // BAG" -- was a hint pointing at a screen the player then had to go and find; Cam's call
 // was that MOVES should be the screen (POK-279).
 static const u8 sText_NoMoves[] = _("NO NEW MOVES AT THIS LEVEL");
+
+u8 BrCatch_BallMultiplier(u16 ball, u8 pret)
+{
+    if (ball != BR_ITEM_ROYALE_BALL && ball != ITEM_SAFARI_BALL)
+        return pret;
+    return gBattleResults.battleTurnCounter == 0 ? 40 : 20;
+}
 
 void BrCatch_Init(void)
 {

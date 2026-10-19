@@ -27,6 +27,10 @@ bool8 BrCatch_TryPark(struct Pokemon *mon);
 // The same park, for a mon picked up off the ground: `key` is the piece it came out of,
 // which stays where it is until a slot is actually chosen (POK-294).
 bool8 BrCatch_TryParkFrom(struct Pokemon *mon, u16 key);
+// Cmd_handleballthrow's multiplier (tenths) for a ball up to the SAFARI BALL, which pret
+// has as `pret`: the ROYALE BALL's (br_items.h), the Zone's SAFARI BALLs included, is the
+// ULTRA BALL's 2x, 4x on the first turn, like a QUICK BALL.
+u8 BrCatch_BallMultiplier(u16 ball, u8 pret);
 // Special: after ChoosePartyMon, VAR_0x8004 says which slot gives way (or nothing).
 void BrCatch_Apply(void);
 // From the party menu's MOVES row: open the relearner for the slot once back in the field.
