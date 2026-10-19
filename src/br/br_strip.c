@@ -93,6 +93,12 @@ static bool8 StrippedInAMatch(const struct ObjectEventTemplate *template, u8 map
 
     if (template->localId >= LOCALID_CAMERA)
         return FALSE;
+    // Every trainer, whatever they look like: a fight on the way is a stop. The rest go
+    // by what they look like. The exceptions below are asked only of those, since this
+    // runs for every template on every map load, and a load that runs a VBlank longer is
+    // a frame more the page holds (seam-midframe).
+    if (template->trainerType == TRAINER_TYPE_NONE && !PersonOrObstacle(template->graphicsId))
+        return FALSE;
     if (BrGym_IsLeader(mapGroup, mapNum, template->localId))
         return FALSE;
     for (i = 0; i < ARRAY_COUNT(sFerrymen); i++)
@@ -105,10 +111,7 @@ static bool8 StrippedInAMatch(const struct ObjectEventTemplate *template, u8 map
         if (template->flagId == sCarriers[i])
             return FALSE;
     }
-    // Every trainer but a leader, whatever they look like: a fight on the way is a stop.
-    if (template->trainerType != TRAINER_TYPE_NONE)
-        return TRUE;
-    return PersonOrObstacle(template->graphicsId);
+    return TRUE;
 }
 
 bool8 BrStrip_Stripped(const struct ObjectEventTemplate *template, u8 mapNum, u8 mapGroup)
