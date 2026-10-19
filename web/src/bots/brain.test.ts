@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Bots, health, STEP_MS, type BotsOptions, type Decision, type PlayerView } from './brain';
+import { Bots, health, STEP_MS, WALKUP_DELAY_MS, type BotsOptions, type Decision, type PlayerView } from './brain';
 import { dealBots, Grade, MAX_SEATS } from './roster';
 import { dealParty, grownUp, rungForPhase } from './party';
 import { World, type Spot, type WorldMap } from './world';
@@ -528,6 +528,79 @@ describe('a bot meeting a player', () => {
     expect(card.name.length).toBeLessThanOrEqual(7);
     expect(card.mons).toHaveLength(1);
     expect((sent[challenge] as { opponent: number }).opponent).toBe(0);
+  });
+
+  it('walks up to the player after the "!", like a trainer that spotted them (POK-409)', () => {
+    // Facing south at a player three cells down its column: two steps, to the cell
+    // next to them, and none of them before the ROM's bubble has had its second.
+    const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 4, dir: 2 });
+    const seat = dealt[0].seat;
+    const challenge = sent.findIndex((m) => m.t === 'challenge');
+    const walk = sent.slice(challenge).filter((m) => m.t === 'step' && (m as { seat: number }).seat === seat);
+    expect(walk).toMatchObject([
+      { d: 1, x: 1, y: 2 },
+      { d: 1, x: 1, y: 3 },
+    ]);
+    expect(bots.spotOf(seat)).toEqual({ map: 'FIELD', x: 1, y: 3 });
+  });
+
+  it('waits for the bubble before the first step of the walk-up', () => {
+    const world = new World([FIELD, PATH]);
+    const sent: { at: number; m: Msg }[] = [];
+    let now = 0;
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push({ at: now, m }),
+      rng: mulberry32(7),
+      engage: { players: () => [{ seat: 0, mapId: 'FIELD', x: 1, y: 4, dir: 2 }] },
+      deal: () => [MON],
+    });
+    const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+    bots.start(dealt, 0);
+    for (now = 50; now <= 4000; now += 50) bots.tick(now);
+    const challengedAt = sent.find((e) => e.m.t === 'challenge')!.at;
+    const steps = sent.filter((e) => e.at >= challengedAt && e.m.t === 'step');
+    expect(steps).toHaveLength(2);
+    expect(steps[0].at - challengedAt).toBeGreaterThanOrEqual(WALKUP_DELAY_MS);
+    expect(steps[1].at - steps[0].at).toBeGreaterThanOrEqual(STEP_MS);
+  });
+
+  it('walks to where the player is now, not where they were at the challenge', () => {
+    // Their ROM can land one more step before it freezes. Toward the bot: it stops next
+    // to them, never on them. Away: it still ends next to them, not two cells short.
+    for (const [moveTo, endY] of [[3, 2], [5, 4]] as const) {
+      const player: PlayerView = { seat: 0, mapId: 'FIELD', x: 1, y: 4, dir: 2 };
+      const world = new World([FIELD, PATH]);
+      const sent: Msg[] = [];
+      const bots = new Bots({
+        world,
+        targets: targets(),
+        mapRef: (id) => REFS[id],
+        send: (m) => void sent.push(m),
+        rng: mulberry32(7),
+        engage: { players: () => [player] },
+        deal: () => [MON],
+      });
+      const dealt = dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]);
+      bots.start(dealt, 0);
+      bots.tick(STEP_MS);
+      expect(sent.some((m) => m.t === 'challenge')).toBe(true);
+      player.y = moveTo;
+      for (let t = 2 * STEP_MS; t <= 6000; t += STEP_MS) bots.tick(t);
+      expect(bots.spotOf(dealt[0].seat)).toEqual({ map: 'FIELD', x: 1, y: endY });
+    }
+  });
+
+  it('stays put when the player is the one who looked: their ROM walks them up', () => {
+    // On its row, looking west at it, while the bot faces south: their look, their walk.
+    const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 4, y: 1, dir: 3 });
+    const seat = dealt[0].seat;
+    const challenge = sent.findIndex((m) => m.t === 'challenge');
+    expect(challenge).toBeGreaterThanOrEqual(0);
+    expect(sent.slice(challenge).some((m) => m.t === 'step' && (m as { seat: number }).seat === seat)).toBe(false);
+    expect(bots.spotOf(seat)).toEqual({ map: 'FIELD', x: 1, y: 1 });
   });
 
   it('answers a challenge from a player who spotted it first', () => {
