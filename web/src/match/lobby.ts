@@ -42,6 +42,8 @@ export type LobbyAction =
   | { kind: 'stats' }
   | { kind: 'seethrough' }
   | { kind: 'career' }
+  // A note to the developers (POK-428).
+  | { kind: 'feedback' }
   | { kind: 'join'; code: string; pass: boolean }
   | { kind: 'watch'; code: string };
 
@@ -149,6 +151,15 @@ export function playRows(link: Link | boolean, openRooms = 0, daily?: RoomListin
   ];
   return rows.map((r) => ({ ...r, id: `lobby-${r.label.toLowerCase().replace(/ /g, '-')}` }));
 }
+
+/** Under the ways into a match, whatever the relay is doing: a note that cannot be sent
+ *  says so on its own screen, and the row being there says where to find it (POK-428). */
+export const FEEDBACK_ROW: LobbyRow = {
+  label: 'SEND FEEDBACK',
+  detail: 'bugs and ideas',
+  action: { kind: 'feedback' },
+  id: 'lobby-feedback',
+};
 
 /** One row per open room, plus the daily's own at the top when the relay offers it.
  *  A room with no seats left is shown and not pressable -- knowing a game is full is

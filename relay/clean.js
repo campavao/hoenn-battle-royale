@@ -160,3 +160,32 @@ export function clientAddress(req, trustProxy) {
   }
   return direct;
 }
+
+// A player's note from the page's FEEDBACK screen (POK-428): the one message
+// that is free text by design.  It reaches a log line and, from there, a
+// Linear issue, so it is kept to one line of printable characters: control
+// characters out, every run of whitespace one space, cut to FEEDBACK_MAX
+// characters (code points, so an emoji is never split in half).  Nothing
+// left is nothing to log.
+export const FEEDBACK_MAX = 1000;
+
+export function cleanFeedback(text) {
+  if (typeof text !== "string") return null;
+  const flat = text.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g, " ")
+    .replace(/\s+/g, " ").trim();
+  if (flat === "") return null;
+  return Array.from(flat).slice(0, FEEDBACK_MAX).join("").trim();
+}
+
+// What the page says about itself beside a note: its version line ("patch
+// 0.3.15 · shell 1a2b3c4 · rom 7562da8") and where the note was written from
+// ("menu", "match-solo").  Shown to whoever reads the note, never acted on.
+export function cleanFeedbackVersion(v) {
+  if (typeof v !== "string") return "?";
+  const out = v.replace(/[^\x20-\x7e\u00b7\u2014]/g, "").trim().slice(0, 96);
+  return out === "" ? "?" : out;
+}
+
+export function cleanFeedbackWhere(where) {
+  return typeof where === "string" && /^[a-z]{1,12}(-[a-z]{1,12})?$/.test(where) ? where : "?";
+}

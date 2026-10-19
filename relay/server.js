@@ -69,6 +69,16 @@
 //                                      waits past the shot clock, turn checks
 //                                      and drifts. Counts only; logged as one
 //                                      `jank` line, not answered.
+//   {type:"feedback", text, v?,       -> feedback_ok, or feedback_error
+//         where?, name?, room?}           {reason: "empty"|"busy"|"full"}: a
+//                                      player's note from the FEEDBACK screen
+//                                      (POK-428), logged as one `feedback`
+//                                      line whose tail is JSON, for
+//                                      play-log.yml to file in Linear. Needs
+//                                      no room: the page opens a socket for
+//                                      it. At most FEEDBACK_PER_HOUR from
+//                                      one address (an IPv6 /64), and
+//                                      FEEDBACK_PER_HOUR_ALL in all
 //   {type:"lock_room", locked, bots?}  host only: refuse new joiners (a match
 //                                      in progress).  Logged as one `match`
 //                                      line at the lock and one at the
@@ -151,7 +161,8 @@
 import http from "node:http";
 import { randomInt } from "node:crypto";
 import { WebSocketServer } from "ws";
-import { cleanMotd, cleanName, cleanPass, cleanSkin, cleanVersion, clientAddress,
+import { cleanFeedback, cleanFeedbackVersion, cleanFeedbackWhere,
+         cleanMotd, cleanName, cleanPass, cleanSkin, cleanVersion, clientAddress,
          dailySecondsUntil, limitsFromEnv, originAllowed, parseDaily,
          parseOrigins } from "./clean.js";
 import { Conn } from "./conn.js";
@@ -161,6 +172,26 @@ import { MAX_SEAT, Room } from "./room.js";
 // server.js exported before the move, it still does.
 export { cleanMotd, cleanPass, clientAddress, dailySecondsUntil, limitsFromEnv,
          MAX_SEAT, originAllowed, parseDaily, parseOrigins };
+
+// Each note becomes a Linear issue somebody reads, so one address gets a few
+// an hour, plenty for a player, and the whole relay a few dozen: a ceiling on
+// a script that walks addresses.
+export const FEEDBACK_PER_HOUR = 6;
+export const FEEDBACK_PER_HOUR_ALL = 30;
+
+// The address a note is counted against: an IPv6 host has a /64 to itself,
+// so that is one address here, written out in full first -- `2001:db8::a` and
+// `2001:db8::b` are one /64.
+export function feedbackBucket(ip) {
+  const low = ip.toLowerCase();
+  if (!low.includes(":") || low.startsWith("::ffff:")) return low;
+  const [head, tail] = low.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const groups = tail === undefined ? left
+    : [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right];
+  return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":");
+}
 
 export const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 export const CODE_LENGTH = 6;
@@ -286,6 +317,8 @@ export function createRelay(options = {}) {
   const rooms = new Map();
   const conns = new Set();
   const perIp = new Map();
+  // address -> when its notes in the last hour were logged (FEEDBACK_PER_HOUR)
+  const feedbackAt = new Map();
 
   // Who inherits a room whose host just went.  The longest-standing member
   // that said it could take it -- the earliest arrival, by the room's own
@@ -878,6 +911,39 @@ export function createRelay(options = {}) {
           + ` | snaps ${n(msg.snaps)} cam ${n(msg.cam)} lost ${n(msg.lost)}`
           + ` | stalls ${n(msg.stalls)} longest ${n(msg.longest)}s`
           + ` | checks ${n(msg.checks)} drifts ${n(msg.drifts)}`);
+        return;
+      }
+      case "feedback": {
+        // A player's note (POK-428). The one free-text message: cleaned to
+        // one printable line, and the line's tail is JSON so a note with a
+        // `|` in it still parses.
+        const text = cleanFeedback(msg.text);
+        if (!text) {
+          conn.send({ type: "feedback_error", reason: "empty" });
+          return;
+        }
+        const now = Date.now();
+        for (const [ip, times] of feedbackAt) {
+          const fresh = times.filter((t) => now - t < 3600e3);
+          if (fresh.length) feedbackAt.set(ip, fresh); else feedbackAt.delete(ip);
+        }
+        const bucket = feedbackBucket(conn.ip);
+        const mine = feedbackAt.get(bucket) || [];
+        let all = 0;
+        for (const times of feedbackAt.values()) all += times.length;
+        if (mine.length >= FEEDBACK_PER_HOUR || all >= FEEDBACK_PER_HOUR_ALL) {
+          // `full`: everybody's ceiling, which is no fault of this player's
+          conn.send({ type: "feedback_error", reason: mine.length >= FEEDBACK_PER_HOUR ? "busy" : "full" });
+          return;
+        }
+        feedbackAt.set(bucket, [...mine, now]);
+        const said = typeof msg.room === "string" && msg.room.length === CODE_LENGTH
+          && [...msg.room].every((ch) => CODE_ALPHABET.includes(ch)) ? msg.room : null;
+        const code = conn.room ? conn.room.code : said || "-";
+        log(`feedback ${code} | ` + JSON.stringify({
+          v: cleanFeedbackVersion(msg.v), where: cleanFeedbackWhere(msg.where),
+          name: cleanName(msg.name), text }));
+        conn.send({ type: "feedback_ok" });
         return;
       }
       default:

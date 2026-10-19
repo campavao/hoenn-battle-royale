@@ -182,12 +182,14 @@ room. Push the first tag only while
 `https://hoenn-relay-production.up.railway.app/health` says `"rooms":0`, the same as a
 relay deploy by hand. Every tag after it compares against the one before.
 
-Two repo secrets make it fully automatic (GitHub → Settings → Secrets → Actions):
+Two repo secrets make it fully automatic (GitHub → Settings → Secrets → Actions), and a
+third files players' notes:
 
 | secret | from | without it |
 |---|---|---|
 | `VERCEL_TOKEN` | Vercel → Account Settings → Tokens | the site step warns and skips; run `release-web.sh --prod` by hand |
 | `RAILWAY_PROJECT_TOKEN` | Railway → `kanto-br-relay` → Settings → Tokens, environment `production` (set 2026-09-25) | the relay step falls back to `RAILWAY_TOKEN`, and warns and skips without either; `railway up` by hand |
+| `LINEAR_API_KEY` | Linear → Settings → Security & access → Personal API keys | the play log files no FEEDBACK notes (POK-428); they wait in the relay's log, and are filed the first run that has a key |
 
 The relay step hands the project token to the CLI as `RAILWAY_TOKEN`, which names its own
 project and environment, so it deploys with `railway up --service hoenn-relay` and no

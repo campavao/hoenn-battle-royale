@@ -45,6 +45,8 @@ Client -> server:
 | `list_rooms` | `patch?, protocol?` | `rooms {rooms:[...]}`: every joinable lobby. Inside the half hour before the DAILY GAME its row leads, and describes the daily this client's `daily_join` would land in: its own build's lobby (code, players), none yet (`code: ""`), or no row while its build's daily match runs |
 | `join_room` | `code, name, spectate?, pass?, skin?, patch?, protocol?, token?` | `room_joined {code, id, host, token}` or `room_error {reason}`. With a `token` naming a seat the room is still holding (a socket that dropped within `rejoinMs`, 60 s), the same `id` comes back whatever the door says -- locked, full or passcoded -- and the token is spent (POK-284). A token whose socket the relay still has (a page that gave up on a half-open one) takes the seat over, host and all, and the old socket is closed. A member who sent `leave_room` or was removed is not held |
 | `stat` | `id, v, solo, since` | play counter; logged, counted, never answered |
+| `jank` | `v, watched, snaps, cam, lost, stalls, longest, checks, drifts` | how smooth a match looked from one page (POK-376); counts only, logged, never answered |
+| `feedback` | `text, v?, where?, name?, room?` | a player's note from the FEEDBACK screen (POK-428), on a socket of its own: logged as `feedback CODE \| {json}` for play-log.yml to file in Linear, answered `feedback_ok` or `feedback_error`. Six an hour from one address (an IPv6 /64), thirty from everyone |
 | `lock_room` | `locked, bots?` | host only: refuse new joiners (match in progress). `bots`: the seats the host dealt its bots, never handed to a member until the unlock |
 | `kick` | `id` | host only: remove a member, ban their address and their resume token from the room |
 | `leave_room` | | |
@@ -71,6 +73,8 @@ Server -> client:
 | `no_open_rooms` | | `quick_join` found nothing open or running |
 | `match_in_progress` | `code, members` | nothing joinable, but a match is running |
 | `pong` | `t?` | reply to `ping` |
+| `feedback_ok` | | your `feedback` was logged |
+| `feedback_error` | `reason` (`empty`, `busy`, `full`) | your `feedback` had no words, was one too many from your address this hour, or one too many from everybody |
 | `info` | `motd, rooms, conns, minProtocol, daily?` | reply to `info`, and pushed once, unasked, right after connect |
 
 Ids are seats: `1..31` (the page's wire and the ROM have 32; 0 is SOLO VS

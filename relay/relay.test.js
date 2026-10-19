@@ -2479,3 +2479,122 @@ test("a jank report is one clamped log line and never answered", async () => {
     a.end();
   });
 });
+
+// ------- POK-428: a player's note from the FEEDBACK screen
+
+test("a feedback note is one log line with a JSON tail, and answered", async () => {
+  await withLoggedRelay(async (port, lines) => {
+    const a = await connect(port);
+    a.send({ type: "feedback", text: "  the ferry\nsoftlocked | again \u0007 ", v: "patch 0.3.15 · shell 1a2b3c4 · rom 7562da8",
+             where: "match-solo", name: "MAY", room: "ABCDEF" });
+    assert.deepEqual(await a.next(), { type: "feedback_ok" });
+    const said = lines.filter((l) => l.startsWith("feedback "));
+    assert.deepEqual(said, [
+      'feedback ABCDEF | {"v":"patch 0.3.15 · shell 1a2b3c4 · rom 7562da8","where":"match-solo","name":"MAY","text":"the ferry softlocked | again"}',
+    ]);
+    a.end();
+  });
+});
+
+test("a feedback note with no words is refused, and junk fields are not written", async () => {
+  await withLoggedRelay(async (port, lines) => {
+    const a = await connect(port);
+    a.send({ type: "feedback", text: " \n\t " });
+    assert.deepEqual(await a.next(), { type: "feedback_error", reason: "empty" });
+    a.send({ type: "feedback", text: 42 });
+    assert.deepEqual(await a.next(), { type: "feedback_error", reason: "empty" });
+    a.send({ type: "feedback", text: "x".repeat(5000), v: { evil: 1 }, where: "../../etc", name: 7, room: "abc" });
+    assert.deepEqual(await a.next(), { type: "feedback_ok" });
+    const said = lines.filter((l) => l.startsWith("feedback "));
+    assert.equal(said.length, 1);
+    const tail = JSON.parse(said[0].slice(said[0].indexOf("| ") + 2));
+    assert.deepEqual({ ...tail, text: tail.text.length }, { v: "?", where: "?", name: "PLAYER", text: 1000 });
+    assert.ok(said[0].startsWith("feedback - | "), "a code that is not one is not written");
+    a.end();
+  });
+});
+
+test("one address gets FEEDBACK_PER_HOUR notes, then busy", async () => {
+  const { FEEDBACK_PER_HOUR } = await import("./server.js");
+  await withLoggedRelay(async (port, lines) => {
+    const a = await connect(port);
+    for (let i = 0; i < FEEDBACK_PER_HOUR; i++) {
+      a.send({ type: "feedback", text: `note ${i}` });
+      assert.deepEqual(await a.next(), { type: "feedback_ok" });
+    }
+    // a new socket from the same address is the same address
+    const b = await connect(port);
+    b.send({ type: "feedback", text: "one more" });
+    assert.deepEqual(await b.next(), { type: "feedback_error", reason: "busy" });
+    assert.equal(lines.filter((l) => l.startsWith("feedback ")).length, FEEDBACK_PER_HOUR);
+    a.end(); b.end();
+  });
+});
+
+test("an IPv6 /64 is one address for notes, and the whole relay has a ceiling too", async () => {
+  const { FEEDBACK_PER_HOUR, FEEDBACK_PER_HOUR_ALL, feedbackBucket } = await import("./server.js");
+  assert.equal(feedbackBucket("2001:db8:1:2:aaaa::1"), "2001:db8:1:2");
+  assert.equal(feedbackBucket("2001:DB8:1:2:bbbb::9"), "2001:db8:1:2");
+  assert.equal(feedbackBucket("2001:db8::a"), "2001:db8:0:0");
+  assert.equal(feedbackBucket("2001:0db8:0:0:1::b"), "2001:db8:0:0");
+  assert.equal(feedbackBucket("2001:db8:1::5"), "2001:db8:1:0");
+  assert.equal(feedbackBucket("2001:db8:1:0:1::5"), "2001:db8:1:0");
+  assert.equal(feedbackBucket("203.0.113.7"), "203.0.113.7");
+  assert.equal(feedbackBucket("::ffff:203.0.113.7"), "::ffff:203.0.113.7");
+
+  const relay = createRelay({ trustProxy: true });
+  const addr = await relay.listen(0, "127.0.0.1");
+  try {
+    let sent = 0;
+    for (let i = 0; sent < FEEDBACK_PER_HOUR_ALL; i++) {
+      const c = await connect(addr.port, { "X-Real-IP": `203.0.113.${i + 1}` });
+      for (let j = 0; j < FEEDBACK_PER_HOUR && sent < FEEDBACK_PER_HOUR_ALL; j++, sent++) {
+        c.send({ type: "feedback", text: `note ${sent}` });
+        assert.deepEqual(await c.next(), { type: "feedback_ok" });
+      }
+      c.end();
+    }
+    const fresh = await connect(addr.port, { "X-Real-IP": "198.51.100.200" });
+    fresh.send({ type: "feedback", text: "a new address, but the relay is full up" });
+    assert.deepEqual(await fresh.next(), { type: "feedback_error", reason: "full" });
+    fresh.end();
+  } finally {
+    await relay.close();
+  }
+});
+
+test("a note from a page in a room is filed under the room it is in, not the one it names", async () => {
+  await withLoggedRelay(async (port, lines) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST" });
+    const code = (await host.until("room_hosted")).code;
+    host.send({ type: "feedback", text: "from inside", room: "ZZZZZZ" });
+    await host.until("feedback_ok");
+    assert.ok(lines.some((l) => l.startsWith(`feedback ${code} | `)), "the relay's own word for the room");
+    host.end();
+  });
+});
+
+test("two addresses in one IPv6 /64 share one hour of notes", async () => {
+  const { FEEDBACK_PER_HOUR } = await import("./server.js");
+  const relay = createRelay({ trustProxy: true });
+  const addr = await relay.listen(0, "127.0.0.1");
+  try {
+    const a = await connect(addr.port, { "X-Real-IP": "2001:db8:5:6::a" });
+    for (let i = 0; i < FEEDBACK_PER_HOUR; i++) {
+      a.send({ type: "feedback", text: `note ${i}` });
+      assert.deepEqual(await a.next(), { type: "feedback_ok" });
+    }
+    const b = await connect(addr.port, { "X-Real-IP": "2001:db8:5:6:ffff::b" });
+    b.send({ type: "feedback", text: "the same host, a new address" });
+    assert.deepEqual(await b.next(), { type: "feedback_error", reason: "busy" });
+    a.end(); b.end();
+  } finally {
+    await relay.close();
+  }
+});
+
+test("cleanFeedback blanks bidi and zero-width marks, which could make a title read backwards", async () => {
+  const { cleanFeedback } = await import("./clean.js");
+  assert.equal(cleanFeedback("abc\u202edef\u200bghi\u2066x\ufeff"), "abc def ghi x");
+});

@@ -569,12 +569,14 @@ export interface SheetModel {
   onRemap(): void;
   onResetPad(): void;
   onForget(): void;
+  /** FEEDBACK: a note to the developers (POK-428). */
+  onFeedback(): void;
   /** A phone's see-through D-pad and A/B (ui/padprefs.ts): MOVE PAD to drag and fade
    *  them, HIDE PAD to walk by tapping alone. Absent where there is no touch pad. */
   pad?: { hidden: boolean; onMove(): void; onToggle(): void };
 }
 
-/** The sheet's settings, MOVE PAD and HIDE PAD among them on a phone. */
+/** The sheet's settings, MOVE PAD and HIDE PAD among them on a phone, and FEEDBACK. */
 function settingsOf(m: SheetModel): OptionSpec[] {
   const rows = [
     { label: m.muted ? 'UNMUTE' : 'MUTE', id: 'mute', onPress: m.onMute },
@@ -586,6 +588,7 @@ function settingsOf(m: SheetModel): OptionSpec[] {
     rows.push({ label: 'MOVE PAD', id: 'pad-move', onPress: m.pad.onMove });
     rows.push({ label: m.pad.hidden ? 'SHOW PAD' : 'HIDE PAD', id: 'pad-hide', onPress: m.pad.onToggle });
   }
+  rows.push({ label: 'FEEDBACK', id: 'feedback', onPress: m.onFeedback });
   return rows;
 }
 
