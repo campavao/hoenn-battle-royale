@@ -62,6 +62,9 @@ const TEXT_W = W - 24;
 const ART_H = 36;
 const ICON = uiData.itemIcons as { cell: number; cols: number };
 const PIECE_GAP = 8;
+const FOG_TILE = 64;
+/** The frame's inside: its border is six pixels. */
+const FOG_W = W - 12;
 
 /** 'due' from a first import until the panels are shown, then '1' for good. In storage,
  *  not memory: a newcomer who came by an invite link meets the menu on a later load. */
@@ -130,11 +133,12 @@ export function howToScreen(model: () => HowToModel): DrawnScreen {
         }
         x += widths[i] + PIECE_GAP;
       });
-      // Wisps two pixels tall, thicker and thinner, as the weather's own fog drifts across
-      // the field; edge to edge inside the frame's border.
+      // The ROM's own fog over the picture, the weather the ring's outside wears, blended
+      // a little lighter than the GBA's 12/16 so the trainer under it still reads, edge to
+      // edge inside the border.
       if (panel.fog) {
-        for (let wy = 0; wy < ART_H; wy += 2) {
-          c.fillRect({ x: 6, y: y + 8 + wy, w: W - 12, h: 2 }, '#8890a0', 0.3 + 0.2 * Math.sin(wy * 0.45));
+        for (let fx = 0; fx < FOG_W; fx += FOG_TILE) {
+          c.drawUiPicture('/field-sprites/fog.png', 0, 0, Math.min(FOG_TILE, FOG_W - fx), ART_H, 6 + fx, y + 8, 0.6);
         }
       }
       let ty = y + 8 + ART_H + 4;

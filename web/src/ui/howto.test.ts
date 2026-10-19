@@ -88,8 +88,8 @@ describe('the HOW TO PLAY screen', () => {
     for (let i = 0; i < 3; i++) press(screen, 'howto-next');
     const fog = paint(screen);
     expect(fog.byId('howto-heading')!.text).toBe('The fog');
-    expect(fog.fills).toHaveLength(18);
-    expect(fog.fills.every((f) => f.r.x === 6 && f.r.w === W - 12)).toBe(true);
+    const tiles = fog.pictures.filter((p) => p.name === '/field-sprites/fog.png');
+    expect(tiles.map((t) => t.x)).toEqual([6, 70, 134, 198]);
   });
 
   it('puts somebody else across from you in the battle', () => {
