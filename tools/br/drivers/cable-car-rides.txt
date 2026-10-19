@@ -48,3 +48,26 @@ wait 600
 shot top
 expect u8 *gSaveBlock1Ptr+4 19
 expect u8 *gSaveBlock1Ptr+5 1
+# And back down: out to MT. CHIMNEY and in again, so the attendant is at her desk.
+hold DOWN 80
+wait 200
+expect u8 *gSaveBlock1Ptr+4 24
+hold UP 20
+wait 200
+expect u8 *gSaveBlock1Ptr+4 19
+expect u8 *gSaveBlock1Ptr+5 1
+hold UP 90
+wait 20
+shot top-desk
+tap A
+wait 60
+tap A
+wait 60
+hold A 4
+wait 60
+hold A 4
+wait 120
+wait 2100
+shot bottom
+expect u8 *gSaveBlock1Ptr+4 19
+expect u8 *gSaveBlock1Ptr+5 0
