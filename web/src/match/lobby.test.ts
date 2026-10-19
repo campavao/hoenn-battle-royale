@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countdown, emptyNote, fixedRows, isRoomCode, roomRows } from './lobby';
+import { FEEDBACK_ROW, HOWTO_ROW, countdown, emptyNote, fixedRows, isRoomCode, playRows, roomRows } from './lobby';
 import type { RoomListing } from '../net/relay';
 
 const room = (over: Partial<RoomListing> = {}): RoomListing => ({
@@ -29,10 +29,18 @@ describe('the fixed rows', () => {
     const rows = fixedRows('connecting');
     const quick = rows.find((r) => r.label === 'QUICK PLAY')!;
     expect(quick.disabled).toBe(true);
-    expect(quick.detail).toBe('connecting');
     expect(quick.action.kind).toBe('quick');
     expect(fixedRows('down').find((r) => r.label === 'QUICK PLAY')!.action.kind).toBe('solo');
     expect(fixedRows('up').find((r) => r.label === 'QUICK PLAY')!.action.kind).toBe('quick');
+  });
+
+  it('say nothing on their right, only the options (Cam, POK-430)', () => {
+    for (const link of ['connecting', 'up', 'down'] as const) {
+      for (const r of fixedRows(link)) expect(r.detail, `${r.label} while ${link}`).toBeUndefined();
+    }
+    const daily = playRows('up', room({ daily: true, host: 'DAILY', secs: 754 }));
+    expect(daily.map((r) => r.label)).toContain('DAILY GAME');
+    for (const r of [...daily, HOWTO_ROW, FEEDBACK_ROW]) expect(r.detail, r.label).toBeUndefined();
   });
 
   it('open up once the relay is there', () => {
