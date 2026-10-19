@@ -1705,7 +1705,9 @@ function resultsShowing(): boolean {
  *  chunks; never on its own, since it would drop a match out from under the player. */
 const CHUNK_FAILS_BEFORE_RELOAD = 3;
 let chunkFails = 0;
-function chunkFailed(): void {
+const chunksFailing = new Set<string>();
+function chunkFailed(chunk: string): void {
+  chunksFailing.add(chunk);
   if (++chunkFails !== CHUNK_FAILS_BEFORE_RELOAD) return;
   const b = document.createElement('button');
   b.id = 'chunk-reload';
@@ -1713,6 +1715,12 @@ function chunkFailed(): void {
   b.textContent = "Part of the game didn't load. Tap to reload.";
   b.addEventListener('click', () => location.reload());
   document.body.append(b);
+}
+/** A retry got through: once every chunk that failed has loaded, the offer goes. */
+function chunkLoaded(chunk: string): void {
+  if (!chunksFailing.delete(chunk) || chunksFailing.size > 0) return;
+  chunkFails = 0;
+  document.getElementById('chunk-reload')?.remove();
 }
 
 /** Where we came, how long we lasted, and what that does to the career record, drawn on
@@ -1733,6 +1741,7 @@ let resultsPending: (() => void) | undefined;
 function loadResultsUi(): Promise<void> {
   resultsUiReady ??= import('./ui/results').then(
     (m) => {
+      chunkLoaded('results');
       resultsUi = m;
       const draw = resultsPending;
       resultsPending = undefined;
@@ -1741,7 +1750,7 @@ function loadResultsUi(): Promise<void> {
     (err: unknown) => {
       resultsUiReady = undefined;
       console.warn('results screen did not load', err);
-      chunkFailed();
+      chunkFailed('results');
     },
   );
   return resultsUiReady;
@@ -1756,13 +1765,14 @@ let profileUiReady: Promise<void> | undefined;
 function loadProfileUi(): Promise<void> {
   profileUiReady ??= import('./ui/profile').then(
     (m) => {
+      chunkLoaded('profile');
       profileUi = m;
       theStage().redraw();
     },
     (err: unknown) => {
       profileUiReady = undefined;
       console.warn('profile screens did not load', err);
-      chunkFailed();
+      chunkFailed('profile');
     },
   );
   return profileUiReady;
@@ -4054,6 +4064,7 @@ function loadPhoneUi(): Promise<typeof import('./ui/phone-ui')> {
       clearTimeout(timer);
       import('./ui/phone-ui').then(
         (m) => {
+          chunkLoaded('phone-ui');
           window.removeEventListener('online', again);
           document.removeEventListener('visibilitychange', again);
           resolve(m);
@@ -4062,7 +4073,7 @@ function loadPhoneUi(): Promise<typeof import('./ui/phone-ui')> {
           busy = false;
           tries++;
           console.warn(`phone HUD did not load (try ${tries})`, err);
-          chunkFailed();
+          chunkFailed('phone-ui');
           timer = setTimeout(again, Math.min(60_000, 2_000 * 2 ** (tries - 1)));
         },
       );
