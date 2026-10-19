@@ -1,0 +1,74 @@
+# double-target: a double battle's target pick tells the page so (POK-383).
+#
+# On the phone the page's move windows stood in for the move menu, and the ROM's own
+# target pick (HandleInputChooseTarget, the bouncing healthbox) left gBrBattle.menu on
+# MOVE: the moves came back up with no pad under them, so a target could only be taken
+# by tapping the move again, and there was no BACK. Now the pick says BR_MENU_TARGET (4)
+# and the page steps aside for the D-pad and A/B; B goes back to the moves.
+#
+# TATE stands at (23,7) in Mossdeep Gym (14:0) facing down; LIZA beside him. The fight is
+# a double, so the test Treecko is copied into slot two first. POUND, its first move, hits
+# one foe: a target to pick.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 0E 00 17 00 09 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+4 14
+expect u8 *gSaveBlock1Ptr+5 0
+poke u8 gBrMatch 2
+copy gPlayerParty+100 gPlayerParty 100
+poke u8 gPlayerPartyCount 2
+hold UP 20
+wait 30
+tap A
+wait 200
+shot talk
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+# the battle's opening lines wait on a press here (no phone page to scroll them)
+tap B
+wait 90
+tap B
+wait 90
+tap B
+wait 90
+tap B
+wait 90
+tap B
+wait 90
+tap B
+wait 90
+tap B
+wait 90
+tap B
+wait 90
+tap B
+wait 90
+tap B
+wait 90
+waitfor u8 gBrBattle+8 1 3000
+shot actions
+# DOUBLE | IS_MASTER | TRAINER
+expect u32 gBattleTypeFlags 0xD
+tap A
+waitfor u8 gBrBattle+8 2 120
+tap A
+waitfor u8 gBrBattle+8 4 120
+shot target
+tap B
+waitfor u8 gBrBattle+8 2 120
+shot back-to-moves
+tap A
+waitfor u8 gBrBattle+8 4 120
+tap A
+# the first mon's choice is in: the second's actions come up
+waitfor u8 gBrBattle+8 1 300

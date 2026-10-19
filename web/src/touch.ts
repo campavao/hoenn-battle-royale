@@ -68,6 +68,8 @@ export const BATTLE_MENU = 8;
 export const MENU_ACTION = 1;
 export const MENU_MOVE = 2;
 export const MENU_SAFARI = 3;
+/** A double battle's target pick: the pad's, so the page's menu steps aside. */
+export const MENU_TARGET = 4;
 /** `struct ChooseMoveStruct` sits at gBattleBufferA[battler][4]; its first field is the
  *  four move ids (include/battle.h). The battler is the local player's: 0 on its own
  *  machine, but 1 on the challenged side of a link battle (battle_controllers.c), so it

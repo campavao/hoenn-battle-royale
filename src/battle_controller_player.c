@@ -399,6 +399,9 @@ static void HandleInputChooseTarget(void)
     s32 i;
     u8 identities[MAX_BATTLERS_COUNT];
     memcpy(identities, sTargetIdentities, ARRAY_COUNT(sTargetIdentities));
+#if BR
+    gBrBattle.menu = BR_MENU_TARGET; // the page steps aside for the pad (POK-383)
+#endif
 
     DoBounceEffect(gMultiUsePlayerCursor, BOUNCE_HEALTHBOX, 15, 1);
 
