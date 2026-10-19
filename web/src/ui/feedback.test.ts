@@ -46,6 +46,12 @@ describe('the FEEDBACK screen', () => {
     expect(rows[rows.length - 1].endsWith('word39')).toBe(true);
   });
 
+  it('starts a new row where the player pressed Enter', () => {
+    expect(boxRows('the ferry softlocked\nat Slateport', 216).rows).toEqual(['the ferry softlocked', 'at Slateport']);
+    expect(boxRows('one\n\ntwo\n', 216).rows).toEqual(['one', '', 'two', '']);
+    expect(boxRows(' \n ', 216).prompt).toBe(true);
+  });
+
   it('holds SEND and the box while a note is on its way', () => {
     const { byId } = paint(model({ text: 'hi', state: 'sending' }));
     expect(byId('feedback-send').disabled).toBe(true);

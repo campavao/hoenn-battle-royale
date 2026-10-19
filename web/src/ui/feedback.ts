@@ -45,7 +45,8 @@ export function feedbackLine(text: string, state: FeedbackState): { text: string
 
 /** The box's rows: the end of what was typed, wrapped, or the prompt when nothing was. */
 export function boxRows(text: string, width: number): { rows: string[]; prompt: boolean } {
-  const rows = wrapText(text, width);
+  // A typed line break starts a new row; a blank line stays blank.
+  const rows = text.trim() ? text.split('\n').flatMap((para) => (para.trim() ? wrapText(para, width) : [''])) : [];
   if (rows.length === 0) return { rows: ['Tap here to type.'], prompt: true };
   return { rows: rows.slice(-BOX_ROWS), prompt: false };
 }
