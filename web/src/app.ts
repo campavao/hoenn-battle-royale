@@ -31,9 +31,10 @@ import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { ringLabel } from './match/clock';
 import { Curtain } from './match/curtain';
-import { FEEDBACK_ROW, emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
+import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import { cleanNote, sendFeedback } from './net/feedback';
 import { feedbackScreen, type FeedbackState } from './ui/feedback';
+import { howToScreen, markHowToDue, takeHowToDue } from './ui/howto';
 import {
   AUTO_START_MS,
   BOT_FILL,
@@ -624,6 +625,8 @@ async function runImportScreen(emu: Emulator): Promise<void> {
   // Dev only: a `#rom=` in the hash always wins over whatever is stored.
   const devRomHash = import.meta.env.DEV ? new URLSearchParams(location.hash.slice(1)).get('rom') : null;
   if (emu.hasRom() && !devRomHash) return; // already imported on this device; nothing to do
+  // A dev `#rom=` is a test, not a newcomer.
+  if (!devRomHash) markHowToDue(localStorage);
 
   showScreen('importing');
   const input = $('#rom-input') as HTMLInputElement;
@@ -3801,6 +3804,9 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         case 'feedback':
           stage.push(feedbackFor(() => ({ where: 'menu' })));
           return;
+        case 'howto':
+          stage.push(howTo);
+          return;
         case 'solo':
           setRoomHash('solo');
           return done({ mode: 'solo' });
@@ -3886,7 +3892,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
 
     const main = menuScreen(() => ({
       title: 'HOENN BATTLE ROYALE',
-      rows: [...playRows(shownLink(), rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)), FEEDBACK_ROW].map(row),
+      rows: [...playRows(shownLink(), rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)), HOWTO_ROW, FEEDBACK_ROW].map(row),
       rowsId: 'lobby-rows',
       note: note || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',
@@ -3981,7 +3987,11 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         },
       };
     }));
+    const howTo = howToScreen(() => ({ skin: careerSkin(), onDone: () => stage.pop() }));
     stage.show(main);
+    // Somebody who imported their ROM by hand is new here: the panels come up over the
+    // first menu they meet, once on this device (POK-429).
+    if (takeHowToDue(localStorage)) stage.push(howTo);
     // One career, every screen (POK-340): the page draws what localStorage holds, so a
     // career changed in another tab -- the wardrobe in one, the menu in the next -- is
     // drawn here the moment it lands, rather than on whatever this tab painted last.
