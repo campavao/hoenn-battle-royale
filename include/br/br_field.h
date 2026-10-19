@@ -259,7 +259,7 @@ extern struct BrFieldShown gBrFieldShown;
 #define BR_OAM_HI_SIZE 64
 #define BR_OAM_HI_MARK 4
 #define BR_OAM_HI_LEFT 8
-extern u8 gBrOamHi[BR_OAM_HI_SIZE];
+extern u8 gBrOamHi[BR_OAM_HI_SIZE] ALIGNED(2);
 // sprite.c, BuildOamBuffer, once the OAM's own copy is held off: every entry unmarked.
 void BrField_OamClear(void);
 // sprite.c, as each OAM entry is written: the entry's true top-left is the sprite's own

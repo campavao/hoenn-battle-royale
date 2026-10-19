@@ -403,10 +403,10 @@ const struct BrFieldView gBrFieldViewWide =
 };
 
 EWRAM_DATA struct BrFieldShown gBrFieldShown = {0};
-EWRAM_DATA u8 gBrOamHi[BR_OAM_HI_SIZE] = {0};
+EWRAM_DATA u8 gBrOamHi[BR_OAM_HI_SIZE] ALIGNED(2) = {0};
 // Built with the OAM buffer. In IWRAM, which C-STYLE keeps for the engine, because EWRAM
 // has no room for both copies: 64 bytes of the stack's headroom (tools/br/ram-headroom.py).
-static u8 sOamHiNext[BR_OAM_HI_SIZE];
+static u8 sOamHiNext[BR_OAM_HI_SIZE] ALIGNED(2);
 static bool8 sOamMarking;
 // BrField_InObjectView's room, and the frame it was counted on.
 static u32 sRoomFrame;
