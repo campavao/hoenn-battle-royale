@@ -36,6 +36,9 @@ export interface TextField {
   value: string;
   /** In UTF-16 units, as a <textarea>'s maxLength counts. */
   max: number;
+  /** Held while what it says is on its way: read-only, not disabled, which would take the
+   *  focus and a phone's keyboard with it. */
+  readOnly?: boolean;
   onInput(text: string): void;
 }
 
@@ -191,7 +194,7 @@ export class Mirror {
         const box = el as HTMLTextAreaElement;
         if (box.value !== w.field.value) box.value = w.field.value;
         box.maxLength = w.field.max;
-        box.disabled = w.disabled === true;
+        box.readOnly = w.field.readOnly === true;
         box.setAttribute('aria-label', w.text);
         fields.set(el, w);
       } else if (w.onPress) {

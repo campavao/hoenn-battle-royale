@@ -11,8 +11,8 @@
 //   <dir>/play.json     what the page draws: sessions, installs, solo reports, bounces,
 //                       jank reports
 //   <dir>/stats.json    the newest heartbeat: who is on right now, peaks since deploy
-//   <dir>/feedback.json which players' notes are already Linear issues (POK-428):
-//                       hashes and deployment ids only, never a note's words
+//   <dir>/feedback.json which deployments were read for players' notes (POK-428):
+//                       deployment ids only, never anything a note said
 //
 // <dir> is PLAY_LOG_DIR (default `play-log`). The workflow checks the `play-log`
 // branch out there, so the every-fifteen-minutes commits never touch the code
@@ -253,11 +253,13 @@ export function parseLine(message, fallbackAt) {
 
 // --- feedback (POK-428) -----------------------------------------------------
 //
-// A player's note from the page's FEEDBACK screen. The repo is public, and so is this
-// workflow's log and the play-log branch, so a note's words go to exactly one place: a
-// Linear issue. What stays here is a hash of each note filed, so the next run (or a dead
-// deployment read in full) never files it twice. Without LINEAR_API_KEY nothing is read
-// for them at all, and they wait in Railway's log for the key to arrive.
+// A player's note from the page's FEEDBACK screen. The repo is public, and so are this
+// workflow's log and the play-log branch, so a note's words, and anything that could
+// confirm a guess at them, go to exactly one place: a Linear issue. The issue carries the
+// note's id, and Linear is asked for it before one is made, so a note read twice (an
+// overlapping window, a deployment read again in full, a run whose commit never landed)
+// is filed once. feedback.json keeps only which deployments were read for notes.
+// Without LINEAR_API_KEY nothing is filed, and the notes wait in Railway's log.
 
 export function parseFeedback(message, fallbackAt) {
   const stamp = message.match(/^(\d{4}-\d\d-\d\dT[\d:.]+Z) (.*)$/);
@@ -277,7 +279,8 @@ const WHERE = { menu: "the main menu", "match-solo": "a solo match", "match-quic
                 "match-host": "a hosted room", "match-daily": "the daily game", "match-join": "a room",
                 "match-watch": "watching a match" };
 
-/** The issue a note becomes. Its first words are the title. */
+/** The issue a note becomes. Its first words are the title; its last line, the id
+ *  Linear is searched for before the next one is made. */
 export function issueFor(note) {
   const words = Array.from(note.text);
   const title = "Player feedback: " + (words.length > 60 ? words.slice(0, 60).join("").trimEnd() + "…" : note.text);
@@ -290,77 +293,88 @@ export function issueFor(note) {
     `- Sent: ${note.t}`,
     "",
     "Sent from the in-game FEEDBACK screen and filed by play-log.yml (POK-428).",
+    `feedback-id: ${note.id}`,
   ].join("\n");
   return { title, description };
 }
 
-async function createIssue(key, note) {
-  const { title, description } = issueFor(note);
+async function linear(key, query, variables) {
   const r = await fetch(LINEAR_API, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: key },
-    body: JSON.stringify({
-      query: `mutation($input: IssueCreateInput!) {
-                issueCreate(input: $input) { success issue { identifier } }
-              }`,
-      variables: { input: { teamId: LINEAR_TEAM, projectId: LINEAR_PROJECT, labelIds: [LINEAR_LABEL],
-                            title, description } }
-    })
+    body: JSON.stringify({ query, variables })
   });
   const body = await r.json().catch(() => ({}));
   // Linear's errors can quote the input, which is the note: only the status is printed.
-  if (!r.ok || body.errors || !body.data?.issueCreate?.success)
-    throw new Error(`Linear refused an issue (${r.status})`);
-  return body.data.issueCreate.issue.identifier;
+  if (!r.ok || body.errors) throw new Error(`Linear answered ${r.status}`);
+  return body.data;
 }
 
-// `notes` are the ones the run's own read saw; a deployment this has never read for
-// notes (every one, the first time there is a key) is read again in full.
-async function fileFeedback(deps, live, now, notes) {
-  const key = process.env.LINEAR_API_KEY;
-  if (!key) {
-    if (notes.length) console.log(`::notice::${notes.length} feedback notes and no LINEAR_API_KEY; they wait in the relay's log`);
-    return;
-  }
-  const before = readJson(FEEDBACK, { swept: {}, filed: [] });
-  const swept = { ...before.swept };
-  const filed = new Set(before.filed);
+/** Linear as fileFeedback uses it: whether a note's issue exists, and making one. */
+export function linearFiler(key) {
+  return {
+    async has(id) {
+      const data = await linear(key,
+        `query($id: String!) { issues(first: 1, filter: { description: { contains: $id } }) { nodes { identifier } } }`,
+        { id: `feedback-id: ${id}` });
+      return (data?.issues?.nodes || []).length > 0;
+    },
+    async create(note) {
+      const data = await linear(key,
+        `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { identifier } } }`,
+        { input: { teamId: LINEAR_TEAM, projectId: LINEAR_PROJECT, labelIds: [LINEAR_LABEL], ...issueFor(note) } });
+      if (!data?.issueCreate?.success) throw new Error("Linear made no issue");
+      return data.issueCreate.issue.identifier;
+    }
+  };
+}
+
+/** One line of the relay's log, as the run reads it: a note, or the heartbeat and the
+ *  event it is. A note is nothing else, whatever its words look like -- a note that
+ *  reads like a heartbeat must not become the public stats.json. */
+export function readLine(message, timestamp) {
+  const note = parseFeedback(message, timestamp);
+  if (note) return { note };
+  return { heartbeat: parseHeartbeat(message), ev: parseLine(message, timestamp) };
+}
+
+// Each deployment is read for notes in full once it has stopped: its last minutes were
+// logged after the run that last saw it live. While it is live, the run's own read
+// (`notes`, from just before the last event) covers it. `state.swept[id]` is "live"
+// while that holds and true once the dead process has been read. `read` is lines();
+// `filer` is linearFiler(), or a test's.
+export async function fileFeedback({ deps, live, now, notes, state, read, filer, log = console.log }) {
+  const swept = { ...state.swept };
   const cutoff = new Date(now.getTime() - SWEEP_DAYS * 86400e3);
   const all = [...notes];
   for (const d of deps) {
-    if (new Date(d.createdAt) < cutoff || swept[d.id]) continue;
-    for (const l of await lines(d.id, new Date(d.createdAt), now)) {
+    if (new Date(d.createdAt) < cutoff) continue;
+    const isLive = live && d.id === live.id;
+    if (swept[d.id] === true || (isLive && swept[d.id] === "live")) continue;
+    for (const l of await read(d.id, new Date(d.createdAt), now)) {
       const note = parseFeedback(l.message, l.timestamp);
       if (note) all.push(note);
     }
-    swept[d.id] = true;
+    swept[d.id] = isLive ? "live" : true;
   }
+  const done = new Set();
   let made = 0;
-  let failed = false;
   for (const note of all) {
-    if (filed.has(note.id)) continue;
-    try {
-      console.log(`feedback ${note.id} -> ${await createIssue(key, note)}`);
-      filed.add(note.id);
-      made += 1;
-    } catch (err) {
-      console.log(`::warning::feedback ${note.id} not filed: ${err.message}`);
-      failed = true;
-    }
+    if (done.has(note.id)) continue;
+    done.add(note.id);
+    if (await filer.has(note.id)) continue;
+    log(`feedback ${note.id} -> ${await filer.create(note)}`);
+    made += 1;
   }
-  // A note that did not make it is read again next run: every deployment in full, since
-  // the run's own read window will have moved past it. `filed` keeps the rest from
-  // being filed twice.
-  const after = { swept: failed ? {} : swept, filed: [...filed] };
-  if (JSON.stringify(after) !== JSON.stringify(before)) writeFileSync(FEEDBACK, JSON.stringify(after, null, 1) + "\n");
-  console.log(`${made} feedback notes filed in Linear`);
+  log(`${made} feedback notes filed in Linear`);
+  return { swept };
 }
 
 // The heartbeat, which is not an event: it is a snapshot, and only the newest one
 // matters. Counters are in-process and reset on every deploy, so `peak` is always
 // "since deployedAt", never all-time -- the page says so.
 export function parseHeartbeat(message) {
-  if (!/\bpeak \d+ rooms/.test(message)) return null;
+  if (!/^(\S+Z )?rooms \d+\/\d+ conns \d+\/\d+ \|.*\bpeak \d+ rooms/.test(message)) return null;
   const one = (re, ...names) => {
     const m = message.match(re);
     if (!m) return {};
@@ -624,13 +638,12 @@ async function main() {
     const got = await lines(d.id, start, now);
     let fresh = 0;
     for (const l of got) {
-      if (isLive) {
-        const hb = parseHeartbeat(l.message);
-        if (hb && (!heartbeat || hb.at > heartbeat.at)) heartbeat = hb;
+      const { note, heartbeat: hb, ev } = readLine(l.message, l.timestamp);
+      if (note) {
+        notes.push(note);
+        continue;
       }
-      const note = parseFeedback(l.message, l.timestamp);
-      if (note) notes.push(note);
-      const ev = parseLine(l.message, l.timestamp);
+      if (isLive && hb && (!heartbeat || hb.at > heartbeat.at)) heartbeat = hb;
       if (!ev) continue;
       ev.deploy = d.id.slice(0, 8);
       const k = key(ev);
@@ -689,7 +702,27 @@ async function main() {
   console.log(`${added} new events; ${play.sessions.length} sessions, ` +
               `${play.installs.length} installs, ${play.solo.length} solo reports`);
 
-  await fileFeedback(deps, live, now, notes);
+  const key = process.env.LINEAR_API_KEY;
+  if (!key) {
+    if (notes.length) console.log(`::notice::${notes.length} feedback notes and no LINEAR_API_KEY; they wait in the relay's log`);
+    return;
+  }
+  // A note not filed this run is filed by a later one (swept is only written when the
+  // pass got through), and a Linear outage is no reason to lose the play log's commit.
+  try {
+    const before = readJson(FEEDBACK, { swept: {} });
+    const after = await fileFeedback({ deps, live, now, notes, state: before, read: lines, filer: linearFiler(key) });
+    if (JSON.stringify(after) !== JSON.stringify(before)) writeFileSync(FEEDBACK, JSON.stringify(after, null, 1) + "\n");
+  } catch (err) {
+    // The note may have come from this run's own window, which the next run's has moved
+    // past: the live deployment is read in full again.
+    console.log(`::warning::feedback not filed this run: ${err.message}`);
+    const before = readJson(FEEDBACK, { swept: {} });
+    if (live && before.swept[live.id] !== undefined) {
+      const { [live.id]: _gone, ...rest } = before.swept;
+      writeFileSync(FEEDBACK, JSON.stringify({ swept: rest }, null, 1) + "\n");
+    }
+  }
 }
 
 if (process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("play-log.mjs")) {

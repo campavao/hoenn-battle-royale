@@ -5,12 +5,15 @@
 import { FEEDBACK_MAX, cleanNote, type FeedbackResult } from '../net/feedback';
 import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, TEXT_RED, type TextColor, fitText, wrapText } from './emerald';
 import { ROW_H, W, paintButtons, paintTitle } from './screens';
-import type { DrawnScreen, Painted, Widget } from './stage';
+import type { DrawnScreen, Look, Painted, Widget } from './stage';
 
 /** Where a send is: not yet, on its way, or how it ended. */
 export type FeedbackState = 'typing' | 'sending' | FeedbackResult;
 
 export interface FeedbackModel {
+  /** Over the game or beside it in a match, as the sheet it came from is, so the game
+   *  stays in view while somebody types; the menu's own screen otherwise. */
+  look?: Look;
   text: string;
   state: FeedbackState;
   onInput(text: string): void;
@@ -33,7 +36,8 @@ export function feedbackLine(text: string, state: FeedbackState): { text: string
     case 'failed':
       return { text: "Couldn't reach the server. Try again.", color: TEXT_RED };
     default:
-      return { text: `${Array.from(cleanNote(text)).length}/${FEEDBACK_MAX}`, color: TEXT_GRAY };
+      // The box's own count, which is where it stops taking letters.
+      return { text: `${text.length}/${FEEDBACK_MAX}`, color: TEXT_GRAY };
   }
 }
 
@@ -48,17 +52,20 @@ export const FEEDBACK_TEXT_ID = 'feedback-text';
 
 export function feedbackScreen(model: () => FeedbackModel): DrawnScreen {
   return {
+    look: () => model().look ?? 'full',
     back() {
       model().onBack();
     },
-    paint(c): Painted {
+    paint(c, h): Painted {
       const m = model();
       const widgets: Widget[] = [];
+      // Over the game, the game dimmed, as the sheet does: it is still running under this.
+      if (m.look === 'overlay') c.fillRect({ x: -c.origin, y: 0, w: c.width, h }, '#000', 0.6);
       let y = 4;
       paintTitle(c, 'FEEDBACK', y);
       widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: 'FEEDBACK', id: 'feedback-title', cursor: null });
       y += 20;
-      const intro = 'A bug, an idea, anything. It goes straight to the developers.';
+      const intro = 'A bug or an idea? Tell us here.';
       const introRows = wrapText(intro, W - 8);
       introRows.forEach((row, i) => c.drawTextCentred(row, W / 2, y + i * ROW_H, TEXT_GRAY));
       widgets.push({ rect: { x: 0, y, w: W, h: introRows.length * ROW_H }, text: intro, cursor: null });
@@ -73,11 +80,10 @@ export function feedbackScreen(model: () => FeedbackModel): DrawnScreen {
         rect: { x: 8, y: y + 4, w: W - 16, h: frame.h - 8 },
         text: 'Your feedback',
         id: FEEDBACK_TEXT_ID,
-        disabled: sending,
-        field: { value: m.text, max: FEEDBACK_MAX, onInput: m.onInput },
+        field: { value: m.text, max: FEEDBACK_MAX, readOnly: sending, onInput: m.onInput },
         // A pad or the keyboard's A puts the caret in it, as a tap does.
         onPress: () => globalThis.document?.getElementById(FEEDBACK_TEXT_ID)?.focus(),
-        cursor: { x: 2, y: y + 8 },
+        cursor: { x: 4, y: y + 8 },
       });
       y += frame.h + 2;
 

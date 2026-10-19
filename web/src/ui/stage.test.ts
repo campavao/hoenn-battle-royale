@@ -12,20 +12,21 @@ class FakeNode {
   type = '';
   textContent = '';
   value = '';
+  readOnly = false;
   maxLength = -1;
   attrs: Record<string, string> = {};
   style: Record<string, string> = {};
   parentNode: FakeNode | null = null;
   childNodes: FakeNode[] = [];
   readonly ownerDocument = fakeDocument;
-  private listeners: ((ev: { target: FakeNode }) => void)[] = [];
+  private listeners: { type: string; fn: (ev: { target: FakeNode }) => void }[] = [];
 
   constructor(tag: string) {
     this.tagName = tag.toUpperCase();
   }
 
-  addEventListener(_type: 'click' | 'input', fn: (ev: { target: FakeNode }) => void): void {
-    this.listeners.push(fn);
+  addEventListener(type: 'click' | 'input', fn: (ev: { target: FakeNode }) => void): void {
+    this.listeners.push({ type, fn });
   }
 
   setAttribute(name: string, value: string): void {
@@ -61,7 +62,17 @@ class FakeNode {
   }
 
   click(): void {
-    for (let n: FakeNode | null = this; n; n = n.parentNode) for (const fn of n.listeners) fn({ target: this });
+    this.dispatch('click');
+  }
+
+  /** What typing does: the value changes, then an input event bubbles up. */
+  typeIn(value: string): void {
+    this.value = value;
+    this.dispatch('input');
+  }
+
+  private dispatch(type: string): void {
+    for (let n: FakeNode | null = this; n; n = n.parentNode) for (const l of n.listeners) if (l.type === type) l.fn({ target: this });
   }
 
   /** Every element under this one, depth first. */
@@ -77,9 +88,9 @@ class FakeNode {
 
 const fakeDocument = { createElement: (tag: string) => new FakeNode(tag) };
 
-function mirror() {
+function mirror(typed: () => void = () => {}) {
   const hits = new FakeNode('div');
-  const m = new Mirror(hits as unknown as HTMLElement, (w) => w.onPress?.());
+  const m = new Mirror(hits as unknown as HTMLElement, (w) => w.onPress?.(), typed);
   const sync = (p: Painted) => m.sync(p, 2, 0);
   const byId = (id: string) => hits.all().find((n) => n.id === id)!;
   const byText = (text: string) => hits.all().filter((n) => n.textContent === text);
@@ -206,5 +217,27 @@ describe('a field in the copy (POK-428)', () => {
     // the screen emptying it after a send does
     sync(paint(''));
     expect(box.value).toBe('');
+  });
+
+  it('hands what is typed to the field painted now, then asks for a repaint', () => {
+    let repaints = 0;
+    const { sync, byId } = mirror(() => repaints++);
+    const typed: string[] = [];
+    const paint = (n: number): Painted => ({
+      widgets: [{ rect: at(40), text: 'Your feedback', id: 'feedback-text', field: { value: '', max: 1000, onInput: (t) => typed.push(`${n}:${t}`) } }],
+    });
+    sync(paint(1));
+    sync(paint(2));
+    (byId('feedback-text') as unknown as { typeIn(v: string): void }).typeIn('lag');
+    expect(typed).toEqual(['2:lag']);
+    expect(repaints).toBe(1);
+  });
+
+  it('is held read-only, never disabled, while the note is on its way', () => {
+    const { sync, byId } = mirror();
+    sync({ widgets: [{ rect: at(40), text: 'Your feedback', id: 'feedback-text', field: { value: 'hi', max: 1000, readOnly: true, onInput: () => {} } }] });
+    const box = byId('feedback-text') as unknown as { readOnly: boolean; disabled: boolean };
+    expect(box.readOnly).toBe(true);
+    expect(box.disabled).toBe(false);
   });
 });

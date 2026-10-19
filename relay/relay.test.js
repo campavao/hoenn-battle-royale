@@ -2530,3 +2530,43 @@ test("one address gets FEEDBACK_PER_HOUR notes, then busy", async () => {
     a.end(); b.end();
   });
 });
+
+test("an IPv6 /64 is one address for notes, and the whole relay has a ceiling too", async () => {
+  const { FEEDBACK_PER_HOUR, FEEDBACK_PER_HOUR_ALL, feedbackBucket } = await import("./server.js");
+  assert.equal(feedbackBucket("2001:db8:1:2:aaaa::1"), "2001:db8:1:2");
+  assert.equal(feedbackBucket("2001:db8:1:2:bbbb::9"), "2001:db8:1:2");
+  assert.equal(feedbackBucket("203.0.113.7"), "203.0.113.7");
+  assert.equal(feedbackBucket("::ffff:203.0.113.7"), "::ffff:203.0.113.7");
+
+  const relay = createRelay({ trustProxy: true });
+  const addr = await relay.listen(0, "127.0.0.1");
+  try {
+    let sent = 0;
+    for (let i = 0; sent < FEEDBACK_PER_HOUR_ALL; i++) {
+      const c = await connect(addr.port, { "X-Real-IP": `203.0.113.${i + 1}` });
+      for (let j = 0; j < FEEDBACK_PER_HOUR && sent < FEEDBACK_PER_HOUR_ALL; j++, sent++) {
+        c.send({ type: "feedback", text: `note ${sent}` });
+        assert.deepEqual(await c.next(), { type: "feedback_ok" });
+      }
+      c.end();
+    }
+    const fresh = await connect(addr.port, { "X-Real-IP": "198.51.100.200" });
+    fresh.send({ type: "feedback", text: "a new address, but the relay is full up" });
+    assert.deepEqual(await fresh.next(), { type: "feedback_error", reason: "busy" });
+    fresh.end();
+  } finally {
+    await relay.close();
+  }
+});
+
+test("a note from a page in a room is filed under the room it is in, not the one it names", async () => {
+  await withLoggedRelay(async (port, lines) => {
+    const host = await connect(port);
+    host.send({ type: "host_room", name: "HOST" });
+    const code = (await host.until("room_hosted")).code;
+    host.send({ type: "feedback", text: "from inside", room: "ZZZZZZ" });
+    await host.until("feedback_ok");
+    assert.ok(lines.some((l) => l.startsWith(`feedback ${code} | `)), "the relay's own word for the room");
+    host.end();
+  });
+});

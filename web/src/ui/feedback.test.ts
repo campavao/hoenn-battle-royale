@@ -49,7 +49,7 @@ describe('the FEEDBACK screen', () => {
   it('holds SEND and the box while a note is on its way', () => {
     const { byId } = paint(model({ text: 'hi', state: 'sending' }));
     expect(byId('feedback-send').disabled).toBe(true);
-    expect(byId(FEEDBACK_TEXT_ID).disabled).toBe(true);
+    expect(byId(FEEDBACK_TEXT_ID).field?.readOnly, 'held, not disabled: the keyboard stays up').toBe(true);
     expect(byId('feedback-note').text).toBe('Sending…');
   });
 
@@ -57,7 +57,9 @@ describe('the FEEDBACK screen', () => {
     expect(feedbackLine('', 'sent')).toEqual({ text: 'Sent. Thank you!', color: TEXT_BLUE });
     expect(feedbackLine('x', 'failed')).toEqual({ text: "Couldn't reach the server. Try again.", color: TEXT_RED });
     expect(feedbackLine('x', 'busy').color).toBe(TEXT_RED);
-    expect(feedbackLine(' two  words ', 'typing').text).toBe(`9/${FEEDBACK_MAX}`);
+    // the box's own count (UTF-16, as maxLength stops it), not the cleaned note's
+    expect(feedbackLine(' two  words ', 'typing').text).toBe(`12/${FEEDBACK_MAX}`);
+    expect(feedbackLine('😀', 'typing').text).toBe(`2/${FEEDBACK_MAX}`);
   });
 
   it('SEND, BACK and B do what the model says', () => {
@@ -69,6 +71,14 @@ describe('the FEEDBACK screen', () => {
     screen.back?.();
     expect(m.onSend).toHaveBeenCalledTimes(1);
     expect(m.onBack).toHaveBeenCalledTimes(2);
+  });
+
+  it('takes the look it is given, dimming the game under it as the sheet does', () => {
+    expect(feedbackScreen(() => model()).look?.()).toBe('full');
+    expect(feedbackScreen(() => model({ look: 'dock' })).look?.()).toBe('dock');
+    const over = paint(model({ look: 'overlay' }));
+    expect(over.fills[0]).toMatchObject({ color: '#000', alpha: 0.6 });
+    expect(paint(model()).fills.filter((f) => f.color === '#000')).toEqual([]);
   });
 
   it('fits a phone held upright with the keyboard up: SEND inside 240 rows', () => {

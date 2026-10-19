@@ -267,7 +267,8 @@ test("a feedback line is a note, never an event", async () => {
       "- From: MAY, in a solo match (room ABCDEF)",
       "- Build: patch 0.3.15 · rom 7562da8",
       "- Sent: 2026-10-19T15:00:00.000Z", "",
-      "Sent from the in-game FEEDBACK screen and filed by play-log.yml (POK-428)."
+      "Sent from the in-game FEEDBACK screen and filed by play-log.yml (POK-428).",
+      `feedback-id: ${note.id}`
     ].join("\n")
   });
 });
@@ -282,4 +283,61 @@ test("a long note's title is its first sixty characters; junk is not a note", as
   assert.equal(parseFeedback("2026-10-19T15:00:00.000Z feedback - | {not json}", "x"), null);
   assert.equal(parseFeedback('2026-10-19T15:00:00.000Z feedback - | {"text":""}', "x"), null);
   assert.equal(parseFeedback("2026-10-19T15:00:00.000Z stat abc v1 | solo +0 | since 2026-10-19", "x"), null);
+});
+
+test("a note that reads like a heartbeat is a note, and never the public stats", async () => {
+  const { readLine } = await import("./play-log.mjs");
+  const text = "rooms 99/99 conns 999/999 | sent leak@example.com in 2 lines | peak 50 rooms 900 conns";
+  const line = `2026-10-19T15:00:00.000Z feedback - | ${JSON.stringify({ text })}`;
+  const read = readLine(line, "x");
+  assert.equal(read.note.text, text);
+  assert.equal(read.heartbeat, undefined);
+  assert.equal(read.ev, undefined);
+  // and a heartbeat is only ever the relay's own line
+  assert.equal(parseHeartbeat("2026-10-19T15:00:00.000Z room ABCDEF: rooms 1/2 conns 1/2 | peak 1 rooms 1 conns"), null);
+  assert.ok(readLine(HEARTBEAT, "x").heartbeat);
+});
+
+test("fileFeedback files each note once, reads a stopped deployment's tail, and prints no words", async () => {
+  const { fileFeedback, parseFeedback } = await import("./play-log.mjs");
+  const line = (t, text) => ({ message: `${t} feedback - | ${JSON.stringify({ text, name: "MAY" })}`, timestamp: t });
+  const logs = {
+    old: [line("2026-10-19T10:00:00.000Z", "secret words one")],
+    cur: [line("2026-10-19T12:00:00.000Z", "secret words two"), line("2026-10-19T12:59:00.000Z", "said as it went down")],
+  };
+  const issues = new Map();
+  const filer = {
+    has: async (id) => issues.has(id),
+    create: async (note) => { issues.set(note.id, note.text); return `POK-${900 + issues.size}`; },
+  };
+  const reads = [];
+  const read = async (id) => { reads.push(id); return logs[id]; };
+  const printed = [];
+  const log = (s) => printed.push(s);
+  const now = new Date("2026-10-19T13:00:00.000Z");
+  const dep = (id, status) => ({ id, status, createdAt: "2026-10-19T09:00:00.000Z" });
+
+  // the first run with a key: every deployment in full, the live one marked as such
+  let state = await fileFeedback({ deps: [dep("cur", "SUCCESS"), dep("old", "REMOVED")], live: dep("cur", "SUCCESS"), now,
+    notes: [parseFeedback(logs.cur[0].message, "x")], state: { swept: {} }, read, filer, log });
+  assert.deepEqual(state, { swept: { cur: "live", old: true } });
+  assert.deepEqual([...issues.values()].sort(), ["said as it went down", "secret words one", "secret words two"]);
+
+  // the next run: the live one is the run's own read; nothing filed twice
+  reads.length = 0;
+  state = await fileFeedback({ deps: [dep("cur", "SUCCESS"), dep("old", "REMOVED")], live: dep("cur", "SUCCESS"), now,
+    notes: [parseFeedback(logs.cur[1].message, "x")], state, read, filer, log });
+  assert.deepEqual(reads, []);
+  assert.equal(issues.size, 3);
+
+  // a redeploy: the stopped process is read once more in full, for what it said last
+  logs.cur.push(line("2026-10-19T13:00:00.000Z", "the last thing before the deploy"));
+  state = await fileFeedback({ deps: [dep("new", "SUCCESS"), dep("cur", "REMOVED"), dep("old", "REMOVED")], live: dep("new", "SUCCESS"), now,
+    notes: [], state, read: async (id) => (reads.push(id), logs[id] ?? []), filer, log });
+  assert.deepEqual(reads, ["new", "cur"]);
+  assert.deepEqual(state, { swept: { new: "live", cur: true, old: true } });
+  assert.equal(issues.size, 4);
+
+  const out = printed.join("\n");
+  for (const words of ["secret", "said as", "last thing", "MAY"]) assert.ok(!out.includes(words), `"${words}" never printed`);
 });

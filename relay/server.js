@@ -77,7 +77,8 @@
 //                                      play-log.yml to file in Linear. Needs
 //                                      no room: the page opens a socket for
 //                                      it. At most FEEDBACK_PER_HOUR from
-//                                      one address
+//                                      one address (an IPv6 /64), and
+//                                      FEEDBACK_PER_HOUR_ALL in all
 //   {type:"lock_room", locked, bots?}  host only: refuse new joiners (a match
 //                                      in progress).  Logged as one `match`
 //                                      line at the lock and one at the
@@ -173,8 +174,17 @@ export { cleanMotd, cleanPass, clientAddress, dailySecondsUntil, limitsFromEnv,
          MAX_SEAT, originAllowed, parseDaily, parseOrigins };
 
 // Each note becomes a Linear issue somebody reads, so one address gets a few
-// an hour: plenty for a player, and a ceiling on a script.
+// an hour, plenty for a player, and the whole relay a few dozen: a ceiling on
+// a script that walks addresses.
 export const FEEDBACK_PER_HOUR = 6;
+export const FEEDBACK_PER_HOUR_ALL = 30;
+
+// The address a note is counted against: an IPv6 host has a /64 to itself,
+// so that is one address here.
+export function feedbackBucket(ip) {
+  return ip.includes(":") && !ip.startsWith("::ffff:")
+    ? ip.split(":").slice(0, 4).join(":") : ip;
+}
 
 export const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 export const CODE_LENGTH = 6;
@@ -910,12 +920,15 @@ export function createRelay(options = {}) {
           const fresh = times.filter((t) => now - t < 3600e3);
           if (fresh.length) feedbackAt.set(ip, fresh); else feedbackAt.delete(ip);
         }
-        const mine = feedbackAt.get(conn.ip) || [];
-        if (mine.length >= FEEDBACK_PER_HOUR) {
+        const bucket = feedbackBucket(conn.ip);
+        const mine = feedbackAt.get(bucket) || [];
+        let all = 0;
+        for (const times of feedbackAt.values()) all += times.length;
+        if (mine.length >= FEEDBACK_PER_HOUR || all >= FEEDBACK_PER_HOUR_ALL) {
           conn.send({ type: "feedback_error", reason: "busy" });
           return;
         }
-        feedbackAt.set(conn.ip, [...mine, now]);
+        feedbackAt.set(bucket, [...mine, now]);
         const said = typeof msg.room === "string" && msg.room.length === CODE_LENGTH
           && [...msg.room].every((ch) => CODE_ALPHABET.includes(ch)) ? msg.room : null;
         const code = conn.room ? conn.room.code : said || "-";

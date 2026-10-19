@@ -51,7 +51,7 @@ import {
   waitsOnHost,
 } from './match/room';
 import { AwayDoor } from './match/away';
-import { Stage, type DrawnScreen } from './ui/stage';
+import { Stage, type DrawnScreen, type Look } from './ui/stage';
 import { ParadeHold, ReplayHold } from './ui/results-hold';
 import type { ResultsModel } from './ui/results';
 import { FrameMeter, PerfProbe, frameLine, perfLines } from './ui/fps';
@@ -432,7 +432,7 @@ function makeSheet(part: () => SheetPart, about: () => FeedbackAbout): DrawnScre
     onRemap: () => settings.remap(),
     onResetPad: () => settings.resetPad(),
     onForget: () => settings.forget(),
-    onFeedback: () => theStage().push(feedbackFor(about)),
+    onFeedback: () => theStage().push(feedbackFor(about, () => (desktop() ? 'dock' : 'overlay'))),
     pad:
       padPrefs && !desktop()
         ? {
@@ -457,28 +457,32 @@ interface FeedbackAbout {
 }
 
 /** What was typed into FEEDBACK and not sent yet: kept across a BACK, so a note started
- *  in a match and left for the fight is still there afterwards. */
+ *  in a match and left for the fight is still there afterwards. The send's state is the
+ *  page's too, so a BACK and a reopen mid-send cannot send it again. */
 let feedbackDraft = '';
+let feedbackState: FeedbackState = 'typing';
 
-/** The FEEDBACK screen (POK-428), pushed over the menu or the sheet. */
-function feedbackFor(about: () => FeedbackAbout): DrawnScreen {
-  let state: FeedbackState = 'typing';
+/** The FEEDBACK screen (POK-428), pushed over the menu or the sheet; `look` is the
+ *  sheet's, in a match. */
+function feedbackFor(about: () => FeedbackAbout, look?: () => Look): DrawnScreen {
+  if (feedbackState !== 'sending') feedbackState = 'typing';
   return feedbackScreen(() => ({
+    look: look?.(),
     text: feedbackDraft,
-    state,
+    state: feedbackState,
     onInput: (text) => {
       feedbackDraft = text;
-      if (state !== 'sending') state = 'typing';
+      if (feedbackState !== 'sending') feedbackState = 'typing';
     },
     onSend: () => {
       const text = cleanNote(feedbackDraft);
-      if (!text || state === 'sending') return;
-      state = 'sending';
+      if (!text || feedbackState === 'sending') return;
+      feedbackState = 'sending';
       const { where, room } = about();
       const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
       void sendFeedback(relayUrl, { type: 'feedback', text, v: versionLine, where, name: careerName(), ...(room ? { room } : {}) }).then(
         (result) => {
-          state = result;
+          feedbackState = result;
           if (result === 'sent' && cleanNote(feedbackDraft) === text) feedbackDraft = '';
           stage?.redraw();
         },
