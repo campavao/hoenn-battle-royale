@@ -30,6 +30,7 @@ import { type BotVoice, LINES, lineAt } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { ringLabel, winLabel } from './match/clock';
+import { LEFT_MATCH_NOTE, noteInMatch, noteOutOfMatch, reloadedMidMatch } from './match/left';
 import { Curtain } from './match/curtain';
 import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import { cleanNote, sendFeedback } from './net/feedback';
@@ -2260,6 +2261,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     {
       decided: (line) => {
         career = line;
+        // Over: a reload from the results is an ordinary one, back into the room.
+        noteOutOfMatch();
         drawResults();
       },
       // The champion's team under the results, as the room draws it (POK-331 #26): our
@@ -2430,6 +2433,7 @@ function loadCareerFile(then: (note: string) => void): void {
 /** Drops the room out of the URL and reloads, which lands on the lobby (parseRoomHash
  *  returns null with no room in the hash). The way out of anywhere. */
 function backToLobby(): void {
+  noteOutOfMatch(); // left on purpose: the lobby has nothing to tell them
   location.hash = withoutRoom(location.hash);
   location.reload();
 }
@@ -2662,6 +2666,7 @@ function wireRoom(
   };
   const roomScreenView = roomScreen(roomModel);
   const showRoomScreen = () => {
+    noteOutOfMatch();
     room.started = false;
     room.card = null;
     stage.show(roomScreenView);
@@ -2672,6 +2677,8 @@ function wireRoom(
     countdown.cancel();
     if (room.started) return;
     room.started = true;
+    // A reload from here on is one out of the match (POK-433, match/left.ts).
+    noteInMatch(hash.code);
     // The town the ROM stands in fades out under black, not in view (POK-346).
     holdCurtain(emu, symbols);
     // ...and the passcode entry over it, should a count run out on a host still typing.
@@ -3728,7 +3735,7 @@ const LOBBY_CONNECT_MS = 6000;
  *  having closed the browsing socket first -- SOLO VS BOTS must reach the ROM with no
  *  connection open, which is the whole point of it. `version` is the tab's, which the
  *  list is asked with: its DAILY row is our own build's daily (POK-331 #14). */
-function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomHash> {
+function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''): Promise<RoomHash> {
   showScreen('lobby');
   const stage = theStage();
   const relay = new RelayClient();
@@ -3740,8 +3747,8 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
   const shownLink = (): Link => (roomsRefused ? 'down' : link);
   let online = false;
   let rooms: RoomListing[] = [];
-  /** The line under the main menu: a rejected code, or nothing. */
-  let note = '';
+  /** The line under the main menu: a rejected code, a match a reload left, or nothing. */
+  let note = firstNote;
   /** The line under the trainer's rows: what became of a career file. */
   let trainerNote = '';
 
@@ -4487,9 +4494,18 @@ async function main(): Promise<void> {
       }
     }
   }
-  const fromHash = parseRoomHash();
+  let fromHash = parseRoomHash();
+  // A reload out of a running match goes to the menu and says so (POK-433): the match
+  // was this tab's and went with it (match/left.ts says why), so the room's URL would
+  // only land on a room screen waiting for a host that has stopped.
+  let lobbyNote = '';
+  if (reloadedMidMatch() && fromHash && fromHash.mode !== 'solo') {
+    history.replaceState(null, '', `#${withoutRoom(location.hash)}`);
+    fromHash = null;
+    lobbyNote = LEFT_MATCH_NOTE;
+  }
   let roomHash = fromHash;
-  if (!roomHash) roomHash = await runLobby({ patch, protocol });
+  if (!roomHash) roomHash = await runLobby({ patch, protocol }, lobbyNote);
   if (roomsRefused && roomHash.mode !== 'solo') return refuseRoom(roomsRefused);
   const bootMode = bootModeFor(roomHash.mode);
   // Solo's seed goes into the ROM before its boot (POK-327): BR_BOOT_SAFARI deals the
