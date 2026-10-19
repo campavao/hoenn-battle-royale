@@ -24,6 +24,7 @@ export const FILE_SECONDS = {
   'boot.spec.ts': 4,
   'bots.spec.ts': 3,
   'curtain.spec.ts': 11,
+  'feedback.spec.ts': 40, // estimated: a menu and one solo boot
   'lobby.spec.ts': 103,
   'match.spec.ts': 198,
   'migration.spec.ts': 111,
