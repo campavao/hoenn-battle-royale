@@ -18,12 +18,12 @@ expect u8 gPlayerPartyCount 1
 pokebytes gDecompressionBuffer 00 18 61 02 00 B0 0C 00 0B 00 84 01 1E 01 B0 0E 00 0B 00 86 01 1E 01 02 B0 0D 00 0A 00 03 13 00 02 19 00 02 14 00 03 00 00 00 00
 mailsend gBrMailbox 11 gDecompressionBuffer 43
 wait 30
-expect u8 gBrLoot+0xA1 3
+expect u8 gBrLoot+0xA1 4
 shot fossils
 tap A
 wait 90
 shot taken
 expectmsg 10 u16 1 0xB000
 expect u8 gPlayerPartyCount 2
-expect u8 gBrLoot+0xA1 2
+expect u8 gBrLoot+0xA1 3
 say story mirage ok

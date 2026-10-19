@@ -16,6 +16,7 @@ import {
   SUPPLIES,
   TraderClaims,
   homeClaimOf,
+  isHomeOrClaim,
   homeKey,
   claimKey,
   claimOf,
@@ -177,5 +178,14 @@ describe('somebody at home asks the host first too (POK-379)', () => {
     claims.note({ t: 'pickup', seat: 6, key: 0x8c05 });
     expect(claims.answer({ t: 'pickup', seat: 2, key: 0x8c45 })?.reply.seat).toBe(6);
     expect(claims.answer({ t: 'pickup', seat: 2, key: 0x8c21 }), 'only an ask is answered').toBeNull();
+  });
+  it("a big floor's trader (POK-413) is the byte's upper half, and asked for the same way", () => {
+    expect(homeKey(0x80 | 0x12)).toBe(0x8c92);
+    expect([homeClaimOf(0x8cd2), homeClaimOf(0x8cc0), homeClaimOf(0x8c92), homeClaimOf(0x8d92)]).toEqual([0x92, 0x80, undefined, undefined]);
+    expect([isHomeOrClaim(0x8c92), isHomeOrClaim(0x8cd2), isHomeOrClaim(0x8d5a), isHomeOrClaim(0x8bff)]).toEqual([true, true, false, false]);
+    const claims = new TraderClaims(() => false);
+    expect(claims.answer({ t: 'pickup', seat: 3, key: 0x8cd2 })).toEqual({ reply: { t: 'pickup', seat: 3, key: 0x8c92 }, granted: true });
+    claims.note({ t: 'pickup', seat: 5, key: 0x8c86 });
+    expect(claims.answer({ t: 'pickup', seat: 3, key: 0x8cc6 })?.reply).toEqual({ t: 'pickup', seat: 5, key: 0x8c86 });
   });
 });
