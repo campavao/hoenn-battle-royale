@@ -1,12 +1,37 @@
 {
- "readAt": "2026-10-18T23:07:49.141Z",
+ "readAt": "2026-10-19T01:11:35.168Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
+   "code": "K8DRSM",
+   "at": "2026-10-19T00:02:20.619Z",
+   "end": "2026-10-19T00:08:43.633Z",
+   "secs": 383,
+   "door": "open",
+   "mode": "quick",
+   "humans": 1,
+   "together": 1,
+   "spectators": 0,
+   "matches": 1,
+   "joins": [],
+   "versions": [],
+   "installs": [],
+   "played": [
+    {
+     "t": "2026-10-19T00:02:30.682Z",
+     "mode": "quick",
+     "trainers": 1,
+     "watching": 0,
+     "secs": null
+    }
+   ],
+   "exact": true
+  },
+  {
    "code": "XMHP72",
    "at": "2026-10-18T23:02:28.338Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-10-18T23:12:41.351Z",
+   "secs": 613,
    "door": "open",
    "mode": "quick",
    "humans": 1,
@@ -25,7 +50,6 @@
      "secs": null
     }
    ],
-   "live": true,
    "exact": true
   },
   {
@@ -2329,13 +2353,13 @@
   {
    "id": "6144a717",
    "first": "2026-10-17T02:37:29.310Z",
-   "last": "2026-10-18T20:12:54.472Z",
+   "last": "2026-10-19T00:02:20.533Z",
    "since": "2026-10-15",
    "versions": [
     "2"
    ],
    "solo": 1,
-   "checkins": 6,
+   "checkins": 7,
    "v": "2"
   }
  ],
@@ -2420,5 +2444,20 @@
    "secs": 3
   }
  ],
- "jank": []
+ "jank": [
+  {
+   "t": "2026-10-19T00:07:43.211Z",
+   "code": "K8DRSM",
+   "v": "?",
+   "watched": 11,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 0,
+   "drifts": 0,
+   "deploy": "911feb38"
+  }
+ ]
 }
