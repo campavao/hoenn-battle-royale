@@ -10,8 +10,8 @@ wait 400
 expect u8 gPlayerPartyCount 0
 # the rung the match is at: 75 (the ring is off, so the tick leaves it there)
 poke u8 gBrLevels 75
-# SPILL from seat 2: one PELIPPER (species 279) at level 30, on the cell we face
-pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 02 00 09 01 00 02 0C 00 10 00 17 01 1E 00
+# SPILL from seat 2: one PELIPPER (species 310) at level 30, on the cell we face
+pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 02 00 09 01 00 02 0C 00 10 00 36 01 1E 00
 poke u16 gBrMailbox+0x0C 1
 wait 20
 expect u8 gBrLoot+0xA0 1
