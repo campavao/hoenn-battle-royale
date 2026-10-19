@@ -62,7 +62,6 @@ const TEXT_W = W - 24;
 const ART_H = 36;
 const ICON = uiData.itemIcons as { cell: number; cols: number };
 const PIECE_GAP = 8;
-const FOG_BAND = 6;
 
 /** 'due' from a first import until the panels are shown, then '1' for good. In storage,
  *  not memory: a newcomer who came by an invite link meets the menu on a later load. */
@@ -113,7 +112,9 @@ export function howToScreen(model: () => HowToModel): DrawnScreen {
       y += 20;
 
       const rows = wrapText(panel.text, TEXT_W);
-      const frame = { x: 0, y, w: W, h: 8 + ART_H + 4 + ROW_H + 4 + rows.length * ROW_H + 12 };
+      // As tall as the longest panel's, so NEXT stays under the thumb from panel to panel.
+      const most = Math.max(...PANELS.map((p) => wrapText(p.text, TEXT_W).length));
+      const frame = { x: 0, y, w: W, h: 8 + ART_H + 4 + ROW_H + 4 + most * ROW_H + 12 };
       c.drawFrame(frame);
       const skins = { you: m.skin, rival: BOT_SKINS.find((s) => s !== m.skin) ?? BOT_SKINS[0] };
       const widths = panel.art.map((p) => ('item' in p ? ICON.cell : (skinSheet(skins[p.trainer])?.w ?? 16)));
@@ -129,11 +130,11 @@ export function howToScreen(model: () => HowToModel): DrawnScreen {
         }
         x += widths[i] + PIECE_GAP;
       });
-      // In bands, as the weather's own fog drifts across the field.
+      // Wisps two pixels tall, thicker and thinner, as the weather's own fog drifts across
+      // the field; edge to edge inside the frame's border.
       if (panel.fog) {
-        for (let band = 0; band * FOG_BAND < ART_H; band++) {
-          const top = y + 8 + band * FOG_BAND;
-          c.fillRect({ x: 8, y: top, w: W - 16, h: Math.min(FOG_BAND, y + 8 + ART_H - top) }, '#a8b0b8', band % 2 ? 0.35 : 0.55);
+        for (let wy = 0; wy < ART_H; wy += 2) {
+          c.fillRect({ x: 6, y: y + 8 + wy, w: W - 12, h: 2 }, '#8890a0', 0.3 + 0.2 * Math.sin(wy * 0.45));
         }
       }
       let ty = y + 8 + ART_H + 4;

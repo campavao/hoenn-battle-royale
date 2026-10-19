@@ -54,6 +54,16 @@ describe('the HOW TO PLAY screen', () => {
     expect(paint(screen).byId('howto-page')!.text, 'B starts it over too').toBe('1/6');
   });
 
+  it('keeps the buttons in one place from panel to panel', () => {
+    const screen = howToScreen(() => ({ skin: 0, onDone: vi.fn() }));
+    const ys = new Set<number>();
+    for (let i = 0; i < PANELS.length; i++) {
+      ys.add(paint(screen).byId(i === PANELS.length - 1 ? 'howto-done' : 'howto-next')!.rect.y);
+      if (i < PANELS.length - 1) press(screen, 'howto-next');
+    }
+    expect(ys.size).toBe(1);
+  });
+
   it('fits every panel on the shortest screen, its words inside the frame', () => {
     const screen = howToScreen(() => ({ skin: 0, onDone: vi.fn() }));
     for (let i = 0; i < PANELS.length; i++) {
@@ -78,8 +88,8 @@ describe('the HOW TO PLAY screen', () => {
     for (let i = 0; i < 3; i++) press(screen, 'howto-next');
     const fog = paint(screen);
     expect(fog.byId('howto-heading')!.text).toBe('The fog');
-    expect(fog.fills).toHaveLength(6);
-    expect(fog.fills.every((f) => f.r.x === 8 && f.r.w === W - 16)).toBe(true);
+    expect(fog.fills).toHaveLength(18);
+    expect(fog.fills.every((f) => f.r.x === 6 && f.r.w === W - 12)).toBe(true);
   });
 
   it('puts somebody else across from you in the battle', () => {
