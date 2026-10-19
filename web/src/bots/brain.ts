@@ -17,7 +17,7 @@ import { MOVE_CUT, MOVE_FLY, MOVE_SURF, tradedMon } from './party';
 import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
 import { sameSpot, spotKey, type SeamDir, type Spot, type World } from './world';
-import { pageCell, type PageCell } from './space';
+import { pageCell, toRom, type PageCell } from './space';
 import { PROTOCOL, type MapRef, type Msg, type Outcome, type PackedMon, type SpillMsg } from '../net/wire';
 import { spillCells } from '../match/loot';
 import { isEventKey } from '../match/events';
@@ -70,6 +70,8 @@ const NEAR_TILES = 4;
 /** A wild battle on a patch, as long as a short one in the ROM: the bot stands still with
  *  the battle mark on, and comes out of it hurt (POK-363). */
 const WILD_MS = 4_000;
+/** A legendary's battle (POK-410): a long one, as a player's against it is. */
+const LEGEND_MS = 12_000;
 /** The walk-up's wait for the "!" (POK-409): the ROM settles the pair, then shows the
  *  bubble over the bot for about a second (br_walkup.c), and only then does it look for
  *  the bot's steps -- for BR_APPROACH_FRAMES, three seconds, so a walk that starts a
@@ -216,6 +218,11 @@ interface Walker {
   quaffAfter: number;
   /** In a wild battle on a patch until this (POK-363); 0 when not. */
   wildUntil?: number;
+  /** The legendary that battle is against (POK-410), to keep or put back when it ends. */
+  legend?: SpillMsg;
+  /** Legendaries it has fought already: one try each, or a bot that lost would stand on
+   *  the one it put back and fight it for ever. */
+  foughtLegends?: Set<number>;
   /** Walking up to somebody (approach): no rests on the way. Cleared with the path. */
   chasing?: boolean;
   /** Steps left before it stops to look around (LEG_MIN). */
@@ -259,6 +266,8 @@ export interface Decision {
     | 'wander'
     /** Stepped onto an encounter patch and had its wild battle (POK-363). */
     | 'wild'
+    /** Fought a legendary the match put down (POK-410). */
+    | 'legend'
     | 'stuck'
     | 'fog'
     | 'duel'
@@ -306,6 +315,9 @@ export interface BotsOptions {
      *  review): the ROM lets go of a bag only on a bare one, and a gift-giver a bot
      *  emptied with an item-named pickup stood on every map with nothing in his hands. */
     bagLeft?: (key: number) => number;
+    /** A legendary the match put down (match/legends.ts): fought, not picked up (POK-410).
+     *  What it is, or undefined for anything else. */
+    legend?: (key: number) => { species: number; level: number } | undefined;
   };
   /** A piece on the ground this bot cannot have yet (match/story.ts, storySealed): behind
    *  a REGI's wall it could not open, or a person's who wants something it has not got.
@@ -857,6 +869,9 @@ export class Bots {
    *  pickable by anybody -- and then it is out and stops being walked around. */
   private eliminate(walker: Walker, teamTaken = false): void {
     if (this.decided) return;
+    // Out in the middle of a legendary's battle: it goes back, not down with the team.
+    if (walker.legend) this.opts.send(walker.legend);
+    walker.legend = undefined;
     const map = this.opts.mapRef(walker.at.map);
     if (map && walker.party.length > 0) {
       // Scattered, not stacked. Every piece used to be written to the dropper's own
@@ -923,6 +938,7 @@ export class Bots {
     if (walker.wildUntil) {
       if (now < walker.wildUntil) return;
       walker.wildUntil = 0;
+      this.endLegend(walker);
       this.opts.send({ t: 'busy', seat: walker.bot.seat });
     }
     // At the counter: the nurse is the turn spent, and the bot walks back out whole.
@@ -935,8 +951,12 @@ export class Bots {
     // that is the turn spent. A piece is solid, so a bot only stands on one that was
     // dropped where it stood.
     const here = this.opts.loot?.at(walker.at.map, pageCell(walker.at.x, walker.at.y));
-    if (here !== undefined && !this.opts.sealed?.({ key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y }, walker)) {
-      this.takePiece(walker, { key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y });
+    if (
+      here !== undefined &&
+      !walker.foughtLegends?.has(here) &&
+      !this.opts.sealed?.({ key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y }, walker)
+    ) {
+      this.takePiece(walker, { key: here, mapId: walker.at.map, x: walker.at.x, y: walker.at.y }, now);
       return;
     }
     if (this.tryTrade(walker)) return;
@@ -950,7 +970,7 @@ export class Bots {
       if (!walker.path || walker.path.steps.length === 0) return;
     }
     const step = walker.path.steps[walker.stepIndex];
-    if (this.solidAhead(walker, step)) return;
+    if (this.solidAhead(walker, step, now)) return;
     // Somebody is already standing there. Two trainers never share a tile, and a pair
     // that swap through each other read as walking through a wall to anyone watching.
     // Drop the route and re-aim next step rather than shove.
@@ -986,11 +1006,18 @@ export class Bots {
     this.wildHere(walker, now);
   }
 
-  /** A piece taken the way a player's A takes one: a gate's boss fought first, then one
-   *  pickup -- the turn spent either way. */
-  private takePiece(walker: Walker, piece: { key: number; mapId: string; x: number; y: number }): void {
+  /** A piece taken the way a player's A takes one: a gate's boss fought first, a
+   *  legendary battled, else one pickup -- the turn spent either way. */
+  private takePiece(walker: Walker, piece: { key: number; mapId: string; x: number; y: number }, now: number): void {
     walker.path = null;
     if (this.fightGuard(walker, piece)) return;
+    // A gate's boss hands his over once beaten (br_legend.c leaves a person's piece be).
+    const held = this.opts.guard?.(piece);
+    const legend = held ? undefined : this.opts.loot?.legend?.(piece.key);
+    if (legend) {
+      this.fightLegend(walker, piece, legend, now);
+      return;
+    }
     // A bag on the ground gives up one item per press -- the ROM's own rule -- so
     // the pickup names what was taken and the rest stays there (POK-237).
     const item = this.opts.loot?.bagAt?.(piece.key);
@@ -1011,18 +1038,18 @@ export class Bots {
    *  where it stands, or a person or a trader it cannot deal with, and the route goes.
    *  A piece it cannot have (storySealed) is walked over, as a player walks over a ball
    *  A cannot lift. TRUE when the step is not taken. */
-  private solidAhead(walker: Walker, step: { dir: SeamDir; to: Spot }): boolean {
+  private solidAhead(walker: Walker, step: { dir: SeamDir; to: Spot }, now: number): boolean {
     if (step.to.map !== walker.at.map) return false; // a door's landing is the far side's
     const key = this.opts.loot?.at(step.to.map, pageCell(step.to.x, step.to.y));
     const piece = key === undefined ? undefined : { key, mapId: step.to.map, x: step.to.x, y: step.to.y };
-    if (piece && !this.opts.sealed?.(piece, walker)) {
+    if (piece && !walker.foughtLegends?.has(piece.key) && !this.opts.sealed?.(piece, walker)) {
       walker.facing = DIR_WIRE[step.dir];
       const map = this.opts.mapRef(walker.at.map);
       if (map) this.opts.send({ t: 'face', seat: walker.bot.seat, f: walker.facing, map });
-      this.takePiece(walker, piece);
+      this.takePiece(walker, piece, now);
       return true;
     }
-    if ((piece && this.opts.person?.(piece)) || (this.opts.traders?.() ?? []).some((t) => t.mapId === step.to.map && t.x === step.to.x && t.y === step.to.y)) {
+    if ((piece && (this.opts.person?.(piece) || walker.foughtLegends?.has(piece.key))) || (this.opts.traders?.() ?? []).some((t) => t.mapId === step.to.map && t.x === step.to.x && t.y === step.to.y)) {
       walker.path = null;
       return true;
     }
@@ -1042,7 +1069,7 @@ export class Bots {
       if (k >= 0) out.add(world.cellOf(k));
     };
     for (const l of this.opts.loot?.all() ?? []) {
-      if (this.opts.person?.(l) || !this.opts.sealed?.(l, walker)) add(l.mapId, l.x, l.y);
+      if (this.opts.person?.(l) || walker.foughtLegends?.has(l.key) || !this.opts.sealed?.(l, walker)) add(l.mapId, l.x, l.y);
     }
     // Every trader standing, as in the ROM, not only the ones this bot could still use.
     for (const t of this.opts.traders?.() ?? []) add(t.mapId, t.x, t.y);
@@ -1090,6 +1117,51 @@ export class Bots {
       lead.hp = Math.max(1, lead.hp - Math.floor((lead.maxHp * share) / 100));
     }
     this.note(walker, 'wild', `key ${patch.key}`);
+  }
+
+  /** A legendary under the bot's feet (POK-410): a player has to beat it in a battle and
+   *  catch it, so a bot does not walk off with one in a step either. Its PICKUP takes it
+   *  off the ground for the room as the battle starts, the way a player's ROM claims it;
+   *  the bot stands with the battle mark on for LEGEND_MS, and every mon still standing
+   *  comes out of it hurt -- never fainted, as a patch's wild battle leaves the lead.
+   *  endLegend says how it went. */
+  private fightLegend(walker: Walker, piece: { key: number; x: number; y: number }, mon: { species: number; level: number }, now: number): void {
+    const key = piece.key;
+    const map = this.opts.mapRef(walker.at.map);
+    if (!map) return;
+    const at = toRom(pageCell(piece.x, piece.y));
+    walker.legend = { t: 'spill', seat: walker.bot.seat, map, mons: [{ key, x: at.x, y: at.y, ...mon }] };
+    (walker.foughtLegends ??= new Set()).add(key);
+    this.opts.send({ t: 'pickup', seat: walker.bot.seat, key });
+    this.opts.send({ t: 'busy', seat: walker.bot.seat, kind: 'battle' });
+    walker.wildUntil = now + LEGEND_MS;
+    walker.nextStepAt = Math.max(walker.nextStepAt, walker.wildUntil);
+    walker.engageAfter = Math.max(walker.engageAfter, walker.wildUntil);
+    walker.path = null;
+    walker.party.forEach((mon, i) => {
+      if (mon.hp <= 0) return;
+      const share = 25 + (mix(walker.bot.seat, key + i) % 36);
+      mon.hp = Math.max(1, mon.hp - Math.floor((mon.maxHp * share) / 100));
+    });
+    this.note(walker, 'legend', `key ${key}`);
+  }
+
+  /** A bot's legendary battle is over: one in three it caught it, with room in the party,
+   *  and it joins at the rung; otherwise it goes back where it stood for everybody, as a
+   *  player's ROM puts back one it ran from (br_legend.c's PutBack): nothing leaves a
+   *  match. */
+  private endLegend(walker: Walker): void {
+    const spill = walker.legend;
+    if (!spill) return;
+    walker.legend = undefined;
+    const mon = spill.mons[0];
+    if (walker.party.length < 6 && mix(walker.bot.seat, mon.key) % 3 === 0) {
+      walker.party.push(tradedMon(mon.species, this.phase));
+      this.note(walker, 'legend', `caught ${mon.species}`);
+      return;
+    }
+    this.opts.send(spill);
+    this.note(walker, 'legend', `put back ${mon.key}`);
   }
 
   /** The end of a leg, when nothing is pressing: the turn is spent standing, and the
@@ -1438,7 +1510,7 @@ export class Bots {
     // Loot in the ring beats wandering: a bot goes and gets it. Nearest first only
     // among the pieces on its own map -- distances across a seam are not comparable,
     // and a bot that crosses one will see that map's loot when it gets there.
-    const pieces = (this.opts.loot?.all() ?? []).filter((l) => !this.opts.sealed?.(l, walker));
+    const pieces = (this.opts.loot?.all() ?? []).filter((l) => !walker.foughtLegends?.has(l.key) && !this.opts.sealed?.(l, walker));
     const loot = pieces
       .filter((l) => (!inside || inside(l.mapId)) && l.mapId === walker.at.map && reach.cell(l.x, l.y))
       .sort(

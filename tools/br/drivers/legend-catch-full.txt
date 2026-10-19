@@ -1,0 +1,85 @@
+# legend-catch-full: a legendary caught into a full party waits on the release screen
+# (POK-227), and cancelling it puts the legendary back where it stood for everybody
+# (POK-410, br_legend.c's BrLegend_CatchCancelled) -- its battle already took it off the
+# ground, so the cancel cannot just leave it lying there the way catch-cancel.txt's ball
+# does. The party is filled as catch-cancel.txt fills it.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+copy gPlayerParty+100 gPlayerParty 100
+copy gPlayerParty+200 gPlayerParty 100
+copy gPlayerParty+300 gPlayerParty 100
+copy gPlayerParty+400 gPlayerParty 100
+copy gPlayerParty+500 gPlayerParty 100
+poke u8 gBrMySeat 0
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1234
+pokebytes gBrMailbox+0x1018 20 08 05 00 00 00 00 1F 00 B0
+pokebytes gBrMailbox+0x1058 0B 11 0E 00 00 01 00 09 01 00 B0 0C 00 11 00 97 01 14 00
+poke u16 gBrMailbox+0x0C 2
+wait 20
+expect u8 gBrLoot+0xA1 1
+# OBJ_EVENT_GFX_LATIAS
+expect u8 gObjectEvents+0x4D 187
+shot standing
+tap A
+wait 30
+# the ask, before its cry: a PICKUP of its claim key 0xB800
+expectmsg 10 u16 1 0xB800
+# the host's answer, seat 0's PICKUP of 0xB000 naming us: it is ours, off every ground
+pokebytes gBrMailbox+0x1098 0A 0B 08 00 00 00 00 B0 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 3
+waitfor u32 gMain+4 BattleMainCB2+1 600
+# BattleSetup_StartLatiBattle: BATTLE_TYPE_LEGENDARY, not a REGI's
+expectbits u32 gBattleTypeFlags 0x6000 0x2000
+expect u8 gBrEvents+17 1
+wait 300
+expect u16 gBattleMons+0x58 407
+tap B
+wait 300
+tap B
+wait 300
+# MASTER BALL x1 in POKe BALLS (SaveBlock1 +0x650), the key zeroed, then what the page
+# does: BALLS_POCKET, MASTER BALL, BAG
+poke u32 *gSaveBlock2Ptr+0xAC 0
+poke u16 *gSaveBlock1Ptr+0x650 1
+poke u16 *gSaveBlock1Ptr+0x652 1
+poke u8 gBagPosition+5 1
+poke u16 gBrBag 1
+drain gBrMailbox
+tap RIGHT
+wait 10
+tap A
+wait 600
+shot caught
+tap B
+wait 120
+tap B
+wait 120
+tap B
+wait 120
+tap B
+wait 120
+waitfor u32 gMain+4 CB2_Overworld+1 900
+# parked, and the release question up: still off the ground
+expect u8 gBrCatch 1
+expect u8 gBrEvents+17 1
+wait 120
+tap A
+wait 90
+shot picker
+# ...and nobody gives way
+tap B
+wait 120
+tap B
+wait 120
+shot cancelled
+expect u8 gBrCatch 0
+expect u8 gPlayerPartyCount 6
+# back on its cell for everybody, its mark live again
+expectmsg 11 u16 4 0xB000
+expectmsg 11 u16 10 407
+expect u8 gBrEvents+17 0
+expect u8 gBrLoot+0xA1 1
+expect u8 gObjectEvents+0x4D 187
+say legend catch full ok

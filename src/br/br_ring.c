@@ -36,6 +36,8 @@
 #include "palette.h"
 #include "field_message_box.h"
 #include "field_player_avatar.h"
+#include "field_specials.h"
+#include "constants/field_specials.h"
 
 EWRAM_DATA struct BrRing gBrRing = {0};
 
@@ -81,6 +83,36 @@ static bool8 ContestBattle(void)
         || PublishedAlone();
 }
 
+// The SS TIDAL's three maps have no section of their own: MAPSEC_DYNAMIC, whose entry
+// is all zeroes, so the ring measured a ride as the top-left corner and the whole voyage
+// was fog (PR #76 review). The boat is where Emerald's own region map puts it
+// (region_map.c, by GetSSTidalLocation): the harbour it is at, else the route the
+// voyage's steps have reached. Every other map keeps its own.
+static u8 Aboard(u8 mapsec)
+{
+    s8 mapGroup, mapNum;
+    s16 x, y;
+
+    if (mapsec != MAPSEC_DYNAMIC
+     || gSaveBlock1Ptr->location.mapGroup != MAP_GROUP(MAP_SS_TIDAL_CORRIDOR)
+     || (gSaveBlock1Ptr->location.mapNum != MAP_NUM(MAP_SS_TIDAL_CORRIDOR)
+      && gSaveBlock1Ptr->location.mapNum != MAP_NUM(MAP_SS_TIDAL_LOWER_DECK)
+      && gSaveBlock1Ptr->location.mapNum != MAP_NUM(MAP_SS_TIDAL_ROOMS)))
+        return mapsec;
+    switch (GetSSTidalLocation(&mapGroup, &mapNum, &x, &y))
+    {
+    case SS_TIDAL_LOCATION_SLATEPORT:
+        return MAPSEC_SLATEPORT_CITY;
+    case SS_TIDAL_LOCATION_LILYCOVE:
+        return MAPSEC_LILYCOVE_CITY;
+    case SS_TIDAL_LOCATION_ROUTE124:
+        return MAPSEC_ROUTE_124;
+    case SS_TIDAL_LOCATION_ROUTE131:
+        return MAPSEC_ROUTE_131;
+    }
+    return Overworld_GetMapHeaderByGroupAndId(mapGroup, mapNum)->regionMapSectionId;
+}
+
 // Distance from the centre to the nearest point of the section's rectangle, squared,
 // against r squared. Integer maths only; sections are whole cells.
 bool8 BrRing_SectionInside(u8 mapsec)
@@ -92,6 +124,7 @@ bool8 BrRing_SectionInside(u8 mapsec)
         return TRUE;
     if (gBrRing.r < 0)
         return FALSE;
+    mapsec = Aboard(mapsec);
     if (mapsec >= MAPSEC_NONE)
         return FALSE;
     loc = &gRegionMapEntries[BrStory_Dock(mapsec)];

@@ -92,6 +92,7 @@ import appTs from './app.ts?raw';
 import brainTs from './bots/brain.ts?raw';
 import lootTs from './match/loot.ts?raw';
 import { PATCH_KEY_BASE } from './match/loot';
+import { LEGEND_GFX } from './match/legends';
 import { EVENT_KEY_BASE, EVENT_MAX, EVENT_PIECES, GOLD, LEGENDS, RARES, claimKey, traderKey } from './match/events';
 import { GIFT_KEY_BASE, GIFTS } from './match/gifts';
 import { DOOR_Y, FLYING, STORIES } from './match/story';
@@ -590,6 +591,17 @@ describe("the BR structs the page reads at an offset", () => {
     expect(ghosts.GIFT_KEY_BASE).toBe(define(lootH, 'BR_LOOT_KEY_GIFT_BASE'));
     expect(ghosts.GIFT_GFX).toEqual(names(lootC, 'sGiftGfx', 'OBJ_EVENT_GFX_').map((n) => define(eventObjectsH, n)));
     expect(ghosts.LOOT_KEY).toBe(item.at.key);
+    expect(ghosts.LOOT_MON).toBe(define(lootH, 'BR_LOOT_MON'));
+  });
+
+  it("a legendary to fight stands as sLegends in br_legend.c says (POK-410)", () => {
+    const legendC = brAll.find((src) => /\bsLegends\[\]/.test(src))!;
+    const body = /sLegends\[\]\[2\] = \{([\s\S]*?)\};/.exec(legendC)![1];
+    const rows = [...body.matchAll(/\{\s*(SPECIES_\w+),\s*(OBJ_EVENT_GFX_\w+)\s*\}/g)].map((m) => [define(speciesH, m[1]), define(eventObjectsH, m[2])]);
+    expect(rows.length).toBeGreaterThan(0);
+    expect([...LEGEND_GFX.entries()].sort((a, b) => a[0] - b[0])).toEqual(rows.sort((a, b) => a[0] - b[0]));
+    // Every legendary an event or a story deals has a sprite: none falls back to a ball.
+    for (const list of LEGENDS) for (const species of list) expect(LEGEND_GFX.has(species), `species ${species}`).toBe(true);
   });
 
   it("the box the ROM keeps objects in: BrField_InObjectView, and Emerald's own spawn and cull", () => {

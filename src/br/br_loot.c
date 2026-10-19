@@ -40,6 +40,7 @@
 #include "br/br_story.h"
 #include "br/br_items.h"
 #include "br/br_loot.h"
+#include "br/br_legend.h"
 #include "br/br_gym.h"
 #include "br/br_field.h"
 #include "br/br_match.h"
@@ -131,6 +132,7 @@ static void Spawn(struct BrLootItem *it)
     u8 gfx = it->kind == BR_LOOT_BAG && !OneThing(it) ? OBJ_EVENT_GFX_BIRCHS_BAG : OBJ_EVENT_GFX_ITEM_BALL;
     u8 movement = MOVEMENT_TYPE_NONE;
     u8 person = BrStory_Person(it);
+    u8 legend = BrLegend_Gfx(it);
     u8 id;
 
     if (BR_LOOT_IS_GIFT(it->key) || BR_LOOT_IS_HOME(it->key))
@@ -141,6 +143,11 @@ static void Spawn(struct BrLootItem *it)
     else if (person != 0)
     {
         gfx = person;
+        movement = MOVEMENT_TYPE_FACE_DOWN;
+    }
+    else if (legend != 0)
+    {
+        gfx = legend; // stood there to be fought, not lying there to be taken (br_legend.h)
         movement = MOVEMENT_TYPE_FACE_DOWN;
     }
     id = SpawnSpecialObjectEventParameterized(gfx, movement, LocalId(it),
@@ -347,6 +354,7 @@ static void ParseSpill(const u8 *d, u16 n)
             continue;
         Add(BrWire_ReadU16(row), mapGroup, mapNum, (s16)BrWire_ReadU16(row + 2),
             (s16)BrWire_ReadU16(row + 4), species, BrWire_Level(row[8]), BR_LOOT_MON, 0);
+        BrEvent_NoteBack(BrWire_ReadU16(row)); // a legendary nobody caught is down again
     }
     off = 4 + 9 * count;
     if (off < n && d[off] != 0 && (u16)(off + 7) <= n)
@@ -519,6 +527,7 @@ static void HandlePickup(const u8 *payload, u8 len)
     BrBalls_NoteTaken(BrWire_ReadU16(d + 1));
     BrPatch_NoteTaken(BrWire_ReadU16(d + 1)); // ...and a patch somebody's battle started on
     BrEvent_NoteTaken(BrWire_ReadU16(d + 1), d[0]); // ...and an event's legendary, for its mark
+    BrLegend_NoteTaken(BrWire_ReadU16(d + 1), d[0]); // ...and one we are fighting too
     it = Find(BrWire_ReadU16(d + 1));
     if (it == NULL)
         return;
@@ -971,6 +980,13 @@ static void Take(struct BrLootItem *it)
         SendPickup(it);
         return;
     }
+    // A legendary the match put down is fought, not taken: its cry and its battle, and
+    // only a catch keeps it (br_legend.h).
+    if (BrLegend_Gfx(it) != 0)
+    {
+        BrLegend_Challenge(it);
+        return;
+    }
     // A ball: the mon inside goes to the party, evolving on the way if it just changed
     // hands. A full party goes through the catch ticket's own release flow -- the same
     // question, asked once, in one place (POK-227).
@@ -1132,6 +1148,9 @@ bool8 BrLoot_Solid(u8 localId)
     // what came back is ours to walk over (SendGiveBack).
     if (it->noRoom)
         return FALSE;
+    // A legendary is a battle, whatever the party holds (BrLegend_Challenge).
+    if (BrLegend_Gfx(it) != 0)
+        return TRUE;
     // A full party takes a ball only by giving one up, and the one given up lands beside
     // you too: walls round a winner who said B to the spoils.
     if (it->kind == BR_LOOT_MON)

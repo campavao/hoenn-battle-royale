@@ -160,7 +160,10 @@ export class HostRole {
     this.now = opts.now ?? (() => performance.now());
     this.world = opts.world;
     this.ownLand = opts.land;
-    this.claims = new TraderClaims((n) => session.events.some((e) => e.n === n && e.trader !== undefined));
+    this.claims = new TraderClaims(
+      (n) => session.events.some((e) => e.n === n && e.trader !== undefined),
+      (key) => session.loot.has(key),
+    );
     const seed = this.seed;
     // Everybody in the room now was dealt in, or on a takeover has been hearing the match
     // all along: only somebody who arrives, or comes back, needs catching up.
@@ -288,7 +291,8 @@ export class HostRole {
    *  from the seat that said them. */
   hear(msg: Msg, via: 'rom' | { from: number }): void {
     // An ask to trade with an event's trader, ours or the room's: the first for him is the
-    // trade, said to everybody; a later one is told who got him, and nobody else is.
+    // trade, said to everybody; a later one is told who got him, and nobody else is. An ask
+    // for a legendary to fight (POK-410) is the same, while it still stands.
     this.claims.note(msg);
     const claim = this.claims.answer(msg);
     if (claim?.granted) this.hostSays(claim.reply);

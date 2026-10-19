@@ -109,6 +109,9 @@ describe("the people past the ROM's box (POK-318)", () => {
     expect(droppedPeople(known({ loot: [ball(4)], live: new Set([objectKey(0xc0 + 4, MAP.num, MAP.group)]) })), 'its own object').toEqual([]);
     // a gift-giver stands as the person his key says (br_loot.c's sGiftGfx)
     expect(droppedPeople(known({ loot: [ball(0, { kind: 2, species: 200, key: 0xc000 }), ball(1, { kind: 2, species: 200, key: 0xc005 })] })).map((p) => p.gfx)).toEqual([GIFT_GFX[0], GIFT_GFX[1]]);
+    // a legendary the match put down stands as itself (br_legend.c, POK-410): REGIROCK 200 and
+    // RAYQUAZA 41 under event keys; the same REGIROCK in a fallen trainer's team is a ball
+    expect(droppedPeople(known({ loot: [ball(0, { kind: 1, species: 401, key: 0xb000 }), ball(1, { kind: 1, species: 406, key: 0xb030 }), ball(2, { kind: 1, species: 401, key: 0x0301 })] })).map((p) => p.gfx)).toEqual([200, 41, GFX_ITEM_BALL]);
   });
 
   // Cam's trainer, 2026-09-18: "If I'm down far enough he's gone, up high enough he's

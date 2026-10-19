@@ -1,0 +1,112 @@
+# ferry-lands: the SS TIDAL lets you off at the other end (2026-10-18 play-test).
+#
+# Cam: "I tried taking the ferry to lilycove but it softlocked me since it put me on the
+# boat but then there was no way off". The way off is the sailor by the gangway at (1,11)
+# on SS TIDAL's corridor (25:41), who warps you ashore once the cabin bed has made land.
+# He is a SAILOR with no flag and no ferry script, so the match's strip (br_strip.c) took
+# him with the rest of the routes' people, and FLY and an ESCAPE ROPE do nothing on a boat.
+#
+# In SLATEPORT HARBOR (9:9) at (8,11), south of the attendant at (8,10).
+# VAR_SS_TIDAL_STATE is SaveBlock1 + 0x139C + 2*(0x40B4 - 0x4000) = +0x1504.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 81 00 09 09 08 00 0B 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 *gSaveBlock1Ptr+4 9
+expect u8 *gSaveBlock1Ptr+5 9
+# "May I see your ticket?", "...flashed the ticket. Where to?", LILYCOVE, YES.
+tap UP
+wait 10
+tap A
+wait 60
+hold A 4
+wait 60
+tap A
+wait 40
+shot where-to
+# LILYCOVE CITY and EXIT; the cursor opens on the last row.
+tap UP
+wait 10
+tap A
+wait 60
+shot lilycove-it-is
+tap A
+wait 60
+# "Please board the ferry and wait for departure."
+hold A 4
+wait 60
+tap A
+wait 500
+shot aboard
+expect u8 *gSaveBlock1Ptr+4 25
+expect u8 *gSaveBlock1Ptr+5 41
+# The ding-dong and "we're sailing on fast currents"; the var is DEPART_SLATEPORT after.
+# B, not A: we face the gangway sailor, and an A past the last page talks to him.
+tap B
+wait 60
+tap B
+wait 60
+tap B
+wait 60
+tap B
+wait 30
+shot corridor
+expect u16 *gSaveBlock1Ptr+0x1504 2
+expect u16 *gSaveBlock1Ptr+0 1
+expect u16 *gSaveBlock1Ptr+2 10
+# Six east along the corridor to CABIN 2's door at (7,9), and up through it.
+hold RIGHT 96
+wait 10
+hold UP 20
+wait 120
+shot cabin
+expect u8 *gSaveBlock1Ptr+5 43
+expect u16 *gSaveBlock1Ptr+0 13
+# Up to the bed's row and east into it: the bed is a sign at (15,11) and (15,12).
+hold UP 64
+wait 10
+hold RIGHT 20
+wait 10
+shot bed
+expect u16 *gSaveBlock1Ptr+0 14
+expect u16 *gSaveBlock1Ptr+2 12
+# "There's a bed... Let's take a rest.", the heal's fade, then "we've made land in LILYCOVE".
+tap A
+wait 60
+tap A
+wait 200
+tap A
+wait 60
+tap A
+wait 60
+shot made-land
+expect u16 *gSaveBlock1Ptr+0x1504 4
+tap A
+wait 60
+# Back down to the door and out into the corridor, west to the gangway.
+hold DOWN 64
+wait 10
+hold DOWN 20
+wait 120
+expect u8 *gSaveBlock1Ptr+5 41
+expect u16 *gSaveBlock1Ptr+0 7
+expect u16 *gSaveBlock1Ptr+2 10
+hold LEFT 96
+wait 10
+shot gangway
+expect u16 *gSaveBlock1Ptr+0 1
+expect u16 *gSaveBlock1Ptr+2 10
+# The sailor below: "we've arrived", and ashore at LILYCOVE HARBOR (13:10).
+tap DOWN
+wait 20
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 300
+shot ashore
+expect u8 *gSaveBlock1Ptr+4 13
+expect u8 *gSaveBlock1Ptr+5 10
+say ferry lands ok
