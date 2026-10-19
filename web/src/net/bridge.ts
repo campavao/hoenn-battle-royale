@@ -560,12 +560,16 @@ export class Bridge {
   /** Our career, for everybody else's trainer card (POK-339): said now, and again to
    *  each roster with somebody in it who has not heard it. The page calls it again when
    *  a match changes the record. */
-  sayCard(record: { wins: number; matches: number; best?: number }): void {
+  sayCard(record: { wins: number; matches: number; best?: number; battles?: number; caught?: number; fav?: number }): void {
     // Inside the decoder's bounds: an imported career can hold any count, and one out of
     // range is a card every other page drops whole.
     const count = (n: number) => Math.min(Math.max(Math.floor(n) || 0, 0), CARD_MAX);
     const best = record.best !== undefined && record.best >= 1 && record.best <= MAX_PLAYERS ? record.best : undefined;
     this.card = { t: 'card', seat: this.seat, wins: count(record.wins), matches: count(record.matches), best };
+    // The lifetime stats (POK-416), when there are any to say.
+    if (record.battles !== undefined) this.card.battles = count(record.battles);
+    if (record.caught !== undefined) this.card.caught = count(record.caught);
+    if (record.fav !== undefined && record.fav >= 1 && record.fav <= 0xffff) this.card.fav = Math.floor(record.fav);
     this.relay.all(this.card);
   }
 

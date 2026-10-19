@@ -1,0 +1,97 @@
+# tally: what the ROM counts for the match's stats (POK-416), read by the page as gBrTally.
+# (2026-10-13, the item rework: "heals work on the whole party"). br_items.c's
+# BrItems_HealParty, from ItemUseOutOfBattle_Medicine.
+#
+# The boot deals one mon; a copy of it goes in the second slot (a whole struct, so its
+# own checksum comes along) and both are hurt. Then a POTION by GIVE, and BAG > POTION >
+# USE.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 gPlayerPartyCount 1
+expect u16 gPlayerParty+0x58 20
+pokebytes gPlayerParty+0x64 7c b1 00 0b 00 00 f9 b2 ce cc bf bf bd c5 c9 ff 80 63 02 02 bd bb c7 ff 00 00 00 00 2d c7 00 00 7c b1 f9 b9 7c b1 f9 b9 7c b1 f9 b9 69 b0 f9 b9 fb b1 f9 b9 7c f7 f9 b9 7d b1 d2 b9 7c b1 f9 b9 5f af f9 b9 7c b1 7c 98 05 b9 bd 8e 7c b1 f9 b9 00 00 00 00 05 ff 14 00 14 00 09 00 08 00 0c 00 0c 00 0b 00
+poke u8 gPlayerPartyCount 2
+poke u16 gPlayerParty+0x56 1
+poke u16 gPlayerParty+0xBA 2
+# A POTION (13), and an ANTIDOTE (14) that the bag takes as a FULL RESTORE (19).
+pokebytes gDecompressionBuffer 02 0D 00 01 0E 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 7
+wait 60
+expect u16 *gSaveBlock1Ptr+0x560 13
+expect u16 *gSaveBlock1Ptr+0x564 19
+# START, down to BAG, in; the POTION is first; USE is first.
+tap START
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 120
+shot bag
+tap A
+wait 30
+shot submenu
+tap A
+wait 30
+shot used
+wait 60
+shot used2
+# Both treated by the one POTION.
+hold A 4
+wait 60
+# one POTION used
+expect u16 gBrTally+6 1
+tap B
+wait 60
+tap B
+wait 60
+# steps: the boot leaves us facing a clear row east (bot-fight puts a ghost there later)
+tap B
+wait 60
+shot pre-walk
+hold RIGHT 48
+wait 30
+shot walked
+expectge u16 gBrTally 2
+# A bot fight, mashed to its end: won, and who used what
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 03 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gDecompressionBuffer 1F 01 00 09 1A 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+expect u8 gBrBotFight+2 1
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 90
+tap A
+wait 300
+tap A
+wait 300
+tap A
+wait 300
+tap A
+wait 300
+tap A
+wait 300
+tap A
+wait 300
+tap A
+wait 300
+tap A
+wait 300
+shot fought
+expect u16 gBrTally+2 1
+# TREECKO (277) used POUND (1)
+expect u16 gBrTally+8 277
+expect u16 gBrTally+20 1
+expectge u8 gBrTally+36 1
+expectge u8 gBrTally+42 1
+expect u16 gBrTally+4 0
+say tally ok

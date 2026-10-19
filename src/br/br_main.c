@@ -11,6 +11,7 @@
 #include "br/br_ring.h"
 #include "br/br_hud.h"
 #include "br/br_match.h"
+#include "br/br_hof.h"
 #include "br/br_levels.h"
 #include "br/br_catch.h"
 #include "br/br_moves.h"
@@ -42,6 +43,7 @@ void BrInit(void)
     BrRing_Init();
     BrHud_Init();
     BrMatch_Init();
+    BrHof_Init();
     BrLevels_Init();
     BrCatch_Init();
     BrNetlink_Init();
@@ -93,6 +95,7 @@ void BrFrame(void)
     BrRing_Tick();
     BrHud_Tick();
     BrMatch_Tick();
+    BrHof_Tick();
     BrLevels_Tick();
     BrCatch_Tick();
     BrMoves_Tick();

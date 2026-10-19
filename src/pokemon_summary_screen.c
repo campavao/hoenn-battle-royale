@@ -3105,6 +3105,9 @@ static void PrintMonOTName(void)
 static void PrintMonOTID(void)
 {
     int xPos;
+#if BR
+    return; // no IDNo: in a match every trainer's is 00000 (POK-418)
+#endif
     if (InBattleFactory() != TRUE && InSlateportBattleTent() != TRUE)
     {
         ConvertIntToDecimalStringN(StringCopy(gStringVar1, gText_IDNumber2), (u16)sMonSummaryScreen->summary.OTID, STR_CONV_MODE_LEADING_ZEROS, 5);

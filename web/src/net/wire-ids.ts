@@ -37,6 +37,7 @@ export const BR_MSG = {
   GIVE: 30,
   NPCOUT: 31,
   EVENT: 32,
+  FAME: 33,
 } as const;
 
 /** The most bytes each message that spans slots packs to, and so what the ROM's
@@ -54,5 +55,5 @@ export const BR_CAP = {
 
 /** The table's shape (BR_WIRE_HASH), and the protocol tools/br/wire-protocols.txt lists
  *  it under (BR_WIRE_PROTOCOL): wire-ids.test.ts holds that to wire.ts's PROTOCOL. */
-export const WIRE_HASH = 0xA2A9EB99;
-export const WIRE_PROTOCOL = 2;
+export const WIRE_HASH = 0x7A2D04DC;
+export const WIRE_PROTOCOL = 3;

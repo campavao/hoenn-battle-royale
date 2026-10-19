@@ -16,6 +16,7 @@
 // the start, and this file is fetched the first time results go up (POK-407).
 import { ordinal } from '../match/career';
 import type { RecordLine } from '../match/record';
+import { favourite, type MatchTally, type TallyNames } from '../match/tally';
 import type { MatchResult } from '../match/results';
 import { TEXT_BLUE, TEXT_DARK, fitText } from './emerald';
 import { ROW_H, W, paintButtons, paintRows, paintTitle, type ButtonSpec } from './screens';
@@ -87,6 +88,33 @@ export function fameOf(
   return { title: winner === seat ? 'Your team' : `The champion: ${nameOf(winner)}`, mons };
 }
 
+/** The match's own lines, for the results under the Hall of Fame. Every count is said,
+ *  zero too -- "0 caught" is an answer to the question Cam asked -- and a favourite only
+ *  once there is one. */
+export function tallyLines(t: MatchTally, names: TallyNames): RecordLine[] {
+  const lines: RecordLine[] = [
+    { label: 'WON', value: String(t.won) },
+    { label: 'CAUGHT', value: String(t.caught) },
+    { label: 'WALKED', value: `${t.steps} ${t.steps === 1 ? 'step' : 'steps'}` },
+    { label: 'ITEMS', value: String(t.items) },
+  ];
+  const mon = favourite(t.mons);
+  if (mon !== undefined) lines.push({ label: 'FAVORITE', value: names.species(mon), wide: true });
+  const move = favourite(t.moves);
+  const moveName = move === undefined ? undefined : names.move(move);
+  if (moveName) lines.push({ label: 'TOP MOVE', value: moveName, wide: true });
+  return lines;
+}
+
+/** The record as rows: counts in pairs, left and right, and a name on a row of its own. */
+export function recordRows(lines: readonly RecordLine[]): { label: string; detail?: string }[] {
+  const rows: { label: string; detail?: string }[] = [];
+  const counts = lines.filter((l) => !l.wide).map((l) => `${l.label} ${l.value}`);
+  for (let i = 0; i < counts.length; i += 2) rows.push({ label: counts[i], detail: counts[i + 1] });
+  for (const l of lines) if (l.wide) rows.push({ label: l.label, detail: l.value });
+  return rows;
+}
+
 export interface ResultsModel {
   view: ResultsView;
   /** The career line the match produced, which recordMatch folds it into. */
@@ -134,7 +162,9 @@ export function resultsScreen(model: () => ResultsModel): DrawnScreen {
 
       if (m.record.length > 0) {
         const recTop = y;
-        const rec = paintRows(c, y, m.record.map((l) => ({ label: l.label, detail: l.value, color: TEXT_DARK })));
+        // Two counts to a row, so the room's and the ROM's both fit (POK-416); a name
+        // gets a row of its own.
+        const rec = paintRows(c, y, recordRows(m.record).map((r) => ({ ...r, color: TEXT_DARK })));
         widgets.push({
           rect: { x: 0, y: recTop, w: W, h: rec.bottom - recTop },
           text: m.record.map((l) => `${l.label} ${l.value}`).join(' · '),

@@ -17,6 +17,8 @@ import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import type { HudWorld } from './ui/phonehud';
 import type { PadPrefsControl } from './ui/padprefs';
+import { moveInfo, type Rom } from './battle/movebook';
+import { favourite, readTally, zeroTally, type MatchTally } from './match/tally';
 import { DEFAULT_FOG_SECS, DEFAULT_SAFARI_SECS, type Director, type DirectorState, type DirectorWorld } from './match/director';
 import { battleSeats, cutTo, nameBstart, romReplaying, Spectate } from './match/spectate';
 import type { Results } from './match/results';
@@ -63,8 +65,6 @@ import {
   type OptionSpec,
   roomScreen,
   sheetScreen,
-  trainerScreen,
-  lookScreen,
   type RoomModel,
   type RoomSeat,
   type RowSpec,
@@ -437,7 +437,7 @@ function cardOf(roster: Roster, seat: number | null, canKick: boolean, watchable
   return {
     seat: e.seat,
     skin: Number(e.skin ?? 0) || 0,
-    lines: cardFor(e),
+    lines: cardFor(e, speciesName),
     canKick: canKick && !e.isMe,
     canWatch: watchable && e.alive && !e.isMe && e.seat !== watching,
   };
@@ -1700,6 +1700,48 @@ function loadResultsUi(): Promise<void> {
 }
 setTimeout(() => void loadResultsUi(), 0);
 
+/** The trainer's own screens (ui/profile.ts): the TRAINER CARD, MY LOOK, MY STATS. A
+ *  chunk of their own, fetched soon after boot as the results' is (POK-407), to keep
+ *  main.js inside its budget; a press before it lands draws once it does. */
+let profileUi: typeof import('./ui/profile') | undefined;
+let profileUiReady: Promise<void> | undefined;
+function loadProfileUi(): Promise<void> {
+  profileUiReady ??= import('./ui/profile').then(
+    (m) => {
+      profileUi = m;
+      theStage().redraw();
+    },
+    (err: unknown) => {
+      profileUiReady = undefined;
+      console.warn('profile screens did not load', err);
+    },
+  );
+  return profileUiReady;
+}
+setTimeout(() => void loadProfileUi(), 0);
+
+/** A screen out of the profile chunk: nothing until it has landed, then itself. */
+function profileScreen(make: (ui: typeof import('./ui/profile')) => DrawnScreen): DrawnScreen {
+  let real: DrawnScreen | undefined;
+  const get = (): DrawnScreen | undefined => {
+    if (!real && profileUi) real = make(profileUi);
+    if (!real) void loadProfileUi();
+    return real;
+  };
+  return {
+    paint: (c, h) => get()?.paint(c, h) ?? { widgets: [] },
+    // Before it lands (or if it never does, a deploy having taken the old chunk away), B
+    // still goes back.
+    back: () => {
+      const screen = get();
+      if (screen) screen.back?.();
+      else theStage().pop();
+    },
+    key: (k, on) => get()?.key?.(k, on) ?? false,
+    char: (key) => get()?.char?.(key) ?? false,
+  };
+}
+
 function renderResults(
   seat: number,
   roster: Roster,
@@ -1710,6 +1752,8 @@ function renderResults(
     /** How many seats the match started with. */
     fieldSize: number;
     seed?: number;
+    /** What our own ROM counted (POK-416), null without gBrTally. */
+    tally: MatchTally | null;
   },
   shown: { career: string; held: boolean; again: ResultsModel['again']; menu?: () => void },
 ): void {
@@ -1728,7 +1772,7 @@ function renderResults(
     view: resultsView(mine, books.fieldSize, seat, nameOf, books.seed),
     career: shown.career,
     fame: fameOf(mine.winner, seat, mine.winner === undefined ? undefined : books.parties.get(mine.winner), nameOf, speciesName),
-    record: recordLines(books.record.forSeat(seat)),
+    record: [...recordLines(books.record.forSeat(seat)), ...(books.tally ? resultsUi.tallyLines(books.tally, { species: speciesName, move: moveNameOf }) : [])],
     again: shown.again,
     menu: shown.menu,
   };
@@ -1762,6 +1806,28 @@ const REPLAY_MAX_MS = 150_000;
  *  the map (include/br/br_match.h). The one byte the page reads out of the match struct:
  *  everything else it needs comes through the mailbox. */
 const BR_PHASE_DONE = 5;
+/** ...and while it runs (BR_PHASE_WIN): somebody else's parade has begun (POK-417). */
+const BR_PHASE_WIN = 4;
+/** How long somebody else's parade is given to begin: their team has to reach us, and
+ *  our ROM waits for a quiet field. A replay it waits behind is not counted. */
+const FAME_START_MS = 15_000;
+
+/** The ROM's own tables (wirePlayScreen), for a move's name in the results and MY STATS
+ *  (POK-416). */
+let romTables: Rom | null = null;
+function moveNameOf(id: number): string | undefined {
+  return (romTables && moveInfo(romTables, id)?.name) || undefined;
+}
+
+/** gBrTally (POK-416), as a MatchSession reads it: undefined for a build without it. */
+function tallyOf(emu: Emulator, symbols: Map<string, number> | undefined): { zero(): void; read(): MatchTally } | undefined {
+  const base = symbols?.get('gBrTally');
+  if (base === undefined) return undefined;
+  return {
+    zero: () => zeroTally((a, v, bits) => emu.write(a, v, bits), base),
+    read: () => readTally((a, bits) => emu.read(a, bits), base),
+  };
+}
 /** `gBrMatch.seed` (include/br/br_match.h): BR_BOOT_SAFARI deals the opening's cell off
  *  it when it is not zero (BrMatch_SafariCell). */
 const MATCH_SEED = 8;
@@ -2007,6 +2073,10 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     done: matchBase !== undefined ? () => emu.read(matchBase, 8) === BR_PHASE_DONE : undefined,
     graceMs: SOLO_END_GRACE_MS,
     giveUpMs: SOLO_WIN_GRACE_MAX_MS - SOLO_END_GRACE_MS - 2 * SOLO_PARADE_POLL_MS,
+    started: () => matchBase !== undefined && emu.read(matchBase, 8) >= BR_PHASE_WIN,
+    startMs: FAME_START_MS,
+    paused: () => romWatching(emu, spectateBase) != null,
+    pauseMaxMs: REPLAY_MAX_MS,
     onParaded: () => drawResults(),
   });
   const soloGrace = new EndGrace({
@@ -2055,6 +2125,8 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       toRom: (m) => rom.push(m),
       // No defaultFog: the director's own, which a solo `start` names anyway.
       store: localStorage,
+      tally: tallyOf(emu, symbols),
+      fameWanted: () => !paraded.paraded,
       grace: soloGrace,
       // Solo has no room to go back to, so the exit is the lobby -- which is what
       // backToLobby does, and there is no socket here for it to scatter. Won, it waits
@@ -2062,7 +2134,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       // the results up, MAIN MENU is the exit and the grace leaves them be (POK-371).
       exit: () => {
         drawResults();
-        if (!resultsShowing() && !replay.waiting) leaveSolo();
+        if (!resultsShowing() && !replay.waiting && !paraded.holding) leaveSolo();
       },
     },
     {
@@ -2077,6 +2149,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
   );
   stallLog = session.log;
   const drawResults = (): void => {
+    session.settleTally();
     const mine = session.results.forSeat(0, performance.now());
     renderResults(
       0,
@@ -2087,6 +2160,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
         parties: session.parties,
         fieldSize: session.fieldSize,
         seed,
+        tally: session.tally,
       },
       {
         career,
@@ -2409,7 +2483,8 @@ function wireRoom(
    *  this browser; this is it said to the people we are playing. */
   const sayCard = () => {
     const c = loadCareer();
-    bridge?.sayCard({ wins: c.wins, matches: c.matches, best: c.best });
+    const t = c.totals;
+    bridge?.sayCard({ wins: c.wins, matches: c.matches, best: c.best, battles: t?.won, caught: t?.caught, fav: t ? favourite(t.mons) : undefined });
   };
   const roomModel = (): RoomModel => {
     const view = controls.roster && bridge ? roomView(controls.roster, bridge.seat, controls.fill) : null;
@@ -2444,7 +2519,7 @@ function wireRoom(
         ? {
             seat: cardEntry.seat,
             skin: Number(cardEntry.skin ?? 0) || 0,
-            lines: cardFor(cardEntry),
+            lines: cardFor(cardEntry, speciesName),
             canKick: (view?.isHost ?? false) && !cardEntry.isMe,
           }
         : null,
@@ -2692,6 +2767,10 @@ function wireRoom(
     done: gBrMatch !== undefined ? () => emu.read(gBrMatch, 8) === BR_PHASE_DONE : undefined,
     graceMs: END_GRACE_MS,
     giveUpMs: WIN_GRACE_MAX_MS - END_GRACE_MS - 2 * PARADE_POLL_MS,
+    started: () => gBrMatch !== undefined && emu.read(gBrMatch, 8) >= BR_PHASE_WIN,
+    startMs: FAME_START_MS,
+    paused: () => romWatching(emu, gBrSpectate) != null,
+    pauseMaxMs: REPLAY_MAX_MS,
     onParaded: () => drawResults(),
   });
   /** Out and watching, the results wait for the fight on screen (POK-365). */
@@ -2725,6 +2804,7 @@ function wireRoom(
     // A dead end's notice is the last screen for this room: nothing is drawn over it.
     if (!bridge || dead.reached) return;
     const seat = bridge.seat;
+    session.settleTally();
     const mine = session.results.forSeat(seat, performance.now());
     renderResults(
       seat,
@@ -2735,6 +2815,7 @@ function wireRoom(
         parties: session.parties,
         fieldSize: session.fieldSize,
         seed: match.seed,
+        tally: session.tally,
       },
       {
         career,
@@ -2765,6 +2846,8 @@ function wireRoom(
       },
       defaultFog: () => controls.fogSecs,
       store: localStorage,
+      tally: tallyOf(emu, symbols),
+      fameWanted: () => !paraded.paraded,
       grace: new EndGrace({
         graceMs: END_GRACE_MS,
         winMaxMs: WIN_GRACE_MAX_MS,
@@ -2777,7 +2860,7 @@ function wireRoom(
       // them be (POK-371); the room's next START still takes this page into it.
       exit: () => {
         drawResults();
-        if (!resultsShowing() && !replay.waiting) void returnToRoom();
+        if (!resultsShowing() && !replay.waiting && !paraded.holding) void returnToRoom();
       },
     },
     {
@@ -3590,6 +3673,9 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
           setSeeThrough(!seeThrough());
           redraw();
           return;
+        case 'mystats':
+          stage.push(myStats);
+          return;
         case 'career':
           // Kanto's career is a file somebody can carry between machines; ours lives
           // in a localStorage nobody can copy, so this is the door (POK-243). Save
@@ -3692,7 +3778,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
     }));
     // The TRAINER CARD (POK-335): name, portrait and record on Emerald's own card, your
     // lines and the settings in the rows under it.
-    const trainer = trainerScreen(() => {
+    const trainer = profileScreen((ui) => ui.trainerScreen(() => {
       const career = loadCareer();
       return {
         face: { name: careerName(), skin: careerSkin(), wins: career.wins, played: career.matches, best: career.best },
@@ -3709,9 +3795,13 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         onSkin: () => press({ kind: 'skin' }),
         onBack: () => stage.pop(),
       };
-    });
+    }));
     /** MY CAREER: out to a file, or back in from one -- a question in the frame, where
      *  the page used to ask with confirm() (POK-320). */
+    /** MY STATS (POK-416): every match so far, off the career. */
+    const myStats = profileScreen((ui) =>
+      ui.statsScreen(() => ({ totals: loadCareer().totals, names: { species: speciesName, move: moveNameOf }, onBack: () => stage.pop() })),
+    );
     const careerAsk = noticeScreen(() => ({
       title: 'MY CAREER',
       lines: [{ text: 'Your career lives in this browser. Save it to a file to keep it, or load one to carry it here.' }],
@@ -3749,7 +3839,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       buttons: [{ label: 'BACK', id: 'lobbies-back', onPress: () => stage.pop() }],
       onBack: () => stage.pop(),
     }));
-    const look = lookScreen(() => {
+    const look = profileScreen((ui) => ui.lookScreen(() => {
       const career = loadCareer();
       return {
         wins: career.wins,
@@ -3774,7 +3864,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
           stage.pop();
         },
       };
-    });
+    }));
     stage.show(main);
     // One career, every screen (POK-340): the page draws what localStorage holds, so a
     // career changed in another tab -- the wardrobe in one, the menu in the next -- is
@@ -3844,6 +3934,8 @@ let fieldView: FieldView | null = null;
 let placeKeys: (() => void) | null = null;
 
 function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined, rom: Uint8Array | null = null): void {
+  // A move's name for the results and MY STATS (POK-416), off the ROM's own tables.
+  if (rom && symbols) romTables = { bytes: rom, sym: (n: string) => symbols.get(n) };
   wireKeyboard(emu);
   // Shown only on a desktop in a match (index.html's #keys), and only past the picture.
   const legend = new KeyLegend($('#keys') as HTMLElement, emu, KEYBOARD_MAP);

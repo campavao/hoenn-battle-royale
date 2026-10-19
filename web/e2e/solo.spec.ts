@@ -8,20 +8,22 @@
 // solo deals a fresh one every match, so the seed is only checked for being there
 // (play.spec.ts pins one, POK-327).
 import { test, expect } from '@playwright/test';
-import { romExists, romHashParam, romPath } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
 
 test.beforeAll(() => {
   test.skip(!romExists(), `no ROM at ${romPath()} -- set HBR_ROM or place pokeemerald.gba at the repo root, then run tools/br/dev-patch.sh`);
 });
 
 test('a solo match ends on its results, and MAIN MENU goes back to the lobby', async ({ page }) => {
-  test.setTimeout(360_000);
+  test.setTimeout(420_000);
 
   await page.goto(`/#solo&fast&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
 
-  // A whole match at the dev pace: 25s opening, 15s ring phases, bots filling the field.
-  await expect(page.locator('#results-panel')).toBeVisible({ timeout: 240_000 });
+  // A whole match at the dev pace: 25s opening, 15s ring phases, bots filling the field,
+  // then the champion's Hall of Fame in our own ROM (POK-417), which lets go by itself.
+  await expect(page.locator('#results-panel')).toBeVisible({ timeout: 300_000 });
+  expect(await page.evaluate((base) => (window as unknown as { __hbr: { emu: { read(a: number, b: number): number } } }).__hbr.emu.read(base, 8), loadSymbols().gBrMatch), 'the Hall of Fame came and went (BR_PHASE_DONE)').toBe(5);
   await expect(page.locator('#results-line')).toHaveText(/seed \d+/);
   await expect(page.locator('#results-career')).toHaveText(/^1 played/);
   await expect(page.locator('#results-record')).toContainText('RINGS');

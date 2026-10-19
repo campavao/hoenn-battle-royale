@@ -494,6 +494,15 @@ export class HostRole {
       // the mechanism: each client's own grace is what actually moves it, so a room of
       // older clients still ends properly.
       this.link.toRoom({ t: 'again', seat: this.link.seat });
+      // A bot champion has no ROM to send its team as its parade starts (POK-243), so
+      // the host that walks it does, for everybody's Hall of Fame (POK-417): the room's
+      // pages and our own.
+      const champ = msg.seat ?? null;
+      const party = champ !== null && champ !== this.link.seat ? this.bots.partyFor(champ) : null;
+      if (party) {
+        this.link.toRoom(party);
+        this.session.note(party, 'page');
+      }
     }
     if (msg.t === 'ring') {
       // The first ring IS the buzzer: it is what ends the opening in the ROM

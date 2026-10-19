@@ -19,7 +19,7 @@
 import { MAP_GROUP_SIZES, MAX_LEVEL, MOVES_COUNT, NUM_SPECIES, SPECIES_UNOWN_GAP } from './rom-limits';
 
 // A peer that speaks a different PROTOCOL is refused at `place`, same as Kanto.
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 
 export const MAX_SEAT = 31; // roster is 32 seats (br_mailbox.h's `struct BrRoster`)
 export const MAX_NAME = 7; // the Gen 1/3 player name box width
@@ -362,6 +362,16 @@ export interface FollowMsg {
   name?: string;
 }
 
+/** The match is over and `seat` took it: parade their team through our own ROM's Hall
+ *  of Fame (POK-417, Cam: "Everyone who is still in the game should see the hall of fame
+ *  screen"). Page -> its own ROM only, right behind the champion's PARTY: nobody else
+ *  needs telling, every page sends its own. */
+export interface FameMsg {
+  t: 'fame';
+  seat: number;
+  name?: string;
+}
+
 /** That ground item is mine, or part of a bag is (Kanto's `took`, renamed to match
  *  what it does). A bare `key` is the whole piece; with `item`/`n`, that many of that
  *  item left the bag and the rest is still there; `cash` says the money went too.
@@ -590,6 +600,11 @@ export interface CardMsg {
   matches: number;
   /** Their best finish, 1 = a win; absent before a match has been finished. */
   best?: number;
+  /** Their lifetime stats (POK-416): battles won, Pokemon caught, and the species they
+   *  have fought with most. Absent from a page older than them, or before any match. */
+  battles?: number;
+  caught?: number;
+  fav?: number;
 }
 
 /** This trainer's tab went to the background, or came back (POK-389). A hidden tab runs
@@ -671,6 +686,7 @@ export type Msg =
   | AgainMsg
   | BusyMsg
   | FollowMsg
+  | FameMsg
   | PeekMsg
   | ShotMsg
   | BotOutMsg
@@ -1016,6 +1032,7 @@ const decoders: Record<string, Decoder> = {
   // Page -> its own ROM only (docs/WIRE.md); decodable so the type round-trips, but
   // match/spectate.ts refuses one that arrives from anybody else.
   follow: (m) => ({ t: 'follow', seat: m.seat === null ? null : reqSeat(m), ...(typeof m.name === 'string' ? { name: m.name } : {}) }),
+  fame: (m) => ({ t: 'fame', seat: reqSeat(m), ...(typeof m.name === 'string' ? { name: m.name } : {}) }),
 
   party: (m) => {
     const mons = m.mons;
@@ -1250,6 +1267,9 @@ const decoders: Record<string, Decoder> = {
     wins: optInt(m, 'wins', 0, CARD_MAX) ?? fail('bad wins'),
     matches: optInt(m, 'matches', 0, CARD_MAX) ?? fail('bad matches'),
     best: optInt(m, 'best', 1, MAX_PLAYERS),
+    battles: optInt(m, 'battles', 0, CARD_MAX),
+    caught: optInt(m, 'caught', 0, CARD_MAX),
+    fav: optInt(m, 'fav', 1, 0xffff),
   }),
 
   away: (m) => {
