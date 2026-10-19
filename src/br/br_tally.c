@@ -45,7 +45,9 @@ void BrTally_Move(u8 battler, u16 move)
     if (!gMain.inBattle || !Counting() || GetBattlerSide(battler) != B_SIDE_PLAYER || gBattleMons[battler].hp == 0
      || move == MOVE_NONE || move == MOVE_STRUGGLE)
         return;
-    Bump(gBrTally.species, gBrTally.speciesN, BR_TALLY_MONS, gBattleMons[battler].species);
+    // The party's own species, not the battler's: a Transform is still the mon that used it.
+    Bump(gBrTally.species, gBrTally.speciesN, BR_TALLY_MONS,
+         GetMonData(&gPlayerParty[gBattlerPartyIndexes[battler]], MON_DATA_SPECIES));
     Bump(gBrTally.moves, gBrTally.movesN, BR_TALLY_MOVES, move);
 }
 

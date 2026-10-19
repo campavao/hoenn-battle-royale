@@ -68,6 +68,9 @@ export interface SessionDeps {
    *  read once it is decided, into the results and the career. Absent where the build
    *  has no gBrTally, and the career then counts what the room saw. */
   tally?: { zero(): void; read(): MatchTally };
+  /** Whether somebody else's Hall of Fame is still wanted in our ROM: not once the
+   *  results have given up on it and gone up (ParadeHold), or it plays under them. */
+  fameWanted?(): boolean;
   grace: EndGrace;
   /** Out of a decided match, once its grace is up. */
   exit(): void;
@@ -380,6 +383,7 @@ export class MatchSession {
     const me = this.deps.mySeat();
     const winner = this.winner;
     if (this.famed || me === null || winner === undefined || seat !== winner || winner === me) return;
+    if (this.deps.fameWanted?.() === false) return;
     const party = this.parties.get(winner);
     if (!party || party.length === 0) return;
     this.famed = true;
@@ -405,6 +409,8 @@ export class MatchSession {
    *  the record and the log stay up until the next `start`, and so does the verdict: a
    *  champion's party can still land while the ROM reboots. */
   endMatch(): void {
+    // A champion's team that lands while the ROM starts over is last match's: no parade.
+    this.famed = true;
     Object.assign(this.match, freshMatch());
     this.lootTable = new Loot();
     this.lootMap = null;

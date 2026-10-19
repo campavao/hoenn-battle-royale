@@ -22,7 +22,8 @@ pokebytes gDecompressionBuffer+132 00 00 00 00
 pokebytes gDecompressionBuffer+139 D4 C3 C1 C1 D3
 mailsend gBrMailbox 7 gDecompressionBuffer 202
 wait 10
-# FAME: seat 1, named STEVEN
+# FAME: seat 1, named STEVEN -- in a match (a FAME in the lobby is last match's, dropped)
+poke u8 gBrMatch 2
 pokebytes gDecompressionBuffer+0x400 01 06 CD CE BF D0 BF C8
 mailsend gBrMailbox 33 gDecompressionBuffer+0x400 8
 waitfor u8 gBrMatch 4 120

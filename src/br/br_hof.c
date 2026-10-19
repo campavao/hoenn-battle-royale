@@ -38,7 +38,9 @@ static void HandleFame(const u8 *payload, u8 len)
 
     // Our own seat is the parade br_match.c runs off the RESULT; a second one of it
     // here would play it twice.
-    if (n < 2 || d[0] >= BR_MAX_SEATS || d[0] == gBrMySeat || sParty != NULL)
+    // Nor in the lobby: a FAME that came late, after the page let go of the match,
+    // is last match's.
+    if (n < 2 || d[0] >= BR_MAX_SEATS || d[0] == gBrMySeat || sParty != NULL || gBrMatch.phase == BR_PHASE_NONE)
         return;
     nameLen = d[1];
     if (nameLen > PLAYER_NAME_LENGTH || 2 + nameLen > n)
@@ -80,6 +82,8 @@ void BrHof_Tick(void)
         return;
     }
     gBrMatch.phase = BR_PHASE_WIN;
+    // The Hall of Fame frees every window: the peek box goes first, not under it.
+    BrSpectate_ClosePeek();
     SetMainCallback2(CB2_DoHallOfFameScreenDontSaveData);
 }
 
@@ -95,7 +99,7 @@ const u8 *BrHof_Name(void)
 
 u16 BrHof_TrainerPic(u16 pic)
 {
-    if (sParty == NULL)
+    if (sParty == NULL || !gBrSeats[sSeat].present)
         return pic;
     return BrBattle_SkinPic(gBrSeats[sSeat].skin, pic);
 }

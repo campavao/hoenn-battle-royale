@@ -1052,6 +1052,11 @@ static void ClosePeek(void)
     gBrSpectate.peeking = FALSE;
 }
 
+void BrSpectate_ClosePeek(void)
+{
+    ClosePeek();
+}
+
 bool8 BrSpectate_HoldsSign(void)
 {
     return gBrSpectate.peeking;

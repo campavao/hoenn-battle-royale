@@ -15,6 +15,7 @@ export class ParadeHold {
    *  is waited for `startMs` to begin, a replay it waits behind not counted. */
   private other = false;
   private startWaited = 0;
+  private pausedFor = 0;
   private lastLook: number | null = null;
 
   constructor(
@@ -34,8 +35,10 @@ export class ParadeHold {
       /** How long somebody else's parade is given to begin. */
       startMs?: number;
       /** Our ROM is playing a fight back (gBrSpectate.watching), which its parade waits
-       *  behind (br_hof.c). */
+       *  behind (br_hof.c): neither the start window nor the give-up runs meanwhile, up
+       *  to `pauseMaxMs` in all. */
       paused?(): boolean;
+      pauseMaxMs?: number;
       onParaded(): void;
       now?(): number;
     },
@@ -48,6 +51,11 @@ export class ParadeHold {
   /** The parade has been seen over: the results are the champion's to read. */
   get paraded(): boolean {
     return this.seenAt !== null;
+  }
+
+  /** Waiting on a parade now: the grace's exit must not take the page away under it. */
+  get holding(): boolean {
+    return this.opts.done !== undefined && this.waitingSince !== null && this.seenAt === null;
   }
 
   /** Whether `seat`'s results wait: anybody's win, with the parade still to be seen
@@ -63,7 +71,7 @@ export class ParadeHold {
     const now = this.now();
     if (this.seenAt === null) {
       this.waitingSince ??= now;
-      if (!this.opts.done?.() && now - this.waitingSince < this.opts.giveUpMs && !this.noShow(now)) return false;
+      if (!this.opts.done?.() && now - this.waitingSince - this.pausedFor < this.opts.giveUpMs && !this.noShow(now)) return false;
       this.seenAt = now;
       this.opts.onParaded();
     }
@@ -74,6 +82,7 @@ export class ParadeHold {
   private noShow(now: number): boolean {
     const since = this.lastLook ?? now;
     this.lastLook = now;
+    if (this.opts.paused?.() && this.pausedFor < (this.opts.pauseMaxMs ?? 0)) this.pausedFor += now - since;
     if (!this.other || this.opts.startMs === undefined || this.opts.started?.()) return false;
     if (!this.opts.paused?.()) this.startWaited += now - since;
     return this.startWaited >= this.opts.startMs;
@@ -85,6 +94,7 @@ export class ParadeHold {
     this.waitingSince = null;
     this.other = false;
     this.startWaited = 0;
+    this.pausedFor = 0;
     this.lastLook = null;
   }
 }

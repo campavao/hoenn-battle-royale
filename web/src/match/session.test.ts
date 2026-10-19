@@ -188,6 +188,23 @@ describe("one match's books (POK-330 #42)", () => {
     expect(toRom.filter((m) => m.t === 'fame')).toHaveLength(1);
   });
 
+  it("parades nothing for a team that lands once the results gave up on it, or once the ROM starts over", () => {
+    let wanted = true;
+    const late = books({ fameWanted: () => wanted });
+    late.session.note(start([0, 7]), 'page');
+    late.session.note({ t: 'win', seat: 7 }, 'page');
+    wanted = false;
+    late.session.note({ t: 'party', seat: 7, mons: [mon] }, { from: 7 });
+    expect(late.toRom.filter((m) => m.t === 'fame')).toEqual([]);
+
+    const over = books();
+    over.session.note(start([0, 7]), 'page');
+    over.session.note({ t: 'win', seat: 7 }, 'page');
+    over.session.endMatch();
+    over.session.note({ t: 'party', seat: 7, mons: [mon] }, { from: 7 });
+    expect(over.toRom.filter((m) => m.t === 'fame')).toEqual([]);
+  });
+
   it('parades nothing extra for our own win, or for somebody who is not the champion', () => {
     const { session, toRom } = books();
     session.note(start([0, 7]), 'page');

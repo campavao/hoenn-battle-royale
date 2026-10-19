@@ -126,4 +126,7 @@ bool8 BrSpectate_MenuParty(void);
 bool8 BrSpectate_MenuBag(void);
 bool8 BrSpectate_MenuCard(void);
 
+// The peek box down, before a screen that frees every window (br_hof.c's parade).
+void BrSpectate_ClosePeek(void);
+
 #endif // GUARD_BR_SPECTATE_H

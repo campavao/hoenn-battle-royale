@@ -1712,7 +1712,13 @@ function profileScreen(make: (ui: typeof import('./ui/profile')) => DrawnScreen)
   };
   return {
     paint: (c, h) => get()?.paint(c, h) ?? { widgets: [] },
-    back: () => get()?.back?.(),
+    // Before it lands (or if it never does, a deploy having taken the old chunk away), B
+    // still goes back.
+    back: () => {
+      const screen = get();
+      if (screen) screen.back?.();
+      else theStage().pop();
+    },
     key: (k, on) => get()?.key?.(k, on) ?? false,
     char: (key) => get()?.char?.(key) ?? false,
   };
@@ -2052,6 +2058,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     started: () => matchBase !== undefined && emu.read(matchBase, 8) >= BR_PHASE_WIN,
     startMs: FAME_START_MS,
     paused: () => romWatching(emu, spectateBase) != null,
+    pauseMaxMs: REPLAY_MAX_MS,
     onParaded: () => drawResults(),
   });
   const soloGrace = new EndGrace({
@@ -2101,6 +2108,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       // No defaultFog: the director's own, which a solo `start` names anyway.
       store: localStorage,
       tally: tallyOf(emu, symbols),
+      fameWanted: () => !paraded.paraded,
       grace: soloGrace,
       // Solo has no room to go back to, so the exit is the lobby -- which is what
       // backToLobby does, and there is no socket here for it to scatter. Won, it waits
@@ -2108,7 +2116,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
       // the results up, MAIN MENU is the exit and the grace leaves them be (POK-371).
       exit: () => {
         drawResults();
-        if (!resultsShowing() && !replay.waiting) leaveSolo();
+        if (!resultsShowing() && !replay.waiting && !paraded.holding) leaveSolo();
       },
     },
     {
@@ -2743,6 +2751,7 @@ function wireRoom(
     started: () => gBrMatch !== undefined && emu.read(gBrMatch, 8) >= BR_PHASE_WIN,
     startMs: FAME_START_MS,
     paused: () => romWatching(emu, gBrSpectate) != null,
+    pauseMaxMs: REPLAY_MAX_MS,
     onParaded: () => drawResults(),
   });
   /** Out and watching, the results wait for the fight on screen (POK-365). */
@@ -2818,6 +2827,7 @@ function wireRoom(
       defaultFog: () => controls.fogSecs,
       store: localStorage,
       tally: tallyOf(emu, symbols),
+      fameWanted: () => !paraded.paraded,
       grace: new EndGrace({
         graceMs: END_GRACE_MS,
         winMaxMs: WIN_GRACE_MAX_MS,
@@ -2830,7 +2840,7 @@ function wireRoom(
       // them be (POK-371); the room's next START still takes this page into it.
       exit: () => {
         drawResults();
-        if (!resultsShowing() && !replay.waiting) void returnToRoom();
+        if (!resultsShowing() && !replay.waiting && !paraded.holding) void returnToRoom();
       },
     },
     {

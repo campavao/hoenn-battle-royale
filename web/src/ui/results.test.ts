@@ -248,6 +248,21 @@ describe("everybody sees the champion's Hall of Fame (POK-417)", () => {
     expect(drawn).toHaveBeenCalledTimes(1);
   });
 
+  it('runs no give-up while a replay plays, up to its cap, and holds the exit meanwhile', () => {
+    let now = 0;
+    let replaying = true;
+    const drawn = vi.fn();
+    const hold = new ParadeHold({ done: () => false, started: () => false, startMs: 15_000, paused: () => replaying, pauseMaxMs: 150_000, graceMs: 1_000, giveUpMs: 55_000, onParaded: drawn, now: () => now });
+    hold.holds(3, 1);
+    for (now = 0; now <= 100_000; now += 500) hold.finished();
+    expect(drawn, 'a hundred seconds of replay').not.toHaveBeenCalled();
+    expect(hold.holding).toBe(true);
+    replaying = false;
+    for (; now <= 116_000; now += 500) hold.finished();
+    expect(drawn, 'the window, after the replay').toHaveBeenCalledTimes(1);
+    expect(hold.holding).toBe(false);
+  });
+
   it('never gives our own parade the window: it waits until it is over or the deadline', () => {
     let now = 0;
     const drawn = vi.fn();
