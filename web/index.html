@@ -58,6 +58,13 @@
       #stage[data-look='dock'] { right: auto; width: var(--dock); z-index: 3; }
       body.docked #screen-playing { margin-left: var(--dock); }
       #stage-box { position: relative; }
+      /* POK-419: a lazy chunk that will not load; a tap reloads (app.ts chunkFailed). */
+      #chunk-reload {
+        position: fixed; z-index: 1001; left: 50%; transform: translateX(-50%);
+        top: calc(env(safe-area-inset-top, 0px) + 8px); max-width: calc(100vw - 32px);
+        padding: 8px 14px; border: 2px solid #383838; border-radius: 6px;
+        background: #f8f8f8; color: #383838; font: 600 14px/1.3 system-ui, sans-serif;
+      }
       /* Emerald's fade from black over a cut (POK-320, Stage.cut): the room giving way to
          the match, the match to its results. Four steps, as the game's palette fades go. */
       #stage-fade { position: fixed; inset: 0; z-index: 10; background: #000; opacity: 0; pointer-events: none; }
