@@ -151,7 +151,7 @@ export async function installStill(s: StillSetup): Promise<void> {
   // above the LCD, as the core reads it; semi-transparent sprites (the weather) and
   // hidden ones are not people.
   const SIZES = [[[8, 8], [16, 16], [32, 32], [64, 64]], [[16, 8], [32, 8], [32, 16], [64, 32]], [[8, 16], [8, 32], [16, 32], [32, 64]]];
-  // The side table puts a marked entry at its true rows, which can be up to 104 above
+  // The side table puts a marked entry at its true rows, which can be up to 184 above
   // the LCD (an item ball north of the player), past where an 8-bit y reaches: a nibble
   // an entry, bit 2 the mark, bits 0-1 the 256s past its y, signed.
   const HI = [0, 1, -2, -1];

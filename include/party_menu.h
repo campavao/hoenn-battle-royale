@@ -48,6 +48,9 @@ void CB2_ReturnToPartyMenuFromFlyMap(void);
 void LoadHeldItemIcons(void);
 void DrawHeldItemIconsForTrade(u8 *partyCounts, u8 *partySpriteIds, u8 whichParty);
 void CB2_ShowPartyMenuForItemUse(void);
+#if BR
+void CB2_BrAskLearn(void); // a lift's fifth move, asked about (br_moves.h, POK-400)
+#endif
 void ItemUseCB_Medicine(u8 taskId, TaskFunc task);
 void ItemUseCB_ReduceEV(u8 taskId, TaskFunc task);
 void ItemUseCB_PPRecovery(u8 taskId, TaskFunc task);

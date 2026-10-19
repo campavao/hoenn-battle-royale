@@ -12,6 +12,8 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 0B 03 05 00 0F 00 BD BB C7 FF
 wait 400
+# a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
+poke u8 gBrAsk+7 1
 # A started match at rung 30, so both sides of the fight stand at 30 (POK-225/234).
 poke u8 gBrMatch 2
 poke u8 gBrMatch+1 1

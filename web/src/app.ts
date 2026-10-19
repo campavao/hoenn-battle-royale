@@ -232,12 +232,21 @@ function setVersionLine(text: string): void {
 
 // ---- the sheet: everything in a match that is not the game (POK-320) -----------------
 
-/** A computer, with a mouse and a keyboard (POK-253's test): the sheet sits beside the
- *  game there, always in view, as the room panel always was. A phone keeps it behind
- *  the menu button, over the game. */
-const DESKTOP = '(hover: hover) and (pointer: fine)';
+/** A mouse and a keyboard (POK-253's test). */
+const POINTER = '(hover: hover) and (pointer: fine)';
+/** A computer, and a window wide enough for the sheet beside the game: the sheet sits
+ *  beside it there, always in view, as the room panel always was. A phone, or a window
+ *  narrower than PHONE_BELOW, keeps it behind the menu button over the game, with the pad
+ *  and the phone's HUD (POK-351: a 400px window was a 160px sliver of game beside a
+ *  240px sheet). Keep in step with index.html's two `min-width: 600px` queries. */
+const PHONE_BELOW = 600;
+const DESKTOP = `${POINTER} and (min-width: ${PHONE_BELOW}px)`;
 function desktop(): boolean {
   return typeof matchMedia === 'function' && matchMedia(DESKTOP).matches;
+}
+/** A keyboard to name in the sheet's help, docked or not. */
+function keyboard(): boolean {
+  return typeof matchMedia === 'function' && matchMedia(POINTER).matches;
 }
 
 /** This page's in-match sheet, the room's or solo's: set by whichever runs. */
@@ -383,7 +392,7 @@ function makeSheet(part: () => SheetPart): DrawnScreen {
     remapLine: settings.remapLine,
     // The pad's line wrapped, not cut: it ends on the axes that moved, which is the part
     // a report needs and the part a cut lost (POK-350).
-    help: desktop() ? (settings.pad ? wrapText(settings.pad, W - 8).slice(0, 3) : KEY_LINES) : TAP_LINES,
+    help: keyboard() ? (settings.pad ? wrapText(settings.pad, W - 8).slice(0, 3) : KEY_LINES) : TAP_LINES,
     version: versionLine,
     onClose: () => openSheet(false),
     onMute: () => settings.mute(),
@@ -1565,8 +1574,14 @@ let askedBand: Band | null = null;
  *  booted: every ask is inside it. */
 let romPicture: FieldPicture | null = null;
 /** The rows the ROM draws above the LCD: how far a phone's picture may come down to its
- *  pad (field.ts layoutField). */
-const liveAbove = (): number | undefined => romPicture?.band.top;
+ *  pad (field.ts layoutField). In a battle, no further than the 104 rows it came
+ *  down before POK-378: the battle menu goes under the LCD, and its bag needs the room. */
+const BATTLE_ABOVE = 104;
+let battleScene = false;
+const liveAbove = (): number | undefined => {
+  const top = romPicture?.band.top;
+  return top !== undefined && battleScene ? Math.min(top, BATTLE_ABOVE) : top;
+};
 
 /** The layout the match gives the picture, measured now, whatever screen is up: the
  *  field only opens past the picture in a match (body.in-match), with the sheet docked
@@ -4021,7 +4036,7 @@ function wirePhoneHud(
   touch: TouchLayer,
   rom: Uint8Array | null,
 ): void {
-  const { BAG_POSITION_POCKET, BattleMenu, PadPrefsControl, PhoneHud, battleWantsNoPad, readBattleBag, readBattleView, readHudView } = ui;
+  const { BAG_POSITION_POCKET, BattleMenu, PadPrefsControl, PhoneHud, battleWantsNoPad, inBattle, readBattleBag, readBattleView, readHudView } = ui;
   const top = $('#hud') as HTMLElement;
   const pad = $('#pad') as HTMLElement;
   const root = $('#screen-playing') as HTMLElement;
@@ -4074,7 +4089,12 @@ function wirePhoneHud(
     battle.setScale(s);
     // Right under the picture, where field.ts put it.
     const lay = measureLayout(wrap, pad, liveAbove());
-    menuRoot.style.top = `${Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s)}px`;
+    const top = Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s);
+    menuRoot.style.top = `${top}px`;
+    // ...and what the box (which clips it) has left under that, past the home bar (the
+    // pad's env(safe-area-inset-bottom), index.html): the bag's list fits it (POK-415).
+    const homeBar = parseFloat(getComputedStyle(pad).paddingBottom || '0');
+    battle.setRoom((wrap.clientHeight - top - homeBar) / s);
   };
   new ResizeObserver(resize).observe(pad);
   new ResizeObserver(resize).observe(wrap);
@@ -4107,6 +4127,13 @@ function wirePhoneHud(
     const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
     if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown);
     battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables, battle.wantsBag) : null);
+    const scene = shown && inBattle(emu, (n) => symbols.get(n));
+    if (scene !== battleScene) {
+      battleScene = scene;
+      fieldView?.layout();
+      placeKeys?.();
+      resize();
+    }
     const noPad = shown && battleWantsNoPad(emu, (n) => symbols.get(n), tables);
     if (noPad !== padOff) document.body.classList.toggle('battle-no-pad', (padOff = noPad));
     if (!shown) {

@@ -28,6 +28,8 @@ void BrWire_FlushHeld(void);
 // Room to send or hold one more of `len` bytes: a caller about to do something the room
 // must hear about asks first, rather than do it and have the message fall on the floor.
 bool8 BrWire_CanHold(u8 len);
+// Nothing held and room in the ring: a message sent now goes out ahead of anything after it.
+bool8 BrWire_Clear(void);
 void BrWire_ResetHeld(void);
 // Unframes a single-slot payload: points *data at the message bytes and returns their
 // length. A frame that is a continuation, claims more than one slot or is too short to

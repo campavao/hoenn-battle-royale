@@ -18,6 +18,7 @@
 #include "constants/moves.h"
 #include "br/br_items.h"
 #include "br/br_match.h"
+#include "br/br_moves.h"
 #include "br/br_levels.h"
 
 EWRAM_DATA struct BrLevels gBrLevels = {0};
@@ -351,9 +352,9 @@ static u16 SetWorth(const struct BrLearner *who, const u16 *moves)
 
 // An empty slot if there is one; otherwise whichever swap leaves the best four, over the
 // slots not in `kept` -- and no swap at all when the four it has are better than any of
-// them with the new move in. This can never be a prompt: a prompt is a freeze with the
-// fog closing.
-static void Teach(const struct BrLearner *who, u16 *moves, u8 kept, u16 move)
+// them with the new move in. `ask`: the player's own lift, where a fifth move is not
+// picked for them but asked about (BrMoves_AskFrom), so nothing is swapped here.
+static void Teach(const struct BrLearner *who, u16 *moves, u8 kept, u16 move, bool8 ask)
 {
     u16 trial[MAX_MON_MOVES];
     u16 bestWorth, w;
@@ -369,6 +370,8 @@ static void Teach(const struct BrLearner *who, u16 *moves, u8 kept, u16 move)
             return;
         }
     }
+    if (ask)
+        return;
     bestWorth = SetWorth(who, moves);
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
@@ -443,7 +446,7 @@ static void LearnThrough(struct Pokemon *mon, u8 from, u8 to)
         u8 level = (learnset[i] & LEVEL_UP_MOVE_LV) >> 9;
 
         if (level > from && level <= to)
-            Teach(&who, moves, kept, learnset[i] & LEVEL_UP_MOVE_ID);
+            Teach(&who, moves, kept, learnset[i] & LEVEL_UP_MOVE_ID, from != 0 && !gBrAsk.off);
     }
     // Only the slots that ended up different are written, so a move that survived the
     // whole walk keeps the PP it had and the PP UPs somebody spent on it.
@@ -500,6 +503,9 @@ static void LiftParty(u8 level)
         // climbed teach, around the TMs it was taught (2026-10-13 had stopped this).
         GrowUp(mon);
         LearnThrough(mon, was, level);
+        // ...and what found four moves already there is asked about, once the field is
+        // ours (Cam, 2026-10-18).
+        BrMoves_AskFrom(i, was, count);
         // Keep the wound: the new max grows, the missing HP stays missing.
         maxAfter = GetMonData(mon, MON_DATA_MAX_HP);
         if (hp > 0)
@@ -561,6 +567,9 @@ void BrLevels_GiveStartingBag(void)
     gBrLevels.rod = ITEM_NONE;
     SwapRod(sRods[0]);
     AddBagItem(ITEM_POKE_BALL, 5);
+    // Hoenn's hidden items are still under the ground in a match, and the ITEMFINDER is
+    // how you find them (Cam, 2026-10-18: "Itemfinder in the starting bag? Yes").
+    AddBagItem(ITEM_ITEMFINDER, 1);
 }
 
 // Which floor of the Department Store you are standing on does not matter: the fog is

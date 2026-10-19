@@ -37,6 +37,8 @@ ENGINE_SYMBOLS = [
     "gAnimScriptActive", "gAnimVisualTaskCount", "gAnimSoundTaskCount", "gAnimScriptCallback", "gBattleSpritesDataPtr", "gBattleAnimAttacker", "gBattleAnimTarget", "gBattleScripting", "gBattlescriptCurrInstr", "gCurrentMove",
     # Scratch a driver can build a wire message in before mailsend pushes it.
     "gDecompressionBuffer", "gBrZone",
+    # The party screen as a lift asks about a fifth move (learn-ask.txt, POK-400).
+    "gPartyMenu",
     # The field camera and the palette fade: the page draws the map past the picture
     # in lockstep with the ROM's own scroll (POK-317, web/src/field.ts).
     "gFieldCamera", "gPaletteFade",
@@ -93,6 +95,9 @@ ENGINE_SYMBOLS = [
     # The phone's bag (web/src/ui/bagsheet.ts): which pocket the ROM's BAG opens on, and
     # what each item is -- its name, description, pocket and whether a battle can use it.
     "gBagPosition", "gItems",
+    # The party screen: a tap on a POKeMON walks its cursor (gPartyMenu.slotId) there and
+    # presses A, while the choose-a-POKeMON task is the one running (web/src/touch.ts).
+    "gPartyMenu", "Task_HandleChooseMonInput",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"

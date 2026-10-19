@@ -28,6 +28,7 @@
 #include "br/br_balls.h"
 #include "br/br_patch.h"
 #include "br/br_event.h"
+#include "br/br_legend.h"
 #include "br/br_story.h"
 #include "br/br_field.h"
 
@@ -58,6 +59,7 @@ void BrInit(void)
     BrBalls_Init();
     BrPatch_Init();
     BrEvent_Init();
+    BrLegend_Init();
 }
 
 // Everything allocated a moment ago is now unowned memory that will be handed out
@@ -86,6 +88,7 @@ void BrFrame(void)
     BrStory_Tick(); // a REGI door we face takes the A first
     BrEvent_Tick(); // a trader we face takes the A before a ball we stand on
     BrLoot_Tick();
+    BrLegend_Tick();
     BrPatch_Tick();
     BrBot_Tick();
     BrDuel_Tick();

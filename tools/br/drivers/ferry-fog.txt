@@ -1,0 +1,71 @@
+# ferry-fog: aboard the SS TIDAL you are where the boat is, not in the fog (PR #76 review).
+#
+# The boat's three maps have no section of their own: MAPSEC_DYNAMIC, whose region-map
+# entry is all zeroes, so the ring measured them as the top-left corner (0,0) and a ride
+# was fog, FOG! and the bleed from the gangway to the landing. Emerald's own region map
+# knows better (region_map.c, GetSSTidalLocation): Slateport while boarding, then Routes
+# 134, 133 and 132 by the step count, 131 halfway, Lilycove when it has made land.
+#
+# In SLATEPORT HARBOR (9:9) at (8,11), with the ring on SLATEPORT CITY (8,10) and r 2:
+# the harbour and ROUTE 134 inside, the corner far outside.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 81 00 09 09 08 00 0B 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# RING from seat 0: phase 1 at (8,10), r 2, no place.
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 08 0A 02 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 60
+expect u8 gBrRing 1
+expect u8 gBrRing+5 0
+# "May I see your ticket?", "...flashed the ticket. Where to?", LILYCOVE, YES.
+tap UP
+wait 10
+tap A
+wait 60
+hold A 4
+wait 60
+tap A
+wait 40
+tap UP
+wait 10
+tap A
+wait 60
+tap A
+wait 60
+hold A 4
+wait 60
+tap A
+wait 500
+expect u8 *gSaveBlock1Ptr+4 25
+expect u8 *gSaveBlock1Ptr+5 41
+tap B
+wait 60
+tap B
+wait 60
+tap B
+wait 60
+tap B
+wait 30
+# Aboard at DEPART_SLATEPORT with no steps yet: ROUTE 134, inside. A bleed comes every
+# few seconds outside; ten seconds aboard and none.
+poke u16 gBrRing+10 0
+wait 600
+shot aboard
+expect u8 gBrRing+5 0
+expect u16 gBrRing+10 0
+# ...and past the ring the voyage is in it. VAR_CRUISE_STEP_COUNT (0x404A, at
+# *gSaveBlock1Ptr+0x1430) at 150 is ROUTE 132 (15,10), seven sections east of the centre.
+poke u16 *gSaveBlock1Ptr+0x1430 150
+wait 120
+expect u8 gBrRing+5 1
+# Made land in LILYCOVE (VAR_SS_TIDAL_STATE 4, at +0x1504): Lilycove, also outside.
+poke u16 *gSaveBlock1Ptr+0x1504 4
+wait 60
+expect u8 gBrRing+5 1
+# Boarding at Slateport again (1): inside.
+poke u16 *gSaveBlock1Ptr+0x1504 1
+wait 60
+expect u8 gBrRing+5 0
+say ferry fog ok

@@ -17,7 +17,7 @@
 // times and you were still there.
 import type { Msg } from '../net/wire';
 import { isPatchKey } from './loot';
-import { claimOf, isHomeOrClaim, traderOf } from './events';
+import { claimOf, isHomeOrClaim, legendClaimOf, traderOf } from './events';
 
 export interface SeatRecord {
   /** The ring phase this seat was still alive at. 0 before the fog's first move. */
@@ -94,7 +94,7 @@ export class MatchRecord {
         // trade with an event's trader is a trade (br_event.h's BR_EVENT_TRADER_KEY), and so
         // is somebody at home's Pokemon, given or traded (POK-379): his key comes twice, the
         // host's yes and the asker's own, and neither it nor the ask is a piece.
-        if (msg.item === undefined && !isPatchKey(msg.key) && traderOf(msg.key) === undefined && claimOf(msg.key) === undefined && !isHomeOrClaim(msg.key))
+        if (msg.item === undefined && !isPatchKey(msg.key) && traderOf(msg.key) === undefined && claimOf(msg.key) === undefined && legendClaimOf(msg.key) === undefined && !isHomeOrClaim(msg.key))
           this.row(msg.seat).took++;
         return;
       case 'dresult': {

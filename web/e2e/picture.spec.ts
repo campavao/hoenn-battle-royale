@@ -15,8 +15,8 @@
 // 64x64 grid is laid out to. The field's BG1..3 are 512 rows since POK-329 (the ROM's
 // ring, include/br/br_field.h), so past the window the core draws the map from them --
 // its own rows, not the window's again -- and nothing of BG0 or of a person twice. And
-// the ROM declares the whole ring less its one spare row (gBrFieldView: 104 above the
-// LCD, 232 below, 496 rows), so that is the band the page asks for, and inside the map
+// the ROM declares the whole ring less its one spare row (gBrFieldView: 184 above the
+// LCD, 152 below, 496 rows), so that is the band the page asks for, and inside the map
 // every row of it past the LCD is the map's own: the still render-maps.py draws of it
 // (still.ts), standing and walking every way.
 //
@@ -46,8 +46,9 @@ const BR_PHASE_SAFARI = 1;
  *  spec cannot import field.ts. */
 const WINDOW = { top: 40, bottom: 56 };
 /** The ROM's band (gBrFieldView, include/br/br_field.h): the 512-row ring less one row,
- *  104 above the LCD and 232 below. phone.spec holds the page to the ROM's own bytes. */
-const TALL = { top: 104, bottom: 232 };
+ *  184 above the LCD and 152 below (POK-378). phone.spec holds the page to the ROM's own
+ *  bytes. */
+const TALL = { top: 184, bottom: 152 };
 /** A 256-row band, the legacy one: the ring before POK-329, and the sprite window's rows. */
 const LEGACY = { top: WINDOW.top, bottom: WINDOW.bottom };
 /** field.ts's LCD_LEFT/LCD_TOP: where our own tile sits on the LCD. */
@@ -65,17 +66,17 @@ const SKIN = 15;
 const GHOST_ROWS_DOWN = 9;
 const GHOST = { x: LCD_LEFT, y: LCD_TOP + GHOST_ROWS_DOWN * 16 + 16 - 32, w: 16, h: 32 };
 /** Route 103 (80x22), whose bottom edge is Oldale Town's top: column 9 is the path south,
- *  open from row 13 to the edge. At rest on row 13 the band's last row is 176 past the
- *  map's last (13*16 - 72 + 160 + 232 - 22*16), and each step down puts 16 more of it past
- *  the edge until all 232 are. */
+ *  open from row 13 to the edge. At rest on row 13 the band's last row is 96 past the
+ *  map's last (13*16 - 72 + 160 + 152 - 22*16), and each step down puts 16 more of it past
+ *  the edge. */
 const ROUTE_103 = { id: 'MAP_ROUTE103', ref: '0:18', w: 80, h: 22 };
 const EDGE_COLUMN = 9;
 const EDGE_FROM = 13;
 const BAND_BOTTOM = TALL.bottom;
 /** Rustboro City (40x60): column 21 is clear from row 0 to row 39 -- no grass, no trainer,
  *  nobody walking into it -- and so is row 11 from column 21 to 27 (ring-tall.txt walks
- *  both). Standing anywhere from (7..31, 11..40) the band's 31 rows and 16 columns (the
- *  player's -11..+19 and -7..+8) are all inside the map, so none of it is clipped. */
+ *  both). Standing anywhere from (7..31, 16..45) the band's 31 rows and 16 columns (the
+ *  player's -16..+14 and -7..+8) are all inside the map, so none of it is clipped. */
 const RUSTBORO = { id: 'MAP_RUSTBORO_CITY', ref: '0:3', w: 40, h: 60 };
 const RUSTBORO_LAND = { x: 21, y: 25 };
 /** Rustboro's top edge is Route 115's bottom (40x80, no offset), and column 21 runs on up
@@ -647,7 +648,7 @@ test("the band stops past the map's edge: walking down to Route 103's last row, 
         }
       }
     }
-    expect(bottoms, "64 on row 13, then 16 more a step: Oldale's seven rows are never cut").toEqual([64, 80, 96, 112, 128, 144, 160, 176, 192]);
+    expect(bottoms, "nothing on rows 13 and 14, then 16 more a step: Oldale's seven rows are never cut").toEqual([0, 0, 16, 32, 48, 64, 80, 96, 112]);
     await page.screenshot({ path: path.join(OUT_DIR, 'edge.png') });
   } finally {
     await ctx.close();

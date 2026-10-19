@@ -109,6 +109,21 @@ BR_EventScript_GiftGone:
 	release
 	end
 
+@ A legendary standing on the ground (src/br/br_legend.c): the host asked for it, its cry
+@ while he answers, then its battle or "got there first". VAR_0x8004 is its species.
+BR_EventScript_Legend::
+	lockall
+	special BrLegend_Ask
+	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_LegendGone
+	playmoncry VAR_0x8004, CRY_MODE_ENCOUNTER
+	delay 40
+	waitmoncry
+	special BrLegend_Battle
+	waitstate
+BR_EventScript_LegendGone:
+	releaseall
+	end
+
 @ ...and somebody at home's Pokemon (src/br/br_balls.c): no "the" in front of it.
 BR_EventScript_GiftMon:
 	message BR_Text_MonReceived
