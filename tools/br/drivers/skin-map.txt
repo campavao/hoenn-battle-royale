@@ -1,0 +1,25 @@
+# skin-map: the MAP marks us with our look's head, not BRENDAN's or MAY's (POK-411; the
+# PR #72 review found the region map's player icon left over). ring-map.txt's walk to the
+# MAP, wearing PICNICKER (skin 7). `shot map` is the record: the icon is her face.
+wait 30
+poke u8 gBrMySkin 7
+pokebytes gBrMailbox+0x2018 81 01 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+expect u8 gObjectEvents+5 32
+tap START
+wait 40
+tap DOWN
+wait 20
+tap DOWN
+wait 20
+tap A
+wait 240
+shot map
+wait 7
+shot map2
+wait 7
+shot map3
+wait 7
+shot map4
+say skin map ok

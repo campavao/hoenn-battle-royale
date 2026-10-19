@@ -2,6 +2,7 @@
 #if BR
 #include "br/br_match.h"
 #include "br/br_battle.h"
+#include "br/br_skin.h"
 #endif
 #include "battle.h"
 #include "battle_anim.h"
@@ -2412,7 +2413,11 @@ static void PlayerHandleDrawTrainerPic(void)
         gSprites[gBattlerSpriteIds[gActiveBattler]].hFlip = 1;
     }
     // Use the back pic in any other scenario.
+#if BR
+    else if (!BrSkin_DrawMyPic(gActiveBattler, DISPLAY_WIDTH, -2))
+#else
     else
+#endif
     {
         DecompressTrainerBackPic(trainerPicId, gActiveBattler);
         SetMultiuseSpriteTemplateToTrainerBack(trainerPicId, GetBattlerPosition(gActiveBattler));
@@ -2431,6 +2436,14 @@ static void PlayerHandleTrainerSlide(void)
 {
     u32 trainerPicId;
 
+#if BR
+    if (BrSkin_DrawMyPic(gActiveBattler, -96, 2))
+    {
+        gBattlerControllerFuncs[gActiveBattler] = CompleteOnBankSpriteCallbackDummy2;
+        return;
+    }
+
+#endif
     if (gBattleTypeFlags & BATTLE_TYPE_LINK)
     {
         if ((gLinkPlayers[GetMultiplayerId()].version & 0xFF) == VERSION_FIRE_RED
@@ -3032,6 +3045,9 @@ static void PlayerHandleIntroTrainerBallThrow(void)
 
     paletteNum = AllocSpritePalette(0xD6F8);
     LoadCompressedPalette(gTrainerBackPicPaletteTable[gSaveBlock2Ptr->playerGender].data, OBJ_PLTT_ID(paletteNum), PLTT_SIZE_4BPP);
+#if BR
+    BrSkin_MyThrowPalette(paletteNum);
+#endif
     gSprites[gBattlerSpriteIds[gActiveBattler]].oam.paletteNum = paletteNum;
 
     taskId = CreateTask(Task_StartSendOutAnim, 5);

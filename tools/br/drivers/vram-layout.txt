@@ -15,6 +15,8 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 11 21 00 0F 00 BD BB C7 FF
 wait 400
+# a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
+poke u8 gBrAsk+7 1
 expect u32 gMain+4 CB2_Overworld+1
 say after-a-map-load
 dump 0x04000008 8

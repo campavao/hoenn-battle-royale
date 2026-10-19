@@ -34,6 +34,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_field.h"
 #include "br/br_strip.h"
+#include "br/br_skin.h"
 #endif
 
 #define SPECIAL_LOCALIDS_START (min(LOCALID_CAMERA, \
@@ -4560,42 +4561,74 @@ u8 GetJumpSpecialDirectionAnimNum(u8 direction)
 
 u8 GetAcroWheelieDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sAcroWheelieDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sAcroWheelieDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetAcroUnusedDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sAcroUnusedDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sAcroUnusedDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetAcroEndWheelieDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sAcroEndWheelieDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sAcroEndWheelieDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetAcroUnusedActionDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sAcroUnusedActionDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sAcroUnusedActionDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetAcroWheeliePedalDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sAcroWheeliePedalDirectionAnimNums[direction], GetMoveDirectionAnimNum(direction));
+#else
     return sAcroWheeliePedalDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetFishingDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sFishingDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sFishingDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetFishingNoCatchDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sFishingNoCatchDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sFishingNoCatchDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetFishingBiteDirectionAnimNum(u8 direction)
 {
+#if BR
+    return BrSkin_PlayerAnim(sFishingBiteDirectionAnimNums[direction], GetFaceDirectionAnimNum(direction));
+#else
     return sFishingBiteDirectionAnimNums[direction];
+#endif
 }
 
 u8 GetRunningDirectionAnimNum(u8 direction)
@@ -5153,7 +5186,11 @@ static void InitMovementNormal(struct ObjectEvent *objectEvent, struct Sprite *s
 static void StartRunningAnim(struct ObjectEvent *objectEvent, struct Sprite *sprite, u8 direction)
 {
     InitNpcForMovement(objectEvent, sprite, direction, MOVE_SPEED_FAST_1);
+#if BR
+    SetStepAnimHandleAlternation(objectEvent, sprite, BrSkin_MyAnim(objectEvent, GetRunningDirectionAnimNum(objectEvent->facingDirection), GetMoveDirectionFastAnimNum(objectEvent->facingDirection)));
+#else
     SetStepAnimHandleAlternation(objectEvent, sprite, GetRunningDirectionAnimNum(objectEvent->facingDirection));
+#endif
 }
 
 static bool8 UpdateMovementNormal(struct ObjectEvent *objectEvent, struct Sprite *sprite)
@@ -6139,7 +6176,11 @@ bool8 MovementAction_StartAnimInDirection_Step0(struct ObjectEvent *objectEvent,
 
 bool8 MovementAction_WaitSpriteAnim(struct ObjectEvent *objectEvent, struct Sprite *sprite)
 {
+#if BR
+    if (SpriteAnimEnded(sprite) || BrSkin_MyAnimEndless(objectEvent))
+#else
     if (SpriteAnimEnded(sprite))
+#endif
     {
         sprite->sActionFuncId = 2;
         return TRUE;
@@ -6150,7 +6191,11 @@ bool8 MovementAction_WaitSpriteAnim(struct ObjectEvent *objectEvent, struct Spri
 static void InitJumpSpecial(struct ObjectEvent *objectEvent, struct Sprite *sprite, u8 direction)
 {
     InitJump(objectEvent, sprite, direction, JUMP_DISTANCE_NORMAL, JUMP_TYPE_HIGH);
+#if BR
+    StartSpriteAnim(sprite, BrSkin_MyAnim(objectEvent, GetJumpSpecialDirectionAnimNum(direction), GetFaceDirectionAnimNum(direction)));
+#else
     StartSpriteAnim(sprite, GetJumpSpecialDirectionAnimNum(direction));
+#endif
 }
 
 bool8 MovementAction_JumpSpecialDown_Step0(struct ObjectEvent *objectEvent, struct Sprite *sprite)

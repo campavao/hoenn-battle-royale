@@ -232,12 +232,21 @@ function setVersionLine(text: string): void {
 
 // ---- the sheet: everything in a match that is not the game (POK-320) -----------------
 
-/** A computer, with a mouse and a keyboard (POK-253's test): the sheet sits beside the
- *  game there, always in view, as the room panel always was. A phone keeps it behind
- *  the menu button, over the game. */
-const DESKTOP = '(hover: hover) and (pointer: fine)';
+/** A mouse and a keyboard (POK-253's test). */
+const POINTER = '(hover: hover) and (pointer: fine)';
+/** A computer, and a window wide enough for the sheet beside the game: the sheet sits
+ *  beside it there, always in view, as the room panel always was. A phone, or a window
+ *  narrower than PHONE_BELOW, keeps it behind the menu button over the game, with the pad
+ *  and the phone's HUD (POK-351: a 400px window was a 160px sliver of game beside a
+ *  240px sheet). Keep in step with index.html's two `min-width: 600px` queries. */
+const PHONE_BELOW = 600;
+const DESKTOP = `${POINTER} and (min-width: ${PHONE_BELOW}px)`;
 function desktop(): boolean {
   return typeof matchMedia === 'function' && matchMedia(DESKTOP).matches;
+}
+/** A keyboard to name in the sheet's help, docked or not. */
+function keyboard(): boolean {
+  return typeof matchMedia === 'function' && matchMedia(POINTER).matches;
 }
 
 /** This page's in-match sheet, the room's or solo's: set by whichever runs. */
@@ -383,7 +392,7 @@ function makeSheet(part: () => SheetPart): DrawnScreen {
     remapLine: settings.remapLine,
     // The pad's line wrapped, not cut: it ends on the axes that moved, which is the part
     // a report needs and the part a cut lost (POK-350).
-    help: desktop() ? (settings.pad ? wrapText(settings.pad, W - 8).slice(0, 3) : KEY_LINES) : TAP_LINES,
+    help: keyboard() ? (settings.pad ? wrapText(settings.pad, W - 8).slice(0, 3) : KEY_LINES) : TAP_LINES,
     version: versionLine,
     onClose: () => openSheet(false),
     onMute: () => settings.mute(),
@@ -1320,13 +1329,13 @@ function waitForMailbox(emu: Emulator, mailboxBase: number, staleAfter?: number)
  *  mGBA's loadGame clears WRAM and decisive if it does not, so it costs nothing either
  *  way; the pause has to come AFTER the wait, because waitForMailbox counts emulated
  *  frames both to resolve and to time out. */
-async function rebootIntoBr(emu: Emulator, mailboxBase: number, bootMode: number): Promise<void> {
+async function rebootIntoBr(emu: Emulator, mailboxBase: number, bootMode: number, skinBase?: number): Promise<void> {
   const before = emu.read(mailboxBase + MAILBOX.OFF_FRAME, 32);
   emu.write(mailboxBase + MAILBOX.OFF_MAGIC, 0, 16);
   await emu.reboot();
   await waitForMailbox(emu, mailboxBase, before);
   emu.pause();
-  writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
+  writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin(), skinBase);
   emu.resume();
 }
 
@@ -1424,8 +1433,13 @@ function writeBootBlock(
   name: string,
   mode: number = BR_BOOT_MAP,
   skin = 0,
+  skinBase?: number,
 ): void {
   const boot = mailboxBase + MAILBOX.OFF_BOOT;
+  // Before the boot spawns the player (POK-411): an NPC look is our own field sprite and
+  // battle picture too, not only our ghost on everybody else's screen, and the room's
+  // write comes after the field is up.
+  if (skinBase !== undefined) writeMySkin(emu, skinBase, skin);
   emu.write(boot + BOOT_AT.mode, mode, 8);
   // The four sprites are BRENDAN, MAY, RIVAL BRENDAN, RIVAL MAY -- the odd ones are
   // the girls, and the player's own avatar should be what they picked for their ghost.
@@ -1560,8 +1574,14 @@ let askedBand: Band | null = null;
  *  booted: every ask is inside it. */
 let romPicture: FieldPicture | null = null;
 /** The rows the ROM draws above the LCD: how far a phone's picture may come down to its
- *  pad (field.ts layoutField). */
-const liveAbove = (): number | undefined => romPicture?.band.top;
+ *  pad (field.ts layoutField). In a battle, no further than the 104 rows it came
+ *  down before POK-378: the battle menu goes under the LCD, and its bag needs the room. */
+const BATTLE_ABOVE = 104;
+let battleScene = false;
+const liveAbove = (): number | undefined => {
+  const top = romPicture?.band.top;
+  return top !== undefined && battleScene ? Math.min(top, BATTLE_ABOVE) : top;
+};
 
 /** The layout the match gives the picture, measured now, whatever screen is up: the
  *  field only opens past the picture in a match (body.in-match), with the sheet docked
@@ -3161,7 +3181,7 @@ function wireRoom(
       // The window may have turned or been resized since the last boot: the band is the
       // match's layout's now (askForBand), and a boot is the one time the core takes it.
       askForBand(emu);
-      if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'));
+      if (mailboxBase !== undefined) await rebootIntoBr(emu, mailboxBase, bootModeFor('room'), symbols?.get('gBrMySkin'));
       else await emu.reboot();
       // Last match's champion is not this match's (POK-243). PLAY AGAIN used to reload
       // the page, which cleared this for free.
@@ -3924,7 +3944,7 @@ function wirePhoneHud(
   touch: TouchLayer,
   rom: Uint8Array | null,
 ): void {
-  const { BAG_POSITION_POCKET, BattleMenu, PadPrefsControl, PhoneHud, battleWantsNoPad, readBattleBag, readBattleView, readHudView } = ui;
+  const { BAG_POSITION_POCKET, BattleMenu, PadPrefsControl, PhoneHud, battleWantsNoPad, inBattle, readBattleBag, readBattleView, readHudView } = ui;
   const top = $('#hud') as HTMLElement;
   const pad = $('#pad') as HTMLElement;
   const root = $('#screen-playing') as HTMLElement;
@@ -3977,7 +3997,12 @@ function wirePhoneHud(
     battle.setScale(s);
     // Right under the picture, where field.ts put it.
     const lay = measureLayout(wrap, pad, liveAbove());
-    menuRoot.style.top = `${Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s)}px`;
+    const top = Math.round((lay.lcdRow + GBA_H) * lay.scale + 4 * s);
+    menuRoot.style.top = `${top}px`;
+    // ...and what the box (which clips it) has left under that, past the home bar (the
+    // pad's env(safe-area-inset-bottom), index.html): the bag's list fits it (POK-415).
+    const homeBar = parseFloat(getComputedStyle(pad).paddingBottom || '0');
+    battle.setRoom((wrap.clientHeight - top - homeBar) / s);
   };
   new ResizeObserver(resize).observe(pad);
   new ResizeObserver(resize).observe(wrap);
@@ -4010,6 +4035,13 @@ function wirePhoneHud(
     const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
     if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown);
     battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables, battle.wantsBag) : null);
+    const scene = shown && inBattle(emu, (n) => symbols.get(n));
+    if (scene !== battleScene) {
+      battleScene = scene;
+      fieldView?.layout();
+      placeKeys?.();
+      resize();
+    }
     const noPad = shown && battleWantsNoPad(emu, (n) => symbols.get(n), tables);
     if (noPad !== padOff) document.body.classList.toggle('battle-no-pad', (padOff = noPad));
     if (!shown) {
@@ -4242,7 +4274,7 @@ async function main(): Promise<void> {
   if (mailboxBase !== undefined) {
     const matchBase = symbols?.get('gBrMatch');
     if (roomHash.mode === 'solo' && matchBase !== undefined) emu.write(matchBase + MATCH_SEED, soloSeed, 32);
-    writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin());
+    writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin(), symbols?.get('gBrMySkin'));
     emu.resume();
   }
 

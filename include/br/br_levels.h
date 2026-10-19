@@ -30,7 +30,7 @@ const u16 *BrLevels_MartItems(void);
 // What an item costs, for GetItemPrice: the match's own price for the few Emerald
 // never sells, else `price`, the item table's.
 u16 BrLevels_ItemPrice(u16 itemId, u16 price);
-// The starting bag: an OLD ROD and a few balls. Called once by the boot.
+// The starting bag: an OLD ROD, a few balls and the ITEMFINDER. Called once by the boot.
 void BrLevels_GiveStartingBag(void);
 bool8 BrLevels_NoExp(void);
 // One clock for Hoenn's own trainers too: their team at the rung the match is at,

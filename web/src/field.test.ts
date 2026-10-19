@@ -28,16 +28,16 @@ describe('the picture past the LCD (POK-319)', () => {
     expect(sprites).toEqual(LEGACY_SPRITE_BAND);
   });
 
-  it("the ROM's view is its 512-row ring less the one row a step needs: 104 above the LCD, 232 below, 496 rows (POK-329)", () => {
+  it("the ROM's view is its 512-row ring less the one row a step needs: 184 above the LCD, 152 below, 496 rows (POK-329, POK-378)", () => {
     const view = { left: define('BR_VIEW_LEFT'), top: define('BR_VIEW_TOP'), right: define('BR_VIEW_RIGHT'), bottom: define('BR_VIEW_BOTTOM') };
     const ringRows = define('BR_RING_TILE_ROWS') / 2;
     const above = define('BR_RING_ABOVE');
     expect(ringRows, 'a 256x512 BG: 32 metatile rows').toBe(32);
-    expect(above).toBe(4);
+    expect(above).toBe(9);
     expect(view.top, "the ring's top: the LCD sits 40 below pos.y's top, and the ring runs BR_RING_ABOVE rows above it").toBe(define('BR_SPRITE_TOP') + 16 * above);
     expect(160 + view.top + view.bottom, 'every ring row but the spare one').toBe(16 * ringRows - 16);
     expect(160 + view.top + view.bottom).toBe(496);
-    expect(view).toEqual({ left: 0, top: 104, right: 16, bottom: 232 });
+    expect(view).toEqual({ left: 0, top: 184, right: 16, bottom: 152 });
     // Sideways it is the ring's 256 columns, as the legacy band's.
     expect({ left: view.left, right: view.right }).toEqual({ left: LEGACY_BAND.left, right: LEGACY_BAND.right });
     // ...and it is a band romBand takes, not one it would turn down for the legacy one.
@@ -252,9 +252,9 @@ describe('the picture past the LCD (POK-319)', () => {
     // the composite shows the map there (Rustboro -> Route 115 in picture.spec: the top
     // four rows were Rustboro's border for four frames).
     describe("rows the ROM has still to draw are cut (ringRows)", () => {
-      const tall: Band = { left: 0, top: 104, right: 16, bottom: 232 };
+      const tall: Band = { left: 0, top: 184, right: 16, bottom: 152 };
       const mid = { w: 60, h: 60 };
-      const bit = (dy: number) => 2 ** (dy + 4);
+      const bit = (dy: number) => 2 ** (dy + RING_ABOVE);
       const rows = (...dys: number[]) => dys.reduce((m, dy) => m + bit(dy), 0);
       const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
       it('none stale: nothing cut', () => {
@@ -262,25 +262,25 @@ describe('the picture past the LCD (POK-319)', () => {
         expect(bandClip(at(20, 20), mid, tall, 0)).toEqual(none);
       });
       it('after a whole-map draw, the band is pret\'s sixteen rows: the sprite window above the LCD, 56 rows below', () => {
-        const wholeMap = rows(...range(-4, -1), ...range(16, 27));
-        expect(bandClip(at(20, 20), mid, tall, wholeMap)).toEqual({ ...none, top: 64, bottom: 176 });
+        const wholeMap = rows(...range(-9, -1), ...range(16, 22));
+        expect(bandClip(at(20, 20), mid, tall, wholeMap)).toEqual({ ...none, top: 144, bottom: 96 });
         // ...and as they are drawn, nearest first, the cuts shrink a row at a time.
-        expect(bandClip(at(20, 20), mid, tall, rows(-4, -3, -2, ...range(17, 27)))).toEqual({ ...none, top: 48, bottom: 160 });
-        expect(bandClip(at(20, 20), mid, tall, rows(-4, 26, 27)), 'the last two').toEqual({ ...none, top: 16, bottom: 16 });
-        expect(bandClip(at(20, 20), mid, tall, rows(27)), 'the far row is past the band').toEqual(none);
+        expect(bandClip(at(20, 20), mid, tall, rows(...range(-9, -2), ...range(17, 22)))).toEqual({ ...none, top: 128, bottom: 80 });
+        expect(bandClip(at(20, 20), mid, tall, rows(-9, 21, 22)), 'the last two').toEqual({ ...none, top: 16, bottom: 16 });
+        expect(bandClip(at(20, 20), mid, tall, rows(22)), 'the far row is past the band').toEqual(none);
       });
-      it("over a connection going up: the new top row is fresh, the three under it the last map's border, so all four are cut", () => {
-        const crossedUp = rows(...range(-3, -1), ...range(15, 26));
-        // Two pixels into the step: the picture's top is map row 158, ring row -1 ends at
-        // 208; its bottom is 654, ring row 15 starts at 448.
-        expect(bandClip(at(20, 20, 0, -2), mid, tall, crossedUp)).toEqual({ ...none, top: 50, bottom: 206 });
+      it("over a connection going up: the new top row is fresh, the eight under it the last map's border, so all nine are cut", () => {
+        const crossedUp = rows(...range(-8, -1), ...range(15, 21));
+        // Two pixels into the step: the picture's top is map row 78, ring row -1 ends at
+        // 208; its bottom is 574, ring row 15 starts at 448.
+        expect(bandClip(at(20, 20, 0, -2), mid, tall, crossedUp)).toEqual({ ...none, top: 130, bottom: 126 });
       });
       it("mid-step down the far row waits in the slot the band's top shows: that is not a row the band shows at the bottom", () => {
-        expect([2, 4, 8, 14].map((sub) => bandClip(at(20, 20, 0, sub), mid, tall, rows(27)))).toEqual(Array(4).fill(none));
+        expect([2, 4, 8, 14].map((sub) => bandClip(at(20, 20, 0, sub), mid, tall, rows(22)))).toEqual(Array(4).fill(none));
       });
       it("never pret's rows, so never the LCD: the nearest stale rows leave the sprite window above it and 40 rows below", () => {
         const cut = bandClip(at(20, 20), mid, tall, rows(-1, 15));
-        expect(cut).toEqual({ ...none, top: 64, bottom: 192 });
+        expect(cut).toEqual({ ...none, top: 144, bottom: 112 });
         expect(tall.top - cut.top, 'rows left above the LCD').toBe(40);
         expect(tall.bottom - cut.bottom, 'and below').toBe(40);
       });

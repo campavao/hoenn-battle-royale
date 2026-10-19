@@ -24,6 +24,10 @@
 #include "window.h"
 #include "constants/battle_anim.h"
 #include "constants/songs.h"
+#if BR
+#include "br/br_skin.h"
+#include "br/br_spectate.h"
+#endif
 
 static void RecordedPlayerHandleGetMonData(void);
 static void RecordedPlayerHandleGetRawMonData(void);
@@ -1186,6 +1190,14 @@ static void RecordedPlayerHandleDrawTrainerPic(void)
     s16 xPos, yPos;
     u32 trainerPicId;
 
+#if BR
+    if (BrSkin_DrawPic(gActiveBattler, BrSpectate_SideSkin(0), DISPLAY_WIDTH, -2))
+    {
+        gBattlerControllerFuncs[gActiveBattler] = CompleteOnBattlerSpriteCallbackDummy;
+        return;
+    }
+
+#endif
     if (gBattleTypeFlags & BATTLE_TYPE_RECORDED_LINK)
     {
         if (gBattleTypeFlags & BATTLE_TYPE_MULTI)
@@ -1737,6 +1749,9 @@ static void RecordedPlayerHandleIntroTrainerBallThrow(void)
         trainerPicId = gSaveBlock2Ptr->playerGender;
 
     LoadCompressedPalette(gTrainerBackPicPaletteTable[trainerPicId].data, OBJ_PLTT_ID(paletteNum), PLTT_SIZE_4BPP);
+#if BR
+    BrSkin_ThrowPalette(BrSpectate_SideSkin(0), paletteNum);
+#endif
 
     gSprites[gBattlerSpriteIds[gActiveBattler]].oam.paletteNum = paletteNum;
 

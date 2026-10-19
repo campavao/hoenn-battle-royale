@@ -155,8 +155,8 @@ bool8 BrRing_CellInside(s16 x, s16 y, s8 r)
 
 // The bottom box on a ring move: the place the fog is closing on, which the host
 // already sends and nothing was reading. Two lines, 90 frames, above the ticker.
-static const u8 sText_FogCloses[] = _("THE FOG CLOSES IN ON");
-const u8 gBrText_FogEverywhere[] = _("FOG EVERYWHERE");
+static const u8 sText_FogCloses[] = _("The fog closes in on");
+const u8 gBrText_FogEverywhere[] = _("Fog everywhere");
 
 static void SayFog(const u8 *place, u8 len)
 {

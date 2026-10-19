@@ -229,25 +229,25 @@ struct BrClosedDoor
     const u8 *line;
 };
 
-static const u8 sText_LabClosed[] = _("PROF. BIRCH'S LAB\nIS CLOSED.");
+static const u8 sText_LabClosed[] = _("PROF. BIRCH's LAB\nis closed.");
 // Cam, live: "block off the battle tent and the daycare center." Both take the party out
 // of the match -- a Tent challenge swaps it for a rental three and runs its own battles,
 // and the DAY CARE will happily keep a Pokemon you are about to need. Only the lobby is
 // listed: refuse that door and the corridor behind it is unreachable.
-static const u8 sText_TentClosed[] = _("THE BATTLE TENT\nIS CLOSED.");
+static const u8 sText_TentClosed[] = _("The BATTLE TENT\nis closed.");
 // And the TRICK HOUSE is eight corridors of puzzle with a mechadoll that stops you on
 // the way in -- VAR_TRICK_HOUSE_ENTRANCE_STATE is 0 at boot, which is the value its
 // ON_FRAME trigger fires on.
-static const u8 sText_TrickHouseClosed[] = _("THE TRICK HOUSE\nIS CLOSED.");
+static const u8 sText_TrickHouseClosed[] = _("The TRICK HOUSE\nis closed.");
 // The SAFARI ZONE sells its own way back in. The attendant wants a POKeBLOCK CASE, which
 // Lilycove still hands out, and 500 -- and for that a contestant is given thirty balls and
 // a step counter in a Zone whose catch pool is the opening's, with the fog outside unable
 // to follow. Nobody has done it in a play-test; it was a hole on paper (2026-09-17).
-static const u8 sText_SafariClosed[] = _("THE SAFARI ZONE\nIS CLOSED.");
+static const u8 sText_SafariClosed[] = _("The SAFARI ZONE\nis closed.");
 // The boot hands out all eight badges, so Victory Road and the LEAGUE stand open -- and
 // SIDNEY's room takes your controls, walks you in and seals the door behind you, with the
 // fog closing outside (POK-295). The lobby stays: it has a nurse and a mart in it.
-static const u8 sText_LeagueClosed[] = _("THE ELITE FOUR\nARE NOT IN.");
+static const u8 sText_LeagueClosed[] = _("The ELITE FOUR\nare not in.");
 
 static const struct BrClosedDoor sClosedDoors[] =
 {

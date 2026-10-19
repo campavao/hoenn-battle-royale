@@ -1,0 +1,27 @@
+# skin-spectate: a watched fight draws both fighters in their own looks (POK-411).
+# spectate-watch.txt's BSTART, with seat numbers riding in the gender bytes: side 0 is
+# seat 0 (BEAUTY, skin 5, female), side 1 is seat 1 (HIKER, skin 4).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gBrSeats 01 05
+pokebytes gBrSeats+16 01 04
+# genders: (seat + 1) << 1 | female
+pokebytes gDecompressionBuffer 00 01 78 56 34 12 0E 00 00 00 BD BB C7 FF 00 00 00 00 BD BB C8 FF 00 00 00 00 03 04 01
+copy gDecompressionBuffer+29 gPlayerParty 100
+pokebytes gDecompressionBuffer+129 01
+copy gDecompressionBuffer+130 gPlayerParty 100
+mailsend gBrMailbox 18 gDecompressionBuffer 230
+wait 10
+expect u8 gBrSpectate+5 1
+pokebytes gDecompressionBuffer 00 01 00 03 00 00 01 01 03 00 00 00
+mailsend gBrMailbox 19 gDecompressionBuffer 12
+wait 300
+shot intro
+wait 100
+shot sent
+wait 800
+expect u32 gBattleTypeFlags 0x8300000C
+expect u8 gBattleOutcome 0
+shot battle
+say skin spectate ok
