@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MENU_ACTION, MENU_MOVE, MENU_SAFARI, menuSlot, onPicture, toGbaPixel } from './touch';
+import { MENU_ACTION, MENU_MOVE, MENU_SAFARI, PARTY_CANCEL, PARTY_CONFIRM, menuSlot, onPicture, partySlotAt, selectRowAt, toGbaPixel } from './touch';
 
 describe('a tap becomes a GBA pixel', () => {
   it('maps the picture one to one at scale', () => {
@@ -613,5 +613,183 @@ describe('PARTY and MAP press START and walk the start menu', () => {
     t.openStartRow(START_BR_MAP);
     for (let i = 0; i < 90 && emu.chosen === null; i++) emu.frame();
     expect(emu.chosen).toBe(START_BR_MAP);
+  });
+});
+
+describe('a tap on the party screen picks a POKeMON (POK-423)', () => {
+  it('the lead box, the rows down the right, and CANCEL', () => {
+    expect(partySlotAt(48, 52, 6)).toBe(0);
+    expect(partySlotAt(150, 20, 6)).toBe(1);
+    expect(partySlotAt(150, 44, 6)).toBe(2);
+    expect(partySlotAt(150, 120, 6)).toBe(5);
+    expect(partySlotAt(200, 150, 6)).toBe(PARTY_CANCEL);
+  });
+
+  it('an empty box and the gaps between boxes are nothing', () => {
+    expect(partySlotAt(150, 44, 2), 'third row, two POKeMON').toBe(-1);
+    expect(partySlotAt(150, 20, 1), 'second row, one POKeMON').toBe(-1);
+    expect(partySlotAt(92, 52, 6), 'between the lead and the rows').toBe(-1);
+    expect(partySlotAt(48, 120, 6), 'under the lead').toBe(-1);
+    expect(partySlotAt(150, 136, 6), 'under the last row, over CANCEL').toBe(-1);
+    expect(partySlotAt(200, 150, 1), 'CANCEL is always there').toBe(PARTY_CANCEL);
+  });
+
+  it('CONFIRM, over CANCEL, only when the screen has one (picking half the party)', () => {
+    expect(partySlotAt(200, 136, 6)).toBe(-1);
+    expect(partySlotAt(200, 136, 6, true)).toBe(PARTY_CONFIRM);
+    expect(partySlotAt(200, 120, 6, true), 'the last row stays the last row').toBe(5);
+    expect(partySlotAt(200, 150, 6, true)).toBe(PARTY_CANCEL);
+  });
+
+  it("the submenu's rows: 16 pixels each, up from row 19", () => {
+    expect(selectRowAt(190, 104, 3)).toBe(0);
+    expect(selectRowAt(190, 151, 3)).toBe(2);
+    expect(selectRowAt(190, 103, 3), 'over it').toBe(-1);
+    expect(selectRowAt(150, 120, 3), 'left of it').toBe(-1);
+    expect(selectRowAt(190, 88, 4)).toBe(0);
+  });
+});
+
+/** The party screen as the ROM keeps it, as far as touch.ts reads it: gMain.callback2,
+ *  gPartyMenu, one task, the window table, and UP/DOWN/A as the screen takes them. */
+class PartyEmu {
+  held = 0;
+  /** Which screen: the party's own callback, or the field's. */
+  cb2 = 0x0800_9001;
+  slot = 0;
+  count = 3;
+  /** 'choose' while Task_HandleChooseMonInput runs, 'select' for the submenu, 'msg' for a
+   *  message with neither. */
+  state: 'choose' | 'select' | 'msg' = 'choose';
+  /** The submenu's rows and cursor (task data[0]). */
+  rows = 3;
+  cur = 0;
+  pressedA: { state: string; at: number } | null = null;
+  private listeners: (() => void)[] = [];
+  private wasDown = 0;
+  press(k: GbaKey) { this.held |= 1 << KEY_BIT[k]; }
+  release(k: GbaKey) { this.held &= ~(1 << KEY_BIT[k]); }
+  keys() { return this.held; }
+  onFrame(l: () => void) { this.listeners.push(l); return () => {}; }
+  read(addr: number): number {
+    if (addr === 0x439) return 0; // gMain.inBattle
+    if (addr === 4) return this.cb2; // gMain.callback2
+    if (addr === 600) return this.count; // gPlayerPartyCount
+    if (addr === 700 + 9) return this.slot & 0xff; // gPartyMenu.slotId
+    if (addr === 7000) return this.state === 'choose' ? 0x081b24bd : 0x081b3001; // gTasks[0].func
+    if (addr === 7000 + 4) return 1; // gTasks[0].isActive
+    if (addr === 7000 + 8) return this.cur; // gTasks[0].data[0]
+    // gWindows[0]: the submenu's, while it is up.
+    if (this.state === 'select' && addr >= 8000 && addr < 8005) return [2, 19, 19 - 2 * this.rows, 10, 2 * this.rows][addr - 8000];
+    return addr >= 8000 && addr < 8000 + 12 * 32 && (addr - 8000) % 12 === 0 ? 0xff : 0;
+  }
+  frame() {
+    for (const l of this.listeners) l();
+    const fresh = this.held & ~this.wasDown;
+    this.wasDown = this.held;
+    const down = (fresh & (1 << KEY_BIT.down)) !== 0;
+    const up = (fresh & (1 << KEY_BIT.up)) !== 0;
+    if (fresh & (1 << KEY_BIT.a)) this.pressedA = { state: this.state, at: this.state === 'choose' ? this.slot : this.cur };
+    if (this.state === 'choose') {
+      const ring = [...Array.from({ length: this.count }, (_, i) => i), PARTY_CANCEL];
+      const i = ring.indexOf(this.slot);
+      if (down) this.slot = ring[(i + 1) % ring.length];
+      if (up) this.slot = ring[(i + ring.length - 1) % ring.length];
+    } else if (this.state === 'select') {
+      if (this.cur === 0xff) this.cur = 0; // its first frame: data[0] = Menu_GetCursorPos()
+      if (down && this.cur < this.rows - 1) this.cur++;
+      if (up && this.cur > 0) this.cur--;
+    }
+  }
+}
+
+function partyLayer(emu: PartyEmu) {
+  const canvas = { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 240, height: 160 }) } as unknown as HTMLCanvasElement;
+  const symbols = new Map([
+    ['gMain', 0], ['CB2_Overworld', 0x0808_5001], ['BattleMainCB2', 0x0803_0001], ['gPlayerPartyCount', 600],
+    ['gPartyMenu', 700], ['gTasks', 7000], ['Task_HandleChooseMonInput', 0x081b24bc], ['gWindows', 8000], ['gBrOwnPos', 9000],
+  ]);
+  const t = new TouchLayer({ emu: emu as never, canvas, symbols });
+  t.attach();
+  return (x: number, y: number) => (t as unknown as { tap(x: number, y: number): void }).tap(x, y);
+}
+
+describe('a tap on the party screen (POK-423)', () => {
+  it('a POKeMON: the cursor walks there, then A on it', () => {
+    const emu = new PartyEmu();
+    const tap = partyLayer(emu);
+    tap(150, 44); // the third box
+    for (let i = 0; i < 40 && !emu.pressedA; i++) emu.frame();
+    expect(emu.pressedA).toEqual({ state: 'choose', at: 2 });
+  });
+
+  it('CANCEL from the lead: one UP, the short way', () => {
+    const emu = new PartyEmu();
+    const tap = partyLayer(emu);
+    tap(200, 150);
+    for (let i = 0; i < 40 && !emu.pressedA; i++) emu.frame();
+    expect(emu.pressedA).toEqual({ state: 'choose', at: PARTY_CANCEL });
+  });
+
+  it("the submenu (a battle's SHIFT / SUMMARY / CANCEL): a tap on a row picks it", () => {
+    const emu = new PartyEmu();
+    const tap = partyLayer(emu);
+    tap(48, 52); // the lead: the submenu opens on it
+    for (let i = 0; i < 20 && !emu.pressedA; i++) emu.frame();
+    for (let i = 0; i < 10; i++) emu.frame(); // the A let go
+    emu.state = 'select';
+    emu.cur = 0xff; // before the submenu's first frame
+    emu.pressedA = null;
+    tap(190, 125); // SUMMARY, the middle of three rows at 104..152
+    for (let i = 0; i < 40 && !emu.pressedA; i++) emu.frame();
+    expect(emu.pressedA).toEqual({ state: 'select', at: 1 });
+  });
+
+  it('anywhere else on the party screen, a tap presses nothing (no step, no A)', () => {
+    const emu = new PartyEmu();
+    const tap = partyLayer(emu);
+    tap(48, 52);
+    for (let i = 0; i < 20 && !emu.pressedA; i++) emu.frame();
+    for (let i = 0; i < 10; i++) emu.frame(); // the A let go
+    emu.state = 'msg'; // a message: neither the choose task nor the submenu
+    let keys = 0;
+    for (const [x, y] of [[48, 52], [190, 125], [120, 150], [10, 10]]) {
+      tap(x, y);
+      for (let i = 0; i < 20; i++) { emu.frame(); keys |= emu.held; }
+    }
+    expect(keys).toBe(0);
+    emu.state = 'select';
+    tap(40, 40); // the submenu is up, but this is not one of its rows
+    for (let i = 0; i < 20; i++) { emu.frame(); keys |= emu.held; }
+    expect(keys).toBe(0);
+  });
+});
+
+describe('a tap reaches the field only while the field is what the ROM runs (POK-423 review)', () => {
+  class ScreenEmu extends FieldEmu {
+    cb2 = 0x0808_5001;
+    read(addr: number): number { return addr === 4 ? this.cb2 : super.read(addr); }
+  }
+  function screenLayer(emu: ScreenEmu) {
+    const canvas = { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 240, height: 160 }) } as unknown as HTMLCanvasElement;
+    const symbols = new Map([['gMain', 0], ['gSaveBlock1Ptr', 5000], ['gFieldCamera', 7000], ['gBrOwnPos', 8000], ['gObjectEvents', 9000], ['CB2_Overworld', 0x0808_5000], ['BattleMainCB2', 0x0803_0000]]);
+    const t = new TouchLayer({ emu: emu as never, canvas, symbols });
+    t.attach();
+    return (x: number, y: number) => (t as unknown as { tap(x: number, y: number): void }).tap(x, y);
+  }
+
+  it('on the field, the tile south: a step', () => {
+    const emu = new ScreenEmu();
+    screenLayer(emu)(120, 90);
+    emu.frame();
+    expect(emu.pressed).toEqual(['down']);
+  });
+
+  it('on the party screen over it (gBrOwnPos still the field): nothing', () => {
+    const emu = new ScreenEmu();
+    emu.cb2 = 0x081b_9001;
+    screenLayer(emu)(120, 90);
+    for (let i = 0; i < 10; i++) emu.frame();
+    expect(emu.pressed).toEqual([]);
   });
 });

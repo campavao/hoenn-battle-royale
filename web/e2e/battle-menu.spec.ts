@@ -230,6 +230,7 @@ const SAVE2_KEY = 0xac;
 const ITEM = { POTION: 13, SUPER_POTION: 22, X_ATTACK: 75, ESCAPE_ROPE: 85, POKE_BALL: 4, GREAT_BALL: 3, ORAN_BERRY: 139, SITRUS_BERRY: 142 };
 // struct Pokemon's hp (include/pokemon.h) and BattlePokemon's (play.ts BMON_HP).
 const PARTY_HP = 0x56;
+const PARTY_MON_SIZE = 100;
 const BMON_HP = 0x28;
 
 const bagKey = async (page: Page, sym: Record<string, number>) => read(page, (await read(page, sym.gSaveBlock2Ptr, 32)) + SAVE2_KEY, 16);
@@ -399,13 +400,20 @@ test("a short phone's bag: everything on the glass, and a tap on each pocket's i
     const head = page.locator('.bm-bag-head');
     // The ROM's party screen, "Use on which POKeMON?", once the bag has handed over to it:
     // A on the first until `count` moves.
+    // A tap on the picture, at a GBA pixel.
+    const tapGba = async (x: number, y: number) => {
+      const { lcd } = await picture(page);
+      const s = lcd.width / 240;
+      await page.touchscreen.tap(lcd.x + x * s, lcd.y + y * s);
+    };
     const onFirstMon = async (count: () => Promise<number>) => {
       await expect(menu).toBeHidden();
       await page.waitForTimeout(3_000);
+      // The party screen: a tap on the lead's box picks it (POK-423), no A.
       const was = await count();
       for (let i = 0; i < 10 && (await count()) === was; i++) {
-        await tap(page, 'z');
-        await page.waitForTimeout(1_000);
+        await tapGba(48, 52);
+        await page.waitForTimeout(2_500);
       }
       // "...HP was restored" waits for a press, and the foe's turn after it: B, which
       // the action menu ignores, until that menu is back.
@@ -445,6 +453,24 @@ test("a short phone's bag: everything on the glass, and a tap on each pocket's i
     await onFirstMon(() => count(3, ITEM.ORAN_BERRY));
     await expect.poll(() => count(3, ITEM.ORAN_BERRY), { timeout: 20_000 }).toBe(3);
     expect(await read(page, sym.gPlayerParty + PARTY_HP, 16), 'healed').toBeGreaterThan(5);
+
+    // POKeMON: a second TREECKO (the lead's copy, at 7 HP). A tap on its box, then on
+    // SHIFT in the submenu, and it comes out (POK-423): no A anywhere.
+    await action();
+    for (let i = 0; i < PARTY_MON_SIZE; i += 4) {
+      await write(page, sym.gPlayerParty + PARTY_MON_SIZE + i, await read(page, sym.gPlayerParty + i, 32), 32);
+    }
+    await write(page, sym.gPlayerParty + PARTY_MON_SIZE + PARTY_HP, 7, 16);
+    await write(page, sym.gPlayerPartyCount, 2, 8);
+    await page.locator('.bm-cell[data-slot="2"]').tap();
+    await expect(menu).toBeHidden();
+    await page.waitForTimeout(2_000);
+    await tapGba(150, 20); // the second box
+    await page.waitForTimeout(1_500);
+    await page.screenshot({ path: path.join(OUT_DIR, 'party-short-phone-submenu.png') });
+    await tapGba(190, 110); // SHIFT, the top of three rows at 104..152
+    await expect.poll(() => read(page, sym.gBattleMons + BMON_HP, 16), { timeout: 30_000 }).toBe(7);
+    await action();
 
     // POKe BALLS: the next turn, the GREAT BALL's page, and USE throws it.
     await action();
