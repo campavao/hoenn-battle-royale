@@ -112,11 +112,14 @@
 //   47:     otLen       u8   (<= 7)
 //   48..54: ot          Gen 3 charmap bytes, unused tail zero
 //   55:     flags       u8   bit0 = traded; bit1 = the moves are a ROM's own, from a
-//                             PARTY report: a card with it fights with them (POK-330 #50)
+//                             PARTY report: a card with it fights with them (POK-330 #50);
+//                             bit2 = shiny, from a ROM's own party: otId is only the
+//                             visible half, so the shine cannot be worked out from it
 //   56..99: reserved    zero
 #define BR_MON_OFF_FLAGS 55
 #define BR_MON_TRADED 0x01
 #define BR_MON_ROM_MOVES 0x02
+#define BR_MON_SHINY 0x04
 
 // BR_MSG_FAINT
 // ROM -> page: a party slot fainted (spectator/HUD state, not elimination).

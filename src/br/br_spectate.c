@@ -764,6 +764,8 @@ static u16 PackOwnBag(u8 *out)
 static void PackOwnMon(struct Pokemon *mon, u8 *row)
 {
     u8 name[POKEMON_NAME_LENGTH + 1];
+    u32 otId = GetMonData(mon, MON_DATA_OT_ID, NULL);
+    u32 personality = GetMonData(mon, MON_DATA_PERSONALITY, NULL);
     u16 v;
     u8 i, len;
 
@@ -784,6 +786,14 @@ static void PackOwnMon(struct Pokemon *mon, u8 *row)
     // These moves are this ROM's own: a bot card built back from this row keeps them
     // (POK-330 #50). The page's own cards never say so.
     row[BR_MON_OFF_FLAGS] = BR_MON_ROM_MOVES;
+    // What the Hall of Fame draws each one as (the play-test: a watcher's parade had
+    // every mon shiny, its personality and OT ID both zero). The OT ID's hidden half
+    // stays off the wire; the shine it decides goes as a flag instead.
+    BrWire_WriteU16(row + BR_PEEK_OFF_OTID, otId);
+    for (i = 0; i < 4; i++)
+        row[BR_PEEK_OFF_PERSONALITY + i] = personality >> (i * 8);
+    if (IsShinyOtIdPersonality(otId, personality))
+        row[BR_MON_OFF_FLAGS] |= BR_MON_SHINY;
     GetMonData(mon, MON_DATA_NICKNAME, name);
     for (len = 0; len < POKEMON_NAME_LENGTH && name[len] != EOS; len++)
         row[BR_PEEK_OFF_NICK + len] = name[len];
@@ -1228,17 +1238,26 @@ static bool8 BuildWatchedMon(const u8 *row, struct Pokemon *mon)
 u8 BrSpectate_PartyOf(u8 seat, struct Pokemon *party)
 {
     const u8 *row, *p;
+    u32 personality;
+    u16 otId, hidden;
     u8 i, count = 0;
 
     if (gBrSpectate.peekMons == 0 || sPartyAsm.buf == NULL || sPeekSeat != seat)
         return 0;
     for (i = 0; i < gBrSpectate.peekMons && count < PARTY_SIZE; i++)
     {
-        // The Hall of Fame says each one's gender, so this one is the row's own: its
-        // personality, and its OT ID's visible half (the hidden half is not on the wire).
+        // The Hall of Fame says each one's gender and draws its shine, so this one is the
+        // row's own: its personality, and its OT ID's visible half. The hidden half is
+        // not on the wire; one is made up that shines exactly when the row says it does
+        // (IsShinyOtIdPersonality: the four halves XORed, under 8 is shiny).
         row = sPartyAsm.buf + 2 + i * BR_PEEK_ROW;
         p = row + BR_PEEK_OFF_PERSONALITY;
-        if (BuildRowMon(row, &party[count], p[0] | (p[1] << 8) | (p[2] << 16) | ((u32)p[3] << 24), BrWire_ReadU16(row + BR_PEEK_OFF_OTID)))
+        personality = p[0] | (p[1] << 8) | (p[2] << 16) | ((u32)p[3] << 24);
+        otId = BrWire_ReadU16(row + BR_PEEK_OFF_OTID);
+        hidden = otId ^ (u16)(personality >> 16) ^ (u16)personality;
+        if (!(row[BR_MON_OFF_FLAGS] & BR_MON_SHINY))
+            hidden ^= 8;
+        if (BuildRowMon(row, &party[count], personality, otId | ((u32)hidden << 16)))
             count++;
     }
     return count;
