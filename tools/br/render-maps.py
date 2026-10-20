@@ -18,8 +18,8 @@ palettes 0..5. Secondary: 512.., 512.., 6..12. The top layer's colour 0 is trans
 
 The border block (border.bin, 2x2 metatiles) is what the ROM repeats past a map edge that
 has no connection -- Route 101's trees either side. It is a 32x32 PNG of its own; the page
-tiles it under everything, aligned to the map's odd coordinates (MapGridGetMetatileIdAt
-indexes it by the parity of grid coords, which carry MAP_OFFSET 7).
+tiles it under everything, aligned to the map's even coordinates (fieldmap.c's
+GetBorderBlockAt indexes it by ((x + 1) & 1) of grid coords, which carry MAP_OFFSET 7).
 
 Each map also gets <MAP_ID>.cover.png: the top layer of the metatiles that put it on BG1,
 which the page draws over the people it draws itself (POK-443).
