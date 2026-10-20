@@ -1,17 +1,14 @@
 // A reload in the middle of a match (POK-433, Cam's 10-19 play-test: "it doesn't look
 // like reload puts me back in the same game. Do we know why that is?").
 //
-// Why it cannot: the match lives in this tab and nowhere else. The ROM's RAM is the
-// player's whole run (party, bag, where they stand), and a reload boots a fresh one; on
-// the host the director and every bot are this page's too, so the match stops with it.
-// The relay holds the seat for a minute (POK-284), which is enough for a socket that
-// blinked and not for a page that started over. So the URL's room used to take the
-// reloaded tab into the room as if nothing had happened -- "Waiting for the host to
-// start", fifteen grey BOTs -- until the player found LEAVE.
-//
-// What it does instead: the tab notes, for itself (sessionStorage outlives a reload and
-// nothing else), that it is in a match, and a reload that finds the note goes to the
-// menu and says the match was left.
+// The match lives in this tab: the ROM's RAM is the player's whole run, and on the host
+// the director and every bot are this page's too. The relay holds the seat for a minute
+// (POK-284), so inside that minute the tab goes back in from what it wrote down on its
+// way out (match/resume.ts, HBR-20). This note is the other half: that the tab was in a
+// match at all. A reload that finds it and cannot go back -- past the minute, from inside
+// a battle, a store that would not take the savestate -- goes to the menu and says the
+// match was left, with WATCH, rather than following the URL into a room screen "Waiting
+// for the host to start" with fifteen grey BOTs.
 
 const KEY = 'hbr-in-match';
 
