@@ -588,8 +588,13 @@ static void InitStartMenu(void)
 
 static void StartMenuTask(u8 taskId)
 {
+#if BR
+    InitStartMenu(); // in one frame: a step a frame showed a blank white box first (#31)
+    SwitchTaskToFollowupFunc(taskId);
+#else
     if (InitStartMenuStep() == TRUE)
         SwitchTaskToFollowupFunc(taskId);
+#endif
 }
 
 static void CreateStartMenuTask(TaskFunc followupFunc)

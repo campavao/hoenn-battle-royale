@@ -1,0 +1,18 @@
+# start-menu-whole: START draws the whole menu, frame and items, in the frame it opens
+# (#31 of Cam's 2026-10-19 play-test: an empty white box first). pret steps the menu's
+# set-up a part a frame; BR runs it through at once (StartMenuTask).
+# capture-only: the menu's tiles are shared with the HUD (hud-vram.txt), so no byte says
+# "drawn"; menu-1 and menu-2 are the first two frames up, and each shows the items.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+hold START 1
+wait 1
+shot menu-1
+wait 1
+shot menu-2
+wait 1
+shot menu-3
+tap B
+wait 20
+say start menu whole ok
