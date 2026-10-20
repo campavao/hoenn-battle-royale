@@ -2790,15 +2790,53 @@ static void Task_HandleSelectionMenuInput(u8 taskId)
 }
 
 #if BR
-// A lift's fifth moves (POK-400), asked the way a TM or a RARE CANDY asks: the screen's
-// own "wants to learn", its YES/NO, the summary screen to pick the move to forget, and
-// "stop trying to teach". data[1] = 1 brings each answer back to Task_TryLearningNextMove,
+// A lift's fifth moves (POK-400), taught the way a TM or a RARE CANDY teaches: straight
+// to the summary screen to pick the move to forget (BrForgetWhich), backing out of it is
+// "did not learn" (BrNotLearned). data[1] = 1 brings each answer back to Task_TryLearningNextMove,
 // which asks the next one here. The exit callback is how this flow is told from the
 // others that come through it: the summary screen's way back keeps it.
 static void CB2_BrAskLearnDone(void)
 {
     // Back to START, as the party screen it stood in for would have gone.
     CB2_ReturnToFieldWithOpenMenu();
+}
+
+// Teaching asks nothing (Cam's 2026-10-19 play-test: "applying an item or a move
+// shouldn't need confirming; they know what they're doing"). A mon with four moves goes
+// straight to the summary screen to pick the one to replace, where the new move is
+// listed fifth: no "wants to learn... delete an older move?" and its YES/NO. A TM, a
+// tutor, a RARE CANDY's level and a lift's fifth move all come through here.
+static void BrForgetWhich(u8 taskId)
+{
+    gTasks[taskId].func = Task_ShowSummaryScreenToForgetMove;
+}
+
+// Backing out of that screen is the answer: the move is not learnt, said once, with no
+// "stop trying to teach?" to say it twice. Task_HandleStopLearningMoveYesNoInput's YES.
+static void BrNotLearned(u8 taskId)
+{
+    GetMonNickname(&gPlayerParty[gPartyMenu.slotId], gStringVar1);
+    StringCopy(gStringVar2, gMoveNames[gPartyMenu.data[0]]);
+    StringExpandPlaceholders(gStringVar4, gText_MoveNotLearned);
+    DisplayPartyMenuMessage(gStringVar4, TRUE);
+    gTasks[taskId].func = gPartyMenu.data[1] == 1 ? Task_TryLearningNextMoveAfterText : Task_ClosePartyMenuAfterText;
+}
+
+// Back from that screen: a move picked is replaced with no "1, 2 and... Poof!", straight
+// to "learned"; none picked is BrNotLearned.
+static void BrReturnFromForget(u8 taskId)
+{
+    if (GetMoveSlotToReplace() != MAX_MON_MOVES)
+        Task_PartyMenuReplaceMove(taskId);
+    else
+        BrNotLearned(taskId);
+}
+
+// A level's move with four already known (RARE CANDY, a lift): the move to the screen.
+static void BrNeedsToReplace(u8 taskId)
+{
+    gPartyMenu.data[0] = gMoveToLearn;
+    BrForgetWhich(taskId);
 }
 
 static bool8 BrAskNextLearn(u8 taskId)
@@ -2821,10 +2859,7 @@ static bool8 BrAskNextLearn(u8 taskId)
     }
     gPartyMenu.data[0] = move;
     gPartyMenu.data[1] = 1;
-    GetMonNickname(&gPlayerParty[slot], gStringVar1);
-    StringCopy(gStringVar2, gMoveNames[move]);
-    DisplayLearnMoveMessage(gText_PkmnNeedsToReplaceMove);
-    gTasks[taskId].func = Task_ReplaceMoveYesNo;
+    BrForgetWhich(taskId);
     return TRUE;
 }
 
@@ -4851,8 +4886,12 @@ void ItemUseCB_TMHM(u8 taskId, TaskFunc task)
     }
     else
     {
+#if BR
+        BrForgetWhich(taskId);
+#else
         DisplayLearnMoveMessage(gText_PkmnNeedsToReplaceMove);
         gTasks[taskId].func = Task_ReplaceMoveYesNo;
+#endif
     }
 }
 
@@ -4951,10 +4990,14 @@ static void Task_ReturnToPartyMenuWhileLearningMove(u8 taskId)
 {
     if (!gPaletteFade.active)
     {
+#if BR
+        BrReturnFromForget(taskId);
+#else
         if (GetMoveSlotToReplace() != MAX_MON_MOVES)
             DisplayPartyMenuForgotMoveMessage(taskId);
         else
             StopLearningMovePrompt(taskId);
+#endif
     }
 }
 
@@ -5209,6 +5252,9 @@ static void PartyMenuTryEvolution(u8 taskId)
 
 static void DisplayMonNeedsToReplaceMove(u8 taskId)
 {
+#if BR
+    BrNeedsToReplace(taskId); return;
+#endif
     GetMonNickname(&gPlayerParty[gPartyMenu.slotId], gStringVar1);
     StringCopy(gStringVar2, gMoveNames[gMoveToLearn]);
     StringExpandPlaceholders(gStringVar4, gText_PkmnNeedsToReplaceMove);
@@ -5441,8 +5487,12 @@ static void TryTutorSelectedMon(u8 taskId)
             }
             break;
         }
+#if BR
+        BrForgetWhich(taskId);
+#else
         DisplayLearnMoveMessage(gText_PkmnNeedsToReplaceMove);
         gTasks[taskId].func = Task_ReplaceMoveYesNo;
+#endif
     }
 }
 

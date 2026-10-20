@@ -28,84 +28,38 @@ tap START
 wait 30
 tap A
 wait 200
-tap A
-wait 60
-tap A
-wait 60
-shot replace-yes-no
-tap A
-wait 90
-tap A
-wait 120
+# No "wants to learn... delete an older move?" and no YES/NO (Cam's 2026-10-19 play-test:
+# teaching needs no confirmations): POKeMON opens straight on the summary screen's
+# "forget which", FURY CUTTER listed fifth.
 shot forget-which
-tap A
-wait 60
-tap A
-wait 120
-shot poof
 expect u16 gPartyMenu+14 210
 expect u16 gPartyMenu+16 1
+expectne u32 gMain+4 CB2_Overworld+1
+# A on POUND: no "1, 2 and... Poof!", straight to "GROVYLE learned FURY CUTTER!"
 tap A
-wait 60
-tap A
-tap A
-wait 120
+wait 200
+shot learned-fury-cutter
 expect u16 gPartyMenu+14 210
 tap A
-wait 60
-tap A
-wait 60
-shot learned-fury-cutter
-tap DOWN
-wait 10
-tap A
-wait 90
-tap A
-wait 60
-tap A
-wait 90
+wait 200
+# PURSUIT next, on the same screen; B declines it, said once: "did not learn PURSUIT."
+shot pursuit
 expect u16 gPartyMenu+14 228
-tap DOWN
-wait 10
-tap A
-wait 90
-tap A
-wait 10
-tap A
-wait 90
+tap B
+wait 150
 shot did-not-learn-pursuit
 tap A
-wait 120
-tap A
-wait 60
-tap A
-wait 60
+wait 200
 expect u16 gPartyMenu+14 103
-tap DOWN
-wait 10
+tap B
+wait 150
 tap A
-wait 90
-tap A
-wait 10
-tap A
-wait 90
-tap A
-wait 120
-tap A
-wait 60
-tap A
-wait 60
+wait 200
 expect u16 gPartyMenu+14 348
-tap DOWN
-wait 10
+tap B
+wait 150
 tap A
-wait 90
-tap A
-wait 10
-tap A
-wait 90
-tap A
-wait 120
+wait 150
 # back to START, as the party screen would have gone
 shot back-on-start
 tap B

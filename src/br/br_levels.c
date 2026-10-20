@@ -75,7 +75,7 @@ static const u8 sText_FogCoversAll[] = _("The fog covers all of HOENN!");
 
 static void SayPhase(void)
 {
-    BrHud_Say(gBrRing.r < 0 ? sText_FogCoversAll : sText_FogSpreads);
+    BrHud_Alert(gBrRing.r < 0 ? sText_FogCoversAll : sText_FogSpreads);
 }
 
 static void SwapRod(u16 rod)
