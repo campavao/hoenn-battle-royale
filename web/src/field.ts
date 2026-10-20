@@ -1027,10 +1027,7 @@ export class FieldView {
 
   constructor(private readonly deps: FieldDeps) {
     this.roster = deps.people ?? null;
-    void import('./field-extra').then((m) => {
-      this.extra = m;
-      this.drawn = null;
-    }, () => {});
+    this.askExtra();
   }
 
   /** The match's roster, once there is one: solo's, or the room's Bridge's. */
@@ -1602,6 +1599,19 @@ export class FieldView {
   private scratch: HTMLCanvasElement | null = null;
   /** field-extra.ts, once its chunk is in. */
   private extra: typeof import('./field-extra') | null = null;
+  private extraTries = 0;
+  private extraPending = false;
+
+  /** field-extra's chunk, asked for again (up to 3 times) after a failed fetch. */
+  private askExtra(): void {
+    if (this.extra || this.extraPending || this.extraTries >= 3) return;
+    this.extraTries++;
+    this.extraPending = true;
+    void import('./field-extra').then((m) => {
+      this.extra = m;
+      this.drawn = null;
+    }, () => {}).finally(() => { this.extraPending = false; });
+  }
   private readonly painter: Painter = {
     layout: () => this.lay,
     image: (id, dir) => this.image(id, dir),
@@ -1726,6 +1736,7 @@ export class FieldView {
    *  stay put: a step's frames ask it again and again. */
   private reached(map: WorldMap, ox: number, oy: number): Reached[] {
     const key = `${map.id}:${Math.floor(ox / TILE)}:${Math.floor(oy / TILE)}:${this.lay.cols}:${this.lay.rows}:${this.extra ? 1 : 0}`;
+    this.askExtra();
     if (this.reachedKey !== key) {
       this.reachedKey = key;
       // A tile of slack each way, for the frames of a step inside the same tile.
