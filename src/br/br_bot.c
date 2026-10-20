@@ -13,6 +13,7 @@
 #include "sound.h"
 #include "constants/battle.h"
 #include "constants/field_weather.h"
+#include "constants/items.h"
 #include "constants/pokemon.h"
 #include "constants/songs.h"
 #include "constants/characters.h"
@@ -106,7 +107,7 @@ bool8 BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
 {
     u16 species = BrWire_Species(BrWire_ReadU16(row));
     u8 level = BrWire_Level(row[2]);
-    u16 hp;
+    u16 hp, held;
     u8 nickname[POKEMON_NAME_LENGTH + 1];
     u8 i, len;
 
@@ -148,6 +149,12 @@ bool8 BrBot_BuildMon(const u8 *row, struct Pokemon *mon)
     // It was written straight on as hit points, so a ZIGZAGOON the page gave 21 walked
     // in at 21/19 and a SWAMPERT at 70% of itself -- and a 0, a mon the fog had put
     // down, walked in whole (POK-330 #30).
+    // What it holds goes into the fight with it (Cam's 10-19 play-test, #22): a bot gives
+    // a LEFTOVERS it picked up to a mon (web/src/bots/bag.ts, equip), and Emerald's own
+    // held-item lines say so as it works. An id past the table is nothing.
+    held = BrWire_ReadU16(row + 24);
+    if (held != ITEM_NONE && held < ITEMS_COUNT)
+        SetMonData(mon, MON_DATA_HELD_ITEM, &held);
     hp = BrBot_HpFromCard(BrWire_ReadU16(row + 3), BrWire_ReadU16(row + 5),
                           GetMonData(mon, MON_DATA_MAX_HP, NULL));
     SetMonData(mon, MON_DATA_HP, &hp);

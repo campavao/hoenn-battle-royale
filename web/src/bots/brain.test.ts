@@ -426,7 +426,8 @@ describe('bots walking', () => {
       { t: 'pickup', seat: dealt[0].seat, key: 0x05ff, item: 13 },
       { t: 'pickup', seat: dealt[0].seat, key: 0x05ff },
     ]);
-    expect(bots.bagOf(dealt[0].seat)).toEqual(expect.arrayContaining([{ id: 200, n: 1 }, { id: 13, n: 2 }]));
+    expect(bots.bagOf(dealt[0].seat)).toEqual(expect.arrayContaining([{ id: 13, n: 2 }]));
+    expect(bots.partyOf(dealt[0].seat)[0].heldItem).toBe(200); // the Leftovers went straight onto the lead
   });
 
   it('forgets a bot that goes out', () => {

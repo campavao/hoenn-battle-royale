@@ -3,6 +3,7 @@ import {
   BATTLE_ITEMS,
   ITEM,
   battleItems,
+  equip,
   isMedicine,
   merge,
   purse,
@@ -87,5 +88,15 @@ describe("a bot's own bag", () => {
   it('is worth more the later it falls', () => {
     expect(purse(3, Grade.Ace)).toBeGreaterThan(purse(0, Grade.Ace));
     expect(purse(3, Grade.Ace)).toBeGreaterThan(purse(3, Grade.Rookie));
+  });
+});
+
+describe('equip', () => {
+  it('hands the best hold items to standing mons that hold nothing, and keeps the rest', () => {
+    const party = [mon(20, 20), mon(0, 20), mon(10, 20)];
+    const bag = [{ id: 183, n: 1 }, { id: 200, n: 2 }, { id: ITEM.POTION, n: 1 }];
+    equip(party, bag);
+    expect(party.map((m) => m.heldItem)).toEqual([200, 0, 200]); // Leftovers outranks Quick Claw; fainted mon skipped
+    expect(bag).toEqual([{ id: 183, n: 1 }, { id: ITEM.POTION, n: 1 }]);
   });
 });

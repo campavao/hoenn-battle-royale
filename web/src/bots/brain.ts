@@ -15,7 +15,7 @@ import { eitherSees, sees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
 import { MOVE_CUT, MOVE_FLY, MOVE_STRENGTH, MOVE_SURF, tradedMon } from './party';
 import HMS from '../data/hms.json';
-import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
+import { battleItems, equip, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
 import { FIELD_CUT, FIELD_STRENGTH, sameSpot, spotKey, type Field, type SeamDir, type Spot, type World } from './world';
 import { pageCell, toRom, type PageCell } from './space';
@@ -479,7 +479,7 @@ function climb(held: PackedMon[], fresh: PackedMon[]): PackedMon[] {
     if (!mine) return next;
     const share = mine.maxHp > 0 ? mine.hp / mine.maxHp : 1;
     const hp = mine.hp <= 0 ? 0 : Math.max(1, Math.round(next.maxHp * share));
-    return { ...next, hp, status: mine.status };
+    return { ...next, hp, status: mine.status, heldItem: mine.heldItem };
   });
 }
 
@@ -1046,6 +1046,8 @@ export class Bots {
       if (item !== undefined) mergeBag(walker.bag, [{ id: item, n: 1 }]);
       this.note(walker, 'pickup', `key ${piece.key}`);
     }
+    // A LEFTOVERS goes on a mon at once, so the next fight shows it (10-19 #22).
+    equip(walker.party, walker.bag);
   }
 
   /** The next step runs into something solid, as it would in a player's ROM

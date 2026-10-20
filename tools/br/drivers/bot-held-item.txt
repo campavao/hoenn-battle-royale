@@ -1,0 +1,39 @@
+# bot-held-item: a bot's mon fights with what it holds (Cam's 10-19 play-test, #22: "it
+# would be cool to also see them apply those items, if this Pelipper was holding
+# Leftovers"). The page gives a LEFTOVERS a bot picked up to a mon (web/src/bots/bag.ts,
+# equip) and the card's PackedMon carries it at +24; BrBot_BuildMon puts it on, and
+# Emerald's own end-of-turn line plays.
+#
+# trainer-ball-refused.txt's fight, the bot's TREECKO on 10 of 19 HP holding LEFTOVERS
+# (200, row byte 24 = card byte 30).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 0A 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 C8 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 0F
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 400
+tap A
+wait 100
+tap A
+wait 100
+tap A
+wait 100
+expect u8 gBrBattle+8 1
+# the foe holds it
+expect u16 gBattleMons+0x86 200
+# FIGHT, POUND; the turn runs to its end and LEFTOVERS gives a little back
+tap A
+wait 30
+tap A
+wait 30
+wait 600
+# POUND took it to 7; Leftovers gave 1 back at the end of the turn
+expect u16 gBattleMons+0x80 8
+shot leftovers
+say bot held item ok

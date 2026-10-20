@@ -86,6 +86,36 @@ export function merge(bag: Stack[], loot: Stack[]): void {
   for (const stack of loot) add(bag, stack.id, stack.n);
 }
 
+/** What a mon holds into a fight to some effect there, best first (include/constants/
+ *  items.h ids). Cam's 10-19 play-test, #22: "it would be cool to also see them apply those
+ *  items, if this Pelipper was holding Leftovers." A bot that picks one up gives it to a
+ *  mon (`equip`), the `trainer` card carries it as the PackedMon's heldItem, and Emerald's
+ *  own held-item lines play in the fight ("restored a little HP using its LEFTOVERS!"). */
+export const HOLD_ITEMS: readonly number[] = [
+  200, // LEFTOVERS
+  186, // CHOICE BAND
+  219, // SHELL BELL
+  196, // FOCUS BAND
+  183, // QUICK CLAW
+  198, // SCOPE LENS
+  187, // KING'S ROCK
+  179, // BRIGHT POWDER
+  180, // WHITE HERB
+  185, // MENTAL HERB
+];
+
+/** Each hold item in the bag goes to a mon still standing that holds nothing, the lead
+ *  first and the best item first. Mutates both. */
+export function equip(party: PackedMon[], bag: Stack[]): void {
+  for (const id of HOLD_ITEMS) {
+    for (;;) {
+      const mon = party.find((m) => m.hp > 0 && !m.heldItem);
+      if (!mon || !take(bag, id)) break;
+      mon.heldItem = id;
+    }
+  }
+}
+
 /** How many units are in here at all -- for a test, and for the ticker. */
 export function units(bag: Stack[]): number {
   return bag.reduce((n, s) => n + s.n, 0);
