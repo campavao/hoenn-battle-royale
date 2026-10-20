@@ -197,8 +197,14 @@ void BrBalls_Tint(struct ObjectEvent *obj, struct Sprite *sprite)
         return;
     // On a desk, a table or a counter (#8; a house cache can land on one too): nothing
     // is ever dealt onto a blocked cell but furniture, so a ball on one sits on its top.
+    // Drawn over the furniture's top layer too, or the row behind clips the ball's top
+    // (Cam, 2026-10-20).
     if (MapGridGetCollisionAt(obj->currentCoords.x, obj->currentCoords.y))
+    {
         sprite->y2 = BR_TABLE_BALL_LIFT;
+        obj->fixedPriority = TRUE;
+        sprite->oam.priority = 1;
+    }
     item = BrLoot_ItemFor(obj->localId);
     if (item == ITEM_NONE)
         item = BrBalls_Deal(obj->mapGroup, obj->mapNum, obj->localId, ScriptItem(TemplateScript(obj)));
