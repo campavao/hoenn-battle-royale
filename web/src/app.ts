@@ -36,6 +36,7 @@ import type { ResumeRecord } from './match/resume';
 import { Curtain } from './match/curtain';
 import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, rewatchRow, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import type { FeedbackState } from './ui/feedback';
+import { chunkScreen as chunkScreenOf } from './ui/chunk-screen';
 import { howToRead, markHowToDue, markHowToRead, takeHowToDue } from './ui/howto-due';
 import {
   AUTO_START_MS,
@@ -501,7 +502,7 @@ function feedbackFor(about: () => FeedbackAbout, look?: () => Look): DrawnScreen
       );
     },
     onBack: () => theStage().pop(),
-  })));
+  })), () => look?.() ?? 'full');
 }
 
 /** Everybody on a roster, as the sheet's seats. */
@@ -1968,27 +1969,9 @@ function profileScreen(make: (ui: typeof import('./ui/profile')) => DrawnScreen)
   return chunkScreen(() => profileUi, loadProfileUi, make);
 }
 
-/** A screen out of a chunk: nothing until `ui()` has it, then itself. */
-function chunkScreen<M>(ui: () => M | undefined, load: () => Promise<void>, make: (m: M) => DrawnScreen): DrawnScreen {
-  let real: DrawnScreen | undefined;
-  const get = (): DrawnScreen | undefined => {
-    const m = ui();
-    if (!real && m) real = make(m);
-    if (!real) void load();
-    return real;
-  };
-  return {
-    paint: (c, h) => get()?.paint(c, h) ?? { widgets: [] },
-    // Before it lands (or if it never does, a deploy having taken the old chunk away), B
-    // still goes back.
-    back: () => {
-      const screen = get();
-      if (screen) screen.back?.();
-      else theStage().pop();
-    },
-    key: (k, on) => get()?.key?.(k, on) ?? false,
-    char: (key) => get()?.char?.(key) ?? false,
-  };
+/** A screen out of a chunk (ui/chunk-screen.ts); waiting, B is the stage's. */
+function chunkScreen<M>(ui: () => M | undefined, load: () => Promise<void>, make: (m: M) => DrawnScreen, look?: () => Look): DrawnScreen {
+  return chunkScreenOf(ui, load, make, { back: () => theStage().pop(), look });
 }
 
 function renderResults(
@@ -2687,7 +2670,7 @@ function wireRoom(
           const next = nextDoor(doorOf(view));
           if (next === 'pass') {
             // Typed on the drawn entry (POK-320). BACK leaves the door as it was.
-                        doorEntry = entryFor('PASS_ENTRY', (state) => ({
+            doorEntry = entryFor('PASS_ENTRY', (state) => ({
               title: 'PASSCODE',
               state,
               note: 'Guests type this to come in.',
