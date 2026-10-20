@@ -3195,6 +3195,9 @@ function wireRoom(
         // And we withdraw from the succession: a trainer who is out should not be the
         // one still running the match everybody else is in (POK-252).
         if (msg.seat === bridge?.seat && !host) relay.canHost(false);
+        // Out, a reload only puts us back to watch: nothing of ours is left to lose
+        // (POK-433). A host's match still goes with its tab, so a host keeps the note.
+        if (msg.seat === bridge?.seat && !host) noteOutOfMatch();
         // Going out is the moment to start watching (play-test: "when I got out in the
         // Safari, it should have brought me to spectating the other players"). Our own
         // `out` never comes back over the relay, so nothing else here ever saw it --
@@ -3271,7 +3274,10 @@ function wireRoom(
         spectate.noteOut(m.seat);
         // The host saying we are out: we went while our socket was down and came back to
         // a match that had buried us (POK-330 #25). Out is watching, as for anybody.
-        if (m.seat === seat) relay.canHost(false);
+        if (m.seat === seat) {
+          relay.canHost(false);
+          noteOutOfMatch();
+        }
         // ...and the seat we watch going out moves the watch on now, not at the next
         // tick of the interval, during which the field was ours to walk.
         autoWatch();
