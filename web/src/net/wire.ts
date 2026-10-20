@@ -336,6 +336,7 @@ export interface PackedMon {
   ot: string; // original trainer name, at most 7 chars
   traded?: boolean; // this row changed hands (Kanto POK-181's trade line)
   romMoves?: boolean; // the moves are a ROM's own, from a `party` report (POK-330 #50)
+  shiny?: boolean; // from a ROM's own party: otId is only the visible half, so the shine rides here
 }
 
 /** A Pokemon in battle fainted -- ROM-emitted, for spectator/HUD state (which party
@@ -1323,6 +1324,7 @@ function validateMon(raw: unknown): PackedMon {
     ot: optText(raw, 'ot', 7) ?? '',
     traded: raw.traded === true ? true : undefined,
     romMoves: raw.romMoves === true ? true : undefined,
+    shiny: raw.shiny === true ? true : undefined,
   };
 }
 
