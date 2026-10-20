@@ -2860,10 +2860,11 @@ function wireRoom(
         dev.bots = host.bots.bots;
       }
     }
-    host.begin();
     // Our own match back from a reload (HBR-20): as it stood, not as an heir would guess it.
-    if (takeOver && hosting) resumeKit?.HOST_SNAP.restoreHost(host, hosting);
+    const back = takeOver ? hosting : undefined;
+    const role = host;
     hosting = undefined;
+    host.begin(back && resumeKit ? () => resumeKit!.HOST_SNAP.restoreHost(role, back) : undefined);
     warmProxy(host.botCount());
     standDownIfHidden();
   };

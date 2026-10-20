@@ -9,6 +9,7 @@ import { HostRole, soloLink, soloRoster, type HostLink, type HostOptions } from 
 import type { DirectorWorld } from './director';
 import { EndGrace } from './grace';
 import { DOORSTEPS, HAND, LANDING } from './landing';
+import { restoreHost, snapHost } from './hostsnap';
 import { dealPlan } from './lifecycle';
 import { MatchSession, type SessionView } from './session';
 import * as Ticker from './ticker';
@@ -377,6 +378,32 @@ describe('the page that runs the match (POK-330 #42)', () => {
     expect(host.director.state.alive).toBe(2);
     expect(room.session.match.out).toEqual(new Set([3]));
     host.dispose();
+  });
+
+  it("lays its own snapshot over the take-over before the first tick: one ring, never the take-over's guess (HBR-20)", () => {
+    const room = hosting([0, 1]);
+    const opening = { safariSecs: 30, fogSecs: 60 };
+    // startDirectorLoop's shape: one tick at once, then the interval.
+    const startLoop = (director: { tick(): void }) => {
+      director.tick();
+      const id = setInterval(() => director.tick(), 1_000);
+      return () => clearInterval(id);
+    };
+    const first = room.deal({ seats: [0, 1], options: opening, startLoop });
+    first.begin();
+    vi.advanceTimersByTime(40_000); // into the first ring
+    const snap = JSON.parse(JSON.stringify(snapHost(first, Date.now(), Date.now())));
+    first.dispose();
+    // Away long enough for the next ring to fall due meanwhile.
+    vi.setSystemTime(Date.now() + 70_000);
+    room.frames().length = 0;
+    const back = room.deal({ seats: [0, 1], options: opening, startLoop, takeOver: true });
+    back.begin(() => restoreHost(back, snap, Date.now(), Date.now()));
+    vi.advanceTimersByTime(2_000);
+    // The one ring that fell due, once, on the centre the match already had.
+    const rings = room.frames().filter((f) => f.m?.t === 'ring');
+    expect(rings.map((f) => f.m)).toMatchObject([{ phase: 2, sx: snap.director.centre.sx, sy: snap.director.centre.sy }]);
+    back.dispose();
   });
 
   it("answers a peek at one of its bots with the bot's team, to whoever asked", () => {
