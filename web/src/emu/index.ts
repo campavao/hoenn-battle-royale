@@ -65,6 +65,7 @@ export interface CoreModule {
    *  EWRAM, -1 for none: with it the band draws every sprite at its true rows, however far
    *  from the LCD. Older cores lack it. */
   _brSetOamTable?(offset: number): void;
+  _brSetWorld?(offset: number): void;
   /** The window the loaded core draws with, `top << 16 | bottom`, or -1 for none. */
   _brSpriteWindow?(): number;
   /** The picture's ABGR8888 pixels in the heap -- the texture's top-left, the LCD at
@@ -262,6 +263,16 @@ export class Emulator {
   setOamTable(addr: number | null): boolean {
     if (!this.m._brSetOamTable) return false;
     this.m._brSetOamTable(addr === null ? -1 : addr - EWRAM_BASE);
+    return addr !== null;
+  }
+
+  /** Hand the core the ROM's world (gBrWorld, an EWRAM address), or none: on the field it
+   *  then draws BG1..3 past the LCD from the ROM's map grid, so a band of any size is the
+   *  map (the whole window, include/br/br_field.h). Takes effect at once and at every boot
+   *  after. False on a core that cannot. */
+  setWorld(addr: number | null): boolean {
+    if (!this.m._brSetWorld) return false;
+    this.m._brSetWorld(addr === null ? -1 : addr - EWRAM_BASE);
     return addr !== null;
   }
 

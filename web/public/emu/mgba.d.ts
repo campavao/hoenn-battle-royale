@@ -311,6 +311,7 @@ declare namespace mGBA {
     _brSetSpriteBand(top: number, bottom: number): void;
     /** The ROM's OAM side table at a byte offset into EWRAM, -1 for none (POK-329 band). */
     _brSetOamTable(offset: number): void;
+    _brSetWorld(offset: number): void;
     /** Hoenn BR (POK-329): the sprite window the loaded core draws with, as
      *  `top << 16 | bottom`, or -1 for none (or no game loaded). */
     _brSpriteWindow(): number;

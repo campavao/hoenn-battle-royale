@@ -112,7 +112,7 @@ import {
   type AxisSense,
   type StickMap,
 } from './pad';
-import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, type FieldLayout, type FieldPicture } from './field';
+import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, worldBand, type FieldLayout, type FieldPicture } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
 import {
@@ -1705,7 +1705,6 @@ function askForBand(emu: Emulator): void {
   const asked = askBand(matchLayout(), romPicture, shownOk);
   emu.setSpriteBand(romPicture.sprites);
   askedBand = devBand(romPicture.band) ?? asked;
-  emu.setViewport(askedBand);
   // gBrFieldShown must name the band the core actually draws, and the core takes a new
   // band only at loadGame: both callers reboot straight after this. A resize handler that
   // calls it without a reboot would tell the ROM about rows the core does not show --
@@ -1713,7 +1712,19 @@ function askForBand(emu: Emulator): void {
   fieldShown = shownOk
     ? { top: askedBand.top, bottom: askedBand.bottom, left: askedBand.left, right: askedBand.right }
     : null;
+  // `#world` (dev, the whole-window prototype): the core draws the whole layout from the
+  // ROM's map grid, past what the ring holds; the ROM keeps the ring it has for the band
+  // above, which the core still draws the LCD's sprites and its own rows from.
+  if (devWorld() && emu.setWorld(worldAt ?? null)) askedBand = worldBand(matchLayout());
+  emu.setViewport(askedBand);
 }
+
+/** `#world` (dev only): the whole-window prototype (Cam, 2026-10-20, "one layer"). */
+function devWorld(): boolean {
+  return import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('world');
+}
+/** gBrWorld: where the ROM says the LCD sits on its map grid (include/br/br_field.h). */
+let worldAt: number | undefined;
 
 /** Where the ROM keeps its OAM side table and the rows the page shows past the LCD
  *  (include/br/br_field.h): read off the symbols of the image booted. */
@@ -4125,6 +4136,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     seeThrough,
     keyLayer: $('#key-layer') as HTMLCanvasElement,
     keyDim: $('#key-dim') as HTMLElement,
+    world: devWorld,
   });
   fieldView.attach();
   // Dev only: where the page walks the ghosts, for the e2e (POK-323, world-moves.spec.ts).
@@ -4429,6 +4441,7 @@ async function main(): Promise<void> {
   romPicture = romBand(bytes, symbols);
   oamTableAt = symbols?.get('gBrOamHi');
   fieldShownAt = symbols?.get('gBrFieldShown');
+  worldAt = symbols?.get('gBrWorld');
 
   showScreen('playing');
   askForBand(emu);
