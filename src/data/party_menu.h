@@ -678,7 +678,6 @@ struct
     [MENU_TOSS] = {gMenuText_Toss, CursorCb_Toss},
 #if BR
     [MENU_MOVES] = {sText_BrMoves, CursorCb_BrMoves},
-    [MENU_NEW_MOVE] = {sText_BrNewMove, CursorCb_BrNewMove},
 #endif
     [MENU_FIELD_MOVES + FIELD_MOVE_CUT] = {gMoveNames[MOVE_CUT], CursorCb_FieldMove},
     [MENU_FIELD_MOVES + FIELD_MOVE_FLASH] = {gMoveNames[MOVE_FLASH], CursorCb_FieldMove},

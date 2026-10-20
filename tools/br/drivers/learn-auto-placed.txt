@@ -1,0 +1,43 @@
+# learn-auto-placed: a move the player set is kept by a lift (Kanto's DESIGN D12: a
+# customized slot is locked). learn-auto.txt's BULBASAUR, with GROWL marked as the
+# player's (bit 1 of the misc substruct's four unused ribbon bits, +0x4F bit 4, where
+# BrMoves_Placed keeps it). learn-auto's lift trades GROWL for SLEEP POWDER; here
+# IVYSAUR keeps GROWL in slot 2, and its mark, and RAZOR LEAF takes VINE WHIP's slot.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gPlayerParty 00 00 00 00 00 00 00 00 BC CF C6 BC BB CD BB CF CC FF 02 02 FF FF FF FF FF FF FF 00 AC B0 00 00 01 00 00 00 4C 06 00 00 00 46 00 00 21 00 2D 00 49 00 16 00 23 28 0A 0A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 85 21 00 00 00 00 00 00 00 10 00 00 00 00 0E FF 28 00 28 00 14 00 14 00 14 00 14 00 14 00
+expect u8 gPlayerParty+84 14
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 200
+expect u16 gPlayerParty+0x20 2
+expect u16 gPlayerParty+0x2C 33
+expect u16 gPlayerParty+0x2E 45
+expect u16 gPlayerParty+0x30 73
+expect u16 gPlayerParty+0x32 75
+expect u8 gPlayerParty+0x4F 16
+# nothing said, nothing waiting: the field is ours, and START's POKeMON opens on the
+# party list
+shot after-lift
+expect u16 *gSaveBlock1Ptr+0 5
+hold LEFT 20
+wait 20
+expect u16 *gSaveBlock1Ptr+0 3
+tap START
+wait 30
+tap A
+wait 200
+shot party-opens
+expect u32 gPartyMenu+0 CB2_ReturnToFieldWithOpenMenu+1
+expect u16 gPartyMenu+16 0
+tap A
+wait 30
+tap A
+wait 200
+tap RIGHT
+wait 40
+tap RIGHT
+wait 40
+shot moves
+say learn auto placed ok

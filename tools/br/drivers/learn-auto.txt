@@ -1,0 +1,48 @@
+# learn-auto: a lift teaches its levels' moves itself and asks nothing, as Kanto's does
+# (Cam, 2026-10-20: "skip the teaching phase, just like in the kanto battle royale.
+# Instead let's replace any moves the player didn't manually place, and swap them out for
+# better moves"). A BULBASAUR at 14 holding TACKLE, GROWL, LEECH SEED and VINE WHIP, none
+# of them set by the player, is lifted to 30 and evolves to IVYSAUR: the best four of
+# what IVYSAUR knows by 30 replace them, and no party screen or ticker line asks.
+# The BULBASAUR is written over the test TREECKO by hand: personality and OT id 0, so its
+# substructs sit unencrypted in GAEM order (growth +0x20, attacks +0x2C, misc +0x44),
+# with the checksum of their 24 halfwords at +0x1C.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+pokebytes gPlayerParty 00 00 00 00 00 00 00 00 BC CF C6 BC BB CD BB CF CC FF 02 02 FF FF FF FF FF FF FF 00 AC A0 00 00 01 00 00 00 4C 06 00 00 00 46 00 00 21 00 2D 00 49 00 16 00 23 28 0A 0A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 85 21 00 00 00 00 00 00 00 00 00 00 00 00 0E FF 28 00 28 00 14 00 14 00 14 00 14 00 14 00
+expect u8 gPlayerParty+84 14
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 03 19 0C 1E 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 200
+expect u16 gPlayerParty+0x20 2
+# TACKLE, SLEEP POWDER for GROWL, LEECH SEED, RAZOR LEAF for VINE WHIP
+expect u16 gPlayerParty+0x2C 33
+expect u16 gPlayerParty+0x2E 79
+expect u16 gPlayerParty+0x30 73
+expect u16 gPlayerParty+0x32 75
+expect u8 gPlayerParty+0x4F 0
+# nothing said, nothing waiting: the field is ours, and START's POKeMON opens on the
+# party list
+shot after-lift
+expect u16 *gSaveBlock1Ptr+0 5
+hold LEFT 20
+wait 20
+expect u16 *gSaveBlock1Ptr+0 3
+tap START
+wait 30
+tap A
+wait 200
+shot party-opens
+expect u32 gPartyMenu+0 CB2_ReturnToFieldWithOpenMenu+1
+expect u16 gPartyMenu+16 0
+tap A
+wait 30
+tap A
+wait 200
+tap RIGHT
+wait 40
+tap RIGHT
+wait 40
+shot moves
+say learn auto ok

@@ -37,8 +37,8 @@ ENGINE_SYMBOLS = [
     "gAnimScriptActive", "gAnimVisualTaskCount", "gAnimSoundTaskCount", "gAnimScriptCallback", "gBattleSpritesDataPtr", "gBattleAnimAttacker", "gBattleAnimTarget", "gBattleScripting", "gBattlescriptCurrInstr", "gCurrentMove",
     # Scratch a driver can build a wire message in before mailsend pushes it.
     "gDecompressionBuffer", "gBrZone",
-    # The party screen as a lift asks about a fifth move (learn-ask.txt, POK-400), and the
-    # way back it keeps while it only lists the party (asks nothing on opening).
+    # The party screen as a move is taught (tm-teach-full.txt), and the way back it keeps
+    # while it only lists the party: a lift asks nothing on opening (learn-auto.txt).
     "gPartyMenu", "CB2_ReturnToFieldWithOpenMenu",
     # The field camera and the palette fade: the page draws the map past the picture
     # in lockstep with the ROM's own scroll (POK-317, web/src/field.ts).

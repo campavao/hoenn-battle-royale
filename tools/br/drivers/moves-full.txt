@@ -13,8 +13,6 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
-# a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
-poke u8 gBrAsk+7 1
 pokebytes gBrLoot 01 00 0C 00 10 00 26 01 00 09 00 03 FF 00 00 00 00 00 00 00
 wait 60
 # each pickup brings up the teach screen by itself (tm-teach.txt): B keeps the TM

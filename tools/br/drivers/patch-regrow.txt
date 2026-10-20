@@ -9,8 +9,6 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
 wait 400
-# a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
-poke u8 gBrAsk+7 1
 poke u8 gBrMatch 2
 poke u32 gBrMatch+8 4
 # RING phase 1, centre 25,12, r 30 (inside everywhere)

@@ -79,12 +79,8 @@
 #include "br/br_catch.h"
 #include "br/br_moves.h"
 static void CursorCb_BrMoves(u8);
-static void CursorCb_BrNewMove(u8);
-static u8 BrMovesRow(u8);
-static bool8 BrAskNextLearn(u8);
 static void DisplayLearnMoveMessage(const u8 *);
 static const u8 sText_BrMoves[] = _("MOVES");
-static const u8 sText_BrNewMove[] = _("NEW MOVE");
 #endif
 
 enum {
@@ -109,7 +105,6 @@ enum {
     MENU_TOSS,
 #if BR
     MENU_MOVES, // the free move relearner at the rung (POK-225)
-    MENU_NEW_MOVE, // a lift's fifth move, in MOVES' place while one waits (POK-400)
 #endif
     MENU_FIELD_MOVES
 };
@@ -2634,7 +2629,7 @@ static void SetPartyMonFieldSelectionActions(struct Pokemon *mons, u8 slotId)
     sPartyMenuInternal->numActions = 0;
     AppendToList(sPartyMenuInternal->actions, &sPartyMenuInternal->numActions, MENU_SUMMARY);
 #if BR
-    AppendToList(sPartyMenuInternal->actions, &sPartyMenuInternal->numActions, BrMovesRow(slotId));
+    AppendToList(sPartyMenuInternal->actions, &sPartyMenuInternal->numActions, MENU_MOVES);
 #endif
 
     // Add field moves to action list
@@ -2797,24 +2792,11 @@ static void Task_HandleSelectionMenuInput(u8 taskId)
 }
 
 #if BR
-// A lift's fifth moves (POK-400), taught the way a TM or a RARE CANDY teaches: straight
-// to the summary screen to pick the move to forget (BrForgetWhich), backing out of it is
-// "did not learn" (BrNotLearned). Asked only when the player picks the mon's NEW MOVE row,
-// one move a pick (Cam, 2026-10-20: "those prompts should not show when opening a party").
-// data[1] = 1 brings the answer back to Task_TryLearningNextMove, where BrAskNextLearn
-// returns to choosing a mon. The exit callback is how this flow is told from the others
-// that come through it: the summary screen's way back keeps it.
-static void CB2_BrNewMoveDone(void)
-{
-    // Back to START, as the party screen it stood in for would have gone.
-    CB2_ReturnToFieldWithOpenMenu();
-}
-
 // Teaching asks nothing (Cam's 2026-10-19 play-test: "applying an item or a move
 // shouldn't need confirming; they know what they're doing"). A mon with four moves goes
 // straight to the summary screen to pick the one to replace, where the new move is
 // listed fifth: no "wants to learn... delete an older move?" and its YES/NO. A TM, a
-// tutor, a RARE CANDY's level and a lift's fifth move all come through here.
+// tutor and a RARE CANDY's level come through here (a lift asks nothing, br_levels.c).
 static void BrForgetWhich(u8 taskId)
 {
     gTasks[taskId].func = Task_ShowSummaryScreenToForgetMove;
@@ -2846,46 +2828,6 @@ static void BrReturnFromForget(u8 taskId)
 static void BrNeedsToReplace(u8 taskId)
 {
     gPartyMenu.data[0] = gMoveToLearn;
-    BrForgetWhich(taskId);
-}
-
-// The answer given: back to choosing a mon, NEW MOVE still on this one if it has another.
-static bool8 BrAskNextLearn(u8 taskId)
-{
-    if (gPartyMenu.exitCallback != CB2_BrNewMoveDone)
-        return FALSE;
-    gPartyMenu.exitCallback = CB2_ReturnToFieldWithOpenMenu;
-    gPartyMenu.data[1] = 0;
-    Task_ReturnToChooseMonAfterText(taskId);
-    return TRUE;
-}
-
-// NEW MOVE while a move waits for this mon, else MOVES (the relearner has it too).
-static u8 BrMovesRow(u8 slot)
-{
-    u16 move;
-
-    if (gPartyMenu.exitCallback == CB2_ReturnToFieldWithOpenMenu && BrMoves_SlotAsk(slot, &move, FALSE))
-        return MENU_NEW_MOVE;
-    return MENU_MOVES;
-}
-
-static void CursorCb_BrNewMove(u8 taskId)
-{
-    u16 move;
-
-    PlaySE(SE_SELECT);
-    PartyMenuRemoveWindow(&sPartyMenuInternal->windowId[0]);
-    PartyMenuRemoveWindow(&sPartyMenuInternal->windowId[1]);
-    if (!BrMoves_SlotAsk(gPartyMenu.slotId, &move, TRUE))
-    {
-        DisplayPartyMenuStdMessage(PARTY_MSG_CHOOSE_MON);
-        gTasks[taskId].func = Task_HandleChooseMonInput;
-        return;
-    }
-    gPartyMenu.exitCallback = CB2_BrNewMoveDone;
-    gPartyMenu.data[0] = move;
-    gPartyMenu.data[1] = 1;
     BrForgetWhich(taskId);
 }
 
@@ -4921,6 +4863,9 @@ static void Task_LearnedMove(u8 taskId)
         if (item < ITEM_HM01)
             RemoveBagItem(item, 1);
     }
+#if BR
+    BrMoves_Placed(mon, move[0]); // a TM's, a tutor's or a forget screen's pick: the player's, kept by a lift
+#endif
     GetMonNickname(mon, gStringVar1);
     StringCopy(gStringVar2, gMoveNames[move[0]]);
     StringExpandPlaceholders(gStringVar4, gText_PkmnLearnedMove3);
@@ -5224,11 +5169,7 @@ static void Task_TryLearnNewMoves(u8 taskId)
 
 static void Task_TryLearningNextMove(u8 taskId)
 {
-#if BR
-    u16 result = BrAskNextLearn(taskId) ? MON_ALREADY_KNOWS_MOVE : MonTryLearningNewMove(&gPlayerParty[gPartyMenu.slotId], FALSE); // a lift's questions, not a RARE CANDY's level: the ask has its own task, so return
-#else
     u16 result = MonTryLearningNewMove(&gPlayerParty[gPartyMenu.slotId], FALSE);
-#endif
 
     switch (result)
     {
