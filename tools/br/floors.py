@@ -53,6 +53,17 @@ FLOOR = {"MB_NORMAL", "MB_CAVE", "MB_INDOOR_ENCOUNTER", "MB_MOUNTAIN_TOP", "MB_S
 # floor traders' 64 keys.
 MAX_ROOMS = 0x100
 MAX_TRADERS = 0x40
+# Things go on the furniture (Cam's 10-19 play-test, #8: "Instead of on the ground, this
+# could sit on the desk. This place can have three, because it's more notable"): in a
+# building's rooms, a table, a desk or a counter -- TABLE_MIN to TABLE_MAX blocked cells
+# standing free of the walls -- holds the ball. A house has one; any other building up to
+# NOTABLE_BALLS, one a table, the first in sRooms and the rest in sTableBalls.
+# A building's: a room off a town's or a route's street, not a cave or a hideout.
+FURNISHED = re.compile(r"MAP_(\w+_(CITY|TOWN)|ROUTE\d+)_")
+TABLE_MIN, TABLE_MAX = 2, 12
+TABLE_TOP = {"MB_NORMAL", "MB_COUNTER"}
+NOTABLE_BALLS = 3
+MAX_TABLE_BALLS = 0x100
 
 HOUSES = [
     "MAP_DEWFORD_TOWN_HOUSE1",
@@ -173,6 +184,7 @@ class Floor:
     def __init__(self, mj, layouts):
         self.house = mj["id"] in HOUSES
         layout = layouts[ew.LAYOUT_AS_PLAYED.get(mj["id"], mj["layout"])]
+        self.furnished = bool(FURNISHED.match(mj["id"]))
         self.w, self.h = layout["width"], layout["height"]
         prim = ew.load_metatile_attrs(ew.resolve_tileset_dir(layout["primary_tileset"], "primary"))
         sec_dir = ew.resolve_tileset_dir(layout.get("secondary_tileset"), "secondary")
@@ -182,6 +194,8 @@ class Floor:
         self.behavior = [ew.metatile_behavior_name(prim, sec, v & ew.MAPGRID_METATILE_ID_MASK) for v in self.cells]
         self.warps = [(e["x"], e["y"]) for e in mj.get("warp_events", [])] + sorted(SURFACED.get(mj["id"], ()))
         self.people = {(e["x"], e["y"]) for e in mj.get("object_events", [])}
+        # A sign, a sculpture, a tablet, a TV: something you press A on already.
+        self.signs = {(e["x"], e["y"]) for e in mj.get("bg_events", [])}
         self.laid = {}
         for v in self.cells:
             m = v & ew.MAPGRID_METATILE_ID_MASK
@@ -243,6 +257,76 @@ class Floor:
         ground stay until they are taken, and a trader until he trades."""
         return len(self.flood(blocked)) < len(self.reach) - len(blocked)
 
+    def tables(self):
+        """The room's tables, desks and counters: a few blocked cells standing free of the
+        walls (none on the map's edge), or a counter's run wherever it stands, each with a
+        floor cell beside it you can walk to.
+        Nearest the middle of the room first. Each is (cells, {cell: [floor beside it]})."""
+        seen, out = set(), []
+        for y in range(self.h):
+            for x in range(self.w):
+                if self.open(x, y) or (x, y) in seen:
+                    continue
+                comp, todo, edge = [], deque([(x, y)]), False
+                seen.add((x, y))
+                while todo:
+                    cx, cy = todo.popleft()
+                    comp.append((cx, cy))
+                    edge |= cx in (0, self.w - 1) or cy in (0, self.h - 1)
+                    for dx, dy in STEPS:
+                        n = (cx + dx, cy + dy)
+                        if 0 <= n[0] < self.w and 0 <= n[1] < self.h and not self.open(*n) and n not in seen:
+                            seen.add(n)
+                            todo.append(n)
+                if edge or not TABLE_MIN <= len(comp) <= TABLE_MAX or any(c in self.warps for c in comp):
+                    # A counter is one even where it meets the wall (the BIKE SHOP's).
+                    comp = [c for c in comp if self.behavior[c[1] * self.w + c[0]] == "MB_COUNTER"]
+                    if not TABLE_MIN <= len(comp) <= TABLE_MAX:
+                        continue
+                beside = {}
+                for c in comp:
+                    if self.behavior[c[1] * self.w + c[0]] not in TABLE_TOP or c in self.signs:
+                        continue
+                    near = [(c[0] + dx, c[1] + dy) for dx, dy in STEPS]
+                    near = [n for n in near if self.spot_ok(n[0], n[1], False)]
+                    if near:
+                        beside[c] = near
+                if beside:
+                    out.append((comp, beside))
+        cx, cy = self.w / 2, self.h / 2
+        out.sort(key=lambda t: min(abs(x - cx) + abs(y - cy) for x, y in t[0]))
+        return out
+
+    def on_tables(self, count):
+        """Up to `count` balls, one a table, each on the cell you reach from the floor
+        south of it where there is one (you face up to it, as at a counter), and the
+        floor cell it is taken from. [(cell, beside)]."""
+        got = []
+        for comp, beside in self.tables():
+            def rank(c):
+                south = (c[0], c[1] + 1) in beside[c]
+                return (not south, abs(c[0] - self.w / 2) + abs(c[1] - self.h / 2), c)
+            cell = min(beside, key=rank)
+            from_ = (cell[0], cell[1] + 1) if (cell[0], cell[1] + 1) in beside[cell] else beside[cell][0]
+            got.append((cell, from_))
+            if len(got) == count:
+                break
+        return got
+
+    def at_table(self, ball, keep):
+        """Somebody at the table the ball is on (Cam: "you can even put this lady sitting
+        at the table"): a floor cell beside the same table, its sides first, never the
+        cell the ball is taken from (`keep`) and never one that cuts the room off."""
+        for comp, beside in self.tables():
+            if ball not in comp:
+                continue
+            cells = sorted({n for ns in beside.values() for n in ns} - set(keep),
+                           key=lambda n: (not any((n[0] + dx, n[1]) in comp for dx in (-1, 1)), n))
+            for n in cells:
+                if self.spot_ok(n[0], n[1], False) and not self.cuts({n}):
+                    return n
+        return None
+
     def pick(self, count):
         """`count` cells from the middle of the room outward, a ring at a time, each ring
         row by row: the cache's first, then the person's."""
@@ -282,18 +366,36 @@ def census():
 
 
 def rooms(floors):
-    """(map, cache, trader, cells) for every room: houses first, in their order, then the
-    rest by name. A house always gets two cells, for whoever may be home."""
+    """(map, cache, trader, cells, more) for every room: houses first, in their order, then
+    the rest by name. cells is the cache's cell, then whoever stands there; more is the
+    rest of a building's table balls. A house always gets two cells, for whoever may be
+    home."""
     out = []
     for map_id in HOUSES:
-        out.append((map_id, True, False, floors[map_id][1].pick(2)))
+        f = floors[map_id][1]
+        table = f.on_tables(1) if f.furnished else []
+        if table:
+            ball, from_ = table[0]
+            person = f.at_table(ball, [from_]) or next((c for c in f.pick(3) if c != from_), None)
+            out.append((map_id, True, False, [ball] + ([person] if person else []), []))
+        else:
+            out.append((map_id, True, False, f.pick(2), []))
     for map_id in sorted(floors):
         if map_id in HOUSES:
             continue
         balls, f = floors[map_id]
         cache, trader = balls == 0, len(f.reach) >= BIG_FLOOR
-        if cache or trader:
-            out.append((map_id, cache, trader, f.pick(2 if trader else 1)))
+        if not (cache or trader):
+            continue
+        table = f.on_tables(NOTABLE_BALLS) if cache and f.furnished else []
+        if table:
+            froms = {from_ for _, from_ in table}
+            cells = [table[0][0]]
+            if trader:
+                cells += [c for c in f.pick(2 + len(froms)) if c not in froms][:1]
+            out.append((map_id, cache, trader, cells, [ball for ball, _ in table[1:]]))
+        else:
+            out.append((map_id, cache, trader, f.pick(2 if trader else 1), []))
     return out
 
 
@@ -303,7 +405,9 @@ def problems(table):
         out.append("%d rooms, past the %d keys a cache has" % (len(table), MAX_ROOMS))
     if sum(1 for r in table if r[2]) > MAX_TRADERS:
         out.append("more than %d traders" % MAX_TRADERS)
-    for map_id, cache, trader, cells in table:
+    if sum(len(r[4]) for r in table) > MAX_TABLE_BALLS:
+        out.append("more than %d table balls past the first" % MAX_TABLE_BALLS)
+    for map_id, cache, trader, cells, _ in table:
         if len(cells) < (2 if trader or map_id in HOUSES else 1):
             out.append("no cell for the %s on %s" % ("trader" if trader else "cache", map_id))
     return out
@@ -314,7 +418,7 @@ def c_table(table):
              "#define BR_ROOM_TRADERS %d" % sum(1 for r in table if r[2]),
              "static const struct BrRoom sRooms[] =", "{"]
     traders = 0
-    for map_id, cache, trader, cells in table:
+    for map_id, cache, trader, cells, _ in table:
         cx, cy = cells[0] if cells else (0, 0)
         px, py = cells[1] if len(cells) > 1 else (0, 0)
         if not cache:
@@ -328,7 +432,18 @@ def c_table(table):
     return "\n".join(lines)
 
 
+def c_more(table):
+    rows = [(i, c) for i, r in enumerate(table) for c in r[4]]
+    lines = ["#define BR_TABLE_BALLS %d" % len(rows),
+             "static const struct BrTableBall sTableBalls[] =", "{"]
+    for i, (x, y) in rows:
+        lines.append("    { %d, %d, %d }, // %s" % (i, x, y, table[i][0]))
+    lines.append("};")
+    return "\n".join(lines)
+
+
 TABLE = re.compile(r"#define BR_HOUSES \d+\n(?:#define BR_ROOM_TRADERS \d+\n)?static const struct BrRoom sRooms\[\] =\n\{.*?\n\};", re.S)
+MORE = re.compile(r"#define BR_TABLE_BALLS \d+\nstatic const struct BrTableBall sTableBalls\[\] =\n\{.*?\n\};", re.S)
 
 
 def main():
@@ -337,9 +452,9 @@ def main():
     bad = problems(table)
     if "--write" in sys.argv or "--check" in sys.argv:
         src = open(BALLS_C, encoding="utf-8").read()
-        if not TABLE.search(src):
-            sys.exit("no sRooms table in %s" % BALLS_C)
-        new = TABLE.sub(lambda _: c_table(table), src)
+        if not TABLE.search(src) or not MORE.search(src):
+            sys.exit("no sRooms or sTableBalls table in %s" % BALLS_C)
+        new = MORE.sub(lambda _: c_more(table), TABLE.sub(lambda _: c_table(table), src))
         if bad:
             sys.exit("\n".join(bad))
         if "--check" in sys.argv:
@@ -347,16 +462,17 @@ def main():
                 sys.exit("src/br/br_balls.c's sRooms is stale: run tools/br/floors.py --write")
         else:
             open(BALLS_C, "w", encoding="utf-8", newline="\n").write(new)
-        print("rooms: %d (%d houses), %d caches, %d traders; every floor has something" % (
-            len(table), len(HOUSES), sum(1 for r in table if r[1]), sum(1 for r in table if r[2])))
+        print("rooms: %d (%d houses), %d caches, %d more on tables, %d traders; every floor has something" % (
+            len(table), len(HOUSES), sum(1 for r in table if r[1]), sum(len(r[4]) for r in table), sum(1 for r in table if r[2])))
         return
     byroom = {r[0]: r for r in table}
     for map_id in sorted(floors):
         balls, f = floors[map_id]
         what = ["%d ball%s" % (balls, "s" if balls > 1 else "")] if balls else []
         if map_id in byroom:
-            _, cache, trader, cells = byroom[map_id]
+            _, cache, trader, cells, more = byroom[map_id]
             what += (["cache"] if cache else []) + (["trader"] if trader else []) + ["at %s" % cells]
+            what += ["and on tables %s" % more] if more else []
         print("%-48s %4d reach  %s" % (map_id, len(f.reach), ", ".join(what)))
     for line in bad:
         print("PROBLEM: " + line)

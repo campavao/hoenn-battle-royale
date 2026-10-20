@@ -15,37 +15,32 @@ wait 200
 hold UP 40
 wait 200
 expect u8 gPlayerPartyCount 1
-# the cache where it always is, (12,11), and him on the next cell out, (11,10): key
+# the cache on the table, (10,12), and him at its west end, (8,11): key
 # 0x8C21, a BULBASAUR (1) at the rung (level 0), standing as a person
 expect u16 gBrLoot 0x8D21
 expect u16 gBrLoot+20 0x8C21
-expect u16 gBrLoot+22 11
-expect u16 gBrLoot+24 10
+expect u16 gBrLoot+22 8
+expect u16 gBrLoot+24 11
 expect u16 gBrLoot+26 1
 expect u8 gBrLoot+30 0
 expect u8 gBrLoot+31 1
 expectne u8 gBrLoot+32 0xFF
-# up the right of the chairs, round the cache (solid now, POK-414), to (12,10), and
-# face him
-hold UP 34
-wait 20
-hold RIGHT 16
-wait 20
-hold RIGHT 16
-wait 20
-hold RIGHT 16
-wait 20
-hold UP 48
+# up a step, left past the table to (1,6), up beside him, and face him
+hold UP 16
 wait 20
 hold LEFT 16
 wait 20
-expect u16 *gSaveBlock1Ptr 5
-expect u16 *gSaveBlock1Ptr+2 3
-hold LEFT 1
+hold LEFT 16
+wait 20
+hold UP 34
+wait 20
+expect u16 *gSaveBlock1Ptr 1
+expect u16 *gSaveBlock1Ptr+2 5
+hold UP 1
 wait 20
 shot home
 tap A
-wait 60
+wait 120
 shot talks
 tap A
 wait 40
@@ -62,8 +57,8 @@ wait 700
 expect u8 gPlayerPartyCount 1
 expectmsg 10 u16 1 0x8C61
 expect u32 gMain+4 CB2_Overworld+1
-# ...and the field is ours: a step right is a step (down is the cache, solid now)
-hold RIGHT 16
+# ...and the field is ours: a step down is a step
+hold DOWN 20
 wait 30
-expect u16 *gSaveBlock1Ptr 6
+expect u16 *gSaveBlock1Ptr+2 6
 say house gift denied ok

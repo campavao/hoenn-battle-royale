@@ -240,13 +240,13 @@ static void Drop(struct BrLootItem *it)
 // map, the piece farthest from the view, as long as it is farther than the new one --
 // what lands by you is what you came for.
 //
-// Never the DAY CARE chest, a Zone ball or a house's cache or person: every ROM deals
+// Never the DAY CARE chest, a Zone ball or a house's cache, table ball or person: every ROM deals
 // those from the seed and the page never sends them, so a row of theirs let go is gone
 // until somebody walks back in -- forever, for the first two.
 static bool8 Resent(u16 key)
 {
     return key != BR_LOOT_KEY_CHEST && (key & 0xFF00) != BR_LOOT_KEY_ZONE_ITEM(0)
-        && (key & 0xFF00) != BR_LOOT_KEY_CACHE(0) && !BR_LOOT_IS_HOME(key);
+        && (key & 0xFF00) != BR_LOOT_KEY_CACHE(0) && !BR_LOOT_IS_HOME(key) && !BR_LOOT_IS_TABLE(key);
 }
 
 static struct BrLootItem *Evict(u8 mapGroup, u8 mapNum, s16 x, s16 y)

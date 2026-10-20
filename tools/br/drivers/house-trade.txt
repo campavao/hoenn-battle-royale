@@ -18,19 +18,17 @@ expect u8 gPlayerPartyCount 1
 expect u16 gBrLoot+20 0x8C21
 expect u16 gBrLoot+26 64
 expect u8 gBrLoot+31 1
-hold UP 34
-wait 20
-hold RIGHT 16
-wait 20
-hold RIGHT 16
-wait 20
-hold RIGHT 16
-wait 20
-hold UP 48
+hold UP 16
 wait 20
 hold LEFT 16
 wait 20
-hold LEFT 1
+hold LEFT 16
+wait 20
+hold UP 34
+wait 20
+expect u16 *gSaveBlock1Ptr 1
+expect u16 *gSaveBlock1Ptr+2 5
+hold UP 1
 wait 20
 shot trader
 # A asks; YES; then B out of the party menu: nothing traded, and he is still there
