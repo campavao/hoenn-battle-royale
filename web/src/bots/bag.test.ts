@@ -3,6 +3,7 @@ import {
   BATTLE_ITEMS,
   ITEM,
   battleItems,
+  carried,
   equip,
   isMedicine,
   merge,
@@ -98,5 +99,14 @@ describe('equip', () => {
     equip(party, bag);
     expect(party.map((m) => m.heldItem)).toEqual([200, 0, 200]); // Leftovers outranks Quick Claw; fainted mon skipped
     expect(bag).toEqual([{ id: 183, n: 1 }, { id: ITEM.POTION, n: 1 }]);
+  });
+});
+
+describe('carried', () => {
+  it('folds what the mons hold back into a copy of the bag', () => {
+    const party = [{ ...mon(20, 20), heldItem: 200 }, mon(10, 20)];
+    const bag = [{ id: 200, n: 1 }, { id: ITEM.POTION, n: 1 }];
+    expect(carried(party, bag)).toEqual([{ id: 200, n: 2 }, { id: ITEM.POTION, n: 1 }]);
+    expect(bag).toEqual([{ id: 200, n: 1 }, { id: ITEM.POTION, n: 1 }]);
   });
 });

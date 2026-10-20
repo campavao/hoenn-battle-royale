@@ -21,6 +21,16 @@
 import { Grade } from './roster';
 import { rungForPhase } from './party';
 import type { PackedMon } from '../net/wire';
+import {
+  ITEM_BRIGHT_POWDER,
+  ITEM_CHOICE_BAND,
+  ITEM_FOCUS_BAND,
+  ITEM_KINGS_ROCK,
+  ITEM_LEFTOVERS,
+  ITEM_QUICK_CLAW,
+  ITEM_SCOPE_LENS,
+  ITEM_SHELL_BELL,
+} from '../match/gifts';
 
 /** One kind of thing, and how many of it. The `spill` wire shape, deliberately. */
 export interface Stack {
@@ -91,17 +101,17 @@ export function merge(bag: Stack[], loot: Stack[]): void {
  *  items, if this Pelipper was holding Leftovers." A bot that picks one up gives it to a
  *  mon (`equip`), the `trainer` card carries it as the PackedMon's heldItem, and Emerald's
  *  own held-item lines play in the fight ("restored a little HP using its LEFTOVERS!"). */
+// No herbs: a WHITE HERB or MENTAL HERB is used up in the fight, and nothing here would
+// take it back off the mon, so it would come back every fight. They stay in the bag.
 export const HOLD_ITEMS: readonly number[] = [
-  200, // LEFTOVERS
-  186, // CHOICE BAND
-  219, // SHELL BELL
-  196, // FOCUS BAND
-  183, // QUICK CLAW
-  198, // SCOPE LENS
-  187, // KING'S ROCK
-  179, // BRIGHT POWDER
-  180, // WHITE HERB
-  185, // MENTAL HERB
+  ITEM_LEFTOVERS,
+  ITEM_CHOICE_BAND,
+  ITEM_SHELL_BELL,
+  ITEM_FOCUS_BAND,
+  ITEM_QUICK_CLAW,
+  ITEM_SCOPE_LENS,
+  ITEM_KINGS_ROCK,
+  ITEM_BRIGHT_POWDER,
 ];
 
 /** Each hold item in the bag goes to a mon still standing that holds nothing, the lead
@@ -114,6 +124,14 @@ export function equip(party: PackedMon[], bag: Stack[]): void {
       mon.heldItem = id;
     }
   }
+}
+
+/** What a bot carries when it falls: the bag, and whatever its mons were holding, so a
+ *  Leftovers it equipped still goes down for whoever beat it. */
+export function carried(party: PackedMon[], bag: Stack[]): Stack[] {
+  const out = bag.map((stack) => ({ ...stack }));
+  for (const mon of party) if (mon.heldItem) add(out, mon.heldItem);
+  return out;
 }
 
 /** How many units are in here at all -- for a test, and for the ticker. */

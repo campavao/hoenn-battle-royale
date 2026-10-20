@@ -758,6 +758,15 @@ describe('a bot meeting a player', () => {
     expect(bots.count(), 'and it stops being walked around').toBe(0);
   });
 
+  it('drops the items its mons were holding with its bag (#22)', () => {
+    const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }, [MON], []);
+    const seat = dealt[0].seat;
+    // The ROM that beat it reports the team as it fought: the lead still holding its Leftovers.
+    bots.setParty(seat, [{ ...MON, hp: 0, heldItem: 200 }]);
+    const spill = sent.find((m) => m.t === 'spill') as { bag?: { items: Stack[] } };
+    expect(spill.bag?.items, 'the Leftovers it was holding').toEqual([{ id: 200, n: 1 }]);
+  });
+
   it('stakes its bag on the card, and spends only what the fight used (POK-237)', () => {
     const bag: Stack[] = [{ id: 13, n: 2 }, { id: 75, n: 1 }];
     const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 1, y: 3, dir: 2 }, [MON], bag);
