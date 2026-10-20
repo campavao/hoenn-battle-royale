@@ -369,4 +369,38 @@ void BrField_MoveCamera(s16 dx, s16 dy);
 // two ticks agree whichever runs first.
 void BrField_ShareObjects(u8 *ghosts, u8 *loot);
 
+// ---- THE WHOLE WINDOW (prototype, Cam 2026-10-20: "one layer") ----------------------
+
+// The ring is as much map as the hardware's BGs hold. A core that can draw more (the
+// page's own, tools/br/mgba-wasm/hbr-exports.patch) draws the rest of the window from
+// the map itself: this map grid, these metatiles, the tiles and palettes in VRAM -- so
+// whatever the field shows past the ring is the field the ROM is running, animated,
+// layered the way DrawMetatile layers it, with nothing of the page's in it.
+//
+// FieldUpdateBgTilemapScroll writes it with the scroll it gives BG1..3. The grid pixel
+// at the LCD's top-left is pos * 16 plus the scroll's distance from pos's ring slot,
+// which a step leaves where it was (pos and the slot move together), so a core reading
+// it at VBlank against the scroll registers it is drawing with -- the ones written the
+// frame before -- moves it by the difference and has the picture's own origin.
+//
+// Eight bytes, because EWRAM is nearly full: where the grid, the layout and the field's
+// callback are is the build's own symbols (gBackupMapLayout, gMapHeader, gMain,
+// CB2_Overworld), which the page hands the core from br-symbols.json.
+struct BrWorld
+{
+    /* 0x00 */ u16 hofs;          // the BG1..3 scroll written with it
+    /* 0x02 */ u16 vofs;
+    /* 0x04 */ s16 lcdX;          // grid pixel (MAP_OFFSET included) at the LCD's top-left
+    /* 0x06 */ s16 lcdY;
+};
+BR_OFFSET(BrWorld, hofs, 0x00)
+BR_OFFSET(BrWorld, vofs, 0x02)
+BR_OFFSET(BrWorld, lcdX, 0x04)
+BR_OFFSET(BrWorld, lcdY, 0x06)
+BR_SIZE(BrWorld, 0x08)
+extern struct BrWorld gBrWorld;
+// field_camera.c, FieldUpdateBgTilemapScroll: the scroll it writes, and the ring slot of
+// pos it was written for.
+void BrField_PublishWorld(u16 hofs, u16 vofs, u8 xTileOffset, u8 yTileOffset);
+
 #endif // GUARD_BR_FIELD_H

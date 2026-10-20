@@ -65,6 +65,7 @@ export interface CoreModule {
    *  EWRAM, -1 for none: with it the band draws every sprite at its true rows, however far
    *  from the LCD. Older cores lack it. */
   _brSetOamTable?(offset: number): void;
+  _brSetWorld?(offset: number, grid: number, header: number, cb2: number, overworld: number): void;
   /** The window the loaded core draws with, `top << 16 | bottom`, or -1 for none. */
   _brSpriteWindow?(): number;
   /** The picture's ABGR8888 pixels in the heap -- the texture's top-left, the LCD at
@@ -98,6 +99,17 @@ export interface Band {
 /** The sprite window (POK-329): the rows above and below the LCD, 96 between them, in
  *  which the ROM keeps every sprite's 8-bit OAM y to one reading. A band that reaches
  *  past it needs a core that knows it; any other core draws rows 256 apart alike. */
+/** What the core draws the whole window from (include/br/br_field.h): gBrWorld, and the
+ *  build's gBackupMapLayout, gMapHeader, &gMain.callback2 and CB2_Overworld (thumb bit
+ *  set, the value gMain.callback2 holds on the field), all GBA addresses. */
+export interface WorldSymbols {
+  at: number;
+  grid: number;
+  header: number;
+  cb2: number;
+  overworld: number;
+}
+
 export interface SpriteBand {
   top: number;
   bottom: number;
@@ -266,6 +278,17 @@ export class Emulator {
     if (!this.m._brSetOamTable) return false;
     this.m._brSetOamTable(addr === null ? -1 : addr - EWRAM_BASE);
     return addr !== null;
+  }
+
+  /** Hand the core the ROM's world (gBrWorld and the symbols it reads past), or none: on
+   *  the field it then draws BG1..3 past the LCD from the ROM's map grid, so a band of any size is the
+   *  map (the whole window, include/br/br_field.h). Takes effect at once and at every boot
+   *  after. False on a core that cannot. */
+  setWorld(world: WorldSymbols | null): boolean {
+    if (!this.m._brSetWorld) return false;
+    if (!world) this.m._brSetWorld(-1, 0, 0, 0, 0);
+    else this.m._brSetWorld(world.at - EWRAM_BASE, world.grid, world.header, world.cb2, world.overworld);
+    return world !== null;
   }
 
   /** The sprite window the band is drawn with, on every boot from now on (POK-329): the

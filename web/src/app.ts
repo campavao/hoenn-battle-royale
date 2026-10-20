@@ -3,7 +3,7 @@
 // goes through emu/index.ts's Emulator wrapper -- this file never touches the core
 // directly, per the project CLAUDE.md.
 
-import { KEY_BIT, Emulator, type Band, type GbaKey } from './emu';
+import { KEY_BIT, Emulator, type Band, type GbaKey, type WorldSymbols } from './emu';
 import { stallLine, watch } from './emu/watchdog';
 import { checkEmerald, isPrePatched, sha1Hex } from './rom/emerald';
 import { loadCheckedRelease, loadSidecars, type CheckedRelease, type ReleaseInfo } from './release';
@@ -115,7 +115,7 @@ import {
   type AxisSense,
   type StickMap,
 } from './pad';
-import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, type FieldLayout, type FieldPicture } from './field';
+import { FieldView, GBA_H, MAIN_CALLBACK2, askBand, measureLayout, romBand, worldBand, type FieldLayout, type FieldPicture } from './field';
 import { speciesName } from './bots/party';
 import { ProxyDuels } from './bots/proxy';
 import {
@@ -1724,7 +1724,6 @@ function askForBand(emu: Emulator): void {
   const asked = askBand(matchLayout(), romPicture, shownOk);
   emu.setSpriteBand(romPicture.sprites);
   askedBand = devBand(romPicture.band) ?? asked;
-  emu.setViewport(askedBand);
   // gBrFieldShown must name the band the core actually draws, and the core takes a new
   // band only at loadGame: both callers reboot straight after this. A resize handler that
   // calls it without a reboot would tell the ROM about rows the core does not show --
@@ -1732,6 +1731,32 @@ function askForBand(emu: Emulator): void {
   fieldShown = shownOk
     ? { top: askedBand.top, bottom: askedBand.bottom, left: askedBand.left, right: askedBand.right }
     : null;
+  // `#world` (dev, the whole-window prototype): the core draws the whole layout from the
+  // ROM's map grid, past what the ring holds; the ROM keeps the ring it has for the band
+  // above, which the core still draws the LCD's sprites and its own rows from.
+  worldOn = wantWorld() && emu.setWorld(worldAt);
+  if (worldOn) askedBand = worldBand(matchLayout());
+  emu.setViewport(askedBand);
+}
+
+/** `#world`: the whole-window prototype (Cam, 2026-10-20, "one layer"; HBR-27), opt-in
+ *  on any build so it can be played before it is the default. */
+function wantWorld(): boolean {
+  return new URLSearchParams(location.hash.slice(1)).has('world');
+}
+/** gBrWorld, where the ROM says the LCD sits on its map grid, and what the core reads
+ *  the map from (include/br/br_field.h); null when the image booted lacks any of them. */
+let worldAt: WorldSymbols | null = null;
+/** Whether the core was handed the world at boot: what FieldView cuts the band by. */
+let worldOn = false;
+function worldSymbols(symbols: Map<string, number> | null | undefined): WorldSymbols | null {
+  const at = symbols?.get('gBrWorld');
+  const grid = symbols?.get('gBackupMapLayout');
+  const header = symbols?.get('gMapHeader');
+  const main = symbols?.get('gMain');
+  const overworld = symbols?.get('CB2_Overworld');
+  if (at === undefined || grid === undefined || header === undefined || main === undefined || overworld === undefined) return null;
+  return { at, grid, header, cb2: main + 4, overworld: overworld | 1 };
 }
 
 /** Where the ROM keeps its OAM side table and the rows the page shows past the LCD
@@ -4309,6 +4334,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     seeThrough,
     keyLayer: $('#key-layer') as HTMLCanvasElement,
     keyDim: $('#key-dim') as HTMLElement,
+    world: () => worldOn,
   });
   fieldView.attach();
   // Dev only: where the page walks the ghosts, for the e2e (POK-323, world-moves.spec.ts).
@@ -4625,6 +4651,7 @@ async function main(): Promise<void> {
   romPicture = romBand(bytes, symbols);
   oamTableAt = symbols?.get('gBrOamHi');
   fieldShownAt = symbols?.get('gBrFieldShown');
+  worldAt = worldSymbols(symbols);
 
   showScreen('playing');
   askForBand(emu);

@@ -99,6 +99,9 @@ void FieldUpdateBgTilemapScroll(void)
     SetGpuReg(REG_OFFSET_BG2VOFS, r4);
     SetGpuReg(REG_OFFSET_BG3HOFS, r5);
     SetGpuReg(REG_OFFSET_BG3VOFS, r4);
+#if BR
+    BrField_PublishWorld(r5, r4, sFieldCameraOffset.xTileOffset, sFieldCameraOffset.yTileOffset);
+#endif
 }
 
 void GetCameraOffsetWithPan(s16 *x, s16 *y)
