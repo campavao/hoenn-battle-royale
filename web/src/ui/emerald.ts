@@ -371,6 +371,11 @@ export class EmeraldCanvas {
     this.ctx.drawImage(img, sx, sy, w, h, x + this.origin, y, w, h);
   }
 
+  /** A CSS filter over what is drawn next (the menu's soft backdrop); 'none' ends it. */
+  setFilter(filter: string): void {
+    this.ctx.filter = filter;
+  }
+
   /** Part of one of the page's own pictures (`/ui/<name>`: the trainer card, its badges,
    *  the portraits; or a path from the root, `/field-sprites/fog.png`) at (x, y). Loaded
    *  on first use; whoever drew without it is asked to draw again when it lands -- or

@@ -78,6 +78,50 @@ describe('the drawn screens (POK-320)', () => {
     expect(lay.rows[4].y).toBe(32 + 4 * ROW_H);
   });
 
+  it('lays the main menu out as tiles: one across, then two to a line (HBR-30)', async () => {
+    const { layoutTiles } = await import('./screens');
+    const six = layoutTiles(68, 6);
+    expect(six[0]).toEqual({ x: 0, y: 68, w: 240, h: 44 });
+    expect(six[1]).toEqual({ x: 0, y: 116, w: 118, h: 62 });
+    expect(six[2]).toEqual({ x: 122, y: 116, w: 118, h: 62 });
+    // An odd one out goes across.
+    expect(six[5]).toEqual({ x: 0, y: 248, w: 240, h: 62 });
+    // Eight (WATCH and the daily too) come lower to fit what is left of the screen.
+    const room = 320 - 68 - 22;
+    const eight = layoutTiles(68, 8, room);
+    const last = eight[7];
+    expect(last.y + last.h).toBeLessThanOrEqual(68 + room);
+    expect(last.h).toBeLessThan(62);
+  });
+
+  it('puts every main menu tile, its picture and the NEW on the screen (HBR-30)', async () => {
+    const { menuScreen } = await import('./screens');
+    const { fakeCanvas } = await import('./fakecanvas');
+    const { FEEDBACK_ROW, HOWTO_ROW, playRows, rewatchRow } = await import('../match/lobby');
+    const rows = [rewatchRow('ABCD'), ...playRows('up', { daily: true } as never), HOWTO_ROW, FEEDBACK_ROW].map((r) => ({
+      label: r.label,
+      id: r.id,
+      art: r.art,
+      badge: r.id === 'lobby-howto',
+      onPress: () => undefined,
+    }));
+    const fake = fakeCanvas();
+    const painted = menuScreen(() => ({ title: 'HOENN BATTLE ROYALE', rows, note: '', tiles: true, trainer: { name: 'CAM', skin: 0, record: '', onPress: () => undefined } })).paint(fake.canvas, 320);
+    for (const r of rows) {
+      const w = painted.widgets.find((x) => x.id === r.id)!;
+      expect(w.text, r.id).toBe(r.label);
+      expect(w.rect.y + w.rect.h, `${r.id} is on the screen`).toBeLessThanOrEqual(320);
+    }
+    expect(rows.filter((r) => r.art).length, 'everything but WATCH has a picture').toBe(rows.length - 1);
+    // Seven and a note line: the low half tiles still say every word (#110's review).
+    const seven = rows.slice(1);
+    for (const h of [300, 310, 316, 320, 330]) {
+      const low = fakeCanvas();
+      menuScreen(() => ({ title: 'HOENN BATTLE ROYALE', rows: seven, note: 'The relay is down.', tiles: true, trainer: { name: 'CAM', skin: 0, record: '', onPress: () => undefined } })).paint(low.canvas, h);
+      for (const r of seven) expect(low.texts.map((t) => t.text), `${r.label} uncut at ${h}`).toContain(r.label);
+    }
+  });
+
   it("seats Kanto's 2x4, and a bigger MAX in more rows", async () => {
     const { layoutSeats, SEAT_W, SEAT_H } = await import('./screens');
     const eight = layoutSeats(24, 8);

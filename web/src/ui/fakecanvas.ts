@@ -41,6 +41,7 @@ export function fakeCanvas(missing: ReadonlySet<string> = new Set()): {
     scale: 1,
     origin: 0,
     clear() {},
+    setFilter() {},
     clearAll() {},
     fillRect(r: Rect, color: string, alpha = 1) {
       fills.push({ r, color, alpha });

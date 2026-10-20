@@ -23,7 +23,10 @@ import {
   wrapText,
 } from './emerald';
 import type { GbaKey } from '../emu';
+import uiData from '../data/ui.json';
 import type { Container, DrawnScreen, Painted, Widget } from './stage';
+
+const ITEM_ICON = uiData.itemIcons as { cell: number; cols: number };
 
 export const ROW_H = 16;
 export const SEAT_W = 56;
@@ -46,6 +49,10 @@ export interface RowSpec {
   onPress?: () => void;
   /** A colour for the label: red for something locked, blue for you. */
   color?: TextColor;
+  /** On a tile (the main menu, HBR-30): a bag icon by item id, or people by sheet. */
+  art?: { item?: number; gfx?: number[] };
+  /** A red NEW on the tile's corner. */
+  badge?: boolean;
 }
 
 /** Where the rows of a list go: a frame at `y`, one ROW_H row each inside its border. */
@@ -784,6 +791,107 @@ export interface MenuModel {
   trainer?: { name: string; skin: number; record: string; onPress: () => void };
   buttons?: ButtonSpec[];
   onBack?: () => void;
+  /** The rows as tiles, two to a line under a wide first one (HBR-30). */
+  tiles?: boolean;
+  /** Drawn first, under everything: the main menu's pan over Hoenn. */
+  backdrop?: (c: EmeraldCanvas, h: number) => void;
+}
+
+const TILE_GAP = 4;
+const WIDE_H = 44;
+const TILE_H = 62;
+/** Room between two people on a tile (Cam, 2026-10-20: "some padding between sprites"). */
+const SPRITE_STEP = 28;
+const TILE_MIN_H = 36;
+const BADGE = { w: 28, h: 13 };
+
+/** Where the tiles go from `y`: the first across the screen, the rest two to a line, an
+ *  odd last one across. Lower than TILE_H when that many lines would not fit in `room`. */
+export function layoutTiles(y: number, count: number, room = Infinity): Rect[] {
+  const out: Rect[] = [];
+  const half = (W - TILE_GAP) / 2;
+  const lines = Math.ceil((count - 1) / 2);
+  const tileH = lines ? Math.max(TILE_MIN_H, Math.min(TILE_H, Math.floor((room - WIDE_H - TILE_GAP) / lines) - TILE_GAP)) : TILE_H;
+  for (let i = 0; i < count; i++) {
+    if (i === 0) {
+      out.push({ x: 0, y, w: W, h: WIDE_H });
+      y += WIDE_H + TILE_GAP;
+    } else if (i % 2 === 1 && i === count - 1) {
+      out.push({ x: 0, y, w: W, h: tileH });
+    } else {
+      out.push({ x: i % 2 === 1 ? 0 : half + TILE_GAP, y, w: half, h: tileH });
+      if (i % 2 === 0) y += tileH + TILE_GAP;
+    }
+  }
+  return out;
+}
+
+function paintTiles(c: EmeraldCanvas, y: number, rows: RowSpec[], room: number, parent?: string): { widgets: Widget[]; bottom: number } {
+  const rects = layoutTiles(y, rows.length, room);
+  const widgets = rows.map((row, i): Widget => {
+    const r = rects[i];
+    const alpha = row.disabled ? 0.4 : 1;
+    c.drawFrame(r);
+    const tall = r.h >= 52 && r.w < W;
+    const across = r.w === W;
+    // A low half tile has room for one person beside its words.
+    const gfx = (row.art?.gfx ?? []).slice(0, tall || across ? undefined : 1);
+    const item = row.art?.item;
+    const n = ITEM_ICON.cell;
+    // A tall tile has its picture over its words. Any other has the words in its middle:
+    // across the screen, its people either side of them; lower, its picture before them.
+    const artW = item !== undefined ? n : (gfx.length - 1) * SPRITE_STEP + 16;
+    const beside = !tall && !across && (item !== undefined || gfx.length > 0) ? artW + 4 : 0;
+    // A picture beside the words leaves them the tile's inside, borders aside.
+    const label = fitText(row.label, r.w - (beside ? 12 : 16) - beside);
+    const lw = measure(label);
+    const ly = tall ? r.y + r.h - 24 : r.y + Math.floor((r.h - ROW_H) / 2) - 2;
+    const lx = Math.round(r.x + beside + (r.w - beside - lw) / 2);
+    c.drawText(label, lx, ly, row.disabled ? TEXT_GRAY : TEXT_DARK);
+    const artX = tall || across ? Math.round(r.x + (r.w - artW) / 2) : lx - beside;
+    const midY = (h: number) => Math.round(r.y + (r.h - h) / 2);
+    if (item !== undefined) {
+      const iy = tall ? r.y + 6 : midY(n);
+      const ix = across && !tall ? r.x + 16 : artX;
+      c.drawUiPicture('items.png', (item % ITEM_ICON.cols) * n, Math.floor(item / ITEM_ICON.cols) * n, n, n, ix, iy, alpha);
+    } else if (across) {
+      // Either side of the words, close in, so the three read as one centred group
+      // (Cam: "quick play text and sprites are center aligned").
+      gfx.forEach((g, k) => c.drawSprite(g, k === 0 ? lx - 16 - 12 : lx + lw + 12, midY(32), alpha));
+    } else {
+      gfx.forEach((g, k) => c.drawSprite(g, artX + k * SPRITE_STEP, tall ? r.y + 4 : midY(32), alpha));
+    }
+    if (row.badge) {
+      const b = { x: r.x + r.w - BADGE.w - 6, y: tall ? r.y + 6 : r.y - TILE_GAP, ...BADGE };
+      // On a low tile the NEW is a sticker over its top edge, clear of the words.
+      c.fillRect(b, '#e03030');
+      c.drawText('NEW', b.x + Math.floor((b.w - measure('NEW')) / 2), b.y - 2, TEXT_WHITE);
+    }
+    return {
+      rect: r,
+      text: row.label,
+      id: row.id,
+      cls: row.cls,
+      parent,
+      disabled: row.disabled,
+      onPress: row.onPress,
+      cursor: row.onPress ? { x: (beside ? artX : across && gfx.length ? lx - 28 : lx) - 10, y: ly + 2 } : null,
+    };
+  });
+  const last = rects[rects.length - 1];
+  return { widgets, bottom: last ? last.y + last.h : y };
+}
+
+/** Who you are, on a strip: pressing it opens the trainer's rows. */
+function paintTrainer(c: EmeraldCanvas, y: number, h: number, t: NonNullable<MenuModel['trainer']>, inset = 0): Widget {
+  const box = { x: inset, y, w: W - 2 * inset, h };
+  c.drawFrame(box);
+  const sheet = skinSheet(t.skin);
+  const pad = Math.floor((h - 32) / 2);
+  if (sheet) c.drawSprite(sheet.gfx, inset + 16, y + pad);
+  c.drawText(fitText(t.name, W - 56 - 2 * inset), inset + 40, y + pad, TEXT_BLUE);
+  c.drawText(fitText(t.record, W - 56 - 2 * inset), inset + 40, y + pad + 16, TEXT_GRAY);
+  return { rect: box, text: `${t.name} ${t.record}`, id: 'lobby-trainer', onPress: t.onPress, cursor: { x: inset + 4, y: y + pad + 10 } };
 }
 
 export function menuScreen(model: () => MenuModel): DrawnScreen {
@@ -796,9 +904,23 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
       const widgets: Widget[] = [];
       const containers: Painted['containers'] = [];
       if (m.rowsId) containers.push({ id: m.rowsId, tag: 'ul', cls: 'lobby-rows' });
+      m.backdrop?.(c, h);
       let y = 4;
       paintTitle(c, m.title, y);
       y += 20;
+      if (m.tiles) {
+        // The strip is painted above the tiles but listed after them, so the cursor starts
+        // on QUICK PLAY.
+        // Room around the card (Cam, 2026-10-20: "some padding around the trainer card").
+        const strip = m.trainer ? paintTrainer(c, y + 4, 44, m.trainer) : null;
+        y += strip ? 56 : 0;
+        const tiles = paintTiles(c, y, m.rows, h - y - (m.note ? 22 : 4), m.rowsId);
+        widgets.push(...tiles.widgets);
+        if (strip) widgets.push(strip);
+        y = tiles.bottom + 2;
+        widgets.push({ rect: paintNote(c, m.note, y), text: m.note, id: m.noteId, cursor: null });
+        return { widgets, containers };
+      }
       const list = paintRows(c, y, m.rows, m.rowsId);
       widgets.push(...list.widgets);
       y = list.bottom + 2;
@@ -806,20 +928,7 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
       widgets.push({ rect: noteRect, text: m.note, id: m.noteId, cursor: null });
       y += ROW_H + 2;
       if (m.trainer) {
-        const t = m.trainer;
-        const box = { x: 0, y, w: W, h: 48 };
-        c.drawFrame(box);
-        const sheet = skinSheet(t.skin);
-        if (sheet) c.drawSprite(sheet.gfx, 16, y + 8);
-        c.drawText(fitText(t.name, W - 56), 40, y + 8, TEXT_BLUE);
-        c.drawText(fitText(t.record, W - 56), 40, y + 24, TEXT_GRAY);
-        widgets.push({
-          rect: box,
-          text: `${t.name} ${t.record}`,
-          id: 'lobby-trainer',
-          onPress: t.onPress,
-          cursor: { x: 4, y: y + 18 },
-        });
+        widgets.push(paintTrainer(c, y, 48, m.trainer));
         y += 52;
       }
       if (m.buttons?.length) widgets.push(...paintButtons(c, Math.min(y, h - 28), m.buttons));

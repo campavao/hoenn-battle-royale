@@ -129,6 +129,8 @@ export interface HowToModel {
   /** Your sprite: you are the one in the fog, and the one who won. */
   skin: number;
   onDone(): void;
+  /** The last panel is up: everything has been read (HBR-30's NEW comes off). */
+  onRead?(): void;
   /** Draw again: a moving panel asks every FRAME_MS while it is up. */
   redraw?(): void;
   /** The clock the pictures move by; performance.now unless a test gives one. */
@@ -150,6 +152,7 @@ function fogOver(c: EmeraldCanvas, r: Rect, drift: number, alpha: number): void 
 export function howToScreen(model: () => HowToModel): DrawnScreen {
   let page = 0;
   let pending = false;
+  let read = false;
   const done = () => {
     page = 0;
     model().onDone();
@@ -161,6 +164,10 @@ export function howToScreen(model: () => HowToModel): DrawnScreen {
       const t = (m.now ?? (() => performance.now()))();
       const panel = PANELS[page];
       const last = page === PANELS.length - 1;
+      if (last && !read) {
+        read = true;
+        m.onRead?.();
+      }
       const widgets: Widget[] = [];
 
       const rows = wrapText(panel.text, TEXT_W);

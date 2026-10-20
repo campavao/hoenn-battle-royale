@@ -86,6 +86,7 @@ from `web/`, which has vite-node):
 | 7 | `python tools/br/export-trainers.py > web/src/data/trainers.json` | the trainers on each map | each map's `scripts.inc` |
 | 8 | `python tools/br/mine-lines.py > web/src/data/lines.json` | MY VOICE's word list | NPC text |
 | 9 | `python tools/br/export-howto.py` | `web/public/ui/howto.png` | HOW TO PLAY's pictures: 3's Safari Zone, Route 101 and Route 111, 4's sheets, the region map, the evolution scene, the Charmander line |
+| 10 | `python tools/br/export-menu-pan.py` | `web/src/data/menupan.json` | The main menu's pan: 3's field maps placed by `world.json`'s seams from Littleroot, and a path through the towns in gym order |
 
 Run order matters for 1 → 2, 1 → 3, and 3 and 4 → 9; the rest stand alone (5's skins name sheets that
 4 writes, but it does not read them). The symbol table and
