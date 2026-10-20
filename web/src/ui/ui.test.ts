@@ -113,6 +113,13 @@ describe('the drawn screens (POK-320)', () => {
       expect(w.rect.y + w.rect.h, `${r.id} is on the screen`).toBeLessThanOrEqual(320);
     }
     expect(rows.filter((r) => r.art).length, 'everything but WATCH has a picture').toBe(rows.length - 1);
+    // Seven and a note line: the low half tiles still say every word (#110's review).
+    const seven = rows.slice(1);
+    for (const h of [300, 310, 316, 320, 330]) {
+      const low = fakeCanvas();
+      menuScreen(() => ({ title: 'HOENN BATTLE ROYALE', rows: seven, note: 'The relay is down.', tiles: true, trainer: { name: 'CAM', skin: 0, record: '', onPress: () => undefined } })).paint(low.canvas, h);
+      for (const r of seven) expect(low.texts.map((t) => t.text), `${r.label} uncut at ${h}`).toContain(r.label);
+    }
   });
 
   it("seats Kanto's 2x4, and a bigger MAX in more rows", async () => {

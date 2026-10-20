@@ -842,7 +842,8 @@ function paintTiles(c: EmeraldCanvas, y: number, rows: RowSpec[], room: number, 
     // across the screen, its people either side of them; lower, its picture before them.
     const artW = item !== undefined ? n : (gfx.length - 1) * SPRITE_STEP + 16;
     const beside = !tall && !across && (item !== undefined || gfx.length > 0) ? artW + 4 : 0;
-    const label = fitText(row.label, r.w - 16 - beside);
+    // A picture beside the words leaves them the tile's inside, borders aside.
+    const label = fitText(row.label, r.w - (beside ? 12 : 16) - beside);
     const lw = measure(label);
     const ly = tall ? r.y + r.h - 24 : r.y + Math.floor((r.h - ROW_H) / 2) - 2;
     const lx = Math.round(r.x + beside + (r.w - beside - lw) / 2);

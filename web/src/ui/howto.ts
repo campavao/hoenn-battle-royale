@@ -152,6 +152,7 @@ function fogOver(c: EmeraldCanvas, r: Rect, drift: number, alpha: number): void 
 export function howToScreen(model: () => HowToModel): DrawnScreen {
   let page = 0;
   let pending = false;
+  let read = false;
   const done = () => {
     page = 0;
     model().onDone();
@@ -163,7 +164,10 @@ export function howToScreen(model: () => HowToModel): DrawnScreen {
       const t = (m.now ?? (() => performance.now()))();
       const panel = PANELS[page];
       const last = page === PANELS.length - 1;
-      if (last) m.onRead?.();
+      if (last && !read) {
+        read = true;
+        m.onRead?.();
+      }
       const widgets: Widget[] = [];
 
       const rows = wrapText(panel.text, TEXT_W);
