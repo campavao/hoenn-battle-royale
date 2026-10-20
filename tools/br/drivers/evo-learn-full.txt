@@ -1,0 +1,72 @@
+# evo-learn-full: learning a move on evolution asks nothing (POK-441, Cam's 2026-10-19
+# play-test: "applying an item or a move shouldn't need confirming"). The evolution
+# scene's own learn, like the bag's, goes straight to the summary screen's "forget
+# which": no "trying to learn... delete a move?" and its YES/NO, no "1, 2, and... Poof!".
+#
+# A TREECKO at Lv15 knowing four (POUND, LEER, ABSORB, QUICK ATTACK), written in the clear
+# (personality and OT id 0, so the substructs are unencrypted, in GAEM order), and a RARE
+# CANDY (68). Lv16 is TREECKO's PURSUIT, taught from the party screen (B: not learnt),
+# then GROVYLE, whose own Lv16 move is FURY CUTTER (210): A there takes ABSORB's slot.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gPlayerParty 00 00 00 00 00 00 00 00 CE CC BF BF BD C5 C9 FF FF FF 02 02 FF FF FF FF FF FF FF 00 9E AD 00 00 15 01 00 00 F3 07 00 00 00 46 00 00 01 00 2B 00 47 00 62 00 23 1E 19 1E 00 00 00 00 00 00 00 00 00 00 00 00 00 00 85 21 00 00 00 00 00 00 00 00 00 00 00 00 0F FF 28 00 28 00 14 00 14 00 14 00 14 00 14 00
+pokebytes gDecompressionBuffer 01 44 00 01
+mailsend gBrMailbox 30 gDecompressionBuffer 4
+wait 60
+tap START
+wait 40
+tap DOWN
+wait 10
+tap A
+wait 120
+# BAG > RARE CANDY > USE > TREECKO
+tap A
+wait 30
+tap A
+wait 60
+tap A
+wait 200
+expect u8 gPlayerParty+0x54 16
+# "elevated to Lv. 16", its stats, then PURSUIT: the summary screen's "forget which" at
+# once (party_menu.c, tm-teach-full); B there is "did not learn"
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 200
+shot pursuit
+tap B
+wait 200
+tap A
+wait 200
+# the evolution, to "Congratulations! Your TREECKO evolved into GROVYLE!"
+wait 900
+hold A 4
+wait 120
+hold A 4
+wait 200
+shot evolved
+expect u16 gPlayerParty+0x20 278
+# then FURY CUTTER: straight to the summary screen, the new move fifth, no YES/NO
+wait 150
+hold A 4
+wait 400
+shot forget-which
+expect u16 gPlayerParty+0x2C 1
+# A on POUND: FURY CUTTER in its slot and "GROVYLE learned FURY CUTTER!", no Poof
+hold A 4
+wait 200
+shot learned
+expect u16 gPlayerParty+0x2C 210
+expect u16 gPlayerParty+0x2E 43
+expect u16 gPlayerParty+0x30 71
+expect u16 gPlayerParty+0x32 98
+hold A 4
+wait 300
+hold A 4
+wait 300
+expect u32 gMain+4 CB2_Overworld+1
+say evo learn full ok
