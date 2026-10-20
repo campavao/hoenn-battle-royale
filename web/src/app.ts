@@ -12,7 +12,8 @@ import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
-import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
+import type { BstartMsg, Msg, PackedMon, PlaceMsg, StartMsg, TurnMsg } from './net/wire';
+import { PROTOCOL } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import type { HudWorld } from './ui/phonehud';
@@ -31,8 +32,9 @@ import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { ringLabel, winLabel } from './match/clock';
 import { LEFT_MATCH_NOTE, noteInMatch, noteOutOfMatch, reloadedMidMatch } from './match/left';
+import { buildId, dropResume, Journal, mayResume, packMatch, saveResume, unpackMatch, takeResume, type ResumeRecord } from './match/resume';
 import { Curtain } from './match/curtain';
-import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
+import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, rewatchRow, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import { cleanNote, sendFeedback } from './net/feedback';
 import { feedbackScreen, type FeedbackState } from './ui/feedback';
 import { howToScreen, markHowToDue, takeHowToDue } from './ui/howto';
@@ -2443,6 +2445,7 @@ function wireRoom(
   symbols: Map<string, number> | undefined,
   hash: RoomHash,
   patch?: string,
+  resume?: ResumeRecord,
 ): void {
   if (mailboxBase === undefined || hash.mode === 'solo') return; // solo: no socket at all
 
@@ -2494,6 +2497,8 @@ function wireRoom(
   let isHost = false;
   /** A rejoin is out: a refusal is about the room we were in, not one we asked into. */
   let rejoining = false;
+  /** ...and it is a reload's (HBR-20), until the room has us back. */
+  let resuming = resume !== undefined;
   /** The room is ours again after our own drop (POK-330 #47), and the match with it:
    *  the director the drop stopped starts again on the next roster that says so. */
   let resumeHost = false;
@@ -2958,6 +2963,9 @@ function wireRoom(
    *  this page one way or the other -- our own ROM's messages on the way up, everybody
    *  else's on the way in, and the host's own as it sends them -- and each goes through
    *  session.note once, the same way solo's do. */
+  /** While a reload's books are read back (HBR-20): when the message being read was
+   *  booked, by the wall clock; 0 the rest of the time. */
+  let rereadAt = 0;
   const session = new MatchSession(
     {
       mySeat: () => bridge?.seat ?? null,
@@ -2966,7 +2974,11 @@ function wireRoom(
       relayRoster: () => controls.roster,
       dealing: () => host !== null,
       bots: () => host?.bots.bots ?? null,
-      toRom: (m) => bridge?.pushToRom(m),
+      // Read back, the books put nothing into a ROM that already holds it.
+      toRom: (m) => {
+        if (!rereadAt) bridge?.pushToRom(m);
+      },
+      now: () => (rereadAt ? performance.now() - (Date.now() - rereadAt) : performance.now()),
       owed: {
         opponent: () => bridge?.opponent() ?? null,
         inRoom: (seat) => (controls.roster?.members ?? []).some((m) => m.id === seat),
@@ -2988,6 +3000,7 @@ function wireRoom(
       // other again. With the results up, PLAY AGAIN is the exit and the grace leaves
       // them be (POK-371); the room's next START still takes this page into it.
       exit: () => {
+        if (rereadAt) return;
         drawResults();
         if (!resultsShowing() && !replay.waiting && !paraded.holding) void returnToRoom();
       },
@@ -3012,6 +3025,13 @@ function wireRoom(
     },
   );
   stallLog = session.log;
+  /** Everything the books are told, kept to write down as the page goes (HBR-20). */
+  const journal = new Journal();
+  const bookNote = session.note.bind(session);
+  session.note = (msg, via) => {
+    journal.note(msg, via, rereadAt || Date.now());
+    bookNote(msg, via);
+  };
   /** Our team and where we stood when our ROM lost its last link fight (POK-387): read
    *  then, since a replay we watch afterwards plays its fight in the same gPlayerParty. */
   let lostWith: { team: { species: number; level: number }[]; at: { map: MapRef; x: number; y: number } } | null = null;
@@ -3066,6 +3086,8 @@ function wireRoom(
   /** The room we are attached to, so a second attach can tell a rejoin of it (the relay
    *  handed our seat back) from a new room. */
   let attachedTo: { seat: number; code: string } | null = null;
+  /** A reload's bots, for the first attach to stand where they were (HBR-20). */
+  const resumeRows: PlaceMsg[] = [];
 
   const attach = (seat: number, code: string, hostSeat: number) => {
     // A rejoin mid-fight keeps the fight: the ROM is still in it, and a fresh Bridge knew
@@ -3088,6 +3110,7 @@ function wireRoom(
     const wasHost = isHost;
     isHost = hostSeat === seat;
     rejoining = false;
+    resuming = false;
     // Ours before the drop and ours again: the relay waited for us, or the room had gone
     // and we opened another (POK-330 #47). The match lives in this tab.
     resumeHost = wasHost && isHost && host === null && onPromotion(match) === 'take-over';
@@ -3096,6 +3119,9 @@ function wireRoom(
     // fallen go back on it fallen.
     if (match.seed !== 0) bridge.roster.seatBots(botRows(match.seed, match.botSeats));
     for (const out of match.out) bridge.roster.applyMsg({ t: 'out', seat: out });
+    // A host back from a reload stands its bots where it last saw them (HBR-20): nobody
+    // else ever told this page, and the take-over picks them up from these rows.
+    for (const row of resumeRows.splice(0)) bridge.roster.applyMsg(row);
     if (rejoin) {
       // ...and what we last said to the seat we are fighting, which the blip may have
       // swallowed (#7), and the drop we asked for and got no cell for (POK-331 #4).
@@ -3571,6 +3597,14 @@ function wireRoom(
     );
   };
   relay.on('room_error', (ev) => {
+    // A reload the room would not take back (HBR-20): the hold ran out, or the room is
+    // gone. Out of the match, then, which the menu says, with WATCH.
+    if (resuming) {
+      resuming = false;
+      noteInMatch(resume?.code);
+      location.reload();
+      return;
+    }
     // `locked` is the common refusal: a room mid-match, which is exactly what you rejoin
     // if you reload an old link. Which ones are dead ends is match/room.ts's onRefused.
     const next = onRefused(ev.reason, { rejoining, wasHost: isHost, seat: bridge?.seat ?? null });
@@ -3701,6 +3735,64 @@ function wireRoom(
     if ((me === undefined || me.alive) && (!bridge || offersToHost(match, bridge.seat))) relay.canHost(true);
   });
 
+  // ---- back from a reload (HBR-20) ----
+  // The books are read back the way they were first told, into nothing (rereadAt), and
+  // the match laid over them as it stood; the ROM is already back (main). From here on
+  // it is a seat coming back from a drop: attach() takes the rejoin's way, and a host
+  // takes the match back as it does after one (resumeHost).
+  if (resume) {
+    attachedTo = { seat: resume.seat, code: resume.code };
+    isHost = resume.host;
+    for (const [msg, via, wall] of resume.journal) {
+      rereadAt = wall;
+      session.note(msg, via);
+    }
+    rereadAt = 0;
+    unpackMatch(match, resume.match, performance.now(), Date.now());
+    resumeRows.push(...resume.rows);
+    hideRoomScreen();
+  }
+  /** Written down as the page goes, so a reload can come back (match/resume.ts): only
+   *  from a match this seat is still in, and never from inside a battle. */
+  const writeResume = (): void => {
+    dropResume();
+    if (!bridge || !attachedTo || !relay.token) return;
+    const seat = bridge.seat;
+    if (!mayResume({ seat, match, busy: session.busy, watching: amWatching })) return;
+    const entries = journal.entries();
+    if (!entries) return;
+    if (host && host.director.state.phase !== 'ended') {
+      match.clockLeft = host.director.state.clockLeft;
+      match.clockAt = performance.now();
+    }
+    const state = emu.snapshot();
+    if (!state) return;
+    const rows: PlaceMsg[] = host
+      ? bridge.roster
+          .all()
+          .filter((e) => match.botSeats.has(e.seat) && e.map !== undefined && e.alive)
+          .map((e) => ({ t: 'place', v: PROTOCOL, seat: e.seat, map: e.map, x: e.x, y: e.y, f: e.dir, st: 'alive' }))
+      : [];
+    saveResume(
+      {
+        v: 1,
+        code: attachedTo.code,
+        token: relay.token,
+        seat,
+        host: host !== null,
+        at: Date.now(),
+        holdMs: relay.rejoinMs,
+        build: buildId(patch, protocol),
+        opts: { ...me, pass: (isHost ? hostPass : joinPass) ?? undefined },
+        match: packMatch(match, performance.now(), Date.now()),
+        journal: entries,
+        rows,
+      },
+      state,
+    );
+  };
+  window.addEventListener('pagehide', writeResume);
+
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
   const skin = String(careerSkin());
   // What we are running, so the relay's version gate can do its job (POK-244). Both
@@ -3722,7 +3814,11 @@ function wireRoom(
   }
   // Open, because a room nobody can find is not a lobby (POK-240). JOIN BY CODE still
   // works for one that is not listed; that is what a passcode is for.
-  if (hash.mode === 'host') relay.host({ ...me, open: true, max: BOT_FILL });
+  if (resume) {
+    rejoining = true;
+    setStatus('Rejoining your match…');
+    relay.resume(resume.code, resume.token, resume.opts);
+  } else if (hash.mode === 'host') relay.host({ ...me, open: true, max: BOT_FILL });
   else if (hash.mode === 'quick') relay.quickJoin(me);
   else if (hash.mode === 'daily') relay.dailyJoin(me);
   else relay.join(hash.code!, { ...me, spectate: hash.mode === 'watch', pass: joinPass ?? undefined });
@@ -3742,7 +3838,7 @@ const LOBBY_CONNECT_MS = 6000;
  *  having closed the browsing socket first -- SOLO VS BOTS must reach the ROM with no
  *  connection open, which is the whole point of it. `version` is the tab's, which the
  *  list is asked with: its DAILY row is our own build's daily (POK-331 #14). */
-function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''): Promise<RoomHash> {
+function runLobby(version: { patch?: string; protocol?: number }, firstNote = '', watchCode: string | null = null): Promise<RoomHash> {
   showScreen('lobby');
   const stage = theStage();
   const relay = new RelayClient();
@@ -3899,6 +3995,10 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
         case 'watch':
           setRoomHash('join', action.code);
           return done({ mode: 'join', code: action.code });
+        case 'rewatch':
+          // The match a reload left (HBR-20): back in to look, as a watcher.
+          setRoomHash('watch', action.code);
+          return done({ mode: 'watch', code: action.code });
       }
     };
     const row = (r: LobbyRow): RowSpec => ({
@@ -3916,7 +4016,12 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
 
     const main = menuScreen(() => ({
       title: 'HOENN BATTLE ROYALE',
-      rows: [...playRows(shownLink(), rooms.find((r) => r.daily)), HOWTO_ROW, FEEDBACK_ROW].map(row),
+      rows: [
+        ...(watchCode ? [rewatchRow(watchCode)] : []),
+        ...playRows(shownLink(), rooms.find((r) => r.daily)),
+        HOWTO_ROW,
+        FEEDBACK_ROW,
+      ].map(row),
       rowsId: 'lobby-rows',
       note: note || leftNote || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',
@@ -4512,19 +4617,29 @@ async function main(): Promise<void> {
     }
   }
   let fromHash = parseRoomHash();
-  // A reload out of a running match goes to the menu and says so (POK-433): the match
-  // was this tab's and went with it (match/left.ts says why), so the room's URL would
-  // only land on a room screen waiting for a host that has stopped.
+  // A reload out of a running match (POK-433). Inside the relay's minute it goes back in
+  // (HBR-20): the ROM from the savestate the page wrote as it went, the rest in wireRoom.
+  // Past it, or from a battle, or with nothing written, it goes to the menu and says so,
+  // with WATCH: the match was this tab's (match/left.ts says why), and the room's URL
+  // would only land on a room screen waiting for a host that has stopped.
   let lobbyNote = '';
+  let watchCode: string | null = null;
+  let resume: ResumeRecord | undefined;
   const leftCode = reloadedMidMatch();
+  const back = takeResume({ build: buildId(patch, protocol), now: Date.now() });
   if (leftCode !== null && fromHash && fromHash.mode !== 'solo' && fromHash.mode !== 'watch'
     && (leftCode === '' || fromHash.code === undefined || fromHash.code === leftCode)) {
-    history.replaceState(null, '', `#${withoutRoom(location.hash)}`);
-    fromHash = null;
-    lobbyNote = LEFT_MATCH_NOTE;
+    if (back && back.rec.code === leftCode && mailboxBase !== undefined && emu.restore(back.state)) {
+      resume = back.rec;
+    } else {
+      history.replaceState(null, '', `#${withoutRoom(location.hash)}`);
+      fromHash = null;
+      lobbyNote = LEFT_MATCH_NOTE;
+      watchCode = leftCode || null;
+    }
   }
   let roomHash = fromHash;
-  if (!roomHash) roomHash = await runLobby({ patch, protocol }, lobbyNote);
+  if (!roomHash) roomHash = await runLobby({ patch, protocol }, lobbyNote, watchCode);
   if (roomsRefused && roomHash.mode !== 'solo') return refuseRoom(roomsRefused);
   const bootMode = bootModeFor(roomHash.mode);
   // Solo's seed goes into the ROM before its boot (POK-327): BR_BOOT_SAFARI deals the
@@ -4536,7 +4651,8 @@ async function main(): Promise<void> {
   if (mailboxBase !== undefined) {
     const matchBase = symbols?.get('gBrMatch');
     if (roomHash.mode === 'solo' && matchBase !== undefined) emu.write(matchBase + MATCH_SEED, soloSeed, 32);
-    writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin(), symbols?.get('gBrMySkin'));
+    // A ROM back from a savestate is mid-match: no boot block for it.
+    if (!resume) writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin(), symbols?.get('gBrMySkin'));
     emu.resume();
   }
 
@@ -4544,7 +4660,7 @@ async function main(): Promise<void> {
   if (mailboxBase !== undefined && roomHash.mode === 'solo') holdCurtain(emu, symbols);
   showScreen('playing');
   if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols, soloSeed);
-  else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch);
+  else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch, resume);
   // An unpatched ROM has no room and no sheet: the game, and nothing over it.
   if (mailboxBase === undefined) theStage().hide();
 }

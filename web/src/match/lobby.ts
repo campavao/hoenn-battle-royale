@@ -47,7 +47,9 @@ export type LobbyAction =
   // A match in six panels (POK-429).
   | { kind: 'howto' }
   | { kind: 'join'; code: string; pass: boolean }
-  | { kind: 'watch'; code: string };
+  | { kind: 'watch'; code: string }
+  // Back into the match a reload left, to watch it (HBR-20).
+  | { kind: 'rewatch'; code: string };
 
 export interface LobbyRow {
   /** What the row says on the left. */
@@ -165,6 +167,12 @@ export const HOWTO_ROW: LobbyRow = {
   action: { kind: 'howto' },
   id: 'lobby-howto',
 };
+
+/** First on the menu after a reload that could not go back into its match (HBR-20,
+ *  Cam: "After that they are out with the WATCH option"). */
+export function rewatchRow(code: string): LobbyRow {
+  return { label: 'WATCH', detail: 'your match', action: { kind: 'rewatch', code }, id: 'lobby-rewatch' };
+}
 
 /** One row per open room, plus the daily's own at the top when the relay offers it.
  *  A room with no seats left is shown and not pressable -- knowing a game is full is
