@@ -1495,7 +1495,8 @@ export class FieldView {
   }
 
   /** The people, bottom-most last so a sprite further down the map is in front. */
-  private drawSprites(ctx: CanvasRenderingContext2D, sprites: FieldSprite[]): boolean {
+  private drawSprites(ctx: CanvasRenderingContext2D, sprites: FieldSprite[], cover: { maps: readonly Reached[]; ox: number; oy: number } | null = null): boolean {
+    if (cover && sprites.length > 0) return this.drawCovered(ctx, sprites, cover);
     let complete = true;
     const lay = this.lay;
     const order = sprites.slice().sort((a, b) => Number(!!b.under) - Number(!!a.under) || (a.y + (SHEETS[String(a.gfx)]?.h ?? 0)) - (b.y + (SHEETS[String(b.gfx)]?.h ?? 0)));
@@ -1516,6 +1517,37 @@ export class FieldView {
         ctx.drawImage(sheet, frame * info.w, 0, info.w, info.h, cx, cy, info.w, info.h);
       }
     }
+    return complete;
+  }
+
+  private scratch: HTMLCanvasElement | null = null;
+
+  /** The people under what stands over them (POK-443): drawn on a canvas of their own,
+   *  the maps' covers (render-maps.py: the top layer of every metatile that puts it on
+   *  BG1, a roof, a tree's crown) cut out of them, and that laid on. Past the picture the
+   *  page drew a bot on a roof the ROM would have put him behind ("he is not obeying the
+   *  Z index"). A cover still on its way covers nobody, and is drawn again when it lands. */
+  private drawCovered(ctx: CanvasRenderingContext2D, sprites: FieldSprite[], cover: { maps: readonly Reached[]; ox: number; oy: number }): boolean {
+    const lay = this.lay;
+    const doc = ctx.canvas.ownerDocument;
+    if (!this.scratch && doc) this.scratch = doc.createElement('canvas');
+    const scratch = this.scratch;
+    const sctx = scratch?.getContext('2d');
+    if (!scratch || !sctx) return this.drawSprites(ctx, sprites);
+    if (scratch.width !== lay.cols) scratch.width = lay.cols;
+    if (scratch.height !== lay.rows) scratch.height = lay.rows;
+    sctx.globalCompositeOperation = 'source-over';
+    sctx.clearRect(0, 0, lay.cols, lay.rows);
+    sctx.imageSmoothingEnabled = false;
+    let complete = this.drawSprites(sctx, sprites);
+    sctx.globalCompositeOperation = 'destination-out';
+    for (const r of cover.maps) {
+      const img = this.image(`${r.map.id}.cover`);
+      if (img) sctx.drawImage(img, r.x - cover.ox, r.y - cover.oy);
+      else complete = false;
+    }
+    sctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(scratch, 0, 0);
     return complete;
   }
 
@@ -1602,7 +1634,7 @@ export class FieldView {
       }
       if (!this.drawMarks(ctx, marks, ox, oy)) complete = false;
       if (c.fog && !this.drawFog(ctx, c.fog)) complete = false;
-      if (!this.drawSprites(ctx, under)) complete = false;
+      if (!this.drawSprites(ctx, under, { maps: reached, ox, oy })) complete = false;
     }
 
     if (c.fade > 0) {
@@ -1766,7 +1798,10 @@ export class FieldView {
       const bare = marks.filter((m) => !m.drawn && m.at.x + TILE > shown.left && m.at.x < shown.right && m.at.y + TILE > shown.top && m.at.y < shown.bottom);
       if (!this.drawMarks(ctx, bare, left - this.lay.lcdCol, top - this.lay.lcdRow)) complete = false;
     }
-    if (!this.drawSprites(ctx, c.sprites.filter((s) => s.hidden))) complete = false;
+    const { left, top } = lcdOrigin(c);
+    const ox = left - lay.lcdCol;
+    const oy = top - lay.lcdRow;
+    if (!this.drawSprites(ctx, c.sprites.filter((s) => s.hidden), { maps: this.reached(outdoors, ox, oy), ox, oy })) complete = false;
     if (c.fade > 0) {
       ctx.globalCompositeOperation = 'source-atop';
       ctx.globalAlpha = Math.min(1, c.fade / 16);

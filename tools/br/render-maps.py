@@ -21,6 +21,9 @@ has no connection -- Route 101's trees either side. It is a 32x32 PNG of its own
 tiles it under everything, aligned to the map's odd coordinates (MapGridGetMetatileIdAt
 indexes it by the parity of grid coords, which carry MAP_OFFSET 7).
 
+Each map also gets <MAP_ID>.cover.png: the top layer of the metatiles that put it on BG1,
+which the page draws over the people it draws itself (POK-443).
+
 No object events, no animation, no player: a still of the ground, one block = 16 px. Every
 map has at most a couple of hundred colours (thirteen palettes of sixteen), so the PNGs
 are written with a palette, exactly, at about a third the size -- they ship with the site.
@@ -37,6 +40,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 OUT = os.path.join(ROOT, 'web', 'public', 'field-maps')
 TILE = 8
 BLOCK = 16
+# include/global.fieldmap.h: the layer type in a metatile attribute's bits 12..15.
+LAYER_COVERED = 1
 
 _tilesets = {}
 
@@ -73,7 +78,9 @@ def load_tileset(name):
     raw = open(os.path.join(d, 'metatiles.bin'), 'rb').read()
     metatiles = [struct.unpack('<8H', raw[i:i + 16]) for i in range(0, len(raw), 16)]
     pals = [load_palette(os.path.join(d, 'palettes', f'{i:02d}.pal')) for i in range(16)]
-    _tilesets[name] = (tiles, metatiles, pals, kind)
+    raw = open(os.path.join(d, 'metatile_attributes.bin'), 'rb').read()
+    layers = [(struct.unpack('<H', raw[i:i + 2])[0] >> 12) & 0xF for i in range(0, len(raw), 2)]
+    _tilesets[name] = (tiles, metatiles, pals, kind, layers)
     return _tilesets[name]
 
 
@@ -93,15 +100,19 @@ class Tilesets:
         self.secondary = load_tileset(layout['secondary_tileset'])
         self.palettes = self.primary[2][:6] + self.secondary[2][6:13] + self.primary[2][13:]
 
-    def draw_block(self, img, bx, by, block):
+    def draw_block(self, img, bx, by, block, cover=False):
         mid = block & 0x3FF
         if mid < 512:
             mt = self.primary[1][mid] if mid < len(self.primary[1]) else None
+            lt = self.primary[4][mid] if mid < len(self.primary[4]) else 0
         else:
             mt = self.secondary[1][mid - 512] if mid - 512 < len(self.secondary[1]) else None
+            lt = self.secondary[4][mid - 512] if mid - 512 < len(self.secondary[4]) else 0
         if mt is None:
             return
-        for layer in (0, 1):
+        if cover and lt == LAYER_COVERED:
+            return
+        for layer in ((1,) if cover else (0, 1)):
             for t in range(4):
                 entry = mt[layer * 4 + t]
                 tid = entry & 0x3FF
@@ -119,6 +130,20 @@ def render(layout):
     img = Image.new('RGB', (w * BLOCK, h * BLOCK), (0, 0, 0))
     for i, block in enumerate(blocks):
         ts.draw_block(img, (i % BLOCK) * BLOCK if False else (i % w) * BLOCK, (i // w) * BLOCK, block)
+    return img
+
+
+def render_cover(layout):
+    """What stands over the people: the top layer of every metatile that puts it on BG1
+    (METATILE_LAYER_TYPE_NORMAL and _SPLIT; a COVERED one's top layer is BG2, under them),
+    on transparency. A roof, a tree's crown, a sign's top -- the page draws it over the
+    people it draws itself (POK-443: "he should have been behind the roof there")."""
+    ts = Tilesets(layout)
+    w, h = layout['width'], layout['height']
+    blocks = struct.unpack(f'<{w * h}H', open(os.path.join(ROOT, layout['blockdata_filepath']), 'rb').read()[: w * h * 2])
+    img = Image.new('RGBA', (w * BLOCK, h * BLOCK), (0, 0, 0, 0))
+    for i, block in enumerate(blocks):
+        ts.draw_block(img, (i % w) * BLOCK, (i // w) * BLOCK, block, cover=True)
     return img
 
 
@@ -148,6 +173,27 @@ def paletted(img):
     return p
 
 
+def cover_paletted(img):
+    """An RGBA cover as a palette PNG with index 0 transparent, exactly."""
+    arr = np.asarray(img)
+    flat = arr.reshape(-1, 4)
+    opaque = flat[:, 3] > 0
+    packed = (flat[:, 0].astype(np.uint32) << 16) | (flat[:, 1].astype(np.uint32) << 8) | flat[:, 2]
+    colours, index = np.unique(packed[opaque], return_inverse=True)
+    if len(colours) > 255:
+        return img
+    full = np.zeros(len(flat), dtype=np.uint8)
+    full[opaque] = index.astype(np.uint8) + 1
+    p = Image.new('P', img.size)
+    pal = [0, 0, 0]
+    for c in colours:
+        pal += [int(c >> 16) & 0xFF, int(c >> 8) & 0xFF, int(c) & 0xFF]
+    p.putpalette(pal)
+    p.putdata(full.tolist())
+    p.info['transparency'] = 0
+    return p
+
+
 def main():
     world = json.load(open(os.path.join(ROOT, 'web', 'src', 'data', 'world.json'), encoding='utf-8'))
     layouts = {l['id']: l for l in json.load(open(os.path.join(ROOT, 'data', 'layouts', 'layouts.json'), encoding='utf-8'))['layouts']}
@@ -170,6 +216,7 @@ def main():
             continue
         paletted(render(layouts[layout_id])).save(os.path.join(OUT, f'{m["id"]}.png'), optimize=True)
         paletted(render_border(layouts[layout_id])).save(os.path.join(OUT, f'{m["id"]}.border.png'), optimize=True)
+        cover_paletted(render_cover(layouts[layout_id])).save(os.path.join(OUT, f'{m["id"]}.cover.png'), optimize=True)
         done += 1
     print(f'{done} maps rendered into {OUT}')
 
