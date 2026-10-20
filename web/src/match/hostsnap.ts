@@ -4,6 +4,10 @@
 // the takeover's guesses (Director.resume, BotResume): the same clock, the same draws, and
 // every bot with the team and bag it had.
 //
+// The director counts the time the tab was away (every ROM in the room did); the bots'
+// own timers, fights and the trainers' fog clocks do not, so a bot comes back neither
+// teleported nor bled for a minute it never stood in. That is on purpose.
+//
 // It reaches into the director and the brain for what they keep private, which nothing
 // else should: it is here, in the chunk only a match loads (match/resume.ts), rather than
 // as their own methods, because main.js has no room for it.
@@ -40,14 +44,21 @@ export interface HostBotsSnap {
   landing: [seat: number, mapId: string, x: number, y: number][];
 }
 
-export function snapHost(role: HostRole, now = performance.now(), wall = Date.now()): HostSnap {
-  return {
-    seed: role.seed,
-    wall,
-    director: snapDirector(role.director, now),
-    bots: snapHostBots(role.bots, now),
-    claims: [...role['claims']['won']],
-  };
+/** Undefined when it cannot be written: the reload is then the heir's take-over, never a
+ *  reload out of the match, which is what a throw here at pagehide would make it. */
+export function snapHost(role: HostRole, now = performance.now(), wall = Date.now()): HostSnap | undefined {
+  try {
+    return {
+      seed: role.seed,
+      wall,
+      director: snapDirector(role.director, now),
+      bots: snapHostBots(role.bots, now),
+      claims: [...role['claims']['won']],
+    };
+  } catch (e) {
+    console.warn('[resume] could not write the match down', e);
+    return undefined;
+  }
 }
 
 export function snapHostBots(hb: HostBots, now: number): HostBotsSnap {
@@ -71,14 +82,15 @@ export function restoreHost(role: HostRole, snap: HostSnap, now = performance.no
   const out = d['opts'].seats.filter((seat) => !d['aliveSeats'].has(seat));
   restoreDirector(d, snap.director, wall - snap.wall);
   for (const seat of out) d['aliveSeats'].delete(seat);
-  restoreHostBots(role.bots, snap.bots, now);
+  restoreHostBots(role.bots, snap.bots, now, new Set(out));
   for (const [key, seat] of snap.claims) role['claims']['won'].set(key, seat);
   for (const seat of snap.director.placements) role['seen'].add(seat);
   return true;
 }
 
-/** The bots as they stood, over the ones the take-over dealt again off the seed. */
-export function restoreHostBots(hb: HostBots, snap: HostBotsSnap, now: number): void {
+/** The bots as they stood, over the ones the take-over dealt again off the seed: all but
+ *  the ones out of the match by now (an heir may have run it meanwhile). */
+export function restoreHostBots(hb: HostBots, snap: HostBotsSnap, now: number, out: ReadonlySet<number> = new Set()): void {
   const b = hb.bots;
   b['walkers'].length = 0;
   b['fighting'].clear();
@@ -91,7 +103,7 @@ export function restoreHostBots(hb: HostBots, snap: HostBotsSnap, now: number): 
   hb.landing.clear();
   for (const [seat, mapId, x, y] of snap.landing) hb.landing.set(seat, { mapId, x, y });
   for (const [id, ticks, ago, dead] of snap.fog) hb.fog['clocks'].set(id, { ticks, last: now - ago, dead });
-  restoreBots(b, snap.bots, now);
+  restoreBots(b, { ...snap.bots, walkers: snap.bots.walkers.filter((w) => !out.has(w.bot.seat)) }, now, out);
 }
 
 export interface DirectorSnap {
@@ -203,7 +215,7 @@ export function snapBots(b: Bots, now: number): BotsSnap {
 /** start() for the bots a snapshot left, standing and carrying what they were, each said
  *  to the room. A duel in the hidden instance went with the tab, so the seeded resolver
  *  settles it on the next tick, as it settles one the instance never answered. */
-export function restoreBots(b: Bots, snap: BotsSnap, now: number): void {
+export function restoreBots(b: Bots, snap: BotsSnap, now: number, out: ReadonlySet<number> = new Set()): void {
   b['nonce'] = snap.nonce;
   b['duelAfter'] = now + snap.duelAfter;
   b['phase'] = snap.phase;
@@ -228,8 +240,15 @@ export function restoreBots(b: Bots, snap: BotsSnap, now: number): void {
     const walker = find(seat);
     const other = find(opponent);
     if (!walker || b['fighting'].has(seat)) continue;
-    if (nonce === undefined) b['fighting'].set(seat, { opponent, since: now - ago, started });
-    else if (other) reproxy(b, walker, other, nonce, now);
+    if (nonce !== undefined) {
+      if (other) reproxy(b, walker, other, nonce, now);
+      continue;
+    }
+    b['fighting'].set(seat, { opponent, since: now - ago, started });
+    // Against somebody out by now, or not under way yet: that was the walk-up, which is
+    // not kept, and it would stand there until FIGHT_START_MS let it go. Let go now, which
+    // tells the room it is free.
+    if (!started || out.has(opponent)) b['release'](seat);
   }
 }
 

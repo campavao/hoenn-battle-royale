@@ -268,6 +268,21 @@ describe("the host's own reload (HBR-20)", () => {
     expect(places(back.sent).map(where)).toEqual(dealBots(SEED, 7, [0], GROUND.spawns).map(where));
   });
 
+  it('leaves out a bot that went out while the tab was away, and lets go of a fight not under way', () => {
+    const { hb, at } = played();
+    const snap = JSON.parse(JSON.stringify(snapHostBots(hb, at())));
+    const [gone, held, free] = hb.bots.positions().map((p) => p.seat);
+    snap.bots.fights.push([held, 0, 1000, true], [free, 0, 1000, false]);
+    const back = host({ now: () => 50_000 });
+    back.sent.length = 0;
+    restoreHostBots(back.hb, snap, 50_000, new Set([gone]));
+    expect(back.hb.bots.spotOf(gone)).toBeUndefined();
+    expect(places(back.sent).some((p) => p.seat === gone)).toBe(false);
+    const busy = back.sent.filter((m) => m.t === 'busy');
+    expect(busy).toEqual([{ t: 'busy', seat: free }]);
+    expect(back.hb.bots.challenged(held, 0)).toBe(false); // still in its fight
+  });
+
   it('settles a duel the hidden instance was running off the seed, on the next tick', () => {
     const { hb, at } = played();
     const snap = JSON.parse(JSON.stringify(snapHostBots(hb, at())));
