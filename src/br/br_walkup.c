@@ -15,10 +15,13 @@
 #define tState data[BR_WALKUP_DATA]
 #define tTimer data[BR_WALKUP_DATA + 1]
 #define tWalker data[BR_WALKUP_DATA + 2]
+#define tBang data[BR_WALKUP_DATA + 3] // the "!" sprite + 1, 0 for none
 
 // The ! bubble over the one who walks up: our own trainer, or their ghost (or ourselves
 // if their ghost is not on this map).
-static void StartExclamation(u8 seat, bool8 overMe)
+static u8 FindBang(void);
+
+static void StartExclamation(struct Task *task, u8 seat, bool8 overMe)
 {
     struct ObjectEvent *obj = &gObjectEvents[gPlayerAvatar.objectEventId];
 
@@ -26,6 +29,41 @@ static void StartExclamation(u8 seat, bool8 overMe)
         obj = &gObjectEvents[gBrSeats[seat].objId];
     ObjectEventGetLocalIdAndMap(obj, &gFieldEffectArguments[0], &gFieldEffectArguments[1], &gFieldEffectArguments[2]);
     FieldEffectStart(FLDEFF_EXCLAMATION_MARK_ICON);
+    task->tBang = FindBang();
+}
+
+// trainer_see.c's icon sprite keeps its local id and map in data[0..2] and its effect
+// in data[7]; the one just made is the newest such.
+static u8 FindBang(void)
+{
+    u8 i;
+
+    for (i = MAX_SPRITES; i-- > 0;)
+    {
+        struct Sprite *sprite = &gSprites[i];
+
+        if (sprite->inUse && sprite->data[7] == FLDEFF_EXCLAMATION_MARK_ICON
+         && sprite->data[0] == gFieldEffectArguments[0]
+         && sprite->data[1] == gFieldEffectArguments[1]
+         && sprite->data[2] == gFieldEffectArguments[2])
+            return i + 1;
+    }
+    return 0;
+}
+
+// The "!" comes down when the walk starts (POK-444: the whole bubble was "a little too
+// much"), rather than bouncing on for another second over the walker.
+static void DropBang(struct Task *task)
+{
+    struct Sprite *sprite;
+
+    if (task->tBang == 0)
+        return;
+    sprite = &gSprites[task->tBang - 1];
+    task->tBang = 0;
+    if (sprite->inUse && sprite->data[7] == FLDEFF_EXCLAMATION_MARK_ICON
+     && FieldEffectActiveListContains(FLDEFF_EXCLAMATION_MARK_ICON))
+        FieldEffectStop(sprite, FLDEFF_EXCLAMATION_MARK_ICON);
 }
 
 // The seat's ghost in a straight line from us, and which way. FALSE when it is not
@@ -138,13 +176,14 @@ bool8 BrWalkup_Run(struct Task *task, u8 seat, u8 rule)
           || !BrGhosts_Idle(seat)))
             return FALSE;
         task->tWalker = IWalk(seat, rule);
-        StartExclamation(seat, task->tWalker);
+        StartExclamation(task, seat, task->tWalker);
         task->tTimer = 0;
         task->tState++;
         return FALSE;
     case 1:
-        if (!FieldEffectActiveListContains(FLDEFF_EXCLAMATION_MARK_ICON) || ++task->tTimer > 90)
+        if (!FieldEffectActiveListContains(FLDEFF_EXCLAMATION_MARK_ICON) || ++task->tTimer > BR_WALKUP_BANG_FRAMES)
         {
+            DropBang(task);
             task->tTimer = 0;
             task->tState++;
         }

@@ -1,0 +1,22 @@
+# hm-select-bike-rod: SELECT rides the bike on dry land even with the rod registered (Cam's
+# 2026-10-19 play-test: "select does not automatically bring out my bike"). The phone's
+# FISH button registers the rod, and SELECT used to cast it again wherever you stood.
+# BrHm_SelectBike lets a rod come first only facing water.
+#
+# hm-select-bike's spot: ROUTE 104 (map 0:19) at (33,22), facing south onto land; the
+# match bag has the OLD ROD (BrLevels_GiveStartingBag) and both bikes.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 00 00 13 21 00 16 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 19
+# the OLD ROD (262) registered
+poke u16 *gSaveBlock1Ptr+0x496 262
+tap SELECT
+wait 60
+shot select-bike-rod
+# on the MACH BIKE, registered in the rod's place
+expectbits u8 gPlayerAvatar 0x02 0x02
+expect u16 *gSaveBlock1Ptr+0x496 259
+expect u32 gMain+4 CB2_Overworld+1
+say select bike over rod ok

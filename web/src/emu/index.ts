@@ -147,6 +147,9 @@ const PATCHED_ROM_PATH = '/patched.gba';
 const LEGACY_PATCHED_PATH = '/data/games/patched.gba';
 const SCREENSHOT_PATH = '/data/screenshots/shot.png';
 const AUTOSAVE_DIR = '/autosave';
+/** The state slot a reload comes back from (HBR-20): out of the way of any a player or a
+ *  test might use. */
+const RESUME_SLOT = 9;
 
 /** Loads the core script raw from public/emu, outside Vite's import analysis. */
 export async function loadCoreFactory(url = '/emu/mgba.js'): Promise<CoreFactory> {
@@ -727,6 +730,48 @@ export class Emulator {
 
   loadState(slot = 1): boolean {
     return this.m.loadState(slot);
+  }
+
+  /** The whole machine as bytes, for a reload to come back to (HBR-20): a savestate in
+   *  RESUME_SLOT, read out of the core's file system and dropped from it. Null when the
+   *  core would not write one. Leaves the core paused. */
+  snapshot(): Uint8Array | null {
+    const path = this.statePath();
+    if (!path) return null;
+    // Stopped first: the core runs on its own thread, and a state taken halfway into a
+    // frame could hold a ring's indices without what they index. Only ever taken as the
+    // page goes, so it stays stopped.
+    this.pause();
+    if (!this.m.saveState(RESUME_SLOT)) return null;
+    try {
+      const bytes = this.m.FS.readFile(path);
+      this.m.FS.unlink(path);
+      return bytes;
+    } catch {
+      return null;
+    }
+  }
+
+  /** ...and the machine put back from them, into whatever is booted now. */
+  restore(bytes: Uint8Array): boolean {
+    const path = this.statePath();
+    if (!path) return false;
+    try {
+      this.m.FS.writeFile(path, bytes);
+      const ok = this.m.loadState(RESUME_SLOT);
+      this.m.FS.unlink(path);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Where the core keeps a state for the image booted now (mgba.js: /data/states/,
+   *  named after the image, `.ss` and the slot). */
+  private statePath(): string | null {
+    if (!this.bootedPath) return null;
+    const base = this.bootedPath.slice(this.bootedPath.lastIndexOf('/') + 1).replace(/\.[^.]*$/, '');
+    return `/data/states/${base}.ss${RESUME_SLOT}`;
   }
 
   /** The picture as the core drew it, band and all, copied out of the heap: what the

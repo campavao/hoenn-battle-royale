@@ -1,0 +1,225 @@
+# fog-ko: the fog finishes a mon in any fog battle (Cam's 2026-10-19 play-test: two mons
+# floored at 1 HP traded Rests for two and a half minutes -- "we might want fog to kill
+# you in this situation"; Cam's answer 2026-10-20: "every fog battle", not only FINAL
+# FOG). And the fog's turn plays the poison's bubbles over the mon it hurts, after its
+# line ("it would be cool with the fog if we did the poison animation").
+#
+# fog-in-battle's wild fight on Route 102, the fog closing on Oldale, not FINAL FOG.
+wait 30
+# BR_BOOT_MAP | TESTMON, male, Route 102 (0, 17), x=20 y=9 -- the middle grass patch
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# the fog closes somewhere else: RING phase 1, centre (25,12), r 1
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 60
+expect u8 gBrRing+4 1
+expect u8 gBrRing+5 1
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 600
+shot wild
+expectge u8 gBattlersCount 2
+expect u16 gBattleTypeFlags 4
+# the fight is fought in the fog
+expect u8 gBrRing+31 1
+tap A
+wait 60
+tap A
+wait 300
+shot menu
+# the wild mon on its last HP point, and we use LEER (the second move), which hurts nobody
+poke u16 gBattleMons+0x80 1
+poke u16 gEnemyParty+0x56 1
+tap A
+wait 60
+tap RIGHT
+wait 10
+tap A
+# the turn: our LEER, its move, then the fog on us -- its bubbles, its line, our bar --
+# then the same on it, frame by frame
+wait 300
+shot turn-00
+wait 8
+shot turn-01
+wait 8
+shot turn-02
+wait 8
+shot turn-03
+wait 8
+shot turn-04
+wait 8
+shot turn-05
+wait 8
+shot turn-06
+wait 8
+shot turn-07
+wait 8
+shot turn-08
+wait 8
+shot turn-09
+wait 8
+shot turn-10
+wait 8
+shot turn-11
+wait 8
+shot turn-12
+wait 8
+shot turn-13
+wait 8
+shot turn-14
+wait 8
+shot turn-15
+wait 8
+shot turn-16
+wait 8
+shot turn-17
+wait 8
+shot turn-18
+wait 8
+shot turn-19
+wait 8
+shot turn-20
+wait 8
+shot turn-21
+wait 8
+shot turn-22
+wait 8
+shot turn-23
+wait 8
+shot turn-24
+wait 8
+shot turn-25
+wait 8
+shot turn-26
+wait 8
+shot turn-27
+wait 8
+shot turn-28
+wait 8
+shot turn-29
+wait 8
+shot turn-30
+wait 8
+shot turn-31
+wait 8
+shot turn-32
+wait 8
+shot turn-33
+wait 8
+shot turn-34
+wait 8
+shot turn-35
+wait 8
+shot turn-36
+wait 8
+shot turn-37
+wait 8
+shot turn-38
+wait 8
+shot turn-39
+wait 8
+shot turn-40
+wait 8
+shot turn-41
+wait 8
+shot turn-42
+wait 8
+shot turn-43
+wait 8
+shot turn-44
+wait 8
+shot turn-45
+wait 8
+shot turn-46
+wait 8
+shot turn-47
+wait 8
+shot turn-48
+wait 8
+shot turn-49
+wait 8
+shot turn-50
+wait 8
+shot turn-51
+wait 8
+shot turn-52
+wait 8
+shot turn-53
+wait 8
+shot turn-54
+wait 8
+shot turn-55
+wait 8
+shot turn-56
+wait 8
+shot turn-57
+wait 8
+shot turn-58
+wait 8
+shot turn-59
+wait 8
+shot turn-60
+wait 8
+shot turn-61
+wait 8
+shot turn-62
+wait 8
+shot turn-63
+wait 8
+shot turn-64
+wait 8
+shot turn-65
+wait 8
+shot turn-66
+wait 8
+shot turn-67
+wait 8
+shot turn-68
+wait 8
+shot turn-69
+wait 8
+shot turn-70
+wait 8
+shot turn-71
+wait 8
+shot turn-72
+wait 8
+shot turn-73
+wait 8
+shot turn-74
+wait 8
+shot turn-75
+wait 8
+shot turn-76
+wait 8
+shot turn-77
+wait 8
+shot turn-78
+wait 8
+shot turn-79
+wait 8
+wait 572
+shot after
+# the fog took it from 1 to 0, and that won the fight
+expect u8 gBrRing+31 1
+expect u16 gBattleMons+0x80 0
+expectge u16 gBrRing+10 2
+# its faint, our EXP: A through the lines
+tap A
+wait 120
+tap A
+wait 120
+tap A
+wait 120
+tap A
+wait 600
+shot back
+# and the fight is over, won: back on the field
+expect u32 gMain+4 CB2_Overworld+1
+say fog final ko ok

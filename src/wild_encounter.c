@@ -389,7 +389,7 @@ static void CreateWildMon(u16 species, u8 level)
     bool32 checkCuteCharm;
 
 #if BR
-    // The opening's catch pool is dealt from the match seed (POK-255), not read off
+    // The opening's encounters are any wild first stage in the dex (2026-10-20), not
     // the Zone's own table -- otherwise every match offers the same handful of species
     // in the same proportions, and the one real decision the opening asks is the same
     // decision every time. Outside the opening this answers SPECIES_NONE and the map

@@ -1,0 +1,37 @@
+# ring-safe-way: outside the ring, the corner's count takes turns with SAFE and an arrow to
+# the ring's centre (Cam's 2026-10-19 play-test, outside the ring: "where even am I?" --
+# only the MAP could say). br_ring.c BrRing_SafeWay; the HP keeps its turn.
+#
+# ring-outside's start: Littleroot (section 4,11), a test Treecko, in a match.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# RING phase 2, centre (25,12) -- due east -- r 1, no place
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 02 19 0C 01 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrRing+5 1
+# the count's turn is the first two seconds of every four (BR_HUD_ALT_FRAMES)
+poke u8 gBrHud+0x16 0
+wait 4
+shot east
+poke u8 gBrHud+0x16 130
+wait 4
+shot east-hp
+# the centre moves north-east, (12,2): up and right both
+pokebytes gBrMailbox+0x1058 0C 0A 07 00 00 00 03 0C 02 01 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 30
+expect u8 gBrRing+5 1
+poke u8 gBrHud+0x16 0
+wait 4
+shot north-east
+# FINAL FOG has no inside to point at: the count again
+pokebytes gBrMailbox+0x1098 0C 0A 07 00 00 00 09 0C 02 FF 00 00
+poke u16 gBrMailbox+0x0C 3
+wait 200
+poke u8 gBrHud+0x16 0
+wait 4
+shot final
+say ring safe way ok

@@ -43,8 +43,10 @@ static const u16 sCarriers[] =
     FLAG_HIDE_LILYCOVE_HARBOR_FERRY_ATTENDANT,
 };
 
-// Graphics that are a person or an obstacle, as runs of OBJ_EVENT_GFX_ ids: 84..87 are
-// the rooftop saleswoman, TEALA, a smash rock and a boulder. Everything else stays: the
+// Graphics that are a person or an obstacle, as runs of OBJ_EVENT_GFX_ ids: 84..86 are
+// the rooftop saleswoman, TEALA and a smash rock. CUT trees and STRENGTH boulders stay
+// since Cam's 10-19 play-test (#7): somebody who could learn the HM clears them as you
+// walk in (br_hm.c). Everything else stays: the
 // nurse (58), item balls and berry trees (59..62), the clerk (83), the dolls, the boats
 // and trucks, the Pokemon, the leaders (125..132, 218: kept or not by br_gym.c's table,
 // below) and the player's own frames, which no map template uses.
@@ -53,8 +55,7 @@ static const u8 sStripped[][2] =
     { OBJ_EVENT_GFX_QUINTY_PLUMP, OBJ_EVENT_GFX_HEX_MANIAC },        // 4..40, towns
     { OBJ_EVENT_GFX_SWIMMER_M, OBJ_EVENT_GFX_CYCLING_TRIATHLETE_F }, // 42..57, routes
     { OBJ_EVENT_GFX_PROF_BIRCH, OBJ_EVENT_GFX_LUCY },                // the Frontier
-    { OBJ_EVENT_GFX_CUTTABLE_TREE, OBJ_EVENT_GFX_CUTTABLE_TREE },
-    { OBJ_EVENT_GFX_ROOFTOP_SALE_WOMAN, OBJ_EVENT_GFX_PUSHABLE_BOULDER },
+    { OBJ_EVENT_GFX_ROOFTOP_SALE_WOMAN, OBJ_EVENT_GFX_BREAKABLE_ROCK },
     { OBJ_EVENT_GFX_ARTIST, OBJ_EVENT_GFX_CAMERAMAN },               // rivals
     { OBJ_EVENT_GFX_SCIENTIST_2, OBJ_EVENT_GFX_DRAKE },              // teams, the Four
     { OBJ_EVENT_GFX_ROXANNE, OBJ_EVENT_GFX_TATE },                   // leaders, off gyms

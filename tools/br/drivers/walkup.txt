@@ -18,12 +18,14 @@ pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0F 00 10 00 01 01 01
 poke u16 gBrMailbox+0x0C 1
 wait 20
 expect u16 gBrOwnPos+2 12
-# BR_ENGAGE_WAIT, then the link opens and the "!" goes up: still where we saw them from
+# BR_ENGAGE_WAIT, then the link opens and the "!" goes up, and half a second into it
+# (BR_WALKUP_BANG_FRAMES, POK-444: a whole second was "a little too much") the walk starts
+# under it: one step taken by now
 wait 120
 expect u8 gBrNetlink 1
-expect u16 gBrOwnPos+2 12
+expect u16 gBrOwnPos+2 13
 shot bubble
-# the "!" is a second; two walks of 16 frames after it, and we are next to them
+# two walks of 16 frames, and we are next to them
 wait 98
 expect u16 gBrOwnPos+2 14
 expect u16 gBrOwnPos+4 16

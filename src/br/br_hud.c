@@ -635,7 +635,14 @@ static void DrawCorner(void)
         buf[0] = EOS;
     if (buf[0] != EOS)
         alt = AltTurn();
-    if (alt != 2)
+    // ...and outside the ring the count's turn is the way back in instead, Safe and an
+    // arrow (Cam's 2026-10-19 play-test, "where even am I?"): in the fog how many are
+    // left matters less than which way to walk.
+    if (alt != 2 && BrRing_SafeWay(buf))
+    {
+        colors = sColorsFog;
+    }
+    else if (alt != 2)
     {
         p = ConvertIntToDecimalStringN(buf, h->left, STR_CONV_MODE_LEFT_ALIGN, 2);
         StringCopy(p, sText_Left);
@@ -789,6 +796,8 @@ static void DrawTicker(const struct BrHudLine *line)
 
     if (line->kind == BR_HUD_KIND_KILL)
         colors = sColorsKill;
+    else if (line->kind == BR_HUD_KIND_ALERT)
+        colors = sColorsFog;
     else if (line->kind == BR_HUD_KIND_SAY)
         colors = sColorsSay;
     FillWindowPixelBuffer(gBrHud.winTicker, BR_HUD_BOX);
@@ -900,7 +909,7 @@ static void DrawBox(void)
 
     FillWindowPixelBuffer(h->winBox, BR_HUD_BOX);
     // CHAR_NEWLINE in the text gives the second line; the printer handles the rest.
-    AddTextPrinterParameterized3(h->winBox, BR_HUD_FONT, 0, 1, sColorsText,
+    AddTextPrinterParameterized3(h->winBox, BR_HUD_FONT, 0, 1, h->box.kind == BR_HUD_KIND_ALERT ? sColorsFog : sColorsText,
         (s8)TEXT_SKIP_DRAW, h->box.text);
 }
 
@@ -931,7 +940,7 @@ static void TickBox(bool8 blocked)
     Present(h->winBox, &sBoxTemplate, BR_HUD_SHOWN_BOX, TRUE, pixels);
 }
 
-void BrHud_Box(const u8 *text)
+static void Box(u8 kind, const u8 *text)
 {
     struct BrHud *h = &gBrHud;
     u8 i;
@@ -940,9 +949,19 @@ void BrHud_Box(const u8 *text)
         h->box.text[i] = text[i];
     h->box.text[i] = EOS;
     h->box.len = i;
-    h->box.kind = BR_HUD_KIND_SYSTEM;
+    h->box.kind = kind;
     h->boxFrames = BR_HUD_BOX_FRAMES;
     h->dirty |= BR_HUD_DIRTY_BOX;
+}
+
+void BrHud_Box(const u8 *text)
+{
+    Box(BR_HUD_KIND_SYSTEM, text);
+}
+
+void BrHud_AlertBox(const u8 *text)
+{
+    Box(BR_HUD_KIND_ALERT, text);
 }
 
 u8 *BrHud_Append(u8 *dst, const u8 *last, const u8 *src)
@@ -960,6 +979,13 @@ void BrHud_Say(const u8 *text)
     Push(BR_HUD_KIND_SYSTEM, text, len > BR_HUD_LINE_MAX ? BR_HUD_LINE_MAX : (u8)len);
 }
 
+void BrHud_Alert(const u8 *text)
+{
+    u16 len = StringLength(text);
+
+    Push(BR_HUD_KIND_ALERT, text, len > BR_HUD_LINE_MAX ? BR_HUD_LINE_MAX : (u8)len);
+}
+
 void BrHud_Hold(const u8 *text)
 {
     u16 len = StringLength(text);
@@ -971,7 +997,7 @@ void BrHud_Hold(const u8 *text)
 
 bool8 BrHud_PageSigns(void)
 {
-    return gBrHud.noCorner != 0;
+    return gBrHud.noCorner == BR_HUD_PAGE_SIGNS;
 }
 
 void BrHud_Release(void)

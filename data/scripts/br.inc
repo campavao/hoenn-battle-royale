@@ -50,6 +50,21 @@ BR_EventScript_Waterfall::
 	releaseall
 	end
 
+@ A CUT tree walked into (src/br/br_hm.c): VAR_LAST_TALKED is the tree, the cut-in is
+@ skipped, and it comes down as EventScript_UseCut has it.
+BR_EventScript_Cut::
+	lockall
+	dofieldeffect FLDEFF_USE_CUT_ON_TREE
+	waitstate
+	goto EventScript_CutTreeDown
+	end
+
+@ A in front of a boulder in a match: STRENGTH is already on (BrHm_AskStrength), so a
+@ walk into it pushes. Nothing to say.
+BR_EventScript_BoulderFree::
+	releaseall
+	end
+
 @ Down at a dive spot and up from under one alike: the warp picks the way.
 BR_EventScript_Dive::
 	lockall

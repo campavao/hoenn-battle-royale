@@ -22,6 +22,7 @@
 #include "br/br_field.h"
 #include "br/br_gym.h"
 #include "br/br_event.h"
+#include "br/br_hm.h"
 
 EWRAM_DATA struct BrMap gBrMap = {0};
 
@@ -29,6 +30,7 @@ EWRAM_DATA struct BrMap gBrMap = {0};
 const u8 gBrText_MenuMap[] = _("MAP");
 const u8 gBrText_TheFog[] = _("The FOG.");
 static const u8 sText_SafeAt[] = _("Safe: ");
+static const u8 sText_Nothing[] = _("");
 
 // The prompt names the ring's centre (POK-325), the one place the fog never reaches:
 // "SAFE: LITTLEROOT TOWN". It said "FOG: ", which read as the place the fog had taken
@@ -41,8 +43,10 @@ const u8 *BrMap_Prompt(void)
         return gBrText_TheFog;
     if (gBrRing.r < 0)
         return gBrText_FogEverywhere;
+    // The first ring names nowhere until it closes (feedback #23), and the prompt says
+    // nothing either (Cam, 2026-10-20: hide "The FOG." too).
     if (gBrRing.place[0] == EOS)
-        return gBrText_TheFog;
+        return sText_Nothing;
     StringCopy(StringCopy(gStringVar4, sText_SafeAt), gBrRing.place);
     if (GetStringWidth(FONT_NORMAL, gStringVar4, 0) <= 14 * 8)
         return gStringVar4;
@@ -83,22 +87,12 @@ void BrMap_TakeFlight(void)
     gBrMap.active = FALSE;
 }
 
-// Who in the party knows FLY. PARTY_SIZE for nobody, which leaves the map a look.
+// Who in the party could FLY: knows it, or could learn HM02 (Cam's 10-19 play-test, #7:
+// "only fly if you have ... a Pokemon that could learn Fly"). PARTY_SIZE for nobody, which
+// leaves the map a look.
 static u8 FlierSlot(void)
 {
-    u8 slot, i;
-
-    for (slot = 0; slot < gPlayerPartyCount && slot < PARTY_SIZE; slot++)
-    {
-        if (GetMonData(&gPlayerParty[slot], MON_DATA_IS_EGG))
-            continue;
-        for (i = 0; i < MAX_MON_MOVES; i++)
-        {
-            if (GetMonData(&gPlayerParty[slot], MON_DATA_MOVE1 + i) == MOVE_FLY)
-                return slot;
-        }
-    }
-    return PARTY_SIZE;
+    return BrHm_Slot(MOVE_FLY);
 }
 
 // The drop picker's way in, and for the same reason: the fly map wants the overworld's

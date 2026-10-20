@@ -97,6 +97,7 @@ const CLASS_COLOUR: Record<number, string> = {
   7: '#2e5a2e', // tall grass
   8: '#5a4a2a', // door / warp
   9: '#4a3a20', // cut tree / rock
+  10: '#4a3a20', // Strength boulder
 };
 
 function mapLabel(m: WorldMap): string {
@@ -179,7 +180,7 @@ function draw(): void {
       const cls = classes[i];
       // The class as a tint over the tiles: walls, water and everywhere nobody can walk
       // off from darkened, so what can be picked reads at a glance.
-      if (!picture || cls === 1 || cls === 2 || cls === 9 || !reachable[i]) {
+      if (!picture || cls === 1 || cls === 2 || cls === 9 || cls === 10 || !reachable[i]) {
         ctx.fillStyle = picture ? 'rgba(0,0,0,0.55)' : (CLASS_COLOUR[cls] ?? '#f0f');
         ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
       }
