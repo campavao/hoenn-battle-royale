@@ -27,6 +27,13 @@ export const FADE_SELECTED = 0;
 export const FADE_Y_WORD = 4;
 export const FADE_COLOR_WORD = 6;
 export const FADE_BG_PALETTES = 0xffff;
+/** BG palette 0's bit: a fade of the screen takes it, a battle animation's fade of the
+ *  fight's own BG palettes (a catch's flash, a switch-out: 1..3) does not, and leaves the
+ *  map past the picture alone (field.ts mapFade, #34 of Cam's 2026-10-19 play-test). */
+export const FADE_BACKDROP = 0x1;
+/** objPaletteToggle's word and its two candidate bits, learned as field.ts does (toggleBitOf). */
+export const FADE_TOGGLE_WORD = 10;
+export const FADE_TOGGLE_BITS = 0x44;
 /** The fade's `mode`, bits 8..9 of the u16 at 8: a FAST_FADE (1) steps every palette,
  *  BG and OBJ, whatever the palette mask says (palette.c, BeginFastPaletteFade), towards
  *  the colour its submode names in bits 0..5 -- FAST_FADE_IN_FROM_WHITE 0, OUT_TO_WHITE
@@ -461,6 +468,9 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
       // it changed read the white as the black unfaded (Firefox's play spec, one run in
       // two, by which frame the change fell on).
       let fullRun = 0;
+      let lastBgY: number | null = null;
+      let toggleBit = 0;
+      let toggleWord: number | null = null;
       let fullColor = -1;
       // A fast fade out that has ended, and how long ago: the picture is its colour until
       // the next fade begins.
@@ -529,8 +539,20 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         // filled it with its colour as it began. Until the next normal fade (field.ts
         // mapFade; the end of a Safari catch, in Firefox).
         const fastCut = fastMode && !fadeActive;
+        // The y the BG palettes show: a step behind the struct's on an OBJ frame and the
+        // delay after it, which stepped it (field.ts bgFadeY, POK-435).
+        const fw10 = emu.read(s.gPaletteFade + k.FADE_TOGGLE_WORD, 16);
+        const normal = fadeActive && !fastMode;
+        if (normal && toggleWord !== null && !toggleBit) {
+          const flip = (toggleWord ^ fw10) & k.FADE_TOGGLE_BITS;
+          if (flip !== 0 && (flip & (flip - 1)) === 0) toggleBit = flip;
+        }
+        toggleWord = normal ? fw10 : null;
+        if (!normal || selected === 0 || !toggleBit) lastBgY = null;
+        else if (fw10 & toggleBit) lastBgY = fadeY;
+        const bgY = lastBgY ?? fadeY;
         if (fast) lastBg = true;
-        else if (fadeActive && selected !== 0) lastBg = (selected & k.FADE_BG_PALETTES) !== 0;
+        else if (fadeActive && selected !== 0) lastBg = (selected & k.FADE_BACKDROP) !== 0;
         // How far the map is under the ROM's fade, 0..16, and in what colour. A normal
         // fade reaches it only where it reached the BG palettes. A fast fade reaches every
         // palette with no blend: y runs from 31 down by 2 every other frame, each step
@@ -543,7 +565,7 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         else if (fastEnd && (fadeActive && selected !== 0 || ++fastEnd.frames > k.HELD_FRAMES)) fastEnd = null;
         const bgFaded = fast
           ? ((fw8 & 1) === 1 ? 16 - (fadeY >> 1) : fadeY >> 1)
-          : fastCut ? ((fw8 & 1) === 1 ? 0 : 16) : fastEnd ? 16 : lastBg ? fadeY : 0;
+          : fastCut ? ((fw8 & 1) === 1 ? 0 : 16) : fastEnd ? 16 : lastBg ? bgY : 0;
         const faded = fast || fastCut ? (fastWhite ? 0x7fff : 0) : fastEnd ? fastEnd.color : fadeColor;
         fullRun = bgFaded >= 16 ? (faded === fullColor ? fullRun + 1 : 1) : 0;
         fullColor = bgFaded >= 16 ? faded : -1;
@@ -551,7 +573,7 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         blackOk.push(bgFaded >= 12 && faded <= 0x0421);
         if (whiteOk.length > k.HELD_FRAMES + 4) whiteOk.shift();
         if (blackOk.length > k.HELD_FRAMES + 4) blackOk.shift();
-        if (fast || (fadeActive && (selected & k.FADE_BG_PALETTES) !== 0)) log.seen.bgFade++;
+        if (fast || (fadeActive && (selected & k.FADE_BACKDROP) !== 0)) log.seen.bgFade++;
         if (fastCut) log.seen.fastCut++;
         const sb1 = emu.read(s.gSaveBlock1Ptr, 32);
         const map = sb1 ? `${emu.read(sb1 + k.SB1_MAP_GROUP, 8)}:${emu.read(sb1 + k.SB1_MAP_NUM, 8)}` : '';
@@ -690,6 +712,9 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         FADE_Y_WORD,
         FADE_COLOR_WORD,
         FADE_BG_PALETTES,
+        FADE_BACKDROP,
+        FADE_TOGGLE_WORD,
+        FADE_TOGGLE_BITS,
         FADE_MODE_WORD,
         FAST_FADE,
         FAST_WHITE_MAX,

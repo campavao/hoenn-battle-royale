@@ -35,6 +35,7 @@
 // the VBlank that ends a frame's logic and drawn during the next -- so what is drawn here
 // is the state read the frame BEFORE.
 import { isWater, type SeamDir, type WorldMap } from './bots/world';
+import type { Mark, Marks, Painter } from './field-extra';
 import { HOENN } from './bots/hoenn';
 import spritesData from './data/sprites.json';
 import type { Band, Emulator, SpriteBand } from './emu';
@@ -108,9 +109,11 @@ const TILE = 16;
 /** The picture's top-left, relative to the pos tile's top-left, at rest. Measured. */
 export const LCD_LEFT = 112;
 export const LCD_TOP = 72;
-/** The border block is 2x2 metatiles, indexed by the parity of grid coords, which carry
- *  MAP_OFFSET 7 -- so block (0,0) of the pattern sits on the map's ODD coordinates. */
-const BORDER_ORIGIN = -TILE;
+/** The border block is 2x2 metatiles, indexed by fieldmap.c's GetBorderBlockAt as
+ *  ((x + 1) & 1) of grid coords, which carry MAP_OFFSET 7 -- so block (0,0) of the
+ *  pattern sits on the map's EVEN coordinates. At -16 it ran half a tree off the ROM's
+ *  own border beside it (Cam's 2026-10-19 play-test, POK-431: "the trees don't line up"). */
+export const BORDER_ORIGIN = 0;
 const BORDER_SIZE = 2 * TILE;
 
 /** `struct CameraObject` (include/field_camera.h): callback, spriteId, speedX, speedY, x, y. */
@@ -133,12 +136,34 @@ export const FADE_COLOR_WORD = 6;
  *  battle picture that had not). */
 export const FADE_SELECTED = 0;
 export const FADE_BG_PALETTES = 0xffff;
+/** BG palette 0, whose first colour is the backdrop: a fade of the screen takes it, a
+ *  battle animation's fade of the fight's own palettes does not (mapFade). */
+export const FADE_BACKDROP = 0x1;
 /** The u16 at +8: a fast fade's submode in bits 0..5, `mode` in bits 8..9 (NORMAL_FADE
  *  0, FAST_FADE 1). A fast fade steps every palette, BG and OBJ, whatever the mask says,
  *  towards its submode's colour: IN_FROM_WHITE 0, OUT_TO_WHITE 1, IN_FROM_BLACK 2,
  *  OUT_TO_BLACK 3 -- white up to 1, and the odd ones fade out. Every battle ends on
  *  OUT_TO_BLACK (battle_main.c): 0x0143 in a trace of one. */
 export const FADE_MODE_WORD = 8;
+/** The u16 at +10 holds objPaletteToggle. A normal fade blends the BG palettes with y on
+ *  one frame and the OBJ ones on the next, and steps y at the end of that second frame --
+ *  so on a frame with the toggle clear, y is already a step past the colours the BG
+ *  palettes are showing. Its bit is not the same in the two builds: agbcc runs
+ *  softwareFadeFinishingCounter across the word boundary from +8, so the toggle is bit 2
+ *  (it alternates frame by frame through a battle's fade-in, and the counter counts in
+ *  bits 12..15 of +8 through the finishing frames); modern GCC starts the counter at +10
+ *  and the toggle is bit 6. Each is something else in the other build, so the page
+ *  learns which: the one of the two that flips between two frames of a running fade
+ *  (toggleBitOf). */
+export const FADE_TOGGLE_WORD = 10;
+export const FADE_TOGGLE_BITS = 0x44;
+
+/** The toggle's bit, from the u16 at FADE_TOGGLE_WORD on two frames running of one normal
+ *  fade: the one of FADE_TOGGLE_BITS that changed, or 0 when neither or both did. */
+export function toggleBitOf(before: number, after: number): number {
+  const flip = (before ^ after) & FADE_TOGGLE_BITS;
+  return flip !== 0 && (flip & (flip - 1)) === 0 ? flip : 0;
+}
 export const FAST_FADE = 1;
 export const FAST_WHITE_MAX = 1;
 /** A map load leaves y at 0 for ~13 frames before its fade-in; a hold that lasts longer
@@ -209,6 +234,9 @@ export const SPRITE_COUNT = 64;
  *  matrixNum's bit 3 (ST_OAM_HFLIP) at bit 12. */
 export const SPR_OAM_MODE = 0x01;
 export const SPR_OAM_ATTR1 = 0x02;
+/** The OAM's u16 at 4: tileNum, then priority in bits 10..11. */
+export const SPR_OAM_ATTR2 = 0x04;
+export const OAM_PRIORITY_SHIFT = 10;
 export const SPR_OAM_HFLIP = 0x08 << 9;
 export const OAM_AFFINE_ON = 1;
 
@@ -237,6 +265,26 @@ const FOG_TILE = 64;
 /** `struct BrRing` (include/br/br_ring.h): outside, and the frames to the next bleed. */
 export const RING_OUTSIDE = 5;
 export const RING_TIMER = 8;
+/** `struct BrPatch` (include/br/br_patch.h): the map its patches are for, the sprite the
+ *  ROM drew each one with (MAX_SPRITES when none). gBrPatchTaken is a bit per patch key
+ *  past PATCH_KEY_BASE, 0x400 of them. */
+export const PATCH_MAP = 0;
+export const PATCH_SPRITE_IDS = 5;
+export const PATCH_MAX = 8;
+export const PATCH_TAKEN_SIZE = 128;
+
+/** A wild patch's mark (br_patch.c Draw): its cell, the sheet, and where on the cell its
+ *  top-left is. Grass rustles, water ripples, anything else gets a shadow at its feet. */
+export interface PatchMark {
+  map: string;
+  /** Map pixels of the map it is on. */
+  x: number;
+  y: number;
+  sheet: 'patch-tall-grass' | 'patch-water' | 'patch-shadow';
+  /** The ROM has a sprite for it this frame: the band draws it. */
+  drawn: boolean;
+}
+
 /** The shake on a fog bleed (Cam: "like as if a Pokémon were poisoned"), in frames. */
 export const SHAKE_FRAMES = 16;
 
@@ -280,6 +328,9 @@ export interface FieldSprite {
   /** Drawn under everybody, whatever its y: the SURF blob, which hangs lower than the
    *  rider on it. */
   under?: boolean;
+  /** Over BG1, so no roof or treetop covers it (drawCovered): an object at OAM priority 1
+   *  or 0, on a bridge's deck say, which is BG1's top layer. */
+  above?: boolean;
 }
 
 /** The image index the sprite is showing: `anims[animNum][animCmdIndex].frame.imageValue`,
@@ -407,8 +458,9 @@ export function holdFade(prev: Camera | null, cur: Camera, hold: { on: boolean; 
 
 /** The fade the map past the picture is under: the ROM's, when it reaches the BG
  *  palettes. A running fade says so by its mask. A finished one cannot -- the ROM clears
- *  the mask on a fade's last step and leaves y where it ended (palette.c) -- so `bg`,
- *  what the last fade reached while it ran, comes back for the next frame. A catch's
+ *  the mask on a fade's last step, runs four more frames with none, and leaves y where it
+ *  ended (palette.c) -- so `bg`, what the last fade reached while it ran, comes back for
+ *  those frames and after. A catch's
  *  ball fades to white on its own OBJ palette and stays there, and the map stayed white
  *  under it until the next fade (POK-327's play spec).
  *
@@ -426,7 +478,13 @@ export function holdFade(prev: Camera | null, cur: Camera, hold: { on: boolean; 
  *  never runs. A fade out leaves the picture as it was; a fade in was filled with its
  *  colour as it began. Read as a normal fade at y 31 in the struct's colour, the map
  *  went white past a picture that had not changed, and was held white (POK-327, in
- *  Firefox's play spec). The mode stays fast until the next normal fade begins. */
+ *  Firefox's play spec). The mode stays fast until the next normal fade begins.
+ *
+ *  And only a fade of BG palette 0, the backdrop's, is the map's: a screen's fade takes
+ *  it, and the catch's flash to white takes it with most of the rest. A battle
+ *  animation's fade of a few of the battle's own -- the switch-out takes BG palettes
+ *  1..3 to white -- turned the field round the fight flat grey (Cam's
+ *  2026-10-19 play-test, "GARDEVOIR, that's enough! Come back!" over grey). */
 export function mapFade(
   fade: { y: number; color: number; active: boolean },
   selected: number,
@@ -440,9 +498,24 @@ export function mapFade(
     const steps = 16 - (fade.y >> 1);
     return { fade: { y: sub & 1 ? steps : 16 - steps, color, active: true }, bg: true };
   }
-  const reached = fade.active && selected !== 0 ? (selected & FADE_BG_PALETTES) !== 0 : bg;
-  const onMap = fade.active ? (selected & FADE_BG_PALETTES) !== 0 : reached;
-  return { fade: onMap ? fade : { ...fade, y: 0, active: false }, bg: reached };
+  const screen = (selected & FADE_BACKDROP) !== 0;
+  const running = fade.active && selected !== 0;
+  const reached = running ? screen : bg;
+  const onMap = running ? screen : reached;
+  // Its finishing frames read as done: the hold after a fast fade waits for a fade that
+  // runs (heldFade), and the frames after one have y at 0, the mask at 0, and active up.
+  return { fade: onMap ? { ...fade, active: running } : { ...fade, y: 0, active: false }, bg: reached };
+}
+
+/** Whether a fade cleared its mask before any read saw it: the struct was at rest on the
+ *  last read, and is now running with no mask (its finishing frames) or at rest
+ *  somewhere else. A fade whose start is its target clears the mask on its first step
+ *  (palette.c), and a wild battle's intro takes the foe's OBJ palette to y 10 that way
+ *  (SpriteCB_WildMon): the map, reading the last fade's `bg`, sat dark behind the
+ *  battle until the next fade began, then lit up in one frame (POK-435). */
+export function unseenFade(last: { y: number; color: number; active: boolean } | null, cur: { y: number; color: number; active: boolean }, selected: number): boolean {
+  if (last === null || last.active) return false;
+  return cur.active ? selected === 0 : last.y !== cur.y || last.color !== cur.color;
 }
 
 /** A 15-bit GBA colour the way mGBA shows it. */
@@ -553,7 +626,12 @@ export function askBand(lay: FieldLayout, rom: FieldPicture, wideOk = false): Ba
     right: Math.min(w.right, eights(lay.cols - lay.lcdCol - GBA_W)),
     bottom: w.bottom,
   };
-  return shownArea(lay, wide) > shownArea(lay, tall) ? wide : tall;
+  // A landscape screen (more map beside the picture than above and below it) takes it
+  // even when the tall ring's 496 rows cover a little more: on a 1920x1080 desktop they
+  // did, and the live map was a 256-pixel column down the middle of a wide field of
+  // stills (Cam's 2026-10-19 play-test, POK-431: "it looks like we may be optimized for a
+  // mobile viewport... Can we extend that to the full width?").
+  return lay.lcdCol > lay.lcdRow || shownArea(lay, wide) > shownArea(lay, tall) ? wide : tall;
 }
 
 /** The whole window's band (the whole-window prototype, include/br/br_field.h): every
@@ -772,6 +850,11 @@ export function neighbours(map: WorldMap, byId: ReadonlyMap<string, WorldMap>): 
   return out;
 }
 
+/** A map the composite draws, and how many seams it is from the one we are on. */
+export interface Reached extends Placed {
+  hops: number;
+}
+
 export interface FieldDeps {
   emu: Emulator;
   /** Null when the ROM is unpatched: the picture is still placed, the field stays dark. */
@@ -962,6 +1045,7 @@ export class FieldView {
 
   constructor(private readonly deps: FieldDeps) {
     this.roster = deps.people ?? null;
+    this.askExtra();
   }
 
   /** The match's roster, once there is one: solo's, or the room's Bridge's. */
@@ -1197,6 +1281,33 @@ export class FieldView {
   /** Whether the last fade the ROM ran reached the BG palettes (mapFade). */
   private fadeBg = true;
 
+  /** The y the BG palettes were last blended with, while a normal fade runs (POK-435):
+   *  the struct's own on a BG frame, the one before it on an OBJ frame, which stepped it.
+   *  Read straight, the map past the picture ran a step ahead of the map in it -- the
+   *  band a block of lighter or darker tiles through every fade (Cam's 2026-10-19
+   *  play-test). Once the mask is cleared the last step has blended both at the target. */
+  private bgFadeY(fade: { y: number; active: boolean }, mode: number, toggle: number, selected: number): number {
+    const normal = fade.active && ((mode >> 8) & 3) !== FAST_FADE;
+    if (normal && this.toggleWord !== null && !this.toggleBit) this.toggleBit = toggleBitOf(this.toggleWord, toggle);
+    this.toggleWord = normal ? toggle : null;
+    if (!normal || selected === 0 || !this.toggleBit) {
+      this.lastBgY = null;
+      return fade.y;
+    }
+    if (toggle & this.toggleBit) {
+      this.lastBgY = fade.y;
+      return fade.y;
+    }
+    return this.lastBgY ?? fade.y;
+  }
+
+  private lastBgY: number | null = null;
+  /** objPaletteToggle's bit in this build, once a fade has shown it (toggleBitOf). */
+  private toggleBit = 0;
+  private toggleWord: number | null = null;
+  /** The struct as the last read found it (unseenFade). */
+  private lastFade: { y: number; color: number; active: boolean } | null = null;
+
   private read(): Camera | null {
     const { emu } = this.deps;
     const sb = this.sym('gSaveBlock1Ptr');
@@ -1208,9 +1319,16 @@ export class FieldView {
     const main = this.sym('gMain');
     const cb2 = this.sym('CB2_Overworld');
     // A fade that leaves the BG palettes alone leaves the map alone, running or done.
-    const seen = fadeBase === undefined
-      ? { fade: { y: 0, color: 0, active: false }, bg: this.fadeBg }
-      : mapFade(fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16)), emu.read(fadeBase + FADE_SELECTED, 32), this.fadeBg, emu.read(fadeBase + FADE_MODE_WORD, 16));
+    let seen = { fade: { y: 0, color: 0, active: false }, bg: this.fadeBg };
+    if (fadeBase !== undefined) {
+      const raw = fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16));
+      const mode = emu.read(fadeBase + FADE_MODE_WORD, 16);
+      const selected = emu.read(fadeBase + FADE_SELECTED, 32);
+      if (unseenFade(this.lastFade, raw, selected)) this.fadeBg = false;
+      this.lastFade = { ...raw };
+      raw.y = this.bgFadeY(raw, mode, emu.read(fadeBase + FADE_TOGGLE_WORD, 16), selected);
+      seen = mapFade(raw, selected, this.fadeBg, mode);
+    }
     const fade = seen.fade;
     this.fadeBg = seen.bg;
     const pick = this.sym('gBrPick');
@@ -1266,6 +1384,9 @@ export class FieldView {
       : [];
     // gBrSeats' standing copy past the box is the page's drawing, not an object of the ROM's.
     this.ghosts = { rom: objects.filter((s) => s.seat !== undefined), drawn: [...dropped.filter((s) => s.seat !== undefined), ...drawn] };
+    const map = HOENN.byRef.get(`${c.group}:${c.num}`);
+    const extra = this.extra;
+    if (map && extra) for (const s of [...dropped, ...drawn]) if (extra.standsAbove(map, s, origin)) s.above = true;
     return [...rom, ...drawn];
   }
 
@@ -1354,6 +1475,7 @@ export class FieldView {
       const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
       const hFlip = oamFlipped(emu.read(s + SPR_OAM_MODE, 8), emu.read(s + SPR_OAM_ATTR1, 16));
       const sprite: FieldSprite = { gfx, frame, hFlip, x, y, hidden: offScreen };
+      if (((emu.read(s + SPR_OAM_ATTR2, 16) >> OAM_PRIORITY_SHIFT) & 3) <= 1) sprite.above = true;
       if (emu.read(o + OBJ_PLAYER_BYTE, 8) & 1) {
         player = sprite;
         blob = this.readBlob(emu.read(o + OBJ_FIELD_EFFECT_SPRITE_ID, 8), coX, coY);
@@ -1468,7 +1590,8 @@ export class FieldView {
   }
 
   /** The people, bottom-most last so a sprite further down the map is in front. */
-  private drawSprites(ctx: CanvasRenderingContext2D, sprites: FieldSprite[]): boolean {
+  private drawSprites(ctx: CanvasRenderingContext2D, sprites: FieldSprite[], cover: { maps: readonly Reached[]; ox: number; oy: number } | null = null): boolean {
+    if (cover && sprites.length > 0 && this.extra) return this.extra.drawCovered(this.painter, ctx, sprites, cover);
     let complete = true;
     const lay = this.lay;
     const order = sprites.slice().sort((a, b) => Number(!!b.under) - Number(!!a.under) || (a.y + (SHEETS[String(a.gfx)]?.h ?? 0)) - (b.y + (SHEETS[String(b.gfx)]?.h ?? 0)));
@@ -1491,6 +1614,29 @@ export class FieldView {
     }
     return complete;
   }
+
+  private scratch: HTMLCanvasElement | null = null;
+  /** field-extra.ts, once its chunk is in. */
+  private extra: typeof import('./field-extra') | null = null;
+  private extraTries = 0;
+  private extraPending = false;
+
+  /** field-extra's chunk, asked for again (up to 3 times) after a failed fetch. */
+  private askExtra(): void {
+    if (this.extra || this.extraPending || this.extraTries >= 3) return;
+    this.extraTries++;
+    this.extraPending = true;
+    void import('./field-extra').then((m) => {
+      this.extra = m;
+      this.drawn = null;
+    }, () => {}).finally(() => { this.extraPending = false; });
+  }
+  private readonly painter: Painter = {
+    layout: () => this.lay,
+    image: (id, dir) => this.image(id, dir),
+    sprites: (ctx, sprites) => this.drawSprites(ctx, sprites),
+    scratch: (doc) => (this.scratch ??= doc.createElement('canvas')),
+  };
 
   /** A canvas whose backing store went away -- Firefox, after the GPU process resets or
    *  a tab comes back from the background -- throws "Canvas is already in error state"
@@ -1529,7 +1675,9 @@ export class FieldView {
     const map = HOENN.byRef.get(at);
     const people = c.sprites.map((s) => `${s.gfx}/${s.frame}/${s.hFlip ? 1 : 0}/${s.x}/${s.y}/${s.hidden ? 1 : 0}`).join(',');
     const fog = c.fog ? `${c.fog.x}/${c.fog.y}/${c.fog.eva}/${c.fog.evb}` : '';
-    const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}:${c.onField ? 1 : 0}`;
+    const marks = map && map.outdoor ? this.marks(c, map) : [];
+    const markKey = marks.map((m) => `${m.x}/${m.y}/${m.drawn ? 1 : 0}`).join(',');
+    const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}:${c.onField ? 1 : 0}:${markKey}`;
     if (key === this.drawn) return;
     const ctx = field.getContext('2d');
     if (!ctx) return;
@@ -1563,17 +1711,17 @@ export class FieldView {
         }
       } else complete = false;
 
-      const still = this.image(map.id);
-      if (still) ctx.drawImage(still, -ox, -oy);
-      else complete = false;
-      for (const n of neighbours(map, HOENN.byId)) {
-        if (!n.map.outdoor) continue;
+      // Farthest first, so a map is never under one further from us than it is.
+      const reached = this.reached(map, ox, oy);
+      for (let i = reached.length - 1; i >= 0; i--) {
+        const n = reached[i];
         const img = this.image(n.map.id);
         if (img) ctx.drawImage(img, n.x - ox, n.y - oy);
         else complete = false;
       }
+      if (this.extra && !this.extra.drawMarks(this.painter, ctx, marks, ox, oy)) complete = false;
       if (c.fog && !this.drawFog(ctx, c.fog)) complete = false;
-      if (!this.drawSprites(ctx, under)) complete = false;
+      if (!this.drawSprites(ctx, under, { maps: reached, ox, oy })) complete = false;
     }
 
     if (c.fade > 0) {
@@ -1582,16 +1730,49 @@ export class FieldView {
       ctx.fillRect(0, 0, lay.cols, lay.rows);
       ctx.globalAlpha = 1;
     }
-    if (overlay && !this.drawOverlay(overlay, c, !!map && map.outdoor)) complete = false;
+    if (overlay && !this.drawOverlay(overlay, c, map && map.outdoor ? map : null, marks)) complete = false;
     // A picture missing its still is drawn again when the still arrives -- and not while
     // nothing is on its way, which is what a failed one is.
     this.drawn = complete || this.images.settled ? key : null;
   }
 
+  private markKit: Marks | null = null;
+
+  /** The wild patches' marks on every map the view reaches (field-extra.ts Marks), `at`
+   *  in map pixels of the map we are on. */
+  private marks(c: Camera, map: WorldMap): Mark[] {
+    const match = this.sym('gBrMatch');
+    const takenAt = this.sym('gBrPatchTaken');
+    const patch = this.sym('gBrPatch');
+    if (!this.extra || match === undefined || takenAt === undefined || patch === undefined) return [];
+    this.markKit ??= new this.extra.Marks();
+    const { left, top } = lcdOrigin(c);
+    return this.markKit.of(this.deps.emu, match, takenAt, patch, (c.group << 8) | c.num, this.reached(map, left - this.lay.lcdCol, top - this.lay.lcdRow), () => { this.drawn = null; });
+  }
+
+  /** The maps the view a field canvas at map pixel (ox, oy) shows (field-extra.ts reach;
+   *  the map and its neighbours until that is in), kept while the map and the view's tile
+   *  stay put: a step's frames ask it again and again. */
+  private reached(map: WorldMap, ox: number, oy: number): Reached[] {
+    const key = `${map.id}:${Math.floor(ox / TILE)}:${Math.floor(oy / TILE)}:${this.lay.cols}:${this.lay.rows}:${this.extra ? 1 : 0}`;
+    this.askExtra();
+    if (this.reachedKey !== key) {
+      this.reachedKey = key;
+      // A tile of slack each way, for the frames of a step inside the same tile.
+      this.reachedList = this.extra
+        ? this.extra.reach(this.painter, map, { left: ox - TILE, top: oy - TILE, right: ox + this.lay.cols + TILE, bottom: oy + this.lay.rows + TILE })
+        : [{ map, x: 0, y: 0, hops: 0 }, ...neighbours(map, HOENN.byId).filter((n) => n.map.outdoor).map((n) => ({ ...n, hops: 1 }))];
+    }
+    return this.reachedList;
+  }
+
+  private reachedKey = '';
+  private reachedList: Reached[] = [];
+
   /** The people the ROM hid for being past its band, drawn over the picture -- only on
    *  the field, where the object table means what it says -- and faded the way the
    *  ROM's palette is, over their own pixels alone. */
-  private drawOverlay(overlay: HTMLCanvasElement, c: Camera, outdoors: boolean): boolean {
+  private drawOverlay(overlay: HTMLCanvasElement, c: Camera, outdoors: WorldMap | null, marks: readonly Mark[]): boolean {
     const ctx = overlay.getContext('2d');
     if (!ctx) return true;
     const lay = this.lay;
@@ -1600,7 +1781,16 @@ export class FieldView {
     ctx.clearRect(0, 0, lay.cols, lay.rows);
     if (!c.onField || !outdoors) return true;
     ctx.imageSmoothingEnabled = false;
-    const complete = this.drawSprites(ctx, c.sprites.filter((s) => s.hidden));
+    let complete = true;
+    const { left, top } = lcdOrigin(c);
+    const ox = left - lay.lcdCol;
+    const oy = top - lay.lcdRow;
+    const reached = this.reached(outdoors, ox, oy);
+    if (this.band && this.extra) {
+      const fog = c.fog;
+      complete = this.extra.drawPast(this.painter, ctx, c, outdoors, this.band, reached, marks, fog ? () => this.drawFog(ctx, fog) : null);
+    }
+    if (!this.drawSprites(ctx, c.sprites.filter((s) => s.hidden), { maps: reached, ox, oy })) complete = false;
     if (c.fade > 0) {
       ctx.globalCompositeOperation = 'source-atop';
       ctx.globalAlpha = Math.min(1, c.fade / 16);

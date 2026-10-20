@@ -98,6 +98,7 @@ interface Regions {
  *  which can be stood on and only jumped one way. 1 and 2 are wall and water. */
 const CLASS_WALL = 1;
 const CLASS_WATER = 2;
+const CLASS_GRASS = 7;
 /** A cuttable tree or a smashable rock: the exporter overlays these at their object
  *  event's cell, because in Emerald they are objects rather than metatile behaviours.
  *  Nothing checked for them until POK-267, so bots walked through trees. */
@@ -197,10 +198,19 @@ const waterGrids = new WeakMap<WorldMap, Uint8Array>();
 /** Is a map's cell water (POK-391: a ghost on it surfs)? Its grid decoded once and kept,
  *  without building a World: the picture asks this, and a spectator never walks. */
 export function isWater(map: WorldMap, x: number, y: number): boolean {
-  if (x < 0 || y < 0 || x >= map.w || y >= map.h) return false;
+  return cellClass(map, x, y) === CLASS_WATER;
+}
+
+/** Is a map's cell tall grass (the exporter's class 7): a patch there rustles. */
+export function isTallGrass(map: WorldMap, x: number, y: number): boolean {
+  return cellClass(map, x, y) === CLASS_GRASS;
+}
+
+function cellClass(map: WorldMap, x: number, y: number): number {
+  if (x < 0 || y < 0 || x >= map.w || y >= map.h) return -1;
   let grid = waterGrids.get(map);
   if (!grid) waterGrids.set(map, (grid = decodeGrid(map.grid, map.w * map.h)));
-  return grid[y * map.w + x] === CLASS_WATER;
+  return grid[y * map.w + x];
 }
 
 export class World {

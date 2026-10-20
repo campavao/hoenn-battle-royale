@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, HEAD_ROOM, ringStaleColumns, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, fieldDimmed } from './field';
+import { FIELD_VIEW_SIZE, HEAD_ROOM, ringStaleColumns, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed } from './field';
+import { standsAbove } from './field-extra';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -129,6 +130,13 @@ describe('the picture past the LCD (POK-319)', () => {
         expect(askBand(lay, rom, true)).toEqual({ left: 128, top: 40, right: 128, bottom: 40 });
         expect(shownArea(lay, rom.wide)).toBe(496 * 240);
         expect(shownArea(lay, askBand(lay, rom, false))).toBe(256 * 384);
+      });
+      it("a 1920x1080 desktop's box, 1440x1080: the wide ring, though the ROM's tall one is a little more area", () => {
+        const real = { ...rom, band: { left: 0, top: 184, right: 16, bottom: 152 } };
+        const lay = layoutField(1440, 1080, 0, 1, 1080);
+        expect(lay).toMatchObject({ cols: 720, rows: 540, lcdCol: 240, lcdRow: 190 });
+        expect(shownArea(lay, askBand(lay, real, false))).toBeGreaterThan(shownArea(lay, real.wide));
+        expect(askBand(lay, real, true)).toEqual({ left: 128, top: 40, right: 128, bottom: 40 });
       });
       it('a phone on its side, 844x390: the 140 columns each side it shows, in eights, up to 128', () => {
         const lay = layoutField(844, 390, 0, 3, 390);
@@ -521,6 +529,32 @@ describe('the fade', () => {
     expect(s).toEqual({ fade: { y: 8, color: 0, active: true }, bg: true });
     s = mapFade({ y: 16, color: 0, active: false }, 0, s.bg);
     expect(s.fade).toEqual({ y: 16, color: 0, active: false });
+  });
+
+  // Cam's 2026-10-19 play-test: "GARDEVOIR, that's enough! Come back!" over a flat grey
+  // field. The switch-out's animation takes the battle's BG palettes 1..3 to white.
+  it("keeps the map out of a battle animation's fade of a few BG palettes", () => {
+    let s = mapFade({ y: 8, color: 0x7fff, active: true }, 0x0000000e, true);
+    expect(s).toEqual({ fade: { y: 0, color: 0x7fff, active: false }, bg: false });
+    s = mapFade({ y: 16, color: 0x7fff, active: false }, 0, s.bg);
+    expect(s.fade.y, 'nor once it is done').toBe(0);
+    // PALETTES_BG alone is the whole map.
+    expect(mapFade({ y: 4, color: 0, active: true }, 0x0000ffff, false).fade.y).toBe(4);
+  });
+
+  // A wild battle's intro: SpriteCB_WildMon takes the foe's OBJ palette to y 10 in grey,
+  // start and target both 10, so the mask is gone before any read; the map sat dark.
+  it('drops a fade whose mask no read saw', () => {
+    const rest = { y: 0, color: 0, active: false };
+    const finishing = { y: 10, color: 0x2108, active: true };
+    const wild = { y: 10, color: 0x2108, active: false };
+    expect(unseenFade(rest, finishing, 0)).toBe(true);
+    expect(unseenFade(rest, wild, 0), 'or that ended between reads').toBe(true);
+    expect(unseenFade(wild, wild, 0), 'and holds still after').toBe(false);
+    expect(unseenFade(null, wild, 0)).toBe(false);
+    expect(unseenFade(rest, { y: 0, color: 0, active: true }, 0xffff), 'a fade seen with its mask').toBe(false);
+    // A warp's fade out was seen running to its end.
+    expect(unseenFade({ y: 14, color: 0, active: true }, { y: 16, color: 0, active: false }, 0)).toBe(false);
   });
 
   // The end of a trainer battle on Route 102, gPaletteFade frame by frame (a driver: the
@@ -1189,5 +1223,21 @@ describe('the see-through battle', () => {
     const px = new Uint8ClampedArray([0, 0, 248, 255, 0, 0, 255, 0, 8, 0, 255, 0, 0, 0, 0, 0, 120, 200, 64, 9]);
     keyPicture(px);
     expect([px[3], px[7], px[11], px[15], px[19]]).toEqual([0, 0, 255, 255, 255]);
+  });
+});
+
+// PR #103's review: a cover is BG1's top layer, and the ROM draws an object at elevation
+// 4..12 (even) over BG1 -- the Cycling Road's deck is that layer on ROUTE 110, and a
+// ghost crossing it past the picture was cut out by the road it rode on.
+describe('who stands over BG1', () => {
+  const route110 = HOENN.byId.get('MAP_ROUTE110')!;
+  // A 16x32 person, gfx 7, whose feet are on cell (x, y) of a map whose top-left is the origin.
+  const at = (x: number, y: number) => ({ gfx: 7, x: x * 16, y: y * 16 + 16 - 32 });
+  it('on the Cycling Road deck (elevation 4)', () => {
+    expect(standsAbove(route110, at(19, 54), { left: 0, top: 0 })).toBe(true);
+  });
+  it('on the ground beside it (elevation 1 or 3)', () => {
+    expect(standsAbove(route110, at(5, 60), { left: 0, top: 0 })).toBe(false);
+    expect(standsAbove(route110, at(20, 0), { left: 0, top: 0 })).toBe(false);
   });
 });

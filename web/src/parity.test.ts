@@ -110,6 +110,7 @@ import { LINE_MAX } from './match/ticker';
 import { CODE_ALPHABET, CODE_LENGTH } from './match/lobby';
 import { KEY_BIT } from './emu';
 import * as field from './field';
+import * as fieldExtra from './field-extra';
 import * as ghosts from './field-ghosts';
 import * as touch from './touch';
 import * as phone from './ui/phonehud';
@@ -815,6 +816,13 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(field.FADE_Y_WORD).toBe(word('y'));
     expect(field.FADE_COLOR_WORD).toBe(word('blendColor'));
     expect(word('active')).toBe(field.FADE_COLOR_WORD);
+    expect(field.FADE_TOGGLE_WORD).toBe(word('objPaletteToggle'));
+    // The natural layout is modern GCC's; agbcc's straddles the word before (field.ts).
+    const bit = 1 << (fade.bits.objPaletteToggle.bit % 16);
+    expect(field.FADE_TOGGLE_BITS & bit).not.toBe(0);
+    expect(field.toggleBitOf(0x0200, 0x0200 | bit), 'learned from a flip').toBe(bit);
+    expect(field.toggleBitOf(0x0a, 0x0e), "agbcc's, off a traced fade-in").toBe(0x4);
+    expect(field.toggleBitOf(0x0a, 0x0a), 'a delay frame says nothing').toBe(0);
     // f's word with `v` in f and every other bit of the word set: fadeOf has to take
     // exactly f's bits out of it.
     const holding = (f: string, v: number) =>
@@ -884,6 +892,11 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(oam).toMatch(/\/\*0x02\*\/ u32 x:9;\s*u32 matrixNum:5;/);
     expect(oam).toMatch(/\/\*0x01\*\/ u32 affineMode:2;/);
     expect([field.SPR_OAM_MODE, field.SPR_OAM_ATTR1]).toEqual([1, 2]);
+    // The priority drawCovered reads, and the elevation table the page maps a cell by.
+    expect(oam).toMatch(/\/\*0x04\*\/ u16 tileNum:10;[^\n]*\n\s*u16 priority:2;/);
+    expect([field.SPR_OAM_ATTR2, field.OAM_PRIORITY_SHIFT]).toEqual([4, 10]);
+    const table = /sElevationToPriority\[\]\s*=\s*\{([^}]*)\}/.exec(objectEventsC)![1];
+    expect(fieldExtra.ELEVATION_TO_PRIORITY).toEqual(table.split(',').map((v) => v.trim()).filter(Boolean).map(Number));
     expect(field.SPR_OAM_HFLIP).toBe(evaluate([gbaTypesH], 'ST_OAM_HFLIP') << 9);
     expect(field.OAM_AFFINE_ON).toBe(evaluate([gbaTypesH], 'ST_OAM_AFFINE_ON_MASK'));
   });
