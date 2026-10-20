@@ -142,6 +142,12 @@ export const FADE_BG_PALETTES = 0xffff;
  *  OUT_TO_BLACK 3 -- white up to 1, and the odd ones fade out. Every battle ends on
  *  OUT_TO_BLACK (battle_main.c): 0x0143 in a trace of one. */
 export const FADE_MODE_WORD = 8;
+/** The u16 at +10: objPaletteToggle in bit 2, read off a battle's fade-in frame by frame.
+ *  A normal fade blends the BG palettes with y on one frame and the OBJ ones on the next,
+ *  and steps y at the end of that second frame -- so on a frame with the bit clear, y is
+ *  already a step past the colours the BG palettes are showing. */
+export const FADE_TOGGLE_WORD = 10;
+export const FADE_TOGGLE_BIT = 0x4;
 export const FAST_FADE = 1;
 export const FAST_WHITE_MAX = 1;
 /** A map load leaves y at 0 for ~13 frames before its fade-in; a hold that lasts longer
@@ -448,7 +454,12 @@ export function holdFade(prev: Camera | null, cur: Camera, hold: { on: boolean; 
  *  never runs. A fade out leaves the picture as it was; a fade in was filled with its
  *  colour as it began. Read as a normal fade at y 31 in the struct's colour, the map
  *  went white past a picture that had not changed, and was held white (POK-327, in
- *  Firefox's play spec). The mode stays fast until the next normal fade begins. */
+ *  Firefox's play spec). The mode stays fast until the next normal fade begins.
+ *
+ *  And only a fade of every BG palette is the map's: a screen's fades are PALETTES_ALL or
+ *  PALETTES_BG. A battle animation's fade of a few of the battle's own -- the switch-out
+ *  takes BG palettes 1..3 to white -- turned the field round the fight flat grey (Cam's
+ *  2026-10-19 play-test, "GARDEVOIR, that's enough! Come back!" over grey). */
 export function mapFade(
   fade: { y: number; color: number; active: boolean },
   selected: number,
@@ -462,8 +473,9 @@ export function mapFade(
     const steps = 16 - (fade.y >> 1);
     return { fade: { y: sub & 1 ? steps : 16 - steps, color, active: true }, bg: true };
   }
-  const reached = fade.active && selected !== 0 ? (selected & FADE_BG_PALETTES) !== 0 : bg;
-  const onMap = fade.active ? (selected & FADE_BG_PALETTES) !== 0 : reached;
+  const all = (selected & FADE_BG_PALETTES) === FADE_BG_PALETTES;
+  const reached = fade.active && selected !== 0 ? all : bg;
+  const onMap = fade.active ? all : reached;
   return { fade: onMap ? fade : { ...fade, y: 0, active: false }, bg: reached };
 }
 
@@ -1224,6 +1236,25 @@ export class FieldView {
   /** Whether the last fade the ROM ran reached the BG palettes (mapFade). */
   private fadeBg = true;
 
+  /** The y the BG palettes were last blended with, while a normal fade runs (POK-435):
+   *  the struct's own on a BG frame, the one before it on an OBJ frame, which stepped it.
+   *  Read straight, the map past the picture ran a step ahead of the map in it -- the
+   *  band a block of lighter or darker tiles through every fade (Cam's 2026-10-19
+   *  play-test). */
+  private bgFadeY(fade: { y: number; active: boolean }, mode: number, toggle: number): number {
+    if (!fade.active || ((mode >> 8) & 3) === FAST_FADE) {
+      this.lastBgY = null;
+      return fade.y;
+    }
+    if (toggle & FADE_TOGGLE_BIT) {
+      this.lastBgY = fade.y;
+      return fade.y;
+    }
+    return this.lastBgY ?? fade.y;
+  }
+
+  private lastBgY: number | null = null;
+
   private read(): Camera | null {
     const { emu } = this.deps;
     const sb = this.sym('gSaveBlock1Ptr');
@@ -1235,9 +1266,13 @@ export class FieldView {
     const main = this.sym('gMain');
     const cb2 = this.sym('CB2_Overworld');
     // A fade that leaves the BG palettes alone leaves the map alone, running or done.
-    const seen = fadeBase === undefined
-      ? { fade: { y: 0, color: 0, active: false }, bg: this.fadeBg }
-      : mapFade(fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16)), emu.read(fadeBase + FADE_SELECTED, 32), this.fadeBg, emu.read(fadeBase + FADE_MODE_WORD, 16));
+    let seen = { fade: { y: 0, color: 0, active: false }, bg: this.fadeBg };
+    if (fadeBase !== undefined) {
+      const raw = fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16));
+      const mode = emu.read(fadeBase + FADE_MODE_WORD, 16);
+      raw.y = this.bgFadeY(raw, mode, emu.read(fadeBase + FADE_TOGGLE_WORD, 16));
+      seen = mapFade(raw, emu.read(fadeBase + FADE_SELECTED, 32), this.fadeBg, mode);
+    }
     const fade = seen.fade;
     this.fadeBg = seen.bg;
     const pick = this.sym('gBrPick');

@@ -530,6 +530,17 @@ describe('the fade', () => {
     expect(s.fade).toEqual({ y: 16, color: 0, active: false });
   });
 
+  // Cam's 2026-10-19 play-test: "GARDEVOIR, that's enough! Come back!" over a flat grey
+  // field. The switch-out's animation takes the battle's BG palettes 1..3 to white.
+  it("keeps the map out of a battle animation's fade of a few BG palettes", () => {
+    let s = mapFade({ y: 8, color: 0x7fff, active: true }, 0x0000000e, true);
+    expect(s).toEqual({ fade: { y: 0, color: 0x7fff, active: false }, bg: false });
+    s = mapFade({ y: 16, color: 0x7fff, active: false }, 0, s.bg);
+    expect(s.fade.y, 'nor once it is done').toBe(0);
+    // PALETTES_BG alone is the whole map.
+    expect(mapFade({ y: 4, color: 0, active: true }, 0x0000ffff, false).fade.y).toBe(4);
+  });
+
   // The end of a trainer battle on Route 102, gPaletteFade frame by frame (a driver: the
   // first move, then A): the battle's fast fade to black (mode 1, submode 3, the mask
   // left at 0 and the colour at the white of the move's flash), its finish, the reset,
