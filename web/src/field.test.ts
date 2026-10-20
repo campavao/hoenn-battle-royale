@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, HEAD_ROOM, ringStaleColumns, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach } from './field';
+import { FIELD_VIEW_SIZE, HEAD_ROOM, ringStaleColumns, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade } from './field';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -539,6 +539,21 @@ describe('the fade', () => {
     expect(s.fade.y, 'nor once it is done').toBe(0);
     // PALETTES_BG alone is the whole map.
     expect(mapFade({ y: 4, color: 0, active: true }, 0x0000ffff, false).fade.y).toBe(4);
+  });
+
+  // A wild battle's intro: SpriteCB_WildMon takes the foe's OBJ palette to y 10 in grey,
+  // start and target both 10, so the mask is gone before any read; the map sat dark.
+  it('drops a fade whose mask no read saw', () => {
+    const rest = { y: 0, color: 0, active: false };
+    const finishing = { y: 10, color: 0x2108, active: true };
+    const wild = { y: 10, color: 0x2108, active: false };
+    expect(unseenFade(rest, finishing, 0)).toBe(true);
+    expect(unseenFade(rest, wild, 0), 'or that ended between reads').toBe(true);
+    expect(unseenFade(wild, wild, 0), 'and holds still after').toBe(false);
+    expect(unseenFade(null, wild, 0)).toBe(false);
+    expect(unseenFade(rest, { y: 0, color: 0, active: true }, 0xffff), 'a fade seen with its mask').toBe(false);
+    // A warp's fade out was seen running to its end.
+    expect(unseenFade({ y: 14, color: 0, active: true }, { y: 16, color: 0, active: false }, 0)).toBe(false);
   });
 
   // The end of a trainer battle on Route 102, gPaletteFade frame by frame (a driver: the

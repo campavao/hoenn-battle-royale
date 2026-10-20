@@ -479,6 +479,17 @@ export function mapFade(
   return { fade: onMap ? fade : { ...fade, y: 0, active: false }, bg: reached };
 }
 
+/** Whether a fade cleared its mask before any read saw it: the struct was at rest on the
+ *  last read, and is now running with no mask (its finishing frames) or at rest
+ *  somewhere else. A fade whose start is its target clears the mask on its first step
+ *  (palette.c), and a wild battle's intro takes the foe's OBJ palette to y 10 that way
+ *  (SpriteCB_WildMon): the map, reading the last fade's `bg`, sat dark behind the
+ *  battle until the next fade began, then lit up in one frame (POK-435). */
+export function unseenFade(last: { y: number; color: number; active: boolean } | null, cur: { y: number; color: number; active: boolean }, selected: number): boolean {
+  if (last === null || last.active) return false;
+  return cur.active ? selected === 0 : last.y !== cur.y || last.color !== cur.color;
+}
+
 /** A 15-bit GBA colour the way mGBA shows it. */
 export function gbaColor(c: number): string {
   const up = (v: number) => (v << 3) | (v >> 2);
@@ -1254,6 +1265,8 @@ export class FieldView {
   }
 
   private lastBgY: number | null = null;
+  /** The struct as the last read found it (unseenFade). */
+  private lastFade: { y: number; color: number; active: boolean } | null = null;
 
   private read(): Camera | null {
     const { emu } = this.deps;
@@ -1270,8 +1283,11 @@ export class FieldView {
     if (fadeBase !== undefined) {
       const raw = fadeOf(emu.read(fadeBase + FADE_Y_WORD, 16), emu.read(fadeBase + FADE_COLOR_WORD, 16));
       const mode = emu.read(fadeBase + FADE_MODE_WORD, 16);
+      const selected = emu.read(fadeBase + FADE_SELECTED, 32);
+      if (unseenFade(this.lastFade, raw, selected)) this.fadeBg = false;
+      this.lastFade = { ...raw };
       raw.y = this.bgFadeY(raw, mode, emu.read(fadeBase + FADE_TOGGLE_WORD, 16));
-      seen = mapFade(raw, emu.read(fadeBase + FADE_SELECTED, 32), this.fadeBg, mode);
+      seen = mapFade(raw, selected, this.fadeBg, mode);
     }
     const fade = seen.fade;
     this.fadeBg = seen.bg;
