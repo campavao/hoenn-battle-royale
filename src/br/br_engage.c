@@ -448,8 +448,10 @@ void BrEngage_OnBattleEnd(u8 peerSeat, u8 outcome)
 {
     gBrEngage.cooldown = BR_ENGAGE_GRACE;
     // B_OUTCOME_RAN is our own trainer running; MON_FLED is the peer running from us.
-    // Only the fleer is held off the pursuer; the pursuer is free after the grace.
-    if (outcome == B_OUTCOME_RAN)
+    // Only the fleer is held off the pursuer; the pursuer is free after the grace. Not
+    // the RUN that leaves a fight the match was won in (BR_RUN_OVER): nobody ran, and a
+    // boot over the champion's head would say they had.
+    if (outcome == B_OUTCOME_RAN && !BrMatch_WinPending())
     {
         u8 buf[2];
 

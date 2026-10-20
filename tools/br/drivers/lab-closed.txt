@@ -2,6 +2,10 @@
 # lab door (Littleroot 7,16), lean north into it, and be refused with a line on the
 # bottom box instead of warped into a room with Birch, the rival and the aide in it.
 #
+# And then walks away (POK-432): the refusal used to hand ProcessPlayerFieldInput a TRUE
+# with no script or warp behind it, and the field locked the controls for good -- Cam
+# leant on the lab, was told it was shut, and never moved again.
+#
 # lab-control.txt is the other half: the same walk into Brendan's house, which is not on
 # the closed list, still opens. Without it this driver passes on a player who never moved.
 wait 30
@@ -21,4 +25,10 @@ wait 20
 shot still-out
 expect u8 *gSaveBlock1Ptr+4 0
 expect u8 *gSaveBlock1Ptr+5 9
+# the boot cell is (7,17); the door is (7,16). Two steps south is (7,19), and a player
+# whose controls the door kept is still at 17.
+hold DOWN 40
+wait 20
+shot walked-away
+expect u8 *gSaveBlock1Ptr+2 19
 say lab closed ok
