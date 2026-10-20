@@ -1,19 +1,18 @@
 # hm-bike-surf: riding into water surfs too, with no stop to get off (2026-10-13). Every
 # bike move asks GetBikeCollision first, and BrHm_BikeInto answers it.
 #
-# clear-map's spot: ROUTE 104 (map 0:19) at (33,22); the sea is north of (36,22), and
-# the item ball at (37,22) stops the ride. The MACH BIKE goes on SELECT.
+# clear-map's spot: ROUTE 104 (map 0:19), past the cuttable tree at (35,22), at (36,22)
+# with the sea to the north. The MACH BIKE goes on SELECT.
 wait 30
 poke u8 gBrMatch 2
-pokebytes gBrMailbox+0x2018 01 00 00 13 21 00 16 00 BD BB C7 FF
+# Boot mode 21: TESTSWIM's MUDKIP could learn SURF, WATERFALL and DIVE (br_hm.h).
+pokebytes gBrMailbox+0x2018 21 00 00 13 24 00 16 00 BD BB C7 FF
 wait 400
 expect u8 *gSaveBlock1Ptr+5 19
 poke u16 *gSaveBlock1Ptr+0x496 259
 tap SELECT
 wait 60
 expectbits u8 gPlayerAvatar 0x02 0x02
-hold RIGHT 40
-wait 30
 shot riding
 expect u16 *gSaveBlock1Ptr+0 36
 expect u16 *gSaveBlock1Ptr+2 22

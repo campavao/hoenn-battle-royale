@@ -1,0 +1,24 @@
+# hm-cut-tree: a CUT tree comes down as you walk into it, when somebody in the party could
+# learn CUT (Cam's 10-19 play-test, #7: "we got rid of all the cuttable trees and boulders,
+# but that could be a cool way to reintroduce them"). No "would you like to CUT it?", no
+# cut-in (br_hm.c, BrHm_WalkInto).
+#
+# ROUTE 104 (map 0:19): the tree at (35,22). The boot's TREECKO could learn CUT. We boot
+# on (35,23), under it.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 13 23 00 17 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr 35
+expect u16 *gSaveBlock1Ptr+2 23
+shot before
+hold UP 16
+wait 120
+shot cut
+# down, and the field is ours again; one more step goes where it stood
+expect u32 gMain+4 CB2_Overworld+1
+hold UP 16
+wait 30
+expect u16 *gSaveBlock1Ptr+2 22
+shot through
+say hm cut tree ok

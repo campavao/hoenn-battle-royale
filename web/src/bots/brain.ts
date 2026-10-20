@@ -14,6 +14,7 @@ import { findPath, findPathToAny, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
 import { MOVE_CUT, MOVE_FLY, MOVE_SURF, tradedMon } from './party';
+import HMS from '../data/hms.json';
 import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
 import { sameSpot, spotKey, type SeamDir, type Spot, type World } from './world';
@@ -402,19 +403,13 @@ export interface BotsOptions {
   ringPhase?: () => number;
 }
 
-/** Can this team cross water? Everybody can, since the HMs went (2026-10-13): a player
- *  walks into the water and is surfing, no Pokemon with the move asked for (br_hm.c), so
- *  a bot that needed one stood on the shore a player could leave. Kept a function, and
- *  the party kept an argument, so a rule that comes back has one place to land. */
-export function canSurf(_party: PackedMon[]): boolean {
-  return CONTESTANTS_NEED_NO_HMS;
+/** Can this team cross water? Only with somebody who knows SURF or could learn it (Cam's
+ *  2026-10-19 play-test, #7): a player's ROM asks the same of its party (br_hm.c,
+ *  BrHm_Slot), so a bot without one stands on the shore a player would. */
+export function canSurf(party: PackedMon[]): boolean {
+  return party.some((mon) => couldUse(mon, 'surf', MOVE_SURF));
 }
 
-/** And through a tree? There are no trees to cut any more: the ROM never spawns a
- *  cuttable tree, a smash rock or a boulder (br_strip.c, 2026-10-13), so a bot walks the
- *  cell like anybody else. The exporter still marks one as its own class (POK-267), and
- *  this is what opens it. That a bot walked through one with the tree still standing
- *  on a player's screen was the 2026-10-12 play-test's bug, and the strip is its fix. */
 /** And over it? A bird dealt FLY at the rung (POK-267). Unlike the water this one is
  *  NOT something every contestant has: a flight needs a Pokemon that can carry you, and
  *  whether this bot has one is the whole point of the rule. */
@@ -422,15 +417,21 @@ export function canFly(party: PackedMon[]): boolean {
   return party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_FLY));
 }
 
-export function canCut(_party: PackedMon[]): boolean {
-  return CONTESTANTS_NEED_NO_HMS;
+/** And through a tree? The trees are back (#7): one falls to a party with somebody who
+ *  knows CUT or could learn it, as in a player's ROM (br_hm.c). */
+export function canCut(party: PackedMon[]): boolean {
+  return party.some((mon) => couldUse(mon, 'cut', MOVE_CUT));
 }
 
-/** POK-256 gave every contestant the run of Hoenn, and the speed-up redesign took the
- *  HMs out of it (2026-10-13): nothing on the map needs one. Named rather than inlined
- *  as `true` so that if that ever stops being so, this is the one place that has to
- *  change -- and the graph keeps modelling water and a tree as their own cells either way. */
-const CONTESTANTS_NEED_NO_HMS = true;
+/** Knows the move, or its species could learn the HM (tools/br/export-hms.py). */
+function couldUse(mon: PackedMon, hm: keyof typeof HMS, move: number): boolean {
+  return mon.moves.some((mv) => mv.id === move) || hmBit(HMS[hm], mon.species);
+}
+
+function hmBit(hex: string, species: number): boolean {
+  const byte = parseInt(hex.substr((species >> 3) * 2, 2), 16);
+  return !Number.isNaN(byte) && ((byte >> (species & 7)) & 1) === 1;
+}
 
 /** The share of the team's health still standing: 1 is untouched, 0 is wiped. */
 export function health(party: PackedMon[]): number {

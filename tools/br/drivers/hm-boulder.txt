@@ -1,0 +1,21 @@
+# hm-boulder: a STRENGTH boulder moves as you walk into it, when somebody in the party
+# could learn STRENGTH (Cam's 10-19 play-test, #7; br_hm.c, BrHm_Strength). No "would you
+# like to use STRENGTH?" first.
+#
+# FIERY PATH (map 24:14): the boulder at (10,15). The boot's TREECKO could learn STRENGTH.
+# We boot on (10,14), north of it, and walk south.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 18 0E 0A 00 0E 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr 10
+expect u16 *gSaveBlock1Ptr+2 14
+shot before
+# the push, then the step into where it was
+hold DOWN 16
+wait 60
+hold DOWN 16
+wait 60
+shot pushed
+expect u16 *gSaveBlock1Ptr+2 15
+say hm boulder ok

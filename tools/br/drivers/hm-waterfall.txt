@@ -5,7 +5,8 @@
 # x 17-19, y 25-28, with more river above at y 22-24.
 wait 30
 poke u8 gBrMatch 2
-pokebytes gBrMailbox+0x2018 01 00 00 22 10 00 1D 00 BD BB C7 FF
+# Boot mode 21: TESTSWIM's MUDKIP could learn SURF, WATERFALL and DIVE (br_hm.h).
+pokebytes gBrMailbox+0x2018 21 00 00 22 10 00 1D 00 BD BB C7 FF
 wait 400
 expect u8 *gSaveBlock1Ptr+5 34
 shot booted
