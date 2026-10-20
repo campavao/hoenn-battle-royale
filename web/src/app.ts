@@ -35,8 +35,7 @@ import { Journal } from './match/journal';
 import type { ResumeRecord } from './match/resume';
 import { Curtain } from './match/curtain';
 import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, rewatchRow, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
-import { cleanNote, sendFeedback } from './net/feedback';
-import { feedbackScreen, type FeedbackState } from './ui/feedback';
+import type { FeedbackState } from './ui/feedback';
 import { howToRead, markHowToDue, markHowToRead, takeHowToDue } from './ui/howto-due';
 import {
   AUTO_START_MS,
@@ -77,7 +76,7 @@ import {
   type SheetModel,
   W,
 } from './ui/screens';
-import { CODE_ENTRY, NAME_ENTRY, PASS_ENTRY, entryScreen, newEntry } from './ui/entry';
+import type { EntryModel, EntryState } from './ui/entry';
 import {
   canStart,
   doorLabel,
@@ -479,7 +478,7 @@ let feedbackState: FeedbackState = 'typing';
  *  sheet's, in a match. */
 function feedbackFor(about: () => FeedbackAbout, look?: () => Look): DrawnScreen {
   if (feedbackState !== 'sending') feedbackState = 'typing';
-  return feedbackScreen(() => ({
+  return chunkScreen(() => feedbackUi, loadFeedbackUi, ({ feedbackScreen, cleanNote, sendFeedback }) => feedbackScreen(() => ({
     look: look?.(),
     text: feedbackDraft,
     state: feedbackState,
@@ -502,7 +501,7 @@ function feedbackFor(about: () => FeedbackAbout, look?: () => Look): DrawnScreen
       );
     },
     onBack: () => theStage().pop(),
-  }));
+  })));
 }
 
 /** Everybody on a roster, as the sheet's seats. */
@@ -1901,6 +1900,54 @@ function loadHowToUi(): Promise<void> {
 }
 setTimeout(() => void loadHowToUi(), 0);
 
+/** The drawn entry (ui/entry.ts) for a name, a room code or a passcode: its own chunk. */
+let entryUi: typeof import('./ui/entry') | undefined;
+let entryUiReady: Promise<void> | undefined;
+function loadEntryUi(): Promise<void> {
+  entryUiReady ??= import('./ui/entry').then(
+    (m) => {
+      chunkLoaded('entry');
+      entryUi = m;
+      theStage().redraw();
+    },
+    (err: unknown) => {
+      entryUiReady = undefined;
+      console.warn('the entry did not load', err);
+      chunkFailed('entry');
+    },
+  );
+  return entryUiReady;
+}
+setTimeout(() => void loadEntryUi(), 0);
+
+/** An entry of `shape`, its state made once the chunk is here. */
+function entryFor(shape: 'NAME_ENTRY' | 'CODE_ENTRY' | 'PASS_ENTRY', model: (state: EntryState) => EntryModel, text = ''): DrawnScreen {
+  return chunkScreen(() => entryUi, loadEntryUi, (ui) => {
+    const state = ui.newEntry(ui[shape], text);
+    return ui.entryScreen(() => model(state));
+  });
+}
+
+/** FEEDBACK's screen and send (ui/feedback-chunk.ts): a chunk of their own too. */
+let feedbackUi: typeof import('./ui/feedback-chunk') | undefined;
+let feedbackUiReady: Promise<void> | undefined;
+function loadFeedbackUi(): Promise<void> {
+  feedbackUiReady ??= import('./ui/feedback-chunk').then(
+    (m) => {
+      chunkLoaded('feedback');
+      feedbackUi = m;
+      theStage().redraw();
+    },
+    (err: unknown) => {
+      feedbackUiReady = undefined;
+      console.warn('feedback did not load', err);
+      chunkFailed('feedback');
+    },
+  );
+  return feedbackUiReady;
+}
+setTimeout(() => void loadFeedbackUi(), 0);
+
 /** The main menu's backdrop, a slow pan over Hoenn (HBR-30, ui/menubg.ts): its own chunk
  *  with its map, and the menu stays black until it lands. */
 let menuBg: typeof import('./ui/menubg') | undefined;
@@ -2640,8 +2687,7 @@ function wireRoom(
           const next = nextDoor(doorOf(view));
           if (next === 'pass') {
             // Typed on the drawn entry (POK-320). BACK leaves the door as it was.
-            const state = newEntry(PASS_ENTRY);
-            doorEntry = entryScreen(() => ({
+                        doorEntry = entryFor('PASS_ENTRY', (state) => ({
               title: 'PASSCODE',
               state,
               note: 'Guests type this to come in.',
@@ -3688,9 +3734,8 @@ function wireRoom(
   const askPass = (code: string): void => {
     const wrong = joinPass !== null;
     setStatus(`Room ${code} has a passcode.`);
-    const state = newEntry(PASS_ENTRY);
     stage.push(
-      entryScreen(() => ({
+      entryFor('PASS_ENTRY', (state) => ({
         title: 'PASSCODE',
         state,
         note: wrong ? 'WRONG PASSCODE' : `Room ${code} is locked.`,
@@ -3999,9 +4044,8 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
       switch (action.kind) {
         case 'name': {
           // Typed on the drawn entry (POK-320), Emerald's seven letters.
-          const state = newEntry(NAME_ENTRY, careerName());
           stage.push(
-            entryScreen(() => ({
+            entryFor('NAME_ENTRY', (state) => ({
               title: 'YOUR NAME',
               state,
               note: 'Seven letters, as Emerald keeps it.',
@@ -4011,7 +4055,7 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
                 stage.pop();
               },
               onBack: () => stage.pop(),
-            })),
+            }), careerName()),
           );
           return;
         }
@@ -4066,9 +4110,8 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
           // The relay never issues 0/O/1/I/L -- they read alike at a glance -- and the
           // entry's keys are the relay's own alphabet (POK-320), so a code that could not
           // be real cannot be typed. The check stays: it is what the relay would say.
-          const state = newEntry(CODE_ENTRY);
           stage.push(
-            entryScreen(() => ({
+            entryFor('CODE_ENTRY', (state) => ({
               title: 'ROOM CODE',
               state,
               note,
@@ -4095,9 +4138,8 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
           // the same entry the code is typed on; BACK leaves the list where it was.
           if (action.pass) {
             const { code } = action;
-            const state = newEntry(PASS_ENTRY);
             stage.push(
-              entryScreen(() => ({
+              entryFor('PASS_ENTRY', (state) => ({
                 title: 'PASSCODE',
                 state,
                 note: `Room ${code} is locked.`,
