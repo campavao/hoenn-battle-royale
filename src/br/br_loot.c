@@ -1030,6 +1030,9 @@ static struct BrLootItem *PieceInReach(void)
 }
 
 static EWRAM_DATA u16 sHeldKey = BR_HELD_NONE;
+// And what it was holding when named: a trader keeps his key when he takes your mon and
+// offers it next (#9), so the key alone would go on naming the one you were given.
+static u16 sHeldWhat;
 
 static const u8 sText_Take[] = _("{A_BUTTON} Take ");
 static const u8 sText_TheBag[] = _("the BAG");
@@ -1070,9 +1073,10 @@ static void HoldLineForReach(void)
         DropHeldLine();
         return;
     }
-    if (it->key == sHeldKey)
+    if (it->key == sHeldKey && it->species == sHeldWhat)
         return;
     sHeldKey = it->key;
+    sHeldWhat = it->species;
     // A sentence, not a bare name (Cam's 2026-10-19 play-test: "WHISCASH" alone on the
     // ticker read as a line with its verb missing).
     p = StringCopy(line, sText_Take);

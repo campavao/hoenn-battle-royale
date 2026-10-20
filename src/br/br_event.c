@@ -51,8 +51,6 @@ STATIC_ASSERT(((BR_EVENT_MAX - 1) << 4 | 15) < 0x100, BrEventKeysStayUnder0xB100
 #define BR_EVENT_LEN 5
 #define BR_EVENT_TRADER_LEN 13
 
-static const u8 sText_Traded[] = _("Traded for ");
-static const u8 sText_Bang[] = _("!");
 static const u8 sText_TradedAlready[] = _("He is trading with someone");
 
 // One trade a trader (POK-392). Two players at him at once both found him standing, both
@@ -324,10 +322,7 @@ static void TryTalk(void)
 
 bool8 BrEvent_Swap(u8 slot, struct Pokemon *mon)
 {
-    u8 line[BR_HUD_LINE_MAX + 2];
-    const u8 *last = line + ARRAY_COUNT(line) - 1;
     u16 held;
-    u8 *p;
 
     // A fainted one for a healthy one would be a MAX REVIVE thrown in.
     if (GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0)
@@ -344,11 +339,8 @@ bool8 BrEvent_Swap(u8 slot, struct Pokemon *mon)
     // mon let go to make room, and is not this: dropped at our feet, it would be ours
     // again for one press, and the trade a free mon.
     gPlayerParty[slot] = *mon;
-    p = BrHud_Append(line, last, sText_Traded);
-    p = BrHud_Append(p, last, gSpeciesNames[GetMonData(mon, MON_DATA_SPECIES, NULL)]);
-    BrHud_Append(p, last, sText_Bang);
+    // No "Traded for X!" (Cam, 2026-10-20): the chime and the party say it.
     PlaySE(SE_PIN);
-    BrHud_Box(line);
     BrSpectate_SendParty();
     return TRUE;
 }
