@@ -12,7 +12,7 @@ index ed16917..f0ae805 100644
  CXX_GUARD_END
  
 diff --git a/include/mgba/internal/gba/renderers/video-software.h b/include/mgba/internal/gba/renderers/video-software.h
-index ce91877..8771962 100644
+index ce91877..a521d01 100644
 --- a/include/mgba/internal/gba/renderers/video-software.h
 +++ b/include/mgba/internal/gba/renderers/video-software.h
 @@ -75,10 +75,18 @@ struct WindowControl {
@@ -46,7 +46,7 @@ index ce91877..8771962 100644
  	int32_t spriteCyclesRemaining;
  
  	// BLDCNT
-@@ -151,6 +159,37 @@ struct GBAVideoSoftwareRenderer {
+@@ -151,6 +159,44 @@ struct GBAVideoSoftwareRenderer {
  	int end;
  
  	uint8_t lastHighlightAmount;
@@ -75,8 +75,15 @@ index ce91877..8771962 100644
 +	/* Hoenn BR (the whole window): the ROM's struct BrWorld in work RAM (brSetWorld), or
 +	 * NULL, and the memory its pointers point into. With it, on the field, BG1..3 past the
 +	 * LCD are drawn from the ROM's map grid and metatiles rather than its tilemaps, so the
-+	 * band is no longer bounded by the hardware's 512-pixel BGs. */
++	 * band is no longer bounded by the hardware's 512-pixel BGs. The ROM's struct holds
++	 * only the scroll and the anchor; where the grid (gBackupMapLayout), the map header
++	 * (gMapHeader), the field's callback (gMain.callback2) and CB2_Overworld are is the
++	 * build's own symbols, which the page passes in. */
 +	const uint8_t* brWorld;
++	uint32_t brWorldGrid;
++	uint32_t brWorldHeader;
++	uint32_t brWorldCb2;
++	uint32_t brWorldOverworld;
 +	const uint8_t* brWram;
 +	const uint8_t* brIwram;
 +	const uint8_t* brRom;
@@ -136,7 +143,7 @@ index 5b4ef70..4a54807 100644
  	}
  
 diff --git a/src/gba/renderers/software-mode0.c b/src/gba/renderers/software-mode0.c
-index 4aada17..19246c5 100644
+index 4aada17..7660195 100644
 --- a/src/gba/renderers/software-mode0.c
 +++ b/src/gba/renderers/software-mode0.c
 @@ -484,7 +484,7 @@
@@ -148,7 +155,7 @@ index 4aada17..19246c5 100644
  	int length = renderer->end - renderer->start;
  	if (background->mosaic) {
  		int mosaicV = GBAMosaicControlGetBgV(renderer->mosaic) + 1;
-@@ -574,3 +574,212 @@ void GBAVideoSoftwareRendererDrawBackgroundMode0(struct GBAVideoSoftwareRenderer
+@@ -574,3 +574,209 @@ void GBAVideoSoftwareRendererDrawBackgroundMode0(struct GBAVideoSoftwareRenderer
  		}
  	}
  }
@@ -188,12 +195,8 @@ index 4aada17..19246c5 100644
 +#define BR_WORLD_HOFS 0x00
 +#define BR_WORLD_VOFS 0x02
 +#define BR_WORLD_LCD_X 0x04
-+#define BR_WORLD_LCD_Y 0x08
-+#define BR_WORLD_LAYOUT 0x0C
-+#define BR_WORLD_GRID 0x10
-+#define BR_WORLD_CB2 0x14
-+#define BR_WORLD_OVERWORLD 0x18
-+#define BR_WORLD_SIZE 0x1C
++#define BR_WORLD_LCD_Y 0x06
++#define BR_WORLD_SIZE 0x08
 +#define BR_LAYOUT_BORDER 0x08
 +#define BR_LAYOUT_PRIMARY 0x10
 +#define BR_LAYOUT_SECONDARY 0x14
@@ -215,12 +218,13 @@ index 4aada17..19246c5 100644
 +		return false;
 +	}
 +	const uint8_t* w = renderer->brWorld;
-+	const uint8_t* cb2 = _brMem(renderer, _brU32(w + BR_WORLD_CB2), 4);
-+	if (!cb2 || _brU32(cb2) != _brU32(w + BR_WORLD_OVERWORLD) || !_brU32(cb2)) {
++	const uint8_t* cb2 = _brMem(renderer, renderer->brWorldCb2, 4);
++	if (!cb2 || _brU32(cb2) != renderer->brWorldOverworld || !_brU32(cb2)) {
 +		return false;
 +	}
-+	const uint8_t* layout = _brMem(renderer, _brU32(w + BR_WORLD_LAYOUT), 0x18);
-+	const uint8_t* grid = _brMem(renderer, _brU32(w + BR_WORLD_GRID), 12);
++	const uint8_t* header = _brMem(renderer, renderer->brWorldHeader, 4);
++	const uint8_t* layout = header ? _brMem(renderer, _brU32(header), 0x18) : NULL;
++	const uint8_t* grid = _brMem(renderer, renderer->brWorldGrid, 12);
 +	if (!layout || !grid) {
 +		return false;
 +	}
@@ -242,8 +246,8 @@ index 4aada17..19246c5 100644
 +	}
 +	world->hofs = _brU16(w + BR_WORLD_HOFS);
 +	world->vofs = _brU16(w + BR_WORLD_VOFS);
-+	world->lcdX = (int32_t) _brU32(w + BR_WORLD_LCD_X);
-+	world->lcdY = (int32_t) _brU32(w + BR_WORLD_LCD_Y);
++	world->lcdX = (int16_t) _brU16(w + BR_WORLD_LCD_X);
++	world->lcdY = (int16_t) _brU16(w + BR_WORLD_LCD_Y);
 +	return true;
 +}
 +
@@ -448,7 +452,7 @@ index 4f7e9f8..cd6b6af 100644
  	int mosaicWait = 0;                                                                                               \
  	int32_t localX;                                                                                                   \
 diff --git a/src/gba/renderers/video-software.c b/src/gba/renderers/video-software.c
-index c5bc37b..aa9875f 100644
+index c5bc37b..bb76b6d 100644
 --- a/src/gba/renderers/video-software.c
 +++ b/src/gba/renderers/video-software.c
 @@ -27,6 +27,7 @@ static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer,
@@ -530,7 +534,27 @@ index c5bc37b..aa9875f 100644
  						if (VIDEO_CHECKS && activeWindow >= MAX_WINDOW) {
  							mLOG(GBA_VIDEO, FATAL, "Out of bounds window write will occur");
  							return;
-@@ -610,10 +617,94 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -558,9 +565,19 @@ static void GBAVideoSoftwareRendererPrepareWindow(struct GBAVideoSoftwareRendere
+ 	}
+ }
+ 
++/* Hoenn BR (the whole window): the world is read once a frame, at its first row, so every
++ * row of it -- the LCD's sides as it is drawn, the band at VBlank -- draws from one anchor
++ * and one grid. */
++static struct GBAVideoSoftwareBrWorld _brWorldState;
++static bool _brWorldOk = false;
++
+ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* renderer, int y) {
+ 	struct GBAVideoSoftwareRenderer* softwareRenderer = (struct GBAVideoSoftwareRenderer*) renderer;
+ 
++	if (y == 0) {
++		_brWorldOk = GBAVideoSoftwareRendererBrWorld(softwareRenderer, &_brWorldState);
++	}
++
+ 	if (y == GBA_VIDEO_VERTICAL_PIXELS - 1) {
+ 		softwareRenderer->nextY = 0;
+ 	} else {
+@@ -610,10 +627,93 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	CLEAN_SCANLINE(softwareRenderer, y);
  
@@ -614,10 +638,9 @@ index c5bc37b..aa9875f 100644
 +static void _brDrawLine(struct GBAVideoSoftwareRenderer* softwareRenderer, int y, bool band) {
 +	int width = BR_ROW_WIDTH(softwareRenderer);
 +	bool outer = band && _brPastSpriteWindow(softwareRenderer, y);
-+	struct GBAVideoSoftwareBrWorld worldState;
 +	const struct GBAVideoSoftwareBrWorld* world = NULL;
-+	if (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) == 0 && GBAVideoSoftwareRendererBrWorld(softwareRenderer, &worldState)) {
-+		world = &worldState;
++	if (_brWorldOk && GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) == 0) {
++		world = &_brWorldState;
 +	}
 +	mColor* row = &softwareRenderer->outputBuffer[softwareRenderer->outputBufferStride * y - softwareRenderer->brLeft];
  	if (GBARegisterDISPCNTIsForcedBlank(softwareRenderer->dispcnt)) {
@@ -627,7 +650,7 @@ index c5bc37b..aa9875f 100644
  			row[x] = M_COLOR_WHITE;
  		}
  		return;
-@@ -635,28 +726,43 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -635,28 +735,43 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  			if (spriteLayers & (1 << priority)) {
  				GBAVideoSoftwareRendererPostprocessSprite(softwareRenderer, priority);
  			}
@@ -676,7 +699,7 @@ index c5bc37b..aa9875f 100644
  					GBAVideoSoftwareRendererDrawBackgroundMode5(softwareRenderer, &softwareRenderer->bg[2], y);
  					break;
  				}
-@@ -664,9 +770,15 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -664,9 +779,15 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  			if (TEST_LAYER_ENABLED(3)) {
  				switch (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt)) {
  				case 0:
@@ -693,7 +716,7 @@ index c5bc37b..aa9875f 100644
  					GBAVideoSoftwareRendererDrawBackgroundMode2(softwareRenderer, &softwareRenderer->bg[3], y);
  					break;
  				}
-@@ -676,6 +788,11 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -676,6 +797,11 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	GBAVideoSoftwareRendererPostprocessBuffer(softwareRenderer);
  
@@ -705,7 +728,7 @@ index c5bc37b..aa9875f 100644
  	if (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) != 0) {
  		if (softwareRenderer->bg[2].enabled == ENABLED_MAX) {
  			softwareRenderer->bg[2].sx += softwareRenderer->bg[2].dmx;
-@@ -706,7 +823,7 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -706,7 +832,7 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	int x;
  	if (softwareRenderer->stereo) {
@@ -714,7 +737,7 @@ index c5bc37b..aa9875f 100644
  			row[x] = softwareRenderer->row[x] & (M_COLOR_RED | M_COLOR_BLUE);
  			row[x] |= softwareRenderer->row[x + 1] & M_COLOR_GREEN;
  			row[x + 1] = softwareRenderer->row[x + 1] & (M_COLOR_RED | M_COLOR_BLUE);
-@@ -719,21 +836,65 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -719,21 +845,65 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  		}
  	} else {
  #ifdef COLOR_16_BIT
@@ -782,7 +805,7 @@ index c5bc37b..aa9875f 100644
  	softwareRenderer->nextY = 0;
  	if (softwareRenderer->temporaryBuffer) {
  		mappedMemoryFree(softwareRenderer->temporaryBuffer, GBA_VIDEO_HORIZONTAL_PIXELS * GBA_VIDEO_VERTICAL_PIXELS * 4);
-@@ -893,14 +1054,15 @@ void GBAVideoSoftwareRendererStepWindow(struct GBAVideoSoftwareRenderer* softwar
+@@ -893,14 +1063,15 @@ void GBAVideoSoftwareRendererStepWindow(struct GBAVideoSoftwareRenderer* softwar
  
  void GBAVideoSoftwareRendererPreprocessBuffer(struct GBAVideoSoftwareRenderer* softwareRenderer) {
  	int x;
@@ -800,7 +823,7 @@ index c5bc37b..aa9875f 100644
  	softwareRenderer->nWindows = 1;
  	if (GBARegisterDISPCNTIsWin0Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsWin1Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsObjwinEnable(softwareRenderer->dispcnt)) {
  		softwareRenderer->windows[0].control = softwareRenderer->winout;
-@@ -1016,12 +1178,69 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
+@@ -1016,12 +1187,69 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
  	}
  }
  
@@ -871,7 +894,7 @@ index c5bc37b..aa9875f 100644
  			renderer->oamDirty = false;
  		}
  		int mosaicV = GBAMosaicControlGetObjV(renderer->mosaic) + 1;
-@@ -1037,7 +1256,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1037,7 +1265,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  			if (renderer->spriteCyclesRemaining <= 0) {
  				break;
  			}
@@ -880,7 +903,7 @@ index c5bc37b..aa9875f 100644
  				continue;
  			}
  			if (GBAObjAttributesAIsMosaic(sprite->obj.a) && mosaicV > 1) {
-@@ -1058,7 +1277,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1058,7 +1286,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  					continue;
  				}
  
@@ -903,7 +926,7 @@ index 751e8b1..59daede 100644
  	-s ENVIRONMENT='web,worker' \
  	-s PTHREAD_POOL_SIZE=5 \
 diff --git a/src/platform/wasm/main.c b/src/platform/wasm/main.c
-index 14d9a8a..5dd06d5 100644
+index 14d9a8a..88ec7f7 100644
 --- a/src/platform/wasm/main.c
 +++ b/src/platform/wasm/main.c
 @@ -12,6 +12,10 @@
@@ -917,7 +940,7 @@ index 14d9a8a..5dd06d5 100644
  
  #include "platform/sdl/sdl-audio.h"
  #include "platform/sdl/sdl-events.h"
-@@ -146,6 +150,284 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
+@@ -146,6 +150,297 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
  		return 0.0;
  }
  
@@ -952,6 +975,10 @@ index 14d9a8a..5dd06d5 100644
 +// Hoenn BR (the whole window): where the ROM's struct BrWorld sits in work RAM (brSetWorld),
 +// -1 for none.
 +static int brWorldTable = -1;
++static uint32_t brWorldGrid = 0;
++static uint32_t brWorldHeader = 0;
++static uint32_t brWorldCb2 = 0;
++static uint32_t brWorldOverworld = 0;
 +static int brSpriteTop = -1;
 +static int brSpriteBottom = -1;
 +
@@ -1099,6 +1126,10 @@ index 14d9a8a..5dd06d5 100644
 +	sr->brRom = (const uint8_t*) gba->memory.rom;
 +	sr->brRomSize = gba->memory.romSize;
 +	sr->brWorld = brWorldTable >= 0 ? (const uint8_t*) gba->memory.wram + brWorldTable : NULL;
++	sr->brWorldGrid = brWorldGrid;
++	sr->brWorldHeader = brWorldHeader;
++	sr->brWorldCb2 = brWorldCb2;
++	sr->brWorldOverworld = brWorldOverworld;
 +}
 +
 +// Tell the software renderer about the band, once the core has installed it. Only at
@@ -1161,12 +1192,17 @@ index 14d9a8a..5dd06d5 100644
 +}
 +
 +// Hoenn BR (the whole window): the ROM's struct BrWorld (include/br/br_field.h), at byte
-+// `offset` into work RAM, or -1 for none. With it, on the field, BG1..3 past the LCD are
-+// drawn from the ROM's map grid, so a band of any size is the map. Takes effect at once,
-+// and at every loadGame after.
-+EMSCRIPTEN_KEEPALIVE void brSetWorld(int offset) {
++// `offset` into work RAM, or -1 for none, and the GBA addresses of the build's
++// gBackupMapLayout, gMapHeader and gMain.callback2, and CB2_Overworld's value (thumb bit
++// set). With it, on the field, BG1..3 past the LCD are drawn from the ROM's map grid, so
++// a band of any size is the map. Takes effect at once, and at every loadGame after.
++EMSCRIPTEN_KEEPALIVE void brSetWorld(int offset, uint32_t grid, uint32_t header, uint32_t cb2, uint32_t overworld) {
 +	struct GBAVideoSoftwareRenderer* sr;
-+	brWorldTable = offset >= 0 && offset + 0x1C <= GBA_SIZE_EWRAM ? offset : -1;
++	brWorldTable = offset >= 0 && offset + 0x08 <= GBA_SIZE_EWRAM ? offset : -1;
++	brWorldGrid = grid;
++	brWorldHeader = header;
++	brWorldCb2 = cb2;
++	brWorldOverworld = overworld;
 +	sr = _brSoftwareRenderer();
 +	if (sr) {
 +		_brApplyWorld(sr);
@@ -1202,7 +1238,7 @@ index 14d9a8a..5dd06d5 100644
  EMSCRIPTEN_KEEPALIVE int getMainLoopTimingMode() {
  	int mode = -1;
  	int value = -1;
-@@ -427,28 +709,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
+@@ -427,28 +722,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
  	mSDLInitBindingsGBA(&renderer->core->inputMap);
  
  	unsigned w, h;
@@ -1250,7 +1286,7 @@ index 14d9a8a..5dd06d5 100644
  
  	emscripten_resume_main_loop();
  	return true;
-@@ -744,19 +1028,11 @@ void runLoop() {
+@@ -744,19 +1041,11 @@ void runLoop() {
  				};
  			}
  			if (mCoreSyncWaitFrameStart(&renderer->thread->impl->sync)) {
@@ -1275,7 +1311,7 @@ index 14d9a8a..5dd06d5 100644
  			}
  			mCoreSyncWaitFrameEnd(&renderer->thread->impl->sync);
  		}
-@@ -860,11 +1136,16 @@ int main() {
+@@ -860,11 +1149,16 @@ int main() {
  
  	mLogSetDefaultLogger(&logCtx);
  
@@ -1297,7 +1333,7 @@ index 14d9a8a..5dd06d5 100644
  	// exclude specific key events
  	SDL_SetEventFilter(excludeKeys, NULL);
 diff --git a/src/platform/wasm/mgba.d.ts b/src/platform/wasm/mgba.d.ts
-index edad1b1..6a25784 100644
+index edad1b1..9ede5d5 100644
 --- a/src/platform/wasm/mgba.d.ts
 +++ b/src/platform/wasm/mgba.d.ts
 @@ -296,6 +296,46 @@ declare namespace mGBA {
@@ -1319,7 +1355,7 @@ index edad1b1..6a25784 100644
 +    _brSetSpriteBand(top: number, bottom: number): void;
 +    /** The ROM's OAM side table at a byte offset into EWRAM, -1 for none (POK-329 band). */
 +    _brSetOamTable(offset: number): void;
-+    _brSetWorld(offset: number): void;
++    _brSetWorld(offset: number, grid: number, header: number, cb2: number, overworld: number): void;
 +    /** Hoenn BR (POK-329): the sprite window the loaded core draws with, as
 +     *  `top << 16 | bottom`, or -1 for none (or no game loaded). */
 +    _brSpriteWindow(): number;

@@ -37,7 +37,7 @@ def main():
             print(f"FAIL {p}: no dumps")
             return 1
         world, pos = dumps[p]
-        hofs, vofs, lcd_x, lcd_y = struct.unpack_from("<HHii", world)
+        hofs, vofs, lcd_x, lcd_y = struct.unpack_from("<HHhh", world)
         x, y = struct.unpack_from("<hh", pos)
         seen[p] = (x, y)
         want = (x * 16, y * 16 + 40)

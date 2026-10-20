@@ -951,8 +951,4 @@ void BrField_PublishWorld(u16 hofs, u16 vofs, u8 xTileOffset, u8 yTileOffset)
     gBrWorld.vofs = vofs;
     gBrWorld.lcdX = gSaveBlock1Ptr->pos.x * 16 + ScrollDistance(hofs - xTileOffset * 8);
     gBrWorld.lcdY = gSaveBlock1Ptr->pos.y * 16 + ScrollDistance(vofs - yTileOffset * 8);
-    gBrWorld.layout = gMapHeader.mapLayout;
-    gBrWorld.grid = &gBackupMapLayout;
-    gBrWorld.cb2 = &gMain.callback2;
-    gBrWorld.overworld = CB2_Overworld;
 }

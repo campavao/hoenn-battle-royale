@@ -3,7 +3,7 @@
 // goes through emu/index.ts's Emulator wrapper -- this file never touches the core
 // directly, per the project CLAUDE.md.
 
-import { KEY_BIT, Emulator, type Band, type GbaKey } from './emu';
+import { KEY_BIT, Emulator, type Band, type GbaKey, type WorldSymbols } from './emu';
 import { stallLine, watch } from './emu/watchdog';
 import { checkEmerald, isPrePatched, sha1Hex } from './rom/emerald';
 import { loadCheckedRelease, loadSidecars, type CheckedRelease, type ReleaseInfo } from './release';
@@ -1715,16 +1715,27 @@ function askForBand(emu: Emulator): void {
   // `#world` (dev, the whole-window prototype): the core draws the whole layout from the
   // ROM's map grid, past what the ring holds; the ROM keeps the ring it has for the band
   // above, which the core still draws the LCD's sprites and its own rows from.
-  if (devWorld() && emu.setWorld(worldAt ?? null)) askedBand = worldBand(matchLayout());
+  if (wantWorld() && emu.setWorld(worldAt)) askedBand = worldBand(matchLayout());
   emu.setViewport(askedBand);
 }
 
-/** `#world` (dev only): the whole-window prototype (Cam, 2026-10-20, "one layer"). */
-function devWorld(): boolean {
-  return import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).has('world');
+/** `#world`: the whole-window prototype (Cam, 2026-10-20, "one layer"; HBR-27), opt-in
+ *  on any build so it can be played before it is the default. */
+function wantWorld(): boolean {
+  return new URLSearchParams(location.hash.slice(1)).has('world');
 }
-/** gBrWorld: where the ROM says the LCD sits on its map grid (include/br/br_field.h). */
-let worldAt: number | undefined;
+/** gBrWorld, where the ROM says the LCD sits on its map grid, and what the core reads
+ *  the map from (include/br/br_field.h); null when the image booted lacks any of them. */
+let worldAt: WorldSymbols | null = null;
+function worldSymbols(symbols: Map<string, number> | null | undefined): WorldSymbols | null {
+  const at = symbols?.get('gBrWorld');
+  const grid = symbols?.get('gBackupMapLayout');
+  const header = symbols?.get('gMapHeader');
+  const main = symbols?.get('gMain');
+  const overworld = symbols?.get('CB2_Overworld');
+  if (at === undefined || grid === undefined || header === undefined || main === undefined || overworld === undefined) return null;
+  return { at, grid, header, cb2: main + 4, overworld: overworld | 1 };
+}
 
 /** Where the ROM keeps its OAM side table and the rows the page shows past the LCD
  *  (include/br/br_field.h): read off the symbols of the image booted. */
@@ -4136,7 +4147,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     seeThrough,
     keyLayer: $('#key-layer') as HTMLCanvasElement,
     keyDim: $('#key-dim') as HTMLElement,
-    world: devWorld,
+    world: wantWorld,
   });
   fieldView.attach();
   // Dev only: where the page walks the ghosts, for the e2e (POK-323, world-moves.spec.ts).
@@ -4441,7 +4452,7 @@ async function main(): Promise<void> {
   romPicture = romBand(bytes, symbols);
   oamTableAt = symbols?.get('gBrOamHi');
   fieldShownAt = symbols?.get('gBrFieldShown');
-  worldAt = symbols?.get('gBrWorld');
+  worldAt = worldSymbols(symbols);
 
   showScreen('playing');
   askForBand(emu);

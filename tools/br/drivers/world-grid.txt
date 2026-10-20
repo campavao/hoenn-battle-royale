@@ -1,36 +1,33 @@
 # world-grid: the whole window's anchor (the one-layer prototype, Cam 2026-10-20). Every
-# field frame the ROM publishes gBrWorld: the scroll it wrote the BGs with, the grid pixel
-# of the LCD's top-left, and where the core reads the map grid, the layout and whether
-# the field is up. The core draws BG1..3 past the LCD from those, so the anchor has to be
-# the camera's own: standing, the LCD's top-left is (pos.x*16, pos.y*16 + 40) on the
-# backup grid (MAP_OFFSET 7 metatiles in, the player 7 across and 4.5 down the LCD) on
-# either ring, and a step moves it 16. The pointers are the build's own symbols.
+# field frame the ROM publishes gBrWorld: the scroll it wrote the BGs with and the grid
+# pixel of the LCD's top-left (the grid, layout and callback are the page's symbols).
+# The core draws BG1..3 past the LCD from those, so the anchor has to be the camera's
+# own: standing, the LCD's top-left is (pos.x*16, pos.y*16 + 40) on the backup grid
+# (MAP_OFFSET 7 metatiles in, the player 7 across and 4.5 down the LCD) on either ring,
+# and a step moves it 16.
 # checked-by: tools/br/world-grid.py
 wait 30
 pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
-expect u32 gBrWorld+0x10 gBackupMapLayout
-expect u32 gBrWorld+0x14 gMain+4
-expect u32 gBrWorld+0x18 CB2_Overworld+1
-expectsame u32 gBrWorld+0x0C gMapHeader
-expectsame u32 *(gBrWorld+0x14) gBrWorld+0x18
+# On the field: the callback the core checks (gMain.callback2) is CB2_Overworld.
+expect u32 gMain+4 CB2_Overworld+1
 say tall
-dump gBrWorld 28
+dump gBrWorld 8
 dump *gSaveBlock1Ptr 4
 hold RIGHT 16
 wait 30
 say tall-right
-dump gBrWorld 28
+dump gBrWorld 8
 dump *gSaveBlock1Ptr 4
 pokebytes gBrFieldShown 28 00 28 00 80 00 80 00
 hold LEFT 16
 wait 30
 say wide
-dump gBrWorld 28
+dump gBrWorld 8
 dump *gSaveBlock1Ptr 4
 hold DOWN 16
 wait 30
 say wide-down
-dump gBrWorld 28
+dump gBrWorld 8
 dump *gSaveBlock1Ptr 4
 say ok
