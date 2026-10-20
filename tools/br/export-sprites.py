@@ -165,6 +165,21 @@ def main():
                 fog_out.putpixel((x, y), fog_pal[c] + (255,))
     fog_out.save(os.path.join(OUT, 'fog.png'), optimize=True)
 
+    # The encounter patches' marks (br_patch.c Draw, POK-431): each one's first frame in
+    # its own colours, for the page to draw a map's patches past the cells the ROM keeps
+    # sprites for. A shadow is colour 15 of general field effect palette 0: black.
+    for name, pic, w, h in (('patch-tall-grass', 'br_patch_tall_grass', 16, 16), ('patch-water', 'br_patch_water', 16, 16), ('patch-shadow', 'shadow_medium', 16, 8)):
+        src = Image.open(os.path.join(ROOT, 'graphics', 'field_effects', 'pics', f'{pic}.png')).convert('P')
+        pal = src.getpalette()
+        mark = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        spx = src.load()
+        for y in range(h):
+            for x in range(w):
+                c = spx[x, y]
+                if c:
+                    mark.putpixel((x, y), (0, 0, 0, 255) if pic == 'shadow_medium' else tuple(pal[3 * c:3 * c + 3]) + (255,))
+        mark.save(os.path.join(OUT, f'{name}.png'), optimize=True)
+
     json.dump(out, open(DATA, 'w', encoding='utf-8'), indent=1)
     print(f'{len(out)} sheets into {OUT}; {DATA}')
     for m in missing:

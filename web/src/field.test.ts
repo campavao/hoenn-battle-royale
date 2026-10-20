@@ -130,6 +130,13 @@ describe('the picture past the LCD (POK-319)', () => {
         expect(shownArea(lay, rom.wide)).toBe(496 * 240);
         expect(shownArea(lay, askBand(lay, rom, false))).toBe(256 * 384);
       });
+      it("a 1920x1080 desktop's box, 1440x1080: the wide ring, though the ROM's tall one is a little more area", () => {
+        const real = { ...rom, band: { left: 0, top: 184, right: 16, bottom: 152 } };
+        const lay = layoutField(1440, 1080, 0, 1, 1080);
+        expect(lay).toMatchObject({ cols: 720, rows: 540, lcdCol: 240, lcdRow: 190 });
+        expect(shownArea(lay, askBand(lay, real, false))).toBeGreaterThan(shownArea(lay, real.wide));
+        expect(askBand(lay, real, true)).toEqual({ left: 128, top: 40, right: 128, bottom: 40 });
+      });
       it('a phone on its side, 844x390: the 140 columns each side it shows, in eights, up to 128', () => {
         const lay = layoutField(844, 390, 0, 3, 390);
         expect(lay).toMatchObject({ cols: 520, rows: 240, lcdCol: 140, lcdRow: 40 });
