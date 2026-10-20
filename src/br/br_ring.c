@@ -594,9 +594,13 @@ void BrRing_Tick(void)
         gBrHud.flashFog = 1; // just went outside: the corner flashes FOG!
     gBrRing.outside = outside;
     // A map load resets the weather to the map's own; re-apply when the map changed.
-    if (!gBrRing.applied
-     || gBrRing.appliedMapGroup != gSaveBlock1Ptr->location.mapGroup
-     || gBrRing.appliedMapNum != gSaveBlock1Ptr->location.mapNum)
+    // Not while the weather fades the screen in: a change of weather drops that fade
+    // where it is (Task_WeatherMain), and the map stayed black under the HUD. Walking
+    // into PETALBURG WOODS (SHADE) in the fog did it (HBR-26, Cam's 2026-10-20 report).
+    if ((!gBrRing.applied
+      || gBrRing.appliedMapGroup != gSaveBlock1Ptr->location.mapGroup
+      || gBrRing.appliedMapNum != gSaveBlock1Ptr->location.mapNum)
+     && IsWeatherNotFadingIn())
         ApplyWeather(outside);
     if (!outside)
     {

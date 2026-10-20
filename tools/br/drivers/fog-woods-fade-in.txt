@@ -1,0 +1,31 @@
+# fog-woods-fade-in: walking into PETALBURG WOODS in the fog, the woods fade in (HBR-26,
+# Cam's 2026-10-20 report: the map black under the HUD for the rest of the match).
+#
+# The woods' own weather is SHADE, which fades the screen in through the weather's
+# palettes; the ring then puts the fog back, and a change of weather mid fade-in drops
+# that fade where it is (Task_WeatherMain), at black. BrRing_Tick now waits for the
+# fade-in to end before it re-applies the weather.
+#
+# On ROUTE 104 (0:19) at (10,39), under the woods' south door, with the ring on
+# SLATEPORT CITY (8,10) and r 2: the route and the woods are both outside.
+wait 30
+poke u32 gBrMatch+8 8
+pokebytes gBrMailbox+0x2018 81 00 00 13 0A 00 27 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# RING from seat 0: phase 1 at (8,10), r 2, no place.
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 08 0A 02 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 120
+expect u8 gBrRing 1
+expect u8 gWeather+0x6d0 6
+hold UP 24
+wait 240
+expect u8 *gSaveBlock1Ptr+4 24
+expect u8 *gSaveBlock1Ptr+5 11
+# The fog again, its palette work idle, and BG palette 0 lit (colour 1, not black).
+expect u8 gWeather+0x6d0 6
+expect u8 gWeather+0x6c6 3
+expectne u16 0x05000002 0
+shot woods
+say fog woods fade-in ok
