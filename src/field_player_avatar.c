@@ -1382,7 +1382,7 @@ static u8 GetPlayerAvatarStateTransitionByGraphicsId(u8 graphicsId, u8 gender)
             return sPlayerAvatarGfxToStateFlag[gender][i].playerFlag;
     }
 #if BR
-    return BrSkin_MyAvatarState(graphicsId);
+    return BrSkin_MyAvatarState();
 #else
     return PLAYER_AVATAR_FLAG_ON_FOOT;
 #endif
