@@ -3,7 +3,7 @@
 // game plays out". Offered once after a player's first ROM import, and a row on the menu.
 // POK-430 gave it Cam's own sections and words, each over a picture out of the game's own
 // art (tools/br/export-howto.py's sheet), some of them moving.
-import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, skinSheet, wrapText, type EmeraldCanvas, type Rect } from './emerald';
+import { TEXT_BLUE, TEXT_DARK, TEXT_GRAY, measure, skinSheet, wrapText, type EmeraldCanvas, type Rect } from './emerald';
 import { ROW_H, W, paintButtons, type ButtonSpec } from './screens';
 import type { DrawnScreen, Painted, Widget } from './stage';
 
@@ -39,7 +39,7 @@ export const PANELS: readonly Panel[] = [
   },
   {
     title: 'Battles',
-    text: "Defeating another Trainer will drop their bag and their Pokémon for you to pick up! You can only have a max party of 6, so anything you can't carry will be dropped.",
+    text: "Defeating another Trainer will drop their bag and their Pokémon for you to pick up! You can only have a max party of 6, so anything you can't carry will be dropped. You can run from a Trainer battle with a POKé DOLL.",
     art: 'battle',
   },
   {
@@ -187,7 +187,7 @@ export function howToScreen(model: () => HowToModel): DrawnScreen {
       // As tall as the longest panel's, so NEXT stays under the thumb from panel to panel.
       const most = Math.max(...PANELS.map((p) => wrapText(p.text, TEXT_W).length));
       const frameH = 8 + ROW_H + 4 + most * ROW_H + 12;
-      const total = ART_H + frameH + 2 + ROW_H + 4 + 24;
+      const total = ART_H + frameH + 4 + 24;
       // The picture, the words and the buttons together, in the middle of a tall screen.
       const top = Math.max(0, Math.floor((h - total) / 2));
       const art = { x: 0, y: top, w: W, h: ART_H };
@@ -232,15 +232,16 @@ export function howToScreen(model: () => HowToModel): DrawnScreen {
       let ty = frame.y + 8;
       c.drawTextCentred(panel.title, W / 2, ty, TEXT_BLUE);
       widgets.push({ rect: { x: 8, y: ty, w: W - 16, h: ROW_H }, text: panel.title, id: 'howto-heading', cursor: null });
+      // Which panel this is, in the heading's row: a row of its own would leave the
+      // longest words (Battles, six lines) no room on a 320-tall screen.
+      const count = `${page + 1}/${PANELS.length}`;
+      const countX = W - 12 - measure(count);
+      c.drawText(count, countX, ty, TEXT_GRAY);
+      widgets.push({ rect: { x: countX, y: ty, w: measure(count), h: ROW_H }, text: count, id: 'howto-page', cursor: null });
       ty += ROW_H + 4;
       rows.forEach((line, i) => c.drawText(line, 12, ty + i * ROW_H, TEXT_DARK));
       widgets.push({ rect: { x: 8, y: ty, w: W - 16, h: rows.length * ROW_H }, text: panel.text, id: 'howto-text', cursor: null });
-      let y = frame.y + frame.h + 2;
-
-      const count = `${page + 1}/${PANELS.length}`;
-      c.drawTextCentred(count, W / 2, y, TEXT_GRAY);
-      widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: count, id: 'howto-page', cursor: null });
-      y += ROW_H + 4;
+      const y = frame.y + frame.h + 4;
 
       // NEXT first, and DONE first on the last panel: the cursor starts on the first
       // button, so A alone clicks through and out.

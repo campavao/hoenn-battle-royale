@@ -86,15 +86,20 @@ describe('the HOW TO PLAY screen', () => {
       const art = byId('howto-art')!;
       const frame = frames[0];
       expect(art.rect, PANELS[i].title).toMatchObject({ x: 0, w: W, h: ART_H });
-      expect(art.rect.y).toBeLessThanOrEqual(2);
+      expect(art.rect.y, 'the stack fills the 320').toBeLessThanOrEqual(4);
       expect(frame.y, `${PANELS[i].title}: the words under the picture`).toBe(art.rect.y + ART_H);
       const buttons = painted.widgets.filter((w) => w.onPress);
-      for (const b of buttons) expect(b.rect.y, `${PANELS[i].title}: buttons below the count`).toBeGreaterThan(byId('howto-page')!.rect.y);
+      for (const b of buttons) expect(b.rect.y, `${PANELS[i].title}: buttons below the frame`).toBeGreaterThan(frame.y + frame.h);
+      const count = byId('howto-page')!.rect;
+      const heading = byId('howto-heading')!;
+      expect(count.y, 'the count in the heading row').toBe(heading.rect.y);
+      expect(count.x, 'clear of the heading').toBeGreaterThan(W / 2 + measure(heading.text) / 2);
+      expect(count.x + count.w).toBeLessThanOrEqual(W - 8);
       for (const b of buttons) expect(b.rect.y + b.rect.h).toBeLessThanOrEqual(320);
       const text = byId('howto-text')!;
       expect(text.rect.y + text.rect.h, `${PANELS[i].title}: words clear of the frame's foot`).toBeLessThanOrEqual(frame.y + frame.h - 8);
       for (const t of texts) expect(t.x + measure(t.text), `"${t.text}" runs off the right`).toBeLessThanOrEqual(W - 8);
-      expect(wrapText(PANELS[i].text, W - 24).length, `${PANELS[i].title} is brief`).toBeLessThanOrEqual(5);
+      expect(wrapText(PANELS[i].text, W - 24).length, `${PANELS[i].title} is brief`).toBeLessThanOrEqual(6);
       if (i < PANELS.length - 1) press(screen, 'howto-next');
     }
   });
