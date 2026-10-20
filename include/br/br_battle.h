@@ -45,6 +45,29 @@ BR_SIZE(BrBattle, 12)
 
 extern struct BrBattle gBrBattle;
 
+// Who is fighting, for the page to park both trainers beside the battle with their names
+// and the balls they have left (Cam's 2026-10-19 play-test, #18; web/src/ui/sides.ts).
+// Filled when the opponent's picture is drawn (BrBattle_OpponentPic), which every trainer
+// battle's intro does before anything else of it shows; the page reads it only while
+// a trainer battle runs. Names are the ROM's charset, EOS-terminated. In IWRAM: EWRAM is
+// at its floor.
+struct BrSides
+{
+    /* 0 */ u8 foePic;       // TRAINER_PIC_*: web/public/trainer-pics/<pic>.png
+    /* 1 */ u8 minePic;
+    /* 2 */ u8 foeName[16];  // B_TRAINER1_NAME, or B_LINK_OPPONENT1_NAME in a link battle
+    /* 18 */ u8 mineName[PLAYER_NAME_LENGTH + 1];
+    /* 26 */ u16 serial;     // +1 a battle: the page tells this fight from the last
+};
+BR_OFFSET(BrSides, foePic, 0)
+BR_OFFSET(BrSides, minePic, 1)
+BR_OFFSET(BrSides, foeName, 2)
+BR_OFFSET(BrSides, mineName, 18)
+BR_OFFSET(BrSides, serial, 26)
+BR_SIZE(BrSides, 28)
+
+extern struct BrSides gBrSides;
+
 #define BR_MENU_NONE   0
 #define BR_MENU_ACTION 1 // FIGHT / BAG / POKeMON / RUN, bottom right, 2x2
 #define BR_MENU_MOVE   2 // the four moves, bottom left, 2x2
