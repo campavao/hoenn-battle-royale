@@ -17,6 +17,8 @@ wait 1260
 # it chose on its own: the map is gone and we are waiting on the host's cell
 shot timedout
 expect u8 gBrPick 1
+# ...the cursor never left SAFARI ZONE, so the ask is MAUVILLE (Cam, 10-20)
+expect u16 gBrPick+12 9
 # ...which arrives, and the drop happens like any other
 pokebytes gBrMailbox+0x1098 19 0A 07 00 00 00 00 19 0A 00 28 00
 poke u16 gBrMailbox+0x0C 3

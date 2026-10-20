@@ -1,0 +1,37 @@
+# safari-escape: the drop never leaves anybody in the opening (Cam, 10-20). The map opens
+# on SAFARI ZONE, and A straight away used to ask for it -- the host dealt the rest
+# house's doorstep and the drop put us back in a Zone with no way out. The ask is
+# MAUVILLE now; and a LAND that names the Zone anyway (an older host, or anything else
+# that puts us back) is caught on the field and taken to Mauville's POKeMON CENTER door.
+wait 30
+pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
+wait 400
+pokebytes gBrMailbox+0x1018 0E 15 12 00 00 78 56 34 12 01 78 00 78 00 00 00 00 19 0A 00 28 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 4
+pokebytes gBrMailbox+0x1058 0D 06 03 00 00 00 00 00
+poke u16 gBrMailbox+0x0C 2
+wait 200
+expect u8 gBrPick 1
+shot pickmap
+tap A
+wait 150
+# MAPSEC_MAUVILLE_CITY, not MAPSEC_SAFARI_ZONE (57)
+expect u16 gBrPick+12 9
+# LAND {seat 0, map 26:3 SAFARI_ZONE_SOUTH, (32,34)}: the rest house's doorstep
+pokebytes gBrMailbox+0x1098 19 0A 07 00 00 00 1A 03 20 00 22 00
+poke u16 gBrMailbox+0x0C 3
+wait 90
+expect u8 gBrPick 0
+expect u8 *gSaveBlock1Ptr+4 26
+expect u8 *gSaveBlock1Ptr+5 3
+shot back-in-safari
+wait 300
+# out of the Zone: MAUVILLE_CITY (0:2), at the CENTER's door
+expect u32 gMain+4 CB2_Overworld+1
+expect u8 *gSaveBlock1Ptr+4 0
+expect u8 *gSaveBlock1Ptr+5 2
+expect u16 *gSaveBlock1Ptr 22
+expect u16 *gSaveBlock1Ptr+2 6
+shot mauville
+say safari escape ok
