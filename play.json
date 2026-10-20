@@ -1,12 +1,12 @@
 {
- "readAt": "2026-10-20T01:52:49.660Z",
+ "readAt": "2026-10-20T02:15:27.481Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
    "code": "RMFABA",
    "at": "2026-10-20T01:12:14.012Z",
-   "end": null,
-   "secs": null,
+   "end": "2026-10-20T02:04:18.150Z",
+   "secs": 3124,
    "door": "open",
    "mode": "host",
    "humans": 6,
@@ -54,11 +54,10 @@
      "mode": "host",
      "trainers": 4,
      "watching": 0,
-     "secs": null
+     "secs": 1210
     }
    ],
-   "migrated": 2,
-   "live": true,
+   "migrated": 5,
    "exact": true
   },
   {
@@ -2710,6 +2709,20 @@
   }
  ],
  "jank": [
+  {
+   "t": "2026-10-20T02:02:17.778Z",
+   "code": "RMFABA",
+   "v": "?",
+   "watched": 654,
+   "snaps": 0,
+   "cam": 0,
+   "lost": 0,
+   "stalls": 0,
+   "longest": 0,
+   "checks": 10,
+   "drifts": 4,
+   "deploy": "f17ced14"
+  },
   {
    "t": "2026-10-20T01:08:00.423Z",
    "code": "KKRHRZ",
