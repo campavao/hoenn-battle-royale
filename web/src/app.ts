@@ -1734,7 +1734,8 @@ function askForBand(emu: Emulator): void {
   // `#world` (dev, the whole-window prototype): the core draws the whole layout from the
   // ROM's map grid, past what the ring holds; the ROM keeps the ring it has for the band
   // above, which the core still draws the LCD's sprites and its own rows from.
-  if (wantWorld() && emu.setWorld(worldAt)) askedBand = worldBand(matchLayout());
+  worldOn = wantWorld() && emu.setWorld(worldAt);
+  if (worldOn) askedBand = worldBand(matchLayout());
   emu.setViewport(askedBand);
 }
 
@@ -1746,6 +1747,8 @@ function wantWorld(): boolean {
 /** gBrWorld, where the ROM says the LCD sits on its map grid, and what the core reads
  *  the map from (include/br/br_field.h); null when the image booted lacks any of them. */
 let worldAt: WorldSymbols | null = null;
+/** Whether the core was handed the world at boot: what FieldView cuts the band by. */
+let worldOn = false;
 function worldSymbols(symbols: Map<string, number> | null | undefined): WorldSymbols | null {
   const at = symbols?.get('gBrWorld');
   const grid = symbols?.get('gBackupMapLayout');
@@ -4331,7 +4334,7 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     seeThrough,
     keyLayer: $('#key-layer') as HTMLCanvasElement,
     keyDim: $('#key-dim') as HTMLElement,
-    world: wantWorld,
+    world: () => worldOn,
   });
   fieldView.attach();
   // Dev only: where the page walks the ghosts, for the e2e (POK-323, world-moves.spec.ts).
