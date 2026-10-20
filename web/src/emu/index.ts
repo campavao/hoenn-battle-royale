@@ -711,10 +711,15 @@ export class Emulator {
 
   /** The whole machine as bytes, for a reload to come back to (HBR-20): a savestate in
    *  RESUME_SLOT, read out of the core's file system and dropped from it. Null when the
-   *  core would not write one. */
+   *  core would not write one. Leaves the core paused. */
   snapshot(): Uint8Array | null {
     const path = this.statePath();
-    if (!path || !this.m.saveState(RESUME_SLOT)) return null;
+    if (!path) return null;
+    // Stopped first: the core runs on its own thread, and a state taken halfway into a
+    // frame could hold a ring's indices without what they index. Only ever taken as the
+    // page goes, so it stays stopped.
+    this.pause();
+    if (!this.m.saveState(RESUME_SLOT)) return null;
     try {
       const bytes = this.m.FS.readFile(path);
       this.m.FS.unlink(path);

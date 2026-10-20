@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { Msg } from '../net/wire';
 import type { TabStore } from './left';
 import { freshMatch } from './lifecycle';
+import { Journal, JOURNAL_MAX } from './journal';
 import {
   fromBase64,
-  Journal,
-  JOURNAL_MAX,
   mayResume,
   packMatch,
   RESUME_MARGIN_MS,
@@ -127,15 +126,16 @@ describe('base64', () => {
 describe('mayResume', () => {
   const running = () => ({ ...freshMatch(), active: true });
   it('a seat still in a running match, on the field', () => {
-    expect(mayResume({ seat: 2, match: running(), busy: new Set(), watching: false })).toBe(true);
+    expect(mayResume({ seat: 2, match: running(), busy: new Set(), watching: false, fighting: false })).toBe(true);
   });
   it('never from a battle: the savestate would be a way out of it', () => {
-    expect(mayResume({ seat: 2, match: running(), busy: new Set([2]), watching: false })).toBe(false);
+    expect(mayResume({ seat: 2, match: running(), busy: new Set([2]), watching: false, fighting: false })).toBe(false);
+    expect(mayResume({ seat: 2, match: running(), busy: new Set(), watching: false, fighting: true })).toBe(false);
   });
   it('not once out, watching, decided, or before the match', () => {
-    expect(mayResume({ seat: 2, match: { ...running(), out: new Set([2]) }, busy: new Set(), watching: false })).toBe(false);
-    expect(mayResume({ seat: 2, match: running(), busy: new Set(), watching: true })).toBe(false);
-    expect(mayResume({ seat: 2, match: { ...running(), ended: true }, busy: new Set(), watching: false })).toBe(false);
-    expect(mayResume({ seat: 2, match: freshMatch(), busy: new Set(), watching: false })).toBe(false);
+    expect(mayResume({ seat: 2, match: { ...running(), out: new Set([2]) }, busy: new Set(), watching: false, fighting: false })).toBe(false);
+    expect(mayResume({ seat: 2, match: running(), busy: new Set(), watching: true, fighting: false })).toBe(false);
+    expect(mayResume({ seat: 2, match: { ...running(), ended: true }, busy: new Set(), watching: false, fighting: false })).toBe(false);
+    expect(mayResume({ seat: 2, match: freshMatch(), busy: new Set(), watching: false, fighting: false })).toBe(false);
   });
 });

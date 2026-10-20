@@ -13,7 +13,6 @@ import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
 import type { BstartMsg, Msg, PackedMon, PlaceMsg, StartMsg, TurnMsg } from './net/wire';
-import { PROTOCOL } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import type { HudWorld } from './ui/phonehud';
@@ -32,7 +31,8 @@ import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
 import { ringLabel, winLabel } from './match/clock';
 import { LEFT_MATCH_NOTE, noteInMatch, noteOutOfMatch, reloadedMidMatch } from './match/left';
-import { buildId, dropResume, Journal, mayResume, packMatch, saveResume, unpackMatch, takeResume, type ResumeRecord } from './match/resume';
+import { Journal } from './match/journal';
+import type { ResumeRecord } from './match/resume';
 import { Curtain } from './match/curtain';
 import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, rewatchRow, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import { cleanNote, sendFeedback } from './net/feedback';
@@ -100,7 +100,7 @@ import {
 } from './match/room';
 import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
-import { MENU_ACTION, START_BR_MAP, START_POKEMON, TouchLayer } from './touch';
+import { MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, START_BR_MAP, START_POKEMON, TouchLayer } from './touch';
 import {
   STICK_KEY,
   guessedStickKeys,
@@ -2430,9 +2430,20 @@ function loadCareerFile(then: (note: string) => void): void {
   input.click();
 }
 
+/** What a reload comes back to a match with (match/resume.ts, HBR-20), loaded once a match
+ *  is on rather than with the page: the page goes away on pagehide, which cannot wait
+ *  for an import, so it is there before it is needed. */
+let resumeKit: typeof import('./match/resume') | null = null;
+function loadResumeKit(): Promise<typeof import('./match/resume')> {
+  return import('./match/resume').then((kit) => (resumeKit = kit));
+}
+/** Set as the page leaves on purpose: nothing to come back to, so nothing is written. */
+let leavingPage = false;
+
 /** Drops the room out of the URL and reloads, which lands on the lobby (parseRoomHash
  *  returns null with no room in the hash). The way out of anywhere. */
 function backToLobby(): void {
+  leavingPage = true;
   noteOutOfMatch(); // left on purpose: the lobby has nothing to tell them
   location.hash = withoutRoom(location.hash);
   location.reload();
@@ -2674,17 +2685,22 @@ function wireRoom(
     room.card = null;
     stage.show(roomScreenView);
   };
-  const hideRoomScreen = () => {
+  const hideRoomScreen = (curtain = true) => {
     // Any start consumes the count (Kanto's POK-167): left armed, it dealt the room's
     // next match the moment it ran out, whatever was happening by then.
     countdown.cancel();
     if (room.started) return;
     room.started = true;
-    // A reload from here on is one out of the match (POK-433, match/left.ts). Not a
-    // watcher's: their ROM holds nothing of the match, and the URL puts them back.
-    if (hash.mode !== 'watch') noteInMatch(attachedTo?.code ?? hash.code);
-    // The town the ROM stands in fades out under black, not in view (POK-346).
-    holdCurtain(emu, symbols);
+    // A reload from here on is one out of the match (POK-433, match/left.ts), or back
+    // into it (HBR-20), for which the page needs its kit before it goes. Not a watcher's:
+    // their ROM holds nothing of the match, and the URL puts them back.
+    if (hash.mode !== 'watch') {
+      noteInMatch(attachedTo?.code ?? hash.code);
+      void loadResumeKit().catch(() => {});
+    }
+    // The town the ROM stands in fades out under black, not in view (POK-346). Not a ROM
+    // back from a reload, already standing in the match: the curtain waits for a warp.
+    if (curtain) holdCurtain(emu, symbols);
     // ...and the passcode entry over it, should a count run out on a host still typing.
     // The game, with the sheet beside it on a desktop.
     if (stage.current === roomScreenView || (doorEntry !== null && stage.current === doorEntry)) showGame();
@@ -2987,7 +3003,8 @@ function wireRoom(
       },
       defaultFog: () => controls.fogSecs,
       store: localStorage,
-      tally: tallyOf(emu, symbols),
+      // ...and the ROM's own counts are the ROM's, back from its savestate.
+      tally: ((t) => t && { zero: () => void (rereadAt || t.zero()), read: () => t.read() })(tallyOf(emu, symbols)),
       fameWanted: () => !paraded.paraded,
       grace: new EndGrace({
         graceMs: END_GRACE_MS,
@@ -3007,6 +3024,7 @@ function wireRoom(
     },
     {
       started: () => {
+        if (rereadAt) return; // a reload's books: the screen is put up once they are read
         hideRoomScreen();
         if (gBrJank !== undefined) {
           emu.write(gBrJank + JANK_LONGEST, 0, 16);
@@ -3205,6 +3223,8 @@ function wireRoom(
       // Our own wild fight is over when our ROM says it is back on the map: nobody else
       // will say so, and a later watcher must not be handed it (spectate.ts noteBusy).
       if (msg.t === 'busy') spectate.noteBusy(bridge!.seat, msg.kind);
+      if (msg.t === 'challenge' || msg.t === 'accept') engaging = true;
+      else if ((msg.t === 'busy' && msg.kind === undefined) || msg.t === 'decline' || msg.t === 'out') engaging = false;
       // Into the books, bag and all -- and our own ROM challenging one of our bots, or
       // fighting one and saying how it went (POK-238), goes to the brain from there: the
       // host walks the bot, and nobody hears their own messages come back. Arriving on a
@@ -3740,7 +3760,7 @@ function wireRoom(
   // the match laid over them as it stood; the ROM is already back (main). From here on
   // it is a seat coming back from a drop: attach() takes the rejoin's way, and a host
   // takes the match back as it does after one (resumeHost).
-  if (resume) {
+  if (resume && resumeKit) {
     attachedTo = { seat: resume.seat, code: resume.code };
     isHost = resume.host;
     for (const [msg, via, wall] of resume.journal) {
@@ -3748,47 +3768,53 @@ function wireRoom(
       session.note(msg, via);
     }
     rereadAt = 0;
-    unpackMatch(match, resume.match, performance.now(), Date.now());
+    resumeKit.unpackMatch(match, resume.match, performance.now(), Date.now());
     resumeRows.push(...resume.rows);
-    hideRoomScreen();
+    hideRoomScreen(false);
+    // A relay that never answers at all is the hold running out too.
+    const left = resume.at + resume.holdMs - Date.now();
+    setTimeout(() => {
+      if (!resuming) return;
+      noteInMatch(resume.code);
+      location.reload();
+    }, Math.max(0, left));
   }
+  /** Our ROM has asked for a fight, or said yes to one, and has not been back on the map
+   *  since: the walk-up and the handshake come before any `busy` says battle. */
+  let engaging = false;
   /** Written down as the page goes, so a reload can come back (match/resume.ts): only
-   *  from a match this seat is still in, and never from inside a battle. */
+   *  from a match this seat is still in, and never from inside a fight. */
   const writeResume = (): void => {
-    dropResume();
-    if (!bridge || !attachedTo || !relay.token) return;
+    const kit = resumeKit;
+    if (!kit) return;
+    kit.dropResume();
+    if (leavingPage || !bridge || !attachedTo || !relay.token) return;
     const seat = bridge.seat;
-    if (!mayResume({ seat, match, busy: session.busy, watching: amWatching })) return;
+    const fighting =
+      engaging || (mainBase !== undefined && (emu.read(mainBase + MAIN_IN_BATTLE_BYTE, 8) & MAIN_IN_BATTLE_BIT) !== 0);
+    if (!kit.mayResume({ seat, match, busy: session.busy, watching: amWatching, fighting })) return;
     const entries = journal.entries();
     if (!entries) return;
     if (host && host.director.state.phase !== 'ended') {
       match.clockLeft = host.director.state.clockLeft;
       match.clockAt = performance.now();
     }
-    const state = emu.snapshot();
-    if (!state) return;
-    const rows: PlaceMsg[] = host
-      ? bridge.roster
-          .all()
-          .filter((e) => match.botSeats.has(e.seat) && e.map !== undefined && e.alive)
-          .map((e) => ({ t: 'place', v: PROTOCOL, seat: e.seat, map: e.map, x: e.x, y: e.y, f: e.dir, st: 'alive' }))
-      : [];
-    saveResume(
+    kit.writeOnLeaving(
       {
-        v: 1,
         code: attachedTo.code,
         token: relay.token,
         seat,
         host: host !== null,
-        at: Date.now(),
         holdMs: relay.rejoinMs,
-        build: buildId(patch, protocol),
+        build: kit.buildId(patch, protocol),
         opts: { ...me, pass: (isHost ? hostPass : joinPass) ?? undefined },
-        match: packMatch(match, performance.now(), Date.now()),
+        match,
         journal: entries,
-        rows,
+        roster: bridge.roster.all(),
+        snapshot: () => emu.snapshot(),
       },
-      state,
+      performance.now(),
+      Date.now(),
     );
   };
   window.addEventListener('pagehide', writeResume);
@@ -4626,7 +4652,8 @@ async function main(): Promise<void> {
   let watchCode: string | null = null;
   let resume: ResumeRecord | undefined;
   const leftCode = reloadedMidMatch();
-  const back = takeResume({ build: buildId(patch, protocol), now: Date.now() });
+  const kit = leftCode !== null ? await loadResumeKit().catch(() => null) : null;
+  const back = kit?.takeResume({ build: kit.buildId(patch, protocol), now: Date.now() }) ?? null;
   if (leftCode !== null && fromHash && fromHash.mode !== 'solo' && fromHash.mode !== 'watch'
     && (leftCode === '' || fromHash.code === undefined || fromHash.code === leftCode)) {
     if (back && back.rec.code === leftCode && mailboxBase !== undefined && emu.restore(back.state)) {

@@ -10,14 +10,16 @@
 // reload keeps and nothing else does, and the reloaded page loads it back and asks for
 // its seat with the relay's token, the way a socket that blinked does.
 //
-// Not from inside a battle: a savestate from before the fight would be a way out of
-// every losing one, so a reload there is a reload out of the match, as before.
+// Not from inside a fight, wild or linked, nor the walk-up into one: a savestate from
+// before the fight would be a way out of every losing one, so a reload there is a reload
+// out of the match, as before.
 // A host's bots come back as the seed dealt them, standing where they were: their brains
 // lived in the tab, the same compromise a promoted heir makes (POK-252).
-import type { MapRef, Msg, PlaceMsg } from '../net/wire';
+import { PROTOCOL, type MapRef, type PlaceMsg } from '../net/wire';
+import type { JournalEntry } from './journal';
 import type { MatchSnapshot } from './lifecycle';
 import type { TabStore } from './left';
-import type { Via } from './session';
+import type { RosterEntry } from './roster';
 
 const KEY = 'hbr-resume';
 const STATE_KEY = 'hbr-resume-state';
@@ -43,8 +45,6 @@ export interface SavedMatch {
   ended: boolean;
 }
 
-export type JournalEntry = [msg: Msg, via: Via, wall: number];
-
 export interface ResumeRecord {
   v: 1;
   code: string;
@@ -66,15 +66,17 @@ export interface ResumeRecord {
 }
 
 /** Whether a page going away now may come back to its match: a seat still in a running
- *  one, not watching it, and not in a battle -- a savestate from before a fight is a way
- *  out of every losing one, so a reload in one is a reload out of the match. */
+ *  one, not watching it, and not in a fight or on its way into one (`busy` from the room,
+ *  `fighting` read off our own ROM and its handshake) -- a savestate from before a fight
+ *  is a way out of every losing one, so a reload in one is a reload out of the match. */
 export function mayResume(p: {
   seat: number;
   match: Pick<MatchSnapshot, 'active' | 'ended' | 'out'>;
   busy: ReadonlySet<number>;
   watching: boolean;
+  fighting: boolean;
 }): boolean {
-  return !p.watching && p.match.active && !p.match.ended && !p.match.out.has(p.seat) && !p.busy.has(p.seat);
+  return !p.watching && !p.fighting && p.match.active && !p.match.ended && !p.match.out.has(p.seat) && !p.busy.has(p.seat);
 }
 
 /** Which build a record belongs to: the patch when there is one, else the wire. */
@@ -116,52 +118,6 @@ export function unpackMatch(into: MatchSnapshot, saved: SavedMatch, perfNow: num
   into.ended = saved.ended;
 }
 
-/** What the books need to be rebuilt from. The fight's own traffic and the room's
- *  chatter are not the match; and of where everybody is, only where our own ROM last was
- *  matters to the books (the loot it was handed for that map), so it is kept apart. */
-const SKIPPED = new Set<Msg['t']>([
-  'place', 'step', 'face', 'bt', 'bstart', 'turn', 'peek', 'shot', 'ping', 'pong', 'follow', 'card', 'ready', 'away',
-]);
-/** The books are rebuilt from at most this many, newest kept; past it the record is not
- *  written at all rather than written wrong. */
-export const JOURNAL_MAX = 6000;
-
-/** Every message the session books, as it books them, from the match's `start`. */
-export class Journal {
-  private list: JournalEntry[] = [];
-  private lastPlace: JournalEntry | null = null;
-  private overflow = false;
-
-  note(msg: Msg, via: Via, wall: number): void {
-    if (msg.t === 'start') this.clear();
-    if (msg.t === 'place' && via === 'rom') {
-      this.lastPlace = [msg, via, wall];
-      return;
-    }
-    if (SKIPPED.has(msg.t)) return;
-    // The clock says the same thing every five seconds: only the latest counts.
-    if (msg.t === 'clock' && this.list.length > 0 && this.list[this.list.length - 1][0].t === 'clock') this.list.pop();
-    if (this.list.length >= JOURNAL_MAX) {
-      this.overflow = true;
-      return;
-    }
-    this.list.push([msg, via, wall]);
-  }
-
-  clear(): void {
-    this.list = [];
-    this.lastPlace = null;
-    this.overflow = false;
-  }
-
-  /** In the order they were booked, our ROM's last `place` at the end; null when there
-   *  were too many to keep. */
-  entries(): JournalEntry[] | null {
-    if (this.overflow) return null;
-    return this.lastPlace ? [...this.list, this.lastPlace] : [...this.list];
-  }
-}
-
 export function toBase64(bytes: Uint8Array): string {
   let s = '';
   const CHUNK = 0x8000;
@@ -184,6 +140,29 @@ function tabStore(): TabStore {
   } catch {
     return null;
   }
+}
+
+/** What the page hands over as it goes; the host's roster rows are where it last saw
+ *  its bots, which nobody else ever told it. */
+export interface Leaving extends Omit<ResumeRecord, 'v' | 'at' | 'match' | 'rows'> {
+  match: MatchSnapshot;
+  roster: readonly RosterEntry[];
+  snapshot(): Uint8Array | null;
+}
+
+/** The record, written: false when the ROM would not give a state or the store would
+ *  not take it. */
+export function writeOnLeaving(p: Leaving, perfNow: number, wallNow: number, store: TabStore = tabStore()): boolean {
+  const state = p.snapshot();
+  if (!state) return false;
+  const bots = p.match.botSeats;
+  const rows: PlaceMsg[] = p.host
+    ? p.roster
+        .filter((e) => bots.has(e.seat) && e.map !== undefined && e.alive)
+        .map((e) => ({ t: 'place', v: PROTOCOL, seat: e.seat, map: e.map, x: e.x, y: e.y, f: e.dir, st: 'alive' }))
+    : [];
+  const { roster: _roster, snapshot: _snapshot, ...rest } = p;
+  return saveResume({ ...rest, v: 1, at: wallNow, match: packMatch(p.match, perfNow, wallNow), rows }, state, store);
 }
 
 /** Written as the page goes. False when the store would not take it (full, refused):

@@ -83,6 +83,8 @@ test('a reload mid-match goes back into the match, as the host', async ({ page }
   expect(await page.evaluate(() => (window as unknown as BrWindow).__br!.match!)).toMatchObject({ active: true, seed });
   // ...and the match still running from here: the bots walk again.
   await expect.poll(() => page.evaluate(() => (window as unknown as { __br: { botCount(): number } }).__br.botCount()), { timeout: 20_000 }).toBeGreaterThan(0);
+  // In view: no curtain held over a ROM that is already standing in the match.
+  await expect(page.locator('#stage-fade')).not.toHaveClass(/hold/, { timeout: 2_000 });
   await page.screenshot({ path: path.join(OUT_DIR, 'reload-rejoin-after.png') });
 });
 
