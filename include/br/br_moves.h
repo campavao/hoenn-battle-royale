@@ -65,34 +65,18 @@ void BrMoves_Tick(void);
 // `callback` (the bag).
 MainCallback BrMoves_TeachExit(MainCallback callback);
 
-// The cartridge's question when a level brings a fifth move (Cam, 2026-10-18, POK-400:
-// "show the normal learn/replace prompt"). A lift fills an empty slot as it always did;
-// a move that finds four already there is no longer swapped in by BrLevels' own pick but
-// asked about: the summary screen to choose the one to forget, when that mon's NEW MOVE
-// is picked in START's POKéMON.
-//
-// The party's slot `slot` climbed from level `from`: every learnset move above `from`
-// and at or under its level that it does not know is asked about, in learnset order.
-// `count` is the party's size now; if it is not the same when the question comes, the
-// party has changed under it and nothing is asked (MOVES still has every one of them).
-void BrMoves_AskFrom(u8 slot, u8 from, u8 count);
-// The move slot `slot` waits to be asked about, for party_menu.c's NEW MOVE row: TRUE with
-// the move, FALSE when it has none (a slot free by now just learns it). `take` moves past
-// it, as asking does: answered or backed out of, the next one is the following move. Never
-// asked on its own (Cam, 2026-10-20: "those prompts should not show when opening a
-// party"): the ticker says so once, and the mon's NEW MOVE asks.
-bool8 BrMoves_SlotAsk(u8 slot, u16 *move, bool8 take);
-
-// What is waiting to be asked. `off` is for drivers that lift a party for some other
-// reason (fog-news.txt, grows-up.txt...) and do not want a party screen in the middle of
-// it: a lift then picks the best four itself, as a match's opening climb does. The page
-// never sets it, and learn-ask.txt is the prompt's own.
-struct BrAsk
-{
-    /* 0 */ u8 from[PARTY_SIZE]; // the level each slot climbed from, 0 for nothing to ask
-    /* 6 */ u8 count;            // the party's size when it climbed
-    /* 7 */ u8 off;
-};
-extern struct BrAsk gBrAsk;
+// The moves the player set by hand (Cam, 2026-10-20: "replace any moves the player didn't
+// manually place, and swap them out for better moves, just like Kanto version"). Per
+// slot, as Cam put it: Kanto's DESIGN D12 locks the whole moveset once any of it is
+// customized. A level-up lift asks nothing: it swaps in better level-up moves itself
+// (br_levels.c) around these. Set wherever the player picks a move: a TM or HM, the
+// MOVES list, the forget screen of a RARE CANDY or an evolution. Kept in the mon, one
+// bit per move slot, so it follows the mon through the party, the PC and a trade, and
+// the summary screen's and the fight menu's move swaps carry it along.
+void BrMoves_Placed(struct Pokemon *mon, u16 move);
+u8 BrMoves_PlacedSlots(struct Pokemon *mon);
+// A slot a lift has written over: its new move is the lift's, not the player's.
+void BrMoves_Unplace(struct Pokemon *mon, u8 slot);
+void BrMoves_SwapPlaced(struct BoxPokemon *mon, u8 a, u8 b);
 
 #endif // GUARD_BR_MOVES_H

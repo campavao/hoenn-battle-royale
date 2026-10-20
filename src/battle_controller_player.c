@@ -3,6 +3,7 @@
 #include "br/br_match.h"
 #include "br/br_battle.h"
 #include "br/br_skin.h"
+#include "br/br_moves.h"
 #endif
 #include "battle.h"
 #include "battle_anim.h"
@@ -832,6 +833,9 @@ static void HandleMoveSwitching(void)
                 }
 
                 SetMonData(&gPlayerParty[gBattlerPartyIndexes[gActiveBattler]], MON_DATA_PP_BONUSES, &totalPPBonuses);
+#if BR
+                BrMoves_SwapPlaced(&gPlayerParty[gBattlerPartyIndexes[gActiveBattler]].box, gMoveSelectionCursor[gActiveBattler], gMultiUsePlayerCursor); // which moves the player set follows the moves
+#endif
             }
         }
 

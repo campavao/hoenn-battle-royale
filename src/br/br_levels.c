@@ -352,9 +352,8 @@ static u16 SetWorth(const struct BrLearner *who, const u16 *moves)
 
 // An empty slot if there is one; otherwise whichever swap leaves the best four, over the
 // slots not in `kept` -- and no swap at all when the four it has are better than any of
-// them with the new move in. `ask`: the player's own lift, where a fifth move is not
-// picked for them but asked about (BrMoves_AskFrom), so nothing is swapped here.
-static void Teach(const struct BrLearner *who, u16 *moves, u8 kept, u16 move, bool8 ask)
+// them with the new move in.
+static void Teach(const struct BrLearner *who, u16 *moves, u8 kept, u16 move)
 {
     u16 trial[MAX_MON_MOVES];
     u16 bestWorth, w;
@@ -370,8 +369,6 @@ static void Teach(const struct BrLearner *who, u16 *moves, u8 kept, u16 move, bo
             return;
         }
     }
-    if (ask)
-        return;
     bestWorth = SetWorth(who, moves);
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
@@ -408,27 +405,26 @@ static bool8 InLearnset(const u16 *learnset, u16 move, u8 to)
 // on: a lift from 5 to 75 would learn whatever is written at exactly 75 -- usually nothing
 // -- and none of the seventy levels in between.
 //
-// From the bottom of the learnset, not from the level it was lifted from (POK-311): a mon
-// caught at 30 knows the last four things written before 30, which is the same accident
-// one level at a time. Teach only ever swaps for a better four, so offering it a move it
-// already passed over costs nothing and is how a wild GROVYLE finds LEAF BLADE.
+// From the bottom of the learnset (POK-311): a mon caught at 30 knows the last four
+// things written before 30, which is the same accident one level at a time. Teach only
+// ever swaps for a better four, so offering it a move it already passed over costs
+// nothing and is how a wild GROVYLE finds LEAF BLADE.
 //
-// `from` is 0 for a mon nobody has chosen anything for: a wild one, a trainer's, a bot's.
-// The player's lift passes the level it was at (Cam, 2026-10-17: "add back in the auto
-// learn moves upon level up, it's too brutal without it"), and then only the levels just
-// climbed teach -- the moves it passed over before were the player's to pass over, and
-// MOVES still has them -- and a slot whose move it could not have learnt by `from` on its
-// own is a TM somebody taught it, which the walk leaves alone. By `from`, not `to`: a
-// MUDKIP taught PROTECT at 5 is still holding a TM when SWAMPERT's learnset reaches it at
-// 46, and a slot written here never gives its TM back (BrMoves_Forgetting).
-static void LearnThrough(struct Pokemon *mon, u8 from, u8 to)
+// `player` is the player's own mon on a lift, which asks nothing (Cam, 2026-10-20: "skip
+// the teaching phase, just like in the kanto battle royale. Instead let's replace any
+// moves the player didn't manually place, and swap them out for better moves"). The
+// slots the player set (BrMoves_Placed) are kept, and so is a move its learnset never
+// teaches by now, a TM or a trainer's: a slot written here never gives its TM back
+// (BrMoves_Forgetting). Everything else is the lift's to better. A wild one, a trainer's
+// or a bot's (`player` FALSE) is nobody's choice, and all four are open.
+static void LearnThrough(struct Pokemon *mon, u8 to, bool8 player)
 {
     u16 species = GetMonData(mon, MON_DATA_SPECIES, NULL);
     const u16 *learnset = gLevelUpLearnsets[species];
     struct BrLearner who;
     u16 had[MAX_MON_MOVES];
     u16 moves[MAX_MON_MOVES];
-    u8 kept = 0;
+    u8 kept = player ? BrMoves_PlacedSlots(mon) : 0;
     u16 i;
 
     who.atk = GetMonData(mon, MON_DATA_ATK, NULL);
@@ -438,15 +434,15 @@ static void LearnThrough(struct Pokemon *mon, u8 from, u8 to)
     for (i = 0; i < MAX_MON_MOVES; i++)
     {
         had[i] = moves[i] = GetMonData(mon, MON_DATA_MOVE1 + i, NULL);
-        if (from != 0 && had[i] != MOVE_NONE && !InLearnset(learnset, had[i], from))
+        if (player && had[i] != MOVE_NONE && !InLearnset(learnset, had[i], to))
             kept |= 1 << i;
     }
     for (i = 0; learnset[i] != LEVEL_UP_END; i++)
     {
         u8 level = (learnset[i] & LEVEL_UP_MOVE_LV) >> 9;
 
-        if (level > from && level <= to)
-            Teach(&who, moves, kept, learnset[i] & LEVEL_UP_MOVE_ID, from != 0 && !gBrAsk.off);
+        if (level <= to)
+            Teach(&who, moves, kept, learnset[i] & LEVEL_UP_MOVE_ID);
     }
     // Only the slots that ended up different are written, so a move that survived the
     // whole walk keeps the PP it had and the PP UPs somebody spent on it.
@@ -457,6 +453,7 @@ static void LearnThrough(struct Pokemon *mon, u8 from, u8 to)
         if (had[i] != MOVE_NONE)
             RemoveMonPPBonus(mon, i);
         SetMonMoveSlot(mon, moves[i], i);
+        BrMoves_Unplace(mon, i);
     }
 }
 
@@ -467,7 +464,7 @@ static void LearnThrough(struct Pokemon *mon, u8 from, u8 to)
 void BrLevels_Settle(struct Pokemon *mon)
 {
     GrowUp(mon);
-    LearnThrough(mon, 0, GetMonData(mon, MON_DATA_LEVEL, NULL));
+    LearnThrough(mon, GetMonData(mon, MON_DATA_LEVEL, NULL), FALSE);
 }
 
 // A bot's mon, built from a card, knows what a player's or a gym leader's would at this
@@ -475,7 +472,7 @@ void BrLevels_Settle(struct Pokemon *mon)
 // CreateMon's last-four-written is the accident POK-311 took off everybody else.
 void BrLevels_TeachUpTo(struct Pokemon *mon, u8 level)
 {
-    LearnThrough(mon, 0, level);
+    LearnThrough(mon, level, FALSE);
 }
 
 static void LiftParty(u8 level)
@@ -488,24 +485,19 @@ static void LiftParty(u8 level)
         u16 species = GetMonData(mon, MON_DATA_SPECIES);
         u32 exp;
         u16 hp, maxBefore, maxAfter;
-        u8 was;
 
         if (species == SPECIES_NONE || GetMonData(mon, MON_DATA_LEVEL) >= level)
             continue;
-        was = GetMonData(mon, MON_DATA_LEVEL);
         exp = gExperienceTables[gSpeciesInfo[species].growthRate][level];
         hp = GetMonData(mon, MON_DATA_HP);
         maxBefore = GetMonData(mon, MON_DATA_MAX_HP);
         SetMonData(mon, MON_DATA_EXP, &exp);
         CalculateMonStats(mon);
         // Evolve before the moves are worked out, so the learnset walked is the one it
-        // will be standing in when the fighting starts. Then it learns what the levels it
-        // climbed teach, around the TMs it was taught (2026-10-13 had stopped this).
+        // will be standing in when the fighting starts. Then it takes the best of what its
+        // levels teach, around the moves the player set.
         GrowUp(mon);
-        LearnThrough(mon, was, level);
-        // ...and what found four moves already there is asked about, once the field is
-        // ours (Cam, 2026-10-18).
-        BrMoves_AskFrom(i, was, count);
+        LearnThrough(mon, level, TRUE);
         // Keep the wound: the new max grows, the missing HP stays missing.
         maxAfter = GetMonData(mon, MON_DATA_MAX_HP);
         if (hp > 0)
@@ -534,7 +526,6 @@ void BrLevels_LiftTrainer(struct Pokemon *party, u8 count)
         if (species == SPECIES_NONE || GetMonData(mon, MON_DATA_LEVEL) == level)
             continue;
         exp = gExperienceTables[gSpeciesInfo[species].growthRate][level];
-        was = GetMonData(mon, MON_DATA_LEVEL);
         SetMonData(mon, MON_DATA_EXP, &exp);
         CalculateMonStats(mon);
         // ...and grows up with it (POK-290), for the same reason the player's team does:
@@ -543,7 +534,7 @@ void BrLevels_LiftTrainer(struct Pokemon *party, u8 count)
         if (level > was)
         {
             GrowUp(mon);
-            LearnThrough(mon, 0, level);
+            LearnThrough(mon, level, FALSE);
         }
         // A trainer's mon walks in whole, unlike the player's, which keeps its wound.
         {

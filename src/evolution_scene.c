@@ -1015,6 +1015,9 @@ static void Task_EvolutionScene(u8 taskId)
 #endif
                         RemoveMonPPBonus(mon, var);
                         SetMonMoveSlot(mon, gMoveToLearn, var);
+#if BR
+                        BrMoves_Placed(mon, gMoveToLearn); // the player's pick on the forget screen
+#endif
                         gTasks[taskId].tLearnMoveState++;
 #if BR
                         gTasks[taskId].tState = EVOSTATE_LEARNED_MOVE;
@@ -1406,6 +1409,9 @@ static void Task_TradeEvolutionScene(u8 taskId)
 
                         RemoveMonPPBonus(mon, var);
                         SetMonMoveSlot(mon, gMoveToLearn, var);
+#if BR
+                        BrMoves_Placed(mon, gMoveToLearn); // the player's pick on the forget screen
+#endif
 #if BR
                         gTasks[taskId].tState = T_EVOSTATE_LEARNED_MOVE; break;
 #endif

@@ -8,8 +8,6 @@
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
 wait 400
-# a lift here picks its own four: the fifth-move prompt is learn-ask.txt's (POK-400)
-poke u8 gBrAsk+7 1
 poke u8 gBrMatch 2
 pokebytes gBrMailbox+0x1018 0B 11 0E 00 00 01 00 09 01 01 00 0C 00 10 00 1B 01 05 00
 poke u16 gBrMailbox+0x0C 1

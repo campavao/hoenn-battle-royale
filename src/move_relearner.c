@@ -1058,6 +1058,7 @@ static bool8 BrCycleMon(void)
 // cursor.
 static void BrTaught(void)
 {
+    BrMoves_Placed(&gPlayerParty[sMoveRelearnerStruct->partyMon], GetCurrentSelectedMove()); // the player's pick: a lift keeps it
     BrMoves_Spend(GetCurrentSelectedMove());
     // Not pret's gSpecialVar_0x8004 = TRUE: pret leaves the screen after one move, but
     // this one stays, and the summary screen's way back in reads 0x8004 as the party

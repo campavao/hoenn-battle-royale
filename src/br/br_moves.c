@@ -159,15 +159,6 @@ static EWRAM_DATA u16 sTeachCount = 0;        // and how many the bag held as it
 
 #define TEACH_WAIT_FRAMES (60 * 15) // a GIVE's round trip, and the found-item jingle
 
-EWRAM_DATA struct BrAsk gBrAsk = {0};
-// How many of the moves at level gBrAsk.from[i] are already behind us: a learnset can
-// teach two at one level (BULBASAUR's 15), and the level alone would skip the second.
-// BR_ASK_LEVEL_DONE: all of them, as the lift left it. IWRAM, for EWRAM's margin; it
-// only means anything beside a from[] the same code just set.
-#define BR_ASK_LEVEL_DONE 0xFF
-static u8 sAskAt[PARTY_SIZE];
-// The ticker has said a question waits, once per lift (Cam, 2026-10-18: "it can wait").
-static bool8 sAskSaid;
 
 bool8 BrMoves_IsTm(u16 item)
 {
@@ -230,126 +221,51 @@ static void Task_OpenTeach(u8 taskId)
     SetMainCallback2(CB2_ShowPartyMenuForItemUse);
 }
 
-void BrMoves_AskFrom(u8 slot, u8 from, u8 count)
+// Bit `slot` of the mon's four unused ribbon bits (MON_DATA_UNUSED_RIBBONS, never shown,
+// never counted): one per move slot.
+static u8 PlacedBits(struct Pokemon *mon)
 {
-    if (slot >= PARTY_SIZE || gBrAsk.off)
-        return;
-    if (gBrAsk.count != count)
-    {
-        u8 i;
-
-        for (i = 0; i < PARTY_SIZE; i++)
-            gBrAsk.from[i] = 0;
-        gBrAsk.count = count;
-    }
-    // A second lift before the first was asked about asks about both.
-    if (gBrAsk.from[slot] == 0 || from < gBrAsk.from[slot])
-    {
-        gBrAsk.from[slot] = from;
-        sAskAt[slot] = BR_ASK_LEVEL_DONE;
-    }
-    sAskSaid = FALSE;
+    return GetMonData(mon, MON_DATA_UNUSED_RIBBONS, NULL);
 }
 
-static void ClearAsks(void)
+static void SetPlacedBits(struct Pokemon *mon, u8 bits)
+{
+    bits &= (1 << MAX_MON_MOVES) - 1;
+    SetMonData(mon, MON_DATA_UNUSED_RIBBONS, &bits);
+}
+
+void BrMoves_Placed(struct Pokemon *mon, u16 move)
 {
     u8 i;
 
-    for (i = 0; i < PARTY_SIZE; i++)
-        gBrAsk.from[i] = 0;
-}
-
-// `learnOnly`: learn what free slots take, and say whether a question waits without
-// moving past it. Otherwise the question found is the one asked now. `only` is the one
-// slot to look at, or PARTY_SIZE for all of them.
-static bool8 FindAsk(u8 only, u8 *slot, u16 *move, bool8 learnOnly)
-{
-    u8 i, count = CalculatePlayerPartyCount();
-
-    if (count != gBrAsk.count)
+    for (i = 0; i < MAX_MON_MOVES; i++)
     {
-        ClearAsks();
-        return FALSE;
-    }
-    for (i = 0; i < count; i++)
-    {
-        struct Pokemon *mon = &gPlayerParty[i];
-        const u16 *learnset = gLevelUpLearnsets[GetMonData(mon, MON_DATA_SPECIES)];
-        u8 level = GetMonData(mon, MON_DATA_LEVEL);
-        u8 last = 0, nth = 0;
-        u16 j;
-
-        if (gBrAsk.from[i] == 0 || (only != PARTY_SIZE && only != i))
-            continue;
-        for (j = 0; learnset[j] != LEVEL_UP_END; j++, nth++)
+        if (GetMonData(mon, MON_DATA_MOVE1 + i, NULL) == move)
         {
-            u8 at = (learnset[j] & LEVEL_UP_MOVE_LV) >> 9;
-            u16 id = learnset[j] & LEVEL_UP_MOVE_ID;
-
-            if (at != last)
-            {
-                last = at;
-                nth = 0;
-            }
-            if (at < gBrAsk.from[i] || (at == gBrAsk.from[i] && nth < sAskAt[i]) || at > level || MonKnowsMove(mon, id))
-                continue;
-            if (GiveMoveToMon(mon, id) != MON_HAS_MAX_MOVES)
-            {
-                gBrAsk.from[i] = at; // a slot came free since the lift: it just learns it
-                sAskAt[i] = nth + 1;
-                continue;
-            }
-            // Asked once: the next question starts past this move, learnt or not.
-            if (!learnOnly)
-            {
-                gBrAsk.from[i] = at;
-                sAskAt[i] = nth + 1;
-            }
-            *slot = i;
-            *move = id;
-            return TRUE;
+            SetPlacedBits(mon, PlacedBits(mon) | (1 << i));
+            return;
         }
-        gBrAsk.from[i] = 0;
     }
-    return FALSE;
 }
 
-bool8 BrMoves_SlotAsk(u8 slot, u16 *move, bool8 take)
+u8 BrMoves_PlacedSlots(struct Pokemon *mon)
 {
-    u8 found;
-
-    if (slot >= PARTY_SIZE || gBrAsk.from[slot] == 0)
-        return FALSE;
-    return FindAsk(slot, &found, move, !take);
+    return PlacedBits(mon);
 }
 
-static bool8 AskPending(void)
+void BrMoves_Unplace(struct Pokemon *mon, u8 slot)
 {
-    u8 i;
-
-    for (i = 0; i < PARTY_SIZE; i++)
-    {
-        if (gBrAsk.from[i] != 0)
-            return TRUE;
-    }
-    return FALSE;
+    SetPlacedBits(mon, PlacedBits(mon) & ~(1 << slot));
 }
 
-// A ten-letter name and this make 39 of the ticker's 40. It said "can learn a move
-// (POKéMON)", which read as a placeholder left in (Cam's 2026-10-19 play-test).
-static const u8 sText_WantsMove[] = _(" has a new move! Open POKéMON");
-
-// By its species as it is when the line goes up (the play-test saw "CACNEA can learn a
-// move" with a CACTURNE in the party), not its nickname.
-static void SayAsk(u8 slot)
+void BrMoves_SwapPlaced(struct BoxPokemon *mon, u8 a, u8 b)
 {
-    u8 line[BR_HUD_LINE_MAX + 2];
-    u8 *last = line + BR_HUD_LINE_MAX;
-    u8 *p;
+    u8 bits = GetBoxMonData(mon, MON_DATA_UNUSED_RIBBONS, NULL);
+    u8 bitA = (bits >> a) & 1, bitB = (bits >> b) & 1;
 
-    p = BrHud_Append(line, last, gSpeciesNames[GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL)]);
-    BrHud_Append(p, last, sText_WantsMove);
-    BrHud_Say(line);
+    bits &= ~((1 << a) | (1 << b));
+    bits |= (bitA << b) | (bitB << a);
+    SetBoxMonData(mon, MON_DATA_UNUSED_RIBBONS, &bits);
 }
 
 // When the field is ours: no script, nobody holding the controls, standing still. A TM
@@ -357,26 +273,6 @@ static void SayAsk(u8 slot)
 // for the bag to have it too.
 void BrMoves_Tick(void)
 {
-    // The questions a lift left are only said here; NEW MOVE in the party screen asks them.
-    if (sTeach == ITEM_NONE && AskPending())
-    {
-        u8 slot;
-        u16 move;
-
-        if (!BrField_OverworldRunning() || gMain.inBattle)
-            return;
-        if (ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked() || !IsPlayerStandingStill())
-            return;
-        // A lift whose new moves all found a free slot (or the party changed) has nothing
-        // to ask, and says nothing.
-        if (!sAskSaid && FindAsk(PARTY_SIZE, &slot, &move, TRUE))
-        {
-            // The ticker says so once, and the question waits for that mon's NEW MOVE
-            // in the party screen: never asked on its own (Cam, 2026-10-20).
-            sAskSaid = TRUE;
-            SayAsk(slot);
-        }
-    }
     if (sTeach == ITEM_NONE)
         return;
     if (CountTotalItemQuantityInBag(sTeach) <= sTeachHad)

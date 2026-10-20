@@ -1,0 +1,41 @@
+# battle-swap-placed: SELECT-swapping two moves in the fight menu carries which of them
+# the player set (review of HBR-29). pret rewrites the party's four moves, PP and PP Ups
+# slot by slot; the marks (BrMoves_Placed, the misc substruct's unused ribbon bits at
+# +0x4F bits 3-6) have to move with them, or the next lift keeps the wrong slot.
+# learn-auto-placed's BULBASAUR (GROWL in slot 2, marked: +0x4F = 0x10) in menu-byte's
+# patch battle; GROWL swapped to slot 1 leaves the mark on slot 1 (+0x4F = 0x08).
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+pokebytes gPlayerParty 00 00 00 00 00 00 00 00 BC CF C6 BC BB CD BB CF CC FF 02 02 FF FF FF FF FF FF FF 00 AC B0 00 00 01 00 00 00 4C 06 00 00 00 46 00 00 21 00 2D 00 49 00 16 00 23 28 0A 0A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 85 21 00 00 00 00 00 00 00 10 00 00 00 00 0E FF 28 00 28 00 14 00 14 00 14 00 14 00 14 00
+expect u8 gPlayerParty+0x4F 16
+poke u8 gBrMatch 2
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 600
+expectge u8 gBattlersCount 2
+tap A
+wait 90
+tap A
+# personality 0 is shiny: the sparkles hold the send-out a little longer
+wait 300
+expect u8 gBrBattle+8 1
+tap A
+wait 30
+expect u8 gBrBattle+8 2
+# TACKLE under the cursor: SELECT, right to GROWL, SELECT
+tap SELECT
+wait 10
+tap RIGHT
+wait 10
+tap SELECT
+wait 20
+shot swapped
+expect u16 gPlayerParty+0x2C 45
+expect u16 gPlayerParty+0x2E 33
+expect u8 gPlayerParty+0x4F 8
+say battle swap placed ok

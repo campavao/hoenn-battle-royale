@@ -452,11 +452,8 @@ void BrBoot_Tick(void)
         BrLevels_GiveStartingBag();
         if (b->mode & BR_BOOT_FLAG_TESTMON)
         {
-            // The e2e harness's mon. Nobody is there to answer a lift's fifth move
-            // (POK-400), and a party menu left open holds the buzzer off, so it picks
-            // its own four, as every lift did before the ask.
+            // The e2e harness's mon.
             ScriptGiveMon(SPECIES_TREECKO, 5, 0, 0, 0, 0);
-            gBrAsk.off = TRUE;
         }
         if (b->mode & BR_BOOT_FLAG_TESTFLY)
         {

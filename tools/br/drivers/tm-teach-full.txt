@@ -4,7 +4,7 @@
 # which", A there replaces the move, and the one line is "learned TOXIC!": no "wants to
 # learn", no YES/NO, no "1, 2 and... Poof!".
 #
-# learn-ask-pair's BULBASAUR (TACKLE, GROWL, LEECH SEED, VINE WHIP) over the test
+# learn-auto's BULBASAUR (TACKLE, GROWL, LEECH SEED, VINE WHIP) over the test
 # TREECKO, and tm-teach's TM06 TOXIC (294) under our feet.
 wait 30
 pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF

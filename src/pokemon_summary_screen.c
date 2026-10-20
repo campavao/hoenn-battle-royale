@@ -1,6 +1,7 @@
 #include "global.h"
 #if BR
 #include "br/br_match.h"
+#include "br/br_moves.h"
 #endif
 #include "main.h"
 #include "battle.h"
@@ -2140,6 +2141,9 @@ static void SwapMonMoves(struct Pokemon *mon, u8 moveIndex1, u8 moveIndex2)
     SetMonData(mon, MON_DATA_PP1 + moveIndex1, &move2pp);
     SetMonData(mon, MON_DATA_PP1 + moveIndex2, &move1pp);
     SetMonData(mon, MON_DATA_PP_BONUSES, &ppBonuses);
+#if BR
+    BrMoves_SwapPlaced(&mon->box, moveIndex1, moveIndex2); // which moves the player set follows the moves
+#endif
 
     summary->moves[moveIndex1] = move2;
     summary->moves[moveIndex2] = move1;
@@ -2175,6 +2179,9 @@ static void SwapBoxMonMoves(struct BoxPokemon *mon, u8 moveIndex1, u8 moveIndex2
     SetBoxMonData(mon, MON_DATA_PP1 + moveIndex1, &move2pp);
     SetBoxMonData(mon, MON_DATA_PP1 + moveIndex2, &move1pp);
     SetBoxMonData(mon, MON_DATA_PP_BONUSES, &ppBonuses);
+#if BR
+    BrMoves_SwapPlaced(mon, moveIndex1, moveIndex2);
+#endif
 
     summary->moves[moveIndex1] = move2;
     summary->moves[moveIndex2] = move1;
