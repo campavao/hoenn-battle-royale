@@ -11,7 +11,7 @@
 // `chooseTarget`.
 import { PATCH_KEY_BASE, type Patch } from './patches';
 import { findPath, findPathToAny, type Path } from './path';
-import { eitherSees, type Facing, type Look } from './sight';
+import { eitherSees, sees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
 import { MOVE_CUT, MOVE_FLY, MOVE_SURF, tradedMon } from './party';
 import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
@@ -67,16 +67,20 @@ const DOOR_MS = 1_200;
 /** Close enough to walk up to: another trainer this near is a fight a person would go
  *  and have (POK-362: "three bots all walked past each other"). Manhattan, same map. */
 const NEAR_TILES = 4;
+/** A player on the bot's screen, as a GBA shows it (15 x 10 cells round you), is close
+ *  enough too: a bot standing in view of somebody it could fight and not coming was
+ *  "why is this guy not coming after me" (Cam's 2026-10-19 play-test, POK-444). */
+const NEAR_PLAYER = { x: 7, y: 5 };
 /** A wild battle on a patch, as long as a short one in the ROM: the bot stands still with
  *  the battle mark on, and comes out of it hurt (POK-363). */
 const WILD_MS = 4_000;
 /** A legendary's battle (POK-410): a long one, as a player's against it is. */
 const LEGEND_MS = 12_000;
-/** The walk-up's wait for the "!" (POK-409): the ROM settles the pair, then shows the
- *  bubble over the bot for about a second (br_walkup.c), and only then does it look for
- *  the bot's steps -- for BR_APPROACH_FRAMES, three seconds, so a walk that starts a
- *  little late still lands. */
-export const WALKUP_DELAY_MS = 1_500;
+/** The walk-up's wait for the "!" (POK-409): the ROM settles the pair, then holds the
+ *  bubble over the bot for half a second (BR_WALKUP_BANG_FRAMES; a second and a half was
+ *  "a little too much", POK-444), and only then does it look for the bot's steps -- for
+ *  BR_APPROACH_FRAMES, three seconds, so a walk that starts a little late still lands. */
+export const WALKUP_DELAY_MS = 1_000;
 
 /** A stateless 32-bit roll from two numbers (mulberry32's finaliser): the rests' own,
  *  off the match's rng, so pausing changes nothing else a seed decides. */
@@ -1193,9 +1197,11 @@ export class Bots {
     if (inside && !inside(walker.at.map) && this.opts.targets.some((t) => inside(t.mapId))) return false;
     const near = (p: { mapId: string; x: number; y: number }) =>
       p.mapId === walker.at.map && Math.abs(p.x - walker.at.x) + Math.abs(p.y - walker.at.y) <= NEAR_TILES;
+    const inView = (p: { mapId: string; x: number; y: number }) =>
+      p.mapId === walker.at.map && Math.abs(p.x - walker.at.x) <= NEAR_PLAYER.x && Math.abs(p.y - walker.at.y) <= NEAR_PLAYER.y;
     const foes: { seat: number; spot: Spot }[] = [];
     for (const player of this.opts.engage?.players() ?? []) {
-      if (!player.busy && near(player)) foes.push({ seat: player.seat, spot: { map: player.mapId, x: player.x, y: player.y } });
+      if (!player.busy && inView(player)) foes.push({ seat: player.seat, spot: { map: player.mapId, x: player.x, y: player.y } });
     }
     if (this.opts.seed !== undefined && now >= this.duelAfter) {
       for (const other of this.walkers) {
@@ -1229,7 +1235,19 @@ export class Bots {
     for (const player of engage?.players() ?? []) {
       if (player.busy || player.mapId !== walker.at.map) continue;
       const theirs: Look = { map: player.mapId, x: player.x, y: player.y, dir: player.dir };
-      if (!eitherSees(this.opts.world, mine, theirs)) continue;
+      if (!eitherSees(this.opts.world, mine, theirs)) {
+        // A bot that may fight looks every way, not only the way it happens to face: a
+        // player in its row or column, in reach, turns it round (Cam's 2026-10-19
+        // play-test, POK-444: "why is this guy not coming after me"). Turned first, so the
+        // ROM reads the bot facing the player and has it walk up (br_walkup.c IWalk).
+        const dir = this.lineTo(walker, player);
+        const look: Look | undefined = dir && { ...mine, dir: DIR_WIRE[dir] };
+        if (!look || !sees(this.opts.world, look, player.x, player.y)) continue;
+        walker.facing = look.dir;
+        mine.dir = look.dir;
+        const turned = this.opts.mapRef(walker.at.map);
+        if (turned) this.opts.send({ t: 'face', seat: walker.bot.seat, f: walker.facing, map: turned });
+      }
       const mons = walker.party;
       if (mons.length === 0) return false;
       // PLAYER_NAME_LENGTH is 7: a HUD name may be longer, a trainer card may not.

@@ -99,6 +99,42 @@ export function guessedStickKeys(axes: readonly number[], rest: readonly number[
   return { keys, moved };
 }
 
+/** Far enough from rest for the readout to name an axis: well under a push (STICK), so a
+ *  stick whose driver only reports part of its throw still shows up as moving. */
+export const READOUT_AXIS = 0.2;
+
+/** The sheet's line for a pad: its name, how many axes the browser gives the page, what
+ *  it is pressing, and -- the part a report needs -- every axis away from rest with its
+ *  value, and every button down by number. Cam's 2026-10-19 play-test: "I've never
+ *  gotten a clear answer on why the analog sticks on my Bluetooth controller are not
+ *  working". With this on the sheet the answer is on screen: push the stick, and either
+ *  an axis moves (the page sees it; REMAP PAD teaches it which) or nothing does (the
+ *  browser is not giving the page that stick at all). A non-standard pad nobody has
+ *  taught says so while it is idle. */
+export function padReadout(
+  pad: { id: string; mapping: string; axes: readonly number[]; buttons: readonly { pressed: boolean }[] },
+  rest: readonly number[],
+  held: readonly string[],
+  taught: boolean,
+): string {
+  const axes: string[] = [];
+  for (let i = 0; i < pad.axes.length; i++) {
+    const away = (pad.axes[i] ?? 0) - (rest[i] ?? 0);
+    if (Math.abs(away) < READOUT_AXIS) continue;
+    axes.push(`${i}:${pad.axes[i] < 0 ? '' : '+'}${pad.axes[i].toFixed(2)}`);
+  }
+  const buttons: number[] = [];
+  pad.buttons.forEach((b, i) => {
+    if (b.pressed) buttons.push(i);
+  });
+  let line = `Gamepad: ${pad.id} (${pad.mapping || 'non-standard'}, ${pad.axes.length} axes)`;
+  if (held.length > 0) line += ` -- ${held.join(' ')}`;
+  if (axes.length > 0) line += ` [axis ${axes.join(' ')}]`;
+  if (buttons.length > 0) line += ` [button ${buttons.join(' ')}]`;
+  if (!pad.mapping && !taught && held.length + axes.length + buttons.length === 0) line += ' -- REMAP PAD to teach it';
+  return line;
+}
+
 export const STICK_KEY = 'hbr.padstick';
 
 export function loadStickMap(storage: Pick<Storage, 'getItem'> | null = typeof localStorage === 'undefined' ? null : localStorage): StickMap | null {

@@ -93,13 +93,22 @@ bool8 BrHm_SkipCutIn(void)
     return TRUE;
 }
 
+static bool8 ItemIsRod(u16 item)
+{
+    return item == ITEM_OLD_ROD || item == ITEM_GOOD_ROD || item == ITEM_SUPER_ROD;
+}
+
 void BrHm_SelectBike(void)
 {
     u16 item = gSaveBlock1Ptr->registeredItem;
 
     if (!BrHm_Free())
         return;
-    if (item != ITEM_NONE && CheckBagHasItem(item, 1))
+    // A rod comes first only facing water. The phone's FISH button registers the rod
+    // (web/src/ui/phonehud.ts), and after one cast SELECT on dry land cast again instead of
+    // riding (Cam's 2026-10-19 play-test: "select does not automatically bring out my bike").
+    if (item != ITEM_NONE && CheckBagHasItem(item, 1)
+     && !(ItemIsRod(item) && !IsPlayerFacingSurfableFishableWater()))
         return;
     if (CheckBagHasItem(ITEM_MACH_BIKE, 1))
         gSaveBlock1Ptr->registeredItem = ITEM_MACH_BIKE;

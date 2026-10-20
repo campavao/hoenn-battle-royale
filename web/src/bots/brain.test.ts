@@ -662,6 +662,44 @@ describe('a bot meeting a player', () => {
     }
   });
 
+  it('turns round to a player on its row it was not facing, then walks up (POK-444)', () => {
+    // Facing south; the player is three cells east on its row, looking south too, so
+    // neither eyeline meets. The bot turns east first -- the ROM reads that facing to
+    // decide who walks -- then stages, challenges and walks the row.
+    const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 4, y: 1, dir: 1 });
+    const seat = dealt[0].seat;
+    const face = sent.findIndex((m) => m.t === 'face' && (m as { seat: number }).seat === seat);
+    const challenge = sent.findIndex((m) => m.t === 'challenge');
+    expect(face).toBeGreaterThanOrEqual(0);
+    expect(sent[face]).toMatchObject({ f: 4 });
+    expect(challenge).toBeGreaterThan(face);
+    const walk = sent.slice(challenge).filter((m) => m.t === 'step' && (m as { seat: number }).seat === seat);
+    expect(walk).toMatchObject([
+      { d: 4, x: 2, y: 1 },
+      { d: 4, x: 3, y: 1 },
+    ]);
+    expect(bots.spotOf(seat)).toEqual({ map: 'FIELD', x: 3, y: 1 });
+  });
+
+  it('does not turn to a player its look could not reach', () => {
+    // Its row, but behind a wall: a look stops on collision, a turn does not see through it.
+    const WALLED: WorldMap = { ...FIELD, grid: grid(['000000', '001000', '000000', '000000', '000000', '000000']) };
+    const world = new World([WALLED, PATH]);
+    const sent: Msg[] = [];
+    const bots = new Bots({
+      world,
+      targets: targets(),
+      mapRef: (id) => REFS[id],
+      send: (m) => void sent.push(m),
+      rng: mulberry32(7),
+      engage: { players: () => [{ seat: 0, mapId: 'FIELD', x: 4, y: 1, dir: 1 }] },
+      deal: () => [MON],
+    });
+    bots.start(dealBots(1, 1, [0], [{ mapId: 'FIELD', map: REFS.FIELD, x: 1, y: 1 }]), 0);
+    bots.tick(STEP_MS);
+    expect(sent.some((m) => m.t === 'challenge')).toBe(false);
+  });
+
   it('stays put when the player is the one who looked: their ROM walks them up', () => {
     // On its row, looking west at it, while the bot faces south: their look, their walk.
     const { sent, dealt, bots } = meeting({ seat: 0, mapId: 'FIELD', x: 4, y: 1, dir: 3 });

@@ -635,7 +635,14 @@ static void DrawCorner(void)
         buf[0] = EOS;
     if (buf[0] != EOS)
         alt = AltTurn();
-    if (alt != 2)
+    // ...and outside the ring the count's turn is the way back in instead, Safe and an
+    // arrow (Cam's 2026-10-19 play-test, "where even am I?"): in the fog how many are
+    // left matters less than which way to walk.
+    if (alt != 2 && BrRing_SafeWay(buf))
+    {
+        colors = sColorsFog;
+    }
+    else if (alt != 2)
     {
         p = ConvertIntToDecimalStringN(buf, h->left, STR_CONV_MODE_LEFT_ALIGN, 2);
         StringCopy(p, sText_Left);

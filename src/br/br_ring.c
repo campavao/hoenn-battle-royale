@@ -19,6 +19,7 @@
 #include "br/br_ring.h"
 #include "br/br_story.h"
 #include "battle.h"
+#include "battle_controllers.h"
 #include "br/br_netlink.h"
 #include "br/br_bot.h"
 #include "br/br_duel.h"
@@ -157,6 +158,7 @@ bool8 BrRing_CellInside(s16 x, s16 y, s8 r)
 // already sends and nothing was reading. Two lines, 90 frames, above the ticker.
 static const u8 sText_FogCloses[] = _("The fog closes in on");
 const u8 gBrText_FogEverywhere[] = _("Fog everywhere");
+static const u8 sText_Safe[] = _("Safe ");
 
 static void SayFog(const u8 *place, u8 len)
 {
@@ -414,6 +416,7 @@ static void Bleed(void)
 // Where the turn's fog has got to: the turn it is for and the next battler to look at.
 static EWRAM_DATA u8 sFogTurn = 0;
 static EWRAM_DATA u8 sFogNext = 0;
+#define FOG_SAID 0x80 // sFogNext's: the line for the battler it names is out
 
 void BrRing_SetBattleFog(bool8 fog)
 {
@@ -438,17 +441,61 @@ void BrRing_DecideSoloFog(void)
         BrRing_DecideBattleFog();
 }
 
-// "<MON> is hurt by the fog!", the bar, the HP. Like the sandstorm's, minus the faint: in
-// a battle the fog hurts but never finishes anybody (see Bleed), so there is nothing to
-// faint and nobody's team to lose here.
-static const u8 sScript_FogHurts[] =
+// "<MON> is hurt by the fog!" -- then the poison's bubbles, which BrRing_FogEndTurn
+// starts itself (FogBubbles) -- then sScript_FogHurts.
+static const u8 sScript_FogSays[] =
 {
     B_SCR_OP_PRINTSTRING, BR_STRINGID_FOG_HURT & 0xFF, BR_STRINGID_FOG_HURT >> 8,
     B_SCR_OP_WAITMESSAGE, B_WAIT_TIME_LONG & 0xFF, B_WAIT_TIME_LONG >> 8,
-    B_SCR_OP_HEALTHBARUPDATE, BS_ATTACKER,
-    B_SCR_OP_DATAHPUPDATE, BS_ATTACKER,
     B_SCR_OP_END2,
 };
+
+// The bar and the HP, once the bubbles are done (healthbarupdate waits for them), and then
+// what a poison turn does after its bar (BattleScript_DoTurnDmg): a mon the fog took to 0
+// faints, and a team with nobody left has lost.
+//
+// checkteamslost takes a pointer, which a byte array cannot hold, so this script is a
+// struct: the bytes up to and including its opcode (twelve: the pointer then starts on a
+// four-byte boundary with no padding before it), the pointer, and the end2 it points at
+// (the link-battle jump DoTurnDmg has lands on the next line too).
+struct FogHurtScript
+{
+    u8 head[12];
+    const u8 *lost;
+    u8 tail[1];
+};
+
+static const struct FogHurtScript sScript_FogHurts =
+{
+    {
+        B_SCR_OP_HEALTHBARUPDATE, BS_ATTACKER,
+        B_SCR_OP_DATAHPUPDATE, BS_ATTACKER,
+        B_SCR_OP_TRYFAINTMON, BS_ATTACKER, FALSE, 0, 0, 0, 0,
+        B_SCR_OP_CHECKTEAMSLOST,
+    },
+    sScript_FogHurts.tail,
+    { B_SCR_OP_END2 },
+};
+STATIC_ASSERT(sizeof(struct FogHurtScript) == 20, BrFogHurtScriptUnpadded)
+
+// The poison's bubbles over the mon the fog is about to hurt (Cam's 2026-10-19 play-test:
+// "it would be cool with the fog if we did the poison animation"). Started here and not
+// by a script's chosenstatusanimation, which a match never reaches: every match runs
+// with battle animations off (br_boot.c, the clock), and that command skips itself then.
+// These are a second long and they are the fog's one sign in a fight, so they play
+// anyway -- the same checks as the command otherwise: nothing on a mon that is not there
+// to see (under the ground, in the sky) or behind a substitute.
+static void FogBubbles(u8 battler)
+{
+    u8 active = gActiveBattler;
+
+    if ((gStatuses3[battler] & STATUS3_SEMI_INVULNERABLE) || gDisableStructs[battler].substituteHP != 0)
+        return;
+    gActiveBattler = battler;
+    BtlController_EmitStatusAnimation(B_COMM_TO_CONTROLLER, FALSE, STATUS1_POISON);
+    MarkBattlerForControllerExec(battler);
+    gActiveBattler = active;
+}
 
 // A frame's wait, for a replay whose fighter has not got this far yet (TurnFog).
 static const u8 sScript_FogWait[] =
@@ -477,7 +524,7 @@ static bool8 TurnFog(void)
     {
         if (!RecordedBattle_TakeSpectateByte(0, &fog))
             return FALSE;
-        gBrRing.battleFog = fog ? TRUE : FALSE;
+        gBrRing.battleFog = fog;
         return TRUE;
     }
     if (gBrRing.active && !BrRing_SectionInside(gMapHeader.regionMapSectionId))
@@ -487,12 +534,14 @@ static bool8 TurnFog(void)
 }
 
 // A tenth of each fighter's max HP at the end of every turn, on whoever is on the field,
-// down to 1. The bench is the field's to bleed afterwards: the other trainer's bench on
-// a link battle is a copy the engine never sends back.
+// down to nothing (Cam, 2026-10-19: fog knocks you out in every fog battle; floored at
+// 1 HP, two mons traded Rests for two and a half minutes while the match waited). The bench is the field's to bleed
+// afterwards: the other trainer's bench on a link battle is a copy the engine never
+// sends back.
 bool8 BrRing_FogEndTurn(void)
 {
     u8 turn = gBattleResults.battleTurnCounter;
-    u8 b;
+    u8 i;
 
     // A duel (the host's hidden instance, two bots) has no fog, but it is published, and
     // a replay of it is a contest's replay: it reads a fog answer off every turn. Without
@@ -523,29 +572,77 @@ bool8 BrRing_FogEndTurn(void)
     if (!gBrRing.battleFog)
         return FALSE;
     gHitMarker &= ~FOG_HIT_MARKERS;
-    for (b = sFogNext; b < gBattlersCount; b++)
+    // In the order the turn ran, as a sandstorm goes: two mons on their last
+    // HP is a race, and the faster one outlasts the other.
+    for (i = sFogNext & ~FOG_SAID; i < gBattlersCount; i++)
     {
+        u8 b = gBattlerByTurnOrder[i];
         u16 hp = gBattleMons[b].hp;
         s32 dmg = gBattleMons[b].maxHP / 10;
 
         if (gAbsentBattlerFlags & gBitTable[b])
             continue;
-        if (hp <= 1)
+        if (hp == 0)
             continue;
         if (dmg < 1)
             dmg = 1;
-        if (dmg >= hp)
-            dmg = hp - 1;
-        sFogNext = b + 1;
+        if (dmg > hp)
+            dmg = hp;
         gBattlerAttacker = b;
+        // Each mon in two calls, as Emerald's poison turn goes: its line, then (the high
+        // bit of sFogNext says the line is out) the bubbles and the bar.
+        if (!(sFogNext & FOG_SAID))
+        {
+            sFogNext = i | FOG_SAID;
+            BattleScriptExecute(sScript_FogSays);
+            return TRUE;
+        }
+        sFogNext = i + 1;
         gBattleMoveDamage = dmg;
         gBrRing.damageDealt += dmg;
         gHitMarker |= FOG_HIT_MARKERS;
-        BattleScriptExecute(sScript_FogHurts);
+        FogBubbles(b);
+        BattleScriptExecute(sScript_FogHurts.head);
         return TRUE;
     }
     sFogNext = gBattlersCount;
     return FALSE;
+}
+
+// Which way the ring's centre is from this map, as one or two arrows after "Safe" (Cam's
+// 2026-10-19 play-test: outside the ring, "where even am I?", and the MAP was the only way
+// to find out). From the middle of this map's section to the centre, in half-sections so
+// a section an even number of cells wide still has a middle; a way that is less than
+// half the other is left off, so a centre almost due north is just the up arrow. FALSE
+// with nothing to point at: inside, no ring yet, or FINAL FOG, which has no inside.
+bool8 BrRing_SafeWay(u8 *buf)
+{
+    const struct RegionMapLocation *loc;
+    u8 mapsec = Aboard(gMapHeader.regionMapSectionId);
+    s16 dx, dy, ax, ay;
+
+    if (!gBrRing.active || !gBrRing.outside || gBrRing.r < 0 || mapsec >= MAPSEC_NONE)
+        return FALSE;
+    loc = &gRegionMapEntries[BrStory_Dock(mapsec)];
+    dx = 2 * gBrRing.cx - (2 * loc->x + loc->width - 1);
+    dy = 2 * gBrRing.cy - (2 * loc->y + loc->height - 1);
+    ax = dx < 0 ? -dx : dx;
+    ay = dy < 0 ? -dy : dy;
+    buf = StringCopy(buf, sText_Safe);
+    // The big arrows: the font's own 0x79-0x7C are six pixels wide, and an up beside a
+    // right read as one double-headed arrow.
+    if (ay != 0 && 2 * ay >= ax)
+    {
+        *buf++ = CHAR_EXTRA_SYMBOL;
+        *buf++ = dy < 0 ? CHAR_UP_ARROW_2 : CHAR_DOWN_ARROW_2;
+    }
+    if (ax != 0 && 2 * ax >= ay)
+    {
+        *buf++ = CHAR_EXTRA_SYMBOL;
+        *buf++ = dx < 0 ? CHAR_LEFT_ARROW_2 : CHAR_RIGHT_ARROW_2;
+    }
+    *buf = EOS;
+    return TRUE;
 }
 
 u16 BrRing_Outside(void)

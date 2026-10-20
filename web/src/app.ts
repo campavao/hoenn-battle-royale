@@ -102,6 +102,7 @@ import { MENU_ACTION, START_BR_MAP, START_POKEMON, TouchLayer } from './touch';
 import {
   STICK_KEY,
   guessedStickKeys,
+  padReadout,
   learnAxis,
   loadStickMap,
   onWindows,
@@ -949,6 +950,14 @@ function loadPadMap(): Record<number, GbaKey> {
 }
 
 let gamepadMap = loadPadMap();
+/** Somebody has taught this device's pad its buttons (the wizard saved a map). */
+let padTaught = (() => {
+  try {
+    return localStorage.getItem(REMAP_KEY) !== null;
+  } catch {
+    return false;
+  }
+})();
 /** Set while the remap wizard is waiting for a button; the poll feeds it instead of
  *  the emulator, so binding START does not also open the start menu. */
 let padCapture: ((index: number) => void) | null = null;
@@ -994,10 +1003,11 @@ function wireGamepad(emu: Emulator): () => void {
   // that is a direction held down forever, which is a player who cannot move and
   // cannot see why. Directions are a move AWAY from rest, not a position.
   const rest = new Map<number, readonly number[]>();
-  /** Which axes are away from rest this poll, for the readout. */
-  const moved: string[] = [];
+  /** The pad the readout describes, and its rest, this poll. */
+  let shown: { pad: Gamepad; rest: readonly number[] } | null = null;
   const poll = () => {
     const now = new Set<GbaKey>();
+    shown = null;
     for (const pad of navigator.getGamepads()) {
       if (!pad) continue;
       if (!rest.has(pad.index)) rest.set(pad.index, [...pad.axes]);
@@ -1037,11 +1047,8 @@ function wireGamepad(emu: Emulator): () => void {
       // the DirectInput hat, decoded below.
       // ...unless the wizard has been shown the stick (POK-321, Cam's pad, whose
       // vertical is an even axis): then only its two learned axes count.
-      moved.length = 0;
+      shown = { pad, rest: base };
       const guess = guessedStickKeys(pad.axes, base);
-      // The axes that moved go on the readout either way: with a learned stick that does
-      // nothing, which axis the stick really is on is the one fact a report needs.
-      moved.push(...guess.moved);
       if (stickMap) {
         for (const key of stickKeys(pad.axes, base, stickMap)) now.add(key);
       } else {
@@ -1063,12 +1070,12 @@ function wireGamepad(emu: Emulator): () => void {
     // wrong and a pad with a stuck axis all look identical from the sofa; this is the
     // difference, and it is the line that would have found the stuck axis in seconds.
     if (padName !== null) {
-      const keys = [...held].join(' ');
-      // The axes that have moved, by number, so a pad that does nothing can be told
-      // apart from a pad whose stick is somewhere this code is not looking -- which is
-      // the difference this line existed to show and could not.
-      const axes = moved.length > 0 ? ` [axes ${moved.join(' ')}]` : '';
-      const line = `${padName}${keys ? ` -- ${keys}` : ''}${axes}`;
+      // The axes that have moved, by number and value, and the buttons down, so a pad
+      // that does nothing can be told apart from a pad whose stick is somewhere this
+      // code is not looking (pad.ts padReadout).
+      const line = shown
+        ? padReadout(shown.pad, shown.rest, [...held], padTaught || stickMap !== null)
+        : padName;
       // On the sheet, drawn again only when it says something new.
       if (settings.pad !== line) {
         settings.pad = line;
@@ -1134,6 +1141,7 @@ function wireRemap(): void {
     const finish = (stick: StickMap | null) => {
       gamepadMap = taken;
       stickMap = stick;
+      padTaught = true;
       try {
         localStorage.setItem(REMAP_KEY, JSON.stringify(taken));
         if (stick) localStorage.setItem(STICK_KEY, JSON.stringify(stick));
@@ -1167,6 +1175,7 @@ function wireRemap(): void {
   settings.resetPad = () => {
     gamepadMap = { ...GAMEPAD_DEFAULT };
     stickMap = null;
+    padTaught = false;
     try {
       localStorage.removeItem(REMAP_KEY);
       localStorage.removeItem(STICK_KEY);

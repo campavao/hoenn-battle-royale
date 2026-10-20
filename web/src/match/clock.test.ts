@@ -11,8 +11,9 @@ describe('ringLabel', () => {
     expect(ringLabel(RING_RADII[RING_RADII.length - 1], 'ROUTE 101')).toBe('FINAL FOG');
   });
 
-  it('says what it does not know', () => {
-    expect(ringLabel(undefined, undefined)).toBe('SAFE: ?');
+  it('is just the fog while the ring names nowhere: the first ring, before it closes', () => {
+    expect(ringLabel(28, undefined)).toBe('FOG');
+    expect(ringLabel(undefined, undefined)).toBe('FOG');
   });
 });
 
