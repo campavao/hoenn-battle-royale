@@ -14,7 +14,7 @@ import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
 import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
-import { HUD_PAGE, readFogHp, writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
+import { HUD, HUD_PAGE, readFogHp, writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import type { HudWorld } from './ui/phonehud';
 import type { PadPrefsControl } from './ui/padprefs';
 import { moveInfo, type Rom } from './battle/movebook';
@@ -269,6 +269,8 @@ let matchStrip: string | null = null;
  *  the ROM while the sheet sits beside the game and the ROM's corner is off. */
 let legendOf: () => string | null = () => null;
 let fogHp: string | null = null;
+/** How many watch the player, while the docked sheet stands in for the corner that said it. */
+let eyesChip: string | null = null;
 /** Whose card the sheet has open. */
 let sheetCard: number | null = null;
 
@@ -425,7 +427,7 @@ function makeSheet(part: () => SheetPart, about: () => FeedbackAbout): DrawnScre
     },
     look: desktop() ? 'dock' : 'overlay',
     strip: matchStrip,
-    chips: [legendOf(), fogHp].filter((chip): chip is string => chip !== null),
+    chips: [legendOf(), fogHp, eyesChip].filter((chip): chip is string => chip !== null),
     note: '',
     muted: settings.muted,
     remapping: settings.remapping,
@@ -4269,12 +4271,16 @@ function wirePhoneHud(
     // On the glass: a match, upright, on a touch screen (index.html shows #hud then).
     const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
     // A desktop's sheet beside the game says the count and the clock, so the ROM's corner
-    // comes off there too (and the fog's HP, which only the corner said, goes on the sheet).
+    // comes off there too (and the fog's HP and the eye count, which only the corner said,
+    // go on the sheet).
     const docked = !shown && desktop() && sheet !== null && stage?.current === sheet;
     if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown ? HUD_PAGE.SIGNS : docked ? HUD_PAGE.CORNER : HUD_PAGE.NONE);
     const hp = docked ? readFogHp(emu, (n) => symbols.get(n)) : null;
-    if (hp !== fogHp) {
+    const eyes = docked && hudBase !== undefined ? emu.read(hudBase + HUD.OFF_EYES, 8) : 0;
+    const watched = eyes > 0 ? `Watched by ${eyes}` : null;
+    if (hp !== fogHp || watched !== eyesChip) {
       fogHp = hp;
+      eyesChip = watched;
       redrawSheet();
     }
     battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables, battle.wantsBag) : null);

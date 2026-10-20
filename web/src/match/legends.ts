@@ -53,6 +53,8 @@ export class LegendWatch {
       this.species.clear();
       this.took.clear();
     } else if (msg.t === 'pickup') this.took.set(msg.key, msg.seat);
+    // Out, their team spills under a key of its own: nobody "has it" any more.
+    else if (msg.t === 'out') for (const [key, seat] of this.took) if (seat === msg.seat) this.took.delete(key);
   }
 
   /** The chip's words, or null with no legendary in the match yet. */
@@ -62,9 +64,9 @@ export class LegendWatch {
       if (down) this.species.set(e.key, down.species);
       const species = this.species.get(e.key);
       if (species === undefined || !LEGEND_GFX.has(species)) continue;
-      if (down) return `LEGENDARY: ${(e.place ?? 'ON THE MAP').toUpperCase()}`;
+      if (down) return e.place ? `Legendary at ${e.place.toUpperCase()}` : 'Legendary on the map';
       const seat = this.took.get(e.key);
-      if (seat !== undefined) return `LEGENDARY: ${short(nameOf(seat))} has it`;
+      if (seat !== undefined) return `${short(nameOf(seat))} has the legendary`;
     }
     return null;
   }

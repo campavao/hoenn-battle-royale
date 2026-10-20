@@ -2790,9 +2790,9 @@ static void Task_HandleSelectionMenuInput(u8 taskId)
 }
 
 #if BR
-// A lift's fifth moves (POK-400), asked the way a TM or a RARE CANDY asks: the screen's
-// own "wants to learn", its YES/NO, the summary screen to pick the move to forget, and
-// "stop trying to teach". data[1] = 1 brings each answer back to Task_TryLearningNextMove,
+// A lift's fifth moves (POK-400), taught the way a TM or a RARE CANDY teaches: straight
+// to the summary screen to pick the move to forget (BrForgetWhich), backing out of it is
+// "did not learn" (BrNotLearned). data[1] = 1 brings each answer back to Task_TryLearningNextMove,
 // which asks the next one here. The exit callback is how this flow is told from the
 // others that come through it: the summary screen's way back keeps it.
 static void CB2_BrAskLearnDone(void)
@@ -2820,6 +2820,23 @@ static void BrNotLearned(u8 taskId)
     StringExpandPlaceholders(gStringVar4, gText_MoveNotLearned);
     DisplayPartyMenuMessage(gStringVar4, TRUE);
     gTasks[taskId].func = gPartyMenu.data[1] == 1 ? Task_TryLearningNextMoveAfterText : Task_ClosePartyMenuAfterText;
+}
+
+// Back from that screen: a move picked is replaced with no "1, 2 and... Poof!", straight
+// to "learned"; none picked is BrNotLearned.
+static void BrReturnFromForget(u8 taskId)
+{
+    if (GetMoveSlotToReplace() != MAX_MON_MOVES)
+        Task_PartyMenuReplaceMove(taskId);
+    else
+        BrNotLearned(taskId);
+}
+
+// A level's move with four already known (RARE CANDY, a lift): the move to the screen.
+static void BrNeedsToReplace(u8 taskId)
+{
+    gPartyMenu.data[0] = gMoveToLearn;
+    BrForgetWhich(taskId);
 }
 
 static bool8 BrAskNextLearn(u8 taskId)
@@ -4974,10 +4991,7 @@ static void Task_ReturnToPartyMenuWhileLearningMove(u8 taskId)
     if (!gPaletteFade.active)
     {
 #if BR
-        if (GetMoveSlotToReplace() != MAX_MON_MOVES)
-            Task_PartyMenuReplaceMove(taskId); // no "1, 2 and... Poof!": straight to "learned"
-        else
-            BrNotLearned(taskId);
+        BrReturnFromForget(taskId);
 #else
         if (GetMoveSlotToReplace() != MAX_MON_MOVES)
             DisplayPartyMenuForgotMoveMessage(taskId);
@@ -5239,9 +5253,7 @@ static void PartyMenuTryEvolution(u8 taskId)
 static void DisplayMonNeedsToReplaceMove(u8 taskId)
 {
 #if BR
-    gPartyMenu.data[0] = gMoveToLearn;
-    BrForgetWhich(taskId);
-    return;
+    BrNeedsToReplace(taskId); return;
 #endif
     GetMonNickname(&gPlayerParty[gPartyMenu.slotId], gStringVar1);
     StringCopy(gStringVar2, gMoveNames[gMoveToLearn]);

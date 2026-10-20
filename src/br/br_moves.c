@@ -338,7 +338,7 @@ bool8 BrMoves_AskWaiting(void)
     return AskPending() && FindAsk(&slot, &move, TRUE);
 }
 
-// A ten-letter name and this make 35 of the ticker's 40. It said "can learn a move
+// A ten-letter name and this make 39 of the ticker's 40. It said "can learn a move
 // (POKéMON)", which read as a placeholder left in (Cam's 2026-10-19 play-test).
 static const u8 sText_WantsMove[] = _(" has a new move! Open POKéMON");
 

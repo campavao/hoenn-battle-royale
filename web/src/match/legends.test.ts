@@ -13,7 +13,7 @@ describe('LegendWatch (the sheet\'s legendary chip, #10)', () => {
   it('names the place while the legendary is down', () => {
     const w = new LegendWatch();
     const ground = { mon: (k: number) => (k === 0x8100 ? { species: 401 } : undefined) };
-    expect(w.chip([ev(0, 0x8100, 'Route 111')], ground, names)).toBe('LEGENDARY: ROUTE 111');
+    expect(w.chip([ev(0, 0x8100, 'Route 111')], ground, names)).toBe('Legendary at ROUTE 111');
   });
 
   it('gives no chip for a rare find', () => {
@@ -28,7 +28,15 @@ describe('LegendWatch (the sheet\'s legendary chip, #10)', () => {
     w.chip([ev(0, 0x8100, 'Route 111')], ground, names);
     down = false;
     w.note({ t: 'pickup', seat: 1, key: 0x8100 });
-    expect(w.chip([ev(0, 0x8100, 'Route 111')], ground, names)).toBe('LEGENDARY: BOBBYBO has it');
+    expect(w.chip([ev(0, 0x8100, 'Route 111')], ground, names)).toBe('BOBBYBO has the legendary');
+  });
+
+  it('stops saying who has it once they are out', () => {
+    const w = new LegendWatch();
+    w.chip([ev(0, 0x8100)], { mon: () => ({ species: 401 }) }, names);
+    w.note({ t: 'pickup', seat: 0, key: 0x8100 });
+    w.note({ t: 'out', seat: 0 });
+    expect(w.chip([ev(0, 0x8100)], { mon: () => undefined }, names)).toBeNull();
   });
 
   it('forgets everything at a new start', () => {

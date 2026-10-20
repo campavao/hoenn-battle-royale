@@ -100,10 +100,10 @@ export function felled(seat: number, name: string, boss: string): TickerMsg | nu
  *  is `A RARE FIND AT `, the same length. */
 export function event(seat: number, place: string | undefined, legend = true): TickerMsg | null {
   const what = legend ? 'A legendary' : 'A rare find';
-  // In the fog's red, as the fog's own lines are (Cam's 2026-10-19 play-test: "because of
+  // A legendary in the fog's red, as the fog's own lines are (Cam's 2026-10-19 play-test: "because of
   // how noisy the bottom is, I've trained myself not to look at it, which means I don't
   // even know where the legendary is").
-  return line(seat, place ? `${what} at ${place.toUpperCase()}!` : `${what} has appeared!`, 'alert');
+  return line(seat, place ? `${what} at ${place.toUpperCase()}!` : `${what} has appeared!`, legend ? 'alert' : undefined);
 }
 
 /** Somebody is out, however it happened, and how many are left after it. */
