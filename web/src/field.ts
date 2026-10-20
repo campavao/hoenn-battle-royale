@@ -136,18 +136,26 @@ export const FADE_COLOR_WORD = 6;
  *  battle picture that had not). */
 export const FADE_SELECTED = 0;
 export const FADE_BG_PALETTES = 0xffff;
+/** BG palette 0, whose first colour is the backdrop: a fade of the screen takes it, a
+ *  battle animation's fade of the fight's own palettes does not (mapFade). */
+export const FADE_BACKDROP = 0x1;
 /** The u16 at +8: a fast fade's submode in bits 0..5, `mode` in bits 8..9 (NORMAL_FADE
  *  0, FAST_FADE 1). A fast fade steps every palette, BG and OBJ, whatever the mask says,
  *  towards its submode's colour: IN_FROM_WHITE 0, OUT_TO_WHITE 1, IN_FROM_BLACK 2,
  *  OUT_TO_BLACK 3 -- white up to 1, and the odd ones fade out. Every battle ends on
  *  OUT_TO_BLACK (battle_main.c): 0x0143 in a trace of one. */
 export const FADE_MODE_WORD = 8;
-/** The u16 at +10: objPaletteToggle in bit 2, read off a battle's fade-in frame by frame.
- *  A normal fade blends the BG palettes with y on one frame and the OBJ ones on the next,
- *  and steps y at the end of that second frame -- so on a frame with the bit clear, y is
- *  already a step past the colours the BG palettes are showing. */
+/** The u16 at +10 holds objPaletteToggle. A normal fade blends the BG palettes with y on
+ *  one frame and the OBJ ones on the next, and steps y at the end of that second frame --
+ *  so on a frame with the toggle clear, y is already a step past the colours the BG
+ *  palettes are showing. Its bit is not the same in the two builds: agbcc runs
+ *  softwareFadeFinishingCounter across the word boundary from +8, so the toggle is bit 2
+ *  (it alternates frame by frame through a battle's fade-in, and the counter counts in
+ *  bits 12..15 of +8 through the finishing frames); modern GCC starts the counter at +10
+ *  and the toggle is bit 6. Either bit counts: on modern bit 2 is the counter's, 0 while
+ *  a fade runs, and on agbcc no fade traced (+10 read 10, 12 or 14) set bit 6. */
 export const FADE_TOGGLE_WORD = 10;
-export const FADE_TOGGLE_BIT = 0x4;
+export const FADE_TOGGLE_BITS = 0x44;
 export const FAST_FADE = 1;
 export const FAST_WHITE_MAX = 1;
 /** A map load leaves y at 0 for ~13 frames before its fade-in; a hold that lasts longer
@@ -435,8 +443,9 @@ export function holdFade(prev: Camera | null, cur: Camera, hold: { on: boolean; 
 
 /** The fade the map past the picture is under: the ROM's, when it reaches the BG
  *  palettes. A running fade says so by its mask. A finished one cannot -- the ROM clears
- *  the mask on a fade's last step and leaves y where it ended (palette.c) -- so `bg`,
- *  what the last fade reached while it ran, comes back for the next frame. A catch's
+ *  the mask on a fade's last step, runs four more frames with none, and leaves y where it
+ *  ended (palette.c) -- so `bg`, what the last fade reached while it ran, comes back for
+ *  those frames and after. A catch's
  *  ball fades to white on its own OBJ palette and stays there, and the map stayed white
  *  under it until the next fade (POK-327's play spec).
  *
@@ -456,9 +465,10 @@ export function holdFade(prev: Camera | null, cur: Camera, hold: { on: boolean; 
  *  went white past a picture that had not changed, and was held white (POK-327, in
  *  Firefox's play spec). The mode stays fast until the next normal fade begins.
  *
- *  And only a fade of every BG palette is the map's: a screen's fades are PALETTES_ALL or
- *  PALETTES_BG. A battle animation's fade of a few of the battle's own -- the switch-out
- *  takes BG palettes 1..3 to white -- turned the field round the fight flat grey (Cam's
+ *  And only a fade of BG palette 0, the backdrop's, is the map's: a screen's fade takes
+ *  it, and the catch's flash to white takes it with most of the rest. A battle
+ *  animation's fade of a few of the battle's own -- the switch-out takes BG palettes
+ *  1..3 to white -- turned the field round the fight flat grey (Cam's
  *  2026-10-19 play-test, "GARDEVOIR, that's enough! Come back!" over grey). */
 export function mapFade(
   fade: { y: number; color: number; active: boolean },
@@ -473,10 +483,13 @@ export function mapFade(
     const steps = 16 - (fade.y >> 1);
     return { fade: { y: sub & 1 ? steps : 16 - steps, color, active: true }, bg: true };
   }
-  const all = (selected & FADE_BG_PALETTES) === FADE_BG_PALETTES;
-  const reached = fade.active && selected !== 0 ? all : bg;
-  const onMap = fade.active ? all : reached;
-  return { fade: onMap ? fade : { ...fade, y: 0, active: false }, bg: reached };
+  const screen = (selected & FADE_BACKDROP) !== 0;
+  const running = fade.active && selected !== 0;
+  const reached = running ? screen : bg;
+  const onMap = running ? screen : reached;
+  // Its finishing frames read as done: the hold after a fast fade waits for a fade that
+  // runs (heldFade), and the frames after one have y at 0, the mask at 0, and active up.
+  return { fade: onMap ? { ...fade, active: running } : { ...fade, y: 0, active: false }, bg: reached };
 }
 
 /** Whether a fade cleared its mask before any read saw it: the struct was at rest on the
@@ -1251,13 +1264,13 @@ export class FieldView {
    *  the struct's own on a BG frame, the one before it on an OBJ frame, which stepped it.
    *  Read straight, the map past the picture ran a step ahead of the map in it -- the
    *  band a block of lighter or darker tiles through every fade (Cam's 2026-10-19
-   *  play-test). */
-  private bgFadeY(fade: { y: number; active: boolean }, mode: number, toggle: number): number {
-    if (!fade.active || ((mode >> 8) & 3) === FAST_FADE) {
+   *  play-test). Once the mask is cleared the last step has blended both at the target. */
+  private bgFadeY(fade: { y: number; active: boolean }, mode: number, toggle: number, selected: number): number {
+    if (!fade.active || selected === 0 || ((mode >> 8) & 3) === FAST_FADE) {
       this.lastBgY = null;
       return fade.y;
     }
-    if (toggle & FADE_TOGGLE_BIT) {
+    if (toggle & FADE_TOGGLE_BITS) {
       this.lastBgY = fade.y;
       return fade.y;
     }
@@ -1286,7 +1299,7 @@ export class FieldView {
       const selected = emu.read(fadeBase + FADE_SELECTED, 32);
       if (unseenFade(this.lastFade, raw, selected)) this.fadeBg = false;
       this.lastFade = { ...raw };
-      raw.y = this.bgFadeY(raw, mode, emu.read(fadeBase + FADE_TOGGLE_WORD, 16));
+      raw.y = this.bgFadeY(raw, mode, emu.read(fadeBase + FADE_TOGGLE_WORD, 16), selected);
       seen = mapFade(raw, selected, this.fadeBg, mode);
     }
     const fade = seen.fade;

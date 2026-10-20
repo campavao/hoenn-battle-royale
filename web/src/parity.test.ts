@@ -815,6 +815,9 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(field.FADE_Y_WORD).toBe(word('y'));
     expect(field.FADE_COLOR_WORD).toBe(word('blendColor'));
     expect(word('active')).toBe(field.FADE_COLOR_WORD);
+    expect(field.FADE_TOGGLE_WORD).toBe(word('objPaletteToggle'));
+    // The natural layout is modern GCC's; agbcc's straddles the word before (field.ts).
+    expect(field.FADE_TOGGLE_BITS & (1 << (fade.bits.objPaletteToggle.bit % 16))).not.toBe(0);
     // f's word with `v` in f and every other bit of the word set: fadeOf has to take
     // exactly f's bits out of it.
     const holding = (f: string, v: number) =>
