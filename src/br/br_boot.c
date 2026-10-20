@@ -469,6 +469,8 @@ void BrBoot_Tick(void)
             if (slot < PARTY_SIZE)
                 SetMonData(&gPlayerParty[slot], MON_DATA_MOVE4, &move);
         }
+        if (b->mode & BR_BOOT_FLAG_TESTSWIM)
+            ScriptGiveMon(SPECIES_MUDKIP, 5, 0, 0, 0, 0);
         ClearTheLateStory();
         if (BR_BOOT_MODE(b->mode) == BR_BOOT_SAFARI)
             BrMatch_BeginSafari();

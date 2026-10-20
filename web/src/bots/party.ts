@@ -58,6 +58,7 @@ export function rungForPhase(phase: number): number {
 export const MOVE_SURF = 57;
 export const MOVE_CUT = 15;
 export const MOVE_FLY = 19;
+export const MOVE_STRENGTH = 70;
 /** The rung a water mon has learned SURF by. Hoenn is half ocean and the drop is
  *  happy to put a trainer on Route 125 or Southern Island, which nothing without it
  *  ever leaves -- so this is a way off an island, not a convenience. */

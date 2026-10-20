@@ -7,19 +7,23 @@
 #
 # skin-field's spot and look: ROUTE 104 (map 0:19) at (33,22), the sea north of
 # (36,22), a PICNICKER with the boot's test mon. win-wild-fight's patch, moved onto
-# the water at (36,20).
+# the water at (36,20). Boot flag 0x20 (TESTSWIM): a MUDKIP, so the party could SURF (#7).
 wait 30
 poke u8 gBrMatch 2
 poke u8 gBrMySkin 7
-pokebytes gBrMailbox+0x2018 81 01 00 13 21 00 16 00 BD BB C7 FF
+pokebytes gBrMailbox+0x2018 A1 01 00 13 21 00 16 00 BD BB C7 FF
 wait 400
 expect u8 *gSaveBlock1Ptr+5 19
 expect u8 gObjectEvents+5 32
 poke u16 *gSaveBlock1Ptr+0x496 259
 tap SELECT
 wait 60
+# The cut tree at (35,22) is back (#7): the TREECKO cuts it on the way, and we go on
 hold RIGHT 40
+wait 150
+hold RIGHT 24
 wait 30
+expect u16 *gSaveBlock1Ptr+0 36
 hold UP 24
 wait 150
 expect u16 *gSaveBlock1Ptr+2 21

@@ -22,6 +22,7 @@
 #include "br/br_field.h"
 #include "br/br_gym.h"
 #include "br/br_event.h"
+#include "br/br_hm.h"
 
 EWRAM_DATA struct BrMap gBrMap = {0};
 
@@ -86,22 +87,12 @@ void BrMap_TakeFlight(void)
     gBrMap.active = FALSE;
 }
 
-// Who in the party knows FLY. PARTY_SIZE for nobody, which leaves the map a look.
+// Who in the party could FLY: knows it, or could learn HM02 (Cam's 10-19 play-test, #7:
+// "only fly if you have ... a Pokemon that could learn Fly"). PARTY_SIZE for nobody, which
+// leaves the map a look.
 static u8 FlierSlot(void)
 {
-    u8 slot, i;
-
-    for (slot = 0; slot < gPlayerPartyCount && slot < PARTY_SIZE; slot++)
-    {
-        if (GetMonData(&gPlayerParty[slot], MON_DATA_IS_EGG))
-            continue;
-        for (i = 0; i < MAX_MON_MOVES; i++)
-        {
-            if (GetMonData(&gPlayerParty[slot], MON_DATA_MOVE1 + i) == MOVE_FLY)
-                return slot;
-        }
-    }
-    return PARTY_SIZE;
+    return BrHm_Slot(MOVE_FLY);
 }
 
 // The drop picker's way in, and for the same reason: the fly map wants the overworld's

@@ -9,7 +9,8 @@ wait 30
 poke u8 gBrMatch 2
 poke u8 gBrMySkin 7
 # BR_BOOT_MAP, female (skin 7 is odd), ROUTE 104
-pokebytes gBrMailbox+0x2018 01 01 00 13 21 00 16 00 BD BB C7 FF
+# Boot mode 21: TESTSWIM's MUDKIP could learn SURF, WATERFALL and DIVE (br_hm.h).
+pokebytes gBrMailbox+0x2018 21 01 00 13 21 00 16 00 BD BB C7 FF
 wait 400
 expect u8 *gSaveBlock1Ptr+5 19
 # The player is object 0 (gPlayerAvatar.objectEventId), graphicsId at +5: PICNICKER (32)

@@ -1,6 +1,10 @@
 @ Interact with cuttable tree
 EventScript_CutTree::
 	lockall
+.if BR
+	callnative BrHm_AskCut
+	goto_if_eq VAR_RESULT, TRUE, BR_EventScript_Cut
+.endif
 	goto_if_unset FLAG_BADGE01_GET, EventScript_CheckTreeCantCut
 	checkpartymove MOVE_CUT
 	goto_if_eq VAR_RESULT, PARTY_SIZE, EventScript_CheckTreeCantCut
@@ -121,6 +125,10 @@ Text_CantSmash:
 
 EventScript_StrengthBoulder::
 	lockall
+.if BR
+	callnative BrHm_AskStrength
+	goto_if_eq VAR_RESULT, TRUE, BR_EventScript_BoulderFree
+.endif
 	goto_if_unset FLAG_BADGE04_GET, EventScript_CantStrength
 	goto_if_set FLAG_SYS_USE_STRENGTH, EventScript_CheckActivatedBoulder
 	checkpartymove MOVE_STRENGTH

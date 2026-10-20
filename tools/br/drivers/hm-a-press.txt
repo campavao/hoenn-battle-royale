@@ -1,0 +1,22 @@
+# hm-a-press: an A press on a CUT tree or a STRENGTH boulder in a match asks nothing
+# either (#7 review): pret's EventScript_CutTree and EventScript_StrengthBoulder would
+# say "Would you like to CUT it?" now that a mon that could learn it passes their
+# checkpartymove. br_hm.c BrHm_AskCut / BrHm_AskStrength send them to BR's own.
+#
+# ROUTE 104 (map 0:19): the tree at (35,22); boot under it on (35,23), face it, press A.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 13 23 00 17 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr+2 23
+hold UP 2
+wait 20
+hold A 4
+wait 150
+shot tree-a
+# no YES/NO up: the field has the keys, and the tree is gone
+expect u32 gMain+4 CB2_Overworld+1
+hold UP 16
+wait 30
+expect u16 *gSaveBlock1Ptr+2 22
+say hm a-press tree ok
