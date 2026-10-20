@@ -24,3 +24,24 @@ export function takeHowToDue(store: Storage): boolean {
     return false;
   }
 }
+
+/** Set once somebody has paged to HOW TO PLAY's last panel (HBR-30, Cam: "a 'new'
+ *  indicator ... dismisses after opening one time and reading all of it"). */
+export const HOWTO_READ_KEY = 'hbr:howto-read';
+
+export function markHowToRead(store: Storage): void {
+  try {
+    store.setItem(HOWTO_READ_KEY, '1');
+  } catch {
+    // Storage refused: the NEW stays, which is the safe way round.
+  }
+}
+
+/** Whether the menu's HOW TO PLAY tile can drop its NEW. */
+export function howToRead(store: Storage): boolean {
+  try {
+    return store.getItem(HOWTO_READ_KEY) === '1';
+  } catch {
+    return false;
+  }
+}

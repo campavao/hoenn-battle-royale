@@ -37,7 +37,7 @@ import { Curtain } from './match/curtain';
 import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, rewatchRow, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import { cleanNote, sendFeedback } from './net/feedback';
 import { feedbackScreen, type FeedbackState } from './ui/feedback';
-import { markHowToDue, takeHowToDue } from './ui/howto-due';
+import { howToRead, markHowToDue, markHowToRead, takeHowToDue } from './ui/howto-due';
 import {
   AUTO_START_MS,
   BOT_FILL,
@@ -1875,6 +1875,21 @@ function loadHowToUi(): Promise<void> {
   return howToUiReady;
 }
 setTimeout(() => void loadHowToUi(), 0);
+
+/** The main menu's backdrop, a slow pan over Hoenn (HBR-30, ui/menubg.ts): its own chunk
+ *  with its map, and the menu stays black until it lands. */
+let menuBg: typeof import('./ui/menubg') | undefined;
+const PAN_MS = 50;
+const reducedMotion = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches;
+setTimeout(() => {
+  import('./ui/menubg').then(
+    (m) => {
+      menuBg = m;
+      theStage().redraw();
+    },
+    (err: unknown) => console.warn('the menu backdrop did not load', err),
+  );
+}, 0);
 
 /** A screen out of the profile chunk: nothing until it has landed, then itself. */
 function profileScreen(make: (ui: typeof import('./ui/profile')) => DrawnScreen): DrawnScreen {
@@ -4086,6 +4101,7 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
       detail: r.detail?.replace('🔒', 'PASS'),
       disabled: r.disabled,
       id: r.id,
+      art: r.art,
       onPress: () => press(r.action),
     });
     const record = () => {
@@ -4093,6 +4109,7 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
       return career.matches > 0 ? careerLine(career) : 'your name';
     };
 
+    let panPending = false;
     const main = menuScreen(() => ({
       title: 'HOENN BATTLE ROYALE',
       rows: [
@@ -4100,8 +4117,22 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
         ...playRows(shownLink(), rooms.find((r) => r.daily)),
         HOWTO_ROW,
         FEEDBACK_ROW,
-      ].map(row),
+      ].map(row).map((r) => (r.id === HOWTO_ROW.id && !howToRead(localStorage) ? { ...r, badge: true } : r)),
       rowsId: 'lobby-rows',
+      tiles: true,
+      backdrop: (c, h) => {
+        if (!menuBg) return;
+        // Held still for somebody who asked for less motion; otherwise drawn again every
+        // PAN_MS while the menu is up, and not once it is gone.
+        if (reducedMotion()) return menuBg.paintPan(c, 0, h);
+        menuBg.paintPan(c, performance.now(), h);
+        if (panPending) return;
+        panPending = true;
+        setTimeout(() => {
+          panPending = false;
+          if (stage.current === main) stage.redraw();
+        }, PAN_MS);
+      },
       note: note || leftNote || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',
       trainer: { name: careerName(), skin: careerSkin(), record: record(), onPress: () => stage.push(trainer) },
@@ -4198,6 +4229,7 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
     const howTo = chunkScreen(() => howToUi, loadHowToUi, (ui) => ui.howToScreen(() => ({
       skin: careerSkin(),
       onDone: () => stage.pop(),
+      onRead: () => markHowToRead(localStorage),
       // Its fog, its evolution and its confetti move; nothing else is drawn for it.
       redraw: () => {
         if (stage.current === howTo) stage.redraw();

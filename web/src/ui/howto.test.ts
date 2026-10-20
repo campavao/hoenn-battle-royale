@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ART_H, EVOLVE_MS, FRAME_MS, HOWTO_KEY, PANELS, SHEET, confetti, evolveFrame, howToScreen, markHowToDue, takeHowToDue } from './howto';
 import { measure, wrapText } from './emerald';
+import { HOWTO_READ_KEY, howToRead, markHowToRead } from './howto-due';
 import { W } from './screens';
 import { fakeCanvas } from './fakecanvas';
 import type { DrawnScreen } from './stage';
@@ -222,5 +223,45 @@ describe('the panels after a first import', () => {
     } as unknown as Storage;
     expect(() => markHowToDue(refusing)).not.toThrow();
     expect(takeHowToDue(refusing)).toBe(false);
+  });
+});
+
+describe("HOW TO PLAY's NEW on the menu (HBR-30)", () => {
+  it('comes off once the last panel has been up, not before', () => {
+    const onRead = vi.fn();
+    const screen = howToScreen(() => ({ skin: 0, onDone: vi.fn(), onRead, now: () => 0 }));
+    for (let i = 1; i < PANELS.length; i++) {
+      paint(screen);
+      expect(onRead, `panel ${i}`).not.toHaveBeenCalled();
+      press(screen, 'howto-next');
+    }
+    paint(screen);
+    expect(onRead).toHaveBeenCalled();
+  });
+
+  it('stays off a SKIP', () => {
+    const onRead = vi.fn();
+    const screen = howToScreen(() => ({ skin: 0, onDone: vi.fn(), onRead, now: () => 0 }));
+    press(screen, 'howto-skip');
+    paint(screen);
+    expect(onRead).not.toHaveBeenCalled();
+  });
+
+  it('is remembered on the device, and kept up when storage refuses', () => {
+    const store = memoryStore();
+    expect(howToRead(store)).toBe(false);
+    markHowToRead(store);
+    expect(store.getItem(HOWTO_READ_KEY)).toBe('1');
+    expect(howToRead(store)).toBe(true);
+    const refusing = {
+      getItem: () => {
+        throw new Error('denied');
+      },
+      setItem: () => {
+        throw new Error('denied');
+      },
+    } as unknown as Storage;
+    expect(() => markHowToRead(refusing)).not.toThrow();
+    expect(howToRead(refusing)).toBe(false);
   });
 });

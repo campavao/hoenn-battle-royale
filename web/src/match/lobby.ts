@@ -63,6 +63,9 @@ export interface LobbyRow {
    *  toggle saying its new value), and a cursor kept by what the row said went back to
    *  the top on every press (POK-333). */
   id?: string;
+  /** What its tile on the main menu shows (HBR-30): a bag icon by item id, or trainers
+   *  by field-sprite sheet. */
+  art?: { item?: number; gfx?: number[] };
 }
 
 /** mm:ss for a countdown, as the daily row shows it. */
@@ -123,6 +126,20 @@ export function profileRows(profile: Profile): LobbyRow[] {
   return rows.map((r) => ({ ...r, id: `trainer-${r.action.kind}` }));
 }
 
+/** The main menu's tiles' pictures (HBR-30, Cam: "bento boxes so they're fun buttons we
+ *  can throw icons / sprites in"): field sprites by sheet (BRENDAN 0, MAY 89, the NURSE
+ *  58, YOUNGSTER 35, LASS 47) and bag icons by item id (S.S. TICKET 265, SUN STONE 93,
+ *  TOWN MAP 361, ORANGE MAIL 121). */
+const ART = {
+  quick: { gfx: [0, 89] },
+  host: { gfx: [58] },
+  lobbies: { gfx: [35, 47] },
+  code: { item: 265 },
+  daily: { item: 93 },
+  howto: { item: 361 },
+  feedback: { item: 121 },
+};
+
 /** The ways into a match; the daily gets a row of its own when the relay is offering one.
  *  Nothing on their right (Cam, 2026-10-19, POK-430: "let's drop the text on the right.
  *  Just keep it the options, no fluff"): a row that cannot be pressed yet is grayed, and
@@ -132,22 +149,22 @@ export function playRows(link: Link | boolean, daily?: RoomListing): LobbyRow[] 
   const online = state === 'up';
   const quick: LobbyRow =
     state === 'up'
-      ? { label: 'QUICK PLAY', action: { kind: 'quick' } }
+      ? { label: 'QUICK PLAY', action: { kind: 'quick' }, art: ART.quick }
       : state === 'down'
-        ? { label: 'QUICK PLAY', action: { kind: 'solo' } }
+        ? { label: 'QUICK PLAY', action: { kind: 'solo' }, art: ART.quick }
         // Not yet either: a press on a cold load is not a quiet game against bots (#41's
         // review). It waits for the socket to open, close, or run out of time.
-        : { label: 'QUICK PLAY', action: { kind: 'quick' }, disabled: true };
+        : { label: 'QUICK PLAY', action: { kind: 'quick' }, disabled: true, art: ART.quick };
   const rows: LobbyRow[] = [
     // SOLO VS BOTS is not a row any more (Cam, 2026-10-14, POK-341: "quick play to me
     // feels actually more like a natural flow"). Offline, QUICK PLAY is that game: the
     // bots, and no socket.
     quick,
-    { label: 'HOST A ROOM', action: { kind: 'host' }, disabled: !online },
-    { label: 'LOBBIES', action: { kind: 'lobbies' }, disabled: !online },
-    { label: 'JOIN BY CODE', action: { kind: 'code' }, disabled: !online },
+    { label: 'HOST A ROOM', action: { kind: 'host' }, disabled: !online, art: ART.host },
+    { label: 'LOBBIES', action: { kind: 'lobbies' }, disabled: !online, art: ART.lobbies },
+    { label: 'JOIN BY CODE', action: { kind: 'code' }, disabled: !online, art: ART.code },
     ...(daily
-      ? [{ label: 'DAILY GAME', action: { kind: 'daily' as const } }]
+      ? [{ label: 'DAILY GAME', action: { kind: 'daily' as const }, art: ART.daily }]
       : []),
   ];
   return rows.map((r) => ({ ...r, id: `lobby-${r.label.toLowerCase().replace(/ /g, '-')}` }));
@@ -159,6 +176,7 @@ export const FEEDBACK_ROW: LobbyRow = {
   label: 'SEND FEEDBACK',
   action: { kind: 'feedback' },
   id: 'lobby-feedback',
+  art: ART.feedback,
 };
 
 /** Over SEND FEEDBACK: how a match goes, in a few panels (POK-429). */
@@ -166,6 +184,7 @@ export const HOWTO_ROW: LobbyRow = {
   label: 'HOW TO PLAY',
   action: { kind: 'howto' },
   id: 'lobby-howto',
+  art: ART.howto,
 };
 
 /** First on the menu after a reload that could not go back into its match (HBR-20,
