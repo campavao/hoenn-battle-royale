@@ -191,6 +191,16 @@ export function isTallGrass(map: WorldMap, x: number, y: number): boolean {
   return cellClass(map, x, y) === CLASS_GRASS;
 }
 
+const elevGrids = new WeakMap<WorldMap, Uint8Array>();
+
+/** A map cell's elevation (map.json's), or -1 off the map. */
+export function cellElevation(map: WorldMap, x: number, y: number): number {
+  if (x < 0 || y < 0 || x >= map.w || y >= map.h) return -1;
+  let grid = elevGrids.get(map);
+  if (!grid) elevGrids.set(map, (grid = decodeGrid(map.elev ?? '', map.w * map.h)));
+  return grid[y * map.w + x];
+}
+
 function cellClass(map: WorldMap, x: number, y: number): number {
   if (x < 0 || y < 0 || x >= map.w || y >= map.h) return -1;
   let grid = waterGrids.get(map);

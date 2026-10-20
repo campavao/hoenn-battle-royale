@@ -31,7 +31,7 @@ export const FADE_BG_PALETTES = 0xffff;
  *  fight's own BG palettes (a catch's flash, a switch-out: 1..3) does not, and leaves the
  *  map past the picture alone (field.ts mapFade, #34 of Cam's 2026-10-19 play-test). */
 export const FADE_BACKDROP = 0x1;
-/** objPaletteToggle's word and bits, either build's (field.ts). */
+/** objPaletteToggle's word and its two candidate bits, learned as field.ts does (toggleBitOf). */
 export const FADE_TOGGLE_WORD = 10;
 export const FADE_TOGGLE_BITS = 0x44;
 /** The fade's `mode`, bits 8..9 of the u16 at 8: a FAST_FADE (1) steps every palette,
@@ -469,6 +469,8 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
       // two, by which frame the change fell on).
       let fullRun = 0;
       let lastBgY: number | null = null;
+      let toggleBit = 0;
+      let toggleWord: number | null = null;
       let fullColor = -1;
       // A fast fade out that has ended, and how long ago: the picture is its colour until
       // the next fade begins.
@@ -540,8 +542,14 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         // The y the BG palettes show: a step behind the struct's on an OBJ frame and the
         // delay after it, which stepped it (field.ts bgFadeY, POK-435).
         const fw10 = emu.read(s.gPaletteFade + k.FADE_TOGGLE_WORD, 16);
-        if (!fadeActive || selected === 0 || fastMode) lastBgY = null;
-        else if (fw10 & k.FADE_TOGGLE_BITS) lastBgY = fadeY;
+        const normal = fadeActive && !fastMode;
+        if (normal && toggleWord !== null && !toggleBit) {
+          const flip = (toggleWord ^ fw10) & k.FADE_TOGGLE_BITS;
+          if (flip !== 0 && (flip & (flip - 1)) === 0) toggleBit = flip;
+        }
+        toggleWord = normal ? fw10 : null;
+        if (!normal || selected === 0 || !toggleBit) lastBgY = null;
+        else if (fw10 & toggleBit) lastBgY = fadeY;
         const bgY = lastBgY ?? fadeY;
         if (fast) lastBg = true;
         else if (fadeActive && selected !== 0) lastBg = (selected & k.FADE_BACKDROP) !== 0;

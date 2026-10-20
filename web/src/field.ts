@@ -34,7 +34,7 @@
 // the picture lags the struct by exactly one frame -- the scroll registers are written at
 // the VBlank that ends a frame's logic and drawn during the next -- so what is drawn here
 // is the state read the frame BEFORE.
-import { isTallGrass, isWater, type SeamDir, type WorldMap } from './bots/world';
+import { cellElevation, isTallGrass, isWater, type SeamDir, type WorldMap } from './bots/world';
 import { PATCH_KEY_BASE, dealPatches, loadPatches, type PatchTable } from './bots/patches';
 import { HOENN } from './bots/hoenn';
 import spritesData from './data/sprites.json';
@@ -152,10 +152,18 @@ export const FADE_MODE_WORD = 8;
  *  softwareFadeFinishingCounter across the word boundary from +8, so the toggle is bit 2
  *  (it alternates frame by frame through a battle's fade-in, and the counter counts in
  *  bits 12..15 of +8 through the finishing frames); modern GCC starts the counter at +10
- *  and the toggle is bit 6. Either bit counts: on modern bit 2 is the counter's, 0 while
- *  a fade runs, and on agbcc no fade traced (+10 read 10, 12 or 14) set bit 6. */
+ *  and the toggle is bit 6. Each is something else in the other build, so the page
+ *  learns which: the one of the two that flips between two frames of a running fade
+ *  (toggleBitOf). */
 export const FADE_TOGGLE_WORD = 10;
 export const FADE_TOGGLE_BITS = 0x44;
+
+/** The toggle's bit, from the u16 at FADE_TOGGLE_WORD on two frames running of one normal
+ *  fade: the one of FADE_TOGGLE_BITS that changed, or 0 when neither or both did. */
+export function toggleBitOf(before: number, after: number): number {
+  const flip = (before ^ after) & FADE_TOGGLE_BITS;
+  return flip !== 0 && (flip & (flip - 1)) === 0 ? flip : 0;
+}
 export const FAST_FADE = 1;
 export const FAST_WHITE_MAX = 1;
 /** A map load leaves y at 0 for ~13 frames before its fade-in; a hold that lasts longer
@@ -226,6 +234,12 @@ export const SPRITE_COUNT = 64;
  *  matrixNum's bit 3 (ST_OAM_HFLIP) at bit 12. */
 export const SPR_OAM_MODE = 0x01;
 export const SPR_OAM_ATTR1 = 0x02;
+/** The OAM's u16 at 4: tileNum, then priority in bits 10..11. */
+export const SPR_OAM_ATTR2 = 0x04;
+export const OAM_PRIORITY_SHIFT = 10;
+/** event_object_movement.c's sElevationToPriority: an object at 4, 6, 8, 10 or 12 is drawn
+ *  at priority 1, over BG1 -- a bridge's deck, the Cycling Road -- and 13 or 14 over all. */
+export const ELEVATION_TO_PRIORITY = [2, 2, 2, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 0, 0, 2];
 export const SPR_OAM_HFLIP = 0x08 << 9;
 export const OAM_AFFINE_ON = 1;
 
@@ -310,6 +324,15 @@ export function shakeOffset(n: number): { dx: number; dy: number } {
   return { dx: sign * amp, dy: (n & 1 ? 1 : 0) * Math.min(1, amp) };
 }
 
+/** Whether the page's own drawing of a person stands where the ROM would put them over
+ *  BG1: by the elevation of the cell under their feet (ELEVATION_TO_PRIORITY). */
+export function standsAbove(map: WorldMap, s: { gfx: number; x: number; y: number }, origin: { left: number; top: number }): boolean {
+  const info = (spritesData as Record<string, { w: number; h: number }>)[String(s.gfx)];
+  if (!info) return false;
+  const e = cellElevation(map, Math.floor((origin.left + s.x + info.w / 2) / TILE), Math.floor((origin.top + s.y + info.h - 1) / TILE));
+  return e >= 0 && ELEVATION_TO_PRIORITY[e] <= 1;
+}
+
 export interface FieldSprite {
   gfx: number;
   frame: number;
@@ -326,6 +349,9 @@ export interface FieldSprite {
   /** Drawn under everybody, whatever its y: the SURF blob, which hangs lower than the
    *  rider on it. */
   under?: boolean;
+  /** Over BG1, so no roof or treetop covers it (drawCovered): an object at OAM priority 1
+   *  or 0, on a bridge's deck say, which is BG1's top layer. */
+  above?: boolean;
 }
 
 /** The image index the sprite is showing: `anims[animNum][animCmdIndex].frame.imageValue`,
@@ -1266,11 +1292,14 @@ export class FieldView {
    *  band a block of lighter or darker tiles through every fade (Cam's 2026-10-19
    *  play-test). Once the mask is cleared the last step has blended both at the target. */
   private bgFadeY(fade: { y: number; active: boolean }, mode: number, toggle: number, selected: number): number {
-    if (!fade.active || selected === 0 || ((mode >> 8) & 3) === FAST_FADE) {
+    const normal = fade.active && ((mode >> 8) & 3) !== FAST_FADE;
+    if (normal && this.toggleWord !== null && !this.toggleBit) this.toggleBit = toggleBitOf(this.toggleWord, toggle);
+    this.toggleWord = normal ? toggle : null;
+    if (!normal || selected === 0 || !this.toggleBit) {
       this.lastBgY = null;
       return fade.y;
     }
-    if (toggle & FADE_TOGGLE_BITS) {
+    if (toggle & this.toggleBit) {
       this.lastBgY = fade.y;
       return fade.y;
     }
@@ -1278,6 +1307,9 @@ export class FieldView {
   }
 
   private lastBgY: number | null = null;
+  /** objPaletteToggle's bit in this build, once a fade has shown it (toggleBitOf). */
+  private toggleBit = 0;
+  private toggleWord: number | null = null;
   /** The struct as the last read found it (unseenFade). */
   private lastFade: { y: number; color: number; active: boolean } | null = null;
 
@@ -1357,6 +1389,8 @@ export class FieldView {
       : [];
     // gBrSeats' standing copy past the box is the page's drawing, not an object of the ROM's.
     this.ghosts = { rom: objects.filter((s) => s.seat !== undefined), drawn: [...dropped.filter((s) => s.seat !== undefined), ...drawn] };
+    const map = HOENN.byRef.get(`${c.group}:${c.num}`);
+    if (map) for (const s of [...dropped, ...drawn]) if (standsAbove(map, s, origin)) s.above = true;
     return [...rom, ...drawn];
   }
 
@@ -1445,6 +1479,7 @@ export class FieldView {
       const frame = frameOf(rom, emu.read(s + SPR_ANIMS, 32), emu.read(s + SPR_ANIM_NUM, 8), emu.read(s + SPR_ANIM_CMD, 8)) ?? 0;
       const hFlip = oamFlipped(emu.read(s + SPR_OAM_MODE, 8), emu.read(s + SPR_OAM_ATTR1, 16));
       const sprite: FieldSprite = { gfx, frame, hFlip, x, y, hidden: offScreen };
+      if (((emu.read(s + SPR_OAM_ATTR2, 16) >> OAM_PRIORITY_SHIFT) & 3) <= 1) sprite.above = true;
       if (emu.read(o + OBJ_PLAYER_BYTE, 8) & 1) {
         player = sprite;
         blob = this.readBlob(emu.read(o + OBJ_FIELD_EFFECT_SPRITE_ID, 8), coX, coY);
@@ -1593,6 +1628,27 @@ export class FieldView {
    *  Z index"). A cover still on its way covers nobody, and is drawn again when it lands. */
   private drawCovered(ctx: CanvasRenderingContext2D, sprites: FieldSprite[], cover: { maps: readonly Reached[]; ox: number; oy: number }): boolean {
     const lay = this.lay;
+    const under = sprites.filter((s) => !s.above);
+    const over = sprites.filter((s) => s.above);
+    // Only the box the people under a cover stand in: a phone redrew, cut and laid on the
+    // whole field for a few 16x32 sprites, on nearly every frame.
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const s of under) {
+      const info = SHEETS[String(s.gfx)];
+      if (!info) continue;
+      x0 = Math.min(x0, lay.lcdCol + s.x);
+      y0 = Math.min(y0, lay.lcdRow + s.y);
+      x1 = Math.max(x1, lay.lcdCol + s.x + info.w);
+      y1 = Math.max(y1, lay.lcdRow + s.y + info.h);
+    }
+    x0 = Math.max(0, Math.floor(x0));
+    y0 = Math.max(0, Math.floor(y0));
+    x1 = Math.min(lay.cols, Math.ceil(x1));
+    y1 = Math.min(lay.rows, Math.ceil(y1));
+    if (!(x1 > x0 && y1 > y0)) return this.drawSprites(ctx, over);
     const doc = ctx.canvas.ownerDocument;
     if (!this.scratch && doc) this.scratch = doc.createElement('canvas');
     const scratch = this.scratch;
@@ -1600,19 +1656,25 @@ export class FieldView {
     if (!scratch || !sctx) return this.drawSprites(ctx, sprites);
     if (scratch.width !== lay.cols) scratch.width = lay.cols;
     if (scratch.height !== lay.rows) scratch.height = lay.rows;
+    const w = x1 - x0;
+    const h = y1 - y0;
+    sctx.save();
+    sctx.beginPath();
+    sctx.rect(x0, y0, w, h);
+    sctx.clip();
     sctx.globalCompositeOperation = 'source-over';
-    sctx.clearRect(0, 0, lay.cols, lay.rows);
+    sctx.clearRect(x0, y0, w, h);
     sctx.imageSmoothingEnabled = false;
-    let complete = this.drawSprites(sctx, sprites);
+    let complete = this.drawSprites(sctx, under);
     sctx.globalCompositeOperation = 'destination-out';
     for (const r of cover.maps) {
       const img = this.image(`${r.map.id}.cover`);
       if (img) sctx.drawImage(img, r.x - cover.ox, r.y - cover.oy);
       else complete = false;
     }
-    sctx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(scratch, 0, 0);
-    return complete;
+    sctx.restore();
+    ctx.drawImage(scratch, x0, y0, w, h, x0, y0, w, h);
+    return this.drawSprites(ctx, over) && complete;
   }
 
   /** A canvas whose backing store went away -- Firefox, after the GPU process resets or
