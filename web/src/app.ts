@@ -3818,6 +3818,13 @@ function wireRoom(
     );
   };
   window.addEventListener('pagehide', writeResume);
+  // ...which is not always going: a page put in the back/forward cache comes back, and
+  // its game must not stay stopped for the snapshot taken on the way.
+  window.addEventListener('pageshow', (ev) => {
+    if (!ev.persisted) return;
+    resumeKit?.dropResume();
+    if (emu.isPaused()) emu.resume();
+  });
 
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
   const skin = String(careerSkin());
