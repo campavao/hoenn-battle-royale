@@ -37,7 +37,7 @@ import { Curtain } from './match/curtain';
 import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, rewatchRow, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import { cleanNote, sendFeedback } from './net/feedback';
 import { feedbackScreen, type FeedbackState } from './ui/feedback';
-import { howToScreen, markHowToDue, takeHowToDue } from './ui/howto';
+import { markHowToDue, takeHowToDue } from './ui/howto-due';
 import {
   AUTO_START_MS,
   BOT_FILL,
@@ -1877,12 +1877,39 @@ function loadProfileUi(): Promise<void> {
 }
 setTimeout(() => void loadProfileUi(), 0);
 
+/** HOW TO PLAY's panels (ui/howto.ts): a chunk of their own as well, fetched soon after
+ *  boot, to keep main.js inside its budget. */
+let howToUi: typeof import('./ui/howto') | undefined;
+let howToUiReady: Promise<void> | undefined;
+function loadHowToUi(): Promise<void> {
+  howToUiReady ??= import('./ui/howto').then(
+    (m) => {
+      chunkLoaded('howto');
+      howToUi = m;
+      theStage().redraw();
+    },
+    (err: unknown) => {
+      howToUiReady = undefined;
+      console.warn('how to play did not load', err);
+      chunkFailed('howto');
+    },
+  );
+  return howToUiReady;
+}
+setTimeout(() => void loadHowToUi(), 0);
+
 /** A screen out of the profile chunk: nothing until it has landed, then itself. */
 function profileScreen(make: (ui: typeof import('./ui/profile')) => DrawnScreen): DrawnScreen {
+  return chunkScreen(() => profileUi, loadProfileUi, make);
+}
+
+/** A screen out of a chunk: nothing until `ui()` has it, then itself. */
+function chunkScreen<M>(ui: () => M | undefined, load: () => Promise<void>, make: (m: M) => DrawnScreen): DrawnScreen {
   let real: DrawnScreen | undefined;
   const get = (): DrawnScreen | undefined => {
-    if (!real && profileUi) real = make(profileUi);
-    if (!real) void loadProfileUi();
+    const m = ui();
+    if (!real && m) real = make(m);
+    if (!real) void load();
     return real;
   };
   return {
@@ -4190,14 +4217,14 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
         },
       };
     }));
-    const howTo = howToScreen(() => ({
+    const howTo = chunkScreen(() => howToUi, loadHowToUi, (ui) => ui.howToScreen(() => ({
       skin: careerSkin(),
       onDone: () => stage.pop(),
       // Its fog, its evolution and its confetti move; nothing else is drawn for it.
       redraw: () => {
         if (stage.current === howTo) stage.redraw();
       },
-    }));
+    })));
     stage.show(main);
     // Somebody who imported their ROM by hand is new here: the panels come up over the
     // first menu they meet, once on this device (POK-429).
