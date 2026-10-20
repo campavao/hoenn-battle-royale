@@ -29,6 +29,7 @@ EWRAM_DATA struct BrMap gBrMap = {0};
 const u8 gBrText_MenuMap[] = _("MAP");
 const u8 gBrText_TheFog[] = _("The FOG.");
 static const u8 sText_SafeAt[] = _("Safe: ");
+static const u8 sText_Nothing[] = _("");
 
 // The prompt names the ring's centre (POK-325), the one place the fog never reaches:
 // "SAFE: LITTLEROOT TOWN". It said "FOG: ", which read as the place the fog had taken
@@ -41,8 +42,10 @@ const u8 *BrMap_Prompt(void)
         return gBrText_TheFog;
     if (gBrRing.r < 0)
         return gBrText_FogEverywhere;
+    // The first ring names nowhere until it closes (feedback #23), and the prompt says
+    // nothing either (Cam, 2026-10-20: hide "The FOG." too).
     if (gBrRing.place[0] == EOS)
-        return gBrText_TheFog;
+        return sText_Nothing;
     StringCopy(StringCopy(gStringVar4, sText_SafeAt), gBrRing.place);
     if (GetStringWidth(FONT_NORMAL, gStringVar4, 0) <= 14 * 8)
         return gStringVar4;
