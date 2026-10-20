@@ -1,5 +1,5 @@
 # house-trade-race: somebody else trades with him while we are in the party menu. Their
-# PICKUP of his key takes him off our map, ours is refused -- "HE HAS ALREADY TRADED" --
+# PICKUP of his key takes him off our map, ours is refused -- "He is trading with someone" --
 # and our TREECKO stays ours.
 #
 # house-trade's walk and seed.

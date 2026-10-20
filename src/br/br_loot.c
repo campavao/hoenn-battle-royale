@@ -519,6 +519,10 @@ static void HandlePickup(const u8 *payload, u8 len)
 
     if (n < 8 || HomeClaimAnswered(BrWire_ReadU16(d + 1), d[0]))
         return;
+    // A trader's key with a Pokemon named: he was given it, and offers it to the next one.
+    if (d[3] != 0 && (BrBalls_NoteHolds(BrWire_ReadU16(d + 1), BrWire_ReadU16(d + 4))
+                      || BrEvent_NoteHolds(BrWire_ReadU16(d + 1), BrWire_ReadU16(d + 4))))
+        return;
     // A house's cache is gone for us too, though we are nowhere near it.
     BrBalls_NoteTaken(BrWire_ReadU16(d + 1));
     BrPatch_NoteTaken(BrWire_ReadU16(d + 1)); // ...and a patch somebody's battle started on
@@ -726,7 +730,7 @@ static const u8 sText_Gift[] = _("A gift: ");
 static const u8 sText_Bang[] = _("!");
 static const u8 sText_NobodyLearns[] = _("All know ");
 static const u8 sText_HaveTm[] = _("Already have ");
-static const u8 sText_TradedAlready[] = _("He has already traded");
+static const u8 sText_TradedAlready[] = _("He is trading with someone");
 
 // A town's gift-giver says a line before he hands it over (Cam's 2026-10-14 play-test,
 // POK-355: "I would like them to talk a little bit before they give you the gift"). One
@@ -791,6 +795,22 @@ void BrLoot_SendTaken(u16 key)
     buf[4] = 0;
     buf[5] = 0;
     buf[6] = 0;
+    buf[7] = 0;
+    BrWire_SendOrHold(BR_MSG_PICKUP, buf, BR_PICKUP_LEN);
+}
+
+// A trader was given `species` here (Cam's 2026-10-19 play-test, #9: "let the traders
+// always trade their current Pokemon with anyone"): the PICKUP of his key with the
+// Pokemon in its item field. He stays where he stands and offers it to the next trainer.
+void BrLoot_SendHolds(u16 key, u16 species)
+{
+    u8 buf[BR_PICKUP_LEN];
+
+    buf[0] = gBrMySeat;
+    BrWire_WriteU16(buf + 1, key);
+    buf[3] = 1;
+    BrWire_WriteU16(buf + 4, species);
+    buf[6] = 1;
     buf[7] = 0;
     BrWire_SendOrHold(BR_MSG_PICKUP, buf, BR_PICKUP_LEN);
 }
@@ -1197,6 +1217,7 @@ void BrLoot_HomeTrade(void)
     struct BrLootItem *it = sGiftKey != 0 ? Find(sGiftKey) : NULL;
     u16 slot = gSpecialVar_0x8004;
     struct Pokemon mon;
+    u16 given;
 
     sGiftKey = 0;
     if (slot >= PARTY_SIZE || GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL) == SPECIES_NONE)
@@ -1217,8 +1238,12 @@ void BrLoot_HomeTrade(void)
     }
     // A trade, so one that evolves on the way over does (TradedInto).
     HomeOffered(&mon, TradedInto(it->species));
-    if (BrEvent_Swap(slot, &mon))
-        SendPickup(it);
+    given = GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL);
+    if (!BrEvent_Swap(slot, &mon))
+        return;
+    // He keeps ours and stays, for the next trainer (#9).
+    BrLoot_SendHolds(it->key, given);
+    BrBalls_NoteHolds(it->key, given);
 }
 
 // One Pokemon a house (POK-379, the event trader's POK-392). Two trainers at him at once

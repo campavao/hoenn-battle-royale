@@ -371,8 +371,12 @@ describe('bots walking', () => {
     bots.ringMoved(2);
     for (let t = STEP_MS; t <= 40_000; t += STEP_MS) bots.tick(t);
     const trades = sent.filter((m) => m.t === 'pickup' && m.key === 0xb00f);
-    expect(trades).toHaveLength(1); // the second bot finds him used up
+    expect(trades).toHaveLength(1); // this page's bots leave him be once one has traded
     const trader = (trades[0] as { seat: number }).seat;
+    // He keeps the one he was given and offers it next (#9): his key names it.
+    expect(trades[0]).toMatchObject({ n: 1 });
+    expect((trades[0] as { item?: number }).item).toBeGreaterThan(0);
+    expect(bots.partyOf(trader).map((m) => m.species)).not.toContain((trades[0] as { item?: number }).item);
     const lapras = grownUp(131, rungForPhase(2));
     expect(bots.partyOf(trader).map((m) => m.species)).toContain(lapras);
     expect(bots.partyOf(dealt.find((b) => b.seat !== trader)!.seat).map((m) => m.species)).not.toContain(lapras);

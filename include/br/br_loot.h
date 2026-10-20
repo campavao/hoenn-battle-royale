@@ -231,6 +231,8 @@ bool8 BrLoot_Solid(u8 localId);
 void BrLoot_GiftTake(void);
 // BR_EventScript_HomeTrader's swap, the party member in VAR_0x8004 for his.
 void BrLoot_HomeTrade(void);
+// A trader's PICKUP naming the Pokemon he was given: he offers it next (br_loot.c).
+void BrLoot_SendHolds(u16 key, u16 species);
 // Before either: two trainers at him at once would both be given his Pokemon, so we ask the
 // host with a PICKUP of his claim key and the script waits (VAR_RESULT TRUE) on the answer.
 // FALSE goes straight on: not somebody at home, nobody chosen, or nothing to ask.

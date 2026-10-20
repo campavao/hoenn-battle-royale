@@ -82,6 +82,9 @@ void BrEvent_Init(void);
 // Somebody's PICKUP, ours included: an event's legendary under that key is gone, or its
 // trader has traded -- with `seat`, which answers a trade of ours waiting on him.
 void BrEvent_NoteTaken(u16 key, u8 seat);
+// An event's trader was given `species`: he offers it from now on (#9). FALSE for any
+// other key.
+bool8 BrEvent_NoteHolds(u16 key, u16 species);
 // A SPILL put an event's legendary back down (br_legend.c: a battle with it that did not
 // end in a catch): its mark is not gray any more.
 void BrEvent_NoteBack(u16 key);

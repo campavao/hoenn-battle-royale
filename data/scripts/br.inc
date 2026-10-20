@@ -151,28 +151,26 @@ BR_EventScript_GiftMon:
 	message BR_Text_MonReceived
 	goto BR_EventScript_GiftSaid
 
-@ Somebody at home who trades (src/br/br_balls.c): the event trader's question, and
-@ BrLoot_HomeTrade's swap. gStringVar1 is his.
+@ Somebody at home who trades (src/br/br_balls.c): the event trader's offer, and
+@ BrLoot_HomeTrade's swap. gStringVar1 is his. One line, then the party menu: picking
+@ one is the yes, B the no (Cam's 2026-10-19 play-test, #9: "this should be quick").
 BR_EventScript_HomeTrader::
 	lockall
-	msgbox BR_Text_TraderOffer, MSGBOX_YESNO
-	goto_if_eq VAR_RESULT, NO, BR_EventScript_HomeTraderNo
+	msgbox BR_Text_TraderOffer, MSGBOX_DEFAULT
 	special ChoosePartyMon
 	special BrLoot_HomeClaim
 	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_HomeTraderAsked
 	waitstate
 BR_EventScript_HomeTraderAsked:
 	special BrLoot_HomeTrade
-BR_EventScript_HomeTraderNo:
 	releaseall
 	end
 
 @ An event's trader (src/br/br_event.c): any one of ours for his, at our rung. gStringVar1
-@ is his. Once a match: the C says so without asking after that.
+@ is his: whatever the last trainer gave him. One line, then the party menu.
 BR_EventScript_Trader::
 	lockall
-	msgbox BR_Text_TraderOffer, MSGBOX_YESNO
-	goto_if_eq VAR_RESULT, NO, BR_EventScript_TraderNo
+	msgbox BR_Text_TraderOffer, MSGBOX_DEFAULT
 	special ChoosePartyMon
 	special BrEvent_Trade
 	goto_if_eq VAR_RESULT, FALSE, BR_EventScript_TraderNo
@@ -260,7 +258,7 @@ BR_Text_MonReceived:
 
 BR_Text_TraderOffer:
 	.string "My {STR_VAR_1} for any one of\n"
-	.string "yours. Trade?$"
+	.string "yours. Pick one!$"
 
 BR_Text_HealParty:
 	.string "HEAL your party?$"

@@ -63,8 +63,6 @@ tap A
 wait 90
 shot offer
 tap A
-wait 30
-tap A
 wait 90
 shot picker
 tap A
@@ -74,8 +72,13 @@ wait 60
 expectmsg 10 u16 1 0x8CD2
 wait 660
 shot traded
+# ...and he keeps our TREECKO (277) for the next trainer (#9): his PICKUP names it, and
+# he stands where he was with it
 expectmsg 10 u16 1 0x8C92
-expect u8 gBrLoot+31 0
+expectmsg 10 u16 4 277
+expect u16 gBrLoot+20 0x8C92
+expect u16 gBrLoot+26 277
+expect u8 gBrLoot+31 1
 expect u8 gPlayerPartyCount 1
 tap A
 wait 60

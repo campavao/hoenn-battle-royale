@@ -496,6 +496,11 @@ STATIC_ASSERT(BR_TABLE_BALLS <= BR_LOOT_TABLE_BALLS, BrTableBallsFitTheirKeys)
 static u8 sCacheTaken[(ARRAY_COUNT(sRooms) + 7) / 8];
 static u8 sTraderTaken[BR_TRADERS / 8];
 static u8 sTableTaken[(BR_TABLE_BALLS + 7) / 8];
+// What each trader holds now, SPECIES_NONE for the one the seed gave him: the last
+// Pokemon a trainer gave him (Cam's 2026-10-19 play-test, #9). A floor's by his index, a
+// house's by the house's eighth, as sHomeTaken is.
+static u16 sTraderHolds[BR_TRADERS];
+static u16 sHomeHolds[8];
 // The map the last room's things went down for, so they leave the table when we leave:
 // rows outlive their maps (br_loot.c's Evict), and these are put back from here, not
 // from the page, every time we walk in. sRoom is that map's row in sRooms, or -1.
@@ -587,6 +592,8 @@ void BrBalls_Init(void)
     memset(sCacheTaken, 0, sizeof(sCacheTaken));
     memset(sTraderTaken, 0, sizeof(sTraderTaken));
     memset(sTableTaken, 0, sizeof(sTableTaken));
+    memset(sTraderHolds, 0, sizeof(sTraderHolds));
+    memset(sHomeHolds, 0, sizeof(sHomeHolds));
     sHomeTaken = 0;
     sCacheMap = 0xFFFF; // no map is (0xFF, 0xFF)
     sRoom = -1;
@@ -653,12 +660,66 @@ static void DropRoom(s16 i)
         BrLoot_DropKey(BR_LOOT_KEY_FLOOR_TRADER(sRooms[i].trader));
 }
 
+// Whoever is home in room i, or its floor's trader, unless a trainer took him for good:
+// a house's gift is gone once given, a trader stays with what he was last given.
+static void PutPeople(s16 i)
+{
+    const struct BrRoom *room = &sRooms[i];
+    u8 group = gSaveBlock1Ptr->location.mapGroup, num = gSaveBlock1Ptr->location.mapNum;
+    u16 species;
+
+    if (i < BR_HOUSES && Home(i) && !(sHomeTaken & (1 << (i / BR_HOME_IN))))
+    {
+        species = sHomeHolds[i / BR_HOME_IN];
+        if (species == SPECIES_NONE)
+            species = sHomeMons[HomeDraw(i) % ARRAY_COUNT(sHomeMons)];
+        BrLoot_AddMon(BR_LOOT_KEY_HOME(i), group, num,
+                      room->personX + MAP_OFFSET, room->personY + MAP_OFFSET, species, 0);
+    }
+    if (room->trader != BR_NO_TRADER && !Flag(sTraderTaken, room->trader))
+    {
+        species = sTraderHolds[room->trader];
+        if (species == SPECIES_NONE)
+            species = sHomeMons[Mix(gBrMatch.seed ^ 0xF100 ^ room->trader) % ARRAY_COUNT(sHomeMons)];
+        BrLoot_AddMon(BR_LOOT_KEY_FLOOR_TRADER(room->trader), group, num,
+                      room->personX + MAP_OFFSET, room->personY + MAP_OFFSET, species, 0);
+    }
+}
+
+bool8 BrBalls_NoteHolds(u16 key, u16 species)
+{
+    u16 i;
+    u16 here = (gSaveBlock1Ptr->location.mapGroup << 8) | gSaveBlock1Ptr->location.mapNum;
+
+    if (!BrBalls_Trades(key) || species == SPECIES_NONE || species >= NUM_SPECIES)
+        return FALSE;
+    if (key >= BR_LOOT_KEY_FLOOR_TRADER(0))
+    {
+        i = key - BR_LOOT_KEY_FLOOR_TRADER(0);
+        if (i >= BR_TRADERS)
+            return FALSE;
+        sTraderHolds[i] = species;
+        sTraderTaken[i / 8] &= ~(1 << (i % 8));
+    }
+    else
+    {
+        i = (key - BR_LOOT_KEY_HOME(0)) / BR_HOME_IN;
+        sHomeHolds[i] = species;
+        sHomeTaken &= ~(1 << i);
+    }
+    // Standing in his room: his row takes it, or he is put back where the host's yes took
+    // him off while the trade was on.
+    if (here == sCacheMap && sRoom >= 0)
+        PutPeople(sRoom);
+    return TRUE;
+}
+
 void BrBalls_Tick(void)
 {
     u8 group = gSaveBlock1Ptr->location.mapGroup, num = gSaveBlock1Ptr->location.mapNum;
     u16 here = (group << 8) | num;
     const struct BrRoom *room;
-    u16 species, i;
+    u16 i;
 
     if (gBrMatch.seed == 0 || here == sCacheMap)
         return;
@@ -677,16 +738,5 @@ void BrBalls_Tick(void)
             BrLoot_AddItem(BR_LOOT_KEY_TABLE(i), group, num,
                            sTableBalls[i].x + MAP_OFFSET, sTableBalls[i].y + MAP_OFFSET, TableItem(i));
     }
-    if (sRoom < BR_HOUSES && Home(sRoom) && !(sHomeTaken & (1 << (sRoom / BR_HOME_IN))))
-    {
-        species = sHomeMons[HomeDraw(sRoom) % ARRAY_COUNT(sHomeMons)];
-        BrLoot_AddMon(BR_LOOT_KEY_HOME(sRoom), group, num,
-                      room->personX + MAP_OFFSET, room->personY + MAP_OFFSET, species, 0);
-    }
-    if (room->trader != BR_NO_TRADER && !Flag(sTraderTaken, room->trader))
-    {
-        species = sHomeMons[Mix(gBrMatch.seed ^ 0xF100 ^ room->trader) % ARRAY_COUNT(sHomeMons)];
-        BrLoot_AddMon(BR_LOOT_KEY_FLOOR_TRADER(room->trader), group, num,
-                      room->personX + MAP_OFFSET, room->personY + MAP_OFFSET, species, 0);
-    }
+    PutPeople(sRoom);
 }

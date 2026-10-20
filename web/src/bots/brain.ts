@@ -1681,15 +1681,15 @@ export class Bots {
     return false;
   }
 
-  /** The traders still standing: the room's word, less the ones a bot here has just
-   *  traded with and the room has not heard back about yet. */
+  /** The traders standing: the room's word, less the ones a bot here has traded with. */
   private openTraders(): ({ key: number; species: number; mapId: string } & PageCell)[] {
     return (this.opts.traders?.() ?? []).filter((t) => !this.tradedKeys.has(t.key));
   }
 
   /** At an event's trader, or a step from him: hand him the most hurt mon still standing
    *  for his fresh one, the way a player at him would (br_event.c's BrEvent_Trade refuses
-   *  a fainted one). The PICKUP of his key uses him up for the whole room. */
+   *  a fainted one). He keeps the one given and offers it next; this page's bots leave
+   *  him be after (tradedKeys), so two of them never hand the same pair back and forth. */
   private tryTrade(walker: Walker): boolean {
     const t = this.openTraders().find(
       (o) => o.mapId === walker.at.map && Math.abs(o.x - walker.at.x) + Math.abs(o.y - walker.at.y) <= 1,
@@ -1701,9 +1701,11 @@ export class Bots {
     });
     if (slot < 0) return false;
     this.tradedKeys.add(t.key);
+    const given = walker.party[slot].species;
     walker.party[slot] = keepFieldMoves(tradedMon(t.species, this.phase), walker.party[slot]);
     (walker.traded ??= new Map()).set(slot, t.species);
-    this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: t.key });
+    // He keeps ours and offers it to the next trainer (#9): his key naming it.
+    this.opts.send({ t: 'pickup', seat: walker.bot.seat, key: t.key, item: given, n: 1 });
     this.note(walker, 'trade', `key ${t.key} species ${t.species}`);
     walker.path = null;
     return true;

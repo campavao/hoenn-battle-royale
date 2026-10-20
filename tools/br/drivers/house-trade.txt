@@ -1,7 +1,8 @@
 # house-trade: somebody at home who trades (POK-379, br_balls.c). The event trader's
-# question -- his for any one of ours -- and the party menu picks; B out of it trades
-# nothing. It is a trade, so his KADABRA comes over an ALAKAZAM (br_loot.c, TradedInto),
-# he keeps ours, and the PICKUP of his key takes him off every map.
+# line -- his for any one of ours -- and the party menu picks; B out of it trades
+# nothing. It is a trade, so his KADABRA comes over an ALAKAZAM (br_loot.c, TradedInto).
+# He keeps ours and offers it to the next trainer (Cam's 2026-10-19 play-test, #9): the
+# PICKUP of his key names it, and he stays, out of the door and back in too.
 #
 # house-gift's walk, under seed 0x1072: PETALBURG CITY's HOUSE1 has a KADABRA trader.
 wait 30
@@ -31,12 +32,10 @@ expect u16 *gSaveBlock1Ptr+2 5
 hold UP 1
 wait 20
 shot trader
-# A asks; YES; then B out of the party menu: nothing traded, and he is still there
+# A asks; A past his line; then B out of the party menu: nothing traded, and he is still there
 tap A
 wait 90
 shot offer
-tap A
-wait 30
 tap A
 wait 90
 shot picker
@@ -47,8 +46,6 @@ expect u16 gBrLoot+20 0x8C21
 # again, and pick ours this time
 tap A
 wait 90
-tap A
-wait 30
 tap A
 wait 90
 tap A
@@ -63,9 +60,42 @@ shot traded
 expect u8 gPlayerPartyCount 1
 expectmsg 7 u16 2 65
 expectmsg 10 u16 1 0x8C21
-expect u8 gBrLoot+31 0
-# ...and A where he stood is nothing now
-tap A
+expectmsg 10 u8 3 1
+expectmsg 10 u16 4 277
+expect u8 gBrLoot+31 1
+expect u16 gBrLoot+20 0x8C21
+expect u16 gBrLoot+26 277
 wait 60
 expect u32 gMain+4 CB2_Overworld+1
+# ...and A on him again: our TREECKO, offered to whoever is next
+tap A
+wait 120
+shot offers-ours
+tap A
+wait 90
+shot menu2
+tap B
+wait 120
+shot out2
+expect u8 gPlayerPartyCount 1
+expectmsg 7 u16 2 65
+expect u32 gMain+4 CB2_Overworld+1
+# ...and he is still there with it out of the door and back in (house-gift.txt's walk)
+wait 60
+hold DOWN 40
+wait 20
+expect u16 *gSaveBlock1Ptr+2 7
+hold RIGHT 40
+wait 20
+expect u16 *gSaveBlock1Ptr 3
+hold DOWN 90
+wait 200
+expectne u8 *gSaveBlock1Ptr+5 2
+hold UP 40
+wait 200
+expect u8 *gSaveBlock1Ptr+5 2
+expect u16 gBrLoot+20 0x8C21
+expect u16 gBrLoot+26 277
+expect u8 gBrLoot+31 1
+shot back-in
 say house trade ok
