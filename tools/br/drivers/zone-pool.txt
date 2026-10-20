@@ -1,8 +1,6 @@
 # zone-pool: the Safari's catch pool is dealt from the match seed (POK-255), not read
-# off Emerald's own Zone table. Twelve species -- three from the rare slice (starters,
-# the pseudo-legendary lines, the ones worth going looking for), five of the type the
-# match is about (POK-296) and four from the open slice -- and the same twelve on every
-# ROM in the room, because the deal is a pure
+# off Emerald's own Zone table. Twelve species from the whole dex bar the legendaries --
+# and the same twelve on every ROM in the room, because the deal is a pure
 # function of the seed the START carried rather than anything sent.
 #
 # The encounter itself cannot be driven here (POK-269: the harness cannot run a wild
@@ -24,27 +22,24 @@ wait 30
 expect u32 gBrMatch+8 0x12345678
 # BrMatch_BeginSafari deals it, so by now it is there and it is this seed's
 expect u32 gBrZone 0x12345678
-# the rare slice: MUDKIP 283, BELDUM 398, LILEEP 388, TORCHIC 280
-# Three slices, Kanto's shape (POK-296): three rare, five of the match's theme, four open.
-# This seed deals a GRASS match. MUDKIP, BELDUM, LILEEP...
-expect u16 gBrZone+4 283
-expect u16 gBrZone+6 398
-expect u16 gBrZone+8 388
-# ...SEEDOT, ODDISH, SHROOMISH, TREECKO, CACNEA -- every one of them GRASS, none twice, and
-# LILEEP above is not drawn again for being GRASS as well...
-expect u16 gBrZone+10 298
-expect u16 gBrZone+12 43
-expect u16 gBrZone+14 306
-expect u16 gBrZone+16 277
-expect u16 gBrZone+18 344
-# ...and GULPIN, MEDITITE, ARON, DUSKULL: the open rest, exactly as it was dealt before there
-# was a theme. The theme comes off a stream of its own, so it re-deals nothing else.
-expect u16 gBrZone+20 367
-expect u16 gBrZone+22 356
-expect u16 gBrZone+24 382
-expect u16 gBrZone+26 361
-# "The log names the theme": ours is the ticker, in the opening, where it is news.
-expectge u8 gBrHud+0x0A 1
+# Twelve from the whole dex bar the legendaries (2026-10-20), none twice, no type theme:
+# MAKUHITA, SEALEO, NATU, CHANSEY, GENGAR, TOTODILE, NINJASK, PILOSWINE, PICHU, PARAS,
+# PIDGEOTTO, LEDIAN -- six types' worth, Johto and Kanto as well as Hoenn, two of them
+# fully evolved. (Species ids are pokeemerald's internal ones: Hoenn's run from 277.)
+expect u16 gBrZone+4 335
+expect u16 gBrZone+6 342
+expect u16 gBrZone+8 177
+expect u16 gBrZone+10 113
+expect u16 gBrZone+12 94
+expect u16 gBrZone+14 158
+expect u16 gBrZone+16 302
+expect u16 gBrZone+18 221
+expect u16 gBrZone+20 172
+expect u16 gBrZone+22 46
+expect u16 gBrZone+24 17
+expect u16 gBrZone+26 166
+# ...and the deal no longer says "A <TYPE> MATCH!" on the ticker
+expect u8 gBrHud+0x0A 0
 wait 60
-shot theme
+shot pool
 say zone pool ok

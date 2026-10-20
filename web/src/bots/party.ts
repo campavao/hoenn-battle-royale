@@ -188,7 +188,7 @@ export function dealParty(
   mapId?: string,
   grade: Grade = Grade.Regular,
   /** This match's Zone pool (match/zone.ts). Kanto: "bots draft their first Pokemon from
-   *  the same zone pool", which is what carries a match's theme past the opening. Every
+   *  the same zone pool". Every
    *  ROM in the room deals the same twelve, so every client still deals the same bot. */
   pool: number[] = [],
 ): PackedMon[] {
