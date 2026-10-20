@@ -34,8 +34,8 @@
 // the picture lags the struct by exactly one frame -- the scroll registers are written at
 // the VBlank that ends a frame's logic and drawn during the next -- so what is drawn here
 // is the state read the frame BEFORE.
-import { cellElevation, isTallGrass, isWater, type SeamDir, type WorldMap } from './bots/world';
-import { PATCH_KEY_BASE, dealPatches, loadPatches, type PatchTable } from './bots/patches';
+import { isWater, type SeamDir, type WorldMap } from './bots/world';
+import type { Mark, Marks, Painter } from './field-extra';
 import { HOENN } from './bots/hoenn';
 import spritesData from './data/sprites.json';
 import type { Band, Emulator, SpriteBand } from './emu';
@@ -237,9 +237,6 @@ export const SPR_OAM_ATTR1 = 0x02;
 /** The OAM's u16 at 4: tileNum, then priority in bits 10..11. */
 export const SPR_OAM_ATTR2 = 0x04;
 export const OAM_PRIORITY_SHIFT = 10;
-/** event_object_movement.c's sElevationToPriority: an object at 4, 6, 8, 10 or 12 is drawn
- *  at priority 1, over BG1 -- a bridge's deck, the Cycling Road -- and 13 or 14 over all. */
-export const ELEVATION_TO_PRIORITY = [2, 2, 2, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 0, 0, 2];
 export const SPR_OAM_HFLIP = 0x08 << 9;
 export const OAM_AFFINE_ON = 1;
 
@@ -288,15 +285,6 @@ export interface PatchMark {
   drawn: boolean;
 }
 
-/** The marks of the patches nobody has taken on `map` under `seed`, in its own pixels. */
-export function patchMarks(table: PatchTable, map: WorldMap, seed: number, taken: (key: number) => boolean, drawn: (i: number) => boolean = () => false): PatchMark[] {
-  return dealPatches(table, map.id, map, seed).flatMap((p, i) => {
-    if (taken(p.key)) return [];
-    const sheet = isWater(map, p.x, p.y) ? 'patch-water' : isTallGrass(map, p.x, p.y) ? 'patch-tall-grass' : 'patch-shadow';
-    return [{ map: map.id, x: p.x * TILE, y: p.y * TILE + (sheet === 'patch-shadow' ? TILE / 2 : 0), sheet, drawn: drawn(i) } as PatchMark];
-  });
-}
-
 /** The shake on a fog bleed (Cam: "like as if a Pokémon were poisoned"), in frames. */
 export const SHAKE_FRAMES = 16;
 
@@ -322,15 +310,6 @@ export function shakeOffset(n: number): { dx: number; dy: number } {
   const amp = Math.ceil((3 * n) / SHAKE_FRAMES);
   const sign = (n >> 1) & 1 ? -1 : 1;
   return { dx: sign * amp, dy: (n & 1 ? 1 : 0) * Math.min(1, amp) };
-}
-
-/** Whether the page's own drawing of a person stands where the ROM would put them over
- *  BG1: by the elevation of the cell under their feet (ELEVATION_TO_PRIORITY). */
-export function standsAbove(map: WorldMap, s: { gfx: number; x: number; y: number }, origin: { left: number; top: number }): boolean {
-  const info = (spritesData as Record<string, { w: number; h: number }>)[String(s.gfx)];
-  if (!info) return false;
-  const e = cellElevation(map, Math.floor((origin.left + s.x + info.w / 2) / TILE), Math.floor((origin.top + s.y + info.h - 1) / TILE));
-  return e >= 0 && ELEVATION_TO_PRIORITY[e] <= 1;
 }
 
 export interface FieldSprite {
@@ -861,27 +840,6 @@ export interface Reached extends Placed {
   hops: number;
 }
 
-/** Every map a view's rectangle reaches (POK-431): the one we are on, its neighbours, and
- *  theirs as far as `view` (map pixels of `map`, [left, right) by [top, bottom)) goes. A
- *  desktop shows 700 pixels of map across, so Oldale's neighbours' neighbours are on
- *  screen, and drawing only the first ring left Route 103's corner as Route 102's border
- *  until the walk got there (Cam's 2026-10-19 play-test: "Route 10x kind of pops in").
- *  Breadth first over the outdoor maps, so a map reached two ways is placed by the
- *  shorter; nearest first. A map off the view still leads on to the ones past it. */
-export function reachedMaps(map: WorldMap, byId: ReadonlyMap<string, WorldMap>, view: { left: number; top: number; right: number; bottom: number }): Reached[] {
-  const all: Reached[] = [{ map, x: 0, y: 0, hops: 0 }];
-  const seen = new Set([map.id]);
-  for (let i = 0; i < all.length; i++) {
-    const at = all[i];
-    for (const n of neighbours(at.map, byId)) {
-      if (seen.has(n.map.id) || !n.map.outdoor) continue;
-      seen.add(n.map.id);
-      all.push({ map: n.map, x: at.x + n.x, y: at.y + n.y, hops: at.hops + 1 });
-    }
-  }
-  return all.filter((r) => r.hops === 0 || (r.x < view.right && r.y < view.bottom && r.x + r.map.w * TILE > view.left && r.y + r.map.h * TILE > view.top));
-}
-
 export interface FieldDeps {
   emu: Emulator;
   /** Null when the ROM is unpatched: the picture is still placed, the field stays dark. */
@@ -1069,6 +1027,10 @@ export class FieldView {
 
   constructor(private readonly deps: FieldDeps) {
     this.roster = deps.people ?? null;
+    void import('./field-extra').then((m) => {
+      this.extra = m;
+      this.drawn = null;
+    }, () => {});
   }
 
   /** The match's roster, once there is one: solo's, or the room's Bridge's. */
@@ -1407,7 +1369,8 @@ export class FieldView {
     // gBrSeats' standing copy past the box is the page's drawing, not an object of the ROM's.
     this.ghosts = { rom: objects.filter((s) => s.seat !== undefined), drawn: [...dropped.filter((s) => s.seat !== undefined), ...drawn] };
     const map = HOENN.byRef.get(`${c.group}:${c.num}`);
-    if (map) for (const s of [...dropped, ...drawn]) if (standsAbove(map, s, origin)) s.above = true;
+    const extra = this.extra;
+    if (map && extra) for (const s of [...dropped, ...drawn]) if (extra.standsAbove(map, s, origin)) s.above = true;
     return [...rom, ...drawn];
   }
 
@@ -1612,7 +1575,7 @@ export class FieldView {
 
   /** The people, bottom-most last so a sprite further down the map is in front. */
   private drawSprites(ctx: CanvasRenderingContext2D, sprites: FieldSprite[], cover: { maps: readonly Reached[]; ox: number; oy: number } | null = null): boolean {
-    if (cover && sprites.length > 0) return this.drawCovered(ctx, sprites, cover);
+    if (cover && sprites.length > 0 && this.extra) return this.extra.drawCovered(this.painter, ctx, sprites, cover);
     let complete = true;
     const lay = this.lay;
     const order = sprites.slice().sort((a, b) => Number(!!b.under) - Number(!!a.under) || (a.y + (SHEETS[String(a.gfx)]?.h ?? 0)) - (b.y + (SHEETS[String(b.gfx)]?.h ?? 0)));
@@ -1637,62 +1600,14 @@ export class FieldView {
   }
 
   private scratch: HTMLCanvasElement | null = null;
-
-  /** The people under what stands over them (POK-443): drawn on a canvas of their own,
-   *  the maps' covers (render-maps.py: the top layer of every metatile that puts it on
-   *  BG1, a roof, a tree's crown) cut out of them, and that laid on. Past the picture the
-   *  page drew a bot on a roof the ROM would have put him behind ("he is not obeying the
-   *  Z index"). A cover still on its way covers nobody, and is drawn again when it lands. */
-  private drawCovered(ctx: CanvasRenderingContext2D, sprites: FieldSprite[], cover: { maps: readonly Reached[]; ox: number; oy: number }): boolean {
-    const lay = this.lay;
-    const under = sprites.filter((s) => !s.above);
-    const over = sprites.filter((s) => s.above);
-    // Only the box the people under a cover stand in: a phone redrew, cut and laid on the
-    // whole field for a few 16x32 sprites, on nearly every frame.
-    let x0 = Infinity;
-    let y0 = Infinity;
-    let x1 = -Infinity;
-    let y1 = -Infinity;
-    for (const s of under) {
-      const info = SHEETS[String(s.gfx)];
-      if (!info) continue;
-      x0 = Math.min(x0, lay.lcdCol + s.x);
-      y0 = Math.min(y0, lay.lcdRow + s.y);
-      x1 = Math.max(x1, lay.lcdCol + s.x + info.w);
-      y1 = Math.max(y1, lay.lcdRow + s.y + info.h);
-    }
-    x0 = Math.max(0, Math.floor(x0));
-    y0 = Math.max(0, Math.floor(y0));
-    x1 = Math.min(lay.cols, Math.ceil(x1));
-    y1 = Math.min(lay.rows, Math.ceil(y1));
-    if (!(x1 > x0 && y1 > y0)) return this.drawSprites(ctx, over);
-    const doc = ctx.canvas.ownerDocument;
-    if (!this.scratch && doc) this.scratch = doc.createElement('canvas');
-    const scratch = this.scratch;
-    const sctx = scratch?.getContext('2d');
-    if (!scratch || !sctx) return this.drawSprites(ctx, sprites);
-    if (scratch.width !== lay.cols) scratch.width = lay.cols;
-    if (scratch.height !== lay.rows) scratch.height = lay.rows;
-    const w = x1 - x0;
-    const h = y1 - y0;
-    sctx.save();
-    sctx.beginPath();
-    sctx.rect(x0, y0, w, h);
-    sctx.clip();
-    sctx.globalCompositeOperation = 'source-over';
-    sctx.clearRect(x0, y0, w, h);
-    sctx.imageSmoothingEnabled = false;
-    let complete = this.drawSprites(sctx, under);
-    sctx.globalCompositeOperation = 'destination-out';
-    for (const r of cover.maps) {
-      const img = this.image(`${r.map.id}.cover`);
-      if (img) sctx.drawImage(img, r.x - cover.ox, r.y - cover.oy);
-      else complete = false;
-    }
-    sctx.restore();
-    ctx.drawImage(scratch, x0, y0, w, h, x0, y0, w, h);
-    return this.drawSprites(ctx, over) && complete;
-  }
+  /** field-extra.ts, once its chunk is in. */
+  private extra: typeof import('./field-extra') | null = null;
+  private readonly painter: Painter = {
+    layout: () => this.lay,
+    image: (id, dir) => this.image(id, dir),
+    sprites: (ctx, sprites) => this.drawSprites(ctx, sprites),
+    scratch: (doc) => (this.scratch ??= doc.createElement('canvas')),
+  };
 
   /** A canvas whose backing store went away -- Firefox, after the GPU process resets or
    *  a tab comes back from the background -- throws "Canvas is already in error state"
@@ -1775,7 +1690,7 @@ export class FieldView {
         if (img) ctx.drawImage(img, n.x - ox, n.y - oy);
         else complete = false;
       }
-      if (!this.drawMarks(ctx, marks, ox, oy)) complete = false;
+      if (this.extra && !this.extra.drawMarks(this.painter, ctx, marks, ox, oy)) complete = false;
       if (c.fog && !this.drawFog(ctx, c.fog)) complete = false;
       if (!this.drawSprites(ctx, under, { maps: reached, ox, oy })) complete = false;
     }
@@ -1792,135 +1707,31 @@ export class FieldView {
     this.drawn = complete || this.images.settled ? key : null;
   }
 
-  /** The maps two seams away or more, over the band where it shows them (POK-431). The
-   *  ROM's ring holds its own map and MAP_OFFSET cells of each neighbour along the seam,
-   *  and border everywhere else: north of Oldale, standing on Route 102 by its east end,
-   *  the band drew Route 102's trees where the composite beside it drew Route 103. So
-   *  those maps go over the band, under the people, with the fog on them; the ROM never
-   *  draws anybody there. */
-  private drawCorners(ctx: CanvasRenderingContext2D, c: Camera, map: WorldMap): boolean {
-    const band = this.band;
-    if (!band) return true;
-    const lay = this.lay;
-    const { left, top } = lcdOrigin(c);
-    const ox = left - lay.lcdCol;
-    const oy = top - lay.lcdRow;
-    const shown = this.shownBand(c, map, band);
-    let complete = true;
-    let clipped = false;
-    ctx.save();
-    ctx.beginPath();
-    const far = this.reached(map, ox, oy).filter((r) => r.hops >= 2);
-    for (const r of far) {
-      const x0 = Math.max(shown.left, r.x);
-      const y0 = Math.max(shown.top, r.y);
-      const x1 = Math.min(shown.right, r.x + r.map.w * TILE);
-      const y1 = Math.min(shown.bottom, r.y + r.map.h * TILE);
-      if (x1 <= x0 || y1 <= y0) continue;
-      ctx.rect(x0 - ox, y0 - oy, x1 - x0, y1 - y0);
-      clipped = true;
-    }
-    if (clipped) {
-      ctx.clip();
-      for (let i = far.length - 1; i >= 0; i--) {
-        const img = this.image(far[i].map.id);
-        if (img) ctx.drawImage(img, far[i].x - ox, far[i].y - oy);
-        else complete = false;
-      }
-      if (c.fog && !this.drawFog(ctx, c.fog)) complete = false;
-    }
-    ctx.restore();
-    return complete;
-  }
+  private markKit: Marks | null = null;
 
-  /** The band as it shows, cut (bandClip), in map pixels of the map we are on. */
-  private shownBand(c: Camera, map: WorldMap, band: Band): { left: number; top: number; right: number; bottom: number } {
-    const cut = bandClip(c, map, band, c.stale, wideRing(band) && c.wide !== false);
-    const { left, top } = lcdOrigin(c);
-    return {
-      left: left - band.left + cut.left,
-      top: top - band.top + cut.top,
-      right: left + GBA_W + band.right - cut.right,
-      bottom: top + GBA_H + band.bottom - cut.bottom,
-    };
-  }
-
-  private patchTable: PatchTable | null = null;
-  private patchAsked = false;
-
-  /** The wild patches' marks on every map the view reaches (POK-431: "the indicator that a
-   *  Pokémon was here did not appear until I was in the area"), dealt the way each ROM
-   *  deals them (bots/patches.ts) and taken by gBrPatchTaken. `at` is in map pixels of
-   *  the map we are on. Nothing until patches.json is in. */
-  private marks(c: Camera, map: WorldMap): (PatchMark & { at: { x: number; y: number } })[] {
-    const { emu } = this.deps;
+  /** The wild patches' marks on every map the view reaches (field-extra.ts Marks), `at`
+   *  in map pixels of the map we are on. */
+  private marks(c: Camera, map: WorldMap): Mark[] {
     const match = this.sym('gBrMatch');
     const takenAt = this.sym('gBrPatchTaken');
     const patch = this.sym('gBrPatch');
-    if (match === undefined || takenAt === undefined || patch === undefined) return [];
-    if (!this.patchTable) {
-      if (!this.patchAsked) {
-        this.patchAsked = true;
-        void loadPatches().then((t) => {
-          this.patchTable = t;
-          this.drawn = null;
-        }, () => {});
-      }
-      return [];
-    }
-    const seed = emu.read(match + MATCH_SEED, 32) >>> 0;
-    if (seed === 0) return [];
-    const taken = emu.bytes(takenAt, PATCH_TAKEN_SIZE);
-    const isTaken = (key: number) => {
-      const n = key - PATCH_KEY_BASE;
-      return n >= 0 && n < PATCH_TAKEN_SIZE * 8 && ((taken[n >> 3] >> (n & 7)) & 1) !== 0;
-    };
-    const ours = emu.read(patch + PATCH_MAP, 16) === ((c.group << 8) | c.num);
-    const ids = emu.bytes(patch + PATCH_SPRITE_IDS, PATCH_MAX);
+    if (!this.extra || match === undefined || takenAt === undefined || patch === undefined) return [];
+    this.markKit ??= new this.extra.Marks();
     const { left, top } = lcdOrigin(c);
-    const reached = this.reached(map, left - this.lay.lcdCol, top - this.lay.lcdRow);
-    // Asked every frame and the same nearly always: dealt again only when the maps in
-    // view, the taken bits or the ROM's own drawn patches change.
-    const key = `${seed}:${ours ? ids.join(',') : '-'}:${taken.join(',')}`;
-    if (this.marksMemo && this.marksMemo.reached === reached && this.marksMemo.key === key) return this.marksMemo.marks;
-    const out: (PatchMark & { at: { x: number; y: number } })[] = [];
-    for (const r of reached) {
-      const drawn = r.hops === 0 && ours ? (i: number) => ids[i] < SPRITE_COUNT : undefined;
-      for (const m of patchMarks(this.patchTable, r.map, seed, isTaken, drawn)) out.push({ ...m, at: { x: m.x + r.x, y: m.y + r.y } });
-    }
-    this.marksMemo = { reached, key, marks: out };
-    return out;
+    return this.markKit.of(this.deps.emu, match, takenAt, patch, (c.group << 8) | c.num, this.reached(map, left - this.lay.lcdCol, top - this.lay.lcdRow), () => { this.drawn = null; });
   }
 
-  private marksMemo: { reached: readonly Reached[]; key: string; marks: (PatchMark & { at: { x: number; y: number } })[] } | null = null;
-
-  /** Marks at their first frame, onto a canvas whose top-left is map pixel (ox, oy). */
-  private drawMarks(ctx: CanvasRenderingContext2D, marks: readonly { sheet: string; at: { x: number; y: number } }[], ox: number, oy: number): boolean {
-    let complete = true;
-    for (const m of marks) {
-      const img = this.image(m.sheet, 'field-sprites');
-      if (img) ctx.drawImage(img, m.at.x - ox, m.at.y - oy);
-      else complete = false;
-    }
-    return complete;
-  }
-
-  /** reachedMaps for the view a field canvas at map pixel (ox, oy) shows, kept while the
-   *  map and the view's tile stay put: a step's frames ask it again and again. */
+  /** The maps the view a field canvas at map pixel (ox, oy) shows (field-extra.ts reach;
+   *  the map and its neighbours until that is in), kept while the map and the view's tile
+   *  stay put: a step's frames ask it again and again. */
   private reached(map: WorldMap, ox: number, oy: number): Reached[] {
-    const key = `${map.id}:${Math.floor(ox / TILE)}:${Math.floor(oy / TILE)}:${this.lay.cols}:${this.lay.rows}`;
+    const key = `${map.id}:${Math.floor(ox / TILE)}:${Math.floor(oy / TILE)}:${this.lay.cols}:${this.lay.rows}:${this.extra ? 1 : 0}`;
     if (this.reachedKey !== key) {
       this.reachedKey = key;
       // A tile of slack each way, for the frames of a step inside the same tile.
-      this.reachedList = reachedMaps(map, HOENN.byId, { left: ox - TILE, top: oy - TILE, right: ox + this.lay.cols + TILE, bottom: oy + this.lay.rows + TILE });
-      // Asked for before a seam is crossed, not on the frame after: the map we cross into
-      // is drawn on its own border, and a border still on its way was black around it for
-      // as long as the fetch took -- the area popping in (POK-431).
-      for (const r of this.reachedList) {
-        if (r.hops > 1) continue;
-        this.image(`${r.map.id}.border`);
-        for (const n of neighbours(r.map, HOENN.byId)) if (n.map.outdoor) this.image(n.map.id);
-      }
+      this.reachedList = this.extra
+        ? this.extra.reach(this.painter, map, { left: ox - TILE, top: oy - TILE, right: ox + this.lay.cols + TILE, bottom: oy + this.lay.rows + TILE })
+        : [{ map, x: 0, y: 0, hops: 0 }, ...neighbours(map, HOENN.byId).filter((n) => n.map.outdoor).map((n) => ({ ...n, hops: 1 }))];
     }
     return this.reachedList;
   }
@@ -1931,7 +1742,7 @@ export class FieldView {
   /** The people the ROM hid for being past its band, drawn over the picture -- only on
    *  the field, where the object table means what it says -- and faded the way the
    *  ROM's palette is, over their own pixels alone. */
-  private drawOverlay(overlay: HTMLCanvasElement, c: Camera, outdoors: WorldMap | null, marks: readonly (PatchMark & { at: { x: number; y: number } })[]): boolean {
+  private drawOverlay(overlay: HTMLCanvasElement, c: Camera, outdoors: WorldMap | null, marks: readonly Mark[]): boolean {
     const ctx = overlay.getContext('2d');
     if (!ctx) return true;
     const lay = this.lay;
@@ -1940,19 +1751,16 @@ export class FieldView {
     ctx.clearRect(0, 0, lay.cols, lay.rows);
     if (!c.onField || !outdoors) return true;
     ctx.imageSmoothingEnabled = false;
-    let complete = this.drawCorners(ctx, c, outdoors);
-    // The marks the band shows bare ground for: the ROM keeps sprites for its own map's
-    // patches near the player only, and for no other map's.
-    if (this.band) {
-      const shown = this.shownBand(c, outdoors, this.band);
-      const { left, top } = lcdOrigin(c);
-      const bare = marks.filter((m) => !m.drawn && m.at.x + TILE > shown.left && m.at.x < shown.right && m.at.y + TILE > shown.top && m.at.y < shown.bottom);
-      if (!this.drawMarks(ctx, bare, left - this.lay.lcdCol, top - this.lay.lcdRow)) complete = false;
-    }
+    let complete = true;
     const { left, top } = lcdOrigin(c);
     const ox = left - lay.lcdCol;
     const oy = top - lay.lcdRow;
-    if (!this.drawSprites(ctx, c.sprites.filter((s) => s.hidden), { maps: this.reached(outdoors, ox, oy), ox, oy })) complete = false;
+    const reached = this.reached(outdoors, ox, oy);
+    if (this.band && this.extra) {
+      const fog = c.fog;
+      complete = this.extra.drawPast(this.painter, ctx, c, outdoors, this.band, reached, marks, fog ? () => this.drawFog(ctx, fog) : null);
+    }
+    if (!this.drawSprites(ctx, c.sprites.filter((s) => s.hidden), { maps: reached, ox, oy })) complete = false;
     if (c.fade > 0) {
       ctx.globalCompositeOperation = 'source-atop';
       ctx.globalAlpha = Math.min(1, c.fade / 16);

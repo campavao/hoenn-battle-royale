@@ -110,6 +110,7 @@ import { LINE_MAX } from './match/ticker';
 import { CODE_ALPHABET, CODE_LENGTH } from './match/lobby';
 import { KEY_BIT } from './emu';
 import * as field from './field';
+import * as fieldExtra from './field-extra';
 import * as ghosts from './field-ghosts';
 import * as touch from './touch';
 import * as phone from './ui/phonehud';
@@ -895,7 +896,7 @@ describe("pret's structs the page reads at an offset (field.ts, touch.ts)", () =
     expect(oam).toMatch(/\/\*0x04\*\/ u16 tileNum:10;[^\n]*\n\s*u16 priority:2;/);
     expect([field.SPR_OAM_ATTR2, field.OAM_PRIORITY_SHIFT]).toEqual([4, 10]);
     const table = /sElevationToPriority\[\]\s*=\s*\{([^}]*)\}/.exec(objectEventsC)![1];
-    expect(field.ELEVATION_TO_PRIORITY).toEqual(table.split(',').map((v) => v.trim()).filter(Boolean).map(Number));
+    expect(fieldExtra.ELEVATION_TO_PRIORITY).toEqual(table.split(',').map((v) => v.trim()).filter(Boolean).map(Number));
     expect(field.SPR_OAM_HFLIP).toBe(evaluate([gbaTypesH], 'ST_OAM_HFLIP') << 9);
     expect(field.OAM_AFFINE_ON).toBe(evaluate([gbaTypesH], 'ST_OAM_AFFINE_ON_MASK'));
   });
