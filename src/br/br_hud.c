@@ -635,7 +635,7 @@ static void DrawCorner(void)
         buf[0] = EOS;
     if (buf[0] != EOS)
         alt = AltTurn();
-    // ...and outside the ring the count's turn is the way back in instead, SAFE and an
+    // ...and outside the ring the count's turn is the way back in instead, Safe and an
     // arrow (Cam's 2026-10-19 play-test, "where even am I?"): in the fog how many are
     // left matters less than which way to walk.
     if (alt != 2 && BrRing_SafeWay(buf))

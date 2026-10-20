@@ -158,7 +158,7 @@ bool8 BrRing_CellInside(s16 x, s16 y, s8 r)
 // already sends and nothing was reading. Two lines, 90 frames, above the ticker.
 static const u8 sText_FogCloses[] = _("The fog closes in on");
 const u8 gBrText_FogEverywhere[] = _("Fog everywhere");
-static const u8 sText_Safe[] = _("SAFE ");
+static const u8 sText_Safe[] = _("Safe ");
 
 static void SayFog(const u8 *place, u8 len)
 {
@@ -487,11 +487,14 @@ STATIC_ASSERT(sizeof(struct FogHurtScript) == 20, BrFogHurtScriptUnpadded)
 // to see (under the ground, in the sky) or behind a substitute.
 static void FogBubbles(u8 battler)
 {
+    u8 active = gActiveBattler;
+
     if ((gStatuses3[battler] & STATUS3_SEMI_INVULNERABLE) || gDisableStructs[battler].substituteHP != 0)
         return;
     gActiveBattler = battler;
     BtlController_EmitStatusAnimation(B_COMM_TO_CONTROLLER, FALSE, STATUS1_POISON);
     MarkBattlerForControllerExec(battler);
+    gActiveBattler = active;
 }
 
 // A frame's wait, for a replay whose fighter has not got this far yet (TurnFog).
@@ -606,7 +609,7 @@ bool8 BrRing_FogEndTurn(void)
     return FALSE;
 }
 
-// Which way the ring's centre is from this map, as one or two arrows after "SAFE" (Cam's
+// Which way the ring's centre is from this map, as one or two arrows after "Safe" (Cam's
 // 2026-10-19 play-test: outside the ring, "where even am I?", and the MAP was the only way
 // to find out). From the middle of this map's section to the centre, in half-sections so
 // a section an even number of cells wide still has a middle; a way that is less than
