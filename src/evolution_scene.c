@@ -168,8 +168,8 @@ static void CB2_BeginEvolutionScene(void)
 #define tLearnMoveNoState   data[8]
 #define tEvoWasStopped      data[9]
 #define tPartyId            data[10]
-
 #if BR
+
 // Learning on evolution asks nothing, as teaching from the bag does (POK-441, Cam's
 // 2026-10-19 play-test: "they know what they're doing"): with four moves known, straight
 // to the summary screen to pick the one to replace -- no "delete a move?" and its YES/NO.
