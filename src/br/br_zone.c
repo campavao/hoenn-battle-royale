@@ -13,6 +13,8 @@
 
 EWRAM_DATA struct BrZone gBrZone = {0};
 
+extern const struct Evolution gEvolutionTable[][EVOS_PER_MON];
+
 // clock.ts's mulberry32, to the bit. The page deals bots and drops with this one, and a
 // pool that has to match across a room is a pool both sides work out the same way --
 // so it is the same generator here rather than the ROM's own Random(), which the page
@@ -136,24 +138,50 @@ static const u8 sSafariItemCells[][3] =   // mapNum, x, y -- map group 26
 // ---- the pool (2026-10-20) -----------------------------------------------------------
 //
 // Cam: "stop grouping them by type (aka no 'It's a WATER round') instead let's just make
-// them random all around (except for legendaries of course)". So the twelve are any twelve
-// from the whole dex the routes may put in the grass (Wild, below), none twice -- no
-// curated slices and no theme. They are what the bots draft from (web/src/match/zone.ts);
-// the opening's own encounters draw from the same whole dex, not just these twelve.
+// them random all around (except for legendaries of course)". So an encounter in the
+// opening is any first stage in the dex the routes may put in the grass (Wild, below) --
+// no curated slices and no theme -- and twelve of the same, dealt off the seed with none
+// twice, are what the bots draft from (web/src/match/zone.ts).
+//
+// First stages only: the opening is at the bottom rung (level 5), and a level-5 SALAMENCE
+// or SLAKING out of the grass would decide the match before the drop. The old pool was
+// all first stages for the same reason.
 
 static bool8 Wild(u16 species);
 
+#define BR_EVOLVED_BYTES ((NUM_SPECIES + 7) / 8)
+
+// One bit per species: does anything evolve into it? Built on the stack per use -- two
+// thousand reads of a const table, cheaper than the EWRAM a kept copy would cost.
+static void MarkEvolved(u8 *evolved)
+{
+    u16 species, target;
+    u8 i;
+
+    for (species = 0; species < BR_EVOLVED_BYTES; species++)
+        evolved[species] = 0;
+    for (species = 1; species < NUM_SPECIES; species++)
+    {
+        for (i = 0; i < EVOS_PER_MON; i++)
+        {
+            target = gEvolutionTable[species][i].targetSpecies;
+            if (target != SPECIES_NONE && target < NUM_SPECIES)
+                evolved[target / 8] |= 1 << (target % 8);
+        }
+    }
+}
+
 // One of them, drawn from the match's stream when `seeded` (the pool, which every ROM in
 // the room has to agree on) or from the ROM's own Random() (an encounter, which only the
-// trainer in it ever sees). Rejection rather than a table: 48 of the dex's 411 are not
-// wild, so it is a draw or two, and a list of the other 363 would be 726 bytes for nothing.
-static u16 AnyWild(bool8 seeded)
+// trainer in it ever sees). Rejection rather than a table: about half the dex qualifies,
+// so it is two or three draws, and a list of the rest would be ROM for nothing.
+static u16 AnyWild(bool8 seeded, const u8 *evolved)
 {
     u16 species;
 
     do
         species = 1 + (seeded ? NextU32() : Random()) % (NUM_SPECIES - 1);
-    while (!Wild(species));
+    while (!Wild(species) || (evolved[species / 8] & (1 << (species % 8))));
     return species;
 }
 
@@ -176,17 +204,19 @@ void BrZone_Init(void)
 
 void BrZone_Ensure(void)
 {
+    u8 evolved[BR_EVOLVED_BYTES];
     u8 i;
 
     if (gBrMatch.seed == 0 || gBrZone.dealtFor == gBrMatch.seed)
         return;
+    MarkEvolved(evolved);
     SeedPool(gBrMatch.seed ^ 0x5A17);
     for (i = 0; i < BR_ZONE_SLOTS; i++)
     {
-        u16 species = AnyWild(TRUE);
+        u16 species = AnyWild(TRUE, evolved);
 
         while (Dealt(i, species))
-            species = AnyWild(TRUE);
+            species = AnyWild(TRUE, evolved);
         gBrZone.species[i] = species;
     }
     // And the balls (POK-261): one per area, and a one-in-eight chance the first is the
@@ -254,22 +284,25 @@ void BrZone_PlaceChest(void)
 
 u16 BrZone_Pick(void)
 {
+    u8 evolved[BR_EVOLVED_BYTES];
+
     if (gBrMatch.phase != BR_PHASE_SAFARI)
         return SPECIES_NONE;
     BrZone_Ensure();
     if (gBrZone.dealtFor == 0)
         return SPECIES_NONE; // no seed yet: a driver in the Zone, or a START still coming
-    // Any wild species at all, off the ROM's own RNG: every encounter is its own draw,
+    // Any wild first stage at all, off the ROM's own RNG: every encounter is its own draw,
     // so two in a row are rarely the same mon. Nothing here has to agree across the room
     // -- a wild battle is nobody else's -- so it does not come off the match's stream.
-    return AnyWild(FALSE);
+    MarkEvolved(evolved);
+    return AnyWild(FALSE, evolved);
 }
 
 // ---- the national dex on the routes (2026-10-05 play-test) -------------------------
 //
 // Cam: "use the national dex to increase Pokemon variety". Emerald's own tables put about
 // a third of the 386 in the grass, the same third every match. Outside the opening (the
-// Zone deals its own, above), half of what a map's table would put in front of you is
+// Zone draws any first stage, above, with no band), half of what a map's table would put in front of you is
 // swapped this match for something of its weight from anywhere in the dex: a species
 // within BR_NATIONAL_BAND of its base stat total that shares one of its types, so a
 // route's ZIGZAGOON is a SENTRET or a RATTATA this match and a pond is still water.

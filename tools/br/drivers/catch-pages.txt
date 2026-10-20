@@ -28,9 +28,9 @@ pokebytes gBrPatch+16 0E 00 0F 00
 pokebytes gBrPatch+32 1E 00 1E 00
 poke u8 gBrPatch+4 2
 # and the mon they deal: the battle draws from gRngValue, which the walk leaves wherever
-# the boot did; 5 is a Safari mon the ball count below catches (it was 2 while the Zone
-# dealt from a pool of twelve commons; any species in the dex now, so the catch rate moves)
-poke u32 gRngValue 5
+# the boot did; 3 is a Safari mon the ball count below catches (it was 2 while the Zone
+# dealt from a pool of twelve commons; any first stage in the dex now, so the catch rate moves)
+poke u32 gRngValue 3
 # find something
 poke u8 gBrPatchTaken+72 0
 hold RIGHT 70

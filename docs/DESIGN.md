@@ -177,8 +177,9 @@ out, and one that comes in waits as it would in a menu.
   section selectable. The ROM does not know where a trainer can stand, so it sends
   `pick {seat, section}`, and the host deals a free cell back as `land`. With no answer
   the ROM drops at the spawn the `start` dealt it. The Safari opening keeps its Kanto
-  shape because Hoenn has a Safari Zone too; its catch pool and item balls are dealt
-  from the match seed on every ROM alike (`br_zone.h`).
+  shape because Hoenn has a Safari Zone too; its encounters are any wild first stage
+  in the dex (no legendaries, no type theme), and the bots' twelve-species pool and its
+  item balls are dealt from the match seed on every ROM alike (`br_zone.h`).
 - **HUD** (`br_hud.h`): the corner (trainers left and the clock; under them where the
   ring is closing, all ring phase long, or FOG EVERYWHERE on the last phase; and an eye
   while anyone watches), the ticker and the bottom box, as overworld windows on BG0.

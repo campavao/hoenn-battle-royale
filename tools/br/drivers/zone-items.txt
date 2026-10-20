@@ -23,13 +23,13 @@ expect u8 gBrLoot+11 3
 # Machines are in the table (POK-279). Kanto's weighting is "a strong TM most often",
 # and it is what makes the MOVES row a real choice -- without it the only machines a
 # match holds are the eight HMs GiveTheRunOfHoenn deals, and a menu of CUT and FLASH is
-# not a menu. Seed 0x0C00 deals two of the six: TM02 DRAGON CLAW into area 2 and TM50
-# OVERHEAT into area 3 -- and it is a Master Ball match, the one-in-eight, in area 0.
-expect u16 gBrZone+28 1
-expect u16 gBrZone+32 290
-expect u16 gBrZone+34 338
+# not a menu. Seed 0x0C00 deals three of the six: TM22 SOLARBEAM into area 0, TM15
+# HYPER BEAM into area 4, TM06 TOXIC into area 5.
+expect u16 gBrZone+28 310
+expect u16 gBrZone+36 303
+expect u16 gBrZone+38 294
 # and nothing outside TM01..TM50 got in by being adjacent to them in the item table
-expectge u16 gBrZone+32 289
-expectle u16 gBrZone+32 338
+expectge u16 gBrZone+28 289
+expectle u16 gBrZone+28 338
 shot zone
 say zone items ok
