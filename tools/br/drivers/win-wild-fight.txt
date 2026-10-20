@@ -1,0 +1,28 @@
+# win-wild-fight: win-bot-fight.txt's rule for a wild fight. The last contestant goes
+# out while we are in the grass, and the fight is left at once for the parade (10-19
+# play-test #27), with no A to press.
+#
+# fog-in-battle.txt's way into the patch's battle on Route 102, without the fog.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 600
+tap A
+wait 120
+shot menu
+expect u8 gBattleOutcome 0
+# RESULT: seat 0 (us), outcome 0
+pokebytes gDecompressionBuffer 00 00
+mailsend gBrMailbox 16 gDecompressionBuffer 2
+wait 400
+shot after
+# BR_PHASE_WIN (4)
+expect u8 gBrMatch 4
+say win wild fight ok

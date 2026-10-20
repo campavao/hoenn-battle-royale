@@ -1,0 +1,54 @@
+# win-bot-trapped: win-bot-fight.txt with our mon caught in a MEAN LOOK. A trapped mon
+# cannot RUN -- the engine says "Can't escape!" at selection and asks again -- and the
+# RUN that leaves a won match was re-pressed into that for good (review of 10-19 #27).
+# It leaves through anything.
+#
+# spoils-bot.txt's fight, up to the action menu.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# TRAINER: seat 31, "BOT", TREECKO (0x115) at 1 HP, so one POUND ends it, and a MUDKIP
+# (0x11B) that fainted in some earlier fight -- the spoils are the whole team. Level 5, POUND. PackedMon rows are 100 bytes: the second at +106.
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 02 15 01 05 01 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+pokebytes gDecompressionBuffer+106 1B 01 05 00 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 06 C7 CF BE C5 C3 CA
+mailsend gBrMailbox 23 gDecompressionBuffer 206
+wait 10
+expect u8 gBrBotFight+3 2
+# seat 31's ghost two cells right of us, then its CHALLENGE
+pokebytes gDecompressionBuffer 1F 01 00 09 07 00 08 00 01 01 00
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+# the walk-up first (POK-409): the "!", and the walk when there is one
+wait 400
+expect u8 gBrBotFight+2 1
+# A through the intro, FIGHT, POUND -- one turn, the second mon having fainted already
+# -- then the win and the prize, every text box by its own frame count, so no press is
+# left over for the box on the field.
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 90
+tap A
+wait 60
+shot menu
+expect u8 gBrBotFight+2 1
+# ...and we are caught in a MEAN LOOK, which a RUN cannot get past: the one that leaves
+# a won match must (review: a trapped player re-pressed RUN into "Can't escape!" for
+# good). STATUS2_ESCAPE_PREVENTION on battler 0.
+poke u32 gBattleMons+0x50 0x04000000
+# OUT: seat 31, then RESULT: seat 0 (us), outcome 0 -- in the order the host sends them.
+pokebytes gDecompressionBuffer 1F
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+pokebytes gDecompressionBuffer 00 00
+mailsend gBrMailbox 16 gDecompressionBuffer 2
+# No button: nothing a player does should be what ends it.
+wait 400
+shot after
+expect u8 gBrBotFight+2 0
+# BR_PHASE_WIN (4): the parade is on.
+expect u8 gBrMatch 4
+say win bot trapped ok

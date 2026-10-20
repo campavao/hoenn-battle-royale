@@ -858,6 +858,7 @@ static void Take(struct BrLootItem *it)
     u16 item;
     u16 count;
     u8 *p;
+    u8 level;
 
     // Nothing leaves the ground without its PICKUP on the way: with the ring full and the
     // hold full too, the press does nothing and the piece is there for the next one.
@@ -994,8 +995,12 @@ static void Take(struct BrLootItem *it)
     // A ball dropped by somebody carries the level they were at, which is the record of
     // the match the ground is for. A ball the match itself put down carries 0 and means
     // the rung: the DAY CARE's chest (POK-306) has been on that floor since the drop.
-    CreateMon(&mon, species, it->level != 0 ? it->level : BrLevels_WildLevel(),
-              USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    // Never under the rung, though: a party is lifted to it and nothing else lifts this
+    // one until the fog moves, which on the last phase is never. A route trainer's team
+    // goes down at the game's own levels -- the battle lifted them, the spill does not --
+    // and a PELIPPER taken at rung 75 fought the rest of the match at 30 (10-19 #28).
+    level = it->level > BrLevels_WildLevel() ? it->level : BrLevels_WildLevel();
+    CreateMon(&mon, species, level, USE_RANDOM_IVS, FALSE, 0, OT_ID_PLAYER_ID, 0);
     BrLevels_Settle(&mon); // a ZUBAT taken at 50 is a CROBAT, and says so
     species = GetMonData(&mon, MON_DATA_SPECIES, NULL);
     if (sGiftKey == it->key)

@@ -57,3 +57,11 @@ export function nextRingRadius(ringIndex: number): number | undefined {
 export function ringLabel(r: number | undefined, place: string | undefined): string {
   return r !== undefined && r < 0 ? 'FINAL FOG' : `SAFE: ${place ?? '?'}`;
 }
+
+/** The strip once the match is decided (10-19 play-test #27): "P1 WINS" was the seat
+ *  number of the player reading it, because the host's own roster entry has no name.
+ *  Our own win says so; anybody else's names them. No seat is a draw. */
+export function winLabel(winner: number | undefined, me: number | null, nameOf: (seat: number) => string): string {
+  if (winner === undefined) return 'DRAW';
+  return winner === me ? 'YOU WIN' : `${nameOf(winner)} WINS`;
+}
