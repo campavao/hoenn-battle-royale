@@ -51,7 +51,8 @@
 //                   0x600 (br_loot.c asserts it; Emerald's last is 854), and a house's
 //                   cache, 0x8D00 | its index (br_balls.c), which needs them under 0x500,
 //                   and whoever is home in one, 0x8C00 | its index, and a big floor's
-//                   trader, 0x8C80 | his index, under 0x400.
+//                   trader, 0x8C80 | his index, under 0x400. A notable building's
+//                   other table balls (br_balls.c), 0xAC00 | i: past slot 5's 0xAB56.
 //                   An event's pieces (br_event.h), 0xB000 | n << 4 | i: past every
 //                   trainer's, whose slot 5 ends at 0xAB56.
 //
@@ -70,6 +71,11 @@
 #define BR_LOOT_KEY_ZONE_ITEM(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x0F00 | (i)))
 #define BR_LOOT_KEY_CHEST ((u16)(BR_LOOT_KEY_NOBODY | 0x0E00))
 #define BR_LOOT_KEY_CACHE(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x0D00 | (i)))
+// A notable building's other table balls (br_balls.c), 0xAC00 | i: past the last seat's
+// trainers (0xAB56) and below the events' 0xB000.
+#define BR_LOOT_TABLE_BALLS 0x100
+#define BR_LOOT_KEY_TABLE(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x2C00 | (i)))
+#define BR_LOOT_IS_TABLE(key) (((key) & 0xFF00) == BR_LOOT_KEY_TABLE(0))
 // Somebody at home in a house (POK-379, br_balls.c): a Pokemon standing as a person, who
 // gives it or trades it to the first trainer to talk to him.
 #define BR_LOOT_KEY_HOME(i) ((u16)(BR_LOOT_KEY_NOBODY | 0x0C00 | (i)))

@@ -15,9 +15,9 @@ expect u16 gBrLoot+6 312
 expect u8 gBrLoot+8 8
 expect u8 gBrLoot+9 2
 expect u8 gBrLoot+11 3
-# the middle of the room, outward: (5,4) on the carpet, beside the table and the chair
-expect u16 gBrLoot+2 12
-expect u16 gBrLoot+4 11
+# on the table (Cam's 2026-10-19 play-test, #8): (3,5), its south-east corner
+expect u16 gBrLoot+2 10
+expect u16 gBrLoot+4 12
 shot inside
 # Out of the door: the cache stays behind, out of the table. (Row 1 is the DAY CARE's
 # chest, which is always there.)
@@ -30,7 +30,7 @@ hold UP 40
 wait 200
 expect u8 gBrLoot+11 3
 expect u16 gBrLoot 0x8D21
-expect u16 gBrLoot+2 12
+expect u16 gBrLoot+2 10
 shot back-in
 # Somebody else takes it -- seat 1, PICKUP of key 0x8D21 -- and it goes from here too
 pokebytes gBrMailbox+0x1018 0A 0B 08 00 00 01 21 8D 00 00 00 00 00 00
