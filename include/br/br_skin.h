@@ -28,6 +28,13 @@ u8 BrSkin_MyAvatar(u8 gfx);
 // ...and which of the two we are, read back off that sprite: pret's own reading makes
 // anything that is not MAY male.
 u8 BrSkin_AvatarGender(u8 gfx);
+// ...and what we were doing, which that sprite cannot say. The way back to the field
+// rebuilds our state from our sprite (SetPlayerAvatarObjectEventIdAndObjectId), and an
+// NPC look's one sprite read ON_FOOT: out of a battle on the sea with no blob and a shore
+// it could not climb (Cam, 2026-10-20). event_object_movement.c keeps the state before
+// it clears it, and field_player_avatar.c reads it back for the look's sprite.
+void BrSkin_KeepMyAvatarState(void);
+u8 BrSkin_MyAvatarState(u8 gfx);
 // event_object_movement.c: an animation past the standard twenty (running, the hop onto
 // SURF) asked of our object while it wears a look that has only those twenty.
 u8 BrSkin_MyAnim(struct ObjectEvent *objectEvent, u8 anim, u8 standard);

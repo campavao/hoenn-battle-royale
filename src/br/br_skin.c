@@ -130,6 +130,20 @@ u8 BrSkin_AvatarGender(u8 gfx)
     return MALE;
 }
 
+static u8 sMyAvatarState;
+
+void BrSkin_KeepMyAvatarState(void)
+{
+    sMyAvatarState = gPlayerAvatar.flags & (PLAYER_AVATAR_FLAG_MACH_BIKE | PLAYER_AVATAR_FLAG_ACRO_BIKE | PLAYER_AVATAR_FLAG_SURFING);
+}
+
+u8 BrSkin_MyAvatarState(u8 gfx)
+{
+    if (BrSkin_MyLookIsNpc() && gfx == BrGhosts_WalkGraphic(gBrMySkin) && sMyAvatarState != 0)
+        return sMyAvatarState;
+    return PLAYER_AVATAR_FLAG_ON_FOOT;
+}
+
 u8 BrSkin_MyAnim(struct ObjectEvent *objectEvent, u8 anim, u8 standard)
 {
     if (objectEvent->isPlayer && objectEvent->graphicsId == BrGhosts_WalkGraphic(gBrMySkin) && BrSkin_MyLookIsNpc())
