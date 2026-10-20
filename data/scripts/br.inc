@@ -10,6 +10,13 @@ BR_EventScript_ReleaseOne::
 	releaseall
 	end
 
+@ A door the match keeps shut (src/br/br_match.c, BrMatch_DoorClosed). The field locks
+@ the controls whenever its input step says TRUE, and only a script or a warp lets go of
+@ them: the refusal is neither, so this is what lets go (POK-432).
+BR_EventScript_DoorClosed::
+	releaseall
+	end
+
 @ A gym leader fell (src/br/br_gym.c). The gym's own script here is the badge, its
 @ fanfare, the badge's page, the TM and the TM's page -- with the fog closing. The purse
 @ has already been paid in C; this lets go of the player and stops.

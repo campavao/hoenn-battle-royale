@@ -4424,7 +4424,12 @@ static void HandleTurnActionSelectionState(void)
                     BattleScriptExecute(BattleScript_PrintCantRunFromTrainer);
                     gBattleCommunication[gActiveBattler] = STATE_BEFORE_ACTION_CHOSEN;
                 }
+#if BR
+                // A match won mid-fight leaves through anything (BR_RUN_OVER, 10-19 #27).
+                else if (IsRunningFromBattleImpossible() != BATTLE_RUN_SUCCESS && gBattleBufferB[gActiveBattler][2] != BR_RUN_OVER
+#else
                 else if (IsRunningFromBattleImpossible() != BATTLE_RUN_SUCCESS
+#endif
                          && gBattleBufferB[gActiveBattler][1] == B_ACTION_RUN)
                 {
                     gSelectionBattleScripts[gActiveBattler] = BattleScript_PrintCantEscapeFromBattle;
