@@ -66,12 +66,13 @@ void BrMoves_Tick(void);
 MainCallback BrMoves_TeachExit(MainCallback callback);
 
 // The moves the player set by hand (Cam, 2026-10-20: "replace any moves the player didn't
-// manually place, and swap them out for better moves, just like Kanto version"; Kanto's
-// DESIGN D12, a customized slot is locked). A level-up lift asks nothing: it swaps in
-// better level-up moves itself (br_levels.c) around these. Set wherever the player picks
-// a move: a TM or HM, the MOVES list, the forget screen of a RARE CANDY or an evolution.
-// Kept in the mon, one bit per move slot, so it follows the mon through the party, the
-// PC and a trade, and the summary screen's move swap carries it along.
+// manually place, and swap them out for better moves, just like Kanto version"). Per
+// slot, as Cam put it: Kanto's DESIGN D12 locks the whole moveset once any of it is
+// customized. A level-up lift asks nothing: it swaps in better level-up moves itself
+// (br_levels.c) around these. Set wherever the player picks a move: a TM or HM, the
+// MOVES list, the forget screen of a RARE CANDY or an evolution. Kept in the mon, one
+// bit per move slot, so it follows the mon through the party, the PC and a trade, and
+// the summary screen's and the fight menu's move swaps carry it along.
 void BrMoves_Placed(struct Pokemon *mon, u16 move);
 u8 BrMoves_PlacedSlots(struct Pokemon *mon);
 // A slot a lift has written over: its new move is the lift's, not the player's.
