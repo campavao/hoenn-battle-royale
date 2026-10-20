@@ -50,6 +50,10 @@ void BrItems_FindHidden(void);
 // whole party (or said it would do nothing).
 bool8 BrItems_HealParty(u8 taskId);
 
+// ItemUseInBattle_PokeBall: TRUE when this is a trainer's battle, and the bag said so and
+// kept the ball (Cam's 10-19 play-test, #16).
+bool8 BrItems_BallRefused(u8 taskId);
+
 // The LINK CABLE (Cam, 2026-10-13: "so folks could evolve pokemon that can today only
 // evolve via trade"). One of pret's unused item ids, made a stone: same pocket, same
 // party menu with its ABLE / NOT ABLE, same evolution scene, used up the same way. What

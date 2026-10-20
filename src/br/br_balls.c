@@ -25,6 +25,9 @@
 // that the KADABRA you caught on Route 116 meets one on your way. Any red ball can be
 // one, a RARE CANDY or MASTER BALL too, as any can be a TM.
 #define BR_BALLS_CABLE_IN 12
+// And one in twelve a POKe DOLL, the only way out of a fight with somebody (POK-293). The
+// Marts were the only place to find one, and a whole match could go by without passing
+// one (Cam's 10-19 play-test: "I still in this game have not encountered a Poke Doll").
 
 // The machines worth a house: gold, and never dealt into a map's ball.
 static const u16 sGold[] =
@@ -96,9 +99,16 @@ u16 BrBalls_Deal(u8 mapGroup, u8 mapNum, u8 localId, u16 item)
     if (gBrMatch.seed == 0 || item == ITEM_NONE || item >= ITEM_MACH_BIKE)
         return item;
     r = Mix(gBrMatch.seed ^ 0xBA11 ^ ((u32)mapGroup << 16) ^ ((u32)mapNum << 8) ^ localId);
-    if (r % BR_BALLS_TM_IN != 0)
-        return (r / BR_BALLS_TM_IN) % BR_BALLS_CABLE_IN == 0 ? BR_ITEM_LINK_CABLE : item;
-    return BlueTm(Mix(r));
+    if (r % BR_BALLS_TM_IN == 0)
+        return BlueTm(Mix(r));
+    switch ((r / BR_BALLS_TM_IN) % BR_BALLS_CABLE_IN)
+    {
+    case 0:
+        return BR_ITEM_LINK_CABLE;
+    case 1:
+        return ITEM_POKE_DOLL;
+    }
+    return item;
 }
 
 // setorcopyvar's opcode (data/script_cmd_table.inc, 0x1a): the first thing an item ball's

@@ -35,6 +35,7 @@
 #include "br/br_battle.h"
 #include "constants/abilities.h"
 #include "constants/moves.h"
+#include "br/br_match.h"
 #include "br/br_bag.h"
 #include "br/br_hud.h"
 #include "br/br_bot.h"
@@ -441,6 +442,14 @@ bool8 BrBattle_HandleRun(void)
 {
     u8 how = gBattleBufferB[gBattlerAttacker][2];
 
+    // The match is over and ours (BrMatch_FightOver): out, from anything, at once.
+    if (how == BR_RUN_OVER && GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
+    {
+        gCurrentTurnActionNumber = gBattlersCount;
+        gBattleOutcome = B_OUTCOME_RAN;
+        return TRUE;
+    }
+
     if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK))
     {
         // A forfeit is not a flee (POK-292). The shot clock ran out, and that has a
@@ -705,6 +714,9 @@ static const u8 sText_ReplayDrew[] = _("{B_LINK_PLAYER_NAME} and {B_LINK_OPPONEN
 // own speech for TRAINER_NONE is whatever the last trainerbattle script left behind.
 static const u8 sText_BotLost[] = _("Huh? Did I just lose?");
 static const u8 sText_BotWon[] = _("Better luck next time!");
+// Said instead of "Got away safely!" by the RUN that leaves a fight the match was won in
+// (BR_RUN_OVER), and with no \p after it: nobody should have to press A to be crowned.
+static const u8 sText_MatchWon[] = _("{PLAY_SE SE_FLEE}You won the match!");
 
 
 // BattleScript_OpponentUsesHealItem's first five lines (data/battle_scripts_2.s) with our
@@ -781,6 +793,11 @@ bool8 BrBattle_BufferString(u16 stringId)
     // message for good. The AI's script already set the battler, so it gets our line.
     if (stringId == STRINGID_TRAINER1USEDITEM && gTrainerBattleOpponent_A == TRAINER_LINK_OPPONENT)
         stringId = BR_STRINGID_USED_ITEM;
+    if (stringId == STRINGID_GOTAWAYSAFELY && BrMatch_FightOver())
+    {
+        BattleStringExpandPlaceholdersToDisplayedString(sText_MatchWon);
+        return TRUE;
+    }
     if (stringId == BR_STRINGID_FOG_HURT)
     {
         BattleStringExpandPlaceholdersToDisplayedString(sText_FogHurt);

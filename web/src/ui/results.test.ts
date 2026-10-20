@@ -14,8 +14,8 @@ describe('what the results say', () => {
     expect(v.rows).toEqual([
       { label: 'Survived', value: '3:12' },
       { label: 'Winner', value: 'MAY' },
-      { label: 'Seed', value: '7' },
     ]);
+    expect(v.seed, 'the seed is the footer, not a row of the match').toBe('7');
   });
 
   it('crowns you, and calls a draw a draw', () => {
@@ -167,8 +167,8 @@ describe("the champion's Hall of Fame comes first (POK-320)", () => {
   });
 });
 
-describe('the record, two counts to a row (POK-416)', () => {
-  it('pairs the counts and gives a name a row of its own', async () => {
+describe('the record, a table (POK-416, 10-19 #29)', () => {
+  it('runs the counts down two columns and gives a name a row of its own', async () => {
     const { recordRows } = await import('./results');
     expect(
       recordRows([
@@ -178,11 +178,12 @@ describe('the record, two counts to a row (POK-416)', () => {
         { label: 'FAVORITE', value: 'TREECKO', wide: true },
       ]),
     ).toEqual([
-      { label: 'RINGS 2', detail: 'WON 3' },
-      { label: 'CAUGHT 1', detail: undefined },
-      { label: 'FAVORITE', detail: 'TREECKO' },
+      { left: { label: 'RINGS', value: '2' }, right: { label: 'CAUGHT', value: '1' } },
+      { left: { label: 'WON', value: '3' }, right: undefined },
+      { left: { label: 'FAVORITE', value: 'TREECKO' }, wide: true },
     ]);
   });
+
 });
 
 describe("everybody sees the champion's Hall of Fame (POK-417)", () => {

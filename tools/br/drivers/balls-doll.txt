@@ -1,0 +1,25 @@
+# balls-doll: one red ball in twelve holds a POKe DOLL this match (Cam's 10-19 play-test,
+# #17: "I still in this game have not encountered a Poke Doll"). The Marts were the only
+# place to find one, and a doll is the only way out of a fight with somebody (POK-293).
+#
+# balls-dealt.txt's ball: ROUTE 104's PP UP at (39,15), local id 21. Under seed 3 it is
+# dealt a POKe DOLL (80) (br_balls.c, BrBalls_Deal). The boot leaves us facing it.
+wait 30
+poke u32 gBrMatch+8 3
+pokebytes gBrMailbox+0x2018 81 00 00 13 27 00 0E 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+# the ITEMS pocket starts empty
+expect u16 *gSaveBlock1Ptr+0x560 0
+tap A
+wait 60
+shot found
+tap A
+wait 60
+tap A
+wait 60
+tap A
+wait 60
+expect u32 gMain+4 CB2_Overworld+1
+expect u16 *gSaveBlock1Ptr+0x560 80
+say balls doll ok

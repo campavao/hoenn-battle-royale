@@ -125,6 +125,6 @@ export function recordLines(rec: SeatRecord): RecordLine[] {
   const lines: RecordLine[] = [{ label: 'RINGS', value: String(rec.rings) }];
   if (rec.trainers > 0) lines.push({ label: 'TRAINERS', value: String(rec.trainers) });
   if (rec.duels > 0) lines.push({ label: 'DUELS', value: `${rec.duelsWon} of ${rec.duels}` });
-  if (rec.took > 0) lines.push({ label: 'TOOK', value: `${rec.took} ${rec.took === 1 ? 'piece' : 'pieces'}` });
+  if (rec.took > 0) lines.push({ label: 'TOOK', value: String(rec.took) });
   return lines;
 }

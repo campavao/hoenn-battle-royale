@@ -29,7 +29,8 @@ import { HostRole, soloLink, soloRoster, type HostLink } from './match/host';
 import { type BotVoice, LINES, lineAt } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
-import { ringLabel } from './match/clock';
+import { ringLabel, winLabel } from './match/clock';
+import { LEFT_MATCH_NOTE, noteInMatch, noteOutOfMatch, reloadedMidMatch } from './match/left';
 import { Curtain } from './match/curtain';
 import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import { cleanNote, sendFeedback } from './net/feedback';
@@ -2131,7 +2132,13 @@ function renderGuestStrip(
   return { alive, clockLeft: left };
 }
 
-function renderMatchStrip(state: DirectorState): void {
+/** Who the strip is read by, for the line that crowns somebody. */
+interface StripWho {
+  me(): number | null;
+  nameOf(seat: number): string;
+}
+
+function renderMatchStrip(state: DirectorState, who: StripWho): void {
   setInMatch(true);
   const mm = Math.floor(state.clockLeft / 60);
   const ss = String(state.clockLeft % 60).padStart(2, '0');
@@ -2141,9 +2148,7 @@ function renderMatchStrip(state: DirectorState): void {
       : state.phase === 'ring'
         ? ringLabel(state.ring?.r, state.ring?.place)
         : state.phase === 'ended'
-          ? state.winner !== undefined
-            ? `P${state.winner} WINS`
-            : 'DRAW'
+          ? winLabel(state.winner, who.me(), (seat) => who.nameOf(seat))
           : 'WAITING';
   setStrip(`${phaseLabel} · ${state.alive} left · ${mm}:${ss}`);
 }
@@ -2151,7 +2156,7 @@ function renderMatchStrip(state: DirectorState): void {
 /** Starts the director's own 1Hz pump: `tick()` (fires the due clock/ring messages),
  *  then mirrors its `state` into `gBrHud`'s two page-writes fields and the HTML
  *  strip. Returns a disposer. */
-function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director: Director): () => void {
+function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director: Director, who: StripWho): () => void {
   const pump = () => {
     director.tick();
     const state = director.state;
@@ -2159,7 +2164,7 @@ function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director:
       writeHudLeft(emu, hudBase, state.alive);
       writeHudClockSecs(emu, hudBase, state.clockLeft);
     }
-    renderMatchStrip(state);
+    renderMatchStrip(state, who);
   };
   pump();
   const id = setInterval(pump, DIRECTOR_TICK_MS);
@@ -2317,7 +2322,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     // The match narrated, as a room's host narrates it (POK-331 #26): Kanto's solo is the
     // room with nobody in it, and its ticker says everything a room's does.
     narration: { mine: careerVoiceLines },
-    startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director),
+    startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director, { me: () => 0, nameOf: (seat) => roster.nameOf(seat) }),
     land: landOverride(),
   });
   // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):
@@ -2435,6 +2440,7 @@ function loadCareerFile(then: (note: string) => void): void {
 /** Drops the room out of the URL and reloads, which lands on the lobby (parseRoomHash
  *  returns null with no room in the hash). The way out of anywhere. */
 function backToLobby(): void {
+  noteOutOfMatch(); // left on purpose: the lobby has nothing to tell them
   location.hash = withoutRoom(location.hash);
   location.reload();
 }
@@ -2667,6 +2673,7 @@ function wireRoom(
   };
   const roomScreenView = roomScreen(roomModel);
   const showRoomScreen = () => {
+    noteOutOfMatch();
     room.started = false;
     room.card = null;
     stage.show(roomScreenView);
@@ -2677,6 +2684,9 @@ function wireRoom(
     countdown.cancel();
     if (room.started) return;
     room.started = true;
+    // A reload from here on is one out of the match (POK-433, match/left.ts). Not a
+    // watcher's: their ROM holds nothing of the match, and the URL puts them back.
+    if (hash.mode !== 'watch') noteInMatch(attachedTo?.code ?? hash.code);
     // The town the ROM stands in fades out under black, not in view (POK-346).
     holdCurtain(emu, symbols);
     // ...and the passcode entry over it, should a count run out on a host still typing.
@@ -2799,7 +2809,10 @@ function wireRoom(
       // nobody willing leaves the room here, and the relay hands it over only on our own
       // `can_host false`, so whoever comes back to their tab has to be asked about.
       startLoop: (director) => {
-        const stop = startDirectorLoop(emu, symbols?.get('gBrHud'), director);
+        const stop = startDirectorLoop(emu, symbols?.get('gBrHud'), director, {
+          me: () => bridge?.seat ?? null,
+          nameOf: (seat) => bridge?.roster.nameOf(seat) ?? `P${seat}`,
+        });
         const asking = setInterval(standDownIfHidden, STAND_DOWN_EVERY_MS);
         return () => {
           stop();
@@ -2998,6 +3011,8 @@ function wireRoom(
       },
       decided: (line) => {
         career = line;
+        // Over: a reload from the results is an ordinary one, back into the room.
+        noteOutOfMatch();
         drawResults();
         // The match just changed our record: the room's cards of us follow (POK-339).
         sayCard();
@@ -3190,6 +3205,9 @@ function wireRoom(
         // And we withdraw from the succession: a trainer who is out should not be the
         // one still running the match everybody else is in (POK-252).
         if (msg.seat === bridge?.seat && !host) relay.canHost(false);
+        // Out, a reload only puts us back to watch: nothing of ours is left to lose
+        // (POK-433). A host's match still goes with its tab, so a host keeps the note.
+        if (msg.seat === bridge?.seat && !host) noteOutOfMatch();
         // Going out is the moment to start watching (play-test: "when I got out in the
         // Safari, it should have brought me to spectating the other players"). Our own
         // `out` never comes back over the relay, so nothing else here ever saw it --
@@ -3266,7 +3284,10 @@ function wireRoom(
         spectate.noteOut(m.seat);
         // The host saying we are out: we went while our socket was down and came back to
         // a match that had buried us (POK-330 #25). Out is watching, as for anybody.
-        if (m.seat === seat) relay.canHost(false);
+        if (m.seat === seat) {
+          relay.canHost(false);
+          noteOutOfMatch();
+        }
         // ...and the seat we watch going out moves the watch on now, not at the next
         // tick of the interval, during which the field was ours to walk.
         autoWatch();
@@ -3731,7 +3752,7 @@ const LOBBY_CONNECT_MS = 6000;
  *  having closed the browsing socket first -- SOLO VS BOTS must reach the ROM with no
  *  connection open, which is the whole point of it. `version` is the tab's, which the
  *  list is asked with: its DAILY row is our own build's daily (POK-331 #14). */
-function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomHash> {
+function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''): Promise<RoomHash> {
   showScreen('lobby');
   const stage = theStage();
   const relay = new RelayClient();
@@ -3745,6 +3766,9 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
   let rooms: RoomListing[] = [];
   /** The line under the main menu: a rejected code, or nothing. */
   let note = '';
+  /** ...or, under the main menu only, that a reload left a match (POK-433): the ROOM
+   *  CODE entry shares `note`, and drew this as a typing error. */
+  const leftNote = firstNote;
   /** The line under the trainer's rows: what became of a career file. */
   let trainerNote = '';
 
@@ -3904,7 +3928,7 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
       title: 'HOENN BATTLE ROYALE',
       rows: [...playRows(shownLink(), rooms.find((r) => r.daily)), HOWTO_ROW, FEEDBACK_ROW].map(row),
       rowsId: 'lobby-rows',
-      note: note || (online ? '' : emptyNote(false)),
+      note: note || leftNote || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',
       trainer: { name: careerName(), skin: careerSkin(), record: record(), onPress: () => stage.push(trainer) },
     }));
@@ -4509,9 +4533,20 @@ async function main(): Promise<void> {
       }
     }
   }
-  const fromHash = parseRoomHash();
+  let fromHash = parseRoomHash();
+  // A reload out of a running match goes to the menu and says so (POK-433): the match
+  // was this tab's and went with it (match/left.ts says why), so the room's URL would
+  // only land on a room screen waiting for a host that has stopped.
+  let lobbyNote = '';
+  const leftCode = reloadedMidMatch();
+  if (leftCode !== null && fromHash && fromHash.mode !== 'solo' && fromHash.mode !== 'watch'
+    && (leftCode === '' || fromHash.code === undefined || fromHash.code === leftCode)) {
+    history.replaceState(null, '', `#${withoutRoom(location.hash)}`);
+    fromHash = null;
+    lobbyNote = LEFT_MATCH_NOTE;
+  }
   let roomHash = fromHash;
-  if (!roomHash) roomHash = await runLobby({ patch, protocol });
+  if (!roomHash) roomHash = await runLobby({ patch, protocol }, lobbyNote);
   if (roomsRefused && roomHash.mode !== 'solo') return refuseRoom(roomsRefused);
   const bootMode = bootModeFor(roomHash.mode);
   // Solo's seed goes into the ROM before its boot (POK-327): BR_BOOT_SAFARI deals the

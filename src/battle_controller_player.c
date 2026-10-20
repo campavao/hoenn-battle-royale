@@ -244,11 +244,12 @@ static void HandleInputChooseAction(void)
 
 #if BR
     // The Safari opening is over and we are still in here (POK-261): leave, now. The
-    // ring is already closing outside and there is a drop to take.
-    if (BrMatch_BuzzerClosing())
+    // ring is already closing outside and there is a drop to take. So too a match we
+    // won while still in here (10-19 #27), with a RUN that cannot fail.
+    if (BrMatch_BuzzerClosing() || BrMatch_FightOver())
     {
         BrBattle_HideClock();
-        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, 0);
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, BrMatch_LeaveKind());
         PlayerBufferExecCompleted();
         return;
     }

@@ -1,0 +1,52 @@
+# trainer-ball-refused: a ROYALE BALL against a trainer's POKeMON stays in the bag, and
+# the bag says why in one line (Cam's 10-19 play-test, #16: "Why did that just happen? I
+# just tried to throw a Royale Ball." -- the cartridge's two lines, cut to "Don't", and the
+# turn gone). The phone's bag already refused it (web/src/ui/battlemenu.ts); this is the
+# GBA's own bag, on a desktop. The fight is phone-trainer-no-a.txt's, without the phone.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 01 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 0F
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 400
+# the walk-up, then the intro's pages to the action menu
+tap A
+wait 100
+tap A
+wait 100
+tap A
+wait 100
+expect u8 gBrBattle+8 1
+expectbits u32 gBattleTypeFlags 8 8
+# the first ball stack, and its count kept in party slot 6 (empty) to hold it to after
+expect u16 *gSaveBlock1Ptr+0x650 4
+copy gPlayerParty+590 *gSaveBlock1Ptr+0x652 2
+# BAG, on the POKe BALLS pocket; the ball, then USE
+poke u8 gBagPosition+5 1
+tap RIGHT
+wait 10
+tap A
+wait 120
+tap A
+wait 30
+tap A
+wait 60
+shot refused
+# the bag kept the ball: no throw, the count as it was, and the bag still open
+expect u16 *gSaveBlock1Ptr+0x650 4
+expectsame u16 *gSaveBlock1Ptr+0x652 gPlayerParty+590
+expect u8 gBrBattle+8 0
+tap A
+wait 30
+tap B
+wait 120
+# ...and B is back on the action menu, the turn still ours
+expect u8 gBrBattle+8 1
+shot back
+say trainer ball refused ok

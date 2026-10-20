@@ -894,7 +894,8 @@ static bool8 TryDoorWarp(struct MapPosition *position, u16 metatileBehavior, u8 
 #if BR
                 // A door the match keeps shut says so and eats the press: no door
                 // animation, no warp, and the player is never locked out of their
-                // own controls. The lab's own two warps both point out, so refusing
+                // own controls -- the TRUE locks them, and BrMatch_DoorClosed's
+                // BR_EventScript_DoorClosed lets go (POK-432). The lab's own two warps both point out, so refusing
                 // the one door here is the whole entrance.
                 const struct WarpEvent *closed = &gMapHeader.events->warps[warpEventId];
 

@@ -13,6 +13,7 @@
 #define BR_RUN_ROLL 0    // a plain RUN, which fails against a trainer (POK-293)
 #define BR_RUN_DOLL 1    // a POKe DOLL: a sure getaway, and nobody is eliminated
 #define BR_RUN_FORFEIT 2 // the shot clock ran out: a definite loser and a definite winner
+#define BR_RUN_OVER 3    // the match was decided while we fought: a sure way out of anything
 
 // How often B is pressed once a screen the battle put up has held the clock past it.
 // Kanto's BAG_BACKOUT_SECONDS: often enough to unwind a picker over a bag over a battle
