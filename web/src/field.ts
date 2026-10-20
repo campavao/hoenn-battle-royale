@@ -1799,13 +1799,21 @@ export class FieldView {
     const ours = emu.read(patch + PATCH_MAP, 16) === ((c.group << 8) | c.num);
     const ids = emu.bytes(patch + PATCH_SPRITE_IDS, PATCH_MAX);
     const { left, top } = lcdOrigin(c);
+    const reached = this.reached(map, left - this.lay.lcdCol, top - this.lay.lcdRow);
+    // Asked every frame and the same nearly always: dealt again only when the maps in
+    // view, the taken bits or the ROM's own drawn patches change.
+    const key = `${seed}:${ours ? ids.join(',') : '-'}:${taken.join(',')}`;
+    if (this.marksMemo && this.marksMemo.reached === reached && this.marksMemo.key === key) return this.marksMemo.marks;
     const out: (PatchMark & { at: { x: number; y: number } })[] = [];
-    for (const r of this.reached(map, left - this.lay.lcdCol, top - this.lay.lcdRow)) {
+    for (const r of reached) {
       const drawn = r.hops === 0 && ours ? (i: number) => ids[i] < SPRITE_COUNT : undefined;
       for (const m of patchMarks(this.patchTable, r.map, seed, isTaken, drawn)) out.push({ ...m, at: { x: m.x + r.x, y: m.y + r.y } });
     }
+    this.marksMemo = { reached, key, marks: out };
     return out;
   }
+
+  private marksMemo: { reached: readonly Reached[]; key: string; marks: (PatchMark & { at: { x: number; y: number } })[] } | null = null;
 
   /** Marks at their first frame, onto a canvas whose top-left is map pixel (ox, oy). */
   private drawMarks(ctx: CanvasRenderingContext2D, marks: readonly { sheet: string; at: { x: number; y: number } }[], ox: number, oy: number): boolean {
