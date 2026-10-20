@@ -21,6 +21,16 @@
 import { Grade } from './roster';
 import { rungForPhase } from './party';
 import type { PackedMon } from '../net/wire';
+import {
+  ITEM_BRIGHT_POWDER,
+  ITEM_CHOICE_BAND,
+  ITEM_FOCUS_BAND,
+  ITEM_KINGS_ROCK,
+  ITEM_LEFTOVERS,
+  ITEM_QUICK_CLAW,
+  ITEM_SCOPE_LENS,
+  ITEM_SHELL_BELL,
+} from '../match/gifts';
 
 /** One kind of thing, and how many of it. The `spill` wire shape, deliberately. */
 export interface Stack {
@@ -84,6 +94,44 @@ export function add(bag: Stack[], id: number, n = 1): void {
 /** A bag found on the ground folds into this one. */
 export function merge(bag: Stack[], loot: Stack[]): void {
   for (const stack of loot) add(bag, stack.id, stack.n);
+}
+
+/** What a mon holds into a fight to some effect there, best first (include/constants/
+ *  items.h ids). Cam's 10-19 play-test, #22: "it would be cool to also see them apply those
+ *  items, if this Pelipper was holding Leftovers." A bot that picks one up gives it to a
+ *  mon (`equip`), the `trainer` card carries it as the PackedMon's heldItem, and Emerald's
+ *  own held-item lines play in the fight ("restored a little HP using its LEFTOVERS!"). */
+// No herbs: a WHITE HERB or MENTAL HERB is used up in the fight, and nothing here would
+// take it back off the mon, so it would come back every fight. They stay in the bag.
+export const HOLD_ITEMS: readonly number[] = [
+  ITEM_LEFTOVERS,
+  ITEM_CHOICE_BAND,
+  ITEM_SHELL_BELL,
+  ITEM_FOCUS_BAND,
+  ITEM_QUICK_CLAW,
+  ITEM_SCOPE_LENS,
+  ITEM_KINGS_ROCK,
+  ITEM_BRIGHT_POWDER,
+];
+
+/** Each hold item in the bag goes to a mon still standing that holds nothing, the lead
+ *  first and the best item first. Mutates both. */
+export function equip(party: PackedMon[], bag: Stack[]): void {
+  for (const id of HOLD_ITEMS) {
+    for (;;) {
+      const mon = party.find((m) => m.hp > 0 && !m.heldItem);
+      if (!mon || !take(bag, id)) break;
+      mon.heldItem = id;
+    }
+  }
+}
+
+/** What a bot carries when it falls: the bag, and whatever its mons were holding, so a
+ *  Leftovers it equipped still goes down for whoever beat it. */
+export function carried(party: PackedMon[], bag: Stack[]): Stack[] {
+  const out = bag.map((stack) => ({ ...stack }));
+  for (const mon of party) if (mon.heldItem) add(out, mon.heldItem);
+  return out;
 }
 
 /** How many units are in here at all -- for a test, and for the ticker. */

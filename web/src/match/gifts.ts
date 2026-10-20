@@ -15,15 +15,15 @@ export const giftKey = (i: number): number => GIFT_KEY_BASE | i;
 export const isGiftKey = (key: number): boolean => (key & 0xf000) === GIFT_KEY_BASE;
 
 // include/constants/items.h: the held items a trainer would walk into a town for.
-const ITEM_BRIGHT_POWDER = 179;
-const ITEM_WHITE_HERB = 180;
-const ITEM_QUICK_CLAW = 183;
-const ITEM_CHOICE_BAND = 186;
-const ITEM_KINGS_ROCK = 187;
-const ITEM_FOCUS_BAND = 196;
-const ITEM_SCOPE_LENS = 198;
-const ITEM_LEFTOVERS = 200;
-const ITEM_SHELL_BELL = 219;
+export const ITEM_BRIGHT_POWDER = 179;
+export const ITEM_WHITE_HERB = 180;
+export const ITEM_QUICK_CLAW = 183;
+export const ITEM_CHOICE_BAND = 186;
+export const ITEM_KINGS_ROCK = 187;
+export const ITEM_FOCUS_BAND = 196;
+export const ITEM_SCOPE_LENS = 198;
+export const ITEM_LEFTOVERS = 200;
+export const ITEM_SHELL_BELL = 219;
 export const GIFTS: readonly number[] = [
   ITEM_BRIGHT_POWDER,
   ITEM_WHITE_HERB,
