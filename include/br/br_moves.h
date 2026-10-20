@@ -68,20 +68,20 @@ MainCallback BrMoves_TeachExit(MainCallback callback);
 // The cartridge's question when a level brings a fifth move (Cam, 2026-10-18, POK-400:
 // "show the normal learn/replace prompt"). A lift fills an empty slot as it always did;
 // a move that finds four already there is no longer swapped in by BrLevels' own pick but
-// asked about, party_menu.c's own "wants to learn ... should a move be deleted" and the
-// summary screen to choose the one to forget, the next time START's POKéMON is opened.
+// asked about: the summary screen to choose the one to forget, when that mon's NEW MOVE
+// is picked in START's POKéMON.
 //
 // The party's slot `slot` climbed from level `from`: every learnset move above `from`
 // and at or under its level that it does not know is asked about, in learnset order.
 // `count` is the party's size now; if it is not the same when the question comes, the
 // party has changed under it and nothing is asked (MOVES still has every one of them).
 void BrMoves_AskFrom(u8 slot, u8 from, u8 count);
-// The next move to ask about, for party_menu.c: TRUE with the slot and the move, and
-// FALSE when there is nothing left. A mon with a slot free by now just learns it.
-bool8 BrMoves_NextAsk(u8 *slot, u16 *move);
-// Whether a question waits. The ticker says so once (Cam, 2026-10-18: "it can wait"), and
-// START's POKéMON asks them rather than the screen fading into it on its own.
-bool8 BrMoves_AskWaiting(void);
+// The move slot `slot` waits to be asked about, for party_menu.c's NEW MOVE row: TRUE with
+// the move, FALSE when it has none (a slot free by now just learns it). `take` moves past
+// it, as asking does: answered or backed out of, the next one is the following move. Never
+// asked on its own (Cam, 2026-10-20: "those prompts should not show when opening a
+// party"): the ticker says so once, and the mon's NEW MOVE asks.
+bool8 BrMoves_SlotAsk(u8 slot, u16 *move, bool8 take);
 
 // What is waiting to be asked. `off` is for drivers that lift a party for some other
 // reason (fog-news.txt, grows-up.txt...) and do not want a party screen in the middle of

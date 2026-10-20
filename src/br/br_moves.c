@@ -260,8 +260,9 @@ static void ClearAsks(void)
 }
 
 // `learnOnly`: learn what free slots take, and say whether a question waits without
-// moving past it. Otherwise the question found is the one asked now.
-static bool8 FindAsk(u8 *slot, u16 *move, bool8 learnOnly)
+// moving past it. Otherwise the question found is the one asked now. `only` is the one
+// slot to look at, or PARTY_SIZE for all of them.
+static bool8 FindAsk(u8 only, u8 *slot, u16 *move, bool8 learnOnly)
 {
     u8 i, count = CalculatePlayerPartyCount();
 
@@ -278,7 +279,7 @@ static bool8 FindAsk(u8 *slot, u16 *move, bool8 learnOnly)
         u8 last = 0, nth = 0;
         u16 j;
 
-        if (gBrAsk.from[i] == 0)
+        if (gBrAsk.from[i] == 0 || (only != PARTY_SIZE && only != i))
             continue;
         for (j = 0; learnset[j] != LEVEL_UP_END; j++, nth++)
         {
@@ -313,9 +314,13 @@ static bool8 FindAsk(u8 *slot, u16 *move, bool8 learnOnly)
     return FALSE;
 }
 
-bool8 BrMoves_NextAsk(u8 *slot, u16 *move)
+bool8 BrMoves_SlotAsk(u8 slot, u16 *move, bool8 take)
 {
-    return FindAsk(slot, move, FALSE);
+    u8 found;
+
+    if (slot >= PARTY_SIZE || gBrAsk.from[slot] == 0)
+        return FALSE;
+    return FindAsk(slot, &found, move, !take);
 }
 
 static bool8 AskPending(void)
@@ -328,14 +333,6 @@ static bool8 AskPending(void)
             return TRUE;
     }
     return FALSE;
-}
-
-bool8 BrMoves_AskWaiting(void)
-{
-    u8 slot;
-    u16 move;
-
-    return AskPending() && FindAsk(&slot, &move, TRUE);
 }
 
 // A ten-letter name and this make 39 of the ticker's 40. It said "can learn a move
@@ -360,7 +357,7 @@ static void SayAsk(u8 slot)
 // for the bag to have it too.
 void BrMoves_Tick(void)
 {
-    // The questions a lift left are only said here; the party screen asks them.
+    // The questions a lift left are only said here; NEW MOVE in the party screen asks them.
     if (sTeach == ITEM_NONE && AskPending())
     {
         u8 slot;
@@ -372,10 +369,10 @@ void BrMoves_Tick(void)
             return;
         // A lift whose new moves all found a free slot (or the party changed) has nothing
         // to ask, and says nothing.
-        if (!sAskSaid && FindAsk(&slot, &move, TRUE))
+        if (!sAskSaid && FindAsk(PARTY_SIZE, &slot, &move, TRUE))
         {
-            // The ticker says so once, and the questions wait for the party screen
-            // (CB2_PartyMenuFromStartMenu): no fade into it mid-match on its own.
+            // The ticker says so once, and the question waits for that mon's NEW MOVE
+            // in the party screen: never asked on its own (Cam, 2026-10-20).
             sAskSaid = TRUE;
             SayAsk(slot);
         }
