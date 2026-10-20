@@ -101,7 +101,6 @@ describe('the drawn screens (POK-320)', () => {
       const w = cell.w - 10;
       // Every label a host control can show, at its widest, from the room's own ladders.
       const room: [string, Parameters<typeof optionLayout>[1]][] = [
-        ...MAX_STEPS.map((max): [string, Parameters<typeof optionLayout>[1]] => [`MAX ${max}`, { kind: 'seats', humans: 1, bots: max - 1, max }]),
         ...MAX_STEPS.map((max): [string, Parameters<typeof optionLayout>[1]] => [fillLabel({ fillOn: true, fill: max - 1 }), { kind: 'toggle', on: true }]),
         [fillLabel({ fillOn: false, fill: 0 }), { kind: 'toggle', on: false }],
         ...TEXT_SPEEDS.map((t): [string, Parameters<typeof optionLayout>[1]] => [`TEXT ${textSpeedLabel(t.value)}`, { kind: 'level', ...levelOf(TEXT_SPEEDS.map((s) => s.value), t.value) }]),
@@ -117,6 +116,8 @@ describe('the drawn screens (POK-320)', () => {
       }
       // A timer's clock goes in front of its words.
       expect(optionLayout('FOG 120s', { kind: 'level', at: 4, of: 5, clock: true }, x, w).clockX).toBe(x);
+      // MAX has no picture (Cam's 2026-10-19 play-test), and its words still fit.
+      for (const max of MAX_STEPS) expect(optionLayout(`MAX ${max}`, undefined, x, w).text).toBe(`MAX ${max}`);
       // And a control without one is drawn as it always was.
       expect(optionLayout('LISTED', undefined, x, w)).toEqual({ clockX: null, textX: x, text: 'LISTED', visualX: null });
     }
@@ -168,37 +169,6 @@ describe('the drawn screens (POK-320)', () => {
     }
     expect(pages).toBe(Math.ceil(16 / firstPage.length));
     expect(seen).toEqual(model(30, 16).seats.map((s) => (s.isMe ? `${s.name} (you)` : s.name)));
-  });
-
-  it('draws no more seats than MAX, whatever it is told (POK-345)', async () => {
-    const { paintOptions } = await import('./screens');
-    const fills: { x: number; w: number; color: string }[] = [];
-    const canvas = {
-      drawFrame: () => undefined,
-      drawText: () => 0,
-      fillRect: (r: { x: number; w: number }, color: string) => fills.push({ x: r.x, w: r.w, color }),
-    } as unknown as Parameters<typeof paintOptions>[0];
-    const seats = (humans: number, bots: number, max: number) => {
-      fills.length = 0;
-      paintOptions(canvas, 0, [{ label: 'MAX', id: 'm', onPress: () => undefined, visual: { kind: 'seats', humans, bots, max } }], 'p');
-      return fills.slice(1); // the baseline first
-    };
-    // One block a seat while they fit; more humans than seats is all of them, no bots.
-    expect(seats(10, 5, 8)).toHaveLength(8);
-    expect(seats(1, 7, 8)).toHaveLength(8);
-    expect(seats(1, 0, 1)).toHaveLength(1);
-    // ...flush with the cell's right edge, like the other pictures, whatever MAX is.
-    const { optionRect } = await import('./screens');
-    const edge = optionRect(0, 0).x + optionRect(0, 0).w - 2;
-    for (const max of [2, 6, 8, 12]) {
-      const last = seats(1, max - 1, max).at(-1)!;
-      expect(last.x + last.w, `MAX ${max}`).toBe(edge);
-    }
-    // A split bar past that, which never runs past its 40 pixels.
-    const big = seats(1, 29, 30);
-    expect(big[0].w, 'one of thirty is still somebody').toBeGreaterThanOrEqual(2);
-    expect(big[0].w + big[1].w).toBe(40);
-    expect(seats(0, 0, 0).reduce((n, f) => n + f.w, 0)).toBe(0);
   });
 
   it('centres a row of buttons a tile apart, each a whole number of tiles wide', async () => {

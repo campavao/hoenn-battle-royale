@@ -171,7 +171,7 @@ static void SayFog(const u8 *place, u8 len)
         *p++ = place[i];
     *p++ = CHAR_EXCL_MARK;
     *p = EOS;
-    BrHud_Box(line);
+    BrHud_AlertBox(line);
 }
 
 static void HandleRing(const u8 *payload, u8 len)

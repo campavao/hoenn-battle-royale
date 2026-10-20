@@ -21,6 +21,7 @@ import type { EndGrace } from './grace';
 import { botRows, freshMatch, noteMatch, type MatchSnapshot } from './lifecycle';
 import { MatchLog, saveMatch } from './log';
 import { noteEvent } from './events';
+import { LegendWatch } from './legends';
 import { Loot } from './loot';
 import { OwedTeam } from './owed';
 import { MatchRecord } from './record';
@@ -182,6 +183,7 @@ export class MatchSession {
   // every time our own trainer arrives somewhere (POK-232). Renewed by endMatch: last
   // match's unclaimed pieces were pushed back into the rebooted ROM, and bots walked to them.
   private lootTable = new Loot();
+  private readonly legends = new LegendWatch();
   private lootMap: string | null = null;
   /** The match's fog phase, from its `start`: what a `ring` puts on the clock. A watcher
    *  who walked in late never heard one, and has the default the director would use. */
@@ -216,6 +218,11 @@ export class MatchSession {
 
   get events(): readonly EventMsg[] {
     return [...this.eventList.values()];
+  }
+
+  /** The legendary chip's words (legends.ts), or null. */
+  legend(): string | null {
+    return this.legends.chip(this.events, this.lootTable, (seat) => this.deps.nameOf(seat));
   }
 
   /** This page has booked that trainer's fall already: a seat caught up after a blip is
@@ -267,6 +274,7 @@ export class MatchSession {
       if (this.beatenList.length > BEATEN_KEPT) this.beatenList.shift();
     }
     noteEvent(this.eventList, msg);
+    this.legends.note(msg);
     if (via === 'rom') giveBag(this.lootTable, msg, (m) => this.deps.toRom(m));
     this.lootTable.note(msg); // a bot taking a ball takes it off this page's table too
     // The match, as anybody in the room can see it.

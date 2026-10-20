@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, DeadEnd, decideStart, doorLabel, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, refusalLine, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState, waitsOnHost } from './room';
+import { AUTO_START_MS, BOT_FILL, botFillFor, canStart, clockLeftAt, dealable, DeadEnd, decideStart, doorLabel, doorOf, fillLabel, FOG_STEPS, MAX_STEPS, nextDoor, nextFog, nextMax, nextTextSpeed, onRefused, refusalLine, roomView, startNote, textSpeedLabel, nextSafari, safariLabel, StartCountdown, startLabel, type StartState, waitsOnHost } from './room';
 import { freshMatch, noteMatch, ringClockLeft } from './lifecycle';
 import { EndGrace } from './grace';
 import { Director, type DirectorWorld } from './director';
@@ -304,6 +304,30 @@ describe("a room's countdown to its own start", () => {
     expect(go).not.toHaveBeenCalled();
     pass(4_000);
     expect(go).toHaveBeenCalledTimes(1);
+  });
+
+  // Cam's 2026-10-19 play-test: "if the user is messing with controls the timer should reset".
+  it('starts over on a press while it counts, and a press with no count arms nothing', () => {
+    const { count, go, redraw, pass } = counting();
+    count.bump();
+    expect(count.running).toBe(false);
+    expect(redraw).not.toHaveBeenCalled();
+    count.arm(go);
+    pass(8_000);
+    expect(count.secondsLeft()).toBe(2);
+    count.bump();
+    expect(count.secondsLeft()).toBe(10);
+    expect(vi.getTimerCount()).toBe(2);
+    pass(9_000);
+    expect(go).not.toHaveBeenCalled();
+    pass(1_000);
+    expect(go).toHaveBeenCalledTimes(1);
+    count.bump(); // the count is over: nothing to start again
+    expect(count.running).toBe(false);
+  });
+
+  it('counts a minute for a room that starts itself', () => {
+    expect(AUTO_START_MS).toBe(60_000);
   });
 });
 
