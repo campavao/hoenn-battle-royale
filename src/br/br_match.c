@@ -10,6 +10,7 @@
 #include "battle.h"
 #include "constants/battle.h"
 #include "constants/maps.h"
+#include "constants/region_map_sections.h"
 #include "random.h"
 #include "hall_of_fame.h"
 #include "malloc.h"
@@ -156,6 +157,7 @@ void BrMatch_HeapReset(void)
 
 static EWRAM_DATA u8 sWinPending = 0;
 static EWRAM_DATA u8 sBackOutFrames = 0;
+static EWRAM_DATA u8 sSafariFrames = 0;
 
 // RESULT {seat, outcome}: outcome 0 for our seat means we are the last one standing.
 static void HandleResult(const u8 *payload, u8 len)
@@ -505,6 +507,32 @@ static void BackOutOfMenus(void)
     gMain.newAndRepeatedKeys |= B_BUTTON;
 }
 
+// The opening is over and we are still standing in it. Nothing should leave us here --
+// the drop takes us out -- but the Zone has no way out on foot, so whatever did (a drop
+// dealt inside it, a drop with no cell to go to) must not cost the match (Cam, 10-20:
+// "catch that and automatically place players in Mauville since it's centrally
+// located"). A second on the field first, so a drop already on its way gets there.
+// Mauville's POKeMON CENTER doorstep, the same cell the host's doorstep list ranks first.
+#define BR_SAFARI_ESCAPE_FRAMES 60
+#define BR_SAFARI_ESCAPE_X 23
+#define BR_SAFARI_ESCAPE_Y 15
+
+static void LeaveSafari(void)
+{
+    if (gMapHeader.regionMapSectionId != MAPSEC_SAFARI_ZONE || BrPick_Picking()
+     || !BrField_OverworldRunning() || ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked())
+    {
+        sSafariFrames = 0;
+        return;
+    }
+    if (++sSafariFrames < BR_SAFARI_ESCAPE_FRAMES)
+        return;
+    sSafariFrames = 0;
+    SetWarpDestination(MAP_GROUP(MAP_MAUVILLE_CITY), MAP_NUM(MAP_MAUVILLE_CITY), WARP_ID_NONE,
+                       BR_SAFARI_ESCAPE_X, BR_SAFARI_ESCAPE_Y);
+    DoWarp();
+}
+
 // The page has said we won and the parade is waiting on the field to come free.
 bool8 BrMatch_WinPending(void)
 {
@@ -556,7 +584,10 @@ void BrMatch_Tick(void)
     // (POK-186) never goes through it, and both ways in end up at BR_PHASE_PLAY. It does
     // nothing after the first time.
     if (gBrMatch.phase == BR_PHASE_PLAY)
+    {
         BrZone_PlaceChest();
+        LeaveSafari();
+    }
     if (gBrMatch.phase != BR_PHASE_SAFARI)
         return;
     // The catch pool belongs to the opening (POK-255). Dealt here rather than in

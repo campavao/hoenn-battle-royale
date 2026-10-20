@@ -95,6 +95,12 @@ void BrPick_Chose(u16 mapSec)
 {
     u8 buf[3];
 
+    // The map opens on where we stand, which at the drop is the SAFARI ZONE: an A
+    // straight away, or a clock run out with the cursor never moved, chose it, and the
+    // host dealt a doorstep of the Zone's rest house -- back in the opening, which has
+    // no way out (Cam, 10-20). Mauville instead, the middle of the map.
+    if (mapSec == MAPSEC_SAFARI_ZONE)
+        mapSec = MAPSEC_MAUVILLE_CITY;
     gBrPick.asked = mapSec;
     gBrPick.waited = 0;
     // Only the clock gets here with no section: A on one is refused. Nothing to ask the

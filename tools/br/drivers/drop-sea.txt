@@ -1,7 +1,8 @@
 # drop-sea: the drop lands on the place the cursor names, never the nearest one (Cam,
 # 2026-10-17, undoing POK-352's snap). The drop opens on SAFARI ZONE, layout (16,2); one
 # step west is (15,2), a cell no section covers. The name box is blank there and A is a
-# buzz: the map stays up and nothing is asked. Back on SAFARI ZONE, A chooses it.
+# buzz: the map stays up and nothing is asked. Back on SAFARI ZONE, A chooses -- and
+# asks for MAUVILLE, since a drop into the opening has no way out (Cam, 10-20).
 wait 30
 pokebytes gBrMailbox+0x2018 82 00 00 00 00 00 00 00 BD BB C7 FF
 wait 400
@@ -27,7 +28,7 @@ tap RIGHT
 wait 30
 tap A
 wait 60
-# MAPSEC_SAFARI_ZONE: had the A on the sea chosen, the map would be gone and this NONE
-expect u16 gBrPick+12 57
+# MAPSEC_MAUVILLE_CITY: had the A on the sea chosen, the map would be gone and this NONE
+expect u16 gBrPick+12 9
 expect u8 gBrPick 1
 say drop sea ok
