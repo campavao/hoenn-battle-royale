@@ -87,7 +87,10 @@ describe('the offline match is the host\'s (POK-331 #25)', () => {
     now = SAFARI * 1000;
     director.tick();
     const first = said.find((msg): msg is RingMsg => msg.t === 'ring')!;
-    for (const h of rings) expect({ sx: h.msg.sx, sy: h.msg.sy, place: h.msg.place }).toEqual({ sx: first.sx, sy: first.sy, place: first.place });
+    for (const h of rings) expect({ sx: h.msg.sx, sy: h.msg.sy }).toEqual({ sx: first.sx, sy: first.sy });
+    // The first names nowhere (director.ts ringSays); every one after names the same place.
+    expect(rings[0].msg.place).toBeUndefined();
+    for (const h of rings.slice(1)) expect(h.msg.place).toBe(rings[1].msg.place);
   });
 
   it('drops each bot at the first ring onto the cell the seed dealt it, in the wire\'s space', () => {

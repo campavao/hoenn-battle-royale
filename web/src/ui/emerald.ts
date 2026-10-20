@@ -42,10 +42,14 @@ export const WINDOW_FILL = '#ffffff';
 /** The page behind every drawn screen: the dark the site already wears. */
 export const STAGE_FILL = '#101418';
 
-/** A charmap byte for each character; an unknown character is a space. */
+/** The big arrows, the font's second page (CHAR_EXTRA_SYMBOL, F9 00..03): its own
+ *  0x79-0x7C are six pixels wide, and an up beside a right reads as one arrow. */
+const ARROWS: Record<string, number> = { '↑': 0x100, '↓': 0x101, '←': 0x102, '→': 0x103 };
+
+/** A glyph for each character, a charmap byte or an arrow; an unknown one is a space. */
 export function glyphIds(text: string): number[] {
   const out: number[] = [];
-  for (const ch of text) out.push(displayByte(ch) ?? 0);
+  for (const ch of text) out.push(ARROWS[ch] ?? displayByte(ch) ?? 0);
   return out;
 }
 

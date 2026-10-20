@@ -52,7 +52,8 @@ expect u8 gBrEngage+11 0xFF
 expect u8 gBrNetlink 1
 expect u8 gBrNetlink+1 0
 expect u8 gBrNetlink+2 1
-expect u16 gBrOwnPos+2 12
+# the walk-up's "!" is half a second (BR_WALKUP_BANG_FRAMES): its first step is taken
+expect u16 gBrOwnPos+2 13
 shot started
 wait 600
 shot vs

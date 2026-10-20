@@ -7,6 +7,9 @@ import {
   ITEM_ACRO_BIKE,
   ITEM_MACH_BIKE,
   LEVELS_ROD,
+  RING_CX,
+  RING_CY,
+  RING_OUTSIDE,
   RING_PLACE,
   RING_R,
   clockText,
@@ -16,6 +19,7 @@ import {
   SignCue,
   fogPhase,
   readHudView,
+  safeWay,
   signFor,
   type HudView,
 } from './phonehud';
@@ -75,6 +79,7 @@ describe('the sign and the fog window', () => {
     flash: 0,
     ring: 'OLDALE TOWN',
     fogEverywhere: false,
+    safe: null,
     ctx: { label: 'BIKE', item: ITEM_MACH_BIKE, enabled: true },
     party: 1,
     ...over,
@@ -106,8 +111,26 @@ describe('the sign and the fog window', () => {
     ]);
   });
 
+  it('outside the ring, a line saying which way is safe (Cam, 2026-10-19: "where even am I?")', () => {
+    expect(text(view({ safe: 'Safe ↑→' }))).toEqual([
+      ['Fog', '1:35'],
+      ['Safe ↑→', ''],
+      ['7 left', ''],
+    ]);
+    // ROUTE 102 is (2..3, 9): its middle is x 2.5, y 9.
+    const r102 = { x: 2, y: 9, w: 2, h: 1 };
+    expect(safeWay(r102, 2, 2)).toBe('Safe ↑'); // due north, a little west: just up
+    expect(safeWay(r102, 9, 3)).toBe('Safe ↑→');
+    expect(safeWay(r102, 12, 9)).toBe('Safe →');
+    expect(safeWay(r102, 0, 13)).toBe('Safe ↓←');
+  });
+
+  it('a first ring that names nowhere is still the fog, not the Safari', () => {
+    expect(text(view({ ring: '' }))[0]).toEqual(['Fog', '1:35']);
+  });
+
   it('every line fits the window', () => {
-    for (const over of [{}, { ring: 'Fog everywhere', fogEverywhere: true }, { eyes: 12, left: 32 }]) {
+    for (const over of [{}, { ring: 'Fog everywhere', fogEverywhere: true }, { eyes: 12, left: 32 }, { safe: 'Safe ↓←' }]) {
       for (const line of fogLines(view(over))) {
         const w = measure(line.left?.text ?? '') + (line.right ? measure(line.right.text) + 4 : 0);
         expect(w, line.left?.text).toBeLessThanOrEqual(FOG_W - 16);
@@ -160,7 +183,13 @@ describe('the HUD read off the ROM', () => {
     put(SYM.gBrLevels + LEVELS_ROD, SUPER_ROD, 2);
     put(SYM.gPlayerPartyCount, 2, 1);
     const v = readHudView(emu, (n) => SYM[n], world)!;
-    expect(v).toMatchObject({ onField: true, party: 2, place: 'ROUTE 102', theme: 'wood', clock: 95, left: 7, ring: 'OLDALE TOWN', fogEverywhere: false });
+    expect(v).toMatchObject({ onField: true, party: 2, place: 'ROUTE 102', theme: 'wood', clock: 95, left: 7, ring: 'OLDALE TOWN', fogEverywhere: false, safe: null });
+    // outside it, OLDALE (4, 9) is east of ROUTE 102's middle
+    put(SYM.gBrRing + RING_CX, 4, 1);
+    put(SYM.gBrRing + RING_CY, 9, 1);
+    put(SYM.gBrRing + RING_OUTSIDE, 1, 1);
+    expect(readHudView(emu, (n) => SYM[n], world)!.safe).toBe('Safe →');
+    put(SYM.gBrRing + RING_OUTSIDE, 0, 1);
     expect(v.ctx).toEqual({ label: 'FISH', item: SUPER_ROD, enabled: true });
     // turned south: grass, so the bike
     put(SYM.gBrOwnPos + 6, 1, 1);

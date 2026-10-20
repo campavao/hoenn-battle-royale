@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { guessedStickKeys, learnAxis, loadStickMap, onWindows, pollPads, startStickLearn, stickKeys, stickLearnStep, type StickMap } from './pad';
+import { guessedStickKeys, learnAxis, loadStickMap, onWindows, padReadout, pollPads, startStickLearn, stickKeys, stickLearnStep, type StickMap } from './pad';
 
 describe('a learned stick (POK-321)', () => {
   // Cam's pad: the stick's vertical is axis 0 and its horizontal axis 1, the reverse of
@@ -149,5 +149,29 @@ describe('learning the stick (POK-350)', () => {
   it('ignores RIGHT on the same axis as UP, and a button skips', () => {
     expect(feed([null, up, null, { axis: 1, sign: 1 }]).phase).toBe('right');
     expect(feed([null, up, 'skip'])).toMatchObject({ phase: 'done', result: null });
+  });
+});
+
+describe('the pad readout (Cam, 2026-10-19: "never gotten a clear answer")', () => {
+  const pad = (axes: number[], pressed: number[] = [], mapping = '') => ({
+    id: '0000-0000-Wireless Gamepad',
+    mapping,
+    axes,
+    buttons: Array.from({ length: 12 }, (_, i) => ({ pressed: pressed.includes(i) })),
+  });
+  const rest = [0, 0, 0, 0, 0, 0];
+
+  it('names the pad, how many axes the browser gives it, and nudges an untaught non-standard pad', () => {
+    expect(padReadout(pad(rest), rest, [], false)).toBe('Gamepad: 0000-0000-Wireless Gamepad (non-standard, 6 axes) -- REMAP PAD to teach it');
+    expect(padReadout(pad(rest), rest, [], true)).toBe('Gamepad: 0000-0000-Wireless Gamepad (non-standard, 6 axes)');
+    expect(padReadout(pad(rest, [], 'standard'), rest, [], false)).toBe('Gamepad: 0000-0000-Wireless Gamepad (standard, 6 axes)');
+  });
+
+  it('shows every axis away from rest with its value, even a part push, and every button down by number', () => {
+    expect(padReadout(pad([0, 0, -0.98, 0.3, 0, 0], [8]), rest, ['up'], true)).toBe(
+      'Gamepad: 0000-0000-Wireless Gamepad (non-standard, 6 axes) -- up [axis 2:-0.98 3:+0.30] [button 8]',
+    );
+    // a resting wobble is not a push
+    expect(padReadout(pad([0.1, -0.1, 0, 0, 0, 0]), rest, [], true)).toBe('Gamepad: 0000-0000-Wireless Gamepad (non-standard, 6 axes)');
   });
 });

@@ -326,16 +326,19 @@ export class Director {
 
     this.phase = 'ring';
     this.ringIndex = Math.max(0, state.ringPhase - 1);
-    this.ringCentre = { sx: state.centre.sx, sy: state.centre.sy, place: state.centre.place };
     // The wire names the centre, not the section; the section whose centre it is.
     this.ringSection = this.sections.find((s) => {
       const c = sectionCentre(s.section);
       return c.sx === state.centre!.sx && c.sy === state.centre!.sy;
     });
+    // A first ring does not say its place (ringSays), so a host taking over in it names the
+    // centre after that section, as beginRing did.
+    const place = state.centre.place ?? this.ringSection?.section.name;
+    this.ringCentre = { sx: state.centre.sx, sy: state.centre.sy, place };
     // ...or a final story's, which is known by its name as well: the ring's place.
     const final = STORIES.find((s) => {
       const section = this.opts.world.sections[s.section];
-      if (!s.final || !section || section.name !== state.centre!.place) return false;
+      if (!s.final || !section || (state.centre!.place !== undefined && section.name !== state.centre!.place)) return false;
       const c = sectionCentre(section);
       return c.sx === state.centre!.sx && c.sy === state.centre!.sy;
     });
@@ -544,8 +547,7 @@ export class Director {
       sx: this.ringCentre.sx,
       sy: this.ringCentre.sy,
       r: RING_RADII[this.ringIndex],
-      next: nextRingRadius(this.ringIndex),
-      place: this.ringCentre.place,
+      ...this.ringSays(),
       elapsed: elapsedSecs,
     });
     if (this.ringIndex === 0) {
@@ -705,9 +707,20 @@ export class Director {
       sx: this.ringCentre.sx,
       sy: this.ringCentre.sy,
       r: RING_RADII[this.ringIndex],
-      next: nextRingRadius(this.ringIndex),
-      place: this.ringCentre.place,
+      ...this.ringSays(),
     };
+  }
+
+  /** What a ring says of where it closes: the place, and the radius the MAP previews.
+   *  Nothing on the first, which reaches everywhere and fogs nobody: where it will close
+   *  is told when it first does (Cam's 2026-10-19 play-test: "you shouldn't know the area
+   *  that's safe until the first round closes in"; a page that loaded in, or a MAP opened,
+   *  before the drop gave the landing away). The centre still goes -- the bots walk by it
+   *  and nothing draws it while the radius covers the map -- and the ROM's box names the
+   *  place on the first ring that carries one, which is the first shrink. */
+  private ringSays(): { next?: number; place?: string } {
+    if (this.ringIndex < 1 || !this.ringCentre) return {};
+    return { next: nextRingRadius(this.ringIndex), place: this.ringCentre.place };
   }
 
   private computeClockLeft(): number {

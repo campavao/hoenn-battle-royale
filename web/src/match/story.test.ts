@@ -152,7 +152,7 @@ describe('story events', () => {
   it("leaves the last event to the final ring's own section", () => {
     for (let seed = 1; seed <= 300; seed++) {
       const sent = run(seed);
-      const ring = sent.find((m) => m.t === 'ring') as RingMsg;
+      const ring = sent.find((m) => m.t === 'ring' && m.phase === 2) as RingMsg;
       const last = (sent.filter((m) => m.t === 'event') as EventMsg[]).find((e) => e.n === EVENT_MAX - 1);
       if (!last) continue;
       // An island's event is at the island and its section is the dock's (story.ts).
@@ -168,7 +168,7 @@ describe('story events', () => {
     let centred = 0;
     for (let seed = 1; seed <= 300; seed++) {
       const sent = run(seed);
-      const ring = sent.find((m) => m.t === 'ring') as RingMsg;
+      const ring = sent.find((m) => m.t === 'ring' && m.phase === 2) as RingMsg;
       const story = byName.get(ring.place ?? '');
       if (!story) continue;
       centred++;
@@ -191,8 +191,15 @@ describe('story events', () => {
       a.start();
       t += 5000;
       a.tick();
+      // Taken over in the first ring, which does not name its place: the heir has only
+      // the centre to know the final story by. The second ring, from a run on, names it.
       const ring = sent.find((m) => m.t === 'ring') as RingMsg;
-      const story = STORIES.find((s) => s.final && SECTIONS[s.section].name === ring.place);
+      expect(ring.place).toBeUndefined();
+      t += 10000;
+      a.tick();
+      const named = sent.find((m) => m.t === 'ring' && m.phase === 2) as RingMsg;
+      const story = STORIES.find((s) => s.final && SECTIONS[s.section].name === named.place);
+      sent.length = 0;
       if (!story) continue;
       const b = mk();
       b.resume({ ringPhase: ring.phase, centre: { sx: ring.sx, sy: ring.sy, place: ring.place }, secsLeftInPhase: 1, events: [] });

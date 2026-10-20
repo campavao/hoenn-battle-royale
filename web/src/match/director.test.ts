@@ -129,7 +129,11 @@ describe('Director ring (POK-224)', () => {
     const rings = h.sent.filter((m) => m.t === 'ring') as RingMsg[];
     expect(rings.map((r) => r.r), 'the first ring reaches all of Hoenn; the first fog is the first shrink').toEqual([28, 15, 9, 7, 5, 3, 2, 0, -1]);
     expect(rings.map((r) => r.phase)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    expect(rings.map((r) => r.next), 'each names the next radius for the MAP, the last none').toEqual([15, 9, 7, 5, 3, 2, 0, -1, undefined]);
+    expect(rings.map((r) => r.next), 'each names the next radius for the MAP, the last none').toEqual([undefined, 9, 7, 5, 3, 2, 0, -1, undefined]);
+    // The first ring keeps its centre's name and its preview to itself: where the fog closes
+    // is told when it first closes (Cam's 2026-10-19 play-test).
+    expect(rings[0].place).toBeUndefined();
+    expect(rings.slice(1).every((r) => r.place === rings[1].place && r.place !== undefined)).toBe(true);
     expect(h.director.state.ring?.next).toBeUndefined();
 
     const centres = new Set(rings.map((r) => `${r.sx},${r.sy}`));
@@ -401,7 +405,7 @@ describe('events (speed-up phase 6)', () => {
   it('puts the last one in the section the ring closes on', () => {
     for (const seed of [1, 2, 3, 7, 11]) {
       const h = runRing(seed);
-      const ring = h.sent.find((m) => m.t === 'ring') as RingMsg;
+      const ring = h.sent.find((m) => m.t === 'ring' && m.phase === 2) as RingMsg;
       const last = h.sent.filter((m) => m.t === 'event').pop() as EventMsg;
       expect(last.place, `seed ${seed}`).toBe(ring.place);
     }

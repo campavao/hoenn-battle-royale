@@ -81,6 +81,9 @@ bool8 BrRing_SectionInside(u8 mapsec);
 bool8 BrRing_CellInside(s16 x, s16 y, s8 r);
 // Special for scripts: 1 when this map is outside the ring.
 u16 BrRing_Outside(void);
+// "SAFE " and the arrow or two toward the ring's centre, into buf (8 bytes), while this
+// map is outside the ring; FALSE otherwise.
+bool8 BrRing_SafeWay(u8 *buf);
 // The last phase has no inside (r = -1): what the corner and the map say then.
 extern const u8 gBrText_FogEverywhere[];
 

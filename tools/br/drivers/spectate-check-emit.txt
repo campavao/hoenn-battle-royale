@@ -20,9 +20,10 @@ expect u16 gBrSpectate 1
 expect u16 gBrSpectate+2 10
 wait 900
 expect u8 gBattleResults+0x13 1
-# turn 1 ended with both mons species 0x115, at 11 and 16 HP
+# turn 1 ended with both mons species 0x115, at 16 HP each (the walk-up's shorter "!",
+# POK-444, starts the fight on another frame, so other rolls)
 expect u16 gBattleMons 0x115
-expect u16 gBattleMons+0x28 11
+expect u16 gBattleMons+0x28 16
 expect u16 gBattleMons+0x58 0x115
 expect u16 gBattleMons+0x80 16
 tap A
@@ -36,7 +37,7 @@ expectle u16 gBrSpectate+2 22
 expectmsg 19 u8 13 0xC0
 expectmsg 19 u8 14 3
 expectmsg 19 u8 15 1
-# 2 * 0x115 * 31 + 11 + 16
-expectmsg 19 u16 16 0x4331
+# 2 * 0x115 * 31 + 16 + 16
+expectmsg 19 u16 16 0x4336
 shot turn2
 say spectate check emit ok
