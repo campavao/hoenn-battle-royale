@@ -1580,6 +1580,9 @@ static void MoveSelectionDisplayMoveType(void)
     u8 *txtPtr;
     struct ChooseMoveStruct *moveInfo = (struct ChooseMoveStruct *)(&gBattleBufferA[gActiveBattler][4]);
 
+#if BR
+    if (BrBattle_MoveTypeLine(moveInfo->moves[gMoveSelectionCursor[gActiveBattler]])) return; // "GRASS ×2"
+#endif
     txtPtr = StringCopy(gDisplayedStringBattle, gText_MoveInterfaceType);
     *(txtPtr)++ = EXT_CTRL_CODE_BEGIN;
     *(txtPtr)++ = EXT_CTRL_CODE_FONT;

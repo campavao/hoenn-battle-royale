@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, HEAD_ROOM, ringStaleColumns, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach } from './field';
+import { FIELD_VIEW_SIZE, HEAD_ROOM, ringStaleColumns, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, fieldDimmed } from './field';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
 import type { RosterEntry } from './match/roster';
@@ -617,6 +617,73 @@ describe('the fade', () => {
   // An object facing east is its west frame with the animation's flip, which the sprite
   // code puts in the OAM (SetSpriteOamFlipBits) and never in Sprite.hFlip: read from
   // Sprite.hFlip, the ROM's people past the picture faced west whenever they faced east.
+  // Feedback #33: START, then POKéMON, in Rustboro -- gPaletteFade frame by frame (a
+  // desktop e2e, menu-dim.spec's walk): the field's fade to black over every palette, the
+  // party screen's CB2 taking over with the struct reset, and its own fade-in from black.
+  // [frame, on the field, y, colour, active, mask, the u16 at 8].
+  it('dims the field under a menu, as under a battle, and the fade in still runs over the map', () => {
+    const trace: [number, boolean, number, number, number, number, number][] = [
+      [79, true, 2, 0, 1, 0xffffffff, 0],
+      [93, true, 16, 0, 1, 0xffffffff, 0],
+      [95, true, 16, 0, 0, 0, 0],
+      [101, false, 16, 0, 0, 0, 0],
+      [104, false, 0, 0, 0, 0, 0x80],
+      [118, false, 0, 0, 0, 0, 0x80],
+      [119, false, 16, 0, 1, 0xffffffff, 0x40],
+      [126, false, 8, 0, 1, 0xffffffff, 0x40],
+      [134, false, 0, 0, 1, 0xffffffff, 0x40],
+      [141, false, 0, 0, 0, 0, 0x40],
+    ];
+    const cam = (onField: boolean, fade: { y: number; color: number; active: boolean }): Camera =>
+      ({ group: 0, num: 3, x: 21, y: 25, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField });
+    let bg = true;
+    let prev: Camera | null = null;
+    let hold = { on: false, frames: 0 };
+    const seen: Record<number, [number, boolean]> = {};
+    for (const [frame, onField, y, color, active, mask, mode] of trace) {
+      const s = mapFade({ y, color, active: active === 1 }, mask, bg, mode);
+      bg = s.bg;
+      const cur = cam(onField, s.fade);
+      hold = holdFade(prev, cur, hold);
+      seen[frame] = [cur.fade, fieldDimmed(cur, false)];
+      prev = cur;
+    }
+    expect(seen).toEqual({
+      79: [2, false],
+      93: [16, false],
+      95: [16, false],
+      // The dim comes on under a black screen...
+      101: [16, true],
+      104: [16, true],
+      118: [16, true],
+      // ...and the menu fades in over the dimmed map.
+      119: [16, true],
+      126: [8, true],
+      134: [0, true],
+      141: [0, true],
+    });
+    // A keyed battle is dimmed whatever the struct says; nothing read yet is not.
+    expect(fieldDimmed(cam(true, { y: 0, color: 0, active: false }), true)).toBe(true);
+    expect(fieldDimmed(null, false)).toBe(false);
+    expect(fieldDimmed(null, true)).toBe(true);
+  });
+
+  it('shows #key-dim off the field and hides it back on it, keyed or not', () => {
+    const keyDim = { hidden: true };
+    const lcd = { style: { visibility: '', filter: '' }, ownerDocument: null };
+    const view = new FieldView({ emu: {}, lcd, keyDim } as unknown as FieldDeps);
+    const seeThrough = (c: { onField: boolean } | null) => (view as unknown as { seeThrough(c: { onField: boolean } | null): void }).seeThrough(c);
+    seeThrough(null);
+    expect(keyDim.hidden, 'nothing read').toBe(true);
+    seeThrough({ onField: true });
+    expect(keyDim.hidden, 'on the field').toBe(true);
+    seeThrough({ onField: false });
+    expect(keyDim.hidden, 'a menu').toBe(false);
+    seeThrough({ onField: true });
+    expect(keyDim.hidden, 'back on the field').toBe(true);
+    expect(lcd.style, 'the picture itself untouched without a see-through battle').toEqual({ visibility: '', filter: '' });
+  });
+
   it("reads a ROM sprite's flip where the hardware does, from its OAM", () => {
     const x = 120;
     expect(oamFlipped(0, SPR_OAM_HFLIP | x), 'facing east').toBe(true);

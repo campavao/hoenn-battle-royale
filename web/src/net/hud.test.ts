@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HUD, writeHudLeft, writeHudClockSecs, writeHudEyes, writeMySeat } from './hud';
+import { HUD, HUD_PAGE, readFogHp, writeHudLeft, writeHudClockSecs, writeHudEyes, writeHudNoCorner, writeMySeat } from './hud';
 import type { RamAccess } from './mailbox';
 
 function fakeRam(): { ram: RamAccess; mem: Map<number, number> } {
@@ -49,5 +49,36 @@ describe('hud.ts (the page-writes fields of gBrHud)', () => {
     const { ram } = fakeRam();
     writeMySeat(ram, 0x2000, 5);
     expect(ram.read(0x2000, 8)).toBe(5);
+  });
+
+  it('writes noCorner as the page and noBattleBox only for a phone (#30)', () => {
+    const { ram } = fakeRam();
+    writeHudNoCorner(ram, 0x1000, HUD_PAGE.CORNER);
+    expect([ram.read(0x1000 + HUD.OFF_NO_CORNER, 8), ram.read(0x1000 + HUD.OFF_NO_BATTLE_BOX, 8)]).toEqual([2, 0]);
+    writeHudNoCorner(ram, 0x1000, HUD_PAGE.SIGNS);
+    expect([ram.read(0x1000 + HUD.OFF_NO_CORNER, 8), ram.read(0x1000 + HUD.OFF_NO_BATTLE_BOX, 8)]).toEqual([1, 1]);
+    writeHudNoCorner(ram, 0x1000, HUD_PAGE.NONE);
+    expect([ram.read(0x1000 + HUD.OFF_NO_CORNER, 8), ram.read(0x1000 + HUD.OFF_NO_BATTLE_BOX, 8)]).toEqual([0, 0]);
+  });
+
+  it('reads the fog HP of the first mon standing, only outside the ring', () => {
+    const { ram } = fakeRam();
+    const syms: Record<string, number> = { gBrRing: 0x3000, gPlayerParty: 0x4000, gPlayerPartyCount: 0x5000 };
+    const sym = (n: string) => syms[n];
+    ram.write(0x5000, 3, 8);
+    // an egg (hasSpecies | isEgg) with HP of its own, passed over as LeadHp passes it
+    ram.write(0x4000 + 0x13, 6, 8);
+    ram.write(0x4000 + 0x56, 9, 16);
+    ram.write(0x4000 + 0x58, 9, 16);
+    // fainted
+    ram.write(0x4000 + 100 + 0x13, 2, 8);
+    ram.write(0x4000 + 100 + 0x58, 30, 16);
+    ram.write(0x4000 + 200 + 0x13, 2, 8);
+    ram.write(0x4000 + 200 + 0x56, 26, 16);
+    ram.write(0x4000 + 200 + 0x58, 40, 16);
+    expect(readFogHp(ram, sym)).toBeNull();
+    ram.write(0x3000 + 5, 1, 8);
+    expect(readFogHp(ram, sym)).toBe('HP 26/40');
+    expect(readFogHp(ram, () => undefined)).toBeNull();
   });
 });

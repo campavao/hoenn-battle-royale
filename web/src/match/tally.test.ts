@@ -56,7 +56,7 @@ describe("what our own ROM counted of the match (POK-416)", () => {
 
   it('says every count, zero too, and a favourite only once there is one', () => {
     const none = tallyLines({ steps: 1, won: 0, caught: 0, items: 0, mons: {}, moves: {} }, names);
-    expect(none.map((l) => `${l.label} ${l.value}`)).toEqual(['WON 0', 'CAUGHT 0', 'WALKED 1 step', 'ITEMS 0']);
+    expect(none.map((l) => `${l.label} ${l.value}`)).toEqual(['WON 0', 'CAUGHT 0', 'STEPS 1', 'ITEMS 0']);
     const some = tallyLines({ steps: 40, won: 2, caught: 1, items: 3, mons: { 277: 5 }, moves: { 1: 4 } }, names);
     expect(some.filter((l) => l.wide)).toEqual([
       { label: 'FAVORITE', value: 'TREECKO', wide: true },
