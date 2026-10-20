@@ -2261,8 +2261,6 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     {
       decided: (line) => {
         career = line;
-        // Over: a reload from the results is an ordinary one, back into the room.
-        noteOutOfMatch();
         drawResults();
       },
       // The champion's team under the results, as the room draws it (POK-331 #26): our
@@ -2677,8 +2675,9 @@ function wireRoom(
     countdown.cancel();
     if (room.started) return;
     room.started = true;
-    // A reload from here on is one out of the match (POK-433, match/left.ts).
-    noteInMatch(hash.code);
+    // A reload from here on is one out of the match (POK-433, match/left.ts). Not a
+    // watcher's: their ROM holds nothing of the match, and the URL puts them back.
+    if (hash.mode !== 'watch') noteInMatch(attachedTo?.code ?? hash.code);
     // The town the ROM stands in fades out under black, not in view (POK-346).
     holdCurtain(emu, symbols);
     // ...and the passcode entry over it, should a count run out on a host still typing.
@@ -3003,6 +3002,8 @@ function wireRoom(
       },
       decided: (line) => {
         career = line;
+        // Over: a reload from the results is an ordinary one, back into the room.
+        noteOutOfMatch();
         drawResults();
         // The match just changed our record: the room's cards of us follow (POK-339).
         sayCard();
@@ -3747,8 +3748,11 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
   const shownLink = (): Link => (roomsRefused ? 'down' : link);
   let online = false;
   let rooms: RoomListing[] = [];
-  /** The line under the main menu: a rejected code, a match a reload left, or nothing. */
-  let note = firstNote;
+  /** The line under the main menu: a rejected code, or nothing. */
+  let note = '';
+  /** ...or, under the main menu only, that a reload left a match (POK-433): the ROOM
+   *  CODE entry shares `note`, and drew this as a typing error. */
+  const leftNote = firstNote;
   /** The line under the trainer's rows: what became of a career file. */
   let trainerNote = '';
 
@@ -3908,7 +3912,7 @@ function runLobby(version: { patch?: string; protocol?: number }, firstNote = ''
       title: 'HOENN BATTLE ROYALE',
       rows: [...playRows(shownLink(), rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)), HOWTO_ROW, FEEDBACK_ROW].map(row),
       rowsId: 'lobby-rows',
-      note: note || (online ? '' : emptyNote(false)),
+      note: note || leftNote || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',
       trainer: { name: careerName(), skin: careerSkin(), record: record(), onPress: () => stage.push(trainer) },
     }));
@@ -4499,7 +4503,9 @@ async function main(): Promise<void> {
   // was this tab's and went with it (match/left.ts says why), so the room's URL would
   // only land on a room screen waiting for a host that has stopped.
   let lobbyNote = '';
-  if (reloadedMidMatch() && fromHash && fromHash.mode !== 'solo') {
+  const leftCode = reloadedMidMatch();
+  if (leftCode !== null && fromHash && fromHash.mode !== 'solo' && fromHash.mode !== 'watch'
+    && (leftCode === '' || fromHash.code === undefined || fromHash.code === leftCode)) {
     history.replaceState(null, '', `#${withoutRoom(location.hash)}`);
     fromHash = null;
     lobbyNote = LEFT_MATCH_NOTE;

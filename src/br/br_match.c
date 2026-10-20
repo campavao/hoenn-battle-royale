@@ -19,6 +19,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_duel.h"
 #include "br/br_match.h"
+#include "br/br_battle.h"
 #include "br/br_ring.h"
 #include "br/br_zone.h"
 #include "br/br_pick.h"
@@ -469,6 +470,12 @@ bool8 BrMatch_FightOver(void)
 {
     return sWinPending && gMain.inBattle
         && !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK));
+}
+
+// Which RUN the controller presses when the buzzer or the win takes us out of a fight.
+u8 BrMatch_LeaveKind(void)
+{
+    return BrMatch_FightOver() ? BR_RUN_OVER : BR_RUN_ROLL;
 }
 
 // No level numbers during a round (POK-266, Kanto v0.37.0). The rung is shared, so a

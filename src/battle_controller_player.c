@@ -249,7 +249,7 @@ static void HandleInputChooseAction(void)
     if (BrMatch_BuzzerClosing() || BrMatch_FightOver())
     {
         BrBattle_HideClock();
-        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, BrMatch_FightOver() ? BR_RUN_OVER : BR_RUN_ROLL);
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, BrMatch_LeaveKind());
         PlayerBufferExecCompleted();
         return;
     }

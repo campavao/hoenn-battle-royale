@@ -44,17 +44,19 @@ export function noteOutOfMatch(store: TabStore = tabStore()): void {
   }
 }
 
-/** Whether this page load is a reload out of a match, which it forgets as it answers:
- *  the next reload is an ordinary one. */
-export function reloadedMidMatch(store: TabStore = tabStore()): boolean {
+/** The room this page load is a reload out of a match in ('' when the tab never knew
+ *  its code), or null for any other load. Forgotten as it answers: the next reload is an
+ *  ordinary one. The caller holds the code to the URL's, so a link to another room in
+ *  the same tab is not taken for one. */
+export function reloadedMidMatch(store: TabStore = tabStore()): string | null {
   let was: string | null = null;
   try {
     was = store?.getItem(KEY) ?? null;
   } catch {
-    return false;
+    return null;
   }
   noteOutOfMatch(store);
-  return was !== null;
+  return was;
 }
 
 /** What the menu says after it (Cam: overlay lines in mixed case). */
