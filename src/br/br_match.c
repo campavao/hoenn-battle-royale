@@ -512,7 +512,7 @@ static void BackOutOfMenus(void)
 // dealt inside it, a drop with no cell to go to) must not cost the match (Cam, 10-20:
 // "catch that and automatically place players in Mauville since it's centrally
 // located"). A second on the field first, so a drop already on its way gets there.
-// Mauville's POKeMON CENTER doorstep, the same cell the host's doorstep list ranks first.
+// Mauville's POKeMART doorstep, the first of the city's doorsteps the host has.
 #define BR_SAFARI_ESCAPE_FRAMES 60
 #define BR_SAFARI_ESCAPE_X 23
 #define BR_SAFARI_ESCAPE_Y 15
