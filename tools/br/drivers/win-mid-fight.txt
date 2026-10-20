@@ -2,6 +2,9 @@
 # (10-19 play-test #27: "P1 WINS" went up mid-battle, and the results came ~50 s later,
 # at the page's 60 s give-up, with no Hall of Fame in between).
 #
+# The link control for win-bot-fight.txt: a link fight already ended on its peer's OUT
+# (br_netlink.c's TickPeerOut) before 10-19 #27, and BR_RUN_OVER leaves it to that.
+#
 # out-peer.txt's session: we challenge seat 1 with loopback on, so the fight is real up
 # to the first choice. Then seat 1 goes out (the fog took them) and the page says we won.
 drain gBrMailbox
