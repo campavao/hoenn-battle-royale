@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CARD_H, CARD_W, SIDES_SIZE, partyBalls, readSides, romName, sidesLayout } from './sides';
+import { CARD_H, CARD_W, SIDES_SIZE, overlaps, partyBalls, readSides, romName, sidesLayout } from './sides';
 import { BATTLE_MENU, MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE } from '../touch';
 
 function mon(hp: number, maxHp: number, status = 0): number[] {
@@ -84,5 +84,14 @@ describe('readSides', () => {
 
   it('is nothing in a wild battle', () => {
     expect(readSides(emu(1, 0), sym, { serial: 0 })).toBeNull();
+  });
+});
+
+describe('overlaps', () => {
+  const box = (left: number, top: number, w: number, h: number) => ({ left, top, right: left + w, bottom: top + h });
+  it('is true only where two boxes share area', () => {
+    expect(overlaps(box(0, 0, 10, 10), box(5, 5, 10, 10))).toBe(true);
+    expect(overlaps(box(0, 0, 10, 10), box(10, 0, 10, 10)), 'edges touching').toBe(false);
+    expect(overlaps(box(0, 0, 10, 10), box(0, 20, 10, 10))).toBe(false);
   });
 });

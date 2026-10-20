@@ -877,6 +877,8 @@ bool8 BrBattle_RecordedWildOpponent(void)
 static const u8 sText_Trainer1Name[] = _("{B_TRAINER1_NAME}");
 static const u8 sText_LinkOpponent1Name[] = _("{B_LINK_OPPONENT1_NAME}");
 
+/* One opponent's name: a double battle against two trainers keeps the last picture drawn
+   but TRAINER1's name. Bots never fight doubles, so the card shows one trainer. */
 static void NoteSides(u32 foePic)
 {
     u8 name[64];

@@ -177,10 +177,33 @@ export function paintBalls(ctx: CanvasRenderingContext2D, balls: readonly Ball[]
 }
 
 /** The two cards, as DOM in the play screen's box, placed off the field's layout. */
+/** What else sits past the picture: the phone's D-pad and A/B (on its side), the HUD's
+ *  ticker and ring (upright), and the key legend (desktop). A card under one of them is
+ *  hidden rather than drawn over or under it (CLAUDE.md: no overlap). */
+const IN_THE_WAY = '#pad .dpad-surface, #pad .ab, #hud > *, #keys';
+
+/** Do two boxes share any area? Touching edges do not count. */
+export function overlaps(a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
+function inTheWay(card: HTMLElement): boolean {
+  const mine = card.getBoundingClientRect();
+  for (const el of document.querySelectorAll<HTMLElement>(IN_THE_WAY)) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0 || getComputedStyle(el).visibility === 'hidden') continue;
+    if (overlaps(mine, r)) return true;
+  }
+  return false;
+}
+
 export class SidesView {
   private readonly cards: { el: HTMLElement; pic: HTMLImageElement; name: HTMLElement; balls: HTMLCanvasElement; drawn: string }[];
   private shown = { serial: 0 };
   private placed = '';
+  /** Frames since the cards were last checked against what else is past the picture: the
+   *  pad comes and goes with the battle menu, so this is not only a placement's question. */
+  private sinceCheck = 0;
   private off: (() => void) | null = null;
 
   constructor(
@@ -229,7 +252,8 @@ export class SidesView {
     }
     const s = lay.scale;
     const place = `${s}:${at.foe.x}:${at.foe.y}:${at.mine.x}:${at.mine.y}`;
-    if (place !== this.placed) {
+    const moved = place !== this.placed;
+    if (moved) {
       this.placed = place;
       [at.foe, at.mine].forEach((p, i) => {
         const { el } = this.cards[i];
@@ -241,7 +265,14 @@ export class SidesView {
       });
     }
     [sides.foe, sides.mine].forEach((side, i) => this.paint(this.cards[i], side, s));
+    const wasHidden = this.root.hidden;
     this.root.hidden = false;
+    if (wasHidden || moved || ++this.sinceCheck >= 8) {
+      this.sinceCheck = 0;
+      for (const card of this.cards) {
+        card.el.style.visibility = inTheWay(card.el) ? 'hidden' : '';
+      }
+    }
   }
 
   private paint(card: SidesView['cards'][number], side: Side, s: number): void {
