@@ -114,7 +114,8 @@
 //   55:     flags       u8   bit0 = traded; bit1 = the moves are a ROM's own, from a
 //                             PARTY report: a card with it fights with them (POK-330 #50);
 //                             bit2 = shiny, from a ROM's own party: otId is only the
-//                             visible half, so the shine cannot be worked out from it
+//                             visible half, so the shine cannot be worked out from it;
+//                             a row without it is drawn never shiny
 //   56..99: reserved    zero
 #define BR_MON_OFF_FLAGS 55
 #define BR_MON_TRADED 0x01

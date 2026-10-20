@@ -1256,7 +1256,7 @@ u8 BrSpectate_PartyOf(u8 seat, struct Pokemon *party)
         otId = BrWire_ReadU16(row + BR_PEEK_OFF_OTID);
         hidden = otId ^ (u16)(personality >> 16) ^ (u16)personality;
         if (!(row[BR_MON_OFF_FLAGS] & BR_MON_SHINY))
-            hidden ^= 8;
+            hidden ^= SHINY_ODDS;
         if (BuildRowMon(row, &party[count], personality, otId | ((u32)hidden << 16)))
             count++;
     }
