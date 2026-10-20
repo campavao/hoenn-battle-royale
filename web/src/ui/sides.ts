@@ -39,10 +39,12 @@ const PIC = 64;
 const NAME_H = 14;
 const BALL = 7;
 const BALL_GAP = 2;
+/** Between the name and the balls (Cam, 2026-10-20: "more spacing"). */
+const NAME_GAP = 5;
 const BALLS_W = PARTY_SIZE * BALL + (PARTY_SIZE - 1) * BALL_GAP;
 /** A card: the picture, the name under it, the balls under that. GBA pixels. */
 export const CARD_W = PIC;
-export const CARD_H = PIC + NAME_H + BALL + 3;
+export const CARD_H = PIC + NAME_H + NAME_GAP + BALL + 3;
 const GAP = 4;
 
 export type Ball = 'ok' | 'status' | 'fainted' | 'empty';
@@ -253,6 +255,7 @@ export class SidesView {
     card.name.setAttribute('aria-label', side.name);
     card.balls.style.width = `${BALLS_W * s}px`;
     card.balls.style.height = `${BALL * s}px`;
+    card.balls.style.marginTop = `${NAME_GAP * s}px`;
     const ctx = card.balls.getContext('2d');
     if (ctx) paintBalls(ctx, side.balls);
   }
