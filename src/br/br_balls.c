@@ -184,6 +184,10 @@ static const u8 *TemplateScript(const struct ObjectEvent *obj)
     return NULL;
 }
 
+// How far up a ball on furniture is drawn: the top, not its front edge (Cam, 2026-10-20:
+// "it looks like it's falling off the bottom").
+#define BR_TABLE_BALL_LIFT -6
+
 void BrBalls_Tint(struct ObjectEvent *obj, struct Sprite *sprite)
 {
     u16 item;
@@ -191,6 +195,10 @@ void BrBalls_Tint(struct ObjectEvent *obj, struct Sprite *sprite)
 
     if (obj->graphicsId != OBJ_EVENT_GFX_ITEM_BALL)
         return;
+    // On a desk, a table or a counter (#8; a house cache can land on one too): nothing
+    // is ever dealt onto a blocked cell but furniture, so a ball on one sits on its top.
+    if (MapGridGetCollisionAt(obj->currentCoords.x, obj->currentCoords.y))
+        sprite->y2 = BR_TABLE_BALL_LIFT;
     item = BrLoot_ItemFor(obj->localId);
     if (item == ITEM_NONE)
         item = BrBalls_Deal(obj->mapGroup, obj->mapNum, obj->localId, ScriptItem(TemplateScript(obj)));
