@@ -26,7 +26,7 @@ function memory(): TabStore & { size(): number } {
 }
 
 const record = (at: number, build = 'abc'): ResumeRecord => ({
-  v: 1,
+  v: 2,
   code: 'XDGUWY',
   token: 't0k',
   seat: 3,
@@ -37,7 +37,6 @@ const record = (at: number, build = 'abc'): ResumeRecord => ({
   opts: { name: 'CAM' },
   match: packMatch(freshMatch(), 0, at),
   journal: [],
-  rows: [],
 });
 
 describe('takeResume (HBR-20)', () => {

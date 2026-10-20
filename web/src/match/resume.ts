@@ -13,13 +13,15 @@
 // Not from inside a fight, wild or linked, nor the walk-up into one: a savestate from
 // before the fight would be a way out of every losing one, so a reload there is a reload
 // out of the match, as before.
-// A host's bots come back as the seed dealt them, standing where they were: their brains
-// lived in the tab, the same compromise a promoted heir makes (POK-252).
-import { PROTOCOL, type MapRef, type PlaceMsg } from '../net/wire';
+// A host's tab writes down the match it runs too (match/host.ts HostSnap): the clock, the
+// bots with the teams and bags they had, their fights. Cam: a match against bots should
+// wait a minute "before reseting the game completely".
+import type { MapRef } from '../net/wire';
+export { HOST_SNAP } from './hostsnap';
+import type { HostSnap } from './hostsnap';
 import type { JournalEntry } from './journal';
 import type { MatchSnapshot } from './lifecycle';
 import type { TabStore } from './left';
-import type { RosterEntry } from './roster';
 
 const KEY = 'hbr-resume';
 const STATE_KEY = 'hbr-resume-state';
@@ -46,7 +48,7 @@ export interface SavedMatch {
 }
 
 export interface ResumeRecord {
-  v: 1;
+  v: 2;
   code: string;
   token: string;
   seat: number;
@@ -61,8 +63,8 @@ export interface ResumeRecord {
   opts: { name: string; skin?: string; pass?: string; patch?: string; protocol?: number };
   match: SavedMatch;
   journal: JournalEntry[];
-  /** Where the host last saw each of its bots, which only the host ever heard. */
-  rows: PlaceMsg[];
+  /** The match this page was running, when it was the host. */
+  hosting?: HostSnap;
 }
 
 /** Whether a page going away now may come back to its match: a seat still in a running
@@ -142,11 +144,9 @@ function tabStore(): TabStore {
   }
 }
 
-/** What the page hands over as it goes; the host's roster rows are where it last saw
- *  its bots, which nobody else ever told it. */
-export interface Leaving extends Omit<ResumeRecord, 'v' | 'at' | 'match' | 'rows'> {
+/** What the page hands over as it goes. */
+export interface Leaving extends Omit<ResumeRecord, 'v' | 'at' | 'match'> {
   match: MatchSnapshot;
-  roster: readonly RosterEntry[];
   snapshot(): Uint8Array | null;
 }
 
@@ -155,14 +155,8 @@ export interface Leaving extends Omit<ResumeRecord, 'v' | 'at' | 'match' | 'rows
 export function writeOnLeaving(p: Leaving, perfNow: number, wallNow: number, store: TabStore = tabStore()): boolean {
   const state = p.snapshot();
   if (!state) return false;
-  const bots = p.match.botSeats;
-  const rows: PlaceMsg[] = p.host
-    ? p.roster
-        .filter((e) => bots.has(e.seat) && e.map !== undefined && e.alive)
-        .map((e) => ({ t: 'place', v: PROTOCOL, seat: e.seat, map: e.map, x: e.x, y: e.y, f: e.dir, st: 'alive' }))
-    : [];
-  const { roster: _roster, snapshot: _snapshot, ...rest } = p;
-  return saveResume({ ...rest, v: 1, at: wallNow, match: packMatch(p.match, perfNow, wallNow), rows }, state, store);
+  const { snapshot: _snapshot, ...rest } = p;
+  return saveResume({ ...rest, v: 2, at: wallNow, match: packMatch(p.match, perfNow, wallNow) }, state, store);
 }
 
 /** Written as the page goes. False when the store would not take it (full, refused):
@@ -207,7 +201,7 @@ export function takeResume(
   if (!raw || !state) return null;
   try {
     const rec = JSON.parse(raw) as ResumeRecord;
-    if (rec.v !== 1 || rec.build !== opts.build) return null;
+    if (rec.v !== 2 || rec.build !== opts.build) return null;
     const age = opts.now - rec.at;
     if (!(age >= 0 && age < rec.holdMs - RESUME_MARGIN_MS)) return null;
     return { rec, state: fromBase64(state) };

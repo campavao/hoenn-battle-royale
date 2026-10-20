@@ -170,10 +170,10 @@ const FIGHT_START_MS = 20_000;
  *  seconds at full speed, up to two queued ahead of it, and a boot. Past this the
  *  instance is not going to answer -- or is on a host too slow to wait for, and the
  *  seeded resolver settles the pair either way. */
-const PROXY_TIMEOUT_MS = 2 * 60_000;
+export const PROXY_TIMEOUT_MS = 2 * 60_000;
 
 /** A bot standing still because its fight is running somewhere else. */
-interface Fight {
+export interface Fight {
   /** The other side: the player whose ROM runs the battle, or the other bot in a proxy
    *  duel. Only this seat's ROM may say how it went. */
   opponent: number;
@@ -188,6 +188,8 @@ interface Fight {
   /** The bot's walk-up to the player before the fight (walkUp): which way, and when the
    *  next step is due. */
   walk?: { dir: SeamDir; next: number };
+  /** A proxy duel's draw, for the seeded resolver to settle it with after a reload. */
+  nonce?: number;
 }
 
 const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
@@ -197,7 +199,7 @@ const DIR_WIRE: Record<SeamDir, 1 | 2 | 3 | 4> = {
   east: 4,
 };
 
-interface Walker {
+export interface Walker {
   bot: Bot;
   at: Spot;
   path: Path | null;
@@ -1370,6 +1372,7 @@ export class Bots {
     const held = [walker, other].map(
       (w) => [w, this.hold(w, (w === walker ? other : walker).bot.seat, now, expire)] as const,
     );
+    for (const [, fight] of held) fight.nonce = nonce;
     // Both bags go in with them (POK-237): what a bot spends in here is gone from the
     // bag it will take into its next fight, the same as a fight against a player.
     void settle(

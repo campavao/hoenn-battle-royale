@@ -12,7 +12,7 @@ import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
-import type { BstartMsg, Msg, PackedMon, PlaceMsg, StartMsg, TurnMsg } from './net/wire';
+import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
 import { HUD, HUD_PAGE, readFogHp, writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import type { HudWorld } from './ui/phonehud';
@@ -2924,9 +2924,14 @@ function wireRoom(
       if (dev) {
         dev.director = host.director;
         dev.botCount = () => host?.botCount() ?? 0;
+        dev.bots = host.bots.bots;
       }
     }
-    host.begin();
+    // Our own match back from a reload (HBR-20): as it stood, not as an heir would guess it.
+    const back = takeOver ? hosting : undefined;
+    const role = host;
+    hosting = undefined;
+    host.begin(back && resumeKit ? () => resumeKit!.HOST_SNAP.restoreHost(role, back) : undefined);
     warmProxy(host.botCount());
     standDownIfHidden();
   };
@@ -3190,8 +3195,9 @@ function wireRoom(
   /** The room we are attached to, so a second attach can tell a rejoin of it (the relay
    *  handed our seat back) from a new room. */
   let attachedTo: { seat: number; code: string } | null = null;
-  /** A reload's bots, for the first attach to stand where they were (HBR-20). */
-  const resumeRows: PlaceMsg[] = [];
+  /** The match this page ran before a reload, for the take-over to pick up as it was
+   *  (HBR-20), once. */
+  let hosting = resume?.hosting;
 
   const attach = (seat: number, code: string, hostSeat: number) => {
     // A rejoin mid-fight keeps the fight: the ROM is still in it, and a fresh Bridge knew
@@ -3223,9 +3229,6 @@ function wireRoom(
     // fallen go back on it fallen.
     if (match.seed !== 0) bridge.roster.seatBots(botRows(match.seed, match.botSeats));
     for (const out of match.out) bridge.roster.applyMsg({ t: 'out', seat: out });
-    // A host back from a reload stands its bots where it last saw them (HBR-20): nobody
-    // else ever told this page, and the take-over picks them up from these rows.
-    for (const row of resumeRows.splice(0)) bridge.roster.applyMsg(row);
     if (rejoin) {
       // ...and what we last said to the seat we are fighting, which the blip may have
       // swallowed (#7), and the drop we asked for and got no cell for (POK-331 #4).
@@ -3855,7 +3858,6 @@ function wireRoom(
     }
     rereadAt = 0;
     resumeKit.unpackMatch(match, resume.match, performance.now(), Date.now());
-    resumeRows.push(...resume.rows);
     hideRoomScreen(false);
     // A relay that never answers at all is the hold running out too.
     const left = resume.at + resume.holdMs - Date.now();
@@ -3896,7 +3898,7 @@ function wireRoom(
         opts: { ...me, pass: (isHost ? hostPass : joinPass) ?? undefined },
         match,
         journal: entries,
-        roster: bridge.roster.all(),
+        hosting: host ? kit.HOST_SNAP.snapHost(host) : undefined,
         snapshot: () => emu.snapshot(),
       },
       performance.now(),

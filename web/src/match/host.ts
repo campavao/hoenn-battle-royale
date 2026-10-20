@@ -250,7 +250,7 @@ export class HostRole {
 
   /** Starts the match, once: a `start` for everybody, or on a takeover the match the wire
    *  already said, picked up where it stands. Then the director's own loop. */
-  begin(): void {
+  begin(lay?: () => void): void {
     if (this.begun) return;
     this.begun = true;
     const { director, plan } = this;
@@ -284,6 +284,9 @@ export class HostRole {
     } else {
       director.start();
     }
+    // Our own match back from a reload (HBR-20) goes over the take-over before the first
+    // tick, or that tick says what the take-over guessed: a second ring, the clock twice.
+    lay?.();
     this.stopLoop = this.startLoop(director);
   }
 
