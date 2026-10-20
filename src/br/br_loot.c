@@ -1143,6 +1143,12 @@ bool8 BrLoot_Solid(u8 localId)
         return FALSE;
     if (BR_LOOT_IS_GIFT(it->key) || BR_LOOT_IS_HOME(it->key) || BrStory_Person(it))
         return TRUE;
+    // A room's cache sits where floors.py put it, never in the way (br_balls.c), so it
+    // walls nothing off: solid whatever A would make of it. A TM you already carry was
+    // walked through there (Cam's 10-19 play-test, #21: "I'm able to walk through this
+    // Poke Ball").
+    if ((it->key & 0xFF00) == BR_LOOT_KEY_CACHE(0))
+        return TRUE;
     if (BrStory_Guarded(it))
         return FALSE;
     if ((it->kind == BR_LOOT_ITEM || OneThing(it)) && BrMoves_IsTm(it->species))

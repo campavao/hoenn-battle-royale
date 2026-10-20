@@ -1,0 +1,38 @@
+# cache-solid: a house's cache stops a step even when A would not take it (Cam's 10-19
+# play-test, #21: "Looks like I'm able to walk through this Poke Ball" -- a SAFEGUARD he
+# already carried). A ball A cannot take is walked over so a dropped one never walls off a
+# one-wide passage (loot-solid.txt), but a cache sits where floors.py put it, out of the
+# way, so it is solid whatever it holds.
+#
+# house-cache.txt's room: PETALBURG CITY's HOUSE1 under seed 0x12345678, the cache TM24
+# THUNDERBOLT at the map's (5,4); the boot leaves us on (3,6). We carry a TM24 already, so A would
+# say "Already have" and leave it.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 08 02 03 00 06 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x12345678
+wait 30
+expect u16 gBrLoot 0x8D21
+expect u16 gBrLoot+6 312
+# a TM24 in the TMs pocket, its count the balls' (bag counts are kept encrypted)
+poke u16 *gSaveBlock1Ptr+0x690 312
+copy *gSaveBlock1Ptr+0x692 *gSaveBlock1Ptr+0x652 2
+expect u16 *gSaveBlock1Ptr 3
+expect u16 *gSaveBlock1Ptr+2 6
+# two east along the carpet, to the cell under the cache
+hold RIGHT 16
+wait 20
+hold RIGHT 16
+wait 20
+expect u16 *gSaveBlock1Ptr 5
+# north twice: one step, then the cache stops us
+hold UP 16
+wait 20
+hold UP 16
+wait 20
+shot stopped
+expect u16 *gSaveBlock1Ptr 5
+expect u16 *gSaveBlock1Ptr+2 5
+expect u8 gBrLoot+11 3
+say cache solid ok
