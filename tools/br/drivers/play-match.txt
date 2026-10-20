@@ -28,9 +28,8 @@ expect u16 *gSaveBlock1Ptr 15
 expect u16 *gSaveBlock1Ptr+2 14
 expect u8 gPlayerPartyCount 1
 expect u8 gNumSafariBalls 30
-# the seed's theme, on the ticker (zone-theme.txt)
-expectge u8 gBrHud+0x0A 1
-expect u8 gBrHud+0x46 0xBB
+# and nothing on the ticker: there is no type theme to announce any more (zone-random.txt)
+expect u8 gBrHud+0x0A 0
 shot boot
 wait 140
 say grass

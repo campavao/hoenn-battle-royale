@@ -1,8 +1,7 @@
 // The Zone's catch pool, read out of the ROM (POK-296).
 //
-// Kanto: "bots draft their first Pokemon from the same zone pool", which is what makes a
-// match's theme carry past the opening -- a WATER match is still a WATER match when a
-// fallen bot's team is lying on Route 110 in the fourth ring.
+// Kanto: "bots draft their first Pokemon from the same zone pool". Ours is twelve species
+// from the whole dex bar the legendaries (2026-10-20: no type theme any more).
 //
 // The pool is dealt inside the ROM off the match seed (src/br/br_zone.c) and every ROM in
 // the room deals the same one, so the page does not mirror the deal: it reads the twelve
@@ -18,7 +17,7 @@ export const BR_ZONE = {
 
 /** The twelve species this match's Zone holds, or none: no symbol (an older patch), or a
  *  pool that has not been dealt for this seed yet. Empty is the caller's cue to fall back
- *  to what it did before there was a theme. */
+ *  to what it did before there was a pool. */
 export function readZonePool(
   read: (addr: number, bits: 8 | 16 | 32) => number,
   base: number | undefined,

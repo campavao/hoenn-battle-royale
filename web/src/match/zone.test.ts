@@ -30,7 +30,7 @@ describe('the Zone pool, read out of the ROM', () => {
 });
 
 describe('a bot drafts its first Pokemon from the Zone', () => {
-  const pool = [43, 306, 277, 344, 298]; // a GRASS match
+  const pool = [43, 306, 277, 344, 298]; // first stages, as the Zone deals them
 
   it('leads with something out of the pool, grown up to the rung', () => {
     for (let seat = 1; seat < 12; seat++) {
