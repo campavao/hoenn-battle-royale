@@ -1,5 +1,5 @@
 {
- "readAt": "2026-10-20T01:30:38.784Z",
+ "readAt": "2026-10-20T01:52:49.660Z",
  "from": "2026-09-16T22:07:57.080Z",
  "sessions": [
   {
@@ -9,10 +9,10 @@
    "secs": null,
    "door": "open",
    "mode": "host",
-   "humans": 3,
-   "together": 3,
+   "humans": 6,
+   "together": 4,
    "spectators": 0,
-   "matches": 1,
+   "matches": 2,
    "joins": [
     {
      "t": "2026-10-20T01:12:58.175Z",
@@ -21,20 +21,43 @@
     {
      "t": "2026-10-20T01:14:32.987Z",
      "how": "code"
+    },
+    {
+     "t": "2026-10-20T01:38:53.998Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-10-20T01:41:26.259Z",
+     "how": "code"
+    },
+    {
+     "t": "2026-10-20T01:41:29.999Z",
+     "how": "code"
     }
    ],
-   "versions": [],
-   "installs": [],
+   "versions": [
+    "3"
+   ],
+   "installs": [
+    "3cc48270"
+   ],
    "played": [
     {
      "t": "2026-10-20T01:14:34.855Z",
      "mode": "host",
      "trainers": 3,
      "watching": 0,
+     "secs": 1410
+    },
+    {
+     "t": "2026-10-20T01:41:49.401Z",
+     "mode": "host",
+     "trainers": 4,
+     "watching": 0,
      "secs": null
     }
    ],
-   "migrated": 1,
+   "migrated": 2,
    "live": true,
    "exact": true
   },
@@ -2557,14 +2580,14 @@
   {
    "id": "3cc48270",
    "first": "2026-10-05T23:35:41.173Z",
-   "last": "2026-10-20T01:12:13.999Z",
+   "last": "2026-10-20T01:41:29.998Z",
    "since": "2026-10-05",
    "versions": [
     "1",
     "3"
    ],
    "solo": 1,
-   "checkins": 12,
+   "checkins": 13,
    "v": "3"
   },
   {
@@ -2582,14 +2605,14 @@
   {
    "id": "a6f8be76",
    "first": "2026-10-14T22:34:17.163Z",
-   "last": "2026-10-20T01:12:58.175Z",
+   "last": "2026-10-20T01:38:53.998Z",
    "since": "2026-10-14",
    "versions": [
     "2",
     "3"
    ],
    "solo": 1,
-   "checkins": 14,
+   "checkins": 15,
    "v": "3"
   },
   {
