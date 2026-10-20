@@ -11,6 +11,7 @@ import { romCell } from './space';
 import type { DirectorWorld } from '../match/director';
 import { botRows } from '../match/lifecycle';
 import { Loot } from '../match/loot';
+import { restoreHostBots, snapHostBots } from '../match/hostsnap';
 import { NPC_FOG_TICK_MS, NPC_FOG_TICKS_TO_KILL } from '../match/npcfog';
 import type { RosterEntry } from '../match/roster';
 import { SAFARI_CELLS } from '../match/safari';
@@ -221,5 +222,63 @@ describe('the host deals its bots (POK-330 #42)', () => {
     expect(log).toHaveBeenCalledTimes(1);
     expect(log.mock.calls[0][0]).toMatch(new RegExp(`^\\[fog\\] cleared ${everyone} trainers on \\d+ maps$`));
     log.mockRestore();
+  });
+});
+
+describe("the host's own reload (HBR-20)", () => {
+  /** A field that has been somewhere: the ring moved, the fog bit, the trainers walked. */
+  function played() {
+    let t = 0;
+    const h = host({ now: () => t });
+    h.hb.setRing({ sx: 3, sy: 3, r: 2 }, 3);
+    for (let i = 1; i <= 120; i++) h.hb.tick((t = i * STEP_MS));
+    return { ...h, at: () => t };
+  }
+
+  it('comes back with every bot as it stood: its cell, its team hurt as it was, its bag, its rng', () => {
+    const { hb, at } = played();
+    const snap = JSON.parse(JSON.stringify(snapHostBots(hb, at())));
+    const hurt = snap.bots.walkers.some((w: { party: { hp: number; maxHp: number }[] }) => w.party.some((m) => m.hp < m.maxHp));
+    expect(hurt).toBe(true);
+    // Over a field the take-over dealt again off the seed, as the page does it.
+    const back = host({ now: () => 99_000 });
+    back.sent.length = 0;
+    restoreHostBots(back.hb, snap, 99_000);
+    expect(back.hb.seats).toEqual(hb.seats);
+    // Each one said where it stands, and nothing was dealt again.
+    expect(places(back.sent).map((p) => p.seat).sort()).toEqual(hb.bots.positions().map((p) => p.seat).sort());
+    for (const p of hb.bots.positions()) {
+      expect(back.hb.bots.spotOf(p.seat)).toMatchObject({ map: p.map, x: p.x, y: p.y });
+      expect(back.hb.bots.partyOf(p.seat)).toEqual(hb.bots.partyOf(p.seat));
+      expect(back.hb.bots.bagOf(p.seat)).toEqual(hb.bots.bagOf(p.seat));
+    }
+    // ...and its own snapshot, the moments counted from its own clock, is the same one.
+    expect(JSON.parse(JSON.stringify(snapHostBots(back.hb, 99_000)))).toEqual(snap);
+  });
+
+  it('keeps an opening an opening: the bots stay in the Zone until the drop sends them', () => {
+    const h = host({ safariSecs: 120 });
+    const snap = JSON.parse(JSON.stringify(snapHostBots(h.hb, 0)));
+    // The take-over deals straight into Hoenn; the reload puts the opening back.
+    const back = host();
+    restoreHostBots(back.hb, snap, 0);
+    expect(back.hb.bots.challenged(back.hb.seats[0], 0)).toBe(false);
+    back.sent.length = 0;
+    back.hb.drop();
+    expect(places(back.sent).map(where)).toEqual(dealBots(SEED, 7, [0], GROUND.spawns).map(where));
+  });
+
+  it('settles a duel the hidden instance was running off the seed, on the next tick', () => {
+    const { hb, at } = played();
+    const snap = JSON.parse(JSON.stringify(snapHostBots(hb, at())));
+    const [a, b] = hb.bots.positions().map((p) => p.seat);
+    snap.bots.fights.push([a, b, 1000, true, 9], [b, a, 1000, true, 9]);
+    let t = 50_000;
+    const back = host({ now: () => t });
+    restoreHostBots(back.hb, snap, t);
+    back.sent.length = 0;
+    back.hb.tick((t += BOT_TICK_MS));
+    const outs = back.sent.filter((m) => m.t === 'out').map((m) => m.seat);
+    expect(outs.filter((s) => s === a || s === b)).toHaveLength(1);
   });
 });

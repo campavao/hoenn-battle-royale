@@ -135,6 +135,12 @@ export interface HostBotsOptions {
   every?: (fn: () => void, ms: number) => () => void;
 }
 
+export interface HostBotsState {
+  inOpening: boolean;
+  ring?: { sx: number; sy: number; r: number };
+  phase: number;
+}
+
 export interface HostBots {
   readonly bots: Bots;
   readonly seats: number[];
@@ -145,6 +151,10 @@ export interface HostBots {
   partyFor: (seat: number) => Msg | null;
   /** One beat of the pump. */
   tick: (now: number) => void;
+  /** What a reload writes down and puts back (match/hostsnap.ts, HBR-20). */
+  st: HostBotsState;
+  fog: NpcFog;
+  landing: Map<number, Cell>;
   dispose: () => void;
 }
 
@@ -163,11 +173,10 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
   const { world, refById, idOf, sectionOf, targets, safariTargets, spawns } = opts.ground ?? botGround();
   const opening = safariSecs > 0 && safariTargets.length > 0 && resume === undefined;
   const safariSpawns = safariTargets.map((t) => ({ ...t, map: refById.get(t.mapId)! }));
-  let inOpening = opening;
+  const st: HostBotsState = { inOpening: opening, phase: 0 };
   // The patches' cells (POK-363), fetched once; until they land a bot meets none.
   let patchTable: PatchTable | null = opts.patchTable ?? null;
   if (!patchTable) void loadPatches().then((t) => (patchTable = t), () => {});
-  let ring: { sx: number; sy: number; r: number } | undefined;
   const bots = new Bots({
     world,
     targets: opening ? safariTargets : targets,
@@ -178,7 +187,7 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
     // No ring yet means no fog anywhere, not fog everywhere. Before this, a bot was
     // counted as outside a ring that did not exist and bled through the whole opening:
     // eight bots went into the Zone and two came out of it (POK-257).
-    inside: (id) => ring === undefined || sectionInside(opts.sections[sectionOf.get(id) ?? ''], ring),
+    inside: (id) => st.ring === undefined || sectionInside(opts.sections[sectionOf.get(id) ?? ''], st.ring),
     // The table holds what the wire said, which is the ROM's space; the brain asks
     // about the grid it walks (bots/space.ts).
     loot: lootView(loot, (mapId) => refById.get(mapId), idOf),
@@ -187,11 +196,11 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
       storySealed(piece, {
         flies: bot.party.some((mon) => FLYING.has(mon.species)),
         has: (id) => bot.bag.some((st) => st.id === id && st.n > 0),
-        phase,
+        phase: st.phase,
         onGround: (key) => loot.has(key),
       }),
     // A gate's boss fights at the rung, full health, as BrLevels_LiftTrainer lifts him.
-    guard: (piece) => storyGuard(piece)?.map((species) => tradedMon(species, phase)),
+    guard: (piece) => storyGuard(piece)?.map((species) => tradedMon(species, st.phase)),
     person: (piece) => isGiftKey(piece.key) || isHomeKey(piece.key) || storyPerson(piece),
     // ...and so is a trader's cell: a session's event is the wire's, MAP_OFFSET in it.
     traders: () =>
@@ -231,7 +240,7 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
     seed,
     onDuel: opts.onDuel ?? (() => {}),
     // Nobody fights in the Zone -- not a player, not another bot.
-    fights: () => !inOpening,
+    fights: () => !st.inOpening,
     onEngage: opts.onEngage ?? (() => {}),
     onDecision: opts.onDecision,
     centres: () => world.centres(),
@@ -244,7 +253,7 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
       const map = refById.get(mapId);
       return patchTable && map ? dealPatches(patchTable, mapId, map, seed >>> 0) : [];
     },
-    ringPhase: () => phase,
+    ringPhase: () => st.phase,
   });
   // Re-deal the whole field so the names line up, drop whoever is out of the match,
   // and stand the rest where the room last saw them rather than back on their drop.
@@ -258,9 +267,8 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
   // Where they will be when the fog comes. The deal draws the same seats, names and
   // skins whichever pool it is handed -- only the cell differs -- so this is the same
   // sixteen bots, standing where the drop would have put them.
-  const landing = new Map(dealBots(seed, fill, takenSeats, spawns).map((b) => [b.seat, b]));
+  const landing = new Map<number, Cell>(dealBots(seed, fill, takenSeats, spawns).map((b) => [b.seat, b]));
   const seatsDealt = new Set(dealt.map((b) => b.seat));
-  let phase = 0;
   bots.start(dealt, clock());
   // The fog clears Hoenn's own trainers off a map it has taken (POK-299): the host runs
   // the per-map clock, and each trainer leaves every ROM as `npcout`, the way a beaten
@@ -271,8 +279,8 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
   const fogSeat = takenSeats[0] ?? 0;
   const tick = (now: number): void => {
     bots.tick(now);
-    if (inOpening) return;
-    const died = npcFog.tick(now, ring);
+    if (st.inOpening) return;
+    const died = npcFog.tick(now, st.ring);
     let cleared = 0;
     for (const mapId of died) {
       const map = refById.get(mapId);
@@ -290,8 +298,8 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
     bots,
     seats: dealt.map((b) => b.seat),
     drop: () => {
-      if (!inOpening) return;
-      inOpening = false;
+      if (!st.inOpening) return;
+      st.inOpening = false;
       bots.setTargets(targets);
       for (const bot of dealt) {
         const to = landing.get(bot.seat);
@@ -302,8 +310,8 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
     // The host hands its own `ring` straight over: the bots read the fog off the same
     // message every ROM in the room does.
     setRing: (next: { sx: number; sy: number; r: number }, nextPhase: number) => {
-      ring = next;
-      phase = nextPhase;
+      st.ring = next;
+      st.phase = nextPhase;
       bots.ringMoved(nextPhase);
     },
     // Pull, not push: a bot's team only goes on the wire when somebody asks to see
@@ -317,6 +325,9 @@ export function createHostBots(opts: HostBotsOptions): HostBots {
       return { t: 'party', seat, mons, bag: { money: bots.moneyOf(seat), items: items.filter((s) => s.n > 0) } };
     },
     tick,
+    st,
+    fog: npcFog,
+    landing,
     dispose: stop,
   };
 }

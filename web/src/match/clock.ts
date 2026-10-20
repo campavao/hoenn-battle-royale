@@ -7,14 +7,23 @@
  *  reused here (rather than a second implementation) so a match seed produces the
  *  same deal/ring sequence on every client that runs it, deterministically, forever
  *  (no dependency on Math.random or a library). */
-export function mulberry32(seed: number): () => number {
-  let a = seed | 0;
-  return () => {
+export function mulberry32(seed: number, state?: number): Rng {
+  let a = (state ?? seed) | 0;
+  const rng = () => {
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+  rng.state = () => a;
+  return rng;
+}
+
+/** A draw that can say where it has got to, so a host back from a reload (HBR-20) picks
+ *  the sequence up where it left off: `mulberry32(0, rng.state())` is the same draw. */
+export interface Rng {
+  (): number;
+  state(): number;
 }
 
 /** A uniform integer in `[0, length)` off the given rng -- `Math.floor(rng() * n)`,

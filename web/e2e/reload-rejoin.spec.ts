@@ -3,8 +3,8 @@
 //
 // Inside the relay's hold the tab comes back to the match it left: the ROM from the
 // savestate the page wrote as it went, its seat from the relay's token, and -- for the
-// host -- the director and its bots, the way a host back from a dropped socket picks the
-// match up (match/resume.ts). Past the hold it goes to the menu and says so, with WATCH
+// host -- the director and its bots as they stood (match/hostsnap.ts), so a match against
+// bots does not start over (Cam, 2026-10-20). Past the hold it goes to the menu and says so, with WATCH
 // at the top, never back to the room screen Cam found in the 10-19 play-test.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -64,11 +64,22 @@ async function startMatch(page: Page): Promise<void> {
   await page.waitForTimeout(3_000);
 }
 
+type BotsWindow = { __br: { bots: { positions(): { seat: number }[]; partyOf(seat: number): { species: number; hp: number }[] } } };
+
 test('a reload mid-match goes back into the match, as the host', async ({ page }) => {
   test.setTimeout(180_000);
   await startMatch(page);
   const before = await where(page);
   const seed = await page.evaluate(() => (window as unknown as BrWindow).__br!.match!.seed);
+  // A bot that has been in the wars: a re-deal off the seed would hand it back whole
+  // (Cam: a match against bots should not reset), so its 1 HP is the proof it was kept.
+  const hurt = await page.evaluate(() => {
+    const bots = (window as unknown as BotsWindow).__br.bots;
+    const seat = bots.positions()[0].seat;
+    const mon = bots.partyOf(seat)[0];
+    mon.hp = 1;
+    return { seat, species: mon.species };
+  });
   await page.screenshot({ path: path.join(OUT_DIR, 'reload-rejoin-before.png') });
 
   await page.reload();
@@ -83,6 +94,9 @@ test('a reload mid-match goes back into the match, as the host', async ({ page }
   expect(await page.evaluate(() => (window as unknown as BrWindow).__br!.match!)).toMatchObject({ active: true, seed });
   // ...and the match still running from here: the bots walk again.
   await expect.poll(() => page.evaluate(() => (window as unknown as { __br: { botCount(): number } }).__br.botCount()), { timeout: 20_000 }).toBeGreaterThan(0);
+  // ...the same bots, carrying what they were: the hurt one still hurt.
+  const after1 = await page.evaluate((seat) => (window as unknown as BotsWindow).__br.bots.partyOf(seat)[0], hurt.seat);
+  expect(after1).toMatchObject({ species: hurt.species, hp: 1 });
   // In view: no curtain held over a ROM that is already standing in the match.
   await expect(page.locator('#stage-fade')).not.toHaveClass(/hold/, { timeout: 2_000 });
   await page.screenshot({ path: path.join(OUT_DIR, 'reload-rejoin-after.png') });

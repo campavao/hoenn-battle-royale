@@ -209,7 +209,7 @@ export interface DirectorState {
 }
 
 export class Director {
-  private readonly rng: () => number;
+  private rng: () => number;
   private readonly sections: SectionCells[];
   /** POK-307: a doorstep for a section the flood left with nothing. */
   private readonly doorsteps: Map<number, Cell[]>;
