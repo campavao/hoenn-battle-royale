@@ -13,11 +13,11 @@ import { PATCH_KEY_BASE, type Patch } from './patches';
 import { findPath, findPathToAny, type Path } from './path';
 import { eitherSees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
-import { MOVE_CUT, MOVE_FLY, MOVE_SURF, tradedMon } from './party';
+import { MOVE_CUT, MOVE_FLY, MOVE_STRENGTH, MOVE_SURF, tradedMon } from './party';
 import HMS from '../data/hms.json';
 import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
-import { sameSpot, spotKey, type SeamDir, type Spot, type World } from './world';
+import { FIELD_CUT, FIELD_STRENGTH, sameSpot, spotKey, type Field, type SeamDir, type Spot, type World } from './world';
 import { pageCell, toRom, type PageCell } from './space';
 import { PROTOCOL, type MapRef, type Msg, type Outcome, type PackedMon, type SpillMsg } from '../net/wire';
 import { spillCells } from '../match/loot';
@@ -410,17 +410,27 @@ export function canSurf(party: PackedMon[]): boolean {
   return party.some((mon) => couldUse(mon, 'surf', MOVE_SURF));
 }
 
-/** And over it? A bird dealt FLY at the rung (POK-267). Unlike the water this one is
- *  NOT something every contestant has: a flight needs a Pokemon that can carry you, and
- *  whether this bot has one is the whole point of the rule. */
+/** And over it? A flight needs a Pokemon that knows FLY or could learn it, as a player's
+ *  ROM asks of its party (br_map.c FlierSlot, BrHm_Slot; #7). */
 export function canFly(party: PackedMon[]): boolean {
-  return party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_FLY));
+  return party.some((mon) => couldUse(mon, 'fly', MOVE_FLY));
 }
 
 /** And through a tree? The trees are back (#7): one falls to a party with somebody who
  *  knows CUT or could learn it, as in a player's ROM (br_hm.c). */
 export function canCut(party: PackedMon[]): boolean {
   return party.some((mon) => couldUse(mon, 'cut', MOVE_CUT));
+}
+
+/** And past a boulder? Somebody who knows STRENGTH or could learn it, as in a player's
+ *  ROM (br_hm.c BrHm_Strength). A bot doesn't push it; with one, it walks the cell. */
+export function canStrength(party: PackedMon[]): boolean {
+  return party.some((mon) => couldUse(mon, 'strength', MOVE_STRENGTH));
+}
+
+/** The field moves this team has, as the world's paths ask for them. */
+export function fieldMoves(party: PackedMon[]): number {
+  return (canCut(party) ? FIELD_CUT : 0) | (canStrength(party) ? FIELD_STRENGTH : 0);
 }
 
 /** Knows the move, or its species could learn the HM (tools/br/export-hms.py). */
@@ -1504,7 +1514,7 @@ export class Bots {
     // Route 104 and Route 103 in two, and a piece or a cell on the far side was a search
     // that settled all of this side before it gave up -- every time the bot stopped to
     // think, and out of the whole roster's budget.
-    const reach = this.opts.world.reachOnMap(walker.at, canSurf(walker.party), canCut(walker.party));
+    const reach = this.opts.world.reachOnMap(walker.at, canSurf(walker.party), fieldMoves(walker.party));
     // Fog first. Aiming only at cells inside the ring is the whole rule: a bot already
     // inside wanders inside, and a bot caught outside walks in, because the route to
     // anywhere it may aim at crosses the edge on the way.
@@ -1677,7 +1687,7 @@ export class Bots {
 
   /** findPath from where the bot stands, paid for out of the tick's budget. */
   private route(walker: Walker, to: Spot, cap: number): Path {
-    const path = findPath(this.opts.world, walker.at, to, cap, canSurf(walker.party), canCut(walker.party), this.solid(walker));
+    const path = findPath(this.opts.world, walker.at, to, cap, canSurf(walker.party), fieldMoves(walker.party), this.solid(walker));
     this.budget -= path.visited;
     return path;
   }
@@ -1689,7 +1699,7 @@ export class Bots {
   private aimAcrossMaps(walker: Walker, targets: { mapId: string; x: number; y: number }[], now: number): boolean {
     const world = this.opts.world;
     const surf = canSurf(walker.party);
-    const cut = canCut(walker.party);
+    const cut = fieldMoves(walker.party);
     const solid = this.solid(walker);
     // The most-wanted map that is not this one, and that we can actually get to.
     const wanted = new Map<string, number>();
@@ -1749,7 +1759,7 @@ export class Bots {
    *  bots were doing for the whole back half of a match (POK-302). */
   private wanderOneStep(walker: Walker, why: 'stuck' | 'wait' = 'stuck'): void {
     const surf = canSurf(walker.party);
-    const cut = canCut(walker.party);
+    const cut = fieldMoves(walker.party);
     const open = this.opts.world.neighbours(walker.at, surf, cut);
     if (open.length === 0) {
       this.note(walker, why);
@@ -1777,7 +1787,7 @@ export class Bots {
    *  bot on any map with a landing cell took uniform random steps even in the fog,
    *  and anywhere else drifted towards the nearest landing map whichever side of the
    *  ring it was on. */
-  private driftGoal(walker: Walker, surf: boolean, cut: boolean): string | undefined {
+  private driftGoal(walker: Walker, surf: boolean, cut: Field): string | undefined {
     const inside = this.opts.inside;
     const seen = new Set<string>();
     let best: string | undefined;

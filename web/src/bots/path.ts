@@ -18,7 +18,7 @@
 // flat arrays reused from one search to the next. It settles the same nodes in the same
 // order as the list it replaced -- path.test.ts runs that one beside it on Hoenn -- so
 // every route, and every `visited`, is the one it always was.
-import { DIRS, sameSpot, type SeamDir, type Spot, type World } from './world';
+import { DIRS, sameSpot, type Field, type SeamDir, type Spot, type World } from './world';
 
 export interface Path {
   /** The steps to walk, in order. Empty when we are already there. */
@@ -136,7 +136,7 @@ interface Goal {
   stayOn: number;
 }
 
-function search(world: World, start: number, goal: Goal, maxVisited: number, surf: boolean, cut: boolean, solid: ReadonlySet<number> | undefined): Path {
+function search(world: World, start: number, goal: Goal, maxVisited: number, surf: boolean, cut: Field, solid: ReadonlySet<number> | undefined): Path {
   const s = scratchFor(world);
   const { state, cost, from, heap } = s;
   const open = s.gen * 2;
@@ -200,7 +200,7 @@ export function findPath(
   to: Spot,
   maxVisited = DEFAULT_BUDGET,
   surf = false,
-  cut = false,
+  cut: Field = false,
   solid?: ReadonlySet<number>,
 ): Path {
   if (sameSpot(from, to)) return { steps: [], found: true, visited: 0 };
@@ -239,7 +239,7 @@ export function findPathToAny(
   goals: readonly Spot[],
   maxVisited = DEFAULT_BUDGET,
   surf = false,
-  cut = false,
+  cut: Field = false,
   solid?: ReadonlySet<number>,
 ): Path {
   if (goals.length === 0) return { steps: [], found: false, visited: 0 };
