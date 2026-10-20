@@ -80,29 +80,9 @@ const STAGE_MS = HOLD_MS + FLASH_MS + AFTER_MS;
 /** CHARMANDER into CHARMELEON, CHARMELEON into CHARIZARD, then CHARIZARD a while. */
 export const EVOLVE_MS = STAGE_MS * 2 + HOLD_MS;
 
-/** 'due' from a first import until the panels are shown, then '1' for good. In storage,
- *  not memory: a newcomer who came by an invite link meets the menu on a later load. */
-export const HOWTO_KEY = 'hbr:howto';
-
-/** A ROM was just imported by hand: somebody new, unless the panels were shown here. */
-export function markHowToDue(store: Storage): void {
-  try {
-    if (store.getItem(HOWTO_KEY) !== '1') store.setItem(HOWTO_KEY, 'due');
-  } catch {
-    // Storage refused: nobody is offered the panels, and the menu row still has them.
-  }
-}
-
-/** True once, on the menu after a first import: the panels go up and are not owed again. */
-export function takeHowToDue(store: Storage): boolean {
-  try {
-    if (store.getItem(HOWTO_KEY) !== 'due') return false;
-    store.setItem(HOWTO_KEY, '1');
-    return true;
-  } catch {
-    return false;
-  }
-}
+// The first-import flag lives in its own module, so the menu can ask it without the
+// panels' chunk (app.ts loads that after boot, for main.js's budget).
+export { HOWTO_KEY, markHowToDue, takeHowToDue } from './howto-due';
 
 /** Which of the three is on show at `t` ms into the loop, and whether it is the white
  *  flash; Emerald flashes between the old shape and the new, faster and faster. */
