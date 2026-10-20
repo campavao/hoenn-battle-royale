@@ -336,6 +336,7 @@ export interface PackedMon {
   ot: string; // original trainer name, at most 7 chars
   traded?: boolean; // this row changed hands (Kanto POK-181's trade line)
   romMoves?: boolean; // the moves are a ROM's own, from a `party` report (POK-330 #50)
+  shiny?: boolean; // from a ROM's own party: otId is only the visible half, so the shine rides here
 }
 
 /** A Pokemon in battle fainted -- ROM-emitted, for spectator/HUD state (which party
@@ -562,12 +563,12 @@ export interface BotRecMsg {
   bag?: { items: { id: number; n: number }[]; money: number };
 }
 
-const TICKER_KINDS: readonly string[] = ['kill', 'system', 'say', 'intro', 'win', 'lose'];
+const TICKER_KINDS: readonly string[] = ['kill', 'system', 'say', 'intro', 'win', 'lose', 'alert'];
 
 /** `intro`/`win`/`lose` are not lines for the ticker: they are a trainer's own battle
  *  text, sent into the ROM of the player about to fight them, which says them in the
  *  fight (2026-10-05 play-test; br_battle.c's BrBattle_SetVoice). */
-export type TickerKind = 'kill' | 'system' | 'say' | 'intro' | 'win' | 'lose';
+export type TickerKind = 'kill' | 'system' | 'say' | 'intro' | 'win' | 'lose' | 'alert';
 
 /** A line for the overworld ticker/HUD (new for Hoenn: DESIGN.md §6 draws the
  *  ticker as a ROM window, so unlike Kanto's same-process HUD, the text has to
@@ -1323,6 +1324,7 @@ function validateMon(raw: unknown): PackedMon {
     ot: optText(raw, 'ot', 7) ?? '',
     traded: raw.traded === true ? true : undefined,
     romMoves: raw.romMoves === true ? true : undefined,
+    shiny: raw.shiny === true ? true : undefined,
   };
 }
 

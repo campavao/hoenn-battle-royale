@@ -47,7 +47,9 @@ export type LobbyAction =
   // A match in six panels (POK-429).
   | { kind: 'howto' }
   | { kind: 'join'; code: string; pass: boolean }
-  | { kind: 'watch'; code: string };
+  | { kind: 'watch'; code: string }
+  // Back into the match a reload left, to watch it (HBR-20).
+  | { kind: 'rewatch'; code: string };
 
 export interface LobbyRow {
   /** What the row says on the left. */
@@ -121,34 +123,31 @@ export function profileRows(profile: Profile): LobbyRow[] {
   return rows.map((r) => ({ ...r, id: `trainer-${r.action.kind}` }));
 }
 
-/** The ways into a match. `openRooms` is how many the relay lists, for the LOBBIES
- *  row's detail; the daily gets a row of its own when the relay is offering one. */
-export function playRows(link: Link | boolean, openRooms = 0, daily?: RoomListing): LobbyRow[] {
+/** The ways into a match; the daily gets a row of its own when the relay is offering one.
+ *  Nothing on their right (Cam, 2026-10-19, POK-430: "let's drop the text on the right.
+ *  Just keep it the options, no fluff"): a row that cannot be pressed yet is grayed, and
+ *  the note under them says when the relay is not there. */
+export function playRows(link: Link | boolean, daily?: RoomListing): LobbyRow[] {
   const state: Link = link === true ? 'up' : link === false ? 'down' : link;
   const online = state === 'up';
   const quick: LobbyRow =
     state === 'up'
-      ? { label: 'QUICK PLAY', detail: 'a game right now', action: { kind: 'quick' } }
+      ? { label: 'QUICK PLAY', action: { kind: 'quick' } }
       : state === 'down'
-        ? { label: 'QUICK PLAY', detail: 'offline: vs bots', action: { kind: 'solo' } }
+        ? { label: 'QUICK PLAY', action: { kind: 'solo' } }
         // Not yet either: a press on a cold load is not a quiet game against bots (#41's
         // review). It waits for the socket to open, close, or run out of time.
-        : { label: 'QUICK PLAY', detail: 'connecting', action: { kind: 'quick' }, disabled: true };
+        : { label: 'QUICK PLAY', action: { kind: 'quick' }, disabled: true };
   const rows: LobbyRow[] = [
     // SOLO VS BOTS is not a row any more (Cam, 2026-10-14, POK-341: "quick play to me
     // feels actually more like a natural flow"). Offline, QUICK PLAY is that game: the
     // bots, and no socket.
     quick,
     { label: 'HOST A ROOM', action: { kind: 'host' }, disabled: !online },
-    {
-      label: 'LOBBIES',
-      detail: online ? `${openRooms} open` : undefined,
-      action: { kind: 'lobbies' },
-      disabled: !online,
-    },
+    { label: 'LOBBIES', action: { kind: 'lobbies' }, disabled: !online },
     { label: 'JOIN BY CODE', action: { kind: 'code' }, disabled: !online },
     ...(daily
-      ? [{ label: 'DAILY GAME', detail: `in ${countdown(daily.secs ?? 0)}`, action: { kind: 'daily' as const } }]
+      ? [{ label: 'DAILY GAME', action: { kind: 'daily' as const } }]
       : []),
   ];
   return rows.map((r) => ({ ...r, id: `lobby-${r.label.toLowerCase().replace(/ /g, '-')}` }));
@@ -158,7 +157,6 @@ export function playRows(link: Link | boolean, openRooms = 0, daily?: RoomListin
  *  says so on its own screen, and the row being there says where to find it (POK-428). */
 export const FEEDBACK_ROW: LobbyRow = {
   label: 'SEND FEEDBACK',
-  detail: 'bugs and ideas',
   action: { kind: 'feedback' },
   id: 'lobby-feedback',
 };
@@ -166,10 +164,15 @@ export const FEEDBACK_ROW: LobbyRow = {
 /** Over SEND FEEDBACK: how a match goes, in a few panels (POK-429). */
 export const HOWTO_ROW: LobbyRow = {
   label: 'HOW TO PLAY',
-  detail: 'a match in brief',
   action: { kind: 'howto' },
   id: 'lobby-howto',
 };
+
+/** First on the menu after a reload that could not go back into its match (HBR-20,
+ *  Cam: "After that they are out with the WATCH option"). */
+export function rewatchRow(code: string): LobbyRow {
+  return { label: 'WATCH', detail: 'your match', action: { kind: 'rewatch', code }, id: 'lobby-rewatch' };
+}
 
 /** One row per open room, plus the daily's own at the top when the relay offers it.
  *  A room with no seats left is shown and not pressable -- knowing a game is full is

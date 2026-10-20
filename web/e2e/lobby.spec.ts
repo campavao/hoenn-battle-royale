@@ -155,8 +155,9 @@ test('offline, QUICK PLAY is a game against bots that opens no socket', async ({
   await page.goto(`/#rom=${romHashParam()}`);
   const quick = page.locator('#lobby-rows button', { hasText: 'QUICK PLAY' });
   await expect(quick).toBeVisible({ timeout: 60_000 });
-  await expect(quick).toContainText('offline: vs bots', { timeout: 30_000 });
-  await expect(quick).toBeEnabled();
+  // Gray while the socket is opening, and pressable once it is refused: no word on its
+  // right says which any more (POK-430).
+  await expect(quick).toBeEnabled({ timeout: 30_000 });
   await expect(page.locator('#lobby-rows button', { hasText: 'SOLO VS BOTS' })).toHaveCount(0);
   await quick.click();
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 30_000 });

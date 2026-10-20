@@ -1,6 +1,7 @@
 #include "global.h"
 #if BR
 #include "br/br_battle.h"
+#include "br/br_hm.h"
 #include "br/br_items.h"
 #endif
 #include "malloc.h"
@@ -6301,7 +6302,8 @@ u32 CanSpeciesLearnTMHM(u16 species, u8 tm)
         return 0;
     }
 #if BR
-    return TRUE; // any mon learns any machine, HMs too (Cam, 2026-10-17)
+    if (BrHm_AnyMachine()) // any mon learns any machine, HMs too (Cam, 2026-10-17)
+        return TRUE;
 #endif
     // Fewer than 64 moves, use GF's method (for matching).
     if (sizeof(struct TMHMLearnset) <= 8)

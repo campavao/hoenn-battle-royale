@@ -75,6 +75,11 @@ const struct BrSpawn *BrMatch_MySpawn(void);
 void BrMatch_SafariCell(u8 *mapNum, u8 *x, u8 *y);
 // The opening's buzzer is going off and we are in a battle: the controllers press RUN.
 bool8 BrMatch_BuzzerClosing(void);
+// We have won the match while still in a fight with somebody who is no longer in it
+// (10-19 play-test #27). The player controller leaves at the next choice, as the buzzer does.
+bool8 BrMatch_FightOver(void);
+// ...and the BR_RUN_* the controller's RUN carries out of it: OVER for the win, a roll for the buzzer.
+u8 BrMatch_LeaveKind(void);
 // A round is on, so no screen shows a level: the party menu, the summary and the
 // battle's healthbox each ask this before they print one (POK-266).
 bool8 BrMatch_InRound(void);

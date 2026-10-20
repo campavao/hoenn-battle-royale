@@ -651,6 +651,15 @@ export class RelayClient {
     return true;
   }
 
+  /** Back into a room this tab was in before a reload (HBR-20): the seat, the token and
+   *  the way we asked, as the page wrote them down on its way out. Then a rejoin. */
+  resume(code: string, token: string, opts: JoinOpts): void {
+    this.lastCode = code;
+    this.token = token;
+    this.lastOpts = opts;
+    this.rejoin();
+  }
+
   /** Shows one member the door (POK-241). Host only -- the relay checks -- and the
    *  seat is refused if it comes back. */
   kick(id: number): void {

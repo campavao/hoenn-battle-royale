@@ -61,6 +61,8 @@ test('the lobby holds the ROM still for as long as it likes, and that is no stop
 
   // ...and nor is the resume, however long the hold before it was.
   await quick.click();
+  // A quick room counts a minute (AUTO_START_MS); START is the host's way past it.
+  await page.locator('#room-start').click({ timeout: 60_000 });
   await expect(page.locator('#match-strip')).toContainText('SAFARI', { timeout: 60_000 });
   await page.waitForTimeout(5_000);
   await expect(page.locator('#stall')).toBeHidden();

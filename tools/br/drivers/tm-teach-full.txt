@@ -1,0 +1,41 @@
+# tm-teach-full: a TM onto a mon with four moves asks nothing (Cam's 2026-10-19 play-test:
+# "get rid of this 1, 2 and poof... applying an item or a move shouldn't need
+# confirming"). The teach screen's pick goes straight to the summary screen's "forget
+# which", A there replaces the move, and the one line is "learned TOXIC!": no "wants to
+# learn", no YES/NO, no "1, 2 and... Poof!".
+#
+# learn-ask-pair's BULBASAUR (TACKLE, GROWL, LEECH SEED, VINE WHIP) over the test
+# TREECKO, and tm-teach's TM06 TOXIC (294) under our feet.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gPlayerParty 00 00 00 00 00 00 00 00 BC CF C6 BC BB CD BB CF CC FF 02 02 FF FF FF FF FF FF FF 00 AC A0 00 00 01 00 00 00 4C 06 00 00 00 46 00 00 21 00 2D 00 49 00 16 00 23 28 0A 0A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 85 21 00 00 00 00 00 00 00 00 00 00 00 00 0E FF 28 00 28 00 14 00 14 00 14 00 14 00 14 00
+expect u16 *gSaveBlock1Ptr+0x690 0
+pokebytes gBrLoot 01 00 0C 00 10 00 26 01 00 09 00 03 FF 00 00 00 00 00 00 00
+wait 60
+tap A
+wait 150
+shot teach-which
+expect u16 *gSaveBlock1Ptr+0x690 294
+expectne u32 gMain+4 CB2_Overworld+1
+# BULBASAUR, the first slot: the summary screen comes up on its own
+tap A
+wait 150
+shot forget-which
+expect u16 gPartyMenu+14 92
+# A on TACKLE (the first move, 0x21 at +0x2C in the unencrypted attacks substruct)
+tap A
+wait 150
+shot learned
+# TOXIC (92) where TACKLE was, and the TM spent
+expect u16 gPlayerParty+0x2C 92
+expect u16 gPlayerParty+0x2E 45
+expect u16 *gSaveBlock1Ptr+0x690 0
+# A past the line once its fanfare is over, and back on the field
+wait 150
+tap A
+wait 150
+expect u32 gMain+4 CB2_Overworld+1
+shot field
+say tm teach full ok

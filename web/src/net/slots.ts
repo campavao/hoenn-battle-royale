@@ -169,7 +169,7 @@ const MAP_REF_BYTES = 2; // an Emerald MapRef packs as group:u8, num:u8
 const STATUS_ORDER = ['lobby', 'alive', 'battle', 'out'] as const;
 const OUTCOME_ORDER: Outcome[] = ['win', 'lose', 'draw', 'forfeit'];
 // br_hud.h's BR_HUD_KIND_*, in order.
-const TICKER_KIND_ORDER: TickerKind[] = ['system', 'kill', 'say', 'intro', 'win', 'lose'];
+export const TICKER_KIND_ORDER: readonly TickerKind[] = ['system', 'kill', 'say', 'intro', 'win', 'lose', 'alert'];
 const TEXT_SPEED_ORDER = [1, 3, 5] as const;
 
 // ---- per-message binary codecs ---------------------------------------------
@@ -365,6 +365,9 @@ const MON_TRADED = 0x01;
 /** The moves are a ROM's own, from a `party` report: a card carrying them fights with
  *  them (POK-330 #50). */
 const MON_ROM_MOVES = 0x02;
+/** Shiny, from a ROM's own party: its otId is only the visible half, so the shine rides
+ *  as a flag (the Hall of Fame draws it). */
+const MON_SHINY = 0x04;
 function encodeMon(mon: PackedMon): Uint8Array {
   const w = new Writer();
   w.u16(mon.species).u8(mon.level).u16(mon.hp).u16(mon.maxHp).u8(mon.status);
@@ -378,7 +381,7 @@ function encodeMon(mon: PackedMon): Uint8Array {
   row.set(w.toBytes());
   row.set(packGen3String(mon.nickname, 10), MON_OFF_NICK);
   row.set(packGen3String(mon.ot, 7), MON_OFF_OT);
-  row[MON_OFF_FLAGS] = (mon.traded ? MON_TRADED : 0) | (mon.romMoves ? MON_ROM_MOVES : 0);
+  row[MON_OFF_FLAGS] = (mon.traded ? MON_TRADED : 0) | (mon.romMoves ? MON_ROM_MOVES : 0) | (mon.shiny ? MON_SHINY : 0);
   return row;
 }
 /** A PackedMon string field: its length byte, then that many of its `max` bytes. */
@@ -411,6 +414,7 @@ function decodeMon(bytes: Uint8Array): PackedMon {
     ot: monText(bytes, MON_OFF_OT, 7),
     traded: flags & MON_TRADED ? true : undefined,
     romMoves: flags & MON_ROM_MOVES ? true : undefined,
+    shiny: flags & MON_SHINY ? true : undefined,
   };
 }
 

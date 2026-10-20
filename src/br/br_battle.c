@@ -33,6 +33,9 @@
 #include "br/br_ghosts.h"
 #include "br/br_netlink.h"
 #include "br/br_battle.h"
+#include "constants/abilities.h"
+#include "constants/moves.h"
+#include "br/br_match.h"
 #include "br/br_bag.h"
 #include "br/br_hud.h"
 #include "br/br_bot.h"
@@ -439,6 +442,14 @@ bool8 BrBattle_HandleRun(void)
 {
     u8 how = gBattleBufferB[gBattlerAttacker][2];
 
+    // The match is over and ours (BrMatch_FightOver): out, from anything, at once.
+    if (how == BR_RUN_OVER && GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
+    {
+        gCurrentTurnActionNumber = gBattlersCount;
+        gBattleOutcome = B_OUTCOME_RAN;
+        return TRUE;
+    }
+
     if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK))
     {
         // A forfeit is not a flee (POK-292). The shot clock ran out, and that has a
@@ -703,6 +714,9 @@ static const u8 sText_ReplayDrew[] = _("{B_LINK_PLAYER_NAME} and {B_LINK_OPPONEN
 // own speech for TRAINER_NONE is whatever the last trainerbattle script left behind.
 static const u8 sText_BotLost[] = _("Huh? Did I just lose?");
 static const u8 sText_BotWon[] = _("Better luck next time!");
+// Said instead of "Got away safely!" by the RUN that leaves a fight the match was won in
+// (BR_RUN_OVER), and with no \p after it: nobody should have to press A to be crowned.
+static const u8 sText_MatchWon[] = _("{PLAY_SE SE_FLEE}You won the match!");
 
 
 // BattleScript_OpponentUsesHealItem's first five lines (data/battle_scripts_2.s) with our
@@ -779,6 +793,11 @@ bool8 BrBattle_BufferString(u16 stringId)
     // message for good. The AI's script already set the battler, so it gets our line.
     if (stringId == STRINGID_TRAINER1USEDITEM && gTrainerBattleOpponent_A == TRAINER_LINK_OPPONENT)
         stringId = BR_STRINGID_USED_ITEM;
+    if (stringId == STRINGID_GOTAWAYSAFELY && BrMatch_FightOver())
+    {
+        BattleStringExpandPlaceholdersToDisplayedString(sText_MatchWon);
+        return TRUE;
+    }
     if (stringId == BR_STRINGID_FOG_HURT)
     {
         BattleStringExpandPlaceholdersToDisplayedString(sText_FogHurt);
@@ -868,4 +887,103 @@ u8 BrBattle_FoeOf(u8 battler, u8 target)
     if (GetBattlerSide(battler) != GetBattlerSide(target))
         return target;
     return GetBattlerAtPosition(GetBattlerPosition(target) ^ BIT_SIDE);
+}
+
+// ---- how a move lands (the desktop's move menu) --------------------------------------
+
+// Palette 5 is the move menu's (graphics/battle_interface/text.pal), and leaves 5..10
+// black: two of them become the phone menu's green and red (web/src/ui/battlemenu.ts's
+// BAND), each with a light shadow as the menu's dark grey has.
+#define BR_EFF_GOOD 5
+#define BR_EFF_BAD 7
+static const u16 sEffColors[] = { RGB(4, 19, 1), RGB(20, 28, 18), RGB(25, 6, 6), RGB(31, 22, 22) };
+
+static const u8 sText_Times4[] = _("×4");
+static const u8 sText_Times2[] = _("×2");
+static const u8 sText_Times1[] = _("×1");
+static const u8 sText_TimesHalf[] = _("×0.5");
+static const u8 sText_TimesQuarter[] = _("×0.25");
+static const u8 sText_Times0[] = _("×0");
+
+// The move's multiplier on the foe's types, in sixteenths: the type chart's rows for the
+// move's type and either of the foe's, Foresight's past the marker too, as
+// web/src/battle/movebook.ts's effectiveness() reads it for the phone.
+static u8 Sixteenths(u8 type, u8 foe)
+{
+    u8 def1 = gBattleMons[foe].types[0];
+    u8 def2 = gBattleMons[foe].types[1];
+    u8 mul = 16;
+    u16 i;
+
+    for (i = 0; TYPE_EFFECT_ATK_TYPE(i) != TYPE_ENDTABLE; i += 3)
+    {
+        if (TYPE_EFFECT_ATK_TYPE(i) != type)
+            continue;
+        if (TYPE_EFFECT_DEF_TYPE(i) != def1 && (def2 == def1 || TYPE_EFFECT_DEF_TYPE(i) != def2))
+            continue;
+        if (TYPE_EFFECT_MULTIPLIER(i) == TYPE_MUL_NO_EFFECT)
+            mul = 0;
+        else if (TYPE_EFFECT_MULTIPLIER(i) == TYPE_MUL_NOT_EFFECTIVE)
+            mul /= 2;
+        else if (TYPE_EFFECT_MULTIPLIER(i) == TYPE_MUL_SUPER_EFFECTIVE)
+            mul *= 2;
+    }
+    return mul;
+}
+
+bool8 BrBattle_MoveTypeLine(u16 move)
+{
+    u8 type = gBattleMoves[move].type;
+    u8 *p;
+    const u8 *times;
+    u8 color = 0;
+    u8 mul;
+    u8 foe = gActiveBattler ^ BIT_SIDE;
+
+    // pret's line where the chart would mislead: status and fixed-damage moves (power 1:
+    // SEISMIC TOSS, SUPER FANG...), the two whose type is not their listed NORMAL, and a
+    // foe that FORESIGHT has opened up.
+    if (gBattleMoves[move].power <= 1 || move == MOVE_HIDDEN_POWER || move == MOVE_WEATHER_BALL
+     || (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) || (gBattleMons[foe].status2 & STATUS2_FORESIGHT))
+        return FALSE;
+    mul = Sixteenths(type, foe);
+    if (type == TYPE_GROUND && gBattleMons[foe].ability == ABILITY_LEVITATE)
+        mul = 0;
+    if (mul >= 64)
+        times = sText_Times4;
+    else if (mul > 16)
+        times = sText_Times2;
+    else if (mul == 16)
+        times = sText_Times1;
+    else if (mul == 0)
+        times = sText_Times0;
+    else if (mul <= 4)
+        times = sText_TimesQuarter;
+    else
+        times = sText_TimesHalf;
+    if (mul > 16)
+        color = BR_EFF_GOOD;
+    else if (mul != 0 && mul < 16)
+        color = BR_EFF_BAD;
+
+    CpuCopy16(sEffColors, &gPlttBufferUnfaded[BG_PLTT_ID(5) + BR_EFF_GOOD], sizeof(sEffColors));
+    CpuCopy16(sEffColors, &gPlttBufferFaded[BG_PLTT_ID(5) + BR_EFF_GOOD], sizeof(sEffColors));
+    // The window's narrow font throughout, where pret's normal-font type name would not
+    // leave room for the multiplier.
+    p = StringCopy(gDisplayedStringBattle, gTypeNames[type]);
+    *p++ = CHAR_SPACE;
+    if (color != 0)
+    {
+        *p++ = EXT_CTRL_CODE_BEGIN;
+        *p++ = EXT_CTRL_CODE_COLOR_HIGHLIGHT_SHADOW;
+        *p++ = color;
+        *p++ = 14; // the window's white
+        *p++ = color + 1;
+    }
+    StringCopy(p, times);
+    // "FIGHTING ×0.25" and "ELECTRIC ×0.25" are a pixel or two over: those lose the space.
+    if (GetStringWidth(FONT_NARROW, gDisplayedStringBattle, 0) > 64)
+        StringCopy(p - 1, p);
+    BattlePutTextOnWindow(gDisplayedStringBattle, B_WIN_MOVE_TYPE);
+    return TRUE;
 }

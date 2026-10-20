@@ -1,0 +1,23 @@
+# zone-random: the opening has no type theme any more (Cam, 2026-10-20: "stop grouping
+# them by type (aka no 'It's a WATER round') instead let's just make them random all
+# around (except for legendaries of course)"). Replaces zone-theme.txt, which checked the
+# "A <TYPE> MATCH!" line this took out.
+#
+# A seed that is already there when the opening begins -- a solo page writes its seed into
+# gBrMatch before the boot -- is dealt at the boot, and the ticker says nothing about it.
+wait 30
+poke u32 gBrMatch+8 0x12345678
+# boot mode 2 = the Safari Zone
+pokebytes gBrMailbox+0x2018 02 00 00 00 00 00 00 00 BD BB C7 FF
+# The boot lands about 200 frames on; a ticker line would be up for 180 field frames
+# after that (BR_HUD_LINE_FRAMES), so this looks where the theme's line used to be.
+wait 260
+expect u8 gBrMatch 1
+# dealt at the boot, from the seed that was waiting for it: MAKUHITA first (zone-pool.txt)
+expect u32 gBrZone 0x12345678
+expect u16 gBrZone+4 335
+# ...and not said: nothing on the ticker
+expect u8 gBrHud+0x0A 0
+wait 30
+shot no-theme
+say zone random ok

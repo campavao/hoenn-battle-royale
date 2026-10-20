@@ -1,0 +1,15 @@
+# hm-surf-gated: the water needs somebody who could learn SURF (Cam's 10-19 play-test, #7:
+# "I wonder if you can only surf if you have a water Pokemon"). hm-waterfall.txt's shore,
+# ROUTE 119 (16,29), with the boot's TREECKO, who could not: walking east stays ashore.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 00 22 10 00 1D 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr+0 16
+hold RIGHT 24
+wait 150
+shot ashore
+expectbits u8 gPlayerAvatar 0x08 0x00
+expect u16 *gSaveBlock1Ptr+0 16
+expect u32 gMain+4 CB2_Overworld+1
+say hm surf gated ok

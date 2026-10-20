@@ -1,0 +1,38 @@
+# win-mid-fight: the match is decided while we are in a fight, and the parade still runs
+# (10-19 play-test #27: "P1 WINS" went up mid-battle, and the results came ~50 s later,
+# at the page's 60 s give-up, with no Hall of Fame in between).
+#
+# The link control for win-bot-fight.txt: a link fight already ended on its peer's OUT
+# (br_netlink.c's TickPeerOut) before 10-19 #27, and BR_RUN_OVER leaves it to that.
+#
+# out-peer.txt's session: we challenge seat 1 with loopback on, so the fight is real up
+# to the first choice. Then seat 1 goes out (the fog took them) and the page says we won.
+drain gBrMailbox
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u8 gBrNetlink+8 1
+# CHALLENGE: challenger 00 (us), opponent 01, nonce 0
+pokebytes gDecompressionBuffer 00 01 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 600
+expect u8 gBrNetlink 1
+tap A
+wait 90
+tap A
+wait 200
+expect u8 gBattleCommunication 2
+expect u8 gBattleOutcome 0
+shot menu
+# OUT: seat 1, then RESULT: seat 0 (us), outcome 0 -- the win, in the order the host
+# sends them.
+pokebytes gDecompressionBuffer 01
+mailsend gBrMailbox 9 gDecompressionBuffer 1
+pokebytes gDecompressionBuffer 00 00
+mailsend gBrMailbox 16 gDecompressionBuffer 2
+wait 300
+shot after
+# BR_PHASE_WIN (4): the parade is on, a few seconds after the fight, not a minute.
+expect u8 gBrMatch 4
+say win mid fight ok

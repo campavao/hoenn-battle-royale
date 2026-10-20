@@ -103,6 +103,20 @@ const CLASS_GRASS = 7;
  *  event's cell, because in Emerald they are objects rather than metatile behaviours.
  *  Nothing checked for them until POK-267, so bots walked through trees. */
 const CLASS_CUT = 9;
+/** A Strength boulder (#7), overlaid the same way. A bot never pushes one; it walks
+ *  through it only with somebody who could push it, as a player's ROM would let them. */
+const CLASS_BOULDER = 10;
+
+/** The field moves a team has for a tree or a boulder: FIELD_CUT, FIELD_STRENGTH, or
+ *  both. `true` is every one of them and `false` none, so the many callers that only
+ *  ask "with HMs or without" keep asking it that way. */
+export type Field = boolean | number;
+export const FIELD_CUT = 1;
+export const FIELD_STRENGTH = 2;
+export function fieldBits(field: Field): number {
+  if (field === true) return FIELD_CUT | FIELD_STRENGTH;
+  return field === false ? 0 : field;
+}
 const LEDGE_MIN = 3;
 const LEDGE_MAX = 6;
 
@@ -141,9 +155,10 @@ const LEDGE_DIRN: number[] = Array.from({ length: 256 }, (_, cls) =>
 const NO_WARP = -2;
 const DEAD_WARP = -1;
 
-function canStand(cls: number, surf: boolean, cut: boolean): boolean {
+function canStand(cls: number, surf: boolean, cut: Field): boolean {
   if (cls === CLASS_WALL) return false;
-  if (cls === CLASS_CUT) return cut;
+  if (cls === CLASS_CUT) return (fieldBits(cut) & FIELD_CUT) !== 0;
+  if (cls === CLASS_BOULDER) return (fieldBits(cut) & FIELD_STRENGTH) !== 0;
   return cls !== CLASS_WATER || surf;
 }
 
@@ -411,7 +426,7 @@ export class World {
    *  node `key` lands, or -1. Rule for rule the same as `step` -- the ledge first, then
    *  the feet, then a door, then the height, then the seams off the edge -- and
    *  world.test.ts holds it to that on every node of Hoenn. */
-  stepKey(key: number, d: number, surf: boolean, cut: boolean): number {
+  stepKey(key: number, d: number, surf: boolean, cut: Field): number {
     const from = this.carried(key);
     const cell = this.cellOf(key);
     const n = this.cellMap[cell];
@@ -553,11 +568,8 @@ export class World {
    *  that is one-way. Water is not, unless they are surfing -- and a bot that can
    *  surf is the only thing that gets off Route 125 or Southern Island, where the
    *  drop is perfectly happy to put one. */
-  standable(id: string, x: number, y: number, surf = false, cut = false): boolean {
-    const cls = this.cell(id, x, y);
-    if (cls === CLASS_WALL) return false;
-    if (cls === CLASS_CUT) return cut;
-    return cls !== CLASS_WATER || surf;
+  standable(id: string, x: number, y: number, surf = false, cut: Field = false): boolean {
+    return canStand(this.cell(id, x, y), surf, cut);
   }
 
   /** Is anything in the way here, by the ROM's own test? `MapGridGetCollisionAt(x, y)
@@ -579,7 +591,7 @@ export class World {
   /** Where one step in `dir` from `spot` lands -- the next cell, the map across a
    *  seam, or null when it is a wall, the void, a ledge facing the wrong way, or a cliff
    *  face: a cell at another height (POK-331 #2). */
-  step(spot: Spot, dir: SeamDir, surf = false, cut = false): Spot | null {
+  step(spot: Spot, dir: SeamDir, surf = false, cut: Field = false): Spot | null {
     const m = this.maps.get(spot.map);
     if (!m) return null;
     const move = STEP_OF[dir];
@@ -621,7 +633,7 @@ export class World {
   /** Off the edge: the seam that joins this map to the next, at the offset the
    *  exporter recorded. A connection's offset shifts the neighbour's axis, which is
    *  why this is not just "same coordinate on the other map". */
-  private acrossSeam(m: WorldMap, spot: Spot, dir: SeamDir, surf: boolean, cut: boolean, from: number): Spot | null {
+  private acrossSeam(m: WorldMap, spot: Spot, dir: SeamDir, surf: boolean, cut: Field, from: number): Spot | null {
     // EVERY seam on that side, not the first. Two maps have two connections on one
     // edge -- ROUTE111 west runs to ROUTE113 at offset 0 and ROUTE112 at offset 20, and
     // ROUTE124 east to ROUTE125 and MOSSDEEP_CITY -- so a `.find()` resolved Route 111's
@@ -640,7 +652,7 @@ export class World {
     spot: Spot,
     dir: SeamDir,
     surf: boolean,
-    cut: boolean,
+    cut: Field,
     from: number,
   ): Spot | null {
     const to = this.maps.get(seam.to);
@@ -690,15 +702,15 @@ export class World {
   // there logged 5,941 stuck steps and 52 fog outs over five replays. 38 of the 903
   // edges are not there on foot, and 12 are not there at all.
 
-  /** Per kit (surf * 2 + cut): map -> the maps a step off it lands on. */
+  /** Per kit (surf * 4 + field bits): map -> the maps a step off it lands on. */
   private readonly mapGraphs = new Map<number, Map<string, Set<string>>>();
   /** goal map and kit -> hops from every map that can reach it. One table per goal,
    *  shared by the whole roster: the ring moves a handful of times a match, the bots
    *  re-aim constantly. */
   private readonly hopCache = new Map<string, Map<string, number>>();
 
-  private graph(surf: boolean, cut: boolean): Map<string, Set<string>> {
-    const kit = (surf ? 2 : 0) + (cut ? 1 : 0);
+  private graph(surf: boolean, cut: Field): Map<string, Set<string>> {
+    const kit = (surf ? 4 : 0) + fieldBits(cut);
     const built = this.mapGraphs.get(kit);
     if (built) return built;
     const g = new Map<string, Set<string>>();
@@ -718,8 +730,8 @@ export class World {
 
   /** How many map crossings from each map to `goal`, by breadth-first search from the
    *  goal outwards. Undefined entries are maps that cannot reach it at all. */
-  private hopsTo(goal: string, surf: boolean, cut: boolean): Map<string, number> {
-    const asked = `${goal}:${surf ? 1 : 0}${cut ? 1 : 0}`;
+  private hopsTo(goal: string, surf: boolean, cut: Field): Map<string, number> {
+    const asked = `${goal}:${surf ? 1 : 0}${fieldBits(cut)}`;
     const cached = this.hopCache.get(asked);
     if (cached) return cached;
     const g = this.graph(surf, cut);
@@ -751,13 +763,13 @@ export class World {
   }
 
   /** Map crossings from `from` to `goal`, or undefined when there is no way at all. */
-  hops(from: string, goal: string, surf = false, cut = false): number | undefined {
+  hops(from: string, goal: string, surf = false, cut: Field = false): number | undefined {
     return this.hopsTo(goal, surf, cut).get(from);
   }
 
   /** The neighbouring maps that take a step closer to `goal`, nearest first. Empty when
    *  we are already there, or when nothing from here reaches it. */
-  nextHops(from: string, goal: string, surf = false, cut = false): string[] {
+  nextHops(from: string, goal: string, surf = false, cut: Field = false): string[] {
     const dist = this.hopsTo(goal, surf, cut);
     const here = dist.get(from);
     if (here === undefined || here === 0) return [];
@@ -772,8 +784,8 @@ export class World {
   /** The cells on `from` that a step lands on `to` -- the seam edge, and any door.
    *  Not somewhere to route TO: a door tile is never stood on, since stepping onto it
    *  lands on the other side, so a route aims at `entryCells` instead. */
-  exitCells(from: string, to: string, surf = false, cut = false): readonly Spot[] {
-    const asked = `${from}>${to}:${surf ? 1 : 0}${cut ? 1 : 0}`;
+  exitCells(from: string, to: string, surf = false, cut: Field = false): readonly Spot[] {
+    const asked = `${from}>${to}:${surf ? 1 : 0}${fieldBits(cut)}`;
     let cells = this.exitCache.get(asked);
     if (!cells) {
       cells = this.findExitCells(from, to, surf, cut);
@@ -789,8 +801,8 @@ export class World {
    *  Tunnel, every cave and gatehouse -- was a search that never found its goal and
    *  spent its whole budget, and a bot already on a seam's edge was "there" and never
    *  took the step over. */
-  entryCells(from: string, to: string, surf = false, cut = false): readonly Spot[] {
-    const asked = `${from}>${to}:${surf ? 1 : 0}${cut ? 1 : 0}`;
+  entryCells(from: string, to: string, surf = false, cut: Field = false): readonly Spot[] {
+    const asked = `${from}>${to}:${surf ? 1 : 0}${fieldBits(cut)}`;
     let cells = this.entryCache.get(asked);
     if (!cells) {
       const out: Spot[] = [];
@@ -814,7 +826,7 @@ export class World {
     return cells;
   }
 
-  private findExitCells(from: string, to: string, surf: boolean, cut: boolean): Spot[] {
+  private findExitCells(from: string, to: string, surf: boolean, cut: Field): Spot[] {
     const m = this.maps.get(from);
     if (!m) return [];
     const out: Spot[] = [];
@@ -865,16 +877,16 @@ export class World {
   // is flooded once. Only a ledge or a door makes a step one way. On foot Hoenn has about
   // 3,950 regions, 490 of them bigger than fifty cells.
 
-  /** Per map number and kit (n * 4 + surf * 2 + cut): its nodes' regions so far. */
+  /** Per map number and kit (n * 8 + surf * 4 + field bits): its nodes' regions so far. */
   private readonly regionMaps = new Map<number, Regions>();
   /** Every region found, any map, any kit: a region's number is its place here. */
   private readonly regionList: Region[] = [];
 
   /** The region a node is in, found now if nobody has asked before. */
-  private regionOf(key: number, surf: boolean, cut: boolean): number {
+  private regionOf(key: number, surf: boolean, cut: Field): number {
     const n = this.mapOf(key);
     const base = this.bases[n];
-    const slot = n * 4 + (surf ? 2 : 0) + (cut ? 1 : 0);
+    const slot = n * 8 + (surf ? 4 : 0) + fieldBits(cut);
     let found = this.regionMaps.get(slot);
     if (!found) {
       found = { cell: new Int32Array(this.widths[n] * this.heights[n]), level: new Map() };
@@ -907,7 +919,7 @@ export class World {
   }
 
   /** A region with its reach flooded: from any node of it, since they all have one. */
-  private flooded(id: number, surf: boolean, cut: boolean): Region {
+  private flooded(id: number, surf: boolean, cut: Field): Region {
     const region = this.regionList[id];
     if (region.reach) return region;
     const n = region.map;
@@ -950,7 +962,7 @@ export class World {
   }
 
   /** The regions a step off this one's reach lands in, with the landings in each. */
-  private nextOf(id: number, surf: boolean, cut: boolean): Map<number, number[]> {
+  private nextOf(id: number, surf: boolean, cut: Field): Map<number, number[]> {
     const region = this.flooded(id, surf, cut);
     if (region.next) return region.next;
     const next = new Map<number, number[]>();
@@ -966,7 +978,7 @@ export class World {
 
   /** What a trainer standing at `from` can walk to without stepping off its map: the
    *  cells of that map, and where the steps off it land. */
-  reachOnMap(from: Spot, surf = false, cut = false): Reach {
+  reachOnMap(from: Spot, surf = false, cut: Field = false): Reach {
     const start = this.key(from);
     if (start < 0) return NO_REACH;
     return this.flooded(this.regionOf(start, surf, cut), surf, cut).reach!;
@@ -994,7 +1006,7 @@ export class World {
     from: Spot,
     goal: string,
     surf = false,
-    cut = false,
+    cut: Field = false,
     arrive?: (reach: Reach) => boolean,
     limit = Infinity,
   ): Spot[] | undefined {
@@ -1035,7 +1047,7 @@ export class World {
   }
 
   /** Every step a trainer could take from here, with the direction that took it. */
-  neighbours(spot: Spot, surf = false, cut = false): { dir: SeamDir; to: Spot }[] {
+  neighbours(spot: Spot, surf = false, cut: Field = false): { dir: SeamDir; to: Spot }[] {
     const out: { dir: SeamDir; to: Spot }[] = [];
     for (const move of STEPS) {
       const to = this.step(spot, move.dir, surf, cut);

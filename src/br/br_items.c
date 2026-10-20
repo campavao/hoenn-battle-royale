@@ -1,5 +1,7 @@
 // The item rework. See include/br/br_items.h.
 #include "global.h"
+#include "battle.h"
+#include "battle_pyramid.h"
 #include "event_data.h"
 #include "item.h"
 #include "item_menu.h"
@@ -319,6 +321,21 @@ bool8 BrItems_HealParty(u8 taskId)
     PlaySE(SE_USE_ITEM);
     RemoveBagItem(item, 1);
     DisplayItemMessage(taskId, FONT_NORMAL, sText_PartyHealed, CloseItemMessage);
+    return TRUE;
+}
+
+// The cartridge lets the ball fly and the trainer knock it away, two lines that BR's fast
+// text cut down to "Don't" (Cam's 10-19 play-test). A trainer's POKeMON is not to be had,
+// so the bag says so and keeps the ball and the turn, as the phone's bag does
+// (web/src/ui/battlemenu.ts).
+static const u8 sText_NotATrainersMon[] = _("You can't catch a\nTRAINER's POKéMON.{PAUSE_UNTIL_PRESS}");
+
+bool8 BrItems_BallRefused(u8 taskId)
+{
+    // The Battle Pyramid's bag has its own message box; no match goes there.
+    if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER) || CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE)
+        return FALSE;
+    DisplayItemMessage(taskId, FONT_NORMAL, sText_NotATrainersMon, CloseItemMessage);
     return TRUE;
 }
 

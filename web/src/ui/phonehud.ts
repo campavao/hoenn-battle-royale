@@ -46,7 +46,10 @@ export const FACING: Record<number, [number, number]> = {
 };
 /** `struct BrRing` (include/br/br_ring.h). */
 export const RING_ACTIVE = 0;
+export const RING_CX = 2;
+export const RING_CY = 3;
 export const RING_R = 4;
+export const RING_OUTSIDE = 5;
 export const RING_PLACE = 14;
 export const RING_PLACE_MAX = 16;
 /** `struct BrLevels.rod` (include/br/br_levels.h): the rod in the bag right now. */
@@ -105,9 +108,12 @@ export interface HudView {
   eyes: number;
   /** gBrHud's FOG! flash: 0 none, 1 the off beat, 2 the on beat (br_hud.c FogPhase). */
   flash: 0 | 1 | 2;
-  /** Where the fog closes to, or FOG EVERYWHERE; null before the ring (the Safari). */
+  /** Where the fog closes to, or FOG EVERYWHERE; empty while the first ring keeps it to
+   *  itself; null before the ring (the Safari). */
   ring: string | null;
   fogEverywhere: boolean;
+  /** Outside the ring, "Safe" and the way to it (safeWay); null inside or with no ring. */
+  safe: string | null;
   ctx: Ctx;
   /** gPlayerPartyCount: the start menu has no POKeMON row before the first catch. */
   party: number;
@@ -130,7 +136,20 @@ export function fogPhase(frames: number): 0 | 1 | 2 {
   return (frames >> 3) & 1 ? 1 : 2;
 }
 
-const SECTIONS = (regionData as { sections: Record<string, { name: string }> }).sections;
+const SECTIONS = (regionData as { sections: Record<string, { name: string; x: number; y: number; w: number; h: number }> }).sections;
+
+/** br_ring.c's BrRing_SafeWay, for the phone's fog window: "Safe" and an arrow or two
+ *  from the middle of the section you are in to the ring's centre, in half-sections so
+ *  an even-width section still has a middle. A way less than half the other is left off
+ *  (Cam's 2026-10-19 play-test, outside the ring: "where even am I?"). */
+export function safeWay(at: { x: number; y: number; w: number; h: number }, cx: number, cy: number): string {
+  const dx = 2 * cx - (2 * at.x + at.w - 1);
+  const dy = 2 * cy - (2 * at.y + at.h - 1);
+  let way = '';
+  if (dy !== 0 && 2 * Math.abs(dy) >= Math.abs(dx)) way += dy < 0 ? '↑' : '↓';
+  if (dx !== 0 && 2 * Math.abs(dx) >= Math.abs(dy)) way += dx < 0 ? '←' : '→';
+  return `Safe ${way}`;
+}
 const THEMES = uiData.popupThemes as Record<string, string>;
 
 /** A section's sign: its name and its theme, wood when the ROM gives it none. */
@@ -171,6 +190,7 @@ export function readHudView(emu: HudRead, sym: (name: string) => number | undefi
   const ring = sym('gBrRing');
   let ringPlace: string | null = null;
   let everywhere = false;
+  let safe: string | null = null;
   if (ring !== undefined && emu.read(ring + RING_ACTIVE, 8) !== 0) {
     if (((emu.read(ring + RING_R, 8) << 24) >> 24) < 0) {
       everywhere = true;
@@ -182,7 +202,11 @@ export function readHudView(emu: HudRead, sym: (name: string) => number | undefi
         if (b === 0xff) break;
         bytes.push(b);
       }
-      ringPlace = bytes.length ? decodeGen3(Uint8Array.from(bytes)) : null;
+      // A first ring names nowhere (director.ts ringSays): still the fog's, not the Safari's.
+      ringPlace = bytes.length ? decodeGen3(Uint8Array.from(bytes)) : '';
+      const at = SECTIONS[map?.section ?? ''];
+      const s8 = (v: number) => (v << 24) >> 24;
+      if (at && emu.read(ring + RING_OUTSIDE, 8) !== 0) safe = safeWay(at, s8(emu.read(ring + RING_CX, 8)), s8(emu.read(ring + RING_CY, 8)));
     }
   }
   const flags = emu.read(avatar + AVATAR_FLAGS, 8);
@@ -203,6 +227,7 @@ export function readHudView(emu: HudRead, sym: (name: string) => number | undefi
     flash: fogPhase(emu.read(hud + HUD_FOG_FRAMES, 8)),
     ring: ringPlace,
     fogEverywhere: everywhere,
+    safe,
     ctx: contextFor(flags, facing, !!map?.outdoor, rod, bikeIn(emu, sym)),
     party: partyCount === undefined ? 0 : emu.read(partyCount, 8),
   };
@@ -237,6 +262,7 @@ export function fogLines(v: HudView): Line[] {
     v.flash === 2 ? { text: 'Fog!', color: TEXT_RED } : v.flash === 1 ? undefined : { text: clockText(v.clock), color: v.clock <= 30 ? TEXT_RED : TEXT_DARK };
   const lines: Line[] = [{ left: { text: v.ring === null ? 'Safari' : 'Fog', color: TEXT_BLUE }, right: clock }];
   if (v.fogEverywhere && v.ring !== null) lines.push({ left: { text: fitText(v.ring, inner), color: TEXT_RED } });
+  if (v.safe) lines.push({ left: { text: v.safe, color: TEXT_RED } });
   lines.push({
     left: { text: `${v.left} left`, color: TEXT_BLUE },
     right: v.eyes > 0 ? { text: `${v.eyes} watch`, color: TEXT_GRAY } : undefined,

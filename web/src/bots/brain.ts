@@ -11,12 +11,13 @@
 // `chooseTarget`.
 import { PATCH_KEY_BASE, type Patch } from './patches';
 import { findPath, findPathToAny, type Path } from './path';
-import { eitherSees, type Facing, type Look } from './sight';
+import { eitherSees, sees, type Facing, type Look } from './sight';
 import { Grade, type Bot } from './roster';
-import { MOVE_CUT, MOVE_FLY, MOVE_SURF, tradedMon } from './party';
+import { MOVE_CUT, MOVE_FLY, MOVE_STRENGTH, MOVE_SURF, tradedMon } from './party';
+import HMS from '../data/hms.json';
 import { battleItems, merge as mergeBag, purse, quaff, spend, type Stack } from './bag';
 import { duel, type DuelResult } from './duel';
-import { sameSpot, spotKey, type SeamDir, type Spot, type World } from './world';
+import { FIELD_CUT, FIELD_STRENGTH, sameSpot, spotKey, type Field, type SeamDir, type Spot, type World } from './world';
 import { pageCell, toRom, type PageCell } from './space';
 import { PROTOCOL, type MapRef, type Msg, type Outcome, type PackedMon, type SpillMsg } from '../net/wire';
 import { spillCells } from '../match/loot';
@@ -67,16 +68,20 @@ const DOOR_MS = 1_200;
 /** Close enough to walk up to: another trainer this near is a fight a person would go
  *  and have (POK-362: "three bots all walked past each other"). Manhattan, same map. */
 const NEAR_TILES = 4;
+/** A player on the bot's screen, as a GBA shows it (15 x 10 cells round you), is close
+ *  enough too: a bot standing in view of somebody it could fight and not coming was
+ *  "why is this guy not coming after me" (Cam's 2026-10-19 play-test, POK-444). */
+const NEAR_PLAYER = { x: 7, y: 5 };
 /** A wild battle on a patch, as long as a short one in the ROM: the bot stands still with
  *  the battle mark on, and comes out of it hurt (POK-363). */
 const WILD_MS = 4_000;
 /** A legendary's battle (POK-410): a long one, as a player's against it is. */
 const LEGEND_MS = 12_000;
-/** The walk-up's wait for the "!" (POK-409): the ROM settles the pair, then shows the
- *  bubble over the bot for about a second (br_walkup.c), and only then does it look for
- *  the bot's steps -- for BR_APPROACH_FRAMES, three seconds, so a walk that starts a
- *  little late still lands. */
-export const WALKUP_DELAY_MS = 1_500;
+/** The walk-up's wait for the "!" (POK-409): the ROM settles the pair, then holds the
+ *  bubble over the bot for half a second (BR_WALKUP_BANG_FRAMES; a second and a half was
+ *  "a little too much", POK-444), and only then does it look for the bot's steps -- for
+ *  BR_APPROACH_FRAMES, three seconds, so a walk that starts a little late still lands. */
+export const WALKUP_DELAY_MS = 1_000;
 
 /** A stateless 32-bit roll from two numbers (mulberry32's finaliser): the rests' own,
  *  off the match's rng, so pausing changes nothing else a seed decides. */
@@ -402,35 +407,45 @@ export interface BotsOptions {
   ringPhase?: () => number;
 }
 
-/** Can this team cross water? Everybody can, since the HMs went (2026-10-13): a player
- *  walks into the water and is surfing, no Pokemon with the move asked for (br_hm.c), so
- *  a bot that needed one stood on the shore a player could leave. Kept a function, and
- *  the party kept an argument, so a rule that comes back has one place to land. */
-export function canSurf(_party: PackedMon[]): boolean {
-  return CONTESTANTS_NEED_NO_HMS;
+/** Can this team cross water? Only with somebody who knows SURF or could learn it (Cam's
+ *  2026-10-19 play-test, #7): a player's ROM asks the same of its party (br_hm.c,
+ *  BrHm_Slot), so a bot without one stands on the shore a player would. */
+export function canSurf(party: PackedMon[]): boolean {
+  return party.some((mon) => couldUse(mon, 'surf', MOVE_SURF));
 }
 
-/** And through a tree? There are no trees to cut any more: the ROM never spawns a
- *  cuttable tree, a smash rock or a boulder (br_strip.c, 2026-10-13), so a bot walks the
- *  cell like anybody else. The exporter still marks one as its own class (POK-267), and
- *  this is what opens it. That a bot walked through one with the tree still standing
- *  on a player's screen was the 2026-10-12 play-test's bug, and the strip is its fix. */
-/** And over it? A bird dealt FLY at the rung (POK-267). Unlike the water this one is
- *  NOT something every contestant has: a flight needs a Pokemon that can carry you, and
- *  whether this bot has one is the whole point of the rule. */
+/** And over it? A flight needs a Pokemon that knows FLY or could learn it, as a player's
+ *  ROM asks of its party (br_map.c FlierSlot, BrHm_Slot; #7). */
 export function canFly(party: PackedMon[]): boolean {
-  return party.some((mon) => mon.moves.some((mv) => mv.id === MOVE_FLY));
+  return party.some((mon) => couldUse(mon, 'fly', MOVE_FLY));
 }
 
-export function canCut(_party: PackedMon[]): boolean {
-  return CONTESTANTS_NEED_NO_HMS;
+/** And through a tree? The trees are back (#7): one falls to a party with somebody who
+ *  knows CUT or could learn it, as in a player's ROM (br_hm.c). */
+export function canCut(party: PackedMon[]): boolean {
+  return party.some((mon) => couldUse(mon, 'cut', MOVE_CUT));
 }
 
-/** POK-256 gave every contestant the run of Hoenn, and the speed-up redesign took the
- *  HMs out of it (2026-10-13): nothing on the map needs one. Named rather than inlined
- *  as `true` so that if that ever stops being so, this is the one place that has to
- *  change -- and the graph keeps modelling water and a tree as their own cells either way. */
-const CONTESTANTS_NEED_NO_HMS = true;
+/** And past a boulder? Somebody who knows STRENGTH or could learn it, as in a player's
+ *  ROM (br_hm.c BrHm_Strength). A bot doesn't push it; with one, it walks the cell. */
+export function canStrength(party: PackedMon[]): boolean {
+  return party.some((mon) => couldUse(mon, 'strength', MOVE_STRENGTH));
+}
+
+/** The field moves this team has, as the world's paths ask for them. */
+export function fieldMoves(party: PackedMon[]): number {
+  return (canCut(party) ? FIELD_CUT : 0) | (canStrength(party) ? FIELD_STRENGTH : 0);
+}
+
+/** Knows the move, or its species could learn the HM (tools/br/export-hms.py). */
+function couldUse(mon: PackedMon, hm: keyof typeof HMS, move: number): boolean {
+  return mon.moves.some((mv) => mv.id === move) || hmBit(HMS[hm], mon.species);
+}
+
+function hmBit(hex: string, species: number): boolean {
+  const byte = parseInt(hex.substr((species >> 3) * 2, 2), 16);
+  return !Number.isNaN(byte) && ((byte >> (species & 7)) & 1) === 1;
+}
 
 /** The share of the team's health still standing: 1 is untouched, 0 is wiped. */
 export function health(party: PackedMon[]): number {
@@ -1193,9 +1208,11 @@ export class Bots {
     if (inside && !inside(walker.at.map) && this.opts.targets.some((t) => inside(t.mapId))) return false;
     const near = (p: { mapId: string; x: number; y: number }) =>
       p.mapId === walker.at.map && Math.abs(p.x - walker.at.x) + Math.abs(p.y - walker.at.y) <= NEAR_TILES;
+    const inView = (p: { mapId: string; x: number; y: number }) =>
+      p.mapId === walker.at.map && Math.abs(p.x - walker.at.x) <= NEAR_PLAYER.x && Math.abs(p.y - walker.at.y) <= NEAR_PLAYER.y;
     const foes: { seat: number; spot: Spot }[] = [];
     for (const player of this.opts.engage?.players() ?? []) {
-      if (!player.busy && near(player)) foes.push({ seat: player.seat, spot: { map: player.mapId, x: player.x, y: player.y } });
+      if (!player.busy && inView(player)) foes.push({ seat: player.seat, spot: { map: player.mapId, x: player.x, y: player.y } });
     }
     if (this.opts.seed !== undefined && now >= this.duelAfter) {
       for (const other of this.walkers) {
@@ -1229,7 +1246,19 @@ export class Bots {
     for (const player of engage?.players() ?? []) {
       if (player.busy || player.mapId !== walker.at.map) continue;
       const theirs: Look = { map: player.mapId, x: player.x, y: player.y, dir: player.dir };
-      if (!eitherSees(this.opts.world, mine, theirs)) continue;
+      if (!eitherSees(this.opts.world, mine, theirs)) {
+        // A bot that may fight looks every way, not only the way it happens to face: a
+        // player in its row or column, in reach, turns it round (Cam's 2026-10-19
+        // play-test, POK-444: "why is this guy not coming after me"). Turned first, so the
+        // ROM reads the bot facing the player and has it walk up (br_walkup.c IWalk).
+        const dir = this.lineTo(walker, player);
+        const look: Look | undefined = dir && { ...mine, dir: DIR_WIRE[dir] };
+        if (!look || !sees(this.opts.world, look, player.x, player.y)) continue;
+        walker.facing = look.dir;
+        mine.dir = look.dir;
+        const turned = this.opts.mapRef(walker.at.map);
+        if (turned) this.opts.send({ t: 'face', seat: walker.bot.seat, f: walker.facing, map: turned });
+      }
       const mons = walker.party;
       if (mons.length === 0) return false;
       // PLAYER_NAME_LENGTH is 7: a HUD name may be longer, a trainer card may not.
@@ -1503,7 +1532,7 @@ export class Bots {
     // Route 104 and Route 103 in two, and a piece or a cell on the far side was a search
     // that settled all of this side before it gave up -- every time the bot stopped to
     // think, and out of the whole roster's budget.
-    const reach = this.opts.world.reachOnMap(walker.at, canSurf(walker.party), canCut(walker.party));
+    const reach = this.opts.world.reachOnMap(walker.at, canSurf(walker.party), fieldMoves(walker.party));
     // Fog first. Aiming only at cells inside the ring is the whole rule: a bot already
     // inside wanders inside, and a bot caught outside walks in, because the route to
     // anywhere it may aim at crosses the edge on the way.
@@ -1676,7 +1705,7 @@ export class Bots {
 
   /** findPath from where the bot stands, paid for out of the tick's budget. */
   private route(walker: Walker, to: Spot, cap: number): Path {
-    const path = findPath(this.opts.world, walker.at, to, cap, canSurf(walker.party), canCut(walker.party), this.solid(walker));
+    const path = findPath(this.opts.world, walker.at, to, cap, canSurf(walker.party), fieldMoves(walker.party), this.solid(walker));
     this.budget -= path.visited;
     return path;
   }
@@ -1688,7 +1717,7 @@ export class Bots {
   private aimAcrossMaps(walker: Walker, targets: { mapId: string; x: number; y: number }[], now: number): boolean {
     const world = this.opts.world;
     const surf = canSurf(walker.party);
-    const cut = canCut(walker.party);
+    const cut = fieldMoves(walker.party);
     const solid = this.solid(walker);
     // The most-wanted map that is not this one, and that we can actually get to.
     const wanted = new Map<string, number>();
@@ -1748,7 +1777,7 @@ export class Bots {
    *  bots were doing for the whole back half of a match (POK-302). */
   private wanderOneStep(walker: Walker, why: 'stuck' | 'wait' = 'stuck'): void {
     const surf = canSurf(walker.party);
-    const cut = canCut(walker.party);
+    const cut = fieldMoves(walker.party);
     const open = this.opts.world.neighbours(walker.at, surf, cut);
     if (open.length === 0) {
       this.note(walker, why);
@@ -1776,7 +1805,7 @@ export class Bots {
    *  bot on any map with a landing cell took uniform random steps even in the fog,
    *  and anywhere else drifted towards the nearest landing map whichever side of the
    *  ring it was on. */
-  private driftGoal(walker: Walker, surf: boolean, cut: boolean): string | undefined {
+  private driftGoal(walker: Walker, surf: boolean, cut: Field): string | undefined {
     const inside = this.opts.inside;
     const seen = new Set<string>();
     let best: string | undefined;

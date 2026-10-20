@@ -1,0 +1,36 @@
+# ring-first-hidden: the first ring keeps where it closes to itself (Cam's 2026-10-19
+# play-test: "you shouldn't know the area that's safe until the first round closes in";
+# a MAP opened before the drop gave the landing away). The host's first RING now carries
+# no place and no next radius (web/src/match/director.ts ringSays), so the MAP has no
+# name to give and nothing to blink. ring-preview.txt is a later ring, which has both.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# RING phase 1, centre (12,7), r 28, as the host sends it now: no place, no next
+pokebytes gBrMailbox+0x1018 0C 0A 07 00 00 00 01 0C 07 1C 00 00
+poke u16 gBrMailbox+0x0C 1
+wait 30
+expect u8 gBrRing 1
+expect u8 gBrRing+4 28
+expect u8 gBrRing+33 0
+expect u8 gBrRing+14 0xFF
+expect u8 gBrRing+5 0
+poke u8 gBrMatch 2
+tap START
+wait 40
+tap DOWN
+wait 20
+tap DOWN
+wait 20
+tap A
+wait 240
+expect u8 gBrMap 1
+# nothing to blink, and no fog on the centre's row: the frame's own tile
+expect u16 gBrMap+2 0
+expect u16 0x0600F25A 0x1000
+expect u16 0x0600F26E 0x1000
+shot map-first
+tap B
+wait 200
+expect u8 gBrMap 0
+say ring first hidden ok

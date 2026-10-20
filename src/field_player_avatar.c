@@ -770,6 +770,9 @@ static bool8 ShouldJumpLedge(s16 x, s16 y, u8 direction)
 
 static bool8 TryPushBoulder(s16 x, s16 y, u8 direction)
 {
+#if BR
+    BrHm_Strength(); // on while somebody could use it
+#endif
     if (FlagGet(FLAG_SYS_USE_STRENGTH))
     {
         u8 objectEventId = GetObjectEventIdByXY(x, y);
@@ -1381,7 +1384,11 @@ static u8 GetPlayerAvatarStateTransitionByGraphicsId(u8 graphicsId, u8 gender)
         if (sPlayerAvatarGfxToStateFlag[gender][i].graphicsId == graphicsId)
             return sPlayerAvatarGfxToStateFlag[gender][i].playerFlag;
     }
+#if BR
+    return BrSkin_MyAvatarState();
+#else
     return PLAYER_AVATAR_FLAG_ON_FOOT;
+#endif
 }
 
 u8 GetPlayerAvatarGraphicsIdByCurrentState(void)

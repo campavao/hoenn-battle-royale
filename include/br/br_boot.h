@@ -18,6 +18,9 @@
 // ...and one that can carry you: a SWELLOW that knows FLY, for the drivers and e2e
 // that have to be in the air (POK-278). Nothing a player can reach writes it.
 #define BR_BOOT_FLAG_TESTFLY 0x40
+// ...and one to take you on the water: a MUDKIP, who could learn SURF, WATERFALL, DIVE and
+// STRENGTH, for the drivers that swim now that the water needs one (br_hm.h).
+#define BR_BOOT_FLAG_TESTSWIM 0x20
 #define BR_BOOT_MODE(m) ((m) & 0x0F)
 
 struct BrBoot

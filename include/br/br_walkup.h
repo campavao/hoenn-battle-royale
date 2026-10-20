@@ -16,6 +16,11 @@
 // How long both sides wait for each other's last step or turn to land before deciding
 // who walks: the decision reads facings, and both must read the same two.
 #define BR_APPROACH_SETTLE 60
+// How long the "!" holds everything before the walk starts. Emerald waits out the whole
+// bubble, about a second and a half; Cam's 2026-10-19 play-test found that "a little too
+// much" (POK-444), so the walk starts half a second in and the bubble rides along over
+// whoever walks. The page's bot waits about as long (brain.ts WALKUP_DELAY_MS).
+#define BR_WALKUP_BANG_FRAMES 30
 
 // Who walks. A person: the one facing down the line at the other, and on a tie (both,
 // or neither) the challenger, link id 0. A bot is a map trainer: it walks when it faces
@@ -27,7 +32,7 @@
 
 // The walk-up keeps its state in the caller's task, in these words; the caller's own
 // state stays below them. They start at 0, which CreateTask gives every word.
-#define BR_WALKUP_DATA 12 // data[12..14]
+#define BR_WALKUP_DATA 12 // data[12..15]
 
 // One frame of the walk-up with `seat`. TRUE once it is over, however it ended.
 bool8 BrWalkup_Run(struct Task *task, u8 seat, u8 rule);

@@ -6,10 +6,10 @@ import { mulberry32 } from './clock';
 import { HOENN } from '../bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './landing';
 import { MAP_OFFSET } from '../net/cells';
-import type { EventMsg, Msg, RingMsg, SpillMsg } from '../net/wire';
+import type { EventMsg, Msg, PackedMon, RingMsg, SpillMsg } from '../net/wire';
 import { Bots, STEP_MS } from '../bots/brain';
 import { dealBots } from '../bots/roster';
-import { dealParty } from '../bots/party';
+import { MOVE_CUT, MOVE_SURF, dealParty } from '../bots/party';
 import { pageCell } from '../bots/space';
 import regionmapData from '../data/regionmap.json';
 import mapsecJson from '../../../src/data/region_map/region_map_sections.json';
@@ -152,7 +152,7 @@ describe('story events', () => {
   it("leaves the last event to the final ring's own section", () => {
     for (let seed = 1; seed <= 300; seed++) {
       const sent = run(seed);
-      const ring = sent.find((m) => m.t === 'ring') as RingMsg;
+      const ring = sent.find((m) => m.t === 'ring' && m.phase === 2) as RingMsg;
       const last = (sent.filter((m) => m.t === 'event') as EventMsg[]).find((e) => e.n === EVENT_MAX - 1);
       if (!last) continue;
       // An island's event is at the island and its section is the dock's (story.ts).
@@ -168,7 +168,7 @@ describe('story events', () => {
     let centred = 0;
     for (let seed = 1; seed <= 300; seed++) {
       const sent = run(seed);
-      const ring = sent.find((m) => m.t === 'ring') as RingMsg;
+      const ring = sent.find((m) => m.t === 'ring' && m.phase === 2) as RingMsg;
       const story = byName.get(ring.place ?? '');
       if (!story) continue;
       centred++;
@@ -191,8 +191,15 @@ describe('story events', () => {
       a.start();
       t += 5000;
       a.tick();
+      // Taken over in the first ring, which does not name its place: the heir has only
+      // the centre to know the final story by. The second ring, from a run on, names it.
       const ring = sent.find((m) => m.t === 'ring') as RingMsg;
-      const story = STORIES.find((s) => s.final && SECTIONS[s.section].name === ring.place);
+      expect(ring.place).toBeUndefined();
+      t += 10000;
+      a.tick();
+      const named = sent.find((m) => m.t === 'ring' && m.phase === 2) as RingMsg;
+      const story = STORIES.find((s) => s.final && SECTIONS[s.section].name === named.place);
+      sent.length = 0;
       if (!story) continue;
       const b = mk();
       b.resume({ ringPhase: ring.phase, centre: { sx: ring.sx, sy: ring.sy, place: ring.place }, secsLeftInPhase: 1, events: [] });
@@ -233,6 +240,9 @@ describe('story events', () => {
     }
   });
 
+  const withFieldMoves = (party: PackedMon[]): PackedMon[] =>
+    party.map((m, i) => (i ? m : { ...m, moves: [...m.moves.slice(0, 2), { id: MOVE_SURF, pp: 15, ppUps: 0 }, { id: MOVE_CUT, pp: 30, ppUps: 0 }] }));
+
   // Bots go for events like players (Cam, 2026-10-13): from the door outside, to the
   // story's first piece, however many floors in.
   const OUTSIDE: Record<string, { mapId: string; x: number; y: number }> = {
@@ -268,7 +278,8 @@ describe('story events', () => {
         mapRef: (id) => HOENN.refOf(id)!,
         send: (m) => void sent.push(m),
         rng: mulberry32(3),
-        deal: (bot, phase, mapId) => dealParty(5, bot.seat, phase, mapId),
+        // A lead that could cross the sea and cut a tree: since #7 a bot needs one, as a player does.
+        deal: (bot, phase, mapId) => withFieldMoves(dealParty(5, bot.seat, phase, mapId)),
         loot: {
           all: () => [...ground].map(([k, at]) => ({ key: k, mapId: at.mapId, ...pageCell(at.x, at.y) })),
           at: (mapId, { x, y }) => [...ground].find(([, c]) => c.mapId === mapId && c.x === x && c.y === y)?.[0],

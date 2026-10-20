@@ -19,6 +19,7 @@
 #include "br/br_ghosts.h"
 #include "br/br_duel.h"
 #include "br/br_match.h"
+#include "br/br_battle.h"
 #include "br/br_ring.h"
 #include "br/br_zone.h"
 #include "br/br_pick.h"
@@ -230,6 +231,8 @@ struct BrClosedDoor
     const u8 *line;
 };
 
+extern const u8 BR_EventScript_DoorClosed[];
+
 static const u8 sText_LabClosed[] = _("PROF. BIRCH's LAB\nis closed.");
 // Cam, live: "block off the battle tent and the daycare center." Both take the party out
 // of the match -- a Tent challenge swaps it for a rental three and runs its own battles,
@@ -274,6 +277,10 @@ bool8 BrMatch_DoorClosed(u8 mapGroup, u8 mapNum)
             // last one has faded, and never re-dirties the window mid-display.
             if (gBrHud.boxFrames == 0)
                 BrHud_Box(sClosedDoors[i].line);
+            // The field takes our TRUE as a script or a warp started, and locks the
+            // controls for it to let go of. Neither started, so nothing did: Cam leant
+            // on the lab once and never moved again (POK-432). This one lets go.
+            ScriptContext_SetupScript(BR_EventScript_DoorClosed);
             return TRUE;
         }
     }
@@ -356,11 +363,6 @@ void BrMatch_BeginSafari(void)
 {
     EnterSafariMode();
     GiveSafariBlocks();
-    // The phase first: the deal says "A <TYPE> MATCH!" only in the opening (SayTheme),
-    // and a seed that is already here -- a room's START came before this warp, and a
-    // solo page writes its seed before the boot -- is dealt on the next line. Dealt
-    // under PHASE_NONE the line was dropped, and dealtFor made every later Ensure a
-    // no-op, so neither ever said what the match was about.
     gBrMatch.phase = BR_PHASE_SAFARI;
     // The catch pool belongs to the opening, so it is dealt when the opening starts
     // rather than on the first encounter that asks (POK-255).
@@ -451,6 +453,24 @@ bool8 BrMatch_BuzzerClosing(void)
     if (gBrMatch.phase != BR_PHASE_SAFARI || !gMain.inBattle)
         return FALSE;
     return gBrRing.active || (gBrMatch.started && gBrMatch.clockLeft == 0);
+}
+
+// The match is ours and we are still fighting (10-19 play-test #27): a bot the fog took
+// while it fought us goes out on the page, the page crowns us, and the fight went on
+// regardless -- its engine has no idea -- for as long as it took to finish, with "WINS"
+// already on the HUD. A link fight needs none of this: its peer's OUT ends it
+// (br_netlink.c's TickPeerOut). Anything else, a bot's, a wild one's or a trainer's, is
+// left at the next choice by a RUN that cannot fail (BR_RUN_OVER).
+bool8 BrMatch_FightOver(void)
+{
+    return sWinPending && gMain.inBattle
+        && !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED_LINK));
+}
+
+// Which RUN the controller presses when the buzzer or the win takes us out of a fight.
+u8 BrMatch_LeaveKind(void)
+{
+    return BrMatch_FightOver() ? BR_RUN_OVER : BR_RUN_ROLL;
 }
 
 // No level numbers during a round (POK-266, Kanto v0.37.0). The rung is shared, so a

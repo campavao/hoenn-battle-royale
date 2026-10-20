@@ -10,6 +10,13 @@ BR_EventScript_ReleaseOne::
 	releaseall
 	end
 
+@ A door the match keeps shut (src/br/br_match.c, BrMatch_DoorClosed). The field locks
+@ the controls whenever its input step says TRUE, and only a script or a warp lets go of
+@ them: the refusal is neither, so this is what lets go (POK-432).
+BR_EventScript_DoorClosed::
+	releaseall
+	end
+
 @ A gym leader fell (src/br/br_gym.c). The gym's own script here is the badge, its
 @ fanfare, the badge's page, the TM and the TM's page -- with the fog closing. The purse
 @ has already been paid in C; this lets go of the player and stops.
@@ -40,6 +47,21 @@ BR_EventScript_Waterfall::
 	lockall
 	setfieldeffectargument 0, 0
 	dofieldeffect FLDEFF_USE_WATERFALL
+	releaseall
+	end
+
+@ A CUT tree walked into (src/br/br_hm.c): VAR_LAST_TALKED is the tree, the cut-in is
+@ skipped, and it comes down as EventScript_UseCut has it.
+BR_EventScript_Cut::
+	lockall
+	dofieldeffect FLDEFF_USE_CUT_ON_TREE
+	waitstate
+	goto EventScript_CutTreeDown
+	end
+
+@ A in front of a boulder in a match: STRENGTH is already on (BrHm_AskStrength), so a
+@ walk into it pushes. Nothing to say.
+BR_EventScript_BoulderFree::
 	releaseall
 	end
 

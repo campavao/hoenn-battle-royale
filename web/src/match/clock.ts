@@ -55,5 +55,15 @@ export function nextRingRadius(ringIndex: number): number | undefined {
  *  ring's -1 is "everywhere" (RING_RADII), which read as "RING -1" for the whole
  *  endgame (2026-10-12 match video). */
 export function ringLabel(r: number | undefined, place: string | undefined): string {
-  return r !== undefined && r < 0 ? 'FINAL FOG' : `SAFE: ${place ?? '?'}`;
+  if (r !== undefined && r < 0) return 'FINAL FOG';
+  // The first ring names nowhere until it closes (feedback #23): the fog, not "SAFE: ?".
+  return place ? `SAFE: ${place}` : 'FOG';
+}
+
+/** The strip once the match is decided (10-19 play-test #27): "P1 WINS" was the seat
+ *  number of the player reading it, because the host's own roster entry has no name.
+ *  Our own win says so; anybody else's names them. No seat is a draw. */
+export function winLabel(winner: number | undefined, me: number | null, nameOf: (seat: number) => string): string {
+  if (winner === undefined) return 'DRAW';
+  return winner === me ? 'YOU WIN' : `${nameOf(winner)} WINS`;
 }

@@ -12,9 +12,9 @@ import { Mailbox, MAILBOX } from './net/mailbox';
 import { RelayClient, type RoomListing, type RosterEvent } from './net/relay';
 import { Bridge } from './net/bridge';
 import { RomPort } from './net/romport';
-import type { BstartMsg, Msg, PackedMon, StartMsg, TurnMsg } from './net/wire';
+import type { BstartMsg, Msg, PackedMon, PlaceMsg, StartMsg, TurnMsg } from './net/wire';
 import { encodeGen3 } from './text/gen3';
-import { writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
+import { HUD, HUD_PAGE, readFogHp, writeHudClockSecs, writeHudEyes, writeHudLeft, writeHudNoCorner, writeMySeat, writeMySkin } from './net/hud';
 import type { HudWorld } from './ui/phonehud';
 import type { PadPrefsControl } from './ui/padprefs';
 import { moveInfo, type Rom } from './battle/movebook';
@@ -29,9 +29,12 @@ import { HostRole, soloLink, soloRoster, type HostLink } from './match/host';
 import { type BotVoice, LINES, lineAt } from './bots/lines';
 import * as Ticker from './match/ticker';
 import { readZonePool } from './match/zone';
-import { ringLabel } from './match/clock';
+import { ringLabel, winLabel } from './match/clock';
+import { LEFT_MATCH_NOTE, noteInMatch, noteOutOfMatch, reloadedMidMatch } from './match/left';
+import { Journal } from './match/journal';
+import type { ResumeRecord } from './match/resume';
 import { Curtain } from './match/curtain';
-import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
+import { FEEDBACK_ROW, HOWTO_ROW, emptyNote, isRoomCode, playRows, profileRows, rewatchRow, roomRows, type LobbyAction, type LobbyRow, type Link } from './match/lobby';
 import { cleanNote, sendFeedback } from './net/feedback';
 import { feedbackScreen, type FeedbackState } from './ui/feedback';
 import { howToScreen, markHowToDue, takeHowToDue } from './ui/howto';
@@ -97,10 +100,11 @@ import {
 } from './match/room';
 import { Roster } from './match/roster';
 import type { MapRef } from './net/wire';
-import { MENU_ACTION, START_BR_MAP, START_POKEMON, TouchLayer } from './touch';
+import { MAIN_IN_BATTLE_BIT, MAIN_IN_BATTLE_BYTE, MENU_ACTION, START_BR_MAP, START_POKEMON, TouchLayer } from './touch';
 import {
   STICK_KEY,
   guessedStickKeys,
+  padReadout,
   learnAxis,
   loadStickMap,
   onWindows,
@@ -264,6 +268,13 @@ let sheet: DrawnScreen | null = null;
 let sheetOpen = false;
 /** The line under the room's: SAFARI / SAFE: PLACE · 8 left · 1:23, while a match is on. */
 let matchStrip: string | null = null;
+/** The sheet's chip (ui/screens.ts SheetModel.chips): the legendary's line, from the
+ *  match's books once there are some, and the lead's HP while the fog is on us, read off
+ *  the ROM while the sheet sits beside the game and the ROM's corner is off. */
+let legendOf: () => string | null = () => null;
+let fogHp: string | null = null;
+/** How many watch the player, while the docked sheet stands in for the corner that said it. */
+let eyesChip: string | null = null;
 /** Whose card the sheet has open. */
 let sheetCard: number | null = null;
 
@@ -420,6 +431,7 @@ function makeSheet(part: () => SheetPart, about: () => FeedbackAbout): DrawnScre
     },
     look: desktop() ? 'dock' : 'overlay',
     strip: matchStrip,
+    chips: [legendOf(), fogHp, eyesChip].filter((chip): chip is string => chip !== null),
     note: '',
     muted: settings.muted,
     remapping: settings.remapping,
@@ -940,6 +952,14 @@ function loadPadMap(): Record<number, GbaKey> {
 }
 
 let gamepadMap = loadPadMap();
+/** Somebody has taught this device's pad its buttons (the wizard saved a map). */
+let padTaught = (() => {
+  try {
+    return localStorage.getItem(REMAP_KEY) !== null;
+  } catch {
+    return false;
+  }
+})();
 /** Set while the remap wizard is waiting for a button; the poll feeds it instead of
  *  the emulator, so binding START does not also open the start menu. */
 let padCapture: ((index: number) => void) | null = null;
@@ -985,10 +1005,11 @@ function wireGamepad(emu: Emulator): () => void {
   // that is a direction held down forever, which is a player who cannot move and
   // cannot see why. Directions are a move AWAY from rest, not a position.
   const rest = new Map<number, readonly number[]>();
-  /** Which axes are away from rest this poll, for the readout. */
-  const moved: string[] = [];
+  /** The pad the readout describes, and its rest, this poll. */
+  let shown: { pad: Gamepad; rest: readonly number[] } | null = null;
   const poll = () => {
     const now = new Set<GbaKey>();
+    shown = null;
     for (const pad of navigator.getGamepads()) {
       if (!pad) continue;
       if (!rest.has(pad.index)) rest.set(pad.index, [...pad.axes]);
@@ -1028,11 +1049,8 @@ function wireGamepad(emu: Emulator): () => void {
       // the DirectInput hat, decoded below.
       // ...unless the wizard has been shown the stick (POK-321, Cam's pad, whose
       // vertical is an even axis): then only its two learned axes count.
-      moved.length = 0;
+      shown = { pad, rest: base };
       const guess = guessedStickKeys(pad.axes, base);
-      // The axes that moved go on the readout either way: with a learned stick that does
-      // nothing, which axis the stick really is on is the one fact a report needs.
-      moved.push(...guess.moved);
       if (stickMap) {
         for (const key of stickKeys(pad.axes, base, stickMap)) now.add(key);
       } else {
@@ -1054,12 +1072,12 @@ function wireGamepad(emu: Emulator): () => void {
     // wrong and a pad with a stuck axis all look identical from the sofa; this is the
     // difference, and it is the line that would have found the stuck axis in seconds.
     if (padName !== null) {
-      const keys = [...held].join(' ');
-      // The axes that have moved, by number, so a pad that does nothing can be told
-      // apart from a pad whose stick is somewhere this code is not looking -- which is
-      // the difference this line existed to show and could not.
-      const axes = moved.length > 0 ? ` [axes ${moved.join(' ')}]` : '';
-      const line = `${padName}${keys ? ` -- ${keys}` : ''}${axes}`;
+      // The axes that have moved, by number and value, and the buttons down, so a pad
+      // that does nothing can be told apart from a pad whose stick is somewhere this
+      // code is not looking (pad.ts padReadout).
+      const line = shown
+        ? padReadout(shown.pad, shown.rest, [...held], padTaught || stickMap !== null)
+        : padName;
       // On the sheet, drawn again only when it says something new.
       if (settings.pad !== line) {
         settings.pad = line;
@@ -1125,6 +1143,7 @@ function wireRemap(): void {
     const finish = (stick: StickMap | null) => {
       gamepadMap = taken;
       stickMap = stick;
+      padTaught = true;
       try {
         localStorage.setItem(REMAP_KEY, JSON.stringify(taken));
         if (stick) localStorage.setItem(STICK_KEY, JSON.stringify(stick));
@@ -1158,6 +1177,7 @@ function wireRemap(): void {
   settings.resetPad = () => {
     gamepadMap = { ...GAMEPAD_DEFAULT };
     stickMap = null;
+    padTaught = false;
     try {
       localStorage.removeItem(REMAP_KEY);
       localStorage.removeItem(STICK_KEY);
@@ -2123,7 +2143,13 @@ function renderGuestStrip(
   return { alive, clockLeft: left };
 }
 
-function renderMatchStrip(state: DirectorState): void {
+/** Who the strip is read by, for the line that crowns somebody. */
+interface StripWho {
+  me(): number | null;
+  nameOf(seat: number): string;
+}
+
+function renderMatchStrip(state: DirectorState, who: StripWho): void {
   setInMatch(true);
   const mm = Math.floor(state.clockLeft / 60);
   const ss = String(state.clockLeft % 60).padStart(2, '0');
@@ -2133,9 +2159,7 @@ function renderMatchStrip(state: DirectorState): void {
       : state.phase === 'ring'
         ? ringLabel(state.ring?.r, state.ring?.place)
         : state.phase === 'ended'
-          ? state.winner !== undefined
-            ? `P${state.winner} WINS`
-            : 'DRAW'
+          ? winLabel(state.winner, who.me(), (seat) => who.nameOf(seat))
           : 'WAITING';
   setStrip(`${phaseLabel} · ${state.alive} left · ${mm}:${ss}`);
 }
@@ -2143,7 +2167,7 @@ function renderMatchStrip(state: DirectorState): void {
 /** Starts the director's own 1Hz pump: `tick()` (fires the due clock/ring messages),
  *  then mirrors its `state` into `gBrHud`'s two page-writes fields and the HTML
  *  strip. Returns a disposer. */
-function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director: Director): () => void {
+function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director: Director, who: StripWho): () => void {
   const pump = () => {
     director.tick();
     const state = director.state;
@@ -2151,7 +2175,7 @@ function startDirectorLoop(emu: Emulator, hudBase: number | undefined, director:
       writeHudLeft(emu, hudBase, state.alive);
       writeHudClockSecs(emu, hudBase, state.clockLeft);
     }
-    renderMatchStrip(state);
+    renderMatchStrip(state, who);
   };
   pump();
   const id = setInterval(pump, DIRECTOR_TICK_MS);
@@ -2264,6 +2288,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     },
   );
   stallLog = session.log;
+  legendOf = () => session.legend();
   const drawResults = (): void => {
     session.settleTally();
     const mine = session.results.forSeat(0, performance.now());
@@ -2308,7 +2333,7 @@ function runSolo(emu: Emulator, mailboxBase: number, symbols: Map<string, number
     // The match narrated, as a room's host narrates it (POK-331 #26): Kanto's solo is the
     // room with nobody in it, and its ticker says everything a room's does.
     narration: { mine: careerVoiceLines },
-    startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director),
+    startLoop: (director) => startDirectorLoop(emu, symbols?.get('gBrHud'), director, { me: () => 0, nameOf: (seat) => roster.nameOf(seat) }),
     land: landOverride(),
   });
   // The bots on the roster by the names they were dealt, as a room's are (POK-330 #51):
@@ -2423,9 +2448,21 @@ function loadCareerFile(then: (note: string) => void): void {
   input.click();
 }
 
+/** What a reload comes back to a match with (match/resume.ts, HBR-20), loaded once a match
+ *  is on rather than with the page: the page goes away on pagehide, which cannot wait
+ *  for an import, so it is there before it is needed. */
+let resumeKit: typeof import('./match/resume') | null = null;
+function loadResumeKit(): Promise<typeof import('./match/resume')> {
+  return import('./match/resume').then((kit) => (resumeKit = kit));
+}
+/** Set as the page leaves on purpose: nothing to come back to, so nothing is written. */
+let leavingPage = false;
+
 /** Drops the room out of the URL and reloads, which lands on the lobby (parseRoomHash
  *  returns null with no room in the hash). The way out of anywhere. */
 function backToLobby(): void {
+  leavingPage = true;
+  noteOutOfMatch(); // left on purpose: the lobby has nothing to tell them
   location.hash = withoutRoom(location.hash);
   location.reload();
 }
@@ -2437,6 +2474,7 @@ function wireRoom(
   symbols: Map<string, number> | undefined,
   hash: RoomHash,
   patch?: string,
+  resume?: ResumeRecord,
 ): void {
   if (mailboxBase === undefined || hash.mode === 'solo') return; // solo: no socket at all
 
@@ -2488,6 +2526,8 @@ function wireRoom(
   let isHost = false;
   /** A rejoin is out: a refusal is about the room we were in, not one we asked into. */
   let rejoining = false;
+  /** ...and it is a reload's (HBR-20), until the room has us back. */
+  let resuming = resume !== undefined;
   /** The room is ours again after our own drop (POK-330 #47), and the match with it:
    *  the director the drop stopped starts again on the next roster that says so. */
   let resumeHost = false;
@@ -2514,7 +2554,6 @@ function wireRoom(
       {
         id: 'room-max',
         label: `MAX ${view.max}`,
-        visual: { kind: 'seats', humans: view.players, bots: view.fill, max: view.max },
         onPress: () => relay.setMax(nextMax(view.max)),
       },
       {
@@ -2654,22 +2693,32 @@ function wireRoom(
         room.card = null;
         stage.redraw();
       },
+      onTouched: () => countdown.bump(),
     };
   };
   const roomScreenView = roomScreen(roomModel);
   const showRoomScreen = () => {
+    noteOutOfMatch();
     room.started = false;
     room.card = null;
     stage.show(roomScreenView);
   };
-  const hideRoomScreen = () => {
+  const hideRoomScreen = (curtain = true) => {
     // Any start consumes the count (Kanto's POK-167): left armed, it dealt the room's
     // next match the moment it ran out, whatever was happening by then.
     countdown.cancel();
     if (room.started) return;
     room.started = true;
-    // The town the ROM stands in fades out under black, not in view (POK-346).
-    holdCurtain(emu, symbols);
+    // A reload from here on is one out of the match (POK-433, match/left.ts), or back
+    // into it (HBR-20), for which the page needs its kit before it goes. Not a watcher's:
+    // their ROM holds nothing of the match, and the URL puts them back.
+    if (hash.mode !== 'watch') {
+      noteInMatch(attachedTo?.code ?? hash.code);
+      void loadResumeKit().catch(() => {});
+    }
+    // The town the ROM stands in fades out under black, not in view (POK-346). Not a ROM
+    // back from a reload, already standing in the match: the curtain waits for a warp.
+    if (curtain) holdCurtain(emu, symbols);
     // ...and the passcode entry over it, should a count run out on a host still typing.
     // The game, with the sheet beside it on a desktop.
     if (stage.current === roomScreenView || (doorEntry !== null && stage.current === doorEntry)) showGame();
@@ -2790,7 +2839,10 @@ function wireRoom(
       // nobody willing leaves the room here, and the relay hands it over only on our own
       // `can_host false`, so whoever comes back to their tab has to be asked about.
       startLoop: (director) => {
-        const stop = startDirectorLoop(emu, symbols?.get('gBrHud'), director);
+        const stop = startDirectorLoop(emu, symbols?.get('gBrHud'), director, {
+          me: () => bridge?.seat ?? null,
+          nameOf: (seat) => bridge?.roster.nameOf(seat) ?? `P${seat}`,
+        });
         const asking = setInterval(standDownIfHidden, STAND_DOWN_EVERY_MS);
         return () => {
           stop();
@@ -2945,6 +2997,9 @@ function wireRoom(
    *  this page one way or the other -- our own ROM's messages on the way up, everybody
    *  else's on the way in, and the host's own as it sends them -- and each goes through
    *  session.note once, the same way solo's do. */
+  /** While a reload's books are read back (HBR-20): when the message being read was
+   *  booked, by the wall clock; 0 the rest of the time. */
+  let rereadAt = 0;
   const session = new MatchSession(
     {
       mySeat: () => bridge?.seat ?? null,
@@ -2953,7 +3008,11 @@ function wireRoom(
       relayRoster: () => controls.roster,
       dealing: () => host !== null,
       bots: () => host?.bots.bots ?? null,
-      toRom: (m) => bridge?.pushToRom(m),
+      // Read back, the books put nothing into a ROM that already holds it.
+      toRom: (m) => {
+        if (!rereadAt) bridge?.pushToRom(m);
+      },
+      now: () => (rereadAt ? performance.now() - (Date.now() - rereadAt) : performance.now()),
       owed: {
         opponent: () => bridge?.opponent() ?? null,
         inRoom: (seat) => (controls.roster?.members ?? []).some((m) => m.id === seat),
@@ -2962,7 +3021,8 @@ function wireRoom(
       },
       defaultFog: () => controls.fogSecs,
       store: localStorage,
-      tally: tallyOf(emu, symbols),
+      // ...and the ROM's own counts are the ROM's, back from its savestate.
+      tally: ((t) => t && { zero: () => void (rereadAt || t.zero()), read: () => t.read() })(tallyOf(emu, symbols)),
       fameWanted: () => !paraded.paraded,
       grace: new EndGrace({
         graceMs: END_GRACE_MS,
@@ -2975,12 +3035,14 @@ function wireRoom(
       // other again. With the results up, PLAY AGAIN is the exit and the grace leaves
       // them be (POK-371); the room's next START still takes this page into it.
       exit: () => {
+        if (rereadAt) return;
         drawResults();
         if (!resultsShowing() && !replay.waiting && !paraded.holding) void returnToRoom();
       },
     },
     {
       started: () => {
+        if (rereadAt) return; // a reload's books: the screen is put up once they are read
         hideRoomScreen();
         if (gBrJank !== undefined) {
           emu.write(gBrJank + JANK_LONGEST, 0, 16);
@@ -2989,6 +3051,8 @@ function wireRoom(
       },
       decided: (line) => {
         career = line;
+        // Over: a reload from the results is an ordinary one, back into the room.
+        noteOutOfMatch();
         drawResults();
         // The match just changed our record: the room's cards of us follow (POK-339).
         sayCard();
@@ -2997,6 +3061,14 @@ function wireRoom(
     },
   );
   stallLog = session.log;
+  /** Everything the books are told, kept to write down as the page goes (HBR-20). */
+  const journal = new Journal();
+  const bookNote = session.note.bind(session);
+  session.note = (msg, via) => {
+    journal.note(msg, via, rereadAt || Date.now());
+    bookNote(msg, via);
+  };
+  legendOf = () => session.legend();
   /** Our team and where we stood when our ROM lost its last link fight (POK-387): read
    *  then, since a replay we watch afterwards plays its fight in the same gPlayerParty. */
   let lostWith: { team: { species: number; level: number }[]; at: { map: MapRef; x: number; y: number } } | null = null;
@@ -3051,6 +3123,8 @@ function wireRoom(
   /** The room we are attached to, so a second attach can tell a rejoin of it (the relay
    *  handed our seat back) from a new room. */
   let attachedTo: { seat: number; code: string } | null = null;
+  /** A reload's bots, for the first attach to stand where they were (HBR-20). */
+  const resumeRows: PlaceMsg[] = [];
 
   const attach = (seat: number, code: string, hostSeat: number) => {
     // A rejoin mid-fight keeps the fight: the ROM is still in it, and a fresh Bridge knew
@@ -3073,6 +3147,7 @@ function wireRoom(
     const wasHost = isHost;
     isHost = hostSeat === seat;
     rejoining = false;
+    resuming = false;
     // Ours before the drop and ours again: the relay waited for us, or the room had gone
     // and we opened another (POK-330 #47). The match lives in this tab.
     resumeHost = wasHost && isHost && host === null && onPromotion(match) === 'take-over';
@@ -3081,6 +3156,9 @@ function wireRoom(
     // fallen go back on it fallen.
     if (match.seed !== 0) bridge.roster.seatBots(botRows(match.seed, match.botSeats));
     for (const out of match.out) bridge.roster.applyMsg({ t: 'out', seat: out });
+    // A host back from a reload stands its bots where it last saw them (HBR-20): nobody
+    // else ever told this page, and the take-over picks them up from these rows.
+    for (const row of resumeRows.splice(0)) bridge.roster.applyMsg(row);
     if (rejoin) {
       // ...and what we last said to the seat we are fighting, which the blip may have
       // swallowed (#7), and the drop we asked for and got no cell for (POK-331 #4).
@@ -3164,6 +3242,8 @@ function wireRoom(
       // Our own wild fight is over when our ROM says it is back on the map: nobody else
       // will say so, and a later watcher must not be handed it (spectate.ts noteBusy).
       if (msg.t === 'busy') spectate.noteBusy(bridge!.seat, msg.kind);
+      if (msg.t === 'challenge' || msg.t === 'accept') engaging = true;
+      else if ((msg.t === 'busy' && msg.kind === undefined) || msg.t === 'decline' || msg.t === 'out') engaging = false;
       // Into the books, bag and all -- and our own ROM challenging one of our bots, or
       // fighting one and saying how it went (POK-238), goes to the brain from there: the
       // host walks the bot, and nobody hears their own messages come back. Arriving on a
@@ -3180,6 +3260,9 @@ function wireRoom(
         // And we withdraw from the succession: a trainer who is out should not be the
         // one still running the match everybody else is in (POK-252).
         if (msg.seat === bridge?.seat && !host) relay.canHost(false);
+        // Out, a reload only puts us back to watch: nothing of ours is left to lose
+        // (POK-433). A host's match still goes with its tab, so a host keeps the note.
+        if (msg.seat === bridge?.seat && !host) noteOutOfMatch();
         // Going out is the moment to start watching (play-test: "when I got out in the
         // Safari, it should have brought me to spectating the other players"). Our own
         // `out` never comes back over the relay, so nothing else here ever saw it --
@@ -3256,7 +3339,10 @@ function wireRoom(
         spectate.noteOut(m.seat);
         // The host saying we are out: we went while our socket was down and came back to
         // a match that had buried us (POK-330 #25). Out is watching, as for anybody.
-        if (m.seat === seat) relay.canHost(false);
+        if (m.seat === seat) {
+          relay.canHost(false);
+          noteOutOfMatch();
+        }
         // ...and the seat we watch going out moves the watch on now, not at the next
         // tick of the interval, during which the field was ours to walk.
         autoWatch();
@@ -3550,6 +3636,14 @@ function wireRoom(
     );
   };
   relay.on('room_error', (ev) => {
+    // A reload the room would not take back (HBR-20): the hold ran out, or the room is
+    // gone. Out of the match, then, which the menu says, with WATCH.
+    if (resuming) {
+      resuming = false;
+      noteInMatch(resume?.code);
+      location.reload();
+      return;
+    }
     // `locked` is the common refusal: a room mid-match, which is exactly what you rejoin
     // if you reload an old link. Which ones are dead ends is match/room.ts's onRefused.
     const next = onRefused(ev.reason, { rejoining, wasHost: isHost, seat: bridge?.seat ?? null });
@@ -3680,6 +3774,77 @@ function wireRoom(
     if ((me === undefined || me.alive) && (!bridge || offersToHost(match, bridge.seat))) relay.canHost(true);
   });
 
+  // ---- back from a reload (HBR-20) ----
+  // The books are read back the way they were first told, into nothing (rereadAt), and
+  // the match laid over them as it stood; the ROM is already back (main). From here on
+  // it is a seat coming back from a drop: attach() takes the rejoin's way, and a host
+  // takes the match back as it does after one (resumeHost).
+  if (resume && resumeKit) {
+    attachedTo = { seat: resume.seat, code: resume.code };
+    isHost = resume.host;
+    for (const [msg, via, wall] of resume.journal) {
+      rereadAt = wall;
+      session.note(msg, via);
+    }
+    rereadAt = 0;
+    resumeKit.unpackMatch(match, resume.match, performance.now(), Date.now());
+    resumeRows.push(...resume.rows);
+    hideRoomScreen(false);
+    // A relay that never answers at all is the hold running out too.
+    const left = resume.at + resume.holdMs - Date.now();
+    setTimeout(() => {
+      if (!resuming) return;
+      noteInMatch(resume.code);
+      location.reload();
+    }, Math.max(0, left));
+  }
+  /** Our ROM has asked for a fight, or said yes to one, and has not been back on the map
+   *  since: the walk-up and the handshake come before any `busy` says battle. */
+  let engaging = false;
+  /** Written down as the page goes, so a reload can come back (match/resume.ts): only
+   *  from a match this seat is still in, and never from inside a fight. */
+  const writeResume = (): void => {
+    const kit = resumeKit;
+    if (!kit) return;
+    kit.dropResume();
+    if (leavingPage || !bridge || !attachedTo || !relay.token) return;
+    const seat = bridge.seat;
+    const fighting =
+      engaging || (mainBase !== undefined && (emu.read(mainBase + MAIN_IN_BATTLE_BYTE, 8) & MAIN_IN_BATTLE_BIT) !== 0);
+    if (!kit.mayResume({ seat, match, busy: session.busy, watching: amWatching, fighting })) return;
+    const entries = journal.entries();
+    if (!entries) return;
+    if (host && host.director.state.phase !== 'ended') {
+      match.clockLeft = host.director.state.clockLeft;
+      match.clockAt = performance.now();
+    }
+    kit.writeOnLeaving(
+      {
+        code: attachedTo.code,
+        token: relay.token,
+        seat,
+        host: host !== null,
+        holdMs: relay.rejoinMs,
+        build: kit.buildId(patch, protocol),
+        opts: { ...me, pass: (isHost ? hostPass : joinPass) ?? undefined },
+        match,
+        journal: entries,
+        roster: bridge.roster.all(),
+        snapshot: () => emu.snapshot(),
+      },
+      performance.now(),
+      Date.now(),
+    );
+  };
+  window.addEventListener('pagehide', writeResume);
+  // ...which is not always going: a page put in the back/forward cache comes back, and
+  // its game must not stay stopped for the snapshot taken on the way.
+  window.addEventListener('pageshow', (ev) => {
+    if (!ev.persisted) return;
+    resumeKit?.dropResume();
+    if (emu.isPaused()) emu.resume();
+  });
+
   const relayUrl = (import.meta.env.VITE_RELAY_URL as string | undefined) || DEFAULT_RELAY_URL;
   const skin = String(careerSkin());
   // What we are running, so the relay's version gate can do its job (POK-244). Both
@@ -3701,7 +3866,11 @@ function wireRoom(
   }
   // Open, because a room nobody can find is not a lobby (POK-240). JOIN BY CODE still
   // works for one that is not listed; that is what a passcode is for.
-  if (hash.mode === 'host') relay.host({ ...me, open: true, max: BOT_FILL });
+  if (resume) {
+    rejoining = true;
+    setStatus('Rejoining your match…');
+    relay.resume(resume.code, resume.token, resume.opts);
+  } else if (hash.mode === 'host') relay.host({ ...me, open: true, max: BOT_FILL });
   else if (hash.mode === 'quick') relay.quickJoin(me);
   else if (hash.mode === 'daily') relay.dailyJoin(me);
   else relay.join(hash.code!, { ...me, spectate: hash.mode === 'watch', pass: joinPass ?? undefined });
@@ -3721,7 +3890,7 @@ const LOBBY_CONNECT_MS = 6000;
  *  having closed the browsing socket first -- SOLO VS BOTS must reach the ROM with no
  *  connection open, which is the whole point of it. `version` is the tab's, which the
  *  list is asked with: its DAILY row is our own build's daily (POK-331 #14). */
-function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomHash> {
+function runLobby(version: { patch?: string; protocol?: number }, firstNote = '', watchCode: string | null = null): Promise<RoomHash> {
   showScreen('lobby');
   const stage = theStage();
   const relay = new RelayClient();
@@ -3735,6 +3904,9 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
   let rooms: RoomListing[] = [];
   /** The line under the main menu: a rejected code, or nothing. */
   let note = '';
+  /** ...or, under the main menu only, that a reload left a match (POK-433): the ROOM
+   *  CODE entry shares `note`, and drew this as a typing error. */
+  const leftNote = firstNote;
   /** The line under the trainer's rows: what became of a career file. */
   let trainerNote = '';
 
@@ -3875,6 +4047,10 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         case 'watch':
           setRoomHash('join', action.code);
           return done({ mode: 'join', code: action.code });
+        case 'rewatch':
+          // The match a reload left (HBR-20): back in to look, as a watcher.
+          setRoomHash('watch', action.code);
+          return done({ mode: 'watch', code: action.code });
       }
     };
     const row = (r: LobbyRow): RowSpec => ({
@@ -3892,9 +4068,14 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
 
     const main = menuScreen(() => ({
       title: 'HOENN BATTLE ROYALE',
-      rows: [...playRows(shownLink(), rooms.filter((r) => !r.daily).length, rooms.find((r) => r.daily)), HOWTO_ROW, FEEDBACK_ROW].map(row),
+      rows: [
+        ...(watchCode ? [rewatchRow(watchCode)] : []),
+        ...playRows(shownLink(), rooms.find((r) => r.daily)),
+        HOWTO_ROW,
+        FEEDBACK_ROW,
+      ].map(row),
       rowsId: 'lobby-rows',
-      note: note || (online ? '' : emptyNote(false)),
+      note: note || leftNote || (online ? '' : emptyNote(false)),
       noteId: 'lobby-note',
       trainer: { name: careerName(), skin: careerSkin(), record: record(), onPress: () => stage.push(trainer) },
     }));
@@ -3987,7 +4168,14 @@ function runLobby(version: { patch?: string; protocol?: number }): Promise<RoomH
         },
       };
     }));
-    const howTo = howToScreen(() => ({ skin: careerSkin(), onDone: () => stage.pop() }));
+    const howTo = howToScreen(() => ({
+      skin: careerSkin(),
+      onDone: () => stage.pop(),
+      // Its fog, its evolution and its confetti move; nothing else is drawn for it.
+      redraw: () => {
+        if (stage.current === howTo) stage.redraw();
+      },
+    }));
     stage.show(main);
     // Somebody who imported their ROM by hand is new here: the panels come up over the
     // first menu they meet, once on this device (POK-429).
@@ -4253,7 +4441,19 @@ function wirePhoneHud(
   emu.onFrame(() => {
     // On the glass: a match, upright, on a touch screen (index.html shows #hud then).
     const shown = upright?.matches !== false && !computer?.matches && top.offsetParent !== null;
-    if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown);
+    // A desktop's sheet beside the game says the count and the clock, so the ROM's corner
+    // comes off there too (and the fog's HP and the eye count, which only the corner said,
+    // go on the sheet).
+    const docked = !shown && desktop() && sheet !== null && stage?.current === sheet;
+    if (hudBase !== undefined) writeHudNoCorner(emu, hudBase, shown ? HUD_PAGE.SIGNS : docked ? HUD_PAGE.CORNER : HUD_PAGE.NONE);
+    const hp = docked ? readFogHp(emu, (n) => symbols.get(n)) : null;
+    const eyes = docked && hudBase !== undefined ? emu.read(hudBase + HUD.OFF_EYES, 8) : 0;
+    const watched = eyes > 0 ? `Watched by ${eyes}` : null;
+    if (hp !== fogHp || watched !== eyesChip) {
+      fogHp = hp;
+      eyesChip = watched;
+      redrawSheet();
+    }
     battle.update(shown ? readBattleView(emu, (n) => symbols.get(n), tables, battle.wantsBag) : null);
     const scene = shown && inBattle(emu, (n) => symbols.get(n));
     if (scene !== battleScene) {
@@ -4480,9 +4680,31 @@ async function main(): Promise<void> {
       }
     }
   }
-  const fromHash = parseRoomHash();
+  let fromHash = parseRoomHash();
+  // A reload out of a running match (POK-433). Inside the relay's minute it goes back in
+  // (HBR-20): the ROM from the savestate the page wrote as it went, the rest in wireRoom.
+  // Past it, or from a battle, or with nothing written, it goes to the menu and says so,
+  // with WATCH: the match was this tab's (match/left.ts says why), and the room's URL
+  // would only land on a room screen waiting for a host that has stopped.
+  let lobbyNote = '';
+  let watchCode: string | null = null;
+  let resume: ResumeRecord | undefined;
+  const leftCode = reloadedMidMatch();
+  const kit = leftCode !== null ? await loadResumeKit().catch(() => null) : null;
+  const back = kit?.takeResume({ build: kit.buildId(patch, protocol), now: Date.now() }) ?? null;
+  if (leftCode !== null && fromHash && fromHash.mode !== 'solo' && fromHash.mode !== 'watch'
+    && (leftCode === '' || fromHash.code === undefined || fromHash.code === leftCode)) {
+    if (back && back.rec.code === leftCode && mailboxBase !== undefined && emu.restore(back.state)) {
+      resume = back.rec;
+    } else {
+      history.replaceState(null, '', `#${withoutRoom(location.hash)}`);
+      fromHash = null;
+      lobbyNote = LEFT_MATCH_NOTE;
+      watchCode = leftCode || null;
+    }
+  }
   let roomHash = fromHash;
-  if (!roomHash) roomHash = await runLobby({ patch, protocol });
+  if (!roomHash) roomHash = await runLobby({ patch, protocol }, lobbyNote, watchCode);
   if (roomsRefused && roomHash.mode !== 'solo') return refuseRoom(roomsRefused);
   const bootMode = bootModeFor(roomHash.mode);
   // Solo's seed goes into the ROM before its boot (POK-327): BR_BOOT_SAFARI deals the
@@ -4494,7 +4716,8 @@ async function main(): Promise<void> {
   if (mailboxBase !== undefined) {
     const matchBase = symbols?.get('gBrMatch');
     if (roomHash.mode === 'solo' && matchBase !== undefined) emu.write(matchBase + MATCH_SEED, soloSeed, 32);
-    writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin(), symbols?.get('gBrMySkin'));
+    // A ROM back from a savestate is mid-match: no boot block for it.
+    if (!resume) writeBootBlock(emu, mailboxBase, careerName(), bootMode, careerSkin(), symbols?.get('gBrMySkin'));
     emu.resume();
   }
 
@@ -4502,7 +4725,7 @@ async function main(): Promise<void> {
   if (mailboxBase !== undefined && roomHash.mode === 'solo') holdCurtain(emu, symbols);
   showScreen('playing');
   if (mailboxBase !== undefined && roomHash.mode === 'solo') runSolo(emu, mailboxBase, symbols, soloSeed);
-  else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch);
+  else wireRoom(emu, mailboxBase, protocol, symbols, roomHash, patch, resume);
   // An unpatched ROM has no room and no sheet: the game, and nothing over it.
   if (mailboxBase === undefined) theStage().hide();
 }

@@ -1,0 +1,21 @@
+# hm-a-press-boulder: hm-a-press's boulder half (a boot is once a run). An A press on
+# a STRENGTH boulder asks nothing (BrHm_AskStrength), and the walk into it then pushes.
+#
+# FIERY PATH (map 24:14): the boulder at (10,15), south of (10,14). A, then walk into it.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 81 00 18 0E 0A 00 0E 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr+2 14
+hold DOWN 2
+wait 20
+hold A 4
+wait 60
+shot boulder-a
+expect u32 gMain+4 CB2_Overworld+1
+hold DOWN 16
+wait 60
+hold DOWN 16
+wait 60
+expect u16 *gSaveBlock1Ptr+2 15
+say hm a-press ok
