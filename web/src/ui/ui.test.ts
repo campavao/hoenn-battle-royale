@@ -82,16 +82,16 @@ describe('the drawn screens (POK-320)', () => {
     const { layoutTiles } = await import('./screens');
     const six = layoutTiles(68, 6);
     expect(six[0]).toEqual({ x: 0, y: 68, w: 240, h: 44 });
-    expect(six[1]).toEqual({ x: 0, y: 116, w: 118, h: 56 });
-    expect(six[2]).toEqual({ x: 122, y: 116, w: 118, h: 56 });
+    expect(six[1]).toEqual({ x: 0, y: 116, w: 118, h: 62 });
+    expect(six[2]).toEqual({ x: 122, y: 116, w: 118, h: 62 });
     // An odd one out goes across.
-    expect(six[5]).toEqual({ x: 0, y: 236, w: 240, h: 56 });
+    expect(six[5]).toEqual({ x: 0, y: 248, w: 240, h: 62 });
     // Eight (WATCH and the daily too) come lower to fit what is left of the screen.
     const room = 320 - 68 - 22;
     const eight = layoutTiles(68, 8, room);
     const last = eight[7];
     expect(last.y + last.h).toBeLessThanOrEqual(68 + room);
-    expect(last.h).toBeLessThan(56);
+    expect(last.h).toBeLessThan(62);
   });
 
   it('puts every main menu tile, its picture and the NEW on the screen (HBR-30)', async () => {

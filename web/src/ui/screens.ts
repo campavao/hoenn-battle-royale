@@ -799,7 +799,9 @@ export interface MenuModel {
 
 const TILE_GAP = 4;
 const WIDE_H = 44;
-const TILE_H = 56;
+const TILE_H = 62;
+/** Room between two people on a tile (Cam, 2026-10-20: "some padding between sprites"). */
+const SPRITE_STEP = 28;
 const TILE_MIN_H = 36;
 const BADGE = { w: 28, h: 13 };
 
@@ -830,14 +832,15 @@ function paintTiles(c: EmeraldCanvas, y: number, rows: RowSpec[], room: number, 
     const r = rects[i];
     const alpha = row.disabled ? 0.4 : 1;
     c.drawFrame(r);
-    const gfx = row.art?.gfx ?? [];
+    const tall = r.h >= 52 && r.w < W;
+    const across = r.w === W;
+    // A low half tile has room for one person beside its words.
+    const gfx = (row.art?.gfx ?? []).slice(0, tall || across ? undefined : 1);
     const item = row.art?.item;
     const n = ITEM_ICON.cell;
     // A tall tile has its picture over its words. Any other has the words in its middle:
     // across the screen, its people either side of them; lower, its picture before them.
-    const tall = r.h >= TILE_H && r.w < W;
-    const across = r.w === W;
-    const artW = item !== undefined ? n : gfx.length * 20 - 4;
+    const artW = item !== undefined ? n : (gfx.length - 1) * SPRITE_STEP + 16;
     const beside = !tall && !across && (item !== undefined || gfx.length > 0) ? artW + 4 : 0;
     const label = fitText(row.label, r.w - 16 - beside);
     const lw = measure(label);
@@ -851,9 +854,11 @@ function paintTiles(c: EmeraldCanvas, y: number, rows: RowSpec[], room: number, 
       const ix = across && !tall ? r.x + 16 : artX;
       c.drawUiPicture('items.png', (item % ITEM_ICON.cols) * n, Math.floor(item / ITEM_ICON.cols) * n, n, n, ix, iy, alpha);
     } else if (across) {
-      gfx.forEach((g, k) => c.drawSprite(g, k === 0 ? r.x + 24 : r.x + r.w - 40, midY(32), alpha));
+      // Either side of the words, close in, so the three read as one centred group
+      // (Cam: "quick play text and sprites are center aligned").
+      gfx.forEach((g, k) => c.drawSprite(g, k === 0 ? lx - 16 - 12 : lx + lw + 12, midY(32), alpha));
     } else {
-      gfx.forEach((g, k) => c.drawSprite(g, artX + k * 20, tall ? r.y + 4 : midY(32), alpha));
+      gfx.forEach((g, k) => c.drawSprite(g, artX + k * SPRITE_STEP, tall ? r.y + 4 : midY(32), alpha));
     }
     if (row.badge) {
       const b = { x: r.x + r.w - BADGE.w - 6, y: tall ? r.y + 6 : r.y - 5, ...BADGE };
@@ -869,7 +874,7 @@ function paintTiles(c: EmeraldCanvas, y: number, rows: RowSpec[], room: number, 
       parent,
       disabled: row.disabled,
       onPress: row.onPress,
-      cursor: row.onPress ? { x: (beside ? artX : lx) - 10, y: ly + 2 } : null,
+      cursor: row.onPress ? { x: (beside ? artX : across && gfx.length ? lx - 28 : lx) - 10, y: ly + 2 } : null,
     };
   });
   const last = rects[rects.length - 1];
@@ -877,15 +882,15 @@ function paintTiles(c: EmeraldCanvas, y: number, rows: RowSpec[], room: number, 
 }
 
 /** Who you are, on a strip: pressing it opens the trainer's rows. */
-function paintTrainer(c: EmeraldCanvas, y: number, h: number, t: NonNullable<MenuModel['trainer']>): Widget {
-  const box = { x: 0, y, w: W, h };
+function paintTrainer(c: EmeraldCanvas, y: number, h: number, t: NonNullable<MenuModel['trainer']>, inset = 0): Widget {
+  const box = { x: inset, y, w: W - 2 * inset, h };
   c.drawFrame(box);
   const sheet = skinSheet(t.skin);
   const pad = Math.floor((h - 32) / 2);
-  if (sheet) c.drawSprite(sheet.gfx, 16, y + pad);
-  c.drawText(fitText(t.name, W - 56), 40, y + pad, TEXT_BLUE);
-  c.drawText(fitText(t.record, W - 56), 40, y + pad + 16, TEXT_GRAY);
-  return { rect: box, text: `${t.name} ${t.record}`, id: 'lobby-trainer', onPress: t.onPress, cursor: { x: 4, y: y + pad + 10 } };
+  if (sheet) c.drawSprite(sheet.gfx, inset + 16, y + pad);
+  c.drawText(fitText(t.name, W - 56 - 2 * inset), inset + 40, y + pad, TEXT_BLUE);
+  c.drawText(fitText(t.record, W - 56 - 2 * inset), inset + 40, y + pad + 16, TEXT_GRAY);
+  return { rect: box, text: `${t.name} ${t.record}`, id: 'lobby-trainer', onPress: t.onPress, cursor: { x: inset + 4, y: y + pad + 10 } };
 }
 
 export function menuScreen(model: () => MenuModel): DrawnScreen {
@@ -905,9 +910,10 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
       if (m.tiles) {
         // The strip is drawn over the tiles but listed after them, so the cursor starts
         // on QUICK PLAY.
-        const strip = m.trainer ? paintTrainer(c, y, 40, m.trainer) : null;
-        y += strip ? 44 : 0;
-        const tiles = paintTiles(c, y, m.rows, h - y - 22, m.rowsId);
+        // Room around the card (Cam, 2026-10-20: "some padding around the trainer card").
+        const strip = m.trainer ? paintTrainer(c, y + 4, 44, m.trainer) : null;
+        y += strip ? 56 : 0;
+        const tiles = paintTiles(c, y, m.rows, h - y - (m.note ? 22 : 4), m.rowsId);
         widgets.push(...tiles.widgets);
         if (strip) widgets.push(strip);
         y = tiles.bottom + 2;
