@@ -862,7 +862,7 @@ function paintTiles(c: EmeraldCanvas, y: number, rows: RowSpec[], room: number, 
       gfx.forEach((g, k) => c.drawSprite(g, artX + k * SPRITE_STEP, tall ? r.y + 4 : midY(32), alpha));
     }
     if (row.badge) {
-      const b = { x: r.x + r.w - BADGE.w - 6, y: tall ? r.y + 6 : r.y - 5, ...BADGE };
+      const b = { x: r.x + r.w - BADGE.w - 6, y: tall ? r.y + 6 : r.y - TILE_GAP, ...BADGE };
       // On a low tile the NEW is a sticker over its top edge, clear of the words.
       c.fillRect(b, '#e03030');
       c.drawText('NEW', b.x + Math.floor((b.w - measure('NEW')) / 2), b.y - 2, TEXT_WHITE);
@@ -909,7 +909,7 @@ export function menuScreen(model: () => MenuModel): DrawnScreen {
       paintTitle(c, m.title, y);
       y += 20;
       if (m.tiles) {
-        // The strip is drawn over the tiles but listed after them, so the cursor starts
+        // The strip is painted above the tiles but listed after them, so the cursor starts
         // on QUICK PLAY.
         // Room around the card (Cam, 2026-10-20: "some padding around the trainer card").
         const strip = m.trainer ? paintTrainer(c, y + 4, 44, m.trainer) : null;
