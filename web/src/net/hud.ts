@@ -52,6 +52,8 @@ export function writeHudNoCorner(ram: RamAccess, hudBase: number, page: HudPage)
 const MON_SIZE = 100;
 const MON_HP = 0x56;
 const MON_MAX_HP = 0x58;
+/** `struct BoxPokemon`'s flags byte: hasSpecies is bit 1, isEgg bit 2. */
+const MON_FLAGS = 0x13;
 /** `struct BrRing.outside` (include/br/br_ring.h). */
 const RING_OUTSIDE = 5;
 
@@ -64,6 +66,8 @@ export function readFogHp(ram: RamAccess, sym: (name: string) => number | undefi
   if (ring === undefined || party === undefined || count === undefined || ram.read(ring + RING_OUTSIDE, 8) === 0) return null;
   const n = Math.min(6, ram.read(count, 8));
   for (let i = 0; i < n; i++) {
+    const flags = ram.read(party + i * MON_SIZE + MON_FLAGS, 8);
+    if ((flags & 2) === 0 || (flags & 4) !== 0) continue; // LeadHp skips no species and eggs
     const hp = ram.read(party + i * MON_SIZE + MON_HP, 16);
     if (hp > 0) return `HP ${hp}/${ram.read(party + i * MON_SIZE + MON_MAX_HP, 16)}`;
   }

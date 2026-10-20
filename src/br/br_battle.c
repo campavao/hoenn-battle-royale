@@ -33,6 +33,8 @@
 #include "br/br_ghosts.h"
 #include "br/br_netlink.h"
 #include "br/br_battle.h"
+#include "constants/abilities.h"
+#include "constants/moves.h"
 #include "br/br_bag.h"
 #include "br/br_hud.h"
 #include "br/br_bot.h"
@@ -919,10 +921,17 @@ bool8 BrBattle_MoveTypeLine(u16 move)
     const u8 *times;
     u8 color = 0;
     u8 mul;
+    u8 foe = gActiveBattler ^ BIT_SIDE;
 
-    if (gBattleMoves[move].power == 0 || (gBattleTypeFlags & BATTLE_TYPE_DOUBLE))
+    // pret's line where the chart would mislead: status and fixed-damage moves (power 1:
+    // SEISMIC TOSS, SUPER FANG...), the two whose type is not their listed NORMAL, and a
+    // foe that FORESIGHT has opened up.
+    if (gBattleMoves[move].power <= 1 || move == MOVE_HIDDEN_POWER || move == MOVE_WEATHER_BALL
+     || (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) || (gBattleMons[foe].status2 & STATUS2_FORESIGHT))
         return FALSE;
-    mul = Sixteenths(type, gActiveBattler ^ BIT_SIDE);
+    mul = Sixteenths(type, foe);
+    if (type == TYPE_GROUND && gBattleMons[foe].ability == ABILITY_LEVITATE)
+        mul = 0;
     if (mul >= 64)
         times = sText_Times4;
     else if (mul > 16)
@@ -942,8 +951,8 @@ bool8 BrBattle_MoveTypeLine(u16 move)
 
     CpuCopy16(sEffColors, &gPlttBufferUnfaded[BG_PLTT_ID(5) + BR_EFF_GOOD], sizeof(sEffColors));
     CpuCopy16(sEffColors, &gPlttBufferFaded[BG_PLTT_ID(5) + BR_EFF_GOOD], sizeof(sEffColors));
-    // The window's narrow font throughout: "ELECTRIC ×0.25" fits its 64 pixels, where
-    // pret's normal-font type name would not leave room for the multiplier.
+    // The window's narrow font throughout, where pret's normal-font type name would not
+    // leave room for the multiplier.
     p = StringCopy(gDisplayedStringBattle, gTypeNames[type]);
     *p++ = CHAR_SPACE;
     if (color != 0)
@@ -955,6 +964,9 @@ bool8 BrBattle_MoveTypeLine(u16 move)
         *p++ = color + 1;
     }
     StringCopy(p, times);
+    // "FIGHTING ×0.25" and "ELECTRIC ×0.25" are a pixel or two over: those lose the space.
+    if (GetStringWidth(FONT_NARROW, gDisplayedStringBattle, 0) > 64)
+        StringCopy(p - 1, p);
     BattlePutTextOnWindow(gDisplayedStringBattle, B_WIN_MOVE_TYPE);
     return TRUE;
 }

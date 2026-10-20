@@ -65,11 +65,17 @@ describe('hud.ts (the page-writes fields of gBrHud)', () => {
     const { ram } = fakeRam();
     const syms: Record<string, number> = { gBrRing: 0x3000, gPlayerParty: 0x4000, gPlayerPartyCount: 0x5000 };
     const sym = (n: string) => syms[n];
-    ram.write(0x5000, 2, 8);
-    ram.write(0x4000 + 0x56, 0, 16);
-    ram.write(0x4000 + 0x58, 30, 16);
-    ram.write(0x4000 + 100 + 0x56, 26, 16);
-    ram.write(0x4000 + 100 + 0x58, 40, 16);
+    ram.write(0x5000, 3, 8);
+    // an egg (hasSpecies | isEgg) with HP of its own, passed over as LeadHp passes it
+    ram.write(0x4000 + 0x13, 6, 8);
+    ram.write(0x4000 + 0x56, 9, 16);
+    ram.write(0x4000 + 0x58, 9, 16);
+    // fainted
+    ram.write(0x4000 + 100 + 0x13, 2, 8);
+    ram.write(0x4000 + 100 + 0x58, 30, 16);
+    ram.write(0x4000 + 200 + 0x13, 2, 8);
+    ram.write(0x4000 + 200 + 0x56, 26, 16);
+    ram.write(0x4000 + 200 + 0x58, 40, 16);
     expect(readFogHp(ram, sym)).toBeNull();
     ram.write(0x3000 + 5, 1, 8);
     expect(readFogHp(ram, sym)).toBe('HP 26/40');
