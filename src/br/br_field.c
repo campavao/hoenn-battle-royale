@@ -934,3 +934,21 @@ void BrField_ShareObjects(u8 *ghosts, u8 *loot)
     *ghosts = min(min(wantGhosts, BR_MAX_GHOSTS), room - owed);
     *loot = min(min(wantLoot, BR_MAX_LOOT), room - *ghosts);
 }
+
+// ---- THE WHOLE WINDOW (br_field.h) ----
+
+EWRAM_DATA struct BrWorld gBrWorld = {0};
+
+// A 9-bit scroll's distance, in [-256, 256).
+static s32 ScrollDistance(u32 v)
+{
+    return (s32)((v & 0x1FF) ^ 0x100) - 0x100;
+}
+
+void BrField_PublishWorld(u16 hofs, u16 vofs, u8 xTileOffset, u8 yTileOffset)
+{
+    gBrWorld.hofs = hofs;
+    gBrWorld.vofs = vofs;
+    gBrWorld.lcdX = gSaveBlock1Ptr->pos.x * 16 + ScrollDistance(hofs - xTileOffset * 8);
+    gBrWorld.lcdY = gSaveBlock1Ptr->pos.y * 16 + ScrollDistance(vofs - yTileOffset * 8);
+}

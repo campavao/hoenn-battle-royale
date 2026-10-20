@@ -556,6 +556,21 @@ export function askBand(lay: FieldLayout, rom: FieldPicture, wideOk = false): Ba
   return shownArea(lay, wide) > shownArea(lay, tall) ? wide : tall;
 }
 
+/** The whole window's band (the whole-window prototype, include/br/br_field.h): every
+ *  column and row the layout shows past the LCD, in eights, up to what the core's row
+ *  buffer and rows hold. A core given the ROM's world draws all of it from the map. */
+export const WORLD_SIDE_MAX = 512;
+export const WORLD_ROWS_MAX = 256;
+export function worldBand(lay: FieldLayout): Band {
+  const eights = (n: number, most: number) => Math.min(most, Math.ceil(Math.max(0, n) / 8) * 8);
+  return {
+    left: eights(lay.lcdCol, WORLD_SIDE_MAX),
+    top: eights(lay.lcdRow, WORLD_ROWS_MAX),
+    right: eights(lay.cols - lay.lcdCol - GBA_W, WORLD_SIDE_MAX),
+    bottom: eights(lay.rows - lay.lcdRow - GBA_H, WORLD_ROWS_MAX),
+  };
+}
+
 /** How much of a layout's map a band's picture covers, in GBA pixels. */
 export function shownArea(lay: FieldLayout, b: Band): number {
   const across = Math.min(b.left, lay.lcdCol) + GBA_W + Math.min(b.right, Math.max(0, lay.cols - lay.lcdCol - GBA_W));
@@ -794,6 +809,9 @@ export interface FieldDeps {
    *  battle shows through its keyed backdrop, shown while the picture is keyed -- and
    *  off the field at all, a menu as much as a fight (fieldDimmed). */
   keyDim?: HTMLElement | null;
+  /** The whole-window prototype is on: the core draws the band from the ROM's map grid,
+   *  so on the field none of it is cut. */
+  world?: () => boolean;
 }
 
 /** The filter that makes a see-through battle's backdrop transparent: the ROM's
@@ -1060,6 +1078,7 @@ export class FieldView {
     // The ring is the one the ROM latched, not the one the band asked for: a ROM that set
     // its BGs up before it was told the band is the tall ring, and the band's columns past
     // pret's are cut.
+    else if (b && cam && this.deps.world?.()) cut = null;
     else if (b && cam) cut = bandClip(cam, HOENN.byRef.get(`${cam.group}:${cam.num}`) ?? null, b, cam.stale ?? 0, wideRing(b) && cam.wide !== false);
     const s = this.lay.scale;
     const want = cut && (cut.left || cut.top || cut.right || cut.bottom)
