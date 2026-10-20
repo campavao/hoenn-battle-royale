@@ -35,6 +35,7 @@
 #include "constants/items.h"
 #if BR
 #include "br/br_moves.h"
+#include "battle_script_commands.h"
 #endif
 
 extern struct Evolution gEvolutionTable[][EVOS_PER_MON];
@@ -167,6 +168,20 @@ static void CB2_BeginEvolutionScene(void)
 #define tLearnMoveNoState   data[8]
 #define tEvoWasStopped      data[9]
 #define tPartyId            data[10]
+#if BR
+
+// Learning on evolution asks nothing, as teaching from the bag does (POK-441, Cam's
+// 2026-10-19 play-test: "they know what they're doing"): with four moves known, straight
+// to the summary screen to pick the one to replace -- no "delete a move?" and its YES/NO.
+// Backing out of that screen is "did not learn", with no "stop learning?" to ask it twice,
+// and a pick is "learned" with no "1, 2, and... Poof!".
+static void BrEvoForgetWhich(u8 taskId, u8 showMoveSelect)
+{
+    BufferMoveToLearnIntoBattleTextBuff2(); // "did not learn {move}" reads it, as the skipped intro did
+    gTasks[taskId].tLearnMoveState = showMoveSelect;
+    BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+}
+#endif
 
 #define TASK_BIT_CAN_STOP       (1 << 0)
 #define TASK_BIT_LEARN_MOVE     (1 << 7)
@@ -872,6 +887,9 @@ static void Task_EvolutionScene(u8 taskId)
         case MVSTATE_INTRO_MSG_1:
             if (!IsTextPrinterActive(0) && !IsSEPlaying())
             {
+#if BR
+                BrEvoForgetWhich(taskId, MVSTATE_SHOW_MOVE_SELECT); break;
+#endif
                 // "{mon} is trying to learn {move}"
                 BufferMoveToLearnIntoBattleTextBuff2();
                 BattleStringExpandPlaceholdersToDisplayedString(gBattleStringsTable[STRINGID_TRYTOLEARNMOVE1 - BATTLESTRINGS_TABLE_START]);
@@ -972,6 +990,9 @@ static void Task_EvolutionScene(u8 taskId)
                 {
                     // Didn't select move slot
                     gTasks[taskId].tLearnMoveState = MVSTATE_ASK_CANCEL;
+#if BR
+                    gTasks[taskId].tLearnMoveState = MVSTATE_CANCEL;
+#endif
                 }
                 else
                 {
@@ -995,6 +1016,9 @@ static void Task_EvolutionScene(u8 taskId)
                         RemoveMonPPBonus(mon, var);
                         SetMonMoveSlot(mon, gMoveToLearn, var);
                         gTasks[taskId].tLearnMoveState++;
+#if BR
+                        gTasks[taskId].tState = EVOSTATE_LEARNED_MOVE;
+#endif
                     }
                 }
             }
@@ -1276,6 +1300,9 @@ static void Task_TradeEvolutionScene(u8 taskId)
         case T_MVSTATE_INTRO_MSG_1:
             if (!IsTextPrinterActive(0) && !IsSEPlaying())
             {
+#if BR
+                BrEvoForgetWhich(taskId, T_MVSTATE_SHOW_MOVE_SELECT); break;
+#endif
                 // "{mon} is trying to learn {move}"
                 BufferMoveToLearnIntoBattleTextBuff2();
                 BattleStringExpandPlaceholdersToDisplayedString(gBattleStringsTable[STRINGID_TRYTOLEARNMOVE1 - BATTLESTRINGS_TABLE_START]);
@@ -1357,6 +1384,9 @@ static void Task_TradeEvolutionScene(u8 taskId)
                 {
                     // Didn't select move slot
                     gTasks[taskId].tLearnMoveState = T_MVSTATE_ASK_CANCEL;
+#if BR
+                    gTasks[taskId].tLearnMoveState = T_MVSTATE_CANCEL;
+#endif
                 }
                 else
                 {
@@ -1376,6 +1406,9 @@ static void Task_TradeEvolutionScene(u8 taskId)
 
                         RemoveMonPPBonus(mon, var);
                         SetMonMoveSlot(mon, gMoveToLearn, var);
+#if BR
+                        gTasks[taskId].tState = T_EVOSTATE_LEARNED_MOVE; break;
+#endif
                         BattleStringExpandPlaceholdersToDisplayedString(gBattleStringsTable[STRINGID_123POOF - BATTLESTRINGS_TABLE_START]);
                         DrawTextOnTradeWindow(0, gDisplayedStringBattle, 1);
                         gTasks[taskId].tLearnMoveState++;

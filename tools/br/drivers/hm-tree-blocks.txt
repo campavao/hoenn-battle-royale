@@ -1,0 +1,15 @@
+# hm-tree-blocks: with nobody who could learn CUT the tree stays, and stops us (Cam's 10-19
+# play-test, #7). hm-cut-tree.txt's tree, booted with no party at all.
+wait 30
+poke u8 gBrMatch 2
+pokebytes gBrMailbox+0x2018 01 00 00 13 23 00 17 00 BD BB C7 FF
+wait 400
+expect u16 *gSaveBlock1Ptr+2 23
+hold UP 16
+wait 120
+hold UP 16
+wait 30
+shot blocked
+expect u16 *gSaveBlock1Ptr+2 23
+expect u32 gMain+4 CB2_Overworld+1
+say hm tree blocks ok

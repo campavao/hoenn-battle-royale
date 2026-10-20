@@ -35,12 +35,16 @@ function run(party: PackedMon[], extra: { alive?: () => number; players?: Player
 const withFly: PackedMon[] = [
   { species: 304, level: 30, hp: 40, maxHp: 40, status: 0, moves: [{ id: MOVE_FLY, pp: 15, ppUps: 0 }], heldItem: 0, otId: 0, personality: 1, exp: 0, nickname: 'TAILLOW', ot: 'BR' },
 ];
-const withoutFly: PackedMon[] = [{ ...withFly[0], moves: [{ id: 33, pp: 35, ppUps: 0 }] }];
+// A MAGIKARP (129) with TACKLE: it doesn't know FLY and couldn't learn it. A TAILLOW
+// without the move still flies, as a player's would (#7, br_map.c FlierSlot).
+const withoutFly: PackedMon[] = [{ ...withFly[0], species: 129, moves: [{ id: 33, pp: 35, ppUps: 0 }], nickname: 'MAGIKARP' }];
+const couldLearnFly: PackedMon[] = [{ ...withFly[0], moves: [{ id: 33, pp: 35, ppUps: 0 }] }];
 
 describe('a bird in the fog flies out of it (POK-267)', () => {
   it('knows whether it can', () => {
     expect(canFly(withFly)).toBe(true);
     expect(canFly(withoutFly)).toBe(false);
+    expect(canFly(couldLearnFly)).toBe(true);
   });
 
   it('lands inside the ring, on a map it could never have walked to', () => {
@@ -65,10 +69,10 @@ describe('a bird in the fog flies out of it (POK-267)', () => {
     expect(bots.spotOf(31)?.map).toBe('FOGGED');
   });
 
-  it('is dealt to birds at the rung, and not before it', () => {
+  it('is a bird some bots are dealt and others are not', () => {
     let birds = 0;
     for (let seat = 16; seat < 32; seat++) if (canFly(dealParty(5, seat, 12))) birds++;
     expect(birds).toBeGreaterThan(0);
-    for (let seat = 16; seat < 32; seat++) expect(canFly(dealParty(5, seat, 1))).toBe(false);
+    expect(birds).toBeLessThan(16);
   });
 });

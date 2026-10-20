@@ -1,4 +1,5 @@
-# clear-map: the map's people and obstacles are gone, and the water needs no HM
+# clear-map: the map's people are gone; a cuttable tree and the sea give way to a party
+# that could learn CUT and SURF, with no HM in the bag and no prompt
 # (2026-10-13, the speed-up redesign: "get rid of all NPCs except for Gym Leaders",
 # "get rid of the need for HMs"). br_strip.c, br_hm.c.
 #
@@ -7,15 +8,16 @@
 # by the time the boot settles. Two cells east at (35,22) is a cuttable tree, local id
 # 30, and past it an item ball at (37,22); north of (36,22) is the sea. The match is
 # running before the map loads, as a drop's landing is (a ROM with none is pret's).
+# Boot mode A1: TESTMON's TREECKO (could learn CUT) and TESTSWIM's MUDKIP (SURF).
 wait 30
 poke u8 gBrMatch 2
-pokebytes gBrMailbox+0x2018 01 00 00 13 21 00 16 00 BD BB C7 FF
+pokebytes gBrMailbox+0x2018 A1 00 00 13 21 00 16 00 BD BB C7 FF
 wait 400
 expect u8 *gSaveBlock1Ptr+4 0
 expect u8 *gSaveBlock1Ptr+5 19
 expect u8 gBrMatch 2
 shot booted
-# No object on the field is the LASS (3) or the tree (30). Byte 8 of each ObjectEvent
+# No object on the field is the LASS (3). The tree (30) stays (Cam, 2026-10-19, #7). Byte 8 of each ObjectEvent
 # is its local id; a slot never used is all zero.
 expectne u8 gObjectEvents+0x008 3
 expectne u8 gObjectEvents+0x02C 3
@@ -33,33 +35,19 @@ expectne u8 gObjectEvents+0x1B8 3
 expectne u8 gObjectEvents+0x1DC 3
 expectne u8 gObjectEvents+0x200 3
 expectne u8 gObjectEvents+0x224 3
-expectne u8 gObjectEvents+0x008 30
-expectne u8 gObjectEvents+0x02C 30
-expectne u8 gObjectEvents+0x050 30
-expectne u8 gObjectEvents+0x074 30
-expectne u8 gObjectEvents+0x098 30
-expectne u8 gObjectEvents+0x0BC 30
-expectne u8 gObjectEvents+0x0E0 30
-expectne u8 gObjectEvents+0x104 30
-expectne u8 gObjectEvents+0x128 30
-expectne u8 gObjectEvents+0x14C 30
-expectne u8 gObjectEvents+0x170 30
-expectne u8 gObjectEvents+0x194 30
-expectne u8 gObjectEvents+0x1B8 30
-expectne u8 gObjectEvents+0x1DC 30
-expectne u8 gObjectEvents+0x200 30
-expectne u8 gObjectEvents+0x224 30
 # No HMs in the bag: the TM/HM pocket (SaveBlock1's bagPocket_TMHM, +0x690) starts
 # empty.
 expect u16 *gSaveBlock1Ptr+0x690 0
-# East through where the tree stood, to the item ball's cell's neighbour. With the tree
-# the run stops at x 34.
+# East into the tree: it falls to CUT, and the walk goes on to the item ball's cell's
+# neighbour. With nobody who could learn CUT the run stops at x 34 (hm-tree-blocks).
 hold RIGHT 60
+wait 200
+hold RIGHT 40
 wait 20
 shot through-tree
 expect u16 *gSaveBlock1Ptr+0 36
 expect u16 *gSaveBlock1Ptr+2 22
-# North into the sea: no A, no "would you like to SURF?", no Pokemon with the move.
+# North into the sea: no A, no "would you like to SURF?", only a mon that could learn it.
 # A turn first (the run left us facing east), then the step that bumps.
 hold UP 24
 wait 150

@@ -6,10 +6,10 @@ import { mulberry32 } from './clock';
 import { HOENN } from '../bots/hoenn';
 import { DOORSTEPS, HAND, LANDING, worldReady } from './landing';
 import { MAP_OFFSET } from '../net/cells';
-import type { EventMsg, Msg, RingMsg, SpillMsg } from '../net/wire';
+import type { EventMsg, Msg, PackedMon, RingMsg, SpillMsg } from '../net/wire';
 import { Bots, STEP_MS } from '../bots/brain';
 import { dealBots } from '../bots/roster';
-import { dealParty } from '../bots/party';
+import { MOVE_CUT, MOVE_SURF, dealParty } from '../bots/party';
 import { pageCell } from '../bots/space';
 import regionmapData from '../data/regionmap.json';
 import mapsecJson from '../../../src/data/region_map/region_map_sections.json';
@@ -240,6 +240,9 @@ describe('story events', () => {
     }
   });
 
+  const withFieldMoves = (party: PackedMon[]): PackedMon[] =>
+    party.map((m, i) => (i ? m : { ...m, moves: [...m.moves.slice(0, 2), { id: MOVE_SURF, pp: 15, ppUps: 0 }, { id: MOVE_CUT, pp: 30, ppUps: 0 }] }));
+
   // Bots go for events like players (Cam, 2026-10-13): from the door outside, to the
   // story's first piece, however many floors in.
   const OUTSIDE: Record<string, { mapId: string; x: number; y: number }> = {
@@ -275,7 +278,8 @@ describe('story events', () => {
         mapRef: (id) => HOENN.refOf(id)!,
         send: (m) => void sent.push(m),
         rng: mulberry32(3),
-        deal: (bot, phase, mapId) => dealParty(5, bot.seat, phase, mapId),
+        // A lead that could cross the sea and cut a tree: since #7 a bot needs one, as a player does.
+        deal: (bot, phase, mapId) => withFieldMoves(dealParty(5, bot.seat, phase, mapId)),
         loot: {
           all: () => [...ground].map(([k, at]) => ({ key: k, mapId: at.mapId, ...pageCell(at.x, at.y) })),
           at: (mapId, { x, y }) => [...ground].find(([, c]) => c.mapId === mapId && c.x === x && c.y === y)?.[0],

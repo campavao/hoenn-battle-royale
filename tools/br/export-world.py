@@ -130,6 +130,7 @@ IMPASSABLE_BEHAVIORS = {name for name in MB if name.startswith("MB_IMPASSABLE")}
 
 CUT_TREE_GFX = "OBJ_EVENT_GFX_CUTTABLE_TREE"
 ROCK_SMASH_GFX = "OBJ_EVENT_GFX_BREAKABLE_ROCK"
+BOULDER_GFX = "OBJ_EVENT_GFX_PUSHABLE_BOULDER"
 
 DIR_MAP = {"up": "north", "down": "south", "left": "west", "right": "east"}
 
@@ -270,7 +271,7 @@ def classify_warp_kind(src_folder, dest_map_id, maps_by_id):
 
 
 def rle_encode(cells):
-    """Run-length encode a flat list of small ints (a class 0-9, a height 0-15) as
+    """Run-length encode a flat list of small ints (a class 0-10, a height 0-15) as
     '<count>x<class>;<count>x<class>;...' -- compact, ASCII, trivially
     decodable, and gzip loves the repetition even before this pass."""
     out = []
@@ -368,6 +369,12 @@ def export():
                 ox, oy = oe["x"], oe["y"]
                 if 0 <= ox < w and 0 <= oy < h:
                     classes[oy * w + ox] = 9
+            # Strength boulders are back on the maps (#7): class 10 at the cell they start
+            # on, which a bot crosses only with somebody who could push it (world.ts).
+            elif oe.get("graphics_id") == BOULDER_GFX:
+                ox, oy = oe["x"], oe["y"]
+                if 0 <= ox < w and 0 <= oy < h:
+                    classes[oy * w + ox] = 10
 
         # seams
         seams = []
