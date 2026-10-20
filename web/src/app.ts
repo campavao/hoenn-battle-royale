@@ -4396,6 +4396,12 @@ function wirePlayScreen(emu: Emulator, symbols: Map<string, number> | undefined,
     world: () => worldOn,
   });
   fieldView.attach();
+  // Both trainers beside a trainer battle, with their names and balls left (#18).
+  if (symbols) {
+    const view = fieldView;
+    // Its own chunk, as the phone's UI is: main.js has a budget (vite.config.ts).
+    void import('./ui/sides').then(({ SidesView }) => new SidesView($('#sides') as HTMLElement, emu, (n) => symbols.get(n), () => view.placement).attach());
+  }
   // Dev only: where the page walks the ghosts, for the e2e (POK-323, world-moves.spec.ts).
   if (import.meta.env.DEV) Object.assign((window as unknown as { __hbr?: object }).__hbr ?? {}, { field: fieldView });
   // Tapping the map (touch.ts). Needs the symbol table: without it there is no reading

@@ -1,0 +1,31 @@
+# battle-sides: who is fighting, for the page to park both trainers beside the battle with
+# their names and balls left (Cam's 2026-10-19 play-test, #18; br_battle.h struct BrSides,
+# web/src/ui/sides.ts).
+#
+# bot-pic.txt's fight: seat 31, named BOT, wearing skin 15 (LASS, pic 77), against us,
+# CAM, in BRENDAN's clothes (pic 71). Filled as the opponent's picture is drawn.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer 1F 03 BC C9 CE 01 15 01 05 13 00 13 00 00 01 00 23 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+mailsend gBrMailbox 23 gDecompressionBuffer 106
+wait 10
+# seat 31's ghost, skin 15 (the last byte), then its CHALLENGE
+pokebytes gDecompressionBuffer 1F 01 00 09 14 00 08 00 01 01 0F
+mailsend gBrMailbox 2 gDecompressionBuffer 11
+pokebytes gDecompressionBuffer 1F 00 00 00
+mailsend gBrMailbox 5 gDecompressionBuffer 4
+wait 300
+expect u8 gBrBotFight+2 1
+expect u8 gBrSides+0 77
+expect u8 gBrSides+1 71
+# B O T, EOS
+expect u16 gBrSides+2 0xC9BC
+expect u16 gBrSides+4 0xFFCE
+# C A M, EOS
+expect u16 gBrSides+18 0xBBBD
+expect u16 gBrSides+20 0xFFC7
+expect u16 gBrSides+26 1
+shot intro
+say battle sides ok

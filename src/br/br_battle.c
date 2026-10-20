@@ -45,6 +45,7 @@
 
 EWRAM_DATA struct BrBattle gBrBattle = {0};
 EWRAM_DATA u8 gBrSeeThrough[2] = {0};
+struct BrSides gBrSides;
 // How long BrBattle_TickSeeThrough has held the count past a battle. At most
 // SEE_THROUGH_HOLD_MAX: a screen after a battle that never loads palette 0 of its own
 // (an evolution) would otherwise be keyed for as long as it is up. The flash was 8 frames.
@@ -873,13 +874,31 @@ bool8 BrBattle_RecordedWildOpponent(void)
     return RecordedBattle_IsSpectateLive();
 }
 
+static const u8 sText_Trainer1Name[] = _("{B_TRAINER1_NAME}");
+static const u8 sText_LinkOpponent1Name[] = _("{B_LINK_OPPONENT1_NAME}");
+
+static void NoteSides(u32 foePic)
+{
+    u8 name[64];
+
+    gBrSides.foePic = foePic;
+    gBrSides.minePic = BrSkin_MyPic(gSaveBlock2Ptr->playerGender == MALE ? TRAINER_PIC_BRENDAN : TRAINER_PIC_MAY);
+    BattleStringExpandPlaceholders(gBattleTypeFlags & BATTLE_TYPE_LINK ? sText_LinkOpponent1Name : sText_Trainer1Name, name);
+    name[sizeof(gBrSides.foeName) - 1] = EOS;
+    StringCopy(gBrSides.foeName, name);
+    StringCopyN(gBrSides.mineName, gSaveBlock2Ptr->playerName, PLAYER_NAME_LENGTH);
+    gBrSides.mineName[PLAYER_NAME_LENGTH] = EOS;
+    gBrSides.serial++;
+}
+
 u32 BrBattle_OpponentPic(u32 pic)
 {
     u8 seat = OpponentSeat();
 
-    if (seat >= BR_MAX_SEATS || !gBrSeats[seat].present)
-        return pic;
-    return BrSkin_Pic(gBrSeats[seat].skin, pic);
+    if (seat < BR_MAX_SEATS && gBrSeats[seat].present)
+        pic = BrSkin_Pic(gBrSeats[seat].skin, pic);
+    NoteSides(pic);
+    return pic;
 }
 
 u8 BrBattle_FoeOf(u8 battler, u8 target)

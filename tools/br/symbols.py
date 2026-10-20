@@ -22,6 +22,8 @@ import sys
 
 ENGINE_SYMBOLS = [
     "gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPlayerParty", "gPlayerPartyCount", "gEnemyParty",
+    # The opponent's balls beside a trainer battle (web/src/ui/sides.ts, #18).
+    "gEnemyPartyCount",
     "gMain", "gObjectEvents", "gPlayerAvatar", "gSprites", "gTasks",
     "gBattleTypeFlags", "gBattleWeather", "gBattleOutcome", "gBattleMainFunc", "gBattlerControllerFuncs",
     "gLinkPlayers", "gBlockRecvBuffer", "gBlockSendBuffer", "gWirelessCommType",
