@@ -130,6 +130,22 @@ u8 BrSkin_AvatarGender(u8 gfx)
     return MALE;
 }
 
+// IWRAM, where it fit in padding: EWRAM has no byte to spare, and this only carries the
+// state across the one spawn from Keep to the read.
+static u8 sMyAvatarState;
+
+void BrSkin_KeepMyAvatarState(void)
+{
+    sMyAvatarState = gPlayerAvatar.flags
+                   & (PLAYER_AVATAR_FLAG_MACH_BIKE | PLAYER_AVATAR_FLAG_ACRO_BIKE | PLAYER_AVATAR_FLAG_SURFING);
+}
+
+u8 BrSkin_MyAvatarState(void)
+{
+    // Only a sprite pret's table does not know reaches here: our look's, whichever it is.
+    return sMyAvatarState != 0 ? sMyAvatarState : PLAYER_AVATAR_FLAG_ON_FOOT;
+}
+
 u8 BrSkin_MyAnim(struct ObjectEvent *objectEvent, u8 anim, u8 standard)
 {
     if (objectEvent->isPlayer && objectEvent->graphicsId == BrGhosts_WalkGraphic(gBrMySkin) && BrSkin_MyLookIsNpc())
