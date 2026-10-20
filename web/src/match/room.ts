@@ -122,7 +122,11 @@ export function startNote(view: RoomView): string {
  *  whole point. */
 export const BOT_FILL = 8;
 
-export const AUTO_START_MS = 10_000; // "for now": a room starts 10s after hosting, or once 2+ seats
+/** How long a room that starts itself counts (Cam's 2026-10-19 play-test: "quick match
+ *  should take like 60 seconds before it starts... right now it feels a little too
+ *  automatic and abrupt"). It was 10 s. Any key or tap on the room starts it again
+ *  (StartCountdown.bump). */
+export const AUTO_START_MS = 60_000;
 
 /** A room's count to its own start (quick play, the daily), and the once-a-second redraw
  *  that shows STARTS IN ticking: one count at a time, and the two let go of together
@@ -134,6 +138,7 @@ export class StartCountdown {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private tick: ReturnType<typeof setInterval> | null = null;
   private due: number | null = null;
+  private go: (() => void) | null = null;
 
   constructor(
     private readonly opts: {
@@ -164,6 +169,7 @@ export class StartCountdown {
    *  still on it. */
   arm(go: () => void): void {
     this.cancel();
+    this.go = go;
     this.due = this.now() + this.opts.ms;
     this.timer = setTimeout(() => {
       this.cancel();
@@ -171,6 +177,14 @@ export class StartCountdown {
       this.opts.redraw();
     }, this.opts.ms);
     this.tick = setInterval(() => this.opts.redraw(), 1000);
+  }
+
+  /** The player is busy on the room: a running count starts again from the top. Nothing
+   *  when no count runs, so a press in a hosted room arms nothing. */
+  bump(): void {
+    if (this.go === null) return;
+    this.arm(this.go);
+    this.opts.redraw();
   }
 
   /** Stop counting: a match started some other way, or this page is no longer the one
@@ -181,6 +195,7 @@ export class StartCountdown {
     this.timer = null;
     this.tick = null;
     this.due = null;
+    this.go = null;
   }
 }
 

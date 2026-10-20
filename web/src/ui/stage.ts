@@ -74,6 +74,10 @@ export interface DrawnScreen {
    *  Z rather than pressing A. */
   char?(key: string): boolean;
   look?(): Look;
+  /** The player did something here: a key, a typed letter or a tap, whatever it then did.
+   *  The room's count to its own start begins again on it (Cam's 2026-10-19 play-test:
+   *  "if the user is messing with controls the timer should reset"). */
+  touched?(): void;
 }
 
 /** The scale a stage shows at: whole pixels once it can afford two, the picture's own
@@ -265,6 +269,7 @@ export class Stage {
       // Beside the game the keyboard is the game's: a button left focused would take the
       // next Space as a second click.
       if (this.look() === 'dock') (root.ownerDocument.activeElement as HTMLElement | null)?.blur?.();
+      this.screen?.touched?.();
       w.onPress?.();
       // What a tap changed is drawn: a key typed into an entry, a card opened.
       this.redraw();
@@ -411,6 +416,7 @@ export class Stage {
    *  while one is showing: the game underneath must not hear it). */
   key(k: GbaKey): boolean {
     if (!this.active) return false;
+    this.screen?.touched?.();
     if (this.screen?.key?.(k, this.selected())) {
       this.paintNow();
       return true;
@@ -442,6 +448,7 @@ export class Stage {
    *  no such screen up, and the key goes on to the game's own keyboard map. */
   char(key: string): boolean {
     if (!this.active || !this.screen?.char) return false;
+    this.screen.touched?.();
     const took = this.screen.char(key);
     if (took) this.paintNow();
     return took;

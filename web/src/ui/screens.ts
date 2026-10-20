@@ -217,6 +217,8 @@ export interface RoomModel {
   onSeat(seat: number): void;
   onKick(seat: number): void;
   onCloseCard(): void;
+  /** Any key or tap on the room: the count to its own start begins again. */
+  onTouched?(): void;
 }
 
 /** What the room screen puts under its seats: the note, the host's options, and the
@@ -252,6 +254,9 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
   /** Which page of the seats is showing, when the room has more people than cells. */
   let page = 0;
   return {
+    touched() {
+      model().onTouched?.();
+    },
     back() {
       const m = model();
       if (m.card) m.onCloseCard();
@@ -341,13 +346,13 @@ export function roomScreen(model: () => RoomModel): DrawnScreen {
 
 /** What a control looks like beside its words (Cam's 2026-10-14 play-test, POK-345:
  *  "we can also make it more visual"). The words stay, since they are what the control
- *  says when pressed; the picture is the reading at a glance.
- *  - `seats`: MAX's seats, the humans in blue, the bots FILL would deal in gray.
+ *  says when pressed; the picture is the reading at a glance. MAX has none: its seat bar
+ *  read as an odd icon (Cam's 2026-10-19 play-test, "I don't think this makes any
+ *  sense"), and the seats above it already show who MAX makes room for.
  *  - `toggle`: a switch, on or off.
  *  - `level`: rising bars, `at` of `of` lit: TEXT's pace, or a timer's length, with a
  *    clock in front of a timer's words. */
 export type OptionVisual =
-  | { kind: 'seats'; humans: number; bots: number; max: number }
   | { kind: 'toggle'; on: boolean }
   | { kind: 'level'; at: number; of: number; clock?: boolean };
 
@@ -358,14 +363,12 @@ export interface OptionSpec {
   visual?: OptionVisual;
 }
 
-const SEATS_W = 40;
 const TOGGLE_W = 15;
 const LEVEL_STEP = 4;
 const CLOCK_W = 7;
 
 /** How wide a control's picture is, in the font's pixels. */
 export function visualWidth(v: OptionVisual): number {
-  if (v.kind === 'seats') return SEATS_W;
   if (v.kind === 'toggle') return TOGGLE_W;
   return v.of * LEVEL_STEP - 1;
 }
@@ -384,32 +387,6 @@ export function optionLayout(
   const vw = visualWidth(visual);
   const visualX = x + w - vw;
   return { clockX: clock ? x : null, textX, text: fitText(label, visualX - 4 - textX), visualX };
-}
-
-/** The seat bar: one block a seat when there is room for them, a split bar when not
- *  (MAX reaches 30). Empty seats are a line along the bottom. */
-function paintSeats(c: EmeraldCanvas, x: number, y: number, v: Extract<OptionVisual, { kind: 'seats' }>): void {
-  const max = Math.max(1, v.max);
-  const humans = Math.min(v.humans, max);
-  const bots = Math.min(v.bots, max - humans);
-  const top = y + 3;
-  const h = 8;
-  const seg = Math.floor((SEATS_W + 1) / max);
-  if (seg >= 3) {
-    // Whole blocks, flush with the cell's right edge like every other picture.
-    const left = x + SEATS_W - (max * seg - 1);
-    c.fillRect({ x: left, y: top + h - 1, w: max * seg - 1, h: 1 }, TEXT_GRAY.fg);
-    for (let i = 0; i < humans + bots; i++) {
-      c.fillRect({ x: left + i * seg, y: top, w: seg - 1, h }, i < humans ? TEXT_BLUE.fg : TEXT_GRAY.fg);
-    }
-    return;
-  }
-  c.fillRect({ x, y: top + h - 1, w: SEATS_W, h: 1 }, TEXT_GRAY.fg);
-  // A human is never thinner than two pixels: one of thirty is still somebody.
-  const hw = humans > 0 ? Math.max(2, Math.round((SEATS_W * humans) / max)) : 0;
-  const bw = Math.max(0, Math.round((SEATS_W * (humans + bots)) / max) - hw);
-  c.fillRect({ x, y: top, w: hw, h }, TEXT_BLUE.fg);
-  c.fillRect({ x: x + hw, y: top, w: bw, h }, TEXT_GRAY.fg);
 }
 
 /** A switch: the knob right on blue for on, left on gray for off. */
@@ -466,8 +443,7 @@ export function paintOptions(
     c.drawText(lay.text, lay.textX, r.y, TEXT_DARK);
     if (o.visual && lay.visualX !== null) {
       const v = o.visual;
-      if (v.kind === 'seats') paintSeats(c, lay.visualX, r.y, v);
-      else if (v.kind === 'toggle') paintToggle(c, lay.visualX, r.y, v.on);
+      if (v.kind === 'toggle') paintToggle(c, lay.visualX, r.y, v.on);
       else paintLevel(c, lay.visualX, r.y, v.at, v.of);
     }
     return { rect: r, text: o.label, id: o.id, parent, onPress: o.onPress, cursor: { x: r.x, y: r.y + 2 } };
@@ -539,6 +515,11 @@ export interface SheetModel {
   status: string;
   /** SAFARI / SAFE: PLACE · 8 left · 1:23, while a match is on. */
   strip: string | null;
+  /** The chip under it, in the fog's red, one line each (Cam's 2026-10-19 play-test):
+   *  where the legendary is or who has it (match/legends.ts), and the lead's HP while
+   *  the fog is on us -- which the ROM's corner said, until a desktop took the corner off
+   *  the map for sitting on the people round the player. Empty, no chip. */
+  chips?: string[];
   note: string;
   seats: RoomSeat[];
   card: TrainerCard | null;
@@ -692,6 +673,17 @@ export function sheetScreen(model: () => SheetModel): DrawnScreen {
         paintTitle(c, fitText(m.strip, W - 8), y);
         widgets.push({ rect: { x: 0, y, w: W, h: ROW_H }, text: m.strip, id: 'match-strip', cls: 'room-code', cursor: null });
         y += ROW_H;
+      }
+      const chips = m.chips ?? [];
+      if (chips.length > 0) {
+        const frame = { x: 0, y: y + 2, w: W, h: chips.length * ROW_H + 8 };
+        c.drawFrame(frame);
+        chips.forEach((chip, i) => {
+          const at = frame.y + 4 + i * ROW_H;
+          c.drawTextCentred(fitText(chip, W - 16), W / 2, at, TEXT_RED);
+          widgets.push({ rect: { x: 0, y: at, w: W, h: ROW_H }, text: chip, id: `match-chip-${i}`, cls: 'room-code', cursor: null });
+        });
+        y = frame.y + frame.h;
       }
       y += 4;
 

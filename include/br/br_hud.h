@@ -132,6 +132,10 @@
 #define BR_HUD_KIND_INTRO 3
 #define BR_HUD_KIND_WIN 4
 #define BR_HUD_KIND_LOSE 5
+// The fog moving and a legendary appearing: the two lines a player has to act on, in the
+// fog's red so they stand apart from the rest (Cam's 2026-10-19 play-test: "because of how
+// noisy the bottom is, I've trained myself not to look at it").
+#define BR_HUD_KIND_ALERT 6
 
 struct BrHudLine
 {
@@ -173,7 +177,7 @@ struct BrHud
     /* 0x14C */ struct BrHudLine box;                 // 44 bytes, the bottom box
     /* 0x178 */ u8 boxFrames;   // frames the box has left, 0 = none
     /* 0x179 */ u8 winBox;      // window id, WINDOW_NONE while absent
-    /* 0x17A */ u8 noCorner;    // PAGE WRITES: 1 while the page draws the corner's lines itself (a phone)
+    /* 0x17A */ u8 noCorner;    // PAGE WRITES: BR_HUD_PAGE_* -- the page draws the corner's lines itself
     /* 0x17B */ u8 noBattleBox; // PAGE WRITES: 1 while the page draws the battle's menus itself (a phone)
     /* 0x17C */
 };
@@ -220,16 +224,25 @@ void BrHud_WindowAdded(u8 windowId);
 // Queue a system line for the ticker (EOS-terminated Gen 3 text, cut at 40 bytes).
 // The oldest queued line goes if the queue is full.
 void BrHud_Say(const u8 *text);
+// The same, as a BR_HUD_KIND_ALERT line.
+void BrHud_Alert(const u8 *text);
 // A held line: shown at once and kept until BrHud_Release; queued news waits behind
 // it (the Kanto rule: a held line outranks the feed).
 void BrHud_Hold(const u8 *text);
 void BrHud_Release(void);
-// The page draws the corner's lines and the map's sign itself (gBrHud.noCorner, a phone):
-// map_name_popup.c then shows no popup of its own.
+// The page draws the corner's lines and the map's sign itself (gBrHud.noCorner is
+// BR_HUD_PAGE_SIGNS, a phone): map_name_popup.c then shows no popup of its own.
+// BR_HUD_PAGE_CORNER is a desktop's: its sheet beside the game says the count and the
+// clock, so the corner comes off the map (it sat over the people round the player,
+// 2026-10-19 play-test), and the ROM still shows the map's name as it arrives.
+#define BR_HUD_PAGE_SIGNS 1
+#define BR_HUD_PAGE_CORNER 2
 bool8 BrHud_PageSigns(void);
 // The bottom box: a two-line message over the field for 90 frames, above the ticker
 // and out of the way of both it and the corner. CHAR_NEWLINE splits the two lines.
 void BrHud_Box(const u8 *text);
+// The same, in BR_HUD_KIND_ALERT's red: the fog closing in.
+void BrHud_AlertBox(const u8 *text);
 // StringCopy for a line built on the stack from names out of a table: copies src up to
 // its EOS or to `last`, the buffer's last byte, and ends it there either way. Returns the
 // EOS, as StringCopy does. A name one letter longer than the table has today would

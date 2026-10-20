@@ -10,6 +10,15 @@ poke u16 gBrMailbox+0x0C 1
 wait 30
 expect u8 gBrMatch 4
 wait 900
+# The team it sends the room as it goes (POK-243) is each mon as it is: the watchers'
+# Hall of Fame draws their parade from these rows, and with no personality and no OT ID
+# on them every mon came out shiny (HBR-22). This TREECKO's personality is 0x0B00B17C,
+# its OT ID 0xB2F90000: the visible half (0) goes, the hidden half stays home, and it is
+# not shiny, so the flags are BR_MON_ROM_MOVES alone.
+expectmsg 7 u16 28 0
+expectmsg 7 u16 30 0xB17C
+expectmsg 7 u16 32 0x0B00
+expectmsg 7 u8 57 2
 shot parade
 tap A
 wait 300

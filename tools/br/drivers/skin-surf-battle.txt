@@ -1,0 +1,95 @@
+# skin-surf-battle: a battle on the water leaves us surfing, and the shore lets us off.
+# Cam's 2026-10-20 report: "if you exit a battle on water, you can't exit the water to
+# go back on land". The way back from a battle rebuilds the avatar's state from its
+# sprite (SetPlayerAvatarObjectEventIdAndObjectId), and with an NPC look every state
+# wears the one walking sprite, so it came back ON_FOOT on the sea: no blob, and the
+# shore an elevation it could not climb.
+#
+# skin-field's spot and look: ROUTE 104 (map 0:19) at (33,22), the sea north of
+# (36,22), a PICNICKER with the boot's test mon. win-wild-fight's patch, moved onto
+# the water at (36,20).
+wait 30
+poke u8 gBrMatch 2
+poke u8 gBrMySkin 7
+pokebytes gBrMailbox+0x2018 81 01 00 13 21 00 16 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 19
+expect u8 gObjectEvents+5 32
+poke u16 *gSaveBlock1Ptr+0x496 259
+tap SELECT
+wait 60
+hold RIGHT 40
+wait 30
+hold UP 24
+wait 150
+expect u16 *gSaveBlock1Ptr+2 21
+expectbits u8 gPlayerAvatar 0x0A 0x08
+shot surfing
+# one patch, one tile further out (coordinates carry the map's +7)
+pokebytes gBrPatch+16 2B 00
+pokebytes gBrPatch+32 1B 00
+poke u8 gBrPatch+4 1
+hold UP 24
+wait 600
+expect u16 gBattleTypeFlags 4
+tap B
+wait 300
+tap B
+wait 300
+shot menu
+# RUN, and no roll: ours outruns theirs
+poke u16 gBattleMons+0x06 999
+poke u16 gBattleMons+0x5E 1
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 200
+tap A
+wait 400
+shot back
+expect u32 gMain+4 CB2_Overworld+1
+expect u16 *gSaveBlock1Ptr+2 20
+# Still surfing, still a PICNICKER
+expectbits u8 gPlayerAvatar 0x08 0x08
+expect u8 gObjectEvents+5 32
+# Two tiles south is the shore: on foot there
+hold DOWN 24
+wait 60
+hold DOWN 24
+wait 150
+shot ashore
+expect u16 *gSaveBlock1Ptr+2 22
+expectbits u8 gPlayerAvatar 0x08 0x00
+expect u8 gObjectEvents+5 32
+# The bikes the same way: on the MACH BIKE, a patch one tile west at (35,22), RUN again
+tap SELECT
+wait 60
+expectbits u8 gPlayerAvatar 0x02 0x02
+pokebytes gBrPatch+16 2A 00
+pokebytes gBrPatch+32 1D 00
+poke u8 gBrPatch+4 1
+hold LEFT 12
+wait 600
+expect u16 gBattleTypeFlags 4
+tap B
+wait 300
+tap B
+wait 300
+poke u16 gBattleMons+0x06 999
+poke u16 gBattleMons+0x5E 1
+tap DOWN
+wait 10
+tap RIGHT
+wait 10
+tap A
+wait 200
+tap A
+wait 400
+shot biking
+expect u32 gMain+4 CB2_Overworld+1
+expect u16 *gSaveBlock1Ptr+0 35
+expectbits u8 gPlayerAvatar 0x02 0x02
+expect u8 gObjectEvents+5 32
+say skin surf battle ok

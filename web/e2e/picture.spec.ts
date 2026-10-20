@@ -410,10 +410,14 @@ test("on a desktop the fog covers the ROM's wide band, every column of it, as it
 });
 
 const ROUTE_120 = { id: 'MAP_ROUTE120', ref: '0:35' };
+const WEATHER_SUNNY = 2;
 const WEATHER_SUNNY_CLOUDS = 1;
 
 // The clouds blend too, but they sit on the map (Route 120's three, field_weather_effect.c
-// sCloudSpriteMapCoords): on the camera's offset, marked, so the core draws each once
+// sCloudSpriteMapCoords) -- under BG2, as Emerald draws them, so they show only as
+// reflections where the bottom layer is see-through: the pond at x 24..31, y 65..78. The
+// test lands beside it (on land at 6,70 nothing of a cloud is ever on screen, and the
+// test passed on the corner's clock alone). They are on the camera's offset, marked, so the core draws each once
 // where it is -- not 320 columns either side as it does a weather grid, nor 256 rows up
 // and down. Every pixel the clouds change is under a cloud the OAM has.
 test("on a desktop Route 120's clouds are drawn once each, where the OAM puts them", async ({ browser }) => {
@@ -422,7 +426,7 @@ test("on a desktop Route 120's clouds are drawn once each, where the OAM puts th
   const ctx = await browser.newContext({ viewport: DESKTOP });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_120.id},6,70&rom=${romHashParam()}`);
+    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_120.id},27,71&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await expect
@@ -436,12 +440,18 @@ test("on a desktop Route 120's clouds are drawn once each, where the OAM puts th
     const pic = await grab(page);
     expect({ width: pic.width, height: pic.height }, "the core draws the ROM's wide band").toEqual({ width: 240 + 2 * WIDE.side, height: 160 + 2 * WIDE.rows });
     // Every value each pixel takes without the clouds, the map's own animation included.
+    // Route 120 lands in its clouds already: clear them first.
+    const weather = (w: number) => page.evaluate(([at, v]) => (window as unknown as PicWindow).__hbr.emu.write(at, v, 8), [sym.gWeather + WEATHER_NEXT, w] as const);
+    await weather(WEATHER_SUNNY);
+    await expect.poll(() => page.evaluate((at) => (window as unknown as PicWindow).__hbr.emu.read(at, 8), sym.gWeather + WEATHER_CURR), { timeout: 10_000 }).toBe(WEATHER_SUNNY);
+    await page.waitForTimeout(3_000);
     const all: Rect = { x: -pic.left, y: -pic.top, w: pic.width, h: pic.height };
-    await learn(page, 'clear', all, 120);
-    await page.evaluate(([at, w]) => (window as unknown as PicWindow).__hbr.emu.write(at, w, 8), [sym.gWeather + WEATHER_NEXT, WEATHER_SUNNY_CLOUDS] as const);
+    await learn(page, 'clear', all, 240);
+    await weather(WEATHER_SUNNY_CLOUDS);
     await expect.poll(() => page.evaluate((at) => (window as unknown as PicWindow).__hbr.emu.read(at, 8), sym.gWeather + WEATHER_CURR), { timeout: 10_000 }).toBe(WEATHER_SUNNY_CLOUDS);
     await page.waitForTimeout(3_000);
-    // Over 30 frames: the pixels no clear frame had, and the semi-transparent OAM entries'
+    // Until a cloud has crossed the pond (they drift a pixel every 2 frames and wrap every
+    // 512), at least 30 frames and at most 1200: the pixels no clear frame had, and the semi-transparent OAM entries'
     // boxes where the core draws them (the side table's true place for a marked one).
     const seen = await page.evaluate(([k, g, hiAt, n]) => new Promise<{ strange: number; outside: string[]; boxes: number }>((resolve) => {
       const w = window as unknown as PicWindow & { __seen: Record<string, Set<number>[]> };
@@ -466,11 +476,12 @@ test("on a desktop Route 120's clouds are drawn once each, where the OAM puts th
         if (got > 0) {
           for (let i = 0; i < px.length; i++) {
             if (learnt[i].has(px[i] >>> 0)) continue;
-            strange++;
             const x = (i % p.width) - p.left;
             const y = Math.floor(i / p.width) - p.top;
             const inBox = (bs: number[][]) => bs.some(([l, t, r, b]) => x >= l && x < r && y >= t && y < b);
-            if (!inBox(boxes) && !inBox(people) && !inBox([HUD])) outside.add(`${x},${y}`);
+            if (inBox([HUD])) continue; // the clock is not a cloud
+            strange++;
+            if (!inBox(boxes) && !inBox(people)) outside.add(`${x},${y}`);
           }
         }
         const oam = emu.bytes(g + 0x38, 128 * 8);
@@ -493,7 +504,7 @@ test("on a desktop Route 120's clouds are drawn once each, where the OAM puts th
           (blend ? boxes : peopleNow).push([left - 1, top - 1, left + bw + 1, top + bh + 1]);
         }
         people = [...people, ...peopleNow];
-        if (++got > n) {
+        if (++got > 1200 || (got > n && strange > 0)) {
           off();
           resolve({ strange, outside: [...outside].slice(0, 20), boxes: boxes.length });
         }

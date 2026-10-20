@@ -338,18 +338,19 @@ bool8 BrMoves_AskWaiting(void)
     return AskPending() && FindAsk(&slot, &move, TRUE);
 }
 
-// A ten-letter name and this make 37 of the ticker's 40.
-static const u8 sText_WantsMove[] = _(" can learn a move (POKéMON)");
+// A ten-letter name and this make 39 of the ticker's 40. It said "can learn a move
+// (POKéMON)", which read as a placeholder left in (Cam's 2026-10-19 play-test).
+static const u8 sText_WantsMove[] = _(" has a new move! Open POKéMON");
 
+// By its species as it is when the line goes up (the play-test saw "CACNEA can learn a
+// move" with a CACTURNE in the party), not its nickname.
 static void SayAsk(u8 slot)
 {
     u8 line[BR_HUD_LINE_MAX + 2];
     u8 *last = line + BR_HUD_LINE_MAX;
-    u8 name[POKEMON_NAME_LENGTH + 1];
     u8 *p;
 
-    GetMonNickname(&gPlayerParty[slot], name);
-    p = BrHud_Append(line, last, name);
+    p = BrHud_Append(line, last, gSpeciesNames[GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL)]);
     BrHud_Append(p, last, sText_WantsMove);
     BrHud_Say(line);
 }

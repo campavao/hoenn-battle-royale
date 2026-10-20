@@ -29,6 +29,9 @@ mailsend gBrMailbox 33 gDecompressionBuffer+0x400 8
 waitfor u8 gBrMatch 4 120
 wait 330
 shot mon-1
+# ZIGGY first, in its own colours: a row without BR_MON_SHINY is never shiny (HBR-22, the
+# play-test's parade was all shiny). OBJ palette 1 is its pic's; colour 4 is 0x29BF shiny.
+expect u16 0x05000228 0x42E9
 wait 200
 shot mon-2
 wait 400

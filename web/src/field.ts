@@ -370,6 +370,16 @@ export function fadeOf(word4: number, word6: number): { y: number; color: number
   return { y: (word4 >> 6) & 31, color: word6 & 0x7fff, active: (word6 & 0x8000) !== 0 };
 }
 
+/** Whether the field past the picture is dimmed (#key-dim): under a keyed battle, and
+ *  off the field at all -- a menu as much as a fight. The party screen, the summary and
+ *  the bag sat over the map lit, the battle over it dimmed: two presentations of one
+ *  thing (Cam's 2026-10-19 play-test, #33). `c` is the state the picture on screen was
+ *  drawn from. Going in and coming out the dim changes while the screen is black (the
+ *  menu's fade, held across its load by holdFade), so the fades still run over the map. */
+export function fieldDimmed(c: { onField: boolean } | null, keyed: boolean): boolean {
+  return keyed || (c !== null && !c.onField);
+}
+
 /** A warp fades to black, the new map loads with the struct reset to y = 0 while the
  *  screen is still black, and a dozen frames later the fade-in starts from 16. Read
  *  literally the field would flash the new map into that gap, so the fade is held at
@@ -781,7 +791,8 @@ export interface FieldDeps {
    *  the picture over, the picture itself takes the filter (not on Safari). */
   keyLayer?: HTMLCanvasElement | null;
   /** Over the field and under the picture, the whole field: dims the map a see-through
-   *  battle shows through its keyed backdrop, shown while the picture is keyed. */
+   *  battle shows through its keyed backdrop, shown while the picture is keyed -- and
+   *  off the field at all, a menu as much as a fight (fieldDimmed). */
   keyDim?: HTMLElement | null;
 }
 
@@ -1085,7 +1096,7 @@ export class FieldView {
     const cur = mid !== undefined && this.deps.emu.read(mid, 8) !== 0 && this.prev ? this.prev : this.read();
     if (this.prev) this.draw(this.prev);
     this.clip(cur?.onField ?? false, this.prev);
-    this.seeThrough();
+    this.seeThrough(this.prev);
     if (cur) {
       this.hold = holdFade(this.prev, cur, this.hold);
       // The ring's bleed: the timer reloads the frame it bites. The whole box shakes,
@@ -1103,22 +1114,28 @@ export class FieldView {
   /** Whether the picture is keyed, by the copy or the filter, as last set. */
   private keyed = false;
 
+  /** Whether the field is dimmed (fieldDimmed), as last set. */
+  private dimmed = false;
+
   /** Ask the ROM for a see-through battle, or not, and key the picture while one draws:
-   *  gBrSeeThrough[0] is the page's, [1] the ROM's count of frames left (br_battle.h). */
-  private seeThrough(): void {
+   *  gBrSeeThrough[0] is the page's, [1] the ROM's count of frames left (br_battle.h).
+   *  And dim the field under it, or under a menu: `drawn` is the state the picture on
+   *  screen was drawn from. */
+  private seeThrough(drawn: Camera | null): void {
     const base = this.sym('gBrSeeThrough');
-    if (base === undefined) return;
     const want = this.deps.seeThrough?.() ?? false;
     const { emu, lcd } = this.deps;
-    emu.write(base, want ? 1 : 0, 8);
-    const keyed = want && emu.read(base + 1, 8) > 0;
+    if (base !== undefined) emu.write(base, want ? 1 : 0, 8);
+    const keyed = base !== undefined && want && emu.read(base + 1, 8) > 0;
+    const dim = fieldDimmed(drawn, keyed);
+    if (dim !== this.dimmed && this.deps.keyDim) this.deps.keyDim.hidden = !dim;
+    this.dimmed = dim;
     const layer = keyed ? this.keyCopy() : false;
     if (keyed === this.keyed && layer === this.layered) return;
     this.keyed = keyed;
     this.layered = layer;
     const keyLayer = this.deps.keyLayer;
     if (keyLayer) keyLayer.hidden = !layer;
-    if (this.deps.keyDim) this.deps.keyDim.hidden = !keyed;
     lcd.style.visibility = layer ? 'hidden' : '';
     if (keyed && !layer) ensureSeeThroughFilter(lcd.ownerDocument);
     lcd.style.filter = keyed && !layer ? `url(#${SEE_THROUGH_FILTER})` : '';

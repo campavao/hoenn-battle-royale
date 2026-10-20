@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAILBOX } from './mailbox';
 import { BR_CONT_FLAG, BR_MSG, packSlot, reassembleSlots, unpackSlot, type BinarySlot } from './slots';
-import type { Msg, PackedMon } from './wire';
+import type { Msg, PackedMon, PartyMsg } from './wire';
 import { decode, PROTOCOL } from './wire';
 
 // Pack -> (simulate the ring) -> reassemble -> unpack, the same round trip a real
@@ -348,6 +348,28 @@ describe('a PackedMon row, as br_wire.h lays it out (POK-331 #1)', () => {
     const row = card.subarray(1 + 1 + 3 + 1); // seat, nameLen, 'MAX', count
     expect(row[55]).toBe(0x02);
     expect(Array.from(row.subarray(8, 12))).toEqual([1, 0, 7, 0]);
+  });
+
+  // The play-test: a watcher's Hall of Fame drew the champion's whole team shiny. The
+  // shine is the full OT ID's to decide and only its visible half is on the wire, so the
+  // champion's ROM says it in the flags byte, and the page carries it to the watcher's.
+  it("carries a ROM's shiny flag, its personality and its OT ID to the watcher's ROM", () => {
+    const shiny = romRow();
+    shiny[55] = 0x06; // BR_MON_ROM_MOVES | BR_MON_SHINY
+    shiny.set([0x39, 0x30], 26); // OT ID 12345's visible half
+    shiny.set([0x78, 0x56, 0x34, 0x12], 28); // personality 0x12345678
+    const payload = new Uint8Array(2 + 100 + 100);
+    payload.set([1, 2]);
+    payload.set(shiny, 2);
+    payload.set(romRow(), 102);
+    const reported = unpackSlot(BR_MSG.PARTY, payload) as { mons: PackedMon[] };
+    expect(reported.mons.map((m) => m.shiny)).toEqual([true, undefined]);
+    expect(reported.mons[0]).toMatchObject({ otId: 12345, personality: 0x12345678 });
+    const relayed = decode(JSON.stringify(reported)) as PartyMsg;
+    const toRom = reassembleSlots(packSlot({ t: 'party', seat: 1, mons: relayed.mons })).payload;
+    expect(Array.from(toRom.subarray(2 + 26, 2 + 32))).toEqual([0x39, 0x30, 0x78, 0x56, 0x34, 0x12]);
+    expect(toRom[2 + 55]).toBe(0x06);
+    expect(toRom[102 + 55]).toBe(0x02);
   });
 });
 

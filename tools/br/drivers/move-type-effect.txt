@@ -1,0 +1,69 @@
+# move-type-effect: the desktop's move menu says how a move lands (Cam's 2026-10-19
+# play-test: "the one part where you gain an advantage on mobile is that you can see the
+# type effectiveness on the moves"). pret's "TYPE/NORMAL" becomes "NORMAL ×0.5" in red,
+# "×0.25" in red, "×0" in grey, "×1" plain; a move that does no damage keeps pret's line.
+#
+# menu-byte's patch battle, the TESTMON's POUND (NORMAL) top left and LEER beside it, and the foe's types (gBattleMons[1].types, +0x58+0x21) poked to what each case
+# needs. The line is drawn again whenever the cursor lands on a move. gDisplayedStringBattle
+# holds it: "NORMAL", a space at [6], then for a coloured one the colour code FC 04 at
+# [7] with green 5 or red 7 at [9], and the × (B9) at [12].
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 11 14 00 09 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+pokebytes gBrPatch+16 1A 00
+pokebytes gBrPatch+32 10 00
+poke u8 gBrPatch+4 1
+tap LEFT
+wait 4
+tap LEFT
+wait 600
+expectge u8 gBattlersCount 2
+tap A
+wait 90
+tap A
+wait 90
+expect u8 gBrBattle+8 1
+# ROCK: POUND is ×0.5, in red
+pokebytes gBattleMons+0x79 05 05
+tap A
+wait 30
+expect u8 gBrBattle+8 2
+shot half
+expect u8 gDisplayedStringBattle+6 0x00
+expect u8 gDisplayedStringBattle+7 0xFC
+expect u8 gDisplayedStringBattle+8 0x04
+expect u8 gDisplayedStringBattle+9 7
+expect u8 gDisplayedStringBattle+12 0xB9
+expect u8 gDisplayedStringBattle+13 0xA1
+# LEER does no damage: pret's TYPE/ line, its T first
+tap RIGHT
+wait 10
+shot status
+expect u8 gDisplayedStringBattle 0xCE
+# ROCK and STEEL: ×0.25
+pokebytes gBattleMons+0x79 05 08
+tap LEFT
+wait 10
+shot quarter
+expect u8 gDisplayedStringBattle+9 7
+expect u8 gDisplayedStringBattle+16 0xA6
+# GHOST: ×0, no colour
+pokebytes gBattleMons+0x79 07 07
+tap RIGHT
+wait 10
+tap LEFT
+wait 10
+shot none
+expect u8 gDisplayedStringBattle+7 0xB9
+expect u8 gDisplayedStringBattle+8 0xA1
+# GRASS: ×1, no colour
+pokebytes gBattleMons+0x79 0C 0C
+tap RIGHT
+wait 10
+tap LEFT
+wait 10
+shot plain
+expect u8 gDisplayedStringBattle+7 0xB9
+expect u8 gDisplayedStringBattle+8 0xA2
+say move type effect ok

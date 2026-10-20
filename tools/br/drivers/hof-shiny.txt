@@ -1,0 +1,35 @@
+# hof-shiny: a watcher's Hall of Fame draws the champion's mon shiny exactly when their
+# ROM said it was (HBR-22). The play-test's parade was all shiny: the rows came with no
+# personality and no OT ID, and those two zeros are a shiny mon. The OT ID's hidden half
+# never crosses the wire, so the champion's ROM puts BR_MON_SHINY in the row's flags and
+# ours makes up a hidden half that shines to match. hof-watcher.txt is the same parade
+# with neither row flagged, and its ZIGGY in its own colours.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+# seat 1 placed two tiles east of us, wearing skin 4 (HIKER)
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 0E 00 0F 00 03 01 04
+poke u16 gBrMailbox+0x0C 1
+wait 10
+expect u8 gBrSeats+17 4
+# their party: TREKO and ZIGGY, the two TREECKO of hof-watcher.txt. ZIGGY is shiny on
+# its own ROM: OT ID 0x3039 visible, personality 0x12345678, flags BR_MON_SHINY
+pokebytes gDecompressionBuffer 01 02 15 01 0C 22 00 38 00 00 01 00 23 00 47 00 14 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 05 CE CC BF C5 C9
+copy gDecompressionBuffer+102 gDecompressionBuffer+2 100
+poke u8 gDecompressionBuffer+104 14
+pokebytes gDecompressionBuffer+128 39 30 78 56 34 12
+pokebytes gDecompressionBuffer+139 D4 C3 C1 C1 D3
+poke u8 gDecompressionBuffer+157 4
+mailsend gBrMailbox 7 gDecompressionBuffer 202
+wait 10
+# FAME: seat 1, named STEVEN, in a match
+poke u8 gBrMatch 2
+pokebytes gDecompressionBuffer+0x400 01 06 CD CE BF D0 BF C8
+mailsend gBrMailbox 33 gDecompressionBuffer+0x400 8
+waitfor u8 gBrMatch 4 120
+wait 330
+shot mon-1
+# ZIGGY, shiny: OBJ palette 1 is its pic's, and colour 4 is 0x42E9 when it is not
+expect u16 0x05000228 0x29BF
+waitfor u8 gBrMatch 5 1800
+say hof shiny ok

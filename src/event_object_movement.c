@@ -1742,6 +1742,9 @@ void SpawnObjectEventsOnReturnToField(s16 x, s16 y)
 {
     u8 i;
 
+#if BR
+    BrSkin_KeepMyAvatarState();
+#endif
     ClearPlayerAvatarInfo();
     for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
     {
