@@ -164,7 +164,7 @@ bool8 BrEvent_NoteHolds(u16 key, u16 species)
     u8 i;
 
     if ((key & 0xF000) != BR_EVENT_KEY_BASE || gBrEvents.seed != gBrMatch.seed
-        || species == SPECIES_NONE || species >= NUM_SPECIES)
+        || species == SPECIES_NONE || species >= NUM_SPECIES || BrLegend_Is(species))
         return FALSE;
     for (i = 0; i < BR_EVENT_MAX; i++)
     {
