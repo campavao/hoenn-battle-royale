@@ -219,10 +219,12 @@ out, and one that comes in waits as it would in a menu.
   late joiner gets the marks with the rest of the catch-up. The placed NPC is a trader on
   the cell past the pieces: A on him, pick any one of yours, and he swaps it for a rare
   the event did not drop, at your rung. Not a fainted one, and what it held goes back to
-  your bag. He trades once, with whoever gets to him first, and then leaves every map:
-  that trade's `pickup` of key `0xB000 | n << 4 | 15` uses him up for the room, and a
-  late joiner's catch-up hands the event back without him. He keeps what he is given
-  (not POK-294's ball at your feet, which would make the trade a free mon). Nothing the
+  your bag. One line, then the party menu: picking one is the yes. He keeps what he is
+  given and offers it to the next trainer (Cam's 2026-10-19 play-test, #9; not POK-294's
+  ball at your feet, which would make the trade a free mon): the trade's `pickup` of key
+  `0xB000 | n << 4 | 15` names the species in its item field, every ROM and the catch-up
+  take it as his offer, and the host's yes (the same key, bare) only has him busy while
+  that trade is on. A house's or a floor's trader does the same. Nothing the
   match puts down is solid, him included. Bots go for events like players: their pieces
   are loot, an event on another map is headed for, and a bot at the trader hands him its
   most hurt mon. Two trades at the same moment can both land; the room keeps one trader

@@ -22,6 +22,7 @@
 #include "constants/songs.h"
 #include "constants/species.h"
 #include "br/br_event.h"
+#include "br/br_legend.h"
 #include "br/br_story.h"
 #include "br/br_field.h"
 #include "br/br_ghosts.h"
@@ -51,9 +52,7 @@ STATIC_ASSERT(((BR_EVENT_MAX - 1) << 4 | 15) < 0x100, BrEventKeysStayUnder0xB100
 #define BR_EVENT_LEN 5
 #define BR_EVENT_TRADER_LEN 13
 
-static const u8 sText_Traded[] = _("Traded for ");
-static const u8 sText_Bang[] = _("!");
-static const u8 sText_TradedAlready[] = _("He has already traded");
+static const u8 sText_TradedAlready[] = _("He is trading with someone");
 
 // One trade a trader (POK-392). Two players at him at once both found him standing, both
 // traded, and both walked off with his rare: a trade asks first. Our PICKUP of his claim
@@ -69,6 +68,7 @@ enum { CLAIM_WAITING, CLAIM_GRANTED, CLAIM_DENIED };
 #define tTimer   data[2]
 #define tVerdict data[3]
 static const u8 sText_Fainted[] = _("Not a fainted one");
+static const u8 sText_Legend[] = _("Not a legendary one");
 
 static void Despawn(u8 i)
 {
@@ -157,6 +157,25 @@ void BrEvent_NoteTaken(u16 key, u8 seat)
     if (taskId != TASK_NONE && key == BR_EVENT_TRADER_KEY(gTasks[taskId].tTrader)
         && gTasks[taskId].tVerdict == CLAIM_WAITING)
         gTasks[taskId].tVerdict = seat == gBrMySeat ? CLAIM_GRANTED : CLAIM_DENIED;
+}
+
+bool8 BrEvent_NoteHolds(u16 key, u16 species)
+{
+    u8 i;
+
+    if ((key & 0xF000) != BR_EVENT_KEY_BASE || gBrEvents.seed != gBrMatch.seed
+        || species == SPECIES_NONE || species >= NUM_SPECIES || BrLegend_Is(species))
+        return FALSE;
+    for (i = 0; i < BR_EVENT_MAX; i++)
+    {
+        if ((gBrEvents.live & (1 << i)) && key == BR_EVENT_TRADER_KEY(i))
+        {
+            gBrEvents.trader[i].species = species;
+            gBrEvents.used &= ~(1 << i); // BrEvent_Tick puts him back
+            return TRUE;
+        }
+    }
+    return FALSE;
 }
 
 void BrEvent_NoteBack(u16 key)
@@ -305,16 +324,21 @@ static void TryTalk(void)
 
 bool8 BrEvent_Swap(u8 slot, struct Pokemon *mon)
 {
-    u8 line[BR_HUD_LINE_MAX + 2];
-    const u8 *last = line + ARRAY_COUNT(line) - 1;
     u16 held;
-    u8 *p;
 
     // A fainted one for a healthy one would be a MAX REVIVE thrown in.
     if (GetMonData(&gPlayerParty[slot], MON_DATA_HP, NULL) == 0)
     {
         PlaySE(SE_FAILURE);
         BrHud_Box(sText_Fainted);
+        return FALSE;
+    }
+    // A trader keeps what he is given and offers it to the next trainer (#9): a legendary
+    // would go round the room for one common mon a time.
+    if (BrLegend_Is(GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL)))
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_Legend);
         return FALSE;
     }
     // What it held stays ours: back in the bag, or at our feet when that pocket is full.
@@ -325,27 +349,24 @@ bool8 BrEvent_Swap(u8 slot, struct Pokemon *mon)
     // mon let go to make room, and is not this: dropped at our feet, it would be ours
     // again for one press, and the trade a free mon.
     gPlayerParty[slot] = *mon;
-    p = BrHud_Append(line, last, sText_Traded);
-    p = BrHud_Append(p, last, gSpeciesNames[GetMonData(mon, MON_DATA_SPECIES, NULL)]);
-    BrHud_Append(p, last, sText_Bang);
+    // No "Traded for X!" (Cam, 2026-10-20): the chime and the party say it.
     PlaySE(SE_PIN);
-    BrHud_Box(line);
     BrSpectate_SendParty();
     return TRUE;
 }
 
-// His mon for ours at `slot`. `say` is the PICKUP of his key that uses him up for the
-// whole room, ours to send only when no host answered for us.
-static void Swap(u8 i, u8 slot, bool8 say)
+// His mon for ours at `slot`. He keeps ours and offers it to the next trainer (Cam's
+// 2026-10-19 play-test, #9), and the PICKUP of his key naming it tells the room so.
+static void Swap(u8 i, u8 slot)
 {
     struct Pokemon mon;
+    u16 given = GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL);
 
     Offered(i, &mon);
     if (!BrEvent_Swap(slot, &mon))
         return;
-    gBrEvents.used |= 1 << i;
-    if (say)
-        BrLoot_SendTaken(BR_EVENT_TRADER_KEY(i));
+    BrLoot_SendHolds(BR_EVENT_TRADER_KEY(i), given);
+    BrEvent_NoteHolds(BR_EVENT_TRADER_KEY(i), given);
 }
 
 static void Task_TradeClaim(u8 taskId)
@@ -361,7 +382,7 @@ static void Task_TradeClaim(u8 taskId)
     }
     else
     {
-        Swap(tTrader, tSlot, tVerdict == CLAIM_WAITING);
+        Swap(tTrader, tSlot);
     }
     DestroyTask(taskId);
     ScriptContext_Enable();
@@ -394,10 +415,16 @@ void BrEvent_Trade(void)
         BrHud_Box(sText_Fainted);
         return;
     }
+    if (BrLegend_Is(GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL)))
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_Legend);
+        return;
+    }
     taskId = CreateTask(Task_TradeClaim, 80);
     if (taskId == TASK_NONE)
     {
-        Swap(i, slot, TRUE);
+        Swap(i, slot);
         return;
     }
     data = gTasks[taskId].data;

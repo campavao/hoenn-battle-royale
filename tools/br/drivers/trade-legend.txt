@@ -1,0 +1,58 @@
+# trade-legend: a trader won't take a legendary (#9 review). He keeps what he is given and
+# offers it to the next trainer, so a LATIAS handed over would go round the room for one
+# common mon a time. BrEvent_Swap refuses it, as it does a fainted one, and he keeps his.
+#
+# house-trade's room and seed: PETALBURG CITY's HOUSE1 under 0x1072, a KADABRA trader.
+# A LATIAS on our own cell (row 0, over the room's cache) is taken into the party, then
+# copied over the TREECKO in slot 0, the one the party menu offers first.
+wait 30
+pokebytes gBrMailbox+0x2018 81 00 08 02 03 00 06 00 BD BB C7 FF
+wait 400
+poke u8 gBrMatch 2
+poke u32 gBrMatch+8 0x1072
+wait 30
+hold DOWN 90
+wait 200
+hold UP 40
+wait 200
+expect u16 gBrLoot+20 0x8C21
+expect u16 gBrLoot+26 64
+expect u16 *gSaveBlock1Ptr 3
+expect u16 *gSaveBlock1Ptr+2 8
+# seat 3's LATIAS (407, level 30) at our feet: (3,8) + MAP_OFFSET, map 8:2, kind 1
+pokebytes gBrLoot 00 03 0A 00 0F 00 97 01 08 02 1E 01 FF 00 00 00 00 00 00 00
+wait 30
+tap A
+wait 120
+tap A
+wait 60
+expect u8 gPlayerPartyCount 2
+copy gPlayerParty gPlayerParty+100 100
+# to him, as house-trade walks
+hold UP 16
+wait 20
+hold LEFT 16
+wait 20
+hold LEFT 16
+wait 20
+hold UP 34
+wait 20
+expect u16 *gSaveBlock1Ptr 1
+expect u16 *gSaveBlock1Ptr+2 5
+hold UP 1
+wait 20
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 60
+shot refused
+# no ask went out, and after the claim's ten seconds nothing has traded: he still has
+# his KADABRA and we still have both
+wait 660
+expect u8 gPlayerPartyCount 2
+expect u16 gBrLoot+20 0x8C21
+expect u16 gBrLoot+26 64
+expect u8 gBrLoot+31 1
+say trade legend ok

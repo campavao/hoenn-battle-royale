@@ -487,19 +487,21 @@ describe('the page that runs the match (POK-330 #42)', () => {
     host.dispose();
   });
 
-  it("a trade with an event's trader takes him out of the catch-up for everybody, his event's mark kept", () => {
+  it("a trade with an event's trader leaves him in the catch-up holding what he was given (#9)", () => {
     const room = hosting();
     const host = room.deal();
     host.begin();
     const event: EventMsg = { t: 'event', seat: 0, n: 0, mapsec: 16, key: 0xb000, trader: { map: ROUTE_101, x: 12, y: 17, species: 131 } };
     room.session.note(event, 'page');
     expect(room.session.events).toEqual([event]);
-    room.recv(1, { t: 'pickup', seat: 1, key: traderKey(1) }); // another event's: nothing
+    room.recv(1, { t: 'pickup', seat: 1, key: traderKey(1), item: 25, n: 1 }); // another event's: nothing
     expect(room.session.events).toEqual([event]);
+    // The host's yes (a bare PICKUP) is him busy, not gone...
     room.recv(1, { t: 'pickup', seat: 1, key: traderKey(0) });
-    const rest: EventMsg = { ...event };
-    delete rest.trader;
-    expect(room.session.events).toEqual([rest]);
+    expect(room.session.events).toEqual([event]);
+    // ...and the trade's own PICKUP names what he holds now.
+    room.recv(1, { t: 'pickup', seat: 1, key: traderKey(0), item: 25, n: 1 });
+    expect(room.session.events).toEqual([{ ...event, trader: { ...event.trader!, species: 25 } }]);
     host.dispose();
   });
 
@@ -521,7 +523,7 @@ describe('the page that runs the match (POK-330 #42)', () => {
       { type: 'to', id: 2, m: traded },
     ]);
     expect(room.toRom).toEqual([traded]);
-    expect(room.session.events[0].trader).toBeUndefined();
+    expect(room.session.events[0].trader?.species, 'busy with 1, not gone').toBe(131);
     // ...our own ROM asking after them hears the same no, and only it does.
     room.frames().length = 0;
     host.hear({ t: 'pickup', seat: 0, key: claimKey(0) }, 'rom');
@@ -531,6 +533,12 @@ describe('the page that runs the match (POK-330 #42)', () => {
     // asker's ROM would trade on its own.
     host.hear({ t: 'pickup', seat: 0, key: claimKey(3) }, 'rom');
     expect(room.pushed[1]).toEqual({ t: 'pickup', seat: 1, key: traderKey(3) });
+    // Once 1's trade is done he holds 1's Pokemon (#9), and the next ask is a yes again.
+    room.recv(1, { t: 'pickup', seat: 1, key: traderKey(0), item: 25, n: 1 });
+    expect(room.session.events[0].trader?.species).toBe(25);
+    room.frames().length = 0;
+    room.recv(2, { t: 'pickup', seat: 2, key: claimKey(0) });
+    expect(room.frames().filter((f) => f.m?.t === 'pickup')).toEqual([{ type: 'all', m: { t: 'pickup', seat: 2, key: traderKey(0) } }]);
     host.dispose();
   });
 

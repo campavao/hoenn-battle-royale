@@ -1,8 +1,9 @@
 # event-trader: an event's placed NPC (speed-up 6b). The EVENT says where its trader
 # stands and what he offers; every ROM puts him there, A on him asks, the party menu picks
-# one of ours and he swaps it for his at our rung. He trades once, with whoever gets to
-# him first, and then leaves every map. Cancelling the menu trades nothing, and a
-# fainted one is refused.
+# one of ours and he swaps it for his at our rung. One line, then the party menu (Cam's
+# 2026-10-19 play-test, #9). He keeps the one he was given and offers it to the next
+# trainer; while somebody else's trade is on, he is busy. Cancelling the menu trades
+# nothing, and a fainted one is refused.
 #
 # catch-release's boot: one TREECKO, standing on (12,16) facing south.
 wait 30
@@ -22,12 +23,10 @@ expect u16 gBrEvents+24 131
 expect u8 gBrEvents+27 9
 expectne u8 gBrEvents+52 0xFF
 shot trader
-# A asks; YES; then B out of the party menu: nothing traded
+# A asks; A past his line; then B out of the party menu: nothing traded
 tap A
 wait 90
 shot offer
-tap A
-wait 30
 tap A
 wait 90
 shot picker
@@ -38,8 +37,6 @@ expect u8 gBrEvents+18 0
 poke u16 gPlayerParty+86 0
 tap A
 wait 90
-tap A
-wait 30
 tap A
 wait 90
 tap A
@@ -52,8 +49,6 @@ poke u16 gPlayerParty+86 20
 tap A
 wait 90
 tap A
-wait 30
-tap A
 wait 90
 tap A
 wait 60
@@ -63,28 +58,42 @@ expect u8 gBrEvents+18 0
 # ahead the old way
 wait 700
 shot traded
-expect u8 gBrEvents+18 1
 expect u8 gPlayerPartyCount 1
 expectmsg 7 u16 2 131
-# ...and he is used up for the whole room: our PICKUP of his key (0xB00F) went out, and
-# he has left the map
+# ...and he keeps our TREECKO (277) for the next trainer: our PICKUP of his key (0xB00F)
+# names it, and he stays on the map offering it
 expectmsg 10 u16 1 0xB00F
-expect u8 gBrEvents+52 0xFF
+expectmsg 10 u8 3 1
+expectmsg 10 u16 4 277
+expect u8 gBrEvents+18 0
+expect u16 gBrEvents+24 277
+expectne u8 gBrEvents+52 0xFF
 tap A
-wait 30
-expect u8 gBrEvents+18 1
+wait 90
 shot again
-# EVENT 1's trader on the same cell, and somebody else trades with him first: their
-# PICKUP of 0xB01F takes him off our map too
-pokebytes gDecompressionBuffer 00 01 10 10 B0 00 09 0C 00 11 00 83 00
+tap A
+wait 90
+tap B
+wait 120
+expect u8 gBrEvents+18 0
+# EVENT 1's trader a cell along, and somebody else trades with him: the host's yes, a
+# PICKUP of 0xB01F naming seat 3, takes him off our map while they trade...
+pokebytes gDecompressionBuffer 00 01 10 10 B0 00 09 0D 00 11 00 83 00
 mailsend gBrMailbox 32 gDecompressionBuffer 13
 wait 30
 expectne u8 gBrEvents+53 0xFF
 pokebytes gDecompressionBuffer 03 1F B0 00 00 00 00 00
 mailsend gBrMailbox 10 gDecompressionBuffer 8
 wait 10
-expect u8 gBrEvents+18 3
+expect u8 gBrEvents+18 2
 expect u8 gBrEvents+53 0xFF
+# ...and their trade's PICKUP naming a PIKACHU (25) puts him back, offering it
+pokebytes gDecompressionBuffer 03 1F B0 01 19 00 01 00
+mailsend gBrMailbox 10 gDecompressionBuffer 8
+wait 30
+expect u8 gBrEvents+18 0
+expect u16 gBrEvents+32 25
+expectne u8 gBrEvents+53 0xFF
 # a new match's first EVENT takes him off the map
 poke u32 gBrMatch+8 0x5678
 pokebytes gDecompressionBuffer 00 01 10 10 B0
@@ -96,7 +105,7 @@ expect u8 gBrEvents+52 0xFF
 expect u16 gBrEvents+24 0
 # The race (PR #23 review): this match's EVENT 2 stands a trader on the cell again, we
 # ask him and open the party menu (our personality kept in the empty sixth slot), and somebody else's trade lands while we pick. Ours
-# is refused -- "HE HAS ALREADY TRADED" -- and the TREECKO's slot is untouched.
+# is refused -- "He is trading with someone" -- and the TREECKO's slot is untouched.
 pokebytes gDecompressionBuffer 00 02 10 20 B0 00 09 0C 00 11 00 83 00
 mailsend gBrMailbox 32 gDecompressionBuffer 13
 wait 30
@@ -105,8 +114,6 @@ expectne u8 gBrEvents+54 0xFF
 copy gPlayerParty+500 gPlayerParty 4
 tap A
 wait 90
-tap A
-wait 30
 tap A
 wait 90
 shot race-picker
@@ -123,8 +130,7 @@ expect u8 gBrEvents+54 0xFF
 tap A
 wait 60
 # EVENT 3's trader, and the host says yes (POK-392): its PICKUP of his key naming us
-# (seat 0) is the trade. We never send that key ourselves; the newest PICKUP we sent is
-# still the claim.
+# (seat 0) is the trade.
 expect u8 gBrMySeat 0
 pokebytes gDecompressionBuffer 00 03 10 30 B0 00 09 0C 00 11 00 83 00
 mailsend gBrMailbox 32 gDecompressionBuffer 13
@@ -132,8 +138,6 @@ wait 30
 expectne u8 gBrEvents+55 0xFF
 tap A
 wait 90
-tap A
-wait 30
 tap A
 wait 90
 tap A
@@ -144,14 +148,17 @@ pokebytes gDecompressionBuffer 00 3F B0 00 00 00 00 00
 mailsend gBrMailbox 10 gDecompressionBuffer 8
 wait 30
 shot granted
-expect u8 gBrEvents+18 12
-expect u8 gBrEvents+55 0xFF
-expectmsg 10 u16 1 0xB03E
+# ...and he holds our LAPRAS (131) now: our PICKUP of his key names it, and he is back
+expectmsg 10 u16 1 0xB03F
+expectmsg 10 u16 4 131
+expect u8 gBrEvents+18 4
+expect u16 gBrEvents+48 131
+expectne u8 gBrEvents+55 0xFF
 expectmsg 7 u16 2 131
 tap A
 wait 60
 # A new match, EVENT 0's trader again, and this time the host says no: its PICKUP names
-# seat 3, who asked first. "HE HAS ALREADY TRADED", and our mon stays ours.
+# seat 3, who asked first. "He is trading with someone", and our mon stays ours.
 poke u32 gBrMatch+8 0x9ABC
 pokebytes gDecompressionBuffer 00 00 10 00 B0 00 09 0C 00 11 00 83 00
 mailsend gBrMailbox 32 gDecompressionBuffer 13
@@ -161,8 +168,6 @@ expectne u8 gBrEvents+52 0xFF
 copy gPlayerParty+500 gPlayerParty 4
 tap A
 wait 90
-tap A
-wait 30
 tap A
 wait 90
 tap A

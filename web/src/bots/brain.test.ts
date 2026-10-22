@@ -371,8 +371,12 @@ describe('bots walking', () => {
     bots.ringMoved(2);
     for (let t = STEP_MS; t <= 40_000; t += STEP_MS) bots.tick(t);
     const trades = sent.filter((m) => m.t === 'pickup' && m.key === 0xb00f);
-    expect(trades).toHaveLength(1); // the second bot finds him used up
+    expect(trades).toHaveLength(1); // this page's bots leave him be once one has traded
     const trader = (trades[0] as { seat: number }).seat;
+    // He keeps the one he was given and offers it next (#9): his key names it.
+    expect(trades[0]).toMatchObject({ n: 1 });
+    expect((trades[0] as { item?: number }).item).toBeGreaterThan(0);
+    expect(bots.partyOf(trader).map((m) => m.species)).not.toContain((trades[0] as { item?: number }).item);
     const lapras = grownUp(131, rungForPhase(2));
     expect(bots.partyOf(trader).map((m) => m.species)).toContain(lapras);
     expect(bots.partyOf(dealt.find((b) => b.seat !== trader)!.seat).map((m) => m.species)).not.toContain(lapras);
@@ -380,6 +384,25 @@ describe('bots walking', () => {
     const slot = bots.partyOf(trader).findIndex((m) => m.species === lapras);
     bots.ringMoved(4);
     expect(bots.partyOf(trader)[slot]).toMatchObject({ species: grownUp(131, rungForPhase(4)), level: rungForPhase(4) });
+  });
+
+  it('never hands a trader a legendary (#9 review: he offers it to everyone after)', () => {
+    const standing = [{ key: 0xb00f, species: 131, mapId: 'FIELD', ...pageCell(0, 1) }];
+    const latias = (hp: number): PackedMon => ({ ...dealParty(5, 0, 0, undefined)[0], species: 407, hp, maxHp: 40 });
+    // The LATIAS is the most hurt, so the next-most-hurt goes instead.
+    const mixed = eventBots({
+      traders: () => standing,
+      deal: (bot, phase) => [latias(1), ...dealParty(5, bot.seat, phase, undefined).slice(0, 1)],
+    });
+    for (let t = STEP_MS; t <= 5_000; t += STEP_MS) mixed.bots.tick(t);
+    const trade = mixed.sent.find((m) => m.t === 'pickup' && m.key === 0xb00f) as { item?: number } | undefined;
+    expect(trade?.item).toBeGreaterThan(0);
+    expect(trade?.item).not.toBe(407);
+    expect(mixed.bots.partyOf(mixed.dealt[0].seat).map((m) => m.species)).toContain(407);
+    // A LATIAS alone: no trade at all.
+    const alone = eventBots({ traders: () => standing, deal: () => [latias(20)] });
+    for (let t = STEP_MS; t <= 5_000; t += STEP_MS) alone.bots.tick(t);
+    expect(alone.sent.some((m) => m.t === 'pickup' && m.key === 0xb00f)).toBe(false);
   });
 
   it("keeps FLY on the slot it trades away, at the trade and up the rungs", () => {

@@ -205,4 +205,16 @@ describe('somebody at home asks the host first too (POK-379)', () => {
     claims.note({ t: 'pickup', seat: 5, key: 0x8c86 });
     expect(claims.answer({ t: 'pickup', seat: 3, key: 0x8cc6 })?.reply).toEqual({ t: 'pickup', seat: 5, key: 0x8c86 });
   });
+
+  it('a trader is free again once his trade names what he was given (#9)', () => {
+    const claims = new TraderClaims(() => true);
+    expect(claims.answer({ t: 'pickup', seat: 3, key: 0x8cd2 })?.granted).toBe(true);
+    expect(claims.answer({ t: 'pickup', seat: 4, key: 0x8cd2 })?.granted, 'busy with 3').toBe(false);
+    claims.note({ t: 'pickup', seat: 3, key: 0x8c92, item: 280, n: 1 });
+    expect(claims.answer({ t: 'pickup', seat: 4, key: 0x8cd2 })).toEqual({ reply: { t: 'pickup', seat: 4, key: 0x8c92 }, granted: true });
+    // ...and an event's the same way
+    expect(claims.answer({ t: 'pickup', seat: 1, key: claimKey(2) })?.granted).toBe(true);
+    claims.note({ t: 'pickup', seat: 1, key: traderKey(2), item: 25, n: 1 });
+    expect(claims.answer({ t: 'pickup', seat: 6, key: claimKey(2) })?.granted).toBe(true);
+  });
 });

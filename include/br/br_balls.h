@@ -38,6 +38,9 @@ void BrBalls_NoteTaken(u16 key);
 // gives the first trainer to talk to him, or trades for one of theirs (POK-379). Put down
 // and taken the cache's way, under BR_LOOT_KEY_HOME. TRUE for one of them who trades.
 bool8 BrBalls_Trades(u16 key);
+// A trader at home or on a floor was given `species`: he offers it from now on, and
+// stands again if the trade's ask took him off. FALSE for any other key.
+bool8 BrBalls_NoteHolds(u16 key, u16 species);
 // Every floor of a town's buildings and of the wild has something (Cam, 2026-10-18): a
 // cache where it had no ball of its own, and on the big ones somebody who trades. TRUE for
 // a cell of this map's kept for either, there or taken, so no wild patch is dealt on it

@@ -12,8 +12,8 @@
 // (src/br/br_event.c).
 //
 // The placed NPC is a trader, on the `event` too, so every ROM stands him on the same
-// cell: any one of yours for his rare at your rung (br_event.c). He trades once, with
-// whoever gets to him first, and offers a rare the event did not drop.
+// cell: any one of yours for his rare at your rung (br_event.c). He offers a rare the
+// event did not drop, then whatever the last trainer gave him (#9).
 import { rungForPhase } from '../bots/party';
 import { MAP_OFFSET } from '../net/cells';
 import { EVENT_MAX, type EventMsg, type EventTrader, type MapRef, type Msg, type PickupMsg, type SpillBag, type SpillMon, type SpillMsg } from '../net/wire';
@@ -28,8 +28,8 @@ export { EVENT_MAX };
 export const eventKey = (n: number, i: number): number => EVENT_KEY_BASE | (n << 4) | i;
 export const isEventKey = (key: number): boolean => (key & 0xf000) === EVENT_KEY_BASE;
 /** BR_EVENT_TRADER_KEY: the last of the event's sixteen keys, past every piece. A `pickup`
- *  of it is the trader having traded, with whoever got to him first (Cam, 2026-10-13):
- *  he leaves every map, and a catch-up leaves him out. */
+ *  of it naming a species is a trade done: he holds that one now (#9). A bare one is the
+ *  host's yes to an ask, which has him busy until that trade's own PICKUP. */
 export const traderKey = (n: number): number => eventKey(n, 15);
 export const traderOf = (key: number): number | undefined =>
   isEventKey(key) && (key & 0xf) === 15 ? (key >> 4) & 0xf : undefined;
@@ -75,7 +75,14 @@ export class TraderClaims {
 
   note(msg: Msg): void {
     if (msg.t === 'start') this.won.clear();
-    if (msg.t !== 'pickup' || this.won.has(msg.key)) return;
+    if (msg.t !== 'pickup') return;
+    // His key naming a Pokemon: the trade is done and he holds it now, free for the next
+    // ask (Cam's 2026-10-19 play-test, #9).
+    if (msg.item !== undefined && (traderOf(msg.key) !== undefined || isHomeKey(msg.key))) {
+      this.won.delete(msg.key);
+      return;
+    }
+    if (this.won.has(msg.key)) return;
     if (traderOf(msg.key) !== undefined || isHomeKey(msg.key)) this.won.set(msg.key, msg.seat);
   }
 
@@ -109,17 +116,16 @@ export class TraderClaims {
   }
 }
 
-/** The events so far, by n, as a late joiner is handed them: an EVENT is booked, and a
- *  trader who has traded is gone for good, so a PICKUP of his key takes him off his. */
+/** The events so far, by n, as a late joiner is handed them: an EVENT is booked, and its
+ *  trader holds whatever he was last given (Cam's 2026-10-19 play-test, #9), which the
+ *  PICKUP of his key naming it says. A bare one is the host's yes to an ask: he is busy
+ *  with that trade, not gone, and its own PICKUP follows. */
 export function noteEvent(events: Map<number, EventMsg>, msg: Msg): void {
   if (msg.t === 'event') events.set(msg.n, msg);
-  const traded = msg.t === 'pickup' ? traderOf(msg.key) : undefined;
+  if (msg.t !== 'pickup' || msg.item === undefined) return;
+  const traded = traderOf(msg.key);
   const withTrader = traded === undefined ? undefined : events.get(traded);
-  if (withTrader?.trader) {
-    const rest: EventMsg = { ...withTrader };
-    delete rest.trader;
-    events.set(withTrader.n, rest);
-  }
+  if (withTrader?.trader) events.set(withTrader.n, { ...withTrader, trader: { ...withTrader.trader, species: msg.item } });
 }
 
 /** The event a ring phase drops, by the director's 0-based ring index, or undefined:
