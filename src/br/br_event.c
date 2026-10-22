@@ -22,6 +22,7 @@
 #include "constants/songs.h"
 #include "constants/species.h"
 #include "br/br_event.h"
+#include "br/br_legend.h"
 #include "br/br_story.h"
 #include "br/br_field.h"
 #include "br/br_ghosts.h"
@@ -67,6 +68,7 @@ enum { CLAIM_WAITING, CLAIM_GRANTED, CLAIM_DENIED };
 #define tTimer   data[2]
 #define tVerdict data[3]
 static const u8 sText_Fainted[] = _("Not a fainted one");
+static const u8 sText_Legend[] = _("Not a legendary one");
 
 static void Despawn(u8 i)
 {
@@ -331,6 +333,14 @@ bool8 BrEvent_Swap(u8 slot, struct Pokemon *mon)
         BrHud_Box(sText_Fainted);
         return FALSE;
     }
+    // A trader keeps what he is given and offers it to the next trainer (#9): a legendary
+    // would go round the room for one common mon a time.
+    if (BrLegend_Is(GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL)))
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_Legend);
+        return FALSE;
+    }
     // What it held stays ours: back in the bag, or at our feet when that pocket is full.
     held = GetMonData(&gPlayerParty[slot], MON_DATA_HELD_ITEM, NULL);
     if (held != ITEM_NONE && !AddBagItem(held, 1))
@@ -403,6 +413,12 @@ void BrEvent_Trade(void)
     {
         PlaySE(SE_FAILURE);
         BrHud_Box(sText_Fainted);
+        return;
+    }
+    if (BrLegend_Is(GetMonData(&gPlayerParty[slot], MON_DATA_SPECIES, NULL)))
+    {
+        PlaySE(SE_FAILURE);
+        BrHud_Box(sText_Legend);
         return;
     }
     taskId = CreateTask(Task_TradeClaim, 80);

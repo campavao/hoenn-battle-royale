@@ -79,6 +79,18 @@ static const u16 sLegends[][2] = {
 // SPILL: seat, map, one mon (key, x, y, species, level), no bag.
 #define BR_LEGEND_SPILL_LEN (4 + 9 + 1)
 
+bool8 BrLegend_Is(u16 species)
+{
+    u8 i;
+
+    for (i = 0; i < ARRAY_COUNT(sLegends); i++)
+    {
+        if (sLegends[i][0] == species)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 void BrLegend_Init(void)
 {
     sLegend.state = BR_LEGEND_NONE;
