@@ -1696,7 +1696,9 @@ export class FieldView {
     const fog = c.fog ? `${c.fog.x}/${c.fog.y}/${c.fog.eva}/${c.fog.evb}` : '';
     const marks = map && map.outdoor ? this.marks(c, map) : [];
     const markKey = marks.map((m) => `${m.x}/${m.y}/${m.drawn ? 1 : 0}`).join(',');
-    const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}:${c.onField ? 1 : 0}:${markKey}`;
+    // The joined maps the core drew (#world): the overlay's stills go where it did not.
+    const drawn = this.band && this.deps.world?.() ? this.deps.emu.worldDrawn() : null;
+    const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}:${c.onField ? 1 : 0}:${markKey}:${drawn}`;
     if (key === this.drawn) return;
     const ctx = field.getContext('2d');
     if (!ctx) return;
@@ -1751,7 +1753,7 @@ export class FieldView {
     }
     const core = this.toCore(c, !!map?.outdoor);
     if (core === false) complete = false;
-    if (overlay && !this.drawOverlay(overlay, c, map && map.outdoor ? map : null, marks, core !== null)) complete = false;
+    if (overlay && !this.drawOverlay(overlay, c, map && map.outdoor ? map : null, marks, core !== null, drawn)) complete = false;
     // A picture missing its still is drawn again when the still arrives -- and not while
     // nothing is on its way, which is what a failed one is.
     this.drawn = complete || this.images.settled ? key : null;
@@ -1794,22 +1796,19 @@ export class FieldView {
    *  the field, where the object table means what it says -- and faded the way the
    *  ROM's palette is, over their own pixels alone. */
   private corePeople: import('./field-extra').CorePeople | null = null;
-  /** Whether the core has the towns' tileset animations (field-extra.ts sendTileAnims). */
-  private animsSent = false;
 
   /** With the whole window (`#world`), the people the overlay drew go to the core, which
    *  draws them into the picture under roofs and treetops (HBR-27, POK-443): null when it
    *  does not, else whether every sheet was in. */
   private toCore(c: Camera, outdoors: boolean): boolean | null {
     if (this.deps.world?.() && this.band && this.extra && c.onField && outdoors) {
-      if (!this.animsSent) this.animsSent = this.extra.sendTileAnims(this.deps.emu, (n) => this.sym(n));
       return (this.corePeople ??= new this.extra.CorePeople()).send(this.painter, this.deps.emu, (n) => this.sym(n), c.sprites.filter((s) => s.hidden));
     }
     this.corePeople?.clear(this.deps.emu);
     return null;
   }
 
-  private drawOverlay(overlay: HTMLCanvasElement, c: Camera, outdoors: WorldMap | null, marks: readonly Mark[], core = false): boolean {
+  private drawOverlay(overlay: HTMLCanvasElement, c: Camera, outdoors: WorldMap | null, marks: readonly Mark[], core: boolean, drawn: Int32Array | null): boolean {
     const ctx = overlay.getContext('2d');
     if (!ctx) return true;
     const lay = this.lay;
@@ -1825,7 +1824,7 @@ export class FieldView {
     const reached = this.reached(outdoors, ox, oy);
     if (this.band && this.extra) {
       const fog = c.fog;
-      complete = this.extra.drawPast(this.painter, ctx, c, outdoors, this.band, reached, marks, fog ? () => this.drawFog(ctx, fog) : null);
+      complete = this.extra.drawPast(this.painter, ctx, c, outdoors, this.band, reached, marks, fog ? () => this.drawFog(ctx, fog) : null, drawn);
     }
     if (!core && !this.drawSprites(ctx, c.sprites.filter((s) => s.hidden), { maps: reached, ox, oy })) complete = false;
     if (c.fade > 0) {

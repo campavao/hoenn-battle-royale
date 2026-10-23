@@ -1,7 +1,8 @@
 // The towns' tileset animations the core plays (field-extra.ts TILE_ANIMS), held to
 // tileset_anims.c: each frame table's length, and where and how much each one draws.
 import { describe, expect, it } from 'vitest';
-import { TILE_ANIMS } from './field-extra';
+import { TILE_ANIMS, coreDrew } from './field-extra';
+import type { Reached } from './field';
 
 const source = (Object.values(import.meta.glob<string>('../../src/tileset_anims.c', { query: '?raw', import: 'default', eager: true }))[0] ?? '').replace(/\r\n/g, '\n');
 
@@ -53,4 +54,19 @@ describe('TILE_ANIMS', () => {
       }
     });
   }
+});
+
+describe('coreDrew', () => {
+  const map = (w: number, h: number) => ({ w, h }) as unknown as Reached['map'];
+  // Route 101 with Oldale above it and Route 102 left of Oldale, as the core lists them.
+  const drawn = Int32Array.from([1, 2, 0, -20, 20, 20, -50, -20, 50, 20]);
+  it('matches a map the core drew by its place and size', () => {
+    expect(coreDrew(drawn, { map: map(20, 20), x: 0, y: -320, hops: 1 })).toBe(true);
+    expect(coreDrew(drawn, { map: map(50, 20), x: -800, y: -320, hops: 2 })).toBe(true);
+  });
+  it('not one it left out, or one elsewhere', () => {
+    expect(coreDrew(drawn, { map: map(40, 60), x: 320, y: 0, hops: 1 })).toBe(false);
+    expect(coreDrew(drawn, { map: map(20, 20), x: 16, y: -320, hops: 1 })).toBe(false);
+    expect(coreDrew(null, { map: map(20, 20), x: 0, y: -320, hops: 1 })).toBe(false);
+  });
 });

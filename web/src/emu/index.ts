@@ -72,6 +72,7 @@ export interface CoreModule {
   _brSetPeople?(bytes: number): void;
   _brTileAnimBuffer?(bytes: number): number;
   _brSetTileAnims?(bytes: number): void;
+  _brWorldDrawn?(): number;
   /** The window the loaded core draws with, `top << 16 | bottom`, or -1 for none. */
   _brSpriteWindow?(): number;
   /** The picture's ABGR8888 pixels in the heap -- the texture's top-left, the LCD at
@@ -315,6 +316,14 @@ export class Emulator {
   }
   setTileAnims(bytes: number): void {
     this.m._brSetTileAnims?.(bytes);
+  }
+  /** The joined maps the core drew last frame (HBR-27, main.c brWorldDrawn): [drawn, n,
+   *  then each map's x, y, width, height in metatiles]; null on a core without it. */
+  worldDrawn(): Int32Array | null {
+    const at = this.m._brWorldDrawn?.() ?? 0;
+    if (!at) return null;
+    const v = new Int32Array(this.m.HEAPU8.buffer, at, 2);
+    return new Int32Array(this.m.HEAPU8.buffer, at, 2 + 4 * v[1]).slice();
   }
 
   /** The sprite window the band is drawn with, on every boot from now on (POK-329): the

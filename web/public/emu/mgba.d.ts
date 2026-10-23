@@ -320,6 +320,8 @@ declare namespace mGBA {
     _brSetPeople(bytes: number): void;
     _brTileAnimBuffer(bytes: number): number;
     _brSetTileAnims(bytes: number): void;
+    /** Hoenn BR (HBR-27): the joined maps the last frame drew, as int32s in the heap. */
+    _brWorldDrawn(): number;
     /** Hoenn BR (POK-329): the sprite window the loaded core draws with, as
      *  `top << 16 | bottom`, or -1 for none (or no game loaded). */
     _brSpriteWindow(): number;
