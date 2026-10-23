@@ -11,7 +11,6 @@ import type { EventMsg, Msg } from '../net/wire';
 import { isEventKey } from './events';
 import { short } from './ticker';
 
-
 /** `sLegends` in br_legend.c: species -> the graphics id it stands as. parity.test.ts pins
  *  it to the C. */
 export const LEGEND_GFX: ReadonlyMap<number, number> = new Map([
