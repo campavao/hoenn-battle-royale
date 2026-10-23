@@ -6,8 +6,8 @@
 //
 // Landed in Rustboro (21,25), a roster of one is handed to the field: seat 16, which solo
 // never deals and the ROM knows nothing of, twelve tiles east -- past the box. Standing on
-// open ground at (33,20) it is drawn whole; at (33,17), under the eaves of the house to the
-// north-east, its head is under the roof's BG1 and only its feet show.
+// open ground at (33,20) it is drawn whole; at (33,15), the walkable row behind the house to
+// the north-east, whose roof is on BG1 over the whole tile, only its head shows above the roof.
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -26,7 +26,8 @@ const SKIN = 15;
 const DIR_SOUTH = 1;
 const MAP_OFFSET = 7;
 const OPEN = { x: 33, y: 20 };
-const EAVES = { x: 33, y: 17 };
+/** Behind the house: passable, and the roof's BG1 covers all of it (the map's cover PNG). */
+const BEHIND = { x: 33, y: 15 };
 /** Pixels of a 16x16 cell that count as a person drawn there. */
 const DRAWN = 40;
 
@@ -164,15 +165,17 @@ test('with the whole window, a person past the box is drawn into the picture, un
     expect((await ram(page, sym)).x, 'we took a step').toBeLessThan(LAND.x);
     expect(spots, 'it stands still on the map while the camera moves').toEqual([`${(OPEN.x + MAP_OFFSET) * 16},${(OPEN.y + MAP_OFFSET) * 16 - 16}`]);
 
-    await stand(EAVES);
+    await stand(BEHIND);
     await page.waitForTimeout(1_000);
-    const eaves = await shoot(page, sym.gBrWorld, 'eaves');
-    await page.screenshot({ path: path.join(OUT_DIR, 'people-eaves-page.png') });
-    const eavesHead = changed(empty, eaves, EAVES.x, EAVES.y - 1);
-    const eavesFeet = changed(empty, eaves, EAVES.x, EAVES.y);
-    console.log(`under the eaves: head ${eavesHead}, feet ${eavesFeet} pixels drawn`);
-    expect(eavesFeet, 'under the eaves its feet are drawn').toBeGreaterThan(DRAWN);
-    expect(eavesHead, '...and the roof covers its head').toBeLessThan(8);
+    const behind = await shoot(page, sym.gBrWorld, 'behind');
+    await page.screenshot({ path: path.join(OUT_DIR, 'people-behind-page.png') });
+    const behindHead = changed(empty, behind, BEHIND.x, BEHIND.y - 1);
+    const behindFeet = changed(empty, behind, BEHIND.x, BEHIND.y);
+    console.log(`behind the roof: head ${behindHead}, feet ${behindFeet} pixels drawn`);
+    // The roof's BG1 covers 248 of the tile's 256 pixels (the map's cover PNG); the cell
+    // above it is open, so whatever of the figure is up there shows as it did in the open.
+    expect(behindFeet, 'behind the house the roof covers its tile').toBeLessThanOrEqual(8);
+    expect(behindHead, '...and its head shows above the roof').toBe(openHead);
     // The page's overlay draws none of it: the field's people are the core's.
     const overlay = await page.evaluate(() => {
       const c = document.querySelector<HTMLCanvasElement>('#overlay');
