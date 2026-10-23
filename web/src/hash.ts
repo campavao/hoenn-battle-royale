@@ -99,13 +99,3 @@ export function devLand(hash: string): { id: string; x: number; y: number } | un
   return m ? { id: m[1], x: Number(m[2]), y: Number(m[3]) } : undefined;
 }
 
-/** `#band=T,B`: the rows the core is asked to draw above and below the LCD (POK-329),
- *  multiples of 8 up to 256 as the core takes them. picture.spec asks for the legacy
- *  256-row band with it, to hold the sprite window to a band that is exactly one. */
-export function devBand(hash: string): { top: number; bottom: number } | undefined {
-  const m = /^(\d+),(\d+)$/.exec(paramsOf(hash).get('band') ?? '');
-  if (!m) return undefined;
-  const top = Number(m[1]);
-  const bottom = Number(m[2]);
-  return top % 8 === 0 && bottom % 8 === 0 && top <= 256 && bottom <= 256 ? { top, bottom } : undefined;
-}

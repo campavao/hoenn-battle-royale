@@ -7,7 +7,7 @@ import { PATCH_KEY_BASE, dealPatches, loadPatches, type PatchTable } from './bot
 import { MATCH_SEED } from './field-ghosts';
 import { HOENN } from './bots/hoenn';
 import type { Band, Emulator } from './emu';
-import { GBA_H, GBA_W, PATCH_MAP, PATCH_MAX, PATCH_SPRITE_IDS, PATCH_TAKEN_SIZE, SPRITE_COUNT, bandClip, lcdOrigin, neighbours, wideRing, type Camera, type FieldSprite, type PatchMark, type Reached } from './field';
+import { GBA_H, GBA_W, PATCH_MAP, PATCH_MAX, PATCH_SPRITE_IDS, PATCH_TAKEN_SIZE, SPRITE_COUNT, lcdOrigin, neighbours, type Camera, type FieldSprite, type PatchMark, type Reached } from './field';
 import spritesData from './data/sprites.json';
 
 const TILE = 16;
@@ -425,19 +425,12 @@ export function stillsOver(reached: readonly Reached[], drawn: Int32Array | null
 /** What the overlay draws past the band, under the hidden people: the maps two seams
  *  away (drawCorners) and the marks the band shows bare ground for, since the ROM keeps
  *  sprites for its own map's patches near the player only, and for no other map's. */
-export function drawPast(p: Painter, ctx: CanvasRenderingContext2D, c: Camera, map: WorldMap, band: Band, reached: readonly Reached[], marks: readonly Mark[], fog: (() => boolean) | null, drawn: Int32Array | null = null): boolean {
+export function drawPast(p: Painter, ctx: CanvasRenderingContext2D, c: Camera, band: Band, reached: readonly Reached[], marks: readonly Mark[], fog: (() => boolean) | null, drawn: Int32Array | null = null): boolean {
   const lay = p.layout();
-  // With the whole window the core draws the band whole (stillsOver says where it drew).
-  const world = !!drawn && drawn[0] === 1;
-  const cut = world ? { left: 0, top: 0, right: 0, bottom: 0 } : bandClip(c, map, band, c.stale, wideRing(band) && c.wide !== false);
+  // The band as it shows on the field, whole (the core draws it all, HBR-27), in map
+  // pixels of the map we are on.
   const { left, top } = lcdOrigin(c);
-  // The band as it shows, cut (bandClip), in map pixels of the map we are on.
-  const shown = {
-    left: left - band.left + cut.left,
-    top: top - band.top + cut.top,
-    right: left + GBA_W + band.right - cut.right,
-    bottom: top + GBA_H + band.bottom - cut.bottom,
-  };
+  const shown = { left: left - band.left, top: top - band.top, right: left + GBA_W + band.right, bottom: top + GBA_H + band.bottom };
   const ox = left - lay.lcdCol;
   const oy = top - lay.lcdRow;
   const corners = drawCorners(p, ctx, stillsOver(reached, drawn, c.layout), shown, ox, oy, fog);

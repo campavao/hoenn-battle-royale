@@ -78,12 +78,10 @@ describe('what came out of app.ts', () => {
 });
 
 // POK-327: the play-a-match e2e sets its match up from the hash -- the seed, the pace,
-// where the drop lands -- and picture.spec the band the core draws (POK-329). Each is a
-// way to rig a match or its picture, so none of them is read in a build.
+// where the drop lands. Each is a way to rig a match, so none of them is read in a build.
 describe('the dev flags a match is set up with', () => {
-  it.each(['fixedSeed', 'paceOptions', 'landOverride', 'devBand'])('%s reads nothing outside DEV', (fn) => {
-    // To the end of the signature's line: a return type can have braces of its own, and
-    // devBand takes the ROM's band to keep its sides (POK-329).
+  it.each(['fixedSeed', 'paceOptions', 'landOverride'])('%s reads nothing outside DEV', (fn) => {
+    // To the end of the signature's line: a return type can have braces of its own.
     const guarded = new RegExp(String.raw`function ${fn}\([^)]*\)[^\n]*\{\s*if \(!import\.meta\.env\.DEV\) return (?:null|undefined);`);
     expect(appSource).toMatch(guarded);
   });
@@ -99,36 +97,5 @@ describe("play.ts's copy of field.ts's offsets", () => {
     const shared = [...copied.keys()].filter((name) => name in exported);
     expect(shared.length, 'a regex that matched nothing would pass by saying nothing').toBeGreaterThanOrEqual(10);
     for (const name of shared) expect(copied.get(name), name).toBe(exported[name]);
-  });
-});
-
-// ...and its copy of bandClip, which the play spec holds every frame's clip-path to: the
-// map's edge, the ring's columns mid-step and the rows the ROM has still to draw (POK-329).
-describe("play.ts's edgeCut is field.ts's bandClip", () => {
-  it('on a map it knows and one it does not, at rest and mid-step every way, with and without stale rows', async () => {
-    // Imported at run time: play.ts is the e2e's, with node's modules, outside the page's
-    // tsconfig -- vitest runs it all the same.
-    const playModule = '../e2e/play';
-    type Band = { left: number; top: number; right: number; bottom: number };
-    const { edgeCut } = (await import(/* @vite-ignore */ playModule)) as {
-      edgeCut(cam: { map: string; x: number; y: number; subX: number; subY: number; stale?: number }, band: Band): Band;
-    };
-    const route = HOENN.byId.get('MAP_ROUTE103')!;
-    const bands = [field.LEGACY_BAND, { left: 0, top: 184, right: 16, bottom: 152 }, { left: 128, top: 40, right: 128, bottom: 40 }];
-    const stales = [0, 0x0ffff000 | 0xf, 0x0fff8007, 1 << 31, 1 << 3, 0x00ff00ff, (1 << 23) | 1];
-    let n = 0;
-    for (const band of bands) {
-      for (const [x, y] of [[9, 13], [9, 21], [0, 0], [79, 5], [40, 11]]) {
-        for (const [subX, subY] of [[0, 0], [4, 0], [-4, 0], [14, 0], [-14, 0], [0, 6], [0, -6], [0, 12]]) {
-          for (const stale of stales) {
-            const cam = { x, y, subX, subY };
-            expect(edgeCut({ ...cam, map: `${route.group}:${route.num}`, stale }, band), JSON.stringify({ cam, band, stale })).toEqual(field.bandClip(cam, route, band, stale));
-            expect(edgeCut({ ...cam, map: '99:99', stale }, band), 'a map neither knows').toEqual(field.bandClip(cam, null, band, stale));
-            n++;
-          }
-        }
-      }
-    }
-    expect(n).toBe(3 * 5 * 8 * 7);
   });
 });

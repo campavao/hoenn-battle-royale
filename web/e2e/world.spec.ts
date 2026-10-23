@@ -1,10 +1,9 @@
-// The whole window (prototype, Cam 2026-10-20: "one layer"). With `#world` the page hands
+// The whole window (HBR-27, Cam 2026-10-20: "one layer"). The page hands
 // the core the ROM's gBrWorld and asks for a band the size of the whole layout; the core
 // draws BG1..3 past the LCD from the ROM's map grid and metatiles, so on the field none
 // of the window is the page's still. Held here the way picture.spec holds the ROM's band:
 // every 16x16 cell of the picture that lies inside a map the check has a still for is
-// that still, standing and walking -- and, for the record, the same walk without `#world`
-// at the same size, saved next to it for the before-and-after.
+// that still, standing and walking.
 //
 // Pinned like picture.spec's Rustboro walk: solo, no bots, landed on Rustboro (21,25).
 import fs from 'node:fs';
@@ -86,57 +85,51 @@ async function land(page: Page, sym: Record<string, number>, hash: string, at = 
   await page.waitForTimeout(3_000);
 }
 
-for (const world of [false, true]) {
-  const name = world ? 'after' : 'before';
-  test(`${name}: a 1920x1080 desktop in Rustboro${world ? ', the whole window from the map grid' : ''}`, async ({ browser }) => {
-    test.setTimeout(240_000);
-    const sym = loadSymbols();
-    const ctx = await browser.newContext({ viewport: DESKTOP });
-    try {
-      const page = await ctx.newPage();
-      await land(page, sym, world ? '&world' : '');
-      const pic = await savePicture(page, `${name}-standing`);
-      await page.screenshot({ path: path.join(OUT_DIR, `${name}-standing.png`) });
-      if (world) {
-        const lay = await page.evaluate(() => (window as unknown as { __hbr: { field: { placement: { cols: number; rows: number; lcdCol: number; lcdRow: number } } } }).__hbr.field.placement);
-        expect(pic.width, 'the core draws every column the layout shows').toBeGreaterThanOrEqual(lay.cols);
-        expect(pic.left, '...with the LCD where the layout put it').toBeGreaterThanOrEqual(lay.lcdCol);
-        expect(pic.width * pic.height, 'more than the wide band').toBeGreaterThan(WIDE.width * WIDE.height);
-        console.log(`world: layout ${lay.cols}x${lay.rows}, LCD at ${lay.lcdCol},${lay.lcdRow}; picture ${pic.width}x${pic.height}, LCD at ${pic.left},${pic.top}`);
-      }
+const name = 'after';
+test('after: a 1920x1080 desktop in Rustboro, the whole window from the map grid', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const sym = loadSymbols();
+  const ctx = await browser.newContext({ viewport: DESKTOP });
+  try {
+    const page = await ctx.newPage();
+    await land(page, sym, '');
+    const pic = await savePicture(page, `${name}-standing`);
+    await page.screenshot({ path: path.join(OUT_DIR, `${name}-standing.png`) });
+    const lay = await page.evaluate(() => (window as unknown as { __hbr: { field: { placement: { cols: number; rows: number; lcdCol: number; lcdRow: number } } } }).__hbr.field.placement);
+    expect(pic.width, 'the core draws every column the layout shows').toBeGreaterThanOrEqual(lay.cols);
+    expect(pic.left, '...with the LCD where the layout put it').toBeGreaterThanOrEqual(lay.lcdCol);
+    expect(pic.width * pic.height, 'more than the wide band').toBeGreaterThan(WIDE.width * WIDE.height);
+    console.log(`world: layout ${lay.cols}x${lay.rows}, LCD at ${lay.lcdCol},${lay.lcdRow}; picture ${pic.width}x${pic.height}, LCD at ${pic.left},${pic.top}`);
 
-      await page.evaluate(installStill, {
-        sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi, gBrWorld: sym.gBrWorld },
-        // Route 116 to the east reaches past the grid's seven metatiles on the walk right.
-        ...aroundOf([RUSTBORO.id]),
-        every: 0,
-        keep: 6,
-        ...STILL,
-        skipWater: true,
-      });
-      const here = async () => { const r = await ram(page, sym); return { x: r.x, y: r.y, map: r.map }; };
-      await page.evaluate(() => (window as unknown as { __still: { start(): void } }).__still.start());
-      await walk(page, 'ArrowDown', async () => (await here()).y >= LAND.y + 6, 5_000);
-      await walk(page, 'ArrowUp', async () => (await here()).y <= 11, 12_000);
-      await walk(page, 'ArrowRight', async () => (await here()).x >= LAND.x + 10, 10_000);
-      await savePicture(page, `${name}-walked`);
-      await page.screenshot({ path: path.join(OUT_DIR, `${name}-walked.png`) });
-      await walk(page, 'ArrowLeft', async () => (await here()).x <= LAND.x, 10_000);
-      const report = await page.evaluate(() => (window as unknown as { __still: { stop(): StillReport } }).__still.stop());
-      const kept = await page.evaluate(() => (window as unknown as { __still: { missPngs(): string[] } }).__still.missPngs());
-      kept.forEach((k, i) => fs.writeFileSync(path.join(OUT_DIR, `${name}-miss-${i}.png`), Buffer.from(k.split(',')[1], 'base64')));
-      fs.writeFileSync(path.join(OUT_DIR, `${name}-misses.json`), JSON.stringify(report.misses.slice(0, 40), null, 1));
-      console.log(`world ${name}: ${report.samples} frames (${report.moving} mid-step), ${report.cells} cells, ${report.missed} missed, worst frame ${(100 * report.worstFrame).toFixed(1)}%, control ${(100 * report.controlFrame).toFixed(1)}%`);
-      expect(report.samples, 'frames compared').toBeGreaterThan(10);
-      if (world) {
-        expect(report.missed, 'every cell inside a known map is the still').toBe(0);
-        expect(report.controlFrame, 'the check has teeth').toBeLessThan(0.9);
-      }
-    } finally {
-      await ctx.close();
-    }
-  });
-}
+    await page.evaluate(installStill, {
+      sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi, gBrWorld: sym.gBrWorld },
+      // Route 116 to the east reaches past the grid's seven metatiles on the walk right.
+      ...aroundOf([RUSTBORO.id]),
+      every: 0,
+      keep: 6,
+      ...STILL,
+      skipWater: true,
+    });
+    const here = async () => { const r = await ram(page, sym); return { x: r.x, y: r.y, map: r.map }; };
+    await page.evaluate(() => (window as unknown as { __still: { start(): void } }).__still.start());
+    await walk(page, 'ArrowDown', async () => (await here()).y >= LAND.y + 6, 5_000);
+    await walk(page, 'ArrowUp', async () => (await here()).y <= 11, 12_000);
+    await walk(page, 'ArrowRight', async () => (await here()).x >= LAND.x + 10, 10_000);
+    await savePicture(page, `${name}-walked`);
+    await page.screenshot({ path: path.join(OUT_DIR, `${name}-walked.png`) });
+    await walk(page, 'ArrowLeft', async () => (await here()).x <= LAND.x, 10_000);
+    const report = await page.evaluate(() => (window as unknown as { __still: { stop(): StillReport } }).__still.stop());
+    const kept = await page.evaluate(() => (window as unknown as { __still: { missPngs(): string[] } }).__still.missPngs());
+    kept.forEach((k, i) => fs.writeFileSync(path.join(OUT_DIR, `${name}-miss-${i}.png`), Buffer.from(k.split(',')[1], 'base64')));
+    fs.writeFileSync(path.join(OUT_DIR, `${name}-misses.json`), JSON.stringify(report.misses.slice(0, 40), null, 1));
+    console.log(`world ${name}: ${report.samples} frames (${report.moving} mid-step), ${report.cells} cells, ${report.missed} missed, worst frame ${(100 * report.worstFrame).toFixed(1)}%, control ${(100 * report.controlFrame).toFixed(1)}%`);
+    expect(report.samples, 'frames compared').toBeGreaterThan(10);
+    expect(report.missed, 'every cell inside a known map is the still').toBe(0);
+    expect(report.controlFrame, 'the check has teeth').toBeLessThan(0.9);
+  } finally {
+    await ctx.close();
+  }
+});
 
 // Past the grid (HBR-27 step 2): the 10-20 play-test's seams were where the backup grid's
 // seven metatiles of each neighbour ran out (feedback item 2). The core now walks the
@@ -156,7 +149,7 @@ for (const cross of CROSSINGS) {
     const ctx = await browser.newContext({ viewport: DESKTOP });
     try {
       const page = await ctx.newPage();
-      await land(page, sym, '&world', cross.at);
+      await land(page, sym, '', cross.at);
       const tag = `cross-${cross.at.map.id}`;
       await savePicture(page, `${tag}-standing`);
       await page.evaluate(installStill, {
