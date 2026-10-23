@@ -224,8 +224,7 @@ test('a person the match strips is not drawn past the box either', async ({ brow
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    // The ring band (`#ring`): with the whole window the core draws the field's people.
-    await page.goto(`/#solo&nobots&ring&rom=${romHashParam()}`);
+    await page.goto(`/#solo&nobots&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 30_000 });
     await page.waitForFunction(
@@ -264,6 +263,8 @@ test('a person the match strips is not drawn past the box either', async ({ brow
       }
     }
     expect(down, 'a clear row past the box').toBeGreaterThan(0);
+    // What the core draws there without him: the map, its animation included.
+    const bare = await corePixels(page, rect, 90, null);
     const x = here.x - MAP_OFFSET;
     const y = here.y - MAP_OFFSET + down;
     // localId, graphicsId, kind, pad, x, y, elevation, movementType (FACE_DOWN), ranges, ...
@@ -276,10 +277,11 @@ test('a person the match strips is not drawn past the box either', async ({ brow
     const before = await read(bit, 8);
     try {
       await poke(templates + row * TEMPLATE_SIZE, tpl);
-      await expect.poll(() => opaqueAt(page, rect), { timeout: 10_000, message: 'a row the match keeps: the page draws him past the box' }).toBeGreaterThan(40);
+      await expect.poll(async () => (await corePixels(page, rect, 10, bare.seen)).strange, { timeout: 10_000, message: 'a row the match keeps: the core draws him past the box' }).toBeGreaterThan(40);
       await page.screenshot({ path: path.join(OUT_DIR, 'people-past-box-kept.png') });
       await poke(bit, [before | (1 << (row & 7))]);
-      await expect.poll(() => opaqueAt(page, rect), { timeout: 10_000, message: 'a row the match strips: nobody draws him' }).toBe(0);
+      await expect.poll(async () => (await corePixels(page, rect, 10, bare.seen)).strange, { timeout: 10_000, message: 'a row the match strips: nobody draws him' }).toBe(0);
+      expect(await opaqueAt(page, rect), 'not the overlay either').toBe(0);
       await page.screenshot({ path: path.join(OUT_DIR, 'people-past-box-stripped.png') });
     } finally {
       // Put the Zone back; a page that crashed has nothing to put back, and its error is the one to see.

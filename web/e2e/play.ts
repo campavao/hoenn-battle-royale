@@ -78,79 +78,15 @@ export const LCD_LEFT = 112;
 export const LCD_TOP = 72;
 export const CAMERA_X = 16;
 export const CAMERA_Y = 20;
-/** Rows past a map's top edge the band keeps (field.ts): the heads on its first row. */
-export const HEAD_ROOM = 16;
 
 /** The outdoor maps, `group:num`: the only ones the composite draws a map for. */
 const OUTDOOR = (worldData as { maps: { group: number; num: number; outdoor: boolean }[] }).maps
   .filter((m) => m.outdoor)
   .map((m) => `${m.group}:${m.num}`);
 
-/** How far past an edge the ROM's picture is the world, in map pixels (field.ts
- *  edgeReach): all the way where nothing is joined (1e9), MAP_OFFSET cells where every
- *  neighbour shares the tilesets, none otherwise. */
-type Seam = { dir: string; same?: boolean };
-const reachOf = (seams: Seam[], dir: string): number => {
-  const joined = seams.filter((s) => s.dir === dir);
-  return joined.length === 0 ? 1e9 : joined.every((s) => s.same) ? 7 * 16 : 0;
-};
-/** Every map's size in tiles and its reach past each edge, north, south, west, east,
- *  `group:num`: the band stops there (POK-329). */
-const SIZES: Record<string, [number, number, number, number, number, number]> = Object.fromEntries(
-  (worldData as { maps: { group: number; num: number; w: number; h: number; seams: Seam[] }[] }).maps.map((m) => [
-    `${m.group}:${m.num}`,
-    [m.w, m.h, reachOf(m.seams, 'north'), reachOf(m.seams, 'south'), reachOf(m.seams, 'west'), reachOf(m.seams, 'east')],
-  ]),
-);
-
 type Band = { left: number; top: number; right: number; bottom: number };
-/** The camera, as field.ts reads it: the pos tile, its map, the sub-tile offsets, and the
- *  ring rows the ROM has still to draw (gBrRingStale). */
-export type Cam = { map: string; x: number; y: number; subX: number; subY: number; stale?: number; wide?: boolean | null };
-
-/** The ROM's ring (field.ts RING_ABOVE, RING_ROWS): bit (dy + 9) of gBrRingStale is grid
- *  row pos.y + dy, map row pos.y + dy - 7; pret's rows 0..14 are never stale. */
-const RING_ABOVE = 9;
-const RING_ROWS = 32;
-
-/** What field.ts cuts off the band on the field (bandClip, POK-329), worked out again
- *  here: what lies past the edge of the map the picture was drawn on, HEAD_ROOM kept past
- *  its top; what lies past the ring's 16 columns mid-step (field.ts ringColumns:
- *  pos.x..pos.x+15, pos.x-1..pos.x+14 mid-step right); and the ring's rows the ROM has
- *  still to draw (ringRows) -- never into the LCD. A map the page does not know has no
- *  edge to cut at. */
-export function edgeCut(cam: Cam, band: Band): Band {
-  const size = SIZES[cam.map];
-  const sub = (v: number) => (v > 0 ? v - 16 : v < 0 ? v + 16 : 0);
-  const left = cam.x * 16 - LCD_LEFT + sub(cam.subX);
-  const top = cam.y * 16 - LCD_TOP + sub(cam.subY);
-  // The wide ring (a band left of the LCD): 32 columns from pos.x - 8, every row live,
-  // its stale bits columns. The tall one: 16 columns, its stale bits rows.
-  const wide = band.left > 0;
-  let ringLeft = (cam.x - (wide ? 8 : 0)) * 16 - LCD_LEFT - (cam.subX > 0 ? 16 : 0);
-  let ringRight = ringLeft + (wide ? 512 : 256);
-  const stale = cam.stale ?? 0;
-  let staleTop = -Infinity;
-  let staleBottom = Infinity;
-  if (wide) {
-    for (let dx = -1; dx >= -8; dx--) if ((stale >>> (dx + 8)) & 1) { ringLeft = Math.max(ringLeft, (cam.x + dx + 1 - 7) * 16); break; }
-    for (let dx = 15; dx < 24; dx++) if ((stale >>> (dx + 8)) & 1) { ringRight = Math.min(ringRight, (cam.x + dx - 7) * 16); break; }
-  } else {
-    for (let dy = -1; dy >= -RING_ABOVE; dy--) if ((stale >>> (dy + RING_ABOVE)) & 1) { staleTop = (cam.y + dy + 1 - 7) * 16; break; }
-    for (let dy = 15; dy < RING_ROWS - RING_ABOVE; dy++) if ((stale >>> (dy + RING_ABOVE)) & 1) { staleBottom = (cam.y + dy - 7) * 16; break; }
-  }
-  const w = size ? size[0] * 16 : Infinity;
-  const h = size ? size[1] * 16 : Infinity;
-  const [north, south, west, east] = size ? size.slice(2) : [Infinity, Infinity, Infinity, Infinity];
-  const bottom = top + GBA_H + band.bottom;
-  const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
-  return {
-    left: cut(Math.max(band.left - left - west, ringLeft - (left - band.left)), band.left),
-    top: cut(Math.max(size ? band.top - top - Math.max(HEAD_ROOM, north) : 0, staleTop - (top - band.top)), band.top),
-    right: cut(Math.max(left + GBA_W + band.right - w - east, left + GBA_W + band.right - ringRight), band.right),
-    bottom: cut(Math.max(bottom - h - south, bottom - staleBottom), band.bottom),
-  };
-}
+/** The camera, as field.ts reads it: the pos tile, its map and the sub-tile offsets. */
+export type Cam = { map: string; x: number; y: number; subX: number; subY: number };
 
 /** A clip-path's inset in CSS pixels, top/right/bottom/left ('' and none are no cut); null
  *  for anything else. The browser may give it back shortened, as CSS allows. */
@@ -234,8 +170,6 @@ export function clipAndCamera(page: Page, sym: Record<string, number>): Promise<
         y: s16(emu.read(sb1 + 2, 16)),
         subX: emu.read(s.gFieldCamera + k.CAMERA_X, 32) | 0,
         subY: emu.read(s.gFieldCamera + k.CAMERA_Y, 32) | 0,
-        stale: s.gBrRingStale === undefined ? 0 : emu.read(s.gBrRingStale, 32) >>> 0,
-        wide: s.gBrFieldWide === undefined ? null : emu.read(s.gBrFieldWide, 8) !== 0,
       };
     };
     let cam: ReturnType<typeof read> | null = null;
@@ -310,20 +244,14 @@ export async function expectLayout(page: Page, want: { onField?: boolean }, what
   expect(p.lcd.y + p.lcd.height, `${what}: the LCD is inside the box`).toBeLessThanOrEqual(p.box.y + p.box.height + 1);
   if (want.onField === undefined) return;
   if (want.onField) {
-    // The band shows on the field, cut only past the map's edge.
+    // The band shows on the field, whole: the core draws the map past every edge (HBR-27).
     if (!sym) throw new Error('expectLayout: the camera is read through the symbols');
     const { cam, clip, scale } = await clipAndCamera(page, sym);
     const inset = insetOf(clip);
     expect(inset, `${what}: a clip-path the page could have set ("${clip}")`).not.toBeNull();
-    // The ring the ROM latched is the one the band asked for (field.ts reads the latch;
-    // edgeCut takes it from the band).
-    if (cam.wide !== null && cam.wide !== undefined) expect(cam.wide, `${what}: the ROM latched the ring the band asked for`).toBe(band.left > 0);
-    // With the whole window (the default; `#ring` is the ring band) nothing is cut.
-    const world = !(await page.evaluate(() => new URLSearchParams(location.hash.slice(1)).has('ring')));
-    const cut = world ? { left: 0, top: 0, right: 0, bottom: 0 } : edgeCut(cam, band);
     const [top, right, bottom, left] = inset!.map((v) => v / scale);
-    expect({ top, right, bottom, left }, `${what}: the band shows on the field, less what is past the edge of ${cam.map} at ${JSON.stringify(cam)} (clip-path "${clip}")`)
-      .toEqual({ top: expect.closeTo(cut.top, 0), right: expect.closeTo(cut.right, 0), bottom: expect.closeTo(cut.bottom, 0), left: expect.closeTo(cut.left, 0) });
+    expect({ top, right, bottom, left }, `${what}: the band shows on the field, whole, on ${cam.map} at ${JSON.stringify(cam)} (clip-path "${clip}")`)
+      .toEqual({ top: expect.closeTo(0, 0), right: expect.closeTo(0, 0), bottom: expect.closeTo(0, 0), left: expect.closeTo(0, 0) });
   } else {
     const s = p.canvas.width / p.buffer.w;
     const inset = insetOf(p.clip);
@@ -388,10 +316,10 @@ export interface PlayLog {
  *  on every frame; the picture's layout and the composite's corners on every other. */
 export async function startRecorder(page: Page, sym: Record<string, number>): Promise<void> {
   await page.evaluate(
-    ([s, k, outdoor, sizes]) => {
+    ([s, k, outdoor]) => {
       type Band = { left: number; top: number; right: number; bottom: number };
       const w = window as unknown as {
-        __hbr: { emu: { read(a: number, w: 8 | 16 | 32): number; onFrame(fn: () => void): () => void; viewport: Band | null } };
+        __hbr: { emu: { read(a: number, w: 8 | 16 | 32): number; onFrame(fn: () => void): () => void; viewport: Band | null; picture(): { width: number; height: number; left: number; top: number; data: Uint8Array } | null } };
         __play?: unknown;
       };
       const emu = w.__hbr.emu;
@@ -413,40 +341,10 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
       w.__play = log;
       let frame = 0;
       let clipOff = 0;
-      // The camera read on the frame before: field.ts cuts the band from it (POK-329).
-      type Cam = { map: string; x: number; y: number; subX: number; subY: number; stale: number };
+      // The camera read on the frame before, as field.ts keeps it.
+      type Cam = { map: string; x: number; y: number; subX: number; subY: number };
       let camBefore: Cam | null = null;
       const s16 = (v: number) => (v << 16) >> 16;
-      const sub = (v: number) => (v > 0 ? v - 16 : v < 0 ? v + 16 : 0);
-      // field.ts's bandClip, as play.ts's edgeCut has it.
-      const edgeCut = (c: Cam, band: Band): Band => {
-        const size = (sizes as Record<string, [number, number, number, number, number, number]>)[c.map];
-        const left = c.x * 16 - k.LCD_LEFT + sub(c.subX);
-        const top = c.y * 16 - k.LCD_TOP + sub(c.subY);
-        const wide = band.left > 0;
-        let ringLeft = (c.x - (wide ? 8 : 0)) * 16 - k.LCD_LEFT - (c.subX > 0 ? 16 : 0);
-        let ringRight = ringLeft + (wide ? 512 : 256);
-        let staleTop = -Infinity;
-        let staleBottom = Infinity;
-        if (wide) {
-          for (let dx = -1; dx >= -8; dx--) if ((c.stale >>> (dx + 8)) & 1) { ringLeft = Math.max(ringLeft, (c.x + dx + 1 - 7) * 16); break; }
-          for (let dx = 15; dx < 24; dx++) if ((c.stale >>> (dx + 8)) & 1) { ringRight = Math.min(ringRight, (c.x + dx - 7) * 16); break; }
-        } else {
-          for (let dy = -1; dy >= -4; dy--) if ((c.stale >>> (dy + 4)) & 1) { staleTop = (c.y + dy + 1 - 7) * 16; break; }
-          for (let dy = 15; dy < 28; dy++) if ((c.stale >>> (dy + 4)) & 1) { staleBottom = (c.y + dy - 7) * 16; break; }
-        }
-        const w = size ? size[0] * 16 : Infinity;
-        const h = size ? size[1] * 16 : Infinity;
-        const [north, south, west, east] = size ? size.slice(2) : [Infinity, Infinity, Infinity, Infinity];
-        const bottom = top + k.GBA_H + band.bottom;
-        const cut = (past: number, side: number) => Math.max(0, Math.min(side, past));
-        return {
-          left: cut(Math.max(band.left - left - west, ringLeft - (left - band.left)), band.left),
-          top: cut(Math.max(size ? band.top - top - Math.max(k.HEAD_ROOM, north) : 0, staleTop - (top - band.top)), band.top),
-          right: cut(Math.max(left + k.GBA_W + band.right - w - east, left + k.GBA_W + band.right - ringRight), band.right),
-          bottom: cut(Math.max(bottom - h - south, bottom - staleBottom), band.bottom),
-        };
-      };
       const insetOf = (clip: string): number[] | null => {
         if (clip === '' || clip === 'none') return [0, 0, 0, 0];
         const m = /^inset\(([^)]*)\)$/.exec(clip.trim());
@@ -591,7 +489,6 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
             y: s16(emu.read(sb1 + 2, 16)),
             subX: emu.read(s.gFieldCamera + k.CAMERA_X, 32) | 0,
             subY: emu.read(s.gFieldCamera + k.CAMERA_Y, 32) | 0,
-            stale: s.gBrRingStale === undefined ? 0 : emu.read(s.gBrRingStale, 32) >>> 0,
           }
           : null;
 
@@ -642,13 +539,10 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         if (band && (lcd.width !== k.GBA_W + band.left + band.right || lcd.height !== k.GBA_H + band.top + band.bottom)) {
           fail('buffer', `${lcd.width}x${lcd.height} with a band ${JSON.stringify(band)}`);
         }
-        // Off the field the whole band is cut; on it, what lies past the edge of the map
-        // the picture was drawn on (POK-329).
+        // Off the field the whole band is cut; on it nothing: the core draws the map past
+        // every edge (HBR-27).
         if (band && (!onField || before)) {
-          // With the whole window (the default; `#ring` is the ring band) the core draws
-          // the map past every edge, and nothing is cut on the field.
-          const world = !new URLSearchParams(location.hash.slice(1)).has('ring');
-          const want = onField && before ? (world ? { left: 0, top: 0, right: 0, bottom: 0 } : edgeCut(before, band)) : band;
+          const want = onField && before ? { left: 0, top: 0, right: 0, bottom: 0 } : band;
           const sc = r.width / lcd.width;
           const got = insetOf(lcd.style.clipPath);
           const ok = !!got && [want.top, want.right, want.bottom, want.left].every((v, i) => Math.abs(got[i] / sc - v) < 0.5);
@@ -699,7 +593,7 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
               // cut) the core's picture covers the field canvas wherever it reaches, and
               // draws the fade itself, so that is what is held to it (a copy of the
               // picture: only here). Off the field the band is cut and the canvas shows.
-              const pic = !onField || new URLSearchParams(location.hash.slice(1)).has('ring') ? null : emu.picture();
+              const pic = onField ? emu.picture() : null;
               const shown = pts.map(([x, y], j) => {
                 const qx = x - lx + (pic?.left ?? 0);
                 const qy = y - ly + (pic?.top ?? 0);
@@ -760,10 +654,8 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
         LCD_TOP,
         CAMERA_X,
         CAMERA_Y,
-        HEAD_ROOM,
       },
       OUTDOOR,
-      SIZES,
     ] as const,
   );
 }

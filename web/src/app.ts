@@ -149,7 +149,7 @@ import {
   type MatchSnapshot,
 } from './match/lifecycle';
 import regionmapData from './data/regionmap.json';
-import { devBand as devBandOf, devLand, devPace, parseRoomHash as parseHash, perfWanted, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
+import { devLand, devPace, parseRoomHash as parseHash, perfWanted, withoutRoom, withRoom, type RoomHash, type RoomMode } from './hash';
 import { warm, warmList } from './sw-warm';
 
 // The world data the director deals spawns and picks ring centres from (POK-223/224).
@@ -1663,16 +1663,6 @@ function landOverride(): { map: MapRef; x: number; y: number } | undefined {
   return land && map ? { map, x: land.x, y: land.y } : undefined;
 }
 
-/** `#band=T,B`: ask the core for T rows above the LCD and B below instead of the ROM's,
- *  the sides as the ROM has them (POK-329: picture.spec asks for the legacy 40/56). Dev
- *  only: past the ROM's ring there is nothing of the map to show, and a player would see
- *  the backdrop. */
-function devBand(rom: Band): Band | undefined {
-  if (!import.meta.env.DEV) return undefined;
-  const rows = devBandOf(location.hash);
-  return rows && { left: rom.left, top: rows.top, right: rom.right, bottom: rows.bottom };
-}
-
 /** The band the core was asked for at the last boot: the field lays out with it when the
  *  emulator has none to say (field.ts bandOf). */
 let askedBand: Band | null = null;
@@ -1723,7 +1713,7 @@ function askForBand(emu: Emulator): void {
   const shownOk = sideTable && fieldShownAt !== undefined;
   const asked = askBand(matchLayout(), romPicture, shownOk);
   emu.setSpriteBand(romPicture.sprites);
-  askedBand = devBand(romPicture.band) ?? asked;
+  askedBand = asked;
   // gBrFieldShown must name the band the core actually draws, and the core takes a new
   // band only at loadGame: both callers reboot straight after this. A resize handler that
   // calls it without a reboot would tell the ROM about rows the core does not show --
@@ -1731,19 +1721,28 @@ function askForBand(emu: Emulator): void {
   fieldShown = shownOk
     ? { top: askedBand.top, bottom: askedBand.bottom, left: askedBand.left, right: askedBand.right }
     : null;
-  // The whole window (the default; `#ring` opts out): the core draws the whole layout
-  // from the ROM's map grid, past what the ring holds; the ROM keeps the ring it has for
-  // the band above, which the core still draws the LCD's sprites and its own rows from.
-  worldOn = wantWorld() && emu.setWorld(worldAt);
+  // The whole window (HBR-27): the core draws the whole layout from the ROM's map grid,
+  // past what the ring holds; the ROM keeps the ring it has for the band above, which the
+  // core still draws the LCD's sprites and its own rows from. A core too old to (one the
+  // service worker kept while the network was down) shows the LCD alone (FieldView.clip)
+  // until the page loads again with a network, once: the core is fetched network first.
+  worldOn = emu.setWorld(worldAt);
   if (worldOn) askedBand = worldBand(matchLayout());
+  else if (worldAt) refreshCore();
   emu.setViewport(askedBand);
 }
 
-/** The whole window, drawn by the core from the ROM's map (Cam, 2026-10-20, "one layer";
- *  HBR-27): the default. `#ring` keeps the ring band and the page's stills past it. */
-function wantWorld(): boolean {
-  return !new URLSearchParams(location.hash.slice(1)).has('ring');
+/** Load the page again for a core that draws the world, once a tab, and only online. */
+function refreshCore(): void {
+  try {
+    if (!navigator.onLine || sessionStorage.getItem('hbr-core-refresh')) return;
+    sessionStorage.setItem('hbr-core-refresh', '1');
+  } catch {
+    return;
+  }
+  location.reload();
 }
+
 /** gBrWorld, where the ROM says the LCD sits on its map grid, and what the core reads
  *  the map from (include/br/br_field.h); null when the image booted lacks any of them. */
 let worldAt: WorldSymbols | null = null;

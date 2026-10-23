@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_VIEW_SIZE, HEAD_ROOM, ringStaleColumns, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandClip, bandOf, ringColumns, ringRows, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed } from './field';
+import { FIELD_VIEW_SIZE, shownArea, wideRing, WIDE_COLUMNS, WIDE_LEFT, LEGACY_BAND, askBand, LEGACY_SPRITE_BAND, type Camera, FieldImages, FieldView, type FieldDeps, SB1_MAP_GROUP, SB1_MAP_NUM, SB1_POS_X, SB1_POS_Y, SHAKE_FRAMES, bandOf, RING_ABOVE, RING_ROWS, fadeOf, fogOrigin, frameOf, gbaColor, FAST_FADE, heldFade, holdFade, layoutField, PAD_GAP, mapFade, lcdOrigin, lcdRect, neighbours, oamFlipped, pictureBox, romBand, shakeOffset, subTile, SPR_OAM_HFLIP, seeThroughAlpha, keyPicture, edgeReach, unseenFade, fieldDimmed } from './field';
 import { standsAbove } from './field-extra';
 import type { Band } from './emu';
 import { GhostWalkers, OBJ_LOCAL_ID, OBJ_MAP_GROUP, OBJ_MAP_NUM, SB1_TEMPLATES, SEAT_SIZE, TEMPLATE_SIZE, TPL_GFX, TPL_LOCAL_ID, TPL_MOVEMENT_TYPE, TPL_X, TPL_Y } from './field-ghosts';
@@ -195,7 +195,10 @@ describe('the picture past the LCD (POK-319)', () => {
       expect(band).toBeGreaterThan(0);
       expect(sprites).toBeGreaterThan(band);
       expect(viewport).toBeGreaterThan(sprites);
-      expect(fn).toMatch(/askedBand = devBand\(romPicture\.band\) \?\? asked;/);
+      expect(fn).toMatch(/askedBand = asked;/);
+      // ...and the whole window over it, from a core that draws the world (HBR-27).
+      expect(fn.indexOf('askedBand = worldBand(matchLayout())')).toBeGreaterThan(fn.indexOf('worldOn = emu.setWorld(worldAt)'));
+      expect(fn.indexOf('askedBand = worldBand(matchLayout())')).toBeLessThan(viewport);
       // The match's layout, whatever is up when it is measured: in-match, and docked on a desktop.
       const measure = appSource.slice(appSource.indexOf('function matchLayout('), appSource.indexOf('function askForBand('));
       expect(measure).toMatch(/classList\.add\('in-match'\)/);
@@ -218,244 +221,52 @@ describe('the picture past the LCD (POK-319)', () => {
     });
   });
 
-  describe("the band stops at the map's edge (POK-329)", () => {
-    const map = { w: 20, h: 20 };
-    const at = (x: number, y: number, subX = 0, subY = 0) => ({ x, y, subX, subY });
-    const none = { left: 0, top: 0, right: 0, bottom: 0 };
+  it("the ring's geometry is the ROM's (include/br/br_field.h)", () => {
+    expect(RING_ABOVE).toBe(define('BR_RING_ABOVE'));
+    expect(RING_ROWS).toBe(define('BR_RING_TILE_ROWS') / 2);
+  });
 
-    it('mid-map, nothing is cut', () => {
-      expect(bandClip(at(10, 10), { w: 30, h: 30 }, LEGACY_BAND)).toEqual(none);
+  // How far past each edge the ROM's own picture is the map (bots/world.ts reads it too).
+  it('reads how far past an edge the ROM draws the world, side by side', () => {
+    const sea = { w: 30, h: 20, seams: [{ dir: 'north' as const }] };
+    expect(edgeReach(sea, 'south'), 'nothing joined: the border, all the way').toBe(Infinity);
+    expect(edgeReach(sea, 'north')).toBe(0);
+    const mixed = { w: 30, h: 20, seams: [{ dir: 'south' as const, same: true }, { dir: 'south' as const }] };
+    expect(edgeReach(mixed, 'south'), 'one neighbour drawn wrong cuts the side').toBe(0);
+    const side = { w: 30, h: 20, seams: [{ dir: 'west' as const, same: true }, { dir: 'east' as const }] };
+    expect(edgeReach(side, 'west'), "MAP_OFFSET cells of a neighbour on the same tilesets").toBe(7 * 16);
+    expect(edgeReach(side, 'east')).toBe(0);
+  });
+
+  it('FieldView shows the whole band on the field from a core drawing the world, and the LCD alone otherwise, in one clip-path set only when it changes', () => {
+    const sets: string[] = [];
+    let clipPath = '';
+    const style = {} as { clipPath: string };
+    Object.defineProperty(style, 'clipPath', {
+      get: () => clipPath,
+      set: (v: string) => {
+        clipPath = v;
+        sets.push(v);
+      },
     });
+    const lcd = { width: 256, height: 256, style };
+    let world = true;
+    const view = new FieldView({ emu: { viewport: LEGACY_BAND }, lcd, world: () => world } as unknown as FieldDeps);
+    const inner = view as unknown as { band: Band | null; lay: { scale: number }; clip(onField: boolean): void };
+    inner.band = { ...LEGACY_BAND };
+    inner.lay = { ...inner.lay, scale: 2 };
 
-    it('near the last row, the rows past it are cut -- never more than the band has', () => {
-      // At rest on row y the picture's top is map row 16y - 72, so the band's last row
-      // is 16y - 72 + 160 + 56 = 16y + 144: row 11 ends it on the edge (320).
-      expect(bandClip(at(10, 11), map, LEGACY_BAND).bottom, 'the band ends on the edge').toBe(0);
-      expect(bandClip(at(10, 12), map, LEGACY_BAND).bottom).toBe(16);
-      expect(bandClip(at(10, 13), map, LEGACY_BAND).bottom).toBe(32);
-      expect(bandClip(at(10, 19), map, LEGACY_BAND).bottom, 'on the last row, all of it').toBe(LEGACY_BAND.bottom);
-      // A taller band: on the last row all of it goes (the LCD's own 72 rows past the
-      // edge stay), and on row 14 the rows from the edge down.
-      expect(bandClip(at(10, 19), map, { left: 0, top: 104, right: 16, bottom: 232 }).bottom).toBe(232);
-      expect(bandClip(at(10, 14), map, { left: 0, top: 104, right: 16, bottom: 232 }).bottom).toBe(14 * 16 + 88 + 232 - 320);
-    });
-
-    it('mid-step, from the camera the picture was drawn from: the tile has moved, the offset walks it back', () => {
-      // A step down onto row 13: the offset runs 4, 8, 12 and the step lands at 0.
-      expect([4, 8, 12, 0].map((sub) => bandClip(at(10, 13, 0, sub), map, LEGACY_BAND).bottom)).toEqual([20, 24, 28, 32]);
-      // ...and back up onto row 12, the offset negative.
-      expect([-4, -8, -12, 0].map((sub) => bandClip(at(10, 12, 0, sub), map, LEGACY_BAND).bottom)).toEqual([28, 24, 20, 16]);
-    });
-
-    it('the right edge, at rest and mid-step', () => {
-      expect(bandClip(at(11, 10), map, LEGACY_BAND).right).toBe(0);
-      expect(bandClip(at(12, 10), map, LEGACY_BAND).right).toBe(16);
-      expect(bandClip(at(12, 10, 8, 0), map, LEGACY_BAND).right, 'half a step onto column 12').toBe(8);
-      expect(bandClip(at(19, 10), map, LEGACY_BAND).right).toBe(LEGACY_BAND.right);
-    });
-
-    // gBrRingStale: bit (dy + 4) is ring row pos.y + dy, not yet drawn -- after a whole-map
-    // draw every row past pret's pos.y..pos.y+15, after a map connection every row past
-    // pret's pos.y..pos.y+14 but a step up's new top row. The band stops short of them and
-    // the composite shows the map there (Rustboro -> Route 115 in picture.spec: the top
-    // four rows were Rustboro's border for four frames).
-    describe("rows the ROM has still to draw are cut (ringRows)", () => {
-      const tall: Band = { left: 0, top: 184, right: 16, bottom: 152 };
-      const mid = { w: 60, h: 60 };
-      const bit = (dy: number) => 2 ** (dy + RING_ABOVE);
-      const rows = (...dys: number[]) => dys.reduce((m, dy) => m + bit(dy), 0);
-      const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
-      it('none stale: nothing cut', () => {
-        expect(ringRows(at(20, 20), 0)).toEqual({ top: -Infinity, bottom: Infinity });
-        expect(bandClip(at(20, 20), mid, tall, 0)).toEqual(none);
-      });
-      it('after a whole-map draw, the band is pret\'s sixteen rows: the sprite window above the LCD, 56 rows below', () => {
-        const wholeMap = rows(...range(-9, -1), ...range(16, 22));
-        expect(bandClip(at(20, 20), mid, tall, wholeMap)).toEqual({ ...none, top: 144, bottom: 96 });
-        // ...and as they are drawn, nearest first, the cuts shrink a row at a time.
-        expect(bandClip(at(20, 20), mid, tall, rows(...range(-9, -2), ...range(17, 22)))).toEqual({ ...none, top: 128, bottom: 80 });
-        expect(bandClip(at(20, 20), mid, tall, rows(-9, 21, 22)), 'the last two').toEqual({ ...none, top: 16, bottom: 16 });
-        expect(bandClip(at(20, 20), mid, tall, rows(22)), 'the far row is past the band').toEqual(none);
-      });
-      it("over a connection going up: the new top row is fresh, the eight under it the last map's border, so all nine are cut", () => {
-        const crossedUp = rows(...range(-8, -1), ...range(15, 21));
-        // Two pixels into the step: the picture's top is map row 78, ring row -1 ends at
-        // 208; its bottom is 574, ring row 15 starts at 448.
-        expect(bandClip(at(20, 20, 0, -2), mid, tall, crossedUp)).toEqual({ ...none, top: 130, bottom: 126 });
-      });
-      it("mid-step down the far row waits in the slot the band's top shows: that is not a row the band shows at the bottom", () => {
-        expect([2, 4, 8, 14].map((sub) => bandClip(at(20, 20, 0, sub), mid, tall, rows(22)))).toEqual(Array(4).fill(none));
-      });
-      it("never pret's rows, so never the LCD: the nearest stale rows leave the sprite window above it and 40 rows below", () => {
-        const cut = bandClip(at(20, 20), mid, tall, rows(-1, 15));
-        expect(cut).toEqual({ ...none, top: 144, bottom: 112 });
-        expect(tall.top - cut.top, 'rows left above the LCD').toBe(40);
-        expect(tall.bottom - cut.bottom, 'and below').toBe(40);
-      });
-    });
-
-    it("the top edge keeps HEAD_ROOM rows: the heads of the map's first row", () => {
-      expect(HEAD_ROOM).toBe(16);
-      expect(bandClip(at(10, 6), map, LEGACY_BAND).top).toBe(0);
-      // Row 5: the band runs from map row -32 to 8; -32..-16 go, -16..8 stay.
-      expect(bandClip(at(10, 5), map, LEGACY_BAND).top).toBe(16);
-      expect(bandClip(at(10, 0), map, LEGACY_BAND).top).toBe(LEGACY_BAND.top);
-    });
-
-    it("a band left of the LCD is the wide ring's, which starts WIDE_LEFT columns left of pos.x: cut only at the map's edge", () => {
-      const wide: Band = { left: 16, top: 40, right: 16, bottom: 40 };
-      expect(bandClip(at(7, 10), map, wide).left, 'past the map edge').toBe(16);
-      expect(bandClip(at(8, 10), map, wide).left, 'on it').toBe(0);
-      expect(bandClip(at(8, 10), map, wide).right).toBe(0);
-    });
-
-    // THE WIDE RING (include/br/br_field.h): 32 columns, pos.x-8..pos.x+23, the view
-    // 31 of them; gBrRingStale's bits are its columns, bit (dx + 8).
-    describe('the wide ring: its columns, and the ones it has still to draw (ringStaleColumns)', () => {
-      const wide: Band = { left: 128, top: 40, right: 128, bottom: 40 };
-      const mid = { w: 60, h: 60 };
-      const bit = (dx: number) => 2 ** (dx + WIDE_LEFT);
-      const cols = (...dxs: number[]) => dxs.reduce((m, dx) => m + bit(dx), 0);
-      const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
-      it('at rest it holds the band, and one column spare', () => {
-        expect(ringColumns(at(20, 20), true)).toEqual({ left: 12 * 16 - 112, right: 44 * 16 - 112 });
-        expect(bandClip(at(20, 20), mid, wide)).toEqual(none);
-      });
-      it("a step right: the far column waits in the slot the band's left edge shows, so the ring is pos.x-9..pos.x+22 and nothing is cut", () => {
-        expect(ringColumns(at(20, 20, 4, 0), true)).toEqual({ left: 11 * 16 - 112, right: 43 * 16 - 112 });
-        expect([2, 4, 8, 14].map((sub) => bandClip(at(20, 20, sub, 0), mid, wide, cols(23)))).toEqual(Array(4).fill(none));
-      });
-      it('a step left: the new column is in from the first frame', () => {
-        expect([-2, -4, -8, -14].map((sub) => bandClip(at(20, 20, sub, 0), mid, wide))).toEqual(Array(4).fill(none));
-      });
-      it("after a whole-map draw, the band is pret's 16 columns: none left of the LCD, its 16 right", () => {
-        const wholeMap = cols(...range(-8, -1), ...range(16, 23));
-        expect(ringStaleColumns(at(20, 20), wholeMap)).toEqual({ left: (20 - 7) * 16, right: (20 + 16 - 7) * 16 });
-        expect(bandClip(at(20, 20), mid, wide, wholeMap)).toEqual({ ...none, left: 128, right: 112 });
-        expect(bandClip(at(20, 20), mid, wide, cols(-8, 23)), 'the last two').toEqual({ ...none, left: 16 });
-      });
-      it('the rows are never cut for staleness: the wide ring has no rows past pret\'s', () => {
-        expect(bandClip(at(20, 20, 0, 8), mid, wide, 0)).toEqual(none);
-      });
-      it("a ROM that latched the tall ring (gBrFieldWide 0) under a wide band: cut to the tall ring's 16 columns", () => {
-        expect(bandClip(at(20, 20), mid, wide, 0, false)).toEqual({ ...none, left: 128, right: 112 });
-        expect(bandClip(at(20, 20), mid, wide, cols(-8), false), 'its bits are rows then, and these none the band shows').toEqual({ ...none, left: 128, right: 112 });
-      });
-    });
-
-    // The ring is 16 metatile columns, 256 pixels, and the band 256 wide: mid-step the
-    // picture straddles 17, and the 17th is another column's slot (Cam's play-test's
-    // sliver at the picture's right, walking either way; picture.spec's Rustboro walk).
-    describe("mid-step sideways, the band's right columns past the ring's are cut (ringColumns)", () => {
-      const mid = { w: 60, h: 60 };
-      it('at rest the picture is the ring, exactly', () => {
-        expect(ringColumns(at(20, 20))).toEqual({ left: 20 * 16 - 112, right: 20 * 16 + 144 });
-        expect(bandClip(at(20, 20), mid, LEGACY_BAND)).toEqual(none);
-      });
-      it("a step right: the far column waits for the landing, so the ring is pos.x-1..pos.x+14 and the band's last subX columns are past it", () => {
-        expect(ringColumns(at(20, 20, 4, 0))).toEqual({ left: 19 * 16 - 112, right: 19 * 16 + 144 });
-        expect([2, 4, 8, 12, 14].map((sub) => bandClip(at(20, 20, sub, 0), mid, LEGACY_BAND).right)).toEqual([2, 4, 8, 12, 14]);
-      });
-      it("a step left: the new column is drawn into the slot the band's right edge shows, the last 16 + subX columns", () => {
-        expect(ringColumns(at(20, 20, -4, 0))).toEqual({ left: 20 * 16 - 112, right: 20 * 16 + 144 });
-        expect([-2, -4, -8, -12, -14].map((sub) => bandClip(at(20, 20, sub, 0), mid, LEGACY_BAND).right)).toEqual([14, 12, 8, 4, 2]);
-      });
-      it("the ROM's tall band the same, never the LCD, and up and down nothing: the 512-row ring holds all 496 rows mid-step", () => {
-        const tall: Band = { left: 0, top: 104, right: 16, bottom: 232 };
-        expect(bandClip(at(20, 20, -2, 0), mid, tall)).toEqual({ ...none, right: 14 });
-        expect([4, 8, 12, -4, -8, -12].map((sub) => bandClip(at(20, 20, 0, sub), mid, tall))).toEqual(Array(6).fill(none));
-      });
-      it('on a map the page does not know, the ring is cut all the same, and no edge', () => {
-        expect(bandClip(at(2, 2, 4, 0), null, LEGACY_BAND)).toEqual({ ...none, right: 4 });
-        expect(bandClip(at(2, 2), null, LEGACY_BAND)).toEqual(none);
-      });
-      it("the ring's geometry is the ROM's (include/br/br_field.h)", () => {
-        expect(RING_ABOVE).toBe(define('BR_RING_ABOVE'));
-        expect(RING_ROWS).toBe(define('BR_RING_TILE_ROWS') / 2);
-        expect(fieldSource, 'the page reads the stale rows by their gBr name').toMatch(/EWRAM_DATA u32 gBrRingStale\b/);
-      });
-      it("near the right edge, the larger of the two cuts", () => {
-        // Row 10 of a 20-wide map at column 12: 16 past the edge at rest; half a step on, 8.
-        expect(bandClip(at(12, 10, 8, 0), map, LEGACY_BAND).right).toBe(8);
-        expect(bandClip(at(11, 10, 4, 0), map, LEGACY_BAND).right, 'the edge cuts nothing, the ring 4').toBe(4);
-      });
-    });
-
-    // 2026-10-07 play-test: "in certain areas the water animation isn't present" -- the
-    // still under the band, past an edge the ROM draws right itself.
-    it('runs past an edge with nothing joined to it: the ROM draws the border, animated', () => {
-      const sea = { w: 30, h: 20, seams: [{ dir: 'north' as const }] };
-      expect(bandClip(at(10, 19), sea, LEGACY_BAND).bottom, 'no neighbour south').toBe(0);
-      expect(bandClip(at(10, 19), { w: 30, h: 20 }, LEGACY_BAND).bottom, 'a bare size cuts as it did').toBe(LEGACY_BAND.bottom);
-      expect(bandClip(at(10, 0), sea, LEGACY_BAND).top, 'a neighbour north: cut past the head room').toBe(LEGACY_BAND.top);
-      expect(edgeReach(sea, 'south')).toBe(Infinity);
-      expect(edgeReach(sea, 'north')).toBe(0);
-    });
-
-    it("runs MAP_OFFSET cells into a neighbour that shares the tilesets, the ROM's own copy of it", () => {
-      const tall: Band = { left: 0, top: 104, right: 16, bottom: 232 };
-      const joined = { w: 30, h: 20, seams: [{ dir: 'south' as const, same: true }, { dir: 'north' as const, same: true }] };
-      // The band's last row at y 19: 19*16 - 72 + 160 + 232 = 624, the edge 320, 7 cells 112.
-      expect(bandClip(at(10, 19), joined, tall).bottom).toBe(624 - 320 - 112);
-      expect(bandClip(at(10, 13), joined, tall).bottom, 'six rows past the seven').toBe(96);
-      expect(bandClip(at(10, 7), joined, tall).bottom, 'the band ending on the seventh: nothing').toBe(0);
-      // At the top: 104 rows above a picture whose top is map row -72: 176 past, 112 kept.
-      expect(bandClip(at(10, 0), joined, tall).top).toBe(176 - 112);
-      const mixed = { w: 30, h: 20, seams: [{ dir: 'south' as const, same: true }, { dir: 'south' as const }] };
-      expect(edgeReach(mixed, 'south'), 'one neighbour drawn wrong cuts the side').toBe(0);
-    });
-
-    it('reads west and east the same way', () => {
-      const side = { w: 30, h: 20, seams: [{ dir: 'west' as const, same: true }, { dir: 'east' as const }] };
-      expect(edgeReach(side, 'west')).toBe(7 * 16);
-      expect(edgeReach(side, 'east')).toBe(0);
-      const open = { w: 30, h: 20, seams: [] };
-      expect(edgeReach(open, 'west')).toBe(Infinity);
-      expect(bandClip(at(29, 10), side, LEGACY_BAND).right, 'a neighbour drawn wrong east: cut there').toBe(LEGACY_BAND.right);
-      expect(bandClip(at(29, 10), open, LEGACY_BAND).right, 'nothing east: the border, uncut').toBe(0);
-    });
-
-    it('never cuts into the LCD, however small the map', () => {
-      const tall: Band = { left: 8, top: 104, right: 16, bottom: 232 };
-      expect(bandClip(at(2, 2), { w: 5, h: 5 }, tall)).toEqual(tall);
-      expect(bandClip(at(2, 2), { w: 5, h: 5 }, LEGACY_BAND)).toEqual(LEGACY_BAND);
-    });
-
-    it('FieldView puts it and the off-field cut in one clip-path, set only when it changes', () => {
-      // Verdanturf, south of Route 116, is drawn with other tilesets: cut at the edge.
-      const route = HOENN.byId.get('MAP_ROUTE116')!;
-      expect({ h: route.h, south: route.seams.filter((s) => s.dir === 'south').map((s) => s.same ?? false) }).toEqual({ h: 20, south: [false] });
-      const sets: string[] = [];
-      let clipPath = '';
-      const style = {} as { clipPath: string };
-      Object.defineProperty(style, 'clipPath', {
-        get: () => clipPath,
-        set: (v: string) => {
-          clipPath = v;
-          sets.push(v);
-        },
-      });
-      const lcd = { width: 256, height: 256, style };
-      const view = new FieldView({ emu: { viewport: LEGACY_BAND }, lcd } as unknown as FieldDeps);
-      const inner = view as unknown as { band: Band | null; lay: { scale: number }; clip(onField: boolean, cam: Camera | null): void };
-      inner.band = { ...LEGACY_BAND };
-      inner.lay = { ...inner.lay, scale: 2 };
-      const cam = (y: number, where: { group: number; num: number } = route) => ({ group: where.group, num: where.num, x: 10, y, subX: 0, subY: 0 }) as Camera;
-
-      inner.clip(true, cam(8));
-      inner.clip(true, cam(9));
-      expect(sets, 'mid-map: no clip, set once').toEqual(['']);
-      inner.clip(true, cam(13));
-      expect(clipPath, 'the 32 rows past the last row, at the scale').toBe('inset(0px 0px 64px 0px)');
-      inner.clip(true, cam(13));
-      expect(sets.length, 'the same cut is not set again').toBe(2);
-      inner.clip(false, cam(13));
-      expect(clipPath, 'off the field, the whole band').toBe('inset(80px 32px 112px 0px)');
-      inner.clip(true, cam(13, { group: 99, num: 99 }));
-      expect(clipPath, 'a map the page does not know: nothing cut').toBe('');
-      inner.clip(true, null);
-      expect(sets.length, 'no camera yet: nothing cut, and nothing set again').toBe(4);
-    });
+    inner.clip(true);
+    inner.clip(true);
+    expect(sets, 'on the field: nothing cut, set once').toEqual(['']);
+    inner.clip(false);
+    expect(clipPath, 'off the field, the whole band').toBe('inset(80px 32px 112px 0px)');
+    inner.clip(false);
+    expect(sets.length, 'the same cut is not set again').toBe(2);
+    world = false;
+    inner.clip(true);
+    expect(clipPath, 'a core not drawing the world: the LCD alone on the field too').toBe('inset(80px 32px 112px 0px)');
+    expect(sets.length).toBe(2);
   });
 
   it('the core\'s canvas is placed so the LCD lands where the layout put it', () => {
@@ -504,7 +315,7 @@ describe('the fade', () => {
 
   it('holds black across a map load until the fade-in starts', () => {
     const cam = (fade: number, fadeActive: boolean): Camera =>
-      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField: true });
+      ({ group: 0, num: 0, x: 0, y: 0, subX: 0, subY: 0, fade, fadeColor: 0, fadeActive, sprites: [], fog: null, outside: false, ringTimer: 0, onField: true });
     expect(heldFade(cam(16, false), cam(0, false), false), 'the reset').toBe(true);
     expect(heldFade(cam(0, false), cam(0, false), true), 'still loading').toBe(true);
     expect(heldFade(cam(0, false), cam(16, true), true), 'the fade-in begins').toBe(false);
@@ -577,7 +388,7 @@ describe('the fade', () => {
       [1121, 0, 0, 0, 0, 0x0040],
     ];
     const cam = (fade: { y: number; color: number; active: boolean }): Camera =>
-      ({ group: 0, num: 17, x: 33, y: 15, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField: true });
+      ({ group: 0, num: 17, x: 33, y: 15, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, onField: true });
     let bg = true; // the move's flash reached BG palettes 1..3 (mask 0xe)
     let prev: Camera | null = null;
     let hold = { on: false, frames: 0 };
@@ -626,7 +437,7 @@ describe('the fade', () => {
       [1300, 16, 0, 1, 0xffffffff, 0x0003],
     ];
     const cam = (fade: { y: number; color: number; active: boolean }): Camera =>
-      ({ group: 26, num: 13, x: 20, y: 20, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField: false });
+      ({ group: 26, num: 13, x: 20, y: 20, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, onField: false });
     let bg = true;
     let prev: Camera | null = null;
     let hold = { on: false, frames: 0 };
@@ -669,7 +480,7 @@ describe('the fade', () => {
       [141, false, 0, 0, 0, 0, 0x40],
     ];
     const cam = (onField: boolean, fade: { y: number; color: number; active: boolean }): Camera =>
-      ({ group: 0, num: 3, x: 21, y: 25, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, stale: 0, wide: null, onField });
+      ({ group: 0, num: 3, x: 21, y: 25, subX: 0, subY: 0, fade: fade.y, fadeColor: fade.color, fadeActive: fade.active, sprites: [], fog: null, outside: false, ringTimer: 0, onField });
     let bg = true;
     let prev: Camera | null = null;
     let hold = { on: false, frames: 0 };
