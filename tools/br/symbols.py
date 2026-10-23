@@ -105,6 +105,21 @@ ENGINE_SYMBOLS = [
     # The party screen: a tap on a POKeMON walks its cursor (gPartyMenu.slotId) there and
     # presses A, while the choose-a-POKeMON task is the one running (web/src/touch.ts).
     "gPartyMenu", "Task_HandleChooseMonInput",
+    # The towns' tileset animations (tileset_anims.c), which the core plays on a joined
+    # map drawn from its own decoded tileset (web/src/field-extra.ts TILE_ANIMS): each
+    # animated secondary tileset and its frame tables.
+    "gTileset_Rustboro", "gTileset_Dewford", "gTileset_Slateport", "gTileset_Mauville",
+    "gTileset_Lavaridge", "gTileset_EverGrande", "gTileset_Pacifidlog", "gTileset_Sootopolis",
+    "gTileset_BattleFrontierOutsideWest", "gTileset_BattleFrontierOutsideEast",
+    "gTilesetAnims_Rustboro_WindyWater",
+    "gTilesetAnims_Rustboro_Fountain", "gTilesetAnims_Dewford_Flag", "gTilesetAnims_Slateport_Balloons",
+    "gTilesetAnims_Mauville_Flower1", "gTilesetAnims_Mauville_Flower2",
+    "gTilesetAnims_Mauville_Flower1_B", "gTilesetAnims_Mauville_Flower2_B",
+    "gTilesetAnims_Lavaridge_Steam", "gTilesetAnims_Lavaridge_Cave_Lava",
+    "gTilesetAnims_EverGrande_Flowers",
+    "gTilesetAnims_Pacifidlog_LogBridges", "gTilesetAnims_Pacifidlog_WaterCurrents",
+    "gTilesetAnims_Sootopolis_StormyWater",
+    "gTilesetAnims_BattleFrontierOutsideWest_Flag", "gTilesetAnims_BattleFrontierOutsideEast_Flag",
 ]
 
 # Map lines look like:  "                0x0203f000                gBrMailbox"
