@@ -224,7 +224,8 @@ test('a person the match strips is not drawn past the box either', async ({ brow
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&rom=${romHashParam()}`);
+    // The ring band (`#ring`): with the whole window the core draws the field's people.
+    await page.goto(`/#solo&nobots&ring&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 30_000 });
     await page.waitForFunction(

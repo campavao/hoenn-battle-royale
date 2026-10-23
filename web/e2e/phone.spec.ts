@@ -25,7 +25,9 @@ test('a phone gets the screen and both thumbs, either way up', async ({ browser 
   const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&rom=${romHashParam()}`);
+    // The ring band (`#ring`): the ROM's own band is what this lays out against. The whole
+    // window's band on a phone is perf.spec's.
+    await page.goto(`/#solo&ring&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
 
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
@@ -129,7 +131,8 @@ test('a desktop keeps most of the window for the game, beside the docked sheet',
   const ctx = await browser.newContext({ viewport: HALF });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&rom=${romHashParam()}`);
+    // The ring band (`#ring`), whose wide ring this layout's band is checked against.
+    await page.goto(`/#solo&ring&rom=${romHashParam()}`);
     await page.waitForSelector('body.docked #stage[data-look="dock"]', { timeout: 90_000 });
     const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
 

@@ -131,7 +131,8 @@ test.beforeAll(() => {
 
 /** Solo from the boot to the seed's Safari cell, standing still. */
 async function boot(page: Page, sym: Record<string, number>, hash: string): Promise<void> {
-  await page.goto(`/#solo&nobots&seed=${SEED}${hash}&rom=${romHashParam()}`);
+  // The ring band unless the test asks for the whole window (`#ring`, the old default).
+  await page.goto(`/#solo&nobots&seed=${SEED}${hash.includes('&world') ? '' : '&ring'}${hash}&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
   await page.waitForSelector('body.in-match', { timeout: 60_000 });
   await expect
@@ -486,7 +487,7 @@ test("on a desktop Route 120's clouds are drawn once each, where the OAM puts th
   const ctx = await browser.newContext({ viewport: DESKTOP });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_120.id},27,71&rom=${romHashParam()}`);
+    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_120.id},27,71&ring&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await expect
@@ -669,7 +670,7 @@ test("the band stops past the map's edge: walking down to Route 103's last row, 
     const page = await ctx.newPage();
     // A short opening, then the drop: #land puts us on the path, whatever is picked.
     // #testmon, as play.spec has it: a party that caught nothing is out at the buzzer.
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_103.id},${EDGE_COLUMN},${EDGE_FROM}&rom=${romHashParam()}`);
+    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_103.id},${EDGE_COLUMN},${EDGE_FROM}&ring&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     // A on the drop map takes the section under the cursor, once it is taking presses.
@@ -754,7 +755,7 @@ async function rustboroIsTheMap(browser: Browser, how: { name: string; context: 
   const ctx = await browser.newContext(how.context);
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${RUSTBORO_LAND.x},${RUSTBORO_LAND.y}&rom=${romHashParam()}`);
+    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${RUSTBORO_LAND.x},${RUSTBORO_LAND.y}&ring&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await expect
