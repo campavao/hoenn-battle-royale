@@ -1,7 +1,7 @@
 # trade-legend: a legendary trades like any mon (Cam, 2026-10-23: "just treat it like any
 # pokemon since it would drop if they died too"). He keeps the LATIAS and offers it to the
-# next trainer, and he still stands as himself, not as the LATIAS (br_loot.c Spawn: home
-# keys first).
+# next trainer, and he still stands as himself, not as the LATIAS (br_legend.c BrLegend_Gfx:
+# only an event's key stands as its legendary).
 #
 # house-trade's room and seed: PETALBURG CITY's HOUSE1 under 0x1072, a KADABRA trader.
 # A LATIAS on our own cell (row 0, over the room's cache) is taken into the party, then
