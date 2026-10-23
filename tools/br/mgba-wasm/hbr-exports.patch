@@ -1089,7 +1089,7 @@ index 4f7e9f8..556c050 100644
  	int mosaicWait = 0;                                                                                               \
  	int32_t localX;                                                                                                   \
 diff --git a/src/gba/renderers/video-software.c b/src/gba/renderers/video-software.c
-index c5bc37b..9598951 100644
+index c5bc37b..5b574d8 100644
 --- a/src/gba/renderers/video-software.c
 +++ b/src/gba/renderers/video-software.c
 @@ -27,6 +27,7 @@ static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer,
@@ -1215,8 +1215,8 @@ index c5bc37b..9598951 100644
  	struct GBAVideoSoftwareRenderer* softwareRenderer = (struct GBAVideoSoftwareRenderer*) renderer;
  
 +	if (y == 0) {
-+		_brWorldOk = GBAVideoSoftwareRendererBrWorld(softwareRenderer, &_brWorldState);
 +		_brSnapPeople(softwareRenderer);
++		_brWorldOk = GBAVideoSoftwareRendererBrWorld(softwareRenderer, &_brWorldState);
 +	}
 +
  	if (y == GBA_VIDEO_VERTICAL_PIXELS - 1) {
