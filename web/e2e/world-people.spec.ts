@@ -73,16 +73,21 @@ async function shoot(page: Page, world: number, name: string): Promise<Shot> {
   return got;
 }
 
-/** Pixels of the 16x16 cell at map tile (tx, ty) that differ between two shots. */
+/** Pixels of the 16x16 cell at map tile (tx, ty) that differ between two shots, each
+ *  placed by its own frame's gBrWorld. */
 function changed(a: Shot, b: Shot, tx: number, ty: number): number {
   let n = 0;
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
-      const px = a.left + (tx + MAP_OFFSET) * 16 + x - a.lcdX;
-      const py = a.top + (ty + MAP_OFFSET) * 16 + y - a.lcdY;
-      if (px < 0 || py < 0 || px >= a.width || py >= a.height) continue;
-      const i = (py * a.width + px) * 4;
-      if (Math.abs(a.rgba[i] - b.rgba[i]) + Math.abs(a.rgba[i + 1] - b.rgba[i + 1]) + Math.abs(a.rgba[i + 2] - b.rgba[i + 2]) > 24) n++;
+      const at = (s: Shot) => {
+        const px = s.left + (tx + MAP_OFFSET) * 16 + x - s.lcdX;
+        const py = s.top + (ty + MAP_OFFSET) * 16 + y - s.lcdY;
+        return px < 0 || py < 0 || px >= s.width || py >= s.height ? -1 : (py * s.width + px) * 4;
+      };
+      const i = at(a);
+      const j = at(b);
+      if (i < 0 || j < 0) continue;
+      if (Math.abs(a.rgba[i] - b.rgba[j]) + Math.abs(a.rgba[i + 1] - b.rgba[j + 1]) + Math.abs(a.rgba[i + 2] - b.rgba[j + 2]) > 24) n++;
     }
   }
   return n;
@@ -126,6 +131,38 @@ test('with the whole window, a person past the box is drawn into the picture, un
     console.log(`open ground: head ${openHead}, feet ${openFeet} pixels drawn`);
     expect(openFeet, 'on open ground its feet are drawn').toBeGreaterThan(DRAWN);
     expect(openHead, '...and its head').toBeGreaterThan(DRAWN / 2);
+
+    // While we walk a step, the camera moves under it and the person stands still on the
+    // map: its grid pixel in the core's buffer is the same every frame of the step.
+    // Ours is the 16x32 entry in its column (the map's own people are in the buffer too).
+    const seen = page.evaluate((col) => new Promise<string[]>((resolve) => {
+      const w = window as unknown as W & { __hbr: { emu: { peopleBuffer(n: number): Uint8Array | null } } };
+      const at: string[] = [];
+      let left = 40;
+      const off = w.__hbr.emu.onFrame(() => {
+        const head = w.__hbr.emu.peopleBuffer(8);
+        const n = head ? new DataView(head.buffer, head.byteOffset, 8).getUint32(4, true) : 0;
+        const buf = w.__hbr.emu.peopleBuffer(8 + 16 * n);
+        if (buf) {
+          const v = new DataView(buf.buffer, buf.byteOffset, buf.length);
+          for (let i = 0; i < n; i++) {
+            const e = 8 + 16 * i;
+            if (v.getUint8(e + 4) === 16 && v.getUint8(e + 5) === 32 && Math.abs(v.getInt16(e, true) - col) <= 32) at.push(`${v.getInt16(e, true)},${v.getInt16(e + 2, true)}`);
+          }
+        }
+        if (--left <= 0) {
+          off();
+          resolve(at);
+        }
+      });
+    }), (OPEN.x + MAP_OFFSET) * 16);
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(250);
+    await page.keyboard.up('ArrowLeft');
+    const spots = [...new Set(await seen)];
+    console.log(`walking a step: the person at ${spots.join(' / ')}`);
+    expect((await ram(page, sym)).x, 'we took a step').toBeLessThan(LAND.x);
+    expect(spots, 'it stands still on the map while the camera moves').toEqual([`${(OPEN.x + MAP_OFFSET) * 16},${(OPEN.y + MAP_OFFSET) * 16 - 16}`]);
 
     await stand(EAVES);
     await page.waitForTimeout(1_000);

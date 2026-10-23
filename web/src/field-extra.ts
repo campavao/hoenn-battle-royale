@@ -192,11 +192,12 @@ export class CorePeople {
       view.setUint8(e + 7, 0);
       view.setUint32(e + 8, at, true);
       view.setUint32(e + 12, 0, true);
+      // The heap is little-endian, as the core reads it: a row at a time.
       const frame = Math.min(s.frame, info.frames - 1);
       const stride = info.w * info.frames;
-      for (let y = 0; y < info.h; y++) {
-        for (let x = 0; x < info.w; x++, at += 2) view.setUint16(at, px[y * stride + frame * info.w + x] ?? 0, true);
-      }
+      const out = new Uint16Array(buf.buffer, buf.byteOffset + at, info.w * info.h);
+      for (let y = 0; y < info.h; y++) out.set(px.subarray(y * stride + frame * info.w, y * stride + (frame + 1) * info.w), y * info.w);
+      at += info.w * info.h * 2;
     });
     emu.setPeople(bytes);
     this.sent = true;

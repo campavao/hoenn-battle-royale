@@ -12,10 +12,18 @@ index ed16917..f0ae805 100644
  CXX_GUARD_END
  
 diff --git a/include/mgba/internal/gba/renderers/video-software.h b/include/mgba/internal/gba/renderers/video-software.h
-index ce91877..921389d 100644
+index ce91877..4c3adc8 100644
 --- a/include/mgba/internal/gba/renderers/video-software.h
 +++ b/include/mgba/internal/gba/renderers/video-software.h
-@@ -75,10 +75,18 @@ struct WindowControl {
+@@ -15,6 +15,7 @@ CXX_GUARD_START
+ #include <mgba/internal/gba/io.h>
+ #include <mgba/internal/gba/renderers/common.h>
+ #include <mgba/internal/gba/video.h>
++#include <mgba-util/threading.h>
+ 
+ struct GBAVideoSoftwareBackground {
+ 	unsigned index;
+@@ -75,10 +76,18 @@ struct WindowControl {
  #define MAX_WINDOW 5
  
  struct Window {
@@ -35,7 +43,7 @@ index ce91877..921389d 100644
  struct GBAVideoSoftwareRenderer {
  	struct GBAVideoRenderer d;
  
-@@ -89,8 +97,8 @@ struct GBAVideoSoftwareRenderer {
+@@ -89,8 +98,8 @@ struct GBAVideoSoftwareRenderer {
  
  	GBARegisterDISPCNT dispcnt;
  
@@ -46,7 +54,7 @@ index ce91877..921389d 100644
  	int32_t spriteCyclesRemaining;
  
  	// BLDCNT
-@@ -151,6 +159,52 @@ struct GBAVideoSoftwareRenderer {
+@@ -151,6 +160,55 @@ struct GBAVideoSoftwareRenderer {
  	int end;
  
  	uint8_t lastHighlightAmount;
@@ -93,9 +101,12 @@ index ce91877..921389d 100644
 +	/* Hoenn BR (the whole window, HBR-27): the people the page walks past the ROM's
 +	 * objects -- other players' ghosts, the map's people past its box -- for the core to
 +	 * draw on the field among the BGs, so a roof covers them the way it covers the ROM's
-+	 * own (POK-443). brSetPeople's buffer, NULL for none. */
++	 * own (POK-443). brSetPeople's published buffer, NULL for none, and the lock it is
++	 * published under: the page writes from its own thread, so the core copies it under
++	 * the lock once a frame, at row 0, and draws the frame from its copy. */
 +	const uint8_t* brPeople;
 +	uint32_t brPeopleBytes;
++	Mutex* brPeopleLock;
  };
  
  void GBAVideoSoftwareRendererCreate(struct GBAVideoSoftwareRenderer* renderer);
@@ -151,7 +162,7 @@ index 5b4ef70..4a54807 100644
  	}
  
 diff --git a/src/gba/renderers/software-mode0.c b/src/gba/renderers/software-mode0.c
-index 4aada17..d5857dc 100644
+index 4aada17..c6567e7 100644
 --- a/src/gba/renderers/software-mode0.c
 +++ b/src/gba/renderers/software-mode0.c
 @@ -6,6 +6,8 @@
@@ -172,7 +183,7 @@ index 4aada17..d5857dc 100644
  	int length = renderer->end - renderer->start;
  	if (background->mosaic) {
  		int mosaicV = GBAMosaicControlGetBgV(renderer->mosaic) + 1;
-@@ -574,3 +576,706 @@ void GBAVideoSoftwareRendererDrawBackgroundMode0(struct GBAVideoSoftwareRenderer
+@@ -574,3 +576,704 @@ void GBAVideoSoftwareRendererDrawBackgroundMode0(struct GBAVideoSoftwareRenderer
  		}
  	}
  }
@@ -814,7 +825,7 @@ index 4aada17..d5857dc 100644
 +/* Hoenn BR (the whole window, HBR-27): the page's people on picture row `y` (LCD rows
 + * 0-159, the band's either side), into the sprite layer the ROM's own objects went into,
 + * so the BGs cover them by priority as they cover the ROM's: a roof (BG1) over a person
-+ * at priority 2 (POK-443). brSetPeople's buffer: a u32 layout and a u32 count, then a
++ * at priority 2 (POK-443). `buf` is the frame's copy of brSetPeople's buffer: a u32 layout and a u32 count, then a
 + * 16-byte entry each -- s16 x, s16 y (grid pixels, MAP_OFFSET in, of the sprite's
 + * top-left), u8 width, u8 height, u8 flags (bit 0 h-flip, bits 1-2 priority), a pad
 + * byte, the u32 byte offset of its pixels in the buffer and 4 more pad bytes -- each
@@ -824,9 +835,7 @@ index 4aada17..d5857dc 100644
 + * next frame. Returns the priorities drawn into, a bit each. */
 +#define BR_PEOPLE_HEADER 8
 +#define BR_PEOPLE_ENTRY 16
-+int GBAVideoSoftwareRendererDrawPeople(struct GBAVideoSoftwareRenderer* renderer, int y, const struct GBAVideoSoftwareBrWorld* world) {
-+	const uint8_t* buf = renderer->brPeople;
-+	uint32_t bytes = renderer->brPeopleBytes;
++int GBAVideoSoftwareRendererDrawPeople(struct GBAVideoSoftwareRenderer* renderer, int y, const struct GBAVideoSoftwareBrWorld* world, const uint8_t* buf, uint32_t bytes) {
 +	uint32_t count, i;
 +	int width = BR_ROW_WIDTH(renderer);
 +	int drawn = 0;
@@ -925,7 +934,7 @@ index 186db38..2d54e6b 100644
  			inY = height - inY - 1;
  		}
 diff --git a/src/gba/renderers/software-private.h b/src/gba/renderers/software-private.h
-index 4f7e9f8..3d14df4 100644
+index 4f7e9f8..b386ffc 100644
 --- a/src/gba/renderers/software-private.h
 +++ b/src/gba/renderers/software-private.h
 @@ -17,6 +17,58 @@
@@ -979,7 +988,7 @@ index 4f7e9f8..3d14df4 100644
 +	float fitA[3];
 +	float fitB[3];
 +};
-+int GBAVideoSoftwareRendererDrawPeople(struct GBAVideoSoftwareRenderer* renderer, int y, const struct GBAVideoSoftwareBrWorld* world);
++int GBAVideoSoftwareRendererDrawPeople(struct GBAVideoSoftwareRenderer* renderer, int y, const struct GBAVideoSoftwareBrWorld* world, const uint8_t* buf, uint32_t bytes);
 +bool GBAVideoSoftwareRendererBrWorld(const struct GBAVideoSoftwareRenderer* renderer, struct GBAVideoSoftwareBrWorld* world);
 +void GBAVideoSoftwareRendererDrawBackgroundWorld(struct GBAVideoSoftwareRenderer* renderer,
 +                                                 struct GBAVideoSoftwareBackground* background, int y,
@@ -999,7 +1008,7 @@ index 4f7e9f8..3d14df4 100644
  	int mosaicWait = 0;                                                                                               \
  	int32_t localX;                                                                                                   \
 diff --git a/src/gba/renderers/video-software.c b/src/gba/renderers/video-software.c
-index c5bc37b..32c5a78 100644
+index c5bc37b..bca3e23 100644
 --- a/src/gba/renderers/video-software.c
 +++ b/src/gba/renderers/video-software.c
 @@ -27,6 +27,7 @@ static void GBAVideoSoftwareRendererWriteOAM(struct GBAVideoRenderer* renderer,
@@ -1081,7 +1090,7 @@ index c5bc37b..32c5a78 100644
  						if (VIDEO_CHECKS && activeWindow >= MAX_WINDOW) {
  							mLOG(GBA_VIDEO, FATAL, "Out of bounds window write will occur");
  							return;
-@@ -558,9 +565,19 @@ static void GBAVideoSoftwareRendererPrepareWindow(struct GBAVideoSoftwareRendere
+@@ -558,9 +565,49 @@ static void GBAVideoSoftwareRendererPrepareWindow(struct GBAVideoSoftwareRendere
  	}
  }
  
@@ -1091,17 +1100,47 @@ index c5bc37b..32c5a78 100644
 +static struct GBAVideoSoftwareBrWorld _brWorldState;
 +static bool _brWorldOk = false;
 +
++/* Hoenn BR (HBR-27): the page's people as the frame draws them, copied at its first row
++ * under the lock they are published under (brSetPeople): the page writes from its own
++ * thread, and a frame drawn from the published buffer could read half of a new list. */
++static uint8_t* _brPeopleCopy = NULL;
++static uint32_t _brPeopleCopyCap = 0;
++static uint32_t _brPeopleCopyBytes = 0;
++
++static void _brSnapPeople(struct GBAVideoSoftwareRenderer* renderer) {
++	_brPeopleCopyBytes = 0;
++	if (!renderer->brPeopleLock) {
++		return;
++	}
++	MutexLock(renderer->brPeopleLock);
++	if (renderer->brPeople && renderer->brPeopleBytes) {
++		if (renderer->brPeopleBytes > _brPeopleCopyCap) {
++			uint8_t* grown = realloc(_brPeopleCopy, renderer->brPeopleBytes);
++			if (grown) {
++				_brPeopleCopy = grown;
++				_brPeopleCopyCap = renderer->brPeopleBytes;
++			}
++		}
++		if (renderer->brPeopleBytes <= _brPeopleCopyCap) {
++			memcpy(_brPeopleCopy, renderer->brPeople, renderer->brPeopleBytes);
++			_brPeopleCopyBytes = renderer->brPeopleBytes;
++		}
++	}
++	MutexUnlock(renderer->brPeopleLock);
++}
++
  static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* renderer, int y) {
  	struct GBAVideoSoftwareRenderer* softwareRenderer = (struct GBAVideoSoftwareRenderer*) renderer;
  
 +	if (y == 0) {
 +		_brWorldOk = GBAVideoSoftwareRendererBrWorld(softwareRenderer, &_brWorldState);
++		_brSnapPeople(softwareRenderer);
 +	}
 +
  	if (y == GBA_VIDEO_VERTICAL_PIXELS - 1) {
  		softwareRenderer->nextY = 0;
  	} else {
-@@ -610,10 +627,93 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -610,10 +657,93 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	CLEAN_SCANLINE(softwareRenderer, y);
  
@@ -1197,18 +1236,18 @@ index c5bc37b..32c5a78 100644
  			row[x] = M_COLOR_WHITE;
  		}
  		return;
-@@ -622,6 +722,10 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -622,6 +752,10 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  	GBAVideoSoftwareRendererPreprocessBuffer(softwareRenderer);
  	softwareRenderer->spriteCyclesRemaining = GBARegisterDISPCNTIsHblankIntervalFree(softwareRenderer->dispcnt) ? OBJ_HBLANK_FREE_LENGTH : OBJ_LENGTH;
  	int spriteLayers = GBAVideoSoftwareRendererPreprocessSpriteLayer(softwareRenderer, y);
 +	/* Hoenn BR (HBR-27): the page's people, behind the ROM's own objects, on every row. */
 +	if (world && GBARegisterDISPCNTIsObjEnable(softwareRenderer->dispcnt) && !softwareRenderer->d.disableOBJ) {
-+		spriteLayers |= GBAVideoSoftwareRendererDrawPeople(softwareRenderer, y, world);
++		spriteLayers |= GBAVideoSoftwareRendererDrawPeople(softwareRenderer, y, world, _brPeopleCopy, _brPeopleCopyBytes);
 +	}
  
  	int w;
  	unsigned priority;
-@@ -635,28 +739,43 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -635,28 +769,43 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  			if (spriteLayers & (1 << priority)) {
  				GBAVideoSoftwareRendererPostprocessSprite(softwareRenderer, priority);
  			}
@@ -1257,7 +1296,7 @@ index c5bc37b..32c5a78 100644
  					GBAVideoSoftwareRendererDrawBackgroundMode5(softwareRenderer, &softwareRenderer->bg[2], y);
  					break;
  				}
-@@ -664,9 +783,15 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -664,9 +813,15 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  			if (TEST_LAYER_ENABLED(3)) {
  				switch (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt)) {
  				case 0:
@@ -1274,7 +1313,7 @@ index c5bc37b..32c5a78 100644
  					GBAVideoSoftwareRendererDrawBackgroundMode2(softwareRenderer, &softwareRenderer->bg[3], y);
  					break;
  				}
-@@ -676,6 +801,11 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -676,6 +831,11 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	GBAVideoSoftwareRendererPostprocessBuffer(softwareRenderer);
  
@@ -1286,7 +1325,7 @@ index c5bc37b..32c5a78 100644
  	if (GBARegisterDISPCNTGetMode(softwareRenderer->dispcnt) != 0) {
  		if (softwareRenderer->bg[2].enabled == ENABLED_MAX) {
  			softwareRenderer->bg[2].sx += softwareRenderer->bg[2].dmx;
-@@ -706,7 +836,7 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -706,7 +866,7 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  
  	int x;
  	if (softwareRenderer->stereo) {
@@ -1295,7 +1334,7 @@ index c5bc37b..32c5a78 100644
  			row[x] = softwareRenderer->row[x] & (M_COLOR_RED | M_COLOR_BLUE);
  			row[x] |= softwareRenderer->row[x + 1] & M_COLOR_GREEN;
  			row[x + 1] = softwareRenderer->row[x + 1] & (M_COLOR_RED | M_COLOR_BLUE);
-@@ -719,21 +849,65 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
+@@ -719,21 +879,65 @@ static void GBAVideoSoftwareRendererDrawScanline(struct GBAVideoRenderer* render
  		}
  	} else {
  #ifdef COLOR_16_BIT
@@ -1363,7 +1402,7 @@ index c5bc37b..32c5a78 100644
  	softwareRenderer->nextY = 0;
  	if (softwareRenderer->temporaryBuffer) {
  		mappedMemoryFree(softwareRenderer->temporaryBuffer, GBA_VIDEO_HORIZONTAL_PIXELS * GBA_VIDEO_VERTICAL_PIXELS * 4);
-@@ -893,14 +1067,15 @@ void GBAVideoSoftwareRendererStepWindow(struct GBAVideoSoftwareRenderer* softwar
+@@ -893,14 +1097,15 @@ void GBAVideoSoftwareRendererStepWindow(struct GBAVideoSoftwareRenderer* softwar
  
  void GBAVideoSoftwareRendererPreprocessBuffer(struct GBAVideoSoftwareRenderer* softwareRenderer) {
  	int x;
@@ -1381,7 +1420,7 @@ index c5bc37b..32c5a78 100644
  	softwareRenderer->nWindows = 1;
  	if (GBARegisterDISPCNTIsWin0Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsWin1Enable(softwareRenderer->dispcnt) || GBARegisterDISPCNTIsObjwinEnable(softwareRenderer->dispcnt)) {
  		softwareRenderer->windows[0].control = softwareRenderer->winout;
-@@ -1016,12 +1191,69 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
+@@ -1016,12 +1221,69 @@ void GBAVideoSoftwareRendererPostprocessBuffer(struct GBAVideoSoftwareRenderer*
  	}
  }
  
@@ -1452,7 +1491,7 @@ index c5bc37b..32c5a78 100644
  			renderer->oamDirty = false;
  		}
  		int mosaicV = GBAMosaicControlGetObjV(renderer->mosaic) + 1;
-@@ -1037,7 +1269,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1037,7 +1299,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  			if (renderer->spriteCyclesRemaining <= 0) {
  				break;
  			}
@@ -1461,7 +1500,7 @@ index c5bc37b..32c5a78 100644
  				continue;
  			}
  			if (GBAObjAttributesAIsMosaic(sprite->obj.a) && mosaicV > 1) {
-@@ -1058,7 +1290,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
+@@ -1058,7 +1320,7 @@ int GBAVideoSoftwareRendererPreprocessSpriteLayer(struct GBAVideoSoftwareRendere
  					continue;
  				}
  
@@ -1484,7 +1523,7 @@ index 751e8b1..59daede 100644
  	-s ENVIRONMENT='web,worker' \
  	-s PTHREAD_POOL_SIZE=5 \
 diff --git a/src/platform/wasm/main.c b/src/platform/wasm/main.c
-index 14d9a8a..d8215cf 100644
+index 14d9a8a..b13ef2c 100644
 --- a/src/platform/wasm/main.c
 +++ b/src/platform/wasm/main.c
 @@ -12,6 +12,10 @@
@@ -1498,7 +1537,7 @@ index 14d9a8a..d8215cf 100644
  
  #include "platform/sdl/sdl-audio.h"
  #include "platform/sdl/sdl-events.h"
-@@ -146,6 +150,344 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
+@@ -146,6 +150,370 @@ EMSCRIPTEN_KEEPALIVE float getVolume() {
  		return 0.0;
  }
  
@@ -1540,11 +1579,25 @@ index 14d9a8a..d8215cf 100644
 +static uint32_t brWorldGroups = 0;
 +static int brSpriteTop = -1;
 +static int brSpriteBottom = -1;
-+// Hoenn BR (HBR-27): the people the page walks, for the core to draw on the field
-+// (brPeopleBuffer, brSetPeople).
++// Hoenn BR (HBR-27): the people the page walks, for the core to draw on the field. The
++// page writes the back buffer (brPeopleBuffer), which the core never reads; brSetPeople
++// copies it into the published one under the lock, which the core copies from under the
++// same lock at each frame's first row. Only the back buffer is grown while published.
 +static uint8_t* brPeople = NULL;
 +static uint32_t brPeopleCap = 0;
-+static uint32_t brPeopleBytes = 0;
++static uint8_t* brPeoplePub = NULL;
++static uint32_t brPeoplePubCap = 0;
++static uint32_t brPeoplePubBytes = 0;
++static Mutex brPeopleLock;
++static bool brPeopleLockMade = false;
++
++static Mutex* _brPeopleLock(void) {
++	if (!brPeopleLockMade) {
++		MutexInit(&brPeopleLock);
++		brPeopleLockMade = true;
++	}
++	return &brPeopleLock;
++}
 +
 +// A side of the band: a multiple of 8 in [0, max]. Columns are held in the renderer's
 +// row buffer, BR_BAND_MAX a side; rows are not, and may go to BR_BAND_MAX_ROWS.
@@ -1695,8 +1748,11 @@ index 14d9a8a..d8215cf 100644
 +	sr->brWorldCb2 = brWorldCb2;
 +	sr->brWorldOverworld = brWorldOverworld;
 +	sr->brWorldGroups = brWorldGroups;
-+	sr->brPeople = brPeopleBytes ? brPeople : NULL;
-+	sr->brPeopleBytes = brPeopleBytes;
++	MutexLock(_brPeopleLock());
++	sr->brPeopleLock = &brPeopleLock;
++	sr->brPeople = brPeoplePubBytes ? brPeoplePub : NULL;
++	sr->brPeopleBytes = brPeoplePubBytes;
++	MutexUnlock(&brPeopleLock);
 +}
 +
 +// Tell the software renderer about the band, once the core has installed it. Only at
@@ -1777,10 +1833,9 @@ index 14d9a8a..d8215cf 100644
 +	}
 +}
 +
-+// Hoenn BR (HBR-27): a buffer of at least `bytes` for the page to write its people into,
-+// in the heap; 0 if it cannot be had. Growing it moves it, and drops what was set.
++// Hoenn BR (HBR-27): the back buffer, at least `bytes` long, for the page to write its
++// people into; 0 if it cannot be had. Growing it moves it.
 +EMSCRIPTEN_KEEPALIVE uint32_t brPeopleBuffer(int bytes) {
-+	struct GBAVideoSoftwareRenderer* sr;
 +	if (bytes < 0) {
 +		return 0;
 +	}
@@ -1791,27 +1846,37 @@ index 14d9a8a..d8215cf 100644
 +		}
 +		brPeople = grown;
 +		brPeopleCap = (uint32_t) bytes;
-+		brPeopleBytes = 0;
-+		sr = _brSoftwareRenderer();
-+		if (sr) {
-+			sr->brPeople = NULL;
-+			sr->brPeopleBytes = 0;
-+		}
 +	}
 +	return (uint32_t) (uintptr_t) brPeople;
 +}
 +
-+// Hoenn BR (HBR-27): the first `bytes` of the buffer are the people to draw from the next
-+// frame on (software-mode0.c GBAVideoSoftwareRendererDrawPeople has the layout); 0 for
-+// nobody.
++// Hoenn BR (HBR-27): publish the back buffer's first `bytes` as the people to draw from the
++// next frame on (software-mode0.c GBAVideoSoftwareRendererDrawPeople has the layout); 0
++// for nobody.
 +EMSCRIPTEN_KEEPALIVE void brSetPeople(int bytes) {
 +	struct GBAVideoSoftwareRenderer* sr;
-+	brPeopleBytes = bytes > 0 && (uint32_t) bytes <= brPeopleCap ? (uint32_t) bytes : 0;
++	uint32_t n = bytes > 0 && (uint32_t) bytes <= brPeopleCap ? (uint32_t) bytes : 0;
++	MutexLock(_brPeopleLock());
++	if (n > brPeoplePubCap) {
++		uint8_t* grown = realloc(brPeoplePub, n);
++		if (grown) {
++			brPeoplePub = grown;
++			brPeoplePubCap = n;
++		} else {
++			n = 0;
++		}
++	}
++	if (n) {
++		memcpy(brPeoplePub, brPeople, n);
++	}
++	brPeoplePubBytes = n;
 +	sr = _brSoftwareRenderer();
 +	if (sr) {
-+		sr->brPeople = brPeopleBytes ? brPeople : NULL;
-+		sr->brPeopleBytes = brPeopleBytes;
++		sr->brPeopleLock = &brPeopleLock;
++		sr->brPeople = n ? brPeoplePub : NULL;
++		sr->brPeopleBytes = n;
 +	}
++	MutexUnlock(&brPeopleLock);
 +}
 +
 +// Hoenn BR (POK-329): the sprite window the loaded core draws with, as `top << 16 |
@@ -1843,7 +1908,7 @@ index 14d9a8a..d8215cf 100644
  EMSCRIPTEN_KEEPALIVE int getMainLoopTimingMode() {
  	int mode = -1;
  	int value = -1;
-@@ -427,28 +769,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
+@@ -427,28 +795,30 @@ EMSCRIPTEN_KEEPALIVE bool loadGame(const char* name, const char* savePathOverrid
  	mSDLInitBindingsGBA(&renderer->core->inputMap);
  
  	unsigned w, h;
@@ -1891,7 +1956,7 @@ index 14d9a8a..d8215cf 100644
  
  	emscripten_resume_main_loop();
  	return true;
-@@ -744,19 +1088,11 @@ void runLoop() {
+@@ -744,19 +1114,11 @@ void runLoop() {
  				};
  			}
  			if (mCoreSyncWaitFrameStart(&renderer->thread->impl->sync)) {
@@ -1916,7 +1981,7 @@ index 14d9a8a..d8215cf 100644
  			}
  			mCoreSyncWaitFrameEnd(&renderer->thread->impl->sync);
  		}
-@@ -860,11 +1196,16 @@ int main() {
+@@ -860,11 +1222,16 @@ int main() {
  
  	mLogSetDefaultLogger(&logCtx);
  
