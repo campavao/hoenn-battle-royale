@@ -229,7 +229,7 @@ jobs:
 
       # A cold `--with-deps` is apt, and apt alone has taken ten minutes, which with a
       # cold ROM build ran a shard into its cap. The browser is cached on Playwright's
-      # version; on a hit the runner image's own libraries are enough, so apt is skipped.
+      # version and the runner image (Playwright builds per distro); on a hit apt is skipped.
       - name: Playwright version
         id: pw
         working-directory: web
@@ -240,11 +240,15 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-${{ steps.pw.outputs.version }}
+          key: playwright-chromium-${{ runner.os }}-${{ env.ImageOS }}-${{ steps.pw.outputs.version }}
 
       - working-directory: web
         run: |
-          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = true ]; then
+          # A hit still checks the image has every library the binaries link against,
+          # and pays for apt only when one is missing.
+          bins=$(find ~/.cache/ms-playwright -type f \( -name chrome -o -name headless_shell -o -name chrome-headless-shell \) 2>/dev/null)
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = true ] && [ -n "$bins" ] \
+             && ! echo "$bins" | xargs ldd 2>/dev/null | grep -q 'not found'; then
             npx playwright install chromium
           else
             npx playwright install --with-deps chromium
