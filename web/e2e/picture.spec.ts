@@ -37,6 +37,13 @@ const PORTRAIT = { width: 390, height: 844 };
 const DESKTOP = { width: 1600, height: 900 };
 /** The ROM's wide band (gBrFieldViewWide): 128 columns each side, 40 rows. */
 const WIDE = { side: 128, rows: 40 };
+/** A big desktop's window, wider than the wide ring's 496 columns with room to spare. */
+const BIG_DESKTOP = { width: 1920, height: 1080 };
+/** Of a 16-column strip, the share of pixels drifting fog changes in 16 frames, at least.
+ *  Lower than the wide-band test's 0.5, which is against the clear picture and so counts
+ *  the tint as well: from one fogged look to the next the tint holds still, and only the
+ *  clouds, a column every four frames, change anything. */
+const DRIFT = 0.2;
 
 const SEED = 5376;
 const SAFARI_SE = '26:13';
@@ -404,6 +411,59 @@ test("on a desktop the fog covers the ROM's wide band, every column of it, as it
     const bare = [...least].filter(([, share]) => share <= 0.5);
     console.log(`picture: fog over the wide band, least share changed ${Math.min(...least.values()).toFixed(2)}`);
     expect(bare.map(([x, share]) => `${x}..${x + 15}: ${share.toFixed(2)}`), 'every 16 columns fogged at every look').toEqual([]);
+  } finally {
+    await ctx.close();
+  }
+});
+
+/** Of each 16 columns of the picture `pic` was, the least share of pixels that changed
+ *  from one look to the next over 8 looks 16 frames apart. */
+async function drift(page: Page, pic: { width: number; left: number }): Promise<Map<number, number>> {
+  const least = new Map<number, number>();
+  await grab(page);
+  for (let look = 0; look < 8; look++) {
+    await keep(page);
+    await grab(page, 16);
+    for (let x = -pic.left; x < pic.width - pic.left; x += 16) {
+      const share = await changedColumns(page, x, Math.min(x + 16, pic.width - pic.left));
+      least.set(x, Math.min(least.get(x) ?? 1, share));
+    }
+  }
+  return least;
+}
+
+// With the whole window (#world, HBR-27) the row is as wide as the window, wider than
+// the ring. The grid and its copies 320 columns either side (_brDrawSprite) reach 400
+// columns left of the LCD and 383 right of it, past a 1920-wide window's 240 either side,
+// so the clouds drift over all of it. (Roofs on BG1 stay clear: the fog is priority 2.)
+test('with the whole window the fog covers every column of it, as it scrolls', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const sym = loadSymbols();
+  const ctx = await browser.newContext({ viewport: BIG_DESKTOP });
+  try {
+    const page = await ctx.newPage();
+    await boot(page, sym, '&world');
+    const pic = await grab(page);
+    expect(pic.left, 'the window reaches past the wide ring').toBeGreaterThan(WIDE.side);
+    // The control: the same looks before the fog. Nothing on this cell moves, so a strip
+    // changes little from one look to the next, and the fog run's drift is the clouds'.
+    const before = await drift(page, pic);
+    await page.evaluate(([at, fog]) => (window as unknown as PicWindow).__hbr.emu.write(at, fog, 8), [sym.gWeather + WEATHER_NEXT, WEATHER_FOG_HORIZONTAL] as const);
+    await expect.poll(() => page.evaluate((at) => (window as unknown as PicWindow).__hbr.emu.read(at, 8), sym.gWeather + WEATHER_CURR), { timeout: 10_000 }).toBe(WEATHER_FOG_HORIZONTAL);
+    // Fully in (Weather_UpdateBlend), and the weather's tint on every palette with it.
+    await page.waitForTimeout(5_000);
+    await grab(page);
+    await save(page, 'world-fog');
+    const after = await drift(page, pic);
+    const most = (m: Map<number, number>) => Math.max(...m.values());
+    const least = (m: Map<number, number>) => Math.min(...m.values());
+    console.log(`picture: whole window (${pic.width} columns), drift per 16 columns -- clear at most ${most(before).toFixed(2)}, fog at least ${least(after).toFixed(2)}`);
+    // Clear, 2 to 4 of the 45 strips, all at 208..256 across the LCD's right edge, still
+    // change (to 0.32 over 5 runs; something animated on this cell); the rest hold still.
+    const still = [...before].filter(([, share]) => share <= DRIFT).length;
+    expect(still, 'clear, the strips hold still from look to look').toBeGreaterThanOrEqual(0.8 * before.size);
+    const bare = [...after].filter(([, share]) => share <= DRIFT);
+    expect(bare.map(([x, share]) => `${x}..${x + 15}: ${share.toFixed(2)}`), 'clouds drifting over every 16 columns at every look').toEqual([]);
   } finally {
     await ctx.close();
   }

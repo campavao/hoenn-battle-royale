@@ -70,6 +70,8 @@ export interface CoreModule {
   _brPeopleBuffer?(bytes: number): number;
   /** Draw the buffer's first `bytes` of people on the field; 0 for nobody. */
   _brSetPeople?(bytes: number): void;
+  _brTileAnimBuffer?(bytes: number): number;
+  _brSetTileAnims?(bytes: number): void;
   /** The window the loaded core draws with, `top << 16 | bottom`, or -1 for none. */
   _brSpriteWindow?(): number;
   /** The picture's ABGR8888 pixels in the heap -- the texture's top-left, the LCD at
@@ -305,6 +307,14 @@ export class Emulator {
   }
   setPeople(bytes: number): void {
     this.m._brSetPeople?.(bytes);
+  }
+  /** The same for the tileset animation table (HBR-27, field-extra.ts tileAnims). */
+  tileAnimBuffer(bytes: number): Uint8Array | null {
+    const at = this.m._brTileAnimBuffer?.(bytes) ?? 0;
+    return at ? this.m.HEAPU8.subarray(at, at + bytes) : null;
+  }
+  setTileAnims(bytes: number): void {
+    this.m._brSetTileAnims?.(bytes);
   }
 
   /** The sprite window the band is drawn with, on every boot from now on (POK-329): the

@@ -318,6 +318,8 @@ declare namespace mGBA {
     /** Hoenn BR (HBR-27): draw the first `bytes` of that buffer's people on the field
      *  from the next frame on; 0 for nobody. */
     _brSetPeople(bytes: number): void;
+    _brTileAnimBuffer(bytes: number): number;
+    _brSetTileAnims(bytes: number): void;
     /** Hoenn BR (POK-329): the sprite window the loaded core draws with, as
      *  `top << 16 | bottom`, or -1 for none (or no game loaded). */
     _brSpriteWindow(): number;

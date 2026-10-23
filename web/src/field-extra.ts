@@ -106,6 +106,74 @@ const CORE_PEOPLE_MAX = 64;
 const CORE_HEADER = 8;
 const CORE_ENTRY = 16;
 
+/** One of tileset_anims.c's animations of a town's own tiles, as its QueueAnimTiles_*
+ *  call reads: `frames` (a pointer array) shown `tiles` tiles at `dest` (a tile of the
+ *  secondary tileset) on the frames whose timer % div is `phase`, frame (timer / div -
+ *  lag) % count. `eight` is one of eight, its VDests: phase and lag k at dest + 4k, for k
+ *  0..7. Mauville's flowers switch to `framesB` (countB long) past their first 12. */
+type TileAnim = { set: string; frames: string; count: number; tiles: number; div: number; dest: number; phase?: number; lag?: number; eight?: true; framesB?: string; countB?: number };
+
+/** tileset_anims.c's TilesetAnim_* for the outdoor towns (array lengths checked against
+ *  the source by field-extra.test.ts). */
+export const TILE_ANIMS: readonly TileAnim[] = [
+  { set: 'Rustboro', frames: 'Rustboro_WindyWater', count: 8, tiles: 4, div: 8, dest: 128, eight: true },
+  { set: 'Rustboro', frames: 'Rustboro_Fountain', count: 2, tiles: 4, div: 8, dest: 448 },
+  { set: 'Dewford', frames: 'Dewford_Flag', count: 4, tiles: 6, div: 8, dest: 170 },
+  { set: 'Slateport', frames: 'Slateport_Balloons', count: 4, tiles: 4, div: 16, dest: 224 },
+  { set: 'Mauville', frames: 'Mauville_Flower1', count: 12, framesB: 'Mauville_Flower1_B', countB: 4, tiles: 4, div: 8, dest: 96, eight: true },
+  { set: 'Mauville', frames: 'Mauville_Flower2', count: 12, framesB: 'Mauville_Flower2_B', countB: 4, tiles: 4, div: 8, dest: 128, eight: true },
+  { set: 'Lavaridge', frames: 'Lavaridge_Steam', count: 4, tiles: 4, div: 16, dest: 288 },
+  { set: 'Lavaridge', frames: 'Lavaridge_Steam', count: 4, tiles: 4, div: 16, dest: 292, lag: -2 },
+  { set: 'Lavaridge', frames: 'Lavaridge_Cave_Lava', count: 4, tiles: 4, div: 16, phase: 1, dest: 160 },
+  { set: 'EverGrande', frames: 'EverGrande_Flowers', count: 8, tiles: 4, div: 8, dest: 224, eight: true },
+  { set: 'Pacifidlog', frames: 'Pacifidlog_LogBridges', count: 4, tiles: 30, div: 16, dest: 464 },
+  { set: 'Pacifidlog', frames: 'Pacifidlog_WaterCurrents', count: 8, tiles: 8, div: 16, phase: 1, dest: 496 },
+  { set: 'Sootopolis', frames: 'Sootopolis_StormyWater', count: 8, tiles: 96, div: 16, dest: 240 },
+  { set: 'BattleFrontierOutsideWest', frames: 'BattleFrontierOutsideWest_Flag', count: 4, tiles: 6, div: 8, dest: 218 },
+  { set: 'BattleFrontierOutsideEast', frames: 'BattleFrontierOutsideEast_Flag', count: 4, tiles: 6, div: 8, dest: 218 },
+];
+
+const ANIMS_HEADER = 8;
+const ANIMS_ENTRY = 32;
+
+/** The table into the core (software-mode0.c GBAVideoSoftwareRendererBrAnims): a joined
+ *  town on its own tileset animates as the one we stand in does. False until it is sent;
+ *  true, and nothing sent, for a build whose symbols name none of it. */
+export function sendTileAnims(emu: Emulator, sym: (name: string) => number | undefined): boolean {
+  const rows: { set: number; frames: number; framesB: number; dest: number; a: TileAnim; phase: number; lag: number }[] = [];
+  for (const a of TILE_ANIMS) {
+    const set = sym(`gTileset_${a.set}`);
+    const frames = sym(`gTilesetAnims_${a.frames}`);
+    const framesB = a.framesB ? sym(`gTilesetAnims_${a.framesB}`) : 0;
+    if (set === undefined || frames === undefined || framesB === undefined) continue;
+    for (let k = 0; k < (a.eight ? 8 : 1); k++) rows.push({ set, frames, framesB, dest: a.dest + 4 * k, a, phase: a.eight ? k : a.phase ?? 0, lag: a.eight ? k : a.lag ?? 0 });
+  }
+  if (rows.length === 0) return true;
+  const bytes = ANIMS_HEADER + rows.length * ANIMS_ENTRY;
+  const buf = emu.tileAnimBuffer(bytes);
+  if (!buf) return false;
+  buf.fill(0);
+  const view = new DataView(buf.buffer, buf.byteOffset, bytes);
+  view.setUint32(0, 1, true);
+  view.setUint32(4, rows.length, true);
+  rows.forEach((r, i) => {
+    const e = ANIMS_HEADER + i * ANIMS_ENTRY;
+    view.setUint32(e, r.set >>> 0, true);
+    view.setUint32(e + 4, r.frames >>> 0, true);
+    view.setUint32(e + 8, r.framesB >>> 0, true);
+    view.setUint16(e + 12, r.dest, true);
+    view.setUint16(e + 14, r.a.tiles, true);
+    view.setUint8(e + 16, r.a.count);
+    view.setUint8(e + 17, r.a.countB ?? 0);
+    view.setUint8(e + 18, r.a.count);
+    view.setUint8(e + 19, r.a.div);
+    view.setUint8(e + 20, r.phase);
+    view.setInt8(e + 21, r.lag);
+  });
+  emu.setTileAnims(bytes);
+  return true;
+}
+
 /** The people the overlay drew past the ROM's objects, handed to the core instead
  *  (HBR-27): it draws them into the picture among the BGs, so a roof or a treetop covers
  *  them the way it covers the ROM's own (POK-443), the field's fade and weather tint take
