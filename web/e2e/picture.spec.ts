@@ -131,7 +131,8 @@ test.beforeAll(() => {
 
 /** Solo from the boot to the seed's Safari cell, standing still. */
 async function boot(page: Page, sym: Record<string, number>, hash: string): Promise<void> {
-  await page.goto(`/#solo&nobots&seed=${SEED}${hash}&rom=${romHashParam()}`);
+  // The ring band unless the test asks for the whole window (`#ring`, the old default).
+  await page.goto(`/#solo&nobots&seed=${SEED}${hash.includes('&world') ? '' : '&ring'}${hash}&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
   await page.waitForSelector('body.in-match', { timeout: 60_000 });
   await expect
@@ -480,13 +481,14 @@ const WEATHER_SUNNY_CLOUDS = 1;
 // test passed on the corner's clock alone). They are on the camera's offset, marked, so the core draws each once
 // where it is -- not 320 columns either side as it does a weather grid, nor 256 rows up
 // and down. Every pixel the clouds change is under a cloud the OAM has.
-test("on a desktop Route 120's clouds are drawn once each, where the OAM puts them", async ({ browser }) => {
+for (const world of [false, true]) {
+test(`on a desktop Route 120's clouds are drawn once each, where the OAM puts them${world ? ' (whole window)' : ''}`, async ({ browser }) => {
   test.setTimeout(180_000);
   const sym = loadSymbols();
   const ctx = await browser.newContext({ viewport: DESKTOP });
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_120.id},27,71&rom=${romHashParam()}`);
+    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_120.id},27,71${world ? '' : '&ring'}&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await expect
@@ -498,7 +500,8 @@ test("on a desktop Route 120's clouds are drawn once each, where the OAM puts th
       .toBe(true);
     await page.waitForTimeout(3_000);
     const pic = await grab(page);
-    expect({ width: pic.width, height: pic.height }, "the core draws the ROM's wide band").toEqual({ width: 240 + 2 * WIDE.side, height: 160 + 2 * WIDE.rows });
+    if (world) expect(pic.width, 'the whole window, past the wide ring').toBeGreaterThan(240 + 2 * WIDE.side);
+    else expect({ width: pic.width, height: pic.height }, "the core draws the ROM's wide band").toEqual({ width: 240 + 2 * WIDE.side, height: 160 + 2 * WIDE.rows });
     // Every value each pixel takes without the clouds, the map's own animation included.
     // Route 120 lands in its clouds already: clear them first.
     const weather = (w: number) => page.evaluate(([at, v]) => (window as unknown as PicWindow).__hbr.emu.write(at, v, 8), [sym.gWeather + WEATHER_NEXT, w] as const);
@@ -571,7 +574,7 @@ test("on a desktop Route 120's clouds are drawn once each, where the OAM puts th
       });
     }), ['clear', sym.gMain, sym.gBrOamHi, 30] as const);
     await grab(page);
-    await save(page, 'wide-clouds');
+    await save(page, world ? 'world-clouds' : 'wide-clouds');
     console.log(`picture: clouds, ${seen.boxes} semi-transparent entries, ${seen.strange} changed pixel-frames, ${seen.outside.length} outside every box`);
     expect(seen.boxes, 'the clouds are in the OAM').toBeGreaterThan(0);
     expect(seen.strange, 'and drawn on the picture').toBeGreaterThan(0);
@@ -580,6 +583,7 @@ test("on a desktop Route 120's clouds are drawn once each, where the OAM puts th
     await ctx.close();
   }
 });
+}
 
 // A 256-row band (#band=40,56: the legacy one, a ROM without gBrFieldView's) is the
 // sprite window's own rows, so the window the page asks for must draw what no window does.
@@ -669,7 +673,7 @@ test("the band stops past the map's edge: walking down to Route 103's last row, 
     const page = await ctx.newPage();
     // A short opening, then the drop: #land puts us on the path, whatever is picked.
     // #testmon, as play.spec has it: a party that caught nothing is out at the buzzer.
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_103.id},${EDGE_COLUMN},${EDGE_FROM}&rom=${romHashParam()}`);
+    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${ROUTE_103.id},${EDGE_COLUMN},${EDGE_FROM}&ring&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     // A on the drop map takes the section under the cursor, once it is taking presses.
@@ -749,12 +753,12 @@ const NL = String.fromCharCode(10);
  *  the connection into Route 115: the tall ring on a portrait phone, the wide one on a
  *  desktop (`wide`), whose band is `picture` and whose sideways legs are long enough to
  *  wrap its 64-column ring. */
-async function rustboroIsTheMap(browser: Browser, how: { name: string; context: BrowserContextOptions; picture: { width: number; height: number; left: number; top: number }; across: number; skipWater?: boolean; east?: boolean }): Promise<void> {
+async function rustboroIsTheMap(browser: Browser, how: { name: string; context: BrowserContextOptions; picture: { width: number; height: number; left: number; top: number }; across: number; skipWater?: boolean; east?: boolean; world?: boolean }): Promise<void> {
   const sym = loadSymbols();
   const ctx = await browser.newContext(how.context);
   try {
     const page = await ctx.newPage();
-    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${RUSTBORO_LAND.x},${RUSTBORO_LAND.y}&rom=${romHashParam()}`);
+    await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${RUSTBORO_LAND.x},${RUSTBORO_LAND.y}${how.world ? '' : '&ring'}&rom=${romHashParam()}`);
     await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
     await page.waitForSelector('body.in-match', { timeout: 60_000 });
     await expect
@@ -768,11 +772,16 @@ async function rustboroIsTheMap(browser: Browser, how: { name: string; context: 
     await page.waitForTimeout(3_000);
 
     const pic = await grab(page);
-    expect({ width: pic.width, height: pic.height, left: pic.left, top: pic.top }, "the core draws the ROM's band").toEqual(how.picture);
+    // The whole window (HBR-27): the band the layout asked for, every row and column the
+    // window shows, drawn from the map -- so every cell of it must be the still.
+    const v = how.world ? await page.evaluate(() => (window as unknown as { __hbr: { emu: { viewport: { left: number; top: number; right: number; bottom: number } } } }).__hbr.emu.viewport) : null;
+    const picture = v ? { width: 240 + v.left + v.right, height: 160 + v.top + v.bottom, left: v.left, top: v.top } : how.picture;
+    if (v) expect(picture.width, 'the whole window is wider than the wide ring').toBeGreaterThan(how.picture.width);
+    expect({ width: pic.width, height: pic.height, left: pic.left, top: pic.top }, "the core draws the band asked for").toEqual(picture);
     await save(page, how.name);
 
     await page.evaluate(installStill, {
-      sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi },
+      sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi, gBrWorld: how.world ? sym.gBrWorld : undefined },
       stills: { [RUSTBORO.ref]: `/field-maps/${RUSTBORO.id}.png`, [ROUTE_115.ref]: `/field-maps/${ROUTE_115.id}.png`, [ROUTE_116.ref]: `/field-maps/${ROUTE_116.id}.png` },
       every: 0,
       keep: 12,
@@ -792,7 +801,7 @@ async function rustboroIsTheMap(browser: Browser, how: { name: string; context: 
       const kept = await page.evaluate(() => (window as unknown as { __still: { missPngs(): string[] } }).__still.missPngs());
       kept.forEach((k, i) => fs.writeFileSync(path.join(OUT_DIR, `${how.name}-${slug}-miss-${i}.png`), Buffer.from(k.split(',')[1], 'base64')));
       expect(report.samples, `${what}: frames compared`).toBeGreaterThan(10);
-      expect(report.picture, `${what}: the ROM's band`).toEqual(how.picture);
+      expect(report.picture, `${what}: the band asked for`).toEqual(picture);
       expect(report.missed, `${what}: every cell of every frame is the still\n${misses(report)}`).toBe(0);
       expect(report.worstFrame, `${what}: every frame is the still`).toBeGreaterThanOrEqual(FRAME_PASS);
       // The check has teeth: no picture is the still one metatile down.
@@ -893,5 +902,20 @@ test("on a desktop the ROM's wide band is the map, every column of it past the L
     // still's frame 21-49% of the time, so the still's sea is left out (still.ts).
     skipWater: true,
     east: true,
+  });
+});
+
+// The same walk under the whole window (the default, HBR-27): every column and row the
+// desktop shows, the core's from the ROM's map grid, Rustboro's neighbours included.
+test("on a desktop the whole window is the map, every cell of it: standing, walking every way, under the START menu and over a connection", async ({ browser }) => {
+  test.setTimeout(300_000);
+  await rustboroIsTheMap(browser, {
+    name: 'rustboro-world',
+    context: { viewport: DESKTOP },
+    picture: { width: 240 + 2 * WIDE.side, height: 160 + 2 * WIDE.rows, left: WIDE.side, top: WIDE.rows },
+    across: 17,
+    skipWater: true,
+    east: true,
+    world: true,
   });
 });

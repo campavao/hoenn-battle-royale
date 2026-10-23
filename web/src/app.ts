@@ -1731,18 +1731,18 @@ function askForBand(emu: Emulator): void {
   fieldShown = shownOk
     ? { top: askedBand.top, bottom: askedBand.bottom, left: askedBand.left, right: askedBand.right }
     : null;
-  // `#world` (dev, the whole-window prototype): the core draws the whole layout from the
-  // ROM's map grid, past what the ring holds; the ROM keeps the ring it has for the band
-  // above, which the core still draws the LCD's sprites and its own rows from.
+  // The whole window (the default; `#ring` opts out): the core draws the whole layout
+  // from the ROM's map grid, past what the ring holds; the ROM keeps the ring it has for
+  // the band above, which the core still draws the LCD's sprites and its own rows from.
   worldOn = wantWorld() && emu.setWorld(worldAt);
   if (worldOn) askedBand = worldBand(matchLayout());
   emu.setViewport(askedBand);
 }
 
-/** `#world`: the whole-window prototype (Cam, 2026-10-20, "one layer"; HBR-27), opt-in
- *  on any build so it can be played before it is the default. */
+/** The whole window, drawn by the core from the ROM's map (Cam, 2026-10-20, "one layer";
+ *  HBR-27): the default. `#ring` keeps the ring band and the page's stills past it. */
 function wantWorld(): boolean {
-  return new URLSearchParams(location.hash.slice(1)).has('world');
+  return !new URLSearchParams(location.hash.slice(1)).has('ring');
 }
 /** gBrWorld, where the ROM says the LCD sits on its map grid, and what the core reads
  *  the map from (include/br/br_field.h); null when the image booted lacks any of them. */

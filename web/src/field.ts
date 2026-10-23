@@ -637,9 +637,12 @@ export function askBand(lay: FieldLayout, rom: FieldPicture, wideOk = false): Ba
   return lay.lcdCol > lay.lcdRow || shownArea(lay, wide) > shownArea(lay, tall) ? wide : tall;
 }
 
-/** The whole window's band (the whole-window prototype, include/br/br_field.h): every
- *  column and row the layout shows past the LCD, in eights, up to what the core's row
- *  buffer and rows hold. A core given the ROM's world draws all of it from the map. */
+/** The whole window's band (HBR-27, include/br/br_field.h): every column and row the
+ *  layout shows past the LCD, in eights, up to what the core's row buffer and rows hold.
+ *  A core given the ROM's world draws all of it from the map. The rows below get a tile
+ *  more, as a margin rather than the settled placement: the layout is measured before
+ *  the match is up, and a portrait phone's LCD settles ten rows higher (lcdRow 184
+ *  measured, 174 shown), which left its bottom ten rows to the stills under the picture. */
 export const WORLD_SIDE_MAX = 512;
 export const WORLD_ROWS_MAX = 256;
 export function worldBand(lay: FieldLayout): Band {
@@ -648,7 +651,7 @@ export function worldBand(lay: FieldLayout): Band {
     left: eights(lay.lcdCol, WORLD_SIDE_MAX),
     top: eights(lay.lcdRow, WORLD_ROWS_MAX),
     right: eights(lay.cols - lay.lcdCol - GBA_W, WORLD_SIDE_MAX),
-    bottom: eights(lay.rows - lay.lcdRow - GBA_H, WORLD_ROWS_MAX),
+    bottom: eights(lay.rows - lay.lcdRow - GBA_H + TILE, WORLD_ROWS_MAX),
   };
 }
 

@@ -18,15 +18,14 @@
 // speaker's late and cut buffers, and what the processes cost -- CPU-seconds a
 // second and the renderer's resident memory. perf.json has the lot.
 //
-// Twice: in a desktop's window, and on a portrait phone's glass (POK-329). The phone is
-// the one that pays for the picture past the LCD -- the core draws 256x496 there, the
-// ROM's whole band, against a desktop's 400x240 (field.ts askBand: the wide ring's
-// columns and rows the layout shows) -- so it is the phone the floor has to hold on. perf-phone.json is its lot.
+// Twice: in a desktop's window, and on a portrait phone's glass (POK-329). Each pays for
+// the picture its window shows past the LCD, the core drawing all of it from the map
+// (HBR-27, field.ts worldBand). perf-phone.json is the phone's lot.
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Browser, type BrowserContextOptions } from '@playwright/test';
 import { cost, costLine, processes, snapshot, type PageSample } from './proc';
-import { loadSymbols, romExists, romHashParam, romPath, romView, startWith } from './symbols';
+import { loadSymbols, romExists, romHashParam, romPath, startWith } from './symbols';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out');
@@ -42,15 +41,19 @@ type PerfWindow = {
 type Band = { left: number; top: number; right: number; bottom: number };
 type BandWindow = { __hbr: { emu: { viewport: Band | null } } };
 
-/** Where each run is: its window, the files it leaves, and the band its layout asks for
- *  -- on a desktop the wide ring, as much of it as its 1280x720 window shows beside the
- *  docked sheet at a phone's zoom (2x: 80 columns each side, and all 40 of its rows), all
- *  of the ROM's band on the phone (184 above and 152 below since POK-378: the LCD sits on
- *  the pad, 174 rows down, and the dock runs past the 152). */
-const RUNS: { name: string; file: string; context: BrowserContextOptions; band: (rom: ReturnType<typeof romView>) => Band }[] = [
-  { name: 'desktop', file: 'perf', context: {}, band: () => ({ left: 80, top: 40, right: 80, bottom: 40 }) },
-  { name: 'phone', file: 'perf-phone', context: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, band: (rom) => rom.viewport },
+/** Where each run is: its window and the files it leaves. */
+const RUNS: { name: string; file: string; context: BrowserContextOptions }[] = [
+  { name: 'desktop', file: 'perf', context: {} },
+  { name: 'phone', file: 'perf-phone', context: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
 ];
+type Placement = { cols: number; rows: number; lcdCol: number; lcdRow: number };
+type FieldWindow = { __hbr: { field: { placement: Placement } } };
+/** The field the layout shows past the LCD on each side, which the whole window's band
+ *  (field.ts worldBand) covers: in eights, measured before the match is up, and a tile
+ *  more rows below. */
+function shown(lay: Placement): Band {
+  return { left: lay.lcdCol, top: lay.lcdRow, right: lay.cols - lay.lcdCol - 240, bottom: lay.rows - lay.lcdRow - 160 };
+}
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -175,9 +178,16 @@ async function hostsAMatch(browser: Browser, run: (typeof RUNS)[number]): Promis
       // audio number reads 0.
       expect(audio.state, 'the AudioContext is running').toBe('running');
       expect(audio.callbacks, 'the speaker asked the core for sound').toBeGreaterThan(0);
-      // ...and it was the picture this layout shows that was paid for (POK-329): a desktop
-      // the part of the wide ring its window shows, a phone the ROM's whole band.
-      expect(band, `the band a ${run.name} asks for`).toEqual(run.band(romView()));
+      // ...and it was the picture this layout shows that was paid for (POK-329, HBR-27):
+      // the whole window, as much of the field as it shows and no more.
+      const lay = await host.evaluate(() => (window as unknown as FieldWindow).__hbr.field.placement);
+      const need = shown(lay);
+      console.log(`${run.name}: band ${JSON.stringify(band)}, the layout shows ${JSON.stringify(need)}`);
+      for (const side of ['left', 'top', 'right', 'bottom'] as const) {
+        const want = Math.max(0, need[side]);
+        expect(band?.[side], `the band a ${run.name} asks for covers the field's ${side}`).toBeGreaterThanOrEqual(want);
+        expect(band?.[side], `...and not much more`).toBeLessThan(want + 8 + 16 + 16);
+      }
     } finally {
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     }
