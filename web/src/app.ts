@@ -1755,8 +1755,10 @@ function worldSymbols(symbols: Map<string, number> | null | undefined): WorldSym
   const header = symbols?.get('gMapHeader');
   const main = symbols?.get('gMain');
   const overworld = symbols?.get('CB2_Overworld');
+  // No table of maps means no neighbours past the grid, not no world (an older patch).
+  const groups = symbols?.get('gMapGroups') ?? 0;
   if (at === undefined || grid === undefined || header === undefined || main === undefined || overworld === undefined) return null;
-  return { at, grid, header, cb2: main + 4, overworld: overworld | 1 };
+  return { at, grid, header, cb2: main + 4, overworld: overworld | 1, groups };
 }
 
 /** Where the ROM keeps its OAM side table and the rows the page shows past the LCD

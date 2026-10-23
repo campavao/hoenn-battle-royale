@@ -57,8 +57,9 @@ ENGINE_SYMBOLS = [
     # gMain.callback2 is this (POK-319, web/src/field.ts).
     "CB2_Overworld",
     # ...and the map grid and layout the core draws the whole window from, which the
-    # ROM names in gBrWorld (world-grid.txt).
-    "gBackupMapLayout", "gMapHeader",
+    # ROM names in gBrWorld (world-grid.txt), and the table of every map, which the core
+    # walks for the neighbours past the grid's edge.
+    "gBackupMapLayout", "gMapHeader", "gMapGroups",
     # ...and the battle's: the phone's stick and A/B stand down while it runs and no
     # battle script waits on a press (web/src/ui/battlemenu.ts battleWantsNoPad).
     "BattleMainCB2",

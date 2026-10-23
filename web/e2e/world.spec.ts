@@ -13,6 +13,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { loadSymbols, romExists, romHashParam, romPath } from './symbols';
 import { ram, tap } from './play';
 import { installStill, type StillReport } from './still';
+import { aroundOf } from './maps';
 
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out', 'world');
@@ -22,8 +23,8 @@ const SEED = 5376;
 const RUSTBORO = { id: 'MAP_RUSTBORO_CITY', ref: '0:3' };
 const LAND = { x: 21, y: 25 };
 const ROUTE_115 = { id: 'MAP_ROUTE115', ref: '0:30' };
-const ROUTE_116 = { id: 'MAP_ROUTE116', ref: '0:31' };
-const ROUTE_104 = { id: 'MAP_ROUTE104', ref: '0:19' };
+const ROUTE_101 = { id: 'MAP_ROUTE101', ref: '0:16' };
+const OLDALE = { id: 'MAP_OLDALE_TOWN', ref: '0:10' };
 /** What the ROM's wide band draws (gBrFieldViewWide): the whole window is more. */
 const WIDE = { width: 240 + 128 + 128, height: 160 + 40 + 40 };
 const STILL = { tolerance: 10, pass: 0.5, minPixels: 64 };
@@ -71,17 +72,17 @@ async function walk(page: Page, key: string, done: () => Promise<boolean>, ms: n
   await page.waitForTimeout(500);
 }
 
-async function land(page: Page, sym: Record<string, number>, hash: string): Promise<void> {
-  await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${RUSTBORO.id},${LAND.x},${LAND.y}${hash}&rom=${romHashParam()}`);
+async function land(page: Page, sym: Record<string, number>, hash: string, at = { map: RUSTBORO, ...LAND }): Promise<void> {
+  await page.goto(`/#solo&nobots&testmon&safari=15&seed=${SEED}&land=${at.map.id},${at.x},${at.y}${hash}&rom=${romHashParam()}`);
   await page.waitForFunction(() => (window as unknown as { __hbr?: unknown }).__hbr !== undefined, { timeout: 60_000 });
   await page.waitForSelector('body.in-match', { timeout: 60_000 });
   await expect
     .poll(async () => {
       const r = await ram(page, sym);
       if (r.pick) await tap(page, 'z');
-      return !r.pick && r.onOverworld && r.map === RUSTBORO.ref ? `${r.x},${r.y}` : '';
-    }, { timeout: 90_000, intervals: [1_000], message: 'landed in Rustboro' })
-    .toBe(`${LAND.x},${LAND.y}`);
+      return !r.pick && r.onOverworld && r.map === at.map.ref ? `${r.x},${r.y}` : '';
+    }, { timeout: 90_000, intervals: [1_000], message: `landed in ${at.map.id}` })
+    .toBe(`${at.x},${at.y}`);
   await page.waitForTimeout(3_000);
 }
 
@@ -106,7 +107,8 @@ for (const world of [false, true]) {
 
       await page.evaluate(installStill, {
         sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi },
-        stills: { [RUSTBORO.ref]: `/field-maps/${RUSTBORO.id}.png`, [ROUTE_115.ref]: `/field-maps/${ROUTE_115.id}.png`, [ROUTE_116.ref]: `/field-maps/${ROUTE_116.id}.png`, [ROUTE_104.ref]: `/field-maps/${ROUTE_104.id}.png` },
+        // Route 116 to the east reaches past the grid's seven metatiles on the walk right.
+        ...aroundOf([RUSTBORO.id]),
         every: 0,
         keep: 6,
         ...STILL,
@@ -130,6 +132,58 @@ for (const world of [false, true]) {
         expect(report.missed, 'every cell inside a known map is the still').toBe(0);
         expect(report.controlFrame, 'the check has teeth').toBeLessThan(0.9);
       }
+    } finally {
+      await ctx.close();
+    }
+  });
+}
+
+// Past the grid (HBR-27 step 2): the 10-20 play-test's seams were where the backup grid's
+// seven metatiles of each neighbour ran out (feedback item 2). The core now walks the
+// map's connections itself, so every neighbour on screen is drawn from its own layout --
+// Route 101's two towns, which share its tiles, and Route 115 north of Rustboro, which
+// does not (gTileset_Fallarbor over gTileset_Rustboro: tiles decoded, palettes fitted).
+// Each walk crosses the join and back, the frame of the crossing included.
+const CROSSINGS = [
+  { name: 'Route 101 into Oldale and back', at: { map: ROUTE_101, x: 10, y: 4 }, maps: [ROUTE_101.id, OLDALE.id, 'MAP_LITTLEROOT_TOWN'], there: OLDALE, stopY: 15 },
+  { name: 'Rustboro into Route 115 and back', at: { map: RUSTBORO, x: 21, y: 10 }, maps: [RUSTBORO.id, ROUTE_115.id], there: ROUTE_115, stopY: 76 },
+];
+
+for (const cross of CROSSINGS) {
+  test(`after: ${cross.name}, every neighbour on screen its own still`, async ({ browser }) => {
+    test.setTimeout(240_000);
+    const sym = loadSymbols();
+    const ctx = await browser.newContext({ viewport: DESKTOP });
+    try {
+      const page = await ctx.newPage();
+      await land(page, sym, '&world', cross.at);
+      const tag = `cross-${cross.at.map.id}`;
+      await savePicture(page, `${tag}-standing`);
+      await page.evaluate(installStill, {
+        sym: { gSaveBlock1Ptr: sym.gSaveBlock1Ptr, gSaveBlock2Ptr: sym.gSaveBlock2Ptr, gTasks: sym.gTasks, gFieldCamera: sym.gFieldCamera, gMain: sym.gMain, CB2_Overworld: sym.CB2_Overworld, gBrOamHi: sym.gBrOamHi },
+        ...aroundOf(cross.maps),
+        every: 0,
+        keep: 6,
+        ...STILL,
+        skipWater: true,
+      });
+      const here = async () => { const r = await ram(page, sym); return { x: r.x, y: r.y, map: r.map }; };
+      await page.evaluate(() => (window as unknown as { __still: { start(): void } }).__still.start());
+      // North over the join, a few steps on, then back to where it began.
+      await walk(page, 'ArrowUp', async () => { const h = await here(); return h.map === cross.there.ref && h.y <= cross.stopY; }, 15_000);
+      expect((await here()).map, 'crossed the join').toBe(cross.there.ref);
+      await savePicture(page, `${tag}-there`);
+      await page.screenshot({ path: path.join(OUT_DIR, `${tag}-there.png`) });
+      await walk(page, 'ArrowDown', async () => { const h = await here(); return h.map === cross.at.map.ref && h.y >= cross.at.y; }, 15_000);
+      expect((await here()).map, 'and back').toBe(cross.at.map.ref);
+      const report = await page.evaluate(() => (window as unknown as { __still: { stop(): StillReport } }).__still.stop());
+      const kept = await page.evaluate(() => (window as unknown as { __still: { missPngs(): string[] } }).__still.missPngs());
+      kept.forEach((k, i) => fs.writeFileSync(path.join(OUT_DIR, `${tag}-miss-${i}.png`), Buffer.from(k.split(',')[1], 'base64')));
+      fs.writeFileSync(path.join(OUT_DIR, `${tag}-misses.json`), JSON.stringify(report.misses.slice(0, 40), null, 1));
+      console.log(`${cross.name}: ${report.samples} frames (${report.moving} mid-step), ${report.cells} cells, ${report.missed} missed, worst frame ${(100 * report.worstFrame).toFixed(1)}%, control ${(100 * report.controlFrame).toFixed(1)}%`);
+      expect(report.samples, 'frames compared').toBeGreaterThan(10);
+      expect(report.missed, 'every cell inside a known map is the still').toBe(0);
+      expect(report.controlFrame, 'the check has teeth').toBeLessThan(0.9);
     } finally {
       await ctx.close();
     }

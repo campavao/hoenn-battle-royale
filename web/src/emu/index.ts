@@ -65,7 +65,7 @@ export interface CoreModule {
    *  EWRAM, -1 for none: with it the band draws every sprite at its true rows, however far
    *  from the LCD. Older cores lack it. */
   _brSetOamTable?(offset: number): void;
-  _brSetWorld?(offset: number, grid: number, header: number, cb2: number, overworld: number): void;
+  _brSetWorld?(offset: number, grid: number, header: number, cb2: number, overworld: number, groups: number): void;
   /** The window the loaded core draws with, `top << 16 | bottom`, or -1 for none. */
   _brSpriteWindow?(): number;
   /** The picture's ABGR8888 pixels in the heap -- the texture's top-left, the LCD at
@@ -100,14 +100,16 @@ export interface Band {
  *  which the ROM keeps every sprite's 8-bit OAM y to one reading. A band that reaches
  *  past it needs a core that knows it; any other core draws rows 256 apart alike. */
 /** What the core draws the whole window from (include/br/br_field.h): gBrWorld, and the
- *  build's gBackupMapLayout, gMapHeader, &gMain.callback2 and CB2_Overworld (thumb bit
- *  set, the value gMain.callback2 holds on the field), all GBA addresses. */
+ *  build's gBackupMapLayout, gMapHeader, &gMain.callback2, CB2_Overworld (thumb bit
+ *  set, the value gMain.callback2 holds on the field) and gMapGroups (0 draws no
+ *  neighbours past the grid), all GBA addresses. */
 export interface WorldSymbols {
   at: number;
   grid: number;
   header: number;
   cb2: number;
   overworld: number;
+  groups: number;
 }
 
 export interface SpriteBand {
@@ -286,8 +288,8 @@ export class Emulator {
    *  after. False on a core that cannot. */
   setWorld(world: WorldSymbols | null): boolean {
     if (!this.m._brSetWorld) return false;
-    if (!world) this.m._brSetWorld(-1, 0, 0, 0, 0);
-    else this.m._brSetWorld(world.at - EWRAM_BASE, world.grid, world.header, world.cb2, world.overworld);
+    if (!world) this.m._brSetWorld(-1, 0, 0, 0, 0, 0);
+    else this.m._brSetWorld(world.at - EWRAM_BASE, world.grid, world.header, world.cb2, world.overworld, world.groups);
     return world !== null;
   }
 
