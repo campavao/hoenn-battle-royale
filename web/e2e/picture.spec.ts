@@ -37,6 +37,10 @@ const PORTRAIT = { width: 390, height: 844 };
 const DESKTOP = { width: 1600, height: 900 };
 /** The ROM's wide band (gBrFieldViewWide): 128 columns each side, 40 rows. */
 const WIDE = { side: 128, rows: 40 };
+/** A big desktop's window, wider than the wide ring's 496 columns with room to spare. */
+const BIG_DESKTOP = { width: 1920, height: 1080 };
+/** Of a 16-column strip, the share of pixels drifting fog changes in 16 frames, at least. */
+const DRIFT = 0.2;
 
 const SEED = 5376;
 const SAFARI_SE = '26:13';
@@ -404,6 +408,46 @@ test("on a desktop the fog covers the ROM's wide band, every column of it, as it
     const bare = [...least].filter(([, share]) => share <= 0.5);
     console.log(`picture: fog over the wide band, least share changed ${Math.min(...least.values()).toFixed(2)}`);
     expect(bare.map(([x, share]) => `${x}..${x + 15}: ${share.toFixed(2)}`), 'every 16 columns fogged at every look').toEqual([]);
+  } finally {
+    await ctx.close();
+  }
+});
+
+// With the whole window (#world, HBR-27) the row is as wide as the window, wider than
+// the ring. The grid and its copies 320 columns either side (_brDrawSprite) reach 400
+// columns left of the LCD and 383 right of it, past a 1920-wide window's 240 either side,
+// so the clouds drift over all of it. (Roofs on BG1 stay clear: the fog is priority 2.)
+test('with the whole window the fog covers every column of it, as it scrolls', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const sym = loadSymbols();
+  const ctx = await browser.newContext({ viewport: BIG_DESKTOP });
+  try {
+    const page = await ctx.newPage();
+    await boot(page, sym, '&world');
+    const pic = await grab(page);
+    expect(pic.left, 'the window reaches past the wide ring').toBeGreaterThan(WIDE.side);
+    await keep(page);
+    await page.evaluate(([at, fog]) => (window as unknown as PicWindow).__hbr.emu.write(at, fog, 8), [sym.gWeather + WEATHER_NEXT, WEATHER_FOG_HORIZONTAL] as const);
+    await expect.poll(() => page.evaluate((at) => (window as unknown as PicWindow).__hbr.emu.read(at, 8), sym.gWeather + WEATHER_CURR), { timeout: 10_000 }).toBe(WEATHER_FOG_HORIZONTAL);
+    // Fully in (Weather_UpdateBlend), and the weather's tint on every palette with it.
+    await page.waitForTimeout(5_000);
+    // The tint holds still and the clouds drift a column every four frames, so a column
+    // with clouds on it changes from one look to the next, and one with only the tint
+    // does not: the player stands still, and nothing else on the map moves.
+    await grab(page);
+    await save(page, 'world-fog');
+    const least = new Map<number, number>();
+    for (let look = 0; look < 8; look++) {
+      await keep(page);
+      await grab(page, 16);
+      for (let x = -pic.left; x < pic.width - pic.left; x += 16) {
+        const share = await changedColumns(page, x, Math.min(x + 16, pic.width - pic.left));
+        least.set(x, Math.min(least.get(x) ?? 1, share));
+      }
+    }
+    console.log(`picture: drifting fog over the whole window (${pic.width} columns): ${[...least].map(([x, share]) => `${x}:${share.toFixed(2)}`).join(' ')}`);
+    const bare = [...least].filter(([, share]) => share <= DRIFT);
+    expect(bare.map(([x, share]) => `${x}..${x + 15}: ${share.toFixed(2)}`), 'clouds drifting over every 16 columns at every look').toEqual([]);
   } finally {
     await ctx.close();
   }
