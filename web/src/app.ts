@@ -1679,6 +1679,13 @@ const liveAbove = (): number | undefined => {
   return top !== undefined && battleScene ? Math.min(top, BATTLE_ABOVE) : top;
 };
 
+/** The phone HUD's scale (--s, index.html): CSS pixels to a GBA pixel, from the pad's width. */
+function padScale(pad: HTMLElement): number {
+  const cs = getComputedStyle(pad);
+  const w = pad.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0');
+  return w > 0 ? Math.min(3, w / 240) : 1.5;
+}
+
 /** The layout the match gives the picture, measured now, whatever screen is up: the
  *  field only opens past the picture in a match (body.in-match), with the sheet docked
  *  beside it on a desktop (body.docked). Both classes are put on for the measure and
@@ -1688,6 +1695,9 @@ function matchLayout(): FieldLayout {
   const was = { inMatch: body.classList.contains('in-match'), docked: body.classList.contains('docked') };
   body.classList.add('in-match');
   body.classList.toggle('docked', desktop());
+  // The dock's size before the phone HUD's chunk fills it (HBR-57): its rows are --s
+  // tall, and a boot measured with an empty dock put the LCD lower than play does.
+  ($('#screen-playing') as HTMLElement).style.setProperty('--s', String(padScale($('#pad') as HTMLElement)));
   try {
     return measureLayout($('#screen-wrap') as HTMLElement, $('#pad') as HTMLElement, liveAbove());
   } finally {
@@ -4513,13 +4523,8 @@ function wirePhoneHud(
         : undefined,
   });
   const wrap = $('#screen-wrap') as HTMLElement;
-  const scale = () => {
-    const cs = getComputedStyle(pad);
-    const w = pad.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0');
-    return w > 0 ? Math.min(3, w / 240) : 1.5;
-  };
   const resize = () => {
-    const s = scale();
+    const s = padScale(pad);
     root.style.setProperty('--s', String(s));
     hud.setScale(s);
     battle.setScale(s);
@@ -4541,7 +4546,7 @@ function wirePhoneHud(
     dpad: $('#dpad-surface') as HTMLElement,
     ab: document.querySelector('#pad .ab') as HTMLElement,
     bar: $('#pad-edit') as HTMLElement,
-    scale,
+    scale: () => padScale(pad),
   });
   const hudBase = symbols.get('gBrHud');
   let world: HudWorld | null = null;

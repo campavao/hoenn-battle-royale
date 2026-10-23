@@ -109,6 +109,46 @@ test('a phone gets the screen and both thumbs, either way up', async ({ browser 
   }
 });
 
+// HBR-57 (Cam's 10-23 recording): on an iPhone the strip under the dock ran a frame behind
+// the picture. The core's band is sized once, at boot, from the layout the match will
+// have -- but measured before the phone HUD's chunk filled the dock, so with the iPhone's
+// status bar and home bar taking their rows the LCD sat lower at boot than in play, and
+// the band stopped 38 rows short of the glass's bottom; the page's stills, a frame late,
+// filled the rest. The insets are the iPhone 15's (59 above, 34 below), put on by hand:
+// a desktop browser has none.
+test('on an iPhone with its insets, the band the core draws covers every row the glass shows', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const INSETS = 'body{padding:59px 0 34px !important} #stage{padding:59px 0 34px !important} body.in-match #pad{padding-bottom:34px !important}';
+  const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  try {
+    const page = await ctx.newPage();
+    await page.addInitScript((css) => {
+      document.addEventListener('DOMContentLoaded', () => {
+        const s = document.createElement('style');
+        s.textContent = css;
+        document.head.appendChild(s);
+      });
+    }, INSETS);
+    await page.goto(`/#solo&nobots&rom=${romHashParam()}`);
+    await page.waitForSelector('body.in-match', { timeout: 60_000 });
+    // The HUD's chunk in and the dock full: the layout play has.
+    await page.waitForSelector('#dock .hud-btn', { timeout: 30_000 });
+    const got = await page.evaluate(() => {
+      const h = (window as unknown as { __hbr: { emu: { viewport: { top: number; bottom: number } }; field: { placement: { rows: number; lcdRow: number } } } }).__hbr;
+      const p = h.field.placement;
+      return { band: h.emu.viewport, top: p.lcdRow, bottom: p.rows - p.lcdRow - 160 };
+    });
+    expect(got.bottom, 'the iPhone shows a long way past the LCD').toBeGreaterThan(160);
+    expect(got.band.top, `the ${got.top} rows above the LCD`).toBeGreaterThanOrEqual(got.top);
+    expect(got.band.bottom, `the ${got.bottom} rows below it, to the glass's bottom`).toBeGreaterThanOrEqual(got.bottom);
+    expect(got.band.top, '...and not much more above').toBeLessThan(got.top + 16);
+    expect(got.band.bottom, '...nor below').toBeLessThan(got.bottom + 8 + 16 + 8);
+    await page.screenshot({ path: path.join(OUT_DIR, 'phone-iphone-insets.png') });
+  } finally {
+    await ctx.close();
+  }
+});
+
 // POK-320 review: the dock was 480px on every desktop window, so a window snapped to half
 // a 1366px laptop screen left the game about 200px. Under 960px wide (or 640 tall) the
 // sheet is drawn at the picture's own size instead.
