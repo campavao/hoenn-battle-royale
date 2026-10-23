@@ -398,6 +398,9 @@ export interface Camera extends CameraPos {
   wide: boolean | null;
   /** The overworld is what the ROM is running (gMain.callback2 == CB2_Overworld). */
   onField: boolean;
+  /** gMapHeader.mapLayout: whose the core's list of the maps it drew must be to place
+   *  them from this camera's map (field-extra.ts stillsOver). */
+  layout?: number;
 }
 
 /** The sub-tile part of the picture's offset from gFieldCamera.x or .y. */
@@ -1345,6 +1348,7 @@ export class FieldView {
       wide: this.readWide(),
       onField: main !== undefined && cb2 !== undefined && (emu.read(main + MAIN_CALLBACK2, 32) & ~1) === cb2
         && !(pick !== undefined && emu.read(pick + PICK_ACTIVE, 8) !== 0),
+      layout: emu.read(this.sym('gMapHeader')!, 32),
     };
     cam.sprites = this.people(cam, p);
     return cam;
@@ -1697,7 +1701,7 @@ export class FieldView {
     const marks = map && map.outdoor ? this.marks(c, map) : [];
     const markKey = marks.map((m) => `${m.x}/${m.y}/${m.drawn ? 1 : 0}`).join(',');
     // The joined maps the core drew (#world): the overlay's stills go where it did not.
-    const drawn = this.band && this.deps.world?.() ? this.deps.emu.worldDrawn() : null;
+    const drawn = this.deps.emu.worldDrawn();
     const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}:${c.onField ? 1 : 0}:${markKey}:${drawn}`;
     if (key === this.drawn) return;
     const ctx = field.getContext('2d');

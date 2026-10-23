@@ -1,7 +1,7 @@
 // The towns' tileset animations the core plays (field-extra.ts TILE_ANIMS), held to
 // tileset_anims.c: each frame table's length, and where and how much each one draws.
 import { describe, expect, it } from 'vitest';
-import { TILE_ANIMS, coreDrew } from './field-extra';
+import { TILE_ANIMS, coreDrew, stillsOver } from './field-extra';
 import type { Reached } from './field';
 
 const source = (Object.values(import.meta.glob<string>('../../src/tileset_anims.c', { query: '?raw', import: 'default', eager: true }))[0] ?? '').replace(/\r\n/g, '\n');
@@ -59,7 +59,7 @@ describe('TILE_ANIMS', () => {
 describe('coreDrew', () => {
   const map = (w: number, h: number) => ({ w, h }) as unknown as Reached['map'];
   // Route 101 with Oldale above it and Route 102 left of Oldale, as the core lists them.
-  const drawn = Int32Array.from([1, 2, 0, -20, 20, 20, -50, -20, 50, 20]);
+  const drawn = Int32Array.from([1, 2, 0x08480000, 0, -20, 20, 20, -50, -20, 50, 20]);
   it('matches a map the core drew by its place and size', () => {
     expect(coreDrew(drawn, { map: map(20, 20), x: 0, y: -320, hops: 1 })).toBe(true);
     expect(coreDrew(drawn, { map: map(50, 20), x: -800, y: -320, hops: 2 })).toBe(true);
@@ -68,5 +68,25 @@ describe('coreDrew', () => {
     expect(coreDrew(drawn, { map: map(40, 60), x: 320, y: 0, hops: 1 })).toBe(false);
     expect(coreDrew(drawn, { map: map(20, 20), x: 16, y: -320, hops: 1 })).toBe(false);
     expect(coreDrew(null, { map: map(20, 20), x: 0, y: -320, hops: 1 })).toBe(false);
+  });
+});
+
+describe('stillsOver', () => {
+  const map = (w: number, h: number) => ({ w, h }) as unknown as Reached['map'];
+  const here = { map: map(20, 20), x: 0, y: 0, hops: 0 };
+  const oldale = { map: map(20, 20), x: 0, y: -320, hops: 1 };
+  const littleroot = { map: map(20, 20), x: 0, y: 320, hops: 1 };
+  const r102 = { map: map(50, 20), x: -800, y: -320, hops: 2 };
+  const reached = [here, oldale, littleroot, r102];
+  it('without the core\'s list: the maps two seams away', () => {
+    expect(stillsOver(reached, null)).toEqual([r102]);
+    expect(stillsOver(reached, Int32Array.from([0, 0, 0]), 7)).toEqual([r102]);
+  });
+  it('with it: every joined map it left out, near or far', () => {
+    expect(stillsOver(reached, Int32Array.from([1, 2, 7, 0, -20, 20, 20, -50, -20, 50, 20]), 7)).toEqual([littleroot]);
+    expect(stillsOver(reached, Int32Array.from([1, 0, 7]), 7)).toEqual([oldale, littleroot, r102]);
+  });
+  it('none from a list made on another map than the camera\'s', () => {
+    expect(stillsOver(reached, Int32Array.from([1, 2, 7, 0, -20, 20, 20, -50, -20, 50, 20]), 8)).toEqual([]);
   });
 });

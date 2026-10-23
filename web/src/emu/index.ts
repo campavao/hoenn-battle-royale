@@ -318,12 +318,12 @@ export class Emulator {
     this.m._brSetTileAnims?.(bytes);
   }
   /** The joined maps the core drew last frame (HBR-27, main.c brWorldDrawn): [drawn, n,
-   *  then each map's x, y, width, height in metatiles]; null on a core without it. */
+   *  layout, then each map's x, y, width, height in metatiles]; null on a core without it. */
   worldDrawn(): Int32Array | null {
     const at = this.m._brWorldDrawn?.() ?? 0;
     if (!at) return null;
     const v = new Int32Array(this.m.HEAPU8.buffer, at, 2);
-    return new Int32Array(this.m.HEAPU8.buffer, at, 2 + 4 * v[1]).slice();
+    return new Int32Array(this.m.HEAPU8.buffer, at, 3 + 4 * v[1]).slice();
   }
 
   /** The sprite window the band is drawn with, on every boot from now on (POK-329): the

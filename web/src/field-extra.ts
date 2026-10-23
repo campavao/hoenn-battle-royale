@@ -400,15 +400,26 @@ export function reach(p: Painter, map: WorldMap, view: { left: number; top: numb
   return list;
 }
 
-/** Whether the core's world drew `r` (Emulator.worldDrawn: n at 1, then each map's x, y,
- *  width and height in metatiles from the map we are on). */
+/** Whether the core's world drew `r` (Emulator.worldDrawn: n at 1, then from 3 each map's
+ *  x, y, width and height in metatiles from the map we are on). */
 export function coreDrew(drawn: Int32Array | null, r: Reached): boolean {
   if (!drawn) return false;
   for (let i = 0; i < drawn[1]; i++) {
-    const e = 2 + 4 * i;
+    const e = 3 + 4 * i;
     if (drawn[e] * TILE === r.x && drawn[e + 1] * TILE === r.y && drawn[e + 2] === r.map.w && drawn[e + 3] === r.map.h) return true;
   }
   return false;
+}
+
+/** The maps the overlay lays a still of. With the whole window the core draws the band
+ *  whole, and every joined map it could (Emulator.worldDrawn): a still goes only where it
+ *  did not. A list made on another map than the camera's `layout` (a seam crossed: the
+ *  page keeps the last whole frame's camera while the ROM loads the next map, and the
+ *  core has drawn from that one) is placed from the wrong map, so none that frame, the
+ *  core having drawn all it reaches. Without it, the maps two seams away, past the ring. */
+export function stillsOver(reached: readonly Reached[], drawn: Int32Array | null, layout?: number): Reached[] {
+  if (!drawn || drawn[0] !== 1) return reached.filter((r) => r.hops >= 2);
+  return drawn[2] === layout ? reached.filter((r) => r.hops >= 1 && !coreDrew(drawn, r)) : [];
 }
 
 /** What the overlay draws past the band, under the hidden people: the maps two seams
@@ -416,8 +427,7 @@ export function coreDrew(drawn: Int32Array | null, r: Reached): boolean {
  *  sprites for its own map's patches near the player only, and for no other map's. */
 export function drawPast(p: Painter, ctx: CanvasRenderingContext2D, c: Camera, map: WorldMap, band: Band, reached: readonly Reached[], marks: readonly Mark[], fog: (() => boolean) | null, drawn: Int32Array | null = null): boolean {
   const lay = p.layout();
-  // With the whole window the core draws the band whole, and every joined map it could
-  // (Emulator.worldDrawn): a still goes only where it did not.
+  // With the whole window the core draws the band whole (stillsOver says where it drew).
   const world = !!drawn && drawn[0] === 1;
   const cut = world ? { left: 0, top: 0, right: 0, bottom: 0 } : bandClip(c, map, band, c.stale, wideRing(band) && c.wide !== false);
   const { left, top } = lcdOrigin(c);
@@ -430,8 +440,7 @@ export function drawPast(p: Painter, ctx: CanvasRenderingContext2D, c: Camera, m
   };
   const ox = left - lay.lcdCol;
   const oy = top - lay.lcdRow;
-  const far = reached.filter((r) => (world ? r.hops >= 1 && !coreDrew(drawn, r) : r.hops >= 2));
-  const corners = drawCorners(p, ctx, far, shown, ox, oy, fog);
+  const corners = drawCorners(p, ctx, stillsOver(reached, drawn, c.layout), shown, ox, oy, fog);
   const bare = marks.filter((m) => !m.drawn && m.at.x + TILE > shown.left && m.at.x < shown.right && m.at.y + TILE > shown.top && m.at.y < shown.bottom);
   return drawMarks(p, ctx, bare, ox, oy) && corners;
 }

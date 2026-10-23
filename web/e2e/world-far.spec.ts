@@ -3,7 +3,7 @@
 // whole reach at 1920x1080) -- animated, with the people on them -- and the page used to
 // lay its still of each map two joins away over that on the overlay, frozen and with
 // nobody on it. Now the core says which maps it drew (main.c brWorldDrawn) and the page
-// draws a still only where it did not. On Route 101 at (2, 2), Route 102 is two joins
+// draws a still only where it did not. On Route 101 at (9, 2), by its path north, Route 102 is two joins
 // away (by Oldale), up and to the left of the player.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,8 +14,11 @@ import { ram, tap } from './play';
 const __dirname = import.meta.dirname;
 const OUT_DIR = path.resolve(__dirname, 'out', 'world');
 const DESKTOP = { width: 1920, height: 1080 };
-const LAND = { x: 2, y: 2 };
+const LAND = { x: 9, y: 2 };
 const TILE = 16;
+const OLDALE = '0:10';
+/** Overlay pixels the patches' marks in view come to, well short of any map's still. */
+const MARKS_AT_MOST = 2_000;
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -47,7 +50,7 @@ test('with the whole window, the maps two joins away are the core\'s, not stills
     console.log(`the core drew: ${JSON.stringify(drawn)}`);
     expect(drawn[0], 'the core drew a world').toBe(1);
     const maps = [];
-    for (let i = 0; i < drawn[1]; i++) maps.push(drawn.slice(2 + 4 * i, 6 + 4 * i).join(','));
+    for (let i = 0; i < drawn[1]; i++) maps.push(drawn.slice(3 + 4 * i, 7 + 4 * i).join(','));
     expect(maps, 'Oldale and Route 102 among them').toEqual(expect.arrayContaining(['0,-20,20,20', '-50,-20,50,20']));
 
     // The overlay over Route 102: the field canvas's map pixel (0, 0) is the player's tile
@@ -68,6 +71,35 @@ test('with the whole window, the maps two joins away are the core\'s, not stills
     }, [LAND.x, LAND.y, TILE] as const);
     console.log(`overlay pixels over Route 102: ${opaque}`);
     expect(opaque, 'the overlay lays no still over Route 102').toBe(0);
+
+    // Over the seam into Oldale: while the ROM loads Oldale the page keeps the last whole
+    // frame's camera, on Route 101, and the core's list is already Oldale's; laid from it,
+    // Route 101's neighbours each got a still for that frame (138676 pixels of overlay).
+    // Every frame of the walk the overlay holds only the grass patches' marks (field-extra
+    // Marks: some 85 pixels each, 255 to 595 here), never a map.
+    const all = page.evaluate(() => new Promise<number[]>((resolve) => {
+      const c = document.querySelector<HTMLCanvasElement>('#overlay')!;
+      const g = c.getContext('2d')!;
+      const out: number[] = [];
+      const t0 = performance.now();
+      const look = () => {
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+        out.push(n);
+        if (performance.now() - t0 < 2_500) requestAnimationFrame(look);
+        else resolve(out);
+      };
+      requestAnimationFrame(look);
+    }));
+    await page.keyboard.down('ArrowUp');
+    await page.waitForTimeout(1_800);
+    await page.keyboard.up('ArrowUp');
+    const frames = await all;
+    const r = await ram(page, sym);
+    console.log(`over the seam: ${frames.length} frames, overlay pixels at most ${Math.max(...frames)}, now at ${r.map} (${r.x}, ${r.y})`);
+    expect(r.map, 'we walked into Oldale').toBe(OLDALE);
+    expect(frames.filter((n) => n > MARKS_AT_MOST), 'no still on any frame').toEqual([]);
   } finally {
     await ctx.close();
   }
