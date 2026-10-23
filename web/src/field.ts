@@ -1574,7 +1574,7 @@ export class FieldView {
     const fog = c.fog ? `${c.fog.x}/${c.fog.y}/${c.fog.eva}/${c.fog.evb}` : '';
     const marks = map && map.outdoor ? this.marks(c, map) : [];
     const markKey = marks.map((m) => `${m.x}/${m.y}/${m.drawn ? 1 : 0}`).join(',');
-    // The joined maps the core drew (#world): the overlay's stills go where it did not.
+    // The joined maps the core drew (the whole window): the overlay's stills go where it did not.
     const drawn = this.deps.emu.worldDrawn();
     const key = `${c.group}:${c.num}:${c.x}:${c.y}:${c.subX}:${c.subY}:${c.fade}:${c.fadeColor}:${people}:${fog}:${c.onField ? 1 : 0}:${markKey}:${drawn}`;
     if (key === this.drawn) return;
@@ -1675,7 +1675,7 @@ export class FieldView {
    *  ROM's palette is, over their own pixels alone. */
   private corePeople: import('./field-extra').CorePeople | null = null;
 
-  /** With the whole window (`#world`), the people the overlay drew go to the core, which
+  /** With the whole window, the people the overlay drew go to the core, which
    *  draws them into the picture under roofs and treetops (HBR-27, POK-443): null when it
    *  does not, else whether every sheet was in. */
   private toCore(c: Camera, outdoors: boolean): boolean | null {

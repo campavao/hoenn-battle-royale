@@ -1,4 +1,4 @@
-// The whole window's people (HBR-27 step 3, POK-443). With `#world` the people the ROM holds
+// The whole window's people (HBR-27 step 3, POK-443). The people the ROM holds
 // no object for -- another seat's ghost past the box it keeps objects in -- are no longer
 // drawn by the page on an overlay over the picture: the page hands them to the core, which
 // draws them into the picture among the BGs, so a roof covers them the way it covers the

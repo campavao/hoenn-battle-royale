@@ -189,7 +189,7 @@ export async function installStill(s: StillSetup): Promise<void> {
       const left = nib & 4 ? x - (nib & 8 ? 512 : 0) : x >= 256 ? x - 512 : x;
       out.push([left - 1, top - 1, left + w + 1, top + h + 1]);
     }
-    // The people the page hands the core with `#world` (HBR-27), where the core draws them:
+    // The people the page hands the core with the whole window (HBR-27), where the core draws them:
     // its buffer's grid pixels, less where gBrWorld has the LCD (software-mode0.c
     // GBAVideoSoftwareRendererDrawPeople has the layout).
     const head = s.sym.gBrWorld === undefined ? null : emu.peopleBuffer?.(8) ?? null;

@@ -209,6 +209,133 @@ async function drift(page: Page, pic: { width: number; left: number }): Promise<
   return least;
 }
 
+/** The sprite window the ROM declares (gBrFieldView): 40 rows above the LCD, 56 below. */
+const WINDOW = { top: 40, bottom: 56 };
+/** field.ts's LCD_LEFT/LCD_TOP: where our own tile sits on the LCD. */
+const LCD_LEFT = 112;
+const LCD_TOP = 72;
+/** `struct BrSeat` (include/br/br_ghosts.h): seat 16 is nobody's in solo. */
+const SEAT = 16;
+const SEAT_SIZE = 16;
+const BR_NO_OBJ = 0xff;
+const DIR_SOUTH = 1;
+const SKIN = 15;
+/** Nine rows down is still inside the ROM's object box (BrField_InObjectView: seven up,
+ *  nine down), so the ghost is a real object with a sprite -- a 16x32 whose top is at
+ *  LCD row 200 and whose legs run on to 231, past the window's 216. */
+const GHOST_ROWS_DOWN = 9;
+const GHOST = { x: LCD_LEFT, y: LCD_TOP + GHOST_ROWS_DOWN * 16 + 16 - 32, w: 16, h: 32 };
+
+/** Of __pic's rows [from, to) (LCD rows), the share of pixels that differ from __pic0's. */
+function changed(page: Page, from: number, to: number): Promise<number> {
+  return page.evaluate(([a, b]) => {
+    const w = window as unknown as PicWindow & { __pic0?: Pic };
+    const p = w.__pic!;
+    const now = new Uint32Array(p.data.buffer);
+    const then = new Uint32Array(w.__pic0!.data.buffer);
+    let diff = 0;
+    let all = 0;
+    for (let y = Math.max(0, p.top + a); y < Math.min(p.height, p.top + b); y++) {
+      for (let x = 0; x < p.width; x++, all++) diff += now[y * p.width + x] !== then[y * p.width + x] ? 1 : 0;
+    }
+    return all ? diff / all : 0;
+  }, [from, to] as const);
+}
+
+/** Over `frames` frames, how many pixels of `r` took a value __seen[key] never had. */
+function strange(page: Page, key: string, r: Rect, frames: number): Promise<number> {
+  return page.evaluate(([k, rect, n]) => new Promise<number>((resolve) => {
+    const w = window as unknown as PicWindow;
+    const seen = w.__seen![k];
+    const odd = new Set<number>();
+    let got = 0;
+    const off = w.__hbr.emu.onFrame(() => {
+      const p = w.__hbr.emu.picture();
+      if (!p) return;
+      const px = new Uint32Array(p.data.buffer);
+      for (let y = 0; y < rect.h; y++) {
+        for (let x = 0; x < rect.w; x++) {
+          const i = y * rect.w + x;
+          if (!seen[i].has(px[(p.top + rect.y + y) * p.width + p.left + rect.x + x] >>> 0)) odd.add(i);
+        }
+      }
+      if (++got >= n) {
+        off();
+        resolve(odd.size);
+      }
+    });
+  }), [key, r, frames] as const);
+}
+
+/** Seat 16 on our map, GHOST_ROWS_DOWN rows below us, facing south: br_ghosts gives it an
+ *  object, as it would a player in the match standing there. `present` 0 takes it off. */
+async function ghost(page: Page, sym: Record<string, number>, present: boolean): Promise<void> {
+  const here = await ram(page, sym);
+  const [group, num] = here.map.split(':').map(Number);
+  const y = here.y + 7 + GHOST_ROWS_DOWN; // the seat row keeps MAP_OFFSET, as the ROM does
+  const x = here.x + 7;
+  const row = present ? [1, SKIN, group, num, x & 0xff, (x >> 8) & 0xff, y & 0xff, (y >> 8) & 0xff, DIR_SOUTH, BR_NO_OBJ, 0, 0, 0, 0, 0, 0] : [0];
+  await page.evaluate(([base, bytes]) => {
+    const emu = (window as unknown as PicWindow).__hbr.emu;
+    (bytes as number[]).forEach((v, i) => emu.write((base as number) + i, v, 8));
+  }, [sym.gBrSeats + SEAT * SEAT_SIZE, row] as const);
+}
+
+// A portrait phone's whole window runs well past the sprite window above and below the
+// LCD, and two of the ROM's pictures there wrap at 256 rows: a sprite's 8-bit OAM y, and
+// the fog's 64x64 grid. (c) A person whose legs cross the window's bottom is drawn there,
+// once -- never 256 rows up at the window's top. (b) The fog covers every 32-row stripe
+// past the window, above and below.
+test('on a phone the whole window past the sprite window: a person drawn once, the fog over every row', async ({ browser }) => {
+  test.setTimeout(180_000);
+  const sym = loadSymbols();
+  const ctx = await browser.newContext({ viewport: PORTRAIT, isMobile: true, hasTouch: true });
+  try {
+    const page = await ctx.newPage();
+    await boot(page, sym, '');
+    const sprites = await page.evaluate(() => (window as unknown as { __hbr: { emu: { spriteBand: unknown } } }).__hbr.emu.spriteBand);
+    expect(sprites, 'the sprite window the ROM declares').toEqual(WINDOW);
+    const pic = await grab(page);
+    const outer = ([[-pic.top, -WINDOW.top], [160 + WINDOW.bottom, pic.height - pic.top]] as Array<[number, number]>).filter(([a, b]) => b > a);
+    expect(outer.length, 'the window reaches past the sprite window both ways').toBe(2);
+    expect(pic.top - WINDOW.top, 'well past it above').toBeGreaterThan(64);
+    expect(pic.height - pic.top - 160 - WINDOW.bottom, 'and below').toBeGreaterThan(64);
+    await save(page, 'phone-world');
+
+    // (c) The ghost's legs past the window's bottom: drawn there, over the map, and
+    // nothing of it at the window's top.
+    const top: Rect = { x: GHOST.x, y: -WINDOW.top, w: GHOST.w, h: 16 };
+    const legs: Rect = { x: GHOST.x, y: 160 + WINDOW.bottom, w: GHOST.w, h: GHOST.y + GHOST.h - (160 + WINDOW.bottom) };
+    await learn(page, 'top', top, 120);
+    await learn(page, 'legs', legs, 120);
+    await ghost(page, sym, true);
+    await expect
+      .poll(() => strange(page, 'legs', legs, 4), { timeout: 15_000, message: "the ghost's legs are drawn past the window, over the map" })
+      .toBeGreaterThan(8);
+    await grab(page);
+    await save(page, 'phone-world-ghost');
+    expect(await strange(page, 'top', top, 30), "nothing of the ghost at the window's top").toBe(0);
+    await ghost(page, sym, false);
+    await expect.poll(() => strange(page, 'legs', legs, 4), { timeout: 15_000, message: 'and they go with it' }).toBe(0);
+
+    // (b) The fog, every 32-row stripe past the window changed when it comes on.
+    await grab(page);
+    await keep(page);
+    await page.evaluate(([at, fog]) => (window as unknown as PicWindow).__hbr.emu.write(at, fog, 8), [sym.gWeather + WEATHER_NEXT, WEATHER_FOG_HORIZONTAL] as const);
+    await expect.poll(() => page.evaluate((at) => (window as unknown as PicWindow).__hbr.emu.read(at, 8), sym.gWeather + WEATHER_CURR), { timeout: 10_000 }).toBe(WEATHER_FOG_HORIZONTAL);
+    await page.waitForTimeout(3_000);
+    await grab(page);
+    await save(page, 'phone-world-fog');
+    for (const [a, b] of outer) {
+      for (let y = a; y < b; y += 32) {
+        expect(await changed(page, y, Math.min(b, y + 32)), `fog in rows ${y}..${Math.min(b, y + 32) - 1}`).toBeGreaterThan(0.5);
+      }
+    }
+  } finally {
+    await ctx.close();
+  }
+});
+
 // With the whole window (HBR-27) the row is as wide as the window, wider than
 // the ring. The grid and its copies 320 columns either side (_brDrawSprite) reach 400
 // columns left of the LCD and 383 right of it, past a 1920-wide window's 240 either side,

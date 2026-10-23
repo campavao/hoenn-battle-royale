@@ -1723,16 +1723,17 @@ function askForBand(emu: Emulator): void {
     : null;
   // The whole window (HBR-27): the core draws the whole layout from the ROM's map grid,
   // past what the ring holds; the ROM keeps the ring it has for the band above, which the
-  // core still draws the LCD's sprites and its own rows from. A core too old to (one the
-  // service worker kept while the network was down) shows the LCD alone (FieldView.clip)
-  // until the page loads again with a network, once: the core is fetched network first.
+  // core still draws the LCD's sprites and its own rows from. A core too old to shows the
+  // LCD alone (FieldView.clip); the first boot reloads for a new one (refreshCore).
   worldOn = emu.setWorld(worldAt);
   if (worldOn) askedBand = worldBand(matchLayout());
-  else if (worldAt) refreshCore();
   emu.setViewport(askedBand);
 }
 
-/** Load the page again for a core that draws the world, once a tab, and only online. */
+/** Load the page again for a core that draws the world, once a tab, and only online: a
+ *  core too old for it is one the service worker kept while the network was down, and the
+ *  core is fetched network first. Only from the first boot, never PLAY AGAIN's: a page
+ *  that booted offline and came back online is not reloaded out of the room. */
 function refreshCore(): void {
   try {
     if (!navigator.onLine || sessionStorage.getItem('hbr-core-refresh')) return;
@@ -4721,6 +4722,7 @@ async function main(): Promise<void> {
 
   showScreen('playing');
   askForBand(emu);
+  if (worldAt && !worldOn) refreshCore();
   if (usingPatched) await emu.startBytes(bytes);
   else await emu.start();
   emu.onFrame(() => writeFieldShown(emu));
