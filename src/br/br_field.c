@@ -980,16 +980,21 @@ void BrField_CameraMoved(void)
 // against the new map's grid, and adds the step after the load: it says so then.
 static s16 StepPos(s16 pos, s16 start, s8 d, u8 tile, u8 startTile)
 {
-    if (sCameraStepping && d != 0 && tile == startTile && (sStepMovedOverSeam || pos == start + d))
+    if (d != 0 && tile == startTile && (sStepMovedOverSeam || pos == start + d))
         return pos - d;
     return pos;
 }
 
 void BrField_PublishWorld(u16 hofs, u16 vofs, u8 xTileOffset, u8 yTileOffset)
 {
-    s16 x = StepPos(gSaveBlock1Ptr->pos.x, sStepX, sStepDx, xTileOffset, sStepTileX);
-    s16 y = StepPos(gSaveBlock1Ptr->pos.y, sStepY, sStepDy, yTileOffset, sStepTileY);
+    s16 x = gSaveBlock1Ptr->pos.x;
+    s16 y = gSaveBlock1Ptr->pos.y;
 
+    if (sCameraStepping)
+    {
+        x = StepPos(x, sStepX, sStepDx, xTileOffset, sStepTileX);
+        y = StepPos(y, sStepY, sStepDy, yTileOffset, sStepTileY);
+    }
     gBrWorld.hofs = hofs;
     gBrWorld.vofs = vofs;
     gBrWorld.lcdX = x * 16 + ScrollDistance(hofs - xTileOffset * 8);
