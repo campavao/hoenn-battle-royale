@@ -1138,6 +1138,10 @@ describe('the people the ROM let go of reach the overlay (POK-318)', () => {
     // ...and a map that is not joined to ours draws nobody.
     const far = HOENN.byId.get('MAP_SLATEPORT_CITY')!;
     expect(r.step([rowAt(far, 3, 10 + 7, 2 + 7)]).sprites.filter((s) => s.seat === 3)).toEqual([]);
+    // Two tiles east, Littleroot's (12, 2) is inside the ROM's box: the overlay is over the
+    // picture, so painted there it would stand on the menus and over the roofs. It is the
+    // ROM's (it spawns one across a seam while spectating), so the page leaves it.
+    expect(r.step([rowAt(town, 4, 12 + 7, 2 + 7)]).sprites.filter((s) => s.seat === 4)).toEqual([]);
   });
 
   it("on the field a walker inside the box, or one whose ghost the ROM still has an object for, is the ROM's", () => {

@@ -1,0 +1,55 @@
+# spectate-next-door: while spectating, a seat on a map joined to ours gets a ghost where
+# the screen shows it (HBR-42, 10-20 play-test: watching one player, another just below
+# them on the next map was drawn by nobody). The ROM spawned ghosts on its own map only,
+# and the page's overlay is over the picture, so it can't paint one there either.
+#
+# Littleroot (0:9) and Route 101 (0:16) are both 20x20, Route 101 above at offset 0:
+# Route 101's (12,17) is Littleroot's (12,-3).
+wait 30
+pokebytes gBrMailbox+0x2018 01 00 00 09 05 00 08 00 BD BB C7 FF
+wait 400
+expect u8 *gSaveBlock1Ptr+5 9
+# seat 1 on Littleroot at (10,2) -- 17, 9 with MAP_OFFSET -- facing north
+pokebytes gBrMailbox+0x1018 02 0E 0B 00 00 01 01 00 09 11 00 09 00 02 01 01
+poke u16 gBrMailbox+0x0C 1
+wait 10
+# seat 2 on Route 101 at (12,17) -- 19, 24 with MAP_OFFSET -- facing south
+pokebytes gBrMailbox+0x1058 02 0E 0B 00 00 02 01 00 10 13 00 18 00 01 01 01
+poke u16 gBrMailbox+0x0C 2
+wait 10
+expect u8 gBrSeats+32 1
+expect u8 gBrSeats+41 0xFF
+# FOLLOW seat 1: the view centres on (10,2), and Route 101's bottom rows are in its box
+pokebytes gBrMailbox+0x1098 14 04 01 00 00 01
+poke u16 gBrMailbox+0x0C 3
+wait 30
+expectge u8 gBrSpectate+9 1
+expect u8 *gSaveBlock1Ptr+5 9
+expect u16 *gSaveBlock1Ptr+2 2
+# seat 2 has a ghost, still on Route 101 in the roster
+expect u8 gBrSeats+35 16
+expectne u8 gBrSeats+41 0xFF
+shot next-door
+# a step south, ordinary: the ghost walks it
+pokebytes gBrMailbox+0x10D8 03 0B 08 00 00 02 01 13 00 19 00 00 10
+poke u16 gBrMailbox+0x0C 4
+wait 30
+expect u16 gBrSeats+38 25
+expectne u8 gBrSeats+41 0xFF
+# ...and onto Littleroot's top row, a PLACE in Littleroot's numbers: the same ghost
+# walks the seam (CrossedSeam), no despawn
+pokebytes gBrMailbox+0x1118 02 0E 0B 00 00 02 01 00 09 13 00 07 00 01 01 01
+poke u16 gBrMailbox+0x0C 5
+wait 30
+expect u8 gBrSeats+35 9
+expect u16 gBrSeats+38 7
+expectne u8 gBrSeats+41 0xFF
+shot crossed
+# stop following: spectating over, a ghost on another map is nobody's -- but seat 2 is on
+# our map now, so it stays
+pokebytes gBrMailbox+0x1158 14 04 01 00 00 FF
+poke u16 gBrMailbox+0x0C 6
+wait 30
+expect u8 gBrSpectate+8 0xFF
+expectne u8 gBrSeats+41 0xFF
+say spectate next door ok
