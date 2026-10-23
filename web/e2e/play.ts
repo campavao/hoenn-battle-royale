@@ -695,10 +695,11 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
               log.seen.full++;
               const up = (v: number) => (v << 3) | (v >> 2);
               const want = [up(faded & 31), up((faded >> 5) & 31), up((faded >> 10) & 31)];
-              // What the window shows there: with the whole window (nothing cut) the core's
-              // picture covers the field canvas wherever it reaches, and draws the fade
-              // itself, so that is what is held to it (a copy of the picture: only here).
-              const pic = new URLSearchParams(location.hash.slice(1)).has('ring') ? null : emu.picture();
+              // What the window shows there: on the field with the whole window (nothing
+              // cut) the core's picture covers the field canvas wherever it reaches, and
+              // draws the fade itself, so that is what is held to it (a copy of the
+              // picture: only here). Off the field the band is cut and the canvas shows.
+              const pic = !onField || new URLSearchParams(location.hash.slice(1)).has('ring') ? null : emu.picture();
               const shown = pts.map(([x, y], j) => {
                 const qx = x - lx + (pic?.left ?? 0);
                 const qy = y - ly + (pic?.top ?? 0);
@@ -706,8 +707,21 @@ export async function startRecorder(page: Page, sym: Record<string, number>): Pr
                 const i = 4 * (qy * pic.width + qx);
                 return Array.from(pic.data.subarray(i, i + 4));
               });
-              if (!shown.every((p) => p.slice(0, 3).every((v, i) => Math.abs(v - want[i]) <= 8))) {
-                fail('unfaded', `map ${map} shows under a whole fade to ${faded.toString(16)}${fast ? ' (fast)' : fastCut ? ' (a fast fade ended before it began)' : fastEnd ? ' (a fast fade ended)' : ''}: corners ${JSON.stringify(shown.map((p) => p.slice(0, 3)))}`);
+              // The core draws the band as it draws the LCD, from the same palettes and
+              // blend, so the band is held to the LCD's own fade: what of the LCD is still
+              // off the fade's colour (the weather's palettes take their own frames over a
+              // fade) may be off it past the LCD too, and no more.
+              let lcdOff = 0;
+              if (pic) {
+                for (let y = 0; y < k.GBA_H; y += 4) {
+                  for (let x = 0; x < k.GBA_W; x += 4) {
+                    const i = 4 * ((pic.top + y) * pic.width + pic.left + x);
+                    for (let c = 0; c < 3; c++) lcdOff = Math.max(lcdOff, Math.abs(pic.data[i + c] - want[c]));
+                  }
+                }
+              }
+              if (!shown.every((p) => p.slice(0, 3).every((v, i) => Math.abs(v - want[i]) <= 8 + lcdOff))) {
+                fail('unfaded', `map ${map} shows under a whole fade to ${faded.toString(16)}${fast ? ' (fast)' : fastCut ? ' (a fast fade ended before it began)' : fastEnd ? ' (a fast fade ended)' : ''}: corners ${JSON.stringify(shown.map((p) => p.slice(0, 3)))}${pic ? `, the LCD off by ${lcdOff}` : ''}`);
               }
             }
             if (black) log.seen.black++;
