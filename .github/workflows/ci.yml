@@ -227,8 +227,34 @@ jobs:
         # way a player does, instead of skipping.
         run: tools/br/dev-patch.sh pokeemerald.map baseline/pokeemerald.gba
 
+      # A cold `--with-deps` is apt, and apt alone has taken ten minutes, which with a
+      # cold ROM build ran a shard into its cap. The browser is cached on Playwright's
+      # version and the runner image (Playwright builds per distro); on a hit apt is skipped.
+      - name: Playwright version
+        id: pw
+        working-directory: web
+        run: |
+          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright's Chromium
+        id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ steps.pw.outputs.image }}-${{ steps.pw.outputs.version }}
+
       - working-directory: web
-        run: npx playwright install --with-deps chromium
+        run: |
+          # A hit still checks the image has every library the binaries link against,
+          # and pays for apt only when one is missing.
+          bins=$(find ~/.cache/ms-playwright -type f \( -name chrome -o -name headless_shell -o -name chrome-headless-shell \) 2>/dev/null || true)
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = true ] && [ -n "$bins" ] \
+             && ! echo "$bins" | xargs ldd 2>/dev/null | grep -q 'not found'; then
+            npx playwright install chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
 
       # Playwright's first webServer is `node ../relay/server.js`, which imports `ws`.
       - working-directory: relay
