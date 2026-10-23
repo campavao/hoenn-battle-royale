@@ -248,7 +248,7 @@ jobs:
         run: |
           # A hit still checks the image has every library the binaries link against,
           # and pays for apt only when one is missing.
-          bins=$(find ~/.cache/ms-playwright -type f \( -name chrome -o -name headless_shell -o -name chrome-headless-shell \) 2>/dev/null)
+          bins=$(find ~/.cache/ms-playwright -type f \( -name chrome -o -name headless_shell -o -name chrome-headless-shell \) 2>/dev/null || true)
           if [ "${{ steps.pw-cache.outputs.cache-hit }}" = true ] && [ -n "$bins" ] \
              && ! echo "$bins" | xargs ldd 2>/dev/null | grep -q 'not found'; then
             npx playwright install chromium
